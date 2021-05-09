@@ -8,6 +8,5 @@ mroonga-path-reproducible-build.patch
 env-perl-usr-bin-perl.patch
 fix-spelling.patch
 1556.patch
-riscv64-link-pthread.patch
 armhf-gcc-segfault-workaround.patch
 rtld_default-kfreebsd.patch

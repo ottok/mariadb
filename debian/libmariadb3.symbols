@@ -18,6 +18,7 @@ libmariadb.so.3 libmariadb3 #MINVER#
  mariadb_rpl_close@libmariadb_3 3.1.0
  mariadb_rpl_fetch@libmariadb_3 3.1.0
  mariadb_rpl_get_optionsv@libmariadb_3 3.1.0
+ mariadb_rpl_init_ex@libmariadb_3 3.1.13
  mariadb_rpl_open@libmariadb_3 3.1.0
  mariadb_rpl_optionsv@libmariadb_3 3.1.0
  mariadb_stmt_execute_direct@libmariadb_3 3.0.0

@@ -1,3 +1,23 @@
+mariadb-10.5 (1:10.5.10-0ubuntu0.21.04.1) hirsute-security; urgency=medium
+
+  * SECURITY UPDATE: New upstream version 10.5.10 includes fixes for the
+    following security vulnerabilities (LP: #1926926):
+    - CVE-2021-2154
+    - CVE-2021-2166
+  * Previous release 10.5.9 included security fixes additionally for:
+    - CVE-2021-27928
+  * Previous release 10.5.7 included security fixes additionally for:
+    - CVE-2021-2194
+  * Previous release 10.5.5 included security fixes additionally for:
+    - CVE-2021-2022
+  * Drop riscv64 patch applied upstream
+  * Drop spelling fixes applied upstream
+  * Update symbols to include new one from MariaDB Client 3.1.13
+  * Remove obsolete sql file removed by upstream (MDEV-24586)
+  * Remove salsa-ci.yml, does not work for Ubuntu quality assurance
+
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 09 May 2021 10:49:34 -0700
+
 mariadb-10.5 (1:10.5.9-1) unstable; urgency=medium
 
   * New upstream version 10.5.9
