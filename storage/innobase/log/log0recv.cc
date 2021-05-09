@@ -2,7 +2,7 @@
 
 Copyright (c) 1997, 2017, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2012, Facebook Inc.
-Copyright (c) 2013, 2020, MariaDB Corporation.
+Copyright (c) 2013, 2021, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -490,7 +490,7 @@ page_corrupted:
         llen= len;
         if ((b & 0x70) == MEMSET)
         {
-          ut_ad(rlen < llen);
+          ut_ad(rlen <= llen);
           if (UNIV_UNLIKELY(rlen != 1))
           {
             size_t s;
@@ -499,7 +499,7 @@ page_corrupted:
             memcpy(frame + last_offset + s, l, llen - s);
           }
           else
-          memset(frame + last_offset, *l, llen);
+            memset(frame + last_offset, *l, llen);
           goto next_after_applying_write;
         }
         const size_t slen= mlog_decode_varint_length(*l);
@@ -583,6 +583,9 @@ typedef std::map<
 	ut_allocator<std::pair<const ulint, file_name_t> > >	recv_spaces_t;
 
 static recv_spaces_t	recv_spaces;
+
+/** The last parsed FILE_RENAME records */
+static std::map<uint32_t,std::string> renamed_spaces;
 
 /** Report an operation to create, delete, or rename a file during backup.
 @param[in]	space_id	tablespace identifier
@@ -942,6 +945,7 @@ void recv_sys_t::close()
   }
 
   recv_spaces.clear();
+  renamed_spaces.clear();
   mlog_init.clear();
 
   close_files();
@@ -1156,12 +1160,13 @@ fail:
 		DBUG_EXECUTE_IF("log_checksum_mismatch", { cksum = crc + 1; });
 
 		if (UNIV_UNLIKELY(crc != cksum)) {
-			ib::error() << "Invalid log block checksum."
-				    << " block: " << block_number
-				    << " checkpoint no: "
-				    << log_block_get_checkpoint_no(buf)
-				    << " expected: " << crc
-				    << " found: " << cksum;
+			ib::error_or_warn(srv_operation!=SRV_OPERATION_BACKUP)
+				<< "Invalid log block checksum. block: "
+				<< block_number
+				<< " checkpoint no: "
+				<< log_block_get_checkpoint_no(buf)
+				<< " expected: " << crc
+				<< " found: " << cksum;
 			goto fail;
 		}
 
@@ -2201,11 +2206,15 @@ same_page:
                       l, static_cast<ulint>(fnend - fn),
                       reinterpret_cast<const byte*>(fn2),
                       fn2 ? static_cast<ulint>(fn2end - fn2) : 0);
-
-        if (!fn2 || !apply);
-        else if (!fil_op_replay_rename(space_id, fn, fn2))
-          found_corrupt_fs= true;
         const_cast<char&>(fn[rlen])= saved_end;
+
+        if (fn2 && apply)
+        {
+          const size_t len= fn2end - fn2;
+          auto r= renamed_spaces.emplace(space_id, std::string{fn2, len});
+          if (!r.second)
+            r.first->second= std::string{fn2, len};
+        }
         if (UNIV_UNLIKELY(found_corrupt_fs))
           return true;
       }
@@ -2421,6 +2430,7 @@ set_start_lsn:
 		any buffered changes. */
 		init->created = false;
 		ut_ad(!mtr.has_modifications());
+		block->page.status = buf_page_t::FREED;
 	}
 
 	/* Make sure that committing mtr does not change the modification
@@ -2640,8 +2650,6 @@ void recv_sys_t::apply(bool last_batch)
     srv_operation == SRV_OPERATION_RESTORE ||
     srv_operation == SRV_OPERATION_RESTORE_EXPORT;
 
-  ut_d(recv_no_log_write = recv_no_ibuf_operations);
-
   mtr_t mtr;
 
   if (!pages.empty())
@@ -2662,6 +2670,8 @@ void recv_sys_t::apply(bool last_batch)
       if (t.lsn)
         trim(page_id_t(id + srv_undo_space_id_start, t.pages), t.lsn);
     }
+
+    fil_system.extend_to_recv_size();
 
     buf_block_t *free_block= buf_LRU_get_free_block(false);
 
@@ -2752,6 +2762,62 @@ next_page:
   {
     buf_pool_invalidate();
     mysql_mutex_lock(&log_sys.mutex);
+  }
+#if 1 /* Mariabackup FIXME: Remove or adjust rename_table_in_prepare() */
+  else if (srv_operation != SRV_OPERATION_NORMAL);
+#endif
+  else
+  {
+    /* In the last batch, we will apply any rename operations. */
+    for (auto r : renamed_spaces)
+    {
+      const uint32_t id= r.first;
+      fil_space_t *space= fil_space_t::get(id);
+      if (!space)
+        continue;
+      ut_ad(UT_LIST_GET_LEN(space->chain) == 1);
+      const char *old= space->chain.start->name;
+      if (r.second != old)
+      {
+        bool exists;
+        os_file_type_t ftype;
+        const char *new_name= r.second.c_str();
+        if (!os_file_status(new_name, &exists, &ftype) || exists)
+        {
+          ib::error() << "Cannot replay rename of tablespace " << id
+                      << " from '" << old << "' to '" << r.second <<
+                      (exists ? "' because the target file exists" : "'");
+          found_corrupt_fs= true;
+        }
+        else
+        {
+          size_t base= r.second.rfind(OS_PATH_SEPARATOR);
+          ut_ad(base != std::string::npos);
+          size_t start= r.second.rfind(OS_PATH_SEPARATOR, base - 1);
+          if (start == std::string::npos)
+            start= 0;
+          else
+            ++start;
+          /* Keep only databasename/tablename without .ibd suffix */
+          std::string space_name(r.second, start, r.second.size() - start - 4);
+          ut_ad(space_name[base - start] == OS_PATH_SEPARATOR);
+#if OS_PATH_SEPARATOR != '/'
+          space_name[base - start]= '/';
+#endif
+          mysql_mutex_lock(&log_sys.mutex);
+          if (dberr_t err= space->rename(space_name.c_str(), r.second.c_str(),
+                                         false))
+          {
+            ib::error() << "Cannot replay rename of tablespace " << id
+                        << " to '" << r.second << "': " << err;
+            found_corrupt_fs= true;
+          }
+          mysql_mutex_unlock(&log_sys.mutex);
+        }
+      }
+      space->release();
+    }
+    renamed_spaces.clear();
   }
 
   mutex_enter(&mutex);
@@ -3573,7 +3639,8 @@ completed:
 		mysql_mutex_unlock(&log_sys.mutex);
 
 		ib::error() << "Recovered only to lsn:"
-			    << recv_sys.recovered_lsn << " checkpoint_lsn: " << checkpoint_lsn;
+			    << recv_sys.recovered_lsn
+			    << " checkpoint_lsn: " << checkpoint_lsn;
 
 		return(DB_ERROR);
 	}
@@ -3606,6 +3673,8 @@ completed:
 
 	recv_sys.apply_log_recs = true;
 	recv_no_ibuf_operations = false;
+	ut_d(recv_no_log_write = srv_operation == SRV_OPERATION_RESTORE
+	     || srv_operation == SRV_OPERATION_RESTORE_EXPORT);
 
 	mutex_exit(&recv_sys.mutex);
 

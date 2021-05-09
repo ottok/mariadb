@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2006, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2020, MariaDB Corporation.
+Copyright (c) 2017, 2021, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -145,16 +145,6 @@ innobase_mysql_print_thd(
 	uint	max_query_len);	/*!< in: max query length to print, or 0 to
 				   use the default max length */
 
-/*****************************************************************//**
-Log code calls this whenever log has been written and/or flushed up
-to a new position. We use this to notify upper layer of a new commit
-checkpoint when necessary.*/
-UNIV_INTERN
-void
-innobase_mysql_log_notify(
-/*======================*/
-	ib_uint64_t	flush_lsn);	/*!< in: LSN flushed to disk */
-
 /** Converts a MySQL type to an InnoDB type. Note that this function returns
 the 'mtype' of InnoDB. InnoDB differentiates between MySQL's old <= 4.1
 VARCHAR and the new true VARCHAR in >= 5.0.3 by the 'prtype'.
@@ -221,7 +211,7 @@ innobase_casedn_str(
 void wsrep_innobase_kill_one_trx(THD *bf_thd, trx_t *victim_trx, bool signal);
 ulint wsrep_innobase_mysql_sort(int mysql_type, uint charset_number,
                              unsigned char* str, ulint str_length,
-                             unsigned int buf_length);
+                             ulint buf_length);
 #endif /* WITH_WSREP */
 
 extern "C" struct charset_info_st *thd_charset(THD *thd);

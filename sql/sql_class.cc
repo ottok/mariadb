@@ -335,17 +335,6 @@ THD *thd_get_current_thd()
   return current_thd;
 }
 
-/**
-  Clear errors from the previous THD
-
-  @param thd              THD object
-*/
-void thd_clear_errors(THD *thd)
-{
-  my_errno= 0;
-  thd->mysys_var->abort= 0;
-}
-
 
 extern "C" unsigned long long thd_query_id(const MYSQL_THD thd)
 {
@@ -820,7 +809,7 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
   net.reading_or_writing= 0;
   client_capabilities= 0;                       // minimalistic client
   system_thread= NON_SYSTEM_THREAD;
-  cleanup_done= free_connection_done= abort_on_warning= 0;
+  cleanup_done= free_connection_done= abort_on_warning= got_warning= 0;
   peer_port= 0;					// For SHOW PROCESSLIST
   transaction= &default_transaction;
   transaction->m_pending_rows_event= 0;
@@ -1438,7 +1427,10 @@ void THD::change_user(void)
     cleanup();
   cleanup_done= 0;
   reset_killed();
-  thd_clear_errors(this);
+  /* Clear errors from the previous THD */
+  my_errno= 0;
+  if (mysys_var)
+    mysys_var->abort= 0;
 
   /* Clear warnings. */
   if (!get_stmt_da()->is_warning_info_empty())
@@ -3614,7 +3606,7 @@ int select_max_min_finder_subselect::send_data(List<Item> &items)
         break;
       case ROW_RESULT:
       case TIME_RESULT:
-        // This case should never be choosen
+        // This case should never be chosen
 	DBUG_ASSERT(0);
 	op= 0;
       }
@@ -4611,7 +4603,13 @@ extern "C" void thd_progress_report(MYSQL_THD thd,
     return;
   if (thd->progress.max_counter != max_progress)        // Simple optimization
   {
-    mysql_mutex_lock(&thd->LOCK_thd_data);
+    /*
+      Better to not wait in the unlikely event that LOCK_thd_data is locked
+      as Galera can potentially have this locked for a long time.
+      Progress counters will fix themselves after the next call.
+    */
+    if (mysql_mutex_trylock(&thd->LOCK_thd_data))
+      return;
     thd->progress.counter= progress;
     thd->progress.max_counter= max_progress;
     mysql_mutex_unlock(&thd->LOCK_thd_data);

@@ -307,7 +307,11 @@ enum chf_create_flags {
 
 #define HA_PERSISTENT_TABLE              (1ULL << 48)
 
-/* If storage engine uses another engine as a base */
+/*
+  If storage engine uses another engine as a base
+  This flag is also needed if the table tries to open the .frm file
+  as part of drop table.
+*/
 #define HA_REUSES_FILE_NAMES             (1ULL << 49)
 
 /*
@@ -1467,7 +1471,7 @@ struct handlerton
      recovery. It uses that to reduce the work needed for any subsequent XA
      recovery process.
    */
-   void (*commit_checkpoint_request)(handlerton *hton, void *cookie);
+   void (*commit_checkpoint_request)(void *cookie);
   /*
     "Disable or enable checkpointing internal to the storage engine. This is
     used for FLUSH TABLES WITH READ LOCK AND DISABLE CHECKPOINT to ensure that
@@ -1798,6 +1802,12 @@ handlerton *ha_default_tmp_handlerton(THD *thd);
   tables
 */
 #define HTON_TRANSACTIONAL_AND_NON_TRANSACTIONAL (1 << 17)
+
+/*
+  Table requires and close and reopen after truncate
+  If the handler has HTON_CAN_RECREATE, this flag is not used
+*/
+#define HTON_REQUIRES_CLOSE_AFTER_TRUNCATE (1 << 18)
 
 class Ha_trx_info;
 
@@ -2157,7 +2167,7 @@ public:
 
 struct Table_scope_and_contents_source_pod_st // For trivial members
 {
-  CHARSET_INFO *table_charset;
+  CHARSET_INFO *alter_table_convert_to_charset;
   LEX_CUSTRING tabledef_version;
   LEX_CSTRING connect_string;
   LEX_CSTRING comment;
@@ -2306,7 +2316,7 @@ struct HA_CREATE_INFO: public Table_scope_and_contents_source_st,
     DBUG_ASSERT(cs);
     if (check_conflicting_charset_declarations(cs))
       return true;
-    table_charset= default_table_charset= cs;
+    alter_table_convert_to_charset= default_table_charset= cs;
     used_fields|= (HA_CREATE_USED_CHARSET | HA_CREATE_USED_DEFAULT_CHARSET);  
     return false;
   }
@@ -5201,7 +5211,7 @@ void trans_register_ha(THD *thd, bool all, handlerton *ht,
 
 const char *get_canonical_filename(handler *file, const char *path,
                                    char *tmp_path);
-void commit_checkpoint_notify_ha(handlerton *hton, void *cookie);
+void commit_checkpoint_notify_ha(void *cookie);
 
 inline const LEX_CSTRING *table_case_name(HA_CREATE_INFO *info, const LEX_CSTRING *name)
 {

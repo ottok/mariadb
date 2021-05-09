@@ -1552,7 +1552,7 @@ static int mysql_test_select(Prepared_statement *stmt,
   }
 
   if (open_normal_and_derived_tables(thd, tables,  MYSQL_OPEN_FORCE_SHARED_MDL,
-                                     DT_INIT | DT_PREPARE | DT_CREATE))
+                                     DT_INIT | DT_PREPARE))
     goto error;
 
   thd->lex->used_tables= 0;                        // Updated by setup_fields
@@ -1614,7 +1614,7 @@ static bool mysql_test_do_fields(Prepared_statement *stmt,
     DBUG_RETURN(TRUE);
 
   if (open_normal_and_derived_tables(thd, tables, MYSQL_OPEN_FORCE_SHARED_MDL,
-                                     DT_INIT | DT_PREPARE | DT_CREATE))
+                                     DT_INIT | DT_PREPARE))
     DBUG_RETURN(TRUE);
   DBUG_RETURN(setup_fields(thd, Ref_ptr_array(),
                            *values, COLUMNS_READ, 0, NULL, 0));
@@ -1646,7 +1646,7 @@ static bool mysql_test_set_fields(Prepared_statement *stmt,
   if ((tables &&
        check_table_access(thd, SELECT_ACL, tables, FALSE, UINT_MAX, FALSE)) ||
       open_normal_and_derived_tables(thd, tables, MYSQL_OPEN_FORCE_SHARED_MDL,
-                                     DT_INIT | DT_PREPARE | DT_CREATE))
+                                     DT_INIT | DT_PREPARE))
     goto error;
 
   while ((var= it++))
@@ -1810,7 +1810,7 @@ static bool mysql_test_create_table(Prepared_statement *stmt)
 
     if (open_normal_and_derived_tables(stmt->thd, lex->query_tables,
                                        MYSQL_OPEN_FORCE_SHARED_MDL,
-                                       DT_INIT | DT_PREPARE | DT_CREATE))
+                                       DT_INIT | DT_PREPARE))
       DBUG_RETURN(TRUE);
 
     select_lex->context.resolve_in_select_list= TRUE;
@@ -3414,15 +3414,17 @@ static void mysql_stmt_execute_common(THD *thd,
   if (!(stmt= find_prepared_statement(thd, stmt_id)))
   {
     char llbuf[22];
+    size_t length;
     /*
       Did not find the statement with the provided stmt_id.
       Set thd->query_string with the stmt_id so the
       audit plugin gets the meaningful notification.
     */
-    if (alloc_query(thd, llbuf, strlen(llbuf)))
+    length= (size_t) (longlong10_to_str(stmt_id, llbuf, 10) - llbuf);
+    if (alloc_query(thd, llbuf, length + 1))
       thd->set_query(0, 0);
-    my_error(ER_UNKNOWN_STMT_HANDLER, MYF(0), static_cast<int>(sizeof(llbuf)),
-             llstr(stmt_id, llbuf), "mysqld_stmt_execute");
+    my_error(ER_UNKNOWN_STMT_HANDLER, MYF(0), (int) length, llbuf,
+             "mysqld_stmt_execute");
     DBUG_VOID_RETURN;
   }
 
@@ -4236,6 +4238,15 @@ bool Prepared_statement::prepare(const char *packet, uint packet_len)
           thd->is_error() ||
           init_param_array(this));
 
+  if (thd->security_ctx->password_expired &&
+      lex->sql_command != SQLCOM_SET_OPTION)
+  {
+    thd->restore_backup_statement(this, &stmt_backup);
+    thd->restore_active_arena(this, &stmt_backup);
+    thd->stmt_arena= old_stmt_arena;
+    my_error(ER_MUST_CHANGE_PASSWORD, MYF(0));
+    DBUG_RETURN(true);
+  }
   lex->set_trg_event_type_for_tables();
 
   /*
@@ -4260,6 +4271,16 @@ bool Prepared_statement::prepare(const char *packet, uint packet_len)
   */
   MDL_savepoint mdl_savepoint= thd->mdl_context.mdl_savepoint();
 
+  /*
+    Set variables specified by
+      SET STATEMENT var1=value1 [, var2=value2, ...] FOR <statement>
+    clause for duration of prepare phase. Original values of variable
+    listed in the SET STATEMENT clause is restored right after return
+    from the function check_prepared_statement()
+  */
+  if (likely(error == 0))
+    error= run_set_statement_if_requested(thd, lex);
+
   /* 
    The only case where we should have items in the thd->free_list is
    after stmt->set_params_from_vars(), which may in some cases create
@@ -4277,6 +4298,12 @@ bool Prepared_statement::prepare(const char *packet, uint packet_len)
     */
     lex->context_analysis_only&= ~CONTEXT_ANALYSIS_ONLY_PREPARE;
   }
+
+  /*
+    Restore original values of variables modified on handling
+    SET STATEMENT clause.
+  */
+  thd->lex->restore_set_statement_var();
 
   /* The order is important */
   lex->unit.cleanup();
@@ -4302,8 +4329,10 @@ bool Prepared_statement::prepare(const char *packet, uint packet_len)
     thd->release_transactional_locks();
   }
 
-  /* Preserve CHANGE MASTER attributes */
-  lex_end_stage1(lex);
+  /* Preserve locked plugins for SET */
+  if (lex->sql_command != SQLCOM_SET_OPTION)
+    lex_unlock_plugins(lex);
+
   cleanup_stmt();
   thd->restore_backup_statement(this, &stmt_backup);
   thd->stmt_arena= old_stmt_arena;
@@ -5147,7 +5176,7 @@ void Prepared_statement::deallocate_immediate()
   status_var_increment(thd->status_var.com_stmt_close);
 
   /* It should now be safe to reset CHANGE MASTER parameters */
-  lex_end_stage2(lex);
+  lex_end(lex);
 }
 
 

@@ -42,6 +42,14 @@ namespace wsrep
      */
     int thread_service_v1_init(void* dlh,
                                wsrep::thread_service* thread_service);
+
+    /**
+     * Deinitialize the thread service.
+     *
+     * @params dlh Handler returned by dlopen().
+     */
+    void thread_service_v1_deinit(void* dlh);
+
 }
 
 #endif // WSREP_THREAD_SERVICE_V1_HPP

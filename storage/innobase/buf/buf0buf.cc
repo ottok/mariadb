@@ -1480,6 +1480,8 @@ bool buf_pool_t::create()
   srv_buf_pool_old_size= srv_buf_pool_size;
   srv_buf_pool_base_size= srv_buf_pool_size;
 
+  last_activity_count= srv_get_activity_count();
+
   chunk_t::map_ref= chunk_t::map_reg;
   buf_LRU_old_ratio_update(100 * 3 / 8, false);
   btr_search_sys_create();
@@ -2320,7 +2322,7 @@ calc_buf_pool_size:
 static void buf_resize_callback(void *)
 {
   DBUG_ENTER("buf_resize_callback");
-  ut_a(srv_shutdown_state == SRV_SHUTDOWN_NONE);
+  ut_ad(srv_shutdown_state < SRV_SHUTDOWN_CLEANUP);
   mysql_mutex_lock(&buf_pool.mutex);
   const auto size= srv_buf_pool_size;
   const bool work= srv_buf_pool_old_size != size;
@@ -3322,7 +3324,8 @@ re_evict:
 		buf_flush_lists(ULINT_UNDEFINED, LSN_MAX);
 		buf_flush_wait_batch_end_acquiring_mutex(false);
 
-		if (!fix_block->page.oldest_modification()) {
+		if (fix_block->page.buf_fix_count() == 1
+		    && !fix_block->page.oldest_modification()) {
 			goto re_evict;
 		}
 

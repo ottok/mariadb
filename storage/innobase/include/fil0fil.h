@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2013, 2020, MariaDB Corporation.
+Copyright (c) 2013, 2021, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -1050,7 +1050,7 @@ struct fil_node_t final
 	/** Determine some file metadata when creating or reading the file.
 	@param	file	the file that is being created, or OS_FILE_CLOSED */
 	void find_metadata(os_file_t file = OS_FILE_CLOSED
-#ifdef UNIV_LINUX
+#ifndef _WIN32
 			   , struct stat* statbuf = NULL
 #endif
 			   );
@@ -1422,6 +1422,9 @@ public:
   @retval NULL if this was the last */
   inline fil_space_t* keyrotate_next(fil_space_t *space, bool recheck,
                                      bool encrypt);
+
+  /** Extend all open data files to the recovered size */
+  ATTRIBUTE_COLD void extend_to_recv_size();
 };
 
 /** The tablespace memory cache. */
@@ -1522,20 +1525,6 @@ fil_write_flushed_lsn(
 	lsn_t	lsn)
 MY_ATTRIBUTE((warn_unused_result));
 
-/** Replay a file rename operation if possible.
-@param[in]	space_id	tablespace identifier
-@param[in]	name		old file name
-@param[in]	new_name	new file name
-@return	whether the operation was successfully applied
-(the name did not exist, or new_name did not exist and
-name was successfully renamed to new_name)  */
-bool
-fil_op_replay_rename(
-	ulint		space_id,
-	const char*	name,
-	const char*	new_name)
-	MY_ATTRIBUTE((warn_unused_result));
-
 /** Delete a tablespace and associated .ibd file.
 @param[in]	id		tablespace identifier
 @param[in]	if_exists	whether to ignore missing tablespace
@@ -1559,7 +1548,7 @@ void fil_close_tablespace(ulint id);
 /*******************************************************************//**
 Allocates and builds a file name from a path, a table or tablespace name
 and a suffix. The string must be freed by caller with ut_free().
-@param[in] path NULL or the direcory path or the full path and filename.
+@param[in] path NULL or the directory path or the full path and filename.
 @param[in] name NULL if path is full, or Table/Tablespace name
 @param[in] suffix NULL or the file extention to use.
 @return own: file name */

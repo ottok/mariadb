@@ -1458,7 +1458,7 @@ mysqld_list_fields(THD *thd, TABLE_LIST *table_list, const char *wild)
 
   if (open_normal_and_derived_tables(thd, table_list,
                                      MYSQL_OPEN_FORCE_SHARED_HIGH_PRIO_MDL,
-                                     DT_INIT | DT_PREPARE | DT_CREATE))
+                                     DT_INIT | DT_PREPARE))
     DBUG_VOID_RETURN;
   table= table_list->table;
 
@@ -1924,7 +1924,7 @@ static void add_table_options(THD *thd, TABLE *table,
     packet->append_ulonglong(share->stats_sample_pages);
   }
 
-  /* We use CHECKSUM, instead of TABLE_CHECKSUM, for backward compability */
+  /* We use CHECKSUM, instead of TABLE_CHECKSUM, for backward compatibility */
   if (create_info.options & HA_OPTION_CHECKSUM)
     packet->append(STRING_WITH_LEN(" CHECKSUM=1"));
   if (create_info.page_checksum != HA_CHOICE_UNDEF)
@@ -3772,15 +3772,8 @@ static bool show_status_array(THD *thd, const char *wild,
 
         if (show_type == SHOW_SYS)
           mysql_mutex_lock(&LOCK_global_system_variables);
-        else if (show_type >= SHOW_LONG_STATUS && scope == OPT_GLOBAL &&
-                 !status_var->local_memory_used)
-        {
-          mysql_mutex_lock(&LOCK_status);
-          *status_var= global_status_var;
-          mysql_mutex_unlock(&LOCK_status);
-          calc_sum_of_all_status(status_var);
-          DBUG_ASSERT(status_var->local_memory_used);
-        }
+        else if (show_type >= SHOW_LONG_STATUS && scope == OPT_GLOBAL)
+          calc_sum_of_all_status_if_needed(status_var);
 
         pos= get_one_variable(thd, var, scope, show_type, status_var,
                               &charset, buff, &length);
@@ -5511,7 +5504,7 @@ static int get_schema_tables_record(THD *thd, TABLE_LIST *tables,
       str.qs_append(share->stats_sample_pages);
     }
 
-    /* We use CHECKSUM, instead of TABLE_CHECKSUM, for backward compability */
+    /* We use CHECKSUM, instead of TABLE_CHECKSUM, for backward compatibility */
     if (share->db_create_options & HA_OPTION_CHECKSUM)
       str.qs_append(STRING_WITH_LEN(" checksum=1"));
 
@@ -6932,10 +6925,14 @@ static int get_check_constraints_record(THD *thd, TABLE_LIST *tables,
       table->field[0]->store(STRING_WITH_LEN("def"), system_charset_info);
       table->field[3]->store(check->name.str, check->name.length,
                              system_charset_info);
+      const char *tmp_buff;
+      tmp_buff= (check->get_vcol_type() == VCOL_CHECK_FIELD ?
+                 "Column" : "Table");
+      table->field[4]->store(tmp_buff, strlen(tmp_buff), system_charset_info);
       /* Make sure the string is empty between each print. */
       str.length(0);
       check->print(&str);
-      table->field[4]->store(str.ptr(), str.length(), system_charset_info);
+      table->field[5]->store(str.ptr(), str.length(), system_charset_info);
       if (schema_table_store_record(thd, table))
         DBUG_RETURN(1);
     }
@@ -7055,8 +7052,7 @@ static bool store_trigger(THD *thd, Trigger *trigger,
                                               (my_time_t)(trigger->create_time/100));
     /* timestamp is with 6 digits */
     timestamp.second_part= (trigger->create_time % 100) * 10000;
-    ((Field_temporal_with_date*) table->field[16])->store_time_dec(&timestamp,
-                                                                   2);
+    table->field[16]->store_time_dec(&timestamp, 2);
   }
 
   sql_mode_string_representation(thd, trigger->sql_mode, &sql_mode_rep);
@@ -8492,14 +8488,19 @@ end:
 
 bool optimize_schema_tables_memory_usage(List<TABLE_LIST> &tables)
 {
+  DBUG_ENTER("optimize_schema_tables_memory_usage");
+
   List_iterator<TABLE_LIST> tli(tables);
 
   while (TABLE_LIST *table_list= tli++)
   {
+    if (!table_list->schema_table)
+      continue;
+
     TABLE *table= table_list->table;
     THD *thd=table->in_use;
 
-    if (!table_list->schema_table || !thd->fill_information_schema_tables())
+    if (!thd->fill_information_schema_tables())
       continue;
 
     if (!table->is_created())
@@ -8539,6 +8540,7 @@ bool optimize_schema_tables_memory_usage(List<TABLE_LIST> &tables)
       {
         /* all fields were optimized away. Force a non-0-length row */
         table->s->reclength= to_recinfo->length= 1;
+        to_recinfo->type= FIELD_NORMAL;
         to_recinfo++;
       }
       p->recinfo= to_recinfo;
@@ -8546,10 +8548,10 @@ bool optimize_schema_tables_memory_usage(List<TABLE_LIST> &tables)
       // TODO switch from Aria to Memory if all blobs were optimized away?
       if (instantiate_tmp_table(table, p->keyinfo, p->start_recinfo, &p->recinfo,
                    table_list->select_lex->options | thd->variables.option_bits))
-        return 1;
+        DBUG_RETURN(1);
     }
   }
-  return 0;
+  DBUG_RETURN(0);
 }
 
 
@@ -8655,6 +8657,16 @@ bool get_schema_tables_result(JOIN *join,
 
       /* A value of 0 indicates a dummy implementation */
       if (table_list->schema_table->fill_table == 0)
+        continue;
+
+      /*
+        Do not fill in tables thare are marked as JT_CONST as these will never
+        be read and they also don't have a tab->read_record.table set!
+        This can happen with queries like
+        SELECT * FROM t1 LEFT JOIN (t1 AS t1b JOIN INFORMATION_SCHEMA.ROUTINES)
+        ON (t1b.a IS NULL);
+      */
+      if (tab->type == JT_CONST)
         continue;
 
       /* skip I_S optimizations specific to get_all_tables */
@@ -9492,6 +9504,7 @@ ST_FIELD_INFO check_constraints_fields_info[]=
   Column("CONSTRAINT_SCHEMA",  Name(),    NOT_NULL, OPEN_FULL_TABLE),
   Column("TABLE_NAME",         Name(),    NOT_NULL, OPEN_FULL_TABLE),
   Column("CONSTRAINT_NAME",    Name(),    NOT_NULL, OPEN_FULL_TABLE),
+  Column("LEVEL",              Varchar(6),NOT_NULL, OPEN_FULL_TABLE),
   Column("CHECK_CLAUSE",       Longtext(MAX_FIELD_VARCHARLENGTH),
                                           NOT_NULL, OPEN_FULL_TABLE),
   CEnd()
@@ -9508,7 +9521,7 @@ extern ST_FIELD_INFO optimizer_trace_info[];
 } //namespace Show
 
 /*
-  Description of ST_FIELD_INFO in table.h
+  Description of ST_FIELD_INFO in sql_i_s.h
 
   Make sure that the order of schema_tables and enum_schema_tables are the same.
 

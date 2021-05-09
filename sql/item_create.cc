@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2011, Oracle and/or its affiliates.
-   Copyright (c) 2008, 2020, MariaDB Corporation.
+   Copyright (c) 2008, 2021, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -5658,6 +5658,21 @@ int item_create_append(Native_func_registry array[])
   for (func= array; func->builder != NULL; func++)
   {
     if (my_hash_insert(& native_functions_hash, (uchar*) func))
+      DBUG_RETURN(1);
+  }
+
+  DBUG_RETURN(0);
+}
+
+int item_create_remove(Native_func_registry array[])
+{
+  Native_func_registry *func;
+
+  DBUG_ENTER("item_create_remove");
+
+  for (func= array; func->builder != NULL; func++)
+  {
+    if (my_hash_delete(& native_functions_hash, (uchar*) func))
       DBUG_RETURN(1);
   }
 

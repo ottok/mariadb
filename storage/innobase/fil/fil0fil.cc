@@ -1,7 +1,7 @@
 /*****************************************************************************
 
-Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2014, 2020, MariaDB Corporation.
+Copyright (c) 1995, 2021, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 2014, 2021, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -113,19 +113,6 @@ bool fil_space_t::try_to_close(bool print_info)
   return false;
 }
 
-/** Test if a tablespace file can be renamed to a new filepath by checking
-if that the old filepath exists and the new filepath does not exist.
-@param[in]	old_path	old filepath
-@param[in]	new_path	new filepath
-@param[in]	is_discarded	whether the tablespace is discarded
-@param[in]	replace_new	whether to ignore the existence of new_path
-@return innodb error code */
-static dberr_t
-fil_rename_tablespace_check(
-	const char*	old_path,
-	const char*	new_path,
-	bool		is_discarded,
-	bool		replace_new = false);
 /** Rename a single-table tablespace.
 The tablespace must exist in the memory cache.
 @param[in]	id		tablespace identifier
@@ -368,12 +355,16 @@ static bool fil_node_open_file_low(fil_node_t *node)
   ut_ad(!node->is_open());
   ut_ad(node->space->is_closing());
   ut_ad(mutex_own(&fil_system.mutex));
-  const auto flags= node->space->flags;
-  bool o_direct_possible= !FSP_FLAGS_HAS_PAGE_COMPRESSION(flags);
+  ulint type;
   static_assert(((UNIV_ZIP_SIZE_MIN >> 1) << 3) == 4096, "compatibility");
-  if (const auto ssize= FSP_FLAGS_GET_ZIP_SSIZE(flags))
-    if (ssize < 3)
-      o_direct_possible= false;
+  switch (FSP_FLAGS_GET_ZIP_SSIZE(node->space->flags)) {
+  case 1:
+  case 2:
+    type= OS_DATA_FILE_NO_O_DIRECT;
+    break;
+  default:
+    type= OS_DATA_FILE;
+  }
 
   for (;;)
   {
@@ -382,8 +373,7 @@ static bool fil_node_open_file_low(fil_node_t *node)
                                  node->is_raw_disk
                                  ? OS_FILE_OPEN_RAW | OS_FILE_ON_ERROR_NO_EXIT
                                  : OS_FILE_OPEN | OS_FILE_ON_ERROR_NO_EXIT,
-                                 OS_FILE_AIO, o_direct_possible
-                                 ? OS_DATA_FILE : OS_DATA_FILE_NO_O_DIRECT,
+                                 OS_FILE_AIO, type,
                                  srv_read_only_mode, &success);
     if (success)
       break;
@@ -1305,6 +1295,33 @@ void fil_system_t::close()
 #endif /* UNIV_LINUX */
 }
 
+/** Extend all open data files to the recovered size */
+ATTRIBUTE_COLD void fil_system_t::extend_to_recv_size()
+{
+  ut_ad(is_initialised());
+  mutex_enter(&mutex);
+  for (fil_space_t *space= UT_LIST_GET_FIRST(fil_system.space_list); space;
+       space= UT_LIST_GET_NEXT(space_list, space))
+  {
+    const uint32_t size= space->recv_size;
+
+    if (size > space->size)
+    {
+      if (space->is_closing())
+        continue;
+      space->reacquire();
+      bool success;
+      while (fil_space_extend_must_retry(space, UT_LIST_GET_LAST(space->chain),
+                                         size, &success))
+        mutex_enter(&mutex);
+      /* Crash recovery requires the file extension to succeed. */
+      ut_a(success);
+      space->release();
+    }
+  }
+  mutex_exit(&mutex);
+}
+
 /** Close all tablespace files at shutdown */
 void fil_space_t::close_all()
 {
@@ -1555,89 +1572,6 @@ fil_name_write(
 {
   ut_ad(!is_predefined_tablespace(space_id));
   mtr->log_file_op(FILE_MODIFY, space_id, name);
-}
-
-/** Replay a file rename operation if possible.
-@param[in]	space_id	tablespace identifier
-@param[in]	name		old file name
-@param[in]	new_name	new file name
-@return	whether the operation was successfully applied
-(the name did not exist, or new_name did not exist and
-name was successfully renamed to new_name)  */
-bool
-fil_op_replay_rename(
-	ulint		space_id,
-	const char*	name,
-	const char*	new_name)
-{
-	/* In order to replay the rename, the following must hold:
-	* The new name is not already used.
-	* A tablespace exists with the old name.
-	* The space ID for that tablepace matches this log entry.
-	This will prevent unintended renames during recovery. */
-	fil_space_t*	space = fil_space_get(space_id);
-
-	if (space == NULL) {
-		return(true);
-	}
-
-	const bool name_match
-		= strcmp(name, UT_LIST_GET_FIRST(space->chain)->name) == 0;
-
-	if (!name_match) {
-		return(true);
-	}
-
-	/* Create the database directory for the new name, if
-	it does not exist yet */
-
-	const char*	namend = strrchr(new_name, OS_PATH_SEPARATOR);
-	ut_a(namend != NULL);
-
-	char*		dir = static_cast<char*>(
-		ut_malloc_nokey(ulint(namend - new_name) + 1));
-
-	memcpy(dir, new_name, ulint(namend - new_name));
-	dir[namend - new_name] = '\0';
-
-	bool		success = os_file_create_directory(dir, false);
-	ut_a(success);
-
-	ulint		dirlen = 0;
-
-	if (const char* dirend = strrchr(dir, OS_PATH_SEPARATOR)) {
-		dirlen = ulint(dirend - dir) + 1;
-	}
-
-	ut_free(dir);
-
-	/* New path must not exist. */
-	dberr_t		err = fil_rename_tablespace_check(
-		name, new_name, false);
-	if (err != DB_SUCCESS) {
-		ib::error() << " Cannot replay file rename."
-			" Remove either file and try again.";
-		return(false);
-	}
-
-	char*		new_table = mem_strdupl(
-		new_name + dirlen,
-		strlen(new_name + dirlen)
-		- 4 /* remove ".ibd" */);
-
-	ut_ad(new_table[ulint(namend - new_name) - dirlen]
-	      == OS_PATH_SEPARATOR);
-#if OS_PATH_SEPARATOR != '/'
-	new_table[namend - new_name - dirlen] = '/';
-#endif
-
-	if (!fil_rename_tablespace(
-		    space_id, name, new_table, new_name)) {
-		ut_error;
-	}
-
-	ut_free(new_table);
-	return(true);
 }
 
 /** Check for pending operations.
@@ -1961,7 +1895,7 @@ fil_space_t *fil_truncate_prepare(ulint space_id)
 /*******************************************************************//**
 Allocates and builds a file name from a path, a table or tablespace name
 and a suffix. The string must be freed by caller with ut_free().
-@param[in] path NULL or the direcory path or the full path and filename.
+@param[in] path NULL or the directory path or the full path and filename.
 @param[in] name NULL if path is full, or Table/Tablespace name
 @param[in] suffix NULL or the file extention to use.
 @param[in] trim_name true if the last name on the path should be trimmed.
@@ -2066,22 +2000,18 @@ fil_make_filepath(
 if that the old filepath exists and the new filepath does not exist.
 @param[in]	old_path	old filepath
 @param[in]	new_path	new filepath
-@param[in]	is_discarded	whether the tablespace is discarded
 @param[in]	replace_new	whether to ignore the existence of new_path
 @return innodb error code */
 static dberr_t
 fil_rename_tablespace_check(
 	const char*	old_path,
 	const char*	new_path,
-	bool		is_discarded,
 	bool		replace_new)
 {
 	bool	exists = false;
 	os_file_type_t	ftype;
 
-	if (!is_discarded
-	    && os_file_status(old_path, &exists, &ftype)
-	    && !exists) {
+	if (os_file_status(old_path, &exists, &ftype) && !exists) {
 		ib::error() << "Cannot rename '" << old_path
 			<< "' to '" << new_path
 			<< "' because the source file"
@@ -2141,7 +2071,7 @@ dberr_t fil_space_t::rename(const char* name, const char* path, bool log,
 
 	if (log) {
 		dberr_t err = fil_rename_tablespace_check(
-			chain.start->name, path, false, replace);
+			chain.start->name, path, replace);
 		if (err != DB_SUCCESS) {
 			return(err);
 		}
@@ -2297,10 +2227,22 @@ fil_ibd_create(
 		return NULL;
 	}
 
+	ulint type;
+	static_assert(((UNIV_ZIP_SIZE_MIN >> 1) << 3) == 4096,
+		      "compatibility");
+	switch (FSP_FLAGS_GET_ZIP_SSIZE(flags)) {
+	case 1:
+	case 2:
+		type = OS_DATA_FILE_NO_O_DIRECT;
+		break;
+	default:
+		type = OS_DATA_FILE;
+	}
+
 	file = os_file_create(
 		innodb_data_file_key, path,
 		OS_FILE_CREATE | OS_FILE_ON_ERROR_NO_EXIT,
-		OS_FILE_AIO, OS_DATA_FILE, srv_read_only_mode, &success);
+		OS_FILE_AIO, type, srv_read_only_mode, &success);
 
 	if (!success) {
 		/* The following call will print an error message */
@@ -3047,7 +2989,7 @@ fil_ibd_load(
 	space = fil_space_get_by_id(space_id);
 	mutex_exit(&fil_system.mutex);
 
-	if (space != NULL) {
+	if (space) {
 		/* Compare the filename we are trying to open with the
 		filename from the first node of the tablespace we opened
 		previously. Fail if it is different. */
@@ -3059,8 +3001,8 @@ fil_ibd_load(
 				<< "' with space ID " << space->id
 				<< ". Another data file called " << node->name
 				<< " exists with the same space ID.";
-				space = NULL;
-				return(FIL_LOAD_ID_CHANGED);
+			space = NULL;
+			return(FIL_LOAD_ID_CHANGED);
 		}
 		return(FIL_LOAD_OK);
 	}
@@ -3097,13 +3039,6 @@ fil_ibd_load(
 		os_offset_t	minimum_size;
 	case DB_SUCCESS:
 		if (file.space_id() != space_id) {
-			ib::info()
-				<< "Ignoring data file '"
-				<< file.filepath()
-				<< "' with space ID " << file.space_id()
-				<< ", since the redo log references "
-				<< file.filepath() << " with space ID "
-				<< space_id << ".";
 			return(FIL_LOAD_ID_CHANGED);
 		}
 		/* Get and test the file size. */

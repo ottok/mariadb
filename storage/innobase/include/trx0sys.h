@@ -87,7 +87,6 @@ void
 trx_write_trx_id(byte* db_trx_id, trx_id_t id)
 {
 	compile_time_assert(DATA_TRX_ID_LEN == 6);
-	ut_ad(id);
 	mach_write_to_6(db_trx_id, id);
 }
 
@@ -830,6 +829,14 @@ public:
   {
     mutex_enter(&mutex);
     for (const auto &trx : trx_list)
+      callback(trx);
+    mutex_exit(&mutex);
+  }
+
+  template <typename Callable> void for_each(Callable &&callback)
+  {
+    mutex_enter(&mutex);
+    for (auto &trx : trx_list)
       callback(trx);
     mutex_exit(&mutex);
   }

@@ -1,5 +1,5 @@
 /* Copyright (c) 2002, 2016, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2016, MariaDB
+   Copyright (c) 2010, 2021, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -278,7 +278,11 @@ bool Item_subselect::fix_fields(THD *thd_param, Item **ref)
   {
     if (sl->tvc)
     {
-      wrap_tvc_into_select(thd, sl);
+      if (!(sl= wrap_tvc_into_select(thd, sl)))
+      {
+        res= TRUE;
+        goto end;
+      }
     }
   }
   
@@ -382,7 +386,7 @@ bool Item_subselect::mark_as_eliminated_processor(void *arg)
 bool Item_subselect::eliminate_subselect_processor(void *arg)
 {
   unit->item= NULL;
-  unit->exclude_from_tree();
+  unit->exclude();
   eliminated= TRUE;
   return FALSE;
 }
@@ -444,6 +448,26 @@ bool Item_subselect::mark_as_dependent(THD *thd, st_select_lex *select,
     upper->select= select;
     upper->item= item;
     if (upper_refs.push_back(upper, thd->stmt_arena->mem_root))
+      return TRUE;
+  }
+  return FALSE;
+}
+
+
+/*
+  @brief
+    Update the table bitmaps for the outer references used within a subquery
+*/
+
+bool Item_subselect::update_table_bitmaps_processor(void *arg)
+{
+  List_iterator<Ref_to_outside> it(upper_refs);
+  Ref_to_outside *upper;
+
+  while ((upper= it++))
+  {
+    if (upper->item &&
+        upper->item->walk(&Item::update_table_bitmaps_processor, FALSE, arg))
       return TRUE;
   }
   return FALSE;
@@ -661,6 +685,31 @@ bool Item_subselect::is_expensive()
 }
 
 
+static
+int walk_items_for_table_list(Item_processor processor,
+                              bool walk_subquery, void *argument,
+                              List<TABLE_LIST>& join_list)
+{
+  List_iterator<TABLE_LIST> li(join_list);
+  int res;
+  while (TABLE_LIST *table= li++)
+  {
+    if (table->on_expr)
+    {
+      if ((res= table->on_expr->walk(processor, walk_subquery, argument)))
+        return res;
+    }
+    if (table->nested_join)
+    {
+      if ((res= walk_items_for_table_list(processor, walk_subquery, argument,
+                                          table->nested_join->join_list)))
+        return res;
+    }
+  }
+  return 0;
+}
+
+
 bool Item_subselect::unknown_splocal_processor(void *argument)
 {
   SELECT_LEX *sl= unit->first_select();
@@ -726,7 +775,10 @@ bool Item_subselect::walk(Item_processor processor, bool walk_subquery,
       if (lex->having && (lex->having)->walk(processor, walk_subquery,
                                              argument))
         return 1;
-      /* TODO: why does this walk WHERE/HAVING but not ON expressions of outer joins? */
+
+     if (walk_items_for_table_list(processor, walk_subquery, argument,
+                                       *lex->join_list))
+        return 1;
 
       while ((item=li++))
       {
@@ -891,7 +943,7 @@ bool Item_subselect::expr_cache_is_needed(THD *thd)
 
 inline bool Item_in_subselect::left_expr_has_null()
 {
-  return (*(optimizer->get_cache()))->null_value;
+  return (*(optimizer->get_cache()))->null_value_inside;
 }
 
 
@@ -1345,7 +1397,17 @@ bool Item_singlerow_subselect::null_inside()
 void Item_singlerow_subselect::bring_value()
 {
   if (!exec() && assigned())
-    null_value= 0;
+  {
+    null_value= true;
+    for (uint i= 0; i < max_columns ; i++)
+    {
+      if (!row[i]->null_value)
+      {
+        null_value= false;
+        return;
+      }
+    }
+  }
   else
     reset();
 }
@@ -1371,7 +1433,11 @@ longlong Item_singlerow_subselect::val_int()
 {
   DBUG_ASSERT(fixed == 1);
   if (forced_const)
-    return value->val_int();
+  {
+    longlong val= value->val_int();
+    null_value= value->null_value;
+    return val;
+  }
   if (!exec() && !value->null_value)
   {
     null_value= FALSE;
@@ -1380,6 +1446,7 @@ longlong Item_singlerow_subselect::val_int()
   else
   {
     reset();
+    DBUG_ASSERT(null_value);
     return 0;
   }
 }
@@ -1388,7 +1455,11 @@ String *Item_singlerow_subselect::val_str(String *str)
 {
   DBUG_ASSERT(fixed == 1);
   if (forced_const)
-    return value->val_str(str);
+  {
+    String *res= value->val_str(str);
+    null_value= value->null_value;
+    return res;
+  }
   if (!exec() && !value->null_value)
   {
     null_value= FALSE;
@@ -1397,6 +1468,7 @@ String *Item_singlerow_subselect::val_str(String *str)
   else
   {
     reset();
+    DBUG_ASSERT(null_value);
     return 0;
   }
 }
@@ -1424,7 +1496,11 @@ my_decimal *Item_singlerow_subselect::val_decimal(my_decimal *decimal_value)
 {
   DBUG_ASSERT(fixed == 1);
   if (forced_const)
-    return value->val_decimal(decimal_value);
+  {
+    my_decimal *val= value->val_decimal(decimal_value);
+    null_value= value->null_value;
+    return val;
+  }
   if (!exec() && !value->null_value)
   {
     null_value= FALSE;
@@ -1433,6 +1509,7 @@ my_decimal *Item_singlerow_subselect::val_decimal(my_decimal *decimal_value)
   else
   {
     reset();
+    DBUG_ASSERT(null_value);
     return 0;
   }
 }
@@ -1442,7 +1519,11 @@ bool Item_singlerow_subselect::val_bool()
 {
   DBUG_ASSERT(fixed == 1);
   if (forced_const)
-    return value->val_bool();
+  {
+    bool val= value->val_bool();
+    null_value= value->null_value;
+    return val;
+  }
   if (!exec() && !value->null_value)
   {
     null_value= FALSE;
@@ -1451,6 +1532,7 @@ bool Item_singlerow_subselect::val_bool()
   else
   {
     reset();
+    DBUG_ASSERT(null_value);
     return 0;
   }
 }
@@ -1460,7 +1542,11 @@ bool Item_singlerow_subselect::get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t
 {
   DBUG_ASSERT(fixed == 1);
   if (forced_const)
-    return value->get_date(thd, ltime, fuzzydate);
+  {
+    bool val= value->get_date(thd, ltime, fuzzydate);
+    null_value= value->null_value;
+    return val;
+  }
   if (!exec() && !value->null_value)
   {
     null_value= FALSE;
@@ -1469,6 +1555,7 @@ bool Item_singlerow_subselect::get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t
   else
   {
     reset();
+    DBUG_ASSERT(null_value);
     return 1;
   }
 }

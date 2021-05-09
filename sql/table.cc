@@ -2283,7 +2283,7 @@ int TABLE_SHARE::init_from_binary_frm_image(THD *thd, bool write,
   }
   else
   {
-    DBUG_PRINT("info", ("Setting system versioning informations"));
+    DBUG_PRINT("info", ("Setting system versioning information"));
     if (init_period_from_extra2(&vers, extra2.system_period.str,
                   extra2.system_period.str + extra2.system_period.length))
       goto err;
@@ -2943,7 +2943,8 @@ int TABLE_SHARE::init_from_binary_frm_image(THD *thd, bool write,
         key_part->key_part_flag|= field->key_part_flag();
         uint16 key_part_length_bytes= field->key_part_length_bytes();
         key_part->store_length+= key_part_length_bytes;
-        keyinfo->key_length+= key_part_length_bytes;
+        if (i < keyinfo->user_defined_key_parts)
+          keyinfo->key_length+= key_part_length_bytes;
 
         if (i == 0 && key != primary_key)
           field->flags |= (((keyinfo->flags & HA_NOSAME ||
@@ -3037,7 +3038,6 @@ int TABLE_SHARE::init_from_binary_frm_image(THD *thd, bool write,
 
       set_if_bigger(share->max_key_length,keyinfo->key_length+
                     keyinfo->user_defined_key_parts);
-      share->total_key_length+= keyinfo->key_length;
       /*
         MERGE tables do not have unique indexes. But every key could be
         an unique index on the underlying MyISAM table. (Bug #10400)
@@ -4719,7 +4719,7 @@ void update_create_info_from_table(HA_CREATE_INFO *create_info, TABLE *table)
   create_info->row_type= share->row_type;
   create_info->key_block_size= share->key_block_size;
   create_info->default_table_charset= share->table_charset;
-  create_info->table_charset= 0;
+  create_info->alter_table_convert_to_charset= 0;
   create_info->comment= share->comment;
   create_info->transactional= share->transactional;
   create_info->page_checksum= share->page_checksum;

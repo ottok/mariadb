@@ -11,7 +11,6 @@ usr/bin/StorageManager
 usr/bin/WriteEngineServer
 usr/bin/clearShm
 usr/bin/cleartablelock
-usr/bin/columnstore
 usr/bin/columnstore-post-install
 usr/bin/columnstore-pre-uninstall
 usr/bin/columnstoreDBWrite
@@ -35,6 +34,7 @@ usr/bin/mcs-loadbrm.py
 usr/bin/mcs-stop-controllernode.sh
 usr/bin/mcsGetConfig
 usr/bin/mcsSetConfig
+usr/bin/mycnfUpgrade
 usr/bin/post-mysql-install
 usr/bin/post-mysqld-install
 usr/bin/reset_locks

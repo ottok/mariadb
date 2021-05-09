@@ -1,5 +1,5 @@
 # Copyright (c) 2006, 2017, Oracle and/or its affiliates.
-# Copyright (c) 2008, 2020, MariaDB Corporation.
+# Copyright (c) 2008, 2021, MariaDB Corporation.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,7 +14,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1335 USA
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.7)
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+PROJECT(MySQL)
 
 # Remove the following comment if you don't want to have striped binaries
 # in RPM's:
@@ -49,8 +50,16 @@ IF(NOT DEFINED MANUFACTURER)
   MARK_AS_ADVANCED(MANUFACTURER)
 ENDIF()
 
-SET(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING
-   "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel")
+IF(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  # Setting build type to RelWithDebInfo as none was specified.")
+  SET(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING
+   "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel"
+   FORCE)
+  # Set the possible values of build type for cmake-gui
+  SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+   "None" "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+ENDIF()
+
 
 # MAX_INDEXES - Set the maximum number of indexes per table, default 64
 SET(MAX_INDEXES 64 CACHE STRING "Max number of indexes")
@@ -76,18 +85,8 @@ IF(UNIX AND NOT APPLE)
   MARK_AS_ADVANCED(WITH_PIC)
 ENDIF()
 
-# Optionally set project name, e.g.
-# foo.xcodeproj (mac) or foo.sln (windows)
+# This is used by TokuDB only
 SET(MYSQL_PROJECT_NAME_DOCSTRING "MySQL project name")
-IF(DEFINED MYSQL_PROJECT_NAME)
-  SET(MYSQL_PROJECT_NAME ${MYSQL_PROJECT_NAME} CACHE STRING
-      ${MYSQL_PROJECT_NAME_DOCSTRING} FORCE)
-ELSE()
-  SET(MYSQL_PROJECT_NAME "MySQL" CACHE STRING
-      ${MYSQL_PROJECT_NAME_DOCSTRING} FORCE)
-  MARK_AS_ADVANCED(MYSQL_PROJECT_NAME)
-ENDIF()
-PROJECT(${MYSQL_PROJECT_NAME})
 
 IF(CMAKE_VERSION VERSION_LESS "3.1")
   IF(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -140,7 +139,7 @@ ENDIF()
 # NUMA
 SET(WITH_NUMA "AUTO" CACHE STRING "Build with non-uniform memory access, allowing --innodb-numa-interleave. Options are ON|OFF|AUTO. ON = enabled (requires NUMA library), OFF = disabled, AUTO = enabled if NUMA library found.")
 
-SET(MYSQL_MAINTAINER_MODE "AUTO" CACHE STRING "MySQL maintainer-specific development environment. Options are: ON OFF AUTO.")
+SET(MYSQL_MAINTAINER_MODE "AUTO" CACHE STRING "Enable MariaDB maintainer-specific warnings. One of: NO (warnings are disabled) WARN (warnings are enabled) ERR (warnings are errors) AUTO (warnings are errors in Debug only)")
 
 # Packaging
 IF (NOT CPACK_GENERATOR)
@@ -204,21 +203,17 @@ OPTION(WITH_ASAN "Enable address sanitizer" OFF)
 IF (WITH_ASAN AND NOT MSVC)
   # this flag might be set by default on some OS
   MY_CHECK_AND_SET_COMPILER_FLAG("-U_FORTIFY_SOURCE" DEBUG RELWITHDEBINFO)
-  # gcc 4.8.1 and new versions of clang
   MY_CHECK_AND_SET_COMPILER_FLAG("-fsanitize=address -fPIC"
     DEBUG RELWITHDEBINFO)
   SET(HAVE_C_FSANITIZE ${have_C__fsanitize_address__fPIC})
   SET(HAVE_CXX_FSANITIZE ${have_CXX__fsanitize_address__fPIC})
   IF(HAVE_C_FSANITIZE AND HAVE_CXX_FSANITIZE)
+    OPTION(WITH_ASAN_SCOPE "Enable -fsanitize-address-use-after-scope" OFF)
     SET(WITH_ASAN_OK 1)
-  ELSE()
-    # older versions of clang
-    MY_CHECK_AND_SET_COMPILER_FLAG("-faddress-sanitizer -fPIC"
-      DEBUG RELWITHDEBINFO)
-    SET(HAVE_C_FADDRESS ${have_C__faddress_sanitizer__fPIC})
-    SET(HAVE_CXX_FADDRESS ${have_CXX__faddress_sanitizer__fPIC})
-    IF(HAVE_C_FADDRESS AND HAVE_CXX_FADDRESS)
-      SET(WITH_ASAN_OK 1)
+    IF(WITH_ASAN_SCOPE)
+      MY_CHECK_AND_SET_COMPILER_FLAG(
+        "-fsanitize=address -fsanitize-address-use-after-scope"
+	DEBUG RELWITHDEBINFO)
     ENDIF()
   ENDIF()
 
@@ -397,7 +392,7 @@ CHECK_PCRE()
 
 CHECK_SYSTEMD()
 
-IF(CMAKE_CROSSCOMPILING)
+IF(CMAKE_CROSSCOMPILING AND NOT DEFINED CMAKE_CROSSCOMPILING_EMULATOR)
   SET(IMPORT_EXECUTABLES "IMPORTFILE-NOTFOUND" CACHE FILEPATH "Path to import_executables.cmake from a native build")
   INCLUDE(${IMPORT_EXECUTABLES})
 ENDIF()
@@ -479,7 +474,7 @@ ADD_SUBDIRECTORY(scripts)
 ADD_SUBDIRECTORY(support-files)
 ADD_SUBDIRECTORY(extra/aws_sdk)
 
-IF(NOT CMAKE_CROSSCOMPILING)
+IF(NOT CMAKE_CROSSCOMPILING OR DEFINED CMAKE_CROSSCOMPILING_EMULATOR)
   SET(EXPORTED comp_err comp_sql factorial)
   IF(NOT WITHOUT_SERVER)
     SET(EXPORTED ${EXPORTED} gen_lex_hash gen_lex_token)
@@ -531,8 +526,7 @@ ADD_CUSTOM_TARGET(INFO_BIN ALL
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
-INSTALL_DOCUMENTATION(README.md CREDITS COPYING THIRDPARTY
-                      EXCEPTIONS-CLIENT COMPONENT Readme)
+INSTALL_DOCUMENTATION(README.md CREDITS COPYING THIRDPARTY COMPONENT Readme)
 
 # MDEV-6526 these files are not installed anymore
 #INSTALL_DOCUMENTATION(${CMAKE_BINARY_DIR}/Docs/INFO_SRC

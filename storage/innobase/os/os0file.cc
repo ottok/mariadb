@@ -2,7 +2,7 @@
 
 Copyright (c) 1995, 2019, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2020, MariaDB Corporation.
+Copyright (c) 2013, 2021, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted
 by Percona Inc.. Those modifications are
@@ -1385,7 +1385,6 @@ os_file_create_func(
 
 	ut_a(type == OS_LOG_FILE
 	     || type == OS_DATA_FILE
-	     || type == OS_DATA_TEMP_FILE
 	     || type == OS_DATA_FILE_NO_O_DIRECT);
 
 	ut_a(purpose == OS_FILE_AIO || purpose == OS_FILE_NORMAL);
@@ -1432,7 +1431,7 @@ os_file_create_func(
 	/* We disable OS caching (O_DIRECT) only on data files */
 	if (!read_only
 	    && *success
-	    && type != OS_LOG_FILE && type != OS_DATA_TEMP_FILE
+	    && type != OS_LOG_FILE
 	    && type != OS_DATA_FILE_NO_O_DIRECT
 	    && (srv_file_flush_method == SRV_O_DIRECT
 		|| srv_file_flush_method == SRV_O_DIRECT_NO_FSYNC)) {
@@ -2522,7 +2521,9 @@ os_file_create_func(
 		/* fall through */
 	case SRV_ALL_O_DIRECT_FSYNC:
 		/*Traditional Windows behavior, no buffering for any files.*/
-		attributes |= FILE_FLAG_NO_BUFFERING;
+		if (type != OS_DATA_FILE_NO_O_DIRECT) {
+			attributes |= FILE_FLAG_NO_BUFFERING;
+		}
 		break;
 
 	case SRV_FSYNC:
@@ -3962,7 +3963,6 @@ static bool is_linux_native_aio_supported()
 	}
 
 	int	err = io_submit(io_ctx, 1, &p_iocb);
-	srv_stats.buffered_aio_submitted.inc();
 
 	if (err >= 1) {
 		/* Now collect the submitted IO request. */
@@ -4160,10 +4160,6 @@ os_aio_print(FILE*	file)
 	time_t		current_time;
 	double		time_elapsed;
 
-	fputs("Pending normal aio reads:", file);
-
-
-	putc('\n', file);
 	current_time = time(NULL);
 	time_elapsed = 0.001 + difftime(current_time, os_last_printout);
 
@@ -4393,7 +4389,7 @@ static bool is_file_on_ssd(char *file_path)
 /** Determine some file metadata when creating or reading the file.
 @param	file	the file that is being created, or OS_FILE_CLOSED */
 void fil_node_t::find_metadata(os_file_t file
-#ifdef UNIV_LINUX
+#ifndef _WIN32
 			       , struct stat* statbuf
 #endif
 			       )
@@ -4433,18 +4429,18 @@ void fil_node_t::find_metadata(os_file_t file
 		block_size = 512;
 	}
 #else
-	on_ssd = space->atomic_write_supported;
-# ifdef UNIV_LINUX
-	if (!on_ssd) {
-		struct stat sbuf;
-		if (!statbuf && !fstat(file, &sbuf)) {
-			statbuf = &sbuf;
-		}
-		if (statbuf && fil_system.is_ssd(statbuf->st_dev)) {
-			on_ssd = true;
-		}
+	struct stat sbuf;
+	if (!statbuf && !fstat(file, &sbuf)) {
+		statbuf = &sbuf;
 	}
+	if (statbuf) {
+		block_size = statbuf->st_blksize;
+	}
+	on_ssd = space->atomic_write_supported
+# ifdef UNIV_LINUX
+		|| (statbuf && fil_system.is_ssd(statbuf->st_dev))
 # endif
+		;
 #endif
 	if (!space->atomic_write_supported) {
 		space->atomic_write_supported = atomic_write
@@ -4478,7 +4474,6 @@ bool fil_node_t::read_page0()
 	if (fstat(handle, &statbuf)) {
 		return false;
 	}
-	block_size = statbuf.st_blksize;
 	os_offset_t size_bytes = statbuf.st_size;
 #else
 	os_offset_t size_bytes = os_file_get_size(handle);

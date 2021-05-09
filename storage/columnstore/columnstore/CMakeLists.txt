@@ -40,6 +40,7 @@ SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib)
 
 SET (ENGINE_SYSCONFDIR "/etc")
 SET (ENGINE_DATADIR    "/var/lib/columnstore")
+SET (ENGINE_LOGDIR    "/var/log/mariadb/columnstore")
 
 IF (INSTALL_LAYOUT)
     # We are building from MariaDB server submodule if this is set
@@ -187,7 +188,7 @@ ELSE ()
     # Remove visibility flag for now as it breaks Ubuntu 18.05 and we need to
     # fix our libraries anyway
     STRING(REPLACE "-fvisibility=hidden" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    MY_CHECK_AND_SET_COMPILER_FLAG("-D_DEBUG" DEBUG)
+    MY_CHECK_AND_SET_COMPILER_FLAG("-D_DEBUG -O0" DEBUG)
 ENDIF()
 
 

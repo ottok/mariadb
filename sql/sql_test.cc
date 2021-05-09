@@ -33,6 +33,8 @@
 #include <malloc.h>
 #elif defined(HAVE_MALLINFO) && defined(HAVE_SYS_MALLOC_H)
 #include <sys/malloc.h>
+#elif defined(HAVE_MALLOC_ZONE)
+#include <malloc/malloc.h>
 #endif
 
 #ifdef HAVE_EVENT_SCHEDULER
@@ -293,7 +295,6 @@ print_plan(JOIN* join, uint idx, double record_count, double read_time,
            double current_read_time, const char *info)
 {
   uint i;
-  POSITION pos;
   JOIN_TAB *join_table;
   JOIN_TAB **plan_nodes;
   TABLE*   table;
@@ -320,8 +321,8 @@ print_plan(JOIN* join, uint idx, double record_count, double read_time,
   fputs("     POSITIONS: ", DBUG_FILE);
   for (i= 0; i < idx ; i++)
   {
-    pos = join->positions[i];
-    table= pos.table->table;
+    POSITION *pos= join->positions + i;
+    table= pos->table->table;
     if (table)
       fputs(table->s->table_name.str, DBUG_FILE);
     fputc(' ', DBUG_FILE);
@@ -337,8 +338,8 @@ print_plan(JOIN* join, uint idx, double record_count, double read_time,
     fputs("BEST_POSITIONS: ", DBUG_FILE);
     for (i= 0; i < idx ; i++)
     {
-      pos= join->best_positions[i];
-      table= pos.table->table;
+      POSITION *pos= join->best_positions + i;
+      table= pos->table->table;
       if (table)
         fputs(table->s->table_name.str, DBUG_FILE);
       fputc(' ', DBUG_FILE);
@@ -617,8 +618,12 @@ Next alarm time: %lu\n",
 	(ulong)alarm_info.next_alarm_time);
 #endif
   display_table_locks();
-#ifdef HAVE_MALLINFO
+#if defined(HAVE_MALLINFO2)
+  struct mallinfo2 info = mallinfo2();
+#elif defined(HAVE_MALLINFO)
   struct mallinfo info= mallinfo();
+#endif
+#if defined(HAVE_MALLINFO) || defined(HAVE_MALLINFO2)
   char llbuff[10][22];
   printf("\nMemory status:\n\
 Non-mmapped space allocated from system: %s\n\
@@ -649,6 +654,20 @@ Memory allocated by threads:             %s\n",
          llstr(tmp.global_memory_used, llbuff[8]),
          llstr(tmp.local_memory_used, llbuff[9]));
 
+#elif defined(HAVE_MALLOC_ZONE)
+  malloc_statistics_t info;
+  char llbuff[4][22];
+
+  malloc_zone_statistics(nullptr, &info);
+  printf("\nMemory status:\n\
+Total allocated space:                   %s\n\
+Total free space:                        %s\n\
+Global memory allocated by server:       %s\n\
+Memory allocated by threads:             %s\n",
+         llstr(info.size_allocated, llbuff[0]),
+         llstr((info.size_allocated - info.size_in_use), llbuff[1]),
+         llstr(tmp.global_memory_used, llbuff[2]),
+         llstr(tmp.local_memory_used, llbuff[3]));
 #endif
 
 #ifdef HAVE_EVENT_SCHEDULER

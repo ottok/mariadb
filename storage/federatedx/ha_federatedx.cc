@@ -3425,7 +3425,9 @@ int ha_federatedx::create(const char *name, TABLE *table_arg,
   {
     FEDERATEDX_SERVER server;
 
-    fill_server(thd->mem_root, &server, &tmp_share, create_info->table_charset);
+    // It's possibly wrong to use alter_table_convert_to_charset here.
+    fill_server(thd->mem_root, &server, &tmp_share,
+                create_info->alter_table_convert_to_charset);
 
 #ifndef DBUG_OFF
     mysql_mutex_init(fe_key_mutex_FEDERATEDX_SERVER_mutex,
@@ -3715,7 +3717,7 @@ maria_declare_plugin(federatedx)
   &federatedx_storage_engine,
   "FEDERATED",
   "Patrick Galbraith",
-  "Allows to access tables on other MariaDB servers, supports transactions and more",
+  "Allows one to access tables on other MariaDB servers, supports transactions and more",
   PLUGIN_LICENSE_GPL,
   federatedx_db_init, /* Plugin Init */
   federatedx_done, /* Plugin Deinit */
@@ -3726,4 +3728,3 @@ maria_declare_plugin(federatedx)
   MariaDB_PLUGIN_MATURITY_STABLE /* maturity */
 }
 maria_declare_plugin_end;
-

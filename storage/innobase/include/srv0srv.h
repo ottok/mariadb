@@ -81,10 +81,6 @@ struct srv_stats_t
 	space in the log buffer and have to flush it */
 	ulint_ctr_1_t		log_waits;
 
-#if defined(LINUX_NATIVE_AIO)
-	ulint_ctr_1_t buffered_aio_submitted;
-#endif
-
 	/** Store the number of write requests issued */
 	ulint_ctr_1_t		buf_pool_write_requests;
 
@@ -479,9 +475,6 @@ extern struct export_var_t export_vars;
 
 /** Global counters */
 extern srv_stats_t	srv_stats;
-
-/** Simulate compression failures. */
-extern uint srv_simulate_comp_failures;
 
 /** Fatal semaphore wait threshold = maximum number of seconds
 that semaphore times out in InnoDB */

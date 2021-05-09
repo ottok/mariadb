@@ -1306,7 +1306,7 @@ uint32_t buildOuterJoin(gp_walk_info& gwi, SELECT_LEX& select_lex)
                     (table_ptr->alias.length ? table_ptr->alias.str : ""),
                     getViewName(table_ptr), true, lower_case_table_names);
 
-        if (table_ptr->outer_join && table_ptr->on_expr)
+        if ((table_ptr->outer_join & (JOIN_TYPE_LEFT | JOIN_TYPE_RIGHT)) && table_ptr->on_expr)
         {
             // inner tables block
             Item_cond* expr = reinterpret_cast<Item_cond*>(table_ptr->on_expr);
@@ -4097,6 +4097,14 @@ ReturnedColumn* buildFunctionColumn(
 #endif
 
         fc->operationType(functor->operationType(funcParms, fc->resultType()));
+        // For some reason, MDB has MYSQL_TYPE_DATETIME2 for functions on a TIMESTAMP
+        if (fc->operationType().colDataType == CalpontSystemCatalog::TIMESTAMP)
+        {
+            CalpontSystemCatalog::ColType ct = fc->resultType();
+            ct.colDataType = CalpontSystemCatalog::TIMESTAMP;
+            ct.colWidth = 8;
+            fc->resultType(ct);
+        }
         fc->expressionId(ci->expressionId++);
         // A few functions use a different collation than that found in 
         // the base ifp class
@@ -6216,7 +6224,7 @@ int processFrom(bool &isUnion,
             }
           
             // Save on_expr to use it for WHERE processing
-            if (!table_ptr->outer_join && table_ptr->on_expr)
+            if (!(table_ptr->outer_join & (JOIN_TYPE_LEFT | JOIN_TYPE_RIGHT)) && table_ptr->on_expr)
             {
                 on_expr_list.push_back(table_ptr->on_expr);
             } 

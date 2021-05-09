@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2016, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2020, MariaDB Corporation.
+   Copyright (c) 2009, 2021, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -664,6 +664,7 @@ typedef struct system_variables
     are based on the cluster size):
   */
   ulong saved_auto_increment_increment, saved_auto_increment_offset;
+  ulong saved_lock_wait_timeout;
   ulonglong wsrep_gtid_seq_no;
 #endif /* WITH_WSREP */
   uint eq_range_index_dive_limit;
@@ -987,11 +988,24 @@ void add_to_status(STATUS_VAR *to_var, STATUS_VAR *from_var);
 void add_diff_to_status(STATUS_VAR *to_var, STATUS_VAR *from_var,
                         STATUS_VAR *dec_var);
 
+uint calc_sum_of_all_status(STATUS_VAR *to);
+static inline void calc_sum_of_all_status_if_needed(STATUS_VAR *to)
+{
+  if (to->local_memory_used == 0)
+  {
+    mysql_mutex_lock(&LOCK_status);
+    *to= global_status_var;
+    mysql_mutex_unlock(&LOCK_status);
+    calc_sum_of_all_status(to);
+    DBUG_ASSERT(to->local_memory_used);
+  }
+}
+
 /*
   Update global_memory_used. We have to do this with atomic_add as the
   global value can change outside of LOCK_status.
 */
-inline void update_global_memory_status(int64 size)
+static inline void update_global_memory_status(int64 size)
 {
   DBUG_PRINT("info", ("global memory_used: %lld  size: %lld",
                       (longlong) global_status_var.global_memory_used,
@@ -1009,7 +1023,7 @@ inline void update_global_memory_status(int64 size)
   @retval         NULL on error
   @retval         Pointter to CHARSET_INFO with the given name on success
 */
-inline CHARSET_INFO *
+static inline CHARSET_INFO *
 mysqld_collation_get_by_name(const char *name,
                              CHARSET_INFO *name_cs= system_charset_info)
 {
@@ -1028,7 +1042,7 @@ mysqld_collation_get_by_name(const char *name,
   return cs;
 }
 
-inline bool is_supported_parser_charset(CHARSET_INFO *cs)
+static inline bool is_supported_parser_charset(CHARSET_INFO *cs)
 {
   return MY_TEST(cs->mbminlen == 1);
 }
@@ -3786,10 +3800,6 @@ public:
     give_protection_error();
     return TRUE;
   }
-  inline bool fill_derived_tables()
-  {
-    return !stmt_arena->is_stmt_prepare() && !lex->only_view_structure();
-  }
   inline bool fill_information_schema_tables()
   {
     return !stmt_arena->is_stmt_prepare();
@@ -6389,11 +6399,13 @@ public:
    - The sj-materialization temporary table
    - Members needed to make index lookup or a full scan of the temptable.
 */
+class POSITION;
+
 class SJ_MATERIALIZATION_INFO : public Sql_alloc
 {
 public:
   /* Optimal join sub-order */
-  struct st_position *positions;
+  POSITION *positions;
 
   uint tables; /* Number of tables in the sj-nest */
 
@@ -6651,7 +6663,8 @@ public:
 class multi_update :public select_result_interceptor
 {
   TABLE_LIST *all_tables; /* query/update command tables */
-  List<TABLE_LIST> *leaves;     /* list of leves of join table tree */
+  List<TABLE_LIST> *leaves;     /* list of leaves of join table tree */
+  List<TABLE_LIST> updated_leaves;  /* list of of updated leaves */
   TABLE_LIST *update_tables;
   TABLE **tmp_tables, *main_table, *table_to_update;
   TMP_TABLE_PARAM *tmp_table_param;
@@ -6689,6 +6702,7 @@ public:
 	       List<Item> *fields, List<Item> *values,
 	       enum_duplicates handle_duplicates, bool ignore);
   ~multi_update();
+  bool init(THD *thd);
   int prepare(List<Item> &list, SELECT_LEX_UNIT *u);
   int send_data(List<Item> &items);
   bool initialize_tables (JOIN *join);

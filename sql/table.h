@@ -815,7 +815,7 @@ struct TABLE_SHARE
   uint rec_buff_length;                 /* Size of table->record[] buffer */
   uint keys, key_parts;
   uint ext_key_parts;       /* Total number of key parts in extended keys */
-  uint max_key_length, max_unique_length, total_key_length;
+  uint max_key_length, max_unique_length;
   uint uniques;                         /* Number of UNIQUE index */
   uint db_create_options;		/* Create options from database */
   uint db_options_in_use;		/* Options in use */
@@ -3200,6 +3200,12 @@ inline void mark_as_null_row(TABLE *table)
   table->status|=STATUS_NULL_ROW;
   if (table->s->null_bytes)
     bfill(table->null_flags,table->s->null_bytes,255);
+}
+
+inline void unmark_as_null_row(TABLE *table)
+{
+  table->null_row=0;
+  table->status= STATUS_NO_RECORD;
 }
 
 bool is_simple_order(ORDER *order);

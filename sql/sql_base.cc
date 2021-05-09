@@ -5272,7 +5272,6 @@ bool open_normal_and_derived_tables(THD *thd, TABLE_LIST *tables, uint flags,
   uint counter;
   MDL_savepoint mdl_savepoint= thd->mdl_context.mdl_savepoint();
   DBUG_ENTER("open_normal_and_derived_tables");
-  DBUG_ASSERT(!thd->fill_derived_tables());
   if (open_tables(thd, &tables, &counter, flags, &prelocking_strategy) ||
       mysql_handle_derived(thd->lex, dt_phases))
     goto end;
@@ -5330,7 +5329,7 @@ bool open_tables_only_view_structure(THD *thd, TABLE_LIST *table_list,
                                            MYSQL_OPEN_GET_NEW_TABLE |
                                            (can_deadlock ?
                                             MYSQL_OPEN_FAIL_ON_MDL_CONFLICT : 0)),
-                                          DT_INIT | DT_PREPARE | DT_CREATE));
+                                          DT_INIT | DT_PREPARE));
   /*
     Restore old value of sql_command back as it is being looked at in
     process_table() function.
@@ -6407,7 +6406,7 @@ find_field_in_tables(THD *thd, Item_ident *item,
         if (!all_merged && current_sel != last_select)
         {
           mark_select_range_as_dependent(thd, last_select, current_sel,
-                                         found, *ref, item);
+                                         found, *ref, item, true);
         }
       }
       return found;
@@ -7823,11 +7822,15 @@ bool setup_tables(THD *thd, Name_resolution_context *context,
           DBUG_RETURN(1);
       }
       tablenr++;
-    }
-    if (tablenr > MAX_TABLES)
-    {
-      my_error(ER_TOO_MANY_TABLES,MYF(0), static_cast<int>(MAX_TABLES));
-      DBUG_RETURN(1);
+      /*
+        We test the max tables here as we setup_table_map() should not be called
+        with tablenr >= 64
+      */
+      if (tablenr > MAX_TABLES)
+      {
+        my_error(ER_TOO_MANY_TABLES,MYF(0), static_cast<int>(MAX_TABLES));
+        DBUG_RETURN(1);
+      }
     }
   }
   else
@@ -7873,7 +7876,8 @@ bool setup_tables(THD *thd, Name_resolution_context *context,
     if (table_list->jtbm_subselect)
     {
       Item *item= table_list->jtbm_subselect->optimizer;
-      if (table_list->jtbm_subselect->optimizer->fix_fields(thd, &item))
+      if (!table_list->jtbm_subselect->optimizer->fixed &&
+          table_list->jtbm_subselect->optimizer->fix_fields(thd, &item))
       {
         my_error(ER_TOO_MANY_TABLES,MYF(0), static_cast<int>(MAX_TABLES)); /* psergey-todo: WHY ER_TOO_MANY_TABLES ???*/
         DBUG_RETURN(1);

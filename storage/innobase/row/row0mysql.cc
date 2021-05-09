@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2000, 2018, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2015, 2020, MariaDB Corporation.
+Copyright (c) 2015, 2021, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -688,6 +688,7 @@ row_mysql_handle_errors(
 	dberr_t	err;
 
 	DBUG_ENTER("row_mysql_handle_errors");
+	DEBUG_SYNC_C("row_mysql_handle_errors");
 
 handle_new_error:
 	err = trx->error_state;
@@ -962,9 +963,6 @@ row_create_prebuilt(
 
 	prebuilt->fts_doc_id_in_read_set = 0;
 	prebuilt->blob_heap = NULL;
-
-	prebuilt->m_no_prefetch = false;
-	prebuilt->m_read_virtual_key = false;
 
 	DBUG_RETURN(prebuilt);
 }
@@ -1803,12 +1801,11 @@ row_update_for_mysql(row_prebuilt_t* prebuilt)
 
 	clust_index = dict_table_get_first_index(table);
 
-	if (prebuilt->pcur->btr_cur.index == clust_index) {
-		btr_pcur_copy_stored_position(node->pcur, prebuilt->pcur);
-	} else {
-		btr_pcur_copy_stored_position(node->pcur,
-					      prebuilt->clust_pcur);
-	}
+	btr_pcur_copy_stored_position(node->pcur,
+				      prebuilt->pcur->btr_cur.index
+				      == clust_index
+				      ? prebuilt->pcur
+				      : prebuilt->clust_pcur);
 
 	ut_a(node->pcur->rel_pos == BTR_PCUR_ON);
 
@@ -2017,7 +2014,8 @@ row_unlock_for_mysql(
 			rec_offs* offsets				= offsets_;
 
 			rec_offs_init(offsets_);
-			offsets = rec_get_offsets(rec, index, offsets, true,
+			offsets = rec_get_offsets(rec, index, offsets,
+						  index->n_core_fields,
 						  ULINT_UNDEFINED, &heap);
 
 			rec_trx_id = row_get_rec_trx_id(rec, index, offsets);
@@ -4174,7 +4172,6 @@ row_rename_table_for_mysql(
 					FOREIGN KEY constraints */
 {
 	dict_table_t*	table			= NULL;
-	ibool		dict_locked		= FALSE;
 	dberr_t		err			= DB_ERROR;
 	mem_heap_t*	heap			= NULL;
 	const char**	constraints_to_drop	= NULL;
@@ -4188,6 +4185,8 @@ row_rename_table_for_mysql(
 	ut_a(old_name != NULL);
 	ut_a(new_name != NULL);
 	ut_ad(trx->state == TRX_STATE_ACTIVE);
+	const bool dict_locked = trx->dict_operation_lock_mode == RW_X_LATCH;
+	ut_ad(!commit || dict_locked);
 
 	if (high_level_read_only) {
 		return(DB_READ_ONLY);
@@ -4205,8 +4204,6 @@ row_rename_table_for_mysql(
 
 	old_is_tmp = dict_table_t::is_temporary_name(old_name);
 	new_is_tmp = dict_table_t::is_temporary_name(new_name);
-
-	dict_locked = trx->dict_operation_lock_mode == RW_X_LATCH;
 
 	table = dict_table_open_on_name(old_name, dict_locked, FALSE,
 					DICT_ERR_IGNORE_FK_NOKEY);
@@ -4311,6 +4308,10 @@ row_rename_table_for_mysql(
 	}
 
 	if (!table->is_temporary()) {
+		if (commit) {
+			dict_stats_wait_bg_to_stop_using_table(table, trx);
+		}
+
 		err = trx_undo_report_rename(trx, table);
 
 		if (err != DB_SUCCESS) {
@@ -4335,6 +4336,7 @@ row_rename_table_for_mysql(
 			   "END;\n"
 			   , FALSE, trx);
 
+	/* Assume the caller guarantees destination name doesn't exist. */
 	ut_ad(err != DB_DUPLICATE_KEY);
 
 	/* SYS_TABLESPACES and SYS_DATAFILES need to be updated if
@@ -4370,7 +4372,7 @@ row_rename_table_for_mysql(
 		ut_free(new_path);
 	}
 	if (err != DB_SUCCESS) {
-		goto end;
+		goto err_exit;
 	}
 
 	if (!new_is_tmp) {
@@ -4514,8 +4516,8 @@ row_rename_table_for_mysql(
 		}
 	}
 
-end:
 	if (err != DB_SUCCESS) {
+err_exit:
 		if (err == DB_DUPLICATE_KEY) {
 			ib::error() << "Possible reasons:";
 			ib::error() << "(1) Table rename would cause two"
@@ -4668,6 +4670,9 @@ funct_exit:
 	}
 
 	if (table != NULL) {
+		if (commit && !table->is_temporary()) {
+			table->stats_bg_flag &= byte(~BG_STAT_SHOULD_QUIT);
+		}
 		dict_table_close(table, dict_locked, FALSE);
 	}
 
@@ -4785,7 +4790,7 @@ func_exit:
 
 	rec = buf + mach_read_from_4(buf);
 
-	offsets = rec_get_offsets(rec, index, offsets_, true,
+	offsets = rec_get_offsets(rec, index, offsets_, index->n_core_fields,
 				  ULINT_UNDEFINED, &heap);
 
 	if (prev_entry != NULL) {

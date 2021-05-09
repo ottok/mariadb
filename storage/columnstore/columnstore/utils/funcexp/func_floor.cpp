@@ -138,49 +138,31 @@ int64_t Func_floor::getIntVal(Row& row,
 
         case execplan::CalpontSystemCatalog::DATE:
         {
-            string str = DataConvert::dateToString1(parm[0]->data()->getDateIntVal(row, isNull));
-
+            // For some reason, MDB doesn't return this as a date,
+            // but datetime is returned as a datetime. Expect
+            // this to change in the future.
+            Date d (parm[0]->data()->getDateIntVal(row, isNull));
             if (!isNull)
-                ret = atoll(str.c_str());
+                ret = d.convertToMySQLint();
         }
         break;
 
         case execplan::CalpontSystemCatalog::DATETIME:
         {
-            string str =
-                DataConvert::datetimeToString1(parm[0]->data()->getDatetimeIntVal(row, isNull));
+            ret = parm[0]->data()->getDatetimeIntVal(row, isNull);
 
-            // strip off micro seconds
-            str = str.substr(0, 14);
-
-            if (!isNull)
-                ret = atoll(str.c_str());
         }
         break;
 
         case execplan::CalpontSystemCatalog::TIMESTAMP:
         {
-            string str =
-                DataConvert::timestampToString1(parm[0]->data()->getTimestampIntVal(row, isNull), timeZone());
-
-            // strip off micro seconds
-            str = str.substr(0, 14);
-
-            if (!isNull)
-                ret = atoll(str.c_str());
+            ret = parm[0]->data()->getTimestampIntVal(row, isNull);
         }
         break;
 
         case execplan::CalpontSystemCatalog::TIME:
         {
-            string str =
-                DataConvert::timeToString1(parm[0]->data()->getTimeIntVal(row, isNull));
-
-            // strip off micro seconds
-            str = str.substr(0, 14);
-
-            if (!isNull)
-                ret = atoll(str.c_str());
+            ret = parm[0]->data()->getTimeIntVal(row, isNull);
         }
         break;
 

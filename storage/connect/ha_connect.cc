@@ -170,7 +170,7 @@
 #define JSONMAX      10             // JSON Default max grp size
 
 extern "C" {
-       char version[]= "Version 1.07.0002 January 27, 2021";
+       char version[]= "Version 1.07.0002 March 22, 2021";
 #if defined(__WIN__)
        char compver[]= "Version 1.07.0002 " __DATE__ " "  __TIME__;
        static char slash= '\\';
@@ -275,6 +275,10 @@ static handler *connect_create_handler(handlerton *hton,
                                        TABLE_SHARE *table,
                                        MEM_ROOT *mem_root);
 
+static bool checkPrivileges(THD* thd, TABTYPE type, PTOS options,
+                            const char* db, TABLE* table = NULL,
+                            bool quick = false);
+
 static int connect_assisted_discovery(handlerton *hton, THD* thd,
                                       TABLE_SHARE *table_s,
                                       HA_CREATE_INFO *info);
@@ -286,7 +290,12 @@ static char *strz(PGLOBAL g, LEX_CSTRING &ls)
 {
   char *str= (char*)PlugSubAlloc(g, NULL, ls.length + 1);
 
-  memcpy(str, ls.str, ls.length);
+  /*
+    ls.str can be NULL, for example when called with
+    create_info->connect_string
+  */
+  if (ls.str)
+    memcpy(str, ls.str, ls.length);
   str[ls.length]= 0;
   return str;
 } // end of strz
@@ -757,8 +766,8 @@ DllExport LPCSTR PlugSetPath(LPSTR to, LPCSTR name, LPCSTR dir)
 
   For engines that have two file name extensions (separate meta/index file
   and data file), the order of elements is relevant. First element of engine
-  file name extensions array should be meta/index file extention. Second
-  element - data file extention. This order is assumed by
+  file name extensions array should be meta/index file extension. Second
+  element - data file extension. This order is assumed by
   prepare_for_repair() when REPAIR TABLE ... USE_FRM is issued.
 
   @see
@@ -1169,7 +1178,8 @@ ulonglong ha_connect::table_flags() const
 //                   HA_NULL_IN_KEY |    not implemented yet
 //                   HA_FAST_KEY_READ |  causes error when sorting (???)
                      HA_NO_TRANSACTIONS | HA_DUPLICATE_KEY_NOT_IN_ORDER |
-                     HA_NO_BLOBS | HA_MUST_USE_TABLE_CONDITION_PUSHDOWN;
+                     HA_NO_BLOBS | HA_MUST_USE_TABLE_CONDITION_PUSHDOWN |
+                     HA_REUSES_FILE_NAMES;
   ha_connect *hp= (ha_connect*)this;
   PTOS        pos= hp->GetTableOptionStruct();
 
@@ -1293,9 +1303,9 @@ PCSZ GetStringTableOption(PGLOBAL g, PTOS options, PCSZ opname, PCSZ sdef)
 	else if (!stricmp(opname, "Data_charset"))
     opval= options->data_charset;
 	else if (!stricmp(opname, "Http") || !stricmp(opname, "URL"))
-		opval = options->http;
+		opval= options->http;
 	else if (!stricmp(opname, "Uri"))
-		opval = options->uri;
+		opval= options->uri;
 
   if (!opval && options->oplist)
     opval= GetListOption(g, opname, options->oplist);
@@ -1609,7 +1619,7 @@ void *ha_connect::GetColumnOption(PGLOBAL g, void *field, PCOLINFO pcf)
   pcf->Opt= (fop) ? (int)fop->opt : 0;
 
 	if (fp->field_length >= 0) {
-		pcf->Length = fp->field_length;
+		pcf->Length= fp->field_length;
 
 		// length is bytes for Connect, not characters
 		if (!strnicmp(chset, "utf8", 4))
@@ -1624,7 +1634,7 @@ void *ha_connect::GetColumnOption(PGLOBAL g, void *field, PCOLINFO pcf)
     pcf->Offset= (int)fop->offset;
     pcf->Freq= (int)fop->freq;
     pcf->Datefmt= (char*)fop->dateformat;
-		pcf->Fieldfmt = fop->fieldformat ? (char*)fop->fieldformat
+		pcf->Fieldfmt= fop->fieldformat ? (char*)fop->fieldformat
 			: fop->jsonpath ? (char*)fop->jsonpath : (char*)fop->xmlpath;
 	} else {
     pcf->Offset= -1;
@@ -2828,7 +2838,6 @@ PFIL ha_connect::CondFilter(PGLOBAL g, Item *cond)
       } else {
         char    buff[256];
         String *res, tmp(buff, sizeof(buff), &my_charset_bin);
-        Item_basic_constant *pval= (Item_basic_constant *)args[i];
         PPARM pp= (PPARM)PlugSubAlloc(g, NULL, sizeof(PARM));
 
         // IN and BETWEEN clauses should be col VOP list
@@ -2837,6 +2846,8 @@ PFIL ha_connect::CondFilter(PGLOBAL g, Item *cond)
 
         switch (args[i]->real_type()) {
           case COND::CONST_ITEM:
+          {
+            Item *pval= (Item *)args[i];
           switch (args[i]->cmp_type()) {
             case STRING_RESULT:
               res= pval->val_str(&tmp);
@@ -2862,6 +2873,7 @@ PFIL ha_connect::CondFilter(PGLOBAL g, Item *cond)
             case ROW_RESULT:
               DBUG_ASSERT(0);
               return NULL;
+          }
           }
           break;
           case COND::CACHE_ITEM:    // Possible ???
@@ -3118,7 +3130,7 @@ PCFIL ha_connect::CheckCond(PGLOBAL g, PCFIL filp, const Item *cond)
       } else {
         char    buff[256];
         String *res, tmp(buff, sizeof(buff), &my_charset_bin);
-        Item_basic_constant *pval= (Item_basic_constant *)args[i];
+        Item *pval= (Item *)args[i];
         Item::Type type= args[i]->real_type();
 
         switch (type) {
@@ -4503,11 +4515,9 @@ int ha_connect::delete_all_rows()
 } // end of delete_all_rows
 
 
-bool ha_connect::check_privileges(THD *thd, PTOS options, const char *dbn, bool quick)
+static bool checkPrivileges(THD *thd, TABTYPE type, PTOS options, 
+                            const char *db, TABLE *table, bool quick)
 {
-  const char *db= (dbn && *dbn) ? dbn : NULL;
-  TABTYPE     type=GetRealType(options);
-
   switch (type) {
     case TAB_UNDEF:
 //  case TAB_CATLG:
@@ -4590,6 +4600,16 @@ bool ha_connect::check_privileges(THD *thd, PTOS options, const char *dbn, bool 
 
   my_printf_error(ER_UNKNOWN_ERROR, "check_privileges failed", MYF(0));
   return true;
+} // end of checkPrivileges
+
+// Check whether the user has required (file) privileges
+bool ha_connect::check_privileges(THD *thd, PTOS options, const char *dbn,
+				  bool quick)
+{
+  const char *db= (dbn && *dbn) ? dbn : NULL;
+  TABTYPE     type=GetRealType(options);
+
+  return checkPrivileges(thd, type, options, db, table, quick);
 } // end of check_privileges
 
 // Check that two indexes are equivalent
@@ -5244,6 +5264,14 @@ int ha_connect::delete_or_rename_table(const char *name, const char *to)
     thd->push_internal_handler(&error_handler);
     bool got_error= open_table_def(thd, share);
     thd->pop_internal_handler();
+    if (!got_error && share->db_type() != connect_hton)
+    {
+      /* The .frm file is not for the connect engine. Something is wrong! */
+      got_error= 1;
+      rc= HA_ERR_INTERNAL_ERROR;
+      my_error(HA_ERR_INTERNAL_ERROR, MYF(0),
+               "TABLE_SHARE is not for the CONNECT engine");
+    }
     if (!got_error) {
       // Now we can work
       if ((pos= share->option_struct)) {
@@ -5390,12 +5418,7 @@ static bool add_field(String* sql, TABTYPE ttp, const char* field_name, int typ,
 	                    int len, int dec, char* key, uint tm, const char* rem,
 	                    char* dft, char* xtra, char* fmt, int flag, bool dbf, char v)
 {
-#if defined(DEVELOPMENT)
-	// Some client programs regard CHAR(36) as GUID
-	char var = (len > 255 || len == 36) ? 'V' : v;
-#else
 	char var = (len > 255) ? 'V' : v;
-#endif
 	bool q, error = false;
 	const char* type = PLGtoMYSQLtype(typ, dbf, var);
 
@@ -5728,6 +5751,29 @@ static int connect_assisted_discovery(handlerton *, THD* thd,
 			}	// endswitch type
 #endif   // REST_SUPPORT
 		} // endif ttp
+
+    if (fn && *fn)
+      switch (ttp) {
+        case TAB_FMT:
+        case TAB_DBF:
+        case TAB_XML:
+        case TAB_INI:
+        case TAB_VEC:
+        case TAB_REST:
+        case TAB_JSON:
+#if defined(BSON_SUPPORT)
+        case TAB_BSON:
+#endif   // BSON_SUPPORT
+          if (checkPrivileges(thd, ttp, topt, db)) {
+            strcpy(g->Message, "This operation requires the FILE privilege");
+            rc= HA_ERR_INTERNAL_ERROR;
+            goto err;
+          } // endif check_privileges
+
+          break;
+        default:
+          break;
+      } // endswitch ttp
 
 		if (!tab) {
 			if (ttp == TAB_TBL) {

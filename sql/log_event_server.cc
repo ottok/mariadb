@@ -5464,7 +5464,7 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
     */
 
     {
-      DBUG_PRINT("debug", ("Checking compability of tables to lock - tables_to_lock: %p",
+      DBUG_PRINT("debug", ("Checking compatibility of tables to lock - tables_to_lock: %p",
                            rgi->tables_to_lock));
 
       /**
@@ -8493,14 +8493,22 @@ void Ignorable_log_event::pack_info(Protocol *protocol)
 
 
 #if defined(HAVE_REPLICATION)
-Heartbeat_log_event::Heartbeat_log_event(const char* buf, uint event_len,
+Heartbeat_log_event::Heartbeat_log_event(const char* buf, ulong event_len,
                     const Format_description_log_event* description_event)
   :Log_event(buf, description_event)
 {
   uint8 header_size= description_event->common_header_len;
-  ident_len = event_len - header_size;
-  set_if_smaller(ident_len,FN_REFLEN-1);
-  log_ident= buf + header_size;
+  if (log_pos == 0)
+  {
+    log_pos= uint8korr(buf + header_size);
+    log_ident= buf + header_size + HB_SUB_HEADER_LEN;
+    ident_len= event_len - (header_size + HB_SUB_HEADER_LEN);
+  }
+  else
+  {
+    log_ident= buf + header_size;
+    ident_len = event_len - header_size;
+  }
 }
 #endif
 

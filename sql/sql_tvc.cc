@@ -372,6 +372,13 @@ int table_value_constr::save_explain_data_intern(THD *thd,
   if (select_lex->master_unit()->derived)
     explain->connection_type= Explain_node::EXPLAIN_NODE_DERIVED;
 
+  for (SELECT_LEX_UNIT *unit= select_lex->first_inner_unit();
+       unit;
+       unit= unit->next_unit())
+  {
+    explain->add_child(unit->first_select()->select_number);
+  }
+
   output->add_node(explain);
 
   if (select_lex->is_top_level_node())
@@ -396,9 +403,14 @@ bool table_value_constr::optimize(THD *thd)
       thd->lex->explain && // for "SET" command in SPs.
       (!thd->lex->explain->get_select(select_lex->select_number)))
   {
-    return save_explain_data_intern(thd, thd->lex->explain);
+    if (save_explain_data_intern(thd, thd->lex->explain))
+      return true;
   }
-  return 0;
+
+  if (select_lex->optimize_unflattened_subqueries(true))
+    return true;
+
+  return false;
 }
 
 
@@ -667,50 +679,69 @@ st_select_lex *wrap_tvc(THD *thd, st_select_lex *tvc_sl,
                         st_select_lex *parent_select)
 {
   LEX *lex= thd->lex;
-  select_result *save_result= thd->lex->result;
+  select_result *save_result= lex->result;
   uint8 save_derived_tables= lex->derived_tables;
   thd->lex->result= NULL;
 
   Query_arena backup;
   Query_arena *arena= thd->activate_stmt_arena_if_needed(&backup);
-  /*
-    Create SELECT_LEX of the select used in the result of transformation
-  */
-  lex->current_select= tvc_sl;
-  if (mysql_new_select(lex, 0, NULL))
-    goto err;
-  mysql_init_select(lex);
-  /* Create item list as '*' for the subquery SQ */
+
   Item *item;
   SELECT_LEX *wrapper_sl;
-  wrapper_sl= lex->current_select;
+  SELECT_LEX_UNIT *derived_unit;
+
+  /*
+    Create SELECT_LEX wrapper_sl of the select used in the result
+    of the transformation
+  */
+  if (!(wrapper_sl= new (thd->mem_root) SELECT_LEX()))
+    goto err;
+  wrapper_sl->select_number= ++thd->lex->stmt_lex->current_select_number;
+  wrapper_sl->parent_lex= lex; /* Used in init_query. */
+  wrapper_sl->init_query();
+  wrapper_sl->init_select();
+
+  wrapper_sl->nest_level= tvc_sl->nest_level;
+  wrapper_sl->parsing_place= tvc_sl->parsing_place;
   wrapper_sl->set_linkage(tvc_sl->get_linkage());
-  wrapper_sl->parsing_place= SELECT_LIST;
+  wrapper_sl->exclude_from_table_unique_test=
+                                 tvc_sl->exclude_from_table_unique_test;
+
+  lex->current_select= wrapper_sl;
   item= new (thd->mem_root) Item_field(thd, &wrapper_sl->context,
                                        star_clex_str);
   if (item == NULL || add_item_to_list(thd, item))
     goto err;
   (wrapper_sl->with_wild)++;
-  
-  /* Exclude SELECT with TVC */
-  tvc_sl->exclude();
+
+  /* Include the newly created select into the global list of selects */
+  wrapper_sl->include_global((st_select_lex_node**)&lex->all_selects_list);
+
+  /* Substitute select node used of TVC for the newly created select */
+  tvc_sl->substitute_in_tree(wrapper_sl);
+
   /*
-    Create derived table DT that will wrap TVC in the result of transformation
+    Create a unit for the substituted select used for TVC and attach it
+    to the the wrapper select wrapper_sl as the only unit. The created
+    unit is the unit for the derived table tvc_x of the transformation.
   */
-  SELECT_LEX *tvc_select; // select for tvc
-  SELECT_LEX_UNIT *derived_unit; // unit for tvc_select
-  if (mysql_new_select(lex, 1, tvc_sl))
+  if (!(derived_unit= new (thd->mem_root) SELECT_LEX_UNIT()))
     goto err;
-  tvc_select= lex->current_select;
-  derived_unit= tvc_select->master_unit();
-  tvc_select->set_linkage(DERIVED_TABLE_TYPE);
-
-  lex->current_select= wrapper_sl;
+  derived_unit->init_query();
+  derived_unit->thd= thd;
+  derived_unit->include_down(wrapper_sl);
 
   /*
-    Create the name of the wrapping derived table and
-    add it to the FROM list of the wrapper
-   */
+    Attach the select used of TVC as the only slave to the unit for
+    the derived table tvc_x of the transformation
+  */
+  derived_unit->add_slave(tvc_sl);
+  tvc_sl->set_linkage(DERIVED_TABLE_TYPE);
+
+  /*
+    Generate the name of the derived table created for TVC and
+    add it to the FROM list of the wrapping select
+  */
   Table_ident *ti;
   LEX_CSTRING alias;
   TABLE_LIST *derived_tab;
@@ -729,19 +760,15 @@ st_select_lex *wrap_tvc(THD *thd, st_select_lex *tvc_sl,
   wrapper_sl->table_list.first->derived_type= DTYPE_TABLE | DTYPE_MATERIALIZE;
   lex->derived_tables|= DERIVED_SUBQUERY;
 
-  wrapper_sl->where= 0;
-  wrapper_sl->set_braces(false);
-  derived_unit->set_with_clause(0);
-
   if (arena)
     thd->restore_active_arena(arena, &backup);
-  thd->lex->result= save_result;
+  lex->result= save_result;
   return wrapper_sl;
 
 err:
   if (arena)
     thd->restore_active_arena(arena, &backup);
-  thd->lex->result= save_result;
+  lex->result= save_result;
   lex->derived_tables= save_derived_tables;
   return 0;
 }
@@ -811,11 +838,12 @@ st_select_lex *wrap_tvc_with_tail(THD *thd, st_select_lex *tvc_sl)
     SELECT * FROM (VALUES (v1), ... (vn)) tvc_x
     and replaces the subselect with the result of the transformation.
 
-  @retval false if successfull
-          true  otherwise
+  @retval wrapping select if successful
+          0  otherwise
 */
 
-bool Item_subselect::wrap_tvc_into_select(THD *thd, st_select_lex *tvc_sl)
+st_select_lex *
+Item_subselect::wrap_tvc_into_select(THD *thd, st_select_lex *tvc_sl)
 {
   LEX *lex= thd->lex;
   /* SELECT_LEX object where the transformation is performed */
@@ -825,14 +853,9 @@ bool Item_subselect::wrap_tvc_into_select(THD *thd, st_select_lex *tvc_sl)
   {
     if (engine->engine_type() == subselect_engine::SINGLE_SELECT_ENGINE)
       ((subselect_single_select_engine *) engine)->change_select(wrapper_sl);
-    lex->current_select= wrapper_sl;
-    return false;
   }
-  else
-  {
-    lex->current_select= parent_select;
-    return true;
-  }
+  lex->current_select= parent_select;
+  return wrapper_sl;
 }
 
 

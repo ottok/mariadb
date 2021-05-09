@@ -40,13 +40,6 @@ Created 11/11/1995 Heikki Tuuri
 #include "log0crypt.h"
 #include "srv0mon.h"
 #include "fil0pagecompress.h"
-#ifdef UNIV_LINUX
-/* include defs for CPU time priority settings */
-#include <unistd.h>
-#include <sys/syscall.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#endif /* UNIV_LINUX */
 #ifdef HAVE_LZO
 # include "lzo/lzo1x.h"
 #elif defined HAVE_SNAPPY
@@ -134,7 +127,34 @@ inline void buf_pool_t::page_cleaner_wakeup()
   double dirty_pct= double(UT_LIST_GET_LEN(buf_pool.flush_list)) * 100.0 /
     double(UT_LIST_GET_LEN(buf_pool.LRU) + UT_LIST_GET_LEN(buf_pool.free));
   double pct_lwm= srv_max_dirty_pages_pct_lwm;
+
+  /* if pct_lwm != 0.0 means adpative flushing is enabled.
+  signal buf page cleaner thread
+  - if pct_lwm <= dirty_pct then it will invoke apdative flushing flow
+  - if pct_lwm > dirty_pct then it will invoke idle flushing flow.
+
+  idle_flushing:
+  dirty_pct < innodb_max_dirty_pages_pct_lwm so it could be an
+  idle flushing use-case.
+
+  Why is last_activity_count not updated always?
+  - let's first understand when is server activity count updated.
+  - it is updated on commit of a transaction trx_t::commit() and not
+    on adding a page to the flush list.
+  - page_cleaner_wakeup is called when a page is added to the flush list.
+
+  - now let's say the first user thread, updates the count from X -> Y but
+    is yet to commit the transaction (so activity count is still Y).
+    followup user threads will see the updated count as (Y) that is matching
+    the universal server activity count (Y), giving a false impression that
+    the server is idle.
+
+  How to avoid this?
+  - by allowing last_activity_count to updated when page-cleaner is made
+    active and has work to do. This ensures that the last_activity signal
+    is consumed by the page-cleaner before the next one is generated. */
   if ((pct_lwm != 0.0 && pct_lwm <= dirty_pct) ||
+      (pct_lwm != 0.0 && last_activity_count == srv_get_activity_count()) ||
       srv_max_buf_pool_modified_pct <= dirty_pct)
   {
     page_cleaner_is_idle= false;
@@ -1532,7 +1552,7 @@ static void log_flush(void *)
   fil_flush_file_spaces();
 
   /* Guarantee progress for buf_flush_lists(). */
-  log_write_up_to(log_sys.get_lsn(), true);
+  log_buffer_flush_to_disk(true);
   log_flush_pending.clear();
 }
 
@@ -1550,15 +1570,17 @@ ulint buf_flush_lists(ulint max_n, lsn_t lsn)
   if (n_flush)
     return 0;
 
-  if (log_sys.get_lsn() > log_sys.get_flushed_lsn())
+  lsn_t flushed_lsn= log_sys.get_flushed_lsn();
+  if (log_sys.get_lsn() > flushed_lsn)
   {
     log_flush_task.wait();
-    if (log_sys.get_lsn() > log_sys.get_flushed_lsn() &&
+    flushed_lsn= log_sys.get_flushed_lsn();
+    if (log_sys.get_lsn() > flushed_lsn &&
         !log_flush_pending.test_and_set())
       srv_thread_pool->submit_task(&log_flush_task);
 #if defined UNIV_DEBUG || defined UNIV_IBUF_DEBUG
     if (UNIV_UNLIKELY(ibuf_debug))
-      log_write_up_to(log_sys.get_lsn(), true);
+      log_buffer_flush_to_disk(true);
 #endif
   }
 
@@ -1703,7 +1725,7 @@ static bool log_checkpoint()
 /** Make a checkpoint. */
 ATTRIBUTE_COLD void log_make_checkpoint()
 {
-  buf_flush_wait_flushed(log_sys.get_lsn());
+  buf_flush_wait_flushed(log_sys.get_lsn(std::memory_order_acquire));
   while (!log_checkpoint());
 }
 
@@ -1874,6 +1896,20 @@ ATTRIBUTE_COLD static void buf_flush_sync_for_checkpoint(lsn_t lsn)
     if (measure >= lsn)
       return;
   }
+}
+
+/** Check if the adpative flushing threshold is recommended based on
+redo log capacity filled threshold.
+@param oldest_lsn     buf_pool.get_oldest_modification()
+@return true if adaptive flushing is recommended. */
+static bool af_needed_for_redo(lsn_t oldest_lsn)
+{
+  lsn_t age= (log_sys.get_lsn() - oldest_lsn);
+  lsn_t af_lwm= static_cast<lsn_t>(srv_adaptive_flushing_lwm *
+   static_cast<double>(log_sys.log_capacity) / 100);
+
+  /* if age > af_lwm adaptive flushing is recommended */
+  return (age > af_lwm);
 }
 
 /*********************************************************************//**
@@ -2054,21 +2090,6 @@ static os_thread_ret_t DECLARE_THREAD(buf_flush_page_cleaner)(void*)
   ut_ad(!srv_read_only_mode);
   ut_ad(buf_page_cleaner_is_active);
 
-#ifdef UNIV_DEBUG_THREAD_CREATION
-  ib::info() << "page_cleaner thread running, id "
-             << os_thread_get_curr_id();
-#endif /* UNIV_DEBUG_THREAD_CREATION */
-#ifdef UNIV_LINUX
-  /* linux might be able to set different setting for each thread.
-  worth to try to set high priority for the page cleaner thread */
-  const pid_t tid= static_cast<pid_t>(syscall(SYS_gettid));
-  setpriority(PRIO_PROCESS, tid, -20);
-  if (getpriority(PRIO_PROCESS, tid) != -20)
-    ib::info() << "If the mysqld execution user is authorized,"
-                  " page cleaner thread priority can be changed."
-                  " See the man page of setpriority().";
-#endif /* UNIV_LINUX */
-
   ulint last_pages= 0;
   timespec abstime;
   set_timespec(abstime, 1);
@@ -2076,6 +2097,7 @@ static os_thread_ret_t DECLARE_THREAD(buf_flush_page_cleaner)(void*)
   mysql_mutex_lock(&buf_pool.flush_list_mutex);
 
   lsn_t lsn_limit;
+  ulint last_activity_count= srv_get_activity_count();
 
   for (;;)
   {
@@ -2095,9 +2117,14 @@ furious_flush:
     else if (srv_shutdown_state > SRV_SHUTDOWN_INITIATED)
       break;
 
-    if (buf_pool.page_cleaner_idle())
-      my_cond_wait(&buf_pool.do_flush_list,
-                   &buf_pool.flush_list_mutex.m_mutex);
+
+    /* If buf pager cleaner is idle and there is no work
+    (either dirty pages are all flushed or adaptive flushing
+    is not enabled) then opt for non-timed wait */
+    if (buf_pool.page_cleaner_idle() &&
+        (!UT_LIST_GET_LEN(buf_pool.flush_list) ||
+         srv_max_dirty_pages_pct_lwm == 0.0))
+      my_cond_wait(&buf_pool.do_flush_list, &buf_pool.flush_list_mutex.m_mutex);
     else
       my_cond_timedwait(&buf_pool.do_flush_list,
                         &buf_pool.flush_list_mutex.m_mutex, &abstime);
@@ -2135,18 +2162,35 @@ unemployed:
     const double dirty_pct= double(dirty_blocks) * 100.0 /
       double(UT_LIST_GET_LEN(buf_pool.LRU) + UT_LIST_GET_LEN(buf_pool.free));
 
+    const lsn_t oldest_lsn= buf_pool.get_oldest_modified()
+      ->oldest_modification();
+    ut_ad(oldest_lsn);
+
+    bool idle_flush= false;
+
     if (lsn_limit);
+    else if (af_needed_for_redo(oldest_lsn));
     else if (srv_max_dirty_pages_pct_lwm != 0.0)
     {
-      if (dirty_pct < srv_max_dirty_pages_pct_lwm)
+      const ulint activity_count= srv_get_activity_count();
+      if (activity_count != last_activity_count)
+        last_activity_count= activity_count;
+      else if (buf_pool.page_cleaner_idle() && buf_pool.n_pend_reads == 0)
+      {
+         /* reaching here means 3 things:
+         - last_activity_count == activity_count: suggesting server is idle
+           (no trx_t::commit activity)
+         - page cleaner is idle (dirty_pct < srv_max_dirty_pages_pct_lwm)
+         - there are no pending reads but there are dirty pages to flush */
+        idle_flush= true;
+        buf_pool.update_last_activity_count(activity_count);
+      }
+
+      if (!idle_flush && dirty_pct < srv_max_dirty_pages_pct_lwm)
         goto unemployed;
     }
     else if (dirty_pct < srv_max_buf_pool_modified_pct)
       goto unemployed;
-
-    const lsn_t oldest_lsn= buf_pool.get_oldest_modified()
-      ->oldest_modification();
-    ut_ad(oldest_lsn);
 
     if (UNIV_UNLIKELY(lsn_limit != 0) && oldest_lsn >= lsn_limit)
       buf_flush_sync_lsn= 0;
@@ -2163,7 +2207,7 @@ unemployed:
       pthread_cond_broadcast(&buf_pool.done_flush_list);
       goto try_checkpoint;
     }
-    else if (!srv_adaptive_flushing)
+    else if (idle_flush || !srv_adaptive_flushing)
     {
       n_flushed= buf_flush_lists(srv_io_capacity, LSN_MAX);
 try_checkpoint:
@@ -2220,6 +2264,12 @@ do_checkpoint:
 next:
 #endif /* !DBUG_OFF */
     mysql_mutex_lock(&buf_pool.flush_list_mutex);
+
+    /* when idle flushing kicks in page_cleaner is marked active.
+    reset it back to idle since the it was made active as part of
+    idle flushing stage. */
+    if (idle_flush)
+      buf_pool.page_cleaner_set_idle(true);
   }
 
   mysql_mutex_unlock(&buf_pool.flush_list_mutex);

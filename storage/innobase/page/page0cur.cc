@@ -2,7 +2,7 @@
 
 Copyright (c) 1994, 2016, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2012, Facebook Inc.
-Copyright (c) 2018, 2020, MariaDB Corporation.
+Copyright (c) 2018, 2021, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -75,7 +75,7 @@ page_cur_try_search_shortcut(
 	ut_ad(page_is_leaf(page));
 
 	rec = page_header_get_ptr(page, PAGE_LAST_INSERT);
-	offsets = rec_get_offsets(rec, index, offsets, true,
+	offsets = rec_get_offsets(rec, index, offsets, index->n_core_fields,
 				  dtuple_get_n_fields(tuple), &heap);
 
 	ut_ad(rec);
@@ -90,7 +90,8 @@ page_cur_try_search_shortcut(
 
 	next_rec = page_rec_get_next_const(rec);
 	if (!page_rec_is_supremum(next_rec)) {
-		offsets = rec_get_offsets(next_rec, index, offsets, true,
+		offsets = rec_get_offsets(next_rec, index, offsets,
+					  index->n_core_fields,
 					  dtuple_get_n_fields(tuple), &heap);
 
 		if (cmp_dtuple_rec_with_match(tuple, next_rec, offsets,
@@ -159,7 +160,7 @@ page_cur_try_search_shortcut_bytes(
 	ut_ad(page_is_leaf(page));
 
 	rec = page_header_get_ptr(page, PAGE_LAST_INSERT);
-	offsets = rec_get_offsets(rec, index, offsets, true,
+	offsets = rec_get_offsets(rec, index, offsets, index->n_core_fields,
 				  dtuple_get_n_fields(tuple), &heap);
 
 	ut_ad(rec);
@@ -180,7 +181,8 @@ page_cur_try_search_shortcut_bytes(
 
 	next_rec = page_rec_get_next_const(rec);
 	if (!page_rec_is_supremum(next_rec)) {
-		offsets = rec_get_offsets(next_rec, index, offsets, true,
+		offsets = rec_get_offsets(next_rec, index, offsets,
+					  index->n_core_fields,
 					  dtuple_get_n_fields(tuple), &heap);
 
 		if (cmp_dtuple_rec_with_match_bytes(
@@ -321,14 +323,14 @@ page_cur_search_with_match(
 #endif /* UNIV_ZIP_DEBUG */
 
 	ut_d(page_check_dir(page));
-	const bool is_leaf = page_is_leaf(page);
+	const ulint n_core = page_is_leaf(page) ? index->n_core_fields : 0;
 
 #ifdef BTR_CUR_HASH_ADAPT
-	if (is_leaf
+	if (n_core
 	    && page_get_direction(page) == PAGE_RIGHT
 	    && page_header_get_offs(page, PAGE_LAST_INSERT)
 	    && mode == PAGE_CUR_LE
-	    && !dict_index_is_spatial(index)
+	    && !index->is_spatial()
 	    && page_header_get_field(page, PAGE_N_DIRECTION) > 3
 	    && page_cur_try_search_shortcut(
 		    block, index, tuple,
@@ -344,10 +346,10 @@ page_cur_search_with_match(
 
 	/* If the mode is for R-tree indexes, use the special MBR
 	related compare functions */
-	if (dict_index_is_spatial(index) && mode > PAGE_CUR_LE) {
+	if (index->is_spatial() && mode > PAGE_CUR_LE) {
 		/* For leaf level insert, we still use the traditional
 		compare function for now */
-		if (mode == PAGE_CUR_RTREE_INSERT && is_leaf) {
+		if (mode == PAGE_CUR_RTREE_INSERT && n_core) {
 			mode = PAGE_CUR_LE;
 		} else {
 			rtr_cur_search_with_match(
@@ -392,7 +394,7 @@ page_cur_search_with_match(
 
 		offsets = offsets_;
 		offsets = rec_get_offsets(
-			mid_rec, index, offsets, is_leaf,
+			mid_rec, index, offsets, n_core,
 			dtuple_get_n_fields_cmp(tuple), &heap);
 
 		cmp = cmp_dtuple_rec_with_match(
@@ -446,7 +448,7 @@ up_slot_match:
 
 		offsets = offsets_;
 		offsets = rec_get_offsets(
-			mid_rec, index, offsets, is_leaf,
+			mid_rec, index, offsets, n_core,
 			dtuple_get_n_fields_cmp(tuple), &heap);
 
 		cmp = cmp_dtuple_rec_with_match(
@@ -627,7 +629,7 @@ page_cur_search_with_match_bytes(
 
 	/* Perform binary search until the lower and upper limit directory
 	slots come to the distance 1 of each other */
-	const bool is_leaf = page_is_leaf(page);
+	const ulint n_core = page_is_leaf(page) ? index->n_core_fields : 0;
 
 	while (up - low > 1) {
 		mid = (low + up) / 2;
@@ -639,7 +641,7 @@ page_cur_search_with_match_bytes(
 			    up_matched_fields, up_matched_bytes);
 
 		offsets = rec_get_offsets(
-			mid_rec, index, offsets_, is_leaf,
+			mid_rec, index, offsets_, n_core,
 			dtuple_get_n_fields_cmp(tuple), &heap);
 
 		cmp = cmp_dtuple_rec_with_match_bytes(
@@ -707,7 +709,7 @@ up_slot_match:
 		}
 
 		offsets = rec_get_offsets(
-			mid_rec, index, offsets_, is_leaf,
+			mid_rec, index, offsets_, n_core,
 			dtuple_get_n_fields_cmp(tuple), &heap);
 
 		cmp = cmp_dtuple_rec_with_match_bytes(
@@ -1311,7 +1313,7 @@ page_cur_insert_rec_low(
   /* 1. Get the size of the physical record in the page */
   const ulint rec_size= rec_offs_size(offsets);
 
-#ifdef HAVE_valgrind
+#ifdef HAVE_MEM_CHECK
   {
     const void *rec_start= rec - rec_offs_extra_size(offsets);
     ulint extra_size= rec_offs_extra_size(offsets) -
@@ -1323,7 +1325,7 @@ page_cur_insert_rec_low(
     /* The variable-length header must be valid. */
     MEM_CHECK_DEFINED(rec_start, extra_size);
   }
-#endif /* HAVE_valgrind */
+#endif /* HAVE_MEM_CHECK */
 
   /* 2. Try to find suitable space from page memory management */
   bool reuse= false;
@@ -1343,7 +1345,8 @@ page_cur_insert_rec_low(
     rec_offs_init(foffsets_);
 
     rec_offs *foffsets= rec_get_offsets(free_rec, index, foffsets_,
-                                        page_is_leaf(block->frame),
+                                        page_is_leaf(block->frame)
+                                        ? index->n_core_fields : 0,
                                         ULINT_UNDEFINED, &heap);
     const ulint fextra_size= rec_offs_extra_size(foffsets);
     insert_buf= free_rec - fextra_size;
@@ -1717,7 +1720,7 @@ page_cur_insert_rec_zip(
   /* 1. Get the size of the physical record in the page */
   const ulint rec_size= rec_offs_size(offsets);
 
-#ifdef HAVE_valgrind
+#ifdef HAVE_MEM_CHECK
   {
     const void *rec_start= rec - rec_offs_extra_size(offsets);
     ulint extra_size= rec_offs_extra_size(offsets) - REC_N_NEW_EXTRA_BYTES;
@@ -1726,7 +1729,7 @@ page_cur_insert_rec_zip(
     /* The variable-length header must be valid. */
     MEM_CHECK_DEFINED(rec_start, extra_size);
   }
-#endif /* HAVE_valgrind */
+#endif /* HAVE_MEM_CHECK */
   const bool reorg_before_insert= page_has_garbage(cursor->block->frame) &&
     rec_size > page_get_max_insert_size(cursor->block->frame, 1) &&
     rec_size <= page_get_max_insert_size_after_reorganize(cursor->block->frame,
@@ -1838,7 +1841,8 @@ page_cur_insert_rec_zip(
 
     rec_offs *foffsets= rec_get_offsets(cursor->block->frame + free_rec, index,
                                         foffsets_,
-                                        page_is_leaf(cursor->block->frame),
+                                        page_is_leaf(cursor->block->frame)
+                                        ? index->n_core_fields : 0,
                                         ULINT_UNDEFINED, &heap);
     insert_buf= cursor->block->frame + free_rec -
       rec_offs_extra_size(foffsets);
@@ -2288,7 +2292,7 @@ page_cur_delete_rec(
 written by page_cur_insert_rec_low() for a ROW_FORMAT=REDUNDANT page.
 @param block      B-tree or R-tree page in ROW_FORMAT=COMPACT or DYNAMIC
 @param reuse      false=allocate from PAGE_HEAP_TOP; true=reuse PAGE_FREE
-@param prev       byte offset of the predecessor, relative to PAGE_NEW_INFIMUM
+@param prev       byte offset of the predecessor, relative to PAGE_OLD_INFIMUM
 @param enc_hdr    encoded fixed-size header bits
 @param hdr_c      number of common record header bytes with prev
 @param data_c     number of common data bytes with prev
@@ -2350,6 +2354,8 @@ corrupted:
   if (prev_rec == &block.frame[PAGE_OLD_INFIMUM]);
   else if (UNIV_UNLIKELY(prev_rec - pextra_size < heap_bot))
     goto corrupted;
+  if (UNIV_UNLIKELY(hdr_c && prev_rec - hdr_c < heap_bot))
+    goto corrupted;
   const ulint pdata_size= rec_get_data_size_old(prev_rec);
   if (UNIV_UNLIKELY(prev_rec + pdata_size > heap_top))
     goto corrupted;
@@ -2365,7 +2371,7 @@ corrupted:
   const ulint extra_size= REC_N_OLD_EXTRA_BYTES +
     (is_short ? n_fields : n_fields * 2);
   hdr_c+= REC_N_OLD_EXTRA_BYTES;
-  if (UNIV_UNLIKELY(hdr_c > extra_size || hdr_c > pextra_size))
+  if (UNIV_UNLIKELY(hdr_c > extra_size))
     goto corrupted;
   if (UNIV_UNLIKELY(extra_size - hdr_c > data_len))
     goto corrupted;

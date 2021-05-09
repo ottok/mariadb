@@ -77,7 +77,8 @@ WECmdArgs::WECmdArgs(int argc, char** argv) :
     fbTruncationAsError(false),
     fUUID(boost::uuids::nil_generator()()),
     fConsoleOutput(true),
-    fTimeZone("SYSTEM")
+    fTimeZone("SYSTEM"),
+    fErrorDir(string(MCSLOGDIR)+"/cpimport/")
 {
     try
     {
@@ -146,6 +147,9 @@ std::string WECmdArgs::getCpImportCmdLine()
             aSS << " -f " << fPmFilePath;
     }
     
+    if (fErrorDir.length() > 0)
+        aSS << " -L " << fErrorDir;
+
     if (fUsername.length() > 0)
         aSS << " -U " << fUsername;
 
@@ -567,7 +571,10 @@ void WECmdArgs::usage()
          << "\t-K\tS3 Authentication Secret (for S3 imports)\n"
          << "\t-t\tS3 Bucket (for S3 imports)\n"
          << "\t-H\tS3 Hostname (for S3 imports, Amazon's S3 default)\n"
-         << "\t-g\tS3 Region (for S3 imports)\n";
+         << "\t-g\tS3 Region (for S3 imports)\n"
+         << "\t-L\tDirectory for the output .err and .bad files.\n"
+         << "\t\tDefault is " << string(MCSLOGDIR);
+
 
     cout << "\nExample1: Traditional usage\n"
          << "\tcpimport -j 1234";
@@ -602,7 +609,7 @@ void WECmdArgs::parseCmdLineArgs(int argc, char** argv)
         fPrgmName = string(MCSBINDIR) + "/" + "cpimport.bin"; //argv[0] is splitter but we need cpimport
 
     while ((aCh = getopt(argc, argv,
-                         "d:j:w:s:v:l:r:b:e:B:f:q:ihm:E:C:P:I:n:p:c:ST:Ny:K:t:H:g:U:"))
+                         "d:j:w:s:v:l:r:b:e:B:f:q:ihm:E:C:P:I:n:p:c:ST:Ny:K:t:H:g:U:L:"))
             != EOF)
     {
         switch (aCh)
@@ -939,6 +946,12 @@ void WECmdArgs::parseCmdLineArgs(int argc, char** argv)
             case 'U': //-U username of the files owner
             {
                 fUsername = optarg;
+                break;
+            }
+
+            case 'L': // -L set the output location of .bad/.err files
+            {
+                fErrorDir = optarg;
                 break;
             }
 
@@ -1481,7 +1494,7 @@ void WECmdArgs::checkJobIdCase()
         snprintf(aBuff, sizeof(aBuff), "%s/Job_%s.xml", fJobPath.c_str(),
                  fJobId.c_str());
     else	// for time being
-        snprintf(aBuff, sizeof(aBuff), "/var/lib/columnstore/data/bulk/job/Job_%s.xml",
+        snprintf(aBuff, sizeof(aBuff), "/var/log/mariadb/columnstore/data/bulk/job/Job_%s.xml",
                  fJobId.c_str());
 
     std::string aJobFileName(aBuff);
@@ -1920,23 +1933,6 @@ void WECmdArgs::checkForBulkLogDir(const std::string& BulkRoot)
             {
                 cout << "\nFailed to create job directory, check permissions\n" << endl;
                 throw runtime_error("Failed to create job directory, check permissions");
-            }
-        }
-
-        std::ostringstream aSS2;
-        aSS2 << BulkRoot;
-        aSS2 << "/log";
-        std::string logDir = aSS2.str();
-
-        if ( !boost::filesystem::exists(logDir.c_str()) )
-        {
-            cout << "Creating directory : " << logDir << endl;
-            bool aSuccess = boost::filesystem::create_directories(logDir.c_str());
-
-            if (!aSuccess)
-            {
-                cout << "\nFailed to create bulk log directory, check permissions\n" << endl;
-                throw runtime_error("Failed to create bulk log directory, check permissions");
             }
         }
     }

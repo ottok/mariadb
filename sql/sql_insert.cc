@@ -1868,9 +1868,10 @@ int write_record(THD *thd, TABLE *table, COPY_INFO *info, select_result *sink)
           in handler methods for the just read row in record[1].
         */
         table->move_fields(table->field, table->record[1], table->record[0]);
-        if (table->update_virtual_fields(table->file, VCOL_UPDATE_FOR_REPLACE))
-          goto err;
+        int verr = table->update_virtual_fields(table->file, VCOL_UPDATE_FOR_REPLACE);
         table->move_fields(table->field, table->record[0], table->record[1]);
+        if (verr)
+          goto err;
       }
       if (info->handle_duplicates == DUP_UPDATE)
       {
@@ -4929,7 +4930,8 @@ bool select_create::send_eof()
   if (!table->s->tmp_table)
   {
 #ifdef WITH_WSREP
-    if (WSREP(thd))
+    if (WSREP(thd) &&
+        table->file->ht->db_type == DB_TYPE_INNODB)
     {
       if (thd->wsrep_trx_id() == WSREP_UNDEFINED_TRX_ID)
       {

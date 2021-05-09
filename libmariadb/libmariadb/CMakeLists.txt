@@ -29,6 +29,7 @@ SET(MARIADB_LIB_SYMBOLS
  mariadb_rpl_fetch
  mariadb_rpl_optionsv
  mariadb_rpl_get_optionsv
+ mariadb_rpl_init_ex
  mariadb_free_rpl_event
  mariadb_field_attr
 )
@@ -272,7 +273,7 @@ SET(LIBMARIADB_SOURCES ${LIBMARIADB_SOURCES}
 ${CC_SOURCE_DIR}/plugins/auth/my_auth.c
 ma_array.c
 ma_charset.c
-ma_hash.c
+ma_hashtbl.c
 ma_net.c
 mariadb_charset.c
 ma_time.c
@@ -367,7 +368,7 @@ ELSE()
 ENDIF()
 
 
-IF((NOT WIN32) AND (CMAKE_VERSION VERSION_GREATER 2.8.7))
+IF(CMAKE_VERSION VERSION_GREATER 2.8.7)
   # CREATE OBJECT LIBRARY 
   ADD_LIBRARY(mariadb_obj OBJECT ${LIBMARIADB_SOURCES})
   IF(UNIX)
@@ -401,8 +402,7 @@ IF(UNIX)
   ADD_LIBRARY(libmariadb SHARED ${libmariadb_RC} ${MARIADB_OBJECTS} ${EMPTY_FILE})
   SET_TARGET_PROPERTIES(libmariadb PROPERTIES COMPILE_FLAGS "${CMAKE_SHARED_LIBRARY_C_FLAGS}")
 ELSE()
-  ADD_LIBRARY(libmariadb SHARED ${libmariadb_RC} mariadbclient.def)
-  TARGET_LINK_LIBRARIES(libmariadb LINK_PRIVATE mariadbclient)
+  ADD_LIBRARY(libmariadb SHARED ${libmariadb_RC} ${MARIADB_OBJECTS} mariadbclient.def)
   SET_TARGET_PROPERTIES(libmariadb PROPERTIES LINKER_LANGUAGE C)
 ENDIF()
 

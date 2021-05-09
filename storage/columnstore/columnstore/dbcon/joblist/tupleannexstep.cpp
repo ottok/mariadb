@@ -429,6 +429,13 @@ void TupleAnnexStep::executeNoOrderBy()
                     continue;
                 }
 
+                if (UNLIKELY(fRowsReturned >= fLimitCount))
+                {
+                    fLimitHit = true;
+                    fJobList->abortOnLimit((JobStep*) this);
+                    continue;
+                }
+
                 if (fConstant)
                     fConstant->fillInConstants(fRowIn, fRowOut);
                 else
@@ -440,11 +447,6 @@ void TupleAnnexStep::executeNoOrderBy()
                 {
                     fRowOut.nextRow();
                     fRowIn.nextRow();
-                }
-                else
-                {
-                    fLimitHit = true;
-                    fJobList->abortOnLimit((JobStep*) this);
                 }
             }
 
@@ -477,8 +479,12 @@ void TupleAnnexStep::executeNoOrderByWithDistinct()
     utils::setThreadName("TASwoOrdDist");
     scoped_ptr<DistinctMap_t> distinctMap(new DistinctMap_t(10, TAHasher(this), TAEq(this)));
     vector<RGData> dataVec;
+    vector<RGData> dataVecSkip;
     RGData rgDataIn;
     RGData rgDataOut;
+    RGData rgDataSkip;
+    RowGroup rowGroupSkip;
+    Row rowSkip;
     bool more = false;
 
     rgDataOut.reinit(fRowGroupOut);
@@ -488,6 +494,13 @@ void TupleAnnexStep::executeNoOrderByWithDistinct()
 
     fRowGroupOut.initRow(&row1);
     fRowGroupOut.initRow(&row2);
+
+    rowGroupSkip = fRowGroupOut;
+    rgDataSkip.reinit(rowGroupSkip);
+    rowGroupSkip.setData(&rgDataSkip);
+    rowGroupSkip.resetRowGroup(0);
+    rowGroupSkip.initRow(&rowSkip);
+    rowGroupSkip.getRow(0, &rowSkip);
 
     try
     {
@@ -510,27 +523,54 @@ void TupleAnnexStep::executeNoOrderByWithDistinct()
             for (uint64_t i = 0; i < fRowGroupIn.getRowCount() && !cancelled() && !fLimitHit; ++i)
             {
                 pair<DistinctMap_t::iterator, bool> inserted;
+                Row* rowPtr;
+
+                if (distinctMap->size() < fLimitStart)
+                    rowPtr = &rowSkip;
+                else
+                    rowPtr = &fRowOut;
 
                 if (fConstant)
-                    fConstant->fillInConstants(fRowIn, fRowOut);
+                    fConstant->fillInConstants(fRowIn, *rowPtr);
                 else
-                    copyRow(fRowIn, &fRowOut);
+                    copyRow(fRowIn, rowPtr);
 
-                ++fRowsProcessed;
                 fRowIn.nextRow();
-
-                inserted = distinctMap->insert(fRowOut.getPointer());
+                inserted = distinctMap->insert(rowPtr->getPointer());
+                ++fRowsProcessed;
 
                 if (inserted.second)
                 {
-                    fRowGroupOut.incRowCount();
-                    fRowOut.nextRow();
-
-                    if (UNLIKELY(++fRowsReturned >= fLimitCount))
+                    if (UNLIKELY(fRowsReturned >= fLimitCount))
                     {
                         fLimitHit = true;
                         fJobList->abortOnLimit((JobStep*) this);
+                        break;
                     }
+
+                    // skip first limit-start rows
+                    if (distinctMap->size() <= fLimitStart)
+                    {
+                        rowGroupSkip.incRowCount();
+                        rowSkip.nextRow();
+                        if (UNLIKELY(rowGroupSkip.getRowCount() >= rowgroup::rgCommonSize))
+                        {
+                            // allocate new RGData for skipped rows below the fLimitStart
+                            // offset (do not take it into account in RM assuming there
+                            // are few skipped rows)
+                            dataVecSkip.push_back(rgDataSkip);
+                            rgDataSkip.reinit(rowGroupSkip);
+                            rowGroupSkip.setData(&rgDataSkip);
+                            rowGroupSkip.resetRowGroup(0);
+                            rowGroupSkip.getRow(0, &rowSkip);
+                        }
+                        continue;
+                    }
+
+                    ++fRowsReturned;
+
+                    fRowGroupOut.incRowCount();
+                    fRowOut.nextRow();
 
                     if (UNLIKELY(fRowGroupOut.getRowCount() >= rowgroup::rgCommonSize))
                     {

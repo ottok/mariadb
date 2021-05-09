@@ -461,6 +461,7 @@ void print_range_for_non_indexed_field(String *out, Field *field,
 static void print_min_range_operator(String *out, const ha_rkey_function flag);
 static void print_max_range_operator(String *out, const ha_rkey_function flag);
 
+static bool is_field_an_unique_index(RANGE_OPT_PARAM *param, Field *field);
 
 /*
   SEL_IMERGE is a list of possible ways to do index merge, i.e. it is
@@ -7721,6 +7722,21 @@ SEL_TREE *Item_bool_func::get_ne_mm_tree(RANGE_OPT_PARAM *param,
 }
 
 
+SEL_TREE *Item_func_ne::get_func_mm_tree(RANGE_OPT_PARAM *param,
+                                         Field *field, Item *value)
+{
+  DBUG_ENTER("Item_func_ne::get_func_mm_tree");
+  /*
+    If this condition is a "col1<>...", where there is a UNIQUE KEY(col1),
+    do not construct a SEL_TREE from it. A condition that excludes just one
+    row in the table is not selective (unless there are only a few rows)
+  */
+  if (is_field_an_unique_index(param, field))
+    DBUG_RETURN(NULL);
+  DBUG_RETURN(get_ne_mm_tree(param, field, value, value));
+}
+
+
 SEL_TREE *Item_func_between::get_func_mm_tree(RANGE_OPT_PARAM *param,
                                               Field *field, Item *value)
 {
@@ -7819,28 +7835,16 @@ SEL_TREE *Item_func_in::get_func_mm_tree(RANGE_OPT_PARAM *param,
         DBUG_RETURN(0);
 
       /*
-        If this is "unique_key NOT IN (...)", do not consider it sargable (for
-        any index, not just the unique one). The logic is as follows:
+        if this is a "col1 NOT IN (...)", and there is a UNIQUE KEY(col1), do
+        not constuct a SEL_TREE from it. The rationale is as follows:
          - if there are only a few constants, this condition is not selective
            (unless the table is also very small in which case we won't gain
            anything)
-         - If there are a lot of constants, the overhead of building and
+         - if there are a lot of constants, the overhead of building and
            processing enormous range list is not worth it.
       */
-      if (param->using_real_indexes)
-      {
-        key_map::Iterator it(field->key_start);
-        uint key_no;
-        while ((key_no= it++) != key_map::Iterator::BITMAP_END)
-        {
-          KEY *key_info= &field->table->key_info[key_no];
-          if (key_info->user_defined_key_parts == 1 &&
-              (key_info->flags & HA_NOSAME))
-          {
-            DBUG_RETURN(0);
-          }
-        }
-      }
+      if (is_field_an_unique_index(param, field))
+        DBUG_RETURN(0);
 
       /* Get a SEL_TREE for "(-inf|NULL) < X < c_0" interval.  */
       uint i=0;
@@ -8537,6 +8541,38 @@ SEL_TREE *Item_equal::get_mm_tree(RANGE_OPT_PARAM *param, Item **cond_ptr)
   }
 
   DBUG_RETURN(ftree);
+}
+
+
+/*
+  @brief
+    Check if there is an one-segment unique key that matches the field exactly
+
+  @detail
+    In the future we could also add "almost unique" indexes where any value is
+    present only in a few rows (but necessarily exactly one row)
+*/
+static bool is_field_an_unique_index(RANGE_OPT_PARAM *param, Field *field)
+{
+  DBUG_ENTER("is_field_an_unique_index");
+
+  // The check for using_real_indexes is there because of the heuristics
+  // this function is used for.
+  if (param->using_real_indexes)
+  {
+    key_map::Iterator it(field->key_start);
+    uint key_no;
+    while ((key_no= it++) != key_map::Iterator::BITMAP_END)
+    {
+      KEY *key_info= &field->table->key_info[key_no];
+      if (key_info->user_defined_key_parts == 1 &&
+          (key_info->flags & HA_NOSAME))
+      {
+        DBUG_RETURN(true);
+      }
+    }
+  }
+  DBUG_RETURN(false);
 }
 
 
@@ -9800,7 +9836,6 @@ and_all_keys(RANGE_OPT_PARAM *param, SEL_ARG *key1, SEL_ARG *key2,
     key1->right= key1->left= &null_element;
     key1->next= key1->prev= 0;
   }
-  uint new_weight= 0;
 
   for (next=key1->first(); next ; next=next->next)
   {
@@ -9813,22 +9848,21 @@ and_all_keys(RANGE_OPT_PARAM *param, SEL_ARG *key1, SEL_ARG *key2,
 	continue;
       }
       next->next_key_part=tmp;
-      new_weight += 1 + tmp->weight;
       if (use_count)
 	next->increment_use_count(use_count);
       if (param->alloced_sel_args > SEL_ARG::MAX_SEL_ARGS)
         break;
     }
     else
-    {
-      new_weight += 1 + key2->weight;
       next->next_key_part=key2;
-    }
   }
   if (!key1)
     return &null_element;			// Impossible ranges
   key1->use_count++;
-  key1->weight= new_weight;
+
+  /* Re-compute the result tree's weight. */
+  key1->update_weight_locally();
+
   key1->max_part_no= MY_MAX(key2->max_part_no, key2->part+1);
   return key1;
 }
@@ -9991,6 +10025,30 @@ get_range(SEL_ARG **e1,SEL_ARG **e2,SEL_ARG *root1)
   }
   return 0;
 }
+
+/*
+  @brief
+    Update the tree weight.
+
+  @detail
+    Utility function to be called on a SEL_ARG tree root after doing local
+    modifications concerning changes at this key part.
+    Assumes that the weight of the graphs connected via next_key_part is
+    up to dayte.
+*/
+void SEL_ARG::update_weight_locally()
+{
+  uint new_weight= 0;
+  const SEL_ARG *sl;
+  for (sl= first(); sl ; sl= sl->next)
+  {
+    new_weight++;
+    if (sl->next_key_part)
+      new_weight += sl->next_key_part->weight;
+  }
+  weight= new_weight;
+}
+
 
 #ifndef DBUG_OFF
 /*
@@ -10620,8 +10678,14 @@ key_or(RANGE_OPT_PARAM *param, SEL_ARG *key1,SEL_ARG *key2)
          */
         tmp->maybe_flag|= key2_cpy.maybe_flag;
         key2_cpy.increment_use_count(key1->use_count+1);
+
+        uint old_weight= tmp->next_key_part? tmp->next_key_part->weight: 0;
+
         tmp->next_key_part= key_or(param, tmp->next_key_part,
                                    key2_cpy.next_key_part);
+
+        uint new_weight= tmp->next_key_part? tmp->next_key_part->weight: 0;
+        key1->weight += (new_weight - old_weight);
 
         if (!cmp)
           break;                     // case b: done with this key2 range
@@ -10728,17 +10792,7 @@ end:
   key1->use_count++;
 
   /* Re-compute the result tree's weight. */
-  {
-    uint new_weight= 0;
-    const SEL_ARG *sl;
-    for (sl= key1->first(); sl ; sl= sl->next)
-    {
-      new_weight++;
-      if (sl->next_key_part)
-        new_weight += sl->next_key_part->weight;
-    }
-    key1->weight= new_weight;
-  }
+  key1->update_weight_locally();
 
   key1->max_part_no= max_part_no;
   return key1;

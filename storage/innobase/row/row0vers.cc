@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1997, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2020, MariaDB Corporation.
+Copyright (c) 2017, 2021, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -116,7 +116,8 @@ row_vers_impl_x_locked_low(
 	heap = mem_heap_create(1024);
 
 	clust_offsets = rec_get_offsets(clust_rec, clust_index, clust_offsets_,
-					true, ULINT_UNDEFINED, &heap);
+					clust_index->n_core_fields,
+					ULINT_UNDEFINED, &heap);
 
 	trx_id = row_get_rec_trx_id(clust_rec, clust_index, clust_offsets);
 	if (trx_id == 0) {
@@ -239,7 +240,8 @@ not_locked:
 		}
 
 		clust_offsets = rec_get_offsets(
-			prev_version, clust_index, clust_offsets_, true,
+			prev_version, clust_index, clust_offsets_,
+			clust_index->n_core_fields,
 			ULINT_UNDEFINED, &heap);
 
 		vers_del = rec_get_deleted_flag(prev_version, comp);
@@ -455,6 +457,8 @@ row_vers_build_clust_v_col(
 	ut_ad(dict_index_has_virtual(index));
 	ut_ad(index->table == clust_index->table);
 
+	DEBUG_SYNC(current_thd, "ib_clust_v_col_before_row_allocated");
+
 	ib_vcol_row vc(nullptr);
 	byte *record = vc.record(thd, index, &maria_table);
 
@@ -553,7 +557,8 @@ row_vers_build_cur_vrow_low(
 
 		clust_offsets = rec_get_offsets(prev_version, clust_index,
 						NULL,
-						true, ULINT_UNDEFINED, &heap);
+						clust_index->n_core_fields,
+						ULINT_UNDEFINED, &heap);
 
 		ulint	entry_len = dict_index_get_n_fields(index);
 
@@ -694,7 +699,8 @@ row_vers_vc_matches_cluster(
 
 		clust_offsets = rec_get_offsets(prev_version, clust_index,
 						NULL,
-						true, ULINT_UNDEFINED, &heap);
+						clust_index->n_core_fields,
+						ULINT_UNDEFINED, &heap);
 
 		ulint	entry_len = dict_index_get_n_fields(index);
 
@@ -821,7 +827,8 @@ row_vers_build_cur_vrow(
 			index, roll_ptr, trx_id, v_heap, &cur_vrow, mtr);
 	}
 
-	*clust_offsets = rec_get_offsets(rec, clust_index, NULL, true,
+	*clust_offsets = rec_get_offsets(rec, clust_index, NULL,
+					 clust_index->n_core_fields,
 					 ULINT_UNDEFINED, &heap);
 	return(cur_vrow);
 }
@@ -873,7 +880,8 @@ row_vers_old_has_index_entry(
 	comp = page_rec_is_comp(rec);
 	ut_ad(!dict_table_is_comp(index->table) == !comp);
 	heap = mem_heap_create(1024);
-	clust_offsets = rec_get_offsets(rec, clust_index, NULL, true,
+	clust_offsets = rec_get_offsets(rec, clust_index, NULL,
+					clust_index->n_core_fields,
 					ULINT_UNDEFINED, &heap);
 
 	if (dict_index_has_virtual(index)) {
@@ -951,7 +959,8 @@ row_vers_old_has_index_entry(
 				}
 			}
 			clust_offsets = rec_get_offsets(rec, clust_index, NULL,
-							true,
+							clust_index
+							->n_core_fields,
 							ULINT_UNDEFINED, &heap);
 		} else {
 
@@ -1026,7 +1035,8 @@ unsafe_to_purge:
 		}
 
 		clust_offsets = rec_get_offsets(prev_version, clust_index,
-						NULL, true,
+						NULL,
+						clust_index->n_core_fields,
 						ULINT_UNDEFINED, &heap);
 
 		if (dict_index_has_virtual(index)) {
@@ -1167,7 +1177,7 @@ row_vers_build_for_consistent_read(
 
 		*offsets = rec_get_offsets(
 			prev_version, index, *offsets,
-			true, ULINT_UNDEFINED, offset_heap);
+			index->n_core_fields, ULINT_UNDEFINED, offset_heap);
 
 #if defined UNIV_DEBUG || defined UNIV_BLOB_LIGHT_DEBUG
 		ut_a(!rec_offs_any_null_extern(prev_version, *offsets));
@@ -1283,11 +1293,10 @@ committed_version_trx:
 				semi-consistent read. */
 
 				version = rec;
-				*offsets = rec_get_offsets(version,
-							   index, *offsets,
-							   true,
-							   ULINT_UNDEFINED,
-							   offset_heap);
+				*offsets = rec_get_offsets(
+					version, index, *offsets,
+					index->n_core_fields, ULINT_UNDEFINED,
+					offset_heap);
 			}
 
 			buf = static_cast<byte*>(
@@ -1330,7 +1339,8 @@ committed_version_trx:
 		}
 
 		version = prev_version;
-		*offsets = rec_get_offsets(version, index, *offsets, true,
+		*offsets = rec_get_offsets(version, index, *offsets,
+					   index->n_core_fields,
 					   ULINT_UNDEFINED, offset_heap);
 #if defined UNIV_DEBUG || defined UNIV_BLOB_LIGHT_DEBUG
 		ut_a(!rec_offs_any_null_extern(version, *offsets));
