@@ -11,7 +11,7 @@ Forwarded: https://jira.mariadb.org/browse/MDEV-19734?focusedCommentId=156606&pa
 
 --- a/cmake/build_configurations/mysql_release.cmake
 +++ b/cmake/build_configurations/mysql_release.cmake
-@@ -170,12 +170,12 @@ IF(UNIX)
+@@ -176,12 +176,12 @@ IF(UNIX)
    IF(CMAKE_COMPILER_IS_GNUCC)
      SET(COMMON_C_FLAGS               "-g -static-libgcc -fno-omit-frame-pointer -fno-strict-aliasing  -Wno-uninitialized")
      SET(CMAKE_C_FLAGS_DEBUG          "-O ${COMMON_C_FLAGS}")
@@ -26,7 +26,7 @@ Forwarded: https://jira.mariadb.org/browse/MDEV-19734?focusedCommentId=156606&pa
    ENDIF()
  
    # IBM Z flags
-@@ -224,8 +224,8 @@ IF(UNIX)
+@@ -230,8 +230,8 @@ IF(UNIX)
        ENDIF()
        SET(CMAKE_C_FLAGS_DEBUG            "${COMMON_C_FLAGS}")
        SET(CMAKE_CXX_FLAGS_DEBUG          "${COMMON_CXX_FLAGS}")
@@ -37,7 +37,7 @@ Forwarded: https://jira.mariadb.org/browse/MDEV-19734?focusedCommentId=156606&pa
        SET(WITH_SSL no)
      ENDIF()
    ENDIF()
-@@ -234,12 +234,12 @@ IF(UNIX)
+@@ -240,12 +240,12 @@ IF(UNIX)
    IF(CMAKE_C_COMPILER_ID MATCHES "Clang")
      SET(COMMON_C_FLAGS               "-g -fno-omit-frame-pointer -fno-strict-aliasing -Wno-parentheses-equality -Wno-string-plus-int")
      SET(CMAKE_C_FLAGS_DEBUG          "${COMMON_C_FLAGS}")

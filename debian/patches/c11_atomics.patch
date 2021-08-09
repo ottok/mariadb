@@ -20,7 +20,7 @@ Date:   Fri Dec 21 19:14:04 2018 +0200
 
 --- a/configure.cmake
 +++ b/configure.cmake
-@@ -865,7 +865,25 @@ int main()
+@@ -866,7 +866,25 @@ int main()
    long long int *ptr= &var;
    return (int)__atomic_load_n(ptr, __ATOMIC_SEQ_CST);
  }"
@@ -62,7 +62,7 @@ Date:   Fri Dec 21 19:14:04 2018 +0200
  ENDIF(HAVE_BFD_H)
 --- a/sql/CMakeLists.txt
 +++ b/sql/CMakeLists.txt
-@@ -318,6 +318,10 @@ IF(WITH_MYSQLD_LDFLAGS)
+@@ -320,6 +320,10 @@ IF(WITH_MYSQLD_LDFLAGS)
       "${MYSQLD_LINK_FLAGS} ${WITH_MYSQLD_LDFLAGS}")
  ENDIF()
  
