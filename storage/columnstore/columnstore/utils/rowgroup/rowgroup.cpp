@@ -32,6 +32,7 @@
 using namespace std;
 
 #include <boost/shared_array.hpp>
+#include <numeric>
 using namespace boost;
 
 #include "bytestream.h"
@@ -402,6 +403,7 @@ RGData::RGData(const RowGroup& rg, uint32_t rowCount)
      */
     memset(rowData.get(), 0, rg.getDataSize(rowCount));   // XXXPAT: make valgrind happy temporarily
 #endif
+  memset(rowData.get(), 0, rg.getDataSize(rowCount));   // XXXPAT: make valgrind happy temporarily
 }
 
 RGData::RGData(const RowGroup& rg)
@@ -478,7 +480,7 @@ void RGData::serialize(ByteStream& bs, uint32_t amount) const
         bs << (uint8_t) 0;
 }
 
-void RGData::deserialize(ByteStream& bs, bool hasLenField)
+void RGData::deserialize(ByteStream& bs, uint32_t defAmount)
 {
     uint32_t amount, sig;
     uint8_t* buf;
@@ -490,7 +492,7 @@ void RGData::deserialize(ByteStream& bs, bool hasLenField)
     {
         bs >> sig;
         bs >> amount;
-        rowData.reset(new uint8_t[amount]);
+        rowData.reset(new uint8_t[std::max(amount, defAmount)]);
         buf = bs.buf();
         memcpy(rowData.get(), buf, amount);
         bs.advance(amount);
@@ -574,12 +576,13 @@ Row& Row::operator=(const Row& r)
     return *this;
 }
 
-string Row::toString() const
+string Row::toString(uint32_t rownum) const
 {
     ostringstream os;
     uint32_t i;
 
     //os << getRid() << ": ";
+    os << "[" << std::setw(5) << rownum << std::setw(0) << "]: ";
     os << (int) useStringTable << ": ";
 
     for (i = 0; i < columnCount; i++)
@@ -1050,45 +1053,6 @@ bool Row::equals(const std::string& val, uint32_t col) const
     return true;
 }
 
-bool Row::equals(const Row& r2, const std::vector<uint32_t>& keyCols) const
-{
-    for (uint32_t i = 0; i < keyCols.size(); i++)
-    {
-        const uint32_t& col = keyCols[i];
-
-        if (UNLIKELY(getColType(col) == execplan::CalpontSystemCatalog::VARCHAR ||
-                     (getColType(col) == execplan::CalpontSystemCatalog::CHAR  && (colWidths[col] > 1)) ||
-                     getColType(col) == execplan::CalpontSystemCatalog::TEXT))
-        {
-            CHARSET_INFO* cs = getCharset(col);
-            if (cs->strnncollsp(getStringPointer(col), getStringLength(col), 
-                          r2.getStringPointer(col), r2.getStringLength(col)))
-            {
-                return false;
-            }
-        }
-        else if (UNLIKELY(getColType(col) == execplan::CalpontSystemCatalog::BLOB))
-        {
-            if (getStringLength(col) != r2.getStringLength(col))
-                return false;
-
-            if (memcmp(getStringPointer(col), r2.getStringPointer(col), getStringLength(col)))
-                return false;
-        }
-        else
-        {
-            if (getColType(col) == execplan::CalpontSystemCatalog::LONGDOUBLE)
-            {
-                if (getLongDoubleField(col) != r2.getLongDoubleField(col))
-                    return false;
-            }
-            else if (getUintField(col) != r2.getUintField(col))
-                return false;
-        }
-    }
-
-    return true;
-}
 
 bool Row::equals(const Row& r2, uint32_t lastCol) const
 {
@@ -1107,9 +1071,7 @@ bool Row::equals(const Row& r2, uint32_t lastCol) const
     // because binary equality is not equality for many charsets/collations
     for (uint32_t col = 0; col <= lastCol; col++)
     {
-        if (UNLIKELY(getColType(col) == execplan::CalpontSystemCatalog::VARCHAR ||
-                     (getColType(col) == execplan::CalpontSystemCatalog::CHAR  && (colWidths[col] > 1)) ||
-                     getColType(col) == execplan::CalpontSystemCatalog::TEXT))
+        if (UNLIKELY(colHasCollation(col)))
         {
             CHARSET_INFO* cs = getCharset(col);
             if (cs->strnncollsp(getStringPointer(col), getStringLength(col), 
@@ -1157,6 +1119,8 @@ RowGroup::RowGroup() : columnCount(0), data(NULL), rgData(NULL), strings(NULL),
     oids.reserve(10);
     keys.reserve(10);
     types.reserve(10);
+    charsetNumbers.reserve(10);
+    charsets.reserve(10);
     scale.reserve(10);
     precision.reserve(10);
 }
@@ -1206,10 +1170,7 @@ RowGroup::RowGroup(uint32_t colCount,
         else
             stOffsets[i + 1] = stOffsets[i] + colWidths[i];
 
-        execplan::CalpontSystemCatalog::ColDataType type = types[i];
-        if ((type == execplan::CalpontSystemCatalog::CHAR && (colWidths[i] > 1)) ||
-            type == execplan::CalpontSystemCatalog::VARCHAR ||
-            type == execplan::CalpontSystemCatalog::TEXT)
+        if (colHasCollation(i))
         {
             hasCollation = true;
         }
@@ -1403,7 +1364,7 @@ uint32_t RowGroup::getColumnCount() const
     return columnCount;
 }
 
-string RowGroup::toString() const
+string RowGroup::toString(const std::vector<uint64_t>& used) const
 {
     ostringstream os;
     ostream_iterator<int> oIter1(os, "\t");
@@ -1435,6 +1396,8 @@ string RowGroup::toString() const
         os << "uses a string table\n";
     else
         os << "doesn't use a string table\n";
+    if (!used.empty())
+      os << "sparse\n";
 
     //os << "strings = " << hex << (int64_t) strings << "\n";
     //os << "data = " << (int64_t) data << "\n" << dec;
@@ -1444,14 +1407,25 @@ string RowGroup::toString() const
         initRow(&r);
         getRow(0, &r);
         os << "rowcount = " << getRowCount() << endl;
+        if (!used.empty())
+        {
+          uint64_t cnt = std::accumulate(used.begin(), used.end(), 0ULL,
+                                         [](uint64_t a, uint64_t bits) {
+                                           return a + __builtin_popcountll(bits);
+                                         });
+          os << "sparse row count = " << cnt << endl;
+        }
         os << "base rid = " << getBaseRid() << endl;
         os << "status = " << getStatus() << endl;
         os << "dbroot = " << getDBRoot() << endl;
         os << "row data...\n";
 
-        for (uint32_t i = 0; i < getRowCount(); i++)
+        uint32_t max_cnt = used.empty() ? getRowCount() : (used.size() * 64);
+        for (uint32_t i = 0; i < max_cnt; i++)
         {
-            os << r.toString() << endl;
+            if (!used.empty() && !(used[i/64] & (1ULL << (i%64))))
+              continue;
+            os << r.toString(i) << endl;
             r.nextRow();
         }
     }
@@ -1542,6 +1516,8 @@ RowGroup& RowGroup::operator+=(const RowGroup& rhs)
     oids.insert(oids.end(), rhs.oids.begin(), rhs.oids.end());
     keys.insert(keys.end(), rhs.keys.begin(), rhs.keys.end());
     types.insert(types.end(), rhs.types.begin(), rhs.types.end());
+    charsetNumbers.insert(charsetNumbers.end(), rhs.charsetNumbers.begin(), rhs.charsetNumbers.end());
+    charsets.insert(charsets.end(), rhs.charsets.begin(), rhs.charsets.end());
     scale.insert(scale.end(), rhs.scale.begin(), rhs.scale.end());
     precision.insert(precision.end(), rhs.precision.begin(), rhs.precision.end());
     colWidths.insert(colWidths.end(), rhs.colWidths.begin(), rhs.colWidths.end());
@@ -1791,6 +1767,8 @@ RowGroup RowGroup::truncate(uint32_t cols)
     ret.oids.resize(cols);
     ret.keys.resize(cols);
     ret.types.resize(cols);
+    ret.charsetNumbers.resize(cols);
+    ret.charsets.resize(cols);
     ret.scale.resize(cols);
     ret.precision.resize(cols);
     ret.forceInline.reset(new bool[cols]);
@@ -1807,10 +1785,7 @@ RowGroup RowGroup::truncate(uint32_t cols)
             ret.hasLongStringField = true;
         }
 
-        execplan::CalpontSystemCatalog::ColDataType type = types[i];
-        if ((type == execplan::CalpontSystemCatalog::CHAR && (colWidths[i] > 1)) ||
-            type == execplan::CalpontSystemCatalog::VARCHAR ||
-            type == execplan::CalpontSystemCatalog::TEXT)
+        if (colHasCollation(i))
         {
             ret.hasCollation = true;
         }

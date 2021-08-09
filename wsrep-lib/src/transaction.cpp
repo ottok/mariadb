@@ -101,7 +101,6 @@ wsrep::transaction::transaction(
     , ws_handle_()
     , ws_meta_()
     , flags_()
-    , pa_unsafe_(false)
     , implicit_deps_(false)
     , certified_(false)
     , fragments_certified_for_statement_()
@@ -326,7 +325,7 @@ int wsrep::transaction::before_prepare(
             {
                 // Force fragment replication on XA prepare
                 flags(flags() | wsrep::provider::flag::prepare);
-                flags(flags() | wsrep::provider::flag::pa_unsafe);
+                pa_unsafe(true);
                 append_sr_keys_for_commit();
                 const bool force_streaming_step = true;
                 ret = streaming_step(lock, force_streaming_step);
@@ -630,7 +629,7 @@ int wsrep::transaction::after_commit()
             client_state_.server_state_.stop_streaming_client(&client_state_);
             lock.lock();
         }
-        clear_fragments();
+        streaming_context_.cleanup();
     }
 
     switch (client_state_.mode())
@@ -768,7 +767,7 @@ int wsrep::transaction::after_rollback()
 
     if (is_streaming() && state() != s_must_replay)
     {
-        clear_fragments();
+        streaming_context_.cleanup();
     }
 
     if (state() == s_aborting)
@@ -1107,16 +1106,15 @@ int wsrep::transaction::commit_or_rollback_by_xid(const wsrep::xid& xid,
         return 1;
     }
 
-    int flags(0);
     if (commit)
     {
-        flags = wsrep::provider::flag::commit;
+        flags(wsrep::provider::flag::commit);
     }
     else
     {
-        flags = wsrep::provider::flag::rollback;
+        flags(wsrep::provider::flag::rollback);
     }
-    flags = flags | wsrep::provider::flag::pa_unsafe;
+    pa_unsafe(true);
     wsrep::stid stid(sa->transaction().server_id(),
                      sa->transaction().id(),
                      client_state_.id());
@@ -1125,7 +1123,7 @@ int wsrep::transaction::commit_or_rollback_by_xid(const wsrep::xid& xid,
     const enum wsrep::provider::status cert_ret(
         provider().certify(client_state_.id(),
                            ws_handle_,
-                           flags,
+                           flags(),
                            meta));
 
     int ret;
@@ -1619,6 +1617,7 @@ int wsrep::transaction::certify_fragment(
         assert(state_ == s_certifying);
         state(lock, s_executing);
         flags(flags() & ~wsrep::provider::flag::start_transaction);
+        flags(flags() & ~wsrep::provider::flag::pa_unsafe);
     }
     return ret;
 }
@@ -1650,7 +1649,7 @@ int wsrep::transaction::certify_commit(
         {
             append_sr_keys_for_commit();
         }
-        flags(flags() | wsrep::provider::flag::pa_unsafe);
+        pa_unsafe(true);
     }
 
     if (implicit_deps())
@@ -1904,7 +1903,7 @@ int wsrep::transaction::replay(wsrep::unique_lock<wsrep::mutex>& lock)
         }
         if (is_streaming())
         {
-            clear_fragments();
+            streaming_context_.cleanup();
         }
         provider().release(ws_handle_);
         break;
@@ -1914,7 +1913,7 @@ int wsrep::transaction::replay(wsrep::unique_lock<wsrep::mutex>& lock)
         if (is_streaming())
         {
             client_service_.remove_fragments();
-            clear_fragments();
+            streaming_context_.cleanup();
         }
         state(lock, s_aborted);
         ret = 1;
@@ -1928,11 +1927,6 @@ int wsrep::transaction::replay(wsrep::unique_lock<wsrep::mutex>& lock)
                     wsrep::log::debug_level_transaction,
                     "replay returned" << replay_ret);
     return ret;
-}
-
-void wsrep::transaction::clear_fragments()
-{
-    streaming_context_.cleanup();
 }
 
 void wsrep::transaction::cleanup()
@@ -1956,7 +1950,6 @@ void wsrep::transaction::cleanup()
     ws_meta_ = wsrep::ws_meta();
     flags_ = 0;
     certified_ = false;
-    pa_unsafe_ = false;
     implicit_deps_ = false;
     sr_keys_.clear();
     streaming_context_.cleanup();

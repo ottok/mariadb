@@ -270,7 +270,7 @@ public:
     // the 'hasLengthField' is there b/c PM aggregation (and possibly others) currently sends
     // inline data with a length field.  Once that's converted to string table format, that
     // option can go away.
-    void deserialize(messageqcpp::ByteStream&, bool hasLengthField = false); // returns the # of bytes read
+    void deserialize(messageqcpp::ByteStream&, uint32_t amount = 0); // returns the # of bytes read
 
     inline uint64_t getStringTableMemUsage();
     void clear();
@@ -372,6 +372,11 @@ public:
     inline bool isShortString(uint32_t colIndex) const;
     inline bool isLongString(uint32_t colIndex) const;
 
+    bool colHasCollation(uint32_t colIndex) const
+    {
+        return execplan::typeHasCollation(getColType(colIndex));
+    }
+
     template<int len> inline uint64_t getUintField(uint32_t colIndex) const;
     inline uint64_t getUintField(uint32_t colIndex) const;
     template<int len> inline int64_t getIntField(uint32_t colIndex) const;
@@ -462,7 +467,7 @@ public:
     // that's not string-table safe, this one is
     inline void copyField(Row& dest, uint32_t destIndex, uint32_t srcIndex) const;
 
-    std::string toString() const;
+    std::string toString(uint32_t rownum = 0) const;
     std::string toCSV() const;
 
     /* These fcns are used only in joins.  The RID doesn't matter on the side that
@@ -494,7 +499,6 @@ public:
                                        const uint32_t col,
                                        uint32_t& intermediateHash) const;
 
-    bool equals(const Row&, const std::vector<uint32_t>& keyColumns) const;
     bool equals(const Row&, uint32_t lastCol) const;
     inline bool equals(const Row&) const;
 
@@ -1354,6 +1358,11 @@ public:
     inline bool isShortString(uint32_t colIndex) const;
     inline bool isLongString(uint32_t colIndex) const;
 
+    bool colHasCollation(uint32_t colIndex) const
+    {
+        return execplan::typeHasCollation(getColType(colIndex));
+    }
+
     inline const std::vector<uint32_t>& getScale() const;
     inline const std::vector<uint32_t>& getPrecision() const;
 
@@ -1374,7 +1383,7 @@ public:
 
     RGData duplicate();   // returns a copy of the attached RGData
 
-    std::string toString() const;
+    std::string toString(const std::vector<uint64_t>& used = {}) const;
 
     /** operator+=
     *

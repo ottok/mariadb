@@ -11,6 +11,7 @@
 [#assign s = name]
 [#assign toto = s?replace(".","_")]
 [#assign toto = toto?replace("/","")]
+[#assign toto = toto?replace("-","_")]
 [#assign inclusion_protection = toto?upper_case]
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __${inclusion_protection}__
@@ -85,6 +86,7 @@ extern ${variable.value} ${variable.name};
     #undef  NO_STM32_CRYPTO
     #define STM32_HAL_V2
     #define HAL_CONSOLE_UART huart2
+    #define STM32_AESGCM_PARTIAL /* allow partial blocks and add auth info (header) */
 #elif defined(STM32H753xx)
     #define WOLFSSL_STM32H7
     #undef  NO_STM32_HASH
@@ -120,6 +122,11 @@ extern ${variable.value} ${variable.name};
     #define HAL_CONSOLE_UART huart2
     #define NO_STM32_RNG
     #define WOLFSSL_GENSEED_FORTEST
+#elif defined(STM32G071xx)
+    #define WOLFSSL_STM32G0
+    #define HAL_CONSOLE_UART huart2
+    #define NO_STM32_RNG
+    #define WOLFSSL_GENSEED_FORTEST
 #else
     #warning Please define a hardware platform!
     /* This means there is not a pre-defined platform for your board/CPU */
@@ -128,7 +135,9 @@ extern ${variable.value} ${variable.name};
         WOLFSSL_STM32F7, WOLFSSL_STM32H7, WOLFSSL_STM32L4 and WOLFSSL_STM32L5 */
     #define WOLFSSL_STM32F4
 
-    /* Debug UART */
+    /* Debug UART used for printf */
+    /* The UART interface number varies for each board/CPU */
+    /* Typically this is the UART attached to the ST-Link USB CDC UART port */
     #define HAL_CONSOLE_UART huart4
 
     /* Hardware Crypto - uncomment as available on hardware */
@@ -475,7 +484,13 @@ extern ${variable.value} ${variable.name};
 /* RNG */
 /* ------------------------------------------------------------------------- */
 #define NO_OLD_RNGNAME /* conflicts with STM RNG macro */
-#define HAVE_HASHDRBG
+#if !defined(WOLF_CONF_RNG) || WOLF_CONF_RNG == 1
+    /* default is enabled */
+    #define HAVE_HASHDRBG
+#else /* WOLF_CONF_RNG == 0 */
+    #define WC_NO_HASHDRBG
+    #define WC_NO_RNG
+#endif
 
 
 /* ------------------------------------------------------------------------- */
@@ -526,7 +541,7 @@ extern ${variable.value} ${variable.name};
 #ifdef __cplusplus
 }
 #endif
-#endif /*__ ${inclusion_protection}_H */
+#endif /* ${inclusion_protection}_H */
 
 /**
   * @}

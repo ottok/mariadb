@@ -710,6 +710,14 @@ dberr_t FetchIndexRootPages::operator()(buf_block_t* block) UNIV_NOTHROW
 				return(DB_CORRUPTION);
 			}
 		}
+
+		if (!page_is_comp(block->frame) !=
+		    !dict_table_is_comp(m_table)) {
+			ib_errf(m_trx->mysql_thd, IB_LOG_LEVEL_ERROR,
+				ER_TABLE_SCHEMA_MISMATCH,
+				"ROW_FORMAT mismatch");
+			return DB_CORRUPTION;
+		}
 	}
 
 	return DB_SUCCESS;
@@ -4232,7 +4240,17 @@ row_import_for_mysql(
 	/* Ensure that all pages dirtied during the IMPORT make it to disk.
 	The only dirty pages generated should be from the pessimistic purge
 	of delete marked records that couldn't be purged in Phase I. */
-	while (buf_flush_dirty_pages(prebuilt->table->space_id));
+	while (buf_flush_list_space(prebuilt->table->space));
+
+	for (ulint count = 0; prebuilt->table->space->referenced(); count++) {
+		/* Issue a warning every 10.24 seconds, starting after
+		2.56 seconds */
+		if ((count & 511) == 128) {
+			ib::warn() << "Waiting for flush to complete on "
+				   << prebuilt->table->name;
+		}
+		os_thread_sleep(20000);
+	}
 
 	ib::info() << "Phase IV - Flush complete";
 	prebuilt->table->space->set_imported();

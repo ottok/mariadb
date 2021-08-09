@@ -3252,7 +3252,6 @@ end:
       my_error(ER_INVALID_ROLE, MYF(0), rolename);
       break;
     case 1:
-      StringBuffer<1024> c_usr;
       LEX_CSTRING role_lex;
       /* First, check if current user can see mysql database. */
       bool read_access= !check_access(thd, SELECT_ACL, "mysql", NULL, NULL, 1, 1);
@@ -3273,11 +3272,9 @@ end:
                                                 NULL) == -1))
       {
         /* Role is not granted but current user can see the role */
-        c_usr.append(user, strlen(user));
-        c_usr.append('@');
-        c_usr.append(host, strlen(host));
-        my_printf_error(ER_INVALID_ROLE, "User %`s has not been granted role %`s",
-                        MYF(0), c_usr.c_ptr(), rolename);
+        my_printf_error(ER_INVALID_ROLE, "User %`s@%`s has not been granted role %`s",
+                        MYF(0), thd->security_ctx->priv_user,
+                        thd->security_ctx->priv_host, rolename);
       }
       else
       {
@@ -9416,14 +9413,13 @@ static bool show_default_role(THD *thd, ACL_USER *acl_entry,
     String def_str(buff, buffsize, system_charset_info);
     def_str.length(0);
     def_str.append(STRING_WITH_LEN("SET DEFAULT ROLE "));
-    def_str.append(&def_rolename);
-    def_str.append(" FOR '");
-    def_str.append(&acl_entry->user);
+    append_identifier(thd, &def_str, def_rolename.str, def_rolename.length);
+    def_str.append(" FOR ");
+    append_identifier(thd, &def_str, acl_entry->user.str, acl_entry->user.length);
     DBUG_ASSERT(!(acl_entry->flags & IS_ROLE));
-    def_str.append(STRING_WITH_LEN("'@'"));
-    def_str.append(acl_entry->host.hostname, acl_entry->hostname_length,
-                   system_charset_info);
-    def_str.append('\'');
+    def_str.append('@');
+    append_identifier(thd, &def_str, acl_entry->host.hostname,
+                      acl_entry->hostname_length);
     protocol->prepare_for_resend();
     protocol->store(def_str.ptr(),def_str.length(),def_str.charset());
     if (protocol->write())
@@ -13904,7 +13900,12 @@ static int server_mpvio_read_packet(MYSQL_PLUGIN_VIO *param, uchar **buf)
 
 done:
   if (set_user_salt_if_needed(mpvio->acl_user, mpvio->curr_auth, mpvio->plugin))
+  {
+    ai->thd->clear_error(); // authenticating user should not see these errors
+    my_error(ER_ACCESS_DENIED_ERROR, MYF(0), ai->thd->security_ctx->user,
+             ai->thd->security_ctx->host_or_ip, ER_THD(ai->thd, ER_YES));
     goto err;
+  }
 
   ai->user_name= ai->thd->security_ctx->user;
   ai->user_name_length= (uint) strlen(ai->user_name);

@@ -2,6 +2,48 @@
 # included from Top Level Makefile.am
 # All paths should be given relative to the root
 
+BUILT_SOURCES+= ctaocrypt/src/fips.c
+BUILT_SOURCES+= ctaocrypt/src/fips_test.c
+BUILT_SOURCES+= wolfcrypt/src/async.c
+BUILT_SOURCES+= wolfcrypt/src/fips.c
+BUILT_SOURCES+= wolfcrypt/src/fips_test.c
+BUILT_SOURCES+= wolfcrypt/src/selftest.c
+BUILT_SOURCES+= wolfcrypt/src/wolfcrypt_first.c
+BUILT_SOURCES+= wolfcrypt/src/wolfcrypt_last.c
+
+MAINTAINERCLEANFILES+= ctaocrypt/src/fips.c
+MAINTAINERCLEANFILES+= ctaocrypt/src/fips_test.c
+MAINTAINERCLEANFILES+= wolfcrypt/src/async.c
+MAINTAINERCLEANFILES+= wolfcrypt/src/fips.c
+MAINTAINERCLEANFILES+= wolfcrypt/src/fips_test.c
+MAINTAINERCLEANFILES+= wolfcrypt/src/selftest.c
+MAINTAINERCLEANFILES+= wolfcrypt/src/wolfcrypt_first.c
+MAINTAINERCLEANFILES+= wolfcrypt/src/wolfcrypt_last.c
+
+ctaocrypt/src/fips.c: Makefile
+	touch $(srcdir)/$@
+
+ctaocrypt/src/fips_test.c: Makefile
+	touch $(srcdir)/$@
+
+wolfcrypt/src/async.c: Makefile
+	touch $(srcdir)/$@
+
+wolfcrypt/src/fips.c: Makefile
+	touch $(srcdir)/$@
+
+wolfcrypt/src/fips_test.c: Makefile
+	touch $(srcdir)/$@
+
+wolfcrypt/src/selftest.c: Makefile
+	touch $(srcdir)/$@
+
+wolfcrypt/src/wolfcrypt_first.c: Makefile
+	touch $(srcdir)/$@
+
+wolfcrypt/src/wolfcrypt_last.c: Makefile
+	touch $(srcdir)/$@
+
 if !BUILD_NO_LIBRARY
 lib_LTLIBRARIES+= src/libwolfssl.la
 endif
@@ -247,8 +289,10 @@ endif
 if BUILD_SP_ARM_THUMB
 src_libwolfssl_la_SOURCES += wolfcrypt/src/sp_armthumb.c
 endif
+if !BUILD_FIPS_V2
 if BUILD_SP_ARM64
 src_libwolfssl_la_SOURCES += wolfcrypt/src/sp_arm64.c
+endif
 endif
 if BUILD_SP_INT
 src_libwolfssl_la_SOURCES += wolfcrypt/src/sp_int.c
@@ -441,6 +485,12 @@ endif
 if !BUILD_FIPS_V2
 if BUILD_ECC
 src_libwolfssl_la_SOURCES += wolfcrypt/src/ecc.c
+endif
+if BUILD_ECCSI
+src_libwolfssl_la_SOURCES += wolfcrypt/src/eccsi.c
+endif
+if BUILD_SAKKE
+src_libwolfssl_la_SOURCES += wolfcrypt/src/sakke.c
 endif
 endif
 

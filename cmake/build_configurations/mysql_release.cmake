@@ -1,5 +1,5 @@
 # Copyright (c) 2010, 2011, Oracle and/or its affiliates. All rights reserved.
-# Copyright (c) 2011, 2019, MariaDB Corporation.
+# Copyright (c) 2011, 2021, MariaDB Corporation.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -85,6 +85,12 @@ ENDIF()
 
 SET(WITH_INNODB_SNAPPY OFF CACHE STRING "")
 SET(WITH_NUMA 0 CACHE BOOL "")
+SET(CPU_LEVEL1_DCACHE_LINESIZE 0)
+
+IF(NOT EXISTS ${CMAKE_SOURCE_DIR}/.git)
+  SET(GIT_EXECUTABLE GIT_EXECUTABLE-NOTFOUND CACHE FILEPATH "")
+ENDIF()
+
 IF(WIN32)
   SET(INSTALL_MYSQLTESTDIR "" CACHE STRING "")
   SET(INSTALL_SQLBENCHDIR  "" CACHE STRING "")

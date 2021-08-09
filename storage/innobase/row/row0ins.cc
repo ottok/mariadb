@@ -930,8 +930,8 @@ row_ins_foreign_fill_virtual(
 		upd_field = update->fields + n_diff;
 
 		upd_field->old_v_val = static_cast<dfield_t*>(
-				mem_heap_alloc(cascade->heap,
-					sizeof *upd_field->old_v_val));
+			mem_heap_alloc(update->heap,
+				       sizeof *upd_field->old_v_val));
 
 		dfield_copy(upd_field->old_v_val, vfield);
 
@@ -3424,7 +3424,6 @@ row_ins_index_entry_set_vals(
 				field->len = UNIV_SQL_NULL;
 				field->type.prtype = DATA_BINARY_TYPE;
 			} else {
-				ut_ad(col->len <= sizeof field_ref_zero);
 				ut_ad(ind_field->fixed_len <= col->len);
 				dfield_set_data(field, field_ref_zero,
 						ind_field->fixed_len);

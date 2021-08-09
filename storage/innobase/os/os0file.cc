@@ -342,6 +342,10 @@ os_file_lock(
 	int		fd,
 	const char*	name)
 {
+	if (my_disable_locking) {
+		return 0;
+	}
+
 	struct flock lk;
 
 	lk.l_type = F_WRLCK;
@@ -1170,136 +1174,6 @@ os_file_create_directory(
 	}
 
 	return(true);
-}
-
-/**
-The os_file_opendir() function opens a directory stream corresponding to the
-directory named by the dirname argument. The directory stream is positioned
-at the first entry. In both Unix and Windows we automatically skip the '.'
-and '..' items at the start of the directory listing.
-@param[in]	dirname		directory name; it must not contain a trailing
-				'\' or '/'
-@param[in]	is_fatal	true if we should treat an error as a fatal
-				error; if we try to open symlinks then we do
-				not wish a fatal error if it happens not to be
-				a directory
-@return directory stream, NULL if error */
-os_file_dir_t
-os_file_opendir(
-	const char*	dirname,
-	bool		error_is_fatal)
-{
-	os_file_dir_t		dir;
-	dir = opendir(dirname);
-
-	if (dir == NULL && error_is_fatal) {
-		os_file_handle_error(dirname, "opendir");
-	}
-
-	return(dir);
-}
-
-/** Closes a directory stream.
-@param[in]	dir		directory stream
-@return 0 if success, -1 if failure */
-int
-os_file_closedir(
-	os_file_dir_t	dir)
-{
-	int	ret = closedir(dir);
-
-	if (ret != 0) {
-		os_file_handle_error_no_exit(NULL, "closedir", false);
-	}
-
-	return(ret);
-}
-
-/** This function returns information of the next file in the directory. We jump
-over the '.' and '..' entries in the directory.
-@param[in]	dirname		directory name or path
-@param[in]	dir		directory stream
-@param[out]	info		buffer where the info is returned
-@return 0 if ok, -1 if error, 1 if at the end of the directory */
-int
-os_file_readdir_next_file(
-	const char*	dirname,
-	os_file_dir_t	dir,
-	os_file_stat_t*	info)
-{
-	struct dirent*	ent;
-	char*		full_path;
-	int		ret;
-	struct stat	statinfo;
-
-next_file:
-
-	ent = readdir(dir);
-
-	if (ent == NULL) {
-
-		return(1);
-	}
-
-	ut_a(strlen(ent->d_name) < OS_FILE_MAX_PATH);
-
-	if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
-
-		goto next_file;
-	}
-
-	strcpy(info->name, ent->d_name);
-
-	full_path = static_cast<char*>(
-		ut_malloc_nokey(strlen(dirname) + strlen(ent->d_name) + 10));
-	if (!full_path) {
-		return -1;
-	}
-
-	sprintf(full_path, "%s/%s", dirname, ent->d_name);
-
-	ret = stat(full_path, &statinfo);
-
-	if (ret) {
-
-		if (errno == ENOENT) {
-			/* readdir() returned a file that does not exist,
-			it must have been deleted in the meantime. Do what
-			would have happened if the file was deleted before
-			readdir() - ignore and go to the next entry.
-			If this is the last entry then info->name will still
-			contain the name of the deleted file when this
-			function returns, but this is not an issue since the
-			caller shouldn't be looking at info when end of
-			directory is returned. */
-
-			ut_free(full_path);
-
-			goto next_file;
-		}
-
-		os_file_handle_error_no_exit(full_path, "stat", false);
-
-		ut_free(full_path);
-
-		return(-1);
-	}
-
-	info->size = statinfo.st_size;
-
-	if (S_ISDIR(statinfo.st_mode)) {
-		info->type = OS_FILE_TYPE_DIR;
-	} else if (S_ISLNK(statinfo.st_mode)) {
-		info->type = OS_FILE_TYPE_LINK;
-	} else if (S_ISREG(statinfo.st_mode)) {
-		info->type = OS_FILE_TYPE_FILE;
-	} else {
-		info->type = OS_FILE_TYPE_UNKNOWN;
-	}
-
-	ut_free(full_path);
-
-	return(0);
 }
 
 /** NOTE! Use the corresponding macro os_file_create(), not directly
@@ -2204,154 +2078,6 @@ os_file_create_directory(
 	}
 
 	return(true);
-}
-
-/** The os_file_opendir() function opens a directory stream corresponding to the
-directory named by the dirname argument. The directory stream is positioned
-at the first entry. In both Unix and Windows we automatically skip the '.'
-and '..' items at the start of the directory listing.
-@param[in]	dirname		directory name; it must not contain a trailing
-				'\' or '/'
-@param[in]	is_fatal	true if we should treat an error as a fatal
-				error; if we try to open symlinks then we do
-				not wish a fatal error if it happens not to
-				be a directory
-@return directory stream, NULL if error */
-os_file_dir_t
-os_file_opendir(
-	const char*	dirname,
-	bool		error_is_fatal)
-{
-	os_file_dir_t		dir;
-	LPWIN32_FIND_DATA	lpFindFileData;
-	char			path[OS_FILE_MAX_PATH + 3];
-
-	ut_a(strlen(dirname) < OS_FILE_MAX_PATH);
-
-	strcpy(path, dirname);
-	strcpy(path + strlen(path), "\\*");
-
-	/* Note that in Windows opening the 'directory stream' also retrieves
-	the first entry in the directory. Since it is '.', that is no problem,
-	as we will skip over the '.' and '..' entries anyway. */
-
-	lpFindFileData = static_cast<LPWIN32_FIND_DATA>(
-		ut_malloc_nokey(sizeof(WIN32_FIND_DATA)));
-
-	dir = FindFirstFile((LPCTSTR) path, lpFindFileData);
-
-	ut_free(lpFindFileData);
-
-	if (dir == INVALID_HANDLE_VALUE) {
-
-		if (error_is_fatal) {
-			os_file_handle_error(dirname, "opendir");
-		}
-
-		return(NULL);
-	}
-
-	return(dir);
-}
-
-/** Closes a directory stream.
-@param[in]	dir	directory stream
-@return 0 if success, -1 if failure */
-int
-os_file_closedir(
-	os_file_dir_t	dir)
-{
-	BOOL		ret;
-
-	ret = FindClose(dir);
-
-	if (!ret) {
-		os_file_handle_error_no_exit(NULL, "closedir", false);
-
-		return(-1);
-	}
-
-	return(0);
-}
-
-/** This function returns information of the next file in the directory. We
-jump over the '.' and '..' entries in the directory.
-@param[in]	dirname		directory name or path
-@param[in]	dir		directory stream
-@param[out]	info		buffer where the info is returned
-@return 0 if ok, -1 if error, 1 if at the end of the directory */
-int
-os_file_readdir_next_file(
-	const char*	dirname,
-	os_file_dir_t	dir,
-	os_file_stat_t*	info)
-{
-	BOOL		ret;
-	int		status;
-	WIN32_FIND_DATA	find_data;
-
-next_file:
-
-	ret = FindNextFile(dir, &find_data);
-
-	if (ret > 0) {
-
-		const char* name;
-
-		name = static_cast<const char*>(find_data.cFileName);
-
-		ut_a(strlen(name) < OS_FILE_MAX_PATH);
-
-		if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
-
-			goto next_file;
-		}
-
-		strcpy(info->name, name);
-
-		info->size = find_data.nFileSizeHigh;
-		info->size <<= 32;
-		info->size |= find_data.nFileSizeLow;
-
-		if (find_data.dwFileAttributes
-		    & FILE_ATTRIBUTE_REPARSE_POINT) {
-
-			/* TODO: test Windows symlinks */
-			/* TODO: MySQL has apparently its own symlink
-			implementation in Windows, dbname.sym can
-			redirect a database directory:
-			REFMAN "windows-symbolic-links.html" */
-
-			info->type = OS_FILE_TYPE_LINK;
-
-		} else if (find_data.dwFileAttributes
-			   & FILE_ATTRIBUTE_DIRECTORY) {
-
-			info->type = OS_FILE_TYPE_DIR;
-
-		} else {
-
-			/* It is probably safest to assume that all other
-			file types are normal. Better to check them rather
-			than blindly skip them. */
-
-			info->type = OS_FILE_TYPE_FILE;
-		}
-
-		status = 0;
-
-	} else if (GetLastError() == ERROR_NO_MORE_FILES) {
-
-		status = 1;
-
-	} else {
-
-		os_file_handle_error_no_exit(NULL, "readdir_next_file", false);
-
-		status = -1;
-	}
-
-	return(status);
 }
 
 /** Check that IO of specific size is possible for the file
@@ -3596,6 +3322,8 @@ os_file_set_size(
 
 fallback:
 #else
+	struct stat statbuf;
+
 	if (is_sparse) {
 		bool success = !ftruncate(file, size);
 		if (!success) {
@@ -3609,10 +3337,17 @@ fallback:
 # ifdef HAVE_POSIX_FALLOCATE
 	int err;
 	do {
-		os_offset_t current_size = os_file_get_size(file);
-		err = current_size >= size
-			? 0 : posix_fallocate(file, current_size,
+		if (fstat(file, &statbuf)) {
+			err = errno;
+		} else {
+			os_offset_t current_size = statbuf.st_size;
+			if (current_size >= size) {
+				return true;
+			}
+			current_size &= ~os_offset_t(statbuf.st_blksize - 1);
+			err = posix_fallocate(file, current_size,
 					      size - current_size);
+		}
 	} while (err == EINTR
 		 && srv_shutdown_state <= SRV_SHUTDOWN_INITIATED);
 
@@ -3635,6 +3370,27 @@ fallback:
 # endif /* HAVE_POSIX_ALLOCATE */
 #endif /* _WIN32*/
 
+#ifdef _WIN32
+	os_offset_t	current_size = os_file_get_size(file);
+	FILE_STORAGE_INFO info;
+	if (GetFileInformationByHandleEx(file, FileStorageInfo, &info,
+					 sizeof info)) {
+		if (info.LogicalBytesPerSector) {
+			current_size &= ~os_offset_t(info.LogicalBytesPerSector
+						     - 1);
+		}
+	}
+#else
+	if (fstat(file, &statbuf)) {
+		return false;
+	}
+	os_offset_t current_size = statbuf.st_size
+		& ~os_offset_t(statbuf.st_blksize - 1);
+#endif
+	if (current_size >= size) {
+		return true;
+	}
+
 	/* Write up to 1 megabyte at a time. */
 	ulint	buf_size = ut_min(ulint(64),
 				  ulint(size >> srv_page_size_shift))
@@ -3645,8 +3401,6 @@ fallback:
 							srv_page_size));
 	/* Write buffer full of zeros */
 	memset(buf, 0, buf_size);
-
-	os_offset_t	current_size = os_file_get_size(file);
 
 	while (current_size < size
 	       && srv_shutdown_state <= SRV_SHUTDOWN_INITIATED) {
@@ -4066,8 +3820,8 @@ static void os_aio_wait_until_no_pending_writes_low()
      tpool::tpool_wait_end();
 }
 
-/** Waits until there are no pending writes. There can
-be other, synchronous, pending writes. */
+/** Wait until there are no pending asynchronous writes.
+Only used on FLUSH TABLES...FOR EXPORT. */
 void os_aio_wait_until_no_pending_writes()
 {
   os_aio_wait_until_no_pending_writes_low();

@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2004, 2012, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2018, MariaDB
+   Copyright (c) 2010, 2021, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -393,10 +393,12 @@ bool mysql_create_or_drop_trigger(THD *thd, TABLE_LIST *tables, bool create)
     This is a good candidate for a minor refactoring.
   */
   TABLE *table;
-  bool result= TRUE;
+  bool result= TRUE, refresh_metadata= FALSE;
   String stmt_query;
   bool lock_upgrade_done= FALSE;
+  bool backup_of_table_list_done= 0;;
   MDL_ticket *mdl_ticket= NULL;
+  MDL_request mdl_request_for_trn;
   Query_tables_list backup;
   DBUG_ENTER("mysql_create_or_drop_trigger");
 
@@ -446,6 +448,15 @@ bool mysql_create_or_drop_trigger(THD *thd, TABLE_LIST *tables, bool create)
     DBUG_RETURN(TRUE);
   }
 
+  /* Protect against concurrent create/drop */
+  MDL_REQUEST_INIT(&mdl_request_for_trn, MDL_key::TABLE,
+                   create ? tables->db.str : thd->lex->spname->m_db.str,
+                   thd->lex->spname->m_name.str,
+                   MDL_EXCLUSIVE, MDL_EXPLICIT);
+  if (thd->mdl_context.acquire_lock(&mdl_request_for_trn,
+                                    thd->variables.lock_wait_timeout))
+    goto end;
+
   if (!create)
   {
     bool if_exists= thd->lex->if_exists();
@@ -454,6 +465,7 @@ bool mysql_create_or_drop_trigger(THD *thd, TABLE_LIST *tables, bool create)
       Protect the query table list from the temporary and potentially
       destructive changes necessary to open the trigger's table.
     */
+    backup_of_table_list_done= 1;
     thd->lex->reset_n_backup_query_tables_list(&backup);
     /*
       Restore Query_tables_list::sql_command, which was
@@ -552,7 +564,7 @@ bool mysql_create_or_drop_trigger(THD *thd, TABLE_LIST *tables, bool create)
 #ifdef WITH_WSREP
   if (WSREP(thd) &&
       !wsrep_should_replicate_ddl(thd, table->s->db_type()->db_type))
-    goto wsrep_error_label;
+    goto end;
 #endif
 
   /* Later on we will need it to downgrade the lock */
@@ -594,25 +606,33 @@ bool mysql_create_or_drop_trigger(THD *thd, TABLE_LIST *tables, bool create)
            table->triggers->create_trigger(thd, tables, &stmt_query):
            table->triggers->drop_trigger(thd, tables, &stmt_query));
 
-  close_all_tables_for_name(thd, table->s, HA_EXTRA_NOT_USED, NULL);
-
-  /*
-    Reopen the table if we were under LOCK TABLES.
-    Ignore the return value for now. It's better to
-    keep master/slave in consistent state.
-  */
-  if (thd->locked_tables_list.reopen_tables(thd, false))
-    thd->clear_error();
-
-  /*
-    Invalidate SP-cache. That's needed because triggers may change list of
-    pre-locking tables.
-  */
-  sp_cache_invalidate();
+  refresh_metadata= TRUE;
 
 end:
   if (!result)
     result= write_bin_log(thd, TRUE, stmt_query.ptr(), stmt_query.length());
+
+  if (mdl_request_for_trn.ticket)
+    thd->mdl_context.release_lock(mdl_request_for_trn.ticket);
+
+  if (refresh_metadata)
+  {
+    close_all_tables_for_name(thd, table->s, HA_EXTRA_NOT_USED, NULL);
+
+    /*
+      Reopen the table if we were under LOCK TABLES.
+      Ignore the return value for now. It's better to
+      keep master/slave in consistent state.
+    */
+    if (thd->locked_tables_list.reopen_tables(thd, false))
+      thd->clear_error();
+
+    /*
+      Invalidate SP-cache. That's needed because triggers may change list of
+      pre-locking tables.
+    */
+    sp_cache_invalidate();
+  }
 
   /*
     If we are under LOCK TABLES we should restore original state of
@@ -623,7 +643,7 @@ end:
     mdl_ticket->downgrade_lock(MDL_SHARED_NO_READ_WRITE);
 
   /* Restore the query table list. Used only for drop trigger. */
-  if (!create)
+  if (backup_of_table_list_done)
     thd->lex->restore_backup_query_tables_list(&backup);
 
   if (!result)
@@ -636,9 +656,11 @@ end:
   }
 
   DBUG_RETURN(result);
+
 #ifdef WITH_WSREP
 wsrep_error_label:
-  DBUG_RETURN(true);
+  DBUG_ASSERT(result == 1);
+  goto end;
 #endif
 }
 

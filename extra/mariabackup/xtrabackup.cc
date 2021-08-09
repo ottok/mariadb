@@ -51,7 +51,7 @@ Street, Fifth Floor, Boston, MA 02110-1335 USA
 #include <my_getopt.h>
 #include <mysql_com.h>
 #include <my_default.h>
-#include <mysqld.h>
+#include <sql_class.h>
 
 #include <fcntl.h>
 #include <string.h>
@@ -256,9 +256,6 @@ static char*	innobase_ignored_opt;
 char*	innobase_data_home_dir;
 char*	innobase_data_file_path;
 
-#ifndef _WIN32
-static char *xtrabackup_debug_sync = NULL;
-#endif
 
 my_bool xtrabackup_incremental_force_scan = FALSE;
 
@@ -1026,7 +1023,7 @@ enum options_xtrabackup
 struct my_option xb_client_options[]= {
     {"verbose", 'V', "display verbose output", (G_PTR *) &verbose,
      (G_PTR *) &verbose, 0, GET_BOOL, NO_ARG, FALSE, 0, 0, 0, 0, 0},
-    {"version", 'v', "print xtrabackup version information",
+    {"version", 'v', "print version information",
      (G_PTR *) &xtrabackup_version, (G_PTR *) &xtrabackup_version, 0, GET_BOOL,
      NO_ARG, 0, 0, 0, 0, 0, 0},
     {"target-dir", OPT_XTRA_TARGET_DIR, "destination directory",
@@ -1244,7 +1241,7 @@ struct my_option xb_client_options[]= {
      "This "
      "option, when specified, makes --copy-back or --move-back transfer "
      "files to non-empty directories. Note that no existing files will be "
-     "overwritten. If --copy-back or --nove-back has to copy a file from "
+     "overwritten. If --copy-back or --move-back has to copy a file from "
      "the backup directory which already exists in the destination "
      "directory, it will still fail with an error.",
      (uchar *) &opt_force_non_empty_dirs, (uchar *) &opt_force_non_empty_dirs,
@@ -1317,8 +1314,8 @@ struct my_option xb_client_options[]= {
      "starting lsn for the incremental backup. This will be mutually "
      "exclusive with --incremental-history-uuid, --incremental-basedir "
      "and --incremental-lsn. If no valid lsn can be found (no series by "
-     "that name, no successful backups by that name) xtrabackup will "
-     "return with an error. It is used with the --incremental option.",
+     "that name, no successful backups by that name), an error will be returned."
+     " It is used with the --incremental option.",
      (uchar *) &opt_incremental_history_name,
      (uchar *) &opt_incremental_history_name, 0, GET_STR, REQUIRED_ARG, 0, 0,
      0, 0, 0, 0},
@@ -1328,8 +1325,8 @@ struct my_option xb_client_options[]= {
      "stored in the PERCONA_SCHEMA.xtrabackup_history to base an "
      "incremental backup on. --incremental-history-name, "
      "--incremental-basedir and --incremental-lsn. If no valid lsn can be "
-     "found (no success record with that uuid) xtrabackup will return "
-     "with an error. It is used with the --incremental option.",
+     "found (no success record with that uuid), an error will be returned."
+     " It is used with the --incremental option.",
      (uchar *) &opt_incremental_history_uuid,
      (uchar *) &opt_incremental_history_uuid, 0, GET_STR, REQUIRED_ARG, 0, 0,
      0, 0, 0, 0},
@@ -1386,11 +1383,6 @@ struct my_option xb_client_options[]= {
      (uchar *) &opt_lock_wait_threshold, (uchar *) &opt_lock_wait_threshold, 0,
      GET_UINT, REQUIRED_ARG, 60, 0, 0, 0, 0, 0},
 
-    {"debug-sleep-before-unlock", OPT_DEBUG_SLEEP_BEFORE_UNLOCK,
-     "This is a debug-only option used by the XtraBackup test suite.",
-     (uchar *) &opt_debug_sleep_before_unlock,
-     (uchar *) &opt_debug_sleep_before_unlock, 0, GET_UINT, REQUIRED_ARG, 0, 0,
-     0, 0, 0, 0},
 
     {"safe-slave-backup-timeout", OPT_SAFE_SLAVE_BACKUP_TIMEOUT,
      "How many seconds --safe-slave-backup should wait for "
@@ -1400,9 +1392,9 @@ struct my_option xb_client_options[]= {
      0, 0, 0, 0, 0},
 
     {"binlog-info", OPT_BINLOG_INFO,
-     "This option controls how XtraBackup should retrieve server's binary log "
+     "This option controls how backup should retrieve server's binary log "
      "coordinates corresponding to the backup. Possible values are OFF, ON, "
-     "LOCKLESS and AUTO. See the XtraBackup manual for more information",
+     "LOCKLESS and AUTO.",
      &opt_binlog_info, &opt_binlog_info, &binlog_info_typelib, GET_ENUM,
      OPT_ARG, BINLOG_INFO_AUTO, 0, 0, 0, 0, 0},
 
@@ -1576,13 +1568,6 @@ struct my_option xb_server_options[] =
    &dbug_option, &dbug_option, 0, GET_STR, OPT_ARG,
    0, 0, 0, 0, 0, 0},
 #endif
-#ifndef __WIN__
-  {"debug-sync", OPT_XTRA_DEBUG_SYNC,
-   "Debug sync point. This is only used by the xtrabackup test suite",
-   (G_PTR*) &xtrabackup_debug_sync,
-   (G_PTR*) &xtrabackup_debug_sync,
-   0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-#endif
 
   {"innodb_checksum_algorithm", OPT_INNODB_CHECKSUM_ALGORITHM,
   "The algorithm InnoDB uses for page checksumming. [CRC32, STRICT_CRC32, "
@@ -1621,7 +1606,7 @@ struct my_option xb_server_options[] =
    REQUIRED_ARG, 0, 0, UINT_MAX, 0, 1, 0},
 
   {"lock-ddl-per-table", OPT_LOCK_DDL_PER_TABLE, "Lock DDL for each table "
-   "before xtrabackup starts to copy it and until the backup is completed.",
+   "before backup starts to copy it and until the backup is completed.",
    (uchar*) &opt_lock_ddl_per_table, (uchar*) &opt_lock_ddl_per_table, 0,
    GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
 
@@ -1663,60 +1648,6 @@ struct my_option xb_server_options[] =
 };
 
 uint xb_server_options_count = array_elements(xb_server_options);
-
-#ifndef __WIN__
-static int debug_sync_resumed;
-
-static void sigcont_handler(int sig);
-
-static void sigcont_handler(int sig __attribute__((unused)))
-{
-	debug_sync_resumed= 1;
-}
-#endif
-
-static inline
-void
-debug_sync_point(const char *name)
-{
-#ifndef __WIN__
-	FILE	*fp;
-	pid_t	pid;
-	char	pid_path[FN_REFLEN];
-
-	if (xtrabackup_debug_sync == NULL) {
-		return;
-	}
-
-	if (strcmp(xtrabackup_debug_sync, name)) {
-		return;
-	}
-
-	pid = getpid();
-
-	snprintf(pid_path, sizeof(pid_path), "%s/xtrabackup_debug_sync",
-		 xtrabackup_target_dir);
-	fp = fopen(pid_path, "w");
-	if (fp == NULL) {
-		die("Can't open open %s", pid_path);
-	}
-	fprintf(fp, "%u\n", (uint) pid);
-	fclose(fp);
-
-	msg("mariabackup: DEBUG: Suspending at debug sync point '%s'. "
-	    "Resume with 'kill -SIGCONT %u'.", name, (uint) pid);
-
-	debug_sync_resumed= 0;
-	kill(pid, SIGSTOP);
-	while (!debug_sync_resumed) {
-		sleep(1);
-	}
-
-	/* On resume */
-	msg("mariabackup: DEBUG: removing the pid file.");
-	my_delete(pid_path, MYF(MY_WME));
-#endif
-}
 
 
 static std::set<std::string> tables_for_export;
@@ -3050,8 +2981,6 @@ static bool xtrabackup_copy_logfile(bool last = false)
 	log_copy_scanned_lsn = start_lsn;
 	pthread_cond_broadcast(&scanned_lsn_cond);
 	pthread_mutex_unlock(&backup_mutex);
-
-	debug_sync_point("xtrabackup_copy_logfile_pause");
 	return(false);
 }
 
@@ -3182,8 +3111,6 @@ DECLARE_THREAD(data_copy_thread_func)(
 	  use mysys functions in this thread.
 	*/
 	my_thread_init();
-
-	debug_sync_point("data_copy_thread_func");
 
 	while ((node = datafiles_iter_next(ctxt->it)) != NULL) {
 		DBUG_MARIABACKUP_EVENT("before_copy", node->space->name);
@@ -3442,6 +3369,225 @@ static void xb_load_single_table_tablespace(const std::string &space_name,
                                   skip_node_page0);
 }
 
+#ifdef _WIN32
+/**
+The os_file_opendir() function opens a directory stream corresponding to the
+directory named by the dirname argument. The directory stream is positioned
+at the first entry. In both Unix and Windows we automatically skip the '.'
+and '..' items at the start of the directory listing.
+@param[in]	dirname		directory name; it must not contain a trailing
+				'\' or '/'
+@return directory stream, NULL if error */
+os_file_dir_t os_file_opendir(const char *dirname)
+{
+  char path[OS_FILE_MAX_PATH + 3];
+
+  ut_a(strlen(dirname) < OS_FILE_MAX_PATH);
+
+  strcpy(path, dirname);
+  strcpy(path + strlen(path), "\\*");
+
+  /* Note that in Windows opening the 'directory stream' also retrieves
+  the first entry in the directory. Since it is '.', that is no problem,
+  as we will skip over the '.' and '..' entries anyway. */
+
+  LPWIN32_FIND_DATA lpFindFileData= static_cast<LPWIN32_FIND_DATA>
+    (ut_malloc_nokey(sizeof(WIN32_FIND_DATA)));
+  os_file_dir_t dir= FindFirstFile((LPCTSTR) path, lpFindFileData);
+  ut_free(lpFindFileData);
+
+  return dir;
+}
+#endif
+
+/** This function returns information of the next file in the directory. We jump
+over the '.' and '..' entries in the directory.
+@param[in]	dirname		directory name or path
+@param[in]	dir		directory stream
+@param[out]	info		buffer where the info is returned
+@return 0 if ok, -1 if error, 1 if at the end of the directory */
+int
+os_file_readdir_next_file(
+	const char*	dirname,
+	os_file_dir_t	dir,
+	os_file_stat_t* info)
+{
+#ifdef _WIN32
+	BOOL		ret;
+	int		status;
+	WIN32_FIND_DATA find_data;
+
+next_file:
+	ret = FindNextFile(dir, &find_data);
+
+	if (ret > 0) {
+
+		const char* name;
+
+		name = static_cast<const char*>(find_data.cFileName);
+
+		ut_a(strlen(name) < OS_FILE_MAX_PATH);
+
+		if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
+
+			goto next_file;
+		}
+
+		strcpy(info->name, name);
+
+		info->size = find_data.nFileSizeHigh;
+		info->size <<= 32;
+		info->size |= find_data.nFileSizeLow;
+
+		if (find_data.dwFileAttributes
+		    & FILE_ATTRIBUTE_REPARSE_POINT) {
+
+			/* TODO: test Windows symlinks */
+			/* TODO: MySQL has apparently its own symlink
+			implementation in Windows, dbname.sym can
+			redirect a database directory:
+			REFMAN "windows-symbolic-links.html" */
+
+			info->type = OS_FILE_TYPE_LINK;
+
+		} else if (find_data.dwFileAttributes
+			   & FILE_ATTRIBUTE_DIRECTORY) {
+
+			info->type = OS_FILE_TYPE_DIR;
+
+		} else {
+
+			/* It is probably safest to assume that all other
+			file types are normal. Better to check them rather
+			than blindly skip them. */
+
+			info->type = OS_FILE_TYPE_FILE;
+		}
+
+		status = 0;
+
+	} else {
+		DWORD err = GetLastError();
+		if (err == ERROR_NO_MORE_FILES) {
+			status = 1;
+		} else {
+			msg("readdir_next_file in %s returned %lu", dir, err);
+			status = -1;
+		}
+	}
+
+	return(status);
+#else
+	struct dirent*	ent;
+	char*		full_path;
+	int		ret;
+	struct stat	statinfo;
+
+next_file:
+
+	ent = readdir(dir);
+
+	if (ent == NULL) {
+
+		return(1);
+	}
+
+	ut_a(strlen(ent->d_name) < OS_FILE_MAX_PATH);
+
+	if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+
+		goto next_file;
+	}
+
+	strcpy(info->name, ent->d_name);
+
+	full_path = static_cast<char*>(
+		ut_malloc_nokey(strlen(dirname) + strlen(ent->d_name) + 10));
+	if (!full_path) {
+		return -1;
+	}
+
+	sprintf(full_path, "%s/%s", dirname, ent->d_name);
+
+	ret = stat(full_path, &statinfo);
+
+	if (ret) {
+
+		if (errno == ENOENT) {
+			/* readdir() returned a file that does not exist,
+			it must have been deleted in the meantime. Do what
+			would have happened if the file was deleted before
+			readdir() - ignore and go to the next entry.
+			If this is the last entry then info->name will still
+			contain the name of the deleted file when this
+			function returns, but this is not an issue since the
+			caller shouldn't be looking at info when end of
+			directory is returned. */
+
+			ut_free(full_path);
+
+			goto next_file;
+		}
+
+		msg("stat %s: Got error %d", full_path, errno);
+
+		ut_free(full_path);
+
+		return(-1);
+	}
+
+	info->size = statinfo.st_size;
+
+	if (S_ISDIR(statinfo.st_mode)) {
+		info->type = OS_FILE_TYPE_DIR;
+	} else if (S_ISLNK(statinfo.st_mode)) {
+		info->type = OS_FILE_TYPE_LINK;
+	} else if (S_ISREG(statinfo.st_mode)) {
+		info->type = OS_FILE_TYPE_FILE;
+	} else {
+		info->type = OS_FILE_TYPE_UNKNOWN;
+	}
+
+	ut_free(full_path);
+	return(0);
+#endif
+}
+
+/***********************************************************************//**
+A fault-tolerant function that tries to read the next file name in the
+directory. We retry 100 times if os_file_readdir_next_file() returns -1. The
+idea is to read as much good data as we can and jump over bad data.
+@return 0 if ok, -1 if error even after the retries, 1 if at the end
+of the directory */
+int
+fil_file_readdir_next_file(
+/*=======================*/
+	dberr_t*	err,	/*!< out: this is set to DB_ERROR if an error
+				was encountered, otherwise not changed */
+	const char*	dirname,/*!< in: directory name or path */
+	os_file_dir_t	dir,	/*!< in: directory stream */
+	os_file_stat_t* info)	/*!< in/out: buffer where the
+				info is returned */
+{
+	for (ulint i = 0; i < 100; i++) {
+		int	ret = os_file_readdir_next_file(dirname, dir, info);
+
+		if (ret != -1) {
+
+			return(ret);
+		}
+
+		ib::error() << "os_file_readdir_next_file() returned -1 in"
+			" directory " << dirname
+			<< ", crash recovery may have failed"
+			" for some .ibd files!";
+
+		*err = DB_ERROR;
+	}
+
+	return(-1);
+}
+
 /** Scan the database directories under the MySQL datadir, looking for
 .ibd files and determining the space id in each of them.
 @return	DB_SUCCESS or error number */
@@ -3460,10 +3606,10 @@ static dberr_t enumerate_ibd_files(process_single_tablespace_func_t callback)
 
 	/* The datadir of MySQL is always the default directory of mysqld */
 
-	dir = os_file_opendir(fil_path_to_mysql_datadir, true);
+	dir = os_file_opendir(fil_path_to_mysql_datadir);
 
-	if (dir == NULL) {
-
+	if (UNIV_UNLIKELY(dir == IF_WIN(INVALID_HANDLE_VALUE, nullptr))) {
+		msg("cannot open dir %s", fil_path_to_mysql_datadir);
 		return(DB_ERROR);
 	}
 
@@ -3516,12 +3662,9 @@ static dberr_t enumerate_ibd_files(process_single_tablespace_func_t callback)
 			goto next_datadir_item;
 		}
 
-		/* We want wrong directory permissions to be a fatal error for
-		XtraBackup. */
-		dbdir = os_file_opendir(dbpath, true);
+		dbdir = os_file_opendir(dbpath);
 
-		if (dbdir != NULL) {
-
+		if (UNIV_UNLIKELY(dbdir != IF_WIN(INVALID_HANDLE_VALUE,NULL))){
 			/* We found a database directory; loop through it,
 			looking for possible .ibd files in it */
 
@@ -3544,7 +3687,7 @@ static dberr_t enumerate_ibd_files(process_single_tablespace_func_t callback)
 				}
 			}
 
-			if (0 != os_file_closedir(dbdir)) {
+			if (os_file_closedir_failed(dbdir)) {
 				fprintf(stderr, "InnoDB: Warning: could not"
 				 " close database directory %s\n",
 					dbpath);
@@ -3553,7 +3696,7 @@ static dberr_t enumerate_ibd_files(process_single_tablespace_func_t callback)
 			}
 
 		} else {
-
+			msg("Can't open dir %s", dbpath);
 			err = DB_ERROR;
 			break;
 
@@ -3567,10 +3710,9 @@ next_datadir_item:
 
 	ut_free(dbpath);
 
-	if (0 != os_file_closedir(dir)) {
+	if (os_file_closedir_failed(dir)) {
 		fprintf(stderr,
 			"InnoDB: Error: could not close MySQL datadir\n");
-
 		return(DB_ERROR);
 	}
 
@@ -3721,8 +3863,6 @@ xb_load_tablespaces()
 	if (err != DB_SUCCESS) {
 		return(err);
 	}
-
-	debug_sync_point("xtrabackup_load_tablespaces_pause");
 	DBUG_MARIABACKUP_EVENT("after_load_tablespaces", 0);
 	return(DB_SUCCESS);
 }
@@ -3833,7 +3973,7 @@ xb_register_filter_entry(
 		strncpy(dbname, name, p - name);
 		dbname[p - name] = 0;
 
-		if (databases_hash) {
+		if (databases_hash && databases_hash->array) {
 			HASH_SEARCH(name_hash, databases_hash,
 					ut_fold_string(dbname),
 					xb_filter_entry_t*,
@@ -4361,6 +4501,14 @@ fail:
 		goto fail;
 	}
 
+
+	if (auto b = aligned_malloc(UNIV_PAGE_SIZE_MAX, 4096)) {
+		field_ref_zero = static_cast<byte*>(
+			memset_aligned<4096>(b, 0, UNIV_PAGE_SIZE_MAX));
+	} else {
+		goto fail;
+	}
+
         {
 	/* definition from recv_recovery_from_checkpoint_start() */
 	ulint		max_cp_field;
@@ -4375,14 +4523,17 @@ reread_log_header:
 
 	if (err != DB_SUCCESS) {
 		msg("Error: cannot read redo log header");
+unlock_and_fail:
 		mysql_mutex_unlock(&log_sys.mutex);
+free_and_fail:
+		aligned_free(const_cast<byte*>(field_ref_zero));
+		field_ref_zero = nullptr;
 		goto fail;
 	}
 
 	if (log_sys.log.format == 0) {
 		msg("Error: cannot process redo log before MariaDB 10.2.2");
-		mysql_mutex_unlock(&log_sys.mutex);
-		goto fail;
+		goto unlock_and_fail;
 	}
 
 	byte* buf = log_sys.checkpoint_buf;
@@ -4403,7 +4554,7 @@ reread_log_header:
 	xtrabackup_init_datasinks();
 
 	if (!select_history()) {
-		goto fail;
+		goto free_and_fail;
 	}
 
 	/* open the log file */
@@ -4412,12 +4563,13 @@ reread_log_header:
 	if (dst_log_file == NULL) {
 		msg("Error: failed to open the target stream for '%s'.",
 		    LOG_FILE_NAME);
-		goto fail;
+		goto free_and_fail;
 	}
 
 	/* label it */
-	byte MY_ALIGNED(OS_FILE_LOG_BLOCK_SIZE) log_hdr_buf[LOG_FILE_HDR_SIZE];
-	memset(log_hdr_buf, 0, sizeof log_hdr_buf);
+	byte* log_hdr_buf = static_cast<byte*>(
+		aligned_malloc(LOG_FILE_HDR_SIZE, OS_FILE_LOG_BLOCK_SIZE));
+	memset(log_hdr_buf, 0, LOG_FILE_HDR_SIZE);
 
 	byte *log_hdr_field = log_hdr_buf;
 	mach_write_to_4(LOG_HEADER_FORMAT + log_hdr_field, log_sys.log.format);
@@ -4446,11 +4598,13 @@ reread_log_header:
 			log_block_calc_checksum_crc32(log_hdr_field));
 
 	/* Write log header*/
-	if (ds_write(dst_log_file, log_hdr_buf, sizeof(log_hdr_buf))) {
+	if (ds_write(dst_log_file, log_hdr_buf, LOG_FILE_HDR_SIZE)) {
 		msg("error: write to logfile failed");
-		goto fail;
+		aligned_free(log_hdr_buf);
+		goto free_and_fail;
 	}
 
+	aligned_free(log_hdr_buf);
 	log_copying_running = true;
 	/* start io throttle */
 	if(xtrabackup_throttle) {
@@ -4468,7 +4622,7 @@ reread_log_header:
 		    " error %s.", ut_strerr(err));
 fail_before_log_copying_thread_start:
 		log_copying_running = false;
-		goto fail;
+		goto free_and_fail;
 	}
 
 	/* copy log file by current position */
@@ -4485,10 +4639,8 @@ fail_before_log_copying_thread_start:
 
 	/* FLUSH CHANGED_PAGE_BITMAPS call */
 	if (!flush_changed_page_bitmaps()) {
-		goto fail;
+		goto free_and_fail;
 	}
-	debug_sync_point("xtrabackup_suspend_at_start");
-
 
 	ut_a(xtrabackup_parallel > 0);
 
@@ -4509,7 +4661,7 @@ fail_before_log_copying_thread_start:
 	datafiles_iter_t *it = datafiles_iter_new();
 	if (it == NULL) {
 		msg("mariabackup: Error: datafiles_iter_new() failed.");
-		goto fail;
+		goto free_and_fail;
 	}
 
 	/* Create data copying threads */
@@ -4563,6 +4715,9 @@ fail_before_log_copying_thread_start:
 
 	if (opt_log_innodb_page_corruption)
 		ok = corrupted_pages.print_to_file(MB_CORRUPTED_PAGES_FILE);
+
+	aligned_free(const_cast<byte*>(field_ref_zero));
+	field_ref_zero = nullptr;
 
 	if (!ok) {
 		goto fail;
@@ -5435,11 +5590,9 @@ static ibool xb_process_datadir(const char *path, const char *suffix,
 	suffix_len = strlen(suffix);
 
 	/* datafile */
-	dbdir = os_file_opendir(path, FALSE);
-
-	if (dbdir != NULL) {
-		ret = fil_file_readdir_next_file(&err, path, dbdir,
-							&fileinfo);
+	dbdir = os_file_opendir(path);
+	if (UNIV_UNLIKELY(dbdir != IF_WIN(INVALID_HANDLE_VALUE, nullptr))) {
+		ret = fil_file_readdir_next_file(&err, path, dbdir, &fileinfo);
 		while (ret == 0) {
 			if (fileinfo.type == OS_FILE_TYPE_DIR) {
 				goto next_file_item_1;
@@ -5469,14 +5622,14 @@ next_file_item_1:
 	}
 
 	/* single table tablespaces */
-	dir = os_file_opendir(path, FALSE);
+	dir = os_file_opendir(path);
 
-	if (dir == NULL) {
+	if (UNIV_UNLIKELY(dbdir == IF_WIN(INVALID_HANDLE_VALUE, nullptr))) {
 		msg("Can't open dir %s", path);
+		return TRUE;
 	}
 
-		ret = fil_file_readdir_next_file(&err, path, dir,
-								&dbinfo);
+	ret = fil_file_readdir_next_file(&err, path, dir, &dbinfo);
 	while (ret == 0) {
 		if (dbinfo.type == OS_FILE_TYPE_FILE
 		    || dbinfo.type == OS_FILE_TYPE_UNKNOWN) {
@@ -5492,10 +5645,9 @@ next_file_item_1:
 
 		os_normalize_path(dbpath);
 
-		dbdir = os_file_opendir(dbpath, FALSE);
+		dbdir = os_file_opendir(dbpath);
 
-		if (dbdir != NULL) {
-
+		if (dbdir != IF_WIN(INVALID_HANDLE_VALUE, nullptr)) {
 			ret = fil_file_readdir_next_file(&err, dbpath, dbdir,
 								&fileinfo);
 			while (ret == 0) {
@@ -6720,12 +6872,6 @@ static int main_low(char** argv)
 			return(EXIT_FAILURE);
 		}
 	}
-
-#ifndef __WIN__
-	if (xtrabackup_debug_sync) {
-		signal(SIGCONT, sigcont_handler);
-	}
-#endif
 
 	/* --backup */
 	if (xtrabackup_backup && !xtrabackup_backup_func()) {

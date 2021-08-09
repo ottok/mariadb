@@ -234,14 +234,19 @@ static void *native_event_get_userdata(native_event *event)
 #elif defined(HAVE_KQUEUE)
 
 /*
-  NetBSD is incompatible with other BSDs , last parameter in EV_SET macro
-  (udata, user data) needs to be intptr_t, whereas it needs to be void*
-  everywhere else.
+  NetBSD prior to 9.99.17 is incompatible with other BSDs, last parameter
+  in EV_SET macro (udata, user data) needs to be intptr_t, whereas it needs
+  to be void* everywhere else.
 */
 
 #ifdef __NetBSD__
+#include <sys/param.h>
+#  if !__NetBSD_Prereq__(9,99,17)
 #define MY_EV_SET(a, b, c, d, e, f, g) EV_SET(a, b, c, d, e, f, (intptr_t)g)
-#else
+#  endif
+#endif
+
+#ifndef MY_EV_SET
 #define MY_EV_SET(a, b, c, d, e, f, g) EV_SET(a, b, c, d, e, f, g)
 #endif
 
@@ -1596,6 +1601,9 @@ int TP_pool_generic::init()
     sql_print_error("Allocation failed");
     DBUG_RETURN(-1);
   }
+  PSI_register(mutex);
+  PSI_register(cond);
+  PSI_register(thread);
   scheduler_init();
   threadpool_started= true;
   for (uint i= 0; i < threadpool_max_size; i++)
@@ -1609,10 +1617,6 @@ int TP_pool_generic::init()
     sql_print_error("Can't set threadpool size to %d",threadpool_size);
     DBUG_RETURN(-1);
   }
-  PSI_register(mutex);
-  PSI_register(cond);
-  PSI_register(thread);
-
   pool_timer.tick_interval= threadpool_stall_limit;
   start_timer(&pool_timer);
   DBUG_RETURN(0);

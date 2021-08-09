@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2019, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2020, MariaDB Corporation
+   Copyright (c) 2009, 2021, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@
 #include "sql_select.h"
 #include "sql_cte.h"
 #include "sql_signal.h"
+#include "sql_derived.h"
 #include "sql_truncate.h"                      // Sql_cmd_truncate_table
 #include "sql_admin.h"                         // Sql_cmd_analyze/Check..._table
 #include "sql_partition.h"
@@ -1255,6 +1256,8 @@ void LEX::start(THD *thd_arg)
   explain_json= false;
   context_analysis_only= 0;
   derived_tables= 0;
+  with_cte_resolution= false;
+  only_cte_resolution= false;
   safe_to_cache_query= 1;
   parsing_options.reset();
   empty_field_list_on_rset= 0;
@@ -2911,6 +2914,7 @@ void st_select_lex_unit::init_query()
   is_view= false;
   with_clause= 0;
   with_element= 0;
+  cloned_from= 0;
   columns_are_renamed= false;
   with_wrapped_tvc= false;
   have_except_all_or_intersect_all= false;
@@ -8997,6 +9001,8 @@ bool LEX::check_main_unit_semantics()
   if (unit.set_nest_level(0) ||
       unit.check_parameters(first_select_lex()))
     return TRUE;
+  if (check_cte_dependencies_and_resolve_references())
+    return TRUE;
   return FALSE;
 }
 
@@ -9703,8 +9709,8 @@ bool LEX::main_select_push(bool service)
 {
   DBUG_ENTER("LEX::main_select_push");
   DBUG_PRINT("info", ("service: %u", service));
-  current_select_number= 1;
-  builtin_select.select_number= 1;
+  current_select_number= ++thd->lex->stmt_lex->current_select_number;
+  builtin_select.select_number= current_select_number;
   builtin_select.is_service_select= service;
   if (push_select(&builtin_select))
     DBUG_RETURN(TRUE);
@@ -10432,8 +10438,7 @@ void st_select_lex::pushdown_cond_into_where_clause(THD *thd, Item *cond,
 
   if (!join->group_list && !with_sum_func)
   {
-    cond=
-      cond->transform(thd, transformer, arg);
+    cond= transform_condition_or_part(thd, cond, transformer, arg);
     if (cond)
     {
       cond->walk(
@@ -10458,9 +10463,12 @@ void st_select_lex::pushdown_cond_into_where_clause(THD *thd, Item *cond,
     into WHERE so it can be pushed.
   */
   if (cond_over_grouping_fields)
-    cond_over_grouping_fields= cond_over_grouping_fields->transform(thd,
-                            &Item::grouping_field_transformer_for_where,
-                            (uchar*) this);
+  {
+    cond_over_grouping_fields= 
+       transform_condition_or_part(thd, cond_over_grouping_fields,
+                                   &Item::grouping_field_transformer_for_where,
+                                   (uchar*) this);
+  }
 
   if (cond_over_grouping_fields)
   {
@@ -11604,4 +11612,24 @@ bool LEX::map_data_type(const Lex_ident_sys_st &schema_name,
   const Type_handler *mapped= schema->map_data_type(thd, type->type_handler());
   type->set_handler(mapped);
   return false;
+}
+
+
+bool SELECT_LEX_UNIT::explainable() const
+{
+  /*
+    EXPLAIN/ANALYZE unit, when:
+    (1) if it's a subquery - it's not part of eliminated WHERE/ON clause.
+    (2) if it's a CTE - it's not hanging (needed for execution)
+    (3) if it's a derived - it's not merged
+    if it's not 1/2/3 - it's some weird internal thing, ignore it
+  */
+  return item ?
+           !item->eliminated :                        // (1)
+           with_element ?
+             derived && derived->derived_result &&
+               !with_element->is_hanging_recursive(): // (2)
+             derived ?
+               derived->is_materialized_derived() :   // (3)
+               false;
 }

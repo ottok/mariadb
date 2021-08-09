@@ -87,6 +87,7 @@ static PBSON BbinAlloc(PGLOBAL g, ulong len, PBVAL jsp)
 /*********************************************************************************/
 /*  SubAlloc a new BJNX class with protection against memory exhaustion.         */
 /*********************************************************************************/
+#ifdef NOT_USED
 static PBJNX BjnxNew(PGLOBAL g, PBVAL vlp, int type, int len)
 {
 	PBJNX bjnx;
@@ -103,7 +104,7 @@ static PBJNX BjnxNew(PGLOBAL g, PBVAL vlp, int type, int len)
 
 	return bjnx;
 } /* end of BjnxNew */
-
+#endif
 /* ----------------------------------- BSNX ------------------------------------ */
 
 /*********************************************************************************/
@@ -286,7 +287,7 @@ my_bool BJNX::ParseJpath(PGLOBAL g)
 {
 	char* p, * p1 = NULL, * p2 = NULL, * pbuf = NULL;
 	int     i;
-	my_bool a, mul = false;
+	my_bool a;
 
 	if (Parsed)
 		return false;                       // Already done
@@ -497,7 +498,8 @@ void BJNX::SetJsonValue(PGLOBAL g, PVAL vp, PBVAL vlp)
 			break;
 		case TYPE_NULL:
 			vp->SetNull(true);
-		default:
+                        /* fall through */
+                default:
 			vp->Reset();
 		} // endswitch Type
 
@@ -540,7 +542,6 @@ PVAL BJNX::GetColumnValue(PGLOBAL g, PBVAL row, int i)
 /*********************************************************************************/
 PBVAL BJNX::GetRowValue(PGLOBAL g, PBVAL row, int i)
 {
-	my_bool expd = false;
 	PBVAL   bap;
 	PBVAL   vlp = NULL;
 
@@ -1083,7 +1084,7 @@ my_bool BJNX::CheckPath(PGLOBAL g, UDF_ARGS *args, PBVAL jsp, PBVAL& jvp, int n)
 PSZ BJNX::Locate(PGLOBAL g, PBVAL jsp, PBVAL jvp, int k)
 {
 	PSZ     str = NULL;
-	my_bool b = false, err = true;
+	my_bool err = true;
 
 	g->Message[0] = 0;
 
@@ -1204,7 +1205,7 @@ my_bool BJNX::LocateValue(PGLOBAL g, PBVAL jvp)
 PSZ BJNX::LocateAll(PGLOBAL g, PBVAL jsp, PBVAL bvp, int mx)
 {
 	PSZ     str = NULL;
-	my_bool b = false, err = true;
+	my_bool err = true;
 	PJPN    jnp;
 
 	if (!jsp) {
@@ -1889,24 +1890,31 @@ static int *GetIntArgPtr(PGLOBAL g, UDF_ARGS *args, uint& n)
 /*********************************************************************************/
 int IsArgJson(UDF_ARGS *args, uint i)
 {
-	int n = 0;
+	const char *pat = args->attributes[i];
+	int   n = 0;
+
+	if (*pat == '@') {
+		pat++;
+
+		if (*pat == '\'' || *pat == '"')
+			pat++;
+
+	} // endif pat
 
 	if (i >= args->arg_count || args->arg_type[i] != STRING_RESULT) {
-	} else if (!strnicmp(args->attributes[i], "Bson_", 5) ||
-		         !strnicmp(args->attributes[i], "Json_", 5)) {
+	} else if (!strnicmp(pat, "Bson_", 5) || !strnicmp(pat, "Json_", 5)) {
 		if (!args->args[i] || strchr("[{ \t\r\n", *args->args[i]))
 			n = 1;					 // arg should be is a json item
 //	else
 //		n = 2;           // A file name may have been returned
 
-	} else if (!strnicmp(args->attributes[i], "Bbin_", 5)) {
+	} else if (!strnicmp(pat, "Bbin_", 5)) {
 		if (args->lengths[i] == sizeof(BSON))
 			n = 3;					 //	arg is a binary json item
 //	else
 //		n = 2;           // A file name may have been returned
 
-	} else if (!strnicmp(args->attributes[i], "Bfile_", 6) ||
-		         !strnicmp(args->attributes[i], "Jfile_", 6)) {
+	} else if (!strnicmp(pat, "Bfile_", 6) || !strnicmp(pat, "Jfile_", 6)) {
 		n = 2;					   //	arg is a json file name
 #if 0
 	} else if (args->lengths[i]) {
@@ -2894,7 +2902,7 @@ my_bool bson_array_grp_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 		return true;
 
 	PGLOBAL g = (PGLOBAL)initid->ptr;
-	PBJNX   bxp = new(g) BJNX(g);
+	(void) new(g) BJNX(g);
 
 	JsonMemSave(g);
 	return false;
@@ -2967,7 +2975,7 @@ my_bool bson_object_grp_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 		return true;
 
 	PGLOBAL g = (PGLOBAL)initid->ptr;
-	PBJNX   bxp = new(g) BJNX(g);
+	(void) new(g) BJNX(g);
 
 	JsonMemSave(g);
 	return false;
@@ -3037,7 +3045,7 @@ my_bool bson_test_init(UDF_INIT* initid, UDF_ARGS* args, char* message) {
 
 char* bson_test(UDF_INIT* initid, UDF_ARGS* args, char* result,
 	unsigned long* res_length, char* is_null, char* error) {
-	char* str = NULL, * sap = NULL, * fn = NULL;
+	char* str = NULL, * fn = NULL;
 	int     pretty = 1;
 	PBVAL   bvp;
 	PGLOBAL g = (PGLOBAL)initid->ptr;
@@ -5035,7 +5043,7 @@ char* bbin_array_add_values(UDF_INIT* initid, UDF_ARGS* args, char* result,
 		if (!CheckMemory(g, initid, args, args->arg_count, true)) {
 			uint  i = 0;
 			BJNX  bnx(g);
-			PBVAL arp, top, jvp = NULL;
+			PBVAL arp, top;
 			PBVAL bvp = bnx.MakeValue(args, 0, true, &top);
 
 			if (bvp->Type == TYPE_JAR) {
@@ -5659,7 +5667,7 @@ char *bbin_get_item(UDF_INIT *initid, UDF_ARGS *args, char *result,
 	if (g->Xchk) {
 		bsp = (PBSON)g->Xchk;
 	} else if (!CheckMemory(g, initid, args, 1, true, true)) {
-		char *path = MakePSZ(g, args, 1);
+                // char *path = MakePSZ(g, args, 1);
 		BJNX  bnx(g, NULL, TYPE_STRING, initid->max_length);
 		PBVAL top, jvp = NULL;
 		PBVAL jsp = bnx.MakeValue(args, 0, true, &top);

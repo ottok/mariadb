@@ -3,14 +3,23 @@
 #ifndef wolfSSL_TEST_H
 #define wolfSSL_TEST_H
 
-#include <stdio.h>
-#include <stdlib.h>
+#ifdef FUSION_RTOS
+    #include <fclstdio.h>
+    #include <fclstdlib.h>
+#else
+    #include <stdio.h>
+    #include <stdlib.h>
+#endif
 #include <assert.h>
 #include <ctype.h>
+#ifdef HAVE_ERRNO_H
+    #include <errno.h>
+#endif
 #include <wolfssl/wolfcrypt/types.h>
-#include <wolfssl/wolfcrypt/error-crypt.h>
+#include <wolfssl/error-ssl.h>
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/mem_track.h>
+#include <wolfssl/wolfio.h>
 #if defined(SHOW_CERTS) && \
     (defined(OPENSSL_EXTRA) || defined(OPENSSL_EXTRA_X509_SMALL))
     #include <wolfssl/wolfcrypt/asn.h> /* for domain component NID value */
@@ -109,7 +118,6 @@
     #include <net/socket.h>
     #define SOCKET_T int
     #define SOL_SOCKET 1
-    #define SO_REUSEADDR 201
     #define WOLFSSL_USE_GETADDRINFO
 
     static unsigned long inet_addr(const char *cp)
@@ -155,7 +163,7 @@
     #define SNPRINTF snprintf
 
     #define XSELECT_WAIT(x,y) do { \
-        struct timeval tv = {(x),(y)}; \
+        struct timeval tv = {((x) + ((y) / 1000000)),((y) % 1000000)}; \
         select(0, NULL, NULL, NULL, &tv); \
     } while (0)
     #define XSLEEP_US(u) XSELECT_WAIT(0,u)
@@ -344,6 +352,7 @@
 #define cliEd448CertFile  "certs/ed448/client-ed448.pem"
 #define cliEd448KeyFile   "certs/ed448/client-ed448-priv.pem"
 #define caEd448CertFile   "certs/ed448/ca-ed448.pem"
+#define caCertFolder      "certs/"
 #ifdef HAVE_WNR
     /* Whitewood netRandom default config file */
     #define wnrConfig     "wnr-example.conf"
@@ -377,6 +386,7 @@
 #define cliEd448CertFile  "./certs/ed448/client-ed448.pem"
 #define cliEd448KeyFile   "./certs/ed448/client-ed448-priv.pem"
 #define caEd448CertFile   "./certs/ed448/ca-ed448.pem"
+#define caCertFolder      "./certs/"
 #ifdef HAVE_WNR
     /* Whitewood netRandom default config file */
     #define wnrConfig     "./wnr-example.conf"
@@ -558,7 +568,7 @@ static WC_INLINE int mygetopt(int argc, char** argv, const char* optstring)
     char  c;
     char* cp;
 
-    /* Added sanity check becuase scan-build complains argv[myoptind] access 
+    /* Added sanity check because scan-build complains argv[myoptind] access
      * results in a null pointer dereference. */
     if (argv == NULL)  {
         myoptarg = NULL;
@@ -635,6 +645,132 @@ static WC_INLINE int mygetopt(int argc, char** argv, const char* optstring)
     return c;
 }
 
+struct mygetopt_long_config {
+    const char *name;
+    int takes_arg;
+    int value;
+};
+
+/**
+ *
+ * @param argc Number of argv strings
+ * @param argv Array of string arguments
+ * @param optstring String containing the supported alphanumeric arguments.
+ *                  A ':' following a character means that it requires a
+ *                  value in myoptarg to be set. A ';' means that the
+ *                  myoptarg is optional. myoptarg is set to "" if not
+ *                  present.
+ * @return Option letter in argument
+ */
+static WC_INLINE int mygetopt_long(int argc, char** argv, const char* optstring,
+    const struct mygetopt_long_config *longopts, int *longindex)
+{
+    static char* next = NULL;
+
+    int  c;
+    char* cp;
+
+    /* Added sanity check because scan-build complains argv[myoptind] access
+     * results in a null pointer dereference. */
+    if (argv == NULL)  {
+        myoptarg = NULL;
+        return -1;
+    }
+
+    if (myoptind == 0)
+        next = NULL;   /* we're starting new/over */
+
+    if (next == NULL || *next == '\0') {
+        if (myoptind == 0)
+            myoptind++;
+
+        if (myoptind >= argc || argv[myoptind] == NULL ||
+                argv[myoptind][0] != '-' || argv[myoptind][1] == '\0') {
+            myoptarg = NULL;
+            if (myoptind < argc)
+                myoptarg = argv[myoptind];
+
+            return -1;
+        }
+
+        if (strcmp(argv[myoptind], "--") == 0) {
+            myoptind++;
+            myoptarg = NULL;
+
+            if (myoptind < argc)
+                myoptarg = argv[myoptind];
+
+            return -1;
+        }
+
+        if (strncmp(argv[myoptind], "--", 2) == 0) {
+            const struct mygetopt_long_config *i;
+            c = -1;
+            myoptarg = NULL;
+            for (i = longopts; i->name; ++i) {
+                if (! strcmp(argv[myoptind] + 2, i->name)) {
+                    c = i->value;
+                    myoptind++;
+                    if (longindex)
+                        *longindex = (int)((i - longopts) / sizeof *i);
+                    if (i->takes_arg) {
+                        if (myoptind < argc) {
+                            myoptarg = argv[myoptind];
+                            myoptind++;
+                        } else
+                            return -1;
+                    }
+                    break;
+                }
+            }
+
+            return c;
+        }
+
+        next = argv[myoptind];
+        next++;                  /* skip - */
+        myoptind++;
+    }
+
+    c  = *next++;
+    /* The C++ strchr can return a different value */
+    cp = (char*)strchr(optstring, c);
+
+    if (cp == NULL || c == ':' || c == ';')
+        return '?';
+
+    cp++;
+
+    if (*cp == ':') {
+        if (*next != '\0') {
+            myoptarg = next;
+            next     = NULL;
+        }
+        else if (myoptind < argc) {
+            myoptarg = argv[myoptind];
+            myoptind++;
+        }
+        else
+            return '?';
+    }
+    else if (*cp == ';') {
+        myoptarg = (char*)"";
+        if (*next != '\0') {
+            myoptarg = next;
+            next     = NULL;
+        }
+        else if (myoptind < argc) {
+            /* Check if next argument is not a parameter argument */
+            if (argv[myoptind] && argv[myoptind][0] != '-') {
+                myoptarg = argv[myoptind];
+                myoptind++;
+            }
+        }
+    }
+
+    return c;
+}
+
 
 #ifdef WOLFSSL_ENCRYPTED_KEYS
 
@@ -654,11 +790,12 @@ static WC_INLINE int PasswordCallBack(char* passwd, int sz, int rw, void* userda
 
 #endif
 
-static const char* client_showpeer_msg[][8] = {
+static const char* client_showpeer_msg[][9] = {
     /* English */
     {
         "SSL version is",
         "SSL cipher suite is",
+        "SSL signature algorithm is",
         "SSL curve name is",
         "SSL DH size is",
         "SSL reused session",
@@ -671,6 +808,7 @@ static const char* client_showpeer_msg[][8] = {
     {
         "SSL バージョンは",
         "SSL 暗号スイートは",
+        "SSL signature algorithm is",
         "SSL 曲線名は",
         "SSL DH サイズは",
         "SSL 再利用セッション",
@@ -818,6 +956,9 @@ static WC_INLINE void showPeerEx(WOLFSSL* ssl, int lng_index)
 #ifndef NO_DH
     int bits;
 #endif
+#ifdef OPENSSL_EXTRA
+    int nid;
+#endif
 #ifdef KEEP_PEER_CERT
     WOLFSSL_X509* peer = wolfSSL_get_peer_certificate(ssl);
     if (peer)
@@ -840,20 +981,25 @@ static WC_INLINE void showPeerEx(WOLFSSL* ssl, int lng_index)
 #else
     printf("%s %s\n", words[1], wolfSSL_CIPHER_get_name(cipher));
 #endif
+#ifdef OPENSSL_EXTRA
+    if (wolfSSL_get_signature_nid(ssl, &nid) == WOLFSSL_SUCCESS) {
+        printf("%s %s\n", words[2], OBJ_nid2sn(nid));
+    }
+#endif
 #if defined(HAVE_ECC) || defined(HAVE_CURVE25519) || defined(HAVE_CURVE448) || \
                                                                  !defined(NO_DH)
     if ((name = wolfSSL_get_curve_name(ssl)) != NULL)
-        printf("%s %s\n", words[2], name);
+        printf("%s %s\n", words[3], name);
 #endif
 #ifndef NO_DH
     else if ((bits = wolfSSL_GetDhKey_Sz(ssl)) > 0)
-        printf("%s %d bits\n", words[3], bits);
+        printf("%s %d bits\n", words[4], bits);
 #endif
     if (wolfSSL_session_reused(ssl))
-        printf("%s\n", words[4]);
+        printf("%s\n", words[5]);
 #ifdef WOLFSSL_ALT_CERT_CHAINS
     if (wolfSSL_is_peer_alt_cert_chain(ssl))
-        printf("%s\n", words[5]);
+        printf("%s\n", words[6]);
 #endif
 
 #if defined(SHOW_CERTS) && defined(SESSION_CERTS) && \
@@ -917,7 +1063,7 @@ static WC_INLINE void build_addr(SOCKADDR_IN_T* addr, const char* peer,
         struct zsock_addrinfo hints, *addrInfo;
         char portStr[6];
         XSNPRINTF(portStr, sizeof(portStr), "%d", port);
-        memset(&hints, 0, sizeof(hints));
+        XMEMSET(&hints, 0, sizeof(hints));
         hints.ai_family = AF_UNSPEC;
         hints.ai_socktype = udp ? SOCK_DGRAM : SOCK_STREAM;
         hints.ai_protocol = udp ? IPPROTO_UDP : IPPROTO_TCP;
@@ -1040,6 +1186,446 @@ static WC_INLINE void tcp_socket(SOCKET_T* sockfd, int udp, int sctp)
 #endif  /* USE_WINDOWS_API */
 }
 
+#if defined(WOLFSSL_WOLFSENTRY_HOOKS) && defined(WOLFSENTRY_H)
+
+#include <wolfsentry/wolfsentry_util.h>
+
+#if !defined(NO_FILESYSTEM) && !defined(WOLFSENTRY_NO_JSON)
+#include <wolfsentry/wolfsentry_json.h>
+#endif
+
+struct wolfsentry_data {
+    struct wolfsentry_sockaddr remote;
+    byte remote_addrbuf[16];
+    struct wolfsentry_sockaddr local;
+    byte local_addrbuf[16];
+    wolfsentry_route_flags_t flags;
+    void *heap;
+    int alloctype;
+};
+
+static void free_wolfsentry_data(struct wolfsentry_data *data) {
+    XFREE(data, data->heap, data->alloctype);
+}
+
+static struct wolfsentry_context *wolfsentry = NULL;
+
+static int wolfsentry_data_index = -1;
+
+static WC_INLINE int wolfsentry_store_endpoints(
+    WOLFSSL *ssl,
+    SOCKADDR_IN_T *remote,
+    SOCKADDR_IN_T *local,
+    int proto,
+    wolfsentry_route_flags_t flags,
+    struct wolfsentry_data **wolfsentry_data_out)
+{
+    struct wolfsentry_data *wolfsentry_data = (struct wolfsentry_data *)XMALLOC(
+        sizeof *wolfsentry_data, NULL, DYNAMIC_TYPE_SOCKADDR);
+    if (wolfsentry_data == NULL)
+        return WOLFSSL_FAILURE;
+
+    wolfsentry_data->heap = NULL;
+    wolfsentry_data->alloctype = DYNAMIC_TYPE_SOCKADDR;
+
+#ifdef TEST_IPV6
+    if ((sizeof wolfsentry_data->remote_addrbuf < sizeof remote->sin6_addr) ||
+        (sizeof wolfsentry_data->local_addrbuf < sizeof local->sin6_addr))
+        return WOLFSSL_FAILURE;
+    wolfsentry_data->remote.sa_family = wolfsentry_data->local.sa_family = remote->sin6_family;
+    wolfsentry_data->remote.sa_port = ntohs(remote->sin6_port);
+    wolfsentry_data->local.sa_port = ntohs(local->sin6_port);
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) {
+        wolfsentry_data->remote.addr_len = 0;
+        XMEMSET(wolfsentry_data->remote.addr, 0, sizeof remote->sin6_addr);
+    } else {
+        wolfsentry_data->remote.addr_len = sizeof remote->sin6_addr * BITS_PER_BYTE;
+        XMEMCPY(wolfsentry_data->remote.addr, &remote->sin6_addr, sizeof remote->sin6_addr);
+    }
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD)) {
+        wolfsentry_data->local.addr_len = 0;
+        XMEMSET(wolfsentry_data->local.addr, 0, sizeof local->sin6_addr);
+    } else {
+        wolfsentry_data->local.addr_len = sizeof local->sin6_addr * BITS_PER_BYTE;
+        XMEMCPY(wolfsentry_data->local.addr, &local->sin6_addr, sizeof local->sin6_addr);
+    }
+#else
+    if ((sizeof wolfsentry_data->remote_addrbuf < sizeof remote->sin_addr) ||
+        (sizeof wolfsentry_data->local_addrbuf < sizeof local->sin_addr))
+        return WOLFSSL_FAILURE;
+    wolfsentry_data->remote.sa_family = wolfsentry_data->local.sa_family = remote->sin_family;
+    wolfsentry_data->remote.sa_port = ntohs(remote->sin_port);
+    wolfsentry_data->local.sa_port = ntohs(local->sin_port);
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) {
+        wolfsentry_data->remote.addr_len = 0;
+        XMEMSET(wolfsentry_data->remote.addr, 0, sizeof remote->sin_addr);
+    } else {
+        wolfsentry_data->remote.addr_len = sizeof remote->sin_addr * BITS_PER_BYTE;
+        XMEMCPY(wolfsentry_data->remote.addr, &remote->sin_addr, sizeof remote->sin_addr);
+    }
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD)) {
+        wolfsentry_data->local.addr_len = 0;
+        XMEMSET(wolfsentry_data->local.addr, 0, sizeof local->sin_addr);
+    } else {
+        wolfsentry_data->local.addr_len = sizeof local->sin_addr * BITS_PER_BYTE;
+        XMEMCPY(wolfsentry_data->local.addr, &local->sin_addr, sizeof local->sin_addr);
+    }
+#endif
+    wolfsentry_data->remote.sa_proto = wolfsentry_data->local.sa_proto = proto;
+    wolfsentry_data->remote.interface = wolfsentry_data->local.interface = 0;
+    wolfsentry_data->flags = flags;
+
+    if (wolfSSL_set_ex_data_with_cleanup(
+            ssl, wolfsentry_data_index, wolfsentry_data,
+            (wolfSSL_ex_data_cleanup_routine_t)free_wolfsentry_data) !=
+        WOLFSSL_SUCCESS) {
+        free_wolfsentry_data(wolfsentry_data);
+        return WOLFSSL_FAILURE;
+    }
+
+    if (wolfsentry_data_out != NULL)
+        *wolfsentry_data_out = wolfsentry_data;
+
+    return WOLFSSL_SUCCESS;
+}
+
+static int wolfSentry_NetworkFilterCallback(
+    WOLFSSL *ssl,
+    struct wolfsentry_context *_wolfsentry,
+    wolfSSL_netfilter_decision_t *decision)
+{
+    struct wolfsentry_data *data;
+    char inet_ntop_buf[INET6_ADDRSTRLEN], inet_ntop_buf2[INET6_ADDRSTRLEN];
+    wolfsentry_errcode_t ret;
+    wolfsentry_action_res_t action_results;
+
+    if ((data = wolfSSL_get_ex_data(ssl, wolfsentry_data_index)) == NULL)
+        return WOLFSSL_FAILURE;
+
+    ret = wolfsentry_route_event_dispatch(
+        _wolfsentry,
+        &data->remote,
+        &data->local,
+        data->flags,
+        NULL /* event_label */,
+        0 /* event_label_len */,
+        NULL /* caller_context */,
+        NULL /* id */,
+        NULL /* inexact_matches */,
+        &action_results);
+
+    if (ret >= 0) {
+        if (WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+            *decision = WOLFSSL_NETFILTER_REJECT;
+        else if (WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT))
+            *decision = WOLFSSL_NETFILTER_ACCEPT;
+        else
+            *decision = WOLFSSL_NETFILTER_PASS;
+    } else {
+        printf("wolfsentry_route_event_dispatch error "
+               WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        *decision = WOLFSSL_NETFILTER_PASS;
+    }
+
+    printf("wolfSentry got network filter callback: family=%d proto=%d rport=%d"
+           " lport=%d raddr=%s laddr=%s interface=%d; decision=%d (%s)\n",
+           data->remote.sa_family,
+           data->remote.sa_proto,
+           data->remote.sa_port,
+           data->local.sa_port,
+           inet_ntop(data->remote.sa_family, data->remote.addr, inet_ntop_buf,
+                     sizeof inet_ntop_buf),
+           inet_ntop(data->local.sa_family, data->local.addr, inet_ntop_buf2,
+                     sizeof inet_ntop_buf2),
+           data->remote.interface,
+           *decision,
+           *decision == WOLFSSL_NETFILTER_REJECT ? "REJECT" :
+           *decision == WOLFSSL_NETFILTER_ACCEPT ? "ACCEPT" :
+           *decision == WOLFSSL_NETFILTER_PASS ? "PASS" :
+           "???");
+
+    return WOLFSSL_SUCCESS;
+}
+
+static int wolfsentry_setup(
+    struct wolfsentry_context **_wolfsentry,
+    const char *_wolfsentry_config_path,
+    wolfsentry_route_flags_t route_flags)
+{
+    wolfsentry_errcode_t ret;
+    ret =  wolfsentry_init(NULL /* hpi */, NULL /* default config */,
+                           _wolfsentry);
+    if (ret < 0) {
+        fprintf(stderr, "wolfsentry_init() returned " WOLFSENTRY_ERROR_FMT "\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err_sys("unable to initialize wolfSentry");
+    }
+
+    if (wolfsentry_data_index < 0)
+        wolfsentry_data_index = wolfSSL_get_ex_new_index(0, NULL, NULL, NULL,
+                                                         NULL);
+
+#if !defined(NO_FILESYSTEM) && !defined(WOLFSENTRY_NO_JSON)
+    if (_wolfsentry_config_path != NULL) {
+        char buf[512], err_buf[512];
+        struct wolfsentry_json_process_state *jps;
+
+        FILE *f = fopen(_wolfsentry_config_path, "r");
+
+        if (f == NULL) {
+            fprintf(stderr, "fopen(%s): %s\n",_wolfsentry_config_path,strerror(errno));
+            err_sys("unable to open wolfSentry config file");
+        }
+
+        if ((ret = wolfsentry_config_json_init(
+                 *_wolfsentry,
+                 WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+                 &jps)) < 0) {
+            fprintf(stderr, "wolfsentry_config_json_init() returned "
+                    WOLFSENTRY_ERROR_FMT "\n",
+                    WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            err_sys("error while initializing wolfSentry config parser");
+        }
+
+        for (;;) {
+            size_t n = fread(buf, 1, sizeof buf, f);
+            if ((n < sizeof buf) && ferror(f)) {
+                fprintf(stderr,"fread(%s): %s\n",_wolfsentry_config_path, strerror(errno));
+                err_sys("error while reading wolfSentry config file");
+            }
+
+            ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
+            if (ret < 0) {
+                fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+                err_sys("error while loading wolfSentry config file");
+            }
+            if ((n < sizeof buf) && feof(f))
+                break;
+        }
+        fclose(f);
+
+        if ((ret = wolfsentry_config_json_fini(jps, err_buf, sizeof err_buf)) < 0) {
+            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+            err_sys("error while loading wolfSentry config file");
+        }
+
+    } else
+#endif /* !NO_FILESYSTEM && !WOLFSENTRY_NO_JSON */
+    {
+        struct wolfsentry_route_table *table;
+
+        if ((ret = wolfsentry_route_get_table_static(*_wolfsentry,
+                                                                &table)) < 0)
+            fprintf(stderr, "wolfsentry_route_get_table_static() returned "
+                    WOLFSENTRY_ERROR_FMT "\n",
+                    WOLFSENTRY_ERROR_FMT_ARGS(ret));
+
+        if (ret < 0)
+            return ret;
+
+        if (WOLFSENTRY_CHECK_BITS(route_flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT)) {
+            struct {
+                struct wolfsentry_sockaddr sa;
+                byte buf[16];
+            } remote, local;
+            wolfsentry_ent_id_t id;
+            wolfsentry_action_res_t action_results;
+
+            if ((ret = wolfsentry_route_table_default_policy_set(
+                     *_wolfsentry, table,
+                     WOLFSENTRY_ACTION_RES_ACCEPT))
+                < 0) {
+                fprintf(stderr,
+                        "wolfsentry_route_table_default_policy_set() returned "
+                        WOLFSENTRY_ERROR_FMT "\n",
+                        WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                return ret;
+            }
+
+            XMEMSET(&remote, 0, sizeof remote);
+            XMEMSET(&local, 0, sizeof local);
+#ifdef TEST_IPV6
+            remote.sa.sa_family = local.sa.sa_family = AF_INET6;
+            remote.sa.addr_len = 128;
+            XMEMCPY(remote.sa.addr, "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\001", 16);
+#else
+            remote.sa.sa_family = local.sa.sa_family = AF_INET;
+            remote.sa.addr_len = 32;
+            XMEMCPY(remote.sa.addr, "\177\000\000\001", 4);
+#endif
+
+            if ((ret = wolfsentry_route_insert_static
+                 (*_wolfsentry, NULL /* caller_context */, &remote.sa, &local.sa,
+                  route_flags                                    |
+                  WOLFSENTRY_ROUTE_FLAG_GREENLISTED              |
+                  WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD    |
+                  WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD|
+                  WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD |
+                  WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD   |
+                  WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD        |
+                  WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD  |
+                  WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD,
+                  0 /* event_label_len */, 0 /* event_label */, &id,
+                  &action_results)) < 0) {
+                fprintf(stderr, "wolfsentry_route_insert_static() returned "
+                        WOLFSENTRY_ERROR_FMT "\n",
+                        WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                return ret;
+            }
+        } else if (WOLFSENTRY_CHECK_BITS(route_flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN)) {
+            struct {
+                struct wolfsentry_sockaddr sa;
+                byte buf[16];
+            } remote, local;
+            wolfsentry_ent_id_t id;
+            wolfsentry_action_res_t action_results;
+
+            if ((ret = wolfsentry_route_table_default_policy_set(
+                     *_wolfsentry, table,
+                     WOLFSENTRY_ACTION_RES_REJECT|WOLFSENTRY_ACTION_RES_STOP))
+                < 0) {
+                fprintf(stderr,
+                        "wolfsentry_route_table_default_policy_set() returned "
+                        WOLFSENTRY_ERROR_FMT "\n",
+                        WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                return ret;
+            }
+
+            XMEMSET(&remote, 0, sizeof remote);
+            XMEMSET(&local, 0, sizeof local);
+#ifdef TEST_IPV6
+            remote.sa.sa_family = local.sa.sa_family = AF_INET6;
+            remote.sa.addr_len = 128;
+            XMEMCPY(remote.sa.addr, "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\001", 16);
+#else
+            remote.sa.sa_family = local.sa.sa_family = AF_INET;
+            remote.sa.addr_len = 32;
+            XMEMCPY(remote.sa.addr, "\177\000\000\001", 4);
+#endif
+
+            if ((ret = wolfsentry_route_insert_static
+                 (*_wolfsentry, NULL /* caller_context */, &remote.sa, &local.sa,
+                  route_flags                                    |
+                  WOLFSENTRY_ROUTE_FLAG_GREENLISTED              |
+                  WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD    |
+                  WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD|
+                  WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD |
+                  WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD   |
+                  WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD        |
+                  WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD  |
+                  WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD,
+                  0 /* event_label_len */, 0 /* event_label */, &id,
+                  &action_results)) < 0) {
+                fprintf(stderr, "wolfsentry_route_insert_static() returned "
+                        WOLFSENTRY_ERROR_FMT "\n",
+                        WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                return ret;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static WC_INLINE int tcp_connect_with_wolfSentry(
+    SOCKET_T* sockfd,
+    const char* ip,
+    word16 port,
+    int udp,
+    int sctp,
+    WOLFSSL* ssl,
+    struct wolfsentry_context *_wolfsentry)
+{
+    SOCKADDR_IN_T remote_addr;
+    struct wolfsentry_data *wolfsentry_data;
+    char inet_ntop_buf[INET6_ADDRSTRLEN], inet_ntop_buf2[INET6_ADDRSTRLEN];
+    wolfsentry_errcode_t ret;
+    wolfsentry_action_res_t action_results;
+    wolfSSL_netfilter_decision_t decision;
+
+    build_addr(&remote_addr, ip, port, udp, sctp);
+
+    {
+        SOCKADDR_IN_T local_addr;
+#ifdef TEST_IPV6
+        local_addr.sin6_port = 0;
+#else
+        local_addr.sin_port = 0;
+#endif
+        ((struct sockaddr *)&local_addr)->sa_family = ((struct sockaddr *)&remote_addr)->sa_family;
+
+        if (wolfsentry_store_endpoints(
+                ssl, &remote_addr, &local_addr,
+                udp ? IPPROTO_UDP : IPPROTO_TCP,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT|
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD|
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD, &wolfsentry_data) != WOLFSSL_SUCCESS)
+            return WOLFSSL_FAILURE;
+    }
+
+    ret = wolfsentry_route_event_dispatch(
+        _wolfsentry,
+        &wolfsentry_data->remote,
+        &wolfsentry_data->local,
+        wolfsentry_data->flags,
+        NULL /* event_label */,
+        0    /* event_label_len */,
+        NULL /* caller_context */,
+        NULL /* id */,
+        NULL /* inexact_matches */,
+        &action_results);
+
+    if (ret < 0) {
+        printf("wolfsentry_route_event_dispatch error "
+               WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        decision = WOLFSSL_NETFILTER_PASS;
+    } else {
+        if (WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+            decision = WOLFSSL_NETFILTER_REJECT;
+        else if (WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT))
+            decision = WOLFSSL_NETFILTER_ACCEPT;
+        else
+            decision = WOLFSSL_NETFILTER_PASS;
+    }
+
+    printf("wolfSentry callin from tcp_connect_with_wolfSentry: family=%d proto=%d rport=%d"
+           " lport=%d raddr=%s laddr=%s interface=%d; decision=%d (%s)\n",
+           wolfsentry_data->remote.sa_family,
+           wolfsentry_data->remote.sa_proto,
+           wolfsentry_data->remote.sa_port,
+           wolfsentry_data->local.sa_port,
+           inet_ntop(wolfsentry_data->remote.sa_family, wolfsentry_data->remote.addr, inet_ntop_buf,
+                     sizeof inet_ntop_buf),
+           inet_ntop(wolfsentry_data->local.sa_family, wolfsentry_data->local.addr, inet_ntop_buf2,
+                     sizeof inet_ntop_buf2),
+           wolfsentry_data->remote.interface,
+           decision,
+           decision == WOLFSSL_NETFILTER_REJECT ? "REJECT" :
+           decision == WOLFSSL_NETFILTER_ACCEPT ? "ACCEPT" :
+           decision == WOLFSSL_NETFILTER_PASS ?   "PASS" :
+           "???");
+
+    if (decision == WOLFSSL_NETFILTER_REJECT)
+        return SOCKET_FILTERED_E;
+
+    if (udp) {
+        wolfSSL_dtls_set_peer(ssl, &remote_addr, sizeof(remote_addr));
+    }
+    tcp_socket(sockfd, udp, sctp);
+
+    if (!udp) {
+        if (connect(*sockfd, (const struct sockaddr*)&remote_addr, sizeof(remote_addr)) != 0)
+            err_sys_with_errno("tcp connect failed");
+    }
+
+    return WOLFSSL_SUCCESS;
+}
+
+#define tcp_connect(sockfd, ip, port, udp, sctp, ssl) \
+    tcp_connect_with_wolfSentry(sockfd, ip, port, udp, sctp, ssl, wolfsentry)
+
+#else /* !WOLFSSL_WOLFSENTRY_HOOKS */
+
 static WC_INLINE void tcp_connect(SOCKET_T* sockfd, const char* ip, word16 port,
                                int udp, int sctp, WOLFSSL* ssl)
 {
@@ -1055,6 +1641,8 @@ static WC_INLINE void tcp_connect(SOCKET_T* sockfd, const char* ip, word16 port,
             err_sys_with_errno("tcp connect failed");
     }
 }
+
+#endif /* WOLFSSL_WOLFSENTRY_HOOKS */
 
 
 static WC_INLINE void udp_connect(SOCKET_T* sockfd, void* addr, int addrSz)
@@ -1290,10 +1878,9 @@ static WC_INLINE void udp_accept(SOCKET_T* sockfd, SOCKET_T* clientfd,
 
 static WC_INLINE void tcp_accept(SOCKET_T* sockfd, SOCKET_T* clientfd,
                               func_args* args, word16 port, int useAnyAddr,
-                              int udp, int sctp, int ready_file, int do_listen)
+                              int udp, int sctp, int ready_file, int do_listen,
+                              SOCKADDR_IN_T *client_addr, socklen_t *client_len)
 {
-    SOCKADDR_IN_T client_addr;
-    socklen_t client_len = sizeof(client_addr);
     tcp_ready* ready = NULL;
 
     (void) ready; /* Account for case when "ready" is not used */
@@ -1350,8 +1937,8 @@ static WC_INLINE void tcp_accept(SOCKET_T* sockfd, SOCKET_T* clientfd,
         }
     }
 
-    *clientfd = accept(*sockfd, (struct sockaddr*)&client_addr,
-                      (ACCEPT_THIRD_T)&client_len);
+    *clientfd = accept(*sockfd, (struct sockaddr*)client_addr,
+                      (ACCEPT_THIRD_T)client_len);
     if(WOLFSSL_SOCKET_IS_INVALID(*clientfd)) {
         err_sys_with_errno("tcp accept failed");
     }
@@ -1455,7 +2042,7 @@ static WC_INLINE unsigned int my_psk_server_cb(WOLFSSL* ssl, const char* identit
     }
 }
 
-
+#ifdef WOLFSSL_TLS13
 static WC_INLINE unsigned int my_psk_client_tls13_cb(WOLFSSL* ssl,
         const char* hint, char* identity, unsigned int id_max_len,
         unsigned char* key, unsigned int key_max_len, const char** ciphersuite)
@@ -1489,14 +2076,18 @@ static WC_INLINE unsigned int my_psk_server_tls13_cb(WOLFSSL* ssl,
 {
     int i;
     int b = 0x01;
+    int kIdLen = (int)XSTRLEN(kIdentityStr);
     const char* userCipher = (const char*)wolfSSL_get_psk_callback_ctx(ssl);
 
     (void)ssl;
     (void)key_max_len;
 
     /* see internal.h MAX_PSK_ID_LEN for PSK identity limit */
-    if (XSTRNCMP(identity, kIdentityStr, XSTRLEN(kIdentityStr)) != 0)
+    if (XSTRNCMP(identity, kIdentityStr, kIdLen) != 0)
         return 0;
+    if (identity[kIdLen] != '\0') {
+        userCipher = wolfSSL_get_cipher_name_by_hash(ssl, identity + kIdLen);
+    }
 
     for (i = 0; i < 32; i++, b += 0x22) {
         if (b >= 0x100)
@@ -1505,6 +2096,103 @@ static WC_INLINE unsigned int my_psk_server_tls13_cb(WOLFSSL* ssl,
     }
 
     *ciphersuite = userCipher ? userCipher : "TLS13-AES128-GCM-SHA256";
+
+    return 32;   /* length of key in octets or 0 for error */
+}
+#endif
+
+#if defined(OPENSSL_ALL) && !defined(NO_CERTS) && \
+       !defined(NO_FILESYSTEM)
+static unsigned char local_psk[32];
+#endif
+static WC_INLINE int my_psk_use_session_cb(WOLFSSL* ssl, 
+            const WOLFSSL_EVP_MD* md, const unsigned char **id,
+            size_t* idlen,  WOLFSSL_SESSION **sess)
+{
+#if defined(OPENSSL_ALL) && !defined(NO_CERTS) && \
+       !defined(NO_FILESYSTEM)
+    int i;
+    int b = 0x01;
+    WOLFSSL_SESSION* lsess;
+    char buf[256];
+    const char* cipher_id = "TLS13-AES128-GCM-SHA256";
+    const SSL_CIPHER* cipher = NULL;
+    STACK_OF(SSL_CIPHER) *supportedCiphers = NULL;
+    int numCiphers = 0;
+    (void)ssl;
+    (void)md;
+    
+    printf("use psk session callback \n");
+    
+    lsess = wolfSSL_SESSION_new();
+    if (lsess == NULL) {
+        return 0;
+    }
+    supportedCiphers = SSL_get_ciphers(ssl);
+    numCiphers = sk_num(supportedCiphers);
+
+    for (i = 0; i < numCiphers; ++i) {
+        
+        if ((cipher = (const WOLFSSL_CIPHER*)sk_value(supportedCiphers, i))) {
+            SSL_CIPHER_description(cipher, buf, sizeof(buf));
+        }
+        
+        if (XMEMCMP(cipher_id, buf, XSTRLEN(cipher_id)) == 0) {
+            break;
+        }
+    }
+    
+    if (i != numCiphers) {
+        SSL_SESSION_set_cipher(lsess, cipher);
+            for (i = 0; i < 32; i++, b += 0x22) {
+            if (b >= 0x100)
+                b = 0x01;
+            local_psk[i] = b;
+        }
+        
+        *id = local_psk;
+        *idlen = 32;
+        *sess = lsess;
+        
+        return 1;
+    }
+    else {
+        *id = NULL;
+        *idlen = 0;
+        *sess = NULL;
+        return 0;
+    }
+#else
+    (void)ssl;
+    (void)md;
+    (void)id;
+    (void)idlen;
+    (void)sess;
+    
+    return 0;
+#endif
+}
+
+static WC_INLINE unsigned int my_psk_client_cs_cb(WOLFSSL* ssl,
+        const char* hint, char* identity, unsigned int id_max_len,
+        unsigned char* key, unsigned int key_max_len, const char* ciphersuite)
+{
+    int i;
+    int b = 0x01;
+
+    (void)ssl;
+    (void)hint;
+    (void)key_max_len;
+
+    /* see internal.h MAX_PSK_ID_LEN for PSK identity limit */
+    XSTRNCPY(identity, kIdentityStr, id_max_len);
+    XSTRNCAT(identity, ciphersuite + XSTRLEN(ciphersuite) - 6, id_max_len);
+
+    for (i = 0; i < 32; i++, b += 0x22) {
+        if (b >= 0x100)
+            b = 0x01;
+        key[i] = b;
+    }
 
     return 32;   /* length of key in octets or 0 for error */
 }
@@ -2126,7 +2814,7 @@ int StackSizeHWMReset(void)
 #define STACK_SIZE_CHECKPOINT(...) ({  \
     ssize_t HWM = StackSizeHWM_OffsetCorrected();    \
     __VA_ARGS__;                                     \
-    printf("relative stack used = %ld\n", HWM);      \
+    printf("    relative stack peak usage = %ld bytes\n", HWM);  \
     StackSizeHWMReset();                             \
     })
 
@@ -2134,10 +2822,10 @@ int StackSizeHWMReset(void)
     ssize_t HWM = StackSizeHWM_OffsetCorrected();    \
     int _ret;                                        \
     __VA_ARGS__;                                     \
-    printf("relative stack used = %ld\n", HWM);      \
+    printf("    relative stack peak usage = %ld bytes\n", HWM);  \
     _ret = StackSizeHWMReset();                      \
     if ((max >= 0) && (HWM > (ssize_t)(max))) {      \
-        printf("relative stack usage at %s L%d exceeds designated max %ld.\n", __FILE__, __LINE__, (ssize_t)(max)); \
+        printf("    relative stack usage at %s L%d exceeds designated max %ld bytes.\n", __FILE__, __LINE__, (ssize_t)(max)); \
         _ret = -1;                                   \
     }                                                \
     _ret;                                            \
@@ -3007,6 +3695,8 @@ static WC_INLINE int myEccSharedSecret(WOLFSSL* ssl, ecc_key* otherKey,
     return ret;
 }
 
+#endif /* HAVE_ECC */
+
 #ifdef HAVE_ED25519
 static WC_INLINE int myEd25519Sign(WOLFSSL* ssl, const byte* in, word32 inSz,
         byte* out, word32* outSz, const byte* key, word32 keySz, void* ctx)
@@ -3329,8 +4019,6 @@ static WC_INLINE int myX448SharedSecret(WOLFSSL* ssl, curve448_key* otherKey,
 }
 #endif /* HAVE_CURVE448 */
 
-#endif /* HAVE_ECC */
-
 #ifndef NO_DH
 static WC_INLINE int myDhCallback(WOLFSSL* ssl, struct DhKey* key,
         const unsigned char* priv, unsigned int privSz,
@@ -3351,7 +4039,7 @@ static WC_INLINE int myDhCallback(WOLFSSL* ssl, struct DhKey* key,
         ret, privSz, pubKeySz, *outlen);
 
     return ret;
-};
+}
 
 #endif /* !NO_DH */
 
@@ -3818,6 +4506,7 @@ static WC_INLINE void SetupPkCallbackContexts(WOLFSSL* ssl, void* myCtx)
 
 #endif /* HAVE_PK_CALLBACKS */
 
+#ifdef USE_WOLFSSL_IO
 static WC_INLINE int SimulateWantWriteIOSendCb(WOLFSSL *ssl, char *buf, int sz, void *ctx)
 {
     static int wantWriteFlag = 1;
@@ -3860,6 +4549,7 @@ static WC_INLINE int SimulateWantWriteIOSendCb(WOLFSSL *ssl, char *buf, int sz, 
         return WOLFSSL_CBIO_ERR_WANT_WRITE;
     }
 }
+#endif /* USE_WOLFSSL_IO */
 
 #if defined(__hpux__) || defined(__MINGW32__) || defined (WOLFSSL_TIRTOS) \
                       || defined(_MSC_VER)
@@ -3926,14 +4616,22 @@ static WC_INLINE const char* mymktemp(char *tempfn, int len, int num)
 
 
 
-#if defined(HAVE_SESSION_TICKET) && defined(HAVE_CHACHA) && \
-                                    defined(HAVE_POLY1305)
+#if defined(HAVE_SESSION_TICKET) && defined(WOLFSSL_NO_DEF_TICKET_ENC_CB) && \
+    ((defined(HAVE_CHACHA) && defined(HAVE_POLY1305)) || \
+      defined(HAVE_AESGCM))
 
+#if defined(HAVE_CHACHA) && defined(HAVE_POLY1305)
     #include <wolfssl/wolfcrypt/chacha20_poly1305.h>
+    #define WOLFSSL_TICKET_KEY_SZ CHACHA20_POLY1305_AEAD_KEYSIZE
+#elif defined(HAVE_AESGCM)
+    #include <wolfssl/wolfcrypt/aes.h>
+    #include <wolfssl/wolfcrypt/wc_encrypt.h> /* AES IV sizes in FIPS mode */
+    #define WOLFSSL_TICKET_KEY_SZ AES_256_KEY_SIZE
+#endif
 
     typedef struct key_ctx {
-        byte name[WOLFSSL_TICKET_NAME_SZ];        /* name for this context */
-        byte key[CHACHA20_POLY1305_AEAD_KEYSIZE]; /* cipher key */
+        byte name[WOLFSSL_TICKET_NAME_SZ]; /* name for this context */
+        byte key[WOLFSSL_TICKET_KEY_SZ];   /* cipher key */
     } key_ctx;
 
     static THREAD_LS_T key_ctx myKey_ctx;
@@ -3970,6 +4668,11 @@ static WC_INLINE const char* mymktemp(char *tempfn, int len, int num)
         byte aad[WOLFSSL_TICKET_NAME_SZ + WOLFSSL_TICKET_IV_SZ + 2];
         int  aadSz = WOLFSSL_TICKET_NAME_SZ + WOLFSSL_TICKET_IV_SZ + 2;
         byte* tmp = aad;
+    #if defined(HAVE_CHACHA) && defined(HAVE_POLY1305)
+        /* chahca20/poly1305 */
+    #elif defined(HAVE_AESGCM)
+        Aes aes;
+    #endif
 
         (void)ssl;
         (void)userCtx;
@@ -3986,22 +4689,35 @@ static WC_INLINE const char* mymktemp(char *tempfn, int len, int num)
             tmp += WOLFSSL_TICKET_NAME_SZ;
             XMEMCPY(tmp, iv, WOLFSSL_TICKET_IV_SZ);
             tmp += WOLFSSL_TICKET_IV_SZ;
-            XMEMCPY(tmp, &sLen, 2);
+            XMEMCPY(tmp, &sLen, sizeof(sLen));
 
+        #if defined(HAVE_CHACHA) && defined(HAVE_POLY1305)
             ret = wc_ChaCha20Poly1305_Encrypt(myKey_ctx.key, iv,
                                               aad, aadSz,
                                               ticket, inLen,
                                               ticket,
                                               mac);
+        #elif defined(HAVE_AESGCM)
+            ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
+            if (ret != 0) return WOLFSSL_TICKET_RET_REJECT;
+
+            ret = wc_AesGcmSetKey(&aes, myKey_ctx.key, sizeof(myKey_ctx.key));
+            if (ret == 0) {
+                ret = wc_AesGcmEncrypt(&aes, ticket, ticket, inLen,
+                                       iv, GCM_NONCE_MID_SZ, mac, AES_BLOCK_SIZE,
+                                       aad, aadSz);
+            }
+            wc_AesFree(&aes);
+        #endif
+            
             if (ret != 0) return WOLFSSL_TICKET_RET_REJECT;
             *outLen = inLen;  /* no padding in this mode */
         }
         /* decrypt */
         else {
-
             /* see if we know this key */
             if (XMEMCMP(key_name, myKey_ctx.name, WOLFSSL_TICKET_NAME_SZ) != 0){
-                printf("client presented unknown ticket key name ");
+                printf("client presented unknown ticket key name %s\n", key_name);
                 return WOLFSSL_TICKET_RET_FATAL;
             }
 
@@ -4010,13 +4726,27 @@ static WC_INLINE const char* mymktemp(char *tempfn, int len, int num)
             tmp += WOLFSSL_TICKET_NAME_SZ;
             XMEMCPY(tmp, iv, WOLFSSL_TICKET_IV_SZ);
             tmp += WOLFSSL_TICKET_IV_SZ;
-            XMEMCPY(tmp, &sLen, 2);
+            XMEMCPY(tmp, &sLen, sizeof(sLen));
 
+        #if defined(HAVE_CHACHA) && defined(HAVE_POLY1305)
             ret = wc_ChaCha20Poly1305_Decrypt(myKey_ctx.key, iv,
                                               aad, aadSz,
                                               ticket, inLen,
                                               mac,
                                               ticket);
+        #elif defined(HAVE_AESGCM)
+            ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
+            if (ret != 0) return WOLFSSL_TICKET_RET_REJECT;
+
+            ret = wc_AesGcmSetKey(&aes, myKey_ctx.key, sizeof(myKey_ctx.key));
+            if (ret == 0) {
+                ret = wc_AesGcmDecrypt(&aes, ticket, ticket, inLen,
+                                        iv, GCM_NONCE_MID_SZ, mac, AES_BLOCK_SIZE,
+                                        aad, aadSz);
+            }
+            wc_AesFree(&aes);
+        #endif
+
             if (ret != 0) return WOLFSSL_TICKET_RET_REJECT;
             *outLen = inLen;  /* no padding in this mode */
         }
@@ -4024,7 +4754,8 @@ static WC_INLINE const char* mymktemp(char *tempfn, int len, int num)
         return WOLFSSL_TICKET_RET_OK;
     }
 
-#endif  /* HAVE_SESSION_TICKET && HAVE_CHACHA && HAVE_POLY1305 */
+#endif /* HAVE_SESSION_TICKET && ((HAVE_CHACHA && HAVE_POLY1305) || HAVE_AESGCM) */
+
 
 static WC_INLINE word16 GetRandomPort(void)
 {
@@ -4041,5 +4772,34 @@ static WC_INLINE word16 GetRandomPort(void)
     (void)rng; /* for WC_NO_RNG case */
     return port;
 }
+
+#ifdef WOLFSSL_EARLY_DATA
+static WC_INLINE void EarlyDataStatus(WOLFSSL* ssl)
+{
+    int earlyData_status;
+#ifdef OPENSSL_EXTRA
+    earlyData_status = SSL_get_early_data_status(ssl);
+#else
+    earlyData_status = wolfSSL_get_early_data_status(ssl);
+#endif
+    if (earlyData_status < 0) return;
+    
+    printf("Early Data was ");
+    
+    switch(earlyData_status) {
+        case WOLFSSL_EARLY_DATA_NOT_SENT:
+                printf("not sent.\n");
+                break;
+        case WOLFSSL_EARLY_DATA_REJECTED:
+                printf("rejected.\n");
+                break;
+        case WOLFSSL_EARLY_DATA_ACCEPTED:
+                printf("accepted\n");
+                break;
+        default:
+                printf("unknown...\n");
+    }
+}
+#endif /* WOLFSSL_EARLY_DATA */
 
 #endif /* wolfSSL_TEST_H */

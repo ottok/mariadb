@@ -40,11 +40,6 @@ Created 1/8/1996 Heikki Tuuri
 #include "sql_table.h"
 #include <mysql/service_thd_mdl.h>
 
-#if defined UNIV_DEBUG || defined UNIV_IBUF_DEBUG
-/** Flag to control insert buffer debugging. */
-extern uint	ibuf_debug;
-#endif /* UNIV_DEBUG || UNIV_IBUF_DEBUG */
-
 #include "btr0btr.h"
 #include "btr0cur.h"
 #include "btr0sea.h"
@@ -2527,8 +2522,8 @@ dict_index_build_internal_clust(
 	ulint		i;
 	ibool*		indexed;
 
-	ut_ad(dict_index_is_clust(index));
-	ut_ad(!dict_index_is_ibuf(index));
+	ut_ad(index->is_primary());
+	ut_ad(!index->has_virtual());
 
 	ut_ad(mutex_own(&dict_sys.mutex));
 
@@ -4256,7 +4251,7 @@ dict_set_corrupted(
 
 	/* If this is read only mode, do not update SYS_INDEXES, just
 	mark it as corrupted in memory */
-	if (srv_read_only_mode) {
+	if (high_level_read_only) {
 		index->type |= DICT_CORRUPT;
 		goto func_exit;
 	}

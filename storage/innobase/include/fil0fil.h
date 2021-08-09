@@ -405,7 +405,7 @@ public:
 	bool is_in_unflushed_spaces;
 
 	/** Checks that this tablespace needs key rotation. */
-	bool is_in_rotation_list;
+	bool is_in_default_encrypt;
 
 	/** True if the device this filespace is on supports atomic writes */
 	bool		atomic_write_supported;
@@ -1404,24 +1404,25 @@ public:
 					record has been written since
 					the latest redo log checkpoint.
 					Protected only by log_sys.mutex. */
-	ilist<fil_space_t, rotation_list_tag_t> rotation_list;
-					/*!< list of all file spaces needing
-					key rotation.*/
+
+	/** List of all file spaces need key rotation */
+	ilist<fil_space_t, rotation_list_tag_t> default_encrypt_tables;
 
 	bool		space_id_reuse_warned;
 					/*!< whether fil_space_t::create()
 					has issued a warning about
 					potential space_id reuse */
 
-  /** Return the next tablespace from rotation_list.
-  @param space   previous tablespace (NULL to start from the start)
+  /** Return the next tablespace from default_encrypt_tables list.
+  @param space   previous tablespace (nullptr to start from the start)
   @param recheck whether the removal condition needs to be rechecked after
   the encryption parameters were changed
   @param encrypt expected state of innodb_encrypt_tables
   @return the next tablespace to process (n_pending_ops incremented)
-  @retval NULL if this was the last */
-  inline fil_space_t* keyrotate_next(fil_space_t *space, bool recheck,
-                                     bool encrypt);
+  @retval fil_system.temp_space if there is no work to do
+  @retval nullptr upon reaching the end of the iteration */
+  inline fil_space_t* default_encrypt_next(fil_space_t *space, bool recheck,
+                                           bool encrypt);
 
   /** Extend all open data files to the recovered size */
   ATTRIBUTE_COLD void extend_to_recv_size();
@@ -1656,21 +1657,6 @@ fil_ibd_load(
 	MY_ATTRIBUTE((warn_unused_result));
 
 
-/***********************************************************************//**
-A fault-tolerant function that tries to read the next file name in the
-directory. We retry 100 times if os_file_readdir_next_file() returns -1. The
-idea is to read as much good data as we can and jump over bad data.
-@return 0 if ok, -1 if error even after the retries, 1 if at the end
-of the directory */
-int
-fil_file_readdir_next_file(
-/*=======================*/
-	dberr_t*	err,	/*!< out: this is set to DB_ERROR if an error
-				was encountered, otherwise not changed */
-	const char*	dirname,/*!< in: directory name or path */
-	os_file_dir_t	dir,	/*!< in: directory stream */
-	os_file_stat_t*	info);	/*!< in/out: buffer where the
-				info is returned */
 /** Determine if a matching tablespace exists in the InnoDB tablespace
 memory cache. Note that if we have not done a crash recovery at the database
 startup, there may be many tablespaces which are not yet in the memory cache.

@@ -32,6 +32,7 @@
 #else
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
+#include <unordered_map>
 #endif
 #include <boost/thread.hpp>
 
@@ -43,11 +44,6 @@
 
 #include "service.h"
 
-//#define PRIMPROC_STOPWATCH
-#ifdef PRIMPROC_STOPWATCH
-#include "stopwatch.h"
-#endif
-
 #include "oamcache.h"
 extern oam::OamCache* oamCache;
 
@@ -58,15 +54,6 @@ extern dbbc::BlockRequestProcessor** BRPp;
 extern BRM::DBRM* brm;
 extern boost::mutex bppLock;
 extern uint32_t highPriorityThreads, medPriorityThreads, lowPriorityThreads;
-
-#ifdef PRIMPROC_STOPWATCH
-extern std::map<pthread_t, logging::StopWatch*> stopwatchMap;
-extern pthread_mutex_t stopwatchMapMutex;
-extern bool stopwatchThreadCreated;
-
-extern void pause_(int seconds);
-extern void* autoFinishStopwatchThread(void* arg);
-#endif
 
 class BPPV
 {

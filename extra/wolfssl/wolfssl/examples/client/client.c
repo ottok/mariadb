@@ -1,6 +1,6 @@
 /* client.c
  *
- * Copyright (C) 2006-2020 wolfSSL Inc.
+ * Copyright (C) 2006-2021 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -19,7 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-
 #ifdef HAVE_CONFIG_H
         #include <config.h>
 #endif
@@ -30,6 +29,13 @@
 #include <wolfssl/wolfcrypt/settings.h>
 
 #include <wolfssl/ssl.h>
+
+#ifdef WOLFSSL_WOLFSENTRY_HOOKS
+#include <wolfsentry/wolfsentry.h>
+#if !defined(NO_FILESYSTEM) && !defined(WOLFSENTRY_NO_JSON)
+static const char *wolfsentry_config_path = NULL;
+#endif
+#endif /* WOLFSSL_WOLFSENTRY_HOOKS */
 
 #if defined(WOLFSSL_MDK_ARM) || defined(WOLFSSL_KEIL_TCP_NET)
         #include <stdio.h>
@@ -274,8 +280,9 @@ static void ShowVersions(void)
 #if defined(WOLFSSL_TLS13) && defined(HAVE_SUPPORTED_CURVES)
 #define MAX_GROUP_NUMBER 4
 static void SetKeyShare(WOLFSSL* ssl, int onlyKeyShare, int useX25519,
-                        int useX448)
+                        int useX448, int setGroups)
 {
+    int ret;
     int groups[MAX_GROUP_NUMBER] = {0};
     int count = 0;
 
@@ -284,49 +291,78 @@ static void SetKeyShare(WOLFSSL* ssl, int onlyKeyShare, int useX25519,
 
     WOLFSSL_START(WC_FUNC_CLIENT_KEY_EXCHANGE_SEND);
     if (onlyKeyShare == 0 || onlyKeyShare == 2) {
-    #ifdef HAVE_CURVE25519
         if (useX25519) {
-            groups[count++] = WOLFSSL_ECC_X25519;
-            if (wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_X25519) != WOLFSSL_SUCCESS)
-                err_sys("unable to use curve x25519");
-        }
-        else
+    #ifdef HAVE_CURVE25519
+            do {
+                ret = wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_X25519);
+                if (ret == WOLFSSL_SUCCESS)
+                    groups[count++] = WOLFSSL_ECC_X25519;
+            #ifdef WOLFSSL_ASYNC_CRYPT
+                else if (ret == WC_PENDING_E)
+                    wolfSSL_AsyncPoll(ssl, WOLF_POLL_FLAG_CHECK_HW);
+            #endif
+                else
+                    err_sys("unable to use curve x25519");
+            } while (ret == WC_PENDING_E);
     #endif
+        }
+        else if (useX448) {
     #ifdef HAVE_CURVE448
-        if (useX448) {
-            groups[count++] = WOLFSSL_ECC_X448;
-            if (wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_X448) != WOLFSSL_SUCCESS)
-                err_sys("unable to use curve x448");
-        }
-        else
+            do {
+                ret = wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_X448);
+                if (ret == WOLFSSL_SUCCESS)
+                    groups[count++] = WOLFSSL_ECC_X448;
+            #ifdef WOLFSSL_ASYNC_CRYPT
+                else if (ret == WC_PENDING_E)
+                    wolfSSL_AsyncPoll(ssl, WOLF_POLL_FLAG_CHECK_HW);
+            #endif
+                else
+                    err_sys("unable to use curve x448");
+            } while (ret == WC_PENDING_E);
     #endif
-        {
+        }
+        else {
     #ifdef HAVE_ECC
         #if !defined(NO_ECC256) || defined(HAVE_ALL_CURVES)
-            groups[count++] = WOLFSSL_ECC_SECP256R1;
-            if (wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_SECP256R1)
-                                                           != WOLFSSL_SUCCESS) {
-                err_sys("unable to use curve secp256r1");
-            }
+            do {
+                ret = wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_SECP256R1);
+                if (ret == WOLFSSL_SUCCESS)
+                    groups[count++] = WOLFSSL_ECC_SECP256R1;
+            #ifdef WOLFSSL_ASYNC_CRYPT
+                else if (ret == WC_PENDING_E)
+                    wolfSSL_AsyncPoll(ssl, WOLF_POLL_FLAG_CHECK_HW);
+            #endif
+                else
+                    err_sys("unable to use curve secp256r1");
+            } while (ret == WC_PENDING_E);
         #endif
     #endif
         }
     }
     if (onlyKeyShare == 0 || onlyKeyShare == 1) {
     #ifdef HAVE_FFDHE_2048
-        groups[count++] = WOLFSSL_FFDHE_2048;
-        if (wolfSSL_UseKeyShare(ssl, WOLFSSL_FFDHE_2048) != WOLFSSL_SUCCESS)
-            err_sys("unable to use DH 2048-bit parameters");
+        do {
+            ret = wolfSSL_UseKeyShare(ssl, WOLFSSL_FFDHE_2048);
+            if (ret == WOLFSSL_SUCCESS)
+                groups[count++] = WOLFSSL_FFDHE_2048;
+        #ifdef WOLFSSL_ASYNC_CRYPT
+            else if (ret == WC_PENDING_E)
+                wolfSSL_AsyncPoll(ssl, WOLF_POLL_FLAG_CHECK_HW);
+        #endif
+            else
+                err_sys("unable to use DH 2048-bit parameters");
+        } while (ret == WC_PENDING_E);
     #endif
     }
-
     if (count >= MAX_GROUP_NUMBER)
         err_sys("example group array size error");
-    if (wolfSSL_set_groups(ssl, groups, count) != WOLFSSL_SUCCESS)
-        err_sys("unable to set groups");
+    if (setGroups && count > 0) {
+        if (wolfSSL_set_groups(ssl, groups, count) != WOLFSSL_SUCCESS)
+            err_sys("unable to set groups");
+    }
     WOLFSSL_END(WC_FUNC_CLIENT_KEY_EXCHANGE_SEND);
 }
-#endif
+#endif /* WOLFSSL_TLS13 && HAVE_SUPPORTED_CURVES */
 
 #ifdef WOLFSSL_EARLY_DATA
 static void EarlyData(WOLFSSL_CTX* ctx, WOLFSSL* ssl, const char* msg,
@@ -444,7 +480,7 @@ static int ClientBenchmarkConnections(WOLFSSL_CTX* ctx, char* host, word16 port,
         #if defined(WOLFSSL_TLS13) && defined(HAVE_SUPPORTED_CURVES)
             else if (version >= 4) {
                 if (!helloRetry)
-                    SetKeyShare(ssl, onlyKeyShare, useX25519, useX448);
+                    SetKeyShare(ssl, onlyKeyShare, useX25519, useX448, 1);
                 else
                     wolfSSL_NoKeyShares(ssl);
             }
@@ -466,6 +502,9 @@ static int ClientBenchmarkConnections(WOLFSSL_CTX* ctx, char* host, word16 port,
             do {
                 err = 0; /* reset error */
                 ret = wolfSSL_connect(ssl);
+#ifdef WOLFSSL_EARLY_DATA
+                EarlyDataStatus(ssl);
+#endif
                 if (ret != WOLFSSL_SUCCESS) {
                     err = wolfSSL_get_error(ssl, 0);
                 #ifdef WOLFSSL_ASYNC_CRYPT
@@ -525,7 +564,7 @@ static int ClientBenchmarkConnections(WOLFSSL_CTX* ctx, char* host, word16 port,
 /* Measures throughput in mbps. Throughput = number of bytes */
 static int ClientBenchmarkThroughput(WOLFSSL_CTX* ctx, char* host, word16 port,
     int dtlsUDP, int dtlsSCTP, int block, size_t throughput, int useX25519,
-    int useX448, int exitWithRet)
+    int useX448, int exitWithRet, int version, int onlyKeyShare)
 {
     double start, conn_time = 0, tx_time = 0, rx_time = 0;
     SOCKET_T sockfd;
@@ -544,24 +583,13 @@ static int ClientBenchmarkThroughput(WOLFSSL_CTX* ctx, char* host, word16 port,
 
     (void)useX25519;
     (void)useX448;
-    #if defined(WOLFSSL_TLS13) && defined(HAVE_SUPPORTED_CURVES)
-        #ifdef HAVE_CURVE25519
-            if (useX25519) {
-                if (wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_X25519)
-                        != WOLFSSL_SUCCESS) {
-                    err_sys("unable to use curve x25519");
-                }
-            }
-        #endif
-        #ifdef HAVE_CURVE448
-            if (useX448) {
-                if (wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_X448)
-                        != WOLFSSL_SUCCESS) {
-                    err_sys("unable to use curve x448");
-                }
-            }
-        #endif
-    #endif
+    (void)version;
+    (void)onlyKeyShare;
+#if defined(WOLFSSL_TLS13) && defined(HAVE_SUPPORTED_CURVES)
+    if (version >= 4) {
+        SetKeyShare(ssl, onlyKeyShare, useX25519, useX448, 1);
+    }
+#endif
 
     do {
         err = 0; /* reset error */
@@ -946,7 +974,7 @@ static int ClientRead(WOLFSSL* ssl, char* reply, int replyLen, int mustRead,
 /*  4. add the same message into Japanese section         */
 /*     (will be translated later)                         */
 /*  5. add printf() into suitable position of Usage()     */
-static const char* client_usage_msg[][66] = {
+static const char* client_usage_msg[][69] = {
     /* English */
     {
         " NOTE: All files relative to wolfSSL home dir\n",          /* 0 */
@@ -968,7 +996,8 @@ static const char* client_usage_msg[][66] = {
         "INFINITE\n",                                               /* 2 */
 #endif
         "-? <num>    Help, print this usage\n"
-        "            0: English, 1: Japanese\n",                    /* 3 */
+        "            0: English, 1: Japanese\n"
+        "--help      Help, in English\n",                           /* 3 */
         "-h <host>   Host to connect to, default",                  /* 4 */
         "-p <num>    Port to connect on, not 0, default",           /* 5 */
 
@@ -1117,8 +1146,27 @@ static const char* client_usage_msg[][66] = {
 #ifdef HAVE_CURVE448
         "-8          Use X448 for key exchange\n",                      /* 66 */
 #endif
-#ifdef HAVE_CRL
-        "-C          Disable CRL\n",
+#if defined(OPENSSL_ALL) && defined(WOLFSSL_CERT_GEN) && \
+    (defined(WOLFSSL_CERT_REQ) || defined(WOLFSSL_CERT_EXT)) && \
+    !defined(NO_FILESYSTEM) && !defined(NO_WOLFSSL_DIR)
+        "-9          Use hash dir look up for certificate loading\n"
+        "            loading from <wolfSSL home>/certs folder\n"
+        "            files in the folder would have the form \"hash.N\" file name\n"
+        "            e.g symbolic link to the file at certs folder\n"
+        "            ln -s ca-cert.pem  `openssl x509 -in ca-cert.pem -hash -noout`.0\n",
+                                                                       /* 67 */
+#endif
+#if defined(WOLFSSL_WOLFSENTRY_HOOKS) && !defined(NO_FILESYSTEM) && \
+    !defined(WOLFSENTRY_NO_JSON)
+        "--wolfsentry-config <file>    Path for JSON wolfSentry config\n",
+                                                                       /* 68 */
+#endif
+#ifndef WOLFSSL_TLS13
+        "-7          Set minimum downgrade protocol version [0-3] "
+        " SSLv3(0) - TLS1.2(3)\n",
+#else
+        "-7          Set minimum downgrade protocol version [0-4] "
+        " SSLv3(0) - TLS1.3(4)\n",                           /* 69 */
 #endif
         NULL,
     },
@@ -1143,7 +1191,8 @@ static const char* client_usage_msg[][66] = {
         "無限\n",                                                        /* 2 */
 #endif
         "-? <num>    ヘルプ, 使い方を表示\n"
-                            "            0: 英語、 1: 日本語\n",         /* 3 */
+        "            0: 英語、 1: 日本語\n"
+        "--ヘルプ     使い方を表示, 日本語で\n",                          /* 3 */
         "-h <host>   接続先ホスト, 既定値",                              /* 4 */
         "-p <num>    接続先ポート, 0は無効, 既定値",                     /* 5 */
 
@@ -1291,8 +1340,31 @@ static const char* client_usage_msg[][66] = {
 #ifdef HAVE_TRUSTED_CA
         "-5          信頼できる認証局の鍵表示を使用する\n",             /* 63 */
 #endif
+        "-6          WANT_WRITE エラーを全てのIO 送信でシュミレートします\n",
 #ifdef HAVE_CURVE448
         "-8          Use X448 for key exchange\n",                      /* 66 */
+#endif
+#if defined(OPENSSL_ALL) && defined(WOLFSSL_CERT_GEN) && \
+    (defined(WOLFSSL_CERT_REQ) || defined(WOLFSSL_CERT_EXT)) && \
+    !defined(NO_FILESYSTEM) && !defined(NO_WOLFSSL_DIR)
+        "-9          証明書の読み込みに hash dir 機能を使用する\n"
+        "            <wolfSSL home>/certs フォルダーからロードします\n"
+        "            フォルダー中のファイルは、\"hash.N\"[N:0-9]名である必要があります\n"
+        "            以下の例ではca-cert.pemにシンボリックリンクを設定します\n"
+        "            ln -s ca-cert.pem  `openssl x509 -in ca-cert.pem -hash -noout`.0\n",
+                                                                        /* 67 */
+#endif
+#if defined(WOLFSSL_WOLFSENTRY_HOOKS) && !defined(NO_FILESYSTEM) && \
+    !defined(WOLFSENTRY_NO_JSON)
+        "--wolfsentry-config <file>    wolfSentry コンフィグファイル\n",
+                                                                      /* 68 */
+#endif
+#ifndef WOLFSSL_TLS13
+        "-7          最小ダウングレード可能なプロトコルバージョンを設定します [0-3] "
+        " SSLv3(0) - TLS1.2(3)\n",
+#else
+        "-7          最小ダウングレード可能なプロトコルバージョンを設定します [0-4] "
+        " SSLv3(0) - TLS1.3(4)\n",                            /* 69 */
 #endif
         NULL,
     },
@@ -1407,6 +1479,7 @@ static void Usage(void)
 #if defined(HAVE_CERTIFICATE_STATUS_REQUEST) \
  || defined(HAVE_CERTIFICATE_STATUS_REQUEST_V2)
     printf("%s", msg[++msgid]); /* -W */
+    printf("%s", msg[++msgid]); /* note for -W */
 #endif
 #if defined(ATOMIC_USER) && !defined(WOLFSSL_AEAD_ONLY)
     printf("%s", msg[++msgid]); /* -U */
@@ -1462,9 +1535,20 @@ static void Usage(void)
 #ifdef HAVE_TRUSTED_CA
     printf("%s", msg[++msgid]);  /* -5 */
 #endif
+    printf("%s", msg[++msgid]);  /* -6 */
 #ifdef HAVE_CURVE448
     printf("%s", msg[++msgid]); /* -8 */
 #endif
+#if defined(OPENSSL_ALL) && defined(WOLFSSL_CERT_GEN) && \
+    (defined(WOLFSSL_CERT_REQ) || defined(WOLFSSL_CERT_EXT)) && \
+    !defined(NO_FILESYSTEM) && !defined(NO_WOLFSSL_DIR)
+    printf("%s", msg[++msgid]); /* -9 */
+#endif
+#if defined(WOLFSSL_WOLFSENTRY_HOOKS) && !defined(NO_FILESYSTEM) && \
+    !defined(WOLFSENTRY_NO_JSON)
+    printf("%s", msg[++msgid]); /* --wolfsentry-config */
+#endif
+    printf("%s", msg[++msgid]); /* -7 */
 }
 
 THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
@@ -1474,6 +1558,10 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
     wolfSSL_method_func method = NULL;
     WOLFSSL_CTX*     ctx     = 0;
     WOLFSSL*         ssl     = 0;
+
+#ifdef WOLFSSL_WOLFSENTRY_HOOKS
+    wolfsentry_errcode_t wolfsentry_ret;
+#endif
 
     WOLFSSL*         sslResume = 0;
     WOLFSSL_SESSION* session = 0;
@@ -1492,8 +1580,18 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
                                        */
 #ifndef WOLFSSL_VXWORKS
     int    ch;
+    static const struct mygetopt_long_config long_options[] = {
+#if defined(WOLFSSL_WOLFSENTRY_HOOKS) && !defined(NO_FILESYSTEM) && \
+    !defined(WOLFSENTRY_NO_JSON)
+        { "wolfsentry-config", 1, 256 },
+#endif
+        { "help", 0, 257 },
+        { "ヘルプ", 0, 258 },
+        { 0, 0, 0 }
+    };
 #endif
     int    version = CLIENT_INVALID_VERSION;
+    int    minVersion = CLIENT_INVALID_VERSION;
     int    usePsk   = 0;
     int    useAnon  = 0;
     int    sendGET  = 0;
@@ -1502,6 +1600,10 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
     size_t throughput = 0;
     int    doDTLS    = 0;
     int    dtlsUDP   = 0;
+#if (defined(WOLFSSL_SCTP) || defined(WOLFSSL_DTLS_MTU)) && \
+                                                           defined(WOLFSSL_DTLS)
+    int    dtlsMTU = 0;
+#endif
     int    dtlsSCTP  = 0;
     int    doMcast   = 0;
     int    matchName = 0;
@@ -1599,6 +1701,11 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
 #ifdef HAVE_WNR
     const char* wnrConfigFile = wnrConfig;
 #endif
+#if defined(OPENSSL_ALL) && defined(WOLFSSL_CERT_GEN) && \
+    (defined(WOLFSSL_CERT_REQ) || defined(WOLFSSL_CERT_EXT)) && \
+    !defined(NO_FILESYSTEM) && !defined(NO_WOLFSSL_DIR)
+    int useCertFolder = 0;
+#endif
     char buffer[WOLFSSL_MAX_ERROR_SZ];
 
     int     argc = ((func_args*)args)->argc;
@@ -1680,11 +1787,11 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
 
 #ifndef WOLFSSL_VXWORKS
     /* Not used: All used */
-    while ((ch = mygetopt(argc, argv, "?:"
-            "ab:c:defgh:i;jk:l:mnop:q:rstuv:wxyz"
+    while ((ch = mygetopt_long(argc, argv, "?:"
+            "ab:c:defgh:i;jk:l:mnop:q:rstu;v:wxyz"
             "A:B:CDE:F:GH:IJKL:M:NO:PQRS:TUVW:XYZ:"
-            "01:23:4568"
-            "@#")) != -1) {
+            "01:23:4567:89"
+            "@#", long_options, 0)) != -1) {
         switch (ch) {
             case '?' :
                 if(myoptarg!=NULL) {
@@ -1693,6 +1800,16 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
                         lng_index = 0;
                     }
                 }
+                Usage();
+                XEXIT_T(EXIT_SUCCESS);
+
+            case 257 :
+                lng_index = 0;
+                Usage();
+                XEXIT_T(EXIT_SUCCESS);
+
+            case 258 :
+                lng_index = 1;
                 Usage();
                 XEXIT_T(EXIT_SUCCESS);
 
@@ -1721,6 +1838,10 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
             case 'u' :
                 doDTLS = 1;
                 dtlsUDP = 1;
+            #if (defined(WOLFSSL_SCTP) || defined(WOLFSSL_DTLS_MTU)) && \
+                                                           defined(WOLFSSL_DTLS)
+                dtlsMTU = atoi(myoptarg);
+            #endif
                 break;
 
             case 'G' :
@@ -2146,7 +2267,13 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
                 nonBlocking = 1;
                 simulateWantWrite = 1;
                 break;
-
+            case '7' :
+                minVersion = atoi(myoptarg);
+                if (minVersion < 0 || minVersion > 4) {
+                    Usage();
+                    XEXIT_T(MY_EX_USAGE);
+                }
+                break;
             case '8' :
                 #ifdef HAVE_CURVE448
                     useX448 = 1;
@@ -2159,7 +2286,13 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
                     #endif
                 #endif
                 break;
-
+            case '9' :
+#if defined(OPENSSL_ALL) && defined(WOLFSSL_CERT_GEN) && \
+    (defined(WOLFSSL_CERT_REQ) || defined(WOLFSSL_CERT_EXT)) && \
+    !defined(NO_FILESYSTEM) && !defined(NO_WOLFSSL_DIR)
+                    useCertFolder = 1;
+#endif
+                    break;
             case '@' :
             {
 #ifdef HAVE_WC_INTROSPECTION
@@ -2193,6 +2326,14 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
                 XEXIT_T(MY_EX_USAGE);
 #endif
             }
+
+#ifdef WOLFSSL_WOLFSENTRY_HOOKS
+            case 256:
+#if !defined(NO_FILESYSTEM) && !defined(WOLFSENTRY_NO_JSON)
+                wolfsentry_config_path = myoptarg;
+#endif
+                break;
+#endif
 
             default:
                 Usage();
@@ -2414,20 +2555,41 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
         err_sys("unable to load static memory");
     }
 #else
-    ctx = wolfSSL_CTX_new(method(NULL));
-    if (ctx == NULL)
-        err_sys("unable to get ctx");
+    if (method != NULL) {
+        ctx = wolfSSL_CTX_new(method(NULL));
+        if (ctx == NULL)
+            err_sys("unable to get ctx");
+    }
 #endif
-
-    if (simulateWantWrite)
-    {
+    if (minVersion != CLIENT_INVALID_VERSION) {
+        wolfSSL_CTX_SetMinVersion(ctx, minVersion);
+    }
+    if (simulateWantWrite) {
+    #ifdef USE_WOLFSSL_IO
         wolfSSL_CTX_SetIOSend(ctx, SimulateWantWriteIOSendCb);
+    #endif
     }
 
 #ifdef SINGLE_THREADED
     if (wolfSSL_CTX_new_rng(ctx) != WOLFSSL_SUCCESS) {
         wolfSSL_CTX_free(ctx); ctx = NULL;
         err_sys("Single Threaded new rng at CTX failed");
+    }
+#endif
+
+
+
+#ifdef WOLFSSL_WOLFSENTRY_HOOKS
+    if (wolfsentry_setup(&wolfsentry, wolfsentry_config_path,
+                                     WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT) < 0) {
+        err_sys("unable to initialize wolfSentry");
+    }
+
+    if (wolfSSL_CTX_set_ConnectFilter(
+            ctx,
+            (NetworkFilterCallback_t)wolfSentry_NetworkFilterCallback,
+            wolfsentry) < 0) {
+        err_sys("unable to install wolfSentry_NetworkFilterCallback");
     }
 #endif
 
@@ -2453,6 +2615,11 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
 
     if (fewerPackets)
         wolfSSL_CTX_set_group_messages(ctx);
+#if (defined(WOLFSSL_SCTP) || defined(WOLFSSL_DTLS_MTU)) && \
+                                                           defined(WOLFSSL_DTLS)
+    if (dtlsMTU)
+        wolfSSL_CTX_dtls_set_mtu(ctx, dtlsMTU);
+#endif
 
 #ifndef NO_DH
     if (wolfSSL_CTX_SetMinDhKey_Sz(ctx, (word16)minDhKeyBits)
@@ -2466,9 +2633,13 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
         const char *defaultCipherList = cipherList;
 
         wolfSSL_CTX_set_psk_client_callback(ctx, my_psk_client_cb);
-    #ifdef WOLFSSL_TLS13
+#ifdef WOLFSSL_TLS13
+    #if !defined(WOLFSSL_PSK_TLS13_CB) && !defined(WOLFSSL_PSK_ONE_ID)
+        wolfSSL_CTX_set_psk_client_cs_callback(ctx, my_psk_client_cs_cb);
+    #else
         wolfSSL_CTX_set_psk_client_tls13_callback(ctx, my_psk_client_tls13_cb);
     #endif
+#endif
         if (defaultCipherList == NULL) {
         #if defined(HAVE_AESGCM) && !defined(NO_DH)
             #ifdef WOLFSSL_TLS13
@@ -2545,7 +2716,7 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
 
 #ifdef HAVE_OCSP
     if (useOcsp) {
-    #ifdef HAVE_IO_TIMEOUT
+    #if defined(HAVE_IO_TIMEOUT) && defined(HAVE_HTTP_CLIENT)
         wolfIO_SetTimeout(DEFAULT_TIMEOUT_SEC);
     #endif
 
@@ -2579,7 +2750,7 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
     #ifdef NO_FILESYSTEM
         if (wolfSSL_CTX_use_certificate_chain_buffer(ctx, client_cert_der_2048,
             sizeof_client_cert_der_2048) != WOLFSSL_SUCCESS)
-            err_sys("can't load server cert buffer");
+            err_sys("can't load client cert buffer");
     #elif !defined(TEST_LOAD_BUFFER)
         if (wolfSSL_CTX_use_certificate_chain_file(ctx, ourCert)
                                                            != WOLFSSL_SUCCESS) {
@@ -2603,7 +2774,7 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
     #ifdef NO_FILESYSTEM
         if (wolfSSL_CTX_use_PrivateKey_buffer(ctx, client_key_der_2048,
             sizeof_client_key_der_2048, SSL_FILETYPE_ASN1) != WOLFSSL_SUCCESS)
-            err_sys("can't load server private key buffer");
+            err_sys("can't load client private key buffer");
     #elif !defined(TEST_LOAD_BUFFER)
         if (wolfSSL_CTX_use_PrivateKey_file(ctx, ourKey, WOLFSSL_FILETYPE_PEM)
                                          != WOLFSSL_SUCCESS) {
@@ -2617,6 +2788,29 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
     }
 
     if (!usePsk && !useAnon && !useVerifyCb && myVerifyAction != VERIFY_FORCE_FAIL) {
+    #if defined(OPENSSL_ALL) && defined(WOLFSSL_CERT_GEN) && \
+    (defined(WOLFSSL_CERT_REQ) || defined(WOLFSSL_CERT_EXT)) && \
+    !defined(NO_FILESYSTEM) && !defined(NO_WOLFSSL_DIR)
+        if (useCertFolder) {
+            WOLFSSL_X509_STORE      *store;
+            WOLFSSL_X509_LOOKUP     *lookup;
+            
+            store = wolfSSL_CTX_get_cert_store(ctx);
+            if (store == NULL) {
+                wolfSSL_CTX_free(ctx); ctx = NULL;
+                err_sys("can't get WOLFSSL_X509_STORE");
+            }
+            lookup = wolfSSL_X509_STORE_add_lookup(store, X509_LOOKUP_hash_dir());
+            if (lookup == NULL) {
+                wolfSSL_CTX_free(ctx); ctx = NULL;
+                err_sys("can't add lookup");
+            }
+            if (wolfSSL_X509_LOOKUP_ctrl(lookup, WOLFSSL_X509_L_ADD_DIR, caCertFolder,
+                            X509_FILETYPE_PEM, NULL) != WOLFSSL_SUCCESS) {
+                err_sys("X509_LOOKUP_ctrl w/ L_ADD_DIR failed");
+            }
+        } else {
+    #endif
     #ifdef NO_FILESYSTEM
         if (wolfSSL_CTX_load_verify_buffer(ctx, ca_cert_der_2048,
             sizeof_ca_cert_der_2048, SSL_FILETYPE_ASN1) != WOLFSSL_SUCCESS) {
@@ -2664,6 +2858,11 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
             }
         }
     #endif /* WOLFSSL_TRUST_PEER_CERT && !NO_FILESYSTEM */
+    #if defined(OPENSSL_ALL) && defined(WOLFSSL_CERT_GEN) && \
+    (defined(WOLFSSL_CERT_REQ) || defined(WOLFSSL_CERT_EXT)) && \
+    !defined(NO_FILESYSTEM) && !defined(NO_WOLFSSL_DIR)
+    }
+    #endif
     }
     if (useVerifyCb || myVerifyAction == VERIFY_FORCE_FAIL ||
             myVerifyAction == VERIFY_USE_PREVERFIY) {
@@ -2682,12 +2881,12 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
     if (ret < 0) {
         printf("Async device open failed\nRunning without async\n");
     }
-    wolfSSL_CTX_UseAsync(ctx, devId);
+    wolfSSL_CTX_SetDevId(ctx, devId);
 #endif /* WOLFSSL_ASYNC_CRYPT */
 
 #ifdef HAVE_SNI
     if (sniHostName) {
-        if (wolfSSL_CTX_UseSNI(ctx, 0, sniHostName,
+        if (wolfSSL_CTX_UseSNI(ctx, WOLFSSL_SNI_HOST_NAME, sniHostName,
                     (word16) XSTRLEN(sniHostName)) != WOLFSSL_SUCCESS) {
             wolfSSL_CTX_free(ctx); ctx = NULL;
             err_sys("UseSNI failed");
@@ -2789,7 +2988,7 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
         ((func_args*)args)->return_code =
             ClientBenchmarkThroughput(ctx, host, port, dtlsUDP, dtlsSCTP,
                                       block, throughput, useX25519, useX448,
-                                      exitWithRet);
+                                      exitWithRet, version, onlyKeyShare);
         wolfSSL_CTX_free(ctx); ctx = NULL;
         if (!exitWithRet)
             XEXIT_T(EXIT_SUCCESS);
@@ -2842,6 +3041,13 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
         err_sys("unable to get SSL object");
     }
 
+#ifndef NO_PSK
+    if (usePsk) {
+    #if defined(OPENSSL_EXTRA) && defined(WOLFSSL_TLS13) && defined(TEST_PSK_USE_SESSION)
+        SSL_set_psk_use_session_callback(ssl, my_psk_use_session_cb);
+    #endif
+    }
+#endif
 
 #ifndef NO_CERTS
     if (useClientCert && loadCertKeyIntoSSLObj){
@@ -2899,43 +3105,7 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
 
 #if defined(WOLFSSL_TLS13) && defined(HAVE_SUPPORTED_CURVES)
     if (!helloRetry && version >= 4) {
-    #if defined(WOLFSSL_TLS13) && (!defined(NO_DH) || defined(HAVE_ECC) || \
-                             defined(HAVE_CURVE25519) || defined(HAVE_CURVE448))
-        if (onlyKeyShare == 0 || onlyKeyShare == 2) {
-        #ifdef HAVE_CURVE25519
-            if (useX25519) {
-                if (wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_X25519)
-                                                           != WOLFSSL_SUCCESS) {
-                    err_sys("unable to use curve x25519");
-                }
-            }
-        #endif
-        #ifdef HAVE_CURVE448
-            if (useX448) {
-                if (wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_X448)
-                                                           != WOLFSSL_SUCCESS) {
-                    err_sys("unable to use curve x448");
-                }
-            }
-        #endif
-        #ifdef HAVE_ECC
-            #if !defined(NO_ECC256) || defined(HAVE_ALL_CURVES)
-            if (wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_SECP256R1)
-                                                           != WOLFSSL_SUCCESS) {
-                err_sys("unable to use curve secp256r1");
-            }
-            #endif
-        #endif
-        }
-        if (onlyKeyShare == 0 || onlyKeyShare == 1) {
-        #ifdef HAVE_FFDHE_2048
-            if (wolfSSL_UseKeyShare(ssl, WOLFSSL_FFDHE_2048)
-                                                           != WOLFSSL_SUCCESS) {
-                err_sys("unable to use DH 2048-bit parameters");
-            }
-        #endif
-        }
-    #endif
+        SetKeyShare(ssl, onlyKeyShare, useX25519, useX448, 0);
     }
     else {
         wolfSSL_NoKeyShares(ssl);
@@ -3068,7 +3238,7 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
 
 #ifdef HAVE_CRL
     if (disableCRL == 0 && !useVerifyCb) {
-    #ifdef HAVE_IO_TIMEOUT
+    #if defined(HAVE_IO_TIMEOUT) && defined(HAVE_HTTP_CLIENT)
         wolfIO_SetTimeout(DEFAULT_TIMEOUT_SEC);
     #endif
 
@@ -3169,7 +3339,7 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
      * cipher name, or the requested cipher name is marked as an alias
      * that matches the established cipher.
      */
-    if (cipherList && (! XSTRSTR(cipherList, ":"))) {
+    if (cipherList && !useDefCipherList && (! XSTRSTR(cipherList, ":"))) {
         WOLFSSL_CIPHER* established_cipher = wolfSSL_get_current_cipher(ssl);
         byte requested_cipherSuite0, requested_cipherSuite;
         int requested_cipherFlags;
@@ -3225,7 +3395,7 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
 #endif
 #endif
 
-#ifdef OPENSSL_EXTRA
+#if defined(OPENSSL_EXTRA) || defined(HAVE_SECRET_CALLBACK)
     printf("Session timeout set to %ld seconds\n", wolfSSL_get_timeout(ssl));
     {
         byte*  rnd;
@@ -3261,8 +3431,14 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
         XFREE(rnd, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
     }
+#endif
 
-    #if defined(OPENSSL_ALL)
+#if defined(OPENSSL_ALL) || (defined(OPENSSL_EXTRA) && (defined(HAVE_STUNNEL) || \
+                             defined(WOLFSSL_NGINX) || defined(HAVE_LIGHTY) || \
+                             defined(WOLFSSL_HAPROXY) || defined(WOLFSSL_OPENSSH)))
+#if !defined(NO_SESSION_CACHE) && \
+    (defined(HAVE_SESSION_TICKET) || defined(SESSION_CERTS)) && \
+        !defined(NO_FILESYSTEM)
     #ifndef NO_BIO
     /* print out session to stdout */
     {
@@ -3270,13 +3446,13 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
         if (bio != NULL) {
             if (wolfSSL_SESSION_print(bio, wolfSSL_get_session(ssl)) !=
                     WOLFSSL_SUCCESS) {
-                wolfSSL_BIO_printf(bio, "ERROR: Unable to print out session\n");
+                wolfSSL_BIO_printf(bio, "BIO error printing session\n");
             }
         }
         wolfSSL_BIO_free(bio);
     }
-    #endif
-    #endif
+    #endif /* !NO_BIO */
+#endif
 #endif
 
     if (doSTARTTLS && starttlsProt != NULL) {
@@ -3761,6 +3937,15 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
     ((func_args*)args)->return_code = 0;
 
 exit:
+
+#ifdef WOLFSSL_WOLFSENTRY_HOOKS
+    wolfsentry_ret = wolfsentry_shutdown(&wolfsentry);
+    if (wolfsentry_ret < 0) {
+        fprintf(stderr,
+                "wolfsentry_shutdown() returned " WOLFSENTRY_ERROR_FMT "\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(wolfsentry_ret));
+    }
+#endif
 
 #ifdef WOLFSSL_ASYNC_CRYPT
     wolfAsync_DevClose(&devId);

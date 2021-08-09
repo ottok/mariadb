@@ -30,7 +30,7 @@
 #define CheckType(X,Y)
 #endif
 
-#if defined(__WIN__)
+#if defined(_WIN32)
 #define EL  "\r\n"
 #else
 #define EL  "\n"
@@ -83,7 +83,7 @@ BDOC::BDOC(PGLOBAL G) : BJSON(G, NULL)
 PBVAL BDOC::ParseJson(PGLOBAL g, char* js, size_t lng)
 {
   size_t i;
-  bool  b = false, ptyp = (bool *)pty;
+  bool  b = false;
   PBVAL bvp = NULL;
 
   s = js;
@@ -145,7 +145,7 @@ PBVAL BDOC::ParseJson(PGLOBAL g, char* js, size_t lng)
           b = false;
           break;
         } // endif b
-
+        /* fall through */
       default:
         if (bvp->Type != TYPE_UNKNOWN) {
           bvp->To_Val = ParseAsArray(i);
@@ -683,7 +683,7 @@ bool BDOC::SerializeArray(OFFSET arp, bool b)
   } else if (jp->WriteChr('['))
     return true;
 
-  for (vp; vp; vp = MVP(vp->Next)) {
+  for (; vp; vp = MVP(vp->Next)) {
     if (first)
       first = false;
     else if ((!b || jp->Prty()) && jp->WriteChr(','))
@@ -718,7 +718,7 @@ bool BDOC::SerializeObject(OFFSET obp)
   if (jp->WriteChr('{'))
     return true;
 
-  for (prp; prp; prp = GetNext(prp)) {
+  for (; prp; prp = GetNext(prp)) {
     if (first)
       first = false;
     else if (jp->WriteChr(','))
@@ -1205,15 +1205,14 @@ void BJSON::SetArrayValue(PBVAL bap, PBVAL nvp, int n)
   int   i = 0;
   PBVAL bvp = NULL;
 
-  if (bap->To_Val)
-    for (bvp = GetArray(bap); bvp; i++, bvp = GetNext(bvp))
-      if (i == n) {
-        SetValueVal(bvp, nvp);
-        return;
-      }
+  for (bvp = GetArray(bap); i < n; i++, bvp = bvp ? GetNext(bvp) : NULL)
+    if (!bvp)
+      AddArrayValue(bap, NewVal());
 
   if (!bvp)
     AddArrayValue(bap, MOF(nvp));
+  else
+    SetValueVal(bvp, nvp);
 
 } // end of SetValue
 

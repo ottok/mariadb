@@ -35,12 +35,6 @@ Created June 2005 by Marko Makela
 
 using st_::span;
 
-/** A BLOB field reference full of zero, for use in assertions and tests.
-Initially, BLOB field references are set to zero, in
-dtuple_convert_big_rec(). */
-alignas(UNIV_PAGE_SIZE_MIN)
-const byte field_ref_zero[UNIV_PAGE_SIZE_MAX] = { 0, };
-
 #ifndef UNIV_INNOCHECKSUM
 #include "mtr0log.h"
 #include "dict0dict.h"
@@ -92,16 +86,12 @@ static const byte supremum_extra_data alignas(4) [] = {
 };
 
 /** Assert that a block of memory is filled with zero bytes.
-Compare at most sizeof(field_ref_zero) bytes.
 @param b in: memory block
 @param s in: size of the memory block, in bytes */
-#define ASSERT_ZERO(b, s)			\
-	ut_ad(!memcmp(b, field_ref_zero,	\
-		      std::min<size_t>(s, sizeof field_ref_zero)));
+#define ASSERT_ZERO(b, s) ut_ad(!memcmp(b, field_ref_zero, s))
 /** Assert that a BLOB pointer is filled with zero bytes.
 @param b in: BLOB pointer */
-#define ASSERT_ZERO_BLOB(b) \
-	ut_ad(!memcmp(b, field_ref_zero, FIELD_REF_SIZE))
+#define ASSERT_ZERO_BLOB(b) ASSERT_ZERO(b, FIELD_REF_SIZE)
 
 /* Enable some extra debugging output.  This code can be enabled
 independently of any UNIV_ debugging conditions. */
@@ -4666,9 +4656,9 @@ bool page_zip_verify_checksum(const byte *data, size_t size)
 
 #ifdef UNIV_INNOCHECKSUM
 	if (log_file) {
-		fprintf(log_file, "page::%llu;"
-			" %s checksum: calculated = %u;"
-			" recorded = %u\n", cur_page_num,
+		fprintf(log_file, "page::" UINT32PF ";"
+			" %s checksum: calculated = " UINT32PF ";"
+			" recorded = " UINT32PF "\n", cur_page_num,
 			buf_checksum_algorithm_name(
 				static_cast<srv_checksum_algorithm_t>(
 				srv_checksum_algorithm)),
@@ -4680,11 +4670,11 @@ bool page_zip_verify_checksum(const byte *data, size_t size)
 			data, size, SRV_CHECKSUM_ALGORITHM_CRC32);
 
 		if (log_file) {
-			fprintf(log_file, "page::%llu: crc32 checksum:"
-				" calculated = %u; recorded = %u\n",
+			fprintf(log_file, "page::" UINT32PF ": crc32 checksum:"
+				" calculated = " UINT32PF "; recorded = " UINT32PF "\n",
 				cur_page_num, crc32, stored);
-			fprintf(log_file, "page::%llu: none checksum:"
-				" calculated = %lu; recorded = %u\n",
+			fprintf(log_file, "page::" UINT32PF ": none checksum:"
+				" calculated = %lu; recorded = " UINT32PF "\n",
 				cur_page_num, BUF_NO_CHECKSUM_MAGIC, stored);
 		}
 	}

@@ -66,6 +66,7 @@ check_result(){
 run_renewcerts(){
     cd certs/ || { echo "Couldn't cd to certs directory"; exit 1; }
     echo ""
+
     #move the custom cnf into our working directory
     cp renewcerts/wolfssl.cnf wolfssl.cnf || exit 1
 
@@ -211,6 +212,20 @@ run_renewcerts(){
     openssl x509 -in ca-cert.pem -text > tmp.pem
     check_result $? "Step 3"
     mv tmp.pem ca-cert.pem
+    echo "End of section"
+    echo "---------------------------------------------------------------------"
+    ############################################################
+    ########## update the self-signed ca-cert-chain.der ########
+    ############################################################
+    echo "Updating ca-cert-chain.der"
+    echo ""
+    #pipe the following arguments to openssl req...
+    echo -e  "US\\nMontana\\nBozeman\\nSawtooth\\nConsulting\\nwww.wolfssl.com\\ninfo@wolfssl.com\\n.\\n.\\n" | openssl req -new -key 1024/ca-key.pem -config ./wolfssl.cnf -nodes -out ca-cert.csr
+    check_result $? "Step 1"
+
+    openssl x509 -req -in ca-cert.csr -days 1000 -extfile wolfssl.cnf -extensions wolfssl_opts -signkey 1024/ca-key.pem -outform DER -out ca-cert-chain.der
+    check_result $? "Step 2"
+    rm ca-cert.csr
     echo "End of section"
     echo "---------------------------------------------------------------------"
     ############################################################
@@ -573,6 +588,28 @@ run_renewcerts(){
     echo "End of section"
     echo "---------------------------------------------------------------------"
     ############################################################
+    ###### calling gen-testcerts.sh           ##################
+    ############################################################
+    echo "Calling gen-testcerts.sh"
+    echo ""
+    cd ./test || { echo "Failed to switch to dir ./test"; exit 1; }
+    ./gen-testcerts.sh
+    check_result $? "gen-testcerts.sh"
+    cd ../ || exit 1
+    echo "End of section"
+    echo "---------------------------------------------------------------------"
+    ############################################################
+    ###### generate cms bundles in test directory ##############
+    ############################################################
+    echo "Generating CMS bundle"
+    echo ""
+    cd ./test || { echo "Failed to switch to dir ./test"; exit 1; }
+    echo "test" | openssl cms -encrypt -binary -keyid -out ktri-keyid-cms.msg -outform der -recip ../client-cert.pem -nocerts
+    check_result $? "generate ktri-keyid-cms.msg"
+    cd ../ || exit 1
+    echo "End of section"
+    echo "---------------------------------------------------------------------"
+    ############################################################
     ########## generate ocsp certs        ######################
     ############################################################
     echo "Changing directory to ocsp..."
@@ -676,8 +713,6 @@ then
 
     #run the function to renew the certs
     run_renewcerts
-    # run_renewcerts will end in the wolfssl/certs/crl dir, backup to root.
-    cd ../ || exit 1
     CURRDIR=${PWD##*/}
     if [ "$CURRDIR" = "certs" ]; then
         cd ../ || exit 1
@@ -786,8 +821,6 @@ else
     # if now defined
     if grep HAVE_NTRU "wolfssl/options.h"; then
         run_renewcerts
-        #run_renewcerts leaves us in wolfssl/certs/crl, backup to root
-        cd ../ || exit 1
         CURRDIR=${PWD##*/}
         if [ "$CURRDIR" = "certs" ]; then
             cd ../ || exit 1

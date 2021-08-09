@@ -2264,11 +2264,10 @@ bool dispatch_command(enum enum_server_command command, THD *thd,
     size_t length=
 #endif
     my_snprintf(buff, buff_len - 1,
-                        "Uptime: %lu  Threads: %d  Questions: %lu  "
+                        "Uptime: %lu  Threads: %u  Questions: %lu  "
                         "Slow queries: %lu  Opens: %lu  "
                         "Open tables: %u  Queries per second avg: %u.%03u",
-                        uptime,
-                        (int) thread_count, (ulong) thd->query_id,
+                        uptime, THD_count::value(), (ulong) thd->query_id,
                         current_global_status_var->long_query_count,
                         current_global_status_var->opened_tables,
                         tc_records(),
@@ -2356,7 +2355,7 @@ bool dispatch_command(enum enum_server_command command, THD *thd,
       size_t next_length_length= packet_start - packet;
       unsigned char *readbuff= net->buff;
 
-      if (net_allocate_new_packet(net, thd, MYF(0)))
+      if (net_allocate_new_packet(net, thd, MYF(MY_THREAD_SPECIFIC)))
         break;
 
       PSI_statement_locker *save_locker= thd->m_statement_psi;
@@ -3593,9 +3592,6 @@ mysql_execute_command(THD *thd)
     if (all_tables)
       thd->get_stmt_da()->opt_clear_warning_info(thd->query_id);
   }
-
-  if (check_dependencies_in_with_clauses(thd->lex->with_clauses_list))
-    DBUG_RETURN(1);
 
 #ifdef HAVE_REPLICATION
   if (unlikely(thd->slave_thread))
@@ -5729,6 +5725,11 @@ mysql_execute_command(THD *thd)
     /* Begin transaction with the same isolation level. */
     if (tx_chain)
     {
+#ifdef WITH_WSREP
+      /* If there are pending changes after rollback we should clear them */
+      if (wsrep_on(thd) && wsrep_has_changes(thd))
+        wsrep_after_statement(thd);
+#endif
       if (trans_begin(thd))
         goto error;
     }
@@ -8291,7 +8292,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
     ptr->is_fqtn= TRUE;
     ptr->db= table->db;
   }
-  else if (lex->copy_db_to(&ptr->db))
+  else if (!lex->with_cte_resolution && lex->copy_db_to(&ptr->db))
     DBUG_RETURN(0);
   else
     ptr->is_fqtn= FALSE;
@@ -8306,9 +8307,11 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
     if (ptr->db.length && ptr->db.str != any_db)
       ptr->db.length= my_casedn_str(files_charset_info, (char*) ptr->db.str);
   }
-      
+
   ptr->table_name= table->table;
-  ptr->lock_type=   lock_type;
+  ptr->lock_type= lock_type;
+  ptr->mdl_type= mdl_type;
+  ptr->table_options= table_options;
   ptr->updating=    MY_TEST(table_options & TL_OPTION_UPDATING);
   /* TODO: remove TL_OPTION_FORCE_INDEX as it looks like it's not used */
   ptr->force_index= MY_TEST(table_options & TL_OPTION_FORCE_INDEX);
@@ -8989,8 +8992,10 @@ void st_select_lex::set_lock_for_tables(thr_lock_type lock_type, bool for_update
   {
     tables->lock_type= lock_type;
     tables->updating=  for_update;
-    tables->mdl_request.set_type((lock_type >= TL_WRITE_ALLOW_WRITE) ?
-                                 MDL_SHARED_WRITE : MDL_SHARED_READ);
+
+    if (tables->db.length)
+      tables->mdl_request.set_type((lock_type >= TL_WRITE_ALLOW_WRITE) ?
+                                   MDL_SHARED_WRITE : MDL_SHARED_READ);
   }
   DBUG_VOID_RETURN;
 }
@@ -10373,8 +10378,8 @@ bool check_host_name(LEX_CSTRING *str)
 }
 
 
-extern int MYSQLparse(THD *thd); // from sql_yacc.cc
-extern int ORAparse(THD *thd);   // from sql_yacc_ora.cc
+extern int MYSQLparse(THD *thd); // from yy_mariadb.cc
+extern int ORAparse(THD *thd);   // from yy_oracle.cc
 
 
 /**

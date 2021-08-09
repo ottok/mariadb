@@ -1,6 +1,6 @@
 /* sniffer.c
  *
- * Copyright (C) 2006-2020 wolfSSL Inc.
+ * Copyright (C) 2006-2021 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -25,6 +25,42 @@
 #endif
 
 #include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/wc_port.h>
+
+/* xctime */
+#ifndef XCTIME
+   #define XCTIME ctime
+#endif
+
+/* only in this file, to avoid confusing future ports leave
+ * these defines here. Do not move to wc_port.h */
+#ifdef USER_CUSTOM_SNIFFX
+    /* To be implemented in user_settings.h */
+#elif defined(FUSION_RTOS)
+    #include <fcl_network.h>
+    #define XINET_NTOA FNS_INET_NTOA
+    #define XINET_ATON FNS_INET_ATON
+    #define XINET_PTON(a,b,c,d) FNS_INET_PTON((a),(b),(c),(d),NULL)
+    #define XINET_NTOP(a,b,c,d) FNS_INET_NTOP((a),(b),(c),(d),NULL)
+    #define XINET_ADDR FNS_INET_ADDR
+    #define XHTONS FNS_HTONS
+    #define XNTOHS FNS_NTOHS
+    #define XHTONL FNS_HTONL
+    #define XNTOHL FNS_NTOHL
+    #define XINADDR_NONE FNS_INADDR_NONE
+#else
+    /* default */
+    #define XINET_NTOA inet_ntoa
+    #define XINET_ATON inet_aton
+    #define XINET_PTON(a,b,c) inet_pton((a),(b),(c))
+    #define XINET_NTOP inet_ntop
+    #define XINET_ADDR inet_addr
+    #define XHTONS htons
+    #define XNTOHS ntohs
+    #define XHTONL htonl
+    #define XNTOHL ntohl
+    #define XINADDR_NONE INADDR_NONE
+#endif
 
 #if !defined(WOLFCRYPT_ONLY) && !defined(NO_FILESYSTEM)
 #ifdef WOLFSSL_SNIFFER
@@ -32,10 +68,17 @@
 #include <assert.h>
 #include <time.h>
 
-#ifndef _WIN32
-  #include <arpa/inet.h>
+#ifdef FUSION_RTOS
+    #include <fns_inet.h>
+    #ifdef TCP_PROTOCOL
+        #undef TCP_PROTOCOL
+    #endif
 #else
-  #include <WS2tcpip.h>
+    #ifndef _WIN32
+        #include <arpa/inet.h>
+    #else
+        #include <WS2tcpip.h>
+    #endif
 #endif
 
 #ifdef _WIN32
@@ -95,7 +138,7 @@ enum {
     EXT_TYPE_SZ        = 2,   /* Extension type length */
     MAX_INPUT_SZ       = MAX_RECORD_SIZE + COMP_EXTRA + MAX_MSG_EXTRA +
                          MTU_EXTRA,  /* Max input sz of reassembly */
-    
+
     /* TLS Extensions */
     EXT_SERVER_NAME                = 0x0000, /* a.k.a. SNI  */
     EXT_MAX_FRAGMENT_LENGTH        = 0x0001,
@@ -160,7 +203,7 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 
 
 static WOLFSSL_GLOBAL int TraceOn = 0;         /* Trace is off by default */
-static WOLFSSL_GLOBAL FILE* TraceFile = 0;
+static WOLFSSL_GLOBAL XFILE TraceFile = 0;
 
 
 /* windows uses .rc table for this */
@@ -716,7 +759,7 @@ void ssl_FreeSniffer(void)
 
     if (TraceFile) {
         TraceOn = 0;
-        fclose(TraceFile);
+        XFCLOSE(TraceFile);
         TraceFile = NULL;
     }
 
@@ -955,9 +998,9 @@ static void Trace(int idx)
     if (TraceOn) {
         char myBuffer[MAX_ERROR_LEN];
         GetError(idx, myBuffer);
-        fprintf(TraceFile, "\t%s\n", myBuffer);
+        XFPRINTF(TraceFile, "\t%s\n", myBuffer);
 #ifdef DEBUG_SNIFFER
-        fprintf(stderr,    "\t%s\n", myBuffer);
+        XFPRINTF(stderr,    "\t%s\n", myBuffer);
 #endif
     }
 }
@@ -967,8 +1010,8 @@ static void Trace(int idx)
 static void TraceHeader(void)
 {
     if (TraceOn) {
-        time_t ticks = time(NULL);
-        fprintf(TraceFile, "\n%s", ctime(&ticks));
+        time_t ticks = XTIME(NULL);
+        XFPRINTF(TraceFile, "\n%s", XCTIME(&ticks));
     }
 }
 
@@ -977,8 +1020,8 @@ static void TraceHeader(void)
 static void TraceSetServer(const char* srv, int port, const char* keyFile)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tTrying to install a new Sniffer Server with\n");
-        fprintf(TraceFile, "\tserver: %s, port: %d, keyFile: %s\n", srv, port,
+        XFPRINTF(TraceFile, "\tTrying to install a new Sniffer Server with\n");
+        XFPRINTF(TraceFile, "\tserver: %s, port: %d, keyFile: %s\n", srv, port,
                                                                     keyFile);
     }
 }
@@ -991,8 +1034,8 @@ static void TraceSetNamedServer(const char* name,
                                  const char* srv, int port, const char* keyFile)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tTrying to install a new Sniffer Server with\n");
-        fprintf(TraceFile, "\tname: %s, server: %s, port: %d, keyFile: %s\n",
+        XFPRINTF(TraceFile, "\tTrying to install a new Sniffer Server with\n");
+        XFPRINTF(TraceFile, "\tname: %s, server: %s, port: %d, keyFile: %s\n",
 		name ? name : "",
 		srv ? srv : "",
 		port,
@@ -1008,7 +1051,7 @@ static void TracePacket(void)
 {
     if (TraceOn) {
         static word32 packetNumber = 0;
-        fprintf(TraceFile, "\tGot a Packet to decode, packet %u\n",
+        XFPRINTF(TraceFile, "\tGot a Packet to decode, packet %u\n",
                 ++packetNumber);
     }
 }
@@ -1017,7 +1060,7 @@ static void TracePacket(void)
 /* Convert network byte order address into human readable */
 static const char* IpToS(int version, void* src, char* dst)
 {
-    return inet_ntop(version, src, dst, TRACE_MSG_SZ);
+    return XINET_NTOP(version, src, dst, TRACE_MSG_SZ);
 }
 
 
@@ -1027,7 +1070,7 @@ static void TraceIP(IpHdr* iphdr)
     if (TraceOn) {
         char src[TRACE_MSG_SZ];
         char dst[TRACE_MSG_SZ];
-        fprintf(TraceFile, "\tdst:%s src:%s\n",
+        XFPRINTF(TraceFile, "\tdst:%s src:%s\n",
                 IpToS(AF_INET, &iphdr->dst, dst),
                 IpToS(AF_INET, &iphdr->src, src));
     }
@@ -1040,7 +1083,7 @@ static void TraceIP6(Ip6Hdr* iphdr)
     if (TraceOn) {
         char src[TRACE_MSG_SZ];
         char dst[TRACE_MSG_SZ];
-        fprintf(TraceFile, "\tdst: %s src: %s\n",
+        XFPRINTF(TraceFile, "\tdst: %s src: %s\n",
                 IpToS(AF_INET6, iphdr->dst, dst),
                 IpToS(AF_INET6, iphdr->src, src));
     }
@@ -1051,8 +1094,8 @@ static void TraceIP6(Ip6Hdr* iphdr)
 static void TraceTcp(TcpHdr* tcphdr)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tdstPort:%u srcPort:%u\n", ntohs(tcphdr->dstPort),
-                ntohs(tcphdr->srcPort));
+        XFPRINTF(TraceFile, "\tdstPort:%u srcPort:%u\n", XNTOHS(tcphdr->dstPort),
+                XNTOHS(tcphdr->srcPort));
     }
 }
 
@@ -1061,7 +1104,7 @@ static void TraceTcp(TcpHdr* tcphdr)
 static void TraceSequence(word32 seq, int len)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tSequence:%u, payload length:%d\n", seq, len);
+        XFPRINTF(TraceFile, "\tSequence:%u, payload length:%d\n", seq, len);
     }
 }
 
@@ -1070,7 +1113,7 @@ static void TraceSequence(word32 seq, int len)
 static void TraceAck(word32 ack, word32 expected)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tAck:%u Expected:%u\n", ack, expected);
+        XFPRINTF(TraceFile, "\tAck:%u Expected:%u\n", ack, expected);
     }
 }
 
@@ -1079,7 +1122,7 @@ static void TraceAck(word32 ack, word32 expected)
 static void TraceRelativeSequence(word32 expected, word32 got)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tExpected sequence:%u, received sequence:%u\n",
+        XFPRINTF(TraceFile, "\tExpected sequence:%u, received sequence:%u\n",
                 expected, got);
     }
 }
@@ -1089,7 +1132,7 @@ static void TraceRelativeSequence(word32 expected, word32 got)
 static void TraceServerSyn(word32 seq)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tServer SYN, Sequence Start:%u\n", seq);
+        XFPRINTF(TraceFile, "\tServer SYN, Sequence Start:%u\n", seq);
     }
 }
 
@@ -1098,7 +1141,7 @@ static void TraceServerSyn(word32 seq)
 static void TraceClientSyn(word32 seq)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tClient SYN, Sequence Start:%u\n", seq);
+        XFPRINTF(TraceFile, "\tClient SYN, Sequence Start:%u\n", seq);
     }
 }
 
@@ -1107,7 +1150,7 @@ static void TraceClientSyn(word32 seq)
 static void TraceClientFin(word32 finSeq, word32 relSeq)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tClient FIN capture:%u, current SEQ:%u\n",
+        XFPRINTF(TraceFile, "\tClient FIN capture:%u, current SEQ:%u\n",
                 finSeq, relSeq);
     }
 }
@@ -1117,7 +1160,7 @@ static void TraceClientFin(word32 finSeq, word32 relSeq)
 static void TraceServerFin(word32 finSeq, word32 relSeq)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tServer FIN capture:%u, current SEQ:%u\n",
+        XFPRINTF(TraceFile, "\tServer FIN capture:%u, current SEQ:%u\n",
                 finSeq, relSeq);
     }
 }
@@ -1127,7 +1170,7 @@ static void TraceServerFin(word32 finSeq, word32 relSeq)
 static void TraceGotData(int bytes)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\t%d bytes of SSL App data processed\n", bytes);
+        XFPRINTF(TraceFile, "\t%d bytes of SSL App data processed\n", bytes);
     }
 }
 
@@ -1136,7 +1179,7 @@ static void TraceGotData(int bytes)
 static void TraceAddedData(int newBytes, int existingBytes)
 {
     if (TraceOn) {
-        fprintf(TraceFile,
+        XFPRINTF(TraceFile,
                 "\t%d bytes added to %d existing bytes in User Buffer\n",
                 newBytes, existingBytes);
     }
@@ -1147,7 +1190,7 @@ static void TraceAddedData(int newBytes, int existingBytes)
 static void TraceStaleSession(void)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tFound a stale session\n");
+        XFPRINTF(TraceFile, "\tFound a stale session\n");
     }
 }
 
@@ -1156,7 +1199,7 @@ static void TraceStaleSession(void)
 static void TraceFindingStale(void)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tTrying to find Stale Sessions\n");
+        XFPRINTF(TraceFile, "\tTrying to find Stale Sessions\n");
     }
 }
 
@@ -1165,7 +1208,7 @@ static void TraceFindingStale(void)
 static void TraceRemovedSession(void)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tRemoved it\n");
+        XFPRINTF(TraceFile, "\tRemoved it\n");
     }
 }
 
@@ -1175,7 +1218,7 @@ static void TraceSessionInfo(SSLInfo* sslInfo)
 {
     if (TraceOn) {
         if (sslInfo != NULL && sslInfo->isValid) {
-            fprintf(TraceFile,
+            XFPRINTF(TraceFile,
                     "\tver:(%u %u) suiteId:(%02x %02x) suiteName:(%s) "
                     #ifdef HAVE_SNI
                     "sni:(%s) "
@@ -1201,7 +1244,7 @@ static void TraceSessionInfo(SSLInfo* sslInfo)
 static void TraceStat(const char* name, int add)
 {
     if (TraceOn) {
-        fprintf(TraceFile, "\tAdding %d to %s\n", add, name);
+        XFPRINTF(TraceFile, "\tAdding %d to %s\n", add, name);
     }
 }
 
@@ -1368,7 +1411,7 @@ static word32 SessionHash(IpInfo* ipInfo, TcpInfo* tcpInfo)
 static SnifferSession* GetSnifferSession(IpInfo* ipInfo, TcpInfo* tcpInfo)
 {
     SnifferSession* session;
-    time_t          currTime = time(NULL);
+    time_t          currTime = XTIME(NULL);
     word32          row = SessionHash(ipInfo, tcpInfo);
 
     assert(row <= HASH_SIZE);
@@ -1581,9 +1624,14 @@ static int SetNamedPrivateKey(const char* name, const char* address, int port,
 #endif
 
     serverIp.version = IPV4;
-    serverIp.ip4 = inet_addr(address);
-    if (serverIp.ip4 == INADDR_NONE) {
-        if (inet_pton(AF_INET6, address, serverIp.ip6) == 1) {
+    serverIp.ip4 = XINET_ADDR(address);
+    if (serverIp.ip4 == XINADDR_NONE) {
+    #ifdef FUSION_RTOS
+        if (XINET_PTON(AF_INET6, address, serverIp.ip6,
+                       sizeof(serverIp.ip4)) == 1) {
+    #else
+        if (XINET_PTON(AF_INET6, address, serverIp.ip6) == 1) {
+    #endif
             serverIp.version = IPV6;
         }
     }
@@ -1636,7 +1684,7 @@ static int SetNamedPrivateKey(const char* name, const char* address, int port,
             /* auto detect key type with WC_PK_TYPE_NONE */
             /* keySz == 0 mean load file */
             ret = wolfSSL_CTX_set_ephemeral_key(sniffer->ctx, WC_PK_TYPE_NONE, 
-                keyFile, 0, type);
+                keyFile, keySz, type);
             if (ret == 0)
                 ret = WOLFSSL_SUCCESS;
         }
@@ -1896,7 +1944,7 @@ static int CheckIp6Hdr(Ip6Hdr* iphdr, IpInfo* info, int length, char* error)
 #endif
 
     info->length = exthdrsz;
-    info->total = ntohs(iphdr->length) + info->length;
+    info->total = XNTOHS(iphdr->length) + info->length;
     /* IPv6 doesn't include its own header size in the length like v4. */
     info->src.version = IPV6;
     XMEMCPY(info->src.ip6, iphdr->src, sizeof(info->src.ip6));
@@ -1938,7 +1986,7 @@ static int CheckIpHdr(IpHdr* iphdr, IpInfo* info, int length, char* error)
 #endif
 
     info->length  = IP_HL(iphdr);
-    info->total   = ntohs(iphdr->length);
+    info->total   = XNTOHS(iphdr->length);
     info->src.version = IPV4;
     info->src.ip4 = iphdr->src;
     info->dst.version = IPV4;
@@ -1957,16 +2005,16 @@ static int CheckTcpHdr(TcpHdr* tcphdr, TcpInfo* info, char* error)
 {
     TraceTcp(tcphdr);
     Trace(TCP_CHECK_STR);
-    info->srcPort   = ntohs(tcphdr->srcPort);
-    info->dstPort   = ntohs(tcphdr->dstPort);
+    info->srcPort   = XNTOHS(tcphdr->srcPort);
+    info->dstPort   = XNTOHS(tcphdr->dstPort);
     info->length    = TCP_LEN(tcphdr);
-    info->sequence  = ntohl(tcphdr->sequence);
+    info->sequence  = XNTOHL(tcphdr->sequence);
     info->fin       = tcphdr->flags & TCP_FIN;
     info->rst       = tcphdr->flags & TCP_RST;
     info->syn       = tcphdr->flags & TCP_SYN;
     info->ack       = tcphdr->flags & TCP_ACK;
     if (info->ack)
-        info->ackNumber = ntohl(tcphdr->ack);
+        info->ackNumber = XNTOHL(tcphdr->ack);
 
 #ifndef WOLFSSL_SNIFFER_WATCH
     if (!IsPortRegistered(info->srcPort) && !IsPortRegistered(info->dstPort)) {
@@ -2111,6 +2159,8 @@ static int SetupKeys(const byte* input, int* sslBytes, SnifferSession* session,
                 /* If we can do ECC, this isn't fatal. Not loading an ECC
                     * key will be fatal, though. */
                 SetError(RSA_DECODE_STR, error, session, 0);
+                if (keys->ecKey == NULL)
+                    keys->ecKey = session->sslServer->buffers.key; /* try ECC */
             #endif
             }
         #ifdef HAVE_ECC
@@ -2230,7 +2280,7 @@ static int SetupKeys(const byte* input, int* sslBytes, SnifferSession* session,
             /* Derive secret from private key and peer's public key */
             do {
             #ifdef WOLFSSL_ASYNC_CRYPT
-                ret = wc_AsyncWait(ret, &dhPriv.asyncDev,
+                ret = wc_AsyncWait(ret, &dhKey.asyncDev,
                         WC_ASYNC_FLAG_CALL_AGAIN);
             #endif
                 if (ret >= 0) {
@@ -4008,7 +4058,7 @@ static void RemoveStaleSessions(void)
         session = SessionTable[i];
         while (session) {
             SnifferSession* next = session->next;
-            if (time(NULL) >= session->lastUsed + WOLFSSL_SNIFFER_TIMEOUT) {
+            if (XTIME(NULL) >= session->lastUsed + WOLFSSL_SNIFFER_TIMEOUT) {
                 TraceStaleSession();
                 RemoveSession(session, NULL, NULL, i);
             }
@@ -4057,7 +4107,7 @@ static SnifferSession* CreateSession(IpInfo* ipInfo, TcpInfo* tcpInfo,
     session->cliPort = (word16)tcpInfo->srcPort;
     session->cliSeqStart = tcpInfo->sequence;
     session->cliExpected = 1;  /* relative */
-    session->lastUsed= time(NULL);
+    session->lastUsed= XTIME(NULL);
     session->keySz = 0;
 #ifdef HAVE_SNI
     session->sni = NULL;
@@ -4778,7 +4828,7 @@ static int CheckPreRecord(IpInfo* ipInfo, TcpInfo* tcpInfo,
     word32 length;
     WOLFSSL* ssl = ((*session)->flags.side == WOLFSSL_SERVER_END) ?
                                   (*session)->sslServer : (*session)->sslClient;
-    byte  skipPartial = ((*session)->flags.side == WOLFSSL_SERVER_END) ?
+    byte skipPartial = ((*session)->flags.side == WOLFSSL_SERVER_END) ?
                         (*session)->flags.srvSkipPartial :
                         (*session)->flags.cliSkipPartial;
     /* remove SnifferSession on 2nd FIN or RST */
@@ -4815,7 +4865,8 @@ static int CheckPreRecord(IpInfo* ipInfo, TcpInfo* tcpInfo,
 
     /* if current partial data, add to end of partial */
     /* if skipping, the data is already at the end of partial */
-    if ( !skipPartial && (length = ssl->buffers.inputBuffer.length) ) {
+    length = ssl->buffers.inputBuffer.length;
+    if ( !skipPartial && length ) {
         Trace(PARTIAL_ADD_STR);
 
         if ( (*sslBytes + length) > ssl->buffers.inputBuffer.bufferSize) {
@@ -4832,46 +4883,46 @@ static int CheckPreRecord(IpInfo* ipInfo, TcpInfo* tcpInfo,
             *sslFrame = ssl->buffers.inputBuffer.buffer;
             *end = *sslFrame + *sslBytes;
         }
-    }
 
-    if (vChain != NULL) {
-#ifdef WOLFSSL_SNIFFER_CHAIN_INPUT
-        struct iovec* chain = (struct iovec*)vChain;
-        word32 i, offset, headerSz, qty, remainder;
+        if (vChain != NULL) {
+    #ifdef WOLFSSL_SNIFFER_CHAIN_INPUT
+            struct iovec* chain = (struct iovec*)vChain;
+            word32 i, offset, headerSz, qty, remainder;
 
-        Trace(CHAIN_INPUT_STR);
-        headerSz = (word32)((const byte*)*sslFrame - (const byte*)chain[0].iov_base);
-        remainder = *sslBytes;
+            Trace(CHAIN_INPUT_STR);
+            headerSz = (word32)((const byte*)*sslFrame - (const byte*)chain[0].iov_base);
+            remainder = *sslBytes;
 
-        if ( (*sslBytes + length) > ssl->buffers.inputBuffer.bufferSize) {
-            if (GrowInputBuffer(ssl, *sslBytes, length) < 0) {
-                SetError(MEMORY_STR, error, *session, FATAL_ERROR_STATE);
-                return -1;
+            if ( (*sslBytes + length) > ssl->buffers.inputBuffer.bufferSize) {
+                if (GrowInputBuffer(ssl, *sslBytes, length) < 0) {
+                    SetError(MEMORY_STR, error, *session, FATAL_ERROR_STATE);
+                    return -1;
+                }
             }
+
+            qty = min(*sslBytes, (word32)chain[0].iov_len - headerSz);
+            XMEMCPY(&ssl->buffers.inputBuffer.buffer[length],
+                (byte*)chain[0].iov_base + headerSz, qty);
+            offset = length;
+            for (i = 1; i < chainSz; i++) {
+                offset += qty;
+                remainder -= qty;
+
+                if (chain[i].iov_len > remainder)
+                    qty = remainder;
+                else
+                    qty = (word32)chain[i].iov_len;
+                XMEMCPY(ssl->buffers.inputBuffer.buffer + offset,
+                        chain[i].iov_base, qty);
+            }
+
+            *sslBytes += length;
+            ssl->buffers.inputBuffer.length = *sslBytes;
+            *sslFrame = ssl->buffers.inputBuffer.buffer;
+            *end = *sslFrame + *sslBytes;
+    #endif
+            (void)chainSz;
         }
-
-        qty = min(*sslBytes, (word32)chain[0].iov_len - headerSz);
-        XMEMCPY(&ssl->buffers.inputBuffer.buffer[length],
-               (byte*)chain[0].iov_base + headerSz, qty);
-        offset = length;
-        for (i = 1; i < chainSz; i++) {
-            offset += qty;
-            remainder -= qty;
-
-            if (chain[i].iov_len > remainder)
-                qty = remainder;
-            else
-                qty = (word32)chain[i].iov_len;
-            XMEMCPY(ssl->buffers.inputBuffer.buffer + offset,
-                    chain[i].iov_base, qty);
-        }
-
-        *sslBytes += length;
-        ssl->buffers.inputBuffer.length = *sslBytes;
-        *sslFrame = ssl->buffers.inputBuffer.buffer;
-        *end = *sslFrame + *sslBytes;
-#endif
-        (void)chainSz;
     }
 
     if ((*session)->flags.clientHello == 0 && **sslFrame != handshake) {
@@ -5284,7 +5335,10 @@ static int RemoveFatalSession(IpInfo* ipInfo, TcpInfo* tcpInfo,
 
 
 /* Passes in an IP/TCP packet for decoding (ethernet/localhost frame) removed */
-/* returns Number of bytes on success, 0 for no data yet, and -1 on error */
+/* returns Number of bytes on success, 0 for no data yet, and
+ * WOLFSSL_SNIFFER_ERROR on error and WOLFSSL_SNIFFER_FATAL_ERROR on fatal state
+ * error
+ */
 static int ssl_DecodePacketInternal(const byte* packet, int length,
                                     void* vChain, word32 chainSz,
                                     byte** data, SSLInfo* sslInfo,
@@ -5312,13 +5366,14 @@ static int ssl_DecodePacketInternal(const byte* packet, int length,
 
     if (CheckHeaders(&ipInfo, &tcpInfo, packet, length, &sslFrame, &sslBytes,
                      error) != 0)
-        return -1;
+        return WOLFSSL_SNIFFER_ERROR;
 
     end = sslFrame + sslBytes;
 
     ret = CheckSession(&ipInfo, &tcpInfo, sslBytes, &session, error);
-    if (RemoveFatalSession(&ipInfo, &tcpInfo, session, error)) return -1;
-    else if (ret == -1) return -1;
+    if (RemoveFatalSession(&ipInfo, &tcpInfo, session, error))
+        return WOLFSSL_SNIFFER_FATAL_ERROR;
+    else if (ret == -1) return WOLFSSL_SNIFFER_ERROR;
     else if (ret ==  1) {
 #ifdef WOLFSSL_SNIFFER_STATS
         if (sslBytes > 0) {
@@ -5334,8 +5389,9 @@ static int ssl_DecodePacketInternal(const byte* packet, int length,
     }
 
     ret = CheckSequence(&ipInfo, &tcpInfo, session, &sslBytes, &sslFrame,error);
-    if (RemoveFatalSession(&ipInfo, &tcpInfo, session, error)) return -1;
-    else if (ret == -1) return -1;
+    if (RemoveFatalSession(&ipInfo, &tcpInfo, session, error))
+        return WOLFSSL_SNIFFER_FATAL_ERROR;
+    else if (ret == -1) return WOLFSSL_SNIFFER_ERROR;
     else if (ret ==  1) {
 #ifdef WOLFSSL_SNIFFER_STATS
         INC_STAT(SnifferStats.sslDecryptedPackets);
@@ -5345,8 +5401,9 @@ static int ssl_DecodePacketInternal(const byte* packet, int length,
 
     ret = CheckPreRecord(&ipInfo, &tcpInfo, &sslFrame, &session, &sslBytes,
                          &end, vChain, chainSz, error);
-    if (RemoveFatalSession(&ipInfo, &tcpInfo, session, error)) return -1;
-    else if (ret == -1) return -1;
+    if (RemoveFatalSession(&ipInfo, &tcpInfo, session, error))
+        return WOLFSSL_SNIFFER_FATAL_ERROR;
+    else if (ret == -1) return WOLFSSL_SNIFFER_ERROR;
     else if (ret ==  1) {
 #ifdef WOLFSSL_SNIFFER_STATS
         INC_STAT(SnifferStats.sslDecryptedPackets);
@@ -5366,7 +5423,8 @@ static int ssl_DecodePacketInternal(const byte* packet, int length,
 #endif
 
     ret = ProcessMessage(sslFrame, session, sslBytes, data, end, ctx, error);
-    if (RemoveFatalSession(&ipInfo, &tcpInfo, session, error)) return -1;
+    if (RemoveFatalSession(&ipInfo, &tcpInfo, session, error))
+        return WOLFSSL_SNIFFER_FATAL_ERROR;
     if (CheckFinCapture(&ipInfo, &tcpInfo, session) == 0) {
         CopySessionInfo(session, sslInfo);
     }
@@ -5376,7 +5434,8 @@ static int ssl_DecodePacketInternal(const byte* packet, int length,
 
 
 /* Passes in an IP/TCP packet for decoding (ethernet/localhost frame) removed */
-/* returns Number of bytes on success, 0 for no data yet, and -1 on error */
+/* returns Number of bytes on success, 0 for no data yet, WOLFSSL_SNIFFER_ERROR.
+ * on error and WOLFSSL_SNIFFER_FATAL_ERROR on fatal state error */
 /* Also returns Session Info if available */
 int ssl_DecodePacketWithSessionInfo(const unsigned char* packet, int length,
     unsigned char** data, SSLInfo* sslInfo, char* error)
@@ -5387,7 +5446,8 @@ int ssl_DecodePacketWithSessionInfo(const unsigned char* packet, int length,
 
 
 /* Passes in an IP/TCP packet for decoding (ethernet/localhost frame) removed */
-/* returns Number of bytes on success, 0 for no data yet, and -1 on error */
+/* returns Number of bytes on success, 0 for no data yet, WOLFSSL_SNIFFER_ERROR.
+ * on error and WOLFSSL_SNIFFER_FATAL_ERROR on fatal state error */
 int ssl_DecodePacket(const byte* packet, int length, byte** data, char* error)
 {
     return ssl_DecodePacketInternal(packet, length, NULL, 0, data, NULL, NULL,
@@ -5397,6 +5457,8 @@ int ssl_DecodePacket(const byte* packet, int length, byte** data, char* error)
 
 #ifdef WOLFSSL_SNIFFER_STORE_DATA_CB
 
+/* returns Number of bytes on success, 0 for no data yet, WOLFSSL_SNIFFER_ERROR.
+ * on error and WOLFSSL_SNIFFER_FATAL_ERROR on fatal state error */
 int ssl_DecodePacketWithSessionInfoStoreData(const unsigned char* packet,
         int length, void* ctx, SSLInfo* sslInfo, char* error)
 {
@@ -5409,6 +5471,8 @@ int ssl_DecodePacketWithSessionInfoStoreData(const unsigned char* packet,
 
 #ifdef WOLFSSL_SNIFFER_CHAIN_INPUT
 
+/* returns Number of bytes on success, 0 for no data yet, WOLFSSL_SNIFFER_ERROR.
+ * on error and WOLFSSL_SNIFFER_FATAL_ERROR on fatal state error */
 int ssl_DecodePacketWithChain(void* vChain, word32 chainSz, byte** data,
         char* error)
 {
@@ -5422,6 +5486,10 @@ int ssl_DecodePacketWithChain(void* vChain, word32 chainSz, byte** data,
 #if defined(WOLFSSL_SNIFFER_CHAIN_INPUT) && \
      defined(WOLFSSL_SNIFFER_STORE_DATA_CB)
 
+/*
+ * returns WOLFSSL_SNIFFER_ERROR on error and WOLFSSL_SNIFFER_FATAL_ERROR on
+ * fatal state error
+ */
 int ssl_DecodePacketWithChainSessionInfoStoreData(void* vChain, word32 chainSz,
         void* ctx, SSLInfo* sslInfo, char* error)
 {
@@ -5467,7 +5535,7 @@ int ssl_Trace(const char* traceFile, char* error)
     if (traceFile) {
         /* Don't try to reopen the file */
         if (TraceFile == NULL) {
-            TraceFile = fopen(traceFile, "a");
+            TraceFile = XFOPEN(traceFile, "a");
             if (!TraceFile) {
                 SetError(BAD_TRACE_FILE_STR, error, NULL, 0);
                 return -1;
@@ -5648,8 +5716,21 @@ int ssl_SetWatchKey_buffer(void* vSniffer, const byte* key, word32 keySz,
     keyType = (keyType == FILETYPE_PEM) ? WOLFSSL_FILETYPE_PEM :
                                           WOLFSSL_FILETYPE_ASN1;
 
-    ret = wolfSSL_use_PrivateKey_buffer(sniffer->sslServer,
+#ifdef WOLFSSL_STATIC_EPHEMERAL
+    /* try setting static ephemeral first */
+    /* auto detect key type with WC_PK_TYPE_NONE */
+    ret = wolfSSL_set_ephemeral_key(sniffer->sslServer, 
+        WC_PK_TYPE_NONE, (const char*)key, keySz,
+            WOLFSSL_FILETYPE_ASN1);
+    if (ret == 0) {
+        ret = WOLFSSL_SUCCESS;
+    }
+    else
+#endif
+    {
+        ret = wolfSSL_use_PrivateKey_buffer(sniffer->sslServer,
             key, keySz, keyType);
+    }
     if (ret != WOLFSSL_SUCCESS) {
         SetError(KEY_FILE_STR, error, sniffer, FATAL_ERROR_STATE);
         return -1;

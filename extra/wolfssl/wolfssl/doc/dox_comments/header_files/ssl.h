@@ -2245,6 +2245,9 @@ WOLFSSL_API int  wolfSSL_get_alert_history(WOLFSSL*, WOLFSSL_ALERT_HISTORY *);
     \return SSL_FAILURE will be returned on failure.  This could be caused
     by the session cache being disabled, or if the session has timed out.
 
+    \return When OPENSSL_EXTRA and WOLFSSL_ERROR_CODE_OPENSSL are defined,
+    SSL_SUCCESS will be returned even if the session has timed out.
+
     \param ssl pointer to the SSL object, created with wolfSSL_new().
     \param session pointer to the WOLFSSL_SESSION used to set the session
     for ssl.
@@ -5036,7 +5039,17 @@ WOLFSSL_API void  wolfSSL_ERR_print_errors_cb (
     \param ctx a pointer to a WOLFSSL_CTX structure, created using
     wolfSSL_CTX_new().
     \param cb wc_psk_client_callback is a function pointer that will be
-    stored in the WOLFSSL_CTX structure.
+    stored in the WOLFSSL_CTX structure. Return value is the key length on
+    success or zero on error.
+    unsigned int (*wc_psk_client_callback)
+    PSK client callback parameters:
+    WOLFSSL* ssl - Pointer to the wolfSSL structure
+    const char* hint - A stored string that could be displayed to provide a
+                        hint to the user.
+    char* identity - The ID will be stored here.
+    unsigned int id_max_len - Size of the ID buffer.
+    unsigned char* key - The key will be stored here.
+    unsigned int key_max_len - The max size of the key.
 
     _Example_
     \code
@@ -5063,19 +5076,27 @@ WOLFSSL_API void wolfSSL_CTX_set_psk_client_callback(WOLFSSL_CTX*,
     \return none No returns.
 
     \param ssl a pointer to a WOLFSSL structure, created using wolfSSL_new().
-    \param cb a function pointer to type wc_psk_client_callback.
+    \param cb a function pointer to type wc_psk_client_callback. Return value
+    is the key length on success or zero on error.
+    unsigned int (*wc_psk_client_callback)
+    PSK client callback parameters:
+    WOLFSSL* ssl - Pointer to the wolfSSL structure
+    const char* hint - A stored string that could be displayed to provide a
+                        hint to the user.
+    char* identity - The ID will be stored here.
+    unsigned int id_max_len - Size of the ID buffer.
+    unsigned char* key - The key will be stored here.
+    unsigned int key_max_len - The max size of the key.
 
     _Example_
     \code
     WOLFSSL* ssl;
-    unsigned int cb(WOLFSSL*, const char*, char*) // Header of function*
-    {
-    	// Function body
-    }
+    static WC_INLINE unsigned int my_psk_client_cb(WOLFSSL* ssl, const char* hint,
+    char* identity, unsigned int id_max_len, unsigned char* key,
+    Unsigned int key_max_len){
     …
-    cb = wc_psk_client_callback;
     if(ssl){
-    wolfSSL_set_psk_client_callback(ssl, cb);
+    wolfSSL_set_psk_client_callback(ssl, my_psk_client_cb);
     } else {
     	// could not set callback
     }
@@ -5216,21 +5237,28 @@ WOLFSSL_API int wolfSSL_use_psk_identity_hint(WOLFSSL*, const char*);
 
     \param ssl a pointer to a WOLFSSL structure, created using wolfSSL_new().
     \param cb a function pointer for the callback and will be stored in
-    the WOLFSSL_CTX structure.
+    the WOLFSSL_CTX structure. Return value is the key length on success or
+    zero on error.
+    unsigned int (*wc_psk_server_callback)
+    PSK server callback parameters
+    WOLFSSL* ssl - Pointer to the wolfSSL structure
+    char* identity - The ID will be stored here.
+    unsigned char* key - The key will be stored here.
+    unsigned int key_max_len - The max size of the key.
 
     _Example_
     \code
     WOLFSSL_CTX* ctx = wolfSSL_CTX_new( protocol method );
     WOLFSSL* ssl = wolfSSL_new(ctx);
     …
-    unsigned int cb(WOLFSSL*, const char*, unsigned char*, unsigned int)
-        // signature requirement
+    static unsigned int my_psk_server_cb(WOLFSSL* ssl, const char* identity,
+                           unsigned char* key, unsigned int key_max_len)
     {
-    	// Function body.
+        // Function body.
     }
     …
     if(ctx != NULL){
-    wolfSSL_CTX_set_psk_server_callback(ctx, cb);
+        wolfSSL_CTX_set_psk_server_callback(ctx, my_psk_server_cb);
     } else {
     	// The CTX object was not properly initialized.
     }
@@ -5252,20 +5280,29 @@ WOLFSSL_API void wolfSSL_CTX_set_psk_server_callback(WOLFSSL_CTX*,
 
     \param ssl a pointer to a WOLFSSL structure, created using wolfSSL_new().
     \param cb a function pointer for the callback and will be stored in
-    the WOLFSSL structure.
+    the WOLFSSL structure. Return value is the key length on success or  zero
+    on error.
+    unsigned int (*wc_psk_server_callback)
+    PSK server callback parameters
+    WOLFSSL* ssl - Pointer to the wolfSSL structure
+    char* identity - The ID will be stored here.
+    unsigned char* key - The key will be stored here.
+    unsigned int key_max_len - The max size of the key.
+
 
     _Example_
     \code
     WOLFSSL_CTX* ctx;
     WOLFSSL* ssl;
     …
-    int cb(WOLFSSL*, const char*, unsigned char*, unsigned int) // Required sig.
+    static unsigned int my_psk_server_cb(WOLFSSL* ssl, const char* identity,
+                           unsigned char* key, unsigned int key_max_len)
     {
-    	// Function body.
+        // Function body.
     }
     …
     if(ssl != NULL && cb != NULL){
-    	wolfSSL_set_psk_server_callback(ssl, cb);
+        wolfSSL_set_psk_server_callback(ssl, my_psk_server_cb);
     }
     \endcode
 
@@ -5746,7 +5783,8 @@ WOLFSSL_API int wolfSSL_set_timeout(WOLFSSL*, unsigned int);
     \brief This function sets the timeout value for SSL sessions, in seconds,
     for the specified SSL context.
 
-    \return SSL_SUCCESS will be returned upon success.
+    \return the previous timeout value, if WOLFSSL_ERROR_CODE_OPENSSL is 
+    \return defined on success. If not defined, SSL_SUCCESS will be returned.
     \return BAD_FUNC_ARG will be returned when the input context (ctx) is null.
 
     \param ctx pointer to the SSL context, created with wolfSSL_CTX_new().
@@ -6719,22 +6757,22 @@ WOLFSSL_API int  wolfSSL_CTX_SetTmpDH_file(WOLFSSL_CTX*, const char* f,
 /*!
     \ingroup CertsKeys
 
-    \brief This function sets the minimum size of the Diffie Hellman key size
-    by accessing the minDhKeySz member in the WOLFSSL_CTX structure.
+    \brief This function sets the minimum size (in bits) of the Diffie Hellman
+    key size by accessing the minDhKeySz member in the WOLFSSL_CTX structure.
 
     \return SSL_SUCCESS returned if the function completes successfully.
     \return BAD_FUNC_ARG returned if the WOLFSSL_CTX struct is NULL or if
-    the keySz is greater than 16,000 or not divisible by 8.
+    the keySz_bits is greater than 16,000 or not divisible by 8.
 
     \param ssl a pointer to a WOLFSSL structure, created using wolfSSL_new().
-    \param keySz a word16 type used to set the minimum DH key size. The
-    WOLFSSL_CTX struct holds this information in the minDhKeySz member.
+    \param keySz_bits a word16 type used to set the minimum DH key size in bits.
+    The WOLFSSL_CTX struct holds this information in the minDhKeySz member.
 
     _Example_
     \code
     public static int CTX_SetMinDhKey_Sz(IntPtr ctx, short minDhKey){
     …
-    return wolfSSL_CTX_SetMinDhKey_Sz(local_ctx, minDhKey);
+    return wolfSSL_CTX_SetMinDhKey_Sz(local_ctx, minDhKeyBits);
     \endcode
 
     \sa wolfSSL_SetMinDhKey_Sz
@@ -6743,27 +6781,28 @@ WOLFSSL_API int  wolfSSL_CTX_SetTmpDH_file(WOLFSSL_CTX*, const char* f,
     \sa wolfSSL_GetDhKey_Sz
     \sa wolfSSL_CTX_SetTMpDH_file
 */
-WOLFSSL_API int wolfSSL_CTX_SetMinDhKey_Sz(WOLFSSL_CTX*, word16);
+WOLFSSL_API int wolfSSL_CTX_SetMinDhKey_Sz(WOLFSSL_CTX* ctx, word16);
 
 /*!
     \ingroup CertsKeys
 
-    \brief Sets the minimum size for a Diffie-Hellman key in the WOLFSSL
-    structure in bytes.
+    \brief Sets the minimum size (in bits) for a Diffie-Hellman key in the
+    WOLFSSL structure.
 
     \return SSL_SUCCESS the minimum size was successfully set.
-    \return BAD_FUNC_ARG the WOLFSSL structure was NULL or the keySz parameter
-    was greater than the allowable size or not divisible by 8.
+    \return BAD_FUNC_ARG the WOLFSSL structure was NULL or if the keySz_bits is
+    greater than 16,000 or not divisible by 8.
 
     \param ssl a pointer to a WOLFSSL structure, created using wolfSSL_new().
-    \param keySz a word16 type representing the bit size of the minimum DH key.
+    \param keySz_bits a word16 type used to set the minimum DH key size in bits.
+    The WOLFSSL_CTX struct holds this information in the minDhKeySz member.
 
     _Example_
     \code
     WOLFSSL* ssl = wolfSSL_new(ctx);
-    word16 keySz;
+    word16 keySz_bits;
     ...
-    if(wolfSSL_SetMinDhKey(ssl, keySz) != SSL_SUCCESS){
+    if(wolfSSL_SetMinDhKey_Sz(ssl, keySz_bits) != SSL_SUCCESS){
 	    // Failed to set.
     }
     \endcode
@@ -6776,22 +6815,22 @@ WOLFSSL_API int wolfSSL_SetMinDhKey_Sz(WOLFSSL*, word16);
 /*!
     \ingroup CertsKeys
 
-    \brief This function sets the maximum size of the Diffie Hellman key size
-    by accessing the maxDhKeySz member in the WOLFSSL_CTX structure.
+    \brief This function sets the maximum size (in bits) of the Diffie Hellman
+    key size by accessing the maxDhKeySz member in the WOLFSSL_CTX structure.
 
     \return SSL_SUCCESS returned if the function completes successfully.
     \return BAD_FUNC_ARG returned if the WOLFSSL_CTX struct is NULL or if
-    the keySz is greater than 16,000 or not divisible by 8.
+    the keySz_bits is greater than 16,000 or not divisible by 8.
 
     \param ssl a pointer to a WOLFSSL structure, created using wolfSSL_new().
-    \param keySz a word16 type used to set the maximum DH key size. The
-    WOLFSSL_CTX struct holds this information in the maxDhKeySz member.
+    \param keySz_bits a word16 type used to set the maximum DH key size in bits.
+    The WOLFSSL_CTX struct holds this information in the maxDhKeySz member.
 
     _Example_
     \code
     public static int CTX_SetMaxDhKey_Sz(IntPtr ctx, short maxDhKey){
     …
-    return wolfSSL_CTX_SetMaxDhKey_Sz(local_ctx, maxDhKey);
+    return wolfSSL_CTX_SetMaxDhKey_Sz(local_ctx, keySz_bits);
     \endcode
 
     \sa wolfSSL_SetMinDhKey_Sz
@@ -6805,8 +6844,8 @@ WOLFSSL_API int wolfSSL_CTX_SetMaxDhKey_Sz(WOLFSSL_CTX*, word16);
 /*!
     \ingroup CertsKeys
 
-    \brief Sets the maximum size for a Diffie-Hellman key in the WOLFSSL
-    structure in bytes.
+    \brief Sets the maximum size (in bits) for a Diffie-Hellman key in the
+    WOLFSSL structure.
 
     \return SSL_SUCCESS the maximum size was successfully set.
     \return BAD_FUNC_ARG the WOLFSSL structure was NULL or the keySz parameter
@@ -6833,11 +6872,12 @@ WOLFSSL_API int wolfSSL_SetMaxDhKey_Sz(WOLFSSL*, word16);
 /*!
     \ingroup CertsKeys
 
-    \brief Returns the value of dhKeySz that is a member of the options
-    structure. This value represents the Diffie-Hellman key size in bytes.
+    \brief Returns the value of dhKeySz (in bits) that is a member of the
+    options structure. This value represents the Diffie-Hellman key size in
+    bytes.
 
     \return dhKeySz returns the value held in ssl->options.dhKeySz which is an
-    integer value.
+    integer value representing a size in bits.
     \return BAD_FUNC_ARG returns if the WOLFSSL struct is NULL.
 
     \param ssl a pointer to a WOLFSSL structure, created using wolfSSL_new().
@@ -6899,7 +6939,7 @@ WOLFSSL_API int wolfSSL_CTX_SetMinRsaKey_Sz(WOLFSSL_CTX*, short);
 /*!
     \ingroup CertsKeys
 
-    \brief Sets the minimum allowable key size in bytes for RSA located in the
+    \brief Sets the minimum allowable key size in bits for RSA located in the
     WOLFSSL structure.
 
     \return SSL_SUCCESS the minimum was set successfully.
@@ -6928,7 +6968,7 @@ WOLFSSL_API int wolfSSL_SetMinRsaKey_Sz(WOLFSSL*, short);
 /*!
     \ingroup CertsKeys
 
-    \brief Sets the minimum size in bytes for the ECC key in the WOLF_CTX
+    \brief Sets the minimum size in bits for the ECC key in the WOLF_CTX
     structure and the WOLFSSL_CERT_MANAGER structure.
 
     \return SSL_SUCCESS returned for a successful execution and the minEccKeySz
@@ -7235,6 +7275,68 @@ WOLFSSL_API int wolfSSL_CTX_trust_peer_buffer(WOLFSSL_CTX*,
 */
 WOLFSSL_API int wolfSSL_CTX_load_verify_buffer(WOLFSSL_CTX*,
                                                const unsigned char*, long, int);
+
+
+/*!
+    \ingroup CertsKeys
+
+    \brief This function loads a CA certificate buffer into the WOLFSSL
+    Context. It behaves like the non-buffered version, only differing in
+    its ability to be called with a buffer as input instead of a file.
+    The buffer is provided by the in argument of size sz. format specifies
+    the format type of the buffer; SSL_FILETYPE_ASN1 or SSL_FILETYPE_PEM.
+    More than one CA certificate may be loaded per buffer as long as the
+    format is in PEM.  The _ex version was added in PR 2413 and supports 
+    additional arguments for userChain and flags.
+
+    \return SSL_SUCCESS upon success
+    \return SSL_BAD_FILETYPE will be returned if the file is the wrong format.
+    \return SSL_BAD_FILE will be returned if the file doesn’t exist,
+    can’t be read, or is corrupted.
+    \return MEMORY_E will be returned if an out of memory condition occurs.
+    \return ASN_INPUT_E will be returned if Base16 decoding fails on the file.
+    \return BUFFER_E will be returned if a chain buffer is bigger than
+    the receiving buffer.
+
+    \param ctx pointer to the SSL context, created with wolfSSL_CTX_new().
+    \param in pointer to the CA certificate buffer.
+    \param sz size of the input CA certificate buffer, in.
+    \param format format of the buffer certificate, either SSL_FILETYPE_ASN1
+    or SSL_FILETYPE_PEM.
+    \param userChain If using format WOLFSSL_FILETYPE_ASN1 this set to non-zero
+    indicates a chain of DER's is being presented.
+    \param flags: See ssl.h around WOLFSSL_LOAD_VERIFY_DEFAULT_FLAGS.
+
+    _Example_
+    \code
+    int ret = 0;
+    int sz = 0;
+    WOLFSSL_CTX* ctx;
+    byte certBuff[...];
+    ...
+
+    // Example for force loading an expired certificate
+    ret = wolfSSL_CTX_load_verify_buffer_ex(ctx, certBuff, sz, SSL_FILETYPE_PEM,
+        0, (WOLFSSL_LOAD_FLAG_DATE_ERR_OKAY));
+    if (ret != SSL_SUCCESS) {
+    	// error loading CA certs from buffer
+    }
+    ...
+    \endcode
+
+    \sa wolfSSL_CTX_load_verify_buffer
+    \sa wolfSSL_CTX_load_verify_locations
+    \sa wolfSSL_CTX_use_certificate_buffer
+    \sa wolfSSL_CTX_use_PrivateKey_buffer
+    \sa wolfSSL_CTX_use_NTRUPrivateKey_file
+    \sa wolfSSL_CTX_use_certificate_chain_buffer
+    \sa wolfSSL_use_certificate_buffer
+    \sa wolfSSL_use_PrivateKey_buffer
+    \sa wolfSSL_use_certificate_chain_buffer
+*/
+WOLFSSL_API int wolfSSL_CTX_load_verify_buffer_ex(WOLFSSL_CTX*,
+                                               const unsigned char*, long, int,
+                                               int, word32);
 
 /*!
     \ingroup CertsKeys
@@ -11215,6 +11317,27 @@ WOLFSSL_API int wolfSSL_CTX_set_TicketHint(WOLFSSL_CTX* ctx, int);
 WOLFSSL_API int wolfSSL_CTX_set_TicketEncCtx(WOLFSSL_CTX* ctx, void*);
 
 /*!
+    \brief This function gets the session ticket encrypt user context for the
+    callback.  For server side use.
+
+    \return userCtx will be returned upon successfully getting the session.
+    \return NULL will be returned on failure.  This is caused by
+    passing invalid arguments to the function, or when the user context has
+    not been set.
+
+    \param ctx pointer to the WOLFSSL_CTX object, created
+    with wolfSSL_CTX_new().
+
+    _Example_
+    \code
+    none
+    \endcode
+
+    \sa wolfSSL_CTX_set_TicketEncCtx
+*/
+WOLFSSL_API void* wolfSSL_CTX_get_TicketEncCtx(WOLFSSL_CTX* ctx);
+
+/*!
     \ingroup IO
 
     \brief Checks if QSH is used in the supplied SSL session.
@@ -12723,6 +12846,40 @@ WOLFSSL_API int  wolfSSL_no_dhe_psk(WOLFSSL* ssl);
 WOLFSSL_API int  wolfSSL_update_keys(WOLFSSL* ssl);
 
 /*!
+    \ingroup IO
+
+    \brief This function is called on a TLS v1.3 client or server wolfSSL to
+    determine whether a rollover of keys is in progress. When
+    wolfSSL_update_keys() is called, a KeyUpdate message is sent and the
+    encryption key is updated. The decryption key is updated when the response
+    is received.
+
+    \param [in] ssl a pointer to a WOLFSSL structure, created using wolfSSL_new().
+    \param [out] required   0 when no key update response required. 1 when no key update response required.
+
+    \return 0 on successful.
+    \return BAD_FUNC_ARG if ssl is NULL or not using TLS v1.3.
+
+    _Example_
+    \code
+    int ret;
+    WOLFSSL* ssl;
+    int required;
+    ...
+    ret = wolfSSL_key_update_response(ssl, &required);
+    if (ret != 0) {
+        // bad parameters
+    }
+    if (required) {
+        // encrypt Key updated, awaiting response to change decrypt key
+    }
+    \endcode
+
+    \sa wolfSSL_update_keys
+*/
+WOLFSSL_API int  wolfSSL_key_update_response(WOLFSSL* ssl, int* required);
+
+/*!
     \ingroup Setup
 
     \brief This function is called on a TLS v1.3 client wolfSSL context to allow
@@ -13714,6 +13871,7 @@ WOLFSSL_API WOLFSSL_METHOD *wolfTLSv1_3_method(void);
  \param key key file path (if keySz == 0) or actual key buffer (PEM or ASN.1)
  \param keySz key size (should be 0 for "key" arg is file path)
  \param format WOLFSSL_FILETYPE_ASN1 or WOLFSSL_FILETYPE_PEM
+ \sa wolfSSL_CTX_get_ephemeral_key
  */
 WOLFSSL_API int wolfSSL_CTX_set_ephemeral_key(WOLFSSL_CTX* ctx, int keyAlgo, const char* key, unsigned int keySz, int format);
 
@@ -13726,8 +13884,35 @@ WOLFSSL_API int wolfSSL_CTX_set_ephemeral_key(WOLFSSL_CTX* ctx, int keyAlgo, con
  \param key key file path (if keySz == 0) or actual key buffer (PEM or ASN.1)
  \param keySz key size (should be 0 for "key" arg is file path)
  \param format WOLFSSL_FILETYPE_ASN1 or WOLFSSL_FILETYPE_PEM
+ \sa wolfSSL_get_ephemeral_key
  */
 WOLFSSL_API int wolfSSL_set_ephemeral_key(WOLFSSL* ssl, int keyAlgo, const char* key, unsigned int keySz, int format);
+
+/*!
+ \ingroup SSL
+ \brief This function returns pointer to loaded key as ASN.1/DER
+ \return 0 Key returned successfully
+ \param ctx A WOLFSSL_CTX context pointer
+ \param keyAlgo enum wc_PkType like WC_PK_TYPE_DH and WC_PK_TYPE_ECDH
+ \param key key buffer pointer
+ \param keySz key size pointer
+ \sa wolfSSL_CTX_set_ephemeral_key
+ */
+WOLFSSL_API int wolfSSL_CTX_get_ephemeral_key(WOLFSSL_CTX* ctx, int keyAlgo, 
+    const unsigned char** key, unsigned int* keySz);
+
+/*!
+ \ingroup SSL
+ \brief This function returns pointer to loaded key as ASN.1/DER
+ \return 0 Key returned successfully
+ \param ssl A WOLFSSL object pointer
+ \param keyAlgo enum wc_PkType like WC_PK_TYPE_DH and WC_PK_TYPE_ECDH
+ \param key key buffer pointer
+ \param keySz key size pointer
+ \sa wolfSSL_set_ephemeral_key
+ */
+WOLFSSL_API int wolfSSL_get_ephemeral_key(WOLFSSL* ssl, int keyAlgo, 
+    const unsigned char** key, unsigned int* keySz);
 
 /*!
  \ingroup SSL

@@ -176,11 +176,11 @@ bool fill_record_n_invoke_before_triggers(THD *thd, TABLE *table,
 bool insert_fields(THD *thd, Name_resolution_context *context,
 		   const char *db_name, const char *table_name,
                    List_iterator<Item> *it, bool any_privileges,
-                   uint *hidden_bit_fields);
+                   uint *hidden_bit_fields, bool returning_field);
 void make_leaves_list(THD *thd, List<TABLE_LIST> &list, TABLE_LIST *tables,
                       bool full_table_list, TABLE_LIST *boundary);
 int setup_wild(THD *thd, TABLE_LIST *tables, List<Item> &fields,
-	       List<Item> *sum_func_list, SELECT_LEX *sl);
+	       List<Item> *sum_func_list, SELECT_LEX *sl, bool returning_field);
 int setup_returning_fields(THD* thd, TABLE_LIST* table_list);
 bool setup_fields(THD *thd, Ref_ptr_array ref_pointer_array,
                   List<Item> &item, enum_column_usage column_usage,
@@ -515,6 +515,8 @@ bool restart_trans_for_tables(THD *thd, TABLE_LIST *table);
 bool extend_table_list(THD *thd, TABLE_LIST *tables,
                        Prelocking_strategy *prelocking_strategy,
                        bool has_prelocking_list);
+
+void promote_select_describe_flag_if_needed(LEX *lex);
 
 /**
   A context of open_tables() function, used to recover
