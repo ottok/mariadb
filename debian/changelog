@@ -1,11 +1,11 @@
-mariadb-10.5 (1:10.5.12-1) unstable; urgency=medium
+mariadb-10.5 (1:10.5.12-0+deb11u1) bullseye; urgency=medium
 
   * New upstream version 10.5.12. Includes security fixes for:
     - CVE-2021-2389
     - CVE-2021-2372
   * Drop patches applied upstream in MariaDB S3 plugin
 
- -- Otto Kekäläinen <otto@debian.org>  Sun, 08 Aug 2021 20:33:47 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 29 Aug 2021 20:29:40 -0700
 
 mariadb-10.5 (1:10.5.11-1) unstable; urgency=medium
 
