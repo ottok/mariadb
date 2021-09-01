@@ -401,39 +401,6 @@ build mariadbclient consumer Python-MySQLdb:
     variables:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
-libmysql* to libmariadb* upgrade:
-  stage: upgrade in Bullseye
-  needs:
-    - job: build
-  image: debian:${RELEASE}
-  artifacts:
-    when: always
-    name: "$CI_BUILD_NAME"
-    paths:
-      - ${WORKING_DIR}/debug
-  script:
-    - *test-prepare-container
-    # Install all libmysql* available in Debian unstable
-    - apt-get install -y pkg-config libmysqlclient-dev
-    - pkg-config --list-all
-    - pkg-config --cflags mysqlclient # mysqlclient.pc from original package
-    - apt-get install -y ./libmariadb3_*.deb ./mariadb-common_*.deb
-    - pkg-config --list-all
-    - apt-get install -y ./libmariadb-dev_*.deb
-    - pkg-config --list-all
-    - apt-get install -y ./libmariadb-dev-compat_*.deb
-    - pkg-config --cflags mysqlclient # mysqlclient.pc from compat package
-    - pkg-config --list-all
-    - apt-get install -y ./libmariadbd19_*.deb
-    - pkg-config --list-all
-    - apt-get install -y ./libmariadbd-dev_*.deb
-    - pkg-config --list-all
-    - apt-get install -y default-libmysqlclient-dev default-libmysqld-dev
-    - *test-verify-libs
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
-
 default-libmysqlclient-dev Bullseye upgrade:
   stage: upgrade in Bullseye
   needs:
