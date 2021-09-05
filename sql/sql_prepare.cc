@@ -894,6 +894,9 @@ static bool insert_bulk_params(Prepared_statement *stmt,
       case STMT_INDICATOR_IGNORE:
         param->set_ignore();
         break;
+      default:
+        DBUG_ASSERT(0);
+        DBUG_RETURN(1);
       }
     }
     else
@@ -1567,7 +1570,12 @@ static int mysql_test_select(Prepared_statement *stmt,
   if (!lex->describe && !thd->lex->analyze_stmt && !stmt->is_sql_prepare())
   {
     /* Make copy of item list, as change_columns may change it */
-    List<Item> fields(lex->first_select_lex()->item_list);
+    SELECT_LEX_UNIT* master_unit= unit->first_select()->master_unit();
+    bool is_union_op=
+      master_unit->is_unit_op() || master_unit->fake_select_lex;
+
+    List<Item> fields(is_union_op ? unit->item_list :
+                                    lex->first_select_lex()->item_list);
 
     /* Change columns if a procedure like analyse() */
     if (unit->last_procedure && unit->last_procedure->change_columns(thd, fields))
@@ -1689,7 +1697,7 @@ static bool mysql_test_call_fields(Prepared_statement *stmt,
 
   while ((item= it++))
   {
-    if (item->fix_fields_if_needed_for_scalar(thd, it.ref()))
+    if (item->fix_fields_if_needed(thd, it.ref()))
       goto err;
   }
   DBUG_RETURN(FALSE);
@@ -4567,6 +4575,7 @@ Prepared_statement::execute_bulk_loop(String *expanded_query,
                                       uchar *packet_end_arg)
 {
   Reprepare_observer reprepare_observer;
+  unsigned char *readbuff= NULL;
   bool error= 0;
   packet= packet_arg;
   packet_end= packet_end_arg;
@@ -4580,24 +4589,37 @@ Prepared_statement::execute_bulk_loop(String *expanded_query,
   if (state == Query_arena::STMT_ERROR)
   {
     my_message(last_errno, last_error, MYF(0));
-    thd->set_bulk_execution(0);
-    return TRUE;
+    goto err;
   }
   /* Check for non zero parameter count*/
   if (param_count == 0)
   {
     DBUG_PRINT("error", ("Statement with no parameters for bulk execution."));
     my_error(ER_UNSUPPORTED_PS, MYF(0));
-    thd->set_bulk_execution(0);
-    return TRUE;
+    goto err;
   }
 
   if (!(sql_command_flags[lex->sql_command] & CF_PS_ARRAY_BINDING_SAFE))
   {
     DBUG_PRINT("error", ("Command is not supported in bulk execution."));
     my_error(ER_UNSUPPORTED_PS, MYF(0));
-    thd->set_bulk_execution(0);
-    return TRUE;
+    goto err;
+  }
+  /*
+     Here second buffer for not optimized commands,
+     optimized commands do it inside thier internal loop.
+  */
+  if (!(sql_command_flags[lex->sql_command] & CF_PS_ARRAY_BINDING_OPTIMIZED) &&
+      this->lex->has_returning())
+  {
+    // Above check can be true for SELECT in future
+    DBUG_ASSERT(lex->sql_command != SQLCOM_SELECT);
+    readbuff= thd->net.buff; // old buffer
+    if (net_allocate_new_packet(&thd->net, thd, MYF(MY_THREAD_SPECIFIC)))
+    {
+      readbuff= NULL; // failure, net_allocate_new_packet keeps old buffer
+      goto err;
+    }
   }
 
 #ifndef EMBEDDED_LIBRARY
@@ -4609,9 +4631,7 @@ Prepared_statement::execute_bulk_loop(String *expanded_query,
   {
     my_error(ER_WRONG_ARGUMENTS, MYF(0),
             "mysqld_stmt_bulk_execute");
-    reset_stmt_params(this);
-    thd->set_bulk_execution(0);
-    return true;
+    goto err;
   }
   read_types= FALSE;
 
@@ -4628,8 +4648,7 @@ Prepared_statement::execute_bulk_loop(String *expanded_query,
     {
       if (set_bulk_parameters(TRUE))
       {
-        thd->set_bulk_execution(0);
-        return true;
+        goto err;
       }
     }
 
@@ -4693,8 +4712,16 @@ reexecute:
   }
   reset_stmt_params(this);
   thd->set_bulk_execution(0);
-
+  if (readbuff)
+    my_free(readbuff);
   return error;
+
+err:
+  reset_stmt_params(this);
+  thd->set_bulk_execution(0);
+  if (readbuff)
+    my_free(readbuff);
+  return true;
 }
 
 
@@ -6071,6 +6098,7 @@ extern "C" int execute_sql_command(const char *command,
   THD *new_thd= 0;
   int result;
   my_bool qc_save= 0;
+  Reprepare_observer *save_reprepare_observer= nullptr;
 
   if (!thd)
   {
@@ -6091,6 +6119,8 @@ extern "C" int execute_sql_command(const char *command,
 
     qc_save= thd->query_cache_is_applicable;
     thd->query_cache_is_applicable= 0;
+    save_reprepare_observer= thd->m_reprepare_observer;
+    thd->m_reprepare_observer= nullptr;
   }
   sql_text.str= (char *) command;
   sql_text.length= strlen(command);
@@ -6128,7 +6158,10 @@ extern "C" int execute_sql_command(const char *command,
   if (new_thd)
     delete new_thd;
   else
+  {
     thd->query_cache_is_applicable= qc_save;
+    thd->m_reprepare_observer= save_reprepare_observer;
+  }
 
   *hosts= 0;
   return result;

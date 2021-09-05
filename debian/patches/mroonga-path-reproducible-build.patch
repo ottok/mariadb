@@ -10,6 +10,6 @@ Subject: Mroonga plugin build in MariaDB is not reproducible (Closes: #976984)
  LIBS="$LIBS $WINDOWS_LIBS"
 -AC_DEFINE_UNQUOTED(CONFIGURE_OPTIONS, "$ac_configure_args", "specified configure options")
 +AC_DEFINE_UNQUOTED(CONFIGURE_OPTIONS, "$(echo $ac_configure_args | sed -e "s@$(pwd)@<builddir>@g")", "specified configure options")
-
+ 
  # For groonga.org
  AC_ARG_WITH(groonga-org-path,

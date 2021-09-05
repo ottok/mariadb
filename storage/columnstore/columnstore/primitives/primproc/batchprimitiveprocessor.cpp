@@ -69,6 +69,11 @@ using namespace joblist;
 
 namespace primitiveprocessor
 {
+
+#ifdef PRIMPROC_STOPWATCH
+#include "poormanprofiler.inc"
+#endif
+
 // these are config parms defined in primitiveserver.cpp, initialized by PrimProc main().
 extern uint32_t blocksReadAhead;
 extern uint32_t dictBufferSize;
@@ -1359,6 +1364,11 @@ void BatchPrimitiveProcessor::execute()
 
     try
     {
+        // Check memory up front
+        if (MonitorProcMem::checkMemlimit())
+        {
+            throw logging::IDBExcept(logging::ERR_PRIMPROC_LOW_MEMORY);
+        }
 #ifdef PRIMPROC_STOPWATCH
         stopwatch->start("BatchPrimitiveProcessor::execute first part");
 #endif
@@ -1695,6 +1705,10 @@ void BatchPrimitiveProcessor::execute()
                     {
                         //cerr <<" * serialzing " << nextRG.toString() << endl;
                         nextRG.serializeRGData(*serialized);
+                        if (MonitorProcMem::checkMemlimit())
+                        {
+                            throw logging::IDBExcept(logging::ERR_PRIMPROC_LOW_MEMORY);
+                        }
                     }
 
                     /* send the msg & reinit the BS */
@@ -1742,6 +1756,10 @@ void BatchPrimitiveProcessor::execute()
                     *serialized << (uint8_t) 1;  // the "count this msg" var
                     fe2Output.setDBRoot(dbRoot);
                     fe2Output.serializeRGData(*serialized);
+                    if (MonitorProcMem::checkMemlimit())
+                    {
+                        throw logging::IDBExcept(logging::ERR_PRIMPROC_LOW_MEMORY);
+                    }
                     //*serialized << fe2Output.getDataSize();
                     //serialized->append(fe2Output.getData(), fe2Output.getDataSize());
                 }
@@ -1782,7 +1800,10 @@ void BatchPrimitiveProcessor::execute()
                 outputRG.setDBRoot(dbRoot);
                 //cerr << "serializing " << outputRG.toString() << endl;
                 outputRG.serializeRGData(*serialized);
-
+                if (MonitorProcMem::checkMemlimit())
+                {
+                    throw logging::IDBExcept(logging::ERR_PRIMPROC_LOW_MEMORY);
+                }
                 //*serialized << outputRG.getDataSize();
                 //serialized->append(outputRG.getData(), outputRG.getDataSize());
                 if (doJoin)
@@ -2110,43 +2131,16 @@ void BatchPrimitiveProcessor::makeResponse()
 int BatchPrimitiveProcessor::operator()()
 {
     utils::setThreadName("PPBatchPrimProc");
-    if (currentBlockOffset == 0)
-    {
-#ifdef PRIMPROC_STOPWATCH   // TODO: needs to be brought up-to-date
-        map<pthread_t, logging::StopWatch*>::iterator stopwatchMapIter = stopwatchMap.find(pthread_self());
-        logging::StopWatch* stopwatch;
-
-        if (stopwatchMapIter != stopwatchMap.end())
-        {
-            stopwatch = stopwatchMapIter->second;
-        }
-        else
-        {
-            pthread_mutex_lock(&stopwatchMapMutex);
-            stopwatch = new logging::StopWatch(stopwatchMap.size());
-            stopwatchMap.insert(make_pair(pthread_self(), stopwatch));
-
-            // Create the thread that will show timing results after five seconds of idle time.
-            if (!stopwatchThreadCreated)
-            {
-                pthread_t timerThread;
-                int err = pthread_create(&timerThread, NULL, autoFinishStopwatchThread, NULL);
-
-                if (err)
-                    cout << "Error creating thread to complete Stopwatches." << endl;
-
-                stopwatchThreadCreated = true;
-            }
-
-            pthread_mutex_unlock(&stopwatchMapMutex);
-        }
-
-        ostringstream oss;
-        oss << "BatchPrimitiveProcessor::operator()";
-        string msg = oss.str();
-        stopwatch->start(msg);
+#ifdef PRIMPROC_STOPWATCH
+    const static std::string msg{"BatchPrimitiveProcessor::operator()"};
+    logging::StopWatch* stopwatch = profiler.getTimer();
 #endif
 
+    if (currentBlockOffset == 0)
+    {
+#ifdef PRIMPROC_STOPWATCH
+        stopwatch->start(msg);
+#endif
         idbassert(count > 0);
     }
 
@@ -2216,7 +2210,6 @@ int BatchPrimitiveProcessor::operator()()
         		<< " blockNum=" << blockNum << endl;
         */
     }
-
     vssCache.clear();
 #ifndef __FreeBSD__
     pthread_mutex_unlock(&objLock);
@@ -2711,6 +2704,22 @@ void BatchPrimitiveProcessor::buildVSSCache(uint32_t loopCount)
             vssCache.insert(make_pair(lbidList[i], vssData[i]));
 
 //	cout << "buildVSSCache inserted " << vssCache.size() << " elements" << endl;
+}
+
+void BatchPrimitiveProcessor::resetMem()
+{
+    serialized.reset();
+    outputMsg.reset();
+    std::vector<SCommand>().swap(filterSteps);
+    std::vector<SCommand>().swap(projectSteps);
+    vssCache.clear();
+#ifndef __FreeBSD__
+    pthread_mutex_unlock(&objLock);
+#endif
+    outRowGroupData.reset();
+    fe1Data.reset();
+    fe2Data.reset();
+    joinedRGMem.reset();
 }
 
 }

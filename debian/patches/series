@@ -8,5 +8,4 @@ mroonga-path-reproducible-build.patch
 env-perl-usr-bin-perl.patch
 fix-spelling.patch
 1556.patch
-rtld_default-kfreebsd.patch
 fix-reproducible-builds-rocksdb.patch

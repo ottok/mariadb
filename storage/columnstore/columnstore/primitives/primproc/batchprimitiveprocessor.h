@@ -53,6 +53,11 @@
 #include "funcexpwrapper.h"
 #include "bppsendthread.h"
 
+//#define PRIMPROC_STOPWATCH
+#ifdef PRIMPROC_STOPWATCH
+#include "stopwatch.h"
+#endif
+
 namespace primitiveprocessor
 {
 typedef std::tr1::unordered_map<int64_t, BRM::VSSData> VSSCache;
@@ -164,6 +169,7 @@ public:
     {
         return doJoin;
     }
+    void resetMem();
 private:
     BatchPrimitiveProcessor();
     BatchPrimitiveProcessor(const BatchPrimitiveProcessor&);

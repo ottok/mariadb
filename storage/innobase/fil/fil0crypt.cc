@@ -55,6 +55,9 @@ UNIV_INTERN uint srv_n_fil_crypt_threads_started = 0;
 /** At this age or older a space/page will be rotated */
 UNIV_INTERN uint srv_fil_crypt_rotate_key_age;
 
+/** Whether the encryption plugin does key rotation */
+static bool srv_encrypt_rotate;
+
 /** Event to signal FROM the key rotation threads. */
 static os_event_t fil_crypt_event;
 
@@ -128,6 +131,14 @@ fil_space_crypt_t::key_get_latest_version(void)
 
 	if (is_key_found()) {
 		key_version = encryption_key_get_latest_version(key_id);
+		/* InnoDB does dirty read of srv_fil_crypt_rotate_key_age.
+		It doesn't matter because srv_encrypt_rotate
+		can be set to true only once */
+		if (!srv_encrypt_rotate
+		    && key_version > srv_fil_crypt_rotate_key_age) {
+			srv_encrypt_rotate = true;
+		}
+
 		srv_stats.n_key_requests.inc();
 		key_found = key_version;
 	}
@@ -1087,7 +1098,7 @@ static bool fil_crypt_start_encrypting_space(fil_space_t* space)
 		mtr.commit();
 
 		/* 4 - sync tablespace before publishing crypt data */
-		while (buf_flush_dirty_pages(space->id));
+		while (buf_flush_list_space(space));
 
 		/* 5 - publish crypt data */
 		mutex_enter(&fil_crypt_threads_mutex);
@@ -1157,6 +1168,33 @@ struct rotate_thread_t {
 	}
 };
 
+/** Avoid the removal of the tablespace from
+default_encrypt_list only when
+1) Another active encryption thread working on tablespace
+2) Eligible for tablespace key rotation
+3) Tablespace is in flushing phase
+@return true if tablespace should be removed from
+default encrypt */
+static bool fil_crypt_must_remove(const fil_space_t &space)
+{
+  ut_ad(space.purpose == FIL_TYPE_TABLESPACE);
+  fil_space_crypt_t *crypt_data = space.crypt_data;
+  ut_ad(mutex_own(&fil_system.mutex));
+  const ulong encrypt_tables= srv_encrypt_tables;
+  if (!crypt_data)
+    return !encrypt_tables;
+  if (!crypt_data->is_key_found())
+    return true;
+
+  mutex_enter(&crypt_data->mutex);
+  const bool remove= (space.is_stopping() || crypt_data->not_encrypted()) &&
+    (!crypt_data->rotate_state.flushing &&
+     !encrypt_tables == !!crypt_data->min_key_version &&
+     !crypt_data->rotate_state.active_threads);
+  mutex_exit(&crypt_data->mutex);
+  return remove;
+}
+
 /***********************************************************************
 Check if space needs rotation given a key_state
 @param[in,out]		state		Key rotation state
@@ -1202,6 +1240,7 @@ fil_crypt_space_needs_rotation(
 		return false;
 	}
 
+	bool need_key_rotation = false;
 	mutex_enter(&crypt_data->mutex);
 
 	do {
@@ -1231,25 +1270,15 @@ fil_crypt_space_needs_rotation(
 			fil_crypt_get_key_state(key_state, crypt_data);
 		}
 
-		bool need_key_rotation = fil_crypt_needs_rotation(
+		need_key_rotation = fil_crypt_needs_rotation(
 			crypt_data,
 			crypt_data->min_key_version,
 			key_state->key_version,
 			key_state->rotate_key_age);
-
-		if (need_key_rotation == false) {
-			break;
-		}
-
-		mutex_exit(&crypt_data->mutex);
-
-		return true;
 	} while (0);
 
 	mutex_exit(&crypt_data->mutex);
-
-
-	return false;
+	return need_key_rotation;
 }
 
 /***********************************************************************
@@ -1453,46 +1482,63 @@ inline bool fil_space_t::acquire_if_not_stopped()
   return UNIV_LIKELY(!(n & CLOSING)) || prepare(true);
 }
 
-/** Return the next tablespace from rotation_list.
-@param space   previous tablespace (NULL to start from the start)
+bool fil_crypt_must_default_encrypt()
+{
+  return !srv_fil_crypt_rotate_key_age || !srv_encrypt_rotate;
+}
+
+/** Return the next tablespace from default_encrypt_tables list.
+@param space   previous tablespace (nullptr to start from the start)
 @param recheck whether the removal condition needs to be rechecked after
 the encryption parameters were changed
 @param encrypt expected state of innodb_encrypt_tables
 @return the next tablespace to process (n_pending_ops incremented)
 @retval fil_system.temp_space if there is no work to do
 @retval nullptr upon reaching the end of the iteration */
-inline fil_space_t *fil_system_t::keyrotate_next(fil_space_t *space,
-                                                 bool recheck, bool encrypt)
+inline fil_space_t *fil_system_t::default_encrypt_next(fil_space_t *space,
+                                                       bool recheck,
+                                                       bool encrypt)
 {
   ut_ad(mutex_own(&mutex));
 
   sized_ilist<fil_space_t, rotation_list_tag_t>::iterator it=
-    space && space->is_in_rotation_list ? space : rotation_list.begin();
+    space && space->is_in_default_encrypt
+    ? space
+    : default_encrypt_tables.begin();
   const sized_ilist<fil_space_t, rotation_list_tag_t>::iterator end=
-    rotation_list.end();
+    default_encrypt_tables.end();
 
   if (space)
   {
     const bool released= !space->release();
 
-    if (space->is_in_rotation_list)
+    if (space->is_in_default_encrypt)
     {
       while (++it != end &&
              (!UT_LIST_GET_LEN(it->chain) || it->is_stopping()));
 
-      /* If one of the encryption threads already started the encryption
-      of the table then don't remove the unencrypted spaces from rotation list
+      /* If one of the encryption threads already started
+      the encryption of the table then don't remove the
+      unencrypted spaces from default encrypt list.
 
-      If there is a change in innodb_encrypt_tables variables value then
-      don't remove the last processed tablespace from the rotation list. */
-      if (released && (!recheck || space->crypt_data) &&
-          !encrypt == !srv_encrypt_tables)
+      If there is a change in innodb_encrypt_tables variables
+      value then don't remove the last processed tablespace
+      from the default encrypt list. */
+      if (released && !recheck && fil_crypt_must_remove(*space))
       {
-        ut_a(!rotation_list.empty());
-        rotation_list.remove(*space);
-        space->is_in_rotation_list= false;
+        ut_a(!default_encrypt_tables.empty());
+        default_encrypt_tables.remove(*space);
+        space->is_in_default_encrypt= false;
       }
     }
+  }
+  else while (it != end &&
+	      (!UT_LIST_GET_LEN(it->chain) || it->is_stopping()))
+  {
+    /* Find the next suitable default encrypt table if
+    beginning of default_encrypt_tables list has been scheduled
+    to be deleted */
+    it++;
   }
 
   if (it == end)
@@ -1524,8 +1570,8 @@ inline fil_space_t *fil_space_t::next(fil_space_t *space, bool recheck,
 {
   mutex_enter(&fil_system.mutex);
 
-  if (!srv_fil_crypt_rotate_key_age)
-    space= fil_system.keyrotate_next(space, recheck, encrypt);
+  if (fil_crypt_must_default_encrypt())
+    space= fil_system.default_encrypt_next(space, recheck, encrypt);
   else
   {
     if (!space)
@@ -1863,6 +1909,9 @@ fil_crypt_rotate_page(
 		if (block->page.status == buf_page_t::FREED) {
 			/* Do not modify freed pages to avoid an assertion
 			failure on recovery.*/
+		} else if (block->page.oldest_modification() > 1) {
+			/* Do not unnecessarily touch pages that are
+			already dirty. */
 		} else if (space->is_stopping()) {
 			/* The tablespace is closing (in DROP TABLE or
 			TRUNCATE TABLE or similar): avoid further access */
@@ -2007,14 +2056,7 @@ fil_crypt_flush_space(
 	if (end_lsn > 0 && !space->is_stopping()) {
 		ulint sum_pages = 0;
 		const ulonglong start = my_interval_timer();
-		do {
-			ulint n_dirty= buf_flush_dirty_pages(state->space->id);
-			if (!n_dirty) {
-				break;
-			}
-			sum_pages += n_dirty;
-		} while (!space->is_stopping());
-
+		while (buf_flush_list_space(space, &sum_pages));
 		if (sum_pages) {
 			const ulonglong end = my_interval_timer();
 
@@ -2271,9 +2313,9 @@ fil_crypt_set_thread_cnt(
 	}
 }
 
-/** Initialize the tablespace rotation_list
+/** Initialize the tablespace default_encrypt_tables
 if innodb_encryption_rotate_key_age=0. */
-static void fil_crypt_rotation_list_fill()
+static void fil_crypt_default_encrypt_tables_fill()
 {
 	ut_ad(mutex_own(&fil_system.mutex));
 
@@ -2281,7 +2323,7 @@ static void fil_crypt_rotation_list_fill()
 	     space != NULL;
 	     space = UT_LIST_GET_NEXT(space_list, space)) {
 		if (space->purpose != FIL_TYPE_TABLESPACE
-		    || space->is_in_rotation_list
+		    || space->is_in_default_encrypt
 		    || UT_LIST_GET_LEN(space->chain) == 0
 		    || !space->acquire_if_not_stopped()) {
 			continue;
@@ -2312,8 +2354,8 @@ static void fil_crypt_rotation_list_fill()
 			}
 		}
 
-		fil_system.rotation_list.push_back(*space);
-		space->is_in_rotation_list = true;
+		fil_system.default_encrypt_tables.push_back(*space);
+		space->is_in_default_encrypt = true;
 next:
 		space->release();
 	}
@@ -2330,7 +2372,7 @@ fil_crypt_set_rotate_key_age(
 	mutex_enter(&fil_system.mutex);
 	srv_fil_crypt_rotate_key_age = val;
 	if (val == 0) {
-		fil_crypt_rotation_list_fill();
+		fil_crypt_default_encrypt_tables_fill();
 	}
 	mutex_exit(&fil_system.mutex);
 	os_event_set(fil_crypt_threads_event);
@@ -2357,8 +2399,8 @@ void fil_crypt_set_encrypt_tables(ulong val)
 
 	srv_encrypt_tables = val;
 
-	if (srv_fil_crypt_rotate_key_age == 0) {
-		fil_crypt_rotation_list_fill();
+	if (fil_crypt_must_default_encrypt()) {
+		fil_crypt_default_encrypt_tables_fill();
 	}
 
 	mutex_exit(&fil_system.mutex);

@@ -2241,7 +2241,7 @@ int mysql_rm_table_no_locks(THD *thd, TABLE_LIST *tables, bool if_exists,
   bool trans_tmp_table_deleted= 0, non_trans_tmp_table_deleted= 0;
   bool non_tmp_table_deleted= 0;
   bool is_drop_tmp_if_exists_added= 0;
-  bool was_view= 0, was_table= 0, log_if_exists= if_exists;
+  bool was_view= 0, log_if_exists= if_exists;
   const char *object_to_drop= (drop_sequence) ? "SEQUENCE" : "TABLE";
   String normal_tables;
   String built_trans_tmp_query, built_non_trans_tmp_query;
@@ -2467,7 +2467,6 @@ int mysql_rm_table_no_locks(THD *thd, TABLE_LIST *tables, bool if_exists,
           . "DROP SEQUENCE", but it's not a sequence
       */
       wrong_drop_sequence= drop_sequence && hton;
-      was_table|= wrong_drop_sequence;
       error= table_type == TABLE_TYPE_UNKNOWN ? ENOENT : -1;
       tdc_remove_table(thd, db.str, table_name.str);
     }
@@ -10681,9 +10680,13 @@ do_continue:;
     if (alter_info->requested_lock == Alter_info::ALTER_TABLE_LOCK_NONE)
       ha_alter_info.online= true;
     // Ask storage engine whether to use copy or in-place
-    ha_alter_info.inplace_supported=
-      table->file->check_if_supported_inplace_alter(&altered_table,
-                                                    &ha_alter_info);
+    {
+      Check_level_instant_set check_level_save(thd, CHECK_FIELD_WARN);
+      ha_alter_info.inplace_supported=
+        table->file->check_if_supported_inplace_alter(&altered_table,
+                                                      &ha_alter_info);
+    }
+
     if (ha_alter_info.inplace_supported != HA_ALTER_INPLACE_NOT_SUPPORTED)
     {
       List_iterator<Key> it(alter_info->key_list);

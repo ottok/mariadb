@@ -5,6 +5,8 @@
 
 # Note, this script makes connection(s) to the public Internet.
 
+SCRIPT_DIR="$(dirname "$0")"
+
 if [[ -z "${RETRIES_REMAINING-}" ]]; then
     export RETRIES_REMAINING=2
 fi
@@ -51,14 +53,14 @@ PARENTDIR="$PWD"
 WORKSPACE="${PARENTDIR}/workspace.pid$$"
 
 mkdir "${WORKSPACE}" || exit $?
-cp -pR certs "${WORKSPACE}"/ || exit $?
+cp -pR ${SCRIPT_DIR}/../certs "${WORKSPACE}"/ || exit $?
 cd "$WORKSPACE" || exit $?
 ln -s ../examples
 
 CERT_DIR="./certs/ocsp"
 ready_file="$WORKSPACE"/wolf_ocsp_s1_readyF$$
 ready_file2="$WORKSPACE"/wolf_ocsp_s1_readyF2$$
-printf '%s\n' "ready file:  $ready_file"
+printf '%s\n' "ready file:  \"$ready_file\""
 
 test_cnf="ocsp_s1.cnf"
 
@@ -66,7 +68,7 @@ wait_for_readyFile(){
 
     counter=0
 
-    while [ ! -s $1 -a "$counter" -lt 20 ]; do
+    while [ ! -s "$1" -a "$counter" -lt 20 ]; do
 	if [[ -n "${2-}" ]]; then
 	    if ! kill -0 $2 2>&-; then
 		echo "pid $2 for port ${3-} exited before creating ready file.  bailing..."
@@ -78,19 +80,19 @@ wait_for_readyFile(){
         counter=$((counter+ 1))
     done
 
-    if test -e $1; then
+    if test -e "$1"; then
         echo -e "found ready file, starting client..."
     else
-        echo -e "NO ready file at $1 -- ending test..."
+        echo -e "NO ready file at \"$1\" -- ending test..."
         exit 1
     fi
 
 }
 
 remove_single_rF(){
-    if test -e $1; then
-        printf '%s\n' "removing ready file: $1"
-        rm $1
+    if test -e "$1"; then
+        printf '%s\n' "removing ready file: \"$1\""
+        rm "$1"
     fi
 }
 
@@ -146,17 +148,17 @@ create_new_cnf() {
     CURR_LOC="$PWD"
     printf '%s\n' "echo now in $CURR_LOC"
     ./renewcerts-for-test.sh $test_cnf
-    cd $WORKSPACE
+    cd "$WORKSPACE"
 }
 
 remove_ready_file() {
-    if test -e $ready_file; then
+    if test -e "$ready_file"; then
         printf '%s\n' "removing ready file"
-        rm $ready_file
+        rm "$ready_file"
     fi
-    if test -e $ready_file2; then
-        printf '%s\n' "removing ready file: $ready_file2"
-        rm $ready_file2
+    if test -e "$ready_file2"; then
+        printf '%s\n' "removing ready file: \"$ready_file2\""
+        rm "$ready_file2"
     fi
 }
 
@@ -225,11 +227,11 @@ port3=$(get_first_free_port $((port2 + 1)))
 
 # test interop fail case
 ready_file=$PWD/wolf_ocsp_readyF$$
-printf '%s\n' "ready file:  $ready_file"
-./examples/server/server -b -p $port1 -o -R $ready_file &
+printf '%s\n' "ready file:  \"$ready_file\""
+./examples/server/server -b -p $port1 -o -R "$ready_file" &
 wolf_pid=$!
-wait_for_readyFile $ready_file $wolf_pid $port1
-if [ ! -f $ready_file ]; then
+wait_for_readyFile "$ready_file" $wolf_pid $port1
+if [ ! -f "$ready_file" ]; then
     printf '%s\n' "Failed to create ready file: \"$ready_file\""
     exit 1
 else
@@ -237,10 +239,10 @@ else
     echo "hi" | openssl s_client -status $V4V6_FLAG -connect ${LOCALHOST}:$port1 -cert ./certs/client-cert.pem -key ./certs/client-key.pem -CAfile ./certs/ocsp/root-ca-cert.pem 2>&1 | tee /dev/stderr | fgrep -q 'self signed certificate in certificate chain'
     if [ $? -neq 0 ]; then
         printf '%s\n' "Expected verification error from s_client is missing."
-        remove_single_rF $ready_file
+        remove_single_rF "$ready_file"
         exit 1
     fi
-    remove_single_rF $ready_file
+    remove_single_rF "$ready_file"
     wait $wolf_pid
     if [ $? -ne 1 ]; then
         printf '%s\n' "wolfSSL server unexpected fail value"
@@ -250,10 +252,10 @@ fi
 
 
 # create a port to use with openssl ocsp responder
-./examples/server/server -b -p $port2 -R $ready_file &
+./examples/server/server -b -p $port2 -R "$ready_file" &
 wolf_pid2=$!
-wait_for_readyFile $ready_file $wolf_pid2 $port2
-if [ ! -f $ready_file ]; then
+wait_for_readyFile "$ready_file" $wolf_pid2 $port2
+if [ ! -f "$ready_file" ]; then
     printf '%s\n' "Failed to create ready file: \"$ready_file\""
     exit 1
 else
@@ -270,7 +272,7 @@ sleep 0.1
 # client test against the server
 server=login.live.com
 #ca=certs/external/baltimore-cybertrust-root.pem
-ca=certs/external/ca_collection.pem
+ca=./certs/external/ca_collection.pem
 
 if [[ "$V4V6" == "4" ]]; then
     ./examples/client/client -C -h $server -p 443 -A $ca -g -W 1
@@ -305,26 +307,26 @@ sleep 0.1
 
 printf '%s\n\n' "------------- TEST CASE 1 SHOULD PASS ------------------------"
 # client test against our own server - GOOD CERT
-./examples/server/server -c certs/ocsp/server1-cert.pem -R $ready_file2 \
+./examples/server/server -c certs/ocsp/server1-cert.pem -R "$ready_file2" \
                          -k certs/ocsp/server1-key.pem -p $port3 &
 wolf_pid3=$!
-wait_for_readyFile $ready_file2 $wolf_pid3 $port3
+wait_for_readyFile "$ready_file2" $wolf_pid3 $port3
 ./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 1 -p $port3
 RESULT=$?
-[ $RESULT -ne 0 ] && printf '\n\n%s\n' "Client connection 2 failed" && exit 1
+[ $RESULT -ne 0 ] && printf '\n\n%s\n' "Client connection 1 failed" && exit 1
 printf '%s\n\n' "Test PASSED!"
 
 printf '%s\n\n' "------------- TEST CASE 2 SHOULD REVOKE ----------------------"
 # client test against our own server - REVOKED CERT
-remove_single_rF $ready_file2
-./examples/server/server -c certs/ocsp/server2-cert.pem -R $ready_file2 \
+remove_single_rF "$ready_file2"
+./examples/server/server -c certs/ocsp/server2-cert.pem -R "$ready_file2" \
                          -k certs/ocsp/server2-key.pem -p $port3 &
 wolf_pid3=$!
-wait_for_readyFile $ready_file2 $wolf_pid3 $port3
+wait_for_readyFile "$ready_file2" $wolf_pid3 $port3
 sleep 0.1
 ./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 1 -p $port3
 RESULT=$?
-[ $RESULT -ne 1 ] && printf '\n\n%s\n' "Client connection succeeded $RESULT" \
+[ $RESULT -ne 1 ] && printf '\n\n%s\n' "Client connection 2 succeeded $RESULT" \
                   && exit 1
 printf '%s\n\n' "Test successfully REVOKED!"
 
@@ -333,31 +335,45 @@ printf '%s\n\n' "Test successfully REVOKED!"
 if [ $? -ne 0 ]; then
     printf '%s\n\n' "------------- TEST CASE 3 SHOULD PASS --------------------"
     # client test against our own server - GOOD CERT
-    remove_single_rF $ready_file2
-    ./examples/server/server -c certs/ocsp/server1-cert.pem -R $ready_file2 \
+    remove_single_rF "$ready_file2"
+    ./examples/server/server -c certs/ocsp/server1-cert.pem -R "$ready_file2" \
                              -k certs/ocsp/server1-key.pem -v 4 \
                              -p $port3 &
     wolf_pid3=$!
-    wait_for_readyFile $ready_file2 $wolf_pid3 $port3
+    wait_for_readyFile "$ready_file2" $wolf_pid3 $port3
     ./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 1 -v 4 -F 1 \
                              -p $port3
     RESULT=$?
     [ $RESULT -ne 0 ] && printf '\n\n%s\n' "Client connection 3 failed" && exit 1
     printf '%s\n\n' "Test PASSED!"
 
-    printf '%s\n\n' "------------- TEST CASE 4 SHOULD REVOKE ------------------"
+    printf '%s\n\n' "------------- TEST CASE 4 SHOULD PASS --------------------"
+    # client test against our own server, must staple - GOOD CERT
+    remove_single_rF "$ready_file2"
+    ./examples/server/server -c certs/ocsp/server1-cert.pem -R "$ready_file2" \
+                             -k certs/ocsp/server1-key.pem -v 4 \
+                             -p $port3 &
+    wolf_pid3=$!
+    wait_for_readyFile "$ready_file2" $wolf_pid3 $port3
+    ./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 1m -v 4 -F 1 \
+                             -p $port3
+    RESULT=$?
+    [ $RESULT -ne 0 ] && printf '\n\n%s\n' "Client connection 4 failed" && exit 1
+    printf '%s\n\n' "Test PASSED!"
+
+    printf '%s\n\n' "------------- TEST CASE 5 SHOULD REVOKE ------------------"
     # client test against our own server - REVOKED CERT
-    remove_single_rF $ready_file2
-    ./examples/server/server -c certs/ocsp/server2-cert.pem -R $ready_file2 \
+    remove_single_rF "$ready_file2"
+    ./examples/server/server -c certs/ocsp/server2-cert.pem -R "$ready_file2" \
                              -k certs/ocsp/server2-key.pem -v 4 \
                              -p $port3 &
     wolf_pid3=$!
-    wait_for_readyFile $ready_file2 $wolf_pid3 $port3
+    wait_for_readyFile "$ready_file2" $wolf_pid3 $port3
     ./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 1 -v 4 -F 1 \
                              -p $port3
     RESULT=$?
     [ $RESULT -ne 1 ] && \
-                      printf '\n\n%s\n' "Client connection succeeded $RESULT" \
+                      printf '\n\n%s\n' "Client connection 5 succeeded $RESULT" \
                       && exit 1
     printf '%s\n\n' "Test successfully REVOKED!"
 fi
@@ -373,20 +389,20 @@ openssl s_server $V4V6_FLAG -cert ./certs/server-cert.pem -key certs/server-key.
 openssl_pid=$!
 sleep 0.1
 
-printf '%s\n\n' "------------- TEST CASE 5 SHOULD PASS ----------------------"
+printf '%s\n\n' "------------- TEST CASE 6 SHOULD PASS ----------------------"
 # client asks for OCSP staple but doesn't fail when none returned
 ./examples/client/client -p $port -g -v 3 -W 1
 
 RESULT=$?
-[ $RESULT -ne 0 ] && printf '\n\n%s\n' "Client connection 5 failed" && exit 1
+[ $RESULT -ne 0 ] && printf '\n\n%s\n' "Client connection 6 failed" && exit 1
 printf '%s\n\n' "Test PASSED!"
 
-printf '%s\n\n' "------------- TEST CASE 6 SHOULD UNKNOWN -------------------"
+printf '%s\n\n' "------------- TEST CASE 7 SHOULD UNKNOWN -------------------"
 # client asks for OCSP staple but doesn't fail when none returned
 ./examples/client/client -p $port -g -v 3 -W 1m
 
 RESULT=$?
-[ $RESULT -ne 1 ] && printf '\n\n%s\n' "Client connection 6 succeeded $RESULT" \
+[ $RESULT -ne 1 ] && printf '\n\n%s\n' "Client connection 7 succeeded $RESULT" \
                   && exit 1
 printf '%s\n\n' "Test PASSED!"
 
@@ -394,22 +410,22 @@ openssl ciphers -tls1_3
 openssl_tls13=$?
 ./examples/client/client -v 4 2>&1 | grep -- 'Bad SSL version'
 wolfssl_not_tls13=$?
-if [ "$openssl_tls13" = "0" -a "wolfssl_not_tls13" != "0" ]; then
-    printf '%s\n\n' "------------- TEST CASE 7 SHOULD PASS --------------------"
+if [ "$openssl_tls13" = "0" -a "$wolfssl_not_tls13" != "0" ]; then
+    printf '%s\n\n' "------------- TEST CASE 8 SHOULD PASS --------------------"
     # client asks for OCSP staple but doesn't fail when none returned
     ./examples/client/client -p $port -g -v 4 -W 1
 
     RESULT=$?
-    [ $RESULT -ne 0 ] && printf '\n\n%s\n' "Client connection 7 failed" && exit 1
+    [ $RESULT -ne 0 ] && printf '\n\n%s\n' "Client connection 8 failed" && exit 1
     printf '%s\n\n' "Test PASSED!"
 
-    printf '%s\n\n' "------------- TEST CASE 8 SHOULD UNKNOWN -----------------"
+    printf '%s\n\n' "------------- TEST CASE 9 SHOULD UNKNOWN -----------------"
     # client asks for OCSP staple but doesn't fail when none returned
     ./examples/client/client -p $port -g -v 4 -W 1m
 
     RESULT=$?
     [ $RESULT -ne 1 ] \
-                  && printf '\n\n%s\n' "Client connection 8 succeeded $RESULT" \
+                  && printf '\n\n%s\n' "Client connection 9 succeeded $RESULT" \
                   && exit 1
     printf '%s\n\n' "Test PASSED!"
 fi

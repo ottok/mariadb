@@ -4422,13 +4422,15 @@ bool Item_param::get_date(THD *thd, MYSQL_TIME *res, date_mode_t fuzzydate)
 }
 
 
-double Item_param::PValue::val_real() const
+double Item_param::PValue::val_real(const Type_std_attributes *attr) const
 {
   switch (type_handler()->cmp_type()) {
   case REAL_RESULT:
     return real;
   case INT_RESULT:
-    return (double) integer;
+    return attr->unsigned_flag
+      ? (double) (ulonglong) integer
+      : (double) integer;
   case DECIMAL_RESULT:
     return m_decimal.to_double();
   case STRING_RESULT:
@@ -4502,7 +4504,7 @@ String *Item_param::PValue::val_str(String *str,
     str->set_real(real, NOT_FIXED_DEC, &my_charset_bin);
     return str;
   case INT_RESULT:
-    str->set(integer, &my_charset_bin);
+    str->set_int(integer, attr->unsigned_flag, &my_charset_bin);
     return str;
   case DECIMAL_RESULT:
     if (m_decimal.to_string_native(str, 0, 0, 0) <= 1)
@@ -8544,6 +8546,7 @@ Item_cache_wrapper::Item_cache_wrapper(THD *thd, Item *item_arg):
   with_field= orig_item->with_field;
   name= item_arg->name;
   m_with_subquery= orig_item->with_subquery();
+  with_window_func= orig_item->with_window_func;
 
   if ((expr_value= orig_item->get_cache(thd)))
     expr_value->setup(thd, orig_item);

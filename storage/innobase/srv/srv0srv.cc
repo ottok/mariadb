@@ -1137,12 +1137,6 @@ srv_export_innodb_status(void)
 
 	export_vars.innodb_log_writes = srv_stats.log_writes;
 
-	export_vars.innodb_pages_created = buf_pool.stat.n_pages_created;
-
-	export_vars.innodb_pages_read = buf_pool.stat.n_pages_read;
-
-	export_vars.innodb_pages_written = buf_pool.stat.n_pages_written;
-
 	export_vars.innodb_row_lock_waits = srv_stats.n_lock_wait_count;
 
 	export_vars.innodb_row_lock_current_waits =
@@ -1524,7 +1518,7 @@ srv_sync_log_buffer_in_background(void)
 	srv_main_thread_op_info = "flushing log";
 	if (difftime(current_time, srv_last_log_flush_time)
 	    >= srv_flush_log_at_timeout) {
-		log_sys.initiate_write(true);
+		log_buffer_flush_to_disk();
 		srv_last_log_flush_time = current_time;
 		srv_log_writes_and_flush++;
 	}

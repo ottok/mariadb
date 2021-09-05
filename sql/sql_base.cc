@@ -6211,7 +6211,7 @@ find_field_in_table_ref(THD *thd, TABLE_LIST *table_list,
           TABLE *table= field_to_set->table;
           DBUG_ASSERT(table);
           if (thd->column_usage == MARK_COLUMNS_READ)
-            bitmap_set_bit(table->read_set, field_to_set->field_index);
+            field_to_set->register_field_in_read_map();
           else
             bitmap_set_bit(table->write_set, field_to_set->field_index);
         }
@@ -7492,7 +7492,7 @@ static bool setup_natural_join_row_types(THD *thd,
 ****************************************************************************/
 
 int setup_wild(THD *thd, TABLE_LIST *tables, List<Item> &fields,
-	       List<Item> *sum_func_list, SELECT_LEX *select_lex)
+	       List<Item> *sum_func_list, SELECT_LEX *select_lex, bool returning_field)
 {
   Item *item;
   List_iterator<Item> it(fields);
@@ -7532,7 +7532,7 @@ int setup_wild(THD *thd, TABLE_LIST *tables, List<Item> &fields,
       else if (insert_fields(thd, ((Item_field*) item)->context,
                              ((Item_field*) item)->db_name.str,
                              ((Item_field*) item)->table_name.str, &it,
-                             any_privileges, &select_lex->hidden_bit_fields))
+                             any_privileges, &select_lex->hidden_bit_fields, returning_field))
       {
 	if (arena)
 	  thd->restore_active_arena(arena, &backup);
@@ -7678,7 +7678,7 @@ int setup_returning_fields(THD* thd, TABLE_LIST* table_list)
   if (!thd->lex->has_returning())
     return 0;
   return setup_wild(thd, table_list, thd->lex->returning()->item_list, NULL,
-                    thd->lex->returning())
+                    thd->lex->returning(), true)
       || setup_fields(thd, Ref_ptr_array(), thd->lex->returning()->item_list,
                       MARK_COLUMNS_READ, NULL, NULL, false);
 }
@@ -8005,7 +8005,7 @@ bool get_key_map_from_key_list(key_map *map, TABLE *table,
 bool
 insert_fields(THD *thd, Name_resolution_context *context, const char *db_name,
 	      const char *table_name, List_iterator<Item> *it,
-              bool any_privileges, uint *hidden_bit_fields)
+              bool any_privileges, uint *hidden_bit_fields, bool returning_field)
 {
   Field_iterator_table_ref field_iterator;
   bool found;
@@ -8032,12 +8032,14 @@ insert_fields(THD *thd, Name_resolution_context *context, const char *db_name,
     else treat natural joins as leaves and do not iterate over their underlying
     tables.
   */
-  for (TABLE_LIST *tables= (table_name ? context->table_list :
-                            context->first_name_resolution_table);
-       tables;
-       tables= (table_name ? tables->next_local :
-                tables->next_name_resolution_table)
-       )
+  TABLE_LIST *first= context->first_name_resolution_table;
+  TABLE_LIST *TABLE_LIST::* next= &TABLE_LIST::next_name_resolution_table;
+  if (table_name && !returning_field)
+  {
+    first= context->table_list;
+    next= &TABLE_LIST::next_local;
+  }
+  for (TABLE_LIST *tables= first; tables; tables= tables->*next)
   {
     Field *field;
     TABLE *table= tables->table;

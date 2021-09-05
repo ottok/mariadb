@@ -776,10 +776,10 @@ std::vector<pfs_os_file_t> fil_system_t::detach(fil_space_t *space,
     unflushed_spaces.remove(*space);
   }
 
-  if (space->is_in_rotation_list)
+  if (space->is_in_default_encrypt)
   {
-    space->is_in_rotation_list= false;
-    rotation_list.remove(*space);
+    space->is_in_default_encrypt= false;
+    default_encrypt_tables.remove(*space);
   }
   UT_LIST_REMOVE(space_list, space);
   if (space == sys_space)
@@ -1001,20 +1001,25 @@ fil_space_t *fil_space_t::create(const char *name, ulint id, ulint flags,
 		fil_system.max_assigned_id = id;
 	}
 
+	const bool rotate =
+		(purpose == FIL_TYPE_TABLESPACE
+		 && (mode == FIL_ENCRYPTION_ON
+		     || mode == FIL_ENCRYPTION_OFF || srv_encrypt_tables)
+		 && fil_crypt_must_default_encrypt());
+
 	/* Inform key rotation that there could be something
 	to do */
-	if (purpose == FIL_TYPE_TABLESPACE
-	    && !srv_fil_crypt_rotate_key_age && fil_crypt_threads_event &&
-	    (mode == FIL_ENCRYPTION_ON || mode == FIL_ENCRYPTION_OFF
-	     || srv_encrypt_tables)) {
+	if (rotate) {
 		/* Key rotation is not enabled, need to inform background
 		encryption threads. */
-		fil_system.rotation_list.push_back(*space);
-		space->is_in_rotation_list = true;
-		mutex_exit(&fil_system.mutex);
+		fil_system.default_encrypt_tables.push_back(*space);
+		space->is_in_default_encrypt = true;
+	}
+
+	mutex_exit(&fil_system.mutex);
+
+	if (rotate && srv_n_fil_crypt_threads_started) {
 		os_event_set(fil_crypt_threads_event);
-	} else {
-		mutex_exit(&fil_system.mutex);
 	}
 
 	return(space);
@@ -1737,9 +1742,7 @@ void fil_close_tablespace(ulint id)
 	can no longer read more pages of this tablespace to buf_pool.
 	Thus we can clean the tablespace out of buf_pool
 	completely and permanently. */
-	while (buf_flush_dirty_pages(id));
-	/* Ensure that all asynchronous IO is completed. */
-	os_aio_wait_until_no_pending_writes();
+	while (buf_flush_list_space(space));
 	ut_ad(space->is_stopping());
 
 	/* If the free is successful, the X lock will be released before

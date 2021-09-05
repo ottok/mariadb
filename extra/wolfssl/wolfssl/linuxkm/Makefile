@@ -1,6 +1,6 @@
 # libwolfssl Linux kernel module Makefile (wraps Kbuild-native makefile)
 #
-# Copyright (C) 2006-2020 wolfSSL Inc.
+# Copyright (C) 2006-2021 wolfSSL Inc.
 #
 # This file is part of wolfSSL.
 #
@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+#/
 
 SHELL=/bin/bash
 
@@ -32,7 +33,7 @@ ifndef SRC_TOP
     SRC_TOP=$(shell dirname $(MODULE_TOP))
 endif
 
-WOLFSSL_CFLAGS=-DHAVE_CONFIG_H -I$(SRC_TOP) -DBUILDING_WOLFSSL $(AM_CFLAGS) $(CFLAGS) -Wno-declaration-after-statement -Wno-redundant-decls
+WOLFSSL_CFLAGS=-DHAVE_CONFIG_H -I$(SRC_TOP) -DBUILDING_WOLFSSL $(AM_CFLAGS) $(CFLAGS) -Wno-declaration-after-statement -Wno-redundant-decls -ffreestanding
 ifdef KERNEL_EXTRA_CFLAGS
     WOLFSSL_CFLAGS += $(KERNEL_EXTRA_CFLAGS)
 endif

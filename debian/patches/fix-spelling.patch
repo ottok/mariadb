@@ -1,21 +1,8 @@
-Forwarded: https://github.com/mariadb-corporation/libmarias3/pull/102
-# Already merged in libmarias3, but S3 plugin not updated into MariaDB 10.5
 Forwarded: https://github.com/facebook/rocksdb/pull/7785
 Author: Otto Kekäläinen <otto@debian.org>
 Subject: Fix various spelling errors still found in code
   Two upstream PRs remain that have been merged, but not imported on MariaDB 10.5.
 
---- a/storage/maria/libmarias3/src/xml.c
-+++ b/storage/maria/libmarias3/src/xml.c
-@@ -782,7 +782,7 @@ static struct xml_node* xml_parse_node(s
- 	/* Close tag has to match open tag
- 	 */
- 	if (!xml_string_equals(tag_open, tag_close)) {
--		xml_parser_error(parser, NO_CHARACTER, "xml_parse_node::tag missmatch");
-+		xml_parser_error(parser, NO_CHARACTER, "xml_parse_node::tag mismatch");
- 		goto exit_failure;
- 	}
- 
 --- a/storage/rocksdb/rocksdb/db/external_sst_file_ingestion_job.cc
 +++ b/storage/rocksdb/rocksdb/db/external_sst_file_ingestion_job.cc
 @@ -46,7 +46,7 @@ Status ExternalSstFileIngestionJob::Prep

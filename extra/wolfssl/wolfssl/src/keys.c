@@ -1,6 +1,6 @@
 /* keys.c
  *
- * Copyright (C) 2006-2020 wolfSSL Inc.
+ * Copyright (C) 2006-2021 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -1203,6 +1203,8 @@ int SetCipherSpecs(WOLFSSL* ssl)
             break;
     #endif
 #endif /* WOLFSSL_TLS13 */
+        default:
+            break;
         }
     }
 
@@ -2271,7 +2273,7 @@ static int SetKeys(Ciphers* enc, Ciphers* dec, Keys* keys, CipherSpecs* specs,
 #endif /* BUILD_ARC4 */
 
 
-#if defined(HAVE_CHACHA) && defined(HAVE_POLY1305)
+#if defined(HAVE_CHACHA) && defined(HAVE_POLY1305) && !defined(NO_CHAPOL_AEAD)
     /* Check that the max implicit iv size is suffecient */
     #if (AEAD_MAX_IMP_SZ < 12) /* CHACHA20_IMP_IV_SZ */
         #error AEAD_MAX_IMP_SZ is too small for ChaCha20
@@ -2909,6 +2911,15 @@ static int SetKeys(Ciphers* enc, Ciphers* dec, Keys* keys, CipherSpecs* specs,
                     return MEMORY_E;
             }
 
+            if (enc) {
+                if (wc_HmacInit(enc->hmac, heap, devId) != 0) {
+                    WOLFSSL_MSG("HmacInit failed in SetKeys");
+                    XFREE(enc->hmac, heap, DYNAMIC_TYPE_CIPHER);
+                    enc->hmac = NULL;
+                    return ASYNC_INIT_E;
+                }
+            }
+
             if (dec && dec->hmac == NULL) {
                 dec->hmac = (Hmac*)XMALLOC(sizeof(Hmac), heap,
                                                            DYNAMIC_TYPE_CIPHER);
@@ -2916,15 +2927,11 @@ static int SetKeys(Ciphers* enc, Ciphers* dec, Keys* keys, CipherSpecs* specs,
                     return MEMORY_E;
             }
 
-            if (enc) {
-                if (wc_HmacInit(enc->hmac, heap, devId) != 0) {
-                    WOLFSSL_MSG("HmacInit failed in SetKeys");
-                    return ASYNC_INIT_E;
-                }
-            }
             if (dec) {
                 if (wc_HmacInit(dec->hmac, heap, devId) != 0) {
                     WOLFSSL_MSG("HmacInit failed in SetKeys");
+                    XFREE(dec->hmac, heap, DYNAMIC_TYPE_CIPHER);
+                    dec->hmac = NULL;
                     return ASYNC_INIT_E;
                 }
             }
@@ -3079,10 +3086,10 @@ int SetKeysSide(WOLFSSL* ssl, enum encrypt_side side)
 #ifdef WOLFSSL_DEBUG_TLS
             WOLFSSL_MSG("Provisioning ENCRYPT key");
             if (ssl->options.side == WOLFSSL_CLIENT_END) {
-                WOLFSSL_BUFFER(ssl->keys.client_write_key, ssl->specs.key_size);
+                WOLFSSL_BUFFER(keys->client_write_key, ssl->specs.key_size);
             }
             else {
-                WOLFSSL_BUFFER(ssl->keys.server_write_key, ssl->specs.key_size);
+                WOLFSSL_BUFFER(keys->server_write_key, ssl->specs.key_size);
             }
 #endif
             wc_encrypt = &ssl->encrypt;
@@ -3092,10 +3099,10 @@ int SetKeysSide(WOLFSSL* ssl, enum encrypt_side side)
 #ifdef WOLFSSL_DEBUG_TLS
             WOLFSSL_MSG("Provisioning DECRYPT key");
             if (ssl->options.side == WOLFSSL_CLIENT_END) {
-                WOLFSSL_BUFFER(ssl->keys.server_write_key, ssl->specs.key_size);
+                WOLFSSL_BUFFER(keys->server_write_key, ssl->specs.key_size);
             }
             else {
-                WOLFSSL_BUFFER(ssl->keys.client_write_key, ssl->specs.key_size);
+                WOLFSSL_BUFFER(keys->client_write_key, ssl->specs.key_size);
             }
 #endif
             wc_decrypt = &ssl->decrypt;
@@ -3105,17 +3112,17 @@ int SetKeysSide(WOLFSSL* ssl, enum encrypt_side side)
 #ifdef WOLFSSL_DEBUG_TLS
             WOLFSSL_MSG("Provisioning ENCRYPT key");
             if (ssl->options.side == WOLFSSL_CLIENT_END) {
-                WOLFSSL_BUFFER(ssl->keys.client_write_key, ssl->specs.key_size);
+                WOLFSSL_BUFFER(keys->client_write_key, ssl->specs.key_size);
             }
             else {
-                WOLFSSL_BUFFER(ssl->keys.server_write_key, ssl->specs.key_size);
+                WOLFSSL_BUFFER(keys->server_write_key, ssl->specs.key_size);
             }
             WOLFSSL_MSG("Provisioning DECRYPT key");
             if (ssl->options.side == WOLFSSL_CLIENT_END) {
-                WOLFSSL_BUFFER(ssl->keys.server_write_key, ssl->specs.key_size);
+                WOLFSSL_BUFFER(keys->server_write_key, ssl->specs.key_size);
             }
             else {
-                WOLFSSL_BUFFER(ssl->keys.client_write_key, ssl->specs.key_size);
+                WOLFSSL_BUFFER(keys->client_write_key, ssl->specs.key_size);
             }
 #endif
             wc_encrypt = &ssl->encrypt;

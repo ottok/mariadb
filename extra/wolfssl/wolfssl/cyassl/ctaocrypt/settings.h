@@ -1,6 +1,6 @@
 /* settings.h
  *
- * Copyright (C) 2006-2020 wolfSSL Inc.
+ * Copyright (C) 2006-2021 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -534,9 +534,9 @@
     #endif
 
     #if (SSL_CFG_3DES_EN == DEF_ENABLED)
-        #undef  NO_DES
+        #undef  NO_DES3
     #else
-        #define NO_DES
+        #define NO_DES3
     #endif
 
     #if (SSL_CFG_AES_EN == DEF_ENABLED)

@@ -6,7 +6,7 @@ Description:
  in a RocksDB release and imported into MariaDB and then into Debian.
 --- a/storage/rocksdb/build_rocksdb.cmake
 +++ b/storage/rocksdb/build_rocksdb.cmake
-@@ -87,6 +87,8 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux"
+@@ -90,6 +90,8 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux"
    add_definitions(-DOS_LINUX)
  elseif(CMAKE_SYSTEM_NAME MATCHES "SunOS")
    add_definitions(-DOS_SOLARIS)

@@ -617,9 +617,8 @@ public:
 					/*!< number of currently pending
 					checkpoint writes */
 
-	/** buffer for checkpoint header */
-	MY_ALIGNED(OS_FILE_LOG_BLOCK_SIZE)
-	byte		checkpoint_buf[OS_FILE_LOG_BLOCK_SIZE];
+  /** buffer for checkpoint header */
+  byte *checkpoint_buf;
 	/* @} */
 
 private:
@@ -699,15 +698,6 @@ public:
 
   /** Shut down the redo log subsystem. */
   void close();
-
-  /** Initiate a write of the log buffer to the file if needed.
-  @param flush  whether to initiate a durable write */
-  inline void initiate_write(bool flush)
-  {
-    const lsn_t lsn= get_lsn();
-    if (!flush || get_flushed_lsn() < lsn)
-      log_write_up_to(lsn, flush);
-  }
 };
 
 /** Redo log system */

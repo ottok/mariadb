@@ -35,6 +35,7 @@
 #include "calpontselectexecutionplan.h"
 #include "resourcedistributor.h"
 #include "installdir.h"
+#include "branchpred.h"
 
 #include "atomicops.h"
 
@@ -125,6 +126,8 @@ const uint64_t defaultOrderByLimitMaxMemory = 1 * 1024 * 1024 * 1024ULL;
 const uint64_t defaultDECThrottleThreshold = 200000000;  // ~200 MB
 
 const uint8_t defaultUseCpimport = 1;
+
+const bool defaultAllowDiskAggregation = false;
 /** @brief ResourceManager
  *	Returns requested values from Config
  *
@@ -148,7 +151,7 @@ public:
 
     /** @brief dtor
      */
-    virtual ~ResourceManager() { }
+    virtual ~ResourceManager() {}
 
     typedef std::map <uint32_t, uint64_t> MemMap;
 
@@ -174,6 +177,11 @@ public:
     int  	    getEmExecQueueSize() const
     {
         return  getIntVal(fExeMgrStr, "ExecQueueSize", defaultEMExecQueueSize);
+    }
+
+    bool         getAllowDiskAggregation() const
+    {
+        return fAllowedDiskAggregation;
     }
 
     int	      	getHjMaxBuckets() const
@@ -390,7 +398,7 @@ public:
         atomicops::atomicAdd(&totalUmMemLimit, amount);
         atomicops::atomicAdd(sessionLimit.get(), amount);
     }
-    inline int64_t availableMemory()
+    inline int64_t availableMemory() const
     {
         return totalUmMemLimit;
     }
@@ -547,13 +555,18 @@ private:
      * @param name the param name whose value is to be returned
      * @param defVal the default value returned if the value is missing
      */
-    std::string getStringVal(const std::string& section, const std::string& name, const std::string& defVal) const;
+    std::string getStringVal(const std::string& section,
+                             const std::string& name,
+                             const std::string& defVal,
+                             const bool reReadConfigIfNeeded = false) const;
 
     template<typename IntType>
     IntType getUintVal(const std::string& section, const std::string& name, IntType defval) const;
 
     template<typename IntType>
     IntType getIntVal(const std::string& section, const std::string& name, IntType defval) const;
+
+    bool getBoolVal(const std::string& section, const std::string& name, bool defval) const;
 
     void logMessage(logging::LOG_TYPE logLevel, logging::Message::MessageID mid, uint64_t value = 0, uint32_t sessionId = 0);
 
@@ -569,6 +582,7 @@ private:
     /*static	const*/ std::string fDMLProcStr;
     /*static	const*/ std::string fBatchInsertStr;
     static	const std::string fOrderByLimitStr;
+    static      const std::string fRowAggregationStr;
     config::Config* fConfig;
     static ResourceManager* fInstance;
     uint32_t fTraceFlags;
@@ -600,16 +614,24 @@ private:
 
     bool isExeMgr;
     bool fUseHdfs;
+    bool fAllowedDiskAggregation{false};
 };
 
 
-inline std::string ResourceManager::getStringVal(const std::string& section, const std::string& name, const std::string& defval) const
+inline std::string ResourceManager::getStringVal(const std::string& section,
+                                                 const std::string& name,
+                                                 const std::string& defval,
+                                                 const bool reReadConfigIfNeeded) const
 {
-    std::string val = fConfig->getConfig(section, name);
+    std::string val = UNLIKELY(reReadConfigIfNeeded)
+                        ? fConfig->getFromActualConfig(section, name)
+                        : fConfig->getConfig(section, name);
 #ifdef DEBUGRM
     std::cout << "RM getStringVal for " << section << " : " << name << " val: " << val << " default: " << defval << std::endl;
 #endif
-    return (0 == val.length() ? defval : val);
+    if (val.empty())
+        val = defval;
+    return val;
 }
 
 template<typename IntType>
@@ -633,7 +655,11 @@ inline IntType ResourceManager::getIntVal(const std::string& section, const std:
     return ( 0 == retStr.length() ? defval : fConfig->fromText(retStr) );
 }
 
-
+inline bool ResourceManager::getBoolVal(const std::string& section, const std::string& name, bool defval) const
+{
+  auto retStr = fConfig->getConfig(section, name);
+  return ( 0 == retStr.length() ? defval : (retStr == "y" || retStr == "Y") );
+}
 
 }
 

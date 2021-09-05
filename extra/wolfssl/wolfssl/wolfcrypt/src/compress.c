@@ -1,6 +1,6 @@
 /* compress.c
  *
- * Copyright (C) 2006-2020 wolfSSL Inc.
+ * Copyright (C) 2006-2021 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -216,6 +216,9 @@ int wc_DeCompressDynamic(byte** out, int maxSz, int memoryType,
     int i;
     word32 tmpSz = 0;
     byte*  tmp;
+
+    (void)memoryType;
+    (void)heap;
 
     if (out == NULL || in == NULL) {
         return BAD_FUNC_ARG;
