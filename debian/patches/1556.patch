@@ -146,7 +146,7 @@ file.
 +  # has thanks to the default use of Unix socket authentication for the 'root'
 +  # account used everywhere since MariaDB 10.4.
 +  postrotate
-+    if test -x /etc/mysql/debian.cnf
++    if test -r /etc/mysql/debian.cnf
 +    then
 +      EXTRAPARAM='--defaults-file=/etc/mysql/debian.cnf'
 +    fi
