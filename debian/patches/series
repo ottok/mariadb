@@ -1,6 +1,3 @@
-mips-groonga-atomic.patch
-mips-connect-unaligned.patch
-c11_atomics.patch
 0025-Change-the-default-optimization-from-O3-to-O2-in-mys.patch
 mips-compilation-failure-__bss_start-symbol-miss.patch
 rocksdb-kfreebsd.patch

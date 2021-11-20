@@ -73,11 +73,6 @@ packaging-fix-checks:
 .build-package:
   timeout: 3h
 
-build bullseye-backports:
-  extends: .build-package
-  variables:
-    RELEASE: bullseye-backports
-
 build buster-backports:
   extends: .build-package
   variables:
@@ -249,34 +244,8 @@ mariadb-10.5 Bullseye upgrade:
     variables:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
-mariadb-10.5 Bullseye to mariadb-10.5 upgrade:
-  stage: upgrade from Bullseye/Buster/Stretch
-  needs:
-    - job: build
-  image: debian:bullseye
-  artifacts:
-    when: always
-    name: "$CI_BUILD_NAME"
-    paths:
-      - ${WORKING_DIR}/debug
-  script:
-    - *test-prepare-container
-    # Install everything MariaDB currently in Debian Bullseye
-    - apt-get install -y 'default-mysql*' 'mariadb-*' 'libmariadb*'
-    # Verify installation of MariaDB from Bullseye
-    - *test-verify-initial
-    - *test-enable-sid-repos
-    - *test-install
-    - service mariadb status
-    - *test-verify-final
-  variables:
-    GIT_STRATEGY: none
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
-
 mariadb-10.3 Buster to mariadb-10.5 upgrade:
-  stage: upgrade from Bullseye/Buster/Stretch
+  stage: upgrade from Buster/Stretch
   needs:
     - job: build
   image: debian:buster
@@ -302,7 +271,7 @@ mariadb-10.3 Buster to mariadb-10.5 upgrade:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
 mariadb-10.1 Stretch to mariadb-10.5 upgrade:
-  stage: upgrade from Bullseye/Buster/Stretch
+  stage: upgrade from Buster/Stretch
   needs:
     - job: build
   image: debian:stretch
@@ -453,7 +422,7 @@ default-libmysqlclient-dev Bullseye upgrade:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
 default-libmysqlclient-dev Buster upgrade:
-  stage: upgrade from Bullseye/Buster/Stretch
+  stage: upgrade from Buster/Stretch
   needs:
     - job: build
   image: debian:buster
@@ -474,7 +443,7 @@ default-libmysqlclient-dev Buster upgrade:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
 default-libmysqlclient-dev Stretch upgrade:
-  stage: upgrade from Bullseye/Buster/Stretch
+  stage: upgrade from Buster/Stretch
   needs:
     - job: build
   image: debian:stretch
@@ -495,7 +464,7 @@ default-libmysqlclient-dev Stretch upgrade:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
 mariadb-connector-c Stretch upgrade:
-  stage: upgrade from Bullseye/Buster/Stretch
+  stage: upgrade from Buster/Stretch
   needs:
     - job: build
   image: debian:stretch
@@ -514,8 +483,6 @@ mariadb-connector-c Stretch upgrade:
   except:
     variables:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
-  allow_failure: true
-  # Upgrading libc from Stretch to Bookworm is not possible due to Bug#993755
 
 # Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
 # The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
