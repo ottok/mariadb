@@ -34,6 +34,7 @@ gnitpick:
   except:
     variables:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+  allow_failure: true
 
 packaging-fix-checks:
   stage: provisioning
