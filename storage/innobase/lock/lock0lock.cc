@@ -4219,6 +4219,65 @@ void lock_release(trx_t* trx)
 #endif
 }
 
+/** Release non-exclusive locks on XA PREPARE,
+and release possible other transactions waiting because of these locks. */
+void lock_release_on_prepare(trx_t *trx)
+{
+  ulint count= 0;
+  lock_mutex_enter();
+  ut_ad(!trx_mutex_own(trx));
+
+  for (lock_t *lock= UT_LIST_GET_LAST(trx->lock.trx_locks); lock; )
+  {
+    ut_ad(lock->trx == trx);
+
+    if (lock_get_type_low(lock) == LOCK_REC)
+    {
+      ut_ad(!lock->index->table->is_temporary());
+      if (lock_rec_get_gap(lock) || lock_get_mode(lock) != LOCK_X)
+        lock_rec_dequeue_from_page(lock);
+      else
+      {
+        ut_ad(trx->dict_operation ||
+              lock->index->table->id >= DICT_HDR_FIRST_ID);
+retain_lock:
+        lock= UT_LIST_GET_PREV(trx_locks, lock);
+        continue;
+      }
+    }
+    else
+    {
+      ut_ad(lock_get_type_low(lock) & LOCK_TABLE);
+      dict_table_t *table= lock->un_member.tab_lock.table;
+      ut_ad(!table->is_temporary());
+
+      switch (lock_get_mode(lock)) {
+      case LOCK_IS:
+      case LOCK_S:
+        lock_table_dequeue(lock);
+        break;
+      case LOCK_IX:
+      case LOCK_X:
+        ut_ad(table->id >= DICT_HDR_FIRST_ID || trx->dict_operation);
+        /* fall through */
+      default:
+        goto retain_lock;
+      }
+    }
+
+    if (++count == LOCK_RELEASE_INTERVAL)
+    {
+      lock_mutex_exit();
+      count= 0;
+      lock_mutex_enter();
+    }
+
+    lock= UT_LIST_GET_LAST(trx->lock.trx_locks);
+  }
+
+  lock_mutex_exit();
+}
+
 /* True if a lock mode is S or X */
 #define IS_LOCK_S_OR_X(lock) \
 	(lock_get_mode(lock) == LOCK_S \
@@ -5640,16 +5699,18 @@ lock_sec_rec_read_check_and_lock(
 	if the max trx id for the page >= min trx id for the trx list or a
 	database recovery is running. */
 
-	if (!page_rec_is_supremum(rec)
+	trx_t *trx = thr_get_trx(thr);
+	if (!lock_table_has(trx, index->table, LOCK_X)
+	    && !page_rec_is_supremum(rec)
 	    && page_get_max_trx_id(block->frame) >= trx_sys.get_min_trx_id()
 	    && lock_rec_convert_impl_to_expl(thr_get_trx(thr), block, rec,
-					     index, offsets)) {
+					     index, offsets)
+	    && gap_mode == LOCK_REC_NOT_GAP) {
 		/* We already hold an implicit exclusive lock. */
 		return DB_SUCCESS;
 	}
 
 #ifdef WITH_WSREP
-	trx_t *trx= thr_get_trx(thr);
 	/* If transaction scanning an unique secondary key is wsrep
 	high priority thread (brute force) this scanning may involve
 	GAP-locking in the index. As this locking happens also when
@@ -5723,9 +5784,12 @@ lock_clust_rec_read_check_and_lock(
 
 	heap_no = page_rec_get_heap_no(rec);
 
-	if (heap_no != PAGE_HEAP_NO_SUPREMUM
-	    && lock_rec_convert_impl_to_expl(thr_get_trx(thr), block, rec,
-					     index, offsets)) {
+	trx_t *trx = thr_get_trx(thr);
+	if (!lock_table_has(trx, index->table, LOCK_X)
+	    && heap_no != PAGE_HEAP_NO_SUPREMUM
+	    && lock_rec_convert_impl_to_expl(trx, block, rec,
+					     index, offsets)
+	    && gap_mode == LOCK_REC_NOT_GAP) {
 		/* We already hold an implicit exclusive lock. */
 		return DB_SUCCESS;
 	}

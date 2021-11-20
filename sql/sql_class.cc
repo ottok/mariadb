@@ -1884,7 +1884,6 @@ void THD::awake_no_mutex(killed_state state_to_set)
   DBUG_PRINT("enter", ("this: %p current_thd: %p  state: %d",
                        this, current_thd, (int) state_to_set));
   THD_CHECK_SENTRY(this);
-  mysql_mutex_assert_owner(&LOCK_thd_data);
   mysql_mutex_assert_owner(&LOCK_thd_kill);
 
   print_aborted_warning(3, "KILLED");
@@ -2049,6 +2048,8 @@ bool THD::notify_shared_lock(MDL_context_owner *ctx_in_use,
 
   if (needs_thr_lock_abort)
   {
+    bool mutex_released= false;
+    mysql_mutex_lock(&in_use->LOCK_thd_kill);
     mysql_mutex_lock(&in_use->LOCK_thd_data);
     /* If not already dying */
     if (in_use->killed != KILL_CONNECTION_HARD)
@@ -2065,12 +2066,25 @@ bool THD::notify_shared_lock(MDL_context_owner *ctx_in_use,
           thread can see those instances (e.g. see partitioning code).
         */
         if (!thd_table->needs_reopen())
-        {
           signalled|= mysql_lock_abort_for_thread(this, thd_table);
-        }
       }
+#ifdef WITH_WSREP
+      if (WSREP(this) && wsrep_thd_is_BF(this, false))
+      {
+        WSREP_DEBUG("notify_shared_lock: BF thread %llu query %s"
+                    " victim %llu query %s",
+                    this->real_id, wsrep_thd_query(this),
+                    in_use->real_id, wsrep_thd_query(in_use));
+        wsrep_abort_thd(this, in_use, false);
+        mutex_released= true;
+      }
+#endif /* WITH_WSREP */
     }
-    mysql_mutex_unlock(&in_use->LOCK_thd_data);
+    if (!mutex_released)
+    {
+      mysql_mutex_unlock(&in_use->LOCK_thd_data);
+      mysql_mutex_unlock(&in_use->LOCK_thd_kill);
+    }
   }
   DBUG_RETURN(signalled);
 }
@@ -4767,6 +4781,32 @@ extern "C" void thd_create_random_password(MYSQL_THD thd,
 }
 
 
+extern "C" const char *thd_priv_host(MYSQL_THD thd, size_t *length)
+{
+  const Security_context *sctx= thd->security_ctx;
+  if (!sctx)
+  {
+    *length= 0;
+    return NULL;
+  }
+  *length= strlen(sctx->priv_host);
+  return sctx->priv_host;
+}
+
+
+extern "C" const char *thd_priv_user(MYSQL_THD thd, size_t *length)
+{
+  const Security_context *sctx= thd->security_ctx;
+  if (!sctx)
+  {
+    *length= 0;
+    return NULL;
+  }
+  *length= strlen(sctx->priv_user);
+  return sctx->priv_user;
+}
+
+
 #ifdef INNODB_COMPATIBILITY_HOOKS
 
 /** open a table and add it to thd->open_tables
@@ -4868,11 +4908,13 @@ void destroy_thd(MYSQL_THD thd)
 extern "C" pthread_key(struct st_my_thread_var *, THR_KEY_mysys);
 MYSQL_THD create_background_thd()
 {
-  DBUG_ASSERT(!current_thd);
+  auto save_thd = current_thd;
+  set_current_thd(nullptr);
+
   auto save_mysysvar= pthread_getspecific(THR_KEY_mysys);
 
   /*
-    Allocate new mysys_var specifically this THD,
+    Allocate new mysys_var specifically new THD,
     so that e.g safemalloc, DBUG etc are happy.
   */
   pthread_setspecific(THR_KEY_mysys, 0);
@@ -4880,7 +4922,8 @@ MYSQL_THD create_background_thd()
   auto thd_mysysvar= pthread_getspecific(THR_KEY_mysys);
   auto thd= new THD(0);
   pthread_setspecific(THR_KEY_mysys, save_mysysvar);
-  thd->set_psi(PSI_CALL_get_thread());
+  thd->set_psi(nullptr);
+  set_current_thd(save_thd);
 
   /*
     Workaround the adverse effect of incrementing thread_count
@@ -4893,6 +4936,9 @@ MYSQL_THD create_background_thd()
   thd->set_command(COM_DAEMON);
   thd->system_thread= SYSTEM_THREAD_GENERIC;
   thd->security_ctx->host_or_ip= "";
+  thd->real_id= 0;
+  thd->thread_id= 0;
+  thd->query_id= 0;
   return thd;
 }
 
@@ -5262,8 +5308,9 @@ thd_need_ordering_with(const MYSQL_THD thd, const MYSQL_THD other_thd)
      the caller should guarantee that the BF state won't change.
      (e.g. InnoDB does it by keeping lock_sys.mutex locked)
   */
-  if (WSREP_ON && wsrep_thd_is_BF(thd, false) &&
-      wsrep_thd_is_BF(other_thd, false))
+  if (WSREP_ON &&
+      wsrep_thd_is_BF(const_cast<THD *>(thd), false) &&
+      wsrep_thd_is_BF(const_cast<THD *>(other_thd), false))
     return 0;
 #endif /* WITH_WSREP */
   rgi= thd->rgi_slave;
@@ -5377,8 +5424,8 @@ extern "C" bool thd_is_strict_mode(const MYSQL_THD thd)
 */
 void thd_get_query_start_data(THD *thd, char *buf)
 {
-  LEX_CSTRING field_name;
-  Field_timestampf f((uchar *)buf, NULL, 0, Field::NONE, &field_name, NULL, 6);
+  Field_timestampf f((uchar *)buf, nullptr, 0, Field::NONE, &empty_clex_str,
+                     nullptr, 6);
   f.store_TIME(thd->query_start(), thd->query_start_sec_part());
 }
 

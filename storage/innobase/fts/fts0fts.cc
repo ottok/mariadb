@@ -32,7 +32,7 @@ Full Text Search interface
 #include "fts0priv.h"
 #include "fts0types.h"
 #include "fts0types.ic"
-#include "fts0vlc.ic"
+#include "fts0vlc.h"
 #include "fts0plugin.h"
 #include "dict0priv.h"
 #include "dict0stats.h"
@@ -483,7 +483,7 @@ cleanup:
 
 	pars_info_t* info = pars_info_create();
 
-	pars_info_bind_id(info, TRUE, "table_stopword", stopword_table_name);
+	pars_info_bind_id(info, "table_stopword", stopword_table_name);
 
 	pars_info_bind_function(info, "my_func", fts_read_stopword,
 				stopword_info);
@@ -579,6 +579,7 @@ fts_cache_init(
 	cache->sync_heap->arg = mem_heap_create(1024);
 
 	cache->total_size = 0;
+	cache->total_size_at_sync = 0;
 
 	mutex_enter((ib_mutex_t*) &cache->deleted_lock);
 	cache->deleted_doc_ids = ib_vector_create(
@@ -1233,7 +1234,7 @@ fts_cache_node_add_positions(
 	ulint		enc_len;
 	ulint		last_pos;
 	byte*		ptr_start;
-	ulint		doc_id_delta;
+	doc_id_t	doc_id_delta;
 
 #ifdef UNIV_DEBUG
 	if (cache) {
@@ -1244,7 +1245,7 @@ fts_cache_node_add_positions(
 	ut_ad(doc_id >= node->last_doc_id);
 
 	/* Calculate the space required to store the ilist. */
-	doc_id_delta = (ulint)(doc_id - node->last_doc_id);
+	doc_id_delta = doc_id - node->last_doc_id;
 	enc_len = fts_get_encoded_len(doc_id_delta);
 
 	last_pos = 0;
@@ -1293,14 +1294,14 @@ fts_cache_node_add_positions(
 	ptr_start = ptr;
 
 	/* Encode the new fragment. */
-	ptr += fts_encode_int(doc_id_delta, ptr);
+	ptr = fts_encode_int(doc_id_delta, ptr);
 
 	last_pos = 0;
 	for (i = 0; i < ib_vector_size(positions); i++) {
 		ulint	pos = *(static_cast<ulint*>(
 			 ib_vector_get(positions, i)));
 
-		ptr += fts_encode_int(pos - last_pos, ptr);
+		ptr = fts_encode_int(pos - last_pos, ptr);
 		last_pos = pos;
 	}
 
@@ -1899,7 +1900,7 @@ fts_create_common_tables(
 
 	fts_table.suffix = "CONFIG";
 	fts_get_table_name(&fts_table, fts_name, true);
-	pars_info_bind_id(info, true, "config_table", fts_name);
+	pars_info_bind_id(info, "config_table", fts_name);
 
 	graph = fts_parse_sql_no_dict_lock(
 		info, fts_config_table_insert_values_sql);
@@ -2627,7 +2628,7 @@ retry:
 		info, "my_func", fts_fetch_store_doc_id, doc_id);
 
 	fts_get_table_name(&fts_table, table_name);
-	pars_info_bind_id(info, true, "config_table", table_name);
+	pars_info_bind_id(info, "config_table", table_name);
 
 	graph = fts_parse_sql(
 		&fts_table, info,
@@ -2755,7 +2756,7 @@ fts_update_sync_doc_id(
 
 	fts_get_table_name(&fts_table, fts_name,
 			   table->fts->dict_locked);
-	pars_info_bind_id(info, true, "table_name", fts_name);
+	pars_info_bind_id(info, "table_name", fts_name);
 
 	graph = fts_parse_sql(
 		&fts_table, info,
@@ -2898,7 +2899,7 @@ fts_delete(
 		fts_table.suffix = "DELETED";
 
 		fts_get_table_name(&fts_table, table_name);
-		pars_info_bind_id(info, true, "deleted", table_name);
+		pars_info_bind_id(info, "deleted", table_name);
 
 		graph = fts_parse_sql(
 			&fts_table,
@@ -3523,11 +3524,14 @@ fts_add_doc_by_id(
 					get_doc->index_cache,
 					doc_id, doc.tokens);
 
-				bool	need_sync = false;
-				if ((cache->total_size > fts_max_cache_size / 10
-				     || fts_need_sync)
-				    && !cache->sync->in_progress) {
-					need_sync = true;
+				bool	need_sync = !cache->sync->in_progress
+					&& (fts_need_sync
+					    || (cache->total_size
+						- cache->total_size_at_sync)
+					    > fts_max_cache_size / 10);
+				if (need_sync) {
+					cache->total_size_at_sync =
+						cache->total_size;
 				}
 
 				rw_lock_x_unlock(&table->fts->cache->lock);
@@ -3704,7 +3708,7 @@ fts_doc_fetch_by_doc_id(
 	pars_info_bind_function(info, "my_func", callback, arg);
 
 	select_str = fts_get_select_columns_str(index, info, info->heap);
-	pars_info_bind_id(info, TRUE, "table_name", index->table->name.m_name);
+	pars_info_bind_id(info, "table_name", index->table->name.m_name);
 
 	if (!get_doc || !get_doc->get_document_graph) {
 		if (option == FTS_FETCH_DOC_BY_ID_EQUAL) {
@@ -3811,7 +3815,7 @@ fts_write_node(
 		info = pars_info_create();
 
 		fts_get_table_name(fts_table, table_name);
-		pars_info_bind_id(info, true, "index_table_name", table_name);
+		pars_info_bind_id(info, "index_table_name", table_name);
 	}
 
 	pars_info_bind_varchar_literal(info, "token", word->f_str, word->f_len);
@@ -3886,7 +3890,7 @@ fts_sync_add_deleted_cache(
 		&fts_table, "DELETED_CACHE", FTS_COMMON_TABLE, sync->table);
 
 	fts_get_table_name(&fts_table, table_name);
-	pars_info_bind_id(info, true, "table_name", table_name);
+	pars_info_bind_id(info, "table_name", table_name);
 
 	graph = fts_parse_sql(
 		&fts_table,
@@ -4883,7 +4887,7 @@ fts_get_rows_count(
 	pars_info_bind_function(info, "my_func", fts_read_ulint, &count);
 
 	fts_get_table_name(fts_table, table_name);
-	pars_info_bind_id(info, true, "table_name", table_name);
+	pars_info_bind_id(info, "table_name", table_name);
 
 	graph = fts_parse_sql(
 		fts_table,

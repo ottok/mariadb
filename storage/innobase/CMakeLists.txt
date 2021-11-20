@@ -1,6 +1,6 @@
 
 # Copyright (c) 2006, 2017, Oracle and/or its affiliates. All rights reserved.
-# Copyright (c) 2014, 2020, MariaDB Corporation.
+# Copyright (c) 2014, 2021, MariaDB Corporation.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -150,7 +150,7 @@ SET(INNOBASE_SOURCES
 	include/fts0tokenize.h
 	include/fts0types.h
 	include/fts0types.ic
-	include/fts0vlc.ic
+	include/fts0vlc.h
 	include/fut0fut.h
 	include/fut0lst.h
 	include/gis0geo.h
@@ -398,4 +398,8 @@ ENDIF()
 IF(NOT (PLUGIN_INNOBASE STREQUAL DYNAMIC))
   TARGET_LINK_LIBRARIES(innobase tpool mysys)
   ADD_SUBDIRECTORY(${CMAKE_SOURCE_DIR}/extra/mariabackup ${CMAKE_BINARY_DIR}/extra/mariabackup)
+ENDIF()
+
+IF(WITH_UNIT_TESTS)
+  ADD_SUBDIRECTORY(unittest)
 ENDIF()

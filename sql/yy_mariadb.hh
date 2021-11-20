@@ -809,7 +809,7 @@ extern int MYSQLdebug;
 typedef union YYSTYPE YYSTYPE;
 union YYSTYPE
 {
-#line 199 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 203 "/home/buildbot/git/sql/sql_yacc.yy"
 
 
   int  num;

@@ -711,8 +711,7 @@ bool buf_is_zeroes(span<const byte> buf)
 /** Check if a page is corrupt.
 @param[in]	check_lsn	whether the LSN should be checked
 @param[in]	read_buf	database page
-@param[in]	zip_size	ROW_FORMAT=COMPRESSED page size, or 0
-@param[in]	space		tablespace
+@param[in]	fsp_flags	tablespace flags
 @return whether the page is corrupted */
 bool
 buf_page_is_corrupted(
@@ -2394,14 +2393,10 @@ retry:
     w->id_= id;
 
     *hash_lock= page_hash.lock_get(fold);
-    (*hash_lock)->write_lock();
-    mysql_mutex_unlock(&mutex);
 
     buf_page_t *bpage= page_hash_get_low(id, fold);
     if (UNIV_LIKELY_NULL(bpage))
     {
-      (*hash_lock)->write_unlock();
-      mysql_mutex_lock(&mutex);
       w->set_state(BUF_BLOCK_NOT_USED);
       *hash_lock= page_hash.lock_get(fold);
       (*hash_lock)->write_lock();
@@ -2409,17 +2404,61 @@ retry:
       goto retry;
     }
 
+    (*hash_lock)->write_lock();
     ut_ad(!w->buf_fix_count_);
     w->buf_fix_count_= 1;
     ut_ad(!w->in_page_hash);
-    ut_d(w->in_page_hash= true); /* Not holding buf_pool.mutex here! */
+    ut_d(w->in_page_hash= true);
     HASH_INSERT(buf_page_t, hash, &page_hash, fold, w);
+    mysql_mutex_unlock(&mutex);
     return nullptr;
   }
 
   ut_error;
   mysql_mutex_unlock(&mutex);
   return nullptr;
+}
+
+/** Stop watching whether a page has been read in.
+watch_set(id) must have returned nullptr before.
+@param id   page identifier */
+void buf_pool_t::watch_unset(const page_id_t id)
+{
+  mysql_mutex_assert_not_owner(&mutex);
+  const ulint fold= id.fold();
+  page_hash_latch *hash_lock= page_hash.lock<true>(fold);
+  /* The page must exist because watch_set() increments buf_fix_count. */
+  buf_page_t *w= page_hash_get_low(id, fold);
+  const auto buf_fix_count= w->buf_fix_count();
+  ut_ad(buf_fix_count);
+  const bool must_remove= buf_fix_count == 1 && watch_is_sentinel(*w);
+  ut_ad(w->in_page_hash);
+  if (!must_remove)
+    w->unfix();
+  hash_lock->write_unlock();
+
+  if (must_remove)
+  {
+    const auto old= w;
+    /* The following is based on buf_pool_t::watch_remove(). */
+    mysql_mutex_lock(&mutex);
+    w= page_hash_get_low(id, fold);
+    page_hash_latch *hash_lock= buf_pool.page_hash.lock_get(fold);
+    hash_lock->write_lock();
+    if (w->unfix() == 0 && w == old)
+    {
+      ut_ad(w->in_page_hash);
+      ut_d(w->in_page_hash= false);
+      HASH_DELETE(buf_page_t, hash, &page_hash, fold, w);
+      // Now that the watch is detached from page_hash, release it to watch[].
+      ut_ad(w->id_ == id);
+      ut_ad(!w->buf_fix_count());
+      ut_ad(w->state() == BUF_BLOCK_ZIP_PAGE);
+      w->set_state(BUF_BLOCK_NOT_USED);
+    }
+    hash_lock->write_unlock();
+    mysql_mutex_unlock(&mutex);
+  }
 }
 
 /** Mark the page status as FREED for the given tablespace id and
@@ -3006,6 +3045,10 @@ lookup:
 				if (set) {
 					return NULL;
 				}
+			}
+
+			if (local_err == DB_IO_ERROR) {
+				return NULL;
 			}
 
 			ib::fatal() << "Unable to read page " << page_id
@@ -3753,6 +3796,7 @@ loop:
   /* Delete possible entries for the page from the insert buffer:
   such can exist if the page belonged to an index which was dropped */
   if (page_id < page_id_t{SRV_SPACE_ID_UPPER_BOUND, 0} &&
+      !srv_is_undo_tablespace(page_id.space()) &&
       !recv_recovery_is_on())
     ibuf_merge_or_delete_for_page(nullptr, page_id, zip_size);
 

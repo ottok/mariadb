@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2017, Oracle and/or its affiliates.
-   Copyright (c) 2008, 2020, MariaDB
+   Copyright (c) 2008, 2021, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -1276,6 +1276,21 @@ bool Field::can_be_substituted_to_equal_item(const Context &ctx,
 }
 
 
+bool Field::cmp_is_done_using_type_handler_of_this(const Item_bool_func *cond,
+                                                   const Item *item) const
+{
+  /*
+    We could eventually take comparison_type_handler() from cond,
+    instead of calculating it again. But only some descendants of
+    Item_bool_func has this method. So this needs some hierarchy changes.
+    Another option is to pass "class Context" to this method.
+  */
+  Type_handler_hybrid_field_type cmp(type_handler_for_comparison());
+  return !cmp.aggregate_for_comparison(item->type_handler_for_comparison()) &&
+         cmp.type_handler() == type_handler_for_comparison();
+}
+
+
 /*
   This handles all numeric and BIT data types.
 */ 
@@ -2490,7 +2505,7 @@ Field *Field::make_new_field(MEM_ROOT *root, TABLE *new_table,
   tmp->unireg_check= Field::NONE;
   tmp->flags&= (NOT_NULL_FLAG | BLOB_FLAG | UNSIGNED_FLAG |
                 ZEROFILL_FLAG | BINARY_FLAG | ENUM_FLAG | SET_FLAG |
-                VERS_SYS_START_FLAG | VERS_SYS_END_FLAG |
+                VERS_ROW_START | VERS_ROW_END |
                 VERS_UPDATE_UNVERSIONED_FLAG);
   tmp->reset_fields();
   tmp->invisible= VISIBLE;
@@ -7356,7 +7371,7 @@ bool
 Field_longstr::cmp_to_string_with_same_collation(const Item_bool_func *cond,
                                                  const Item *item) const
 {
-  return item->cmp_type() == STRING_RESULT &&
+  return cmp_is_done_using_type_handler_of_this(cond, item) &&
          charset() == cond->compare_collation();
 }
 
@@ -7365,7 +7380,7 @@ bool
 Field_longstr::cmp_to_string_with_stricter_collation(const Item_bool_func *cond,
                                                      const Item *item) const
 {
-  return item->cmp_type() == STRING_RESULT &&
+  return cmp_is_done_using_type_handler_of_this(cond, item) &&
          (charset() == cond->compare_collation() ||
           cond->compare_collation()->state & MY_CS_BINSORT);
 }
@@ -8612,6 +8627,7 @@ int Field_blob::store(const char *from,size_t length,CHARSET_INFO *cs)
   rc= well_formed_copy_with_check((char*) value.ptr(), (uint) new_length,
                                   cs, from, length,
                                   length, true, &copy_len);
+  value.length(copy_len);
   Field_blob::store_length(copy_len);
   bmove(ptr+packlength,(uchar*) &tmp,sizeof(char*));
 

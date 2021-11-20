@@ -3303,6 +3303,8 @@ os_file_set_size(
 	os_offset_t	size,
 	bool	is_sparse)
 {
+	ut_ad(!(size & 4095));
+
 #ifdef _WIN32
 	/* On Windows, changing file size works well and as expected for both
 	sparse and normal files.
@@ -3344,7 +3346,7 @@ fallback:
 			if (current_size >= size) {
 				return true;
 			}
-			current_size &= ~os_offset_t(statbuf.st_blksize - 1);
+			current_size &= ~4095ULL;
 			err = posix_fallocate(file, current_size,
 					      size - current_size);
 		}
@@ -3384,8 +3386,7 @@ fallback:
 	if (fstat(file, &statbuf)) {
 		return false;
 	}
-	os_offset_t current_size = statbuf.st_size
-		& ~os_offset_t(statbuf.st_blksize - 1);
+	os_offset_t current_size = statbuf.st_size & ~4095ULL;
 #endif
 	if (current_size >= size) {
 		return true;
@@ -3826,6 +3827,20 @@ void os_aio_wait_until_no_pending_writes()
 {
   os_aio_wait_until_no_pending_writes_low();
   buf_dblwr.wait_flush_buffered_writes();
+}
+
+/** Wait until there are no pending asynchronous reads. */
+void os_aio_wait_until_no_pending_reads()
+{
+  const auto notify_wait= read_slots->pending_io_count();
+
+  if (notify_wait)
+    tpool::tpool_wait_begin();
+
+  read_slots->wait();
+
+  if (notify_wait)
+    tpool::tpool_wait_end();
 }
 
 /** Request a read or write.

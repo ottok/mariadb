@@ -108,6 +108,7 @@ wsrep::transaction::transaction(
     , sr_keys_()
     , apply_error_buf_()
     , xid_()
+    , streaming_rollback_in_progress_(false)
 { }
 
 
@@ -834,7 +835,13 @@ int wsrep::transaction::after_statement()
         break;
     case s_must_abort:
     case s_cert_failed:
-        client_state_.override_error(wsrep::e_deadlock_error);
+        // Error may be set already. For example, if fragment size
+        // exceeded the maximum size in certify_fragment(), then
+        // we already have wsrep::e_error_during_commit
+        if (client_state_.current_error() == wsrep::e_success)
+        {
+            client_state_.override_error(wsrep::e_deadlock_error);
+        }
         lock.unlock();
         ret = client_service_.bf_rollback();
         lock.lock();
@@ -848,7 +855,7 @@ int wsrep::transaction::after_statement()
     {
         if (is_xa() && !ordered())
         {
-            ret = xa_replay(lock);
+            ret = xa_replay_commit(lock);
         }
         else
         {
@@ -897,6 +904,34 @@ int wsrep::transaction::after_statement()
     debug_log_state("after_statement_leave");
     assert(ret == 0 || state() == s_aborted);
     return ret;
+}
+
+void wsrep::transaction::after_command_must_abort(
+    wsrep::unique_lock<wsrep::mutex>& lock)
+{
+    debug_log_state("after_command_must_abort enter");
+    assert(active());
+    assert(state_ == s_must_abort);
+
+    if (is_xa() && is_streaming())
+    {
+        state(lock, s_must_replay);
+    }
+
+    lock.unlock();
+    client_service_.bf_rollback();
+    lock.lock();
+
+    if (is_xa() && is_streaming())
+    {
+        xa_replay(lock);
+    }
+    else
+    {
+        client_state_.override_error(wsrep::e_deadlock_error);
+    }
+
+    debug_log_state("after_command_must_abort leave");
 }
 
 void wsrep::transaction::after_applying()
@@ -1172,9 +1207,8 @@ void wsrep::transaction::xa_detach()
     debug_log_state("xa_detach leave");
 }
 
-int wsrep::transaction::xa_replay(wsrep::unique_lock<wsrep::mutex>& lock)
+void wsrep::transaction::xa_replay_common(wsrep::unique_lock<wsrep::mutex>& lock)
 {
-    debug_log_state("xa_replay enter");
     assert(lock.owns_lock());
     assert(is_xa());
     assert(is_streaming());
@@ -1196,42 +1230,49 @@ int wsrep::transaction::xa_replay(wsrep::unique_lock<wsrep::mutex>& lock)
     {
         client_service_.emergency_shutdown();
     }
+}
 
+int wsrep::transaction::xa_replay(wsrep::unique_lock<wsrep::mutex>& lock)
+{
+    debug_log_state("xa_replay enter");
+    xa_replay_common(lock);
+    state(lock, s_aborted);
+    streaming_context_.cleanup();
+    provider().release(ws_handle_);
+    cleanup();
+    client_service_.signal_replayed();
+    debug_log_state("xa_replay leave");
+    return 0;
+}
+
+int wsrep::transaction::xa_replay_commit(wsrep::unique_lock<wsrep::mutex>& lock)
+{
+    debug_log_state("xa_replay_commit enter");
+    xa_replay_common(lock);
+    lock.unlock();
+    enum wsrep::provider::status status(client_service_.commit_by_xid());
+    lock.lock();
     int ret(1);
-    if (bf_abort_client_state_ == wsrep::client_state::s_idle)
+    switch (status)
     {
-        state(lock, s_aborted);
+    case wsrep::provider::success:
+        state(lock, s_committed);
         streaming_context_.cleanup();
         provider().release(ws_handle_);
         cleanup();
         ret = 0;
-    }
-    else
-    {
-        lock.unlock();
-        enum wsrep::provider::status status(client_service_.commit_by_xid());
-        lock.lock();
-        switch (status)
-        {
-        case wsrep::provider::success:
-            state(lock, s_committed);
-            streaming_context_.cleanup();
-            provider().release(ws_handle_);
-            cleanup();
-            ret = 0;
-            break;
-        default:
-            log_warning() << "Failed to commit by xid during replay";
-            // Commit by xid failed, return a commit
-            // error and let the client retry
-            state(lock, s_preparing);
-            state(lock, s_prepared);
-            client_state_.override_error(wsrep::e_error_during_commit, status);
-        }
+        break;
+    default:
+        log_warning() << "Failed to commit by xid during replay";
+        // Commit by xid failed, return a commit
+        // error and let the client retry
+        state(lock, s_preparing);
+        state(lock, s_prepared);
+        client_state_.override_error(wsrep::e_error_during_commit, status);
     }
 
     client_service_.signal_replayed();
-    debug_log_state("xa_replay leave");
+    debug_log_state("xa_replay_commit leave");
     return ret;
 }
 
@@ -1410,6 +1451,19 @@ int wsrep::transaction::certify_fragment(
     state(lock, s_certifying);
     lock.unlock();
     client_service_.debug_sync("wsrep_before_fragment_certification");
+
+    enum wsrep::provider::status status(
+        client_state_.server_state_.send_pending_rollback_events());
+    if (status)
+    {
+        wsrep::log_warning()
+            << "Failed to replicate pending rollback events: "
+            << status << " ("
+            << wsrep::provider::to_string(status) << ")";
+        lock.lock();
+        state(lock, s_must_abort);
+        return 1;
+    }
 
     wsrep::mutable_buffer data;
     size_t log_position(0);
@@ -1643,6 +1697,32 @@ int wsrep::transaction::certify_commit(
     state(lock, s_certifying);
     lock.unlock();
 
+    enum wsrep::provider::status status(
+        client_state_.server_state_.send_pending_rollback_events());
+    if (status)
+    {
+        wsrep::log_warning()
+            << "Failed to replicate pending rollback events: "
+            << status << " ("
+            << wsrep::provider::to_string(status) << ")";
+
+        // We failed to replicate some pending rollback fragment.
+        // Meaning that some transaction that was rolled back
+        // locally might still be active out there in the cluster.
+        // To avoid a potential BF-BF conflict, we need to abort
+        // and give up on this one.
+        // Notice that we can't abort a prepared XA that wants to
+        // commit. Fortunately, there is no need to in this case:
+        // the commit fragment for XA does not cause any changes and
+        // can't possibly conflict with other transactions out there.
+        if (!is_xa())
+        {
+            lock.lock();
+            state(lock, s_must_abort);
+            return 1;
+        }
+    }
+
     if (is_streaming())
     {
         if (!is_xa())
@@ -1828,19 +1908,30 @@ int wsrep::transaction::append_sr_keys_for_commit()
     return ret;
 }
 
-void wsrep::transaction::streaming_rollback(wsrep::unique_lock<wsrep::mutex>& lock)
+void wsrep::transaction::streaming_rollback(
+    wsrep::unique_lock<wsrep::mutex>& lock)
 {
     debug_log_state("streaming_rollback enter");
     assert(state_ != s_must_replay);
     assert(is_streaming());
+    assert(lock.owns_lock());
+
+    // Prevent streaming_rollback() to be executed simultaneously.
+    // Notice that lock is unlocked when calling into server_state
+    // methods, to avoid violating lock order.
+    // The condition variable below prevents a thread to go
+    // through streaming_rollback() while another thread is busy
+    // stopping or converting the streaming_client().
+    // This would be problematic if a thread is performing BF abort,
+    // while the original client manages to complete its rollback
+    // and therefore change the state of the transaction, causing
+    // assertions to fire.
+    while (streaming_rollback_in_progress_)
+        client_state_.cond_.wait(lock);
+    streaming_rollback_in_progress_ = true;
+
     if (streaming_context_.rolled_back() == false)
     {
-        // We must set rolled_back id before stopping streaming client
-        // or converting to applier. Accessing server_state requires
-        // releasing the client_state lock in order to avoid violating
-        // locking order, and this will open up a possibility for two
-        // threads accessing this block simultaneously.
-        streaming_context_.rolled_back(id_);
         if (bf_aborted_in_total_order_)
         {
             lock.unlock();
@@ -1852,27 +1943,35 @@ void wsrep::transaction::streaming_rollback(wsrep::unique_lock<wsrep::mutex>& lo
             // Create a high priority applier which will handle the
             // rollback fragment or clean up on configuration change.
             // Adopt transaction will copy fragment set and appropriate
-            // meta data. Mark current transaction streaming context
-            // rolled back.
+            // meta data.
             lock.unlock();
+            server_service_.debug_sync("wsrep_streaming_rollback");
             client_state_.server_state_.convert_streaming_client_to_applier(
                 &client_state_);
             lock.lock();
             streaming_context_.cleanup();
-            // Cleanup cleans rolled_back_for from streaming context, but
-            // we want to preserve it to avoid executing this block
-            // more than once.
-            streaming_context_.rolled_back(id_);
-            enum wsrep::provider::status ret;
-            if ((ret = provider().rollback(id_)))
+
+            enum wsrep::provider::status status(provider().rollback(id_));
+            if (status)
             {
+                lock.unlock();
+                client_state_.server_state_.queue_rollback_event(id_);
+                lock.lock();
                 wsrep::log_debug()
-                    << "Failed to replicate rollback fragment for "
-                    << id_ << ": " << ret;
+                    << "Failed to replicate rollback fragment for " << id_
+                    << ": " << status << " ( "
+                    << wsrep::provider::to_string(status) << ")";
             }
         }
+
+        // Mark the streaming context as rolled back,
+        // so that this block is executed once.
+        streaming_context_.rolled_back(id_);
     }
+
     debug_log_state("streaming_rollback leave");
+    streaming_rollback_in_progress_ = false;
+    client_state_.cond_.notify_all();
 }
 
 int wsrep::transaction::replay(wsrep::unique_lock<wsrep::mutex>& lock)

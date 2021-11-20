@@ -1270,6 +1270,7 @@ int ha_maria::check(THD * thd, HA_CHECK_OPT * check_opt)
   if (!file || !param) return HA_ADMIN_INTERNAL_ERROR;
 
   unmap_file(file);
+  register_handler(file);
   maria_chk_init(param);
   param->thd= thd;
   param->op_name= "check";
@@ -1325,14 +1326,18 @@ int ha_maria::check(THD * thd, HA_CHECK_OPT * check_opt)
     {
       ulonglong old_testflag= param->testflag;
       param->testflag |= T_MEDIUM;
-      if (!(error= init_io_cache(&param->read_cache, file->dfile.file,
-                                 my_default_record_cache_size, READ_CACHE,
-                                 share->pack.header_length, 1, MYF(MY_WME))))
-      {
+
+      /* BLOCK_RECORD does not need a cache as it is using the page cache */
+      if (file->s->data_file_type != BLOCK_RECORD)
+        error= init_io_cache(&param->read_cache, file->dfile.file,
+                             my_default_record_cache_size, READ_CACHE,
+                             share->pack.header_length, 1, MYF(MY_WME));
+      if (!error)
         error= maria_chk_data_link(param, file,
                                    MY_TEST(param->testflag & T_EXTEND));
+
+      if (file->s->data_file_type != BLOCK_RECORD)
         end_io_cache(&param->read_cache);
-      }
       param->testflag= old_testflag;
     }
   }
@@ -1476,7 +1481,7 @@ int ha_maria::repair(THD * thd, HA_CHECK_OPT *check_opt)
   param->testflag= ((check_opt->flags & ~(T_EXTEND)) |
                    T_SILENT | T_FORCE_CREATE | T_CALC_CHECKSUM |
                    (check_opt->flags & T_EXTEND ? T_REP : T_REP_BY_SORT));
-  param->sort_buffer_length= THDVAR(thd, sort_buffer_size);
+  param->orig_sort_buffer_length= THDVAR(thd, sort_buffer_size);
   param->backup_time= check_opt->start_time;
   start_records= file->state->records;
   old_proc_info= thd_proc_info(thd, "Checking table");
@@ -1547,7 +1552,7 @@ int ha_maria::zerofill(THD * thd, HA_CHECK_OPT *check_opt)
   param->thd= thd;
   param->op_name= "zerofill";
   param->testflag= check_opt->flags | T_SILENT | T_ZEROFILL;
-  param->sort_buffer_length= THDVAR(thd, sort_buffer_size);
+  param->orig_sort_buffer_length= THDVAR(thd, sort_buffer_size);
   param->db_name= table->s->db.str;
   param->table_name= table->alias.c_ptr();
 
@@ -1583,7 +1588,7 @@ int ha_maria::optimize(THD * thd, HA_CHECK_OPT *check_opt)
   param->op_name= "optimize";
   param->testflag= (check_opt->flags | T_SILENT | T_FORCE_CREATE |
                    T_REP_BY_SORT | T_STATISTICS | T_SORT_INDEX);
-  param->sort_buffer_length= THDVAR(thd, sort_buffer_size);
+  param->orig_sort_buffer_length= THDVAR(thd, sort_buffer_size);
   thd_progress_init(thd, 1);
   if ((error= repair(thd, param, 1)) && param->retry_repair)
   {
@@ -2051,7 +2056,7 @@ int ha_maria::enable_indexes(uint mode)
     }
 
     param->myf_rw &= ~MY_WAIT_IF_FULL;
-    param->sort_buffer_length= THDVAR(thd,sort_buffer_size);
+    param->orig_sort_buffer_length= THDVAR(thd,sort_buffer_size);
     param->stats_method= (enum_handler_stats_method)THDVAR(thd,stats_method);
     param->tmpdir= &mysql_tmpdir_list;
     if ((error= (repair(thd, param, 0) != HA_ADMIN_OK)) && param->retry_repair)
@@ -2899,7 +2904,7 @@ int ha_maria::external_lock(THD *thd, int lock_type)
           if (file->autocommit)
           {
             if (ma_commit(trn))
-              result= HA_ERR_INTERNAL_ERROR;
+              result= HA_ERR_COMMIT_ERROR;
             thd_set_ha_data(thd, maria_hton, 0);
           }
         }
@@ -3038,7 +3043,7 @@ int ha_maria::implicit_commit(THD *thd, bool new_trn)
 
   error= 0;
   if (unlikely(ma_commit(trn)))
-    error= 1;
+    error= HA_ERR_COMMIT_ERROR;
   if (!new_trn)
   {
     reset_thd_trn(thd, used_tables);
@@ -3475,7 +3480,7 @@ static int maria_commit(handlerton *hton __attribute__ ((unused)),
                         THD *thd, bool all)
 {
   TRN *trn= THD_TRN;
-  int res;
+  int res= 0;
   MARIA_HA *used_instances;
   DBUG_ENTER("maria_commit");
 
@@ -3494,7 +3499,8 @@ static int maria_commit(handlerton *hton __attribute__ ((unused)),
   trnman_reset_locked_tables(trn, 0);
   trnman_set_flags(trn, trnman_get_flags(trn) & ~TRN_STATE_INFO_LOGGED);
   trn->used_instances= 0;
-  res= ma_commit(trn);
+  if (ma_commit(trn))
+    res= HA_ERR_COMMIT_ERROR;
   reset_thd_trn(thd, used_instances);
   thd_set_ha_data(thd, maria_hton, 0);
   DBUG_RETURN(res);

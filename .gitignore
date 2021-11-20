@@ -10,8 +10,11 @@
 .ninja_*
 *.mri
 *.mri.tpl
+/.cproject
+/.project
 .gdb_history
 .vs/
+/.settings/
 errmsg.sys
 typescript
 _CPack_Packages
@@ -193,6 +196,7 @@ sql/lex_token.h
 sql/gen_lex_token
 sql/gen_lex_hash
 sql/lex_hash.h
+sql/myskel.m4
 sql/mysql_tzinfo_to_sql
 sql/mysqld
 sql/sql_builtin.cc
@@ -377,6 +381,7 @@ x86/
 build/
 bld/
 [Bb]in/
+/cmake-build-debug/
 [Oo]bj/
 
 # Roslyn cache directories
@@ -559,7 +564,7 @@ compile_commands.json
 .vscode/
 
 # Clion && other JetBrains ides
-.idea
+/.idea/
 
 .cache/clangd
 
