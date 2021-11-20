@@ -3040,6 +3040,7 @@ void reinit_stmt_before_use(THD *thd, LEX *lex)
   }
   for (; sl; sl= sl->next_select_in_list())
   {
+    sl->parent_lex->in_sum_func= NULL;
     if (sl->changed_elements & TOUCHED_SEL_COND)
     {
       /* remove option which was put by mysql_explain_union() */
@@ -3174,7 +3175,6 @@ void reinit_stmt_before_use(THD *thd, LEX *lex)
     lex->result->set_thd(thd);
   }
   lex->allow_sum_func.clear_all();
-  lex->in_sum_func= NULL;
   DBUG_VOID_RETURN;
 }
 
@@ -3445,6 +3445,11 @@ static void mysql_stmt_execute_common(THD *thd,
                                        stmt_id == LAST_STMT_ID, read_types))
   {
     my_error(ER_MALFORMED_PACKET, MYF(0));
+    /*
+      Let's set the thd->query_string so the audit plugin
+      can report the executed query that failed.
+    */
+    thd->set_query_inner(stmt->query_string);
     DBUG_VOID_RETURN;
   }
 

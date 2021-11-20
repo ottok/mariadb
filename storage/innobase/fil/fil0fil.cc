@@ -49,6 +49,7 @@ Created 10/25/1995 Heikki Tuuri
 #include "os0event.h"
 #include "sync0sync.h"
 #include "buf0flu.h"
+#include "log.h"
 #ifdef UNIV_LINUX
 # include <sys/types.h>
 # include <sys/sysmacros.h>
@@ -96,13 +97,22 @@ bool fil_space_t::try_to_close(bool print_info)
 
     if (const auto n= space->set_closing())
     {
-      if (print_info)
-        ib::info() << "Cannot close file " << node->name
-                   << " because of "
-                   << (n & PENDING)
-                   << ((n & NEEDS_FSYNC)
-                       ? " pending operations and pending fsync"
-                       : " pending operations");
+      if (!print_info)
+        continue;
+      print_info= false;
+      const time_t now= time(nullptr);
+      if (now - fil_system.n_open_exceeded_time < 5)
+        continue; /* We display messages at most once in 5 seconds. */
+      fil_system.n_open_exceeded_time= now;
+
+      if (n & PENDING)
+        sql_print_information("InnoDB: Cannot close file %s because of "
+                              UINT32PF " pending operations%s", node->name,
+                              n & PENDING,
+                              (n & NEEDS_FSYNC) ? " and pending fsync" : "");
+      else if (n & NEEDS_FSYNC)
+        sql_print_information("InnoDB: Cannot close file %s because of "
+                              "pending fsync", node->name);
       continue;
     }
 
@@ -423,15 +433,18 @@ static bool fil_node_open_file(fil_node_t *node)
   ut_ad(node->space->purpose != FIL_TYPE_TEMPORARY);
   ut_ad(node->space->referenced());
 
+  const auto old_time= fil_system.n_open_exceeded_time;
+
   for (ulint count= 0; fil_system.n_open >= srv_max_n_open_files; count++)
   {
     if (fil_space_t::try_to_close(count > 1))
       count= 0;
     else if (count >= 2)
     {
-      ib::warn() << "innodb_open_files=" << srv_max_n_open_files
-                 << " is exceeded (" << fil_system.n_open
-                 << ") files stay open)";
+      if (old_time != fil_system.n_open_exceeded_time)
+        sql_print_warning("InnoDB: innodb_open_files=" ULINTPF
+                          " is exceeded (" ULINTPF " files stay open)",
+                          srv_max_n_open_files, fil_system.n_open);
       break;
     }
     else
@@ -577,10 +590,15 @@ fil_space_extend_must_retry(
 
 	const unsigned	page_size = space->physical_size();
 
-	/* Datafile::read_first_page() expects srv_page_size bytes.
-	fil_node_t::read_page0() expects at least 4 * srv_page_size bytes.*/
+	/* Datafile::read_first_page() expects innodb_page_size bytes.
+	fil_node_t::read_page0() expects at least 4 * innodb_page_size bytes.
+	os_file_set_size() expects multiples of 4096 bytes.
+	For ROW_FORMAT=COMPRESSED tables using 1024-byte or 2048-byte
+	pages, we will preallocate up to an integer multiple of 4096 bytes,
+	and let normal writes append 1024, 2048, or 3072 bytes to the file. */
 	os_offset_t new_size = std::max(
-		os_offset_t(size - file_start_page_no) * page_size,
+		(os_offset_t(size - file_start_page_no) * page_size)
+		& ~os_offset_t(4095),
 		os_offset_t(FIL_IBD_FILE_INITIAL_SIZE << srv_page_size_shift));
 
 	*success = os_file_set_size(node->name, node->handle, new_size,
@@ -1464,8 +1482,7 @@ fil_space_t *fil_space_t::get(ulint id)
 
   if (n & STOPPING)
     space= nullptr;
-
-  if ((n & CLOSING) && !space->prepare())
+  else if ((n & CLOSING) && !space->prepare())
     space= nullptr;
 
   return space;
@@ -3216,16 +3233,19 @@ func_exit:
 /*============================ FILE I/O ================================*/
 
 /** Report information about an invalid page access. */
-ATTRIBUTE_COLD __attribute__((noreturn))
-static void
-fil_report_invalid_page_access(const char *name,
-                               os_offset_t offset, ulint len, bool is_read)
+ATTRIBUTE_COLD
+static void fil_invalid_page_access_msg(bool fatal, const char *name,
+                                        os_offset_t offset, ulint len,
+                                        bool is_read)
 {
-  ib::fatal() << "Trying to " << (is_read ? "read " : "write ") << len
-              << " bytes at " << offset
-              << " outside the bounds of the file: " << name;
+  sql_print_error("%s%s %zu bytes at " UINT64PF
+                  " outside the bounds of the file: %s",
+                  fatal ? "[FATAL] InnoDB: " : "InnoDB: ",
+                  is_read ? "Trying to read" : "Trying to write",
+                  len, offset, name);
+  if (fatal)
+    abort();
 }
-
 
 /** Update the data structures on write completion */
 inline void fil_node_t::complete_write()
@@ -3280,6 +3300,7 @@ fil_io_t fil_space_t::io(const IORequest &type, os_offset_t offset, size_t len,
 	}
 
 	ulint p = static_cast<ulint>(offset >> srv_page_size_shift);
+	bool fatal;
 
 	if (UNIV_LIKELY_NULL(UT_LIST_GET_NEXT(chain, node))) {
 		ut_ad(this == fil_system.sys_space
@@ -3294,9 +3315,13 @@ fil_io_t fil_space_t::io(const IORequest &type, os_offset_t offset, size_t len,
 					release();
 					return {DB_ERROR, nullptr};
 				}
-				fil_report_invalid_page_access(name, offset,
-							       len,
-							       type.is_read());
+
+				fatal = true;
+fail:
+				fil_invalid_page_access_msg(fatal, node->name,
+							    offset, len,
+							    type.is_read());
+				return {DB_IO_ERROR, nullptr};
 			}
 		}
 
@@ -3304,16 +3329,17 @@ fil_io_t fil_space_t::io(const IORequest &type, os_offset_t offset, size_t len,
 	}
 
 	if (UNIV_UNLIKELY(node->size <= p)) {
+		release();
+
 		if (type.type == IORequest::READ_ASYNC) {
-			release();
 			/* If we can tolerate the non-existent pages, we
 			should return with DB_ERROR and let caller decide
 			what to do. */
 			return {DB_ERROR, nullptr};
 		}
 
-		fil_report_invalid_page_access(
-			node->name, offset, len, type.is_read());
+		fatal = node->space->purpose != FIL_TYPE_IMPORT;
+		goto fail;
 	}
 
 	dberr_t err;

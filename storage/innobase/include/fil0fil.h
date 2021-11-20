@@ -633,6 +633,18 @@ public:
 	static bool full_crc32(ulint flags) {
 		return flags & FSP_FLAGS_FCRC32_MASK_MARKER;
 	}
+  /** Determine if full_crc32 is used along with compression */
+  static bool is_full_crc32_compressed(ulint flags)
+  {
+    if (full_crc32(flags))
+    {
+      ulint algo= FSP_FLAGS_FCRC32_GET_COMPRESSED_ALGO(flags);
+      DBUG_ASSERT(algo <= PAGE_ALGORITHM_LAST);
+      return algo > 0;
+    }
+
+    return false;
+  }
 	/** @return whether innodb_checksum_algorithm=full_crc32 is active */
 	bool full_crc32() const { return full_crc32(flags); }
 	/** Determine the logical page size.
@@ -694,21 +706,15 @@ public:
 	unsigned zip_size() const { return zip_size(flags); }
 	/** @return the physical page size */
 	unsigned physical_size() const { return physical_size(flags); }
-	/** Check whether the compression enabled in tablespace.
-	@param[in]	flags	tablespace flags */
-	static bool is_compressed(ulint flags) {
-
-		if (full_crc32(flags)) {
-			ulint algo = FSP_FLAGS_FCRC32_GET_COMPRESSED_ALGO(
-				flags);
-			DBUG_ASSERT(algo <= PAGE_ALGORITHM_LAST);
-			return algo > 0;
-		}
-
-		return FSP_FLAGS_HAS_PAGE_COMPRESSION(flags);
-	}
-	/** @return whether the compression enabled for the tablespace. */
-	bool is_compressed() const { return is_compressed(flags); }
+  /** Check whether the compression enabled in tablespace.
+  @param[in]	flags	tablespace flags */
+  static bool is_compressed(ulint flags)
+  {
+    return is_full_crc32_compressed(flags) ||
+      FSP_FLAGS_HAS_PAGE_COMPRESSION(flags);
+  }
+  /** @return whether the compression enabled for the tablespace. */
+  bool is_compressed() const { return is_compressed(flags); }
 
 	/** Get the compression algorithm for full crc32 format.
 	@param[in]	flags	tablespace flags
@@ -1387,6 +1393,8 @@ public:
   sized_ilist<fil_space_t, unflushed_spaces_tag_t> unflushed_spaces;
   /** number of currently open files; protected by mutex */
   ulint n_open;
+  /** last time we noted n_open exceeding the limit; protected by mutex */
+  time_t n_open_exceeded_time;
 	ulint		max_assigned_id;/*!< maximum space id in the existing
 					tables, or assigned during the time
 					mysqld has been up; at an InnoDB

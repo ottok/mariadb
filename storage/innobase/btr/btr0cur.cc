@@ -330,10 +330,12 @@ btr_cur_latch_leaves(
 						  true, mtr);
 			latch_leaves.blocks[2] = get_block;
 #ifdef UNIV_BTR_DEBUG
-			ut_a(page_is_comp(get_block->frame)
-			     == page_is_comp(block->frame));
-			ut_a(btr_page_get_prev(get_block->frame)
-			     == block->page.id().page_no());
+			if (get_block) {
+				ut_a(page_is_comp(get_block->frame)
+				     == page_is_comp(block->frame));
+				ut_a(btr_page_get_prev(get_block->frame)
+				     == block->page.id().page_no());
+			}
 #endif /* UNIV_BTR_DEBUG */
 			if (spatial) {
 				cursor->rtr_info->tree_blocks[
@@ -3339,16 +3341,16 @@ static void btr_cur_prefetch_siblings(const buf_block_t *block,
   uint32_t prev= mach_read_from_4(my_assume_aligned<4>(page + FIL_PAGE_PREV));
   uint32_t next= mach_read_from_4(my_assume_aligned<4>(page + FIL_PAGE_NEXT));
 
+  fil_space_t *space= index->table->space;
+
   if (prev == FIL_NULL);
-  else if (index->table->space->acquire())
-    buf_read_page_background(index->table->space,
-                             page_id_t(block->page.id().space(), prev),
-                             block->zip_size(), false);
+  else if (space->acquire())
+    buf_read_page_background(space, page_id_t(space->id, prev),
+                             block->zip_size());
   if (next == FIL_NULL);
-  else if (index->table->space->acquire())
-    buf_read_page_background(index->table->space,
-                             page_id_t(block->page.id().space(), next),
-                             block->zip_size(), false);
+  else if (space->acquire())
+    buf_read_page_background(space, page_id_t(space->id, next),
+                             block->zip_size());
 }
 
 /*************************************************************//**

@@ -25,6 +25,33 @@
 
 #include "wsrep/logger.hpp"
 
+#include <ostream>
+#include <cstdio>
+
+static wsrep::default_mutex logger_mtx;
+
+static void
+logger_fn(wsrep::log::level l, const char* pfx, const char* msg)
+{
+    wsrep::unique_lock<wsrep::mutex> lock(logger_mtx);
+
+    struct timespec time;
+    clock_gettime(CLOCK_REALTIME, &time);
+
+    time_t const tt(time.tv_sec);
+    struct tm    date;
+    localtime_r(&tt, &date);
+
+    char date_str[85] = { '\0', };
+    snprintf(date_str, sizeof(date_str) - 1,
+             "%04d-%02d-%02d %02d:%02d:%02d.%03d",
+             date.tm_year + 1900, date.tm_mon + 1, date.tm_mday,
+             date.tm_hour, date.tm_min, date.tm_sec, (int)time.tv_nsec/1000000);
+
+    std::cerr << date_str << ' ' << pfx << wsrep::log::to_c_string(l) << ' '
+              << msg << std::endl;
+}
+
 db::server::server(simulator& simulator,
                    const std::string& name,
                    const std::string& address)
@@ -33,6 +60,7 @@ db::server::server(simulator& simulator,
     , mutex_()
     , cond_()
     , server_service_(*this)
+    , reporter_(mutex_, name + ".json", 4)
     , server_state_(server_service_,
                     name, address, "dbsim_" + name + "_data")
     , last_client_id_(0)
@@ -40,7 +68,9 @@ db::server::server(simulator& simulator,
     , appliers_()
     , clients_()
     , client_threads_()
-{ }
+{
+    wsrep::log::logger_fn(logger_fn);
+}
 
 void db::server::applier_thread()
 {
@@ -129,3 +159,9 @@ wsrep::high_priority_service* db::server::streaming_applier_service()
     throw wsrep::not_implemented_error();
 }
 
+void db::server::log_state_change(enum wsrep::server_state::state from,
+                                  enum wsrep::server_state::state to)
+{
+    wsrep::log_info() << "State changed " << from << " -> " << to;
+    reporter_.report_state(to, 0);
+}

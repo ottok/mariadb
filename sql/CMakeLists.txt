@@ -65,6 +65,8 @@ ADD_CUSTOM_COMMAND(
   DEPENDS gen_lex_token
 )
 
+FIND_PACKAGE(BISON 2.0)
+
 ADD_CUSTOM_COMMAND(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/yy_mariadb.yy
          ${CMAKE_CURRENT_BINARY_DIR}/yy_oracle.yy
@@ -72,6 +74,7 @@ ADD_CUSTOM_COMMAND(
    "-DOUT1=${CMAKE_CURRENT_BINARY_DIR}/yy_oracle.yy"
    "-DOUT2=${CMAKE_CURRENT_BINARY_DIR}/yy_mariadb.yy"
    "-DIN=${CMAKE_CURRENT_SOURCE_DIR}/sql_yacc.yy"
+    "-DBISON_VERSION=${BISON_VERSION}"
    -P ${CMAKE_CURRENT_SOURCE_DIR}/gen_yy_files.cmake
   COMMENT "Building yy_mariadb.yy and yy_oracle.yy from sql_yacc.yy"
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/sql_yacc.yy
@@ -321,8 +324,6 @@ IF(WITH_MYSQLD_LDFLAGS)
 ENDIF()
 
 
-FIND_PACKAGE(BISON 2.0)
-
 
 # Handle out-of-source build from source package with possibly broken 
 # bison. Copy bison output to from source to build directory, if not already 
@@ -352,12 +353,13 @@ IF (NOT BISON_FOUND)
       MESSAGE(FATAL_ERROR ${ERRMSG})
   ENDIF()
 ELSE()
+  CONFIGURE_FILE(myskel.m4.in myskel.m4)
   BISON_TARGET(gen_mariadb_cc_hh ${CMAKE_CURRENT_BINARY_DIR}/yy_mariadb.yy
                                  ${CMAKE_CURRENT_BINARY_DIR}/yy_mariadb.cc
-               COMPILE_FLAGS "-p MYSQL -S ${CMAKE_CURRENT_SOURCE_DIR}/myskel.m4")
+               COMPILE_FLAGS "-p MYSQL -S ${CMAKE_CURRENT_BINARY_DIR}/myskel.m4")
   BISON_TARGET(gen_oracle_cc_hh ${CMAKE_CURRENT_BINARY_DIR}/yy_oracle.yy
                                 ${CMAKE_CURRENT_BINARY_DIR}/yy_oracle.cc
-               COMPILE_FLAGS "-p ORA -S ${CMAKE_CURRENT_SOURCE_DIR}/myskel.m4")
+               COMPILE_FLAGS "-p ORA -S ${CMAKE_CURRENT_BINARY_DIR}/myskel.m4")
 ENDIF()
 
 IF(NOT CMAKE_CROSSCOMPILING OR DEFINED CMAKE_CROSSCOMPILING_EMULATOR)

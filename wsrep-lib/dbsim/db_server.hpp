@@ -22,6 +22,7 @@
 
 #include "wsrep/gtid.hpp"
 #include "wsrep/client_state.hpp"
+#include "wsrep/reporter.hpp"
 
 #include "db_storage_engine.hpp"
 #include "db_server_state.hpp"
@@ -58,6 +59,8 @@ namespace db
         wsrep::client_state* local_client_state();
         void release_client_state(wsrep::client_state*);
         wsrep::high_priority_service* streaming_applier_service();
+        void log_state_change(enum wsrep::server_state::state,
+                              enum wsrep::server_state::state);
     private:
         void start_client(size_t id);
 
@@ -66,6 +69,7 @@ namespace db
         wsrep::default_mutex mutex_;
         wsrep::default_condition_variable cond_;
         db::server_service server_service_;
+        wsrep::reporter reporter_;
         db::server_state server_state_;
         std::atomic<size_t> last_client_id_;
         std::atomic<size_t> last_transaction_id_;
