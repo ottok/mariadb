@@ -17,6 +17,7 @@
         <li>\ref Base_Encoding</li>
         <li>\ref Compression</li>
         <li>\ref Error</li>
+        <li>\ref IoTSafe</li>
         <li>\ref Keys</li>
         <li>\ref Logging</li>
         <li>\ref Math</li>
@@ -32,6 +33,7 @@
         <li>\ref Camellia</li>
         <li>\ref ChaCha</li>
         <li>\ref ChaCha20Poly1305</li>
+        <li>\ref Crypto Callbacks</li>
         <li>\ref Curve25519</li>
         <li>\ref Curve448</li>
         <li>\ref DSA</li>

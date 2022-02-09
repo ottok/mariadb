@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2018, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2010, 2021, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -228,17 +228,18 @@ void table_events_statements_common::make_row_part_1(PFS_events_statements *stat
 
   m_row_exists= false;
 
-  PFS_statement_class *unsafe= (PFS_statement_class*) statement->m_class;
+  PFS_statement_class *unsafe= (PFS_statement_class*)
+    statement->m_event.m_class;
   PFS_statement_class *klass= sanitize_statement_class(unsafe);
   if (unlikely(klass == NULL))
     return;
 
-  m_row.m_thread_internal_id= statement->m_thread_internal_id;
-  m_row.m_event_id= statement->m_event_id;
-  m_row.m_end_event_id= statement->m_end_event_id;
-  m_row.m_nesting_event_id= statement->m_nesting_event_id;
-  m_row.m_nesting_event_type= statement->m_nesting_event_type;
-  m_row.m_nesting_event_level= statement->m_nesting_event_level;
+  m_row.m_thread_internal_id= statement->m_event.m_thread_internal_id;
+  m_row.m_event_id= statement->m_event.m_event_id;
+  m_row.m_end_event_id= statement->m_event.m_end_event_id;
+  m_row.m_nesting_event_id= statement->m_event.m_nesting_event_id;
+  m_row.m_nesting_event_type= statement->m_event.m_nesting_event_type;
+  m_row.m_nesting_event_level= statement->m_event.m_nesting_event_level;
 
   if (m_row.m_end_event_id == 0)
   {
@@ -246,10 +247,10 @@ void table_events_statements_common::make_row_part_1(PFS_events_statements *stat
   }
   else
   {
-    timer_end= statement->m_timer_end;
+    timer_end= statement->m_event.m_timer_end;
   }
 
-  m_normalizer->to_pico(statement->m_timer_start, timer_end,
+  m_normalizer->to_pico(statement->m_event.m_timer_start, timer_end,
                       & m_row.m_timer_start, & m_row.m_timer_end, & m_row.m_timer_wait);
   m_row.m_lock_time= statement->m_lock_time * MICROSEC_TO_PICOSEC;
 
@@ -376,7 +377,7 @@ int table_events_statements_common::read_row_values(TABLE *table,
     return HA_ERR_RECORD_DELETED;
 
   /* Set the null bits */
-  DBUG_ASSERT(table->s->null_bytes == 3);
+  assert(table->s->null_bytes == 3);
   buf[0]= 0;
   buf[1]= 0;
   buf[2]= 0;
@@ -565,7 +566,7 @@ int table_events_statements_common::read_row_values(TABLE *table,
           set_field_ulong(f, m_row.m_nesting_event_level);
         break;
       default:
-        DBUG_ASSERT(false);
+        assert(false);
       }
     }
   }
@@ -658,11 +659,11 @@ int table_events_statements_current::rnd_pos(const void *pos)
         return HA_ERR_RECORD_DELETED;
     }
 
-    DBUG_ASSERT(m_pos.m_index_2 < statement_stack_max);
+    assert(m_pos.m_index_2 < statement_stack_max);
 
     statement= &pfs_thread->m_statement_stack[m_pos.m_index_2];
 
-    if (statement->m_class != NULL)
+    if (statement->m_event.m_class)
     {
       make_row(pfs_thread, statement);
       return 0;
@@ -762,7 +763,7 @@ int table_events_statements_history::rnd_next(void)
 
       statement= &pfs_thread->m_statements_history[m_pos.m_index_2];
 
-      if (statement->m_class != NULL)
+      if (statement->m_event.m_class)
       {
         make_row(pfs_thread, statement);
         /* Next iteration, look for the next history in this thread */
@@ -780,20 +781,20 @@ int table_events_statements_history::rnd_pos(const void *pos)
   PFS_thread *pfs_thread;
   PFS_events_statements *statement;
 
-  DBUG_ASSERT(events_statements_history_per_thread != 0);
+  assert(events_statements_history_per_thread != 0);
   set_position(pos);
 
   pfs_thread= global_thread_container.get(m_pos.m_index_1);
   if (pfs_thread != NULL)
   {
-    DBUG_ASSERT(m_pos.m_index_2 < events_statements_history_per_thread);
+    assert(m_pos.m_index_2 < events_statements_history_per_thread);
 
     if ( ! pfs_thread->m_statements_history_full &&
         (m_pos.m_index_2 >= pfs_thread->m_statements_history_index))
       return HA_ERR_RECORD_DELETED;
 
     statement= &pfs_thread->m_statements_history[m_pos.m_index_2];
-    if (statement->m_class != NULL)
+    if (statement->m_event.m_class)
     {
       make_row(pfs_thread, statement);
       return 0;
@@ -876,7 +877,7 @@ int table_events_statements_history_long::rnd_next(void)
   {
     statement= &events_statements_history_long_array[m_pos.m_index];
 
-    if (statement->m_class != NULL)
+    if (statement->m_event.m_class)
     {
       make_row(statement);
       /* Next iteration, look for the next entry */
@@ -908,7 +909,7 @@ int table_events_statements_history_long::rnd_pos(const void *pos)
 
   statement= &events_statements_history_long_array[m_pos.m_index];
 
-  if (statement->m_class == NULL)
+  if (!statement->m_event.m_class)
     return HA_ERR_RECORD_DELETED;
 
   make_row(statement);

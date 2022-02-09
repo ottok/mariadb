@@ -212,6 +212,12 @@
 /* Uncomment next line if using RENESAS RX64N */
 /* #define WOLFSSL_RENESAS_RX65N */
 
+/* Uncomment next line if using RENESAS SCE Protected Mode */
+/* #define WOLFSSL_RENESAS_SCEPROTECT */
+
+/* Uncomment next line if using RENESAS RA6M4 */
+/* #define WOLFSSL_RENESAS_RA6M4 */
+
 /* Uncomment next line if using Solaris OS*/
 /* #define WOLFSSL_SOLARIS */
 
@@ -233,9 +239,26 @@
     #include "wolfSSL.I-CUBE-wolfSSL_conf.h"
 #endif
 
+#define WOLFSSL_MAKE_FIPS_VERSION(major, minor) ((major * 256) + minor)
+#if !defined(HAVE_FIPS)
+    #define WOLFSSL_FIPS_VERSION_CODE WOLFSSL_MAKE_FIPS_VERSION(0,0)
+#elif !defined(HAVE_FIPS_VERSION)
+    #define WOLFSSL_FIPS_VERSION_CODE WOLFSSL_MAKE_FIPS_VERSION(1,0)
+#elif !defined(HAVE_FIPS_VERSION_MINOR)
+    #define WOLFSSL_FIPS_VERSION_CODE WOLFSSL_MAKE_FIPS_VERSION(HAVE_FIPS_VERSION,0)
+#else
+    #define WOLFSSL_FIPS_VERSION_CODE WOLFSSL_MAKE_FIPS_VERSION(HAVE_FIPS_VERSION,HAVE_FIPS_VERSION_MINOR)
+#endif
+
+#define FIPS_VERSION_LT(major,minor) (WOLFSSL_FIPS_VERSION_CODE < WOLFSSL_MAKE_FIPS_VERSION(major,minor))
+#define FIPS_VERSION_LE(major,minor) (WOLFSSL_FIPS_VERSION_CODE <= WOLFSSL_MAKE_FIPS_VERSION(major,minor))
+#define FIPS_VERSION_EQ(major,minor) (WOLFSSL_FIPS_VERSION_CODE == WOLFSSL_MAKE_FIPS_VERSION(major,minor))
+#define FIPS_VERSION_GE(major,minor) (WOLFSSL_FIPS_VERSION_CODE >= WOLFSSL_MAKE_FIPS_VERSION(major,minor))
+#define FIPS_VERSION_GT(major,minor) (WOLFSSL_FIPS_VERSION_CODE > WOLFSSL_MAKE_FIPS_VERSION(major,minor))
+
 /* make sure old RNG name is used with CTaoCrypt FIPS */
 #ifdef HAVE_FIPS
-    #if !defined(HAVE_FIPS_VERSION) || (HAVE_FIPS_VERSION < 2)
+    #if FIPS_VERSION_LT(2,0)
         #define WC_RNG RNG
     #else
         #ifndef WOLFSSL_STM32L4
@@ -298,6 +321,9 @@
 #endif
 #endif /* WOLFSSL_ESPIDF */
 
+#if defined(WOLFCRYPT_ONLY)
+    #undef WOLFSSL_RENESAS_TSIP
+#endif /* WOLFCRYPT_ONLY */
 #if defined(WOLFSSL_RENESAS_TSIP)
     #define TSIP_TLS_HMAC_KEY_INDEX_WORDSIZE 64
     #define TSIP_TLS_MASTERSECRET_SIZE       80   /* 20 words */
@@ -307,18 +333,38 @@
         #define WOLFSSL_RENESAS_TSIP_TLS
         #define WOLFSSL_RENESAS_TSIP_TLS_AES_CRYPT
     #endif
-#endif
+#endif /* WOLFSSL_RENESAS_TSIP */
 
-#if defined(WOLFSSL_RENESAS_RA6M3G) || defined(WOLFSSL_RENESAS_RA6M3)
+#if defined(WOLFSSL_RENESAS_SCEPROTECT)
+    #define SCE_TLS_MASTERSECRET_SIZE         80  /* 20 words */
+    #define TSIP_TLS_HMAC_KEY_INDEX_WORDSIZE  64
+    #define TSIP_TLS_ENCPUBKEY_SZ_BY_CERTVRFY 560 /* in bytes */
+    #define SCE_TLS_CLIENTRANDOM_SZ           36  /* in bytes */
+    #define SCE_TLS_SERVERRANDOM_SZ           36  /* in bytes */
+    #define SCE_TLS_ENCRYPTED_ECCPUBKEY_SZ    96  /* in bytes */
+
+    #define WOLFSSL_RENESAS_SCEPROTECT_ECC
+    #if defined(WOLFSSL_RENESAS_SCEPROTECT_ECC)
+        #define HAVE_PK_CALLBACKS
+        /* #define DEBUG_PK_CB */
+    #endif
+#endif
+#if defined(WOLFSSL_RENESAS_RA6M3G) || defined(WOLFSSL_RENESAS_RA6M3) ||\
+              defined(WOLFSSL_RENESAS_RA6M4)
     /* settings in user_settings.h */
 #endif
 
-#if defined(HAVE_LWIP_NATIVE) /* using LwIP native TCP socket */
+#if defined(WOLFSSL_LWIP_NATIVE) || \
+    defined(HAVE_LWIP_NATIVE) /* using LwIP native TCP socket */
+    #undef WOLFSSL_USER_IO
+    #define WOLFSSL_USER_IO
+
+    #if defined(HAVE_LWIP_NATIVE)
     #define WOLFSSL_LWIP
     #define NO_WRITEV
     #define SINGLE_THREADED
-    #define WOLFSSL_USER_IO
     #define NO_FILESYSTEM
+    #endif
 #endif
 
 #if defined(WOLFSSL_CONTIKI)
@@ -1027,7 +1073,7 @@ extern void uITRON4_free(void *p) ;
         #define XFREE(p, h, type)    vPortFree((p))
     #endif
 
-    //#define USER_TICKS
+    /* #define USER_TICKS */
     /* Allows use of DH with fixed points if uncommented and NO_DH is removed */
     /* WOLFSSL_DH_CONST */
     #define WOLFSSL_LWIP
@@ -1353,8 +1399,8 @@ extern void uITRON4_free(void *p) ;
             #include "stm32f1xx.h"
         #endif
     #endif /* WOLFSSL_STM32_CUBEMX */
-#endif /* WOLFSSL_STM32F2 || WOLFSSL_STM32F4 || WOLFSSL_STM32L4 || 
-          WOLFSSL_STM32L5 || WOLFSSL_STM32F7 || WOLFSSL_STMWB || 
+#endif /* WOLFSSL_STM32F2 || WOLFSSL_STM32F4 || WOLFSSL_STM32L4 ||
+          WOLFSSL_STM32L5 || WOLFSSL_STM32F7 || WOLFSSL_STMWB ||
           WOLFSSL_STM32H7 || WOLFSSL_STM32G0 */
 #ifdef WOLFSSL_DEOS
     #include <deos.h>
@@ -1588,6 +1634,16 @@ extern void uITRON4_free(void *p) ;
     #endif
 #endif /*(WOLFSSL_XILINX_CRYPT)*/
 
+#ifdef WOLFSSL_KCAPI_AES
+    #define WOLFSSL_AES_GCM_FIXED_IV_AAD
+#endif
+#ifdef WOLFSSL_KCAPI_ECC
+    #define ECC_USER_CURVES
+    #undef  NO_ECC256
+    #define HAVE_ECC384
+    #define HAVE_ECC521
+#endif
+
 #if defined(WOLFSSL_APACHE_MYNEWT)
     #include "os/os_malloc.h"
     #if !defined(WOLFSSL_LWIP)
@@ -1665,7 +1721,7 @@ extern void uITRON4_free(void *p) ;
     #undef HAVE_AES_ECB
     #define HAVE_AES_ECB
 
-    //@TODO used for now until plugging in caam aes use with qnx
+    /* @TODO used for now until plugging in caam aes use with qnx */
     #undef WOLFSSL_AES_DIRECT
     #define WOLFSSL_AES_DIRECT
 #endif
@@ -1800,7 +1856,7 @@ extern void uITRON4_free(void *p) ;
     #ifdef WOLFSSL_MIN_ECC_BITS
         #define ECC_MIN_KEY_SZ WOLFSSL_MIN_ECC_BITS
     #else
-        #if defined(HAVE_FIPS) && defined(HAVE_FIPS_VERSION) && HAVE_FIPS_VERSION >= 2
+        #if FIPS_VERSION_GE(2,0)
             /* FIPSv2 and ready (for now) includes 192-bit support */
             #define ECC_MIN_KEY_SZ 192
         #else
@@ -1867,6 +1923,10 @@ extern void uITRON4_free(void *p) ;
     #ifndef NO_ED25519_VERIFY
         #undef HAVE_ED25519_VERIFY
         #define HAVE_ED25519_VERIFY
+        #ifdef WOLFSSL_ED25519_STREAMING_VERIFY
+            #undef WOLFSSL_ED25519_PERSISTENT_SHA
+            #define WOLFSSL_ED25519_PERSISTENT_SHA
+        #endif
     #endif
     #ifndef NO_ED25519_KEY_EXPORT
         #undef HAVE_ED25519_KEY_EXPORT
@@ -1905,6 +1965,10 @@ extern void uITRON4_free(void *p) ;
     #ifndef NO_ED448_VERIFY
         #undef HAVE_ED448_VERIFY
         #define HAVE_ED448_VERIFY
+        #ifdef WOLFSSL_ED448_STREAMING_VERIFY
+            #undef WOLFSSL_ED448_PERSISTENT_SHA
+            #define WOLFSSL_ED448_PERSISTENT_SHA
+        #endif
     #endif
     #ifndef NO_ED448_KEY_EXPORT
         #undef HAVE_ED448_KEY_EXPORT
@@ -1967,6 +2031,12 @@ extern void uITRON4_free(void *p) ;
      !defined(HAVE_CAMELLIA) && !defined(HAVE_IDEA) && \
      !defined(HAVE_NULL_CIPHER) && !defined(HAVE_HC128))
     #define WOLFSSL_AEAD_ONLY
+#endif
+
+#if !defined(HAVE_PUBLIC_FFDHE) && !defined(NO_DH) && \
+    !defined(WOLFSSL_NO_PUBLIC_FFDHE) && \
+    (defined(HAVE_SELFTEST) || FIPS_VERSION_EQ(2,0))
+    #define HAVE_PUBLIC_FFDHE
 #endif
 
 #if !defined(NO_DH) && !defined(HAVE_FFDHE)
@@ -2144,12 +2214,13 @@ extern void uITRON4_free(void *p) ;
     #define HAVE_PKCS12
 #endif
 
-#ifndef NO_PKCS8
+#if !defined(NO_PKCS8) || defined(HAVE_PKCS12)
     #undef  HAVE_PKCS8
     #define HAVE_PKCS8
 #endif
 
-#if !defined(NO_PBKDF1) || defined(WOLFSSL_ENCRYPTED_KEYS) || defined(HAVE_PKCS8) || defined(HAVE_PKCS12)
+#if !defined(NO_PBKDF1) || defined(WOLFSSL_ENCRYPTED_KEYS) || \
+    defined(HAVE_PKCS8) || defined(HAVE_PKCS12)
     #undef  HAVE_PBKDF1
     #define HAVE_PBKDF1
 #endif
@@ -2231,17 +2302,19 @@ extern void uITRON4_free(void *p) ;
 
 #if defined(OPENSSL_ALL) || defined(WOLFSSL_NGINX) || defined(WOLFSSL_HAPROXY) \
  || defined(HAVE_LIGHTY)
-    #define SSL_OP_NO_COMPRESSION    SSL_OP_NO_COMPRESSION
     #define OPENSSL_NO_ENGINE
-    #define X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT
     #ifndef OPENSSL_EXTRA
         #define OPENSSL_EXTRA
     #endif
-    #ifndef HAVE_SESSION_TICKET
+    /* Session Tickets will be enabled when --enable-opensslall is used.
+     * Time is required for ticket expiration checking */
+    #if !defined(HAVE_SESSION_TICKET) && !defined(NO_ASN_TIME)
         #define HAVE_SESSION_TICKET
     #endif
+    /* OCSP will be enabled in configure.ac when --enable-opensslall is used,
+     * but do not force all users to have it enabled. */
     #ifndef HAVE_OCSP
-        #define HAVE_OCSP
+        /*#define HAVE_OCSP*/
     #endif
     #ifndef KEEP_OUR_CERT
         #define KEEP_OUR_CERT
@@ -2255,17 +2328,16 @@ extern void uITRON4_free(void *p) ;
     #define SSL_CTRL_SET_TLSEXT_HOSTNAME 55
 #endif
 
-
 /* both CURVE and ED small math should be enabled */
 #ifdef CURVED25519_SMALL
-        #define CURVE25519_SMALL
-        #define ED25519_SMALL
+    #define CURVE25519_SMALL
+    #define ED25519_SMALL
 #endif
 
 /* both CURVE and ED small math should be enabled */
 #ifdef CURVED448_SMALL
-        #define CURVE448_SMALL
-        #define ED448_SMALL
+    #define CURVE448_SMALL
+    #define ED448_SMALL
 #endif
 
 
@@ -2288,14 +2360,24 @@ extern void uITRON4_free(void *p) ;
     #endif
 #endif
 
+#ifdef OPENSSL_COEXIST
+    /* make sure old names are disabled */
+    #ifndef NO_OLD_SSL_NAMES
+        #define NO_OLD_SSL_NAMES
+    #endif
+    #ifndef NO_OLD_WC_NAMES
+        #define NO_OLD_WC_NAMES
+    #endif
+#endif
+
 #if defined(NO_OLD_WC_NAMES) || defined(OPENSSL_EXTRA)
     /* added to have compatibility with SHA256() */
     #if !defined(NO_OLD_SHA_NAMES) && (!defined(HAVE_FIPS) || \
-            (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
+            FIPS_VERSION_GT(2,0))
         #define NO_OLD_SHA_NAMES
     #endif
     #if !defined(NO_OLD_MD5_NAME) && (!defined(HAVE_FIPS) || \
-            (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
+            FIPS_VERSION_GT(2,0))
         #define NO_OLD_MD5_NAME
     #endif
 #endif
@@ -2404,7 +2486,12 @@ extern void uITRON4_free(void *p) ;
 #endif
 
 #if defined(HAVE_EX_DATA) || defined(FORTRESS)
+    #if defined(FORTRESS) && !defined(HAVE_EX_DATA)
+        #define HAVE_EX_DATA
+    #endif
+    #ifndef MAX_EX_DATA
     #define MAX_EX_DATA 5  /* allow for five items of ex_data */
+    #endif
 #endif
 
 #ifdef NO_WOLFSSL_SMALL_STACK
@@ -2431,15 +2518,14 @@ extern void uITRON4_free(void *p) ;
 #endif
 
 /* FIPS v1 does not support TLS v1.3 (requires RSA PSS and HKDF) */
-#if defined(HAVE_FIPS) && !defined(HAVE_FIPS_VERSION)
+#if FIPS_VERSION_EQ(1,0)
     #undef WC_RSA_PSS
     #undef WOLFSSL_TLS13
 #endif
 
 /* For FIPSv2 make sure the ECDSA encoding allows extra bytes
  * but make sure users consider enabling it */
-#if !defined(NO_STRICT_ECDSA_LEN) && defined(HAVE_FIPS) && \
-        defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION >= 2)
+#if !defined(NO_STRICT_ECDSA_LEN) && FIPS_VERSION_GE(2,0)
     /* ECDSA length checks off by default for CAVP testing
      * consider enabling strict checks in production */
     #define NO_STRICT_ECDSA_LEN
@@ -2460,10 +2546,15 @@ extern void uITRON4_free(void *p) ;
 #endif
 
 /* DH Extra is not supported on FIPS v1 or v2 (is missing DhKey .pub/.priv) */
-#if defined(WOLFSSL_DH_EXTRA) && defined(HAVE_FIPS) && \
-        (!defined(HAVE_FIPS_VERSION) || HAVE_FIPS_VERSION <= 2)
+#if defined(WOLFSSL_DH_EXTRA) && defined(HAVE_FIPS) && FIPS_VERSION_LE(2,0)
     #undef WOLFSSL_DH_EXTRA
 #endif
+
+/* wc_Sha512.devId isn't available before FIPS 5.1 */
+#if defined(HAVE_FIPS) && FIPS_VERSION_LT(5,1)
+    #define NO_SHA2_CRYPTO_CB
+#endif
+
 
 /* Check for insecure build combination:
  * secure renegotiation   [enabled]
@@ -2480,10 +2571,42 @@ extern void uITRON4_free(void *p) ;
     #endif
 
     /* Note: "--enable-renegotiation-indication" ("HAVE_RENEGOTIATION_INDICATION")
-     * only sends the secure renegotiation extension, but is not actually supported. 
-     * This was added because some TLS peers required it even if not used, so we call 
+     * only sends the secure renegotiation extension, but is not actually supported.
+     * This was added because some TLS peers required it even if not used, so we call
      * this "(FAKE Secure Renegotiation)"
      */
+#endif
+
+/* Crypto callbacks should enable hash flag support */
+#if defined(WOLF_CRYPTO_CB) && !defined(WOLFSSL_HASH_FLAGS)
+    /* FIPS v1 and v2 do not support hash flags, so do not allow it with
+     * crypto callbacks */
+    #if !defined(HAVE_FIPS) || (defined(HAVE_FIPS) && \
+            defined(HAVE_FIPS_VERSION) && HAVE_FIPS_VERSION >= 3)
+        #define WOLFSSL_HASH_FLAGS
+    #endif
+#endif
+
+/* Enable Post-Quantum Cryptography if we have liboqs from the OpenQuantumSafe
+ * group */
+#ifdef HAVE_LIBOQS
+#define HAVE_PQC
+#endif
+
+#if defined(HAVE_PQC) && !defined(HAVE_LIBOQS)
+#error "You must have a post-quantum cryptography implementation to use PQC."
+#endif
+
+/* ---------------------------------------------------------------------------
+ * Depricated Algorithm Handling
+ *   Unless allowed via a build macro, disable support
+ * ---------------------------------------------------------------------------*/
+
+/* RC4: Per RFC7465 Feb 2015, the cipher suite has been deprecated due to a
+ * number of exploits capable of decrypting portions of encrypted messages. */
+#ifndef WOLFSSL_ALLOW_RC4
+    #undef  NO_RC4
+    #define NO_RC4
 #endif
 
 

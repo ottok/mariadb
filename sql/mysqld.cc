@@ -1339,12 +1339,13 @@ struct my_rnd_struct sql_rand; ///< used by sql_class.cc:THD::THD()
 
 #ifndef EMBEDDED_LIBRARY
 MYSQL_SOCKET unix_sock, base_ip_sock, extra_ip_sock;
+C_MODE_START
+#ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
 /**
   Error reporter that buffer log messages.
   @param level          log message level
   @param format         log message format string
 */
-C_MODE_START
 static void buffered_option_error_reporter(enum loglevel level,
                                            const char *format, ...)
 {
@@ -1356,6 +1357,7 @@ static void buffered_option_error_reporter(enum loglevel level,
   va_end(args);
   buffered_logs.buffer(level, buffer);
 }
+#endif
 
 
 /**
@@ -1757,6 +1759,7 @@ static void close_connections(void)
   {
     wsrep_deinit(true);
   }
+  wsrep_sst_auth_free();
 #endif
   /* All threads has now been aborted */
   DBUG_PRINT("quit", ("Waiting for threads to die (count=%u)", THD_count::value()));
@@ -5287,7 +5290,7 @@ int mysqld_main(int argc, char **argv)
     Initialize the array of performance schema instrument configurations.
   */
   init_pfs_instrument_array();
-#endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
+
   /*
     Logs generated while parsing the command line
     options are buffered and printed later.
@@ -5295,7 +5298,7 @@ int mysqld_main(int argc, char **argv)
   buffered_logs.init();
   my_getopt_error_reporter= buffered_option_error_reporter;
   my_charset_error_reporter= buffered_option_error_reporter;
-#ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
+
   pfs_param.m_pfs_instrument= const_cast<char*>("");
 #endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
   my_timer_init(&sys_timer_info);
@@ -7695,7 +7698,7 @@ static int mysql_init_variables(void)
   disable_log_notes= 0;
   mqh_used= 0;
   cleanup_done= 0;
-  test_flags= select_errors= dropping_tables= ha_open_options=0;
+  select_errors= dropping_tables= ha_open_options=0;
   THD_count::count= CONNECT::count= 0;
   slave_open_temp_tables= 0;
   opt_endinfo= using_udf_functions= 0;
@@ -7965,7 +7968,8 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
     if (argument)
     {
       strmake(server_version, argument, sizeof(server_version) - 1);
-      set_sys_var_value_origin(&server_version_ptr, sys_var::CONFIG);
+      set_sys_var_value_origin(&server_version_ptr,
+                *filename ? sys_var::CONFIG : sys_var::COMMAND_LINE, filename);
       using_custom_server_version= true;
     }
 #ifndef EMBEDDED_LIBRARY
@@ -8578,7 +8582,6 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
   {
     /* Allow break with SIGINT, no core or stack trace */
     test_flags|= TEST_SIGINT;
-    opt_stack_trace= 1;
     test_flags&= ~TEST_CORE_ON_SIGNAL;
   }
   /* Set global MyISAM variables from delay_key_write_options */
@@ -8699,10 +8702,12 @@ void set_server_version(char *buf, size_t size)
 {
   bool is_log= opt_log || global_system_variables.sql_log_slow || opt_bin_log;
   bool is_debug= IF_DBUG(!strstr(MYSQL_SERVER_SUFFIX_STR, "-debug"), 0);
+  bool is_valgrind= IF_VALGRIND(!strstr(MYSQL_SERVER_SUFFIX_STR, "-valgrind"), 0);
   strxnmov(buf, size - 1,
            MYSQL_SERVER_VERSION,
            MYSQL_SERVER_SUFFIX_STR,
            IF_EMBEDDED("-embedded", ""),
+           is_valgrind ? "-valgrind" : "",
            is_debug ? "-debug" : "",
            is_log ? "-log" : "",
            NullS);

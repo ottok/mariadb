@@ -137,6 +137,13 @@ void* wolfSSL_Malloc(size_t size)
     }
     else {
     #ifndef WOLFSSL_NO_MALLOC
+        #ifdef WOLFSSL_TRAP_MALLOC_SZ
+        if (size > WOLFSSL_TRAP_MALLOC_SZ) {
+            WOLFSSL_MSG("Malloc too big!");
+            return NULL;
+        }
+        #endif
+
         res = malloc(size);
     #else
         WOLFSSL_MSG("No malloc available");
@@ -607,11 +614,11 @@ void* wolfSSL_Malloc(size_t size, void* heap, int type)
             /* allow using malloc for creating ctx and method */
             if (type == DYNAMIC_TYPE_CTX || type == DYNAMIC_TYPE_METHOD ||
                                             type == DYNAMIC_TYPE_CERT_MANAGER) {
-                WOLFSSL_MSG("ERROR allowing null heap hint for ctx/method\n");
+                WOLFSSL_MSG("ERROR allowing null heap hint for ctx/method");
                 res = malloc(size);
             }
             else {
-                WOLFSSL_MSG("ERROR null heap hint passed into XMALLOC\n");
+                WOLFSSL_MSG("ERROR null heap hint passed into XMALLOC");
                 res = NULL;
             }
         #else
@@ -620,6 +627,10 @@ void* wolfSSL_Malloc(size_t size, void* heap, int type)
                 res = pvPortMalloc(size);
             #else
                 res = malloc(size);
+            #endif
+
+            #ifdef WOLFSSL_DEBUG_MEMORY
+                printf("Alloc: %p -> %u at %s:%d\n", res, (word32)size, func, line);
             #endif
         #else
             WOLFSSL_MSG("No heap hint found to use and no malloc");
@@ -663,7 +674,7 @@ void* wolfSSL_Malloc(size_t size, void* heap, int type)
             /* general static memory */
             if (pt == NULL) {
                 for (i = 0; i < WOLFMEM_MAX_BUCKETS; i++) {
-                    if ((word32)size < mem->sizeList[i]) {
+                    if ((word32)size <= mem->sizeList[i]) {
                         if (mem->ava[i] != NULL) {
                             pt = mem->ava[i];
                             mem->ava[i] = pt->next;
@@ -744,6 +755,9 @@ void wolfSSL_Free(void *ptr, void* heap, int type)
         /* check for testing heap hint was set */
     #ifdef WOLFSSL_HEAP_TEST
         if (heap == (void*)WOLFSSL_HEAP_TEST) {
+        #ifdef WOLFSSL_DEBUG_MEMORY
+            printf("Free: %p at %s:%d\n", pt, func, line);
+        #endif
             return free(ptr);
         }
     #endif
@@ -753,10 +767,10 @@ void wolfSSL_Free(void *ptr, void* heap, int type)
             /* allow using malloc for creating ctx and method */
             if (type == DYNAMIC_TYPE_CTX || type == DYNAMIC_TYPE_METHOD ||
                                             type == DYNAMIC_TYPE_CERT_MANAGER) {
-                WOLFSSL_MSG("ERROR allowing null heap hint for ctx/method\n");
+                WOLFSSL_MSG("ERROR allowing null heap hint for ctx/method");
             }
             else {
-                WOLFSSL_MSG("ERROR null heap hint passed into XFREE\n");
+                WOLFSSL_MSG("ERROR null heap hint passed into XFREE");
             }
         #endif
         #ifndef WOLFSSL_NO_MALLOC
@@ -857,7 +871,7 @@ void* wolfSSL_Realloc(void *ptr, size_t size, void* heap, int type)
 
     if (heap == NULL) {
         #ifdef WOLFSSL_HEAP_TEST
-            WOLFSSL_MSG("ERROR null heap hint passed in to XREALLOC\n");
+            WOLFSSL_MSG("ERROR null heap hint passed in to XREALLOC");
         #endif
         #ifndef WOLFSSL_NO_MALLOC
             res = realloc(ptr, size);
@@ -898,7 +912,7 @@ void* wolfSSL_Realloc(void *ptr, size_t size, void* heap, int type)
         else {
         /* general memory */
             for (i = 0; i < WOLFMEM_MAX_BUCKETS; i++) {
-                if ((word32)size < mem->sizeList[i]) {
+                if ((word32)size <= mem->sizeList[i]) {
                     if (mem->ava[i] != NULL) {
                         pt = mem->ava[i];
                         mem->ava[i] = pt->next;
@@ -1126,3 +1140,197 @@ void __attribute__((no_instrument_function))
 }
 #endif
 
+#if defined(WOLFSSL_LINUXKM_SIMD_X86)
+    static union fpregs_state **wolfcrypt_linuxkm_fpu_states = NULL;
+
+    static WARN_UNUSED_RESULT inline int am_in_hard_interrupt_handler(void)
+    {
+        return (preempt_count() & (NMI_MASK | HARDIRQ_MASK)) != 0;
+    }
+
+    WARN_UNUSED_RESULT int allocate_wolfcrypt_linuxkm_fpu_states(void)
+    {
+        wolfcrypt_linuxkm_fpu_states =
+            (union fpregs_state **)kzalloc(nr_cpu_ids
+                                           * sizeof(struct fpu_state *),
+                                           GFP_KERNEL);
+        if (! wolfcrypt_linuxkm_fpu_states) {
+            pr_err("warning, allocation of %lu bytes for "
+                   "wolfcrypt_linuxkm_fpu_states failed.\n",
+                   nr_cpu_ids * sizeof(struct fpu_state *));
+            return MEMORY_E;
+        }
+        {
+            typeof(nr_cpu_ids) i;
+            for (i=0; i<nr_cpu_ids; ++i) {
+                _Static_assert(sizeof(union fpregs_state) <= PAGE_SIZE,
+                               "union fpregs_state is larger than expected.");
+                wolfcrypt_linuxkm_fpu_states[i] =
+                    (union fpregs_state *)kzalloc(PAGE_SIZE
+                                                  /* sizeof(union fpregs_state) */,
+                                                  GFP_KERNEL);
+                if (! wolfcrypt_linuxkm_fpu_states[i])
+                    break;
+                /* double-check that the allocation is 64-byte-aligned as needed
+                 * for xsave.
+                 */
+                if ((unsigned long)wolfcrypt_linuxkm_fpu_states[i] & 63UL) {
+                    pr_err("warning, allocation for wolfcrypt_linuxkm_fpu_states "
+                           "was not properly aligned (%px).\n",
+                           wolfcrypt_linuxkm_fpu_states[i]);
+                    kfree(wolfcrypt_linuxkm_fpu_states[i]);
+                    wolfcrypt_linuxkm_fpu_states[i] = 0;
+                    break;
+                }
+            }
+            if (i < nr_cpu_ids) {
+                pr_err("warning, only %u/%u allocations succeeded for "
+                       "wolfcrypt_linuxkm_fpu_states.\n",
+                       i, nr_cpu_ids);
+                return MEMORY_E;
+            }
+        }
+        return 0;
+    }
+
+    void free_wolfcrypt_linuxkm_fpu_states(void)
+    {
+        if (wolfcrypt_linuxkm_fpu_states) {
+            typeof(nr_cpu_ids) i;
+            for (i=0; i<nr_cpu_ids; ++i) {
+                if (wolfcrypt_linuxkm_fpu_states[i])
+                    kfree(wolfcrypt_linuxkm_fpu_states[i]);
+            }
+            kfree(wolfcrypt_linuxkm_fpu_states);
+            wolfcrypt_linuxkm_fpu_states = 0;
+        }
+    }
+
+    WARN_UNUSED_RESULT int save_vector_registers_x86(void)
+    {
+        int processor_id;
+
+        preempt_disable();
+
+        processor_id = smp_processor_id();
+
+        {
+            static int _warned_on_null = -1;
+            if ((wolfcrypt_linuxkm_fpu_states == NULL) ||
+                (wolfcrypt_linuxkm_fpu_states[processor_id] == NULL))
+            {
+                preempt_enable();
+                if (_warned_on_null < processor_id) {
+                    _warned_on_null = processor_id;
+                    pr_err("save_vector_registers_x86 called for cpu id %d "
+                           "with null context buffer.\n", processor_id);
+                }
+                return BAD_STATE_E;
+            }
+        }
+
+        if (! irq_fpu_usable()) {
+            if (am_in_hard_interrupt_handler()) {
+
+                /* allow for nested calls */
+                if (((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] != 0) {
+                    if (((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] == 255) {
+                        preempt_enable();
+                        pr_err("save_vector_registers_x86 recursion register overflow for "
+                               "cpu id %d.\n", processor_id);
+                        return BAD_STATE_E;
+                    } else {
+                        ++((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1];
+                        return 0;
+                    }
+                }
+                /* note, fpregs_lock() is not needed here, because
+                 * interrupts/preemptions are already disabled here.
+                 */
+                {
+                    /* save_fpregs_to_fpstate() only accesses fpu->state, which
+                     * has stringent alignment requirements (64 byte cache
+                     * line), but takes a pointer to the parent struct.  work
+                     * around this.
+                     */
+                    struct fpu *fake_fpu_pointer =
+                        (struct fpu *)(((char *)wolfcrypt_linuxkm_fpu_states[processor_id])
+                                       - offsetof(struct fpu, state));
+                #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+                    copy_fpregs_to_fpstate(fake_fpu_pointer);
+                #else
+                    save_fpregs_to_fpstate(fake_fpu_pointer);
+                #endif
+                }
+                /* mark the slot as used. */
+                ((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] = 1;
+                /* note, not preempt_enable()ing, mirroring kernel_fpu_begin()
+                 * semantics, even though routine will have been entered already
+                 * non-preemptable.
+                 */
+                return 0;
+            } else {
+                preempt_enable();
+                return BAD_STATE_E;
+            }
+        } else {
+
+            /* allow for nested calls */
+            if (((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] != 0) {
+                if (((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] == 255) {
+                    preempt_enable();
+                    pr_err("save_vector_registers_x86 recursion register overflow for "
+                           "cpu id %d.\n", processor_id);
+                    return BAD_STATE_E;
+                } else {
+                    ++((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1];
+                    return 0;
+                }
+            }
+
+            kernel_fpu_begin();
+            preempt_enable(); /* kernel_fpu_begin() does its own
+                               * preempt_disable().  decrement ours.
+                               */
+            ((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] = 1;
+            return 0;
+        }
+    }
+    void restore_vector_registers_x86(void)
+    {
+        int processor_id = smp_processor_id();
+
+        if ((wolfcrypt_linuxkm_fpu_states == NULL) ||
+            (wolfcrypt_linuxkm_fpu_states[processor_id] == NULL))
+        {
+                pr_err("restore_vector_registers_x86 called for cpu id %d "
+                       "without null context buffer.\n", processor_id);
+                return;
+        }
+
+        if (((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] == 0)
+        {
+            pr_err("restore_vector_registers_x86 called for cpu id %d "
+                   "without saved context.\n", processor_id);
+            return;
+        }
+
+        if (--((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] > 0) {
+            preempt_enable(); /* preempt_disable count will still be nonzero after this decrement. */
+            return;
+        }
+
+        if (am_in_hard_interrupt_handler()) {
+        #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+            copy_kernel_to_fpregs(wolfcrypt_linuxkm_fpu_states[processor_id]);
+        #else
+            __restore_fpregs_from_fpstate(wolfcrypt_linuxkm_fpu_states[processor_id],
+                                          xfeatures_mask_all);
+        #endif
+            preempt_enable();
+        } else {
+            kernel_fpu_end();
+        }
+        return;
+    }
+#endif /* WOLFSSL_LINUXKM_SIMD_X86 && WOLFSSL_LINUXKM_SIMD_X86_IRQ_ALLOWED */

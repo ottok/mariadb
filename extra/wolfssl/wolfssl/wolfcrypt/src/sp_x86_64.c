@@ -26,6 +26,10 @@
 #endif
 
 #include <wolfssl/wolfcrypt/settings.h>
+
+#if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH) || \
+    defined(WOLFSSL_HAVE_SP_ECC)
+
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/cpuid.h>
 #ifdef NO_INLINE
@@ -34,9 +38,6 @@
     #define WOLFSSL_MISC_INCLUDED
     #include <wolfcrypt/src/misc.c>
 #endif
-
-#if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH) || \
-                                    defined(WOLFSSL_HAVE_SP_ECC)
 
 #ifdef RSA_LOW_MEM
 #ifndef WOLFSSL_SP_SMALL
@@ -47,6 +48,17 @@
 #include <wolfssl/wolfcrypt/sp.h>
 
 #ifdef WOLFSSL_SP_X86_64_ASM
+#define SP_PRINT_NUM(var, name, total, words, bits)     \
+    do {                                                \
+        int ii;                                         \
+        fprintf(stderr, name "=0x");                    \
+        for (ii = words - 1; ii >= 0; ii--)             \
+            fprintf(stderr, SP_PRINT_FMT, (var)[ii]);   \
+        fprintf(stderr, "\n");                         \
+    } while (0)
+
+#define SP_PRINT_VAL(var, name)                         \
+    fprintf(stderr, name "=0x" SP_PRINT_FMT "\n", var)
 #if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH)
 #ifndef WOLFSSL_SP_NO_2048
 extern void sp_2048_from_bin_bswap(sp_digit* r, int size, const byte* a, int n);
@@ -158,28 +170,42 @@ static void sp_2048_from_mp(sp_digit* r, int size, const mp_int* a)
 #endif
 }
 
-extern void sp_2048_to_bin_bswap(sp_digit* r, byte* a);
-extern void sp_2048_to_bin_movbe(sp_digit* r, byte* a);
+extern void sp_2048_to_bin_bswap_32(sp_digit* r, byte* a);
+extern void sp_2048_to_bin_movbe_32(sp_digit* r, byte* a);
 /* Write r as big endian to byte array.
  * Fixed length number of bytes written: 256
  *
  * r  A single precision integer.
  * a  Byte array.
  */
-static void sp_2048_to_bin(sp_digit* r, byte* a)
+static void sp_2048_to_bin_32(sp_digit* r, byte* a)
 {
 #ifndef NO_MOVBE_SUPPORT
     word32 cpuid_flags = cpuid_get_flags();
 
     if (IS_INTEL_MOVBE(cpuid_flags)) {
-        sp_2048_to_bin_movbe(r, a);
+        sp_2048_to_bin_movbe_32(r, a);
     }
     else
 #endif
     {
-        sp_2048_to_bin_bswap(r, a);
+        sp_2048_to_bin_bswap_32(r, a);
     }
 }
+
+#if (defined(WOLFSSL_HAVE_SP_RSA) && (!defined(WOLFSSL_RSA_PUBLIC_ONLY) || !defined(WOLFSSL_SP_SMALL))) || defined(WOLFSSL_HAVE_SP_DH)
+/* Normalize the values in each word to 64.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_2048_norm_32(a)
+
+#endif /* (WOLFSSL_HAVE_SP_RSA && (!WOLFSSL_RSA_PUBLIC_ONLY || !WOLFSSL_SP_SMALL)) || WOLFSSL_HAVE_SP_DH */
+/* Normalize the values in each word to 64.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_2048_norm_32(a)
 
 extern void sp_2048_mul_16(sp_digit* r, const sp_digit* a, const sp_digit* b);
 extern void sp_2048_sqr_16(sp_digit* r, const sp_digit* a);
@@ -234,20 +260,22 @@ static void sp_2048_mont_norm_16(sp_digit* r, const sp_digit* m)
 {
     XMEMSET(r, 0, sizeof(sp_digit) * 16);
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
     /* r = 2^n mod m */
     sp_2048_sub_in_place_16(r, m);
 }
 
 extern sp_digit sp_2048_cond_sub_16(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
 extern void sp_2048_mont_reduce_16(sp_digit* a, const sp_digit* m, sp_digit mp);
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_mul_16(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -259,9 +287,9 @@ static void sp_2048_mont_mul_16(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_sqr_16(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -287,6 +315,7 @@ extern sp_digit div_2048_word_asm_16(sp_digit d1, sp_digit d0, sp_digit div);
 static WC_INLINE sp_digit div_2048_word_16(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
 #if _MSC_VER >= 1920
     return _udiv128(d1, d0, div, NULL);
 #else
@@ -304,6 +333,7 @@ static WC_INLINE sp_digit div_2048_word_16(sp_digit d1, sp_digit d0,
 static WC_INLINE sp_digit div_2048_word_16(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     register sp_digit r asm("rax");
     __asm__ __volatile__ (
         "divq %3"
@@ -344,7 +374,7 @@ static void sp_2048_mask_16(sp_digit* r, const sp_digit* a, sp_digit m)
 #endif
 }
 
-extern int64_t sp_2048_cmp_16(const sp_digit* a, const sp_digit* b);
+extern sp_int64 sp_2048_cmp_16(const sp_digit* a, const sp_digit* b);
 /* Divide d in a and put remainder into r (m*d + r = a)
  * m is not calculated as it is not needed at this time.
  *
@@ -365,6 +395,8 @@ static WC_INLINE int sp_2048_div_16(const sp_digit* a, const sp_digit* d, sp_dig
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)m;
 
@@ -416,6 +448,7 @@ static WC_INLINE int sp_2048_div_16(const sp_digit* a, const sp_digit* d, sp_dig
 static WC_INLINE int sp_2048_mod_16(sp_digit* r, const sp_digit* a,
         const sp_digit* m)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     return sp_2048_div_16(a, m, NULL, r);
 }
 
@@ -426,13 +459,15 @@ static WC_INLINE int sp_2048_mod_16(sp_digit* r, const sp_digit* a,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_2048_mod_exp_16(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
     sp_digit td[(33 * 32) + 32];
 #endif
@@ -447,11 +482,22 @@ static int sp_2048_mod_exp_16(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 32) + 32, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 32) + 32, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
@@ -595,14 +641,14 @@ static int sp_2048_mod_exp_16(sp_digit* r, const sp_digit* a, const sp_digit* e,
 
 extern void sp_2048_mont_reduce_avx2_16(sp_digit* a, const sp_digit* m, sp_digit mp);
 #ifdef HAVE_INTEL_AVX2
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_mul_avx2_16(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -616,9 +662,9 @@ static void sp_2048_mont_mul_avx2_16(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_sqr_avx2_16(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -636,13 +682,15 @@ static void sp_2048_mont_sqr_avx2_16(sp_digit* r, const sp_digit* a,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_2048_mod_exp_avx2_16(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
     sp_digit td[(33 * 32) + 32];
 #endif
@@ -657,11 +705,22 @@ static int sp_2048_mod_exp_avx2_16(sp_digit* r, const sp_digit* a, const sp_digi
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 32) + 32, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 32) + 32, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
@@ -806,7 +865,7 @@ static int sp_2048_mod_exp_avx2_16(sp_digit* r, const sp_digit* a, const sp_digi
 
 #endif /* (WOLFSSL_HAVE_SP_RSA & !WOLFSSL_RSA_PUBLIC_ONLY) | WOLFSSL_HAVE_SP_DH */
 
-#if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH)
+#if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
 /* r = 2^n mod m where n is the number of bits to reduce by.
  * Given m must be 2048 bits, just need to subtract.
  *
@@ -817,21 +876,23 @@ static void sp_2048_mont_norm_32(sp_digit* r, const sp_digit* m)
 {
     XMEMSET(r, 0, sizeof(sp_digit) * 32);
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
     /* r = 2^n mod m */
     sp_2048_sub_in_place_32(r, m);
 }
 
-#endif /* WOLFSSL_HAVE_SP_RSA | WOLFSSL_HAVE_SP_DH */
+#endif /* (WOLFSSL_HAVE_SP_RSA & !WOLFSSL_RSA_PUBLIC_ONLY) | WOLFSSL_HAVE_SP_DH */
 extern sp_digit sp_2048_cond_sub_32(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
 extern void sp_2048_mont_reduce_32(sp_digit* a, const sp_digit* m, sp_digit mp);
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_mul_32(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -843,9 +904,9 @@ static void sp_2048_mont_mul_32(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_sqr_32(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -854,8 +915,7 @@ static void sp_2048_mont_sqr_32(sp_digit* r, const sp_digit* a,
     sp_2048_mont_reduce_32(r, m, mp);
 }
 
-#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
-extern sp_digit sp_2048_cond_sub_avx2_32(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
+extern sp_digit sp_2048_sub_32(sp_digit* r, const sp_digit* a, const sp_digit* b);
 extern void sp_2048_mul_d_avx2_32(sp_digit* r, const sp_digit* a, const sp_digit b);
 #ifdef _WIN64
 #if _MSC_VER < 1920
@@ -871,6 +931,7 @@ extern sp_digit div_2048_word_asm_32(sp_digit d1, sp_digit d0, sp_digit div);
 static WC_INLINE sp_digit div_2048_word_32(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
 #if _MSC_VER >= 1920
     return _udiv128(d1, d0, div, NULL);
 #else
@@ -888,6 +949,7 @@ static WC_INLINE sp_digit div_2048_word_32(sp_digit d1, sp_digit d0,
 static WC_INLINE sp_digit div_2048_word_32(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     register sp_digit r asm("rax");
     __asm__ __volatile__ (
         "divq %3"
@@ -898,113 +960,6 @@ static WC_INLINE sp_digit div_2048_word_32(sp_digit d1, sp_digit d0,
     return r;
 }
 #endif /* _WIN64 */
-/* AND m into each word of a and store in r.
- *
- * r  A single precision integer.
- * a  A single precision integer.
- * m  Mask to AND against each digit.
- */
-static void sp_2048_mask_32(sp_digit* r, const sp_digit* a, sp_digit m)
-{
-#ifdef WOLFSSL_SP_SMALL
-    int i;
-
-    for (i=0; i<32; i++) {
-        r[i] = a[i] & m;
-    }
-#else
-    int i;
-
-    for (i = 0; i < 32; i += 8) {
-        r[i+0] = a[i+0] & m;
-        r[i+1] = a[i+1] & m;
-        r[i+2] = a[i+2] & m;
-        r[i+3] = a[i+3] & m;
-        r[i+4] = a[i+4] & m;
-        r[i+5] = a[i+5] & m;
-        r[i+6] = a[i+6] & m;
-        r[i+7] = a[i+7] & m;
-    }
-#endif
-}
-
-extern int64_t sp_2048_cmp_32(const sp_digit* a, const sp_digit* b);
-/* Divide d in a and put remainder into r (m*d + r = a)
- * m is not calculated as it is not needed at this time.
- *
- * a  Number to be divided.
- * d  Number to divide with.
- * m  Multiplier result.
- * r  Remainder from the division.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_2048_div_32(const sp_digit* a, const sp_digit* d, sp_digit* m,
-        sp_digit* r)
-{
-    sp_digit t1[64];
-    sp_digit t2[33];
-    sp_digit div;
-    sp_digit r1;
-    int i;
-#ifdef HAVE_INTEL_AVX2
-    word32 cpuid_flags = cpuid_get_flags();
-#endif
-
-    (void)m;
-
-    div = d[31];
-    XMEMCPY(t1, a, sizeof(*t1) * 2 * 32);
-    r1 = sp_2048_cmp_32(&t1[32], d) >= 0;
-#ifdef HAVE_INTEL_AVX2
-    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
-        sp_2048_cond_sub_avx2_32(&t1[32], &t1[32], d, (sp_digit)0 - r1);
-    else
-#endif
-        sp_2048_cond_sub_32(&t1[32], &t1[32], d, (sp_digit)0 - r1);
-    for (i=31; i>=0; i--) {
-        sp_digit hi = t1[32 + i] - (t1[32 + i] == div);
-        r1 = div_2048_word_32(hi, t1[32 + i - 1], div);
-
-#ifdef HAVE_INTEL_AVX2
-        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
-            sp_2048_mul_d_avx2_32(t2, d, r1);
-        else
-#endif
-            sp_2048_mul_d_32(t2, d, r1);
-        t1[32 + i] += sp_2048_sub_in_place_32(&t1[i], t2);
-        t1[32 + i] -= t2[32];
-        sp_2048_mask_32(t2, d, t1[32 + i]);
-        t1[32 + i] += sp_2048_add_32(&t1[i], &t1[i], t2);
-        sp_2048_mask_32(t2, d, t1[32 + i]);
-        t1[32 + i] += sp_2048_add_32(&t1[i], &t1[i], t2);
-    }
-
-    r1 = sp_2048_cmp_32(t1, d) >= 0;
-#ifdef HAVE_INTEL_AVX2
-    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
-        sp_2048_cond_sub_avx2_32(r, t1, d, (sp_digit)0 - r1);
-    else
-#endif
-        sp_2048_cond_sub_32(r, t1, d, (sp_digit)0 - r1);
-
-    return MP_OKAY;
-}
-
-/* Reduce a modulo m into r. (r = a mod m)
- *
- * r  A single precision number that is the reduced result.
- * a  A single precision number that is to be reduced.
- * m  A single precision number that is the modulus to reduce with.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_2048_mod_32(sp_digit* r, const sp_digit* a,
-        const sp_digit* m)
-{
-    return sp_2048_div_32(a, m, NULL, r);
-}
-
-#endif /* WOLFSSL_HAVE_SP_DH || !WOLFSSL_RSA_PUBLIC_ONLY */
-extern sp_digit sp_2048_sub_32(sp_digit* r, const sp_digit* a, const sp_digit* b);
 /* Divide d in a and put remainder into r (m*d + r = a)
  * m is not calculated as it is not needed at this time.
  *
@@ -1025,6 +980,8 @@ static WC_INLINE int sp_2048_div_32_cond(const sp_digit* a, const sp_digit* d, s
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)m;
 
@@ -1080,10 +1037,122 @@ static WC_INLINE int sp_2048_div_32_cond(const sp_digit* a, const sp_digit* d, s
 static WC_INLINE int sp_2048_mod_32_cond(sp_digit* r, const sp_digit* a,
         const sp_digit* m)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     return sp_2048_div_32_cond(a, m, NULL, r);
 }
 
 #if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
+extern sp_digit sp_2048_cond_sub_avx2_32(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
+/* AND m into each word of a and store in r.
+ *
+ * r  A single precision integer.
+ * a  A single precision integer.
+ * m  Mask to AND against each digit.
+ */
+static void sp_2048_mask_32(sp_digit* r, const sp_digit* a, sp_digit m)
+{
+#ifdef WOLFSSL_SP_SMALL
+    int i;
+
+    for (i=0; i<32; i++) {
+        r[i] = a[i] & m;
+    }
+#else
+    int i;
+
+    for (i = 0; i < 32; i += 8) {
+        r[i+0] = a[i+0] & m;
+        r[i+1] = a[i+1] & m;
+        r[i+2] = a[i+2] & m;
+        r[i+3] = a[i+3] & m;
+        r[i+4] = a[i+4] & m;
+        r[i+5] = a[i+5] & m;
+        r[i+6] = a[i+6] & m;
+        r[i+7] = a[i+7] & m;
+    }
+#endif
+}
+
+extern sp_int64 sp_2048_cmp_32(const sp_digit* a, const sp_digit* b);
+/* Divide d in a and put remainder into r (m*d + r = a)
+ * m is not calculated as it is not needed at this time.
+ *
+ * a  Number to be divided.
+ * d  Number to divide with.
+ * m  Multiplier result.
+ * r  Remainder from the division.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_2048_div_32(const sp_digit* a, const sp_digit* d, sp_digit* m,
+        sp_digit* r)
+{
+    sp_digit t1[64];
+    sp_digit t2[33];
+    sp_digit div;
+    sp_digit r1;
+    int i;
+#ifdef HAVE_INTEL_AVX2
+    word32 cpuid_flags = cpuid_get_flags();
+#endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    (void)m;
+
+    div = d[31];
+    XMEMCPY(t1, a, sizeof(*t1) * 2 * 32);
+    r1 = sp_2048_cmp_32(&t1[32], d) >= 0;
+#ifdef HAVE_INTEL_AVX2
+    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+        sp_2048_cond_sub_avx2_32(&t1[32], &t1[32], d, (sp_digit)0 - r1);
+    else
+#endif
+        sp_2048_cond_sub_32(&t1[32], &t1[32], d, (sp_digit)0 - r1);
+    for (i=31; i>=0; i--) {
+        sp_digit hi = t1[32 + i] - (t1[32 + i] == div);
+        r1 = div_2048_word_32(hi, t1[32 + i - 1], div);
+
+#ifdef HAVE_INTEL_AVX2
+        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+            sp_2048_mul_d_avx2_32(t2, d, r1);
+        else
+#endif
+            sp_2048_mul_d_32(t2, d, r1);
+        t1[32 + i] += sp_2048_sub_in_place_32(&t1[i], t2);
+        t1[32 + i] -= t2[32];
+        sp_2048_mask_32(t2, d, t1[32 + i]);
+        t1[32 + i] += sp_2048_add_32(&t1[i], &t1[i], t2);
+        sp_2048_mask_32(t2, d, t1[32 + i]);
+        t1[32 + i] += sp_2048_add_32(&t1[i], &t1[i], t2);
+    }
+
+    r1 = sp_2048_cmp_32(t1, d) >= 0;
+#ifdef HAVE_INTEL_AVX2
+    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+        sp_2048_cond_sub_avx2_32(r, t1, d, (sp_digit)0 - r1);
+    else
+#endif
+        sp_2048_cond_sub_32(r, t1, d, (sp_digit)0 - r1);
+
+    return MP_OKAY;
+}
+
+#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
+/* Reduce a modulo m into r. (r = a mod m)
+ *
+ * r  A single precision number that is the reduced result.
+ * a  A single precision number that is to be reduced.
+ * m  A single precision number that is the modulus to reduce with.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_2048_mod_32(sp_digit* r, const sp_digit* a,
+        const sp_digit* m)
+{
+    ASSERT_SAVED_VECTOR_REGISTERS();
+    return sp_2048_div_32(a, m, NULL, r);
+}
+
+#endif /* WOLFSSL_HAVE_SP_DH || !WOLFSSL_RSA_PUBLIC_ONLY */
 /* Modular exponentiate a to the e mod m. (r = a^e mod m)
  *
  * r     A single precision number that is the result of the operation.
@@ -1091,17 +1160,19 @@ static WC_INLINE int sp_2048_mod_32_cond(sp_digit* r, const sp_digit* a,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
-    sp_digit td[(33 * 64) + 64];
+    sp_digit td[(17 * 64) + 64];
 #endif
-    sp_digit* t[32];
+    sp_digit* t[16];
     sp_digit* rt = NULL;
     sp_digit* norm;
     sp_digit mp = 1;
@@ -1112,24 +1183,35 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 64) + 64, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (17 * 64) + 64, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
     if (err == MP_OKAY) {
         norm = td;
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = td + i * 64;
-        rt = td + 2048;
+        rt = td + 1024;
 #else
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = &td[i * 64];
-        rt = &td[2048];
+        rt = &td[1024];
 #endif
 
         sp_2048_mont_setup(m, &mp);
@@ -1162,22 +1244,6 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
         sp_2048_mont_mul_32(t[13], t[ 7], t[ 6], m, mp);
         sp_2048_mont_sqr_32(t[14], t[ 7], m, mp);
         sp_2048_mont_mul_32(t[15], t[ 8], t[ 7], m, mp);
-        sp_2048_mont_sqr_32(t[16], t[ 8], m, mp);
-        sp_2048_mont_mul_32(t[17], t[ 9], t[ 8], m, mp);
-        sp_2048_mont_sqr_32(t[18], t[ 9], m, mp);
-        sp_2048_mont_mul_32(t[19], t[10], t[ 9], m, mp);
-        sp_2048_mont_sqr_32(t[20], t[10], m, mp);
-        sp_2048_mont_mul_32(t[21], t[11], t[10], m, mp);
-        sp_2048_mont_sqr_32(t[22], t[11], m, mp);
-        sp_2048_mont_mul_32(t[23], t[12], t[11], m, mp);
-        sp_2048_mont_sqr_32(t[24], t[12], m, mp);
-        sp_2048_mont_mul_32(t[25], t[13], t[12], m, mp);
-        sp_2048_mont_sqr_32(t[26], t[13], m, mp);
-        sp_2048_mont_mul_32(t[27], t[14], t[13], m, mp);
-        sp_2048_mont_sqr_32(t[28], t[14], m, mp);
-        sp_2048_mont_mul_32(t[29], t[15], t[14], m, mp);
-        sp_2048_mont_sqr_32(t[30], t[15], m, mp);
-        sp_2048_mont_mul_32(t[31], t[16], t[15], m, mp);
 
         i = (bits - 1) / 64;
         n = e[i--];
@@ -1186,12 +1252,12 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
         if (c == 0) {
             c = 64;
         }
-        /* Minus the number of top bits to use so rest is a multiple of 5. */
-        if ((bits % 5) == 0) {
-            c -= 5;
+        /* Minus the number of top bits to use so rest is a multiple of 4. */
+        if ((bits % 4) == 0) {
+            c -= 4;
         }
         else {
-            c -= bits % 5;
+            c -= bits % 4;
         }
         if (c < 0) {
             /* Number of bits in top word is less than number needed. */
@@ -1207,22 +1273,22 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
             n <<= 64 - c;
         }
         XMEMCPY(r, t[y], sizeof(sp_digit) * 32);
-        for (; i>=0 || c>=5; ) {
-            if (c >= 5) {
-                y = (byte)((n >> 59) & 0x1f);
-                n <<= 5;
-                c -= 5;
+        for (; i>=0 || c>=4; ) {
+            if (c >= 4) {
+                y = (byte)((n >> 60) & 0xf);
+                n <<= 4;
+                c -= 4;
             }
             else if (c == 0) {
                 n = e[i--];
-                y = (byte)(n >> 59);
-                n <<= 5;
-                c = 59;
+                y = (byte)(n >> 60);
+                n <<= 4;
+                c = 60;
             }
             else {
-                y = (byte)(n >> 59);
+                y = (byte)(n >> 60);
                 n = e[i--];
-                c = 5 - c;
+                c = 4 - c;
                 y |= (byte)(n >> (64 - c));
                 n <<= c;
                 c = 64 - c;
@@ -1236,10 +1302,8 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
             sp_2048_mont_reduce_32(rt, m, mp);
             sp_2048_sqr_32(r, rt);
             sp_2048_mont_reduce_32(r, m, mp);
-            sp_2048_sqr_32(rt, r);
-            sp_2048_mont_reduce_32(rt, m, mp);
 
-            sp_2048_mul_32(r, rt, t[y]);
+            sp_2048_mul_32(r, r, t[y]);
             sp_2048_mont_reduce_32(r, m, mp);
         }
 
@@ -1257,18 +1321,18 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
 
     return err;
 }
-#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 
+#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 extern void sp_2048_mont_reduce_avx2_32(sp_digit* a, const sp_digit* m, sp_digit mp);
 #ifdef HAVE_INTEL_AVX2
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_mul_avx2_32(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -1282,9 +1346,9 @@ static void sp_2048_mont_mul_avx2_32(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_sqr_avx2_32(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -1303,17 +1367,19 @@ static void sp_2048_mont_sqr_avx2_32(sp_digit* r, const sp_digit* a,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_2048_mod_exp_avx2_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
-    sp_digit td[(33 * 64) + 64];
+    sp_digit td[(17 * 64) + 64];
 #endif
-    sp_digit* t[32];
+    sp_digit* t[16];
     sp_digit* rt = NULL;
     sp_digit* norm;
     sp_digit mp = 1;
@@ -1324,24 +1390,35 @@ static int sp_2048_mod_exp_avx2_32(sp_digit* r, const sp_digit* a, const sp_digi
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 64) + 64, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (17 * 64) + 64, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
     if (err == MP_OKAY) {
         norm = td;
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = td + i * 64;
-        rt = td + 2048;
+        rt = td + 1024;
 #else
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = &td[i * 64];
-        rt = &td[2048];
+        rt = &td[1024];
 #endif
 
         sp_2048_mont_setup(m, &mp);
@@ -1374,22 +1451,6 @@ static int sp_2048_mod_exp_avx2_32(sp_digit* r, const sp_digit* a, const sp_digi
         sp_2048_mont_mul_avx2_32(t[13], t[ 7], t[ 6], m, mp);
         sp_2048_mont_sqr_avx2_32(t[14], t[ 7], m, mp);
         sp_2048_mont_mul_avx2_32(t[15], t[ 8], t[ 7], m, mp);
-        sp_2048_mont_sqr_avx2_32(t[16], t[ 8], m, mp);
-        sp_2048_mont_mul_avx2_32(t[17], t[ 9], t[ 8], m, mp);
-        sp_2048_mont_sqr_avx2_32(t[18], t[ 9], m, mp);
-        sp_2048_mont_mul_avx2_32(t[19], t[10], t[ 9], m, mp);
-        sp_2048_mont_sqr_avx2_32(t[20], t[10], m, mp);
-        sp_2048_mont_mul_avx2_32(t[21], t[11], t[10], m, mp);
-        sp_2048_mont_sqr_avx2_32(t[22], t[11], m, mp);
-        sp_2048_mont_mul_avx2_32(t[23], t[12], t[11], m, mp);
-        sp_2048_mont_sqr_avx2_32(t[24], t[12], m, mp);
-        sp_2048_mont_mul_avx2_32(t[25], t[13], t[12], m, mp);
-        sp_2048_mont_sqr_avx2_32(t[26], t[13], m, mp);
-        sp_2048_mont_mul_avx2_32(t[27], t[14], t[13], m, mp);
-        sp_2048_mont_sqr_avx2_32(t[28], t[14], m, mp);
-        sp_2048_mont_mul_avx2_32(t[29], t[15], t[14], m, mp);
-        sp_2048_mont_sqr_avx2_32(t[30], t[15], m, mp);
-        sp_2048_mont_mul_avx2_32(t[31], t[16], t[15], m, mp);
 
         i = (bits - 1) / 64;
         n = e[i--];
@@ -1398,12 +1459,12 @@ static int sp_2048_mod_exp_avx2_32(sp_digit* r, const sp_digit* a, const sp_digi
         if (c == 0) {
             c = 64;
         }
-        /* Minus the number of top bits to use so rest is a multiple of 5. */
-        if ((bits % 5) == 0) {
-            c -= 5;
+        /* Minus the number of top bits to use so rest is a multiple of 4. */
+        if ((bits % 4) == 0) {
+            c -= 4;
         }
         else {
-            c -= bits % 5;
+            c -= bits % 4;
         }
         if (c < 0) {
             /* Number of bits in top word is less than number needed. */
@@ -1419,22 +1480,22 @@ static int sp_2048_mod_exp_avx2_32(sp_digit* r, const sp_digit* a, const sp_digi
             n <<= 64 - c;
         }
         XMEMCPY(r, t[y], sizeof(sp_digit) * 32);
-        for (; i>=0 || c>=5; ) {
-            if (c >= 5) {
-                y = (byte)((n >> 59) & 0x1f);
-                n <<= 5;
-                c -= 5;
+        for (; i>=0 || c>=4; ) {
+            if (c >= 4) {
+                y = (byte)((n >> 60) & 0xf);
+                n <<= 4;
+                c -= 4;
             }
             else if (c == 0) {
                 n = e[i--];
-                y = (byte)(n >> 59);
-                n <<= 5;
-                c = 59;
+                y = (byte)(n >> 60);
+                n <<= 4;
+                c = 60;
             }
             else {
-                y = (byte)(n >> 59);
+                y = (byte)(n >> 60);
                 n = e[i--];
-                c = 5 - c;
+                c = 4 - c;
                 y |= (byte)(n >> (64 - c));
                 n <<= c;
                 c = 64 - c;
@@ -1448,10 +1509,8 @@ static int sp_2048_mod_exp_avx2_32(sp_digit* r, const sp_digit* a, const sp_digi
             sp_2048_mont_reduce_avx2_32(rt, m, mp);
             sp_2048_sqr_avx2_32(r, rt);
             sp_2048_mont_reduce_avx2_32(r, m, mp);
-            sp_2048_sqr_avx2_32(rt, r);
-            sp_2048_mont_reduce_avx2_32(rt, m, mp);
 
-            sp_2048_mul_avx2_32(r, rt, t[y]);
+            sp_2048_mul_avx2_32(r, r, t[y]);
             sp_2048_mont_reduce_avx2_32(r, m, mp);
         }
 
@@ -1470,8 +1529,8 @@ static int sp_2048_mod_exp_avx2_32(sp_digit* r, const sp_digit* a, const sp_digi
     return err;
 }
 #endif /* HAVE_INTEL_AVX2 */
-#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 
+#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 #ifdef WOLFSSL_HAVE_SP_RSA
 /* RSA public key operation.
  *
@@ -1501,6 +1560,8 @@ int sp_RsaPublic_2048(const byte* in, word32 inLen, const mp_int* em,
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (*outLen < 256) {
         err = MP_TO_E;
@@ -1619,7 +1680,7 @@ int sp_RsaPublic_2048(const byte* in, word32 inLen, const mp_int* em,
     }
 
     if (err == MP_OKAY) {
-        sp_2048_to_bin(r, out);
+        sp_2048_to_bin_32(r, out);
         *outLen = 256;
     }
 
@@ -1631,6 +1692,7 @@ int sp_RsaPublic_2048(const byte* in, word32 inLen, const mp_int* em,
     return err;
 }
 
+#ifndef WOLFSSL_RSA_PUBLIC_ONLY
 #if defined(SP_RSA_PRIVATE_EXP_D) || defined(RSA_LOW_MEM)
 /* RSA private key operation.
  *
@@ -1662,6 +1724,8 @@ int sp_RsaPrivate_2048(const byte* in, word32 inLen, const mp_int* dm,
     sp_digit* m;
     sp_digit* r;
     int err = MP_OKAY;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)pm;
     (void)qm;
@@ -1710,7 +1774,7 @@ int sp_RsaPrivate_2048(const byte* in, word32 inLen, const mp_int* dm,
     }
 
     if (err == MP_OKAY) {
-        sp_2048_to_bin(r, out);
+        sp_2048_to_bin_32(r, out);
         *outLen = 256;
     }
 
@@ -1770,6 +1834,8 @@ int sp_RsaPrivate_2048(const byte* in, word32 inLen, const mp_int* dm,
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)dm;
     (void)mm;
@@ -1863,7 +1929,7 @@ int sp_RsaPrivate_2048(const byte* in, word32 inLen, const mp_int* dm,
         XMEMSET(&tmpb[16], 0, sizeof(sp_digit) * 16);
         sp_2048_add_32(r, tmpb, tmpa);
 
-        sp_2048_to_bin(r, out);
+        sp_2048_to_bin_32(r, out);
         *outLen = 256;
     }
 
@@ -1880,6 +1946,7 @@ int sp_RsaPrivate_2048(const byte* in, word32 inLen, const mp_int* dm,
     return err;
 }
 #endif /* SP_RSA_PRIVATE_EXP_D | RSA_LOW_MEM */
+#endif /* WOLFSSL_RSA_PUBLIC_ONLY */
 #endif /* WOLFSSL_HAVE_SP_RSA */
 #if defined(WOLFSSL_HAVE_SP_DH) || (defined(WOLFSSL_HAVE_SP_RSA) && \
                                               !defined(WOLFSSL_RSA_PUBLIC_ONLY))
@@ -1964,14 +2031,23 @@ int sp_ModExp_2048(const mp_int* base, const mp_int* exp, const mp_int* mod,
     mp_int* res)
 {
     int err = MP_OKAY;
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit *b = NULL;
+    sp_digit *e = NULL;
+    sp_digit *m = NULL;
+    sp_digit* r;
+#else
     sp_digit b[64];
     sp_digit e[32];
     sp_digit m[32];
     sp_digit* r = b;
+#endif
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
     int expBits = mp_count_bits(exp);
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (mp_count_bits(base) > 2048 || expBits > 2048 ||
                                                    mp_count_bits(mod) != 2048) {
@@ -1980,6 +2056,19 @@ int sp_ModExp_2048(const mp_int* base, const mp_int* exp, const mp_int* mod,
     else if (mp_iseven(mod)) {
         err = MP_VAL;
     }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        if (((b = (sp_digit *)XMALLOC(64 * sizeof(*b), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((e = (sp_digit *)XMALLOC(32 * sizeof(*e), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((m = (sp_digit *)XMALLOC(32 * sizeof(*m), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL))
+        {
+            err = MEMORY_E;
+        } else {
+            r = b;
+        }
+    }
+#endif
 
     if (err == MP_OKAY) {
         sp_2048_from_mp(b, 32, base);
@@ -1998,7 +2087,18 @@ int sp_ModExp_2048(const mp_int* base, const mp_int* exp, const mp_int* mod,
         err = sp_2048_to_mp(r, res);
     }
 
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (b != NULL)
+        XFREE(b, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (e != NULL) {
+        XMEMSET(e, 0, 32);
+        XFREE(e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (m != NULL)
+        XFREE(m, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#else
     XMEMSET(e, 0, sizeof(e));
+#endif
 
     return err;
 }
@@ -2013,13 +2113,15 @@ extern void sp_2048_lshift_32(sp_digit* r, const sp_digit* a, int n);
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even.
  */
 static int sp_2048_mod_exp_2_avx2_32(sp_digit* r, const sp_digit* e, int bits,
         const sp_digit* m)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
     sp_digit td[33 + 64];
 #endif
@@ -2034,11 +2136,19 @@ static int sp_2048_mod_exp_2_avx2_32(sp_digit* r, const sp_digit* e, int bits,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 + 64), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 + 64), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
@@ -2138,13 +2248,15 @@ static int sp_2048_mod_exp_2_avx2_32(sp_digit* r, const sp_digit* e, int bits,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even.
  */
 static int sp_2048_mod_exp_2_32(sp_digit* r, const sp_digit* e, int bits,
         const sp_digit* m)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
     sp_digit td[33 + 64];
 #endif
@@ -2159,11 +2271,19 @@ static int sp_2048_mod_exp_2_32(sp_digit* r, const sp_digit* e, int bits,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 + 64), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 + 64), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
@@ -2274,14 +2394,23 @@ int sp_DhExp_2048(const mp_int* base, const byte* exp, word32 expLen,
     const mp_int* mod, byte* out, word32* outLen)
 {
     int err = MP_OKAY;
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit *b = NULL;
+    sp_digit *e = NULL;
+    sp_digit *m = NULL;
+    sp_digit* r;
+#else
     sp_digit b[64];
     sp_digit e[32];
     sp_digit m[32];
     sp_digit* r = b;
+#endif
     word32 i;
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (mp_count_bits(base) > 2048 || expLen > 256 ||
                                                    mp_count_bits(mod) != 2048) {
@@ -2290,6 +2419,19 @@ int sp_DhExp_2048(const mp_int* base, const byte* exp, word32 expLen,
     else if (mp_iseven(mod)) {
         err = MP_VAL;
     }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        if (((b = (sp_digit *)XMALLOC(64 * sizeof(*b), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((e = (sp_digit *)XMALLOC(32 * sizeof(*e), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((m = (sp_digit *)XMALLOC(32 * sizeof(*m), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL))
+        {
+            err = MEMORY_E;
+        } else {
+            r = b;
+        }
+    }
+#endif
 
     if (err == MP_OKAY) {
         sp_2048_from_mp(b, 32, base);
@@ -2318,7 +2460,7 @@ int sp_DhExp_2048(const mp_int* base, const byte* exp, word32 expLen,
     }
 
     if (err == MP_OKAY) {
-        sp_2048_to_bin(r, out);
+        sp_2048_to_bin_32(r, out);
         *outLen = 256;
         for (i=0; i<256 && out[i] == 0; i++) {
             /* Search for first non-zero. */
@@ -2327,7 +2469,18 @@ int sp_DhExp_2048(const mp_int* base, const byte* exp, word32 expLen,
         XMEMMOVE(out, out + i, *outLen);
     }
 
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (b != NULL)
+        XFREE(b, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (e != NULL) {
+        XMEMSET(e, 0, 32);
+        XFREE(e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (m != NULL)
+        XFREE(m, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#else
     XMEMSET(e, 0, sizeof(e));
+#endif
 
     return err;
 }
@@ -2345,14 +2498,23 @@ int sp_ModExp_1024(const mp_int* base, const mp_int* exp, const mp_int* mod,
     mp_int* res)
 {
     int err = MP_OKAY;
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit *b = NULL;
+    sp_digit *e = NULL;
+    sp_digit *m = NULL;
+    sp_digit* r;
+#else
     sp_digit b[32];
     sp_digit e[16];
     sp_digit m[16];
     sp_digit* r = b;
+#endif
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
     int expBits = mp_count_bits(exp);
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (mp_count_bits(base) > 1024 || expBits > 1024 ||
                                                    mp_count_bits(mod) != 1024) {
@@ -2361,6 +2523,19 @@ int sp_ModExp_1024(const mp_int* base, const mp_int* exp, const mp_int* mod,
     else if (mp_iseven(mod)) {
         err = MP_VAL;
     }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        if (((b = (sp_digit *)XMALLOC(32 * sizeof(*b), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((e = (sp_digit *)XMALLOC(16 * sizeof(*e), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((m = (sp_digit *)XMALLOC(16 * sizeof(*m), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL))
+        {
+            err = MEMORY_E;
+        } else {
+            r = b;
+        }
+    }
+#endif
 
     if (err == MP_OKAY) {
         sp_2048_from_mp(b, 16, base);
@@ -2380,7 +2555,18 @@ int sp_ModExp_1024(const mp_int* base, const mp_int* exp, const mp_int* mod,
         err = sp_2048_to_mp(r, res);
     }
 
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (b != NULL)
+        XFREE(b, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (e != NULL) {
+        XMEMSET(e, 0, 16);
+        XFREE(e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (m != NULL)
+        XFREE(m, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#else
     XMEMSET(e, 0, sizeof(e));
+#endif
 
     return err;
 }
@@ -2499,28 +2685,42 @@ static void sp_3072_from_mp(sp_digit* r, int size, const mp_int* a)
 #endif
 }
 
-extern void sp_3072_to_bin_bswap(sp_digit* r, byte* a);
-extern void sp_3072_to_bin_movbe(sp_digit* r, byte* a);
+extern void sp_3072_to_bin_bswap_48(sp_digit* r, byte* a);
+extern void sp_3072_to_bin_movbe_48(sp_digit* r, byte* a);
 /* Write r as big endian to byte array.
  * Fixed length number of bytes written: 384
  *
  * r  A single precision integer.
  * a  Byte array.
  */
-static void sp_3072_to_bin(sp_digit* r, byte* a)
+static void sp_3072_to_bin_48(sp_digit* r, byte* a)
 {
 #ifndef NO_MOVBE_SUPPORT
     word32 cpuid_flags = cpuid_get_flags();
 
     if (IS_INTEL_MOVBE(cpuid_flags)) {
-        sp_3072_to_bin_movbe(r, a);
+        sp_3072_to_bin_movbe_48(r, a);
     }
     else
 #endif
     {
-        sp_3072_to_bin_bswap(r, a);
+        sp_3072_to_bin_bswap_48(r, a);
     }
 }
+
+#if (defined(WOLFSSL_HAVE_SP_RSA) && (!defined(WOLFSSL_RSA_PUBLIC_ONLY) || !defined(WOLFSSL_SP_SMALL))) || defined(WOLFSSL_HAVE_SP_DH)
+/* Normalize the values in each word to 64.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_3072_norm_48(a)
+
+#endif /* (WOLFSSL_HAVE_SP_RSA && (!WOLFSSL_RSA_PUBLIC_ONLY || !WOLFSSL_SP_SMALL)) || WOLFSSL_HAVE_SP_DH */
+/* Normalize the values in each word to 64.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_3072_norm_48(a)
 
 extern void sp_3072_mul_12(sp_digit* r, const sp_digit* a, const sp_digit* b);
 extern void sp_3072_sqr_12(sp_digit* r, const sp_digit* a);
@@ -2585,20 +2785,22 @@ static void sp_3072_mont_norm_24(sp_digit* r, const sp_digit* m)
 {
     XMEMSET(r, 0, sizeof(sp_digit) * 24);
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
     /* r = 2^n mod m */
     sp_3072_sub_in_place_24(r, m);
 }
 
 extern sp_digit sp_3072_cond_sub_24(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
 extern void sp_3072_mont_reduce_24(sp_digit* a, const sp_digit* m, sp_digit mp);
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_mul_24(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -2610,9 +2812,9 @@ static void sp_3072_mont_mul_24(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_sqr_24(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -2638,6 +2840,7 @@ extern sp_digit div_3072_word_asm_24(sp_digit d1, sp_digit d0, sp_digit div);
 static WC_INLINE sp_digit div_3072_word_24(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
 #if _MSC_VER >= 1920
     return _udiv128(d1, d0, div, NULL);
 #else
@@ -2655,6 +2858,7 @@ static WC_INLINE sp_digit div_3072_word_24(sp_digit d1, sp_digit d0,
 static WC_INLINE sp_digit div_3072_word_24(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     register sp_digit r asm("rax");
     __asm__ __volatile__ (
         "divq %3"
@@ -2695,7 +2899,7 @@ static void sp_3072_mask_24(sp_digit* r, const sp_digit* a, sp_digit m)
 #endif
 }
 
-extern int64_t sp_3072_cmp_24(const sp_digit* a, const sp_digit* b);
+extern sp_int64 sp_3072_cmp_24(const sp_digit* a, const sp_digit* b);
 /* Divide d in a and put remainder into r (m*d + r = a)
  * m is not calculated as it is not needed at this time.
  *
@@ -2716,6 +2920,8 @@ static WC_INLINE int sp_3072_div_24(const sp_digit* a, const sp_digit* d, sp_dig
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)m;
 
@@ -2767,6 +2973,7 @@ static WC_INLINE int sp_3072_div_24(const sp_digit* a, const sp_digit* d, sp_dig
 static WC_INLINE int sp_3072_mod_24(sp_digit* r, const sp_digit* a,
         const sp_digit* m)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     return sp_3072_div_24(a, m, NULL, r);
 }
 
@@ -2777,13 +2984,15 @@ static WC_INLINE int sp_3072_mod_24(sp_digit* r, const sp_digit* a,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_3072_mod_exp_24(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
     sp_digit td[(33 * 48) + 48];
 #endif
@@ -2798,11 +3007,22 @@ static int sp_3072_mod_exp_24(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 48) + 48, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 48) + 48, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
@@ -2946,14 +3166,14 @@ static int sp_3072_mod_exp_24(sp_digit* r, const sp_digit* a, const sp_digit* e,
 
 extern void sp_3072_mont_reduce_avx2_24(sp_digit* a, const sp_digit* m, sp_digit mp);
 #ifdef HAVE_INTEL_AVX2
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_mul_avx2_24(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -2967,9 +3187,9 @@ static void sp_3072_mont_mul_avx2_24(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_sqr_avx2_24(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -2987,13 +3207,15 @@ static void sp_3072_mont_sqr_avx2_24(sp_digit* r, const sp_digit* a,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_3072_mod_exp_avx2_24(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
     sp_digit td[(33 * 48) + 48];
 #endif
@@ -3008,11 +3230,22 @@ static int sp_3072_mod_exp_avx2_24(sp_digit* r, const sp_digit* a, const sp_digi
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 48) + 48, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 48) + 48, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
@@ -3157,7 +3390,7 @@ static int sp_3072_mod_exp_avx2_24(sp_digit* r, const sp_digit* a, const sp_digi
 
 #endif /* (WOLFSSL_HAVE_SP_RSA & !WOLFSSL_RSA_PUBLIC_ONLY) | WOLFSSL_HAVE_SP_DH */
 
-#if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH)
+#if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
 /* r = 2^n mod m where n is the number of bits to reduce by.
  * Given m must be 3072 bits, just need to subtract.
  *
@@ -3168,21 +3401,23 @@ static void sp_3072_mont_norm_48(sp_digit* r, const sp_digit* m)
 {
     XMEMSET(r, 0, sizeof(sp_digit) * 48);
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
     /* r = 2^n mod m */
     sp_3072_sub_in_place_48(r, m);
 }
 
-#endif /* WOLFSSL_HAVE_SP_RSA | WOLFSSL_HAVE_SP_DH */
+#endif /* (WOLFSSL_HAVE_SP_RSA & !WOLFSSL_RSA_PUBLIC_ONLY) | WOLFSSL_HAVE_SP_DH */
 extern sp_digit sp_3072_cond_sub_48(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
 extern void sp_3072_mont_reduce_48(sp_digit* a, const sp_digit* m, sp_digit mp);
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_mul_48(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -3194,9 +3429,9 @@ static void sp_3072_mont_mul_48(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_sqr_48(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -3205,8 +3440,7 @@ static void sp_3072_mont_sqr_48(sp_digit* r, const sp_digit* a,
     sp_3072_mont_reduce_48(r, m, mp);
 }
 
-#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
-extern sp_digit sp_3072_cond_sub_avx2_48(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
+extern sp_digit sp_3072_sub_48(sp_digit* r, const sp_digit* a, const sp_digit* b);
 extern void sp_3072_mul_d_avx2_48(sp_digit* r, const sp_digit* a, const sp_digit b);
 #ifdef _WIN64
 #if _MSC_VER < 1920
@@ -3222,6 +3456,7 @@ extern sp_digit div_3072_word_asm_48(sp_digit d1, sp_digit d0, sp_digit div);
 static WC_INLINE sp_digit div_3072_word_48(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
 #if _MSC_VER >= 1920
     return _udiv128(d1, d0, div, NULL);
 #else
@@ -3239,6 +3474,7 @@ static WC_INLINE sp_digit div_3072_word_48(sp_digit d1, sp_digit d0,
 static WC_INLINE sp_digit div_3072_word_48(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     register sp_digit r asm("rax");
     __asm__ __volatile__ (
         "divq %3"
@@ -3249,113 +3485,6 @@ static WC_INLINE sp_digit div_3072_word_48(sp_digit d1, sp_digit d0,
     return r;
 }
 #endif /* _WIN64 */
-/* AND m into each word of a and store in r.
- *
- * r  A single precision integer.
- * a  A single precision integer.
- * m  Mask to AND against each digit.
- */
-static void sp_3072_mask_48(sp_digit* r, const sp_digit* a, sp_digit m)
-{
-#ifdef WOLFSSL_SP_SMALL
-    int i;
-
-    for (i=0; i<48; i++) {
-        r[i] = a[i] & m;
-    }
-#else
-    int i;
-
-    for (i = 0; i < 48; i += 8) {
-        r[i+0] = a[i+0] & m;
-        r[i+1] = a[i+1] & m;
-        r[i+2] = a[i+2] & m;
-        r[i+3] = a[i+3] & m;
-        r[i+4] = a[i+4] & m;
-        r[i+5] = a[i+5] & m;
-        r[i+6] = a[i+6] & m;
-        r[i+7] = a[i+7] & m;
-    }
-#endif
-}
-
-extern int64_t sp_3072_cmp_48(const sp_digit* a, const sp_digit* b);
-/* Divide d in a and put remainder into r (m*d + r = a)
- * m is not calculated as it is not needed at this time.
- *
- * a  Number to be divided.
- * d  Number to divide with.
- * m  Multiplier result.
- * r  Remainder from the division.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_3072_div_48(const sp_digit* a, const sp_digit* d, sp_digit* m,
-        sp_digit* r)
-{
-    sp_digit t1[96];
-    sp_digit t2[49];
-    sp_digit div;
-    sp_digit r1;
-    int i;
-#ifdef HAVE_INTEL_AVX2
-    word32 cpuid_flags = cpuid_get_flags();
-#endif
-
-    (void)m;
-
-    div = d[47];
-    XMEMCPY(t1, a, sizeof(*t1) * 2 * 48);
-    r1 = sp_3072_cmp_48(&t1[48], d) >= 0;
-#ifdef HAVE_INTEL_AVX2
-    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
-        sp_3072_cond_sub_avx2_48(&t1[48], &t1[48], d, (sp_digit)0 - r1);
-    else
-#endif
-        sp_3072_cond_sub_48(&t1[48], &t1[48], d, (sp_digit)0 - r1);
-    for (i=47; i>=0; i--) {
-        sp_digit hi = t1[48 + i] - (t1[48 + i] == div);
-        r1 = div_3072_word_48(hi, t1[48 + i - 1], div);
-
-#ifdef HAVE_INTEL_AVX2
-        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
-            sp_3072_mul_d_avx2_48(t2, d, r1);
-        else
-#endif
-            sp_3072_mul_d_48(t2, d, r1);
-        t1[48 + i] += sp_3072_sub_in_place_48(&t1[i], t2);
-        t1[48 + i] -= t2[48];
-        sp_3072_mask_48(t2, d, t1[48 + i]);
-        t1[48 + i] += sp_3072_add_48(&t1[i], &t1[i], t2);
-        sp_3072_mask_48(t2, d, t1[48 + i]);
-        t1[48 + i] += sp_3072_add_48(&t1[i], &t1[i], t2);
-    }
-
-    r1 = sp_3072_cmp_48(t1, d) >= 0;
-#ifdef HAVE_INTEL_AVX2
-    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
-        sp_3072_cond_sub_avx2_48(r, t1, d, (sp_digit)0 - r1);
-    else
-#endif
-        sp_3072_cond_sub_48(r, t1, d, (sp_digit)0 - r1);
-
-    return MP_OKAY;
-}
-
-/* Reduce a modulo m into r. (r = a mod m)
- *
- * r  A single precision number that is the reduced result.
- * a  A single precision number that is to be reduced.
- * m  A single precision number that is the modulus to reduce with.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_3072_mod_48(sp_digit* r, const sp_digit* a,
-        const sp_digit* m)
-{
-    return sp_3072_div_48(a, m, NULL, r);
-}
-
-#endif /* WOLFSSL_HAVE_SP_DH || !WOLFSSL_RSA_PUBLIC_ONLY */
-extern sp_digit sp_3072_sub_48(sp_digit* r, const sp_digit* a, const sp_digit* b);
 /* Divide d in a and put remainder into r (m*d + r = a)
  * m is not calculated as it is not needed at this time.
  *
@@ -3376,6 +3505,8 @@ static WC_INLINE int sp_3072_div_48_cond(const sp_digit* a, const sp_digit* d, s
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)m;
 
@@ -3431,10 +3562,122 @@ static WC_INLINE int sp_3072_div_48_cond(const sp_digit* a, const sp_digit* d, s
 static WC_INLINE int sp_3072_mod_48_cond(sp_digit* r, const sp_digit* a,
         const sp_digit* m)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     return sp_3072_div_48_cond(a, m, NULL, r);
 }
 
 #if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
+extern sp_digit sp_3072_cond_sub_avx2_48(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
+/* AND m into each word of a and store in r.
+ *
+ * r  A single precision integer.
+ * a  A single precision integer.
+ * m  Mask to AND against each digit.
+ */
+static void sp_3072_mask_48(sp_digit* r, const sp_digit* a, sp_digit m)
+{
+#ifdef WOLFSSL_SP_SMALL
+    int i;
+
+    for (i=0; i<48; i++) {
+        r[i] = a[i] & m;
+    }
+#else
+    int i;
+
+    for (i = 0; i < 48; i += 8) {
+        r[i+0] = a[i+0] & m;
+        r[i+1] = a[i+1] & m;
+        r[i+2] = a[i+2] & m;
+        r[i+3] = a[i+3] & m;
+        r[i+4] = a[i+4] & m;
+        r[i+5] = a[i+5] & m;
+        r[i+6] = a[i+6] & m;
+        r[i+7] = a[i+7] & m;
+    }
+#endif
+}
+
+extern sp_int64 sp_3072_cmp_48(const sp_digit* a, const sp_digit* b);
+/* Divide d in a and put remainder into r (m*d + r = a)
+ * m is not calculated as it is not needed at this time.
+ *
+ * a  Number to be divided.
+ * d  Number to divide with.
+ * m  Multiplier result.
+ * r  Remainder from the division.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_3072_div_48(const sp_digit* a, const sp_digit* d, sp_digit* m,
+        sp_digit* r)
+{
+    sp_digit t1[96];
+    sp_digit t2[49];
+    sp_digit div;
+    sp_digit r1;
+    int i;
+#ifdef HAVE_INTEL_AVX2
+    word32 cpuid_flags = cpuid_get_flags();
+#endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    (void)m;
+
+    div = d[47];
+    XMEMCPY(t1, a, sizeof(*t1) * 2 * 48);
+    r1 = sp_3072_cmp_48(&t1[48], d) >= 0;
+#ifdef HAVE_INTEL_AVX2
+    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+        sp_3072_cond_sub_avx2_48(&t1[48], &t1[48], d, (sp_digit)0 - r1);
+    else
+#endif
+        sp_3072_cond_sub_48(&t1[48], &t1[48], d, (sp_digit)0 - r1);
+    for (i=47; i>=0; i--) {
+        sp_digit hi = t1[48 + i] - (t1[48 + i] == div);
+        r1 = div_3072_word_48(hi, t1[48 + i - 1], div);
+
+#ifdef HAVE_INTEL_AVX2
+        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+            sp_3072_mul_d_avx2_48(t2, d, r1);
+        else
+#endif
+            sp_3072_mul_d_48(t2, d, r1);
+        t1[48 + i] += sp_3072_sub_in_place_48(&t1[i], t2);
+        t1[48 + i] -= t2[48];
+        sp_3072_mask_48(t2, d, t1[48 + i]);
+        t1[48 + i] += sp_3072_add_48(&t1[i], &t1[i], t2);
+        sp_3072_mask_48(t2, d, t1[48 + i]);
+        t1[48 + i] += sp_3072_add_48(&t1[i], &t1[i], t2);
+    }
+
+    r1 = sp_3072_cmp_48(t1, d) >= 0;
+#ifdef HAVE_INTEL_AVX2
+    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+        sp_3072_cond_sub_avx2_48(r, t1, d, (sp_digit)0 - r1);
+    else
+#endif
+        sp_3072_cond_sub_48(r, t1, d, (sp_digit)0 - r1);
+
+    return MP_OKAY;
+}
+
+#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
+/* Reduce a modulo m into r. (r = a mod m)
+ *
+ * r  A single precision number that is the reduced result.
+ * a  A single precision number that is to be reduced.
+ * m  A single precision number that is the modulus to reduce with.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_3072_mod_48(sp_digit* r, const sp_digit* a,
+        const sp_digit* m)
+{
+    ASSERT_SAVED_VECTOR_REGISTERS();
+    return sp_3072_div_48(a, m, NULL, r);
+}
+
+#endif /* WOLFSSL_HAVE_SP_DH || !WOLFSSL_RSA_PUBLIC_ONLY */
 /* Modular exponentiate a to the e mod m. (r = a^e mod m)
  *
  * r     A single precision number that is the result of the operation.
@@ -3442,17 +3685,19 @@ static WC_INLINE int sp_3072_mod_48_cond(sp_digit* r, const sp_digit* a,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
-    sp_digit td[(33 * 96) + 96];
+    sp_digit td[(17 * 96) + 96];
 #endif
-    sp_digit* t[32];
+    sp_digit* t[16];
     sp_digit* rt = NULL;
     sp_digit* norm;
     sp_digit mp = 1;
@@ -3463,24 +3708,35 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 96) + 96, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (17 * 96) + 96, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
     if (err == MP_OKAY) {
         norm = td;
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = td + i * 96;
-        rt = td + 3072;
+        rt = td + 1536;
 #else
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = &td[i * 96];
-        rt = &td[3072];
+        rt = &td[1536];
 #endif
 
         sp_3072_mont_setup(m, &mp);
@@ -3513,22 +3769,6 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
         sp_3072_mont_mul_48(t[13], t[ 7], t[ 6], m, mp);
         sp_3072_mont_sqr_48(t[14], t[ 7], m, mp);
         sp_3072_mont_mul_48(t[15], t[ 8], t[ 7], m, mp);
-        sp_3072_mont_sqr_48(t[16], t[ 8], m, mp);
-        sp_3072_mont_mul_48(t[17], t[ 9], t[ 8], m, mp);
-        sp_3072_mont_sqr_48(t[18], t[ 9], m, mp);
-        sp_3072_mont_mul_48(t[19], t[10], t[ 9], m, mp);
-        sp_3072_mont_sqr_48(t[20], t[10], m, mp);
-        sp_3072_mont_mul_48(t[21], t[11], t[10], m, mp);
-        sp_3072_mont_sqr_48(t[22], t[11], m, mp);
-        sp_3072_mont_mul_48(t[23], t[12], t[11], m, mp);
-        sp_3072_mont_sqr_48(t[24], t[12], m, mp);
-        sp_3072_mont_mul_48(t[25], t[13], t[12], m, mp);
-        sp_3072_mont_sqr_48(t[26], t[13], m, mp);
-        sp_3072_mont_mul_48(t[27], t[14], t[13], m, mp);
-        sp_3072_mont_sqr_48(t[28], t[14], m, mp);
-        sp_3072_mont_mul_48(t[29], t[15], t[14], m, mp);
-        sp_3072_mont_sqr_48(t[30], t[15], m, mp);
-        sp_3072_mont_mul_48(t[31], t[16], t[15], m, mp);
 
         i = (bits - 1) / 64;
         n = e[i--];
@@ -3537,12 +3777,12 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
         if (c == 0) {
             c = 64;
         }
-        /* Minus the number of top bits to use so rest is a multiple of 5. */
-        if ((bits % 5) == 0) {
-            c -= 5;
+        /* Minus the number of top bits to use so rest is a multiple of 4. */
+        if ((bits % 4) == 0) {
+            c -= 4;
         }
         else {
-            c -= bits % 5;
+            c -= bits % 4;
         }
         if (c < 0) {
             /* Number of bits in top word is less than number needed. */
@@ -3558,22 +3798,22 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
             n <<= 64 - c;
         }
         XMEMCPY(r, t[y], sizeof(sp_digit) * 48);
-        for (; i>=0 || c>=5; ) {
-            if (c >= 5) {
-                y = (byte)((n >> 59) & 0x1f);
-                n <<= 5;
-                c -= 5;
+        for (; i>=0 || c>=4; ) {
+            if (c >= 4) {
+                y = (byte)((n >> 60) & 0xf);
+                n <<= 4;
+                c -= 4;
             }
             else if (c == 0) {
                 n = e[i--];
-                y = (byte)(n >> 59);
-                n <<= 5;
-                c = 59;
+                y = (byte)(n >> 60);
+                n <<= 4;
+                c = 60;
             }
             else {
-                y = (byte)(n >> 59);
+                y = (byte)(n >> 60);
                 n = e[i--];
-                c = 5 - c;
+                c = 4 - c;
                 y |= (byte)(n >> (64 - c));
                 n <<= c;
                 c = 64 - c;
@@ -3587,10 +3827,8 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
             sp_3072_mont_reduce_48(rt, m, mp);
             sp_3072_sqr_48(r, rt);
             sp_3072_mont_reduce_48(r, m, mp);
-            sp_3072_sqr_48(rt, r);
-            sp_3072_mont_reduce_48(rt, m, mp);
 
-            sp_3072_mul_48(r, rt, t[y]);
+            sp_3072_mul_48(r, r, t[y]);
             sp_3072_mont_reduce_48(r, m, mp);
         }
 
@@ -3608,18 +3846,18 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
 
     return err;
 }
-#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 
+#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 extern void sp_3072_mont_reduce_avx2_48(sp_digit* a, const sp_digit* m, sp_digit mp);
 #ifdef HAVE_INTEL_AVX2
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_mul_avx2_48(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -3633,9 +3871,9 @@ static void sp_3072_mont_mul_avx2_48(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_sqr_avx2_48(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -3654,17 +3892,19 @@ static void sp_3072_mont_sqr_avx2_48(sp_digit* r, const sp_digit* a,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_3072_mod_exp_avx2_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
-    sp_digit td[(33 * 96) + 96];
+    sp_digit td[(17 * 96) + 96];
 #endif
-    sp_digit* t[32];
+    sp_digit* t[16];
     sp_digit* rt = NULL;
     sp_digit* norm;
     sp_digit mp = 1;
@@ -3675,24 +3915,35 @@ static int sp_3072_mod_exp_avx2_48(sp_digit* r, const sp_digit* a, const sp_digi
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 96) + 96, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (17 * 96) + 96, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
     if (err == MP_OKAY) {
         norm = td;
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = td + i * 96;
-        rt = td + 3072;
+        rt = td + 1536;
 #else
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = &td[i * 96];
-        rt = &td[3072];
+        rt = &td[1536];
 #endif
 
         sp_3072_mont_setup(m, &mp);
@@ -3725,22 +3976,6 @@ static int sp_3072_mod_exp_avx2_48(sp_digit* r, const sp_digit* a, const sp_digi
         sp_3072_mont_mul_avx2_48(t[13], t[ 7], t[ 6], m, mp);
         sp_3072_mont_sqr_avx2_48(t[14], t[ 7], m, mp);
         sp_3072_mont_mul_avx2_48(t[15], t[ 8], t[ 7], m, mp);
-        sp_3072_mont_sqr_avx2_48(t[16], t[ 8], m, mp);
-        sp_3072_mont_mul_avx2_48(t[17], t[ 9], t[ 8], m, mp);
-        sp_3072_mont_sqr_avx2_48(t[18], t[ 9], m, mp);
-        sp_3072_mont_mul_avx2_48(t[19], t[10], t[ 9], m, mp);
-        sp_3072_mont_sqr_avx2_48(t[20], t[10], m, mp);
-        sp_3072_mont_mul_avx2_48(t[21], t[11], t[10], m, mp);
-        sp_3072_mont_sqr_avx2_48(t[22], t[11], m, mp);
-        sp_3072_mont_mul_avx2_48(t[23], t[12], t[11], m, mp);
-        sp_3072_mont_sqr_avx2_48(t[24], t[12], m, mp);
-        sp_3072_mont_mul_avx2_48(t[25], t[13], t[12], m, mp);
-        sp_3072_mont_sqr_avx2_48(t[26], t[13], m, mp);
-        sp_3072_mont_mul_avx2_48(t[27], t[14], t[13], m, mp);
-        sp_3072_mont_sqr_avx2_48(t[28], t[14], m, mp);
-        sp_3072_mont_mul_avx2_48(t[29], t[15], t[14], m, mp);
-        sp_3072_mont_sqr_avx2_48(t[30], t[15], m, mp);
-        sp_3072_mont_mul_avx2_48(t[31], t[16], t[15], m, mp);
 
         i = (bits - 1) / 64;
         n = e[i--];
@@ -3749,12 +3984,12 @@ static int sp_3072_mod_exp_avx2_48(sp_digit* r, const sp_digit* a, const sp_digi
         if (c == 0) {
             c = 64;
         }
-        /* Minus the number of top bits to use so rest is a multiple of 5. */
-        if ((bits % 5) == 0) {
-            c -= 5;
+        /* Minus the number of top bits to use so rest is a multiple of 4. */
+        if ((bits % 4) == 0) {
+            c -= 4;
         }
         else {
-            c -= bits % 5;
+            c -= bits % 4;
         }
         if (c < 0) {
             /* Number of bits in top word is less than number needed. */
@@ -3770,22 +4005,22 @@ static int sp_3072_mod_exp_avx2_48(sp_digit* r, const sp_digit* a, const sp_digi
             n <<= 64 - c;
         }
         XMEMCPY(r, t[y], sizeof(sp_digit) * 48);
-        for (; i>=0 || c>=5; ) {
-            if (c >= 5) {
-                y = (byte)((n >> 59) & 0x1f);
-                n <<= 5;
-                c -= 5;
+        for (; i>=0 || c>=4; ) {
+            if (c >= 4) {
+                y = (byte)((n >> 60) & 0xf);
+                n <<= 4;
+                c -= 4;
             }
             else if (c == 0) {
                 n = e[i--];
-                y = (byte)(n >> 59);
-                n <<= 5;
-                c = 59;
+                y = (byte)(n >> 60);
+                n <<= 4;
+                c = 60;
             }
             else {
-                y = (byte)(n >> 59);
+                y = (byte)(n >> 60);
                 n = e[i--];
-                c = 5 - c;
+                c = 4 - c;
                 y |= (byte)(n >> (64 - c));
                 n <<= c;
                 c = 64 - c;
@@ -3799,10 +4034,8 @@ static int sp_3072_mod_exp_avx2_48(sp_digit* r, const sp_digit* a, const sp_digi
             sp_3072_mont_reduce_avx2_48(rt, m, mp);
             sp_3072_sqr_avx2_48(r, rt);
             sp_3072_mont_reduce_avx2_48(r, m, mp);
-            sp_3072_sqr_avx2_48(rt, r);
-            sp_3072_mont_reduce_avx2_48(rt, m, mp);
 
-            sp_3072_mul_avx2_48(r, rt, t[y]);
+            sp_3072_mul_avx2_48(r, r, t[y]);
             sp_3072_mont_reduce_avx2_48(r, m, mp);
         }
 
@@ -3821,8 +4054,8 @@ static int sp_3072_mod_exp_avx2_48(sp_digit* r, const sp_digit* a, const sp_digi
     return err;
 }
 #endif /* HAVE_INTEL_AVX2 */
-#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 
+#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 #ifdef WOLFSSL_HAVE_SP_RSA
 /* RSA public key operation.
  *
@@ -3852,6 +4085,8 @@ int sp_RsaPublic_3072(const byte* in, word32 inLen, const mp_int* em,
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (*outLen < 384) {
         err = MP_TO_E;
@@ -3970,7 +4205,7 @@ int sp_RsaPublic_3072(const byte* in, word32 inLen, const mp_int* em,
     }
 
     if (err == MP_OKAY) {
-        sp_3072_to_bin(r, out);
+        sp_3072_to_bin_48(r, out);
         *outLen = 384;
     }
 
@@ -3982,6 +4217,7 @@ int sp_RsaPublic_3072(const byte* in, word32 inLen, const mp_int* em,
     return err;
 }
 
+#ifndef WOLFSSL_RSA_PUBLIC_ONLY
 #if defined(SP_RSA_PRIVATE_EXP_D) || defined(RSA_LOW_MEM)
 /* RSA private key operation.
  *
@@ -4013,6 +4249,8 @@ int sp_RsaPrivate_3072(const byte* in, word32 inLen, const mp_int* dm,
     sp_digit* m;
     sp_digit* r;
     int err = MP_OKAY;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)pm;
     (void)qm;
@@ -4061,7 +4299,7 @@ int sp_RsaPrivate_3072(const byte* in, word32 inLen, const mp_int* dm,
     }
 
     if (err == MP_OKAY) {
-        sp_3072_to_bin(r, out);
+        sp_3072_to_bin_48(r, out);
         *outLen = 384;
     }
 
@@ -4121,6 +4359,8 @@ int sp_RsaPrivate_3072(const byte* in, word32 inLen, const mp_int* dm,
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)dm;
     (void)mm;
@@ -4214,7 +4454,7 @@ int sp_RsaPrivate_3072(const byte* in, word32 inLen, const mp_int* dm,
         XMEMSET(&tmpb[24], 0, sizeof(sp_digit) * 24);
         sp_3072_add_48(r, tmpb, tmpa);
 
-        sp_3072_to_bin(r, out);
+        sp_3072_to_bin_48(r, out);
         *outLen = 384;
     }
 
@@ -4231,6 +4471,7 @@ int sp_RsaPrivate_3072(const byte* in, word32 inLen, const mp_int* dm,
     return err;
 }
 #endif /* SP_RSA_PRIVATE_EXP_D | RSA_LOW_MEM */
+#endif /* WOLFSSL_RSA_PUBLIC_ONLY */
 #endif /* WOLFSSL_HAVE_SP_RSA */
 #if defined(WOLFSSL_HAVE_SP_DH) || (defined(WOLFSSL_HAVE_SP_RSA) && \
                                               !defined(WOLFSSL_RSA_PUBLIC_ONLY))
@@ -4315,14 +4556,23 @@ int sp_ModExp_3072(const mp_int* base, const mp_int* exp, const mp_int* mod,
     mp_int* res)
 {
     int err = MP_OKAY;
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit *b = NULL;
+    sp_digit *e = NULL;
+    sp_digit *m = NULL;
+    sp_digit* r;
+#else
     sp_digit b[96];
     sp_digit e[48];
     sp_digit m[48];
     sp_digit* r = b;
+#endif
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
     int expBits = mp_count_bits(exp);
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (mp_count_bits(base) > 3072 || expBits > 3072 ||
                                                    mp_count_bits(mod) != 3072) {
@@ -4331,6 +4581,19 @@ int sp_ModExp_3072(const mp_int* base, const mp_int* exp, const mp_int* mod,
     else if (mp_iseven(mod)) {
         err = MP_VAL;
     }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        if (((b = (sp_digit *)XMALLOC(96 * sizeof(*b), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((e = (sp_digit *)XMALLOC(48 * sizeof(*e), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((m = (sp_digit *)XMALLOC(48 * sizeof(*m), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL))
+        {
+            err = MEMORY_E;
+        } else {
+            r = b;
+        }
+    }
+#endif
 
     if (err == MP_OKAY) {
         sp_3072_from_mp(b, 48, base);
@@ -4349,7 +4612,18 @@ int sp_ModExp_3072(const mp_int* base, const mp_int* exp, const mp_int* mod,
         err = sp_3072_to_mp(r, res);
     }
 
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (b != NULL)
+        XFREE(b, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (e != NULL) {
+        XMEMSET(e, 0, 48);
+        XFREE(e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (m != NULL)
+        XFREE(m, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#else
     XMEMSET(e, 0, sizeof(e));
+#endif
 
     return err;
 }
@@ -4364,13 +4638,15 @@ extern void sp_3072_lshift_48(sp_digit* r, const sp_digit* a, int n);
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even.
  */
 static int sp_3072_mod_exp_2_avx2_48(sp_digit* r, const sp_digit* e, int bits,
         const sp_digit* m)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
     sp_digit td[49 + 96];
 #endif
@@ -4385,11 +4661,19 @@ static int sp_3072_mod_exp_2_avx2_48(sp_digit* r, const sp_digit* e, int bits,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (49 + 96), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (49 + 96), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
@@ -4489,13 +4773,15 @@ static int sp_3072_mod_exp_2_avx2_48(sp_digit* r, const sp_digit* e, int bits,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even.
  */
 static int sp_3072_mod_exp_2_48(sp_digit* r, const sp_digit* e, int bits,
         const sp_digit* m)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
     sp_digit td[49 + 96];
 #endif
@@ -4510,11 +4796,19 @@ static int sp_3072_mod_exp_2_48(sp_digit* r, const sp_digit* e, int bits,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (49 + 96), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (49 + 96), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
@@ -4625,14 +4919,23 @@ int sp_DhExp_3072(const mp_int* base, const byte* exp, word32 expLen,
     const mp_int* mod, byte* out, word32* outLen)
 {
     int err = MP_OKAY;
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit *b = NULL;
+    sp_digit *e = NULL;
+    sp_digit *m = NULL;
+    sp_digit* r;
+#else
     sp_digit b[96];
     sp_digit e[48];
     sp_digit m[48];
     sp_digit* r = b;
+#endif
     word32 i;
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (mp_count_bits(base) > 3072 || expLen > 384 ||
                                                    mp_count_bits(mod) != 3072) {
@@ -4641,6 +4944,19 @@ int sp_DhExp_3072(const mp_int* base, const byte* exp, word32 expLen,
     else if (mp_iseven(mod)) {
         err = MP_VAL;
     }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        if (((b = (sp_digit *)XMALLOC(96 * sizeof(*b), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((e = (sp_digit *)XMALLOC(48 * sizeof(*e), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((m = (sp_digit *)XMALLOC(48 * sizeof(*m), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL))
+        {
+            err = MEMORY_E;
+        } else {
+            r = b;
+        }
+    }
+#endif
 
     if (err == MP_OKAY) {
         sp_3072_from_mp(b, 48, base);
@@ -4669,7 +4985,7 @@ int sp_DhExp_3072(const mp_int* base, const byte* exp, word32 expLen,
     }
 
     if (err == MP_OKAY) {
-        sp_3072_to_bin(r, out);
+        sp_3072_to_bin_48(r, out);
         *outLen = 384;
         for (i=0; i<384 && out[i] == 0; i++) {
             /* Search for first non-zero. */
@@ -4678,7 +4994,18 @@ int sp_DhExp_3072(const mp_int* base, const byte* exp, word32 expLen,
         XMEMMOVE(out, out + i, *outLen);
     }
 
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (b != NULL)
+        XFREE(b, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (e != NULL) {
+        XMEMSET(e, 0, 48);
+        XFREE(e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (m != NULL)
+        XFREE(m, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#else
     XMEMSET(e, 0, sizeof(e));
+#endif
 
     return err;
 }
@@ -4696,14 +5023,23 @@ int sp_ModExp_1536(const mp_int* base, const mp_int* exp, const mp_int* mod,
     mp_int* res)
 {
     int err = MP_OKAY;
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit *b = NULL;
+    sp_digit *e = NULL;
+    sp_digit *m = NULL;
+    sp_digit* r;
+#else
     sp_digit b[48];
     sp_digit e[24];
     sp_digit m[24];
     sp_digit* r = b;
+#endif
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
     int expBits = mp_count_bits(exp);
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (mp_count_bits(base) > 1536 || expBits > 1536 ||
                                                    mp_count_bits(mod) != 1536) {
@@ -4712,6 +5048,19 @@ int sp_ModExp_1536(const mp_int* base, const mp_int* exp, const mp_int* mod,
     else if (mp_iseven(mod)) {
         err = MP_VAL;
     }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        if (((b = (sp_digit *)XMALLOC(48 * sizeof(*b), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((e = (sp_digit *)XMALLOC(24 * sizeof(*e), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((m = (sp_digit *)XMALLOC(24 * sizeof(*m), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL))
+        {
+            err = MEMORY_E;
+        } else {
+            r = b;
+        }
+    }
+#endif
 
     if (err == MP_OKAY) {
         sp_3072_from_mp(b, 24, base);
@@ -4731,7 +5080,18 @@ int sp_ModExp_1536(const mp_int* base, const mp_int* exp, const mp_int* mod,
         err = sp_3072_to_mp(r, res);
     }
 
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (b != NULL)
+        XFREE(b, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (e != NULL) {
+        XMEMSET(e, 0, 24);
+        XFREE(e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (m != NULL)
+        XFREE(m, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#else
     XMEMSET(e, 0, sizeof(e));
+#endif
 
     return err;
 }
@@ -4850,28 +5210,42 @@ static void sp_4096_from_mp(sp_digit* r, int size, const mp_int* a)
 #endif
 }
 
-extern void sp_4096_to_bin_bswap(sp_digit* r, byte* a);
-extern void sp_4096_to_bin_movbe(sp_digit* r, byte* a);
+extern void sp_4096_to_bin_bswap_64(sp_digit* r, byte* a);
+extern void sp_4096_to_bin_movbe_64(sp_digit* r, byte* a);
 /* Write r as big endian to byte array.
  * Fixed length number of bytes written: 512
  *
  * r  A single precision integer.
  * a  Byte array.
  */
-static void sp_4096_to_bin(sp_digit* r, byte* a)
+static void sp_4096_to_bin_64(sp_digit* r, byte* a)
 {
 #ifndef NO_MOVBE_SUPPORT
     word32 cpuid_flags = cpuid_get_flags();
 
     if (IS_INTEL_MOVBE(cpuid_flags)) {
-        sp_4096_to_bin_movbe(r, a);
+        sp_4096_to_bin_movbe_64(r, a);
     }
     else
 #endif
     {
-        sp_4096_to_bin_bswap(r, a);
+        sp_4096_to_bin_bswap_64(r, a);
     }
 }
+
+#if (defined(WOLFSSL_HAVE_SP_RSA) && (!defined(WOLFSSL_RSA_PUBLIC_ONLY) || !defined(WOLFSSL_SP_SMALL))) || defined(WOLFSSL_HAVE_SP_DH)
+/* Normalize the values in each word to 64.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_4096_norm_64(a)
+
+#endif /* (WOLFSSL_HAVE_SP_RSA && (!WOLFSSL_RSA_PUBLIC_ONLY || !WOLFSSL_SP_SMALL)) || WOLFSSL_HAVE_SP_DH */
+/* Normalize the values in each word to 64.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_4096_norm_64(a)
 
 extern sp_digit sp_4096_sub_in_place_64(sp_digit* a, const sp_digit* b);
 extern sp_digit sp_4096_add_64(sp_digit* r, const sp_digit* a, const sp_digit* b);
@@ -4906,7 +5280,7 @@ static void sp_4096_mont_setup(const sp_digit* a, sp_digit* rho)
 }
 
 extern void sp_4096_mul_d_64(sp_digit* r, const sp_digit* a, sp_digit b);
-#if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH)
+#if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
 /* r = 2^n mod m where n is the number of bits to reduce by.
  * Given m must be 4096 bits, just need to subtract.
  *
@@ -4917,21 +5291,23 @@ static void sp_4096_mont_norm_64(sp_digit* r, const sp_digit* m)
 {
     XMEMSET(r, 0, sizeof(sp_digit) * 64);
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
     /* r = 2^n mod m */
     sp_4096_sub_in_place_64(r, m);
 }
 
-#endif /* WOLFSSL_HAVE_SP_RSA | WOLFSSL_HAVE_SP_DH */
+#endif /* (WOLFSSL_HAVE_SP_RSA & !WOLFSSL_RSA_PUBLIC_ONLY) | WOLFSSL_HAVE_SP_DH */
 extern sp_digit sp_4096_cond_sub_64(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
 extern void sp_4096_mont_reduce_64(sp_digit* a, const sp_digit* m, sp_digit mp);
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_4096_mont_mul_64(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -4943,9 +5319,9 @@ static void sp_4096_mont_mul_64(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_4096_mont_sqr_64(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -4954,8 +5330,7 @@ static void sp_4096_mont_sqr_64(sp_digit* r, const sp_digit* a,
     sp_4096_mont_reduce_64(r, m, mp);
 }
 
-#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
-extern sp_digit sp_4096_cond_sub_avx2_64(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
+extern sp_digit sp_4096_sub_64(sp_digit* r, const sp_digit* a, const sp_digit* b);
 extern void sp_4096_mul_d_avx2_64(sp_digit* r, const sp_digit* a, const sp_digit b);
 #ifdef _WIN64
 #if _MSC_VER < 1920
@@ -4971,6 +5346,7 @@ extern sp_digit div_4096_word_asm_64(sp_digit d1, sp_digit d0, sp_digit div);
 static WC_INLINE sp_digit div_4096_word_64(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
 #if _MSC_VER >= 1920
     return _udiv128(d1, d0, div, NULL);
 #else
@@ -4988,6 +5364,7 @@ static WC_INLINE sp_digit div_4096_word_64(sp_digit d1, sp_digit d0,
 static WC_INLINE sp_digit div_4096_word_64(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     register sp_digit r asm("rax");
     __asm__ __volatile__ (
         "divq %3"
@@ -4998,113 +5375,6 @@ static WC_INLINE sp_digit div_4096_word_64(sp_digit d1, sp_digit d0,
     return r;
 }
 #endif /* _WIN64 */
-/* AND m into each word of a and store in r.
- *
- * r  A single precision integer.
- * a  A single precision integer.
- * m  Mask to AND against each digit.
- */
-static void sp_4096_mask_64(sp_digit* r, const sp_digit* a, sp_digit m)
-{
-#ifdef WOLFSSL_SP_SMALL
-    int i;
-
-    for (i=0; i<64; i++) {
-        r[i] = a[i] & m;
-    }
-#else
-    int i;
-
-    for (i = 0; i < 64; i += 8) {
-        r[i+0] = a[i+0] & m;
-        r[i+1] = a[i+1] & m;
-        r[i+2] = a[i+2] & m;
-        r[i+3] = a[i+3] & m;
-        r[i+4] = a[i+4] & m;
-        r[i+5] = a[i+5] & m;
-        r[i+6] = a[i+6] & m;
-        r[i+7] = a[i+7] & m;
-    }
-#endif
-}
-
-extern int64_t sp_4096_cmp_64(const sp_digit* a, const sp_digit* b);
-/* Divide d in a and put remainder into r (m*d + r = a)
- * m is not calculated as it is not needed at this time.
- *
- * a  Number to be divided.
- * d  Number to divide with.
- * m  Multiplier result.
- * r  Remainder from the division.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_4096_div_64(const sp_digit* a, const sp_digit* d, sp_digit* m,
-        sp_digit* r)
-{
-    sp_digit t1[128];
-    sp_digit t2[65];
-    sp_digit div;
-    sp_digit r1;
-    int i;
-#ifdef HAVE_INTEL_AVX2
-    word32 cpuid_flags = cpuid_get_flags();
-#endif
-
-    (void)m;
-
-    div = d[63];
-    XMEMCPY(t1, a, sizeof(*t1) * 2 * 64);
-    r1 = sp_4096_cmp_64(&t1[64], d) >= 0;
-#ifdef HAVE_INTEL_AVX2
-    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
-        sp_4096_cond_sub_avx2_64(&t1[64], &t1[64], d, (sp_digit)0 - r1);
-    else
-#endif
-        sp_4096_cond_sub_64(&t1[64], &t1[64], d, (sp_digit)0 - r1);
-    for (i=63; i>=0; i--) {
-        sp_digit hi = t1[64 + i] - (t1[64 + i] == div);
-        r1 = div_4096_word_64(hi, t1[64 + i - 1], div);
-
-#ifdef HAVE_INTEL_AVX2
-        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
-            sp_4096_mul_d_avx2_64(t2, d, r1);
-        else
-#endif
-            sp_4096_mul_d_64(t2, d, r1);
-        t1[64 + i] += sp_4096_sub_in_place_64(&t1[i], t2);
-        t1[64 + i] -= t2[64];
-        sp_4096_mask_64(t2, d, t1[64 + i]);
-        t1[64 + i] += sp_4096_add_64(&t1[i], &t1[i], t2);
-        sp_4096_mask_64(t2, d, t1[64 + i]);
-        t1[64 + i] += sp_4096_add_64(&t1[i], &t1[i], t2);
-    }
-
-    r1 = sp_4096_cmp_64(t1, d) >= 0;
-#ifdef HAVE_INTEL_AVX2
-    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
-        sp_4096_cond_sub_avx2_64(r, t1, d, (sp_digit)0 - r1);
-    else
-#endif
-        sp_4096_cond_sub_64(r, t1, d, (sp_digit)0 - r1);
-
-    return MP_OKAY;
-}
-
-/* Reduce a modulo m into r. (r = a mod m)
- *
- * r  A single precision number that is the reduced result.
- * a  A single precision number that is to be reduced.
- * m  A single precision number that is the modulus to reduce with.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_4096_mod_64(sp_digit* r, const sp_digit* a,
-        const sp_digit* m)
-{
-    return sp_4096_div_64(a, m, NULL, r);
-}
-
-#endif /* WOLFSSL_HAVE_SP_DH || !WOLFSSL_RSA_PUBLIC_ONLY */
-extern sp_digit sp_4096_sub_64(sp_digit* r, const sp_digit* a, const sp_digit* b);
 /* Divide d in a and put remainder into r (m*d + r = a)
  * m is not calculated as it is not needed at this time.
  *
@@ -5125,6 +5395,8 @@ static WC_INLINE int sp_4096_div_64_cond(const sp_digit* a, const sp_digit* d, s
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)m;
 
@@ -5180,10 +5452,122 @@ static WC_INLINE int sp_4096_div_64_cond(const sp_digit* a, const sp_digit* d, s
 static WC_INLINE int sp_4096_mod_64_cond(sp_digit* r, const sp_digit* a,
         const sp_digit* m)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     return sp_4096_div_64_cond(a, m, NULL, r);
 }
 
 #if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
+extern sp_digit sp_4096_cond_sub_avx2_64(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
+/* AND m into each word of a and store in r.
+ *
+ * r  A single precision integer.
+ * a  A single precision integer.
+ * m  Mask to AND against each digit.
+ */
+static void sp_4096_mask_64(sp_digit* r, const sp_digit* a, sp_digit m)
+{
+#ifdef WOLFSSL_SP_SMALL
+    int i;
+
+    for (i=0; i<64; i++) {
+        r[i] = a[i] & m;
+    }
+#else
+    int i;
+
+    for (i = 0; i < 64; i += 8) {
+        r[i+0] = a[i+0] & m;
+        r[i+1] = a[i+1] & m;
+        r[i+2] = a[i+2] & m;
+        r[i+3] = a[i+3] & m;
+        r[i+4] = a[i+4] & m;
+        r[i+5] = a[i+5] & m;
+        r[i+6] = a[i+6] & m;
+        r[i+7] = a[i+7] & m;
+    }
+#endif
+}
+
+extern sp_int64 sp_4096_cmp_64(const sp_digit* a, const sp_digit* b);
+/* Divide d in a and put remainder into r (m*d + r = a)
+ * m is not calculated as it is not needed at this time.
+ *
+ * a  Number to be divided.
+ * d  Number to divide with.
+ * m  Multiplier result.
+ * r  Remainder from the division.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_4096_div_64(const sp_digit* a, const sp_digit* d, sp_digit* m,
+        sp_digit* r)
+{
+    sp_digit t1[128];
+    sp_digit t2[65];
+    sp_digit div;
+    sp_digit r1;
+    int i;
+#ifdef HAVE_INTEL_AVX2
+    word32 cpuid_flags = cpuid_get_flags();
+#endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    (void)m;
+
+    div = d[63];
+    XMEMCPY(t1, a, sizeof(*t1) * 2 * 64);
+    r1 = sp_4096_cmp_64(&t1[64], d) >= 0;
+#ifdef HAVE_INTEL_AVX2
+    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+        sp_4096_cond_sub_avx2_64(&t1[64], &t1[64], d, (sp_digit)0 - r1);
+    else
+#endif
+        sp_4096_cond_sub_64(&t1[64], &t1[64], d, (sp_digit)0 - r1);
+    for (i=63; i>=0; i--) {
+        sp_digit hi = t1[64 + i] - (t1[64 + i] == div);
+        r1 = div_4096_word_64(hi, t1[64 + i - 1], div);
+
+#ifdef HAVE_INTEL_AVX2
+        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+            sp_4096_mul_d_avx2_64(t2, d, r1);
+        else
+#endif
+            sp_4096_mul_d_64(t2, d, r1);
+        t1[64 + i] += sp_4096_sub_in_place_64(&t1[i], t2);
+        t1[64 + i] -= t2[64];
+        sp_4096_mask_64(t2, d, t1[64 + i]);
+        t1[64 + i] += sp_4096_add_64(&t1[i], &t1[i], t2);
+        sp_4096_mask_64(t2, d, t1[64 + i]);
+        t1[64 + i] += sp_4096_add_64(&t1[i], &t1[i], t2);
+    }
+
+    r1 = sp_4096_cmp_64(t1, d) >= 0;
+#ifdef HAVE_INTEL_AVX2
+    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+        sp_4096_cond_sub_avx2_64(r, t1, d, (sp_digit)0 - r1);
+    else
+#endif
+        sp_4096_cond_sub_64(r, t1, d, (sp_digit)0 - r1);
+
+    return MP_OKAY;
+}
+
+#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
+/* Reduce a modulo m into r. (r = a mod m)
+ *
+ * r  A single precision number that is the reduced result.
+ * a  A single precision number that is to be reduced.
+ * m  A single precision number that is the modulus to reduce with.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_4096_mod_64(sp_digit* r, const sp_digit* a,
+        const sp_digit* m)
+{
+    ASSERT_SAVED_VECTOR_REGISTERS();
+    return sp_4096_div_64(a, m, NULL, r);
+}
+
+#endif /* WOLFSSL_HAVE_SP_DH || !WOLFSSL_RSA_PUBLIC_ONLY */
 /* Modular exponentiate a to the e mod m. (r = a^e mod m)
  *
  * r     A single precision number that is the result of the operation.
@@ -5191,17 +5575,19 @@ static WC_INLINE int sp_4096_mod_64_cond(sp_digit* r, const sp_digit* a,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_4096_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
-    sp_digit td[(33 * 128) + 128];
+    sp_digit td[(17 * 128) + 128];
 #endif
-    sp_digit* t[32];
+    sp_digit* t[16];
     sp_digit* rt = NULL;
     sp_digit* norm;
     sp_digit mp = 1;
@@ -5212,24 +5598,35 @@ static int sp_4096_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 128) + 128, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (17 * 128) + 128, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
     if (err == MP_OKAY) {
         norm = td;
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = td + i * 128;
-        rt = td + 4096;
+        rt = td + 2048;
 #else
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = &td[i * 128];
-        rt = &td[4096];
+        rt = &td[2048];
 #endif
 
         sp_4096_mont_setup(m, &mp);
@@ -5262,22 +5659,6 @@ static int sp_4096_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
         sp_4096_mont_mul_64(t[13], t[ 7], t[ 6], m, mp);
         sp_4096_mont_sqr_64(t[14], t[ 7], m, mp);
         sp_4096_mont_mul_64(t[15], t[ 8], t[ 7], m, mp);
-        sp_4096_mont_sqr_64(t[16], t[ 8], m, mp);
-        sp_4096_mont_mul_64(t[17], t[ 9], t[ 8], m, mp);
-        sp_4096_mont_sqr_64(t[18], t[ 9], m, mp);
-        sp_4096_mont_mul_64(t[19], t[10], t[ 9], m, mp);
-        sp_4096_mont_sqr_64(t[20], t[10], m, mp);
-        sp_4096_mont_mul_64(t[21], t[11], t[10], m, mp);
-        sp_4096_mont_sqr_64(t[22], t[11], m, mp);
-        sp_4096_mont_mul_64(t[23], t[12], t[11], m, mp);
-        sp_4096_mont_sqr_64(t[24], t[12], m, mp);
-        sp_4096_mont_mul_64(t[25], t[13], t[12], m, mp);
-        sp_4096_mont_sqr_64(t[26], t[13], m, mp);
-        sp_4096_mont_mul_64(t[27], t[14], t[13], m, mp);
-        sp_4096_mont_sqr_64(t[28], t[14], m, mp);
-        sp_4096_mont_mul_64(t[29], t[15], t[14], m, mp);
-        sp_4096_mont_sqr_64(t[30], t[15], m, mp);
-        sp_4096_mont_mul_64(t[31], t[16], t[15], m, mp);
 
         i = (bits - 1) / 64;
         n = e[i--];
@@ -5286,12 +5667,12 @@ static int sp_4096_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
         if (c == 0) {
             c = 64;
         }
-        /* Minus the number of top bits to use so rest is a multiple of 5. */
-        if ((bits % 5) == 0) {
-            c -= 5;
+        /* Minus the number of top bits to use so rest is a multiple of 4. */
+        if ((bits % 4) == 0) {
+            c -= 4;
         }
         else {
-            c -= bits % 5;
+            c -= bits % 4;
         }
         if (c < 0) {
             /* Number of bits in top word is less than number needed. */
@@ -5307,22 +5688,22 @@ static int sp_4096_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
             n <<= 64 - c;
         }
         XMEMCPY(r, t[y], sizeof(sp_digit) * 64);
-        for (; i>=0 || c>=5; ) {
-            if (c >= 5) {
-                y = (byte)((n >> 59) & 0x1f);
-                n <<= 5;
-                c -= 5;
+        for (; i>=0 || c>=4; ) {
+            if (c >= 4) {
+                y = (byte)((n >> 60) & 0xf);
+                n <<= 4;
+                c -= 4;
             }
             else if (c == 0) {
                 n = e[i--];
-                y = (byte)(n >> 59);
-                n <<= 5;
-                c = 59;
+                y = (byte)(n >> 60);
+                n <<= 4;
+                c = 60;
             }
             else {
-                y = (byte)(n >> 59);
+                y = (byte)(n >> 60);
                 n = e[i--];
-                c = 5 - c;
+                c = 4 - c;
                 y |= (byte)(n >> (64 - c));
                 n <<= c;
                 c = 64 - c;
@@ -5336,10 +5717,8 @@ static int sp_4096_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
             sp_4096_mont_reduce_64(rt, m, mp);
             sp_4096_sqr_64(r, rt);
             sp_4096_mont_reduce_64(r, m, mp);
-            sp_4096_sqr_64(rt, r);
-            sp_4096_mont_reduce_64(rt, m, mp);
 
-            sp_4096_mul_64(r, rt, t[y]);
+            sp_4096_mul_64(r, r, t[y]);
             sp_4096_mont_reduce_64(r, m, mp);
         }
 
@@ -5357,18 +5736,18 @@ static int sp_4096_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
 
     return err;
 }
-#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 
+#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 extern void sp_4096_mont_reduce_avx2_64(sp_digit* a, const sp_digit* m, sp_digit mp);
 #ifdef HAVE_INTEL_AVX2
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_4096_mont_mul_avx2_64(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -5382,9 +5761,9 @@ static void sp_4096_mont_mul_avx2_64(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_4096_mont_sqr_avx2_64(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -5403,17 +5782,19 @@ static void sp_4096_mont_sqr_avx2_64(sp_digit* r, const sp_digit* a,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_4096_mod_exp_avx2_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
-    sp_digit td[(33 * 128) + 128];
+    sp_digit td[(17 * 128) + 128];
 #endif
-    sp_digit* t[32];
+    sp_digit* t[16];
     sp_digit* rt = NULL;
     sp_digit* norm;
     sp_digit mp = 1;
@@ -5424,24 +5805,35 @@ static int sp_4096_mod_exp_avx2_64(sp_digit* r, const sp_digit* a, const sp_digi
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (33 * 128) + 128, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (17 * 128) + 128, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
     if (err == MP_OKAY) {
         norm = td;
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = td + i * 128;
-        rt = td + 4096;
+        rt = td + 2048;
 #else
-        for (i=0; i<32; i++)
+        for (i=0; i<16; i++)
             t[i] = &td[i * 128];
-        rt = &td[4096];
+        rt = &td[2048];
 #endif
 
         sp_4096_mont_setup(m, &mp);
@@ -5474,22 +5866,6 @@ static int sp_4096_mod_exp_avx2_64(sp_digit* r, const sp_digit* a, const sp_digi
         sp_4096_mont_mul_avx2_64(t[13], t[ 7], t[ 6], m, mp);
         sp_4096_mont_sqr_avx2_64(t[14], t[ 7], m, mp);
         sp_4096_mont_mul_avx2_64(t[15], t[ 8], t[ 7], m, mp);
-        sp_4096_mont_sqr_avx2_64(t[16], t[ 8], m, mp);
-        sp_4096_mont_mul_avx2_64(t[17], t[ 9], t[ 8], m, mp);
-        sp_4096_mont_sqr_avx2_64(t[18], t[ 9], m, mp);
-        sp_4096_mont_mul_avx2_64(t[19], t[10], t[ 9], m, mp);
-        sp_4096_mont_sqr_avx2_64(t[20], t[10], m, mp);
-        sp_4096_mont_mul_avx2_64(t[21], t[11], t[10], m, mp);
-        sp_4096_mont_sqr_avx2_64(t[22], t[11], m, mp);
-        sp_4096_mont_mul_avx2_64(t[23], t[12], t[11], m, mp);
-        sp_4096_mont_sqr_avx2_64(t[24], t[12], m, mp);
-        sp_4096_mont_mul_avx2_64(t[25], t[13], t[12], m, mp);
-        sp_4096_mont_sqr_avx2_64(t[26], t[13], m, mp);
-        sp_4096_mont_mul_avx2_64(t[27], t[14], t[13], m, mp);
-        sp_4096_mont_sqr_avx2_64(t[28], t[14], m, mp);
-        sp_4096_mont_mul_avx2_64(t[29], t[15], t[14], m, mp);
-        sp_4096_mont_sqr_avx2_64(t[30], t[15], m, mp);
-        sp_4096_mont_mul_avx2_64(t[31], t[16], t[15], m, mp);
 
         i = (bits - 1) / 64;
         n = e[i--];
@@ -5498,12 +5874,12 @@ static int sp_4096_mod_exp_avx2_64(sp_digit* r, const sp_digit* a, const sp_digi
         if (c == 0) {
             c = 64;
         }
-        /* Minus the number of top bits to use so rest is a multiple of 5. */
-        if ((bits % 5) == 0) {
-            c -= 5;
+        /* Minus the number of top bits to use so rest is a multiple of 4. */
+        if ((bits % 4) == 0) {
+            c -= 4;
         }
         else {
-            c -= bits % 5;
+            c -= bits % 4;
         }
         if (c < 0) {
             /* Number of bits in top word is less than number needed. */
@@ -5519,22 +5895,22 @@ static int sp_4096_mod_exp_avx2_64(sp_digit* r, const sp_digit* a, const sp_digi
             n <<= 64 - c;
         }
         XMEMCPY(r, t[y], sizeof(sp_digit) * 64);
-        for (; i>=0 || c>=5; ) {
-            if (c >= 5) {
-                y = (byte)((n >> 59) & 0x1f);
-                n <<= 5;
-                c -= 5;
+        for (; i>=0 || c>=4; ) {
+            if (c >= 4) {
+                y = (byte)((n >> 60) & 0xf);
+                n <<= 4;
+                c -= 4;
             }
             else if (c == 0) {
                 n = e[i--];
-                y = (byte)(n >> 59);
-                n <<= 5;
-                c = 59;
+                y = (byte)(n >> 60);
+                n <<= 4;
+                c = 60;
             }
             else {
-                y = (byte)(n >> 59);
+                y = (byte)(n >> 60);
                 n = e[i--];
-                c = 5 - c;
+                c = 4 - c;
                 y |= (byte)(n >> (64 - c));
                 n <<= c;
                 c = 64 - c;
@@ -5548,10 +5924,8 @@ static int sp_4096_mod_exp_avx2_64(sp_digit* r, const sp_digit* a, const sp_digi
             sp_4096_mont_reduce_avx2_64(rt, m, mp);
             sp_4096_sqr_avx2_64(r, rt);
             sp_4096_mont_reduce_avx2_64(r, m, mp);
-            sp_4096_sqr_avx2_64(rt, r);
-            sp_4096_mont_reduce_avx2_64(rt, m, mp);
 
-            sp_4096_mul_avx2_64(r, rt, t[y]);
+            sp_4096_mul_avx2_64(r, r, t[y]);
             sp_4096_mont_reduce_avx2_64(r, m, mp);
         }
 
@@ -5570,8 +5944,8 @@ static int sp_4096_mod_exp_avx2_64(sp_digit* r, const sp_digit* a, const sp_digi
     return err;
 }
 #endif /* HAVE_INTEL_AVX2 */
-#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 
+#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 #ifdef WOLFSSL_HAVE_SP_RSA
 /* RSA public key operation.
  *
@@ -5601,6 +5975,8 @@ int sp_RsaPublic_4096(const byte* in, word32 inLen, const mp_int* em,
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (*outLen < 512) {
         err = MP_TO_E;
@@ -5719,7 +6095,7 @@ int sp_RsaPublic_4096(const byte* in, word32 inLen, const mp_int* em,
     }
 
     if (err == MP_OKAY) {
-        sp_4096_to_bin(r, out);
+        sp_4096_to_bin_64(r, out);
         *outLen = 512;
     }
 
@@ -5731,6 +6107,7 @@ int sp_RsaPublic_4096(const byte* in, word32 inLen, const mp_int* em,
     return err;
 }
 
+#ifndef WOLFSSL_RSA_PUBLIC_ONLY
 #if defined(SP_RSA_PRIVATE_EXP_D) || defined(RSA_LOW_MEM)
 /* RSA private key operation.
  *
@@ -5762,6 +6139,8 @@ int sp_RsaPrivate_4096(const byte* in, word32 inLen, const mp_int* dm,
     sp_digit* m;
     sp_digit* r;
     int err = MP_OKAY;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)pm;
     (void)qm;
@@ -5810,7 +6189,7 @@ int sp_RsaPrivate_4096(const byte* in, word32 inLen, const mp_int* dm,
     }
 
     if (err == MP_OKAY) {
-        sp_4096_to_bin(r, out);
+        sp_4096_to_bin_64(r, out);
         *outLen = 512;
     }
 
@@ -5870,6 +6249,8 @@ int sp_RsaPrivate_4096(const byte* in, word32 inLen, const mp_int* dm,
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)dm;
     (void)mm;
@@ -5963,7 +6344,7 @@ int sp_RsaPrivate_4096(const byte* in, word32 inLen, const mp_int* dm,
         XMEMSET(&tmpb[32], 0, sizeof(sp_digit) * 32);
         sp_4096_add_64(r, tmpb, tmpa);
 
-        sp_4096_to_bin(r, out);
+        sp_4096_to_bin_64(r, out);
         *outLen = 512;
     }
 
@@ -5980,6 +6361,7 @@ int sp_RsaPrivate_4096(const byte* in, word32 inLen, const mp_int* dm,
     return err;
 }
 #endif /* SP_RSA_PRIVATE_EXP_D | RSA_LOW_MEM */
+#endif /* WOLFSSL_RSA_PUBLIC_ONLY */
 #endif /* WOLFSSL_HAVE_SP_RSA */
 #if defined(WOLFSSL_HAVE_SP_DH) || (defined(WOLFSSL_HAVE_SP_RSA) && \
                                               !defined(WOLFSSL_RSA_PUBLIC_ONLY))
@@ -6064,14 +6446,23 @@ int sp_ModExp_4096(const mp_int* base, const mp_int* exp, const mp_int* mod,
     mp_int* res)
 {
     int err = MP_OKAY;
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit *b = NULL;
+    sp_digit *e = NULL;
+    sp_digit *m = NULL;
+    sp_digit* r;
+#else
     sp_digit b[128];
     sp_digit e[64];
     sp_digit m[64];
     sp_digit* r = b;
+#endif
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
     int expBits = mp_count_bits(exp);
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (mp_count_bits(base) > 4096 || expBits > 4096 ||
                                                    mp_count_bits(mod) != 4096) {
@@ -6080,6 +6471,19 @@ int sp_ModExp_4096(const mp_int* base, const mp_int* exp, const mp_int* mod,
     else if (mp_iseven(mod)) {
         err = MP_VAL;
     }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        if (((b = (sp_digit *)XMALLOC(128 * sizeof(*b), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((e = (sp_digit *)XMALLOC(64 * sizeof(*e), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((m = (sp_digit *)XMALLOC(64 * sizeof(*m), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL))
+        {
+            err = MEMORY_E;
+        } else {
+            r = b;
+        }
+    }
+#endif
 
     if (err == MP_OKAY) {
         sp_4096_from_mp(b, 64, base);
@@ -6098,7 +6502,18 @@ int sp_ModExp_4096(const mp_int* base, const mp_int* exp, const mp_int* mod,
         err = sp_4096_to_mp(r, res);
     }
 
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (b != NULL)
+        XFREE(b, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (e != NULL) {
+        XMEMSET(e, 0, 64);
+        XFREE(e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (m != NULL)
+        XFREE(m, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#else
     XMEMSET(e, 0, sizeof(e));
+#endif
 
     return err;
 }
@@ -6113,13 +6528,15 @@ extern void sp_4096_lshift_64(sp_digit* r, const sp_digit* a, int n);
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even.
  */
 static int sp_4096_mod_exp_2_avx2_64(sp_digit* r, const sp_digit* e, int bits,
         const sp_digit* m)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
     sp_digit td[65 + 128];
 #endif
@@ -6134,11 +6551,19 @@ static int sp_4096_mod_exp_2_avx2_64(sp_digit* r, const sp_digit* e, int bits,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (65 + 128), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (65 + 128), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
@@ -6238,13 +6663,15 @@ static int sp_4096_mod_exp_2_avx2_64(sp_digit* r, const sp_digit* e, int bits,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even.
  */
 static int sp_4096_mod_exp_2_64(sp_digit* r, const sp_digit* e, int bits,
         const sp_digit* m)
 {
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td;
+    sp_digit* td = NULL;
 #else
     sp_digit td[65 + 128];
 #endif
@@ -6259,11 +6686,19 @@ static int sp_4096_mod_exp_2_64(sp_digit* r, const sp_digit* e, int bits,
     byte y;
     int err = MP_OKAY;
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (65 + 128), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL) {
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (65 + 128), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL) {
+            err = MEMORY_E;
+        }
     }
 #endif
 
@@ -6374,14 +6809,23 @@ int sp_DhExp_4096(const mp_int* base, const byte* exp, word32 expLen,
     const mp_int* mod, byte* out, word32* outLen)
 {
     int err = MP_OKAY;
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit *b = NULL;
+    sp_digit *e = NULL;
+    sp_digit *m = NULL;
+    sp_digit* r;
+#else
     sp_digit b[128];
     sp_digit e[64];
     sp_digit m[64];
     sp_digit* r = b;
+#endif
     word32 i;
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     if (mp_count_bits(base) > 4096 || expLen > 512 ||
                                                    mp_count_bits(mod) != 4096) {
@@ -6390,6 +6834,19 @@ int sp_DhExp_4096(const mp_int* base, const byte* exp, word32 expLen,
     else if (mp_iseven(mod)) {
         err = MP_VAL;
     }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        if (((b = (sp_digit *)XMALLOC(128 * sizeof(*b), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((e = (sp_digit *)XMALLOC(64 * sizeof(*e), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL) ||
+            ((m = (sp_digit *)XMALLOC(64 * sizeof(*m), NULL, DYNAMIC_TYPE_TMP_BUFFER)) == NULL))
+        {
+            err = MEMORY_E;
+        } else {
+            r = b;
+        }
+    }
+#endif
 
     if (err == MP_OKAY) {
         sp_4096_from_mp(b, 64, base);
@@ -6418,7 +6875,7 @@ int sp_DhExp_4096(const mp_int* base, const byte* exp, word32 expLen,
     }
 
     if (err == MP_OKAY) {
-        sp_4096_to_bin(r, out);
+        sp_4096_to_bin_64(r, out);
         *outLen = 512;
         for (i=0; i<512 && out[i] == 0; i++) {
             /* Search for first non-zero. */
@@ -6427,7 +6884,18 @@ int sp_DhExp_4096(const mp_int* base, const byte* exp, word32 expLen,
         XMEMMOVE(out, out + i, *outLen);
     }
 
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (b != NULL)
+        XFREE(b, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (e != NULL) {
+        XMEMSET(e, 0, 64);
+        XFREE(e, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (m != NULL)
+        XFREE(m, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#else
     XMEMSET(e, 0, sizeof(e));
+#endif
 
     return err;
 }
@@ -6457,12 +6925,12 @@ static const sp_digit p256_mod[4] = {
     0xffffffffffffffffL,0x00000000ffffffffL,0x0000000000000000L,
     0xffffffff00000001L
 };
-/* The Montogmery normalizer for modulus of the curve P256. */
+/* The Montgomery normalizer for modulus of the curve P256. */
 static const sp_digit p256_norm_mod[4] = {
     0x0000000000000001L,0xffffffff00000000L,0xffffffffffffffffL,
     0x00000000fffffffeL
 };
-/* The Montogmery multiplier for modulus of the curve P256. */
+/* The Montgomery multiplier for modulus of the curve P256. */
 static const sp_digit p256_mp_mod = 0x0000000000000001;
 #if defined(WOLFSSL_VALIDATE_ECC_KEYGEN) || defined(HAVE_ECC_SIGN) || \
                                             defined(HAVE_ECC_VERIFY)
@@ -6478,14 +6946,14 @@ static const sp_digit p256_order2[4] = {
     0xffffffff00000000L
 };
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
-/* The Montogmery normalizer for order of the curve P256. */
+/* The Montgomery normalizer for order of the curve P256. */
 static const sp_digit p256_norm_order[4] = {
     0x0c46353d039cdaafL,0x4319055258e8617bL,0x0000000000000000L,
     0x00000000ffffffffL
 };
 #endif
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
-/* The Montogmery multiplier for order of the curve P256. */
+/* The Montgomery multiplier for order of the curve P256. */
 static const sp_digit p256_mp_order = 0xccd1c8aaee00bc4fL;
 #endif
 #ifdef WOLFSSL_SP_SMALL
@@ -6524,7 +6992,7 @@ extern void sp_256_mul_4(sp_digit* r, const sp_digit* a, const sp_digit* b);
 extern void sp_256_sqr_4(sp_digit* r, const sp_digit* a);
 extern sp_digit sp_256_add_4(sp_digit* r, const sp_digit* a, const sp_digit* b);
 extern sp_digit sp_256_sub_4(sp_digit* r, const sp_digit* a, const sp_digit* b);
-/* Multiply a number by Montogmery normalizer mod modulus (prime).
+/* Multiply a number by Montgomery normalizer mod modulus (prime).
  *
  * r  The resulting Montgomery form number.
  * a  The number to convert.
@@ -6535,6 +7003,8 @@ static int sp_256_mod_mul_norm_4(sp_digit* r, const sp_digit* a, const sp_digit*
     int64_t t[8];
     int64_t a32[8];
     int64_t o;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)m;
 
@@ -6790,10 +7260,10 @@ extern void sp_256_mont_sqr_4(sp_digit* r, const sp_digit* a, const sp_digit* m,
 /* Square the Montgomery form number a number of times. (r = a ^ n mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * n   Number of times to square.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_256_mont_sqr_n_4(sp_digit* r, const sp_digit* a, int n,
         const sp_digit* m, sp_digit mp)
@@ -6882,7 +7352,7 @@ static void sp_256_mont_inv_4(sp_digit* r, const sp_digit* a, sp_digit* td)
 #endif /* WOLFSSL_SP_SMALL */
 }
 
-extern int64_t sp_256_cmp_4(const sp_digit* a, const sp_digit* b);
+extern sp_int64 sp_256_cmp_4(const sp_digit* a, const sp_digit* b);
 /* Normalize the values in each word to 64.
  *
  * a  Array of sp_digit to normalize.
@@ -6904,7 +7374,7 @@ static void sp_256_map_4(sp_point_256* r, const sp_point_256* p,
 {
     sp_digit* t1 = t;
     sp_digit* t2 = t + 2*4;
-    int64_t n;
+    sp_int64 n;
 
     sp_256_mont_inv_4(t1, p->z, t + 2*4);
 
@@ -7913,10 +8383,10 @@ extern void sp_256_mont_sqr_avx2_4(sp_digit* r, const sp_digit* a, const sp_digi
 /* Square the Montgomery form number a number of times. (r = a ^ n mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * n   Number of times to square.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_256_mont_sqr_n_avx2_4(sp_digit* r, const sp_digit* a, int n,
         const sp_digit* m, sp_digit mp)
@@ -8013,7 +8483,7 @@ static void sp_256_map_avx2_4(sp_point_256* r, const sp_point_256* p,
 {
     sp_digit* t1 = t;
     sp_digit* t2 = t + 2*4;
-    int64_t n;
+    sp_int64 n;
 
     sp_256_mont_inv_avx2_4(t1, p->z, t + 2*4);
 
@@ -9837,7 +10307,7 @@ int sp_ecc_mulmod_256(const mp_int* km, const ecc_point* gm, ecc_point* r,
  * km      Scalar to multiply by.
  * p       Point to multiply.
  * am      Point to add to scalar mulitply result.
- * inMont  Point to add is in montogmery form.
+ * inMont  Point to add is in montgomery form.
  * r       Resulting point.
  * map     Indicates whether to convert result to affine.
  * heap    Heap to use for allocation.
@@ -22663,7 +23133,7 @@ int sp_ecc_mulmod_base_256(const mp_int* km, ecc_point* r, int map, void* heap)
  *
  * km      Scalar to multiply by.
  * am      Point to add to scalar mulitply result.
- * inMont  Point to add is in montogmery form.
+ * inMont  Point to add is in montgomery form.
  * r       Resulting point.
  * map     Indicates whether to convert result to affine.
  * heap    Heap to use for allocation.
@@ -22809,7 +23279,7 @@ static int sp_256_ecc_gen_k_4(WC_RNG* rng, sp_digit* k)
         err = wc_RNG_GenerateBlock(rng, buf, sizeof(buf));
         if (err == 0) {
             sp_256_from_bin(k, 4, buf, (int)sizeof(buf));
-            if (sp_256_cmp_4(k, p256_order2) < 0) {
+            if (sp_256_cmp_4(k, p256_order2) <= 0) {
                 sp_256_add_one_4(k);
                 break;
             }
@@ -22923,26 +23393,26 @@ int sp_ecc_make_key_256(WC_RNG* rng, mp_int* priv, ecc_point* pub, void* heap)
 }
 
 #ifdef HAVE_ECC_DHE
-extern void sp_256_to_bin_bswap(sp_digit* r, byte* a);
-extern void sp_256_to_bin_movbe(sp_digit* r, byte* a);
+extern void sp_256_to_bin_bswap_4(sp_digit* r, byte* a);
+extern void sp_256_to_bin_movbe_4(sp_digit* r, byte* a);
 /* Write r as big endian to byte array.
  * Fixed length number of bytes written: 32
  *
  * r  A single precision integer.
  * a  Byte array.
  */
-static void sp_256_to_bin(sp_digit* r, byte* a)
+static void sp_256_to_bin_4(sp_digit* r, byte* a)
 {
 #ifndef NO_MOVBE_SUPPORT
     word32 cpuid_flags = cpuid_get_flags();
 
     if (IS_INTEL_MOVBE(cpuid_flags)) {
-        sp_256_to_bin_movbe(r, a);
+        sp_256_to_bin_movbe_4(r, a);
     }
     else
 #endif
     {
-        sp_256_to_bin_bswap(r, a);
+        sp_256_to_bin_bswap_4(r, a);
     }
 }
 
@@ -23003,7 +23473,7 @@ int sp_ecc_secret_gen_256(const mp_int* priv, const ecc_point* pub, byte* out,
             err = sp_256_ecc_mulmod_4(point, point, k, 1, 1, heap);
     }
     if (err == MP_OKAY) {
-        sp_256_to_bin(point->x, out);
+        sp_256_to_bin_4(point->x, out);
         *outLen = 32;
     }
 
@@ -23041,6 +23511,7 @@ extern sp_digit div_256_word_asm_4(sp_digit d1, sp_digit d0, sp_digit div);
 static WC_INLINE sp_digit div_256_word_4(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
 #if _MSC_VER >= 1920
     return _udiv128(d1, d0, div, NULL);
 #else
@@ -23058,6 +23529,7 @@ static WC_INLINE sp_digit div_256_word_4(sp_digit d1, sp_digit d0,
 static WC_INLINE sp_digit div_256_word_4(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     register sp_digit r asm("rax");
     __asm__ __volatile__ (
         "divq %3"
@@ -23111,6 +23583,8 @@ static WC_INLINE int sp_256_div_4(const sp_digit* a, const sp_digit* d, sp_digit
     word32 cpuid_flags = cpuid_get_flags();
 #endif
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
     (void)m;
 
     div = d[3];
@@ -23161,11 +23635,26 @@ static WC_INLINE int sp_256_div_4(const sp_digit* a, const sp_digit* d, sp_digit
 static WC_INLINE int sp_256_mod_4(sp_digit* r, const sp_digit* a,
         const sp_digit* m)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     return sp_256_div_4(a, m, NULL, r);
 }
 
 #endif
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
+/* Multiply two number mod the order of P256 curve. (r = a * b mod order)
+ *
+ * r  Result of the multiplication.
+ * a  First operand of the multiplication.
+ * b  Second operand of the multiplication.
+ */
+static void sp_256_mont_mul_order_4(sp_digit* r, const sp_digit* a, const sp_digit* b)
+{
+    ASSERT_SAVED_VECTOR_REGISTERS();
+    sp_256_mul_4(r, a, b);
+    sp_256_mont_reduce_order_4(r, p256_order, p256_mp_order);
+}
+
+#if defined(HAVE_ECC_SIGN) || (defined(HAVE_ECC_VERIFY) && defined(WOLFSSL_SP_SMALL))
 #ifdef WOLFSSL_SP_SMALL
 /* Order-2 for the P256 curve. */
 static const uint64_t p256_order_minus_2[4] = {
@@ -23179,18 +23668,6 @@ static const uint64_t p256_order_low[2] = {
 };
 #endif /* WOLFSSL_SP_SMALL */
 
-/* Multiply two number mod the order of P256 curve. (r = a * b mod order)
- *
- * r  Result of the multiplication.
- * a  First operand of the multiplication.
- * b  Second operand of the multiplication.
- */
-static void sp_256_mont_mul_order_4(sp_digit* r, const sp_digit* a, const sp_digit* b)
-{
-    sp_256_mul_4(r, a, b);
-    sp_256_mont_reduce_order_4(r, p256_order, p256_mp_order);
-}
-
 /* Square number mod the order of P256 curve. (r = a * a mod order)
  *
  * r  Result of the squaring.
@@ -23198,6 +23675,7 @@ static void sp_256_mont_mul_order_4(sp_digit* r, const sp_digit* a, const sp_dig
  */
 static void sp_256_mont_sqr_order_4(sp_digit* r, const sp_digit* a)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     sp_256_sqr_4(r, a);
     sp_256_mont_reduce_order_4(r, p256_order, p256_mp_order);
 }
@@ -23212,6 +23690,8 @@ static void sp_256_mont_sqr_order_4(sp_digit* r, const sp_digit* a)
 static void sp_256_mont_sqr_n_order_4(sp_digit* r, const sp_digit* a, int n)
 {
     int i;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     sp_256_mont_sqr_order_4(r, a);
     for (i=1; i<n; i++) {
@@ -23238,6 +23718,9 @@ static int sp_256_mont_inv_order_4_nb(sp_ecc_ctx_t* sp_ctx, sp_digit* r, const s
         sp_digit* t)
 {
     int err = FP_WOULDBLOCK;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
     sp_256_mont_inv_order_4_ctx* ctx = (sp_256_mont_inv_order_4_ctx*)sp_ctx;
 
     typedef char ctx_size_test[sizeof(sp_256_mont_inv_order_4_ctx) >= sizeof(*sp_ctx) ? -1 : 1];
@@ -23296,6 +23779,8 @@ static void sp_256_mont_inv_order_4(sp_digit* r, const sp_digit* a,
     sp_digit* t2 = td + 2 * 4;
     sp_digit* t3 = td + 4 * 4;
     int i;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     /* t = a^2 */
     sp_256_mont_sqr_order_4(t, a);
@@ -23369,8 +23854,10 @@ static void sp_256_mont_inv_order_4(sp_digit* r, const sp_digit* a,
 #endif /* WOLFSSL_SP_SMALL */
 }
 
+#endif /* HAVE_ECC_SIGN || (HAVE_ECC_VERIFY && WOLFSSL_SP_SMALL) */
 #ifdef HAVE_INTEL_AVX2
 extern void sp_256_mont_mul_order_avx2_4(sp_digit* r, const sp_digit* a, const sp_digit* b);
+#if defined(HAVE_ECC_SIGN) || (defined(HAVE_ECC_VERIFY) && defined(WOLFSSL_SP_SMALL))
 extern void sp_256_mont_sqr_order_avx2_4(sp_digit* r, const sp_digit* a);
 
 #ifndef WOLFSSL_SP_SMALL
@@ -23383,6 +23870,8 @@ extern void sp_256_mont_sqr_order_avx2_4(sp_digit* r, const sp_digit* a);
 static void sp_256_mont_sqr_n_order_avx2_4(sp_digit* r, const sp_digit* a, int n)
 {
     int i;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     sp_256_mont_sqr_order_avx2_4(r, a);
     for (i=1; i<n; i++) {
@@ -23409,6 +23898,9 @@ static int sp_256_mont_inv_order_avx2_4_nb(sp_ecc_ctx_t* sp_ctx, sp_digit* r, co
         sp_digit* t)
 {
     int err = FP_WOULDBLOCK;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
     sp_256_mont_inv_order_avx2_4_ctx* ctx = (sp_256_mont_inv_order_avx2_4_ctx*)sp_ctx;
 
     typedef char ctx_size_test[sizeof(sp_256_mont_inv_order_avx2_4_ctx) >= sizeof(*sp_ctx) ? -1 : 1];
@@ -23467,6 +23959,8 @@ static void sp_256_mont_inv_order_avx2_4(sp_digit* r, const sp_digit* a,
     sp_digit* t2 = td + 2 * 4;
     sp_digit* t3 = td + 4 * 4;
     int i;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     /* t = a^2 */
     sp_256_mont_sqr_order_avx2_4(t, a);
@@ -23540,6 +24034,7 @@ static void sp_256_mont_inv_order_avx2_4(sp_digit* r, const sp_digit* a,
 #endif /* WOLFSSL_SP_SMALL */
 }
 
+#endif /* HAVE_ECC_SIGN || (HAVE_ECC_VERIFY && WOLFSSL_SP_SMALL) */
 #endif /* HAVE_INTEL_AVX2 */
 #endif /* HAVE_ECC_SIGN | HAVE_ECC_VERIFY */
 #ifdef HAVE_ECC_SIGN
@@ -23564,7 +24059,7 @@ static int sp_256_calc_s_4(sp_digit* s, const sp_digit* r, sp_digit* k,
 {
     int err;
     sp_digit carry;
-    int64_t c;
+    sp_int64 c;
     sp_digit* kInv = k;
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
@@ -23699,7 +24194,7 @@ int sp_ecc_sign_256_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash, word32 hashLen, W
         break;
     case 3: /* MODORDER */
     {
-        int64_t c;
+        sp_int64 c;
         /* r = point->x mod order */
         XMEMCPY(ctx->r, ctx->point.x, sizeof(sp_digit) * 4U);
         sp_256_norm_4(ctx->r);
@@ -23748,7 +24243,7 @@ int sp_ecc_sign_256_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash, word32 hashLen, W
     case 9: /* S2 */
     {
         sp_digit carry;
-        int64_t c;
+        sp_int64 c;
         sp_256_norm_4(ctx->x);
         carry = sp_256_add_4(ctx->s, ctx->e, ctx->x);
         sp_256_cond_sub_4(ctx->s, ctx->s,
@@ -23818,7 +24313,7 @@ int sp_ecc_sign_256(const byte* hash, word32 hashLen, WC_RNG* rng,
     sp_digit* r = NULL;
     sp_digit* tmp = NULL;
     sp_digit* s = NULL;
-    int64_t c;
+    sp_int64 c;
     int err = MP_OKAY;
     int i;
 #ifdef HAVE_INTEL_AVX2
@@ -24005,16 +24500,18 @@ static int sp_256_calc_vfy_point_4(sp_point_256* p1, sp_point_256* p2,
         sp_256_mod_inv_4(s, s, p256_order);
     }
 #endif /* !WOLFSSL_SP_SMALL */
-#ifdef HAVE_INTEL_AVX2
-    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
-        sp_256_mul_avx2_4(s, s, p256_norm_order);
-    }
-    else
-#endif
     {
-        sp_256_mul_4(s, s, p256_norm_order);
+#ifdef HAVE_INTEL_AVX2
+        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
+            sp_256_mul_avx2_4(s, s, p256_norm_order);
+        }
+        else
+#endif
+        {
+            sp_256_mul_4(s, s, p256_norm_order);
+        }
+        err = sp_256_mod_4(s, s, p256_order);
     }
-    err = sp_256_mod_4(s, s, p256_order);
     if (err == MP_OKAY) {
         sp_256_norm_4(s);
 #ifdef WOLFSSL_SP_SMALL
@@ -24031,7 +24528,6 @@ static int sp_256_calc_vfy_point_4(sp_point_256* p1, sp_point_256* p2,
             sp_256_mont_mul_order_4(u1, u1, s);
             sp_256_mont_mul_order_4(u2, u2, s);
         }
-
 #else
 #ifdef HAVE_INTEL_AVX2
         if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
@@ -24044,14 +24540,16 @@ static int sp_256_calc_vfy_point_4(sp_point_256* p1, sp_point_256* p2,
             sp_256_mont_mul_order_4(u1, u1, s);
             sp_256_mont_mul_order_4(u2, u2, s);
         }
-
 #endif /* WOLFSSL_SP_SMALL */
 #ifdef HAVE_INTEL_AVX2
-        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
             err = sp_256_ecc_mulmod_base_avx2_4(p1, u1, 0, 0, heap);
+        }
         else
 #endif
+        {
             err = sp_256_ecc_mulmod_base_4(p1, u1, 0, 0, heap);
+        }
     }
     if ((err == MP_OKAY) && sp_256_iszero_4(p1->z)) {
         p1->infinity = 1;
@@ -24206,7 +24704,7 @@ int sp_ecc_verify_256_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash,
         break;
     case 12: /* RES */
     {
-        int64_t c = 0;
+        sp_int64 c = 0;
         err = MP_OKAY; /* math okay, now check result */
         *res = (int)(sp_256_cmp_4(ctx->p1.x, ctx->u1) == 0);
         if (*res == 0) {
@@ -24261,7 +24759,7 @@ int sp_ecc_verify_256(const byte* hash, word32 hashLen, const mp_int* pX,
     sp_digit* tmp = NULL;
     sp_point_256* p2 = NULL;
     sp_digit carry;
-    int64_t c = 0;
+    sp_int64 c = 0;
     int err = MP_OKAY;
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
@@ -24591,7 +25089,7 @@ int sp_ecc_proj_add_point_256(mp_int* pX, mp_int* pY, mp_int* pZ,
     sp_point_256 p[2];
 #endif
     sp_point_256* q = NULL;
-    int err;
+    int err = MP_OKAY;
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
@@ -24621,6 +25119,10 @@ int sp_ecc_proj_add_point_256(mp_int* pX, mp_int* pY, mp_int* pZ,
         sp_256_from_mp(q->x, 4, qX);
         sp_256_from_mp(q->y, 4, qY);
         sp_256_from_mp(q->z, 4, qZ);
+        p->infinity = sp_256_iszero_4(p->x) &
+                      sp_256_iszero_4(p->y);
+        q->infinity = sp_256_iszero_4(q->x) &
+                      sp_256_iszero_4(q->y);
 
 #ifdef HAVE_INTEL_AVX2
         if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
@@ -24695,6 +25197,8 @@ int sp_ecc_proj_dbl_point_256(mp_int* pX, mp_int* pY, mp_int* pZ,
         sp_256_from_mp(p->x, 4, pX);
         sp_256_from_mp(p->y, 4, pY);
         sp_256_from_mp(p->z, 4, pZ);
+        p->infinity = sp_256_iszero_4(p->x) &
+                      sp_256_iszero_4(p->y);
 
 #ifdef HAVE_INTEL_AVX2
         if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
@@ -24765,6 +25269,8 @@ int sp_ecc_map_256(mp_int* pX, mp_int* pY, mp_int* pZ)
         sp_256_from_mp(p->x, 4, pX);
         sp_256_from_mp(p->y, 4, pY);
         sp_256_from_mp(p->z, 4, pZ);
+        p->infinity = sp_256_iszero_4(p->x) &
+                      sp_256_iszero_4(p->y);
 
 #ifdef HAVE_INTEL_AVX2
         if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
@@ -24994,12 +25500,12 @@ static const sp_digit p384_mod[6] = {
     0x00000000ffffffffL,0xffffffff00000000L,0xfffffffffffffffeL,
     0xffffffffffffffffL,0xffffffffffffffffL,0xffffffffffffffffL
 };
-/* The Montogmery normalizer for modulus of the curve P384. */
+/* The Montgomery normalizer for modulus of the curve P384. */
 static const sp_digit p384_norm_mod[6] = {
     0xffffffff00000001L,0x00000000ffffffffL,0x0000000000000001L,
     0x0000000000000000L,0x0000000000000000L,0x0000000000000000L
 };
-/* The Montogmery multiplier for modulus of the curve P384. */
+/* The Montgomery multiplier for modulus of the curve P384. */
 static sp_digit p384_mp_mod = 0x0000000100000001;
 #if defined(WOLFSSL_VALIDATE_ECC_KEYGEN) || defined(HAVE_ECC_SIGN) || \
                                             defined(HAVE_ECC_VERIFY)
@@ -25015,14 +25521,14 @@ static const sp_digit p384_order2[6] = {
     0xffffffffffffffffL,0xffffffffffffffffL,0xffffffffffffffffL
 };
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
-/* The Montogmery normalizer for order of the curve P384. */
+/* The Montgomery normalizer for order of the curve P384. */
 static const sp_digit p384_norm_order[6] = {
     0x1313e695333ad68dL,0xa7e5f24db74f5885L,0x389cb27e0bc8d220L,
     0x0000000000000000L,0x0000000000000000L,0x0000000000000000L
 };
 #endif
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
-/* The Montogmery multiplier for order of the curve P384. */
+/* The Montgomery multiplier for order of the curve P384. */
 static sp_digit p384_mp_order = 0x6ed46089e88fdc45L;
 #endif
 #ifdef WOLFSSL_SP_SMALL
@@ -25064,7 +25570,7 @@ extern void sp_384_mul_6(sp_digit* r, const sp_digit* a, const sp_digit* b);
 extern void sp_384_sqr_6(sp_digit* r, const sp_digit* a);
 extern sp_digit sp_384_add_6(sp_digit* r, const sp_digit* a, const sp_digit* b);
 extern sp_digit sp_384_sub_6(sp_digit* r, const sp_digit* a, const sp_digit* b);
-/* Multiply a number by Montogmery normalizer mod modulus (prime).
+/* Multiply a number by Montgomery normalizer mod modulus (prime).
  *
  * r  The resulting Montgomery form number.
  * a  The number to convert.
@@ -25371,14 +25877,14 @@ extern void sp_384_cond_copy_6(sp_digit* r, const sp_digit* a, sp_digit m);
 extern sp_digit sp_384_cond_sub_6(sp_digit* r, const sp_digit* a, const sp_digit* b, sp_digit m);
 extern void sp_384_mont_reduce_6(sp_digit* a, const sp_digit* m, sp_digit mp);
 extern void sp_384_mont_reduce_order_6(sp_digit* a, const sp_digit* m, sp_digit mp);
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_384_mont_mul_6(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -25390,9 +25896,9 @@ static void sp_384_mont_mul_6(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_384_mont_sqr_6(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -25405,10 +25911,10 @@ static void sp_384_mont_sqr_6(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number a number of times. (r = a ^ n mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * n   Number of times to square.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_384_mont_sqr_n_6(sp_digit* r, const sp_digit* a, int n,
         const sp_digit* m, sp_digit mp)
@@ -25513,7 +26019,7 @@ static void sp_384_mont_inv_6(sp_digit* r, const sp_digit* a, sp_digit* td)
 #endif /* WOLFSSL_SP_SMALL */
 }
 
-extern int64_t sp_384_cmp_6(const sp_digit* a, const sp_digit* b);
+extern sp_int64 sp_384_cmp_6(const sp_digit* a, const sp_digit* b);
 /* Normalize the values in each word to 64.
  *
  * a  Array of sp_digit to normalize.
@@ -25531,7 +26037,7 @@ static void sp_384_map_6(sp_point_384* r, const sp_point_384* p,
 {
     sp_digit* t1 = t;
     sp_digit* t2 = t + 2*6;
-    int64_t n;
+    sp_int64 n;
 
     sp_384_mont_inv_6(t1, p->z, t + 2*6);
 
@@ -25566,14 +26072,16 @@ static void sp_384_map_6(sp_point_384* r, const sp_point_384* p,
 /* Add two Montgomery form numbers (r = a + b % m).
  *
  * r   Result of addition.
- * a   First number to add in Montogmery form.
- * b   Second number to add in Montogmery form.
+ * a   First number to add in Montgomery form.
+ * b   Second number to add in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_384_mont_add_6(sp_digit* r, const sp_digit* a, const sp_digit* b,
         const sp_digit* m)
 {
     sp_digit o;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     o = sp_384_add_6(r, a, b);
     sp_384_cond_sub_6(r, r, m, 0 - o);
@@ -25583,12 +26091,14 @@ extern sp_digit sp_384_dbl_6(sp_digit* r, const sp_digit* a);
 /* Double a Montgomery form number (r = a + a % m).
  *
  * r   Result of doubling.
- * a   Number to double in Montogmery form.
+ * a   Number to double in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_384_mont_dbl_6(sp_digit* r, const sp_digit* a, const sp_digit* m)
 {
     sp_digit o;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     o = sp_384_dbl_6(r, a);
     sp_384_cond_sub_6(r, r, m, 0 - o);
@@ -25597,12 +26107,14 @@ static void sp_384_mont_dbl_6(sp_digit* r, const sp_digit* a, const sp_digit* m)
 /* Triple a Montgomery form number (r = a + a + a % m).
  *
  * r   Result of Tripling.
- * a   Number to triple in Montogmery form.
+ * a   Number to triple in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_384_mont_tpl_6(sp_digit* r, const sp_digit* a, const sp_digit* m)
 {
     sp_digit o;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     o = sp_384_dbl_6(r, a);
     sp_384_cond_sub_6(r, r, m, 0 - o);
@@ -25614,14 +26126,16 @@ extern sp_digit sp_384_cond_add_6(sp_digit* r, const sp_digit* a, const sp_digit
 /* Subtract two Montgomery form numbers (r = a - b % m).
  *
  * r   Result of subtration.
- * a   Number to subtract from in Montogmery form.
- * b   Number to subtract with in Montogmery form.
+ * a   Number to subtract from in Montgomery form.
+ * b   Number to subtract with in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_384_mont_sub_6(sp_digit* r, const sp_digit* a, const sp_digit* b,
         const sp_digit* m)
 {
     sp_digit o;
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     o = sp_384_sub_6(r, a, b);
     sp_384_cond_add_6(r, r, m, o);
@@ -26598,14 +27112,14 @@ static int sp_384_ecc_mulmod_win_add_sub_6(sp_point_384* r, const sp_point_384* 
 extern void sp_384_mul_avx2_6(sp_digit* r, const sp_digit* a, const sp_digit* b);
 #define sp_384_mont_reduce_avx2_6         sp_384_mont_reduce_6
 extern void sp_384_mont_reduce_order_avx2_6(sp_digit* a, const sp_digit* m, sp_digit mp);
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_384_mont_mul_avx2_6(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -26620,9 +27134,9 @@ extern void sp_384_sqr_avx2_6(sp_digit* r, const sp_digit* a);
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_384_mont_sqr_avx2_6(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -26636,10 +27150,10 @@ static void sp_384_mont_sqr_avx2_6(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number a number of times. (r = a ^ n mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * n   Number of times to square.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_384_mont_sqr_n_avx2_6(sp_digit* r, const sp_digit* a, int n,
         const sp_digit* m, sp_digit mp)
@@ -26749,7 +27263,7 @@ static void sp_384_map_avx2_6(sp_point_384* r, const sp_point_384* p,
 {
     sp_digit* t1 = t;
     sp_digit* t2 = t + 2*6;
-    int64_t n;
+    sp_int64 n;
 
     sp_384_mont_inv_avx2_6(t1, p->z, t + 2*6);
 
@@ -28573,7 +29087,7 @@ int sp_ecc_mulmod_384(const mp_int* km, const ecc_point* gm, ecc_point* r,
  * km      Scalar to multiply by.
  * p       Point to multiply.
  * am      Point to add to scalar mulitply result.
- * inMont  Point to add is in montogmery form.
+ * inMont  Point to add is in montgomery form.
  * r       Resulting point.
  * map     Indicates whether to convert result to affine.
  * heap    Heap to use for allocation.
@@ -47213,7 +47727,7 @@ int sp_ecc_mulmod_base_384(const mp_int* km, ecc_point* r, int map, void* heap)
  *
  * km      Scalar to multiply by.
  * am      Point to add to scalar mulitply result.
- * inMont  Point to add is in montogmery form.
+ * inMont  Point to add is in montgomery form.
  * r       Resulting point.
  * map     Indicates whether to convert result to affine.
  * heap    Heap to use for allocation.
@@ -47359,7 +47873,7 @@ static int sp_384_ecc_gen_k_6(WC_RNG* rng, sp_digit* k)
         err = wc_RNG_GenerateBlock(rng, buf, sizeof(buf));
         if (err == 0) {
             sp_384_from_bin(k, 6, buf, (int)sizeof(buf));
-            if (sp_384_cmp_6(k, p384_order2) < 0) {
+            if (sp_384_cmp_6(k, p384_order2) <= 0) {
                 sp_384_add_one_6(k);
                 break;
             }
@@ -47473,26 +47987,26 @@ int sp_ecc_make_key_384(WC_RNG* rng, mp_int* priv, ecc_point* pub, void* heap)
 }
 
 #ifdef HAVE_ECC_DHE
-extern void sp_384_to_bin_bswap(sp_digit* r, byte* a);
-extern void sp_384_to_bin_movbe(sp_digit* r, byte* a);
+extern void sp_384_to_bin_bswap_6(sp_digit* r, byte* a);
+extern void sp_384_to_bin_movbe_6(sp_digit* r, byte* a);
 /* Write r as big endian to byte array.
  * Fixed length number of bytes written: 48
  *
  * r  A single precision integer.
  * a  Byte array.
  */
-static void sp_384_to_bin(sp_digit* r, byte* a)
+static void sp_384_to_bin_6(sp_digit* r, byte* a)
 {
 #ifndef NO_MOVBE_SUPPORT
     word32 cpuid_flags = cpuid_get_flags();
 
     if (IS_INTEL_MOVBE(cpuid_flags)) {
-        sp_384_to_bin_movbe(r, a);
+        sp_384_to_bin_movbe_6(r, a);
     }
     else
 #endif
     {
-        sp_384_to_bin_bswap(r, a);
+        sp_384_to_bin_bswap_6(r, a);
     }
 }
 
@@ -47553,7 +48067,7 @@ int sp_ecc_secret_gen_384(const mp_int* priv, const ecc_point* pub, byte* out,
             err = sp_384_ecc_mulmod_6(point, point, k, 1, 1, heap);
     }
     if (err == MP_OKAY) {
-        sp_384_to_bin(point->x, out);
+        sp_384_to_bin_6(point->x, out);
         *outLen = 48;
     }
 
@@ -47590,6 +48104,7 @@ extern sp_digit div_384_word_asm_6(sp_digit d1, sp_digit d0, sp_digit div);
 static WC_INLINE sp_digit div_384_word_6(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
 #if _MSC_VER >= 1920
     return _udiv128(d1, d0, div, NULL);
 #else
@@ -47607,6 +48122,7 @@ static WC_INLINE sp_digit div_384_word_6(sp_digit d1, sp_digit d0,
 static WC_INLINE sp_digit div_384_word_6(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     register sp_digit r asm("rax");
     __asm__ __volatile__ (
         "divq %3"
@@ -47662,6 +48178,8 @@ static WC_INLINE int sp_384_div_6(const sp_digit* a, const sp_digit* d, sp_digit
     word32 cpuid_flags = cpuid_get_flags();
 #endif
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
     (void)m;
 
     div = d[5];
@@ -47712,11 +48230,25 @@ static WC_INLINE int sp_384_div_6(const sp_digit* a, const sp_digit* d, sp_digit
 static WC_INLINE int sp_384_mod_6(sp_digit* r, const sp_digit* a,
         const sp_digit* m)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     return sp_384_div_6(a, m, NULL, r);
 }
 
 #endif
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
+/* Multiply two number mod the order of P384 curve. (r = a * b mod order)
+ *
+ * r  Result of the multiplication.
+ * a  First operand of the multiplication.
+ * b  Second operand of the multiplication.
+ */
+static void sp_384_mont_mul_order_6(sp_digit* r, const sp_digit* a, const sp_digit* b)
+{
+    sp_384_mul_6(r, a, b);
+    sp_384_mont_reduce_order_6(r, p384_order, p384_mp_order);
+}
+
+#if defined(HAVE_ECC_SIGN) || (defined(HAVE_ECC_VERIFY) && defined(WOLFSSL_SP_SMALL))
 #ifdef WOLFSSL_SP_SMALL
 /* Order-2 for the P384 curve. */
 static const uint64_t p384_order_minus_2[6] = {
@@ -47729,18 +48261,6 @@ static const uint64_t p384_order_low[3] = {
     0xecec196accc52971U,0x581a0db248b0a77aU,0xc7634d81f4372ddfU
 };
 #endif /* WOLFSSL_SP_SMALL */
-
-/* Multiply two number mod the order of P384 curve. (r = a * b mod order)
- *
- * r  Result of the multiplication.
- * a  First operand of the multiplication.
- * b  Second operand of the multiplication.
- */
-static void sp_384_mont_mul_order_6(sp_digit* r, const sp_digit* a, const sp_digit* b)
-{
-    sp_384_mul_6(r, a, b);
-    sp_384_mont_reduce_order_6(r, p384_order, p384_mp_order);
-}
 
 /* Square number mod the order of P384 curve. (r = a * a mod order)
  *
@@ -47883,6 +48403,7 @@ static void sp_384_mont_inv_order_6(sp_digit* r, const sp_digit* a,
 #endif /* WOLFSSL_SP_SMALL */
 }
 
+#endif /* HAVE_ECC_SIGN || (HAVE_ECC_VERIFY && WOLFSSL_SP_SMALL) */
 #ifdef HAVE_INTEL_AVX2
 /* Multiply two number mod the order of P384 curve. (r = a * b mod order)
  *
@@ -47896,6 +48417,7 @@ static void sp_384_mont_mul_order_avx2_6(sp_digit* r, const sp_digit* a, const s
     sp_384_mont_reduce_order_avx2_6(r, p384_order, p384_mp_order);
 }
 
+#if defined(HAVE_ECC_SIGN) || (defined(HAVE_ECC_VERIFY) && defined(WOLFSSL_SP_SMALL))
 /* Square number mod the order of P384 curve. (r = a * a mod order)
  *
  * r  Result of the squaring.
@@ -48037,6 +48559,7 @@ static void sp_384_mont_inv_order_avx2_6(sp_digit* r, const sp_digit* a,
 #endif /* WOLFSSL_SP_SMALL */
 }
 
+#endif /* HAVE_ECC_SIGN || (HAVE_ECC_VERIFY && WOLFSSL_SP_SMALL) */
 #endif /* HAVE_INTEL_AVX2 */
 #endif /* HAVE_ECC_SIGN | HAVE_ECC_VERIFY */
 #ifdef HAVE_ECC_SIGN
@@ -48061,7 +48584,7 @@ static int sp_384_calc_s_6(sp_digit* s, const sp_digit* r, sp_digit* k,
 {
     int err;
     sp_digit carry;
-    int64_t c;
+    sp_int64 c;
     sp_digit* kInv = k;
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
@@ -48196,7 +48719,7 @@ int sp_ecc_sign_384_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash, word32 hashLen, W
         break;
     case 3: /* MODORDER */
     {
-        int64_t c;
+        sp_int64 c;
         /* r = point->x mod order */
         XMEMCPY(ctx->r, ctx->point.x, sizeof(sp_digit) * 6U);
         sp_384_norm_6(ctx->r);
@@ -48245,7 +48768,7 @@ int sp_ecc_sign_384_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash, word32 hashLen, W
     case 9: /* S2 */
     {
         sp_digit carry;
-        int64_t c;
+        sp_int64 c;
         sp_384_norm_6(ctx->x);
         carry = sp_384_add_6(ctx->s, ctx->e, ctx->x);
         sp_384_cond_sub_6(ctx->s, ctx->s,
@@ -48315,7 +48838,7 @@ int sp_ecc_sign_384(const byte* hash, word32 hashLen, WC_RNG* rng,
     sp_digit* r = NULL;
     sp_digit* tmp = NULL;
     sp_digit* s = NULL;
-    int64_t c;
+    sp_int64 c;
     int err = MP_OKAY;
     int i;
 #ifdef HAVE_INTEL_AVX2
@@ -48575,20 +49098,21 @@ static int sp_384_calc_vfy_point_6(sp_point_384* p1, sp_point_384* p2,
 #endif
 
 #ifndef WOLFSSL_SP_SMALL
-    {
-        sp_384_mod_inv_6(s, s, p384_order);
-    }
+    err = sp_384_mod_inv_6(s, s, p384_order);
+    if (err == MP_OKAY)
 #endif /* !WOLFSSL_SP_SMALL */
-#ifdef HAVE_INTEL_AVX2
-    if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
-        sp_384_mul_avx2_6(s, s, p384_norm_order);
-    }
-    else
-#endif
     {
-        sp_384_mul_6(s, s, p384_norm_order);
+#ifdef HAVE_INTEL_AVX2
+        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
+            sp_384_mul_avx2_6(s, s, p384_norm_order);
+        }
+        else
+#endif
+        {
+            sp_384_mul_6(s, s, p384_norm_order);
+        }
+        err = sp_384_mod_6(s, s, p384_order);
     }
-    err = sp_384_mod_6(s, s, p384_order);
     if (err == MP_OKAY) {
         sp_384_norm_6(s);
 #ifdef WOLFSSL_SP_SMALL
@@ -48605,7 +49129,6 @@ static int sp_384_calc_vfy_point_6(sp_point_384* p1, sp_point_384* p2,
             sp_384_mont_mul_order_6(u1, u1, s);
             sp_384_mont_mul_order_6(u2, u2, s);
         }
-
 #else
 #ifdef HAVE_INTEL_AVX2
         if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
@@ -48618,14 +49141,16 @@ static int sp_384_calc_vfy_point_6(sp_point_384* p1, sp_point_384* p2,
             sp_384_mont_mul_order_6(u1, u1, s);
             sp_384_mont_mul_order_6(u2, u2, s);
         }
-
 #endif /* WOLFSSL_SP_SMALL */
 #ifdef HAVE_INTEL_AVX2
-        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
+        if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
             err = sp_384_ecc_mulmod_base_avx2_6(p1, u1, 0, 0, heap);
+        }
         else
 #endif
+        {
             err = sp_384_ecc_mulmod_base_6(p1, u1, 0, 0, heap);
+        }
     }
     if ((err == MP_OKAY) && sp_384_iszero_6(p1->z)) {
         p1->infinity = 1;
@@ -48780,7 +49305,7 @@ int sp_ecc_verify_384_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash,
         break;
     case 12: /* RES */
     {
-        int64_t c = 0;
+        sp_int64 c = 0;
         err = MP_OKAY; /* math okay, now check result */
         *res = (int)(sp_384_cmp_6(ctx->p1.x, ctx->u1) == 0);
         if (*res == 0) {
@@ -48835,7 +49360,7 @@ int sp_ecc_verify_384(const byte* hash, word32 hashLen, const mp_int* pX,
     sp_digit* tmp = NULL;
     sp_point_384* p2 = NULL;
     sp_digit carry;
-    int64_t c = 0;
+    sp_int64 c = 0;
     int err = MP_OKAY;
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
@@ -49165,7 +49690,7 @@ int sp_ecc_proj_add_point_384(mp_int* pX, mp_int* pY, mp_int* pZ,
     sp_point_384 p[2];
 #endif
     sp_point_384* q = NULL;
-    int err;
+    int err = MP_OKAY;
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
@@ -49195,6 +49720,10 @@ int sp_ecc_proj_add_point_384(mp_int* pX, mp_int* pY, mp_int* pZ,
         sp_384_from_mp(q->x, 6, qX);
         sp_384_from_mp(q->y, 6, qY);
         sp_384_from_mp(q->z, 6, qZ);
+        p->infinity = sp_384_iszero_6(p->x) &
+                      sp_384_iszero_6(p->y);
+        q->infinity = sp_384_iszero_6(q->x) &
+                      sp_384_iszero_6(q->y);
 
 #ifdef HAVE_INTEL_AVX2
         if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
@@ -49269,6 +49798,8 @@ int sp_ecc_proj_dbl_point_384(mp_int* pX, mp_int* pY, mp_int* pZ,
         sp_384_from_mp(p->x, 6, pX);
         sp_384_from_mp(p->y, 6, pY);
         sp_384_from_mp(p->z, 6, pZ);
+        p->infinity = sp_384_iszero_6(p->x) &
+                      sp_384_iszero_6(p->y);
 
 #ifdef HAVE_INTEL_AVX2
         if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
@@ -49339,6 +49870,8 @@ int sp_ecc_map_384(mp_int* pX, mp_int* pY, mp_int* pZ)
         sp_384_from_mp(p->x, 6, pX);
         sp_384_from_mp(p->y, 6, pY);
         sp_384_from_mp(p->z, 6, pZ);
+        p->infinity = sp_384_iszero_6(p->x) &
+                      sp_384_iszero_6(p->y);
 
 #ifdef HAVE_INTEL_AVX2
         if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags))
@@ -49631,7 +50164,7 @@ static const sp_digit p1024_mod[16] = {
     0xbe9ae358b3e01a2eL,0x416c0ce19cb48261L,0x65c61198dad0657aL,
     0x997abb1f0a563fdaL
 };
-/* The Montogmery normalizer for modulus of the curve P1024. */
+/* The Montgomery normalizer for modulus of the curve P1024. */
 static const sp_digit p1024_norm_mod[16] = {
     0x99927f850157a015L,0x7f3a20ef53853178L,0x031c17dc767a824fL,
     0x606b2950a968e0e0L,0x5830c3ade3c3f655L,0x49500b57ce7ad57dL,
@@ -49640,7 +50173,7 @@ static const sp_digit p1024_norm_mod[16] = {
     0x41651ca74c1fe5d1L,0xbe93f31e634b7d9eL,0x9a39ee67252f9a85L,
     0x668544e0f5a9c025L
 };
-/* The Montogmery multiplier for modulus of the curve P1024. */
+/* The Montgomery multiplier for modulus of the curve P1024. */
 static sp_digit p1024_mp_mod = 0x290420077c8f2f3d;
 #if defined(WOLFSSL_SP_SMALL) || defined(HAVE_ECC_CHECK_KEY)
 /* The order of the curve P1024. */
@@ -49718,6 +50251,7 @@ extern sp_digit div_1024_word_asm_16(sp_digit d1, sp_digit d0, sp_digit div);
 static WC_INLINE sp_digit div_1024_word_16(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
 #if _MSC_VER >= 1920
     return _udiv128(d1, d0, div, NULL);
 #else
@@ -49735,6 +50269,7 @@ static WC_INLINE sp_digit div_1024_word_16(sp_digit d1, sp_digit d0,
 static WC_INLINE sp_digit div_1024_word_16(sp_digit d1, sp_digit d0,
         sp_digit div)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     register sp_digit r asm("rax");
     __asm__ __volatile__ (
         "divq %3"
@@ -49775,7 +50310,7 @@ static void sp_1024_mask_16(sp_digit* r, const sp_digit* a, sp_digit m)
 #endif
 }
 
-extern int64_t sp_1024_cmp_16(const sp_digit* a, const sp_digit* b);
+extern sp_int64 sp_1024_cmp_16(const sp_digit* a, const sp_digit* b);
 /* Divide d in a and put remainder into r (m*d + r = a)
  * m is not calculated as it is not needed at this time.
  *
@@ -49796,6 +50331,8 @@ static WC_INLINE int sp_1024_div_16(const sp_digit* a, const sp_digit* d, sp_dig
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
     (void)m;
 
@@ -49847,10 +50384,11 @@ static WC_INLINE int sp_1024_div_16(const sp_digit* a, const sp_digit* d, sp_dig
 static WC_INLINE int sp_1024_mod_16(sp_digit* r, const sp_digit* a,
         const sp_digit* m)
 {
+    ASSERT_SAVED_VECTOR_REGISTERS();
     return sp_1024_div_16(a, m, NULL, r);
 }
 
-/* Multiply a number by Montogmery normalizer mod modulus (prime).
+/* Multiply a number by Montgomery normalizer mod modulus (prime).
  *
  * r  The resulting Montgomery form number.
  * a  The number to convert.
@@ -49864,7 +50402,7 @@ static int sp_1024_mod_mul_norm_16(sp_digit* r, const sp_digit* a, const sp_digi
 }
 
 #ifdef HAVE_INTEL_AVX2
-/* Multiply a number by Montogmery normalizer mod modulus (prime).
+/* Multiply a number by Montgomery normalizer mod modulus (prime).
  *
  * r  The resulting Montgomery form number.
  * a  The number to convert.
@@ -50133,14 +50671,14 @@ static int sp_1024_point_to_ecc_point_16(const sp_point_1024* p, ecc_point* pm)
 
 extern void sp_1024_cond_copy_16(sp_digit* r, const sp_digit* a, sp_digit m);
 extern void sp_1024_mont_reduce_16(sp_digit* a, const sp_digit* m, sp_digit mp);
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_1024_mont_mul_16(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -50152,9 +50690,9 @@ static void sp_1024_mont_mul_16(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_1024_mont_sqr_16(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -50238,7 +50776,7 @@ static void sp_1024_map_16(sp_point_1024* r, const sp_point_1024* p,
 {
     sp_digit* t1 = t;
     sp_digit* t2 = t + 2*16;
-    int64_t n;
+    sp_int64 n;
 
     sp_1024_mont_inv_16(t1, p->z, t + 2*16);
 
@@ -51257,14 +51795,14 @@ static int sp_1024_ecc_mulmod_win_add_sub_16(sp_point_1024* r, const sp_point_10
 #ifdef HAVE_INTEL_AVX2
 #ifdef HAVE_INTEL_AVX2
 extern void sp_1024_mont_reduce_avx2_16(sp_digit* a, const sp_digit* m, sp_digit mp);
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_1024_mont_mul_avx2_16(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -51278,9 +51816,9 @@ static void sp_1024_mont_mul_avx2_16(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_1024_mont_sqr_avx2_16(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -51337,7 +51875,7 @@ static void sp_1024_map_avx2_16(sp_point_1024* r, const sp_point_1024* p,
 {
     sp_digit* t1 = t;
     sp_digit* t2 = t + 2*16;
-    int64_t n;
+    sp_int64 n;
 
     sp_1024_mont_inv_avx2_16(t1, p->z, t + 2*16);
 
@@ -56561,7 +57099,7 @@ int sp_ecc_mulmod_base_1024(const mp_int* km, ecc_point* r, int map, void* heap)
  *
  * km      Scalar to multiply by.
  * am      Point to add to scalar mulitply result.
- * inMont  Point to add is in montogmery form.
+ * inMont  Point to add is in montgomery form.
  * r       Resulting point.
  * map     Indicates whether to convert result to affine.
  * heap    Heap to use for allocation.
@@ -58890,6 +59428,8 @@ int sp_ModExp_Fp_star_1024(const mp_int* base, mp_int* exp, mp_int* res)
     word32 cpuid_flags = cpuid_get_flags();
 #endif
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
 #ifdef HAVE_INTEL_AVX2
     if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
         err = sp_ModExp_Fp_star_avx2_1024(base, exp, res);
@@ -60498,6 +61038,8 @@ int sp_Pairing_1024(const ecc_point* pm, const ecc_point* qm, mp_int* res)
     word32 cpuid_flags = cpuid_get_flags();
 #endif
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
 #ifdef HAVE_INTEL_AVX2
     if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
         err = sp_Pairing_avx2_1024(pm, qm, res);
@@ -61629,6 +62171,8 @@ int sp_Pairing_gen_precomp_1024(const ecc_point* pm, byte* table, word32* len)
     word32 cpuid_flags = cpuid_get_flags();
 #endif
 
+    ASSERT_SAVED_VECTOR_REGISTERS();
+
 #ifdef HAVE_INTEL_AVX2
     if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
         err = sp_Pairing_gen_precomp_avx2_1024(pm, table, len);
@@ -61662,6 +62206,8 @@ int sp_Pairing_precomp_1024(const ecc_point* pm, const ecc_point* qm, mp_int* re
 #ifdef HAVE_INTEL_AVX2
     word32 cpuid_flags = cpuid_get_flags();
 #endif
+
+    ASSERT_SAVED_VECTOR_REGISTERS();
 
 #ifdef HAVE_INTEL_AVX2
     if (IS_INTEL_BMI2(cpuid_flags) && IS_INTEL_ADX(cpuid_flags)) {
@@ -61729,7 +62275,7 @@ static int sp_1024_ecc_is_point_16(const sp_point_1024* point,
     sp_digit t1[16 * 4];
 #endif
     sp_digit* t2 = NULL;
-    int64_t n;
+    sp_int64 n;
     int err = MP_OKAY;
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)

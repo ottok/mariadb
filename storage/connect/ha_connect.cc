@@ -5720,10 +5720,10 @@ static int connect_assisted_discovery(handlerton *, THD* thd,
 		if (ttp == TAB_UNDEF && !topt->http) {
 			topt->type= (src) ? "MYSQL" : (tab) ? "PROXY" : "DOS";
 			ttp= GetTypeID(topt->type);
-			sprintf(g->Message, "No table_type. Was set to %s", topt->type);
+			snprintf(g->Message, sizeof(g->Message), "No table_type. Was set to %s", topt->type);
 			push_warning(thd, Sql_condition::WARN_LEVEL_NOTE, 0, g->Message);
 		} else if (ttp == TAB_NIY) {
-			sprintf(g->Message, "Unsupported table type %s", topt->type);
+			snprintf(g->Message, sizeof(g->Message), "Unsupported table type %s", topt->type);
 			rc= HA_ERR_INTERNAL_ERROR;
 			goto err;
 #if defined(REST_SUPPORT)
@@ -7205,7 +7205,8 @@ ha_connect::check_if_supported_inplace_alter(TABLE *altered_table,
     ALTER_ADD_UNIQUE_INDEX |
     ALTER_DROP_UNIQUE_INDEX |
     ALTER_ADD_PK_INDEX |
-    ALTER_DROP_PK_INDEX;
+    ALTER_DROP_PK_INDEX |
+    ALTER_INDEX_ORDER;
 
   alter_table_operations inplace_offline_operations=
     ALTER_COLUMN_TYPE_CHANGE_BY_ENGINE |

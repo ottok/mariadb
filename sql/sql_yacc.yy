@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2015, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2020, MariaDB
+   Copyright (c) 2010, 2021, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -4643,7 +4643,12 @@ create_like:
 
 opt_create_select:
           /* empty */ {}
-        | opt_duplicate opt_as create_select_query_expression opt_versioning_option
+        | opt_duplicate opt_as create_select_query_expression
+        opt_versioning_option
+          {
+            if (Lex->check_cte_dependencies_and_resolve_references())
+              MYSQL_YYABORT;
+          }
         ;
 
 create_select_query_expression:
@@ -6027,6 +6032,7 @@ field_type_or_serial:
             Lex->last_field->set_handler(&type_handler_ulonglong);
             Lex->last_field->flags|= AUTO_INCREMENT_FLAG | NOT_NULL_FLAG
                                      | UNSIGNED_FLAG | UNIQUE_KEY_FLAG;
+            Lex->alter_info.flags|= ALTER_ADD_INDEX;
           }
           opt_serial_attribute
         ;
@@ -6425,7 +6431,7 @@ field_type_lob:
         | JSON_SYM opt_compressed
           {
             Lex->charset= &my_charset_utf8mb4_bin;
-            $$.set(&type_handler_json_longtext);
+            $$.set(&type_handler_long_blob_json);
           }
         ;
 
@@ -13229,7 +13235,10 @@ delete:
             lex->first_select_lex()->order_list.empty();
           }
           delete_part2
-          { }
+          {
+            if (Lex->check_cte_dependencies_and_resolve_references())
+              MYSQL_YYABORT;
+          }
           ;
 
 opt_delete_system_time:

@@ -26,15 +26,16 @@
 
 #include <wolfssl/openssl/ssl.h>
 
-#define ASN1_STRING_new      wolfSSL_ASN1_STRING_new
-#define ASN1_STRING_type_new wolfSSL_ASN1_STRING_type_new
-#define ASN1_STRING_type     wolfSSL_ASN1_STRING_type
-#define ASN1_STRING_set      wolfSSL_ASN1_STRING_set
-#define ASN1_STRING_free     wolfSSL_ASN1_STRING_free
+#define ASN1_STRING_new       wolfSSL_ASN1_STRING_new
+#define ASN1_STRING_type_new  wolfSSL_ASN1_STRING_type_new
+#define ASN1_STRING_type      wolfSSL_ASN1_STRING_type
+#define ASN1_STRING_set       wolfSSL_ASN1_STRING_set
+#define ASN1_OCTET_STRING_set wolfSSL_ASN1_STRING_set
+#define ASN1_STRING_free      wolfSSL_ASN1_STRING_free
 
-#define ASN1_get_object      wolfSSL_ASN1_get_object
-#define d2i_ASN1_OBJECT      wolfSSL_d2i_ASN1_OBJECT
-#define c2i_ASN1_OBJECT      wolfSSL_c2i_ASN1_OBJECT
+#define ASN1_get_object       wolfSSL_ASN1_get_object
+#define d2i_ASN1_OBJECT       wolfSSL_d2i_ASN1_OBJECT
+#define c2i_ASN1_OBJECT       wolfSSL_c2i_ASN1_OBJECT
 
 #define V_ASN1_INTEGER                   0x02
 #define V_ASN1_OCTET_STRING              0x04 /* tag for ASN1_OCTET_STRING */
@@ -71,6 +72,7 @@
 #define ASN1_TIME_set                   wolfSSL_ASN1_TIME_set
 
 #define V_ASN1_EOC                      0
+#define V_ASN1_NULL                     5
 #define V_ASN1_OBJECT                   6
 #define V_ASN1_UTF8STRING               12
 #define V_ASN1_SEQUENCE                 16
@@ -91,6 +93,17 @@
 #define ASN1_STRING_FLAG_CONT            0x020
 #define ASN1_STRING_FLAG_MSTRING         0x040
 #define ASN1_STRING_FLAG_EMBED           0x080
+
+/* X.509 PKI size limits from RFC2459 (appendix A) */
+/* internally our limit is CTC_NAME_SIZE (64) - overriden with WC_CTC_NAME_SIZE */
+#define ub_name                    CTC_NAME_SIZE /* 32768 */
+#define ub_common_name             CTC_NAME_SIZE /* 64 */
+#define ub_locality_name           CTC_NAME_SIZE /* 128 */
+#define ub_state_name              CTC_NAME_SIZE /* 128 */
+#define ub_organization_name       CTC_NAME_SIZE /* 64 */
+#define ub_organization_unit_name  CTC_NAME_SIZE /* 64 */
+#define ub_title                   CTC_NAME_SIZE /* 64 */
+#define ub_email_address           CTC_NAME_SIZE /* 128 */
 
 
 WOLFSSL_API WOLFSSL_ASN1_INTEGER *wolfSSL_BN_to_ASN1_INTEGER(

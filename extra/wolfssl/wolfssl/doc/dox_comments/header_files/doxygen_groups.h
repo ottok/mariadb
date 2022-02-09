@@ -6,6 +6,7 @@
     \defgroup Camellia Algorithms - Camellia
     \defgroup ChaCha Algorithms - ChaCha
     \defgroup ChaCha20Poly1305 Algorithms - ChaCha20_Poly1305
+    \defgroup Crypto Callbacks - CryptoCb
     \defgroup Curve25519 Algorithms - Curve25519
     \defgroup Curve448 Algorithms - Curve448
     \defgroup DSA Algorithms - DSA
@@ -213,6 +214,21 @@
     \defgroup CertManager CertManager API
     \defgroup Compression Compression
     \defgroup Error Error Reporting
+    \defgroup IoTSafe IoT-Safe Module
+    IoT-Safe (IoT-SIM Applet For Secure End-2-End Communication) is a technology that leverage the SIM as robust,
+    scalable and standardized hardware Root of Trust to protect data communication.
+
+    IoT-Safe SSL sessions use the SIM as Hardware Security Module, offloading all the crypto public
+    key operations and reducing the attack surface by restricting access to certificate and keys
+    to the SIM.
+
+    IoT-Safe support can be enabled on an existing WOLFSSL_CTX contex, using wolfSSL_CTX_iotsafe_enable().\n
+    Session created within the context can set the parameters for IoT-Safe key and files usage, and enable
+    the public keys callback, with wolfSSL_iotsafe_on().
+
+    If compiled in, the module supports IoT-Safe random number generator as source of entropy for wolfCrypt.
+
+
     \defgroup Keys Key and Cert Conversion
     \defgroup Logging Logging
     \defgroup Math Math API

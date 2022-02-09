@@ -70,9 +70,17 @@ block cipher mechanism that uses n-bit binary string parameter key with 128-bits
 #include "xsecure_aes.h"
 #endif
 
+#ifdef WOLFSSL_SE050
+    #include <wolfssl/wolfcrypt/port/nxp/se050_port.h>
+#endif
+
 #if defined(WOLFSSL_AFALG) || defined(WOLFSSL_AFALG_XILINX_AES)
 /* included for struct msghdr */
 #include <wolfssl/wolfcrypt/port/af_alg/wc_afalg.h>
+#endif
+
+#if defined(WOLFSSL_KCAPI_AES)
+#include <wolfssl/wolfcrypt/port/kcapi/wc_kcapi.h>
 #endif
 
 #if defined(WOLFSSL_DEVCRYPTO_AES) || defined(WOLFSSL_DEVCRYPTO_CBC)
@@ -131,7 +139,7 @@ enum {
     KEYWRAP_BLOCK_SIZE  = 8,
 
     GCM_NONCE_MAX_SZ = 16, /* wolfCrypt's maximum nonce size allowed. */
-    GCM_NONCE_MID_SZ = 12, /* The usual default nonce size for AES-GCM. */
+    GCM_NONCE_MID_SZ = 12, /* The default nonce size for AES-GCM. */
     GCM_NONCE_MIN_SZ = 8,  /* wolfCrypt's minimum nonce size allowed. */
     CCM_NONCE_MIN_SZ = 7,
     CCM_NONCE_MAX_SZ = 13,
@@ -172,6 +180,12 @@ struct Aes {
 #ifdef OPENSSL_EXTRA
     word32 aadH[4]; /* additional authenticated data GHASH */
     word32 aadLen;  /* additional authenticated data len */
+#endif
+
+#ifdef WOLFSSL_SE050
+    sss_symmetric_t aes_ctx; /* used as the function context */
+    int ctxInitDone;
+    int keyId;
 #endif
 
 #ifdef GCM_TABLE
@@ -224,9 +238,14 @@ struct Aes {
                   GCM_NONCE_MID_SZ)];
 #endif
 #endif
+#if defined(WOLFSSL_KCAPI_AES)
+    struct kcapi_handle* handle;
+    int                  init;
+#endif
 #if defined(WOLF_CRYPTO_CB) || (defined(WOLFSSL_DEVCRYPTO) && \
     (defined(WOLFSSL_DEVCRYPTO_AES) || defined(WOLFSSL_DEVCRYPTO_CBC))) || \
-    (defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_AES))
+    (defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_AES)) || \
+    defined(WOLFSSL_KCAPI_AES)
     word32 devKey[AES_MAX_KEY_SIZE/WOLFSSL_BIT_SIZE/sizeof(word32)]; /* raw key */
 #ifdef HAVE_CAVIUM_OCTEON_SYNC
     int    keySet;
@@ -242,6 +261,9 @@ struct Aes {
 #if defined(WOLFSSL_RENESAS_TSIP_TLS) && \
     defined(WOLFSSL_RENESAS_TSIP_TLS_AES_CRYPT)
     TSIP_AES_CTX ctx;
+#endif
+#if defined(WOLFSSL_RENESAS_SCEPROTECT)
+    SCE_AES_CTX ctx;
 #endif
 #if defined(WOLFSSL_IMXRT_DCP)
     dcp_handle_t handle;
@@ -351,8 +373,13 @@ WOLFSSL_API int wc_AesEcbDecrypt(Aes* aes, byte* out,
 #endif
 /* AES-DIRECT */
 #if defined(WOLFSSL_AES_DIRECT)
+#ifdef WOLFSSL_LINUXKM
+ WOLFSSL_API __must_check int wc_AesEncryptDirect(Aes* aes, byte* out, const byte* in);
+ WOLFSSL_API __must_check int wc_AesDecryptDirect(Aes* aes, byte* out, const byte* in);
+#else
  WOLFSSL_API void wc_AesEncryptDirect(Aes* aes, byte* out, const byte* in);
  WOLFSSL_API void wc_AesDecryptDirect(Aes* aes, byte* out, const byte* in);
+#endif
  WOLFSSL_API int  wc_AesSetKeyDirect(Aes* aes, const byte* key, word32 len,
                                 const byte* iv, int dir);
 #endif

@@ -221,22 +221,27 @@
    typedef unsigned int    fp_digit;
    #define SIZEOF_FP_DIGIT 2
    typedef unsigned long   fp_word;
+   typedef   signed long   fp_sword;
 #elif defined(FP_64BIT)
    /* for GCC only on supported platforms */
    typedef unsigned long long fp_digit;   /* 64bit, 128 uses mode(TI) below */
    #define SIZEOF_FP_DIGIT 8
-   typedef unsigned long      fp_word __attribute__ ((mode(TI)));
+   typedef unsigned long      fp_word  __attribute__ ((mode(TI)));
+   typedef   signed long      fp_sword __attribute__ ((mode(TI)));
 #else
 
    #ifndef NO_TFM_64BIT
       #if defined(_MSC_VER) || defined(__BORLANDC__)
          typedef unsigned __int64   ulong64;
+         typedef   signed __int64    long64;
       #else
          typedef unsigned long long ulong64;
+         typedef   signed long long  long64;
       #endif
       typedef unsigned int       fp_digit;
       #define SIZEOF_FP_DIGIT 4
       typedef ulong64            fp_word;
+      typedef long64             fp_sword;
       #define FP_32BIT
    #else
       /* some procs like coldfire prefer not to place multiply into 64bit type
@@ -244,6 +249,7 @@
       typedef unsigned short     fp_digit;
       #define SIZEOF_FP_DIGIT 2
       typedef unsigned int       fp_word;
+      typedef   signed int       fp_sword;
    #endif
 #endif
 
@@ -296,7 +302,7 @@
 #define FP_OKAY      0
 #define FP_VAL      -1
 #define FP_MEM      -2
-#define FP_NOT_INF	-3
+#define FP_NOT_INF  -3
 #define FP_WOULDBLOCK -4
 
 /* equalities */
@@ -420,7 +426,8 @@ typedef fp_int   mp_int;
 /* initialize [or zero] an fp int */
 void fp_init(fp_int *a);
 MP_API void fp_zero(fp_int *a);
-MP_API void fp_clear(fp_int *a); /* uses ForceZero to clear sensitive memory */
+MP_API void fp_clear(fp_int *a);
+/* uses ForceZero to clear sensitive memory */
 MP_API void fp_forcezero (fp_int * a);
 MP_API void fp_free(fp_int* a);
 

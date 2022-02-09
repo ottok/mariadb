@@ -37,7 +37,7 @@
 #endif /* HAVE_FIPS_VERSION >= 2 */
 
 #if defined(HAVE_FIPS) && \
-	(!defined(HAVE_FIPS_VERSION) || (HAVE_FIPS_VERSION < 2))
+        (!defined(HAVE_FIPS_VERSION) || (HAVE_FIPS_VERSION < 2))
 #define wc_Sha             Sha
 #define WC_SHA             SHA
 #define WC_SHA_BLOCK_SIZE  SHA_BLOCK_SIZE
@@ -53,7 +53,7 @@
 #endif
 
 #ifdef WOLFSSL_IMXRT_DCP
-	#include "fsl_dcp.h"
+    #include "fsl_dcp.h"
 #endif
 
 #ifdef __cplusplus
@@ -110,10 +110,16 @@ enum {
     #include "wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h"
 #else
 
+#if defined(WOLFSSL_SE050) && defined(WOLFSSL_SE050_HASH)
+    #include "wolfssl/wolfcrypt/port/nxp/se050_port.h"
+#endif
+
 /* Sha digest */
 struct wc_Sha {
 #ifdef FREESCALE_LTC_SHA
         ltc_hash_ctx_t ctx;
+#elif defined(WOLFSSL_SE050) && defined(WOLFSSL_SE050_HASH)
+        SE050_HASH_Context se050Ctx;
 #elif defined(STM32_HASH)
         STM32_HASH_Context stmCtx;
 #elif defined(WOLFSSL_SILABS_SE_ACCEL)
@@ -147,7 +153,7 @@ struct wc_Sha {
    !defined(NO_WOLFSSL_ESP32WROOM32_CRYPT_HASH)
     WC_ESP32SHA ctx;
 #endif
-#if defined(WOLFSSL_HASH_FLAGS) || defined(WOLF_CRYPTO_CB)
+#ifdef WOLFSSL_HASH_FLAGS
     word32 flags; /* enum wc_HashFlags in hash.h */
 #endif
 };
@@ -179,7 +185,7 @@ WOLFSSL_API int wc_ShaTransform(wc_Sha*, const byte*);
 WOLFSSL_API void wc_ShaSizeSet(wc_Sha* sha, word32 len);
 #endif
 
-#if defined(WOLFSSL_HASH_FLAGS) || defined(WOLF_CRYPTO_CB)
+#ifdef WOLFSSL_HASH_FLAGS
     WOLFSSL_API int wc_ShaSetFlags(wc_Sha* sha, word32 flags);
     WOLFSSL_API int wc_ShaGetFlags(wc_Sha* sha, word32* flags);
 #endif

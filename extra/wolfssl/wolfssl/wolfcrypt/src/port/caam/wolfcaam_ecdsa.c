@@ -25,7 +25,7 @@
 
 #include <wolfssl/wolfcrypt/settings.h>
 
-#if defined(HAVE_ECC) && defined(WOLFSSL_QNX_CAAM)
+#if defined(WOLFSSL_QNX_CAAM) && defined(HAVE_ECC)
 
 #include <wolfssl/wolfcrypt/logging.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
@@ -117,7 +117,7 @@ int wc_CAAM_EccSign(const byte* in, int inlen, byte* out, word32* outlen,
     /* check for known predetermined parameters */
     ecdsel = GetECDSEL(dp->id, CAAM_ECDSA_PD);
     if (ecdsel == 0) {
-        WOLFSSL_MSG("Unsupported curve type\n");
+        WOLFSSL_MSG("Unsupported curve type");
         return BAD_FUNC_ARG;
     }
 
@@ -175,7 +175,7 @@ int wc_CAAM_EccSign(const byte* in, int inlen, byte* out, word32* outlen,
         mp_free(&mpr);
         mp_free(&mps);
         if (ret != 0) {
-            WOLFSSL_MSG("Issue converting to signature\n");
+            WOLFSSL_MSG("Issue converting to signature");
             return -1;
         }
     }
@@ -466,4 +466,4 @@ int wc_CAAM_EccCheckPrivKey(ecc_key* key, const byte* pubKey, word32 pubKeySz) {
     return CRYPTOCB_UNAVAILABLE;
 }
 
-#endif /* HAVE_ECC && WOLFSSL_QNX_CAAM */
+#endif /* WOLFSSL_QNX_CAAM && HAVE_ECC */

@@ -27,7 +27,7 @@ SET(CPACK_COMPONENT_BACKUP_GROUP "backup")
 
 SET(CPACK_COMPONENTS_ALL Server ManPagesServer IniFiles Server_Scripts
                          SupportFiles Development ManPagesDevelopment
-                         ManPagesTest Readme ManPagesClient Test 
+                         ManPagesTest Readme ManPagesClient Test
                          Common Client SharedLibraries ClientPlugins
                          backup
 )
@@ -49,21 +49,50 @@ SET(CPACK_RPM_PACKAGE_RELOCATABLE FALSE)
 SET(CPACK_PACKAGE_RELOCATABLE FALSE)
 SET(CPACK_RPM_PACKAGE_GROUP "Applications/Databases")
 SET(CPACK_RPM_PACKAGE_URL ${CPACK_PACKAGE_URL})
-SET(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
 
 SET(CPACK_RPM_shared_PACKAGE_VENDOR "MariaDB Corporation Ab")
 SET(CPACK_RPM_shared_PACKAGE_LICENSE "LGPLv2.1")
-SET(CPACK_RPM_shared_PACKAGE_SUMMARY "LGPL MariaDB client library")
-SET(CPACK_RPM_shared_PACKAGE_DESCRIPTION "
-This is LGPL MariaDB client library that can be used to connect to MySQL
+
+# Set default description for packages
+SET(CPACK_RPM_PACKAGE_DESCRIPTION "MariaDB: a very fast and robust SQL database server
+
+It is GPL v2 licensed, which means you can use the it free of charge under the
+conditions of the GNU General Public License Version 2 (http://www.gnu.org/licenses/).
+
+MariaDB documentation can be found at https://mariadb.com/kb
+MariaDB bug reports should be submitted through https://jira.mariadb.org")
+
+# mariabackup
+SET(CPACK_RPM_backup_PACKAGE_SUMMARY "Backup tool for MariaDB server")
+SET(CPACK_RPM_backup_PACKAGE_DESCRIPTION "Mariabackup is an open source tool provided by MariaDB
+for performing physical online backups of InnoDB, Aria and MyISAM tables.
+For InnoDB, “hot online” backups are possible.
+It was originally forked from Percona XtraBackup 2.3.8.")
+
+# Packages with default description
+SET(CPACK_RPM_client_PACKAGE_SUMMARY "MariaDB database client binaries")
+SET(CPACK_RPM_client_PACKAGE_DESCRIPTION "${CPACK_RPM_PACKAGE_DESCRIPTION}")
+SET(CPACK_RPM_common_PACKAGE_SUMMARY "MariaDB database common files (e.g. /etc/mysql/conf.d/mariadb.cnf)")
+SET(CPACK_RPM_common_PACKAGE_DESCRIPTION "${CPACK_RPM_PACKAGE_DESCRIPTION}")
+SET(CPACK_RPM_compat_PACKAGE_SUMMARY "MariaDB database client library MySQL compat package")
+SET(CPACK_RPM_compat_PACKAGE_DESCRIPTION "${CPACK_RPM_PACKAGE_DESCRIPTION}")
+SET(CPACK_RPM_devel_PACKAGE_SUMMARY "MariaDB database development files")
+SET(CPACK_RPM_devel_PACKAGE_DESCRIPTION "${CPACK_RPM_PACKAGE_DESCRIPTION}")
+SET(CPACK_RPM_server_PACKAGE_SUMMARY "MariaDB database server binaries")
+SET(CPACK_RPM_server_PACKAGE_DESCRIPTION "${CPACK_RPM_PACKAGE_DESCRIPTION}")
+SET(CPACK_RPM_test_PACKAGE_SUMMARY "MariaDB database regression test suite")
+SET(CPACK_RPM_test_PACKAGE_DESCRIPTION "${CPACK_RPM_PACKAGE_DESCRIPTION}")
+
+# libmariadb3
+SET(CPACK_RPM_shared_PACKAGE_SUMMARY "LGPL MariaDB database client library")
+SET(CPACK_RPM_shared_PACKAGE_DESCRIPTION "This is LGPL MariaDB client library that can be used to connect to MySQL
 or MariaDB.
 
 This code is based on the LGPL libmysql client library from MySQL 3.23
 and PHP's mysqlnd extension.
 
 This product includes PHP software, freely available from
-<http://www.php.net/software/>
-")
+http://www.php.net/software/")
 
 SET(CPACK_RPM_SPEC_MORE_DEFINE "
 %define mysql_vendor ${CPACK_PACKAGE_VENDOR}
@@ -162,6 +191,8 @@ SETA(CPACK_RPM_devel_PACKAGE_OBSOLETES
   "MySQL-devel")
 SETA(CPACK_RPM_devel_PACKAGE_PROVIDES
   "MySQL-devel")
+SETA(CPACK_RPM_devel_PACKAGE_REQUIRES
+  "MariaDB-shared >= 10.2.42")
 
 SETA(CPACK_RPM_server_PACKAGE_OBSOLETES
   "MariaDB"
@@ -323,9 +354,11 @@ MACRO(ADDIF var)
   ENDIF()
 ENDMACRO()
 
+ADDIF(MYSQL_MAINTAINER_MODE)
 ADDIF(CMAKE_BUILD_TYPE)
 ADDIF(BUILD_CONFIG)
 ADDIF(WITH_SSL)
+ADDIF(WITH_JEMALLOC)
 
 ENDIF()
 ENDIF(RPM)

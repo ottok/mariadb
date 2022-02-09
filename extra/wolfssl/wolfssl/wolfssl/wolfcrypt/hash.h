@@ -170,7 +170,7 @@ WOLFSSL_API int wc_HashFinal(wc_HashAlg* hash, enum wc_HashType type,
     byte* out);
 WOLFSSL_API int wc_HashFree(wc_HashAlg* hash, enum wc_HashType type);
 
-#if defined(WOLFSSL_HASH_FLAGS) || defined(WOLF_CRYPTO_CB)
+#ifdef WOLFSSL_HASH_FLAGS
     WOLFSSL_API int wc_HashSetFlags(wc_HashAlg* hash, enum wc_HashType type,
         word32 flags);
     WOLFSSL_API int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type,
@@ -205,6 +205,8 @@ WOLFSSL_API int wc_Sha384Hash(const byte*, word32, byte*);
 #ifdef WOLFSSL_SHA512
 #include <wolfssl/wolfcrypt/sha512.h>
 WOLFSSL_API int wc_Sha512Hash(const byte*, word32, byte*);
+WOLFSSL_API int wc_Sha512_224Hash(const byte*, word32, byte*);
+WOLFSSL_API int wc_Sha512_256Hash(const byte*, word32, byte*);
 #endif /* WOLFSSL_SHA512 */
 
 #ifdef WOLFSSL_SHA3
@@ -219,31 +221,6 @@ WOLFSSL_API int wc_Shake256Hash(const byte*, word32, byte*, word32);
 #endif /* WOLFSSL_SHA3 */
 
 #endif /* !NO_HASH_WRAPPER */
-
-enum max_prf {
-#ifdef HAVE_FFDHE_8192
-    MAX_PRF_HALF        = 516, /* Maximum half secret len */
-#elif defined(HAVE_FFDHE_6144)
-    MAX_PRF_HALF        = 388, /* Maximum half secret len */
-#else
-    MAX_PRF_HALF        = 260, /* Maximum half secret len */
-#endif
-    MAX_PRF_LABSEED     = 128, /* Maximum label + seed len */
-    MAX_PRF_DIG         = 224  /* Maximum digest len      */
-};
-
-#ifdef WOLFSSL_HAVE_PRF
-WOLFSSL_API int wc_PRF(byte* result, word32 resLen, const byte* secret,
-                    word32 secLen, const byte* seed, word32 seedLen, int hash,
-                    void* heap, int devId);
-WOLFSSL_API int wc_PRF_TLSv1(byte* digest, word32 digLen, const byte* secret,
-                    word32 secLen, const byte* label, word32 labLen,
-                    const byte* seed, word32 seedLen, void* heap, int devId);
-WOLFSSL_API int wc_PRF_TLS(byte* digest, word32 digLen, const byte* secret,
-                    word32 secLen, const byte* label, word32 labLen,
-                    const byte* seed, word32 seedLen, int useAtLeastSha256,
-                    int hash_type, void* heap, int devId);
-#endif /* WOLFSSL_HAVE_PRF */
 
 #ifdef __cplusplus
     } /* extern "C" */

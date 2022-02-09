@@ -314,6 +314,25 @@ extern "C" {
 /* Mask of word size. */
 #define SP_WORD_MASK    (SP_WORD_SIZE - 1)
 
+/* For debugging only - format string for different digit sizes. */
+#if SP_WORD_SIZE == 64
+    #if SP_ULONG_BITS == 64
+        #define SP_PRINT_FMT       "%016lx"
+    #else
+        #define SP_PRINT_FMT       "%016llx"
+    #endif
+#elif SP_WORD_SIZE == 32
+    #if SP_UINT_BITS == 32
+        #define SP_PRINT_FMT       "%08x"
+    #else
+        #define SP_PRINT_FMT       "%08lx"
+    #endif
+#elif SP_WORD_SIZE == 16
+    #define SP_PRINT_FMT       "%04x"
+#elif SP_WORD_SIZE == 8
+    #define SP_PRINT_FMT       "%02x"
+#endif
+
 
 #if defined(WOLFSSL_HAVE_SP_ECC) && defined(WOLFSSL_SP_NONBLOCK)
 /* Non-blocking ECC operation context. */
@@ -416,25 +435,6 @@ typedef struct sp_ecc_ctx {
     #endif
 #endif
 
-
-/* For debugging only - format string for different digit sizes. */
-#if SP_WORD_SIZE == 64
-    #if SP_ULONG_BITS == 64
-        #define SP_PRINT_FMT       "%016lx"
-    #else
-        #define SP_PRINT_FMT       "%016llx"
-    #endif
-#elif SP_WORD_SIZE == 32
-    #if SP_UINT_BITS == 32
-        #define SP_PRINT_FMT       "%08x"
-    #else
-        #define SP_PRINT_FMT       "%08lx"
-    #endif
-#elif SP_WORD_SIZE == 16
-    #define SP_PRINT_FMT       "%04x"
-#elif SP_WORD_SIZE == 8
-    #define SP_PRINT_FMT       "%02x"
-#endif
 
 #ifndef NO_FILESYSTEM
 /* Output is formatted to be used with script that checks calculations. */
@@ -806,7 +806,8 @@ MP_API int sp_add_d(sp_int* a, sp_int_digit d, sp_int* r);
 MP_API int sp_sub_d(sp_int* a, sp_int_digit d, sp_int* r);
 MP_API int sp_mul_d(sp_int* a, sp_int_digit d, sp_int* r);
 #if (defined(WOLFSSL_SP_MATH_ALL) && !defined(WOLFSSL_RSA_VERIFY_ONLY)) || \
-    defined(WOLFSSL_KEY_GEN) || defined(HAVE_COMP_KEY)
+    defined(WOLFSSL_KEY_GEN) || defined(HAVE_COMP_KEY) || \
+    defined(WC_MP_TO_RADIX)
 MP_API int sp_div_d(sp_int* a, sp_int_digit d, sp_int* r, sp_int_digit* rem);
 #endif
 #if defined(WOLFSSL_SP_MATH_ALL) || (defined(HAVE_ECC) && \
@@ -881,7 +882,7 @@ MP_API int sp_to_unsigned_bin_at_pos(int o, sp_int* a, unsigned char* out);
 MP_API int sp_read_radix(sp_int* a, const char* in, int radix);
 MP_API int sp_tohex(sp_int* a, char* str);
 MP_API int sp_todecimal(mp_int* a, char* str);
-#ifdef WOLFSSL_SP_MATH_ALL
+#if defined(WOLFSSL_SP_MATH_ALL) || defined(WC_MP_TO_RADIX)
 MP_API int sp_toradix(mp_int* a, char* str, int radix);
 MP_API int sp_radix_size(mp_int* a, int radix, int* size);
 #endif

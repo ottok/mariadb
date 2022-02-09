@@ -235,6 +235,7 @@ int wsrep::transaction::assign_read_view(const wsrep::gtid* const gtid)
 
 int wsrep::transaction::append_key(const wsrep::key& key)
 {
+    assert(active());
     try
     {
         debug_log_key_append(key);
@@ -250,7 +251,7 @@ int wsrep::transaction::append_key(const wsrep::key& key)
 
 int wsrep::transaction::append_data(const wsrep::const_buffer& data)
 {
-
+    assert(active());
     return provider().append_data(ws_handle_, data);
 }
 
@@ -647,7 +648,6 @@ int wsrep::transaction::after_commit()
     assert(ret == 0);
     state(lock, s_committed);
 
-    // client_state_.server_state().last_committed_gtid(ws_meta.gitd());
     debug_log_state("after_commit_leave");
     return ret;
 }
@@ -677,9 +677,9 @@ int wsrep::transaction::before_rollback()
         case s_preparing:
             // Error detected during prepare phase
             state(lock, s_must_abort);
-            // fall through
+            WSREP_FALLTHROUGH;
         case s_prepared:
-            // fall through
+            WSREP_FALLTHROUGH;
         case s_executing:
             // Voluntary rollback
             if (is_streaming())
@@ -850,7 +850,7 @@ int wsrep::transaction::after_statement()
             break;
         }
         // Continue to replay if rollback() changed the state to s_must_replay
-        // Fall through
+        WSREP_FALLTHROUGH;
     case s_must_replay:
     {
         if (is_xa() && !ordered())
@@ -1404,7 +1404,7 @@ int wsrep::transaction::streaming_step(wsrep::unique_lock<wsrep::mutex>& lock,
     switch (streaming_context_.fragment_unit())
     {
     case streaming_context::row:
-        // fall through
+        WSREP_FALLTHROUGH;
     case streaming_context::statement:
         streaming_context_.increment_unit_counter(1);
         break;
@@ -1535,14 +1535,22 @@ int wsrep::transaction::certify_fragment(
         // available to store the fragment. The fragment meta data
         // is updated after certification.
         wsrep::id server_id(client_state_.server_state().id());
-        assert(server_id.is_undefined() == false);
-        if (storage_service.start_transaction(ws_handle_) ||
-            storage_service.append_fragment(
-                server_id,
-                id(),
-                flags(),
-                wsrep::const_buffer(data.data(), data.size()),
-                xid()))
+
+        if (server_id.is_undefined()) {
+            // Server disconnected from cluster, do not
+            // append a fragment with undefined server_id.
+            ret = 1;
+            error = wsrep::e_append_fragment_error;
+        }
+
+        if (ret == 0 &&
+            (storage_service.start_transaction(ws_handle_) ||
+             storage_service.append_fragment(
+                 server_id,
+                 id(),
+                 flags(),
+                 wsrep::const_buffer(data.data(), data.size()),
+                 xid())))
         {
             ret = 1;
             error = wsrep::e_append_fragment_error;

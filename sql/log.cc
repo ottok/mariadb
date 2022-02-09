@@ -1700,7 +1700,7 @@ static int binlog_close_connection(handlerton *hton, THD *thd)
   binlog_cache_mngr *const cache_mngr=
     (binlog_cache_mngr*) thd_get_ha_data(thd, binlog_hton);
 #ifdef WITH_WSREP
-  if (cache_mngr && !cache_mngr->trx_cache.empty()) {
+  if (WSREP(thd) && cache_mngr && !cache_mngr->trx_cache.empty()) {
     IO_CACHE* cache= cache_mngr->get_binlog_cache_log(true);
     uchar *buf;
     size_t len=0;
@@ -3706,6 +3706,7 @@ bool MYSQL_BIN_LOG::open(const char *log_name,
             opt_slave_sql_verify_checksum ? (enum_binlog_checksum_alg) binlog_checksum_options
                                           : BINLOG_CHECKSUM_ALG_OFF;
         s.checksum_alg= relay_log_checksum_alg;
+        s.set_relay_log_event();
       }
       else
         s.checksum_alg= (enum_binlog_checksum_alg)binlog_checksum_options;
@@ -7971,6 +7972,8 @@ MYSQL_BIN_LOG::queue_for_group_commit(group_commit_entry *orig_entry)
     cur= entry->thd->wait_for_commit_ptr;
   }
 
+  result= orig_queue == NULL;
+
 #ifdef WITH_WSREP
   if (wsrep_is_active(entry->thd) &&
       wsrep_run_commit_hook(entry->thd, entry->all))
@@ -7994,7 +7997,6 @@ MYSQL_BIN_LOG::queue_for_group_commit(group_commit_entry *orig_entry)
 
   DBUG_PRINT("info", ("Queued for group commit as %s",
                       (orig_queue == NULL) ? "leader" : "participant"));
-  result= orig_queue == NULL;
 
 end:
   if (backup_lock_released)

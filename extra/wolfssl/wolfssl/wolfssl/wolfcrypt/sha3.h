@@ -58,6 +58,11 @@ enum {
     WC_SHA3_512_DIGEST_SIZE  = 64,
     WC_SHA3_512_COUNT        =  9,
 
+    #ifndef WOLFSSL_NO_SHAKE256
+        WC_SHAKE128          = WC_HASH_TYPE_SHAKE128,
+        WC_SHAKE256          = WC_HASH_TYPE_SHAKE256,
+    #endif
+
 #if !defined(HAVE_SELFTEST) || \
     defined(HAVE_SELFTEST_VERSION) && (HAVE_SELFTEST_VERSION >= 2)
     /* These values are used for HMAC, not SHA-3 directly.
@@ -79,6 +84,10 @@ enum {
     #define SHA3_512             WC_SHA3_512
     #define SHA3_512_DIGEST_SIZE WC_SHA3_512_DIGEST_SIZE
     #define Sha3 wc_Sha3
+    #ifndef WOLFSSL_NO_SHAKE256
+        #define SHAKE128             WC_SHAKE128
+        #define SHAKE256             WC_SHAKE256
+    #endif
 #endif
 
 
@@ -103,7 +112,7 @@ struct wc_Sha3 {
 #ifdef WOLFSSL_ASYNC_CRYPT
     WC_ASYNC_DEV asyncDev;
 #endif /* WOLFSSL_ASYNC_CRYPT */
-#if defined(WOLFSSL_HASH_FLAGS) || defined(WOLF_CRYPTO_CB)
+#ifdef WOLFSSL_HASH_FLAGS
     word32 flags; /* enum wc_HashFlags in hash.h */
 #endif
 };
@@ -115,7 +124,9 @@ struct wc_Sha3 {
 
 #endif
 
+#ifndef WOLFSSL_NO_SHAKE256
 typedef wc_Sha3 wc_Shake;
+#endif
 
 
 WOLFSSL_API int wc_InitSha3_224(wc_Sha3*, void*, int);
@@ -146,13 +157,15 @@ WOLFSSL_API void wc_Sha3_512_Free(wc_Sha3*);
 WOLFSSL_API int wc_Sha3_512_GetHash(wc_Sha3*, byte*);
 WOLFSSL_API int wc_Sha3_512_Copy(wc_Sha3* src, wc_Sha3* dst);
 
+#ifndef WOLFSSL_NO_SHAKE256
 WOLFSSL_API int wc_InitShake256(wc_Shake*, void*, int);
 WOLFSSL_API int wc_Shake256_Update(wc_Shake*, const byte*, word32);
 WOLFSSL_API int wc_Shake256_Final(wc_Shake*, byte*, word32);
 WOLFSSL_API void wc_Shake256_Free(wc_Shake*);
 WOLFSSL_API int wc_Shake256_Copy(wc_Shake* src, wc_Sha3* dst);
+#endif
 
-#if defined(WOLFSSL_HASH_FLAGS) || defined(WOLF_CRYPTO_CB)
+#ifdef WOLFSSL_HASH_FLAGS
     WOLFSSL_API int wc_Sha3_SetFlags(wc_Sha3* sha3, word32 flags);
     WOLFSSL_API int wc_Sha3_GetFlags(wc_Sha3* sha3, word32* flags);
 #endif

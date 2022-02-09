@@ -151,6 +151,8 @@
         #elif defined(EBSNET)
             #include "rtipapi.h"  /* errno */
             #include "socket.h"
+        #elif defined(NETOS)
+            #include <sockapi.h>
         #elif !defined(DEVKITPRO) && !defined(WOLFSSL_PICOTCP) \
                 && !defined(WOLFSSL_CONTIKI) && !defined(WOLFSSL_WICED) \
                 && !defined(WOLFSSL_GNRC) && !defined(WOLFSSL_RIOT_OS)
@@ -166,7 +168,9 @@
         #endif
     #endif
 
-    #if defined(WOLFSSL_RENESAS_RA6M3G) || defined(WOLFSSL_RENESAS_RA6M3) /* Uses FREERTOS_TCP */
+    #if defined(WOLFSSL_RENESAS_RA6M3G) || defined(WOLFSSL_RENESAS_RA6M3) ||\
+                    defined(WOLFSSL_RENESAS_RA6M4)
+      /* Uses FREERTOS_TCP */
         #include <errno.h>
     #endif
 
@@ -275,6 +279,14 @@
     #define SOCKET_EPIPE       FCL_EPIPE
     #define SOCKET_ECONNREFUSED FCL_ECONNREFUSED
     #define SOCKET_ECONNABORTED FNS_ECONNABORTED
+#elif defined(WOLFSSL_LWIP_NATIVE)
+    #define SOCKET_EWOULDBLOCK ERR_WOULDBLOCK
+    #define SOCKET_EAGAIN      ERR_WOULDBLOCK
+    #define SOCKET_ECONNRESET  ERR_RST
+    #define SOCKET_EINTR       ERR_CLSD
+    #define SOCKET_EPIPE       ERR_CLSD
+    #define SOCKET_ECONNREFUSED ERR_CONN
+    #define SOCKET_ECONNABORTED ERR_ABRT
 #else
     #define SOCKET_EWOULDBLOCK EWOULDBLOCK
     #define SOCKET_EAGAIN      EAGAIN
@@ -318,6 +330,9 @@
 #elif defined(WOLFSSL_LINUXKM)
     #define SEND_FUNCTION linuxkm_send
     #define RECV_FUNCTION linuxkm_recv
+#elif defined(WOLFSSL_SGX)
+    #define SEND_FUNCTION send
+    #define RECV_FUNCTION recv
 #else
     #define SEND_FUNCTION send
     #define RECV_FUNCTION recv
@@ -373,6 +388,10 @@
 #endif
 WOLFSSL_API  int wolfIO_TcpConnect(SOCKET_T* sockfd, const char* ip,
     unsigned short port, int to_sec);
+#ifdef HAVE_SOCKADDR
+WOLFSSL_API int wolfIO_TcpAccept(SOCKET_T sockfd, SOCKADDR* peer_addr, XSOCKLENT* peer_len);
+#endif
+WOLFSSL_API int wolfIO_TcpBind(SOCKET_T* sockfd, word16 port);
 WOLFSSL_API  int wolfIO_Send(SOCKET_T sd, char *buf, int sz, int wrFlags);
 WOLFSSL_API  int wolfIO_Recv(SOCKET_T sd, char *buf, int sz, int rdFlags);
 
@@ -425,12 +444,6 @@ WOLFSSL_API int BioReceive(WOLFSSL* ssl, char* buf, int sz, void* ctx);
             WOLFSSL_API int EmbedReceiveFromMcast(WOLFSSL* ssl,
                                                   char* buf, int sz, void*);
         #endif /* WOLFSSL_MULTICAST */
-        #ifdef WOLFSSL_SESSION_EXPORT
-            WOLFSSL_API int EmbedGetPeer(WOLFSSL* ssl, char* ip, int* ipSz,
-                                                unsigned short* port, int* fam);
-            WOLFSSL_API int EmbedSetPeer(WOLFSSL* ssl, char* ip, int ipSz,
-                                                  unsigned short port, int fam);
-        #endif /* WOLFSSL_SESSION_EXPORT */
     #endif /* WOLFSSL_DTLS */
 #endif /* USE_WOLFSSL_IO */
 
@@ -581,6 +594,27 @@ WOLFSSL_API void wolfSSL_SetIOWriteFlags(WOLFSSL* ssl, int flags);
 
 #endif
 
+#ifdef WOLFSSL_LWIP_NATIVE
+    #include "lwip/tcp.h"
+    #include "lwip/sockets.h"
+
+    typedef struct WOLFSSL_LWIP_NATIVE_STATE {
+        struct tcp_pcb * pcb;
+        tcp_recv_fn recv_fn;
+        tcp_sent_fn sent_fn;
+        int    pulled;
+        struct pbuf *pbuf;
+        int    wait;
+        void * arg;   /* arg for application */
+        int    idle_count;
+    } WOLFSSL_LWIP_NATIVE_STATE;
+
+    WOLFSSL_LOCAL int LwIPNativeSend(WOLFSSL* ssl, char* buf, int sz, void* ctx);
+    WOLFSSL_LOCAL int LwIPNativeReceive(WOLFSSL* ssl, char* buf, int sz,
+                                     void* ctx);
+    WOLFSSL_API   int wolfSSL_SetIO_LwIP(WOLFSSL* ssl, void *pcb,
+                                tcp_recv_fn recv, tcp_sent_fn sent, void *arg);
+#endif
 
 #ifdef WOLFSSL_DTLS
     typedef int (*CallbackGenCookie)(WOLFSSL* ssl, unsigned char* buf, int sz,
@@ -589,16 +623,20 @@ WOLFSSL_API void wolfSSL_SetIOWriteFlags(WOLFSSL* ssl, int flags);
     WOLFSSL_API void  wolfSSL_SetCookieCtx(WOLFSSL* ssl, void *ctx);
     WOLFSSL_API void* wolfSSL_GetCookieCtx(WOLFSSL* ssl);
 
-    #ifdef WOLFSSL_SESSION_EXPORT
-        typedef int (*CallbackGetPeer)(WOLFSSL* ssl, char* ip, int* ipSz,
-                                            unsigned short* port, int* fam);
-        typedef int (*CallbackSetPeer)(WOLFSSL* ssl, char* ip, int ipSz,
-                                              unsigned short port, int fam);
-
-        WOLFSSL_API void wolfSSL_CTX_SetIOGetPeer(WOLFSSL_CTX*, CallbackGetPeer);
-        WOLFSSL_API void wolfSSL_CTX_SetIOSetPeer(WOLFSSL_CTX*, CallbackSetPeer);
-    #endif /* WOLFSSL_SESSION_EXPORT */
 #endif
+#ifdef WOLFSSL_SESSION_EXPORT
+    typedef int (*CallbackGetPeer)(WOLFSSL* ssl, char* ip, int* ipSz,
+                                        unsigned short* port, int* fam);
+    typedef int (*CallbackSetPeer)(WOLFSSL* ssl, char* ip, int ipSz,
+                                          unsigned short port, int fam);
+
+    WOLFSSL_API void wolfSSL_CTX_SetIOGetPeer(WOLFSSL_CTX*, CallbackGetPeer);
+    WOLFSSL_API void wolfSSL_CTX_SetIOSetPeer(WOLFSSL_CTX*, CallbackSetPeer);
+    WOLFSSL_API int EmbedGetPeer(WOLFSSL* ssl, char* ip, int* ipSz,
+                                                unsigned short* port, int* fam);
+    WOLFSSL_API int EmbedSetPeer(WOLFSSL* ssl, char* ip, int ipSz,
+                                                  unsigned short port, int fam);
+#endif /* WOLFSSL_SESSION_EXPORT */
 
 
 

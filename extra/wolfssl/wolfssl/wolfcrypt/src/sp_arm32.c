@@ -26,6 +26,10 @@
 #endif
 
 #include <wolfssl/wolfcrypt/settings.h>
+
+#if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH) || \
+    defined(WOLFSSL_HAVE_SP_ECC)
+
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/cpuid.h>
 #ifdef NO_INLINE
@@ -34,9 +38,6 @@
     #define WOLFSSL_MISC_INCLUDED
     #include <wolfcrypt/src/misc.c>
 #endif
-
-#if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH) || \
-                                    defined(WOLFSSL_HAVE_SP_ECC)
 
 #ifdef RSA_LOW_MEM
 #ifndef WOLFSSL_SP_SMALL
@@ -47,6 +48,17 @@
 #include <wolfssl/wolfcrypt/sp.h>
 
 #ifdef WOLFSSL_SP_ARM32_ASM
+#define SP_PRINT_NUM(var, name, total, words, bits)     \
+    do {                                                \
+        int ii;                                         \
+        fprintf(stderr, name "=0x");                    \
+        for (ii = words - 1; ii >= 0; ii--)             \
+            fprintf(stderr, SP_PRINT_FMT, (var)[ii]);   \
+        fprintf(stderr, "\n");                         \
+    } while (0)
+
+#define SP_PRINT_VAL(var, name)                         \
+    fprintf(stderr, name "=0x" SP_PRINT_FMT "\n", var)
 #if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH)
 #ifndef WOLFSSL_SP_NO_2048
 /* Read big endian unsigned byte array into r.
@@ -175,7 +187,7 @@ static void sp_2048_from_mp(sp_digit* r, int size, const mp_int* a)
  * r  A single precision integer.
  * a  Byte array.
  */
-static void sp_2048_to_bin(sp_digit* r, byte* a)
+static void sp_2048_to_bin_64(sp_digit* r, byte* a)
 {
     int i;
     int j;
@@ -208,6 +220,20 @@ static void sp_2048_to_bin(sp_digit* r, byte* a)
         }
     }
 }
+
+#if (defined(WOLFSSL_HAVE_SP_RSA) && (!defined(WOLFSSL_RSA_PUBLIC_ONLY) || !defined(WOLFSSL_SP_SMALL))) || defined(WOLFSSL_HAVE_SP_DH)
+/* Normalize the values in each word to 32.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_2048_norm_64(a)
+
+#endif /* (WOLFSSL_HAVE_SP_RSA && (!WOLFSSL_RSA_PUBLIC_ONLY || !WOLFSSL_SP_SMALL)) || WOLFSSL_HAVE_SP_DH */
+/* Normalize the values in each word to 32.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_2048_norm_64(a)
 
 #ifndef WOLFSSL_SP_SMALL
 /* Multiply a and b into r. (r = a * b)
@@ -3871,14 +3897,14 @@ SP_NOINLINE static void sp_2048_mont_reduce_32(sp_digit* a, const sp_digit* m,
     sp_2048_cond_sub_32(a - 32, a, m, (sp_digit)0 - ca);
 }
 
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_mul_32(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -3890,9 +3916,9 @@ static void sp_2048_mont_mul_32(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_sqr_32(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -4239,7 +4265,7 @@ static sp_digit div_2048_word_32(sp_digit d1, sp_digit d0, sp_digit div)
  * return -ve, 0 or +ve if a is less than, equal to or greater than b
  * respectively.
  */
-static int32_t sp_2048_cmp_32(const sp_digit* a, const sp_digit* b)
+static sp_int32 sp_2048_cmp_32(const sp_digit* a, const sp_digit* b)
 {
     sp_digit r = -1;
     sp_digit one = 1;
@@ -4695,7 +4721,9 @@ static WC_INLINE int sp_2048_mod_32(sp_digit* r, const sp_digit* a, const sp_dig
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
@@ -4715,11 +4743,20 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (16 * 64), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (16 * 64), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
 #endif
 
     if (err == MP_OKAY) {
@@ -4835,7 +4872,9 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
@@ -4855,11 +4894,20 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (32 * 64), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (32 * 64), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
 #endif
 
     if (err == MP_OKAY) {
@@ -4988,7 +5036,7 @@ static int sp_2048_mod_exp_32(sp_digit* r, const sp_digit* a, const sp_digit* e,
 
 #endif /* (WOLFSSL_HAVE_SP_RSA & !WOLFSSL_RSA_PUBLIC_ONLY) | WOLFSSL_HAVE_SP_DH */
 
-#if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH)
+#if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
 /* r = 2^n mod m where n is the number of bits to reduce by.
  * Given m must be 2048 bits, just need to subtract.
  *
@@ -5003,7 +5051,7 @@ static void sp_2048_mont_norm_64(sp_digit* r, const sp_digit* m)
     sp_2048_sub_in_place_64(r, m);
 }
 
-#endif /* WOLFSSL_HAVE_SP_RSA | WOLFSSL_HAVE_SP_DH */
+#endif /* (WOLFSSL_HAVE_SP_RSA & !WOLFSSL_RSA_PUBLIC_ONLY) | WOLFSSL_HAVE_SP_DH */
 /* Conditionally subtract b from a using the mask m.
  * m is -1 to subtract and 0 when not copying.
  *
@@ -5980,14 +6028,14 @@ SP_NOINLINE static void sp_2048_mont_reduce_64(sp_digit* a, const sp_digit* m,
     sp_2048_cond_sub_64(a - 64, a, m, (sp_digit)0 - ca);
 }
 
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_mul_64(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -5999,9 +6047,9 @@ static void sp_2048_mont_mul_64(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_2048_mont_sqr_64(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -6010,7 +6058,328 @@ static void sp_2048_mont_sqr_64(sp_digit* r, const sp_digit* a,
     sp_2048_mont_reduce_64(r, m, mp);
 }
 
-#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
+#ifdef WOLFSSL_SP_SMALL
+/* Sub b from a into r. (r = a - b)
+ *
+ * r  A single precision integer.
+ * a  A single precision integer.
+ * b  A single precision integer.
+ */
+static sp_digit sp_2048_sub_64(sp_digit* r, const sp_digit* a,
+        const sp_digit* b)
+{
+    sp_digit c = 0;
+
+    __asm__ __volatile__ (
+        "add	r12, %[a], #256\n\t"
+        "\n1:\n\t"
+        "rsbs	%[c], %[c], #0\n\t"
+        "ldr	r4, [%[a]], #4\n\t"
+        "ldr	r5, [%[a]], #4\n\t"
+        "ldr	r6, [%[a]], #4\n\t"
+        "ldr	r7, [%[a]], #4\n\t"
+        "ldr	r8, [%[b]], #4\n\t"
+        "ldr	r9, [%[b]], #4\n\t"
+        "ldr	r10, [%[b]], #4\n\t"
+        "ldr	r14, [%[b]], #4\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "sbcs	r7, r7, r14\n\t"
+        "str	r4, [%[r]], #4\n\t"
+        "str	r5, [%[r]], #4\n\t"
+        "str	r6, [%[r]], #4\n\t"
+        "str	r7, [%[r]], #4\n\t"
+        "sbc	%[c], r4, r4\n\t"
+        "cmp	%[a], r12\n\t"
+        "bne	1b\n\t"
+        : [c] "+r" (c), [r] "+r" (r), [a] "+r" (a), [b] "+r" (b)
+        :
+        : "memory", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r14", "r12"
+    );
+
+    return c;
+}
+
+#else
+/* Sub b from a into r. (r = a - b)
+ *
+ * r  A single precision integer.
+ * a  A single precision integer.
+ * b  A single precision integer.
+ */
+static sp_digit sp_2048_sub_64(sp_digit* r, const sp_digit* a,
+        const sp_digit* b)
+{
+    sp_digit c = 0;
+
+    __asm__ __volatile__ (
+        "ldr	r3, [%[a], #0]\n\t"
+        "ldr	r4, [%[a], #4]\n\t"
+        "ldr	r5, [%[a], #8]\n\t"
+        "ldr	r6, [%[a], #12]\n\t"
+        "ldr	r7, [%[b], #0]\n\t"
+        "ldr	r8, [%[b], #4]\n\t"
+        "ldr	r9, [%[b], #8]\n\t"
+        "ldr	r10, [%[b], #12]\n\t"
+        "subs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #0]\n\t"
+        "str	r4, [%[r], #4]\n\t"
+        "str	r5, [%[r], #8]\n\t"
+        "str	r6, [%[r], #12]\n\t"
+        "ldr	r3, [%[a], #16]\n\t"
+        "ldr	r4, [%[a], #20]\n\t"
+        "ldr	r5, [%[a], #24]\n\t"
+        "ldr	r6, [%[a], #28]\n\t"
+        "ldr	r7, [%[b], #16]\n\t"
+        "ldr	r8, [%[b], #20]\n\t"
+        "ldr	r9, [%[b], #24]\n\t"
+        "ldr	r10, [%[b], #28]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #16]\n\t"
+        "str	r4, [%[r], #20]\n\t"
+        "str	r5, [%[r], #24]\n\t"
+        "str	r6, [%[r], #28]\n\t"
+        "ldr	r3, [%[a], #32]\n\t"
+        "ldr	r4, [%[a], #36]\n\t"
+        "ldr	r5, [%[a], #40]\n\t"
+        "ldr	r6, [%[a], #44]\n\t"
+        "ldr	r7, [%[b], #32]\n\t"
+        "ldr	r8, [%[b], #36]\n\t"
+        "ldr	r9, [%[b], #40]\n\t"
+        "ldr	r10, [%[b], #44]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #32]\n\t"
+        "str	r4, [%[r], #36]\n\t"
+        "str	r5, [%[r], #40]\n\t"
+        "str	r6, [%[r], #44]\n\t"
+        "ldr	r3, [%[a], #48]\n\t"
+        "ldr	r4, [%[a], #52]\n\t"
+        "ldr	r5, [%[a], #56]\n\t"
+        "ldr	r6, [%[a], #60]\n\t"
+        "ldr	r7, [%[b], #48]\n\t"
+        "ldr	r8, [%[b], #52]\n\t"
+        "ldr	r9, [%[b], #56]\n\t"
+        "ldr	r10, [%[b], #60]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #48]\n\t"
+        "str	r4, [%[r], #52]\n\t"
+        "str	r5, [%[r], #56]\n\t"
+        "str	r6, [%[r], #60]\n\t"
+        "ldr	r3, [%[a], #64]\n\t"
+        "ldr	r4, [%[a], #68]\n\t"
+        "ldr	r5, [%[a], #72]\n\t"
+        "ldr	r6, [%[a], #76]\n\t"
+        "ldr	r7, [%[b], #64]\n\t"
+        "ldr	r8, [%[b], #68]\n\t"
+        "ldr	r9, [%[b], #72]\n\t"
+        "ldr	r10, [%[b], #76]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #64]\n\t"
+        "str	r4, [%[r], #68]\n\t"
+        "str	r5, [%[r], #72]\n\t"
+        "str	r6, [%[r], #76]\n\t"
+        "ldr	r3, [%[a], #80]\n\t"
+        "ldr	r4, [%[a], #84]\n\t"
+        "ldr	r5, [%[a], #88]\n\t"
+        "ldr	r6, [%[a], #92]\n\t"
+        "ldr	r7, [%[b], #80]\n\t"
+        "ldr	r8, [%[b], #84]\n\t"
+        "ldr	r9, [%[b], #88]\n\t"
+        "ldr	r10, [%[b], #92]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #80]\n\t"
+        "str	r4, [%[r], #84]\n\t"
+        "str	r5, [%[r], #88]\n\t"
+        "str	r6, [%[r], #92]\n\t"
+        "ldr	r3, [%[a], #96]\n\t"
+        "ldr	r4, [%[a], #100]\n\t"
+        "ldr	r5, [%[a], #104]\n\t"
+        "ldr	r6, [%[a], #108]\n\t"
+        "ldr	r7, [%[b], #96]\n\t"
+        "ldr	r8, [%[b], #100]\n\t"
+        "ldr	r9, [%[b], #104]\n\t"
+        "ldr	r10, [%[b], #108]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #96]\n\t"
+        "str	r4, [%[r], #100]\n\t"
+        "str	r5, [%[r], #104]\n\t"
+        "str	r6, [%[r], #108]\n\t"
+        "ldr	r3, [%[a], #112]\n\t"
+        "ldr	r4, [%[a], #116]\n\t"
+        "ldr	r5, [%[a], #120]\n\t"
+        "ldr	r6, [%[a], #124]\n\t"
+        "ldr	r7, [%[b], #112]\n\t"
+        "ldr	r8, [%[b], #116]\n\t"
+        "ldr	r9, [%[b], #120]\n\t"
+        "ldr	r10, [%[b], #124]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #112]\n\t"
+        "str	r4, [%[r], #116]\n\t"
+        "str	r5, [%[r], #120]\n\t"
+        "str	r6, [%[r], #124]\n\t"
+        "ldr	r3, [%[a], #128]\n\t"
+        "ldr	r4, [%[a], #132]\n\t"
+        "ldr	r5, [%[a], #136]\n\t"
+        "ldr	r6, [%[a], #140]\n\t"
+        "ldr	r7, [%[b], #128]\n\t"
+        "ldr	r8, [%[b], #132]\n\t"
+        "ldr	r9, [%[b], #136]\n\t"
+        "ldr	r10, [%[b], #140]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #128]\n\t"
+        "str	r4, [%[r], #132]\n\t"
+        "str	r5, [%[r], #136]\n\t"
+        "str	r6, [%[r], #140]\n\t"
+        "ldr	r3, [%[a], #144]\n\t"
+        "ldr	r4, [%[a], #148]\n\t"
+        "ldr	r5, [%[a], #152]\n\t"
+        "ldr	r6, [%[a], #156]\n\t"
+        "ldr	r7, [%[b], #144]\n\t"
+        "ldr	r8, [%[b], #148]\n\t"
+        "ldr	r9, [%[b], #152]\n\t"
+        "ldr	r10, [%[b], #156]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #144]\n\t"
+        "str	r4, [%[r], #148]\n\t"
+        "str	r5, [%[r], #152]\n\t"
+        "str	r6, [%[r], #156]\n\t"
+        "ldr	r3, [%[a], #160]\n\t"
+        "ldr	r4, [%[a], #164]\n\t"
+        "ldr	r5, [%[a], #168]\n\t"
+        "ldr	r6, [%[a], #172]\n\t"
+        "ldr	r7, [%[b], #160]\n\t"
+        "ldr	r8, [%[b], #164]\n\t"
+        "ldr	r9, [%[b], #168]\n\t"
+        "ldr	r10, [%[b], #172]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #160]\n\t"
+        "str	r4, [%[r], #164]\n\t"
+        "str	r5, [%[r], #168]\n\t"
+        "str	r6, [%[r], #172]\n\t"
+        "ldr	r3, [%[a], #176]\n\t"
+        "ldr	r4, [%[a], #180]\n\t"
+        "ldr	r5, [%[a], #184]\n\t"
+        "ldr	r6, [%[a], #188]\n\t"
+        "ldr	r7, [%[b], #176]\n\t"
+        "ldr	r8, [%[b], #180]\n\t"
+        "ldr	r9, [%[b], #184]\n\t"
+        "ldr	r10, [%[b], #188]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #176]\n\t"
+        "str	r4, [%[r], #180]\n\t"
+        "str	r5, [%[r], #184]\n\t"
+        "str	r6, [%[r], #188]\n\t"
+        "ldr	r3, [%[a], #192]\n\t"
+        "ldr	r4, [%[a], #196]\n\t"
+        "ldr	r5, [%[a], #200]\n\t"
+        "ldr	r6, [%[a], #204]\n\t"
+        "ldr	r7, [%[b], #192]\n\t"
+        "ldr	r8, [%[b], #196]\n\t"
+        "ldr	r9, [%[b], #200]\n\t"
+        "ldr	r10, [%[b], #204]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #192]\n\t"
+        "str	r4, [%[r], #196]\n\t"
+        "str	r5, [%[r], #200]\n\t"
+        "str	r6, [%[r], #204]\n\t"
+        "ldr	r3, [%[a], #208]\n\t"
+        "ldr	r4, [%[a], #212]\n\t"
+        "ldr	r5, [%[a], #216]\n\t"
+        "ldr	r6, [%[a], #220]\n\t"
+        "ldr	r7, [%[b], #208]\n\t"
+        "ldr	r8, [%[b], #212]\n\t"
+        "ldr	r9, [%[b], #216]\n\t"
+        "ldr	r10, [%[b], #220]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #208]\n\t"
+        "str	r4, [%[r], #212]\n\t"
+        "str	r5, [%[r], #216]\n\t"
+        "str	r6, [%[r], #220]\n\t"
+        "ldr	r3, [%[a], #224]\n\t"
+        "ldr	r4, [%[a], #228]\n\t"
+        "ldr	r5, [%[a], #232]\n\t"
+        "ldr	r6, [%[a], #236]\n\t"
+        "ldr	r7, [%[b], #224]\n\t"
+        "ldr	r8, [%[b], #228]\n\t"
+        "ldr	r9, [%[b], #232]\n\t"
+        "ldr	r10, [%[b], #236]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #224]\n\t"
+        "str	r4, [%[r], #228]\n\t"
+        "str	r5, [%[r], #232]\n\t"
+        "str	r6, [%[r], #236]\n\t"
+        "ldr	r3, [%[a], #240]\n\t"
+        "ldr	r4, [%[a], #244]\n\t"
+        "ldr	r5, [%[a], #248]\n\t"
+        "ldr	r6, [%[a], #252]\n\t"
+        "ldr	r7, [%[b], #240]\n\t"
+        "ldr	r8, [%[b], #244]\n\t"
+        "ldr	r9, [%[b], #248]\n\t"
+        "ldr	r10, [%[b], #252]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #240]\n\t"
+        "str	r4, [%[r], #244]\n\t"
+        "str	r5, [%[r], #248]\n\t"
+        "str	r6, [%[r], #252]\n\t"
+        "sbc	%[c], %[c], #0\n\t"
+        : [c] "+r" (c)
+        : [r] "r" (r), [a] "r" (a), [b] "r" (b)
+        : "memory", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"
+    );
+
+    return c;
+}
+
+#endif /* WOLFSSL_SP_SMALL */
 /* Divide the double width number (d1|d0) by the dividend. (d1|d0 / div)
  *
  * d1   The high order half of the number to divide.
@@ -6073,6 +6442,69 @@ static sp_digit div_2048_word_64(sp_digit d1, sp_digit d0, sp_digit div)
     return r;
 }
 
+/* Divide d in a and put remainder into r (m*d + r = a)
+ * m is not calculated as it is not needed at this time.
+ *
+ * a  Number to be divided.
+ * d  Number to divide with.
+ * m  Multiplier result.
+ * r  Remainder from the division.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_2048_div_64_cond(const sp_digit* a, const sp_digit* d, sp_digit* m,
+        sp_digit* r)
+{
+    sp_digit t1[128], t2[65];
+    sp_digit div, r1;
+    int i;
+
+    (void)m;
+
+
+    div = d[63];
+    XMEMCPY(t1, a, sizeof(*t1) * 2 * 64);
+    for (i=63; i>=0; i--) {
+        sp_digit hi = t1[64 + i] - (t1[64 + i] == div);
+        r1 = div_2048_word_64(hi, t1[64 + i - 1], div);
+
+        sp_2048_mul_d_64(t2, d, r1);
+        t1[64 + i] += sp_2048_sub_in_place_64(&t1[i], t2);
+        t1[64 + i] -= t2[64];
+        if (t1[64 + i] != 0) {
+            t1[64 + i] += sp_2048_add_64(&t1[i], &t1[i], d);
+            if (t1[64 + i] != 0)
+                t1[64 + i] += sp_2048_add_64(&t1[i], &t1[i], d);
+        }
+    }
+
+    for (i = 63; i > 0; i--) {
+        if (t1[i] != d[i])
+            break;
+    }
+    if (t1[i] >= d[i]) {
+        sp_2048_sub_64(r, t1, d);
+    }
+    else {
+        XMEMCPY(r, t1, sizeof(*t1) * 64);
+    }
+
+    return MP_OKAY;
+}
+
+/* Reduce a modulo m into r. (r = a mod m)
+ *
+ * r  A single precision number that is the reduced result.
+ * a  A single precision number that is to be reduced.
+ * m  A single precision number that is the modulus to reduce with.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_2048_mod_64_cond(sp_digit* r, const sp_digit* a, const sp_digit* m)
+{
+    return sp_2048_div_64_cond(a, m, NULL, r);
+}
+
+#if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
+#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
 /* AND m into each word of a and store in r.
  *
  * r  A single precision integer.
@@ -6110,7 +6542,7 @@ static void sp_2048_mask_64(sp_digit* r, const sp_digit* a, sp_digit m)
  * return -ve, 0 or +ve if a is less than, equal to or greater than b
  * respectively.
  */
-static int32_t sp_2048_cmp_64(const sp_digit* a, const sp_digit* b)
+static sp_int32 sp_2048_cmp_64(const sp_digit* a, const sp_digit* b)
 {
     sp_digit r = -1;
     sp_digit one = 1;
@@ -6911,59 +7343,6 @@ static WC_INLINE int sp_2048_mod_64(sp_digit* r, const sp_digit* a, const sp_dig
 }
 
 #endif /* WOLFSSL_HAVE_SP_DH || !WOLFSSL_RSA_PUBLIC_ONLY */
-/* Divide d in a and put remainder into r (m*d + r = a)
- * m is not calculated as it is not needed at this time.
- *
- * a  Number to be divided.
- * d  Number to divide with.
- * m  Multiplier result.
- * r  Remainder from the division.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_2048_div_64_cond(const sp_digit* a, const sp_digit* d, sp_digit* m,
-        sp_digit* r)
-{
-    sp_digit t1[128], t2[65];
-    sp_digit div, r1;
-    int i;
-
-    (void)m;
-
-
-    div = d[63];
-    XMEMCPY(t1, a, sizeof(*t1) * 2 * 64);
-    for (i=63; i>=0; i--) {
-        sp_digit hi = t1[64 + i] - (t1[64 + i] == div);
-        r1 = div_2048_word_64(hi, t1[64 + i - 1], div);
-
-        sp_2048_mul_d_64(t2, d, r1);
-        t1[64 + i] += sp_2048_sub_in_place_64(&t1[i], t2);
-        t1[64 + i] -= t2[64];
-        if (t1[64 + i] != 0) {
-            t1[64 + i] += sp_2048_add_64(&t1[i], &t1[i], d);
-            if (t1[64 + i] != 0)
-                t1[64 + i] += sp_2048_add_64(&t1[i], &t1[i], d);
-        }
-    }
-
-    r1 = sp_2048_cmp_64(t1, d) >= 0;
-    sp_2048_cond_sub_64(r, t1, d, (sp_digit)0 - r1);
-
-    return MP_OKAY;
-}
-
-/* Reduce a modulo m into r. (r = a mod m)
- *
- * r  A single precision number that is the reduced result.
- * a  A single precision number that is to be reduced.
- * m  A single precision number that is the modulus to reduce with.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_2048_mod_64_cond(sp_digit* r, const sp_digit* a, const sp_digit* m)
-{
-    return sp_2048_div_64_cond(a, m, NULL, r);
-}
-
 #if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || \
                                                      defined(WOLFSSL_HAVE_SP_DH)
 #ifdef WOLFSSL_SP_SMALL
@@ -6974,7 +7353,151 @@ static WC_INLINE int sp_2048_mod_64_cond(sp_digit* r, const sp_digit* a, const s
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
+ */
+static int sp_2048_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
+        int bits, const sp_digit* m, int reduceA)
+{
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit* td = NULL;
+#else
+    sp_digit td[8 * 128];
+#endif
+    sp_digit* t[8];
+    sp_digit* norm = NULL;
+    sp_digit mp = 1;
+    sp_digit n;
+    sp_digit mask;
+    int i;
+    int c;
+    byte y;
+    int err = MP_OKAY;
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (8 * 128), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
+#endif
+
+    if (err == MP_OKAY) {
+        norm = td;
+        for (i=0; i<8; i++) {
+            t[i] = td + i * 128;
+        }
+
+        sp_2048_mont_setup(m, &mp);
+        sp_2048_mont_norm_64(norm, m);
+
+        XMEMSET(t[1], 0, sizeof(sp_digit) * 64U);
+        if (reduceA != 0) {
+            err = sp_2048_mod_64(t[1] + 64, a, m);
+            if (err == MP_OKAY) {
+                err = sp_2048_mod_64(t[1], t[1], m);
+            }
+        }
+        else {
+            XMEMCPY(t[1] + 64, a, sizeof(sp_digit) * 64);
+            err = sp_2048_mod_64(t[1], t[1], m);
+        }
+    }
+
+    if (err == MP_OKAY) {
+        sp_2048_mont_sqr_64(t[ 2], t[ 1], m, mp);
+        sp_2048_mont_mul_64(t[ 3], t[ 2], t[ 1], m, mp);
+        sp_2048_mont_sqr_64(t[ 4], t[ 2], m, mp);
+        sp_2048_mont_mul_64(t[ 5], t[ 3], t[ 2], m, mp);
+        sp_2048_mont_sqr_64(t[ 6], t[ 3], m, mp);
+        sp_2048_mont_mul_64(t[ 7], t[ 4], t[ 3], m, mp);
+
+        i = (bits - 1) / 32;
+        n = e[i--];
+        c = bits & 31;
+        if (c == 0) {
+            c = 32;
+        }
+        c -= bits % 3;
+        if (c == 32) {
+            c = 29;
+        }
+        if (c < 0) {
+            /* Number of bits in top word is less than number needed. */
+            c = -c;
+            y = (byte)(n << c);
+            n = e[i--];
+            y |= (byte)(n >> (64 - c));
+            n <<= c;
+            c = 64 - c;
+        }
+        else {
+            y = (byte)(n >> c);
+            n <<= 32 - c;
+        }
+        XMEMCPY(r, t[y], sizeof(sp_digit) * 64);
+        for (; i>=0 || c>=3; ) {
+            if (c == 0) {
+                n = e[i--];
+                y = (byte)(n >> 29);
+                n <<= 3;
+                c = 29;
+            }
+            else if (c < 3) {
+                y = (byte)(n >> 29);
+                n = e[i--];
+                c = 3 - c;
+                y |= (byte)(n >> (32 - c));
+                n <<= c;
+                c = 32 - c;
+            }
+            else {
+                y = (byte)((n >> 29) & 0x7);
+                n <<= 3;
+                c -= 3;
+            }
+
+            sp_2048_mont_sqr_64(r, r, m, mp);
+            sp_2048_mont_sqr_64(r, r, m, mp);
+            sp_2048_mont_sqr_64(r, r, m, mp);
+
+            sp_2048_mont_mul_64(r, r, t[y], m, mp);
+        }
+
+        XMEMSET(&r[64], 0, sizeof(sp_digit) * 64U);
+        sp_2048_mont_reduce_64(r, m, mp);
+
+        mask = 0 - (sp_2048_cmp_64(r, m) >= 0);
+        sp_2048_cond_sub_64(r, r, m, mask);
+    }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (td != NULL)
+        XFREE(td, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#endif
+
+    return err;
+}
+#else
+/* Modular exponentiate a to the e mod m. (r = a^e mod m)
+ *
+ * r     A single precision number that is the result of the operation.
+ * a     A single precision number being exponentiated.
+ * e     A single precision number that is the exponent.
+ * bits  The number of bits in the exponent.
+ * m     A single precision number that is the modulus.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_2048_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
@@ -6994,11 +7517,20 @@ static int sp_2048_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (16 * 128), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (16 * 128), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
 #endif
 
     if (err == MP_OKAY) {
@@ -7106,166 +7638,10 @@ static int sp_2048_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
 
     return err;
 }
-#else
-/* Modular exponentiate a to the e mod m. (r = a^e mod m)
- *
- * r     A single precision number that is the result of the operation.
- * a     A single precision number being exponentiated.
- * e     A single precision number that is the exponent.
- * bits  The number of bits in the exponent.
- * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
- */
-static int sp_2048_mod_exp_64(sp_digit* r, const sp_digit* a, const sp_digit* e,
-        int bits, const sp_digit* m, int reduceA)
-{
-#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td = NULL;
-#else
-    sp_digit td[32 * 128];
-#endif
-    sp_digit* t[32];
-    sp_digit* norm = NULL;
-    sp_digit mp = 1;
-    sp_digit n;
-    sp_digit mask;
-    int i;
-    int c;
-    byte y;
-    int err = MP_OKAY;
-
-#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (32 * 128), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
-#endif
-
-    if (err == MP_OKAY) {
-        norm = td;
-        for (i=0; i<32; i++) {
-            t[i] = td + i * 128;
-        }
-
-        sp_2048_mont_setup(m, &mp);
-        sp_2048_mont_norm_64(norm, m);
-
-        XMEMSET(t[1], 0, sizeof(sp_digit) * 64U);
-        if (reduceA != 0) {
-            err = sp_2048_mod_64(t[1] + 64, a, m);
-            if (err == MP_OKAY) {
-                err = sp_2048_mod_64(t[1], t[1], m);
-            }
-        }
-        else {
-            XMEMCPY(t[1] + 64, a, sizeof(sp_digit) * 64);
-            err = sp_2048_mod_64(t[1], t[1], m);
-        }
-    }
-
-    if (err == MP_OKAY) {
-        sp_2048_mont_sqr_64(t[ 2], t[ 1], m, mp);
-        sp_2048_mont_mul_64(t[ 3], t[ 2], t[ 1], m, mp);
-        sp_2048_mont_sqr_64(t[ 4], t[ 2], m, mp);
-        sp_2048_mont_mul_64(t[ 5], t[ 3], t[ 2], m, mp);
-        sp_2048_mont_sqr_64(t[ 6], t[ 3], m, mp);
-        sp_2048_mont_mul_64(t[ 7], t[ 4], t[ 3], m, mp);
-        sp_2048_mont_sqr_64(t[ 8], t[ 4], m, mp);
-        sp_2048_mont_mul_64(t[ 9], t[ 5], t[ 4], m, mp);
-        sp_2048_mont_sqr_64(t[10], t[ 5], m, mp);
-        sp_2048_mont_mul_64(t[11], t[ 6], t[ 5], m, mp);
-        sp_2048_mont_sqr_64(t[12], t[ 6], m, mp);
-        sp_2048_mont_mul_64(t[13], t[ 7], t[ 6], m, mp);
-        sp_2048_mont_sqr_64(t[14], t[ 7], m, mp);
-        sp_2048_mont_mul_64(t[15], t[ 8], t[ 7], m, mp);
-        sp_2048_mont_sqr_64(t[16], t[ 8], m, mp);
-        sp_2048_mont_mul_64(t[17], t[ 9], t[ 8], m, mp);
-        sp_2048_mont_sqr_64(t[18], t[ 9], m, mp);
-        sp_2048_mont_mul_64(t[19], t[10], t[ 9], m, mp);
-        sp_2048_mont_sqr_64(t[20], t[10], m, mp);
-        sp_2048_mont_mul_64(t[21], t[11], t[10], m, mp);
-        sp_2048_mont_sqr_64(t[22], t[11], m, mp);
-        sp_2048_mont_mul_64(t[23], t[12], t[11], m, mp);
-        sp_2048_mont_sqr_64(t[24], t[12], m, mp);
-        sp_2048_mont_mul_64(t[25], t[13], t[12], m, mp);
-        sp_2048_mont_sqr_64(t[26], t[13], m, mp);
-        sp_2048_mont_mul_64(t[27], t[14], t[13], m, mp);
-        sp_2048_mont_sqr_64(t[28], t[14], m, mp);
-        sp_2048_mont_mul_64(t[29], t[15], t[14], m, mp);
-        sp_2048_mont_sqr_64(t[30], t[15], m, mp);
-        sp_2048_mont_mul_64(t[31], t[16], t[15], m, mp);
-
-        i = (bits - 1) / 32;
-        n = e[i--];
-        c = bits & 31;
-        if (c == 0) {
-            c = 32;
-        }
-        c -= bits % 5;
-        if (c == 32) {
-            c = 27;
-        }
-        if (c < 0) {
-            /* Number of bits in top word is less than number needed. */
-            c = -c;
-            y = (byte)(n << c);
-            n = e[i--];
-            y |= (byte)(n >> (64 - c));
-            n <<= c;
-            c = 64 - c;
-        }
-        else {
-            y = (byte)(n >> c);
-            n <<= 32 - c;
-        }
-        XMEMCPY(r, t[y], sizeof(sp_digit) * 64);
-        for (; i>=0 || c>=5; ) {
-            if (c == 0) {
-                n = e[i--];
-                y = (byte)(n >> 27);
-                n <<= 5;
-                c = 27;
-            }
-            else if (c < 5) {
-                y = (byte)(n >> 27);
-                n = e[i--];
-                c = 5 - c;
-                y |= (byte)(n >> (32 - c));
-                n <<= c;
-                c = 32 - c;
-            }
-            else {
-                y = (byte)((n >> 27) & 0x1f);
-                n <<= 5;
-                c -= 5;
-            }
-
-            sp_2048_mont_sqr_64(r, r, m, mp);
-            sp_2048_mont_sqr_64(r, r, m, mp);
-            sp_2048_mont_sqr_64(r, r, m, mp);
-            sp_2048_mont_sqr_64(r, r, m, mp);
-            sp_2048_mont_sqr_64(r, r, m, mp);
-
-            sp_2048_mont_mul_64(r, r, t[y], m, mp);
-        }
-
-        XMEMSET(&r[64], 0, sizeof(sp_digit) * 64U);
-        sp_2048_mont_reduce_64(r, m, mp);
-
-        mask = 0 - (sp_2048_cmp_64(r, m) >= 0);
-        sp_2048_cond_sub_64(r, r, m, mask);
-    }
-
-#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    if (td != NULL)
-        XFREE(td, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-#endif
-
-    return err;
-}
 #endif /* WOLFSSL_SP_SMALL */
 #endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 
+#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 #ifdef WOLFSSL_HAVE_SP_RSA
 /* RSA public key operation.
  *
@@ -7286,7 +7662,7 @@ int sp_RsaPublic_2048(const byte* in, word32 inLen, const mp_int* em,
     sp_digit* a = NULL;
 #else
     sp_digit a[64 * 5];
-#endif    
+#endif
     sp_digit* m = NULL;
     sp_digit* r = NULL;
     sp_digit *ah = NULL;
@@ -7384,7 +7760,7 @@ int sp_RsaPublic_2048(const byte* in, word32 inLen, const mp_int* em,
     }
 
     if (err == MP_OKAY) {
-        sp_2048_to_bin(r, out);
+        sp_2048_to_bin_64(r, out);
         *outLen = 256;
     }
 
@@ -7680,7 +8056,7 @@ int sp_RsaPrivate_2048(const byte* in, word32 inLen, const mp_int* dm,
     }
 
     if (err == MP_OKAY) {
-        sp_2048_to_bin(r, out);
+        sp_2048_to_bin_64(r, out);
         *outLen = 256;
     }
 
@@ -7771,7 +8147,7 @@ int sp_RsaPrivate_2048(const byte* in, word32 inLen, const mp_int* dm,
         XMEMSET(&tmpb[32], 0, sizeof(sp_digit) * 32);
         sp_2048_add_64(r, tmpb, tmpa);
 
-        sp_2048_to_bin(r, out);
+        sp_2048_to_bin_64(r, out);
         *outLen = 256;
     }
 
@@ -8312,7 +8688,9 @@ static void sp_2048_lshift_64(sp_digit* r, sp_digit* a, byte n)
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even.
  */
 static int sp_2048_mod_exp_2_64(sp_digit* r, const sp_digit* e, int bits,
         const sp_digit* m)
@@ -8333,11 +8711,17 @@ static int sp_2048_mod_exp_2_64(sp_digit* r, const sp_digit* e, int bits,
     byte y;
     int err = MP_OKAY;
 
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * 193, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * 193, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
 #endif
 
     if (err == MP_OKAY) {
@@ -8471,7 +8855,7 @@ int sp_DhExp_2048(const mp_int* base, const byte* exp, word32 expLen,
     }
 
     if (err == MP_OKAY) {
-        sp_2048_to_bin(r, out);
+        sp_2048_to_bin_64(r, out);
         *outLen = 256;
         for (i=0; i<256 && out[i] == 0; i++) {
             /* Search for first non-zero. */
@@ -8670,7 +9054,7 @@ static void sp_3072_from_mp(sp_digit* r, int size, const mp_int* a)
  * r  A single precision integer.
  * a  Byte array.
  */
-static void sp_3072_to_bin(sp_digit* r, byte* a)
+static void sp_3072_to_bin_96(sp_digit* r, byte* a)
 {
     int i;
     int j;
@@ -8703,6 +9087,20 @@ static void sp_3072_to_bin(sp_digit* r, byte* a)
         }
     }
 }
+
+#if (defined(WOLFSSL_HAVE_SP_RSA) && (!defined(WOLFSSL_RSA_PUBLIC_ONLY) || !defined(WOLFSSL_SP_SMALL))) || defined(WOLFSSL_HAVE_SP_DH)
+/* Normalize the values in each word to 32.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_3072_norm_96(a)
+
+#endif /* (WOLFSSL_HAVE_SP_RSA && (!WOLFSSL_RSA_PUBLIC_ONLY || !WOLFSSL_SP_SMALL)) || WOLFSSL_HAVE_SP_DH */
+/* Normalize the values in each word to 32.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_3072_norm_96(a)
 
 #ifndef WOLFSSL_SP_SMALL
 /* Multiply a and b into r. (r = a * b)
@@ -14172,14 +14570,14 @@ SP_NOINLINE static void sp_3072_mont_reduce_48(sp_digit* a, const sp_digit* m,
     sp_3072_cond_sub_48(a - 48, a, m, (sp_digit)0 - ca);
 }
 
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_mul_48(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -14191,9 +14589,9 @@ static void sp_3072_mont_mul_48(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_sqr_48(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -14652,7 +15050,7 @@ static sp_digit div_3072_word_48(sp_digit d1, sp_digit d0, sp_digit div)
  * return -ve, 0 or +ve if a is less than, equal to or greater than b
  * respectively.
  */
-static int32_t sp_3072_cmp_48(const sp_digit* a, const sp_digit* b)
+static sp_int32 sp_3072_cmp_48(const sp_digit* a, const sp_digit* b)
 {
     sp_digit r = -1;
     sp_digit one = 1;
@@ -15284,7 +15682,9 @@ static WC_INLINE int sp_3072_mod_48(sp_digit* r, const sp_digit* a, const sp_dig
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
@@ -15304,11 +15704,20 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (16 * 96), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (16 * 96), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
 #endif
 
     if (err == MP_OKAY) {
@@ -15424,7 +15833,9 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
@@ -15444,11 +15855,20 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (32 * 96), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (32 * 96), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
 #endif
 
     if (err == MP_OKAY) {
@@ -15577,7 +15997,7 @@ static int sp_3072_mod_exp_48(sp_digit* r, const sp_digit* a, const sp_digit* e,
 
 #endif /* (WOLFSSL_HAVE_SP_RSA & !WOLFSSL_RSA_PUBLIC_ONLY) | WOLFSSL_HAVE_SP_DH */
 
-#if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH)
+#if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
 /* r = 2^n mod m where n is the number of bits to reduce by.
  * Given m must be 3072 bits, just need to subtract.
  *
@@ -15592,7 +16012,7 @@ static void sp_3072_mont_norm_96(sp_digit* r, const sp_digit* m)
     sp_3072_sub_in_place_96(r, m);
 }
 
-#endif /* WOLFSSL_HAVE_SP_RSA | WOLFSSL_HAVE_SP_DH */
+#endif /* (WOLFSSL_HAVE_SP_RSA & !WOLFSSL_RSA_PUBLIC_ONLY) | WOLFSSL_HAVE_SP_DH */
 /* Conditionally subtract b from a using the mask m.
  * m is -1 to subtract and 0 when not copying.
  *
@@ -17017,14 +17437,14 @@ SP_NOINLINE static void sp_3072_mont_reduce_96(sp_digit* a, const sp_digit* m,
     sp_3072_cond_sub_96(a - 96, a, m, (sp_digit)0 - ca);
 }
 
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_mul_96(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -17036,9 +17456,9 @@ static void sp_3072_mont_mul_96(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_3072_mont_sqr_96(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -17047,7 +17467,456 @@ static void sp_3072_mont_sqr_96(sp_digit* r, const sp_digit* a,
     sp_3072_mont_reduce_96(r, m, mp);
 }
 
-#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
+#ifdef WOLFSSL_SP_SMALL
+/* Sub b from a into r. (r = a - b)
+ *
+ * r  A single precision integer.
+ * a  A single precision integer.
+ * b  A single precision integer.
+ */
+static sp_digit sp_3072_sub_96(sp_digit* r, const sp_digit* a,
+        const sp_digit* b)
+{
+    sp_digit c = 0;
+
+    __asm__ __volatile__ (
+        "add	r12, %[a], #384\n\t"
+        "\n1:\n\t"
+        "rsbs	%[c], %[c], #0\n\t"
+        "ldr	r4, [%[a]], #4\n\t"
+        "ldr	r5, [%[a]], #4\n\t"
+        "ldr	r6, [%[a]], #4\n\t"
+        "ldr	r7, [%[a]], #4\n\t"
+        "ldr	r8, [%[b]], #4\n\t"
+        "ldr	r9, [%[b]], #4\n\t"
+        "ldr	r10, [%[b]], #4\n\t"
+        "ldr	r14, [%[b]], #4\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "sbcs	r7, r7, r14\n\t"
+        "str	r4, [%[r]], #4\n\t"
+        "str	r5, [%[r]], #4\n\t"
+        "str	r6, [%[r]], #4\n\t"
+        "str	r7, [%[r]], #4\n\t"
+        "sbc	%[c], r4, r4\n\t"
+        "cmp	%[a], r12\n\t"
+        "bne	1b\n\t"
+        : [c] "+r" (c), [r] "+r" (r), [a] "+r" (a), [b] "+r" (b)
+        :
+        : "memory", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r14", "r12"
+    );
+
+    return c;
+}
+
+#else
+/* Sub b from a into r. (r = a - b)
+ *
+ * r  A single precision integer.
+ * a  A single precision integer.
+ * b  A single precision integer.
+ */
+static sp_digit sp_3072_sub_96(sp_digit* r, const sp_digit* a,
+        const sp_digit* b)
+{
+    sp_digit c = 0;
+
+    __asm__ __volatile__ (
+        "ldr	r3, [%[a], #0]\n\t"
+        "ldr	r4, [%[a], #4]\n\t"
+        "ldr	r5, [%[a], #8]\n\t"
+        "ldr	r6, [%[a], #12]\n\t"
+        "ldr	r7, [%[b], #0]\n\t"
+        "ldr	r8, [%[b], #4]\n\t"
+        "ldr	r9, [%[b], #8]\n\t"
+        "ldr	r10, [%[b], #12]\n\t"
+        "subs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #0]\n\t"
+        "str	r4, [%[r], #4]\n\t"
+        "str	r5, [%[r], #8]\n\t"
+        "str	r6, [%[r], #12]\n\t"
+        "ldr	r3, [%[a], #16]\n\t"
+        "ldr	r4, [%[a], #20]\n\t"
+        "ldr	r5, [%[a], #24]\n\t"
+        "ldr	r6, [%[a], #28]\n\t"
+        "ldr	r7, [%[b], #16]\n\t"
+        "ldr	r8, [%[b], #20]\n\t"
+        "ldr	r9, [%[b], #24]\n\t"
+        "ldr	r10, [%[b], #28]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #16]\n\t"
+        "str	r4, [%[r], #20]\n\t"
+        "str	r5, [%[r], #24]\n\t"
+        "str	r6, [%[r], #28]\n\t"
+        "ldr	r3, [%[a], #32]\n\t"
+        "ldr	r4, [%[a], #36]\n\t"
+        "ldr	r5, [%[a], #40]\n\t"
+        "ldr	r6, [%[a], #44]\n\t"
+        "ldr	r7, [%[b], #32]\n\t"
+        "ldr	r8, [%[b], #36]\n\t"
+        "ldr	r9, [%[b], #40]\n\t"
+        "ldr	r10, [%[b], #44]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #32]\n\t"
+        "str	r4, [%[r], #36]\n\t"
+        "str	r5, [%[r], #40]\n\t"
+        "str	r6, [%[r], #44]\n\t"
+        "ldr	r3, [%[a], #48]\n\t"
+        "ldr	r4, [%[a], #52]\n\t"
+        "ldr	r5, [%[a], #56]\n\t"
+        "ldr	r6, [%[a], #60]\n\t"
+        "ldr	r7, [%[b], #48]\n\t"
+        "ldr	r8, [%[b], #52]\n\t"
+        "ldr	r9, [%[b], #56]\n\t"
+        "ldr	r10, [%[b], #60]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #48]\n\t"
+        "str	r4, [%[r], #52]\n\t"
+        "str	r5, [%[r], #56]\n\t"
+        "str	r6, [%[r], #60]\n\t"
+        "ldr	r3, [%[a], #64]\n\t"
+        "ldr	r4, [%[a], #68]\n\t"
+        "ldr	r5, [%[a], #72]\n\t"
+        "ldr	r6, [%[a], #76]\n\t"
+        "ldr	r7, [%[b], #64]\n\t"
+        "ldr	r8, [%[b], #68]\n\t"
+        "ldr	r9, [%[b], #72]\n\t"
+        "ldr	r10, [%[b], #76]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #64]\n\t"
+        "str	r4, [%[r], #68]\n\t"
+        "str	r5, [%[r], #72]\n\t"
+        "str	r6, [%[r], #76]\n\t"
+        "ldr	r3, [%[a], #80]\n\t"
+        "ldr	r4, [%[a], #84]\n\t"
+        "ldr	r5, [%[a], #88]\n\t"
+        "ldr	r6, [%[a], #92]\n\t"
+        "ldr	r7, [%[b], #80]\n\t"
+        "ldr	r8, [%[b], #84]\n\t"
+        "ldr	r9, [%[b], #88]\n\t"
+        "ldr	r10, [%[b], #92]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #80]\n\t"
+        "str	r4, [%[r], #84]\n\t"
+        "str	r5, [%[r], #88]\n\t"
+        "str	r6, [%[r], #92]\n\t"
+        "ldr	r3, [%[a], #96]\n\t"
+        "ldr	r4, [%[a], #100]\n\t"
+        "ldr	r5, [%[a], #104]\n\t"
+        "ldr	r6, [%[a], #108]\n\t"
+        "ldr	r7, [%[b], #96]\n\t"
+        "ldr	r8, [%[b], #100]\n\t"
+        "ldr	r9, [%[b], #104]\n\t"
+        "ldr	r10, [%[b], #108]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #96]\n\t"
+        "str	r4, [%[r], #100]\n\t"
+        "str	r5, [%[r], #104]\n\t"
+        "str	r6, [%[r], #108]\n\t"
+        "ldr	r3, [%[a], #112]\n\t"
+        "ldr	r4, [%[a], #116]\n\t"
+        "ldr	r5, [%[a], #120]\n\t"
+        "ldr	r6, [%[a], #124]\n\t"
+        "ldr	r7, [%[b], #112]\n\t"
+        "ldr	r8, [%[b], #116]\n\t"
+        "ldr	r9, [%[b], #120]\n\t"
+        "ldr	r10, [%[b], #124]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #112]\n\t"
+        "str	r4, [%[r], #116]\n\t"
+        "str	r5, [%[r], #120]\n\t"
+        "str	r6, [%[r], #124]\n\t"
+        "ldr	r3, [%[a], #128]\n\t"
+        "ldr	r4, [%[a], #132]\n\t"
+        "ldr	r5, [%[a], #136]\n\t"
+        "ldr	r6, [%[a], #140]\n\t"
+        "ldr	r7, [%[b], #128]\n\t"
+        "ldr	r8, [%[b], #132]\n\t"
+        "ldr	r9, [%[b], #136]\n\t"
+        "ldr	r10, [%[b], #140]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #128]\n\t"
+        "str	r4, [%[r], #132]\n\t"
+        "str	r5, [%[r], #136]\n\t"
+        "str	r6, [%[r], #140]\n\t"
+        "ldr	r3, [%[a], #144]\n\t"
+        "ldr	r4, [%[a], #148]\n\t"
+        "ldr	r5, [%[a], #152]\n\t"
+        "ldr	r6, [%[a], #156]\n\t"
+        "ldr	r7, [%[b], #144]\n\t"
+        "ldr	r8, [%[b], #148]\n\t"
+        "ldr	r9, [%[b], #152]\n\t"
+        "ldr	r10, [%[b], #156]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #144]\n\t"
+        "str	r4, [%[r], #148]\n\t"
+        "str	r5, [%[r], #152]\n\t"
+        "str	r6, [%[r], #156]\n\t"
+        "ldr	r3, [%[a], #160]\n\t"
+        "ldr	r4, [%[a], #164]\n\t"
+        "ldr	r5, [%[a], #168]\n\t"
+        "ldr	r6, [%[a], #172]\n\t"
+        "ldr	r7, [%[b], #160]\n\t"
+        "ldr	r8, [%[b], #164]\n\t"
+        "ldr	r9, [%[b], #168]\n\t"
+        "ldr	r10, [%[b], #172]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #160]\n\t"
+        "str	r4, [%[r], #164]\n\t"
+        "str	r5, [%[r], #168]\n\t"
+        "str	r6, [%[r], #172]\n\t"
+        "ldr	r3, [%[a], #176]\n\t"
+        "ldr	r4, [%[a], #180]\n\t"
+        "ldr	r5, [%[a], #184]\n\t"
+        "ldr	r6, [%[a], #188]\n\t"
+        "ldr	r7, [%[b], #176]\n\t"
+        "ldr	r8, [%[b], #180]\n\t"
+        "ldr	r9, [%[b], #184]\n\t"
+        "ldr	r10, [%[b], #188]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #176]\n\t"
+        "str	r4, [%[r], #180]\n\t"
+        "str	r5, [%[r], #184]\n\t"
+        "str	r6, [%[r], #188]\n\t"
+        "ldr	r3, [%[a], #192]\n\t"
+        "ldr	r4, [%[a], #196]\n\t"
+        "ldr	r5, [%[a], #200]\n\t"
+        "ldr	r6, [%[a], #204]\n\t"
+        "ldr	r7, [%[b], #192]\n\t"
+        "ldr	r8, [%[b], #196]\n\t"
+        "ldr	r9, [%[b], #200]\n\t"
+        "ldr	r10, [%[b], #204]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #192]\n\t"
+        "str	r4, [%[r], #196]\n\t"
+        "str	r5, [%[r], #200]\n\t"
+        "str	r6, [%[r], #204]\n\t"
+        "ldr	r3, [%[a], #208]\n\t"
+        "ldr	r4, [%[a], #212]\n\t"
+        "ldr	r5, [%[a], #216]\n\t"
+        "ldr	r6, [%[a], #220]\n\t"
+        "ldr	r7, [%[b], #208]\n\t"
+        "ldr	r8, [%[b], #212]\n\t"
+        "ldr	r9, [%[b], #216]\n\t"
+        "ldr	r10, [%[b], #220]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #208]\n\t"
+        "str	r4, [%[r], #212]\n\t"
+        "str	r5, [%[r], #216]\n\t"
+        "str	r6, [%[r], #220]\n\t"
+        "ldr	r3, [%[a], #224]\n\t"
+        "ldr	r4, [%[a], #228]\n\t"
+        "ldr	r5, [%[a], #232]\n\t"
+        "ldr	r6, [%[a], #236]\n\t"
+        "ldr	r7, [%[b], #224]\n\t"
+        "ldr	r8, [%[b], #228]\n\t"
+        "ldr	r9, [%[b], #232]\n\t"
+        "ldr	r10, [%[b], #236]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #224]\n\t"
+        "str	r4, [%[r], #228]\n\t"
+        "str	r5, [%[r], #232]\n\t"
+        "str	r6, [%[r], #236]\n\t"
+        "ldr	r3, [%[a], #240]\n\t"
+        "ldr	r4, [%[a], #244]\n\t"
+        "ldr	r5, [%[a], #248]\n\t"
+        "ldr	r6, [%[a], #252]\n\t"
+        "ldr	r7, [%[b], #240]\n\t"
+        "ldr	r8, [%[b], #244]\n\t"
+        "ldr	r9, [%[b], #248]\n\t"
+        "ldr	r10, [%[b], #252]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #240]\n\t"
+        "str	r4, [%[r], #244]\n\t"
+        "str	r5, [%[r], #248]\n\t"
+        "str	r6, [%[r], #252]\n\t"
+        "ldr	r3, [%[a], #256]\n\t"
+        "ldr	r4, [%[a], #260]\n\t"
+        "ldr	r5, [%[a], #264]\n\t"
+        "ldr	r6, [%[a], #268]\n\t"
+        "ldr	r7, [%[b], #256]\n\t"
+        "ldr	r8, [%[b], #260]\n\t"
+        "ldr	r9, [%[b], #264]\n\t"
+        "ldr	r10, [%[b], #268]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #256]\n\t"
+        "str	r4, [%[r], #260]\n\t"
+        "str	r5, [%[r], #264]\n\t"
+        "str	r6, [%[r], #268]\n\t"
+        "ldr	r3, [%[a], #272]\n\t"
+        "ldr	r4, [%[a], #276]\n\t"
+        "ldr	r5, [%[a], #280]\n\t"
+        "ldr	r6, [%[a], #284]\n\t"
+        "ldr	r7, [%[b], #272]\n\t"
+        "ldr	r8, [%[b], #276]\n\t"
+        "ldr	r9, [%[b], #280]\n\t"
+        "ldr	r10, [%[b], #284]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #272]\n\t"
+        "str	r4, [%[r], #276]\n\t"
+        "str	r5, [%[r], #280]\n\t"
+        "str	r6, [%[r], #284]\n\t"
+        "ldr	r3, [%[a], #288]\n\t"
+        "ldr	r4, [%[a], #292]\n\t"
+        "ldr	r5, [%[a], #296]\n\t"
+        "ldr	r6, [%[a], #300]\n\t"
+        "ldr	r7, [%[b], #288]\n\t"
+        "ldr	r8, [%[b], #292]\n\t"
+        "ldr	r9, [%[b], #296]\n\t"
+        "ldr	r10, [%[b], #300]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #288]\n\t"
+        "str	r4, [%[r], #292]\n\t"
+        "str	r5, [%[r], #296]\n\t"
+        "str	r6, [%[r], #300]\n\t"
+        "ldr	r3, [%[a], #304]\n\t"
+        "ldr	r4, [%[a], #308]\n\t"
+        "ldr	r5, [%[a], #312]\n\t"
+        "ldr	r6, [%[a], #316]\n\t"
+        "ldr	r7, [%[b], #304]\n\t"
+        "ldr	r8, [%[b], #308]\n\t"
+        "ldr	r9, [%[b], #312]\n\t"
+        "ldr	r10, [%[b], #316]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #304]\n\t"
+        "str	r4, [%[r], #308]\n\t"
+        "str	r5, [%[r], #312]\n\t"
+        "str	r6, [%[r], #316]\n\t"
+        "ldr	r3, [%[a], #320]\n\t"
+        "ldr	r4, [%[a], #324]\n\t"
+        "ldr	r5, [%[a], #328]\n\t"
+        "ldr	r6, [%[a], #332]\n\t"
+        "ldr	r7, [%[b], #320]\n\t"
+        "ldr	r8, [%[b], #324]\n\t"
+        "ldr	r9, [%[b], #328]\n\t"
+        "ldr	r10, [%[b], #332]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #320]\n\t"
+        "str	r4, [%[r], #324]\n\t"
+        "str	r5, [%[r], #328]\n\t"
+        "str	r6, [%[r], #332]\n\t"
+        "ldr	r3, [%[a], #336]\n\t"
+        "ldr	r4, [%[a], #340]\n\t"
+        "ldr	r5, [%[a], #344]\n\t"
+        "ldr	r6, [%[a], #348]\n\t"
+        "ldr	r7, [%[b], #336]\n\t"
+        "ldr	r8, [%[b], #340]\n\t"
+        "ldr	r9, [%[b], #344]\n\t"
+        "ldr	r10, [%[b], #348]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #336]\n\t"
+        "str	r4, [%[r], #340]\n\t"
+        "str	r5, [%[r], #344]\n\t"
+        "str	r6, [%[r], #348]\n\t"
+        "ldr	r3, [%[a], #352]\n\t"
+        "ldr	r4, [%[a], #356]\n\t"
+        "ldr	r5, [%[a], #360]\n\t"
+        "ldr	r6, [%[a], #364]\n\t"
+        "ldr	r7, [%[b], #352]\n\t"
+        "ldr	r8, [%[b], #356]\n\t"
+        "ldr	r9, [%[b], #360]\n\t"
+        "ldr	r10, [%[b], #364]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #352]\n\t"
+        "str	r4, [%[r], #356]\n\t"
+        "str	r5, [%[r], #360]\n\t"
+        "str	r6, [%[r], #364]\n\t"
+        "ldr	r3, [%[a], #368]\n\t"
+        "ldr	r4, [%[a], #372]\n\t"
+        "ldr	r5, [%[a], #376]\n\t"
+        "ldr	r6, [%[a], #380]\n\t"
+        "ldr	r7, [%[b], #368]\n\t"
+        "ldr	r8, [%[b], #372]\n\t"
+        "ldr	r9, [%[b], #376]\n\t"
+        "ldr	r10, [%[b], #380]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #368]\n\t"
+        "str	r4, [%[r], #372]\n\t"
+        "str	r5, [%[r], #376]\n\t"
+        "str	r6, [%[r], #380]\n\t"
+        "sbc	%[c], %[c], #0\n\t"
+        : [c] "+r" (c)
+        : [r] "r" (r), [a] "r" (a), [b] "r" (b)
+        : "memory", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"
+    );
+
+    return c;
+}
+
+#endif /* WOLFSSL_SP_SMALL */
 /* Divide the double width number (d1|d0) by the dividend. (d1|d0 / div)
  *
  * d1   The high order half of the number to divide.
@@ -17110,6 +17979,69 @@ static sp_digit div_3072_word_96(sp_digit d1, sp_digit d0, sp_digit div)
     return r;
 }
 
+/* Divide d in a and put remainder into r (m*d + r = a)
+ * m is not calculated as it is not needed at this time.
+ *
+ * a  Number to be divided.
+ * d  Number to divide with.
+ * m  Multiplier result.
+ * r  Remainder from the division.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_3072_div_96_cond(const sp_digit* a, const sp_digit* d, sp_digit* m,
+        sp_digit* r)
+{
+    sp_digit t1[192], t2[97];
+    sp_digit div, r1;
+    int i;
+
+    (void)m;
+
+
+    div = d[95];
+    XMEMCPY(t1, a, sizeof(*t1) * 2 * 96);
+    for (i=95; i>=0; i--) {
+        sp_digit hi = t1[96 + i] - (t1[96 + i] == div);
+        r1 = div_3072_word_96(hi, t1[96 + i - 1], div);
+
+        sp_3072_mul_d_96(t2, d, r1);
+        t1[96 + i] += sp_3072_sub_in_place_96(&t1[i], t2);
+        t1[96 + i] -= t2[96];
+        if (t1[96 + i] != 0) {
+            t1[96 + i] += sp_3072_add_96(&t1[i], &t1[i], d);
+            if (t1[96 + i] != 0)
+                t1[96 + i] += sp_3072_add_96(&t1[i], &t1[i], d);
+        }
+    }
+
+    for (i = 95; i > 0; i--) {
+        if (t1[i] != d[i])
+            break;
+    }
+    if (t1[i] >= d[i]) {
+        sp_3072_sub_96(r, t1, d);
+    }
+    else {
+        XMEMCPY(r, t1, sizeof(*t1) * 96);
+    }
+
+    return MP_OKAY;
+}
+
+/* Reduce a modulo m into r. (r = a mod m)
+ *
+ * r  A single precision number that is the reduced result.
+ * a  A single precision number that is to be reduced.
+ * m  A single precision number that is the modulus to reduce with.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_3072_mod_96_cond(sp_digit* r, const sp_digit* a, const sp_digit* m)
+{
+    return sp_3072_div_96_cond(a, m, NULL, r);
+}
+
+#if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
+#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
 /* AND m into each word of a and store in r.
  *
  * r  A single precision integer.
@@ -17147,7 +18079,7 @@ static void sp_3072_mask_96(sp_digit* r, const sp_digit* a, sp_digit m)
  * return -ve, 0 or +ve if a is less than, equal to or greater than b
  * respectively.
  */
-static int32_t sp_3072_cmp_96(const sp_digit* a, const sp_digit* b)
+static sp_int32 sp_3072_cmp_96(const sp_digit* a, const sp_digit* b)
 {
     sp_digit r = -1;
     sp_digit one = 1;
@@ -18300,59 +19232,6 @@ static WC_INLINE int sp_3072_mod_96(sp_digit* r, const sp_digit* a, const sp_dig
 }
 
 #endif /* WOLFSSL_HAVE_SP_DH || !WOLFSSL_RSA_PUBLIC_ONLY */
-/* Divide d in a and put remainder into r (m*d + r = a)
- * m is not calculated as it is not needed at this time.
- *
- * a  Number to be divided.
- * d  Number to divide with.
- * m  Multiplier result.
- * r  Remainder from the division.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_3072_div_96_cond(const sp_digit* a, const sp_digit* d, sp_digit* m,
-        sp_digit* r)
-{
-    sp_digit t1[192], t2[97];
-    sp_digit div, r1;
-    int i;
-
-    (void)m;
-
-
-    div = d[95];
-    XMEMCPY(t1, a, sizeof(*t1) * 2 * 96);
-    for (i=95; i>=0; i--) {
-        sp_digit hi = t1[96 + i] - (t1[96 + i] == div);
-        r1 = div_3072_word_96(hi, t1[96 + i - 1], div);
-
-        sp_3072_mul_d_96(t2, d, r1);
-        t1[96 + i] += sp_3072_sub_in_place_96(&t1[i], t2);
-        t1[96 + i] -= t2[96];
-        if (t1[96 + i] != 0) {
-            t1[96 + i] += sp_3072_add_96(&t1[i], &t1[i], d);
-            if (t1[96 + i] != 0)
-                t1[96 + i] += sp_3072_add_96(&t1[i], &t1[i], d);
-        }
-    }
-
-    r1 = sp_3072_cmp_96(t1, d) >= 0;
-    sp_3072_cond_sub_96(r, t1, d, (sp_digit)0 - r1);
-
-    return MP_OKAY;
-}
-
-/* Reduce a modulo m into r. (r = a mod m)
- *
- * r  A single precision number that is the reduced result.
- * a  A single precision number that is to be reduced.
- * m  A single precision number that is the modulus to reduce with.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_3072_mod_96_cond(sp_digit* r, const sp_digit* a, const sp_digit* m)
-{
-    return sp_3072_div_96_cond(a, m, NULL, r);
-}
-
 #if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || \
                                                      defined(WOLFSSL_HAVE_SP_DH)
 #ifdef WOLFSSL_SP_SMALL
@@ -18363,7 +19242,151 @@ static WC_INLINE int sp_3072_mod_96_cond(sp_digit* r, const sp_digit* a, const s
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
+ */
+static int sp_3072_mod_exp_96(sp_digit* r, const sp_digit* a, const sp_digit* e,
+        int bits, const sp_digit* m, int reduceA)
+{
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit* td = NULL;
+#else
+    sp_digit td[8 * 192];
+#endif
+    sp_digit* t[8];
+    sp_digit* norm = NULL;
+    sp_digit mp = 1;
+    sp_digit n;
+    sp_digit mask;
+    int i;
+    int c;
+    byte y;
+    int err = MP_OKAY;
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (8 * 192), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
+#endif
+
+    if (err == MP_OKAY) {
+        norm = td;
+        for (i=0; i<8; i++) {
+            t[i] = td + i * 192;
+        }
+
+        sp_3072_mont_setup(m, &mp);
+        sp_3072_mont_norm_96(norm, m);
+
+        XMEMSET(t[1], 0, sizeof(sp_digit) * 96U);
+        if (reduceA != 0) {
+            err = sp_3072_mod_96(t[1] + 96, a, m);
+            if (err == MP_OKAY) {
+                err = sp_3072_mod_96(t[1], t[1], m);
+            }
+        }
+        else {
+            XMEMCPY(t[1] + 96, a, sizeof(sp_digit) * 96);
+            err = sp_3072_mod_96(t[1], t[1], m);
+        }
+    }
+
+    if (err == MP_OKAY) {
+        sp_3072_mont_sqr_96(t[ 2], t[ 1], m, mp);
+        sp_3072_mont_mul_96(t[ 3], t[ 2], t[ 1], m, mp);
+        sp_3072_mont_sqr_96(t[ 4], t[ 2], m, mp);
+        sp_3072_mont_mul_96(t[ 5], t[ 3], t[ 2], m, mp);
+        sp_3072_mont_sqr_96(t[ 6], t[ 3], m, mp);
+        sp_3072_mont_mul_96(t[ 7], t[ 4], t[ 3], m, mp);
+
+        i = (bits - 1) / 32;
+        n = e[i--];
+        c = bits & 31;
+        if (c == 0) {
+            c = 32;
+        }
+        c -= bits % 3;
+        if (c == 32) {
+            c = 29;
+        }
+        if (c < 0) {
+            /* Number of bits in top word is less than number needed. */
+            c = -c;
+            y = (byte)(n << c);
+            n = e[i--];
+            y |= (byte)(n >> (64 - c));
+            n <<= c;
+            c = 64 - c;
+        }
+        else {
+            y = (byte)(n >> c);
+            n <<= 32 - c;
+        }
+        XMEMCPY(r, t[y], sizeof(sp_digit) * 96);
+        for (; i>=0 || c>=3; ) {
+            if (c == 0) {
+                n = e[i--];
+                y = (byte)(n >> 29);
+                n <<= 3;
+                c = 29;
+            }
+            else if (c < 3) {
+                y = (byte)(n >> 29);
+                n = e[i--];
+                c = 3 - c;
+                y |= (byte)(n >> (32 - c));
+                n <<= c;
+                c = 32 - c;
+            }
+            else {
+                y = (byte)((n >> 29) & 0x7);
+                n <<= 3;
+                c -= 3;
+            }
+
+            sp_3072_mont_sqr_96(r, r, m, mp);
+            sp_3072_mont_sqr_96(r, r, m, mp);
+            sp_3072_mont_sqr_96(r, r, m, mp);
+
+            sp_3072_mont_mul_96(r, r, t[y], m, mp);
+        }
+
+        XMEMSET(&r[96], 0, sizeof(sp_digit) * 96U);
+        sp_3072_mont_reduce_96(r, m, mp);
+
+        mask = 0 - (sp_3072_cmp_96(r, m) >= 0);
+        sp_3072_cond_sub_96(r, r, m, mask);
+    }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (td != NULL)
+        XFREE(td, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#endif
+
+    return err;
+}
+#else
+/* Modular exponentiate a to the e mod m. (r = a^e mod m)
+ *
+ * r     A single precision number that is the result of the operation.
+ * a     A single precision number being exponentiated.
+ * e     A single precision number that is the exponent.
+ * bits  The number of bits in the exponent.
+ * m     A single precision number that is the modulus.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_3072_mod_exp_96(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
@@ -18383,11 +19406,20 @@ static int sp_3072_mod_exp_96(sp_digit* r, const sp_digit* a, const sp_digit* e,
     byte y;
     int err = MP_OKAY;
 
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (16 * 192), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (16 * 192), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
 #endif
 
     if (err == MP_OKAY) {
@@ -18495,166 +19527,10 @@ static int sp_3072_mod_exp_96(sp_digit* r, const sp_digit* a, const sp_digit* e,
 
     return err;
 }
-#else
-/* Modular exponentiate a to the e mod m. (r = a^e mod m)
- *
- * r     A single precision number that is the result of the operation.
- * a     A single precision number being exponentiated.
- * e     A single precision number that is the exponent.
- * bits  The number of bits in the exponent.
- * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
- */
-static int sp_3072_mod_exp_96(sp_digit* r, const sp_digit* a, const sp_digit* e,
-        int bits, const sp_digit* m, int reduceA)
-{
-#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td = NULL;
-#else
-    sp_digit td[32 * 192];
-#endif
-    sp_digit* t[32];
-    sp_digit* norm = NULL;
-    sp_digit mp = 1;
-    sp_digit n;
-    sp_digit mask;
-    int i;
-    int c;
-    byte y;
-    int err = MP_OKAY;
-
-#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (32 * 192), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
-#endif
-
-    if (err == MP_OKAY) {
-        norm = td;
-        for (i=0; i<32; i++) {
-            t[i] = td + i * 192;
-        }
-
-        sp_3072_mont_setup(m, &mp);
-        sp_3072_mont_norm_96(norm, m);
-
-        XMEMSET(t[1], 0, sizeof(sp_digit) * 96U);
-        if (reduceA != 0) {
-            err = sp_3072_mod_96(t[1] + 96, a, m);
-            if (err == MP_OKAY) {
-                err = sp_3072_mod_96(t[1], t[1], m);
-            }
-        }
-        else {
-            XMEMCPY(t[1] + 96, a, sizeof(sp_digit) * 96);
-            err = sp_3072_mod_96(t[1], t[1], m);
-        }
-    }
-
-    if (err == MP_OKAY) {
-        sp_3072_mont_sqr_96(t[ 2], t[ 1], m, mp);
-        sp_3072_mont_mul_96(t[ 3], t[ 2], t[ 1], m, mp);
-        sp_3072_mont_sqr_96(t[ 4], t[ 2], m, mp);
-        sp_3072_mont_mul_96(t[ 5], t[ 3], t[ 2], m, mp);
-        sp_3072_mont_sqr_96(t[ 6], t[ 3], m, mp);
-        sp_3072_mont_mul_96(t[ 7], t[ 4], t[ 3], m, mp);
-        sp_3072_mont_sqr_96(t[ 8], t[ 4], m, mp);
-        sp_3072_mont_mul_96(t[ 9], t[ 5], t[ 4], m, mp);
-        sp_3072_mont_sqr_96(t[10], t[ 5], m, mp);
-        sp_3072_mont_mul_96(t[11], t[ 6], t[ 5], m, mp);
-        sp_3072_mont_sqr_96(t[12], t[ 6], m, mp);
-        sp_3072_mont_mul_96(t[13], t[ 7], t[ 6], m, mp);
-        sp_3072_mont_sqr_96(t[14], t[ 7], m, mp);
-        sp_3072_mont_mul_96(t[15], t[ 8], t[ 7], m, mp);
-        sp_3072_mont_sqr_96(t[16], t[ 8], m, mp);
-        sp_3072_mont_mul_96(t[17], t[ 9], t[ 8], m, mp);
-        sp_3072_mont_sqr_96(t[18], t[ 9], m, mp);
-        sp_3072_mont_mul_96(t[19], t[10], t[ 9], m, mp);
-        sp_3072_mont_sqr_96(t[20], t[10], m, mp);
-        sp_3072_mont_mul_96(t[21], t[11], t[10], m, mp);
-        sp_3072_mont_sqr_96(t[22], t[11], m, mp);
-        sp_3072_mont_mul_96(t[23], t[12], t[11], m, mp);
-        sp_3072_mont_sqr_96(t[24], t[12], m, mp);
-        sp_3072_mont_mul_96(t[25], t[13], t[12], m, mp);
-        sp_3072_mont_sqr_96(t[26], t[13], m, mp);
-        sp_3072_mont_mul_96(t[27], t[14], t[13], m, mp);
-        sp_3072_mont_sqr_96(t[28], t[14], m, mp);
-        sp_3072_mont_mul_96(t[29], t[15], t[14], m, mp);
-        sp_3072_mont_sqr_96(t[30], t[15], m, mp);
-        sp_3072_mont_mul_96(t[31], t[16], t[15], m, mp);
-
-        i = (bits - 1) / 32;
-        n = e[i--];
-        c = bits & 31;
-        if (c == 0) {
-            c = 32;
-        }
-        c -= bits % 5;
-        if (c == 32) {
-            c = 27;
-        }
-        if (c < 0) {
-            /* Number of bits in top word is less than number needed. */
-            c = -c;
-            y = (byte)(n << c);
-            n = e[i--];
-            y |= (byte)(n >> (64 - c));
-            n <<= c;
-            c = 64 - c;
-        }
-        else {
-            y = (byte)(n >> c);
-            n <<= 32 - c;
-        }
-        XMEMCPY(r, t[y], sizeof(sp_digit) * 96);
-        for (; i>=0 || c>=5; ) {
-            if (c == 0) {
-                n = e[i--];
-                y = (byte)(n >> 27);
-                n <<= 5;
-                c = 27;
-            }
-            else if (c < 5) {
-                y = (byte)(n >> 27);
-                n = e[i--];
-                c = 5 - c;
-                y |= (byte)(n >> (32 - c));
-                n <<= c;
-                c = 32 - c;
-            }
-            else {
-                y = (byte)((n >> 27) & 0x1f);
-                n <<= 5;
-                c -= 5;
-            }
-
-            sp_3072_mont_sqr_96(r, r, m, mp);
-            sp_3072_mont_sqr_96(r, r, m, mp);
-            sp_3072_mont_sqr_96(r, r, m, mp);
-            sp_3072_mont_sqr_96(r, r, m, mp);
-            sp_3072_mont_sqr_96(r, r, m, mp);
-
-            sp_3072_mont_mul_96(r, r, t[y], m, mp);
-        }
-
-        XMEMSET(&r[96], 0, sizeof(sp_digit) * 96U);
-        sp_3072_mont_reduce_96(r, m, mp);
-
-        mask = 0 - (sp_3072_cmp_96(r, m) >= 0);
-        sp_3072_cond_sub_96(r, r, m, mask);
-    }
-
-#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    if (td != NULL)
-        XFREE(td, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-#endif
-
-    return err;
-}
 #endif /* WOLFSSL_SP_SMALL */
 #endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 
+#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 #ifdef WOLFSSL_HAVE_SP_RSA
 /* RSA public key operation.
  *
@@ -18675,7 +19551,7 @@ int sp_RsaPublic_3072(const byte* in, word32 inLen, const mp_int* em,
     sp_digit* a = NULL;
 #else
     sp_digit a[96 * 5];
-#endif    
+#endif
     sp_digit* m = NULL;
     sp_digit* r = NULL;
     sp_digit *ah = NULL;
@@ -18773,7 +19649,7 @@ int sp_RsaPublic_3072(const byte* in, word32 inLen, const mp_int* em,
     }
 
     if (err == MP_OKAY) {
-        sp_3072_to_bin(r, out);
+        sp_3072_to_bin_96(r, out);
         *outLen = 384;
     }
 
@@ -19149,7 +20025,7 @@ int sp_RsaPrivate_3072(const byte* in, word32 inLen, const mp_int* dm,
     }
 
     if (err == MP_OKAY) {
-        sp_3072_to_bin(r, out);
+        sp_3072_to_bin_96(r, out);
         *outLen = 384;
     }
 
@@ -19240,7 +20116,7 @@ int sp_RsaPrivate_3072(const byte* in, word32 inLen, const mp_int* dm,
         XMEMSET(&tmpb[48], 0, sizeof(sp_digit) * 48);
         sp_3072_add_96(r, tmpb, tmpa);
 
-        sp_3072_to_bin(r, out);
+        sp_3072_to_bin_96(r, out);
         *outLen = 384;
     }
 
@@ -19973,7 +20849,9 @@ static void sp_3072_lshift_96(sp_digit* r, sp_digit* a, byte n)
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even.
  */
 static int sp_3072_mod_exp_2_96(sp_digit* r, const sp_digit* e, int bits,
         const sp_digit* m)
@@ -19994,11 +20872,17 @@ static int sp_3072_mod_exp_2_96(sp_digit* r, const sp_digit* e, int bits,
     byte y;
     int err = MP_OKAY;
 
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * 289, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * 289, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
 #endif
 
     if (err == MP_OKAY) {
@@ -20132,7 +21016,7 @@ int sp_DhExp_3072(const mp_int* base, const byte* exp, word32 expLen,
     }
 
     if (err == MP_OKAY) {
-        sp_3072_to_bin(r, out);
+        sp_3072_to_bin_96(r, out);
         *outLen = 384;
         for (i=0; i<384 && out[i] == 0; i++) {
             /* Search for first non-zero. */
@@ -20331,7 +21215,7 @@ static void sp_4096_from_mp(sp_digit* r, int size, const mp_int* a)
  * r  A single precision integer.
  * a  Byte array.
  */
-static void sp_4096_to_bin(sp_digit* r, byte* a)
+static void sp_4096_to_bin_128(sp_digit* r, byte* a)
 {
     int i;
     int j;
@@ -20364,6 +21248,20 @@ static void sp_4096_to_bin(sp_digit* r, byte* a)
         }
     }
 }
+
+#if (defined(WOLFSSL_HAVE_SP_RSA) && (!defined(WOLFSSL_RSA_PUBLIC_ONLY) || !defined(WOLFSSL_SP_SMALL))) || defined(WOLFSSL_HAVE_SP_DH)
+/* Normalize the values in each word to 32.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_4096_norm_128(a)
+
+#endif /* (WOLFSSL_HAVE_SP_RSA && (!WOLFSSL_RSA_PUBLIC_ONLY || !WOLFSSL_SP_SMALL)) || WOLFSSL_HAVE_SP_DH */
+/* Normalize the values in each word to 32.
+ *
+ * a  Array of sp_digit to normalize.
+ */
+#define sp_4096_norm_128(a)
 
 #ifndef WOLFSSL_SP_SMALL
 /* Sub b from a into a. (a -= b)
@@ -22680,7 +23578,7 @@ static void sp_4096_mul_d_128(sp_digit* r, const sp_digit* a,
 #endif
 }
 
-#if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH)
+#if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
 /* r = 2^n mod m where n is the number of bits to reduce by.
  * Given m must be 4096 bits, just need to subtract.
  *
@@ -22695,7 +23593,7 @@ static void sp_4096_mont_norm_128(sp_digit* r, const sp_digit* m)
     sp_4096_sub_in_place_128(r, m);
 }
 
-#endif /* WOLFSSL_HAVE_SP_RSA | WOLFSSL_HAVE_SP_DH */
+#endif /* (WOLFSSL_HAVE_SP_RSA & !WOLFSSL_RSA_PUBLIC_ONLY) | WOLFSSL_HAVE_SP_DH */
 /* Conditionally subtract b from a using the mask m.
  * m is -1 to subtract and 0 when not copying.
  *
@@ -24568,14 +25466,14 @@ SP_NOINLINE static void sp_4096_mont_reduce_128(sp_digit* a, const sp_digit* m,
     sp_4096_cond_sub_128(a - 128, a, m, (sp_digit)0 - ca);
 }
 
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_4096_mont_mul_128(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -24587,9 +25485,9 @@ static void sp_4096_mont_mul_128(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_4096_mont_sqr_128(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -24598,7 +25496,584 @@ static void sp_4096_mont_sqr_128(sp_digit* r, const sp_digit* a,
     sp_4096_mont_reduce_128(r, m, mp);
 }
 
-#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
+#ifdef WOLFSSL_SP_SMALL
+/* Sub b from a into r. (r = a - b)
+ *
+ * r  A single precision integer.
+ * a  A single precision integer.
+ * b  A single precision integer.
+ */
+static sp_digit sp_4096_sub_128(sp_digit* r, const sp_digit* a,
+        const sp_digit* b)
+{
+    sp_digit c = 0;
+
+    __asm__ __volatile__ (
+        "add	r12, %[a], #512\n\t"
+        "\n1:\n\t"
+        "rsbs	%[c], %[c], #0\n\t"
+        "ldr	r4, [%[a]], #4\n\t"
+        "ldr	r5, [%[a]], #4\n\t"
+        "ldr	r6, [%[a]], #4\n\t"
+        "ldr	r7, [%[a]], #4\n\t"
+        "ldr	r8, [%[b]], #4\n\t"
+        "ldr	r9, [%[b]], #4\n\t"
+        "ldr	r10, [%[b]], #4\n\t"
+        "ldr	r14, [%[b]], #4\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "sbcs	r7, r7, r14\n\t"
+        "str	r4, [%[r]], #4\n\t"
+        "str	r5, [%[r]], #4\n\t"
+        "str	r6, [%[r]], #4\n\t"
+        "str	r7, [%[r]], #4\n\t"
+        "sbc	%[c], r4, r4\n\t"
+        "cmp	%[a], r12\n\t"
+        "bne	1b\n\t"
+        : [c] "+r" (c), [r] "+r" (r), [a] "+r" (a), [b] "+r" (b)
+        :
+        : "memory", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r14", "r12"
+    );
+
+    return c;
+}
+
+#else
+/* Sub b from a into r. (r = a - b)
+ *
+ * r  A single precision integer.
+ * a  A single precision integer.
+ * b  A single precision integer.
+ */
+static sp_digit sp_4096_sub_128(sp_digit* r, const sp_digit* a,
+        const sp_digit* b)
+{
+    sp_digit c = 0;
+
+    __asm__ __volatile__ (
+        "ldr	r3, [%[a], #0]\n\t"
+        "ldr	r4, [%[a], #4]\n\t"
+        "ldr	r5, [%[a], #8]\n\t"
+        "ldr	r6, [%[a], #12]\n\t"
+        "ldr	r7, [%[b], #0]\n\t"
+        "ldr	r8, [%[b], #4]\n\t"
+        "ldr	r9, [%[b], #8]\n\t"
+        "ldr	r10, [%[b], #12]\n\t"
+        "subs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #0]\n\t"
+        "str	r4, [%[r], #4]\n\t"
+        "str	r5, [%[r], #8]\n\t"
+        "str	r6, [%[r], #12]\n\t"
+        "ldr	r3, [%[a], #16]\n\t"
+        "ldr	r4, [%[a], #20]\n\t"
+        "ldr	r5, [%[a], #24]\n\t"
+        "ldr	r6, [%[a], #28]\n\t"
+        "ldr	r7, [%[b], #16]\n\t"
+        "ldr	r8, [%[b], #20]\n\t"
+        "ldr	r9, [%[b], #24]\n\t"
+        "ldr	r10, [%[b], #28]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #16]\n\t"
+        "str	r4, [%[r], #20]\n\t"
+        "str	r5, [%[r], #24]\n\t"
+        "str	r6, [%[r], #28]\n\t"
+        "ldr	r3, [%[a], #32]\n\t"
+        "ldr	r4, [%[a], #36]\n\t"
+        "ldr	r5, [%[a], #40]\n\t"
+        "ldr	r6, [%[a], #44]\n\t"
+        "ldr	r7, [%[b], #32]\n\t"
+        "ldr	r8, [%[b], #36]\n\t"
+        "ldr	r9, [%[b], #40]\n\t"
+        "ldr	r10, [%[b], #44]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #32]\n\t"
+        "str	r4, [%[r], #36]\n\t"
+        "str	r5, [%[r], #40]\n\t"
+        "str	r6, [%[r], #44]\n\t"
+        "ldr	r3, [%[a], #48]\n\t"
+        "ldr	r4, [%[a], #52]\n\t"
+        "ldr	r5, [%[a], #56]\n\t"
+        "ldr	r6, [%[a], #60]\n\t"
+        "ldr	r7, [%[b], #48]\n\t"
+        "ldr	r8, [%[b], #52]\n\t"
+        "ldr	r9, [%[b], #56]\n\t"
+        "ldr	r10, [%[b], #60]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #48]\n\t"
+        "str	r4, [%[r], #52]\n\t"
+        "str	r5, [%[r], #56]\n\t"
+        "str	r6, [%[r], #60]\n\t"
+        "ldr	r3, [%[a], #64]\n\t"
+        "ldr	r4, [%[a], #68]\n\t"
+        "ldr	r5, [%[a], #72]\n\t"
+        "ldr	r6, [%[a], #76]\n\t"
+        "ldr	r7, [%[b], #64]\n\t"
+        "ldr	r8, [%[b], #68]\n\t"
+        "ldr	r9, [%[b], #72]\n\t"
+        "ldr	r10, [%[b], #76]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #64]\n\t"
+        "str	r4, [%[r], #68]\n\t"
+        "str	r5, [%[r], #72]\n\t"
+        "str	r6, [%[r], #76]\n\t"
+        "ldr	r3, [%[a], #80]\n\t"
+        "ldr	r4, [%[a], #84]\n\t"
+        "ldr	r5, [%[a], #88]\n\t"
+        "ldr	r6, [%[a], #92]\n\t"
+        "ldr	r7, [%[b], #80]\n\t"
+        "ldr	r8, [%[b], #84]\n\t"
+        "ldr	r9, [%[b], #88]\n\t"
+        "ldr	r10, [%[b], #92]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #80]\n\t"
+        "str	r4, [%[r], #84]\n\t"
+        "str	r5, [%[r], #88]\n\t"
+        "str	r6, [%[r], #92]\n\t"
+        "ldr	r3, [%[a], #96]\n\t"
+        "ldr	r4, [%[a], #100]\n\t"
+        "ldr	r5, [%[a], #104]\n\t"
+        "ldr	r6, [%[a], #108]\n\t"
+        "ldr	r7, [%[b], #96]\n\t"
+        "ldr	r8, [%[b], #100]\n\t"
+        "ldr	r9, [%[b], #104]\n\t"
+        "ldr	r10, [%[b], #108]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #96]\n\t"
+        "str	r4, [%[r], #100]\n\t"
+        "str	r5, [%[r], #104]\n\t"
+        "str	r6, [%[r], #108]\n\t"
+        "ldr	r3, [%[a], #112]\n\t"
+        "ldr	r4, [%[a], #116]\n\t"
+        "ldr	r5, [%[a], #120]\n\t"
+        "ldr	r6, [%[a], #124]\n\t"
+        "ldr	r7, [%[b], #112]\n\t"
+        "ldr	r8, [%[b], #116]\n\t"
+        "ldr	r9, [%[b], #120]\n\t"
+        "ldr	r10, [%[b], #124]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #112]\n\t"
+        "str	r4, [%[r], #116]\n\t"
+        "str	r5, [%[r], #120]\n\t"
+        "str	r6, [%[r], #124]\n\t"
+        "ldr	r3, [%[a], #128]\n\t"
+        "ldr	r4, [%[a], #132]\n\t"
+        "ldr	r5, [%[a], #136]\n\t"
+        "ldr	r6, [%[a], #140]\n\t"
+        "ldr	r7, [%[b], #128]\n\t"
+        "ldr	r8, [%[b], #132]\n\t"
+        "ldr	r9, [%[b], #136]\n\t"
+        "ldr	r10, [%[b], #140]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #128]\n\t"
+        "str	r4, [%[r], #132]\n\t"
+        "str	r5, [%[r], #136]\n\t"
+        "str	r6, [%[r], #140]\n\t"
+        "ldr	r3, [%[a], #144]\n\t"
+        "ldr	r4, [%[a], #148]\n\t"
+        "ldr	r5, [%[a], #152]\n\t"
+        "ldr	r6, [%[a], #156]\n\t"
+        "ldr	r7, [%[b], #144]\n\t"
+        "ldr	r8, [%[b], #148]\n\t"
+        "ldr	r9, [%[b], #152]\n\t"
+        "ldr	r10, [%[b], #156]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #144]\n\t"
+        "str	r4, [%[r], #148]\n\t"
+        "str	r5, [%[r], #152]\n\t"
+        "str	r6, [%[r], #156]\n\t"
+        "ldr	r3, [%[a], #160]\n\t"
+        "ldr	r4, [%[a], #164]\n\t"
+        "ldr	r5, [%[a], #168]\n\t"
+        "ldr	r6, [%[a], #172]\n\t"
+        "ldr	r7, [%[b], #160]\n\t"
+        "ldr	r8, [%[b], #164]\n\t"
+        "ldr	r9, [%[b], #168]\n\t"
+        "ldr	r10, [%[b], #172]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #160]\n\t"
+        "str	r4, [%[r], #164]\n\t"
+        "str	r5, [%[r], #168]\n\t"
+        "str	r6, [%[r], #172]\n\t"
+        "ldr	r3, [%[a], #176]\n\t"
+        "ldr	r4, [%[a], #180]\n\t"
+        "ldr	r5, [%[a], #184]\n\t"
+        "ldr	r6, [%[a], #188]\n\t"
+        "ldr	r7, [%[b], #176]\n\t"
+        "ldr	r8, [%[b], #180]\n\t"
+        "ldr	r9, [%[b], #184]\n\t"
+        "ldr	r10, [%[b], #188]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #176]\n\t"
+        "str	r4, [%[r], #180]\n\t"
+        "str	r5, [%[r], #184]\n\t"
+        "str	r6, [%[r], #188]\n\t"
+        "ldr	r3, [%[a], #192]\n\t"
+        "ldr	r4, [%[a], #196]\n\t"
+        "ldr	r5, [%[a], #200]\n\t"
+        "ldr	r6, [%[a], #204]\n\t"
+        "ldr	r7, [%[b], #192]\n\t"
+        "ldr	r8, [%[b], #196]\n\t"
+        "ldr	r9, [%[b], #200]\n\t"
+        "ldr	r10, [%[b], #204]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #192]\n\t"
+        "str	r4, [%[r], #196]\n\t"
+        "str	r5, [%[r], #200]\n\t"
+        "str	r6, [%[r], #204]\n\t"
+        "ldr	r3, [%[a], #208]\n\t"
+        "ldr	r4, [%[a], #212]\n\t"
+        "ldr	r5, [%[a], #216]\n\t"
+        "ldr	r6, [%[a], #220]\n\t"
+        "ldr	r7, [%[b], #208]\n\t"
+        "ldr	r8, [%[b], #212]\n\t"
+        "ldr	r9, [%[b], #216]\n\t"
+        "ldr	r10, [%[b], #220]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #208]\n\t"
+        "str	r4, [%[r], #212]\n\t"
+        "str	r5, [%[r], #216]\n\t"
+        "str	r6, [%[r], #220]\n\t"
+        "ldr	r3, [%[a], #224]\n\t"
+        "ldr	r4, [%[a], #228]\n\t"
+        "ldr	r5, [%[a], #232]\n\t"
+        "ldr	r6, [%[a], #236]\n\t"
+        "ldr	r7, [%[b], #224]\n\t"
+        "ldr	r8, [%[b], #228]\n\t"
+        "ldr	r9, [%[b], #232]\n\t"
+        "ldr	r10, [%[b], #236]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #224]\n\t"
+        "str	r4, [%[r], #228]\n\t"
+        "str	r5, [%[r], #232]\n\t"
+        "str	r6, [%[r], #236]\n\t"
+        "ldr	r3, [%[a], #240]\n\t"
+        "ldr	r4, [%[a], #244]\n\t"
+        "ldr	r5, [%[a], #248]\n\t"
+        "ldr	r6, [%[a], #252]\n\t"
+        "ldr	r7, [%[b], #240]\n\t"
+        "ldr	r8, [%[b], #244]\n\t"
+        "ldr	r9, [%[b], #248]\n\t"
+        "ldr	r10, [%[b], #252]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #240]\n\t"
+        "str	r4, [%[r], #244]\n\t"
+        "str	r5, [%[r], #248]\n\t"
+        "str	r6, [%[r], #252]\n\t"
+        "ldr	r3, [%[a], #256]\n\t"
+        "ldr	r4, [%[a], #260]\n\t"
+        "ldr	r5, [%[a], #264]\n\t"
+        "ldr	r6, [%[a], #268]\n\t"
+        "ldr	r7, [%[b], #256]\n\t"
+        "ldr	r8, [%[b], #260]\n\t"
+        "ldr	r9, [%[b], #264]\n\t"
+        "ldr	r10, [%[b], #268]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #256]\n\t"
+        "str	r4, [%[r], #260]\n\t"
+        "str	r5, [%[r], #264]\n\t"
+        "str	r6, [%[r], #268]\n\t"
+        "ldr	r3, [%[a], #272]\n\t"
+        "ldr	r4, [%[a], #276]\n\t"
+        "ldr	r5, [%[a], #280]\n\t"
+        "ldr	r6, [%[a], #284]\n\t"
+        "ldr	r7, [%[b], #272]\n\t"
+        "ldr	r8, [%[b], #276]\n\t"
+        "ldr	r9, [%[b], #280]\n\t"
+        "ldr	r10, [%[b], #284]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #272]\n\t"
+        "str	r4, [%[r], #276]\n\t"
+        "str	r5, [%[r], #280]\n\t"
+        "str	r6, [%[r], #284]\n\t"
+        "ldr	r3, [%[a], #288]\n\t"
+        "ldr	r4, [%[a], #292]\n\t"
+        "ldr	r5, [%[a], #296]\n\t"
+        "ldr	r6, [%[a], #300]\n\t"
+        "ldr	r7, [%[b], #288]\n\t"
+        "ldr	r8, [%[b], #292]\n\t"
+        "ldr	r9, [%[b], #296]\n\t"
+        "ldr	r10, [%[b], #300]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #288]\n\t"
+        "str	r4, [%[r], #292]\n\t"
+        "str	r5, [%[r], #296]\n\t"
+        "str	r6, [%[r], #300]\n\t"
+        "ldr	r3, [%[a], #304]\n\t"
+        "ldr	r4, [%[a], #308]\n\t"
+        "ldr	r5, [%[a], #312]\n\t"
+        "ldr	r6, [%[a], #316]\n\t"
+        "ldr	r7, [%[b], #304]\n\t"
+        "ldr	r8, [%[b], #308]\n\t"
+        "ldr	r9, [%[b], #312]\n\t"
+        "ldr	r10, [%[b], #316]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #304]\n\t"
+        "str	r4, [%[r], #308]\n\t"
+        "str	r5, [%[r], #312]\n\t"
+        "str	r6, [%[r], #316]\n\t"
+        "ldr	r3, [%[a], #320]\n\t"
+        "ldr	r4, [%[a], #324]\n\t"
+        "ldr	r5, [%[a], #328]\n\t"
+        "ldr	r6, [%[a], #332]\n\t"
+        "ldr	r7, [%[b], #320]\n\t"
+        "ldr	r8, [%[b], #324]\n\t"
+        "ldr	r9, [%[b], #328]\n\t"
+        "ldr	r10, [%[b], #332]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #320]\n\t"
+        "str	r4, [%[r], #324]\n\t"
+        "str	r5, [%[r], #328]\n\t"
+        "str	r6, [%[r], #332]\n\t"
+        "ldr	r3, [%[a], #336]\n\t"
+        "ldr	r4, [%[a], #340]\n\t"
+        "ldr	r5, [%[a], #344]\n\t"
+        "ldr	r6, [%[a], #348]\n\t"
+        "ldr	r7, [%[b], #336]\n\t"
+        "ldr	r8, [%[b], #340]\n\t"
+        "ldr	r9, [%[b], #344]\n\t"
+        "ldr	r10, [%[b], #348]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #336]\n\t"
+        "str	r4, [%[r], #340]\n\t"
+        "str	r5, [%[r], #344]\n\t"
+        "str	r6, [%[r], #348]\n\t"
+        "ldr	r3, [%[a], #352]\n\t"
+        "ldr	r4, [%[a], #356]\n\t"
+        "ldr	r5, [%[a], #360]\n\t"
+        "ldr	r6, [%[a], #364]\n\t"
+        "ldr	r7, [%[b], #352]\n\t"
+        "ldr	r8, [%[b], #356]\n\t"
+        "ldr	r9, [%[b], #360]\n\t"
+        "ldr	r10, [%[b], #364]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #352]\n\t"
+        "str	r4, [%[r], #356]\n\t"
+        "str	r5, [%[r], #360]\n\t"
+        "str	r6, [%[r], #364]\n\t"
+        "ldr	r3, [%[a], #368]\n\t"
+        "ldr	r4, [%[a], #372]\n\t"
+        "ldr	r5, [%[a], #376]\n\t"
+        "ldr	r6, [%[a], #380]\n\t"
+        "ldr	r7, [%[b], #368]\n\t"
+        "ldr	r8, [%[b], #372]\n\t"
+        "ldr	r9, [%[b], #376]\n\t"
+        "ldr	r10, [%[b], #380]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #368]\n\t"
+        "str	r4, [%[r], #372]\n\t"
+        "str	r5, [%[r], #376]\n\t"
+        "str	r6, [%[r], #380]\n\t"
+        "ldr	r3, [%[a], #384]\n\t"
+        "ldr	r4, [%[a], #388]\n\t"
+        "ldr	r5, [%[a], #392]\n\t"
+        "ldr	r6, [%[a], #396]\n\t"
+        "ldr	r7, [%[b], #384]\n\t"
+        "ldr	r8, [%[b], #388]\n\t"
+        "ldr	r9, [%[b], #392]\n\t"
+        "ldr	r10, [%[b], #396]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #384]\n\t"
+        "str	r4, [%[r], #388]\n\t"
+        "str	r5, [%[r], #392]\n\t"
+        "str	r6, [%[r], #396]\n\t"
+        "ldr	r3, [%[a], #400]\n\t"
+        "ldr	r4, [%[a], #404]\n\t"
+        "ldr	r5, [%[a], #408]\n\t"
+        "ldr	r6, [%[a], #412]\n\t"
+        "ldr	r7, [%[b], #400]\n\t"
+        "ldr	r8, [%[b], #404]\n\t"
+        "ldr	r9, [%[b], #408]\n\t"
+        "ldr	r10, [%[b], #412]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #400]\n\t"
+        "str	r4, [%[r], #404]\n\t"
+        "str	r5, [%[r], #408]\n\t"
+        "str	r6, [%[r], #412]\n\t"
+        "ldr	r3, [%[a], #416]\n\t"
+        "ldr	r4, [%[a], #420]\n\t"
+        "ldr	r5, [%[a], #424]\n\t"
+        "ldr	r6, [%[a], #428]\n\t"
+        "ldr	r7, [%[b], #416]\n\t"
+        "ldr	r8, [%[b], #420]\n\t"
+        "ldr	r9, [%[b], #424]\n\t"
+        "ldr	r10, [%[b], #428]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #416]\n\t"
+        "str	r4, [%[r], #420]\n\t"
+        "str	r5, [%[r], #424]\n\t"
+        "str	r6, [%[r], #428]\n\t"
+        "ldr	r3, [%[a], #432]\n\t"
+        "ldr	r4, [%[a], #436]\n\t"
+        "ldr	r5, [%[a], #440]\n\t"
+        "ldr	r6, [%[a], #444]\n\t"
+        "ldr	r7, [%[b], #432]\n\t"
+        "ldr	r8, [%[b], #436]\n\t"
+        "ldr	r9, [%[b], #440]\n\t"
+        "ldr	r10, [%[b], #444]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #432]\n\t"
+        "str	r4, [%[r], #436]\n\t"
+        "str	r5, [%[r], #440]\n\t"
+        "str	r6, [%[r], #444]\n\t"
+        "ldr	r3, [%[a], #448]\n\t"
+        "ldr	r4, [%[a], #452]\n\t"
+        "ldr	r5, [%[a], #456]\n\t"
+        "ldr	r6, [%[a], #460]\n\t"
+        "ldr	r7, [%[b], #448]\n\t"
+        "ldr	r8, [%[b], #452]\n\t"
+        "ldr	r9, [%[b], #456]\n\t"
+        "ldr	r10, [%[b], #460]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #448]\n\t"
+        "str	r4, [%[r], #452]\n\t"
+        "str	r5, [%[r], #456]\n\t"
+        "str	r6, [%[r], #460]\n\t"
+        "ldr	r3, [%[a], #464]\n\t"
+        "ldr	r4, [%[a], #468]\n\t"
+        "ldr	r5, [%[a], #472]\n\t"
+        "ldr	r6, [%[a], #476]\n\t"
+        "ldr	r7, [%[b], #464]\n\t"
+        "ldr	r8, [%[b], #468]\n\t"
+        "ldr	r9, [%[b], #472]\n\t"
+        "ldr	r10, [%[b], #476]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #464]\n\t"
+        "str	r4, [%[r], #468]\n\t"
+        "str	r5, [%[r], #472]\n\t"
+        "str	r6, [%[r], #476]\n\t"
+        "ldr	r3, [%[a], #480]\n\t"
+        "ldr	r4, [%[a], #484]\n\t"
+        "ldr	r5, [%[a], #488]\n\t"
+        "ldr	r6, [%[a], #492]\n\t"
+        "ldr	r7, [%[b], #480]\n\t"
+        "ldr	r8, [%[b], #484]\n\t"
+        "ldr	r9, [%[b], #488]\n\t"
+        "ldr	r10, [%[b], #492]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #480]\n\t"
+        "str	r4, [%[r], #484]\n\t"
+        "str	r5, [%[r], #488]\n\t"
+        "str	r6, [%[r], #492]\n\t"
+        "ldr	r3, [%[a], #496]\n\t"
+        "ldr	r4, [%[a], #500]\n\t"
+        "ldr	r5, [%[a], #504]\n\t"
+        "ldr	r6, [%[a], #508]\n\t"
+        "ldr	r7, [%[b], #496]\n\t"
+        "ldr	r8, [%[b], #500]\n\t"
+        "ldr	r9, [%[b], #504]\n\t"
+        "ldr	r10, [%[b], #508]\n\t"
+        "sbcs	r3, r3, r7\n\t"
+        "sbcs	r4, r4, r8\n\t"
+        "sbcs	r5, r5, r9\n\t"
+        "sbcs	r6, r6, r10\n\t"
+        "str	r3, [%[r], #496]\n\t"
+        "str	r4, [%[r], #500]\n\t"
+        "str	r5, [%[r], #504]\n\t"
+        "str	r6, [%[r], #508]\n\t"
+        "sbc	%[c], %[c], #0\n\t"
+        : [c] "+r" (c)
+        : [r] "r" (r), [a] "r" (a), [b] "r" (b)
+        : "memory", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"
+    );
+
+    return c;
+}
+
+#endif /* WOLFSSL_SP_SMALL */
 /* Divide the double width number (d1|d0) by the dividend. (d1|d0 / div)
  *
  * d1   The high order half of the number to divide.
@@ -24661,6 +26136,69 @@ static sp_digit div_4096_word_128(sp_digit d1, sp_digit d0, sp_digit div)
     return r;
 }
 
+/* Divide d in a and put remainder into r (m*d + r = a)
+ * m is not calculated as it is not needed at this time.
+ *
+ * a  Number to be divided.
+ * d  Number to divide with.
+ * m  Multiplier result.
+ * r  Remainder from the division.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_4096_div_128_cond(const sp_digit* a, const sp_digit* d, sp_digit* m,
+        sp_digit* r)
+{
+    sp_digit t1[256], t2[129];
+    sp_digit div, r1;
+    int i;
+
+    (void)m;
+
+
+    div = d[127];
+    XMEMCPY(t1, a, sizeof(*t1) * 2 * 128);
+    for (i=127; i>=0; i--) {
+        sp_digit hi = t1[128 + i] - (t1[128 + i] == div);
+        r1 = div_4096_word_128(hi, t1[128 + i - 1], div);
+
+        sp_4096_mul_d_128(t2, d, r1);
+        t1[128 + i] += sp_4096_sub_in_place_128(&t1[i], t2);
+        t1[128 + i] -= t2[128];
+        if (t1[128 + i] != 0) {
+            t1[128 + i] += sp_4096_add_128(&t1[i], &t1[i], d);
+            if (t1[128 + i] != 0)
+                t1[128 + i] += sp_4096_add_128(&t1[i], &t1[i], d);
+        }
+    }
+
+    for (i = 127; i > 0; i--) {
+        if (t1[i] != d[i])
+            break;
+    }
+    if (t1[i] >= d[i]) {
+        sp_4096_sub_128(r, t1, d);
+    }
+    else {
+        XMEMCPY(r, t1, sizeof(*t1) * 128);
+    }
+
+    return MP_OKAY;
+}
+
+/* Reduce a modulo m into r. (r = a mod m)
+ *
+ * r  A single precision number that is the reduced result.
+ * a  A single precision number that is to be reduced.
+ * m  A single precision number that is the modulus to reduce with.
+ * returns MP_OKAY indicating success.
+ */
+static WC_INLINE int sp_4096_mod_128_cond(sp_digit* r, const sp_digit* a, const sp_digit* m)
+{
+    return sp_4096_div_128_cond(a, m, NULL, r);
+}
+
+#if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || defined(WOLFSSL_HAVE_SP_DH)
+#if defined(WOLFSSL_HAVE_SP_DH) || !defined(WOLFSSL_RSA_PUBLIC_ONLY)
 /* AND m into each word of a and store in r.
  *
  * r  A single precision integer.
@@ -24698,7 +26236,7 @@ static void sp_4096_mask_128(sp_digit* r, const sp_digit* a, sp_digit m)
  * return -ve, 0 or +ve if a is less than, equal to or greater than b
  * respectively.
  */
-static int32_t sp_4096_cmp_128(const sp_digit* a, const sp_digit* b)
+static sp_int32 sp_4096_cmp_128(const sp_digit* a, const sp_digit* b)
 {
     sp_digit r = -1;
     sp_digit one = 1;
@@ -26203,59 +27741,6 @@ static WC_INLINE int sp_4096_mod_128(sp_digit* r, const sp_digit* a, const sp_di
 }
 
 #endif /* WOLFSSL_HAVE_SP_DH || !WOLFSSL_RSA_PUBLIC_ONLY */
-/* Divide d in a and put remainder into r (m*d + r = a)
- * m is not calculated as it is not needed at this time.
- *
- * a  Number to be divided.
- * d  Number to divide with.
- * m  Multiplier result.
- * r  Remainder from the division.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_4096_div_128_cond(const sp_digit* a, const sp_digit* d, sp_digit* m,
-        sp_digit* r)
-{
-    sp_digit t1[256], t2[129];
-    sp_digit div, r1;
-    int i;
-
-    (void)m;
-
-
-    div = d[127];
-    XMEMCPY(t1, a, sizeof(*t1) * 2 * 128);
-    for (i=127; i>=0; i--) {
-        sp_digit hi = t1[128 + i] - (t1[128 + i] == div);
-        r1 = div_4096_word_128(hi, t1[128 + i - 1], div);
-
-        sp_4096_mul_d_128(t2, d, r1);
-        t1[128 + i] += sp_4096_sub_in_place_128(&t1[i], t2);
-        t1[128 + i] -= t2[128];
-        if (t1[128 + i] != 0) {
-            t1[128 + i] += sp_4096_add_128(&t1[i], &t1[i], d);
-            if (t1[128 + i] != 0)
-                t1[128 + i] += sp_4096_add_128(&t1[i], &t1[i], d);
-        }
-    }
-
-    r1 = sp_4096_cmp_128(t1, d) >= 0;
-    sp_4096_cond_sub_128(r, t1, d, (sp_digit)0 - r1);
-
-    return MP_OKAY;
-}
-
-/* Reduce a modulo m into r. (r = a mod m)
- *
- * r  A single precision number that is the reduced result.
- * a  A single precision number that is to be reduced.
- * m  A single precision number that is the modulus to reduce with.
- * returns MP_OKAY indicating success.
- */
-static WC_INLINE int sp_4096_mod_128_cond(sp_digit* r, const sp_digit* a, const sp_digit* m)
-{
-    return sp_4096_div_128_cond(a, m, NULL, r);
-}
-
 #if (defined(WOLFSSL_HAVE_SP_RSA) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || \
                                                      defined(WOLFSSL_HAVE_SP_DH)
 #ifdef WOLFSSL_SP_SMALL
@@ -26266,7 +27751,151 @@ static WC_INLINE int sp_4096_mod_128_cond(sp_digit* r, const sp_digit* a, const 
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
+ */
+static int sp_4096_mod_exp_128(sp_digit* r, const sp_digit* a, const sp_digit* e,
+        int bits, const sp_digit* m, int reduceA)
+{
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    sp_digit* td = NULL;
+#else
+    sp_digit td[8 * 256];
+#endif
+    sp_digit* t[8];
+    sp_digit* norm = NULL;
+    sp_digit mp = 1;
+    sp_digit n;
+    sp_digit mask;
+    int i;
+    int c;
+    byte y;
+    int err = MP_OKAY;
+
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (8 * 256), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
+#endif
+
+    if (err == MP_OKAY) {
+        norm = td;
+        for (i=0; i<8; i++) {
+            t[i] = td + i * 256;
+        }
+
+        sp_4096_mont_setup(m, &mp);
+        sp_4096_mont_norm_128(norm, m);
+
+        XMEMSET(t[1], 0, sizeof(sp_digit) * 128U);
+        if (reduceA != 0) {
+            err = sp_4096_mod_128(t[1] + 128, a, m);
+            if (err == MP_OKAY) {
+                err = sp_4096_mod_128(t[1], t[1], m);
+            }
+        }
+        else {
+            XMEMCPY(t[1] + 128, a, sizeof(sp_digit) * 128);
+            err = sp_4096_mod_128(t[1], t[1], m);
+        }
+    }
+
+    if (err == MP_OKAY) {
+        sp_4096_mont_sqr_128(t[ 2], t[ 1], m, mp);
+        sp_4096_mont_mul_128(t[ 3], t[ 2], t[ 1], m, mp);
+        sp_4096_mont_sqr_128(t[ 4], t[ 2], m, mp);
+        sp_4096_mont_mul_128(t[ 5], t[ 3], t[ 2], m, mp);
+        sp_4096_mont_sqr_128(t[ 6], t[ 3], m, mp);
+        sp_4096_mont_mul_128(t[ 7], t[ 4], t[ 3], m, mp);
+
+        i = (bits - 1) / 32;
+        n = e[i--];
+        c = bits & 31;
+        if (c == 0) {
+            c = 32;
+        }
+        c -= bits % 3;
+        if (c == 32) {
+            c = 29;
+        }
+        if (c < 0) {
+            /* Number of bits in top word is less than number needed. */
+            c = -c;
+            y = (byte)(n << c);
+            n = e[i--];
+            y |= (byte)(n >> (64 - c));
+            n <<= c;
+            c = 64 - c;
+        }
+        else {
+            y = (byte)(n >> c);
+            n <<= 32 - c;
+        }
+        XMEMCPY(r, t[y], sizeof(sp_digit) * 128);
+        for (; i>=0 || c>=3; ) {
+            if (c == 0) {
+                n = e[i--];
+                y = (byte)(n >> 29);
+                n <<= 3;
+                c = 29;
+            }
+            else if (c < 3) {
+                y = (byte)(n >> 29);
+                n = e[i--];
+                c = 3 - c;
+                y |= (byte)(n >> (32 - c));
+                n <<= c;
+                c = 32 - c;
+            }
+            else {
+                y = (byte)((n >> 29) & 0x7);
+                n <<= 3;
+                c -= 3;
+            }
+
+            sp_4096_mont_sqr_128(r, r, m, mp);
+            sp_4096_mont_sqr_128(r, r, m, mp);
+            sp_4096_mont_sqr_128(r, r, m, mp);
+
+            sp_4096_mont_mul_128(r, r, t[y], m, mp);
+        }
+
+        XMEMSET(&r[128], 0, sizeof(sp_digit) * 128U);
+        sp_4096_mont_reduce_128(r, m, mp);
+
+        mask = 0 - (sp_4096_cmp_128(r, m) >= 0);
+        sp_4096_cond_sub_128(r, r, m, mask);
+    }
+
+#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
+    if (td != NULL)
+        XFREE(td, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#endif
+
+    return err;
+}
+#else
+/* Modular exponentiate a to the e mod m. (r = a^e mod m)
+ *
+ * r     A single precision number that is the result of the operation.
+ * a     A single precision number being exponentiated.
+ * e     A single precision number that is the exponent.
+ * bits  The number of bits in the exponent.
+ * m     A single precision number that is the modulus.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even or exponent is 0.
  */
 static int sp_4096_mod_exp_128(sp_digit* r, const sp_digit* a, const sp_digit* e,
         int bits, const sp_digit* m, int reduceA)
@@ -26286,11 +27915,20 @@ static int sp_4096_mod_exp_128(sp_digit* r, const sp_digit* a, const sp_digit* e
     byte y;
     int err = MP_OKAY;
 
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+    else if (bits == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (16 * 256), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (16 * 256), NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
 #endif
 
     if (err == MP_OKAY) {
@@ -26398,166 +28036,10 @@ static int sp_4096_mod_exp_128(sp_digit* r, const sp_digit* a, const sp_digit* e
 
     return err;
 }
-#else
-/* Modular exponentiate a to the e mod m. (r = a^e mod m)
- *
- * r     A single precision number that is the result of the operation.
- * a     A single precision number being exponentiated.
- * e     A single precision number that is the exponent.
- * bits  The number of bits in the exponent.
- * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
- */
-static int sp_4096_mod_exp_128(sp_digit* r, const sp_digit* a, const sp_digit* e,
-        int bits, const sp_digit* m, int reduceA)
-{
-#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    sp_digit* td = NULL;
-#else
-    sp_digit td[32 * 256];
-#endif
-    sp_digit* t[32];
-    sp_digit* norm = NULL;
-    sp_digit mp = 1;
-    sp_digit n;
-    sp_digit mask;
-    int i;
-    int c;
-    byte y;
-    int err = MP_OKAY;
-
-#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * (32 * 256), NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
-#endif
-
-    if (err == MP_OKAY) {
-        norm = td;
-        for (i=0; i<32; i++) {
-            t[i] = td + i * 256;
-        }
-
-        sp_4096_mont_setup(m, &mp);
-        sp_4096_mont_norm_128(norm, m);
-
-        XMEMSET(t[1], 0, sizeof(sp_digit) * 128U);
-        if (reduceA != 0) {
-            err = sp_4096_mod_128(t[1] + 128, a, m);
-            if (err == MP_OKAY) {
-                err = sp_4096_mod_128(t[1], t[1], m);
-            }
-        }
-        else {
-            XMEMCPY(t[1] + 128, a, sizeof(sp_digit) * 128);
-            err = sp_4096_mod_128(t[1], t[1], m);
-        }
-    }
-
-    if (err == MP_OKAY) {
-        sp_4096_mont_sqr_128(t[ 2], t[ 1], m, mp);
-        sp_4096_mont_mul_128(t[ 3], t[ 2], t[ 1], m, mp);
-        sp_4096_mont_sqr_128(t[ 4], t[ 2], m, mp);
-        sp_4096_mont_mul_128(t[ 5], t[ 3], t[ 2], m, mp);
-        sp_4096_mont_sqr_128(t[ 6], t[ 3], m, mp);
-        sp_4096_mont_mul_128(t[ 7], t[ 4], t[ 3], m, mp);
-        sp_4096_mont_sqr_128(t[ 8], t[ 4], m, mp);
-        sp_4096_mont_mul_128(t[ 9], t[ 5], t[ 4], m, mp);
-        sp_4096_mont_sqr_128(t[10], t[ 5], m, mp);
-        sp_4096_mont_mul_128(t[11], t[ 6], t[ 5], m, mp);
-        sp_4096_mont_sqr_128(t[12], t[ 6], m, mp);
-        sp_4096_mont_mul_128(t[13], t[ 7], t[ 6], m, mp);
-        sp_4096_mont_sqr_128(t[14], t[ 7], m, mp);
-        sp_4096_mont_mul_128(t[15], t[ 8], t[ 7], m, mp);
-        sp_4096_mont_sqr_128(t[16], t[ 8], m, mp);
-        sp_4096_mont_mul_128(t[17], t[ 9], t[ 8], m, mp);
-        sp_4096_mont_sqr_128(t[18], t[ 9], m, mp);
-        sp_4096_mont_mul_128(t[19], t[10], t[ 9], m, mp);
-        sp_4096_mont_sqr_128(t[20], t[10], m, mp);
-        sp_4096_mont_mul_128(t[21], t[11], t[10], m, mp);
-        sp_4096_mont_sqr_128(t[22], t[11], m, mp);
-        sp_4096_mont_mul_128(t[23], t[12], t[11], m, mp);
-        sp_4096_mont_sqr_128(t[24], t[12], m, mp);
-        sp_4096_mont_mul_128(t[25], t[13], t[12], m, mp);
-        sp_4096_mont_sqr_128(t[26], t[13], m, mp);
-        sp_4096_mont_mul_128(t[27], t[14], t[13], m, mp);
-        sp_4096_mont_sqr_128(t[28], t[14], m, mp);
-        sp_4096_mont_mul_128(t[29], t[15], t[14], m, mp);
-        sp_4096_mont_sqr_128(t[30], t[15], m, mp);
-        sp_4096_mont_mul_128(t[31], t[16], t[15], m, mp);
-
-        i = (bits - 1) / 32;
-        n = e[i--];
-        c = bits & 31;
-        if (c == 0) {
-            c = 32;
-        }
-        c -= bits % 5;
-        if (c == 32) {
-            c = 27;
-        }
-        if (c < 0) {
-            /* Number of bits in top word is less than number needed. */
-            c = -c;
-            y = (byte)(n << c);
-            n = e[i--];
-            y |= (byte)(n >> (64 - c));
-            n <<= c;
-            c = 64 - c;
-        }
-        else {
-            y = (byte)(n >> c);
-            n <<= 32 - c;
-        }
-        XMEMCPY(r, t[y], sizeof(sp_digit) * 128);
-        for (; i>=0 || c>=5; ) {
-            if (c == 0) {
-                n = e[i--];
-                y = (byte)(n >> 27);
-                n <<= 5;
-                c = 27;
-            }
-            else if (c < 5) {
-                y = (byte)(n >> 27);
-                n = e[i--];
-                c = 5 - c;
-                y |= (byte)(n >> (32 - c));
-                n <<= c;
-                c = 32 - c;
-            }
-            else {
-                y = (byte)((n >> 27) & 0x1f);
-                n <<= 5;
-                c -= 5;
-            }
-
-            sp_4096_mont_sqr_128(r, r, m, mp);
-            sp_4096_mont_sqr_128(r, r, m, mp);
-            sp_4096_mont_sqr_128(r, r, m, mp);
-            sp_4096_mont_sqr_128(r, r, m, mp);
-            sp_4096_mont_sqr_128(r, r, m, mp);
-
-            sp_4096_mont_mul_128(r, r, t[y], m, mp);
-        }
-
-        XMEMSET(&r[128], 0, sizeof(sp_digit) * 128U);
-        sp_4096_mont_reduce_128(r, m, mp);
-
-        mask = 0 - (sp_4096_cmp_128(r, m) >= 0);
-        sp_4096_cond_sub_128(r, r, m, mask);
-    }
-
-#if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    if (td != NULL)
-        XFREE(td, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-#endif
-
-    return err;
-}
 #endif /* WOLFSSL_SP_SMALL */
 #endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 
+#endif /* (WOLFSSL_HAVE_SP_RSA && !WOLFSSL_RSA_PUBLIC_ONLY) || WOLFSSL_HAVE_SP_DH */
 #ifdef WOLFSSL_HAVE_SP_RSA
 /* RSA public key operation.
  *
@@ -26578,7 +28060,7 @@ int sp_RsaPublic_4096(const byte* in, word32 inLen, const mp_int* em,
     sp_digit* a = NULL;
 #else
     sp_digit a[128 * 5];
-#endif    
+#endif
     sp_digit* m = NULL;
     sp_digit* r = NULL;
     sp_digit *ah = NULL;
@@ -26676,7 +28158,7 @@ int sp_RsaPublic_4096(const byte* in, word32 inLen, const mp_int* em,
     }
 
     if (err == MP_OKAY) {
-        sp_4096_to_bin(r, out);
+        sp_4096_to_bin_128(r, out);
         *outLen = 512;
     }
 
@@ -27132,7 +28614,7 @@ int sp_RsaPrivate_4096(const byte* in, word32 inLen, const mp_int* dm,
     }
 
     if (err == MP_OKAY) {
-        sp_4096_to_bin(r, out);
+        sp_4096_to_bin_128(r, out);
         *outLen = 512;
     }
 
@@ -27223,7 +28705,7 @@ int sp_RsaPrivate_4096(const byte* in, word32 inLen, const mp_int* dm,
         XMEMSET(&tmpb[64], 0, sizeof(sp_digit) * 64);
         sp_4096_add_128(r, tmpb, tmpa);
 
-        sp_4096_to_bin(r, out);
+        sp_4096_to_bin_128(r, out);
         *outLen = 512;
     }
 
@@ -28148,7 +29630,9 @@ static void sp_4096_lshift_128(sp_digit* r, sp_digit* a, byte n)
  * e     A single precision number that is the exponent.
  * bits  The number of bits in the exponent.
  * m     A single precision number that is the modulus.
- * returns 0 on success and MEMORY_E on dynamic memory allocation failure.
+ * returns  0 on success.
+ * returns  MEMORY_E on dynamic memory allocation failure.
+ * returns  MP_VAL when base is even.
  */
 static int sp_4096_mod_exp_2_128(sp_digit* r, const sp_digit* e, int bits,
         const sp_digit* m)
@@ -28169,11 +29653,17 @@ static int sp_4096_mod_exp_2_128(sp_digit* r, const sp_digit* e, int bits,
     byte y;
     int err = MP_OKAY;
 
+    if ((m[0] & 1) == 0) {
+        err = MP_VAL;
+    }
+
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
-    td = (sp_digit*)XMALLOC(sizeof(sp_digit) * 385, NULL,
-                            DYNAMIC_TYPE_TMP_BUFFER);
-    if (td == NULL)
-        err = MEMORY_E;
+    if (err == MP_OKAY) {
+        td = (sp_digit*)XMALLOC(sizeof(sp_digit) * 385, NULL,
+                                DYNAMIC_TYPE_TMP_BUFFER);
+        if (td == NULL)
+            err = MEMORY_E;
+    }
 #endif
 
     if (err == MP_OKAY) {
@@ -28307,7 +29797,7 @@ int sp_DhExp_4096(const mp_int* base, const byte* exp, word32 expLen,
     }
 
     if (err == MP_OKAY) {
-        sp_4096_to_bin(r, out);
+        sp_4096_to_bin_128(r, out);
         *outLen = 512;
         for (i=0; i<512 && out[i] == 0; i++) {
             /* Search for first non-zero. */
@@ -28348,12 +29838,12 @@ static const sp_digit p256_mod[8] = {
     0xffffffff,0xffffffff,0xffffffff,0x00000000,0x00000000,0x00000000,
     0x00000001,0xffffffff
 };
-/* The Montogmery normalizer for modulus of the curve P256. */
+/* The Montgomery normalizer for modulus of the curve P256. */
 static const sp_digit p256_norm_mod[8] = {
     0x00000001,0x00000000,0x00000000,0xffffffff,0xffffffff,0xffffffff,
     0xfffffffe,0x00000000
 };
-/* The Montogmery multiplier for modulus of the curve P256. */
+/* The Montgomery multiplier for modulus of the curve P256. */
 static const sp_digit p256_mp_mod = 0x00000001;
 #if defined(WOLFSSL_VALIDATE_ECC_KEYGEN) || defined(HAVE_ECC_SIGN) || \
                                             defined(HAVE_ECC_VERIFY)
@@ -28369,14 +29859,14 @@ static const sp_digit p256_order2[8] = {
     0x00000000,0xffffffff
 };
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
-/* The Montogmery normalizer for order of the curve P256. */
+/* The Montgomery normalizer for order of the curve P256. */
 static const sp_digit p256_norm_order[8] = {
     0x039cdaaf,0x0c46353d,0x58e8617b,0x43190552,0x00000000,0x00000000,
     0xffffffff,0x00000000
 };
 #endif
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
-/* The Montogmery multiplier for order of the curve P256. */
+/* The Montgomery multiplier for order of the curve P256. */
 static const sp_digit p256_mp_order = 0xee00bc4f;
 #endif
 /* The base point of curve P256. */
@@ -29540,7 +31030,7 @@ static sp_digit sp_256_sub_8(sp_digit* r, const sp_digit* a,
 }
 
 #endif /* WOLFSSL_SP_SMALL */
-/* Multiply a number by Montogmery normalizer mod modulus (prime).
+/* Multiply a number by Montgomery normalizer mod modulus (prime).
  *
  * r  The resulting Montgomery form number.
  * a  The number to convert.
@@ -29967,14 +31457,14 @@ static int sp_256_point_to_ecc_point_8(const sp_point_256* p, ecc_point* pm)
     return err;
 }
 
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 SP_NOINLINE static void sp_256_mont_mul_8(sp_digit* r, const sp_digit* a, const sp_digit* b,
         const sp_digit* m, sp_digit mp)
@@ -30629,9 +32119,9 @@ SP_NOINLINE static void sp_256_mont_mul_8(sp_digit* r, const sp_digit* a, const 
 /* Square the Montgomery form number mod the modulus (prime). (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 SP_NOINLINE static void sp_256_mont_sqr_8(sp_digit* r, const sp_digit* a, const sp_digit* m,
         sp_digit mp)
@@ -31146,10 +32636,10 @@ SP_NOINLINE static void sp_256_mont_sqr_8(sp_digit* r, const sp_digit* a, const 
 /* Square the Montgomery form number a number of times. (r = a ^ n mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * n   Number of times to square.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_256_mont_sqr_n_8(sp_digit* r, const sp_digit* a, int n,
         const sp_digit* m, sp_digit mp)
@@ -31245,7 +32735,7 @@ static void sp_256_mont_inv_8(sp_digit* r, const sp_digit* a, sp_digit* td)
  * return -ve, 0 or +ve if a is less than, equal to or greater than b
  * respectively.
  */
-static int32_t sp_256_cmp_8(const sp_digit* a, const sp_digit* b)
+static sp_int32 sp_256_cmp_8(const sp_digit* a, const sp_digit* b)
 {
     sp_digit r = -1;
     sp_digit one = 1;
@@ -31588,7 +33078,7 @@ static void sp_256_map_8(sp_point_256* r, const sp_point_256* p,
 {
     sp_digit* t1 = t;
     sp_digit* t2 = t + 2*8;
-    int32_t n;
+    sp_int32 n;
 
     sp_256_mont_inv_8(t1, p->z, t + 2*8);
 
@@ -31623,8 +33113,8 @@ static void sp_256_map_8(sp_point_256* r, const sp_point_256* p,
 /* Add two Montgomery form numbers (r = a + b % m).
  *
  * r   Result of addition.
- * a   First number to add in Montogmery form.
- * b   Second number to add in Montogmery form.
+ * a   First number to add in Montgomery form.
+ * b   Second number to add in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_256_mont_add_8(sp_digit* r, const sp_digit* a, const sp_digit* b,
@@ -31694,7 +33184,7 @@ static void sp_256_mont_add_8(sp_digit* r, const sp_digit* a, const sp_digit* b,
 /* Double a Montgomery form number (r = a + a % m).
  *
  * r   Result of doubling.
- * a   Number to double in Montogmery form.
+ * a   Number to double in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_256_mont_dbl_8(sp_digit* r, const sp_digit* a, const sp_digit* m)
@@ -31747,7 +33237,7 @@ static void sp_256_mont_dbl_8(sp_digit* r, const sp_digit* a, const sp_digit* m)
 /* Triple a Montgomery form number (r = a + a + a % m).
  *
  * r   Result of Tripling.
- * a   Number to triple in Montogmery form.
+ * a   Number to triple in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_256_mont_tpl_8(sp_digit* r, const sp_digit* a, const sp_digit* m)
@@ -31844,8 +33334,8 @@ static void sp_256_mont_tpl_8(sp_digit* r, const sp_digit* a, const sp_digit* m)
 /* Subtract two Montgomery form numbers (r = a - b % m).
  *
  * r   Result of subtration.
- * a   Number to subtract from in Montogmery form.
- * b   Number to subtract with in Montogmery form.
+ * a   Number to subtract from in Montgomery form.
+ * b   Number to subtract with in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_256_mont_sub_8(sp_digit* r, const sp_digit* a, const sp_digit* b,
@@ -33816,7 +35306,7 @@ int sp_ecc_mulmod_256(const mp_int* km, const ecc_point* gm, ecc_point* r,
  * km      Scalar to multiply by.
  * p       Point to multiply.
  * am      Point to add to scalar mulitply result.
- * inMont  Point to add is in montogmery form.
+ * inMont  Point to add is in montgomery form.
  * r       Resulting point.
  * map     Indicates whether to convert result to affine.
  * heap    Heap to use for allocation.
@@ -35365,7 +36855,7 @@ int sp_ecc_mulmod_base_256(const mp_int* km, ecc_point* r, int map, void* heap)
  *
  * km      Scalar to multiply by.
  * am      Point to add to scalar mulitply result.
- * inMont  Point to add is in montogmery form.
+ * inMont  Point to add is in montgomery form.
  * r       Resulting point.
  * map     Indicates whether to convert result to affine.
  * heap    Heap to use for allocation.
@@ -35540,7 +37030,7 @@ static int sp_256_ecc_gen_k_8(WC_RNG* rng, sp_digit* k)
         err = wc_RNG_GenerateBlock(rng, buf, sizeof(buf));
         if (err == 0) {
             sp_256_from_bin(k, 8, buf, (int)sizeof(buf));
-            if (sp_256_cmp_8(k, p256_order2) < 0) {
+            if (sp_256_cmp_8(k, p256_order2) <= 0) {
                 sp_256_add_one_8(k);
                 break;
             }
@@ -35645,7 +37135,7 @@ int sp_ecc_make_key_256(WC_RNG* rng, mp_int* priv, ecc_point* pub, void* heap)
  * r  A single precision integer.
  * a  Byte array.
  */
-static void sp_256_to_bin(sp_digit* r, byte* a)
+static void sp_256_to_bin_8(sp_digit* r, byte* a)
 {
     int i;
     int j;
@@ -35728,7 +37218,7 @@ int sp_ecc_secret_gen_256(const mp_int* priv, const ecc_point* pub, byte* out,
             err = sp_256_ecc_mulmod_8(point, point, k, 1, 1, heap);
     }
     if (err == MP_OKAY) {
-        sp_256_to_bin(point->x, out);
+        sp_256_to_bin_8(point->x, out);
         *outLen = 32;
     }
 
@@ -36084,6 +37574,19 @@ static WC_INLINE int sp_256_mod_8(sp_digit* r, const sp_digit* a, const sp_digit
 
 #endif
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
+/* Multiply two number mod the order of P256 curve. (r = a * b mod order)
+ *
+ * r  Result of the multiplication.
+ * a  First operand of the multiplication.
+ * b  Second operand of the multiplication.
+ */
+static void sp_256_mont_mul_order_8(sp_digit* r, const sp_digit* a, const sp_digit* b)
+{
+    sp_256_mul_8(r, a, b);
+    sp_256_mont_reduce_order_8(r, p256_order, p256_mp_order);
+}
+
+#if defined(HAVE_ECC_SIGN) || (defined(HAVE_ECC_VERIFY) && defined(WOLFSSL_SP_SMALL))
 #ifdef WOLFSSL_SP_SMALL
 /* Order-2 for the P256 curve. */
 static const uint32_t p256_order_minus_2[8] = {
@@ -36096,18 +37599,6 @@ static const sp_int_digit p256_order_low[4] = {
     0xfc63254fU,0xf3b9cac2U,0xa7179e84U,0xbce6faadU
 };
 #endif /* WOLFSSL_SP_SMALL */
-
-/* Multiply two number mod the order of P256 curve. (r = a * b mod order)
- *
- * r  Result of the multiplication.
- * a  First operand of the multiplication.
- * b  Second operand of the multiplication.
- */
-static void sp_256_mont_mul_order_8(sp_digit* r, const sp_digit* a, const sp_digit* b)
-{
-    sp_256_mul_8(r, a, b);
-    sp_256_mont_reduce_order_8(r, p256_order, p256_mp_order);
-}
 
 /* Square number mod the order of P256 curve. (r = a * a mod order)
  *
@@ -36279,6 +37770,7 @@ static void sp_256_mont_inv_order_8(sp_digit* r, const sp_digit* a,
 #endif /* WOLFSSL_SP_SMALL */
 }
 
+#endif /* HAVE_ECC_SIGN || (HAVE_ECC_VERIFY && WOLFSSL_SP_SMALL) */
 #endif /* HAVE_ECC_SIGN | HAVE_ECC_VERIFY */
 #ifdef HAVE_ECC_SIGN
 #ifndef SP_ECC_MAX_SIG_GEN
@@ -36302,7 +37794,7 @@ static int sp_256_calc_s_8(sp_digit* s, const sp_digit* r, sp_digit* k,
 {
     int err;
     sp_digit carry;
-    int32_t c;
+    sp_int32 c;
     sp_digit* kInv = k;
 
     /* Conv k to Montgomery form (mod order) */
@@ -36414,7 +37906,7 @@ int sp_ecc_sign_256_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash, word32 hashLen, W
         break;
     case 3: /* MODORDER */
     {
-        int32_t c;
+        sp_int32 c;
         /* r = point->x mod order */
         XMEMCPY(ctx->r, ctx->point.x, sizeof(sp_digit) * 8U);
         sp_256_norm_8(ctx->r);
@@ -36463,7 +37955,7 @@ int sp_ecc_sign_256_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash, word32 hashLen, W
     case 9: /* S2 */
     {
         sp_digit carry;
-        int32_t c;
+        sp_int32 c;
         sp_256_norm_8(ctx->x);
         carry = sp_256_add_8(ctx->s, ctx->e, ctx->x);
         sp_256_cond_sub_8(ctx->s, ctx->s,
@@ -36533,7 +38025,7 @@ int sp_ecc_sign_256(const byte* hash, word32 hashLen, WC_RNG* rng,
     sp_digit* r = NULL;
     sp_digit* tmp = NULL;
     sp_digit* s = NULL;
-    int32_t c;
+    sp_int32 c;
     int err = MP_OKAY;
     int i;
 
@@ -36971,14 +38463,13 @@ static int sp_256_calc_vfy_point_8(sp_point_256* p1, sp_point_256* p2,
     int err;
 
 #ifndef WOLFSSL_SP_SMALL
-    {
-        sp_256_mod_inv_8(s, s, p256_order);
-    }
+    err = sp_256_mod_inv_8(s, s, p256_order);
+    if (err == MP_OKAY)
 #endif /* !WOLFSSL_SP_SMALL */
     {
         sp_256_mul_8(s, s, p256_norm_order);
+        err = sp_256_mod_8(s, s, p256_order);
     }
-    err = sp_256_mod_8(s, s, p256_order);
     if (err == MP_OKAY) {
         sp_256_norm_8(s);
 #ifdef WOLFSSL_SP_SMALL
@@ -36987,15 +38478,15 @@ static int sp_256_calc_vfy_point_8(sp_point_256* p1, sp_point_256* p2,
             sp_256_mont_mul_order_8(u1, u1, s);
             sp_256_mont_mul_order_8(u2, u2, s);
         }
-
 #else
         {
             sp_256_mont_mul_order_8(u1, u1, s);
             sp_256_mont_mul_order_8(u2, u2, s);
         }
-
 #endif /* WOLFSSL_SP_SMALL */
+        {
             err = sp_256_ecc_mulmod_base_8(p1, u1, 0, 0, heap);
+        }
     }
     if ((err == MP_OKAY) && sp_256_iszero_8(p1->z)) {
         p1->infinity = 1;
@@ -37145,7 +38636,7 @@ int sp_ecc_verify_256_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash,
         break;
     case 12: /* RES */
     {
-        int32_t c = 0;
+        sp_int32 c = 0;
         err = MP_OKAY; /* math okay, now check result */
         *res = (int)(sp_256_cmp_8(ctx->p1.x, ctx->u1) == 0);
         if (*res == 0) {
@@ -37200,7 +38691,7 @@ int sp_ecc_verify_256(const byte* hash, word32 hashLen, const mp_int* pX,
     sp_digit* tmp = NULL;
     sp_point_256* p2 = NULL;
     sp_digit carry;
-    int32_t c = 0;
+    sp_int32 c = 0;
     int err = MP_OKAY;
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
@@ -37517,7 +39008,7 @@ int sp_ecc_proj_add_point_256(mp_int* pX, mp_int* pY, mp_int* pZ,
     sp_point_256 p[2];
 #endif
     sp_point_256* q = NULL;
-    int err;
+    int err = MP_OKAY;
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
     if (err == MP_OKAY) {
@@ -37544,6 +39035,10 @@ int sp_ecc_proj_add_point_256(mp_int* pX, mp_int* pY, mp_int* pZ,
         sp_256_from_mp(q->x, 8, qX);
         sp_256_from_mp(q->y, 8, qY);
         sp_256_from_mp(q->z, 8, qZ);
+        p->infinity = sp_256_iszero_8(p->x) &
+                      sp_256_iszero_8(p->y);
+        q->infinity = sp_256_iszero_8(q->x) &
+                      sp_256_iszero_8(q->y);
 
             sp_256_proj_point_add_8(p, p, q, tmp);
     }
@@ -37610,6 +39105,8 @@ int sp_ecc_proj_dbl_point_256(mp_int* pX, mp_int* pY, mp_int* pZ,
         sp_256_from_mp(p->x, 8, pX);
         sp_256_from_mp(p->y, 8, pY);
         sp_256_from_mp(p->z, 8, pZ);
+        p->infinity = sp_256_iszero_8(p->x) &
+                      sp_256_iszero_8(p->y);
 
             sp_256_proj_point_dbl_8(p, p, tmp);
     }
@@ -37672,6 +39169,8 @@ int sp_ecc_map_256(mp_int* pX, mp_int* pY, mp_int* pZ)
         sp_256_from_mp(p->x, 8, pX);
         sp_256_from_mp(p->y, 8, pY);
         sp_256_from_mp(p->z, 8, pZ);
+        p->infinity = sp_256_iszero_8(p->x) &
+                      sp_256_iszero_8(p->y);
 
             sp_256_map_8(p, p, tmp);
     }
@@ -37849,12 +39348,12 @@ static const sp_digit p384_mod[12] = {
     0xffffffff,0x00000000,0x00000000,0xffffffff,0xfffffffe,0xffffffff,
     0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff
 };
-/* The Montogmery normalizer for modulus of the curve P384. */
+/* The Montgomery normalizer for modulus of the curve P384. */
 static const sp_digit p384_norm_mod[12] = {
     0x00000001,0xffffffff,0xffffffff,0x00000000,0x00000001,0x00000000,
     0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000
 };
-/* The Montogmery multiplier for modulus of the curve P384. */
+/* The Montgomery multiplier for modulus of the curve P384. */
 static sp_digit p384_mp_mod = 0x00000001;
 #if defined(WOLFSSL_VALIDATE_ECC_KEYGEN) || defined(HAVE_ECC_SIGN) || \
                                             defined(HAVE_ECC_VERIFY)
@@ -37870,14 +39369,14 @@ static const sp_digit p384_order2[12] = {
     0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff
 };
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
-/* The Montogmery normalizer for order of the curve P384. */
+/* The Montgomery normalizer for order of the curve P384. */
 static const sp_digit p384_norm_order[12] = {
     0x333ad68d,0x1313e695,0xb74f5885,0xa7e5f24d,0x0bc8d220,0x389cb27e,
     0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000
 };
 #endif
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
-/* The Montogmery multiplier for order of the curve P384. */
+/* The Montgomery multiplier for order of the curve P384. */
 static sp_digit p384_mp_order = 0xe88fdc45;
 #endif
 /* The base point of curve P384. */
@@ -39966,7 +41465,7 @@ static sp_digit sp_384_sub_12(sp_digit* r, const sp_digit* a,
 }
 
 #endif /* WOLFSSL_SP_SMALL */
-/* Multiply a number by Montogmery normalizer mod modulus (prime).
+/* Multiply a number by Montgomery normalizer mod modulus (prime).
  *
  * r  The resulting Montgomery form number.
  * a  The number to convert.
@@ -40510,14 +42009,14 @@ SP_NOINLINE static void sp_384_mont_reduce_12(sp_digit* a, const sp_digit* m,
     sp_384_cond_sub_12(a - 12, a, m, (sp_digit)0 - ca);
 }
 
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_384_mont_mul_12(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -40529,9 +42028,9 @@ static void sp_384_mont_mul_12(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_384_mont_sqr_12(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -40544,10 +42043,10 @@ static void sp_384_mont_sqr_12(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number a number of times. (r = a ^ n mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * n   Number of times to square.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_384_mont_sqr_n_12(sp_digit* r, const sp_digit* a, int n,
         const sp_digit* m, sp_digit mp)
@@ -40659,7 +42158,7 @@ static void sp_384_mont_inv_12(sp_digit* r, const sp_digit* a, sp_digit* td)
  * return -ve, 0 or +ve if a is less than, equal to or greater than b
  * respectively.
  */
-static int32_t sp_384_cmp_12(const sp_digit* a, const sp_digit* b)
+static sp_int32 sp_384_cmp_12(const sp_digit* a, const sp_digit* b)
 {
     sp_digit r = -1;
     sp_digit one = 1;
@@ -40852,7 +42351,7 @@ static void sp_384_map_12(sp_point_384* r, const sp_point_384* p,
 {
     sp_digit* t1 = t;
     sp_digit* t2 = t + 2*12;
-    int32_t n;
+    sp_int32 n;
 
     sp_384_mont_inv_12(t1, p->z, t + 2*12);
 
@@ -40887,8 +42386,8 @@ static void sp_384_map_12(sp_point_384* r, const sp_point_384* p,
 /* Add two Montgomery form numbers (r = a + b % m).
  *
  * r   Result of addition.
- * a   First number to add in Montogmery form.
- * b   Second number to add in Montogmery form.
+ * a   First number to add in Montgomery form.
+ * b   Second number to add in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_384_mont_add_12(sp_digit* r, const sp_digit* a, const sp_digit* b,
@@ -40903,7 +42402,7 @@ static void sp_384_mont_add_12(sp_digit* r, const sp_digit* a, const sp_digit* b
 /* Double a Montgomery form number (r = a + a % m).
  *
  * r   Result of doubling.
- * a   Number to double in Montogmery form.
+ * a   Number to double in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_384_mont_dbl_12(sp_digit* r, const sp_digit* a, const sp_digit* m)
@@ -40917,7 +42416,7 @@ static void sp_384_mont_dbl_12(sp_digit* r, const sp_digit* a, const sp_digit* m
 /* Triple a Montgomery form number (r = a + a + a % m).
  *
  * r   Result of Tripling.
- * a   Number to triple in Montogmery form.
+ * a   Number to triple in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_384_mont_tpl_12(sp_digit* r, const sp_digit* a, const sp_digit* m)
@@ -41039,8 +42538,8 @@ static sp_digit sp_384_cond_add_12(sp_digit* r, const sp_digit* a, const sp_digi
 /* Subtract two Montgomery form numbers (r = a - b % m).
  *
  * r   Result of subtration.
- * a   Number to subtract from in Montogmery form.
- * b   Number to subtract with in Montogmery form.
+ * a   Number to subtract from in Montgomery form.
+ * b   Number to subtract with in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_384_mont_sub_12(sp_digit* r, const sp_digit* a, const sp_digit* b,
@@ -43014,7 +44513,7 @@ int sp_ecc_mulmod_384(const mp_int* km, const ecc_point* gm, ecc_point* r,
  * km      Scalar to multiply by.
  * p       Point to multiply.
  * am      Point to add to scalar mulitply result.
- * inMont  Point to add is in montogmery form.
+ * inMont  Point to add is in montgomery form.
  * r       Resulting point.
  * map     Indicates whether to convert result to affine.
  * heap    Heap to use for allocation.
@@ -44563,7 +46062,7 @@ int sp_ecc_mulmod_base_384(const mp_int* km, ecc_point* r, int map, void* heap)
  *
  * km      Scalar to multiply by.
  * am      Point to add to scalar mulitply result.
- * inMont  Point to add is in montogmery form.
+ * inMont  Point to add is in montgomery form.
  * r       Resulting point.
  * map     Indicates whether to convert result to affine.
  * heap    Heap to use for allocation.
@@ -44751,7 +46250,7 @@ static int sp_384_ecc_gen_k_12(WC_RNG* rng, sp_digit* k)
         err = wc_RNG_GenerateBlock(rng, buf, sizeof(buf));
         if (err == 0) {
             sp_384_from_bin(k, 12, buf, (int)sizeof(buf));
-            if (sp_384_cmp_12(k, p384_order2) < 0) {
+            if (sp_384_cmp_12(k, p384_order2) <= 0) {
                 sp_384_add_one_12(k);
                 break;
             }
@@ -44856,7 +46355,7 @@ int sp_ecc_make_key_384(WC_RNG* rng, mp_int* priv, ecc_point* pub, void* heap)
  * r  A single precision integer.
  * a  Byte array.
  */
-static void sp_384_to_bin(sp_digit* r, byte* a)
+static void sp_384_to_bin_12(sp_digit* r, byte* a)
 {
     int i;
     int j;
@@ -44939,7 +46438,7 @@ int sp_ecc_secret_gen_384(const mp_int* priv, const ecc_point* pub, byte* out,
             err = sp_384_ecc_mulmod_12(point, point, k, 1, 1, heap);
     }
     if (err == MP_OKAY) {
-        sp_384_to_bin(point->x, out);
+        sp_384_to_bin_12(point->x, out);
         *outLen = 48;
     }
 
@@ -45343,6 +46842,19 @@ static WC_INLINE int sp_384_mod_12(sp_digit* r, const sp_digit* a, const sp_digi
 
 #endif
 #if defined(HAVE_ECC_SIGN) || defined(HAVE_ECC_VERIFY)
+/* Multiply two number mod the order of P384 curve. (r = a * b mod order)
+ *
+ * r  Result of the multiplication.
+ * a  First operand of the multiplication.
+ * b  Second operand of the multiplication.
+ */
+static void sp_384_mont_mul_order_12(sp_digit* r, const sp_digit* a, const sp_digit* b)
+{
+    sp_384_mul_12(r, a, b);
+    sp_384_mont_reduce_order_12(r, p384_order, p384_mp_order);
+}
+
+#if defined(HAVE_ECC_SIGN) || (defined(HAVE_ECC_VERIFY) && defined(WOLFSSL_SP_SMALL))
 #ifdef WOLFSSL_SP_SMALL
 /* Order-2 for the P384 curve. */
 static const uint32_t p384_order_minus_2[12] = {
@@ -45355,18 +46867,6 @@ static const uint32_t p384_order_low[6] = {
     0xccc52971U,0xecec196aU,0x48b0a77aU,0x581a0db2U,0xf4372ddfU,0xc7634d81U
 };
 #endif /* WOLFSSL_SP_SMALL */
-
-/* Multiply two number mod the order of P384 curve. (r = a * b mod order)
- *
- * r  Result of the multiplication.
- * a  First operand of the multiplication.
- * b  Second operand of the multiplication.
- */
-static void sp_384_mont_mul_order_12(sp_digit* r, const sp_digit* a, const sp_digit* b)
-{
-    sp_384_mul_12(r, a, b);
-    sp_384_mont_reduce_order_12(r, p384_order, p384_mp_order);
-}
 
 /* Square number mod the order of P384 curve. (r = a * a mod order)
  *
@@ -45509,6 +47009,7 @@ static void sp_384_mont_inv_order_12(sp_digit* r, const sp_digit* a,
 #endif /* WOLFSSL_SP_SMALL */
 }
 
+#endif /* HAVE_ECC_SIGN || (HAVE_ECC_VERIFY && WOLFSSL_SP_SMALL) */
 #endif /* HAVE_ECC_SIGN | HAVE_ECC_VERIFY */
 #ifdef HAVE_ECC_SIGN
 #ifndef SP_ECC_MAX_SIG_GEN
@@ -45532,7 +47033,7 @@ static int sp_384_calc_s_12(sp_digit* s, const sp_digit* r, sp_digit* k,
 {
     int err;
     sp_digit carry;
-    int32_t c;
+    sp_int32 c;
     sp_digit* kInv = k;
 
     /* Conv k to Montgomery form (mod order) */
@@ -45644,7 +47145,7 @@ int sp_ecc_sign_384_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash, word32 hashLen, W
         break;
     case 3: /* MODORDER */
     {
-        int32_t c;
+        sp_int32 c;
         /* r = point->x mod order */
         XMEMCPY(ctx->r, ctx->point.x, sizeof(sp_digit) * 12U);
         sp_384_norm_12(ctx->r);
@@ -45693,7 +47194,7 @@ int sp_ecc_sign_384_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash, word32 hashLen, W
     case 9: /* S2 */
     {
         sp_digit carry;
-        int32_t c;
+        sp_int32 c;
         sp_384_norm_12(ctx->x);
         carry = sp_384_add_12(ctx->s, ctx->e, ctx->x);
         sp_384_cond_sub_12(ctx->s, ctx->s,
@@ -45763,7 +47264,7 @@ int sp_ecc_sign_384(const byte* hash, word32 hashLen, WC_RNG* rng,
     sp_digit* r = NULL;
     sp_digit* tmp = NULL;
     sp_digit* s = NULL;
-    int32_t c;
+    sp_int32 c;
     int err = MP_OKAY;
     int i;
 
@@ -46248,14 +47749,13 @@ static int sp_384_calc_vfy_point_12(sp_point_384* p1, sp_point_384* p2,
     int err;
 
 #ifndef WOLFSSL_SP_SMALL
-    {
-        sp_384_mod_inv_12(s, s, p384_order);
-    }
+    err = sp_384_mod_inv_12(s, s, p384_order);
+    if (err == MP_OKAY)
 #endif /* !WOLFSSL_SP_SMALL */
     {
         sp_384_mul_12(s, s, p384_norm_order);
+        err = sp_384_mod_12(s, s, p384_order);
     }
-    err = sp_384_mod_12(s, s, p384_order);
     if (err == MP_OKAY) {
         sp_384_norm_12(s);
 #ifdef WOLFSSL_SP_SMALL
@@ -46264,15 +47764,15 @@ static int sp_384_calc_vfy_point_12(sp_point_384* p1, sp_point_384* p2,
             sp_384_mont_mul_order_12(u1, u1, s);
             sp_384_mont_mul_order_12(u2, u2, s);
         }
-
 #else
         {
             sp_384_mont_mul_order_12(u1, u1, s);
             sp_384_mont_mul_order_12(u2, u2, s);
         }
-
 #endif /* WOLFSSL_SP_SMALL */
+        {
             err = sp_384_ecc_mulmod_base_12(p1, u1, 0, 0, heap);
+        }
     }
     if ((err == MP_OKAY) && sp_384_iszero_12(p1->z)) {
         p1->infinity = 1;
@@ -46422,7 +47922,7 @@ int sp_ecc_verify_384_nb(sp_ecc_ctx_t* sp_ctx, const byte* hash,
         break;
     case 12: /* RES */
     {
-        int32_t c = 0;
+        sp_int32 c = 0;
         err = MP_OKAY; /* math okay, now check result */
         *res = (int)(sp_384_cmp_12(ctx->p1.x, ctx->u1) == 0);
         if (*res == 0) {
@@ -46477,7 +47977,7 @@ int sp_ecc_verify_384(const byte* hash, word32 hashLen, const mp_int* pX,
     sp_digit* tmp = NULL;
     sp_point_384* p2 = NULL;
     sp_digit carry;
-    int32_t c = 0;
+    sp_int32 c = 0;
     int err = MP_OKAY;
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
@@ -46794,7 +48294,7 @@ int sp_ecc_proj_add_point_384(mp_int* pX, mp_int* pY, mp_int* pZ,
     sp_point_384 p[2];
 #endif
     sp_point_384* q = NULL;
-    int err;
+    int err = MP_OKAY;
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)
     if (err == MP_OKAY) {
@@ -46821,6 +48321,10 @@ int sp_ecc_proj_add_point_384(mp_int* pX, mp_int* pY, mp_int* pZ,
         sp_384_from_mp(q->x, 12, qX);
         sp_384_from_mp(q->y, 12, qY);
         sp_384_from_mp(q->z, 12, qZ);
+        p->infinity = sp_384_iszero_12(p->x) &
+                      sp_384_iszero_12(p->y);
+        q->infinity = sp_384_iszero_12(q->x) &
+                      sp_384_iszero_12(q->y);
 
             sp_384_proj_point_add_12(p, p, q, tmp);
     }
@@ -46887,6 +48391,8 @@ int sp_ecc_proj_dbl_point_384(mp_int* pX, mp_int* pY, mp_int* pZ,
         sp_384_from_mp(p->x, 12, pX);
         sp_384_from_mp(p->y, 12, pY);
         sp_384_from_mp(p->z, 12, pZ);
+        p->infinity = sp_384_iszero_12(p->x) &
+                      sp_384_iszero_12(p->y);
 
             sp_384_proj_point_dbl_12(p, p, tmp);
     }
@@ -46949,6 +48455,8 @@ int sp_ecc_map_384(mp_int* pX, mp_int* pY, mp_int* pZ)
         sp_384_from_mp(p->x, 12, pX);
         sp_384_from_mp(p->y, 12, pY);
         sp_384_from_mp(p->z, 12, pZ);
+        p->infinity = sp_384_iszero_12(p->x) &
+                      sp_384_iszero_12(p->y);
 
             sp_384_map_12(p, p, tmp);
     }
@@ -50678,7 +52186,7 @@ static const sp_digit p1024_mod[32] = {
     0xb3e01a2e,0xbe9ae358,0x9cb48261,0x416c0ce1,0xdad0657a,0x65c61198,
     0x0a563fda,0x997abb1f
 };
-/* The Montogmery normalizer for modulus of the curve P1024. */
+/* The Montgomery normalizer for modulus of the curve P1024. */
 static const sp_digit p1024_norm_mod[32] = {
     0x0157a015,0x99927f85,0x53853178,0x7f3a20ef,0x767a824f,0x031c17dc,
     0xa968e0e0,0x606b2950,0xe3c3f655,0x5830c3ad,0xce7ad57d,0x49500b57,
@@ -50687,7 +52195,7 @@ static const sp_digit p1024_norm_mod[32] = {
     0x4c1fe5d1,0x41651ca7,0x634b7d9e,0xbe93f31e,0x252f9a85,0x9a39ee67,
     0xf5a9c025,0x668544e0
 };
-/* The Montogmery multiplier for modulus of the curve P1024. */
+/* The Montgomery multiplier for modulus of the curve P1024. */
 static sp_digit p1024_mp_mod = 0x7c8f2f3d;
 #if defined(WOLFSSL_SP_SMALL) || defined(HAVE_ECC_CHECK_KEY)
 /* The order of the curve P1024. */
@@ -51416,7 +52924,7 @@ static void sp_1024_mask_32(sp_digit* r, const sp_digit* a, sp_digit m)
  * return -ve, 0 or +ve if a is less than, equal to or greater than b
  * respectively.
  */
-static int32_t sp_1024_cmp_32(const sp_digit* a, const sp_digit* b)
+static sp_int32 sp_1024_cmp_32(const sp_digit* a, const sp_digit* b)
 {
     sp_digit r = -1;
     sp_digit one = 1;
@@ -51864,7 +53372,7 @@ static WC_INLINE int sp_1024_mod_32(sp_digit* r, const sp_digit* a, const sp_dig
     return sp_1024_div_32(a, m, NULL, r);
 }
 
-/* Multiply a number by Montogmery normalizer mod modulus (prime).
+/* Multiply a number by Montgomery normalizer mod modulus (prime).
  *
  * r  The resulting Montgomery form number.
  * a  The number to convert.
@@ -52458,14 +53966,14 @@ SP_NOINLINE static void sp_1024_mont_reduce_32(sp_digit* a, const sp_digit* m,
     sp_1024_cond_sub_32(a - 32, a, m, ca);
 }
 
-/* Multiply two Montogmery form numbers mod the modulus (prime).
+/* Multiply two Montgomery form numbers mod the modulus (prime).
  * (r = a * b mod m)
  *
  * r   Result of multiplication.
- * a   First number to multiply in Montogmery form.
- * b   Second number to multiply in Montogmery form.
+ * a   First number to multiply in Montgomery form.
+ * b   Second number to multiply in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_1024_mont_mul_32(sp_digit* r, const sp_digit* a,
         const sp_digit* b, const sp_digit* m, sp_digit mp)
@@ -52477,9 +53985,9 @@ static void sp_1024_mont_mul_32(sp_digit* r, const sp_digit* a,
 /* Square the Montgomery form number. (r = a * a mod m)
  *
  * r   Result of squaring.
- * a   Number to square in Montogmery form.
+ * a   Number to square in Montgomery form.
  * m   Modulus (prime).
- * mp  Montogmery mulitplier.
+ * mp  Montgomery mulitplier.
  */
 static void sp_1024_mont_sqr_32(sp_digit* r, const sp_digit* a,
         const sp_digit* m, sp_digit mp)
@@ -52563,7 +54071,7 @@ static void sp_1024_map_32(sp_point_1024* r, const sp_point_1024* p,
 {
     sp_digit* t1 = t;
     sp_digit* t2 = t + 2*32;
-    int32_t n;
+    sp_int32 n;
 
     sp_1024_mont_inv_32(t1, p->z, t + 2*32);
 
@@ -52598,8 +54106,8 @@ static void sp_1024_map_32(sp_point_1024* r, const sp_point_1024* p,
 /* Add two Montgomery form numbers (r = a + b % m).
  *
  * r   Result of addition.
- * a   First number to add in Montogmery form.
- * b   Second number to add in Montogmery form.
+ * a   First number to add in Montgomery form.
+ * b   Second number to add in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_1024_mont_add_32(sp_digit* r, const sp_digit* a, const sp_digit* b,
@@ -52768,7 +54276,7 @@ static void sp_1024_mont_add_32(sp_digit* r, const sp_digit* a, const sp_digit* 
 /* Double a Montgomery form number (r = a + a % m).
  *
  * r   Result of doubling.
- * a   Number to double in Montogmery form.
+ * a   Number to double in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_1024_mont_dbl_32(sp_digit* r, const sp_digit* a, const sp_digit* m)
@@ -52920,7 +54428,7 @@ static void sp_1024_mont_dbl_32(sp_digit* r, const sp_digit* a, const sp_digit* 
 /* Triple a Montgomery form number (r = a + a + a % m).
  *
  * r   Result of Tripling.
- * a   Number to triple in Montogmery form.
+ * a   Number to triple in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_1024_mont_tpl_32(sp_digit* r, const sp_digit* a, const sp_digit* m)
@@ -53227,8 +54735,8 @@ static void sp_1024_mont_tpl_32(sp_digit* r, const sp_digit* a, const sp_digit* 
 /* Subtract two Montgomery form numbers (r = a - b % m).
  *
  * r   Result of subtration.
- * a   Number to subtract from in Montogmery form.
- * b   Number to subtract with in Montogmery form.
+ * a   Number to subtract from in Montgomery form.
+ * b   Number to subtract with in Montgomery form.
  * m   Modulus (prime).
  */
 static void sp_1024_mont_sub_32(sp_digit* r, const sp_digit* a, const sp_digit* b,
@@ -59177,7 +60685,7 @@ int sp_ecc_mulmod_base_1024(const mp_int* km, ecc_point* r, int map, void* heap)
  *
  * km      Scalar to multiply by.
  * am      Point to add to scalar mulitply result.
- * inMont  Point to add is in montogmery form.
+ * inMont  Point to add is in montgomery form.
  * r       Resulting point.
  * map     Indicates whether to convert result to affine.
  * heap    Heap to use for allocation.
@@ -62890,7 +64398,7 @@ static int sp_1024_ecc_is_point_32(const sp_point_1024* point,
     sp_digit t1[32 * 4];
 #endif
     sp_digit* t2 = NULL;
-    int32_t n;
+    sp_int32 n;
     int err = MP_OKAY;
 
 #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_SP_NO_MALLOC)

@@ -1,8 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1997, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2012, Facebook Inc.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -55,9 +54,6 @@ Created 9/20/1997 Heikki Tuuri
 #include "srv0srv.h"
 #include "srv0start.h"
 #include "fil0pagecompress.h"
-
-/** Read-ahead area in applying log records to file pages */
-#define RECV_READ_AHEAD_AREA	32U
 
 /** The recovery system */
 recv_sys_t	recv_sys;
@@ -1664,20 +1660,17 @@ inline void page_recv_t::will_not_read()
 
 
 /** Register a redo log snippet for a page.
-@param page_id  page identifier
+@param it       page iterator
 @param start_lsn start LSN of the mini-transaction
 @param lsn      @see mtr_t::commit_lsn()
 @param recs     redo log snippet @see log_t::FORMAT_10_5
 @param len      length of l, in bytes */
-inline void recv_sys_t::add(const page_id_t page_id,
-                            lsn_t start_lsn, lsn_t lsn, const byte *l,
-                            size_t len)
+inline void recv_sys_t::add(map::iterator it, lsn_t start_lsn, lsn_t lsn,
+                            const byte *l, size_t len)
 {
   ut_ad(mutex_own(&mutex));
-  std::pair<map::iterator, bool> p= pages.emplace(map::value_type
-                                                  (page_id, page_recv_t()));
-  page_recv_t& recs= p.first->second;
-  ut_ad(p.second == recs.log.empty());
+  page_id_t page_id = it->first;
+  page_recv_t &recs= it->second;
 
   switch (*l & 0x70) {
   case FREE_PAGE: case INIT_PAGE:
@@ -1769,6 +1762,7 @@ bool recv_sys_t::parse(lsn_t checkpoint_lsn, store_t *store, bool apply)
 loop:
   const byte *const log= buf + recovered_offset;
   const lsn_t start_lsn= recovered_lsn;
+  map::iterator cached_pages_it = pages.end();
 
   /* Check that the entire mini-transaction is included within the buffer */
   const byte *l;
@@ -1838,9 +1832,7 @@ eom_found:
 #endif
 
   uint32_t space_id= 0, page_no= 0, last_offset= 0;
-#if 1 /* MDEV-14425 FIXME: remove this */
   bool got_page_op= false;
-#endif
   for (l= log; l < end; l+= rlen)
   {
     const byte *const recs= l;
@@ -2092,8 +2084,12 @@ same_page:
         /* fall through */
       case STORE_YES:
         if (!mlog_init.will_avoid_read(id, start_lsn))
-          add(id, start_lsn, end_lsn, recs,
+        {
+          if (cached_pages_it == pages.end() || cached_pages_it->first != id)
+            cached_pages_it= pages.emplace(id, page_recv_t()).first;
+          add(cached_pages_it, start_lsn, end_lsn, recs,
               static_cast<size_t>(l + rlen - recs));
+        }
         continue;
       case STORE_NO:
         if (!is_init)
@@ -2106,11 +2102,9 @@ same_page:
         pages.erase(i);
       }
     }
-#if 1 /* MDEV-14425 FIXME: this must be in the checkpoint file only! */
     else if (rlen)
     {
       switch (b & 0xf0) {
-# if 1 /* MDEV-14425 FIXME: Remove this! */
       case FILE_CHECKPOINT:
         if (space_id == 0 && page_no == 0 && rlen == 8)
         {
@@ -2141,7 +2135,6 @@ same_page:
           }
           continue;
         }
-# endif
         /* fall through */
       default:
         if (!srv_force_recovery)
@@ -2219,7 +2212,6 @@ same_page:
           return true;
       }
     }
-#endif
     else
       goto malformed;
   }
@@ -2512,35 +2504,32 @@ func_exit:
 	ut_ad(mtr.has_committed());
 }
 
-/** Reads in pages which have hashed log records, from an area around a given
-page number.
-@param[in]	page_id	page id */
-static void recv_read_in_area(page_id_t page_id)
+/** Read pages for which log needs to be applied.
+@param page_id	first page identifier to read
+@param i        iterator to recv_sys.pages */
+static void recv_read_in_area(page_id_t page_id, recv_sys_t::map::iterator i)
 {
-	uint32_t page_nos[RECV_READ_AHEAD_AREA];
-	compile_time_assert(ut_is_2pow(RECV_READ_AHEAD_AREA));
-	page_id.set_page_no(ut_2pow_round(page_id.page_no(),
-					  RECV_READ_AHEAD_AREA));
-	const ulint up_limit = page_id.page_no() + RECV_READ_AHEAD_AREA;
-	uint32_t* p = page_nos;
+  uint32_t page_nos[32];
+  ut_ad(page_id == i->first);
+  page_id.set_page_no(ut_2pow_round(page_id.page_no(), 32U));
+  const page_id_t up_limit{page_id + 31};
+  uint32_t* p= page_nos;
 
-	for (recv_sys_t::map::iterator i= recv_sys.pages.lower_bound(page_id);
-	     i != recv_sys.pages.end()
-	     && i->first.space() == page_id.space()
-	     && i->first.page_no() < up_limit; i++) {
-		if (i->second.state == page_recv_t::RECV_NOT_PROCESSED
-		    && !buf_pool.page_hash_contains(i->first)) {
-			i->second.state = page_recv_t::RECV_BEING_READ;
-			*p++ = i->first.page_no();
-		}
-	}
+  for (; i != recv_sys.pages.end() && i->first <= up_limit; i++)
+  {
+    if (i->second.state == page_recv_t::RECV_NOT_PROCESSED)
+    {
+      i->second.state= page_recv_t::RECV_BEING_READ;
+      *p++= i->first.page_no();
+    }
+  }
 
-	if (p != page_nos) {
-		mutex_exit(&recv_sys.mutex);
-		buf_read_recv_pages(page_id.space(), page_nos,
-				    ulint(p - page_nos));
-		mutex_enter(&recv_sys.mutex);
-	}
+  if (p != page_nos)
+  {
+    mutex_exit(&recv_sys.mutex);
+    buf_read_recv_pages(page_id.space(), page_nos, ulint(p - page_nos));
+    mutex_enter(&recv_sys.mutex);
+  }
 }
 
 /** Attempt to initialize a page based on redo log records.
@@ -2620,6 +2609,32 @@ buf_block_t *recv_sys_t::recover_low(const page_id_t page_id)
   return block;
 }
 
+/** Thread-safe function which sorts flush_list by oldest_modification */
+static void log_sort_flush_list()
+{
+  mysql_mutex_lock(&buf_pool.flush_list_mutex);
+
+  const size_t size= UT_LIST_GET_LEN(buf_pool.flush_list);
+  std::unique_ptr<buf_page_t *[]> list(new buf_page_t *[size]);
+
+  size_t idx= 0;
+  for (buf_page_t *p= UT_LIST_GET_FIRST(buf_pool.flush_list); p;
+       p= UT_LIST_GET_NEXT(list, p))
+    list.get()[idx++]= p;
+
+  std::sort(list.get(), list.get() + size,
+            [](const buf_page_t *lhs, const buf_page_t *rhs) {
+              return rhs->oldest_modification() < lhs->oldest_modification();
+            });
+
+  UT_LIST_INIT(buf_pool.flush_list, &buf_page_t::list);
+
+  for (size_t i= 0; i < size; i++)
+    UT_LIST_ADD_LAST(buf_pool.flush_list, list[i]);
+
+  mysql_mutex_unlock(&buf_pool.flush_list_mutex);
+}
+
 /** Apply buffered log to persistent data pages.
 @param last_batch     whether it is possible to write more redo log */
 void recv_sys_t::apply(bool last_batch)
@@ -2678,10 +2693,9 @@ void recv_sys_t::apply(bool last_batch)
     for (map::iterator p= pages.begin(); p != pages.end(); )
     {
       const page_id_t page_id= p->first;
-      page_recv_t &recs= p->second;
-      ut_ad(!recs.log.empty());
+      ut_ad(!p->second.log.empty());
 
-      switch (recs.state) {
+      switch (p->second.state) {
       case page_recv_t::RECV_BEING_READ:
       case page_recv_t::RECV_BEING_PROCESSED:
         p++;
@@ -2692,35 +2706,17 @@ void recv_sys_t::apply(bool last_batch)
           mutex_exit(&mutex);
           free_block= buf_LRU_get_free_block(false);
           mutex_enter(&mutex);
-next_page:
-          p= pages.lower_bound(page_id);
-        }
-        continue;
-      case page_recv_t::RECV_NOT_PROCESSED:
-        mtr.start();
-        mtr.set_log_mode(MTR_LOG_NO_REDO);
-        if (buf_block_t *block= buf_page_get_low(page_id, 0, RW_X_LATCH,
-                                                 nullptr, BUF_GET_IF_IN_POOL,
-                                                 __FILE__, __LINE__,
-                                                 &mtr, nullptr, false))
-        {
-          buf_block_dbg_add_level(block, SYNC_NO_ORDER_CHECK);
-          recv_recover_page(block, mtr, p);
-          ut_ad(mtr.has_committed());
-        }
-        else
-        {
-          mtr.commit();
-          recv_read_in_area(page_id);
           break;
         }
-        map::iterator r= p++;
-        r->second.log.clear();
-        pages.erase(r);
+        ut_ad(p == pages.end() || p->first > page_id);
         continue;
+      case page_recv_t::RECV_NOT_PROCESSED:
+        recv_read_in_area(page_id, p);
       }
-
-      goto next_page;
+      p= pages.lower_bound(page_id);
+      /* Ensure that progress will be made. */
+      ut_ad(p == pages.end() || p->first > page_id ||
+            p->second.state >= page_recv_t::RECV_BEING_READ);
     }
 
     buf_pool.free_block(free_block);
@@ -2754,9 +2750,15 @@ next_page:
   mysql_mutex_assert_not_owner(&log_sys.mutex);
   mutex_exit(&mutex);
 
-  /* Instead of flushing, last_batch could sort the buf_pool.flush_list
-  in ascending order of buf_page_t::oldest_modification. */
-  buf_flush_sync();
+  if (last_batch && srv_operation != SRV_OPERATION_RESTORE &&
+      srv_operation != SRV_OPERATION_RESTORE_EXPORT)
+    log_sort_flush_list();
+  else
+  {
+    /* Instead of flushing, last_batch could sort the buf_pool.flush_list
+    in ascending order of buf_page_t::oldest_modification. */
+    buf_flush_sync_batch(recovered_lsn);
+  }
 
   if (!last_batch)
   {
@@ -3659,7 +3661,9 @@ completed:
 
 	log_sys.last_checkpoint_lsn = checkpoint_lsn;
 
-	if (!srv_read_only_mode && srv_operation == SRV_OPERATION_NORMAL) {
+	if (!srv_read_only_mode && srv_operation == SRV_OPERATION_NORMAL
+	    && (~log_t::FORMAT_ENCRYPTED & log_sys.log.format)
+	    == log_t::FORMAT_10_5) {
 		/* Write a FILE_CHECKPOINT marker as the first thing,
 		before generating any other redo log. This ensures
 		that subsequent crash recovery will be possible even
