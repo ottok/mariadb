@@ -45,8 +45,8 @@ file.
  # You should have received a copy of the GNU General Public License
  # along with this program; if not, write to the Free Software
  # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1335 USA
-@@ -31,6 +31,9 @@ ELSE()
-   SET(MYSQLD_USER "mysql")
+@@ -32,6 +32,9 @@ ELSE()
+   SET(MYSQLD_GROUP "mysql")
    SET(ini_file_extension "cnf")
    SET(HOSTNAME "uname -n")
 +
@@ -55,7 +55,7 @@ file.
  ENDIF()
  
  # XXX: shouldn't we just have variables for all this stuff and centralise
-@@ -50,9 +53,11 @@ ENDIF()
+@@ -51,9 +54,11 @@ ENDIF()
  
  IF(UNIX)
    SET(prefix ${CMAKE_INSTALL_PREFIX})
@@ -69,7 +69,7 @@ file.
      INSTALL(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/${script}
        DESTINATION ${inst_location} COMPONENT Server_Scripts)
    ENDFOREACH()
-@@ -94,7 +99,7 @@ IF(UNIX)
+@@ -95,7 +100,7 @@ IF(UNIX)
    INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/mariadb.pc DESTINATION ${INSTALL_LIBDIR}/pkgconfig COMPONENT Development)
  
    INSTALL(FILES mysql.m4 DESTINATION ${INSTALL_SHAREDIR}/aclocal COMPONENT Development)
@@ -78,7 +78,7 @@ file.
    SET(bindir ${INSTALL_BINDIRABS})
    SET(sbindir ${INSTALL_SBINDIRABS})
    SET(scriptdir ${INSTALL_SCRIPTDIRABS})
-@@ -112,7 +117,7 @@ IF(UNIX)
+@@ -113,7 +118,7 @@ IF(UNIX)
    ELSE()
      SET(sysconf2dir "${sysconfdir}/mysql")
    ENDIF()
@@ -87,7 +87,7 @@ file.
                   ${CMAKE_CURRENT_BINARY_DIR}/mysql.server @ONLY)
    INSTALL(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/mysql.server
      DESTINATION ${inst_location} COMPONENT SupportFiles)
-@@ -181,8 +186,9 @@ IF(UNIX)
+@@ -182,8 +187,9 @@ IF(UNIX)
    ENDIF()
  
    IF (INSTALL_SYSCONFDIR)
@@ -158,43 +158,3 @@ file.
 +    fi
 +  endscript
 +}
---- a/support-files/mysql-log-rotate.sh
-+++ /dev/null
-@@ -1,37 +0,0 @@
--# This logname can be set in /etc/my.cnf
--# by setting the variable "log-error"
--# in the [mysqld] section as follows:
--#
--# [mysqld]
--# log-error=@localstatedir@/mysqld.log
--#
--# If the root user has a password you have to create a
--# /root/.my.cnf configuration file with the following
--# content:
--#
--# [mysqladmin]
--# password = <secret> 
--# user= root
--#
--# where "<secret>" is the password. 
--#
--# ATTENTION: This /root/.my.cnf should be readable ONLY
--# for root !
--
--@localstatedir@/mysqld.log {
--        # create 600 mysql mysql
--        notifempty
--        daily
--        rotate 3
--        missingok
--        compress
--    postrotate
--	# just if mariadbd is really running
--	if test -x @bindir@/mysqladmin && \
--	   @bindir@/mysqladmin ping &>/dev/null
--	then
--	   @bindir@/mysqladmin --local flush-error-log \
--              flush-engine-log flush-general-log flush-slow-log
--	fi
--    endscript
--}
