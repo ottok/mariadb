@@ -155,15 +155,6 @@ static int IsValidCipherSuite(const char* line, char *suite, size_t suite_spc)
         found = 1;
     }
 
-    /* if QSH not enabled then do not use QSH suite */
-    #ifdef HAVE_QSH
-        if (suite[0] && (XSTRNCMP(suite, "QSH", 3) == 0)) {
-            if (wolfSSL_CTX_set_cipher_list(cipherSuiteCtx, suite + 4)
-                                                                 != WOLFSSL_SUCCESS)
-                return 0;
-        }
-    #endif
-
     if (found) {
         if (wolfSSL_CTX_set_cipher_list(cipherSuiteCtx, suite) == WOLFSSL_SUCCESS)
             valid = 1;
@@ -487,7 +478,7 @@ static int execute_test_case(int svr_argc, char** svr_argv,
         if (cliArgs.argc + 2 > MAX_ARGS)
             printf("cannot add the magic port number flag to client\n");
         else {
-            snprintf(portNumber, sizeof(portNumber), "%d", ready.port);
+            snprintf(portNumber, sizeof(portNumber), "%d", (int)ready.port);
             cli_argv[cliArgs.argc++] = portFlag;
             cli_argv[cliArgs.argc++] = portNumber;
         }
@@ -553,7 +544,7 @@ static int execute_test_case(int svr_argc, char** svr_argv,
     /* verify results */
     if ((cliArgs.return_code != 0 && cliTestShouldFail == 0) ||
         (cliArgs.return_code == 0 && cliTestShouldFail != 0)) {
-        printf("client_test failed %d %s\n", cliArgs.return_code, 
+        printf("client_test failed %d %s\n", cliArgs.return_code,
             cliTestShouldFail ? "(should fail)" : "");
         XEXIT(EXIT_FAILURE);
     }
@@ -876,7 +867,7 @@ int SuiteTest(int argc, char** argv)
     }
     #endif
     #ifndef WOLFSSL_NO_TLS12
-    /* add TLSv13 downgrade tets */
+    /* add TLSv13 downgrade tests */
     strcpy(argv0[1], "tests/test-tls13-down.conf");
     printf("starting TLSv13 Downgrade extra tests\n");
     test_harness(&args);
@@ -886,8 +877,21 @@ int SuiteTest(int argc, char** argv)
         goto exit;
     }
     #endif
+    #ifdef HAVE_PQC
+    /* add TLSv13 pq tests */
+    strcpy(argv0[1], "tests/test-tls13-pq.conf");
+    printf("starting TLSv13 post-quantum groups tests\n");
+    test_harness(&args);
+    if (args.return_code != 0) {
+        printf("error from script %d\n", args.return_code);
+        args.return_code = EXIT_FAILURE;
+        goto exit;
+    }
+    #endif
 #endif
-#if defined(HAVE_CURVE25519) && defined(HAVE_ED25519)
+#if defined(HAVE_CURVE25519) && defined(HAVE_ED25519) && \
+    defined(HAVE_ED25519_SIGN) && defined(HAVE_ED25519_VERIFY) && \
+    defined(HAVE_ED25519_KEY_IMPORT) && defined(HAVE_ED25519_KEY_EXPORT)
     /* add ED25519 certificate cipher suite tests */
     strcpy(argv0[1], "tests/test-ed25519.conf");
     printf("starting ED25519 extra cipher suite tests\n");
@@ -898,7 +902,9 @@ int SuiteTest(int argc, char** argv)
         goto exit;
     }
 #endif
-#if defined(HAVE_CURVE448) && defined(HAVE_ED448)
+#if defined(HAVE_CURVE448) && defined(HAVE_ED448) && \
+    defined(HAVE_ED448_SIGN) && defined(HAVE_ED448_VERIFY) && \
+    defined(HAVE_ED448_KEY_IMPORT) && defined(HAVE_ED448_KEY_EXPORT)
     /* add ED448 certificate cipher suite tests */
     strcpy(argv0[1], "tests/test-ed448.conf");
     printf("starting ED448 extra cipher suite tests\n");
@@ -922,7 +928,10 @@ int SuiteTest(int argc, char** argv)
     }
 #endif
 #if defined(HAVE_ECC) && !defined(NO_SHA256) && defined(WOLFSSL_CUSTOM_CURVES) && \
-    defined(HAVE_ECC_KOBLITZ) && defined(HAVE_ECC_BRAINPOOL)
+    defined(HAVE_ECC_KOBLITZ) && defined(HAVE_ECC_BRAINPOOL) && \
+        /* Intel QuickAssist and Cavium Nitrox do not support custom curves */ \
+        !defined(HAVE_INTEL_QA) && !defined(HAVE_CAVIUM_V)
+
     /* TLS non-NIST curves (Koblitz / Brainpool) */
     strcpy(argv0[1], "tests/test-ecc-cust-curves.conf");
     printf("starting TLS test of non-NIST curves (Koblitz / Brainpool)\n");
@@ -1068,27 +1077,6 @@ int SuiteTest(int argc, char** argv)
     }
 #endif /* HAVE_RSA and HAVE_ECC */
 #endif /* !WC_STRICT_SIG */
-#ifdef HAVE_QSH
-    /* add QSH extra suites */
-    strcpy(argv0[1], "tests/test-qsh.conf");
-    printf("starting qsh extra cipher suite tests\n");
-    test_harness(&args);
-    if (args.return_code != 0) {
-        printf("error from script %d\n", args.return_code);
-        args.return_code = EXIT_FAILURE;
-        goto exit;
-    }
-#ifdef WOLFSSL_OLDTLS_SHA2_CIPHERSUITES
-    strcpy(argv0[1], "tests/test-qsh-sha2.conf");
-    printf("starting qsh extra cipher suite tests - old TLS sha-2 cs\n");
-    test_harness(&args);
-    if (args.return_code != 0) {
-        printf("error from script %d\n", args.return_code);
-        args.return_code = EXIT_FAILURE;
-        goto exit;
-    }
-#endif
-#endif
 #ifndef NO_PSK
     #ifndef WOLFSSL_NO_TLS12
         #if !defined(NO_RSA) || defined(HAVE_ECC)

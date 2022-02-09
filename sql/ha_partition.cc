@@ -4084,8 +4084,9 @@ int ha_partition::external_lock(THD *thd, int lock_type)
          These commands may be excluded because working history partition is needed
          only for versioned DML. */
       thd->lex->sql_command != SQLCOM_SELECT &&
-      thd->lex->sql_command != SQLCOM_INSERT_SELECT)
-      m_part_info->vers_set_hist_part(thd);
+      thd->lex->sql_command != SQLCOM_INSERT_SELECT &&
+      (error= m_part_info->vers_set_hist_part(thd)))
+      goto err_handler;
   }
   DBUG_RETURN(0);
 
@@ -4222,7 +4223,7 @@ int ha_partition::start_stmt(THD *thd, thr_lock_type lock_type)
        i= bitmap_get_next_set(&m_part_info->lock_partitions, i))
   {
     if (unlikely((error= m_file[i]->start_stmt(thd, lock_type))))
-      break;
+      DBUG_RETURN(error);
     /* Add partition to be called in reset(). */
     bitmap_set_bit(&m_partitions_to_reset, i);
   }
@@ -4241,7 +4242,7 @@ int ha_partition::start_stmt(THD *thd, thr_lock_type lock_type)
       // TODO: MDEV-20345 (see above)
       thd->lex->sql_command != SQLCOM_SELECT &&
       thd->lex->sql_command != SQLCOM_INSERT_SELECT)
-      m_part_info->vers_set_hist_part(thd);
+      error= m_part_info->vers_set_hist_part(thd);
   default:;
   }
   DBUG_RETURN(error);
@@ -11051,11 +11052,8 @@ int ha_partition::check_misplaced_rows(uint read_part_id, bool do_repair)
       read_part_id != m_part_info->vers_info->now_part->id &&
       !m_part_info->vers_info->interval.is_set())
   {
-    print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, "note",
-                    table_share->db.str, table->alias,
-                    opt_op_name[CHECK_PARTS],
-                    "Not supported for non-INTERVAL history partitions");
-    DBUG_RETURN(HA_ADMIN_NOT_IMPLEMENTED);
+    /* Skip this check as it is not supported for non-INTERVAL history partitions. */
+    DBUG_RETURN(HA_ADMIN_OK);
   }
 
   if (do_repair)

@@ -25,8 +25,6 @@
 #ifndef WOLFSSL_BIO_H_
 #define WOLFSSL_BIO_H_
 
-#include <wolfssl/openssl/ssl.h>
-
 
 #ifdef __cplusplus
     extern "C" {
@@ -63,6 +61,7 @@
 #define BIO_ctrl_reset_read_request     wolfSSL_BIO_ctrl_reset_read_request
 #define BIO_set_write_buf_size          wolfSSL_BIO_set_write_buf_size
 #define BIO_make_bio_pair               wolfSSL_BIO_make_bio_pair
+#define BIO_up_ref                      wolfSSL_BIO_up_ref
 
 #define BIO_new_fd                      wolfSSL_BIO_new_fd
 #define BIO_set_fp                      wolfSSL_BIO_set_fp
@@ -108,6 +107,8 @@
 #define BIO_set_data               wolfSSL_BIO_set_data
 #define BIO_get_shutdown           wolfSSL_BIO_get_shutdown
 #define BIO_set_shutdown           wolfSSL_BIO_set_shutdown
+
+#define BIO_get_fd                 wolfSSL_BIO_get_fd
 
 #define BIO_clear_flags            wolfSSL_BIO_clear_flags
 #define BIO_set_ex_data            wolfSSL_BIO_set_ex_data

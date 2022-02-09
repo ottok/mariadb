@@ -114,6 +114,7 @@ static const alter_table_operations INNOBASE_INPLACE_IGNORE
 	| ALTER_VIRTUAL_GCOL_EXPR
 	| ALTER_DROP_CHECK_CONSTRAINT
 	| ALTER_RENAME
+	| ALTER_INDEX_ORDER
 	| ALTER_COLUMN_INDEX_LENGTH
 	| ALTER_CHANGE_INDEX_COMMENT;
 
@@ -1911,10 +1912,15 @@ innobase_fts_check_doc_id_col(
 }
 
 /** Check whether the table is empty.
-@param[in]	table	table to be checked
+@param[in]	table			table to be checked
+@param[in]	ignore_delete_marked	Ignore the delete marked
+					flag record
 @return true if table is empty */
-static bool innobase_table_is_empty(const dict_table_t *table)
+static bool innobase_table_is_empty(const dict_table_t *table,
+				    bool ignore_delete_marked=true)
 {
+  if (!table->space)
+    return false;
   dict_index_t *clust_index= dict_table_get_first_index(table);
   mtr_t mtr;
   btr_pcur_t pcur;
@@ -1952,12 +1958,16 @@ next_page:
   }
 
   rec= page_cur_get_rec(cur);
-  if (rec_get_deleted_flag(rec, dict_table_is_comp(table)));
-  else if (!page_rec_is_supremum(rec))
+  if (rec_get_deleted_flag(rec, dict_table_is_comp(table)))
   {
+    if (ignore_delete_marked)
+      goto scan_leaf;
+non_empty:
     mtr.commit();
     return false;
   }
+  else if (!page_rec_is_supremum(rec))
+    goto non_empty;
   else
   {
     next_page= true;
@@ -2454,7 +2464,8 @@ next_column:
 			   | ALTER_ADD_UNIQUE_INDEX
 		*/
 			   | ALTER_ADD_NON_UNIQUE_NON_PRIM_INDEX
-			   | ALTER_DROP_NON_UNIQUE_NON_PRIM_INDEX);
+			   | ALTER_DROP_NON_UNIQUE_NON_PRIM_INDEX
+			   | ALTER_INDEX_ORDER);
 		if (supports_instant) {
 			flags &= ~(ALTER_DROP_STORED_COLUMN
 #if 0 /* MDEV-17468: remove check_v_col_in_order() and fix the code */
@@ -6762,6 +6773,7 @@ wrong_column_name:
 		DBUG_ASSERT(num_fts_index <= 1);
 		DBUG_ASSERT(!ctx->online || num_fts_index == 0);
 		DBUG_ASSERT(!ctx->online
+			    || !ha_alter_info->mdl_exclusive_after_prepare
 			    || ctx->add_autoinc == ULINT_UNDEFINED);
 		DBUG_ASSERT(!ctx->online
 			    || !innobase_need_rebuild(ha_alter_info, old_table)
@@ -7580,6 +7592,20 @@ ha_innobase::prepare_inplace_alter_table(
 		DBUG_RETURN(false);
 	}
 
+#ifdef WITH_PARTITION_STORAGE_ENGINE
+	if (table->part_info == NULL) {
+#endif
+	/* Ignore the MDL downgrade when table is empty.
+	This optimization is disabled for partition table. */
+	ha_alter_info->mdl_exclusive_after_prepare =
+		innobase_table_is_empty(m_prebuilt->table, false);
+	if (ha_alter_info->online
+	    && ha_alter_info->mdl_exclusive_after_prepare) {
+		ha_alter_info->online = false;
+	}
+#ifdef WITH_PARTITION_STORAGE_ENGINE
+	}
+#endif
 	indexed_table = m_prebuilt->table;
 
 	/* ALTER TABLE will not implicitly move a table from a single-table
@@ -8364,7 +8390,9 @@ ha_innobase::inplace_alter_table(
 
 	DEBUG_SYNC(m_user_thd, "innodb_inplace_alter_table_enter");
 
-	if (!(ha_alter_info->handler_flags & INNOBASE_ALTER_DATA)) {
+	/* Ignore the inplace alter phase when table is empty */
+	if (!(ha_alter_info->handler_flags & INNOBASE_ALTER_DATA)
+	    || ha_alter_info->mdl_exclusive_after_prepare) {
 ok_exit:
 		DEBUG_SYNC(m_user_thd, "innodb_after_inplace_alter_table");
 		DBUG_RETURN(false);
@@ -8834,6 +8862,14 @@ func_exit:
 			}
 
 			row_mysql_unlock_data_dictionary(prebuilt->trx);
+		}
+
+		if (ctx->add_vcol) {
+			for (ulint i = 0; i < ctx->num_to_add_vcol; i++) {
+				ctx->add_vcol[i].~dict_v_col_t();
+			}
+			ctx->num_to_add_vcol = 0;
+			ctx->add_vcol = nullptr;
 		}
 	}
 

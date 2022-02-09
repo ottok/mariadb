@@ -75,10 +75,15 @@
 /* Crypto Information Structure for callbacks */
 typedef struct wc_CryptoInfo {
     int algo_type; /* enum wc_AlgoType */
+#if HAVE_ANONYMOUS_INLINE_AGGREGATES
+    union {
+#endif
 #if !defined(NO_RSA) || defined(HAVE_ECC)
     struct {
         int type; /* enum wc_PkType */
+#if HAVE_ANONYMOUS_INLINE_AGGREGATES
         union {
+#endif
         #ifndef NO_RSA
             struct {
                 const byte* in;
@@ -182,14 +187,18 @@ typedef struct wc_CryptoInfo {
                 byte         contextLen;
             } ed25519verify;
         #endif
+#if HAVE_ANONYMOUS_INLINE_AGGREGATES
         };
+#endif
     } pk;
 #endif /* !NO_RSA || HAVE_ECC */
 #if !defined(NO_AES) || !defined(NO_DES3)
     struct {
         int type; /* enum wc_CipherType */
         int enc;
+#if HAVE_ANONYMOUS_INLINE_AGGREGATES
         union {
+#endif
         #ifdef HAVE_AESGCM
             struct {
                 Aes*        aes;
@@ -216,6 +225,32 @@ typedef struct wc_CryptoInfo {
                 word32      authInSz;
             } aesgcm_dec;
         #endif /* HAVE_AESGCM */
+        #ifdef HAVE_AESCCM
+            struct {
+                Aes*        aes;
+                byte*       out;
+                const byte* in;
+                word32      sz;
+                const byte* nonce;
+                word32      nonceSz;
+                byte*       authTag;
+                word32      authTagSz;
+                const byte* authIn;
+                word32      authInSz;
+            } aesccm_enc;
+            struct {
+                Aes*        aes;
+                byte*       out;
+                const byte* in;
+                word32      sz;
+                const byte* nonce;
+                word32      nonceSz;
+                const byte* authTag;
+                word32      authTagSz;
+                const byte* authIn;
+                word32      authInSz;
+            } aesccm_dec;
+        #endif /* HAVE_AESCCM */
         #ifdef HAVE_AES_CBC
             struct {
                 Aes*        aes;
@@ -232,7 +267,9 @@ typedef struct wc_CryptoInfo {
                 word32      sz;
             } des3;
         #endif
+#if HAVE_ANONYMOUS_INLINE_AGGREGATES
         };
+#endif
     } cipher;
 #endif /* !NO_AES || !NO_DES3 */
 #if !defined(NO_SHA) || !defined(NO_SHA256) || \
@@ -242,7 +279,9 @@ typedef struct wc_CryptoInfo {
         const byte* in;
         word32 inSz;
         byte* digest;
+#if HAVE_ANONYMOUS_INLINE_AGGREGATES
         union {
+#endif
         #ifndef NO_SHA
             wc_Sha* sha1;
         #endif
@@ -255,7 +294,9 @@ typedef struct wc_CryptoInfo {
         #ifdef WOLFSSL_SHA512
             wc_Sha512* sha512;
         #endif
+#if HAVE_ANONYMOUS_INLINE_AGGREGATES
         };
+#endif
     } hash;
 #endif /* !NO_SHA || !NO_SHA256 */
 #ifndef NO_HMAC
@@ -291,6 +332,9 @@ typedef struct wc_CryptoInfo {
         word32  inSz;
         int type;
     } cmac;
+#endif
+#if HAVE_ANONYMOUS_INLINE_AGGREGATES
+    };
 #endif
 } wc_CryptoInfo;
 
@@ -367,6 +411,19 @@ WOLFSSL_LOCAL int wc_CryptoCb_AesGcmDecrypt(Aes* aes, byte* out,
      const byte* authTag, word32 authTagSz,
      const byte* authIn, word32 authInSz);
 #endif /* HAVE_AESGCM */
+#ifdef HAVE_AESCCM
+WOLFSSL_LOCAL int wc_CryptoCb_AesCcmEncrypt(Aes* aes, byte* out,
+    const byte* in, word32 sz,
+    const byte* nonce, word32 nonceSz,
+    byte* authTag, word32 authTagSz,
+    const byte* authIn, word32 authInSz);
+
+WOLFSSL_LOCAL int wc_CryptoCb_AesCcmDecrypt(Aes* aes, byte* out,
+    const byte* in, word32 sz,
+    const byte* nonce, word32 nonceSz,
+    const byte* authTag, word32 authTagSz,
+    const byte* authIn, word32 authInSz);
+#endif /* HAVE_AESCCM */
 #ifdef HAVE_AES_CBC
 WOLFSSL_LOCAL int wc_CryptoCb_AesCbcEncrypt(Aes* aes, byte* out,
                                const byte* in, word32 sz);

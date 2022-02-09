@@ -1362,15 +1362,7 @@ row_import::match_schema(
 {
 	/* Do some simple checks. */
 
-	if (m_table->n_cols != m_n_cols) {
-		ib_errf(thd, IB_LOG_LEVEL_ERROR, ER_TABLE_SCHEMA_MISMATCH,
-			"Number of columns don't match, table has %u "
-			"columns but the tablespace meta-data file has "
-			ULINTPF " columns",
-			m_table->n_cols, m_n_cols);
-
-		return(DB_ERROR);
-	} else if (UT_LIST_GET_LEN(m_table->indexes) != m_n_indexes) {
+	if (UT_LIST_GET_LEN(m_table->indexes) != m_n_indexes) {
 
 		/* If the number of indexes don't match then it is better
 		to abort the IMPORT. It is easy for the user to create a
@@ -2210,8 +2202,6 @@ row_import_cleanup(
 	prebuilt->trx->op_info = "";
 
 	DBUG_EXECUTE_IF("ib_import_before_checkpoint_crash", DBUG_SUICIDE(););
-
-	log_make_checkpoint();
 
 	return(err);
 }
@@ -3109,9 +3099,8 @@ static dberr_t decrypt_decompress(fil_space_crypt_t *space_crypt,
     if (!buf_page_verify_crypt_checksum(data, space_flags))
       return DB_CORRUPTION;
 
-    dberr_t err;
-    if (!fil_space_decrypt(space_id, space_crypt, data, page.size(),
-                           space_flags, data, &err) || err != DB_SUCCESS)
+    if (dberr_t err= fil_space_decrypt(space_id, space_crypt, data,
+                                       page.size(), space_flags, data))
       return err;
   }
 
@@ -3277,7 +3266,10 @@ static dberr_t handle_instant_metadata(dict_table_t *table,
     }
 
     mem_heap_t *heap= NULL;
-    SCOPE_EXIT([&heap]() { mem_heap_free(heap); });
+    SCOPE_EXIT([&heap]() {
+      if (heap)
+        mem_heap_free(heap);
+    });
 
     while (btr_page_get_level(page.get()) != 0)
     {
@@ -3825,9 +3817,12 @@ page_corrupted:
     if (!buf_page_verify_crypt_checksum(readptr, m_space_flags))
       goto page_corrupted;
 
-    if (!fil_space_decrypt(get_space_id(), iter.crypt_data, readptr,
-                           size, m_space_flags, readptr, &err) ||
-        err != DB_SUCCESS)
+    if (ENCRYPTION_KEY_NOT_ENCRYPTED ==
+        buf_page_get_key_version(readptr, m_space_flags))
+      goto page_corrupted;
+
+    if ((err= fil_space_decrypt(get_space_id(), iter.crypt_data, readptr, size,
+                                m_space_flags, readptr)))
       goto func_exit;
   }
 
@@ -3978,7 +3973,6 @@ page_corrupted:
 
 			if (!encrypted) {
 			} else if (!key_version) {
-not_encrypted:
 				if (block->page.id().page_no() == 0
 				    && block->page.zip.data) {
 					block->page.zip.data = src;
@@ -3997,21 +3991,16 @@ not_encrypted:
 					goto page_corrupted;
 				}
 
-				decrypted = fil_space_decrypt(
+				if ((err = fil_space_decrypt(
 					actual_space_id,
 					iter.crypt_data, dst,
 					callback.physical_size(),
 					callback.get_space_flags(),
-					src, &err);
-
-				if (err != DB_SUCCESS) {
+					src))) {
 					goto func_exit;
 				}
 
-				if (!decrypted) {
-					goto not_encrypted;
-				}
-
+				decrypted = true;
 				updated = true;
 			}
 

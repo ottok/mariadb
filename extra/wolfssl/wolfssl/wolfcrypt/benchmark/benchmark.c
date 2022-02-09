@@ -110,7 +110,10 @@
     #undef  NO_FILESYSTEM
     #define NO_FILESYSTEM
 
-#elif defined(ANDROID)
+/* ANDROID_V454 (for android studio) displays information in a textview
+ * and redirects printf to the textview output instead of using
+ * __android_log_print() */
+#elif defined(ANDROID) && !defined(ANDROID_V454)
     #ifdef XMALLOC_USER
         #include <stdlib.h>  /* we're using malloc / free direct here */
     #endif
@@ -139,6 +142,9 @@
     #ifdef XPRINTF
         #undef  printf
         #define printf XPRINTF
+    #elif defined(NETOS)
+        #undef printf
+        #define printf dc_log_printf
     #endif
 #endif
 
@@ -192,11 +198,14 @@
 #ifdef WOLFCRYPT_HAVE_SAKKE
     #include <wolfssl/wolfcrypt/sakke.h>
 #endif
+#ifdef HAVE_LIBOQS
+    #include <oqs/kem.h>
+#endif
+#ifdef HAVE_PQC
+    #include <wolfssl/wolfcrypt/falcon.h>
+#endif
 
 #include <wolfssl/wolfcrypt/dh.h>
-#ifdef HAVE_NTRU
-    #include "libntruencrypt/ntru_crypto.h"
-#endif
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/types.h>
@@ -209,12 +218,30 @@
     #ifdef HAVE_CAVIUM_OCTEON_SYNC
         #include <wolfssl/wolfcrypt/port/cavium/cavium_octeon_sync.h>
     #endif
+    #ifdef HAVE_RENESAS_SYNC
+        #include <wolfssl/wolfcrypt/port/renesas/renesas_sync.h>
+    #endif
 #endif
 
 #ifdef WOLFSSL_ASYNC_CRYPT
     #include <wolfssl/wolfcrypt/async.h>
 #endif
 
+#ifdef HAVE_FIPS
+    #include <wolfssl/wolfcrypt/fips_test.h>
+
+    static void myFipsCb(int ok, int err, const char* hash)
+    {
+        printf("in my Fips callback, ok = %d, err = %d\n", ok, err);
+        printf("message = %s\n", wc_GetErrorString(err));
+        printf("hash = %s\n", hash);
+
+        if (err == IN_CORE_FIPS_E) {
+            printf("In core integrity hash check failure, copy above hash\n");
+            printf("into verifyCore[] in fips_test.c and rebuild\n");
+        }
+    }
+#endif
 
 #ifdef WOLFSSL_STATIC_MEMORY
     static WOLFSSL_HEAP_HINT* HEAP_HINT;
@@ -295,8 +322,6 @@
 #define BENCH_RSA                0x00000002
 #define BENCH_RSA_SZ             0x00000004
 #define BENCH_DH                 0x00000010
-#define BENCH_NTRU               0x00000100
-#define BENCH_NTRU_KEYGEN        0x00000200
 #define BENCH_ECC_MAKEKEY        0x00001000
 #define BENCH_ECC                0x00002000
 #define BENCH_ECC_ENCRYPT        0x00004000
@@ -320,6 +345,36 @@
 #define BENCH_SAKKE_VALIDATE     0x40000000
 #define BENCH_SAKKE              0x80000000
 
+/* Post-Quantum Asymmetric algorithms. */
+#define BENCH_FALCON_LEVEL1_SIGN     0x00000001
+#define BENCH_FALCON_LEVEL5_SIGN     0x00000002
+#define BENCH_KYBER_LEVEL1_KEYGEN    0x00000004
+#define BENCH_KYBER_LEVEL1_ENCAP     0x00000008
+#define BENCH_KYBER_LEVEL3_KEYGEN    0x00000010
+#define BENCH_KYBER_LEVEL3_ENCAP     0x00000020
+#define BENCH_KYBER_LEVEL5_KEYGEN    0x00000040
+#define BENCH_KYBER_LEVEL5_ENCAP     0x00000080
+#define BENCH_KYBER90S_LEVEL1_KEYGEN 0x00000100
+#define BENCH_KYBER90S_LEVEL1_ENCAP  0x00000200
+#define BENCH_KYBER90S_LEVEL3_KEYGEN 0x00000400
+#define BENCH_KYBER90S_LEVEL3_ENCAP  0x00000800
+#define BENCH_KYBER90S_LEVEL5_KEYGEN 0x00001000
+#define BENCH_KYBER90S_LEVEL5_ENCAP  0x00002000
+#define BENCH_SABER_LEVEL1_KEYGEN    0x00004000
+#define BENCH_SABER_LEVEL1_ENCAP     0x00008000
+#define BENCH_SABER_LEVEL3_KEYGEN    0x00010000
+#define BENCH_SABER_LEVEL3_ENCAP     0x00020000
+#define BENCH_SABER_LEVEL5_KEYGEN    0x00040000
+#define BENCH_SABER_LEVEL5_ENCAP     0x00080000
+#define BENCH_NTRUHPS_LEVEL1_KEYGEN  0x00100000
+#define BENCH_NTRUHPS_LEVEL1_ENCAP   0x00200000
+#define BENCH_NTRUHPS_LEVEL3_KEYGEN  0x00400000
+#define BENCH_NTRUHPS_LEVEL3_ENCAP   0x00800000
+#define BENCH_NTRUHPS_LEVEL5_KEYGEN  0x01000000
+#define BENCH_NTRUHPS_LEVEL5_ENCAP   0x02000000
+#define BENCH_NTRUHRSS_LEVEL3_KEYGEN 0x04000000
+#define BENCH_NTRUHRSS_LEVEL3_ENCAP  0x08000000
+
 /* Other */
 #define BENCH_RNG                0x00000001
 #define BENCH_SCRYPT             0x00000002
@@ -338,6 +393,8 @@ static int bench_digest_algs = 0;
 static int bench_mac_algs = 0;
 /* Asymmetric algorithms to benchmark. */
 static int bench_asym_algs = 0;
+/* Post-Quantum Asymmetric algorithms to benchmark. */
+static int bench_pq_asym_algs = 0;
 /* Other cryptographic algorithms to benchmark. */
 static int bench_other_algs = 0;
 
@@ -507,10 +564,6 @@ static const bench_alg bench_asym_opt[] = {
 #ifndef NO_DH
     { "-dh",                 BENCH_DH                },
 #endif
-#ifdef HAVE_NTRU
-    { "-ntru",               BENCH_NTRU              },
-    { "-ntru-kg",            BENCH_NTRU_KEYGEN       },
-#endif
 #ifdef HAVE_ECC
     { "-ecc-kg",             BENCH_ECC_MAKEKEY       },
     { "-ecc",                BENCH_ECC               },
@@ -552,6 +605,81 @@ static const bench_alg bench_asym_opt[] = {
     { "-sakke",              BENCH_SAKKE             },
 #endif
     { NULL, 0 }
+};
+
+/* The post-quantum-specific mapping of command line option to bit values and
+ * OQS name. */
+typedef struct bench_pq_alg {
+    /* Command line option string. */
+    const char* str;
+    /* Bit values to set. */
+    word32 val;
+    const char* pqc_name;
+} bench_pq_alg;
+
+/* All recognized post-quantum asymmetric algorithm choosing command line
+ * options. */
+static const bench_pq_alg bench_pq_asym_opt[] = {
+    { "-pq",                 0xffffffff, NULL},
+#ifdef HAVE_LIBOQS
+    { "-falcon_level1",      BENCH_FALCON_LEVEL1_SIGN,
+      OQS_SIG_alg_falcon_512 },
+    { "-falcon_level5",      BENCH_FALCON_LEVEL5_SIGN,
+      OQS_SIG_alg_falcon_1024 },
+    { "-kyber_level1-kg",    BENCH_KYBER_LEVEL1_KEYGEN,
+      OQS_KEM_alg_kyber_512 },
+    { "-kyber_level1-ed",       BENCH_KYBER_LEVEL1_ENCAP,
+      OQS_KEM_alg_kyber_512 },
+    { "-kyber_level3-kg",    BENCH_KYBER_LEVEL3_KEYGEN,
+      OQS_KEM_alg_kyber_768 },
+    { "-kyber_level3-ed",       BENCH_KYBER_LEVEL3_ENCAP,
+      OQS_KEM_alg_kyber_768 },
+    { "-kyber_level5-kg",    BENCH_KYBER_LEVEL5_KEYGEN,
+      OQS_KEM_alg_kyber_1024 },
+    { "-kyber_level5-ed",       BENCH_KYBER_LEVEL5_ENCAP,
+      OQS_KEM_alg_kyber_1024 },
+    { "-kyber90s_level1-kg", BENCH_KYBER90S_LEVEL1_KEYGEN,
+      OQS_KEM_alg_kyber_512_90s },
+    { "-kyber90s_level1-ed",    BENCH_KYBER90S_LEVEL1_ENCAP,
+      OQS_KEM_alg_kyber_512_90s },
+    { "-kyber90s_level3-kg", BENCH_KYBER90S_LEVEL3_KEYGEN,
+      OQS_KEM_alg_kyber_768_90s },
+    { "-kyber90s_level3-ed",    BENCH_KYBER90S_LEVEL3_ENCAP,
+      OQS_KEM_alg_kyber_768_90s },
+    { "-kyber90s_level5-kg", BENCH_KYBER90S_LEVEL5_KEYGEN,
+      OQS_KEM_alg_kyber_1024_90s},
+    { "-kyber90s_level5-ed",    BENCH_KYBER90S_LEVEL5_ENCAP,
+      OQS_KEM_alg_kyber_1024_90s },
+    { "-saber_level1-kg",    BENCH_SABER_LEVEL1_KEYGEN,
+      OQS_KEM_alg_saber_lightsaber },
+    { "-saber_level1-ed",       BENCH_SABER_LEVEL1_ENCAP,
+      OQS_KEM_alg_saber_lightsaber },
+    { "-saber_level3-kg",    BENCH_SABER_LEVEL3_KEYGEN,
+      OQS_KEM_alg_saber_saber },
+    { "-saber_level3-ed",       BENCH_SABER_LEVEL3_ENCAP,
+      OQS_KEM_alg_saber_saber },
+    { "-saber_level5-kg",    BENCH_SABER_LEVEL5_KEYGEN,
+      OQS_KEM_alg_saber_firesaber },
+    { "-saber_level5-ed",       BENCH_SABER_LEVEL5_ENCAP,
+      OQS_KEM_alg_saber_firesaber },
+    { "-ntruHPS_level1-kg",  BENCH_NTRUHPS_LEVEL1_KEYGEN,
+      OQS_KEM_alg_ntru_hps2048509 },
+    { "-ntruHPS_level1-ed",     BENCH_NTRUHPS_LEVEL1_ENCAP,
+      OQS_KEM_alg_ntru_hps2048509 },
+    { "-ntruHPS_level3-kg",  BENCH_NTRUHPS_LEVEL3_KEYGEN,
+      OQS_KEM_alg_ntru_hps2048677 },
+    { "-ntruHPS_level3-ed",     BENCH_NTRUHPS_LEVEL3_ENCAP,
+      OQS_KEM_alg_ntru_hps2048677 },
+    { "-ntruHPS_level5-kg",  BENCH_NTRUHPS_LEVEL5_KEYGEN,
+      OQS_KEM_alg_ntru_hps4096821 },
+    { "-ntruHPS_level5-ed",     BENCH_NTRUHPS_LEVEL5_ENCAP,
+      OQS_KEM_alg_ntru_hps4096821 },
+    { "-ntruHRSS_level3-kg", BENCH_NTRUHRSS_LEVEL3_KEYGEN,
+      OQS_KEM_alg_ntru_hrss701 },
+    { "-ntruHRSS_level3-ed",    BENCH_NTRUHRSS_LEVEL3_ENCAP,
+      OQS_KEM_alg_ntru_hrss701 },
+#endif
+    { NULL, 0, NULL }
 };
 
 /* All recognized other cryptographic algorithm choosing command line options.
@@ -636,7 +764,7 @@ static const char* bench_result_words1[][4] = {
 #endif
 };
 
-#if !defined(NO_RSA) || defined(HAVE_NTRU) || \
+#if !defined(NO_RSA) || \
     defined(HAVE_ECC) || !defined(NO_DH) || defined(HAVE_ECC_ENCRYPT) || \
     defined(HAVE_CURVE25519) || defined(HAVE_CURVE25519_SHARED_SECRET)  || \
     defined(HAVE_ED25519) || defined(HAVE_CURVE448) || \
@@ -777,7 +905,7 @@ static const char* bench_desc_words[][14] = {
 
 #if defined(HAVE_ED25519) || defined(HAVE_CURVE25519) || \
     defined(HAVE_CURVE448) || defined(HAVE_ED448) || \
-    defined(HAVE_ECC) || defined(HAVE_NTRU) || !defined(NO_DH) || \
+    defined(HAVE_ECC) || !defined(NO_DH) || \
     !defined(NO_RSA) || defined(HAVE_SCRYPT)
     #define BENCH_ASYM
 #endif
@@ -1069,10 +1197,13 @@ typedef enum bench_stat_type {
     BENCH_STAT_SYM,
 } bench_stat_type_t;
 #if defined(WOLFSSL_ASYNC_CRYPT) && !defined(WC_NO_ASYNC_THREADING)
+    #ifndef BENCH_MAX_NAME_SZ
+    #define BENCH_MAX_NAME_SZ 24
+    #endif
     typedef struct bench_stats {
         struct bench_stats* next;
         struct bench_stats* prev;
-        const char* algo;
+        char algo[BENCH_MAX_NAME_SZ+1]; /* may not be static, so make copy */
         const char* desc;
         double perfsec;
         int strength;
@@ -1090,16 +1221,21 @@ typedef enum bench_stat_type {
         const char* algo, int strength, const char* desc, int doAsync,
         double perfsec, const char* perftype, int ret)
     {
-        bench_stats_t* bstat;
+        bench_stats_t* bstat = NULL;
 
         /* protect bench_stats_head and bench_stats_tail access */
         pthread_mutex_lock(&bench_lock);
 
-        /* locate existing in list */
-        for (bstat = bench_stats_head; bstat != NULL; bstat = bstat->next) {
-            /* match based on algo, strength and desc */
-            if (bstat->algo == algo && bstat->strength == strength && bstat->desc == desc && bstat->doAsync == doAsync) {
-                break;
+        if (algo != NULL) {
+            /* locate existing in list */
+            for (bstat = bench_stats_head; bstat != NULL; bstat = bstat->next) {
+                /* match based on algo, strength and desc */
+                if (XSTRNCMP(bstat->algo, algo, BENCH_MAX_NAME_SZ) == 0 &&
+                    bstat->strength == strength &&
+                    bstat->desc == desc &&
+                    bstat->doAsync == doAsync) {
+                    break;
+                }
             }
         }
 
@@ -1121,10 +1257,10 @@ typedef enum bench_stat_type {
                 bench_stats_tail = bstat; /* add to the end either way */
             }
         }
-
         if (bstat) {
             bstat->type = type;
-            bstat->algo = algo;
+            if (algo != NULL)
+                XSTRNCPY(bstat->algo, algo, BENCH_MAX_NAME_SZ);
             bstat->strength = strength;
             bstat->desc = desc;
             bstat->doAsync = doAsync;
@@ -1133,17 +1269,8 @@ typedef enum bench_stat_type {
             bstat->perftype = perftype;
             if (bstat->lastRet > ret)
                 bstat->lastRet = ret; /* track last error */
-
-            pthread_mutex_unlock(&bench_lock);
-
-            /* wait until remaining are complete */
-            while (bstat->finishCount < g_threadCount) {
-                wc_AsyncThreadYield();
-            }
         }
-        else {
-            pthread_mutex_unlock(&bench_lock);
-        }
+        pthread_mutex_unlock(&bench_lock);
 
         return bstat;
     }
@@ -1295,7 +1422,7 @@ static void bench_stats_sym_finish(const char* desc, int doAsync, int count,
         }
     }
 
-    /* caclulcate blocks per second */
+    /* calculate blocks per second */
     if (total > 0) {
         persec = (1 / total) * blocks;
     }
@@ -1374,6 +1501,52 @@ static void bench_stats_asym_finish(const char* algo, int strength,
     TEST_SLEEP();
 }
 #endif
+
+#if defined(HAVE_PQC)
+static void bench_stats_pq_asym_finish(const char* algo, int doAsync, int count,
+                                       double start, int ret)
+{
+    double total, each = 0, opsSec, milliEach;
+    const char **word = bench_result_words2[lng_index];
+    const char* kOpsSec = "Ops/Sec";
+    char msg[128] = {0};
+
+    total = current_time(0) - start;
+    if (count > 0)
+        each  = total / count; /* per second  */
+    opsSec = count / total;    /* ops second */
+    milliEach = each * 1000;   /* milliseconds */
+
+    /* format and print to terminal */
+    if (csv_format == 1) {
+        /* only print out header once */
+        if (csv_header_count == 1) {
+            printf("\nPost Quantum Asymmetric Ciphers:\n\n");
+            printf("Algorithm,avg ms,ops/sec,\n");
+            csv_header_count++;
+        }
+        XSNPRINTF(msg, sizeof(msg), "%s %.3f,%.3f,\n", algo, milliEach, opsSec);
+    } else {
+         XSNPRINTF(msg, sizeof(msg), "%-18s %s %6d %s %5.3f %s, %s %5.3f ms,"
+         " %.3f %s\n", algo, BENCH_ASYNC_GET_NAME(doAsync),
+         count, word[0], total, word[1], word[2], milliEach, opsSec, word[3]);
+    }
+    printf("%s", msg);
+
+    /* show errors */
+    if (ret < 0) {
+        printf("Benchmark %s failed: %d\n", algo, ret);
+    }
+
+    /* Add to thread stats */
+    bench_stats_add(BENCH_STAT_ASYM, algo, 0, "", doAsync, opsSec, kOpsSec, ret);
+
+    (void)doAsync;
+    (void)ret;
+
+    TEST_SLEEP();
+}
+#endif
 #endif /* BENCH_ASYM */
 
 static WC_INLINE void bench_stats_free(void)
@@ -1430,6 +1603,12 @@ static void* benchmarks_do(void* args)
     devId = wc_CryptoCb_InitOcteon();
     if (devId == INVALID_DEVID) {
         printf("Couldn't get the Octeon device ID\n");
+    }
+#endif
+#ifdef HAVE_RENESAS_SYNC
+    devId = wc_CryptoCb_CryptInitRenesasCmn(NULL, &guser_PKCbInfo);
+    if (devId == INVALID_DEVID) {
+        printf("Couldn't get the Renesas device ID\n");
     }
 #endif
 #endif
@@ -1503,7 +1682,8 @@ static void* benchmarks_do(void* args)
         bench_aescbc(0);
     #endif
     #if ((defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_3DES)) || \
-         defined(HAVE_INTEL_QA_SYNC) || defined(HAVE_CAVIUM_OCTEON_SYNC)) && \
+         defined(HAVE_INTEL_QA_SYNC) || defined(HAVE_CAVIUM_OCTEON_SYNC) || \
+         defined(HAVE_RENESAS_SYNC)) && \
         !defined(NO_HW_BENCH)
         bench_aescbc(1);
     #endif
@@ -1515,7 +1695,8 @@ static void* benchmarks_do(void* args)
         bench_aesgcm(0);
     #endif
     #if ((defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_3DES)) || \
-         defined(HAVE_INTEL_QA_SYNC) || defined(HAVE_CAVIUM_OCTEON_SYNC)) && \
+         defined(HAVE_INTEL_QA_SYNC) || defined(HAVE_CAVIUM_OCTEON_SYNC) || \
+         defined(HAVE_RENESAS_SYNC)) && \
         !defined(NO_HW_BENCH)
         bench_aesgcm(1);
     #endif
@@ -1820,11 +2001,12 @@ static void* benchmarks_do(void* args)
     #ifdef WOLFSSL_KEY_GEN
         if (bench_all || (bench_asym_algs & BENCH_RSA_KEYGEN)) {
         #ifndef NO_SW_BENCH
-            if (bench_asym_algs & BENCH_RSA_SZ) {
-                bench_rsaKeyGen_size(0, bench_size);
+            if (((word32)bench_asym_algs == 0xFFFFFFFFU) ||
+                        (bench_asym_algs & BENCH_RSA_SZ) == 0) {
+                bench_rsaKeyGen(0);
             }
             else {
-                bench_rsaKeyGen(0);
+                bench_rsaKeyGen_size(0, bench_size);
             }
         #endif
         #if defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_RSA_KEYGEN) \
@@ -1873,13 +2055,6 @@ static void* benchmarks_do(void* args)
     }
 #endif
 
-#ifdef HAVE_NTRU
-    if (bench_all || (bench_asym_algs & BENCH_NTRU))
-        bench_ntru();
-    if (bench_all || (bench_asym_algs & BENCH_NTRU_KEYGEN))
-        bench_ntruKeyGen();
-#endif
-
 #ifdef HAVE_ECC
     if (bench_all || (bench_asym_algs & BENCH_ECC_MAKEKEY) ||
             (bench_asym_algs & BENCH_ECC) ||
@@ -1900,6 +2075,14 @@ static void* benchmarks_do(void* args)
             }
 
             do {
+            #ifdef WOLFCRYPT_HAVE_SAKKE
+                /* SAKKE is not useable with ECDH/ECDSA. Run separate test. */
+                if (curveId == ECC_SAKKE_1) {
+                    curveId++;
+                    continue;
+                }
+            #endif
+
                 if (wc_ecc_get_curve_size_from_id(curveId) !=
                         ECC_BAD_ARG_E) {
                     bench_ecc_curve(curveId);
@@ -1979,6 +2162,65 @@ static void* benchmarks_do(void* args)
     #endif
 #endif
 
+#ifdef HAVE_PQC
+    if (bench_all || (bench_pq_asym_algs & BENCH_FALCON_LEVEL1_SIGN))
+        bench_falconKeySign(1);
+    if (bench_all || (bench_pq_asym_algs & BENCH_FALCON_LEVEL5_SIGN))
+        bench_falconKeySign(5);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER_LEVEL1_KEYGEN))
+        bench_pqcKemKeygen(BENCH_KYBER_LEVEL1_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER_LEVEL1_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_KYBER_LEVEL1_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER_LEVEL3_KEYGEN))
+        bench_pqcKemKeygen(BENCH_KYBER_LEVEL3_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER_LEVEL3_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_KYBER_LEVEL3_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER_LEVEL5_KEYGEN))
+        bench_pqcKemKeygen(BENCH_KYBER_LEVEL5_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER_LEVEL5_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_KYBER_LEVEL5_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER90S_LEVEL1_KEYGEN))
+        bench_pqcKemKeygen(BENCH_KYBER90S_LEVEL1_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER90S_LEVEL1_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_KYBER90S_LEVEL1_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER90S_LEVEL3_KEYGEN))
+        bench_pqcKemKeygen(BENCH_KYBER90S_LEVEL3_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER90S_LEVEL3_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_KYBER90S_LEVEL3_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER90S_LEVEL5_KEYGEN))
+        bench_pqcKemKeygen(BENCH_KYBER90S_LEVEL5_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_KYBER90S_LEVEL5_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_KYBER90S_LEVEL5_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_SABER_LEVEL1_KEYGEN))
+        bench_pqcKemKeygen(BENCH_SABER_LEVEL1_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_SABER_LEVEL1_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_SABER_LEVEL1_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_SABER_LEVEL3_KEYGEN))
+        bench_pqcKemKeygen(BENCH_SABER_LEVEL3_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_SABER_LEVEL3_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_SABER_LEVEL3_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_SABER_LEVEL5_KEYGEN))
+        bench_pqcKemKeygen(BENCH_SABER_LEVEL5_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_SABER_LEVEL5_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_SABER_LEVEL5_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_NTRUHPS_LEVEL1_KEYGEN))
+        bench_pqcKemKeygen(BENCH_NTRUHPS_LEVEL1_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_NTRUHPS_LEVEL1_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_NTRUHPS_LEVEL1_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_NTRUHPS_LEVEL3_KEYGEN))
+        bench_pqcKemKeygen(BENCH_NTRUHPS_LEVEL3_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_NTRUHPS_LEVEL3_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_NTRUHPS_LEVEL3_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_NTRUHPS_LEVEL5_KEYGEN))
+        bench_pqcKemKeygen(BENCH_NTRUHPS_LEVEL5_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_NTRUHPS_LEVEL5_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_NTRUHPS_LEVEL5_ENCAP);
+    if (bench_all || (bench_pq_asym_algs & BENCH_NTRUHRSS_LEVEL3_KEYGEN))
+        bench_pqcKemKeygen(BENCH_NTRUHRSS_LEVEL3_KEYGEN);
+    if (bench_all || (bench_pq_asym_algs & BENCH_NTRUHRSS_LEVEL3_ENCAP))
+        bench_pqcKemEncapDecap(BENCH_NTRUHRSS_LEVEL3_ENCAP);
+#endif
+
 #ifdef WOLFCRYPT_HAVE_SAKKE
     #ifdef WOLFCRYPT_SAKKE_KMS
         if (bench_all || (bench_asym_algs & BENCH_SAKKE_KEYGEN)) {
@@ -2007,26 +2249,8 @@ exit:
     XFREE(bench_iv, HEAP_HINT, DYNAMIC_TYPE_WOLF_BIGINT);
 #endif
 
-#ifdef WOLF_CRYPTO_CB
-#ifdef HAVE_INTEL_QA_SYNC
-    wc_CryptoCb_CleanupIntelQa(&devId);
-#endif
-#ifdef HAVE_CAVIUM_OCTEON_SYNC
-    wc_CryptoCb_CleanupOcteon(&devId);
-#endif
-#endif
-
-#ifdef WOLFSSL_ASYNC_CRYPT
-    /* free event queue */
-    wolfEventQueue_Free(&eventQueue);
-#endif
-
 #if defined(HAVE_LOCAL_RNG)
     wc_FreeRng(&gRng);
-#endif
-
-#ifdef WOLFSSL_ASYNC_CRYPT
-    wolfAsync_DevClose(&devId);
 #endif
 
 /* cleanup the thread if fixed point cache is enabled and have thread local */
@@ -2061,6 +2285,9 @@ int benchmark_init(void)
         printf("wolfCrypt_Init failed %d\n", ret);
         return EXIT_FAILURE;
     }
+#ifdef WC_RNG_SEED_CB
+    wc_SetSeed_Cb(wc_GenerateSeed);
+#endif
 
     bench_stats_init();
 
@@ -2093,18 +2320,40 @@ int benchmark_free(void)
 {
     int ret;
 
+#ifndef HAVE_RENESAS_SYNC
+    if (gPrintStats || devId != INVALID_DEVID) {
+        bench_stats_print();
+    }
+#endif
+
+    bench_stats_free();
+
+#ifdef WOLF_CRYPTO_CB
+#ifdef HAVE_INTEL_QA_SYNC
+    wc_CryptoCb_CleanupIntelQa(&devId);
+#endif
+#ifdef HAVE_CAVIUM_OCTEON_SYNC
+    wc_CryptoCb_CleanupOcteon(&devId);
+#endif
+#ifdef HAVE_RENESAS_SYNC
+    wc_CryptoCb_CleanupRenesasCmn(&devId);
+#endif
+#endif
+
+#ifdef WOLFSSL_ASYNC_CRYPT
+    /* free event queue */
+    wolfEventQueue_Free(&eventQueue);
+
+    /* close device */
+    wolfAsync_DevClose(&devId);
+#endif
+
 #ifdef HAVE_WNR
     ret = wc_FreeNetRandom();
     if (ret < 0) {
         printf("Failed to free netRandom context %d\n", ret);
     }
 #endif
-
-    if (gPrintStats || devId != INVALID_DEVID) {
-        bench_stats_print();
-    }
-
-    bench_stats_free();
 
     if ((ret = wolfCrypt_Cleanup()) != 0) {
         printf("error %d with wolfCrypt_Cleanup\n", ret);
@@ -2128,6 +2377,10 @@ int benchmark_test(void *args)
     printf(" wolfSSL version %s\n", LIBWOLFSSL_VERSION_STRING);
     printf("------------------------------------------------------------------------------\n");
 
+#ifdef HAVE_FIPS
+    wolfCrypt_SetCb_fips(myFipsCb);
+#endif
+
     ret = benchmark_init();
     if (ret != 0)
         EXIT_TEST(ret);
@@ -2141,7 +2394,13 @@ int benchmark_test(void *args)
         g_threadCount = WC_ASYNC_BENCH_THREAD_COUNT;
     #else
         g_threadCount = wc_AsyncGetNumberOfCpus();
+        if (g_threadCount > 0) {
+            g_threadCount /= 2; /* use physical core count */
+        }
     #endif
+    }
+    if (g_threadCount <= 0) {
+        g_threadCount = 1;
     }
 
     printf("CPUs: %d\n", g_threadCount);
@@ -2353,9 +2612,9 @@ static void bench_aesgcm_internal(int doAsync, const byte* key, word32 keySz,
 #endif
     double start;
 
-    DECLARE_VAR(bench_additional, byte, AES_AUTH_ADD_SZ, HEAP_HINT);
-    DECLARE_VAR(bench_tag, byte, AES_AUTH_TAG_SZ, HEAP_HINT);
-#ifdef DECLARE_VAR_IS_HEAP_ALLOC
+    WC_DECLARE_VAR(bench_additional, byte, AES_AUTH_ADD_SZ, HEAP_HINT);
+    WC_DECLARE_VAR(bench_tag, byte, AES_AUTH_TAG_SZ, HEAP_HINT);
+#ifdef WC_DECLARE_VAR_IS_HEAP_ALLOC
     if (bench_additional == NULL || bench_tag == NULL) {
         printf("bench_aesgcm_internal malloc failed\n");
         goto exit;
@@ -2497,19 +2756,19 @@ exit:
         wc_AesFree(&enc[i]);
     }
 
-    FREE_VAR(bench_additional, HEAP_HINT);
-    FREE_VAR(bench_tag, HEAP_HINT);
+    WC_FREE_VAR(bench_additional, HEAP_HINT);
+    WC_FREE_VAR(bench_tag, HEAP_HINT);
 }
 
 void bench_aesgcm(int doAsync)
 {
 #if defined(WOLFSSL_AES_128) && !defined(WOLFSSL_AFALG_XILINX_AES) \
-	&& !defined(WOLFSSL_XILINX_CRYPT)
+        && !defined(WOLFSSL_XILINX_CRYPT)
     bench_aesgcm_internal(doAsync, bench_key, 16, bench_iv, 12,
                           "AES-128-GCM-enc", "AES-128-GCM-dec");
 #endif
 #if defined(WOLFSSL_AES_192) && !defined(WOLFSSL_AFALG_XILINX_AES) \
-	&& !defined(WOLFSSL_XILINX_CRYPT)
+        && !defined(WOLFSSL_XILINX_CRYPT)
     bench_aesgcm_internal(doAsync, bench_key, 24, bench_iv, 12,
                           "AES-192-GCM-enc", "AES-192-GCM-dec");
 #endif
@@ -2546,17 +2805,17 @@ void bench_gmac(void)
     XMEMSET(&gmac, 0, sizeof(Gmac)); /* clear context */
     (void)wc_AesInit((Aes*)&gmac, HEAP_HINT, INVALID_DEVID);
     wc_GmacSetKey(&gmac, bench_key, 16);
-    
+
     bench_stats_start(&count, &start);
-    do {                        
-        ret = wc_GmacUpdate(&gmac, bench_iv, 12, bench_plain, bench_size, 
+    do {
+        ret = wc_GmacUpdate(&gmac, bench_iv, 12, bench_plain, bench_size,
             tag, sizeof(tag));
 
         count++;
     } while (bench_stats_sym_check(start));
     wc_AesFree((Aes*)&gmac);
 
-    bench_stats_sym_finish(gmacStr, 0, count, bench_size, start, ret);    
+    bench_stats_sym_finish(gmacStr, 0, count, bench_size, start, ret);
 }
 
 #endif /* HAVE_AESGCM */
@@ -2566,7 +2825,7 @@ void bench_gmac(void)
 static void bench_aesecb_internal(int doAsync, const byte* key, word32 keySz,
                                   const char* encLabel, const char* decLabel)
 {
-    int    ret, i, count = 0, times, pending = 0;
+    int    ret = 0, i, count = 0, times, pending = 0;
     Aes    enc[BENCH_MAX_PENDING];
     double start;
 
@@ -2865,10 +3124,10 @@ void bench_aesccm(void)
     double start;
     int    ret, i, count;
 
-    DECLARE_VAR(bench_additional, byte, AES_AUTH_ADD_SZ, HEAP_HINT);
-    DECLARE_VAR(bench_tag, byte, AES_AUTH_TAG_SZ, HEAP_HINT);
+    WC_DECLARE_VAR(bench_additional, byte, AES_AUTH_ADD_SZ, HEAP_HINT);
+    WC_DECLARE_VAR(bench_tag, byte, AES_AUTH_TAG_SZ, HEAP_HINT);
 
-#ifdef DECLARE_VAR_IS_HEAP_ALLOC
+#ifdef WC_DECLARE_VAR_IS_HEAP_ALLOC
     if (bench_additional == NULL || bench_tag == NULL) {
         printf("bench_aesccm malloc failed\n");
         goto exit;
@@ -2907,8 +3166,8 @@ void bench_aesccm(void)
 
   exit:
 
-    FREE_VAR(bench_additional, HEAP_HINT);
-    FREE_VAR(bench_tag, HEAP_HINT);
+    WC_FREE_VAR(bench_additional, HEAP_HINT);
+    WC_FREE_VAR(bench_tag, HEAP_HINT);
 }
 #endif /* HAVE_AESCCM */
 #endif /* !NO_AES */
@@ -3228,7 +3487,7 @@ void bench_md5(int doAsync)
     wc_Md5 hash[BENCH_MAX_PENDING];
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_MD5_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_MD5_DIGEST_SIZE, HEAP_HINT);
 
     /* clear for done cleanup */
     XMEMSET(hash, 0, sizeof(hash));
@@ -3304,7 +3563,7 @@ exit:
     }
 #endif
 
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif /* !NO_MD5 */
 
@@ -3315,7 +3574,7 @@ void bench_sha(int doAsync)
     wc_Sha hash[BENCH_MAX_PENDING];
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA_DIGEST_SIZE, HEAP_HINT);
 
     /* clear for done cleanup */
     XMEMSET(hash, 0, sizeof(hash));
@@ -3389,7 +3648,7 @@ exit:
         wc_ShaFree(&hash[i]);
     }
 
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif /* NO_SHA */
 
@@ -3400,7 +3659,7 @@ void bench_sha224(int doAsync)
     wc_Sha224 hash[BENCH_MAX_PENDING];
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA224_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA224_DIGEST_SIZE, HEAP_HINT);
 
     /* clear for done cleanup */
     XMEMSET(hash, 0, sizeof(hash));
@@ -3470,7 +3729,7 @@ exit:
         wc_Sha224Free(&hash[i]);
     }
 
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif
 
@@ -3480,7 +3739,7 @@ void bench_sha256(int doAsync)
     wc_Sha256 hash[BENCH_MAX_PENDING];
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA256_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA256_DIGEST_SIZE, HEAP_HINT);
 
     /* clear for done cleanup */
     XMEMSET(hash, 0, sizeof(hash));
@@ -3553,7 +3812,7 @@ exit:
         wc_Sha256Free(&hash[i]);
     }
 
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif
 
@@ -3563,7 +3822,7 @@ void bench_sha384(int doAsync)
     wc_Sha384 hash[BENCH_MAX_PENDING];
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA384_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA384_DIGEST_SIZE, HEAP_HINT);
 
     /* clear for done cleanup */
     XMEMSET(hash, 0, sizeof(hash));
@@ -3633,7 +3892,7 @@ exit:
         wc_Sha384Free(&hash[i]);
     }
 
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif
 
@@ -3643,7 +3902,7 @@ void bench_sha512(int doAsync)
     wc_Sha512 hash[BENCH_MAX_PENDING];
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA512_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA512_DIGEST_SIZE, HEAP_HINT);
 
     /* clear for done cleanup */
     XMEMSET(hash, 0, sizeof(hash));
@@ -3713,7 +3972,7 @@ exit:
         wc_Sha512Free(&hash[i]);
     }
 
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif
 
@@ -3725,7 +3984,7 @@ void bench_sha3_224(int doAsync)
     wc_Sha3   hash[BENCH_MAX_PENDING];
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA3_224_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA3_224_DIGEST_SIZE, HEAP_HINT);
 
     /* clear for done cleanup */
     XMEMSET(hash, 0, sizeof(hash));
@@ -3795,7 +4054,7 @@ exit:
         wc_Sha3_224_Free(&hash[i]);
     }
 
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif /* WOLFSSL_NOSHA3_224 */
 
@@ -3805,7 +4064,7 @@ void bench_sha3_256(int doAsync)
     wc_Sha3   hash[BENCH_MAX_PENDING];
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA3_256_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA3_256_DIGEST_SIZE, HEAP_HINT);
 
     /* clear for done cleanup */
     XMEMSET(hash, 0, sizeof(hash));
@@ -3875,7 +4134,7 @@ exit:
         wc_Sha3_256_Free(&hash[i]);
     }
 
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif /* WOLFSSL_NOSHA3_256 */
 
@@ -3885,7 +4144,7 @@ void bench_sha3_384(int doAsync)
     wc_Sha3   hash[BENCH_MAX_PENDING];
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA3_384_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA3_384_DIGEST_SIZE, HEAP_HINT);
 
     /* clear for done cleanup */
     XMEMSET(hash, 0, sizeof(hash));
@@ -3955,7 +4214,7 @@ exit:
         wc_Sha3_384_Free(&hash[i]);
     }
 
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif /* WOLFSSL_NOSHA3_384 */
 
@@ -3965,7 +4224,7 @@ void bench_sha3_512(int doAsync)
     wc_Sha3   hash[BENCH_MAX_PENDING];
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA3_512_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_SHA3_512_DIGEST_SIZE, HEAP_HINT);
 
     /* clear for done cleanup */
     XMEMSET(hash, 0, sizeof(hash));
@@ -4035,7 +4294,7 @@ exit:
         wc_Sha3_512_Free(&hash[i]);
     }
 
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif /* WOLFSSL_NOSHA3_512 */
 #endif
@@ -4300,12 +4559,12 @@ static void bench_hmac(int doAsync, int type, int digestSz,
     double start;
     int    ret = 0, i, count = 0, times, pending = 0;
 #ifdef WOLFSSL_ASYNC_CRYPT
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_MAX_DIGEST_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, WC_MAX_DIGEST_SIZE, HEAP_HINT);
 #else
-	byte digest[BENCH_MAX_PENDING][WC_MAX_DIGEST_SIZE];
+    byte digest[BENCH_MAX_PENDING][WC_MAX_DIGEST_SIZE];
 #endif
 
-	(void)digestSz;
+    (void)digestSz;
 
     /* clear for done cleanup */
     XMEMSET(hmac, 0, sizeof(hmac));
@@ -4371,7 +4630,7 @@ exit:
     }
 
 #ifdef WOLFSSL_ASYNC_CRYPT
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 #endif
 }
 
@@ -4681,18 +4940,18 @@ static void bench_rsa_helper(int doAsync, RsaKey rsaKey[BENCH_MAX_PENDING],
     double      start = 0.0f;
     const char**desc = bench_desc_words[lng_index];
 #ifndef WOLFSSL_RSA_VERIFY_ONLY
-    DECLARE_VAR(message, byte, TEST_STRING_SZ, HEAP_HINT);
+    WC_DECLARE_VAR(message, byte, TEST_STRING_SZ, HEAP_HINT);
 #endif
     #if !defined(WOLFSSL_MDK5_COMPLv5) && !defined(_WIN32_WCE)
     /* MDK5 compiler regard this as a executable statement, and does not allow declarations after the line. */
-    DECLARE_ARRAY_DYNAMIC_DEC(enc, byte, BENCH_MAX_PENDING, rsaKeySz, HEAP_HINT);
+    WC_DECLARE_ARRAY_DYNAMIC_DEC(enc, byte, BENCH_MAX_PENDING, rsaKeySz, HEAP_HINT);
     #else
         byte* enc[BENCH_MAX_PENDING];
     #endif
     #if !defined(WOLFSSL_RSA_VERIFY_INLINE) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)
         #if !defined(WOLFSSL_MDK5_COMPLv5) && !defined(_WIN32_WCE)
           /* MDK5 compiler regard this as a executable statement, and does not allow declarations after the line. */
-            DECLARE_ARRAY_DYNAMIC_DEC(out, byte, BENCH_MAX_PENDING, rsaKeySz, HEAP_HINT);
+            WC_DECLARE_ARRAY_DYNAMIC_DEC(out, byte, BENCH_MAX_PENDING, rsaKeySz, HEAP_HINT);
             #else
               byte* out[BENCH_MAX_PENDING];
         #endif
@@ -4700,9 +4959,9 @@ static void bench_rsa_helper(int doAsync, RsaKey rsaKey[BENCH_MAX_PENDING],
         byte* out[BENCH_MAX_PENDING];
     #endif
 
-    DECLARE_ARRAY_DYNAMIC_EXE(enc, byte, BENCH_MAX_PENDING, rsaKeySz, HEAP_HINT);
+    WC_DECLARE_ARRAY_DYNAMIC_EXE(enc, byte, BENCH_MAX_PENDING, rsaKeySz, HEAP_HINT);
     #if !defined(WOLFSSL_RSA_VERIFY_INLINE) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)
-        DECLARE_ARRAY_DYNAMIC_EXE(out, byte, BENCH_MAX_PENDING, rsaKeySz, HEAP_HINT);
+        WC_DECLARE_ARRAY_DYNAMIC_EXE(out, byte, BENCH_MAX_PENDING, rsaKeySz, HEAP_HINT);
         if (out[0] == NULL) {
             ret = MEMORY_E;
             goto exit;
@@ -4712,7 +4971,7 @@ static void bench_rsa_helper(int doAsync, RsaKey rsaKey[BENCH_MAX_PENDING],
         ret = MEMORY_E;
         goto exit;
     }
-#ifdef DECLARE_VAR_IS_HEAP_ALLOC
+#ifdef WC_DECLARE_VAR_IS_HEAP_ALLOC
     if (message == NULL) {
         ret = MEMORY_E;
         goto exit;
@@ -4870,11 +5129,11 @@ exit_rsa_verifyinline:
 
 exit:
 
-    FREE_ARRAY_DYNAMIC(enc, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY_DYNAMIC(enc, BENCH_MAX_PENDING, HEAP_HINT);
 #if !defined(WOLFSSL_RSA_VERIFY_INLINE) && !defined(WOLFSSL_RSA_PUBLIC_ONLY)
-    FREE_ARRAY_DYNAMIC(out, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY_DYNAMIC(out, BENCH_MAX_PENDING, HEAP_HINT);
 #endif
-    FREE_VAR(message, HEAP_HINT);
+    WC_FREE_VAR(message, HEAP_HINT);
 }
 
 void bench_rsa(int doAsync)
@@ -4911,8 +5170,8 @@ void bench_rsa(int doAsync)
     /* init keys */
     for (i = 0; i < BENCH_MAX_PENDING; i++) {
         /* setup an async context for each key */
-	ret = wc_InitRsaKey_ex(&rsaKey[i], HEAP_HINT,
-			       doAsync ? devId : INVALID_DEVID);
+        ret = wc_InitRsaKey_ex(&rsaKey[i], HEAP_HINT,
+                               doAsync ? devId : INVALID_DEVID);
         if (ret < 0) {
             goto exit_bench_rsa;
         }
@@ -5045,7 +5304,11 @@ exit_bench_rsa_key:
     #endif
 #endif
 
+#ifdef HAVE_FFDHE_4096
+#define BENCH_DH_KEY_SIZE  512 /* for 4096 bit */
+#else
 #define BENCH_DH_KEY_SIZE  384 /* for 3072 bit */
+#endif
 #define BENCH_DH_PRIV_SIZE (BENCH_DH_KEY_SIZE/8)
 
 void bench_dh(int doAsync)
@@ -5066,16 +5329,20 @@ void bench_dh(int doAsync)
     word32 pubSz2 = BENCH_DH_KEY_SIZE;
     word32 privSz2 = BENCH_DH_PRIV_SIZE;
     word32 agreeSz[BENCH_MAX_PENDING];
-#ifdef HAVE_FFDHE_2048
+#if defined(HAVE_FFDHE_2048) || defined(HAVE_FFDHE_3072)
+#ifdef HAVE_PUBLIC_FFDHE
     const DhParams *params = NULL;
+#else
+    int paramName = 0;
+#endif
 #endif
 
-    DECLARE_ARRAY(pub, byte, BENCH_MAX_PENDING, BENCH_DH_KEY_SIZE, HEAP_HINT);
-    DECLARE_VAR(pub2, byte, BENCH_DH_KEY_SIZE, HEAP_HINT);
-    DECLARE_ARRAY(agree, byte, BENCH_MAX_PENDING, BENCH_DH_KEY_SIZE, HEAP_HINT);
-    DECLARE_ARRAY(priv, byte, BENCH_MAX_PENDING, BENCH_DH_PRIV_SIZE, HEAP_HINT);
-    DECLARE_VAR(priv2, byte, BENCH_DH_PRIV_SIZE, HEAP_HINT);
-#ifdef DECLARE_VAR_IS_HEAP_ALLOC
+    WC_DECLARE_ARRAY(pub, byte, BENCH_MAX_PENDING, BENCH_DH_KEY_SIZE, HEAP_HINT);
+    WC_DECLARE_VAR(pub2, byte, BENCH_DH_KEY_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(agree, byte, BENCH_MAX_PENDING, BENCH_DH_KEY_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(priv, byte, BENCH_MAX_PENDING, BENCH_DH_PRIV_SIZE, HEAP_HINT);
+    WC_DECLARE_VAR(priv2, byte, BENCH_DH_PRIV_SIZE, HEAP_HINT);
+#ifdef WC_DECLARE_VAR_IS_HEAP_ALLOC
     if (pub[0] == NULL || pub2 == NULL || agree[0] == NULL || priv[0] == NULL || priv2 == NULL) {
         ret = MEMORY_E;
         goto exit;
@@ -5106,14 +5373,32 @@ void bench_dh(int doAsync)
     }
 #ifdef HAVE_FFDHE_2048
     else if (use_ffdhe == 2048) {
+#ifdef HAVE_PUBLIC_FFDHE
         params = wc_Dh_ffdhe2048_Get();
+#else
+        paramName = WC_FFDHE_2048;
+#endif
         dhKeySz = 2048;
     }
 #endif
 #ifdef HAVE_FFDHE_3072
     else if (use_ffdhe == 3072) {
+#ifdef HAVE_PUBLIC_FFDHE
         params = wc_Dh_ffdhe3072_Get();
+#else
+        paramName = WC_FFDHE_3072;
+#endif
         dhKeySz = 3072;
+    }
+#endif
+#ifdef HAVE_FFDHE_4096
+    else if (use_ffdhe == 4096) {
+#ifdef HAVE_PUBLIC_FFDHE
+        params = wc_Dh_ffdhe4096_Get();
+#else
+        paramName = WC_FFDHE_4096;
+#endif
+        dhKeySz = 4096;
     }
 #endif
 
@@ -5139,10 +5424,16 @@ void bench_dh(int doAsync)
     #endif
         }
     #if defined(HAVE_FFDHE_2048) || defined(HAVE_FFDHE_3072)
+    #ifdef HAVE_PUBLIC_FFDHE
         else if (params != NULL) {
             ret = wc_DhSetKey(&dhKey[i], params->p, params->p_len, params->g,
                                                                  params->g_len);
         }
+    #else
+        else if (paramName != 0) {
+            ret = wc_DhSetNamedKey(&dhKey[i], paramName);
+        }
+    #endif
     #endif
         if (ret != 0) {
             printf("DhKeyDecode failed %d, can't benchmark\n", ret);
@@ -5152,6 +5443,7 @@ void bench_dh(int doAsync)
 
     /* Key Gen */
     bench_stats_start(&count, &start);
+    PRIVATE_KEY_UNLOCK();
     do {
         /* while free pending slots in queue, submit ops */
         for (times = 0; times < genTimes || pending > 0; ) {
@@ -5171,6 +5463,7 @@ void bench_dh(int doAsync)
         } /* for times */
         count += times;
     } while (bench_stats_sym_check(start));
+    PRIVATE_KEY_LOCK();
 exit_dh_gen:
     bench_stats_asym_finish("DH", dhKeySz, desc[2], doAsync, count, start, ret);
 
@@ -5179,13 +5472,16 @@ exit_dh_gen:
     }
 
     /* Generate key to use as other public */
+    PRIVATE_KEY_UNLOCK();
     ret = wc_DhGenerateKeyPair(&dhKey[0], &gRng, priv2, &privSz2, pub2, &pubSz2);
+    PRIVATE_KEY_LOCK();
 #ifdef WOLFSSL_ASYNC_CRYPT
     ret = wc_AsyncWait(ret, &dhKey[0].asyncDev, WC_ASYNC_FLAG_NONE);
 #endif
 
     /* Key Agree */
     bench_stats_start(&count, &start);
+    PRIVATE_KEY_UNLOCK();
     do {
         for (times = 0; times < agreeTimes || pending > 0; ) {
             bench_async_poll(&pending);
@@ -5203,6 +5499,7 @@ exit_dh_gen:
         } /* for times */
         count += times;
     } while (bench_stats_sym_check(start));
+    PRIVATE_KEY_LOCK();
 exit:
     bench_stats_asym_finish("DH", dhKeySz, desc[3], doAsync, count, start, ret);
 
@@ -5211,227 +5508,13 @@ exit:
         wc_FreeDhKey(&dhKey[i]);
     }
 
-    FREE_ARRAY(pub, BENCH_MAX_PENDING, HEAP_HINT);
-    FREE_VAR(pub2, HEAP_HINT);
-    FREE_ARRAY(priv, BENCH_MAX_PENDING, HEAP_HINT);
-    FREE_VAR(priv2, HEAP_HINT);
-    FREE_ARRAY(agree, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(pub, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_VAR(pub2, HEAP_HINT);
+    WC_FREE_ARRAY(priv, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_VAR(priv2, HEAP_HINT);
+    WC_FREE_ARRAY(agree, BENCH_MAX_PENDING, HEAP_HINT);
 }
 #endif /* !NO_DH */
-
-#ifdef HAVE_NTRU
-byte GetEntropy(ENTROPY_CMD cmd, byte* out);
-
-byte GetEntropy(ENTROPY_CMD cmd, byte* out)
-{
-    if (cmd == INIT)
-        return 1; /* using local rng */
-
-    if (out == NULL)
-        return 0;
-
-    if (cmd == GET_BYTE_OF_ENTROPY)
-        return (wc_RNG_GenerateBlock(&gRng, out, 1) == 0) ? 1 : 0;
-
-    if (cmd == GET_NUM_BYTES_PER_BYTE_OF_ENTROPY) {
-        *out = 1;
-        return 1;
-    }
-
-    return 0;
-}
-
-void bench_ntru(void)
-{
-    int    i;
-    double start;
-
-    byte   public_key[1027];
-    word16 public_key_len = sizeof(public_key);
-    byte   private_key[1120];
-    word16 private_key_len = sizeof(private_key);
-    word16 ntruBits = 128;
-    word16 type     = 0;
-    word32 ret;
-
-    byte ciphertext[1022];
-    word16 ciphertext_len;
-    byte plaintext[16];
-    word16 plaintext_len;
-    const char**desc = bench_desc_words[lng_index];
-
-    DRBG_HANDLE drbg;
-    static byte const aes_key[] = {
-        0xf3, 0xe9, 0x87, 0xbb, 0x18, 0x08, 0x3c, 0xaa,
-        0x7b, 0x12, 0x49, 0x88, 0xaf, 0xb3, 0x22, 0xd8
-    };
-
-    static byte const wolfsslStr[] = {
-        'w', 'o', 'l', 'f', 'S', 'S', 'L', ' ', 'N', 'T', 'R', 'U'
-    };
-
-    for (ntruBits = 128; ntruBits < 257; ntruBits += 64) {
-        switch (ntruBits) {
-            case 128:
-                type = NTRU_EES439EP1;
-                break;
-            case 192:
-                type = NTRU_EES593EP1;
-                break;
-            case 256:
-                type = NTRU_EES743EP1;
-                break;
-        }
-
-        ret = ntru_crypto_drbg_instantiate(ntruBits, wolfsslStr,
-                sizeof(wolfsslStr), (ENTROPY_FN) GetEntropy, &drbg);
-        if(ret != DRBG_OK) {
-            printf("NTRU drbg instantiate failed\n");
-            return;
-        }
-
-        /* set key sizes */
-        ret = ntru_crypto_ntru_encrypt_keygen(drbg, type, &public_key_len,
-                                                  NULL, &private_key_len, NULL);
-        if (ret != NTRU_OK) {
-            ntru_crypto_drbg_uninstantiate(drbg);
-            printf("NTRU failed to get key lengths\n");
-            return;
-        }
-
-        ret = ntru_crypto_ntru_encrypt_keygen(drbg, type, &public_key_len,
-                                     public_key, &private_key_len,
-                                     private_key);
-
-        ntru_crypto_drbg_uninstantiate(drbg);
-
-        if (ret != NTRU_OK) {
-            printf("NTRU keygen failed\n");
-            return;
-        }
-
-        ret = ntru_crypto_drbg_instantiate(ntruBits, NULL, 0,
-                (ENTROPY_FN)GetEntropy, &drbg);
-        if (ret != DRBG_OK) {
-            printf("NTRU error occurred during DRBG instantiation\n");
-            return;
-        }
-
-        ret = ntru_crypto_ntru_encrypt(drbg, public_key_len, public_key,
-                sizeof(aes_key), aes_key, &ciphertext_len, NULL);
-
-        if (ret != NTRU_OK) {
-            printf("NTRU error occurred requesting the buffer size needed\n");
-            return;
-        }
-
-        bench_stats_start(&i, &start);
-        for (i = 0; i < ntimes; i++) {
-            ret = ntru_crypto_ntru_encrypt(drbg, public_key_len, public_key,
-                    sizeof(aes_key), aes_key, &ciphertext_len, ciphertext);
-            if (ret != NTRU_OK) {
-                printf("NTRU encrypt error\n");
-                return;
-            }
-        }
-        bench_stats_asym_finish("NTRU", ntruBits, desc[6], 0, i, start, ret);
-
-        ret = ntru_crypto_drbg_uninstantiate(drbg);
-        if (ret != DRBG_OK) {
-            printf("NTRU error occurred uninstantiating the DRBG\n");
-            return;
-        }
-
-        ret = ntru_crypto_ntru_decrypt(private_key_len, private_key,
-                ciphertext_len, ciphertext, &plaintext_len, NULL);
-
-        if (ret != NTRU_OK) {
-            printf("NTRU decrypt error occurred getting the buffer size needed\n");
-            return;
-        }
-
-        plaintext_len = sizeof(plaintext);
-
-        bench_stats_start(&i, &start);
-        for (i = 0; i < ntimes; i++) {
-            ret = ntru_crypto_ntru_decrypt(private_key_len, private_key,
-                                      ciphertext_len, ciphertext,
-                                      &plaintext_len, plaintext);
-
-            if (ret != NTRU_OK) {
-                printf("NTRU error occurred decrypting the key\n");
-                return;
-            }
-        }
-        bench_stats_asym_finish("NTRU", ntruBits, desc[7], 0, i, start, ret);
-    }
-
-}
-
-void bench_ntruKeyGen(void)
-{
-    double start;
-    int    i;
-
-    byte   public_key[1027];
-    word16 public_key_len = sizeof(public_key);
-    byte   private_key[1120];
-    word16 private_key_len = sizeof(private_key);
-    word16 ntruBits = 128;
-    word16 type     = 0;
-    word32 ret;
-    const char**desc = bench_desc_words[lng_index];
-
-    DRBG_HANDLE drbg;
-    static uint8_t const pers_str[] = {
-                'w', 'o', 'l', 'f',  'S', 'S', 'L', ' ', 't', 'e', 's', 't'
-    };
-
-    for (ntruBits = 128; ntruBits < 257; ntruBits += 64) {
-        ret = ntru_crypto_drbg_instantiate(ntruBits, pers_str,
-                sizeof(pers_str), GetEntropy, &drbg);
-        if (ret != DRBG_OK) {
-            printf("NTRU drbg instantiate failed\n");
-            return;
-        }
-
-        switch (ntruBits) {
-            case 128:
-                type = NTRU_EES439EP1;
-                break;
-            case 192:
-                type = NTRU_EES593EP1;
-                break;
-            case 256:
-                type = NTRU_EES743EP1;
-                break;
-        }
-
-        /* set key sizes */
-        ret = ntru_crypto_ntru_encrypt_keygen(drbg, type, &public_key_len,
-                                                  NULL, &private_key_len, NULL);
-
-        bench_stats_start(&i, &start);
-        for (i = 0; i < genTimes; i++) {
-            ret = ntru_crypto_ntru_encrypt_keygen(drbg, type, &public_key_len,
-                                         public_key, &private_key_len,
-                                         private_key);
-        }
-        bench_stats_asym_finish("NTRU", ntruBits, desc[2], 0, i, start, ret);
-
-        if (ret != NTRU_OK) {
-            return;
-        }
-
-        ret = ntru_crypto_drbg_uninstantiate(drbg);
-
-        if (ret != NTRU_OK) {
-            printf("NTRU drbg uninstantiate failed\n");
-            return;
-        }
-    }
-}
-#endif
 
 #ifdef HAVE_ECC
 
@@ -5475,7 +5558,6 @@ void bench_eccMakeKey(int doAsync, int curveId)
     char name[BENCH_ECC_NAME_SZ];
     double start;
     const char**desc = bench_desc_words[lng_index];
-
 
 #ifdef WOLFSSL_ASYNC_CRYPT
     deviceID = doAsync ? devId : INVALID_DEVID;
@@ -5550,11 +5632,11 @@ void bench_ecc(int doAsync, int curveId)
     const char**desc = bench_desc_words[lng_index];
 
 #ifdef HAVE_ECC_DHE
-    DECLARE_ARRAY(shared, byte, BENCH_MAX_PENDING, MAX_ECC_BYTES, HEAP_HINT);
+    WC_DECLARE_ARRAY(shared, byte, BENCH_MAX_PENDING, MAX_ECC_BYTES, HEAP_HINT);
 #endif
 #if !defined(NO_ASN) && defined(HAVE_ECC_SIGN)
-    DECLARE_ARRAY(sig, byte, BENCH_MAX_PENDING, ECC_MAX_SIG_SIZE, HEAP_HINT);
-    DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, MAX_ECC_BYTES, HEAP_HINT);
+    WC_DECLARE_ARRAY(sig, byte, BENCH_MAX_PENDING, ECC_MAX_SIG_SIZE, HEAP_HINT);
+    WC_DECLARE_ARRAY(digest, byte, BENCH_MAX_PENDING, MAX_ECC_BYTES, HEAP_HINT);
 #endif
 
 #ifdef WOLFSSL_ASYNC_CRYPT
@@ -5606,6 +5688,7 @@ void bench_ecc(int doAsync, int curveId)
 
     /* ECC Shared Secret */
     bench_stats_start(&count, &start);
+    PRIVATE_KEY_UNLOCK();
     do {
         for (times = 0; times < agreeTimes || pending > 0; ) {
             bench_async_poll(&pending);
@@ -5627,6 +5710,7 @@ void bench_ecc(int doAsync, int curveId)
         } /* for times */
         count += times;
     } while (bench_stats_sym_check(start));
+    PRIVATE_KEY_UNLOCK();
 exit_ecdhe:
     XSNPRINTF(name, BENCH_ECC_NAME_SZ, "ECDHE [%15s]", wc_ecc_get_name(curveId));
 
@@ -5726,13 +5810,14 @@ exit:
     }
 
 #ifdef HAVE_ECC_DHE
-    FREE_ARRAY(shared, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(shared, BENCH_MAX_PENDING, HEAP_HINT);
 #endif
 #if !defined(NO_ASN) && defined(HAVE_ECC_SIGN)
-    FREE_ARRAY(sig, BENCH_MAX_PENDING, HEAP_HINT);
-    FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(sig, BENCH_MAX_PENDING, HEAP_HINT);
+    WC_FREE_ARRAY(digest, BENCH_MAX_PENDING, HEAP_HINT);
 #endif
 
+    (void)doAsync;
     (void)pending;
     (void)x;
     (void)count;
@@ -5749,7 +5834,7 @@ void bench_eccEncrypt(int curveId)
     ecc_key userA, userB;
     int     keySize;
     byte    msg[48];
-    byte    out[80];
+    byte    out[sizeof(msg) + WC_SHA256_DIGEST_SIZE + (MAX_ECC_BITS+3)/4 + 2];
     word32  outSz   = sizeof(out);
     word32  bench_plainSz = BENCH_SIZE;
     int     ret, i, count;
@@ -5873,7 +5958,7 @@ void bench_curve25519KeyAgree(void)
     double start;
     int    ret, i, count;
     byte   shared[32];
-	const char**desc = bench_desc_words[lng_index];
+    const char**desc = bench_desc_words[lng_index];
     word32 x = 0;
 
     wc_curve25519_init(&genKey);
@@ -5945,8 +6030,8 @@ void bench_ed25519KeySign(void)
     byte   sig[ED25519_SIG_SIZE];
     byte   msg[512];
     word32 x = 0;
-#endif
     const char**desc = bench_desc_words[lng_index];
+#endif
 
     wc_ed25519_init(&genKey);
 
@@ -6030,7 +6115,7 @@ void bench_curve448KeyAgree(void)
     double start;
     int    ret, i, count;
     byte   shared[56];
-	const char**desc = bench_desc_words[lng_index];
+    const char**desc = bench_desc_words[lng_index];
     word32 x = 0;
 
     wc_curve448_init(&genKey);
@@ -6102,8 +6187,8 @@ void bench_ed448KeySign(void)
     byte   sig[ED448_SIG_SIZE];
     byte   msg[512];
     word32 x = 0;
-#endif
     const char**desc = bench_desc_words[lng_index];
+#endif
 
     wc_ed448_init(&genKey);
 
@@ -6573,6 +6658,258 @@ void bench_sakke(void)
 #endif /* WOLFCRYPT_SAKKE_CLIENT */
 #endif /* WOLFCRYPT_HAVE_SAKKE */
 
+#ifdef HAVE_PQC
+static void bench_pqcKemInit(word32 alg, byte **priv_key, byte **pub_key,
+                   const char **wolf_name, OQS_KEM **kem)
+{
+    int i;
+    const char *pqc_name = NULL;
+
+    *pub_key = NULL;
+    *priv_key = NULL;
+
+    for (i=0; bench_pq_asym_opt[i].str != NULL; i++) {
+        if (alg ==  bench_pq_asym_opt[i].val) {
+            pqc_name = bench_pq_asym_opt[i].pqc_name;
+            *wolf_name = bench_pq_asym_opt[i].str;
+            break;
+        }
+    }
+
+    if (pqc_name == NULL) {
+        printf("Bad OQS Alg specified\n");
+        return;
+    }
+
+#ifdef HAVE_LIBOQS
+    *kem = OQS_KEM_new(pqc_name);
+    if (*kem == NULL) {
+        printf("OQS_KEM_new() failed\n");
+        return;
+    }
+#endif
+
+    *pub_key = (byte*)XMALLOC((*kem)->length_public_key, HEAP_HINT,
+                              DYNAMIC_TYPE_TMP_BUFFER);
+
+
+    *priv_key = (byte*)XMALLOC((*kem)->length_secret_key, HEAP_HINT,
+                               DYNAMIC_TYPE_TMP_BUFFER);
+
+}
+
+void bench_pqcKemKeygen(word32 alg)
+{
+    const char *wolf_name = NULL;
+    OQS_KEM* kem = NULL;
+    double start;
+    int i, count, ret;
+    byte *priv_key;
+    byte *pub_key;
+
+    bench_pqcKemInit(alg, &priv_key, &pub_key, &wolf_name, &kem);
+
+    if (wolf_name == NULL || kem == NULL || pub_key == NULL ||
+        priv_key == NULL) {
+        printf("bench_pqcKemInit() failed\n");
+        goto exit;
+    }
+
+    bench_stats_start(&count, &start);
+    do {
+        for (i = 0; i < genTimes; i++) {
+#ifdef HAVE_LIBOQS
+            ret = OQS_KEM_keypair(kem, pub_key, priv_key);
+            if (ret != OQS_SUCCESS) {
+                printf("OQS_KEM_keypair() failed: %d\n", ret);
+                goto exit;
+            }
+#endif
+        }
+        count += i;
+    } while (bench_stats_sym_check(start));
+
+    /* + 1 gets rid of the leading dash (-) */
+    bench_stats_pq_asym_finish(wolf_name + 1, 0, count, start, 0);
+
+exit:
+    XFREE(priv_key, HEAP_HINT, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(pub_key, HEAP_HINT, DYNAMIC_TYPE_TMP_BUFFER);
+    OQS_KEM_free(kem);
+
+}
+
+void bench_pqcKemEncapDecap(word32 alg)
+{
+    const char *wolf_name = NULL;
+    OQS_KEM* kem = NULL;
+    double start;
+    int i, count, ret;
+    byte *priv_key;
+    byte *pub_key;
+    byte *ciphertext = NULL;
+    byte *shared_secret = NULL;
+
+    bench_pqcKemInit(alg, &priv_key, &pub_key, &wolf_name, &kem);
+
+    if (wolf_name == NULL || kem == NULL || pub_key == NULL ||
+        priv_key == NULL) {
+        printf("bench_pqcKemInit() failed\n");
+        goto exit;
+    }
+
+#ifdef HAVE_LIBOQS
+    ret = OQS_KEM_keypair(kem, pub_key, priv_key);
+    if (ret != OQS_SUCCESS) {
+        printf("OQS_KEM_keypair() failed: %d\n", ret);
+        goto exit;
+    }
+#endif
+
+    shared_secret = (byte*)XMALLOC(kem->length_shared_secret, HEAP_HINT,
+                                   DYNAMIC_TYPE_TMP_BUFFER);
+
+    ciphertext = (byte*)XMALLOC(kem->length_ciphertext, HEAP_HINT,
+                                   DYNAMIC_TYPE_TMP_BUFFER);
+
+    if (shared_secret == NULL || ciphertext == NULL) {
+        printf("XMALLOC() failed\n");
+        goto exit;
+    }
+
+    if (ret == OQS_SUCCESS) {
+        bench_stats_start(&count, &start);
+        do {
+            for (i = 0; i < agreeTimes; i++) {
+#ifdef HAVE_LIBOQS
+                ret = OQS_KEM_encaps(kem, ciphertext, shared_secret, pub_key);
+                if (ret != OQS_SUCCESS) {
+                    printf("OQS_KEM_encaps() failed: %d\n", ret);
+                    goto exit;
+                }
+
+                ret = OQS_KEM_decaps(kem, shared_secret, ciphertext, priv_key);
+                if (ret != OQS_SUCCESS) {
+                    printf("OQS_KEM_decaps() failed: %d\n", ret);
+                    goto exit;
+                }
+#endif
+            }
+            count += i;
+        } while (bench_stats_sym_check(start));
+
+        /* + 1 gets rid of the leading dash (-) */
+        bench_stats_pq_asym_finish(wolf_name + 1, 0, count, start, ret);
+    }
+
+exit:
+    XFREE(ciphertext, HEAP_HINT, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(shared_secret, HEAP_HINT, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(priv_key, HEAP_HINT, DYNAMIC_TYPE_TMP_BUFFER);
+    XFREE(pub_key, HEAP_HINT, DYNAMIC_TYPE_TMP_BUFFER);
+    OQS_KEM_free(kem);
+}
+
+void bench_falconKeySign(byte level)
+{
+    int    ret = 0;
+    falcon_key key;
+    double start;
+    int    i, count;
+    byte   sig[FALCON_MAX_SIG_SIZE];
+    byte   msg[512];
+    word32 x = 0;
+    const char**desc = bench_desc_words[lng_index];
+
+    ret = wc_falcon_init(&key);
+    if (ret != 0) {
+        printf("wc_falcon_init failed %d\n", ret);
+        return;
+    }
+
+    ret = wc_falcon_set_level(&key, level);
+    if (ret != 0) {
+        printf("wc_falcon_set_level failed %d\n", ret);
+    }
+
+    if (ret == 0) {
+        if (level == 1) {
+            ret = wc_falcon_import_private_key(bench_falcon_level1_key,
+                                               sizeof_bench_falcon_level1_key,
+                                               NULL, 0, &key);
+        }
+        else {
+            ret = wc_falcon_import_private_key(bench_falcon_level5_key,
+                                               sizeof_bench_falcon_level5_key,
+                                               NULL, 0, &key);
+        }
+
+        if (ret != 0) {
+            printf("wc_falcon_import_private_key failed %d\n", ret);
+        }
+    }
+
+    /* make dummy msg */
+    for (i = 0; i < (int)sizeof(msg); i++) {
+        msg[i] = (byte)i;
+    }
+
+    bench_stats_start(&count, &start);
+    do {
+        for (i = 0; i < agreeTimes; i++) {
+            if (ret == 0) {
+                if (level == 1) {
+                    x = FALCON_LEVEL1_SIG_SIZE;
+                    ret = wc_falcon_sign_msg(msg, sizeof(msg), sig, &x, &key);
+                }
+                else {
+                    x = FALCON_LEVEL5_SIG_SIZE;
+                    ret = wc_falcon_sign_msg(msg, sizeof(msg), sig, &x, &key);
+                }
+                if (ret != 0) {
+                    printf("wc_falcon_sign_msg failed\n");
+                }
+            }
+        }
+        count += i;
+    } while (bench_stats_sym_check(start));
+
+    if (ret == 0) {
+        bench_stats_asym_finish("FALCON", level, desc[4], 0, count, start, ret);
+    }
+
+    bench_stats_start(&count, &start);
+    do {
+        for (i = 0; i < agreeTimes; i++) {
+            if (ret == 0) {
+                int verify = 0;
+                if (level == 1) {
+                    ret = wc_falcon_verify_msg(sig, x, msg, sizeof(msg),
+                                               &verify, &key);
+                }
+                else {
+                    ret = wc_falcon_verify_msg(sig, x, msg, sizeof(msg),
+                                               &verify, &key);
+                }
+
+                if (ret != 0 || verify != 1) {
+                    printf("wc_falcon_verify_msg failed %d, verify %d\n",
+                        ret, verify);
+                    ret = -1;
+                }
+            }
+        }
+        count += i;
+    } while (bench_stats_sym_check(start));
+
+    if (ret == 0) {
+        bench_stats_asym_finish("FALCON", level, desc[5], 0, count, start, ret);
+    }
+
+    wc_falcon_free(&key);
+}
+#endif /* HAVE_PQC */
+
 #ifndef HAVE_STACK_SIZE
 #if defined(_WIN32) && !defined(INTIME_RTOS)
 
@@ -6994,6 +7331,10 @@ int main(int argc, char** argv)
         else if (string_matches(argv[1], "-ffdhe3072"))
             use_ffdhe = 3072;
 #endif
+#if !defined(NO_DH) && defined(HAVE_FFDHE_4096)
+        else if (string_matches(argv[1], "-ffdhe4096"))
+            use_ffdhe = 4096;
+#endif
 #if defined(HAVE_ECC) && !defined(NO_ECC256)
         else if (string_matches(argv[1], "-p256"))
             bench_asym_algs |= BENCH_ECC_P256;
@@ -7057,6 +7398,14 @@ int main(int argc, char** argv)
             for (i=0; !optMatched && bench_asym_opt[i].str != NULL; i++) {
                 if (string_matches(argv[1], bench_asym_opt[i].str)) {
                     bench_asym_algs |= bench_asym_opt[i].val;
+                    bench_all = 0;
+                    optMatched = 1;
+                }
+            }
+            /* Known asymmetric post-quantum algorithms */
+            for (i=0; !optMatched && bench_pq_asym_opt[i].str != NULL; i++) {
+                if (string_matches(argv[1], bench_pq_asym_opt[i].str)) {
+                    bench_pq_asym_algs |= bench_pq_asym_opt[i].val;
                     bench_all = 0;
                     optMatched = 1;
                 }

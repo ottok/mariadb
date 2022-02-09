@@ -2,7 +2,7 @@
 
 Copyright (c) 1995, 2018, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2008, Google Inc.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -1571,6 +1571,9 @@ inline bool buf_pool_t::realloc(buf_block_t *block)
 	new_block = buf_LRU_get_free_only();
 
 	if (new_block == NULL) {
+		mysql_mutex_lock(&buf_pool.flush_list_mutex);
+		page_cleaner_wakeup();
+		mysql_mutex_unlock(&buf_pool.flush_list_mutex);
 		return(false); /* free list was not enough */
 	}
 
@@ -2500,6 +2503,11 @@ void buf_page_free(fil_space_t *space, uint32_t page, mtr_t *mtr,
       rw_lock_x_lock_inline(&block->lock, 0, file, line);
       buf_block_dbg_add_level(block, SYNC_NO_ORDER_CHECK);
 
+#ifdef BTR_CUR_HASH_ADAPT
+      if (block->index)
+        btr_search_drop_page_hash_index(block);
+#endif /* BTR_CUR_HASH_ADAPT */
+
       block->page.status= buf_page_t::FREED;
       return;
     }
@@ -3300,10 +3308,7 @@ re_evict:
 
 		fix_block->fix();
 		mysql_mutex_unlock(&buf_pool.mutex);
-		buf_flush_list();
-		buf_flush_wait_batch_end_acquiring_mutex(false);
-		while (buf_flush_list_space(space));
-		os_aio_wait_until_no_pending_writes();
+		buf_flush_sync();
 
 		if (fix_block->page.buf_fix_count() == 1
 		    && !fix_block->page.oldest_modification()) {

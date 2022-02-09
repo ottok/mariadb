@@ -1868,7 +1868,6 @@ public:
     table during query processing (grouping and so on)
   */
   virtual bool is_result_field() { return 0; }
-  virtual bool is_json_type() { return false; }
   virtual bool is_bool_literal() const { return false; }
   /* This is to handle printing of default values */
   virtual bool need_parentheses_in_default() { return false; }
@@ -3363,7 +3362,6 @@ public:
     Collect outer references
   */
   bool collect_outer_ref_processor(void *arg) override;
-  Item *derived_field_transformer_for_having(THD *thd, uchar *arg) override;
   friend bool insert_fields(THD *thd, Name_resolution_context *context,
                             const char *db_name,
                             const char *table_name, List_iterator<Item> *it,
@@ -3427,7 +3425,6 @@ public:
   my_decimal *val_decimal_result(my_decimal *) override;
   bool val_bool_result() override;
   bool is_null_result() override;
-  bool is_json_type() override;
   bool send(Protocol *protocol, st_value *buffer) override;
   Load_data_outvar *get_load_data_outvar() override { return this; }
   bool load_data_set_null(THD *thd, const Load_data_param *param) override
@@ -5463,7 +5460,6 @@ public:
   {
     return ref ? (*ref)->get_typelib() : NULL;
   }
-  bool is_json_type() override { return (*ref)->is_json_type(); }
 
   bool walk(Item_processor processor, bool walk_subquery, void *arg) override
   {
@@ -7534,6 +7530,19 @@ public:
   void close() {}
 };
 
+
+/*
+  fix_escape_item() sets the out "escape" parameter to:
+  - native code in case of an 8bit character set
+  - Unicode code point in case of a multi-byte character set
+
+  The value meaning a not-initialized ESCAPE character must not be equal to
+  any valid value, so must be outside of these ranges:
+  - -128..+127, not to conflict with a valid 8bit charcter
+  - 0..0x10FFFF, not to conflict with a valid Unicode code point
+  The exact value does not matter.
+*/
+#define ESCAPE_NOT_INITIALIZED -1000
 
 /*
   It's used in ::fix_fields() methods of LIKE and JSON_SEARCH

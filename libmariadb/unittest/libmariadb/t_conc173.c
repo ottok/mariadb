@@ -31,9 +31,9 @@ static int test_conc_173(MYSQL *unused __attribute__((unused)))
 {
   MYSQL mysql;
   int arg;
-  int i=0;
+  int i;
 
-  for (;;)
+  for (i = 0; i < 1000; i++)
   {
     mysql_init(&mysql);
     mysql_options(&mysql, MYSQL_READ_DEFAULT_GROUP, "client");

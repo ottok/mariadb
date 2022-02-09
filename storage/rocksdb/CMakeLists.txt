@@ -1,5 +1,9 @@
 # TODO: Copyrights
 
+SET(CPACK_RPM_rocksdb-engine_PACKAGE_SUMMARY "RocksDB storage engine for MariaDB" PARENT_SCOPE)
+SET(CPACK_RPM_rocksdb-engine_PACKAGE_DESCRIPTION "The RocksDB storage engine is a high performance storage engine, aimed
+at maximising storage efficiency while maintaining InnoDB-like performance." PARENT_SCOPE)
+
 MACRO(SKIP_ROCKSDB_PLUGIN msg)
   MESSAGE_ONCE(SKIP_ROCKSDB_PLUGIN "Can't build rocksdb engine - ${msg}")
   ADD_FEATURE_INFO(ROCKSDB "OFF" "Storage Engine")
@@ -125,7 +129,8 @@ SET(ROCKSDB_SE_SOURCES
 # This is a strong requirement coming from RocksDB. No conditional checks here.
 #ADD_DEFINITIONS(-DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX
 #)
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "riscv64")
+
+if (HAVE_GCC_C11_ATOMICS_WITH_LIBATOMIC)
   SET(ATOMIC_EXTRA_LIBS -latomic)
 else()
   SET(ATOMIC_EXTRA_LIBS)

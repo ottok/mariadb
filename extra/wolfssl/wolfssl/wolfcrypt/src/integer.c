@@ -183,7 +183,13 @@ void mp_clear (mp_int * a)
       return;
 
   /* only do anything if a hasn't been freed previously */
-  if (a->dp != NULL) {
+#ifndef HAVE_WOLF_BIGINT
+  /* When HAVE_WOLF_BIGINT then mp_free -> wc_bigint_free needs to be called
+   * because a->raw->buf may be allocated even when a->dp == NULL. This is the
+   * case for when a zero is loaded into the mp_int. */
+  if (a->dp != NULL)
+#endif
+  {
     /* first zero the digits */
     for (i = 0; i < a->used; i++) {
         a->dp[i] = 0;
@@ -537,13 +543,14 @@ void mp_clamp (mp_int * a)
 /* swap the elements of two integers, for cases where you can't simply swap the
  * mp_int pointers around
  */
-void mp_exch (mp_int * a, mp_int * b)
+int mp_exch (mp_int * a, mp_int * b)
 {
   mp_int  t;
 
   t  = *a;
   *a = *b;
   *b = t;
+  return MP_OKAY;
 }
 
 int mp_cond_swap_ct (mp_int * a, mp_int * b, int c, int m)
@@ -660,7 +667,7 @@ void mp_rshd (mp_int * a, int b)
 /* calc a value mod 2**b */
 int mp_mod_2d (mp_int * a, int b, mp_int * c)
 {
-  int     x, res;
+  int     x, res, bmax;
 
   /* if b is <= 0 then zero the int */
   if (b <= 0) {
@@ -669,7 +676,7 @@ int mp_mod_2d (mp_int * a, int b, mp_int * c)
   }
 
   /* if the modulus is larger than the value than return */
-  if (b >= (int) (a->used * DIGIT_BIT)) {
+  if (a->sign == MP_ZPOS && b >= (int) (a->used * DIGIT_BIT)) {
     res = mp_copy (a, c);
     return res;
   }
@@ -679,14 +686,37 @@ int mp_mod_2d (mp_int * a, int b, mp_int * c)
     return res;
   }
 
+  /* calculate number of digits in mod value */
+  bmax = (b / DIGIT_BIT) + ((b % DIGIT_BIT) == 0 ? 0 : 1);
   /* zero digits above the last digit of the modulus */
-  for (x = (b / DIGIT_BIT) + ((b % DIGIT_BIT) == 0 ? 0 : 1); x < c->used; x++) {
+  for (x = bmax; x < c->used; x++) {
     c->dp[x] = 0;
   }
+
+  if (c->sign == MP_NEG) {
+     mp_digit carry = 0;
+
+     /* grow result to size of modulus */
+     if ((res = mp_grow(c, bmax)) != MP_OKAY) {
+         return res;
+     }
+     /* negate value */
+     for (x = 0; x < c->used; x++) {
+         mp_digit next = c->dp[x] > 0;
+         c->dp[x] = ((mp_digit)0 - c->dp[x] - carry) & MP_MASK;
+         carry |= next;
+     }
+     for (; x < bmax; x++) {
+         c->dp[x] = ((mp_digit)0 - carry) & MP_MASK;
+     }
+     c->used = bmax;
+     c->sign = MP_ZPOS;
+  }
+
   /* clear the digit that is not completely outside/inside the modulus */
   x = DIGIT_BIT - (b % DIGIT_BIT);
   if (x != DIGIT_BIT) {
-    c->dp[b / DIGIT_BIT] &=
+    c->dp[bmax - 1] &=
          ((mp_digit)~((mp_digit)0)) >> (x + ((sizeof(mp_digit)*8) - DIGIT_BIT));
   }
   mp_clamp (c);
@@ -1197,8 +1227,7 @@ int mp_invmod_slow (mp_int * a, mp_int * b, mp_int * c)
     goto LBL_ERR;
   }
   if (mp_isone(&x)) {
-    mp_set(c, 1);
-    res = MP_OKAY;
+    res = mp_set(c, 1);
     goto LBL_ERR;
   }
   if ((res = mp_copy (b, &y)) != MP_OKAY) {
@@ -4471,7 +4500,7 @@ int mp_sub_d (mp_int * a, mp_digit b, mp_int * c)
 
 #if defined(WOLFSSL_KEY_GEN) || defined(HAVE_COMP_KEY) || defined(HAVE_ECC) || \
     defined(DEBUG_WOLFSSL) || !defined(NO_RSA) || !defined(NO_DSA) || \
-    !defined(NO_DH)
+    !defined(NO_DH) || defined(WC_MP_TO_RADIX)
 
 static const int lnz[16] = {
    4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0
@@ -4591,7 +4620,7 @@ static int mp_div_d (mp_int * a, mp_digit b, mp_int * c, mp_digit * d)
      if (w >= b) {
 #ifdef WOLFSSL_LINUXKM
         t = (mp_digit)w;
-	/* Linux kernel macro for in-place 64 bit integer division. */
+        /* Linux kernel macro for in-place 64 bit integer division. */
         do_div(t, b);
 #else
         t = (mp_digit)(w / b);
@@ -5179,7 +5208,7 @@ LBL_U:mp_clear (&u);
 
 #if !defined(NO_DSA) || defined(HAVE_ECC) || defined(WOLFSSL_KEY_GEN) || \
     defined(HAVE_COMP_KEY) || defined(WOLFSSL_DEBUG_MATH) || \
-    defined(DEBUG_WOLFSSL) || defined(OPENSSL_EXTRA)
+    defined(DEBUG_WOLFSSL) || defined(OPENSSL_EXTRA) || defined(WC_MP_TO_RADIX)
 
 /* chars used in radix conversions */
 const char *mp_s_rmap = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"

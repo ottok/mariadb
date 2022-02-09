@@ -607,8 +607,8 @@ my_strnxfrm_tis620(CHARSET_INFO *cs,
                    const uchar *src, size_t srclen, uint flags)
 {
   size_t len, dstlen0= dstlen;
-  len= (uint) (strmake((char*) dst, (char*) src, MY_MIN(dstlen, srclen)) -
-	               (char*) dst);
+  len= MY_MIN(dstlen, srclen);
+  memcpy(dst, src, len);
   len= thai2sortable(dst, len);
   set_if_smaller(dstlen, nweights);
   set_if_smaller(len, dstlen); 
@@ -630,8 +630,8 @@ my_strnxfrm_tis620_nopad(CHARSET_INFO *cs,
                          const uchar *src, size_t srclen, uint flags)
 {
   size_t len, dstlen0= dstlen;
-  len= (uint) (strmake((char*) dst, (char*) src, MY_MIN(dstlen, srclen)) -
-	               (char*) dst);
+  len= MY_MIN(dstlen, srclen);
+  memcpy(dst, src, len);
   len= thai2sortable(dst, len);
   set_if_smaller(dstlen, nweights);
   set_if_smaller(len, dstlen);
@@ -854,6 +854,7 @@ static MY_COLLATION_HANDLER my_collation_ci_handler =
     NULL,		/* init */
     my_strnncoll_tis620,
     my_strnncollsp_tis620,
+    my_strnncollsp_nchars_generic_8bit,
     my_strnxfrm_tis620,
     my_strnxfrmlen_simple,
     my_like_range_simple,
@@ -869,6 +870,7 @@ static MY_COLLATION_HANDLER my_collation_nopad_ci_handler =
     NULL,		/* init */
     my_strnncoll_tis620,
     my_strnncollsp_tis620_nopad,
+    my_strnncollsp_nchars_generic_8bit,
     my_strnxfrm_tis620_nopad,
     my_strnxfrmlen_simple,
     my_like_range_simple,

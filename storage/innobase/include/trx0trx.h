@@ -426,7 +426,9 @@ struct trx_lock_t {
 	trx_que_t	que_state;	/*!< valid when trx->state
 					== TRX_STATE_ACTIVE: TRX_QUE_RUNNING,
 					TRX_QUE_LOCK_WAIT, ... */
-
+	/** Transaction being waited for; protected by the same mutexes as
+	wait_lock */
+	trx_t*		wait_trx;
 	lock_t*		wait_lock;	/*!< if trx execution state is
 					TRX_QUE_LOCK_WAIT, this points to
 					the lock request, otherwise this is
@@ -1121,6 +1123,6 @@ struct commit_node_t{
 	mutex_exit(&t->mutex);			\
 } while (0)
 
-#include "trx0trx.ic"
+#include "trx0trx.inl"
 
 #endif

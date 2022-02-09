@@ -1826,7 +1826,7 @@ sub executable_setup () {
   $exe_mysql_plugin=   mtr_exe_exists("$path_client_bindir/mysql_plugin");
   $exe_mariadb_conv=   mtr_exe_exists("$path_client_bindir/mariadb-conv");
 
-  $exe_mysql_embedded= mtr_exe_maybe_exists("$basedir/libmysqld/examples/mysql_embedded");
+  $exe_mysql_embedded= mtr_exe_maybe_exists("$bindir/libmysqld/examples/mysql_embedded");
 
   # Look for mysqltest executable
   if ( $opt_embedded_server )
@@ -5004,6 +5004,7 @@ sub mysqld_start ($$) {
   # Differs from "generic" MYSQLD_CMD by including all command line
   # options from *.opt and *.combination files.
   $ENV{'MYSQLD_LAST_CMD'}= "$exe  @$args";
+  my $oldexe= $exe;
 
   My::Debugger::setup_args(\$args, \$exe, $mysqld->name());
   $ENV{'VALGRIND_TEST'}= $opt_valgrind = int(($exe || '') eq 'valgrind');
@@ -5059,8 +5060,9 @@ sub mysqld_start ($$) {
   $mysqld->{'started_opts'}= $extra_opts;
 
   my $expect_file= "$opt_vardir/tmp/".$mysqld->name().".expect";
-  return sleep_until_file_created($mysqld->value('pid-file'), $expect_file,
-           $opt_start_timeout, $mysqld->{'proc'}, $warn_seconds);
+  return $oldexe eq ($exe || '') ||
+         sleep_until_file_created($mysqld->value('pid-file'), $expect_file,
+                     $opt_start_timeout, $mysqld->{'proc'}, $warn_seconds);
 }
 
 
