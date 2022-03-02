@@ -2,7 +2,7 @@ version=3
 opts=\
 pgpsigurlmangle=s/$/.asc/,\
 uversionmangle=s/-(rc|beta)/$1/,pasv \
-https://ftp.nluug.nl/db/mariadb/mariadb-10.6.([\d\.]*(?:-beta|-rc)?)/source/mariadb-([\d\.]*(?:-beta|-rc)?).tar.gz \
+https://archive.mariadb.org/mariadb-10.6.([\d\.]*(?:-beta|-rc)?)/source/mariadb-([\d\.]*(?:-beta|-rc)?).tar.gz \
 
 # String "-10.6." needs to be in path as MariaDB releases several series in
 # parallel (e.g 10.6, 10.4, 10.3 etc) and uscan should check for updates only
@@ -11,6 +11,7 @@ https://ftp.nluug.nl/db/mariadb/mariadb-10.6.([\d\.]*(?:-beta|-rc)?)/source/mari
 # Automated signature checking with pgpsigurlmangle has been available
 # only since devscripts version 2.13.3
 
-# Specifically use ftp.nluug.nl because is supports https and the main page has a file listing
-# suitable for scanning new releases, while other servers either lack https or have the main
-# directory masked by a half-empty index.html file.
+# Specifically use archive.mariadb.org because it supports https and the main
+# page has a file listing suitable for scanning new releases.
+# The archive.mariadb.org service is under MariaDB Foundation control and is
+# the official source for new releases.
