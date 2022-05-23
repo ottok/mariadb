@@ -104,3 +104,43 @@ msgstr ""
 "Recomendamos que non elimine os datos se vai eliminar o paquete MariaDB para "
 "instalar unha versión máis nova, ou se inda os usa algún paquete mariadb-"
 "server."
+
+#. Type: boolean
+#. Description
+#: ../mariadb-server.templates:5001
+msgid "Enable the Feedback plugin?"
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../mariadb-server.templates:5001
+msgid ""
+"The User Feedback plugin is designed to collect configuration and usage "
+"statistics and optionally upload it to mariadb.org, or to any other "
+"configured URL."
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../mariadb-server.templates:5001
+msgid ""
+"The statistics submitted to mariadb.org will be used to steer engineering "
+"and community development of the MariaDB Server."
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../mariadb-server.templates:5001
+msgid ""
+"The plugin gathers only non-sensitive information; no personal data or "
+"anything that would enable tracking of the user will be sent."
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../mariadb-server.templates:5001
+msgid ""
+"See https://mariadb.org/about/statistics/ for more information on how to "
+"configure the User Feedback plugin, as well as collected MariaDB usage "
+"statistics."
+msgstr ""

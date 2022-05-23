@@ -278,6 +278,30 @@ EOF
           -i "$old_postrm_file" || true
       fi
     done
+
+    # Set up User Feedback Plugin config file
+    fb_cfg=$mysql_cfgdir/mariadb.conf.d/50-feedback.cnf
+
+    db_get "mariadb-server-$MAJOR_VER/feedback_plugin" || true
+    if [ "$RET" = "true" ]
+    then
+      FEEDBACK="ON"
+    else
+      FEEDBACK="OFF"
+    fi
+
+    # The cp before the sed ensures we do not mess up
+    # the config file's ownership and permissions.
+    cp -a -f $fb_cfg $fb_cfg.tmp
+
+    # If the admin deleted or commented some variables but then set
+    # them via debconf, (re-)add them to the conffile.
+    test -z "$FEEDBACK" || grep -Eq '^.*feedback=' $fb_cfg || \
+        echo "feedback=" >> $fb_cfg
+
+    sed -e "s/^.*feedback=.*/feedback=$FEEDBACK/" \
+        < $fb_cfg > $fb_cfg.tmp
+    mv -f $fb_cfg.tmp $fb_cfg
     ;;
 
   abort-upgrade|abort-remove|abort-configure)

@@ -1,0 +1,12 @@
+[server]
+# Config file for User Feedback Plugin
+# See https://mariadb.com/kb/en/mariadb/feedback-plugin/
+# for more configuration options
+
+# Enable (ON) or disable (OFF) the Feedback plugin.
+feedback=OFF
+
+# URL to which the data is sent.
+# More than one URL, separated by spaces, can be specified.
+# Set it to an empty string to disable data sending.
+#feedback_url=https://mariadb.org/feedback_plugin/post
