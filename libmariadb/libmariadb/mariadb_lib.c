@@ -202,10 +202,16 @@ restart:
   if (len == packet_error || len == 0)
   {
     end_server(mysql);
-    my_set_error(mysql, net->last_errno == ER_NET_PACKET_TOO_LARGE ?
-		     CR_NET_PACKET_TOO_LARGE:
-		     CR_SERVER_LOST,
-         SQLSTATE_UNKNOWN, 0, errno);
+#ifdef HAVE_TLS
+    /* don't overwrite possible tls protocol errors */
+    if (net->last_errno != CR_SSL_CONNECTION_ERROR)
+#endif
+    {
+      my_set_error(mysql, net->last_errno == ER_NET_PACKET_TOO_LARGE ?
+                   CR_NET_PACKET_TOO_LARGE:
+                   CR_SERVER_LOST,
+                   SQLSTATE_UNKNOWN, 0, errno);
+    }
     return(packet_error);
   }
   if (net->read_pos[0] == 255)
@@ -667,6 +673,18 @@ struct st_default_options mariadb_defaults[] =
     if (!(OPTS)->extension)                                     \
       (OPTS)->extension= (struct st_mysql_options_extension *)  \
         calloc(1, sizeof(struct st_mysql_options_extension));
+
+#define OPT_SET_EXTENDED_VALUE_BIN(OPTS, KEY, KEY_LEN, VAL, LEN) \
+    CHECK_OPT_EXTENSION_SET(OPTS)                                \
+    free((gptr)(OPTS)->extension->KEY);                          \
+    if((VAL) && (LEN)) {                                         \
+      if (((OPTS)->extension->KEY= malloc((LEN)))) {             \
+        memcpy((OPTS)->extension->KEY, (VAL), (LEN));            \
+        (OPTS)->extension->KEY_LEN= (LEN);                       \
+      }                                                          \
+    }                                                            \
+    else                                                         \
+      (OPTS)->extension->KEY= NULL
 
 #define OPT_SET_EXTENDED_VALUE_STR(OPTS, KEY, VAL)               \
     CHECK_OPT_EXTENSION_SET(OPTS)                                \
@@ -1812,6 +1830,11 @@ my_bool STDCALL mariadb_reconnect(MYSQL *mysql)
   mysql_close(mysql);
   *mysql=tmp_mysql;
   mysql->net.pvio->mysql= mysql;
+#ifdef HAVE_TLS
+  /* CONC-604: Set new connection handle */
+  if (mysql_get_ssl_cipher(mysql))
+    ma_pvio_tls_set_connection(mysql);
+#endif
   ma_net_clear(&mysql->net);
   mysql->affected_rows= ~(unsigned long long) 0;
   mysql->info= 0;
@@ -1990,6 +2013,7 @@ static void mysql_close_options(MYSQL *mysql)
     free(mysql->options.extension->tls_version);
     free(mysql->options.extension->url);
     free(mysql->options.extension->connection_handler);
+    free(mysql->options.extension->proxy_header);
     if(ma_hashtbl_inited(&mysql->options.extension->connect_attrs))
       ma_hashtbl_free(&mysql->options.extension->connect_attrs);
     if (ma_hashtbl_inited(&mysql->options.extension->userdata))
@@ -3245,8 +3269,7 @@ mysql_optionsv(MYSQL *mysql,enum mysql_option option, ...)
   case MARIADB_OPT_PROXY_HEADER:
     {
     size_t arg2 = va_arg(ap, size_t);
-    OPT_SET_EXTENDED_VALUE(&mysql->options, proxy_header, (char *)arg1);
-    OPT_SET_EXTENDED_VALUE(&mysql->options, proxy_header_len, arg2);
+    OPT_SET_EXTENDED_VALUE_BIN(&mysql->options, proxy_header, proxy_header_len, (char *)arg1, arg2);
     }
     break;
   case MARIADB_OPT_TLS_VERSION:

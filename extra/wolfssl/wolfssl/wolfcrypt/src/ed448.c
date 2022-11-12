@@ -1,6 +1,6 @@
 /* ed448.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -185,6 +185,10 @@ int wc_ed448_make_public(ed448_key* key, unsigned char* pubKey, word32 pubKeySz)
         ret = BAD_FUNC_ARG;
     }
 
+    if ((ret == 0) && (!key->privKeySet)) {
+        ret = ECC_PRIV_KEY_E;
+    }
+
     if (ret == 0)
         ret = ed448_hash(key, key->k, ED448_KEY_SIZE, az, sizeof(az));
 
@@ -196,6 +200,8 @@ int wc_ed448_make_public(ed448_key* key, unsigned char* pubKey, word32 pubKeySz)
 
         ge448_scalarmult_base(&A, az);
         ge448_to_bytes(pubKey, &A);
+
+        key->pubKeySet = 1;
     }
 
     return ret;
@@ -225,19 +231,22 @@ int wc_ed448_make_key(WC_RNG* rng, int keySz, ed448_key* key)
     }
 
     if (ret == 0) {
+        key->pubKeySet = 0;
+        key->privKeySet = 0;
+
         ret = wc_RNG_GenerateBlock(rng, key->k, ED448_KEY_SIZE);
     }
     if (ret == 0) {
+        key->privKeySet = 1;
         ret = wc_ed448_make_public(key, key->p, ED448_PUB_KEY_SIZE);
         if (ret != 0) {
+            key->privKeySet = 0;
             ForceZero(key->k, ED448_KEY_SIZE);
         }
     }
     if (ret == 0) {
         /* put public key after private key, on the same buffer */
         XMEMMOVE(key->k + ED448_KEY_SIZE, key->p, ED448_PUB_KEY_SIZE);
-
-        key->pubKeySet = 1;
     }
 
     return ret;
@@ -547,6 +556,18 @@ static int ed448_verify_msg_update_with_sha(const byte* msgSegment,
     return ed448_hash_update(key, sha, msgSegment, msgSegmentLen);
 }
 
+/* Order of the ed448 curve - little endian. */
+static const byte ed448_order[] = {
+    0xf3, 0x44, 0x58, 0xab, 0x92, 0xc2, 0x78, 0x23,
+    0x55, 0x8f, 0xc5, 0x8d, 0x72, 0xc2, 0x6c, 0x21,
+    0x90, 0x36, 0xd6, 0xae, 0x49, 0xdb, 0x4e, 0xc4,
+    0xe9, 0x23, 0xca, 0x7c, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x3f,
+    0x00
+};
+
 /* Verify the message using the ed448 public key.
  *
  *  sig         [in]  Signature to verify.
@@ -566,6 +587,7 @@ static int ed448_verify_msg_final_with_sha(const byte* sig, word32 sigLen,
     ge448_p2 A;
     ge448_p2 R;
     int      ret;
+    int      i;
 
     /* sanity check on arguments */
     if ((sig == NULL) || (res == NULL) || (key == NULL))
@@ -576,6 +598,18 @@ static int ed448_verify_msg_final_with_sha(const byte* sig, word32 sigLen,
 
     /* check on basics needed to verify signature */
     if (sigLen != ED448_SIG_SIZE)
+        return BAD_FUNC_ARG;
+    /* Check S is not larger than or equal to order. */
+    for (i = (int)sizeof(ed448_order) - 1; i >= 0; i--) {
+        /* Bigger than order. */
+        if (sig[ED448_SIG_SIZE/2 + i] > ed448_order[i])
+            return BAD_FUNC_ARG;
+        /* Less than order. */
+        if (sig[ED448_SIG_SIZE/2 + i] < ed448_order[i])
+            break;
+    }
+    /* Same value as order. */
+    if (i == -1)
         return BAD_FUNC_ARG;
 
     /* uncompress A (public key), test if valid, and negate it */
@@ -789,6 +823,10 @@ int wc_ed448_init_ex(ed448_key* key, void *heap, int devId)
 
     fe448_init();
 
+#ifdef WOLFSSL_CHECK_MEM_ZERO
+    wc_MemZero_Add("wc_ed448_init_ex key->k", &key->k, sizeof(key->k));
+#endif
+
 #ifdef WOLFSSL_ED448_PERSISTENT_SHA
     return ed448_hash_init(key, &key->sha);
 #else /* !WOLFSSL_ED448_PERSISTENT_SHA */
@@ -816,6 +854,9 @@ void wc_ed448_free(ed448_key* key)
         ed448_hash_free(key, &key->sha);
 #endif
         ForceZero(key, sizeof(ed448_key));
+    #ifdef WOLFSSL_CHECK_MEM_ZERO
+        wc_MemZero_Check(key, sizeof(ed448_key));
+    #endif
     }
 }
 
@@ -861,13 +902,17 @@ int wc_ed448_export_public(ed448_key* key, byte* out, word32* outLen)
 /* Import a compressed or uncompressed ed448 public key from a byte array.
  * Public key encoded in big-endian.
  *
- * in      [in]  Array holding public key.
- * inLen   [in]  Number of bytes of data in array.
- * key     [in]  Ed448 public key.
+ * in       [in]  Array holding public key.
+ * inLen    [in]  Number of bytes of data in array.
+ * key      [in]  Ed448 public key.
+ * trusted  [in]  Indicates whether the public key data is trusted.
+ *                When 0, checks public key matches private key.
+ *                When 1, doesn't check public key matches private key.
  * returns BAD_FUNC_ARG when a parameter is NULL or key format is not supported,
  *         0 otherwise.
  */
-int wc_ed448_import_public(const byte* in, word32 inLen, ed448_key* key)
+int wc_ed448_import_public_ex(const byte* in, word32 inLen, ed448_key* key,
+    int trusted)
 {
     int ret = 0;
 
@@ -876,7 +921,7 @@ int wc_ed448_import_public(const byte* in, word32 inLen, ed448_key* key)
         ret = BAD_FUNC_ARG;
     }
 
-    if  (inLen < ED448_PUB_KEY_SIZE) {
+    if (inLen != ED448_PUB_KEY_SIZE) {
         ret = BAD_FUNC_ARG;
     }
 
@@ -886,20 +931,16 @@ int wc_ed448_import_public(const byte* in, word32 inLen, ed448_key* key)
         if (in[0] == 0x40 && inLen > ED448_PUB_KEY_SIZE) {
             /* key is stored in compressed format so just copy in */
             XMEMCPY(key->p, (in + 1), ED448_PUB_KEY_SIZE);
-            key->pubKeySet = 1;
         }
         /* importing uncompressed public key */
         else if (in[0] == 0x04 && inLen > 2*ED448_PUB_KEY_SIZE) {
             /* pass in (x,y) and store compressed key */
             ret = ge448_compress_key(key->p, in+1, in+1+ED448_PUB_KEY_SIZE);
-            if (ret == 0)
-                key->pubKeySet = 1;
         }
         else if (inLen == ED448_PUB_KEY_SIZE) {
             /* if not specified compressed or uncompressed check key size
              * if key size is equal to compressed key size copy in key */
             XMEMCPY(key->p, in, ED448_PUB_KEY_SIZE);
-            key->pubKeySet = 1;
         }
         else {
             /* bad public key format */
@@ -907,9 +948,37 @@ int wc_ed448_import_public(const byte* in, word32 inLen, ed448_key* key)
         }
     }
 
+    if (ret == 0) {
+        key->pubKeySet = 1;
+        if (key->privKeySet && (!trusted)) {
+            /* Check untrusted public key data matches private key. */
+            ret = wc_ed448_check_key(key);
+        }
+    }
+
+    if ((ret != 0) && (key != NULL)) {
+        /* No public key set on failure. */
+        key->pubKeySet = 0;
+    }
+
     return ret;
 }
 
+/* Import a compressed or uncompressed ed448 public key from a byte array.
+ *
+ * Public key encoded in big-endian.
+ * Public key is not trusted and is checked against private key if set.
+ *
+ * in      [in]  Array holding public key.
+ * inLen   [in]  Number of bytes of data in array.
+ * key     [in]  Ed448 public key.
+ * returns BAD_FUNC_ARG when a parameter is NULL or key format is not supported,
+ *         0 otherwise.
+ */
+int wc_ed448_import_public(const byte* in, word32 inLen, ed448_key* key)
+{
+    return wc_ed448_import_public_ex(in, inLen, key, 0);
+}
 
 /* Import an ed448 private key from a byte array.
  *
@@ -931,12 +1000,24 @@ int wc_ed448_import_private_only(const byte* priv, word32 privSz,
     }
 
     /* key size check */
-    if ((ret == 0) && (privSz < ED448_KEY_SIZE)) {
+    if ((ret == 0) && (privSz != ED448_KEY_SIZE)) {
         ret = BAD_FUNC_ARG;
     }
 
     if (ret == 0) {
         XMEMCPY(key->k, priv, ED448_KEY_SIZE);
+        key->privKeySet = 1;
+    }
+
+    if ((ret == 0) && key->pubKeySet) {
+        /* Validate loaded public key */
+        ret = wc_ed448_check_key(key);
+    }
+
+    if ((ret != 0) && (key != NULL)) {
+        /* No private key set on error. */
+        key->privKeySet = 0;
+        ForceZero(key->k, ED448_KEY_SIZE);
     }
 
     return ret;
@@ -944,6 +1025,64 @@ int wc_ed448_import_private_only(const byte* priv, word32 privSz,
 
 
 /* Import an ed448 private and public keys from byte array(s).
+ *
+ * priv     [in]  Array holding private key from wc_ed448_export_private_only(),
+ *                or private+public keys from wc_ed448_export_private().
+ * privSz   [in]  Number of bytes of data in private key array.
+ * pub      [in]  Array holding public key (or NULL).
+ * pubSz    [in]  Number of bytes of data in public key array (or 0).
+ * key      [in]  Ed448 private/public key.
+ * trusted  [in]  Indicates whether the public key data is trusted.
+ *                When 0, checks public key matches private key.
+ *                When 1, doesn't check public key matches private key.
+ * returns BAD_FUNC_ARG when a required parameter is NULL or an invalid
+ *         combination of keys/lengths is supplied, 0 otherwise.
+ */
+int wc_ed448_import_private_key_ex(const byte* priv, word32 privSz,
+    const byte* pub, word32 pubSz, ed448_key* key, int trusted)
+{
+    int ret;
+
+    /* sanity check on arguments */
+    if (priv == NULL || key == NULL)
+        return BAD_FUNC_ARG;
+
+    /* key size check */
+    if (privSz != ED448_KEY_SIZE && privSz != ED448_PRV_KEY_SIZE)
+        return BAD_FUNC_ARG;
+
+    if (pub == NULL) {
+        if (pubSz != 0)
+            return BAD_FUNC_ARG;
+        if (privSz != ED448_PRV_KEY_SIZE)
+            return BAD_FUNC_ARG;
+        pub = priv + ED448_KEY_SIZE;
+        pubSz = ED448_PUB_KEY_SIZE;
+    }
+    else if (pubSz < ED448_PUB_KEY_SIZE) {
+        return BAD_FUNC_ARG;
+    }
+
+    XMEMCPY(key->k, priv, ED448_KEY_SIZE);
+    key->privKeySet = 1;
+
+    /* import public key */
+    ret = wc_ed448_import_public_ex(pub, pubSz, key, trusted);
+    if (ret != 0) {
+        key->privKeySet = 0;
+        ForceZero(key->k, ED448_KEY_SIZE);
+        return ret;
+    }
+
+    /* make the private key (priv + pub) */
+    XMEMCPY(key->k + ED448_KEY_SIZE, key->p, ED448_PUB_KEY_SIZE);
+
+    return ret;
+}
+
+/* Import an ed448 private and public keys from byte array(s).
+ *
+ * Public key is not trusted and is checked against private key.
  *
  * priv    [in]  Array holding private key from wc_ed448_export_private_only(),
  *               or private+public keys from wc_ed448_export_private().
@@ -957,39 +1096,8 @@ int wc_ed448_import_private_only(const byte* priv, word32 privSz,
 int wc_ed448_import_private_key(const byte* priv, word32 privSz,
                                 const byte* pub, word32 pubSz, ed448_key* key)
 {
-    int ret;
-
-    /* sanity check on arguments */
-    if (priv == NULL || key == NULL)
-        return BAD_FUNC_ARG;
-
-    /* key size check */
-    if (privSz < ED448_KEY_SIZE)
-        return BAD_FUNC_ARG;
-
-    if (pub == NULL) {
-        if (pubSz != 0)
-            return BAD_FUNC_ARG;
-        if (privSz < ED448_PRV_KEY_SIZE)
-            return BAD_FUNC_ARG;
-        pub = priv + ED448_KEY_SIZE;
-        pubSz = ED448_PUB_KEY_SIZE;
-    } else if (pubSz < ED448_PUB_KEY_SIZE) {
-        return BAD_FUNC_ARG;
-    }
-
-    /* import public key */
-    ret = wc_ed448_import_public(pub, pubSz, key);
-    if (ret != 0)
-        return ret;
-
-    /* make the private key (priv + pub) */
-    XMEMCPY(key->k, priv, ED448_KEY_SIZE);
-    XMEMCPY(key->k + ED448_KEY_SIZE, key->p, ED448_PUB_KEY_SIZE);
-
-    return ret;
+    return wc_ed448_import_private_key_ex(priv, privSz, pub, pubSz, key, 0);
 }
-
 
 #endif /* HAVE_ED448_KEY_IMPORT */
 

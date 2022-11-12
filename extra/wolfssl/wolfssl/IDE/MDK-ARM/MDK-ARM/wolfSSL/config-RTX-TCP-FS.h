@@ -1,6 +1,6 @@
 /* config-RTX-TCP-FS.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -197,19 +197,6 @@
 #define NO_HMAC
 #endif
 //  </e>
-//      <e>HC128
-#define MDK_CONF_HC128 0
-#if MDK_CONF_HC128 == 1
-#define HAVE_HC128
-#endif
-//  </e>
-//  <e>RABBIT
-#define MDK_CONF_RABBIT 1
-#if MDK_CONF_RABBI == 0
-#define NO_RABBIT
-#endif
-//  </e>
-
 //      <e>AEAD
 #define MDK_CONF_AEAD 0
 #if MDK_CONF_AEAD == 1

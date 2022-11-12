@@ -156,6 +156,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\src\dtls13.c"
+				>
+			</File>
+			<File
+				RelativePath=".\src\dtls.c"
+				>
+			</File>
+			<File
 				RelativePath=".\src\internal.c"
 				>
 			</File>
@@ -264,10 +272,6 @@
 				>
 			</File>
 			<File
-				RelativePath=".\wolfcrypt\src\hc128.c"
-				>
-			</File>
-			<File
 				RelativePath=".\wolfcrypt\src\hmac.c"
 				>
 			</File>
@@ -309,10 +313,6 @@
 			</File>
 			<File
 				RelativePath=".\wolfcrypt\src\pwdbased.c"
-				>
-			</File>
-			<File
-				RelativePath=".\wolfcrypt\src\rabbit.c"
 				>
 			</File>
 			<File

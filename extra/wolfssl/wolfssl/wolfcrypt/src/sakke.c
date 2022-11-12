@@ -1,6 +1,6 @@
 /* sakke.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -1885,15 +1885,27 @@ static int sakke_accumulate_line_add_one(mp_proj* v, mp_int* prime, mp_digit mp,
 static int sakke_accumulate_line_dbl(mp_proj* v, ecc_point* p, ecc_point* q,
         mp_int* prime, mp_digit mp, mp_proj* r, mp_int** t)
 {
-    int err;
+    int err = 0;
     mp_int* t1 = t[0];
     mp_int* t2 = r->z;
     mp_int* z2 = t[1];
+#ifdef WOLFSSL_SMALL_STACK
+    mp_int* l = NULL;
+    mp_int* ty = NULL;
+    l = (mp_int *)XMALLOC(sizeof(*l), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (l == NULL)
+        err = 1;
+    ty = (mp_int *)XMALLOC(sizeof(*ty), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (ty == NULL)
+        err = 1;
+#else
     mp_int tmp[2];
     mp_int* l = &tmp[0];
     mp_int* ty = &tmp[1];
+#endif
 
-    err = mp_init(l);
+    if (err == 0)
+        err = mp_init(l);
     if (err == 0) {
         err = mp_init(ty);
     }
@@ -1985,8 +1997,19 @@ static int sakke_accumulate_line_dbl(mp_proj* v, ecc_point* p, ecc_point* q,
         err = sakke_submod(p->y, t2, prime, p->y);
     }
 
+#ifdef WOLFSSL_SMALL_STACK
+    if (ty != NULL) {
+        mp_free(ty);
+        XFREE(ty, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (l != NULL) {
+        mp_free(l);
+        XFREE(l, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+#else
     mp_free(ty);
     mp_free(l);
+#endif
 
     return err;
 }
@@ -2018,16 +2041,36 @@ static int sakke_accumulate_line_dbl(mp_proj* v, ecc_point* p, ecc_point* q,
 static int sakke_accumulate_line_add_one(mp_proj* v, mp_int* prime, mp_digit mp,
         ecc_point* p, ecc_point* q, ecc_point* c, mp_proj* r, mp_int** t)
 {
-    int err;
+    int err = 0;
     mp_int* t1 = t[0];
     mp_int* t2 = t[1];
+#ifdef WOLFSSL_SMALL_STACK
+    mp_int* h = NULL;
+    mp_int* ty = NULL;
+    mp_int* tz = NULL;
+    mp_int* t3 = NULL;
+    h = (mp_int *)XMALLOC(sizeof(*h), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (h == NULL)
+        err = 1;
+    ty = (mp_int *)XMALLOC(sizeof(*ty), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (ty == NULL)
+        err = 1;
+    tz = (mp_int *)XMALLOC(sizeof(*tz), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (tz == NULL)
+        err = 1;
+    t3 = (mp_int *)XMALLOC(sizeof(*t3), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (t3 == NULL)
+        err = 1;
+#else
     mp_int tmp[4];
     mp_int* h = &tmp[0];
     mp_int* ty = &tmp[1];
     mp_int* tz = &tmp[2];
     mp_int* t3 = &tmp[3];
+#endif
 
-    err = mp_init_multi(h, ty, tz, t3, NULL, NULL);
+    if (err == 0)
+        err = mp_init_multi(h, ty, tz, t3, NULL, NULL);
 
     /* r.x = (q.x + p.x) * c.y */
     if (err == 0) {
@@ -2135,10 +2178,29 @@ static int sakke_accumulate_line_add_one(mp_proj* v, mp_int* prime, mp_digit mp,
         err = sakke_addmod(t3, t2, prime, c->y);
     }
 
+#ifdef WOLFSSL_SMALL_STACK
+    if (t3 != NULL) {
+        mp_free(t3);
+        XFREE(t3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (tz != NULL) {
+        mp_free(tz);
+        XFREE(tz, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (ty != NULL) {
+        mp_free(ty);
+        XFREE(ty, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    if (h != NULL) {
+        mp_free(h);
+        XFREE(h, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+#else
     mp_free(t3);
     mp_free(tz);
     mp_free(ty);
     mp_free(h);
+#endif
 
     return err;
 }
@@ -6088,10 +6150,12 @@ static int sakke_calc_a(SakkeKey* key, enum wc_HashType hashType,
         const byte* data, word32 sz, const byte* extra, word32 extraSz, byte* a)
 {
     int err;
+    int hash_inited = 0;
 
     /* Step 1: A = hashfn( s ), where s = data | extra */
     err = wc_HashInit_ex(&key->hash, hashType, key->heap, INVALID_DEVID);
     if (err == 0) {
+        hash_inited = 1;
         err = wc_HashUpdate(&key->hash, hashType, data, sz);
     }
     if ((err == 0) && (extra != NULL)) {
@@ -6099,6 +6163,10 @@ static int sakke_calc_a(SakkeKey* key, enum wc_HashType hashType,
     }
     if (err == 0) {
         err = wc_HashFinal(&key->hash, hashType, a);
+    }
+
+    if (hash_inited) {
+        (void)wc_HashFree(&key->hash, hashType);
     }
 
     return err;
@@ -6127,13 +6195,19 @@ static int sakke_hash_to_range(SakkeKey* key, enum wc_HashType hashType,
     byte v[WC_MAX_DIGEST_SIZE];
     word32 hashSz = 1;
     word32 i;
+    int hash_inited = 0;
+
+    err = wc_HashInit_ex(&key->hash, hashType, key->heap, INVALID_DEVID);
+    if (err == 0)
+        hash_inited = 1;
 
     /* Step 1: A = hashfn( s ), where s = data | extra
      * See sakke_calc_a (need function parameters to be 7 or less)
      */
 
     /* Step 2: h_0 = 00...00, a string of null bits of length hashlen bits */
-    err = wc_HashGetDigestSize(hashType);
+    if (err == 0)
+        err = wc_HashGetDigestSize(hashType);
     if (err > 0) {
         hashSz = (word32)err;
         XMEMSET(h, 0, hashSz);
@@ -6154,6 +6228,10 @@ static int sakke_hash_to_range(SakkeKey* key, enum wc_HashType hashType,
         if (err == 0) {
             sakke_xor_in_v(v, hashSz, out, i, n);
         }
+    }
+
+    if (hash_inited) {
+        (void)wc_HashFree(&key->hash, hashType);
     }
 
     return err;

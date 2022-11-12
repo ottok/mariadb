@@ -1,6 +1,6 @@
 /* ocsp.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -34,7 +34,7 @@
 #define OCSP_CERTID               WOLFSSL_OCSP_CERTID
 #define OCSP_ONEREQ               WOLFSSL_OCSP_ONEREQ
 
-#define OCSP_REVOKED_STATUS_NOSTATUS     -1
+#define OCSP_REVOKED_STATUS_NOSTATUS     (-1)
 
 
 #define OCSP_RESPONSE_STATUS_SUCCESSFUL  0

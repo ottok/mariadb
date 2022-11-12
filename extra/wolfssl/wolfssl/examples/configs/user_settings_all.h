@@ -1,6 +1,6 @@
 /* user_settings_all.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -170,9 +170,6 @@ extern "C" {
 #define WOLFSSL_DES_ECB
 
 /* Non-Standard Algorithms (DG disabled) */
-//#define HAVE_HC128
-//#define HAVE_RABBIT
-//#define HAVE_IDEA
 //#define HAVE_CAMELLIA
 //#define WOLFSSL_RIPEMD
 //#define HAVE_SCRYPT

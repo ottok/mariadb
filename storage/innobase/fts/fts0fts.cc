@@ -53,14 +53,14 @@ by looking up the key word in the obsolete table names */
 
 /** This is maximum FTS cache for each table and would be
 a configurable variable */
-ulong	fts_max_cache_size;
+Atomic_relaxed<size_t> fts_max_cache_size;
 
 /** Whether the total memory used for FTS cache is exhausted, and we will
 need a sync to free some memory */
 bool	fts_need_sync = false;
 
 /** Variable specifying the total memory allocated for FTS cache */
-ulong	fts_max_total_cache_size;
+Atomic_relaxed<size_t> fts_max_total_cache_size;
 
 /** This is FTS result cache limit for each query and would be
 a configurable variable */
@@ -231,18 +231,6 @@ fts_add_doc_by_id(
 /*==============*/
 	fts_trx_table_t*ftt,		/*!< in: FTS trx table */
 	doc_id_t	doc_id);	/*!< in: doc id */
-/******************************************************************//**
-Update the last document id. This function could create a new
-transaction to update the last document id.
-@return DB_SUCCESS if OK */
-static
-dberr_t
-fts_update_sync_doc_id(
-/*===================*/
-	const dict_table_t*	table,		/*!< in: table */
-	doc_id_t		doc_id,		/*!< in: last document id */
-	trx_t*			trx)		/*!< in: update trx, or NULL */
-	MY_ATTRIBUTE((nonnull(1)));
 
 /** Tokenize a document.
 @param[in,out]	doc	document to tokenize
@@ -2272,9 +2260,7 @@ fts_trx_table_create(
 	fts_trx_table_t*	ftt;
 
 	ftt = static_cast<fts_trx_table_t*>(
-		mem_heap_alloc(fts_trx->heap, sizeof(*ftt)));
-
-	memset(ftt, 0x0, sizeof(*ftt));
+		mem_heap_zalloc(fts_trx->heap, sizeof *ftt));
 
 	ftt->table = table;
 	ftt->fts_trx = fts_trx;
@@ -2528,27 +2514,6 @@ fts_get_max_cache_size(
 #endif
 
 /*********************************************************************//**
-Update the next and last Doc ID in the CONFIG table to be the input
-"doc_id" value (+ 1). We would do so after each FTS index build or
-table truncate */
-void
-fts_update_next_doc_id(
-/*===================*/
-	trx_t*			trx,		/*!< in/out: transaction */
-	const dict_table_t*	table,		/*!< in: table */
-	doc_id_t		doc_id)		/*!< in: DOC ID to set */
-{
-	table->fts->cache->synced_doc_id = doc_id;
-	table->fts->cache->next_doc_id = doc_id + 1;
-
-	table->fts->cache->first_doc_id = table->fts->cache->next_doc_id;
-
-	fts_update_sync_doc_id(
-		table, table->fts->cache->synced_doc_id, trx);
-
-}
-
-/*********************************************************************//**
 Get the next available document id.
 @return DB_SUCCESS if OK */
 dberr_t
@@ -2677,7 +2642,7 @@ retry:
 	}
 	mutex_exit(&cache->doc_id_lock);
 
-	if (cmp_doc_id > *doc_id) {
+	if (cmp_doc_id && cmp_doc_id >= *doc_id) {
 		error = fts_update_sync_doc_id(
 			table, cache->synced_doc_id, trx);
 	}
@@ -2706,17 +2671,17 @@ func_exit:
 	return(error);
 }
 
-/*********************************************************************//**
-Update the last document id. This function could create a new
+/** Update the last document id. This function could create a new
 transaction to update the last document id.
-@return DB_SUCCESS if OK */
-static
+@param  table   table to be updated
+@param  doc_id  last document id
+@param  trx     update trx or null
+@retval DB_SUCCESS if OK */
 dberr_t
 fts_update_sync_doc_id(
-/*===================*/
-	const dict_table_t*	table,		/*!< in: table */
-	doc_id_t		doc_id,		/*!< in: last document id */
-	trx_t*			trx)		/*!< in: update trx, or NULL */
+	const dict_table_t*	table,
+	doc_id_t		doc_id,
+	trx_t*			trx)
 {
 	byte		id[FTS_MAX_ID_LEN];
 	pars_info_t*	info;
@@ -3437,7 +3402,7 @@ fts_add_doc_by_id(
 
 	btr_pcur_open_with_no_init(
 		fts_id_index, tuple, PAGE_CUR_LE, BTR_SEARCH_LEAF,
-		&pcur, 0, &mtr);
+		&pcur, &mtr);
 
 	/* If we have a match, add the data to doc structure */
 	if (btr_pcur_get_low_match(&pcur) == 1) {
@@ -3475,7 +3440,7 @@ fts_add_doc_by_id(
 
 			btr_pcur_open_with_no_init(
 				clust_index, clust_ref, PAGE_CUR_LE,
-				BTR_SEARCH_LEAF, &clust_pcur, 0, &mtr);
+				BTR_SEARCH_LEAF, &clust_pcur, &mtr);
 
 			doc_pcur = &clust_pcur;
 			clust_rec = btr_pcur_get_rec(&clust_pcur);
@@ -3502,7 +3467,6 @@ fts_add_doc_by_id(
 				get_doc, clust_index, doc_pcur, offsets, &doc);
 
 			if (doc.found) {
-				ibool	success MY_ATTRIBUTE((unused));
 
 				btr_pcur_store_position(doc_pcur, &mtr);
 				mtr_commit(&mtr);
@@ -3556,12 +3520,10 @@ fts_add_doc_by_id(
 				mtr_start(&mtr);
 
 				if (i < num_idx - 1) {
-
-					success = btr_pcur_restore_position(
-						BTR_SEARCH_LEAF, doc_pcur,
-						&mtr);
-
-					ut_ad(success);
+					ut_d(auto status=)
+					  btr_pcur_restore_position(
+					      BTR_SEARCH_LEAF, doc_pcur, &mtr);
+					ut_ad(status == btr_pcur_t::SAME_ALL);
 				}
 			}
 
@@ -4249,7 +4211,7 @@ fts_sync(
 	ulint		i;
 	dberr_t		error = DB_SUCCESS;
 	fts_cache_t*	cache = sync->table->fts->cache;
-
+	size_t		fts_cache_size= 0;
 	rw_lock_x_lock(&cache->lock);
 
 	/* Check if cache is being synced.
@@ -4274,11 +4236,17 @@ fts_sync(
 	fts_sync_begin(sync);
 
 begin_sync:
-	if (cache->total_size > fts_max_cache_size) {
+	fts_cache_size= fts_max_cache_size;
+	if (cache->total_size > fts_cache_size) {
 		/* Avoid the case: sync never finish when
 		insert/update keeps comming. */
 		ut_ad(sync->unlock_cache);
 		sync->unlock_cache = false;
+		ib::warn() << "Total InnoDB FTS size "
+			<< cache->total_size << " for the table "
+			<< cache->sync->table->name
+			<< " exceeds the innodb_ft_cache_size "
+			<< fts_cache_size;
 	}
 
 	for (i = 0; i < ib_vector_size(cache->indexes); ++i) {
@@ -4298,6 +4266,13 @@ begin_sync:
 
 		if (error != DB_SUCCESS) {
 			goto end_sync;
+		}
+
+		if (!sync->unlock_cache
+		    && cache->total_size < fts_max_cache_size) {
+			/* Reset the unlock cache if the value
+			is less than innodb_ft_cache_size */
+			sync->unlock_cache = true;
 		}
 	}
 

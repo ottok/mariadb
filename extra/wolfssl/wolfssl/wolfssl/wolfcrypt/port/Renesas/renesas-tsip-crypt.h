@@ -1,6 +1,6 @@
 /* renesas-tsip-crypt.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -26,12 +26,11 @@
 #if defined(WOLFSSL_RENESAS_TSIP_IAREWRX)
     #include "r_bsp/mcu/all/r_rx_compiler.h"
     #include "r_bsp/platform.h"
-#else
-    #include "platform.h"
+    #include "r_tsip_rx_if.h"
 #endif
 
-#include "r_tsip_rx_if.h"
 #include <wolfssl/wolfcrypt/logging.h>
+#include <wolfssl/ssl.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,76 +65,146 @@ enum {
     l_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256   = 0x27,
     l_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 = 0x2b,
     l_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256   = 0x2f,    
+    l_TLS_AES_128_GCM_SHA256                  = 0x01,
+    l_TLS_AES_128_CCM_SHA256                  = 0x04,
 };
 
 enum {
-    ENCRYPTED_ECDHE_PUBKEY_SZ = 96,
-    ECCP256_PUBKEY_SZ = 64,
-    TSIP_TLS_CLIENTRANDOM_SZ = 32,
-    TSIP_TLS_SERVERRANDOM_SZ = 32,
+    ENCRYPTED_ECDHE_PUBKEY_SZ  = 96,
+    ECCP256_PUBKEY_SZ          = 64,
+    TSIP_TLS_CLIENTRANDOM_SZ   = 32,
+    TSIP_TLS_SERVERRANDOM_SZ   = 32,
+    TSIP_TLS_VERIFY_DATA_WD_SZ = 8,
+    TSIP_TLS_MAX_SIGDATA_SZ    = 130,
+    TSIP_TEMP_WORK_SIZE        = 128,
 };
 
-#if (!defined(NO_SHA) || !defined(NO_SHA256)) && \
-    !defined(NO_WOLFSSL_RENESAS_TSIP_CRYPT_HASH)
+struct WOLFSSL;
+struct KeyShareEntry;
 
-typedef enum {
-    TSIP_SHA1 = 0,
-    TSIP_SHA256 = 1,
-} TSIP_SHA_TYPE;
-
-typedef struct {
-    byte*  msg;
-    void*  heap;
-    word32 used;
-    word32 len;
-    word32 sha_type;
-#if defined(WOLF_CRYPTO_CB)
-    word32 flags;
-    int devId;
-#endif    
-} wolfssl_TSIP_Hash;
-
-/* RAW hash function APIs are not implemented with TSIP */
-#define WOLFSSL_NO_HASH_RAW
-
-typedef wolfssl_TSIP_Hash wc_Sha;
-
-#if !defined(NO_SHA256)
-    typedef wolfssl_TSIP_Hash wc_Sha256;
-#endif
-
-#endif /* NO_SHA */
-
-#if defined(WOLFSSL_RENESAS_TSIP_TLS_AES_CRYPT)
-    typedef struct {
-        tsip_aes_key_index_t tsip_keyIdx;
-        word32               keySize;
-        byte                 setup;
-    } TSIP_AES_CTX;
-#endif 
-
+/*  MsgBag stands for message bag and acts as a buffer for holding plain text
+ *  handshake messages exchanged between client and server.
+ *  MsgBag was introduced as a workaround for the TSIP's limitation that TSIP 
+ *  can not process multiple hash algorithms at the same time. If the
+ *  limitation is resolved in a future TSIP, MsgBag should be removed.    
+ *  The contents in this MsgBag is used for transcript hashing. The hash value
+ *  is used for the key derivation and Finished-message. 
+ *  The capacity of the MsgBag is defined as MSGBAG_SIZE and the actual
+ *  size is 8KB. The size should be large enough to hold all the handshake
+ *  messages including the server and client certificate messages.
+ */
+#define MSGBAG_SIZE (1024 * 8)
+#define MAX_MSGBAG_MESSAGES 10
+typedef struct MsgBag
+{
+    int   msgIdx;
+    int   buffIdx;
+    byte  msgTypes[MAX_MSGBAG_MESSAGES];
+    byte  buff[MSGBAG_SIZE];
+} MsgBag;
 
 
 /*
- * structure for ECDH key exchange
+ * TsipUserCtx holds mainly keys used for TLS handshake in TSIP specific format.
  */
 typedef struct TsipUserCtx {
-    
-    uint32_t user_key_id;
+    /* unique number for each session */
+    int devId;
 
-#if (WOLFSSL_RENESAS_TSIP_VER >=109)     
+    /* 0:working as a TLS client, 1: as a server */
+    byte                    side;
+
+    /* public key index for verification of RootCA cert */
+    uint32_t                user_key_id;
+    
+    /* WOLFSSL object associated with */
+    struct WOLFSSL*         ssl;
+    struct WOLFSSL_CTX*     ctx;
+
+    /* HEAP_HINT */
+    void*                   heap;
+
+#if (WOLFSSL_RENESAS_TSIP_VER >= 115)
+    /* TLSv1.3 handshake related members, mainly keys */
+
+    /* handle is used as work area for Tls13 handshake */
+    tsip_tls13_handle_t                                handle13;
+
+    /* RSA-2048bit private key-index for client authentication */
+    tsip_rsa2048_private_key_index_t                   RsaPrivateKeyIdx;
+
+    /* ECC P256 private key-index for client authentication */
+    tsip_ecc_private_key_index_t                       EcdsaPrivateKeyIdx;
+
+    /* ECDHE private key index for Tls13 handshake */
+    tsip_tls_p256_ecc_key_index_t                      EcdhPrivKey13Idx;
+
+    /* ECDHE pre-master secret */
+    tsip_tls13_ephemeral_shared_secret_key_index_t     sharedSecret13Idx;
+    
+    /* Handshake secret for Tls13 handshake */
+    tsip_tls13_ephemeral_handshake_secret_key_index_t  handshakeSecret13Idx;
+    
+    /* the key to decrypt server-finished message */
+    tsip_tls13_ephemeral_server_finished_key_index_t   serverFinished13Idx;
+
+    /* key for Sha256-Hmac to gen "Client Finished" */
+    tsip_hmac_sha_key_index_t                          clientFinished13Idx;
+
+    /* AES decryption key for handshake */
+    tsip_aes_key_index_t                               serverWriteKey13Idx;
+
+    /* AES encryption key for handshake */
+    tsip_aes_key_index_t                               clientWriteKey13Idx;
+
+    /* Handshake verified data used for master secret */
+    word32                          verifyData13Idx[TSIP_TLS_VERIFY_DATA_WD_SZ];
+
+    /* master secret for TLS1.3 */
+    tsip_tls13_ephemeral_master_secret_key_index_t     masterSecret13Idx;
+
+    /* server app traffic secret */
+    tsip_tls13_ephemeral_app_secret_key_index_t        serverAppTraffic13Secret;
+
+    /* client app traffic secret */
+    tsip_tls13_ephemeral_app_secret_key_index_t        clientAppTraffic13Secret;
+
+    /* server write key */
+    tsip_aes_key_index_t                               serverAppWriteKey13Idx;
+
+    /* client write key */
+    tsip_aes_key_index_t                               clientAppWriteKey13Idx;
+
+    /* hash handle for transcript hash of handshake messages */
+    tsip_hmac_sha_handle_t                             hmacFinished13Handle;
+
+    /* storage for handshake messages */
+    MsgBag                                             messageBag;
+
+    /* signature data area for TLS1.3 CertificateVerify message  */
+    byte                             sigDataCertVerify[TSIP_TLS_MAX_SIGDATA_SZ];
+
+    /* peer's Rsa 2046 bit public key index for CertificateVerify message */
+    tsip_rsa2048_public_key_index_t                    serverRsa2048PubKey13Idx;
+
+    /* peer's Ecc P256 public key index for CertificateVerify message */
+    tsip_ecc_public_key_index_t                       serverEccP256PubKey13Idx;
+
+#endif /* WOLFSSL_RENESAS_TSIP_VER >=115 */
+    
+#if (WOLFSSL_RENESAS_TSIP_VER >=109)
     /* out from R_SCE_TLS_ServerKeyExchangeVerify */
     uint32_t encrypted_ephemeral_ecdh_public_key[ENCRYPTED_ECDHE_PUBKEY_SZ];
     
     /* ephemeral ECDH pubkey index 
      * got from R_TSIP_GenerateTlsP256EccKeyIndex.
-     * Input to R_TSIP_TlsGeneratePreMasterSecretWithEccP256Key. 
+     * Input to R_TSIP_TlsGeneratePreMasterSecretWithEccP256Key.
      */
     tsip_tls_p256_ecc_key_index_t ecc_p256_wrapped_key;
 
-    /* ephemeral ECDH pub-key Qx(256bit)||Qy(256bit) 
+    /* ephemeral ECDH pub-key Qx(256bit)||Qy(256bit)
      * got from  R_TSIP_GenerateTlsP256EccKeyIndex.
-     * Should be sent to peer(server) in Client Key Exchange msg. 
+     * Should be sent to peer(server) in Client Key Exchange msg.
      */
     uint8_t ecc_ecdh_public_key[ECCP256_PUBKEY_SZ];
 #endif /* WOLFSSL_RENESAS_TSIP_VER >=109 */
@@ -145,16 +214,39 @@ typedef struct TsipUserCtx {
     uint8_t     tsip_clientRandom[TSIP_TLS_CLIENTRANDOM_SZ];
     uint8_t     tsip_serverRandom[TSIP_TLS_SERVERRANDOM_SZ];
 
+    /* installed key handling */
+    tsip_aes_key_index_t user_aes256_key_index;
+    uint8_t user_aes256_key_set:1;
+    tsip_aes_key_index_t user_aes128_key_index;
+    uint8_t user_aes128_key_set:1;
+    
     /* TSIP defined cipher suite number */
-    uint32_t    tsip_cipher;    
+    uint32_t    tsip_cipher;
     
     /* flags */
-    uint8_t pk_key_set:1;
+    uint8_t ClientRsaPrivKey_set:1;
+    uint8_t ClientEccPrivKey_set:1;
+    uint8_t HmacInitialized:1;
+    uint8_t RootCAverified:1;
+    uint8_t EcdsaPrivKey_set:1;
+    uint8_t Dhe_key_set:1;
+    uint8_t SharedSecret_set:1;
+    uint8_t EarlySecret_set:1;
+    uint8_t HandshakeSecret_set:1;
+    uint8_t HandshakeClientTrafficKey_set:1;
+    uint8_t HandshakeServerTrafficKey_set:1;
+    uint8_t HandshakeVerifiedData_set:1;
+    uint8_t MasterSecret_set:1;
+    uint8_t ServerTrafficSecret_set:1;
+    uint8_t ClientTrafficSecret_set:1;
+    uint8_t ServerWriteTrafficKey_set:1;
+    uint8_t ClientWriteTrafficKey_set:1;
     uint8_t session_key_set:1;
 
 
 } TsipUserCtx;
 
+typedef TsipUserCtx RenesasUserCtx;
 typedef TsipUserCtx user_PKCbInfo;
 
 typedef struct
@@ -171,6 +263,9 @@ typedef struct
     uint8_t *  iv;
     uint8_t *  encrypted_user_tls_key;
     uint32_t   encrypted_user_tls_key_type;
+    uint8_t *  encrypted_user_private_key;
+    uint32_t   encrypted_user_private_key_type;
+    tsip_ecc_private_key_index_t client_private_key_index;       
     tsip_tls_ca_certification_public_key_index_t  user_rsa2048_tls_pubindex;
 } tsip_key_data;
 
@@ -187,6 +282,8 @@ typedef struct
 
 struct Aes;
 struct WOLFSSL;
+struct WOLFSSL_CTX;
+struct wc_CryptoInfo;
 /*----------------------------------------------------*/
 /*   APIs                                             */
 /*----------------------------------------------------*/
@@ -197,7 +294,7 @@ WOLFSSL_API void tsip_set_callbacks(struct WOLFSSL_CTX* ctx);
 
 WOLFSSL_API int  tsip_set_callback_ctx(struct WOLFSSL* ssl, void* user_ctx);
 
-
+WOLFSSL_API int  tsip_set_clientPrivateKeyEnc(const byte* key, int keyType);
 
 #if (WOLFSSL_RENESAS_TSIP_VER >=109)
 
@@ -221,10 +318,79 @@ WOLFSSL_API void tsip_inform_user_keys(
 /*----------------------------------------------------*/
 /*   internal use functions                           */
 /*----------------------------------------------------*/
+#if (WOLFSSL_RENESAS_TSIP_VER >=115)
+#ifdef WOLF_CRYPTO_CB
+
+struct wc_CryptoInfo;
+
+WOLFSSL_LOCAL int tsip_TlsCleanup(struct WOLFSSL* ssl);
+
+WOLFSSL_LOCAL int tsip_StoreMessage(struct WOLFSSL* ssl, const byte* data,
+                                                         int sz);
+
+WOLFSSL_LOCAL int tsip_GetMessageSha256(struct WOLFSSL* ssl, byte* hash,
+                                                                int* sz);
+
+WOLFSSL_LOCAL int tsip_Tls13GetHmacMessages(struct WOLFSSL* ssl, byte* mac);
+
+WOLFSSL_LOCAL int tsip_Tls13GenEccKeyPair(struct WOLFSSL* ssl, 
+                                                struct KeyShareEntry* kse);
+
+WOLFSSL_LOCAL int tsip_Tls13GenSharedSecret(struct WOLFSSL* ssl,
+                                                struct KeyShareEntry* kse);
+
+WOLFSSL_LOCAL int tsip_Tls13DeriveEarlySecret(struct WOLFSSL* ssl);
+
+WOLFSSL_LOCAL int tsip_Tls13DeriveHandshakeSecret(struct WOLFSSL* ssl);
+
+WOLFSSL_LOCAL int tsip_Tls13DeriveKeys(struct WOLFSSL* ssl,
+                                                int keyType, int side);
+
+WOLFSSL_LOCAL int tsip_Tls13DeriveMasterSecret(struct WOLFSSL* ssl);
+
+WOLFSSL_LOCAL int tsip_Tls13DeriveHandshakeTrafficKeys(struct WOLFSSL* ssl);
+
+WOLFSSL_LOCAL int tsip_Tls13HandleFinished(struct WOLFSSL* ssl,
+                                           const byte*     input,
+                                           word32*         inOutIdx,
+                                           word32          size,
+                                           word32          totalSz);
+
+WOLFSSL_LOCAL int tsip_Tls13BuildMessage(struct WOLFSSL* ssl,
+                                         byte* output, int outSz,
+                                         const byte* input, int inSz,
+                                         int type,
+                                         int hashOutput);
+
+WOLFSSL_LOCAL int tsip_Tls13SendFinished(struct WOLFSSL* ssl,
+                                             byte*       output,
+                                             int         outSz,
+                                             const byte* input,
+                                             int         hashOutput);
+
+WOLFSSL_LOCAL int tsip_Tls13VerifyHandshake(struct WOLFSSL* ssl,
+                                               const byte* input, byte* hash,
+                                               word32* pHashSz);
+
+WOLFSSL_LOCAL int tsip_Tls13AesDecrypt(struct WOLFSSL* ssl, 
+                                    byte* output, const byte* input, word16 sz);
+
+WOLFSSL_LOCAL int tsip_Tls13AesEncrypt(struct WOLFSSL* ssl,
+                                    byte* output, const byte* input, word16 sz);
+
+WOLFSSL_LOCAL int tsip_Tls13CertificateVerify(struct WOLFSSL* ssl, 
+                                            const byte* input, word32* inOutIdx,
+                                            word32 totalSz);
+
+WOLFSSL_LOCAL int tsip_Tls13SendCertVerify(struct WOLFSSL*ssl);
+
+#endif /* WOLF_CRYPTO_CB */
+#endif /* WOLFSSL_RENESAS_TSIP_VER >=115 */
 
 
 #if (WOLFSSL_RENESAS_TSIP_VER >=109)
-
+WOLFSSL_LOCAL int wc_tsip_AesCipher(int devIdArg, struct wc_CryptoInfo* info, 
+                                                                    void* ctx);
 WOLFSSL_LOCAL int wc_tsip_generateMasterSecretEx(
         byte        cipherSuiteFirst,
         byte        cipherSuite,
@@ -241,27 +407,27 @@ WOLFSSL_LOCAL int wc_tsip_generateMasterSecret(
         const byte *sr,
         byte *ms);
 
-#endif
+#endif /* WOLFSSL_RENESAS_TSIP_VER */
 
 
 WOLFSSL_LOCAL int wc_tsip_storeKeyCtx(
-        struct WOLFSSL *ssl,
+        WOLFSSL *ssl,
         TsipUserCtx *userCtx);
 
 WOLFSSL_LOCAL int wc_tsip_generateEncryptPreMasterSecret(
-        struct WOLFSSL*  ssl,
+        WOLFSSL*  ssl,
         byte*       out,
         word32*     outSz);
 
 WOLFSSL_LOCAL int wc_tsip_EccSharedSecret(
-        struct WOLFSSL* ssl,
+        WOLFSSL* ssl,
         struct ecc_key* otherKey,
         unsigned char* pubKeyDer, unsigned int* pubKeySz,
         unsigned char* out, unsigned int* outlen,
         int side, void* ctx);
 
 WOLFSSL_LOCAL int wc_tsip_RsaVerify(
-        struct WOLFSSL* ssl,
+        WOLFSSL* ssl,
         byte* sig,
         word32 sigSz,
         byte** out,
@@ -270,7 +436,7 @@ WOLFSSL_LOCAL int wc_tsip_RsaVerify(
         void* ctx);
 
 WOLFSSL_LOCAL int wc_tsip_EccVerify(
-        struct WOLFSSL*  ssl, 
+        WOLFSSL*  ssl, 
         const byte* sig,    word32  sigSz,
         const byte* hash,   word32  hashSz,
         const byte* key,    word32  keySz,
@@ -283,19 +449,19 @@ WOLFSSL_LOCAL int wc_tsip_generateVerifyData(
         uint8_t*        hashes);
 
 WOLFSSL_LOCAL int wc_tsip_AesCbcEncrypt(
-        struct Aes* aes,
+        Aes* aes,
         byte*       out,
         const byte* in,
         word32      sz);
 
 WOLFSSL_LOCAL int wc_tsip_AesCbcDecrypt(
-        struct Aes* aes,
+        Aes* aes,
         byte*       out,
         const byte* in,
         word32      sz);
  
 WOLFSSL_LOCAL int wc_tsip_AesGcmEncrypt(
-        struct Aes* aes, byte* out,
+        Aes* aes, byte* out,
         const byte* in, word32 sz,
               byte* iv, word32 ivSz,
               byte* authTag, word32 authTagSz,
@@ -303,7 +469,7 @@ WOLFSSL_LOCAL int wc_tsip_AesGcmEncrypt(
         void* ctx);
             
 WOLFSSL_LOCAL int wc_tsip_AesGcmDecrypt(
-        struct Aes* aes, byte* out,
+        Aes* aes, byte* out,
         const byte* in, word32 sz,
         const byte* iv, word32 ivSz,
         const byte* authTag, word32 authTagSz,
@@ -311,14 +477,14 @@ WOLFSSL_LOCAL int wc_tsip_AesGcmDecrypt(
         void* ctx);
 
 WOLFSSL_LOCAL int wc_tsip_ShaXHmacVerify(
-        const struct WOLFSSL *ssl,
+        const WOLFSSL *ssl,
         const byte* message, 
         word32      messageSz,
         word32      macSz,
         word32      content);
 
 WOLFSSL_LOCAL int wc_tsip_Sha1HmacGenerate(
-        const struct WOLFSSL *ssl,
+        const WOLFSSL *ssl,
         const byte* myInner, 
         word32      innerSz,
         const byte* in,
@@ -326,7 +492,7 @@ WOLFSSL_LOCAL int wc_tsip_Sha1HmacGenerate(
         byte*       digest);
 
 WOLFSSL_LOCAL int wc_tsip_Sha256HmacGenerate(
-        const struct WOLFSSL *ssl,
+        const WOLFSSL *ssl,
         const byte* myInner,
         word32      innerSz,
         const byte* in,
@@ -341,7 +507,7 @@ WOLFSSL_LOCAL int  tsip_hw_lock();
 
 WOLFSSL_LOCAL void tsip_hw_unlock( void );
 
-WOLFSSL_LOCAL int  tsip_usable(const struct WOLFSSL *ssl,
+WOLFSSL_LOCAL int  tsip_usable(const WOLFSSL *ssl,
                                 uint8_t session_key_generated);
 
 WOLFSSL_LOCAL void tsip_inform_sflash_signedcacert(
@@ -371,7 +537,7 @@ WOLFSSL_LOCAL int  wc_tsip_generatePremasterSecret(
         word32  preSz);
 
 WOLFSSL_LOCAL int  wc_tsip_generateSessionKey(
-        struct WOLFSSL* ssl,
+        WOLFSSL* ssl,
         TsipUserCtx*    ctx,
         int             devId);
 

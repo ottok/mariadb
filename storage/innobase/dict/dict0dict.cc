@@ -2,7 +2,7 @@
 
 Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2012, Facebook Inc.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -921,12 +921,14 @@ template dict_table_t*
 dict_acquire_mdl_shared<true>(dict_table_t*,THD*,MDL_ticket**,dict_table_op_t);
 
 /** Look up a table by numeric identifier.
+@tparam purge_thd Whether the function is called by purge thread
 @param[in]      table_id        table identifier
 @param[in]      dict_locked     data dictionary locked
 @param[in]      table_op        operation to perform when opening
 @param[in,out]  thd             background thread, or NULL to not acquire MDL
 @param[out]     mdl             mdl ticket, or NULL
 @return table, NULL if does not exist */
+template<bool purge_thd>
 dict_table_t*
 dict_table_open_on_id(table_id_t table_id, bool dict_locked,
                       dict_table_op_t table_op, THD *thd,
@@ -948,6 +950,10 @@ dict_table_open_on_id(table_id_t table_id, bool dict_locked,
 		table_op == DICT_TABLE_OP_OPEN_ONLY_IF_CACHED);
 
 	if (table != NULL) {
+		if (purge_thd && table->name.is_temporary()) {
+			mutex_exit(&dict_sys.mutex);
+			return nullptr;
+		}
 		dict_sys.acquire(table);
 		MONITOR_INC(MONITOR_TABLE_REFERENCE);
 	}
@@ -964,6 +970,11 @@ dict_table_open_on_id(table_id_t table_id, bool dict_locked,
 
 	return table;
 }
+
+template dict_table_t* dict_table_open_on_id<false>
+(table_id_t, bool, dict_table_op_t, THD *, MDL_ticket **);
+template dict_table_t* dict_table_open_on_id<true>
+(table_id_t, bool, dict_table_op_t, THD *, MDL_ticket **);
 
 /********************************************************************//**
 Looks for column n position in the clustered index.
@@ -1428,45 +1439,6 @@ dict_table_find_index_on_id(
 	return(NULL);
 }
 
-/**********************************************************************//**
-Looks for an index with the given id. NOTE that we do not reserve
-the dictionary mutex: this function is for emergency purposes like
-printing info of a corrupt database page!
-@return index or NULL if not found in cache */
-dict_index_t*
-dict_index_find_on_id_low(
-/*======================*/
-	index_id_t	id)	/*!< in: index id */
-{
-	if (!dict_sys.is_initialised()) return NULL;
-
-	dict_table_t*	table;
-
-	for (table = UT_LIST_GET_FIRST(dict_sys.table_LRU);
-	     table != NULL;
-	     table = UT_LIST_GET_NEXT(table_LRU, table)) {
-
-		dict_index_t*	index = dict_table_find_index_on_id(table, id);
-
-		if (index != NULL) {
-			return(index);
-		}
-	}
-
-	for (table = UT_LIST_GET_FIRST(dict_sys.table_non_LRU);
-	     table != NULL;
-	     table = UT_LIST_GET_NEXT(table_LRU, table)) {
-
-		dict_index_t*	index = dict_table_find_index_on_id(table, id);
-
-		if (index != NULL) {
-			return(index);
-		}
-	}
-
-	return(NULL);
-}
-
 /** Function object to remove a foreign key constraint from the
 referenced_set of the referenced table.  The foreign key object is
 also removed from the dictionary cache.  The foreign key constraint
@@ -1710,7 +1682,7 @@ dict_table_rename_in_cache(
 			in UTF-8 charset.  The variable fkid here is used
 			to store foreign key constraint name in charset
 			my_charset_filename for comparison further below. */
-			char    fkid[MAX_TABLE_NAME_LEN+20];
+			char    fkid[MAX_TABLE_NAME_LEN * 2 + 20];
 			ibool	on_tmp = FALSE;
 
 			/* The old table name in my_charset_filename is stored
@@ -1744,7 +1716,8 @@ dict_table_rename_in_cache(
 				}
 			}
 
-			strncpy(fkid, foreign->id, MAX_TABLE_NAME_LEN);
+			strncpy(fkid, foreign->id, (sizeof fkid) - 1);
+			fkid[(sizeof fkid) - 1] = '\0';
 
 			if (strstr(fkid, TEMP_TABLE_PATH_PREFIX) == NULL) {
 				innobase_convert_to_filename_charset(
@@ -2784,7 +2757,7 @@ dict_index_build_internal_fts(
 {
 	dict_index_t*	new_index;
 
-	ut_ad(index->type == DICT_FTS);
+	ut_ad(index->type & DICT_FTS);
 	ut_ad(mutex_own(&dict_sys.mutex));
 
 	/* Create a new index */
@@ -3583,10 +3556,11 @@ dict_table_get_highest_foreign_id(
 	for (dict_foreign_set::iterator it = table->foreign_set.begin();
 	     it != table->foreign_set.end();
 	     ++it) {
-		char    fkid[MAX_TABLE_NAME_LEN+20];
+		char    fkid[MAX_TABLE_NAME_LEN * 2 + 20];
 		foreign = *it;
 
-		strcpy(fkid, foreign->id);
+		strncpy(fkid, foreign->id, (sizeof fkid) - 1);
+		fkid[(sizeof fkid) - 1] = '\0';
 		/* Convert foreign key identifier on dictionary memory
 		cache to filename charset. */
 		innobase_convert_to_filename_charset(
@@ -3768,9 +3742,19 @@ dict_index_get_if_in_cache_low(
 /*===========================*/
 	index_id_t	index_id)	/*!< in: index id */
 {
-	ut_ad(mutex_own(&dict_sys.mutex));
+  ut_ad(mutex_own(&dict_sys.mutex));
 
-	return(dict_index_find_on_id_low(index_id));
+  for (dict_table_t *table= UT_LIST_GET_FIRST(dict_sys.table_LRU);
+       table; table= UT_LIST_GET_NEXT(table_LRU, table))
+    if (dict_index_t *index= dict_table_find_index_on_id(table, index_id))
+      return index;
+
+  for (dict_table_t *table = UT_LIST_GET_FIRST(dict_sys.table_non_LRU);
+       table; table= UT_LIST_GET_NEXT(table_LRU, table))
+    if (dict_index_t *index= dict_table_find_index_on_id(table, index_id))
+      return index;
+
+  return nullptr;
 }
 
 #ifdef UNIV_DEBUG
@@ -4292,7 +4276,7 @@ dict_set_corrupted(
 
 	btr_cur_search_to_nth_level(sys_index, 0, tuple, PAGE_CUR_LE,
 				    BTR_MODIFY_LEAF,
-				    &cursor, 0, __FILE__, __LINE__, &mtr);
+				    &cursor, __FILE__, __LINE__, &mtr);
 
 	if (cursor.low_match == dtuple_get_n_fields(tuple)) {
 		/* UPDATE SYS_INDEXES SET TYPE=index->type
@@ -4394,7 +4378,7 @@ dict_index_set_merge_threshold(
 
 	btr_cur_search_to_nth_level(sys_index, 0, tuple, PAGE_CUR_GE,
 				    BTR_MODIFY_LEAF,
-				    &cursor, 0, __FILE__, __LINE__, &mtr);
+				    &cursor, __FILE__, __LINE__, &mtr);
 
 	if (cursor.up_match == dtuple_get_n_fields(tuple)
 	    && rec_get_n_fields_old(btr_cur_get_rec(&cursor))

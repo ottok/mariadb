@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2016, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2021, MariaDB Corporation
+   Copyright (c) 2010, 2022, MariaDB Corporation
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -95,8 +95,8 @@ pthread_handler_t handle_delayed_insert(void *arg);
 static void unlink_blobs(TABLE *table);
 #endif
 static bool check_view_insertability(THD *thd, TABLE_LIST *view);
-static int binlog_show_create_table(THD *thd, TABLE *table,
-                                    Table_specification_st *create_info);
+static int binlog_show_create_table_(THD *thd, TABLE *table,
+                                     Table_specification_st *create_info);
 
 /*
   Check that insert/update fields are from the same single table of a view.
@@ -991,7 +991,12 @@ bool mysql_insert(THD *thd, TABLE_LIST *table_list,
     goto values_loop_end;
 
   THD_STAGE_INFO(thd, stage_update);
-  thd->decide_logging_format_low(table);
+
+  if  (duplic == DUP_UPDATE)
+  {
+    restore_record(table,s->default_values);	// Get empty record
+    thd->reconsider_logging_format_for_iodup(table);
+  }
   do
   {
     DBUG_PRINT("info", ("iteration %llu", iteration));
@@ -1335,8 +1340,12 @@ values_loop_end:
     thd->lex->current_select->save_leaf_tables(thd);
     thd->lex->current_select->first_cond_optimization= 0;
   }
-  if (readbuff)
-    my_free(readbuff);
+
+  my_free(readbuff);
+#ifndef EMBEDDED_LIBRARY
+  if (lock_type == TL_WRITE_DELAYED && table->expr_arena)
+    table->expr_arena->free_items();
+#endif
   DBUG_RETURN(FALSE);
 
 abort:
@@ -1353,6 +1362,8 @@ abort:
     */
     for (Field **ptr= table_list->table->field ; *ptr ; ptr++)
       (*ptr)->free();
+    if (table_list->table->expr_arena)
+      table_list->table->expr_arena->free_items();
   }
 #endif
   if (table != NULL)
@@ -1531,8 +1542,7 @@ static bool mysql_prepare_insert_check_table(THD *thd, TABLE_LIST *table_list,
   if (insert_into_view && !fields.elements)
   {
     thd->lex->empty_field_list_on_rset= 1;
-    if (!thd->lex->first_select_lex()->leaf_tables.head()->table ||
-        table_list->is_multitable())
+    if (!table_list->table || table_list->is_multitable())
     {
       my_error(ER_VIEW_NO_INSERT_FIELD_LIST, MYF(0),
                table_list->view_db.str, table_list->view_name.str);
@@ -3773,7 +3783,6 @@ int mysql_insert_select_prepare(THD *thd, select_result *sel_res)
   if (sel_res)
     sel_res->prepare(lex->returning()->item_list, NULL);
 
-  DBUG_ASSERT(select_lex->leaf_tables.elements != 0);
   List_iterator<TABLE_LIST> ti(select_lex->leaf_tables);
   TABLE_LIST *table;
   uint insert_tables;
@@ -4074,9 +4083,7 @@ int select_insert::send_data(List<Item> &values)
   bool error=0;
 
   thd->count_cuted_fields= CHECK_FIELD_WARN;	// Calculate cuted fields
-  store_values(values);
-  if (table->default_field &&
-      unlikely(table->update_default_fields(info.ignore)))
+  if (store_values(values, info.ignore))
     DBUG_RETURN(1);
   thd->count_cuted_fields= CHECK_FIELD_ERROR_FOR_NULL;
   if (unlikely(thd->is_error()))
@@ -4134,18 +4141,19 @@ int select_insert::send_data(List<Item> &values)
 }
 
 
-void select_insert::store_values(List<Item> &values)
+bool select_insert::store_values(List<Item> &values, bool ignore_errors)
 {
   DBUG_ENTER("select_insert::store_values");
+  bool error;
 
   if (fields->elements)
-    fill_record_n_invoke_before_triggers(thd, table, *fields, values, 1,
-                                         TRG_EVENT_INSERT);
+    error= fill_record_n_invoke_before_triggers(thd, table, *fields, values,
+                                                ignore_errors, TRG_EVENT_INSERT);
   else
-    fill_record_n_invoke_before_triggers(thd, table, table->field_to_fill(),
-                                         values, 1, TRG_EVENT_INSERT);
+    error= fill_record_n_invoke_before_triggers(thd, table, table->field_to_fill(),
+                                                values, ignore_errors, TRG_EVENT_INSERT);
 
-  DBUG_VOID_RETURN;
+  DBUG_RETURN(error);
 }
 
 bool select_insert::prepare_eof()
@@ -4423,7 +4431,7 @@ TABLE *select_create::create_table_from_items(THD *thd, List<Item> *items,
   tmp_table.maybe_null= 0;
   tmp_table.in_use= thd;
 
-  if (!opt_explicit_defaults_for_timestamp)
+  if (!(thd->variables.option_bits & OPTION_EXPLICIT_DEF_TIMESTAMP))
     promote_first_timestamp_column(&alter_info->create_list);
 
   if (create_info->fix_create_fields(thd, alter_info, *create_table))
@@ -4465,6 +4473,16 @@ TABLE *select_create::create_table_from_items(THD *thd, List<Item> *items,
       cr_field->flags &= ~NOT_NULL_FLAG;
     alter_info->create_list.push_back(cr_field, thd->mem_root);
   }
+
+  /*
+    Item*::type_handler() always returns pointers to
+    type_handler_{time2|datetime2|timestamp2} no matter what
+    the current mysql56_temporal_format says.
+    Let's convert them according to mysql56_temporal_format.
+    QQ: This perhaps should eventually be fixed to have Item*::type_handler()
+    respect mysql56_temporal_format, and remove the upgrade from here.
+  */
+  Create_field::upgrade_data_types(alter_info->create_list);
 
   if (create_info->check_fields(thd, alter_info,
                                 create_table->table_name,
@@ -4673,7 +4691,7 @@ select_create::prepare(List<Item> &_values, SELECT_LEX_UNIT *u)
       TABLE const *const table = *tables;
       if (thd->is_current_stmt_binlog_format_row() &&
           !table->s->tmp_table)
-        return binlog_show_create_table(thd, *tables, ptr->create_info);
+        return binlog_show_create_table_(thd, *tables, ptr->create_info);
       return 0;
     }
     select_create *ptr;
@@ -4787,8 +4805,8 @@ select_create::prepare(List<Item> &_values, SELECT_LEX_UNIT *u)
 }
 
 
-static int binlog_show_create_table(THD *thd, TABLE *table,
-                                    Table_specification_st *create_info)
+static int binlog_show_create_table_(THD *thd, TABLE *table,
+                                     Table_specification_st *create_info)
 {
   /*
     Note 1: In RBR mode, we generate a CREATE TABLE statement for the
@@ -4881,7 +4899,7 @@ bool binlog_create_table(THD *thd, TABLE *table, bool replace)
                              HA_CREATE_USED_DEFAULT_CHARSET);
   /* Ensure we write all engine options to binary log */
   create_info.used_fields|= HA_CREATE_PRINT_ALL_OPTIONS;
-  result= binlog_show_create_table(thd, table, &create_info) != 0;
+  result= binlog_show_create_table_(thd, table, &create_info) != 0;
   thd->variables.option_bits= save_option_bits;
   return result;
 }
@@ -4923,10 +4941,10 @@ bool binlog_drop_table(THD *thd, TABLE *table)
 }
 
 
-void select_create::store_values(List<Item> &values)
+bool select_create::store_values(List<Item> &values, bool ignore_errors)
 {
-  fill_record_n_invoke_before_triggers(thd, table, field, values, 1,
-                                       TRG_EVENT_INSERT);
+  return fill_record_n_invoke_before_triggers(thd, table, field, values,
+                                              ignore_errors, TRG_EVENT_INSERT);
 }
 
 

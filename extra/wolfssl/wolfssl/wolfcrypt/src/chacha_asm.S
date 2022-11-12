@@ -1,6 +1,6 @@
 /* chacha_asm
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -18,6 +18,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+
+#ifdef WOLFSSL_USER_SETTINGS
+#include "wolfssl/wolfcrypt/settings.h"
+#endif
 
 #ifndef HAVE_INTEL_AVX1
 #define HAVE_INTEL_AVX1

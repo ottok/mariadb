@@ -1,4 +1,4 @@
-/* Copyright (C) 2013-2021 Codership Oy <info@codership.com>
+/* Copyright (C) 2013-2022 Codership Oy <info@codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
 #include "wsrep_trans_observer.h"
 #include "wsrep_high_priority_service.h"
 #include "wsrep_storage_service.h"
+#include "wsrep_server_state.h"
 #include "transaction.h"
 #include "rpl_rli.h"
 #include "log_event.h"
@@ -347,6 +348,7 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
   mysql_mutex_assert_owner(&victim_thd->LOCK_thd_data);
   mysql_mutex_assert_owner(&victim_thd->LOCK_thd_kill);
 
+#ifdef ENABLED_DEBUG_SYNC
   DBUG_EXECUTE_IF("sync.wsrep_bf_abort",
                   {
                     const char act[]=
@@ -356,6 +358,7 @@ bool wsrep_bf_abort(THD* bf_thd, THD* victim_thd)
                     DBUG_ASSERT(!debug_sync_set_action(bf_thd,
                                                        STRING_WITH_LEN(act)));
                   };);
+#endif
 
   if (WSREP(victim_thd) && !victim_thd->wsrep_trx().active())
   {

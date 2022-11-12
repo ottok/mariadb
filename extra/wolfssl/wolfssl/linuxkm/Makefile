@@ -1,6 +1,6 @@
 # libwolfssl Linux kernel module Makefile (wraps Kbuild-native makefile)
 #
-# Copyright (C) 2006-2021 wolfSSL Inc.
+# Copyright (C) 2006-2022 wolfSSL Inc.
 #
 # This file is part of wolfSSL.
 #
@@ -17,7 +17,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
-#/
 
 SHELL=/bin/bash
 
@@ -62,9 +61,9 @@ libwolfssl.ko:
 	@mkdir -p linuxkm src wolfcrypt/src wolfcrypt/test
 	@if test ! -h $(SRC_TOP)/Kbuild; then ln -s $(MODULE_TOP)/Kbuild $(SRC_TOP)/Kbuild; fi
 ifeq "$(ENABLED_LINUXKM_PIE)" "yes"
-	+$(MAKE) -C $(KERNEL_ROOT) M=$(MODULE_TOP) src=$(SRC_TOP) CC_FLAGS_FTRACE=
+	+$(MAKE) -C $(KERNEL_ROOT) M=$(MODULE_TOP) src=$(SRC_TOP) $(KBUILD_EXTRA_FLAGS) CC_FLAGS_FTRACE=
 else
-	+$(MAKE) -C $(KERNEL_ROOT) M=$(MODULE_TOP) src=$(SRC_TOP)
+	+$(MAKE) -C $(KERNEL_ROOT) M=$(MODULE_TOP) src=$(SRC_TOP) $(KBUILD_EXTRA_FLAGS)
 endif
 
 libwolfssl.ko.signed: libwolfssl.ko

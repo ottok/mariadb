@@ -300,6 +300,50 @@ struct ReleaseAll {
   }
 };
 
+/** Stops iteration is savepoint is reached */
+template <typename Functor> struct TillSavepoint
+{
+
+  /** Constructor
+  @param[in] functor functor which is called if savepoint is not reached
+  @param[in] savepoint savepoint value to rollback
+  @param[in] used current position in slots container */
+  TillSavepoint(const Functor &functor, ulint savepoint, ulint used)
+      : functor(functor),
+        m_slots_count((used - savepoint) / sizeof(mtr_memo_slot_t))
+  {
+    ut_ad(savepoint);
+    ut_ad(used >= savepoint);
+  }
+
+  /** @return true if savepoint is not reached, false otherwise */
+  bool operator()(mtr_memo_slot_t *slot)
+  {
+#ifdef UNIV_DEBUG
+    /** This check is added because the code is invoked only from
+    row_search_mvcc() to release latches acquired during clustered index search
+    for secondary index record. To make it more universal we could add one more
+    member in this functor for debug build to pass only certain slot types,
+    but this is currently not necessary. */
+    switch (slot->type)
+    {
+    case MTR_MEMO_S_LOCK:
+    case MTR_MEMO_PAGE_S_FIX:
+      break;
+    default:
+      ut_a(false);
+    }
+#endif
+    return m_slots_count-- && functor(slot);
+  }
+
+private:
+  /** functor to invoke */
+  const Functor &functor;
+  /** slots count left till savepoint */
+  ulint m_slots_count;
+};
+
 #ifdef UNIV_DEBUG
 /** Check that all slots have been handled. */
 struct DebugCheck {
@@ -316,22 +360,10 @@ struct DebugCheck {
 struct ReleaseBlocks
 {
   const lsn_t start, end;
-#ifdef UNIV_DEBUG
-  const mtr_buf_t &memo;
-
-  ReleaseBlocks(lsn_t start, lsn_t end, const mtr_buf_t &memo) :
-    start(start), end(end), memo(memo)
-#else /* UNIV_DEBUG */
-  ReleaseBlocks(lsn_t start, lsn_t end, const mtr_buf_t&) :
-    start(start), end(end)
-#endif /* UNIV_DEBUG */
-  {
-    ut_ad(start);
-    ut_ad(end);
-  }
+  ReleaseBlocks(lsn_t start, lsn_t end) : start(start), end(end) {}
 
   /** @return true always */
-  bool operator()(mtr_memo_slot_t* slot) const
+  bool operator()(mtr_memo_slot_t *slot) const
   {
     if (!slot->object)
       return true;
@@ -448,9 +480,8 @@ void mtr_t::commit()
     else
       ut_ad(!m_freed_space);
 
-    m_memo.for_each_block_in_reverse(CIterate<const ReleaseBlocks>
-                                     (ReleaseBlocks(lsns.first, m_commit_lsn,
-                                                    m_memo)));
+    m_memo.for_each_block_in_reverse
+      (CIterate<const ReleaseBlocks>(ReleaseBlocks(lsns.first, m_commit_lsn)));
     if (m_made_dirty)
       mysql_mutex_unlock(&log_sys.flush_order_mutex);
 
@@ -466,6 +497,21 @@ void mtr_t::commit()
     m_memo.for_each_block_in_reverse(CIterate<ReleaseAll>());
 
   release_resources();
+}
+
+/** Release latches till savepoint. To simplify the code only
+MTR_MEMO_S_LOCK and MTR_MEMO_PAGE_S_FIX slot types are allowed to be
+released, otherwise it would be neccesary to add one more argument in the
+function to point out what slot types are allowed for rollback, and this
+would be overengineering as corrently the function is used only in one place
+in the code.
+@param savepoint   savepoint, can be obtained with get_savepoint */
+void mtr_t::rollback_to_savepoint(ulint savepoint)
+{
+  Iterate<TillSavepoint<ReleaseLatches>> iteration(
+      TillSavepoint<ReleaseLatches>(ReleaseLatches(), savepoint,
+                                    get_savepoint()));
+  m_memo.for_each_block_in_reverse(iteration);
 }
 
 /** Shrink a tablespace. */
@@ -556,8 +602,7 @@ void mtr_t::commit_shrink(fil_space_t &space)
   m_memo.for_each_block_in_reverse(CIterate<Shrink>{space});
 
   m_memo.for_each_block_in_reverse(CIterate<const ReleaseBlocks>
-                                   (ReleaseBlocks(start_lsn, m_commit_lsn,
-                                                  m_memo)));
+                                   (ReleaseBlocks(start_lsn, m_commit_lsn)));
   mysql_mutex_unlock(&log_sys.flush_order_mutex);
 
   mutex_enter(&fil_system.mutex);
@@ -1179,16 +1224,6 @@ mtr_t::memo_contains_page_flagged(
 	return m_memo.for_each_block_in_reverse(iteration)
 		? NULL : iteration.functor.get_block();
 }
-
-/** Print info of an mtr handle. */
-void
-mtr_t::print() const
-{
-	ib::info() << "Mini-transaction handle: memo size "
-		<< m_memo.size() << " bytes log size "
-		<< get_log()->size() << " bytes";
-}
-
 #endif /* UNIV_DEBUG */
 
 
@@ -1228,4 +1263,6 @@ void mtr_t::modify(const buf_block_t &block)
   }
   iteration.functor.found->type= static_cast<mtr_memo_type_t>
     (iteration.functor.found->type | MTR_MEMO_MODIFY);
+  if (is_block_dirtied(&block))
+    m_made_dirty= true;
 }

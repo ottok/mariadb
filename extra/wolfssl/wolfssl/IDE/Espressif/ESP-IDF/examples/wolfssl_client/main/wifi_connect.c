@@ -1,6 +1,6 @@
 /* wifi_connect.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -54,7 +54,7 @@ static void set_time()
     /* please update the time if seeing unknown failure when loading cert.  */
     /* this could cause TLS communication failure due to time expiration    */
     /* incleasing 31536000 seconds is close to spend 356 days.              */
-    utctime.tv_sec = 1619650800; /* dummy time: Wed April 28 23:00:00 2021 */
+    utctime.tv_sec = 1645797600; /* dummy time: Fri 25 Feb 2022 02:00:00 2022 */
     utctime.tv_usec = 0;
     tz.tz_minuteswest = 0;
     tz.tz_dsttime = 0;
@@ -102,8 +102,13 @@ static esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
         esp_wifi_connect();
         break;
     case SYSTEM_EVENT_STA_GOT_IP:
+    #if ESP_IDF_VERSION_MAJOR >= 4
+        ESP_LOGI(TAG, "got ip:" IPSTR "\n",
+                 IP2STR(&event->event_info.got_ip.ip_info.ip));
+    #else
         ESP_LOGI(TAG, "got ip:%s",
                  ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+    #endif
         /* http://esp32.info/docs/esp_idf/html/dd/d08/group__xEventGroupSetBits.html */
         xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
         break;
@@ -123,7 +128,8 @@ void app_main(void)
     ESP_ERROR_CHECK(nvs_flash_init());
 
     ESP_LOGI(TAG, "Initialize wifi");
-#if ESP_IDF_VERSION_MAJOR >= 4 && ESP_IDF_VERSION_MINOR >= 1
+#if (ESP_IDF_VERSION_MAJOR >= 4 && ESP_IDF_VERSION_MINOR >= 1) || \
+    (ESP_IDF_VERSION_MAJOR > 5)
     esp_netif_init();
 #else
     tcpip_adapter_init();

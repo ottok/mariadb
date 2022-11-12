@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2000, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -104,8 +104,6 @@ public:
 	double scan_time() override;
 
 	double read_time(uint index, uint ranges, ha_rows rows) override;
-
-	int delete_all_rows() override;
 
 	int write_row(const uchar * buf) override;
 
@@ -242,7 +240,6 @@ public:
 		ulonglong		nb_desired_values,
 		ulonglong*		first_value,
 		ulonglong*		nb_reserved_values) override;
-	int reset_auto_increment(ulonglong value) override;
 
 	bool get_error_message(int error, String *buf) override;
 
@@ -450,7 +447,6 @@ protected:
 	dberr_t innobase_lock_autoinc();
 	ulonglong innobase_peek_autoinc();
 	dberr_t innobase_set_max_autoinc(ulonglong auto_inc);
-	dberr_t innobase_reset_autoinc(ulonglong auto_inc);
 
 	/** Resets a query execution 'template'.
 	@see build_template() */
@@ -461,6 +457,10 @@ protected:
 
 	int general_fetch(uchar* buf, uint direction, uint match_mode);
 	int change_active_index(uint keynr);
+	/* @return true if it's necessary to switch current statement log
+	format from STATEMENT to ROW if binary log format is MIXED and
+	autoincrement values are changed in the statement */
+	bool autoinc_lock_mode_stmt_unsafe() const override;
 	dict_index_t* innobase_get_index(uint keynr);
 
 #ifdef WITH_WSREP
@@ -574,9 +574,6 @@ bool thd_is_strict_mode(const MYSQL_THD thd);
 extern void mysql_bin_log_commit_pos(THD *thd, ulonglong *out_pos, const char **out_file);
 
 struct trx_t;
-#ifdef WITH_WSREP
-#include <mysql/service_wsrep.h>
-#endif /* WITH_WSREP */
 
 extern const struct _ft_vft ft_vft_result;
 

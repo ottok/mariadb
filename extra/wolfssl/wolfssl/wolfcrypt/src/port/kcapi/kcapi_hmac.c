@@ -1,6 +1,6 @@
 /* kcapi_hmac.c
  *
- * Copyright (C) 2006-2020 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -26,7 +26,7 @@
 
 #include <wolfssl/wolfcrypt/settings.h>
 
-#if defined(WOLFSSL_KCAPI_HMAC)
+#if defined(WOLFSSL_KCAPI_HMAC) && !defined(NO_HMAC)
 
 #define FIPS_NO_WRAPPERS
 
@@ -102,7 +102,7 @@ int wc_HmacSetKey(Hmac* hmac, int type, const byte* key, word32 length)
     const char* ciphername = NULL;
 
     if ((hmac == NULL || (key == NULL && length != 0))) {
-        ret = BAD_FUNC_ARG;
+        return BAD_FUNC_ARG;
     }
 
 #ifdef HAVE_FIPS
@@ -183,7 +183,7 @@ int wc_HmacSetKey(Hmac* hmac, int type, const byte* key, word32 length)
         hmac->macType = type;
     }
 
-    if (ret == 0 && hmac->handle == NULL) {
+    if (hmac->handle != NULL) {
         kcapi_md_destroy(hmac->handle);
         hmac->handle = NULL;
     }
@@ -234,7 +234,7 @@ int wc_HmacUpdate(Hmac* hmac, const byte* msg, word32 length)
             ret = wc_HmacUpdate_Software(hmac, msg, length);
             break;
         default:
-            ret = kcapi_md_update(hmac->handle, msg, length);
+            ret = (int)kcapi_md_update(hmac->handle, msg, length);
             if (ret >= 0) {
                 ret = 0;
             }
@@ -325,7 +325,7 @@ int wc_HmacFinal(Hmac* hmac, byte* hash)
                 return wc_HmacFinal_Software(hmac, hash);
         #endif
         }
-        ret = kcapi_md_final(hmac->handle, hash, len);
+        ret = (int)kcapi_md_final(hmac->handle, hash, len);
     }
     if (ret >= 0) {
         ret = 0;
@@ -334,5 +334,4 @@ int wc_HmacFinal(Hmac* hmac, byte* hash)
     return ret;
 }
 
-#endif /* WOLFSSL_KCAPI_HMAC */
-
+#endif /* WOLFSSL_KCAPI_HMAC && !NO_HMAC */

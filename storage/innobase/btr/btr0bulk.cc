@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2014, 2019, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2021, MariaDB Corporation.
+Copyright (c) 2017, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -362,7 +362,6 @@ inline void PageBulk::finishPage()
   ut_ad((fmt != REDUNDANT) == m_is_comp);
 
   ulint count= 0;
-  ulint n_recs= 0;
   byte *slot= my_assume_aligned<2>(m_page + srv_page_size -
                                    (PAGE_DIR + PAGE_DIR_SLOT_SIZE));
   const page_dir_slot_t *const slot0 = slot;
@@ -378,7 +377,6 @@ inline void PageBulk::finishPage()
       ut_ad(offset >= PAGE_NEW_SUPREMUM);
       ut_ad(offset < page_offset(slot));
       count++;
-      n_recs++;
 
       if (count == (PAGE_DIR_SLOT_MAX_N_OWNED + 1) / 2)
       {
@@ -432,7 +430,6 @@ inline void PageBulk::finishPage()
     while (insert_rec != m_page + PAGE_OLD_SUPREMUM)
     {
       count++;
-      n_recs++;
 
       if (count == (PAGE_DIR_SLOT_MAX_N_OWNED + 1) / 2)
       {
@@ -755,6 +752,11 @@ bool
 PageBulk::isSpaceAvailable(
 	ulint		rec_size)
 {
+	if (m_rec_no >= 8190) {
+		ut_ad(srv_page_size == 65536);
+		return false;
+	}
+
 	ulint	slot_size;
 	ulint	required_space;
 
@@ -819,14 +821,6 @@ PageBulk::storeExt(
 
 	dberr_t	err = btr_store_big_rec_extern_fields(
 		&btr_pcur, offsets, big_rec, &m_mtr, BTR_STORE_INSERT_BULK);
-
-	/* Reset m_block and m_cur_rec from page cursor, because
-	block may be changed during blob insert. (FIXME: Can it really?) */
-	ut_ad(m_block == btr_pcur.btr_cur.page_cur.block);
-
-	m_block = btr_pcur.btr_cur.page_cur.block;
-	m_cur_rec = btr_pcur.btr_cur.page_cur.rec;
-	m_page = buf_block_get_frame(m_block);
 
 	return(err);
 }

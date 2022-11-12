@@ -1,6 +1,6 @@
 /* pkcs12.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -27,7 +27,8 @@
 
 #include <wolfssl/wolfcrypt/settings.h>
 
-#if !defined(NO_ASN) && !defined(NO_PWDBASED) && defined(HAVE_PKCS12)
+#if defined(HAVE_PKCS12) && \
+    !defined(NO_ASN) && !defined(NO_PWDBASED) && !defined(NO_HMAC)
 
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/asn_public.h>
@@ -188,7 +189,6 @@ void wc_PKCS12_free(WC_PKCS12* pkcs12)
     }
 
     XFREE(pkcs12, NULL, DYNAMIC_TYPE_PKCS);
-    pkcs12 = NULL;
 }
 
 
@@ -512,7 +512,7 @@ static int wc_PKCS12_create_mac(WC_PKCS12* pkcs12, byte* data, word32 dataSz,
     int id  = 3; /* value from RFC 7292 indicating key is used for MAC */
     word32 i;
     byte unicodePasswd[MAX_UNICODE_SZ];
-    byte key[MAX_KEY_SIZE];
+    byte key[PKCS_MAX_KEY_SIZE];
 
     if (pkcs12 == NULL || pkcs12->signData == NULL || data == NULL ||
             out == NULL) {
@@ -668,6 +668,7 @@ int wc_d2i_PKCS12(const byte* der, word32 derSz, WC_PKCS12* pkcs12)
 
     if (version != WC_PKCS12_VERSION_DEFAULT) {
         WOLFSSL_MSG("PKCS12 unsupported version!");
+        WOLFSSL_ERROR_VERBOSE(ASN_VERSION_E);
         return ASN_VERSION_E;
     }
 
@@ -1012,18 +1013,25 @@ void wc_FreeCertList(WC_DerCertList* list, void* heap)
     (void)heap;
 }
 
-static void freeDecCertList(WC_DerCertList** list, byte** pkey, word32* pkeySz,
-    byte** cert, word32* certSz, void* heap)
+static WARN_UNUSED_RESULT int freeDecCertList(WC_DerCertList** list,
+    byte** pkey, word32* pkeySz, byte** cert, word32* certSz, void* heap)
 {
     WC_DerCertList* current  = *list;
     WC_DerCertList* previous = NULL;
-    DecodedCert DeCert;
+#ifdef WOLFSSL_SMALL_STACK
+    DecodedCert *DeCert = (DecodedCert *)XMALLOC(
+        sizeof(*DeCert), heap, DYNAMIC_TYPE_PKCS);
+    if (DeCert == NULL)
+        return MEMORY_E;
+#else
+    DecodedCert DeCert[1];
+#endif
 
     while (current != NULL) {
 
-        InitDecodedCert(&DeCert, current->buffer, current->bufferSz, heap);
-        if (ParseCertRelative(&DeCert, CERT_TYPE, NO_VERIFY, NULL) == 0) {
-            if (wc_CheckPrivateKeyCert(*pkey, *pkeySz, &DeCert) == 1) {
+        InitDecodedCert(DeCert, current->buffer, current->bufferSz, heap);
+        if (ParseCertRelative(DeCert, CERT_TYPE, NO_VERIFY, NULL) == 0) {
+            if (wc_CheckPrivateKeyCert(*pkey, *pkeySz, DeCert) == 1) {
                 WOLFSSL_MSG("Key Pair found");
                 *cert = current->buffer;
                 *certSz = current->bufferSz;
@@ -1034,16 +1042,22 @@ static void freeDecCertList(WC_DerCertList** list, byte** pkey, word32* pkeySz,
                 else {
                     previous->next = current->next;
                 }
-                FreeDecodedCert(&DeCert);
+                FreeDecodedCert(DeCert);
                 XFREE(current, heap, DYNAMIC_TYPE_PKCS);
                 break;
             }
         }
-        FreeDecodedCert(&DeCert);
+        FreeDecodedCert(DeCert);
 
         previous = current;
         current  = current->next;
     }
+
+#ifdef WOLFSSL_SMALL_STACK
+    XFREE(DeCert, heap, DYNAMIC_TYPE_PKCS);
+#endif
+
+    return 0;
 }
 
 
@@ -1446,7 +1460,10 @@ int wc_PKCS12_parse(WC_PKCS12* pkcs12, const char* psw,
 
     /* check if key pair, remove from list */
     if (*pkey != NULL) {
-        freeDecCertList(&certList, pkey, pkeySz, cert, certSz, pkcs12->heap);
+        ret = freeDecCertList(&certList, pkey, pkeySz, cert, certSz,
+                              pkcs12->heap);
+        if (ret < 0)
+            goto exit_pk12par;
     }
 
     /* if ca arg provided return certList, otherwise free it */
@@ -2492,4 +2509,4 @@ void* wc_PKCS12_GetHeap(WC_PKCS12* pkcs12)
 
 #undef ERROR_OUT
 
-#endif /* !NO_ASN && !NO_PWDBASED && HAVE_PKCS12 */
+#endif /* HAVE_PKCS12 && !NO_ASN && !NO_PWDBASED && !NO_HMAC */

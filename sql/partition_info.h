@@ -79,6 +79,10 @@ struct Vers_part_info : public Sql_alloc
   partition_element *hist_part;
 };
 
+/*
+  See generate_partition_syntax() for details of how the data is used
+  in partition expression.
+*/
 class partition_info : public Sql_alloc
 {
 public:
@@ -88,6 +92,10 @@ public:
   List<partition_element> partitions;
   List<partition_element> temp_partitions;
 
+  /*
+    These are mutually exclusive with part_expr/subpart_expr depending on
+    what is specified in partitioning filter: expression or column list.
+  */
   List<const char> part_field_list;
   List<const char> subpart_field_list;
   
@@ -404,7 +412,13 @@ public:
     vers_info->limit= limit;
     return !limit;
   }
+  bool vers_require_hist_part(THD *thd) const
+  {
+    return part_type == VERSIONING_PARTITION &&
+      thd->lex->vers_history_generating();
+  }
   int vers_set_hist_part(THD *thd);
+  void vers_check_limit(THD *thd);
   bool vers_fix_field_list(THD *thd);
   void vers_update_el_ids();
   partition_element *get_partition(uint part_id)

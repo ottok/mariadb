@@ -2,7 +2,7 @@
 
 Copyright (c) 1994, 2016, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2012, Facebook Inc.
-Copyright (c) 2014, 2021, MariaDB Corporation.
+Copyright (c) 2014, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -696,8 +696,9 @@ void btr_page_free(dict_index_t* index, buf_block_t* block, mtr_t* mtr,
 		   bool blob)
 {
 	ut_ad(mtr->memo_contains_flagged(block, MTR_MEMO_PAGE_X_FIX));
-#ifdef BTR_CUR_HASH_ADAPT
-	if (block->index && !block->index->freed()) {
+#if defined BTR_CUR_HASH_ADAPT && defined UNIV_DEBUG
+	if (block->index
+	    && !btr_search_check_marked_free_index(block)) {
 		ut_ad(!blob);
 		ut_ad(page_is_leaf(block->frame));
 	}
@@ -833,7 +834,7 @@ btr_page_get_father_node_ptr_func(
 
 	err = btr_cur_search_to_nth_level(
 		index, level + 1, tuple,
-		PAGE_CUR_LE, latch_mode, cursor, 0,
+		PAGE_CUR_LE, latch_mode, cursor,
 		file, line, mtr);
 
 	if (err != DB_SUCCESS) {
@@ -2379,7 +2380,7 @@ btr_insert_on_non_leaf_level_func(
 		dberr_t err = btr_cur_search_to_nth_level(
 			index, level, tuple, PAGE_CUR_LE,
 			BTR_CONT_MODIFY_TREE,
-			&cursor, 0, file, line, mtr);
+			&cursor, file, line, mtr);
 
 		if (err != DB_SUCCESS) {
 			ib::warn() << " Error code: " << err
@@ -2400,7 +2401,7 @@ btr_insert_on_non_leaf_level_func(
 		btr_cur_search_to_nth_level(index, level, tuple,
 					    PAGE_CUR_RTREE_INSERT,
 					    BTR_CONT_MODIFY_TREE,
-					    &cursor, 0, file, line, mtr);
+					    &cursor, file, line, mtr);
 	}
 
 	ut_ad(cursor.flag == BTR_CUR_BINARY);
@@ -2660,8 +2661,8 @@ btr_insert_into_right_sibling(
 	max_size = page_get_max_insert_size_after_reorganize(next_page, 1);
 
 	/* Extends gap lock for the next page */
-	if (!dict_table_is_locking_disabled(cursor->index->table)) {
-		lock_update_split_left(next_block, block);
+	if (is_leaf && !dict_table_is_locking_disabled(cursor->index->table)) {
+		lock_update_node_pointer(block, next_block);
 	}
 
 	rec = page_cur_tuple_insert(
@@ -3223,6 +3224,7 @@ btr_lift_page_up(
 
 	ut_ad(!page_has_siblings(page));
 	ut_ad(mtr->memo_contains_flagged(block, MTR_MEMO_PAGE_X_FIX));
+	ut_ad(!page_is_empty(page));
 
 	page_level = btr_page_get_level(page);
 	root_page_no = dict_index_get_page(index);
@@ -3309,10 +3311,20 @@ btr_lift_page_up(
 	if (index->is_instant()
 	    && father_block->page.id().page_no() == root_page_no) {
 		ut_ad(!father_page_zip);
+
+		if (page_is_leaf(page)) {
+			const rec_t* rec = page_rec_get_next(
+				page_get_infimum_rec(page));
+			ut_ad(rec_is_metadata(rec, *index));
+			if (rec_is_add_metadata(rec, *index)
+			    && page_get_n_recs(page) == 1) {
+				index->clear_instant_add();
+				goto copied;
+			}
+		}
+
 		btr_set_instant(father_block, *index, mtr);
 	}
-
-	page_level++;
 
 	/* Copy the records to the father page one by one. */
 	if (0
@@ -3345,6 +3357,7 @@ btr_lift_page_up(
 		}
 	}
 
+copied:
 	if (!dict_table_is_locking_disabled(index->table)) {
 		/* Free predicate page locks on the block */
 		if (dict_index_is_spatial(index)) {
@@ -3355,6 +3368,8 @@ btr_lift_page_up(
 		}
 		lock_update_copy_and_discard(father_block, block);
 	}
+
+	page_level++;
 
 	/* Go upward to root page, decrementing levels by one. */
 	for (i = lift_father_up ? 1 : 0; i < n_blocks; i++, page_level++) {
@@ -3588,17 +3603,9 @@ retry:
 			}
 
 			if (mbr_changed) {
-#ifdef UNIV_DEBUG
-				bool	success = rtr_update_mbr_field(
-					&cursor2, offsets2, &father_cursor,
-					merge_page, &new_mbr, NULL, mtr);
-
-				ut_ad(success);
-#else
 				rtr_update_mbr_field(
 					&cursor2, offsets2, &father_cursor,
 					merge_page, &new_mbr, NULL, mtr);
-#endif
 			} else {
 				rtr_node_ptr_delete(&father_cursor, mtr);
 			}

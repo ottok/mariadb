@@ -3,7 +3,7 @@
 Copyright (c) 1996, 2017, Oracle and/or its affiliates. All rights reserved.
 Copyright (c) 2008, Google Inc.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -397,12 +397,12 @@ static dberr_t srv_undo_tablespace_create(const char* name)
 
 	if (!ret) {
 		if (os_file_get_last_error(false) != OS_FILE_ALREADY_EXISTS
-#ifdef UNIV_AIX
+#ifdef _AIX
 			/* AIX 5.1 after security patch ML7 may have
 			errno set to 0 here, which causes our function
 			to return 100; work around that AIX problem */
 		    && os_file_get_last_error(false) != 100
-#endif /* UNIV_AIX */
+#endif
 		) {
 			ib::error() << "Can't create UNDO tablespace "
 				<< name;
@@ -848,6 +848,26 @@ static void srv_shutdown_threads()
 	}
 }
 
+
+/** Shut down background threads that can generate undo log. */
+static void srv_shutdown_bg_undo_sources()
+{
+  srv_shutdown_state= SRV_SHUTDOWN_INITIATED;
+
+  if (srv_undo_sources)
+  {
+    ut_ad(!srv_read_only_mode);
+    fts_optimize_shutdown();
+    dict_stats_shutdown();
+    while (row_get_background_drop_list_len_low())
+    {
+      srv_inc_activity_count();
+      os_thread_yield();
+    }
+    srv_undo_sources= false;
+  }
+}
+
 #ifdef UNIV_DEBUG
 # define srv_init_abort(_db_err)	\
 	srv_init_abort_low(create_new_db, __FILE__, __LINE__, _db_err)
@@ -1243,13 +1263,12 @@ dberr_t srv_start(bool create_new_db)
 	recv_sys.create();
 	lock_sys.create(srv_lock_table_size);
 
+	srv_startup_is_before_trx_rollback_phase = true;
 
 	if (!srv_read_only_mode) {
 		buf_flush_page_cleaner_init();
 		ut_ad(buf_page_cleaner_is_active);
 	}
-
-	srv_startup_is_before_trx_rollback_phase = true;
 
 	/* Check if undo tablespaces and redo log files exist before creating
 	a new system tablespace */
@@ -1479,9 +1498,6 @@ file_checked:
 			err = srv_validate_undo_tablespaces();
 			if (err != DB_SUCCESS) {
 				return srv_init_abort(err);
-			}
-			if (srv_operation == SRV_OPERATION_RESTORE) {
-				break;
 			}
 			err = trx_lists_init_at_db_start();
 			if (err != DB_SUCCESS) {
@@ -1957,23 +1973,6 @@ skip_monitors:
 	return(DB_SUCCESS);
 }
 
-/** Shut down background threads that can generate undo log. */
-void srv_shutdown_bg_undo_sources()
-{
-	srv_shutdown_state = SRV_SHUTDOWN_INITIATED;
-
-	if (srv_undo_sources) {
-		ut_ad(!srv_read_only_mode);
-		fts_optimize_shutdown();
-		dict_stats_shutdown();
-		while (row_get_background_drop_list_len_low()) {
-			srv_inc_activity_count();
-			os_thread_yield();
-		}
-		srv_undo_sources = false;
-	}
-}
-
 /**
   Shutdown purge to make sure that there is no possibility that we call any
   plugin code (e.g., audit) inside virtual column computation.
@@ -2111,10 +2110,6 @@ void innodb_shutdown()
 		srv_tmp_space.delete_files();
 	}
 	srv_tmp_space.shutdown();
-
-#ifdef WITH_INNODB_DISALLOW_WRITES
-	os_event_destroy(srv_allow_writes_event);
-#endif /* WITH_INNODB_DISALLOW_WRITES */
 
 	if (srv_was_started && srv_print_verbose_log) {
 		ib::info() << "Shutdown completed; log sequence number "

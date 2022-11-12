@@ -1,7 +1,7 @@
 /* user_settings-tls-generic.h
  * generated from configure options
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -69,12 +69,6 @@ extern "C" {
 #undef  NO_RC4
 #define NO_RC4
 
-#undef  NO_HC128
-#define NO_HC128
-
-#undef  NO_RABBIT
-#define NO_RABBIT
-
 #undef  WOLFSSL_SHA224
 #define WOLFSSL_SHA224
 
@@ -131,6 +125,18 @@ extern "C" {
 
 #undef  WOLFSSL_STATIC_MEMORY
 #define WOLFSSL_STATIC_MEMORY
+
+#undef  WOLFSSL_TLS13
+#define WOLFSSL_TLS13
+
+#undef  HAVE_HKDF
+#define HAVE_HKDF
+
+#undef  WC_RSA_PSS
+#define WC_RSA_PSS
+
+#undef  HAVE_FFDHE_2048
+#define HAVE_FFDHE_2048
 
 #if 0
 #undef  WOLFSSL_HAVE_SP_RSA

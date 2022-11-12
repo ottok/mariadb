@@ -3,7 +3,7 @@
 
 /*
    Copyright (c) 2005, 2012, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2021, MariaDB Corporation.
+   Copyright (c) 2009, 2022, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -588,8 +588,9 @@ private:
     And one method to read it in.
   */
   bool create_handler_file(const char *name);
-  bool setup_engine_array(MEM_ROOT *mem_root);
+  bool setup_engine_array(MEM_ROOT *mem_root, handlerton *first_engine);
   bool read_par_file(const char *name);
+  handlerton *get_def_part_engine(const char *name);
   bool get_from_handler_file(const char *name, MEM_ROOT *mem_root,
                              bool is_clone);
   bool new_handlers_from_part_info(MEM_ROOT *mem_root);
@@ -1106,10 +1107,6 @@ public:
     NOTE: This cannot be cached since it can depend on TRANSACTION ISOLATION
     LEVEL which is dynamic, see bug#39084.
 
-    HA_READ_RND_SAME:
-    Not currently used. (Means that the handler supports the rnd_same() call)
-    (MyISAM, HEAP)
-
     HA_TABLE_SCAN_ON_INDEX:
     Used to avoid scanning full tables on an index. If this flag is set then
     the handler always has a primary key (hidden if not defined) and this
@@ -1368,7 +1365,7 @@ public:
   void release_auto_increment() override;
 private:
   int reset_auto_increment(ulonglong value) override;
-  void update_next_auto_inc_val();
+  int update_next_auto_inc_val();
   virtual void lock_auto_increment()
   {
     /* lock already taken */
@@ -1407,15 +1404,17 @@ private:
     unlock_auto_increment();
   }
 
-  void check_insert_autoincrement()
+  void check_insert_or_replace_autoincrement()
   {
     /*
-      If we INSERT into the table having the AUTO_INCREMENT column,
+      If we INSERT or REPLACE into the table having the AUTO_INCREMENT column,
       we have to read all partitions for the next autoincrement value
       unless we already did it.
     */
     if (!part_share->auto_inc_initialized &&
-        ha_thd()->lex->sql_command == SQLCOM_INSERT &&
+        (ha_thd()->lex->sql_command == SQLCOM_INSERT ||
+         ha_thd()->lex->sql_command == SQLCOM_INSERT_SELECT ||
+         ha_thd()->lex->sql_command == SQLCOM_REPLACE) &&
         table->found_next_number_field)
       bitmap_set_all(&m_part_info->read_partitions);
   }
@@ -1617,7 +1616,6 @@ public:
     for (; part_id < part_id_end; ++part_id)
     {
       handler *file= m_file[part_id];
-      DBUG_ASSERT(bitmap_is_set(&(m_part_info->read_partitions), part_id));
       file->info(HA_STATUS_VARIABLE | HA_STATUS_NO_LOCK | HA_STATUS_OPEN);
       part_recs+= file->stats.records;
     }

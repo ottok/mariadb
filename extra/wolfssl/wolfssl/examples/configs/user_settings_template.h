@@ -1,6 +1,6 @@
 /* user_settings_template.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -525,8 +525,6 @@ extern "C" {
 
 #define NO_DSA
 #define NO_RC4
-#define NO_HC128
-#define NO_RABBIT
 #define NO_MD4
 #define NO_PWDBASED
 //#define NO_CODING

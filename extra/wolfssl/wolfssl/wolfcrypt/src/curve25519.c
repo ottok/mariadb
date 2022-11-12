@@ -1,6 +1,6 @@
 /* curve25519.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -300,7 +300,7 @@ int wc_curve25519_shared_secret_ex(curve25519_key* private_key,
 #else
     #ifdef WOLFSSL_SE050
     if (!private_key->privSet) {
-        /* use NXP SE050 is private key is not set */
+        /* use NXP SE050: "privSet" is not set */
         ret = se050_curve25519_shared_secret(private_key, public_key, &o);
     }
     else
@@ -311,6 +311,18 @@ int wc_curve25519_shared_secret_ex(curve25519_key* private_key,
     ret = curve25519(o.point, private_key->k, public_key->p.point);
 
     RESTORE_VECTOR_REGISTERS();
+    }
+#endif
+#ifdef WOLFSSL_ECDHX_SHARED_NOT_ZERO
+    if (ret == 0) {
+        int i;
+        byte t = 0;
+        for (i = 0; i < CURVE25519_KEYSIZE; i++) {
+            t |= o.point[i];
+        }
+        if (t == 0) {
+            ret = ECC_OUT_OF_RANGE_E;
+        }
     }
 #endif
     if (ret != 0) {
@@ -444,7 +456,7 @@ int wc_curve25519_check_public(const byte* pub, word32 pubSz, int endian)
 
     if (endian == EC25519_LITTLE_ENDIAN) {
         /* Check for value of zero or one */
-        for (i = pubSz - 1; i > 0; i--) {
+        for (i = CURVE25519_KEYSIZE - 1; i > 0; i--) {
             if (pub[i] != 0)
                 break;
         }
@@ -452,21 +464,41 @@ int wc_curve25519_check_public(const byte* pub, word32 pubSz, int endian)
             return ECC_BAD_ARG_E;
 
         /* Check high bit set */
-        if (pub[CURVE25519_KEYSIZE-1] & 0x80)
+        if (pub[CURVE25519_KEYSIZE - 1] & 0x80)
             return ECC_OUT_OF_RANGE_E;
+
+        /* Check for order-1 or higher. */
+        if (pub[CURVE25519_KEYSIZE - 1] == 0x7f) {
+            for (i = CURVE25519_KEYSIZE - 2; i > 0; i--) {
+                if (pub[i] != 0xff)
+                    break;
+            }
+            if (i == 0 && (pub[0] >= 0xec))
+                return ECC_BAD_ARG_E;
+         }
     }
     else {
         /* Check for value of zero or one */
-        for (i = 0; i < pubSz-1; i++) {
+        for (i = 0; i < CURVE25519_KEYSIZE - 1; i++) {
             if (pub[i] != 0)
                 break;
         }
-        if (i == pubSz - 1 && (pub[i] == 0 || pub[i] == 1))
+        if (i == CURVE25519_KEYSIZE - 1 && (pub[i] == 0 || pub[i] == 1))
             return ECC_BAD_ARG_E;
 
         /* Check high bit set */
         if (pub[0] & 0x80)
             return ECC_OUT_OF_RANGE_E;
+
+        /* Check for order-1 or higher. */
+        if (pub[0] == 0x7f) {
+            for (i = 1; i < CURVE25519_KEYSIZE - 1; i++) {
+                if (pub[i] != 0)
+                    break;
+            }
+            if (i == CURVE25519_KEYSIZE - 1 && (pub[i] >= 0xec))
+                return ECC_BAD_ARG_E;
+         }
     }
 
     return 0;
@@ -633,6 +665,10 @@ int wc_curve25519_init_ex(curve25519_key* key, void* heap, int devId)
     fe_init();
 #endif
 
+#ifdef WOLFSSL_CHECK_MEM_ZERO
+    wc_MemZero_Add("wc_curve25519_init_ex key->k", key->k, CURVE25519_KEYSIZE);
+#endif
+
     return 0;
 }
 
@@ -656,6 +692,9 @@ void wc_curve25519_free(curve25519_key* key)
     XMEMSET(&key->p, 0, sizeof(key->p));
     key->pubSet = 0;
     key->privSet = 0;
+#ifdef WOLFSSL_CHECK_MEM_ZERO
+    wc_MemZero_Check(key, sizeof(curve25519_key));
+#endif
 }
 
 /* get key size */

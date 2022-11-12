@@ -281,7 +281,7 @@ INSERT INTO t1 VALUES
 (33,5),(33,5),(33,5),(33,5),(34,5),(35,5);
 EXPLAIN SELECT * FROM t1 WHERE a IN(1,2) AND b=5;
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
-1	SIMPLE	t1	ref|filter	a,b	b|a	5|5	const	15 (5%)	Using where; Using rowid filter
+1	SIMPLE	t1	range|filter	a,b	a|b	5|5	NULL	2 (41%)	Using index condition; Using where; Using rowid filter
 SELECT * FROM t1 WHERE a IN(1,2) AND b=5;
 a	b
 DROP TABLE t1;
@@ -3635,6 +3635,25 @@ SELECT * FROM t1 LEFT JOIN t2 ON a = pk WHERE b >= 0 AND pk IS NULL;
 a	pk	b
 DROP TABLE t1, t2;
 SET @@optimizer_switch= @save_optimizer_switch;
+
+# MDEV-28858 Wrong result with table elimination combined with
+# not_null_range_scan
+#
+CREATE TABLE t1 (a INT, b INT) ENGINE=MyISAM;
+INSERT INTO t1 VALUES  (10,1),(null,2);
+CREATE TABLE t2 (pk INT PRIMARY KEY) ENGINE=MyISAM;
+INSERT INTO t2 VALUES (1),(2);
+SET @save_optimizer_switch= @@optimizer_switch;
+SET optimizer_switch= 'not_null_range_scan=on';
+SELECT t1.b FROM t1 LEFT JOIN t2 ON t1.a = t2.pk WHERE t1.a IS NULL ORDER BY t1.b;
+b
+2
+SET optimizer_switch= 'not_null_range_scan=off';
+SELECT t1.b FROM t1 LEFT JOIN t2 ON t1.a = t2.pk WHERE t1.a IS NULL ORDER BY t1.b;
+b
+2
+SET @@optimizer_switch=@save_optimizer_switch;
+drop table t1,t2;
 #
 # End of 10.5 tests
 #

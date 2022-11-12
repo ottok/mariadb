@@ -140,7 +140,7 @@ struct st_ma_pvio_methods pvio_socket_methods= {
 #ifndef PLUGIN_DYNAMIC
 MARIADB_PVIO_PLUGIN pvio_socket_client_plugin=
 #else
-MARIADB_PVIO_PLUGIN _mysql_client_plugin_declaration_
+MARIADB_PVIO_PLUGIN _mysql_client_plugin_declaration_=
 #endif
 {
   MARIADB_CLIENT_PVIO_PLUGIN,
@@ -627,6 +627,10 @@ static int pvio_socket_internal_connect(MARIADB_PVIO *pvio,
   int rc= 0;
   struct st_pvio_socket *csock= NULL;
   int timeout;
+#ifndef _WIN32
+  unsigned int wait_conn= 1;
+  time_t start_t= time(NULL);
+#endif
 
   if (!pvio || !pvio->data)
     return 1;
@@ -640,6 +644,13 @@ static int pvio_socket_internal_connect(MARIADB_PVIO *pvio,
 #ifndef _WIN32
   do {
     rc= connect(csock->socket, (struct sockaddr*) name, (int)namelen);
+
+    if (time(NULL) - start_t > (time_t)timeout/1000)
+      break;
+
+    usleep(wait_conn);
+    wait_conn= wait_conn >= 1000000 ? 1000000 : wait_conn * 2;
+
   } while (rc == -1 && (errno == EINTR || errno == EAGAIN));
   /* in case a timeout values was set we need to check error values
      EINPROGRESS */
@@ -1126,3 +1137,4 @@ int pvio_socket_shutdown(MARIADB_PVIO *pvio)
   }
   return -1;
 }
+

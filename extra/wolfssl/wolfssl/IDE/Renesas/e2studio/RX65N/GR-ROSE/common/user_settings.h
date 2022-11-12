@@ -1,6 +1,6 @@
 /* user_settings.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -37,9 +37,10 @@
  *      109: TSIPv1.09
  *      113: TSIPv1.13
  *      114: TSIPv1.14
+ *      115: TSIPv1.15
  *----------------------------------------------------------------------------*/
   #define WOLFSSL_RENESAS_TSIP
-  #define WOLFSSL_RENESAS_TSIP_VER     114
+  #define WOLFSSL_RENESAS_TSIP_VER     115
 
 
 /*-- TLS version definitions  --------------------------------------------------
@@ -48,7 +49,7 @@
  * TLSv1.3, uncomment line below.
  * 
  *----------------------------------------------------------------------------*/
-/*#define WOLFSSL_TLS13*/
+#define WOLFSSL_TLS13
 
 
 /*-- Operating System related definitions --------------------------------------
@@ -67,11 +68,12 @@
  *----------------------------------------------------------------------------*/
 
   #define NO_DEV_RANDOM
-
+  #define NO_MD4
   #define WOLFSSL_DH_CONST
   #define HAVE_TLS_EXTENSIONS
 
   #define HAVE_AESGCM
+  #define HAVE_AESCCM
   #define HAVE_AES_CBC
   #define WOLFSSL_SHA512
 
@@ -103,7 +105,7 @@
    * - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA256
    * 
    */
-  /*#define USE_ECC_CERT*/
+  #define USE_ECC_CERT
 
   /* In this example application, Root CA cert buffer named 
    * "ca_ecc_cert_der_256" is used under the following macro definition 
@@ -123,9 +125,15 @@
  *----------------------------------------------------------------------------*/
   #define SIZEOF_LONG_LONG 8
 
-#if !defined(min)
-  #define min(data1, data2)                _builtin_min(data1, data2)
-#endif
+  /*#define WOLFSSL_STATIC_MEMORY*/
+  
+  #if defined(WOLFSSL_STATIC_MEMORY)
+    #define USE_FAST_MATH
+  #else
+    #define WOLFSSL_SMALL_STACK
+  #endif /* WOLFSSL_STATIC_MEMORY */
+
+
 
  /* 
   * -- "NO_ASN_TIME" macro is to avoid certificate expiration validation --
@@ -144,13 +152,15 @@
   #define WOLFSSL_LOG_PRINTF
   #define WOLFSSL_HAVE_MIN
   #define WOLFSSL_HAVE_MAX
-  #define WOLFSSL_SMALL_STACK
+  
   #define NO_WRITEV
   #define WOLFSSL_USER_IO
 
   #define WOLFSSL_USER_CURRTIME /* for benchmark */
-  #define USER_TIME
+  #define TIME_OVERRIDES
   #define XTIME time
+  #define WOLFSSL_GMTIME
+  #define XGMTIME(c,t)  gmtime(c)
   #define USE_WOLF_SUSECONDS_T
   #define USE_WOLF_TIMEVAL_T
 
@@ -219,3 +229,6 @@
     #define HAVE_HKDF
     #define WC_RSA_PSS
 #endif
+
+
+#define XSTRCASECMP(s1,s2) strcmp((s1),(s2))

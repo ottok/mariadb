@@ -18,7 +18,6 @@
 #define LOG_H
 
 #include "handler.h"                            /* my_xid */
-#include "wsrep_mysqld.h"
 #include "rpl_constants.h"
 
 class Relay_log_info;
@@ -735,7 +734,7 @@ public:
   }
   void harvest_bytes_written(Atomic_counter<uint64> *counter)
   {
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     char buf1[22],buf2[22];
 #endif
     DBUG_ENTER("harvest_bytes_written");
@@ -1109,8 +1108,7 @@ public:
                          const char *query, size_t query_length);
 
   /* we use this function to setup all enabled log event handlers */
-  int set_handlers(ulonglong error_log_printer,
-                   ulonglong slow_log_printer,
+  int set_handlers(ulonglong slow_log_printer,
                    ulonglong general_log_printer);
   void init_error_log(ulonglong error_log_printer);
   void init_slow_log(ulonglong slow_log_printer);
@@ -1248,7 +1246,7 @@ static inline TC_LOG *get_tc_log_implementation()
 }
 
 #ifdef WITH_WSREP
-IO_CACHE* wsrep_get_trans_cache(THD *);
+IO_CACHE* wsrep_get_cache(THD *, bool);
 void wsrep_thd_binlog_trx_reset(THD * thd);
 void wsrep_thd_binlog_stmt_rollback(THD * thd);
 #endif /* WITH_WSREP */

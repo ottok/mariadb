@@ -1,3 +1,5 @@
+# Work around MDEV-29508
+
 # Tests for PERFORMANCE_SCHEMA
 # Check server start for short server start options
 

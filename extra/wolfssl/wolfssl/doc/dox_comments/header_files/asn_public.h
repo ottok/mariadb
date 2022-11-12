@@ -19,7 +19,67 @@
     \sa wc_MakeCert
     \sa wc_MakeCertReq
 */
-WOLFSSL_API int wc_InitCert(Cert*);
+int wc_InitCert(Cert*);
+
+/*!
+     \ingroup ASN
+
+     \brief This function allocates a new Cert structure for use during
+     cert operations without the application having to allocate the structure
+     itself. The Cert structure is also initialized by this function thus
+     removing the need to call wc_InitCert(). When the application is finished
+     using the allocated Cert structure wc_CertFree() must be called.
+
+     \return pointer If successful the call will return a pointer to the
+     newly allocated and initialized Cert.
+     \return NULL On a memory allocation failure.
+
+     \param A pointer to the heap used for dynamic allocation. Can be NULL.
+
+     _Example_
+     \code
+     Cert*   myCert;
+
+     myCert = wc_CertNew(NULL);
+     if (myCert == NULL) {
+         // Cert creation failure
+     }
+     \endcode
+
+     \sa wc_InitCert
+     \sa wc_MakeCert
+     \sa wc_CertFree
+
+*/
+Cert* wc_CertNew(void* heap);
+
+/*!
+     \ingroup ASN
+
+     \brief This function frees the memory allocated for a cert structure
+     by a previous call to wc_CertNew().
+
+     \return None.
+
+     \param A pointer to the cert structure to free.
+
+     _Example_
+     \code
+     Cert*   myCert;
+
+     myCert = wc_CertNew(NULL);
+
+     // Perform cert operations.
+
+     wc_CertFree(myCert);
+     \endcode
+
+     \sa wc_InitCert
+     \sa wc_MakeCert
+     \sa wc_CertNew
+
+*/
+void  wc_CertFree(Cert* cert);
 
 /*!
     \ingroup ASN
@@ -64,8 +124,8 @@ WOLFSSL_API int wc_InitCert(Cert*);
     \sa wc_InitCert
     \sa wc_MakeCertReq
 */
-WOLFSSL_API int  wc_MakeCert(Cert*, byte* derBuffer, word32 derSz, RsaKey*,
-                             ecc_key*, WC_RNG*);
+int  wc_MakeCert(Cert* cert, byte* derBuffer, word32 derSz, RsaKey* rsaKey,
+                             ecc_key* eccKey, WC_RNG* rng);
 
 /*!
     \ingroup ASN
@@ -111,8 +171,8 @@ WOLFSSL_API int  wc_MakeCert(Cert*, byte* derBuffer, word32 derSz, RsaKey*,
     \sa wc_InitCert
     \sa wc_MakeCert
 */
-WOLFSSL_API int  wc_MakeCertReq(Cert*, byte* derBuffer, word32 derSz,
-                                    RsaKey*, ecc_key*);
+int  wc_MakeCertReq(Cert* cert, byte* derBuffer, word32 derSz,
+                                    RsaKey* rsaKey, ecc_key* eccKey);
 
 /*!
     \ingroup ASN
@@ -133,7 +193,7 @@ WOLFSSL_API int  wc_MakeCertReq(Cert*, byte* derBuffer, word32 derSz,
     \param requestSz the size of the certificate body we’re requesting
     to have signed
     \param sType Type of signature to create. Valid options are: CTC_MD5wRSA,
-    CTC_SHAwRSA, CTC_SHAwECDSA, CTC_SHA256wECDSA, andCTC_SHA256wRSA
+    CTC_SHAwRSA, CTC_SHAwECDSA, CTC_SHA256wECDSA, and CTC_SHA256wRSA
     \param buffer pointer to the buffer containing the certificate to be
     signed. On success: will hold the newly signed certificate
     \param buffSz the (total) size of the buffer in which to store the newly
@@ -164,8 +224,8 @@ WOLFSSL_API int  wc_MakeCertReq(Cert*, byte* derBuffer, word32 derSz,
     \sa wc_InitCert
     \sa wc_MakeCert
 */
-WOLFSSL_API int  wc_SignCert(int requestSz, int sigType, byte* derBuffer,
-                             word32 derSz, RsaKey*, ecc_key*, WC_RNG*);
+int  wc_SignCert(int requestSz, int sigType, byte* derBuffer,
+                 word32 derSz, RsaKey* rsaKey, ecc_key* eccKey, WC_RNG* rng);
 
 /*!
     \ingroup ASN
@@ -210,8 +270,8 @@ WOLFSSL_API int  wc_SignCert(int requestSz, int sigType, byte* derBuffer,
     \sa wc_MakeCert
     \sa wc_SignCert
 */
-WOLFSSL_API int  wc_MakeSelfCert(Cert*, byte* derBuffer, word32 derSz, RsaKey*,
-                             WC_RNG*);
+int  wc_MakeSelfCert(Cert* cert, byte* derBuffer, word32 derSz, RsaKey* key,
+                             WC_RNG* rng);
 
 /*!
     \ingroup ASN
@@ -272,7 +332,7 @@ WOLFSSL_API int  wc_MakeSelfCert(Cert*, byte* derBuffer, word32 derSz, RsaKey*,
     \sa wc_SetSubject
     \sa wc_SetIssuerBuffer
 */
-WOLFSSL_API int  wc_SetIssuer(Cert*, const char*);
+int  wc_SetIssuer(Cert* cert, const char* issuerFile);
 
 /*!
     \ingroup ASN
@@ -329,7 +389,7 @@ WOLFSSL_API int  wc_SetIssuer(Cert*, const char*);
     \sa wc_InitCert
     \sa wc_SetIssuer
 */
-WOLFSSL_API int  wc_SetSubject(Cert*, const char*);
+int  wc_SetSubject(Cert* cert, const char* subjectFile);
 
 
 /*!
@@ -394,7 +454,7 @@ WOLFSSL_API int  wc_SetSubject(Cert*, const char*);
     \sa wc_InitCert
     \sa wc_SetSubject
 */
-WOLFSSL_API int  wc_SetSubjectRaw(Cert* cert, const byte* der, int derSz);
+int  wc_SetSubjectRaw(Cert* cert, const byte* der, int derSz);
 
 /*!
     \ingroup ASN
@@ -422,7 +482,7 @@ WOLFSSL_API int  wc_SetSubjectRaw(Cert* cert, const byte* der, int derSz);
     \sa wc_InitCert
     \sa wc_SetSubjectRaw
 */
-WOLFSSL_API int  wc_GetSubjectRaw(byte **subjectRaw, Cert *cert);
+int  wc_GetSubjectRaw(byte **subjectRaw, Cert *cert);
 
 /*!
     \ingroup ASN
@@ -481,7 +541,7 @@ WOLFSSL_API int  wc_GetSubjectRaw(byte **subjectRaw, Cert *cert);
     \sa wc_InitCert
     \sa wc_SetIssuer
 */
-WOLFSSL_API int  wc_SetAltNames(Cert*, const char*);
+int  wc_SetAltNames(Cert* cert, const char* file);
 
 /*!
     \ingroup ASN
@@ -545,7 +605,7 @@ WOLFSSL_API int  wc_SetAltNames(Cert*, const char*);
     \sa wc_InitCert
     \sa wc_SetIssuer
 */
-WOLFSSL_API int  wc_SetIssuerBuffer(Cert*, const byte*, int);
+int  wc_SetIssuerBuffer(Cert* cert, const byte* der, int derSz);
 
 /*!
     \ingroup ASN
@@ -609,7 +669,7 @@ WOLFSSL_API int  wc_SetIssuerBuffer(Cert*, const byte*, int);
     \sa wc_InitCert
     \sa wc_SetIssuer
 */
-WOLFSSL_API int  wc_SetIssuerRaw(Cert* cert, const byte* der, int derSz);
+int  wc_SetIssuerRaw(Cert* cert, const byte* der, int derSz);
 
 /*!
     \ingroup ASN
@@ -672,7 +732,7 @@ WOLFSSL_API int  wc_SetIssuerRaw(Cert* cert, const byte* der, int derSz);
     \sa wc_InitCert
     \sa wc_SetSubject
 */
-WOLFSSL_API int  wc_SetSubjectBuffer(Cert*, const byte*, int);
+int  wc_SetSubjectBuffer(Cert* cert, const byte* der, int derSz);
 
 /*!
     \ingroup ASN
@@ -738,7 +798,7 @@ WOLFSSL_API int  wc_SetSubjectBuffer(Cert*, const byte*, int);
     \sa wc_InitCert
     \sa wc_SetAltNames
 */
-WOLFSSL_API int  wc_SetAltNamesBuffer(Cert*, const byte*, int);
+int  wc_SetAltNamesBuffer(Cert* cert, const byte* der, int derSz);
 
 /*!
     \ingroup ASN
@@ -801,7 +861,7 @@ WOLFSSL_API int  wc_SetAltNamesBuffer(Cert*, const byte*, int);
 
     \sa wc_InitCert
 */
-WOLFSSL_API int  wc_SetDatesBuffer(Cert*, const byte*, int);
+int  wc_SetDatesBuffer(Cert* cert, const byte* der, int derSz);
 
 /*!
     \ingroup ASN
@@ -835,7 +895,7 @@ WOLFSSL_API int  wc_SetDatesBuffer(Cert*, const byte*, int);
     \sa wc_SetAuthKeyId
     \sa wc_SetAuthKeyIdFromCert
 */
-WOLFSSL_API int wc_SetAuthKeyIdFromPublicKey(Cert *cert, RsaKey *rsakey,
+int wc_SetAuthKeyIdFromPublicKey(Cert *cert, RsaKey *rsakey,
                                              ecc_key *eckey);
 
 /*!
@@ -866,7 +926,7 @@ WOLFSSL_API int wc_SetAuthKeyIdFromPublicKey(Cert *cert, RsaKey *rsakey,
     \sa wc_SetAuthKeyIdFromPublicKey
     \sa wc_SetAuthKeyId
 */
-WOLFSSL_API int wc_SetAuthKeyIdFromCert(Cert *cert, const byte *der, int derSz);
+int wc_SetAuthKeyIdFromCert(Cert *cert, const byte *der, int derSz);
 
 /*!
     \ingroup ASN
@@ -895,7 +955,7 @@ WOLFSSL_API int wc_SetAuthKeyIdFromCert(Cert *cert, const byte *der, int derSz);
     \sa wc_SetAuthKeyIdFromPublicKey
     \sa wc_SetAuthKeyIdFromCert
 */
-WOLFSSL_API int wc_SetAuthKeyId(Cert *cert, const char* file);
+int wc_SetAuthKeyId(Cert *cert, const char* file);
 
 /*!
     \ingroup ASN
@@ -903,7 +963,7 @@ WOLFSSL_API int wc_SetAuthKeyId(Cert *cert, const char* file);
     \brief Set SKID from RSA or ECC public key.
 
     \return 0 Success
-    \return BAD_FUNC_ARG Returned if cert or rsakey and eckey is null.
+    \return BAD_FUNC_ARG Returned if cert or rsakey and eckey are null.
     \return MEMORY_E Returned if there is an error allocating memory.
     \return PUBLIC_KEY_E Returned if there is an error getting the public key.
 
@@ -926,7 +986,7 @@ WOLFSSL_API int wc_SetAuthKeyId(Cert *cert, const char* file);
 
     \sa wc_SetSubjectKeyId
 */
-WOLFSSL_API int wc_SetSubjectKeyIdFromPublicKey(Cert *cert, RsaKey *rsakey,
+int wc_SetSubjectKeyIdFromPublicKey(Cert *cert, RsaKey *rsakey,
                                                 ecc_key *eckey);
 
 /*!
@@ -957,7 +1017,7 @@ WOLFSSL_API int wc_SetSubjectKeyIdFromPublicKey(Cert *cert, RsaKey *rsakey,
 
     \sa wc_SetSubjectKeyIdFromPublicKey
 */
-WOLFSSL_API int wc_SetSubjectKeyId(Cert *cert, const char* file);
+int wc_SetSubjectKeyId(Cert *cert, const char* file);
 
 /*!
     \ingroup RSA
@@ -991,7 +1051,7 @@ WOLFSSL_API int wc_SetSubjectKeyId(Cert *cert, const char* file);
     \sa wc_InitCert
     \sa wc_MakeRsaKey
 */
-WOLFSSL_API int wc_SetKeyUsage(Cert *cert, const char *value);
+int wc_SetKeyUsage(Cert *cert, const char *value);
 
 /*!
     \ingroup ASN
@@ -1021,7 +1081,7 @@ WOLFSSL_API int wc_SetKeyUsage(Cert *cert, const char *value);
 
     \sa wc_PubKeyPemToDer
 */
-WOLFSSL_API int wc_PemPubKeyToDer(const char* fileName,
+int wc_PemPubKeyToDer(const char* fileName,
                                        unsigned char* derBuf, int derSz);
 
 /*!
@@ -1053,8 +1113,8 @@ WOLFSSL_API int wc_PemPubKeyToDer(const char* fileName,
 
     \sa wc_PemPubKeyToDer
 */
-WOLFSSL_API int wc_PubKeyPemToDer(const unsigned char*, int,
-                                      unsigned char*, int);
+int wc_PubKeyPemToDer(const unsigned char* pem, int pemSz,
+                                      unsigned char* buff, int buffSz);
 
 /*!
     \ingroup ASN
@@ -1088,7 +1148,7 @@ WOLFSSL_API int wc_PubKeyPemToDer(const unsigned char*, int,
 
     \sa none
 */
-WOLFSSL_API
+
 int wc_PemCertToDer(const char* fileName, unsigned char* derBuf, int derSz);
 
 /*!
@@ -1131,7 +1191,7 @@ int wc_PemCertToDer(const char* fileName, unsigned char* derBuf, int derSz);
 
     \sa wc_PemCertToDer
 */
-WOLFSSL_API int wc_DerToPem(const byte* der, word32 derSz, byte* output,
+int wc_DerToPem(const byte* der, word32 derSz, byte* output,
                                 word32 outputSz, int type);
 
 /*!
@@ -1176,7 +1236,7 @@ WOLFSSL_API int wc_DerToPem(const byte* der, word32 derSz, byte* output,
 
     \sa wc_PemCertToDer
 */
-WOLFSSL_API int wc_DerToPemEx(const byte* der, word32 derSz, byte* output,
+int wc_DerToPemEx(const byte* der, word32 derSz, byte* output,
                                 word32 outputSz, byte *cipherIno, int type);
 
 /*!
@@ -1214,8 +1274,8 @@ WOLFSSL_API int wc_DerToPemEx(const byte* der, word32 derSz, byte* output,
 
     \sa wc_PemToDer
 */
-WOLFSSL_API int wc_KeyPemToDer(const unsigned char*, int,
-                                    unsigned char*, int, const char*);
+int wc_KeyPemToDer(const unsigned char* pem, int pemSz,
+                                    unsigned char* buff, int buffSz, const char* pass);
 
 /*!
     \ingroup CertsKeys
@@ -1246,8 +1306,8 @@ WOLFSSL_API int wc_KeyPemToDer(const unsigned char*, int,
 
     \sa wc_PemToDer
 */
-WOLFSSL_API int wc_CertPemToDer(const unsigned char*, int,
-                                     unsigned char*, int, int);
+int wc_CertPemToDer(const unsigned char* pem, int pemSz,
+                    unsigned char* buff, int buffSz, int type);
 
 /*!
     \ingroup CertsKeys
@@ -1269,7 +1329,7 @@ WOLFSSL_API int wc_CertPemToDer(const unsigned char*, int,
 
     \sa wc_GetPubKeyDerFromCert
 */
-WOLFSSL_API int wc_GetPubKeyDerFromCert(struct DecodedCert* cert,
+int wc_GetPubKeyDerFromCert(struct DecodedCert* cert,
                                         byte* derKey, word32* derKeySz);
 
 /*!
@@ -1329,8 +1389,8 @@ WOLFSSL_API int wc_GetPubKeyDerFromCert(struct DecodedCert* cert,
 
     \sa wc_RSA_PrivateKeyDecode
 */
-WOLFSSL_API int wc_EccPrivateKeyDecode(const byte*, word32*,
-                                           ecc_key*, word32);
+int wc_EccPrivateKeyDecode(const byte* input, word32* inOutIdx,
+                                           ecc_key* key, word32 inSz);
 
 /*!
     \ingroup ASN
@@ -1374,7 +1434,7 @@ WOLFSSL_API int wc_EccPrivateKeyDecode(const byte*, word32*,
 
     \sa wc_RsaKeyToDer
 */
-WOLFSSL_API int wc_EccKeyToDer(ecc_key*, byte* output, word32 inLen);
+int wc_EccKeyToDer(ecc_key* key, byte* output, word32 inLen);
 
 /*!
     \ingroup ASN
@@ -1408,16 +1468,16 @@ WOLFSSL_API int wc_EccKeyToDer(ecc_key*, byte* output, word32 inLen);
 
     \sa wc_ecc_import_x963
 */
-WOLFSSL_API int wc_EccPublicKeyDecode(const byte*, word32*,
-                                              ecc_key*, word32);
+int wc_EccPublicKeyDecode(const byte* input, word32* inOutIdx,
+                          ecc_key* key, word32 inSz);
 
 /*!
     \ingroup ASN
 
     \brief This function converts the ECC public key to DER format. It
     returns the size of buffer used. The public ECC key in DER format is stored
-    in output buffer. with_AlgCurve is a flag for when to include a header that
-    has the Algorithm and Curve information.
+    in output buffer. The with_AlgCurve flag will include a header that
+    has the Algorithm and Curve information
 
     \return >0 Success, size of buffer used
     \return BAD_FUNC_ARG Returned if output or key is null.
@@ -1436,7 +1496,7 @@ WOLFSSL_API int wc_EccPublicKeyDecode(const byte*, word32*,
     wc_ecc_init(&key);
     WC_WC_RNG rng;
     wc_InitRng(&rng);
-    wc_ecc_make_key(&rng, 24, &key);
+    wc_ecc_make_key(&rng, 32, &key);
     int derSz = // Some appropriate size for der;
     byte der[derSz];
 
@@ -1449,8 +1509,53 @@ WOLFSSL_API int wc_EccPublicKeyDecode(const byte*, word32*,
     \sa wc_EccKeyToDer
     \sa wc_EccPrivateKeyDecode
 */
-WOLFSSL_API int wc_EccPublicKeyToDer(ecc_key*, byte* output,
+int wc_EccPublicKeyToDer(ecc_key* key, byte* output,
                                          word32 inLen, int with_AlgCurve);
+
+/*!
+    \ingroup ASN
+
+    \brief This function converts the ECC public key to DER format. It
+    returns the size of buffer used. The public ECC key in DER format is stored
+    in output buffer. The with_AlgCurve flag will include a header that
+    has the Algorithm and Curve information. The comp parameter determines if
+    the public key will be exported as compressed.
+
+    \return >0 Success, size of buffer used
+    \return BAD_FUNC_ARG Returned if output or key is null.
+    \return LENGTH_ONLY_E Error in getting ECC public key size.
+    \return BUFFER_E Returned when output buffer is too small.
+
+    \param key Pointer to ECC key
+    \param output Pointer to output buffer to write to.
+    \param inLen Size of buffer.
+    \param with_AlgCurve a flag for when to include a header that has the
+    Algorithm and Curve information.
+    \param comp If 1 (non-zero) the ECC public key will be written in
+    compressed form. If 0 it will be written in an uncompressed format.
+
+    _Example_
+    \code
+    ecc_key key;
+    wc_ecc_init(&key);
+    WC_WC_RNG rng;
+    wc_InitRng(&rng);
+    wc_ecc_make_key(&rng, 32, &key);
+    int derSz = // Some appropriate size for der;
+    byte der[derSz];
+
+    // Write out a compressed ECC key
+    if(wc_EccPublicKeyToDer_ex(&key, der, derSz, 1, 1) < 0)
+    {
+        // Error converting ECC public key to der
+    }
+    \endcode
+
+    \sa wc_EccKeyToDer
+    \sa wc_EccPublicKeyDecode
+*/
+int wc_EccPublicKeyToDer_ex(ecc_key* key, byte* output,
+                                     word32 inLen, int with_AlgCurve, int comp);
 
 /*!
     \ingroup ASN
@@ -1477,22 +1582,22 @@ WOLFSSL_API int wc_EccPublicKeyToDer(ecc_key*, byte* output,
     Sha256 sha256;
     // initialize sha256 for hashing
 
-    byte* dig = = (byte*)malloc(SHA256_DIGEST_SIZE);
+    byte* dig = = (byte*)malloc(WC_SHA256_DIGEST_SIZE);
     // perform hashing and hash updating so dig stores SHA-256 hash
     // (see wc_InitSha256, wc_Sha256Update and wc_Sha256Final)
-    signSz = wc_EncodeSignature(encodedSig, dig, SHA256_DIGEST_SIZE,SHA256h);
+    signSz = wc_EncodeSignature(encodedSig, dig, WC_SHA256_DIGEST_SIZE, SHA256h);
     \endcode
 
     \sa none
 */
-WOLFSSL_API word32 wc_EncodeSignature(byte* out, const byte* digest,
+word32 wc_EncodeSignature(byte* out, const byte* digest,
                                       word32 digSz, int hashOID);
 
 /*!
     \ingroup ASN
 
     \brief This function returns the hash OID that corresponds to a hashing
-    type. For example, when given the type: SHA512, this function returns the
+    type. For example, when given the type: WC_SHA512, this function returns the
     identifier corresponding to a SHA512 hash, SHA512h.
 
     \return Success On success, returns the OID corresponding to the
@@ -1500,14 +1605,14 @@ WOLFSSL_API word32 wc_EncodeSignature(byte* out, const byte* digest,
     \return 0 Returned if an unrecognized hash type is passed in as argument.
 
     \param type the hash type for which to find the OID. Valid options,
-    depending on build configuration, include: MD2, MD5, SHA, SHA256, SHA512,
-    SHA384, and SHA512.
+    depending on build configuration, include: WC_MD5, WC_SHA, WC_SHA256,
+    WC_SHA384, WC_SHA512, WC_SHA3_224, WC_SHA3_256, WC_SHA3_384 or WC_SHA3_512
 
     _Example_
     \code
     int hashOID;
 
-    hashOID = wc_GetCTC_HashOID(SHA512);
+    hashOID = wc_GetCTC_HashOID(WC_SHA512);
     if (hashOID == 0) {
 	    // WOLFSSL_SHA512 not defined
     }
@@ -1515,7 +1620,7 @@ WOLFSSL_API word32 wc_EncodeSignature(byte* out, const byte* digest,
 
     \sa none
 */
-WOLFSSL_API int wc_GetCTC_HashOID(int type);
+int wc_GetCTC_HashOID(int type);
 
 /*!
     \ingroup ASN
@@ -1546,7 +1651,7 @@ WOLFSSL_API int wc_GetCTC_HashOID(int type);
     \sa wc_SetAltNamesBuffer
     \sa wc_SetDatesBuffer
 */
-WOLFSSL_API void wc_SetCert_Free(Cert* cert);
+void wc_SetCert_Free(Cert* cert);
 
 /*!
     \ingroup ASN
@@ -1578,7 +1683,7 @@ WOLFSSL_API void wc_SetCert_Free(Cert* cert);
     \sa wc_DecryptPKCS8Key
     \sa wc_CreateEncryptedPKCS8Key
 */
-WOLFSSL_API int wc_GetPkcs8TraditionalOffset(byte* input,
+int wc_GetPkcs8TraditionalOffset(byte* input,
                                              word32* inOutIdx, word32 sz);
 
 /*!
@@ -1629,7 +1734,7 @@ WOLFSSL_API int wc_GetPkcs8TraditionalOffset(byte* input,
     \sa wc_DecryptPKCS8Key
     \sa wc_CreateEncryptedPKCS8Key
 */
-WOLFSSL_API int wc_CreatePKCS8Key(byte* out, word32* outSz,
+int wc_CreatePKCS8Key(byte* out, word32* outSz,
         byte* key, word32 keySz, int algoID, const byte* curveOID,
         word32 oidSz);
 
@@ -1690,7 +1795,7 @@ WOLFSSL_API int wc_CreatePKCS8Key(byte* out, word32* outSz,
     \sa wc_DecryptPKCS8Key
     \sa wc_CreateEncryptedPKCS8Key
 */
-WOLFSSL_API int wc_EncryptPKCS8Key(byte* key, word32 keySz, byte* out,
+int wc_EncryptPKCS8Key(byte* key, word32 keySz, byte* out,
         word32* outSz, const char* password, int passwordSz, int vPKCS,
         int pbeOid, int encAlgId, byte* salt, word32 saltSz, int itt,
         WC_RNG* rng, void* heap);
@@ -1727,7 +1832,7 @@ WOLFSSL_API int wc_EncryptPKCS8Key(byte* key, word32 keySz, byte* out,
     \sa wc_EncryptPKCS8Key
     \sa wc_CreateEncryptedPKCS8Key
 */
-WOLFSSL_API int wc_DecryptPKCS8Key(byte* input, word32 sz, const char* password,
+int wc_DecryptPKCS8Key(byte* input, word32 sz, const char* password,
         int passwordSz);
 
 /*!
@@ -1786,7 +1891,7 @@ WOLFSSL_API int wc_DecryptPKCS8Key(byte* input, word32 sz, const char* password,
     \sa wc_EncryptPKCS8Key
     \sa wc_DecryptPKCS8Key
 */
-WOLFSSL_API int wc_CreateEncryptedPKCS8Key(byte* key, word32 keySz, byte* out,
+int wc_CreateEncryptedPKCS8Key(byte* key, word32 keySz, byte* out,
         word32* outSz, const char* password, int passwordSz, int vPKCS,
         int pbeOid, int encAlgId, byte* salt, word32 saltSz, int itt,
         WC_RNG* rng, void* heap);
@@ -1816,7 +1921,7 @@ WOLFSSL_API int wc_CreateEncryptedPKCS8Key(byte* key, word32 keySz, byte* out,
     \sa wc_ParseCert
     \sa wc_FreeDecodedCert
 */
-WOLFSSL_API void wc_InitDecodedCert(struct DecodedCert* cert,
+void wc_InitDecodedCert(struct DecodedCert* cert,
     const byte* source, word32 inSz, void* heap);
 
 /*!
@@ -1855,7 +1960,7 @@ WOLFSSL_API void wc_InitDecodedCert(struct DecodedCert* cert,
     \sa wc_InitDecodedCert
     \sa wc_FreeDecodedCert
 */
-WOLFSSL_API int wc_ParseCert(DecodedCert* cert, int type, int verify, void* cm);
+int wc_ParseCert(DecodedCert* cert, int type, int verify, void* cm);
 
 /*!
     \ingroup ASN
@@ -1883,4 +1988,182 @@ WOLFSSL_API int wc_ParseCert(DecodedCert* cert, int type, int verify, void* cm);
     \sa wc_InitDecodedCert
     \sa wc_ParseCert
 */
-WOLFSSL_API void wc_FreeDecodedCert(struct DecodedCert* cert);
+void wc_FreeDecodedCert(struct DecodedCert* cert);
+
+/*!
+    \ingroup ASN
+
+    \brief This function registers a time callback that will be used anytime
+    wolfSSL needs to get the current time. The prototype of the callback should
+    be the same as the "time" function from the C standard library.
+
+    \return 0 Returned on success.
+
+    \param f function to register as the time callback.
+
+    _Example_
+    \code
+    int ret = 0;
+    // Time callback prototype
+    time_t my_time_cb(time_t* t);
+    // Register it
+    ret = wc_SetTimeCb(my_time_cb);
+    if (ret != 0) {
+        // failed to set time callback
+    }
+    time_t my_time_cb(time_t* t)
+    {
+        // custom time function
+    }
+    \endcode
+
+    \sa wc_Time
+*/
+int wc_SetTimeCb(wc_time_cb f);
+
+/*!
+    \ingroup ASN
+
+    \brief This function gets the current time. By default, it uses the XTIME
+    macro, which varies between platforms. The user can use a function of their
+    choosing instead via the wc_SetTimeCb function.
+
+    \return Time Current time returned on success.
+
+    \param t Optional time_t pointer to populate with current time.
+
+    _Example_
+    \code
+    time_t currentTime = 0;
+    currentTime = wc_Time(NULL);
+    wc_Time(&currentTime);
+    \endcode
+
+    \sa wc_SetTimeCb
+*/
+time_t wc_Time(time_t* t);
+
+/*!
+    \ingroup ASN
+
+    \brief This function injects a custom extension in to an X.509 certificate.
+     note: The content at the address pointed to by any of the parameters that
+           are pointers must not be modified until the certificate is generated
+           and you have the der output. This function does NOT copy the
+           contents to another buffer.
+
+    \return 0 Returned on success.
+    \return Other negative values on failure.
+
+    \param cert Pointer to an initialized DecodedCert object.
+    \param critical If 0, the extension will not be marked critical, otherwise
+     it will be marked critical.
+    \param oid Dot separated oid as a string. For example "1.2.840.10045.3.1.7"
+    \param der The der encoding of the content of the extension.
+    \param derSz The size in bytes of the der encoding.
+
+
+    _Example_
+    \code
+    int ret = 0;
+    Cert newCert;
+    wc_InitCert(&newCert);
+
+    // Code to setup subject, public key, issuer, and other things goes here.
+
+    ret = wc_SetCustomExtension(&newCert, 1, "1.2.3.4.5",
+              (const byte *)"This is a critical extension", 28);
+    if (ret < 0) {
+        // Failed to set the extension.
+    }
+
+    ret = wc_SetCustomExtension(&newCert, 0, "1.2.3.4.6",
+              (const byte *)"This is NOT a critical extension", 32)
+    if (ret < 0) {
+        // Failed to set the extension.
+    }
+
+    // Code to sign the certificate and then write it out goes here.
+
+    \endcode
+
+    \sa wc_InitCert
+    \sa wc_SetUnknownExtCallback
+*/
+int wc_SetCustomExtension(Cert *cert, int critical, const char *oid,
+                                      const byte *der, word32 derSz);
+
+/*!
+    \ingroup ASN
+
+    \brief This function registers a callback that will be used anytime
+    wolfSSL encounters an unknown X.509 extension in a certificate while parsing
+    a certificate. The prototype of the callback should be:
+
+    \return 0 Returned on success.
+    \return Other negative values on failure.
+
+    \param cert the DecodedCert struct that is to be associated with this
+    callback.
+    \param cb function to register as the time callback.
+
+    _Example_
+    \code
+    int ret = 0;
+    // Unkown extension callback prototype
+    int myUnknownExtCallback(const word16* oid, word32 oidSz, int crit,
+                             const unsigned char* der, word32 derSz);
+
+    // Register it
+    ret = wc_SetUnknownExtCallback(cert, myUnknownExtCallback);
+    if (ret != 0) {
+        // failed to set the callback
+    }
+
+    // oid: Array of integers that are the dot separated values in an oid.
+    // oidSz: Number of values in oid.
+    // crit: Whether the extension was mark critical.
+    // der: The der encoding of the content of the extension.
+    // derSz: The size in bytes of the der encoding.
+    int myCustomExtCallback(const word16* oid, word32 oidSz, int crit,
+                            const unsigned char* der, word32 derSz) {
+
+        // Logic to parse extension goes here.
+
+        // NOTE: by returning zero, we are accepting this extension and
+        // informing wolfSSL that it is acceptable. If you find an extension
+        // that you do not find acceptable, you should return an error. The
+        // standard behavior upon encountering an unknown extension with the
+        // critical flag set is to return ASN_CRIT_EXT_E. For the sake of
+        // brevity, this example is always accepting every extension; you
+        // should use different logic.
+        return 0;
+    }
+    \endcode
+
+    \sa ParseCert
+    \sa wc_SetCustomExtension
+*/
+int wc_SetUnknownExtCallback(DecodedCert* cert,
+                                             wc_UnknownExtCallback cb);
+/*!
+    \ingroup ASN
+
+    \brief This function verifies the signature in the der form of an X.509
+    certificate against a public key. The public key is expected to be the full
+    subject public key info in der form.
+
+    \return 0 Returned on success.
+    \return Other negative values on failure.
+
+    \param cert The der encoding of the X.509 certificate.
+    \param certSz The size in bytes of cert.
+    \param heap A pointer to the heap used for dynamic allocation. Can be NULL.
+    \param pubKey The der encoding of the public key.
+    \param pubKeySz The size in bytes of pubKey.
+    \param pubKeyOID OID identifying the algorithm of the public key.
+    (ie: ECDSAk, DSAk or RSAk)
+*/
+int wc_CheckCertSigPubKey(const byte* cert, word32 certSz,
+                                      void* heap, const byte* pubKey,
+                                      word32 pubKeySz, int pubKeyOID);

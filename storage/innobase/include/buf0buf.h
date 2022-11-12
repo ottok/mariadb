@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -73,11 +73,6 @@ should not happen. This is because when we do LRU flushing we also put
 the blocks on free list. If LRU list is very small then we can end up
 in thrashing. */
 #define BUF_LRU_MIN_LEN		256
-
-# ifdef UNIV_DEBUG
-extern my_bool	buf_disable_resize_buffer_pool_debug; /*!< if TRUE, resizing
-					buffer pool is not allowed. */
-# endif /* UNIV_DEBUG */
 
 /** buf_page_t::state() values, distinguishing buf_page_t and buf_block_t */
 enum buf_page_state
@@ -2042,9 +2037,14 @@ public:
   buf_tmp_buffer_t *io_buf_reserve() { return io_buf.reserve(); }
 
   /** @return whether any I/O is pending */
-  bool any_io_pending() const
+  bool any_io_pending()
   {
-    return n_pend_reads || n_flush_LRU() || n_flush_list();
+    if (n_pend_reads)
+      return true;
+    mysql_mutex_lock(&mutex);
+    const bool any_pending{n_flush_LRU_ || n_flush_list_};
+    mysql_mutex_unlock(&mutex);
+    return any_pending;
   }
   /** @return total amount of pending I/O */
   ulint io_pending() const

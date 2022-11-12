@@ -1698,7 +1698,7 @@ t2	CREATE TABLE "t2" (
   "dc209" decimal(20,9) DEFAULT NULL,
   "cc" char(10) DEFAULT NULL,
   "cv" varchar(10) DEFAULT NULL,
-  "cvu" varchar(10) CHARACTER SET utf8 DEFAULT NULL,
+  "cvu" varchar(10) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
   "t1" tinytext DEFAULT NULL,
   "t2" text DEFAULT NULL,
   "t3" mediumtext DEFAULT NULL,
@@ -1860,7 +1860,7 @@ t2	CREATE TABLE "t2" (
   "dc209" decimal(20,9) DEFAULT NULL,
   "cc" char(10) DEFAULT NULL,
   "cv" varchar(10) DEFAULT NULL,
-  "cvu" varchar(10) CHARACTER SET utf8 DEFAULT NULL,
+  "cvu" varchar(10) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
   "t1" tinytext DEFAULT NULL,
   "t2" text DEFAULT NULL,
   "t3" mediumtext DEFAULT NULL,
@@ -2061,9 +2061,9 @@ CALL p1();
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE "t1" (
-  "tables_table_name" varchar(64) CHARACTER SET utf8 DEFAULT NULL,
+  "tables_table_name" varchar(64) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
   "tables_table_rows" bigint(21) unsigned DEFAULT NULL,
-  "processlist_info" longtext CHARACTER SET utf8 DEFAULT NULL,
+  "processlist_info" longtext CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
   "processlist_info_binary" blob(65535) DEFAULT NULL
 )
 DROP TABLE t1;
@@ -2549,7 +2549,18 @@ idx
 1
 DROP PROCEDURE p1;
 #
-# Start of 10.4 tests
+# MDEV-28588 SIGSEGV in __memmove_avx_unaligned_erms, strmake_root
+#
+SET sql_mode=ORACLE;
+BEGIN END;
+CREATE TABLE t1 (a INT);
+CREATE TRIGGER tr AFTER INSERT ON t1 FOR EACH ROW BEGIN END;
+SELECT ACTION_STATEMENT FROM INFORMATION_SCHEMA.TRIGGERS WHERE TRIGGER_SCHEMA='test' AND TRIGGER_NAME='tr';
+ACTION_STATEMENT	BEGIN END
+DROP TRIGGER tr;
+DROP TABLE t1;
+#
+# End of 10.3 tests
 #
 #
 # MDEV-19637 Crash on an SP variable assignment to a wrong subselect

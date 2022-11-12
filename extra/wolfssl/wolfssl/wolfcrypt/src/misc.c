@@ -1,6 +1,6 @@
 /* misc.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -187,11 +187,32 @@ WC_STATIC WC_INLINE word32 ByteReverseWord32(word32 value)
 WC_STATIC WC_INLINE void ByteReverseWords(word32* out, const word32* in,
                                     word32 byteCount)
 {
-    word32 count = byteCount/(word32)sizeof(word32), i;
+    word32 count, i;
 
-    for (i = 0; i < count; i++)
-        out[i] = ByteReverseWord32(in[i]);
+#ifdef WOLFSSL_USE_ALIGN
+    if ((((size_t)in & 0x3) == 0) &&
+        (((size_t)out & 0x3) == 0))
+    {
+#endif
+        count = byteCount/(word32)sizeof(word32);
+        for (i = 0; i < count; i++)
+            out[i] = ByteReverseWord32(in[i]);
+#ifdef WOLFSSL_USE_ALIGN
+    }
+    else {
+        byte *in_bytes = (byte *)in;
+        byte *out_bytes = (byte *)out;
+        word32 scratch;
 
+        byteCount &= ~0x3U;
+
+        for (i = 0; i < byteCount; i += sizeof(word32)) {
+            XMEMCPY(&scratch, in_bytes + i, sizeof(scratch));
+            scratch = ByteReverseWord32(scratch);
+            XMEMCPY(out_bytes + i, &scratch, sizeof(scratch));
+        }
+    }
+#endif
 }
 
 #if defined(WORD64_AVAILABLE) && !defined(WOLFSSL_NO_WORD64_OPS)
@@ -544,7 +565,297 @@ WC_STATIC WC_INLINE byte ctSetLTE(int a, int b)
 {
     return (byte)(((word32)a - b - 1) >> 31);
 }
+
+/* Constant time - conditionally copy size bytes from src to dst if mask is set
+ */
+WC_STATIC WC_INLINE void ctMaskCopy(byte mask, byte* dst, byte* src,
+    word16 size)
+{
+    int i;
+    for (i = 0; i < size; ++i) {
+        *(dst + i) ^= (*(dst + i) ^ *(src + i)) & mask;
+    }
+}
+
 #endif
+
+#if defined(WOLFSSL_W64_WRAPPER)
+#if defined(WORD64_AVAILABLE) && !defined(WOLFSSL_W64_WRAPPER_TEST)
+WC_STATIC WC_INLINE void w64Increment(w64wrapper *n) {
+    n->n++;
+}
+
+WC_STATIC WC_INLINE void w64Decrement(w64wrapper *n) {
+    n->n--;
+}
+
+WC_STATIC WC_INLINE byte w64Equal(w64wrapper a, w64wrapper b) {
+    return (a.n == b.n);
+}
+
+WC_STATIC WC_INLINE word32 w64GetLow32(w64wrapper n) {
+    return (word32)n.n;
+}
+
+WC_STATIC WC_INLINE word32 w64GetHigh32(w64wrapper n) {
+    return (word32)(n.n >> 32);
+}
+
+WC_STATIC WC_INLINE void w64SetLow32(w64wrapper *n, word32 low) {
+    n->n = (n->n & (~(word64)(0xffffffff))) | low;
+}
+
+WC_STATIC WC_INLINE w64wrapper w64Add32(w64wrapper a, word32 b, byte *wrap) {
+    a.n = a.n + b;
+    if (a.n < b && wrap != NULL)
+        *wrap = 1;
+
+    return a;
+}
+
+WC_STATIC WC_INLINE w64wrapper w64Sub32(w64wrapper a, word32 b, byte *wrap)
+{
+    if (a.n < b && wrap != NULL)
+        *wrap = 1;
+    a.n = a.n - b;
+    return a;
+}
+
+WC_STATIC WC_INLINE byte w64GT(w64wrapper a, w64wrapper b)
+{
+    return a.n > b.n;
+}
+
+WC_STATIC WC_INLINE byte w64IsZero(w64wrapper a)
+{
+    return a.n == 0;
+}
+
+WC_STATIC WC_INLINE void c64toa(const w64wrapper *a, byte *out)
+{
+#ifdef BIG_ENDIAN_ORDER
+    XMEMCPY(out, &a->n, sizeof(a->n));
+#else
+    word64 _out;
+    _out = ByteReverseWord64(a->n);
+    XMEMCPY(out, &_out, sizeof(_out));
+#endif /* BIG_ENDIAN_ORDER */
+}
+
+WC_STATIC WC_INLINE void ato64(const byte *in, w64wrapper *w64)
+{
+#ifdef BIG_ENDIAN_ORDER
+    XMEMCPY(&w64->n, in, sizeof(w64->n));
+#else
+    word64 _in;
+    XMEMCPY(&_in, in, sizeof(_in));
+    w64->n = ByteReverseWord64(_in);
+#endif /* BIG_ENDIAN_ORDER */
+}
+
+WC_STATIC WC_INLINE w64wrapper w64From32(word32 hi, word32 lo)
+{
+    w64wrapper ret;
+    ret.n = ((word64)hi << 32) | lo;
+    return ret;
+}
+
+WC_STATIC WC_INLINE byte w64GTE(w64wrapper a, w64wrapper b)
+{
+    return a.n >= b.n;
+}
+
+WC_STATIC WC_INLINE byte w64LT(w64wrapper a, w64wrapper b)
+{
+    return a.n < b.n;
+}
+
+WC_STATIC WC_INLINE w64wrapper w64Sub(w64wrapper a, w64wrapper b)
+{
+    a.n -= b.n;
+    return a;
+}
+
+WC_STATIC WC_INLINE void w64Zero(w64wrapper *a)
+{
+    a->n = 0;
+}
+
+#else
+WC_STATIC WC_INLINE void w64Increment(w64wrapper *n)
+{
+    n->n[1]++;
+    if (n->n[1] == 0)
+        n->n[0]++;
+}
+
+WC_STATIC WC_INLINE void w64Decrement(w64wrapper *n) {
+    if (n->n[1] == 0)
+        n->n[0]--;
+    n->n[1]--;
+}
+
+WC_STATIC WC_INLINE byte w64Equal(w64wrapper a, w64wrapper b)
+{
+    return (a.n[0] == b.n[0] && a.n[1] == b.n[1]);
+}
+
+WC_STATIC WC_INLINE word32 w64GetLow32(w64wrapper n) {
+    return n.n[1];
+}
+
+WC_STATIC WC_INLINE word32 w64GetHigh32(w64wrapper n) {
+    return n.n[0];
+}
+
+WC_STATIC WC_INLINE void w64SetLow32(w64wrapper *n, word32 low)
+{
+    n->n[1] = low;
+}
+
+WC_STATIC WC_INLINE w64wrapper w64Add32(w64wrapper a, word32 b, byte *wrap)
+{
+    a.n[1] = a.n[1] + b;
+    if (a.n[1] < b) {
+        a.n[0]++;
+        if (wrap != NULL && a.n[0] == 0)
+                *wrap = 1;
+    }
+
+    return a;
+}
+
+WC_STATIC WC_INLINE w64wrapper w64Sub32(w64wrapper a, word32 b, byte *wrap)
+{
+    byte _underflow = 0;
+    if (a.n[1] < b)
+        _underflow = 1;
+
+    a.n[1] -= b;
+    if (_underflow) {
+        if (a.n[0] == 0 && wrap != NULL)
+            *wrap = 1;
+        a.n[0]--;
+    }
+
+    return a;
+}
+
+WC_STATIC WC_INLINE w64wrapper w64Sub(w64wrapper a, w64wrapper b)
+{
+    if (a.n[1] < b.n[1])
+        a.n[0]--;
+    a.n[1] -= b.n[1];
+    a.n[0] -= b.n[0];
+    return a;
+}
+
+WC_STATIC WC_INLINE void w64Zero(w64wrapper *a)
+{
+    a->n[0] = a->n[1] = 0;
+}
+
+WC_STATIC WC_INLINE byte w64GT(w64wrapper a, w64wrapper b)
+{
+    if (a.n[0] > b.n[0])
+        return 1;
+    if (a.n[0] == b.n[0])
+        return a.n[1] > b.n[1];
+    return 0;
+}
+
+WC_STATIC WC_INLINE byte w64GTE(w64wrapper a, w64wrapper b)
+{
+    if (a.n[0] > b.n[0])
+        return 1;
+    if (a.n[0] == b.n[0])
+        return a.n[1] >= b.n[1];
+    return 0;
+}
+
+WC_STATIC WC_INLINE byte w64IsZero(w64wrapper a)
+{
+    return a.n[0] == 0 && a.n[1] == 0;
+}
+
+WC_STATIC WC_INLINE void c64toa(w64wrapper *a, byte *out)
+{
+#ifdef BIG_ENDIAN_ORDER
+    word32 *_out = (word32*)(out);
+    _out[0] = a->n[0];
+    _out[1] = a->n[1];
+#else
+    c32toa(a->n[0], out);
+    c32toa(a->n[1], out + 4);
+#endif /* BIG_ENDIAN_ORDER */
+}
+
+WC_STATIC WC_INLINE void ato64(const byte *in, w64wrapper *w64)
+{
+#ifdef BIG_ENDIAN_ORDER
+    const word32 *_in = (const word32*)(in);
+    w64->n[0] = *_in;
+    w64->n[1] = *(_in + 1);
+#else
+    ato32(in, &w64->n[0]);
+    ato32(in + 4, &w64->n[1]);
+#endif /* BIG_ENDIAN_ORDER */
+}
+
+WC_STATIC WC_INLINE w64wrapper w64From32(word32 hi, word32 lo)
+{
+    w64wrapper w64;
+    w64.n[0] = hi;
+    w64.n[1] = lo;
+    return w64;
+}
+
+WC_STATIC WC_INLINE byte w64LT(w64wrapper a, w64wrapper b)
+{
+    if (a.n[0] < b.n[0])
+        return 1;
+    if (a.n[0] == b.n[0])
+        return a.n[1] < b.n[1];
+
+    return 0;
+}
+
+#endif /* WORD64_AVAILABLE && !WOLFSSL_W64_WRAPPER_TEST */
+#endif /* WOLFSSL_W64_WRAPPER */
+
+#if defined(HAVE_SESSION_TICKET) || !defined(NO_CERTS) || \
+    !defined(NO_SESSION_CACHE)
+/* Make a word from the front of random hash */
+WC_STATIC WC_INLINE word32 MakeWordFromHash(const byte* hashID)
+{
+    return ((word32)hashID[0] << 24) | ((word32)hashID[1] << 16) |
+           ((word32)hashID[2] <<  8) |  (word32)hashID[3];
+}
+#endif /* HAVE_SESSION_TICKET || !NO_CERTS || !NO_SESSION_CACHE */
+
+
+#if !defined(NO_SESSION_CACHE) || defined(HAVE_SESSION_TICKET)
+
+#include <wolfssl/wolfcrypt/hash.h>
+
+/* some session IDs aren't random after all, let's make them random */
+WC_STATIC WC_INLINE word32 HashObject(const byte* o, word32 len, int* error)
+{
+    byte digest[WC_MAX_DIGEST_SIZE];
+
+#ifndef NO_MD5
+    *error =  wc_Md5Hash(o, len, digest);
+#elif !defined(NO_SHA)
+    *error =  wc_ShaHash(o, len, digest);
+#elif !defined(NO_SHA256)
+    *error =  wc_Sha256Hash(o, len, digest);
+#else
+    #error "We need a digest to hash the session IDs"
+#endif
+
+    return *error == 0 ? MakeWordFromHash(digest) : 0; /* 0 on failure */
+}
+#endif /* !NO_SESSION_CACHE || HAVE_SESSION_TICKET */
 
 #undef WC_STATIC
 

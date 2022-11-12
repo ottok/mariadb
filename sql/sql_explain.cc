@@ -604,27 +604,29 @@ void Explain_union::print_explain_json(Explain_query *query,
   else
     writer->add_member("union_result").start_object();
 
-  // using_temporary_table
-  make_union_table_name(table_name_buffer);
-  writer->add_member("table_name").add_str(table_name_buffer);
-  writer->add_member("access_type").add_str("ALL"); // not very useful
-
-  /* r_loops (not present in tabular output) */
-  if (is_analyze)
+  if (using_tmp)
   {
-    writer->add_member("r_loops").add_ll(fake_select_lex_tracker.get_loops());
-  }
+    make_union_table_name(table_name_buffer);
+    writer->add_member("table_name").add_str(table_name_buffer);
+    writer->add_member("access_type").add_str("ALL"); // not very useful
 
-  /* `r_rows` */
-  if (is_analyze)
-  {
-    writer->add_member("r_rows");
-    if (fake_select_lex_tracker.has_scans())
-      writer->add_double(fake_select_lex_tracker.get_avg_rows());
-    else
-      writer->add_null();
-  }
+    /* r_loops (not present in tabular output) */
+    if (is_analyze)
+    {
+      writer->add_member("r_loops").add_ll(
+          fake_select_lex_tracker.get_loops());
+    }
 
+    /* `r_rows` */
+    if (is_analyze)
+    {
+      writer->add_member("r_rows");
+      if (fake_select_lex_tracker.has_scans())
+        writer->add_double(fake_select_lex_tracker.get_avg_rows());
+      else
+        writer->add_null();
+    }
+  }
   writer->add_member("query_specifications").start_array();
 
   for (int i= 0; i < (int) union_members.elements(); i++)
@@ -660,7 +662,11 @@ int Explain_node::print_explain_for_children(Explain_query *query,
   for (int i= 0; i < (int) children.elements(); i++)
   {
     Explain_node *node= query->get_node(children.at(i));
-    if (node->print_explain(query, output, explain_flags, is_analyze))
+    /*
+      Note: node may not be present because for certain kinds of subqueries,
+      the optimizer is not able to see that they were eliminated.
+    */
+    if (node && node->print_explain(query, output, explain_flags, is_analyze))
       return 1;
   }
   return 0;
@@ -704,8 +710,15 @@ void Explain_node::print_explain_json_for_children(Explain_query *query,
   for (int i= 0; i < (int) children.elements(); i++)
   {
     Explain_node *node= query->get_node(children.at(i));
-    /* Derived tables are printed inside Explain_table_access objects */
     
+    /*
+      Note: node may not be present because for certain kinds of subqueries,
+      the optimizer is not able to see that they were eliminated.
+    */
+    if (!node)
+      continue;
+
+    /* Derived tables are printed inside Explain_table_access objects */
     if (!is_connection_printable_in_json(node->connection_type))
       continue;
 
@@ -1663,6 +1676,7 @@ void Explain_rowid_filter::print_explain_json(Explain_query *query,
   if (is_analyze)
   {
     writer->add_member("r_rows").add_double(tracker->get_container_elements());
+    writer->add_member("r_lookups").add_ll(tracker->get_container_lookups());
     writer->add_member("r_selectivity_pct").
       add_double(tracker->get_r_selectivity_pct() * 100.0);
     writer->add_member("r_buffer_size").

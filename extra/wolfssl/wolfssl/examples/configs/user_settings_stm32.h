@@ -1,6 +1,6 @@
 /* wolfSSL_conf.h (example of generated wolfSSL.I-CUBE-wolfSSL_conf.h)
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -386,8 +386,8 @@
 /* AES */
 #if defined(WOLF_CONF_AESGCM) && WOLF_CONF_AESGCM == 1
     #define HAVE_AESGCM
-    /* GCM Method: GCM_SMALL, GCM_WORD32 or GCM_TABLE */
-    /* GCM_TABLE is about 4K larger and 3x faster */
+    /* GCM Method: GCM_SMALL, GCM_WORD32, GCM_TABLE or GCM_TABLE_4BIT */
+    /* GCM_TABLE is about 4K larger and 3x faster for GHASH */
     #define GCM_SMALL
     #define HAVE_AES_DECRYPT
 #endif
@@ -560,8 +560,6 @@
 
 #define NO_DSA
 #define NO_RC4
-#define NO_HC128
-#define NO_RABBIT
 #define NO_MD4
 #define NO_DES3
 

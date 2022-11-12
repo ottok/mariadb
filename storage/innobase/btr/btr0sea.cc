@@ -2,7 +2,7 @@
 
 Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2008, Google Inc.
-Copyright (c) 2017, 2021, MariaDB Corporation.
+Copyright (c) 2017, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -1010,8 +1010,6 @@ both have sensible values.
 				we assume the caller uses his search latch
 				to protect the record!
 @param[out]	cursor		tree cursor
-@param[in]	ahi_latch	the adaptive hash index latch being held,
-				or NULL
 @param[in]	mtr		mini transaction
 @return whether the search succeeded */
 bool
@@ -1022,23 +1020,18 @@ btr_search_guess_on_hash(
 	ulint		mode,
 	ulint		latch_mode,
 	btr_cur_t*	cursor,
-	rw_lock_t*	ahi_latch,
 	mtr_t*		mtr)
 {
 	ulint		fold;
 	index_id_t	index_id;
 
 	ut_ad(mtr->is_active());
-	ut_ad(!ahi_latch || rw_lock_own_flagged(
-		      ahi_latch, RW_LOCK_FLAG_X | RW_LOCK_FLAG_S));
 
 	if (!btr_search_enabled) {
 		return false;
 	}
 
 	ut_ad(!index->is_ibuf());
-	ut_ad(!ahi_latch
-	      || ahi_latch == &btr_search_sys.get_part(*index)->latch);
 	ut_ad((latch_mode == BTR_SEARCH_LEAF)
 	      || (latch_mode == BTR_MODIFY_LEAF));
 	compile_time_assert(ulint{BTR_SEARCH_LEAF} == ulint{RW_S_LATCH});
@@ -1074,25 +1067,18 @@ btr_search_guess_on_hash(
 	auto part = btr_search_sys.get_part(*index);
 	const rec_t* rec;
 
-	if (!ahi_latch) {
-		rw_lock_s_lock(&part->latch);
+	rw_lock_s_lock(&part->latch);
 
-		if (!btr_search_enabled) {
-			goto fail;
-		}
-	} else {
-		ut_ad(btr_search_enabled);
-		ut_ad(rw_lock_own(ahi_latch, RW_LOCK_S));
+	if (!btr_search_enabled) {
+		goto fail;
 	}
 
 	rec = static_cast<const rec_t*>(
 		ha_search_and_get_data(&part->table, fold));
 
 	if (!rec) {
-		if (!ahi_latch) {
 fail:
-			rw_lock_s_unlock(&part->latch);
-		}
+		rw_lock_s_unlock(&part->latch);
 
 		btr_search_failure(info, cursor);
 		return false;
@@ -1100,59 +1086,51 @@ fail:
 
 	buf_block_t* block = buf_pool.block_from_ahi(rec);
 
-	if (!ahi_latch) {
-		page_hash_latch* hash_lock = buf_pool.hash_lock_get(
-			block->page.id());
-		hash_lock->read_lock();
+	page_hash_latch* hash_lock = buf_pool.hash_lock_get(block->page.id());
+	hash_lock->read_lock();
 
-		if (block->page.state() == BUF_BLOCK_REMOVE_HASH) {
-			/* Another thread is just freeing the block
-			from the LRU list of the buffer pool: do not
-			try to access this page. */
-			hash_lock->read_unlock();
+	if (block->page.state() == BUF_BLOCK_REMOVE_HASH) {
+		/* Another thread is just freeing the block
+		from the LRU list of the buffer pool: do not
+		try to access this page. */
+		hash_lock->read_unlock();
+		goto fail;
+	}
+
+	const bool fail = index != block->index
+		&& index_id == block->index->id;
+	ut_a(!fail || block->index->freed());
+	ut_ad(block->page.state() == BUF_BLOCK_FILE_PAGE);
+	DBUG_ASSERT(fail || block->page.status != buf_page_t::FREED);
+
+	buf_block_buf_fix_inc(block, __FILE__, __LINE__);
+	hash_lock->read_unlock();
+	block->page.set_accessed();
+
+	buf_page_make_young_if_needed(&block->page);
+	mtr_memo_type_t	fix_type;
+	if (latch_mode == BTR_SEARCH_LEAF) {
+		if (!rw_lock_s_lock_nowait(&block->lock, __FILE__, __LINE__)) {
+got_no_latch:
+			buf_block_buf_fix_dec(block);
 			goto fail;
 		}
-
-		const bool fail = index != block->index
-			&& index_id == block->index->id;
-		ut_a(!fail || block->index->freed());
-		ut_ad(block->page.state() == BUF_BLOCK_FILE_PAGE);
-		DBUG_ASSERT(fail || block->page.status != buf_page_t::FREED);
-
-		buf_block_buf_fix_inc(block, __FILE__, __LINE__);
-		hash_lock->read_unlock();
-		block->page.set_accessed();
-
-		buf_page_make_young_if_needed(&block->page);
-		mtr_memo_type_t	fix_type;
-		if (latch_mode == BTR_SEARCH_LEAF) {
-			if (!rw_lock_s_lock_nowait(&block->lock,
-						   __FILE__, __LINE__)) {
-got_no_latch:
-				buf_block_buf_fix_dec(block);
-				goto fail;
-			}
-			fix_type = MTR_MEMO_PAGE_S_FIX;
-		} else {
-			if (!rw_lock_x_lock_func_nowait_inline(
-				    &block->lock, __FILE__, __LINE__)) {
-				goto got_no_latch;
-			}
-			fix_type = MTR_MEMO_PAGE_X_FIX;
+		fix_type = MTR_MEMO_PAGE_S_FIX;
+	} else {
+		if (!rw_lock_x_lock_func_nowait_inline(
+			    &block->lock, __FILE__, __LINE__)) {
+			goto got_no_latch;
 		}
-		mtr->memo_push(block, fix_type);
+		fix_type = MTR_MEMO_PAGE_X_FIX;
+	}
+	mtr->memo_push(block, fix_type);
 
-		buf_pool.stat.n_page_gets++;
+	buf_pool.stat.n_page_gets++;
 
-		rw_lock_s_unlock(&part->latch);
+	rw_lock_s_unlock(&part->latch);
 
-		buf_block_dbg_add_level(block, SYNC_TREE_NODE_FROM_HASH);
-		if (UNIV_UNLIKELY(fail)) {
-			goto fail_and_release_page;
-		}
-	} else if (UNIV_UNLIKELY(index != block->index
-				 && index_id == block->index->id)) {
-		ut_a(block->index->freed());
+	buf_block_dbg_add_level(block, SYNC_TREE_NODE_FROM_HASH);
+	if (UNIV_UNLIKELY(fail)) {
 		goto fail_and_release_page;
 	}
 
@@ -1161,9 +1139,7 @@ got_no_latch:
 		ut_ad(block->page.state() == BUF_BLOCK_REMOVE_HASH);
 
 fail_and_release_page:
-		if (!ahi_latch) {
-			btr_leaf_page_release(block, latch_mode, mtr);
-		}
+		btr_leaf_page_release(block, latch_mode, mtr);
 
 		btr_search_failure(info, cursor);
 		return false;
@@ -1181,7 +1157,7 @@ fail_and_release_page:
 	record to determine if our guess for the cursor position is
 	right. */
 	if (index_id != btr_page_get_index_id(block->frame)
-	    || !btr_search_check_guess(cursor, !!ahi_latch, tuple, mode)) {
+	    || !btr_search_check_guess(cursor, 0, tuple, mode)) {
 		goto fail_and_release_page;
 	}
 
@@ -1230,14 +1206,6 @@ fail_and_release_page:
 #ifdef UNIV_SEARCH_PERF_STAT
 	btr_search_n_succ++;
 #endif
-	/* Increment the page get statistics though we did not really
-	fix the page: for user info only */
-	++buf_pool.stat.n_page_gets;
-
-	if (!ahi_latch) {
-		buf_page_make_young_if_needed(&block->page);
-	}
-
 	return true;
 }
 
@@ -1246,8 +1214,11 @@ fail_and_release_page:
 			index page for which we know that
 			block->buf_fix_count == 0 or it is an index page which
 			has already been removed from the buf_pool.page_hash
-			i.e.: it is in state BUF_BLOCK_REMOVE_HASH */
-void btr_search_drop_page_hash_index(buf_block_t* block)
+			i.e.: it is in state BUF_BLOCK_REMOVE_HASH
+@param[in]	garbage_collect	drop ahi only if the index is marked
+				as freed */
+void btr_search_drop_page_hash_index(buf_block_t* block,
+				     bool garbage_collect)
 {
 	ulint			n_fields;
 	ulint			n_bytes;
@@ -1263,9 +1234,6 @@ void btr_search_drop_page_hash_index(buf_block_t* block)
 	rec_offs*		offsets;
 
 retry:
-	/* This debug check uses a dirty read that could theoretically cause
-	false positives while buf_pool.clear_hash_index() is executing. */
-	assert_block_ahi_valid(block);
 	ut_ad(!btr_search_own_any(RW_LOCK_S));
 	ut_ad(!btr_search_own_any(RW_LOCK_X));
 
@@ -1290,17 +1258,24 @@ retry:
 	auto part = btr_search_sys.get_part(index_id,
 					    block->page.id().space());
 
+	rw_lock_s_lock(&part->latch);
+
 	dict_index_t* index = block->index;
 	bool is_freed = index && index->freed();
 
 	if (is_freed) {
+		rw_lock_s_unlock(&part->latch);
 		rw_lock_x_lock(&part->latch);
-	} else {
-		rw_lock_s_lock(&part->latch);
+		if (index != block->index) {
+			rw_lock_x_unlock(&part->latch);
+			goto retry;
+		}
+	} else if (garbage_collect) {
+		rw_lock_s_unlock(&part->latch);
+		return;
 	}
 
 	assert_block_ahi_valid(block);
-
 
 	if (!index || !btr_search_enabled) {
 		if (is_freed) {
@@ -1774,11 +1749,12 @@ drop_exit:
 		return;
 	}
 
+	rw_lock_s_lock(ahi_latch);
+
 	if (index->freed()) {
+		rw_lock_s_unlock(ahi_latch);
 		goto drop_exit;
 	}
-
-	rw_lock_s_lock(ahi_latch);
 
 	if (block->index) {
 		uint16_t n_fields = block->curr_n_fields;
@@ -2375,5 +2351,20 @@ btr_search_validate()
 	return(true);
 }
 
+#ifdef UNIV_DEBUG
+bool btr_search_check_marked_free_index(const buf_block_t *block)
+{
+  const index_id_t index_id= btr_page_get_index_id(block->frame);
+  auto part= btr_search_sys.get_part(index_id, block->page.id().space());
+
+  rw_lock_s_lock(&part->latch);
+
+  bool is_freed= block->index && block->index->freed();
+
+  rw_lock_s_unlock(&part->latch);
+
+  return is_freed;
+}
+#endif /* UNIV_DEBUG */
 #endif /* defined UNIV_AHI_DEBUG || defined UNIV_DEBUG */
 #endif /* BTR_CUR_HASH_ADAPT */

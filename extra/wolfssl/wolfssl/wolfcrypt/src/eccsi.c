@@ -1,6 +1,6 @@
 /* eccsi.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -155,6 +155,7 @@ void wc_FreeEccsiKey(EccsiKey* key)
         wc_ecc_del_point_h(key->pvt, key->heap);
         wc_ecc_free(&key->pubkey);
         wc_ecc_free(&key->ecc);
+        XMEMSET(key, 0, sizeof(*key));
     }
 }
 
@@ -383,10 +384,12 @@ static int eccsi_compute_hs(EccsiKey* key, enum wc_HashType hashType,
     word32 dataSz = 0;
     int idx = wc_ecc_get_curve_idx(key->ecc.dp->id);
     ecc_point* kpak = &key->ecc.pubkey;
+    int hash_inited = 0;
 
     /* HS = hash( G | KPAK | ID | PVT ) */
     err = wc_HashInit_ex(&key->hash, hashType, key->heap, INVALID_DEVID);
     if (err == 0) {
+        hash_inited = 1;
         /* Base Point - G */
         dataSz = sizeof(key->data);
         err = eccsi_encode_base(key, key->data, &dataSz);
@@ -424,6 +427,10 @@ static int eccsi_compute_hs(EccsiKey* key, enum wc_HashType hashType,
 
     if (err == 0) {
         *hashSz = (byte)wc_HashGetDigestSize(hashType);
+    }
+
+    if (hash_inited) {
+        (void)wc_HashFree(&key->hash, hashType);
     }
 
     return err;
@@ -1707,17 +1714,17 @@ int wc_SetEccsiPair(EccsiKey* key, const mp_int* ssk, const ecc_point* pvt)
  *
  * @param  [in]   a      MP integer to fix.
  * @param  [in]   order  MP integer representing order of curve.
- * @param  [in]   max    Maximum number of bytes to encode into.
+ * @param  [in]   m      Maximum number of bytes to encode into.
  * @param  [out]  r      MP integer that is the result after fixing.
  * @return  0 on success.
  * @return  MEMORY_E when dynamic memory allocation fails.
  */
-static int eccsi_fit_to_octets(const mp_int* a, mp_int* order, int max,
+static int eccsi_fit_to_octets(const mp_int* a, mp_int* order, int m,
         mp_int* r)
 {
     int err;
 
-    if (mp_count_bits(a) > max * 8) {
+    if (mp_count_bits(a) > m * 8) {
         err = mp_sub(order, (mp_int*)a, r);
     }
     else
@@ -1737,16 +1744,16 @@ static int eccsi_fit_to_octets(const mp_int* a, mp_int* order, int max,
  *
  * @param  [in]   a      MP integer to fix.
  * @param  [in]   order  MP integer representing order of curve.
- * @param  [in]   max    Maximum number of bytes to encode into.
+ * @param  [in]   m      Maximum number of bytes to encode into.
  * @param  [out]  r      MP integer that is the result after fixing.
  * @return  0 on success.
  * @return  MEMORY_E when dynamic memory allocation fails.
  */
-static int eccsi_fit_to_octets(const mp_int* a, const mp_int* order, int max,
+static int eccsi_fit_to_octets(const mp_int* a, const mp_int* order, int m,
         mp_int* r)
 {
     (void)order;
-    (void)max;
+    (void)m;
 
     /* Duplicate line to stop static analyzer complaining. */
     return mp_copy(a, r);
@@ -1774,10 +1781,12 @@ static int eccsi_compute_he(EccsiKey* key, enum wc_HashType hashType,
 {
     int err = 0;
     word32 dataSz = key->ecc.dp->size;
+    int hash_inited = 0;
 
     /* HE = hash( HS | r | M ) */
     err = wc_HashInit_ex(&key->hash, hashType, key->heap, INVALID_DEVID);
     if (err == 0) {
+        hash_inited = 1;
         /* HS */
         err = wc_HashUpdate(&key->hash, hashType, key->idHash, key->idHashSz);
     }
@@ -1797,6 +1806,10 @@ static int eccsi_compute_he(EccsiKey* key, enum wc_HashType hashType,
     }
     if (err == 0) {
         *heSz = wc_HashGetDigestSize(hashType);
+    }
+
+    if (hash_inited) {
+        (void)wc_HashFree(&key->hash, hashType);
     }
 
     return err;
