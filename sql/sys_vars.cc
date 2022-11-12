@@ -65,6 +65,9 @@
 #include "semisync_master.h"
 #include "semisync_slave.h"
 #include <ssl_compat.h>
+#ifdef WITH_WSREP
+#include "wsrep_mysqld.h"
+#endif
 
 #define PCRE2_STATIC 1             /* Important on Windows */
 #include "pcre2.h"                 /* pcre2 header file */
@@ -719,15 +722,13 @@ Sys_binlog_direct(
        CMD_LINE(OPT_ARG), DEFAULT(FALSE),
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(binlog_direct_check));
 
-
-static Sys_var_mybool Sys_explicit_defaults_for_timestamp(
+static Sys_var_bit Sys_explicit_defaults_for_timestamp(
        "explicit_defaults_for_timestamp",
        "This option causes CREATE TABLE to create all TIMESTAMP columns "
        "as NULL with DEFAULT NULL attribute, Without this option, "
        "TIMESTAMP columns are NOT NULL and have implicit DEFAULT clauses.",
-       READ_ONLY GLOBAL_VAR(opt_explicit_defaults_for_timestamp),
-       CMD_LINE(OPT_ARG), DEFAULT(FALSE));
-
+       SESSION_VAR(option_bits), CMD_LINE(OPT_ARG),
+       OPTION_EXPLICIT_DEF_TIMESTAMP, DEFAULT(FALSE), NO_MUTEX_GUARD, IN_BINLOG);
 
 static Sys_var_ulonglong Sys_bulk_insert_buff_size(
        "bulk_insert_buffer_size", "Size of tree cache used in bulk "
@@ -5078,13 +5079,19 @@ static Sys_var_have Sys_have_symlink(
        "--skip-symbolic-links option.",
        READ_ONLY GLOBAL_VAR(have_symlink), NO_CMD_LINE);
 
-#if defined(__SANITIZE_ADDRESS__) || defined(WITH_UBSAN)
+#if defined __SANITIZE_ADDRESS__ || defined WITH_UBSAN || __has_feature(memory_sanitizer)
 
-#ifdef __SANITIZE_ADDRESS__
-#define SANITIZER_MODE "ASAN"
-#else
-#define SANITIZER_MODE "UBSAN"
-#endif /* __SANITIZE_ADDRESS__ */
+# ifdef __SANITIZE_ADDRESS__
+#  ifdef WITH_UBSAN
+#   define SANITIZER_MODE "ASAN,UBSAN"
+#  else
+#   define SANITIZER_MODE "ASAN"
+#  endif
+# elif defined WITH_UBSAN
+#  define SANITIZER_MODE "UBSAN"
+# else
+#  define SANITIZER_MODE "MSAN"
+# endif
 
 static char *have_sanitizer;
 static Sys_var_charptr Sys_have_santitizer(
@@ -5332,7 +5339,6 @@ Sys_var_rpl_filter::global_value_ptr(THD *thd,
   }
 
   rpl_filter= mi->rpl_filter;
-  tmp.length(0);
 
   mysql_mutex_lock(&LOCK_active_mi);
   switch (opt_id) {
@@ -6626,7 +6632,7 @@ static Sys_var_ulong Sys_log_tc_size(
        DEFAULT(my_getpagesize() * 6), BLOCK_SIZE(my_getpagesize()));
 #endif
 
-static Sys_var_ulonglong Sys_max_thread_mem(
+static Sys_var_ulonglong Sys_max_session_mem_used(
        "max_session_mem_used", "Amount of memory a single user session "
        "is allowed to allocate. This limits the value of the "
        "session variable MEM_USED", SESSION_VAR(max_mem_used),

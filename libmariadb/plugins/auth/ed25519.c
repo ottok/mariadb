@@ -20,8 +20,7 @@
 #define _GNU_SOURCE 1
 #endif
 
-#ifdef _WIN32
-#define HAVE_WINCRYPT
+#ifdef HAVE_WINCRYPT
 #undef HAVE_OPENSSL
 #undef HAVE_GNUTLS
 #endif
@@ -56,7 +55,7 @@ extern BCRYPT_ALG_HANDLE Sha512Prov;
 #endif
 
 #include <ref10/api.h>
-#include <ref10/common.h>
+#include <ed25519_common.h>
 #include <ma_crypt.h>
 
 /* function prototypes */

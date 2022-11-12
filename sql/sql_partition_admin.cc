@@ -32,6 +32,7 @@
 #include "ha_partition.h"                   // ha_partition
 #endif
 #include "sql_base.h"                       // open_and_lock_tables
+#include "wsrep_mysqld.h"
 
 #ifndef WITH_PARTITION_STORAGE_ENGINE
 
@@ -259,8 +260,13 @@ static bool compare_table_with_partition(THD *thd, TABLE *table,
     my_error(ER_TABLES_DIFFERENT_METADATA, MYF(0));
     DBUG_RETURN(TRUE);
   }
-  DBUG_ASSERT(table->s->db_create_options ==
-              part_table->s->db_create_options);
+
+  if (table->s->db_create_options != part_table->s->db_create_options)
+  {
+    my_error(ER_TABLES_DIFFERENT_METADATA, MYF(0));
+    DBUG_RETURN(TRUE);
+  }
+
   DBUG_ASSERT(table->s->db_options_in_use ==
               part_table->s->db_options_in_use);
 
@@ -562,6 +568,14 @@ bool Sql_cmd_alter_table_exchange_partition::
 
   part_table= table_list->table;
   swap_table= swap_table_list->table;
+
+  /* Don't allow to exchange with a VIEW */
+  if (unlikely(swap_table_list->view))
+  {
+    my_error(ER_WRONG_OBJECT, MYF(0), table_list->db.str,
+              swap_table_list->table_name.str, "BASE TABLE");
+    DBUG_RETURN(TRUE);
+  }
 
   if (unlikely(check_exchange_partition(swap_table, part_table)))
     DBUG_RETURN(TRUE);

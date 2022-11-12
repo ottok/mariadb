@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 #openssl.test
 
@@ -10,11 +10,16 @@ CERT_DIR="$PWD/$(dirname "$0")/../certs"
 
 if ! test -n "$WOLFSSL_OPENSSL_TEST"; then
     echo "WOLFSSL_OPENSSL_TEST NOT set, won't run"
-    exit 0
+    exit 77
 fi
 
 # if we can, isolate the network namespace to eliminate port collisions.
-if [ "${AM_BWRAPPED-}" != "yes" ]; then
+if [[ -n "$NETWORK_UNSHARE_HELPER" ]]; then
+     if [[ -z "$NETWORK_UNSHARE_HELPER_CALLED" ]]; then
+         export NETWORK_UNSHARE_HELPER_CALLED=yes
+         exec "$NETWORK_UNSHARE_HELPER" "$0" "$@" || exit $?
+     fi
+elif [ "${AM_BWRAPPED-}" != "yes" ]; then
     bwrap_path="$(command -v bwrap)"
     if [ -n "$bwrap_path" ]; then
         export AM_BWRAPPED=yes
@@ -27,9 +32,19 @@ echo "WOLFSSL_OPENSSL_TEST set, running test..."
 
 # need a unique port since may run the same time as testsuite
 generate_port() {
-    port=$(($(od -An -N2 /dev/random) % (65535-49512) + 49512))
-}
+    #-------------------------------------------------------------------------#
+    # Generate a random port number
+    #-------------------------------------------------------------------------#
 
+    if [[ "$OSTYPE" == "linux"* ]]; then
+        port=$(($(od -An -N2 /dev/urandom) % (65535-49512) + 49512))
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        port=$(($(od -An -N2 /dev/random) % (65535-49512) + 49512))
+    else
+        echo "Unknown OS TYPE"
+        exit 1
+    fi
+}
 
 no_pid=-1
 servers=""
@@ -316,11 +331,11 @@ do_wolfssl_client() {
     if [ "$version" != "5" -a "$version" != "" ]
     then
         echo "#"
-        echo "# $WOLFSSL_CLIENT -p $port -g $wolfssl_resume -l $wolfSuite -v $version $psk $adh "$wolfssl_cert" "$wolfssl_key" "$wolfssl_caCert" $crl"
+        echo "# $WOLFSSL_CLIENT -p $port -g $wolfssl_resume -l $wolfSuite -v $version $psk $adh \"$wolfssl_cert\" \"$wolfssl_key\" \"$wolfssl_caCert\" $crl"
         $WOLFSSL_CLIENT -p $port -g $wolfssl_resume -l $wolfSuite -v $version $psk $adh "$wolfssl_cert" "$wolfssl_key" "$wolfssl_caCert" $crl
     else
         echo "#"
-        echo "# $WOLFSSL_CLIENT -p $port -g $wolfssl_resume -l $wolfSuite $psk $adh "$wolfssl_cert" "$wolfssl_key" "$wolfssl_caCert" $crl"
+        echo "# $WOLFSSL_CLIENT -p $port -g $wolfssl_resume -l $wolfSuite $psk $adh \"$wolfssl_cert\" \"$wolfssl_key\" \"$wolfssl_caCert\" $crl"
         # do all versions
         $WOLFSSL_CLIENT -p $port -g $wolfssl_resume -l $wolfSuite $psk $adh "$wolfssl_cert" "$wolfssl_key" "$wolfssl_caCert" $crl
     fi
@@ -370,12 +385,12 @@ do_openssl_client() {
     if [ "$tls13_cipher" = "" ]
     then
         echo "#"
-        echo "# $OPENSSL s_client -connect localhost:$port -reconnect -cipher $cmpSuite $openssl_version $openssl_psk $openssl_cert1 \"$openssl_cert2\" $openssl_key1 \"$openssl_key2\" $openssl_caCert1 \"$openssl_caCert2\""
-        echo "Hello" | eval "$OPENSSL s_client -connect localhost:$port -reconnect -cipher $cmpSuite $openssl_version $openssl_psk $openssl_cert1 \"$openssl_cert2\" $openssl_key1 \"$openssl_key2\" $openssl_caCert1 \"$openssl_caCert2\""
+        echo "# $OPENSSL s_client -connect localhost:$port -reconnect -legacy_renegotiation -cipher $cmpSuite $openssl_version $openssl_psk $openssl_cert1 \"$openssl_cert2\" $openssl_key1 \"$openssl_key2\" $openssl_caCert1 \"$openssl_caCert2\""
+        echo "Hello" | eval "$OPENSSL s_client -connect localhost:$port -reconnect -legacy_renegotiation -cipher $cmpSuite $openssl_version $openssl_psk $openssl_cert1 \"$openssl_cert2\" $openssl_key1 \"$openssl_key2\" $openssl_caCert1 \"$openssl_caCert2\""
     else
         echo "#"
-        echo "# $OPENSSL s_client -connect localhost:$port -reconnect -ciphersuites=$cmpSuite $openssl_version $openssl_psk $openssl_cert1 \"$openssl_cert2\" $openssl_key1 \"$openssl_key2\" $openssl_caCert1 \"$openssl_caCert2\""
-        echo "Hello" | eval "$OPENSSL s_client -connect localhost:$port -reconnect -ciphersuites=$cmpSuite $openssl_version $openssl_psk $openssl_cert1 \"$openssl_cert2\" $openssl_key1 \"$openssl_key2\" $openssl_caCert1 \"$openssl_caCert2\""
+        echo "# $OPENSSL s_client -connect localhost:$port -reconnect -legacy_renegotiation -ciphersuites=$cmpSuite $openssl_version $openssl_psk $openssl_cert1 \"$openssl_cert2\" $openssl_key1 \"$openssl_key2\" $openssl_caCert1 \"$openssl_caCert2\""
+        echo "Hello" | eval "$OPENSSL s_client -connect localhost:$port -reconnect -legacy_renegotiation -ciphersuites=$cmpSuite $openssl_version $openssl_psk $openssl_cert1 \"$openssl_cert2\" $openssl_key1 \"$openssl_key2\" $openssl_caCert1 \"$openssl_caCert2\""
     fi
 
     client_result=$?
@@ -407,11 +422,12 @@ command -v $OPENSSL >/dev/null 2>&1 || { echo >&2 "Requires openssl command, but
 
 echo -e "\nTesting for _build directory as part of distcheck, different paths"
 currentDir=`pwd`
-if [ "$currentDir" = *"_build" ]
-then
+case "$currentDir" in
+*_build)
     echo -e "_build directory detected, moving a directory back"
     cd ..
-fi
+    ;;
+esac
 echo -e "\nChecking for wolfSSL client - needed for cipher list"
 wolfssl_client_avail=`$WOLFSSL_CLIENT -?`
 case $wolfssl_client_avail in
@@ -445,10 +461,10 @@ esac
 wolf_ciphers=`$WOLFSSL_CLIENT -e`
 # get wolfssl supported versions
 wolf_versions=`$WOLFSSL_CLIENT -V`
-wolf_versions="$wolf_versions:5" #5 will test without -v flag
+wolf_versions="${wolf_versions}:5" #5 will test without -v flag
 
-OIFS=$IFS # store old separator to reset
-IFS=$'\:' # set delimiter
+OIFS="$IFS" # store old separator to reset
+IFS=: # set delimiter
 for version in $wolf_versions
 do
     case $version in
@@ -460,7 +476,7 @@ do
         ;;
     esac
 done
-IFS=$OIFS #restore separator
+IFS="$OIFS" #restore separator
 
 #
 # Start OpenSSL servers
@@ -546,8 +562,8 @@ case $openssl_nodhe in
 esac
 
 # Check suites to determine support in wolfSSL
-OIFS=$IFS # store old separator to reset
-IFS=$'\:' # set delimiter
+OIFS="$IFS" # store old separator to reset
+IFS=: # set delimiter
 for wolfSuite in $wolf_ciphers; do
     case $wolfSuite in
     *ECDHE-RSA-*)
@@ -583,7 +599,7 @@ for wolfSuite in $wolf_ciphers; do
         wolf_rsa=yes
     esac
 done
-IFS=$OIFS #restore separator
+IFS="$OIFS" #restore separator
 
 openssl_ciphers=`$OPENSSL ciphers ALL 2>&1`
 case $openssl_ciphers in
@@ -738,8 +754,8 @@ do
     check_server_ready
 done
 
-OIFS=$IFS # store old separator to reset
-IFS=$'\:' # set delimiter
+OIFS="$IFS" # store old separator to reset
+IFS=: # set delimiter
 set -f # no globbing
 
 wolf_temp_cases_total=0
@@ -1167,7 +1183,7 @@ do
     open_temp_cases_tested=0
     wolfdowngrade="$version"
 done
-IFS=$OIFS #restore separator
+IFS="$OIFS" #restore separator
 
 do_cleanup
 

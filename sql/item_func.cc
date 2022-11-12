@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2015, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2021, MariaDB
+   Copyright (c) 2009, 2022, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -55,6 +55,9 @@
 #include "debug_sync.h"
 #include "sql_base.h"
 #include "sql_cte.h"
+#ifdef WITH_WSREP
+#include "mysql/service_wsrep.h"
+#endif /* WITH_WSREP */
 
 #ifdef NO_EMBEDDED_ACCESS_CHECKS
 #define sp_restore_security_context(A,B) while (0) {}
@@ -1163,14 +1166,10 @@ longlong Item_func_plus::int_op()
     }
   }
 
-#ifndef WITH_UBSAN
-  res= val0 + val1;
-#else
   if (res_unsigned)
     res= (longlong) ((ulonglong) val0 + (ulonglong) val1);
   else
-    res= val0+val1;
-#endif /* WITH_UBSAN */
+    res= val0 + val1;
 
   return check_integer_overflow(res, res_unsigned);
 
@@ -1333,14 +1332,10 @@ longlong Item_func_minus::int_op()
         goto err;
     }
   }
-#ifndef WITH_UBSAN
-  res= val0 - val1;
-#else
   if (res_unsigned)
     res= (longlong) ((ulonglong) val0 - (ulonglong) val1);
   else
     res= val0 - val1;
-#endif /* WITH_UBSAN */
 
   return check_integer_overflow(res, res_unsigned);
 
@@ -2509,7 +2504,7 @@ void Item_func_round::fix_arg_decimal()
     set_handler(&type_handler_newdecimal);
     unsigned_flag= args[0]->unsigned_flag;
     decimals= args[0]->decimals;
-    max_length= float_length(args[0]->decimals) + 1;
+    max_length= args[0]->max_length;
   }
 }
 
@@ -3492,6 +3487,7 @@ udf_handler::fix_fields(THD *thd, Item_func_or_sum *func,
 	  thd->alloc(f_args.arg_count*sizeof(Item_result))))
 
     {
+    err_exit:
       free_udf(u_d);
       DBUG_RETURN(TRUE);
     }
@@ -3531,7 +3527,8 @@ udf_handler::fix_fields(THD *thd, Item_func_or_sum *func,
       func->used_tables_and_const_cache_join(item);
       f_args.arg_type[i]=item->result_type();
     }
-    if (!(buffers=new (thd->mem_root) String[arg_count]) ||
+    buffers=new (thd->mem_root) String[arg_count];
+    if (!buffers ||
         !multi_alloc_root(thd->mem_root,
                           &f_args.args,              arg_count * sizeof(char *),
                           &f_args.lengths,           arg_count * sizeof(long),
@@ -3540,10 +3537,7 @@ udf_handler::fix_fields(THD *thd, Item_func_or_sum *func,
                           &f_args.attributes,        arg_count * sizeof(char *),
                           &f_args.attribute_lengths, arg_count * sizeof(long),
                           NullS))
-    {
-      free_udf(u_d);
-      DBUG_RETURN(TRUE);
-    }
+      goto err_exit;
   }
   if (func->fix_length_and_dec())
     DBUG_RETURN(TRUE);
@@ -3611,8 +3605,7 @@ udf_handler::fix_fields(THD *thd, Item_func_or_sum *func,
     {
       my_error(ER_CANT_INITIALIZE_UDF, MYF(0),
                u_d->name.str, init_msg_buff);
-      free_udf(u_d);
-      DBUG_RETURN(TRUE);
+      goto err_exit;
     }
     func->max_length=MY_MIN(initid.max_length,MAX_BLOB_WIDTH);
     func->maybe_null=initid.maybe_null;
@@ -4623,10 +4616,12 @@ longlong Item_func_sleep::val_int()
 
   mysql_cond_destroy(&cond);
 
+#ifdef ENABLED_DEBUG_SYNC
   DBUG_EXECUTE_IF("sleep_inject_query_done_debug_sync", {
       debug_sync_set_action
         (thd, STRING_WITH_LEN("dispatch_command_end SIGNAL query_done"));
     };);
+#endif
 
   return MY_TEST(!error);                  // Return 1 killed
 }
@@ -6219,6 +6214,8 @@ bool Item_func_match::init_search(THD *thd, bool no_order)
 
   ft_handler= table->file->ft_init_ext(flags, key, ft_tmp);
 
+  if (!ft_handler)
+    DBUG_RETURN(1);
   if (join_key)
     table->file->ft_handler=ft_handler;
 
@@ -6593,7 +6590,7 @@ const char *
 Item_func_sp::func_name() const
 {
   THD *thd= current_thd;
-  return Item_sp::func_name(thd);
+  return Item_sp::func_name(thd, m_handler == &sp_handler_package_function);
 }
 
 

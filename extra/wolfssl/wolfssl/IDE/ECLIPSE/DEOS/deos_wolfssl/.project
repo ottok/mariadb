@@ -425,19 +425,9 @@
 			<locationURI>WOLFSSL_ROOT/wolfcrypt/src/hash.c</locationURI>
 		</link>
 		<link>
-			<name>wolfcrypt/src/hc128.c</name>
-			<type>1</type>
-			<locationURI>WOLFSSL_ROOT/wolfcrypt/src/hc128.c</locationURI>
-		</link>
-		<link>
 			<name>wolfcrypt/src/hmac.c</name>
 			<type>1</type>
 			<locationURI>WOLFSSL_ROOT/wolfcrypt/src/hmac.c</locationURI>
-		</link>
-		<link>
-			<name>wolfcrypt/src/idea.c</name>
-			<type>1</type>
-			<locationURI>WOLFSSL_ROOT/wolfcrypt/src/idea.c</locationURI>
 		</link>
 		<link>
 			<name>wolfcrypt/src/integer.c</name>
@@ -488,11 +478,6 @@
 			<name>wolfcrypt/src/pwdbased.c</name>
 			<type>1</type>
 			<locationURI>WOLFSSL_ROOT/wolfcrypt/src/pwdbased.c</locationURI>
-		</link>
-		<link>
-			<name>wolfcrypt/src/rabbit.c</name>
-			<type>1</type>
-			<locationURI>WOLFSSL_ROOT/wolfcrypt/src/rabbit.c</locationURI>
 		</link>
 		<link>
 			<name>wolfcrypt/src/random.c</name>

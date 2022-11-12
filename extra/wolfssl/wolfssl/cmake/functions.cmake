@@ -1,6 +1,12 @@
 function(override_cache VAR VAL)
-    get_property(VAR_TYPE CACHE ${VAR} PROPERTY TYPE)
-    set(${VAR} ${VAL} CACHE ${VAR_TYPE} ${${VAR}_HELP_STRING} FORCE)
+    get_property(VAR_STRINGS CACHE ${VAR} PROPERTY STRINGS)
+    LIST(FIND VAR_STRINGS ${VAL} CK)
+    if(-1 EQUAL ${CK})
+        message(SEND_ERROR
+            "\"${VAL}\" is not valid override value for \"${VAR}\"."
+            " Please select value from \"${VAR_STRINGS}\"\n")
+    endif()
+    set_property(CACHE ${VAR} PROPERTY VALUE ${VAL})
 endfunction()
 
 function(add_option NAME HELP_STRING DEFAULT VALUES)
@@ -35,11 +41,20 @@ function(generate_build_flags)
     if(WOLFSSL_TLS13 OR WOLFSSL_USER_SETTINGS)
         set(BUILD_TLS13 "yes" PARENT_SCOPE)
     endif()
+    if(WOLFSSL_DTLS13 OR WOLFSSL_USER_SETTINGS)
+        set(BUILD_DTLS13 "yes" PARENT_SCOPE)
+    endif()
+    if(WOLFSSL_QUIC)
+        set(BUILD_QUIC "yes" PARENT_SCOPE)
+    endif()
     if(WOLFSSL_RNG OR WOLFSSL_USER_SETTINGS)
         set(BUILD_RNG "yes" PARENT_SCOPE)
     endif()
     if(WOLFSSL_SCTP OR WOLFSSL_USER_SETTINGS)
         set(BUILD_SCTP "yes" PARENT_SCOPE)
+    endif()
+    if(WOLFSSL_DTLS_CID OR WOLFSSL_USER_SETTINGS)
+        set(BUILD_DTLS_COMMON "yes" PARENT_SCOPE)
     endif()
     set(BUILD_MCAST ${WOLFSSL_MCAST} PARENT_SCOPE)
     set(BUILD_IPV6 ${WOLFSSL_IPV6} PARENT_SCOPE)
@@ -136,9 +151,6 @@ function(generate_build_flags)
     if(WOLFSSL_CODING OR WOLFSSL_USER_SETTINGS)
         set(BUILD_CODING "yes" PARENT_SCOPE)
     endif()
-    if(WOLFSSL_IDEA OR WOLFSSL_USER_SETTINGS)
-        set(BUILD_IDEA "yes" PARENT_SCOPE)
-    endif()
     if(WOLFSSL_ARC4 OR WOLFSSL_USER_SETTINGS)
         set(BUILD_RC4 "yes" PARENT_SCOPE)
     endif()
@@ -147,12 +159,6 @@ function(generate_build_flags)
     endif()
     if(WOLFSSL_SHA OR WOLFSSL_USER_SETTINGS)
         set(BUILD_SHA "yes" PARENT_SCOPE)
-    endif()
-    if(WOLFSSL_HC128 OR WOLFSSL_USER_SETTINGS)
-        set(BUILD_HC128 "yes" PARENT_SCOPE)
-    endif()
-    if(WOLFSSL_RABBIT OR WOLFSSL_USER_SETTINGS)
-        set(BUILD_RABBIT "yes" PARENT_SCOPE)
     endif()
     set(BUILD_FIPS ${WOLFSSL_FIPS} PARENT_SCOPE)
     if("${FIPS_VERSION}" STREQUAL "v1")
@@ -187,12 +193,15 @@ function(generate_build_flags)
     if(WOLFSSL_XCHACHA OR WOLFSSL_USER_SETTINGS)
         set(BUILD_XCHACHA "yes" PARENT_SCOPE)
     endif()
+    if(WOLFSSL_OQS OR WOLFSSL_USER_SETTINGS)
+        set(BUILD_FALCON "yes" PARENT_SCOPE)
+    endif()
     set(BUILD_INLINE ${WOLFSSL_INLINE} PARENT_SCOPE)
     if(WOLFSSL_OCSP OR WOLFSSL_USER_SETTINGS)
         set(BUILD_OCSP "yes" PARENT_SCOPE)
     endif()
-    set(BUILD_OCSP_STAPLING ${WOLFSSL_CERTIFICATE_STATUS_REQUEST} PARENT_SCOPE)
-    set(BUILD_OCSP_STAPLING_V2 ${WOLFSSL_CERTIFICATE_STATUS_REQUEST_V2} PARENT_SCOPE)
+    set(BUILD_OCSP_STAPLING ${WOLFSSL_OCSPSTAPLING} PARENT_SCOPE)
+    set(BUILD_OCSP_STAPLING_V2 ${WOLFSSL_OCSPSTAPLING_V2} PARENT_SCOPE)
     if(WOLFSSL_CRL OR WOLFSSL_USER_SETTINGS)
         set(BUILD_CRL "yes" PARENT_SCOPE)
     endif()
@@ -266,7 +275,7 @@ function(generate_build_flags)
     if(WOLFSSL_SP_X86_64_ASM OR WOLFSSL_USER_SETTINGS)
         set(BUILD_SP_X86_64 "yes" PARENT_SCOPE)
     endif()
-    if(WOLFSSL_SP_MATH OR WOLFSSL_USER_SETTINGS)
+    if(WOLFSSL_SP_MATH OR WOLFSSL_SP_MATH_ALL OR WOLFSSL_USER_SETTINGS)
         set(BUILD_SP_INT "yes" PARENT_SCOPE)
     endif()
     set(BUILD_FAST_RSA ${WOLFSSL_FAST_RSA} PARENT_SCOPE)
@@ -343,12 +352,12 @@ function(generate_lib_src_list LIB_SOURCES)
          if(BUILD_FIPS_V2)
               # FIPSv2 first file
               list(APPEND LIB_SOURCES wolfcrypt/src/wolfcrypt_first.c)
-              
+
               list(APPEND LIB_SOURCES
-                wolfcrypt/src/hmac.c 
-                wolfcrypt/src/random.c 
+                wolfcrypt/src/hmac.c
+                wolfcrypt/src/random.c
                 wolfcrypt/src/sha256.c)
-              
+
               if(BUILD_RSA)
                    list(APPEND LIB_SOURCES wolfcrypt/src/rsa.c)
               endif()
@@ -442,16 +451,16 @@ function(generate_lib_src_list LIB_SOURCES)
 
          if(BUILD_FIPS_RAND)
               list(APPEND LIB_SOURCES
-                   wolfcrypt/src/wolfcrypt_first.c 
-                   wolfcrypt/src/hmac.c 
-                   wolfcrypt/src/random.c 
-                   wolfcrypt/src/sha256.c 
-                   wolfcrypt/src/sha256_asm.S 
-                   wolfcrypt/src/fips.c 
-                   wolfcrypt/src/fips_test.c 
+                   wolfcrypt/src/wolfcrypt_first.c
+                   wolfcrypt/src/hmac.c
+                   wolfcrypt/src/random.c
+                   wolfcrypt/src/sha256.c
+                   wolfcrypt/src/sha256_asm.S
+                   wolfcrypt/src/fips.c
+                   wolfcrypt/src/fips_test.c
                    wolfcrypt/src/wolfcrypt_last.c)
          endif()
-    endif() 
+    endif()
 
     # For wolfRand, exclude everything else.
     if(NOT BUILD_FIPS_RAND)
@@ -524,7 +533,7 @@ function(generate_lib_src_list LIB_SOURCES)
               endif()
 
               if(BUILD_SP_X86_64)
-                   list(APPEND LIB_SOURCES 
+                   list(APPEND LIB_SOURCES
                         wolfcrypt/src/sp_x86_64.c
                         wolfcrypt/src/sp_x86_64_asm.S)
               endif()
@@ -536,18 +545,17 @@ function(generate_lib_src_list LIB_SOURCES)
               if(BUILD_SP_ARM_THUMB)
                    list(APPEND LIB_SOURCES wolfcrypt/src/sp_armthumb.c)
               endif()
-              
+
               if(BUILD_SP_ARM64)
                    list(APPEND LIB_SOURCES wolfcrypt/src/sp_arm64.c)
               endif()
 
-              if(BUILD_SP_INT)
-                   list(APPEND LIB_SOURCES wolfcrypt/src/sp_int.c)
-              endif()
-              
               if(BUILD_SP_ARM_CORTEX)
                    list(APPEND LIB_SOURCES wolfcrypt/src/sp_cortexm.c)
               endif()
+         endif()
+         if(BUILD_SP_INT)
+              list(APPEND LIB_SOURCES wolfcrypt/src/sp_int.c)
          endif()
 
          if(NOT BUILD_FIPS_V2)
@@ -597,19 +605,15 @@ function(generate_lib_src_list LIB_SOURCES)
     endif()
 
     list(APPEND LIB_SOURCES
-         wolfcrypt/src/logging.c 
-         wolfcrypt/src/wc_port.c 
+         wolfcrypt/src/logging.c
+         wolfcrypt/src/wc_port.c
          wolfcrypt/src/error.c)
 
-    if(BUILD_DEBUG)
-         list(APPEND LIB_SOURCES
-              wolfcrypt/src/debug.c)
-    endif()
 
     if(NOT BUILD_FIPS_RAND)
          list(APPEND LIB_SOURCES
-              wolfcrypt/src/wc_encrypt.c 
-              wolfcrypt/src/signature.c 
+              wolfcrypt/src/wc_encrypt.c
+              wolfcrypt/src/signature.c
               wolfcrypt/src/wolfmath.c)
     endif()
 
@@ -671,7 +675,7 @@ function(generate_lib_src_list LIB_SOURCES)
                    wolfcrypt/src/aes_asm.S
                    wolfcrypt/src/aes_gcm_asm.S)
          endif()
-         
+
          if(BUILD_CAMELLIA)
               list(APPEND LIB_SOURCES wolfcrypt/src/camellia.c)
          endif()
@@ -687,17 +691,9 @@ function(generate_lib_src_list LIB_SOURCES)
          if(BUILD_BLAKE2)
               list(APPEND LIB_SOURCES wolfcrypt/src/blake2b.c)
          endif()
-         
+
          if(BUILD_BLAKE2S)
               list(APPEND LIB_SOURCES wolfcrypt/src/blake2s.c)
-         endif()
-
-         if(BUILD_HC128)
-              list(APPEND LIB_SOURCES wolfcrypt/src/hc128.c)
-         endif()
-
-         if(BUILD_RABBIT)
-              list(APPEND LIB_SOURCES wolfcrypt/src/rabbit.c)
          endif()
 
          if(BUILD_CHACHA)
@@ -798,6 +794,10 @@ function(generate_lib_src_list LIB_SOURCES)
               endif()
          endif()
 
+         if(BUILD_FALCON)
+              list(APPEND LIB_SOURCES wolfcrypt/src/falcon.c)
+         endif()
+
          if(BUILD_LIBZ)
               list(APPEND LIB_SOURCES wolfcrypt/src/compress.c)
          endif()
@@ -810,10 +810,6 @@ function(generate_lib_src_list LIB_SOURCES)
               list(APPEND LIB_SOURCES wolfcrypt/src/srp.c)
          endif()
 
-         if(BUILD_IDEA)
-              list(APPEND LIB_SOURCES wolfcrypt/src/idea.c)
-         endif()
-
          if(BUILD_AFALG)
               list(APPEND LIB_SOURCES wolfcrypt/src/port/af_alg/wc_afalg.c)
          endif()
@@ -821,14 +817,22 @@ function(generate_lib_src_list LIB_SOURCES)
          if(NOT BUILD_CRYPTONLY)
               # ssl files
               list(APPEND LIB_SOURCES
-                   src/internal.c 
-                   src/wolfio.c 
-                   src/keys.c 
-                   src/ssl.c 
+                   src/internal.c
+                   src/wolfio.c
+                   src/keys.c
+                   src/ssl.c
                    src/tls.c)
 
               if(BUILD_TLS13)
                    list(APPEND LIB_SOURCES src/tls13.c)
+              endif()
+
+              if(BUILD_DTLS13)
+                   list(APPEND LIB_SOURCES src/dtls13.c)
+              endif()
+
+              if(BUILD_QUIC)
+                   list(APPEND LIB_SOURCES src/quic.c)
               endif()
 
               if(BUILD_OCSP)
@@ -841,6 +845,10 @@ function(generate_lib_src_list LIB_SOURCES)
 
               if(BUILD_SNIFFER)
                    list(APPEND LIB_SOURCES src/sniffer.c)
+              endif()
+
+              if(BUILD_DTLS_COMMON)
+                   list(APPEND LIB_SOURCES src/dtls.c)
               endif()
          endif()
     endif()
@@ -911,8 +919,6 @@ function(add_to_options_file DEFINITIONS OPTION_FILE)
             endif()
 
             file(APPEND ${OPTION_FILE} "\n")
-        else()
-            message("option w/o begin -D is ${DEF}, not saving to ${OPTION_FILE}")
         endif()
     endforeach()
 endfunction()

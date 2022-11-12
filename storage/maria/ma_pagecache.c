@@ -190,7 +190,7 @@ struct st_pagecache_hash_link
 enum PCBLOCK_TEMPERATURE { PCBLOCK_COLD /*free*/ , PCBLOCK_WARM , PCBLOCK_HOT };
 
 /* debug info */
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
 static const char *page_cache_page_type_str[]=
 {
   /* used only for control page type changing during debugging */
@@ -225,8 +225,9 @@ static const char *page_cache_page_pin_str[]=
   "unpinned -> pinned",
   "pinned -> unpinned"
 };
+#endif /* DBUG_TRACE */
 
-
+#ifndef DBUG_OFF
 typedef struct st_pagecache_pin_info
 {
   struct st_pagecache_pin_info *next, **prev;
@@ -563,7 +564,7 @@ static void pagecache_debug_print _VARARGS((const char *fmt, ...));
 #define KEYCACHE_DBUG_ASSERT(a)    DBUG_ASSERT(a)
 #endif /* defined(PAGECACHE_DEBUG) */
 
-#if defined(PAGECACHE_DEBUG) || !defined(DBUG_OFF)
+#if defined(PAGECACHE_DEBUG) || defined(DBUG_TRACE)
 static my_thread_id pagecache_thread_id;
 #define KEYCACHE_THREAD_TRACE(l)                                              \
              KEYCACHE_DBUG_PRINT(l,("|thread %lld",pagecache_thread_id))
@@ -581,7 +582,7 @@ static my_thread_id pagecache_thread_id;
 #define KEYCACHE_THREAD_TRACE_BEGIN(l)
 #define KEYCACHE_THREAD_TRACE_END(l)
 #define KEYCACHE_THREAD_TRACE(l)
-#endif /* defined(PAGECACHE_DEBUG) || !defined(DBUG_OFF) */
+#endif /* defined(PAGECACHE_DEBUG) || defined(DBUG_TRACE) */
 
 #define PCBLOCK_NUMBER(p, b)                                                    \
   ((uint) (((char*)(b)-(char *) p->block_root)/sizeof(PAGECACHE_BLOCK_LINK)))
@@ -2824,8 +2825,14 @@ static void read_big_block(PAGECACHE *pagecache,
         have read our block for us
       */
       struct st_my_thread_var *thread;
-      DBUG_ASSERT(page_st == PAGE_WAIT_TO_BE_READ);
-      DBUG_ASSERT(page_st != PAGE_TO_BE_READ);
+      /*
+        Either the page was not yet read and there is another thread
+        doing the read (page_st == PAGE_WAIT_TO_BE_READ) or the page
+        was just read and there are other threads waiting for the page
+        but they have not yet unmarked the PCLBOCK_BIG_READ flag
+        (page_st == PAGE_READ)
+      */
+      DBUG_ASSERT(page_st == PAGE_READ || page_st == PAGE_WAIT_TO_BE_READ);
       block->status|= PCBLOCK_BIG_READ; // will be read by other thread
       /*
         Block read failed because somebody else is reading the first block
@@ -2844,12 +2851,12 @@ static void read_big_block(PAGECACHE *pagecache,
                                    &pagecache->cache_lock);
       }
       while (thread->next);
-      // page should be read by other  thread
+      // page should be read by other thread
       DBUG_ASSERT(block->status & PCBLOCK_READ ||
                   block->status & PCBLOCK_ERROR);
       /*
         It is possible that other thread already removed  the flag (in
-        case of two threads waiting) but it will not make harm to try to
+        case of two threads waiting) but it will not harm to try to
         remove it even in that case.
       */
       block->status&= ~PCBLOCK_BIG_READ;
@@ -2883,13 +2890,18 @@ static void read_big_block(PAGECACHE *pagecache,
   args.pageno= page_to_read;
   args.data= block->hash_link->file.callback_data;
 
+  pagecache->global_cache_read++;
   if (pagecache->big_block_read(pagecache, &args, &block->hash_link->file,
                                 &data))
   {
+    pagecache->big_block_free(&data);
     pagecache_pthread_mutex_lock(&pagecache->cache_lock);
     block_to_read->status|= PCBLOCK_ERROR;
     block_to_read->error= (int16) my_errno;
-    pagecache->big_block_free(&data);
+
+    /* Handle the block that we originally wanted with read */
+    block->status|= PCBLOCK_ERROR;
+    block->error= block_to_read->error;
     goto error;
   }
 
@@ -2973,6 +2985,7 @@ end:
   block_to_read->status&= ~PCBLOCK_BIG_READ;
   if (block_to_read != block)
   {
+    /* Unlock the 'first block' in the big read */
     remove_reader(block_to_read);
     unreg_request(pagecache, block_to_read, 1);
   }
@@ -2986,18 +2999,11 @@ error:
     Read failed. Mark all readers waiting for the a block covered by the
     big block that the read failed
   */
-  for (offset= pagecache->block_size, page= page_to_read + 1;
-       offset < data.length;
-       offset+= pagecache->block_size, page++)
+  for (offset= 0, page= page_to_read + 1;
+       offset < big_block_size_in_pages;
+       offset++)
   {
-    DBUG_ASSERT(offset + pagecache->block_size <= data.length);
-    if (page == our_page)
-    {
-      DBUG_ASSERT(!(block->status & PCBLOCK_READ));
-      block->status|= PCBLOCK_ERROR;
-      block->error= (int16) my_errno;
-    }
-    else
+    if (page != our_page)
     {
       PAGECACHE_BLOCK_LINK *bl;
       bl= find_block(pagecache,  &block->hash_link->file, page, 1,
@@ -3709,8 +3715,9 @@ uchar *pagecache_read(PAGECACHE *pagecache,
     unlock_pin= lock_to_pin[buff==0][lock].unlock_pin;
   PAGECACHE_BLOCK_LINK *fake_link;
   my_bool reg_request;
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
   char llbuf[22];
+#endif
   DBUG_ENTER("pagecache_read");
   DBUG_PRINT("enter", ("fd: %u  page: %s  buffer: %p  level: %u  "
                        "t:%s  (%d)%s->%s  %s->%s  big block: %d",
@@ -3726,7 +3733,6 @@ uchar *pagecache_read(PAGECACHE *pagecache,
   DBUG_ASSERT(buff != 0 || (buff == 0 && (unlock_pin == PAGECACHE_PIN ||
                                           unlock_pin == PAGECACHE_PIN_LEFT_PINNED)));
   DBUG_ASSERT(pageno < ((1ULL) << 40));
-#endif
 
   if (!page_link)
     page_link= &fake_link;
@@ -4370,8 +4376,9 @@ my_bool pagecache_write_part(PAGECACHE *pagecache,
   my_bool error= 0;
   int need_lock_change= write_lock_change_table[lock].need_lock_change;
   my_bool reg_request;
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
   char llbuf[22];
+#endif
   DBUG_ENTER("pagecache_write_part");
   DBUG_PRINT("enter", ("fd: %u  page: %s  level: %u  type: %s  lock: %s  "
                        "pin: %s   mode: %s  offset: %u  size %u",
@@ -4387,7 +4394,6 @@ my_bool pagecache_write_part(PAGECACHE *pagecache,
   DBUG_ASSERT(offset + size <= pagecache->block_size);
   DBUG_ASSERT(pageno < ((1ULL) << 40));
   DBUG_ASSERT(pagecache->big_block_read == 0);
-#endif
 
   if (!page_link)
     page_link= &fake_link;

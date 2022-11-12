@@ -3,7 +3,7 @@
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All rights reserved.
 Copyright (c) 2008, 2009, Google Inc.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -90,10 +90,6 @@ struct srv_stats_t
 
 	/** Number of bytes saved by page compression */
 	ulint_ctr_64_t          page_compression_saved;
-	/* Number of index pages written */
-	ulint_ctr_64_t          index_pages_written;
-	/* Number of non index pages written */
-	ulint_ctr_64_t          non_index_pages_written;
 	/* Number of pages compressed with page compression */
         ulint_ctr_64_t          pages_page_compressed;
 	/* Number of TRIM operations induced by page compression */
@@ -160,9 +156,6 @@ struct srv_stats_t
 
 	/** Number of encryption_get_latest_key_version calls */
 	ulint_ctr_64_t		n_key_requests;
-
-	/** Number of spaces in keyrotation list */
-	ulint_ctr_64_t		key_rotation_list_length;
 
 	/** Number of temporary tablespace blocks encrypted */
 	ulint_ctr_64_t		n_temp_blocks_encrypted;
@@ -290,11 +283,6 @@ extern uint	srv_flush_log_at_timeout;
 extern ulong	srv_log_write_ahead_size;
 extern my_bool	srv_adaptive_flushing;
 extern my_bool	srv_flush_sync;
-
-#ifdef WITH_INNODB_DISALLOW_WRITES
-/* When this event is reset we do not allow any file writes to take place. */
-extern os_event_t	srv_allow_writes_event;
-#endif /* WITH_INNODB_DISALLOW_WRITES */
 
 /* If this flag is TRUE, then we will load the indexes' (and tables') metadata
 even if they are marked as "corrupted". Mostly it is for DBA to process
@@ -438,8 +426,6 @@ extern my_bool	innodb_evict_tables_on_commit_debug;
 extern my_bool	srv_sync_debug;
 extern my_bool	srv_purge_view_update_only_debug;
 
-/** Value of MySQL global used to disable master thread. */
-extern my_bool	srv_master_thread_disabled_debug;
 /** InnoDB system tablespace to set during recovery */
 extern uint	srv_sys_space_size_debug;
 /** whether redo log file has been created at startup */
@@ -671,15 +657,6 @@ void srv_purge_shutdown();
 /** Init purge tasks*/
 void srv_init_purge_tasks();
 
-#ifdef UNIV_DEBUG
-/** Disables master thread. It's used by:
-	SET GLOBAL innodb_master_thread_disabled_debug = 1 (0).
-@param[in]	save		immediate result from check function */
-void
-srv_master_thread_disabled_debug_update(THD*, st_mysql_sys_var*, void*,
-					const void* save);
-#endif /* UNIV_DEBUG */
-
 /** Status variables to be passed to MySQL */
 struct export_var_t{
 	char  innodb_buffer_pool_dump_status[OS_FILE_MAX_PATH + 128];/*!< Buf pool dump status */
@@ -774,10 +751,6 @@ struct export_var_t{
 
 	int64_t innodb_page_compression_saved;/*!< Number of bytes saved
 						by page compression */
-	int64_t innodb_index_pages_written;  /*!< Number of index pages
-						written */
-	int64_t innodb_non_index_pages_written;  /*!< Number of non index pages
-						written */
 	int64_t innodb_pages_page_compressed;/*!< Number of pages
 						compressed by page compression */
 	int64_t innodb_page_compressed_trim_op;/*!< Number of TRIM operations
@@ -816,7 +789,6 @@ struct export_var_t{
 	ulint innodb_encryption_rotation_pages_flushed;
 	ulint innodb_encryption_rotation_estimated_iops;
 	int64_t innodb_encryption_key_requests;
-	int64_t innodb_key_rotation_list_length;
 };
 
 /** Thread slot in the thread table.  */

@@ -359,10 +359,13 @@ SHOW WARNINGS;
 --echo # Statement information runtime
 --echo
 
+#enable after fix MDEV-28535
+--disable_view_protocol
 SELECT CAST(-19999999999999999999 AS SIGNED),
        CAST(-19999999999999999999 AS SIGNED);
 GET DIAGNOSTICS @var = NUMBER;
 SELECT @var;
+--enable_view_protocol
 
 SELECT COUNT(max_questions) INTO @var FROM mysql.user;
 GET DIAGNOSTICS @var = NUMBER;
@@ -853,3 +856,12 @@ FLUSH STATUS;
 SHOW STATUS LIKE 'Com%get_diagnostics';
 GET DIAGNOSTICS @var1 = NUMBER;
 SHOW STATUS LIKE 'Com%get_diagnostics';
+
+--echo #
+--echo # MDEV-26695: Number of an invalid row is not calculated for table value constructor
+--echo #
+
+CREATE TABLE t1 (a CHAR(1)) VALUES ('a'),('b'),('foo');
+CREATE TABLE t2 (a char(1)) VALUES ('a'),('b') UNION VALUES ('foo');
+
+DROP TABLE t1, t2;

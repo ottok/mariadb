@@ -1,6 +1,6 @@
 /* crl.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -90,10 +90,19 @@ static int InitCRL_Entry(CRL_Entry* crle, DecodedCRL* dcrl, const byte* buff,
     XMEMCPY(crle->nextDate, dcrl->nextDate, MAX_DATE_SIZE);
     crle->lastDateFormat = dcrl->lastDateFormat;
     crle->nextDateFormat = dcrl->nextDateFormat;
-
+    crle->version = dcrl->version;
+#if defined(OPENSSL_EXTRA)
+    crle->issuer = NULL;
+    wolfSSL_d2i_X509_NAME(&crle->issuer, (unsigned char**)&dcrl->issuer,
+                          dcrl->issuerSz);
+    if (crle->issuer == NULL) {
+        return WOLFSSL_FAILURE;
+    }
+#endif
     crle->certs = dcrl->certs;   /* take ownsership */
     dcrl->certs = NULL;
     crle->totalCerts = dcrl->totalCerts;
+    crle->crlNumber = dcrl->crlNumber;
     crle->verified = verified;
     if (!verified) {
         crle->tbsSz = dcrl->sigIndex - dcrl->certBegin;
@@ -143,10 +152,15 @@ static void FreeCRL_Entry(CRL_Entry* crle, void* heap)
         tmp = next;
     }
     if (crle->signature != NULL)
-        XFREE(crle->signature, heap, DYNAMIC_TYPE_REVOKED);
+        XFREE(crle->signature, heap, DYNAMIC_TYPE_CRL_ENTRY);
     if (crle->toBeSigned != NULL)
-        XFREE(crle->toBeSigned, heap, DYNAMIC_TYPE_REVOKED);
-
+        XFREE(crle->toBeSigned, heap, DYNAMIC_TYPE_CRL_ENTRY);
+#if defined(OPENSSL_EXTRA)
+    if (crle->issuer != NULL) {
+        FreeX509Name(crle->issuer);
+        XFREE(crle->issuer, heap, DYNAMIC_TYPE_X509);
+    }
+#endif
     (void)heap;
 }
 
@@ -174,13 +188,20 @@ void FreeCRL(WOLFSSL_CRL* crl, int dynamic)
 #ifdef HAVE_CRL_MONITOR
     if (crl->tid != 0) {
         WOLFSSL_MSG("stopping monitor thread");
-        if (StopMonitor(crl->mfd) == 0)
-            pthread_join(crl->tid, NULL);
+        if (StopMonitor(crl->mfd) == 0) {
+            int _pthread_ret = pthread_join(crl->tid, NULL);
+            if (_pthread_ret != 0)
+                WOLFSSL_MSG("stop monitor failed in pthread_join");
+        }
         else {
             WOLFSSL_MSG("stop monitor failed");
         }
     }
-    pthread_cond_destroy(&crl->cond);
+    {
+        int _pthread_ret = pthread_cond_destroy(&crl->cond);
+        if (_pthread_ret != 0)
+            WOLFSSL_MSG("pthread_cond_destroy failed in FreeCRL()");
+    }
 #endif
     wc_FreeMutex(&crl->crlLock);
     if (dynamic)   /* free self */
@@ -497,7 +518,7 @@ int BufferLoadCRL(WOLFSSL_CRL* crl, const byte* buff, long sz, int type,
 #endif
 
     InitDecodedCRL(dcrl, crl->heap);
-    ret = ParseCRL(dcrl, myBuffer, (word32)sz, crl->cm);
+    ret = ParseCRL(dcrl, myBuffer, (word32)sz, verify, crl->cm);
     if (ret != 0 && !(ret == ASN_CRL_NO_SIGNER_E && verify == NO_VERIFY)) {
         WOLFSSL_MSG("ParseCRL error");
     }
@@ -551,6 +572,9 @@ static RevokedCert *DupRevokedCertList(RevokedCert* in, void* heap)
             XMEMCPY(tmp->serialNumber, current->serialNumber,
                     EXTERNAL_SERIAL_SIZE);
             tmp->serialSz = current->serialSz;
+            XMEMCPY(tmp->revDate, current->revDate,
+                    MAX_DATE_SIZE);
+            tmp->revDateFormat = current->revDateFormat;
             tmp->next = NULL;
             if (prev != NULL)
                 prev->next = tmp;
@@ -1116,8 +1140,10 @@ static void* DoMonitor(void* arg)
             XFREE(buff, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         #endif
 
-        if (wd > 0)
-            inotify_rm_watch(notifyFd, wd);
+        if (wd > 0) {
+            if (inotify_rm_watch(notifyFd, wd) < 0)
+                WOLFSSL_MSG("inotify_rm_watch #1 failed in DoMonitor");
+        }
         (void)close(crl->mfd);
         (void)close(notifyFd);
         return NULL;
@@ -1171,8 +1197,10 @@ static void* DoMonitor(void* arg)
     XFREE(buff, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 #endif
 
-    if (wd > 0)
-        inotify_rm_watch(notifyFd, wd);
+    if (wd > 0) {
+        if (inotify_rm_watch(notifyFd, wd) < 0)
+            WOLFSSL_MSG("inotify_rm_watch #2 failed in DoMonitor");
+    }
     (void)close(crl->mfd);
     (void)close(notifyFd);
 

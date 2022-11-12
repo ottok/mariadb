@@ -3,7 +3,7 @@
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2008, 2009 Google Inc.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -148,13 +148,6 @@ my_bool	srv_use_atomic_writes;
 /** innodb_compression_algorithm; used with page compression */
 ulong	innodb_compression_algorithm;
 
-#ifdef UNIV_DEBUG
-/** Used by SET GLOBAL innodb_master_thread_disabled_debug = X. */
-my_bool	srv_master_thread_disabled_debug;
-/** Event used to inform that master thread is disabled. */
-static os_event_t	srv_master_thread_disabled_event;
-#endif /* UNIV_DEBUG */
-
 /*------------------------- LOG FILES ------------------------ */
 char*	srv_log_group_home_dir;
 
@@ -193,10 +186,6 @@ acquisition attempts exceeds maximum allowed value. If so,
 srv_printf_innodb_monitor() will request mutex acquisition
 with mutex_enter(), which will wait until it gets the mutex. */
 #define MUTEX_NOWAIT(mutex_skipped)	((mutex_skipped) < MAX_MUTEX_NOWAIT)
-
-#ifdef WITH_INNODB_DISALLOW_WRITES
-UNIV_INTERN os_event_t	srv_allow_writes_event;
-#endif /* WITH_INNODB_DISALLOW_WRITES */
 
 /** copy of innodb_buffer_pool_size */
 ulint	srv_buf_pool_size;
@@ -534,9 +523,8 @@ static srv_sys_t	srv_sys;
 struct purge_coordinator_state
 {
   /** Snapshot of the last history length before the purge call.*/
-  uint32 m_history_length;
-  Atomic_counter<int> m_running;
-  purge_coordinator_state() : m_history_length(), m_running(0) {}
+  size_t m_history_length= 0;
+  Atomic_counter<int> m_running{0};
 };
 
 static purge_coordinator_state purge_state;
@@ -663,7 +651,6 @@ static void srv_init()
 	}
 
 	need_srv_free = true;
-	ut_d(srv_master_thread_disabled_event = os_event_create(0));
 
 	/* page_zip_stat_per_index_mutex is acquired from:
 	1. page_zip_compress() (after SYNC_FSP)
@@ -675,18 +662,8 @@ static void srv_init()
 	mutex_create(LATCH_ID_PAGE_ZIP_STAT_PER_INDEX,
 		     &page_zip_stat_per_index_mutex);
 
-#ifdef WITH_INNODB_DISALLOW_WRITES
-	/* Writes have to be enabled on init or else we hang. Thus, we
-	always set the event here regardless of innobase_disallow_writes.
-	That flag will always be 0 at this point because it isn't settable
-	via my.cnf or command line arg. */
-	srv_allow_writes_event = os_event_create(0);
-	os_event_set(srv_allow_writes_event);
-#endif /* WITH_INNODB_DISALLOW_WRITES */
-
 	/* Initialize some INFORMATION SCHEMA internal structures */
 	trx_i_s_cache_init(trx_i_s_cache);
-
 }
 
 /*********************************************************************//**
@@ -705,8 +682,6 @@ srv_free(void)
 	if (!srv_read_only_mode) {
 		mutex_free(&srv_sys.tasks_mutex);
 	}
-
-	ut_d(os_event_destroy(srv_master_thread_disabled_event));
 
 	trx_i_s_cache_free(trx_i_s_cache);
 	srv_thread_pool_end();
@@ -1178,8 +1153,6 @@ srv_export_innodb_status(void)
 		srv_truncated_status_writes;
 
 	export_vars.innodb_page_compression_saved = srv_stats.page_compression_saved;
-	export_vars.innodb_index_pages_written = srv_stats.index_pages_written;
-	export_vars.innodb_non_index_pages_written = srv_stats.non_index_pages_written;
 	export_vars.innodb_pages_page_compressed = srv_stats.pages_page_compressed;
 	export_vars.innodb_page_compressed_trim_op = srv_stats.page_compressed_trim_op;
 	export_vars.innodb_pages_page_decompressed = srv_stats.pages_page_decompressed;
@@ -1224,8 +1197,6 @@ srv_export_innodb_status(void)
 			crypt_stat.estimated_iops;
 		export_vars.innodb_encryption_key_requests =
 			srv_stats.n_key_requests;
-		export_vars.innodb_key_rotation_list_length =
-			srv_stats.key_rotation_list_length;
 	}
 
 	mutex_exit(&srv_innodb_monitor_mutex);
@@ -1341,17 +1312,6 @@ void srv_monitor_task(void*)
 
 	if (sync_array_print_long_waits(&waiter, &sema)
 	    && sema == old_sema && os_thread_eq(waiter, old_waiter)) {
-#if defined(WITH_WSREP) && defined(WITH_INNODB_DISALLOW_WRITES)
-		if (!os_event_is_set(srv_allow_writes_event)) {
-			fprintf(stderr,
-				"WSREP: avoiding InnoDB self crash due to "
-				"long semaphore wait of  > %lu seconds\n"
-				"Server is processing SST donor operation, "
-				"fatal_cnt now: " ULINTPF,
-				srv_fatal_semaphore_wait_threshold, fatal_cnt);
-			return;
-		}
-#endif /* WITH_WSREP */
 		if (fatal_cnt++) {
 			ib::fatal() << "Semaphore wait has lasted > "
 				<< srv_fatal_semaphore_wait_threshold
@@ -1577,54 +1537,6 @@ srv_shutdown_print_master_pending(
 	}
 }
 
-#ifdef UNIV_DEBUG
-/** Waits in loop as long as master thread is disabled (debug) */
-static
-void
-srv_master_do_disabled_loop(void)
-{
-	if (!srv_master_thread_disabled_debug) {
-		/* We return here to avoid changing op_info. */
-		return;
-	}
-
-	srv_main_thread_op_info = "disabled";
-
-	while (srv_master_thread_disabled_debug) {
-		os_event_set(srv_master_thread_disabled_event);
-		if (srv_shutdown_state != SRV_SHUTDOWN_NONE) {
-			break;
-		}
-		os_thread_sleep(100000);
-	}
-
-	srv_main_thread_op_info = "";
-}
-
-/** Disables master thread. It's used by:
-	SET GLOBAL innodb_master_thread_disabled_debug = 1 (0).
-@param[in]	save		immediate result from check function */
-void
-srv_master_thread_disabled_debug_update(THD*, st_mysql_sys_var*, void*,
-					const void* save)
-{
-	/* This method is protected by mutex, as every SET GLOBAL .. */
-	ut_ad(srv_master_thread_disabled_event != NULL);
-
-	const bool disable = *static_cast<const my_bool*>(save);
-
-	const int64_t sig_count = os_event_reset(
-		srv_master_thread_disabled_event);
-
-	srv_master_thread_disabled_debug = disable;
-
-	if (disable) {
-		os_event_wait_low(
-			srv_master_thread_disabled_event, sig_count);
-	}
-}
-#endif /* UNIV_DEBUG */
-
 /*********************************************************************//**
 Perform the tasks that the master thread is supposed to do when the
 server is active. There are two types of tasks. The first category is
@@ -1654,8 +1566,6 @@ srv_master_do_active_tasks(void)
 	row_drop_tables_for_mysql_in_background();
 	MONITOR_INC_TIME_IN_MICRO_SECS(
 		MONITOR_SRV_BACKGROUND_DROP_TABLE_MICROSECOND, counter_time);
-
-	ut_d(srv_master_do_disabled_loop());
 
 	if (srv_shutdown_state > SRV_SHUTDOWN_INITIATED) {
 		return;
@@ -1718,8 +1628,6 @@ srv_master_do_idle_tasks(void)
 	MONITOR_INC_TIME_IN_MICRO_SECS(
 		MONITOR_SRV_BACKGROUND_DROP_TABLE_MICROSECOND,
 			 counter_time);
-
-	ut_d(srv_master_do_disabled_loop());
 
 	if (srv_shutdown_state > SRV_SHUTDOWN_INITIATED) {
 		return;
@@ -1815,7 +1723,7 @@ static bool srv_purge_should_exit()
     return true;
 
   /* Slow shutdown was requested. */
-  if (const uint32_t history_size= trx_sys.rseg_history_len)
+  if (const size_t history_size= trx_sys.rseg_history_len)
   {
     static time_t progress_time;
     time_t now= time(NULL);
@@ -1824,7 +1732,7 @@ static bool srv_purge_should_exit()
       progress_time= now;
 #if defined HAVE_SYSTEMD && !defined EMBEDDED_LIBRARY
       service_manager_extend_timeout(INNODB_EXTEND_TIMEOUT_INTERVAL,
-				     "InnoDB: to purge %u transactions",
+				     "InnoDB: to purge %zu transactions",
 				     history_size);
       ib::info() << "to purge " << history_size << " transactions";
 #endif
@@ -1875,13 +1783,13 @@ Atomic_counter<int> srv_purge_thread_count_changed;
 /** Do the actual purge operation.
 @param[in,out]	n_total_purged	total number of purged pages
 @return length of history list before the last purge batch. */
-static uint32_t srv_do_purge(ulint* n_total_purged)
+static size_t srv_do_purge(ulint* n_total_purged)
 {
 	ulint		n_pages_purged;
 
 	static ulint	count = 0;
 	static ulint	n_use_threads = 0;
-	static uint32_t	rseg_history_len = 0;
+	static size_t	rseg_history_len = 0;
 	ulint		old_activity_count = srv_get_activity_count();
 	static ulint	n_threads = srv_n_purge_threads;
 
@@ -2095,7 +2003,7 @@ static void srv_shutdown_purge_tasks()
   std::unique_lock<std::mutex> lk(purge_thd_mutex);
   while (!purge_thds.empty())
   {
-    innobase_destroy_background_thd(purge_thds.front());
+    destroy_background_thd(purge_thds.front());
     purge_thds.pop_front();
   }
   n_purge_thds= 0;
@@ -2144,7 +2052,7 @@ void srv_purge_shutdown()
 		while(!srv_purge_should_exit()) {
 			ut_a(!purge_sys.paused());
 			srv_wake_purge_thread_if_not_active();
-			os_thread_sleep(1000);
+			purge_coordinator_task.wait();
 		}
 		purge_sys.coordinator_shutdown();
 		srv_shutdown_purge_tasks();

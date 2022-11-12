@@ -1,6 +1,6 @@
 /* user_settings.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -240,20 +240,6 @@
 #define MDK_CONF_RC4 0
 #if MDK_CONF_RC4 == 0
 #define NO_RC4
-#endif
-//  </e>
-
-//      <e>HC128
-#define MDK_CONF_HC128 1
-#if MDK_CONF_HC128 == 0
-#define NO_HC128
-#endif
-//  </e>
-
-//      <e>RABBIT
-#define MDK_CONF_RABBIT 1
-#if MDK_CONF_RABBIT == 0
-#define NO_RABBIT
 #endif
 //  </e>
 

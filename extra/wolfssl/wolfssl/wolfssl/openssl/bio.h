@@ -1,6 +1,6 @@
 /* bio.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -30,6 +30,7 @@
     extern "C" {
 #endif
 
+#if defined(OPENSSL_EXTRA) || defined(OPENSSL_EXTRA_X509_SMALL)
 
 #define BIO_FLAGS_BASE64_NO_NL WOLFSSL_BIO_FLAG_BASE64_NO_NL
 #define BIO_FLAGS_READ         WOLFSSL_BIO_FLAG_READ
@@ -56,6 +57,7 @@
 #define BIO_s_file                      wolfSSL_BIO_s_file
 #define BIO_s_bio                       wolfSSL_BIO_s_bio
 #define BIO_s_socket                    wolfSSL_BIO_s_socket
+#define BIO_s_accept                    wolfSSL_BIO_s_socket
 #define BIO_set_fd                      wolfSSL_BIO_set_fd
 #define BIO_set_close                   wolfSSL_BIO_set_close
 #define BIO_ctrl_reset_read_request     wolfSSL_BIO_ctrl_reset_read_request
@@ -139,6 +141,8 @@
 #define BIO_CTRL_RESET             1
 #define BIO_CTRL_EOF               2
 #define BIO_CTRL_INFO              3
+#define BIO_CTRL_SET               4
+#define BIO_CTRL_GET               5
 #define BIO_CTRL_PUSH              6
 #define BIO_CTRL_POP               7
 #define BIO_CTRL_GET_CLOSE         8
@@ -166,11 +170,11 @@
 
 #define BIO_FP_WRITE               0x04
 
+#endif /* OPENSSL_EXTRA || OPENSSL_EXTRA_X509_SMALL */
+
 
 #ifdef __cplusplus
     }  /* extern "C" */
 #endif
 
-
 #endif /* WOLFSSL_BIO_H_ */
-

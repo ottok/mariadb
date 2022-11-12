@@ -2661,7 +2661,7 @@ static my_bool translog_buffer_flush(struct st_translog_buffer *buffer)
        i < buffer->size;
        i+= TRANSLOG_PAGE_SIZE, pg++)
   {
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     TRANSLOG_ADDRESS addr= (buffer->offset + i);
 #endif
     DBUG_PRINT("info", ("send log form %lu till %lu  address: " LSN_FMT "  "
@@ -2908,7 +2908,7 @@ static my_bool translog_page_validator(int res, PAGECACHE_IO_HOOK_ARGS *args)
   uint flags;
   uchar *page_pos;
   TRANSLOG_FILE *data= (TRANSLOG_FILE *) args->data;
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
   pgcache_page_no_t offset= page_no * TRANSLOG_PAGE_SIZE;
 #endif
   DBUG_ENTER("translog_page_validator");
@@ -3268,7 +3268,7 @@ static my_bool translog_get_last_page_addr(TRANSLOG_ADDRESS *addr,
   my_off_t file_size;
   uint32 file_no= LSN_FILE_NO(*addr);
   TRANSLOG_FILE *file;
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
   char buff[21];
 #endif
   DBUG_ENTER("translog_get_last_page_addr");
@@ -7996,22 +7996,14 @@ void translog_flush_buffers(TRANSLOG_ADDRESS *lsn,
   }
   else
   {
-    if (log_descriptor.bc.buffer->last_lsn == LSN_IMPOSSIBLE)
+    if (log_descriptor.bc.buffer->last_lsn == LSN_IMPOSSIBLE &&
+        log_descriptor.bc.buffer->prev_last_lsn == LSN_IMPOSSIBLE)
     {
-      /*
-        In this case both last_lsn & prev_last_lsn are LSN_IMPOSSIBLE
-        otherwise it will go in the first IF because LSN_IMPOSSIBLE less
-        then any real LSN and cmp_translog_addr(*lsn,
-        log_descriptor.bc.buffer->prev_last_lsn) will be TRUE
-      */
-      DBUG_ASSERT(log_descriptor.bc.buffer->prev_last_lsn ==
-                  LSN_IMPOSSIBLE);
       DBUG_PRINT("info", ("There is no LSNs yet generated => do nothing"));
       translog_unlock();
       DBUG_VOID_RETURN;
     }
 
-    DBUG_ASSERT(log_descriptor.bc.buffer->prev_last_lsn != LSN_IMPOSSIBLE);
     /* fix lsn if it was horizon */
     *lsn= log_descriptor.bc.buffer->prev_last_lsn;
     DBUG_PRINT("info", ("LSN to flush fixed to prev last lsn: " LSN_FMT,
@@ -8937,19 +8929,22 @@ void translog_hard_group_commit(my_bool mode)
 
 void translog_sync()
 {
-  uint32 max= get_current_logfile()->number;
-  uint32 min;
   DBUG_ENTER("ma_translog_sync");
 
-  min= soft_sync_min;
-  if (!min)
-    min= max;
+  /* The following is only true if initalization of translog succeded */
+  if (log_descriptor.open_files.elements != 0)
+  {
+    uint32 max= get_current_logfile()->number;
+    uint32 min;
 
-  translog_sync_files(min, max, sync_log_dir >= TRANSLOG_SYNC_DIR_ALWAYS);
+    min= soft_sync_min;
+    if (!min)
+      min= max;
 
+    translog_sync_files(min, max, sync_log_dir >= TRANSLOG_SYNC_DIR_ALWAYS);
+  }
   DBUG_VOID_RETURN;
 }
-
 
 /**
   @brief set rate for group commit

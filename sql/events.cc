@@ -35,6 +35,7 @@
 #include "set_var.h"
 #include "lock.h"   // lock_object_name
 #include "mysql/psi/mysql_sp.h"
+#include "wsrep_mysqld.h"
 
 /**
   @addtogroup Event_Scheduler
@@ -670,6 +671,7 @@ Events::drop_schema_events(THD *thd, const char *db)
     {
       db_repository->drop_schema_events(thd, &db_lex);
       delete db_repository;
+      db_repository= 0;
     }
   }
   DBUG_VOID_RETURN;

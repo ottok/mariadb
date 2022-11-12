@@ -1,6 +1,6 @@
 /* user_settings_min_ecc.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -86,8 +86,6 @@ extern "C" {
 #define NO_MD4
 #define NO_MD5
 #define NO_SHA
-#define NO_HC128
-#define NO_RABBIT
 #define NO_PWDBASED
 #define NO_PKCS12
 #define NO_PKCS8

@@ -400,22 +400,19 @@ typedef ssize_t lint;
 #ifdef _WIN32
 /* Use the integer types and formatting strings defined in Visual Studio. */
 # define UINT32PF	"%u"
-# define INT64PF	"%lld"
 # define UINT64scan     "llu"
 # define UINT64PFx	"%016llx"
 #elif defined __APPLE__
 /* Apple prefers to call the 64-bit types 'long long'
 in both 32-bit and 64-bit environments. */
 # define UINT32PF	"%" PRIu32
-# define INT64PF	"%lld"
 # define UINT64scan     "llu"
 # define UINT64PFx	"%016llx"
 #elif defined _AIX
 /* Workaround for macros expension trouble */
 # define UINT32PF      "%u"
-# define INT64PF       "%lld"
 # define UINT64scan    "lu"
-# define UINT64PFx     "%016llx"
+# define UINT64PFx     "%016lx"
 #else
 /* Use the integer types and formatting strings defined in the C99 standard. */
 # define UINT32PF	"%" PRIu32
@@ -501,7 +498,7 @@ contains the sum of the following flag and the locally stored len. */
 #endif /* CHECK FOR GCC VER_GT_2 */
 
 /* Some macros to improve branch prediction and reduce cache misses */
-#if defined(COMPILER_HINTS) && defined(__GNUC__)
+#ifdef __GNUC__
 /* Tell the compiler that 'expr' probably evaluates to 'constant'. */
 # define UNIV_EXPECT(expr,constant) __builtin_expect(expr, constant)
 /* Tell the compiler that a pointer is likely to be NULL */
@@ -521,16 +518,11 @@ it is read or written. */
 # define UNIV_EXPECT(expr,value) (expr)
 # define UNIV_LIKELY_NULL(expr) (expr)
 
-# if defined(COMPILER_HINTS)
 //# define UNIV_PREFETCH_R(addr) sun_prefetch_read_many((void*) addr)
-#  define UNIV_PREFETCH_R(addr) ((void) 0)
-#  define UNIV_PREFETCH_RW(addr) sun_prefetch_write_many(addr)
-# else
-#  define UNIV_PREFETCH_R(addr) ((void) 0)
-#  define UNIV_PREFETCH_RW(addr) ((void) 0)
-# endif /* COMPILER_HINTS */
+# define UNIV_PREFETCH_R(addr) ((void) 0)
+# define UNIV_PREFETCH_RW(addr) sun_prefetch_write_many(addr)
 
-# elif defined __WIN__ && defined COMPILER_HINTS
+# elif defined __WIN__
 # include <xmmintrin.h>
 # define UNIV_EXPECT(expr,value) (expr)
 # define UNIV_LIKELY_NULL(expr) (expr)

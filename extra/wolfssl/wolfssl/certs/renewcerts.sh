@@ -27,6 +27,7 @@
 #                       client-relative-uri.pem
 #                       client-crl-dist.pem
 #                       entity-no-ca-bool-cert.pem
+#                       fpki-cert.der
 # updates the following crls:
 #                       crl/cliCrl.pem
 #                       crl/crl.pem
@@ -344,6 +345,20 @@ run_renewcerts(){
     echo "End of section"
     echo "---------------------------------------------------------------------"
     ###########################################################
+    ########## update and sign fpki-cert.der ################
+    ###########################################################
+    echo "Updating fpki-cert.der"
+    echo ""
+    #pipe the following arguments to openssl req...
+    echo -e "US\\nMontana\\nBozeman\\nwolfSSL\\nFPKI\\nwww.wolfssl.com\\ninfo@wolfssl.com\\n.\\n.\\n" | openssl req -new -key server-key.pem -config ./wolfssl.cnf -nodes > fpki-req.pem
+    check_result $? "Step 1"
+
+    openssl x509 -req -in fpki-req.pem -extfile wolfssl.cnf -extensions fpki_ext -days 1000 -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 -out fpki-cert.der -outform DER
+    check_result $? "Step 2"
+    rm fpki-req.pem
+    echo "End of section"
+    echo "---------------------------------------------------------------------"
+    ###########################################################
     ########## update and sign server-cert.pem ################
     ###########################################################
     echo "Updating server-cert.pem"
@@ -605,9 +620,19 @@ run_renewcerts(){
     echo "---------------------------------------------------------------------"
 
     ############################################################
+    ########## generate RSA-PSS certificates ###################
+    ############################################################
+    echo "Renewing RSA-PSS certificates"
+    cd rsapss
+    ./renew-rsapss-certs.sh
+    cd ..
+    echo "End of section"
+    echo "---------------------------------------------------------------------"
+
+    ############################################################
     ########## generate Ed25519 certificates ###################
     ############################################################
-    echo "Renewing Ed448 certificates"
+    echo "Renewing Ed25519 certificates"
     cd ed25519
     ./gen-ed25519-certs.sh
     cd ..

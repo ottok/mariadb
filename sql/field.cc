@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2017, Oracle and/or its affiliates.
-   Copyright (c) 2008, 2021, MariaDB
+   Copyright (c) 2008, 2022, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -2591,6 +2591,11 @@ int Field::set_default()
   if (default_value)
   {
     Query_arena backup_arena;
+    /*
+      TODO: this may impose memory leak until table flush.
+          See comment in
+          TABLE::update_virtual_fields(handler *, enum_vcol_update_mode).
+    */
     table->in_use->set_n_backup_active_arena(table->expr_arena, &backup_arena);
     int rc= default_value->expr->save_in_field(this, 0);
     table->in_use->restore_active_arena(table->expr_arena, &backup_arena);
@@ -3310,11 +3315,12 @@ Field_new_decimal::Field_new_decimal(uchar *ptr_arg,
                                      uint8 dec_arg,bool zero_arg,
                                      bool unsigned_arg)
   :Field_num(ptr_arg, len_arg, null_ptr_arg, null_bit_arg,
-             unireg_check_arg, field_name_arg, dec_arg, zero_arg, unsigned_arg)
+             unireg_check_arg, field_name_arg,
+             MY_MIN(dec_arg, DECIMAL_MAX_SCALE), zero_arg, unsigned_arg)
 {
   precision= get_decimal_precision(len_arg, dec_arg, unsigned_arg);
-  DBUG_ASSERT((precision <= DECIMAL_MAX_PRECISION) &&
-              (dec <= DECIMAL_MAX_SCALE));
+  DBUG_ASSERT(precision <= DECIMAL_MAX_PRECISION);
+  DBUG_ASSERT(dec <= DECIMAL_MAX_SCALE);
   bin_size= my_decimal_get_binary_size(precision, dec);
 }
 
@@ -3371,7 +3377,7 @@ bool Field_new_decimal::store_value(const my_decimal *decimal_value,
   DBUG_ASSERT(marked_for_write_or_computed());
   int error= 0;
   DBUG_ENTER("Field_new_decimal::store_value");
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
   {
     char dbug_buff[DECIMAL_MAX_STR_LENGTH+2];
     DBUG_PRINT("enter", ("value: %s", dbug_decimal_as_string(dbug_buff, decimal_value)));
@@ -3386,7 +3392,7 @@ bool Field_new_decimal::store_value(const my_decimal *decimal_value,
     error= 1;
     decimal_value= &decimal_zero;
   }
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
   {
     char dbug_buff[DECIMAL_MAX_STR_LENGTH+2];
     DBUG_PRINT("info", ("saving with precision %d  scale: %d  value %s",
@@ -3478,7 +3484,7 @@ int Field_new_decimal::store(const char *from, size_t length,
     }
   }
 
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
   char dbug_buff[DECIMAL_MAX_STR_LENGTH+2];
   DBUG_PRINT("enter", ("value: %s",
                        dbug_decimal_as_string(dbug_buff, &decimal_value)));
@@ -7511,7 +7517,7 @@ my_decimal *Field_string::val_decimal(my_decimal *decimal_value)
   THD *thd= get_thd();
   Converter_str2my_decimal_with_warn(thd,
                                      Warn_filter_string(thd, this),
-                                     E_DEC_FATAL_ERROR,
+                                     E_DEC_FATAL_ERROR & ~E_DEC_BAD_NUM,
                                      Field_string::charset(),
                                      (const char *) ptr,
                                      field_length, decimal_value);
@@ -7872,7 +7878,7 @@ my_decimal *Field_varstring::val_decimal(my_decimal *decimal_value)
   DBUG_ASSERT(marked_for_read());
   THD *thd= get_thd();
   Converter_str2my_decimal_with_warn(thd, Warn_filter(thd),
-                                     E_DEC_FATAL_ERROR,
+                                     E_DEC_FATAL_ERROR & ~E_DEC_BAD_NUM,
                                      Field_varstring::charset(),
                                      (const char *) get_data(),
                                      get_length(), decimal_value);
@@ -8705,7 +8711,7 @@ my_decimal *Field_blob::val_decimal(my_decimal *decimal_value)
 
   THD *thd= get_thd();
   Converter_str2my_decimal_with_warn(thd, Warn_filter(thd),
-                                     E_DEC_FATAL_ERROR,
+                                     E_DEC_FATAL_ERROR & ~E_DEC_BAD_NUM,
                                      Field_blob::charset(),
                                      blob, length, decimal_value);
   return decimal_value;
@@ -9947,7 +9953,7 @@ int Field_bit::cmp_prefix(const uchar *a, const uchar *b,
 }
 
 
-int Field_bit::key_cmp(const uchar *str, uint length) const
+int Field_bit::key_cmp(const uchar *str, uint) const
 {
   if (bit_len)
   {
@@ -9956,7 +9962,6 @@ int Field_bit::key_cmp(const uchar *str, uint length) const
     if ((flag= (int) (bits - *str)))
       return flag;
     str++;
-    length--;
   }
   return memcmp(ptr, str, bytes_in_rec);
 }
@@ -10661,7 +10666,7 @@ bool Column_definition::check(THD *thd)
       TIMESTAMP columns get implicit DEFAULT value when
       explicit_defaults_for_timestamp is not set.
     */
-    if ((opt_explicit_defaults_for_timestamp ||
+    if (((thd->variables.option_bits & OPTION_EXPLICIT_DEF_TIMESTAMP) ||
         !is_timestamp_type()) && !vers_sys_field())
     {
       flags|= NO_DEFAULT_VALUE_FLAG;
@@ -10796,6 +10801,7 @@ Column_definition::Column_definition(THD *thd, Field *old_field,
   comment=    old_field->comment;
   vcol_info=  old_field->vcol_info;
   option_list= old_field->option_list;
+  explicitly_nullable= !(old_field->flags & NOT_NULL_FLAG);
   compression_method_ptr= 0;
   versioning= VERSIONING_NOT_SET;
   invisible= old_field->invisible;
@@ -10819,8 +10825,6 @@ Column_definition::Column_definition(THD *thd, Field *old_field,
   }
 
   type_handler()->Column_definition_reuse_fix_attributes(thd, this, old_field);
-
-  type_handler()->Column_definition_implicit_upgrade(this);
 
   /*
     Copy the default (constant/function) from the column object orig_field, if

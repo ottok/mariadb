@@ -1,6 +1,6 @@
 /* snifftest.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -27,6 +27,8 @@
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/logging.h>
+#include <wolfssl/wolfcrypt/error-crypt.h>
+#include <wolfssl/version.h>
 
 #ifdef WOLFSSL_SNIFFER_STORE_DATA_CB
     #include <wolfssl/wolfcrypt/memory.h>
@@ -147,14 +149,16 @@ static const byte eccHash[] = {
 #endif
 
 
-pcap_t* pcap = NULL;
-pcap_if_t* alldevs = NULL;
-
+static pcap_t* pcap = NULL;
+static pcap_if_t* alldevs = NULL;
+static struct bpf_program pcap_fp;
 
 static void FreeAll(void)
 {
-    if (pcap)
+    if (pcap) {
+        pcap_freecode(&pcap_fp);
         pcap_close(pcap);
+    }
     if (alldevs)
         pcap_freealldevs(alldevs);
 #ifndef _WIN32
@@ -326,7 +330,7 @@ static int myStoreDataCb(const unsigned char* decryptBuf,
 
 /* try and load as both static ephemeral and private key */
 /* only fail if no key is loaded */
-/* Allow comma seperated list of files */
+/* Allow comma separated list of files */
 static int load_key(const char* name, const char* server, int port,
     const char* keyFiles, const char* passwd, char* err)
 {
@@ -382,6 +386,189 @@ static void TrimNewLine(char* str)
         str[strSz-1] = '\0';
 }
 
+static void show_appinfo(void)
+{
+    printf("snifftest %s\n", LIBWOLFSSL_VERSION_STRING);
+
+    /* list enabled sniffer features */
+    printf("sniffer features: "
+    #ifdef WOLFSSL_SNIFFER_STATS
+        "stats, "
+    #endif
+    #ifdef WOLFSSL_SNIFFER_WATCH
+        "watch, "
+    #endif
+    #ifdef WOLFSSL_SNIFFER_STORE_DATA_CB
+        "store_data_cb "
+    #endif
+    #ifdef WOLFSSL_SNIFFER_CHAIN_INPUT
+        "chain_input "
+    #endif
+    #ifdef WOLFSSL_SNIFFER_KEY_CALLBACK
+        "key_callback "
+    #endif
+    #ifdef DEBUG_SNIFFER
+        "debug "
+    #endif
+    #ifdef WOLFSSL_TLS13
+        "tls_v13 "
+    #endif
+    #ifndef WOLFSSL_NO_TLS12
+        "tls_v12 "
+    #endif
+    #ifdef HAVE_SESSION_TICKET
+        "session_ticket "
+    #endif
+    #ifdef WOLFSSL_STATIC_EPHEMERAL
+        "static_ephemeral "
+    #endif
+    #ifdef WOLFSSL_ENCRYPTED_KEYS
+        "encrypted_keys "
+    #endif
+    #ifdef HAVE_SNI
+        "sni "
+    #endif
+    #ifdef HAVE_EXTENDED_MASTER
+        "extended_master "
+    #endif
+    #ifdef HAVE_MAX_FRAGMENT
+        "max fragment "
+    #endif
+    #ifdef WOLFSSL_ASYNC_CRYPT
+        "async_crypt "
+    #endif
+    #ifndef NO_RSA
+        "rsa "
+    #endif
+    #if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
+        "dh "
+    #endif
+    #ifdef HAVE_ECC
+        "ecc "
+    #endif
+    #ifdef HAVE_CURVE448
+        "x448 "
+    #endif
+    #ifdef HAVE_CURVE22519
+        "x22519 "
+    #endif
+    #ifdef WOLFSSL_STATIC_RSA
+        "rsa_static "
+    #endif
+    #ifdef WOLFSSL_STATIC_DH
+        "dh_static "
+    #endif
+    "\n\n"
+    );
+}
+static void show_usage(void)
+{
+    printf("usage:\n");
+    printf("\t./snifftest\n");
+    printf("\t\tprompts for options\n");
+    printf("\t./snifftest dump pemKey [server] [port] [password]\n");
+}
+
+
+#ifdef WOLFSSL_ASYNC_CRYPT
+
+typedef struct SnifferPacket {
+    byte* packet;
+    int   length;
+    int   lastRet;
+    int   packetNumber;
+} SnifferPacket;
+
+static SnifferPacket asyncQueue[WOLF_ASYNC_MAX_PENDING];
+
+/* returns index to queue */
+static int SnifferAsyncQueueAdd(int lastRet, void* chain, int chainSz,
+    int isChain, int packetNumber)
+{
+    int ret = MEMORY_E, i, length;
+    byte* packet;
+
+#ifdef WOLFSSL_SNIFFER_CHAIN_INPUT
+    if (isChain) {
+        struct iovec* vchain = (struct iovec*)chain;
+        length = 0;
+        for (i = 0; i < chainSz; i++)
+            length += vchain[i].iov_len;
+        packet = (byte*)vchain[0].iov_base;
+    }
+    else
+#endif
+    {
+        packet = (byte*)chain;
+        length = chainSz;
+    }
+
+    /* find first free idx */
+    for (i=0; i<WOLF_ASYNC_MAX_PENDING; i++) {
+        if (asyncQueue[i].packet == NULL) {
+            if (ret == MEMORY_E) {
+                ret = i;
+                break;
+            }
+        }
+    }
+    if (ret != MEMORY_E) {
+        asyncQueue[ret].packet = XMALLOC(length, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        if (asyncQueue[ret].packet == NULL) {
+            return MEMORY_E;
+        }
+        XMEMCPY(asyncQueue[ret].packet, packet, length);
+        asyncQueue[ret].length = length;
+        asyncQueue[ret].lastRet = lastRet;
+        asyncQueue[ret].packetNumber = packetNumber;
+    }
+    (void)isChain;
+
+    return ret;
+}
+
+static int SnifferAsyncPollQueue(byte** data, char* err, SSLInfo* sslInfo,
+    int* queueSz)
+{
+    int ret = 0, i;
+    WOLF_EVENT* events[WOLF_ASYNC_MAX_PENDING];
+    int eventCount = 0;
+
+    /* try to process existing items in queue */
+    for (i=0; i<WOLF_ASYNC_MAX_PENDING; i++) {
+        if (asyncQueue[i].packet != NULL) {
+            (*queueSz)++;
+
+            /* do poll for events on hardware */
+            ret = ssl_PollSniffer(events, WOLF_ASYNC_MAX_PENDING,
+                WOLF_POLL_FLAG_CHECK_HW, &eventCount);
+            if (ret == 0) {
+                /* attempt to reprocess pending packet */
+            #ifdef DEBUG_SNIFFER
+                printf("Retrying packet %d\n", asyncQueue[i].packetNumber);
+            #endif
+                ret = ssl_DecodePacketAsync(asyncQueue[i].packet,
+                    asyncQueue[i].length, 0, data, err, sslInfo, NULL);
+                asyncQueue[i].lastRet = ret;
+                if (ret >= 0) {
+                    /* done, so free and break to process below */
+                    XFREE(asyncQueue[i].packet, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+                    asyncQueue[i].packet = NULL;
+                    if (ret > 0) {
+                        /* decrypted some data, so return */
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (ret == WC_PENDING_E) {
+        ret = 0; /* nothing new */
+    }
+    return ret;
+}
+#endif /* WOLFSSL_ASYNC_CRYPT */
+
 int main(int argc, char** argv)
 {
     int          ret = 0;
@@ -398,13 +585,17 @@ int main(int argc, char** argv)
     char         keyFilesUser[MAX_FILENAME_SZ];
     const char  *server = NULL;
     const char  *sniName = NULL;
-    struct       bpf_program fp;
     pcap_if_t   *d;
     pcap_addr_t *a;
+    int          isChain = 0;
+    int          j;
 #ifdef WOLFSSL_SNIFFER_CHAIN_INPUT
-    struct iovec chain[CHAIN_INPUT_COUNT];
-    int          chainSz;
+    struct iovec chains[CHAIN_INPUT_COUNT];
+    unsigned int remainder;
 #endif
+    int packetNumber = 0;
+
+    show_appinfo();
 
     signal(SIGINT, sig_handler);
 
@@ -501,10 +692,10 @@ int main(int argc, char** argv)
 
         SNPRINTF(filter, sizeof(filter), "tcp and port %d", port);
 
-        ret = pcap_compile(pcap, &fp, filter, 0, 0);
+        ret = pcap_compile(pcap, &pcap_fp, filter, 0, 0);
         if (ret != 0) printf("pcap_compile failed %s\n", pcap_geterr(pcap));
 
-        ret = pcap_setfilter(pcap, &fp);
+        ret = pcap_setfilter(pcap, &pcap_fp);
         if (ret != 0) printf("pcap_setfilter failed %s\n", pcap_geterr(pcap));
 
         /* optionally enter the private key to use */
@@ -587,13 +778,13 @@ int main(int argc, char** argv)
             }
 
             /* Only let through TCP/IP packets */
-            ret = pcap_compile(pcap, &fp, "(ip6 or ip) and tcp", 0, 0);
+            ret = pcap_compile(pcap, &pcap_fp, "(ip6 or ip) and tcp", 0, 0);
             if (ret != 0) {
                 printf("pcap_compile failed %s\n", pcap_geterr(pcap));
                 exit(EXIT_FAILURE);
             }
 
-            ret = pcap_setfilter(pcap, &fp);
+            ret = pcap_setfilter(pcap, &pcap_fp);
             if (ret != 0) {
                 printf("pcap_setfilter failed %s\n", pcap_geterr(pcap));
                 exit(EXIT_FAILURE);
@@ -601,9 +792,7 @@ int main(int argc, char** argv)
         }
     }
     else {
-        /* usage error */
-        printf( "usage: ./snifftest or ./snifftest dump pemKey"
-                " [server] [port] [password]\n");
+        show_usage();
         exit(EXIT_FAILURE);
     }
 
@@ -614,74 +803,127 @@ int main(int argc, char** argv)
         frame = NULL_IF_FRAME_LEN;
 
     while (1) {
-        static int packetNumber = 0;
         struct pcap_pkthdr header;
-        const unsigned char* packet = pcap_next(pcap, &header);
+        const unsigned char* packet = NULL;
         SSLInfo sslInfo;
-        packetNumber++;
+        void* chain = NULL;
+        int   chainSz = 0;
+        byte* data = NULL; /* pointer to decrypted data */
+#ifdef WOLFSSL_ASYNC_CRYPT
+        int queueSz = 0;
+#endif
+
+#ifndef WOLFSSL_ASYNC_CRYPT
+        ret = 0; /* reset status */
+#else
+        /* poll hardware and attempt to process items in queue. If returns > 0
+         * then data pointer has decrypted something */
+        ret = SnifferAsyncPollQueue(&data, err, &sslInfo, &queueSz);
+        if (queueSz >= WOLF_ASYNC_MAX_PENDING) {
+            /* queue full, poll again */
+            continue;
+        }
+#endif
+        if (data == NULL) {
+            /* grab next pcap packet */
+            packetNumber++;
+            packet = pcap_next(pcap, &header);
+        #if defined(WOLFSSL_ASYNC_CRYPT) && defined(DEBUG_SNIFFER)
+            printf("Packet Number: %d\n", packetNumber);
+        #endif
+        }
         if (packet) {
-
-            byte* data = NULL;
-
             if (header.caplen > 40)  { /* min ip(20) + min tcp(20) */
                 packet        += frame;
                 header.caplen -= frame;
             }
-            else
+            else {
+                /* packet doesn't contain minimum ip/tcp header */
                 continue;
-#ifdef WOLFSSL_SNIFFER_CHAIN_INPUT
-            {
-                unsigned int j = 0;
-                unsigned int remainder = header.caplen;
-
-                chainSz = 0;
-                do {
-                    unsigned int chunkSz;
-
-                    chunkSz = min(remainder, CHAIN_INPUT_CHUNK_SIZE);
-                    chain[chainSz].iov_base = (void*)(packet + j);
-                    chain[chainSz].iov_len = chunkSz;
-                    j += chunkSz;
-                    remainder -= chunkSz;
-                    chainSz++;
-                } while (j < header.caplen);
             }
+
+#ifdef WOLFSSL_SNIFFER_CHAIN_INPUT
+            isChain = 1;
+            j = 0;
+            remainder = header.caplen;
+            chainSz = 0;
+            do {
+                unsigned int chunkSz = min(remainder, CHAIN_INPUT_CHUNK_SIZE);
+                chains[chainSz].iov_base = (void*)(packet + j);
+                chains[chainSz].iov_len = chunkSz;
+                j += chunkSz;
+                remainder -= chunkSz;
+                chainSz++;
+            } while (j < (int)header.caplen);
+            chain = (void*)chains;
+#else
+            chain = (void*)packet;
+            chainSz = header.caplen;
 #endif
 
-#if defined(WOLFSSL_SNIFFER_CHAIN_INPUT) && \
-    defined(WOLFSSL_SNIFFER_STORE_DATA_CB)
+#ifdef WOLFSSL_ASYNC_CRYPT
+            /* For async call the original API again with same data,
+             * or call with different sessions for multiple concurrent
+             * stream processing */
+            ret = ssl_DecodePacketAsync(chain, chainSz, isChain, &data, err,
+                &sslInfo, NULL);
+
+            /* WC_PENDING_E: Hardware is processing or stream is blocked
+             *               (waiting on WC_PENDING_E) */
+            if (ret == WC_PENDING_E) {
+                /* add to queue, for later processing */
+            #ifdef DEBUG_SNIFFER
+                printf("Steam is pending, queue packet %d\n", packetNumber);
+            #endif
+                ret = SnifferAsyncQueueAdd(ret, chain, chainSz, isChain,
+                    packetNumber);
+                if (ret >= 0) {
+                    ret = 0; /* mark event just added */
+                }
+            }
+
+#elif defined(WOLFSSL_SNIFFER_CHAIN_INPUT) && \
+      defined(WOLFSSL_SNIFFER_STORE_DATA_CB)
             ret = ssl_DecodePacketWithChainSessionInfoStoreData(chain, chainSz,
                     &data, &sslInfo, err);
 #elif defined(WOLFSSL_SNIFFER_CHAIN_INPUT)
             (void)sslInfo;
             ret = ssl_DecodePacketWithChain(chain, chainSz, &data, err);
-#elif defined(WOLFSSL_SNIFFER_STORE_DATA_CB)
+#else
+    #if defined(WOLFSSL_SNIFFER_STORE_DATA_CB)
             ret = ssl_DecodePacketWithSessionInfoStoreData(packet,
                     header.caplen, &data, &sslInfo, err);
-#else
+    #else
             ret = ssl_DecodePacketWithSessionInfo(packet, header.caplen, &data,
                                                   &sslInfo, err);
+    #endif
+            (void)chain;
+            (void)chainSz;
 #endif
-            if (ret < 0) {
-                printf("ssl_Decode ret = %d, %s\n", ret, err);
-                hadBadPacket = 1;
-            }
-            if (ret > 0) {
-                int j;
-                /* Convert non-printable data to periods. */
-                for (j = 0; j < ret; j++) {
-                    if (isprint(data[j]) || isspace(data[j])) continue;
-                    data[j] = '.';
-                }
-                data[ret] = 0;
-                printf("SSL App Data(%d:%d):%s\n", packetNumber, ret, data);
-                ssl_FreeZeroDecodeBuffer(&data, ret, err);
-            }
         }
-        else if (saveFile)
-            break;      /* we're done reading file */
+
+        /* check if we are done reading file */
+        if (packet == NULL && data == NULL && saveFile) {
+            break;
+        }
+
+        if (ret < 0) {
+            printf("ssl_Decode ret = %d, %s\n", ret, err);
+            hadBadPacket = 1;
+        }
+        if (data != NULL && ret > 0) {
+            /* Convert non-printable data to periods. */
+            for (j = 0; j < ret; j++) {
+                if (isprint(data[j]) || isspace(data[j])) continue;
+                data[j] = '.';
+            }
+            data[ret] = 0;
+            printf("SSL App Data(%d:%d):%s\n", packetNumber, ret, data);
+            ssl_FreeZeroDecodeBuffer(&data, ret, err);
+        }
     }
     FreeAll();
+    (void)isChain;
 
     return hadBadPacket ? EXIT_FAILURE : EXIT_SUCCESS;
 }

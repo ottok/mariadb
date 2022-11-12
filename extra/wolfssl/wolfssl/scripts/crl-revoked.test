@@ -4,7 +4,12 @@
 CERT_DIR=certs
 
 # if we can, isolate the network namespace to eliminate port collisions.
-if [ "${AM_BWRAPPED-}" != "yes" ]; then
+if [[ -n "$NETWORK_UNSHARE_HELPER" ]]; then
+     if [[ -z "$NETWORK_UNSHARE_HELPER_CALLED" ]]; then
+         export NETWORK_UNSHARE_HELPER_CALLED=yes
+         exec "$NETWORK_UNSHARE_HELPER" "$0" "$@" || exit $?
+     fi
+elif [ "${AM_BWRAPPED-}" != "yes" ]; then
     bwrap_path="$(command -v bwrap)"
     if [ -n "$bwrap_path" ]; then
         export AM_BWRAPPED=yes
@@ -143,7 +148,7 @@ run_hashdir_test() {
   fi
   ln -s ./crl/crl.pem "$crl_hash_name".r0
   popd
-  
+
   # starts the server on crl_port, -R generates ready file to be used as a
   # mutex lock, -c loads the revoked certificate. We capture the processid
   # into the variable server_pid
@@ -159,11 +164,11 @@ run_hashdir_test() {
 
   # get created port 0 ephemeral port
   crl_port="$(cat "$ready_file")"
-  
+
   # starts client on crl_port and captures the output from client
   capture_out=$(./examples/client/client -p $crl_port -9 2>&1)
   client_result=$?
-  
+
   wait $server_pid
   server_result=$?
 
@@ -183,7 +188,7 @@ run_hashdir_test() {
         echo ""
         exit_hash_dir_code=1
     esac
-  
+
   # clean up hashed cert and crl
   pushd ${CERT_DIR}
   rm "$ca_hash_name".0
@@ -213,4 +218,3 @@ run_test
 echo "exiting with $exit_code certificate was not revoked"
 exit $exit_code
 ########## end program ##########
-

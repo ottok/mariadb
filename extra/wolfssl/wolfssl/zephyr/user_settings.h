@@ -1,6 +1,6 @@
 /* user_settings.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -73,12 +73,6 @@ extern "C" {
 
 #undef  NO_RC4
 #define NO_RC4
-
-#undef  NO_HC128
-#define NO_HC128
-
-#undef  NO_RABBIT
-#define NO_RABBIT
 
 #undef  WOLFSSL_SHA224
 #define WOLFSSL_SHA224

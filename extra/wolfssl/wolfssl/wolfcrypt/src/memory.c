@@ -1,6 +1,6 @@
 /* memory.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -120,6 +120,147 @@ int wolfSSL_GetAllocators(wolfSSL_Malloc_cb*  mf,
 }
 
 #ifndef WOLFSSL_STATIC_MEMORY
+#ifdef WOLFSSL_CHECK_MEM_ZERO
+
+#ifndef WOLFSSL_MEM_CHECK_ZERO_CACHE_LEN
+/* Number of entries in table of addresses to check. */
+#define WOLFSSL_MEM_CHECK_ZERO_CACHE_LEN    256
+#endif
+
+/* Alignment to maintain when adding length to allocated pointer.
+ * Intel x64 wants to use aligned loads of XMM registers.
+ */
+#define MEM_ALIGN       16
+
+/* An address that is meant to be all zeros for its length. */
+typedef struct MemZero {
+    /* Name of address to check. */
+    const char* name;
+    /* Address to check. */
+    const void* addr;
+    /* Length of data that must be zero. */
+    size_t len;
+} MemZero;
+
+/* List of addresses to check. */
+static MemZero memZero[WOLFSSL_MEM_CHECK_ZERO_CACHE_LEN];
+/* Next index to place address at.
+ * -1 indicates uninitialized.
+ * If nextIdx is equal to WOLFSSL_MEM_CHECK_ZERO_CACHE_LEN then all entries
+ * have been used.
+ */
+static int nextIdx = -1;
+/* Mutex to protect modifying list of addresses to check. */
+static wolfSSL_Mutex zeroMutex;
+
+/* Initialize the table of addresses and the mutex.
+ */
+void wc_MemZero_Init()
+{
+    /* Clear the table to more easily see what is valid. */
+    XMEMSET(memZero, 0, sizeof(memZero));
+    /* Initialize mutex. */
+    wc_InitMutex(&zeroMutex);
+    /* Next index is first entry. */
+    nextIdx = 0;
+}
+
+/* Free the mutex and check we have not any uncheck addresses.
+ */
+void wc_MemZero_Free()
+{
+    /* Free mutex. */
+    wc_FreeMutex(&zeroMutex);
+    /* Make sure we checked all addresses. */
+    if (nextIdx > 0) {
+        int i;
+        fprintf(stderr, "[MEM_ZERO] Unseen: %d\n", nextIdx);
+        for (i = 0; i < nextIdx; i++) {
+            fprintf(stderr, "  %s - %p:%ld\n", memZero[i].name, memZero[i].addr,
+                memZero[i].len);
+        }
+    }
+    /* Uninitialized value in next index. */
+    nextIdx = -1;
+}
+
+/* Add an address to check.
+ *
+ * @param [in] name  Name of address to check.
+ * @param [in] addr  Address that needs to be checked.
+ * @param [in] len   Length of data that must be zero.
+ */
+void wc_MemZero_Add(const char* name, const void* addr, size_t len)
+{
+    /* Initialize if not done. */
+    if (nextIdx == -1) {
+        wc_MemZero_Init();
+    }
+
+    /* Add an entry to the table while locked. */
+    wc_LockMutex(&zeroMutex);
+    if (nextIdx < WOLFSSL_MEM_CHECK_ZERO_CACHE_LEN) {
+        /* Fill in the next entry and update next index. */
+        memZero[nextIdx].name = name;
+        memZero[nextIdx].addr = addr;
+        memZero[nextIdx].len  = len;
+        nextIdx++;
+    }
+    else {
+        /* Abort when too many entries. */
+        fprintf(stderr, "\n[MEM_ZERO] Too many addresses to check\n");
+        fprintf(stderr, "[MEM_ZERO] WOLFSSL_MEM_CHECK_ZERO_CACHE_LEN\n");
+        abort();
+    }
+    wc_UnLockMutex(&zeroMutex);
+}
+
+/* Check the memory in the range of the address for memory that must be zero.
+ *
+ * @param [in] addr  Start address of memory that is to be checked.
+ * @param [in] len   Length of data associated with address.
+ */
+void wc_MemZero_Check(void* addr, size_t len)
+{
+    int i;
+    size_t j;
+
+    wc_LockMutex(&zeroMutex);
+    /* Look at each address for overlap with address passes in. */
+    for (i = 0; i < nextIdx; i++) {
+        if ((memZero[i].addr < addr) ||
+               ((size_t)memZero[i].addr >= (size_t)addr + len)) {
+            /* Check address not part of memory to check. */
+            continue;
+        }
+
+        /* Address is in range of memory being freed - check each byte zero. */
+        for (j = 0; j < memZero[i].len; j++) {
+            if (((unsigned char*)memZero[i].addr)[j] != 0) {
+                /* Byte not zero - abort! */
+                fprintf(stderr, "\n[MEM_ZERO] %s:%p + %ld is not zero\n",
+                    memZero[i].name, memZero[i].addr, j);
+                fprintf(stderr, "[MEM_ZERO] Checking %p:%ld\n", addr, len);
+                abort();
+                break;
+            }
+        }
+        /* Update next index to write to. */
+        nextIdx--;
+        if (nextIdx > 0) {
+            /* Remove entry. */
+            XMEMCPY(memZero + i, memZero + i + 1,
+                sizeof(MemZero) * (nextIdx - i));
+            /* Clear out top to make it easier to see what is to be checked. */
+            XMEMSET(&memZero[nextIdx], 0, sizeof(MemZero));
+        }
+        /* Need to check this index again with new data. */
+        i--;
+    }
+    wc_UnLockMutex(&zeroMutex);
+}
+#endif /* WOLFSSL_CHECK_MEM_ZERO */
+
 #ifdef WOLFSSL_DEBUG_MEMORY
 void* wolfSSL_Malloc(size_t size, const char* func, unsigned int line)
 #else
@@ -127,6 +268,11 @@ void* wolfSSL_Malloc(size_t size)
 #endif
 {
     void* res = 0;
+
+#ifdef WOLFSSL_CHECK_MEM_ZERO
+    /* Space for requested size. */
+    size += MEM_ALIGN;
+#endif
 
     if (malloc_function) {
     #ifdef WOLFSSL_DEBUG_MEMORY
@@ -150,9 +296,19 @@ void* wolfSSL_Malloc(size_t size)
     #endif
     }
 
+#ifdef WOLFSSL_CHECK_MEM_ZERO
+    /* Restore size to requested value. */
+    size -= MEM_ALIGN;
+    if (res != NULL) {
+        /* Place size at front of allocated data and move pointer passed it. */
+        *(size_t*)res = size;
+        res = ((unsigned char*)res) + MEM_ALIGN;
+    }
+#endif
+
 #ifdef WOLFSSL_DEBUG_MEMORY
 #if defined(WOLFSSL_DEBUG_MEMORY_PRINT) && !defined(WOLFSSL_TRACK_MEMORY)
-    printf("Alloc: %p -> %u at %s:%d\n", res, (word32)size, func, line);
+    fprintf(stderr, "Alloc: %p -> %u at %s:%u\n", res, (word32)size, func, line);
 #else
     (void)func;
     (void)line;
@@ -166,7 +322,7 @@ void* wolfSSL_Malloc(size_t size)
 
 #ifdef WOLFSSL_FORCE_MALLOC_FAIL_TEST
     if (res && --gMemFailCount == 0) {
-        printf("\n---FORCED MEM FAIL TEST---\n");
+        fprintf(stderr, "\n---FORCED MEM FAIL TEST---\n");
         if (free_function) {
         #ifdef WOLFSSL_DEBUG_MEMORY
             free_function(res, func, line);
@@ -193,11 +349,18 @@ void wolfSSL_Free(void *ptr)
 {
 #ifdef WOLFSSL_DEBUG_MEMORY
 #if defined(WOLFSSL_DEBUG_MEMORY_PRINT) && !defined(WOLFSSL_TRACK_MEMORY)
-    printf("Free: %p at %s:%d\n", ptr, func, line);
+    fprintf(stderr, "Free: %p at %s:%u\n", ptr, func, line);
 #else
     (void)func;
     (void)line;
 #endif
+#endif
+
+#ifdef WOLFSSL_CHECK_MEM_ZERO
+    /* Move pointer back to originally allocated pointer. */
+    ptr = ((unsigned char*)ptr) - MEM_ALIGN;
+    /* Check that the pointer is zero where required. */
+    wc_MemZero_Check(((unsigned char*)ptr) + MEM_ALIGN, *(size_t*)ptr);
 #endif
 
     if (free_function) {
@@ -222,6 +385,33 @@ void* wolfSSL_Realloc(void *ptr, size_t size, const char* func, unsigned int lin
 void* wolfSSL_Realloc(void *ptr, size_t size)
 #endif
 {
+#ifdef WOLFSSL_CHECK_MEM_ZERO
+    /* Can't check data that has been freed during realloc.
+     * Manually allocated new memory, copy data and free original pointer.
+     */
+#ifdef WOLFSSL_DEBUG_MEMORY
+    void* res = wolfSSL_Malloc(size, func, line);
+#else
+    void* res = wolfSSL_Malloc(size);
+#endif
+    if (ptr != NULL) {
+        /* Copy the minimum of old and new size. */
+        size_t copySize = *(size_t*)(((unsigned char*)ptr) - MEM_ALIGN);
+        if (size < copySize) {
+            copySize = size;
+        }
+        XMEMCPY(res, ptr, copySize);
+        /* Dispose of old pointer. */
+    #ifdef WOLFSSL_DEBUG_MEMORY
+        wolfSSL_Free(ptr, func, line);
+    #else
+        wolfSSL_Free(ptr);
+    #endif
+    }
+
+    /* Return new pointer with data copied into it. */
+    return res;
+#else
     void* res = 0;
 
     if (realloc_function) {
@@ -240,6 +430,7 @@ void* wolfSSL_Realloc(void *ptr, size_t size)
     }
 
     return res;
+#endif
 }
 #endif /* WOLFSSL_STATIC_MEMORY */
 
@@ -406,7 +597,7 @@ int wolfSSL_load_static_memory(byte* buffer, word32 sz, int flag,
     }
 
 #ifdef WOLFSSL_DEBUG_MEMORY
-    printf("Allocated %d bytes for static memory @ %p\n", ava, pt);
+    fprintf(stderr, "Allocated %d bytes for static memory @ %p\n", ava, pt);
 #endif
 
     /* divide into chunks of memory and add them to available list */
@@ -625,17 +816,19 @@ void* wolfSSL_Malloc(size_t size, void* heap, int type)
         #ifndef WOLFSSL_NO_MALLOC
             #ifdef FREERTOS
                 res = pvPortMalloc(size);
+            #elif defined(WOLFSSL_EMBOS)
+                res = OS_HEAP_malloc(size);
             #else
                 res = malloc(size);
             #endif
 
             #ifdef WOLFSSL_DEBUG_MEMORY
-                printf("Alloc: %p -> %u at %s:%d\n", res, (word32)size, func, line);
+                fprintf(stderr, "Alloc: %p -> %u at %s:%d\n", res, (word32)size, func, line);
             #endif
         #else
             WOLFSSL_MSG("No heap hint found to use and no malloc");
             #ifdef WOLFSSL_DEBUG_MEMORY
-            printf("ERROR: at %s:%d\n", func, line);
+            fprintf(stderr, "ERROR: at %s:%d\n", func, line);
             #endif
         #endif /* WOLFSSL_NO_MALLOC */
         #endif /* WOLFSSL_HEAP_TEST */
@@ -682,7 +875,7 @@ void* wolfSSL_Malloc(size_t size, void* heap, int type)
                         }
                     #ifdef WOLFSSL_DEBUG_STATIC_MEMORY
                         else {
-                            printf("Size: %ld, Empty: %d\n", size,
+                            fprintf(stderr, "Size: %ld, Empty: %d\n", size,
                                                               mem->sizeList[i]);
                         }
                     #endif
@@ -697,7 +890,7 @@ void* wolfSSL_Malloc(size_t size, void* heap, int type)
             res = pt->buffer;
 
         #ifdef WOLFSSL_DEBUG_MEMORY
-            printf("Alloc: %p -> %u at %s:%d\n", pt->buffer, pt->sz, func, line);
+            fprintf(stderr, "Alloc: %p -> %u at %s:%d\n", pt->buffer, pt->sz, func, line);
         #endif
 
             /* keep track of connection statistics if flag is set */
@@ -719,7 +912,7 @@ void* wolfSSL_Malloc(size_t size, void* heap, int type)
         else {
             WOLFSSL_MSG("ERROR ran out of static memory");
             #ifdef WOLFSSL_DEBUG_MEMORY
-            printf("Looking for %lu bytes at %s:%d\n", size, func, line);
+            fprintf(stderr, "Looking for %lu bytes at %s:%d\n", size, func, line);
             #endif
         }
 
@@ -756,7 +949,7 @@ void wolfSSL_Free(void *ptr, void* heap, int type)
     #ifdef WOLFSSL_HEAP_TEST
         if (heap == (void*)WOLFSSL_HEAP_TEST) {
         #ifdef WOLFSSL_DEBUG_MEMORY
-            printf("Free: %p at %s:%d\n", pt, func, line);
+            fprintf(stderr, "Free: %p at %s:%d\n", pt, func, line);
         #endif
             return free(ptr);
         }
@@ -776,6 +969,8 @@ void wolfSSL_Free(void *ptr, void* heap, int type)
         #ifndef WOLFSSL_NO_MALLOC
             #ifdef FREERTOS
                 vPortFree(ptr);
+            #elif defined(WOLFSSL_EMBOS)
+                OS_HEAP_free(ptr);
             #else
                 free(ptr);
             #endif
@@ -821,7 +1016,7 @@ void wolfSSL_Free(void *ptr, void* heap, int type)
             mem->frAlc += 1;
 
         #ifdef WOLFSSL_DEBUG_MEMORY
-            printf("Free: %p -> %u at %s:%d\n", pt->buffer, pt->sz, func, line);
+            fprintf(stderr, "Free: %p -> %u at %s:%d\n", pt->buffer, pt->sz, func, line);
         #endif
 
             /* keep track of connection statistics if flag is set */
@@ -1088,12 +1283,12 @@ void *xrealloc(void *p, size_t n, void* heap, int type, const char* func,
         p32[0] = (word32)n;
         newp = (void*)(p32 + 4);
 
-        fprintf(stderr, "Alloc: %p -> %u (%d) at %s:%s:%u\n", newp, (word32)n,
-                                                        type, func, file, line);
         if (p != NULL) {
             fprintf(stderr, "Free: %p -> %u (%d) at %s:%s:%u\n", p, oldLen,
                                                         type, func, file, line);
         }
+        fprintf(stderr, "Alloc: %p -> %u (%d) at %s:%s:%u\n", newp, (word32)n,
+                                                        type, func, file, line);
     }
 
     (void)heap;
@@ -1140,197 +1335,6 @@ void __attribute__((no_instrument_function))
 }
 #endif
 
-#if defined(WOLFSSL_LINUXKM_SIMD_X86)
-    static union fpregs_state **wolfcrypt_linuxkm_fpu_states = NULL;
-
-    static WARN_UNUSED_RESULT inline int am_in_hard_interrupt_handler(void)
-    {
-        return (preempt_count() & (NMI_MASK | HARDIRQ_MASK)) != 0;
-    }
-
-    WARN_UNUSED_RESULT int allocate_wolfcrypt_linuxkm_fpu_states(void)
-    {
-        wolfcrypt_linuxkm_fpu_states =
-            (union fpregs_state **)kzalloc(nr_cpu_ids
-                                           * sizeof(struct fpu_state *),
-                                           GFP_KERNEL);
-        if (! wolfcrypt_linuxkm_fpu_states) {
-            pr_err("warning, allocation of %lu bytes for "
-                   "wolfcrypt_linuxkm_fpu_states failed.\n",
-                   nr_cpu_ids * sizeof(struct fpu_state *));
-            return MEMORY_E;
-        }
-        {
-            typeof(nr_cpu_ids) i;
-            for (i=0; i<nr_cpu_ids; ++i) {
-                _Static_assert(sizeof(union fpregs_state) <= PAGE_SIZE,
-                               "union fpregs_state is larger than expected.");
-                wolfcrypt_linuxkm_fpu_states[i] =
-                    (union fpregs_state *)kzalloc(PAGE_SIZE
-                                                  /* sizeof(union fpregs_state) */,
-                                                  GFP_KERNEL);
-                if (! wolfcrypt_linuxkm_fpu_states[i])
-                    break;
-                /* double-check that the allocation is 64-byte-aligned as needed
-                 * for xsave.
-                 */
-                if ((unsigned long)wolfcrypt_linuxkm_fpu_states[i] & 63UL) {
-                    pr_err("warning, allocation for wolfcrypt_linuxkm_fpu_states "
-                           "was not properly aligned (%px).\n",
-                           wolfcrypt_linuxkm_fpu_states[i]);
-                    kfree(wolfcrypt_linuxkm_fpu_states[i]);
-                    wolfcrypt_linuxkm_fpu_states[i] = 0;
-                    break;
-                }
-            }
-            if (i < nr_cpu_ids) {
-                pr_err("warning, only %u/%u allocations succeeded for "
-                       "wolfcrypt_linuxkm_fpu_states.\n",
-                       i, nr_cpu_ids);
-                return MEMORY_E;
-            }
-        }
-        return 0;
-    }
-
-    void free_wolfcrypt_linuxkm_fpu_states(void)
-    {
-        if (wolfcrypt_linuxkm_fpu_states) {
-            typeof(nr_cpu_ids) i;
-            for (i=0; i<nr_cpu_ids; ++i) {
-                if (wolfcrypt_linuxkm_fpu_states[i])
-                    kfree(wolfcrypt_linuxkm_fpu_states[i]);
-            }
-            kfree(wolfcrypt_linuxkm_fpu_states);
-            wolfcrypt_linuxkm_fpu_states = 0;
-        }
-    }
-
-    WARN_UNUSED_RESULT int save_vector_registers_x86(void)
-    {
-        int processor_id;
-
-        preempt_disable();
-
-        processor_id = smp_processor_id();
-
-        {
-            static int _warned_on_null = -1;
-            if ((wolfcrypt_linuxkm_fpu_states == NULL) ||
-                (wolfcrypt_linuxkm_fpu_states[processor_id] == NULL))
-            {
-                preempt_enable();
-                if (_warned_on_null < processor_id) {
-                    _warned_on_null = processor_id;
-                    pr_err("save_vector_registers_x86 called for cpu id %d "
-                           "with null context buffer.\n", processor_id);
-                }
-                return BAD_STATE_E;
-            }
-        }
-
-        if (! irq_fpu_usable()) {
-            if (am_in_hard_interrupt_handler()) {
-
-                /* allow for nested calls */
-                if (((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] != 0) {
-                    if (((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] == 255) {
-                        preempt_enable();
-                        pr_err("save_vector_registers_x86 recursion register overflow for "
-                               "cpu id %d.\n", processor_id);
-                        return BAD_STATE_E;
-                    } else {
-                        ++((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1];
-                        return 0;
-                    }
-                }
-                /* note, fpregs_lock() is not needed here, because
-                 * interrupts/preemptions are already disabled here.
-                 */
-                {
-                    /* save_fpregs_to_fpstate() only accesses fpu->state, which
-                     * has stringent alignment requirements (64 byte cache
-                     * line), but takes a pointer to the parent struct.  work
-                     * around this.
-                     */
-                    struct fpu *fake_fpu_pointer =
-                        (struct fpu *)(((char *)wolfcrypt_linuxkm_fpu_states[processor_id])
-                                       - offsetof(struct fpu, state));
-                #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
-                    copy_fpregs_to_fpstate(fake_fpu_pointer);
-                #else
-                    save_fpregs_to_fpstate(fake_fpu_pointer);
-                #endif
-                }
-                /* mark the slot as used. */
-                ((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] = 1;
-                /* note, not preempt_enable()ing, mirroring kernel_fpu_begin()
-                 * semantics, even though routine will have been entered already
-                 * non-preemptable.
-                 */
-                return 0;
-            } else {
-                preempt_enable();
-                return BAD_STATE_E;
-            }
-        } else {
-
-            /* allow for nested calls */
-            if (((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] != 0) {
-                if (((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] == 255) {
-                    preempt_enable();
-                    pr_err("save_vector_registers_x86 recursion register overflow for "
-                           "cpu id %d.\n", processor_id);
-                    return BAD_STATE_E;
-                } else {
-                    ++((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1];
-                    return 0;
-                }
-            }
-
-            kernel_fpu_begin();
-            preempt_enable(); /* kernel_fpu_begin() does its own
-                               * preempt_disable().  decrement ours.
-                               */
-            ((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] = 1;
-            return 0;
-        }
-    }
-    void restore_vector_registers_x86(void)
-    {
-        int processor_id = smp_processor_id();
-
-        if ((wolfcrypt_linuxkm_fpu_states == NULL) ||
-            (wolfcrypt_linuxkm_fpu_states[processor_id] == NULL))
-        {
-                pr_err("restore_vector_registers_x86 called for cpu id %d "
-                       "without null context buffer.\n", processor_id);
-                return;
-        }
-
-        if (((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] == 0)
-        {
-            pr_err("restore_vector_registers_x86 called for cpu id %d "
-                   "without saved context.\n", processor_id);
-            return;
-        }
-
-        if (--((unsigned char *)wolfcrypt_linuxkm_fpu_states[processor_id])[PAGE_SIZE-1] > 0) {
-            preempt_enable(); /* preempt_disable count will still be nonzero after this decrement. */
-            return;
-        }
-
-        if (am_in_hard_interrupt_handler()) {
-        #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
-            copy_kernel_to_fpregs(wolfcrypt_linuxkm_fpu_states[processor_id]);
-        #else
-            __restore_fpregs_from_fpstate(wolfcrypt_linuxkm_fpu_states[processor_id],
-                                          xfeatures_mask_all);
-        #endif
-            preempt_enable();
-        } else {
-            kernel_fpu_end();
-        }
-        return;
-    }
-#endif /* WOLFSSL_LINUXKM_SIMD_X86 && WOLFSSL_LINUXKM_SIMD_X86_IRQ_ALLOWED */
+#ifdef WOLFSSL_LINUXKM
+    #include "../../linuxkm/linuxkm_memory.c"
+#endif

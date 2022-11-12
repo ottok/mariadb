@@ -54,13 +54,6 @@ savepoint. */
 #define mtr_memo_release(m, o, t)					\
 				(m)->memo_release((o), (t))
 
-/** Print info of an mtr handle. */
-#define mtr_print(m)		(m)->print()
-
-/** Return the log object of a mini-transaction buffer.
-@return	log */
-#define mtr_get_log(m)		(m)->get_log()
-
 /** Push an object to an mtr memo stack. */
 #define mtr_memo_push(m, o, t)	(m)->memo_push(o, t)
 
@@ -96,6 +89,15 @@ struct mtr_t {
 
   /** Commit the mini-transaction. */
   void commit();
+
+  /** Release latches till savepoint. To simplify the code only
+  MTR_MEMO_S_LOCK and MTR_MEMO_PAGE_S_FIX slot types are allowed to be
+  released, otherwise it would be neccesary to add one more argument in the
+  function to point out what slot types are allowed for rollback, and this
+  would be overengineering as currently the function is used only in one place
+  in the code.
+  @param savepoint   savepoint, can be obtained with get_savepoint */
+  void rollback_to_savepoint(ulint savepoint);
 
   /** Commit a mini-transaction that is shrinking a tablespace.
   @param space   tablespace that is being shrunk */
@@ -351,29 +353,12 @@ public:
 		const byte*	ptr,
 		ulint		flags) const;
 
-	/** Print info of an mtr handle. */
-	void print() const;
-
 	/** @return true if mini-transaction contains modifications. */
 	bool has_modifications() const { return m_modifications; }
-
-	/** @return the memo stack */
-	const mtr_buf_t* get_memo() const { return &m_memo; }
-
-	/** @return the memo stack */
-	mtr_buf_t* get_memo() { return &m_memo; }
 #endif /* UNIV_DEBUG */
 
 	/** @return true if a record was added to the mini-transaction */
 	bool is_dirty() const { return m_made_dirty; }
-
-	/** Get the buffered redo log of this mini-transaction.
-	@return	redo log */
-	const mtr_buf_t* get_log() const { return &m_log; }
-
-	/** Get the buffered redo log of this mini-transaction.
-	@return	redo log */
-	mtr_buf_t* get_log() { return &m_log; }
 
 	/** Push an object to an mtr memo stack.
 	@param object	object
@@ -385,6 +370,11 @@ public:
 	@return true if the mtr is dirtying a clean page. */
 	static inline bool is_block_dirtied(const buf_block_t* block)
 		MY_ATTRIBUTE((warn_unused_result));
+
+  /** @return the size of the log is empty */
+  size_t get_log_size() const { return m_log.size(); }
+  /** @return whether the log and memo are empty */
+  bool is_empty() const { return m_memo.size() == 0 && m_log.size() == 0; }
 
   /** Write request types */
   enum write_type

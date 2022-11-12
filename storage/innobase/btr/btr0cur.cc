@@ -3,7 +3,7 @@
 Copyright (c) 1994, 2019, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2008, Google Inc.
 Copyright (c) 2012, Facebook Inc.
-Copyright (c) 2015, 2021, MariaDB Corporation.
+Copyright (c) 2015, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -1229,38 +1229,36 @@ If mode is PAGE_CUR_GE, then up_match will a have a sensible value.
 If mode is PAGE_CUR_LE , cursor is left at the place where an insert of the
 search tuple should be performed in the B-tree. InnoDB does an insert
 immediately after the cursor. Thus, the cursor may end up on a user record,
-or on a page infimum record. */
-dberr_t
-btr_cur_search_to_nth_level_func(
-	dict_index_t*	index,	/*!< in: index */
-	ulint		level,	/*!< in: the tree level of search */
-	const dtuple_t*	tuple,	/*!< in: data tuple; NOTE: n_fields_cmp in
-				tuple must be set so that it cannot get
-				compared to the node ptr page number field! */
-	page_cur_mode_t	mode,	/*!< in: PAGE_CUR_L, ...;
-				Inserts should always be made using
-				PAGE_CUR_LE to search the position! */
-	ulint		latch_mode, /*!< in: BTR_SEARCH_LEAF, ..., ORed with
-				at most one of BTR_INSERT, BTR_DELETE_MARK,
-				BTR_DELETE, or BTR_ESTIMATE;
-				cursor->left_block is used to store a pointer
-				to the left neighbor page, in the cases
-				BTR_SEARCH_PREV and BTR_MODIFY_PREV;
-				NOTE that if ahi_latch, we might not have a
-				cursor page latch, we assume that ahi_latch
-				protects the record! */
-	btr_cur_t*	cursor, /*!< in/out: tree cursor; the cursor page is
-				s- or x-latched, but see also above! */
-#ifdef BTR_CUR_HASH_ADAPT
-	rw_lock_t*	ahi_latch,
-				/*!< in: currently held btr_search_latch
-				(in RW_S_LATCH mode), or NULL */
-#endif /* BTR_CUR_HASH_ADAPT */
-	const char*	file,	/*!< in: file name */
-	unsigned	line,	/*!< in: line where called */
-	mtr_t*		mtr,	/*!< in: mtr */
-	ib_uint64_t	autoinc)/*!< in: PAGE_ROOT_AUTO_INC to be written
-				(0 if none) */
+or on a page infimum record.
+@param index      index
+@param level      the tree level of search
+@param tuple      data tuple; NOTE: n_fields_cmp in tuple must be set so that
+                  it cannot get compared to the node ptr page number field!
+@param mode       PAGE_CUR_L, NOTE that if the search is made using a unique
+                  prefix of a record, mode should be PAGE_CUR_LE, not
+                  PAGE_CUR_GE, as the latter may end up on the previous page of
+                  the record! Inserts should always be made using PAGE_CUR_LE
+                  to search the position!
+@param latch_mode BTR_SEARCH_LEAF, ..., ORed with at most one of BTR_INSERT,
+                  BTR_DELETE_MARK, BTR_DELETE, or BTR_ESTIMATE;
+                  cursor->left_block is used to store a pointer to the left
+                  neighbor page, in the cases BTR_SEARCH_PREV and
+                  BTR_MODIFY_PREV; NOTE that if ahi_latch, we might not have a
+                  cursor page latch, we assume that ahi_latch protects the
+                  record!
+@param cursor     tree cursor; the cursor page is s- or x-latched, but see also
+                  above!
+@param file       file name
+@param line       line where called
+@param mtr        mini-transaction
+@param autoinc    PAGE_ROOT_AUTO_INC to be written (0 if none)
+@return DB_SUCCESS on success or error code otherwise */
+dberr_t btr_cur_search_to_nth_level(dict_index_t *index, ulint level,
+                                    const dtuple_t *tuple,
+                                    page_cur_mode_t mode, ulint latch_mode,
+                                    btr_cur_t *cursor, const char *file,
+                                    unsigned line, mtr_t *mtr,
+                                    ib_uint64_t autoinc)
 {
 	page_t*		page = NULL; /* remove warning */
 	buf_block_t*	block;
@@ -1424,15 +1422,14 @@ btr_cur_search_to_nth_level_func(
 	    && mode != PAGE_CUR_LE_OR_EXTENDS
 # endif /* PAGE_CUR_LE_OR_EXTENDS */
 	    && !dict_index_is_spatial(index)
-	    /* If !ahi_latch, we do a dirty read of
+	    /* We do a dirty read of
 	    btr_search_enabled below, and btr_search_guess_on_hash()
 	    will have to check it again. */
 	    && btr_search_enabled
 	    && !modify_external
 	    && !(tuple->info_bits & REC_INFO_MIN_REC_FLAG)
 	    && btr_search_guess_on_hash(index, info, tuple, mode,
-					latch_mode, cursor,
-					ahi_latch, mtr)) {
+					latch_mode, cursor, mtr)) {
 
 		/* Search using the hash index succeeded */
 
@@ -1452,13 +1449,6 @@ btr_cur_search_to_nth_level_func(
 
 	/* If the hash search did not succeed, do binary search down the
 	tree */
-
-#ifdef BTR_CUR_HASH_ADAPT
-	if (ahi_latch) {
-		/* Release possible search latch to obey latching order */
-		rw_lock_s_unlock(ahi_latch);
-	}
-#endif /* BTR_CUR_HASH_ADAPT */
 
 	/* Store the position of the tree latch we push to mtr so that we
 	know how to release it when we have latched leaf node(s) */
@@ -2507,12 +2497,6 @@ func_exit:
 		cursor->rtr_info->mbr_adj = true;
 	}
 
-#ifdef BTR_CUR_HASH_ADAPT
-	if (ahi_latch) {
-		rw_lock_s_lock(ahi_latch);
-	}
-#endif /* BTR_CUR_HASH_ADAPT */
-
 	DBUG_RETURN(err);
 }
 
@@ -3520,6 +3504,7 @@ fail_err:
 		 << ib::hex(thr ? thr->graph->trx->id : 0)
 		 << ' ' << rec_printer(entry).str());
 	DBUG_EXECUTE_IF("do_page_reorganize",
+			if (n_recs)
 			btr_page_reorganize(page_cursor, index, mtr););
 
 	/* Now, try the insert */
@@ -5833,7 +5818,6 @@ discard_page:
 			rec_t*		father_rec;
 			btr_cur_t	father_cursor;
 			rec_offs*	offsets;
-			bool		upd_ret;
 			ulint		len;
 
 			rtr_page_get_father_block(NULL, heap, index,
@@ -5847,17 +5831,8 @@ discard_page:
 			rtr_read_mbr(rec_get_nth_field(
 				father_rec, offsets, 0, &len), &father_mbr);
 
-			upd_ret = rtr_update_mbr_field(&father_cursor, offsets,
-						       NULL, page, &father_mbr,
-						       next_rec, mtr);
-
-			if (!upd_ret) {
-				*err = DB_ERROR;
-
-				mem_heap_free(heap);
-				return(FALSE);
-			}
-
+			rtr_update_mbr_field(&father_cursor, offsets, NULL,
+					     page, &father_mbr, next_rec, mtr);
 			ut_d(parent_latched = true);
 		} else {
 			/* Otherwise, if we delete the leftmost node pointer
@@ -6233,8 +6208,7 @@ btr_estimate_n_rows_in_range_low(
               btr_cur_search_to_nth_level(index, 0, tuple1->tuple,
                                             tuple1->mode,
 					    BTR_SEARCH_LEAF | BTR_ESTIMATE,
-					    &cursor, 0,
-					    __FILE__, __LINE__, &mtr);
+					    &cursor, __FILE__, __LINE__, &mtr);
 
 		ut_ad(!page_rec_is_infimum(btr_cur_get_rec(&cursor)));
 
@@ -6290,8 +6264,7 @@ btr_estimate_n_rows_in_range_low(
 		btr_cur_search_to_nth_level(index, 0, tuple2->tuple,
                                             mode2,
 					    BTR_SEARCH_LEAF | BTR_ESTIMATE,
-					    &cursor, 0,
-					    __FILE__, __LINE__, &mtr);
+					    &cursor, __FILE__, __LINE__, &mtr);
 
 		const rec_t*	rec = btr_cur_get_rec(&cursor);
 
@@ -7193,11 +7166,9 @@ struct btr_blob_log_check_t {
 			buf_block_buf_fix_dec(m_pcur->btr_cur.page_cur.block);
 		} else {
 			ut_ad(m_pcur->rel_pos == BTR_PCUR_ON);
-			bool ret = btr_pcur_restore_position(
-				BTR_MODIFY_LEAF | BTR_MODIFY_EXTERNAL,
-				m_pcur, m_mtr);
-
-			ut_a(ret);
+			ut_a(btr_pcur_restore_position(
+			      BTR_MODIFY_LEAF | BTR_MODIFY_EXTERNAL, m_pcur,
+			      m_mtr) == btr_pcur_t::SAME_ALL);
 		}
 
 		*m_block	= btr_pcur_get_block(m_pcur);
@@ -7232,9 +7203,7 @@ the file, in case the file was somehow truncated in the crash.
 dberr_t
 btr_store_big_rec_extern_fields(
 /*============================*/
-	btr_pcur_t*	pcur,		/*!< in/out: a persistent cursor. if
-					btr_mtr is restarted, then this can
-					be repositioned. */
+	btr_pcur_t*	pcur,		/*!< in: a persistent cursor */
 	rec_offs*	offsets,	/*!< in/out: rec_get_offsets() on
 					pcur. the "external storage" flags
 					in offsets will correctly correspond

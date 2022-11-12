@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2015, 2021, MariaDB
+   Copyright (c) 2015, 2022, MariaDB
 
  This program is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -1957,6 +1957,9 @@ Type_collection_std::aggregate_for_comparison(const Type_handler *ha,
       return ha;
     }
   }
+  if ((a == INT_RESULT && b == STRING_RESULT) ||
+      (b == INT_RESULT && a == STRING_RESULT))
+    return &type_handler_newdecimal;
   if ((a == INT_RESULT || a == DECIMAL_RESULT) &&
       (b == INT_RESULT || b == DECIMAL_RESULT))
     return &type_handler_newdecimal;
@@ -2293,7 +2296,6 @@ Type_handler_decimal_result::make_num_distinct_aggregator_field(
                                                             const Item *item)
                                                             const
 {
-  DBUG_ASSERT(item->decimals <= DECIMAL_MAX_SCALE);
   return new (mem_root)
          Field_new_decimal(NULL, item->max_length,
                            (uchar *) (item->maybe_null ? "" : 0),
@@ -4260,19 +4262,6 @@ void Type_handler_temporal_with_date::Item_update_null_value(Item *item) const
   (void) item->get_date(thd, &ltime, Datetime::Options(thd));
 }
 
-bool
-Type_handler_timestamp_common::
-Column_definition_set_attributes(THD *thd,
-                                 Column_definition *def,
-                                 const Lex_field_type_st &attr,
-                                 CHARSET_INFO *cs,
-                                 column_definition_type_t type) const
-{
-  Type_handler::Column_definition_set_attributes(thd, def, attr, cs, type);
-  if (!opt_explicit_defaults_for_timestamp)
-    def->flags|= NOT_NULL_FLAG;
-  return false;
-}
 
 void Type_handler_string_result::Item_update_null_value(Item *item) const
 {

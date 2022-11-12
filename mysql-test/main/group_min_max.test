@@ -3,6 +3,7 @@
 # The queries in this file test query execution via QUICK_GROUP_MIN_MAX_SELECT.
 #
 
+--source include/no_valgrind_without_big.inc
 --source include/default_optimizer_switch.inc
 --source include/have_innodb.inc
 #
@@ -1717,6 +1718,8 @@ CREATE TABLE `t1` (
 INSERT INTO t1 (owner_id, foo, whatever)
 VALUES (1, TRUE, "yello"), (1, FALSE, "yello"), (2, TRUE, "yello"),
        (2, TRUE, "yello"), (2, FALSE, "yello");
-EXPLAIN SELECT DISTINCT owner_id FROM t1 WHERE foo = true GROUP BY owner_id HAVING (COUNT(*) = 1);
+--replace_column 9 #
+EXPLAIN 
+SELECT DISTINCT owner_id FROM t1 WHERE foo = true GROUP BY owner_id HAVING (COUNT(*) = 1);
 SELECT DISTINCT owner_id FROM t1 WHERE foo = true GROUP BY owner_id HAVING (COUNT(*) = 1);
 DROP TABLE t1;

@@ -412,7 +412,8 @@ void trx_t::free()
 
   mod_tables.clear();
 
-  MEM_NOACCESS(&n_ref, sizeof n_ref);
+  MEM_NOACCESS(&skip_lock_inheritance_and_n_ref,
+               sizeof skip_lock_inheritance_and_n_ref);
   /* do not poison mutex */
   MEM_NOACCESS(&id, sizeof id);
   MEM_NOACCESS(&state, sizeof state);
@@ -518,6 +519,7 @@ inline void trx_t::release_locks()
   }
 
   lock.table_locks.clear();
+  reset_skip_lock_inheritance();
 }
 
 /** At shutdown, frees a transaction object. */
@@ -561,8 +563,10 @@ void trx_disconnect_prepared(trx_t *trx)
   ut_ad(trx->mysql_thd);
   ut_ad(!trx->mysql_log_file_name);
   trx->read_view.close();
+  trx_sys.trx_list.freeze();
   trx->is_recovered= true;
   trx->mysql_thd= NULL;
+  trx_sys.trx_list.unfreeze();
   /* todo/fixme: suggest to do it at innodb prepare */
   trx->will_lock= false;
   trx_sys.rw_trx_hash.put_pins(trx);

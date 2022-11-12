@@ -1,6 +1,6 @@
 /* arc4.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -53,11 +53,12 @@ typedef struct Arc4 {
     void* heap;
 } Arc4;
 
-WOLFSSL_API int wc_Arc4Process(Arc4*, byte*, const byte*, word32);
-WOLFSSL_API int wc_Arc4SetKey(Arc4*, const byte*, word32);
+WOLFSSL_API int wc_Arc4Process(Arc4* arc4, byte* out, const byte* in,
+                               word32 length);
+WOLFSSL_API int wc_Arc4SetKey(Arc4* arc4, const byte* key, word32 length);
 
-WOLFSSL_API int  wc_Arc4Init(Arc4*, void*, int);
-WOLFSSL_API void wc_Arc4Free(Arc4*);
+WOLFSSL_API int  wc_Arc4Init(Arc4* arc4, void* heap, int devId);
+WOLFSSL_API void wc_Arc4Free(Arc4* arc4);
 
 #ifdef __cplusplus
     } /* extern "C" */

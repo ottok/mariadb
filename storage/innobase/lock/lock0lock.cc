@@ -1,6 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 1996, 2017, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 1996, 2022, Oracle and/or its affiliates.
 Copyright (c) 2014, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
@@ -970,8 +970,7 @@ lock_rec_has_expl(
 	      || (precise_mode & LOCK_MODE_MASK) == LOCK_X);
 	ut_ad(!(precise_mode & LOCK_INSERT_INTENTION));
 
-	for (lock = lock_rec_get_first(&lock_sys.rec_hash, block->page.id(),
-	      heap_no);
+	for (lock = lock_rec_get_first(&lock_sys.rec_hash, block, heap_no);
 	     lock != NULL;
 	     lock = lock_rec_get_next(heap_no, lock)) {
 
@@ -1025,7 +1024,7 @@ lock_rec_other_has_expl_req(
 	}
 
 	for (lock_t* lock = lock_rec_get_first(&lock_sys.rec_hash,
-					       block->page.id(), heap_no);
+					       block, heap_no);
 	     lock != NULL;
 	     lock = lock_rec_get_next(heap_no, lock)) {
 
@@ -1076,18 +1075,19 @@ static void wsrep_kill_victim(const trx_t * const trx, const lock_t *lock)
 /*********************************************************************//**
 Checks if some other transaction has a conflicting explicit lock request
 in the queue, so that we have to wait.
-@param[in] mode LOCK_S or LOCK_X, possibly ORed to LOCK_GAP or LOC_REC_NOT_GAP,
-LOCK_INSERT_INTENTION
-@param[in] block buffer block containing the record
-@param[in] heap_no heap number of the record
-@param[in] trx our transaction
-@param[out] was_ignored true if conflicting locks waiting for the current
-transaction were ignored
 @return lock or NULL */
-static lock_t *lock_rec_other_has_conflicting(unsigned mode,
-                                              const buf_block_t *block,
-                                              ulint heap_no, const trx_t *trx,
-                                              bool *was_ignored= nullptr)
+static
+lock_t*
+lock_rec_other_has_conflicting(
+/*===========================*/
+	unsigned		mode,	/*!< in: LOCK_S or LOCK_X,
+					possibly ORed to LOCK_GAP or
+					LOC_REC_NOT_GAP,
+					LOCK_INSERT_INTENTION */
+	const buf_block_t*	block,	/*!< in: buffer block containing
+					the record */
+	ulint			heap_no,/*!< in: heap number of the record */
+	const trx_t*		trx)	/*!< in: our transaction */
 {
 	lock_t*		lock;
 
@@ -1095,21 +1095,10 @@ static lock_t *lock_rec_other_has_conflicting(unsigned mode,
 
 	bool	is_supremum = (heap_no == PAGE_HEAP_NO_SUPREMUM);
 
-	for (lock = lock_rec_get_first(&lock_sys.rec_hash, block->page.id(),
-	      heap_no);
+	for (lock = lock_rec_get_first(&lock_sys.rec_hash, block, heap_no);
 	     lock != NULL;
 	     lock = lock_rec_get_next(heap_no, lock)) {
 
-		/* There can't be lock loops for one record, because
-		all waiting locks of the record  will always wait for the same
-		lock of the record in a cell array, and check for
-		conflicting lock will always start with the first lock for the
-		heap_no, and go ahead with the same order(the order of the
-		locks in the cell array) */
-		if (lock_get_wait(lock) && lock->trx->lock.wait_trx == trx) {
-			if (was_ignored) *was_ignored= true;
-			continue;
-		}
 		if (lock_rec_has_to_wait(true, trx, mode, lock, is_supremum)) {
 #ifdef WITH_WSREP
 			if (trx->is_wsrep()) {
@@ -1266,7 +1255,6 @@ static void check_trx_state(const trx_t *trx)
 
 /** Create a new record lock and inserts it to the lock queue,
 without checking for deadlocks or conflicts.
-@param[in]	c_lock		conflicting lock
 @param[in]	type_mode	lock mode and wait flag; type will be replaced
 				with LOCK_REC
 @param[in]	page_id		index page number
@@ -1275,15 +1263,11 @@ without checking for deadlocks or conflicts.
 @param[in]	index		the index tree
 @param[in,out]	trx		transaction
 @param[in]	holds_trx_mutex	whether the caller holds trx->mutex
-@param[in]	insert_before_waiting if true, inserts new B-tree record lock
-just after the last non-waiting lock of the current transaction which is
-located before the first waiting for the current transaction lock, otherwise
-the lock is inserted at the end of the queue
 @return created lock */
 lock_t*
 lock_rec_create_low(
-	lock_t*		c_lock,
 #ifdef WITH_WSREP
+	lock_t*		c_lock,	/*!< conflicting lock */
 	que_thr_t*	thr,	/*!< thread owning trx */
 #endif
 	unsigned	type_mode,
@@ -1292,8 +1276,7 @@ lock_rec_create_low(
 	ulint		heap_no,
 	dict_index_t*	index,
 	trx_t*		trx,
-	bool		holds_trx_mutex,
-	bool		insert_before_waiting)
+	bool		holds_trx_mutex)
 {
 	lock_t*		lock;
 	ulint		n_bits;
@@ -1402,7 +1385,7 @@ lock_rec_create_low(
 			}
 
 			trx->lock.que_state = TRX_QUE_LOCK_WAIT;
-			lock_set_lock_and_trx_wait(lock, trx, c_lock);
+			lock_set_lock_and_trx_wait(lock, trx);
 			UT_LIST_ADD_LAST(trx->lock.trx_locks, lock);
 
 			trx->lock.wait_thr = thr;
@@ -1430,46 +1413,15 @@ lock_rec_create_low(
 		trx_mutex_exit(c_lock->trx);
 	} else
 #endif /* WITH_WSREP */
-	if (insert_before_waiting
-	    && !(type_mode & (LOCK_PREDICATE | LOCK_PRDT_PAGE))) {
-		/* Try to insert the lock just after the last non-waiting
-		lock of the current transaction which immediately
-		precedes the first waiting lock request. */
-		hash_table_t *lock_hash = lock_hash_get(type_mode);
-		hash_cell_t& cell = lock_hash->array[lock_hash->calc_hash(
-		    page_id.fold())];
-
-		lock_t* last_non_waiting = nullptr;
-
-		for (lock_t* l = lock_rec_get_first(lock_hash, page_id,
-		      heap_no); l; l = lock_rec_get_next(heap_no, l)) {
-			if (lock_get_wait(lock)
-			    && l->trx->lock.wait_trx == trx) {
-				break;
-			}
-			if (l->trx == trx) {
-				last_non_waiting = l;
-			}
-		}
-
-		if (!last_non_waiting) {
-			goto append_last;
-		}
-
-		cell.insert_after(*last_non_waiting, *lock, &lock_t::hash);
-	}
-	else {
-append_last:
-		if (!(type_mode & (LOCK_WAIT | LOCK_PREDICATE | LOCK_PRDT_PAGE))
-		    && innodb_lock_schedule_algorithm
-		    == INNODB_LOCK_SCHEDULE_ALGORITHM_VATS
-		    && !thd_is_replication_slave_thread(trx->mysql_thd)) {
-			HASH_PREPEND(lock_t, hash, &lock_sys.rec_hash,
-				     page_id.fold(), lock);
-		} else {
-			HASH_INSERT(lock_t, hash, lock_hash_get(type_mode),
-				    page_id.fold(), lock);
-		}
+	if (!(type_mode & (LOCK_WAIT | LOCK_PREDICATE | LOCK_PRDT_PAGE))
+	    && innodb_lock_schedule_algorithm
+	    == INNODB_LOCK_SCHEDULE_ALGORITHM_VATS
+	    && !thd_is_replication_slave_thread(trx->mysql_thd)) {
+		HASH_PREPEND(lock_t, hash, &lock_sys.rec_hash,
+			     page_id.fold(), lock);
+	} else {
+		HASH_INSERT(lock_t, hash, lock_hash_get(type_mode),
+			    page_id.fold(), lock);
 	}
 
 	if (!holds_trx_mutex) {
@@ -1477,7 +1429,7 @@ append_last:
 	}
 	ut_ad(trx_mutex_own(trx));
 	if (type_mode & LOCK_WAIT) {
-		lock_set_lock_and_trx_wait(lock, trx, c_lock);
+		lock_set_lock_and_trx_wait(lock, trx);
 	}
 	UT_LIST_ADD_LAST(trx->lock.trx_locks, lock);
 	if (!holds_trx_mutex) {
@@ -1624,7 +1576,6 @@ lock_rec_insert_to_head(
 
 /** Enqueue a waiting request for a lock which cannot be granted immediately.
 Check for deadlocks.
-@param[in]	c_lock		conflicting lock
 @param[in]	type_mode	the requested lock mode (LOCK_S or LOCK_X)
 				possibly ORed with LOCK_GAP or
 				LOCK_REC_NOT_GAP, ORed with
@@ -1643,7 +1594,9 @@ Check for deadlocks.
 				(or it happened to commit) */
 dberr_t
 lock_rec_enqueue_waiting(
-	lock_t*			c_lock,
+#ifdef WITH_WSREP
+	lock_t*			c_lock,	/*!< conflicting lock */
+#endif
 	unsigned		type_mode,
 	const buf_block_t*	block,
 	ulint			heap_no,
@@ -1681,9 +1634,9 @@ lock_rec_enqueue_waiting(
 
 	/* Enqueue the lock request that will wait to be granted, note that
 	we already own the trx mutex. */
-	lock_t* lock = lock_rec_create(c_lock,
+	lock_t* lock = lock_rec_create(
 #ifdef WITH_WSREP
-		thr,
+		c_lock, thr,
 #endif
 		type_mode | LOCK_WAIT, block, heap_no, index, trx, TRUE);
 
@@ -1777,20 +1730,22 @@ on the record, and the request to be added is not a waiting request, we
 can reuse a suitable record lock object already existing on the same page,
 just setting the appropriate bit in its bitmap. This is a low-level function
 which does NOT check for deadlocks or lock compatibility!
-@param[in] type_mode lock mode, wait, gap etc. flags; type is ignored and
-replaced by LOCK_REC
-@param[in] block buffer block containing the record
-@param[in] heap_no heap number of the record
-@param[in] index index of record
-@param[in/out] trx transaction 
-@param[in] caller_owns_trx_mutex, TRUE if caller owns the transaction mutex
-@param[in] insert_before_waiting true=insert B-tree record lock right before
-a waiting lock request; false=insert the lock at the end of the queue
 @return lock where the bit was set */
-static void lock_rec_add_to_queue(unsigned type_mode, const buf_block_t *block,
-                                  ulint heap_no, dict_index_t *index,
-                                  trx_t *trx, bool caller_owns_trx_mutex,
-                                  bool insert_before_waiting= false)
+static
+void
+lock_rec_add_to_queue(
+/*==================*/
+	unsigned		type_mode,/*!< in: lock mode, wait, gap
+					etc. flags; type is ignored
+					and replaced by LOCK_REC */
+	const buf_block_t*	block,	/*!< in: buffer block containing
+					the record */
+	ulint			heap_no,/*!< in: heap number of the record */
+	dict_index_t*		index,	/*!< in: index of record */
+	trx_t*			trx,	/*!< in/out: transaction */
+	bool			caller_owns_trx_mutex)
+					/*!< in: TRUE if caller owns the
+					transaction mutex */
 {
 #ifdef UNIV_DEBUG
 	ut_ad(lock_mutex_own());
@@ -1879,16 +1834,11 @@ static void lock_rec_add_to_queue(unsigned type_mode, const buf_block_t *block,
 		}
 	}
 
-	/* Note: We will not pass any conflicting lock to lock_rec_create(),
-	because we should be moving an existing waiting lock request. */
-	ut_ad(!(type_mode & LOCK_WAIT) || trx->lock.wait_trx);
-
-	lock_rec_create(NULL,
+	lock_rec_create(
 #ifdef WITH_WSREP
-		NULL,
+		NULL, NULL,
 #endif
-		type_mode, block, heap_no, index, trx, caller_owns_trx_mutex,
-		insert_before_waiting);
+		type_mode, block, heap_no, index, trx, caller_owns_trx_mutex);
 }
 
 /*********************************************************************//**
@@ -1946,23 +1896,28 @@ lock_rec_lock(
       /* Do nothing if the trx already has a strong enough lock on rec */
       if (!lock_rec_has_expl(mode, block, heap_no, trx))
       {
-        bool was_ignored = false;
-        if (lock_t *c_lock= lock_rec_other_has_conflicting(
-                mode, block, heap_no, trx, &was_ignored))
+        if (
+#ifdef WITH_WSREP
+	    lock_t *c_lock=
+#endif
+	    lock_rec_other_has_conflicting(mode, block, heap_no, trx))
         {
           /*
             If another transaction has a non-gap conflicting
             request in the queue, as this transaction does not
             have a lock strong enough already granted on the
 	    record, we have to wait. */
-	    err = lock_rec_enqueue_waiting(c_lock, mode, block, heap_no, index,
-		thr, NULL);
+	    err = lock_rec_enqueue_waiting(
+#ifdef WITH_WSREP
+			c_lock,
+#endif /* WITH_WSREP */
+			mode, block, heap_no, index, thr, NULL);
         }
         else if (!impl)
         {
           /* Set the requested lock on the record. */
           lock_rec_add_to_queue(LOCK_REC | mode, block, heap_no, index, trx,
-                                true, was_ignored);
+                                true);
           err= DB_SUCCESS_LOCKED_REC;
         }
       }
@@ -1988,9 +1943,9 @@ lock_rec_lock(
       Note that we don't own the trx mutex.
     */
     if (!impl)
-      lock_rec_create(NULL,
+      lock_rec_create(
 #ifdef WITH_WSREP
-         NULL,
+         NULL, NULL,
 #endif
         mode, block, heap_no, index, trx, false);
 
@@ -2213,17 +2168,8 @@ static void lock_rec_dequeue_from_page(lock_t* in_lock)
 			if (!lock_get_wait(lock)) {
 				continue;
 			}
-
-			ut_ad(lock->trx->lock.wait_trx);
-			ut_ad(lock->trx->lock.wait_lock);
-
-			if (const lock_t* c = lock_rec_has_to_wait_in_queue(
-				    lock)) {
-				trx_mutex_enter(lock->trx);
-				lock->trx->lock.wait_trx = c->trx;
-				trx_mutex_exit(lock->trx);
-			}
-			else {
+			const lock_t* c = lock_rec_has_to_wait_in_queue(lock);
+			if (!c) {
 				/* Grant the lock */
 				ut_ad(lock->trx != in_lock->trx);
 				lock_grant(lock);
@@ -2313,7 +2259,7 @@ lock_rec_reset_and_release_wait_low(
 
 	ut_ad(lock_mutex_own());
 
-	for (lock = lock_rec_get_first(hash, block->page.id(), heap_no);
+	for (lock = lock_rec_get_first(hash, block, heap_no);
 	     lock != NULL;
 	     lock = lock_rec_get_next(heap_no, lock)) {
 
@@ -2345,51 +2291,54 @@ lock_rec_reset_and_release_wait(
 		&lock_sys.prdt_page_hash, block, PAGE_HEAP_NO_INFIMUM);
 }
 
-/*************************************************************//**
-Makes a record to inherit the locks (except LOCK_INSERT_INTENTION type)
+/** Makes a record to inherit the locks (except LOCK_INSERT_INTENTION type)
 of another record as gap type locks, but does not reset the lock bits of
 the other record. Also waiting lock requests on rec are inherited as
-GRANTED gap locks. */
-static
-void
-lock_rec_inherit_to_gap(
-/*====================*/
-	const buf_block_t*	heir_block,	/*!< in: block containing the
-						record which inherits */
-	const buf_block_t*	block,		/*!< in: block containing the
-						record from which inherited;
-						does NOT reset the locks on
-						this record */
-	ulint			heir_heap_no,	/*!< in: heap_no of the
-						inheriting record */
-	ulint			heap_no)	/*!< in: heap_no of the
-						donating record */
+GRANTED gap locks.
+@param heir_block   block containing the record which inherits
+@param block block  containing the record from which inherited; does NOT reset
+                    the locks on this record
+@param heir_heap_no heap_no of the inheriting record
+@param heap_no      heap_no of the donating record
+@tparam from_split  true if the function is invoked from
+                    lock_update_split_(left|right)(), in this case not-gap
+                    locks are not inherited to supremum if transaction
+                    isolation level less or equal to READ COMMITTED */
+template <bool from_split= false>
+static void lock_rec_inherit_to_gap(const buf_block_t *heir_block,
+                                    const buf_block_t *block,
+                                    ulint heir_heap_no, ulint heap_no)
 {
-	lock_t*	lock;
+  ut_ad(lock_mutex_own());
+  ut_ad(!from_split || heir_heap_no == PAGE_HEAP_NO_SUPREMUM);
 
-	ut_ad(lock_mutex_own());
+  /* At READ UNCOMMITTED or READ COMMITTED isolation level,
+  we do not want locks set
+  by an UPDATE or a DELETE to be inherited as gap type locks. But we
+  DO want S-locks/X-locks(taken for replace) set by a consistency
+  constraint to be inherited also then. */
 
-	/* At READ UNCOMMITTED or READ COMMITTED isolation level,
-	we do not want locks set
-	by an UPDATE or a DELETE to be inherited as gap type locks. But we
-	DO want S-locks/X-locks(taken for replace) set by a consistency
-	constraint to be inherited also then. */
+  for (lock_t *lock= lock_rec_get_first(&lock_sys.rec_hash, block, heap_no);
+       lock != NULL; lock= lock_rec_get_next(heap_no, lock))
+  {
 
-	for (lock = lock_rec_get_first(&lock_sys.rec_hash, block->page.id(),
-	      heap_no);
-	     lock != NULL;
-	     lock = lock_rec_get_next(heap_no, lock)) {
-
-		if (!lock_rec_get_insert_intention(lock)
-		    && (lock->trx->isolation_level > TRX_ISO_READ_COMMITTED
-			|| lock_get_mode(lock) !=
-			(lock->trx->duplicates ? LOCK_S : LOCK_X))) {
-			lock_rec_add_to_queue(
-				LOCK_REC | LOCK_GAP | lock_get_mode(lock),
-				heir_block, heir_heap_no, lock->index,
-				lock->trx, FALSE);
-		}
-	}
+    if (!lock->trx->is_not_inheriting_locks() &&
+        !lock_rec_get_insert_intention(lock) &&
+        (lock->trx->isolation_level > TRX_ISO_READ_COMMITTED ||
+         /* When we are in a page split (not purge), then we don't set a lock
+         on supremum if the donor lock type is LOCK_REC_NOT_GAP. That is, do
+         not create bogus gap locks for non-gap locks for READ UNCOMMITTED and
+         READ COMMITTED isolation levels. LOCK_ORDINARY and
+         LOCK_GAP require a gap before the record to be locked, that is why
+         setting lock on supremmum is necessary. */
+         ((!from_split || !lock->is_record_not_gap()) &&
+          (lock_get_mode(lock) != (lock->trx->duplicates ? LOCK_S : LOCK_X)))))
+    {
+      lock_rec_add_to_queue(LOCK_REC | LOCK_GAP | lock_get_mode(lock),
+                            heir_block, heir_heap_no, lock->index, lock->trx,
+                            FALSE);
+    }
+  }
 }
 
 /*************************************************************//**
@@ -2412,12 +2361,12 @@ lock_rec_inherit_to_gap_if_gap_lock(
 
 	lock_mutex_enter();
 
-	for (lock = lock_rec_get_first(&lock_sys.rec_hash, block->page.id(),
-	      heap_no);
+	for (lock = lock_rec_get_first(&lock_sys.rec_hash, block, heap_no);
 	     lock != NULL;
 	     lock = lock_rec_get_next(heap_no, lock)) {
 
-		if (!lock_rec_get_insert_intention(lock)
+		if (!lock->trx->is_not_inheriting_locks()
+		    && !lock_rec_get_insert_intention(lock)
 		    && (heap_no == PAGE_HEAP_NO_SUPREMUM
 			|| !lock_rec_get_rec_not_gap(lock))) {
 
@@ -2456,12 +2405,12 @@ lock_rec_move_low(
 
 	/* If the lock is predicate lock, it resides on INFIMUM record */
 	ut_ad(lock_rec_get_first(
-		lock_hash, receiver->page.id(), receiver_heap_no) == NULL
+		lock_hash, receiver, receiver_heap_no) == NULL
 	      || lock_hash == &lock_sys.prdt_hash
 	      || lock_hash == &lock_sys.prdt_page_hash);
 
 	for (lock = lock_rec_get_first(lock_hash,
-				       donator->page.id(), donator_heap_no);
+				       donator, donator_heap_no);
 	     lock != NULL;
 	     lock = lock_rec_get_next(donator_heap_no, lock)) {
 
@@ -2470,8 +2419,7 @@ lock_rec_move_low(
 		lock_rec_reset_nth_bit(lock, donator_heap_no);
 
 		if (type_mode & LOCK_WAIT) {
-			ut_ad(lock->trx->lock.wait_lock == lock);
-			lock->type_mode &= ~LOCK_WAIT;
+			lock_reset_lock_and_trx_wait(lock);
 		}
 
 		/* Note that we FIRST reset the bit, and then set the lock:
@@ -2483,7 +2431,7 @@ lock_rec_move_low(
 	}
 
 	ut_ad(!lock_rec_get_first(&lock_sys.rec_hash,
-				  donator->page.id(), donator_heap_no));
+				  donator, donator_heap_no));
 }
 
 /** Move all the granted locks to the front of the given lock list.
@@ -2588,8 +2536,8 @@ lock_move_reorganize_page(
 		lock_rec_bitmap_reset(lock);
 
 		if (lock_get_wait(lock)) {
-			ut_ad(lock->trx->lock.wait_lock == lock);
-			lock->type_mode&= ~LOCK_WAIT;
+
+			lock_reset_lock_and_trx_wait(lock);
 		}
 
 		lock = lock_rec_get_next_on_page(lock);
@@ -2765,9 +2713,7 @@ lock_move_rec_list_end(
 				ut_ad(!page_rec_is_metadata(orec));
 
 				if (type_mode & LOCK_WAIT) {
-					ut_ad(lock->trx->lock.wait_lock ==
-					    lock);
-					lock->type_mode&= ~LOCK_WAIT;
+					lock_reset_lock_and_trx_wait(lock);
 				}
 
 				lock_rec_add_to_queue(
@@ -2865,9 +2811,7 @@ lock_move_rec_list_start(
 				ut_ad(!page_rec_is_metadata(prev));
 
 				if (type_mode & LOCK_WAIT) {
-					ut_ad(lock->trx->lock.wait_lock
-					    == lock);
-					lock->type_mode&= ~LOCK_WAIT;
+					lock_reset_lock_and_trx_wait(lock);
 				}
 
 				lock_rec_add_to_queue(
@@ -2963,9 +2907,7 @@ lock_rtr_move_rec_list(
 			if (rec1_heap_no < lock->un_member.rec_lock.n_bits
 			    && lock_rec_reset_nth_bit(lock, rec1_heap_no)) {
 				if (type_mode & LOCK_WAIT) {
-					ut_ad(lock->trx->lock.wait_lock
-					    == lock);
-					lock->type_mode&= ~LOCK_WAIT;
+					lock_reset_lock_and_trx_wait(lock);
 				}
 
 				lock_rec_add_to_queue(
@@ -3006,10 +2948,21 @@ lock_update_split_right(
 	/* Inherit the locks to the supremum of left page from the successor
 	of the infimum on right page */
 
-	lock_rec_inherit_to_gap(left_block, right_block,
+	lock_rec_inherit_to_gap<true>(left_block, right_block,
 				PAGE_HEAP_NO_SUPREMUM, heap_no);
 
 	lock_mutex_exit();
+}
+
+void lock_update_node_pointer(const buf_block_t *left_block,
+                              const buf_block_t *right_block)
+{
+  const ulint h= lock_get_min_heap_no(right_block);
+
+  lock_mutex_enter();
+  lock_rec_inherit_to_gap(right_block, left_block,
+                          h, PAGE_HEAP_NO_SUPREMUM);
+  lock_mutex_exit();
 }
 
 /*************************************************************//**
@@ -3115,7 +3068,7 @@ lock_update_split_left(
 	/* Inherit the locks to the supremum of the left page from the
 	successor of the infimum on the right page */
 
-	lock_rec_inherit_to_gap(left_block, right_block,
+	lock_rec_inherit_to_gap<true>(left_block, right_block,
 				PAGE_HEAP_NO_SUPREMUM, heap_no);
 
 	lock_mutex_exit();
@@ -3411,8 +3364,10 @@ lock_table_create(
 				in dictionary cache */
 	unsigned	type_mode,/*!< in: lock mode possibly ORed with
 				LOCK_WAIT */
-	trx_t*		trx,	/*!< in: trx */
-	lock_t*	c_lock = NULL	/*!< in: conflicting lock */
+	trx_t*		trx	/*!< in: trx */
+#ifdef WITH_WSREP
+	, lock_t*	c_lock = NULL	/*!< in: conflicting lock */
+#endif
 	)
 {
 	lock_t*		lock;
@@ -3495,7 +3450,8 @@ lock_table_create(
 	ut_list_append(table->locks, lock, TableLockGetNode());
 
 	if (type_mode & LOCK_WAIT) {
-		lock_set_lock_and_trx_wait(lock, trx, c_lock);
+
+		lock_set_lock_and_trx_wait(lock, trx);
 	}
 
 	lock->trx->lock.table_locks.push_back(lock);
@@ -3650,8 +3606,10 @@ lock_table_enqueue_waiting(
 	unsigned	mode,	/*!< in: lock mode this transaction is
 				requesting */
 	dict_table_t*	table,	/*!< in/out: table */
-	que_thr_t*	thr,	/*!< in: query thread */
-	lock_t*	c_lock	/*!< in: conflicting lock or NULL */
+	que_thr_t*	thr	/*!< in: query thread */
+#ifdef WITH_WSREP
+	, lock_t*	c_lock	/*!< in: conflicting lock or NULL */
+#endif
 )
 {
 	trx_t*		trx;
@@ -3682,7 +3640,11 @@ lock_table_enqueue_waiting(
 #endif /* WITH_WSREP */
 
 	/* Enqueue the lock request that will wait to be granted */
-	lock = lock_table_create(table, mode | LOCK_WAIT, trx, c_lock);
+	lock = lock_table_create(table, mode | LOCK_WAIT, trx
+#ifdef WITH_WSREP
+				 , c_lock
+#endif
+				 );
 
 	const trx_t*	victim_trx =
 		DeadlockChecker::check_and_resolve(lock, trx);
@@ -3838,7 +3800,11 @@ lock_table(
 
 	if (wait_for != NULL) {
 		err = lock_table_enqueue_waiting(flags | mode, table,
-						 thr, wait_for);
+						 thr
+#ifdef WITH_WSREP
+						 , wait_for
+#endif
+						 );
 	} else {
 		lock_table_create(table, flags | mode, trx);
 
@@ -3886,7 +3852,7 @@ lock_table_ix_resurrect(
 Checks if a waiting table lock request still has to wait in a queue.
 @return TRUE if still has to wait */
 static
-const lock_t*
+bool
 lock_table_has_to_wait_in_queue(
 /*============================*/
 	const lock_t*	wait_lock)	/*!< in: waiting table lock */
@@ -3905,11 +3871,11 @@ lock_table_has_to_wait_in_queue(
 
 		if (lock_has_to_wait(wait_lock, lock)) {
 
-			return(lock);
+			return(true);
 		}
 	}
 
-	return(NULL);
+	return(false);
 }
 
 /*************************************************************//**
@@ -3938,17 +3904,9 @@ lock_table_dequeue(
 	     lock != NULL;
 	     lock = UT_LIST_GET_NEXT(un_member.tab_lock.locks, lock)) {
 
-		if (!lock_get_wait(lock))
-			continue;
+		if (lock_get_wait(lock)
+		    && !lock_table_has_to_wait_in_queue(lock)) {
 
-		ut_ad(lock->trx->lock.wait_trx);
-		ut_ad(lock->trx->lock.wait_lock);
-
-		if (const lock_t *c = lock_table_has_to_wait_in_queue(lock)) {
-			trx_mutex_enter(lock->trx);
-			lock->trx->lock.wait_trx = c->trx;
-			trx_mutex_exit(lock->trx);
-		} else {
 			/* Grant the lock */
 			ut_ad(in_lock->trx != lock->trx);
 			lock_grant(lock);
@@ -4093,8 +4051,7 @@ lock_rec_unlock(
 	lock_mutex_enter();
 	trx_mutex_enter(trx);
 
-	first_lock = lock_rec_get_first(&lock_sys.rec_hash, block->page.id(),
-	    heap_no);
+	first_lock = lock_rec_get_first(&lock_sys.rec_hash, block, heap_no);
 
 	/* Find the last lock with the same lock_mode and transaction
 	on the record. */
@@ -4137,16 +4094,8 @@ released:
 			if (!lock_get_wait(lock)) {
 				continue;
 			}
-			ut_ad(lock->trx->lock.wait_trx);
-			ut_ad(lock->trx->lock.wait_lock);
-			if (const lock_t* c = lock_rec_has_to_wait_in_queue(
-			      lock)) {
-				if (lock->trx != trx)
-					trx_mutex_enter(lock->trx);
-				lock->trx->lock.wait_trx = c->trx;
-				if (lock->trx != trx)
-					trx_mutex_exit(lock->trx);
-			} else {
+			const lock_t* c = lock_rec_has_to_wait_in_queue(lock);
+			if (!c) {
 				/* Grant the lock */
 				ut_ad(trx != lock->trx);
 				lock_grant(lock);
@@ -4307,6 +4256,11 @@ void lock_release_on_prepare(trx_t *trx)
       {
         ut_ad(trx->dict_operation ||
               lock->index->table->id >= DICT_HDR_FIRST_ID);
+        ut_ad(lock->trx->isolation_level > TRX_ISO_READ_COMMITTED ||
+              /* Insert-intention lock is valid for supremum for isolation
+              level > TRX_ISO_READ_COMMITTED */
+              lock_get_mode(lock) == LOCK_X ||
+              !lock_rec_get_nth_bit(lock, PAGE_HEAP_NO_SUPREMUM));
 retain_lock:
         lock= UT_LIST_GET_PREV(trx_locks, lock);
         continue;
@@ -4343,6 +4297,8 @@ retain_lock:
   }
 
   lock_mutex_exit();
+
+  trx->set_skip_lock_inheritance();
 }
 
 /* True if a lock mode is S or X */
@@ -4601,14 +4557,14 @@ lock_print_info_summary(
 	fprintf(file,
 		"Purge done for trx's n:o < " TRX_ID_FMT
 		" undo n:o < " TRX_ID_FMT " state: %s\n"
-		"History list length %u\n",
+		"History list length %zu\n",
 		purge_sys.tail.trx_no,
 		purge_sys.tail.undo_no,
 		purge_sys.enabled()
 		? (purge_sys.running() ? "running"
 		   : purge_sys.paused() ? "stopped" : "running but idle")
 		: "disabled",
-		uint32_t{trx_sys.rseg_history_len});
+		size_t{trx_sys.rseg_history_len});
 
 #ifdef PRINT_NUM_OF_LOCK_STRUCTS
 	fprintf(file,
@@ -4840,7 +4796,7 @@ lock_rec_queue_validate(
 	if (!page_rec_is_user_rec(rec)) {
 
 		for (lock = lock_rec_get_first(&lock_sys.rec_hash,
-					       block->page.id(), heap_no);
+					       block, heap_no);
 		     lock != NULL;
 		     lock = lock_rec_get_next_const(heap_no, lock)) {
 
@@ -4914,7 +4870,7 @@ func_exit:
 				wsrep_report_bf_lock_wait(impl_trx->mysql_thd, impl_trx->id);
 				wsrep_report_bf_lock_wait(other_lock->trx->mysql_thd, other_lock->trx->id);
 
-				if (!lock_rec_has_expl(LOCK_S | LOCK_REC_NOT_GAP,
+				if (!lock_rec_has_expl(LOCK_X | LOCK_REC_NOT_GAP,
 						       block, heap_no,
 						       impl_trx)) {
 					ib::info() << "WSREP impl BF lock conflict";
@@ -4923,20 +4879,7 @@ func_exit:
 #endif /* WITH_WSREP */
 			{
 				ut_ad(lock_get_wait(other_lock));
-				/* After MDEV-27025 fix the following case is
-				possible:
-				1. trx 1 acquires S-lock;
-				2. trx 2 creates X-lock waiting for trx 1;
-				3. trx 1 creates implicit lock, as
-				lock_rec_other_has_conflicting() returns no
-				conflicting trx 2 X-lock, the explicit lock
-				will not be created;
-				4. trx 3 creates waiting X-lock,
-				it will wait for S-lock of trx 1.
-				That is why we relaxing the condition here and
-				check only for S-lock.
-				*/
-				ut_ad(lock_rec_has_expl(LOCK_S | LOCK_REC_NOT_GAP,
+				ut_ad(lock_rec_has_expl(LOCK_X | LOCK_REC_NOT_GAP,
 						        block, heap_no, impl_trx));
 			}
 		}
@@ -4944,8 +4887,7 @@ func_exit:
 		mutex_exit(&impl_trx->mutex);
 	}
 
-	for (lock = lock_rec_get_first(&lock_sys.rec_hash, block->page.id(),
-	      heap_no);
+	for (lock = lock_rec_get_first(&lock_sys.rec_hash, block, heap_no);
 	     lock != NULL;
 	     lock = lock_rec_get_next_const(heap_no, lock)) {
 		ut_ad(!lock->trx->read_only
@@ -5042,25 +4984,25 @@ loop:
 	holding a space->latch. */
 	if (!sync_check_find(SYNC_FSP))
 	for (i = nth_bit; i < lock_rec_get_n_bits(lock); i++) {
-
-		if (i == PAGE_HEAP_NO_SUPREMUM
-		    || lock_rec_get_nth_bit(lock, i)) {
+		bool locked = lock_rec_get_nth_bit(lock, i);
+		if (locked || i == PAGE_HEAP_NO_SUPREMUM) {
 
 			rec = page_find_rec_with_heap_no(block->frame, i);
 			ut_a(rec);
-			ut_ad(!lock_rec_get_nth_bit(lock, i)
-			      || page_rec_is_leaf(rec));
-			offsets = rec_get_offsets(rec, lock->index, offsets,
-						  lock->index->n_core_fields,
-						  ULINT_UNDEFINED, &heap);
+			ut_ad(!locked || page_rec_is_leaf(rec));
 
 			/* If this thread is holding the file space
 			latch (fil_space_t::latch), the following
 			check WILL break the latching order and may
 			cause a deadlock of threads. */
 
-			lock_rec_queue_validate(
-				TRUE, block, rec, lock->index, offsets);
+			if (locked) {
+				offsets = rec_get_offsets(rec, lock->index,
+					offsets, lock->index->n_core_fields,
+					ULINT_UNDEFINED, &heap);
+				lock_rec_queue_validate(TRUE, block, rec,
+					lock->index, offsets);
+			}
 
 			nth_bit = i + 1;
 
@@ -5143,12 +5085,6 @@ static void lock_rec_block_validate(const page_id_t page_id)
 			RW_X_LATCH, NULL,
 			BUF_GET_POSSIBLY_FREED,
 			__FILE__, __LINE__, &mtr, &err);
-
-		if (err != DB_SUCCESS) {
-			ib::error() << "Lock rec block validate failed for tablespace "
-				   << space->name
-				   << page_id << " err " << err;
-		}
 
 		if (block && block->page.status != buf_page_t::FREED) {
 			buf_block_dbg_add_level(block, SYNC_NO_ORDER_CHECK);
@@ -5280,8 +5216,7 @@ lock_rec_insert_check_and_lock(
 	BTR_NO_LOCKING_FLAG and skip the locking altogether. */
 	ut_ad(lock_table_has(trx, index->table, LOCK_IX));
 
-	lock = lock_rec_get_first(&lock_sys.rec_hash, block->page.id(),
-	    heap_no);
+	lock = lock_rec_get_first(&lock_sys.rec_hash, block, heap_no);
 
 	if (lock == NULL) {
 		/* We optimize CPU time usage in the simplest case */
@@ -5320,13 +5255,19 @@ lock_rec_insert_check_and_lock(
 
 	const unsigned	type_mode = LOCK_X | LOCK_GAP | LOCK_INSERT_INTENTION;
 
-	if (lock_t* c_lock =
+	if (
+#ifdef WITH_WSREP
+	    lock_t* c_lock =
+#endif /* WITH_WSREP */
 	    lock_rec_other_has_conflicting(type_mode, block, heap_no, trx)) {
 		/* Note that we may get DB_SUCCESS also here! */
 		trx_mutex_enter(trx);
 
-		err = lock_rec_enqueue_waiting(c_lock, type_mode, block,
-		    heap_no, index, thr, NULL);
+		err = lock_rec_enqueue_waiting(
+#ifdef WITH_WSREP
+			c_lock,
+#endif /* WITH_WSREP */
+			type_mode, block, heap_no, index, thr, NULL);
 
 		trx_mutex_exit(trx);
 	} else {
@@ -5403,7 +5344,7 @@ lock_rec_convert_impl_to_expl_for_trx(
 	    && !lock_rec_has_expl(LOCK_X | LOCK_REC_NOT_GAP,
 				  block, heap_no, trx)) {
 		lock_rec_add_to_queue(LOCK_REC | LOCK_X | LOCK_REC_NOT_GAP,
-				      block, heap_no, index, trx, true, true);
+				      block, heap_no, index, trx, true);
 	}
 
 	lock_mutex_exit();

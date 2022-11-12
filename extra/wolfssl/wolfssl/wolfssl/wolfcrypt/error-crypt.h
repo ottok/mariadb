@@ -1,6 +1,6 @@
 /* error-crypt.h
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -24,7 +24,7 @@
 */
 /*
 DESCRIPTION
-This library defines error codes and contians routines for setting and examining
+This library defines error codes and contains routines for setting and examining
 the error status.
 */
 
@@ -247,8 +247,13 @@ enum {
     ECC_PCT_E           = -286,  /* ECDHE Pairwise Consistency Test failure */
     FIPS_PRIVATE_KEY_LOCKED_E = -287, /* Cannot export private key. */
     PROTOCOLCB_UNAVAILABLE  = -288, /* Protocol callback unavailable */
+    AES_SIV_AUTH_E = -289, /* AES-SIV authentication failed */
+    NO_VALID_DEVID = -290, /* no valid device ID */
 
-    WC_LAST_E           = -288,  /* Update this to indicate last error */
+    IO_FAILED_E = -291,          /* Input/output failure */
+    SYSLIB_FAILED_E = -292,      /* System/library call failed */
+
+    WC_LAST_E           = -292,  /* Update this to indicate last error */
     MIN_CODE_E          = -300   /* errors -101 - -299 */
 
     /* add new companion error id strings for any new error codes
@@ -264,7 +269,7 @@ enum {
 
 #else
 WOLFSSL_API void wc_ErrorString(int err, char* buff);
-WOLFSSL_API const char* wc_GetErrorString(int error);
+WOLFSSL_ABI WOLFSSL_API const char* wc_GetErrorString(int error);
 #endif
 
 #ifdef __cplusplus

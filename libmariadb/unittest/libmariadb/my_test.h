@@ -73,7 +73,19 @@ if (IS_SKYSQL(hostname)) \
 #define SKIP_NOTLS
 #endif
 
-#define IS_MAXSCALE() (getenv("srv")!=NULL && (strcmp(getenv("srv"), "maxscale") == 0 || strcmp(getenv("srv"), "skysql-ha") == 0))
+#define SKIP_TLS \
+if (force_tls)\
+{\
+  diag("Test doesn't work with TLS");\
+  return SKIP;\
+}
+
+MYSQL *mysql_default = NULL;  /* default connection */
+
+#define IS_MAXSCALE()\
+   ((mysql_default && strstr(mysql_get_server_info(mysql_default), "maxScale")) ||\
+    (getenv("srv")!=NULL && (strcmp(getenv("srv"), "maxscale") == 0 ||\
+     strcmp(getenv("srv"), "skysql-ha") == 0)))
 #define SKIP_MAXSCALE \
 if (IS_MAXSCALE()) \
 { \
@@ -644,11 +656,38 @@ MYSQL *my_test_connect(MYSQL *mysql,
 
 void run_tests(struct my_tests_st *test) {
   int i, rc, total=0;
-  MYSQL *mysql, *mysql_default= NULL;  /* default connection */
+  MYSQL *mysql;
 
   while (test[total].function)
     total++;
   plan(total);
+
+  /* display TLS stats */
+  mysql= mysql_init(NULL);
+  mysql_ssl_set(mysql, NULL, NULL, NULL, NULL, NULL);
+
+  if (!mysql_real_connect(mysql, hostname, username, password, schema, port, socketname, 0))
+  {
+    BAIL_OUT("Can't establish TLS connection to server.");
+  }
+
+  if (!mysql_query(mysql, "SHOW VARIABLES LIKE '%ssl%'"))
+  {
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+
+    diag("TLS server variables");
+    diag("--------------------");
+
+    res= mysql_store_result(mysql);
+    while ((row= mysql_fetch_row(res)))
+      diag("%s: %s", row[0], row[1]);
+    mysql_free_result(res);
+    diag("Cipher in use: %s", mysql_get_ssl_cipher(mysql));
+    diag("--------------------");
+  }
+  mysql_close(mysql);
+
 
   if ((mysql_default= test_connect(NULL)))
   {

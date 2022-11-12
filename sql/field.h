@@ -638,6 +638,14 @@ public:
   {
     in_partitioning_expr= TRUE;
   }
+  bool need_refix() const
+  {
+    return flags & VCOL_SESSION_FUNC;
+  }
+  bool fix_expr(THD *thd);
+  bool fix_session_expr(THD *thd);
+  bool cleanup_session_expr();
+  bool fix_and_check_expr(THD *thd, TABLE *table);
   inline bool is_equal(const Virtual_column_info* vcol) const;
   inline void print(String*);
 };
@@ -5254,7 +5262,7 @@ public:
   uint  flags, pack_length;
   List<String> interval_list;
   engine_option_value *option_list;
-
+  bool explicitly_nullable;
 
   /*
     This is additinal data provided for any computed(virtual) field.
@@ -5276,7 +5284,7 @@ public:
     comment(null_clex_str),
     on_update(NULL), invisible(VISIBLE), char_length(0),
     flags(0), pack_length(0),
-    option_list(NULL),
+    option_list(NULL), explicitly_nullable(false),
     vcol_info(0), default_value(0), check_constraint(0),
     versioning(VERSIONING_NOT_SET), period(NULL)
   {
@@ -5653,7 +5661,7 @@ inline bool Row_definition_list::eq_name(const Spvar_definition *def,
 class Create_field :public Column_definition
 {
 public:
-  LEX_CSTRING change;			// If done with alter table
+  LEX_CSTRING change;			// Old column name if column is renamed by ALTER
   LEX_CSTRING after;			// Put column after this one
   Field *field;				// For alter table
   const TYPELIB *save_interval;         // Temporary copy for the above
@@ -5682,6 +5690,12 @@ public:
   }
   /* Used to make a clone of this object for ALTER/CREATE TABLE */
   Create_field *clone(MEM_ROOT *mem_root) const;
+  static void upgrade_data_types(List<Create_field> &list)
+  {
+    List_iterator<Create_field> it(list);
+    while (Create_field *f= it++)
+      f->type_handler()->Column_definition_implicit_upgrade(f);
+  }
 };
 
 

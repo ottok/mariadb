@@ -1,6 +1,6 @@
 /* cpuid.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -36,7 +36,7 @@
     #ifndef _MSC_VER
         #define cpuid(reg, leaf, sub)\
             __asm__ __volatile__ ("cpuid":\
-                "=a" (reg[0]), "=b" (reg[1]), "=c" (reg[2]), "=d" (reg[3]) :\
+                "=a" ((reg)[0]), "=b" ((reg)[1]), "=c" ((reg)[2]), "=d" ((reg)[3]) :\
                 "a" (leaf), "c"(sub));
 
         #define XASM_LINK(f) asm(f)
@@ -97,6 +97,8 @@
             if (cpuid_flag(1, 0, ECX, 25)) { cpuid_flags |= CPUID_AESNI ; }
             if (cpuid_flag(7, 0, EBX, 19)) { cpuid_flags |= CPUID_ADX   ; }
             if (cpuid_flag(1, 0, ECX, 22)) { cpuid_flags |= CPUID_MOVBE ; }
+            if (cpuid_flag(7, 0, EBX,  3)) { cpuid_flags |= CPUID_BMI1  ; }
+
             cpuid_check = 1;
         }
     }

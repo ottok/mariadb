@@ -388,52 +388,9 @@ bool Item_subselect::mark_as_eliminated_processor(void *arg)
 bool Item_subselect::eliminate_subselect_processor(void *arg)
 {
   unit->item= NULL;
-  unit->exclude();
+  if (!unit->is_excluded())
+    unit->exclude();
   eliminated= TRUE;
-  return FALSE;
-}
-
-
-/**
-  Adjust the master select of the subquery to be the fake_select which
-  represents the whole UNION right above the subquery, instead of the
-  last query of the UNION.
-
-  @param arg  pointer to the fake select
-
-  @return
-    FALSE to force the evaluation of the processor for the subsequent items.
-*/
-
-bool Item_subselect::set_fake_select_as_master_processor(void *arg)
-{
-  SELECT_LEX *fake_select= (SELECT_LEX*) arg;
-  /*
-    Move the st_select_lex_unit of a subquery from a global ORDER BY clause to
-    become a direct child of the fake_select of a UNION. In this way the
-    ORDER BY that is applied to the temporary table that contains the result of
-    the whole UNION, and all columns in the subquery are resolved against this
-    table. The transformation is applied only for immediate child subqueries of
-    a UNION query.
-  */
-  if (unit->outer_select()->master_unit()->fake_select_lex == fake_select)
-  {
-    /*
-      Set the master of the subquery to be the fake select (i.e. the whole
-      UNION), instead of the last query in the UNION.
-    */
-    fake_select->add_slave(unit);
-    DBUG_ASSERT(unit->outer_select() == fake_select);
-    /* Adjust the name resolution context hierarchy accordingly. */
-    for (SELECT_LEX *sl= unit->first_select(); sl; sl= sl->next_select())
-      sl->context.outer_context= &(fake_select->context);
-    /*
-      Undo Item_subselect::eliminate_subselect_processor because at that phase
-      we don't know yet that the ORDER clause will be moved to the fake select.
-    */
-    unit->item= this;
-    eliminated= FALSE;
-  }
   return FALSE;
 }
 
@@ -809,6 +766,7 @@ bool Item_subselect::exec()
 
   DBUG_ENTER("Item_subselect::exec");
   DBUG_ASSERT(fixed);
+  DBUG_ASSERT(!eliminated);
 
   DBUG_EXECUTE_IF("Item_subselect",
     Item::Print print(this,
@@ -1318,11 +1276,18 @@ bool Item_singlerow_subselect::fix_length_and_dec()
   }
   unsigned_flag= value->unsigned_flag;
   /*
-    If there are not tables in subquery then ability to have NULL value
-    depends on SELECT list (if single row subquery have tables then it
-    always can be NULL if there are not records fetched).
+    If the subquery has no tables (1) and is not a UNION (2), like:
+
+      (SELECT subq_value)
+
+    then its NULLability is the same as subq_value's NULLability.
+
+    (1): A subquery that uses a table will return NULL when the table is empty.
+    (2): A UNION subquery will return NULL if it produces a "Subquery returns
+         more than one row" error.
   */
-  if (engine->no_tables())
+  if (engine->no_tables() &&
+      engine->engine_type() != subselect_engine::UNION_ENGINE)
     maybe_null= engine->may_be_null();
   else
   {
@@ -1357,6 +1322,16 @@ Item* Item_singlerow_subselect::expr_cache_insert_transformer(THD *tmp_thd,
   DBUG_ENTER("Item_singlerow_subselect::expr_cache_insert_transformer");
 
   DBUG_ASSERT(thd == tmp_thd);
+
+  /*
+    Do not create subquery cache if the subquery was eliminated.
+    The optimizer may eliminate subquery items (see
+    eliminate_subselect_processor). However it does not update
+    all query's data structures, so the eliminated item may be
+    still reachable.
+  */
+  if (eliminated)
+    DBUG_RETURN(this);
 
   if (expr_cache)
     DBUG_RETURN(expr_cache);
@@ -2832,6 +2807,8 @@ bool Item_in_subselect::inject_in_to_exists_cond(JOIN *join_arg)
     }
 
     where_item= and_items(thd, join_arg->conds, where_item);
+
+    /* This is the fix_fields() call mentioned in the comment above */
     if (where_item->fix_fields_if_needed(thd, 0))
       DBUG_RETURN(true);
     // TIMOUR TODO: call optimize_cond() for the new where clause
@@ -2842,14 +2819,14 @@ bool Item_in_subselect::inject_in_to_exists_cond(JOIN *join_arg)
     /* Attach back the list of multiple equalities to the new top-level AND. */
     if (and_args && join_arg->cond_equal)
     {
-      /* The argument list of the top-level AND may change after fix fields. */
+      /*
+        The fix_fields() call above may have changed the argument list, so
+        fetch it again:
+      */
       and_args= ((Item_cond*) join_arg->conds)->argument_list();
-      List_iterator<Item_equal> li(join_arg->cond_equal->current_level);
-      Item_equal *elem;
-      while ((elem= li++))
-      {
-        and_args->push_back(elem, thd->mem_root);
-      }
+      ((Item_cond_and *) (join_arg->conds))->m_cond_equal=
+                                             *join_arg->cond_equal;
+      and_args->append((List<Item> *)&join_arg->cond_equal->current_level);
     }
   }
 

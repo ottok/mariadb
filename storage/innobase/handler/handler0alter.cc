@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2005, 2019, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -227,7 +227,7 @@ inline void dict_table_t::prepare_instant(const dict_table_t& old,
 	If that is the case, the instant ALTER TABLE would keep
 	the InnoDB table in its current format. */
 
-	const dict_index_t& oindex = *old.indexes.start;
+	dict_index_t& oindex = *old.indexes.start;
 	dict_index_t& index = *indexes.start;
 	first_alter_pos = 0;
 
@@ -373,6 +373,15 @@ found_j:
 				goto found_nullable;
 			}
 		}
+
+		/* In case of discarded tablespace, InnoDB can't
+		read the root page. So assign the null bytes based
+		on nullabled fields */
+		if (!oindex.table->space) {
+			oindex.n_core_null_bytes = static_cast<uint8_t>(
+				UT_BITS_IN_BYTES(unsigned(oindex.n_nullable)));
+		}
+
 		/* The n_core_null_bytes only matters for
 		ROW_FORMAT=COMPACT and ROW_FORMAT=DYNAMIC tables. */
 		ut_ad(UT_BITS_IN_BYTES(core_null) == oindex.n_core_null_bytes
@@ -1758,8 +1767,13 @@ set_max_size:
 		Field** af = altered_table->field;
 		Field** const end = altered_table->field
 			+ altered_table->s->fields;
+		List_iterator_fast<Create_field> cf_it(
+			ha_alter_info->alter_info->create_list);
 		for (unsigned c = 0; af < end; af++) {
-			if (!(*af)->stored_in_db()) {
+			const Create_field* cf = cf_it++;
+			if (!cf->field || !(*af)->stored_in_db()) {
+				/* Ignore virtual or newly created
+				column */
 				continue;
 			}
 
@@ -2258,7 +2272,16 @@ innodb_instant_alter_column_allowed_reason:
 
 			if (new_field->field) {
 				/* This is an existing column. */
-				continue;
+
+				if (new_field->field->charset()
+				    == key_part->field->charset()) {
+					continue;
+				}
+
+				ha_alter_info->unsupported_reason =
+					"Collation change on"
+					" an indexed column";
+				DBUG_RETURN(HA_ALTER_INPLACE_NOT_SUPPORTED);
 			}
 
 			/* This is an added column. */
@@ -2816,7 +2839,7 @@ no_match:
 				= key_part.field->pack_length();
 
 			/* Any index on virtual columns cannot be used
-			for reference constaint */
+			for reference constraint */
 			if (!key_part.field->stored_in_db()) {
 				goto no_match;
 			}
@@ -4929,20 +4952,19 @@ prepare_inplace_add_virtual(
 	const TABLE*		table)
 {
 	ha_innobase_inplace_ctx*	ctx;
-	uint16_t i = 0, j = 0;
+	uint16_t i = 0;
 
 	ctx = static_cast<ha_innobase_inplace_ctx*>
 		(ha_alter_info->handler_ctx);
 
-	ctx->num_to_add_vcol = altered_table->s->virtual_fields
-		+ ctx->num_to_drop_vcol - table->s->virtual_fields;
+	unsigned j = altered_table->s->virtual_fields + ctx->num_to_drop_vcol;
 
 	ctx->add_vcol = static_cast<dict_v_col_t*>(
-		 mem_heap_zalloc(ctx->heap, ctx->num_to_add_vcol
-				 * sizeof *ctx->add_vcol));
+		 mem_heap_zalloc(ctx->heap, j * sizeof *ctx->add_vcol));
 	ctx->add_vcol_name = static_cast<const char**>(
-		 mem_heap_alloc(ctx->heap, ctx->num_to_add_vcol
-				* sizeof *ctx->add_vcol_name));
+		 mem_heap_alloc(ctx->heap, j * sizeof *ctx->add_vcol_name));
+
+	j = 0;
 
 	for (const Create_field& new_field :
 	     ha_alter_info->alter_info->create_list) {
@@ -5021,6 +5043,7 @@ prepare_inplace_add_virtual(
 		j++;
 	}
 
+	ctx->num_to_add_vcol = j;
 	return(false);
 }
 
@@ -6191,8 +6214,10 @@ prepare_inplace_alter_table_dict(
 		/* If we promised ALGORITHM=NOCOPY or ALGORITHM=INSTANT,
 		we must retain the original ROW_FORMAT of the table. */
 		flags = (user_table->flags & (DICT_TF_MASK_COMPACT
+					      | DICT_TF_MASK_ZIP_SSIZE
 					      | DICT_TF_MASK_ATOMIC_BLOBS))
 			| (flags & ~(DICT_TF_MASK_COMPACT
+				     | DICT_TF_MASK_ZIP_SSIZE
 				     | DICT_TF_MASK_ATOMIC_BLOBS));
 	}
 
@@ -9201,16 +9226,14 @@ innobase_rename_columns_try(
 	const char*		table_name)
 {
 	uint	i = 0;
-	ulint	num_v = 0;
 
 	DBUG_ASSERT(ctx->need_rebuild());
 	DBUG_ASSERT(ha_alter_info->handler_flags
 		    & ALTER_COLUMN_NAME);
 
 	for (Field** fp = table->field; *fp; fp++, i++) {
-		const bool is_virtual = !(*fp)->stored_in_db();
 		if (!((*fp)->flags & FIELD_IS_RENAMED)) {
-			goto processed_field;
+			continue;
 		}
 
 		for (const Create_field& cf :
@@ -9228,10 +9251,6 @@ innobase_rename_columns_try(
 
 		ut_error;
 processed_field:
-		if (is_virtual) {
-			num_v++;
-		}
-
 		continue;
 	}
 
@@ -10654,6 +10673,10 @@ commit_cache_norebuild(
 		: NULL;
 	DBUG_ASSERT((ctx->new_table->fts == NULL)
 		    == (ctx->new_table->fts_doc_id_index == NULL));
+	if (table->found_next_number_field
+		&& !altered_table->found_next_number_field) {
+		ctx->prebuilt->table->persistent_autoinc = 0;
+	}
 	DBUG_RETURN(found);
 }
 
@@ -10977,7 +11000,15 @@ ha_innobase::commit_inplace_alter_table(
 	if (!(ha_alter_info->handler_flags & ~INNOBASE_INPLACE_IGNORE)) {
 		DBUG_ASSERT(!ctx0);
 		MONITOR_ATOMIC_DEC(MONITOR_PENDING_ALTER_TABLE);
-		ha_alter_info->group_commit_ctx = NULL;
+		if (table->found_next_number_field
+			&& !altered_table->found_next_number_field) {
+			m_prebuilt->table->persistent_autoinc = 0;
+			/* Don't reset ha_alter_info->group_commit_ctx to make
+			partitions engine to call this function for all
+			partitions. */
+		}
+		else
+			ha_alter_info->group_commit_ctx = NULL;
 		DBUG_RETURN(false);
 	}
 
@@ -11381,6 +11412,8 @@ foreign_fail:
 		row_mysql_unlock_data_dictionary(trx);
 		trx->free();
 		MONITOR_ATOMIC_DEC(MONITOR_PENDING_ALTER_TABLE);
+		/* There is no need to reset dict_table_t::persistent_autoinc
+		as the table is reloaded */
 		DBUG_RETURN(false);
 	}
 

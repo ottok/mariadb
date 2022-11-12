@@ -6,6 +6,7 @@
     \defgroup Camellia Algorithms - Camellia
     \defgroup ChaCha Algorithms - ChaCha
     \defgroup ChaCha20Poly1305 Algorithms - ChaCha20_Poly1305
+    \defgroup CMAC Algorithm - CMAC
     \defgroup Crypto Callbacks - CryptoCb
     \defgroup Curve25519 Algorithms - Curve25519
     \defgroup Curve448 Algorithms - Curve448
@@ -193,9 +194,7 @@
     Generate a random SSV (wc_GenerateSakkeSSV()) for key exchange.\n
     Derive the SSV, (wc_DeriveSakkeSSV()) on the recipient from the encapsulated SSV.
 
-    \defgroup HC128 Algorithms - HC-128
     \defgroup HMAC Algorithms - HMAC
-    \defgroup IDEA Algorithms - IDEA
     \defgroup MD2 Algorithms - MD2
     \defgroup MD4 Algorithms - MD4
     \defgroup MD5 Algorithms - MD5
@@ -205,8 +204,8 @@
     \defgroup Poly1305 Algorithms - Poly1305
     \defgroup RIPEMD Algorithms - RIPEMD
     \defgroup RSA Algorithms - RSA
-    \defgroup Rabbit Algorithms - Rabbit
     \defgroup SHA Algorithms - SHA 128/224/256/384/512
+    \defgroup SipHash Algorithm - SipHash
     \defgroup SRP Algorithms - SRP
 
     \defgroup ASN ASN.1
@@ -228,7 +227,7 @@
 
     If compiled in, the module supports IoT-Safe random number generator as source of entropy for wolfCrypt.
 
-
+    \defgroup PSA Platform Security Architecture (PSA) API
     \defgroup Keys Key and Cert Conversion
     \defgroup Logging Logging
     \defgroup Math Math API

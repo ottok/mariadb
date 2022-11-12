@@ -1,6 +1,6 @@
 /* kcapi_rsa.c
  *
- * Copyright (C) 2006-2020 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -26,7 +26,7 @@
 
 #include <wolfssl/wolfcrypt/settings.h>
 
-#if defined(WOLFSSL_KCAPI_RSA)
+#if defined(WOLFSSL_KCAPI_RSA) && !defined(NO_RSA)
 
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/logging.h>
@@ -254,7 +254,7 @@ int KcapiRsa_Decrypt(RsaKey* key, const byte* in, word32 inLen, byte* out,
         }
     }
     if (ret == 0) {
-        ret = kcapi_akcipher_decrypt(key->handle, in, inLen, out, *outLen,
+        ret = (int)kcapi_akcipher_decrypt(key->handle, in, inLen, out, *outLen,
                                   KCAPI_ACCESS_HEURISTIC);
         if (ret >= 0) {
             *outLen = ret;
@@ -345,7 +345,7 @@ int KcapiRsa_Encrypt(RsaKey* key, const byte* in, word32 inLen, byte* out,
         }
     }
     if (ret == 0) {
-        ret = kcapi_akcipher_encrypt(key->handle, in, inLen, out, *outLen,
+        ret = (int)kcapi_akcipher_encrypt(key->handle, in, inLen, out, *outLen,
                                     KCAPI_ACCESS_HEURISTIC);
         if (ret >= 0) {
             *outLen = ret;
@@ -356,5 +356,4 @@ int KcapiRsa_Encrypt(RsaKey* key, const byte* in, word32 inLen, byte* out,
     return ret;
 }
 
-#endif /* WOLFSSL_KCAPI_RSA */
-
+#endif /* WOLFSSL_KCAPI_RSA && !NO_RSA */

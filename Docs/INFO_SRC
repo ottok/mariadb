@@ -1,8 +1,8 @@
-commit: 9aa3564e8a06c3d2027fc514213ecf42b049b06e
-date: 2022-02-10 21:04:51 +0100
-build-date: 2022-02-10 20:11:38 +0000 
-short: 9aa3564
+commit: 177d858e38d7fa7e90a7088fcc2f5576eba411a0
+date: 2022-11-02 13:14:54 +0100
+build-date: 2022-11-02 12:37:31 +0000 
+short: 177d858
 branch: HEAD
 
 
-MariaDB source 10.5.15
+MariaDB source 10.5.18

@@ -114,6 +114,9 @@ extern ${variable.value} ${variable.name};
 #elif defined(STM32F207xx)
     #define WOLFSSL_STM32F2
     #define HAL_CONSOLE_UART huart3
+#elif defined(STM32F217xx)
+    #define WOLFSSL_STM32F2
+    #define HAL_CONSOLE_UART huart2
 #elif defined(STM32F107xC)
     #define WOLFSSL_STM32F1
     #define HAL_CONSOLE_UART huart4
@@ -128,12 +131,22 @@ extern ${variable.value} ${variable.name};
     #define HAL_CONSOLE_UART huart2
     #define NO_STM32_RNG
     #define WOLFSSL_GENSEED_FORTEST
+#elif defined(STM32U575xx) || defined(STM32U585xx)
+    #define HAL_CONSOLE_UART huart1
+    #define WOLFSSL_STM32U5
+    #define STM32_HAL_V2
+    #ifdef STM32U585xx
+        #undef  NO_STM32_HASH
+        #undef  NO_STM32_CRYPTO
+        #define WOLFSSL_STM32_PKA
+    #endif
 #else
     #warning Please define a hardware platform!
     /* This means there is not a pre-defined platform for your board/CPU */
     /* You need to define a CPU type, HW crypto and debug UART */
     /* CPU Type: WOLFSSL_STM32F1, WOLFSSL_STM32F2, WOLFSSL_STM32F4, 
-        WOLFSSL_STM32F7, WOLFSSL_STM32H7, WOLFSSL_STM32L4 and WOLFSSL_STM32L5 */
+        WOLFSSL_STM32F7, WOLFSSL_STM32H7, WOLFSSL_STM32L4, WOLFSSL_STM32L5,
+        WOLFSSL_STM32G0, WOLFSSL_STM32WB and WOLFSSL_STM32U5 */
     #define WOLFSSL_STM32F4
 
     /* Debug UART used for printf */
@@ -146,7 +159,7 @@ extern ${variable.value} ${variable.name};
     //#define NO_STM32_RNG
     //#undef  NO_STM32_HASH
     //#undef  NO_STM32_CRYPTO
-    //#define WOLFSSL_GENSEED_FORTEST
+    //#define WOLFSSL_GENSEED_FORTEST /* if no HW RNG is available use test seed */
     //#define STM32_HAL_V2
 #endif
 
@@ -260,8 +273,14 @@ extern ${variable.value} ${variable.name};
 #if defined(WOLF_CONF_BASE64_ENCODE) && WOLF_CONF_BASE64_ENCODE == 1
     #define WOLFSSL_BASE64_ENCODE
 #endif
-#if defined(WOLF_CONF_OPENSSL_EXTRA) && WOLF_CONF_OPENSSL_EXTRA == 1
+#if defined(WOLF_CONF_OPENSSL_EXTRA) && WOLF_CONF_OPENSSL_EXTRA >= 1
     #define OPENSSL_EXTRA
+    #if !defined(INT_MAX)
+        #include <limits.h>
+    #endif
+#endif
+#if defined(WOLF_CONF_OPENSSL_EXTRA) && WOLF_CONF_OPENSSL_EXTRA >= 2
+    #define OPENSSL_ALL
 #endif
 
 /* TLS Session Cache */
@@ -269,6 +288,14 @@ extern ${variable.value} ${variable.name};
     #define SMALL_SESSION_CACHE
 #else
     #define NO_SESSION_CACHE
+#endif
+
+/* Post Quantum
+ * Note: PQM4 is compatible with STM32. The project can be found at:
+ * https://github.com/mupq/pqm4
+ */
+#if defined(WOLF_CONF_PQM4) && WOLF_CONF_PQM4 == 1
+    #define HAVE_PQM4
 #endif
 
 
@@ -367,8 +394,8 @@ extern ${variable.value} ${variable.name};
 /* AES */
 #if defined(WOLF_CONF_AESGCM) && WOLF_CONF_AESGCM == 1
     #define HAVE_AESGCM
-    /* GCM Method: GCM_SMALL, GCM_WORD32 or GCM_TABLE */
-    /* GCM_TABLE is about 4K larger and 3x faster */
+    /* GCM Method: GCM_SMALL, GCM_WORD32, GCM_TABLE or GCM_TABLE_4BIT */
+    /* GCM_TABLE is about 4K larger and 3x faster for GHASH */
     #define GCM_SMALL
     #define HAVE_AES_DECRYPT
 #endif
@@ -545,8 +572,6 @@ extern ${variable.value} ${variable.name};
 
 #define NO_DSA
 #define NO_RC4
-#define NO_HC128
-#define NO_RABBIT
 #define NO_MD4
 #define NO_DES3
 

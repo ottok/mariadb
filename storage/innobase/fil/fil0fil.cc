@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2021, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2014, 2021, MariaDB Corporation.
+Copyright (c) 2014, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -50,7 +50,7 @@ Created 10/25/1995 Heikki Tuuri
 #include "sync0sync.h"
 #include "buf0flu.h"
 #include "log.h"
-#ifdef UNIV_LINUX
+#ifdef __linux__
 # include <sys/types.h>
 # include <sys/sysmacros.h>
 # include <dirent.h>
@@ -89,7 +89,9 @@ bool fil_space_t::try_to_close(bool print_info)
     of fil_system.space_list, so that they would be less likely to be
     closed here. */
     fil_node_t *node= UT_LIST_GET_FIRST(space->chain);
-    ut_ad(node);
+    if (!node)
+      /* fil_ibd_create() did not invoke fil_space_t::add() yet */
+      continue;
     ut_ad(!UT_LIST_GET_NEXT(chain, node));
 
     if (!node->is_open())
@@ -454,6 +456,8 @@ static bool fil_node_open_file(fil_node_t *node)
       /* Flush tablespaces so that we can close modified files. */
       fil_flush_file_spaces();
       mutex_enter(&fil_system.mutex);
+      if (node->is_open())
+        return true;
     }
   }
 
@@ -661,11 +665,9 @@ fil_space_extend_must_retry(
 }
 
 /** @return whether the file is usable for io() */
-ATTRIBUTE_COLD bool fil_space_t::prepare(bool have_mutex)
+ATTRIBUTE_COLD bool fil_space_t::prepare_acquired()
 {
   ut_ad(referenced());
-  if (!have_mutex)
-    mutex_enter(&fil_system.mutex);
   ut_ad(mutex_own(&fil_system.mutex));
   fil_node_t *node= UT_LIST_GET_LAST(chain);
   ut_ad(!id || purpose == FIL_TYPE_TEMPORARY ||
@@ -710,8 +712,16 @@ ATTRIBUTE_COLD bool fil_space_t::prepare(bool have_mutex)
 clear:
    n_pending.fetch_and(~CLOSING, std::memory_order_relaxed);
 
-  if (!have_mutex)
-    mutex_exit(&fil_system.mutex);
+  return is_open;
+}
+
+/** @return whether the file is usable for io() */
+ATTRIBUTE_COLD bool fil_space_t::acquire_and_prepare()
+{
+  mutex_enter(&fil_system.mutex);
+  const auto flags= acquire_low() & (STOPPING | CLOSING);
+  const bool is_open= !flags || (flags == CLOSING && prepare_acquired());
+  mutex_exit(&fil_system.mutex);
   return is_open;
 }
 
@@ -1010,6 +1020,9 @@ fil_space_t *fil_space_t::create(const char *name, ulint id, ulint flags,
 		if (UNIV_LIKELY(id <= fil_system.max_assigned_id)) {
 			break;
 		}
+		if (UNIV_UNLIKELY(srv_operation == SRV_OPERATION_BACKUP)) {
+			break;
+		}
 		if (!fil_system.space_id_reuse_warned) {
 			ib::warn() << "Allocated tablespace ID " << id
 				<< " for " << name << ", old maximum was "
@@ -1164,7 +1177,10 @@ err_exit:
     }
 
     if (create_new_db)
+    {
+      node->find_metadata(node->handle);
       continue;
+    }
     if (skip_read)
     {
       size+= node->size;
@@ -1232,7 +1248,7 @@ void fil_system_t::create(ulint hash_size)
 	spaces.create(hash_size);
 
 	fil_space_crypt_init();
-#ifdef UNIV_LINUX
+#ifdef __linux__
 	ssd.clear();
 	char fn[sizeof(dirent::d_name)
 		+ sizeof "/sys/block/" "/queue/rotational"];
@@ -1312,10 +1328,10 @@ void fil_system_t::close()
 
   ut_ad(!spaces.array);
 
-#ifdef UNIV_LINUX
+#ifdef __linux__
   ssd.clear();
   ssd.shrink_to_fit();
-#endif /* UNIV_LINUX */
+#endif /* __linux__ */
 }
 
 /** Extend all open data files to the recovered size */
@@ -1478,13 +1494,13 @@ fil_space_t *fil_space_t::get(ulint id)
   mutex_enter(&fil_system.mutex);
   fil_space_t *space= fil_space_get_by_id(id);
   const uint32_t n= space ? space->acquire_low() : 0;
-  mutex_exit(&fil_system.mutex);
 
   if (n & STOPPING)
     space= nullptr;
-  else if ((n & CLOSING) && !space->prepare())
+  else if ((n & CLOSING) && !space->prepare_acquired())
     space= nullptr;
 
+  mutex_exit(&fil_system.mutex);
   return space;
 }
 
@@ -1963,9 +1979,10 @@ fil_make_filepath(
 	if (path != NULL) {
 		memcpy(full_name, path, path_len);
 		len = path_len;
-		full_name[len] = '\0';
-		os_normalize_path(full_name);
 	}
+
+	full_name[len] = '\0';
+	os_normalize_path(full_name);
 
 	if (trim_name) {
 		/* Find the offset of the last DIR separator and set it to
@@ -3110,6 +3127,13 @@ fil_ibd_load(
 		? fil_space_read_crypt_data(fil_space_t::zip_size(flags),
 					    first_page)
 		: NULL;
+
+	if (crypt_data && !crypt_data->is_key_found()) {
+		crypt_data->~fil_space_crypt_t();
+		ut_free(crypt_data);
+		return FIL_LOAD_INVALID;
+	}
+
 	space = fil_space_t::create(
 		file.name(), space_id, flags, FIL_TYPE_TABLESPACE, crypt_data);
 
@@ -3650,12 +3674,6 @@ fil_names_clear(
 	bool	do_write)
 {
 	mtr_t	mtr;
-	ulint	mtr_checkpoint_size = RECV_SCAN_SIZE - 1;
-
-	DBUG_EXECUTE_IF(
-		"increase_mtr_checkpoint_size",
-		mtr_checkpoint_size = 75 * 1024;
-		);
 
 	mysql_mutex_assert_owner(&log_sys.mutex);
 	ut_ad(lsn);
@@ -3664,9 +3682,9 @@ fil_names_clear(
 
 	for (fil_space_t* space = UT_LIST_GET_FIRST(fil_system.named_spaces);
 	     space != NULL; ) {
-		if (mtr.get_log()->size()
-		    + (3 + 5 + 1) + strlen(space->chain.start->name)
-		    >= mtr_checkpoint_size) {
+		if (mtr.get_log_size()
+		    + strlen(space->chain.start->name)
+		    >= RECV_SCAN_SIZE - (3 + 5 + 1)) {
 			/* Prevent log parse buffer overflow */
 			mtr.commit_files();
 			mtr.start();

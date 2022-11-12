@@ -16,6 +16,7 @@ include IDE/INTIME-RTOS/include.am
 include IDE/KDS/include.am
 include IDE/STM32Cube/include.am
 include IDE/VS-ARM/include.am
+include IDE/MSVS-2019-AZSPHERE/include.am
 include IDE/VS-AZURE-SPHERE/include.am
 include IDE/GCC-ARM/include.am
 include IDE/CSBENCH/include.am
@@ -45,6 +46,10 @@ include IDE/WINCE/include.am
 include IDE/iotsafe/include.am
 include IDE/Android/include.am
 include IDE/NETOS/include.am
+include IDE/IAR-MSP430/include.am
+include IDE/zephyr/include.am
+include IDE/AURIX/include.am
+include IDE/MCUEXPRESSO/include.am
 
 EXTRA_DIST+= IDE/IAR-EWARM IDE/MDK-ARM IDE/MDK5-ARM IDE/MYSQL IDE/LPCXPRESSO IDE/HEXIWEAR IDE/Espressif
 EXTRA_DIST+= IDE/OPENSTM32/README.md

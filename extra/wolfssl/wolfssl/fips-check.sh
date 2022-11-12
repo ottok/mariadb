@@ -11,7 +11,7 @@
 #
 #     $ ./fips-check [flavor] [keep]
 #
-#     - flavor: linux (default), ios, android, windows, freertos, linux-ecc, netbsd-selftest, linuxv2, fips-ready, stm32l4-v2, linuxv5, linuxv5-ready, linuxv5-dev
+#     - flavor: linux (default), ios, android, windows, freertos, linux-ecc, netbsd-selftest, linuxv2, fipsv2-OE-ready, stm32l4-v2, linuxv5, fips-ready, fips-dev
 #
 #     - keep: (default off) XXX-fips-test temp dir around for inspection
 #
@@ -32,13 +32,12 @@ Flavor is one of:
     sgx
     netos-7.6
     linuxv2 (FIPSv2, use for Win10)
-    fips-ready
     stm32l4-v2 (FIPSv2, use for STM32L4)
     wolfrand
     solaris
     linuxv5 (current FIPS 140-3)
-    linuxv5-ready (ready FIPS 140-3)
-    linuxv5-dev (dev FIPS 140-3)
+    fips-ready (ready FIPS 140-3)
+    fips-dev (dev FIPS 140-3)
 Keep (default off) retains the XXX-fips-test temp dir for inspection.
 
 Example:
@@ -173,7 +172,7 @@ linux-ecc)
   CRYPT_VERSION=$LINUX_ECC_CRYPT_VERSION
   CRYPT_REPO=$LINUX_ECC_CRYPT_REPO
   ;;
-linuxv2)
+linuxv2 | fipsv2-OE-ready)
   FIPS_VERSION=WCv4-stable
   FIPS_REPO=git@github.com:wolfssl/fips.git
   CRYPT_VERSION=WCv4-stable
@@ -184,6 +183,7 @@ linuxv2)
   FIPS_SRCS+=( wolfcrypt_first.c wolfcrypt_last.c )
   FIPS_INCS=( fips.h )
   FIPS_OPTION=v2
+  COPY_DIRECT=( wolfcrypt/src/aes_asm.S wolfcrypt/src/aes_asm.asm )
   ;;
 netbsd-selftest)
   FIPS_VERSION=$NETBSD_FIPS_VERSION
@@ -232,27 +232,28 @@ linuxv5)
   RNG_VERSION="WCv5.0-RC12"
   FIPS_SRCS=( fips.c fips_test.c wolfcrypt_first.c wolfcrypt_last.c )
   FIPS_INCS=( fips.h )
-  FIPS_OPTION="v5-RC12"
+  FIPS_OPTION="v5"
   COPY_DIRECT=( wolfcrypt/src/aes_asm.S wolfcrypt/src/aes_asm.asm
+                wolfcrypt/src/aes_gcm_asm.S
                 wolfcrypt/src/sha256_asm.S wolfcrypt/src/sha512_asm.S )
   ;;
-linuxv5-ready|fips-ready|fips-v5-ready)
+fips-ready)
   FIPS_REPO="git@github.com:wolfSSL/fips.git"
-  FIPS_VERSION="WCv5.0-RC12"
+  FIPS_VERSION="master"
   CRYPT_INC_PATH=wolfssl/wolfcrypt
   CRYPT_SRC_PATH=wolfcrypt/src
   FIPS_SRCS=( fips.c fips_test.c wolfcrypt_first.c wolfcrypt_last.c )
   FIPS_INCS=( fips.h )
-  FIPS_OPTION=v5-ready
+  FIPS_OPTION=ready
   ;;
-linuxv5-dev|fips-dev)
+fips-dev)
   FIPS_REPO="git@github.com:wolfSSL/fips.git"
   FIPS_VERSION="master"
   CRYPT_INC_PATH=wolfssl/wolfcrypt
   CRYPT_SRC_PATH=wolfcrypt/src
   FIPS_SRCS+=( wolfcrypt_first.c wolfcrypt_last.c )
   FIPS_INCS=( fips.h )
-  FIPS_OPTION=v5-dev
+  FIPS_OPTION=dev
   ;;
 
 stm32l4-v2)
@@ -372,17 +373,17 @@ esac
 # clone the FIPS repository
 case "$FIPS_OPTION" in
     *dev)
-	if ! $GIT clone --depth 1 "$FIPS_REPO" fips; then
+        if ! $GIT clone --depth 1 "$FIPS_REPO" fips; then
             echo "fips-check: Couldn't check out the FIPS repository for fips-dev."
             exit 1
-	fi
-	;;
+        fi
+        ;;
     *)
-	if ! $GIT clone --depth 1 -b "$FIPS_VERSION" "$FIPS_REPO" fips; then
+        if ! $GIT clone --depth 1 -b "$FIPS_VERSION" "$FIPS_REPO" fips; then
             echo "fips-check: Couldn't check out ${FIPS_VERSION} from repository ${FIPS_REPO}."
             exit 1
-	fi
-	;;
+        fi
+        ;;
 esac
 
 for SRC in "${FIPS_SRCS[@]}"
@@ -394,6 +395,19 @@ for INC in "${FIPS_INCS[@]}"
 do
     cp "fips/$INC" "$CRYPT_INC_PATH"
 done
+
+# When checking out cert 3389 ready code, NIST will no longer perform
+# new certifications on 140-2 modules. If we were to use the latest files from
+# master that would require re-cert due to changes in the module boundary.
+# Since OE additions can still be processed for cert3389 we will call 140-2
+# ready "fipsv2-OE-ready" indicating it is ready to use for an OE addition but
+# would not be good for a new certification effort with the latest files.
+if [ "$FLAVOR" = "fipsv2-OE-ready" ]; then
+    OLD_VERSION="    return \"v4.0.0-alpha\";"
+    OE_READY_VERSION="    return \"fipsv2-OE-ready\";"
+    cp "${CRYPT_SRC_PATH}/fips.c" "${CRYPT_SRC_PATH}/fips.c.bak"
+    sed "s/^${OLD_VERSION}/${OE_READY_VERSION}/" "${CRYPT_SRC_PATH}/fips.c.bak" >"${CRYPT_SRC_PATH}/fips.c"
+fi
 
 # run the make test
 ./autogen.sh

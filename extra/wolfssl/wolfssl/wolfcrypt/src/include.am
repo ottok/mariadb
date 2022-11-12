@@ -1,15 +1,15 @@
 # vim:ft=automake
 # All paths should be given relative to the root
 
-BUILT_SOURCES+= wolfcrypt/src/port/cavium/cavium_nitrox.c
-BUILT_SOURCES+= wolfcrypt/src/port/intel/quickassist.c
-BUILT_SOURCES+= wolfcrypt/src/port/intel/quickassist_mem.c
+ASYNC_FILES =						\
+	wolfcrypt/src/port/cavium/cavium_nitrox.c	\
+	wolfcrypt/src/port/intel/quickassist.c		\
+	wolfcrypt/src/port/intel/quickassist_mem.c
 
-MAINTAINERCLEANFILES+= wolfcrypt/src/port/cavium/cavium_nitrox.c
-MAINTAINERCLEANFILES+= wolfcrypt/src/port/intel/quickassist.c
-MAINTAINERCLEANFILES+= wolfcrypt/src/port/intel/quickassist_mem.c
+BUILT_SOURCES+= $(ASYNC_FILES)
 
-EXTRA_DIST += src/bio.c
+MAINTAINERCLEANFILES+= $(ASYNC_FILES)
+
 EXTRA_DIST += wolfcrypt/src/misc.c
 EXTRA_DIST += wolfcrypt/src/evp.c
 EXTRA_DIST += wolfcrypt/src/asm.c
@@ -62,10 +62,6 @@ EXTRA_DIST += wolfcrypt/src/port/ti/ti-aes.c \
               wolfcrypt/src/port/arm/armv8-aes.c \
               wolfcrypt/src/port/arm/armv8-sha256.c \
               wolfcrypt/src/port/arm/armv8-chacha.c \
-              wolfcrypt/src/port/arm/armv8-curve25519.c \
-              wolfcrypt/src/port/arm/armv8-32-curve25519.c \
-              wolfcrypt/src/port/arm/armv8-sha512-asm.c \
-              wolfcrypt/src/port/arm/armv8-32-sha512-asm.c \
               wolfcrypt/src/port/nxp/ksdk_port.c \
               wolfcrypt/src/port/nxp/dcp_port.c \
               wolfcrypt/src/port/nxp/se050_port.c \
@@ -81,9 +77,15 @@ EXTRA_DIST += wolfcrypt/src/port/ti/ti-aes.c \
               wolfcrypt/src/port/caam/caam_sha.c \
               wolfcrypt/src/port/caam/caam_doc.pdf \
               wolfcrypt/src/port/caam/wolfcaam_init.c \
+              wolfcrypt/src/port/caam/wolfcaam_seco.c \
               wolfcrypt/src/port/caam/wolfcaam_qnx.c \
+              wolfcrypt/src/port/caam/wolfcaam_x25519.c \
               wolfcrypt/src/port/caam/wolfcaam_ecdsa.c \
               wolfcrypt/src/port/caam/wolfcaam_cmac.c \
+              wolfcrypt/src/port/caam/wolfcaam_hash.c \
+              wolfcrypt/src/port/caam/wolfcaam_rsa.c \
+              wolfcrypt/src/port/caam/wolfcaam_hmac.c \
+              wolfcrypt/src/port/caam/wolfcaam_aes.c \
               wolfcrypt/src/port/silabs/silabs_aes.c \
               wolfcrypt/src/port/silabs/silabs_ecc.c \
               wolfcrypt/src/port/silabs/silabs_hash.c \
@@ -122,14 +124,8 @@ EXTRA_DIST += wolfcrypt/src/port/ti/ti-aes.c \
               wolfcrypt/src/port/Renesas/README.md \
               wolfcrypt/src/port/cypress/psoc6_crypto.c
 
-wolfcrypt/src/port/cavium/cavium_nitrox.c: Makefile
-	@test -e $(srcdir)/$@ || touch $(srcdir)/$@
-
-wolfcrypt/src/port/intel/quickassist.c: Makefile
-	@test -e $(srcdir)/$@ || touch $(srcdir)/$@
-
-wolfcrypt/src/port/intel/quickassist_mem.c: Makefile
-	@test -e $(srcdir)/$@ || touch $(srcdir)/$@
+$(ASYNC_FILES):
+	$(AM_V_at)touch $(srcdir)/$@
 
 if BUILD_CRYPTOCB
 src_libwolfssl_la_SOURCES += wolfcrypt/src/cryptocb.c
@@ -140,6 +136,10 @@ src_libwolfssl_la_SOURCES += wolfcrypt/src/wc_pkcs11.c
 endif
 
 if BUILD_DEVCRYPTO
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/devcrypto/devcrypto_ecdsa.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/devcrypto/devcrypto_x25519.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/devcrypto/devcrypto_rsa.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/devcrypto/devcrypto_hmac.c
 src_libwolfssl_la_SOURCES += wolfcrypt/src/port/devcrypto/devcrypto_hash.c
 src_libwolfssl_la_SOURCES += wolfcrypt/src/port/devcrypto/devcrypto_aes.c
 src_libwolfssl_la_SOURCES += wolfcrypt/src/port/devcrypto/wc_devcrypto.c
@@ -177,10 +177,24 @@ endif
 if BUILD_CAAM
 src_libwolfssl_la_SOURCES += wolfcrypt/src/port/caam/wolfcaam_init.c
 src_libwolfssl_la_SOURCES += wolfcrypt/src/port/caam/wolfcaam_qnx.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/caam/wolfcaam_seco.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/caam/wolfcaam_x25519.c
 src_libwolfssl_la_SOURCES += wolfcrypt/src/port/caam/wolfcaam_ecdsa.c
 src_libwolfssl_la_SOURCES += wolfcrypt/src/port/caam/wolfcaam_cmac.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/caam/wolfcaam_aes.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/caam/wolfcaam_hash.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/caam/wolfcaam_rsa.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/caam/wolfcaam_hmac.c
 endif
 
 if BUILD_SE050
 src_libwolfssl_la_SOURCES += wolfcrypt/src/port/nxp/se050_port.c
 endif
+
+if BUILD_PSA
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/psa/psa.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/psa/psa_hash.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/psa/psa_aes.c
+src_libwolfssl_la_SOURCES += wolfcrypt/src/port/psa/psa_pkcbs.c
+endif
+EXTRA_DIST += wolfcrypt/src/port/psa/README.md

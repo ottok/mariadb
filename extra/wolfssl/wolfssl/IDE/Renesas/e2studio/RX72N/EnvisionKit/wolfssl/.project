@@ -220,19 +220,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/wolfcrypt/src/hash.c</locationURI>
 		</link>
 		<link>
-			<name>wolfcrypt/src/hc128.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/wolfcrypt/src/hc128.c</locationURI>
-		</link>
-		<link>
 			<name>wolfcrypt/src/hmac.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/wolfcrypt/src/hmac.c</locationURI>
-		</link>
-		<link>
-			<name>wolfcrypt/src/idea.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/wolfcrypt/src/idea.c</locationURI>
 		</link>
 		<link>
 			<name>wolfcrypt/src/include.am</name>
@@ -293,11 +283,6 @@
 			<name>wolfcrypt/src/pwdbased.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/wolfcrypt/src/pwdbased.c</locationURI>
-		</link>
-		<link>
-			<name>wolfcrypt/src/rabbit.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/wolfcrypt/src/rabbit.c</locationURI>
 		</link>
 		<link>
 			<name>wolfcrypt/src/random.c</name>

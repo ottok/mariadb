@@ -1,6 +1,6 @@
 /* hmac.c
  *
- * Copyright (C) 2006-2021 wolfSSL Inc.
+ * Copyright (C) 2006-2022 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -26,6 +26,7 @@
 
 #include <wolfssl/wolfcrypt/wc_port.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
+#include <wolfssl/wolfcrypt/logging.h>
 
 #ifndef NO_HMAC
 
@@ -57,6 +58,7 @@
 #ifdef WOLFSSL_KCAPI_HMAC
     #include <wolfssl/wolfcrypt/port/kcapi/kcapi_hmac.h>
 
+    /* map the _Software calls used by kcapi_hmac.c */
     #define wc_HmacSetKey  wc_HmacSetKey_Software
     #define wc_HmacUpdate  wc_HmacUpdate_Software
     #define wc_HmacFinal   wc_HmacFinal_Software
@@ -328,8 +330,10 @@ int wc_HmacSetKey(Hmac* hmac, int type, const byte* key, word32 length)
         return ret;
 
 #ifdef HAVE_FIPS
-    if (length < HMAC_FIPS_MIN_KEY)
+    if (length < HMAC_FIPS_MIN_KEY) {
+        WOLFSSL_ERROR_VERBOSE(HMAC_MIN_KEYLEN_E);
         return HMAC_MIN_KEYLEN_E;
+    }
 #endif
 
 #ifdef WOLF_CRYPTO_CB
@@ -994,6 +998,11 @@ int wc_HmacFinal(Hmac* hmac, byte* hash)
 #ifdef WOLFSSL_KCAPI_HMAC
     /* implemented in wolfcrypt/src/port/kcapi/kcapi_hmac.c */
 
+    /* unmap the _Software calls used by kcapi_hmac.c */
+    #undef wc_HmacSetKey
+    #undef wc_HmacUpdate
+    #undef wc_HmacFinal
+
 #else
 /* Initialize Hmac for use with async device */
 int wc_HmacInit(Hmac* hmac, void* heap, int devId)
@@ -1010,6 +1019,9 @@ int wc_HmacInit(Hmac* hmac, void* heap, int devId)
     hmac->devId = devId;
     hmac->devCtx = NULL;
 #endif
+#if defined(WOLFSSL_DEVCRYPTO_HMAC)
+    hmac->ctx.cfd = -1;
+#endif
 
 #if defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_HMAC)
     ret = wolfAsync_DevCtxInit(&hmac->asyncDev, WOLFSSL_ASYNC_MARKER_HMAC,
@@ -1021,7 +1033,7 @@ int wc_HmacInit(Hmac* hmac, void* heap, int devId)
     return ret;
 }
 
-#ifdef HAVE_PKCS11
+#ifdef WOLF_PRIVATE_KEY_ID
 int  wc_HmacInit_Id(Hmac* hmac, unsigned char* id, int len, void* heap,
                     int devId)
 {
@@ -1064,7 +1076,7 @@ int wc_HmacInit_Label(Hmac* hmac, const char* label, void* heap, int devId)
 
     return ret;
 }
-#endif
+#endif /* WOLF_PRIVATE_KEY_ID */
 
 /* Free Hmac from use with async device */
 void wc_HmacFree(Hmac* hmac)
