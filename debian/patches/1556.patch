@@ -15,7 +15,7 @@ file.
 
 --- a/.gitignore
 +++ b/.gitignore
-@@ -279,7 +279,7 @@ support-files/my-innodb-heavy-4G.cnf
+@@ -280,7 +280,7 @@ support-files/my-innodb-heavy-4G.cnf
  support-files/my-large.cnf
  support-files/my-medium.cnf
  support-files/my-small.cnf

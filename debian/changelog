@@ -1,3 +1,46 @@
+mariadb-10.5 (1:10.5.18-0+deb11u1) UNRELEASED; urgency=medium
+
+  * New upstream version 10.5.18.
+  * New upstream version 10.5.17. Includes security fixes for
+    - CVE-2018-25032
+    - CVE-2022-32081
+    - CVE-2022-32082
+    - CVE-2022-32084
+    - CVE-2022-32089
+    - CVE-2022-32091
+  * New upstream version 10.5.16. Includes security fixes for
+    - CVE-2021-46669
+    - CVE-2022-27376
+    - CVE-2022-27377
+    - CVE-2022-27378
+    - CVE-2022-27379
+    - CVE-2022-27380
+    - CVE-2022-27381
+    - CVE-2022-27382
+    - CVE-2022-27383
+    - CVE-2022-27384
+    - CVE-2022-27386
+    - CVE-2022-27387
+    - CVE-2022-27444
+    - CVE-2022-27445
+    - CVE-2022-27446
+    - CVE-2022-27447
+    - CVE-2022-27448
+    - CVE-2022-27449
+    - CVE-2022-27451
+    - CVE-2022-27452
+    - CVE-2022-27455
+    - CVE-2022-27456
+    - CVE-2022-27457
+    - CVE-2022-27458
+    - CVE-2022-32083
+    - CVE-2022-32085
+    - CVE-2022-32086
+    - CVE-2022-32087
+    - CVE-2022-32088
+
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 11 Nov 2022 18:33:01 -0800
+
 mariadb-10.5 (1:10.5.15-0+deb11u1) bullseye; urgency=medium
 
   [ Otto Kekäläinen ]
