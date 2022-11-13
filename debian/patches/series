@@ -2,16 +2,8 @@
 rocksdb-kfreebsd.patch
 mroonga-path-reproducible-build.patch
 env-perl-usr-bin-perl.patch
-fix-spelling-mariadb.patch
 fix-spelling-rocksdb.patch
-fix-spelling-wsrep.patch
 1556.patch
 fix-reproducible-builds-rocksdb.patch
 mroonga-mrn-lib-dirs-path-reproducible-build.patch
 2006-kfreebsd-amd64.patch
-openssl-3-enable.patch
-openssl-3-compatibility.patch
-MDEV-26645-fix-test-main.func_math.patch
-2028-MDEV-23915-fix-test-main.grat_kill.patch
-MDEV-27980-revert-loose-disable-plugin-file-key-management.patch
-1006527-fix-ppc64-ftbfs.patch

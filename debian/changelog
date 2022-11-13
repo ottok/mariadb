@@ -1,3 +1,58 @@
+mariadb-10.6 (1:10.6.11-0ubuntu0.22.04.1) jammy-security; urgency=medium
+
+  * SECURITY UPDATE: New upstream version 10.6.11 includes fixes for security
+    vulnerabilities from previous releases as listed below (LP: #1996452)
+  * New upstream version 10.6.10. Includes several important fixes for
+    issues that regressed in previous release. See details in:
+    https://mariadb.org/regressions-in-recent-mariadb-server-releases/
+  * New upstream version 10.6.9. Includes security fixes for
+    - CVE-2018-25032
+    - CVE-2022-32081
+    - CVE-2022-32082
+    - CVE-2022-32084
+    - CVE-2022-32089
+    - CVE-2022-32091
+  * New upstream version 10.6.8. Includes security fixes for
+    - CVE-2021-46669
+    - CVE-2022-27376
+    - CVE-2022-27377
+    - CVE-2022-27378
+    - CVE-2022-27379
+    - CVE-2022-27380
+    - CVE-2022-27381
+    - CVE-2022-27382
+    - CVE-2022-27383
+    - CVE-2022-27384
+    - CVE-2022-27386
+    - CVE-2022-27387
+    - CVE-2022-27444
+    - CVE-2022-27445
+    - CVE-2022-27446
+    - CVE-2022-27447
+    - CVE-2022-27448
+    - CVE-2022-27449
+    - CVE-2022-27451
+    - CVE-2022-27452
+    - CVE-2022-27455
+    - CVE-2022-27456
+    - CVE-2022-27457
+    - CVE-2022-27458
+    - CVE-2022-32085
+    - CVE-2022-32086
+    - CVE-2022-32087
+    - CVE-2022-32088
+  * Clean away several patches:
+    - Remove Mroonga patch that didn't help make it build in a reproducible way.
+      The patch does not hurt, but cleaning away all excess cruft is a vice.
+    - Remove multiple patches that all got merged upstream or that were
+      themselves backported existing upstream commits.
+    - Remove the OpenSSL 30 patches that all got merged upstream in
+      https://github.com/MariaDB/server/pull/2036
+  * Add Bulgarian and Chinese translations for error messages
+  * Include new wsrep_sst_backup in mariadb-server-10.6 package
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 12 Nov 2022 23:48:47 -0800
+
 mariadb-10.6 (1:10.6.7-2ubuntu1.1) jammy; urgency=medium
 
   * d/rules: disable LTO on Ubuntu so a low MEMLOCK_LIMIT can be
