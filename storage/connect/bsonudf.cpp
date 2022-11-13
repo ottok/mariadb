@@ -1146,7 +1146,7 @@ my_bool BJNX::LocateArray(PGLOBAL g, PBVAL jarp)
 
 	for (int i = 0; i < n && !Found; i++) {
 		Jp->N = m;
-		sprintf(s, "[%d]", i + B);
+		snprintf(s, sizeof(s), "[%d]", i + B);
 
 		if (Jp->WriteStr(s))
 			return true;
@@ -1440,7 +1440,7 @@ my_bool BJNX::AddPath(void)
 
 	for (int i = 0; i <= I; i++) {
 		if (Jpnp[i].Type == TYPE_JAR) {
-			sprintf(s, "[%d]", Jpnp[i].N + B);
+			snprintf(s, sizeof(s), "[%d]", Jpnp[i].N + B);
 
 			if (Jp->WriteStr(s))
 				return true;
@@ -3573,14 +3573,14 @@ char *bson_item_merge(UDF_INIT *initid, UDF_ARGS *args, char *result,
 	if (!CheckMemory(g, initid, args, 2, false, false, true)) {
 		JTYP  type;
 		BJNX  bnx(g);
-		PBVAL jvp, top = NULL;
+		PBVAL jvp = NULL, top = NULL;
 		PBVAL jsp[2] = {NULL, NULL};
 
 		for (int i = 0; i < 2; i++) {
 			jvp = bnx.MakeValue(args, i, true);
 
 			if (i) {
-				if (jvp->Type != type) {
+				if (jvp && (jvp->Type != type)) {
 					PUSH_WARNING("Argument types mismatch");
 					goto fin;
 				}	// endif type
@@ -5724,14 +5724,14 @@ char *bbin_item_merge(UDF_INIT *initid, UDF_ARGS *args, char *result,
 	if (!CheckMemory(g, initid, args, 2, false, false, true)) {
 		JTYP  type;
 		BJNX  bnx(g);
-		PBVAL jvp, top = NULL;
+		PBVAL jvp = NULL, top = NULL;
 		PBVAL jsp[2] = {NULL, NULL};
 
 		for (int i = 0; i < 2; i++) {
 			if (i) {
 				jvp = bnx.MakeValue(args, i, true);
 
-				if (jvp->Type != type) {
+				if (jvp && (jvp->Type != type)) {
 					PUSH_WARNING("Argument types mismatch");
 					goto fin;
 				}	// endif type

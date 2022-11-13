@@ -513,9 +513,27 @@ btr_page_alloc_low(
 					page should be initialized. */
 	dberr_t*	err)		/*!< out: error code */
 {
-  buf_block_t *root= btr_root_block_get(index, RW_SX_LATCH, mtr, err);
+  const auto savepoint= mtr->get_savepoint();
+  buf_block_t *root= btr_root_block_get(index, RW_NO_LATCH, mtr, err);
   if (UNIV_UNLIKELY(!root))
     return root;
+
+  if (mtr->have_u_or_x_latch(*root))
+  {
+#ifdef BTR_CUR_HASH_ADAPT
+    ut_ad(!root->index || !root->index->freed());
+#endif
+    mtr->release_block_at_savepoint(savepoint, root);
+  }
+  else
+  {
+    mtr->u_lock_register(savepoint);
+    root->page.lock.u_lock();
+#ifdef BTR_CUR_HASH_ADAPT
+    btr_search_drop_page_hash_index(root, true);
+#endif
+  }
+
   fseg_header_t *seg_header= root->page.frame +
     (level ? PAGE_HEADER + PAGE_BTR_SEG_TOP : PAGE_HEADER + PAGE_BTR_SEG_LEAF);
   return fseg_alloc_free_page_general(seg_header, hint_page_no, file_direction,
@@ -584,8 +602,8 @@ dberr_t btr_page_free(dict_index_t* index, buf_block_t* block, mtr_t* mtr,
                       bool blob, bool space_latched)
 {
   ut_ad(mtr->memo_contains_flagged(block, MTR_MEMO_PAGE_X_FIX));
-#ifdef BTR_CUR_HASH_ADAPT
-  if (block->index && !block->index->freed())
+#if defined BTR_CUR_HASH_ADAPT && defined UNIV_DEBUG
+  if (btr_search_check_marked_free_index(block))
   {
     ut_ad(!blob);
     ut_ad(page_is_leaf(block->page.frame));
@@ -610,11 +628,29 @@ dberr_t btr_page_free(dict_index_t* index, buf_block_t* block, mtr_t* mtr,
 
   fil_space_t *space= index->table->space;
   dberr_t err;
-  if (page_t* root = btr_root_get(index, mtr, &err))
+
+  const auto savepoint= mtr->get_savepoint();
+  if (buf_block_t *root= btr_root_block_get(index, RW_NO_LATCH, mtr, &err))
   {
-    err= fseg_free_page(&root[blob || page_is_leaf(block->page.frame)
-                              ? PAGE_HEADER + PAGE_BTR_SEG_LEAF
-                              : PAGE_HEADER + PAGE_BTR_SEG_TOP],
+    if (mtr->have_u_or_x_latch(*root))
+    {
+#ifdef BTR_CUR_HASH_ADAPT
+      ut_ad(!root->index || !root->index->freed());
+#endif
+      mtr->release_block_at_savepoint(savepoint, root);
+    }
+    else
+    {
+      mtr->u_lock_register(savepoint);
+      root->page.lock.u_lock();
+#ifdef BTR_CUR_HASH_ADAPT
+      btr_search_drop_page_hash_index(root, true);
+#endif
+    }
+    err= fseg_free_page(&root->page.frame[blob ||
+                                          page_is_leaf(block->page.frame)
+                                          ? PAGE_HEADER + PAGE_BTR_SEG_LEAF
+                                          : PAGE_HEADER + PAGE_BTR_SEG_TOP],
                         space, page, mtr, space_latched);
   }
   if (err == DB_SUCCESS)
@@ -717,7 +753,7 @@ btr_page_get_father_node_ptr_func(
 								  user_rec, 0,
 								  heap, level),
 					PAGE_CUR_LE, latch_mode,
-					cursor, 0, mtr) != DB_SUCCESS) {
+					cursor, mtr) != DB_SUCCESS) {
 		return nullptr;
 	}
 
@@ -1066,6 +1102,7 @@ dberr_t dict_index_t::clear(que_thr_t *thr)
     mtr.set_log_mode(MTR_LOG_NO_REDO);
   else
     set_modified(mtr);
+  mtr_sx_lock_index(this, &mtr);
 
   dberr_t err;
   if (buf_block_t *root_block=
@@ -1374,7 +1411,10 @@ static dberr_t btr_page_reorganize_low(page_cur_t *cursor, dict_index_t *index,
                 block->page.frame + PAGE_MAX_TRX_ID + PAGE_HEADER,
                 PAGE_DATA - (PAGE_MAX_TRX_ID + PAGE_HEADER)));
 
-  if (index->has_locking())
+  if (!index->has_locking());
+  else if (index->page == FIL_NULL)
+    ut_ad(index->is_dummy);
+  else
     lock_move_reorganize_page(block, old);
 
   /* Write log for the changes, if needed. */
@@ -2343,7 +2383,7 @@ btr_insert_on_non_leaf_level(
 
 	dberr_t err = btr_cur_search_to_nth_level(index, level, tuple, mode,
 						  BTR_CONT_MODIFY_TREE,
-						  &cursor, 0, mtr);
+						  &cursor, mtr);
 	ut_ad(cursor.flag == BTR_CUR_BINARY);
 
 	if (UNIV_LIKELY(err == DB_SUCCESS)) {
@@ -3305,6 +3345,7 @@ btr_lift_page_up(
 
 	ut_ad(!page_has_siblings(page));
 	ut_ad(mtr->memo_contains_flagged(block, MTR_MEMO_PAGE_X_FIX));
+	ut_ad(!page_is_empty(page));
 
 	page_level = btr_page_get_level(page);
 	root_page_no = dict_index_get_page(index);
@@ -3391,10 +3432,20 @@ btr_lift_page_up(
 	if (index->is_instant()
 	    && father_block->page.id().page_no() == root_page_no) {
 		ut_ad(!father_page_zip);
+
+		if (page_is_leaf(page)) {
+			const rec_t* rec = page_rec_get_next(
+				page_get_infimum_rec(page));
+			ut_ad(rec_is_metadata(rec, *index));
+			if (rec_is_add_metadata(rec, *index)
+			    && page_get_n_recs(page) == 1) {
+				index->clear_instant_add();
+				goto copied;
+			}
+		}
+
 		btr_set_instant(father_block, *index, mtr);
 	}
-
-	page_level++;
 
 	/* Copy the records to the father page one by one. */
 	if (0
@@ -3439,6 +3490,7 @@ btr_lift_page_up(
 		}
 	}
 
+copied:
 	if (index->has_locking()) {
 		const page_id_t id{block->page.id()};
 		/* Free predicate page locks on the block */
@@ -3448,6 +3500,8 @@ btr_lift_page_up(
 			lock_update_copy_and_discard(*father_block, id);
 		}
 	}
+
+	page_level++;
 
 	/* Go upward to root page, decrementing levels by one. */
 	for (i = lift_father_up ? 1 : 0; i < n_blocks; i++, page_level++) {
@@ -4843,6 +4897,7 @@ corrupted:
 loop:
 	if (!block) {
 invalid_page:
+		mtr.commit();
 func_exit:
 		mem_heap_free(heap);
 		return err;
@@ -5222,11 +5277,6 @@ btr_validate_index(
 	dict_index_t*	index,	/*!< in: index */
 	const trx_t*	trx)	/*!< in: transaction or NULL */
 {
-  /* Full Text index are implemented by auxiliary tables, not the B-tree */
-  if (index->online_status != ONLINE_INDEX_COMPLETE ||
-      (index->type & (DICT_FTS | DICT_CORRUPT)))
-    return DB_SUCCESS;
-
   const bool lockout= index->is_spatial();
 
   mtr_t mtr;

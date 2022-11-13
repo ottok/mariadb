@@ -37,6 +37,9 @@
 #include "sql_partition.h"
 #include "sql_partition_admin.h"               // Sql_cmd_alter_table_*_part
 #include "event_parse_data.h"
+#ifdef WITH_WSREP
+#include "mysql/service_wsrep.h"
+#endif
 
 void LEX::parse_error(uint err_number)
 {
@@ -2948,6 +2951,7 @@ void st_select_lex::init_query()
   min_max_opt_list.empty();
   limit_params.clear();
   join= 0;
+  cur_pos_in_select_list= UNDEF_POS;
   having= prep_having= where= prep_where= 0;
   cond_pushed_into_where= cond_pushed_into_having= 0;
   attach_to_conds.empty();
@@ -3071,23 +3075,9 @@ void st_select_lex_node::include_down(st_select_lex_node *upper)
 }
 
 
-void st_select_lex_node::add_slave(st_select_lex_node *slave_arg)
+void st_select_lex_node::attach_single(st_select_lex_node *slave_arg)
 {
-  for (; slave; slave= slave->next)
-    if (slave == slave_arg)
-      return;
-
-  if (slave)
-  {
-    st_select_lex_node *slave_arg_slave= slave_arg->slave;
-    /* Insert in the front of list of slaves if any. */
-    slave_arg->include_neighbour(slave);
-    /* include_neighbour() sets slave_arg->slave=0, restore it. */
-    slave_arg->slave= slave_arg_slave;
-    /* Count on include_neighbour() setting the master. */
-    DBUG_ASSERT(slave_arg->master == this);
-  }
-  else
+  DBUG_ASSERT(slave == 0);
   {
     slave= slave_arg;
     slave_arg->master= this;
@@ -9635,7 +9625,8 @@ Item *LEX::create_item_qualified_asterisk(THD *thd,
                                              null_clex_str, *name,
                                              star_clex_str)))
     return NULL;
-  current_select->with_wild++;
+  current_select->parsing_place == IN_RETURNING ?
+              thd->lex->returning()->with_wild++ : current_select->with_wild++;
   return item;
 }
 
@@ -9650,7 +9641,8 @@ Item *LEX::create_item_qualified_asterisk(THD *thd,
   if (!(item= new (thd->mem_root) Item_field(thd, current_context(),
                                              schema, *b, star_clex_str)))
    return NULL;
-  current_select->with_wild++;
+  current_select->parsing_place == IN_RETURNING ?
+            thd->lex->returning()->with_wild++ : current_select->with_wild++;
   return item;
 }
 
@@ -10858,9 +10850,8 @@ st_select_lex::build_pushable_cond_for_having_pushdown(THD *thd, Item *cond)
   */
   if (cond->get_extraction_flag() == MARKER_FULL_EXTRACTION)
   {
-    Item *result= cond->transform(thd,
-                                  &Item::multiple_equality_transformer,
-                                  (uchar *)this);
+    Item *result= cond->top_level_transform(thd,
+                        &Item::multiple_equality_transformer, (uchar *)this);
     if (!result)
       return true;
     if (result->type() == Item::COND_ITEM &&

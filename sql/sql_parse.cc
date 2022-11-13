@@ -7044,13 +7044,13 @@ static bool check_show_access(THD *thd, TABLE_LIST *table)
   @brief Check if the requested privileges exists in either User-, Host- or
     Db-tables.
   @param thd          Thread context
-  @param want_access  Privileges requested
+  @param requirements Privileges requested
   @param tables       List of tables to be compared against
-  @param no_errors    Don't report error to the client (using my_error() call).
   @param any_combination_of_privileges_will_do TRUE if any privileges on any
     column combination is enough.
   @param number       Only the first 'number' tables in the linked list are
                       relevant.
+  @param no_errors    Don't report error to the client (using my_error() call).
 
   The suppled table list contains cached privileges. This functions calls the
   help functions check_access and check_grant to verify the first three steps
@@ -7077,7 +7077,7 @@ static bool check_show_access(THD *thd, TABLE_LIST *table)
 
 bool
 check_table_access(THD *thd, privilege_t requirements, TABLE_LIST *tables,
-		   bool any_combination_of_privileges_will_do,
+                   bool any_combination_of_privileges_will_do,
                    uint number, bool no_errors)
 {
   TABLE_LIST *org_tables= tables;
@@ -7308,7 +7308,6 @@ bool check_fk_parent_table_access(THD *thd,
     if (key->type == Key::FOREIGN_KEY)
     {
       TABLE_LIST parent_table;
-      bool is_qualified_table_name;
       Foreign_key *fk_key= (Foreign_key *)key;
       LEX_CSTRING db_name;
       LEX_CSTRING table_name= { fk_key->ref_table.str,
@@ -7325,7 +7324,6 @@ bool check_fk_parent_table_access(THD *thd,
 
       if (fk_key->ref_db.str)
       {
-        is_qualified_table_name= true;
         if (!(db_name.str= (char *) thd->memdup(fk_key->ref_db.str,
                                                 fk_key->ref_db.length+1)))
           return true;
@@ -7347,7 +7345,6 @@ bool check_fk_parent_table_access(THD *thd,
           if (!(db_name.str= (char *) thd->memdup(create_db,
                                                   db_name.length+1)))
             return true;
-          is_qualified_table_name= true;
 
           if (check_db_name((LEX_STRING*) &db_name))
           {
@@ -7359,8 +7356,6 @@ bool check_fk_parent_table_access(THD *thd,
         {
           if (thd->lex->copy_db_to(&db_name))
             return true;
-          else
-           is_qualified_table_name= false;
         }
       }
 
@@ -7386,22 +7381,11 @@ bool check_fk_parent_table_access(THD *thd,
       if (check_some_access(thd, privileges, &parent_table) ||
           parent_table.grant.want_privilege)
       {
-        if (is_qualified_table_name)
-        {
-          const size_t qualified_table_name_len= NAME_LEN + 1 + NAME_LEN + 1;
-          char *qualified_table_name= (char *) thd->alloc(qualified_table_name_len);
-
-          my_snprintf(qualified_table_name, qualified_table_name_len, "%s.%s",
-                      db_name.str, table_name.str);
-          table_name.str= qualified_table_name;
-        }
-
         my_error(ER_TABLEACCESS_DENIED_ERROR, MYF(0),
-                 "REFERENCES",
-                 thd->security_ctx->priv_user,
-                 thd->security_ctx->host_or_ip,
-                 table_name.str);
-
+                "REFERENCES",
+                thd->security_ctx->priv_user,
+                thd->security_ctx->host_or_ip,
+                db_name.str, table_name.str);
         return true;
       }
     }
@@ -7881,6 +7865,7 @@ static bool wsrep_mysql_parse(THD *thd, char *rawbuf, uint length,
           thd->lex->sql_command != SQLCOM_SELECT  &&
           thd->wsrep_retry_counter < thd->variables.wsrep_retry_autocommit)
       {
+#ifdef ENABLED_DEBUG_SYNC
 	DBUG_EXECUTE_IF("sync.wsrep_retry_autocommit",
                     {
                       const char act[]=
@@ -7889,6 +7874,7 @@ static bool wsrep_mysql_parse(THD *thd, char *rawbuf, uint length,
                         "WAIT_FOR wsrep_retry_autocommit_continue";
                       DBUG_ASSERT(!debug_sync_set_action(thd, STRING_WITH_LEN(act)));
                     });
+#endif
         WSREP_DEBUG("wsrep retrying AC query: %lu  %s",
                     thd->wsrep_retry_counter, wsrep_thd_query(thd));
         wsrep_prepare_for_autocommit_retry(thd, rawbuf, length, parser_state);
@@ -9038,7 +9024,6 @@ push_new_name_resolution_context(THD *thd,
   Name_resolution_context *on_context;
   if (!(on_context= new (thd->mem_root) Name_resolution_context))
     return TRUE;
-  on_context->init();
   on_context->first_name_resolution_table=
     left_op->first_leaf_for_name_resolution();
   on_context->last_name_resolution_table=
@@ -9208,7 +9193,7 @@ kill_one_thread(THD *thd, longlong id, killed_state kill_signal, killed_type typ
   tmp= find_thread_by_id(id, type == KILL_TYPE_QUERY);
   if (!tmp)
     DBUG_RETURN(error);
-
+  DEBUG_SYNC(thd, "found_killee");
   if (tmp->get_command() != COM_DAEMON)
   {
     /*
@@ -9913,7 +9898,7 @@ bool create_table_precheck(THD *thd, TABLE_LIST *tables,
 {
   LEX *lex= thd->lex;
   SELECT_LEX *select_lex= lex->first_select_lex();
-  privilege_t want_priv(NO_ACL);
+  privilege_t want_priv{CREATE_ACL};
   bool error= TRUE;                                 // Error message is given
   DBUG_ENTER("create_table_precheck");
 
@@ -9922,8 +9907,10 @@ bool create_table_precheck(THD *thd, TABLE_LIST *tables,
     CREATE TABLE ... SELECT, also require INSERT.
   */
 
-  want_priv= lex->tmp_table() ? CREATE_TMP_ACL :
-             (CREATE_ACL | (select_lex->item_list.elements ? INSERT_ACL : NO_ACL));
+  if (lex->tmp_table())
+    want_priv= CREATE_TMP_ACL;
+  else if (select_lex->item_list.elements || select_lex->tvc)
+    want_priv|= INSERT_ACL;
 
   /* CREATE OR REPLACE on not temporary tables require DROP_ACL */
   if (lex->create_info.or_replace() && !lex->tmp_table())

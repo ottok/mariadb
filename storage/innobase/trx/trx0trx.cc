@@ -399,7 +399,8 @@ void trx_t::free()
     autoinc_locks= NULL;
   }
 
-  MEM_NOACCESS(&n_ref, sizeof n_ref);
+  MEM_NOACCESS(&skip_lock_inheritance_and_n_ref,
+               sizeof skip_lock_inheritance_and_n_ref);
   /* do not poison mutex */
   MEM_NOACCESS(&id, sizeof id);
   MEM_NOACCESS(&state, sizeof state);
@@ -485,6 +486,7 @@ TRANSACTIONAL_INLINE inline void trx_t::commit_state()
 /** Release any explicit locks of a committing transaction. */
 inline void trx_t::release_locks()
 {
+  DEBUG_SYNC_C("trx_t_release_locks_enter");
   DBUG_ASSERT(state == TRX_STATE_COMMITTED_IN_MEMORY);
   DBUG_ASSERT(!is_referenced());
 
@@ -498,6 +500,7 @@ inline void trx_t::release_locks()
   }
 
   lock.table_locks.clear();
+  reset_skip_lock_inheritance();
   id= 0;
   while (dict_table_t *table= UT_LIST_GET_FIRST(lock.evicted_tables))
   {
@@ -548,8 +551,10 @@ void trx_disconnect_prepared(trx_t *trx)
   ut_ad(trx->mysql_thd);
   ut_ad(!trx->mysql_log_file_name);
   trx->read_view.close();
+  trx_sys.trx_list.freeze();
   trx->is_recovered= true;
   trx->mysql_thd= NULL;
+  trx_sys.trx_list.unfreeze();
   /* todo/fixme: suggest to do it at innodb prepare */
   trx->will_lock= false;
   trx_sys.rw_trx_hash.put_pins(trx);
@@ -783,7 +788,7 @@ corrupted:
 		ib::info() << "Trx id counter is " << trx_sys.get_max_trx_id();
 	}
 
-	purge_sys.clone_oldest_view();
+	purge_sys.clone_oldest_view<true>();
 	return DB_SUCCESS;
 }
 
@@ -1129,8 +1134,8 @@ trx_finalize_for_fts(
 	trx->fts_trx = NULL;
 }
 
-
-extern "C" void thd_decrement_pending_ops(MYSQL_THD);
+extern "C" MYSQL_THD thd_increment_pending_ops(MYSQL_THD);
+extern "C" void  thd_decrement_pending_ops(MYSQL_THD);
 
 
 #include "../log/log0sync.h"
@@ -1163,7 +1168,7 @@ sync:
   }
 
   completion_callback cb;
-  if ((cb.m_param = innodb_thd_increment_pending_ops(trx->mysql_thd)))
+  if ((cb.m_param = thd_increment_pending_ops(trx->mysql_thd)))
   {
     cb.m_callback = (void (*)(void *)) thd_decrement_pending_ops;
     log_write_up_to(lsn, flush, false, &cb);
@@ -1379,9 +1384,8 @@ TRANSACTIONAL_INLINE inline void trx_t::commit_in_memory(const mtr_t *mtr)
     wsrep= false;
     wsrep_commit_ordered(mysql_thd);
   }
-  ut_ad(!(lock.was_chosen_as_deadlock_victim & byte(~2U)));
-  lock.was_chosen_as_deadlock_victim= false;
 #endif /* WITH_WSREP */
+  lock.was_chosen_as_deadlock_victim= false;
 }
 
 void trx_t::commit_cleanup()
@@ -1430,7 +1434,8 @@ TRANSACTIONAL_TARGET void trx_t::commit_low(mtr_t *mtr)
 
   if (mtr)
   {
-    apply_log();
+    if (UNIV_UNLIKELY(apply_online_log))
+      apply_log();
     trx_write_serialisation_history(this, mtr);
 
     /* The following call commits the mini-transaction, making the
@@ -2166,6 +2171,7 @@ trx_set_rw_mode(
 	ut_ad(trx->rsegs.m_redo.rseg != 0);
 
 	trx_sys.register_rw(trx);
+	ut_ad(trx->id);
 
 	/* So that we can see our own changes. */
 	if (trx->read_view.is_open()) {

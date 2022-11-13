@@ -108,7 +108,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 (PARTITION `p0` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
@@ -132,7 +132,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 (PARTITION `custom_name` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
@@ -249,7 +249,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 2
 PARTITIONS 3
 alter table t1 drop partition non_existent;
@@ -428,7 +428,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'2000-01-01 00:00:00'
 PARTITIONS 2
 # Test STARTS warning
@@ -439,7 +439,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'2000-01-01 00:00:00'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -454,7 +454,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 SECOND STARTS TIMESTAMP'1999-12-15 13:33:33'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -463,7 +463,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 MINUTE STARTS TIMESTAMP'1999-12-15 13:33:00'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -472,7 +472,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 HOUR STARTS TIMESTAMP'1999-12-15 13:00:00'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -481,7 +481,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'1999-12-15 00:00:00'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -490,7 +490,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 MONTH STARTS TIMESTAMP'1999-12-15 00:00:00'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -499,7 +499,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 YEAR STARTS TIMESTAMP'1999-12-15 00:00:00'
 PARTITIONS 2
 # seconds equivalent of 1 day does not round:
@@ -509,7 +509,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 86400 SECOND STARTS TIMESTAMP'1999-12-15 13:33:33'
 PARTITIONS 2
 # STARTS value is in local time_zone:
@@ -525,14 +525,14 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'2000-01-01 00:00:00'
 PARTITIONS 2
 show create table t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'2000-01-01 00:00:00'
 PARTITIONS 2
 set time_zone="+00:00";
@@ -540,14 +540,14 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'1999-12-31 21:00:00'
 PARTITIONS 2
 show create table t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'1999-12-31 21:00:00'
 PARTITIONS 2
 # Test rotation
@@ -918,7 +918,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `pk` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 7 SECOND STARTS TIMESTAMP'2018-04-11 17:00:04'
 (PARTITION `ver_p1` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `ver_pn` CURRENT ENGINE = DEFAULT_ENGINE)
@@ -970,7 +970,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 PARTITIONS 2
 # 2 partitions are created: p0 and pn
@@ -983,7 +983,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 10
 PARTITIONS 4
 # 4 partitions are created: p0, p1, p2 and pn
@@ -1537,6 +1537,108 @@ create trigger tr before insert on t for each row update tcount set c = c + 1;
 insert into t select * from t;
 drop table tcount, t;
 #
+# MDEV-19569 Assertion `table_list->table' failed in find_field_in_table_ref and Assertion `table_ref->table || table_ref->view' in Field_iterator_table_ref::set_field_iterator
+#
+set timestamp=unix_timestamp('2000-01-01 00:00:00');
+create table t1 (i int);
+create table t2 (i int);
+alter table t1 partition by system_time 
+interval (select i from t2) day (partition p1 history, partition pn current);
+ERROR 42000: INTERVAL does not support subqueries or stored functions
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time 
+interval (select i from t2) day (partition p1 history, partition pn current);
+ERROR 42000: INTERVAL does not support subqueries or stored functions
+create table t1 (id int) with system versioning
+partition by system_time
+interval "hello" day (partition p1 history, partition pn current);
+ERROR HY000: Wrong parameters for partitioned `t1`: wrong value for 'INTERVAL'
+create table t1 (id int) with system versioning
+partition by system_time
+interval 3.893 day (partition p1 history, partition pn current);
+drop table t1, t2;
+create table t1 (id int) with system versioning
+partition by system_time interval "3-11" year_month (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '3-11' YEAR_MONTH STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "3 11" day_hour (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '3 11' DAY_HOUR STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "3 11:12" day_minute (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '3 11:12' DAY_MINUTE STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "3 11:12:13" day_second (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '3 11:12:13' DAY_SECOND STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "11:12" hour_minute (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '11:12' HOUR_MINUTE STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "11:12:13" hour_second (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '11:12:13' HOUR_SECOND STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "12:13" minute_second (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '12:13' MINUTE_SECOND STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "12:13.123" minute_microsecond (partition p1 history, partition pn current);
+ERROR HY000: Wrong parameters for partitioned `t1`: wrong value for 'INTERVAL'
+#
 # End of 10.3 tests
 #
 #
@@ -1585,7 +1687,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 PARTITIONS 3
 alter table t1 add partition partitions 2;
@@ -1595,7 +1697,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 PARTITIONS 5
 alter table t1 add partition partitions 3;
@@ -1605,7 +1707,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 PARTITIONS 8
 drop tables t1;
@@ -1619,7 +1721,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 1
 (PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p3` HISTORY ENGINE = DEFAULT_ENGINE,
@@ -1629,7 +1731,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 1
 (PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p3` HISTORY ENGINE = DEFAULT_ENGINE,
@@ -1648,7 +1750,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 1
 (PARTITION `p2` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p8` HISTORY ENGINE = DEFAULT_ENGINE,
@@ -1661,7 +1763,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 1
 (PARTITION `p2` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p8` HISTORY ENGINE = DEFAULT_ENGINE,

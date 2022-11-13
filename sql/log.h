@@ -18,7 +18,6 @@
 #define LOG_H
 
 #include "handler.h"                            /* my_xid */
-#include "wsrep_mysqld.h"
 #include "rpl_constants.h"
 
 class Relay_log_info;
@@ -736,7 +735,7 @@ public:
   }
   void harvest_bytes_written(Atomic_counter<uint64> *counter)
   {
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     char buf1[22],buf2[22];
 #endif
     DBUG_ENTER("harvest_bytes_written");

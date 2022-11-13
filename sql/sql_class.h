@@ -66,7 +66,8 @@ void set_thd_stage_info(void *thd,
 #include "my_apc.h"
 #include "rpl_gtid.h"
 
-#include "wsrep_mysqld.h"
+#include "wsrep.h"
+#include "wsrep_on.h"
 #ifdef WITH_WSREP
 #include <inttypes.h>
 /* wsrep-lib */
@@ -76,6 +77,11 @@ void set_thd_stage_info(void *thd,
 #include "wsrep_condition_variable.h"
 
 class Wsrep_applier_service;
+enum wsrep_consistency_check_mode {
+    NO_CONSISTENCY_CHECK,
+    CONSISTENCY_CHECK_DECLARED,
+    CONSISTENCY_CHECK_RUNNING,
+};
 #endif /* WITH_WSREP */
 
 class Reprepare_observer;
@@ -114,8 +120,8 @@ enum enum_slave_type_conversions { SLAVE_TYPE_CONVERSIONS_ALL_LOSSY,
                                    SLAVE_TYPE_CONVERSIONS_ALL_NON_LOSSY};
 
 /*
-  MARK_COLUMNS_READ:  A column is goind to be read.
-  MARK_COLUMNS_WRITE: A column is going to be written to.
+  COLUMNS_READ:       A column is goind to be read.
+  COLUMNS_WRITE:      A column is going to be written to.
   MARK_COLUMNS_READ:  A column is goind to be read.
                       A bit in read set is set to inform handler that the field
                       is to be read. If field list contains duplicates, then
@@ -1328,6 +1334,7 @@ public:
 
   LEX_CSTRING name; /* name for named prepared statements */
   LEX *lex;                                     // parse tree descriptor
+  my_hrtime_t hr_prepare_time; // time of preparation in microseconds
   /*
     Points to the query associated with this statement. It's const, but
     we need to declare it char * because all table handlers are written
@@ -2052,6 +2059,21 @@ public:
 };
 
 
+struct Suppress_warnings_error_handler : public Internal_error_handler
+{
+  bool handle_condition(THD *thd,
+                        uint sql_errno,
+                        const char *sqlstate,
+                        Sql_condition::enum_warning_level *level,
+                        const char *msg,
+                        Sql_condition **cond_hdl)
+  {
+    return *level == Sql_condition::WARN_LEVEL_WARN;
+  }
+};
+
+
+
 /**
   Tables that were locked with LOCK TABLES statement.
 
@@ -2563,9 +2585,6 @@ struct thd_async_state
     mysql_mutex_unlock(&m_mtx);
   }
 };
-
-extern "C" void thd_increment_pending_ops(MYSQL_THD);
-extern "C" void thd_decrement_pending_ops(MYSQL_THD);
 
 
 /**
@@ -3610,6 +3629,8 @@ public:
   /*
     In case of a slave, set to the error code the master got when executing
     the query. 0 if no error on the master.
+    The stored into variable master error code may get reset inside
+    execution stack when the event turns out to be ignored.
   */
   int	     slave_expected_error;
   enum_sql_command last_sql_command;  // Last sql_command exceuted in mysql_execute_command()
@@ -6104,7 +6125,7 @@ class select_insert :public select_result_interceptor {
   int prepare(List<Item> &list, SELECT_LEX_UNIT *u);
   virtual int prepare2(JOIN *join);
   virtual int send_data(List<Item> &items);
-  virtual void store_values(List<Item> &values);
+  virtual bool store_values(List<Item> &values, bool ignore_errors);
   virtual bool can_rollback_data() { return 0; }
   bool prepare_eof();
   bool send_ok_packet();
@@ -6149,7 +6170,8 @@ public:
     }
   int prepare(List<Item> &list, SELECT_LEX_UNIT *u);
 
-  void store_values(List<Item> &values);
+  int binlog_show_create_table(TABLE **tables, uint count);
+  bool store_values(List<Item> &values, bool ignore_errors);
   bool send_eof();
   virtual void abort_result_set();
   virtual bool can_rollback_data() { return 1; }
@@ -6721,6 +6743,7 @@ class select_max_min_finder_subselect :public select_subselect
   bool (select_max_min_finder_subselect::*op)();
   bool fmax;
   bool is_all;
+  void set_op(const Type_handler *ha);
 public:
   select_max_min_finder_subselect(THD *thd_arg, Item_subselect *item_arg,
                                   bool mx, bool all):
@@ -6733,6 +6756,7 @@ public:
   bool cmp_decimal();
   bool cmp_str();
   bool cmp_time();
+  bool cmp_native();
 };
 
 /* EXISTS subselect interface class */
@@ -7322,7 +7346,12 @@ public:
 
 inline bool add_item_to_list(THD *thd, Item *item)
 {
-  bool res= thd->lex->current_select->add_item_to_list(thd, item);
+  bool res;
+  LEX *lex= thd->lex;
+  if (lex->current_select->parsing_place == IN_RETURNING)
+    res= lex->returning()->add_item_to_list(thd, item);
+  else
+    res= lex->current_select->add_item_to_list(thd, item);
   return res;
 }
 

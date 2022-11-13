@@ -1995,29 +1995,62 @@ static int binlog_prepare(handlerton *hton, THD *thd, bool all)
 
 int binlog_commit_by_xid(handlerton *hton, XID *xid)
 {
+  int rc= 0;
   THD *thd= current_thd;
 
   if (thd->is_current_stmt_binlog_disabled())
     return 0;
+
+  /* the asserted state can't be reachable with xa commit */
+  DBUG_ASSERT(!thd->get_stmt_da()->is_error() ||
+              thd->get_stmt_da()->sql_errno() != ER_XA_RBROLLBACK);
+  /*
+    This is a recovered user xa transaction commit.
+    Create a "temporary" binlog transaction to write the commit record
+    into binlog.
+  */
+  THD_TRANS trans;
+  trans.ha_list= NULL;
+
+  thd->ha_data[hton->slot].ha_info[1].register_ha(&trans, hton);
+  thd->ha_data[binlog_hton->slot].ha_info[1].set_trx_read_write();
   (void) thd->binlog_setup_trx_data();
 
   DBUG_ASSERT(thd->lex->sql_command == SQLCOM_XA_COMMIT);
 
-  return binlog_commit(thd, TRUE, FALSE);
+  rc= binlog_commit(thd, TRUE, FALSE);
+  thd->ha_data[binlog_hton->slot].ha_info[1].reset();
+
+  return rc;
 }
 
 
 int binlog_rollback_by_xid(handlerton *hton, XID *xid)
 {
+  int rc= 0;
   THD *thd= current_thd;
 
   if (thd->is_current_stmt_binlog_disabled())
     return 0;
+
+  if (thd->get_stmt_da()->is_error() &&
+      thd->get_stmt_da()->sql_errno() == ER_XA_RBROLLBACK)
+    return rc;
+
+  THD_TRANS trans;
+  trans.ha_list= NULL;
+
+  thd->ha_data[hton->slot].ha_info[1].register_ha(&trans, hton);
+  thd->ha_data[hton->slot].ha_info[1].set_trx_read_write();
   (void) thd->binlog_setup_trx_data();
 
   DBUG_ASSERT(thd->lex->sql_command == SQLCOM_XA_ROLLBACK ||
               (thd->transaction->xid_state.get_state_code() == XA_ROLLBACK_ONLY));
-  return binlog_rollback(hton, thd, TRUE);
+
+  rc= binlog_rollback(hton, thd, TRUE);
+  thd->ha_data[hton->slot].ha_info[1].reset();
+
+  return rc;
 }
 
 
@@ -2151,10 +2184,16 @@ int binlog_commit(THD *thd, bool all, bool ro_1pc)
   }
 
   if (cache_mngr->trx_cache.empty() &&
-      thd->transaction->xid_state.get_state_code() != XA_PREPARED)
+      (thd->transaction->xid_state.get_state_code() != XA_PREPARED ||
+       !(thd->ha_data[binlog_hton->slot].ha_info[1].is_started() &&
+         thd->ha_data[binlog_hton->slot].ha_info[1].is_trx_read_write())))
   {
     /*
-      we're here because cache_log was flushed in MYSQL_BIN_LOG::log_xid()
+      This is an empty transaction commit (both the regular and xa),
+      or such transaction xa-prepare or
+      either one's statement having no effect on the transactional cache
+      as any prior to it.
+      The empty xa-prepare sinks in only when binlog is read-only.
     */
     cache_mngr->reset(false, true);
     THD_STAGE_INFO(thd, org_stage);
@@ -2239,10 +2278,12 @@ static int binlog_rollback(handlerton *hton, THD *thd, bool all)
   }
 
   if (!cache_mngr->trx_cache.has_incident() && cache_mngr->trx_cache.empty() &&
-      thd->transaction->xid_state.get_state_code() != XA_PREPARED)
+      (thd->transaction->xid_state.get_state_code() != XA_PREPARED ||
+       !(thd->ha_data[binlog_hton->slot].ha_info[1].is_started() &&
+         thd->ha_data[binlog_hton->slot].ha_info[1].is_trx_read_write())))
   {
     /*
-      we're here because cache_log was flushed in MYSQL_BIN_LOG::log_xid()
+      The same comments apply as in the binlog commit method's branch.
     */
     cache_mngr->reset(false, true);
     thd->reset_binlog_for_next_statement();
@@ -3406,6 +3447,7 @@ void MYSQL_BIN_LOG::stop_background_thread()
                       &LOCK_binlog_background_thread);
     mysql_mutex_unlock(&LOCK_binlog_background_thread);
     binlog_background_thread_started= false;
+    binlog_background_thread_stop= true; // mark it's not going to restart
   }
 }
 
@@ -3604,7 +3646,8 @@ bool MYSQL_BIN_LOG::open(const char *log_name,
         DBUG_RETURN(1);
     }
 
-    if (!binlog_background_thread_started &&
+    if ((!binlog_background_thread_started &&
+         !binlog_background_thread_stop) &&
         start_binlog_background_thread())
       DBUG_RETURN(1);
   }
@@ -8215,10 +8258,12 @@ MYSQL_BIN_LOG::trx_group_commit_leader(group_commit_entry *leader)
   DBUG_ENTER("MYSQL_BIN_LOG::trx_group_commit_leader");
 
   {
+#ifdef ENABLED_DEBUG_SYNC
     DBUG_EXECUTE_IF("inject_binlog_commit_before_get_LOCK_log",
       DBUG_ASSERT(!debug_sync_set_action(leader->thd, STRING_WITH_LEN
         ("commit_before_get_LOCK_log SIGNAL waiting WAIT_FOR cont TIMEOUT 1")));
     );
+#endif
     /*
       Lock the LOCK_log(), and once we get it, collect any additional writes
       that queued up while we were waiting.
@@ -8508,7 +8553,11 @@ MYSQL_BIN_LOG::trx_group_commit_leader(group_commit_entry *leader)
     ++num_commits;
     if (current->cache_mngr->using_xa && likely(!current->error) &&
         DBUG_EVALUATE_IF("skip_commit_ordered", 0, 1))
+    {
+      mysql_mutex_lock(&current->thd->LOCK_thd_data);
       run_commit_ordered(current->thd, current->all);
+      mysql_mutex_unlock(&current->thd->LOCK_thd_data);
+    }
     current->thd->wakeup_subsequent_commits(current->error);
 
     /*
@@ -10436,6 +10485,7 @@ int TC_LOG_BINLOG::unlog_xa_prepare(THD *thd, bool all)
       /* an empty XA-prepare event group is logged */
       rc= write_empty_xa_prepare(thd, cache_mngr); // normally gains need_unlog
       trans_register_ha(thd, true, binlog_hton, 0); // do it for future commmit
+      thd->ha_data[binlog_hton->slot].ha_info[1].set_trx_read_write();
     }
     if (rw_count == 0 || !cache_mngr->need_unlog)
       return rc;
@@ -10497,6 +10547,7 @@ binlog_background_thread(void *arg __attribute__((unused)))
   thd->store_globals();
   thd->security_ctx->skip_grants();
   thd->set_command(COM_DAEMON);
+  THD_count::count--;
 
   /*
     Load the slave replication GTID state from the mysql.gtid_slave_pos
@@ -10550,6 +10601,7 @@ binlog_background_thread(void *arg __attribute__((unused)))
     mysql_mutex_unlock(&mysql_bin_log.LOCK_binlog_background_thread);
 
     /* Process any incoming commit_checkpoint_notify() calls. */
+#ifdef ENABLED_DEBUG_SYNC
     DBUG_EXECUTE_IF("inject_binlog_background_thread_before_mark_xid_done",
       DBUG_ASSERT(!debug_sync_set_action(
         thd,
@@ -10558,6 +10610,7 @@ binlog_background_thread(void *arg __attribute__((unused)))
                         "WAIT_FOR something_that_will_never_happen "
                         "TIMEOUT 2")));
       );
+#endif
     while (queue)
     {
       long count= queue->notify_count;
@@ -10572,11 +10625,13 @@ binlog_background_thread(void *arg __attribute__((unused)))
         mysql_bin_log.mark_xid_done(queue->binlog_id, true);
       queue= next;
 
+#ifdef ENABLED_DEBUG_SYNC
       DBUG_EXECUTE_IF("binlog_background_checkpoint_processed",
         DBUG_ASSERT(!debug_sync_set_action(
           thd,
           STRING_WITH_LEN("now SIGNAL binlog_background_checkpoint_processed")));
         );
+#endif
     }
 
     if (stop)
@@ -10586,6 +10641,7 @@ binlog_background_thread(void *arg __attribute__((unused)))
   THD_STAGE_INFO(thd, stage_binlog_stopping_background_thread);
 
   /* No need to use mutex as thd is not linked into other threads */
+  THD_count::count++;
   delete thd;
 
   my_thread_end();

@@ -5662,7 +5662,7 @@ inline bool Row_definition_list::eq_name(const Spvar_definition *def,
 class Create_field :public Column_definition
 {
 public:
-  LEX_CSTRING change;			// If done with alter table
+  LEX_CSTRING change;			// Old column name if column is renamed by ALTER
   LEX_CSTRING after;			// Put column after this one
   Field *field;				// For alter table
   const TYPELIB *save_interval;         // Temporary copy for the above
@@ -5691,6 +5691,12 @@ public:
   }
   /* Used to make a clone of this object for ALTER/CREATE TABLE */
   Create_field *clone(MEM_ROOT *mem_root) const;
+  static void upgrade_data_types(List<Create_field> &list)
+  {
+    List_iterator<Create_field> it(list);
+    while (Create_field *f= it++)
+      f->type_handler()->Column_definition_implicit_upgrade(f);
+  }
 };
 
 

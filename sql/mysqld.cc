@@ -78,6 +78,7 @@
 #ifdef WITH_WSREP
 #include "wsrep_thd.h"
 #include "wsrep_sst.h"
+#include "wsrep_server_state.h"
 #endif /* WITH_WSREP */
 #include "proxy_protocol.h"
 
@@ -1538,6 +1539,10 @@ static my_bool kill_thread_phase_1(THD *thd, int *n_threads_awaiting_ack)
 
   if (DBUG_EVALUATE_IF("only_kill_system_threads", !thd->system_thread, 0))
     return 0;
+  if (DBUG_EVALUATE_IF("only_kill_system_threads_no_loop",
+                       !thd->system_thread, 0))
+    return 0;
+
   thd->awake(KILL_SERVER_HARD);
   return 0;
 }
@@ -1672,6 +1677,7 @@ void kill_mysql(THD *thd)
   shutdown_thread_id= thd->thread_id;
   DBUG_EXECUTE_IF("mysql_admin_shutdown_wait_for_slaves",
                   thd->lex->is_shutdown_wait_for_slaves= true;);
+#ifdef ENABLED_DEBUG_SYNC
   DBUG_EXECUTE_IF("simulate_delay_at_shutdown",
                   {
                     DBUG_ASSERT(binlog_dump_thread_count == 3);
@@ -1681,6 +1687,7 @@ void kill_mysql(THD *thd)
                     DBUG_ASSERT(!debug_sync_set_action(thd,
                                                        STRING_WITH_LEN(act)));
                   };);
+#endif
 
   if (thd->lex->is_shutdown_wait_for_slaves)
     shutdown_wait_for_slaves= true;
@@ -1747,7 +1754,6 @@ static void close_connections(void)
 
   Events::deinit();
   slave_prepare_for_shutdown();
-  mysql_bin_log.stop_background_thread();
   ack_receiver.stop();
 
   /*
@@ -1768,7 +1774,8 @@ static void close_connections(void)
 
   for (int i= 0; (THD_count::value() - binlog_dump_thread_count -
                   n_threads_awaiting_ack) &&
-                 i < 1000;
+                 i < 1000 &&
+                 DBUG_EVALUATE_IF("only_kill_system_threads_no_loop", 0, 1);
        i++)
     my_sleep(20000);
 
@@ -1787,9 +1794,12 @@ static void close_connections(void)
                       THD_count::value() - binlog_dump_thread_count -
                           n_threads_awaiting_ack));
 
-  while (THD_count::value() - binlog_dump_thread_count -
-         n_threads_awaiting_ack)
+  while ((THD_count::value() - binlog_dump_thread_count -
+          n_threads_awaiting_ack) &&
+         DBUG_EVALUATE_IF("only_kill_system_threads_no_loop", 0, 1))
+  {
     my_sleep(1000);
+  }
 
   /* Kill phase 2 */
   server_threads.iterate(kill_thread_phase_2);
@@ -3858,14 +3868,24 @@ static int init_common_variables()
   if (ignore_db_dirs_init())
     exit(1);
 
-#ifdef _WIN32
-  get_win_tzname(system_time_zone, sizeof(system_time_zone));
-#elif defined(HAVE_TZNAME)
   struct tm tm_tmp;
-  localtime_r(&server_start_time,&tm_tmp);
-  const char *tz_name=  tzname[tm_tmp.tm_isdst != 0 ? 1 : 0];
-  strmake_buf(system_time_zone, tz_name);
-#endif /* HAVE_TZNAME */
+  localtime_r(&server_start_time, &tm_tmp);
+
+#ifdef HAVE_TZNAME
+#ifdef _WIN32
+  /*
+   If env.variable TZ is set, derive timezone name from it.
+   Otherwise, use IANA tz name from get_win_tzname.
+  */
+  if (!getenv("TZ"))
+    get_win_tzname(system_time_zone, sizeof(system_time_zone));
+  else
+#endif
+  {
+    const char *tz_name= tzname[tm_tmp.tm_isdst != 0 ? 1 : 0];
+    strmake_buf(system_time_zone, tz_name);
+  }
+#endif
 
   /*
     We set SYSTEM time zone as reasonable default and
@@ -4593,10 +4613,9 @@ static void init_ssl()
     DBUG_PRINT("info",("ssl_acceptor_fd: %p", ssl_acceptor_fd));
     if (!ssl_acceptor_fd)
     {
-      sql_print_warning("Failed to setup SSL");
-      sql_print_warning("SSL error: %s", sslGetErrString(error));
-      opt_use_ssl = 0;
-      have_ssl= SHOW_OPTION_DISABLED;
+      sql_print_error("Failed to setup SSL");
+      sql_print_error("SSL error: %s", sslGetErrString(error));
+      unireg_abort(1);
     }
     else
       ssl_acceptor_stats.init();
@@ -6206,7 +6225,7 @@ void handle_connections_sockets()
     }
 #endif // HAVE_POLL
 
-    for (uint retry=0; retry < MAX_ACCEPT_RETRY; retry++)
+    for (uint retry=0; retry < MAX_ACCEPT_RETRY && !abort_loop; retry++)
     {
       size_socket length= sizeof(struct sockaddr_storage);
       MYSQL_SOCKET new_sock;
@@ -7952,7 +7971,7 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
       global_system_variables.log_warnings= atoi(argument);
     break;
   case 'T':
-    test_flags= argument ? (uint) atoi(argument) : 0;
+    test_flags= argument ? ((uint) atoi(argument) & ~TEST_BLOCKING) : 0;
     opt_endinfo=1;
     break;
   case OPT_THREAD_CONCURRENCY:

@@ -909,15 +909,14 @@ void ha_close_connection(THD* thd)
 {
   for (auto i= 0; i < MAX_HA; i++)
   {
-    if (thd->ha_data[i].lock)
+    if (plugin_ref plugin= thd->ha_data[i].lock)
     {
-      handlerton *hton= plugin_hton(thd->ha_data[i].lock);
+      thd->ha_data[i].lock= NULL;
+      handlerton *hton= plugin_hton(plugin);
       if (hton->close_connection)
         hton->close_connection(hton, thd);
-      /* make sure SE didn't reset ha_data in close_connection() */
-      DBUG_ASSERT(thd->ha_data[i].lock);
-      /* make sure ha_data is reset and ha_data_lock is released */
       thd_set_ha_data(thd, hton, 0);
+      plugin_unlock(NULL, plugin);
     }
     DBUG_ASSERT(!thd->ha_data[i].ha_ptr);
   }
@@ -4933,32 +4932,17 @@ int handler::ha_check(THD *thd, HA_CHECK_OPT *check_opt)
   DBUG_ASSERT(table_share->tmp_table != NO_TMP_TABLE ||
               m_lock_type != F_UNLCK);
 
-  const ulong v= table->s->mysql_version;
-
-  if ((v >= MYSQL_VERSION_ID) &&
+  if ((table->s->mysql_version >= MYSQL_VERSION_ID) &&
       (check_opt->sql_flags & TT_FOR_UPGRADE))
     return 0;
 
-  if (v < MYSQL_VERSION_ID)
+  if (table->s->mysql_version < MYSQL_VERSION_ID)
   {
     if (unlikely((error= check_old_types())))
       return error;
     error= ha_check_for_upgrade(check_opt);
     if (unlikely(error && (error != HA_ADMIN_NEEDS_CHECK)))
       return error;
-    if (table->s->table_category == TABLE_CATEGORY_USER &&
-        (v < 100142 ||
-         (v >= 100200 && v < 100228) ||
-         (v >= 100300 && v < 100319) ||
-         (v >= 100400 && v < 100409)))
-    {
-      for (const KEY *key= table->key_info,
-           *end= table->key_info + table->s->keys; key < end; key++)
-      {
-        if (key->flags & HA_BINARY_PACK_KEY && key->flags & HA_VAR_LENGTH_KEY)
-          return HA_ADMIN_NEEDS_UPGRADE;
-      }
-    }
     if (unlikely(!error && (check_opt->sql_flags & TT_FOR_UPGRADE)))
       return 0;
   }

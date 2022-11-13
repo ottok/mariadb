@@ -125,7 +125,6 @@ void thd_clear_error(MYSQL_THD thd);
 TABLE *find_fk_open_table(THD *thd, const char *db, size_t db_len,
 			  const char *table, size_t table_len);
 MYSQL_THD create_background_thd();
-void destroy_background_thd(MYSQL_THD thd);
 void reset_thd(MYSQL_THD thd);
 TABLE *get_purge_table(THD *thd);
 TABLE *open_purge_table(THD *thd, const char *db, size_t dblen,
@@ -1824,29 +1823,6 @@ MYSQL_THD innobase_create_background_thd(const char* name)
 	return thd;
 }
 
-extern "C" void thd_increment_pending_ops(MYSQL_THD);
-
-THD *innodb_thd_increment_pending_ops(THD *thd)
-{
-  if (!thd || THDVAR(thd, background_thread))
-    return nullptr;
-  thd_increment_pending_ops(thd);
-  return thd;
-}
-
-/** Destroy a background purge thread THD.
-@param[in]	thd	MYSQL_THD to destroy */
-void
-innobase_destroy_background_thd(
-/*============================*/
-	MYSQL_THD thd)
-{
-	/* need to close the connection explicitly, the server won't do it
-	if innodb is in the PLUGIN_IS_DYING state */
-	innobase_close_connection(innodb_hton_ptr, thd);
-	thd_set_ha_data(thd, innodb_hton_ptr, NULL);
-	destroy_background_thd(thd);
-}
 
 /** Close opened tables, free memory, delete items for a MYSQL_THD.
 @param[in]	thd	MYSQL_THD to reset */
@@ -3677,7 +3653,7 @@ ha_innobase::init_table_handle_for_HANDLER(void)
 	innobase_register_trx(ht, m_user_thd, m_prebuilt->trx);
 
 	/* We did the necessary inits in this function, no need to repeat them
-	in row_search_for_mysql */
+	in row_search_mvcc() */
 
 	m_prebuilt->sql_stat_start = FALSE;
 
@@ -5032,6 +5008,7 @@ static int innobase_close_connection(handlerton *hton, THD *thd)
   DBUG_ASSERT(hton == innodb_hton_ptr);
   if (auto trx= thd_to_trx(thd))
   {
+    thd_set_ha_data(thd, innodb_hton_ptr, NULL);
     if (trx->state == TRX_STATE_PREPARED && trx->has_logged_persistent())
     {
       trx_disconnect_prepared(trx);
@@ -5039,6 +5016,7 @@ static int innobase_close_connection(handlerton *hton, THD *thd)
     }
     innobase_rollback_trx(trx);
     trx->free();
+    DEBUG_SYNC(thd, "innobase_connection_closed");
   }
   return 0;
 }
@@ -7424,7 +7402,7 @@ ha_innobase::build_template(
 			/* We must at least fetch all primary key cols. Note
 			that if the clustered index was internally generated
 			by InnoDB on the row id (no primary key was
-			defined), then row_search_for_mysql() will always
+			defined), then row_search_mvcc() will always
 			retrieve the row id to a special buffer in the
 			m_prebuilt struct. */
 
@@ -7438,6 +7416,11 @@ ha_innobase::build_template(
 
 	m_prebuilt->versioned_write = table->versioned_write(VERS_TRX_ID);
 	m_prebuilt->need_to_access_clustered = (index == clust_index);
+
+	if (m_prebuilt->in_fts_query) {
+		/* Do clustered index lookup to fetch the FTS_DOC_ID */
+		m_prebuilt->need_to_access_clustered = true;
+	}
 
 	/* Either m_prebuilt->index should be a secondary index, or it
 	should be the clustered index. */
@@ -8956,7 +8939,7 @@ statement issued by the user. We also increment trx->n_mysql_tables_in_use.
 instructions to m_prebuilt->template of the table handle instance in
 ::index_read. The template is used to save CPU time in large joins.
 
-  3) In row_search_for_mysql, if m_prebuilt->sql_stat_start is true, we
+  3) In row_search_mvcc(), if m_prebuilt->sql_stat_start is true, we
 allocate a new consistent read view for the trx if it does not yet have one,
 or in the case of a locking read, set an InnoDB 'intention' table level
 lock on the table.
@@ -9258,7 +9241,7 @@ ha_innobase::change_active_index(
 		}
 
 		/* The caller seems to ignore this.  Thus, we must check
-		this again in row_search_for_mysql(). */
+		this again in row_search_mvcc(). */
 		DBUG_RETURN(convert_error_code_to_mysql(DB_MISSING_HISTORY,
 				0, NULL));
 	}
@@ -9858,9 +9841,9 @@ next_record:
 
 		int	error;
 
-		switch (dberr_t ret = row_search_for_mysql(buf, PAGE_CUR_GE,
-							   m_prebuilt,
-							   ROW_SEL_EXACT, 0)) {
+		switch (dberr_t ret = row_search_mvcc(buf, PAGE_CUR_GE,
+						      m_prebuilt,
+						      ROW_SEL_EXACT, 0)) {
 		case DB_SUCCESS:
 			error = 0;
 			table->status = 0;
@@ -13497,11 +13480,12 @@ int ha_innobase::delete_table(const char *name)
 
   if (table->is_temporary())
   {
-    dict_sys.remove(table, false, true);
     dict_sys.unlock();
     parent_trx->mod_tables.erase(table); /* CREATE...SELECT error handling */
     btr_drop_temporary_table(*table);
-    dict_mem_table_free(table);
+    dict_sys.lock(SRW_LOCK_CALL);
+    dict_sys.remove(table);
+    dict_sys.unlock();
     DBUG_RETURN(0);
   }
 
@@ -14845,9 +14829,11 @@ ha_innobase::info_low(
 			stats.index_file_length
 				= ulonglong(stat_sum_of_other_index_sizes)
 				* size;
+			space->s_lock();
 			stats.delete_length = 1024
 				* fsp_get_available_space_in_free_extents(
 					*space);
+			space->s_unlock();
 		}
 		stats.check_time = 0;
 		stats.mrr_length_per_rec= (uint)ref_length +  8; // 8 = max(sizeof(void *));
@@ -15196,8 +15182,10 @@ ha_innobase::check(
 
 	DBUG_ENTER("ha_innobase::check");
 	DBUG_ASSERT(thd == ha_thd());
+	DBUG_ASSERT(thd == m_user_thd);
 	ut_a(m_prebuilt->trx->magic_n == TRX_MAGIC_N);
 	ut_a(m_prebuilt->trx == thd_to_trx(thd));
+	ut_ad(m_prebuilt->trx->mysql_thd == thd);
 
 	if (m_prebuilt->mysql_template == NULL) {
 		/* Build the template; we will use a dummy template
@@ -15207,7 +15195,6 @@ ha_innobase::check(
 	}
 
 	if (!m_prebuilt->table->space) {
-
 		ib_senderrf(
 			thd,
 			IB_LOG_LEVEL_ERROR,
@@ -15215,10 +15202,7 @@ ha_innobase::check(
 			table->s->table_name.str);
 
 		DBUG_RETURN(HA_ADMIN_CORRUPT);
-
-	} else if (!m_prebuilt->table->is_readable() &&
-		   !m_prebuilt->table->space) {
-
+	} else if (!m_prebuilt->table->is_readable()) {
 		ib_senderrf(
 			thd, IB_LOG_LEVEL_ERROR,
 			ER_TABLESPACE_MISSING,
@@ -15236,8 +15220,12 @@ ha_innobase::check(
 	of records in some index; to play safe, we normally use
 	REPEATABLE READ here */
 	m_prebuilt->trx->isolation_level = high_level_read_only
+		&& !m_prebuilt->table->is_temporary()
 		? TRX_ISO_READ_UNCOMMITTED
 		: TRX_ISO_REPEATABLE_READ;
+
+	trx_start_if_not_started(m_prebuilt->trx, false);
+	m_prebuilt->trx->read_view.open(m_prebuilt->trx);
 
 	for (dict_index_t* index
 	     = dict_table_get_first_index(m_prebuilt->table);
@@ -15247,25 +15235,22 @@ ha_innobase::check(
 		if (!index->is_committed()) {
 			continue;
 		}
+		if (index->type & DICT_FTS) {
+			/* We do not check any FULLTEXT INDEX. */
+			continue;
+		}
 
-		if (!(check_opt->flags & T_QUICK)
-		    && !index->is_corrupted()) {
-
-			dberr_t err = btr_validate_index(
-					index, m_prebuilt->trx);
-
-			if (err != DB_SUCCESS) {
-				is_ok = false;
-
-				push_warning_printf(
-					thd,
-					Sql_condition::WARN_LEVEL_WARN,
-					ER_NOT_KEYFILE,
-					"InnoDB: The B-tree of"
-					" index %s is corrupted.",
-					index->name());
-				continue;
-			}
+		if ((check_opt->flags & T_QUICK) || index->is_corrupted()) {
+		} else if (btr_validate_index(index, m_prebuilt->trx)
+			   != DB_SUCCESS) {
+			is_ok = false;
+			push_warning_printf(thd,
+					    Sql_condition::WARN_LEVEL_WARN,
+					    ER_NOT_KEYFILE,
+					    "InnoDB: The B-tree of"
+					    " index %s is corrupted.",
+					    index->name());
+			continue;
 		}
 
 		/* Instead of invoking change_active_index(), set up
@@ -15287,7 +15272,7 @@ ha_innobase::check(
 		if (UNIV_UNLIKELY(!m_prebuilt->index_usable)) {
 			if (index->is_corrupted()) {
 				push_warning_printf(
-					m_user_thd,
+					thd,
 					Sql_condition::WARN_LEVEL_WARN,
 					HA_ERR_INDEX_CORRUPT,
 					"InnoDB: Index %s is marked as"
@@ -15296,7 +15281,7 @@ ha_innobase::check(
 				is_ok = false;
 			} else {
 				push_warning_printf(
-					m_user_thd,
+					thd,
 					Sql_condition::WARN_LEVEL_WARN,
 					HA_ERR_TABLE_DEF_CHANGED,
 					"InnoDB: Insufficient history for"
@@ -15309,18 +15294,22 @@ ha_innobase::check(
 		m_prebuilt->sql_stat_start = TRUE;
 		m_prebuilt->template_type = ROW_MYSQL_DUMMY_TEMPLATE;
 		m_prebuilt->n_template = 0;
-		m_prebuilt->need_to_access_clustered = FALSE;
+		m_prebuilt->read_just_key = 0;
+		m_prebuilt->autoinc_error = DB_SUCCESS;
+		m_prebuilt->need_to_access_clustered =
+			!!(check_opt->flags & T_EXTEND);
 
 		dtuple_set_n_fields(m_prebuilt->search_tuple, 0);
 
 		m_prebuilt->select_lock_type = LOCK_NONE;
 
 		/* Scan this index. */
-		if (dict_index_is_spatial(index)) {
+		if (index->is_spatial()) {
 			ret = row_count_rtree_recs(m_prebuilt, &n_rows);
+		} else if (index->type & DICT_FTS) {
+			ret = DB_SUCCESS;
 		} else {
-			ret = row_scan_index_for_mysql(
-				m_prebuilt, index, &n_rows);
+			ret = row_check_index(m_prebuilt, &n_rows);
 		}
 
 		DBUG_EXECUTE_IF(
@@ -15329,11 +15318,18 @@ ha_innobase::check(
 				ret = DB_CORRUPTION;
 			});
 
-		if (ret == DB_INTERRUPTED || thd_killed(m_user_thd)) {
+		if (ret == DB_INTERRUPTED || thd_killed(thd)) {
 			/* Do not report error since this could happen
 			during shutdown */
 			break;
 		}
+
+		if (ret == DB_SUCCESS
+		    && m_prebuilt->autoinc_error != DB_MISSING_HISTORY) {
+			/* See if any non-fatal errors were reported. */
+			ret = m_prebuilt->autoinc_error;
+		}
+
 		if (ret != DB_SUCCESS) {
 			/* Assume some kind of corruption. */
 			push_warning_printf(
@@ -18737,7 +18733,10 @@ wsrep_abort_transaction(
 	ut_ad(bf_thd);
 	ut_ad(victim_thd);
 
+	wsrep_thd_kill_LOCK(victim_thd);
+	wsrep_thd_LOCK(victim_thd);
 	trx_t* victim_trx= thd_to_trx(victim_thd);
+	wsrep_thd_UNLOCK(victim_thd);
 
 	WSREP_DEBUG("abort transaction: BF: %s victim: %s victim conf: %s",
 			wsrep_thd_query(bf_thd),
@@ -18747,7 +18746,6 @@ wsrep_abort_transaction(
 	if (victim_trx) {
 		victim_trx->lock.set_wsrep_victim();
 
-		wsrep_thd_kill_LOCK(victim_thd);
 		wsrep_thd_LOCK(victim_thd);
 		bool aborting= !wsrep_thd_set_wsrep_aborter(bf_thd, victim_thd);
 		wsrep_thd_UNLOCK(victim_thd);
@@ -18764,8 +18762,6 @@ wsrep_abort_transaction(
 					 };);
 			wsrep_thd_bf_abort(bf_thd, victim_thd, signal);
 		}
-		wsrep_thd_kill_UNLOCK(victim_thd);
-		DBUG_VOID_RETURN;
 	} else {
 		DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort",
 				 {
@@ -18776,11 +18772,10 @@ wsrep_abort_transaction(
 				   DBUG_ASSERT(!debug_sync_set_action(bf_thd,
 								      STRING_WITH_LEN(act)));
 				 };);
-		wsrep_thd_kill_LOCK(victim_thd);
 		wsrep_thd_bf_abort(bf_thd, victim_thd, signal);
-		wsrep_thd_kill_UNLOCK(victim_thd);
 	}
 
+	wsrep_thd_kill_UNLOCK(victim_thd);
 	DBUG_VOID_RETURN;
 }
 
@@ -20179,7 +20174,7 @@ innobase_rename_vc_templ(
 		for purge thread.
 */
 
-bool innobase_allocate_row_for_vcol(THD *thd, dict_index_t *index,
+bool innobase_allocate_row_for_vcol(THD *thd, const dict_index_t *index,
                                     mem_heap_t **heap, TABLE **table,
                                     VCOL_STORAGE *storage)
 {
@@ -20263,7 +20258,8 @@ innobase_get_computed_value(
 	TABLE*			mysql_table,
 	byte*			mysql_rec,
 	const dict_table_t*	old_table,
-	const upd_t*		update)
+	const upd_t*		update,
+	bool			ignore_warnings)
 {
 	byte		rec_buf2[REC_VERSION_56_MAX_INDEX_COL_LEN];
 	byte*		buf;
@@ -20370,7 +20366,9 @@ innobase_get_computed_value(
 
 	MY_BITMAP *old_write_set = dbug_tmp_use_all_columns(mysql_table, &mysql_table->write_set);
 	MY_BITMAP *old_read_set = dbug_tmp_use_all_columns(mysql_table, &mysql_table->read_set);
-	ret = mysql_table->update_virtual_field(mysql_table->field[col->m_col.ind]);
+	ret = mysql_table->update_virtual_field(
+		mysql_table->field[col->m_col.ind],
+		ignore_warnings);
 	dbug_tmp_restore_column_map(&mysql_table->read_set, old_read_set);
 	dbug_tmp_restore_column_map(&mysql_table->write_set, old_write_set);
 

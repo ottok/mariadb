@@ -1,3 +1,4 @@
+--source include/no_valgrind_without_big.inc
 --source include/have_stat_tables.inc
 --source include/have_sequence.inc
 --source include/default_charset.inc
@@ -848,7 +849,7 @@ create table t2 (c int, d int, key(c), key(d)) engine=myisam;
 insert t2 select floor(rand()*1e5/2)*2, floor(rand()*1e5/3)*3 from t1;
 
 analyze table t1,t2;
-
+--disable_view_protocol
 set optimizer_use_condition_selectivity=1;
 explain extended 
 select * from t1, t2, t1 as t3
@@ -864,7 +865,7 @@ select * from t1, t2, t1 as t3
 --sorted_result
 select * from t1, t2, t1 as t3
   where t1.b=t2.c and t2.d=t3.a and t3.b<5 and t1.a < 2000;
-
+--enable_view_protocol
 set optimizer_use_condition_selectivity=@save_optimizer_use_condition_selectivity;
 
 drop table t1,t2;
@@ -1110,8 +1111,8 @@ drop function f1;
 --echo #
 create table t1 (a int, b int, key (b), key (a));
 insert into t1
-select (rand(1)*1000)/10, (rand(1001)*1000)/50 from seq_1_to_1000;
-analyze table t1 ;
+select (rand(1)*1000)/10, (rand(1001)*1000)/20 from seq_1_to_1000;
+analyze table t1 persistent for all;
 
 --echo # Check what info the optimizer has about selectivities
 explain extended select * from t1 use index () where a in (17,51,5);
@@ -1247,6 +1248,8 @@ insert into t1 select seq,seq from seq_1_to_100;
 
 create table t2 (id int, a int, b int, PRIMARY KEY(id), key(a), key(b));
 insert into t2 select seq,seq,seq from seq_1_to_100;
+
+analyze table t1,t2 persistent for all;
 
 set optimizer_switch='exists_to_in=off';
 set optimizer_use_condition_selectivity=2;

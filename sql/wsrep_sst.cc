@@ -30,7 +30,7 @@
 #include "wsrep_utils.h"
 #include "wsrep_xid.h"
 #include "wsrep_thd.h"
-#include "wsrep_mysqld.h"
+#include "wsrep_server_state.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -1740,6 +1740,7 @@ wait_signal:
 
           WSREP_INFO("Donor state reached");
 
+#ifdef ENABLED_DEBUG_SYNC
           DBUG_EXECUTE_IF("sync.wsrep_donor_state",
           {
             const char act[]=
@@ -1749,6 +1750,7 @@ wait_signal:
             assert(!debug_sync_set_action(thd.ptr,
                                           STRING_WITH_LEN(act)));
           };);
+#endif
 
           goto wait_signal;
         }

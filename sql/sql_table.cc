@@ -58,6 +58,8 @@
 #include "ddl_log.h"
 #include "debug.h"                     // debug_crash_here()
 #include <algorithm>
+#include "wsrep_mysqld.h"
+#include "sql_debug.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -3658,6 +3660,13 @@ without_overlaps_err:
                           thd->mem_root))
       DBUG_RETURN(TRUE);
 
+#ifndef DBUG_OFF
+  DBUG_EXECUTE_IF("key",
+    Debug_key::print_keys(thd, "prep_create_table: ",
+                          *key_info_buffer, *key_count);
+  );
+#endif
+
   DBUG_RETURN(FALSE);
 }
 
@@ -4969,7 +4978,7 @@ mysql_rename_table(handlerton *base, const LEX_CSTRING *old_db,
   length= build_table_filename(to, sizeof(to) - 1, new_db->str,
                                new_name->str, "", flags & FN_TO_IS_TMP);
   // Check if we hit FN_REFLEN bytes along with file extension.
-  if (length+reg_ext_length >= FN_REFLEN)
+  if (length+reg_ext_length > FN_REFLEN)
   {
     my_error(ER_IDENT_CAUSES_TOO_LONG_PATH, MYF(0), (int) sizeof(to)-1, to);
     DBUG_RETURN(TRUE);
@@ -5127,6 +5136,7 @@ bool mysql_create_like_table(THD* thd, TABLE_LIST* table,
     if ((duplicate= unique_table(thd, table, src_table, 0)))
     {
       update_non_unique_table_error(src_table, "CREATE", duplicate);
+      res= 1;
       goto err;
     }
   }
@@ -7624,6 +7634,20 @@ void append_drop_column(THD *thd, String *str, Field *field)
 }
 
 
+static inline
+void rename_field_in_list(Create_field *field, List<const char> *field_list)
+{
+  DBUG_ASSERT(field->change.str);
+  List_iterator<const char> it(*field_list);
+  while (const char *name= it++)
+  {
+    if (my_strcasecmp(system_charset_info, name, field->change.str))
+      continue;
+    it.replace(field->field_name.str);
+  }
+}
+
+
 /**
   Prepare column and key definitions for CREATE TABLE in ALTER TABLE.
 
@@ -7990,6 +8014,34 @@ mysql_prepare_alter_table(THD *thd, TABLE *table,
         field->default_value->expr->walk(&Item::rename_fields_processor, 1,
                                         &column_rename_param);
     }
+#ifdef WITH_PARTITION_STORAGE_ENGINE
+    if (thd->work_part_info)
+    {
+      partition_info *part_info= thd->work_part_info;
+      List_iterator<Create_field> def_it(column_rename_param.fields);
+      const bool part_field_list= !part_info->part_field_list.is_empty();
+      const bool subpart_field_list= !part_info->subpart_field_list.is_empty();
+      if (part_info->part_expr)
+        part_info->part_expr->walk(&Item::rename_fields_processor, 1,
+                                  &column_rename_param);
+      if (part_info->subpart_expr)
+        part_info->subpart_expr->walk(&Item::rename_fields_processor, 1,
+                                      &column_rename_param);
+      if (part_field_list || subpart_field_list)
+      {
+        while (Create_field *def= def_it++)
+        {
+          if (def->change.str)
+          {
+            if (part_field_list)
+              rename_field_in_list(def, &part_info->part_field_list);
+            if (subpart_field_list)
+              rename_field_in_list(def, &part_info->subpart_field_list);
+          } /* if (def->change.str) */
+        } /* while (def) */
+      } /* if (part_field_list || subpart_field_list) */
+    } /* if (part_info) */
+#endif
     // Force reopen because new column name is on thd->mem_root
     table->mark_table_for_reopen();
   }
@@ -9535,7 +9587,7 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
 
   DEBUG_SYNC(thd, "alter_opened_table");
 
-#ifdef WITH_WSREP
+#if defined WITH_WSREP && defined ENABLED_DEBUG_SYNC
   DBUG_EXECUTE_IF("sync.alter_opened_table",
                   {
                     const char act[]=
@@ -9901,6 +9953,9 @@ do_continue:;
 
 #ifdef WITH_PARTITION_STORAGE_ENGINE
   {
+    /*
+      Partitioning: part_info is prepared and returned via thd->work_part_info
+    */
     if (prep_alter_part_table(thd, table, alter_info, create_info,
                               &partition_changed, &fast_alter_partition))
     {
@@ -9927,6 +9982,18 @@ do_continue:;
   }
 
   set_table_default_charset(thd, create_info, alter_ctx.db);
+
+  /*
+    The ALTER related code cannot alter partitions and change column data types
+    at the same time. So in case of partition change statements like:
+      ALTER TABLE t1 DROP PARTITION p1;
+    we skip implicit data type upgrade (such as "MariaDB 5.3 TIME" to
+    "MySQL 5.6 TIME" or vice versa according to mysql56_temporal_format).
+    Note, one can run a separate "ALTER TABLE t1 FORCE;" statement
+    before or after the partition change ALTER statement to upgrade data types.
+  */
+  if (IF_PARTITIONING(!fast_alter_partition, 1))
+    Create_field::upgrade_data_types(alter_info->create_list);
 
   if (create_info->check_fields(thd, alter_info,
                                 table_list->table_name, table_list->db) ||
@@ -10115,8 +10182,10 @@ do_continue:;
 
     No ddl logging needed as ddl_log_alter_query will take care of failed
     table creations.
+
+    Partitioning: part_info is passed via thd->work_part_info
   */
-  error= create_table_impl(thd, (DDL_LOG_STATE*) 0, (DDL_LOG_STATE*) 0,
+  error= create_table_impl(thd, nullptr, nullptr,
                            alter_ctx.db, alter_ctx.table_name,
                            alter_ctx.new_db, alter_ctx.tmp_name,
                            alter_ctx.get_tmp_cstring_path(),

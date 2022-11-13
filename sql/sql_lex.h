@@ -36,6 +36,7 @@
 #include "sql_limit.h"                // Select_limit_counters
 #include "json_table.h"               // Json_table_column
 #include "sql_schema.h"
+#include "table.h"
 
 /* Used for flags of nesting constructs */
 #define SELECT_NESTING_MAP_SIZE 64
@@ -767,7 +768,7 @@ public:
 
   inline st_select_lex_node* get_master() { return master; }
   void include_down(st_select_lex_node *upper);
-  void add_slave(st_select_lex_node *slave_arg);
+  void attach_single(st_select_lex_node *slave_arg);
   void include_neighbour(st_select_lex_node *before);
   void link_chain_down(st_select_lex_node *first);
   void link_neighbour(st_select_lex_node *neighbour)
@@ -4569,6 +4570,11 @@ public:
 
   int add_period(Lex_ident name, Lex_ident_sys_st start, Lex_ident_sys_st end)
   {
+    if (check_period_name(name.str)) {
+      my_error(ER_WRONG_COLUMN_NAME, MYF(0), name.str);
+      return 1;
+    }
+
     if (lex_string_cmp(system_charset_info, &start, &end) == 0)
     {
       my_error(ER_FIELD_SPECIFIED_TWICE, MYF(0), start.str);

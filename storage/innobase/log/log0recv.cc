@@ -217,7 +217,9 @@ public:
     /** The page was modified, affecting the encryption parameters */
     APPLIED_TO_ENCRYPTION,
     /** The page was modified, affecting the tablespace header */
-    APPLIED_TO_FSP_HEADER
+    APPLIED_TO_FSP_HEADER,
+    /** The page was found to be corrupted */
+    APPLIED_CORRUPTED,
   };
 
   /** Apply log to a page frame.
@@ -299,12 +301,10 @@ public:
         ut_ad(*l == OPT_PAGE_CHECKSUM);
         if (page_checksum(block, l + 1))
         {
-          applied= APPLIED_YES;
 page_corrupted:
           sql_print_error("InnoDB: Set innodb_force_recovery=1"
                           " to ignore corruption.");
-          recv_sys.set_corrupt_log();
-          return applied;
+          return APPLIED_CORRUPTED;
         }
         goto next_after_applying;
       }
@@ -393,7 +393,7 @@ page_corrupted:
             rlen-= ll;
             l+= ll;
             ll= mlog_decode_varint_length(*l);
-            if (UNIV_UNLIKELY(ll > 3 || ll >= rlen))
+            if (UNIV_UNLIKELY(ll > 3 || ll > rlen))
               goto record_corrupted;
             size_t data_c= mlog_decode_varint(l);
             ut_ad(data_c != MLOG_DECODE_ERROR);
@@ -420,7 +420,7 @@ page_corrupted:
             rlen-= ll;
             l+= ll;
             ll= mlog_decode_varint_length(*l);
-            if (UNIV_UNLIKELY(ll > 2 || ll >= rlen))
+            if (UNIV_UNLIKELY(ll > 2 || ll > rlen))
               goto record_corrupted;
             size_t data_c= mlog_decode_varint(l);
             rlen-= ll;
@@ -829,7 +829,29 @@ processed:
     fil_space_t *space= fil_space_t::create(it->first, flags,
                                             FIL_TYPE_TABLESPACE, crypt_data);
     ut_ad(space);
-    space->add(name.c_str(), OS_FILE_CLOSED, size, false, false);
+    const char *filename= name.c_str();
+    if (srv_operation == SRV_OPERATION_RESTORE)
+    {
+      const char* tbl_name = strrchr(filename, '/');
+#ifdef _WIN32
+      if (const char *last = strrchr(filename, '\\'))
+      {
+        if (last > tbl_name)
+          tbl_name = last;
+      }
+#endif
+      if (tbl_name)
+      {
+        while (--tbl_name > filename &&
+#ifdef _WIN32
+               *tbl_name != '\\' &&
+#endif
+               *tbl_name != '/');
+        if (tbl_name > filename)
+          filename= tbl_name + 1;
+      }
+    }
+    space->add(filename, OS_FILE_CLOSED, size, false, false);
     space->recv_size= it->second.size;
     space->size_in_header= size;
     return space;
@@ -1226,9 +1248,6 @@ static void fil_name_process(const char *name, ulint len, uint32_t space_id,
 		if (deleted) {
 			d->deleted = true;
 			goto got_deleted;
-		}
-		if (ftype == FILE_RENAME) {
-			d->file_name= fname.name;
 		}
 		goto reload;
 	}
@@ -2786,6 +2805,7 @@ static buf_block_t *recv_recover_page(buf_block_t *block, mtr_t &mtr,
 			start_lsn = 0;
 			continue;
 		case log_phys_t::APPLIED_YES:
+		case log_phys_t::APPLIED_CORRUPTED:
 			goto set_start_lsn;
 		case log_phys_t::APPLIED_TO_FSP_HEADER:
 		case log_phys_t::APPLIED_TO_ENCRYPTION:
@@ -2839,7 +2859,8 @@ static buf_block_t *recv_recover_page(buf_block_t *block, mtr_t &mtr,
 		}
 
 set_start_lsn:
-		if (recv_sys.is_corrupt_log() && !srv_force_recovery) {
+		if ((a == log_phys_t::APPLIED_CORRUPTED
+		     || recv_sys.is_corrupt_log()) && !srv_force_recovery) {
 			if (init) {
 				init->created = false;
 				if (space || block->page.id().page_no()) {
@@ -2930,7 +2951,13 @@ ATTRIBUTE_COLD void recv_sys_t::free_corrupted_page(page_id_t page_id)
     p->second.log.clear();
     pages.erase(p);
     if (!srv_force_recovery)
+    {
       set_corrupt_fs();
+      ib::error() << "Unable to apply log to corrupted page " << page_id
+                  << "; set innodb_force_recovery to ignore";
+    }
+    else
+      ib::warn() << "Discarding log for corrupted page " << page_id;
   }
 
   if (pages.empty())

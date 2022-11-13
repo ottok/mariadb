@@ -75,7 +75,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` time(4) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 show columns from t1;
 Field	Type	Null	Key	Default	Extra
 a	time(4)	YES		NULL	
@@ -129,12 +129,12 @@ show create table t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
   `a` time(4) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 show create table t3;
 Table	Create Table
 t3	CREATE TABLE `t3` (
   `a` time(4) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 drop table t2, t3;
 insert t1 values ('2010-12-13 14:15:16.222222');
 Warnings:
@@ -156,7 +156,7 @@ t2	CREATE TABLE `t2` (
   `a-1` decimal(12,4) DEFAULT NULL,
   `a*1` decimal(12,4) DEFAULT NULL,
   `a/2` decimal(15,8) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 show create table t3;
 Table	Create Table
 t3	CREATE TABLE `t3` (
@@ -164,7 +164,7 @@ t3	CREATE TABLE `t3` (
   `min(a)` time(4) DEFAULT NULL,
   `sum(a)` decimal(33,4) DEFAULT NULL,
   `avg(a)` decimal(15,8) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 drop table t1, t2, t3;
 create table t1 (f0_time time(0), f1_time time(1), f2_time time(2), f3_time time(3), f4_time time(4), f5_time time(5), f6_time time(6));
 insert t1 values ( '2010-11-12 11:14:17.765432', '2010-11-12 11:14:17.765432', '2010-11-12 11:14:17.765432', '2010-11-12 11:14:17.765432', '2010-11-12 11:14:17.765432', '2010-11-12 11:14:17.765432', '2010-11-12 11:14:17.765432');
@@ -314,7 +314,7 @@ Table	Create Table
 t2	CREATE TABLE `t2` (
   `a` time(6) DEFAULT NULL,
   `b` time(6) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 select * from t2;
 a	b
 03:04:06.234500	03:04:06.234561
@@ -360,7 +360,7 @@ select cast(1e-6 as time(6));
 cast(1e-6 as time(6))
 00:00:00.000001
 #
-# Start of 10.4 tests
+# End of 5.5 tests
 #
 #
 # MDEV-20397 Support TIMESTAMP, DATETIME, TIME in ROUND() and TRUNCATE()
@@ -379,7 +379,7 @@ t2	CREATE TABLE `t2` (
   `r2` time NOT NULL,
   `t1` time DEFAULT NULL,
   `t2` time NOT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t2;
 DROP TABLE t1;
 CREATE TABLE t1 (a TIME(6));
@@ -681,7 +681,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `FLOOR(TIME'00:00:00.999999')` time NOT NULL,
   `CEILING(TIME'00:00:00.999999')` time NOT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1;
 CREATE TABLE t1 (a TIME(6));
 INSERT INTO t1 VALUES ('838:59:59.999999');
@@ -907,3 +907,14 @@ a	CEILING(a)	CEILING_SP(a)	CEILING(a)=CEILING_SP(a)
 DROP FUNCTION FLOOR_SP;
 DROP FUNCTION CEILING_SP;
 DROP TABLE t1;
+#
+# MDEV-29924 Assertion `(((nr) % (1LL << 24)) % (int) log_10_int[6 - dec]) == 0' failed in my_time_packed_to_binary on SELECT when using TIME field
+#
+create table t1 (c decimal(3,1),d time(6));
+insert into t1 values (null,0.1),(null,0.1), (0.1,0.2);
+select c from t1 where c<all (select d from t1);
+c
+drop table t1;
+#
+# End of 10.4 tests
+#

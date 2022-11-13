@@ -469,46 +469,6 @@ row_upd_changes_field_size_or_external(
 	return(FALSE);
 }
 
-/***********************************************************//**
-Returns true if row update contains disowned external fields.
-@return true if the update contains disowned external fields. */
-bool
-row_upd_changes_disowned_external(
-/*==============================*/
-	const upd_t*	update)	/*!< in: update vector */
-{
-	const upd_field_t*	upd_field;
-	const dfield_t*		new_val;
-	ulint			new_len;
-	ulint                   n_fields;
-	ulint			i;
-
-	n_fields = upd_get_n_fields(update);
-
-	for (i = 0; i < n_fields; i++) {
-		const byte*	field_ref;
-
-		upd_field = upd_get_nth_field(update, i);
-		new_val = &(upd_field->new_val);
-		new_len = dfield_get_len(new_val);
-
-		if (!dfield_is_ext(new_val)) {
-			continue;
-		}
-
-		ut_ad(new_len >= BTR_EXTERN_FIELD_REF_SIZE);
-
-		field_ref = static_cast<const byte*>(dfield_get_data(new_val))
-			    + new_len - BTR_EXTERN_FIELD_REF_SIZE;
-
-		if (field_ref[BTR_EXTERN_LEN] & BTR_EXTERN_OWNER_FLAG) {
-			return(true);
-		}
-	}
-
-	return(false);
-}
-
 /***************************************************************//**
 Builds an update vector from those fields which in a secondary index entry
 differ from a record that has the equal ordering fields. NOTE: we compare
@@ -601,6 +561,7 @@ row_upd_build_difference_binary(
 	const rec_t*	rec,
 	const rec_offs*	offsets,
 	bool		no_sys,
+	bool		ignore_warnings,
 	trx_t*		trx,
 	mem_heap_t*	heap,
 	TABLE*		mysql_table,
@@ -699,7 +660,7 @@ row_upd_build_difference_binary(
 			dfield_t*	vfield = innobase_get_computed_value(
 				update->old_vrow, col, index,
 				&vc.heap, heap, NULL, thd, mysql_table, record,
-				NULL, NULL);
+				NULL, NULL, ignore_warnings);
 			if (vfield == NULL) {
 				*error = DB_COMPUTE_VALUE_FAILED;
 				return(NULL);

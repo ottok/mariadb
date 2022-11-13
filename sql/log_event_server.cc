@@ -1723,12 +1723,7 @@ int Query_log_event::do_apply_event(rpl_group_info *rgi,
       thd->slave_expected_error= expected_error;
       if (flags2_inited)
       {
-        /*
-          all bits of thd->variables.option_bits which are 1 in
-          OPTIONS_WRITTEN_TO_BIN_LOG must take their value from
-          flags2.
-        */
-        ulonglong mask= rli->relay_log.description_event_for_exec->options_written_to_bin_log;
+        ulonglong mask= flags2_inited;
         thd->variables.option_bits= (flags2 & mask) |
                                     (thd->variables.option_bits & ~mask);
       }
@@ -1921,6 +1916,13 @@ int Query_log_event::do_apply_event(rpl_group_info *rgi,
         thd->update_server_status();
         log_slow_statement(thd);
         thd->lex->restore_set_statement_var();
+
+        /*
+          When THD::slave_expected_error gets reset inside execution stack
+          that is the case of to be ignored event. In this case the expected
+          error must change to the reset value as well.
+        */
+        expected_error= thd->slave_expected_error;
       }
 
       thd->variables.option_bits&= ~OPTION_MASTER_SQL_ERROR;

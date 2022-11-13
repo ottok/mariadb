@@ -4772,7 +4772,7 @@ static const char *i_s_sys_tables_rec(const btr_pcur_t &pcur, mtr_t *mtr,
   }
 
   if (rec)
-    return dict_load_table_low(mtr, rec, table);
+    return dict_load_table_low(mtr, false, rec, table);
 
   *table= dict_sys.load_table
     (span<const char>{reinterpret_cast<const char*>(pcur.old_rec), len});
@@ -6501,6 +6501,8 @@ static int i_s_sys_tablespaces_fill_table(THD *thd, TABLE_LIST *tables, Item*)
 
   fil_system.freeze_space_list--;
   mysql_mutex_unlock(&fil_system.mutex);
+  if (err == DB_SUCCESS)
+    err= i_s_sys_tablespaces_fill(thd, *fil_system.temp_space, tables->table);
   DBUG_RETURN(err);
 }
 

@@ -5,6 +5,7 @@
 #
 
 --source include/have_innodb.inc
+--source include/innodb_page_size.inc
 # Embedded server does not restart of server
 --source include/not_embedded.inc
 --source include/no_valgrind_without_big.inc
@@ -612,3 +613,15 @@ INSERT INTO t VALUES (1);
 START TRANSACTION READ ONLY;
 UPDATE t SET a = NULL;
 ROLLBACK;
+DROP TABLE t;
+
+--echo #
+--echo # MDEV-29886 Assertion !index->table->is_temporary() failed
+--echo # in trx_undo_prev_version_build upon CHECK
+--echo #
+CREATE TEMPORARY TABLE t (a INT, KEY(a)) ENGINE=InnoDB SELECT 1;
+UPDATE t SET a=2;
+CHECK TABLE t;
+CHECK TABLE t EXTENDED;
+DROP TEMPORARY TABLE t;
+--echo # End of 10.6 tests
