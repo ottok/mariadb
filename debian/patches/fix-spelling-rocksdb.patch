@@ -1,4 +1,4 @@
-Forwarded: https://github.com/facebook/rocksdb/pull/7785
+Forwarded: https://github.com/facebook/rocksdb/pull/9653
 Author: Otto Kekäläinen <otto@debian.org>
 Subject: Fix various spelling errors still found in code
   Two upstream PRs remain that have been merged, but not imported on MariaDB 10.6.

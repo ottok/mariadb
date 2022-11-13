@@ -236,7 +236,7 @@ access to the packaging source directory via a local mount:
 
     laptop$ docker run -it -v ${PWD}:/build -w /build debian:sid bash
     container$ apt update && apt install -y autopkgtest
-    container$ autopkgtest -- null
+    container$ autopkgtest --shell-fail -- null
 
 Edit the files in `debian/tests` in your favorite code editor and re-run the
 `autopkgtest -- null` until the tests are passing. When the autopkgtests work

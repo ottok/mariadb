@@ -1,0 +1,158 @@
+Forwarded: https://github.com/MariaDB/server/commit/5c8e9cacea2e913c0da74686bfbfeff0a33c2cee
+Origin: https://github.com/MariaDB/server/commit/5c8e9cacea2e913c0da74686bfbfeff0a33c2cee.patch
+From: Daniel Black <daniel@mariadb.org>
+Date: Wed, 2 Mar 2022 11:48:24 +1100
+Subject: [PATCH] MDEV-27936 hardware lock ellision on ppc64{,le} failing to
+ compile
+
+There is only a very small range of gcc compiler versions
+that allow the built_{htm} functions to be defined without -mhtm
+being specified as a global CFLAG. Without this cflags the
+__built_tbegin and other htm instructions simply aren't available.
+
+The include header htmxlintrin.h uses these inlines. As such
+the file that includes it need to be compiled with -mhtm. Other
+tricks like #pragma GCC target("cpu=power8","htm") around the
+include block had no effect on making the builtins avialable.
+
+As such we are left with the option of putting the include header
+in one location, srw_lock, and enabling it there.
+
+As a partial mitigation, extented to GNU/clang compilers,
+transaction functions gain the attribute "hot".
+
+In general the use of htm is around the optimistic
+transaction ability of the function. The key part of using the
+hot attribute is to place these functions together so that
+a maximization of icache, tlb and OS paging can ensure that
+these can be ready to execute by any thread/cpu with the
+minimium amount of overhead. The increased speed on
+the transaction to not be conflicted and rollback on tend.
+
+trx_has_lock_x cannot be cold and hot so settled on hot.
+
+POWER is particulary affected here because the xbegin/xend
+functions are not inline.
+---
+ storage/innobase/CMakeLists.txt               | 11 +++++++
+ .../include/transactional_lock_guard.h        | 31 ++++++++++---------
+ storage/innobase/sync/srw_lock.cc             | 17 +++++++++-
+ storage/innobase/trx/trx0rec.cc               |  2 +-
+ 4 files changed, 44 insertions(+), 17 deletions(-)
+
+--- a/storage/innobase/CMakeLists.txt
++++ b/storage/innobase/CMakeLists.txt
+@@ -380,6 +380,17 @@ IF(CMAKE_COMPILER_IS_GNUCXX AND CMAKE_SY
+       COMPILE_FLAGS "-O0"
+       )
+ ENDIF()
++
++# Older gcc version insist on -mhtm flag for including the
++# htmxlintrin.h header. This is also true for new gcc versions
++# like 11.2.0 in Debian Sid
++IF(CMAKE_SYSTEM_NAME MATCHES "Linux"
++   AND CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64|powerpc64")
++  ADD_COMPILE_FLAGS(
++      sync/srw_lock.cc
++      COMPILE_FLAGS "-mhtm"
++      )
++ENDIF()
+ IF(MSVC)
+   IF(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    ADD_COMPILE_FLAGS(
+--- a/storage/innobase/include/transactional_lock_guard.h
++++ b/storage/innobase/include/transactional_lock_guard.h
+@@ -45,8 +45,8 @@ bool transactional_lock_enabled();
+ 
+ #  include <immintrin.h>
+ #  if defined __GNUC__ && !defined __INTEL_COMPILER
+-#   define TRANSACTIONAL_TARGET __attribute__((target("rtm")))
+-#   define TRANSACTIONAL_INLINE __attribute__((target("rtm"),always_inline))
++#   define TRANSACTIONAL_TARGET __attribute__((target("rtm"),hot))
++#   define TRANSACTIONAL_INLINE __attribute__((target("rtm"),hot,always_inline))
+ #  else
+ #   define TRANSACTIONAL_TARGET /* nothing */
+ #   define TRANSACTIONAL_INLINE /* nothing */
+@@ -70,25 +70,26 @@ TRANSACTIONAL_INLINE static inline void
+ 
+ TRANSACTIONAL_INLINE static inline void xend() { _xend(); }
+ # elif defined __powerpc64__
+-#  include <htmxlintrin.h>
+ extern bool have_transactional_memory;
+ bool transactional_lock_enabled();
+-#   define TRANSACTIONAL_TARGET __attribute__((target("htm")))
+-#   define TRANSACTIONAL_INLINE __attribute__((target("htm"),always_inline))
+-
+-TRANSACTIONAL_INLINE static inline bool xbegin()
+-{
+-  return have_transactional_memory &&
+-    __TM_simple_begin() == _HTM_TBEGIN_STARTED;
+-}
++#   define TRANSACTIONAL_TARGET __attribute__((hot))
++#   define TRANSACTIONAL_INLINE __attribute__((hot,always_inline))
+ 
++/**
++  Newer gcc compilers only provide __builtin_{htm}
++  function when the -mhtm is actually provided. So
++  we've got the option of including it globally, or
++  pushing down to one file with that enabled and removing
++  the inline optimization.
++  file.
++ */
++TRANSACTIONAL_TARGET bool xbegin();
++TRANSACTIONAL_TARGET void xabort();
++TRANSACTIONAL_TARGET void xend();
+ #  ifdef UNIV_DEBUG
+ bool xtest();
+ #  endif
+ 
+-TRANSACTIONAL_INLINE static inline void xabort() { __TM_abort(); }
+-
+-TRANSACTIONAL_INLINE static inline void xend() { __TM_end(); }
+ # endif
+ #endif
+ 
+--- a/storage/innobase/sync/srw_lock.cc
++++ b/storage/innobase/sync/srw_lock.cc
+@@ -55,6 +55,20 @@ TRANSACTIONAL_TARGET
+ bool xtest() { return have_transactional_memory && _xtest(); }
+ # endif
+ #elif defined __powerpc64__
++# include <htmxlintrin.h>
++
++__attribute__((target("htm"),hot))
++bool xbegin()
++{
++  return have_transactional_memory &&
++    __TM_simple_begin() == _HTM_TBEGIN_STARTED;
++}
++
++__attribute__((target("htm"),hot))
++void xabort() { __TM_abort(); }
++
++__attribute__((target("htm"),hot))
++void xend() { __TM_end(); }
+ # ifdef __linux__
+ #  include <sys/auxv.h>
+ 
+@@ -79,7 +93,8 @@ bool transactional_lock_enabled()
+ }
+ 
+ # ifdef UNIV_DEBUG
+-TRANSACTIONAL_TARGET bool xtest()
++__attribute__((target("htm"),hot))
++bool xtest()
+ {
+   return have_transactional_memory &&
+     _HTM_STATE (__builtin_ttest ()) == _HTM_TRANSACTIONAL;
+--- a/storage/innobase/trx/trx0rec.cc
++++ b/storage/innobase/trx/trx0rec.cc
+@@ -1951,7 +1951,7 @@ dberr_t trx_undo_report_rename(trx_t* tr
+ 	return err;
+ }
+ 
+-TRANSACTIONAL_TARGET ATTRIBUTE_COLD ATTRIBUTE_NOINLINE
++TRANSACTIONAL_TARGET ATTRIBUTE_NOINLINE
+ /** @return whether the transaction holds an exclusive lock on a table */
+ static bool trx_has_lock_x(const trx_t &trx, dict_table_t& table)
+ {

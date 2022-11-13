@@ -2,7 +2,7 @@ main.partition_order : MDEV-27954
 main.func_str : MDEV-27954
 main.group_by : MDEV-27954
 main.group_by_null : MDEV-27954
-main.features 'nm' : MDEV-27954
+main.features : MDEV-27954
 main.repair_symlink-5543 : MDEV-23920
 main.type_datetime : MDEV-27954
 main.xml : MDEV-27954

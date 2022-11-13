@@ -1,3 +1,4 @@
+Forwarded: https://github.com/MariaDB/server/pull/2036
 From: https://gitlab.com/redhat/centos-stream/rpms/mariadb/-/blob/c9s/mariadb-openssl3.patch
 Origin: upstream, https://github.com/MariaDB/server/commit/c80991c79f701dac42c630af4bd39593b0c7efb4
 Author: Vladislav Vaintroub <wlad@mariadb.com>

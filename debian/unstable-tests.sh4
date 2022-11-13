@@ -1,1 +1,1 @@
-# For an unknown reason, the mysql-test-run does not even start on m68k Debian buildd (Bug#988349)
+# For an unknown reason, the mysql-test-run does not even start on sh4 Debian buildd (Bug#988349)

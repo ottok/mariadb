@@ -1,3 +1,4 @@
+Forwarded: https://github.com/MariaDB/server/pull/2035
 Author: Otto Kekäläinen <otto@debian.org>
 Subject: Fix various spelling errors still found in code
 --- a/mysql-test/main/dyncol.result
