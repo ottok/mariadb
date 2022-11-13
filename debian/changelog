@@ -1,3 +1,10 @@
+mariadb-10.6 (1:10.6.7-2ubuntu1.1) jammy; urgency=medium
+
+  * d/rules: disable LTO on Ubuntu so a low MEMLOCK_LIMIT can be
+    properly caught and dealt with (LP: #1970634)
+
+ -- Andreas Hasenack <andreas@canonical.com>  Fri, 17 Jun 2022 10:03:50 -0300
+
 mariadb-10.6 (1:10.6.7-2ubuntu1) jammy; urgency=medium
 
   * Pseudo-sync version 1:10.6.7-3~exp1 for the following fixes (LP: #1964045)
