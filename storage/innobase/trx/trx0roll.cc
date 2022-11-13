@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1996, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2016, 2021, MariaDB Corporation.
+Copyright (c) 2016, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -60,7 +60,7 @@ const trx_t*		trx_roll_crash_recv_trx;
 inline bool trx_t::rollback_finish()
 {
   mod_tables.clear();
-
+  apply_online_log= false;
   if (UNIV_LIKELY(error_state == DB_SUCCESS))
   {
     commit();
@@ -135,15 +135,21 @@ inline void trx_t::rollback_low(trx_savept_t *savept)
   }
   else
   {
+    /* There must not be partial rollback if transaction was chosen as deadlock
+    victim. Galera transaction abort can be invoked during partial rollback. */
+    ut_ad(!(lock.was_chosen_as_deadlock_victim & 1));
     ut_a(error_state == DB_SUCCESS);
     const undo_no_t limit= savept->least_undo_no;
+    apply_online_log= false;
     for (trx_mod_tables_t::iterator i= mod_tables.begin();
-	 i != mod_tables.end(); )
+         i != mod_tables.end(); )
     {
       trx_mod_tables_t::iterator j= i++;
       ut_ad(j->second.valid());
       if (j->second.rollback(limit))
         mod_tables.erase(j);
+      else if (!apply_online_log)
+        apply_online_log= j->first->is_active_ddl();
     }
     MONITOR_INC(MONITOR_TRX_ROLLBACK_SAVEPOINT);
   }
@@ -208,6 +214,10 @@ dberr_t trx_rollback_for_mysql(trx_t* trx)
 	case TRX_STATE_NOT_STARTED:
 		trx->will_lock = false;
 		ut_ad(trx->mysql_thd);
+		/* Galera transaction abort can be invoked from MDL acquision
+		code, so trx->lock.was_chosen_as_deadlock_victim can be set
+		even if trx->state is TRX_STATE_NOT_STARTED. */
+		ut_ad(!(trx->lock.was_chosen_as_deadlock_victim & 1));
 #ifdef WITH_WSREP
 		trx->wsrep= false;
 		trx->lock.was_chosen_as_deadlock_victim= false;
@@ -415,9 +425,6 @@ trx_rollback_to_savepoint_for_mysql_low(
 	trx_mark_sql_stat_end(trx);
 
 	trx->op_info = "";
-#ifdef WITH_WSREP
-	trx->lock.was_chosen_as_deadlock_victim = false;
-#endif
 	return(err);
 }
 
@@ -631,7 +638,7 @@ struct trx_roll_count_callback_arg
 static my_bool trx_roll_count_callback(rw_trx_hash_element_t *element,
                                        trx_roll_count_callback_arg *arg)
 {
-  mysql_mutex_lock(&element->mutex);
+  element->mutex.wr_lock();
   if (trx_t *trx= element->trx)
   {
     if (trx->is_recovered && trx_state_eq(trx, TRX_STATE_ACTIVE))
@@ -640,7 +647,7 @@ static my_bool trx_roll_count_callback(rw_trx_hash_element_t *element,
       arg->n_rows+= trx->undo_no;
     }
   }
-  mysql_mutex_unlock(&element->mutex);
+  element->mutex.wr_unlock();
   return 0;
 }
 
@@ -678,7 +685,7 @@ void trx_roll_report_progress()
 static my_bool trx_rollback_recovered_callback(rw_trx_hash_element_t *element,
                                                std::vector<trx_t*> *trx_list)
 {
-  mysql_mutex_lock(&element->mutex);
+  element->mutex.wr_lock();
   if (trx_t *trx= element->trx)
   {
     trx->mutex_lock();
@@ -686,7 +693,7 @@ static my_bool trx_rollback_recovered_callback(rw_trx_hash_element_t *element,
       trx_list->push_back(trx);
     trx->mutex_unlock();
   }
-  mysql_mutex_unlock(&element->mutex);
+  element->mutex.wr_unlock();
   return 0;
 }
 

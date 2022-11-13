@@ -1,5 +1,5 @@
-SET @save_persistent=@@GLOBAL.innodb_stats_persistent;
-SET GLOBAL innodb_stats_persistent=0;
+set @save_persistent=@@global.innodb_stats_persistent;
+set global innodb_stats_persistent= 0;
 call mtr.add_suppression("need more HISTORY partitions");
 set system_versioning_alter_history=keep;
 # Check conventional partitioning on temporal tables
@@ -108,7 +108,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 (PARTITION `p0` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
@@ -132,7 +132,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 (PARTITION `custom_name` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
@@ -249,7 +249,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 2
 PARTITIONS 3
 alter table t1 drop partition non_existent;
@@ -265,6 +265,9 @@ x
 6
 delete from t1 where x < 4;
 delete from t1;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
 select * from t1 partition (p0);
 x
 1
@@ -276,12 +279,11 @@ x
 5
 6
 insert into t1 values (7), (8);
-Warnings:
-Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
 ### warn about full partition
 delete from t1;
 Warnings:
 Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
 select * from t1 partition (p1) order by x;
 x
 4
@@ -426,7 +428,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'2000-01-01 00:00:00'
 PARTITIONS 2
 # Test STARTS warning
@@ -437,7 +439,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'2000-01-01 00:00:00'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -452,7 +454,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 SECOND STARTS TIMESTAMP'1999-12-15 13:33:33'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -461,7 +463,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 MINUTE STARTS TIMESTAMP'1999-12-15 13:33:00'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -470,7 +472,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 HOUR STARTS TIMESTAMP'1999-12-15 13:00:00'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -479,7 +481,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'1999-12-15 00:00:00'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -488,7 +490,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 MONTH STARTS TIMESTAMP'1999-12-15 00:00:00'
 PARTITIONS 2
 create or replace table t1 (i int) with system versioning
@@ -497,7 +499,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 YEAR STARTS TIMESTAMP'1999-12-15 00:00:00'
 PARTITIONS 2
 # seconds equivalent of 1 day does not round:
@@ -507,7 +509,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 86400 SECOND STARTS TIMESTAMP'1999-12-15 13:33:33'
 PARTITIONS 2
 # STARTS value is in local time_zone:
@@ -523,14 +525,14 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'2000-01-01 00:00:00'
 PARTITIONS 2
 show create table t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'2000-01-01 00:00:00'
 PARTITIONS 2
 set time_zone="+00:00";
@@ -538,14 +540,14 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'1999-12-31 21:00:00'
 PARTITIONS 2
 show create table t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 1 DAY STARTS TIMESTAMP'1999-12-31 21:00:00'
 PARTITIONS 2
 # Test rotation
@@ -637,9 +639,13 @@ x
 ### warn about full partition
 delete from t1 where x < 3;
 delete from t1;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
 delete from t1;
 Warnings:
 Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^ (no matter if nothing was deleted)
 select * from t1 partition (p0sp0);
 x
 1
@@ -815,7 +821,11 @@ partition p1 history,
 partition p2 history,
 partition pn current);
 delete from t1 where x = 1;
+# You see warning above ^
 delete from t1 where x = 2;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p2`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
 #
 # MDEV-14923 Assertion upon INSERT into locked versioned partitioned table
 #
@@ -908,7 +918,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `pk` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME INTERVAL 7 SECOND STARTS TIMESTAMP'2018-04-11 17:00:04'
 (PARTITION `ver_p1` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `ver_pn` CURRENT ENGINE = DEFAULT_ENGINE)
@@ -938,9 +948,13 @@ create or replace table t1 (x int) with system versioning partition by system_ti
 lock tables t1 write;
 insert into t1 values (0), (1), (2), (3);
 delete from t1 where x < 3;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
 delete from t1;
 Warnings:
 Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
 unlock tables;
 #
 # MDEV-20336 Assertion bitmap_is_set(read_partitions) upon SELECT FOR UPDATE from versioned table
@@ -956,7 +970,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 PARTITIONS 2
 # 2 partitions are created: p0 and pn
@@ -969,7 +983,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 10
 PARTITIONS 4
 # 4 partitions are created: p0, p1, p2 and pn
@@ -1064,6 +1078,7 @@ create or replace table t1 (f char(6)) engine innodb with system versioning;
 insert into t1 values (null);
 update t1 set f= 'foo';
 update t1 set f= 'bar';
+# You see warning above ^
 create or replace view v1 as select * from t1 for system_time all;
 update v1 set f = '';
 ERROR HY000: Table 't1' was locked with a READ lock and can't be updated
@@ -1073,6 +1088,8 @@ partition by system_time limit 1
 insert into t1 values (null);
 update t1 set f= 'foo';
 update t1 set f= 'bar';
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p2`) is out of LIMIT, need more HISTORY partitions
 create or replace view v1 as select * from t1 for system_time all;
 update v1 set f= '';
 ERROR HY000: Table 't1' was locked with a READ lock and can't be updated
@@ -1194,7 +1211,436 @@ delete from t1 partition (p0, p1, pn);
 ERROR HY000: Not allowed for system-versioned table `test`.`t1`
 drop table t1;
 set timestamp= default;
+#
+# MDEV-25546 LIMIT partitioning does not respect ROLLBACK
+#
+create or replace table t1 (pk int primary key)
+with system versioning engine innodb
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+insert into t1 select seq from seq_1_to_90;
+start transaction;
+replace into t1 select seq from seq_1_to_80;
+replace into t1 select seq from seq_1_to_70;
+replace into t1 select seq from seq_1_to_60;
+select partition_name, table_rows
+from information_schema.partitions
+where table_name = 't1';
+partition_name	table_rows
+p0	150
+p1	60
+pn	90
+rollback;
+select partition_name, table_rows
+from information_schema.partitions
+where table_name = 't1';
+partition_name	table_rows
+p0	0
+p1	0
+pn	90
+replace into t1 select seq from seq_1_to_10;
+select partition_name, table_rows
+from information_schema.partitions
+where table_name = 't1';
+partition_name	table_rows
+p0	10
+p1	0
+pn	90
+drop table t1;
+#
+# MDEV-28271 Assertion on TRUNCATE PARTITION for PARTITION BY SYSTEM_TIME
+#
+create table t1 (x int) with system versioning
+partition by system_time limit 1 (
+partition p0 history,
+partition p1 history,
+partition p2 history, # p2 just disables warning about p1 partition full
+partition pn current);
+insert into t1 values (0);
+update t1 set x= x + 1;
+update t1 set x= x + 1;
+select * from t1 partition (p0);
+x
+0
+select * from t1 partition (p1);
+x
+1
+select * from t1 partition (pn);
+x
+2
+delete from t1;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p2`) is out of LIMIT, need more HISTORY partitions
+delete history from t1;
+select * from t1 partition (p0);
+x
+select * from t1 partition (p1);
+x
+select * from t1 partition (pn);
+x
+insert into t1 values (0);
+update t1 set x= x + 1;
+update t1 set x= x + 1;
+# TRUNCATE PARTITION ALL does the same
+alter table t1 truncate partition all;
+select * from t1 partition (p0);
+x
+select * from t1 partition (p1);
+x
+select * from t1 partition (pn);
+x
+insert into t1 values (0);
+update t1 set x= x + 1;
+update t1 set x= x + 1;
+# TRUNCATE PARTITION deletes data from HISTORY partition
+alter table t1 truncate partition p1;
+select * from t1 partition (p0);
+x
+0
+select * from t1 partition (p1);
+x
+select * from t1 partition (pn);
+x
+2
+# or from CURRENT partition
+alter table t1 truncate partition pn;
+select * from t1 partition (p0);
+x
+0
+select * from t1 partition (p1);
+x
+select * from t1 partition (pn);
+x
+drop table t1;
+#
+# MDEV-20077 Warning on full history partition is delayed until next DML statement
+#
+# DELETE
+create table t1 (x int) with system versioning
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+insert into t1 select seq from seq_0_to_200;
+# p0 is filled with 100 records (no warnings):
+delete from t1 where x <= 99;
+# p1 is filled with 1 + 100 records (warning is printed):
+delete from t1 where x <= 100;
+delete from t1;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
+select count(*) from t1 partition (p0);
+count(*)
+100
+select count(*) from t1 partition (p1);
+count(*)
+101
+drop table t1;
+# DELETE under LOCK TABLES
+create table t1 (x int) with system versioning
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+insert into t1 select seq from seq_0_to_200;
+lock tables t1 write;
+# (LOCK TABLES) p0 is filled with 100 records (no warnings):
+delete from t1 where x <= 99;
+# (LOCK TABLES) p1 is filled with 1 + 100 records (warning is printed):
+delete from t1 where x <= 100;
+delete from t1;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
+unlock tables;
+select count(*) from t1 partition (p0);
+count(*)
+100
+select count(*) from t1 partition (p1);
+count(*)
+101
+drop table t1;
+# DELETE multitable
+create table t1 (x int) with system versioning
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+create table t2 (y int);
+insert into t1 select seq from seq_0_to_200;
+insert into t2 select seq from seq_0_to_3;
+delete t1, t2 from t1 join t2 where x < 50 and y = 0;
+delete t1, t2 from t1 join t2 where x < 100 and y = 1;
+delete t1, t2 from t1 join t2 where x < 150 and y = 2;
+delete t1, t2 from t1 join t2;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
+select count(*) from t1 partition (p0);
+count(*)
+100
+select count(*) from t1 partition (p1);
+count(*)
+101
+drop table t1;
+# UDPATE
+create table t1 (x int) with system versioning
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+insert into t1 select seq from seq_0_to_49;
+update t1 set x= x + 1;
+update t1 set x= x + 1;
+update t1 set x= x + 1;
+update t1 set x= x + 1;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
+select count(*) from t1 partition (p0);
+count(*)
+100
+select count(*) from t1 partition (p1);
+count(*)
+100
+drop tables t1, t2;
+# UPDATE multitable
+create table t1 (x int) with system versioning
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+create table t2 (y int);
+insert into t1 select seq from seq_0_to_49;
+insert into t2 values (5);
+update t1, t2 set x= x + 1;
+update t1, t2 set x= x + 1;
+update t1, t2 set x= x + 1;
+update t1, t2 set x= x + 1;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
+select count(*) from t1 partition (p0);
+count(*)
+100
+select count(*) from t1 partition (p1);
+count(*)
+100
+drop tables t1, t2;
+# INSERT .. ON DUPLICATE KEY UPDATE (ODKU)
+create table t1 (x int primary key) with system versioning
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+insert into t1 select seq from seq_0_to_100;
+delete from t1 where x <= 99;
+insert into t1 values (100) on duplicate key update x= 400;
+select count(*) from t1 partition (p0);
+count(*)
+100
+select count(*) from t1 partition (p1);
+count(*)
+1
+drop table t1;
+# INSERT .. SELECT .. ON DUPLICATE KEY UPDATE (ODKU)
+create table t1 (x int primary key) with system versioning
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+create table t2 (y int);
+insert into t2 values (100);
+insert into t1 select seq from seq_0_to_100;
+delete from t1 where x <= 99;
+insert into t1 select * from t2 on duplicate key update x= 500;
+select count(*) from t1 partition (p0);
+count(*)
+100
+select count(*) from t1 partition (p1);
+count(*)
+1
+drop tables t1, t2;
+# REPLACE
+create table t1 (x int primary key) with system versioning
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+insert into t1 select seq from seq_0_to_100;
+delete from t1 where x < 99;
+replace t1 values (100);
+replace t1 values (100);
+select count(*) from t1 partition (p0);
+count(*)
+100
+select count(*) from t1 partition (p1);
+count(*)
+1
+drop table t1;
+# LOAD DATA .. REPLACE
+create table t1 (x int primary key) with system versioning
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+insert into t1 select seq from seq_0_to_49;
+select x into outfile 'MDEV-20077.data' from t1;
+load data infile 'MDEV-20077.data' replace into table t1 (x);
+load data infile 'MDEV-20077.data' replace into table t1 (x);
+load data infile 'MDEV-20077.data' replace into table t1 (x);
+load data infile 'MDEV-20077.data' replace into table t1 (x);
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
+select count(*) from t1 partition (p0);
+count(*)
+100
+select count(*) from t1 partition (p1);
+count(*)
+100
+drop table t1;
+# REPLACE .. SELECT
+create table t1 (x int primary key) with system versioning
+partition by system_time limit 100 (
+partition p0 history,
+partition p1 history,
+partition pn current);
+insert into t1 select seq from seq_0_to_49;
+replace t1 select * from t1;
+replace t1 select * from t1;
+replace t1 select * from t1;
+replace t1 select * from t1;
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
+# You see warning above ^
+select count(*) from t1 partition (p0);
+count(*)
+100
+select count(*) from t1 partition (p1);
+count(*)
+100
+drop table t1;
+#
+# MDEV-28552 Assertion `inited==RND' failed in handler::ha_rnd_end
+#
+create table tcount (c int unsigned);
+insert into tcount values (0);
+create table t (f int) with system versioning
+partition by system_time limit 1000
+(partition p1 history, partition pn current);
+insert into t values (1),(2);
+create trigger tr before insert on t for each row update tcount set c = c + 1;
+insert into t select * from t;
+drop table tcount, t;
+#
+# MDEV-19569 Assertion `table_list->table' failed in find_field_in_table_ref and Assertion `table_ref->table || table_ref->view' in Field_iterator_table_ref::set_field_iterator
+#
+set timestamp=unix_timestamp('2000-01-01 00:00:00');
+create table t1 (i int);
+create table t2 (i int);
+alter table t1 partition by system_time 
+interval (select i from t2) day (partition p1 history, partition pn current);
+ERROR 42000: INTERVAL does not support subqueries or stored functions
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time 
+interval (select i from t2) day (partition p1 history, partition pn current);
+ERROR 42000: INTERVAL does not support subqueries or stored functions
+create table t1 (id int) with system versioning
+partition by system_time
+interval "hello" day (partition p1 history, partition pn current);
+ERROR HY000: Wrong parameters for partitioned `t1`: wrong value for 'INTERVAL'
+create table t1 (id int) with system versioning
+partition by system_time
+interval 3.893 day (partition p1 history, partition pn current);
+drop table t1, t2;
+create table t1 (id int) with system versioning
+partition by system_time interval "3-11" year_month (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '3-11' YEAR_MONTH STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "3 11" day_hour (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '3 11' DAY_HOUR STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "3 11:12" day_minute (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '3 11:12' DAY_MINUTE STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "3 11:12:13" day_second (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '3 11:12:13' DAY_SECOND STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "11:12" hour_minute (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '11:12' HOUR_MINUTE STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "11:12:13" hour_second (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '11:12:13' HOUR_SECOND STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "12:13" minute_second (partition p1 history, partition pn current);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL '12:13' MINUTE_SECOND STARTS TIMESTAMP'2000-01-01 00:00:00'
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+drop table t1;
+create table t1 (id int) with system versioning
+partition by system_time interval "12:13.123" minute_microsecond (partition p1 history, partition pn current);
+ERROR HY000: Wrong parameters for partitioned `t1`: wrong value for 'INTERVAL'
+#
 # End of 10.3 tests
+#
 #
 # MDEV-22283 Server crashes in key_copy or unexpected error 156: The table already existed in the storage engine
 #
@@ -1227,7 +1673,9 @@ select * from t1 where i > 0 or pk = 1000 limit 1;
 pk	i	c
 1	1	a
 drop table t1;
+#
 # End of 10.4 tests
+#
 #
 # MDEV-22153 ALTER add default history partitions makes table inaccessible
 #
@@ -1239,7 +1687,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 PARTITIONS 3
 alter table t1 add partition partitions 2;
@@ -1249,7 +1697,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 PARTITIONS 5
 alter table t1 add partition partitions 3;
@@ -1259,7 +1707,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME 
 PARTITIONS 8
 drop tables t1;
@@ -1273,7 +1721,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 1
 (PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p3` HISTORY ENGINE = DEFAULT_ENGINE,
@@ -1283,7 +1731,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `i` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 1
 (PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p3` HISTORY ENGINE = DEFAULT_ENGINE,
@@ -1302,7 +1750,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 1
 (PARTITION `p2` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p8` HISTORY ENGINE = DEFAULT_ENGINE,
@@ -1315,7 +1763,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
-) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci WITH SYSTEM VERSIONING
  PARTITION BY SYSTEM_TIME LIMIT 1
 (PARTITION `p2` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `p8` HISTORY ENGINE = DEFAULT_ENGINE,
@@ -1335,5 +1783,4 @@ drop tables t1;
 #
 # End of 10.5 tests
 #
-SET GLOBAL innodb_stats_persistent=@save_persistent;
-# End of 10.6 tests
+set global innodb_stats_persistent= @save_persistent;

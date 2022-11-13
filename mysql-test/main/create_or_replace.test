@@ -5,6 +5,9 @@
 --source include/have_innodb.inc
 --source include/have_metadata_lock_info.inc
 
+SET @save_persistent=@@GLOBAL.innodb_stats_persistent;
+SET GLOBAL innodb_stats_persistent=OFF;
+
 #
 # Create help table
 #
@@ -41,7 +44,7 @@ DROP TEMPORARY TABLE t1;
 --echo #
 --echo # Testing with temporary tables
 --echo #
-
+--disable_view_protocol
 CREATE OR REPLACE TABLE t1 (a int);
 CREATE OR REPLACE TEMPORARY TABLE t1 (a int);
 CREATE OR REPLACE TEMPORARY TABLE t1 (a int, b int);
@@ -101,6 +104,7 @@ create or replace table t1 as select a from (select a from t1) as t3;
 --error ER_UPDATE_TABLE_USED
 create or replace table t1 as select a from t2 where t2.a in (select a from t1);
 drop table t1;
+--enable_view_protocol
 
 --echo #
 --echo # Testing with normal tables
@@ -123,6 +127,7 @@ CREATE OR REPLACE TABLE t1 AS SELECT 1;
 SHOW CREATE TABLE t1;
 DROP TABLE t1;
 
+--disable_service_connection
 # Using lock tables with CREATE OR REPLACE
 CREATE OR REPLACE TABLE t1 (a int);
 LOCK TABLES t1 write,t2 write;
@@ -204,6 +209,7 @@ drop table t1,t3,t4;
 --echo # Test the meta data locks are freed properly
 --echo #
 
+--disable_view_protocol
 create database mysqltest2;
 
 drop table if exists test.t1,mysqltest2.t2;
@@ -212,21 +218,18 @@ create table mysqltest2.t2 like test.t1;
 lock table test.t1 write, mysqltest2.t2 write;
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 --error ER_TABLE_MUST_HAVE_COLUMNS
 create or replace table test.t1;
 show tables;
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 --error ER_TABLE_MUST_HAVE_COLUMNS
 create or replace table mysqltest2.t2;
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 create table t1 (i int);
 drop table t1;
 
@@ -235,21 +238,18 @@ create table mysqltest2.t2 like test.t1;
 lock table test.t1 write, mysqltest2.t2 write;
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 --error ER_DUP_FIELDNAME
 create or replace table test.t1 (a int) select 1 as 'a', 2 as 'a';
 show tables;
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 --error ER_DUP_FIELDNAME
 create or replace table mysqltest2.t2 (a int) select 1 as 'a', 2 as 'a';
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 create table t1 (i int);
 drop table t1;
 
@@ -258,8 +258,7 @@ create table mysqltest2.t2 like test.t1;
 lock table test.t1 write, mysqltest2.t2 write;
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 unlock tables;
 drop table test.t1,mysqltest2.t2;
 
@@ -268,8 +267,7 @@ create table mysqltest2.t2 like test.t1;
 lock table test.t1 write, mysqltest2.t2 write;
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 unlock tables;
 drop table t1;
 
@@ -294,7 +292,7 @@ show tables;
 select * from information_schema.metadata_lock_info;
 create table t1 (i int);
 drop table t1;
-
+--enable_view_protocol
 
 --echo #
 --echo # Testing CREATE .. LIKE
@@ -369,24 +367,20 @@ create table t1 (a int);
 lock table t1 write, t2 read;
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 
 create or replace table t1 (i int);
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 create or replace table t1 like t2;
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 create or replace table t1 select 1 as f1;
 --replace_column 1 #
 --sorted_result
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 drop table t1;
 unlock tables;
 
@@ -516,5 +510,24 @@ CREATE OR REPLACE TEMPORARY TABLE t2(c INT DEFAULT '');
 SELECT * FROM t3;
 UNLOCK TABLES;
 DROP TABLE t3;
+--enable_service_connection
+
+--echo #
+--echo # MDEV-29697 Assertion failure in Diagnostics_area::set_ok_status
+--echo #            upon CREATE OR REPLACE causing ER_UPDATE_TABLE_USED
+--echo #
+CREATE TABLE t (a INT) ENGINE=MyISAM;
+CREATE TABLE tm (a INT) ENGINE=MERGE UNION(t);
+--error ER_UPDATE_TABLE_USED
+CREATE OR REPLACE TABLE t LIKE tm;
+
+# Cleanup
+DROP TABLE IF EXISTS tm, t;
+
+--echo #
+--echo # End of 10.3 tests
+--echo #
 
 --echo # End of 10.4 tests
+
+SET GLOBAL innodb_stats_persistent=@save_persistent;

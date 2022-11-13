@@ -1441,7 +1441,7 @@ static int mysql_test_update(Prepared_statement *stmt,
     DBUG_ASSERT(update_source_table || table_list->view != 0);
     DBUG_PRINT("info", ("Switch to multi-update"));
     /* pass counter value */
-    thd->lex->table_count= table_count;
+    thd->lex->table_count_update= table_count;
     /* convert to multiupdate */
     DBUG_RETURN(2);
   }
@@ -2461,6 +2461,10 @@ static bool check_prepared_statement(Prepared_statement *stmt)
       goto error;
   }
 
+#ifdef WITH_WSREP
+    if (wsrep_sync_wait(thd, sql_command))
+      goto error;
+#endif
   switch (sql_command) {
   case SQLCOM_REPLACE:
   case SQLCOM_INSERT:
@@ -4488,6 +4492,8 @@ bool Prepared_statement::prepare(const char *packet, uint packet_len)
     if (thd->spcont == NULL)
       general_log_write(thd, COM_STMT_PREPARE, query(), query_length());
   }
+  // The same format as for triggers to compare
+  hr_prepare_time= my_hrtime();
   DBUG_RETURN(error);
 }
 
@@ -4581,8 +4587,8 @@ Prepared_statement::execute_loop(String *expanded_query,
                                  uchar *packet_end)
 {
   Reprepare_observer reprepare_observer;
-  bool error;
   int reprepare_attempt= 0;
+  bool error;
   iterations= FALSE;
 
   /*
@@ -4601,7 +4607,13 @@ Prepared_statement::execute_loop(String *expanded_query,
 
   if (set_parameters(expanded_query, packet, packet_end))
     return TRUE;
-
+#ifdef WITH_WSREP
+  if (thd->wsrep_delayed_BF_abort)
+  {
+    WSREP_DEBUG("delayed BF abort, quitting execute_loop, stmt: %d", id);
+    return TRUE;
+  }
+#endif /* WITH_WSREP */
 reexecute:
   // Make sure that reprepare() did not create any new Items.
   DBUG_ASSERT(thd->free_list == NULL);

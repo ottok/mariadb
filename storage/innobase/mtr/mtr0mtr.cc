@@ -299,6 +299,50 @@ struct ReleaseAll {
   }
 };
 
+/** Stops iteration is savepoint is reached */
+template <typename Functor> struct TillSavepoint
+{
+
+  /** Constructor
+  @param[in] functor functor which is called if savepoint is not reached
+  @param[in] savepoint savepoint value to rollback
+  @param[in] used current position in slots container */
+  TillSavepoint(const Functor &functor, ulint savepoint, ulint used)
+      : functor(functor),
+        m_slots_count((used - savepoint) / sizeof(mtr_memo_slot_t))
+  {
+    ut_ad(savepoint);
+    ut_ad(used >= savepoint);
+  }
+
+  /** @return true if savepoint is not reached, false otherwise */
+  bool operator()(mtr_memo_slot_t *slot)
+  {
+#ifdef UNIV_DEBUG
+    /** This check is added because the code is invoked only from
+    row_search_mvcc() to release latches acquired during clustered index search
+    for secondary index record. To make it more universal we could add one more
+    member in this functor for debug build to pass only certain slot types,
+    but this is currently not necessary. */
+    switch (slot->type)
+    {
+    case MTR_MEMO_S_LOCK:
+    case MTR_MEMO_PAGE_S_FIX:
+      break;
+    default:
+      ut_a(false);
+    }
+#endif
+    return m_slots_count-- && functor(slot);
+  }
+
+private:
+  /** functor to invoke */
+  const Functor &functor;
+  /** slots count left till savepoint */
+  ulint m_slots_count;
+};
+
 #ifdef UNIV_DEBUG
 /** Check that all slots have been handled. */
 struct DebugCheck {
@@ -315,22 +359,10 @@ struct DebugCheck {
 struct ReleaseBlocks
 {
   const lsn_t start, end;
-#ifdef UNIV_DEBUG
-  const mtr_buf_t &memo;
-
-  ReleaseBlocks(lsn_t start, lsn_t end, const mtr_buf_t &memo) :
-    start(start), end(end), memo(memo)
-#else /* UNIV_DEBUG */
-  ReleaseBlocks(lsn_t start, lsn_t end, const mtr_buf_t&) :
-    start(start), end(end)
-#endif /* UNIV_DEBUG */
-  {
-    ut_ad(start);
-    ut_ad(end);
-  }
+  ReleaseBlocks(lsn_t start, lsn_t end) : start(start), end(end) {}
 
   /** @return true always */
-  bool operator()(mtr_memo_slot_t* slot) const
+  bool operator()(mtr_memo_slot_t *slot) const
   {
     if (!slot->object)
       return true;
@@ -343,8 +375,8 @@ struct ReleaseBlocks
       return true;
     }
 
-    buf_flush_note_modification(static_cast<buf_block_t*>(slot->object),
-                                start, end);
+    buf_block_t *block= static_cast<buf_block_t*>(slot->object);
+    buf_flush_note_modification(block, start, end);
     return true;
   }
 };
@@ -404,7 +436,7 @@ void mtr_t::commit()
 
     std::pair<lsn_t,page_flush_ahead> lsns;
 
-    if (UNIV_LIKELY(m_log_mode == MTR_LOG_ALL))
+    if (UNIV_LIKELY(is_logged()))
     {
       lsns= do_write();
 
@@ -448,9 +480,8 @@ void mtr_t::commit()
     else
       ut_ad(!m_freed_space);
 
-    m_memo.for_each_block_in_reverse(CIterate<const ReleaseBlocks>
-                                     (ReleaseBlocks(lsns.first, m_commit_lsn,
-                                                    m_memo)));
+    m_memo.for_each_block_in_reverse
+      (CIterate<const ReleaseBlocks>(ReleaseBlocks(lsns.first, m_commit_lsn)));
     if (m_made_dirty)
       mysql_mutex_unlock(&log_sys.flush_order_mutex);
 
@@ -466,6 +497,21 @@ void mtr_t::commit()
     m_memo.for_each_block_in_reverse(CIterate<ReleaseAll>());
 
   release_resources();
+}
+
+/** Release latches till savepoint. To simplify the code only
+MTR_MEMO_S_LOCK and MTR_MEMO_PAGE_S_FIX slot types are allowed to be
+released, otherwise it would be neccesary to add one more argument in the
+function to point out what slot types are allowed for rollback, and this
+would be overengineering as corrently the function is used only in one place
+in the code.
+@param savepoint   savepoint, can be obtained with get_savepoint */
+void mtr_t::rollback_to_savepoint(ulint savepoint)
+{
+  Iterate<TillSavepoint<ReleaseLatches>> iteration(
+      TillSavepoint<ReleaseLatches>(ReleaseLatches(), savepoint,
+                                    get_savepoint()));
+  m_memo.for_each_block_in_reverse(iteration);
 }
 
 /** Shrink a tablespace. */
@@ -531,6 +577,7 @@ void mtr_t::commit_shrink(fil_space_t &space)
   log_write_and_flush_prepare();
 
   const lsn_t start_lsn= do_write().first;
+  ut_d(m_log.erase());
 
   mysql_mutex_lock(&log_sys.flush_order_mutex);
   /* Durably write the reduced FSP_SIZE before truncating the data file. */
@@ -563,8 +610,7 @@ void mtr_t::commit_shrink(fil_space_t &space)
   m_memo.for_each_block_in_reverse(CIterate<Shrink>{space});
 
   m_memo.for_each_block_in_reverse(CIterate<const ReleaseBlocks>
-                                   (ReleaseBlocks(start_lsn, m_commit_lsn,
-                                                  m_memo)));
+                                   (ReleaseBlocks(start_lsn, m_commit_lsn)));
   mysql_mutex_unlock(&log_sys.flush_order_mutex);
 
   mysql_mutex_lock(&fil_system.mutex);
@@ -578,6 +624,92 @@ void mtr_t::commit_shrink(fil_space_t &space)
   srv_stats.log_write_requests.inc();
 
   release_resources();
+}
+
+/** Commit a mini-transaction that is deleting or renaming a file.
+@param space   tablespace that is being renamed or deleted
+@param name    new file name (nullptr=the file will be deleted)
+@return whether the operation succeeded */
+bool mtr_t::commit_file(fil_space_t &space, const char *name)
+{
+  ut_ad(is_active());
+  ut_ad(!is_inside_ibuf());
+  ut_ad(!high_level_read_only);
+  ut_ad(m_modifications);
+  ut_ad(!m_made_dirty);
+  ut_ad(!recv_recovery_is_on());
+  ut_ad(m_log_mode == MTR_LOG_ALL);
+  ut_ad(UT_LIST_GET_LEN(space.chain) == 1);
+
+  log_write_and_flush_prepare();
+
+  do_write();
+
+  mysql_mutex_assert_owner(&log_sys.mutex);
+
+  if (!name && space.max_lsn)
+  {
+    ut_d(space.max_lsn= 0);
+    fil_system.named_spaces.remove(space);
+  }
+
+  /* Block log_checkpoint(). */
+  mysql_mutex_lock(&buf_pool.flush_list_mutex);
+
+  /* Durably write the log for the file system operation. */
+  log_write_and_flush();
+
+  char *old_name= space.chain.start->name;
+  bool success;
+
+  if (name)
+  {
+    success= os_file_rename(innodb_data_file_key, old_name, name);
+
+    if (success)
+    {
+      mysql_mutex_lock(&fil_system.mutex);
+      space.chain.start->name= mem_strdup(name);
+      mysql_mutex_unlock(&fil_system.mutex);
+      ut_free(old_name);
+    }
+  }
+  else
+  {
+    /* Remove any additional files. */
+    if (char *cfg_name= fil_make_filepath(old_name,
+					  fil_space_t::name_type{}, CFG,
+                                          false))
+    {
+      os_file_delete_if_exists(innodb_data_file_key, cfg_name, nullptr);
+      ut_free(cfg_name);
+    }
+
+    if (FSP_FLAGS_HAS_DATA_DIR(space.flags))
+      RemoteDatafile::delete_link_file(space.name());
+
+    /* Remove the directory entry. The file will actually be deleted
+    when our caller closes the handle. */
+    os_file_delete(innodb_data_file_key, old_name);
+
+    mysql_mutex_lock(&fil_system.mutex);
+    /* Sanity checks after reacquiring fil_system.mutex */
+    ut_ad(&space == fil_space_get_by_id(space.id));
+    ut_ad(!space.referenced());
+    ut_ad(space.is_stopping());
+
+    fil_system.detach(&space, true);
+    mysql_mutex_unlock(&fil_system.mutex);
+
+    success= true;
+  }
+
+  mysql_mutex_unlock(&buf_pool.flush_list_mutex);
+  ut_d(m_log.erase());
+  release_resources();
+
+  srv_stats.log_write_requests.inc();
+  return success;
 }
 
 /** Commit a mini-transaction that did not modify any pages,
@@ -628,19 +760,9 @@ void mtr_t::commit_files(lsn_t checkpoint_lsn)
 bool
 mtr_t::is_named_space(ulint space) const
 {
-	ut_ad(!m_user_space || m_user_space->id != TRX_SYS_SPACE);
-
-	switch (m_log_mode) {
-	case MTR_LOG_NONE:
-	case MTR_LOG_NO_REDO:
-		return(true);
-	case MTR_LOG_ALL:
-		return(m_user_space_id == space
-		       || is_predefined_tablespace(space));
-	}
-
-	ut_error;
-	return(false);
+  ut_ad(!m_user_space || m_user_space->id != TRX_SYS_SPACE);
+  return !is_logged() || m_user_space_id == space ||
+    is_predefined_tablespace(space);
 }
 /** Check if a tablespace is associated with the mini-transaction
 (needed for generating a FILE_MODIFY record)
@@ -650,16 +772,8 @@ bool mtr_t::is_named_space(const fil_space_t* space) const
 {
   ut_ad(!m_user_space || m_user_space->id != TRX_SYS_SPACE);
 
-  switch (m_log_mode) {
-  case MTR_LOG_NONE:
-  case MTR_LOG_NO_REDO:
-    return true;
-  case MTR_LOG_ALL:
-    return m_user_space == space || is_predefined_tablespace(space->id);
-  }
-
-  ut_error;
-  return false;
+  return !is_logged() || m_user_space == space ||
+    is_predefined_tablespace(space->id);
 }
 #endif /* UNIV_DEBUG */
 
@@ -933,6 +1047,68 @@ static mtr_t::page_flush_ahead log_close(lsn_t lsn)
   return mtr_t::PAGE_FLUSH_SYNC;
 }
 
+inline void mtr_t::page_checksum(const buf_page_t &bpage)
+{
+  const byte *page= bpage.frame;
+  size_t size= srv_page_size;
+
+  if (UNIV_LIKELY_NULL(bpage.zip.data))
+  {
+    size= (UNIV_ZIP_SIZE_MIN >> 1) << bpage.zip.ssize;
+    switch (fil_page_get_type(bpage.zip.data)) {
+    case FIL_PAGE_TYPE_ALLOCATED:
+    case FIL_PAGE_INODE:
+    case FIL_PAGE_IBUF_BITMAP:
+    case FIL_PAGE_TYPE_FSP_HDR:
+    case FIL_PAGE_TYPE_XDES:
+      /* These are essentially uncompressed pages. */
+      break;
+    default:
+      page= bpage.zip.data;
+    }
+  }
+
+  /* We have to exclude from the checksum the normal
+  page checksum that is written by buf_flush_init_for_writing()
+  and FIL_PAGE_LSN which would be updated once we have actually
+  allocated the LSN.
+
+  Unfortunately, we cannot access fil_space_t easily here. In order to
+  be compatible with encrypted tablespaces in the pre-full_crc32
+  format we will unconditionally exclude the 8 bytes at
+  FIL_PAGE_FILE_FLUSH_LSN_OR_KEY_VERSION
+  a.k.a. FIL_RTREE_SPLIT_SEQ_NUM. */
+  const uint32_t checksum=
+    my_crc32c(my_crc32c(my_crc32c(0, page + FIL_PAGE_OFFSET,
+                                  FIL_PAGE_LSN - FIL_PAGE_OFFSET),
+                        page + FIL_PAGE_TYPE, 2),
+              page + FIL_PAGE_SPACE_ID, size - (FIL_PAGE_SPACE_ID + 8));
+
+  byte *l= log_write<OPTION>(bpage.id(), nullptr, 5, true, 0);
+  *l++= OPT_PAGE_CHECKSUM;
+  mach_write_to_4(l, checksum);
+  m_log.close(l + 4);
+}
+
+/** Write OPT_PAGE_CHECKSUM records for modified pages */
+struct WriteOPT_PAGE_CHECKSUM
+{
+  mtr_t &mtr;
+  WriteOPT_PAGE_CHECKSUM(mtr_t &mtr) : mtr(mtr) {}
+
+  /** @return true always */
+  bool operator()(const mtr_memo_slot_t *slot) const
+  {
+    if (slot->type & MTR_MEMO_MODIFY)
+    {
+      const buf_page_t &b= static_cast<const buf_block_t*>(slot->object)->page;
+      if (!b.is_freed())
+        mtr.page_checksum(b);
+    }
+    return true;
+  }
+};
+
 /** Write the block contents to the REDO log */
 struct mtr_write_log
 {
@@ -948,10 +1124,21 @@ struct mtr_write_log
 std::pair<lsn_t,mtr_t::page_flush_ahead> mtr_t::do_write()
 {
 	ut_ad(!recv_no_log_write);
-	ut_ad(m_log_mode == MTR_LOG_ALL);
+	ut_ad(is_logged());
 
 	ulint	len	= m_log.size();
 	ut_ad(len > 0);
+
+#ifndef DBUG_OFF
+	if (m_log_mode == MTR_LOG_ALL) {
+		do {
+			DBUG_EXECUTE_IF("skip_page_checksum", continue;);
+			m_memo.for_each_block(CIterate<WriteOPT_PAGE_CHECKSUM>
+					      (*this));
+			len = m_log.size();
+		} while (0);
+	}
+#endif
 
 	if (len > srv_log_buffer_size / 2) {
 		log_buffer_extend(ulong((len + 1) * 2));
@@ -988,7 +1175,7 @@ std::pair<lsn_t,mtr_t::page_flush_ahead> mtr_t::do_write()
 @return {start_lsn,flush_ahead} */
 inline std::pair<lsn_t,mtr_t::page_flush_ahead> mtr_t::finish_write(ulint len)
 {
-	ut_ad(m_log_mode == MTR_LOG_ALL);
+	ut_ad(is_logged());
 	mysql_mutex_assert_owner(&log_sys.mutex);
 	ut_ad(m_log.size() == len);
 	ut_ad(len > 0);
@@ -1029,7 +1216,22 @@ struct FindBlockX
   /** @return whether the block was not found x-latched */
   bool operator()(const mtr_memo_slot_t *slot) const
   {
-    return slot->object != &block || slot->type != MTR_MEMO_PAGE_X_FIX;
+    return slot->object != &block || !(slot->type & MTR_MEMO_PAGE_X_FIX);
+  }
+};
+
+/** Find out whether a block was not X or U latched by the mini-transaction */
+struct FindBlockUX
+{
+  const buf_block_t &block;
+
+  FindBlockUX(const buf_block_t &block): block(block) {}
+
+  /** @return whether the block was not found x-latched */
+  bool operator()(const mtr_memo_slot_t *slot) const
+  {
+    return slot->object != &block ||
+      !(slot->type & (MTR_MEMO_PAGE_X_FIX | MTR_MEMO_PAGE_SX_FIX));
   }
 };
 
@@ -1063,6 +1265,14 @@ bool mtr_t::have_x_latch(const buf_block_t &block) const
   return true;
 }
 
+bool mtr_t::have_u_or_x_latch(const buf_block_t &block) const
+{
+  if (m_memo.for_each_block(CIterate<FindBlockUX>(FindBlockUX(block))))
+    return false;
+  ut_ad(block.page.lock.have_u_or_x());
+  return true;
+}
+
 /** Check if we are holding exclusive tablespace latch
 @param space  tablespace to search for
 @param shared whether to look for shared latch, instead of exclusive
@@ -1077,45 +1287,6 @@ bool mtr_t::memo_contains(const fil_space_t& space, bool shared)
   ut_ad(shared || space.is_owner());
   return true;
 }
-
-#ifdef BTR_CUR_HASH_ADAPT
-/** If a stale adaptive hash index exists on the block, drop it.
-Multiple executions of btr_search_drop_page_hash_index() on the
-same block must be prevented by exclusive page latch. */
-ATTRIBUTE_COLD
-static void mtr_defer_drop_ahi(buf_block_t *block, mtr_memo_type_t fix_type)
-{
-  switch (fix_type) {
-  case MTR_MEMO_BUF_FIX:
-    /* We do not drop the adaptive hash index, because safely doing
-    so would require acquiring block->lock, and that is not safe
-    to acquire in some RW_NO_LATCH access paths. Those code paths
-    should have no business accessing the adaptive hash index anyway. */
-    break;
-  case MTR_MEMO_PAGE_S_FIX:
-    /* Temporarily release our S-latch. */
-    block->page.lock.s_unlock();
-    block->page.lock.x_lock();
-    if (dict_index_t *index= block->index)
-      if (index->freed())
-        btr_search_drop_page_hash_index(block);
-    block->page.lock.x_unlock();
-    block->page.lock.s_lock();
-    ut_ad(!block->page.is_read_fixed());
-    break;
-  case MTR_MEMO_PAGE_SX_FIX:
-    block->page.lock.u_x_upgrade();
-    if (dict_index_t *index= block->index)
-      if (index->freed())
-        btr_search_drop_page_hash_index(block);
-    block->page.lock.x_u_downgrade();
-    break;
-  default:
-    ut_ad(fix_type == MTR_MEMO_PAGE_X_FIX);
-    btr_search_drop_page_hash_index(block);
-  }
-}
-#endif /* BTR_CUR_HASH_ADAPT */
 
 /** Upgrade U-latched pages to X */
 struct UpgradeX
@@ -1171,8 +1342,7 @@ void mtr_t::page_lock(buf_block_t *block, ulint rw_latch)
   ut_d(const auto state= block->page.state());
   ut_ad(state > buf_page_t::FREED);
   ut_ad(state > buf_page_t::WRITE_FIX || state < buf_page_t::READ_FIX);
-  switch (rw_latch)
-  {
+  switch (rw_latch) {
   case RW_NO_LATCH:
     fix_type= MTR_MEMO_BUF_FIX;
     goto done;
@@ -1198,10 +1368,8 @@ void mtr_t::page_lock(buf_block_t *block, ulint rw_latch)
   }
 
 #ifdef BTR_CUR_HASH_ADAPT
-  if (dict_index_t *index= block->index)
-    if (index->freed())
-      mtr_defer_drop_ahi(block, fix_type);
-#endif /* BTR_CUR_HASH_ADAPT */
+  btr_search_drop_page_hash_index(block, true);
+#endif
 
 done:
   ut_ad(state < buf_page_t::UNFIXED ||
@@ -1335,20 +1503,10 @@ mtr_t::memo_contains_page_flagged(
 	return m_memo.for_each_block_in_reverse(iteration)
 		? NULL : iteration.functor.get_block();
 }
-
-/** Print info of an mtr handle. */
-void
-mtr_t::print() const
-{
-	ib::info() << "Mini-transaction handle: memo size "
-		<< m_memo.size() << " bytes log size "
-		<< get_log()->size() << " bytes";
-}
-
 #endif /* UNIV_DEBUG */
 
 
-/** Find a block, preferrably in MTR_MEMO_MODIFY state */
+/** Find a potentially modified block. */
 struct FindModified
 {
   mtr_memo_slot_t *found= nullptr;
@@ -1360,8 +1518,7 @@ struct FindModified
     if (slot->object != &block)
       return true;
     found= slot;
-    return !(slot->type & (MTR_MEMO_MODIFY |
-                           MTR_MEMO_PAGE_X_FIX | MTR_MEMO_PAGE_SX_FIX));
+    return !(slot->type & (MTR_MEMO_PAGE_X_FIX | MTR_MEMO_PAGE_SX_FIX));
   }
 };
 
@@ -1384,4 +1541,68 @@ void mtr_t::modify(const buf_block_t &block)
   }
   iteration.functor.found->type= static_cast<mtr_memo_type_t>
     (iteration.functor.found->type | MTR_MEMO_MODIFY);
+  if (is_block_dirtied(&block))
+    m_made_dirty= true;
+}
+
+/** Handle an exclusively latched block that was later marked as freed. */
+struct MarkFreed
+{
+  const page_id_t id;
+  mutable buf_block_t *freed= nullptr;
+  MarkFreed(page_id_t id) : id(id) {}
+
+  bool operator()(mtr_memo_slot_t *slot) const
+  {
+    buf_block_t *block= static_cast<buf_block_t*>(slot->object);
+    if (!block);
+    else if (block == freed)
+    {
+      if (slot->type & (MTR_MEMO_PAGE_SX_FIX | MTR_MEMO_PAGE_X_FIX))
+        slot->type= MTR_MEMO_PAGE_X_FIX;
+      else
+      {
+        ut_ad(slot->type == MTR_MEMO_BUF_FIX);
+        block->page.unfix();
+        slot->object= nullptr;
+      }
+    }
+    else if (slot->type & (MTR_MEMO_PAGE_X_FIX | MTR_MEMO_PAGE_SX_FIX) &&
+             block->page.id() == id)
+    {
+      ut_ad(!block->page.is_freed());
+      ut_ad(!freed);
+      freed= block;
+      if (!(slot->type & MTR_MEMO_PAGE_X_FIX))
+      {
+        ut_d(bool upgraded=) block->page.lock.x_lock_upgraded();
+        ut_ad(upgraded);
+      }
+      slot->type= MTR_MEMO_PAGE_X_MODIFY;
+#ifdef BTR_CUR_HASH_ADAPT
+      if (block->index)
+        btr_search_drop_page_hash_index(block);
+#endif /* BTR_CUR_HASH_ADAPT */
+      block->page.set_freed(block->page.state());
+    }
+    return true;
+  }
+};
+
+/** Free a page.
+@param space   tablespace
+@param offset  offset of the page to be freed */
+void mtr_t::free(const fil_space_t &space, uint32_t offset)
+{
+  ut_ad(is_named_space(&space));
+  ut_ad(!m_freed_space || m_freed_space == &space);
+
+  if (is_logged())
+  {
+    CIterate<MarkFreed> mf{MarkFreed{{space.id, offset}}};
+    m_memo.for_each_block_in_reverse(mf);
+    if (mf.functor.freed && !m_made_dirty)
+      m_made_dirty= is_block_dirtied(mf.functor.freed);
+    m_log.close(log_write<FREE_PAGE>({space.id, offset}, nullptr));
+  }
 }

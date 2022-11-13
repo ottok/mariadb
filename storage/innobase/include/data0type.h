@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2020, MariaDB Corporation.
+Copyright (c) 2017, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -24,9 +24,7 @@ Data types
 Created 1/16/1996 Heikki Tuuri
 *******************************************************/
 
-#ifndef data0type_h
-#define data0type_h
-
+#pragma once
 #include "univ.i"
 
 /** Special length indicating a missing instantly added column */
@@ -196,9 +194,6 @@ constexpr uint8_t DATA_MBR_LEN= uint8_t(SPDIMS * 2 * sizeof(double));
 /** system-versioned user data column */
 #define DATA_VERSIONED (DATA_VERS_START|DATA_VERS_END)
 
-/** Check whether locking is disabled (never). */
-#define dict_table_is_locking_disabled(table) false
-
 /*-------------------------------------------*/
 
 /* This many bytes we need to store the type information affecting the
@@ -325,7 +320,6 @@ dtype_get_prtype(
 
 /*********************************************************************//**
 Compute the mbminlen and mbmaxlen members of a data type structure. */
-UNIV_INLINE
 void
 dtype_get_mblen(
 /*============*/
@@ -494,6 +488,8 @@ dtype_print(
 	const dtype_t*	type);
 #endif /* UNIV_DEBUG */
 
+struct dict_col_t;
+
 /* Structure for an SQL data type.
 If you add fields to this structure, be sure to initialize them everywhere.
 This structure is initialized in the following functions:
@@ -549,6 +545,10 @@ struct dtype_t{
 		mbminlen = 0;
 		mbmaxlen = 0;
 	}
+
+	/** Copy the type information from a column.
+	@param col column type to be copied */
+	void assign(const dict_col_t &col);
 };
 
 /** The DB_TRX_ID,DB_ROLL_PTR values for "no history is available" */
@@ -589,5 +589,3 @@ static const byte REC_INFO_METADATA_ALTER
 	= REC_INFO_METADATA_ADD | REC_INFO_DELETED_FLAG;
 
 #include "data0type.inl"
-
-#endif

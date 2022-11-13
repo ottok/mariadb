@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1994, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2021, MariaDB Corporation.
+Copyright (c) 2017, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -32,7 +32,6 @@ Created 5/11/1994 Heikki Tuuri
 
 #ifndef UNIV_INNOCHECKSUM
 #include <mysql_com.h>
-#include "os0thread.h"
 #include "ut0ut.h"
 #include "trx0trx.h"
 #include <string>
@@ -92,7 +91,7 @@ ut_print_timestamp(
 #ifdef UNIV_INNOCHECKSUM
 		ulint{0}
 #else
-		ulint(os_thread_get_curr_id())
+		ulint(pthread_self())
 #endif
 		);
 }
@@ -450,9 +449,6 @@ ut_strerr(
 		return("Table is encrypted but decrypt failed.");
 	case DB_IO_PARTIAL_FAILED:
 		return("Partial IO failed");
-	case DB_FORCED_ABORT:
-		return("Transaction aborted by another higher priority "
-		       "transaction");
 	case DB_COMPUTE_VALUE_FAILED:
 		return("Compute generated column failed");
 	case DB_NO_FK_ON_S_BASE_COL:

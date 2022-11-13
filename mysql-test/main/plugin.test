@@ -27,6 +27,7 @@ SELECT * FROM t1;
 set global example_ulong_var=500;
 set global example_enum_var= e1;
 set session example_int_var= -1;
+set global example_deprecated_var=1;
 show status like 'example%';
 show variables like 'example%';
 
@@ -255,10 +256,12 @@ select plugin_name from information_schema.plugins where plugin_library like 'ha
 #
 #
 #
+--disable_service_connection
 set names utf8;
 select convert('admin𝌆' using utf8);
 --error ER_UDF_NO_PATHS
 install plugin foo soname 'admin𝌆';
+--enable_service_connection
 
 --echo # End of 5.5 test
 
@@ -294,6 +297,23 @@ select * from mysql.plugin WHERE name='unexisting_plugin';
 
 --error ER_SP_DOES_NOT_EXIST
 UNINSTALL PLUGIN unexisting_plugin;
+
+--echo #
+--echo # MDEV-26323 use-after-poison issue of MariaDB server
+--echo #
+
+--replace_regex /library '.*[\\/].(dll|so)' [(].*[)]/library '.so'/
+--error ER_CANT_OPEN_LIBRARY
+INSTALL PLUGIN DEALLOCATE SONAME '';
+
+--replace_regex /library '.*[\\/]x.(dll|so)' [(].*[)]/library 'x.so'/
+--error ER_CANT_OPEN_LIBRARY
+INSTALL PLUGIN DEALLOCATE SONAME 'x';
+
+--replace_regex /library '.*[\\/]xx.(dll|so)' [(].*[)]/library 'xx.so'/
+--error ER_CANT_OPEN_LIBRARY
+INSTALL PLUGIN DEALLOCATE SONAME 'xx';
+
 
 --echo # End of 10.2 tests
 

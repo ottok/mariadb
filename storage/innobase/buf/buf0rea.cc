@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2015, 2021, MariaDB Corporation.
+Copyright (c) 2015, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -41,6 +41,7 @@ Created 11/5/1995 Heikki Tuuri
 #include "os0file.h"
 #include "srv0start.h"
 #include "srv0srv.h"
+#include "log.h"
 
 /** If there are buf_pool.curr_size per the number below pending reads, then
 read-ahead is not done: this is to prevent flooding the buffer pool with
@@ -50,19 +51,30 @@ i/o-fixed buffer blocks */
 /** Remove the sentinel block for the watch before replacing it with a
 real block. watch_unset() or watch_occurred() will notice
 that the block has been replaced with the real block.
-@param watch      sentinel
-@param chain      locked hash table chain */
-inline void buf_pool_t::watch_remove(buf_page_t *watch,
-                                     buf_pool_t::hash_chain &chain)
+@param w          sentinel
+@param chain      locked hash table chain
+@return           w->state() */
+inline uint32_t buf_pool_t::watch_remove(buf_page_t *w,
+                                         buf_pool_t::hash_chain &chain)
 {
   mysql_mutex_assert_owner(&buf_pool.mutex);
-  ut_ad(page_hash.lock_get(chain).is_write_locked());
-  ut_a(watch_is_sentinel(*watch));
-  if (watch->buf_fix_count())
-    page_hash.remove(chain, watch);
-  ut_ad(!watch->in_page_hash);
-  watch->set_state(buf_page_t::NOT_USED);
-  watch->id_= page_id_t(~0ULL);
+  ut_ad(xtest() || page_hash.lock_get(chain).is_write_locked());
+  ut_ad(w >= &watch[0]);
+  ut_ad(w < &watch[array_elements(watch)]);
+  ut_ad(!w->in_zip_hash);
+  ut_ad(!w->zip.data);
+
+  uint32_t s{w->state()};
+  w->set_state(buf_page_t::NOT_USED);
+  ut_ad(s >= buf_page_t::UNFIXED);
+  ut_ad(s < buf_page_t::READ_FIX);
+
+  if (~buf_page_t::LRU_MASK & s)
+    page_hash.remove(chain, w);
+
+  ut_ad(!w->in_page_hash);
+  w->id_= page_id_t(~0ULL);
+  return s;
 }
 
 /** Initialize a page for read to the buffer buf_pool. If the page is
@@ -139,14 +151,8 @@ static buf_page_t* buf_page_init_for_read(ulint mode, const page_id_t page_id,
         {buf_pool.page_hash.lock_get(chain)};
 
       if (hash_page)
-      {
-        /* Preserve the reference count. */
-        uint32_t buf_fix_count= hash_page->state();
-        ut_a(buf_fix_count >= buf_page_t::UNFIXED);
-        ut_a(buf_fix_count < buf_page_t::READ_FIX);
-        buf_pool.watch_remove(hash_page, chain);
-        block->page.fix(buf_fix_count - buf_page_t::UNFIXED);
-      }
+        bpage->set_state(buf_pool.watch_remove(hash_page, chain) +
+                         (buf_page_t::READ_FIX - buf_page_t::UNFIXED));
 
       buf_pool.page_hash.append(chain, &block->page);
     }
@@ -209,16 +215,8 @@ static buf_page_t* buf_page_init_for_read(ulint mode, const page_id_t page_id,
         {buf_pool.page_hash.lock_get(chain)};
 
       if (hash_page)
-      {
-        /* Preserve the reference count. It can be 0 if
-        buf_pool_t::watch_unset() is executing concurrently,
-        waiting for buf_pool.mutex, which we are holding. */
-        uint32_t buf_fix_count= hash_page->state();
-        ut_a(buf_fix_count >= buf_page_t::UNFIXED);
-        ut_a(buf_fix_count < buf_page_t::READ_FIX);
-        bpage->fix(buf_fix_count - buf_page_t::UNFIXED);
-        buf_pool.watch_remove(hash_page, chain);
-      }
+        bpage->set_state(buf_pool.watch_remove(hash_page, chain) +
+                         (buf_page_t::READ_FIX - buf_page_t::UNFIXED));
 
       buf_pool.page_hash.append(chain, bpage);
     }
@@ -290,7 +288,7 @@ nothing_read:
 		/* Trx sys header is so low in the latching order that we play
 		safe and do not leave the i/o-completion to an asynchronous
 		i/o-thread. Change buffer pages must always be read with
-		syncronous i/o, to make sure they do not get involved in
+		synchronous i/o, to make sure they do not get involved in
 		thread deadlocks. */
 		sync = true;
 	}
@@ -322,28 +320,17 @@ nothing_read:
 				       ? IORequest::READ_SYNC
 				       : IORequest::READ_ASYNC),
 			     page_id.page_no() * len, len, dst, bpage);
-	*err= fio.err;
+	*err = fio.err;
 
 	if (UNIV_UNLIKELY(fio.err != DB_SUCCESS)) {
-		if (!sync || fio.err == DB_TABLESPACE_DELETED
-		    || fio.err == DB_IO_ERROR) {
-			buf_pool.corrupted_evict(bpage);
-			return false;
-		}
-
-		ut_error;
-	}
-
-	if (sync) {
+		ut_d(auto n=) buf_pool.n_pend_reads--;
+		ut_ad(n > 0);
+		buf_pool.corrupted_evict(bpage, buf_page_t::READ_FIX);
+	} else if (sync) {
 		thd_wait_end(NULL);
-
 		/* The i/o was already completed in space->io() */
 		*err = bpage->read_complete(*fio.node);
 		space->release();
-
-		if (*err != DB_SUCCESS) {
-			return false;
-		}
 	}
 
 	return true;
@@ -490,26 +477,6 @@ void buf_read_page_background(fil_space_t *space, const page_id_t page_id,
 	if (buf_read_page_low(&err, space, false, BUF_READ_ANY_PAGE,
 			      page_id, zip_size, false)) {
 		srv_stats.buf_pool_reads.add(1);
-	}
-
-	switch (err) {
-	case DB_SUCCESS:
-	case DB_ERROR:
-		break;
-	case DB_TABLESPACE_DELETED:
-		ib::info() << "trying to read page " << page_id
-			<< " in the background"
-			" in a non-existing or being-dropped tablespace";
-		break;
-	case DB_PAGE_CORRUPTED:
-	case DB_DECRYPTION_FAILED:
-		ib::error()
-			<< "Background Page read failed to "
-			"read or decrypt " << page_id;
-		break;
-	default:
-		ib::fatal() << "Error " << err << " in background read of "
-			<< page_id;
 	}
 
 	/* We do not increment number of I/O operations used for LRU policy
@@ -688,6 +655,13 @@ failed:
   return count;
 }
 
+/** @return whether a page has been freed */
+inline bool fil_space_t::is_freed(uint32_t page)
+{
+  std::lock_guard<std::mutex> freed_lock(freed_range_mutex);
+  return freed_ranges.contains(page);
+}
+
 /** Issues read requests for pages which recovery wants to read in.
 @param[in]	space_id	tablespace id
 @param[in]	page_nos	array of page numbers to read, with the
@@ -707,7 +681,7 @@ void buf_read_recv_pages(ulint space_id, const uint32_t* page_nos, ulint n)
 	for (ulint i = 0; i < n; i++) {
 
 		/* Ignore if the page already present in freed ranges. */
-		if (space->freed_ranges.contains(page_nos[i])) {
+		if (space->is_freed(page_nos[i])) {
 			continue;
 		}
 
@@ -738,12 +712,13 @@ void buf_read_recv_pages(ulint space_id, const uint32_t* page_nos, ulint n)
 				  BUF_READ_ANY_PAGE, cur_page_id, zip_size,
 				  true);
 
-		if (err == DB_DECRYPTION_FAILED || err == DB_PAGE_CORRUPTED) {
-			ib::error() << "Recovery failed to read or decrypt "
-				<< cur_page_id;
+		if (err != DB_SUCCESS) {
+			sql_print_error("InnoDB: Recovery failed to read page "
+					UINT32PF " from %s",
+					cur_page_id.page_no(),
+					space->chain.start->name);
 		}
 	}
-
 
         DBUG_PRINT("ib_buf", ("recovery read (%u pages) for %s", n,
 			      space->chain.start->name));

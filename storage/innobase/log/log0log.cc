@@ -2,7 +2,7 @@
 
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2009, Google Inc.
-Copyright (c) 2014, 2021, MariaDB Corporation.
+Copyright (c) 2014, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -214,7 +214,7 @@ void log_t::create()
   max_checkpoint_age= 0;
   next_checkpoint_no= 0;
   next_checkpoint_lsn= 0;
-  n_pending_checkpoint_writes= 0;
+  checkpoint_pending= false;
 
   log_block_init(buf, LOG_START_LSN);
   log_block_set_first_rec_group(buf, LOG_BLOCK_HDR_SIZE);
@@ -693,13 +693,14 @@ mutex is released in the function.
 static void log_write(bool rotate_key)
 {
 	mysql_mutex_assert_owner(&log_sys.mutex);
-	ut_ad(!recv_no_log_write);
 	lsn_t write_lsn;
 	if (log_sys.buf_free == log_sys.buf_next_to_write) {
 		/* Nothing to write */
 		mysql_mutex_unlock(&log_sys.mutex);
 		return;
 	}
+
+	ut_ad(!recv_no_log_write);
 
 	ulint		start_offset;
 	ulint		end_offset;
@@ -822,9 +823,12 @@ void log_write_up_to(lsn_t lsn, bool flush_to_disk, bool rotate_key,
 repeat:
   lsn_t ret_lsn1= 0, ret_lsn2= 0;
 
-  if (flush_to_disk &&
-      flush_lock.acquire(lsn, callback) != group_commit_lock::ACQUIRED)
-    return;
+  if (flush_to_disk)
+  {
+    if (flush_lock.acquire(lsn, callback) != group_commit_lock::ACQUIRED)
+      return;
+    flush_lock.set_pending(log_sys.get_lsn());
+  }
 
   if (write_lock.acquire(lsn, flush_to_disk ? nullptr : callback) ==
       group_commit_lock::ACQUIRED)
@@ -832,7 +836,8 @@ repeat:
     mysql_mutex_lock(&log_sys.mutex);
     lsn_t write_lsn= log_sys.get_lsn();
     write_lock.set_pending(write_lsn);
-
+    if (flush_to_disk)
+      flush_lock.set_pending(write_lsn);
     log_write(rotate_key);
 
     ut_a(log_sys.write_lsn == write_lsn);
@@ -958,7 +963,8 @@ ATTRIBUTE_COLD void log_write_checkpoint_info(lsn_t end_lsn)
 	ut_ad(LOG_CHECKPOINT_1 < srv_page_size);
 	ut_ad(LOG_CHECKPOINT_2 < srv_page_size);
 
-	++log_sys.n_pending_checkpoint_writes;
+	ut_ad(!log_sys.checkpoint_pending);
+	log_sys.checkpoint_pending = true;
 
 	mysql_mutex_unlock(&log_sys.mutex);
 
@@ -973,8 +979,8 @@ ATTRIBUTE_COLD void log_write_checkpoint_info(lsn_t end_lsn)
 
 	mysql_mutex_lock(&log_sys.mutex);
 
-	--log_sys.n_pending_checkpoint_writes;
-	ut_ad(log_sys.n_pending_checkpoint_writes == 0);
+	ut_ad(log_sys.checkpoint_pending);
+	log_sys.checkpoint_pending = false;
 
 	log_sys.next_checkpoint_no++;
 
@@ -986,8 +992,6 @@ ATTRIBUTE_COLD void log_write_checkpoint_info(lsn_t end_lsn)
 			      log_sys.get_flushed_lsn()));
 
 	MONITOR_INC(MONITOR_NUM_CHECKPOINT);
-
-	DBUG_EXECUTE_IF("crash_after_checkpoint", DBUG_SUICIDE(););
 
 	mysql_mutex_unlock(&log_sys.mutex);
 }
@@ -1068,7 +1072,6 @@ ATTRIBUTE_COLD void logs_empty_and_mark_files_at_shutdown()
 	dict_stats_shutdown();
 	btr_defragment_shutdown();
 
-	ut_d(srv_master_thread_enable());
 	srv_shutdown_state = SRV_SHUTDOWN_CLEANUP;
 
 	if (srv_buffer_pool_dump_at_shutdown &&
@@ -1172,8 +1175,8 @@ wait_suspend_loop:
 
 	if (log_sys.is_initialised()) {
 		mysql_mutex_lock(&log_sys.mutex);
-		const ulint	n_write	= log_sys.n_pending_checkpoint_writes;
-		const ulint	n_flush	= log_sys.pending_flushes;
+		const size_t n_write{log_sys.checkpoint_pending};
+		const size_t n_flush{log_sys.get_pending_flushes()};
 		mysql_mutex_unlock(&log_sys.mutex);
 
 		if (n_write || n_flush) {
@@ -1309,7 +1312,7 @@ log_print(
 		ULINTPF " pending chkp writes\n"
 		ULINTPF " log i/o's done, %.2f log i/o's/second\n",
 		log_sys.pending_flushes.load(),
-		log_sys.n_pending_checkpoint_writes,
+		ulint{log_sys.checkpoint_pending},
 		log_sys.n_log_ios,
 		static_cast<double>(
 			log_sys.n_log_ios - log_sys.n_log_ios_old)

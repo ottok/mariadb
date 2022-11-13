@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1996, 2015, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2015, 2021, MariaDB Corporation.
+Copyright (c) 2015, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -124,16 +124,8 @@ btr_pcur_is_on_user_rec(
 /*====================*/
 	const btr_pcur_t*	cursor)	/*!< in: persistent cursor */
 {
-	ut_ad(cursor->pos_state == BTR_PCUR_IS_POSITIONED);
-	ut_ad(cursor->latch_mode != BTR_NO_LATCHES);
-
-	if (btr_pcur_is_before_first_on_page(cursor)
-	    || btr_pcur_is_after_last_on_page(cursor)) {
-
-		return(FALSE);
-	}
-
-	return(TRUE);
+  return !btr_pcur_is_before_first_on_page(cursor) &&
+    !btr_pcur_is_after_last_on_page(cursor);
 }
 
 /*********************************************************//**
@@ -163,7 +155,7 @@ static inline bool btr_pcur_is_after_last_in_tree(btr_pcur_t* cursor)
 /*********************************************************//**
 Moves the persistent cursor to the next record on the same page. */
 UNIV_INLINE
-void
+rec_t*
 btr_pcur_move_to_next_on_page(
 /*==========================*/
 	btr_pcur_t*	cursor)	/*!< in/out: persistent cursor */
@@ -171,25 +163,23 @@ btr_pcur_move_to_next_on_page(
 	ut_ad(cursor->pos_state == BTR_PCUR_IS_POSITIONED);
 	ut_ad(cursor->latch_mode != BTR_NO_LATCHES);
 
-	page_cur_move_to_next(btr_pcur_get_page_cur(cursor));
-
 	cursor->old_stored = false;
+	return page_cur_move_to_next(btr_pcur_get_page_cur(cursor));
 }
 
 /*********************************************************//**
 Moves the persistent cursor to the previous record on the same page. */
 UNIV_INLINE
-void
+rec_t*
 btr_pcur_move_to_prev_on_page(
 /*==========================*/
 	btr_pcur_t*	cursor)	/*!< in/out: persistent cursor */
 {
 	ut_ad(cursor->pos_state == BTR_PCUR_IS_POSITIONED);
 	ut_ad(cursor->latch_mode != BTR_NO_LATCHES);
-
-	page_cur_move_to_prev(btr_pcur_get_page_cur(cursor));
-
 	cursor->old_stored = false;
+
+	return page_cur_move_to_prev(btr_pcur_get_page_cur(cursor));
 }
 
 /*********************************************************//**
@@ -209,13 +199,12 @@ btr_pcur_move_to_next_user_rec(
 	cursor->old_stored = false;
 loop:
 	if (btr_pcur_is_after_last_on_page(cursor)) {
-		if (btr_pcur_is_after_last_in_tree(cursor)) {
+		if (btr_pcur_is_after_last_in_tree(cursor)
+		    || btr_pcur_move_to_next_page(cursor, mtr) != DB_SUCCESS) {
 			return(FALSE);
 		}
-
-		btr_pcur_move_to_next_page(cursor, mtr);
-	} else {
-		btr_pcur_move_to_next_on_page(cursor);
+	} else if (UNIV_UNLIKELY(!btr_pcur_move_to_next_on_page(cursor))) {
+		return false;
 	}
 
 	if (btr_pcur_is_on_user_rec(cursor)) {
@@ -238,22 +227,16 @@ btr_pcur_move_to_next(
 				function may release the page latch */
 	mtr_t*		mtr)	/*!< in: mtr */
 {
-	ut_ad(cursor->pos_state == BTR_PCUR_IS_POSITIONED);
-	ut_ad(cursor->latch_mode != BTR_NO_LATCHES);
+  ut_ad(cursor->pos_state == BTR_PCUR_IS_POSITIONED);
+  ut_ad(cursor->latch_mode != BTR_NO_LATCHES);
 
-	cursor->old_stored = false;
+  cursor->old_stored= false;
 
-	if (btr_pcur_is_after_last_on_page(cursor)) {
-		if (btr_pcur_is_after_last_in_tree(cursor)) {
-			return(FALSE);
-		}
-
-		btr_pcur_move_to_next_page(cursor, mtr);
-		return(TRUE);
-	}
-
-	btr_pcur_move_to_next_on_page(cursor);
-	return(TRUE);
+  if (btr_pcur_is_after_last_on_page(cursor))
+    return !btr_pcur_is_after_last_in_tree(cursor) &&
+      btr_pcur_move_to_next_page(cursor, mtr) == DB_SUCCESS;
+  else
+    return !!btr_pcur_move_to_next_on_page(cursor);
 }
 
 /**************************************************************//**
@@ -329,9 +312,8 @@ btr_pcur_free(
 }
 
 /**************************************************************//**
-Initializes and opens a persistent cursor to an index tree. It should be
-closed with btr_pcur_close. */
-UNIV_INLINE
+Initializes and opens a persistent cursor to an index tree. */
+inline
 dberr_t
 btr_pcur_open_low(
 /*==============*/
@@ -350,93 +332,43 @@ btr_pcur_open_low(
 				(0 if none) */
 	mtr_t*		mtr)	/*!< in: mtr */
 {
-	btr_cur_t*	btr_cursor;
-	dberr_t err = DB_SUCCESS;
-
-	/* Initialize the cursor */
-
-	btr_pcur_init(cursor);
-
-	cursor->latch_mode = BTR_LATCH_MODE_WITHOUT_FLAGS(latch_mode);
-	cursor->search_mode = mode;
-
-	/* Search with the tree cursor */
-
-	btr_cursor = btr_pcur_get_btr_cur(cursor);
-
-	ut_ad(!dict_index_is_spatial(index));
-
-	err = btr_cur_search_to_nth_level_func(
-		index, level, tuple, mode, latch_mode, btr_cursor,
-#ifdef BTR_CUR_HASH_ADAPT
-		NULL,
-#endif /* BTR_CUR_HASH_ADAPT */
-		mtr, autoinc);
-
-	if (UNIV_UNLIKELY(err != DB_SUCCESS)) {
-		ib::warn() << "btr_pcur_open_low"
-			   << " level: " << level
-			   << " table: " << index->table->name
-			   << " index: " << index->name
-			   << " error: " << err;
-	}
-
-	cursor->pos_state = BTR_PCUR_IS_POSITIONED;
-
-	cursor->trx_if_known = NULL;
-
-	return(err);
+  ut_ad(!index->is_spatial());
+  btr_pcur_init(cursor);
+  cursor->latch_mode= BTR_LATCH_MODE_WITHOUT_FLAGS(latch_mode);
+  cursor->search_mode= mode;
+  cursor->pos_state= BTR_PCUR_IS_POSITIONED;
+  cursor->trx_if_known= nullptr;
+  return btr_cur_search_to_nth_level(index, level, tuple, mode, latch_mode,
+                                     btr_pcur_get_btr_cur(cursor),
+                                     mtr, autoinc);
 }
 
-/**************************************************************//**
-Opens an persistent cursor to an index tree without initializing the
-cursor. */
-UNIV_INLINE
-dberr_t
-btr_pcur_open_with_no_init_func(
-/*============================*/
-	dict_index_t*	index,	/*!< in: index */
-	const dtuple_t*	tuple,	/*!< in: tuple on which search done */
-	page_cur_mode_t	mode,	/*!< in: PAGE_CUR_L, ...;
-				NOTE that if the search is made using a unique
-				prefix of a record, mode should be
-				PAGE_CUR_LE, not PAGE_CUR_GE, as the latter
-				may end up on the previous page of the
-				record! */
-	ulint		latch_mode,/*!< in: BTR_SEARCH_LEAF, ...;
-				NOTE that if ahi_latch then we might not
-				acquire a cursor page latch, but assume
-				that the ahi_latch protects the record! */
-	btr_pcur_t*	cursor, /*!< in: memory buffer for persistent cursor */
-#ifdef BTR_CUR_HASH_ADAPT
-	srw_spin_lock*	ahi_latch,
-				/*!< in: currently held AHI rdlock, or NULL */
-#endif /* BTR_CUR_HASH_ADAPT */
-	mtr_t*		mtr)	/*!< in: mtr */
+/** Opens an persistent cursor to an index tree without initializing the
+cursor.
+@param index      index
+@param tuple      tuple on which search done
+@param mode       PAGE_CUR_L, ...; NOTE that if the search is made using a
+                  unique prefix of a record, mode should be PAGE_CUR_LE, not
+                  PAGE_CUR_GE, as the latter may end up on the previous page of
+                  the record!
+@param latch_mode BTR_SEARCH_LEAF, ...
+@param cursor     memory buffer for persistent cursor
+@param mtr        mini-transaction
+@return DB_SUCCESS on success or error code otherwise. */
+inline
+dberr_t btr_pcur_open_with_no_init(dict_index_t *index, const dtuple_t *tuple,
+                                   page_cur_mode_t mode, ulint latch_mode,
+                                   btr_pcur_t *cursor, mtr_t *mtr)
 {
-	btr_cur_t*	btr_cursor;
-	dberr_t		err = DB_SUCCESS;
+  cursor->latch_mode= BTR_LATCH_MODE_WITHOUT_INTENTION(latch_mode);
+  cursor->search_mode= mode;
+  cursor->pos_state= BTR_PCUR_IS_POSITIONED;
+  cursor->old_stored= false;
+  cursor->trx_if_known= nullptr;
 
-	cursor->latch_mode = BTR_LATCH_MODE_WITHOUT_INTENTION(latch_mode);
-	cursor->search_mode = mode;
-
-	/* Search with the tree cursor */
-
-	btr_cursor = btr_pcur_get_btr_cur(cursor);
-
-	err = btr_cur_search_to_nth_level_func(
-		index, 0, tuple, mode, latch_mode, btr_cursor,
-#ifdef BTR_CUR_HASH_ADAPT
-		ahi_latch,
-#endif /* BTR_CUR_HASH_ADAPT */
-		mtr);
-
-	cursor->pos_state = BTR_PCUR_IS_POSITIONED;
-
-	cursor->old_stored = false;
-
-	cursor->trx_if_known = NULL;
-	return err;
+  /* Search with the tree cursor */
+  return btr_cur_search_to_nth_level(index, 0, tuple, mode, latch_mode,
+                                     btr_pcur_get_btr_cur(cursor), mtr);
 }
 
 /*****************************************************************//**
@@ -477,38 +409,6 @@ btr_pcur_open_at_index_side(
 	return (err);
 }
 
-/**********************************************************************//**
-Positions a cursor at a randomly chosen position within a B-tree.
-@return true if the index is available and we have put the cursor, false
-if the index is unavailable */
-UNIV_INLINE
-bool
-btr_pcur_open_at_rnd_pos(
-	dict_index_t*	index,		/*!< in: index */
-	ulint		latch_mode,	/*!< in: BTR_SEARCH_LEAF, ... */
-	btr_pcur_t*	cursor,		/*!< in/out: B-tree pcur */
-	mtr_t*		mtr)		/*!< in: mtr */
-{
-	/* Initialize the cursor */
-
-	cursor->latch_mode = latch_mode;
-	cursor->search_mode = PAGE_CUR_G;
-
-	btr_pcur_init(cursor);
-
-	bool	available;
-
-	available = btr_cur_open_at_rnd_pos(index, latch_mode,
-					    btr_pcur_get_btr_cur(cursor),
-					    mtr);
-	cursor->pos_state = BTR_PCUR_IS_POSITIONED;
-	cursor->old_stored = false;
-
-	cursor->trx_if_known = NULL;
-
-	return(available);
-}
-
 /**************************************************************//**
 Frees the possible memory heap of a persistent cursor and sets the latch
 mode of the persistent cursor to BTR_NO_LATCHES.
@@ -518,9 +418,7 @@ cursor is currently positioned. The latch is acquired by the
 are not allowed, you must take care (if using the cursor in S-mode) to
 manually release the latch by either calling
 btr_leaf_page_release(btr_pcur_get_block(&pcur), pcur.latch_mode, mtr)
-or by committing the mini-transaction right after btr_pcur_close().
-A subsequent attempt to crawl the same page in the same mtr would cause
-an assertion failure. */
+or by mtr_t::commit(). */
 UNIV_INLINE
 void
 btr_pcur_close(

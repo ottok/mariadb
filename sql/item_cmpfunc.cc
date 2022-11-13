@@ -35,6 +35,7 @@
 
 #define PCRE2_STATIC 1             /* Important on Windows */
 #include "pcre2.h"                 /* pcre2 header file */
+#include "my_json_writer.h"
 
 /*
   Compare row signature of two expressions
@@ -318,7 +319,18 @@ static bool convert_const_to_int(THD *thd, Item_field *field_item,
       field_item->field_type() != MYSQL_TYPE_YEAR)
     return 1;
 
-  if ((*item)->can_eval_in_optimize())
+  /*
+    Replace (*item) with its value if the item can be computed.
+
+    Do not replace items that contain aggregate functions:
+    There can be such items that are constants, e.g. COLLATION(AVG(123)),
+    but this function is called at Name Resolution phase.
+    Removing aggregate functions may confuse query plan generation code, e.g.
+    the optimizer might conclude that the query doesn't need to do grouping
+    at all.
+  */
+  if ((*item)->can_eval_in_optimize() &&
+      !(*item)->with_sum_func())
   {
     TABLE *table= field->table;
     MY_BITMAP *old_maps[2] = { NULL, NULL };
@@ -406,9 +418,18 @@ bool Item_func::setup_args_and_comparator(THD *thd, Arg_comparator *cmp)
   if (args[0]->cmp_type() == STRING_RESULT &&
       args[1]->cmp_type() == STRING_RESULT)
   {
+    Query_arena *arena, backup;
+    arena= thd->activate_stmt_arena_if_needed(&backup);
+
     DTCollation tmp;
-    if (agg_arg_charsets_for_comparison(tmp, args, 2))
-      return true;
+    bool ret= agg_arg_charsets_for_comparison(tmp, args, 2);
+
+    if (arena)
+      thd->restore_active_arena(arena, &backup);
+
+    if (ret)
+      return ret;
+
     cmp->m_compare_collation= tmp.collation;
   }
   //  Convert constants when compared to int/year field
@@ -780,7 +801,9 @@ int Arg_comparator::compare_e_string()
 {
   String *res1,*res2;
   res1= (*a)->val_str(&value1);
+  DBUG_ASSERT((res1 == NULL) == (*a)->null_value);
   res2= (*b)->val_str(&value2);
+  DBUG_ASSERT((res2 == NULL) == (*b)->null_value);
   if (!res1 || !res2)
     return MY_TEST(res1 == res2);
   return MY_TEST(sortcmp(res1, res2, compare_collation()) == 0);
@@ -4333,6 +4356,56 @@ Item_func_in::fix_fields(THD *thd, Item **ref)
 }
 
 
+Item *Item_func_in::in_predicate_to_equality_transformer(THD *thd, uchar *arg)
+{
+  if (!array || have_null || !all_items_are_consts(args + 1, arg_count - 1))
+    return this; /* Transformation is not applicable */
+
+  /*
+    If all elements in the array of constant values are equal and there are
+    no NULLs in the list then clause
+    -  "a IN (e1,..,en)" can be converted to "a = e1"
+    -  "a NOT IN (e1,..,en)" can be converted to "a != e1".
+    This means an object of Item_func_in can be replaced with an object of
+    Item_func_eq for IN (e1,..,en) clause or Item_func_ne for
+    NOT IN (e1,...,en).
+  */
+
+  /*
+    Since the array is sorted it's enough to compare the first and the last
+    elements to tell whether all elements are equal
+  */
+  if (array->compare_elems(0, array->used_count - 1))
+  {
+    /* Not all elements are equal, transformation is not possible */
+    return this;
+  }
+
+  Json_writer_object trace_wrapper(thd);
+  trace_wrapper.add("transformation", "in_predicate_to_equality")
+               .add("before", this);
+
+  Item *new_item= nullptr;
+  if (negated)
+    new_item= new (thd->mem_root) Item_func_ne(thd, args[0], args[1]);
+  else
+    new_item= new (thd->mem_root) Item_func_eq(thd, args[0], args[1]);
+  if (new_item)
+  {
+    new_item->set_name(thd, name);
+    if (new_item->fix_fields(thd, &new_item))
+    {
+      /*
+        If there are any problems during fixing fields, there is no need to
+        return an error, just discard the transformation
+      */
+      new_item= this;
+    }
+  }
+  trace_wrapper.add("after", new_item);
+  return new_item;
+}
+
 bool
 Item_func_in::eval_not_null_tables(void *opt_arg)
 {
@@ -4712,10 +4785,11 @@ void Item_func_in::mark_as_condition_AND_part(TABLE_LIST *embedding)
   Query_arena *arena, backup;
   arena= thd->activate_stmt_arena_if_needed(&backup);
 
-  if (to_be_transformed_into_in_subq(thd))
+  if (!transform_into_subq_checked)
   {
-    transform_into_subq= true;
-    thd->lex->current_select->in_funcs.push_back(this, thd->mem_root);
+    if ((transform_into_subq= to_be_transformed_into_in_subq(thd)))
+      thd->lex->current_select->in_funcs.push_back(this, thd->mem_root);
+    transform_into_subq_checked= true;
   }
 
   if (arena)
@@ -5147,6 +5221,35 @@ Item *Item_cond::transform(THD *thd, Item_transformer transformer, uchar *arg)
     */
     if (new_item != item)
       thd->change_item_tree(li.ref(), new_item);
+  }
+  return Item_func::transform(thd, transformer, arg);
+}
+
+
+/**
+  Transform an Item_cond object with a transformer callback function.
+
+  This is like transform() but doesn't use change_item_tree(),
+  because top-level expression is stored in prep_where/prep_on anyway and
+  is restored from there, there is no need to use change_item_tree().
+
+  Furthermore, it can be actually harmful to use it, if build_equal_items()
+  had replaced Item_eq with Item_equal and deleted list_node with a pointer
+  to Item_eq. In this case rollback_item_tree_changes() would modify the
+  deleted list_node.
+*/
+Item *Item_cond::top_level_transform(THD *thd, Item_transformer transformer, uchar *arg)
+{
+  DBUG_ASSERT(!thd->stmt_arena->is_stmt_prepare());
+
+  List_iterator<Item> li(list);
+  Item *item;
+  while ((item= li++))
+  {
+    Item *new_item= item->top_level_transform(thd, transformer, arg);
+    if (!new_item)
+      return 0;
+    *li.ref()= new_item;
   }
   return Item_func::transform(thd, transformer, arg);
 }
@@ -7666,7 +7769,17 @@ bool Item_equal::create_pushable_equalities(THD *thd,
     if (!eq ||  equalities->push_back(eq, thd->mem_root))
       return true;
     if (!clone_const)
-      right_item->set_extraction_flag(MARKER_IMMUTABLE);
+    {
+      /*
+        Also set IMMUTABLE_FL for any sub-items of the right_item.
+        This is needed to prevent Item::cleanup_excluding_immutables_processor
+        from peforming cleanup of the sub-items and so creating an item tree
+        where a fixed item has non-fixed items inside it.
+      */
+      int16 new_flag= MARKER_IMMUTABLE;
+      right_item->walk(&Item::set_extraction_flag_processor, false,
+                       (void*)&new_flag);
+    }
   }
 
   while ((item=it++))

@@ -66,11 +66,6 @@ Created 9/17/2000 Heikki Tuuri
 #include <vector>
 #include <thread>
 
-#ifdef WITH_WSREP
-#include "mysql/service_wsrep.h"
-#include "wsrep.h"
-#include "wsrep_mysqld.h"
-#endif
 
 /*******************************************************************//**
 Delays an INSERT, DELETE or UPDATE operation if the purge is lagging. */
@@ -701,6 +696,8 @@ handle_new_error:
 		trx->rollback();
 		break;
 
+	case DB_IO_ERROR:
+	case DB_TABLE_CORRUPT:
 	case DB_CORRUPTION:
 	case DB_PAGE_CORRUPTED:
 		ib::error() << "We detected index corruption in an InnoDB type"
@@ -821,6 +818,10 @@ row_create_prebuilt(
 		DBUG_EXECUTE_IF("innodb_srch_key_buffer_max_value",
 			ut_a(temp_index->n_user_defined_cols
 						== MAX_REF_PARTS););
+		if (temp_index->is_corrupted()) {
+			continue;
+		}
+
 		uint temp_len = 0;
 		for (uint i = 0; i < temp_index->n_uniq; i++) {
 			ulint type = temp_index->fields[i].col->mtype;
@@ -1124,7 +1125,7 @@ row_lock_table_autoinc_for_mysql(
 
 		trx_start_if_not_started_xa(trx, true);
 
-		err = lock_table(prebuilt->table, LOCK_AUTO_INC, thr);
+		err = lock_table(prebuilt->table, NULL, LOCK_AUTO_INC, thr);
 
 		trx->error_state = err;
 	} while (err != DB_SUCCESS
@@ -1166,7 +1167,7 @@ row_lock_table(row_prebuilt_t* prebuilt)
 
 		trx_start_if_not_started_xa(trx, false);
 
-		err = lock_table(prebuilt->table, static_cast<lock_mode>(
+		err = lock_table(prebuilt->table, NULL, static_cast<lock_mode>(
 					 prebuilt->select_lock_type), thr);
 		trx->error_state = err;
 	} while (err != DB_SUCCESS
@@ -1199,10 +1200,10 @@ row_mysql_get_table_status(
 			// to decrypt
 			if (push_warning) {
 				ib_push_warning(trx, DB_DECRYPTION_FAILED,
-					"Table %s in tablespace %lu encrypted."
+					"Table %s is encrypted."
 					"However key management plugin or used key_id is not found or"
 					" used encryption algorithm or method does not match.",
-					table->name.m_name, table->space);
+					table->name.m_name);
 			}
 
 			err = DB_DECRYPTION_FAILED;
@@ -1250,30 +1251,19 @@ row_insert_for_mysql(
 	ut_a(prebuilt->magic_n == ROW_PREBUILT_ALLOCATED);
 	ut_a(prebuilt->magic_n2 == ROW_PREBUILT_ALLOCATED);
 
-	if (!prebuilt->table->space) {
-
-		ib::error() << "The table " << prebuilt->table->name
+	if (!table->space) {
+		ib::error() << "The table " << table->name
 			<< " doesn't have a corresponding tablespace, it was"
 			" discarded.";
 
 		return(DB_TABLESPACE_DELETED);
-
-	} else if (!prebuilt->table->is_readable()) {
-		return(row_mysql_get_table_status(prebuilt->table, trx, true));
+	} else if (!table->is_readable()) {
+		return row_mysql_get_table_status(table, trx, true);
 	} else if (high_level_read_only) {
 		return(DB_READ_ONLY);
-	}
-
-	DBUG_EXECUTE_IF("mark_table_corrupted", {
-		/* Mark the table corrupted for the clustered index */
-		dict_index_t*	index = dict_table_get_first_index(table);
-		ut_ad(dict_index_is_clust(index));
-		dict_set_corrupted(index, "INSERT TABLE", false); });
-
-	if (dict_table_is_corrupted(table)) {
-
-		ib::error() << "Table " << table->name << " is corrupt.";
-		return(DB_TABLE_CORRUPT);
+	} else if (UNIV_UNLIKELY(table->corrupted)
+		   || dict_table_get_first_index(table)->is_corrupted()) {
+		return DB_TABLE_CORRUPT;
 	}
 
 	trx->op_info = "inserting";
@@ -1776,7 +1766,7 @@ error:
 
 /** This can only be used when the current transaction is at
 READ COMMITTED or READ UNCOMMITTED isolation level.
-Before calling this function row_search_for_mysql() must have
+Before calling this function row_search_mvcc() must have
 initialized prebuilt->new_rec_locks to store the information which new
 record locks really were set. This function removes a newly set
 clustered index record lock under prebuilt->pcur or
@@ -1792,56 +1782,29 @@ row_unlock_for_mysql(
 	row_prebuilt_t*	prebuilt,
 	ibool		has_latches_on_recs)
 {
-	btr_pcur_t*	pcur		= prebuilt->pcur;
-	btr_pcur_t*	clust_pcur	= prebuilt->clust_pcur;
-	trx_t*		trx		= prebuilt->trx;
-
-	ut_ad(prebuilt != NULL);
-	ut_ad(trx != NULL);
-	ut_ad(trx->isolation_level <= TRX_ISO_READ_COMMITTED);
-
-	if (dict_index_is_spatial(prebuilt->index)) {
-		return;
-	}
-
-	trx->op_info = "unlock_row";
-
-	if (prebuilt->new_rec_locks >= 1) {
+	if (prebuilt->new_rec_locks == 1 && prebuilt->index->is_clust()) {
+		trx_t* trx = prebuilt->trx;
+		ut_ad(trx->isolation_level <= TRX_ISO_READ_COMMITTED);
+		trx->op_info = "unlock_row";
 
 		const rec_t*	rec;
 		dict_index_t*	index;
 		trx_id_t	rec_trx_id;
 		mtr_t		mtr;
+		btr_pcur_t*	pcur	= prebuilt->pcur;
 
 		mtr_start(&mtr);
 
 		/* Restore the cursor position and find the record */
 
-		if (!has_latches_on_recs) {
-			btr_pcur_restore_position(BTR_SEARCH_LEAF, pcur, &mtr);
+		if (!has_latches_on_recs
+		    && pcur->restore_position(BTR_SEARCH_LEAF, &mtr)
+		    != btr_pcur_t::SAME_ALL) {
+			goto no_unlock;
 		}
 
 		rec = btr_pcur_get_rec(pcur);
 		index = btr_pcur_get_btr_cur(pcur)->index;
-
-		if (prebuilt->new_rec_locks >= 2) {
-			/* Restore the cursor position and find the record
-			in the clustered index. */
-
-			if (!has_latches_on_recs) {
-				btr_pcur_restore_position(BTR_SEARCH_LEAF,
-							  clust_pcur, &mtr);
-			}
-
-			rec = btr_pcur_get_rec(clust_pcur);
-			index = btr_pcur_get_btr_cur(clust_pcur)->index;
-		}
-
-		if (!dict_index_is_clust(index)) {
-			/* This is not a clustered index record.  We
-			do not know how to unlock the record. */
-			goto no_unlock;
-		}
 
 		/* If the record has been modified by this
 		transaction, do not unlock it. */
@@ -1877,24 +1840,11 @@ row_unlock_for_mysql(
 				rec,
 				static_cast<enum lock_mode>(
 					prebuilt->select_lock_type));
-
-			if (prebuilt->new_rec_locks >= 2) {
-				rec = btr_pcur_get_rec(clust_pcur);
-
-				lock_rec_unlock(
-					trx,
-					btr_pcur_get_block(clust_pcur)
-					->page.id(),
-					rec,
-					static_cast<enum lock_mode>(
-						prebuilt->select_lock_type));
-			}
 		}
 no_unlock:
 		mtr_commit(&mtr);
+		trx->op_info = "";
 	}
-
-	trx->op_info = "";
 }
 
 /** Write query start time as SQL field data to a buffer. Needed by InnoDB.
@@ -2297,6 +2247,13 @@ row_mysql_table_id_reassign(
 	trx_t*		trx,
 	table_id_t*	new_id)
 {
+	if (!dict_sys.sys_tables || dict_sys.sys_tables->corrupted ||
+	    !dict_sys.sys_columns || dict_sys.sys_columns->corrupted ||
+	    !dict_sys.sys_indexes || dict_sys.sys_indexes->corrupted ||
+	    !dict_sys.sys_virtual || dict_sys.sys_virtual->corrupted) {
+		return DB_CORRUPTION;
+	}
+
 	dberr_t		err;
 	pars_info_t*	info	= pars_info_create();
 
@@ -2447,9 +2404,6 @@ row_discard_tablespace(
 	/* All persistent operations successful, update the
 	data dictionary memory cache. */
 
-	table->file_unreadable = true;
-	table->space = NULL;
-	table->flags2 |= DICT_TF2_DISCARDED;
 	dict_table_change_id_in_cache(table, new_id);
 
 	dict_index_t* index = UT_LIST_GET_FIRST(table->indexes);
@@ -2495,7 +2449,8 @@ rollback:
         fts_optimize_add_table(table);
       }
       trx->rollback();
-      row_mysql_unlock_data_dictionary(trx);
+      if (trx->dict_operation_lock_mode)
+        row_mysql_unlock_data_dictionary(trx);
       return err;
     }
   }
@@ -2520,6 +2475,9 @@ rollback:
 
   It would be better to remove the integrity-breaking
   ALTER TABLE...DISCARD TABLESPACE operation altogether. */
+  table->file_unreadable= true;
+  table->space= nullptr;
+  table->flags2|= DICT_TF2_DISCARDED;
   err= row_discard_tablespace(trx, table);
   DBUG_EXECUTE_IF("ib_discard_before_commit_crash",
                   log_buffer_flush_to_disk(); DBUG_SUICIDE(););
@@ -2528,7 +2486,6 @@ rollback:
   trx->commit(deleted);
   const auto space_id= table->space_id;
   pfs_os_file_t d= fil_delete_tablespace(space_id);
-  table->space= nullptr;
   DBUG_EXECUTE_IF("ib_discard_after_commit_crash", DBUG_SUICIDE(););
   row_mysql_unlock_data_dictionary(trx);
 
@@ -2894,7 +2851,8 @@ row_rename_table_for_mysql(
 		DEBUG_SYNC_C("innodb_rename_in_cache");
 		/* The following call will also rename the .ibd file */
 		err = dict_table_rename_in_cache(
-			table, new_name, !new_is_tmp);
+			table, span<const char>{new_name,strlen(new_name)},
+			false);
 		if (err != DB_SUCCESS) {
 			goto rollback_and_exit;
 		}
@@ -2911,7 +2869,7 @@ row_rename_table_for_mysql(
 		dict_names_t	fk_tables;
 
 		err = dict_load_foreigns(
-			new_name, NULL, false,
+			new_name, nullptr, trx->id,
 			!old_is_tmp || trx->check_foreigns,
 			use_fk
 			? DICT_ERR_IGNORE_NONE
@@ -2978,183 +2936,4 @@ funct_exit:
 	trx->op_info = "";
 
 	return(err);
-}
-
-/*********************************************************************//**
-Scans an index for either COUNT(*) or CHECK TABLE.
-If CHECK TABLE; Checks that the index contains entries in an ascending order,
-unique constraint is not broken, and calculates the number of index entries
-in the read view of the current transaction.
-@return DB_SUCCESS or other error */
-dberr_t
-row_scan_index_for_mysql(
-/*=====================*/
-	row_prebuilt_t*		prebuilt,	/*!< in: prebuilt struct
-						in MySQL handle */
-	const dict_index_t*	index,		/*!< in: index */
-	ulint*			n_rows)		/*!< out: number of entries
-						seen in the consistent read */
-{
-	dtuple_t*	prev_entry	= NULL;
-	ulint		matched_fields;
-	byte*		buf;
-	dberr_t		ret;
-	rec_t*		rec;
-	int		cmp;
-	ibool		contains_null;
-	ulint		i;
-	ulint		cnt;
-	mem_heap_t*	heap		= NULL;
-	rec_offs	offsets_[REC_OFFS_NORMAL_SIZE];
-	rec_offs*	offsets;
-	rec_offs_init(offsets_);
-
-	*n_rows = 0;
-
-	/* Don't support RTree Leaf level scan */
-	ut_ad(!dict_index_is_spatial(index));
-
-	if (dict_index_is_clust(index)) {
-		/* The clustered index of a table is always available.
-		During online ALTER TABLE that rebuilds the table, the
-		clustered index in the old table will have
-		index->online_log pointing to the new table. All
-		indexes of the old table will remain valid and the new
-		table will be unaccessible to MySQL until the
-		completion of the ALTER TABLE. */
-	} else if (dict_index_is_online_ddl(index)
-		   || (index->type & DICT_FTS)) {
-		/* Full Text index are implemented by auxiliary tables,
-		not the B-tree. We also skip secondary indexes that are
-		being created online. */
-		return(DB_SUCCESS);
-	}
-
-	ulint bufsize = std::max<ulint>(srv_page_size,
-					prebuilt->mysql_row_len);
-	buf = static_cast<byte*>(ut_malloc_nokey(bufsize));
-	heap = mem_heap_create(100);
-
-	cnt = 1000;
-
-	ret = row_search_for_mysql(buf, PAGE_CUR_G, prebuilt, 0, 0);
-loop:
-	/* Check thd->killed every 1,000 scanned rows */
-	if (--cnt == 0) {
-		if (trx_is_interrupted(prebuilt->trx)) {
-			ret = DB_INTERRUPTED;
-			goto func_exit;
-		}
-		cnt = 1000;
-	}
-
-	switch (ret) {
-	case DB_SUCCESS:
-		break;
-	case DB_DEADLOCK:
-	case DB_LOCK_TABLE_FULL:
-	case DB_LOCK_WAIT_TIMEOUT:
-	case DB_INTERRUPTED:
-		goto func_exit;
-	default:
-		ib::warn() << "CHECK TABLE on index " << index->name << " of"
-			" table " << index->table->name << " returned " << ret;
-		/* (this error is ignored by CHECK TABLE) */
-		/* fall through */
-	case DB_END_OF_INDEX:
-		ret = DB_SUCCESS;
-func_exit:
-		ut_free(buf);
-		mem_heap_free(heap);
-
-		return(ret);
-	}
-
-	*n_rows = *n_rows + 1;
-
-	/* else this code is doing handler::check() for CHECK TABLE */
-
-	/* row_search... returns the index record in buf, record origin offset
-	within buf stored in the first 4 bytes, because we have built a dummy
-	template */
-
-	rec = buf + mach_read_from_4(buf);
-
-	offsets = rec_get_offsets(rec, index, offsets_, index->n_core_fields,
-				  ULINT_UNDEFINED, &heap);
-
-	if (prev_entry != NULL) {
-		matched_fields = 0;
-
-		cmp = cmp_dtuple_rec_with_match(prev_entry, rec, offsets,
-						&matched_fields);
-		contains_null = FALSE;
-
-		/* In a unique secondary index we allow equal key values if
-		they contain SQL NULLs */
-
-		for (i = 0;
-		     i < dict_index_get_n_ordering_defined_by_user(index);
-		     i++) {
-			if (UNIV_SQL_NULL == dfield_get_len(
-				    dtuple_get_nth_field(prev_entry, i))) {
-
-				contains_null = TRUE;
-				break;
-			}
-		}
-
-		const char* msg;
-
-		if (cmp > 0) {
-			ret = DB_INDEX_CORRUPT;
-			msg = "index records in a wrong order in ";
-not_ok:
-			ib::error()
-				<< msg << index->name
-				<< " of table " << index->table->name
-				<< ": " << *prev_entry << ", "
-				<< rec_offsets_print(rec, offsets);
-			/* Continue reading */
-		} else if (dict_index_is_unique(index)
-			   && !contains_null
-			   && matched_fields
-			   >= dict_index_get_n_ordering_defined_by_user(
-				   index)) {
-			ret = DB_DUPLICATE_KEY;
-			msg = "duplicate key in ";
-			goto not_ok;
-		}
-	}
-
-	{
-		mem_heap_t*	tmp_heap = NULL;
-
-		/* Empty the heap on each round.  But preserve offsets[]
-		for the row_rec_to_index_entry() call, by copying them
-		into a separate memory heap when needed. */
-		if (UNIV_UNLIKELY(offsets != offsets_)) {
-			ulint	size = rec_offs_get_n_alloc(offsets)
-				* sizeof *offsets;
-
-			tmp_heap = mem_heap_create(size);
-
-			offsets = static_cast<rec_offs*>(
-				mem_heap_dup(tmp_heap, offsets, size));
-		}
-
-		mem_heap_empty(heap);
-
-		prev_entry = row_rec_to_index_entry(
-			rec, index, offsets, heap);
-
-		if (UNIV_LIKELY_NULL(tmp_heap)) {
-			mem_heap_free(tmp_heap);
-		}
-	}
-
-	ret = row_search_for_mysql(
-		buf, PAGE_CUR_G, prebuilt, 0, ROW_SEL_NEXT);
-
-	goto loop;
 }

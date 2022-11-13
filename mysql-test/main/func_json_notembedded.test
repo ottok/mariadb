@@ -1,5 +1,6 @@
 source include/have_profiling.inc;
 source include/not_embedded.inc;
+source include/no_valgrind_without_big.inc;
 
 set global max_allowed_packet=1073741824;
 connect u,localhost,root;
@@ -9,8 +10,8 @@ connect u,localhost,root;
 --echo #
 set group_concat_max_len= 4294967295;
 
-set @obj=concat_ws('','{', repeat('"a":"b",', 125000000/2), '"c":"d"}');
-set @arr=concat_ws('','[', repeat('1234567,', 125000000/2), '2345678]');
+set @obj=concat_ws('','{', repeat('"a":"b",', 1250000/2), '"c":"d"}');
+set @arr=concat_ws('','[', repeat('1234567,', 1250000/2), '2345678]');
 select length(@obj), length(@arr);
 
 set max_statement_time=0.0001;

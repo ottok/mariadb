@@ -2,7 +2,7 @@
 #define SQL_SELECT_INCLUDED
 
 /* Copyright (c) 2000, 2013, Oracle and/or its affiliates.
-   Copyright (c) 2008, 2020, MariaDB Corporation.
+   Copyright (c) 2008, 2022, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -376,6 +376,8 @@ typedef struct st_join_table {
   uint          used_null_fields;
   uint          used_uneven_bit_fields;
   enum join_type type;
+  /* If first key part is used for any key in 'key_dependent' */
+  bool          key_start_dependent;
   bool          cached_eq_ref_table,eq_ref_table;
   bool          shortcut_for_distinct;
   bool          sorted;
@@ -958,6 +960,8 @@ public:
   /* If ref-based access is used: bitmap of tables this table depends on  */
   table_map ref_depend_map;
 
+  /* tables that may help best_access_path() to find a better key */
+  table_map key_dependent;
   /*
     Bitmap of semi-join inner tables that are in the join prefix and for
     which there's no provision for how to eliminate semi-join duplicates
@@ -989,6 +993,8 @@ public:
   */
   enum sj_strategy_enum sj_strategy;
 
+  /* Type of join (EQ_REF, REF etc) */
+  enum join_type type;
   /*
     Valid only after fix_semijoin_strategies_for_picked_join_order() call:
     if sj_strategy!=SJ_OPT_NONE, this is the number of subsequent tables that
@@ -1283,7 +1289,6 @@ public:
 
   Pushdown_query *pushdown_query;
   JOIN_TAB *original_join_tab;
-  uint	   original_table_count;
 
 /******* Join optimization state members start *******/
   /*
@@ -1305,9 +1310,16 @@ public:
     Bitmap of inner tables of semi-join nests that have a proper subset of
     their tables in the current join prefix. That is, of those semi-join
     nests that have their tables both in and outside of the join prefix.
+    (Note: tables that are constants but have not been pulled out of semi-join
+    nests are not considered part of semi-join nests)
   */
   table_map cur_sj_inner_tables;
-  
+
+#ifndef DBUG_OFF
+  void dbug_verify_sj_inner_tables(uint n_positions) const;
+  int dbug_join_tab_array_size;
+#endif
+
   /* We also maintain a stack of join optimization states in * join->positions[] */
 /******* Join optimization state members end *******/
 
@@ -1780,6 +1792,12 @@ private:
   bool make_aggr_tables_info();
   bool add_fields_for_current_rowid(JOIN_TAB *cur, List<Item> *fields);
   void init_join_cache_and_keyread();
+  bool transform_in_predicates_into_equalities(THD *thd);
+  bool transform_all_conds_and_on_exprs(THD *thd,
+                                        Item_transformer transformer);
+  bool transform_all_conds_and_on_exprs_in_join_list(THD *thd,
+                                                 List<TABLE_LIST> *join_list,
+                                                 Item_transformer transformer);
 };
 
 enum enum_with_bush_roots { WITH_BUSH_ROOTS, WITHOUT_BUSH_ROOTS};
@@ -2468,6 +2486,8 @@ int create_sort_index(THD *thd, JOIN *join, JOIN_TAB *tab, Filesort *fsort);
 
 JOIN_TAB *first_explain_order_tab(JOIN* join);
 JOIN_TAB *next_explain_order_tab(JOIN* join, JOIN_TAB* tab);
+
+bool is_eliminated_table(table_map eliminated_tables, TABLE_LIST *tbl);
 
 bool check_simple_equality(THD *thd, const Item::Context &ctx,
                            Item *left_item, Item *right_item,

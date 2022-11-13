@@ -3,7 +3,7 @@
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All rights reserved.
 Copyright (c) 2008, 2009, Google Inc.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -55,7 +55,7 @@ Created 10/10/1995 Heikki Tuuri
 /** Simple non-atomic counter
 @tparam	Type  the integer type of the counter */
 template <typename Type>
-struct MY_ALIGNED(CPU_LEVEL1_DCACHE_LINESIZE) simple_counter
+struct alignas(CPU_LEVEL1_DCACHE_LINESIZE) simple_counter
 {
   /** Increment the counter */
   Type inc() { return add(1); }
@@ -114,10 +114,6 @@ struct srv_stats_t
 
 	/** Number of bytes saved by page compression */
 	ulint_ctr_n_t          page_compression_saved;
-	/* Number of index pages written */
-	ulint_ctr_n_t          index_pages_written;
-	/* Number of non index pages written */
-	ulint_ctr_n_t          non_index_pages_written;
 	/* Number of pages compressed with page compression */
         ulint_ctr_n_t          pages_page_compressed;
 	/* Number of TRIM operations induced by page compression */
@@ -174,9 +170,6 @@ struct srv_stats_t
 
 	/** Number of encryption_get_latest_key_version calls */
 	ulint_ctr_n_t		n_key_requests;
-
-	/** Number of spaces in keyrotation list */
-	ulint_ctr_n_t		key_rotation_list_length;
 
 	/** Number of temporary tablespace blocks encrypted */
 	ulint_ctr_n_t		n_temp_blocks_encrypted;
@@ -299,13 +292,6 @@ extern uint	srv_flush_log_at_timeout;
 extern ulong	srv_log_write_ahead_size;
 extern my_bool	srv_adaptive_flushing;
 extern my_bool	srv_flush_sync;
-
-#ifdef WITH_INNODB_DISALLOW_WRITES
-extern my_bool innodb_disallow_writes;
-void innodb_wait_allow_writes();
-#else
-# define innodb_wait_allow_writes() do {} while (0)
-#endif /* WITH_INNODB_DISALLOW_WRITES */
 
 /** Requested size in bytes */
 extern ulint		srv_buf_pool_size;
@@ -452,8 +438,6 @@ extern ulint	srv_log_writes_and_flush;
 extern my_bool	innodb_evict_tables_on_commit_debug;
 extern my_bool	srv_purge_view_update_only_debug;
 
-/** Value of MySQL global used to disable master thread. */
-extern my_bool	srv_master_thread_disabled_debug;
 /** InnoDB system tablespace to set during recovery */
 extern uint	srv_sys_space_size_debug;
 /** whether redo log file has been created at startup */
@@ -679,18 +663,6 @@ void srv_purge_shutdown();
 /** Init purge tasks*/
 void srv_init_purge_tasks();
 
-#ifdef UNIV_DEBUG
-/** Disables master thread. It's used by:
-	SET GLOBAL innodb_master_thread_disabled_debug = 1 (0).
-@param[in]	save		immediate result from check function */
-void
-srv_master_thread_disabled_debug_update(THD*, st_mysql_sys_var*, void*,
-					const void* save);
-
-/** Enable the master thread on shutdown. */
-void srv_master_thread_enable();
-#endif /* UNIV_DEBUG */
-
 /** Status variables to be passed to MySQL */
 struct export_var_t{
 #ifdef BTR_CUR_HASH_ADAPT
@@ -789,10 +761,6 @@ struct export_var_t{
 
 	int64_t innodb_page_compression_saved;/*!< Number of bytes saved
 						by page compression */
-	int64_t innodb_index_pages_written;  /*!< Number of index pages
-						written */
-	int64_t innodb_non_index_pages_written;  /*!< Number of non index pages
-						written */
 	int64_t innodb_pages_page_compressed;/*!< Number of pages
 						compressed by page compression */
 	int64_t innodb_page_compressed_trim_op;/*!< Number of TRIM operations
@@ -831,7 +799,6 @@ struct export_var_t{
 	ulint innodb_encryption_rotation_pages_flushed;
 	ulint innodb_encryption_rotation_estimated_iops;
 	int64_t innodb_encryption_key_requests;
-	int64_t innodb_key_rotation_list_length;
 };
 
 extern tpool::thread_pool *srv_thread_pool;

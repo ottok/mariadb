@@ -943,14 +943,14 @@ ENUM_VALUE_LIST	NULL
 READ_ONLY	NO
 COMMAND_LINE_ARGUMENT	REQUIRED
 VARIABLE_NAME	EXPLICIT_DEFAULTS_FOR_TIMESTAMP
-VARIABLE_SCOPE	GLOBAL
+VARIABLE_SCOPE	SESSION
 VARIABLE_TYPE	BOOLEAN
 VARIABLE_COMMENT	This option causes CREATE TABLE to create all TIMESTAMP columns as NULL with DEFAULT NULL attribute, Without this option, TIMESTAMP columns are NOT NULL and have implicit DEFAULT clauses.
 NUMERIC_MIN_VALUE	NULL
 NUMERIC_MAX_VALUE	NULL
 NUMERIC_BLOCK_SIZE	NULL
 ENUM_VALUE_LIST	OFF,ON
-READ_ONLY	YES
+READ_ONLY	NO
 COMMAND_LINE_ARGUMENT	OPTIONAL
 VARIABLE_NAME	EXTERNAL_USER
 VARIABLE_SCOPE	SESSION ONLY
@@ -1185,7 +1185,7 @@ COMMAND_LINE_ARGUMENT	NULL
 VARIABLE_NAME	GTID_STRICT_MODE
 VARIABLE_SCOPE	GLOBAL
 VARIABLE_TYPE	BOOLEAN
-VARIABLE_COMMENT	Enforce strict seq_no ordering of events in the binary log. Slave stops with an error if it encounters an event that would cause it to generate an out-of-order binlog if executed.
+VARIABLE_COMMENT	Enforce strict seq_no ordering of events in the binary log. Slave stops with an error if it encounters an event that would cause it to generate an out-of-order binlog if executed. When ON the same server-id semisync-replicated transactions that duplicate exising ones in binlog are ignored without error and slave interruption.
 NUMERIC_MIN_VALUE	NULL
 NUMERIC_MAX_VALUE	NULL
 NUMERIC_BLOCK_SIZE	NULL

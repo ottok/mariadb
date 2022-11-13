@@ -44,6 +44,7 @@ test/t1	DEFAULT	DEFAULT	MYSQLD_DATADIR/test/t1.ibd
 test/t2	DEFAULT	DEFAULT	MYSQLD_DATADIR/test/t2.ibd
 test/t3	DEFAULT	8192	MYSQLD_DATADIR/test/t3.ibd
 test/t4	DEFAULT	DEFAULT	MYSQLD_DATADIR/test/t4.ibd
+innodb_temporary	DEFAULT	DEFAULT	MYSQLD_DATADIR/ibtmp1
 DROP TABLE t1, t2, t3, t4;
 # Test 4) The maximum row size is dependent upon the page size.
 #         Each row format has its own amount of overhead that
@@ -101,7 +102,7 @@ c16 char(200), c17 char(200), c18 char(200), c19 char(200), c20 char(200),
 c21 char(200), c22 char(200), c23 char(200), c24 char(200), c25 char(200),
 c26 char(200), c27 char(200), c28 char(200), c29 char(200), c30 char(200),
 c31 char(200), c32 char(200), c33 char(200), c34 char(200), c35 char(200),
-c36 char(200), c37 char(200), c38 char(200), c39 char(200), c40 char(157)
+c36 char(200), c37 char(200), c38 char(196)
 ) ROW_FORMAT=compressed;
 DROP TABLE t1;
 CREATE TABLE t1 (
@@ -367,7 +368,7 @@ t1	CREATE TABLE `t1` (
   `d` text NOT NULL,
   PRIMARY KEY (`a`,`b`(255),`c`(255)),
   KEY `b` (`b`(767))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 STATS_PERSISTENT=0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci STATS_PERSISTENT=0
 CHECK TABLE t1;
 Table	Op	Msg_type	Msg_text
 test.t1	check	status	OK
@@ -485,7 +486,7 @@ t1	CREATE TABLE `t1` (
   KEY `t1u` (`u`(767)),
   KEY `t1ut` (`u`(767),`t`(767)),
   KEY `t1st` (`s`(767),`t`(767))
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 ROW_FORMAT=DYNAMIC
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci ROW_FORMAT=DYNAMIC
 DROP TABLE t1;
 # Bug#12547647 UPDATE LOGGING COULD EXCEED LOG PAGE SIZE
 CREATE TABLE bug12547647(
@@ -591,7 +592,20 @@ ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=1 CHARSET=ASCII;
 Warnings:
 Warning	139	Row size too large (> 8126). Changing some columns to TEXT or BLOB may help. In current row format, BLOB prefix of 0 bytes is stored inline.
 DROP TABLE t1;
-CREATE TABLE t1(c text, PRIMARY KEY (c(438)))
+CREATE TABLE t1(c text, PRIMARY KEY (c(293)))
 ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=1 CHARSET=ASCII;
 INSERT INTO t1 VALUES(REPEAT('A',512)),(REPEAT('B',512));
 DROP TABLE t1;
+#
+# MDEV-28950 Assertion `*err == DB_SUCCESS' in btr_page_split_and_insert
+#
+CREATE TABLE t1(c CHAR(255) NOT NULL) ENGINE=InnoDB;
+INSERT INTO t1 VALUES ('');
+ALTER TABLE t1 ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=1;
+INSERT INTO t1 VALUES (''),(''),('');
+SET @save_innodb_compression_level= @@innodb_compression_level;
+SET GLOBAL innodb_compression_level=0;
+INSERT INTO t1 VALUES ('');
+SET GLOBAL innodb_compression_level= @save_innodb_compression_level;
+DROP TABLE t1;
+# End of 10.6 tests

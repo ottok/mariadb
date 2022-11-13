@@ -1,6 +1,6 @@
 /*
   Copyright (c) 2005, 2019, Oracle and/or its affiliates.
-  Copyright (c) 2009, 2021, MariaDB
+  Copyright (c) 2009, 2022, MariaDB
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -767,6 +767,7 @@ int ha_partition::create(const char *name, TABLE *table_arg,
 			 HA_CREATE_INFO *create_info)
 {
   int error;
+  THD *thd= ha_thd();
   char name_buff[FN_REFLEN + 1], name_lc_buff[FN_REFLEN];
   char *name_buffer_ptr;
   const char *path;
@@ -785,8 +786,27 @@ int ha_partition::create(const char *name, TABLE *table_arg,
     my_error(ER_FEATURE_NOT_SUPPORTED_WITH_PARTITIONING, MYF(0), "CREATE TEMPORARY TABLE");
     DBUG_RETURN(TRUE);
   }
+  /*
+    The following block should be removed once the table-level data directory
+    specification is supported by the partitioning engine (MDEV-28108).
+  */
+  if (thd_sql_command(thd) == SQLCOM_ALTER_TABLE && create_info)
+  {
+    if (create_info->data_file_name)
+    {
+      push_warning_printf(
+          thd, Sql_condition::WARN_LEVEL_WARN, WARN_OPTION_IGNORED,
+          "<DATA DIRECTORY> table option of old schema is ignored");
+    }
+    if (create_info->index_file_name)
+    {
+      push_warning_printf(
+          thd, Sql_condition::WARN_LEVEL_WARN, WARN_OPTION_IGNORED,
+          "<INDEX DIRECTORY> table option of old schema is ignored");
+    }
+  }
 
-  if (get_from_handler_file(name, ha_thd()->mem_root, false))
+  if (get_from_handler_file(name, thd->mem_root, false))
     DBUG_RETURN(TRUE);
   DBUG_ASSERT(m_file_buffer);
   name_buffer_ptr= m_name_buffer_ptr;
@@ -2427,7 +2447,6 @@ uint ha_partition::del_ren_table(const char *from, const char *to)
   char *name_buffer_ptr;
   const char *from_path;
   const char *to_path= NULL;
-  uint i;
   handler **file, **abort_file;
   THD *thd= ha_thd();
   DBUG_ENTER("ha_partition::del_ren_table");
@@ -2467,7 +2486,6 @@ uint ha_partition::del_ren_table(const char *from, const char *to)
   from_path= get_canonical_filename(*file, from, from_lc_buff);
   if (to != NULL)
     to_path= get_canonical_filename(*file, to, to_lc_buff);
-  i= 0;
   do
   {
     if (unlikely((error= create_partition_name(from_buff, sizeof(from_buff),
@@ -2492,7 +2510,6 @@ uint ha_partition::del_ren_table(const char *from, const char *to)
     name_buffer_ptr= strend(name_buffer_ptr) + 1;
     if (unlikely(error))
       save_error= error;
-    i++;
   } while (*(++file));
   if (to != NULL)
   {
@@ -3193,11 +3210,12 @@ err1:
     @retval true   Failure
 */
 
-bool ha_partition::setup_engine_array(MEM_ROOT *mem_root)
+bool ha_partition::setup_engine_array(MEM_ROOT *mem_root,
+                                      handlerton* first_engine)
 {
   uint i;
   uchar *buff;
-  handlerton **engine_array, *first_engine;
+  handlerton **engine_array;
   enum legacy_db_type db_type, first_db_type;
 
   DBUG_ASSERT(!m_file);
@@ -3207,11 +3225,8 @@ bool ha_partition::setup_engine_array(MEM_ROOT *mem_root)
     DBUG_RETURN(true);
 
   buff= (uchar *) (m_file_buffer + PAR_ENGINES_OFFSET);
-  first_db_type= (enum legacy_db_type) buff[0];
-  first_engine= ha_resolve_by_legacy_type(ha_thd(), first_db_type);
-  if (!first_engine)
-    goto err;
 
+  first_db_type= (enum legacy_db_type) buff[0];
   if (!(m_engine_array= (plugin_ref*)
         alloc_root(&m_mem_root, m_tot_parts * sizeof(plugin_ref))))
     goto err;
@@ -3252,6 +3267,75 @@ err:
 }
 
 
+handlerton *ha_partition::get_def_part_engine(const char *name)
+{
+  if (table_share)
+  {
+    if (table_share->default_part_plugin)
+      return plugin_data(table_share->default_part_plugin, handlerton *);
+  }
+  else
+  {
+    // DROP TABLE, for example
+    char buff[FN_REFLEN];
+    File file;
+    MY_STAT state;
+    uchar *frm_image= 0;
+    handlerton *hton= 0;
+    bool use_legacy_type= false;
+
+    fn_format(buff, name, "", reg_ext, MY_APPEND_EXT);
+
+    file= mysql_file_open(key_file_frm, buff, O_RDONLY | O_SHARE, MYF(0));
+    if (file < 0)
+      return NULL;
+
+    if (mysql_file_fstat(file, &state, MYF(MY_WME)))
+      goto err;
+    if (state.st_size <= 64)
+      goto err;
+    if (!(frm_image= (uchar*)my_malloc(key_memory_Partition_share,
+                                       state.st_size, MYF(MY_WME))))
+      goto err;
+    if (mysql_file_read(file, frm_image, state.st_size, MYF(MY_NABP)))
+      goto err;
+
+    if (frm_image[64] != '/')
+    {
+      const uchar *e2= frm_image + 64;
+      const uchar *e2end = e2 + uint2korr(frm_image + 4);
+      if (e2end > frm_image + state.st_size)
+        goto err;
+      while (e2 + 3 < e2end)
+      {
+        uchar type= *e2++;
+        size_t length= extra2_read_len(&e2, e2end);
+        if (!length)
+          goto err;
+        if (type == EXTRA2_DEFAULT_PART_ENGINE)
+        {
+          LEX_CSTRING name= { (char*)e2, length };
+          plugin_ref plugin= ha_resolve_by_name(ha_thd(), &name, false);
+          if (plugin)
+            hton= plugin_data(plugin, handlerton *);
+          goto err;
+        }
+        e2+= length;
+      }
+    }
+    use_legacy_type= true;
+err:
+    my_free(frm_image);
+    mysql_file_close(file, MYF(0));
+    if (!use_legacy_type)
+      return hton;
+  }
+
+  return ha_resolve_by_legacy_type(ha_thd(),
+                  (enum legacy_db_type)m_file_buffer[PAR_ENGINES_OFFSET]);
+}
+
+
 /**
   Get info about partition engines and their names from the .par file
 
@@ -3279,7 +3363,11 @@ bool ha_partition::get_from_handler_file(const char *name, MEM_ROOT *mem_root,
   if (read_par_file(name))
     DBUG_RETURN(true);
 
-  if (!is_clone && setup_engine_array(mem_root))
+  handlerton *default_engine= get_def_part_engine(name);
+  if (!default_engine)
+    DBUG_RETURN(true);
+
+  if (!is_clone && setup_engine_array(mem_root, default_engine))
     DBUG_RETURN(true);
 
   DBUG_RETURN(false);
@@ -3684,7 +3772,22 @@ int ha_partition::open(const char *name, int mode, uint test_if_locked)
     for (i= 0; i < m_tot_parts; i++)
     {
       if (!bitmap_is_set(&m_is_clone_of->m_opened_partitions, i))
+      {
+        /* Here we should just create the handler instance, not open it. */
+        if (!(m_file[i]= get_new_handler(table->s, m_clone_mem_root,
+                                         file[i]->ht)))
+        {
+          error= HA_ERR_INITIALIZATION;
+          file= &m_file[i];
+          goto err_handler;
+        }
+        if (m_file[i]->set_ha_share_ref(file[i]->ha_share))
+        {
+          error= HA_ERR_INITIALIZATION;
+          goto err_handler;
+        }
         continue;
+      }
 
       if (unlikely((error= create_partition_name(name_buff, sizeof(name_buff),
                                                  name, name_buffer_ptr,
@@ -3705,7 +3808,7 @@ int ha_partition::open(const char *name, int mode, uint test_if_locked)
   }
   else
   {
-    check_insert_autoincrement();
+    check_insert_or_replace_autoincrement();
     if (unlikely((error= open_read_partitions(name_buff, sizeof(name_buff)))))
       goto err_handler;
     m_num_locks= m_file_sample->lock_count();
@@ -4081,6 +4184,8 @@ int ha_partition::external_lock(THD *thd, int lock_type)
   if (lock_type == F_UNLCK)
   {
     bitmap_clear_all(used_partitions);
+    if (m_lock_type == F_WRLCK && m_part_info->vers_require_hist_part(thd))
+      m_part_info->vers_check_limit(thd);
   }
   else
   {
@@ -4101,13 +4206,7 @@ int ha_partition::external_lock(THD *thd, int lock_type)
   {
     if (m_part_info->part_expr)
       m_part_info->part_expr->walk(&Item::register_field_in_read_map, 1, 0);
-    if (m_part_info->part_type == VERSIONING_PARTITION &&
-      /* TODO: MDEV-20345 exclude more inapproriate commands like INSERT
-         These commands may be excluded because working history partition is needed
-         only for versioned DML. */
-      thd->lex->sql_command != SQLCOM_SELECT &&
-      thd->lex->sql_command != SQLCOM_INSERT_SELECT &&
-      (error= m_part_info->vers_set_hist_part(thd)))
+    if ((error= m_part_info->vers_set_hist_part(thd)))
       goto err_handler;
   }
   DBUG_RETURN(0);
@@ -4253,11 +4352,7 @@ int ha_partition::start_stmt(THD *thd, thr_lock_type lock_type)
   {
     if (m_part_info->part_expr)
       m_part_info->part_expr->walk(&Item::register_field_in_read_map, 1, 0);
-    if (m_part_info->part_type == VERSIONING_PARTITION &&
-      // TODO: MDEV-20345 (see above)
-      thd->lex->sql_command != SQLCOM_SELECT &&
-      thd->lex->sql_command != SQLCOM_INSERT_SELECT)
-      error= m_part_info->vers_set_hist_part(thd);
+    error= m_part_info->vers_set_hist_part(thd);
   }
   DBUG_RETURN(error);
 }
@@ -4429,15 +4524,15 @@ int ha_partition::write_row(const uchar * buf)
   if (have_auto_increment)
   {
     if (!table_share->next_number_keypart)
-      update_next_auto_inc_val();
-    error= update_auto_increment();
+      if (unlikely(error= update_next_auto_inc_val()))
+        goto exit;
 
     /*
       If we have failed to set the auto-increment value for this row,
       it is highly likely that we will not be able to insert it into
       the correct partition. We must check and fail if necessary.
     */
-    if (unlikely(error))
+    if (unlikely(error= update_auto_increment()))
       goto exit;
 
     /*
@@ -8395,6 +8490,7 @@ int ha_partition::compare_number_of_records(ha_partition *me,
 
 int ha_partition::info(uint flag)
 {
+  int error;
   uint no_lock_flag= flag & HA_STATUS_NO_LOCK;
   uint extra_var_flag= flag & HA_STATUS_VARIABLE_EXTRA;
   DBUG_ENTER("ha_partition::info");
@@ -8447,7 +8543,11 @@ int ha_partition::info(uint flag)
             break;
           }
           file= *file_array;
-          file->info(HA_STATUS_AUTO | no_lock_flag);
+          if ((error= file->info(HA_STATUS_AUTO | no_lock_flag)))
+          {
+            unlock_auto_increment();
+            DBUG_RETURN(error);
+          }
           set_if_bigger(auto_increment_value,
                         file->stats.auto_increment_value);
         } while (*(++file_array));
@@ -8504,7 +8604,8 @@ int ha_partition::info(uint flag)
          i= bitmap_get_next_set(&m_part_info->read_partitions, i))
     {
       file= m_file[i];
-      file->info(HA_STATUS_VARIABLE | no_lock_flag | extra_var_flag);
+      if ((error= file->info(HA_STATUS_VARIABLE | no_lock_flag | extra_var_flag)))
+        DBUG_RETURN(error);
       stats.records+= file->stats.records;
       stats.deleted+= file->stats.deleted;
       stats.data_file_length+= file->stats.data_file_length;
@@ -8593,7 +8694,8 @@ int ha_partition::info(uint flag)
         if (!(flag & HA_STATUS_VARIABLE) ||
             !bitmap_is_set(&(m_part_info->read_partitions),
                            (uint) (file_array - m_file)))
-          file->info(HA_STATUS_VARIABLE | no_lock_flag | extra_var_flag);
+          if ((error= file->info(HA_STATUS_VARIABLE | no_lock_flag | extra_var_flag)))
+            DBUG_RETURN(error);
         if (file->stats.records > max_records || !handler_instance_set)
         {
           handler_instance_set= 1;
@@ -8614,7 +8716,8 @@ int ha_partition::info(uint flag)
               this);
 
     file= m_file[handler_instance];
-    file->info(HA_STATUS_CONST | no_lock_flag);
+    if ((error= file->info(HA_STATUS_CONST | no_lock_flag)))
+      DBUG_RETURN(error);
     stats.block_size= file->stats.block_size;
     stats.create_time= file->stats.create_time;
     ref_length= m_ref_length;
@@ -8630,7 +8733,8 @@ int ha_partition::info(uint flag)
       Note: all engines does not support HA_STATUS_ERRKEY, so set errkey.
     */
     file->errkey= errkey;
-    file->info(HA_STATUS_ERRKEY | no_lock_flag);
+    if ((error= file->info(HA_STATUS_ERRKEY | no_lock_flag)))
+      DBUG_RETURN(error);
     errkey= file->errkey;
   }
   if (flag & HA_STATUS_TIME)
@@ -8647,7 +8751,8 @@ int ha_partition::info(uint flag)
     do
     {
       file= *file_array;
-      file->info(HA_STATUS_TIME | no_lock_flag);
+      if ((error= file->info(HA_STATUS_TIME | no_lock_flag)))
+        DBUG_RETURN(error);
       if (file->stats.update_time > stats.update_time)
 	stats.update_time= file->stats.update_time;
     } while (*(++file_array));
@@ -8763,7 +8868,7 @@ int ha_partition::change_partitions_to_open(List<String> *partition_names)
     return 0;
   }
 
-  check_insert_autoincrement();
+  check_insert_or_replace_autoincrement();
   if (bitmap_cmp(&m_opened_partitions, &m_part_info->read_partitions) != 0)
     return 0;
 
@@ -10495,7 +10600,16 @@ bool ha_partition::commit_inplace_alter_table(TABLE *altered_table,
         Loop over all other partitions as to follow the protocol!
       */
       uint i;
-      DBUG_ASSERT(0);
+      /*
+        InnoDB does not set ha_alter_info->group_commit_ctx to NULL in the
+        case if autoincrement attribute is necessary to reset for all
+        partitions for INNOBASE_INPLACE_IGNORE handler flags. It does not
+        affect durability, because it is solely about updating the InnoDB data
+        dictionary caches (one InnoDB dict_table_t per partition or
+        sub-partition).
+      */
+      DBUG_ASSERT(table->found_next_number_field
+          && !altered_table->found_next_number_field);
       for (i= 1; i < m_tot_parts; i++)
       {
         ha_alter_info->handler_ctx= part_inplace_ctx->handler_ctx_array[i];
@@ -10656,11 +10770,11 @@ int ha_partition::cmp_ref(const uchar *ref1, const uchar *ref2)
    the underlying partitions require that the value should be re-calculated
 */
 
-void ha_partition::update_next_auto_inc_val()
+int ha_partition::update_next_auto_inc_val()
 {
-  if (!part_share->auto_inc_initialized ||
-      need_info_for_auto_inc())
-    info(HA_STATUS_AUTO);
+  if (!part_share->auto_inc_initialized || need_info_for_auto_inc())
+    return info(HA_STATUS_AUTO);
+  return 0;
 }
 
 

@@ -24,8 +24,7 @@ The low-level file system
 Created 10/25/1995 Heikki Tuuri
 *******************************************************/
 
-#ifndef fil0fil_h
-#define fil0fil_h
+#pragma once
 
 #include "fsp0types.h"
 #include "mach0data.h"
@@ -412,32 +411,42 @@ private:
   static constexpr uint32_t PENDING= ~(STOPPING | CLOSING | NEEDS_FSYNC);
   /** latch protecting all page allocation bitmap pages */
   srw_lock latch;
-  os_thread_id_t latch_owner;
+  pthread_t latch_owner;
   ut_d(Atomic_relaxed<uint32_t> latch_count;)
 public:
-	/** MariaDB encryption data */
-	fil_space_crypt_t* crypt_data;
+  /** MariaDB encryption data */
+  fil_space_crypt_t *crypt_data;
 
-	/** Checks that this tablespace in a list of unflushed tablespaces. */
-	bool is_in_unflushed_spaces;
+  /** Whether needs_flush(), or this is in fil_system.unflushed_spaces */
+  bool is_in_unflushed_spaces;
 
-	/** Checks that this tablespace needs key rotation. */
-	bool is_in_default_encrypt;
+  /** Whether this in fil_system.default_encrypt_tables (needs key rotation) */
+  bool is_in_default_encrypt;
 
-	/** mutex to protect freed ranges */
-	std::mutex	freed_range_mutex;
+private:
+  /** Whether any corrupton of this tablespace has been reported */
+  mutable std::atomic_flag is_corrupted;
 
-	/** Variables to store freed ranges. This can be used to write
-	zeroes/punch the hole in files. Protected by freed_mutex */
-	range_set	freed_ranges;
+  /** mutex to protect freed_ranges and last_freed_lsn */
+  std::mutex freed_range_mutex;
 
-	/** Stores last page freed lsn. Protected by freed_mutex */
-	lsn_t		last_freed_lsn;
+  /** Ranges of freed page numbers; protected by freed_range_mutex */
+  range_set freed_ranges;
 
-	ulint		magic_n;/*!< FIL_SPACE_MAGIC_N */
+  /** LSN of freeing last page; protected by freed_range_mutex */
+  lsn_t last_freed_lsn;
 
+public:
   /** @return whether doublewrite buffering is needed */
   inline bool use_doublewrite() const;
+
+  /** @return whether a page has been freed */
+  inline bool is_freed(uint32_t page);
+
+  /** Apply freed_ranges to the file.
+  @param writable whether the file is writable
+  @return number of pages written or hole-punched */
+  uint32_t flush_freed(bool writable);
 
 	/** Append a file to the chain of files of a space.
 	@param[in]	name		file name of a file that is not open
@@ -495,6 +504,9 @@ public:
   written while the space ID is being updated in each page. */
   inline void set_imported();
 
+  /** Report the tablespace as corrupted */
+  ATTRIBUTE_COLD void set_corrupted() const;
+
   /** @return whether the storage device is rotational (HDD, not SSD) */
   inline bool is_rotational() const;
 
@@ -526,15 +538,16 @@ public:
 
 private:
   MY_ATTRIBUTE((warn_unused_result))
-  /** Try to acquire a tablespace reference.
-  @return the old reference count (if STOPPING is set, it was not acquired) */
-  uint32_t acquire_low()
+  /** Try to acquire a tablespace reference (increment referenced()).
+  @param avoid   when these flags are set, nothing will be acquired
+  @return the old reference count */
+  uint32_t acquire_low(uint32_t avoid= STOPPING)
   {
     uint32_t n= 0;
     while (!n_pending.compare_exchange_strong(n, n + 1,
                                               std::memory_order_acquire,
                                               std::memory_order_relaxed) &&
-           !(n & STOPPING));
+           !(n & avoid));
     return n;
   }
 public:
@@ -548,10 +561,8 @@ public:
   @return whether the file is usable */
   bool acquire()
   {
-    uint32_t n= acquire_low();
-    if (UNIV_LIKELY(!(n & (STOPPING | CLOSING))))
-      return true;
-    return UNIV_LIKELY(!(n & STOPPING)) && prepare();
+    const auto flags= acquire_low(STOPPING | CLOSING) & (STOPPING | CLOSING);
+    return UNIV_LIKELY(!flags) || (flags == CLOSING && acquire_and_prepare());
   }
 
   /** Acquire another tablespace reference for I/O. */
@@ -1040,20 +1051,20 @@ public:
 #ifdef UNIV_DEBUG
   bool is_latched() const { return latch_count != 0; }
 #endif
-  bool is_owner() const { return latch_owner == os_thread_get_curr_id(); }
+  bool is_owner() const { return latch_owner == pthread_self(); }
   /** Acquire the allocation latch in exclusive mode */
   void x_lock()
   {
     latch.wr_lock(SRW_LOCK_CALL);
     ut_ad(!latch_owner);
-    latch_owner= os_thread_get_curr_id();
+    latch_owner= pthread_self();
     ut_ad(!latch_count.fetch_add(1));
   }
   /** Release the allocation latch from exclusive mode */
   void x_unlock()
   {
     ut_ad(latch_count.fetch_sub(1) == 1);
-    ut_ad(latch_owner == os_thread_get_curr_id());
+    ut_ad(latch_owner == pthread_self());
     latch_owner= 0;
     latch.wr_unlock();
   }
@@ -1080,14 +1091,13 @@ public:
 
 private:
   /** @return whether the file is usable for io() */
-  ATTRIBUTE_COLD bool prepare(bool have_mutex= false);
+  ATTRIBUTE_COLD bool prepare_acquired();
+  /** @return whether the file is usable for io() */
+  ATTRIBUTE_COLD bool acquire_and_prepare();
 #endif /*!UNIV_INNOCHECKSUM */
 };
 
 #ifndef UNIV_INNOCHECKSUM
-/** Value of fil_space_t::magic_n */
-#define	FIL_SPACE_MAGIC_N	89472
-
 /** File node of a tablespace or the log data space */
 struct fil_node_t final
 {
@@ -1268,8 +1278,9 @@ struct fil_addr_t {
 
 /** For the first page in a system tablespace data file(ibdata*, not *.ibd):
 the file has been flushed to disk at least up to this lsn
-For other pages: 32-bit key version used to encrypt the page + 32-bit checksum
-or 64 bites of zero if no encryption */
+For other pages of tablespaces not in innodb_checksum_algorithm=full_crc32
+format: 32-bit key version used to encrypt the page + 32-bit checksum
+or 64 bits of zero if no encryption */
 #define FIL_PAGE_FILE_FLUSH_LSN_OR_KEY_VERSION 26U
 
 /** This overloads FIL_PAGE_FILE_FLUSH_LSN for RTREE Split Sequence Number */
@@ -1445,7 +1456,7 @@ struct fil_system_t {
 
 private:
   bool m_initialised;
-#ifdef UNIV_LINUX
+#ifdef __linux__
   /** available block devices that reside on non-rotational storage */
   std::vector<dev_t> ssd;
 public:
@@ -1740,10 +1751,7 @@ file inode probably is much faster (the OS caches them) than accessing
 the first page of the file.  This boolean may be initially false, but if
 a remote tablespace is found it will be changed to true.
 
-If the fix_dict boolean is set, then it is safe to use an internal SQL
-statement to update the dictionary tables if they are incorrect.
-
-@param[in]	validate	true if we should validate the tablespace
+@param[in]	validate	0=maybe missing, 1=do not validate, 2=validate
 @param[in]	purpose		FIL_TYPE_TABLESPACE or FIL_TYPE_TEMPORARY
 @param[in]	id		tablespace ID
 @param[in]	flags		expected FSP_SPACE_FLAGS
@@ -1755,7 +1763,7 @@ If file-per-table, it is the table name in the databasename/tablename format
 @retval	NULL	if the tablespace could not be opened */
 fil_space_t*
 fil_ibd_open(
-	bool			validate,
+	unsigned		validate,
 	fil_type_t		purpose,
 	ulint			id,
 	ulint			flags,
@@ -1894,7 +1902,4 @@ void test_make_filepath();
 @return	block size */
 ulint fil_space_get_block_size(const fil_space_t* space, unsigned offset);
 
-#include "fil0fil.inl"
 #endif /* UNIV_INNOCHECKSUM */
-
-#endif /* fil0fil_h */

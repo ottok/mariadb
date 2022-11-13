@@ -1,6 +1,6 @@
 
 # Copyright (c) 2006, 2017, Oracle and/or its affiliates. All rights reserved.
-# Copyright (c) 2014, 2021, MariaDB Corporation.
+# Copyright (c) 2014, 2022, MariaDB Corporation.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,9 +17,129 @@
 
 # This is the CMakeLists for InnoDB
 
+INCLUDE(CheckFunctionExists)
+INCLUDE(CheckCSourceCompiles)
+INCLUDE(CheckCSourceRuns)
+INCLUDE(lz4.cmake)
+INCLUDE(lzo.cmake)
+INCLUDE(lzma.cmake)
+INCLUDE(bzip2.cmake)
+INCLUDE(snappy.cmake)
+INCLUDE(numa)
+INCLUDE(TestBigEndian)
+
+MYSQL_CHECK_LZ4()
+MYSQL_CHECK_LZO()
+MYSQL_CHECK_LZMA()
+MYSQL_CHECK_BZIP2()
+MYSQL_CHECK_SNAPPY()
+MYSQL_CHECK_NUMA()
+
+INCLUDE(${MYSQL_CMAKE_SCRIPT_DIR}/compile_flags.cmake)
+
+IF(CMAKE_CROSSCOMPILING)
+  # Use CHECK_C_SOURCE_COMPILES instead of CHECK_C_SOURCE_RUNS when
+  # cross-compiling. Not as precise, but usually good enough.
+  # This only make sense for atomic tests in this file, this trick doesn't
+  # work in a general case.
+  MACRO(CHECK_C_SOURCE SOURCE VAR)
+    CHECK_C_SOURCE_COMPILES("${SOURCE}" "${VAR}")
+  ENDMACRO()
+ELSE()
+  MACRO(CHECK_C_SOURCE SOURCE VAR)
+    CHECK_C_SOURCE_RUNS("${SOURCE}" "${VAR}")
+  ENDMACRO()
+ENDIF()
+
+# OS tests
+IF(UNIX)
+  IF(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    ADD_DEFINITIONS("-D_GNU_SOURCE=1")
+    IF(HAVE_LIBNUMA)
+      LINK_LIBRARIES(numa)
+    ENDIF()
+  ENDIF()
+ENDIF()
+
+# Enable InnoDB's UNIV_DEBUG in debug builds
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DUNIV_DEBUG")
+
+OPTION(WITH_INNODB_AHI "Include innodb_adaptive_hash_index" ON)
+OPTION(WITH_INNODB_ROOT_GUESS "Cache index root block descriptors" ON)
+IF(WITH_INNODB_AHI)
+  ADD_DEFINITIONS(-DBTR_CUR_HASH_ADAPT -DBTR_CUR_ADAPT)
+  IF(NOT WITH_INNODB_ROOT_GUESS)
+    MESSAGE(WARNING "WITH_INNODB_AHI implies WITH_INNODB_ROOT_GUESS")
+    SET(WITH_INNODB_ROOT_GUESS ON)
+  ENDIF()
+ELSEIF(WITH_INNODB_ROOT_GUESS)
+  ADD_DEFINITIONS(-DBTR_CUR_ADAPT)
+ENDIF()
+ADD_FEATURE_INFO(INNODB_AHI WITH_INNODB_AHI "InnoDB Adaptive Hash Index")
+ADD_FEATURE_INFO(INNODB_ROOT_GUESS WITH_INNODB_ROOT_GUESS
+                 "Cache index root block descriptors in InnoDB")
+
+OPTION(WITH_INNODB_EXTRA_DEBUG "Enable extra InnoDB debug checks" OFF)
+IF(WITH_INNODB_EXTRA_DEBUG)
+  ADD_DEFINITIONS(-DUNIV_ZIP_DEBUG)
+ENDIF()
+ADD_FEATURE_INFO(INNODB_EXTRA_DEBUG WITH_INNODB_EXTRA_DEBUG "Extra InnoDB debug checks")
 
 
-INCLUDE(innodb.cmake)
+CHECK_FUNCTION_EXISTS(sched_getcpu  HAVE_SCHED_GETCPU)
+IF(HAVE_SCHED_GETCPU)
+ ADD_DEFINITIONS(-DHAVE_SCHED_GETCPU=1)
+ENDIF()
+
+IF(HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE)
+ ADD_DEFINITIONS(-DHAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE=1)
+ENDIF()
+
+IF (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
+    CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wconversion -Wno-sign-conversion")
+  SET_SOURCE_FILES_PROPERTIES(fts/fts0pars.cc
+    PROPERTIES COMPILE_FLAGS -Wno-conversion)
+ENDIF()
+
+IF(NOT MSVC)
+  # Work around MDEV-18417, MDEV-18656, MDEV-18417
+  IF(WITH_ASAN AND CMAKE_COMPILER_IS_GNUCC AND
+     CMAKE_C_COMPILER_VERSION VERSION_LESS "6.0.0")
+    SET_SOURCE_FILES_PROPERTIES(trx/trx0rec.cc PROPERTIES COMPILE_FLAGS -O1)
+  ENDIF()
+ENDIF(NOT MSVC)
+
+CHECK_FUNCTION_EXISTS(vasprintf  HAVE_VASPRINTF)
+
+# Include directories under innobase
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/storage/innobase/include
+		    ${CMAKE_SOURCE_DIR}/storage/innobase/handler)
+
+# Sun Studio bug with -xO2
+IF(CMAKE_CXX_COMPILER_ID MATCHES "SunPro"
+	AND CMAKE_CXX_FLAGS_RELEASE MATCHES "O2"
+	AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+	# Sun Studio 12 crashes with -xO2 flag, but not with higher optimization
+	# -xO3
+	SET_SOURCE_FILES_PROPERTIES(${CMAKE_CURRENT_SOURCE_DIR}/rem/rem0rec.cc
+    PROPERTIES COMPILE_FLAGS -xO3)
+ENDIF()
+
+
+IF(MSVC)
+  # Avoid "unreferenced label" warning in generated file
+  GET_FILENAME_COMPONENT(_SRC_DIR ${CMAKE_CURRENT_LIST_FILE} PATH)
+  SET_SOURCE_FILES_PROPERTIES(${_SRC_DIR}/pars/pars0grm.c
+          PROPERTIES COMPILE_FLAGS "/wd4102")
+  SET_SOURCE_FILES_PROPERTIES(${_SRC_DIR}/pars/lexyy.c
+          PROPERTIES COMPILE_FLAGS "/wd4003")
+ENDIF()
+
+# Include directories under innobase
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/storage/innobase/include
+                    ${CMAKE_SOURCE_DIR}/storage/innobase/handler
+                    ${CMAKE_SOURCE_DIR}/libbinlogevents/include)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/tpool)
 
 SET(INNOBASE_SOURCES
@@ -128,7 +248,6 @@ SET(INNOBASE_SOURCES
 	include/fil0crypt.h
 	include/fil0crypt.inl
 	include/fil0fil.h
-	include/fil0fil.inl
 	include/fil0pagecompress.h
 	include/fsp0file.h
 	include/fsp0fsp.h
@@ -148,7 +267,6 @@ SET(INNOBASE_SOURCES
 	include/fts0types.h
 	include/fts0types.inl
 	include/fts0vlc.h
-	include/fut0fut.h
 	include/fut0lst.h
 	include/gis0geo.h
 	include/gis0rtree.h
@@ -186,7 +304,6 @@ SET(INNOBASE_SOURCES
 	include/mtr0types.h
 	include/os0file.h
 	include/os0file.inl
-	include/os0thread.h
 	include/page0cur.h
 	include/page0cur.inl
 	include/page0page.h
@@ -214,7 +331,6 @@ SET(INNOBASE_SOURCES
 	include/row0import.h
 	include/row0ins.h
 	include/row0log.h
-	include/row0log.inl
 	include/row0merge.h
 	include/row0mysql.h
 	include/row0purge.h
@@ -222,7 +338,6 @@ SET(INNOBASE_SOURCES
 	include/row0row.h
 	include/row0row.inl
 	include/row0sel.h
-	include/row0sel.inl
 	include/row0types.h
 	include/row0uins.h
 	include/row0umod.h
@@ -240,10 +355,8 @@ SET(INNOBASE_SOURCES
 	include/trx0i_s.h
 	include/trx0purge.h
 	include/trx0rec.h
-	include/trx0rec.inl
 	include/trx0roll.h
 	include/trx0rseg.h
-	include/trx0rseg.inl
 	include/trx0sys.h
 	include/trx0trx.h
 	include/trx0trx.inl
@@ -283,7 +396,6 @@ SET(INNOBASE_SOURCES
 	mem/mem0mem.cc
 	mtr/mtr0mtr.cc
 	os/os0file.cc
-	os/os0thread.cc
 	page/page0cur.cc
 	page/page0page.cc
 	page/page0zip.cc
@@ -380,6 +492,20 @@ IF(CMAKE_COMPILER_IS_GNUCXX AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64"
       COMPILE_FLAGS "-O0"
       )
 ENDIF()
+
+# Older gcc version insist on -mhtm flag for including the
+# htmxlintrin.h header. This is also true for new gcc versions
+# like 11.2.0 in Debian Sid
+# s390x because of the way it defines the high level intrinsics
+# as not-inline in the header file can only be included by one
+# source file that has -mhtm enabled.
+IF(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64|powerpc64|s390x"
+   OR CMAKE_SYSTEM_NAME MATCHES "AIX")
+  ADD_COMPILE_FLAGS(
+      sync/srw_lock.cc
+      COMPILE_FLAGS "-mhtm"
+      )
+ENDIF()
 IF(MSVC)
   IF(CMAKE_SIZEOF_VOID_P EQUAL 8)
    ADD_COMPILE_FLAGS(
@@ -389,6 +515,11 @@ IF(MSVC)
   # silence "switch statement contains 'default' but no 'case' label
   # on generated file.
   TARGET_COMPILE_OPTIONS(innobase PRIVATE "/wd4065")
+ENDIF()
+IF(CMAKE_C_COMPILER_ID MATCHES "Clang" AND
+   NOT CMAKE_C_COMPILER_VERSION VERSION_LESS "13.0.0")
+  ADD_COMPILE_FLAGS(pars/pars0grm.cc fts/fts0pars.cc
+    COMPILE_FLAGS "-Wno-unused-but-set-variable")
 ENDIF()
 
 IF(NOT (PLUGIN_INNOBASE STREQUAL DYNAMIC))

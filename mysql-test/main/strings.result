@@ -9,15 +9,6 @@ ERROR HY000: \042D\0442\0443 \043E\043F\0435\0440\0430\0446\0438\044E \043D\0435
 STOP SLAVE;
 RESET SLAVE ALL;
 #
-# MDEV-25778 Overrun buffer in to_string_native()
-#
-CREATE TABLE t1 (a DECIMAL(15,11) ZEROFILL);
-INSERT INTO t1 (a) VALUES (0.1),(0.2);
-SELECT length(ENCRYPT(a)) AS f, COUNT(*) FROM t1 GROUP BY f;
-f	COUNT(*)
-13	2
-DROP TABLE t1;
-#
 # MDEV-25754 ASAN: stack-buffer-overflow in Field_newdate::val_str
 #
 CREATE TABLE t1 (d DATE);
@@ -27,3 +18,13 @@ LENGTH(CONCAT_WS(d, ' '))
 1
 1
 DROP TABLE t1;
+#
+# MDEV-28315 ASAN stack-buffer-overflow in String::copy_aligned
+#
+CREATE TABLE t1 (a VARBINARY(128)) CHARACTER SET utf32;
+INSERT INTO t1 VALUES ('South Carolina, Vermont, New Jersey, New Mexico, Wisconsin, Missouri, Delaware');
+CREATE TABLE t2 (b SET('South Carolina', 'Vermont', 'Texas', 'New Mexico', 'Wisconsin', 'Missouri', 'Delaware', 'Wyoming', 'New Jersey', 'Maryland', 'Illinois', 'New York')) CHARACTER SET utf32;
+INSERT INTO t2 SELECT * FROM t1;
+ERROR 01000: Data truncated for column 'b' at row 1
+DROP TABLE t1;
+DROP TABLE t2;

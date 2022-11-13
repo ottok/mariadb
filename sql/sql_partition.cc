@@ -1,5 +1,5 @@
 /* Copyright (c) 2005, 2017, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2020, MariaDB
+   Copyright (c) 2009, 2022, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -4802,6 +4802,7 @@ static void check_datadir_altered_for_innodb(THD *thd,
   @param[out] partition_changed  Boolean indicating whether partition changed
   @param[out] fast_alter_table   Boolean indicating if fast partition alter is
                                  possible.
+  @param[out] thd->work_part_info Prepared part_info for the new table
 
   @return Operation status
     @retval TRUE                 Error
@@ -5451,7 +5452,6 @@ that are reorganised.
         my_error(ER_ROW_IS_REFERENCED, MYF(0));
         goto err;
       }
-      tab_part_info->num_parts-= num_parts_dropped;
     }
     else if (alter_info->partition_flags & ALTER_PARTITION_REBUILD)
     {
@@ -6117,8 +6117,6 @@ static bool mysql_drop_partitions(ALTER_PARTITION_PARAM_TYPE *lpt)
   char path[FN_REFLEN+1];
   partition_info *part_info= lpt->table->part_info;
   List_iterator<partition_element> part_it(part_info->partitions);
-  uint i= 0;
-  uint remove_count= 0;
   int error;
   DBUG_ENTER("mysql_drop_partitions");
 
@@ -6133,16 +6131,6 @@ static bool mysql_drop_partitions(ALTER_PARTITION_PARAM_TYPE *lpt)
     lpt->table->file->print_error(error, MYF(0));
     DBUG_RETURN(TRUE);
   }
-  do
-  {
-    partition_element *part_elem= part_it++;
-    if (part_elem->part_state == PART_IS_DROPPED)
-    {
-      part_it.remove();
-      remove_count++;
-    }
-  } while (++i < part_info->num_parts);
-  part_info->num_parts-= remove_count;
   DBUG_RETURN(FALSE);
 }
 
@@ -6836,16 +6824,33 @@ static bool alter_partition_lock_handling(ALTER_PARTITION_PARAM_TYPE *lpt)
 
 static int alter_close_table(ALTER_PARTITION_PARAM_TYPE *lpt)
 {
-  int error= 0;
+  THD *thd= lpt->thd;
+  TABLE_SHARE *share= lpt->table->s;
   DBUG_ENTER("alter_close_table");
 
-  if (lpt->table->db_stat)
-  {
-    error= mysql_lock_remove(lpt->thd, lpt->thd->lock, lpt->table);
-    error= lpt->table->file->ha_close();
-    lpt->table->db_stat= 0;                        // Mark file closed
-  }
-  DBUG_RETURN(error);
+  TABLE *table= thd->open_tables;
+  do {
+    table= find_locked_table(table, share->db.str, share->table_name.str);
+    if (!table)
+    {
+      DBUG_RETURN(0);
+    }
+
+    if (table->db_stat)
+    {
+      if (int error= mysql_lock_remove(thd, thd->lock, table))
+      {
+        DBUG_RETURN(error);
+      }
+      if (int error= table->file->ha_close())
+      {
+        DBUG_RETURN(error);
+      }
+      table->db_stat= 0; // Mark file closed
+    }
+  } while ((table= table->next));
+
+  DBUG_RETURN(0);
 }
 
 

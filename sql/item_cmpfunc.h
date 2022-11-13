@@ -2500,6 +2500,7 @@ protected:
   SEL_TREE *get_func_mm_tree(RANGE_OPT_PARAM *param,
                              Field *field, Item *value) override;
   bool transform_into_subq;
+  bool transform_into_subq_checked;
 public:
   /// An array of values, created when the bisection lookup method is used
   in_vector *array;
@@ -2522,6 +2523,7 @@ public:
     Item_func_opt_neg(thd, list),
     Predicant_to_list_comparator(thd, arg_count - 1),
     transform_into_subq(false),
+    transform_into_subq_checked(false),
     array(0), have_null(0),
     arg_types_compatible(FALSE), emb_on_expr_nest(0)
   { }
@@ -2628,6 +2630,7 @@ public:
   bool to_be_transformed_into_in_subq(THD *thd);
   bool create_value_list_for_tvc(THD *thd, List< List<Item> > *values);
   Item *in_predicate_to_in_subs_transformer(THD *thd, uchar *arg) override;
+  Item *in_predicate_to_equality_transformer(THD *thd, uchar *arg) override;
   uint32 max_length_of_left_expr();
 };
 
@@ -3190,6 +3193,7 @@ public:
   void copy_andor_arguments(THD *thd, Item_cond *item);
   bool walk(Item_processor processor, bool walk_subquery, void *arg) override;
   Item *transform(THD *thd, Item_transformer transformer, uchar *arg) override;
+  Item *top_level_transform(THD *thd, Item_transformer transformer, uchar *arg) override;
   void traverse_cond(Cond_traverser, void *arg, traverse_order order) override;
   void neg_arguments(THD *thd);
   Item* propagate_equal_fields(THD *, const Context &, COND_EQUAL *) override;

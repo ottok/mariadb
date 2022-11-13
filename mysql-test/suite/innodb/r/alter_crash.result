@@ -65,7 +65,7 @@ t1	CREATE TABLE `t1` (
   `f1` int(11) NOT NULL,
   `f2` int(11) NOT NULL,
   PRIMARY KEY (`f2`,`f1`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 INSERT INTO t1 VALUES (5,6),(7,8);
 SELECT * FROM t1;
 f1	f2
@@ -107,7 +107,7 @@ Table	Create Table
 t2	CREATE TABLE `t2` (
   `f1` int(11) NOT NULL,
   `f2` int(11) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t2;
 CREATE TABLE t2 (f1 INT NOT NULL, f2 INT NOT NULL) ENGINE=InnoDB;
 ALTER TABLE t2 ADD PRIMARY KEY (f2, f1);
@@ -145,7 +145,7 @@ t1	CREATE TABLE `t1` (
   `d` int(11) DEFAULT NULL,
   PRIMARY KEY (`a`),
   KEY `b` (`b`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 UPDATE t1 SET d=NULL;
 SELECT * FROM t1;
 a	b	d
@@ -169,9 +169,6 @@ INSERT INTO t1(f1, f2) VALUES(2, "This is column2 value");
 ROLLBACK;
 set DEBUG_SYNC = 'now SIGNAL insert_done';
 connection default;
-Warnings:
-Warning	1265	Data truncated for column 'f3' at row 3
-Warning	1265	Data truncated for column 'f4' at row 3
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -181,7 +178,7 @@ t1	CREATE TABLE `t1` (
   `f6` int(11) NOT NULL,
   `f4` char(100) NOT NULL,
   PRIMARY KEY (`f6`,`f4`(3),`f3`(3))
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT COUNT(*) FROM t1;
 COUNT(*)
 1
@@ -202,6 +199,7 @@ connection default;
 SET DEBUG_SYNC = 'now WAIT_FOR scanned';
 BEGIN;
 INSERT INTO t1 VALUES(2,1);
+COMMIT;
 SET DEBUG_SYNC = 'now SIGNAL commit';
 SET DEBUG_SYNC = 'now WAIT_FOR c';
 SET GLOBAL innodb_fil_make_page_dirty_debug=0;
@@ -217,8 +215,9 @@ t1	CREATE TABLE `t1` (
   `a` int(11) NOT NULL,
   `b` int(11) DEFAULT NULL,
   PRIMARY KEY (`a`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT * FROM t1;
 a	b
 1	1
+2	1
 DROP TABLE t1;

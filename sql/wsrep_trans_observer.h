@@ -1,4 +1,4 @@
-/* Copyright 2016-2019 Codership Oy <http://www.codership.com>
+/* Copyright 2016-2022 Codership Oy <http://www.codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -232,6 +232,10 @@ static inline int wsrep_before_prepare(THD* thd, bool all)
   WSREP_DEBUG("wsrep_before_prepare: %d", wsrep_is_real(thd, all));
   int ret= 0;
   DBUG_ASSERT(wsrep_run_commit_hook(thd, all));
+  if ((ret= thd->wsrep_parallel_slave_wait_for_prior_commit()))
+  {
+    DBUG_RETURN(ret);
+  }
   if ((ret= thd->wsrep_cs().before_prepare()) == 0)
   {
     DBUG_ASSERT(!thd->wsrep_trx().ws_meta().gtid().is_undefined());

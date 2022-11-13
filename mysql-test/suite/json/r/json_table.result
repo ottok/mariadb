@@ -57,14 +57,14 @@ Jeans	{"color": "blue", "price": 50}	blue
 select * from t1 right join json_table(t1.item_props,'$' columns( color varchar(100) path '$.color')) as T on 1;
 ERROR 42S22: Unknown column 't1.item_props' in 'JSON_TABLE argument'
 DROP TABLE t1;
-select * from JSON_TABLE( '[ {"xa": 1, "b": [11,111]}, {"a": 2, "b": [22,222]}, {"a":3}]', '$[*]' COLUMNS( a INT PATH '$.a' default '101' on empty, NESTED PATH '$.b[*]' COLUMNS (b INT PATH '$'))) as jt;
+select * from JSON_TABLE( '[ {"xa": 1, "b": [11,111]}, {"a": 2, "b": [22,222]}, {"a":3}]', '$[*]' COLUMNS( a INT PATH '$.a' default 101 on empty, NESTED PATH '$.b[*]' COLUMNS (b INT PATH '$'))) as jt;
 a	b
 101	11
 101	111
 2	22
 2	222
 3	NULL
-select * from JSON_TABLE( '[ {"xa": 1, "b": [11,111]}, {"a": 2, "b": [22,222]}, {"a":3}]', '$[*]' COLUMNS( a INT PATH '$.a' default '202' on error, NESTED PATH '$.b[*]' COLUMNS (b INT PATH '$'))) as jt;
+select * from JSON_TABLE( '[ {"xa": 1, "b": [11,111]}, {"a": 2, "b": [22,222]}, {"a":3}]', '$[*]' COLUMNS( a INT PATH '$.a' default 202 on error, NESTED PATH '$.b[*]' COLUMNS (b INT PATH '$'))) as jt;
 a	b
 NULL	11
 NULL	111
@@ -265,8 +265,8 @@ from t1, json_table(t1.json, '$' columns (value varchar(32) PATH '$.value')) T;
 show create table tj1;
 Table	Create Table
 tj1	CREATE TABLE `tj1` (
-  `value` varchar(32) CHARACTER SET utf8mb4 DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+  `value` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 drop table t1;
 drop table tj1;
 CREATE TABLE t1(id INT, f1 JSON);
@@ -953,6 +953,20 @@ converted	original
 Warnings:
 Warning	1264	Out of range value for column 'converted' at row 2
 Warning	1366	Incorrect integer value: 'foo' for column ``.`(temporary)`.`converted` at row 3
+select * from
+json_table('[{"color": "blue",  "price": { "high": 10, "low": 5}},
+               {"color": "white",   "price": "pretty low"},
+               {"color": "yellow",  "price": 256.20},
+               {"color": "red",   "price": { "high": 20, "low": 8}}]',
+'$[*]' columns(color varchar(100) path '$.color',
+price json path '$.price'
+                        )
+) as T;
+color	price
+blue	{ "high": 10, "low": 5}
+white	"pretty low"
+yellow	256.20
+red	{ "high": 20, "low": 8}
 #
 # MDEV-27696 Json table columns accept redundant COLLATE syntax
 #
@@ -980,6 +994,22 @@ name VARCHAR(10) BINARY COLLATE utf8_czech_ci path '$.name'
 ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'COLLATE utf8_czech_ci path '$.name'
   )
 ) AS jt' at line 3
+#
+# MDEV-27690 Crash on `CHARACTER SET csname COLLATE DEFAULT` in column definition
+#
+SELECT * FROM json_table('[{"name":"Jeans"}]', '$[*]'
+  COLUMNS(
+name  VARCHAR(10) CHARACTER SET latin1 COLLATE DEFAULT PATH '$.name'
+  )
+) AS jt;
+name
+Jeans
+#
+# MDEV-28480: Assertion `0' failed in Item_row::illegal_method_call
+#             on SELECT FROM JSON_TABLE
+#
+SELECT 1 FROM JSON_TABLE (row(1,2), '$' COLUMNS (o FOR ORDINALITY)) AS j;
+ERROR 21000: Operand should contain 1 column(s)
 #
 # End of 10.6 tests
 #

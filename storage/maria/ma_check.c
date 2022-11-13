@@ -1070,7 +1070,7 @@ static int chk_index(HA_CHECK *param, MARIA_HA *info, MARIA_KEYDEF *keyinfo,
          share->state.state.data_file_length) ||
         (share->data_file_type == NO_RECORD && record != 0))
     {
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
       char llbuff2[22], llbuff3[22];
 #endif
       _ma_check_print_error(param,
@@ -6350,6 +6350,9 @@ int maria_update_state_info(HA_CHECK *param, MARIA_HA *info,uint update)
 {
   MARIA_SHARE *share= info->s;
   DBUG_ENTER("maria_update_state_info");
+
+  if (info->s->no_status_updates)
+    DBUG_RETURN(0);                             /* S3 readonly table */
 
   if (update & UPDATE_OPEN_COUNT)
   {

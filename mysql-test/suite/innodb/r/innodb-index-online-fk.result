@@ -36,13 +36,13 @@ SET foreign_key_checks = 0;
 ALTER TABLE child ADD CONSTRAINT fk_20 FOREIGN KEY (a1, a2)
 REFERENCES parent(a, b) ON DELETE CASCADE ON UPDATE CASCADE,
 ALGORITHM = INPLACE;
-ERROR HY000: Failed to add the foreign key constaint. Missing index for constraint 'fk_20' in the referenced table 'parent'
+ERROR HY000: Failed to add the foreign key constraint. Missing index for constraint 'fk_20' in the referenced table 'parent'
 SHOW WARNINGS;
 Level	Code	Message
-Error	1822	Failed to add the foreign key constaint. Missing index for constraint 'fk_20' in the referenced table 'parent'
+Error	1822	Failed to add the foreign key constraint. Missing index for constraint 'fk_20' in the referenced table 'parent'
 SHOW ERRORS;
 Level	Code	Message
-Error	1822	Failed to add the foreign key constaint. Missing index for constraint 'fk_20' in the referenced table 'parent'
+Error	1822	Failed to add the foreign key constraint. Missing index for constraint 'fk_20' in the referenced table 'parent'
 CREATE INDEX idx1 on parent(a, b);
 ALTER TABLE child ADD CONSTRAINT fk_10 FOREIGN KEY (a1, a2)
 REFERENCES parent(a, b) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -82,7 +82,7 @@ child	CREATE TABLE `child` (
   CONSTRAINT `fk_10` FOREIGN KEY (`a1`, `a2`) REFERENCES `parent` (`a`, `b`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_2` FOREIGN KEY (`a1`, `a2`) REFERENCES `parent` (`a`, `b`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_3` FOREIGN KEY (`a1`, `a2`) REFERENCES `parent` (`a`, `b`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DELETE FROM parent where a = 1;
 SELECT * FROM child;
 a1	a2
@@ -141,11 +141,11 @@ SET DEBUG_DBUG = '+d,innodb_test_no_foreign_idx';
 ALTER TABLE `#child` ADD CONSTRAINT fk_40 FOREIGN KEY (a1, a2)
 REFERENCES `#parent`(a, b) ON DELETE CASCADE ON UPDATE CASCADE,
 ALGORITHM = INPLACE;
-ERROR HY000: Failed to add the foreign key constaint. Missing index for constraint 'fk_40' in the foreign table '#child'
+ERROR HY000: Failed to add the foreign key constraint. Missing index for constraint 'fk_40' in the foreign table '#child'
 SET DEBUG_DBUG = @saved_debug_dbug;
 SHOW ERRORS;
 Level	Code	Message
-Error	1821	Failed to add the foreign key constaint. Missing index for constraint 'fk_40' in the foreign table '#child'
+Error	1821	Failed to add the foreign key constraint. Missing index for constraint 'fk_40' in the foreign table '#child'
 SELECT * FROM information_schema.INNODB_SYS_FOREIGN;
 ID	FOR_NAME	REF_NAME	N_COLS	TYPE
 test/fk_1	test/child	test/parent	1	6
@@ -168,11 +168,11 @@ SET DEBUG_DBUG = '+d,innodb_test_no_reference_idx';
 ALTER TABLE child ADD CONSTRAINT fk_42 FOREIGN KEY (a1, a2)
 REFERENCES parent(a, b) ON DELETE CASCADE ON UPDATE CASCADE,
 ALGORITHM = INPLACE;
-ERROR HY000: Failed to add the foreign key constaint. Missing index for constraint 'fk_42' in the referenced table 'parent'
+ERROR HY000: Failed to add the foreign key constraint. Missing index for constraint 'fk_42' in the referenced table 'parent'
 SET DEBUG_DBUG = @saved_debug_dbug;
 SHOW ERRORS;
 Level	Code	Message
-Error	1822	Failed to add the foreign key constaint. Missing index for constraint 'fk_42' in the referenced table 'parent'
+Error	1822	Failed to add the foreign key constraint. Missing index for constraint 'fk_42' in the referenced table 'parent'
 SET DEBUG_DBUG = '+d,innodb_test_wrong_fk_option';
 ALTER TABLE child ADD CONSTRAINT fk_42 FOREIGN KEY (a1, a2)
 REFERENCES parent(a, b) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -258,7 +258,7 @@ child	CREATE TABLE `child` (
   PRIMARY KEY (`a1`),
   KEY `fk_4` (`a2`),
   CONSTRAINT `fk_4` FOREIGN KEY (`a2`) REFERENCES `parent` (`b`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT * FROM information_schema.INNODB_SYS_FOREIGN;
 ID	FOR_NAME	REF_NAME	N_COLS	TYPE
 test/fk_4	test/child	test/parent	1	5
@@ -352,7 +352,7 @@ child	CREATE TABLE `child` (
   PRIMARY KEY (`a3`),
   KEY `tb` (`a2`),
   CONSTRAINT `fk_1` FOREIGN KEY (`a2`) REFERENCES `parent` (`b`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE child;
 CREATE TABLE child (a1 INT NOT NULL, a2 INT) ENGINE = InnoDB;
 ALTER TABLE child ADD PRIMARY KEY idx (a1),
@@ -389,7 +389,7 @@ child	CREATE TABLE `child` (
   PRIMARY KEY (`a1`),
   KEY `fk_1` (`a2`),
   CONSTRAINT `fk_1` FOREIGN KEY (`a2`) REFERENCES `parent` (`b`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE child;
 CREATE TABLE child (a1 INT NOT NULL, a2 INT) ENGINE = InnoDB;
 ALTER TABLE child CHANGE a1 a3 INT,
@@ -423,7 +423,7 @@ child	CREATE TABLE `child` (
   `a2` int(11) DEFAULT NULL,
   KEY `fk_1` (`a3`),
   CONSTRAINT `fk_1` FOREIGN KEY (`a3`) REFERENCES `parent` (`b`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE child;
 CREATE TABLE child (a1 INT NOT NULL, a2 INT) ENGINE = InnoDB;
 ALTER TABLE child ADD PRIMARY KEY idx (a3), CHANGE a1 a3 INT,
@@ -456,7 +456,7 @@ child	CREATE TABLE `child` (
   KEY `fk_b` (`a1_new`),
   CONSTRAINT `fk_a` FOREIGN KEY (`a2_new`) REFERENCES `parent` (`b`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_b` FOREIGN KEY (`a1_new`) REFERENCES `parent` (`a`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT * from information_schema.INNODB_SYS_FOREIGN;
 ID	FOR_NAME	REF_NAME	N_COLS	TYPE
 test/fk_a	test/child	test/parent	1	6
@@ -470,7 +470,7 @@ ADD CONSTRAINT fk_new_1 FOREIGN KEY (a1_new) REFERENCES parent(b),
 ADD CONSTRAINT fk_new_2 FOREIGN KEY (a2_new) REFERENCES parent(a),
 ADD CONSTRAINT fk_new_3 FOREIGN KEY (a3) REFERENCES parent(c),
 ALGORITHM = INPLACE;
-ERROR HY000: Failed to add the foreign key constaint. Missing index for constraint 'fk_new_3' in the referenced table 'parent'
+ERROR HY000: Failed to add the foreign key constraint. Missing index for constraint 'fk_new_3' in the referenced table 'parent'
 SHOW CREATE TABLE child;
 Table	Create Table
 child	CREATE TABLE `child` (
@@ -481,7 +481,7 @@ child	CREATE TABLE `child` (
   KEY `fk_b` (`a1_new`),
   CONSTRAINT `fk_a` FOREIGN KEY (`a2_new`) REFERENCES `parent` (`b`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_b` FOREIGN KEY (`a1_new`) REFERENCES `parent` (`a`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT * from information_schema.INNODB_SYS_FOREIGN;
 ID	FOR_NAME	REF_NAME	N_COLS	TYPE
 test/fk_a	test/child	test/parent	1	6
@@ -509,7 +509,7 @@ child	CREATE TABLE `child` (
   CONSTRAINT `fk_new_1` FOREIGN KEY (`a1_new`) REFERENCES `parent` (`b`),
   CONSTRAINT `fk_new_2` FOREIGN KEY (`a2_new`) REFERENCES `parent` (`a`),
   CONSTRAINT `fk_new_3` FOREIGN KEY (`a3`) REFERENCES `parent` (`a`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT * from information_schema.INNODB_SYS_FOREIGN;
 ID	FOR_NAME	REF_NAME	N_COLS	TYPE
 test/fk_a	test/child	test/parent	1	6
@@ -532,7 +532,7 @@ ADD CONSTRAINT fk_new_1 FOREIGN KEY (a1) REFERENCES parent(b),
 ADD CONSTRAINT fk_new_2 FOREIGN KEY (a2) REFERENCES parent(a),
 ADD CONSTRAINT fk_new_3 FOREIGN KEY (a3) REFERENCES parent(c),
 ALGORITHM = INPLACE;
-ERROR HY000: Failed to add the foreign key constaint. Missing index for constraint 'fk_new_3' in the referenced table 'parent'
+ERROR HY000: Failed to add the foreign key constraint. Missing index for constraint 'fk_new_3' in the referenced table 'parent'
 SHOW CREATE TABLE child;
 Table	Create Table
 child	CREATE TABLE `child` (
@@ -540,7 +540,7 @@ child	CREATE TABLE `child` (
   `a2` int(11) DEFAULT NULL,
   `a3` int(11) DEFAULT NULL,
   KEY `tb` (`a2`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT * from information_schema.INNODB_SYS_FOREIGN;
 ID	FOR_NAME	REF_NAME	N_COLS	TYPE
 SELECT * from information_schema.INNODB_SYS_FOREIGN_COLS;
@@ -564,7 +564,7 @@ child	CREATE TABLE `child` (
   CONSTRAINT `fk_new_1` FOREIGN KEY (`a1`) REFERENCES `parent` (`b`),
   CONSTRAINT `fk_new_2` FOREIGN KEY (`a2`) REFERENCES `parent` (`a`),
   CONSTRAINT `fk_new_3` FOREIGN KEY (`a3`) REFERENCES `parent` (`a`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT * from information_schema.INNODB_SYS_FOREIGN;
 ID	FOR_NAME	REF_NAME	N_COLS	TYPE
 test/fk_new_1	test/child	test/parent	1	0

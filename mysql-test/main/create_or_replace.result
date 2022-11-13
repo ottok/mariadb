@@ -1,3 +1,5 @@
+SET @save_persistent=@@GLOBAL.innodb_stats_persistent;
+SET GLOBAL innodb_stats_persistent=OFF;
 CREATE TABLE t2 (a int);
 INSERT INTO t2 VALUES(1),(2),(3);
 #
@@ -31,13 +33,13 @@ Table	Create Table
 t1	CREATE TEMPORARY TABLE `t1` (
   `a` int(11) DEFAULT NULL,
   `b` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TEMPORARY TABLE t1;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1;
 create temporary table t1 (i int) engine=InnoDB;
 create or replace temporary table t1 (a int, b int) engine=InnoDB;
@@ -46,7 +48,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TEMPORARY TABLE `t1` (
   `j` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 drop table t1;
 CREATE OR REPLACE TABLE t1 (a int);
 LOCK TABLES t1 write;
@@ -60,13 +62,13 @@ Table	Create Table
 t1	CREATE TEMPORARY TABLE `t1` (
   `a` int(11) DEFAULT NULL,
   `b` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TEMPORARY TABLE t1;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 CREATE OR REPLACE TABLE t2 (a int);
 ERROR HY000: Table 't2' was not locked with LOCK TABLES
 DROP TABLE t1;
@@ -88,7 +90,7 @@ Table	Create Table
 t1	CREATE TEMPORARY TABLE `t1` (
   `b` int(11) DEFAULT NULL,
   `a` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1;
 CREATE TEMPORARY TABLE t1 AS SELECT a FROM t2;
 CREATE TEMPORARY TABLE IF NOT EXISTS t1(a int, b int) SELECT 1,2 FROM t2;
@@ -101,7 +103,7 @@ SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `1` int(1) NOT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1;
 create table t1 (a int);
 create or replace table t1 as select * from t1;
@@ -121,7 +123,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` int(11) DEFAULT NULL,
   `b` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1;
 CREATE TABLE t1 (a int) SELECT * from t2;
 SELECT * FROM t1;
@@ -142,7 +144,7 @@ SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `1` int(1) NOT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1;
 CREATE OR REPLACE TABLE t1 (a int);
 LOCK TABLES t1 write,t2 write;
@@ -218,7 +220,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `j` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 drop table t1;
 create table t1 (i int) engine=InnoDB;
 lock table t1 write, t2 write;
@@ -258,8 +260,7 @@ Note	1051	Unknown table 'test.t1,mysqltest2.t2'
 create table test.t1 (i int) engine=myisam;
 create table mysqltest2.t2 like test.t1;
 lock table test.t1 write, mysqltest2.t2 write;
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_BACKUP_DDL	NULL	Backup lock		
 #	MDL_BACKUP_DML	NULL	Backup lock		
@@ -272,8 +273,7 @@ ERROR 42000: A table must have at least 1 column
 show tables;
 Tables_in_test
 t2
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_BACKUP_DDL	NULL	Backup lock		
 #	MDL_BACKUP_DML	NULL	Backup lock		
@@ -282,16 +282,14 @@ THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_SHARED_NO_READ_WRITE	NULL	Table metadata lock	mysqltest2	t2
 create or replace table mysqltest2.t2;
 ERROR 42000: A table must have at least 1 column
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 create table t1 (i int);
 drop table t1;
 create table test.t1 (i int);
 create table mysqltest2.t2 like test.t1;
 lock table test.t1 write, mysqltest2.t2 write;
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_BACKUP_DDL	NULL	Backup lock		
 #	MDL_BACKUP_DML	NULL	Backup lock		
@@ -304,8 +302,7 @@ ERROR 42S21: Duplicate column name 'a'
 show tables;
 Tables_in_test
 t2
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_BACKUP_DDL	NULL	Backup lock		
 #	MDL_BACKUP_DML	NULL	Backup lock		
@@ -314,16 +311,14 @@ THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_SHARED_NO_READ_WRITE	NULL	Table metadata lock	mysqltest2	t2
 create or replace table mysqltest2.t2 (a int) select 1 as 'a', 2 as 'a';
 ERROR 42S21: Duplicate column name 'a'
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 create table t1 (i int);
 drop table t1;
 create table test.t1 (i int) engine=innodb;
 create table mysqltest2.t2 like test.t1;
 lock table test.t1 write, mysqltest2.t2 write;
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_BACKUP_DDL	NULL	Backup lock		
 #	MDL_INTENTION_EXCLUSIVE	NULL	Schema metadata lock	mysqltest2	
@@ -335,8 +330,7 @@ drop table test.t1,mysqltest2.t2;
 create table test.t1 (i int) engine=aria transactional=1 checksum=1;
 create table mysqltest2.t2 like test.t1;
 lock table test.t1 write, mysqltest2.t2 write;
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_BACKUP_DDL	NULL	Backup lock		
 #	MDL_INTENTION_EXCLUSIVE	NULL	Schema metadata lock	mysqltest2	
@@ -377,7 +371,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 drop table t1;
 create table t1 (b int);
 lock tables t1 write, t2 read;
@@ -392,7 +386,7 @@ show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 drop table t1;
 create or replace table t1 like t2;
 create or replace table t1 like t1;
@@ -452,8 +446,7 @@ drop view t1;
 #
 create table t1 (a int);
 lock table t1 write, t2 read;
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_BACKUP_DDL	NULL	Backup lock		
 #	MDL_BACKUP_DML	NULL	Backup lock		
@@ -461,8 +454,7 @@ THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_SHARED_NO_READ_WRITE	NULL	Table metadata lock	test	t1
 #	MDL_SHARED_READ	NULL	Table metadata lock	test	t2
 create or replace table t1 (i int);
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_BACKUP_DDL	NULL	Backup lock		
 #	MDL_BACKUP_DML	NULL	Backup lock		
@@ -470,8 +462,7 @@ THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_SHARED_NO_READ_WRITE	NULL	Table metadata lock	test	t1
 #	MDL_SHARED_READ	NULL	Table metadata lock	test	t2
 create or replace table t1 like t2;
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_BACKUP_DDL	NULL	Backup lock		
 #	MDL_BACKUP_DML	NULL	Backup lock		
@@ -479,8 +470,7 @@ THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_SHARED_NO_READ_WRITE	NULL	Table metadata lock	test	t1
 #	MDL_SHARED_READ	NULL	Table metadata lock	test	t2
 create or replace table t1 select 1 as f1;
-select * from information_schema.metadata_lock_info
-where table_name not like 'innodb_%_stats';
+select * from information_schema.metadata_lock_info;
 THREAD_ID	LOCK_MODE	LOCK_DURATION	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
 #	MDL_BACKUP_DDL	NULL	Backup lock		
 #	MDL_BACKUP_DML	NULL	Backup lock		
@@ -577,4 +567,17 @@ SELECT * FROM t3;
 ERROR HY000: Table 't3' was not locked with LOCK TABLES
 UNLOCK TABLES;
 DROP TABLE t3;
+#
+# MDEV-29697 Assertion failure in Diagnostics_area::set_ok_status
+#            upon CREATE OR REPLACE causing ER_UPDATE_TABLE_USED
+#
+CREATE TABLE t (a INT) ENGINE=MyISAM;
+CREATE TABLE tm (a INT) ENGINE=MERGE UNION(t);
+CREATE OR REPLACE TABLE t LIKE tm;
+ERROR HY000: Table 'tm' is specified twice, both as a target for 'CREATE' and as a separate source for data
+DROP TABLE IF EXISTS tm, t;
+#
+# End of 10.3 tests
+#
 # End of 10.4 tests
+SET GLOBAL innodb_stats_persistent=@save_persistent;

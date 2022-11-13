@@ -3,7 +3,7 @@
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2008, 2009 Google Inc.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -146,13 +146,6 @@ my_bool	srv_numa_interleave;
 my_bool	srv_use_atomic_writes;
 /** innodb_compression_algorithm; used with page compression */
 ulong	innodb_compression_algorithm;
-
-#ifdef UNIV_DEBUG
-/** Used by SET GLOBAL innodb_master_thread_disabled_debug = X. */
-my_bool	srv_master_thread_disabled_debug;
-/** Event used to inform that master thread is disabled. */
-static pthread_cond_t srv_master_thread_disabled_cond;
-#endif /* UNIV_DEBUG */
 
 /*------------------------- LOG FILES ------------------------ */
 char*	srv_log_group_home_dir;
@@ -485,7 +478,7 @@ priority of the background thread so that it will be scheduled and it
 can release the resource.  This solution is called priority inheritance
 in real-time programming.  A drawback of this solution is that the overhead
 of acquiring a mutex increases slightly, maybe 0.2 microseconds on a 100
-MHz Pentium, because the thread has to call os_thread_get_curr_id.  This may
+MHz Pentium, because the thread has to call pthread_self.  This may
 be compared to 0.5 microsecond overhead for a mutex lock-unlock pair. Note
 that the thread cannot store the information in the resource , say mutex,
 itself, because competing threads could wipe out the information if it is
@@ -527,7 +520,7 @@ static srv_sys_t	srv_sys;
 struct purge_coordinator_state
 {
   /** Snapshot of the last history length before the purge call.*/
-  uint32 m_history_length;
+  size_t m_history_length;
   Atomic_counter<int> m_running;
 private:
   ulint count;
@@ -662,14 +655,12 @@ static void srv_init()
 	UT_LIST_INIT(srv_sys.tasks, &que_thr_t::queue);
 
 	need_srv_free = true;
-	ut_d(pthread_cond_init(&srv_master_thread_disabled_cond, nullptr));
 
 	mysql_mutex_init(page_zip_stat_per_index_mutex_key,
 			 &page_zip_stat_per_index_mutex, nullptr);
 
 	/* Initialize some INFORMATION SCHEMA internal structures */
 	trx_i_s_cache_init(trx_i_s_cache);
-
 }
 
 /*********************************************************************//**
@@ -685,8 +676,6 @@ srv_free(void)
 	mysql_mutex_destroy(&srv_innodb_monitor_mutex);
 	mysql_mutex_destroy(&page_zip_stat_per_index_mutex);
 	mysql_mutex_destroy(&srv_sys.tasks_mutex);
-
-	ut_d(pthread_cond_destroy(&srv_master_thread_disabled_cond));
 
 	trx_i_s_cache_free(trx_i_s_cache);
 	srv_thread_pool_end();
@@ -1096,7 +1085,7 @@ srv_export_innodb_status(void)
 		- UT_LIST_GET_LEN(buf_pool.free);
 
 	export_vars.innodb_max_trx_id = trx_sys.get_max_trx_id();
-	export_vars.innodb_history_list_length = trx_sys.history_size();
+	export_vars.innodb_history_list_length = trx_sys.history_size_approx();
 
 	export_vars.innodb_log_waits = srv_stats.log_waits;
 
@@ -1153,8 +1142,6 @@ srv_export_innodb_status(void)
 		srv_truncated_status_writes;
 
 	export_vars.innodb_page_compression_saved = srv_stats.page_compression_saved;
-	export_vars.innodb_index_pages_written = srv_stats.index_pages_written;
-	export_vars.innodb_non_index_pages_written = srv_stats.non_index_pages_written;
 	export_vars.innodb_pages_page_compressed = srv_stats.pages_page_compressed;
 	export_vars.innodb_page_compressed_trim_op = srv_stats.page_compressed_trim_op;
 	export_vars.innodb_pages_page_decompressed = srv_stats.pages_page_decompressed;
@@ -1199,8 +1186,6 @@ srv_export_innodb_status(void)
 			crypt_stat.estimated_iops;
 		export_vars.innodb_encryption_key_requests =
 			srv_stats.n_key_requests;
-		export_vars.innodb_key_rotation_list_length =
-			srv_stats.key_rotation_list_length;
 	}
 
 	mysql_mutex_unlock(&srv_innodb_monitor_mutex);
@@ -1529,48 +1514,6 @@ srv_shutdown_print_master_pending(
 	}
 }
 
-#ifdef UNIV_DEBUG
-/** Waits in loop as long as master thread is disabled (debug) */
-static void srv_master_do_disabled_loop()
-{
-  if (!srv_master_thread_disabled_debug)
-    return;
-  srv_main_thread_op_info = "disabled";
-  mysql_mutex_lock(&LOCK_global_system_variables);
-  while (srv_master_thread_disabled_debug)
-    my_cond_wait(&srv_master_thread_disabled_cond,
-                 &LOCK_global_system_variables.m_mutex);
-  mysql_mutex_unlock(&LOCK_global_system_variables);
-  srv_main_thread_op_info = "";
-}
-
-/** Disables master thread. It's used by:
-	SET GLOBAL innodb_master_thread_disabled_debug = 1 (0).
-@param[in]	save		immediate result from check function */
-void
-srv_master_thread_disabled_debug_update(THD*, st_mysql_sys_var*, void*,
-                                        const void* save)
-{
-  mysql_mutex_assert_owner(&LOCK_global_system_variables);
-  const bool disable= *static_cast<const my_bool*>(save);
-  srv_master_thread_disabled_debug= disable;
-  if (!disable)
-    pthread_cond_signal(&srv_master_thread_disabled_cond);
-}
-
-/** Enable the master thread on shutdown. */
-void srv_master_thread_enable()
-{
-  if (srv_master_thread_disabled_debug)
-  {
-    mysql_mutex_lock(&LOCK_global_system_variables);
-    srv_master_thread_disabled_debug= FALSE;
-    pthread_cond_signal(&srv_master_thread_disabled_cond);
-    mysql_mutex_unlock(&LOCK_global_system_variables);
-  }
-}
-#endif /* UNIV_DEBUG */
-
 /** Perform periodic tasks whenever the server is active.
 @param counter_time  microsecond_interval_timer() */
 static void srv_master_do_active_tasks(ulonglong counter_time)
@@ -1647,7 +1590,6 @@ void srv_master_callback(void*)
   ut_a(srv_shutdown_state <= SRV_SHUTDOWN_INITIATED);
 
   MONITOR_INC(MONITOR_MASTER_THREAD_SLEEP);
-  ut_d(srv_master_do_disabled_loop());
   if (!purge_state.m_running)
     srv_wake_purge_thread_if_not_active();
   ulonglong counter_time= microsecond_interval_timer();
@@ -1675,7 +1617,7 @@ static bool srv_purge_should_exit()
     return true;
 
   /* Slow shutdown was requested. */
-  const uint32_t history_size= trx_sys.history_size();
+  const size_t history_size= trx_sys.history_size();
   if (history_size)
   {
     static time_t progress_time;
@@ -1685,9 +1627,9 @@ static bool srv_purge_should_exit()
       progress_time= now;
 #if defined HAVE_SYSTEMD && !defined EMBEDDED_LIBRARY
       service_manager_extend_timeout(INNODB_EXTEND_TIMEOUT_INTERVAL,
-				     "InnoDB: to purge %u transactions",
+				     "InnoDB: to purge %zu transactions",
 				     history_size);
-      ib::info() << "to purge " << history_size << " transactions";
+      sql_print_information("InnoDB: to purge %zu transactions", history_size);
 #endif
     }
     return false;
@@ -1983,7 +1925,7 @@ static void srv_shutdown_purge_tasks()
   std::unique_lock<std::mutex> lk(purge_thd_mutex);
   while (!purge_thds.empty())
   {
-    innobase_destroy_background_thd(purge_thds.front());
+    destroy_background_thd(purge_thds.front());
     purge_thds.pop_front();
   }
   n_purge_thds= 0;
@@ -2032,8 +1974,7 @@ void srv_purge_shutdown()
 		while(!srv_purge_should_exit()) {
 			ut_a(!purge_sys.paused());
 			srv_wake_purge_thread_if_not_active();
-			std::this_thread::sleep_for(
-				std::chrono::milliseconds(1));
+			purge_coordinator_task.wait();
 		}
 		purge_sys.coordinator_shutdown();
 		srv_shutdown_purge_tasks();

@@ -17,15 +17,6 @@ STOP SLAVE;
 RESET SLAVE ALL;
 
 --echo #
---echo # MDEV-25778 Overrun buffer in to_string_native()
---echo #
-
-CREATE TABLE t1 (a DECIMAL(15,11) ZEROFILL);
-INSERT INTO t1 (a) VALUES (0.1),(0.2);
-SELECT length(ENCRYPT(a)) AS f, COUNT(*) FROM t1 GROUP BY f;
-DROP TABLE t1;
-
---echo #
 --echo # MDEV-25754 ASAN: stack-buffer-overflow in Field_newdate::val_str
 --echo #
 
@@ -33,3 +24,15 @@ CREATE TABLE t1 (d DATE);
 INSERT INTO t1 VALUES ('1920-03-02'),('2020-12-01');
 SELECT LENGTH(CONCAT_WS(d, ' ')) FROM t1;
 DROP TABLE t1;
+
+--echo #
+--echo # MDEV-28315 ASAN stack-buffer-overflow in String::copy_aligned
+--echo #
+
+CREATE TABLE t1 (a VARBINARY(128)) CHARACTER SET utf32;
+INSERT INTO t1 VALUES ('South Carolina, Vermont, New Jersey, New Mexico, Wisconsin, Missouri, Delaware');
+CREATE TABLE t2 (b SET('South Carolina', 'Vermont', 'Texas', 'New Mexico', 'Wisconsin', 'Missouri', 'Delaware', 'Wyoming', 'New Jersey', 'Maryland', 'Illinois', 'New York')) CHARACTER SET utf32;
+--error WARN_DATA_TRUNCATED
+INSERT INTO t2 SELECT * FROM t1;
+DROP TABLE t1;
+DROP TABLE t2;

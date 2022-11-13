@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2006, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2021, MariaDB Corporation.
+Copyright (c) 2017, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -140,15 +140,6 @@ uint8_t
 get_innobase_type_from_mysql_type(unsigned *unsigned_flag, const Field *field);
 
 /******************************************************************//**
-Get the variable length bounds of the given character set. */
-void
-innobase_get_cset_width(
-/*====================*/
-	ulint	cset,		/*!< in: MySQL charset-collation code */
-	unsigned*mbminlen,	/*!< out: minimum length of a char (in bytes) */
-	unsigned*mbmaxlen);	/*!< out: maximum length of a char (in bytes) */
-
-/******************************************************************//**
 Compares NUL-terminated UTF-8 strings case insensitively.
 @return 0 if a=b, <0 if a<b, >1 if a>b */
 int
@@ -207,13 +198,6 @@ but can be used for comparison.
 */
 extern "C" unsigned long long thd_start_utime(const MYSQL_THD thd);
 
-
-/**
-  Indicate the start of an async operation in a foreground thread.
-@param thd          current_thd
-@return thd
-@retval nullptr   if this is not a foreground thread */
-THD *innodb_thd_increment_pending_ops(THD *thd);
 
 /** Determines the current SQL statement.
 Thread unsafe, can only be called from the thread owning the THD.
@@ -469,10 +453,9 @@ normalize_table_name_c_low(
 @return new MYSQL_THD */
 MYSQL_THD innobase_create_background_thd(const char* name);
 
-/** Destroy a background purge thread THD.
+/** Destroy a THD object associated with a background task.
 @param[in]	thd	MYSQL_THD to destroy */
-void
-innobase_destroy_background_thd(MYSQL_THD);
+void destroy_background_thd(MYSQL_THD thd);
 
 /** Close opened tables, free memory, delete items for a MYSQL_THD.
 @param[in]	thd	MYSQL_THD to reset */

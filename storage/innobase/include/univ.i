@@ -67,6 +67,7 @@ support cross-platform development and expose comonly used SQL names. */
 
 #include <my_global.h>
 #include "my_counter.h"
+#include "aligned.h"
 #include <m_string.h>
 #include <mysqld_error.h>
 
@@ -190,9 +191,6 @@ using the call command. */
 #define FTS_INTERNAL_DIAG_PRINT                 /* FTS internal debugging
                                                 info output */
 #endif
-
-#define UNIV_BTR_DEBUG				/* check B-tree links */
-#define UNIV_LIGHT_MEM_DEBUG			/* light memory debugging */
 
 // #define UNIV_SQL_DEBUG
 
@@ -363,22 +361,19 @@ typedef ssize_t lint;
 #ifdef _WIN32
 /* Use the integer types and formatting strings defined in Visual Studio. */
 # define UINT32PF	"%u"
-# define INT64PF	"%lld"
 # define UINT64scan     "llu"
 # define UINT64PFx	"%016llx"
 #elif defined __APPLE__
 /* Apple prefers to call the 64-bit types 'long long'
 in both 32-bit and 64-bit environments. */
 # define UINT32PF	"%" PRIu32
-# define INT64PF	"%lld"
 # define UINT64scan     "llu"
 # define UINT64PFx	"%016llx"
 #elif defined _AIX
 /* Workaround for macros expension trouble */
 # define UINT32PF      "%u"
-# define INT64PF       "%lld"
 # define UINT64scan    "lu"
-# define UINT64PFx     "%016llx"
+# define UINT64PFx     "%016lx"
 #else
 /* Use the integer types and formatting strings defined in the C99 standard. */
 # define UINT32PF	"%" PRIu32
@@ -458,7 +453,7 @@ contains the sum of the following flag and the locally stored len. */
 #endif /* CHECK FOR GCC VER_GT_2 */
 
 /* Some macros to improve branch prediction and reduce cache misses */
-#if defined(COMPILER_HINTS) && defined(__GNUC__)
+#ifdef __GNUC__
 /* Tell the compiler that 'expr' probably evaluates to 'constant'. */
 # define UNIV_EXPECT(expr,constant) __builtin_expect(expr, constant)
 /* Tell the compiler that a pointer is likely to be NULL */
@@ -478,16 +473,11 @@ it is read or written. */
 # define UNIV_EXPECT(expr,value) (expr)
 # define UNIV_LIKELY_NULL(expr) (expr)
 
-# if defined(COMPILER_HINTS)
 //# define UNIV_PREFETCH_R(addr) sun_prefetch_read_many((void*) addr)
-#  define UNIV_PREFETCH_R(addr) ((void) 0)
-#  define UNIV_PREFETCH_RW(addr) sun_prefetch_write_many(addr)
-# else
-#  define UNIV_PREFETCH_R(addr) ((void) 0)
-#  define UNIV_PREFETCH_RW(addr) ((void) 0)
-# endif /* COMPILER_HINTS */
+# define UNIV_PREFETCH_R(addr) ((void) 0)
+# define UNIV_PREFETCH_RW(addr) sun_prefetch_write_many(addr)
 
-# elif defined _MSC_VER && defined COMPILER_HINTS
+# elif defined _MSC_VER
 # define UNIV_EXPECT(expr,value) (expr)
 # define UNIV_LIKELY_NULL(expr) (expr)
 # if defined _M_IX86 || defined _M_X64
@@ -543,7 +533,6 @@ extern mysql_pfs_key_t fts_cache_mutex_key;
 extern mysql_pfs_key_t fts_cache_init_mutex_key;
 extern mysql_pfs_key_t fts_delete_mutex_key;
 extern mysql_pfs_key_t fts_doc_id_mutex_key;
-extern mysql_pfs_key_t fts_pll_tokenize_mutex_key;
 extern mysql_pfs_key_t ibuf_bitmap_mutex_key;
 extern mysql_pfs_key_t ibuf_mutex_key;
 extern mysql_pfs_key_t ibuf_pessimistic_insert_mutex_key;
@@ -564,8 +553,6 @@ extern mysql_pfs_key_t trx_pool_mutex_key;
 extern mysql_pfs_key_t trx_pool_manager_mutex_key;
 extern mysql_pfs_key_t lock_wait_mutex_key;
 extern mysql_pfs_key_t srv_threads_mutex_key;
-extern mysql_pfs_key_t thread_mutex_key;
-extern mysql_pfs_key_t row_drop_list_mutex_key;
 # endif /* UNIV_PFS_MUTEX */
 
 # ifdef UNIV_PFS_RWLOCK
@@ -577,5 +564,6 @@ extern mysql_pfs_key_t index_tree_rw_lock_key;
 extern mysql_pfs_key_t index_online_log_key;
 extern mysql_pfs_key_t trx_sys_rw_lock_key;
 extern mysql_pfs_key_t lock_latch_key;
+extern mysql_pfs_key_t trx_rseg_latch_key;
 # endif /* UNIV_PFS_RWLOCK */
 #endif /* HAVE_PSI_INTERFACE */

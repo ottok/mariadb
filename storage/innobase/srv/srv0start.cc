@@ -3,7 +3,7 @@
 Copyright (c) 1996, 2017, Oracle and/or its affiliates. All rights reserved.
 Copyright (c) 2008, Google Inc.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -55,7 +55,6 @@ Created 2/16/1996 Heikki Tuuri
 #include "buf0dblwr.h"
 #include "buf0dump.h"
 #include "os0file.h"
-#include "os0thread.h"
 #include "fil0fil.h"
 #include "fil0crypt.h"
 #include "fsp0fsp.h"
@@ -394,12 +393,12 @@ static dberr_t srv_undo_tablespace_create(const char* name)
 
 	if (!ret) {
 		if (os_file_get_last_error(false) != OS_FILE_ALREADY_EXISTS
-#ifdef UNIV_AIX
+#ifdef _AIX
 			/* AIX 5.1 after security patch ML7 may have
 			errno set to 0 here, which causes our function
 			to return 100; work around that AIX problem */
 		    && os_file_get_last_error(false) != 100
-#endif /* UNIV_AIX */
+#endif
 		) {
 			ib::error() << "Can't create UNDO tablespace "
 				<< name;
@@ -752,10 +751,12 @@ srv_undo_tablespaces_init(bool create_new_db)
     mtr_t mtr;
     for (ulint i= 0; i < srv_undo_tablespaces; ++i)
     {
-       mtr.start();
-       fsp_header_init(fil_space_get(srv_undo_space_id_start + i),
-                       SRV_UNDO_TABLESPACE_SIZE_IN_PAGES, &mtr);
-       mtr.commit();
+      mtr.start();
+      dberr_t err= fsp_header_init(fil_space_get(srv_undo_space_id_start + i),
+                                   SRV_UNDO_TABLESPACE_SIZE_IN_PAGES, &mtr);
+      mtr.commit();
+      if (err)
+        return err;
     }
   }
 
@@ -801,10 +802,13 @@ srv_open_tmp_tablespace(bool create_new_db)
 		mtr_t mtr;
 		mtr.start();
 		mtr.set_log_mode(MTR_LOG_NO_REDO);
-		fsp_header_init(fil_system.temp_space,
-				srv_tmp_space.get_sum_of_sizes(),
-				&mtr);
+		err = fsp_header_init(fil_system.temp_space,
+				      srv_tmp_space.get_sum_of_sizes(),
+				      &mtr);
 		mtr.commit();
+		if (err == DB_SUCCESS) {
+			err = trx_temp_rseg_create(&mtr);
+		}
 	} else {
 		/* This file was just opened in the code above! */
 		ib::error() << "The innodb_temporary"
@@ -820,7 +824,6 @@ srv_open_tmp_tablespace(bool create_new_db)
 static void srv_shutdown_threads()
 {
 	ut_ad(!srv_undo_sources);
-	ut_d(srv_master_thread_enable());
 	srv_master_timer.reset();
 	srv_shutdown_state = SRV_SHUTDOWN_EXIT_THREADS;
 
@@ -831,6 +834,21 @@ static void srv_shutdown_threads()
 	if (srv_n_fil_crypt_threads) {
 		fil_crypt_set_thread_cnt(0);
 	}
+}
+
+
+/** Shut down background threads that can generate undo log. */
+static void srv_shutdown_bg_undo_sources()
+{
+  srv_shutdown_state= SRV_SHUTDOWN_INITIATED;
+
+  if (srv_undo_sources)
+  {
+    ut_ad(!srv_read_only_mode);
+    fts_optimize_shutdown();
+    dict_stats_shutdown();
+    srv_undo_sources= false;
+  }
 }
 
 #ifdef UNIV_DEBUG
@@ -1225,13 +1243,12 @@ dberr_t srv_start(bool create_new_db)
 	recv_sys.create();
 	lock_sys.create(srv_lock_table_size);
 
+	srv_startup_is_before_trx_rollback_phase = true;
 
 	if (!srv_read_only_mode) {
 		buf_flush_page_cleaner_init();
 		ut_ad(buf_page_cleaner_is_active);
 	}
-
-	srv_startup_is_before_trx_rollback_phase = true;
 
 	/* Check if undo tablespaces and redo log files exist before creating
 	a new system tablespace */
@@ -1380,17 +1397,18 @@ file_checked:
 		ut_ad(fil_system.sys_space->id == 0);
 		compile_time_assert(TRX_SYS_SPACE == 0);
 		compile_time_assert(IBUF_SPACE_ID == 0);
-		fsp_header_init(fil_system.sys_space,
-				uint32_t(sum_of_new_sizes), &mtr);
+		ut_a(fsp_header_init(fil_system.sys_space,
+				     uint32_t(sum_of_new_sizes), &mtr)
+		     == DB_SUCCESS);
 
 		ulint ibuf_root = btr_create(
 			DICT_CLUSTERED | DICT_IBUF, fil_system.sys_space,
-			DICT_IBUF_ID_MIN, nullptr, &mtr);
+			DICT_IBUF_ID_MIN, nullptr, &mtr, &err);
 
 		mtr_commit(&mtr);
 
 		if (ibuf_root == FIL_NULL) {
-			return(srv_init_abort(DB_ERROR));
+			return srv_init_abort(err);
 		}
 
 		ut_ad(ibuf_root == IBUF_TREE_ROOT_PAGE_NO);
@@ -1399,8 +1417,7 @@ file_checked:
 		the first rollback segment before the double write buffer.
 		All the remaining rollback segments will be created later,
 		after the double write buffer has been created. */
-		trx_sys_create_sys_pages();
-		err = trx_lists_init_at_db_start();
+		err = trx_sys_create_sys_pages(&mtr);
 
 		if (err != DB_SUCCESS) {
 			return(srv_init_abort(err));
@@ -1462,10 +1479,9 @@ file_checked:
 			if (err != DB_SUCCESS) {
 				return srv_init_abort(err);
 			}
-			if (srv_operation == SRV_OPERATION_RESTORE) {
-				break;
+			if (srv_operation != SRV_OPERATION_RESTORE) {
+				dict_sys.load_sys_tables();
 			}
-			dict_sys.load_sys_tables();
 			err = trx_lists_init_at_db_start();
 			if (err != DB_SUCCESS) {
 				return srv_init_abort(err);
@@ -1513,6 +1529,10 @@ file_checked:
 				buf_block_t* block = buf_page_get(
 					page_id_t(0, 0), 0,
 					RW_SX_LATCH, &mtr);
+				/* The first page of the system tablespace
+				should already have been successfully
+				accessed earlier during startup. */
+				ut_a(block);
 				ulint size = mach_read_from_4(
 					FSP_HEADER_OFFSET + FSP_SIZE
 					+ block->page.frame);
@@ -1716,6 +1736,11 @@ file_checked:
 				page_id_t(IBUF_SPACE_ID,
 					  FSP_IBUF_HEADER_PAGE_NO),
 				0, RW_X_LATCH, &mtr);
+			if (UNIV_UNLIKELY(!block)) {
+			corrupted_old_page:
+				mtr.commit();
+				return srv_init_abort(DB_CORRUPTION);
+			}
 			fil_block_check_type(*block, FIL_PAGE_TYPE_SYS, &mtr);
 			/* Already MySQL 3.23.53 initialized
 			FSP_IBUF_TREE_ROOT_PAGE_NO to
@@ -1723,16 +1748,25 @@ file_checked:
 			block = buf_page_get(
 				page_id_t(TRX_SYS_SPACE, TRX_SYS_PAGE_NO),
 				0, RW_X_LATCH, &mtr);
+			if (UNIV_UNLIKELY(!block)) {
+				goto corrupted_old_page;
+			}
 			fil_block_check_type(*block, FIL_PAGE_TYPE_TRX_SYS,
 					     &mtr);
 			block = buf_page_get(
 				page_id_t(TRX_SYS_SPACE,
 					  FSP_FIRST_RSEG_PAGE_NO),
 				0, RW_X_LATCH, &mtr);
+			if (UNIV_UNLIKELY(!block)) {
+				goto corrupted_old_page;
+			}
 			fil_block_check_type(*block, FIL_PAGE_TYPE_SYS, &mtr);
 			block = buf_page_get(
 				page_id_t(TRX_SYS_SPACE, FSP_DICT_HDR_PAGE_NO),
 				0, RW_X_LATCH, &mtr);
+			if (UNIV_UNLIKELY(!block)) {
+				goto corrupted_old_page;
+			}
 			fil_block_check_type(*block, FIL_PAGE_TYPE_SYS, &mtr);
 			mtr.commit();
 		}
@@ -1832,8 +1866,6 @@ skip_monitors:
 			return(srv_init_abort(err));
 		}
 
-		trx_temp_rseg_create();
-
 		if (srv_force_recovery < SRV_FORCE_NO_BACKGROUND) {
 			srv_start_periodic_timer(srv_master_timer, srv_master_callback, 1000);
 		}
@@ -1892,21 +1924,6 @@ skip_monitors:
 	}
 
 	return(DB_SUCCESS);
-}
-
-/** Shut down background threads that can generate undo log. */
-void srv_shutdown_bg_undo_sources()
-{
-	srv_shutdown_state = SRV_SHUTDOWN_INITIATED;
-
-	ut_d(srv_master_thread_enable());
-
-	if (srv_undo_sources) {
-		ut_ad(!srv_read_only_mode);
-		fts_optimize_shutdown();
-		dict_stats_shutdown();
-		srv_undo_sources = false;
-	}
 }
 
 /**
@@ -2072,7 +2089,7 @@ srv_get_meta_data_filename(
 	char*		path;
 
 	/* Make sure the data_dir_path is set. */
-	dict_get_and_save_data_dir_path(table, false);
+	dict_get_and_save_data_dir_path(table);
 
 	const char* data_dir_path = DICT_TF_HAS_DATA_DIR(table->flags)
 		? table->data_dir_path : nullptr;

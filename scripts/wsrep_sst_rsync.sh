@@ -2,8 +2,8 @@
 
 set -ue
 
-# Copyright (C) 2017-2021 MariaDB
-# Copyright (C) 2010-2014 Codership Oy
+# Copyright (C) 2017-2022 MariaDB
+# Copyright (C) 2010-2022 Codership Oy
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -34,7 +34,18 @@ wsrep_check_programs rsync
 
 cleanup_joiner()
 {
+    # Since this is invoked just after exit NNN
+    local estatus=$?
+    if [ $estatus -ne 0 ]; then
+        wsrep_log_error "Cleanup after exit with status: $estatus"
+    elif [ -z "${coords:-}" ]; then
+        estatus=32
+        wsrep_log_error "Failed to get current position"
+    fi
+
     local failure=0
+
+    [ "$(pwd)" != "$OLD_PWD" ] && cd "$OLD_PWD"
 
     wsrep_log_info "Joiner cleanup: rsync PID=$RSYNC_REAL_PID," \
                    "stunnel PID=$STUNNEL_REAL_PID"
@@ -57,19 +68,22 @@ cleanup_joiner()
 
     if [ $failure -eq 0 ]; then
         if cleanup_pid $RSYNC_REAL_PID "$RSYNC_PID" "$RSYNC_CONF"; then
-            [ -f "$MAGIC_FILE" ] && rm -f "$MAGIC_FILE"
+            [ -f "$MAGIC_FILE" ] && rm -f "$MAGIC_FILE" || :
+            [ -f "$BINLOG_TAR_FILE" ] && rm -f "$BINLOG_TAR_FILE" || :
         else
             wsrep_log_warning "rsync cleanup failed."
         fi
     fi
 
-    wsrep_log_info "Joiner cleanup done."
-
     if [ "$WSREP_SST_OPT_ROLE" = 'joiner' ]; then
         wsrep_cleanup_progress_file
     fi
 
-    [ -f "$SST_PID" ] && rm -f "$SST_PID"
+    [ -f "$SST_PID" ] && rm -f "$SST_PID" || :
+
+    wsrep_log_info "Joiner cleanup done."
+
+    exit $estatus
 }
 
 check_pid_and_port()
@@ -140,66 +154,77 @@ STUNNEL_PID="$WSREP_SST_OPT_DATA/stunnel.pid"
 
 MAGIC_FILE="$WSREP_SST_OPT_DATA/rsync_sst_complete"
 
-BINLOG_TAR_FILE="$WSREP_SST_OPT_DATA/wsrep_sst_binlog.tar"
-BINLOG_N_FILES=1
-
 get_binlog
 
 if [ -n "$WSREP_SST_OPT_BINLOG" ]; then
-    BINLOG_DIRNAME=$(dirname "$WSREP_SST_OPT_BINLOG")
-    BINLOG_FILENAME=$(basename "$WSREP_SST_OPT_BINLOG")
-fi
-
-# if no command line argument and INNODB_LOG_GROUP_HOME is not set,
-# try to get it from my.cnf:
-if [ -z "$INNODB_LOG_GROUP_HOME" ]; then
-    INNODB_LOG_GROUP_HOME=$(parse_cnf '--mysqld' 'innodb-log-group-home-dir')
+    binlog_dir=$(dirname "$WSREP_SST_OPT_BINLOG")
+    binlog_base=$(basename "$WSREP_SST_OPT_BINLOG")
 fi
 
 OLD_PWD="$(pwd)"
 
-WSREP_LOG_DIR="$INNODB_LOG_GROUP_HOME"
-
-cd "$WSREP_SST_OPT_DATA"
-if [ -n "$WSREP_LOG_DIR" ]; then
-    # handle both relative and absolute paths
-    [ ! -d "$WSREP_LOG_DIR" ] && mkdir -p "$WSREP_LOG_DIR"
-    cd "$WSREP_LOG_DIR"
+DATA="$WSREP_SST_OPT_DATA"
+if [ -n "$DATA" -a "$DATA" != '.' ]; then
+    [ ! -d "$DATA" ] && mkdir -p "$DATA"
+    cd "$DATA"
 fi
-WSREP_LOG_DIR=$(pwd -P)
+DATA_DIR="$(pwd)"
 
 cd "$OLD_PWD"
 
-# if no command line argument and INNODB_DATA_HOME_DIR environment variable
-# is not set, try to get it from my.cnf:
+BINLOG_TAR_FILE="$DATA_DIR/wsrep_sst_binlog.tar"
+
+ib_log_dir="$DATA_DIR"
+ib_home_dir="$DATA_DIR"
+ib_undo_dir="$DATA_DIR"
+
+# if no command line argument and INNODB_LOG_GROUP_HOME is not set,
+# then try to get it from the my.cnf:
+if [ -z "$INNODB_LOG_GROUP_HOME" ]; then
+    INNODB_LOG_GROUP_HOME=$(parse_cnf '--mysqld' 'innodb-log-group-home-dir')
+    INNODB_LOG_GROUP_HOME=$(trim_dir "$INNODB_LOG_GROUP_HOME")
+fi
+
+if [ -n "$INNODB_LOG_GROUP_HOME" -a "$INNODB_LOG_GROUP_HOME" != '.' ]; then
+    # handle both relative and absolute paths:
+    cd "$DATA"
+    [ ! -d "$INNODB_LOG_GROUP_HOME" ] && mkdir -p "$INNODB_LOG_GROUP_HOME"
+    cd "$INNODB_LOG_GROUP_HOME"
+    ib_log_dir="$(pwd)"
+    cd "$OLD_PWD"
+fi
+
+# if no command line argument and INNODB_DATA_HOME_DIR environment
+# variable is not set, try to get it from the my.cnf:
 if [ -z "$INNODB_DATA_HOME_DIR" ]; then
     INNODB_DATA_HOME_DIR=$(parse_cnf '--mysqld' 'innodb-data-home-dir')
+    INNODB_DATA_HOME_DIR=$(trim_dir "$INNODB_DATA_HOME_DIR")
 fi
 
-cd "$WSREP_SST_OPT_DATA"
-if [ -n "$INNODB_DATA_HOME_DIR" ]; then
-    # handle both relative and absolute paths
+if [ -n "$INNODB_DATA_HOME_DIR" -a "$INNODB_DATA_HOME_DIR" != '.' ]; then
+    # handle both relative and absolute paths:
+    cd "$DATA"
     [ ! -d "$INNODB_DATA_HOME_DIR" ] && mkdir -p "$INNODB_DATA_HOME_DIR"
     cd "$INNODB_DATA_HOME_DIR"
+    ib_home_dir="$(pwd)"
+    cd "$OLD_PWD"
 fi
-INNODB_DATA_HOME_DIR=$(pwd -P)
 
-cd "$OLD_PWD"
-
-# if no command line argument then try to get it from my.cnf:
+# if no command line argument and INNODB_UNDO_DIR is not set,
+# then try to get it from the my.cnf:
 if [ -z "$INNODB_UNDO_DIR" ]; then
     INNODB_UNDO_DIR=$(parse_cnf '--mysqld' 'innodb-undo-directory')
+    INNODB_UNDO_DIR=$(trim_dir "$INNODB_UNDO_DIR")
 fi
 
-cd "$WSREP_SST_OPT_DATA"
-if [ -n "$INNODB_UNDO_DIR" ]; then
-    # handle both relative and absolute paths
+if [ -n "$INNODB_UNDO_DIR" -a "$INNODB_UNDO_DIR" != '.' ]; then
+    # handle both relative and absolute paths:
+    cd "$DATA"
     [ ! -d "$INNODB_UNDO_DIR" ] && mkdir -p "$INNODB_UNDO_DIR"
     cd "$INNODB_UNDO_DIR"
+    ib_undo_dir="$(pwd)"
+    cd "$OLD_PWD"
 fi
-INNODB_UNDO_DIR=$(pwd -P)
-
-cd "$OLD_PWD"
 
 encgroups='--mysqld|sst'
 
@@ -210,7 +235,7 @@ SSTCERT="$tpem"
 SSTCA="$tcert"
 SSTCAP="$tcap"
 
-SSLMODE=$(parse_cnf "$encgroups" 'ssl-mode' | tr [:lower:] [:upper:])
+SSLMODE=$(parse_cnf "$encgroups" 'ssl-mode' | tr '[[:lower:]]' '[[:upper:]]')
 
 if [ -z "$SSLMODE" ]; then
     # Implicit verification if CA is set and the SSL mode
@@ -224,6 +249,15 @@ if [ -z "$SSLMODE" ]; then
     elif [ -n "$SSTKEY" -a -n "$SSTCERT" ]; then
         SSLMODE='REQUIRED'
     fi
+else
+    case "$SSLMODE" in
+    'VERIFY_IDENTITY'|'VERIFY_CA'|'REQUIRED'|'DISABLED')
+        ;;
+    *)
+        wsrep_log_error "Unrecognized ssl-mode option: '$SSLMODE'"
+        exit 22 # EINVAL
+        ;;
+    esac
 fi
 
 if [ -n "$SSTKEY" -a -n "$SSTCERT" ]; then
@@ -248,18 +282,11 @@ VERIFY_OPT=""
 CHECK_OPT=""
 CHECK_OPT_LOCAL=""
 if [ "${SSLMODE#VERIFY}" != "$SSLMODE" ]; then
-    case "$SSLMODE" in
-    'VERIFY_IDENTITY')
+    if [ "$SSLMODE" = 'VERIFY_IDENTITY' ]; then
         VERIFY_OPT='verifyPeer = yes'
-        ;;
-    'VERIFY_CA')
+    else
         VERIFY_OPT='verifyChain = yes'
-        ;;
-    *)
-        wsrep_log_error "Unrecognized ssl-mode option: '$SSLMODE'"
-        exit 22 # EINVAL
-        ;;
-    esac
+    fi
     if [ -z "$SSTCA$SSTCAP" ]; then
         wsrep_log_error "Can't have ssl-mode='$SSLMODE' without CA file or path"
         exit 22 # EINVAL
@@ -276,7 +303,7 @@ if [ "${SSLMODE#VERIFY}" != "$SSLMODE" ]; then
             CHECK_OPT="checkHost = $WSREP_SST_OPT_HOST"
         fi
         if is_local_ip "$WSREP_SST_OPT_HOST_UNESCAPED"; then
-            CHECK_OPT_LOCAL="checkHost = localhost"
+            CHECK_OPT_LOCAL='checkHost = localhost'
         fi
     fi
 fi
@@ -293,17 +320,65 @@ if [ -n "$SSLMODE" -a "$SSLMODE" != 'DISABLED' ]; then
     fi
 fi
 
-readonly SECRET_TAG="secret"
+readonly SECRET_TAG='secret'
+readonly BYPASS_TAG='bypass'
 
-if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]
-then
+SST_PID="$WSREP_SST_OPT_DATA/wsrep_sst.pid"
 
-    [ -f "$MAGIC_FILE"      ] && rm -f "$MAGIC_FILE"
-    [ -f "$BINLOG_TAR_FILE" ] && rm -f "$BINLOG_TAR_FILE"
-    [ -f "$STUNNEL_PID"     ] && rm -f "$STUNNEL_PID"
+# give some time for previous SST to complete:
+check_round=0
+while check_pid "$SST_PID" 0; do
+    wsrep_log_info "Previous SST is not completed, waiting for it to exit"
+    check_round=$(( check_round + 1 ))
+    if [ $check_round -eq 20 ]; then
+        wsrep_log_error "previous SST script still running."
+        exit 114 # EALREADY
+    fi
+    sleep 1
+done
 
-    if [ -n "$STUNNEL" ]
-    then
+trap simple_cleanup EXIT
+echo $$ > "$SST_PID"
+
+# give some time for stunnel from the previous SST to complete:
+check_round=0
+while check_pid "$STUNNEL_PID" 1 "$STUNNEL_CONF"; do
+    wsrep_log_info "Lingering stunnel daemon found at startup," \
+                   "waiting for it to exit"
+    check_round=$(( check_round + 1 ))
+    if [ $check_round -eq 10 ]; then
+        wsrep_log_error "stunnel daemon still running."
+        exit 114 # EALREADY
+    fi
+    sleep 1
+done
+
+MODULE="${WSREP_SST_OPT_MODULE:-rsync_sst}"
+
+RSYNC_PID="$WSREP_SST_OPT_DATA/$MODULE.pid"
+RSYNC_CONF="$WSREP_SST_OPT_DATA/$MODULE.conf"
+
+# give some time for rsync from the previous SST to complete:
+check_round=0
+while check_pid "$RSYNC_PID" 1 "$RSYNC_CONF"; do
+    wsrep_log_info "Lingering rsync daemon found at startup," \
+                   "waiting for it to exit"
+    check_round=$(( check_round + 1 ))
+    if [ $check_round -eq 10 ]; then
+        wsrep_log_error "rsync daemon still running."
+        exit 114 # EALREADY
+    fi
+    sleep 1
+done
+
+[ -f "$MAGIC_FILE" ]      && rm -f "$MAGIC_FILE"
+[ -f "$BINLOG_TAR_FILE" ] && rm -f "$BINLOG_TAR_FILE"
+
+RC=0
+
+if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
+
+    if [ -n "$STUNNEL" ]; then
         cat << EOF > "$STUNNEL_CONF"
 key = $SSTKEY
 cert = $SSTCERT
@@ -319,11 +394,7 @@ ${VERIFY_OPT}
 ${CHECK_OPT}
 ${CHECK_OPT_LOCAL}
 EOF
-    else
-        [ -f "$STUNNEL_CONF" ] && rm -f "$STUNNEL_CONF"
     fi
-
-    RC=0
 
     if [ $WSREP_SST_OPT_BYPASS -eq 0 ]; then
 
@@ -331,58 +402,127 @@ EOF
         ERROR="$WSREP_SST_OPT_DATA/sst_error"
 
         [ -f "$FLUSHED" ] && rm -f "$FLUSHED"
-        [ -f "$ERROR"   ] && rm -f "$ERROR"
+        [ -f "$ERROR" ]   && rm -f "$ERROR"
 
-        echo "flush tables"
+        echo 'flush tables'
 
         # Wait for :
         # (a) Tables to be flushed, AND
         # (b) Cluster state ID & wsrep_gtid_domain_id to be written to the file, OR
         # (c) ERROR file, in case flush tables operation failed.
 
-        while [ ! -r "$FLUSHED" ] && \
-                ! grep -q -F ':' '--' "$FLUSHED" >/dev/null 2>&1
+        while [ ! -r "$FLUSHED" ] || \
+                ! grep -q -F ':' -- "$FLUSHED"
         do
             # Check whether ERROR file exists.
             if [ -f "$ERROR" ]; then
                 # Flush tables operation failed.
-                rm -f "$ERROR"
+                rm "$ERROR"
                 exit 255
             fi
             sleep 0.2
         done
 
         STATE=$(cat "$FLUSHED")
-        rm -f "$FLUSHED"
+        rm "$FLUSHED"
 
         sync
 
-        if [ -n "$WSREP_SST_OPT_BINLOG" -a -d "${BINLOG_DIRNAME:-}" ]
-        then
-            # Prepare binlog files
-            cd "$BINLOG_DIRNAME"
+        wsrep_log_info "Tables flushed"
 
-            binlog_files_full=$(tail -n $BINLOG_N_FILES \
-                                "$WSREP_SST_OPT_BINLOG_INDEX")
-            binlog_files=""
-            for file in $binlog_files_full; do
-                binlog_file=$(basename "$file")
-                binlog_files="$binlog_files${binlog_files:+ }'$binlog_file'"
-            done
-
-            if [ -n "$binlog_files" ]; then
-                wsrep_log_info "Preparing binlog files for transfer:"
-                eval tar -cvf "'$BINLOG_TAR_FILE'" $binlog_files >&2
+        if [ -n "$WSREP_SST_OPT_BINLOG" ]; then
+            # Change the directory to binlog base (if possible):
+            cd "$DATA"
+            # Let's check the existence of the file with the index:
+            if [ -f "$WSREP_SST_OPT_BINLOG_INDEX" ]; then
+                # Let's read the binlog index:
+                max_binlogs=$(parse_cnf "$encgroups" 'sst-max-binlogs' 1)
+                if [ $max_binlogs -ge 0 ]; then
+                    binlog_files=""
+                    if [ $max_binlogs -gt 0 ]; then
+                        binlog_files=$(tail -n $max_binlogs \
+                                       "$WSREP_SST_OPT_BINLOG_INDEX")
+                    fi
+                else
+                    binlog_files=$(cat "$WSREP_SST_OPT_BINLOG_INDEX")
+                fi
+                if [ -n "$binlog_files" ]; then
+                    # Preparing binlog files for transfer:
+                    wsrep_log_info "Preparing binlog files for transfer:"
+                    tar_type=0
+                    if tar --help | grep -qw -F -- '--transform'; then
+                        tar_type=1
+                    elif tar --version | grep -qw -E '^bsdtar'; then
+                        tar_type=2
+                    fi
+                    if [ $tar_type -eq 2 ]; then
+                        if [ -n "$BASH_VERSION" ]; then
+                            printf '%s' "$binlog_files" >&2
+                        else
+                            echo "$binlog_files" >&2
+                        fi
+                    fi
+                    if [ $tar_type -ne 0 ]; then
+                        # Preparing list of the binlog file names:
+                        echo "$binlog_files" | {
+                            binlogs=""
+                            while read bin_file || [ -n "$bin_file" ]; do
+                                [ ! -f "$bin_file" ] && continue
+                                if [ -n "$BASH_VERSION" ]; then
+                                    first="${bin_file:0:1}"
+                                else
+                                    first=$(echo "$bin_file" | cut -c1)
+                                fi
+                                if [ "$first" = '-' -o "$first" = '@' ]; then
+                                    bin_file="./$bin_file"
+                                fi
+                                binlogs="$binlogs${binlogs:+ }'$bin_file'"
+                            done
+                            if [ -n "$binlogs" ]; then
+                                if [ $tar_type -eq 1 ]; then
+                                    tar_options="--transform='s/^.*\///g'"
+                                else
+                                    # bsdtar handles backslash incorrectly:
+                                    tar_options="-s '?^.*/??g'"
+                                fi
+                                eval tar -P $tar_options \
+                                         -cvf "'$BINLOG_TAR_FILE'" $binlogs >&2
+                            fi
+                        }
+                    else
+                        tar_options='-cvf'
+                        echo "$binlog_files" | \
+                        while read bin_file || [ -n "$bin_file" ]; do
+                            [ ! -f "$bin_file" ] && continue
+                            bin_dir=$(dirname "$bin_file")
+                            bin_base=$(basename "$bin_file")
+                            if [ -n "$BASH_VERSION" ]; then
+                                first="${bin_base:0:1}"
+                            else
+                                first=$(echo "$bin_base" | cut -c1)
+                            fi
+                            if [ "$first" = '-' -o "$first" = '@' ]; then
+                                bin_base="./$bin_base"
+                            fi
+                            if [ -n "$bin_dir" -a "$bin_dir" != '.' ]; then
+                                tar $tar_options "$BINLOG_TAR_FILE" \
+                                    -C "$bin_dir" "$bin_base" >&2
+                            else
+                                tar $tar_options "$BINLOG_TAR_FILE" \
+                                    "$bin_base" >&2
+                            fi
+                            tar_options='-rvf'
+                        done
+                    fi
+                fi
             fi
-
             cd "$OLD_PWD"
         fi
 
-        # Use deltaxfer only for WAN
-        inv=$(basename "$0")
+        # Use deltaxfer only for WAN:
         WHOLE_FILE_OPT=""
-        if [ "${inv%wsrep_sst_rsync_wan*}" = "$inv" ]; then
-            WHOLE_FILE_OPT="--whole-file"
+        if [ "${WSREP_METHOD%_wan}" = "$WSREP_METHOD" ]; then
+            WHOLE_FILE_OPT='--whole-file'
         fi
 
 # Old filter - include everything except selected
@@ -399,9 +539,9 @@ FILTER="-f '- /lost+found'
         -f '- /.pid'
         -f '- /.conf'
         -f '+ /wsrep_sst_binlog.tar'
-        -f '- $INNODB_DATA_HOME_DIR/ib_lru_dump'
-        -f '- $INNODB_DATA_HOME_DIR/ibdata*'
-        -f '+ $INNODB_UNDO_DIR/undo*'
+        -f '- $ib_home_dir/ib_lru_dump'
+        -f '- $ib_home_dir/ibdata*'
+        -f '+ $ib_undo_dir/undo*'
         -f '+ /*/'
         -f '- /*'"
 
@@ -430,12 +570,14 @@ FILTER="-f '- /lost+found'
             exit $RC
         fi
 
+        wsrep_log_info "Transfer of normal directories done"
+
         # Transfer InnoDB data files
         rsync ${STUNNEL:+--rsh="$STUNNEL"} \
               --owner --group --perms --links --specials \
               --ignore-times --inplace --dirs --delete --quiet \
               $WHOLE_FILE_OPT -f '+ /ibdata*' -f '+ /ib_lru_dump' \
-              -f '- **' "$INNODB_DATA_HOME_DIR/" \
+              -f '- **' "$ib_home_dir/" \
               "rsync://$WSREP_SST_OPT_ADDR-data_dir" >&2 || RC=$?
 
         if [ $RC -ne 0 ]; then
@@ -443,12 +585,14 @@ FILTER="-f '- /lost+found'
             exit 255 # unknown error
         fi
 
+        wsrep_log_info "Transfer of InnoDB data files done"
+
         # second, we transfer InnoDB and Aria log files
         rsync ${STUNNEL:+--rsh="$STUNNEL"} \
               --owner --group --perms --links --specials \
               --ignore-times --inplace --dirs --delete --quiet \
               $WHOLE_FILE_OPT -f '+ /ib_logfile[0-9]*' -f '+ /aria_log.*' \
-              -f '+ /aria_log_control' -f '- **' "$WSREP_LOG_DIR/" \
+              -f '+ /aria_log_control' -f '- **' "$ib_log_dir/" \
               "rsync://$WSREP_SST_OPT_ADDR-log_dir" >&2 || RC=$?
 
         if [ $RC -ne 0 ]; then
@@ -456,10 +600,12 @@ FILTER="-f '- /lost+found'
             exit 255 # unknown error
         fi
 
+        wsrep_log_info "Transfer of InnoDB and Aria log files done"
+
         # then, we parallelize the transfer of database directories,
         # use '.' so that path concatenation works:
 
-        cd "$WSREP_SST_OPT_DATA"
+        cd "$DATA"
 
         backup_threads=$(parse_cnf '--mysqld|sst' 'backup-threads')
         if [ -z "$backup_threads" ]; then
@@ -483,6 +629,10 @@ FILTER="-f '- /lost+found'
             exit 255 # unknown error
         fi
 
+        wsrep_log_info "Transfer of data done"
+
+        [ -f "$BINLOG_TAR_FILE" ] && rm "$BINLOG_TAR_FILE"
+
     else # BYPASS
 
         wsrep_log_info "Bypassing state dump."
@@ -493,6 +643,7 @@ FILTER="-f '- /lost+found'
 
     fi
 
+    wsrep_log_info "Sending continue to donor"
     echo 'continue' # now server can resume updating data
 
     echo "$STATE" > "$MAGIC_FILE"
@@ -502,9 +653,15 @@ FILTER="-f '- /lost+found'
         echo "$SECRET_TAG $WSREP_SST_OPT_REMOTE_PSWD" >> "$MAGIC_FILE"
     fi
 
+    if [ $WSREP_SST_OPT_BYPASS -ne 0 ]; then
+        echo "$BYPASS_TAG" >> "$MAGIC_FILE"
+    fi
+
     rsync ${STUNNEL:+--rsh="$STUNNEL"} \
           --archive --quiet --checksum "$MAGIC_FILE" \
           "rsync://$WSREP_SST_OPT_ADDR" >&2 || RC=$?
+
+    rm "$MAGIC_FILE"
 
     if [ $RC -ne 0 ]; then
         wsrep_log_error "rsync $MAGIC_FILE returned code $RC:"
@@ -514,72 +671,19 @@ FILTER="-f '- /lost+found'
     echo "done $STATE"
 
     if [ -n "$STUNNEL" ]; then
-        [ -f "$STUNNEL_CONF" ] && rm -f "$STUNNEL_CONF"
-        [ -f "$STUNNEL_PID"  ] && rm -f "$STUNNEL_PID"
+        rm "$STUNNEL_CONF"
+        [ -f "$STUNNEL_PID" ] && rm "$STUNNEL_PID"
     fi
 
-elif [ "$WSREP_SST_OPT_ROLE" = 'joiner' ]
-then
+else # joiner
+
     check_sockets_utils
 
-    SST_PID="$WSREP_SST_OPT_DATA/wsrep_sst.pid"
-
-    # give some time for previous SST to complete:
-    check_round=0
-    while check_pid "$SST_PID" 0 'wsrep_sst_'; do
-        wsrep_log_info "previous SST is not completed, waiting for it to exit"
-        check_round=$(( check_round + 1 ))
-        if [ $check_round -eq 10 ]; then
-            wsrep_log_error "previous SST script still running."
-            exit 114 # EALREADY
-        fi
-        sleep 1
-    done
-
-    echo $$ > "$SST_PID"
-
-    # give some time for stunnel from the previous SST to complete:
-    check_round=0
-    while check_pid "$STUNNEL_PID" 1; do
-        wsrep_log_info "Lingering stunnel daemon found at startup," \
-                       "waiting for it to exit"
-        check_round=$(( check_round + 1 ))
-        if [ $check_round -eq 10 ]; then
-            wsrep_log_error "stunnel daemon already running."
-            exit 114 # EALREADY
-        fi
-        sleep 1
-    done
-
-    MODULE="rsync_sst"
-    RSYNC_PID="$WSREP_SST_OPT_DATA/$MODULE.pid"
-    RSYNC_CONF="$WSREP_SST_OPT_DATA/$MODULE.conf"
-
-    # give some time for rsync from the previous SST to complete:
-    check_round=0
-    while check_pid "$RSYNC_PID" 1; do
-        wsrep_log_info "Lingering rsync daemon found at startup," \
-                       "waiting for it to exit"
-        check_round=$(( check_round + 1 ))
-        if [ $check_round -eq 10 ]; then
-            wsrep_log_error "rsync daemon already running."
-            exit 114 # EALREADY
-        fi
-        sleep 1
-    done
-
-    [ -f "$MAGIC_FILE"      ] && rm -f "$MAGIC_FILE"
-    [ -f "$BINLOG_TAR_FILE" ] && rm -f "$BINLOG_TAR_FILE"
-
-    [ -z "$STUNNEL" -a -f "$STUNNEL_CONF" ] && rm -f "$STUNNEL_CONF"
-
-    ADDR="$WSREP_SST_OPT_ADDR"
+    ADDR="$WSREP_SST_OPT_HOST"
     RSYNC_PORT="$WSREP_SST_OPT_PORT"
     RSYNC_ADDR="$WSREP_SST_OPT_HOST"
     RSYNC_ADDR_UNESCAPED="$WSREP_SST_OPT_HOST_UNESCAPED"
 
-    trap "exit 32" HUP PIPE
-    trap "exit 3"  INT TERM ABRT
     trap cleanup_joiner EXIT
 
     touch "$SST_PROGRESS_FILE"
@@ -600,16 +704,13 @@ $SILENT
     path = $WSREP_SST_OPT_DATA
     exclude = .zfs
 [$MODULE-log_dir]
-    path = $WSREP_LOG_DIR
+    path = $ib_log_dir
 [$MODULE-data_dir]
-    path = $INNODB_DATA_HOME_DIR
+    path = $ib_home_dir
 EOF
 
-#   rm -rf "$DATA/ib_logfile"* # we don't want old logs around
-
     # If the IP is local, listen only on it:
-    if is_local_ip "$RSYNC_ADDR_UNESCAPED"
-    then
+    if is_local_ip "$RSYNC_ADDR_UNESCAPED"; then
         RSYNC_EXTRA_ARGS="--address $RSYNC_ADDR_UNESCAPED"
         STUNNEL_ACCEPT="$RSYNC_ADDR_UNESCAPED:$RSYNC_PORT"
     else
@@ -617,7 +718,7 @@ EOF
         RSYNC_EXTRA_ARGS=""
         STUNNEL_ACCEPT="$RSYNC_PORT"
         # Overwrite address with all:
-        RSYNC_ADDR="*"
+        RSYNC_ADDR='*'
     fi
 
     if [ -z "$STUNNEL" ]; then
@@ -675,11 +776,10 @@ EOF
         TRANSFER_PID="$STUNNEL_PID"
     fi
 
-    if [ "${SSLMODE#VERIFY}" != "$SSLMODE" ]
-    then # backward-incompatible behavior
+    if [ "${SSLMODE#VERIFY}" != "$SSLMODE" ]; then
+        # backward-incompatible behavior:
         CN=""
-        if [ -n "$SSTCERT" ]
-        then
+        if [ -n "$SSTCERT" ]; then
             # find out my Common Name
             get_openssl
             if [ -z "$OPENSSL_BINARY" ]; then
@@ -688,7 +788,7 @@ EOF
                 exit 42
             fi
             CN=$("$OPENSSL_BINARY" x509 -noout -subject -in "$SSTCERT" | \
-                 tr "," "\n" | grep -F 'CN =' | cut -d= -f2 | sed s/^\ // | \
+                 tr ',' '\n' | grep -F 'CN =' | cut -d '=' -f2 | sed s/^\ // | \
                  sed s/\ %//)
         fi
         MY_SECRET="$(wsrep_gen_secret)"
@@ -696,7 +796,6 @@ EOF
         ADDR="$CN:$MY_SECRET@$WSREP_SST_OPT_HOST"
     else
         MY_SECRET="" # for check down in recv_joiner()
-        ADDR="$WSREP_SST_OPT_HOST"
     fi
 
     until check_pid_and_port "$TRANSFER_PID" $TRANSFER_REAL_PID \
@@ -716,8 +815,7 @@ EOF
         sleep 1
     done
 
-    if ! ps -p $MYSQLD_PID >/dev/null 2>&1
-    then
+    if ! ps -p $MYSQLD_PID >/dev/null 2>&1; then
         wsrep_log_error \
             "Parent mysqld process (PID: $MYSQLD_PID) terminated unexpectedly."
         kill -- -$MYSQLD_PID
@@ -725,16 +823,64 @@ EOF
         exit 32
     fi
 
-    if [ -n "$WSREP_SST_OPT_BINLOG" ]; then
-        if [ -f "$BINLOG_TAR_FILE" ]; then
-            cd "$BINLOG_DIRNAME"
+    if [ ! -r "$MAGIC_FILE" ]; then
+        # This message should cause joiner to abort:
+        wsrep_log_info "rsync process ended without creating" \
+                       "magic file ($MAGIC_FILE)"
+        exit 32
+    fi
 
-            binlog_index="$WSREP_SST_OPT_BINLOG_INDEX"
+    if [ -n "$MY_SECRET" ]; then
+        # Check donor supplied secret:
+        SECRET=$(grep -m1 -E "^$SECRET_TAG[[:space:]]" "$MAGIC_FILE" || :)
+        SECRET=$(trim_string "${SECRET#$SECRET_TAG}")
+        if [ "$SECRET" != "$MY_SECRET" ]; then
+            wsrep_log_error "Donor does not know my secret!"
+            wsrep_log_info "Donor: '$SECRET', my: '$MY_SECRET'"
+            exit 32
+        fi
+    fi
 
-            # Clean up old binlog files first
-            rm -f "$BINLOG_FILENAME".[0-9]*
-            [ -f "$binlog_index" ] && rm -f "$binlog_index"
+    if [ $WSREP_SST_OPT_BYPASS -eq 0 ]; then
+        if grep -m1 -qE "^$BYPASS_TAG([[:space:]]+.*)?\$" "$MAGIC_FILE"; then
+            readonly WSREP_SST_OPT_BYPASS=1
+            readonly WSREP_TRANSFER_TYPE='IST'
+        fi
+    fi
 
+    binlog_tar_present=0
+    if [ -f "$BINLOG_TAR_FILE" ]; then
+        binlog_tar_present=1
+        if [ $WSREP_SST_OPT_BYPASS -ne 0 ]; then
+            wsrep_log_warning "tar with binlogs transferred in the IST mode"
+        fi
+    fi
+
+    if [ $WSREP_SST_OPT_BYPASS -eq 0 -a -n "$WSREP_SST_OPT_BINLOG" ]; then
+        # If it is SST (not an IST) or tar with binlogs is present
+        # among the transferred files, then we need to remove the
+        # old binlogs:
+        cd "$DATA"
+        # Clean up the old binlog files and index:
+        binlog_index="$WSREP_SST_OPT_BINLOG_INDEX"
+        if [ -f "$binlog_index" ]; then
+            while read bin_file || [ -n "$bin_file" ]; do
+                rm -f "$bin_file" || :
+            done < "$binlog_index"
+            rm "$binlog_index"
+        fi
+        binlog_cd=0
+        # Change the directory to binlog base (if possible):
+        if [ -n "$binlog_dir" -a "$binlog_dir" != '.' -a \
+             -d "$binlog_dir" ]
+        then
+            binlog_cd=1
+            cd "$binlog_dir"
+        fi
+        # Clean up unindexed binlog files:
+        rm -f "$binlog_base".[0-9]* || :
+        [ $binlog_cd -ne 0 ] && cd "$DATA_DIR"
+        if [ $binlog_tar_present -ne 0 ]; then
             # Create a temporary file:
             tmpdir=$(parse_cnf '--mysqld|sst' 'tmpdir')
             if [ -z "$tmpdir" ]; then
@@ -744,53 +890,45 @@ EOF
             else
                tmpfile=$(TMPDIR="$tmpdir"; mktemp)
             fi
-
+            index_dir=$(dirname "$binlog_index");
+            if [ -n "$index_dir" -a "$index_dir" != '.' ]; then
+                [ ! -d "$index_dir" ] && mkdir -p "$index_dir"
+            fi
+            binlog_cd=0
+            if [ -n "$binlog_dir" -a "$binlog_dir" != '.' ]; then
+                [ ! -d "$binlog_dir" ] && mkdir -p "$binlog_dir"
+                binlog_cd=1
+                cd "$binlog_dir"
+            fi
+            # Extracting binlog files:
             wsrep_log_info "Extracting binlog files:"
-            if ! tar -xvf "$BINLOG_TAR_FILE" > "$tmpfile"; then
+            if tar --version | grep -qw -E '^bsdtar'; then
+                tar -tf "$BINLOG_TAR_FILE" > "$tmpfile" && \
+                tar -xvf "$BINLOG_TAR_FILE" > /dev/null || RC=$?
+            else
+                tar -xvf "$BINLOG_TAR_FILE" > "$tmpfile" && \
+                cat "$tmpfile" >&2 || RC=$?
+            fi
+            if [ $RC -ne 0 ]; then
                 wsrep_log_error "Error unpacking tar file with binlog files"
-                rm -f "$tmpfile"
+                rm "$tmpfile"
                 exit 32
             fi
-
             # Rebuild binlog index:
-            while read bin_file; do
-                echo "$BINLOG_DIRNAME/$bin_file" >> "$binlog_index"
+            [ $binlog_cd -ne 0 ] && cd "$DATA_DIR"
+            while read bin_file || [ -n "$bin_file" ]; do
+                echo "$binlog_dir${binlog_dir:+/}$bin_file" >> "$binlog_index"
             done < "$tmpfile"
-            rm -f "$tmpfile"
-
+            rm "$tmpfile"
             cd "$OLD_PWD"
         fi
     fi
 
-    if [ -r "$MAGIC_FILE" ]; then
-        if [ -n "$MY_SECRET" ]; then
-            # check donor supplied secret
-            SECRET=$(grep -F -- "$SECRET_TAG " "$MAGIC_FILE" 2>/dev/null | \
-                     cut -d ' ' -f 2)
-            if [ "$SECRET" != "$MY_SECRET" ]; then
-                wsrep_log_error "Donor does not know my secret!"
-                wsrep_log_info "Donor: '$SECRET', my: '$MY_SECRET'"
-                exit 32
-            fi
-            # remove secret from the magic file, and output
-            # the UUID:seqno & wsrep_gtid_domain_id:
-            grep -v -F -- "$SECRET_TAG " "$MAGIC_FILE"
-        else
-            # Output the UUID:seqno and wsrep_gtid_domain_id:
-            cat "$MAGIC_FILE"
-        fi
-    else
-        # this message should cause joiner to abort
-        echo "rsync process ended without creating '$MAGIC_FILE'"
-    fi
-
-#   wsrep_cleanup_progress_file
-#   cleanup_joiner
-else
-    wsrep_log_error "Unrecognized role: '$WSREP_SST_OPT_ROLE'"
-    exit 22 # EINVAL
+    # Remove special tags from the magic file, and from the output:
+    coords=$(head -n1 "$MAGIC_FILE")
+    wsrep_log_info "Galera co-ords from recovery: $coords"
+    echo "$coords" # Output : UUID:seqno wsrep_gtid_domain_id
 fi
 
-[ -f "$BINLOG_TAR_FILE" ] && rm -f "$BINLOG_TAR_FILE"
-
+wsrep_log_info "$WSREP_METHOD $WSREP_TRANSFER_TYPE completed on $WSREP_SST_OPT_ROLE"
 exit 0

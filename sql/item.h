@@ -2,7 +2,7 @@
 #define SQL_ITEM_INCLUDED
 
 /* Copyright (c) 2000, 2017, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2021, MariaDB Corporation.
+   Copyright (c) 2009, 2022, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -214,7 +214,7 @@ struct Name_resolution_context: Sql_alloc
     The name resolution context to search in when an Item cannot be
     resolved in this context (the context of an outer select)
   */
-  Name_resolution_context *outer_context;
+  Name_resolution_context *outer_context= nullptr;
 
   /*
     List of tables used to resolve the items of this context.  Usually these
@@ -224,7 +224,7 @@ struct Name_resolution_context: Sql_alloc
     statements we have to change this member dynamically to ensure correct
     name resolution of different parts of the statement.
   */
-  TABLE_LIST *table_list;
+  TABLE_LIST *table_list= nullptr;
   /*
     In most cases the two table references below replace 'table_list' above
     for the purpose of name resolution. The first and last name resolution
@@ -232,62 +232,65 @@ struct Name_resolution_context: Sql_alloc
     join tree in a FROM clause. This is needed for NATURAL JOIN, JOIN ... USING
     and JOIN ... ON. 
   */
-  TABLE_LIST *first_name_resolution_table;
+  TABLE_LIST *first_name_resolution_table= nullptr;
   /*
     Last table to search in the list of leaf table references that begins
     with first_name_resolution_table.
   */
-  TABLE_LIST *last_name_resolution_table;
+  TABLE_LIST *last_name_resolution_table= nullptr;
 
   /* Cache first_name_resolution_table in setup_natural_join_row_types */
-  TABLE_LIST *natural_join_first_table;
+  TABLE_LIST *natural_join_first_table= nullptr;
   /*
     SELECT_LEX item belong to, in case of merged VIEW it can differ from
     SELECT_LEX where item was created, so we can't use table_list/field_list
     from there
   */
-  st_select_lex *select_lex;
+  st_select_lex *select_lex= nullptr;
 
   /*
     Processor of errors caused during Item name resolving, now used only to
     hide underlying tables in errors about views (i.e. it substitute some
     errors for views)
   */
-  void (*error_processor)(THD *, void *);
-  void *error_processor_data;
+  void (*error_processor)(THD *, void *)= &dummy_error_processor;
+  void *error_processor_data= nullptr;
 
   /*
     When TRUE items are resolved in this context both against the
     SELECT list and this->table_list. If FALSE, items are resolved
     only against this->table_list.
   */
-  bool resolve_in_select_list;
+  bool resolve_in_select_list= false;
 
   /*
     Bitmap of tables that should be ignored when doing name resolution.
     Normally it is {0}. Non-zero values are used by table functions.
   */
-  ignored_tables_list_t ignored_tables;
+  ignored_tables_list_t ignored_tables= nullptr;
 
   /*
     Security context of this name resolution context. It's used for views
     and is non-zero only if the view is defined with SQL SECURITY DEFINER.
   */
-  Security_context *security_ctx;
+  Security_context *security_ctx= nullptr;
 
-  Name_resolution_context()
-    :outer_context(0), table_list(0), select_lex(0),
-    error_processor_data(0),
-    ignored_tables(NULL),
-    security_ctx(0)
-    {}
+  Name_resolution_context() = default;
+
+  /**
+    Name resolution context with resolution in only one table
+  */
+  Name_resolution_context(TABLE_LIST *table) :
+    first_name_resolution_table(table), last_name_resolution_table(table)
+  {}
 
   void init()
   {
     resolve_in_select_list= FALSE;
     error_processor= &dummy_error_processor;
-    first_name_resolution_table= NULL;
-    last_name_resolution_table= NULL;
+    ignored_tables= nullptr;
+    first_name_resolution_table= nullptr;
+    last_name_resolution_table= nullptr;
   }
 
   void resolve_in_table_list_only(TABLE_LIST *tables)
@@ -1143,6 +1146,11 @@ public:
   {
     return fixed() ? false : fix_fields(thd, ref);
   }
+
+  /*
+   fix_fields_if_needed_for_scalar() is used where we need to filter items
+   that can't be scalars and want to return error for it.
+  */
   bool fix_fields_if_needed_for_scalar(THD *thd, Item **ref)
   {
     return fix_fields_if_needed(thd, ref) || check_cols(1);
@@ -2104,6 +2112,11 @@ public:
   }
 
   virtual Item* transform(THD *thd, Item_transformer transformer, uchar *arg);
+  virtual Item* top_level_transform(THD *thd, Item_transformer transformer,
+                                    uchar *arg)
+  {
+    return transform(thd, transformer, arg);
+  }
 
   /*
     This function performs a generic "compilation" of the Item tree.
@@ -2163,7 +2176,6 @@ public:
   virtual bool enumerate_field_refs_processor(void *arg) { return 0; }
   virtual bool mark_as_eliminated_processor(void *arg) { return 0; }
   virtual bool eliminate_subselect_processor(void *arg) { return 0; }
-  virtual bool set_fake_select_as_master_processor(void *arg) { return 0; }
   virtual bool view_used_tables_processor(void *arg) { return 0; }
   virtual bool eval_not_null_tables(void *arg) { return 0; }
   virtual bool is_subquery_processor(void *arg) { return 0; }
@@ -2174,6 +2186,12 @@ public:
   virtual bool cleanup_is_expensive_cache_processor(void *arg)
   {
     is_expensive_cache= (int8)(-1);
+    return 0;
+  }
+
+  virtual bool set_extraction_flag_processor(void *arg)
+  {
+    set_extraction_flag(*(int16*)arg);
     return 0;
   }
 
@@ -2467,6 +2485,8 @@ public:
   virtual Item *in_subq_field_transformer_for_having(THD *thd, uchar *arg)
   { return this; }
   virtual Item *in_predicate_to_in_subs_transformer(THD *thd, uchar *arg)
+  { return this; }
+  virtual Item *in_predicate_to_equality_transformer(THD *thd, uchar *arg)
   { return this; }
   virtual Item *field_transformer_for_having_pushdown(THD *thd, uchar *arg)
   { return this; }
@@ -3485,6 +3505,10 @@ public:
     this variable.
   */
   bool can_be_depended;
+  /*
+     NOTE: came from TABLE::alias_name_used and this is only a hint!
+     See comment for TABLE::alias_name_used.
+  */
   bool alias_name_used; /* true if item was resolved against alias */
 
   Item_ident(THD *thd, Name_resolution_context *context_arg,
@@ -5487,7 +5511,7 @@ public:
   Field *sp_result_field;
   Item_sp(THD *thd, Name_resolution_context *context_arg, sp_name *name_arg);
   Item_sp(THD *thd, Item_sp *item);
-  LEX_CSTRING func_name_cstring(THD *thd) const;
+  LEX_CSTRING func_name_cstring(THD *thd, bool is_package_function) const;
   void cleanup();
   bool sp_check_access(THD *thd);
   bool execute(THD *thd, bool *null_value, Item **args, uint arg_count);
@@ -6617,7 +6641,6 @@ class Item_default_value : public Item_field
   void calculate();
 public:
   Item *arg= nullptr;
-  Field *cached_field= nullptr;
   Item_default_value(THD *thd, Name_resolution_context *context_arg, Item *a,
                      bool vcol_assignment_arg)
     : Item_field(thd, context_arg),
@@ -6634,6 +6657,10 @@ public:
   bool get_date(THD *thd, MYSQL_TIME *ltime,date_mode_t fuzzydate) override;
   bool val_native(THD *thd, Native *to) override;
   bool val_native_result(THD *thd, Native *to) override;
+  longlong val_datetime_packed(THD *thd) override
+  { return Item::val_datetime_packed(thd); }
+  longlong val_time_packed(THD *thd) override
+  { return Item::val_time_packed(thd); }
 
   /* Result variants */
   double val_result() override;
@@ -6647,6 +6674,7 @@ public:
 
   bool send(Protocol *protocol, st_value *buffer) override;
   int save_in_field(Field *field_arg, bool no_conversions) override;
+  void save_in_result_field(bool no_conversions) override;
   bool save_in_param(THD *, Item_param *param) override
   {
     // It should not be possible to have "EXECUTE .. USING DEFAULT(a)"
@@ -6662,11 +6690,12 @@ public:
   }
   bool vcol_assignment_allowed_value() const override
   { return vcol_assignment_ok; }
-  Field *get_tmp_table_field() override { return nullptr; }
   Item *get_tmp_table_item(THD *) override { return this; }
   Item_field *field_for_view_update() override { return nullptr; }
   bool update_vcol_processor(void *) override { return false; }
+  bool check_field_expression_processor(void *arg) override;
   bool check_func_default_processor(void *) override { return true; }
+  bool register_field_in_read_map(void *arg) override;
   bool walk(Item_processor processor, bool walk_subquery, void *args) override
   {
     return (arg && arg->walk(processor, walk_subquery, args)) ||
@@ -6945,7 +6974,7 @@ public:
   for any value.
 */
 
-class Item_cache: public Item,
+class Item_cache: public Item_fixed_hybrid,
                   public Type_handler_hybrid_field_type
 {
 protected:
@@ -6976,7 +7005,7 @@ public:
   bool null_value_inside;
 
   Item_cache(THD *thd):
-    Item(thd),
+    Item_fixed_hybrid(thd),
     Type_handler_hybrid_field_type(&type_handler_string),
     example(0), cached_field(0),
     value_cached(0),
@@ -6985,10 +7014,11 @@ public:
     set_maybe_null();
     null_value= 1;
     null_value_inside= true;
+    quick_fix_field();
   }
 protected:
   Item_cache(THD *thd, const Type_handler *handler):
-    Item(thd),
+    Item_fixed_hybrid(thd),
     Type_handler_hybrid_field_type(handler),
     example(0), cached_field(0),
     value_cached(0),
@@ -6997,6 +7027,7 @@ protected:
     set_maybe_null();
     null_value= 1;
     null_value_inside= true;
+    quick_fix_field();
   }
 
 public:
@@ -7049,10 +7080,17 @@ public:
     }
     return mark_unsupported_function("cache", arg, VCOL_IMPOSSIBLE);
   }
+  bool fix_fields(THD *thd, Item **ref) override
+  {
+    quick_fix_field();
+    if (example && !example->fixed())
+      return example->fix_fields(thd, ref);
+    return 0;
+  }
   void cleanup() override
   {
     clear();
-    Item::cleanup();
+    Item_fixed_hybrid::cleanup();
   }
   /**
      Check if saved item has a non-NULL value.

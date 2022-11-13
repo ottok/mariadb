@@ -3204,7 +3204,7 @@ SHOW CREATE TABLE fv_result;
 Table	Create Table
 fv_result	CREATE TABLE `fv_result` (
   `somedate` datetime DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT * FROM fv_result;
 somedate
 2017-07-20 12:47:56
@@ -4231,6 +4231,59 @@ i	LAST_VALUE(COUNT(i)) OVER (PARTITION BY i ORDER BY j)
 4	2
 DROP TABLE t1;
 #
+# MDEV-15208: server crashed, when using ORDER BY with window function and UNION
+#
+CREATE TABLE t1 (a INT);
+INSERT INTO t1 VALUES (1),(1),(1),(1),(1),(2),(2),(2),(2),(2),(2);
+SELECT 1 UNION SELECT a FROM t1 ORDER BY (row_number() over ());
+ERROR HY000: Expression #1 of ORDER BY contains aggregate function and applies to a UNION
+DROP TABLE t1;
+#
+#  MDEV-19398: Assertion `item1->type() == Item::FIELD_ITEM &&
+#    item2->type() == Item::FIELD_ITEM' failed in compare_order_elements
+#
+CREATE TABLE t1 ( id varchar(10));
+INSERT INTO t1 values (1),(2),(3);
+SELECT
+dense_rank() over (ORDER BY avg(1)+3),
+rank()       over (ORDER BY avg(1))
+FROM t1
+GROUP BY nullif(id, 15532);
+dense_rank() over (ORDER BY avg(1)+3)	rank()       over (ORDER BY avg(1))
+1	1
+1	1
+1	1
+SELECT
+dense_rank() over (ORDER BY avg(1)),
+rank()       over (ORDER BY avg(1))
+FROM t1
+GROUP BY nullif(id, 15532);
+dense_rank() over (ORDER BY avg(1))	rank()       over (ORDER BY avg(1))
+1	1
+1	1
+1	1
+drop table t1;
+CREATE TABLE t1 ( a char(25), b text);
+INSERT INTO t1 VALUES ('foo','bar');
+SELECT
+SUM(b)       OVER (PARTITION BY a),
+ROW_NUMBER() OVER (PARTITION BY b)
+FROM t1
+GROUP BY
+LEFT((SYSDATE()), 'foo')
+WITH ROLLUP;
+SUM(b)       OVER (PARTITION BY a)	ROW_NUMBER() OVER (PARTITION BY b)
+0	1
+0	2
+Warnings:
+Warning	1292	Truncated incorrect INTEGER value: 'foo'
+Warning	1292	Truncated incorrect INTEGER value: 'foo'
+Warning	1292	Truncated incorrect INTEGER value: 'foo'
+Warning	1292	Truncated incorrect DOUBLE value: 'bar'
+Warning	1292	Truncated incorrect DOUBLE value: 'bar'
+drop table t1;
+#
+#
 # End of 10.2 tests
 #
 #
@@ -4263,7 +4316,7 @@ t2	CREATE TABLE `t2` (
   `pk` int(11) DEFAULT NULL,
   `a` int(11) DEFAULT NULL,
   `bit_or` bigint(21) unsigned NOT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT * FROM t1;
 pk	a	b
 1	0	1
@@ -4278,7 +4331,7 @@ t2	CREATE TABLE `t2` (
   `pk` int(11) DEFAULT NULL,
   `a` int(11) DEFAULT NULL,
   `bit_or` bigint(21) unsigned NOT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT * FROM t2;
 pk	a	bit_or
 1	0	18446744073709551615

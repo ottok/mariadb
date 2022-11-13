@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2000, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2021, MariaDB Corporation.
+Copyright (c) 2017, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -263,7 +263,7 @@ row_update_for_mysql(
 
 /** This can only be used when the current transaction is at
 READ COMMITTED or READ UNCOMMITTED isolation level.
-Before calling this function row_search_for_mysql() must have
+Before calling this function row_search_mvcc() must have
 initialized prebuilt->new_rec_locks to store the information which new
 record locks really were set. This function removes a newly set
 clustered index record lock under prebuilt->pcur or
@@ -381,22 +381,6 @@ row_rename_table_for_mysql(
 	bool		use_fk)		/*!< in: whether to parse and enforce
 					FOREIGN KEY constraints */
 	MY_ATTRIBUTE((nonnull, warn_unused_result));
-
-/*********************************************************************//**
-Scans an index for either COOUNT(*) or CHECK TABLE.
-If CHECK TABLE; Checks that the index contains entries in an ascending order,
-unique constraint is not broken, and calculates the number of index entries
-in the read view of the current transaction.
-@return DB_SUCCESS or other error */
-dberr_t
-row_scan_index_for_mysql(
-/*=====================*/
-	row_prebuilt_t*		prebuilt,	/*!< in: prebuilt struct
-						in MySQL handle */
-	const dict_index_t*	index,		/*!< in: index */
-	ulint*			n_rows)		/*!< out: number of entries
-						seen in the consistent read */
-	MY_ATTRIBUTE((warn_unused_result));
 
 /* A struct describing a place for an individual column in the MySQL
 row format which is presented to the table handler in ha_innobase.
@@ -606,7 +590,7 @@ struct row_prebuilt_t {
 					ROW_READ_TRY_SEMI_CONSISTENT and
 					to simply skip the row.	 If
 					the row matches, the next call to
-					row_search_for_mysql() will lock
+					row_search_mvcc() will lock
 					the row.
 					This eliminates lock waits in some
 					cases; note that this breaks
@@ -615,7 +599,7 @@ struct row_prebuilt_t {
 					the session is using READ
 					COMMITTED or READ UNCOMMITTED
 					isolation level, set in
-					row_search_for_mysql() if we set a new
+					row_search_mvcc() if we set a new
 					record lock on the secondary
 					or clustered index; this is
 					used in row_unlock_for_mysql()
@@ -755,9 +739,8 @@ struct VCOL_STORAGE
 @return		TRUE  malloc failure
 */
 
-bool innobase_allocate_row_for_vcol(
-				    THD *	  thd,
-				    dict_index_t* index,
+bool innobase_allocate_row_for_vcol(THD *thd,
+				    const dict_index_t* index,
 				    mem_heap_t**  heap,
 				    TABLE**	  table,
 				    VCOL_STORAGE* storage);
@@ -773,17 +756,13 @@ public:
 
   ib_vcol_row(mem_heap_t *heap) : heap(heap) {}
 
-  byte *record(THD *thd, dict_index_t *index, TABLE **table)
+  byte *record(THD *thd, const dict_index_t *index, TABLE **table)
   {
-    if (!storage.innobase_record)
-    {
-      bool ok = innobase_allocate_row_for_vcol(thd, index, &heap, table,
-                                               &storage);
-      if (!ok)
-        return NULL;
-    }
+    if (!storage.innobase_record &&
+        !innobase_allocate_row_for_vcol(thd, index, &heap, table, &storage))
+      return nullptr;
     return storage.innobase_record;
-  };
+  }
 
   ~ib_vcol_row()
   {
@@ -815,7 +794,9 @@ void innobase_report_computed_value_failed(dtuple_t *row);
 @param[in]	old_table	during ALTER TABLE, this is the old table
 				or NULL.
 @param[in]	update	update vector for the parent row
-@param[in]	foreign		foreign key information
+@param[in]	ignore_warnings	ignore warnings during calculation. Usually
+				means that a calculation is internal and
+				should have no side effects.
 @return the field filled with computed value */
 dfield_t*
 innobase_get_computed_value(
@@ -828,8 +809,9 @@ innobase_get_computed_value(
 	THD*			thd,
 	TABLE*			mysql_table,
 	byte*			mysql_rec,
-	const dict_table_t*	old_table,
-	const upd_t*		update);
+	const dict_table_t*	old_table=NULL,
+	const upd_t*		update=NULL,
+	bool			ignore_warnings=false);
 
 /** Get the computed value by supplying the base column values.
 @param[in,out]	table		the table whose virtual column
@@ -849,7 +831,7 @@ innobase_rename_vc_templ(
 #define ROW_MYSQL_REC_FIELDS	1
 #define ROW_MYSQL_NO_TEMPLATE	2
 #define ROW_MYSQL_DUMMY_TEMPLATE 3	/* dummy template used in
-					row_scan_and_check_index */
+					row_check_index() */
 
 /* Values for hint_need_to_fetch_extra_cols */
 #define ROW_RETRIEVE_PRIMARY_KEY	1

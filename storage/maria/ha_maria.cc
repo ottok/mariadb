@@ -1477,6 +1477,7 @@ int ha_maria::repair(THD * thd, HA_CHECK_OPT *check_opt)
   maria_chk_init(param);
   param->thd= thd;
   param->op_name= "repair";
+  file->error_count=0;
 
   /*
     The following can only be true if the table was marked as STATE_MOVED
@@ -2072,13 +2073,19 @@ int ha_maria::enable_indexes(uint mode)
     param->orig_sort_buffer_length= THDVAR(thd,sort_buffer_size);
     param->stats_method= (enum_handler_stats_method)THDVAR(thd,stats_method);
     param->tmpdir= &mysql_tmpdir_list;
-    if ((error= (repair(thd, param, 0) != HA_ADMIN_OK)) && param->retry_repair)
+
+    /*
+      Don't retry repair if we get duplicate key error if
+      create_unique_index_by_sort is enabled
+      This can be set when doing an ALTER TABLE and enabling unique keys
+    */
+    if ((error= (repair(thd, param, 0) != HA_ADMIN_OK)) && param->retry_repair &&
+        (my_errno != HA_ERR_FOUND_DUPP_KEY ||
+         !file->create_unique_index_by_sort))
     {
       sql_print_warning("Warning: Enabling keys got errno %d on %s.%s, "
                         "retrying",
                         my_errno, param->db_name, param->table_name);
-      /* This should never fail normally */
-      DBUG_ASSERT(thd->killed != 0);
       /* Repairing by sort failed. Now try standard repair method. */
       param->testflag &= ~T_REP_BY_SORT;
       file->state->records= start_rows;

@@ -6,7 +6,18 @@ drop table if exists t1, t2;
 CREATE TABLE t1 (a int);
 CREATE OR REPLACE VIEW v1 AS SELECT * FROM t1;
 ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE v1;
-ERROR 42000: Can't open table
+ERROR HY000: 'test.v1' is not of type 'BASE TABLE'
+DROP VIEW v1;
+DROP TABLE t1;
+#
+# MDEV-28599 EXCHANGE PARTITION on view causes ER_CHECK_NO_SUCH_TABLE instead of ER_WRONG_OBJECT
+#
+CREATE TABLE t1 (a int)
+PARTITION BY HASH (a)
+PARTITIONS 2;
+CREATE OR REPLACE VIEW v1 AS SELECT * FROM t1;
+ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE v1;
+ERROR HY000: 'test.v1' is not of type 'BASE TABLE'
 DROP VIEW v1;
 DROP TABLE t1;
 #
@@ -780,7 +791,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `id` int(11) DEFAULT NULL,
   `purchased` date DEFAULT NULL
-) ENGINE=<curr_engine> DEFAULT CHARSET=latin1
+) ENGINE=<curr_engine> DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
  PARTITION BY RANGE (year(`purchased`))
 SUBPARTITION BY HASH (to_days(`purchased`))
 (PARTITION `p0` VALUES LESS THAN MAXVALUE ENGINE = <curr_engine>)
@@ -801,7 +812,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `id` int(11) DEFAULT NULL,
   `purchased` date DEFAULT NULL
-) ENGINE=<curr_engine> DEFAULT CHARSET=latin1
+) ENGINE=<curr_engine> DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
  PARTITION BY RANGE (year(`purchased`))
 SUBPARTITION BY HASH (to_days(`purchased`))
 (PARTITION `p0` VALUES LESS THAN MAXVALUE
@@ -821,7 +832,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `id` int(11) DEFAULT NULL,
   `purchased` date DEFAULT NULL
-) ENGINE=<curr_engine> DEFAULT CHARSET=latin1
+) ENGINE=<curr_engine> DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
  PARTITION BY RANGE (year(`purchased`))
 (PARTITION `p0` VALUES LESS THAN MAXVALUE ENGINE = <curr_engine>)
 DROP TABLE t1;
@@ -1782,7 +1793,7 @@ SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
  PARTITION BY LIST (`a`)
 SUBPARTITION BY HASH (`a`)
 (PARTITION `p1` VALUES IN (1)
@@ -1812,7 +1823,7 @@ SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` int(11) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
  PARTITION BY LIST (`a`)
 SUBPARTITION BY HASH (`a`)
 (PARTITION `p1` VALUES IN (1)
@@ -1849,7 +1860,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` int(11) DEFAULT NULL,
   KEY `inx_a` (`a`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1
+) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
  PARTITION BY RANGE (`a`)
 SUBPARTITION BY HASH (`a`)
 (PARTITION `pUpTo10` VALUES LESS THAN (10)

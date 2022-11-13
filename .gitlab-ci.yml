@@ -118,8 +118,10 @@ fedora-ninja:
     - mkdir builddir; cd builddir
     - cmake -DRPM=generic $CMAKE_FLAGS -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -G Ninja .. 2>&1 | tee -a ../build-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG.log
     - ninja -t graph > ../dependencies.dot && dot -Tpng -o ../dependencies.png ../dependencies.dot
-    - eatmydata ninja package --verbose 2>&1 | tee -a ../build-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG.log
-    # Ninja builds are not affected by bug https://jira.mariadb.org/browse/MDEV-25968
+    - eatmydata ninja package -j 2 --verbose 2>&1 | tee -a ../build-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG.log
+    # @TODO: Unlike other builds, the Ninja builds using Gitlab.com runners don't get stuck, but they do get
+    # stuck on runners with more processors, see https://jira.mariadb.org/browse/MDEV-25968.
+    # Thus, use the same limitation on Ninja builds as well to ensure it never gets stuck due to this bug.
     - ninja test
     - *rpm_listfiles
     - mkdir ../rpm; mv *.rpm ../rpm
@@ -172,12 +174,12 @@ fedora-clang:
 
 centos8:
   stage: build
-  image: centos:8
+  image: quay.io/centos/centos:stream8 # CentOS 8 is deprecated, use this Stream8 instead
   variables:
     GIT_STRATEGY: fetch
     GIT_SUBMODULE_STRATEGY: normal
   script:
-    - yum install -y yum-utils rpm-build openssl-devel
+    - yum install -y yum-utils rpm-build openssl-devel pcre2-devel
     - yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
     # dnf --enablerepo=powertools install Judy-devel  #--> not found
     - dnf config-manager --set-enabled powertools
@@ -186,7 +188,7 @@ centos8:
     # - package Judy-devel-1.0.5-18.module_el8.3.0+757+d382997d.i686 is filtered out by modular filtering
     # - package Judy-devel-1.0.5-18.module_el8.3.0+757+d382997d.x86_64 is filtered out by modular filtering
     # Solution: install Judy-devel directly from downloaded rpm file:
-    - yum install -y http://mirror.centos.org/centos/8/PowerTools/x86_64/os/Packages/Judy-devel-1.0.5-18.module_el8.3.0+757+d382997d.x86_64.rpm
+    - yum install -y http://vault.centos.org/centos/8/PowerTools/x86_64/os/Packages/Judy-devel-1.0.5-18.module_el8.3.0+757+d382997d.x86_64.rpm
     # Use eatmydata to speed up build
     - yum install -y https://github.com/stewartsmith/libeatmydata/releases/download/v129/libeatmydata-129-1.fc33.x86_64.rpm
     - yum install -y ccache  # From EPEL
@@ -226,7 +228,7 @@ centos7:
     # This repository does not have any .spec files, so install dependencies based on Fedora spec file
     - yum-builddep -y mariadb-server
     # ..with a few extra ones, as CentOS 7 is very old and these are added in newer MariaDB releases
-    - yum install -y yum-utils rpm-build gcc gcc-c++ bison libxml2-devel libevent-devel openssl-devel
+    - yum install -y yum-utils rpm-build gcc gcc-c++ bison libxml2-devel libevent-devel openssl-devel pcre2-devel
     - mkdir builddir; cd builddir
     - cmake -DRPM=$CI_JOB_NAME $CMAKE_FLAGS .. 2>&1 | tee -a ../build-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG.log
     - make package -j 2 2>&1 | tee -a ../build-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG.log

@@ -2,7 +2,7 @@
 
 Copyright (c) 1995, 2019, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2021, MariaDB Corporation.
+Copyright (c) 2013, 2022, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted
 by Percona Inc.. Those modifications are
@@ -37,7 +37,7 @@ Created 10/21/1995 Heikki Tuuri
 #include "os0file.h"
 #include "sql_const.h"
 
-#ifdef UNIV_LINUX
+#ifdef __linux__
 # include <sys/types.h>
 # include <sys/stat.h>
 #endif
@@ -50,7 +50,6 @@ Created 10/21/1995 Heikki Tuuri
 #ifdef HAVE_LINUX_UNISTD_H
 #include "unistd.h"
 #endif
-#include "os0thread.h"
 #include "buf0dblwr.h"
 
 #include <tpool_structs.h>
@@ -64,7 +63,7 @@ Created 10/21/1995 Heikki Tuuri
 # include <linux/falloc.h>
 #endif /* HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE */
 
-#if defined(UNIV_LINUX) && defined(HAVE_SYS_IOCTL_H)
+#if defined(__linux__) && defined(HAVE_SYS_IOCTL_H)
 # include <sys/ioctl.h>
 # ifndef DFS_IOCTL_ATOMIC_WRITE_SET
 #  define DFS_IOCTL_ATOMIC_WRITE_SET _IOW(0x95, 2, uint)
@@ -80,7 +79,6 @@ Created 10/21/1995 Heikki Tuuri
 
 #include <thread>
 #include <chrono>
-#include <memory>
 
 /* Per-IO operation environment*/
 class io_slots
@@ -120,7 +118,7 @@ public:
 
 	size_t pending_io_count()
 	{
-		return (size_t)m_max_aio - m_cache.size();
+		return m_cache.pos();
 	}
 
 	tpool::task_group* get_task_group()
@@ -134,8 +132,8 @@ public:
 	}
 };
 
-static std::unique_ptr<io_slots> read_slots;
-static std::unique_ptr<io_slots> write_slots;
+static io_slots *read_slots;
+static io_slots *write_slots;
 
 /** Number of retries for partial I/O's */
 constexpr ulint NUM_RETRIES_ON_PARTIAL_IO = 10;
@@ -151,9 +149,6 @@ static ulint	os_innodb_umask = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
 /** Umask for creating files */
 static ulint	os_innodb_umask	= 0;
 #endif /* _WIN32 */
-
-
-#define WAIT_ALLOW_WRITES() innodb_wait_allow_writes()
 
 Atomic_counter<ulint> os_n_file_reads;
 static ulint	os_bytes_read_since_printout;
@@ -320,26 +315,13 @@ private:
   os_offset_t m_offset;
 };
 
-#undef USE_FILE_LOCK
-#ifndef _WIN32
-/* On Windows, mandatory locking is used */
-# define USE_FILE_LOCK
-#endif
-#ifdef USE_FILE_LOCK
+#ifndef _WIN32 /* On Microsoft Windows, mandatory locking is used */
 /** Obtain an exclusive lock on a file.
-@param[in]	fd		file descriptor
-@param[in]	name		file name
+@param fd      file descriptor
+@param name    file name
 @return 0 on success */
-static
-int
-os_file_lock(
-	int		fd,
-	const char*	name)
+int os_file_lock(int fd, const char *name)
 {
-	if (my_disable_locking) {
-		return 0;
-	}
-
 	struct flock lk;
 
 	lk.l_type = F_WRLCK;
@@ -365,7 +347,7 @@ os_file_lock(
 
 	return(0);
 }
-#endif /* USE_FILE_LOCK */
+#endif /* !_WIN32 */
 
 
 /** Create a temporary file. This function is like tmpfile(3), but
@@ -376,7 +358,6 @@ FILE*
 os_file_create_tmpfile()
 {
 	FILE*	file	= NULL;
-	WAIT_ALLOW_WRITES();
 	File	fd	= mysql_tmpfile("ib");
 
 	if (fd >= 0) {
@@ -416,46 +397,6 @@ os_file_read_string(
 
 		str[flen] = '\0';
 	}
-}
-
-/** This function returns a new path name after replacing the basename
-in an old path with a new basename.  The old_path is a full path
-name including the extension.  The tablename is in the normal
-form "databasename/tablename".  The new base name is found after
-the forward slash.  Both input strings are null terminated.
-
-This function allocates memory to be returned.  It is the callers
-responsibility to free the return value after it is no longer needed.
-
-@param[in]	old_path		Pathname
-@param[in]	tablename		Contains new base name
-@return own: new full pathname */
-char *os_file_make_new_pathname(const char *old_path, const char *tablename)
-{
-  /* Split the tablename into its database and table name components.
-  They are separated by a '/'. */
-  const char *last_slash= strrchr(tablename, '/');
-  const char *base_name= last_slash ? last_slash + 1 : tablename;
-
-  /* Find the offset of the last slash. We will strip off the
-  old basename.ibd which starts after that slash. */
-  last_slash = strrchr(old_path, '/');
-#ifdef _WIN32
-  if (const char *last= strrchr(old_path, '\\'))
-    if (last > last_slash)
-      last_slash= last;
-#endif
-
-  size_t dir_len= last_slash
-    ? size_t(last_slash - old_path)
-    : strlen(old_path);
-
-  /* allocate a new path and move the old directory path to it. */
-  size_t new_path_len= dir_len + strlen(base_name) + sizeof "/.ibd";
-  char *new_path= static_cast<char*>(ut_malloc_nokey(new_path_len));
-  memcpy(new_path, old_path, dir_len);
-  snprintf(new_path + dir_len, new_path_len - dir_len, "/%s.ibd", base_name);
-  return new_path;
 }
 
 /** This function reduces a null-terminated full remote path name into
@@ -784,7 +725,7 @@ os_file_punch_hole_posix(
 
 	return(DB_IO_ERROR);
 
-#elif defined(UNIV_SOLARIS)
+#elif defined __sun__
 
 	// Use F_FREESP
 
@@ -856,6 +797,7 @@ os_file_get_last_error_low(
 	case EXDEV:
 	case ENOTDIR:
 	case EISDIR:
+	case EPERM:
 		return(OS_FILE_PATH_ERROR);
 	case EAGAIN:
 		if (srv_use_native_aio) {
@@ -942,7 +884,7 @@ os_file_status_posix(
 
 	if (!ret) {
 		/* file exists, everything OK */
-
+		MSAN_STAT_WORKAROUND(&statinfo);
 	} else if (errno == ENOENT || errno == ENOTDIR || errno == ENAMETOOLONG) {
 		/* file does not exist */
 		return(true);
@@ -979,7 +921,6 @@ os_file_flush_func(
 {
 	int	ret;
 
-	WAIT_ALLOW_WRITES();
 	ret = os_file_sync_posix(file);
 
 	if (ret == 0) {
@@ -1030,10 +971,6 @@ os_file_create_simple_func(
 
 	int		create_flag;
 	const char*	mode_str	= NULL;
-
-	if (create_mode != OS_FILE_OPEN && create_mode != OS_FILE_OPEN_RAW) {
-		WAIT_ALLOW_WRITES();
-	}
 
 	ut_a(!(create_mode & OS_FILE_ON_ERROR_SILENT));
 	ut_a(!(create_mode & OS_FILE_ON_ERROR_NO_EXIT));
@@ -1116,17 +1053,18 @@ os_file_create_simple_func(
 		os_file_set_nocache(file, name, mode_str);
 	}
 
-#ifdef USE_FILE_LOCK
+#ifndef _WIN32
 	if (!read_only
 	    && *success
-	    && (access_type == OS_FILE_READ_WRITE)
+	    && access_type == OS_FILE_READ_WRITE
+	    && !my_disable_locking
 	    && os_file_lock(file, name)) {
 
 		*success = false;
 		close(file);
 		file = -1;
 	}
-#endif /* USE_FILE_LOCK */
+#endif /* !_WIN32 */
 
 	return(file);
 }
@@ -1148,7 +1086,6 @@ os_file_create_directory(
 {
 	int	rcode;
 
-	WAIT_ALLOW_WRITES();
 	rcode = mkdir(pathname, 0770);
 
 	if (!(rcode == 0 || (errno == EEXIST && !fail_if_exists))) {
@@ -1295,10 +1232,11 @@ os_file_create_func(
 		os_file_set_nocache(file, name, mode_str);
 	}
 
-#ifdef USE_FILE_LOCK
+#ifndef _WIN32
 	if (!read_only
 	    && *success
 	    && create_mode != OS_FILE_OPEN_RAW
+	    && !my_disable_locking
 	    && os_file_lock(file, name)) {
 
 		if (create_mode == OS_FILE_OPEN_RETRY) {
@@ -1324,7 +1262,7 @@ os_file_create_func(
 		close(file);
 		file = -1;
 	}
-#endif /* USE_FILE_LOCK */
+#endif /* !_WIN32 */
 
 	return(file);
 }
@@ -1352,10 +1290,6 @@ os_file_create_simple_no_error_handling_func(
 {
 	os_file_t	file;
 	int		create_flag;
-
-	if (create_mode != OS_FILE_OPEN && create_mode != OS_FILE_OPEN_RAW) {
-		WAIT_ALLOW_WRITES();
-	}
 
 	ut_a(!(create_mode & OS_FILE_ON_ERROR_SILENT));
 	ut_a(!(create_mode & OS_FILE_ON_ERROR_NO_EXIT));
@@ -1401,10 +1335,11 @@ os_file_create_simple_no_error_handling_func(
 
 	*success = (file != -1);
 
-#ifdef USE_FILE_LOCK
+#ifndef _WIN32
 	if (!read_only
 	    && *success
 	    && access_type == OS_FILE_READ_WRITE
+	    && !my_disable_locking
 	    && os_file_lock(file, name)) {
 
 		*success = false;
@@ -1412,7 +1347,7 @@ os_file_create_simple_no_error_handling_func(
 		file = -1;
 
 	}
-#endif /* USE_FILE_LOCK */
+#endif /* !_WIN32 */
 
 	return(file);
 }
@@ -1431,7 +1366,6 @@ os_file_delete_if_exists_func(
 	}
 
 	int	ret;
-	WAIT_ALLOW_WRITES();
 
 	ret = unlink(name);
 
@@ -1456,7 +1390,6 @@ os_file_delete_func(
 	const char*	name)
 {
 	int	ret;
-	WAIT_ALLOW_WRITES();
 
 	ret = unlink(name);
 
@@ -1495,7 +1428,6 @@ os_file_rename_func(
 #endif /* UNIV_DEBUG */
 
 	int	ret;
-	WAIT_ALLOW_WRITES();
 
 	ret = rename(oldpath, newpath);
 
@@ -1531,8 +1463,10 @@ bool os_file_close_func(os_file_t file)
 os_offset_t
 os_file_get_size(os_file_t file)
 {
-	struct stat statbuf;
-	return fstat(file, &statbuf) ? os_offset_t(-1) : statbuf.st_size;
+  struct stat statbuf;
+  if (fstat(file, &statbuf)) return os_offset_t(-1);
+  MSAN_STAT_WORKAROUND(&statbuf);
+  return statbuf.st_size;
 }
 
 /** Gets a file size.
@@ -1549,6 +1483,7 @@ os_file_get_size(
 	int	ret = stat(filename, &s);
 
 	if (ret == 0) {
+		MSAN_STAT_WORKAROUND(&s);
 		file_size.m_total_size = s.st_size;
 		/* st_blocks is in 512 byte sized blocks */
 		file_size.m_alloc_size = s.st_blocks * 512;
@@ -1592,6 +1527,8 @@ os_file_get_status_posix(
 
 		return(DB_FAIL);
 	}
+
+	MSAN_STAT_WORKAROUND(statinfo);
 
 	switch (statinfo->st_mode & S_IFMT) {
 	case S_IFDIR:
@@ -1665,7 +1602,6 @@ bool
 os_file_set_eof(
 	FILE*		file)	/*!< in: file to be truncated */
 {
-	WAIT_ALLOW_WRITES();
 	return(!ftruncate(fileno(file), ftell(file)));
 }
 
@@ -2128,10 +2064,6 @@ os_file_create_func(
 	DWORD		share_mode = read_only
 		? FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
 		: FILE_SHARE_READ | FILE_SHARE_DELETE;
-
-	if (create_mode != OS_FILE_OPEN && create_mode != OS_FILE_OPEN_RAW) {
-		WAIT_ALLOW_WRITES();
-	}
 
 	on_error_no_exit = create_mode & OS_FILE_ON_ERROR_NO_EXIT
 		? true : false;
@@ -2702,48 +2634,6 @@ os_file_get_status_win32(
 				CloseHandle(fh);
 			}
 		}
-		stat_info->block_size = 0;
-
-		/* What follows, is calculation of FS block size, which is not important
-		(it is just shown in I_S innodb tables). The error to calculate it will be ignored.*/
-		char	volname[MAX_PATH];
-		BOOL	result = GetVolumePathName(path, volname, MAX_PATH);
-		static	bool warned_once = false;
-		if (!result) {
-			if (!warned_once) {
-				ib::warn()
-					<< "os_file_get_status_win32: "
-					<< "Failed to get the volume path name for: "
-					<< path
-					<< "- OS error number " << GetLastError();
-				warned_once = true;
-			}
-			return(DB_SUCCESS);
-		}
-
-		DWORD	sectorsPerCluster;
-		DWORD	bytesPerSector;
-		DWORD	numberOfFreeClusters;
-		DWORD	totalNumberOfClusters;
-
-		result = GetDiskFreeSpace(
-			(LPCSTR) volname,
-			&sectorsPerCluster,
-			&bytesPerSector,
-			&numberOfFreeClusters,
-			&totalNumberOfClusters);
-
-		if (!result) {
-			if (!warned_once) {
-				ib::warn()
-					<< "GetDiskFreeSpace(" << volname << ",...) "
-					<< "failed "
-					<< "- OS error number " << GetLastError();
-				warned_once = true;
-			}
-			return(DB_SUCCESS);
-		}
-		stat_info->block_size = bytesPerSector * sectorsPerCluster;
 	} else {
 		stat_info->type = OS_FILE_TYPE_UNKNOWN;
 	}
@@ -2827,7 +2717,7 @@ os_file_set_eof(
 
 #endif /* !_WIN32*/
 
-/** Does a syncronous read or write depending upon the type specified
+/** Does a synchronous read or write depending upon the type specified
 In case of partial reads/writes the function tries
 NUM_RETRIES_ON_PARTIAL_IO times to read/write the complete data.
 @param[in]	type,		IO flags
@@ -2909,10 +2799,11 @@ os_file_io(
 @param[in]	type		IO context
 @param[in]	file		handle to an open file
 @param[out]	buf		buffer from which to write
-@param[in]	n		number of bytes to read, starting from offset
-@param[in]	offset		file offset from the start where to read
+@param[in]	n		number of bytes to write, starting from offset
+@param[in]	offset		file offset from the start where to write
 @param[out]	err		DB_SUCCESS or error code
-@return number of bytes written, -1 if error */
+@return number of bytes written
+@retval -1 on error */
 static MY_ATTRIBUTE((warn_unused_result))
 ssize_t
 os_file_pwrite(
@@ -2957,8 +2848,6 @@ os_file_write_func(
 	dberr_t		err;
 
 	ut_ad(n > 0);
-
-	WAIT_ALLOW_WRITES();
 
 	ssize_t	n_bytes = os_file_pwrite(type, file, (byte*)buf, n, offset, &err);
 
@@ -3201,7 +3090,7 @@ os_file_set_nocache(
 	}
 
 	/* some versions of Solaris may not have DIRECTIO_ON */
-#if defined(UNIV_SOLARIS) && defined(DIRECTIO_ON)
+#if defined(__sun__) && defined(DIRECTIO_ON)
 	if (directio(fd, DIRECTIO_ON) == -1) {
 		int	errno_save = errno;
 
@@ -3230,7 +3119,7 @@ os_file_set_nocache(
 				<< ", continuing anyway.";
 		}
 	}
-#endif /* defined(UNIV_SOLARIS) && defined(DIRECTIO_ON) */
+#endif /* defined(__sun__) && defined(DIRECTIO_ON) */
 }
 
 #endif /* _WIN32 */
@@ -3317,6 +3206,7 @@ fallback:
 		if (fstat(file, &statbuf)) {
 			err = errno;
 		} else {
+			MSAN_STAT_WORKAROUND(&statbuf);
 			os_offset_t current_size = statbuf.st_size;
 			if (current_size >= size) {
 				return true;
@@ -3548,6 +3438,35 @@ dberr_t IORequest::punch_hole(os_offset_t off, ulint len) const
 	}
 }
 
+/*
+  Get file system block size, by path.
+
+  This is expensive on Windows, and not very useful in general,
+  (only shown in some I_S table), so we keep that out of usual
+  stat.
+*/
+size_t os_file_get_fs_block_size(const char *path)
+{
+#ifdef _WIN32
+  char volname[MAX_PATH];
+  if (!GetVolumePathName(path, volname, MAX_PATH))
+    return 0;
+  DWORD sectorsPerCluster;
+  DWORD bytesPerSector;
+  DWORD numberOfFreeClusters;
+  DWORD totalNumberOfClusters;
+
+  if (GetDiskFreeSpace(volname, &sectorsPerCluster, &bytesPerSector,
+                       &numberOfFreeClusters, &totalNumberOfClusters))
+    return ((size_t) bytesPerSector) * sectorsPerCluster;
+#else
+  os_file_stat_t info;
+  if (os_file_get_status(path, &info, false, false) == DB_SUCCESS)
+    return info.block_size;
+#endif
+  return 0;
+}
+
 /** This function returns information about the specified file
 @param[in]	path		pathname of the file
 @param[out]	stat_info	information of a file in a directory
@@ -3593,10 +3512,17 @@ extern void fil_aio_callback(const IORequest &request);
 
 static void io_callback(tpool::aiocb *cb)
 {
-  ut_a(cb->m_err == DB_SUCCESS);
   const IORequest &request= *static_cast<const IORequest*>
     (static_cast<const void*>(cb->m_userdata));
-
+  if (cb->m_err != DB_SUCCESS)
+  {
+    ib::fatal() << "IO Error: " << cb->m_err << " during " <<
+      (request.is_async() ? "async " : "sync ") <<
+      (request.is_LRU() ? "lru " : "") <<
+      (cb->m_opcode == tpool::aio_opcode::AIO_PREAD ? "read" : "write") <<
+      " of " << cb->m_len << " bytes, for file " << cb->m_fh << ", returned " <<
+      cb->m_ret_len;
+  }
   /* Return cb back to cache*/
   if (cb->m_opcode == tpool::aio_opcode::AIO_PREAD)
   {
@@ -3746,10 +3672,6 @@ int os_aio_init()
   int max_read_events= int(srv_n_read_io_threads *
                            OS_AIO_N_PENDING_IOS_PER_THREAD);
   int max_events= max_read_events + max_write_events;
-
-  read_slots.reset(new io_slots(max_read_events, srv_n_read_io_threads));
-  write_slots.reset(new io_slots(max_write_events, srv_n_write_io_threads));
-
   int ret;
 #if LINUX_NATIVE_AIO
   if (srv_use_native_aio && !is_linux_native_aio_supported())
@@ -3780,12 +3702,11 @@ disable:
   }
 #endif
 
-  if (ret)
+  if (!ret)
   {
-    read_slots.reset();
-    write_slots.reset();
+    read_slots= new io_slots(max_read_events, srv_n_read_io_threads);
+    write_slots= new io_slots(max_write_events, srv_n_write_io_threads);
   }
-
   return ret;
 }
 
@@ -3793,8 +3714,10 @@ disable:
 void os_aio_free()
 {
   srv_thread_pool->disable_aio();
-  read_slots.reset();
-  write_slots.reset();
+  delete read_slots;
+  delete write_slots;
+  read_slots= nullptr;
+  write_slots= nullptr;
 }
 
 /** Wait until there are no pending asynchronous writes. */
@@ -3883,7 +3806,7 @@ func_exit:
 	}
 
 	compile_time_assert(sizeof(IORequest) <= tpool::MAX_AIO_USERDATA_LEN);
-	io_slots* slots= type.is_read() ? read_slots.get() : write_slots.get();
+	io_slots* slots= type.is_read() ? read_slots : write_slots;
 	tpool::aiocb* cb = slots->acquire();
 
 	cb->m_buffer = buf;
@@ -4019,7 +3942,7 @@ static bool is_drive_on_ssd(DWORD nr)
                       sizeof storage_query, &seek_penalty, sizeof seek_penalty,
                       &bytes_written, nullptr))
   {
-    on_ssd= seek_penalty.IncursSeekPenalty;
+    on_ssd= !seek_penalty.IncursSeekPenalty;
   }
   else
   {
@@ -4171,10 +4094,13 @@ void fil_node_t::find_metadata(os_file_t file
 #else
   struct stat sbuf;
   if (!statbuf && !fstat(file, &sbuf))
+  {
+    MSAN_STAT_WORKAROUND(&sbuf);
     statbuf= &sbuf;
+  }
   if (statbuf)
     block_size= statbuf->st_blksize;
-# ifdef UNIV_LINUX
+# ifdef __linux__
   on_ssd= statbuf && fil_system.is_ssd(statbuf->st_dev);
 # endif
 #endif
@@ -4204,6 +4130,7 @@ bool fil_node_t::read_page0()
   struct stat statbuf;
   if (fstat(handle, &statbuf))
     return false;
+  MSAN_STAT_WORKAROUND(&statbuf);
   os_offset_t size_bytes= statbuf.st_size;
 #else
   os_offset_t size_bytes= os_file_get_size(handle);

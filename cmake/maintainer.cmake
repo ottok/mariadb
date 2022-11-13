@@ -23,8 +23,11 @@ ENDIF()
 SET(MY_WARNING_FLAGS
   -Wall
   -Wdeclaration-after-statement
+  -Wenum-compare
+  -Wenum-conversion
   -Wextra
   -Wformat-security
+  -Wmissing-braces
   -Wno-format-truncation
   -Wno-init-self
   -Wno-nonnull-compare

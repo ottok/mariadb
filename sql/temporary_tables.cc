@@ -625,6 +625,10 @@ bool THD::drop_temporary_table(TABLE *table, bool *is_trans, bool delete_table)
   DBUG_PRINT("tmptable", ("Dropping table: '%s'.'%s'",
                           table->s->db.str, table->s->table_name.str));
 
+  // close all handlers in case it is statement abort and some can be left
+  if (is_error())
+    table->file->ha_reset();
+
   locked= lock_temporary_tables();
 
   share= tmp_table_share(table);
@@ -697,15 +701,17 @@ bool THD::rm_temporary_table(handlerton *base, const char *path)
   char frm_path[FN_REFLEN + 1];
 
   strxnmov(frm_path, sizeof(frm_path) - 1, path, reg_ext, NullS);
-  if (mysql_file_delete(key_file_frm, frm_path,
-                        MYF(MY_WME | MY_IGNORE_ENOENT)))
-    error= true;
+
   if (base->drop_table(base, path) > 0)
   {
     error= true;
     sql_print_warning("Could not remove temporary table: '%s', error: %d",
                       path, my_errno);
   }
+
+  if (mysql_file_delete(key_file_frm, frm_path,
+                        MYF(MY_WME | MY_IGNORE_ENOENT)))
+    error= true;
 
   DBUG_RETURN(error);
 }

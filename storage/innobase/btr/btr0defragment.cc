@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (C) 2012, 2014 Facebook, Inc. All Rights Reserved.
-Copyright (C) 2014, 2021, MariaDB Corporation.
+Copyright (C) 2014, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -259,9 +259,10 @@ btr_defragment_calc_n_recs_for_size(
 
 	const ulint n_core = page_is_leaf(page) ? index->n_core_fields : 0;
 	page_cur_set_before_first(block, &cur);
-	page_cur_move_to_next(&cur);
-	while (page_cur_get_rec(&cur) != page_get_supremum_rec(page)) {
-		rec_t* cur_rec = page_cur_get_rec(&cur);
+	while (rec_t* cur_rec = page_cur_move_to_next(&cur)) {
+		if (page_rec_is_supremum(cur_rec)) {
+			break;
+		}
 		offsets = rec_get_offsets(cur_rec, index, offsets, n_core,
 					  ULINT_UNDEFINED, &heap);
 		ulint rec_size = rec_offs_size(offsets);
@@ -271,7 +272,6 @@ btr_defragment_calc_n_recs_for_size(
 			break;
 		}
 		n_recs ++;
-		page_cur_move_to_next(&cur);
 	}
 	*n_recs_size = size;
 	if (UNIV_LIKELY_NULL(heap)) {
@@ -283,7 +283,8 @@ btr_defragment_calc_n_recs_for_size(
 /*************************************************************//**
 Merge as many records from the from_block to the to_block. Delete
 the from_block if all records are successfully merged to to_block.
-@return the to_block to target for next merge operation. */
+@return the to_block to target for next merge operation.
+@retval nullptr if corruption was noticed */
 static
 buf_block_t*
 btr_defragment_merge_pages(
@@ -330,9 +331,9 @@ btr_defragment_merge_pages(
 	// reorganizing the page, otherwise we need to reorganize the page
 	// first to release more space.
 	if (move_size > max_ins_size) {
-		if (!btr_page_reorganize_block(page_zip_level,
-					       to_block, index,
-					       mtr)) {
+		dberr_t err = btr_page_reorganize_block(page_zip_level,
+                                                        to_block, index, mtr);
+		if (err != DB_SUCCESS) {
 			if (!dict_index_is_clust(index)
 			    && page_is_leaf(to_page)) {
 				ibuf_reset_free_bits(to_block);
@@ -341,23 +342,31 @@ btr_defragment_merge_pages(
 			// not compressable. There's no point to try
 			// merging into this page. Continue to the
 			// next page.
-			return from_block;
+			return err == DB_FAIL ? from_block : nullptr;
 		}
 		ut_ad(page_validate(to_page, index));
 		max_ins_size = page_get_max_insert_size(to_page, n_recs);
-		ut_a(max_ins_size >= move_size);
+		if (max_ins_size < move_size) {
+			return nullptr;
+		}
 	}
 
 	// Move records to pack to_page more full.
 	orig_pred = NULL;
 	target_n_recs = n_recs_to_move;
+	dberr_t err;
 	while (n_recs_to_move > 0) {
-		rec = page_rec_get_nth(from_page,
-					n_recs_to_move + 1);
+		if (!(rec = page_rec_get_nth(from_page, n_recs_to_move + 1))) {
+			return nullptr;
+		}
 		orig_pred = page_copy_rec_list_start(
-			to_block, from_block, rec, index, mtr);
+			to_block, from_block, rec, index, mtr, &err);
 		if (orig_pred)
 			break;
+		if (err != DB_FAIL) {
+			return nullptr;
+		}
+
 		// If we reach here, that means compression failed after packing
 		// n_recs_to_move number of records to to_page. We try to reduce
 		// the targeted data size on the to_page by
@@ -396,19 +405,20 @@ btr_defragment_merge_pages(
 		}
 	}
 	btr_cur_t parent;
-	if (n_recs_to_move == n_recs) {
+	if (!btr_page_get_father(index, from_block, mtr, &parent)) {
+		to_block = nullptr;
+	} else if (n_recs_to_move == n_recs) {
 		/* The whole page is merged with the previous page,
 		free it. */
-		const page_id_t from{from_block->page.id()};
-		lock_update_merge_left(*to_block, orig_pred, from);
+		lock_update_merge_left(*to_block, orig_pred,
+				       from_block->page.id());
 		btr_search_drop_page_hash_index(from_block);
-		ut_a(DB_SUCCESS == btr_level_list_remove(*from_block, *index,
-							 mtr));
-		btr_page_get_father(index, from_block, mtr, &parent);
-		btr_cur_node_ptr_delete(&parent, mtr);
-		/* btr_blob_dbg_remove(from_page, index,
-		"btr_defragment_n_pages"); */
-		btr_page_free(index, from_block, mtr);
+		if (btr_level_list_remove(*from_block, *index, mtr)
+		    != DB_SUCCESS
+		    || btr_cur_node_ptr_delete(&parent, mtr) != DB_SUCCESS
+		    || btr_page_free(index, from_block, mtr) != DB_SUCCESS) {
+			return nullptr;
+		}
 	} else {
 		// There are still records left on the page, so
 		// increment n_defragmented. Node pointer will be changed
@@ -424,15 +434,23 @@ btr_defragment_merge_pages(
 						    orig_pred,
 						    from_block);
 			// FIXME: reuse the node_ptr!
-			btr_page_get_father(index, from_block, mtr, &parent);
-			btr_cur_node_ptr_delete(&parent, mtr);
+			if (btr_cur_node_ptr_delete(&parent, mtr)
+			    != DB_SUCCESS) {
+				return nullptr;
+			}
 			rec = page_rec_get_next(
 				page_get_infimum_rec(from_page));
+			if (!rec) {
+				return nullptr;
+			}
 			node_ptr = dict_index_build_node_ptr(
 				index, rec, page_get_page_no(from_page),
 				heap, level);
-			btr_insert_on_non_leaf_level(0, index, level+1,
-						     node_ptr, mtr);
+			if (btr_insert_on_non_leaf_level(0, index, level+1,
+							 node_ptr, mtr)
+			    != DB_SUCCESS) {
+				return nullptr;
+			}
 		}
 		to_block = from_block;
 	}
@@ -507,6 +525,9 @@ btr_defragment_n_pages(
 
 		blocks[i] = btr_block_get(*index, page_no, RW_X_LATCH, true,
 					  mtr);
+		if (!blocks[i]) {
+			return nullptr;
+		}
 	}
 
 	if (n_pages == 1) {
@@ -517,7 +538,8 @@ btr_defragment_n_pages(
 				return NULL;
 			/* given page is the last page.
 			Lift the records to father. */
-			btr_lift_page_up(index, block, mtr);
+			dberr_t err;
+			btr_lift_page_up(index, block, mtr, &err);
 		}
 		return NULL;
 	}
@@ -580,6 +602,9 @@ btr_defragment_n_pages(
 		if (new_block != current_block) {
 			n_defragmented ++;
 			current_block = new_block;
+			if (!new_block) {
+				break;
+			}
 		}
 	}
 	mem_heap_free(heap);
@@ -631,7 +656,7 @@ release_and_exit:
 				mysql_mutex_unlock(&btr_defragment_mutex);
 func_exit:
 				set_current_thd(nullptr);
-				innobase_destroy_background_thd(thd);
+				destroy_background_thd(thd);
 				return;
 			}
 			item = *btr_defragment_wq.begin();
@@ -667,26 +692,30 @@ processed:
 		mtr_start(&mtr);
 		dict_index_t *index = item->pcur->btr_cur.index;
 		index->set_modified(mtr);
-		/* To follow the latching order defined in WL#6326, acquire index->lock X-latch.
-		This entitles us to acquire page latches in any order for the index. */
+		/* To follow the latching order defined in WL#6326,
+		acquire index->lock X-latch.  This entitles us to
+		acquire page latches in any order for the index. */
 		mtr_x_lock_index(index, &mtr);
-		/* This will acquire index->lock SX-latch, which per WL#6363 is allowed
+		/* This will acquire index->lock U latch, which is allowed
 		when we are already holding the X-latch. */
-		btr_pcur_restore_position(BTR_MODIFY_TREE, item->pcur, &mtr);
-		buf_block_t* first_block = btr_pcur_get_block(item->pcur);
 		if (buf_block_t *last_block =
-		    btr_defragment_n_pages(first_block, index,
-					   srv_defragment_n_pages,
-					   &mtr)) {
+		    item->pcur->restore_position(BTR_MODIFY_TREE, &mtr)
+		    == btr_pcur_t::CORRUPTED
+		    ? nullptr
+		    : btr_defragment_n_pages(btr_pcur_get_block(item->pcur),
+					     index, srv_defragment_n_pages,
+					     &mtr)) {
 			/* If we haven't reached the end of the index,
 			place the cursor on the last record of last page,
 			store the cursor position, and put back in queue. */
 			page_t* last_page = buf_block_get_frame(last_block);
 			rec_t* rec = page_rec_get_prev(
 				page_get_supremum_rec(last_page));
-			ut_a(page_rec_is_user_rec(rec));
-			page_cur_position(rec, last_block,
-					  btr_pcur_get_page_cur(item->pcur));
+			if (rec && page_rec_is_user_rec(rec)) {
+				page_cur_position(rec, last_block,
+						  btr_pcur_get_page_cur(
+							  item->pcur));
+			}
 			btr_pcur_store_position(item->pcur, &mtr);
 			mtr_commit(&mtr);
 			/* Update the last_processed time of this index. */

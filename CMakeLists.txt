@@ -1,5 +1,5 @@
 # Copyright (c) 2006, 2017, Oracle and/or its affiliates.
-# Copyright (c) 2008, 2021, MariaDB Corporation.
+# Copyright (c) 2008, 2022, MariaDB Corporation.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ PROJECT(MySQL)
 # in RPM's:
 
 #set(CPACK_RPM_SPEC_MORE_DEFINE "%define __spec_install_post /bin/true")
-FOREACH(p CMP0022 CMP0046 CMP0040 CMP0048 CMP0054 CMP0075 CMP0069)
+FOREACH(p CMP0022 CMP0046 CMP0040 CMP0048 CMP0054 CMP0075 CMP0069 CMP0135)
   IF(POLICY ${p})
     CMAKE_POLICY(SET ${p} NEW)
   ENDIF()
@@ -80,9 +80,11 @@ SET(MYSQL_PROJECT_NAME_DOCSTRING "MySQL project name")
 
 IF(CMAKE_VERSION VERSION_LESS "3.1")
   IF(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11")
   ENDIF()
 ELSE()
+  SET(CMAKE_C_STANDARD 99)
   SET(CMAKE_CXX_STANDARD 11)
 ENDIF()
 
@@ -254,9 +256,11 @@ ENDIF()
 
 INCLUDE(wsrep)
 
-OPTION(WITH_DBUG_TRACE "Enable DBUG_ENTER()/DBUG_EXIT()" ON)
+OPTION(WITH_DBUG_TRACE "Enable DBUG_ENTER()/DBUG_RETURN()/DBUG_PRINT()" ON)
 IF(WITH_DBUG_TRACE)
-  ADD_DEFINITIONS(-DDBUG_TRACE)
+  FOREACH(LANG C CXX)
+    SET(CMAKE_${LANG}_FLAGS_DEBUG "${CMAKE_${LANG}_FLAGS_DEBUG} -DDBUG_TRACE")
+  ENDFOREACH()
 ENDIF()
 
 # Always enable debug sync for debug builds.
@@ -416,14 +420,12 @@ IF(WITH_UNIT_TESTS)
  ENDIF()
 ENDIF()
 
-INCLUDE(cpack_tgz)
-INCLUDE(cpack_rpm)
-INCLUDE(cpack_deb)
 
 UNSET (MYSQLD_STATIC_PLUGIN_LIBS CACHE)
 
 INCLUDE(mariadb_connector_c) # this does ADD_SUBDIRECTORY(libmariadb)
 
+INCLUDE(cpack_tgz)
 INCLUDE(cpack_rpm)
 INCLUDE(cpack_deb)
 

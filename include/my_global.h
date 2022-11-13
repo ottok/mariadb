@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2001, 2013, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2021, MariaDB Corporation.
+   Copyright (c) 2009, 2022, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -1053,10 +1053,12 @@ typedef ulong		myf;	/* Type of MyFlags in my_funcs */
 static inline char *dlerror(void)
 {
   static char win_errormsg[2048];
-  FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM
-      | FORMAT_MESSAGE_IGNORE_INSERTS
-      | FORMAT_MESSAGE_MAX_WIDTH_MASK,
-    0, GetLastError(), 0, win_errormsg, 2048, NULL);
+  FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM |
+                 FORMAT_MESSAGE_IGNORE_INSERTS |
+                 FORMAT_MESSAGE_MAX_WIDTH_MASK,
+                 0, GetLastError(),
+                 MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
+                 win_errormsg, 2048, NULL);
   return win_errormsg;
 }
 #define HAVE_DLOPEN 1

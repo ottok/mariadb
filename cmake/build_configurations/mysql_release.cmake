@@ -1,5 +1,5 @@
 # Copyright (c) 2010, 2011, Oracle and/or its affiliates. All rights reserved.
-# Copyright (c) 2011, 2021, MariaDB Corporation.
+# Copyright (c) 2011, 2022, MariaDB Corporation.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -106,12 +106,13 @@ ELSEIF(RPM)
   SET(PLUGIN_AUTH_SOCKET YES CACHE STRING "")
   SET(WITH_EMBEDDED_SERVER ON CACHE BOOL "")
   SET(WITH_PCRE system CACHE STRING "")
-  IF(RPM MATCHES "fedora|centos|rhel")
+  SET(CLIENT_PLUGIN_ZSTD OFF)
+  IF(RPM MATCHES "fedora|centos|rhel|rocky|alma")
     SET(WITH_INNODB_BZIP2 OFF CACHE STRING "")
     SET(WITH_INNODB_LZO OFF CACHE STRING "")
     SET(WITH_ROCKSDB_BZip2 OFF CACHE STRING "")
   ENDIF()
-  IF(RPM MATCHES "opensuse|sles|centos|rhel")
+  IF(RPM MATCHES "opensuse|sles|centos|rhel|rocky|alma")
     SET(WITH_INNODB_LZ4 OFF CACHE STRING "")
     SET(WITH_ROCKSDB_LZ4 OFF CACHE STRING "")
     SET(GRN_WITH_LZ4 no CACHE STRING "")
@@ -124,6 +125,7 @@ ELSEIF(DEB)
   SET(PLUGIN_AUTH_SOCKET YES CACHE STRING "")
   SET(WITH_EMBEDDED_SERVER ON CACHE BOOL "")
   SET(WITH_PCRE system CACHE STRING "")
+  SET(CLIENT_PLUGIN_ZSTD OFF)
   SET(WITH_INNODB_BZIP2 OFF CACHE STRING "")
   SET(WITH_INNODB_LZMA OFF CACHE STRING "")
   SET(WITH_INNODB_LZO OFF CACHE STRING "")
