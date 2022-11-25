@@ -1,7 +1,7 @@
-mariadb-10.6 (1:10.6.11-0ubuntu0.22.10.1) kinetic-updates; urgency=medium
+mariadb-10.6 (1:10.6.11-0ubuntu0.22.10.1) kinetic-security; urgency=medium
 
   * New upstream version 10.6.11. Neither 10.6.11 nor 10.6.10 contain any
-    known CVE tracked security vulnerabilities.
+    known CVE tracked security vulnerabilities. (LP: #1996452)
 
  -- Otto Kekäläinen <otto@debian.org>  Sun, 20 Nov 2022 19:22:48 -0800
 
