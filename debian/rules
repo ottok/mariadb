@@ -213,19 +213,19 @@ endif
 # Install mariadb.socket without enabling it, keep using mariadb.service by default
 # @TODO: Temporarily disable extra and socket systemd file installation until
 # a '--build=all' compatible mechanism is found
-override_dh_systemd_enable:
-	dh_systemd_enable --name=mariadb
-	dh_systemd_enable --no-enable --name=mariadb@ # mariadb@.service
-#	dh_systemd_enable --no-enable --name=mariadb mariadb.socket
-#	dh_systemd_enable --no-enable --name=mariadb-extra mariadb-extra.socket
-#	dh_systemd_enable --no-enable --name=mariadb@ mariadb.socket
-#	dh_systemd_enable --no-enable --name=mariadb-extra@ mariadb-extra.socket
+override_dh_installsystemd:
+	dh_installsystemd --name=mariadb
+	dh_installsystemd --no-enable --name=mariadb@ # mariadb@.service
+	dh_installsystemd --no-enable --name=mariadb mariadb.socket
+	dh_installsystemd --no-enable --name=mariadb-extra mariadb-extra.socket
+	dh_installsystemd --no-enable --name=mariadb@ mariadb.socket
+	dh_installsystemd --no-enable --name=mariadb-extra@ mariadb-extra.socket
 
 # Start mariadbd at sequence number 19 before 20 where apache, proftpd etc gets
 # started which might depend on a running database server.
 override_dh_installinit-arch:
 	dh_installinit --name=mariadb --no-start -- defaults 19 21
-	dh_systemd_start --restart-after-upgrade
+	dh_installsystemd --restart-after-upgrade
 
 # Use custom server version string variable
 override_dh_gencontrol:
