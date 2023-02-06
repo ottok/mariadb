@@ -499,6 +499,11 @@ Package: mariadb-server-core
 Architecture: any
 Depends:
  mariadb-common (>= ${source:Version}),
+ mariadb-plugin-provider-bzip2,
+ mariadb-plugin-provider-lz4,
+ mariadb-plugin-provider-lzma,
+ mariadb-plugin-provider-lzo,
+ mariadb-plugin-provider-snappy,
  ${misc:Depends},
  ${shlibs:Depends},
 Conflicts:
@@ -583,11 +588,6 @@ Suggests:
  netcat-openbsd,
 Recommends:
  libhtml-template-perl,
- mariadb-plugin-provider-bzip2,
- mariadb-plugin-provider-lz4,
- mariadb-plugin-provider-lzma,
- mariadb-plugin-provider-lzo,
- mariadb-plugin-provider-snappy,
  pv,
 Pre-Depends:
  adduser (>= 3.40),
