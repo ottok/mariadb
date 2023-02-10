@@ -1209,6 +1209,18 @@ public:
   }
 };
 
+class Item_func_hash_mariadb_100403: public Item_func_hash
+{
+public:
+  Item_func_hash_mariadb_100403(THD *thd, List<Item> &item)
+   :Item_func_hash(thd, item)
+  {}
+  longlong val_int();
+  Item *get_copy(THD *thd)
+  { return get_item_copy<Item_func_hash_mariadb_100403>(thd, this); }
+  const char *func_name() const { return "<hash_mariadb_100403>"; }
+};
+
 class Item_longlong_func: public Item_int_func
 {
 public:
@@ -4157,9 +4169,7 @@ public:
   void print(String *str, enum_query_type query_type) override;
   bool check_vcol_func_processor(void *arg) override
   {
-    return mark_unsupported_function(func_name(), "()", arg,
-                                     (VCOL_NON_DETERMINISTIC |
-                                      VCOL_NOT_VIRTUAL));
+    return mark_unsupported_function(func_name(), "()", arg, VCOL_NEXTVAL);
   }
 };
 

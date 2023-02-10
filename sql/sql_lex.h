@@ -1200,12 +1200,14 @@ public:
     group_list_ptrs, and re-establish the original list before each execution.
   */
   SQL_I_List<ORDER>       group_list;
+  SQL_I_List<ORDER>       save_group_list;
   Group_list_ptrs        *group_list_ptrs;
 
   List<Item>          item_list;  /* list of fields & expressions */
   List<Item>          pre_fix;    /* above list before fix_fields */
   List<Item>          fix_after_optimize;
   SQL_I_List<ORDER> order_list;   /* ORDER clause */
+  SQL_I_List<ORDER> save_order_list;
   SQL_I_List<ORDER> gorder_list;
   Lex_select_limit limit_params;  /* LIMIT clause parameters */
 
@@ -1343,6 +1345,9 @@ public:
     this select level.
   */
   table_map select_list_tables;
+
+  /* Set to 1 if any field in field list has ROWNUM() */
+  bool rownum_in_field_list;
 
   /* namp of nesting SELECT visibility (for aggregate functions check) */
   nesting_map name_visibility_map;
@@ -3560,8 +3565,6 @@ public:
   }
 
 
-  SQL_I_List<ORDER> save_group_list;
-  SQL_I_List<ORDER> save_order_list;
   LEX_CSTRING *win_ref;
   Window_frame *win_frame;
   Window_frame_bound *frame_top_bound;
@@ -4399,7 +4402,7 @@ public:
                       bool if_not_exists)
   {
     constr->name= name;
-    constr->flags= if_not_exists ? VCOL_CHECK_CONSTRAINT_IF_NOT_EXISTS : 0;
+    constr->if_not_exists= if_not_exists;
     alter_info.check_constraint_list.push_back(constr);
     return false;
   }
@@ -4802,8 +4805,8 @@ public:
                               const LEX_CSTRING *constraint_name,
                               Table_ident *ref_table_name,
                               DDL_options ddl_options);
+
   bool check_dependencies_in_with_clauses();
-  bool resolve_references_to_cte_in_hanging_cte();
   bool check_cte_dependencies_and_resolve_references();
   bool resolve_references_to_cte(TABLE_LIST *tables,
                                  TABLE_LIST **tables_last);

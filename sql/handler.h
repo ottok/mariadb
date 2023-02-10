@@ -2,7 +2,7 @@
 #define HANDLER_INCLUDED
 /*
    Copyright (c) 2000, 2019, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2022, MariaDB
+   Copyright (c) 2009, 2023, MariaDB
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License
@@ -357,9 +357,9 @@ enum chf_create_flags {
   Rowid's are not comparable. This is set if the rowid is unique to the
   current open handler, like it is with federated where the rowid is a
   pointer to a local result set buffer. The effect of having this set is
-  that the optimizer will not consirer the following optimizations for
+  that the optimizer will not consider the following optimizations for
   the table:
-  ror scans or filtering
+  ror scans, filtering or duplicate weedout
 */
 #define HA_NON_COMPARABLE_ROWID (1ULL << 60)
 
@@ -2166,7 +2166,8 @@ struct Vers_parse_info: public Table_period_info
   Vers_parse_info() :
     Table_period_info(STRING_WITH_LEN("SYSTEM_TIME")),
     versioned_fields(false),
-    unversioned_fields(false)
+    unversioned_fields(false),
+    can_native(-1)
   {}
 
   Table_period_info::start_end_t as_row;
@@ -2195,6 +2196,9 @@ protected:
   bool need_check(const Alter_info *alter_info) const;
   bool check_conditions(const Lex_table_name &table_name,
                         const Lex_table_name &db) const;
+  bool create_sys_field(THD *thd, const char *field_name,
+                        Alter_info *alter_info, int flags);
+
 public:
   static const Lex_ident default_start;
   static const Lex_ident default_end;
@@ -2212,6 +2216,7 @@ public:
   */
   bool versioned_fields : 1;
   bool unversioned_fields : 1;
+  int can_native;
 };
 
 /**
@@ -2330,6 +2335,7 @@ struct Table_scope_and_contents_source_st:
                     int select_count= 0);
   bool check_period_fields(THD *thd, Alter_info *alter_info);
 
+  void vers_check_native();
   bool vers_fix_system_fields(THD *thd, Alter_info *alter_info,
                               const TABLE_LIST &create_table);
 
@@ -2337,7 +2343,6 @@ struct Table_scope_and_contents_source_st:
                                 const Lex_table_name &table_name,
                                 const Lex_table_name &db,
                                 int select_count= 0);
-
 };
 
 
@@ -3562,6 +3567,7 @@ public:
   }
 
   int check_collation_compatibility();
+  int check_long_hash_compatibility() const;
   int ha_check_for_upgrade(HA_CHECK_OPT *check_opt);
   /** to be actually called to get 'check()' functionality*/
   int ha_check(THD *thd, HA_CHECK_OPT *check_opt);
@@ -5172,18 +5178,8 @@ public:
     These functions check for such possibility.
     Implementation could be based on Field_xxx::is_equal()
    */
-  virtual bool can_convert_string(const Field_string *field,
-                                  const Column_definition &new_type) const
-  {
-    return false;
-  }
-  virtual bool can_convert_varstring(const Field_varstring *field,
-                                     const Column_definition &new_type) const
-  {
-    return false;
-  }
-  virtual bool can_convert_blob(const Field_blob *field,
-                                const Column_definition &new_type) const
+  virtual bool can_convert_nocopy(const Field &,
+                                  const Column_definition &) const
   {
     return false;
   }
@@ -5208,7 +5204,7 @@ public:
     return (lower_case_table_names == 2 && !(ha_table_flags() & HA_FILE_BASED));
   }
 
-  void log_not_redoable_operation(const char *operation);
+  bool log_not_redoable_operation(const char *operation);
 protected:
   Handler_share *get_ha_share_ptr();
   void set_ha_share_ptr(Handler_share *arg_ha_share);

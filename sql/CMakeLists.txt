@@ -230,6 +230,15 @@ FOREACH(se aria partition perfschema sql_sequence wsrep)
   ENDIF()
 ENDFOREACH()
 
+IF(VISIBILITY_HIDDEN_FLAG AND TARGET partition AND WITH_UBSAN)
+  # the spider plugin needs some partition symbols from inside mysqld
+  # when built with ubsan, in which case we need to remove
+  # -fvisibility=hidden from partition
+  GET_TARGET_PROPERTY(f partition COMPILE_FLAGS)
+  STRING(REPLACE "${VISIBILITY_HIDDEN_FLAG}" "" f ${f})
+  SET_TARGET_PROPERTIES(partition PROPERTIES COMPILE_FLAGS "${f}")
+ENDIF()
+
 IF(WIN32)
   SET(MYSQLD_SOURCE main.cc  message.rc)
 ELSE()
@@ -502,7 +511,11 @@ IF(WIN32)
   TARGET_LINK_LIBRARIES(mariadb-upgrade-service mysys winservice)
 ENDIF(WIN32)
 
+IF(NOT WITH_WSREP)
+  SET(EXCL_WSREP "wsrep_[a-np-z]*.h")
+ENDIF()
 INSTALL(DIRECTORY . DESTINATION ${INSTALL_INCLUDEDIR}/server/private COMPONENT Development
   FILES_MATCHING PATTERN "*.h"
   PATTERN share EXCLUDE
+  PATTERN "${EXCL_WSREP}" EXCLUDE
   PATTERN CMakeFiles EXCLUDE)

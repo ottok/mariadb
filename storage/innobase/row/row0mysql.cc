@@ -704,7 +704,7 @@ handle_new_error:
 			" table. You have to dump + drop + reimport the"
 			" table or, in a case of widespread corruption,"
 			" dump all InnoDB tables and recreate the whole"
-			" tablespace. If the mysqld server crashes after"
+			" tablespace. If the mariadbd server crashes after"
 			" the startup or when you dump the tables. "
 			<< FORCE_RECOVERY_MSG;
 		goto rollback_to_savept;
@@ -1337,7 +1337,10 @@ error_exit:
 		return(err);
 	}
 
-	if (dict_table_has_fts_index(table)) {
+	if (dict_table_has_fts_index(table)
+	    && (!table->versioned()
+		|| !node->row->fields[table->vers_end].vers_history_row())) {
+
 		doc_id_t	doc_id;
 
 		/* Extract the doc id from the hidden FTS column */
@@ -1456,11 +1459,8 @@ row_create_update_node_for_mysql(
 
 	node->in_mysql_interface = true;
 	node->is_delete = NO_DELETE;
-	node->searched_update = FALSE;
-	node->select = NULL;
-	node->pcur = btr_pcur_create_for_mysql();
-
-	DBUG_PRINT("info", ("node: %p, pcur: %p", node, node->pcur));
+	node->pcur = new (mem_heap_alloc(heap, sizeof(btr_pcur_t)))
+		btr_pcur_t();
 
 	node->table = table;
 
@@ -1472,10 +1472,6 @@ row_create_update_node_for_mysql(
 	UT_LIST_INIT(node->columns, &sym_node_t::col_var_list);
 
 	node->has_clust_rec_x_lock = TRUE;
-	node->cmpl_info = 0;
-
-	node->table_sym = NULL;
-	node->col_assign_list = NULL;
 
 	DBUG_RETURN(node);
 }
@@ -1550,7 +1546,7 @@ row_fts_update_or_delete(
 	ut_a(dict_table_has_fts_index(prebuilt->table));
 
 	/* Deletes are simple; get them out of the way first. */
-	if (node->is_delete == PLAIN_DELETE) {
+	if (node->is_delete) {
 		/* A delete affects all FTS indexes, so we pass NULL */
 		fts_trx_add_op(trx, table, old_doc_id, FTS_DELETE, NULL);
 	} else {
@@ -1559,7 +1555,7 @@ row_fts_update_or_delete(
 
 		if (new_doc_id == 0) {
 			ib::error() << "InnoDB FTS: Doc ID cannot be 0";
-			return(DB_FTS_INVALID_DOCID);
+			DBUG_RETURN(DB_FTS_INVALID_DOCID);
 		}
 		row_fts_do_update(trx, table, old_doc_id, new_doc_id);
 	}
@@ -1650,8 +1646,7 @@ row_update_for_mysql(row_prebuilt_t* prebuilt)
 	clust_index = dict_table_get_first_index(table);
 
 	btr_pcur_copy_stored_position(node->pcur,
-				      prebuilt->pcur->btr_cur.index
-				      == clust_index
+				      prebuilt->pcur->index() == clust_index
 				      ? prebuilt->pcur
 				      : prebuilt->clust_pcur);
 
@@ -1804,7 +1799,7 @@ row_unlock_for_mysql(
 		}
 
 		rec = btr_pcur_get_rec(pcur);
-		index = btr_pcur_get_btr_cur(pcur)->index;
+		index = pcur->index();
 
 		/* If the record has been modified by this
 		transaction, do not unlock it. */
@@ -1992,7 +1987,7 @@ row_update_cascade_for_mysql(
                 return(DB_FOREIGN_EXCEED_MAX_CASCADE);
         }
 
-	const trx_t* trx = thr_get_trx(thr);
+	trx_t* trx = thr_get_trx(thr);
 
 	if (table->versioned()) {
 		if (node->is_delete == PLAIN_DELETE) {

@@ -1110,6 +1110,18 @@ static void mysql57_calculate_null_position(TABLE_SHARE *share,
   }
 }
 
+
+Item_func_hash *TABLE_SHARE::make_long_hash_func(THD *thd,
+                                                 MEM_ROOT *mem_root,
+                                                 List<Item> *field_list)
+                                                 const
+{
+  if (old_long_hash_function())
+    return new (mem_root) Item_func_hash_mariadb_100403(thd, *field_list);
+  return new (mem_root) Item_func_hash(thd, *field_list);
+}
+
+
 /** Parse TABLE_SHARE::vcol_defs
 
   unpack_vcol_info_from_frm
@@ -1315,7 +1327,10 @@ bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
           list_item= new (mem_root) Item_field(thd, keypart->field);
         field_list->push_back(list_item, mem_root);
       }
-      Item_func_hash *hash_item= new(mem_root)Item_func_hash(thd, *field_list);
+
+      Item_func_hash *hash_item= table->s->make_long_hash_func(thd, mem_root,
+                                                               field_list);
+
       Virtual_column_info *v= new (mem_root) Virtual_column_info();
       field->vcol_info= v;
       field->vcol_info->expr= hash_item;
@@ -2439,11 +2454,11 @@ int TABLE_SHARE::init_from_binary_frm_image(THD *thd, bool write,
 	comment_pos+=   comment_length;
       }
 
-      if ((uchar) strpos[13] == (uchar) MYSQL_TYPE_VIRTUAL
-          && likely(share->mysql_version >= 100000))
+      if (strpos[13] == MYSQL_TYPE_VIRTUAL &&
+          (share->mysql_version < 50600 || share->mysql_version >= 100000))
       {
         /*
-          MariaDB version 10.0 version.
+          MariaDB 5.5 or 10.0 version.
           The interval_id byte in the .frm file stores the length of the
           expression statement for a virtual column.
         */
@@ -3256,6 +3271,8 @@ int TABLE_SHARE::init_from_binary_frm_image(THD *thd, bool write,
         share->stored_fields--;
         if (reg_field->flags & BLOB_FLAG)
           share->virtual_not_stored_blob_fields++;
+        if (reg_field->flags & PART_KEY_FLAG)
+          vcol_info->set_vcol_type(VCOL_GENERATED_VIRTUAL_INDEXED);
         /* Correct stored_rec_length as non stored fields are last */
         recpos= (uint) (reg_field->ptr - record);
         if (share->stored_rec_length >= recpos)
@@ -3654,7 +3671,7 @@ class Vcol_expr_context
   bool inited;
   THD *thd;
   TABLE *table;
-  Query_arena backup_arena;
+  Query_arena backup_arena, *stmt_arena;
   table_map old_map;
   Security_context *save_security_ctx;
   sql_mode_t save_sql_mode;
@@ -3664,6 +3681,7 @@ public:
     inited(false),
     thd(_thd),
     table(_table),
+    stmt_arena(thd->stmt_arena),
     old_map(table->map),
     save_security_ctx(thd->security_ctx),
     save_sql_mode(thd->variables.sql_mode) {}
@@ -3684,6 +3702,7 @@ bool Vcol_expr_context::init()
     thd->security_ctx= tl->security_ctx;
 
   thd->set_n_backup_active_arena(table->expr_arena, &backup_arena);
+  thd->stmt_arena= thd;
 
   inited= true;
   return false;
@@ -3697,6 +3716,7 @@ Vcol_expr_context::~Vcol_expr_context()
   thd->security_ctx= save_security_ctx;
   thd->restore_active_arena(table->expr_arena, &backup_arena);
   thd->variables.sql_mode= save_sql_mode;
+  thd->stmt_arena= stmt_arena;
 }
 
 
@@ -3804,7 +3824,7 @@ bool Virtual_column_info::fix_and_check_expr(THD *thd, TABLE *table)
              get_vcol_type_name(), name.str);
     DBUG_RETURN(1);
   }
-  else if (unlikely(res.errors & VCOL_AUTO_INC))
+  else if (res.errors & VCOL_AUTO_INC && vcol_type != VCOL_GENERATED_VIRTUAL)
   {
     /*
       An auto_increment field may not be used in an expression for
@@ -3815,10 +3835,17 @@ bool Virtual_column_info::fix_and_check_expr(THD *thd, TABLE *table)
       pointer at that time
     */
     myf warn= table->s->frm_version < FRM_VER_EXPRESSSIONS ? ME_WARNING : 0;
-    my_error(ER_VIRTUAL_COLUMN_FUNCTION_IS_NOT_ALLOWED, MYF(warn),
+    my_error(ER_GENERATED_COLUMN_FUNCTION_IS_NOT_ALLOWED, MYF(warn),
              "AUTO_INCREMENT", get_vcol_type_name(), res.name);
     if (!warn)
       DBUG_RETURN(1);
+  }
+  else if (vcol_type != VCOL_GENERATED_VIRTUAL && vcol_type != VCOL_DEFAULT &&
+           res.errors & VCOL_NOT_STRICTLY_DETERMINISTIC)
+  {
+    my_error(ER_GENERATED_COLUMN_FUNCTION_IS_NOT_ALLOWED, MYF(0),
+             res.name, get_vcol_type_name(), name.str);
+    DBUG_RETURN(1);
   }
   flags= res.errors;
 
@@ -8995,6 +9022,7 @@ int TABLE::update_generated_fields()
     res= found_next_number_field->set_default();
     if (likely(!res))
       res= file->update_auto_increment();
+    next_number_field= NULL;
   }
 
   if (likely(!res) && vfield)
@@ -9656,15 +9684,16 @@ bool TABLE_LIST::change_refs_to_fields()
   List_iterator<Item> li(used_items);
   Item_direct_ref *ref;
   Field_iterator_view field_it;
+  Name_resolution_context *ctx;
   THD *thd= table->in_use;
+  Item **materialized_items;
   DBUG_ASSERT(is_merged_derived());
 
   if (!used_items.elements)
     return FALSE;
 
-  Item **materialized_items=
-      (Item **)thd->calloc(sizeof(void *) * table->s->fields);
-  Name_resolution_context *ctx= new Name_resolution_context(this);
+  materialized_items= (Item **)thd->calloc(sizeof(void *) * table->s->fields);
+  ctx= new (thd->mem_root) Name_resolution_context(this);
   if (!materialized_items || !ctx)
     return TRUE;
 

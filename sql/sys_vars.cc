@@ -3019,7 +3019,7 @@ static Sys_var_mybool Sys_skip_name_resolve(
        "skip_name_resolve",
        "Don't resolve hostnames. All hostnames are IP's or 'localhost'.",
        READ_ONLY GLOBAL_VAR(opt_skip_name_resolve),
-       CMD_LINE(OPT_ARG, OPT_SKIP_RESOLVE),
+       CMD_LINE(OPT_ARG),
        DEFAULT(FALSE));
 
 static Sys_var_mybool Sys_skip_show_database(
@@ -5847,7 +5847,7 @@ static bool update_wsrep_auto_increment_control (sys_var *self, THD *thd, enum_v
   {
     /*
       The variables that control auto increment shall be calculated
-      automaticaly based on the size of the cluster. This usually done
+      automatically based on the size of the cluster. This usually done
       within the wsrep_view_handler_cb callback. However, if the user
       manually sets the value of wsrep_auto_increment_control to 'ON',
       then we should to re-calculate these variables again (because
@@ -6013,6 +6013,7 @@ static const char *wsrep_mode_names[]=
   "REPLICATE_MYISAM",
   "REPLICATE_ARIA",
   "DISALLOW_LOCAL_GTID",
+  "BF_ABORT_MARIABACKUP",
   NullS
 };
 static Sys_var_set Sys_wsrep_mode(

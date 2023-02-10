@@ -1317,8 +1317,6 @@ void LEX::start(THD *thd_arg)
   stmt_var_list.empty();
   proc_list.elements=0;
 
-  save_group_list.empty();
-  save_order_list.empty();
   win_ref= NULL;
   win_frame= NULL;
   frame_top_bound= NULL;
@@ -3002,6 +3000,8 @@ void st_select_lex::init_query()
   prep_leaf_list_state= UNINIT;
   bzero((char*) expr_cache_may_be_used, sizeof(expr_cache_may_be_used));
   select_list_tables= 0;
+  rownum_in_field_list= 0;
+
   window_specs.empty();
   window_funcs.empty();
   tvc= 0;

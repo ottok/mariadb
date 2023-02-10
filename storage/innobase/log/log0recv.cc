@@ -986,6 +986,21 @@ bool recv_sys_t::recover_deferred(recv_sys_t::map::iterator &p,
         DB_SUCCESS == os_file_punch_hole(node->handle, 0, 4096) &&
         !my_test_if_thinly_provisioned(node->handle);
 #endif
+      /* Mimic fil_node_t::read_page0() in case the file exists and
+      has already been extended to a larger size. */
+      ut_ad(node->size == size);
+      const os_offset_t file_size= os_file_get_size(node->handle);
+      if (file_size != os_offset_t(-1))
+      {
+        const uint32_t n_pages=
+          uint32_t(file_size / fil_space_t::physical_size(flags));
+        if (n_pages > size)
+        {
+          space->size= node->size= n_pages;
+          space->set_committed_size();
+          goto size_set;
+        }
+      }
       if (!os_file_set_size(node->name, node->handle,
                             (size * fil_space_t::physical_size(flags)) &
                             ~4095ULL, is_sparse))
@@ -993,6 +1008,7 @@ bool recv_sys_t::recover_deferred(recv_sys_t::map::iterator &p,
         space->release();
         goto release_and_fail;
       }
+    size_set:
       node->deferred= false;
       space->release();
       it->second.space= space;
@@ -1020,6 +1036,8 @@ fail:
 void (*log_file_op)(ulint space_id, int type,
 		    const byte* name, ulint len,
 		    const byte* new_name, ulint new_len);
+
+void (*undo_space_trunc)(uint32_t space_id);
 
 void (*first_page_init)(ulint space_id);
 
@@ -1148,6 +1166,7 @@ public:
 		}
 
 		mtr.commit();
+		clear();
 	}
 
 	/** Clear the data structure */
@@ -1173,14 +1192,6 @@ inline void recv_sys_t::trim(const page_id_t page_id, lsn_t lsn)
 		if (r->second.trim(lsn)) {
 			pages.erase(r);
 		}
-	}
-	if (fil_space_t* space = fil_space_get(page_id.space())) {
-		ut_ad(UT_LIST_GET_LEN(space->chain) == 1);
-		fil_node_t* file = UT_LIST_GET_FIRST(space->chain);
-		ut_ad(file->is_open());
-		os_file_truncate(file->name, file->handle,
-				 os_offset_t{page_id.page_no()}
-				 << srv_page_size_shift, true);
 	}
 	DBUG_VOID_RETURN;
 }
@@ -1336,35 +1347,22 @@ same_space:
 		case FIL_LOAD_INVALID:
 			ut_ad(space == NULL);
 			if (srv_force_recovery == 0) {
-				ib::warn() << "We do not continue the crash"
-					" recovery, because the table may"
-					" become corrupt if we cannot apply"
-					" the log records in the InnoDB log to"
-					" it. To fix the problem and start"
-					" mysqld:";
-				ib::info() << "1) If there is a permission"
-					" problem in the file and mysqld"
-					" cannot open the file, you should"
-					" modify the permissions.";
-				ib::info() << "2) If the tablespace is not"
-					" needed, or you can restore an older"
-					" version from a backup, then you can"
-					" remove the .ibd file, and use"
-					" --innodb_force_recovery=1 to force"
-					" startup without this file.";
-				ib::info() << "3) If the file system or the"
-					" disk is broken, and you cannot"
-					" remove the .ibd file, you can set"
-					" --innodb_force_recovery.";
+				sql_print_error("InnoDB: Recovery cannot access"
+						" file %s (tablespace "
+						UINT32PF ")", name, space_id);
+				sql_print_information("InnoDB: You may set "
+						      "innodb_force_recovery=1"
+						      " to ignore this and"
+						      " possibly get a"
+						      " corrupted database.");
 				recv_sys.set_corrupt_fs();
 				break;
 			}
 
-			ib::info() << "innodb_force_recovery was set to "
-				<< srv_force_recovery << ". Continuing crash"
-				" recovery even though we cannot access the"
-				" files for tablespace " << space_id << ".";
-			break;
+			sql_print_warning("InnoDB: Ignoring changes to"
+					  " file %s (tablespace " UINT32PF ")"
+					  " due to innodb_force_recovery",
+					  name, space_id);
 		}
 	}
 }
@@ -1781,7 +1779,7 @@ ATTRIBUTE_COLD static dberr_t recv_log_recover_pre_10_2()
 
     if (!log_crypt_101_read_checkpoint(buf))
     {
-      ib::error() << "Decrypting checkpoint failed";
+      sql_print_error("InnoDB: Decrypting checkpoint failed");
       continue;
     }
 
@@ -1803,11 +1801,11 @@ ATTRIBUTE_COLD static dberr_t recv_log_recover_pre_10_2()
 
   if (!lsn)
   {
-    ib::error() << "Upgrade after a crash is not supported."
-            " This redo log was created before MariaDB 10.2.2,"
-            " and we did not find a valid checkpoint."
-            " Please follow the instructions at"
-            " https://mariadb.com/kb/en/library/upgrading/";
+    sql_print_error("InnoDB: Upgrade after a crash is not supported."
+                    " This redo log was created before MariaDB 10.2.2,"
+                    " and we did not find a valid checkpoint."
+                    " Please follow the instructions at"
+                    " https://mariadb.com/kb/en/library/upgrading/");
     return DB_ERROR;
   }
 
@@ -1816,7 +1814,7 @@ ATTRIBUTE_COLD static dberr_t recv_log_recover_pre_10_2()
   const lsn_t source_offset= log_sys.log.calc_lsn_offset_old(lsn);
 
   static constexpr char NO_UPGRADE_RECOVERY_MSG[]=
-    "Upgrade after a crash is not supported."
+    "InnoDB: Upgrade after a crash is not supported."
     " This redo log was created before MariaDB 10.2.2";
 
   recv_sys.read(source_offset & ~511, {buf, 512});
@@ -1824,7 +1822,7 @@ ATTRIBUTE_COLD static dberr_t recv_log_recover_pre_10_2()
   if (log_block_calc_checksum_format_0(buf) != log_block_get_checksum(buf) &&
       !log_crypt_101_read_block(buf, lsn))
   {
-    ib::error() << NO_UPGRADE_RECOVERY_MSG << ", and it appears corrupted.";
+    sql_print_error("%s, and it appears corrupted.", NO_UPGRADE_RECOVERY_MSG);
     return DB_CORRUPTION;
   }
 
@@ -1841,10 +1839,13 @@ ATTRIBUTE_COLD static dberr_t recv_log_recover_pre_10_2()
   }
 
   if (buf[20 + 32 * 9] == 2)
-    ib::error() << "Cannot decrypt log for upgrading."
-                   " The encrypted log was created before MariaDB 10.2.2.";
+    sql_print_error("InnoDB: Cannot decrypt log for upgrading."
+                    " The encrypted log was created before MariaDB 10.2.2.");
   else
-    ib::error() << NO_UPGRADE_RECOVERY_MSG << ".";
+    sql_print_error("%s. You must start up and shut down"
+                    " MariaDB 10.1 or MySQL 5.6 or earlier"
+                    " on the data directory.",
+                    NO_UPGRADE_RECOVERY_MSG);
 
   return DB_ERROR;
 }
@@ -1883,7 +1884,7 @@ static dberr_t recv_log_recover_10_4()
 		return DB_CORRUPTION;
 	}
 
-	recv_sys.read(source_offset & ~(OS_FILE_LOG_BLOCK_SIZE - 1),
+	recv_sys.read(source_offset & ~lsn_t(OS_FILE_LOG_BLOCK_SIZE - 1),
 		      {buf, OS_FILE_LOG_BLOCK_SIZE});
 
 	ulint crc = log_block_calc_checksum_crc32(buf);
@@ -1951,8 +1952,8 @@ recv_find_max_checkpoint(ulint* max_field)
 		: 0;
 	if (log_sys.log.format != log_t::FORMAT_3_23
 	    && !recv_check_log_header_checksum(buf)) {
-		ib::error() << "Invalid redo log header checksum.";
-		return(DB_CORRUPTION);
+		sql_print_error("InnoDB: Invalid redo log header checksum.");
+		return DB_CORRUPTION;
 	}
 
 	char creator[LOG_HEADER_CREATOR_END - LOG_HEADER_CREATOR + 1];
@@ -1974,9 +1975,9 @@ recv_find_max_checkpoint(ulint* max_field)
 	case log_t::FORMAT_10_5 | log_t::FORMAT_ENCRYPTED:
 		break;
 	default:
-		ib::error() << "Unsupported redo log format."
-			" The redo log was created with " << creator << ".";
-		return(DB_ERROR);
+		sql_print_error("InnoDB: Unsupported redo log format."
+				" The redo log was created with %s.", creator);
+		return DB_ERROR;
 	}
 
 	for (field = LOG_CHECKPOINT_1; field <= LOG_CHECKPOINT_2;
@@ -1998,8 +1999,8 @@ recv_find_max_checkpoint(ulint* max_field)
 
 		if (log_sys.is_encrypted()
 		    && !log_crypt_read_checkpoint_buf(buf)) {
-			ib::error() << "Reading checkpoint"
-				" encryption info failed.";
+			sql_print_error("InnoDB: Reading checkpoint"
+					" encryption info failed.");
 			continue;
 		}
 
@@ -2028,11 +2029,11 @@ recv_find_max_checkpoint(ulint* max_field)
 		was filled with zeroes, and were killed. After
 		10.2.2, we would reject such a file already earlier,
 		when checking the file header. */
-		ib::error() << "No valid checkpoint found"
-			" (corrupted redo log)."
-			" You can try --innodb-force-recovery=6"
-			" as a last resort.";
-		return(DB_ERROR);
+		sql_print_error("InnoDB: No valid checkpoint found"
+				" (corrupted redo log)."
+				" You can try --innodb-force-recovery=6"
+				" as a last resort.");
+		return DB_ERROR;
 	}
 
 	switch (log_sys.log.format) {
@@ -2041,11 +2042,15 @@ recv_find_max_checkpoint(ulint* max_field)
 		break;
 	default:
 		if (dberr_t err = recv_log_recover_10_4()) {
-			ib::error()
-				<< "Upgrade after a crash is not supported."
-				" The redo log was created with " << creator
-				<< (err == DB_ERROR
-				    ? "." : ", and it appears corrupted.");
+			sql_print_error("InnoDB: Upgrade after a crash "
+					"is not supported."
+					" The redo log was created with %s%s.",
+					creator,
+					err == DB_ERROR
+					? ". You must start up and shut down"
+					" MariaDB 10.4 or earlier"
+					" on the data directory"
+					: ", and it appears corrupted");
 			return err;
 		}
 	}
@@ -2421,6 +2426,8 @@ same_page:
                         TRX_SYS_MAX_UNDO_SPACES, "compatibility");
           truncated_undo_spaces[space_id - srv_undo_space_id_start]=
             { recovered_lsn, page_no };
+          if (undo_space_trunc)
+            undo_space_trunc(space_id);
 #endif
           last_offset= 1; /* the next record must not be same_page  */
           continue;
@@ -3265,7 +3272,17 @@ void recv_sys_t::apply(bool last_batch)
     {
       const trunc& t= truncated_undo_spaces[id];
       if (t.lsn)
-        trim(page_id_t(id + srv_undo_space_id_start, t.pages), t.lsn);
+      {
+        trim(page_id_t(id + srv_undo_space_id_start, 0), t.lsn);
+        if (fil_space_t *space = fil_space_get(id + srv_undo_space_id_start))
+        {
+          ut_ad(UT_LIST_GET_LEN(space->chain) == 1);
+          fil_node_t *file= UT_LIST_GET_FIRST(space->chain);
+          ut_ad(file->is_open());
+          os_file_truncate(file->name, file->handle,
+                           os_offset_t{t.pages} << srv_page_size_shift, true);
+        }
+      }
     }
 
     fil_system.extend_to_recv_size();

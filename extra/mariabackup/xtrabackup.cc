@@ -190,6 +190,7 @@ struct xb_filter_entry_t{
 lsn_t checkpoint_lsn_start;
 lsn_t checkpoint_no_start;
 static lsn_t log_copy_scanned_lsn;
+/** whether log_copying_thread() is active; protected by log_sys.mutex */
 static bool log_copying_running;
 
 int xtrabackup_parallel;
@@ -243,6 +244,10 @@ long innobase_buffer_pool_awe_mem_mb = 0;
 long innobase_file_io_threads = 4;
 ulong innobase_read_io_threads = 4;
 ulong innobase_write_io_threads = 4;
+
+/** Store the failed read of undo tablespace ids. Protected by
+backup mutex */
+static std::set<uint32_t> fail_undo_ids;
 
 longlong innobase_page_size = (1LL << 14); /* 16KB */
 char*	innobase_buffer_pool_filename = NULL;
@@ -404,6 +409,10 @@ struct ddl_tracker_t {
 };
 
 static ddl_tracker_t ddl_tracker;
+
+/** Store the space ids of truncated undo log tablespaces. Protected
+by recv_sys.mutex */
+static std::set<uint32_t> undo_trunc_ids;
 
 /** Stores the space ids of page0 INIT_PAGE redo records. It is
 used to indicate whether the given deferred tablespace can
@@ -917,6 +926,11 @@ static void backup_file_op_fail(ulint space_id, int type,
 		die("DDL operation detected in the late phase of backup."
 			"Backup is inconsistent. Remove --no-lock option to fix.");
 	}
+}
+
+static void backup_undo_trunc(uint32_t space_id)
+{
+  undo_trunc_ids.insert(space_id);
 }
 
 /* Function to store the space id of page0 INIT_PAGE
@@ -2141,7 +2155,6 @@ static bool innodb_init_param()
 	srv_buf_pool_size = (ulint) xtrabackup_use_memory;
 	srv_buf_pool_chunk_unit = (ulong)srv_buf_pool_size;
 
-	srv_n_file_io_threads = (uint) innobase_file_io_threads;
 	srv_n_read_io_threads = (uint) innobase_read_io_threads;
 	srv_n_write_io_threads = (uint) innobase_write_io_threads;
 
@@ -2851,15 +2864,27 @@ static my_bool xtrabackup_copy_datafile(fil_node_t *node, uint thread_n,
 	}
 
 	/* The main copy loop */
-	while ((res = xb_fil_cur_read(&cursor, corrupted_pages)) ==
-		XB_FIL_CUR_SUCCESS) {
+	while (1) {
+		res = xb_fil_cur_read(&cursor, corrupted_pages);
+		if (res == XB_FIL_CUR_ERROR) {
+		       goto error;
+		}
+
+		if (res == XB_FIL_CUR_EOF) {
+			break;
+		}
+
 		if (!write_filter.process(&write_filt_ctxt, dstfile)) {
 			goto error;
 		}
-	}
 
-	if (res == XB_FIL_CUR_ERROR) {
-		goto error;
+		if (res == XB_FIL_CUR_SKIP) {
+			pthread_mutex_lock(&backup_mutex);
+			fail_undo_ids.insert(
+				static_cast<uint32_t>(cursor.space_id));
+			pthread_mutex_unlock(&backup_mutex);
+			break;
+		}
 	}
 
 	if (write_filter.finalize
@@ -3092,16 +3117,18 @@ static void log_copying_thread()
   my_thread_end();
 }
 
+/** whether io_watching_thread() is active; protected by log_sys.mutex */
 static bool have_io_watching_thread;
-static pthread_t io_watching_thread_id;
 
 /* io throttle watching (rough) */
-static void *io_watching_thread(void*)
+static void io_watching_thread()
 {
+  my_thread_init();
   /* currently, for --backup only */
-  ut_a(xtrabackup_backup);
+  ut_ad(xtrabackup_backup);
 
   mysql_mutex_lock(&log_sys.mutex);
+  ut_ad(have_io_watching_thread);
 
   while (log_copying_running && !metadata_to_lsn)
   {
@@ -3114,9 +3141,10 @@ static void *io_watching_thread(void*)
 
   /* stop io throttle */
   xtrabackup_throttle= 0;
+  have_io_watching_thread= false;
   mysql_cond_broadcast(&wait_throttle);
   mysql_mutex_unlock(&log_sys.mutex);
-  return nullptr;
+  my_thread_end();
 }
 
 #ifndef DBUG_OFF
@@ -3816,10 +3844,6 @@ static dberr_t xb_assign_undo_space_start()
 	int		n_retries = 5;
 	ulint		fsp_flags;
 
-	if (srv_undo_tablespaces == 0) {
-		return error;
-	}
-
 	file = os_file_create(0, srv_sys_space.first_datafile()->filepath(),
 		OS_FILE_OPEN, OS_FILE_NORMAL, OS_DATA_FILE, true, &ret);
 
@@ -3831,7 +3855,7 @@ static dberr_t xb_assign_undo_space_start()
 	byte* page = static_cast<byte*>
 		(aligned_malloc(srv_page_size, srv_page_size));
 
-	if (os_file_read(IORequestRead, file, page, 0, srv_page_size)
+	if (os_file_read(IORequestRead, file, page, 0, srv_page_size, nullptr)
 	    != DB_SUCCESS) {
 		msg("Reading first page failed.\n");
 		error = DB_ERROR;
@@ -3843,7 +3867,7 @@ static dberr_t xb_assign_undo_space_start()
 retry:
 	if (os_file_read(IORequestRead, file, page,
 			 TRX_SYS_PAGE_NO << srv_page_size_shift,
-			 srv_page_size) != DB_SUCCESS) {
+			 srv_page_size, nullptr) != DB_SUCCESS) {
 		msg("Reading TRX_SYS page failed.");
 		error = DB_ERROR;
 		goto func_exit;
@@ -3882,6 +3906,21 @@ func_exit:
 	ut_a(ret);
 
 	return error;
+}
+
+/** Close all undo tablespaces while applying incremental delta */
+static void xb_close_undo_tablespaces()
+{
+  if (srv_undo_space_id_start == 0)
+    return;
+  for (ulint space_id= srv_undo_space_id_start;
+       space_id < srv_undo_space_id_start + srv_undo_tablespaces_open;
+       space_id++)
+  {
+     fil_space_t *space= fil_space_get(space_id);
+     ut_ad(space);
+     space->close();
+  }
 }
 
 /****************************************************************************
@@ -3945,6 +3984,10 @@ xb_load_tablespaces()
 	err = enumerate_ibd_files(xb_load_single_table_tablespace);
 	if (err != DB_SUCCESS) {
 		return(err);
+	}
+
+	if (srv_operation == SRV_OPERATION_RESTORE_DELTA) {
+		xb_close_undo_tablespaces();
 	}
 
 	DBUG_MARIABACKUP_EVENT("after_load_tablespaces", {});
@@ -4362,27 +4405,29 @@ end:
 # define xb_set_max_open_files(x) 0UL
 #endif
 
-static void stop_backup_threads(bool running)
+static void stop_backup_threads()
 {
-  if (running)
+  mysql_cond_broadcast(&log_copying_stop);
+
+  if (log_copying_running || have_io_watching_thread)
   {
+    mysql_mutex_unlock(&log_sys.mutex);
     fputs("mariabackup: Stopping log copying thread", stderr);
     fflush(stderr);
-    while (log_copying_running)
+    mysql_mutex_lock(&log_sys.mutex);
+    while (log_copying_running || have_io_watching_thread)
     {
+      mysql_cond_broadcast(&log_copying_stop);
+      mysql_mutex_unlock(&log_sys.mutex);
       putc('.', stderr);
       fflush(stderr);
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
+      mysql_mutex_lock(&log_sys.mutex);
     }
     putc('\n', stderr);
-    mysql_cond_destroy(&log_copying_stop);
   }
 
-  if (have_io_watching_thread)
-  {
-    pthread_join(io_watching_thread_id, nullptr);
-    mysql_cond_destroy(&wait_throttle);
-  }
+  mysql_cond_destroy(&log_copying_stop);
 }
 
 /** Implement the core of --backup
@@ -4412,11 +4457,7 @@ static bool xtrabackup_backup_low()
 			msg("Error: recv_find_max_checkpoint() failed.");
 		}
 
-		mysql_cond_broadcast(&log_copying_stop);
-		const bool running= log_copying_running;
-		mysql_mutex_unlock(&log_sys.mutex);
-		stop_backup_threads(running);
-		mysql_mutex_lock(&log_sys.mutex);
+		stop_backup_threads();
 	}
 
 	if (metadata_to_lsn && xtrabackup_copy_logfile(true)) {
@@ -4434,11 +4475,30 @@ static bool xtrabackup_backup_low()
 
 	dst_log_file = NULL;
 
-	if(!xtrabackup_incremental) {
-		strcpy(metadata_type, "full-backuped");
+	std::vector<uint32_t> failed_ids;
+	std::set_difference(
+		fail_undo_ids.begin(), fail_undo_ids.end(),
+		undo_trunc_ids.begin(), undo_trunc_ids.end(),
+		std::inserter(failed_ids, failed_ids.begin()));
+
+	for (uint32_t id : failed_ids) {
+		msg("mariabackup: Failed to read undo log "
+		    "tablespace space id %d and there is no undo "
+		    "tablespace truncation redo record.",
+		    id);
+	}
+
+	if (failed_ids.size() > 0) {
+		return false;
+	}
+
+	if (!xtrabackup_incremental) {
+		safe_strcpy(metadata_type, sizeof(metadata_type),
+			    "full-backuped");
 		metadata_from_lsn = 0;
 	} else {
-		strcpy(metadata_type, "incremental");
+		safe_strcpy(metadata_type, sizeof(metadata_type),
+			    "incremental");
 		metadata_from_lsn = incremental_lsn;
 	}
 	metadata_last_lsn = log_copy_scanned_lsn;
@@ -4508,6 +4568,7 @@ static bool xtrabackup_backup_func()
 
 	srv_operation = SRV_OPERATION_BACKUP;
 	log_file_op = backup_file_op;
+	undo_space_trunc = backup_undo_trunc;
 	first_page_init = backup_first_page_op;
 	metadata_to_lsn = 0;
 
@@ -4517,12 +4578,12 @@ fail:
 		if (log_copying_running) {
 			mysql_mutex_lock(&log_sys.mutex);
 			metadata_to_lsn = 1;
-			mysql_cond_broadcast(&log_copying_stop);
+			stop_backup_threads();
 			mysql_mutex_unlock(&log_sys.mutex);
-			stop_backup_threads(true);
 		}
 
 		log_file_op = NULL;
+		undo_space_trunc = NULL;
 		first_page_init = NULL;
 		if (dst_log_file) {
 			ds_close(dst_log_file);
@@ -4558,7 +4619,6 @@ fail:
 	xb_filters_init();
 
 	xb_fil_io_init();
-	srv_n_file_io_threads = srv_n_read_io_threads;
 
 	if (os_aio_init()) {
 		msg("Error: cannot initialize AIO subsystem");
@@ -4680,13 +4740,15 @@ reread_log_header:
 
 	aligned_free(log_hdr_buf);
 	log_copying_running = true;
+
+	mysql_cond_init(0, &log_copying_stop, nullptr);
+
 	/* start io throttle */
-	if(xtrabackup_throttle) {
+	if (xtrabackup_throttle) {
 		io_ticket = xtrabackup_throttle;
 		have_io_watching_thread = true;
 		mysql_cond_init(0, &wait_throttle, nullptr);
-		mysql_thread_create(0, &io_watching_thread_id, nullptr,
-				    io_watching_thread, nullptr);
+		std::thread(io_watching_thread).detach();
 	}
 
 	/* Populate fil_system with tablespaces to copy */
@@ -4714,7 +4776,6 @@ fail_before_log_copying_thread_start:
 
 	DBUG_MARIABACKUP_EVENT("before_innodb_log_copy_thread_started", {});
 
-	mysql_cond_init(0, &log_copying_stop, nullptr);
 	std::thread(log_copying_thread).detach();
 
 	/* FLUSH CHANGED_PAGE_BITMAPS call */
@@ -4812,6 +4873,7 @@ fail_before_log_copying_thread_start:
 
 	innodb_shutdown();
 	log_file_op = NULL;
+	undo_space_trunc = NULL;
 	first_page_init = NULL;
 	pthread_mutex_destroy(&backup_mutex);
 	pthread_cond_destroy(&scanned_lsn_cond);
@@ -5351,7 +5413,8 @@ xtrabackup_apply_delta(
 		offset = ((incremental_buffers * (page_size / 4))
 			 << page_size_shift);
 		if (os_file_read(IORequestRead, src_file,
-				 incremental_buffer, offset, page_size)
+				 incremental_buffer, offset, page_size,
+				 nullptr)
 		    != DB_SUCCESS) {
 			goto error;
 		}
@@ -5384,7 +5447,7 @@ xtrabackup_apply_delta(
 		/* read whole of the cluster */
 		if (os_file_read(IORequestRead, src_file,
 				 incremental_buffer,
-				 offset, page_in_buffer * page_size)
+				 offset, page_in_buffer * page_size, nullptr)
 		    != DB_SUCCESS) {
 			goto error;
 		}
@@ -6012,12 +6075,6 @@ static bool xtrabackup_prepare_func(char** argv)
 
 	fil_system.freeze_space_list = 0;
 
-	/* increase IO threads */
-	if (srv_n_file_io_threads < 10) {
-		srv_n_read_io_threads = 4;
-		srv_n_write_io_threads = 4;
-	}
-
 	msg("Starting InnoDB instance for recovery.");
 
 	msg("mariabackup: Using %lld bytes for buffer pool "
@@ -6085,7 +6142,8 @@ static bool xtrabackup_prepare_func(char** argv)
 	if (ok) {
 		char	filename[FN_REFLEN];
 
-		strcpy(metadata_type, "log-applied");
+		safe_strcpy(metadata_type, sizeof(metadata_type),
+			    "log-applied");
 
 		if(xtrabackup_incremental
 		   && metadata_to_lsn < incremental_to_lsn)

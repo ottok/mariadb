@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2009, 2019, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2015, 2022, MariaDB Corporation.
+Copyright (c) 2015, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -339,6 +339,8 @@ dict_table_schema_check(
 	const dict_table_t* table= dict_sys.load_table(req_schema->table_name);
 
 	if (!table) {
+		if (opt_bootstrap)
+			return DB_TABLE_NOT_FOUND;
 		if (req_schema == &table_stats_schema) {
 			if (innodb_table_stats_not_found_reported) {
 				return DB_STATS_DO_NOT_EXIST;
@@ -1079,6 +1081,60 @@ btr_record_not_null_field_in_rec(
 	}
 }
 
+inline dberr_t
+btr_cur_t::open_random_leaf(rec_offs *&offsets, mem_heap_t *&heap, mtr_t &mtr)
+{
+  ut_ad(!index()->is_spatial());
+  ut_ad(!mtr.get_savepoint());
+
+  mtr_s_lock_index(index(), &mtr);
+
+  if (index()->page == FIL_NULL)
+    return DB_CORRUPTION;
+
+  dberr_t err;
+  auto offset= index()->page;
+  bool merge= false;
+  ulint height= ULINT_UNDEFINED;
+
+  while (buf_block_t *block=
+         btr_block_get(*index(), offset, RW_S_LATCH, merge, &mtr, &err))
+  {
+    page_cur.block= block;
+
+    if (height == ULINT_UNDEFINED)
+    {
+      height= btr_page_get_level(block->page.frame);
+      if (height > BTR_MAX_LEVELS)
+        return DB_CORRUPTION;
+
+      if (height == 0)
+        goto got_leaf;
+    }
+
+    if (height == 0)
+    {
+      mtr.rollback_to_savepoint(0, mtr.get_savepoint() - 1);
+    got_leaf:
+      page_cur.rec= page_get_infimum_rec(block->page.frame);
+      return DB_SUCCESS;
+    }
+
+    if (!--height)
+      merge= !index()->is_clust();
+
+    page_cur_open_on_rnd_user_rec(&page_cur);
+
+    offsets= rec_get_offsets(page_cur.rec, page_cur.index, offsets, 0,
+                             ULINT_UNDEFINED, &heap);
+
+    /* Go to the child node */
+    offset= btr_node_ptr_get_child_page_no(page_cur.rec, offsets);
+  }
+
+  return err;
+}
+
 /** Estimated table level stats from sampled value.
 @param value sampled stats
 @param index index being sampled
@@ -1107,7 +1163,6 @@ std::vector<index_field_stats_t>
 btr_estimate_number_of_different_key_vals(dict_index_t* index,
 					  trx_id_t bulk_trx_id)
 {
-	btr_cur_t	cursor;
 	page_t*		page;
 	rec_t*		rec;
 	ulint		n_cols;
@@ -1222,14 +1277,15 @@ btr_estimate_number_of_different_key_vals(dict_index_t* index,
 	ut_ad(n_sample_pages > 0 && n_sample_pages <= (index->stat_index_size <= 1 ? 1 : index->stat_index_size));
 
 	/* We sample some pages in the index to get an estimate */
+	btr_cur_t cursor;
+	cursor.page_cur.index = index;
 
 	for (ulint i = 0; i < n_sample_pages; i++) {
 		mtr.start();
 
-		if (!btr_cur_open_at_rnd_pos(index, BTR_SEARCH_LEAF,
-					     &cursor, &mtr)
-		    || index->table->bulk_trx_id != bulk_trx_id
-		    || !index->is_readable()) {
+		if (cursor.open_random_leaf(offsets_rec, heap, mtr) !=
+                    DB_SUCCESS
+		    || index->table->bulk_trx_id != bulk_trx_id) {
 			mtr.commit();
 			goto exit_loop;
 		}
@@ -1242,9 +1298,8 @@ btr_estimate_number_of_different_key_vals(dict_index_t* index,
 
 		page = btr_cur_get_page(&cursor);
 
-		rec = page_rec_get_next(page_get_infimum_rec(page));
-		const ulint n_core = page_is_leaf(page)
-			? index->n_core_fields : 0;
+		rec = page_rec_get_next(cursor.page_cur.rec);
+		const ulint n_core = index->n_core_fields;
 
 		if (rec && !page_rec_is_supremum(rec)) {
 			not_empty_flag = 1;
@@ -1560,6 +1615,96 @@ empty_table:
 	return err;
 }
 
+/** Open a cursor at the first page in a tree level.
+@param page_cur  cursor
+@param level     level to search for (0=leaf)
+@param mtr       mini-transaction */
+static dberr_t page_cur_open_level(page_cur_t *page_cur, ulint level,
+                                   mtr_t *mtr)
+{
+  mem_heap_t *heap= nullptr;
+  rec_offs offsets_[REC_OFFS_NORMAL_SIZE];
+  rec_offs *offsets= offsets_;
+  dberr_t err;
+
+  dict_index_t *const index= page_cur->index;
+
+  rec_offs_init(offsets_);
+  ut_ad(level != ULINT_UNDEFINED);
+  ut_ad(mtr->memo_contains_flagged(&index->lock, MTR_MEMO_SX_LOCK));
+  ut_ad(mtr->get_savepoint() == 1);
+
+  uint32_t page= index->page;
+
+  for (ulint height = ULINT_UNDEFINED;; height--)
+  {
+    buf_block_t* block=
+      btr_block_get(*index, page, RW_S_LATCH,
+                    !height && !index->is_clust(), mtr, &err);
+    if (!block)
+      break;
+
+    const uint32_t l= btr_page_get_level(block->page.frame);
+
+    if (height == ULINT_UNDEFINED)
+    {
+      ut_ad(!heap);
+      /* We are in the root node */
+      height= l;
+      if (UNIV_UNLIKELY(height < level))
+        return DB_CORRUPTION;
+    }
+    else if (UNIV_UNLIKELY(height != l) || page_has_prev(block->page.frame))
+    {
+      err= DB_CORRUPTION;
+      break;
+    }
+
+    page_cur_set_before_first(block, page_cur);
+
+    if (height == level)
+      break;
+
+    ut_ad(height);
+
+    if (!page_cur_move_to_next(page_cur))
+    {
+      err= DB_CORRUPTION;
+      break;
+    }
+
+    offsets= rec_get_offsets(page_cur->rec, index, offsets, 0, ULINT_UNDEFINED,
+                             &heap);
+    page= btr_node_ptr_get_child_page_no(page_cur->rec, offsets);
+  }
+
+  if (UNIV_LIKELY_NULL(heap))
+    mem_heap_free(heap);
+
+  /* Release all page latches except the one on the desired page. */
+  const auto end= mtr->get_savepoint();
+  if (end > 1)
+    mtr->rollback_to_savepoint(1, end - 1);
+
+  return err;
+}
+
+/** Open a cursor at the first page in a tree level.
+@param page_cur  cursor
+@param level     level to search for (0=leaf)
+@param mtr       mini-transaction
+@param index     index tree */
+static dberr_t btr_pcur_open_level(btr_pcur_t *pcur, ulint level, mtr_t *mtr,
+                                   dict_index_t *index)
+{
+  pcur->latch_mode= BTR_SEARCH_LEAF;
+  pcur->search_mode= PAGE_CUR_G;
+  pcur->pos_state= BTR_PCUR_IS_POSITIONED;
+  pcur->btr_cur.page_cur.index= index;
+  return page_cur_open_level(&pcur->btr_cur.page_cur, level, mtr);
+}
+
+
 /* @{ Pseudo code about the relation between the following functions
 
 let N = N_SAMPLE_PAGES(index)
@@ -1616,7 +1761,8 @@ dict_stats_analyze_index_level(
 	DEBUG_PRINTF("    %s(table=%s, index=%s, level=" ULINTPF ")\n",
 		     __func__, index->table->name, index->name, level);
 
-	ut_ad(mtr->memo_contains(index->lock, MTR_MEMO_SX_LOCK));
+	*total_recs = 0;
+	*total_pages = 0;
 
 	n_uniq = dict_index_get_n_unique(index);
 
@@ -1649,9 +1795,7 @@ dict_stats_analyze_index_level(
 	/* Position pcur on the leftmost record on the leftmost page
 	on the desired level. */
 
-	if (btr_pcur_open_at_index_side(
-		    true, index, BTR_SEARCH_TREE_ALREADY_S_LATCHED,
-		    &pcur, true, level, mtr) != DB_SUCCESS
+	if (btr_pcur_open_level(&pcur, level, mtr, index) != DB_SUCCESS
 	    || !btr_pcur_move_to_next_on_page(&pcur)) {
 		goto func_exit;
 	}
@@ -1661,20 +1805,9 @@ dict_stats_analyze_index_level(
 	/* The page must not be empty, except when
 	it is the root page (and the whole index is empty). */
 	ut_ad(btr_pcur_is_on_user_rec(&pcur) || page_is_leaf(page));
-	ut_ad(btr_pcur_get_rec(&pcur)
-	      == page_rec_get_next_const(page_get_infimum_rec(page)));
 
 	prev_rec = NULL;
 	prev_rec_is_copied = false;
-
-	/* no records by default */
-	*total_recs = 0;
-
-	*total_pages = 0;
-
-	if (page_has_prev(page) || btr_page_get_level(page) != level) {
-		goto func_exit;
-	}
 
 	if (REC_INFO_MIN_REC_FLAG & rec_get_info_bits(
 		    btr_pcur_get_rec(&pcur), page_is_comp(page))) {
@@ -1728,10 +1861,7 @@ dict_stats_analyze_index_level(
 
 		if (level == 0
 		    && !srv_stats_include_delete_marked
-		    && rec_get_deleted_flag(
-			    rec,
-			    page_is_comp(btr_pcur_get_page(&pcur)))) {
-
+		    && rec_get_deleted_flag(rec, page_rec_is_comp(rec))) {
 			if (rec_is_last_on_page
 			    && !prev_rec_is_copied
 			    && prev_rec != NULL) {
@@ -1811,7 +1941,7 @@ dict_stats_analyze_index_level(
 			records on this level at some point we will jump from
 			one page to the next and then rec and prev_rec will
 			be on different pages and
-			btr_pcur_move_to_next_user_rec() will release the
+			btr_cur_move_to_next_user_rec() will release the
 			latch on the page that prev_rec is on */
 			prev_rec = rec_copy_prefix_to_buf(
 				rec, index, n_uniq,
@@ -1820,7 +1950,7 @@ dict_stats_analyze_index_level(
 
 		} else {
 			/* still on the same page, the next call to
-			btr_pcur_move_to_next_user_rec() will not jump
+			btr_cur_move_to_next_user_rec() will not jump
 			on the next page, we can simply assign pointers
 			instead of copying the records like above */
 
@@ -1891,7 +2021,6 @@ dict_stats_analyze_index_level(
 	}
 #endif /* UNIV_STATS_DEBUG */
 
-	btr_leaf_page_release(btr_pcur_get_block(&pcur), BTR_SEARCH_LEAF, mtr);
 func_exit:
 	ut_free(prev_rec_buf);
 	mem_heap_free(heap);
@@ -2280,7 +2409,6 @@ dict_stats_analyze_index_for_n_prefix(
 		     n_prefix, n_diff_data->n_diff_on_level);
 #endif
 
-	ut_ad(mtr->memo_contains(index->lock, MTR_MEMO_SX_LOCK));
 	ut_ad(n_diff_data->level);
 
 	/* Position pcur on the leftmost record on the leftmost page
@@ -2289,9 +2417,7 @@ dict_stats_analyze_index_for_n_prefix(
 	n_diff_data->n_diff_all_analyzed_pages = 0;
 	n_diff_data->n_external_pages_sum = 0;
 
-	if (btr_pcur_open_at_index_side(true, index,
-					BTR_SEARCH_TREE_ALREADY_S_LATCHED,
-					&pcur, true, n_diff_data->level, mtr)
+	if (btr_pcur_open_level(&pcur, n_diff_data->level, mtr, index)
 	    != DB_SUCCESS
 	    || !btr_pcur_move_to_next_on_page(&pcur)) {
 		return;
@@ -2681,6 +2807,7 @@ empty_index:
 		mtr.commit();
 		mtr.start();
 		mtr_sx_lock_index(index, &mtr);
+		ut_ad(mtr.get_savepoint() == 1);
 		buf_block_t *root = btr_root_block_get(index, RW_S_LATCH,
 						       &mtr, &err);
 		if (!root || root_level != btr_page_get_level(root->page.frame)
@@ -2696,7 +2823,7 @@ empty_index:
 			break;
 		}
 
-		mtr.memo_release(root, MTR_MEMO_PAGE_S_FIX);
+		mtr.rollback_to_savepoint(1);
 
 		/* check whether we should pick the current level;
 		we pick level 1 even if it does not have enough
@@ -2758,6 +2885,7 @@ empty_index:
 				break;
 			}
 
+			mtr.rollback_to_savepoint(1);
 			dict_stats_analyze_index_level(index,
 						       level,
 						       n_diff_on_level,
@@ -2765,7 +2893,7 @@ empty_index:
 						       &total_pages,
 						       n_diff_boundaries,
 						       &mtr);
-
+			mtr.rollback_to_savepoint(1);
 			level_is_analyzed = true;
 
 			if (level == 1
@@ -2880,6 +3008,7 @@ dict_stats_update_persistent(
 	index_stats_t stats = dict_stats_analyze_index(index);
 
 	if (stats.is_bulk_operation()) {
+		dict_stats_empty_table(table, false);
 		return DB_SUCCESS_LOCKED_REC;
 	}
 
@@ -2921,6 +3050,12 @@ dict_stats_update_persistent(
 		table->stats_mutex_unlock();
 		stats = dict_stats_analyze_index(index);
 		table->stats_mutex_lock();
+
+		if (stats.is_bulk_operation()) {
+			table->stats_mutex_unlock();
+			dict_stats_empty_table(table, false);
+			return DB_SUCCESS_LOCKED_REC;
+		}
 
 		index->stat_index_size = stats.index_size;
 		index->stat_n_leaf_pages = stats.n_leaf_pages;
@@ -3995,7 +4130,8 @@ dict_stats_update(
 			or is corrupted, calculate the transient stats */
 
 			if (innodb_table_stats_not_found == false &&
-			    table->stats_error_printed == false) {
+			    table->stats_error_printed == false &&
+			    !opt_bootstrap) {
 				ib::error() << "Fetch of persistent statistics"
 					" requested for table "
 					<< table->name

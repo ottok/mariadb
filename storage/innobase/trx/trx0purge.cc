@@ -424,7 +424,6 @@ static dberr_t trx_purge_free_segment(trx_rseg_t *rseg, fil_addr_t hdr_addr)
       block->fix();
       mtr.commit();
       mtr.start();
-      mtr.flag_modified();
       rseg->latch.wr_lock(SRW_LOCK_CALL);
       rseg_hdr->page.lock.x_lock();
       block->page.lock.x_lock();
@@ -766,11 +765,12 @@ not_free:
         auto block= reinterpret_cast<buf_block_t*>(bpage);
         if (!bpage->lock.x_lock_try())
         {
+        rescan:
           /* Let buf_pool_t::release_freed_page() proceed. */
           mysql_mutex_unlock(&buf_pool.flush_list_mutex);
-          std::this_thread::yield();
+          mysql_mutex_lock(&buf_pool.mutex);
           mysql_mutex_lock(&buf_pool.flush_list_mutex);
-        rescan:
+          mysql_mutex_unlock(&buf_pool.mutex);
           bpage= UT_LIST_GET_LAST(buf_pool.flush_list);
           continue;
         }

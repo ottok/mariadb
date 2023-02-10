@@ -6437,7 +6437,9 @@ DROP TABLE t1;
 --echo # MDEV-24314: create view with derived table without default database
 --echo #
 
-drop database test;
+create database dummy;
+use dummy;
+drop database dummy;
 
 create database db1;
 create table db1.t1 (a int);
@@ -6460,7 +6462,6 @@ drop view db1.v1;
 drop table db1.t1;
 drop database db1;
 
-create database test;
 use test;
 
 --echo #
@@ -6643,6 +6644,15 @@ execute stmt;
 deallocate prepare stmt;
 drop view v1;
 drop table t1;
+
+--echo #
+--echo # MDEV-28696 View created as "select b''; " references invalid table(s) or column(s) or function(s) or definer/invoker of view lack rights to use them
+--echo #
+
+CREATE VIEW v1 as select b'';
+SELECT * FROM v1;
+DROP VIEW v1;
+
 
 --echo #
 --echo # End of 10.3 tests

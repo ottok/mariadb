@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2005, 2019, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2013, 2022, MariaDB Corporation.
+Copyright (c) 2013, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -2128,8 +2128,7 @@ static bool innobase_table_is_empty(const dict_table_t *table,
   bool next_page= false;
 
   mtr.start();
-  if (btr_pcur_open_at_index_side(true, clust_index, BTR_SEARCH_LEAF,
-                                  &pcur, true, 0, &mtr) != DB_SUCCESS)
+  if (pcur.open_leaf(true, clust_index, BTR_SEARCH_LEAF, &mtr) != DB_SUCCESS)
   {
 non_empty:
     mtr.commit();
@@ -2159,10 +2158,11 @@ next_page:
                          &mtr);
     if (!block)
       goto non_empty;
-    btr_leaf_page_release(page_cur_get_block(cur), BTR_SEARCH_LEAF, &mtr);
     page_cur_set_before_first(block, cur);
     if (UNIV_UNLIKELY(!page_cur_move_to_next(cur)))
       goto non_empty;
+    const auto s= mtr.get_savepoint();
+    mtr.rollback_to_savepoint(s - 2, s - 1);
   }
 
   rec= page_cur_get_rec(cur);
@@ -2238,6 +2238,12 @@ ha_innobase::check_if_supported_inplace_alter(
 	}
 
 	update_thd();
+
+	if (!m_prebuilt->table->space) {
+		ib_senderrf(m_user_thd, IB_LOG_LEVEL_WARN,
+			    ER_TABLESPACE_DISCARDED,
+			    table->s->table_name.str);
+	}
 
 	if (is_read_only(!high_level_read_only
 			 && (ha_alter_info->handler_flags & ALTER_OPTIONS)
@@ -2541,6 +2547,11 @@ innodb_instant_alter_column_allowed_reason:
 		        < dict_table_get_n_user_cols(m_prebuilt->table)));
 
 	if (fulltext_indexes && m_prebuilt->table->fts) {
+		/* FTS index of versioned table has row_end, need rebuild */
+		if (table->versioned() != altered_table->versioned()) {
+			need_rebuild= true;
+		}
+
 		/* FULLTEXT indexes are supposed to remain. */
 		/* Disallow DROP INDEX FTS_DOC_ID_INDEX */
 
@@ -3950,6 +3961,8 @@ innobase_fts_check_doc_id_index(
 		/* Check if a unique index with the name of
 		FTS_DOC_ID_INDEX_NAME is being created. */
 
+		const ulint fts_n_uniq= altered_table->versioned() ? 2 : 1;
+
 		for (uint i = 0; i < altered_table->s->keys; i++) {
 			const KEY& key = altered_table->key_info[i];
 
@@ -3959,7 +3972,7 @@ innobase_fts_check_doc_id_index(
 			}
 
 			if ((key.flags & HA_NOSAME)
-			    && key.user_defined_key_parts == 1
+			    && key.user_defined_key_parts == fts_n_uniq
 			    && !strcmp(key.name.str, FTS_DOC_ID_INDEX_NAME)
 			    && !strcmp(key.key_part[0].field->field_name.str,
 				       FTS_DOC_ID_COL_NAME)) {
@@ -3989,7 +4002,7 @@ innobase_fts_check_doc_id_index(
 		}
 
 		if (!dict_index_is_unique(index)
-		    || dict_index_get_n_unique(index) > 1
+		    || dict_index_get_n_unique(index) != table->fts_n_uniq()
 		    || strcmp(index->name, FTS_DOC_ID_INDEX_NAME)) {
 			return(FTS_INCORRECT_DOC_ID_INDEX);
 		}
@@ -4030,6 +4043,7 @@ innobase_fts_check_doc_id_index_in_def(
 {
 	/* Check whether there is a "FTS_DOC_ID_INDEX" in the to be built index
 	list */
+	const uint fts_n_uniq= key_info->table->versioned() ? 2 : 1;
 	for (ulint j = 0; j < n_key; j++) {
 		const KEY*	key = &key_info[j];
 
@@ -4040,7 +4054,7 @@ innobase_fts_check_doc_id_index_in_def(
 		/* Do a check on FTS DOC ID_INDEX, it must be unique,
 		named as "FTS_DOC_ID_INDEX" and on column "FTS_DOC_ID" */
 		if (!(key->flags & HA_NOSAME)
-		    || key->user_defined_key_parts != 1
+		    || key->user_defined_key_parts != fts_n_uniq
 		    || strcmp(key->name.str, FTS_DOC_ID_INDEX_NAME)
 		    || strcmp(key->key_part[0].field->field_name.str,
 			      FTS_DOC_ID_COL_NAME)) {
@@ -4232,13 +4246,22 @@ created_clustered:
 
 	if (add_fts_doc_idx) {
 		index_def_t*	index = indexdef++;
+		uint nfields = 1;
 
+		if (altered_table->versioned())
+			++nfields;
 		index->fields = static_cast<index_field_t*>(
-			mem_heap_alloc(heap, sizeof *index->fields));
-		index->n_fields = 1;
-		index->fields->col_no = fts_doc_id_col;
-		index->fields->prefix_len = 0;
-		index->fields->is_v_col = false;
+			mem_heap_alloc(heap, sizeof(*index->fields) * nfields));
+		index->n_fields = nfields;
+		index->fields[0].col_no = fts_doc_id_col;
+		index->fields[0].prefix_len = 0;
+		index->fields[0].is_v_col = false;
+		if (nfields == 2) {
+			index->fields[1].col_no
+				= altered_table->s->vers.end_fieldno;
+			index->fields[1].prefix_len = 0;
+			index->fields[1].is_v_col = false;
+		}
 		index->ind_type = DICT_UNIQUE;
 		ut_ad(!rebuild
 		      || !add_fts_doc_id
@@ -5847,7 +5870,16 @@ static bool innobase_instant_try(
 	const dict_col_t* old_cols = user_table->cols;
 	DBUG_ASSERT(user_table->n_cols == ctx->old_n_cols);
 
+#ifdef BTR_CUR_HASH_ADAPT
+	/* Acquire the ahi latch to avoid a race condition
+	between ahi access and instant alter table */
+	srw_spin_lock* ahi_latch = btr_search_sys.get_latch(*index);
+	ahi_latch->wr_lock(SRW_LOCK_CALL);
+#endif /* BTR_CUR_HASH_ADAPT */
 	const bool metadata_changed = ctx->instant_column();
+#ifdef BTR_CUR_HASH_ADAPT
+	ahi_latch->wr_unlock();
+#endif /* BTR_CUR_HASH_ADAPT */
 
 	DBUG_ASSERT(index->n_fields >= n_old_fields);
 	/* The table may have been emptied and may have lost its
@@ -6023,8 +6055,7 @@ add_all_virtual:
 	mtr.start();
 	index->set_modified(mtr);
 	btr_pcur_t pcur;
-	dberr_t err = btr_pcur_open_at_index_side(true, index, BTR_MODIFY_TREE,
-						  &pcur, true, 0, &mtr);
+	dberr_t err= pcur.open_leaf(true, index, BTR_MODIFY_TREE, &mtr);
 	if (err != DB_SUCCESS) {
 func_exit:
 		mtr.commit();
@@ -6050,7 +6081,8 @@ func_exit:
 
 	que_thr_t* thr = pars_complete_graph_for_exec(
 		NULL, trx, ctx->heap, NULL);
-	const bool is_root = block->page.id().page_no() == index->page;
+	page_id_t id{block->page.id()};
+	const bool is_root = id.page_no() == index->page;
 
 	if (rec_is_metadata(rec, *index)) {
 		ut_ad(page_rec_is_user_rec(rec));
@@ -6067,8 +6099,10 @@ func_exit:
 		}
 
 		/* Ensure that the root page is in the correct format. */
-		buf_block_t* root = btr_root_block_get(index, RW_X_LATCH,
-						       &mtr, &err);
+		id.set_page_no(index->page);
+		buf_block_t* root = mtr.get_already_latched(
+			id, MTR_MEMO_PAGE_SX_FIX);
+
 		if (UNIV_UNLIKELY(!root)) {
 			goto func_exit;
 		}
@@ -7286,13 +7320,10 @@ error_handling_drop_uncached:
 				goto error_handling;
 			}
 
-			ctx->new_table->fts->dict_locked = true;
-
 			error = innobase_fts_load_stopword(
 				ctx->new_table, ctx->trx,
 				ctx->prebuilt->trx->mysql_thd)
 				? DB_SUCCESS : DB_ERROR;
-			ctx->new_table->fts->dict_locked = false;
 
 			if (error != DB_SUCCESS) {
 				goto error_handling;
@@ -9882,7 +9913,7 @@ innobase_update_foreign_cache(
 
 	err = dict_load_foreigns(user_table->name.m_name,
 				 ctx->col_names, 1, true,
-				 DICT_ERR_IGNORE_NONE,
+				 DICT_ERR_IGNORE_FK_NOKEY,
 				 fk_tables);
 
 	if (err == DB_CANNOT_ADD_CONSTRAINT) {
@@ -10090,6 +10121,7 @@ commit_try_rebuild(
 	ha_innobase_inplace_ctx*ctx,
 	TABLE*			altered_table,
 	const TABLE*		old_table,
+	bool			statistics_exist,
 	trx_t*			trx,
 	const char*		table_name)
 {
@@ -10160,7 +10192,9 @@ commit_try_rebuild(
 		if (error == DB_SUCCESS) {
 			/* The statistics for the surviving indexes will be
 			re-inserted in alter_stats_rebuild(). */
-			error = trx->drop_table_statistics(old_name);
+			if (statistics_exist) {
+				error = trx->drop_table_statistics(old_name);
+			}
 			if (error == DB_SUCCESS) {
 				error = trx->drop_table(*user_table);
 			}
@@ -11242,7 +11276,8 @@ err_index:
 	}
 
 	DBUG_EXECUTE_IF("stats_lock_fail",
-			error = DB_LOCK_WAIT;);
+			error = DB_LOCK_WAIT_TIMEOUT;
+			trx_rollback_for_mysql(trx););
 
 	if (error == DB_SUCCESS) {
 		error = lock_sys_tables(trx);
@@ -11260,6 +11295,18 @@ err_index:
 		if (fts_exist) {
 			purge_sys.resume_FTS();
 		}
+
+		if (trx->state == TRX_STATE_NOT_STARTED) {
+			/* Transaction may have been rolled back
+			due to a lock wait timeout, deadlock,
+			or a KILL statement. So restart the
+			transaction to remove the newly created
+			table or index stubs from data dictionary
+			and table cache in
+			rollback_inplace_alter_table() */
+			trx_start_for_ddl(trx);
+		}
+
 		DBUG_RETURN(true);
 	}
 
@@ -11305,6 +11352,7 @@ fail:
 
 			if (commit_try_rebuild(ha_alter_info, ctx,
 					       altered_table, table,
+					       table_stats && index_stats,
 					       trx,
 					       table_share->table_name.str)) {
 				goto fail;

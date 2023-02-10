@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1996, 2022, Oracle and/or its affiliates.
-Copyright (c) 2014, 2022, MariaDB Corporation.
+Copyright (c) 2014, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -593,8 +593,6 @@ UNIV_INLINE
 bool
 lock_rec_has_to_wait(
 /*=================*/
-	bool		for_locking,
-				/*!< in is called locking or releasing */
 	const trx_t*	trx,	/*!< in: trx of new lock */
 	unsigned	type_mode,/*!< in: precise mode of the new lock
 				to set: LOCK_S or LOCK_X, possibly
@@ -695,22 +693,31 @@ lock_rec_has_to_wait(
 #endif /* HAVE_REPLICATION */
 
 #ifdef WITH_WSREP
-		/* New lock request from a transaction is using unique key
-		scan and this transaction is a wsrep high priority transaction
-		(brute force). If conflicting transaction is also wsrep high
-		priority transaction we should avoid lock conflict because
-		ordering of these transactions is already decided and
-		conflicting transaction will be later replayed. */
-		if (trx->is_wsrep_UK_scan()
-		    && wsrep_thd_is_BF(lock2->trx->mysql_thd, false)) {
-			return false;
-		}
+	/* New lock request from a transaction is using unique key
+	scan and this transaction is a wsrep high priority transaction
+	(brute force). If conflicting transaction is also wsrep high
+	priority transaction we should avoid lock conflict because
+	ordering of these transactions is already decided and
+	conflicting transaction will be later replayed. */
+	if (trx->is_wsrep_UK_scan()
+	    && wsrep_thd_is_BF(lock2->trx->mysql_thd, false)) {
+		return false;
+	}
 
-		/* We very well can let bf to wait normally as other
-		BF will be replayed in case of conflict. For debug
-		builds we will do additional sanity checks to catch
-		unsupported bf wait if any. */
-		ut_d(wsrep_assert_no_bf_bf_wait(lock2, trx));
+	/* if BF-BF conflict, we have to look at write set order */
+	if (trx->is_wsrep() &&
+	   (type_mode & LOCK_MODE_MASK) == LOCK_X &&
+	   (lock2->type_mode & LOCK_MODE_MASK) == LOCK_X &&
+	   wsrep_thd_order_before(trx->mysql_thd,
+				  lock2->trx->mysql_thd)) {
+		return false;
+	}
+
+	/* We very well can let bf to wait normally as other
+	BF will be replayed in case of conflict. For debug
+	builds we will do additional sanity checks to catch
+	unsupported bf wait if any. */
+	ut_d(wsrep_assert_no_bf_bf_wait(lock2, trx));
 #endif /* WITH_WSREP */
 
 	return true;
@@ -748,7 +755,7 @@ lock_has_to_wait(
 	}
 
 	return lock_rec_has_to_wait(
-		false, lock1->trx, lock1->type_mode, lock2,
+		lock1->trx, lock1->type_mode, lock2,
 		lock_rec_get_nth_bit(lock1, PAGE_HEAP_NO_SUPREMUM));
 }
 
@@ -1025,7 +1032,7 @@ static lock_t *lock_rec_other_has_conflicting(unsigned mode,
 
 	for (lock_t* lock = lock_sys_t::get_first(cell, id, heap_no);
 	     lock; lock = lock_rec_get_next(heap_no, lock)) {
-		if (lock_rec_has_to_wait(true, trx, mode, lock, is_supremum)) {
+		if (lock_rec_has_to_wait(trx, mode, lock, is_supremum)) {
 			return(lock);
 		}
 	}
@@ -1602,6 +1609,14 @@ lock_rec_has_to_wait_in_queue(const hash_cell_t &cell, const lock_t *wait_lock)
 		if (heap_no < lock_rec_get_n_bits(lock)
 		    && (p[bit_offset] & bit_mask)
 		    && lock_has_to_wait(wait_lock, lock)) {
+#ifdef WITH_WSREP
+			if (lock->trx->is_wsrep() &&
+			    wsrep_thd_order_before(wait_lock->trx->mysql_thd,
+						   lock->trx->mysql_thd)) {
+				/* don't wait for another BF lock */
+				continue;
+			}
+#endif
 			return(lock);
 		}
 	}
@@ -3934,8 +3949,7 @@ void lock_release(trx_t *trx)
 #ifdef UNIV_DEBUG
   std::set<table_id_t> to_evict;
   if (innodb_evict_tables_on_commit_debug &&
-      !trx->is_recovered && !trx->dict_operation &&
-      !trx->dict_operation_lock_mode)
+      !trx->is_recovered && !dict_sys.locked())
     for (const auto& p : trx->mod_tables)
       if (!p.first->is_temporary())
         to_evict.emplace(p.first->id);

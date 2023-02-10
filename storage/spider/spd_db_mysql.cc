@@ -912,7 +912,7 @@ int spider_db_mbase_result::fetch_table_status(
 #endif
     } else
       stat.create_time = (time_t) 0;
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     {
       struct tm *ts, tmp_ts;
       char buf[80];
@@ -962,7 +962,7 @@ int spider_db_mbase_result::fetch_table_status(
 #endif
     } else
       stat.check_time = (time_t) 0;
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     {
       struct tm *ts, tmp_ts;
       char buf[80];
@@ -1041,7 +1041,7 @@ int spider_db_mbase_result::fetch_table_status(
 #endif
     } else
       stat.create_time = (time_t) 0;
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     {
       struct tm *ts, tmp_ts;
       char buf[80];
@@ -1066,7 +1066,7 @@ int spider_db_mbase_result::fetch_table_status(
 #endif
     } else
       stat.update_time = (time_t) 0;
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     {
       struct tm *ts, tmp_ts;
       char buf[80];
@@ -1091,7 +1091,7 @@ int spider_db_mbase_result::fetch_table_status(
 #endif
     } else
       stat.check_time = (time_t) 0;
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     {
       struct tm *ts, tmp_ts;
       char buf[80];
@@ -4210,7 +4210,7 @@ int spider_db_mariadb_util::append_column_value(ha_spider *spider,
       ptr = tmp_str.get_str();
     } else if (field->type() == MYSQL_TYPE_GEOMETRY)
     {
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
       double xmin, xmax, ymin, ymax;
       float8get(xmin, new_ptr);
       float8get(xmax, new_ptr + 8);
@@ -4367,7 +4367,7 @@ int spider_db_mysql_util::append_column_value(
       }
       tmp_str.length(SIZEOF_STORED_DOUBLE * lcnt);
 */
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
       double xmin, xmax, ymin, ymax;
 /*
       float8store(buf,xmin);
@@ -5717,6 +5717,7 @@ int spider_db_mbase_util::open_item_func(
   int error_num;
   Item *item, **item_list = item_func->arguments();
   Field *field;
+  spider_string tmp_str;
   uint roop_count, item_count = item_func->argument_count(), start_item = 0;
   LEX_CSTRING org_func_name= {SPIDER_SQL_NULL_CHAR_STR,
                               SPIDER_SQL_NULL_CHAR_LEN};
@@ -6175,10 +6176,11 @@ int spider_db_mbase_util::open_item_func(
 
           if (str)
           {
-            char tmp_buf[MAX_FIELD_WIDTH], *tmp_ptr, *tmp_ptr2;
-            spider_string tmp_str(tmp_buf, MAX_FIELD_WIDTH, str->charset());
+            char *tmp_ptr, *tmp_ptr2;
+            DBUG_ASSERT(tmp_str.length() == 0);
+            tmp_str.set_charset(str->charset());
             tmp_str.init_calc_mem(123);
-            tmp_str.length(0);
+            tmp_str.reserve(MAX_FIELD_WIDTH);
             str->length(str->length() - SPIDER_SQL_OPEN_PAREN_LEN);
             if (!merge_func)
             {
@@ -6312,10 +6314,11 @@ int spider_db_mbase_util::open_item_func(
 
           if (str)
           {
-            char tmp_buf[MAX_FIELD_WIDTH], *tmp_ptr, *tmp_ptr2;
-            spider_string tmp_str(tmp_buf, MAX_FIELD_WIDTH, str->charset());
+            char *tmp_ptr, *tmp_ptr2;
+            DBUG_ASSERT(tmp_str.length() == 0);
+            tmp_str.set_charset(str->charset());
             tmp_str.init_calc_mem(124);
-            tmp_str.length(0);
+            tmp_str.reserve(MAX_FIELD_WIDTH);
             str->length(str->length() - SPIDER_SQL_OPEN_PAREN_LEN);
             if (!merge_func)
             {
@@ -6468,10 +6471,11 @@ int spider_db_mbase_util::open_item_func(
 
         if (str)
         {
-          char tmp_buf[MAX_FIELD_WIDTH], *tmp_ptr, *tmp_ptr2;
-          spider_string tmp_str(tmp_buf, MAX_FIELD_WIDTH, str->charset());
+          char *tmp_ptr, *tmp_ptr2;
+          DBUG_ASSERT(tmp_str.length() == 0);
+          tmp_str.set_charset(str->charset());
           tmp_str.init_calc_mem(125);
-          tmp_str.length(0);
+          tmp_str.reserve(MAX_FIELD_WIDTH);
           str->length(str->length() - SPIDER_SQL_OPEN_PAREN_LEN);
           if (!merge_func)
           {

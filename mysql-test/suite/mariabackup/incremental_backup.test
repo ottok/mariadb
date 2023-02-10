@@ -1,5 +1,6 @@
 --source include/have_aria.inc
 --source include/innodb_page_size.inc
+--source include/innodb_undo_tablespaces.inc
 
 # see suite.pm "check for exact values, in case the default changes to be small everywhere"
 if (`select @@max_binlog_stmt_cache_size = 4294963200 and @@innodb_page_size = 65536`) {
@@ -33,7 +34,7 @@ INSERT INTO t VALUES(1);
 
 echo # Create full backup , modify table, then create incremental/differential backup;
 --disable_result_log
-exec $XTRABACKUP --defaults-file=$MYSQLTEST_VARDIR/my.cnf  --backup --parallel=10 --target-dir=$basedir;
+exec $XTRABACKUP --defaults-file=$MYSQLTEST_VARDIR/my.cnf  --backup --parallel=10 --target-dir=$basedir --throttle=1000;
 --enable_result_log
 BEGIN;
 INSERT INTO t VALUES(0);

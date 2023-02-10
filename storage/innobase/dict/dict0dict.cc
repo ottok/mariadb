@@ -2,7 +2,7 @@
 
 Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2012, Facebook Inc.
-Copyright (c) 2013, 2022, MariaDB Corporation.
+Copyright (c) 2013, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -685,8 +685,7 @@ dict_acquire_mdl_shared(dict_table_t *table,
   }
   else
   {
-    ut_ad(dict_sys.frozen());
-    ut_ad(!dict_sys.locked());
+    ut_ad(dict_sys.frozen_not_locked());
     db_len= dict_get_db_name_len(table->name.m_name);
   }
 
@@ -1003,7 +1002,7 @@ void dict_sys_t::lock_wait(SRW_LOCK_ARGS(const char *file, unsigned line))
     latch_ex_wait_start.store(0, std::memory_order_relaxed);
     ut_ad(!latch_readers);
     ut_ad(!latch_ex);
-    ut_d(latch_ex= true);
+    ut_d(latch_ex= pthread_self());
     return;
   }
 
@@ -1021,15 +1020,15 @@ void dict_sys_t::lock_wait(SRW_LOCK_ARGS(const char *file, unsigned line))
   latch.wr_lock(SRW_LOCK_ARGS(file, line));
   ut_ad(!latch_readers);
   ut_ad(!latch_ex);
-  ut_d(latch_ex= true);
+  ut_d(latch_ex= pthread_self());
 }
 
 #ifdef UNIV_PFS_RWLOCK
 ATTRIBUTE_NOINLINE void dict_sys_t::unlock()
 {
-  ut_ad(latch_ex);
+  ut_ad(latch_ex == pthread_self());
   ut_ad(!latch_readers);
-  ut_d(latch_ex= false);
+  ut_d(latch_ex= 0);
   latch.wr_unlock();
 }
 
@@ -1488,6 +1487,7 @@ dict_table_t::rename_tablespace(span<const char> new_name, bool replace) const
     err= DB_TABLESPACE_EXISTS;
   else
   {
+    space->x_lock();
     err= space->rename(path, true, replace);
     if (data_dir)
     {
@@ -1495,6 +1495,7 @@ dict_table_t::rename_tablespace(span<const char> new_name, bool replace) const
         new_name= {name.m_name, strlen(name.m_name)};
       RemoteDatafile::delete_link_file(new_name);
     }
+    space->x_unlock();
   }
 
   ut_free(path);
@@ -2746,17 +2747,6 @@ dict_index_build_internal_fts(
 	return(new_index);
 }
 /*====================== FOREIGN KEY PROCESSING ========================*/
-
-/*********************************************************************//**
-Checks if a table is referenced by foreign keys.
-@return TRUE if table is referenced by a foreign key */
-ibool
-dict_table_is_referenced_by_foreign_key(
-/*====================================*/
-	const dict_table_t*	table)	/*!< in: InnoDB table */
-{
-	return(!table->referenced_set.empty());
-}
 
 /**********************************************************************//**
 Removes a foreign constraint struct from the dictionary cache. */
@@ -4151,9 +4141,9 @@ void dict_set_corrupted(dict_index_t *index, const char *ctx)
 	dfield_set_data(dfield, buf, 8);
 
 	dict_index_copy_types(tuple, sys_index, 2);
+	cursor.page_cur.index = sys_index;
 
-	if (btr_cur_search_to_nth_level(sys_index, 0, tuple, PAGE_CUR_LE,
-					BTR_MODIFY_LEAF, &cursor, &mtr)
+	if (cursor.search_leaf(tuple, PAGE_CUR_LE, BTR_MODIFY_LEAF, &mtr)
 	    != DB_SUCCESS) {
 		goto fail;
 	}
@@ -4226,9 +4216,9 @@ dict_index_set_merge_threshold(
 	dfield_set_data(dfield, buf, 8);
 
 	dict_index_copy_types(tuple, sys_index, 2);
+	cursor.page_cur.index = sys_index;
 
-	if (btr_cur_search_to_nth_level(sys_index, 0, tuple, PAGE_CUR_GE,
-					BTR_MODIFY_LEAF, &cursor, &mtr)
+	if (cursor.search_leaf(tuple, PAGE_CUR_GE, BTR_MODIFY_LEAF, &mtr)
 	    != DB_SUCCESS) {
 		goto func_exit;
 	}

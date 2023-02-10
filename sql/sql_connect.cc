@@ -892,7 +892,7 @@ int thd_set_peer_addr(THD *thd,
     return 1; /* The error is set by my_strdup(). */
   }
   thd->main_security_ctx.host_or_ip = thd->main_security_ctx.ip;
-  if (!(specialflag & SPECIAL_NO_RESOLVE))
+  if (!opt_skip_name_resolve)
   {
     int rc;
 
@@ -1110,7 +1110,6 @@ void setup_connection_thread_globals(THD *thd)
 {
   DBUG_EXECUTE_IF("CONNECT_wait", {
     extern Dynamic_array<MYSQL_SOCKET> listen_sockets;
-    DBUG_ASSERT(listen_sockets.size());
     while (listen_sockets.size())
       my_sleep(1000);
   });
@@ -1271,7 +1270,8 @@ void prepare_new_connection_state(THD* thd)
         and the main Diagnostics Area contains an error condition.
       */
       if (packet_length != packet_error)
-        my_error(ER_NEW_ABORTING_CONNECTION, MYF(0),
+        my_error(ER_NEW_ABORTING_CONNECTION,
+                 (thd->db.str || sctx->user) ? MYF(0) : MYF(ME_WARNING),
                  thd->thread_id,
                  thd->db.str ? thd->db.str : "unconnected",
                  sctx->user ? sctx->user : "unauthenticated",
