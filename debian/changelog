@@ -1,3 +1,10 @@
+mariadb-10.6 (1:10.6.12-0ubuntu0.22.04.1) jammy-security; urgency=medium
+
+  * New upstream version 10.6.12. Includes fix for a major
+    performance/memory consumption issue (MDEV-29988) (LP: #2006882).
+
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 09 Feb 2023 22:57:07 -0800
+
 mariadb-10.6 (1:10.6.11-0ubuntu0.22.04.1) jammy-security; urgency=medium
 
   * SECURITY UPDATE: New upstream version 10.6.11 includes fixes for security
