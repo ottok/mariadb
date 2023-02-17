@@ -1,3 +1,10 @@
+mariadb-10.6 (1:10.6.12-0ubuntu0.22.10.1) kinetic-security; urgency=medium
+
+  * New upstream version 10.6.12. Includes fix for a major
+    performance/memory consumption issue (MDEV-29988) (LP: #2006882).
+
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 16 Feb 2023 22:15:28 -0800
+
 mariadb-10.6 (1:10.6.11-0ubuntu0.22.10.1) kinetic-security; urgency=medium
 
   * New upstream version 10.6.11. Neither 10.6.11 nor 10.6.10 contain any
