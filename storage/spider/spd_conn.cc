@@ -132,7 +132,7 @@ uchar *spider_conn_get_key(
   DBUG_ENTER("spider_conn_get_key");
   *length = conn->conn_key_length;
   DBUG_PRINT("info",("spider conn_kind=%u", conn->conn_kind));
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
   spider_print_keys(conn->conn_key, conn->conn_key_length);
 #endif
   DBUG_RETURN((uchar*) conn->conn_key);
@@ -642,18 +642,25 @@ SPIDER_CONN *spider_create_conn(
     conn->tgt_host = tmp_host;
     memcpy(conn->tgt_host, share->tgt_hosts[link_idx],
       share->tgt_hosts_lengths[link_idx]);
+
     conn->tgt_username_length = share->tgt_usernames_lengths[link_idx];
     conn->tgt_username = tmp_username;
-    memcpy(conn->tgt_username, share->tgt_usernames[link_idx],
-      share->tgt_usernames_lengths[link_idx]);
+    if (conn->tgt_username_length)
+      memcpy(conn->tgt_username, share->tgt_usernames[link_idx],
+             share->tgt_usernames_lengths[link_idx]);
+
     conn->tgt_password_length = share->tgt_passwords_lengths[link_idx];
     conn->tgt_password = tmp_password;
-    memcpy(conn->tgt_password, share->tgt_passwords[link_idx],
-      share->tgt_passwords_lengths[link_idx]);
+    if (conn->tgt_password_length)
+      memcpy(conn->tgt_password, share->tgt_passwords[link_idx],
+             share->tgt_passwords_lengths[link_idx]);
+
     conn->tgt_socket_length = share->tgt_sockets_lengths[link_idx];
     conn->tgt_socket = tmp_socket;
-    memcpy(conn->tgt_socket, share->tgt_sockets[link_idx],
-      share->tgt_sockets_lengths[link_idx]);
+    if (conn->tgt_socket_length)
+      memcpy(conn->tgt_socket, share->tgt_sockets[link_idx],
+             share->tgt_sockets_lengths[link_idx]);
+
     conn->tgt_wrapper_length = share->tgt_wrappers_lengths[link_idx];
     conn->tgt_wrapper = tmp_wrapper;
     memcpy(conn->tgt_wrapper, share->tgt_wrappers[link_idx],
@@ -990,19 +997,19 @@ SPIDER_CONN *spider_get_conn(
   if (conn_kind == SPIDER_CONN_KIND_MYSQL)
   {
 #endif
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     spider_print_keys(conn_key, share->conn_keys_lengths[link_idx]);
 #endif
 #if defined(HS_HAS_SQLCOM) && defined(HAVE_HANDLERSOCKET)
   } else if (conn_kind == SPIDER_CONN_KIND_HS_READ)
   {
     conn_key = share->hs_read_conn_keys[link_idx];
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     spider_print_keys(conn_key, share->hs_read_conn_keys_lengths[link_idx]);
 #endif
   } else {
     conn_key = share->hs_write_conn_keys[link_idx];
-#ifndef DBUG_OFF
+#ifdef DBUG_TRACE
     spider_print_keys(conn_key, share->hs_write_conn_keys_lengths[link_idx]);
 #endif
   }

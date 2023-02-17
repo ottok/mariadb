@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2017, Oracle and/or its affiliates.
-   Copyright (c) 2008, 2022, MariaDB
+   Copyright (c) 2008, 2023, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -1138,7 +1138,7 @@ static bool wsrep_tables_accessible_when_detached(const TABLE_LIST *tables)
     if (get_table_category(&db, &tn)  < TABLE_CATEGORY_INFORMATION)
       return false;
   }
-  return true;
+  return tables != NULL;
 }
 
 static bool wsrep_command_no_result(char command)
@@ -2515,7 +2515,7 @@ void log_slow_statement(THD *thd)
   if ((thd->server_status &
        (SERVER_QUERY_NO_INDEX_USED | SERVER_QUERY_NO_GOOD_INDEX_USED)) &&
       !(thd->query_plan_flags & QPLAN_STATUS) &&
-      !slow_filter_masked(thd, QPLAN_NOT_USING_INDEX))
+      (thd->variables.log_slow_filter & QPLAN_NOT_USING_INDEX))
   {
     thd->query_plan_flags|= QPLAN_NOT_USING_INDEX;
     /* We are always logging no index queries if enabled in filter */
@@ -2800,9 +2800,10 @@ bool sp_process_definer(THD *thd)
   }
   else
   {
-    LEX_USER *d= lex->definer= get_current_user(thd, lex->definer);
+    LEX_USER *d= get_current_user(thd, lex->definer);
     if (!d)
       DBUG_RETURN(TRUE);
+    thd->change_item_tree((Item**)&lex->definer, (Item*)d);
 
     /*
       If the specified definer differs from the current user or role, we
@@ -3689,6 +3690,8 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
           (sql_command_flags[lex->sql_command] & CF_CHANGES_DATA) == 0)    &&
         !wsrep_tables_accessible_when_detached(all_tables)                 &&
         lex->sql_command != SQLCOM_SET_OPTION                              &&
+        lex->sql_command != SQLCOM_CHANGE_DB                               &&
+        !(lex->sql_command == SQLCOM_SELECT && !all_tables)                &&
         !wsrep_is_show_query(lex->sql_command))
     {
       my_message(ER_UNKNOWN_COM_ERROR,
@@ -4208,8 +4211,10 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
 
     WSREP_TO_ISOLATION_BEGIN(first_table->db.str, first_table->table_name.str, NULL);
 
+    Recreate_info recreate_info;
     res= mysql_alter_table(thd, &first_table->db, &first_table->table_name,
-                           &create_info, first_table, &alter_info,
+                           &create_info, first_table,
+                           &recreate_info, &alter_info,
                            0, (ORDER*) 0, 0, lex->if_exists());
     break;
   }
@@ -8824,8 +8829,8 @@ TABLE_LIST *st_select_lex::convert_right_join()
 void st_select_lex::prepare_add_window_spec(THD *thd)
 {
   LEX *lex= thd->lex;
-  lex->save_group_list= group_list;
-  lex->save_order_list= order_list;
+  save_group_list= group_list;
+  save_order_list= order_list;
   lex->win_ref= NULL;
   lex->win_frame= NULL;
   lex->frame_top_bound= NULL;
@@ -8852,8 +8857,8 @@ bool st_select_lex::add_window_def(THD *thd,
                                                       win_part_list_ptr,
                                                       win_order_list_ptr,
                                                       win_frame);
-  group_list= thd->lex->save_group_list;
-  order_list= thd->lex->save_order_list;
+  group_list= save_group_list;
+  order_list= save_order_list;
   if (parsing_place != SELECT_LIST)
   {
     fields_in_window_functions+= win_part_list_ptr->elements +
@@ -8879,8 +8884,8 @@ bool st_select_lex::add_window_spec(THD *thd,
                                                          win_part_list_ptr,
                                                          win_order_list_ptr,
                                                          win_frame);
-  group_list= thd->lex->save_group_list;
-  order_list= thd->lex->save_order_list;
+  group_list= save_group_list;
+  order_list= save_order_list;
   if (parsing_place != SELECT_LIST)
   {
     fields_in_window_functions+= win_part_list_ptr->elements +

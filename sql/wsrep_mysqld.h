@@ -89,6 +89,7 @@ extern ulong       wsrep_running_rollbacker_threads;
 extern bool        wsrep_new_cluster;
 extern bool        wsrep_gtid_mode;
 extern uint32      wsrep_gtid_domain_id;
+extern std::atomic <bool > wsrep_thread_create_failed;
 extern ulonglong   wsrep_mode;
 extern my_bool     wsrep_strict_ddl;
 
@@ -129,7 +130,8 @@ enum enum_wsrep_mode {
   WSREP_MODE_REQUIRED_PRIMARY_KEY= (1ULL << 2),
   WSREP_MODE_REPLICATE_MYISAM= (1ULL << 3),
   WSREP_MODE_REPLICATE_ARIA= (1ULL << 4),
-  WSREP_MODE_DISALLOW_LOCAL_GTID= (1ULL << 5)
+  WSREP_MODE_DISALLOW_LOCAL_GTID= (1ULL << 5),
+  WSREP_MODE_BF_MARIABACKUP= (1ULL << 6)
 };
 
 // Streaming Replication

@@ -129,6 +129,7 @@ xb_fil_cur_open(
 	in case of error */
 	cursor->buf = NULL;
 	cursor->node = NULL;
+	cursor->n_process_batch = 0;
 
 	cursor->space_id = node->space->id;
 
@@ -223,7 +224,7 @@ xb_fil_cur_open(
 	if (!node->space->crypt_data
 	    && os_file_read(IORequestRead,
 			    node->handle, cursor->buf, 0,
-			    cursor->page_size) == DB_SUCCESS) {
+			    cursor->page_size, nullptr) == DB_SUCCESS) {
 		mysql_mutex_lock(&fil_system.mutex);
 		if (!node->space->crypt_data) {
 			node->space->crypt_data = fil_space_read_crypt_data(
@@ -374,6 +375,8 @@ xb_fil_cur_result_t xb_fil_cur_read(xb_fil_cur_t*	cursor,
 		return(XB_FIL_CUR_EOF);
 	}
 
+reinit_buf:
+	cursor->n_process_batch++;
 	if (to_read > (ib_int64_t) cursor->buf_size) {
 		to_read = (ib_int64_t) cursor->buf_size;
 	}
@@ -415,12 +418,30 @@ read_retry:
 	cursor->buf_page_no = static_cast<unsigned>(offset / page_size);
 
 	if (os_file_read(IORequestRead, cursor->file, cursor->buf, offset,
-			  (ulint) to_read) != DB_SUCCESS) {
-		ret = XB_FIL_CUR_ERROR;
-		goto func_exit;
+			 (ulint) to_read, nullptr) != DB_SUCCESS) {
+		if (!srv_is_undo_tablespace(cursor->space_id)) {
+			ret = XB_FIL_CUR_ERROR;
+			goto func_exit;
+		}
+
+		if (cursor->buf_page_no
+		    >= SRV_UNDO_TABLESPACE_SIZE_IN_PAGES) {
+			ret = XB_FIL_CUR_SKIP;
+			goto func_exit;
+		}
+
+		to_read = SRV_UNDO_TABLESPACE_SIZE_IN_PAGES * page_size;
+
+		if (cursor->n_process_batch > 1) {
+			ret = XB_FIL_CUR_ERROR;
+			goto func_exit;
+		}
+
+		space->release();
+		goto reinit_buf;
 	}
 
-	defer = space->is_deferred();
+	defer = UT_LIST_GET_FIRST(space->chain)->deferred;
 	/* check pages for corruption and re-read if necessary. i.e. in case of
 	partially written pages */
 	for (page = cursor->buf, i = 0; i < npages;

@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1997, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2022, MariaDB Corporation.
+Copyright (c) 2017, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -68,7 +68,7 @@ row_undo_ins_remove_clust_rec(
 	dberr_t		err;
 	ulint		n_tries	= 0;
 	mtr_t		mtr;
-	dict_index_t*	index	= node->pcur.btr_cur.index;
+	dict_index_t*	index	= node->pcur.index();
 	table_id_t table_id = 0;
 	const bool dict_locked = node->trx->dict_operation_lock_mode;
 restart:
@@ -207,9 +207,8 @@ retry:
 	} else {
 		index->set_modified(mtr);
 	}
-	ut_a(
-	    node->pcur.restore_position(BTR_MODIFY_TREE | BTR_LATCH_FOR_DELETE,
-	      &mtr) == btr_pcur_t::SAME_ALL);
+	ut_a(node->pcur.restore_position(BTR_PURGE_TREE, &mtr)
+	     == btr_pcur_t::SAME_ALL);
 
 	btr_cur_pessimistic_delete(&err, FALSE, &node->pcur.btr_cur, 0, true,
 				   &mtr);
@@ -234,7 +233,7 @@ func_exit:
 	if (err == DB_SUCCESS && node->rec_type == TRX_UNDO_INSERT_METADATA) {
 		/* When rolling back the very first instant ADD COLUMN
 		operation, reset the root page to the basic state. */
-		err = btr_reset_instant(*index, true, &mtr);
+		btr_reset_instant(*index, true, &mtr);
 	}
 
 	btr_pcur_commit_specify_mtr(&node->pcur, &mtr);
@@ -254,7 +253,7 @@ static MY_ATTRIBUTE((nonnull, warn_unused_result))
 dberr_t
 row_undo_ins_remove_sec_low(
 /*========================*/
-	ulint		mode,	/*!< in: BTR_MODIFY_LEAF or BTR_MODIFY_TREE,
+	btr_latch_mode	mode,	/*!< in: BTR_MODIFY_LEAF or BTR_MODIFY_TREE,
 				depending on whether we wish optimistic or
 				pessimistic descent down the index tree */
 	dict_index_t*	index,	/*!< in: index */
@@ -266,25 +265,38 @@ row_undo_ins_remove_sec_low(
 	mtr_t			mtr;
 	const bool		modify_leaf = mode == BTR_MODIFY_LEAF;
 
+	pcur.btr_cur.page_cur.index = index;
 	row_mtr_start(&mtr, index, !modify_leaf);
 
-	if (modify_leaf) {
-		mode = BTR_MODIFY_LEAF | BTR_ALREADY_S_LATCHED;
+	if (index->is_spatial()) {
+		mode = modify_leaf
+			? btr_latch_mode(BTR_MODIFY_LEAF
+					 | BTR_RTREE_DELETE_MARK
+					 | BTR_RTREE_UNDO_INS)
+			: btr_latch_mode(BTR_PURGE_TREE | BTR_RTREE_UNDO_INS);
+		btr_pcur_get_btr_cur(&pcur)->thr = thr;
+		if (rtr_search(entry, mode, &pcur, &mtr)) {
+			goto func_exit;
+		}
+
+		if (rec_get_deleted_flag(
+			    btr_pcur_get_rec(&pcur),
+			    dict_table_is_comp(index->table))) {
+			ib::error() << "Record found in index " << index->name
+				<< " is deleted marked on insert rollback.";
+			ut_ad(0);
+		}
+		goto found;
+	} else if (modify_leaf) {
+		mode = BTR_MODIFY_LEAF_ALREADY_LATCHED;
 		mtr_s_lock_index(index, &mtr);
 	} else {
-		ut_ad(mode == (BTR_MODIFY_TREE | BTR_LATCH_FOR_DELETE));
-		mtr_sx_lock_index(index, &mtr);
+		ut_ad(mode == BTR_PURGE_TREE);
+		mode = BTR_PURGE_TREE_ALREADY_LATCHED;
+		mtr_x_lock_index(index, &mtr);
 	}
 
-	if (dict_index_is_spatial(index)) {
-		if (modify_leaf) {
-			mode |= BTR_RTREE_DELETE_MARK;
-		}
-		btr_pcur_get_btr_cur(&pcur)->thr = thr;
-		mode |= BTR_RTREE_UNDO_INS;
-	}
-
-	switch (row_search_index_entry(index, entry, mode, &pcur, &mtr)) {
+	switch (row_search_index_entry(entry, mode, &pcur, &mtr)) {
 	case ROW_BUFFERED:
 	case ROW_NOT_DELETED_REF:
 		/* These are invalid outcomes, because the mode passed
@@ -294,15 +306,7 @@ row_undo_ins_remove_sec_low(
 	case ROW_NOT_FOUND:
 		break;
 	case ROW_FOUND:
-		if (dict_index_is_spatial(index)
-		    && rec_get_deleted_flag(
-			    btr_pcur_get_rec(&pcur),
-			    dict_table_is_comp(index->table))) {
-			ib::error() << "Record found in index " << index->name
-				<< " is deleted marked on insert rollback.";
-			ut_ad(0);
-		}
-
+        found:
 		btr_cur_t* btr_cur = btr_pcur_get_btr_cur(&pcur);
 
 		if (modify_leaf) {
@@ -317,6 +321,7 @@ row_undo_ins_remove_sec_low(
 		}
 	}
 
+func_exit:
 	btr_pcur_close(&pcur);
 	mtr_commit(&mtr);
 
@@ -349,9 +354,7 @@ row_undo_ins_remove_sec(
 
 	/* Try then pessimistic descent to the B-tree */
 retry:
-	err = row_undo_ins_remove_sec_low(
-		BTR_MODIFY_TREE | BTR_LATCH_FOR_DELETE,
-		index, entry, thr);
+	err = row_undo_ins_remove_sec_low(BTR_PURGE_TREE, index, entry, thr);
 
 	/* The delete operation may fail if we have little
 	file space left: TODO: easiest to crash the database

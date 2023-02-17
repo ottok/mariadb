@@ -519,6 +519,8 @@ enum enum_vcol_info_type
   VCOL_DEFAULT, VCOL_CHECK_FIELD, VCOL_CHECK_TABLE,
   VCOL_USING_HASH,
   /* Additional types should be added here */
+
+  VCOL_GENERATED_VIRTUAL_INDEXED, // this is never written in .frm
   /* Following is the highest value last   */
   VCOL_TYPE_NONE = 127 // Since the 0 value is already in use
 };
@@ -528,6 +530,7 @@ static inline const char *vcol_type_name(enum_vcol_info_type type)
   switch (type)
   {
   case VCOL_GENERATED_VIRTUAL:
+  case VCOL_GENERATED_VIRTUAL_INDEXED:
   case VCOL_GENERATED_STORED:
     return "GENERATED ALWAYS AS";
   case VCOL_DEFAULT:
@@ -551,11 +554,10 @@ static inline const char *vcol_type_name(enum_vcol_info_type type)
 #define VCOL_FIELD_REF         1
 #define VCOL_NON_DETERMINISTIC 2
 #define VCOL_SESSION_FUNC      4  /* uses session data, e.g. USER or DAYNAME */
-#define VCOL_TIME_FUNC         8
+#define VCOL_TIME_FUNC         8  /* safe for SBR */
 #define VCOL_AUTO_INC         16
 #define VCOL_IMPOSSIBLE       32
-#define VCOL_NOT_VIRTUAL      64  /* Function can't be virtual */
-#define VCOL_CHECK_CONSTRAINT_IF_NOT_EXISTS 128
+#define VCOL_NEXTVAL          64  /* NEXTVAL is not implemented for vcols */
 
 #define VCOL_NOT_STRICTLY_DETERMINISTIC                       \
   (VCOL_NON_DETERMINISTIC | VCOL_TIME_FUNC | VCOL_SESSION_FUNC)
@@ -587,6 +589,7 @@ public:
   bool stored_in_db;
   bool utf8;                                    /* Already in utf8 */
   bool automatic_name;
+  bool if_not_exists;
   Item *expr;
   Lex_ident name;                               /* Name of constraint */
   /* see VCOL_* (VCOL_FIELD_REF, ...) */
@@ -1760,12 +1763,6 @@ public:
     Used by the ALTER TABLE
   */
   virtual bool is_equal(const Column_definition &new_field) const= 0;
-  // Used as double dispatch pattern: calls virtual method of handler
-  virtual bool
-  can_be_converted_by_engine(const Column_definition &new_type) const
-  {
-    return false;
-  }
   /* convert decimal to longlong with overflow check */
   longlong convert_decimal2longlong(const my_decimal *val, bool unsigned_flag,
                                     int *err);
@@ -1833,7 +1830,14 @@ public:
   key_map get_possible_keys();
 
   /* Hash value */
-  virtual void hash(ulong *nr, ulong *nr2);
+  void hash(Hasher *hasher)
+  {
+    if (is_null())
+      hasher->add_null();
+    else
+      hash_not_null(hasher);
+  }
+  virtual void hash_not_null(Hasher *hasher);
 
   /**
     Get the upper limit of the MySQL integral and floating-point type.
@@ -4052,11 +4056,6 @@ public:
   void sql_type(String &str) const override;
   void sql_rpl_type(String*) const override;
   bool is_equal(const Column_definition &new_field) const override;
-  bool can_be_converted_by_engine(const Column_definition &new_type) const
-    override
-  {
-    return table->file->can_convert_string(this, new_type);
-  }
   uchar *pack(uchar *to, const uchar *from, uint max_length) override;
   const uchar *unpack(uchar* to, const uchar *from, const uchar *from_end,
                       uint param_data) override;
@@ -4211,12 +4210,7 @@ public:
                        uchar *new_ptr, uint32 length,
                        uchar *new_null_ptr, uint new_null_bit) override;
   bool is_equal(const Column_definition &new_field) const override;
-  bool can_be_converted_by_engine(const Column_definition &new_type) const
-    override
-  {
-    return table->file->can_convert_varstring(this, new_type);
-  }
-  void hash(ulong *nr, ulong *nr2) override;
+  void hash_not_null(Hasher *hasher) override;
   uint length_size() const override { return length_bytes; }
   void print_key_value(String *out, uint32 length) override;
   Binlog_type_info binlog_type_info() const override;
@@ -4476,6 +4470,7 @@ public:
   bool make_empty_rec_store_default_value(THD *thd, Item *item) override;
   int store(const char *to, size_t length, CHARSET_INFO *charset) override;
   using Field_str::store;
+  void hash_not_null(Hasher *hasher) override;
   double val_real() override;
   longlong val_int() override;
   String *val_str(String *, String *) override;
@@ -4654,11 +4649,6 @@ public:
   uint32 char_length() const override;
   uint32 character_octet_length() const override;
   bool is_equal(const Column_definition &new_field) const override;
-  bool can_be_converted_by_engine(const Column_definition &new_type) const
-    override
-  {
-    return table->file->can_convert_blob(this, new_type);
-  }
   void print_key_value(String *out, uint32 length) override;
   Binlog_type_info binlog_type_info() const override;
 
@@ -5051,7 +5041,7 @@ public:
     if (bit_ptr)
       bit_ptr= ADD_TO_PTR(bit_ptr, ptr_diff, uchar*);
   }
-  void hash(ulong *nr, ulong *nr2) override;
+  void hash_not_null(Hasher *hasher) override;
 
   SEL_ARG *get_mm_leaf(RANGE_OPT_PARAM *param, KEY_PART *key_part,
                        const Item_bool_func *cond,
@@ -5449,7 +5439,7 @@ public:
     Record_addr addr(true);
     return make_field(share, mem_root, &addr, field_name_arg);
   }
-  /* Return true if default is an expression that must be saved explicitely */
+  /* Return true if default is an expression that must be saved explicitly */
   bool has_default_expression();
 
   bool has_default_now_unireg_check() const
@@ -5910,6 +5900,5 @@ ulonglong TABLE::vers_start_id() const
   DBUG_ASSERT(versioned(VERS_TRX_ID));
   return static_cast<ulonglong>(vers_start_field()->val_int());
 }
-
 
 #endif /* FIELD_INCLUDED */

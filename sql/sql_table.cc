@@ -1689,13 +1689,16 @@ err:
   }
   error= thd->is_error();
 
+  if (non_temp_tables_count)
+    query_cache_invalidate3(thd, tables, 0);
+
   /*
     We are always logging drop of temporary tables.
     The reason is to handle the following case:
     - Use statement based replication
     - CREATE TEMPORARY TABLE foo (logged)
     - set row based replication
-    - DROP TEMPORAY TABLE foo    (needs to be logged)
+    - DROP TEMPORARY TABLE foo   (needs to be logged)
     This should be fixed so that we remember if creation of the
     temporary table was logged and only log it if the creation was
     logged.
@@ -1707,7 +1710,6 @@ err:
     if (non_trans_tmp_table_deleted || trans_tmp_table_deleted)
       thd->transaction->stmt.mark_dropped_temp_table();
 
-    query_cache_invalidate3(thd, tables, 0);
     if (!dont_log_query && mysql_bin_log.is_open())
     {
       debug_crash_here("ddl_log_drop_before_binlog");
@@ -3638,7 +3640,7 @@ without_overlaps_err:
         my_error(ER_TOO_LONG_IDENT, MYF(0), check->name.str);
         DBUG_RETURN(TRUE);
       }
-      if (check_expression(check, &check->name, VCOL_CHECK_TABLE))
+      if (check_expression(check, &check->name, VCOL_CHECK_TABLE, alter_info))
         DBUG_RETURN(TRUE);
     }
   }
@@ -5508,6 +5510,9 @@ int mysql_discard_or_import_tablespace(THD *thd,
   if (unlikely(error))
     goto err;
 
+  if (discard)
+    table_list->table->s->tdc->flush(thd, true);
+
   /*
     The 0 in the call below means 'not in a transaction', which means
     immediate invalidation; that is probably what we wish here
@@ -6082,10 +6087,8 @@ remove_key:
 
     while ((check=it++))
     {
-      if (!(check->flags & VCOL_CHECK_CONSTRAINT_IF_NOT_EXISTS) &&
-          check->name.length)
+      if (!check->if_not_exists && check->name.length)
         continue;
-      check->flags= 0;
       for (c= share->field_check_constraints;
            c < share->table_check_constraints ; c++)
       {
@@ -6436,7 +6439,7 @@ static bool fill_alter_inplace_info(THD *thd, TABLE *table, bool varchar,
       bool is_equal= field->is_equal(*new_field);
       if (!is_equal)
       {
-        if (field->can_be_converted_by_engine(*new_field))
+        if (field->table->file->can_convert_nocopy(*field, *new_field))
         {
           /*
             New column type differs from the old one, but storage engine can
@@ -8040,6 +8043,8 @@ mysql_prepare_alter_table(THD *thd, TABLE *table,
           } /* if (def->change.str) */
         } /* while (def) */
       } /* if (part_field_list || subpart_field_list) */
+      // Force reopen because new column name is on thd->mem_root
+      table->mark_table_for_reopen();
     } /* if (part_info) */
 #endif
     // Force reopen because new column name is on thd->mem_root
@@ -9399,6 +9404,7 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
                        const LEX_CSTRING *new_name,
                        HA_CREATE_INFO *create_info,
                        TABLE_LIST *table_list,
+                       Recreate_info *recreate_info,
                        Alter_info *alter_info,
                        uint order_num, ORDER *order, bool ignore,
                        bool if_exists)
@@ -9739,6 +9745,7 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
   if (check_engine(thd, alter_ctx.new_db.str, alter_ctx.new_name.str, create_info))
     DBUG_RETURN(true);
 
+  create_info->vers_check_native();
   if (create_info->vers_info.fix_alter_info(thd, alter_info, create_info, table))
   {
     DBUG_RETURN(true);
@@ -10854,11 +10861,10 @@ end_temporary:
 
   thd->variables.option_bits&= ~OPTION_BIN_COMMIT_OFF;
 
-  my_snprintf(alter_ctx.tmp_buff, sizeof(alter_ctx.tmp_buff),
-              ER_THD(thd, ER_INSERT_INFO),
-	      (ulong) (copied + deleted), (ulong) deleted,
-	      (ulong) thd->get_stmt_da()->current_statement_warn_count());
-  my_ok(thd, copied + deleted, 0L, alter_ctx.tmp_buff);
+  *recreate_info= Recreate_info(copied, deleted);
+  thd->my_ok_with_recreate_info(*recreate_info,
+                                (ulong) thd->get_stmt_da()->
+                                          current_statement_warn_count());
   DEBUG_SYNC(thd, "alter_table_inplace_trans_commit");
   DBUG_RETURN(false);
 
@@ -11367,7 +11373,8 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
     Like mysql_alter_table().
 */
 
-bool mysql_recreate_table(THD *thd, TABLE_LIST *table_list, bool table_copy)
+bool mysql_recreate_table(THD *thd, TABLE_LIST *table_list,
+                          Recreate_info *recreate_info, bool table_copy)
 {
   HA_CREATE_INFO create_info;
   Alter_info alter_info;
@@ -11393,8 +11400,11 @@ bool mysql_recreate_table(THD *thd, TABLE_LIST *table_list, bool table_copy)
       Alter_info::ALTER_TABLE_ALGORITHM_COPY);
 
   bool res= mysql_alter_table(thd, &null_clex_str, &null_clex_str, &create_info,
-                              table_list, &alter_info, 0,
-                              (ORDER *) 0, 0, 0);
+                              table_list, recreate_info, &alter_info, 0,
+                              (ORDER *) 0,
+                              // Ignore duplicate records on REPAIR
+                              thd->lex->sql_command == SQLCOM_REPAIR,
+                              0);
   table_list->next_global= next_table;
   DBUG_RETURN(res);
 }

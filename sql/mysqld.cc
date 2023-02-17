@@ -132,6 +132,8 @@
 
 #include <my_service_manager.h>
 
+#include <source_revision.h>
+
 #define mysqld_charset &my_charset_latin1
 
 
@@ -4012,21 +4014,6 @@ static int init_common_variables()
 
   mysql_real_data_home_len= uint(strlen(mysql_real_data_home));
 
-  if (!opt_abort)
-  {
-    if (IS_SYSVAR_AUTOSIZE(&server_version_ptr))
-      sql_print_information("%s (server %s) starting as process %lu ...",
-                            my_progname, server_version, (ulong) getpid());
-    else
-    {
-      char real_server_version[SERVER_VERSION_LENGTH];
-      set_server_version(real_server_version, sizeof(real_server_version));
-      sql_print_information("%s (server %s as %s) starting as process %lu ...",
-                            my_progname, real_server_version, server_version,
-                            (ulong) getpid());
-    }
-  }
-
   sf_leaking_memory= 0; // no memory leaks from now on
 
 #ifndef EMBEDDED_LIBRARY
@@ -4089,8 +4076,8 @@ static int init_common_variables()
     files= my_set_max_open_files(max_open_files);
     SYSVAR_AUTOSIZE_IF_CHANGED(open_files_limit, files, ulong);
 
-    if (files < wanted_files && global_system_variables.log_warnings)
-      sql_print_warning("Could not increase number of max_open_files to more than %u (request: %u)", files, wanted_files);
+    if (files < max_open_files && global_system_variables.log_warnings)
+      sql_print_warning("Could not increase number of max_open_files to more than %u (request: %u)", files, max_open_files);
 
     /* If we required too much tc_instances than we reduce */
     SYSVAR_AUTOSIZE_IF_CHANGED(tc_instances,
@@ -4879,6 +4866,14 @@ static int init_server_components()
   error_handler_hook= my_message_sql;
   proc_info_hook= set_thd_stage_info;
 
+  /*
+￼    Print source revision hash, as one of the first lines, if not the
+￼    first in error log, for troubleshooting and debugging purposes
+￼  */
+  if (!opt_help)
+    sql_print_information("Starting MariaDB %s source revision %s as process %lu",
+                          server_version, SOURCE_REVISION, (ulong) getpid());
+
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
   /*
     Parsing the performance schema command line option may have reported
@@ -5022,12 +5017,11 @@ static int init_server_components()
     else // full wsrep initialization
     {
       // add basedir/bin to PATH to resolve wsrep script names
-      char* const tmp_path= (char*)my_alloca(strlen(mysql_home) +
-                                             strlen("/bin") + 1);
+      size_t tmp_path_size= strlen(mysql_home) + 5; /* including "/bin" */
+      char* const tmp_path= (char*)my_alloca(tmp_path_size);
       if (tmp_path)
       {
-        strcpy(tmp_path, mysql_home);
-        strcat(tmp_path, "/bin");
+        snprintf(tmp_path, tmp_path_size, "%s/bin", mysql_home);
         wsrep_prepend_PATH(tmp_path);
       }
       else
@@ -5850,8 +5844,9 @@ int mysqld_main(int argc, char **argv)
     char real_server_version[2 * SERVER_VERSION_LENGTH + 10];
 
     set_server_version(real_server_version, sizeof(real_server_version));
-    strcat(real_server_version, "' as '");
-    strcat(real_server_version, server_version);
+    safe_strcat(real_server_version, sizeof(real_server_version), "' as '");
+    safe_strcat(real_server_version, sizeof(real_server_version),
+		server_version);
 
     sql_print_information(ER_DEFAULT(ER_STARTUP), my_progname,
                           real_server_version,
@@ -7019,7 +7014,9 @@ static int show_ssl_get_cipher_list(THD *thd, SHOW_VAR *var, char *buff,
     rpl_semi_sync_master_show_##name
 
 #define DEF_SHOW_FUNC(name, show_type)                                       \
-    static  int SHOW_FNAME(name)(MYSQL_THD thd, SHOW_VAR *var, char *buff)   \
+    static  int SHOW_FNAME(name)(MYSQL_THD thd, SHOW_VAR *var, void *buff,   \
+                                 system_status_var *status_var,              \
+                                 enum_var_type var_type)                     \
     {                                                                        \
       repl_semisync_master.set_export_stats();                                 \
       var->type= show_type;                                                  \
@@ -7296,7 +7293,7 @@ SHOW_VAR status_vars[]= {
   {"Created_tmp_files",	       (char*) &my_tmp_file_created,	SHOW_LONG},
   {"Created_tmp_tables",       (char*) offsetof(STATUS_VAR, created_tmp_tables_), SHOW_LONG_STATUS},
 #ifndef DBUG_OFF
-  {"Debug",                    (char*) &debug_status_func,  SHOW_FUNC},
+  SHOW_FUNC_ENTRY("Debug",     &debug_status_func),
 #endif
   {"Delayed_errors",           (char*) &delayed_insert_errors,  SHOW_LONG},
   {"Delayed_insert_threads",   (char*) &delayed_insert_threads, SHOW_LONG_NOFLUSH},
@@ -7349,7 +7346,7 @@ SHOW_VAR status_vars[]= {
   {"Handler_tmp_write",        (char*) offsetof(STATUS_VAR, ha_tmp_write_count), SHOW_LONG_STATUS},
   {"Handler_update",           (char*) offsetof(STATUS_VAR, ha_update_count), SHOW_LONG_STATUS},
   {"Handler_write",            (char*) offsetof(STATUS_VAR, ha_write_count), SHOW_LONG_STATUS},
-  {"Key",                      (char*) &show_default_keycache, SHOW_FUNC},
+  SHOW_FUNC_ENTRY("Key",       &show_default_keycache),
   {"Last_query_cost",          (char*) offsetof(STATUS_VAR, last_query_cost), SHOW_DOUBLE_STATUS},
 #ifndef DBUG_OFF
   {"malloc_calls",             (char*) &malloc_calls, SHOW_LONG},
@@ -7377,20 +7374,20 @@ SHOW_VAR status_vars[]= {
   {"Rows_read",                (char*) offsetof(STATUS_VAR, rows_read), SHOW_LONGLONG_STATUS},
   {"Rows_tmp_read",            (char*) offsetof(STATUS_VAR, rows_tmp_read), SHOW_LONGLONG_STATUS},
 #ifdef HAVE_REPLICATION
-  {"Rpl_semi_sync_master_status", (char*) &SHOW_FNAME(status), SHOW_FUNC},
-  {"Rpl_semi_sync_master_clients", (char*) &SHOW_FNAME(clients), SHOW_FUNC},
+  SHOW_FUNC_ENTRY("Rpl_semi_sync_master_status", &SHOW_FNAME(status)),
+  SHOW_FUNC_ENTRY("Rpl_semi_sync_master_clients", &SHOW_FNAME(clients)),
   {"Rpl_semi_sync_master_yes_tx", (char*) &rpl_semi_sync_master_yes_transactions, SHOW_LONG},
   {"Rpl_semi_sync_master_no_tx", (char*) &rpl_semi_sync_master_no_transactions, SHOW_LONG},
-  {"Rpl_semi_sync_master_wait_sessions", (char*) &SHOW_FNAME(wait_sessions), SHOW_FUNC},
+  SHOW_FUNC_ENTRY("Rpl_semi_sync_master_wait_sessions", &SHOW_FNAME(wait_sessions)),
   {"Rpl_semi_sync_master_no_times", (char*) &rpl_semi_sync_master_off_times, SHOW_LONG},
   {"Rpl_semi_sync_master_timefunc_failures", (char*) &rpl_semi_sync_master_timefunc_fails, SHOW_LONG},
   {"Rpl_semi_sync_master_wait_pos_backtraverse", (char*) &rpl_semi_sync_master_wait_pos_backtraverse, SHOW_LONG},
-  {"Rpl_semi_sync_master_tx_wait_time", (char*) &SHOW_FNAME(trx_wait_time), SHOW_FUNC},
-  {"Rpl_semi_sync_master_tx_waits", (char*) &SHOW_FNAME(trx_wait_num), SHOW_FUNC},
-  {"Rpl_semi_sync_master_tx_avg_wait_time", (char*) &SHOW_FNAME(avg_trx_wait_time), SHOW_FUNC},
-  {"Rpl_semi_sync_master_net_wait_time", (char*) &SHOW_FNAME(net_wait_time), SHOW_FUNC},
-  {"Rpl_semi_sync_master_net_waits", (char*) &SHOW_FNAME(net_wait_num), SHOW_FUNC},
-  {"Rpl_semi_sync_master_net_avg_wait_time", (char*) &SHOW_FNAME(avg_net_wait_time), SHOW_FUNC},
+  SHOW_FUNC_ENTRY("Rpl_semi_sync_master_tx_wait_time", &SHOW_FNAME(trx_wait_time)),
+  SHOW_FUNC_ENTRY("Rpl_semi_sync_master_tx_waits", &SHOW_FNAME(trx_wait_num)),
+  SHOW_FUNC_ENTRY("Rpl_semi_sync_master_tx_avg_wait_time", &SHOW_FNAME(avg_trx_wait_time)),
+  SHOW_FUNC_ENTRY("Rpl_semi_sync_master_net_wait_time", &SHOW_FNAME(net_wait_time)),
+  SHOW_FUNC_ENTRY("Rpl_semi_sync_master_net_waits", &SHOW_FNAME(net_wait_num)),
+  SHOW_FUNC_ENTRY("Rpl_semi_sync_master_net_avg_wait_time", &SHOW_FNAME(avg_net_wait_time)),
   {"Rpl_semi_sync_master_request_ack", (char*) &rpl_semi_sync_master_request_ack, SHOW_LONGLONG},
   {"Rpl_semi_sync_master_get_ack", (char*)&rpl_semi_sync_master_get_ack, SHOW_LONGLONG},
   {"Rpl_semi_sync_slave_status", (char*) &rpl_semi_sync_slave_status, SHOW_BOOL},
@@ -7514,7 +7511,7 @@ SHOW_VAR status_vars[]= {
   {"wsrep_applier_thread_count", (char*) &wsrep_running_applier_threads, SHOW_LONG_NOFLUSH},
   {"wsrep_rollbacker_thread_count", (char *) &wsrep_running_rollbacker_threads, SHOW_LONG_NOFLUSH},
   {"wsrep_cluster_capabilities", (char*) &wsrep_cluster_capabilities, SHOW_CHAR_PTR},
-  {"wsrep",                    (char*) &wsrep_show_status,       SHOW_FUNC},
+  SHOW_FUNC_ENTRY("wsrep",     &wsrep_show_status),
 #endif
   {NullS, NullS, SHOW_LONG}
 };
@@ -7847,7 +7844,8 @@ static int mysql_init_variables(void)
     }
     else
       my_path(prg_dev, my_progname, "mysql/bin");
-    strcat(prg_dev,"/../");			// Remove 'bin' to get base dir
+    // Remove 'bin' to get base dir
+    safe_strcat(prg_dev, sizeof(prg_dev), "/../");
     cleanup_dirname(mysql_home,prg_dev);
   }
 #else
@@ -8163,12 +8161,6 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
     break;
   case (int) OPT_SKIP_HOST_CACHE:
     opt_specialflag|= SPECIAL_NO_HOST_CACHE;
-    break;
-  case (int) OPT_SKIP_RESOLVE:
-    if ((opt_skip_name_resolve= (argument != disabled_my_option)))
-      opt_specialflag|= SPECIAL_NO_RESOLVE;
-    else
-      opt_specialflag&= ~SPECIAL_NO_RESOLVE;
     break;
   case (int) OPT_WANT_CORE:
     test_flags |= TEST_CORE_ON_SIGNAL;

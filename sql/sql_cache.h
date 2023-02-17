@@ -32,7 +32,7 @@ typedef struct st_changed_table_list CHANGED_TABLE_LIST;
    Can't create new free memory block if unused memory in block less
    then QUERY_CACHE_MIN_ALLOCATION_UNIT.
    if QUERY_CACHE_MIN_ALLOCATION_UNIT == 0 then
-   QUERY_CACHE_MIN_ALLOCATION_UNIT choosed automaticaly
+   QUERY_CACHE_MIN_ALLOCATION_UNIT choosed automatically
 */
 #define QUERY_CACHE_MIN_ALLOCATION_UNIT		512
 
@@ -319,7 +319,7 @@ private:
   Cache_staus m_cache_status;
 
   void free_query_internal(Query_cache_block *point);
-  void invalidate_table_internal(THD *thd, uchar *key, size_t key_length);
+  void invalidate_table_internal(uchar *key, size_t key_length);
 
 protected:
   /*
@@ -375,8 +375,7 @@ protected:
   void invalidate_table(THD *thd, TABLE *table);
   void invalidate_table(THD *thd, uchar *key, size_t  key_length);
   void invalidate_table(THD *thd, Query_cache_block *table_block);
-  void invalidate_query_block_list(THD *thd, 
-                                   Query_cache_block_table *list_root);
+  void invalidate_query_block_list(Query_cache_block_table *list_root);
 
   TABLE_COUNTER_TYPE
     register_tables_from_list(THD *thd, TABLE_LIST *tables_used,

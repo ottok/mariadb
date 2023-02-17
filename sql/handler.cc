@@ -1011,12 +1011,30 @@ void ha_end_backup()
                            PLUGIN_IS_DELETED|PLUGIN_IS_READY, 0);
 }
 
-void handler::log_not_redoable_operation(const char *operation)
+/*
+  Take a lock to block MDL_BACKUP_DDL (used by maria-backup) until
+  the DDL operation is taking place
+*/
+
+bool handler::log_not_redoable_operation(const char *operation)
 {
   DBUG_ENTER("log_not_redoable_operation");
   if (table->s->tmp_table == NO_TMP_TABLE)
   {
+    /*
+      Take a lock to ensure that mariadb-backup will notice the
+      new log entry (and re-copy the table if needed).
+    */
+    THD *thd= table->in_use;
+    MDL_request mdl_backup;
     backup_log_info ddl_log;
+
+    MDL_REQUEST_INIT(&mdl_backup, MDL_key::BACKUP, "", "", MDL_BACKUP_DDL,
+                     MDL_STATEMENT);
+    if (thd->mdl_context.acquire_lock(&mdl_backup,
+                                      thd->variables.lock_wait_timeout))
+      DBUG_RETURN(1);
+
     bzero(&ddl_log, sizeof(ddl_log));
     lex_string_set(&ddl_log.query, operation);
     /*
@@ -1032,7 +1050,7 @@ void handler::log_not_redoable_operation(const char *operation)
     ddl_log.org_table_id=     table->s->tabledef_version;
     backup_log_ddl(&ddl_log);
   }
-  DBUG_VOID_RETURN;
+  DBUG_RETURN(0);
 }
 
 /*
@@ -4534,7 +4552,7 @@ void handler::print_error(int error, myf errflag)
     break;
   case HA_ERR_AUTOINC_ERANGE:
     textno= error;
-    my_error(textno, errflag, table->next_number_field->field_name.str,
+    my_error(textno, errflag, table->found_next_number_field->field_name.str,
              table->in_use->get_stmt_da()->current_row_for_warning());
     DBUG_VOID_RETURN;
     break;
@@ -4680,6 +4698,35 @@ int handler::check_collation_compatibility()
 }
 
 
+int handler::check_long_hash_compatibility() const
+{
+  if (!table->s->old_long_hash_function())
+    return 0;
+  KEY *key= table->key_info;
+  KEY *key_end= key + table->s->keys;
+  for ( ; key < key_end; key++)
+  {
+    if (key->algorithm == HA_KEY_ALG_LONG_HASH)
+    {
+      /*
+        The old (pre-MDEV-27653)  hash function was wrong.
+        So the long hash unique constraint can have some
+        duplicate records. REPAIR TABLE can't fix this,
+        it will fail on a duplicate key error.
+        Only "ALTER IGNORE TABLE .. FORCE" can fix this.
+        So we need to return HA_ADMIN_NEEDS_ALTER here,
+        (not HA_ADMIN_NEEDS_UPGRADE which is used elsewhere),
+        to properly send the error message text corresponding
+        to ER_TABLE_NEEDS_REBUILD (rather than to ER_TABLE_NEEDS_UPGRADE)
+        to the user.
+      */
+      return HA_ADMIN_NEEDS_ALTER;
+    }
+  }
+  return 0;
+}
+
+
 int handler::ha_check_for_upgrade(HA_CHECK_OPT *check_opt)
 {
   int error;
@@ -4716,6 +4763,9 @@ int handler::ha_check_for_upgrade(HA_CHECK_OPT *check_opt)
     return HA_ADMIN_NEEDS_ALTER;
 
   if (unlikely((error= check_collation_compatibility())))
+    return error;
+
+  if (unlikely((error= check_long_hash_compatibility())))
     return error;
     
   return check_for_upgrade(check_opt);
@@ -7320,8 +7370,13 @@ int handler::check_duplicate_long_entries_update(const uchar *new_rec)
       {
         int error;
         field= keypart->field;
-        /* Compare fields if they are different then check for duplicates */
-        if (field->cmp_binary_offset(reclength))
+        /*
+          Compare fields if they are different then check for duplicates
+          cmp_binary_offset cannot differentiate between null and empty string
+          So also check for that too
+        */
+        if((field->is_null(0) != field->is_null(reclength)) ||
+                               field->cmp_binary_offset(reclength))
         {
           if((error= check_duplicate_long_entry_key(new_rec, i)))
             return error;
@@ -8084,7 +8139,6 @@ static Create_field *vers_init_sys_field(THD *thd, const char *field_name, int f
   f->flags= flags | NOT_NULL_FLAG;
   if (integer)
   {
-    DBUG_ASSERT(0); // Not implemented yet
     f->set_handler(&type_handler_vers_trx_id);
     f->length= MY_INT64_NUM_DECIMAL_DIGITS - 1;
     f->flags|= UNSIGNED_FLAG;
@@ -8102,10 +8156,13 @@ static Create_field *vers_init_sys_field(THD *thd, const char *field_name, int f
   return f;
 }
 
-static bool vers_create_sys_field(THD *thd, const char *field_name,
-                                  Alter_info *alter_info, int flags)
+bool Vers_parse_info::create_sys_field(THD *thd, const char *field_name,
+                                       Alter_info *alter_info, int flags)
 {
-  Create_field *f= vers_init_sys_field(thd, field_name, flags, false);
+  DBUG_ASSERT(can_native >= 0); /* Requires vers_check_native() called */
+  Create_field *f= vers_init_sys_field(thd, field_name, flags,
+                                       DBUG_EVALUATE_IF("sysvers_force_trx",
+                                                        (bool) can_native, false));
   if (!f)
     return true;
 
@@ -8129,12 +8186,20 @@ bool Vers_parse_info::fix_implicit(THD *thd, Alter_info *alter_info)
   period= start_end_t(default_start, default_end);
   as_row= period;
 
-  if (vers_create_sys_field(thd, default_start, alter_info, VERS_ROW_START) ||
-      vers_create_sys_field(thd, default_end, alter_info, VERS_ROW_END))
+  if (create_sys_field(thd, default_start, alter_info, VERS_ROW_START) ||
+      create_sys_field(thd, default_end, alter_info, VERS_ROW_END))
   {
     return true;
   }
   return false;
+}
+
+
+void Table_scope_and_contents_source_st::vers_check_native()
+{
+  vers_info.can_native= (db_type->db_type == DB_TYPE_PARTITION_DB ||
+                         ha_check_storage_engine_flag(db_type,
+                                                      HTON_NATIVE_SYS_VERSIONING));
 }
 
 
@@ -8143,9 +8208,12 @@ bool Table_scope_and_contents_source_st::vers_fix_system_fields(
 {
   DBUG_ASSERT(!(alter_info->flags & ALTER_DROP_SYSTEM_VERSIONING));
 
-  DBUG_EXECUTE_IF("sysvers_force", if (!tmp_table()) {
-                  alter_info->flags|= ALTER_ADD_SYSTEM_VERSIONING;
-                  options|= HA_VERSIONED_TABLE; });
+  if (DBUG_EVALUATE_IF("sysvers_force", true, false) ||
+      DBUG_EVALUATE_IF("sysvers_force_trx", true, false))
+  {
+    alter_info->flags|= ALTER_ADD_SYSTEM_VERSIONING;
+    options|= HA_VERSIONED_TABLE;
+  }
 
   if (!vers_info.need_check(alter_info))
     return false;
@@ -8176,7 +8244,9 @@ bool Table_scope_and_contents_source_st::vers_fix_system_fields(
     {
       f->flags|= VERS_UPDATE_UNVERSIONED_FLAG;
     }
-  } // while (Create_field *f= it++)
+  } // while
+
+  vers_check_native();
 
   if (vers_info.fix_implicit(thd, alter_info))
     return true;
@@ -8242,7 +8312,8 @@ bool Vers_parse_info::fix_alter_info(THD *thd, Alter_info *alter_info,
   if (!need_check(alter_info) && !share->versioned)
     return false;
 
-  if (DBUG_EVALUATE_IF("sysvers_force", 0, share->tmp_table))
+  if (DBUG_EVALUATE_IF("sysvers_force", 0, share->tmp_table) ||
+      DBUG_EVALUATE_IF("sysvers_force_trx", 0, share->tmp_table))
   {
     my_error(ER_VERS_NOT_SUPPORTED, MYF(0), "CREATE TEMPORARY TABLE");
     return true;

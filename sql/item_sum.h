@@ -1,7 +1,7 @@
 #ifndef ITEM_SUM_INCLUDED
 #define ITEM_SUM_INCLUDED
 /* Copyright (c) 2000, 2013 Oracle and/or its affiliates.
-   Copyright (c) 2008, 2020, MariaDB Corporation.
+   Copyright (c) 2008, 2023, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -367,7 +367,14 @@ public:
   int8 aggr_level;        /* nesting level of the aggregating subquery       */
   int8 max_arg_level;     /* max level of unbound column references          */
   int8 max_sum_func_level;/* max level of aggregation for embedded functions */
-  bool quick_group;			/* If incremental update of fields */
+
+  /*
+    true  (the default value) means this aggregate function can be computed
+          with TemporaryTableWithPartialSums algorithm (see end_update()).
+    false means this aggregate function needs OrderedGroupBy algorithm (see
+          end_write_group()).
+  */
+  bool quick_group;
   /*
     This list is used by the check for mixing non aggregated fields and
     sum functions in the ONLY_FULL_GROUP_BY_MODE. We save all outer fields
@@ -1090,8 +1097,9 @@ class Item_sum_std final :public Item_sum_variance
   Item *result_item(THD *thd, Field *field) override final;
   LEX_CSTRING func_name_cstring() const override
   {
-    static LEX_CSTRING sum_name= {STRING_WITH_LEN("std(") };
-    return sum_name;
+    static LEX_CSTRING std_name= {STRING_WITH_LEN("std(") };
+    static LEX_CSTRING stddev_samp_name= {STRING_WITH_LEN("stddev_samp(") };
+    return sample ? stddev_samp_name : std_name;
   }
   Item *copy_or_same(THD* thd) override final;
   Item *get_copy(THD *thd) override final

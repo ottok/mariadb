@@ -1254,6 +1254,8 @@ public:
   table_map outer_join;
   /* Bitmap of tables used in the select list items */
   table_map select_list_used_tables;
+  /* Tables that has HA_NON_COMPARABLE_ROWID (does not support rowid) set */
+  table_map not_usable_rowid_map;
   ha_rows  send_records,found_records,join_examined_rows, accepted_rows;
 
   /*
@@ -1420,11 +1422,6 @@ public:
     GROUP/ORDER BY.
   */
   bool simple_order, simple_group;
-  /*
-    Set to 1 if any field in field list has RAND_TABLE set. For example if
-    if one uses RAND() or ROWNUM() in field list
-  */
-  bool rand_table_in_field_list;
 
   /*
     ordered_index_usage is set if an ordered index access
@@ -1457,12 +1454,30 @@ public:
     (set in make_join_statistics())
   */
   bool impossible_where; 
-  List<Item> all_fields; ///< to store all fields that used in query
+
+  /*
+    All fields used in the query processing.
+
+    Initially this is a list of fields from the query's SQL text.
+
+    Then, ORDER/GROUP BY and Window Function code add columns that need to
+    be saved to be available in the post-group-by context. These extra columns
+    are added to the front, because this->all_fields points to the suffix of
+    this list.
+  */
+  List<Item> all_fields;
   ///Above list changed to use temporary table
   List<Item> tmp_all_fields1, tmp_all_fields2, tmp_all_fields3;
   ///Part, shared with list above, emulate following list
   List<Item> tmp_fields_list1, tmp_fields_list2, tmp_fields_list3;
-  List<Item> &fields_list; ///< hold field list passed to mysql_select
+
+  /*
+    The original field list as it was passed to mysql_select(). This refers
+    to select_lex->item_list.
+    CAUTION: this list is a suffix of this->all_fields list, that is, it shares
+    elements with that list!
+  */
+  List<Item> &fields_list;
   List<Item> procedure_fields_list;
   int error;
 
@@ -1791,6 +1806,7 @@ private:
   bool add_having_as_table_cond(JOIN_TAB *tab);
   bool make_aggr_tables_info();
   bool add_fields_for_current_rowid(JOIN_TAB *cur, List<Item> *fields);
+  void free_pushdown_handlers(List<TABLE_LIST>& join_list);
   void init_join_cache_and_keyread();
   bool transform_in_predicates_into_equalities(THD *thd);
   bool transform_all_conds_and_on_exprs(THD *thd,
@@ -1870,15 +1886,10 @@ public:
   */
   enum store_key_result copy(THD *thd)
   {
-    enum store_key_result result;
     enum_check_fields org_count_cuted_fields= thd->count_cuted_fields;
-    sql_mode_t org_sql_mode= thd->variables.sql_mode;
-    thd->variables.sql_mode&= ~(MODE_NO_ZERO_IN_DATE | MODE_NO_ZERO_DATE);
-    thd->variables.sql_mode|= MODE_INVALID_DATES;
-    thd->count_cuted_fields= CHECK_FIELD_IGNORE;
-    result= copy_inner();
+    Use_relaxed_field_copy urfc(to_field->table->in_use);
+    store_key_result result= copy_inner();
     thd->count_cuted_fields= org_count_cuted_fields;
-    thd->variables.sql_mode= org_sql_mode;
     return result;
   }
 
@@ -2470,8 +2481,6 @@ public:
   derived_handler *handler;
 
   Pushdown_derived(TABLE_LIST *tbl, derived_handler *h);
-
-  ~Pushdown_derived();
 
   int execute(); 
 };
