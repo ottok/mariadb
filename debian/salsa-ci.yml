@@ -85,6 +85,23 @@ packaging-fix-checks:
     variables:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
+# Additional builds on arm64 only when in main project as only it has runners
+# available in https://salsa.debian.org/groups/mariadb-team/-/runners
+build arm64:
+  extends: .build-package-arm64
+  rules:
+    - if: $CI_PROJECT_ROOT_NAMESPACE  == "mariadb-team"
+
+build armel:
+  extends: .build-package-armel
+  rules:
+    - if: $CI_PROJECT_ROOT_NAMESPACE  == "mariadb-team"
+
+build armhf:
+  extends: .build-package-armhf
+  rules:
+    - if: $CI_PROJECT_ROOT_NAMESPACE  == "mariadb-team"
+
 build bullseye-backports:
   extends: .build-package
   variables:
