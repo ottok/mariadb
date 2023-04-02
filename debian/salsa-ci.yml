@@ -8,6 +8,7 @@ include:
 variables:
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
   RELEASE: bullseye
+  SALSA_CI_IMAGES_LINTIAN: ${SALSA_CI_IMAGES}/lintian:bullseye
   SALSA_CI_DISABLE_REPROTEST: 1
   SALSA_CI_DISABLE_MISSING_BREAKS: 0
   SALSA_CI_DISABLE_RC_BUGS: 1
@@ -524,7 +525,10 @@ mariadb.org-10.5 to mariadb-10.5 upgrade:
     # The 10.5.9 release is missing mariadb-plugin-columnstore, define all other packages but it to avoid hitting the error:
     #   The following packages have unmet dependencies:
     #   mariadb-plugin-columnstore : Depends: mariadb-server-10.5 (= 1:10.5.8+maria~sid) but 1:10.5.9+maria~sid is to be installed
-    - apt-get install -y libmariadb3 'libmariadb-*' 'libmariadbd*' 'mariadb-c*' 'mariadb-b*' 'mariadb-s*' 'mariadb-t*' 'mariadb-plugin-con*' 'mariadb-plugin-cr*' 'mariadb-plugin-g*' 'mariadb-plugin-m*' 'mariadb-plugin-o*' 'mariadb-plugin-s*'
+    # In 10.5.19 release package mariadb-columnstore-cmapi fails to install in
+    # container due to hard dependency on systemd service, so avoid 'mariadb-c*'
+    # too.
+    - apt-get install -y libmariadb3 'libmariadb-*' 'libmariadbd*' 'mariadb-common' 'mariadb-cl*' 'mariadb-b*' 'mariadb-s*' 'mariadb-t*' 'mariadb-plugin-con*' 'mariadb-plugin-cr*' 'mariadb-plugin-g*' 'mariadb-plugin-m*' 'mariadb-plugin-o*' 'mariadb-plugin-s*'
     # Once 10.5.10 is out, revert back to:
     # Package libmariadbclient-dev from mariadb.org conflicts with libmariadb-dev in Bullseye, so cannot use wildcard that would include it
     #- apt-get install -y 'mariadb*' libmariadb3 'libmariadb-*' 'libmariadbd*'
