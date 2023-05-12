@@ -1,6 +1,7 @@
 libmariadb.so.3 libmariadb3 #MINVER#
 * Build-Depends-Package: libmariadb-dev
  libmariadb_3@libmariadb_3 3.0.0
+ libmariadb_3_3_5@libmariadb_3_3_5 3.3.5
  libmariadbclient_18@libmariadbclient_18 3.0.0
  libmysqlclient_18@libmysqlclient_18 3.0.0
  ma_pvio_register_callback@libmariadb_3 3.0.0
@@ -16,6 +17,9 @@ libmariadb.so.3 libmariadb3 #MINVER#
  mariadb_get_infov@libmariadb_3 3.0.0
  mariadb_reconnect@libmariadb_3 3.0.0
  mariadb_rpl_close@libmariadb_3 3.1.0
+ mariadb_rpl_errno@libmariadb_3_3_5 3.3.5
+ mariadb_rpl_error@libmariadb_3_3_5 3.3.5
+ mariadb_rpl_extract_rows@libmariadb_3_3_5 3.3.5
  mariadb_rpl_fetch@libmariadb_3 3.1.0
  mariadb_rpl_get_optionsv@libmariadb_3 3.1.0
  mariadb_rpl_init_ex@libmariadb_3 3.1.13
