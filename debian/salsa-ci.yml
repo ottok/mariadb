@@ -71,6 +71,9 @@ build native deb amd64:
 build native deb i386:
   extends: .build-package-i386
 
+# Buster only has libfmt 6.1 but 7.0 is required, so backport build for Buster
+# is not possible unless somebody packages libfmt7-dev for Buster.
+
 autopkgtest:
   extends: .test-autopkgtest
   artifacts:
@@ -126,17 +129,6 @@ blhc:
   cat << EOF > /etc/apt/preferences.d/enable-backports-to-satisfy-dependencies
   Package: *
   Pin: release n=bullseye-*
-  Pin-Priority: 500
-  EOF
-  apt-get update -qq
-
-.test-enable-buster-backports-repos: &test-enable-buster-backports-repos |
-  # Enable buster-backports (assumes environment already Debian Buster)
-  echo 'deb http://deb.debian.org/debian buster-backports main' > /etc/apt/sources.list.d/buster-backports.list
-  # Increase default backports priority policy from '100' to '500' so it can actually be used
-  cat << EOF > /etc/apt/preferences.d/enable-backports-to-satisfy-dependencies
-  Package: *
-  Pin: release n=buster-*
   Pin-Priority: 500
   EOF
   apt-get update -qq
@@ -245,35 +237,6 @@ mariadb-10.5 Bullseye upgrade:
     - *test-verify-initial
     - *test-install
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-final
-  variables:
-    GIT_STRATEGY: none
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
-
-mariadb-10.3 with Buster backports upgrade:
-  stage: upgrade extras
-  needs:
-    - job: build buster-backports
-  image: debian:buster
-  artifacts:
-    when: always
-    name: "$CI_BUILD_NAME"
-    paths:
-      - ${WORKING_DIR}/debug
-  script:
-    - *test-prepare-container
-    # Install everything MariaDB 10.3 currently in Debian Buster
-    - apt-get install -y 'default-mysql*' 'mariadb-*' 'libmariadb*'
-    # Verify installation of MariaDB from Buster
-    - *test-verify-initial
-    # Buster backports is needed for liburing1 (>= 0.7) and galera-4 (>= 26.4)
-    - *test-enable-buster-backports-repos
-    - *test-install
-    # mariadb-10.3 in Buster ships a /etc/init.d/mysql so it should continue to work
-    - service mysql status
-    - service mariadb status
     - *test-verify-final
   variables:
     GIT_STRATEGY: none
@@ -746,74 +709,12 @@ mariadb.org-10.5 to mariadb upgrade:
     variables:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
-mariadb.org-10.4 to mariadb with Buster backports upgrade:
-  stage: upgrade extras
-  needs:
-    - job: build buster-backports
-  image: debian:buster
-  artifacts:
-    when: always
-    name: "$CI_BUILD_NAME"
-    paths:
-      - ${WORKING_DIR}/debug
-  script:
-    - *test-prepare-container
-    - apt-get -qq install --no-install-recommends --yes ca-certificates curl
-    - curl -sS https://mariadb.org/mariadb_release_signing_key.asc -o /etc/apt/trusted.gpg.d/mariadb.asc
-    - echo "deb https://archive.mariadb.org/mariadb-10.4/repo/debian buster main" > /etc/apt/sources.list.d/mariadb.list
-    - apt-get update -qq
-    - apt-get install -y mariadb-server-10.4
-    # MariaDB.org version of 10.4 and early 10.5 do not install an init file, so
-    # it must be installed here manually
-    - cp /usr/share/mysql/mysql.init /etc/init.d/mysql; chmod +x /etc/init.d/mysql; service mysql start; sleep 5
-    - *test-verify-initial
-    # Buster backports is needed for liburing1 (>= 0.7) and galera-4 (>= 26.4)
-    - *test-enable-buster-backports-repos
-    - *test-install
-    - sleep 5 # Give the mysql_upgrade a bit of time to complete before querying the server
-    - service mysql status
-    - service mariadb status
-    - *test-verify-final
-  variables:
-    GIT_STRATEGY: none
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
-mariadb.org-10.3 to mariadb with Buster backports upgrade:
-  stage: upgrade extras
-  needs:
-    - job: build bullseye-backports
-  image: debian:bullseye
-  artifacts:
-    when: always
-    name: "$CI_BUILD_NAME"
-    paths:
-      - ${WORKING_DIR}/debug
-  script:
-    - *test-prepare-container
-    - apt-get -qq install --no-install-recommends --yes ca-certificates curl
-    - curl -sS https://mariadb.org/mariadb_release_signing_key.asc -o /etc/apt/trusted.gpg.d/mariadb.asc
-    - echo "deb https://archive.mariadb.org/mariadb-10.3/repo/debian buster main" > /etc/apt/sources.list.d/mariadb.list
-    - apt-get update -qq
-    - apt-get install -y mariadb-server-10.3
-    - *test-verify-initial
-    # Buster backports is needed for liburing1 (>= 0.7) and galera-4 (>= 26.4)
-    - *test-enable-buster-backports-repos
-    - *test-install
-    - service mysql status
-    # Give the mariadb-upgrade plenty of time to complete, otherwise next commands
-    # fail on non-existing mariadb.sys user
-    - sleep 15
-    - *test-verify-final
-  variables:
-    GIT_STRATEGY: none
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+# archive.mariadb.org has for 10.3 and 10.4 only Buster, so we can't test upgrades to
+# 10.9 with only Bullseye builds
 
 # archive.mariadb.org has for 10.2 only Stretch, so we can't test upgrades to
-# 10.6 with only Buster and Bullseye builds
+# 10.9 with only Bullseye builds
 
 mysql.com-5.7 upgrade:
   stage: upgrade extras
