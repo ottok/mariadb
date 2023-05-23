@@ -296,7 +296,7 @@ Breaks: mariadb-client-10.0,
         mariadb-server-10.2,
         mariadb-server-10.3,
         mariadb-server-10.4,
-        mariadb-server-10.5,
+        mariadb-server-10.5 (<< 1:10.11),
         mariadb-server-10.6,
         mysql-client-5.5,
         mysql-client-5.6,
@@ -330,7 +330,7 @@ Replaces: mariadb-client-10.0,
           mariadb-server-10.2,
           mariadb-server-10.3,
           mariadb-server-10.4,
-          mariadb-server-10.5,
+          mariadb-server-10.5 (<< 1:10.11),
           mariadb-server-10.6,
           mysql-client-5.5,
           mysql-client-5.6,
@@ -374,6 +374,7 @@ Breaks: mariadb-client-10.1,
         mariadb-server-10.2,
         mariadb-server-10.3,
         mariadb-server-10.4,
+        mariadb-server-10.5 (<< 1:10.11),
         mariadb-server-core-10.0,
         mariadb-server-core-10.1,
         mariadb-server-core-10.2,
@@ -398,7 +399,7 @@ Replaces: mariadb-client-10.1,
           mariadb-server-10.2,
           mariadb-server-10.3,
           mariadb-server-10.4,
-          mariadb-server-10.5,
+          mariadb-server-10.5 (<< 1:10.11),
           mariadb-server-10.6,
           mariadb-server-core-10.0,
           mariadb-server-core-10.1,
@@ -482,7 +483,7 @@ Breaks: cqrlog (<< 1.9.0-5~),
         mariadb-server-10.2,
         mariadb-server-10.3,
         mariadb-server-10.4,
-        mariadb-server-10.5,
+        mariadb-server-10.5 (<< 1:10.11),
         mariadb-server-10.6,
         mariadb-server-5.5,
         mariadb-tokudb-engine-10.0,
@@ -504,7 +505,7 @@ Replaces: handlersocket-mysql-5.5,
           mariadb-server-10.2,
           mariadb-server-10.3,
           mariadb-server-10.4,
-          mariadb-server-10.5,
+          mariadb-server-10.5 (<< 1:10.11),
           mariadb-server-10.6,
           mariadb-server-5.5,
           mariadb-tokudb-engine-10.0,
@@ -529,6 +530,19 @@ Description: MariaDB database server binaries
  ease of use.
  .
  This package includes the server binaries.
+
+Package: mariadb-server-10.5
+Architecture: any
+Depends: mariadb-server (>= 1:10.11),
+         ${shlibs:Depends}
+Description: MariaDB database server binaries
+ MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
+ server. SQL (Structured Query Language) is the most popular database query
+ language in the world. The main goals of MariaDB are speed, robustness and
+ ease of use.
+ .
+ This package is a transitional package designed to make upgrades from previous
+ MariaDB versions seamless.
 
 Package: mariadb-backup
 Architecture: any
