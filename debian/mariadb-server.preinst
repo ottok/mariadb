@@ -21,6 +21,15 @@ export PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin
 mysql_datadir=/var/lib/mysql
 mysql_upgradedir=/var/lib/mysql-upgrade
 
+MARIADBD_USERS="root"
+
+# Check if user 'mysql' exists before referring to it in pgrep
+# to avoid pgrep erroring on 'invalid user name'
+if id mysql >/dev/null 2>&1
+then
+  MARIADBD_USERS="$MARIADBD_USERS,mysql"
+fi
+
 # Try to stop the server in a sane way. If it does not success let the admin
 # do it himself. No database directories should be removed while the server
 # is running! Another mariadbd in e.g. a different chroot is fine for us.
@@ -28,7 +37,7 @@ stop_server() {
     # Return immediately if there are no mysqld processes running on a host
     # (leave containerized processes with the same name in other namespaces)
     # as there is no point in trying to shutdown in that case.
-    if ! pgrep -x --nslist pid --ns $$ "mysqld|mariadbd" > /dev/null; then return; fi
+    if ! pgrep -x -u "$MARIADBD_USERS" --nslist pid --ns $$ "mysqld|mariadbd" > /dev/null; then return; fi
 
     set +e
     invoke-rc.d mariadb stop
