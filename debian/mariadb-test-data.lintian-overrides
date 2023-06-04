@@ -1,6 +1,9 @@
 # These should be moved, see https://jira.mariadb.org/browse/MDEV-21654
 arch-dependent-file-in-usr-share [usr/share/mysql/mysql-test/suite/plugins/pam/pam_mariadb_mtr.so]
 arch-independent-package-contains-binary-or-object [usr/share/mysql/mysql-test/suite/plugins/pam/pam_mariadb_mtr.so]
+# Duplicate in old Lintian syntax as the FTP of NEW queue still uses it
+arch-dependent-file-in-usr-share usr/share/mysql/mysql-test/suite/plugins/pam/pam_mariadb_mtr.so
+arch-independent-package-contains-binary-or-object usr/share/mysql/mysql-test/suite/plugins/pam/pam_mariadb_mtr.so
 # Intentional for test files
 national-encoding [usr/share/mysql/mysql-test/*]
 # Extra test documentation files that really need to be kept in context in test directory
