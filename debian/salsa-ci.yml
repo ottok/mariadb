@@ -8,7 +8,6 @@ include:
 variables:
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
   RELEASE: bullseye
-  SALSA_CI_IMAGES_LINTIAN: ${SALSA_CI_IMAGES}/lintian:bullseye
   SALSA_CI_DISABLE_REPROTEST: 1
   SALSA_CI_DISABLE_MISSING_BREAKS: 0
   SALSA_CI_DISABLE_RC_BUGS: 1
@@ -16,6 +15,12 @@ variables:
   SALSA_CI_DISABLE_BUILD_PACKAGE_ANY: 1
   GIT_SUBMODULE_STRATEGY: recursive
   SALSA_CI_GBP_BUILDPACKAGE_ARGS: "--git-submodules" # did not apply to extract-sources
+  # Make Lintian image use Bullseye as it does not use ${RELEASE} since
+  # https://salsa.debian.org/salsa-ci-team/pipeline/-/merge_requests/347 and
+  # Lintian v2.115+ has syntax changes about brackets '[]' usage that are too
+  # invasive to fix/use in older distro releases
+  SALSA_CI_IMAGES_LINTIAN: ${SALSA_CI_IMAGES}/lintian:bullseye
+  SALSA_CI_PIUPARTS_PRE_INSTALL_SCRIPT: 'debian/salsa-ci-enable-sec-and-update-repos.sh'
 
 stages:
   - provisioning
@@ -60,14 +65,13 @@ build buster-backports:
 
 build stretch-backports:
   extends: .build-package
-  script:
+  before_script:
     - |
       cat > /etc/apt/sources.list <<EOF
       deb http://archive.debian.org/debian stretch main
       deb http://archive.debian.org/debian-security stretch/updates main
       deb http://archive.debian.org/debian stretch-backports main
       EOF
-    - *autobake-deb-steps
   variables:
     RELEASE: stretch-backports
 
@@ -83,6 +87,12 @@ build i386:
 
 build native deb:
   extends: .build-package
+
+autopkgtest:
+  extends: .test-autopkgtest
+  artifacts:
+    reports:
+      junit: ${WORKING_DIR}/debci/artifacts/mysql-test-run-junit.xml
 
 piuparts:
   extends: .test-piuparts
@@ -124,6 +134,13 @@ blhc:
   # Upgrade minimal stack first
   apt-get update
   apt-get install -y apt
+
+# The official Stretch repository has been deprecated, so use last snapshot instead
+.test-enable-stretch-archive-repos: &test-enable-stretch-archive-repos |
+  cat > /etc/apt/sources.list <<EOF
+  deb http://archive.debian.org/debian stretch main
+  deb http://archive.debian.org/debian-security stretch/updates main
+  EOF
 
 .test-install: &test-install |
   # Install MariaDB built in this commit
@@ -236,6 +253,7 @@ mariadb-10.1 Stretch to mariadb-10.5 upgrade:
     paths:
       - ${WORKING_DIR}/debug
   script:
+    - *test-enable-stretch-archive-repos
     - *test-prepare-container
     # Install almost everything currently in Debian Stretch,
     # omitting libmariadbclient-dev-compat as it would conflict
@@ -408,6 +426,7 @@ default-libmysqlclient-dev Stretch upgrade:
     paths:
       - ${WORKING_DIR}/debug
   script:
+    - *test-enable-stretch-archive-repos
     - *test-prepare-container
     - apt-get install -y pkg-config default-libmysqlclient-dev
     - pkg-config --list-all
@@ -429,6 +448,7 @@ mariadb-connector-c Stretch upgrade:
     paths:
       - ${WORKING_DIR}/debug
   script:
+    - *test-enable-stretch-archive-repos
     - *test-prepare-container
     - apt-get install -y pkg-config libmariadb2 libmariadb-dev libmariadb-dev-compat
     - pkg-config --list-all
@@ -485,12 +505,7 @@ mysql-5.7 Bionic to mariadb-10.5 upgrade:
     paths:
       - ${WORKING_DIR}/debug
   script:
-    - |
-      cat > /etc/apt/sources.list <<EOF
-      deb http://archive.debian.org/debian stretch main
-      deb http://archive.debian.org/debian-security stretch/updates main
-      deb http://archive.debian.org/debian stretch-backports main
-      EOF
+    - *test-enable-stretch-archive-repos
     - *test-prepare-container
     # Add Ubuntu Bionic archive keys and repository
     - apt-get install --no-install-recommends --yes gpg gpg-agent dirmngr ca-certificates # Bare minimal (<4MB) for apt-key to work
@@ -500,9 +515,9 @@ mysql-5.7 Bionic to mariadb-10.5 upgrade:
     - apt-get install -y 'mysql*' 'libmysqlc*'
     - *test-verify-initial
     # Enable backports to make libzstd1, rocksdb-tools
-    - echo "deb http://deb.debian.org/debian stretch-backports main" >> /etc/apt/sources.list.d/backports.list
+    - echo "deb http://archive.debian.org/debian stretch-backports main" >> /etc/apt/sources.list.d/backports.list
     # Enable backports to make galera-4 available
-    - echo "deb http://deb.debian.org/debian stretch-backports-sloppy main" >> /etc/apt/sources.list.d/backports.list && apt-get update
+    - echo "deb http://archive.debian.org/debian stretch-backports-sloppy main" >> /etc/apt/sources.list.d/backports.list && apt-get update
     # Remove plugin that requires libcurl4, not available in Debian Stretch
     - rm mariadb-plugin-s3*.deb
     - *test-install
@@ -637,12 +652,7 @@ mariadb.org-10.2 to mariadb-10.5 upgrade:
     paths:
       - ${WORKING_DIR}/debug
   script:
-    - |
-      cat > /etc/apt/sources.list <<EOF
-      deb http://archive.debian.org/debian stretch main
-      deb http://archive.debian.org/debian-security stretch/updates main
-      deb http://archive.debian.org/debian stretch-backports main
-      EOF
+    - *test-enable-stretch-archive-repos
     - *test-prepare-container
     - apt install -y curl apt-transport-https
     - curl -sS https://mariadb.org/mariadb_release_signing_key.asc -o /etc/apt/trusted.gpg.d/mariadb.asc
@@ -659,9 +669,9 @@ mariadb.org-10.2 to mariadb-10.5 upgrade:
       mysql --defaults-file=/etc/mysql/debian.cnf --table -e "SELECT * FROM mysql.user; SHOW CREATE USER root@localhost;"
       mysql --defaults-file=/etc/mysql/debian.cnf --table -e "SELECT * FROM mysql.plugin; SHOW PLUGINS;"
     # Enable backports to make libzstd1, rocksdb-tools
-    - echo "deb http://deb.debian.org/debian stretch-backports main" >> /etc/apt/sources.list.d/backports.list
+    - echo "deb http://archive.debian.org/debian stretch-backports main" >> /etc/apt/sources.list.d/backports.list
     # Enable backports to make galera-4 available
-    - echo "deb http://deb.debian.org/debian stretch-backports-sloppy main" >> /etc/apt/sources.list.d/backports.list && apt-get update
+    - echo "deb http://archive.debian.org/debian stretch-backports-sloppy main" >> /etc/apt/sources.list.d/backports.list && apt-get update
     # Increase default backports priority policy from '100' to '500' so it can actually be used
     - |
       cat << EOF > /etc/apt/preferences.d/enable-backports-to-satisfy-dependencies
