@@ -61,6 +61,12 @@ build buster-backports:
 build stretch-backports:
   extends: .build-package
   script:
+    - |
+      cat > /etc/apt/sources.list <<EOF
+      deb http://archive.debian.org/debian stretch main
+      deb http://archive.debian.org/debian-security stretch/updates main
+      deb http://archive.debian.org/debian stretch-backports main
+      EOF
     - *autobake-deb-steps
   variables:
     RELEASE: stretch-backports
@@ -479,6 +485,12 @@ mysql-5.7 Bionic to mariadb-10.5 upgrade:
     paths:
       - ${WORKING_DIR}/debug
   script:
+    - |
+      cat > /etc/apt/sources.list <<EOF
+      deb http://archive.debian.org/debian stretch main
+      deb http://archive.debian.org/debian-security stretch/updates main
+      deb http://archive.debian.org/debian stretch-backports main
+      EOF
     - *test-prepare-container
     # Add Ubuntu Bionic archive keys and repository
     - apt-get install --no-install-recommends --yes gpg gpg-agent dirmngr ca-certificates # Bare minimal (<4MB) for apt-key to work
@@ -625,6 +637,12 @@ mariadb.org-10.2 to mariadb-10.5 upgrade:
     paths:
       - ${WORKING_DIR}/debug
   script:
+    - |
+      cat > /etc/apt/sources.list <<EOF
+      deb http://archive.debian.org/debian stretch main
+      deb http://archive.debian.org/debian-security stretch/updates main
+      deb http://archive.debian.org/debian stretch-backports main
+      EOF
     - *test-prepare-container
     - apt install -y curl apt-transport-https
     - curl -sS https://mariadb.org/mariadb_release_signing_key.asc -o /etc/apt/trusted.gpg.d/mariadb.asc
