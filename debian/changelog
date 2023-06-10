@@ -1,3 +1,9 @@
+mariadb (1:10.11.3-1+deb12u1) bookworm; urgency=medium
+
+  * Open new changelog for bookworm testing.
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 10 Jun 2023 09:58:57 -0700
+
 mariadb (1:10.11.3-1) unstable; urgency=medium
 
   * New upstream version 10.11.3. Includes security fixes for

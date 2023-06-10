@@ -8,7 +8,7 @@ include:
 variables:
   BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19 libmariadbd-dev mariadb-common mariadb-client mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-cracklib-password-check mariadb-test mariadb-test-data"
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
-  RELEASE: sid
+  RELEASE: bookworm
   # Reprotest works, but takes very long time and often fails due to timeouts.
   # Thus is is best kept disabled and only occasionally manually enabled to
   # test that reproducibility works, along with atomic reprotest to directly
@@ -17,6 +17,10 @@ variables:
   SALSA_CI_ENABLE_ATOMIC_REPROTEST: 0
   SALSA_CI_DISABLE_MISSING_BREAKS: 0
   SALSA_CI_DISABLE_RC_BUGS: 0
+  # Make Lintian and Piuparts use ${RELEASE} so our commits get tested against
+  # the correct release before making an upload to that release
+  SALSA_CI_IMAGES_LINTIAN: ${SALSA_CI_IMAGES}/lintian:${RELEASE}
+  SALSA_CI_PIUPARTS_PRE_INSTALL_SCRIPT: 'debian/salsa-ci-enable-sec-and-update-repos.sh'
 
 # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
 # timeout (1h) is often not enough
