@@ -440,6 +440,47 @@ mariadb-10.5 and Bullseye upgrade:
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
+mariadb-10.5 with lz compression and Bullseye upgrade:
+  extends: .salsa-ci-template-for-mariadb
+  stage: upgrade MariaDB and distro
+  image: debian:bullseye
+  script:
+    - *test-prepare-container
+    # Install everything MariaDB currently in Debian Bullseye
+    - apt-get install -y mariadb-server
+    # Verify installation of MariaDB from Bullseye
+    - dpkg -l | grep -e "mariadb-server.*10.5"
+    - *test-verify-initial
+    # Create lz compressed InnoDB table
+    - |
+      cat > /etc/mysql/mariadb.conf.d/99-innodb-lz-compression.cnf <<EOF
+      [server]
+      innodb_compression_algorithm=lz4
+      innodb_compression_default=ON
+      EOF
+    - service mariadb restart && sleep 5
+    - |
+      mariadb -e "
+      CREATE DATABASE testcompression;
+      USE testcompression;
+      CREATE TABLE t(a INT PRIMARY KEY) ENGINE=INNODB;
+      INSERT INTO t VALUEs (1);
+      SHOW CREATE TABLE t;
+      SELECT * FROM t;
+      "
+    # Ensure mariadbd will not crash on next shutdown for any reason
+    - service mariadb stop && sleep 5
+    - *test-enable-sid-repos
+    - *test-enable-artifacts-repo
+    - apt install -qq --yes mariadb-server || true
+    # As this is likely to fail, debug status
+    - find /etc/mysql/mariadb.conf.d
+    - cat /etc/mysql/mariadb.conf.d/provider_lz4.*
+    - apt install -qq --yes mariadb-server
+    - *test-full-upgrade
+    - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
+    - *test-verify-final
+
 mariadb-10.3 and Buster upgrade:
   extends: .salsa-ci-template-for-mariadb
   stage: upgrade MariaDB and distro
