@@ -534,7 +534,10 @@ Description: MariaDB database server binaries
 Package: mariadb-server-10.5
 Architecture: any
 Depends: mariadb-server (>= 1:10.11),
+         ${misc:Depends},
          ${shlibs:Depends}
+Section: oldlibs
+Priority: optional
 Description: MariaDB database server binaries
  MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
  server. SQL (Structured Query Language) is the most popular database query
