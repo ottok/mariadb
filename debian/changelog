@@ -1,4 +1,4 @@
-mariadb (1:10.11.4-0+deb12u1) bookworm; urgency=medium
+mariadb (1:10.11.4-0+deb12u2) bookworm; urgency=medium
 
   [ Otto Kekäläinen ]
   * New upstream version 10.11.4. Includes fixes for several severe regressions,
@@ -6,11 +6,12 @@ mariadb (1:10.11.4-0+deb12u1) bookworm; urgency=medium
   * Duplicate selected Lintian overrides in old Lintian syntax for NEW queue
     (this might strictly not be needed for bookworm but does not hurt either)
   * Extend the transitional package metadata referenced below
+  * Bump revision to 'u2' to satisfy Debian FTP queue requirements
 
   [ Andreas Beckmann ]
   * Introduce transitional mariadb-server-10.5 (Closes: #1035949)
 
- -- Otto Kekäläinen <otto@debian.org>  Wed, 02 Aug 2023 08:30:57 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 02 Aug 2023 20:08:31 -0700
 
 mariadb (1:10.11.3-1) unstable; urgency=medium
 
