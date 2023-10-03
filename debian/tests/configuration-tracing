@@ -64,6 +64,9 @@ trace() {
     # In Sid 'Debian n/a', in Bookworm 'Debian 12'
     normalize_value version-comment "Debian RELEASE"
 
+    # Inherits git commit id from latest upstream release and thus not constant
+    normalize_value version-source-revision -
+
     # 32-bit systems (i386, armel, armhf) have lower values
     normalize_value innodb-io-capacity-max 18446744073709551615 # 32-bit: 4294967295
     normalize_value max-binlog-cache-size 18446744073709547520 # 32-bit: 4294963200
