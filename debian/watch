@@ -2,7 +2,7 @@ version=4
 opts=\
 pgpsigurlmangle=s/$/.asc/,\
 uversionmangle=s/-(rc|beta)/$1/,pasv \
-https://archive.mariadb.org/mariadb-10.11.([\d\.]*(?:-beta|-rc)?)/source mariadb-([\d\.]*(?:-beta|-rc)?).tar.gz
+https://archive.mariadb.org/mariadb-10.11.([\d\.]*(?:-beta|-rc)?)/source/ mariadb-([\d\.]*(?:-beta|-rc)?).tar.gz
 
 # String "-10.11." needs to be in path as MariaDB releases several series in
 # parallel (e.g 10.11, 10.4, 10.3 etc) and uscan should check for updates only
