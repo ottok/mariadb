@@ -6,7 +6,6 @@ mariadb (1:10.11.4-1~deb12u1) bookworm; urgency=medium
   * Duplicate selected Lintian overrides in old Lintian syntax for NEW queue
     (this might strictly not be needed for bookworm but does not hurt either)
   * Extend the transitional package metadata referenced below
-  * Bump revision to 'u2' to satisfy Debian FTP queue requirements
 
   [ Andreas Beckmann ]
   * Introduce transitional mariadb-server-10.5 (Closes: #1035949)
