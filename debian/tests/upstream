@@ -62,15 +62,6 @@ then
   echo "main.failed_auth_unixsocket : Test returns wrong exit code on armhf and i386 (but only in debci) https://jira.mariadb.org/browse/MDEV-23933" >> $MTR_SKIP_TEST_LIST
 fi
 
-# Temporary workaround to ensure critical MariaDB uploads targeting Debian 13
-# "Bookworm" don't get stuck on irrelevant lxcfs issue
-# https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1036818
-if [ "$ARCH" = "armhf" ] || [ "$ARCH" = "armel" ]
-then
-  echo "run: skipped on armhf and armel due to Bug#1036818"
-  exit 0
-fi
-
 # Store skipped test list in artifacts so it can be viewed while debugging
 # failed autopkgtest runs
 cp -v $MTR_SKIP_TEST_LIST $AUTOPKGTEST_ARTIFACTS
