@@ -198,7 +198,7 @@ Breaks: mariadb-client-10.0,
         mariadb-client-core-10.6,
         mariadb-client-core-5.5,
         mariadb-server-10.0,
-        mariadb-server-10.1,
+        mariadb-server-10.1 (<< 1:10.11),
         mariadb-server-core (<< ${source:Version}),
         mariadb-server-core-10.3,
         mariadb-server-core-10.4,
@@ -229,7 +229,7 @@ Replaces: mariadb-client-10.0,
           mariadb-client-core-10.6,
           mariadb-client-core-5.5,
           mariadb-server-10.0,
-          mariadb-server-10.1,
+          mariadb-server-10.1 (<< 1:10.11),
           mariadb-server-core (<< ${source:Version}),
           mariadb-server-core-10.3,
           mariadb-server-core-10.4,
@@ -291,13 +291,13 @@ Breaks: mariadb-client-10.0,
         mariadb-client-core-10.5,
         mariadb-client-core-10.6,
         mariadb-server (<< ${source:Version}),
-        mariadb-server-10.0,
-        mariadb-server-10.1,
-        mariadb-server-10.2,
-        mariadb-server-10.3,
-        mariadb-server-10.4,
+        mariadb-server-10.0 (<< 1:10.11),
+        mariadb-server-10.1 (<< 1:10.11),
+        mariadb-server-10.2 (<< 1:10.11),
+        mariadb-server-10.3 (<< 1:10.11),
+        mariadb-server-10.4 (<< 1:10.11),
         mariadb-server-10.5 (<< 1:10.11),
-        mariadb-server-10.6,
+        mariadb-server-10.6 (<< 1:10.11),
         mysql-client-5.5,
         mysql-client-5.6,
         mysql-client-5.7,
@@ -325,13 +325,13 @@ Replaces: mariadb-client-10.0,
           mariadb-client-core-10.5,
           mariadb-client-core-10.6,
           mariadb-server (<< ${source:Version}),
-          mariadb-server-10.0,
-          mariadb-server-10.1,
-          mariadb-server-10.2,
-          mariadb-server-10.3,
-          mariadb-server-10.4,
+          mariadb-server-10.0 (<< 1:10.11),
+          mariadb-server-10.1 (<< 1:10.11),
+          mariadb-server-10.2 (<< 1:10.11),
+          mariadb-server-10.3 (<< 1:10.11),
+          mariadb-server-10.4 (<< 1:10.11),
           mariadb-server-10.5 (<< 1:10.11),
-          mariadb-server-10.6,
+          mariadb-server-10.6 (<< 1:10.11),
           mysql-client-5.5,
           mysql-client-5.6,
           mysql-client-5.7,
@@ -369,12 +369,13 @@ Conflicts: mariadb-galera-server-5.5,
            mysql-server-8.0,
            virtual-mysql-server-core
 Breaks: mariadb-client-10.1,
-        mariadb-server-10.0,
-        mariadb-server-10.1,
-        mariadb-server-10.2,
-        mariadb-server-10.3,
-        mariadb-server-10.4,
+        mariadb-server-10.0 (<< 1:10.11),
+        mariadb-server-10.1 (<< 1:10.11),
+        mariadb-server-10.2 (<< 1:10.11),
+        mariadb-server-10.3 (<< 1:10.11),
+        mariadb-server-10.4 (<< 1:10.11),
         mariadb-server-10.5 (<< 1:10.11),
+        mariadb-server-10.6 (<< 1:10.11),
         mariadb-server-core-10.0,
         mariadb-server-core-10.1,
         mariadb-server-core-10.2,
@@ -394,13 +395,13 @@ Breaks: mariadb-client-10.1,
         percona-xtradb-cluster-server-5.7
 Replaces: mariadb-client-10.1,
           mariadb-server (<< ${source:Version}),
-          mariadb-server-10.0,
-          mariadb-server-10.1,
-          mariadb-server-10.2,
-          mariadb-server-10.3,
-          mariadb-server-10.4,
+          mariadb-server-10.0 (<< 1:10.11),
+          mariadb-server-10.1 (<< 1:10.11),
+          mariadb-server-10.2 (<< 1:10.11),
+          mariadb-server-10.3 (<< 1:10.11),
+          mariadb-server-10.4 (<< 1:10.11),
           mariadb-server-10.5 (<< 1:10.11),
-          mariadb-server-10.6,
+          mariadb-server-10.6 (<< 1:10.11),
           mariadb-server-core-10.0,
           mariadb-server-core-10.1,
           mariadb-server-core-10.2,
@@ -478,13 +479,13 @@ Breaks: cqrlog (<< 1.9.0-5~),
         mariadb-galera-server,
         mariadb-galera-server-10.0,
         mariadb-galera-server-5.5,
-        mariadb-server-10.0,
-        mariadb-server-10.1,
-        mariadb-server-10.2,
-        mariadb-server-10.3,
-        mariadb-server-10.4,
+        mariadb-server-10.0 (<< 1:10.11),
+        mariadb-server-10.1 (<< 1:10.11),
+        mariadb-server-10.2 (<< 1:10.11),
+        mariadb-server-10.3 (<< 1:10.11),
+        mariadb-server-10.4 (<< 1:10.11),
         mariadb-server-10.5 (<< 1:10.11),
-        mariadb-server-10.6,
+        mariadb-server-10.6 (<< 1:10.11),
         mariadb-server-5.5,
         mariadb-tokudb-engine-10.0,
         mariadb-tokudb-engine-10.1,
@@ -500,13 +501,13 @@ Replaces: handlersocket-mysql-5.5,
           mariadb-galera-server,
           mariadb-galera-server-10.0,
           mariadb-galera-server-5.5,
-          mariadb-server-10.0,
-          mariadb-server-10.1,
-          mariadb-server-10.2,
-          mariadb-server-10.3,
-          mariadb-server-10.4,
+          mariadb-server-10.0 (<< 1:10.11),
+          mariadb-server-10.1 (<< 1:10.11),
+          mariadb-server-10.2 (<< 1:10.11),
+          mariadb-server-10.3 (<< 1:10.11),
+          mariadb-server-10.4 (<< 1:10.11),
           mariadb-server-10.5 (<< 1:10.11),
-          mariadb-server-10.6,
+          mariadb-server-10.6 (<< 1:10.11),
           mariadb-server-5.5,
           mariadb-tokudb-engine-10.0,
           mariadb-tokudb-engine-10.1,
@@ -531,6 +532,20 @@ Description: MariaDB database server binaries
  .
  This package includes the server binaries.
 
+Package: mariadb-server-10.6
+Architecture: any
+Depends: mariadb-server (>= 1:10.11),
+         ${shlibs:Depends}
+Priority: optional
+Description: MariaDB database server binaries (transitional dummy package)
+ MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
+ server. SQL (Structured Query Language) is the most popular database query
+ language in the world. The main goals of MariaDB are speed, robustness and
+ ease of use.
+ .
+ This package is a transitional dummy package designed to make upgrades from
+ previous MariaDB versions seamless (mainly Ubuntu 22.04 Jammy).
+
 Package: mariadb-server-10.5
 Architecture: any
 Depends: mariadb-server (>= 1:10.11),
@@ -542,8 +557,38 @@ Description: MariaDB database server binaries (transitional dummy package)
  language in the world. The main goals of MariaDB are speed, robustness and
  ease of use.
  .
- This package is a transitional dummy package designed to make upgrades
- from previous MariaDB versions seamless.
+ This package is a transitional dummy package designed to make upgrades from
+ previous MariaDB versions seamless (mainly Debian 11 Bullseye).
+
+Package: mariadb-server-10.3
+Architecture: any
+Depends: mariadb-server (>= 1:10.11),
+         ${shlibs:Depends}
+Priority: optional
+Description: MariaDB database server binaries (transitional dummy package)
+ MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
+ server. SQL (Structured Query Language) is the most popular database query
+ language in the world. The main goals of MariaDB are speed, robustness and
+ ease of use.
+ .
+ This package is a transitional dummy package designed to make upgrades from
+ previous MariaDB versions seamless (mainly Debian 10 Buster and Ubuntu 20.04
+ Focal).
+
+Package: mariadb-server-10.1
+Architecture: any
+Depends: mariadb-server (>= 1:10.11),
+         ${shlibs:Depends}
+Priority: optional
+Description: MariaDB database server binaries (transitional dummy package)
+ MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
+ server. SQL (Structured Query Language) is the most popular database query
+ language in the world. The main goals of MariaDB are speed, robustness and
+ ease of use.
+ .
+ This package is a transitional dummy package designed to make upgrades from
+ previous MariaDB versions seamless (mainly Debian 11 Stretch and Ubuntu 18.04
+ Bionic).
 
 Package: mariadb-backup
 Architecture: any
@@ -578,11 +623,11 @@ Conflicts: mariadb-connect-engine-10.0,
 Breaks: mariadb-connect-engine-10.0,
         mariadb-connect-engine-10.1,
         mariadb-server-10.0,
-        mariadb-server-10.1
+        mariadb-server-10.1 (<< 1:10.11)
 Replaces: mariadb-connect-engine-10.0,
           mariadb-connect-engine-10.1,
           mariadb-server-10.0,
-          mariadb-server-10.1
+          mariadb-server-10.1 (<< 1:10.11)
 Description: Connect storage engine for MariaDB server
  Connect engine supports a number of file formats (dbf, xml, txt, bin, etc),
  connections to ODBC tables and remote MySQL tables, as well as a number of
@@ -628,11 +673,11 @@ Conflicts: mariadb-oqgraph-engine-10.0,
 Breaks: mariadb-oqgraph-engine-10.0,
         mariadb-oqgraph-engine-10.1,
         mariadb-server-10.0,
-        mariadb-server-10.1
+        mariadb-server-10.1 (<< 1:10.11)
 Replaces: mariadb-oqgraph-engine-10.0,
           mariadb-oqgraph-engine-10.1,
           mariadb-server-10.0,
-          mariadb-server-10.1
+          mariadb-server-10.1 (<< 1:10.11)
 Description: OQGraph storage engine for MariaDB server
  The OQGraph engine is a computation engine plugin for handling hierarchies
  (trees) and graphs (friend-of-a-friend, etc) cleanly through standard SQL.
@@ -644,9 +689,9 @@ Depends: mariadb-server (= ${server:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Breaks: mariadb-server-10.0,
-        mariadb-server-10.1
+        mariadb-server-10.1 (<< 1:10.11)
 Replaces: mariadb-server-10.0,
-          mariadb-server-10.1
+          mariadb-server-10.1 (<< 1:10.11)
 Description: Mroonga storage engine for MariaDB server
  Mroonga (formerly named Groonga Storage Engine) is a storage engine that
  provides fast CJK-ready full text searching using column store.
@@ -658,9 +703,9 @@ Depends: mariadb-server (= ${server:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Breaks: mariadb-server-10.0,
-        mariadb-server-10.1
+        mariadb-server-10.1 (<< 1:10.11)
 Replaces: mariadb-server-10.0,
-          mariadb-server-10.1
+          mariadb-server-10.1 (<< 1:10.11)
 Description: Spider storage engine for MariaDB server
  The Spider storage engine with built-in sharding features. It supports
  partitioning and xa transactions, and allows tables of different MariaDB server
