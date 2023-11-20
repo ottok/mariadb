@@ -1,8 +1,13 @@
-mariadb (1:10.11.5-4) UNRELEASED; urgency=medium
+mariadb (1:10.11.6-1) UNRELEASED; urgency=medium
 
-  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+  * New upstream version 10.11.6. Includes fixes for several severe regressions
+    as noted at https://mariadb.com/kb/en/mariadb-10-11-6-release-notes/ as well
+    as security issues:
+    - CVE-2023-22084 (Closes: #1034889)
+  * Upstream MariaDB Server 10.11.6 included fix for fmtlib 10 compatibility
+    (Closes: #1056387)
 
- -- Otto Kekäläinen <otto@debian.org>  Sat, 14 Oct 2023 11:40:03 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 20 Nov 2023 00:36:52 -0800
 
 mariadb (1:10.11.5-3) unstable; urgency=medium
 
