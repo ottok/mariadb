@@ -2195,15 +2195,16 @@ inline bool is_prepared_xa(THD *thd)
 static bool trans_cannot_safely_rollback(THD *thd, bool all)
 {
   DBUG_ASSERT(ending_trans(thd, all));
+  ulong binlog_format= thd->wsrep_binlog_format(thd->variables.binlog_format);
 
   return ((thd->variables.option_bits & OPTION_BINLOG_THIS_TRX) ||
           (trans_has_updated_non_trans_table(thd) &&
-           thd->wsrep_binlog_format() == BINLOG_FORMAT_STMT) ||
+           binlog_format == BINLOG_FORMAT_STMT) ||
           (thd->transaction->all.has_modified_non_trans_temp_table() &&
-           thd->wsrep_binlog_format() == BINLOG_FORMAT_MIXED) ||
+           binlog_format == BINLOG_FORMAT_MIXED) ||
           (trans_has_updated_non_trans_table(thd) &&
            ending_single_stmt_trans(thd,all) &&
-           thd->wsrep_binlog_format() == BINLOG_FORMAT_MIXED) ||
+           binlog_format == BINLOG_FORMAT_MIXED) ||
           is_prepared_xa(thd));
 }
 
@@ -2427,6 +2428,7 @@ static int binlog_rollback(handlerton *hton, THD *thd, bool all)
   }
   else if (likely(!error))
   {  
+    ulong binlog_format= thd->wsrep_binlog_format(thd->variables.binlog_format);
     if (ending_trans(thd, all) && trans_cannot_safely_rollback(thd, all))
       error= binlog_rollback_flush_trx_cache(thd, all, cache_mngr);
     /*
@@ -2443,9 +2445,9 @@ static int binlog_rollback(handlerton *hton, THD *thd, bool all)
              (!(thd->transaction->stmt.has_created_dropped_temp_table() &&
                 !thd->is_current_stmt_binlog_format_row()) &&
               (!stmt_has_updated_non_trans_table(thd) ||
-               thd->wsrep_binlog_format() != BINLOG_FORMAT_STMT) &&
+               binlog_format != BINLOG_FORMAT_STMT) &&
               (!thd->transaction->stmt.has_modified_non_trans_temp_table() ||
-               thd->wsrep_binlog_format() != BINLOG_FORMAT_MIXED)))
+               binlog_format != BINLOG_FORMAT_MIXED)))
       error= binlog_truncate_trx_cache(thd, cache_mngr, all);
   }
 
@@ -3439,6 +3441,23 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
           goto err;
       thd->free_items();
     }
+    if ((log_slow_verbosity & LOG_SLOW_VERBOSITY_WARNINGS) &&
+        thd->get_stmt_da()->unsafe_statement_warn_count())
+    {
+      Diagnostics_area::Sql_condition_iterator it=
+        thd->get_stmt_da()->sql_conditions();
+      ulong idx, max_warnings= thd->variables.log_slow_max_warnings;
+      const Sql_condition *err;
+      my_b_printf(&log_file, "# Warnings\n");
+      for (idx= 0; (err= it++) && idx < max_warnings; idx++)
+      {
+        my_b_printf(&log_file, "# %-15s %4u %.*s\n",
+                    warning_level_names[err->get_level()].str,
+                    (uint) err->get_sql_errno(),
+                    (int) err->get_message_octet_length(),
+                    err->get_message_text());
+      }
+    }
     if (thd->db.str && strcmp(thd->db.str, db))
     {						// Database changed
       if (my_b_printf(&log_file,"use %s;\n",thd->db.str))
@@ -3463,7 +3482,6 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
                               end, -10);
       }
     }
-
     /*
       This info used to show up randomly, depending on whether the query
       checked the query start time or not. now we always write current
@@ -4062,7 +4080,7 @@ bool MYSQL_BIN_LOG::open(const char *log_name,
       bytes_written+= description_event_for_queue->data_written;
     }
     if (flush_io_cache(&log_file) ||
-        mysql_file_sync(log_file.file, MYF(MY_WME|MY_SYNC_FILESIZE)))
+        mysql_file_sync(log_file.file, MYF(MY_WME)))
       goto err;
 
     my_off_t offset= my_b_tell(&log_file);
@@ -4100,7 +4118,7 @@ bool MYSQL_BIN_LOG::open(const char *log_name,
                      strlen(log_file_name)) ||
           my_b_write(&index_file, (uchar*) "\n", 1) ||
           flush_io_cache(&index_file) ||
-          mysql_file_sync(index_file.file, MYF(MY_WME|MY_SYNC_FILESIZE)))
+          mysql_file_sync(index_file.file, MYF(MY_WME)))
         goto err;
 
 #ifdef HAVE_REPLICATION
@@ -4240,7 +4258,7 @@ static bool copy_up_file_and_fill(IO_CACHE *index_file, my_off_t offset)
   }
   /* The following will either truncate the file or fill the end with \n' */
   if (mysql_file_chsize(file, offset - init_offset, '\n', MYF(MY_WME)) ||
-      mysql_file_sync(file, MYF(MY_WME|MY_SYNC_FILESIZE)))
+      mysql_file_sync(file, MYF(MY_WME)))
     goto err;
 
   /* Reset data in old index cache */
@@ -5036,7 +5054,7 @@ int MYSQL_BIN_LOG::sync_purge_index_file()
 
   if (unlikely((error= flush_io_cache(&purge_index_file))) ||
       unlikely((error= my_sync(purge_index_file.file,
-                               MYF(MY_WME | MY_SYNC_FILESIZE)))))
+                               MYF(MY_WME)))))
     DBUG_RETURN(error);
 
   DBUG_RETURN(error);
@@ -5748,7 +5766,7 @@ bool MYSQL_BIN_LOG::flush_and_sync(bool *synced)
   if (sync_period && ++sync_counter >= sync_period)
   {
     sync_counter= 0;
-    err= mysql_file_sync(fd, MYF(MY_WME|MY_SYNC_FILESIZE));
+    err= mysql_file_sync(fd, MYF(MY_WME));
     if (synced)
       *synced= 1;
 #ifndef DBUG_OFF
@@ -6563,7 +6581,7 @@ MYSQL_BIN_LOG::write_state_to_file()
   log_inited= false;
   if ((err= end_io_cache(&cache)))
     goto err;
-  if ((err= mysql_file_sync(file_no, MYF(MY_WME|MY_SYNC_FILESIZE))))
+  if ((err= mysql_file_sync(file_no, MYF(MY_WME))))
     goto err;
   goto end;
 
@@ -10332,7 +10350,7 @@ bool MYSQL_BIN_LOG::truncate_and_remove_binlogs(const char *file_name,
     error= mysql_file_chsize(index_file.file, index_file_offset, '\n',
                              MYF(MY_WME));
     if (!error)
-      error= mysql_file_sync(index_file.file, MYF(MY_WME|MY_SYNC_FILESIZE));
+      error= mysql_file_sync(index_file.file, MYF(MY_WME));
     if (error)
     {
       sql_print_error("Failed to truncate binlog index "
@@ -10374,7 +10392,7 @@ bool MYSQL_BIN_LOG::truncate_and_remove_binlogs(const char *file_name,
   /* Change binlog file size to truncate_pos */
   error= mysql_file_chsize(file, pos, 0, MYF(MY_WME));
   if (!error)
-    error= mysql_file_sync(file, MYF(MY_WME|MY_SYNC_FILESIZE));
+    error= mysql_file_sync(file, MYF(MY_WME));
   if (error)
   {
     sql_print_error("Failed to truncate the "

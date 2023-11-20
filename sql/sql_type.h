@@ -124,6 +124,40 @@ enum scalar_comparison_op
 };
 
 
+/*
+  This enum is intentionally defined as "class" to disallow its implicit
+  cast as "bool". This is needed to avoid pre-MDEV-32203 constructs like:
+    if (field->can_optimize_range(...))
+      do_optimization();
+  to merge automatically as such - that would change the meaning
+  to the opposite. The pre-MDEV-32203 code must to be changed to:
+    if (field->can_optimize_range(...) == Data_type_compatibility::OK)
+      do_optimization();
+*/
+enum class Data_type_compatibility
+{
+  OK,
+  INCOMPATIBLE_DATA_TYPE,
+  INCOMPATIBLE_COLLATION
+};
+
+
+static inline const LEX_CSTRING
+scalar_comparison_op_to_lex_cstring(scalar_comparison_op op)
+{
+  switch (op) {
+  case SCALAR_CMP_EQ:    return LEX_CSTRING{STRING_WITH_LEN("=")};
+  case SCALAR_CMP_EQUAL: return LEX_CSTRING{STRING_WITH_LEN("<=>")};
+  case SCALAR_CMP_LT:    return LEX_CSTRING{STRING_WITH_LEN("<")};
+  case SCALAR_CMP_LE:    return LEX_CSTRING{STRING_WITH_LEN("<=")};
+  case SCALAR_CMP_GE:    return LEX_CSTRING{STRING_WITH_LEN(">")};
+  case SCALAR_CMP_GT:    return LEX_CSTRING{STRING_WITH_LEN(">=")};
+  }
+  DBUG_ASSERT(0);
+  return LEX_CSTRING{STRING_WITH_LEN("<?>")};
+}
+
+
 class Hasher
 {
   ulong m_nr1;
@@ -3234,10 +3268,16 @@ public:
   bool agg_item_collations(DTCollation &c, const LEX_CSTRING &name,
                            Item **items, uint nitems,
                            uint flags, int item_sep);
+  struct Single_coll_err
+  {
+    const DTCollation& coll;
+    bool first;
+  };
   bool agg_item_set_converter(const DTCollation &coll,
                               const LEX_CSTRING &name,
                               Item **args, uint nargs,
-                              uint flags, int item_sep);
+                              uint flags, int item_sep,
+                              const Single_coll_err *single_item_err= NULL);
 
   /*
     Collect arguments' character sets together.
@@ -5264,6 +5304,12 @@ public:
     return type_limits_int()->char_length();
   }
   uint32 Item_decimal_notation_int_digits(const Item *item) const override;
+  bool Item_hybrid_func_fix_attributes(THD *thd,
+                                       const LEX_CSTRING &name,
+                                       Type_handler_hybrid_field_type *,
+                                       Type_all_attributes *atrr,
+                                       Item **items,
+                                       uint nitems) const override;
   bool partition_field_check(const LEX_CSTRING &, Item *item_expr)
     const override
   {

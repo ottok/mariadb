@@ -1935,6 +1935,8 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
         MYSQL_QUERY_DONE(thd->is_error());
       }
 
+      thd->lex->restore_set_statement_var();
+
 #if defined(ENABLED_PROFILING)
       thd->profiling.finish_current_query();
       thd->profiling.start_new_query("continuing");
@@ -6126,7 +6128,7 @@ finish:
       thd->release_transactional_locks();
     }
   }
-  else if (! thd->in_sub_stmt && ! thd->in_multi_stmt_transaction_mode())
+  else if (! thd->in_sub_stmt && ! thd->in_active_multi_stmt_transaction())
   {
     /*
       - If inside a multi-statement transaction,
@@ -6236,8 +6238,7 @@ static bool execute_sqlcom_select(THD *thd, TABLE_LIST *all_tables)
         result->remove_offset_limit();
         if (lex->explain_json)
         {
-          lex->explain->print_explain_json(result, lex->analyze_stmt,
-                                           false /* is_show_cmd */);
+          lex->explain->print_explain_json(result, lex->analyze_stmt);
         }
         else
         {
@@ -6326,11 +6327,6 @@ static bool __attribute__ ((noinline))
 execute_show_status(THD *thd, TABLE_LIST *all_tables)
 {
   bool res;
-
-#if defined(__GNUC__) && (__GNUC__ >= 13)
-#pragma GCC diagnostic ignored "-Wdangling-pointer"
-#endif
-
   system_status_var old_status_var= thd->status_var;
   thd->initial_status_var= &old_status_var;
   WSREP_SYNC_WAIT(thd, WSREP_SYNC_WAIT_BEFORE_SHOW);
@@ -7051,6 +7047,7 @@ static bool check_show_access(THD *thd, TABLE_LIST *table)
                      FALSE, FALSE))
           return TRUE; /* Access denied */
 
+    thd->col_access= dst_table->grant.privilege; // for sql_show.cc
     /*
       Check_grant will grant access if there is any column privileges on
       all of the tables thanks to the fourth parameter (bool show_table).

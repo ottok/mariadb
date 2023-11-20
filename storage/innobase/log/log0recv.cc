@@ -817,12 +817,8 @@ processed:
                              const std::string &name, uint32_t flags,
                              fil_space_crypt_t *crypt_data, uint32_t size)
   {
-    if (crypt_data && !crypt_data->is_key_found())
-    {
-      crypt_data->~fil_space_crypt_t();
-      ut_free(crypt_data);
+    if (crypt_data && !fil_crypt_check(crypt_data, name.c_str()))
       return nullptr;
-    }
     mysql_mutex_lock(&fil_system.mutex);
     fil_space_t *space= fil_space_t::create(it->first, flags,
                                             FIL_TYPE_TABLESPACE, crypt_data);
@@ -1201,12 +1197,13 @@ inline void recv_sys_t::trim(const page_id_t page_id, lsn_t lsn)
   DBUG_VOID_RETURN;
 }
 
-inline void recv_sys_t::read(os_offset_t total_offset, span<byte> buf)
+inline dberr_t recv_sys_t::read(os_offset_t total_offset, span<byte> buf)
 {
   size_t file_idx= static_cast<size_t>(total_offset / log_sys.file_size);
   os_offset_t offset= total_offset % log_sys.file_size;
-  dberr_t err= recv_sys.files[file_idx].read(offset, buf);
-  ut_a(err == DB_SUCCESS);
+  return file_idx
+    ? recv_sys.files[file_idx].read(offset, buf)
+    : log_sys.log.read(offset, buf);
 }
 
 inline size_t recv_sys_t::files_size()
@@ -1363,6 +1360,15 @@ same_space:
 					  int(len), name, space_id);
 		}
 	}
+}
+
+void recv_sys_t::close_files()
+{
+  for (auto &file : files)
+    if (file.is_opened())
+      file.close();
+  files.clear();
+  files.shrink_to_fit();
 }
 
 /** Clean up after recv_sys_t::create() */
@@ -1601,7 +1607,8 @@ ATTRIBUTE_COLD static dberr_t recv_log_recover_pre_10_2()
   if (source_offset < (log_sys.is_pmem() ? log_sys.file_size : 4096))
     memcpy_aligned<512>(buf, &log_sys.buf[source_offset & ~511], 512);
   else
-    recv_sys.read(source_offset & ~511, {buf, 512});
+    if (dberr_t err= recv_sys.read(source_offset & ~511, {buf, 512}))
+      return err;
 
   if (log_block_calc_checksum_format_0(buf) !=
       mach_read_from_4(my_assume_aligned<4>(buf + 508)) &&
@@ -1640,7 +1647,8 @@ static dberr_t recv_log_recover_10_5(lsn_t lsn_offset)
     memcpy_aligned<512>(buf, &log_sys.buf[lsn_offset & ~511], 512);
   else
   {
-    recv_sys.read(lsn_offset & ~lsn_t{4095}, {buf, 4096});
+    if (dberr_t err= recv_sys.read(lsn_offset & ~lsn_t{4095}, {buf, 4096}))
+      return err;
     buf+= lsn_offset & 0xe00;
   }
 
@@ -1691,13 +1699,17 @@ dberr_t recv_sys_t::find_checkpoint()
     else if (size < log_t::START_OFFSET + SIZE_OF_FILE_CHECKPOINT)
     {
     too_small:
-      os_file_close(file);
       sql_print_error("InnoDB: File %.*s is too small",
                       int(path.size()), path.data());
+    err_exit:
+      os_file_close(file);
       return DB_ERROR;
     }
+    else if (!log_sys.attach(file, size))
+      goto err_exit;
+    else
+      file= OS_FILE_CLOSED;
 
-    log_sys.attach(file, size);
     recv_sys.files.emplace_back(file);
     for (int i= 1; i < 101; i++)
     {
@@ -3786,16 +3798,24 @@ inline fil_space_t *fil_system_t::find(const char *path) const
 static void log_sort_flush_list()
 {
   /* Ensure that oldest_modification() cannot change during std::sort() */
-  for (;;)
   {
-    os_aio_wait_until_no_pending_writes(false);
-    mysql_mutex_lock(&buf_pool.flush_list_mutex);
-    if (buf_pool.flush_list_active())
-      my_cond_wait(&buf_pool.done_flush_list,
-                   &buf_pool.flush_list_mutex.m_mutex);
-    else if (!os_aio_pending_writes())
-      break;
-    mysql_mutex_unlock(&buf_pool.flush_list_mutex);
+    const double pct_lwm= srv_max_dirty_pages_pct_lwm;
+    /* Disable "idle" flushing in order to minimize the wait time below. */
+    srv_max_dirty_pages_pct_lwm= 0.0;
+
+    for (;;)
+    {
+      os_aio_wait_until_no_pending_writes(false);
+      mysql_mutex_lock(&buf_pool.flush_list_mutex);
+      if (buf_pool.page_cleaner_active())
+        my_cond_wait(&buf_pool.done_flush_list,
+                     &buf_pool.flush_list_mutex.m_mutex);
+      else if (!os_aio_pending_writes())
+        break;
+      mysql_mutex_unlock(&buf_pool.flush_list_mutex);
+    }
+
+    srv_max_dirty_pages_pct_lwm= pct_lwm;
   }
 
   const size_t size= UT_LIST_GET_LEN(buf_pool.flush_list);
@@ -4797,6 +4817,14 @@ byte *recv_dblwr_t::find_page(const page_id_t page_id,
     if (page_get_page_no(page) != page_id.page_no() ||
         page_get_space_id(page) != page_id.space())
       continue;
+    if (page_id.page_no() == 0)
+    {
+      uint32_t flags= mach_read_from_4(
+        FSP_HEADER_OFFSET + FSP_SPACE_FLAGS + page);
+      if (!fil_space_t::is_valid_flags(flags, page_id.space()))
+        continue;
+    }
+
     const lsn_t lsn= mach_read_from_8(page + FIL_PAGE_LSN);
     if (lsn <= max_lsn ||
         !validate_page(page_id, page, space, tmp_buf))
@@ -4805,9 +4833,38 @@ byte *recv_dblwr_t::find_page(const page_id_t page_id,
       memset(page + FIL_PAGE_LSN, 0, 8);
       continue;
     }
+
+    ut_a(page_get_page_no(page) == page_id.page_no());
     max_lsn= lsn;
     result= page;
   }
 
   return result;
+}
+
+bool recv_dblwr_t::restore_first_page(uint32_t space_id, const char *name,
+                                      os_file_t file)
+{
+  const page_id_t page_id(space_id, 0);
+  const byte* page= find_page(page_id);
+  if (!page)
+  {
+    /* If the first page of the given user tablespace is not there
+    in the doublewrite buffer, then the recovery is going to fail
+    now. Hence this is treated as error. */
+    ib::error()
+            << "Corrupted page " << page_id << " of datafile '"
+            << name <<"' could not be found in the doublewrite buffer.";
+    return true;
+  }
+
+  ulint physical_size= fil_space_t::physical_size(
+    mach_read_from_4(page + FSP_HEADER_OFFSET + FSP_SPACE_FLAGS));
+  ib::info() << "Restoring page " << page_id << " of datafile '"
+          << name << "' from the doublewrite buffer. Writing "
+          << physical_size << " bytes into file '" << name << "'";
+
+  return os_file_write(
+           IORequestWrite, name, file, page, 0, physical_size) !=
+         DB_SUCCESS;
 }

@@ -374,14 +374,13 @@ TABLE_SHARE *alloc_table_share(const char *db, const char *table_name,
         table_alias_charset->strnncoll(key, 6, "mysql", 6) == 0)
       share->not_usable_by_query_cache= 1;
 
-    init_sql_alloc(PSI_INSTRUMENT_ME, &share->stats_cb.mem_root,
-                   TABLE_ALLOC_BLOCK_SIZE, 0, MYF(0));
-
     memcpy((char*) &share->mem_root, (char*) &mem_root, sizeof(mem_root));
     mysql_mutex_init(key_TABLE_SHARE_LOCK_share,
                      &share->LOCK_share, MY_MUTEX_INIT_SLOW);
     mysql_mutex_init(key_TABLE_SHARE_LOCK_ha_data,
                      &share->LOCK_ha_data, MY_MUTEX_INIT_FAST);
+    mysql_mutex_init(key_TABLE_SHARE_LOCK_statistics,
+                     &share->LOCK_statistics, MY_MUTEX_INIT_SLOW);
 
     DBUG_EXECUTE_IF("simulate_big_table_id",
                     if (last_table_id < UINT_MAX32)
@@ -482,15 +481,19 @@ void TABLE_SHARE::destroy()
     ha_share= NULL;                             // Safety
   }
 
-  delete_stat_values_for_table_share(this);
+  if (stats_cb)
+  {
+    stats_cb->usage_count--;
+    delete stats_cb;
+  }
   delete sequence;
-  free_root(&stats_cb.mem_root, MYF(0));
 
   /* The mutexes are initialized only for shares that are part of the TDC */
   if (tmp_table == NO_TMP_TABLE)
   {
     mysql_mutex_destroy(&LOCK_share);
     mysql_mutex_destroy(&LOCK_ha_data);
+    mysql_mutex_destroy(&LOCK_statistics);
   }
   my_hash_free(&name_hash);
 
@@ -1129,19 +1132,9 @@ bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
       return vcol &&
              vcol->expr->walk(&Item::check_field_expression_processor, 0, field);
     }
-    static bool check_constraint(Field *field, Virtual_column_info *vcol)
-    {
-      uint32 flags= field->flags;
-      /* Check constraints can refer it itself */
-      field->flags|= NO_DEFAULT_VALUE_FLAG;
-      const bool res= check(field, vcol);
-      field->flags= flags;
-      return res;
-    }
     static bool check(Field *field)
     {
       if (check(field, field->vcol_info) ||
-          check_constraint(field, field->check_constraint) ||
           check(field, field->default_value))
         return true;
       return false;
@@ -1156,6 +1149,7 @@ bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
   Field **vfield_ptr= table->vfield;
   Field **dfield_ptr= table->default_field;
   Virtual_column_info **check_constraint_ptr= table->check_constraints;
+  Sql_mode_save_for_frm_handling sql_mode_save(thd);
   Query_arena backup_arena;
   Virtual_column_info *vcol= 0;
   StringBuffer<MAX_FIELD_WIDTH> expr_str;
@@ -1176,8 +1170,6 @@ bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
   thd->stmt_arena= table->expr_arena;
   thd->update_charset(&my_charset_utf8mb4_general_ci, table->s->table_charset);
   expr_str.append(&parse_vcol_keyword);
-  Sql_mode_instant_remove sms(thd, MODE_NO_BACKSLASH_ESCAPES |
-                              MODE_EMPTY_STRING_IS_NULL);
 
   while (pos < end)
   {
@@ -1353,11 +1345,16 @@ bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
 
   /* Check that expressions aren't referring to not yet initialized fields */
   for (field_ptr= table->field; *field_ptr; field_ptr++)
+  {
     if (check_vcol_forward_refs::check(*field_ptr))
     {
       *error_reported= true;
       goto end;
     }
+    if ((*field_ptr)->check_constraint)
+        (*field_ptr)->check_constraint->expr->
+          walk(&Item::update_func_default_processor, 0, *field_ptr);
+  }
 
   table->find_constraint_correlated_indexes();
 
@@ -4545,6 +4542,88 @@ partititon_err:
 }
 
 
+/**
+  Free engine stats
+
+  This is only called from closefrm() when the TABLE object is destroyed
+**/
+
+void TABLE::free_engine_stats()
+{
+  bool free_stats= 0;
+  TABLE_STATISTICS_CB *stats= stats_cb;
+  mysql_mutex_lock(&s->LOCK_share);
+  free_stats= --stats->usage_count == 0;
+  mysql_mutex_unlock(&s->LOCK_share);
+  if (free_stats)
+    delete stats;
+}
+
+
+/*
+  Use engine stats from table_share if table_share has been updated
+*/
+
+void TABLE::update_engine_independent_stats()
+{
+  bool free_stats= 0;
+  TABLE_STATISTICS_CB *org_stats= stats_cb;
+  DBUG_ASSERT(stats_cb != s->stats_cb);
+
+  if (stats_cb != s->stats_cb)
+  {
+    mysql_mutex_lock(&s->LOCK_share);
+    if (org_stats)
+      free_stats= --org_stats->usage_count == 0;
+    if ((stats_cb= s->stats_cb))
+      stats_cb->usage_count++;
+    mysql_mutex_unlock(&s->LOCK_share);
+    if (free_stats)
+      delete org_stats;
+  }
+}
+
+
+/*
+  Update engine stats in table share to use new stats
+*/
+
+void
+TABLE_SHARE::update_engine_independent_stats(TABLE_STATISTICS_CB *new_stats)
+{
+  TABLE_STATISTICS_CB *free_stats= 0;
+  DBUG_ASSERT(new_stats->usage_count == 0);
+
+  mysql_mutex_lock(&LOCK_share);
+  if (stats_cb)
+  {
+    if (!--stats_cb->usage_count)
+      free_stats= stats_cb;
+  }
+  stats_cb= new_stats;
+  new_stats->usage_count++;
+  mysql_mutex_unlock(&LOCK_share);
+  if (free_stats)
+    delete free_stats;
+}
+
+
+/* Check if we have statistics for histograms */
+
+bool TABLE_SHARE::histograms_exists()
+{
+  bool res= 0;
+  if (stats_cb)
+  {
+    mysql_mutex_lock(&LOCK_share);
+    if (stats_cb)
+      res= stats_cb->histograms_exists();
+    mysql_mutex_unlock(&LOCK_share);
+  }
+  return res;
+}
+
+
 /*
   Free information allocated by openfrm
 
@@ -4583,6 +4662,12 @@ int closefrm(TABLE *table)
     table->part_info= 0;
   }
 #endif
+  if (table->stats_cb)
+  {
+    DBUG_ASSERT(table->s->tmp_table == NO_TMP_TABLE);
+    table->free_engine_stats();
+  }
+
   free_root(&table->mem_root, MYF(0));
   DBUG_RETURN(error);
 }
@@ -10086,7 +10171,6 @@ bool TR_table::update(ulonglong start_id, ulonglong end_id)
     table->file->print_error(error, MYF(0));
   /* extra() is used to apply the bulk insert operation
   on mysql/transaction_registry table */
-  table->file->extra(HA_EXTRA_IGNORE_INSERT);
   return error;
 }
 

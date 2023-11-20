@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2022 Codership Oy <http://www.codership.com>
+/* Copyright (c) 2008, 2023 Codership Oy <http://www.codership.com>
    Copyright (c) 2020, 2022, MariaDB
 
    This program is free software; you can redistribute it and/or modify
@@ -860,6 +860,7 @@ void wsrep_deinit_server()
   wsrep_deinit_schema();
   Wsrep_server_state::destroy();
   Wsrep_status::destroy();
+  wsrep_free_status_vars();
 }
 
 int wsrep_init()
@@ -3485,8 +3486,9 @@ int wsrep_ignored_error_code(Log_event* ev, int error)
   const THD* thd= ev->thd;
 
   DBUG_ASSERT(error);
-  DBUG_ASSERT(wsrep_thd_is_applying(thd) &&
-              !wsrep_thd_is_local_toi(thd));
+  /* Note that binlog events can be executed on master also with
+     BINLOG '....'; */
+  DBUG_ASSERT(!wsrep_thd_is_local_toi(thd));
 
   if ((wsrep_ignore_apply_errors & WSREP_IGNORE_ERRORS_ON_RECONCILING_DML))
   {
@@ -3823,6 +3825,30 @@ my_bool get_wsrep_recovery()
 bool wsrep_consistency_check(THD *thd)
 {
   return thd->wsrep_consistency_check == CONSISTENCY_CHECK_RUNNING;
+}
+
+// Wait until wsrep has reached ready state
+void wsrep_wait_ready(THD *thd)
+{
+  mysql_mutex_lock(&LOCK_wsrep_ready);
+  while(!wsrep_ready)
+  {
+    WSREP_INFO("Waiting to reach ready state");
+    mysql_cond_wait(&COND_wsrep_ready, &LOCK_wsrep_ready);
+  }
+  WSREP_INFO("ready state reached");
+  mysql_mutex_unlock(&LOCK_wsrep_ready);
+}
+
+void wsrep_ready_set(bool ready_value)
+{
+  WSREP_DEBUG("Setting wsrep_ready to %d", ready_value);
+  mysql_mutex_lock(&LOCK_wsrep_ready);
+  wsrep_ready= ready_value;
+  // Signal if we have reached ready state
+  if (wsrep_ready)
+    mysql_cond_signal(&COND_wsrep_ready);
+  mysql_mutex_unlock(&LOCK_wsrep_ready);
 }
 
 

@@ -72,6 +72,8 @@ No_such_table_error_handler::handle_condition(THD *,
                                               Sql_condition ** cond_hdl)
 {
   *cond_hdl= NULL;
+  if (!first_error)
+    first_error= sql_errno;
   if (sql_errno == ER_NO_SUCH_TABLE || sql_errno == ER_NO_SUCH_TABLE_IN_ENGINE)
   {
     m_handled_errors++;
@@ -93,7 +95,6 @@ bool No_such_table_error_handler::safely_trapped_errors()
   */
   return ((m_handled_errors > 0) && (m_unhandled_errors == 0));
 }
-
 
 /**
   This internal handler is used to trap ER_NO_SUCH_TABLE and
@@ -871,6 +872,9 @@ int close_thread_tables(THD *thd)
     TODO: Probably even better approach is to simply associate list of
           derived tables with (sub-)statement instead of thread and destroy
           them at the end of its execution.
+
+    Note: EXPLAIN/ANALYZE depends on derived tables being freed here. See
+    sql_explain.h:ExplainDataStructureLifetime.
   */
   if (thd->derived_tables)
   {
@@ -988,7 +992,11 @@ void close_thread_table(THD *thd, TABLE **table_ptr)
   DBUG_ASSERT(thd->mdl_context.is_lock_owner(MDL_key::TABLE,
                                              table->s->db.str,
                                              table->s->table_name.str,
-                                             MDL_SHARED));
+                                             MDL_SHARED) ||
+              thd->mdl_context.is_lock_warrantee(MDL_key::TABLE,
+                                                 table->s->db.str,
+                                                 table->s->table_name.str,
+                                                 MDL_SHARED));
   table->vcol_cleanup_expr(thd);
   table->mdl_ticket= NULL;
 
@@ -2091,15 +2099,15 @@ retry_share:
       goto err_lock;
     }
 
-    /* Open view */
-    if (mysql_make_view(thd, share, table_list, false))
-      goto err_lock;
-
     /*
       This table is a view. Validate its metadata version: in particular,
       that it was a view when the statement was prepared.
     */
     if (check_and_update_table_version(thd, table_list, share))
+      goto err_lock;
+
+    /* Open view */
+    if (mysql_make_view(thd, share, table_list, false))
       goto err_lock;
 
     /* TODO: Don't free this */
@@ -3632,7 +3640,8 @@ thr_lock_type read_lock_type_for_table(THD *thd,
     at THD::variables::sql_log_bin member.
   */
   bool log_on= mysql_bin_log.is_open() && thd->variables.sql_log_bin;
-  if ((log_on == FALSE) || (thd->wsrep_binlog_format() == BINLOG_FORMAT_ROW) ||
+  if ((log_on == FALSE) ||
+      (thd->wsrep_binlog_format(thd->variables.binlog_format) == BINLOG_FORMAT_ROW) ||
       (table_list->table->s->table_category == TABLE_CATEGORY_LOG) ||
       (table_list->table->s->table_category == TABLE_CATEGORY_PERFORMANCE) ||
       !(is_update_query(prelocking_ctx->sql_command) ||
@@ -4174,6 +4183,12 @@ open_and_process_table(THD *thd, TABLE_LIST *tables, uint *counter, uint flags,
   if (tables->open_strategy && !tables->table)
     goto end;
 
+  /* Check and update metadata version of a base table. */
+  error= check_and_update_table_version(thd, tables, tables->table->s);
+
+  if (unlikely(error))
+    goto end;
+
   error= extend_table_list(thd, tables, prelocking_strategy, has_prelocking_list);
   if (unlikely(error))
     goto end;
@@ -4181,11 +4196,6 @@ open_and_process_table(THD *thd, TABLE_LIST *tables, uint *counter, uint flags,
   /* Copy grant information from TABLE_LIST instance to TABLE one. */
   tables->table->grant= tables->grant;
 
-  /* Check and update metadata version of a base table. */
-  error= check_and_update_table_version(thd, tables, tables->table->s);
-
-  if (unlikely(error))
-    goto end;
   /*
     After opening a MERGE table add the children to the query list of
     tables, so that they are opened too.
@@ -5594,7 +5604,8 @@ bool open_and_lock_tables(THD *thd, const DDL_options_st &options,
     goto err;
 
   /* Don't read statistics tables when opening internal tables */
-  if (!(flags & MYSQL_OPEN_IGNORE_LOGGING_FORMAT))
+  if (!(flags & (MYSQL_OPEN_IGNORE_LOGGING_FORMAT |
+                 MYSQL_OPEN_IGNORE_ENGINE_STATS)))
     (void) read_statistics_for_tables_if_needed(thd, tables);
   
   if (derived)
