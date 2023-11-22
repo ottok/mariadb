@@ -11,3 +11,6 @@ package-contains-documentation-outside-usr-share-doc [usr/share/mysql/errmsg-utf
 # mysql(d).service are symlinks to mariadb.service, and there is indeed a init.d/mariadb shipped
 package-supports-alternative-init-but-no-init.d-script [lib/systemd/system/mysql.service]
 package-supports-alternative-init-but-no-init.d-script [lib/systemd/system/mysqld.service]
+# Intentionally symlinks mysql->mariadb
+service-file-is-not-a-file [lib/systemd/system/mysql.service]
+service-file-is-not-a-file [lib/systemd/system/mysqld.service]
