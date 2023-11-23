@@ -348,7 +348,7 @@ blhc:
       cat >/etc/apt/sources.list.d/mariadb.sources <<EOF
       X-Repolib-Name: MariaDB
       Types: deb
-      URIs: https://deb.mariadb.org/${MARIADB_VERSION}/debian
+      URIs: https://archive.mariadb.org/mariadb-${MARIADB_VERSION}/repo/debian
       Suites: ${RELEASE}
       Components: main
       Signed-By: /etc/apt/keyrings/mariadb-keyring.pgp
