@@ -1,13 +1,25 @@
-mariadb (1:10.11.6-1) UNRELEASED; urgency=medium
+mariadb (1:10.11.6-1) unstable; urgency=medium
 
+  [ Otto Kekäläinen ]
   * New upstream version 10.11.6. Includes fixes for several severe regressions
     as noted at https://mariadb.com/kb/en/mariadb-10-11-6-release-notes/ as well
     as security issues:
-    - CVE-2023-22084 (Closes: #1034889)
+    - CVE-2023-22084
   * Upstream MariaDB Server 10.11.6 included fix for fmtlib 10 compatibility
     (Closes: #1056387)
+  * Drop STACK_DIRECTION customization as upstream CMake code now handles it
+  * Update traces to match these changes in MariaDB 10.11.6:
+    - New option 'ALL' to multiple parameters as a way to define that all
+      possible values/options are selected
+    - New variables log-slow-max-warnings, note-verbosity and
+      optimizer-max-sel-args
+    - Default value for innodb-purge-batch-size increased to 1000
+    - Support for TLSv1.1 has been dropped
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 20 Nov 2023 00:36:52 -0800
+  [ Guillem Jover ]
+  * Remove tilegx support removed from dpkg 1.22.0 (Closes: #1056748)
+
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 26 Nov 2023 18:54:33 -0800
 
 mariadb (1:10.11.5-3) unstable; urgency=medium
 
