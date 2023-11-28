@@ -147,11 +147,11 @@ blhc:
   mysql --table -e "SELECT * FROM plugin;" mysql
   mysql --table -e "SHOW PLUGINS;" mysql
 
-.test-enable-sid-repos: &test-enable-sid-repos
-  # Apply usrmerge workaround for Stretch/Buster/Bullseye to Bookworm/Sid upgrades
+.test-enable-bookworm-repos: &test-enable-bookworm-repos
+  # Apply usrmerge workaround for Stretch/Buster/Bullseye to Bookworm upgrades
   - echo 'this system will not be supported in the future' > /etc/unsupported-skip-usrmerge-conversion
-  # Replace any old repos with just Sid
-  - echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list
+  # Replace any old repos with just Bookworm
+  - echo 'deb http://deb.debian.org/debian bookworm main' > /etc/apt/sources.list
   # Upgrade minimal stack first
   - apt-get update -qq
   # Next step will fail on https://bugs.debian.org/993755
@@ -411,7 +411,7 @@ mariadb-10.6 and Bookworm-20230208 upgrade:
     - apt-get install -y mariadb-server
     - dpkg -l | grep -e "mariadb-server.*10.6"
     - *test-verify-initial
-    - *test-enable-sid-repos
+    - *test-enable-bookworm-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mariadb restart
     - *test-enable-artifacts-repo
@@ -431,7 +431,7 @@ mariadb-10.5 and Bullseye upgrade:
     # Verify installation of MariaDB from Bullseye
     - dpkg -l | grep -e "mariadb-server.*10.5"
     - *test-verify-initial
-    - *test-enable-sid-repos
+    - *test-enable-bookworm-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mariadb restart
     - *test-full-upgrade
@@ -449,7 +449,7 @@ mariadb-10.3 and Buster upgrade:
     # Verify installation of MariaDB from Buster
     - dpkg -l | grep -e "mariadb-server.*10.3"
     - *test-verify-initial
-    - *test-enable-sid-repos
+    - *test-enable-bookworm-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mysql restart # in 10.3 service name is still 'mysql'
     - *test-full-upgrade
@@ -469,7 +469,7 @@ default-mysql-server and Bullseye upgrade:
     - apt-get install -y default-mysql-server zoph
     # Verify installation of MariaDB from Bullseye
     - *test-verify-initial
-    - *test-enable-sid-repos
+    - *test-enable-bookworm-repos
     - *test-enable-artifacts-repo
     # Start with partial upgrade
     - apt-get install -y default-mysql-server
@@ -574,30 +574,6 @@ build mariadbclient consumer Python-MySQLdb:
     - apt-get purge -y libmariadb-dev # Not needed for run-time
     - python3 -c "import MySQLdb; print(MySQLdb.get_client_info())"
 
-libmysql* to libmariadb* upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB
-  script:
-    - *test-prepare-container
-    # Install all libmysql* available in Debian unstable
-    - apt-get install -y pkg-config libmysqlclient-dev
-    - pkg-config --list-all
-    - pkg-config --cflags mysqlclient # mysqlclient.pc from original package
-    - *test-enable-artifacts-repo
-    - apt-get install -y libmariadb3
-    - pkg-config --list-all
-    - apt-get install -y libmariadb-dev
-    - pkg-config --list-all
-    - apt-get install -y libmariadb-dev-compat
-    - pkg-config --cflags mysqlclient # mysqlclient.pc from compat package
-    - pkg-config --list-all
-    - apt-get install -y libmariadbd19
-    - pkg-config --list-all
-    - apt-get install -y libmariadbd-dev
-    - pkg-config --list-all
-    - apt-get install -y default-libmysqlclient-dev default-libmysqld-dev
-    - *test-verify-libs
-
 default-libmysqlclient-dev upgrade:
   extends: .salsa-ci-template-for-mariadb
   stage: upgrade MariaDB
@@ -616,7 +592,7 @@ default-libmysqlclient-dev and Bullseye upgrade:
     - *test-prepare-container
     - apt-get install -y pkg-config default-libmysqlclient-dev
     - pkg-config --list-all
-    - *test-enable-sid-repos
+    - *test-enable-bookworm-repos
     - *test-full-upgrade-libs
     - *test-verify-libs
 
@@ -628,7 +604,7 @@ default-libmysqlclient-dev and Buster upgrade:
     - *test-prepare-container
     - apt-get install -y pkg-config default-libmysqlclient-dev
     - pkg-config --list-all
-    - *test-enable-sid-repos
+    - *test-enable-bookworm-repos
     - *test-full-upgrade-libs
     - *test-verify-libs
 
@@ -645,32 +621,6 @@ default-libmysqlclient-dev with Bullseye backports upgrade:
     - *test-enable-bullseye-backports-repos
     - *test-full-upgrade-libs
     - *test-verify-libs
-
-# Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
-# The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
-mysql-8.0 in Sid upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB variant
-  image: debian:sid
-  script:
-    - *test-prepare-container
-    # The postinst fails often if 'ps' is missing from system, so install procps
-    - apt-get install -y procps mysql-server 'libmysqlc*'
-    # Ensure MySQL 8.0 package actually got installed
-    - dpkg -l | grep -e "mysql-server.*8.0"
-    - *test-verify-initial
-    - *test-install-all
-    # Due to some (currently unknown) changes in MySQL 8.0 packaging or apt
-    # behaviour changes, a system with a previous installation of MySQL 8.0 will
-    # on upgrades to MariaDB first fully remove MySQL, including the
-    # /etc/init.d/mysql file, so previous techniques in
-    # mariadb-server-10.6.postinst to maintain backwards compatibility with
-    # 'service mysql status' after installing MariaDB on top MySQL no longer
-    # works. Thus the step to test it now intentionally has a fallback to use
-    # the service name 'mariadb' instead, and the fallback is always used.
-    - sleep 5 # Give the mysql_upgrade a bit of time to complete before querying the server
-    - service mysql status || service mariadb status
-    - *test-verify-final
 
 # Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
 # The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
@@ -925,7 +875,7 @@ mysql.com-5.7 with Buster upgrade:
     # Ensure MySQL 5.7 package actually got installed
     - dpkg -l | grep -e "mysql-server.*5.7"
     - *test-verify-initial
-    - *test-enable-sid-repos
+    - *test-enable-bookworm-repos
     - *test-install-all
     # Due to some (currently unknown) changes in MySQL 5.7 packaging or apt
     # behaviour changes, a system with a previous installation of MySQL will
