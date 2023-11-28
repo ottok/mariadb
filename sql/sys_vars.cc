@@ -1877,6 +1877,13 @@ Sys_gtid_domain_id(
        ON_CHECK(check_gtid_domain_id));
 
 
+/*
+  Check that setting gtid_seq_no isn't done inside a transaction, and (in
+  gtid_strict_mode) doesn't create an out-of-order GTID sequence.
+
+  Setting gtid_seq_no to DEFAULT or 0 means we 'reset' it so that the value
+  doesn't affect the GTID of the next event group written to the binlog.
+*/
 static bool check_gtid_seq_no(sys_var *self, THD *thd, set_var *var)
 {
   uint32 domain_id, server_id;
@@ -1887,13 +1894,16 @@ static bool check_gtid_seq_no(sys_var *self, THD *thd, set_var *var)
                                                  ER_INSIDE_TRANSACTION_PREVENTS_SWITCH_GTID_DOMAIN_ID_SEQ_NO)))
     return true;
 
-  domain_id= thd->variables.gtid_domain_id;
-  server_id= thd->variables.server_id;
-  seq_no= (uint64)var->value->val_uint();
-  DBUG_EXECUTE_IF("ignore_set_gtid_seq_no_check", return 0;);
-  if (opt_gtid_strict_mode && opt_bin_log &&
-      mysql_bin_log.check_strict_gtid_sequence(domain_id, server_id, seq_no))
-    return true;
+  DBUG_EXECUTE_IF("ignore_set_gtid_seq_no_check", return false;);
+  if (var->value && opt_gtid_strict_mode && opt_bin_log)
+  {
+    domain_id= thd->variables.gtid_domain_id;
+    server_id= thd->variables.server_id;
+    seq_no= (uint64)var->value->val_uint();
+    if (seq_no != 0 &&
+        mysql_bin_log.check_strict_gtid_sequence(domain_id, server_id, seq_no))
+      return true;
+  }
 
   return false;
 }
@@ -2877,6 +2887,7 @@ export const char *optimizer_switch_names[]=
   "condition_pushdown_from_having",
   "not_null_range_scan",
   "hash_join_cardinality",
+  "cset_narrowing",
   "default", 
   NullS
 };
@@ -3379,7 +3390,7 @@ static Sys_var_charptr_fscs Sys_secure_file_priv(
        "Limit LOAD DATA, SELECT ... OUTFILE, and LOAD_FILE() to files "
        "within specified directory",
        PREALLOCATED READ_ONLY GLOBAL_VAR(opt_secure_file_priv),
-       CMD_LINE(REQUIRED_ARG), DEFAULT(0));
+       CMD_LINE(REQUIRED_ARG, OPT_SEQURE_FILE_PRIV), DEFAULT(0));
 
 static bool check_server_id(sys_var *self, THD *thd, set_var *var)
 {
@@ -3955,7 +3966,7 @@ static Sys_var_set Sys_tls_version(
        "TLS protocol version for secure connections.",
        READ_ONLY GLOBAL_VAR(tls_version), CMD_LINE(REQUIRED_ARG),
        tls_version_names,
-       DEFAULT(VIO_TLSv1_1 | VIO_TLSv1_2 | VIO_TLSv1_3));
+       DEFAULT(VIO_TLSv1_2 | VIO_TLSv1_3));
 
 static Sys_var_mybool Sys_standard_compliant_cte(
        "standard_compliant_cte",
@@ -4654,10 +4665,13 @@ static Sys_var_bit Sys_sql_warnings(
        DEFAULT(FALSE));
 
 static Sys_var_bit Sys_sql_notes(
-       "sql_notes", "If set to 1, the default, warning_count is incremented each "
-       "time a Note warning is encountered. If set to 0, Note warnings are not "
-       "recorded. mysqldump has outputs to set this variable to 0 so that no "
-       "unnecessary increments occur when data is reloaded.",
+       "sql_notes",
+       "If set to 1, the default, warning_count is incremented "
+       "each time a Note warning is encountered. If set to 0, Note warnings "
+       "are not recorded. mysqldump has outputs to set this variable to 0 so "
+       "that no unnecessary increments occur when data is reloaded. "
+       "See also note_verbosity, which allows one to define with notes are "
+       "sent.",
        SESSION_VAR(option_bits), NO_CMD_LINE, OPTION_SQL_NOTES,
        DEFAULT(TRUE));
 
@@ -6494,7 +6508,7 @@ static const char *log_slow_filter_names[]=
 
 static Sys_var_set Sys_log_slow_filter(
        "log_slow_filter",
-       "Log only certain types of queries to the slow log. If variable empty alll kind of queries are logged.  All types are bound by slow_query_time, except 'not_using_index' which is always logged if enabled",
+       "Log only certain types of queries to the slow log. If variable empty all kind of queries are logged.  All types are bound by slow_query_time, except 'not_using_index' which is always logged if enabled",
        SESSION_VAR(log_slow_filter), CMD_LINE(REQUIRED_ARG),
        log_slow_filter_names,
        /* by default we log all queries except 'not_using_index' */
@@ -6586,13 +6600,35 @@ static Sys_var_ulong Sys_log_slow_rate_limit(
        SESSION_VAR(log_slow_rate_limit), CMD_LINE(REQUIRED_ARG),
        VALID_RANGE(1, UINT_MAX), DEFAULT(1), BLOCK_SIZE(1));
 
-static const char *log_slow_verbosity_names[]= { "innodb", "query_plan", 
-                                                 "explain", 0 };
+/*
+  Full is not needed below anymore as one can set all bits with '= ALL', but
+  we need it for compatiblity with earlier versions.
+*/
+static const char *log_slow_verbosity_names[]=
+{ "innodb", "query_plan", "explain", "engine", "warnings", "full", 0};
+
 static Sys_var_set Sys_log_slow_verbosity(
        "log_slow_verbosity",
        "Verbosity level for the slow log",
        SESSION_VAR(log_slow_verbosity), CMD_LINE(REQUIRED_ARG),
        log_slow_verbosity_names, DEFAULT(LOG_SLOW_VERBOSITY_INIT));
+
+static Sys_var_ulong Sys_log_slow_max_warnings(
+       "log_slow_max_warnings",
+       "Max numbers of warnings printed to slow query log per statement",
+       SESSION_VAR(log_slow_max_warnings), CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(0, 1000), DEFAULT(10), BLOCK_SIZE(1));
+
+static const char *note_verbosity_names[]=
+{ "basic", "unusable_keys", "explain", 0};
+
+static Sys_var_set Sys_note_verbosity(
+       "note_verbosity",
+       "Verbosity level for note-warnings given to the user. "
+       "See also @@sql_notes.",
+       SESSION_VAR(note_verbosity), CMD_LINE(REQUIRED_ARG),
+       note_verbosity_names, DEFAULT(NOTE_VERBOSITY_NORMAL |
+                                     NOTE_VERBOSITY_EXPLAIN));
 
 static Sys_var_ulong Sys_join_cache_level(
        "join_cache_level",
@@ -6958,7 +6994,15 @@ static Sys_var_ulong Sys_optimizer_max_sel_arg_weight(
        "optimizer_max_sel_arg_weight",
        "The maximum weight of the SEL_ARG graph. Set to 0 for no limit",
        SESSION_VAR(optimizer_max_sel_arg_weight), CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(0, ULONG_MAX), DEFAULT(SEL_ARG::MAX_WEIGHT), BLOCK_SIZE(1));
+       VALID_RANGE(0, UINT_MAX), DEFAULT(SEL_ARG::MAX_WEIGHT), BLOCK_SIZE(1));
+
+static Sys_var_ulong Sys_optimizer_max_sel_args(
+       "optimizer_max_sel_args",
+       "The maximum number of SEL_ARG objects created when optimizing a range. "
+       "If more objects would be needed, the range will not be used by the "
+       "optimizer.",
+       SESSION_VAR(optimizer_max_sel_args), CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(0, UINT_MAX), DEFAULT(SEL_ARG::DEFAULT_MAX_SEL_ARGS), BLOCK_SIZE(1));
 
 static Sys_var_enum Sys_secure_timestamp(
        "secure_timestamp", "Restricts direct setting of a session "

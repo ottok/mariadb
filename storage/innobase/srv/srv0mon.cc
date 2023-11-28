@@ -25,7 +25,7 @@ Database monitor counter interfaces
 Created 12/9/2009 Jimmy Yang
 *******************************************************/
 
-#include "buf0buf.h"
+#include "buf0flu.h"
 #include "dict0mem.h"
 #include "ibuf0ibuf.h"
 #include "lock0lock.h"
@@ -137,7 +137,7 @@ static monitor_info_t	innodb_counter_info[] =
 	 "Number of row locks currently being waited for"
 	 " (innodb_row_lock_current_waits)",
 	 static_cast<monitor_type_t>(
-	 MONITOR_EXISTING | MONITOR_DEFAULT_ON),
+	 MONITOR_EXISTING | MONITOR_DISPLAY_CURRENT | MONITOR_DEFAULT_ON),
 	 MONITOR_DEFAULT_START, MONITOR_OVLD_ROW_LOCK_CURRENT_WAIT},
 
 	{"lock_row_lock_time", "lock",
@@ -1513,21 +1513,20 @@ srv_mon_process_existing_counter(
 	/* innodb_row_lock_time */
 	case MONITOR_OVLD_LOCK_WAIT_TIME:
 		// dirty read without lock_sys.wait_mutex
-		value = lock_sys.get_wait_time_cumulative() / 1000;
+		value = lock_sys.get_wait_time_cumulative();
 		break;
 
 	/* innodb_row_lock_time_max */
 	case MONITOR_OVLD_LOCK_MAX_WAIT_TIME:
 		// dirty read without lock_sys.wait_mutex
-		value = lock_sys.get_wait_time_max() / 1000;
+		value = lock_sys.get_wait_time_max();
 		break;
 
 	/* innodb_row_lock_time_avg */
 	case MONITOR_OVLD_LOCK_AVG_WAIT_TIME:
 		mysql_mutex_lock(&lock_sys.wait_mutex);
 		if (auto count = lock_sys.get_wait_cumulative()) {
-			value = lock_sys.get_wait_time_cumulative() / 1000
-				/ count;
+			value = lock_sys.get_wait_time_cumulative() / count;
 		} else {
 			value = 0;
 		}

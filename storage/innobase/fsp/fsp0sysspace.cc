@@ -393,11 +393,11 @@ SysTablespace::set_size(
 	Datafile&	file)
 {
 	ut_ad(!srv_read_only_mode || m_ignore_read_only);
+	const ib::bytes_iec b{uint64_t{file.m_size} << srv_page_size_shift};
 
 	/* We created the data file and now write it full of zeros */
-	ib::info() << "Setting file '" << file.filepath() << "' size to "
-		<< ib::bytes_iec{file.m_size << srv_page_size_shift} <<
-		". Physically writing the file full; Please wait ...";
+	ib::info() << "Setting file '" << file.filepath() << "' size to " << b
+		<< ". Physically writing the file full; Please wait ...";
 
 	bool	success = os_file_set_size(
 		file.m_filepath, file.m_handle,
@@ -405,7 +405,7 @@ SysTablespace::set_size(
 
 	if (success) {
 		ib::info() << "File '" << file.filepath() << "' size is now "
-			<< ib::bytes_iec{file.m_size << srv_page_size_shift}
+			<< b
 			<< ".";
 	} else {
 		ib::error() << "Could not set the file size of '"
@@ -588,7 +588,9 @@ inline dberr_t SysTablespace::read_lsn_and_check_flags()
 
 		if (err != DB_SUCCESS
 		    && (retry == 1
-			|| it->restore_from_doublewrite())) {
+			|| recv_sys.dblwr.restore_first_page(
+				it->m_space_id, it->m_filepath,
+				it->handle()))) {
 
 			it->close();
 

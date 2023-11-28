@@ -1020,6 +1020,12 @@ struct charset_info_st
     return (coll->strnncollsp)(this, (uchar *) a, alen, (uchar *) b, blen);
   }
 
+  int strnncollsp(const LEX_CSTRING &a, const LEX_CSTRING &b) const
+  {
+    return (coll->strnncollsp)(this, (uchar *) a.str, a.length,
+                                     (uchar *) b.str, b.length);
+  }
+
   size_t strnxfrm(char *dst, size_t dstlen, uint nweights,
                   const char *src, size_t srclen, uint flags) const
   {
@@ -1858,6 +1864,9 @@ my_well_formed_length(CHARSET_INFO *cs, const char *b, const char *e,
 #define USE_TIS620
 #include "t_ctype.h"
 #endif
+
+int my_wc_mb_utf8mb4_bmp_only(CHARSET_INFO *cs, my_wc_t wc, uchar *r,
+                              uchar *e);
 
 #ifdef	__cplusplus
 }

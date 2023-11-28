@@ -321,8 +321,15 @@ get_one_option(const struct my_option *opt, const char *argument,
   case 'S':
     if (filename[0] == '\0')
     {
-      /* Socket given on command line, switch protocol to use SOCKETSt */
-      opt_protocol= MYSQL_PROTOCOL_SOCKET;
+      /*
+        Socket given on command line, switch protocol to use SOCKETSt
+        Except on Windows if 'protocol= pipe' has been provided in
+        the config file or command line.
+      */
+      if (opt_protocol != MYSQL_PROTOCOL_PIPE)
+      {
+        opt_protocol= MYSQL_PROTOCOL_SOCKET;
+      }
     }
     break;
   }
@@ -362,7 +369,7 @@ int main(int argc,char *argv[])
   }
   commands = temp_argv;
   if (tty_password)
-    opt_password = get_tty_password(NullS);
+    opt_password = my_get_tty_password(NullS);
 
   (void) signal(SIGINT,endprog);			/* Here if abort */
   (void) signal(SIGTERM,endprog);		/* Here if abort */
@@ -455,6 +462,7 @@ int main(int argc,char *argv[])
 	if (error > 0)
 	  break;
 
+        error= -error; /* don't exit with negative error codes */
         /*
           Command was well-formed, but failed on the server. Might succeed
           on retry (if conditions on server change etc.), but needs --force
@@ -1093,8 +1101,8 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
       else if (argc == 1)
       {
         /* prompt for password */
-        typed_password= get_tty_password("New password: ");
-        verified= get_tty_password("Confirm new password: ");
+        typed_password= my_get_tty_password("New password: ");
+        verified= my_get_tty_password("Confirm new password: ");
         if (strcmp(typed_password, verified) != 0)
         {
           my_printf_error(0,"Passwords don't match",MYF(ME_BELL));
@@ -1169,24 +1177,8 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
       else
       if (mysql_query(mysql,buff))
       {
-	if (mysql_errno(mysql)!=1290)
-	{
-	  my_printf_error(0,"unable to change password; error: '%s'",
-			  error_flags, mysql_error(mysql));
-	}
-	else
-	{
-	  /*
-	    We don't try to execute 'update mysql.user set..'
-	    because we can't perfectly find out the host
-	   */
-	  my_printf_error(0,"\n"
-			  "You cannot use 'password' command as mariadbd runs\n"
-			  " with grant tables disabled (was started with"
-			  " --skip-grant-tables).\n"
-			  "Use: \"mysqladmin flush-privileges password '*'\""
-			  " instead", error_flags);
-	}
+        my_printf_error(0,"unable to change password; error: '%s'",
+                        error_flags, mysql_error(mysql));
         ret = -1;
       }
 password_done:

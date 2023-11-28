@@ -3427,35 +3427,43 @@ os_file_get_status(
 	return(ret);
 }
 
-
-extern void fil_aio_callback(const IORequest &request);
-
-static void io_callback(tpool::aiocb *cb)
+static void fake_io_callback(void *c)
 {
+  tpool::aiocb *cb= static_cast<tpool::aiocb*>(c);
+  ut_ad(read_slots->contains(cb));
+  static_cast<const IORequest*>(static_cast<const void*>(cb->m_userdata))->
+    fake_read_complete(cb->m_offset);
+  read_slots->release(cb);
+}
+
+static void read_io_callback(void *c)
+{
+  tpool::aiocb *cb= static_cast<tpool::aiocb*>(c);
+  ut_ad(cb->m_opcode == tpool::aio_opcode::AIO_PREAD);
+  ut_ad(read_slots->contains(cb));
   const IORequest &request= *static_cast<const IORequest*>
     (static_cast<const void*>(cb->m_userdata));
-  if (cb->m_err != DB_SUCCESS)
-  {
-    ib::fatal() << "IO Error: " << cb->m_err << " during " <<
-      (request.is_async() ? "async " : "sync ") <<
-      (request.is_LRU() ? "lru " : "") <<
-      (cb->m_opcode == tpool::aio_opcode::AIO_PREAD ? "read" : "write") <<
-      " of " << cb->m_len << " bytes, for file " << cb->m_fh << ", returned " <<
-      cb->m_ret_len;
-  }
-  /* Return cb back to cache*/
-  if (cb->m_opcode == tpool::aio_opcode::AIO_PREAD)
-  {
-    ut_ad(read_slots->contains(cb));
-    fil_aio_callback(request);
-    read_slots->release(cb);
-  }
-  else
-  {
-    ut_ad(write_slots->contains(cb));
-    fil_aio_callback(request);
-    write_slots->release(cb);
-  }
+  request.read_complete(cb->m_err);
+  read_slots->release(cb);
+}
+
+static void write_io_callback(void *c)
+{
+  tpool::aiocb *cb= static_cast<tpool::aiocb*>(c);
+  ut_ad(cb->m_opcode == tpool::aio_opcode::AIO_PWRITE);
+  ut_ad(write_slots->contains(cb));
+  const IORequest &request= *static_cast<const IORequest*>
+    (static_cast<const void*>(cb->m_userdata));
+
+  if (UNIV_UNLIKELY(cb->m_err != 0))
+    ib::info () << "IO Error: " << cb->m_err
+                << "during write of "
+                << cb->m_len << " bytes, for file "
+                << request.node->name << "(" << cb->m_fh << "), returned "
+                << cb->m_ret_len;
+
+  request.write_complete(cb->m_err);
+  write_slots->release(cb);
 }
 
 #ifdef LINUX_NATIVE_AIO
@@ -3758,6 +3766,28 @@ void os_aio_wait_until_no_pending_reads(bool declare)
     tpool::tpool_wait_end();
 }
 
+/** Submit a fake read request during crash recovery.
+@param type  fake read request
+@param offset additional context */
+void os_fake_read(const IORequest &type, os_offset_t offset)
+{
+  tpool::aiocb *cb= read_slots->acquire();
+
+  cb->m_group= read_slots->get_task_group();
+  cb->m_fh= type.node->handle.m_file;
+  cb->m_buffer= nullptr;
+  cb->m_len= 0;
+  cb->m_offset= offset;
+  cb->m_opcode= tpool::aio_opcode::AIO_PREAD;
+  new (cb->m_userdata) IORequest{type};
+  cb->m_internal_task.m_func= fake_io_callback;
+  cb->m_internal_task.m_arg= cb;
+  cb->m_internal_task.m_group= cb->m_group;
+
+  srv_thread_pool->submit_task(&cb->m_internal_task);
+}
+
+
 /** Request a read or write.
 @param type		I/O request
 @param buf		buffer
@@ -3803,23 +3833,32 @@ func_exit:
 		return err;
 	}
 
+	io_slots* slots;
+	tpool::callback_func callback;
+	tpool::aio_opcode opcode;
+
 	if (type.is_read()) {
 		++os_n_file_reads;
+		slots = read_slots;
+		callback = read_io_callback;
+		opcode = tpool::aio_opcode::AIO_PREAD;
 	} else {
 		++os_n_file_writes;
+		slots = write_slots;
+		callback = write_io_callback;
+		opcode = tpool::aio_opcode::AIO_PWRITE;
 	}
 
 	compile_time_assert(sizeof(IORequest) <= tpool::MAX_AIO_USERDATA_LEN);
-	io_slots* slots= type.is_read() ? read_slots : write_slots;
 	tpool::aiocb* cb = slots->acquire();
 
 	cb->m_buffer = buf;
-	cb->m_callback = (tpool::callback_func)io_callback;
+	cb->m_callback = callback;
 	cb->m_group = slots->get_task_group();
 	cb->m_fh = type.node->handle.m_file;
 	cb->m_len = (int)n;
 	cb->m_offset = offset;
-	cb->m_opcode = type.is_read() ? tpool::aio_opcode::AIO_PREAD : tpool::aio_opcode::AIO_PWRITE;
+	cb->m_opcode = opcode;
 	new (cb->m_userdata) IORequest{type};
 
 	if (srv_thread_pool->submit_io(cb)) {
@@ -3827,6 +3866,7 @@ func_exit:
 		os_file_handle_error(type.node->name, type.is_read()
 				     ? "aio read" : "aio write");
 		err = DB_IO_ERROR;
+		type.node->space->release();
 	}
 
 	goto func_exit;
@@ -4027,36 +4067,40 @@ static bool is_volume_on_ssd(const char *volume_mount_point)
 }
 
 #include <unordered_map>
-static bool is_file_on_ssd(char *file_path)
+static bool is_path_on_ssd(char *file_path)
 {
-  /* Cache of volume_path => volume_info, protected by rwlock.*/
-  static std::unordered_map<std::string, bool> cache;
-  static SRWLOCK lock= SRWLOCK_INIT;
-
   /* Preset result, in case something fails, e.g we're on network drive.*/
   char volume_path[MAX_PATH];
   if (!GetVolumePathName(file_path, volume_path, array_elements(volume_path)))
     return false;
+  return is_volume_on_ssd(volume_path);
+}
 
-  /* Try cached volume info first.*/
-  std::string volume_path_str(volume_path);
+static bool is_file_on_ssd(HANDLE handle, char *file_path)
+{
+  ULONGLONG volume_serial_number;
+  FILE_ID_INFO info;
+  if(!GetFileInformationByHandleEx(handle, FileIdInfo, &info, sizeof(info)))
+    return false;
+  volume_serial_number= info.VolumeSerialNumber;
+
+  static std::unordered_map<ULONGLONG, bool> cache;
+  static SRWLOCK lock= SRWLOCK_INIT;
   bool found;
   bool result;
   AcquireSRWLockShared(&lock);
-  auto e= cache.find(volume_path_str);
+  auto e= cache.find(volume_serial_number);
   if ((found= e != cache.end()))
     result= e->second;
   ReleaseSRWLockShared(&lock);
-
-  if (found)
-    return result;
-
-  result= is_volume_on_ssd(volume_path);
-
-  /* Update cache */
-  AcquireSRWLockExclusive(&lock);
-  cache[volume_path_str]= result;
-  ReleaseSRWLockExclusive(&lock);
+  if (!found)
+  {
+    result= is_path_on_ssd(file_path);
+    /* Update cache */
+    AcquireSRWLockExclusive(&lock);
+    cache[volume_serial_number]= result;
+    ReleaseSRWLockExclusive(&lock);
+  }
   return result;
 }
 
@@ -4082,7 +4126,7 @@ void fil_node_t::find_metadata(os_file_t file
     punch_hole= IF_WIN(, !create ||) os_is_sparse_file_supported(file);
 
 #ifdef _WIN32
-  on_ssd= is_file_on_ssd(name);
+  on_ssd= is_file_on_ssd(file, name);
   FILE_STORAGE_INFO info;
   if (GetFileInformationByHandleEx(file, FileStorageInfo, &info, sizeof info))
     block_size= info.PhysicalBytesPerSectorForAtomicity;

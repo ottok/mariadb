@@ -962,7 +962,7 @@ SplM_plan_info * JOIN_TAB::choose_best_splitting(uint idx,
   SplM_plan_info *spl_plan= 0;
   uint best_key= 0;
   uint best_key_parts= 0;
-  table_map best_param_tables;
+  table_map best_param_tables= 0L;
   Json_writer_object trace_obj(thd, "choose_best_splitting");
   Json_writer_array  trace_arr(thd, "considered_keys");
   /*
@@ -985,7 +985,8 @@ SplM_plan_info * JOIN_TAB::choose_best_splitting(uint idx,
       table_map needed_in_prefix= 0;
       do
       {
-        if (keyuse_ext->needed_in_prefix & remaining_tables)
+        if (keyuse_ext->needed_in_prefix &
+            (remaining_tables | this->join->sjm_lookup_tables))
 	{
           keyuse_ext++;
           continue;

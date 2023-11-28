@@ -1,14 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2018, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2008, Google Inc.
 Copyright (c) 2013, 2022, MariaDB Corporation.
-
-Portions of this file contain modifications contributed and copyrighted by
-Google, Inc. Those modifications are gratefully acknowledged and are described
-briefly in the InnoDB documentation. The contributions by Google are
-incorporated with their permission, and subject to the conditions contained in
-the file COPYING.Google.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -34,18 +27,21 @@ Created 11/5/1995 Heikki Tuuri
 #include "assume_aligned.h"
 #include "mtr0types.h"
 #include "mach0data.h"
-#include "buf0buf.h"
 #include "buf0checksum.h"
+#include "mariadb_stats.h"
 #include <string.h>
 
 #ifdef UNIV_INNOCHECKSUM
-#include "my_sys.h"
+# include "my_sys.h"
+# include "buf0buf.h"
 #else
 #include "my_cpu.h"
 #include "mem0mem.h"
 #include "btr0btr.h"
 #include "fil0fil.h"
 #include "fil0crypt.h"
+#include "buf0rea.h"
+#include "buf0flu.h"
 #include "buf0buddy.h"
 #include "buf0dblwr.h"
 #include "lock0lock.h"
@@ -2140,6 +2136,8 @@ void buf_page_free(fil_space_t *space, uint32_t page, mtr_t *mtr)
   }
 
   block->page.lock.x_lock();
+  if (block->page.is_ibuf_exist())
+    ibuf_merge_or_delete_for_page(nullptr, page_id, block->page.zip_size());
 #ifdef BTR_CUR_HASH_ADAPT
   if (block->index)
     btr_search_drop_page_hash_index(block, false);
@@ -2164,6 +2162,7 @@ buf_page_t* buf_page_get_zip(const page_id_t page_id, ulint zip_size)
   ut_ad(zip_size);
   ut_ad(ut_is_2pow(zip_size));
   ++buf_pool.stat.n_page_gets;
+  mariadb_increment_pages_accessed();
 
   buf_pool_t::hash_chain &chain= buf_pool.page_hash.cell_get(page_id.fold());
   page_hash_latch &hash_lock= buf_pool.page_hash.lock_get(chain);
@@ -2259,6 +2258,7 @@ must_read_page:
   switch (dberr_t err= buf_read_page(page_id, zip_size)) {
   case DB_SUCCESS:
   case DB_SUCCESS_LOCKED_REC:
+    mariadb_increment_pages_read();
     goto lookup;
   default:
     ib::error() << "Reading compressed page " << page_id
@@ -2436,6 +2436,7 @@ buf_page_get_low(
 	      || ibuf_page_low(page_id, zip_size, FALSE, NULL));
 
 	++buf_pool.stat.n_page_gets;
+        mariadb_increment_pages_accessed();
 
 	auto& chain= buf_pool.page_hash.cell_get(page_id.fold());
 	page_hash_latch& hash_lock = buf_pool.page_hash.lock_get(chain);
@@ -2507,6 +2508,7 @@ loop:
 	switch (dberr_t local_err = buf_read_page(page_id, zip_size)) {
 	case DB_SUCCESS:
 	case DB_SUCCESS_LOCKED_REC:
+                mariadb_increment_pages_read();
 		buf_read_ahead_random(page_id, zip_size, ibuf_inside(mtr));
 		break;
 	default:
@@ -3067,7 +3069,6 @@ bool buf_page_optimistic_get(ulint rw_latch, buf_block_t *block,
   ut_ad(~buf_page_t::LRU_MASK & state);
   ut_ad(block->page.frame);
 
-  ++buf_pool.stat.n_page_gets;
   return true;
 }
 
@@ -3105,6 +3106,7 @@ buf_block_t *buf_page_try_get(const page_id_t page_id, mtr_t *mtr)
   ut_ad(block->page.id() == page_id);
 
   ++buf_pool.stat.n_page_gets;
+  mariadb_increment_pages_accessed();
   return block;
 }
 

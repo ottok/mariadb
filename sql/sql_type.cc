@@ -94,10 +94,6 @@ Vers_type_trx             vers_type_trx;
 class Type_collection_std: public Type_collection
 {
 public:
-  const Type_handler *handler_by_name(const LEX_CSTRING &name) const override
-  {
-    return NULL;
-  }
   const Type_handler *aggregate_for_result(const Type_handler *a,
                                            const Type_handler *b)
                                            const override
@@ -136,10 +132,6 @@ public:
   bool init(Type_handler_data *data) override
   {
     return false;
-  }
-  const Type_handler *handler_by_name(const LEX_CSTRING &name) const override
-  {
-    return NULL;
   }
   const Type_handler *aggregate_for_result(const Type_handler *a,
                                            const Type_handler *b)
@@ -212,7 +204,7 @@ Type_handler::handler_by_name(THD *thd, const LEX_CSTRING &name)
   }
 
 #ifdef HAVE_SPATIAL
-  const Type_handler *ha= type_collection_geometry.handler_by_name(name);
+  const Type_handler *ha= Type_collection_geometry_handler_by_name(name);
   if (ha)
     return ha;
 #endif
@@ -1831,6 +1823,7 @@ Type_handler::bit_and_int_mixture_handler(uint max_char_length)
              Note, independently from "treat_bit_as_number":
              - a single BIT argument gives BIT as a result
              - two BIT couterparts give BIT as a result
+             - (BIT + explicit NULL) or (explicit NULL + BIT) give BIT
 
   @details This function aggregates field types from the array of items.
     Found type is supposed to be used later as the result field type
@@ -1862,8 +1855,11 @@ aggregate_for_result(const LEX_CSTRING &funcname, Item **items, uint nitems,
   {
     const Type_handler *cur= items[i]->type_handler();
     set_if_bigger(max_display_length, items[i]->max_display_length());
-    if (treat_bit_as_number &&
-        ((type_handler() == &type_handler_bit) ^ (cur == &type_handler_bit)))
+    uint bit_count= (type_handler() == &type_handler_bit) +
+                    (cur == &type_handler_bit);
+    uint null_count= (type_handler() == &type_handler_null) +
+                     (cur == &type_handler_null);
+    if (treat_bit_as_number && bit_count == 1 && null_count == 0)
     {
       bit_and_non_bit_mixture_found= true;
       if (type_handler() == &type_handler_bit)
@@ -4575,7 +4571,34 @@ Type_handler_timestamp_common::create_item_copy(THD *thd, Item *item) const
 
 /*************************************************************************/
 
+/*
+  This method handles YEAR and BIT data types.
+  It does not switch the data type to DECIAMAL on a
+  unsigned_flag mistmatch. This important for combinations
+  like YEAR+NULL, BIT+NULL.
+*/
 bool Type_handler_int_result::
+       Item_hybrid_func_fix_attributes(THD *thd,
+                                       const LEX_CSTRING &name,
+                                       Type_handler_hybrid_field_type *handler,
+                                       Type_all_attributes *func,
+                                       Item **items, uint nitems) const
+{
+  func->aggregate_attributes_int(items, nitems);
+  return false;
+}
+
+
+/*
+  This method handles general purpose integer data types
+    TINYINT, SHORTINT, MEDIUNINT, BIGINT.
+  It switches to DECIMAL in case if a mismatch in unsigned_flag found.
+
+  Note, we should fix this to ignore all items with
+  type_handler()==&type_handler_null.
+  It's too late for 10.4. Let's do it eventually in a higher version.
+*/
+bool Type_handler_general_purpose_int::
        Item_hybrid_func_fix_attributes(THD *thd,
                                        const LEX_CSTRING &name,
                                        Type_handler_hybrid_field_type *handler,

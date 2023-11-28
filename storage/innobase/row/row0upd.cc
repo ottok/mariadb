@@ -1060,10 +1060,8 @@ row_upd_replace_vcol(
 	bool	is_undo_log = true;
 
 	/* We will read those unchanged (but indexed) virtual columns in */
-	if (ptr != NULL) {
-		const byte*	end_ptr;
-
-		end_ptr = ptr + mach_read_from_2(ptr);
+	if (ptr) {
+		const byte* const end_ptr = ptr + mach_read_from_2(ptr);
 		ptr += 2;
 
 		while (ptr != end_ptr) {
@@ -1189,7 +1187,7 @@ row_upd_replace(
 		*ext = NULL;
 	}
 
-	row_upd_replace_vcol(row, table, update, true, NULL, NULL);
+	row_upd_replace_vcol(row, table, update, true, nullptr, nullptr);
 }
 
 /***********************************************************//**
@@ -2929,9 +2927,8 @@ error_handling:
 void thd_get_query_start_data(THD *thd, char *buf);
 
 /** Appends row_start or row_end field to update vector and sets a
-CURRENT_TIMESTAMP/trx->id value to it.
-Supposed to be called only by make_versioned_update() and
-make_versioned_delete().
+CURRENT_TIMESTAMP/trx->id value to it. Called by vers_make_update() and
+vers_make_delete().
 @param[in]	trx	transaction
 @param[in]	vers_sys_idx	table->row_start or table->row_end */
 void upd_node_t::vers_update_fields(const trx_t *trx, ulint idx)

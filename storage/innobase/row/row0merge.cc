@@ -281,10 +281,10 @@ row_merge_insert_index_tuples(
 	ut_stage_alter_t*	stage= nullptr,
 	merge_file_t*		blob_file= nullptr);
 
-/******************************************************//**
-Encode an index record. */
+/** Encode an index record.
+@return size of the record */
 static MY_ATTRIBUTE((nonnull))
-void
+ulint
 row_merge_buf_encode(
 /*=================*/
 	byte**			b,		/*!< in/out: pointer to
@@ -315,6 +315,7 @@ row_merge_buf_encode(
 				   entry->fields, n_fields);
 
 	*b += size;
+	return size;
 }
 
 static MY_ATTRIBUTE((malloc, nonnull))
@@ -478,6 +479,13 @@ static ulint row_merge_bulk_buf_add(row_merge_buf_t* buf,
       continue;
 
     ulint fixed_len= ifield->fixed_len;
+
+    /* CHAR in ROW_FORMAT=REDUNDANT is always
+    fixed-length, but in the temporary file it is
+    variable-length for variable-length character sets. */
+    if (fixed_len && !index->table->not_redundant() &&
+        col->mbminlen != col->mbmaxlen)
+      fixed_len= 0;
 
     if (fixed_len);
     else if (len < 128 || (!DATA_BIG_COL(col)))
@@ -1168,7 +1176,13 @@ dberr_t row_merge_buf_write(const row_merge_buf_t *buf,
 			}
 		}
 
-		row_merge_buf_encode(&b, index, entry, n_fields);
+		ulint rec_size= row_merge_buf_encode(
+				&b, index, entry, n_fields);
+		if (blob_file && rec_size > srv_page_size) {
+			err = DB_TOO_BIG_RECORD;
+			goto func_exit;
+		}
+
 		ut_ad(b < &block[srv_sort_buf_size]);
 
 		DBUG_LOG("ib_merge_sort",
@@ -3039,7 +3053,7 @@ wait_again:
 		if (err == DB_SUCCESS) {
 			new_table->fts->cache->synced_doc_id = max_doc_id;
 
-		        /* Update the max value as next FTS_DOC_ID */
+			/* Update the max value as next FTS_DOC_ID */
 			if (max_doc_id >= new_table->fts->cache->next_doc_id) {
 				new_table->fts->cache->next_doc_id =
 					max_doc_id + 1;
@@ -5329,6 +5343,8 @@ dberr_t row_merge_bulk_t::write_to_index(ulint index_no, trx_t *trx)
 func_exit:
   if (err != DB_SUCCESS)
     trx->error_info= index;
+  else if (index->is_primary() && table->persistent_autoinc)
+    btr_write_autoinc(index, table->autoinc - 1);
   err= btr_bulk.finish(err);
   return err;
 }
@@ -5381,6 +5397,7 @@ bulk_rollback:
       if (t.second.get_first() < low_limit)
         low_limit= t.second.get_first();
       delete t.second.bulk_store;
+      t.second.bulk_store= nullptr;
     }
   }
   trx_savept_t bulk_save{low_limit};

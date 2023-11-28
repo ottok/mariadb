@@ -126,6 +126,25 @@ public:
     bool use_fields,
     spider_fields *fields
   ) override;
+protected:
+  int check_item_func(
+    Item_func *item_func,
+    ha_spider *spider,
+    const char *alias,
+    uint alias_length,
+    bool use_fields,
+    spider_fields *fields
+  );
+  int print_item_func(
+    Item_func *item_func,
+    ha_spider *spider,
+    spider_string *str,
+    const char *alias,
+    uint alias_length,
+    bool use_fields,
+    spider_fields *fields
+  );
+public:
   int open_item_sum_func(
     Item_sum *item_sum,
     ha_spider *spider,
@@ -1348,9 +1367,6 @@ public:
     ulong *realloced
   );
   int reset_sql(
-    ulong sql_type
-  );
-  bool need_lock_before_set_sql_for_exec(
     ulong sql_type
   );
   int set_sql_for_exec(

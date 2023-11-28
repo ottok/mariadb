@@ -80,6 +80,7 @@ Street, Fifth Floor, Boston, MA 02110-1335 USA
 #include <srv0start.h>
 #include "trx0sys.h"
 #include <buf0dblwr.h>
+#include <buf0flu.h>
 #include "ha_innodb.h"
 
 #include <list>
@@ -847,27 +848,49 @@ void mdl_lock_all()
 
 
 // Convert non-null terminated filename to space name
+// Note that in 10.6 the filename may be an undo file name
 static std::string filename_to_spacename(const void *filename, size_t len)
 {
-	// null- terminate filename
-	char *f = (char *)malloc(len + 1);
-	ut_a(f);
-	memcpy(f, filename, len);
-	f[len] = 0;
-	for (size_t i = 0; i < len; i++)
-		if (f[i] == '\\')
-			f[i] = '/';
-	char *p = strrchr(f, '.');
-	ut_a(p);
-	*p = 0;
-	char *table = strrchr(f, '/');
-	ut_a(table);
-	*table = 0;
-	char *db = strrchr(f, '/');
-	*table = '/';
-	std::string s(db ? db+1 : f);
-	free(f);
-	return s;
+  char f[FN_REFLEN];
+  char *p= 0, *table, *db;
+  DBUG_ASSERT(len < FN_REFLEN);
+
+  strmake(f, (const char*) filename, len);
+
+#ifdef _WIN32
+  for (size_t i = 0; i < len; i++)
+  {
+    if (f[i] == '\\')
+      f[i] = '/';
+  }
+#endif
+
+  /* Remove extension, if exists */
+  if (!(p= strrchr(f, '.')))
+    goto err;
+  *p= 0;
+
+  /* Find table name */
+  if (!(table= strrchr(f, '/')))
+    goto err;
+  *table = 0;
+
+  /* Find database name */
+  db= strrchr(f, '/');
+  *table = '/';
+  if (!db)
+    goto err;
+  {
+    std::string s(db+1);
+    return s;
+  }
+
+err:
+  /* Not a database/table. Return original (converted) name */
+  if (p)
+    *p= '.';                                    // Restore removed extension
+  std::string s(f);
+  return s;
 }
 
 /** Report an operation to create, delete, or rename a file during backup.
@@ -1850,7 +1873,7 @@ static int prepare_export()
       IF_WIN("\"","") "\"%s\" --mysqld \"%s\""
       " --defaults-extra-file=./backup-my.cnf --defaults-group-suffix=%s --datadir=."
       " --innodb --innodb-fast-shutdown=0 --loose-partition"
-      " --innodb_purge_rseg_truncate_frequency=1 --innodb-buffer-pool-size=%llu"
+      " --innodb-buffer-pool-size=%llu"
       " --console --skip-log-error --skip-log-bin --bootstrap %s< "
       BOOTSTRAP_FILENAME IF_WIN("\"",""),
       mariabackup_exe,
@@ -1864,7 +1887,7 @@ static int prepare_export()
       IF_WIN("\"","") "\"%s\" --mysqld"
       " --defaults-file=./backup-my.cnf --defaults-group-suffix=%s --datadir=."
       " --innodb --innodb-fast-shutdown=0 --loose-partition"
-      " --innodb_purge_rseg_truncate_frequency=1 --innodb-buffer-pool-size=%llu"
+      " --innodb-buffer-pool-size=%llu"
       " --console --log-error= --skip-log-bin --bootstrap %s< "
       BOOTSTRAP_FILENAME IF_WIN("\"",""),
       mariabackup_exe,
@@ -2373,10 +2396,15 @@ static bool innodb_init()
   buf_flush_sync();
   recv_sys.debug_free();
   ut_ad(!os_aio_pending_reads());
-  ut_ad(!os_aio_pending_writes());
   ut_d(mysql_mutex_lock(&buf_pool.flush_list_mutex));
   ut_ad(!buf_pool.get_oldest_modification(0));
   ut_d(mysql_mutex_unlock(&buf_pool.flush_list_mutex));
+  /* os_aio_pending_writes() may hold here if some write_io_callback()
+  did not release the slot yet.  However, the page write itself must
+  have completed, because the buf_pool.flush_list is empty. In debug
+  builds, we wait for this to happen, hoping to get a hung process if
+  this assumption does not hold. */
+  ut_d(os_aio_wait_until_no_pending_writes(false));
   log_sys.close_file();
 
   if (xtrabackup_incremental)
@@ -3146,7 +3174,7 @@ static bool xtrabackup_copy_logfile()
       if (log_sys.buf[recv_sys.offset] <= 1)
         break;
 
-      if (recv_sys.parse_mtr(STORE_NO) == recv_sys_t::OK)
+      if (recv_sys.parse_mtr<false>(false) == recv_sys_t::OK)
       {
         do
         {
@@ -3156,7 +3184,7 @@ static bool xtrabackup_copy_logfile()
                                                  sequence_offset));
           *seq= 1;
         }
-        while ((r= recv_sys.parse_mtr(STORE_NO)) == recv_sys_t::OK);
+        while ((r= recv_sys.parse_mtr<false>(false)) == recv_sys_t::OK);
 
         if (ds_write(dst_log_file, log_sys.buf + start_offset,
                      recv_sys.offset - start_offset))
@@ -4647,7 +4675,9 @@ fail:
 		goto fail;
 	}
 
-	log_sys.create();
+	if (!log_sys.create()) {
+		goto fail;
+	}
 	/* get current checkpoint_lsn */
 	{
 		mysql_mutex_lock(&recv_sys.mutex);
@@ -6017,7 +6047,9 @@ error:
 		}
 
 		recv_sys.create();
-		log_sys.create();
+		if (!log_sys.create()) {
+			goto error;
+		}
 		recv_sys.recovery_on = true;
 
 		xb_fil_io_init();

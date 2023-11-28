@@ -30,6 +30,8 @@
 #include "sql_time.h"
 #include "mem_root_array.h"
 
+#include "cset_narrowing.h"
+
 C_MODE_START
 #include <ma_dyncol.h>
 
@@ -787,7 +789,8 @@ enum class item_with_t : item_flags_t
   FIELD=       (1<<2), // If any item except Item_sum contains a field.
   SUM_FUNC=    (1<<3), // If item contains a sum func
   SUBQUERY=    (1<<4), // If item containts a sub query
-  ROWNUM_FUNC= (1<<5)
+  ROWNUM_FUNC= (1<<5), // If ROWNUM function was used
+  PARAM=       (1<<6)  // If user parameter was used
 };
 
 
@@ -1087,6 +1090,8 @@ public:
   { return (bool) (with_flags & item_with_t::SUBQUERY); }
   inline bool with_rownum_func() const
   { return (bool) (with_flags & item_with_t::ROWNUM_FUNC); }
+  inline bool with_param() const
+  { return (bool) (with_flags & item_with_t::PARAM); }
   inline void copy_flags(const Item *org, item_base_t mask)
   {
     base_flags= (item_base_t) (((item_flags_t) base_flags &
@@ -2217,15 +2222,6 @@ public:
     return 0;
   }
 
-  /**
-    Check db/table_name if they defined in item and match arg values
-
-    @param arg Pointer to Check_table_name_prm structure
-
-    @retval true Match failed
-    @retval false Match succeeded
-  */
-  virtual bool check_table_name_processor(void *arg) { return false; }
   /* 
     TRUE if the expression depends only on the table indicated by tab_map
     or can be converted to such an exression using equalities.
@@ -2340,6 +2336,7 @@ public:
   virtual bool check_handler_func_processor(void *arg) { return 0; }
   virtual bool check_field_expression_processor(void *arg) { return 0; }
   virtual bool check_func_default_processor(void *arg) { return 0; }
+  virtual bool update_func_default_processor(void *arg) { return 0; }
   /*
     Check if an expression value has allowed arguments, like DATE/DATETIME
     for date functions. Also used by partitioning code to reject
@@ -2424,15 +2421,6 @@ public:
     uint count;
     int nest_level;
     bool collect;
-  };
-
-  struct Check_table_name_prm
-  {
-    LEX_CSTRING db;
-    LEX_CSTRING table_name;
-    String field;
-    Check_table_name_prm(LEX_CSTRING _db, LEX_CSTRING _table_name) :
-      db(_db), table_name(_table_name) {}
   };
 
   /*
@@ -3499,17 +3487,17 @@ protected:
     updated during fix_fields() to values from Field object and life-time 
     of those is shorter than life-time of Item_field.
   */
-  LEX_CSTRING orig_db_name;
-  LEX_CSTRING orig_table_name;
-  LEX_CSTRING orig_field_name;
+  Lex_table_name orig_db_name;
+  Lex_table_name orig_table_name;
+  Lex_ident      orig_field_name;
 
   void undeclared_spvar_error() const;
 
 public:
   Name_resolution_context *context;
-  LEX_CSTRING db_name;
-  LEX_CSTRING table_name;
-  LEX_CSTRING field_name;
+  Lex_table_name db_name;
+  Lex_table_name table_name;
+  Lex_ident      field_name;
   /*
     Cached pointer to table which contains this field, used for the same reason
     by prep. stmt. too in case then we have not-fully qualified field.
@@ -3583,27 +3571,18 @@ public:
 
 private:
   /*
-    Setting this member to TRUE (via set_refers_to_temp_table())
-    ensures print() function continues to work even if the table
-    has been dropped.
+    Indicates whether this Item_field refers to a regular or some kind of
+    temporary table.
+    This is needed for print() to work: it may be called even after the table
+    referred by the Item_field has been dropped.
 
-    We need this for "ANALYZE statement" feature. Query execution has
-    these steps:
-      1. Run the query.
-      2. Cleanup starts. Temporary tables are destroyed
-      3. print "ANALYZE statement" output, if needed
-      4. Call close_thread_table() for regular tables.
-
-    Step #4 is done after step #3, so "ANALYZE stmt" has no problem printing
-    Item_field objects that refer to regular tables.
-
-    However, Step #3 is done after Step #2. Attempt to print Item_field objects
-    that refer to temporary tables will cause access to freed memory.
-
-    To resolve this, we use refers_to_temp_table member to refer to items 
-    in temporary (work) tables.
+    See ExplainDataStructureLifetime in sql_explain.h for details.
   */
-  bool refers_to_temp_table= false;
+  enum {
+    NO_TEMP_TABLE= 0,
+    REFERS_TO_DERIVED_TMP= 1,
+    REFERS_TO_OTHER_TMP=2
+  } refers_to_temp_table = NO_TEMP_TABLE;
 
 public:
   Item_field(THD *thd, Name_resolution_context *context_arg,
@@ -3786,24 +3765,6 @@ public:
     }
     return 0;
   }
-  bool check_table_name_processor(void *arg) override
-  {
-    Check_table_name_prm &p= *static_cast<Check_table_name_prm*>(arg);
-    if (!field && p.table_name.length && table_name.length)
-    {
-      DBUG_ASSERT(p.db.length);
-      if ((db_name.length &&
-          my_strcasecmp(table_alias_charset, p.db.str, db_name.str)) ||
-          my_strcasecmp(table_alias_charset, p.table_name.str, table_name.str))
-      {
-        print(&p.field, (enum_query_type) (QT_ITEM_ORIGINAL_FUNC_NULLIF |
-                                          QT_NO_DATA_EXPANSION |
-                                          QT_TO_SYSTEM_CHARSET));
-        return true;
-      }
-    }
-    return false;
-  }
   void cleanup() override;
   Item_equal *get_item_equal() override { return item_equal; }
   void set_item_equal(Item_equal *item_eq) override { item_equal= item_eq; }
@@ -3837,7 +3798,7 @@ public:
     return field->table->pos_in_table_list->outer_join;
   }
   bool check_index_dependence(void *arg) override;
-  void set_refers_to_temp_table(bool value);
+  void set_refers_to_temp_table();
   friend class Item_default_value;
   friend class Item_insert_value;
   friend class st_select_lex_unit;
@@ -5352,17 +5313,17 @@ public:
    :used_tables_cache(other->used_tables_cache),
     const_item_cache(other->const_item_cache)
   { }
-  void used_tables_and_const_cache_init()
+  inline void used_tables_and_const_cache_init()
   {
     used_tables_cache= 0;
     const_item_cache= true;
   }
-  void used_tables_and_const_cache_join(const Item *item)
+  inline void used_tables_and_const_cache_join(const Item *item)
   {
     used_tables_cache|= item->used_tables();
     const_item_cache&= item->const_item();
   }
-  void used_tables_and_const_cache_update_and_join(Item *item)
+  inline void used_tables_and_const_cache_update_and_join(Item *item)
   {
     item->update_used_tables();
     used_tables_and_const_cache_join(item);
@@ -5444,8 +5405,10 @@ protected:
 
 public:
   // This method is used by Arg_comparator
-  bool agg_arg_charsets_for_comparison(CHARSET_INFO **cs, Item **a, Item **b)
+  bool agg_arg_charsets_for_comparison(CHARSET_INFO **cs, Item **a, Item **b,
+                                       bool allow_narrowing)
   {
+    THD *thd= current_thd;
     DTCollation tmp;
     if (tmp.set((*a)->collation, (*b)->collation, MY_COLL_CMP_CONV) ||
         tmp.derivation == DERIVATION_NONE)
@@ -5458,11 +5421,40 @@ public:
                func_name());
       return true;
     }
+
+    if (allow_narrowing &&
+        (*a)->collation.derivation == (*b)->collation.derivation)
+    {
+      // allow_narrowing==true only for = and <=> comparisons.
+      if (Utf8_narrow::should_do_narrowing(thd, (*a)->collation.collation,
+                                                (*b)->collation.collation))
+      {
+        // a is a subset, b is a superset (e.g. utf8mb3 vs utf8mb4)
+        *cs= (*b)->collation.collation; // Compare using the wider cset
+        return false;
+      }
+      else
+      if (Utf8_narrow::should_do_narrowing(thd, (*b)->collation.collation,
+                                                (*a)->collation.collation))
+      {
+        // a is a superset, b is a subset (e.g. utf8mb4 vs utf8mb3)
+        *cs= (*a)->collation.collation; // Compare using the wider cset
+        return false;
+      }
+    }
+    /*
+      If necessary, convert both *a and *b to the collation in tmp:
+    */
+    Single_coll_err error_for_a= {(*b)->collation, true};
+    Single_coll_err error_for_b= {(*a)->collation, false};
+
     if (agg_item_set_converter(tmp, func_name_cstring(),
-                               a, 1, MY_COLL_CMP_CONV, 1) ||
+                               a, 1, MY_COLL_CMP_CONV, 1,
+                               /*just for error message*/ &error_for_a) ||
         agg_item_set_converter(tmp, func_name_cstring(),
-                               b, 1, MY_COLL_CMP_CONV, 1))
-      return true;
+                               b, 1, MY_COLL_CMP_CONV, 1,
+                               /*just for error message*/ &error_for_b))
+        return true;
     *cs= tmp.collation;
     return false;
   }
@@ -6735,6 +6727,7 @@ public:
   bool update_vcol_processor(void *) override { return false; }
   bool check_field_expression_processor(void *arg) override;
   bool check_func_default_processor(void *) override { return true; }
+  bool update_func_default_processor(void *arg) override;
   bool register_field_in_read_map(void *arg) override;
   bool walk(Item_processor processor, bool walk_subquery, void *args) override
   {

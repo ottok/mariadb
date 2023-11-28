@@ -165,8 +165,6 @@ ERROR 23000: Cannot delete or update a parent row: a foreign key constraint fail
 ALTER TABLE child FORCE;
 DELETE FROM parent;
 DROP TABLE child,parent;
-SET @saved_frequency = @@GLOBAL.innodb_purge_rseg_truncate_frequency;
-SET GLOBAL innodb_purge_rseg_truncate_frequency = 1;
 SELECT unique_constraint_name FROM information_schema.referential_constraints
 WHERE table_name = 't2';
 unique_constraint_name
@@ -246,8 +244,11 @@ CREATE TABLE t1 (a INT, UNIQUE(a), KEY(a)) ENGINE=InnoDB;
 ALTER TABLE t1 ADD FOREIGN KEY (a) REFERENCES t1 (a);
 SET SESSION FOREIGN_KEY_CHECKS = OFF;
 ALTER TABLE t1 CHANGE COLUMN a a TIME NOT NULL;
+ERROR HY000: Cannot change column 'a': used in a foreign key constraint 't1_ibfk_1' of table 'test.t1'
 ALTER TABLE t1 ADD pk INT NOT NULL AUTO_INCREMENT PRIMARY KEY;
 ALTER TABLE t1 CHANGE COLUMN a b TIME;
+ERROR 0A000: ALGORITHM=COPY is not supported. Reason: Columns participating in a foreign key are renamed. Try ALGORITHM=INPLACE
+ALTER TABLE t1 CHANGE COLUMN a b TIME, DROP FOREIGN KEY t1_ibfk_1;
 SET SESSION FOREIGN_KEY_CHECKS = ON;
 DROP TABLE t1;
 #
@@ -727,7 +728,6 @@ CHECK TABLE t1;
 Table	Op	Msg_type	Msg_text
 test.t1	check	status	OK
 DROP TABLE t1;
-SET GLOBAL innodb_purge_rseg_truncate_frequency = @saved_frequency;
 #
 # MDEV-17187 table doesn't exist in engine after ALTER other tables
 # with CONSTRAINTs
@@ -886,7 +886,22 @@ DROP INDEX fx ON t1;
 INSERT INTO t1 VALUES (2,11,11);
 DROP TABLE t1;
 SET FOREIGN_KEY_CHECKS=DEFAULT;
+#
+# MDEV-32018 Allow the setting of Auto_increment on FK referenced columns
+#
+CREATE TABLE t1 (
+id int unsigned NOT NULL PRIMARY KEY
+);
+CREATE TABLE t2 (
+id int unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY,
+t1_id int unsigned DEFAULT NULL,
+CONSTRAINT FK_t1_id FOREIGN KEY (t1_id) REFERENCES t1 (id)
+);
+ALTER TABLE t1 MODIFY id INT unsigned AUTO_INCREMENT;
+DROP TABLE t1,t2;
+#
 # End of 10.4 tests
+#
 #
 # MDEV-20729 Fix REFERENCES constraint in column definition
 #
@@ -1026,7 +1041,36 @@ CREATE OR REPLACE TABLE t1 (b INT) ENGINE=InnoDB;
 connection default;
 INSERT INTO t2 VALUES (1);
 connection con1;
-disconnect con1;
 connection default;
 DROP TABLE IF EXISTS t2, t1;
+#
+# MDEV-30531 Corrupt index(es) on busy table when using FOREIGN KEY
+#
+CREATE TABLE collections (
+id int(11) unsigned NOT NULL AUTO_INCREMENT,
+collectionhash varchar(255) NOT NULL DEFAULT '0',
+PRIMARY KEY (id),
+UNIQUE KEY ix_collection_collectionhash (collectionhash)
+) ENGINE=InnoDB;
+CREATE TABLE binaries (
+id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+collections_id int(11) unsigned NOT NULL DEFAULT 0,
+binaryhash binary(16) NOT NULL DEFAULT '0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',
+PRIMARY KEY (id),
+UNIQUE KEY ix_binary_binaryhash (binaryhash),
+CONSTRAINT FK_collections FOREIGN KEY (collections_id) REFERENCES collections (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+INSERT INTO collections (id) VALUES (NULL);
+connection con1;
+INSERT INTO binaries (id,collections_id) VALUES (NULL,1);
+REPLACE INTO collections (id) VALUES (NULL);
+connection default;
+REPLACE INTO binaries (id) VALUES (NULL);
+SET GLOBAL innodb_max_purge_lag_wait=0;
+CHECK TABLE binaries, collections EXTENDED;
+Table	Op	Msg_type	Msg_text
+test.binaries	check	status	OK
+test.collections	check	status	OK
+disconnect con1;
+DROP TABLE binaries, collections;
 # End of 10.6 tests
