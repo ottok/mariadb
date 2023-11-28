@@ -1,3 +1,16 @@
+mariadb (1:10.11.6-0+deb12u1) bookworm; urgency=medium
+
+  * New upstream version 10.11.6. Includes fixes for several severe regressions
+    as noted at https://mariadb.com/kb/en/mariadb-10-11-6-release-notes/ as well
+    as security issues:
+    - CVE-2023-22084
+  * Previous upstream version 10.11.5 also included fixes for several severe
+    regressions such as
+    - MDEV-31642: Upgrade may crash if innodb_log_file_buffering=OFF
+      (Closes: #1040784)
+
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 27 Nov 2023 21:55:27 -0800
+
 mariadb (1:10.11.4-1~deb12u1) bookworm; urgency=medium
 
   [ Otto Kekäläinen ]

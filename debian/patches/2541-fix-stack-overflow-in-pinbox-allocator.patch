@@ -93,8 +93,8 @@ Services, Inc.
  /*
    Free an object allocated via pinbox allocator
  
-@@ -271,138 +262,85 @@ void lf_pinbox_free(LF_PINS *pins, void
-    lf_pinbox_real_free(pins);
+@@ -274,138 +265,85 @@ void lf_pinbox_free(LF_PINS *pins, void
+                       lf_pinbox_real_free(pins););
  }
  
 -struct st_harvester {
