@@ -8,8 +8,11 @@ mariadb (1:10.11.6-0+deb12u1) bookworm; urgency=medium
     regressions such as
     - MDEV-31642: Upgrade may crash if innodb_log_file_buffering=OFF
       (Closes: #1040784)
+    - MDEV-31836: mariadb-dump incorrect order of columns (Closes: #1055073)
+  * Drop STACK_DIRECTION customization as upstream CMake code now handles it
+  * Update configuration tracing to match what is expected for 10.11.6
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 27 Nov 2023 21:55:27 -0800
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 29 Nov 2023 20:42:37 -0800
 
 mariadb (1:10.11.4-1~deb12u1) bookworm; urgency=medium
 
