@@ -297,7 +297,6 @@ class Type_collection_geometry: public Type_collection
 #endif
 public:
   bool init(Type_handler_data *data) override;
-  const Type_handler *handler_by_name(const LEX_CSTRING &name) const override;
   const Type_handler *aggregate_for_result(const Type_handler *a,
                                            const Type_handler *b)
                                            const override;
@@ -316,6 +315,8 @@ public:
 };
 
 extern Type_collection_geometry type_collection_geometry;
+const Type_handler *
+Type_collection_geometry_handler_by_name(const LEX_CSTRING &name);
 
 #include "field.h"
 
@@ -376,9 +377,9 @@ public:
     if (tmp.length)
       to->set_data_type_name(tmp);
   }
-  bool can_optimize_range(const Item_bool_func *cond,
-                                  const Item *item,
-                                  bool is_eq_func) const override;
+  Data_type_compatibility can_optimize_range(const Item_bool_func *cond,
+                                             const Item *item,
+                                             bool is_eq_func) const override;
   void sql_type(String &str) const override;
   Copy_func *get_copy_func(const Field *from) const override
   {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2008, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -238,8 +238,7 @@ ha_perfschema::ha_perfschema(handlerton *hton, TABLE_SHARE *share)
   : handler(hton, share), m_table_share(NULL), m_table(NULL)
 {}
 
-ha_perfschema::~ha_perfschema()
-{}
+ha_perfschema::~ha_perfschema() = default;
 
 int ha_perfschema::open(const char *name, int mode, uint test_if_locked)
 {

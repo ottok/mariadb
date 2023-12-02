@@ -143,7 +143,7 @@ public:
   void print_explain_json_for_children(Explain_query *query,
                                        Json_writer *writer, bool is_analyze);
   bool print_explain_json_cache(Json_writer *writer, bool is_analyze);
-  virtual ~Explain_node(){}
+  virtual ~Explain_node() = default;
 };
 
 
@@ -290,7 +290,7 @@ class Explain_aggr_node : public Sql_alloc
 {
 public:
   virtual enum_explain_aggr_node_type get_type()= 0;
-  virtual ~Explain_aggr_node() {}
+  virtual ~Explain_aggr_node() = default;
   Explain_aggr_node *child;
 };
 
@@ -474,7 +474,7 @@ public:
                     bool is_analyze);
   
   /* Send tabular EXPLAIN to the client */
-  int send_explain(THD *thd);
+  int send_explain(THD *thd, bool extended);
   
   /* Return tabular EXPLAIN output as a text string */
   bool print_explain_str(THD *thd, String *out_str, bool is_analyze);
@@ -722,7 +722,7 @@ public:
 class Explain_table_access : public Sql_alloc
 {
 public:
-  Explain_table_access(MEM_ROOT *root) :
+  Explain_table_access(MEM_ROOT *root, bool timed) :
     derived_select_number(0),
     non_merged_sjm_number(0),
     extra_tags(root),
@@ -735,6 +735,8 @@ public:
     pushed_index_cond(NULL),
     sjm_nest(NULL),
     pre_join_sort(NULL),
+    handler_for_stats(NULL),
+    jbuf_unpack_tracker(timed),
     rowid_filter(NULL)
   {}
   ~Explain_table_access() { delete sjm_nest; }
@@ -842,8 +844,38 @@ public:
   Exec_time_tracker op_tracker;
   Gap_time_tracker extra_time_tracker;
 
+  /*
+    Handler object to get the handler_stats from.
+
+    Notes:
+    This pointer is only valid until notify_tables_are_closed() is called.
+    After that, the tables may be freed or reused, together with their
+    handler_stats objects.
+    notify_tables_are_closed() disables printing of FORMAT=JSON output.
+    r_engine_stats is only printed in FORMAT=JSON output, so we're fine.
+
+    We do not store pointers to temporary (aka "work") tables here.
+    Temporary tables may be freed (e.g. by JOIN::cleanup()) or re-created
+    during query execution (when HEAP table is converted into Aria).
+  */
+  handler *handler_for_stats;
+
+  /* When using join buffer: Track the reads from join buffer */
   Table_access_tracker jbuf_tracker;
-  
+
+  /* When using join buffer: time spent unpacking rows from the join buffer */
+  Time_and_counter_tracker jbuf_unpack_tracker;
+
+  /*
+    When using join buffer: time spent after unpacking rows from the join
+    buffer. This will capture the time spent checking the Join Condition:
+    the condition that depends on this table and preceding tables.
+  */
+  Gap_time_tracker jbuf_extra_time_tracker;
+
+  /* When using join buffer: Track the number of incoming record combinations */
+  Counter_tracker jbuf_loops_tracker;
+
   Explain_rowid_filter *rowid_filter;
 
   int print_explain(select_result_sink *output, uint8 explain_flags, 
@@ -878,7 +910,8 @@ public:
   Explain_update(MEM_ROOT *root, bool is_analyze) : 
     Explain_node(root),
     filesort_tracker(NULL),
-    command_tracker(is_analyze)
+    command_tracker(is_analyze),
+    handler_for_stats(NULL)
   {}
 
   virtual enum explain_node_type get_type() { return EXPLAIN_UPDATE; }
@@ -937,6 +970,9 @@ public:
   
   /* TODO: This tracks time to read rows from the table */
   Exec_time_tracker table_tracker;
+
+  /* The same as  Explain_table_access::handler_for_stats */
+  handler *handler_for_stats;
 
   virtual int print_explain(Explain_query *query, select_result_sink *output, 
                             uint8 explain_flags, bool is_analyze);

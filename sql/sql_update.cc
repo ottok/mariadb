@@ -231,6 +231,11 @@ bool TABLE::vers_check_update(List<Item> &items)
       }
     }
   }
+  /*
+    Tell TRX_ID-versioning that it does not insert history row
+    (see calc_row_difference()).
+  */
+  vers_write= false;
   return false;
 }
 
@@ -689,7 +694,7 @@ int mysql_update(THD *thd,
   */
   if (thd->lex->describe)
     goto produce_explain_and_leave;
-  if (!(explain= query_plan.save_explain_update_data(query_plan.mem_root, thd)))
+  if (!(explain= query_plan.save_explain_update_data(thd, query_plan.mem_root)))
     goto err;
 
   ANALYZE_START_TRACKING(thd, &explain->command_tracker);
@@ -1375,11 +1380,12 @@ produce_explain_and_leave:
     We come here for various "degenerate" query plans: impossible WHERE,
     no-partitions-used, impossible-range, etc.
   */
-  if (unlikely(!query_plan.save_explain_update_data(query_plan.mem_root, thd)))
+  if (unlikely(!query_plan.save_explain_update_data(thd, query_plan.mem_root)))
     goto err;
 
 emit_explain_and_leave:
-  int err2= thd->lex->explain->send_explain(thd);
+  bool extended= thd->lex->describe & DESCRIBE_EXTENDED;
+  int err2= thd->lex->explain->send_explain(thd, extended);
 
   delete select;
   free_underlaid_joins(thd, select_lex);
@@ -1453,6 +1459,8 @@ bool mysql_prepare_update(THD *thd, TABLE_LIST *table_list,
 
 
   select_lex->fix_prepare_information(thd, conds, &fake_conds);
+  if (!thd->lex->upd_del_where)
+    thd->lex->upd_del_where= *conds;
   DBUG_RETURN(FALSE);
 }
 
@@ -1980,7 +1988,10 @@ bool mysql_multi_update(THD *thd, TABLE_LIST *table_list, List<Item> *fields,
   else
   {
     if (thd->lex->describe || thd->lex->analyze_stmt)
-      res= thd->lex->explain->send_explain(thd);
+    {
+      bool extended= thd->lex->describe & DESCRIBE_EXTENDED;
+      res= thd->lex->explain->send_explain(thd, extended);
+    }
   }
   thd->abort_on_warning= 0;
   DBUG_RETURN(res);

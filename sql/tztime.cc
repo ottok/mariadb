@@ -1027,7 +1027,7 @@ static const String tz_SYSTEM_name("SYSTEM", 6, &my_charset_latin1);
 class Time_zone_system : public Time_zone
 {
 public:
-  Time_zone_system() {}                       /* Remove gcc warning */
+  Time_zone_system() = default;                       /* Remove gcc warning */
   virtual my_time_t TIME_to_gmt_sec(const MYSQL_TIME *t, uint *error_code) const;
   virtual void gmt_sec_to_TIME(MYSQL_TIME *tmp, my_time_t t) const;
   virtual const String * get_name() const;
@@ -1123,7 +1123,7 @@ Time_zone_system::get_name() const
 class Time_zone_utc : public Time_zone
 {
 public:
-  Time_zone_utc() {}                          /* Remove gcc warning */
+  Time_zone_utc() = default;                          /* Remove gcc warning */
   virtual my_time_t TIME_to_gmt_sec(const MYSQL_TIME *t,
                                     uint *error_code) const;
   virtual void gmt_sec_to_TIME(MYSQL_TIME *tmp, my_time_t t) const;
@@ -2429,9 +2429,9 @@ print_tz_as_sql(const char* tz_name, const TIME_ZONE_INFO *sp)
 
 
 #define SAVE_ENGINE(e) \
-  "\"select ENGINE into @" e "_engine" \
+  "'select ENGINE into @" e "_engine" \
   " from information_schema.TABLES" \
-  " where TABLE_SCHEMA=DATABASE() and TABLE_NAME='" e "'\""
+  " where TABLE_SCHEMA=DATABASE() and TABLE_NAME=''" e "'''"
 
 /*
   Print info about leap seconds in time zone as SQL statements

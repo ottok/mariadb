@@ -664,7 +664,11 @@ public:
     {
       if (sysvartrack_global_update(thd, new_val,
                                     var->save_result.string_value.length))
+      {
+        if (new_val)
+          my_free(new_val);
         new_val= 0;
+      }
     }
     global_update_finish(new_val);
     return (new_val == 0 && var->save_result.string_value.str != 0);
@@ -1386,6 +1390,10 @@ public:
 
   Backing store: ulonglong
 */
+
+static const LEX_CSTRING all_clex_str= {STRING_WITH_LEN("all")};
+
+
 class Sys_var_set: public Sys_var_typelib
 {
 public:
@@ -1445,6 +1453,12 @@ public:
       var->save_result.ulonglong_value=
             find_set(&typelib, res->ptr(), res->length(), NULL,
                     &error, &error_len, &not_used);
+      if (error_len &&
+          !my_charset_latin1.strnncollsp(res->to_lex_cstring(), all_clex_str))
+      {
+        var->save_result.ulonglong_value= ((1ULL << (typelib.count)) -1);
+        error_len= 0;
+      }
       /*
         note, we only issue an error if error_len > 0.
         That is even while empty (zero-length) values are considered

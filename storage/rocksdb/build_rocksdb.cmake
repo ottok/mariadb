@@ -129,17 +129,13 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64|powerpc64")
   ADD_DEFINITIONS(-DHAVE_POWER8 -DHAS_ALTIVEC)
 endif(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64|powerpc64")
 
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "riscv64")
- set(SYSTEM_LIBS ${SYSTEM_LIBS} -latomic)
-endif()
-
 option(WITH_FALLOCATE "build with fallocate" ON)
 
 if(WITH_FALLOCATE AND UNIX)
   include(CheckCSourceCompiles)
   CHECK_C_SOURCE_COMPILES("
+#define _GNU_SOURCE
 #include <fcntl.h>
-#include <linux/falloc.h>
 int main() {
  int fd = open(\"/dev/null\", 0);
  fallocate(fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, 0, 1024);
@@ -161,9 +157,9 @@ include_directories(SYSTEM ${ROCKSDB_SOURCE_DIR}/third-party/gtest-1.7.0/fused-s
 
 find_package(Threads REQUIRED)
 if(WIN32)
-  set(SYSTEM_LIBS ${SYSTEM_LIBS} Shlwapi.lib Rpcrt4.lib)
+  set(SYSTEM_LIBS ${SYSTEM_LIBS} ${ATOMIC_EXTRA_LIBS} Shlwapi.lib Rpcrt4.lib)
 else()
-  set(SYSTEM_LIBS ${CMAKE_THREAD_LIBS_INIT} ${LIBRT} ${CMAKE_DL_LIBS})
+  set(SYSTEM_LIBS ${SYSTEM_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${LIBRT} ${CMAKE_DL_LIBS} ${ATOMIC_EXTRA_LIBS})
 endif()
 
 set(ROCKSDB_LIBS rocksdblib})

@@ -117,7 +117,7 @@ static MARIA_HA *maria_clone_internal(MARIA_SHARE *share,
 		       &info.blobs,sizeof(MARIA_BLOB)*share->base.blobs,
 		       &info.buff,(share->base.max_key_block_length*2+
 				   share->base.max_key_length),
-		       &info.lastkey_buff,share->base.max_key_length*2+1,
+		       &info.lastkey_buff,share->base.max_key_length*3,
 		       &info.first_mbr_key, share->base.max_key_length,
 		       &info.maria_rtree_recursion_state,
                        share->have_rtree ? 1024 : 0,
@@ -958,7 +958,8 @@ MARIA_HA *maria_open(const char *name, int mode, uint open_flags,
 
     if (MY_TEST(share->base.extra_options & MA_EXTRA_OPTIONS_ENCRYPTED))
     {
-      if (!(disk_pos= ma_crypt_read(share, disk_pos)))
+      if (!(disk_pos= ma_crypt_read(share, disk_pos,
+                                    MY_TEST(open_flags & HA_OPEN_FOR_DROP))))
         goto err;
     }
 

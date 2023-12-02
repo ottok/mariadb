@@ -91,7 +91,7 @@ ATTRIBUTE_COLD void btr_decryption_failed(const dict_index_t &index);
 @param[out]	err	error code
 @return block */
 buf_block_t *btr_block_get(const dict_index_t &index,
-                           uint32_t page, ulint mode, bool merge,
+                           uint32_t page, rw_lock_type_t mode, bool merge,
                            mtr_t *mtr, dberr_t *err= nullptr);
 
 /**************************************************************//**
@@ -445,7 +445,7 @@ Gets the root node of a tree and x- or s-latches it.
 buf_block_t*
 btr_root_block_get(
 /*===============*/
-	const dict_index_t*	index,	/*!< in: index tree */
+	dict_index_t*		index,	/*!< in: index tree */
 	rw_lock_type_t		mode,	/*!< in: either RW_S_LATCH
 					or RW_X_LATCH */
 	mtr_t*			mtr,	/*!< in: mtr */

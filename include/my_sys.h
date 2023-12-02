@@ -28,9 +28,7 @@ C_MODE_START
 #include <m_ctype.h>                    /* for CHARSET_INFO */
 #include <stdarg.h>
 #include <typelib.h>
-#ifdef _WIN32
-#include <malloc.h> /*for alloca*/
-#endif
+#include <my_alloca.h>
 #include <mysql/plugin.h>
 #include <mysql/service_my_print_error.h>
 
@@ -92,7 +90,6 @@ C_MODE_START
 #define MY_THREADSAFE 2048U     /* my_seek(): lock fd mutex */
 #define MY_SYNC       4096U     /* my_copy(): sync dst file */
 #define MY_SYNC_DIR   32768U    /* my_create/delete/rename: sync directory */
-#define MY_SYNC_FILESIZE 65536U /* my_sync(): safe sync when file is extended */
 #define MY_THREAD_SPECIFIC 0x10000U /* my_malloc(): thread specific */
 /* Tree that should delete things automatically */
 #define MY_TREE_WITH_DELETE 0x40000U
@@ -163,6 +160,7 @@ extern my_thread_id (*sf_malloc_dbug_id)(void);
 
 typedef void (*MALLOC_SIZE_CB) (long long size, my_bool is_thread_specific); 
 extern void set_malloc_size_cb(MALLOC_SIZE_CB func);
+extern MALLOC_SIZE_CB update_malloc_size;
 
 	/* defines when allocating data */
 extern void *my_malloc(PSI_memory_key key, size_t size, myf MyFlags);
@@ -193,16 +191,6 @@ my_bool my_test_if_thinly_provisioned(File handle);
 extern my_bool my_may_have_atomic_write;
 
 #if defined(HAVE_ALLOCA) && !defined(HAVE_valgrind)
-#if defined(_AIX) && !defined(__GNUC__) && !defined(_AIX43)
-#pragma alloca
-#endif /* _AIX */
-#if defined(__MWERKS__)
-#undef alloca
-#define alloca _alloca
-#endif /* __MWERKS__ */
-#if defined(__GNUC__) && !defined(HAVE_ALLOCA_H) && ! defined(alloca)
-#define alloca __builtin_alloca
-#endif /* GNUC */
 #define my_alloca(SZ) alloca((size_t) (SZ))
 #define my_afree(PTR) ((void)0)
 #define MAX_ALLOCA_SZ 4096
@@ -1078,7 +1066,7 @@ extern size_t escape_string_for_mysql(CHARSET_INFO *charset_info,
                                       char *to, size_t to_length,
                                       const char *from, size_t length,
                                       my_bool *overflow);
-extern char *get_tty_password(const char *opt_message);
+extern char *my_get_tty_password(const char *opt_message);
 #ifdef _WIN32
 #define BACKSLASH_MBTAIL
 /* File system character set */

@@ -136,7 +136,6 @@ static void buf_LRU_block_free_hashed_page(buf_block_t *block)
 @param[in]	bpage		control block */
 static inline void incr_LRU_size_in_bytes(const buf_page_t* bpage)
 {
-	/* FIXME: use atomics, not mutex */
 	mysql_mutex_assert_owner(&buf_pool.mutex);
 
 	buf_pool.stat.LRU_bytes += bpage->physical_size();
@@ -397,6 +396,13 @@ buf_block_t *buf_LRU_get_free_block(bool have_mutex)
 		mysql_mutex_assert_owner(&buf_pool.mutex);
 		goto got_mutex;
 	}
+	DBUG_EXECUTE_IF("recv_ran_out_of_buffer",
+			if (recv_recovery_is_on()
+			    && recv_sys.apply_log_recs) {
+				mysql_mutex_lock(&buf_pool.mutex);
+				goto flush_lru;
+			});
+get_mutex:
 	mysql_mutex_lock(&buf_pool.mutex);
 got_mutex:
 	buf_LRU_check_size_of_non_data_objects();
@@ -439,20 +445,32 @@ got_block:
 		if ((block = buf_LRU_get_free_only()) != nullptr) {
 			goto got_block;
 		}
-		if (!buf_pool.n_flush_LRU_) {
-			break;
+		mysql_mutex_unlock(&buf_pool.mutex);
+		mysql_mutex_lock(&buf_pool.flush_list_mutex);
+		const auto n_flush = buf_pool.n_flush();
+		if (!buf_pool.try_LRU_scan) {
+			buf_pool.page_cleaner_wakeup(true);
 		}
-		my_cond_wait(&buf_pool.done_free, &buf_pool.mutex.m_mutex);
+		mysql_mutex_unlock(&buf_pool.flush_list_mutex);
+		mysql_mutex_lock(&buf_pool.mutex);
+		if (!n_flush) {
+			goto not_found;
+		}
+		if (!buf_pool.try_LRU_scan) {
+			my_cond_wait(&buf_pool.done_free,
+				     &buf_pool.mutex.m_mutex);
+		}
 	}
 
-#ifndef DBUG_OFF
 not_found:
-#endif
-	mysql_mutex_unlock(&buf_pool.mutex);
+	if (n_iterations > 1) {
+		MONITOR_INC( MONITOR_LRU_GET_FREE_WAITS );
+	}
 
-	if (n_iterations > 20 && !buf_lru_free_blocks_error_printed
+	if (n_iterations == 21 && !buf_lru_free_blocks_error_printed
 	    && srv_buf_pool_old_size == srv_buf_pool_size) {
-
+		buf_lru_free_blocks_error_printed = true;
+		mysql_mutex_unlock(&buf_pool.mutex);
 		ib::warn() << "Difficult to find free blocks in the buffer pool"
 			" (" << n_iterations << " search iterations)! "
 			<< flush_failures << " failed attempts to"
@@ -466,12 +484,7 @@ not_found:
 			<< os_n_file_writes << " OS file writes, "
 			<< os_n_fsyncs
 			<< " OS fsyncs.";
-
-		buf_lru_free_blocks_error_printed = true;
-	}
-
-	if (n_iterations > 1) {
-		MONITOR_INC( MONITOR_LRU_GET_FREE_WAITS );
+		mysql_mutex_lock(&buf_pool.mutex);
 	}
 
 	/* No free block was found: try to flush the LRU list.
@@ -482,16 +495,19 @@ not_found:
 	removing the block from buf_pool.page_hash and buf_pool.LRU is fairly
 	involved (particularly in case of ROW_FORMAT=COMPRESSED pages). We
 	can do that in a separate patch sometime in future. */
-
-	if (!buf_flush_LRU(innodb_lru_flush_size)) {
+#ifndef DBUG_OFF
+flush_lru:
+#endif
+	if (!buf_flush_LRU(innodb_lru_flush_size, true)) {
 		MONITOR_INC(MONITOR_LRU_SINGLE_FLUSH_FAILURE_COUNT);
 		++flush_failures;
 	}
 
 	n_iterations++;
-	mysql_mutex_lock(&buf_pool.mutex);
 	buf_pool.stat.LRU_waits++;
-	goto got_mutex;
+	mysql_mutex_unlock(&buf_pool.mutex);
+	buf_dblwr.flush_buffered_writes();
+	goto get_mutex;
 }
 
 /** Move the LRU_old pointer so that the length of the old blocks list
@@ -800,50 +816,63 @@ bool buf_LRU_free_page(buf_page_t *bpage, bool zip)
 	/* We cannot use transactional_lock_guard here,
 	because buf_buddy_relocate() in buf_buddy_free() could get stuck. */
 	hash_lock.lock();
-	lsn_t oldest_modification = bpage->oldest_modification_acquire();
+	const lsn_t oldest_modification = bpage->oldest_modification_acquire();
 
 	if (UNIV_UNLIKELY(!bpage->can_relocate())) {
 		/* Do not free buffer fixed and I/O-fixed blocks. */
 		goto func_exit;
 	}
 
-	if (oldest_modification == 1) {
+	switch (oldest_modification) {
+	case 2:
+		ut_ad(id.space() == SRV_TMP_SPACE_ID);
+		ut_ad(!bpage->zip.data);
+		if (!bpage->is_freed()) {
+			goto func_exit;
+		}
+		bpage->clear_oldest_modification();
+		break;
+	case 1:
 		mysql_mutex_lock(&buf_pool.flush_list_mutex);
-		oldest_modification = bpage->oldest_modification();
-		if (oldest_modification) {
-			ut_ad(oldest_modification == 1);
+		if (const lsn_t om = bpage->oldest_modification()) {
+			ut_ad(om == 1);
 			buf_pool.delete_from_flush_list(bpage);
 		}
 		mysql_mutex_unlock(&buf_pool.flush_list_mutex);
 		ut_ad(!bpage->oldest_modification());
-		oldest_modification = 0;
-	}
-
-	if (zip || !bpage->zip.data) {
-		/* This would completely free the block. */
-		/* Do not completely free dirty blocks. */
-
-		if (oldest_modification) {
-			goto func_exit;
+		/* fall through */
+	case 0:
+		if (zip || !bpage->zip.data || !bpage->frame) {
+			break;
 		}
-	} else if (oldest_modification && !bpage->frame) {
-func_exit:
-		hash_lock.unlock();
-		return(false);
-
-	} else if (bpage->frame) {
+relocate_compressed:
 		b = static_cast<buf_page_t*>(ut_zalloc_nokey(sizeof *b));
 		ut_a(b);
 		mysql_mutex_lock(&buf_pool.flush_list_mutex);
 		new (b) buf_page_t(*bpage);
 		b->frame = nullptr;
-		b->set_state(buf_page_t::UNFIXED + 1);
+		{
+			ut_d(uint32_t s=) b->fix();
+			ut_ad(s == buf_page_t::FREED
+			      || s == buf_page_t::UNFIXED
+			      || s == buf_page_t::IBUF_EXIST
+			      || s == buf_page_t::REINIT);
+		}
+		break;
+	default:
+		if (zip || !bpage->zip.data || !bpage->frame) {
+			/* This would completely free the block. */
+			/* Do not completely free dirty blocks. */
+func_exit:
+			hash_lock.unlock();
+			return(false);
+		}
+		goto relocate_compressed;
 	}
 
 	mysql_mutex_assert_owner(&buf_pool.mutex);
 
-	DBUG_PRINT("ib_buf", ("free page %u:%u",
-			      id.space(), id.page_no()));
+	DBUG_PRINT("ib_buf", ("free page %u:%u", id.space(), id.page_no()));
 
 	ut_ad(bpage->can_relocate());
 
@@ -1021,7 +1050,8 @@ buf_LRU_block_free_non_file_page(
 	} else {
 		UT_LIST_ADD_FIRST(buf_pool.free, &block->page);
 		ut_d(block->page.in_free_list = true);
-		pthread_cond_signal(&buf_pool.done_free);
+		buf_pool.try_LRU_scan= true;
+		pthread_cond_broadcast(&buf_pool.done_free);
 	}
 
 	MEM_NOACCESS(block->page.frame, srv_page_size);
@@ -1062,64 +1092,57 @@ static bool buf_LRU_block_remove_hashed(buf_page_t *bpage, const page_id_t id,
 
 	buf_pool.freed_page_clock += 1;
 
-	if (UNIV_LIKELY(bpage->frame != nullptr)) {
+	if (UNIV_LIKELY(!bpage->zip.data)) {
 		MEM_CHECK_ADDRESSABLE(bpage, sizeof(buf_block_t));
 		MEM_CHECK_ADDRESSABLE(bpage->frame, srv_page_size);
 		buf_block_modify_clock_inc((buf_block_t*) bpage);
-		if (UNIV_LIKELY_NULL(bpage->zip.data)) {
-			const page_t*	page = bpage->frame;
+	} else if (const page_t *page = bpage->frame) {
+		MEM_CHECK_ADDRESSABLE(bpage, sizeof(buf_block_t));
+		MEM_CHECK_ADDRESSABLE(bpage->frame, srv_page_size);
+		buf_block_modify_clock_inc((buf_block_t*) bpage);
 
-			ut_a(!zip || !bpage->oldest_modification());
-			ut_ad(bpage->zip_size());
-
-			switch (fil_page_get_type(page)) {
-			case FIL_PAGE_TYPE_ALLOCATED:
-			case FIL_PAGE_INODE:
-			case FIL_PAGE_IBUF_BITMAP:
-			case FIL_PAGE_TYPE_FSP_HDR:
-			case FIL_PAGE_TYPE_XDES:
-				/* These are essentially uncompressed pages. */
-				if (!zip) {
-					/* InnoDB writes the data to the
-					uncompressed page frame.  Copy it
-					to the compressed page, which will
-					be preserved. */
-					memcpy(bpage->zip.data, page,
-					       bpage->zip_size());
-				}
-				break;
-			case FIL_PAGE_TYPE_ZBLOB:
-			case FIL_PAGE_TYPE_ZBLOB2:
-				break;
-			case FIL_PAGE_INDEX:
-			case FIL_PAGE_RTREE:
-#if defined UNIV_ZIP_DEBUG && defined BTR_CUR_HASH_ADAPT
-				/* During recovery, we only update the
-				compressed page, not the uncompressed one. */
-				ut_a(recv_recovery_is_on()
-				     || page_zip_validate(
-					     &bpage->zip, page,
-					     ((buf_block_t*) bpage)->index));
-#endif /* UNIV_ZIP_DEBUG && BTR_CUR_HASH_ADAPT */
-				break;
-			default:
-				ib::error() << "The compressed page to be"
-					" evicted seems corrupt:";
-				ut_print_buf(stderr, page, srv_page_size);
-
-				ib::error() << "Possibly older version of"
-					" the page:";
-
-				ut_print_buf(stderr, bpage->zip.data,
-					     bpage->zip_size());
-				putc('\n', stderr);
-				ut_error;
+		ut_a(!zip || !bpage->oldest_modification());
+		ut_ad(bpage->zip_size());
+		/* Skip consistency checks if the page was freed.
+		In recovery, we could get a sole FREE_PAGE record
+		and nothing else, for a ROW_FORMAT=COMPRESSED page.
+		Its contents would be garbage. */
+		if (!bpage->is_freed())
+		switch (fil_page_get_type(page)) {
+		case FIL_PAGE_TYPE_ALLOCATED:
+		case FIL_PAGE_INODE:
+		case FIL_PAGE_IBUF_BITMAP:
+		case FIL_PAGE_TYPE_FSP_HDR:
+		case FIL_PAGE_TYPE_XDES:
+			/* These are essentially uncompressed pages. */
+			if (!zip) {
+				/* InnoDB writes the data to the
+				uncompressed page frame.  Copy it
+				to the compressed page, which will
+				be preserved. */
+				memcpy(bpage->zip.data, page,
+				       bpage->zip_size());
 			}
-		} else {
-			goto evict_zip;
+			break;
+		case FIL_PAGE_TYPE_ZBLOB:
+		case FIL_PAGE_TYPE_ZBLOB2:
+		case FIL_PAGE_INDEX:
+		case FIL_PAGE_RTREE:
+			break;
+		default:
+			ib::error() << "The compressed page to be"
+				" evicted seems corrupt:";
+			ut_print_buf(stderr, page, srv_page_size);
+
+			ib::error() << "Possibly older version of"
+				" the page:";
+
+			ut_print_buf(stderr, bpage->zip.data,
+				     bpage->zip_size());
+			putc('\n', stderr);
+			ut_error;
 		}
 	} else {
-evict_zip:
 		ut_a(!bpage->oldest_modification());
 		MEM_CHECK_ADDRESSABLE(bpage->zip.data, bpage->zip_size());
 	}
@@ -1159,25 +1182,6 @@ evict_zip:
 			return true;
 		}
 
-		/* Question: If we release hash_lock here
-		then what protects us against:
-		1) Some other thread buffer fixing this page
-		2) Some other thread trying to read this page and
-		not finding it in buffer pool attempting to read it
-		from the disk.
-		Answer:
-		1) Cannot happen because the page is no longer in the
-		page_hash. Only possibility is when while invalidating
-		a tablespace we buffer fix the prev_page in LRU to
-		avoid relocation during the scan. But that is not
-		possible because we are holding buf_pool mutex.
-
-		2) Not possible because in buf_page_init_for_read()
-		we do a look up of page_hash while holding buf_pool
-		mutex and since we are holding buf_pool mutex here
-		and by the time we'll release it in the caller we'd
-		have inserted the compressed only descriptor in the
-		page_hash. */
 		hash_lock.unlock();
 
 		if (bpage->zip.data) {
@@ -1211,6 +1215,7 @@ void buf_pool_t::corrupted_evict(buf_page_t *bpage, uint32_t state)
   buf_pool_t::hash_chain &chain= buf_pool.page_hash.cell_get(id.fold());
   page_hash_latch &hash_lock= buf_pool.page_hash.lock_get(chain);
 
+  recv_sys.free_corrupted_page(id);
   mysql_mutex_lock(&mutex);
   hash_lock.lock();
 
@@ -1235,8 +1240,6 @@ void buf_pool_t::corrupted_evict(buf_page_t *bpage, uint32_t state)
     buf_LRU_block_free_hashed_page(reinterpret_cast<buf_block_t*>(bpage));
 
   mysql_mutex_unlock(&mutex);
-
-  recv_sys.free_corrupted_page(id);
 }
 
 /** Update buf_pool.LRU_old_ratio.

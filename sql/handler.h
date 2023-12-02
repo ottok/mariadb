@@ -35,6 +35,7 @@
 #include "sql_array.h"          /* Dynamic_array<> */
 #include "mdl.h"
 #include "vers_string.h"
+#include "ha_handler_stats.h"
 
 #include "sql_analyze_stmt.h" // for Exec_time_tracker 
 
@@ -45,6 +46,7 @@
 #include "sql_sequence.h"
 #include "mem_root_array.h"
 #include <utility>     // pair
+#include <my_attribute.h> /* __attribute__ */
 
 class Alter_info;
 class Virtual_column_info;
@@ -885,7 +887,7 @@ struct xid_t {
   long bqual_length;
   char data[XIDDATASIZE];  // not \0-terminated !
 
-  xid_t() {}                                /* Remove gcc warning */
+  xid_t() = default;                                /* Remove gcc warning */
   bool eq(struct xid_t *xid) const
   { return !xid->is_null() && eq(xid->gtrid_length, xid->bqual_length, xid->data); }
   bool eq(long g, long b, const char *d) const
@@ -1530,9 +1532,9 @@ struct handlerton
                             const char *query, uint query_length,
                             const char *db, const char *table_name);
 
-   void (*abort_transaction)(handlerton *hton, THD *bf_thd,
-			    THD *victim_thd, my_bool signal);
-   int (*set_checkpoint)(handlerton *hton, const XID* xid);
+   void (*abort_transaction)(handlerton *hton, THD *bf_thd, THD *victim_thd,
+                             my_bool signal) __attribute__((nonnull));
+   int (*set_checkpoint)(handlerton *hton, const XID *xid);
    int (*get_checkpoint)(handlerton *hton, XID* xid);
   /**
      Check if the version of the table matches the version in the .frm
@@ -1651,7 +1653,7 @@ struct handlerton
      public:
      virtual bool add_table(const char *tname, size_t tlen) = 0;
      virtual bool add_file(const char *fname) = 0;
-     protected: virtual ~discovered_list() {}
+     protected: virtual ~discovered_list() = default;
    };
 
    /*
@@ -1894,7 +1896,7 @@ struct THD_TRANS
     m_unsafe_rollback_flags= 0;
   }
   bool is_empty() const { return ha_list == NULL; }
-  THD_TRANS() {}                        /* Remove gcc warning */
+  THD_TRANS() = default;                        /* Remove gcc warning */
 
   unsigned int m_unsafe_rollback_flags;
  /*
@@ -2135,7 +2137,7 @@ struct Table_period_info: Sql_alloc
 
   struct start_end_t
   {
-    start_end_t() {};
+    start_end_t() = default;
     start_end_t(const LEX_CSTRING& _start, const LEX_CSTRING& _end) :
       start(_start),
       end(_end) {}
@@ -2470,9 +2472,9 @@ struct KEY_PAIR
 class inplace_alter_handler_ctx : public Sql_alloc
 {
 public:
-  inplace_alter_handler_ctx() {}
+  inplace_alter_handler_ctx() = default;
 
-  virtual ~inplace_alter_handler_ctx() {}
+  virtual ~inplace_alter_handler_ctx() = default;
   virtual void set_shared_data(const inplace_alter_handler_ctx& ctx) {}
 };
 
@@ -2700,12 +2702,6 @@ typedef struct st_key_create_information
   uint flags;                                   /* HA_USE.. flags */
   LEX_CSTRING parser_name;
   LEX_CSTRING comment;
-  /**
-    A flag to determine if we will check for duplicate indexes.
-    This typically means that the key information was specified
-    directly by the user (set by the parser).
-  */
-  bool check_for_duplicate_indexes;
   bool is_ignored;
 } KEY_CREATE_INFO;
 
@@ -2727,8 +2723,8 @@ typedef struct st_key_create_information
 class TABLEOP_HOOKS
 {
 public:
-  TABLEOP_HOOKS() {}
-  virtual ~TABLEOP_HOOKS() {}
+  TABLEOP_HOOKS() = default;
+  virtual ~TABLEOP_HOOKS() = default;
 
   inline void prelock(TABLE **tables, uint count)
   {
@@ -2769,7 +2765,7 @@ typedef class Item COND;
 
 typedef struct st_ha_check_opt
 {
-  st_ha_check_opt() {}                        /* Remove gcc warning */
+  st_ha_check_opt() = default;                        /* Remove gcc warning */
   uint flags;       /* isam layer flags (e.g. for myisamchk) */
   uint sql_flags;   /* sql layer flags - for something myisamchk cannot do */
   time_t start_time;   /* When check/repair starts */
@@ -3148,8 +3144,8 @@ uint calculate_key_len(TABLE *, uint, const uchar *, key_part_map);
 class Handler_share
 {
 public:
-  Handler_share() {}
-  virtual ~Handler_share() {}
+  Handler_share() = default;
+  virtual ~Handler_share() = default;
 };
 
 enum class Compare_keys : uint32_t
@@ -3219,13 +3215,23 @@ protected:
 
   ha_rows estimation_rows_to_insert;
   handler *lookup_handler;
+  /* Statistics for the query. Updated if handler_stats.in_use is set */
+  ha_handler_stats active_handler_stats;
+  void set_handler_stats();
 public:
   handlerton *ht;                 /* storage engine of this handler */
   uchar *ref;				/* Pointer to current row */
   uchar *dup_ref;			/* Pointer to duplicate row */
   uchar *lookup_buffer;
 
+  /* General statistics for the table like number of row, file sizes etc */
   ha_statistics stats;
+  /*
+    Collect query stats here if pointer is != NULL.
+    This is a pointer because if we do a clone of the handler, we want to
+    use the original handler for collecting statistics.
+  */
+  ha_handler_stats *handler_stats;
 
   /** MultiRangeRead-related members: */
   range_seq_t mrr_iter;    /* Iterator to traverse the range sequence */
@@ -3419,8 +3425,8 @@ public:
     :table_share(share_arg), table(0),
     estimation_rows_to_insert(0),
     lookup_handler(this),
-    ht(ht_arg), ref(0), lookup_buffer(NULL), end_range(NULL),
-    implicit_emptied(0),
+    ht(ht_arg), ref(0), lookup_buffer(NULL), handler_stats(NULL),
+    end_range(NULL), implicit_emptied(0),
     mark_trx_read_write_done(0),
     check_table_binlog_row_based_done(0),
     check_table_binlog_row_based_result(0),
@@ -3705,7 +3711,7 @@ public:
     - How things are tracked in trx and in add_changed_table().
     - If we can combine several statements under one commit in the binary log.
   */
-  bool has_transactions()
+  bool has_transactions() const
   {
     return ((ha_table_flags() & (HA_NO_TRANSACTIONS | HA_PERSISTENT_TABLE))
             == 0);
@@ -3716,16 +3722,25 @@ public:
     we don't have to write failed statements to the log as they can be
     rolled back.
   */
-  bool has_transactions_and_rollback()
+  bool has_transactions_and_rollback() const
   {
     return has_transactions() && has_rollback();
   }
   /*
     True if the underlaying table support transactions and rollback
   */
-  bool has_transaction_manager()
+  bool has_transaction_manager() const
   {
     return ((ha_table_flags() & HA_NO_TRANSACTIONS) == 0 && has_rollback());
+  }
+
+  /*
+    True if the underlaying table support TRANSACTIONAL table option
+  */
+  bool has_transactional_option() const
+  {
+    extern handlerton *maria_hton;
+    return partition_ht() == maria_hton || has_transaction_manager();
   }
 
   /*
@@ -3733,7 +3748,7 @@ public:
     can be killed fast.
   */
 
-  bool has_rollback()
+  bool has_rollback() const
   {
     return ((ht->flags & HTON_NO_ROLLBACK) == 0);
   }
@@ -4850,6 +4865,22 @@ public:
   {
     check_table_binlog_row_based_done= 0;
   }
+  virtual void handler_stats_updated() {}
+
+  inline void ha_handler_stats_reset()
+  {
+    handler_stats= &active_handler_stats;
+    active_handler_stats.reset();
+    active_handler_stats.active= 1;
+    handler_stats_updated();
+  }
+  inline void ha_handler_stats_disable()
+  {
+    handler_stats= 0;
+    active_handler_stats.active= 0;
+    handler_stats_updated();
+  }
+
 private:
   /* Cache result to avoid extra calls */
   inline void mark_trx_read_write()
@@ -5205,6 +5236,7 @@ public:
   }
 
   bool log_not_redoable_operation(const char *operation);
+
 protected:
   Handler_share *get_ha_share_ptr();
   void set_ha_share_ptr(Handler_share *arg_ha_share);
@@ -5309,7 +5341,7 @@ public:
                         const LEX_CSTRING *wild_arg);
   Discovered_table_list(THD *thd_arg, Dynamic_array<LEX_CSTRING*> *tables_arg)
     : thd(thd_arg), wild(NULL), with_temps(true), tables(tables_arg) {}
-  ~Discovered_table_list() {}
+  ~Discovered_table_list() = default;
 
   bool add_table(const char *tname, size_t tlen);
   bool add_file(const char *fname);

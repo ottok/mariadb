@@ -161,7 +161,7 @@ void Explain_query::query_plan_ready()
   Send EXPLAIN output to the client.
 */
 
-int Explain_query::send_explain(THD *thd)
+int Explain_query::send_explain(THD *thd, bool extended)
 {
   select_result *result;
   LEX *lex= thd->lex;
@@ -174,8 +174,22 @@ int Explain_query::send_explain(THD *thd)
   if (thd->lex->explain_json)
     print_explain_json(result, thd->lex->analyze_stmt);
   else
+  {
     res= print_explain(result, lex->describe, thd->lex->analyze_stmt);
-
+    if (extended)
+    {
+      char buff[1024];
+      String str(buff,(uint32) sizeof(buff), system_charset_info);
+                 str.length(0);
+     /*
+       The warnings system requires input in utf8, @see
+        mysqld_show_warnings().
+     */
+     lex->unit.print(&str, QT_EXPLAIN_EXTENDED);
+                     push_warning(thd, Sql_condition::WARN_LEVEL_NOTE,
+                     ER_YES, str.c_ptr_safe());
+    }
+  }
   if (res)
     result->abort_result_set();
   else
@@ -183,6 +197,7 @@ int Explain_query::send_explain(THD *thd)
 
   return res;
 }
+
 
 
 /*
@@ -1694,6 +1709,26 @@ void Explain_rowid_filter::print_explain_json(Explain_query *query,
   writer->end_object(); // rowid_filter
 }
 
+static void trace_engine_stats(handler *file, Json_writer *writer)
+{
+  if (file && file->handler_stats)
+  {
+    ha_handler_stats *hs= file->handler_stats;
+    writer->add_member("r_engine_stats").start_object();
+    if (hs->pages_accessed)
+      writer->add_member("pages_accessed").add_ull(hs->pages_accessed);
+    if (hs->pages_updated)
+      writer->add_member("pages_updated").add_ull(hs->pages_updated);
+    if (hs->pages_read_count)
+      writer->add_member("pages_read_count").add_ull(hs->pages_read_count);
+    if (hs->pages_read_time)
+      writer->add_member("pages_read_time_ms").
+        add_double(hs->pages_read_time / 1000.0);
+    if (hs->undo_records_read)
+      writer->add_member("old_rows_read").add_ull(hs->undo_records_read);
+    writer->end_object();
+  }
+}
 
 void Explain_table_access::print_explain_json(Explain_query *query,
                                               Json_writer *writer,
@@ -1835,6 +1870,7 @@ void Explain_table_access::print_explain_json(Explain_query *query,
       writer->add_member("r_table_time_ms").add_double(total_time);
       writer->add_member("r_other_time_ms").add_double(extra_time_tracker.get_time_ms());
     }
+    trace_engine_stats(handler_for_stats, writer);
   }
 
   /* `filtered` */
@@ -1891,10 +1927,38 @@ void Explain_table_access::print_explain_json(Explain_query *query,
 
     if (is_analyze)
     {
-      //writer->add_member("r_loops").add_ll(jbuf_tracker.get_loops());
+      writer->add_member("r_loops").add_ll(jbuf_loops_tracker.get_loops());
+
       writer->add_member("r_filtered");
       if (jbuf_tracker.has_scans())
         writer->add_double(jbuf_tracker.get_filtered_after_where()*100.0);
+      else
+        writer->add_null();
+
+      writer->add_member("r_unpack_time_ms");
+      writer->add_double(jbuf_unpack_tracker.get_time_ms());
+      DBUG_EXECUTE_IF("analyze_print_r_unpack_ops",
+                      {
+                        writer->add_member("r_unpack_ops");
+                        writer->add_ull(jbuf_unpack_tracker.get_loops());
+                      });
+
+      writer->add_member("r_other_time_ms").
+        add_double(jbuf_extra_time_tracker.get_time_ms());
+      /*
+        effective_rows is average number of matches we got for an incoming
+        row. The row is stored in the join buffer and then is read
+        from there, possibly multiple times. We can't count this number
+        directly. Infer it as:
+         total_number_of_row_combinations_considered / r_loops.
+      */
+      writer->add_member("r_effective_rows");
+      if (jbuf_loops_tracker.has_scans())
+      {
+        double loops= (double)jbuf_loops_tracker.get_loops();
+        double row_combinations= (double)jbuf_tracker.r_rows;
+        writer->add_double(row_combinations / loops);
+      }
       else
         writer->add_null();
     }
@@ -2512,6 +2576,8 @@ void Explain_update::print_explain_json(Explain_query *query,
               add_double(table_tracker.get_time_ms());
     }
   }
+
+  trace_engine_stats(handler_for_stats, writer);
 
   if (where_cond)
   {

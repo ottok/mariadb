@@ -262,6 +262,12 @@ const char *dbug_print_mdl(MDL_ticket *mdl_ticket)
 }
 
 
+const char *dbug_print(MDL_ticket *mdl_ticket)
+{
+  return dbug_print_mdl(mdl_ticket);
+}
+
+
 static int mdl_dbug_print_lock(MDL_ticket *mdl_ticket, void *arg, bool granted)
 {
   String *tmp= (String*) arg;
@@ -276,6 +282,7 @@ static int mdl_dbug_print_lock(MDL_ticket *mdl_ticket, void *arg, bool granted)
 const char *mdl_dbug_print_locks()
 {
   thread_local String tmp;
+  tmp.length(0);
   mdl_iterate(mdl_dbug_print_lock, (void*) &tmp);
   return tmp.c_ptr();
 }
@@ -415,7 +422,7 @@ public:
     virtual bool needs_notification(const MDL_ticket *ticket) const = 0;
     virtual bool conflicting_locks(const MDL_ticket *ticket) const = 0;
     virtual bitmap_t hog_lock_types_bitmap() const = 0;
-    virtual ~MDL_lock_strategy() {}
+    virtual ~MDL_lock_strategy() = default;
   };
 
 
@@ -426,7 +433,7 @@ public:
   */
   struct MDL_scoped_lock : public MDL_lock_strategy
   {
-    MDL_scoped_lock() {}
+    MDL_scoped_lock() = default;
     virtual const bitmap_t *incompatible_granted_types_bitmap() const
     { return m_granted_incompatible; }
     virtual const bitmap_t *incompatible_waiting_types_bitmap() const
@@ -463,7 +470,7 @@ public:
   */
   struct MDL_object_lock : public MDL_lock_strategy
   {
-    MDL_object_lock() {}
+    MDL_object_lock() = default;
     virtual const bitmap_t *incompatible_granted_types_bitmap() const
     { return m_granted_incompatible; }
     virtual const bitmap_t *incompatible_waiting_types_bitmap() const
@@ -507,7 +514,7 @@ public:
 
   struct MDL_backup_lock: public MDL_lock_strategy
   {
-    MDL_backup_lock() {}
+    MDL_backup_lock() = default;
     virtual const bitmap_t *incompatible_granted_types_bitmap() const
     { return m_granted_incompatible; }
     virtual const bitmap_t *incompatible_waiting_types_bitmap() const
@@ -1875,13 +1882,11 @@ bool MDL_lock::has_pending_conflicting_lock(enum_mdl_type type)
 
 
 MDL_wait_for_graph_visitor::~MDL_wait_for_graph_visitor()
-{
-}
+= default;
 
 
 MDL_wait_for_subgraph::~MDL_wait_for_subgraph()
-{
-}
+= default;
 
 /**
   Check if ticket represents metadata lock of "stronger" or equal type

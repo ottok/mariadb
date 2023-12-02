@@ -29,6 +29,7 @@ Created 2012-02-08 by Sunny Bains.
 #ifdef BTR_CUR_HASH_ADAPT
 # include "btr0sea.h"
 #endif
+#include "buf0flu.h"
 #include "que0que.h"
 #include "dict0boot.h"
 #include "dict0load.h"
@@ -353,8 +354,8 @@ public:
 			<< index->name;
 	}
 
-	/** Descructor */
-	~IndexPurge() UNIV_NOTHROW { }
+	/** Destructor */
+	~IndexPurge() UNIV_NOTHROW = default;
 
 	/** Purge delete marked records.
 	@return DB_SUCCESS or error code. */
@@ -702,7 +703,7 @@ struct FetchIndexRootPages : public AbstractCallback {
 		m_table(table), m_index(0, 0) UNIV_NOTHROW { }
 
 	/** Destructor */
-	~FetchIndexRootPages() UNIV_NOTHROW override { }
+	~FetchIndexRootPages() UNIV_NOTHROW override = default;
 
 	/** Fetch the clustered index root page in the tablespace
 	@param iter	Tablespace iterator
@@ -3901,6 +3902,7 @@ page_corrupted:
 					block->page.zip.data = src;
 					frame_changed = true;
 				} else if (!page_compressed
+					   && type != FIL_PAGE_TYPE_XDES
 					   && !block->page.zip.data) {
 					block->page.frame = src;
 					frame_changed = true;

@@ -3520,8 +3520,12 @@ String *Item_func_conv::val_str(String *str)
                                                 from_base, &endptr, &err);
   }
 
+  uint dummy_errors;
   if (!(ptr= longlong2str(dec, ans, to_base)) ||
-      str->copy(ans, (uint32) (ptr - ans), default_charset()))
+      (collation.collation->state & MY_CS_NONASCII) ?
+       str->copy(ans, (uint32)  (ptr - ans), &my_charset_latin1,
+                 collation.collation, &dummy_errors) :
+       str->copy(ans, (uint32) (ptr - ans), collation.collation))
   {
     null_value= 1;
     return NULL;
@@ -3739,6 +3743,7 @@ String *Item_func_weight_string::val_str(String *str)
                            weigth_flags);
   DBUG_ASSERT(frm_length <= tmp_length);
 
+  str->set_charset(&my_charset_bin);
   str->length(frm_length);
   null_value= 0;
   return str;
@@ -3818,6 +3823,7 @@ String *Item_func_unhex::val_str(String *str)
 
   from= res->ptr();
   null_value= 0;
+  str->set_charset(&my_charset_bin);
   str->length(length);
   to= (char*) str->ptr();
   if (res->length() % 2)

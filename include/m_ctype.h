@@ -269,6 +269,28 @@ typedef enum enum_repertoire_t
 #define MY_STRXFRM_REVERSE_LEVEL6  0x00200000 /* if reverse order for level6 */
 #define MY_STRXFRM_REVERSE_SHIFT   16
 
+/* Flags to strnncollsp_nchars */
+/*
+  MY_STRNNCOLLSP_NCHARS_EMULATE_TRIMMED_TRAILING_SPACES -
+    defines if inside strnncollsp_nchars()
+    short strings should be virtually extended to "nchars"
+    characters by emulating trimmed trailing spaces.
+
+    This flag is needed when comparing packed strings of the CHAR
+    data type, when trailing spaces are trimmed on storage (like in InnoDB),
+    however the actual values (after unpacking) will have those trailing
+    spaces.
+
+    If this flag is passed, strnncollsp_nchars() performs both
+    truncating longer strings and extending shorter strings
+    to exactly "nchars".
+
+    If this flag is not passed, strnncollsp_nchars() only truncates longer
+    strings to "nchars", but does not extend shorter strings to "nchars".
+*/
+#define MY_STRNNCOLLSP_NCHARS_EMULATE_TRIMMED_TRAILING_SPACES 1
+
+
 /*
    Collation IDs for MariaDB that should not conflict with MySQL.
    We reserve 256..511, because MySQL will most likely use this range
@@ -404,7 +426,8 @@ struct my_collation_handler_st
   int     (*strnncollsp_nchars)(CHARSET_INFO *,
                                 const uchar *str1, size_t len1,
                                 const uchar *str2, size_t len2,
-                                size_t nchars);
+                                size_t nchars,
+                                uint flags);
   size_t     (*strnxfrm)(CHARSET_INFO *,
                          uchar *dst, size_t dstlen, uint nweights,
                          const uchar *src, size_t srclen, uint flags);
@@ -862,6 +885,12 @@ struct charset_info_st
                   const char *b, size_t blen) const
   {
     return (coll->strnncollsp)(this, (uchar *) a, alen, (uchar *) b, blen);
+  }
+
+  int strnncollsp(const LEX_CSTRING &a, const LEX_CSTRING &b) const
+  {
+    return (coll->strnncollsp)(this, (uchar *) a.str, a.length,
+                                     (uchar *) b.str, b.length);
   }
 
   size_t strnxfrm(char *dst, size_t dstlen, uint nweights,
@@ -1681,6 +1710,9 @@ my_well_formed_length(CHARSET_INFO *cs, const char *b, const char *e,
 #define USE_TIS620
 #include "t_ctype.h"
 #endif
+
+int my_wc_mb_utf8mb4_bmp_only(CHARSET_INFO *cs, my_wc_t wc, uchar *r,
+                              uchar *e);
 
 #ifdef	__cplusplus
 }

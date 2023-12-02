@@ -1039,6 +1039,8 @@ public:
 
   bool set_lock_to_the_last_select(Lex_select_lock l);
 
+  bool can_be_merged();
+
   friend class st_select_lex;
 };
 
@@ -1276,6 +1278,8 @@ public:
     and all inner subselects.
   */
   uint select_n_where_fields;
+  /* Total number of elements in group by and order by lists */
+  uint order_group_num;
   /* reserved for exists 2 in */
   uint select_n_reserved;
   /*
@@ -1296,6 +1300,8 @@ public:
     st_select_lex.
   */
   uint curr_tvc_name;
+  /* true <=> select has been created a TVC wrapper */
+  bool is_tvc_wrapper;
   uint fields_in_window_functions;
   uint insert_tables;
   enum_parsing_place parsing_place; /* where we are parsing expression */
@@ -1380,6 +1386,7 @@ public:
     return (st_select_lex_unit*) slave; 
   }
   st_select_lex* outer_select();
+  bool is_query_topmost(THD *thd);
   st_select_lex* next_select() { return (st_select_lex*) next; }
   st_select_lex* next_select_in_list() 
   {
@@ -1465,7 +1472,12 @@ public:
     init_select();
   }
   bool setup_ref_array(THD *thd, uint order_group_num);
+  uint get_cardinality_of_ref_ptrs_slice(uint order_group_num_arg);
   void print(THD *thd, String *str, enum_query_type query_type);
+  void print_item_list(THD *thd, String *str, enum_query_type query_type);
+  void print_set_clause(THD *thd, String *str, enum_query_type query_type);
+  void print_on_duplicate_key_clause(THD *thd, String *str,
+                                     enum_query_type query_type);
   static void print_order(String *str,
                           ORDER *order,
                           enum_query_type query_type);
@@ -1572,6 +1584,7 @@ public:
                                        bool no_to_clones);
   
   List<Window_spec> window_specs;
+  bool is_win_spec_list_built;
   void prepare_add_window_spec(THD *thd);
   bool add_window_def(THD *thd, LEX_CSTRING *win_name, LEX_CSTRING *win_ref,
                       SQL_I_List<ORDER> win_partition_list,
@@ -1754,8 +1767,8 @@ public:
     These constructor and destructor serve for creation/destruction
     of Query_tables_list instances which are used as backup storage.
   */
-  Query_tables_list() {}
-  ~Query_tables_list() {}
+  Query_tables_list() = default;
+  ~Query_tables_list() = default;
 
   /* Initializes (or resets) Query_tables_list object for "real" use. */
   void reset_query_tables_list(bool init);
@@ -2420,13 +2433,9 @@ class Lex_input_stream
                   const char *str, const char *end, int sep);
   my_charset_conv_wc_mb get_escape_func(THD *thd, my_wc_t sep) const;
 public:
-  Lex_input_stream()
-  {
-  }
+  Lex_input_stream() = default;
 
-  ~Lex_input_stream()
-  {
-  }
+  ~Lex_input_stream() = default;
 
   /**
      Object initializer. Must be called before usage.
@@ -2502,7 +2511,7 @@ private:
     Get the last character accepted.
     @return the last character accepted.
   */
-  unsigned char yyGetLast()
+  unsigned char yyGetLast() const
   {
     return m_ptr[-1];
   }
@@ -2510,7 +2519,7 @@ private:
   /**
     Look at the next character to parse, but do not accept it.
   */
-  unsigned char yyPeek()
+  unsigned char yyPeek() const
   {
     return m_ptr[0];
   }
@@ -2519,7 +2528,7 @@ private:
     Look ahead at some character to parse.
     @param n offset of the character to look up
   */
-  unsigned char yyPeekn(int n)
+  unsigned char yyPeekn(int n) const
   {
     return m_ptr[n];
   }
@@ -2580,7 +2589,7 @@ private:
     @param n number of characters expected
     @return true if there are less than n characters to parse
   */
-  bool eof(int n)
+  bool eof(int n) const
   {
     return ((m_ptr + n) >= m_end_of_query);
   }
@@ -2611,10 +2620,10 @@ private:
     Get the maximum length of the utf8-body buffer.
     The utf8 body can grow because of the character set conversion and escaping.
   */
-  size_t get_body_utf8_maximum_length(THD *thd);
+  size_t get_body_utf8_maximum_length(THD *thd) const;
 
   /** Get the length of the current token, in the raw buffer. */
-  uint yyLength()
+  uint yyLength() const
   {
     /*
       The assumption is that the lexical analyser is always 1 character ahead,
@@ -2639,31 +2648,31 @@ public:
     End of file indicator for the query text to parse.
     @return true if there are no more characters to parse
   */
-  bool eof()
+  bool eof() const
   {
     return (m_ptr >= m_end_of_query);
   }
 
   /** Get the raw query buffer. */
-  const char *get_buf()
+  const char *get_buf() const
   {
     return m_buf;
   }
 
   /** Get the pre-processed query buffer. */
-  const char *get_cpp_buf()
+  const char *get_cpp_buf() const
   {
     return m_cpp_buf;
   }
 
   /** Get the end of the raw query buffer. */
-  const char *get_end_of_query()
+  const char *get_end_of_query() const
   {
     return m_end_of_query;
   }
 
   /** Get the token start position, in the raw buffer. */
-  const char *get_tok_start()
+  const char *get_tok_start() const
   {
     return has_lookahead() ? m_tok_start_prev : m_tok_start;
   }
@@ -2674,25 +2683,25 @@ public:
   }
 
   /** Get the token end position, in the raw buffer. */
-  const char *get_tok_end()
+  const char *get_tok_end() const
   {
     return m_tok_end;
   }
 
   /** Get the current stream pointer, in the raw buffer. */
-  const char *get_ptr()
+  const char *get_ptr() const
   {
     return m_ptr;
   }
 
   /** Get the token start position, in the pre-processed buffer. */
-  const char *get_cpp_tok_start()
+  const char *get_cpp_tok_start() const
   {
     return has_lookahead() ? m_cpp_tok_start_prev : m_cpp_tok_start;
   }
 
   /** Get the token end position, in the pre-processed buffer. */
-  const char *get_cpp_tok_end()
+  const char *get_cpp_tok_end() const
   {
     return m_cpp_tok_end;
   }
@@ -2701,7 +2710,7 @@ public:
     Get the token end position in the pre-processed buffer,
     with trailing spaces removed.
   */
-  const char *get_cpp_tok_end_rtrim()
+  const char *get_cpp_tok_end_rtrim() const
   {
     const char *p;
     for (p= m_cpp_tok_end;
@@ -2712,7 +2721,7 @@ public:
   }
 
   /** Get the current stream pointer, in the pre-processed buffer. */
-  const char *get_cpp_ptr()
+  const char *get_cpp_ptr() const
   {
     return m_cpp_ptr;
   }
@@ -2721,7 +2730,7 @@ public:
     Get the current stream pointer, in the pre-processed buffer,
     with traling spaces removed.
   */
-  const char *get_cpp_ptr_rtrim()
+  const char *get_cpp_ptr_rtrim() const
   {
     const char *p;
     for (p= m_cpp_ptr;
@@ -2731,15 +2740,9 @@ public:
     return p;
   }
   /** Get the utf8-body string. */
-  const char *get_body_utf8_str()
+  LEX_CSTRING body_utf8() const
   {
-    return m_body_utf8;
-  }
-
-  /** Get the utf8-body length. */
-  size_t get_body_utf8_length()
-  {
-    return (size_t) (m_body_utf8_ptr - m_body_utf8);
+    return LEX_CSTRING({m_body_utf8, (size_t) (m_body_utf8_ptr - m_body_utf8)});
   }
 
   void body_utf8_start(THD *thd, const char *begin_ptr);
@@ -2773,7 +2776,7 @@ private:
 
   bool consume_comment(int remaining_recursions_permitted);
   int lex_one_token(union YYSTYPE *yylval, THD *thd);
-  int find_keyword(Lex_ident_cli_st *str, uint len, bool function);
+  int find_keyword(Lex_ident_cli_st *str, uint len, bool function) const;
   LEX_CSTRING get_token(uint skip, uint length);
   int scan_ident_sysvar(THD *thd, Lex_ident_cli_st *str);
   int scan_ident_start(THD *thd, Lex_ident_cli_st *str);
@@ -3005,11 +3008,11 @@ public:
   void set_impossible_where() { impossible_where= true; }
   void set_no_partitions() { no_partitions= true; }
 
-  Explain_update* save_explain_update_data(MEM_ROOT *mem_root, THD *thd);
+  Explain_update* save_explain_update_data(THD *thd, MEM_ROOT *mem_root);
 protected:
-  bool save_explain_data_intern(MEM_ROOT *mem_root, Explain_update *eu, bool is_analyze);
+  bool save_explain_data_intern(THD *thd, MEM_ROOT *mem_root, Explain_update *eu, bool is_analyze);
 public:
-  virtual ~Update_plan() {}
+  virtual ~Update_plan() = default;
 
   Update_plan(MEM_ROOT *mem_root_arg) : 
     impossible_where(false), no_partitions(false), 
@@ -3042,7 +3045,7 @@ public:
     deleting_all_rows= false;
   }
 
-  Explain_delete* save_explain_delete_data(MEM_ROOT *mem_root, THD *thd);
+  Explain_delete* save_explain_delete_data(THD *thd, MEM_ROOT *mem_root);
 };
 
 enum account_lock_type
@@ -3063,7 +3066,7 @@ enum password_exp_type
 
 struct Account_options: public USER_RESOURCES
 {
-  Account_options() { }
+  Account_options() = default;
 
   void reset()
   {
@@ -3468,7 +3471,6 @@ public:
   TABLE_LIST *create_last_non_select_table;
   sp_head *sphead;
   sp_name *spname;
-
   sp_pcontext *spcont;
 
   st_sp_chistics sp_chistics;
@@ -3571,6 +3573,8 @@ public:
   Window_frame_bound *frame_bottom_bound;
   Window_spec *win_spec;
 
+  Item *upd_del_where;
+
   /* System Versioning */
   vers_select_conds_t vers_conditions;
   vers_select_conds_t period_conditions;
@@ -3652,7 +3656,7 @@ public:
 
   bool can_be_merged();
   bool can_use_merged();
-  bool can_not_use_merged(bool no_update_or_delete);
+  bool can_not_use_merged();
   bool only_view_structure();
   bool need_correct_ident();
   uint8 get_effective_with_check(TABLE_LIST *view);
@@ -3876,8 +3880,7 @@ public:
   bool create_package_finalize(THD *thd,
                                const sp_name *name,
                                const sp_name *name2,
-                               const char *body_start,
-                               const char *body_end);
+                               const char *cpp_body_end);
   bool call_statement_start(THD *thd, sp_name *name);
   bool call_statement_start(THD *thd, const Lex_ident_sys_st *name);
   bool call_statement_start(THD *thd, const Lex_ident_sys_st *name1,
@@ -4124,9 +4127,6 @@ public:
 
   Item *create_item_query_expression(THD *thd, st_select_lex_unit *unit);
 
-  Item *make_item_func_replace(THD *thd, Item *org, Item *find, Item *replace);
-  Item *make_item_func_substr(THD *thd, Item *a, Item *b, Item *c);
-  Item *make_item_func_substr(THD *thd, Item *a, Item *b);
   Item *make_item_func_sysdate(THD *thd, uint fsp);
   Item *make_item_func_call_generic(THD *thd, Lex_ident_cli_st *db,
                                     Lex_ident_cli_st *name, List<Item> *args);
@@ -4253,7 +4253,7 @@ public:
                                         const LEX_CSTRING *index,
                                         const Lex_for_loop_bounds_st &bounds);
   bool sp_for_loop_intrange_condition_test(THD *thd, const Lex_for_loop_st &loop);
-  bool sp_for_loop_intrange_finalize(THD *thd, const Lex_for_loop_st &loop);
+  bool sp_for_loop_intrange_iterate(THD *thd, const Lex_for_loop_st &loop);
 
   /* Cursor FOR LOOP methods */
   bool sp_for_loop_cursor_declarations(THD *thd, Lex_for_loop_st *loop,
@@ -4269,7 +4269,7 @@ public:
                                              Lex_for_loop_bounds_st *bounds,
                                              sp_lex_cursor *cur);
   bool sp_for_loop_cursor_condition_test(THD *thd, const Lex_for_loop_st &loop);
-  bool sp_for_loop_cursor_finalize(THD *thd, const Lex_for_loop_st &);
+  bool sp_for_loop_cursor_iterate(THD *thd, const Lex_for_loop_st &);
 
   /* Generic FOR LOOP methods*/
 
@@ -4327,9 +4327,12 @@ public:
   */
   bool sp_for_loop_finalize(THD *thd, const Lex_for_loop_st &loop)
   {
-    return loop.is_for_loop_cursor() ?
-           sp_for_loop_cursor_finalize(thd, loop) :
-           sp_for_loop_intrange_finalize(thd, loop);
+    if (loop.is_for_loop_cursor() ?
+        sp_for_loop_cursor_iterate(thd, loop) :
+        sp_for_loop_intrange_iterate(thd, loop))
+      return true;
+    // Generate a jump to the beginning of the loop
+    return sp_while_loop_finalize(thd);
   }
   bool sp_for_loop_outer_block_finalize(THD *thd, const Lex_for_loop_st &loop);
 
@@ -4836,14 +4839,13 @@ class Set_signal_information
 {
 public:
   /** Empty default constructor, use clear() */
- Set_signal_information() {} 
+ Set_signal_information() = default; 
 
   /** Copy constructor. */
   Set_signal_information(const Set_signal_information& set);
 
   /** Destructor. */
-  ~Set_signal_information()
-  {}
+  ~Set_signal_information() = default;
 
   /** Clear all items. */
   void clear();
@@ -4966,8 +4968,7 @@ public:
     return m_lip.init(thd, buff, length);
   }
 
-  ~Parser_state()
-  {}
+  ~Parser_state() = default;
 
   Lex_input_stream m_lip;
   Yacc_state m_yacc;
@@ -5137,7 +5138,12 @@ int init_lex_with_single_table(THD *thd, TABLE *table, LEX *lex);
 extern int MYSQLlex(union YYSTYPE *yylval, THD *thd);
 extern int ORAlex(union YYSTYPE *yylval, THD *thd);
 
-extern void trim_whitespace(CHARSET_INFO *cs, LEX_CSTRING *str, size_t * prefix_length = 0);
+inline void trim_whitespace(CHARSET_INFO *cs, LEX_CSTRING *str,
+                            size_t * prefix_length = 0)
+{
+  *str= Lex_cstring(*str).trim_whitespace(cs, prefix_length);
+}
+
 
 extern bool is_lex_native_function(const LEX_CSTRING *name); 
 extern bool is_native_function(THD *thd, const LEX_CSTRING *name);

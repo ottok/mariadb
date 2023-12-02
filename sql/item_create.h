@@ -63,9 +63,9 @@ public:
 
 protected:
   /** Constructor */
-  Create_func() {}
+  Create_func() = default;
   /** Destructor */
-  virtual ~Create_func() {}
+  virtual ~Create_func() = default;
 };
 
 
@@ -88,9 +88,9 @@ public:
 
 protected:
   /** Constructor. */
-  Create_func_arg0() {}
+  Create_func_arg0() = default;
   /** Destructor. */
-  virtual ~Create_func_arg0() {}
+  virtual ~Create_func_arg0() = default;
 };
 
 
@@ -114,9 +114,9 @@ public:
 
 protected:
   /** Constructor. */
-  Create_func_arg1() {}
+  Create_func_arg1() = default;
   /** Destructor. */
-  virtual ~Create_func_arg1() {}
+  virtual ~Create_func_arg1() = default;
 };
 
 
@@ -141,9 +141,9 @@ public:
 
 protected:
   /** Constructor. */
-  Create_func_arg2() {}
+  Create_func_arg2() = default;
   /** Destructor. */
-  virtual ~Create_func_arg2() {}
+  virtual ~Create_func_arg2() = default;
 };
 
 
@@ -169,9 +169,9 @@ public:
 
 protected:
   /** Constructor. */
-  Create_func_arg3() {}
+  Create_func_arg3() = default;
   /** Destructor. */
-  virtual ~Create_func_arg3() {}
+  virtual ~Create_func_arg3() = default;
 };
 
 
@@ -203,9 +203,9 @@ public:
 
 protected:
   /** Constructor. */
-  Create_native_func() {}
+  Create_native_func() = default;
   /** Destructor. */
-  virtual ~Create_native_func() {}
+  virtual ~Create_native_func() = default;
 };
 
 
@@ -246,20 +246,10 @@ public:
 
 protected:
   /** Constructor. */
-  Create_qfunc() {}
+  Create_qfunc() = default;
   /** Destructor. */
-  virtual ~Create_qfunc() {}
+  virtual ~Create_qfunc() = default;
 };
-
-
-/**
-  Find the native function builder associated with a given function name.
-  @param thd The current thread
-  @param name The native function name
-  @return The native function builder associated with the name, or NULL
-*/
-extern Create_func *find_native_function_builder(THD *thd,
-                                                 const LEX_CSTRING *name);
 
 
 /**
@@ -295,9 +285,9 @@ public:
 
 protected:
   /** Constructor. */
-  Create_udf_func() {}
+  Create_udf_func() = default;
   /** Destructor. */
-  virtual ~Create_udf_func() {}
+  virtual ~Create_udf_func() = default;
 };
 #endif
 
@@ -308,9 +298,48 @@ struct Native_func_registry
   Create_func *builder;
 };
 
+
+class Native_functions_hash: public HASH
+{
+public:
+  Native_functions_hash()
+  {
+    bzero(this, sizeof(*this));
+  }
+  ~Native_functions_hash()
+  {
+    /*
+      No automatic free because objects of this type
+      are expected to be declared statically.
+      The code in cleanup() calls my_hash_free() which may not work correctly
+      at the very end of mariadbd shutdown.
+      The the upper level code should call cleanup() explicitly.
+
+      Unfortunatelly, it's not possible to use DBUG_ASSERT(!records) here,
+      because the server terminates using exit() in some cases,
+      e.g. in the test main.named_pipe with the "Create named pipe failed"
+      error.
+    */
+  }
+  bool init(size_t count);
+  bool append(const Native_func_registry array[], size_t count);
+  bool remove(const Native_func_registry array[], size_t count);
+  void cleanup();
+  /**
+    Find the native function builder associated with a given function name.
+    @param thd The current thread
+    @param name The native function name
+    @return The native function builder associated with the name, or NULL
+  */
+  Create_func *find(THD *thd, const LEX_CSTRING &name) const;
+};
+
+extern MYSQL_PLUGIN_IMPORT Native_functions_hash native_functions_hash;
+
+extern const Native_func_registry func_array[];
+extern const size_t func_array_length;
+
 int item_create_init();
-int item_create_append(Native_func_registry array[]);
-int item_create_remove(Native_func_registry array[]);
 void item_create_cleanup();
 
 Item *create_func_dyncol_create(THD *thd, List<DYNCALL_CREATE_DEF> &list);
@@ -342,8 +371,8 @@ public:
     DBUG_ASSERT(i < m_count);
     return m_elements[i];
   }
+  const Native_func_registry *elements() const { return m_elements; }
   size_t count() const { return m_count; }
-  bool append_to_hash(HASH *hash) const;
 };
 
 

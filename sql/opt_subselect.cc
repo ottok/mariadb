@@ -663,6 +663,14 @@ int check_and_do_in_subquery_rewrites(JOIN *join)
         my_error(ER_OPERAND_COLUMNS, MYF(0), ncols);
         DBUG_RETURN(-1);
       }
+
+      uint cols_num= in_subs->left_exp()->cols();
+      for (uint i= 0; i < cols_num; i++)
+      {
+        if (select_lex->ref_pointer_array[i]->
+           check_cols(in_subs->left_exp()->element_index(i)->cols()))
+             DBUG_RETURN(-1);
+      }
     }
     /* Check if any table is not supporting comparable rowids */
     {
@@ -4186,6 +4194,7 @@ bool setup_sj_materialization_part1(JOIN_TAB *sjm_tab)
   }
 
   sjm->sjm_table_param.field_count= subq_select->item_list.elements;
+  sjm->sjm_table_param.func_count= sjm->sjm_table_param.field_count;
   sjm->sjm_table_param.force_not_null_cols= TRUE;
 
   if (!(sjm->table= create_tmp_table(thd, &sjm->sjm_table_param, 
@@ -4205,6 +4214,7 @@ bool setup_sj_materialization_part1(JOIN_TAB *sjm_tab)
   
   sjm->materialized= FALSE;
   sjm_tab->table= sjm->table;
+  sjm_tab->tab_list= emb_sj_nest;
   sjm->table->pos_in_table_list= emb_sj_nest;
  
   DBUG_RETURN(FALSE);
@@ -5801,14 +5811,14 @@ TABLE *create_dummy_tmp_table(THD *thd)
   DBUG_ENTER("create_dummy_tmp_table");
   TABLE *table;
   TMP_TABLE_PARAM sjm_table_param;
-  sjm_table_param.init();
-  sjm_table_param.field_count= 1;
   List<Item> sjm_table_cols;
   const LEX_CSTRING dummy_name= { STRING_WITH_LEN("dummy") };
   Item *column_item= new (thd->mem_root) Item_int(thd, 1);
   if (!column_item)
     DBUG_RETURN(NULL);
 
+  sjm_table_param.init();
+  sjm_table_param.field_count= sjm_table_param.func_count= 1;
   sjm_table_cols.push_back(column_item, thd->mem_root);
   if (!(table= create_tmp_table(thd, &sjm_table_param, 
                                 sjm_table_cols, (ORDER*) 0, 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2008, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -670,11 +670,9 @@ int PFS_engine_table::update_row_values(TABLE *,
 class PFS_internal_schema_access : public ACL_internal_schema_access
 {
 public:
-  PFS_internal_schema_access()
-  {}
+  PFS_internal_schema_access() = default;
 
-  ~PFS_internal_schema_access()
-  {}
+  ~PFS_internal_schema_access() = default;
 
   ACL_internal_access_result check(privilege_t want_access,
                                    privilege_t *save_priv) const;

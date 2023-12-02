@@ -39,6 +39,7 @@ Created 9/17/2000 Heikki Tuuri
 
 struct row_prebuilt_t;
 class ha_innobase;
+class ha_handler_stats;
 
 /*******************************************************************//**
 Frees the blob heap in prebuilt when no longer needed. */
@@ -702,7 +703,7 @@ struct row_prebuilt_t {
 
 /** Callback for row_mysql_sys_index_iterate() */
 struct SysIndexCallback {
-	virtual ~SysIndexCallback() { }
+	virtual ~SysIndexCallback() = default;
 
 	/** Callback method
 	@param mtr current mini transaction
@@ -812,11 +813,6 @@ innobase_get_computed_value(
 	const dict_table_t*	old_table=NULL,
 	const upd_t*		update=NULL,
 	bool			ignore_warnings=false);
-
-/** Get the computed value by supplying the base column values.
-@param[in,out]	table		the table whose virtual column
-				template to be built */
-TABLE* innobase_init_vc_templ(dict_table_t* table);
 
 /** Change dbname and table name in table->vc_templ.
 @param[in,out]	table	the table whose virtual column template

@@ -80,6 +80,7 @@
 #include "debug_sync.h"                         // DEBUG_SYNC
 #include "debug.h"                              // debug_crash_here
 #include <my_bit.h>
+#include "rpl_rli.h"
 
 #ifdef WITH_WSREP
 #include "wsrep_trans_observer.h" /* wsrep_start_transction() */
@@ -475,7 +476,7 @@ void upgrade_lock_type(THD *thd, thr_lock_type *lock_type,
     }
 
     bool log_on= (thd->variables.option_bits & OPTION_BIN_LOG);
-    if (WSREP_BINLOG_FORMAT(global_system_variables.binlog_format) == BINLOG_FORMAT_STMT &&
+    if (thd->wsrep_binlog_format(global_system_variables.binlog_format) == BINLOG_FORMAT_STMT &&
         log_on && mysql_bin_log.is_open())
     {
       /*
@@ -579,7 +580,8 @@ bool open_and_lock_for_insert_delayed(THD *thd, TABLE_LIST *table_list)
       Open tables used for sub-selects or in stored functions, will also
       cache these functions.
     */
-    if (open_and_lock_tables(thd, table_list->next_global, TRUE, 0))
+    if (open_and_lock_tables(thd, table_list->next_global, TRUE,
+                             MYSQL_OPEN_IGNORE_ENGINE_STATS))
     {
       end_delayed_insert(thd);
       error= TRUE;
@@ -853,7 +855,8 @@ bool mysql_insert(THD *thd, TABLE_LIST *table_list,
   save_insert_query_plan(thd, table_list);
   if (thd->lex->describe)
   {
-    retval= thd->lex->explain->send_explain(thd);
+    bool extended= thd->lex->describe & DESCRIBE_EXTENDED;
+    retval= thd->lex->explain->send_explain(thd, extended);
     goto abort;
   }
 
@@ -929,7 +932,7 @@ bool mysql_insert(THD *thd, TABLE_LIST *table_list,
       same table in the same connection.
     */
     if (thd->locked_tables_mode <= LTM_LOCK_TABLES &&
-       values_list.elements > 1)
+        !table->s->long_unique_table && values_list.elements > 1)
     {
       using_bulk_insert= 1;
       table->file->ha_start_bulk_insert(values_list.elements);
@@ -1827,6 +1830,12 @@ int write_record(THD *thd, TABLE *table, COPY_INFO *info, select_result *sink)
   save_read_set= table->read_set;
   save_write_set= table->write_set;
 
+  DBUG_EXECUTE_IF("rpl_write_record_small_sleep_gtid_100_200",
+    {
+      if (thd->rgi_slave && (thd->rgi_slave->current_gtid.seq_no == 100 ||
+                             thd->rgi_slave->current_gtid.seq_no == 200))
+        my_sleep(20000);
+    });
   if (info->handle_duplicates == DUP_REPLACE ||
       info->handle_duplicates == DUP_UPDATE)
   {
@@ -1990,7 +1999,8 @@ int write_record(THD *thd, TABLE *table, COPY_INFO *info, select_result *sink)
           if (error != HA_ERR_RECORD_IS_THE_SAME)
           {
             info->updated++;
-            if (table->versioned())
+            if (table->versioned() &&
+                table->vers_check_update(*info->update_fields))
             {
               if (table->versioned(VERS_TIMESTAMP))
               {
@@ -2166,9 +2176,6 @@ int write_record(THD *thd, TABLE *table, COPY_INFO *info, select_result *sink)
     goto after_trg_or_ignored_err;
   }
 
-  /* Notify the engine about insert ignore operation */
-  if (info->handle_duplicates == DUP_ERROR && info->ignore)
-    table->file->extra(HA_EXTRA_IGNORE_INSERT);
 after_trg_n_copied_inc:
   info->copied++;
   thd->record_first_successful_insert_id_in_cur_stmt(table->file->insert_id_for_cur_row);
@@ -2222,7 +2229,7 @@ int check_that_all_fields_are_given_values(THD *thd, TABLE *entry, TABLE_LIST *t
   for (Field **field=entry->field ; *field ; field++)
   {
     if (!bitmap_is_set(write_set, (*field)->field_index) &&
-        !(*field)->vers_sys_field() &&
+        !(*field)->vers_sys_field() && !(*field)->vcol_info &&
         has_no_default_value(thd, *field, table_list) &&
         ((*field)->real_type() != MYSQL_TYPE_ENUM))
       err=1;
@@ -2741,6 +2748,9 @@ TABLE *Delayed_insert::get_local_table(THD* client_thd)
 
   /* Ensure we don't use the table list of the original table */
   copy->pos_in_table_list= 0;
+
+  /* We don't need statistics for insert delayed */
+  copy->stats_cb= 0;
 
   /*
     Make a copy of all fields.
@@ -3518,7 +3528,7 @@ bool Delayed_insert::handle_inserts(void)
     we get a crash, then binary log will contain rows that are not yet
     written to disk, which will cause problems in replication.
   */
-  if (!using_bin_log)
+  if (!using_bin_log && !table->s->long_unique_table)
     table->file->extra(HA_EXTRA_WRITE_CACHE);
 
   mysql_mutex_lock(&mutex);
@@ -3678,7 +3688,7 @@ bool Delayed_insert::handle_inserts(void)
                    table->s->table_name.str);
           goto err;
 	}
-	if (!using_bin_log)
+	if (!using_bin_log && !table->s->long_unique_table)
 	  table->file->extra(HA_EXTRA_WRITE_CACHE);
         mysql_mutex_lock(&mutex);
 	THD_STAGE_INFO(&thd, stage_insert);
@@ -4055,7 +4065,8 @@ int select_insert::prepare2(JOIN *)
   if (thd->lex->describe)
     DBUG_RETURN(0);
   if (thd->lex->current_select->options & OPTION_BUFFER_RESULT &&
-      thd->locked_tables_mode <= LTM_LOCK_TABLES)
+      thd->locked_tables_mode <= LTM_LOCK_TABLES &&
+      !table->s->long_unique_table)
     table->file->ha_start_bulk_insert((ha_rows) 0);
 
   /* Same as the other variants of INSERT */
@@ -4158,6 +4169,7 @@ bool select_insert::store_values(List<Item> &values)
   DBUG_ENTER("select_insert::store_values");
   bool error;
 
+  table->reset_default_fields();
   if (fields->elements)
     error= fill_record_n_invoke_before_triggers(thd, table, *fields, values,
                                                 true, TRG_EVENT_INSERT);
@@ -4534,8 +4546,6 @@ TABLE *select_create::create_table_from_items(THD *thd, List<Item> *items,
   */
 
   if (!mysql_create_table_no_lock(thd, &ddl_log_state_create, &ddl_log_state_rm,
-                                  &create_table->db,
-                                  &create_table->table_name,
                                   create_info, alter_info, NULL,
                                   select_field_count, create_table))
   {
@@ -4815,17 +4825,18 @@ select_create::prepare(List<Item> &_values, SELECT_LEX_UNIT *u)
     table->file->extra(HA_EXTRA_WRITE_CAN_REPLACE);
   if (info.handle_duplicates == DUP_UPDATE)
     table->file->extra(HA_EXTRA_INSERT_WITH_UPDATE);
-  if (thd->locked_tables_mode <= LTM_LOCK_TABLES)
+  if (thd->locked_tables_mode <= LTM_LOCK_TABLES &&
+      !table->s->long_unique_table)
   {
     table->file->ha_start_bulk_insert((ha_rows) 0);
     if (thd->lex->duplicates == DUP_ERROR && !thd->lex->ignore)
       table->file->extra(HA_EXTRA_BEGIN_ALTER_COPY);
+    table->file->extra(HA_EXTRA_WRITE_CACHE);
   }
   thd->abort_on_warning= !info.ignore && thd->is_strict_mode();
   if (check_that_all_fields_are_given_values(thd, table, table_list))
     DBUG_RETURN(1);
   table->mark_columns_needed_for_insert();
-  table->file->extra(HA_EXTRA_WRITE_CACHE);
   // Mark table as used
   table->query_id= thd->query_id;
   DBUG_RETURN(0);

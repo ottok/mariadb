@@ -1,14 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1997, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2008, Google Inc.
 Copyright (c) 2015, 2023, MariaDB Corporation.
-
-Portions of this file contain modifications contributed and copyrighted by
-Google, Inc. Those modifications are gratefully acknowledged and are described
-briefly in the InnoDB documentation. The contributions by Google are
-incorporated with their permission, and subject to the conditions contained in
-the file COPYING.Google.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -4892,7 +4885,11 @@ page_corrupted:
 	if (trx->isolation_level == TRX_ISO_READ_UNCOMMITTED
 	    || !trx->read_view.is_open()) {
 	} else if (trx_id_t bulk_trx_id = index->table->bulk_trx_id) {
-		if (!trx->read_view.changes_visible(bulk_trx_id)) {
+		/* InnoDB should allow the transaction to read all
+		the rows when InnoDB intends to do any locking
+		on the record */
+		if (prebuilt->select_lock_type == LOCK_NONE
+		    && !trx->read_view.changes_visible(bulk_trx_id)) {
 			trx->op_info = "";
 			err = DB_END_OF_INDEX;
 			goto normal_return;

@@ -116,7 +116,7 @@ static my_bool opt_compress= 0, silent= 0, verbose= 0;
 static my_bool debug_info_flag= 0, debug_check_flag= 0;
 static my_bool tty_password= 0;
 static my_bool opt_mark_progress= 0;
-static my_bool ps_protocol= 0, ps_protocol_enabled= 0;
+static my_bool ps_protocol= 0, ps_protocol_enabled= 0, ps2_protocol_enabled= 0;
 static my_bool sp_protocol= 0, sp_protocol_enabled= 0;
 static my_bool view_protocol= 0, view_protocol_enabled= 0;
 static my_bool service_connection_enabled= 1;
@@ -157,6 +157,7 @@ static struct property prop_list[] = {
   { &display_session_track_info, 0, 1, 1, "$ENABLED_STATE_CHANGE_INFO" },
   { &display_metadata, 0, 0, 0, "$ENABLED_METADATA" },
   { &ps_protocol_enabled, 0, 0, 0, "$ENABLED_PS_PROTOCOL" },
+  { &ps2_protocol_enabled, 0, 0, 0, "$ENABLED_PS2_PROTOCOL" },
   { &view_protocol_enabled, 0, 0, 0, "$ENABLED_VIEW_PROTOCOL"},
   { &service_connection_enabled, 0, 1, 0, "$ENABLED_SERVICE_CONNECTION"},
   { &disable_query_log, 0, 0, 1, "$ENABLED_QUERY_LOG" },
@@ -173,6 +174,7 @@ enum enum_prop {
   P_SESSION_TRACK,
   P_META,
   P_PS,
+  P_PS2,
   P_VIEW,
   P_CONN,
   P_QUERY,
@@ -263,6 +265,7 @@ static size_t suite_dir_len, overlay_dir_len;
 
 /* Precompiled re's */
 static regex_t ps_re;     /* the query can be run using PS protocol */
+static regex_t ps2_re;    /* the query can be run using PS protocol with second execution*/
 static regex_t sp_re;     /* the query can be run as a SP */
 static regex_t view_re;   /* the query can be run as a view*/
 
@@ -381,6 +384,7 @@ enum enum_commands {
   Q_LOWERCASE,
   Q_START_TIMER, Q_END_TIMER,
   Q_CHARACTER_SET, Q_DISABLE_PS_PROTOCOL, Q_ENABLE_PS_PROTOCOL,
+  Q_DISABLE_PS2_PROTOCOL, Q_ENABLE_PS2_PROTOCOL,
   Q_DISABLE_VIEW_PROTOCOL, Q_ENABLE_VIEW_PROTOCOL,
   Q_DISABLE_SERVICE_CONNECTION, Q_ENABLE_SERVICE_CONNECTION,
   Q_ENABLE_NON_BLOCKING_API, Q_DISABLE_NON_BLOCKING_API,
@@ -474,6 +478,8 @@ const char *command_names[]=
   "character_set",
   "disable_ps_protocol",
   "enable_ps_protocol",
+  "disable_ps2_protocol",
+  "enable_ps2_protocol",
   "disable_view_protocol",
   "enable_view_protocol",
   "disable_service_connection",
@@ -1031,35 +1037,38 @@ exit_func:
 static int do_stmt_prepare(struct st_connection *cn, const char *q, int q_len)
 {
   /* The cn->stmt is already set. */
+  DBUG_ENTER("do_stmt_prepare");
   if (!cn->has_thread)
-    return mysql_stmt_prepare(cn->stmt, q, q_len);
+    DBUG_RETURN(mysql_stmt_prepare(cn->stmt, q, q_len));
   cn->cur_query= q;
   cn->cur_query_len= q_len;
   signal_connection_thd(cn, EMB_PREPARE_STMT);
   wait_query_thread_done(cn);
-  return cn->result;
+  DBUG_RETURN(cn->result);
 }
 
 
 static int do_stmt_execute(struct st_connection *cn)
 {
+  DBUG_ENTER("do_stmt_execute");
   /* The cn->stmt is already set. */
   if (!cn->has_thread)
-    return mysql_stmt_execute(cn->stmt);
+    DBUG_RETURN(mysql_stmt_execute(cn->stmt));
   signal_connection_thd(cn, EMB_EXECUTE_STMT);
   wait_query_thread_done(cn);
-  return cn->result;
+  DBUG_RETURN(cn->result);
 }
 
 
 static int do_stmt_close(struct st_connection *cn)
 {
+  DBUG_ENTER("do_stmt_close");
   /* The cn->stmt is already set. */
   if (!cn->has_thread)
-    return mysql_stmt_close(cn->stmt);
+    DBUG_RETURN(mysql_stmt_close(cn->stmt));
   signal_connection_thd(cn, EMB_CLOSE_STMT);
   wait_query_thread_done(cn);
-  return cn->result;
+  DBUG_RETURN(cn->result);
 }
 
 
@@ -3579,9 +3588,11 @@ void do_system(struct st_command *command)
 /* returns TRUE if path is inside a sandbox */
 bool is_sub_path(const char *path, size_t plen, const char *sandbox)
 {
-  size_t len= strlen(sandbox);
-  if (!sandbox || !len || plen <= len || memcmp(path, sandbox, len - 1)
-      || path[len] != '/')
+  size_t len;
+  if (!sandbox)
+    return false;
+  len= strlen(sandbox);
+  if (plen <= len || memcmp(path, sandbox, len-1) || path[len] != '/')
     return false;
   return true;
 }
@@ -3828,9 +3839,21 @@ void do_move_file(struct st_command *command)
                      sizeof(move_file_args)/sizeof(struct command_arg),
                      ' ');
 
-  if (bad_path(ds_to_file.str))
-    DBUG_VOID_RETURN;
+  size_t from_plen = strlen(ds_from_file.str);
+  size_t to_plen = strlen(ds_to_file.str);
+  const char *vardir= getenv("MYSQLTEST_VARDIR");
+  const char *tmpdir= getenv("MYSQL_TMP_DIR");
 
+  if (!((is_sub_path(ds_from_file.str, from_plen, vardir) && 
+        is_sub_path(ds_to_file.str, to_plen, vardir)) || 
+        (is_sub_path(ds_from_file.str, from_plen, tmpdir) && 
+        is_sub_path(ds_to_file.str, to_plen, tmpdir)))) {
+        report_or_die("Paths '%s' and '%s' are not both under MYSQLTEST_VARDIR '%s'"
+                "or both under MYSQL_TMP_DIR '%s'",
+                ds_from_file, ds_to_file, vardir, tmpdir);
+        DBUG_VOID_RETURN;
+  }
+  
   DBUG_PRINT("info", ("Move %s to %s", ds_from_file.str, ds_to_file.str));
   error= (my_rename(ds_from_file.str, ds_to_file.str,
                     MYF(disable_warnings ? 0 : MY_WME)) != 0);
@@ -5198,6 +5221,7 @@ void do_shutdown_server(struct st_command *command)
     if (!timeout || wait_until_dead(pid, timeout < 5 ? 5 : timeout))
     {
       (void) my_kill(pid, SIGKILL);
+      wait_until_dead(pid, 5);
     }
   }
   DBUG_VOID_RETURN;
@@ -7322,7 +7346,7 @@ int parse_args(int argc, char **argv)
   if (argc == 1)
     opt_db= *argv;
   if (tty_password)
-    opt_pass= get_tty_password(NullS);          /* purify tested */
+    opt_pass= my_get_tty_password(NullS);          /* purify tested */
   if (debug_info_flag)
     my_end_arg= MY_CHECK_ERROR | MY_GIVE_INFO;
   if (debug_check_flag)
@@ -7889,6 +7913,7 @@ int append_warnings(DYNAMIC_STRING *ds, MYSQL* mysql)
 
   if (!(count= mysql_warning_count(mysql)))
     DBUG_RETURN(0);
+  DBUG_PRINT("info", ("Warnings: %ud", count));
 
   /*
     If one day we will support execution of multi-statements
@@ -8344,6 +8369,7 @@ void run_query_stmt(struct st_connection *cn, struct st_command *command,
                     char *query, size_t query_len, DYNAMIC_STRING *ds,
                     DYNAMIC_STRING *ds_warnings)
 {
+  my_bool ignore_second_execution= 0;
   MYSQL_RES *res= NULL;     /* Note that here 'res' is meta data result set */
   MYSQL *mysql= cn->mysql;
   MYSQL_STMT *stmt;
@@ -8351,6 +8377,9 @@ void run_query_stmt(struct st_connection *cn, struct st_command *command,
   DYNAMIC_STRING ds_execute_warnings;
   DBUG_ENTER("run_query_stmt");
   DBUG_PRINT("query", ("'%-.60s'", query));
+  DBUG_PRINT("info",
+             ("disable_warnings: %d  prepare_warnings_enabled: %d",
+              (int) disable_warnings, (int) prepare_warnings_enabled));
 
   if (!mysql)
   {
@@ -8411,9 +8440,28 @@ void run_query_stmt(struct st_connection *cn, struct st_command *command,
 #endif
 
   /*
+    Execute the query first time if second execution enable
+  */
+  if(ps2_protocol_enabled && match_re(&ps2_re, query))
+  {
+    if (do_stmt_execute(cn))
+    {
+      handle_error(command, mysql_stmt_errno(stmt),
+                  mysql_stmt_error(stmt), mysql_stmt_sqlstate(stmt), ds);
+      goto end;
+    }
+    /*
+      We cannot run query twice if we get prepare warnings as these will otherwise be
+      disabled
+    */
+    ignore_second_execution= (prepare_warnings_enabled &&
+                              mysql_warning_count(mysql) != 0);
+  }
+
+  /*
     Execute the query
   */
-  if (do_stmt_execute(cn))
+  if (!ignore_second_execution && do_stmt_execute(cn))
   {
     handle_error(command, mysql_stmt_errno(stmt),
                  mysql_stmt_error(stmt), mysql_stmt_sqlstate(stmt), ds);
@@ -8488,7 +8536,10 @@ void run_query_stmt(struct st_connection *cn, struct st_command *command,
           that warnings from both the prepare and execute phase are shown.
         */
         if (!disable_warnings && !prepare_warnings_enabled)
+        {
+          DBUG_PRINT("info", ("warnings disabled"));
           dynstr_set(&ds_prepare_warnings, NULL);
+        }
       }
       else
       {
@@ -8590,7 +8641,9 @@ end:
   error - function will not return
 */
 
-void run_prepare_stmt(struct st_connection *cn, struct st_command *command, const char *query, size_t query_len, DYNAMIC_STRING *ds, DYNAMIC_STRING *ds_warnings)
+void run_prepare_stmt(struct st_connection *cn, struct st_command *command,
+                      const char *query, size_t query_len, DYNAMIC_STRING *ds,
+                      DYNAMIC_STRING *ds_warnings)
 {
 
   MYSQL *mysql= cn->mysql;
@@ -8751,9 +8804,8 @@ void run_bind_stmt(struct st_connection *cn, struct st_command *command,
 */
 
 void run_execute_stmt(struct st_connection *cn, struct st_command *command,
-                    const char *query, size_t query_len, DYNAMIC_STRING *ds,
-                      DYNAMIC_STRING *ds_warnings
-                      )
+                      const char *query, size_t query_len, DYNAMIC_STRING *ds,
+                      DYNAMIC_STRING *ds_warnings)
 {
   MYSQL_RES *res= NULL;     /* Note that here 'res' is meta data result set */
   MYSQL *mysql= cn->mysql;
@@ -9019,6 +9071,9 @@ int util_query(MYSQL* org_mysql, const char* query){
           org_mysql->unix_socket);
 
       cur_con->util_mysql= mysql;
+      if (mysql->charset != org_mysql->charset)
+        mysql_set_character_set(mysql, org_mysql->charset->
+                                IF_EMBEDDED(cs_name.str, csname));
     }
   }
   else
@@ -9398,6 +9453,13 @@ void init_re(void)
     "[[:space:]]*UNINSTALL[[:space:]]+|"
     "[[:space:]]*UPDATE[[:space:]]"
     ")";
+  /*
+    Filter for queries that can be run for second
+    execution of prepare statement
+  */
+  const char *ps2_re_str =
+    "^("
+    "[[:space:]]*SELECT[[:space:]])";
 
   /*
     Filter for queries that can be run as views
@@ -9407,6 +9469,7 @@ void init_re(void)
     "[[:space:]]*SELECT[[:space:]])";
 
   init_re_comp(&ps_re, ps_re_str);
+  init_re_comp(&ps2_re, ps2_re_str);
   init_re_comp(&sp_re, sp_re_str);
   init_re_comp(&view_re, view_re_str);
 }
@@ -9443,6 +9506,7 @@ int match_re(regex_t *re, char *str)
 void free_re(void)
 {
   regfree(&ps_re);
+  regfree(&ps2_re);
   regfree(&sp_re);
   regfree(&view_re);
 }
@@ -9794,6 +9858,9 @@ int main(int argc, char **argv)
   if (cursor_protocol)
     ps_protocol= 1;
 
+  /* Enable second execution of SELECT for ps-protocol
+     if ps-protocol is used */
+  ps2_protocol_enabled= ps_protocol;
   ps_protocol_enabled= ps_protocol;
   sp_protocol_enabled= sp_protocol;
   view_protocol_enabled= view_protocol;
@@ -10220,6 +10287,12 @@ int main(int argc, char **argv)
         break;
       case Q_ENABLE_PS_PROTOCOL:
         set_property(command, P_PS, ps_protocol);
+        break;
+      case Q_DISABLE_PS2_PROTOCOL:
+        set_property(command, P_PS2, 0);
+        break;
+      case Q_ENABLE_PS2_PROTOCOL:
+        set_property(command, P_PS2, ps_protocol);
         break;
       case Q_DISABLE_VIEW_PROTOCOL:
         set_property(command, P_VIEW, 0);
@@ -11829,7 +11902,7 @@ void dynstr_append_sorted(DYNAMIC_STRING* ds, DYNAMIC_STRING *ds_input,
 
   /* Sort array */
   qsort(lines.buffer, lines.elements,
-        sizeof(char**), (qsort_cmp)comp_lines);
+        sizeof(uchar *), (qsort_cmp)comp_lines);
 
   /* Create new result */
   for (i= 0; i < lines.elements ; i++)

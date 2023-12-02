@@ -249,7 +249,7 @@ MY_UNICASE_CHARACTER my_unicase_default_page00[]={
   Almost similar to my_unicase_default_page00, but maps sorting order
   for U+00DF to 0x00DF instead of 0x0053.
 */
-static MY_UNICASE_CHARACTER plane00_mysql500[]={
+MY_UNICASE_CHARACTER my_unicase_mysql500_page00[]={
   {0x0000,0x0000,0x0000},  {0x0001,0x0001,0x0001},
   {0x0002,0x0002,0x0002},  {0x0003,0x0003,0x0003},
   {0x0004,0x0004,0x0004},  {0x0005,0x0005,0x0005},
@@ -1740,8 +1740,8 @@ MY_UNICASE_INFO my_unicase_default=
 /*
   Reproduce old utf8mb3_general_ci behaviour before we fixed Bug#27877.
 */
-MY_UNICASE_CHARACTER *my_unicase_pages_mysql500[256]={
- plane00_mysql500,
+MY_UNICASE_CHARACTER *my_unicase_mysql500_pages[256]={
+ my_unicase_mysql500_page00,
           plane01, plane02, plane03, plane04, plane05,    NULL,    NULL,
     NULL,    NULL,    NULL,    NULL,    NULL,    NULL,    NULL,    NULL,
     NULL,    NULL,    NULL,    NULL,    NULL,    NULL,    NULL,    NULL,
@@ -1781,7 +1781,7 @@ MY_UNICASE_CHARACTER *my_unicase_pages_mysql500[256]={
 MY_UNICASE_INFO my_unicase_mysql500=
 {
   0xFFFF,
-  my_unicase_pages_mysql500
+  my_unicase_mysql500_pages
 };
 
 
@@ -5269,14 +5269,14 @@ static inline int my_weight_mb3_utf8mb3_general_ci(uchar b0, uchar b1, uchar b2)
 
 static inline int my_weight_mb1_utf8mb3_general_mysql500_ci(uchar b)
 {
-  return (int) plane00_mysql500[b & 0xFF].sort;
+  return (int) my_unicase_mysql500_page00[b & 0xFF].sort;
 }
 
 
 static inline int my_weight_mb2_utf8mb3_general_mysql500_ci(uchar b0, uchar b1)
 {
   my_wc_t wc= UTF8MB2_CODE(b0, b1);
-  MY_UNICASE_CHARACTER *page= my_unicase_pages_mysql500[wc >> 8];
+  MY_UNICASE_CHARACTER *page= my_unicase_mysql500_pages[wc >> 8];
   return (int) (page ? page[wc & 0xFF].sort : wc);
 }
 
@@ -5285,7 +5285,7 @@ static inline int
 my_weight_mb3_utf8mb3_general_mysql500_ci(uchar b0, uchar b1, uchar b2)
 {
   my_wc_t wc= UTF8MB3_CODE(b0, b1, b2);
-  MY_UNICASE_CHARACTER *page= my_unicase_pages_mysql500[wc >> 8];
+  MY_UNICASE_CHARACTER *page= my_unicase_mysql500_pages[wc >> 8];
   return (int) (page ? page[wc & 0xFF].sort : wc);
 }
 
@@ -5295,8 +5295,8 @@ my_weight_mb3_utf8mb3_general_mysql500_ci(uchar b0, uchar b1, uchar b2)
 #define MY_MB_WC(cs, pwc, s, e)  my_mb_wc_utf8mb3_quick(pwc, s, e)
 #define OPTIMIZE_ASCII           1
 #define UNICASE_MAXCHAR          MY_UNICASE_INFO_DEFAULT_MAXCHAR
-#define UNICASE_PAGE0            plane00_mysql500
-#define UNICASE_PAGES            my_unicase_pages_mysql500
+#define UNICASE_PAGE0            my_unicase_mysql500_page00
+#define UNICASE_PAGES            my_unicase_mysql500_pages
 #define WEIGHT_ILSEQ(x)          (0xFF0000 + (uchar) (x))
 #define WEIGHT_MB1(x)            my_weight_mb1_utf8mb3_general_mysql500_ci(x)
 #define WEIGHT_MB2(x,y)          my_weight_mb2_utf8mb3_general_mysql500_ci(x,y)
@@ -6888,7 +6888,7 @@ static const uint16 uni_FF20_FF5F[64]=
 
 static int hexlo(int x)
 {
-  static const char hex_lo_digit[256]=
+  static const signed char hex_lo_digit[256]=
   {
     -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1, /* ................ */
     -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1, /* ................ */
@@ -7972,5 +7972,17 @@ struct charset_info_st my_charset_utf8mb4_nopad_bin=
   &my_charset_utf8mb4_handler,
   &my_collation_utf8mb4_nopad_bin_handler
 };
+
+/*
+  Take a my_wc_t character and convert it to utf8mb3 representation.
+  Characters that are not in Basic Multilingual Plane are replaced with
+  MY_CS_REPLACEMENT_CHARACTER.
+*/
+int my_wc_mb_utf8mb4_bmp_only(CHARSET_INFO *cs, my_wc_t wc, uchar *r, uchar *e)
+{
+  if (wc > 0xFFFF)
+    wc= MY_CS_REPLACEMENT_CHARACTER;
+  return my_wc_mb_utf8mb4(cs, wc, r, e);
+}
 
 #endif /* HAVE_CHARSET_utf8mb4 */

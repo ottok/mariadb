@@ -30,6 +30,8 @@
 #include "sql_time.h"
 #include "mem_root_array.h"
 
+#include "cset_narrowing.h"
+
 C_MODE_START
 #include <ma_dyncol.h>
 
@@ -326,7 +328,7 @@ private:
   TABLE_LIST *save_next_local;
 
 public:
-  Name_resolution_context_state() {}          /* Remove gcc warning */
+  Name_resolution_context_state() = default;          /* Remove gcc warning */
 
 public:
   /* Save the state of a name resolution context. */
@@ -427,7 +429,7 @@ class sp_rcontext;
 class Sp_rcontext_handler
 {
 public:
-  virtual ~Sp_rcontext_handler() {}
+  virtual ~Sp_rcontext_handler() = default;
   /**
     A prefix used for SP variable names in queries:
     - EXPLAIN EXTENDED
@@ -500,8 +502,8 @@ public:
                   required, otherwise we only reading it and SELECT
                   privilege might be required.
   */
-  Settable_routine_parameter() {}
-  virtual ~Settable_routine_parameter() {}
+  Settable_routine_parameter() = default;
+  virtual ~Settable_routine_parameter() = default;
   virtual void set_required_privilege(bool rw) {};
 
   /*
@@ -583,7 +585,7 @@ class Rewritable_query_parameter
       limit_clause_param(false)
   { }
 
-  virtual ~Rewritable_query_parameter() { }
+  virtual ~Rewritable_query_parameter() = default;
 
   virtual bool append_for_log(THD *thd, String *str) = 0;
 };
@@ -743,7 +745,7 @@ public:
 class Item_const
 {
 public:
-  virtual ~Item_const() {}
+  virtual ~Item_const() = default;
   virtual const Type_all_attributes *get_type_all_attributes_from_const() const= 0;
   virtual bool const_is_null() const { return false; }
   virtual const longlong *const_ptr_longlong() const { return NULL; }
@@ -787,7 +789,8 @@ enum class item_with_t : item_flags_t
   FIELD=       (1<<2), // If any item except Item_sum contains a field.
   SUM_FUNC=    (1<<3), // If item contains a sum func
   SUBQUERY=    (1<<4), // If item containts a sub query
-  ROWNUM_FUNC= (1<<5)
+  ROWNUM_FUNC= (1<<5), // If ROWNUM function was used
+  PARAM=       (1<<6)  // If user parameter was used
 };
 
 
@@ -1087,6 +1090,8 @@ public:
   { return (bool) (with_flags & item_with_t::SUBQUERY); }
   inline bool with_rownum_func() const
   { return (bool) (with_flags & item_with_t::ROWNUM_FUNC); }
+  inline bool with_param() const
+  { return (bool) (with_flags & item_with_t::PARAM); }
   inline void copy_flags(const Item *org, item_base_t mask)
   {
     base_flags= (item_base_t) (((item_flags_t) base_flags &
@@ -2207,15 +2212,6 @@ public:
     return 0;
   }
 
-  /**
-    Check db/table_name if they defined in item and match arg values
-
-    @param arg Pointer to Check_table_name_prm structure
-
-    @retval true Match failed
-    @retval false Match succeeded
-  */
-  virtual bool check_table_name_processor(void *arg) { return false; }
   /* 
     TRUE if the expression depends only on the table indicated by tab_map
     or can be converted to such an exression using equalities.
@@ -2330,6 +2326,7 @@ public:
   virtual bool check_handler_func_processor(void *arg) { return 0; }
   virtual bool check_field_expression_processor(void *arg) { return 0; }
   virtual bool check_func_default_processor(void *arg) { return 0; }
+  virtual bool update_func_default_processor(void *arg) { return 0; }
   /*
     Check if an expression value has allowed arguments, like DATE/DATETIME
     for date functions. Also used by partitioning code to reject
@@ -2414,15 +2411,6 @@ public:
     uint count;
     int nest_level;
     bool collect;
-  };
-
-  struct Check_table_name_prm
-  {
-    LEX_CSTRING db;
-    LEX_CSTRING table_name;
-    String field;
-    Check_table_name_prm(LEX_CSTRING _db, LEX_CSTRING _table_name) :
-      db(_db), table_name(_table_name) {}
   };
 
   /*
@@ -2912,8 +2900,8 @@ class Field_enumerator
 {
 public:
   virtual void visit_field(Item_field *field)= 0;
-  virtual ~Field_enumerator() {};             /* purecov: inspected */
-  Field_enumerator() {}                       /* Remove gcc warning */
+  virtual ~Field_enumerator() = default;;             /* purecov: inspected */
+  Field_enumerator() = default;                       /* Remove gcc warning */
 };
 
 class Item_string;
@@ -3445,7 +3433,7 @@ public:
   Item_result_field(THD *thd, Item_result_field *item):
     Item_fixed_hybrid(thd, item), result_field(item->result_field)
   {}
-  ~Item_result_field() {}			/* Required with gcc 2.95 */
+  ~Item_result_field() = default;
   Field *get_tmp_table_field() override { return result_field; }
   Field *create_tmp_field_ex(MEM_ROOT *root, TABLE *table, Tmp_field_src *src,
                              const Tmp_field_param *param) override
@@ -3480,17 +3468,17 @@ protected:
     updated during fix_fields() to values from Field object and life-time 
     of those is shorter than life-time of Item_field.
   */
-  LEX_CSTRING orig_db_name;
-  LEX_CSTRING orig_table_name;
-  LEX_CSTRING orig_field_name;
+  Lex_table_name orig_db_name;
+  Lex_table_name orig_table_name;
+  Lex_ident      orig_field_name;
 
   void undeclared_spvar_error() const;
 
 public:
   Name_resolution_context *context;
-  LEX_CSTRING db_name;
-  LEX_CSTRING table_name;
-  LEX_CSTRING field_name;
+  Lex_table_name db_name;
+  Lex_table_name table_name;
+  Lex_ident      field_name;
   /*
     Cached pointer to table which contains this field, used for the same reason
     by prep. stmt. too in case then we have not-fully qualified field.
@@ -3740,24 +3728,6 @@ public:
       item_equal= NULL;
     }
     return 0;
-  }
-  bool check_table_name_processor(void *arg) override
-  {
-    Check_table_name_prm &p= *static_cast<Check_table_name_prm*>(arg);
-    if (!field && p.table_name.length && table_name.length)
-    {
-      DBUG_ASSERT(p.db.length);
-      if ((db_name.length &&
-          my_strcasecmp(table_alias_charset, p.db.str, db_name.str)) ||
-          my_strcasecmp(table_alias_charset, p.table_name.str, table_name.str))
-      {
-        print(&p.field, (enum_query_type) (QT_ITEM_ORIGINAL_FUNC_NULLIF |
-                                          QT_NO_DATA_EXPANSION |
-                                          QT_TO_SYSTEM_CHARSET));
-        return true;
-      }
-    }
-    return false;
   }
   void cleanup() override;
   Item_equal *get_item_equal() override { return item_equal; }
@@ -5340,17 +5310,17 @@ public:
    :used_tables_cache(other->used_tables_cache),
     const_item_cache(other->const_item_cache)
   { }
-  void used_tables_and_const_cache_init()
+  inline void used_tables_and_const_cache_init()
   {
     used_tables_cache= 0;
     const_item_cache= true;
   }
-  void used_tables_and_const_cache_join(const Item *item)
+  inline void used_tables_and_const_cache_join(const Item *item)
   {
     used_tables_cache|= item->used_tables();
     const_item_cache&= item->const_item();
   }
-  void used_tables_and_const_cache_update_and_join(Item *item)
+  inline void used_tables_and_const_cache_update_and_join(Item *item)
   {
     item->update_used_tables();
     used_tables_and_const_cache_join(item);
@@ -5432,8 +5402,10 @@ protected:
 
 public:
   // This method is used by Arg_comparator
-  bool agg_arg_charsets_for_comparison(CHARSET_INFO **cs, Item **a, Item **b)
+  bool agg_arg_charsets_for_comparison(CHARSET_INFO **cs, Item **a, Item **b,
+                                       bool allow_narrowing)
   {
+    THD *thd= current_thd;
     DTCollation tmp;
     if (tmp.set((*a)->collation, (*b)->collation, MY_COLL_CMP_CONV) ||
         tmp.derivation == DERIVATION_NONE)
@@ -5446,11 +5418,40 @@ public:
                func_name());
       return true;
     }
+
+    if (allow_narrowing &&
+        (*a)->collation.derivation == (*b)->collation.derivation)
+    {
+      // allow_narrowing==true only for = and <=> comparisons.
+      if (Utf8_narrow::should_do_narrowing(thd, (*a)->collation.collation,
+                                                (*b)->collation.collation))
+      {
+        // a is a subset, b is a superset (e.g. utf8mb3 vs utf8mb4)
+        *cs= (*b)->collation.collation; // Compare using the wider cset
+        return false;
+      }
+      else
+      if (Utf8_narrow::should_do_narrowing(thd, (*b)->collation.collation,
+                                                (*a)->collation.collation))
+      {
+        // a is a superset, b is a subset (e.g. utf8mb4 vs utf8mb3)
+        *cs= (*a)->collation.collation; // Compare using the wider cset
+        return false;
+      }
+    }
+    /*
+      If necessary, convert both *a and *b to the collation in tmp:
+    */
+    Single_coll_err error_for_a= {(*b)->collation, true};
+    Single_coll_err error_for_b= {(*a)->collation, false};
+
     if (agg_item_set_converter(tmp, func_name_cstring(),
-                               a, 1, MY_COLL_CMP_CONV, 1) ||
+                               a, 1, MY_COLL_CMP_CONV, 1,
+                               /*just for error message*/ &error_for_a) ||
         agg_item_set_converter(tmp, func_name_cstring(),
-                               b, 1, MY_COLL_CMP_CONV, 1))
-      return true;
+                               b, 1, MY_COLL_CMP_CONV, 1,
+                               /*just for error message*/ &error_for_b))
+        return true;
     *cs= tmp.collation;
     return false;
   }
@@ -6723,6 +6724,7 @@ public:
   bool update_vcol_processor(void *) override { return false; }
   bool check_field_expression_processor(void *arg) override;
   bool check_func_default_processor(void *) override { return true; }
+  bool update_func_default_processor(void *arg) override;
   bool register_field_in_read_map(void *arg) override;
   bool walk(Item_processor processor, bool walk_subquery, void *args) override
   {
@@ -7082,6 +7084,9 @@ public:
   }
 
   virtual void keep_array() {}
+#ifndef DBUG_OFF
+  bool is_array_kept() { return TRUE; }
+#endif
   void print(String *str, enum_query_type query_type) override;
   bool eq_def(const Field *field) 
   {
@@ -7570,13 +7575,14 @@ public:
   bool null_inside() override;
   void bring_value() override;
   void keep_array() override { save_array= 1; }
+#ifndef DBUG_OFF
+  bool is_array_kept() { return save_array; }
+#endif
   void cleanup() override
   {
     DBUG_ENTER("Item_cache_row::cleanup");
     Item_cache::cleanup();
-    if (save_array)
-      bzero(values, item_count*sizeof(Item**));
-    else
+    if (!save_array)
       values= 0;
     DBUG_VOID_RETURN;
   }
@@ -7700,7 +7706,7 @@ public:
   */
   virtual void close()= 0;
 
-  virtual ~Item_iterator() {}
+  virtual ~Item_iterator() = default;
 };
 
 
@@ -7807,7 +7813,7 @@ public:
   Item *get_tmp_table_item(THD *thd)
   { return m_item->get_tmp_table_item(thd); }
   Item *get_copy(THD *thd)
-  { return m_item->get_copy(thd); }
+  { return get_item_copy<Item_direct_ref_to_item>(thd, this); }
   COND *build_equal_items(THD *thd, COND_EQUAL *inherited,
                           bool link_item_fields,
                           COND_EQUAL **cond_equal_ref)
@@ -7875,7 +7881,20 @@ public:
   bool excl_dep_on_grouping_fields(st_select_lex *sel)
   { return m_item->excl_dep_on_grouping_fields(sel); }
   bool is_expensive() { return m_item->is_expensive(); }
-  Item* build_clone(THD *thd) { return get_copy(thd); }
+  void set_item(Item *item) { m_item= item; }
+  Item *build_clone(THD *thd)
+  {
+    Item *clone_item= m_item->build_clone(thd);
+    if (clone_item)
+    {
+      Item_direct_ref_to_item *copy= (Item_direct_ref_to_item *) get_copy(thd);
+      if (!copy)
+        return 0;
+      copy->set_item(clone_item);
+      return copy;
+    }
+    return 0;
+  }
 
   void split_sum_func(THD *thd, Ref_ptr_array ref_pointer_array,
                       List<Item> &fields, uint flags)

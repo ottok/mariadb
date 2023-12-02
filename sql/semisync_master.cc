@@ -18,6 +18,8 @@
 
 #include <my_global.h>
 #include "semisync_master.h"
+#include <algorithm>
+#include <mysql_com.h>
 
 #define TIME_THOUSAND 1000
 #define TIME_MILLION  1000000
@@ -317,8 +319,8 @@ void Active_tranx::clear_active_tranx_nodes(const char *log_file_name,
 
 /*******************************************************************************
  *
- * <Repl_semi_sync_master> class: the basic code layer for syncsync master.
- * <Repl_semi_sync_slave>  class: the basic code layer for syncsync slave.
+ * <Repl_semi_sync_master> class: the basic code layer for semisync master.
+ * <Repl_semi_sync_slave>  class: the basic code layer for semisync slave.
  *
  * The most important functions during semi-syn replication listed:
  *
@@ -562,6 +564,8 @@ int Repl_semi_sync_master::report_reply_packet(uint32 server_id,
 
   DBUG_ENTER("Repl_semi_sync_master::report_reply_packet");
 
+  DBUG_EXECUTE_IF("semisync_corrupt_magic",
+                  const_cast<uchar*>(packet)[REPLY_MAGIC_NUM_OFFSET]= 0;);
   if (unlikely(packet[REPLY_MAGIC_NUM_OFFSET] !=
                Repl_semi_sync_master::k_packet_magic_num))
   {
@@ -593,9 +597,18 @@ int Repl_semi_sync_master::report_reply_packet(uint32 server_id,
 
   rpl_semi_sync_master_get_ack++;
   report_reply_binlog(server_id, log_file_name, log_file_pos);
+  result= 0;
 
 l_end:
+  if (result == -1)
+  {
+    char buf[256];
+    octet2hex(buf, (const char*) packet, std::min(static_cast<ulong>(sizeof(buf)-1),
+                                                  packet_len));
+    sql_print_information("First bytes of the packet from semisync slave "
+                          "server-id %d: %s", server_id, buf);
 
+  }
   DBUG_RETURN(result);
 }
 
@@ -809,8 +822,6 @@ void Repl_semi_sync_master::dump_end(THD* thd)
 
   remove_slave();
   ack_receiver.remove_slave(thd);
-
-  return;
 }
 
 int Repl_semi_sync_master::commit_trx(const char* trx_wait_binlog_name,

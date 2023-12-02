@@ -625,9 +625,21 @@ public:
                       sizeof(trx_id_t)));
     if (element)
     {
+      /* rw_trx_hash_t::erase() sets element->trx to nullptr under
+      element->mutex protection before removing the element from hash table.
+      If the element was removed before the mutex acquisition, element->trx
+      will be equal to nullptr. */
+      DEBUG_SYNC_C("before_trx_hash_find_element_mutex_enter");
       element->mutex.wr_lock();
+      /* element_trx can't point to reused object now. If transaction was
+      deregistered before element->mutex acquisition, element->trx is nullptr.
+      It can't be deregistered while element->mutex is held. */
+      trx_t *element_trx = element->trx;
       lf_hash_search_unpin(pins);
-      if ((trx= element->trx)) {
+      /* The *element can be reused now, as element->trx value is stored
+      locally in element_trx. */
+      DEBUG_SYNC_C("after_trx_hash_find_element_mutex_enter");
+      if ((trx= element_trx)) {
         DBUG_ASSERT(trx_id == trx->id);
         ut_d(validate_element(trx));
         if (do_ref_count)
@@ -640,12 +652,19 @@ public:
             trx->mutex is released, and it will have to be rechecked
             by the caller after reacquiring the mutex.
           */
+          /* trx_t::commit_in_memory() sets the state to
+          TRX_STATE_COMMITTED_IN_MEMORY before deregistering the transaction.
+          It also waits for any implicit-to-explicit lock conversions to cease
+          after deregistering. */
           if (trx->state == TRX_STATE_COMMITTED_IN_MEMORY)
             trx= nullptr;
           else
             trx->reference();
         }
       }
+      /* element's lifetime is equal to the hash lifetime, that's why
+      element->mutex is valid here despite the element is unpinned. In the
+      worst case some thread will wait for element->mutex releasing. */
       element->mutex.wr_unlock();
     }
     if (!caller_trx)
@@ -924,14 +943,19 @@ public:
   /**
     Determine if the specified transaction or any older one might be active.
 
-    @param caller_trx  used to get/set pins
+    @param trx         current transaction
     @param id          transaction identifier
     @return whether any transaction not newer than id might be active
   */
 
-  bool find_same_or_older(trx_t *caller_trx, trx_id_t id)
+  bool find_same_or_older(trx_t *trx, trx_id_t id)
   {
-    return rw_trx_hash.iterate(caller_trx, find_same_or_older_callback, &id);
+    if (trx->max_inactive_id >= id)
+      return false;
+    bool found= rw_trx_hash.iterate(trx, find_same_or_older_callback, &id);
+    if (!found)
+      trx->max_inactive_id= id;
+    return found;
   }
 
 
@@ -1048,7 +1072,7 @@ public:
   void close();
 
   /** @return total number of active (non-prepared) transactions */
-  ulint any_active_transactions();
+  size_t any_active_transactions(size_t *prepared= nullptr);
 
 
   /**

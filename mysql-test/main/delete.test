@@ -451,6 +451,7 @@ DELETE t1 FROM db1.t1, db2.t1;
 
 # Test multiple-table cross database deletes
 
+--disable_ps2_protocol
 DELETE t1 FROM db1.t2 AS t1, db2.t2 AS t2 WHERE t2.a = 1 AND t1.a = t2.a;
 SELECT ROW_COUNT();
 CALL count_rows();
@@ -462,6 +463,7 @@ DROP DATABASE db1;
 DROP DATABASE db2;
 DROP PROCEDURE count_rows;
 DROP TABLE t1, t2;
+--enable_ps2_protocol
 
 --echo #
 --echo # Bug#46958: Assertion in Diagnostics_area::set_ok_status, trigger, 
@@ -582,3 +584,44 @@ DELETE v2 FROM v2;
 
 DROP VIEW v2, v1;
 DROP TABLE t1, t2;
+
+--echo End of 5.5 tests
+
+--echo #
+--echo # MDEV-30586: DELETE with WHERE containing nested subquery
+--echo #             with set function aggregated in outer subquery
+--echo #
+
+create table t1 (a int);
+insert into t1 values (3), (7), (1);
+
+create table t2 (b int);
+insert into t2 values (2), (1), (4), (7);
+
+create table t3 (a int, b int);
+insert into t3 values (2,10), (7,30), (2,30), (1,10), (7,40);
+
+let $c=
+        t1.a in (select t3.a from t3 group by t3.a
+                   having t3.a > any (select t2.b from t2
+                                        where t2.b*10 < sum(t3.b)));
+
+eval
+select * from t1
+  where $c;
+
+eval
+delete from t1
+  where $c;
+
+eval
+select * from t1
+  where $c;
+
+eval
+update t1 set t1.a=t1.a+10
+  where $c;
+
+drop table t1,t2,t3;
+
+--echo End of 10.4 tests

@@ -98,8 +98,6 @@ static const char *output_prefix= "";
 static char **defaults_argv= 0;
 static MEM_ROOT glob_root;
 
-static uint protocol_to_force= MYSQL_PROTOCOL_DEFAULT;
-
 #ifndef DBUG_OFF
 static const char *default_dbug_option = "d:t:o,/tmp/mariadb-binlog.trace";
 const char *current_dbug_option= default_dbug_option;
@@ -314,8 +312,8 @@ class Load_log_processor
     }
 
 public:
-  Load_log_processor() {}
-  ~Load_log_processor() {}
+  Load_log_processor() = default;
+  ~Load_log_processor() = default;
 
   int init()
   {
@@ -1689,7 +1687,7 @@ static struct my_option my_options[] =
    &stop_position, &stop_position, 0, GET_ULL,
    REQUIRED_ARG, (longlong)(~(my_off_t)0), BIN_LOG_HEADER_SIZE,
    (ulonglong)(~(my_off_t)0), 0, 0, 0},
-  {"table", 'T', "List entries for just this table (local log only).",
+  {"table", 'T', "List entries for just this table (affects only row events).",
    &table, &table, 0, GET_STR_ALLOC, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0},
   {"to-last-log", 't', "Requires -R. Will not stop at the end of the \
@@ -1835,15 +1833,20 @@ static void cleanup()
   my_free_open_file_info();
   load_processor.destroy();
   mysql_server_end();
+  if (opt_flashback)
+  {
+    delete_dynamic(&binlog_events);
+    delete_dynamic(&events_in_stmt);
+  }
   DBUG_VOID_RETURN;
 }
 
 
-static void die()
+static void die(int err)
 {
   cleanup();
   my_end(MY_DONT_FREE_DBUG);
-  exit(1);
+  exit(err);
 }
 
 
@@ -1880,7 +1883,7 @@ static my_time_t convert_str_to_timestamp(const char* str)
       l_time.time_type != MYSQL_TIMESTAMP_DATETIME || status.warnings)
   {
     error("Incorrect date and time argument: %s", str);
-    die();
+    die(1);
   }
   /*
     Note that Feb 30th, Apr 31st cause no error messages and are mapped to
@@ -1893,12 +1896,10 @@ static my_time_t convert_str_to_timestamp(const char* str)
 
 
 extern "C" my_bool
-get_one_option(const struct my_option *opt, const char *argument, const char *filename)
+get_one_option(const struct my_option *opt, const char *argument,
+               const char *filename)
 {
   bool tty_password=0;
-
-  /* Track when protocol is set via CLI to not force overrides */
-  static my_bool ignore_protocol_override = FALSE;
 
   switch (opt->id) {
 #ifndef DBUG_OFF
@@ -1947,16 +1948,8 @@ get_one_option(const struct my_option *opt, const char *argument, const char *fi
                                               opt->name)) <= 0)
     {
       sf_leaking_memory= 1; /* no memory leak reports here */
-      die();
+      die(1);
     }
-
-    /* Specification of protocol via CLI trumps implicit overrides */
-    if (filename[0] == '\0')
-    {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
     break;
 #ifdef WHEN_FLASHBACK_REVIEW_READY
   case opt_flashback_review:
@@ -1976,7 +1969,7 @@ get_one_option(const struct my_option *opt, const char *argument, const char *fi
                                      opt->name)) <= 0)
     {
       sf_leaking_memory= 1; /* no memory leak reports here */
-      die();
+      die(1);
     }
     opt_base64_output_mode= (enum_base64_output_mode)(val - 1);
     break;
@@ -2034,35 +2027,24 @@ get_one_option(const struct my_option *opt, const char *argument, const char *fi
     print_row_event_positions_used= 1;
     break;
   case 'P':
-    /* If port and socket are set, fall back to default behavior */
-    if (protocol_to_force == SOCKET_PROTOCOL_TO_FORCE)
+    if (filename[0] == '\0')
     {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
-    /* If port is set via CLI, try to force protocol to TCP */
-    if (filename[0] == '\0' &&
-        !ignore_protocol_override &&
-        protocol_to_force == MYSQL_PROTOCOL_DEFAULT)
-    {
-      protocol_to_force = MYSQL_PROTOCOL_TCP;
+      /* Port given on command line, switch protocol to use TCP */
+      opt_protocol= MYSQL_PROTOCOL_TCP;
     }
     break;
   case 'S':
-    /* If port and socket are set, fall back to default behavior */
-    if (protocol_to_force == MYSQL_PROTOCOL_TCP)
+    if (filename[0] == '\0')
     {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
-    /* Prioritize socket if set via command line */
-    if (filename[0] == '\0' &&
-        !ignore_protocol_override &&
-        protocol_to_force == MYSQL_PROTOCOL_DEFAULT)
-    {
-      protocol_to_force = SOCKET_PROTOCOL_TO_FORCE;
+      /*
+        Socket given on command line, switch protocol to use SOCKETSt
+        Except on Windows if 'protocol= pipe' has been provided in
+        the config file or command line.
+      */
+      if (opt_protocol != MYSQL_PROTOCOL_PIPE)
+      {
+        opt_protocol= MYSQL_PROTOCOL_SOCKET;
+      }
     }
     break;
   case 'v':
@@ -2081,7 +2063,7 @@ get_one_option(const struct my_option *opt, const char *argument, const char *fi
     break;
   }
   if (tty_password)
-    pass= get_tty_password(NullS);
+    pass= my_get_tty_password(NullS);
 
   return 0;
 }
@@ -2093,7 +2075,7 @@ static int parse_args(int *argc, char*** argv)
 
   if ((ho_error=handle_options(argc, argv, my_options, get_one_option)))
   {
-    die();
+    die(ho_error);
   }
   if (debug_info_flag)
     my_end_arg= MY_CHECK_ERROR | MY_GIVE_INFO;
@@ -3038,13 +3020,6 @@ int main(int argc, char** argv)
 
   parse_args(&argc, (char***)&argv);
 
-  /* Command line options override configured protocol */
-  if (protocol_to_force > MYSQL_PROTOCOL_DEFAULT
-      && protocol_to_force != opt_protocol)
-  {
-    warn_protocol_override(host, &opt_protocol, protocol_to_force);
-  }
-
   if (!argc || opt_version)
   {
     if (!opt_version)
@@ -3059,6 +3034,12 @@ int main(int argc, char** argv)
     opt_base64_output_mode= BASE64_OUTPUT_AUTO;
 
   my_set_max_open_files(open_files_limit);
+
+  if (opt_flashback && opt_raw_mode)
+  {
+    error("The --raw mode is not allowed with --flashback mode");
+    die(1);
+  }
 
   if (opt_flashback)
   {
@@ -3075,7 +3056,7 @@ int main(int argc, char** argv)
     if (!remote_opt)
     {
       error("The --raw mode only works with --read-from-remote-server");
-      die();
+      die(1);
     }
     if (one_database)
       warning("The --database option is ignored in raw mode");
@@ -3097,7 +3078,7 @@ int main(int argc, char** argv)
                                   O_WRONLY | O_BINARY, MYF(MY_WME))))
       {
         error("Could not create log file '%s'", result_file_name);
-        die();
+        die(1);
       }
     }
     else
@@ -3186,7 +3167,7 @@ int main(int argc, char** argv)
   /* Set delimiter back to semicolon */
   if (retval != ERROR_STOP)
   {
-    if (!stop_event_string.is_empty())
+    if (!stop_event_string.is_empty() && result_file)
       fprintf(result_file, "%s", stop_event_string.ptr());
     if (!opt_raw_mode && opt_flashback)
       fprintf(result_file, "DELIMITER ;\n");
@@ -3215,8 +3196,13 @@ int main(int argc, char** argv)
 
   if (tmpdir.list)
     free_tmpdir(&tmpdir);
-  if (result_file && result_file != stdout)
-    my_fclose(result_file, MYF(0));
+  if (result_file)
+  {
+    if (result_file != stdout)
+      my_fclose(result_file, MYF(0));
+    else
+      fflush(result_file);
+  }
   cleanup();
   /* We cannot free DBUG, it is used in global destructors after exit(). */
   my_end(my_end_arg | MY_DONT_FREE_DBUG);

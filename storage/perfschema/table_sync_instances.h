@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2008, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -78,8 +78,7 @@ private:
   table_mutex_instances();
 
 public:
-  ~table_mutex_instances()
-  {}
+  ~table_mutex_instances() = default;
 
 private:
   void make_row(PFS_mutex *pfs);
@@ -137,8 +136,7 @@ private:
   table_rwlock_instances();
 
 public:
-  ~table_rwlock_instances()
-  {}
+  ~table_rwlock_instances() = default;
 
 private:
   void make_row(PFS_rwlock *pfs);
@@ -190,8 +188,7 @@ private:
   table_cond_instances();
 
 public:
-  ~table_cond_instances()
-  {}
+  ~table_cond_instances() = default;
 
 private:
   void make_row(PFS_cond *pfs);

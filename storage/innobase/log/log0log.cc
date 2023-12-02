@@ -1,14 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2009, Google Inc.
 Copyright (c) 2014, 2022, MariaDB Corporation.
-
-Portions of this file contain modifications contributed and copyrighted by
-Google, Inc. Those modifications are gratefully acknowledged and are described
-briefly in the InnoDB documentation. The contributions by Google are
-incorporated with their permission, and subject to the conditions contained in
-the file COPYING.Google.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -168,11 +161,10 @@ log_set_capacity(ulonglong file_size)
 }
 
 /** Initialize the redo log subsystem. */
-void log_t::create()
+bool log_t::create()
 {
   ut_ad(this == &log_sys);
   ut_ad(!is_initialised());
-  m_initialised= true;
 
 #if defined(__aarch64__)
   mysql_mutex_init(log_sys_mutex_key, &mutex, MY_MUTEX_INIT_FAST);
@@ -194,9 +186,18 @@ void log_t::create()
 
   buf= static_cast<byte*>(ut_malloc_dontdump(srv_log_buffer_size,
                                              PSI_INSTRUMENT_ME));
-  TRASH_ALLOC(buf, srv_log_buffer_size);
+  if (!buf)
+    return false;
   flush_buf= static_cast<byte*>(ut_malloc_dontdump(srv_log_buffer_size,
                                                    PSI_INSTRUMENT_ME));
+  if (!flush_buf)
+  {
+    ut_free_dodump(buf, srv_log_buffer_size);
+    buf= nullptr;
+    return false;
+  }
+
+  TRASH_ALLOC(buf, srv_log_buffer_size);
   TRASH_ALLOC(flush_buf, srv_log_buffer_size);
 
   max_buf_free= srv_log_buffer_size / LOG_BUF_FLUSH_RATIO -
@@ -223,6 +224,8 @@ void log_t::create()
   buf_free= LOG_BLOCK_HDR_SIZE;
   checkpoint_buf= static_cast<byte*>
     (aligned_malloc(OS_FILE_LOG_BLOCK_SIZE, OS_FILE_LOG_BLOCK_SIZE));
+  m_initialised= true;
+  return true;
 }
 
 file_os_io::file_os_io(file_os_io &&rhs) : m_fd(rhs.m_fd)
@@ -273,6 +276,7 @@ dberr_t file_os_io::close() noexcept
   return DB_SUCCESS;
 }
 
+__attribute__((warn_unused_result))
 dberr_t file_os_io::read(os_offset_t offset, span<byte> buf) noexcept
 {
   return os_file_read(IORequestRead, m_fd, buf.data(), offset, buf.size(),
@@ -376,6 +380,7 @@ public:
                                                                    : DB_ERROR;
   }
   dberr_t close() noexcept final { return m_file.unmap(); }
+  __attribute__((warn_unused_result))
   dberr_t read(os_offset_t offset, span<byte> buf) noexcept final
   {
     memcpy(buf.data(), m_file.data() + offset, buf.size());
@@ -442,6 +447,8 @@ dberr_t log_file_t::close() noexcept
   return DB_SUCCESS;
 }
 
+
+__attribute__((warn_unused_result))
 dberr_t log_file_t::read(os_offset_t offset, span<byte> buf) noexcept
 {
   ut_ad(is_opened());
@@ -502,17 +509,6 @@ void log_t::file::write_header_durable(lsn_t lsn)
   log_sys.log.write(0, {buf, OS_FILE_LOG_BLOCK_SIZE});
   if (!log_sys.log.writes_are_durable())
     log_sys.log.flush();
-}
-
-void log_t::file::read(os_offset_t offset, span<byte> buf)
-{
-  if (const dberr_t err= fd.read(offset, buf))
-    ib::fatal() << "read(" << fd.get_path() << ") returned "<< err;
-}
-
-bool log_t::file::writes_are_durable() const noexcept
-{
-  return fd.writes_are_durable();
 }
 
 void log_t::file::write(os_offset_t offset, span<byte> buf)
@@ -1065,6 +1061,16 @@ ATTRIBUTE_COLD void log_check_margins()
   while (log_sys.check_flush_or_checkpoint());
 }
 
+/** Wait for a log checkpoint if needed.
+NOTE that this function may only be called while not holding
+any synchronization objects except dict_sys.latch. */
+void log_free_check()
+{
+  ut_ad(!lock_sys.is_writer());
+  if (log_sys.check_flush_or_checkpoint())
+    log_check_margins();
+}
+
 extern void buf_resize_shutdown();
 
 /** Make a checkpoint at the latest lsn on shutdown. */
@@ -1173,14 +1179,6 @@ wait_suspend_loop:
 
 	if (!buf_pool.is_initialised()) {
 		ut_ad(!srv_was_started);
-	} else if (ulint pending_io = buf_pool.io_pending()) {
-		if (srv_print_verbose_log && count > 600) {
-			ib::info() << "Waiting for " << pending_io << " buffer"
-				" page I/Os to complete";
-			count = 0;
-		}
-
-		goto loop;
 	} else {
 		buf_flush_buffer_pool();
 	}

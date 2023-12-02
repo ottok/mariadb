@@ -213,7 +213,7 @@ public:
     m_message[0]= '\0';
   }
 
-  virtual ~Silence_log_table_errors() {}
+  virtual ~Silence_log_table_errors() = default;
 
   virtual bool handle_condition(THD *thd,
                                 uint sql_errno,
@@ -416,7 +416,7 @@ private:
   Rows_log_event *m_pending;
 
   /*
-    Bit flags for what has been writting to cache. Used to
+    Bit flags for what has been writing to cache. Used to
     discard logs without any data changes.
     see enum_logged_status;
   */
@@ -646,14 +646,10 @@ end:
 }
 
 
-Log_to_csv_event_handler::Log_to_csv_event_handler()
-{
-}
+Log_to_csv_event_handler::Log_to_csv_event_handler() = default;
 
 
-Log_to_csv_event_handler::~Log_to_csv_event_handler()
-{
-}
+Log_to_csv_event_handler::~Log_to_csv_event_handler() = default;
 
 
 void Log_to_csv_event_handler::cleanup()
@@ -2079,15 +2075,16 @@ inline bool is_prepared_xa(THD *thd)
 static bool trans_cannot_safely_rollback(THD *thd, bool all)
 {
   DBUG_ASSERT(ending_trans(thd, all));
+  ulong binlog_format= thd->wsrep_binlog_format(thd->variables.binlog_format);
 
   return ((thd->variables.option_bits & OPTION_KEEP_LOG) ||
           (trans_has_updated_non_trans_table(thd) &&
-           thd->wsrep_binlog_format() == BINLOG_FORMAT_STMT) ||
+           binlog_format == BINLOG_FORMAT_STMT) ||
           (thd->transaction->all.has_modified_non_trans_temp_table() &&
-           thd->wsrep_binlog_format() == BINLOG_FORMAT_MIXED) ||
+           binlog_format == BINLOG_FORMAT_MIXED) ||
           (trans_has_updated_non_trans_table(thd) &&
            ending_single_stmt_trans(thd,all) &&
-           thd->wsrep_binlog_format() == BINLOG_FORMAT_MIXED) ||
+           binlog_format == BINLOG_FORMAT_MIXED) ||
           is_prepared_xa(thd));
 }
 
@@ -2311,6 +2308,7 @@ static int binlog_rollback(handlerton *hton, THD *thd, bool all)
   }
   else if (likely(!error))
   {  
+    ulong binlog_format= thd->wsrep_binlog_format(thd->variables.binlog_format);
     if (ending_trans(thd, all) && trans_cannot_safely_rollback(thd, all))
       error= binlog_rollback_flush_trx_cache(thd, all, cache_mngr);
     /*
@@ -2327,9 +2325,9 @@ static int binlog_rollback(handlerton *hton, THD *thd, bool all)
              (!(thd->transaction->stmt.has_created_dropped_temp_table() &&
                 !thd->is_current_stmt_binlog_format_row()) &&
               (!stmt_has_updated_non_trans_table(thd) ||
-               thd->wsrep_binlog_format() != BINLOG_FORMAT_STMT) &&
+               binlog_format != BINLOG_FORMAT_STMT) &&
               (!thd->transaction->stmt.has_modified_non_trans_temp_table() ||
-               thd->wsrep_binlog_format() != BINLOG_FORMAT_MIXED)))
+               binlog_format != BINLOG_FORMAT_MIXED)))
       error= binlog_truncate_trx_cache(thd, cache_mngr, all);
   }
 
@@ -3208,6 +3206,10 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
     char buff[80], *end;
     char query_time_buff[22+7], lock_time_buff[22+7];
     size_t buff_len;
+    ulonglong log_slow_verbosity= thd->variables.log_slow_verbosity;
+    if (log_slow_verbosity & LOG_SLOW_VERBOSITY_FULL)
+      log_slow_verbosity= ~(ulonglong) 0;
+
     end= buff;
 
     if (!(specialflag & SPECIAL_SHORT_LOG_FORMAT))
@@ -3234,7 +3236,6 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
           my_b_write(&log_file, (uchar*) "\n", 1))
         goto err;
 
-    /* For slow query log */
     sprintf(query_time_buff, "%.6f", ulonglong2double(query_utime)/1000000.0);
     sprintf(lock_time_buff,  "%.6f", ulonglong2double(lock_utime)/1000000.0);
     if (my_b_printf(&log_file,
@@ -3250,8 +3251,33 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
                     (ulong) (thd->status_var.bytes_sent - thd->bytes_sent_old)))
       goto err;
 
-    if ((thd->variables.log_slow_verbosity & LOG_SLOW_VERBOSITY_QUERY_PLAN)
-        && thd->tmp_tables_used &&
+    if (unlikely(log_slow_verbosity &
+                 LOG_SLOW_VERBOSITY_ENGINE) &&
+        thd->handler_stats.has_stats())
+    {
+      ha_handler_stats *stats= &thd->handler_stats;
+      double tracker_frequency= timer_tracker_frequency();
+      sprintf(query_time_buff, "%.4f",
+              1000.0 * ulonglong2double(stats->pages_read_time)/
+              tracker_frequency);
+      sprintf(lock_time_buff,  "%.4f",
+              1000.0 * ulonglong2double(stats->engine_time)/
+              tracker_frequency);
+
+      if (my_b_printf(&log_file,
+                      "# Pages_accessed: %lu  Pages_read: %lu  "
+                      "Pages_updated: %lu  Old_rows_read: %lu\n"
+                      "# Pages_read_time: %s  Engine_time: %s\n",
+                      (ulong) stats->pages_accessed,
+                      (ulong) stats->pages_read_count,
+                      (ulong) stats->pages_updated,
+                      (ulong) stats->undo_records_read,
+                      query_time_buff, lock_time_buff))
+      goto err;
+    }
+
+    if ((log_slow_verbosity & LOG_SLOW_VERBOSITY_QUERY_PLAN) &&
+        thd->tmp_tables_used &&
         my_b_printf(&log_file,
                     "# Tmp_tables: %lu  Tmp_disk_tables: %lu  "
                     "Tmp_table_sizes: %s\n",
@@ -3265,7 +3291,7 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
                     ErrConvDQName(thd->spcont->m_sp).ptr()))
       goto err;
 
-     if ((thd->variables.log_slow_verbosity & LOG_SLOW_VERBOSITY_QUERY_PLAN) &&
+     if ((log_slow_verbosity & LOG_SLOW_VERBOSITY_QUERY_PLAN) &&
          (thd->query_plan_flags &
           (QPLAN_FULL_SCAN | QPLAN_FULL_JOIN | QPLAN_TMP_TABLE |
            QPLAN_TMP_DISK | QPLAN_FILESORT | QPLAN_FILESORT_DISK |
@@ -3287,8 +3313,7 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
                        "Yes" : "No")
                      ))
       goto err;
-    if (thd->variables.log_slow_verbosity & LOG_SLOW_VERBOSITY_EXPLAIN &&
-        thd->lex->explain)
+    if (log_slow_verbosity & LOG_SLOW_VERBOSITY_EXPLAIN && thd->lex->explain)
     {
       StringBuffer<128> buf;
       DBUG_ASSERT(!thd->free_list);
@@ -3296,6 +3321,23 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
         if (my_b_printf(&log_file, "%s", buf.c_ptr_safe()))
           goto err;
       thd->free_items();
+    }
+    if ((log_slow_verbosity & LOG_SLOW_VERBOSITY_WARNINGS) &&
+        thd->get_stmt_da()->unsafe_statement_warn_count())
+    {
+      Diagnostics_area::Sql_condition_iterator it=
+        thd->get_stmt_da()->sql_conditions();
+      ulong idx, max_warnings= thd->variables.log_slow_max_warnings;
+      const Sql_condition *err;
+      my_b_printf(&log_file, "# Warnings\n");
+      for (idx= 0; (err= it++) && idx < max_warnings; idx++)
+      {
+        my_b_printf(&log_file, "# %-15s %4u %.*s\n",
+                    warning_level_names[err->get_level()].str,
+                    (uint) err->get_sql_errno(),
+                    (int) err->get_message_octet_length(),
+                    err->get_message_text());
+      }
     }
     if (thd->db.str && strcmp(thd->db.str, db))
     {						// Database changed
@@ -3321,7 +3363,6 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
                               end, -10);
       }
     }
-
     /*
       This info used to show up randomly, depending on whether the query
       checked the query start time or not. now we always write current
@@ -3920,7 +3961,7 @@ bool MYSQL_BIN_LOG::open(const char *log_name,
       bytes_written+= description_event_for_queue->data_written;
     }
     if (flush_io_cache(&log_file) ||
-        mysql_file_sync(log_file.file, MYF(MY_WME|MY_SYNC_FILESIZE)))
+        mysql_file_sync(log_file.file, MYF(MY_WME)))
       goto err;
 
     my_off_t offset= my_b_tell(&log_file);
@@ -3958,7 +3999,7 @@ bool MYSQL_BIN_LOG::open(const char *log_name,
                      strlen(log_file_name)) ||
           my_b_write(&index_file, (uchar*) "\n", 1) ||
           flush_io_cache(&index_file) ||
-          mysql_file_sync(index_file.file, MYF(MY_WME|MY_SYNC_FILESIZE)))
+          mysql_file_sync(index_file.file, MYF(MY_WME)))
         goto err;
 
 #ifdef HAVE_REPLICATION
@@ -4098,7 +4139,7 @@ static bool copy_up_file_and_fill(IO_CACHE *index_file, my_off_t offset)
   }
   /* The following will either truncate the file or fill the end with \n' */
   if (mysql_file_chsize(file, offset - init_offset, '\n', MYF(MY_WME)) ||
-      mysql_file_sync(file, MYF(MY_WME|MY_SYNC_FILESIZE)))
+      mysql_file_sync(file, MYF(MY_WME)))
     goto err;
 
   /* Reset data in old index cache */
@@ -4894,7 +4935,7 @@ int MYSQL_BIN_LOG::sync_purge_index_file()
 
   if (unlikely((error= flush_io_cache(&purge_index_file))) ||
       unlikely((error= my_sync(purge_index_file.file,
-                               MYF(MY_WME | MY_SYNC_FILESIZE)))))
+                               MYF(MY_WME)))))
     DBUG_RETURN(error);
 
   DBUG_RETURN(error);
@@ -5606,7 +5647,7 @@ bool MYSQL_BIN_LOG::flush_and_sync(bool *synced)
   if (sync_period && ++sync_counter >= sync_period)
   {
     sync_counter= 0;
-    err= mysql_file_sync(fd, MYF(MY_WME|MY_SYNC_FILESIZE));
+    err= mysql_file_sync(fd, MYF(MY_WME));
     if (synced)
       *synced= 1;
 #ifndef DBUG_OFF
@@ -6386,7 +6427,7 @@ MYSQL_BIN_LOG::write_state_to_file()
   log_inited= false;
   if ((err= end_io_cache(&cache)))
     goto err;
-  if ((err= mysql_file_sync(file_no, MYF(MY_WME|MY_SYNC_FILESIZE))))
+  if ((err= mysql_file_sync(file_no, MYF(MY_WME))))
     goto err;
   goto end;
 
@@ -7844,7 +7885,7 @@ MYSQL_BIN_LOG::queue_for_group_commit(group_commit_entry *orig_entry)
 
         Setting this flag may or may not be seen by the other thread, but we
         are safe in any case: The other thread will set queued_by_other under
-        its LOCK_wait_commit, and we will not check queued_by_other only after
+        its LOCK_wait_commit, and we will not check queued_by_other until after
         we have been woken up.
       */
       wfc->opaque_pointer= orig_entry;
@@ -7941,7 +7982,7 @@ MYSQL_BIN_LOG::queue_for_group_commit(group_commit_entry *orig_entry)
     is pointed to by `last` (we do not use NULL to terminate the list).
 
     As we process an entry, any waiters for that entry are added at the end of
-    the list, to be processed in subsequent iterations. The the entry is added
+    the list, to be processed in subsequent iterations. Then the entry is added
     to the group_commit_queue.  This continues until the list is exhausted,
     with all entries ever added eventually processed.
 
@@ -10144,7 +10185,7 @@ bool MYSQL_BIN_LOG::truncate_and_remove_binlogs(const char *file_name,
     error= mysql_file_chsize(index_file.file, index_file_offset, '\n',
                              MYF(MY_WME));
     if (!error)
-      error= mysql_file_sync(index_file.file, MYF(MY_WME|MY_SYNC_FILESIZE));
+      error= mysql_file_sync(index_file.file, MYF(MY_WME));
     if (error)
     {
       sql_print_error("Failed to truncate binlog index "
@@ -10186,7 +10227,7 @@ bool MYSQL_BIN_LOG::truncate_and_remove_binlogs(const char *file_name,
   /* Change binlog file size to truncate_pos */
   error= mysql_file_chsize(file, pos, 0, MYF(MY_WME));
   if (!error)
-    error= mysql_file_sync(file, MYF(MY_WME|MY_SYNC_FILESIZE));
+    error= mysql_file_sync(file, MYF(MY_WME));
   if (error)
   {
     sql_print_error("Failed to truncate the "
@@ -11819,7 +11860,10 @@ get_gtid_list_event(IO_CACHE *cache, Gtid_list_log_event **out_gtid_list)
     if (typ == START_ENCRYPTION_EVENT)
     {
       if (fdle->start_decryption((Start_encryption_log_event*) ev))
+      {
         errormsg= "Could not set up decryption for binlog.";
+        typ= UNKNOWN_EVENT; // to cleanup and abort below
+      }
     }
     delete ev;
     if (typ == ROTATE_EVENT || typ == STOP_EVENT ||

@@ -195,7 +195,7 @@ public:
   /* True if the container does not contain any element */
   virtual bool is_empty() = 0;
 
-  virtual ~Rowid_filter_container() {}
+  virtual ~Rowid_filter_container() = default;
 };
 
 
@@ -217,6 +217,11 @@ protected:
   Rowid_filter_tracker *tracker;
 
 public:
+  enum build_return_code {
+    SUCCESS,
+    NON_FATAL_ERROR,
+    FATAL_ERROR,
+  };
   Rowid_filter(Rowid_filter_container *container_arg)
     : container(container_arg) {}
 
@@ -224,7 +229,7 @@ public:
     Build the filter :
     fill it with info on the set of elements placed there
   */
-  virtual bool build() = 0;
+  virtual build_return_code build() = 0;
 
   /*
     Check whether an element is in the filter.
@@ -232,7 +237,7 @@ public:
   */
   virtual bool check(char *elem) = 0;
 
-  virtual ~Rowid_filter() {}
+  virtual ~Rowid_filter() = default;
 
   bool is_empty() { return container->is_empty(); }
 
@@ -269,7 +274,7 @@ public:
 
   ~Range_rowid_filter();
 
-  bool build() { return fill(); }
+  build_return_code build();
 
   bool check(char *elem)
   {
@@ -279,8 +284,6 @@ public:
     tracker->increment_checked_elements_count(was_checked);
     return was_checked;
   }
-
-  bool fill();
 
   SQL_SELECT *get_select() { return select; }
 };

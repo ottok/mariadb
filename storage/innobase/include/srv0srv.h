@@ -108,10 +108,6 @@ struct srv_stats_t
 	/** Store the number of write requests issued */
 	ulint_ctr_1_t		buf_pool_write_requests;
 
-	/** Number of buffer pool reads that led to the reading of
-	a disk page */
-	ulint_ctr_1_t		buf_pool_reads;
-
 	/** Number of bytes saved by page compression */
 	ulint_ctr_n_t          page_compression_saved;
 	/* Number of pages compressed with page compression */
@@ -393,6 +389,9 @@ extern my_bool  srv_immediate_scrub_data_uncompressed;
 enum srv_operation_mode {
 	/** Normal mode (MariaDB Server) */
 	SRV_OPERATION_NORMAL,
+	/** Mariabackup is executing server to export already restored
+	tablespaces */
+	SRV_OPERATION_EXPORT_RESTORED,
 	/** Mariabackup taking a backup */
 	SRV_OPERATION_BACKUP,
 	/** Mariabackup restoring a backup for subsequent --copy-back */
@@ -571,10 +570,6 @@ Frees the data structures created in srv_init(). */
 void
 srv_free(void);
 
-/** Wake up the purge if there is work to do. */
-void
-srv_wake_purge_thread_if_not_active();
-
 /******************************************************************//**
 Outputs to a file the output of the InnoDB Monitor.
 @return FALSE if not all information printed
@@ -614,16 +609,6 @@ void
 srv_que_task_enqueue_low(
 /*=====================*/
 	que_thr_t*	thr);	/*!< in: query thread */
-
-/**
-Flag which is set, whenever innodb_purge_threads changes.
-It is read and reset in srv_do_purge().
-
-Thus it is Atomic_counter<int>, not bool, since unprotected
-reads are used. We just need an atomic with relaxed memory
-order, to please Thread Sanitizer.
-*/
-extern Atomic_counter<int> srv_purge_thread_count_changed;
 
 #ifdef UNIV_DEBUG
 /** @return whether purge or master task is active */
@@ -670,24 +655,14 @@ struct export_var_t{
 	char  innodb_buffer_pool_resize_status[512];/*!< Buf pool resize status */
 	my_bool innodb_buffer_pool_load_incomplete;/*!< Buf pool load incomplete */
 	ulint innodb_buffer_pool_pages_total;	/*!< Buffer pool size */
-	ulint innodb_buffer_pool_pages_data;	/*!< Data pages */
 	ulint innodb_buffer_pool_bytes_data;	/*!< File bytes used */
-	ulint innodb_buffer_pool_pages_dirty;	/*!< Dirty data pages */
-	ulint innodb_buffer_pool_bytes_dirty;	/*!< File bytes modified */
 	ulint innodb_buffer_pool_pages_misc;	/*!< Miscellanous pages */
-	ulint innodb_buffer_pool_pages_free;	/*!< Free pages */
 #ifdef UNIV_DEBUG
 	ulint innodb_buffer_pool_pages_latched;	/*!< Latched pages */
 #endif /* UNIV_DEBUG */
-	ulint innodb_buffer_pool_pages_made_not_young;
-	ulint innodb_buffer_pool_pages_made_young;
-	ulint innodb_buffer_pool_pages_old;
-	ulint innodb_buffer_pool_read_requests;	/*!< buf_pool.stat.n_page_gets */
-	ulint innodb_buffer_pool_reads;		/*!< srv_buf_pool_reads */
+	/** buf_pool.stat.n_page_gets (a sharded counter) */
+	ulint innodb_buffer_pool_read_requests;
 	ulint innodb_buffer_pool_write_requests;/*!< srv_stats.buf_pool_write_requests */
-	ulint innodb_buffer_pool_read_ahead_rnd;/*!< srv_read_ahead_rnd */
-	ulint innodb_buffer_pool_read_ahead;	/*!< srv_read_ahead */
-	ulint innodb_buffer_pool_read_ahead_evicted;/*!< srv_read_ahead evicted*/
 	ulint innodb_checkpoint_age;
 	ulint innodb_checkpoint_max_age;
 	ulint innodb_data_pending_reads;	/*!< Pending reads */
@@ -719,13 +694,10 @@ struct export_var_t{
 	ulint innodb_os_log_pending_fsyncs;	/*!< n_pending_log_flushes */
 	ulint innodb_row_lock_waits;		/*!< srv_n_lock_wait_count */
 	ulint innodb_row_lock_current_waits;	/*!< srv_n_lock_wait_current_count */
-	int64_t innodb_row_lock_time;		/*!< srv_n_lock_wait_time
-						/ 1000 */
-	ulint innodb_row_lock_time_avg;		/*!< srv_n_lock_wait_time
-						/ 1000
-						/ srv_n_lock_wait_count */
-	ulint innodb_row_lock_time_max;		/*!< srv_n_lock_max_wait_time
-						/ 1000 */
+	int64_t innodb_row_lock_time;		/*!< srv_n_lock_wait_time */
+	uint64_t innodb_row_lock_time_avg;	/*!< srv_n_lock_wait_time
+						     / srv_n_lock_wait_count */
+	uint64_t innodb_row_lock_time_max;	/*!< srv_n_lock_max_wait_time */
 	ulint innodb_rows_read;			/*!< srv_n_rows_read */
 	ulint innodb_rows_inserted;		/*!< srv_n_rows_inserted */
 	ulint innodb_rows_updated;		/*!< srv_n_rows_updated */

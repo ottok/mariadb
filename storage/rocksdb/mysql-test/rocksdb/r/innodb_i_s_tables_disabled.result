@@ -30,7 +30,7 @@ lock_rec_locks	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	coun
 lock_table_lock_created	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of table locks created
 lock_table_lock_removed	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of table locks removed from the lock queue
 lock_table_locks	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Current number of table locks on tables
-lock_row_lock_current_waits	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	status_counter	Number of row locks currently being waited for (innodb_row_lock_current_waits)
+lock_row_lock_current_waits	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	Number of row locks currently being waited for (innodb_row_lock_current_waits)
 lock_row_lock_time	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	status_counter	Time spent in acquiring row locks, in milliseconds (innodb_row_lock_time)
 lock_row_lock_time_max	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	The maximum time to acquire a row lock, in milliseconds (innodb_row_lock_time_max)
 lock_row_lock_waits	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	status_counter	Number of times a row lock had to be waited for (innodb_row_lock_waits)
@@ -146,8 +146,8 @@ trx_commits_insert_update	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NUL
 trx_rollbacks	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of transactions rolled back
 trx_rollbacks_savepoint	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of transactions rolled back to savepoint
 trx_rseg_history_len	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	Length of the TRX_RSEG_HISTORY list
-trx_undo_slots_used	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of undo slots used
-trx_undo_slots_cached	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of undo slots cached
+trx_undo_slots_used	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	Number of undo slots used
+trx_undo_slots_cached	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	Number of undo slots cached
 trx_rseg_current_size	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	Current rollback segment size in pages
 purge_del_mark_records	purge	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of delete-marked rows purged
 purge_upd_exist_or_extern_records	purge	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of purges on updates of existing records and updates on delete marked record with externally stored field
@@ -181,7 +181,7 @@ compress_pages_page_decompressed	compression	0	NULL	NULL	NULL	0	NULL	NULL	NULL	N
 compress_pages_page_compression_error	compression	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of page compression errors
 compress_pages_encrypted	compression	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of pages encrypted
 compress_pages_decrypted	compression	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of pages decrypted
-index_page_splits	index	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of index page splits
+index_page_splits	index	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	status_counter	Number of index page splits
 index_page_merge_attempts	index	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of index page merge attempts
 index_page_merge_successful	index	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of successful index page merges
 index_page_reorg_attempts	index	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of index page reorganization attempts

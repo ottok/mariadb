@@ -23,6 +23,11 @@
 #undef EXTRA_DEBUG
 #define EXTRA_DEBUG
 
+#ifndef DBUG_OFF
+/* Put a protected barrier after every element when using multi_alloc_root() */
+#define ALLOC_BARRIER
+#endif
+
 /* data packed in MEM_ROOT -> min_malloc */
 
 #define MALLOC_FLAG(A) ((A & 1) ? MY_THREAD_SPECIFIC : 0)
@@ -72,6 +77,9 @@ void init_alloc_root(PSI_memory_key key, MEM_ROOT *mem_root, size_t block_size,
   mem_root->block_num= 4;			/* We shift this with >>2 */
   mem_root->first_block_usage= 0;
   mem_root->m_psi_key= key;
+#ifdef PROTECT_STATEMENT_MEMROOT
+  mem_root->read_only= 0;
+#endif
 
 #if !(defined(HAVE_valgrind) && defined(EXTRA_DEBUG))
   if (pre_alloc_size)
@@ -211,6 +219,10 @@ void *alloc_root(MEM_ROOT *mem_root, size_t length)
   DBUG_PRINT("enter",("root: %p", mem_root));
   DBUG_ASSERT(alloc_root_inited(mem_root));
 
+#ifdef PROTECT_STATEMENT_MEMROOT
+  DBUG_ASSERT(mem_root->read_only == 0);
+#endif
+
   DBUG_EXECUTE_IF("simulate_out_of_memory",
                   {
                     /* Avoid reusing an already allocated block */
@@ -311,6 +323,9 @@ void *multi_alloc_root(MEM_ROOT *root, ...)
   {
     length= va_arg(args, uint);
     tot_length+= ALIGN_SIZE(length);
+#ifdef ALLOC_BARRIER
+    tot_length+= ALIGN_SIZE(1);
+#endif
   }
   va_end(args);
 
@@ -324,6 +339,10 @@ void *multi_alloc_root(MEM_ROOT *root, ...)
     *ptr= res;
     length= va_arg(args, uint);
     res+= ALIGN_SIZE(length);
+#ifdef ALLOC_BARRIER
+    TRASH_FREE(res, ALIGN_SIZE(1));
+    res+= ALIGN_SIZE(1);
+#endif
   }
   va_end(args);
   DBUG_RETURN((void*) start);

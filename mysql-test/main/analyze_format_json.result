@@ -17,6 +17,7 @@ ANALYZE
       "r_rows": 10,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 30,
       "attached_condition": "t0.a < 3"
@@ -46,6 +47,7 @@ ANALYZE
       "r_rows": 10,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 0,
       "attached_condition": "t0.a > 9 and t0.a is not null"
@@ -61,6 +63,7 @@ ANALYZE
       "r_loops": 0,
       "rows": 1,
       "r_rows": null,
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": null
     }
@@ -87,6 +90,7 @@ ANALYZE
       "r_rows": 10,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 100,
       "attached_condition": "t0.a is not null"
@@ -104,6 +108,7 @@ ANALYZE
       "r_rows": 1,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 40,
       "attached_condition": "t1.b < 4"
@@ -131,6 +136,7 @@ ANALYZE
       "r_rows": 100,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 20,
       "attached_condition": "tbl1.b < 20"
@@ -144,6 +150,7 @@ ANALYZE
         "r_rows": 100,
         "r_table_time_ms": "REPLACED",
         "r_other_time_ms": "REPLACED",
+        "r_engine_stats": REPLACED,
         "filtered": 100,
         "r_filtered": 60,
         "attached_condition": "tbl2.b < 60"
@@ -151,7 +158,11 @@ ANALYZE
       "buffer_type": "flat",
       "buffer_size": "1Kb",
       "join_type": "BNL",
-      "r_filtered": 100
+      "r_loops": 20,
+      "r_filtered": 100,
+      "r_unpack_time_ms": "REPLACED",
+      "r_other_time_ms": "REPLACED",
+      "r_effective_rows": 60
     }
   }
 }
@@ -171,6 +182,7 @@ ANALYZE
       "r_rows": 100,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 20,
       "attached_condition": "tbl1.b < 20"
@@ -184,6 +196,7 @@ ANALYZE
         "r_rows": 100,
         "r_table_time_ms": "REPLACED",
         "r_other_time_ms": "REPLACED",
+        "r_engine_stats": REPLACED,
         "filtered": 100,
         "r_filtered": 60,
         "attached_condition": "tbl2.b < 60"
@@ -192,7 +205,11 @@ ANALYZE
       "buffer_size": "1Kb",
       "join_type": "BNL",
       "attached_condition": "tbl1.c > tbl2.c",
-      "r_filtered": 15.83333333
+      "r_loops": 20,
+      "r_filtered": 15.83333333,
+      "r_unpack_time_ms": "REPLACED",
+      "r_other_time_ms": "REPLACED",
+      "r_effective_rows": 60
     }
   }
 }
@@ -220,6 +237,7 @@ ANALYZE
       "r_rows": 10,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 100,
       "attached_condition": "t1.a is not null"
@@ -237,6 +255,7 @@ ANALYZE
       "r_rows": 0.2,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 100,
       "using_index": true
@@ -272,6 +291,7 @@ ANALYZE
       "r_rows": 10,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 50,
       "attached_condition": "test.t1.a < 5"
@@ -306,7 +326,8 @@ ANALYZE
       "rows": 1000,
       "r_rows": 1000,
       "r_filtered": 100,
-      "r_total_time_ms": "REPLACED"
+      "r_total_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED
     }
   }
 }
@@ -330,6 +351,7 @@ ANALYZE
       "r_rows": 10,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 50,
       "index_condition": "t1.pk < 10",
@@ -356,6 +378,7 @@ ANALYZE
       "r_rows": 10,
       "r_filtered": 50,
       "r_total_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "attached_condition": "t1.pk < 10 and t1.b > 4"
     }
   }
@@ -396,6 +419,7 @@ ANALYZE
       "r_rows": 5,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 100
     },
@@ -420,6 +444,7 @@ ANALYZE
         "r_rows": 203.8,
         "r_table_time_ms": "REPLACED",
         "r_other_time_ms": "REPLACED",
+        "r_engine_stats": REPLACED,
         "filtered": 100,
         "r_filtered": 98.13542689
       }
@@ -457,6 +482,7 @@ ANALYZE
               "r_rows": 10,
               "r_table_time_ms": "REPLACED",
               "r_other_time_ms": "REPLACED",
+              "r_engine_stats": REPLACED,
               "filtered": 100,
               "r_filtered": 50,
               "attached_condition": "tbl1.a < 5"
@@ -477,6 +503,7 @@ ANALYZE
               "r_rows": 10,
               "r_table_time_ms": "REPLACED",
               "r_other_time_ms": "REPLACED",
+              "r_engine_stats": REPLACED,
               "filtered": 100,
               "r_filtered": 20,
               "attached_condition": "tbl2.a in (2,3)"
@@ -527,6 +554,7 @@ ANALYZE
           "r_rows": 256,
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
+          "r_engine_stats": REPLACED,
           "filtered": 100,
           "r_filtered": 100
         }
@@ -559,6 +587,7 @@ ANALYZE
           "r_rows": 256,
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
+          "r_engine_stats": REPLACED,
           "filtered": 100,
           "r_filtered": 100
         }
@@ -602,6 +631,7 @@ ANALYZE
           "r_rows": 256,
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
+          "r_engine_stats": REPLACED,
           "filtered": 100,
           "r_filtered": 100
         }
@@ -632,6 +662,7 @@ ANALYZE
       "r_rows": 2,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 100
     },
@@ -644,6 +675,7 @@ ANALYZE
         "r_rows": 2,
         "r_table_time_ms": "REPLACED",
         "r_other_time_ms": "REPLACED",
+        "r_engine_stats": REPLACED,
         "filtered": 100,
         "r_filtered": 0,
         "attached_condition": "<in_optimizer>(t2.b,t2.b in (subquery#2))"
@@ -652,7 +684,11 @@ ANALYZE
       "buffer_size": "65",
       "join_type": "BNL",
       "attached_condition": "<in_optimizer>(t2.b,t2.b in (subquery#2))",
-      "r_filtered": null
+      "r_loops": 2,
+      "r_filtered": null,
+      "r_unpack_time_ms": "REPLACED",
+      "r_other_time_ms": "REPLACED",
+      "r_effective_rows": 0
     },
     "subqueries": [
       {
@@ -668,6 +704,7 @@ ANALYZE
             "r_rows": 2,
             "r_table_time_ms": "REPLACED",
             "r_other_time_ms": "REPLACED",
+            "r_engine_stats": REPLACED,
             "filtered": 100,
             "r_filtered": 100
           }
@@ -723,6 +760,7 @@ ANALYZE
               "r_rows": 2,
               "r_table_time_ms": "REPLACED",
               "r_other_time_ms": "REPLACED",
+              "r_engine_stats": REPLACED,
               "filtered": 100,
               "r_filtered": 100
             },
@@ -735,6 +773,7 @@ ANALYZE
                 "r_rows": 2,
                 "r_table_time_ms": "REPLACED",
                 "r_other_time_ms": "REPLACED",
+                "r_engine_stats": REPLACED,
                 "filtered": 100,
                 "r_filtered": 0,
                 "attached_condition": "t3.f3 in (1,2)"
@@ -742,7 +781,11 @@ ANALYZE
               "buffer_type": "flat",
               "buffer_size": "1",
               "join_type": "BNL",
-              "r_filtered": null
+              "r_loops": 2,
+              "r_filtered": null,
+              "r_unpack_time_ms": "REPLACED",
+              "r_other_time_ms": "REPLACED",
+              "r_effective_rows": 0
             },
             "subqueries": [
               {
@@ -757,6 +800,7 @@ ANALYZE
                       "r_loops": 0,
                       "rows": 2,
                       "r_rows": null,
+                      "r_engine_stats": REPLACED,
                       "filtered": 100,
                       "r_filtered": null
                     },
@@ -767,6 +811,7 @@ ANALYZE
                         "r_loops": 0,
                         "rows": 2,
                         "r_rows": null,
+                        "r_engine_stats": REPLACED,
                         "filtered": 100,
                         "r_filtered": null
                       },
@@ -774,7 +819,11 @@ ANALYZE
                       "buffer_size": "65",
                       "join_type": "BNL",
                       "attached_condition": "t2.f2 = t3.f3",
-                      "r_filtered": null
+                      "r_loops": 0,
+                      "r_filtered": null,
+                      "r_unpack_time_ms": "REPLACED",
+                      "r_other_time_ms": "REPLACED",
+                      "r_effective_rows": null
                     }
                   }
                 }
@@ -810,6 +859,7 @@ ANALYZE
       "r_rows": 10,
       "r_table_time_ms": "REPLACED",
       "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
       "filtered": 100,
       "r_filtered": 0,
       "attached_condition": "t1.a < 0"
@@ -836,6 +886,7 @@ ANALYZE
                   "r_loops": 0,
                   "rows": 10,
                   "r_rows": null,
+                  "r_engine_stats": REPLACED,
                   "filtered": 100,
                   "r_filtered": null,
                   "attached_condition": "t2.a < t1.a"
@@ -849,3 +900,131 @@ ANALYZE
   }
 }
 drop table t0,t1,t2;
+#
+# MDEV-30806: ANALYZE FORMAT=JSON: better support for BNL and BNL-H joins
+#
+create table t10 (
+a int,
+b int
+);
+insert into t10 select seq, seq/3 from seq_0_to_999;
+create table t11 (
+a int,
+b int
+);
+insert into t11 select seq, seq/5 from seq_0_to_999;
+analyze table t10,t11 persistent for all;
+Table	Op	Msg_type	Msg_text
+test.t10	analyze	status	Engine-independent statistics collected
+test.t10	analyze	status	OK
+test.t11	analyze	status	Engine-independent statistics collected
+test.t11	analyze	status	OK
+analyze format=json
+select * from t10, t11
+where
+t10.a < 700 and
+t11.a < 100
+and t10.b=t11.b;
+ANALYZE
+{
+  "query_block": {
+    "select_id": 1,
+    "r_loops": 1,
+    "r_total_time_ms": "REPLACED",
+    "table": {
+      "table_name": "t11",
+      "access_type": "ALL",
+      "r_loops": 1,
+      "rows": 1000,
+      "r_rows": 1000,
+      "r_table_time_ms": "REPLACED",
+      "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
+      "filtered": 10.15625,
+      "r_filtered": 10,
+      "attached_condition": "t11.a < 100"
+    },
+    "block-nl-join": {
+      "table": {
+        "table_name": "t10",
+        "access_type": "ALL",
+        "r_loops": 1,
+        "rows": 1000,
+        "r_rows": 1000,
+        "r_table_time_ms": "REPLACED",
+        "r_other_time_ms": "REPLACED",
+        "r_engine_stats": REPLACED,
+        "filtered": 70.3125,
+        "r_filtered": 70,
+        "attached_condition": "t10.a < 700"
+      },
+      "buffer_type": "flat",
+      "buffer_size": "1Kb",
+      "join_type": "BNL",
+      "attached_condition": "t10.b = t11.b",
+      "r_loops": 100,
+      "r_filtered": 0.424285714,
+      "r_unpack_time_ms": "REPLACED",
+      "r_other_time_ms": "REPLACED",
+      "r_effective_rows": 700
+    }
+  }
+}
+set @tmp=@@join_cache_level, join_cache_level=6;
+analyze format=json
+select * from t10, t11
+where
+t10.a < 700 and
+t11.a < 100
+and t10.b=t11.b;
+ANALYZE
+{
+  "query_block": {
+    "select_id": 1,
+    "r_loops": 1,
+    "r_total_time_ms": "REPLACED",
+    "table": {
+      "table_name": "t11",
+      "access_type": "ALL",
+      "r_loops": 1,
+      "rows": 1000,
+      "r_rows": 1000,
+      "r_table_time_ms": "REPLACED",
+      "r_other_time_ms": "REPLACED",
+      "r_engine_stats": REPLACED,
+      "filtered": 10.15625,
+      "r_filtered": 10,
+      "attached_condition": "t11.a < 100 and t11.b is not null"
+    },
+    "block-nl-join": {
+      "table": {
+        "table_name": "t10",
+        "access_type": "hash_ALL",
+        "key": "#hash#$hj",
+        "key_length": "5",
+        "used_key_parts": ["b"],
+        "ref": ["test.t11.b"],
+        "r_loops": 1,
+        "rows": 1000,
+        "r_rows": 1000,
+        "r_table_time_ms": "REPLACED",
+        "r_other_time_ms": "REPLACED",
+        "r_engine_stats": REPLACED,
+        "filtered": 70.3125,
+        "r_filtered": 70,
+        "attached_condition": "t10.a < 700"
+      },
+      "buffer_type": "flat",
+      "buffer_size": "3Kb",
+      "join_type": "BNLH",
+      "attached_condition": "t10.b = t11.b",
+      "r_loops": 100,
+      "r_filtered": 100,
+      "r_unpack_time_ms": "REPLACED",
+      "r_other_time_ms": "REPLACED",
+      "r_effective_rows": 2.97
+    }
+  }
+}
+set join_cache_level=@tmp;
+drop table t10, t11;

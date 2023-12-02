@@ -1932,7 +1932,7 @@ rpl_load_gtid_slave_state(THD *thd)
   for (i= 0; i < array.elements; ++i)
   {
     get_dynamic(&array, (uchar *)&tmp_entry, i);
-    if ((err= rpl_global_gtid_slave_state->update(tmp_entry.gtid.domain_id,
+    if ((err= rpl_global_gtid_slave_state->update_nolock(tmp_entry.gtid.domain_id,
                                                   tmp_entry.gtid.server_id,
                                                   tmp_entry.sub_id,
                                                   tmp_entry.gtid.seq_no,
@@ -2387,7 +2387,17 @@ void rpl_group_info::slave_close_thread_tables(THD *thd)
 {
   DBUG_ENTER("rpl_group_info::slave_close_thread_tables(THD *thd)");
   thd->get_stmt_da()->set_overwrite_status(true);
-  thd->is_error() ? trans_rollback_stmt(thd) : trans_commit_stmt(thd);
+#ifdef WITH_WSREP
+  // This can happen e.g. when table_def::compatible_with fails and sets a error
+  // but thd->is_error() is false then. However, we do not want to commit
+  // statement on Galera instead we want to rollback it as later in
+  // apply_write_set we rollback transaction and that can't be done
+  // after wsrep transaction state is s_committed.
+  if (WSREP(thd))
+    (thd->is_error() || thd->is_slave_error) ? trans_rollback_stmt(thd) : trans_commit_stmt(thd);
+  else
+#endif
+    thd->is_error() ? trans_rollback_stmt(thd) : trans_commit_stmt(thd);
   thd->get_stmt_da()->set_overwrite_status(false);
 
   close_thread_tables(thd);
@@ -2427,8 +2437,13 @@ mark_start_commit_inner(rpl_parallel_entry *e, group_commit_orderer *gco,
   uint64 count= ++e->count_committing_event_groups;
   /* Signal any following GCO whose wait_count has been reached now. */
   tmp= gco;
+
+  DBUG_ASSERT(!tmp->gc_done);
+
   while ((tmp= tmp->next_gco))
   {
+    DBUG_ASSERT(!tmp->gc_done);
+
     uint64 wait_count= tmp->wait_count;
     if (wait_count > count)
       break;

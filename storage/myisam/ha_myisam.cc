@@ -80,7 +80,7 @@ static MYSQL_THDVAR_ULONG(repair_threads, PLUGIN_VAR_RQCMDARG,
 static MYSQL_THDVAR_ULONGLONG(sort_buffer_size, PLUGIN_VAR_RQCMDARG,
   "The buffer that is allocated when sorting the index when doing "
   "a REPAIR or when creating indexes with CREATE INDEX or ALTER TABLE", NULL, NULL,
-  SORT_BUFFER_INIT, MIN_SORT_BUFFER, SIZE_T_MAX, 1);
+  SORT_BUFFER_INIT, MIN_SORT_BUFFER, SIZE_T_MAX/16, 1);
 
 static MYSQL_SYSVAR_BOOL(use_mmap, opt_myisam_use_mmap, PLUGIN_VAR_NOCMDARG,
   "Use memory mapping for reading and writing MyISAM tables", NULL, NULL, FALSE);
@@ -2143,9 +2143,17 @@ int ha_myisam::info(uint flag)
     share->keys_for_keyread.intersect(share->keys_in_use);
     share->db_record_offset= misam_info.record_offset;
     if (share->key_parts)
-      memcpy((char*) table->key_info[0].rec_per_key,
-	     (char*) misam_info.rec_per_key,
-             sizeof(table->key_info[0].rec_per_key[0])*share->key_parts);
+    {
+      ulong *from= misam_info.rec_per_key;
+      KEY *key, *key_end;
+      for (key= table->key_info, key_end= key + share->keys;
+           key < key_end ; key++)
+      {
+        memcpy(key->rec_per_key, from,
+               key->user_defined_key_parts * sizeof(*from));
+        from+= key->user_defined_key_parts;
+      }
+    }
     if (table_share->tmp_table == NO_TMP_TABLE)
       mysql_mutex_unlock(&table_share->LOCK_share);
   }

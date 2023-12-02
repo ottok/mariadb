@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2008, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -84,8 +84,7 @@ protected:
   table_all_instr(const PFS_engine_table_share *share);
 
 public:
-  ~table_all_instr()
-  {}
+  ~table_all_instr() = default;
 
 protected:
   /**

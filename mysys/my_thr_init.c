@@ -23,7 +23,7 @@
 #include <m_string.h>
 #include <signal.h>
 
-pthread_key(struct st_my_thread_var*, THR_KEY_mysys);
+pthread_key(struct st_my_thread_var*, THR_KEY_mysys=-1);
 mysql_mutex_t THR_LOCK_malloc, THR_LOCK_open,
               THR_LOCK_lock, THR_LOCK_myisam, THR_LOCK_heap,
               THR_LOCK_net, THR_LOCK_charset, THR_LOCK_threads,
@@ -421,7 +421,7 @@ const char *my_thread_name(void)
   if (!tmp->name[0])
   {
     my_thread_id id= my_thread_dbug_id();
-    sprintf(name_buff,"T@%lu", (ulong) id);
+    snprintf(name_buff, sizeof(name_buff), "T@%lu", (ulong) id);
     strmake_buf(tmp->name, name_buff);
   }
   return tmp->name;

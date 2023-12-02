@@ -91,6 +91,13 @@ struct group_commit_orderer {
     FORCE_SWITCH= 2
   };
   uint8 flags;
+#ifndef DBUG_OFF
+  /*
+    Flag set when the GCO has been freed and entered the free list, to catch
+    (in debug) errors in the complex lifetime of this object.
+  */
+  bool gc_done;
+#endif
 };
 
 
@@ -260,7 +267,7 @@ struct rpl_parallel_thread {
 
 struct pool_bkp_for_pfs{
   uint32 count;
-  bool inited;
+  bool inited, is_valid;
   struct rpl_parallel_thread **rpl_thread_arr;
   void init(uint32 thd_count)
   {
@@ -287,6 +294,7 @@ struct pool_bkp_for_pfs{
       my_free(rpl_thread_arr);
       rpl_thread_arr= NULL;
     }
+    inited= false;
   }
 };
 
@@ -338,13 +346,13 @@ struct rpl_parallel_entry {
   /*
    At STOP SLAVE (force_abort=true), we do not want to process all events in
    the queue (which could unnecessarily delay stop, if a lot of events happen
-   to be queued). The stop_count provides a safe point at which to stop, so
+   to be queued). The stop_sub_id provides a safe point at which to stop, so
    that everything before becomes committed and nothing after does. The value
-   corresponds to group_commit_orderer::wait_count; if wait_count is less than
-   or equal to stop_count, we execute the associated event group, else we
-   skip it (and all following) and stop.
+   corresponds to rpl_group_info::gtid_sub_id; if that is less than or equal
+   to stop_sub_id, we execute the associated event group, else we skip it (and
+   all following) and stop.
   */
-  uint64 stop_count;
+  uint64 stop_sub_id;
 
   /*
     Cyclic array recording the last rpl_thread_max worker threads that we

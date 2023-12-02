@@ -919,6 +919,7 @@ PSI_mutex_key key_LOCK_gtid_waiting;
 PSI_mutex_key key_LOCK_after_binlog_sync;
 PSI_mutex_key key_LOCK_prepare_ordered, key_LOCK_commit_ordered;
 PSI_mutex_key key_TABLE_SHARE_LOCK_share;
+PSI_mutex_key key_TABLE_SHARE_LOCK_statistics;
 PSI_mutex_key key_LOCK_ack_receiver;
 
 PSI_mutex_key key_TABLE_SHARE_LOCK_rotation;
@@ -986,6 +987,7 @@ static PSI_mutex_info all_server_mutexes[]=
   { &key_structure_guard_mutex, "Query_cache::structure_guard_mutex", 0},
   { &key_TABLE_SHARE_LOCK_ha_data, "TABLE_SHARE::LOCK_ha_data", 0},
   { &key_TABLE_SHARE_LOCK_share, "TABLE_SHARE::LOCK_share", 0},
+  { &key_TABLE_SHARE_LOCK_statistics, "TABLE_SHARE::LOCK_statistics", 0},
   { &key_TABLE_SHARE_LOCK_rotation, "TABLE_SHARE::LOCK_rotation", 0},
   { &key_LOCK_error_messages, "LOCK_error_messages", PSI_FLAG_GLOBAL},
   { &key_LOCK_prepare_ordered, "LOCK_prepare_ordered", PSI_FLAG_GLOBAL},
@@ -1224,8 +1226,7 @@ class Buffered_log : public Sql_alloc
 public:
   Buffered_log(enum loglevel level, const char *message);
 
-  ~Buffered_log()
-  {}
+  ~Buffered_log() = default;
 
   void print(void);
 
@@ -1285,11 +1286,9 @@ void Buffered_log::print()
 class Buffered_logs
 {
 public:
-  Buffered_logs()
-  {}
+  Buffered_logs() = default;
 
-  ~Buffered_logs()
-  {}
+  ~Buffered_logs() = default;
 
   void init();
   void cleanup();
@@ -1717,6 +1716,11 @@ static void close_connections(void)
       (void) unlink(mysqld_unix_port);
     }
   }
+  /*
+    The following is needed to the threads stuck in
+    setup_connection_thread_globals()
+    to continue.
+  */
   listen_sockets.free_memory();
   mysql_mutex_unlock(&LOCK_start_thread);
 
@@ -2002,6 +2006,7 @@ static void clean_up(bool print_message)
   end_ssl();
 #ifndef EMBEDDED_LIBRARY
   vio_end();
+  listen_sockets.free_memory();
 #endif /*!EMBEDDED_LIBRARY*/
 #if defined(ENABLED_DEBUG_SYNC)
   /* End the debug sync facility. See debug_sync.cc. */
@@ -2682,11 +2687,9 @@ void close_connection(THD *thd, uint sql_errno)
     thd->protocol->net_send_error(thd, sql_errno, ER_DEFAULT(sql_errno), NULL);
     thd->print_aborted_warning(lvl, ER_DEFAULT(sql_errno));
   }
-  else
-    thd->print_aborted_warning(lvl, (thd->main_security_ctx.user ?
-                                     "This connection closed normally" :
-                                     "This connection closed normally without"
-                                      " authentication"));
+  else if (!thd->main_security_ctx.user)
+    thd->print_aborted_warning(lvl, "This connection closed normally without"
+                                    " authentication");
 
   thd->disconnect();
 
@@ -4343,6 +4346,8 @@ static int init_common_variables()
     return 1;
   }
 
+  if (tls_version & (VIO_TLSv1_0 + VIO_TLSv1_1))
+      sql_print_warning("TLSv1.0 and TLSv1.1 are insecure and should not be used for tls_version");
 
 #ifdef WITH_WSREP
   /*
@@ -4602,7 +4607,10 @@ static void init_ssl()
     {
       sql_print_error("Failed to setup SSL");
       sql_print_error("SSL error: %s", sslGetErrString(error));
-      unireg_abort(1);
+      if (!opt_bootstrap)
+        unireg_abort(1);
+      opt_use_ssl = 0;
+      have_ssl= SHOW_OPTION_DISABLED;
     }
     else
       ssl_acceptor_stats.init();
@@ -6374,8 +6382,6 @@ struct my_option my_long_options[]=
   {"console", OPT_CONSOLE, "Write error output on screen; don't remove the console window on windows.",
    &opt_console, &opt_console, 0, GET_BOOL, NO_ARG, 0, 0, 0,
    0, 0, 0},
-  {"core-file", OPT_WANT_CORE, "Write core on errors.", 0, 0, 0, GET_NO_ARG,
-   NO_ARG, 0, 0, 0, 0, 0, 0},
 #ifdef DBUG_OFF
   {"debug", '#', "Built in DBUG debugger. Disabled in this build.",
    &current_dbug_option, &current_dbug_option, 0, GET_STR, OPT_ARG,
@@ -8162,9 +8168,6 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
   case (int) OPT_SKIP_HOST_CACHE:
     opt_specialflag|= SPECIAL_NO_HOST_CACHE;
     break;
-  case (int) OPT_WANT_CORE:
-    test_flags |= TEST_CORE_ON_SIGNAL;
-    break;
   case OPT_CONSOLE:
     if (opt_console)
       opt_error_log= 0;			// Force logs to stdout
@@ -8937,7 +8940,7 @@ static int test_if_case_insensitive(const char *dir_name)
                                buff, 0666, O_RDWR, MYF(0))) < 0)
   {
     if (!opt_abort)
-      sql_print_warning("Can't create test file %s", buff);
+      sql_print_warning("Can't create test file '%s' (Errcode: %M)", buff, my_errno);
     DBUG_RETURN(-1);
   }
   mysql_file_close(file, MYF(0));
@@ -9301,8 +9304,8 @@ PSI_memory_key key_memory_thd_transactions;
 PSI_memory_key key_memory_user_conn;
 PSI_memory_key key_memory_user_var_entry;
 PSI_memory_key key_memory_user_var_entry_value;
-
 PSI_memory_key key_memory_String_value;
+PSI_memory_key key_memory_WSREP;
 
 #ifdef HAVE_PSI_INTERFACE
 
@@ -9590,6 +9593,7 @@ static PSI_memory_info all_server_memory[]=
 //  { &key_memory_get_all_tables, "get_all_tables", 0},
 //  { &key_memory_fill_schema_schemata, "fill_schema_schemata", 0},
   { &key_memory_native_functions, "native_functions", PSI_FLAG_GLOBAL},
+  { &key_memory_WSREP, "wsrep", 0 }
 };
 
 /**

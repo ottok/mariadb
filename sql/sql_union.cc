@@ -344,6 +344,7 @@ select_unit::create_result_table(THD *thd_arg, List<Item> *column_types,
   DBUG_ASSERT(table == 0);
   tmp_table_param.init();
   tmp_table_param.field_count= column_types->elements;
+  tmp_table_param.func_count= tmp_table_param.field_count;
   tmp_table_param.bit_fields_as_long= bit_fields_as_long;
   tmp_table_param.hidden_field_count= hidden;
 
@@ -384,7 +385,8 @@ select_union_recursive::create_result_table(THD *thd_arg,
     return true;
   
   incr_table_param.init();
-  incr_table_param.field_count= column_types->elements;
+  incr_table_param.field_count= incr_table_param.func_count=
+    column_types->elements;
   incr_table_param.bit_fields_as_long= bit_fields_as_long;
   if (! (incr_table= create_tmp_table(thd_arg, &incr_table_param, *column_types,
                                       (ORDER*) 0, false, 1,
@@ -2301,9 +2303,9 @@ bool st_select_lex_unit::exec()
           the current result.
         */
         push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
-                            ER_QUERY_EXCEEDED_ROWS_EXAMINED_LIMIT,
-                            ER_THD(thd, ER_QUERY_EXCEEDED_ROWS_EXAMINED_LIMIT),
-                            thd->accessed_rows_and_keys,
+                            ER_QUERY_RESULT_INCOMPLETE,
+                            ER_THD(thd, ER_QUERY_RESULT_INCOMPLETE),
+                            "LIMIT ROWS EXAMINED",
                             thd->lex->limit_rows_examined->val_uint());
         thd->reset_killed();
         break;

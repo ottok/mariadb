@@ -1,15 +1,8 @@
 /*****************************************************************************
 
 Copyright (c) 1996, 2017, Oracle and/or its affiliates. All rights reserved.
-Copyright (c) 2008, Google Inc.
 Copyright (c) 2009, Percona Inc.
 Copyright (c) 2013, 2022, MariaDB Corporation.
-
-Portions of this file contain modifications contributed and copyrighted by
-Google, Inc. Those modifications are gratefully acknowledged and are described
-briefly in the InnoDB documentation. The contributions by Google are
-incorporated with their permission, and subject to the conditions contained in
-the file COPYING.Google.
 
 Portions of this file contain modifications contributed and copyrighted
 by Percona Inc.. Those modifications are
@@ -97,6 +90,7 @@ Created 2/16/1996 Heikki Tuuri
 #include "btr0pcur.h"
 #include "zlib.h"
 #include "ut0crc32.h"
+#include "log.h"
 
 /** We are prepared for a situation that we have this many threads waiting for
 a transactional lock inside InnoDB. srv_start() sets the value. */
@@ -249,7 +243,17 @@ static dberr_t create_log_file(bool create_new_db, lsn_t lsn,
 	}
 
 	DBUG_PRINT("ib_log", ("After innodb_log_abort_6"));
-	DBUG_ASSERT(!buf_pool.any_io_pending());
+	ut_ad(!os_aio_pending_reads());
+	ut_d(mysql_mutex_lock(&buf_pool.flush_list_mutex));
+	ut_ad(!buf_pool.get_oldest_modification(0));
+	ut_d(mysql_mutex_unlock(&buf_pool.flush_list_mutex));
+	/* os_aio_pending_writes() may hold here if some
+	write_io_callback() did not release the slot yet.  However,
+	the page write itself must have completed, because the
+	buf_pool.flush_list is empty. In debug builds, we wait for
+	this to happen, hoping to get a hung process if this
+	assumption does not hold. */
+	ut_d(os_aio_wait_until_no_pending_writes(false));
 
 	DBUG_EXECUTE_IF("innodb_log_abort_7", return DB_ERROR;);
 	DBUG_PRINT("ib_log", ("After innodb_log_abort_7"));
@@ -479,7 +483,8 @@ static ulint trx_rseg_get_n_undo_tablespaces()
 @param[in]	name	tablespace file name
 @param[in]	i	undo tablespace count
 @return undo tablespace identifier
-@retval 0 on failure */
+@retval 0               if file doesn't exist
+@retval ULINT_UNDEFINED if page0 is corrupted */
 static ulint srv_undo_tablespace_open(bool create, const char* name, ulint i)
 {
   bool success;
@@ -515,14 +520,13 @@ static ulint srv_undo_tablespace_open(bool create, const char* name, ulint i)
   {
     page_t *page= static_cast<byte*>(aligned_malloc(srv_page_size,
                                                     srv_page_size));
-    dberr_t err= os_file_read(IORequestRead, fh, page, 0, srv_page_size,
-                              nullptr);
-    if (err != DB_SUCCESS)
+    if (os_file_read(IORequestRead, fh, page, 0, srv_page_size, nullptr) !=
+        DB_SUCCESS)
     {
 err_exit:
       ib::error() << "Unable to read first page of file " << name;
       aligned_free(page);
-      return err;
+      return ULINT_UNDEFINED;
     }
 
     uint32_t id= mach_read_from_4(FIL_PAGE_SPACE_ID + page);
@@ -531,19 +535,20 @@ err_exit:
                           FSP_HEADER_OFFSET + FSP_SPACE_ID + page, 4))
     {
       ib::error() << "Inconsistent tablespace ID in file " << name;
-      err= DB_CORRUPTION;
-      goto err_exit;
-    }
-
-    fsp_flags= mach_read_from_4(FSP_HEADER_OFFSET + FSP_SPACE_FLAGS + page);
-    if (buf_page_is_corrupted(false, page, fsp_flags))
-    {
-      ib::error() << "Checksum mismatch in the first page of file " << name;
-      err= DB_CORRUPTION;
       goto err_exit;
     }
 
     space_id= id;
+    fsp_flags= mach_read_from_4(FSP_HEADER_OFFSET + FSP_SPACE_FLAGS + page);
+
+    if (buf_page_is_corrupted(false, page, fsp_flags))
+    {
+      sql_print_error("InnoDB: Checksum mismatch in the first page of file %s",
+                      name);
+      if (recv_sys.dblwr.restore_first_page(space_id, name, fh))
+        goto err_exit;
+    }
+
     aligned_free(page);
   }
 
@@ -555,13 +560,12 @@ err_exit:
 
   fil_set_max_space_id_if_bigger(space_id);
 
-  fil_space_t *space= fil_space_t::create(space_id, fsp_flags,
-					  FIL_TYPE_TABLESPACE, NULL);
-  ut_a(fil_validate());
-  ut_a(space);
-
-  fil_node_t *file= space->add(name, fh, 0, false, true);
   mysql_mutex_lock(&fil_system.mutex);
+  fil_space_t *space= fil_space_t::create(space_id, fsp_flags,
+					  FIL_TYPE_TABLESPACE, nullptr,
+					  FIL_ENCRYPTION_DEFAULT, true);
+  ut_ad(space);
+  fil_node_t *file= space->add(name, fh, 0, false, true);
 
   if (create)
   {
@@ -655,16 +659,18 @@ static dberr_t srv_all_undo_tablespaces_open(bool create_new_db, ulint n_undo)
     char name[OS_FILE_MAX_PATH];
     snprintf(name, sizeof name, "%s/undo%03zu", srv_undo_dir, i + 1);
     ulint space_id= srv_undo_tablespace_open(create_new_db, name, i);
-    if (!space_id)
-    {
+    switch (space_id) {
+    case ULINT_UNDEFINED:
+      return DB_CORRUPTION;
+    case 0:
       if (!create_new_db)
-        break;
-      ib::error() << "Unable to open create tablespace '" << name << "'.";
+        goto unused_undo;
+      sql_print_error("InnoDB: Unable to open create tablespace '%s'", name);
       return DB_ERROR;
+    default:
+      /* Should be no gaps in undo tablespace ids. */
+      ut_a(!i || prev_id + 1 == space_id);
     }
-
-    /* Should be no gaps in undo tablespace ids. */
-    ut_a(!i || prev_id + 1 == space_id);
 
     prev_id= space_id;
 
@@ -678,13 +684,14 @@ static dberr_t srv_all_undo_tablespaces_open(bool create_new_db, ulint n_undo)
   We stop at the first failure. These are undo tablespaces that are
   not in use and therefore not required by recovery. We only check
   that there are no gaps. */
-
+unused_undo:
   for (ulint i= prev_id + 1; i < srv_undo_space_id_start + TRX_SYS_N_RSEGS;
        ++i)
   {
      char name[OS_FILE_MAX_PATH];
      snprintf(name, sizeof name, "%s/undo%03zu", srv_undo_dir, i);
-     if (!srv_undo_tablespace_open(create_new_db, name, i))
+     ulint space_id= srv_undo_tablespace_open(create_new_db, name, i);
+     if (!space_id || space_id == ULINT_UNDEFINED)
        break;
      ++srv_undo_tablespaces_open;
   }
@@ -701,7 +708,7 @@ srv_undo_tablespaces_init(bool create_new_db)
   srv_undo_tablespaces_open= 0;
 
   ut_a(srv_undo_tablespaces <= TRX_SYS_N_RSEGS);
-  ut_a(!create_new_db || srv_operation == SRV_OPERATION_NORMAL);
+  ut_a(!create_new_db || srv_operation <= SRV_OPERATION_EXPORT_RESTORED);
 
   if (srv_undo_tablespaces == 1)
     srv_undo_tablespaces= 0;
@@ -905,9 +912,7 @@ static lsn_t srv_prepare_to_delete_redo_log_file(bool old_exists)
 {
   DBUG_ENTER("srv_prepare_to_delete_redo_log_file");
 
-  /* Disable checkpoints in the page cleaner. */
-  ut_ad(!recv_sys.recovery_on);
-  recv_sys.recovery_on= true;
+  ut_ad(recv_sys.recovery_on);
 
   /* Clean the buffer pool. */
   buf_flush_sync();
@@ -968,7 +973,11 @@ same_size:
   }
 
   ut_ad(flushed_lsn == log_sys.get_lsn());
-  ut_ad(!buf_pool.any_io_pending());
+  ut_ad(!os_aio_pending_reads());
+  ut_d(mysql_mutex_lock(&buf_pool.flush_list_mutex));
+  ut_ad(!buf_pool.get_oldest_modification(0));
+  ut_d(mysql_mutex_unlock(&buf_pool.flush_list_mutex));
+  ut_d(os_aio_wait_until_no_pending_writes(false));
 
   DBUG_RETURN(flushed_lsn);
 }
@@ -1057,7 +1066,7 @@ dberr_t srv_start(bool create_new_db)
 	bool		srv_log_file_found = true;
 	mtr_t		mtr;
 
-	ut_ad(srv_operation == SRV_OPERATION_NORMAL
+	ut_ad(srv_operation <= SRV_OPERATION_RESTORE_EXPORT
 	      || srv_operation == SRV_OPERATION_RESTORE
 	      || srv_operation == SRV_OPERATION_RESTORE_EXPORT);
 
@@ -1230,7 +1239,12 @@ dberr_t srv_start(bool create_new_db)
 	}
 #endif /* UNIV_DEBUG */
 
-	log_sys.create();
+	if (!log_sys.create()) {
+		sql_print_error("InnoDB: Cannot allocate memory;"
+				" too large innodb_log_buffer_size?");
+		return srv_init_abort(DB_ERROR);
+	}
+
 	recv_sys.create();
 	lock_sys.create(srv_lock_table_size);
 
@@ -1454,7 +1468,8 @@ file_checked:
 		}
 
 		switch (srv_operation) {
-		case SRV_OPERATION_NORMAL:
+                case SRV_OPERATION_NORMAL:
+		case SRV_OPERATION_EXPORT_RESTORED:
 		case SRV_OPERATION_RESTORE_EXPORT:
 			/* Initialize the change buffer. */
 			err = dict_boot();
@@ -1487,9 +1502,14 @@ file_checked:
 		if (srv_force_recovery < SRV_FORCE_NO_LOG_REDO) {
 			/* Apply the hashed log records to the
 			respective file pages, for the last batch of
-			recv_group_scan_log_recs(). */
-
+			recv_group_scan_log_recs().
+			Since it may generate huge batch of threadpool tasks,
+			for read io task group, scale down thread creation rate
+			by temporarily restricting tpool concurrency.
+			*/
+			srv_thread_pool->set_concurrency(srv_n_read_io_threads);
 			recv_sys.apply(true);
+			srv_thread_pool->set_concurrency();
 
 			if (recv_sys.is_corrupt_log()
 			    || recv_sys.is_corrupt_fs()) {
@@ -1589,10 +1609,10 @@ file_checked:
 			}
 		}
 
-		recv_sys.debug_free();
-
 		if (srv_operation == SRV_OPERATION_RESTORE
 		    || srv_operation == SRV_OPERATION_RESTORE_EXPORT) {
+			buf_flush_sync();
+			recv_sys.debug_free();
 			/* After applying the redo log from
 			SRV_OPERATION_BACKUP, flush the changes
 			to the data files and truncate or delete the log.
@@ -1601,7 +1621,10 @@ file_checked:
 			ut_ad(srv_force_recovery <= SRV_FORCE_IGNORE_CORRUPT);
 			ut_ad(recv_no_log_write);
 			err = fil_write_flushed_lsn(log_sys.get_lsn());
-			DBUG_ASSERT(!buf_pool.any_io_pending());
+			ut_ad(!os_aio_pending_reads());
+			ut_d(mysql_mutex_lock(&buf_pool.flush_list_mutex));
+			ut_ad(!buf_pool.get_oldest_modification(0));
+			ut_d(mysql_mutex_unlock(&buf_pool.flush_list_mutex));
 			log_sys.log.close_file();
 			if (err == DB_SUCCESS) {
 				bool trunc = srv_operation
@@ -1645,7 +1668,18 @@ file_checked:
 			threads until creating a log checkpoint at the
 			end of create_log_file(). */
 			ut_d(recv_no_log_write = true);
-			DBUG_ASSERT(!buf_pool.any_io_pending());
+			ut_ad(!os_aio_pending_reads());
+			ut_d(mysql_mutex_lock(&buf_pool.flush_list_mutex));
+			ut_ad(!buf_pool.get_oldest_modification(0));
+			ut_d(mysql_mutex_unlock(&buf_pool.flush_list_mutex));
+			/* os_aio_pending_writes() may hold here if
+			some write_io_callback() did not release the
+			slot yet. However, the page write itself must
+			have completed, because the buf_pool.flush_list
+			is empty. In debug builds, we wait for this to
+			happen, hoping to get a hung process if this
+			assumption does not hold. */
+			ut_d(os_aio_wait_until_no_pending_writes(false));
 
 			DBUG_EXECUTE_IF("innodb_log_abort_3",
 					return(srv_init_abort(DB_ERROR)););
@@ -1684,6 +1718,8 @@ file_checked:
 				return(srv_init_abort(err));
 			}
 		}
+
+		recv_sys.debug_free();
 	}
 
 	ut_ad(err == DB_SUCCESS);
@@ -1848,7 +1884,8 @@ skip_monitors:
 		return(srv_init_abort(err));
 	}
 
-	if (!srv_read_only_mode && srv_operation == SRV_OPERATION_NORMAL) {
+	if (!srv_read_only_mode
+	    && srv_operation <= SRV_OPERATION_EXPORT_RESTORED) {
 		/* Initialize the innodb_temporary tablespace and keep
 		it open until shutdown. */
 		err = srv_open_tmp_tablespace(create_new_db);
@@ -1930,7 +1967,7 @@ void innodb_preshutdown()
 
   if (srv_read_only_mode)
     return;
-  if (!srv_fast_shutdown && srv_operation == SRV_OPERATION_NORMAL)
+  if (!srv_fast_shutdown && srv_operation <= SRV_OPERATION_EXPORT_RESTORED)
   {
     /* Because a slow shutdown must empty the change buffer, we had
     better prevent any further changes from being buffered. */
@@ -1970,6 +2007,7 @@ void innodb_shutdown()
 		mysql_mutex_unlock(&buf_pool.flush_list_mutex);
 		break;
 	case SRV_OPERATION_NORMAL:
+	case SRV_OPERATION_EXPORT_RESTORED:
 		/* Shut down the persistent files. */
 		logs_empty_and_mark_files_at_shutdown();
 	}
@@ -1996,12 +2034,12 @@ void innodb_shutdown()
 
 	ut_ad(dict_sys.is_initialised() || !srv_was_started);
 	ut_ad(trx_sys.is_initialised() || !srv_was_started);
-	ut_ad(buf_dblwr.is_initialised() || !srv_was_started
+	ut_ad(buf_dblwr.is_created() || !srv_was_started
 	      || srv_read_only_mode
 	      || srv_force_recovery >= SRV_FORCE_NO_TRX_UNDO);
 	ut_ad(lock_sys.is_initialised() || !srv_was_started);
 	ut_ad(log_sys.is_initialised() || !srv_was_started);
-	ut_ad(ibuf.index || !srv_was_started
+	ut_ad(ibuf.index || !innodb_change_buffering || !srv_was_started
 	      || srv_force_recovery >= SRV_FORCE_NO_DDL_UNDO);
 
 	dict_stats_deinit();

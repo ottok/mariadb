@@ -486,11 +486,15 @@ bool sp_create_assignment_instr(THD *thd, bool no_lookahead,
         be deleted by the destructor ~sp_instr_xxx().
         So we should remove "lex" from the stack sp_head::m_lex,
         to avoid double free.
-        Note, in case "lex" is not owned by any sp_instr_xxx,
-        it's also safe to remove it from the stack right now.
-        So we can remove it unconditionally, without testing lex->sp_lex_in_use.
       */
       lex->sphead->restore_lex(thd);
+      /*
+        No needs for "delete lex" here: "lex" is already linked
+        to the sp_instr_stmt (using sp_lex_keeper) instance created by
+        the call for new_sp_instr_stmt() above. It will be freed
+        by ~sp_head/~sp_instr/~sp_lex_keeper during THD::end_statement().
+      */
+      DBUG_ASSERT(lex->sp_lex_in_use); // used by sp_instr_stmt
       return true;
     }
     enum_var_type inner_option_type= lex->option_type;
@@ -886,7 +890,7 @@ void Lex_input_stream::body_utf8_start(THD *thd, const char *begin_ptr)
 }
 
 
-size_t Lex_input_stream::get_body_utf8_maximum_length(THD *thd)
+size_t Lex_input_stream::get_body_utf8_maximum_length(THD *thd) const
 {
   /*
     String literals can grow during escaping:
@@ -1323,6 +1327,8 @@ void LEX::start(THD *thd_arg)
   frame_bottom_bound= NULL;
   win_spec= NULL;
 
+  upd_del_where= NULL;
+
   vers_conditions.empty();
   period_conditions.empty();
 
@@ -1389,7 +1395,7 @@ Yacc_state::~Yacc_state()
 }
 
 int Lex_input_stream::find_keyword(Lex_ident_cli_st *kwd,
-                                   uint len, bool function)
+                                   uint len, bool function) const
 {
   const char *tok= m_tok_start;
 
@@ -1409,7 +1415,6 @@ int Lex_input_stream::find_keyword(Lex_ident_cli_st *kwd,
       case CLOB_MARIADB_SYM:           return CLOB_ORACLE_SYM;
       case CONTINUE_MARIADB_SYM:       return CONTINUE_ORACLE_SYM;
       case DECLARE_MARIADB_SYM:        return DECLARE_ORACLE_SYM;
-      case DECODE_MARIADB_SYM:         return DECODE_ORACLE_SYM;
       case ELSEIF_MARIADB_SYM:         return ELSEIF_ORACLE_SYM;
       case ELSIF_MARIADB_SYM:          return ELSIF_ORACLE_SYM;
       case EXCEPTION_MARIADB_SYM:      return EXCEPTION_ORACLE_SYM;
@@ -1480,7 +1485,7 @@ bool is_lex_native_function(const LEX_CSTRING *name)
 
 bool is_native_function(THD *thd, const LEX_CSTRING *name)
 {
-  if (find_native_function_builder(thd, name))
+  if (native_functions_hash.find(thd, *name))
     return true;
 
   if (is_lex_native_function(name))
@@ -2861,34 +2866,6 @@ int Lex_input_stream::scan_ident_delimited(THD *thd,
 }
 
 
-void trim_whitespace(CHARSET_INFO *cs, LEX_CSTRING *str, size_t * prefix_length)
-{
-  /*
-    TODO:
-    This code assumes that there are no multi-bytes characters
-    that can be considered white-space.
-  */
-
-  size_t plen= 0;
-  while ((str->length > 0) && (my_isspace(cs, str->str[0])))
-  {
-    plen++;
-    str->length --;
-    str->str ++;
-  }
-  if (prefix_length)
-    *prefix_length= plen;
-  /*
-    FIXME:
-    Also, parsing backward is not safe with multi bytes characters
-  */
-  while ((str->length > 0) && (my_isspace(cs, str->str[str->length-1])))
-  {
-    str->length --;
-  }
-}
-
-
 /*
   st_select_lex structures initialisations
 */
@@ -2985,6 +2962,7 @@ void st_select_lex::init_query()
   max_equal_elems= 0;
   ref_pointer_array.reset();
   select_n_where_fields= 0;
+  order_group_num= 0;
   select_n_reserved= 0;
   select_n_having_items= 0;
   n_sum_items= 0;
@@ -3004,6 +2982,7 @@ void st_select_lex::init_query()
 
   window_specs.empty();
   window_funcs.empty();
+  is_win_spec_list_built= false;
   tvc= 0;
   versioned_tables= 0;
   pushdown_select= 0;
@@ -3056,6 +3035,7 @@ void st_select_lex::init_select()
   in_funcs.empty();
   curr_tvc_name= 0;
   versioned_tables= 0;
+  is_tvc_wrapper= false;
   nest_flags= 0;
 }
 
@@ -3541,46 +3521,41 @@ List<Item>* st_select_lex::get_item_list()
   return &item_list;
 }
 
-bool st_select_lex::setup_ref_array(THD *thd, uint order_group_num)
-{
 
+uint st_select_lex::get_cardinality_of_ref_ptrs_slice(uint order_group_num_arg)
+{
   if (!((options & SELECT_DISTINCT) && !group_list.elements))
     hidden_bit_fields= 0;
 
-  // find_order_in_list() may need some extra space, so multiply by two.
-  order_group_num*= 2;
+  if (!order_group_num)
+    order_group_num= order_group_num_arg;
 
   /*
-    We have to create array in prepared statement memory if it is a
-    prepared statement
+    find_order_in_list() may need some extra space,
+    so multiply order_group_num by 2
   */
-  Query_arena *arena= thd->stmt_arena;
-  const size_t n_elems= (n_sum_items +
-                       n_child_sum_items +
-                       item_list.elements +
-                       select_n_reserved +
-                       select_n_having_items +
-                       select_n_where_fields +
-                       order_group_num +
-                       hidden_bit_fields +
-                       fields_in_window_functions) * (size_t) 5;
-  DBUG_ASSERT(n_elems % 5 == 0);
+  uint n= n_sum_items +
+          n_child_sum_items +
+          item_list.elements +
+          select_n_reserved +
+          select_n_having_items +
+          select_n_where_fields +
+          order_group_num * 2 +
+          hidden_bit_fields +
+          fields_in_window_functions;
+  return n;
+}
+
+
+bool st_select_lex::setup_ref_array(THD *thd, uint order_group_num)
+{
+  uint n_elems= get_cardinality_of_ref_ptrs_slice(order_group_num) * 5;
   if (!ref_pointer_array.is_null())
-  {
-    /*
-      We need to take 'n_sum_items' into account when allocating the array,
-      and this may actually increase during the optimization phase due to
-      MIN/MAX rewrite in Item_in_subselect::single_value_transformer.
-      In the usual case we can reuse the array from the prepare phase.
-      If we need a bigger array, we must allocate a new one.
-     */
-    if (ref_pointer_array.size() >= n_elems)
-      return false;
-   }
-  Item **array= static_cast<Item**>(arena->alloc(sizeof(Item*) * n_elems));
+    return false;
+  Item **array= static_cast<Item**>(thd->stmt_arena->alloc(sizeof(Item*) *
+                                                           n_elems));
   if (likely(array != NULL))
     ref_pointer_array= Ref_ptr_array(array, n_elems);
-
   return array == NULL;
 }
 
@@ -3962,7 +3937,8 @@ void Query_tables_list::destroy_query_tables_list()
 
 LEX::LEX()
   : explain(NULL), result(0), part_info(NULL), arena_for_set_stmt(0),
-    mem_root_for_set_stmt(0), json_table(NULL), default_used(0),
+    mem_root_for_set_stmt(0), json_table(NULL), analyze_stmt(0),
+    default_used(0),
     with_rownum(0), is_lex_started(0), option_type(OPT_DEFAULT),
     context_analysis_only(0), sphead(0), limit_rows_examined_cnt(ULONGLONG_MAX)
 {
@@ -3980,57 +3956,54 @@ LEX::LEX()
 }
 
 
+bool LEX::can_be_merged()
+{
+  return unit.can_be_merged();
+}
+
+
 /*
-  Check whether the merging algorithm can be used on this VIEW
+  Check whether the merging algorithm can be used for this unit
 
   SYNOPSIS
-    LEX::can_be_merged()
+    st_select_lex_unit::can_be_merged()
 
   DESCRIPTION
-    We can apply merge algorithm if it is single SELECT view  with
-    subqueries only in WHERE clause (we do not count SELECTs of underlying
-    views, and second level subqueries) and we have not grpouping, ordering,
-    HAVING clause, aggregate functions, DISTINCT clause, LIMIT clause and
-    several underlying tables.
+    We can apply merge algorithm for a unit if it is single SELECT with
+    subqueries only in WHERE clauses or in ON conditions or in select list
+    (we do not count SELECTs of underlying  views/derived tables/CTEs and
+    second level subqueries) and we have no grouping, ordering, HAVING
+    clause, aggregate functions, DISTINCT clause, LIMIT clause.
 
   RETURN
     FALSE - only temporary table algorithm can be used
     TRUE  - merge algorithm can be used
 */
 
-bool LEX::can_be_merged()
+bool st_select_lex_unit::can_be_merged()
 {
   // TODO: do not forget implement case when select_lex.table_list.elements==0
 
   /* find non VIEW subqueries/unions */
-  bool selects_allow_merge= (first_select_lex()->next_select() == 0 &&
-                             !(first_select_lex()->uncacheable &
-                               UNCACHEABLE_RAND));
-  if (selects_allow_merge)
-  {
-    for (SELECT_LEX_UNIT *tmp_unit= first_select_lex()->first_inner_unit();
-         tmp_unit;
-         tmp_unit= tmp_unit->next_unit())
-    {
-      if (tmp_unit->first_select()->parent_lex == this &&
-          (tmp_unit->item != 0 &&
-           (tmp_unit->item->place() != IN_WHERE &&
-            tmp_unit->item->place() != IN_ON &&
-            tmp_unit->item->place() != SELECT_LIST)))
-      {
-        selects_allow_merge= 0;
-        break;
-      }
-    }
-  }
+  st_select_lex *fs= first_select();
 
-  return (selects_allow_merge &&
-          first_select_lex()->group_list.elements == 0 &&
-          first_select_lex()->having == 0 &&
-          first_select_lex()->with_sum_func == 0 &&
-          first_select_lex()->table_list.elements >= 1 &&
-          !(first_select_lex()->options & SELECT_DISTINCT) &&
-          first_select_lex()->limit_params.select_limit == 0);
+  if (fs->next_select() ||
+      (fs->uncacheable & UNCACHEABLE_RAND) ||
+      (fs->options & SELECT_DISTINCT) ||
+      fs->group_list.elements || fs->having ||
+      fs->with_sum_func ||
+      fs->table_list.elements < 1 ||
+      fs->limit_params.select_limit)
+    return false;
+  for (SELECT_LEX_UNIT *tmp_unit= fs->first_inner_unit();
+       tmp_unit;
+       tmp_unit= tmp_unit->next_unit())
+    if ((tmp_unit->item != 0 &&
+         (tmp_unit->item->place() != IN_WHERE &&
+          tmp_unit->item->place() != IN_ON &&
+          tmp_unit->item->place() != SELECT_LIST)))
+      return false;
+  return true;
 }
 
 
@@ -4090,7 +4063,7 @@ bool LEX::can_use_merged()
     TRUE  - VIEWs with MERGE algorithms can be used
 */
 
-bool LEX::can_not_use_merged(bool no_update_or_delete)
+bool LEX::can_not_use_merged()
 {
   switch (sql_command) {
   case SQLCOM_CREATE_VIEW:
@@ -4102,12 +4075,6 @@ bool LEX::can_not_use_merged(bool no_update_or_delete)
   */
   case SQLCOM_SHOW_FIELDS:
     return TRUE;
-
-  case SQLCOM_UPDATE_MULTI:
-  case SQLCOM_DELETE_MULTI:
-    if (no_update_or_delete)
-      return TRUE;
-    /* Fall through */
 
   default:
     return FALSE;
@@ -6849,7 +6816,6 @@ bool LEX::sp_for_loop_implicit_cursor_statement(THD *thd,
   if (unlikely(!(bounds->m_index=
                  new (thd->mem_root) sp_assignment_lex(thd, this))))
     return true;
-  bounds->m_index->sp_lex_in_use= true;
   sphead->reset_lex(thd, bounds->m_index);
   DBUG_ASSERT(thd->lex != this);
   /*
@@ -7089,7 +7055,7 @@ bool LEX::sp_for_loop_increment(THD *thd, const Lex_for_loop_st &loop)
 }
 
 
-bool LEX::sp_for_loop_intrange_finalize(THD *thd, const Lex_for_loop_st &loop)
+bool LEX::sp_for_loop_intrange_iterate(THD *thd, const Lex_for_loop_st &loop)
 {
   sphead->reset_lex(thd);
 
@@ -7099,13 +7065,11 @@ bool LEX::sp_for_loop_intrange_finalize(THD *thd, const Lex_for_loop_st &loop)
                thd->lex->sphead->restore_lex(thd)))
     return true;
 
-  // Generate a jump to the beginning of the loop
-  DBUG_ASSERT(this == thd->lex);
-  return sp_while_loop_finalize(thd);
+  return false;
 }
 
 
-bool LEX::sp_for_loop_cursor_finalize(THD *thd, const Lex_for_loop_st &loop)
+bool LEX::sp_for_loop_cursor_iterate(THD *thd, const Lex_for_loop_st &loop)
 {
   sp_instr_cfetch *instr=
     new (thd->mem_root) sp_instr_cfetch(sphead->instructions(),
@@ -7113,9 +7077,9 @@ bool LEX::sp_for_loop_cursor_finalize(THD *thd, const Lex_for_loop_st &loop)
   if (unlikely(instr == NULL) || unlikely(sphead->add_instr(instr)))
     return true;
   instr->add_to_varlist(loop.m_index);
-  // Generate a jump to the beginning of the loop
-  return sp_while_loop_finalize(thd);
+  return false;
 }
+
 
 bool LEX::sp_for_loop_outer_block_finalize(THD *thd,
                                            const Lex_for_loop_st &loop)
@@ -7409,7 +7373,7 @@ bool LEX::sp_body_finalize_routine(THD *thd)
 {
   if (sphead->check_unresolved_goto())
     return true;
-  sphead->set_stmt_end(thd);
+  sphead->set_stmt_end(thd, thd->m_parser_state->m_lip.get_cpp_tok_start());
   sphead->restore_thd_mem_root(thd);
   return false;
 }
@@ -7697,13 +7661,22 @@ bool LEX::sp_iterate_statement(THD *thd, const LEX_CSTRING *label_name)
 
 bool LEX::sp_continue_loop(THD *thd, sp_label *lab)
 {
-  if (lab->ctx->for_loop().m_index)
+  const sp_pcontext::Lex_for_loop &for_loop= lab->ctx->for_loop();
+  /*
+    FOR loops need some additional instructions (e.g. an integer increment or
+    a cursor fetch) before the "jump to the start of the body" instruction.
+    We need to check two things here:
+    - If we're in a FOR loop at all.
+    - If the label pointed by "lab" belongs exactly to the nearest FOR loop,
+      rather than to a nested LOOP/WHILE/REPEAT inside the FOR.
+  */
+  if (for_loop.m_index /* we're in some FOR loop */ &&
+      for_loop.m_start_label == lab /* lab belongs to the FOR loop */)
   {
-    // We're in a FOR loop, increment the index variable before backward jump
-    sphead->reset_lex(thd);
-    DBUG_ASSERT(this != thd->lex);
-    if (thd->lex->sp_for_loop_increment(thd, lab->ctx->for_loop()) ||
-        thd->lex->sphead->restore_lex(thd))
+    // We're in a FOR loop, and "ITERATE loop_label" belongs to this FOR loop.
+    if (for_loop.is_for_loop_cursor() ?
+        sp_for_loop_cursor_iterate(thd, for_loop) :
+        sp_for_loop_intrange_iterate(thd, for_loop))
       return true;
   }
   return sp_change_context(thd, lab->ctx, false) ||
@@ -9341,8 +9314,7 @@ sp_package *LEX::create_package_start(THD *thd,
 bool LEX::create_package_finalize(THD *thd,
                                   const sp_name *name,
                                   const sp_name *name2,
-                                  const char *body_start,
-                                  const char *body_end)
+                                  const char *cpp_body_end)
 {
   if (name2 &&
       (name2->m_explicit_name != name->m_explicit_name ||
@@ -9355,18 +9327,8 @@ bool LEX::create_package_finalize(THD *thd,
              exp ? ErrConvDQName(name).ptr() : name->m_name.str);
     return true;
   }
-  // TODO: reuse code in LEX::create_package_finalize and sp_head::set_stmt_end
-  sphead->m_body.length= body_end - body_start;
-  if (unlikely(!(sphead->m_body.str= thd->strmake(body_start,
-                                                  sphead->m_body.length))))
-    return true;
 
-  size_t not_used;
-  Lex_input_stream *lip= & thd->m_parser_state->m_lip;
-  sphead->m_defstr.length= lip->get_cpp_ptr() - lip->get_cpp_buf();
-  sphead->m_defstr.str= thd->strmake(lip->get_cpp_buf(), sphead->m_defstr.length);
-  trim_whitespace(thd->charset(), &sphead->m_defstr, &not_used);
-
+  sphead->set_stmt_end(thd, cpp_body_end);
   sphead->restore_thd_mem_root(thd);
   sp_package *pkg= sphead->get_package();
   DBUG_ASSERT(pkg);
@@ -9383,22 +9345,6 @@ bool LEX::add_grant_command(THD *thd, const List<LEX_COLUMN> &columns)
     return true;
   }
   return false;
-}
-
-
-Item *LEX::make_item_func_substr(THD *thd, Item *a, Item *b, Item *c)
-{
-  return (thd->variables.sql_mode & MODE_ORACLE) ?
-    new (thd->mem_root) Item_func_substr_oracle(thd, a, b, c) :
-    new (thd->mem_root) Item_func_substr(thd, a, b, c);
-}
-
-
-Item *LEX::make_item_func_substr(THD *thd, Item *a, Item *b)
-{
-  return (thd->variables.sql_mode & MODE_ORACLE) ?
-    new (thd->mem_root) Item_func_substr_oracle(thd, a, b) :
-    new (thd->mem_root) Item_func_substr(thd, a, b);
 }
 
 
@@ -9419,17 +9365,6 @@ Item *LEX::make_item_func_sysdate(THD *thd, uint fsp)
     return NULL;
   safe_to_cache_query=0;
   return item;
-}
-
-
-Item *LEX::make_item_func_replace(THD *thd,
-                                  Item *org,
-                                  Item *find,
-                                  Item *replace)
-{
-  return (thd->variables.sql_mode & MODE_ORACLE) ?
-    new (thd->mem_root) Item_func_replace_oracle(thd, org, find, replace) :
-    new (thd->mem_root) Item_func_replace(thd, org, find, replace);
 }
 
 
@@ -9607,7 +9542,7 @@ Item *LEX::make_item_func_call_native_or_parse_error(THD *thd,
                                                      Lex_ident_cli_st &name,
                                                      List<Item> *args)
 {
-  Create_func *builder= find_native_function_builder(thd, &name);
+  Create_func *builder= native_functions_hash.find(thd, name);
   DBUG_EXECUTE_IF("make_item_func_call_native_simulate_not_found",
                   builder= NULL;);
   if (builder)
@@ -11848,4 +11783,10 @@ bool SELECT_LEX_UNIT::explainable() const
              derived ?
                derived->is_materialized_derived() :   // (3)
                false;
+}
+
+
+bool st_select_lex::is_query_topmost(THD *thd)
+{
+  return get_master() == &thd->lex->unit;
 }

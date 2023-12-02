@@ -26,13 +26,24 @@ public:
   Schema(const LEX_CSTRING &name)
    :m_name(name)
   { }
-  virtual ~Schema() { }
+  virtual ~Schema() = default;
   const LEX_CSTRING &name() const { return m_name; }
   virtual const Type_handler *map_data_type(THD *thd, const Type_handler *src)
                                             const
   {
     return src;
   }
+
+  // Builders for native SQL function with a special syntax in sql_yacc.yy
+  virtual Item *make_item_func_replace(THD *thd,
+                                       Item *subj,
+                                       Item *find,
+                                       Item *replace) const;
+  virtual Item *make_item_func_substr(THD *thd,
+                                      const Lex_substring_spec_st &spec) const;
+
+  virtual Item *make_item_func_trim(THD *thd, const Lex_trim_st &spec) const;
+
   /*
     For now we have *hard-coded* compatibility schemas:
       schema_mariadb, schema_oracle, schema_maxdb.

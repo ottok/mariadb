@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2010, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -116,8 +116,7 @@ protected:
   table_ews_by_host_by_event_name();
 
 public:
-  ~table_ews_by_host_by_event_name()
-  {}
+  ~table_ews_by_host_by_event_name() = default;
 
 protected:
   void make_row(PFS_host *host, PFS_instr_class *klass);

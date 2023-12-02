@@ -563,7 +563,7 @@ bool String::append(const char *s,size_t size)
   }
 
   /*
-    For an ASCII compatinble string we can just append.
+    For an ASCII compatible string we can just append.
   */
   return Binary_string::append(s, arg_length);
 }
@@ -659,56 +659,42 @@ bool String::append_parenthesized(long nr, int radix)
 }
 
 
-bool String::append_with_prefill(const char *s,uint32 arg_length,
-		 uint32 full_length, char fill_char)
+int Binary_string::strstr(const char *search, uint32 search_length, uint32 offset) const
 {
-  int t_length= arg_length > full_length ? arg_length : full_length;
-
-  if (realloc_with_extra_if_needed(str_length + t_length))
-    return TRUE;
-  t_length= full_length - arg_length;
-  if (t_length > 0)
+  if (search_length + offset <= str_length)
   {
-    bfill(Ptr+str_length, t_length, fill_char);
-    str_length=str_length + t_length;
-  }
-  append(s, arg_length);
-  return FALSE;
-}
-
-
-int Binary_string::strstr(const Binary_string &s, uint32 offset)
-{
-  if (s.length()+offset <= str_length)
-  {
-    if (!s.length())
+    if (!search_length)
       return ((int) offset);	// Empty string is always found
 
-    const char *str = Ptr+offset;
-    const char *search=s.ptr();
-    const char *end=Ptr+str_length-s.length()+1;
-    const char *search_end=s.ptr()+s.length();
+    const char *str= Ptr + offset;
+    const char *end= Ptr + str_length - search_length + 1;
+    const char *search_end= search + search_length;
 skip:
     while (str != end)
     {
       if (*str++ == *search)
       {
-	char *i,*j;
-	i=(char*) str; j=(char*) search+1;
-	while (j != search_end)
-	  if (*i++ != *j++) goto skip;
-	return (int) (str-Ptr) -1;
+        char *i= (char*) str;
+        char *j= (char*) search + 1 ;
+        while (j != search_end)
+          if (*i++ != *j++) goto skip;
+        return (int) (str-Ptr) -1;
       }
     }
   }
   return -1;
 }
 
+int Binary_string::strstr(const Binary_string &s, uint32 offset) const
+{
+  return strstr(s.ptr(), s.length(), offset);
+}
+
 /*
 ** Search string from end. Offset is offset to the end of string
 */
 
-int Binary_string::strrstr(const Binary_string &s, uint32 offset)
+int Binary_string::strrstr(const Binary_string &s, uint32 offset) const
 {
   if (s.length() <= offset && offset <= str_length)
   {
@@ -1152,22 +1138,28 @@ String_copier::well_formed_copy(CHARSET_INFO *to_cs,
   characters with backslashes as necessary.
   Does not add the enclosing quotes, this is left up to caller.
 */
-#define APPEND(X)   if (append(X)) return 1; else break
+#define APPEND(...)   if (append(__VA_ARGS__)) return 1;
 bool String::append_for_single_quote(const char *st, size_t len)
 {
   const char *end= st+len;
+  int chlen;
   for (; st < end; st++)
   {
-    uchar c= *st;
-    switch (c)
+    switch (*st)
     {
-    case '\\':   APPEND(STRING_WITH_LEN("\\\\"));
-    case '\0':   APPEND(STRING_WITH_LEN("\\0"));
-    case '\'':   APPEND(STRING_WITH_LEN("\\'"));
-    case '\n':   APPEND(STRING_WITH_LEN("\\n"));
-    case '\r':   APPEND(STRING_WITH_LEN("\\r"));
-    case '\032': APPEND(STRING_WITH_LEN("\\Z"));
-    default:     APPEND(c);
+    case '\\':   APPEND(STRING_WITH_LEN("\\\\")); break;
+    case '\0':   APPEND(STRING_WITH_LEN("\\0")); break;
+    case '\'':   APPEND(STRING_WITH_LEN("\\'")); break;
+    case '\n':   APPEND(STRING_WITH_LEN("\\n")); break;
+    case '\r':   APPEND(STRING_WITH_LEN("\\r")); break;
+    case '\032': APPEND(STRING_WITH_LEN("\\Z")); break;
+    default:     if ((chlen=charset()->charlen(st, end)) > 0)
+                 {
+                   APPEND(st, chlen);
+                   st+= chlen-1;
+                 }
+                 else
+                   APPEND(*st);
     }
   }
   return 0;

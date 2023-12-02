@@ -564,6 +564,8 @@ int init_embedded_server(int argc, char **argv, char **groups)
   if (ho_error != 0)
     return 1;
 
+  my_timer_init(&sys_timer_info);
+
   if (init_common_variables())
   {
     mysql_server_end();
@@ -1044,7 +1046,7 @@ class Client_field_extension: public Sql_alloc,
 public:
   Client_field_extension()
   {
-    memset(this, 0, sizeof(*this));
+    memset((void*) this, 0, sizeof(*this));
   }
   void copy_extended_metadata(MEM_ROOT *memroot,
                               const Send_field_extended_metadata &src)
