@@ -11,6 +11,7 @@ usr/include/mariadb/mariadb_dyncol.h
 usr/include/mariadb/mariadb_rpl.h
 usr/include/mariadb/mariadb_stmt.h
 usr/include/mariadb/mariadb_version.h
+usr/include/mariadb/my_alloca.h
 usr/include/mariadb/my_config.h
 usr/include/mariadb/my_global.h
 usr/include/mariadb/my_sys.h
