@@ -5,6 +5,11 @@ mariadb-10.6 (1:10.6.16-0ubuntu0.22.04.1) jammy-security; urgency=medium
     - CVE-2023-22084
   * Previous upstream version 10.6.13 included security fixes for:
     - CVE-2022-47015
+  * Include new test plugin file and header file
+  * Update libmariadb3.symbols to include new ABI changes in 3.3.5
+    and fix DPKG_GENSYMBOLS_CHECK_LEVEL so it actually takes effect and in
+    build will properly fail if there are unaccounted symbol changes in
+    future upstream maintenance releases
   * For details, see https://mariadb.com/kb/en/mariadb-10-6-16-release-notes/
     and previous upstream release notes
 
