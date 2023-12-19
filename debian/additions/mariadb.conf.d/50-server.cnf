@@ -72,7 +72,7 @@ bind-address            = 127.0.0.1
 #       settings you may need to change.
 #server-id              = 1
 #log_bin                = /var/log/mysql/mysql-bin.log
-expire_logs_days        = 10
+#expire_logs_days       = 10
 #max_binlog_size        = 100M
 
 #
