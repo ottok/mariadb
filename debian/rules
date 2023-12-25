@@ -71,7 +71,6 @@ MAKEFLAGS += VERBOSE=1
 override_dh_auto_clean:
 	@echo "RULES.$@"
 	dh_testdir
-	dh_testroot
 	# Delete obsolete/unstable components and embedded source code copies
 	# to ensure they are not used in Debian and in general to keep MariaDB binaries
 	# secure and using only system libraries that can be updated quickly and easily
@@ -81,8 +80,12 @@ override_dh_auto_clean:
 	rm -rf storage/columnstore
 	# Delete precompiled binaries in upstream sources to ensure they are not used in Debian
 	rm -rf storage/connect/JavaWrappers.jar	storage/columnstore/columnstore/utils/jemalloc/libjemalloc.so.2
-
-	debconf-updatepo # Update po-files when clean runs before each build
+	
+	# Update po-files when clean runs before each build
+	debconf-updatepo
+	
+	# Clean up files created by custom sections in build that 'dh clean' does not see automatically
+	rm -rf debian/mariadb-server.*.socket debian/substvars
 
 override_dh_auto_configure:
 	@echo "RULES.$@"
