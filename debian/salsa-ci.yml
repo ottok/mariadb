@@ -664,7 +664,7 @@ mysql-community-cluster-8.0 from MySQL.com with Bullseye backports upgrade:
   script:
     - *test-prepare-container
     - apt-get install --no-install-recommends --yes ca-certificates curl systemctl
-    - curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x859be8d7c586f538430b19c2467b942d3a79bd29" -o /etc/apt/trusted.gpg.d/mysql.asc
+    - curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xbca43417c3b485dd128ec6d4b7b3b788a8d3785c" -o /etc/apt/trusted.gpg.d/mysql.asc
     - echo "deb https://repo.mysql.com/apt/debian/ bullseye mysql-cluster-8.0" > /etc/apt/sources.list.d/mysql.list
     - apt-get update -qq
     - apt-get install -y mysql-cluster-community-server
@@ -868,7 +868,7 @@ mysql.com-5.7 with Buster upgrade:
     - *test-prepare-container
     - |
       apt-get install --no-install-recommends --yes gpg gpg-agent dirmngr ca-certificates # Bare minimal (<4MB) for apt-key to work
-      apt-key adv --recv-keys --keyserver hkps://keyserver.ubuntu.com:443 467B942D3A79BD29
+      apt-key adv --recv-keys --keyserver hkps://keyserver.ubuntu.com:443 B7B3B788A8D3785C
       echo "deb https://repo.mysql.com/apt/debian/ buster mysql-5.7" > /etc/apt/sources.list.d/mysql.list
       apt-get update -qq
       apt-get install -y 'mysql*' 'libmysqlc*'
