@@ -1,3 +1,9 @@
+mariadb (1:10.11.4-1ubuntu1) mantic-security; urgency=medium
+
+  * Start new git branch for Ubuntu 23.10 (Mantic Minotaur) maintenance
+
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 29 Dec 2023 14:53:47 +0800
+
 mariadb (1:10.11.4-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
