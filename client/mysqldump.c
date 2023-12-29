@@ -1080,8 +1080,15 @@ get_one_option(const struct my_option *opt,
   case 'S':
     if (filename[0] == '\0')
     {
-      /* Socket given on command line, switch protocol to use SOCKETSt */
-      opt_protocol= MYSQL_PROTOCOL_SOCKET;
+      /*
+        Socket given on command line, switch protocol to use SOCKETSt
+        Except on Windows if 'protocol= pipe' has been provided in
+        the config file or command line.
+      */
+      if (opt_protocol != MYSQL_PROTOCOL_PIPE)
+      {
+        opt_protocol= MYSQL_PROTOCOL_SOCKET;
+      }
     }
     break;
   }
@@ -1351,7 +1358,7 @@ static int get_options(int *argc, char ***argv)
     return EX_USAGE;
   }
   if (tty_password)
-    opt_password=get_tty_password(NullS);
+    opt_password=my_get_tty_password(NullS);
   return(0);
 } /* get_options */
 
@@ -1912,8 +1919,13 @@ static FILE* open_sql_file_for_table(const char* table, int flags)
 
 static void free_resources()
 {
-  if (md_result_file && md_result_file != stdout)
-    my_fclose(md_result_file, MYF(0));
+  if (md_result_file)
+  {
+    if (md_result_file != stdout)
+      my_fclose(md_result_file, MYF(0));
+    else
+      fflush(md_result_file);
+  }
   if (get_table_name_result)
     mysql_free_result(get_table_name_result);
   if (routine_res)
@@ -2847,11 +2859,7 @@ static uint dump_routines_for_db(char *db)
                     routine_type[i], routine_name);
 
         if (mysql_query_with_error_report(mysql, &routine_res, query_buff))
-        {
-          mysql_free_result(routine_list_res);
-          routine_list_res= 0;
-          DBUG_RETURN(1);
-        }
+          continue;
 
         while ((row= mysql_fetch_row(routine_res)))
         {
@@ -3357,7 +3365,8 @@ static uint get_table_structure(const char *table, const char *db, char *table_t
     my_snprintf(query_buff, sizeof(query_buff),
                 "select column_name, extra, generation_expression, data_type "
                 "from information_schema.columns where table_schema=database() "
-                "and table_name=%s", quote_for_equal(table, temp_buff));
+                "and table_name=%s order by ordinal_position",
+                quote_for_equal(table, temp_buff));
     if (mysql_query_with_error_report(mysql, &result, query_buff))
     {
       if (path)
@@ -3442,7 +3451,8 @@ static uint get_table_structure(const char *table, const char *db, char *table_t
                                   "`EXTRA` AS `Extra`, "
                                   "`COLUMN_COMMENT` AS `Comment` "
                                   "FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE "
-                                  "TABLE_SCHEMA = %s AND TABLE_NAME = %s";
+                                  "TABLE_SCHEMA = %s AND TABLE_NAME = %s "
+                                  "ORDER BY ORDINAL_POSITION";
 
     verbose_msg("%s: Warning: Can't set SQL_QUOTE_SHOW_CREATE option (%s)\n",
                 my_progname_short, mysql_error(mysql));

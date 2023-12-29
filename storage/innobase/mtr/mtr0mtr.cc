@@ -31,9 +31,12 @@ Created 11/26/1995 Heikki Tuuri
 #include "log0crypt.h"
 #ifdef BTR_CUR_HASH_ADAPT
 # include "btr0sea.h"
+#else
+# include "btr0cur.h"
 #endif
 #include "srv0start.h"
 #include "log.h"
+#include "mariadb_stats.h"
 
 void mtr_memo_slot_t::release() const
 {
@@ -327,10 +330,10 @@ void mtr_t::commit()
     ut_ad(!srv_read_only_mode);
     std::pair<lsn_t,page_flush_ahead> lsns{do_write()};
     process_freed_pages();
+    size_t modified= 0;
 
     if (m_made_dirty)
     {
-      size_t modified= 0;
       auto it= m_memo.rbegin();
 
       mysql_mutex_lock(&buf_pool.flush_list_mutex);
@@ -385,8 +388,6 @@ void mtr_t::commit()
       }
       else
         log_sys.latch.rd_unlock();
-
-      size_t modified= 0;
 
       for (auto it= m_memo.rbegin(); it != m_memo.rend(); )
       {
@@ -445,6 +446,8 @@ void mtr_t::commit()
       buf_pool.add_flush_list_requests(modified);
       m_memo.clear();
     }
+
+    mariadb_increment_pages_updated(modified);
 
     if (UNIV_UNLIKELY(lsns.second != PAGE_FLUSH_NO))
       buf_flush_ahead(m_commit_lsn, lsns.second == PAGE_FLUSH_SYNC);
@@ -585,7 +588,7 @@ void mtr_t::commit_shrink(fil_space_t &space)
 
   mysql_mutex_lock(&fil_system.mutex);
   ut_ad(space.is_being_truncated);
-  ut_ad(space.is_stopping());
+  ut_ad(space.is_stopping_writes());
   space.clear_stopping();
   space.is_being_truncated= false;
   mysql_mutex_unlock(&fil_system.mutex);
@@ -597,14 +600,8 @@ void mtr_t::commit_shrink(fil_space_t &space)
 /** Commit a mini-transaction that is deleting or renaming a file.
 @param space   tablespace that is being renamed or deleted
 @param name    new file name (nullptr=the file will be deleted)
-@param detached_handle if detached_handle != nullptr and if space is detached
-                       during the function execution the file handle if its
-                       node will be set to OS_FILE_CLOSED, and the previous
-                       value of the file handle will be assigned to the
-                       address, pointed by detached_handle.
 @return whether the operation succeeded */
-bool mtr_t::commit_file(fil_space_t &space, const char *name,
-    pfs_os_file_t *detached_handle)
+bool mtr_t::commit_file(fil_space_t &space, const char *name)
 {
   ut_ad(is_active());
   ut_ad(!is_inside_ibuf());
@@ -655,7 +652,7 @@ bool mtr_t::commit_file(fil_space_t &space, const char *name,
   m_latch_ex= false;
 
   char *old_name= space.chain.start->name;
-  bool success;
+  bool success= true;
 
   if (name)
   {
@@ -668,37 +665,6 @@ bool mtr_t::commit_file(fil_space_t &space, const char *name,
       old_name= new_name;
     mysql_mutex_unlock(&fil_system.mutex);
     ut_free(old_name);
-  }
-  else
-  {
-    /* Remove any additional files. */
-    if (char *cfg_name= fil_make_filepath(old_name,
-					  fil_space_t::name_type{}, CFG,
-                                          false))
-    {
-      os_file_delete_if_exists(innodb_data_file_key, cfg_name, nullptr);
-      ut_free(cfg_name);
-    }
-
-    if (FSP_FLAGS_HAS_DATA_DIR(space.flags))
-      RemoteDatafile::delete_link_file(space.name());
-
-    /* Remove the directory entry. The file will actually be deleted
-    when our caller closes the handle. */
-    os_file_delete(innodb_data_file_key, old_name);
-
-    mysql_mutex_lock(&fil_system.mutex);
-    /* Sanity checks after reacquiring fil_system.mutex */
-    ut_ad(&space == fil_space_get_by_id(space.id));
-    ut_ad(!space.referenced());
-    ut_ad(space.is_stopping());
-
-    pfs_os_file_t handle = fil_system.detach(&space, true);
-    if (detached_handle)
-      *detached_handle = handle;
-    mysql_mutex_unlock(&fil_system.mutex);
-
-    success= true;
   }
 
   mysql_mutex_unlock(&buf_pool.flush_list_mutex);
@@ -1628,62 +1594,60 @@ void mtr_t::free(const fil_space_t &space, uint32_t offset)
   ut_ad(is_named_space(&space));
   ut_ad(!m_freed_space || m_freed_space == &space);
 
-  if (is_logged())
-  {
-    buf_block_t *freed= nullptr;
-    const page_id_t id{space.id, offset};
+  buf_block_t *freed= nullptr;
+  const page_id_t id{space.id, offset};
 
-    for (auto it= m_memo.end(); it != m_memo.begin(); )
+  for (auto it= m_memo.end(); it != m_memo.begin(); )
+  {
+    it--;
+  next:
+    mtr_memo_slot_t &slot= *it;
+    buf_block_t *block= static_cast<buf_block_t*>(slot.object);
+    ut_ad(block);
+    if (block == freed)
     {
-      it--;
-    next:
-      mtr_memo_slot_t &slot= *it;
-      buf_block_t *block= static_cast<buf_block_t*>(slot.object);
-      ut_ad(block);
-      if (block == freed)
+      if (slot.type & (MTR_MEMO_PAGE_SX_FIX | MTR_MEMO_PAGE_X_FIX))
+        slot.type= MTR_MEMO_PAGE_X_FIX;
+      else
       {
-        if (slot.type & (MTR_MEMO_PAGE_SX_FIX | MTR_MEMO_PAGE_X_FIX))
-          slot.type= MTR_MEMO_PAGE_X_FIX;
-        else
-        {
-          ut_ad(slot.type == MTR_MEMO_BUF_FIX);
-          block->page.unfix();
-          m_memo.erase(it, it + 1);
-          goto next;
-        }
-      }
-      else if (slot.type & (MTR_MEMO_PAGE_X_FIX | MTR_MEMO_PAGE_SX_FIX) &&
-               block->page.id() == id)
-      {
-        ut_ad(!block->page.is_freed());
-        ut_ad(!freed);
-        freed= block;
-        if (!(slot.type & MTR_MEMO_PAGE_X_FIX))
-        {
-          ut_d(bool upgraded=) block->page.lock.x_lock_upgraded();
-          ut_ad(upgraded);
-        }
-        if (id.space() >= SRV_TMP_SPACE_ID)
-        {
-          block->page.set_temp_modified();
-          slot.type= MTR_MEMO_PAGE_X_FIX;
-        }
-        else
-        {
-          slot.type= MTR_MEMO_PAGE_X_MODIFY;
-          if (!m_made_dirty)
-            m_made_dirty= block->page.oldest_modification() <= 1;
-        }
-#ifdef BTR_CUR_HASH_ADAPT
-        if (block->index)
-          btr_search_drop_page_hash_index(block, false);
-#endif /* BTR_CUR_HASH_ADAPT */
-        block->page.set_freed(block->page.state());
+        ut_ad(slot.type == MTR_MEMO_BUF_FIX);
+        block->page.unfix();
+        m_memo.erase(it, it + 1);
+        goto next;
       }
     }
-
-    m_log.close(log_write<FREE_PAGE>(id, nullptr));
+    else if (slot.type & (MTR_MEMO_PAGE_X_FIX | MTR_MEMO_PAGE_SX_FIX) &&
+               block->page.id() == id)
+    {
+      ut_ad(!block->page.is_freed());
+      ut_ad(!freed);
+      freed= block;
+      if (!(slot.type & MTR_MEMO_PAGE_X_FIX))
+      {
+        ut_d(bool upgraded=) block->page.lock.x_lock_upgraded();
+        ut_ad(upgraded);
+      }
+      if (id.space() >= SRV_TMP_SPACE_ID)
+      {
+        block->page.set_temp_modified();
+        slot.type= MTR_MEMO_PAGE_X_FIX;
+      }
+      else
+      {
+        slot.type= MTR_MEMO_PAGE_X_MODIFY;
+        if (!m_made_dirty)
+          m_made_dirty= block->page.oldest_modification() <= 1;
+      }
+#ifdef BTR_CUR_HASH_ADAPT
+      if (block->index)
+        btr_search_drop_page_hash_index(block, false);
+#endif /* BTR_CUR_HASH_ADAPT */
+      block->page.set_freed(block->page.state());
+    }
   }
+
+  if (is_logged())
+    m_log.close(log_write<FREE_PAGE>(id, nullptr));
 }
 
 void small_vector_base::grow_by_1(void *small, size_t element_size)

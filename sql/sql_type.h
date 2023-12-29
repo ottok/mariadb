@@ -124,6 +124,40 @@ enum scalar_comparison_op
 };
 
 
+/*
+  This enum is intentionally defined as "class" to disallow its implicit
+  cast as "bool". This is needed to avoid pre-MDEV-32203 constructs like:
+    if (field->can_optimize_range(...))
+      do_optimization();
+  to merge automatically as such - that would change the meaning
+  to the opposite. The pre-MDEV-32203 code must to be changed to:
+    if (field->can_optimize_range(...) == Data_type_compatibility::OK)
+      do_optimization();
+*/
+enum class Data_type_compatibility
+{
+  OK,
+  INCOMPATIBLE_DATA_TYPE,
+  INCOMPATIBLE_COLLATION
+};
+
+
+static inline const LEX_CSTRING
+scalar_comparison_op_to_lex_cstring(scalar_comparison_op op)
+{
+  switch (op) {
+  case SCALAR_CMP_EQ:    return LEX_CSTRING{STRING_WITH_LEN("=")};
+  case SCALAR_CMP_EQUAL: return LEX_CSTRING{STRING_WITH_LEN("<=>")};
+  case SCALAR_CMP_LT:    return LEX_CSTRING{STRING_WITH_LEN("<")};
+  case SCALAR_CMP_LE:    return LEX_CSTRING{STRING_WITH_LEN("<=")};
+  case SCALAR_CMP_GE:    return LEX_CSTRING{STRING_WITH_LEN(">")};
+  case SCALAR_CMP_GT:    return LEX_CSTRING{STRING_WITH_LEN(">=")};
+  }
+  DBUG_ASSERT(0);
+  return LEX_CSTRING{STRING_WITH_LEN("<?>")};
+}
+
+
 class Hasher
 {
   ulong m_nr1;
@@ -3234,10 +3268,16 @@ public:
   bool agg_item_collations(DTCollation &c, const LEX_CSTRING &name,
                            Item **items, uint nitems,
                            uint flags, int item_sep);
+  struct Single_coll_err
+  {
+    const DTCollation& coll;
+    bool first;
+  };
   bool agg_item_set_converter(const DTCollation &coll,
                               const LEX_CSTRING &name,
                               Item **args, uint nargs,
-                              uint flags, int item_sep);
+                              uint flags, int item_sep,
+                              const Single_coll_err *single_item_err= NULL);
 
   /*
     Collect arguments' character sets together.
@@ -3384,17 +3424,12 @@ public:
 class Name: private LEX_CSTRING
 {
 public:
-  Name(const char *str_arg, uint length_arg)
-  {
-    DBUG_ASSERT(length_arg < UINT_MAX32);
-    LEX_CSTRING::str= str_arg;
-    LEX_CSTRING::length= length_arg;
-  }
-  Name(const LEX_CSTRING &lcs)
-  {
-    LEX_CSTRING::str= lcs.str;
-    LEX_CSTRING::length= lcs.length;
-  }
+  constexpr Name(const char *str_arg, uint length_arg) :
+    LEX_CSTRING({str_arg, length_arg})
+  { }
+  constexpr Name(const LEX_CSTRING &lcs) :
+    LEX_CSTRING(lcs)
+  { }
   const char *ptr() const { return LEX_CSTRING::str; }
   uint length() const { return (uint) LEX_CSTRING::length; }
   const LEX_CSTRING &lex_cstring() const { return *this; }
@@ -5269,6 +5304,12 @@ public:
     return type_limits_int()->char_length();
   }
   uint32 Item_decimal_notation_int_digits(const Item *item) const override;
+  bool Item_hybrid_func_fix_attributes(THD *thd,
+                                       const LEX_CSTRING &name,
+                                       Type_handler_hybrid_field_type *,
+                                       Type_all_attributes *atrr,
+                                       Item **items,
+                                       uint nitems) const override;
   bool partition_field_check(const LEX_CSTRING &, Item *item_expr)
     const override
   {
@@ -7396,7 +7437,6 @@ class Type_collection
 public:
   virtual ~Type_collection() = default;
   virtual bool init(Type_handler_data *) { return false; }
-  virtual const Type_handler *handler_by_name(const LEX_CSTRING &name) const= 0;
   virtual const Type_handler *aggregate_for_result(const Type_handler *h1,
                                                    const Type_handler *h2)
                                                    const= 0;
@@ -7574,8 +7614,9 @@ extern Named_type_handler<Type_handler_time>        type_handler_time;
 extern Named_type_handler<Type_handler_time2>       type_handler_time2;
 extern Named_type_handler<Type_handler_datetime>    type_handler_datetime;
 extern Named_type_handler<Type_handler_datetime2>   type_handler_datetime2;
-extern Named_type_handler<Type_handler_timestamp>   type_handler_timestamp;
-extern Named_type_handler<Type_handler_timestamp2>  type_handler_timestamp2;
+
+extern MYSQL_PLUGIN_IMPORT Named_type_handler<Type_handler_timestamp>   type_handler_timestamp;
+extern MYSQL_PLUGIN_IMPORT Named_type_handler<Type_handler_timestamp2>  type_handler_timestamp2;
 
 extern Type_handler_interval_DDhhmmssff type_handler_interval_DDhhmmssff;
 

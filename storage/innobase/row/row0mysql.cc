@@ -31,6 +31,7 @@ Created 9/17/2000 Heikki Tuuri
 #include <spatial.h>
 
 #include "row0mysql.h"
+#include "buf0flu.h"
 #include "btr0sea.h"
 #include "dict0boot.h"
 #include "dict0crea.h"
@@ -81,7 +82,7 @@ static void row_mysql_delay_if_needed()
     const lsn_t lsn= log_sys.get_lsn();
     if ((lsn - last) / 4 >= max_age / 5)
       buf_flush_ahead(last + max_age / 5, false);
-    srv_wake_purge_thread_if_not_active();
+    purge_sys.wake_if_not_active();
     std::this_thread::sleep_for(std::chrono::microseconds(delay));
   }
 }
@@ -1669,12 +1670,8 @@ row_update_for_mysql(row_prebuilt_t* prebuilt)
 
 	ut_ad(!prebuilt->versioned_write || node->table->versioned());
 
-	if (prebuilt->versioned_write) {
-		if (node->is_delete == VERSIONED_DELETE) {
-                  node->vers_make_delete(trx);
-                } else if (node->update->affects_versioned()) {
-                  node->vers_make_update(trx);
-                }
+	if (prebuilt->versioned_write && node->is_delete == VERSIONED_DELETE) {
+		node->vers_make_delete(trx);
 	}
 
 	for (;;) {

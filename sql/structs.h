@@ -96,11 +96,11 @@ class engine_option_value;
 struct ha_index_option_struct;
 
 typedef struct st_key {
-  uint	key_length;			/* total length of user defined key parts  */
-  ulong flags;                          /* dupp key and pack flags */
-  uint	user_defined_key_parts;	   /* How many key_parts */
-  uint	usable_key_parts; /* Should normally be = user_defined_key_parts */
-  uint ext_key_parts;              /* Number of key parts in extended key */
+  uint  key_length;                /* total length of user defined key parts  */
+  ulong flags;                     /* dupp key and pack flags */
+  uint  user_defined_key_parts;    /* How many key_parts */
+  uint  usable_key_parts; /* Should normally be = user_defined_key_parts */
+  uint  ext_key_parts;             /* Number of key parts in extended key */
   ulong ext_key_flags;             /* Flags for extended key              */
   /*
     Parts of primary key that are in the extension of this index. 
@@ -870,12 +870,9 @@ public:
   {
     m_index= 0;
     m_target_bound= 0;
+    m_cursor_offset= 0;
     m_direction= 0;
     m_implicit_cursor= false;
-  }
-  void init(const Lex_for_loop_st &other)
-  {
-    *this= other;
   }
   bool is_for_loop_cursor() const { return m_target_bound == NULL; }
   bool is_for_loop_explicit_cursor() const

@@ -943,14 +943,15 @@ bool Item_field::register_field_in_write_map(void *arg)
 
   This is used by fix_vcol_expr() when a table is opened
 
-  We don't have to check fields that are marked as NO_DEFAULT_VALUE
-  as the upper level will ensure that all these will be given a value.
+  We don't have to check non-virtual fields that are marked as
+  NO_DEFAULT_VALUE as the upper level will ensure that all these
+  will be given a value.
 */
 
 bool Item_field::check_field_expression_processor(void *arg)
 {
   Field *org_field= (Field*) arg;
-  if (field->flags & NO_DEFAULT_VALUE_FLAG)
+  if (field->flags & NO_DEFAULT_VALUE_FLAG && !field->vcol_info)
     return 0;
   if ((field->default_value && field->default_value->flags) || field->vcol_info)
   {
@@ -1521,7 +1522,7 @@ int Item::save_in_field_no_warnings(Field *field, bool no_conversions)
 
 #ifndef DBUG_OFF
 static inline
-void mark_unsupported_func(const char *where, const char *processor_name)
+void dbug_mark_unsupported_func(const char *where, const char *processor_name)
 {
   char buff[64];
   my_snprintf(buff, sizeof(buff), "%s::%s", where ? where: "", processor_name);
@@ -1531,7 +1532,7 @@ void mark_unsupported_func(const char *where, const char *processor_name)
   DBUG_VOID_RETURN;
 }
 #else
-#define mark_unsupported_func(X,Y) {}
+#define dbug_mark_unsupported_func(X,Y) {}
 #endif
 
 bool mark_unsupported_function(const char *where, void *store, uint result)
@@ -1539,7 +1540,7 @@ bool mark_unsupported_function(const char *where, void *store, uint result)
   Item::vcol_func_processor_result *res=
     (Item::vcol_func_processor_result*) store;
   uint old_errors= res->errors;
-  mark_unsupported_func(where, "check_vcol_func_processor");
+  dbug_mark_unsupported_func(where, "check_vcol_func_processor");
   res->errors|= result;  /* Store type of expression */
   /* Store the name to the highest violation (normally VCOL_IMPOSSIBLE) */
   if (result > old_errors)
@@ -1560,33 +1561,19 @@ bool mark_unsupported_function(const char *w1, const char *w2,
 
 bool Item_field::check_vcol_func_processor(void *arg)
 {
+  uint r= VCOL_FIELD_REF;
   context= 0;
   vcol_func_processor_result *res= (vcol_func_processor_result *) arg;
   if (res && res->alter_info)
+    r|= res->alter_info->check_vcol_field(this);
+  else if (field)
   {
-    for (Key &k: res->alter_info->key_list)
-    {
-      if (k.type != Key::FOREIGN_KEY)
-        continue;
-      Foreign_key *fk= (Foreign_key*) &k;
-      if (fk->update_opt != FK_OPTION_CASCADE)
-        continue;
-      for (Key_part_spec& kp: fk->columns)
-      {
-        if (!lex_string_cmp(system_charset_info, &kp.field_name, &field_name))
-        {
-          return mark_unsupported_function(field_name.str, arg, VCOL_IMPOSSIBLE);
-        }
-      }
-    }
+    if (field->unireg_check == Field::NEXT_NUMBER)
+      r|= VCOL_AUTO_INC;
+    if (field->vcol_info &&
+        field->vcol_info->flags & (VCOL_NOT_STRICTLY_DETERMINISTIC | VCOL_AUTO_INC))
+      r|= VCOL_NON_DETERMINISTIC;
   }
-
-  uint r= VCOL_FIELD_REF;
-  if (field && field->unireg_check == Field::NEXT_NUMBER)
-    r|= VCOL_AUTO_INC;
-  if (field && field->vcol_info &&
-      field->vcol_info->flags & (VCOL_NOT_STRICTLY_DETERMINISTIC | VCOL_AUTO_INC))
-    r|= VCOL_NON_DETERMINISTIC;
   return mark_unsupported_function(field_name.str, arg, r);
 }
 
@@ -2536,7 +2523,8 @@ bool DTCollation::aggregate(const DTCollation &dt, uint flags)
 
 /******************************/
 static
-void my_coll_agg_error(DTCollation &c1, DTCollation &c2, const char *fname)
+void my_coll_agg_error(const DTCollation &c1, const DTCollation &c2,
+                       const char *fname)
 {
   my_error(ER_CANT_AGGREGATE_2COLLATIONS,MYF(0),
            c1.collation->coll_name.str, c1.derivation_name(),
@@ -2619,10 +2607,17 @@ bool Type_std_attributes::agg_item_collations(DTCollation &c,
 }
 
 
+/*
+  @param single_err  When nargs==1, use *single_err as the second aggregated
+                     collation when producing error message.
+*/
+
 bool Type_std_attributes::agg_item_set_converter(const DTCollation &coll,
                                                  const LEX_CSTRING &fname,
                                                  Item **args, uint nargs,
-                                                 uint flags, int item_sep)
+                                                 uint flags, int item_sep,
+                                                 const Single_coll_err
+                                                 *single_err)
 {
   THD *thd= current_thd;
   if (thd->lex->is_ps_or_view_context_analysis())
@@ -2660,26 +2655,41 @@ bool Type_std_attributes::agg_item_set_converter(const DTCollation &coll,
         args[0]= safe_args[0];
         args[item_sep]= safe_args[1];
       }
-      my_coll_agg_error(args, nargs, fname.str, item_sep);
+      if (nargs == 1 && single_err)
+      {
+        /*
+          Use *single_err to produce an error message mentioning two
+          collations.
+        */
+        if (single_err->first)
+          my_coll_agg_error(args[0]->collation, single_err->coll, fname.str);
+        else
+          my_coll_agg_error(single_err->coll, args[0]->collation, fname.str);
+      }
+      else
+        my_coll_agg_error(args, nargs, fname.str, item_sep);
       return TRUE;
     }
 
     if (conv->fix_fields_if_needed(thd, arg))
       return TRUE;
 
-    Query_arena *arena, backup;
-    arena= thd->activate_stmt_arena_if_needed(&backup);
-    if (arena)
+    if (!thd->stmt_arena->is_conventional())
     {
+      Query_arena *arena, backup;
+      arena= thd->activate_stmt_arena_if_needed(&backup);
+
       Item_direct_ref_to_item *ref=
         new (thd->mem_root) Item_direct_ref_to_item(thd, *arg);
       if ((ref == NULL) || ref->fix_fields(thd, (Item **)&ref))
       {
-        thd->restore_active_arena(arena, &backup);
+        if (arena)
+          thd->restore_active_arena(arena, &backup);
         return TRUE;
       }
       *arg= ref;
-      thd->restore_active_arena(arena, &backup);
+      if (arena)
+        thd->restore_active_arena(arena, &backup);
       ref->change_item(thd, conv);
     }
     else
@@ -2924,7 +2934,7 @@ Item_sp::execute_impl(THD *thd, Item **args, uint arg_count)
     init_sql_alloc(key_memory_sp_head_call_root, &sp_mem_root,
                    MEM_ROOT_BLOCK_SIZE, 0, MYF(0));
     *sp_query_arena= Query_arena(&sp_mem_root,
-                                 Query_arena::STMT_INITIALIZED_FOR_SP);
+                                 Query_arena::STMT_SP_QUERY_ARGUMENTS);
   }
 
   bool err_status= m_sp->execute_function(thd, args, arg_count,
@@ -3152,7 +3162,7 @@ void Item_field::set_field(Field *field_par)
 
   if (field->table->s->tmp_table == SYSTEM_TMP_TABLE ||
       field->table->s->tmp_table == INTERNAL_TMP_TABLE)
-    set_refers_to_temp_table(true);
+    set_refers_to_temp_table();
 }
 
 
@@ -3629,7 +3639,7 @@ Item *Item_field::get_tmp_table_item(THD *thd)
   if (new_item)
   {
     new_item->field= new_item->result_field;
-    new_item->set_refers_to_temp_table(true);
+    new_item->set_refers_to_temp_table();
   }
   return new_item;
 }
@@ -3640,9 +3650,14 @@ longlong Item_field::val_int_endpoint(bool left_endp, bool *incl_endp)
   return null_value? LONGLONG_MIN : res;
 }
 
-void Item_field::set_refers_to_temp_table(bool value)
+void Item_field::set_refers_to_temp_table()
 {
-  refers_to_temp_table= value;
+  /*
+    Derived temp. tables have non-zero derived_select_number.
+    We don't need to distingish between other kinds of temp.tables currently.
+  */
+  refers_to_temp_table= (field->table->derived_select_number != 0)?
+                        REFERS_TO_DERIVED_TMP : REFERS_TO_OTHER_TMP;
 }
 
 
@@ -4093,6 +4108,7 @@ Item_param::Item_param(THD *thd, const LEX_CSTRING *name_arg,
     value is set.
   */
   set_maybe_null();
+  with_flags= with_flags | item_with_t::PARAM;
 }
 
 
@@ -6305,7 +6321,7 @@ void Item_field::cleanup()
   field= 0;
   item_equal= NULL;
   null_value= FALSE;
-  refers_to_temp_table= FALSE;
+  refers_to_temp_table= NO_TEMP_TABLE;
   DBUG_VOID_RETURN;
 }
 
@@ -7873,14 +7889,15 @@ void Item_field::print(String *str, enum_query_type query_type)
 {
   /*
     If the field refers to a constant table, print the value.
-    (1): But don't attempt to do that if
-          * the field refers to a temporary (work) table, and
-          * temp. tables might already have been dropped.
+    There are two exceptions:
+    1. For temporary (aka "work") tables, we can only access the derived temp.
+       tables. Other kinds of tables might already have been dropped.
+    2. Don't print constants if QT_NO_DATA_EXPANSION or QT_VIEW_INTERNAL is
+       specified.
   */
-  if (!(refers_to_temp_table &&                      // (1)
-        (query_type & QT_DONT_ACCESS_TMP_TABLES)) && // (1)
-      field && field->table->const_table &&
-      !(query_type & (QT_NO_DATA_EXPANSION | QT_VIEW_INTERNAL)))
+  if ((refers_to_temp_table != REFERS_TO_OTHER_TMP) &&             // (1)
+      !(query_type & (QT_NO_DATA_EXPANSION | QT_VIEW_INTERNAL)) && // (2)
+      field && field->table->const_table)
   {
     print_value(str);
     return;
@@ -8177,7 +8194,7 @@ bool Item_ref::fix_fields(THD *thd, Item **reference)
       if (from_field != not_found_field)
       {
         Item_field* fld;
-        if (!(fld= new (thd->mem_root) Item_field(thd, from_field)))
+        if (!(fld= new (thd->mem_root) Item_field(thd, context, from_field)))
           goto error;
         thd->change_item_tree(reference, fld);
         mark_as_dependent(thd, last_checked_context->select_lex,
@@ -9158,7 +9175,7 @@ Item* Item_cache_wrapper::get_tmp_table_item(THD *thd)
   {
     auto item_field= new (thd->mem_root) Item_field(thd, result_field);
     if (item_field)
-      item_field->set_refers_to_temp_table(true);
+      item_field->set_refers_to_temp_table();
     return item_field;
   }
   return copy_or_same(thd);
@@ -9545,6 +9562,11 @@ bool Item_default_value::eq(const Item *item, bool binary_cmp) const
 
 
 bool Item_default_value::check_field_expression_processor(void *)
+{
+  return Item_default_value::update_func_default_processor(0);
+}
+
+bool Item_default_value::update_func_default_processor(void *)
 {
   field->default_value= ((Item_field *)(arg->real_item()))->field->default_value;
   return 0;

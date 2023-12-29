@@ -1284,23 +1284,20 @@ static dberr_t fsp_free_page(fil_space_t *space, page_no_t offset, mtr_t *mtr)
 			      + header->page.frame, frag_n_used - 1);
 	}
 
+	mtr->free(*space, static_cast<uint32_t>(offset));
+	xdes_set_free<true>(*xdes, descr, offset % FSP_EXTENT_SIZE, mtr);
+	ut_ad(err == DB_SUCCESS);
+
 	if (!xdes_get_n_used(descr)) {
 		/* The extent has become free: move it to another list */
 		err = flst_remove(header, FSP_HEADER_OFFSET + FSP_FREE_FRAG,
 				  xdes, xoffset, mtr);
-		if (UNIV_UNLIKELY(err != DB_SUCCESS)) {
-			return err;
-		}
-		err = fsp_free_extent(space, offset, mtr);
-		if (UNIV_UNLIKELY(err != DB_SUCCESS)) {
-			return err;
+		if (err == DB_SUCCESS) {
+			err = fsp_free_extent(space, offset, mtr);
 		}
 	}
 
-	mtr->free(*space, static_cast<uint32_t>(offset));
-	xdes_set_free<true>(*xdes, descr, offset % FSP_EXTENT_SIZE, mtr);
-
-	return DB_SUCCESS;
+	return err;
 }
 
 /** @return Number of segment inodes which fit on a single page */
@@ -2762,15 +2759,23 @@ remove:
 			      not_full_n_used - descr_n_used);
 	}
 
-	err = fsp_free_extent(space, page, mtr);
-	if (UNIV_UNLIKELY(err != DB_SUCCESS)) {
-		return err;
-	}
+	std::vector<uint8_t> going_to_free;
+	static_assert(FSP_EXTENT_SIZE_MIN == 256, "compatibility");
+	static_assert(FSP_EXTENT_SIZE_MAX == 64, "compatibility");
 
 	for (uint32_t i = 0; i < FSP_EXTENT_SIZE; i++) {
 		if (!xdes_is_free(descr, i)) {
-			buf_page_free(space, first_page_in_extent + i, mtr);
+			going_to_free.emplace_back(uint8_t(i));
 		}
+	}
+
+	if (dberr_t err = fsp_free_extent(space, page, mtr)) {
+		return err;
+	}
+
+	for (uint32_t i : going_to_free) {
+		mtr->free(*space, first_page_in_extent + i);
+		buf_page_free(space, first_page_in_extent + i, mtr);
 	}
 
 	return DB_SUCCESS;

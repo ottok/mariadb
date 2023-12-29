@@ -25,7 +25,7 @@ Created 2011/12/19
 *******************************************************/
 
 #include "buf0dblwr.h"
-#include "buf0buf.h"
+#include "buf0flu.h"
 #include "buf0checksum.h"
 #include "srv0start.h"
 #include "srv0srv.h"
@@ -362,7 +362,7 @@ void buf_dblwr_t::recover()
   {
     byte *page= *i;
     const uint32_t page_no= page_get_page_no(page);
-    if (!page_no) /* recovered via Datafile::restore_from_doublewrite() */
+    if (!page_no) /* recovered via recv_dblwr_t::restore_first_page() */
       continue;
 
     const lsn_t lsn= mach_read_from_8(page + FIL_PAGE_LSN);
@@ -372,7 +372,7 @@ void buf_dblwr_t::recover()
     const uint32_t space_id= page_get_space_id(page);
     const page_id_t page_id(space_id, page_no);
 
-    if (recv_sys.lsn < lsn)
+    if (recv_sys.scanned_lsn < lsn)
     {
       ib::info() << "Ignoring a doublewrite copy of page " << page_id
                  << " with future log sequence number " << lsn;
@@ -528,7 +528,7 @@ static void buf_dblwr_check_page_lsn(const page_t* page, const fil_space_t& s)
 
 static void buf_dblwr_check_page_lsn(const buf_page_t &b, const byte *page)
 {
-  if (fil_space_t *space= fil_space_t::get(b.id().space()))
+  if (fil_space_t *space= fil_space_t::get_for_write(b.id().space()))
   {
     buf_dblwr_check_page_lsn(page, *space);
     space->release();

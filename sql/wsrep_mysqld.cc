@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2022 Codership Oy <http://www.codership.com>
+/* Copyright (c) 2008, 2023 Codership Oy <http://www.codership.com>
    Copyright (c) 2020, 2022, MariaDB
 
    This program is free software; you can redistribute it and/or modify
@@ -52,6 +52,7 @@
 #include "log_event.h"
 #include "sql_connect.h"
 #include "thread_cache.h"
+#include "debug_sync.h"
 
 #include <sstream>
 
@@ -859,6 +860,7 @@ void wsrep_deinit_server()
   wsrep_deinit_schema();
   Wsrep_server_state::destroy();
   Wsrep_status::destroy();
+  wsrep_free_status_vars();
 }
 
 int wsrep_init()
@@ -2578,6 +2580,15 @@ bool wsrep_can_run_in_toi(THD *thd, const char *db, const char *table,
 
     return !(table || table_list);
     break;
+  case SQLCOM_CREATE_SEQUENCE:
+    /* No TOI for temporary sequences as they are
+       not replicated */
+    if (thd->lex->tmp_table())
+    {
+      return false;
+    }
+    return true;
+
   }
 }
 
@@ -2866,6 +2877,13 @@ static int wsrep_RSU_begin(THD *thd, const char *db_, const char *table_)
   WSREP_DEBUG("RSU BEGIN: %lld, : %s", wsrep_thd_trx_seqno(thd),
               wsrep_thd_query(thd));
 
+  /* For CREATE TEMPORARY SEQUENCE we do not start RSU because
+     object is local only and actually CREATE TABLE + INSERT
+  */
+  if (thd->lex->sql_command == SQLCOM_CREATE_SEQUENCE &&
+      thd->lex->tmp_table())
+    return 1;
+
   if (thd->variables.wsrep_OSU_method == WSREP_OSU_RSU &&
       thd->variables.sql_log_bin == 1 &&
       wsrep_check_mode(WSREP_MODE_DISALLOW_LOCAL_GTID))
@@ -2965,9 +2983,20 @@ int wsrep_to_isolation_begin(THD *thd, const char *db_, const char *table_,
     return -1;
   }
 
+  /* If we are inside LOCK TABLE we release it and give warning. */
+  if (thd->variables.option_bits & OPTION_TABLE_LOCK &&
+      thd->lex->sql_command == SQLCOM_CREATE_SEQUENCE)
+  {
+    thd->locked_tables_list.unlock_locked_tables(thd);
+    thd->variables.option_bits&= ~(OPTION_TABLE_LOCK);
+    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+			HA_ERR_UNSUPPORTED,
+			"Galera cluster does not support LOCK TABLE on "
+			"SEQUENCES. Lock is released.");
+  }
   if (wsrep_debug && thd->mdl_context.has_locks())
   {
-    WSREP_DEBUG("thread holds MDL locks at TI begin: %s %llu",
+    WSREP_DEBUG("thread holds MDL locks at TO begin: %s %llu",
                 wsrep_thd_query(thd), thd->thread_id);
   }
 
@@ -3107,6 +3136,20 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                   request_thd, granted_thd);
     ticket->wsrep_report(wsrep_debug);
 
+    DEBUG_SYNC(request_thd, "before_wsrep_thd_abort");
+    DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort", {
+      const char act[]= "now "
+                        "SIGNAL sync.before_wsrep_thd_abort_reached "
+                        "WAIT_FOR signal.before_wsrep_thd_abort";
+      DBUG_ASSERT(!debug_sync_set_action(request_thd, STRING_WITH_LEN(act)));
+    };);
+
+    /* Here we will call wsrep_abort_transaction so we should hold
+    THD::LOCK_thd_data to protect victim from concurrent usage
+    and THD::LOCK_thd_kill to protect from disconnect or delete.
+
+    */
+    mysql_mutex_lock(&granted_thd->LOCK_thd_kill);
     mysql_mutex_lock(&granted_thd->LOCK_thd_data);
 
     if (wsrep_thd_is_toi(granted_thd) ||
@@ -3118,13 +3161,11 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                     wsrep_thd_query(request_thd));
         THD_STAGE_INFO(request_thd, stage_waiting_isolation);
         ticket->wsrep_report(wsrep_debug);
-        mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
       }
       else if (wsrep_thd_is_SR(granted_thd) && !wsrep_thd_is_SR(request_thd))
       {
         WSREP_MDL_LOG(INFO, "MDL conflict, DDL vs SR",
                       schema, schema_len, request_thd, granted_thd);
-        mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
         WSREP_DEBUG("wsrep_handle_mdl_conflict DDL vs SR for %s",
                     wsrep_thd_query(request_thd));
         THD_STAGE_INFO(request_thd, stage_waiting_isolation);
@@ -3136,6 +3177,7 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                       request_thd, granted_thd);
         ticket->wsrep_report(true);
         mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+        mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
         unireg_abort(1);
       }
     }
@@ -3146,7 +3188,6 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                   wsrep_thd_query(request_thd));
       THD_STAGE_INFO(request_thd, stage_waiting_ddl);
       ticket->wsrep_report(wsrep_debug);
-      mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
       if (granted_thd->current_backup_stage != BACKUP_FINISHED &&
 	  wsrep_check_mode(WSREP_MODE_BF_MARIABACKUP))
       {
@@ -3160,7 +3201,6 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                   wsrep_thd_query(request_thd));
       THD_STAGE_INFO(request_thd, stage_waiting_isolation);
       ticket->wsrep_report(wsrep_debug);
-      mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
       wsrep_abort_thd(request_thd, granted_thd, 1);
     }
     else
@@ -3174,7 +3214,6 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
 
       if (granted_thd->wsrep_trx().active())
       {
-        mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
         wsrep_abort_thd(request_thd, granted_thd, 1);
       }
       else
@@ -3183,10 +3222,9 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
           Granted_thd is likely executing with wsrep_on=0. If the requesting
           thd is BF, BF abort and wait.
         */
-        mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
-
         if (wsrep_thd_is_BF(request_thd, FALSE))
         {
+          granted_thd->awake_no_mutex(KILL_QUERY_HARD);
           ha_abort_transaction(request_thd, granted_thd, TRUE);
         }
         else
@@ -3195,10 +3233,14 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
                         schema, schema_len,
                         request_thd, granted_thd);
 	  ticket->wsrep_report(true);
+          mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+          mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
 	  unireg_abort(1);
         }
       }
     }
+    mysql_mutex_unlock(&granted_thd->LOCK_thd_data);
+    mysql_mutex_unlock(&granted_thd->LOCK_thd_kill);
   }
   else
   {
@@ -3210,13 +3252,17 @@ void wsrep_handle_mdl_conflict(MDL_context *requestor_ctx,
 static bool abort_replicated(THD *thd)
 {
   bool ret_code= false;
+  mysql_mutex_lock(&thd->LOCK_thd_kill);
+  mysql_mutex_lock(&thd->LOCK_thd_data);
   if (thd->wsrep_trx().state() == wsrep::transaction::s_committing)
   {
     WSREP_DEBUG("aborting replicated trx: %llu", (ulonglong)(thd->real_id));
 
-    (void)wsrep_abort_thd(thd, thd, TRUE);
+    wsrep_abort_thd(thd, thd, TRUE);
     ret_code= true;
   }
+  mysql_mutex_unlock(&thd->LOCK_thd_data);
+  mysql_mutex_unlock(&thd->LOCK_thd_kill);
   return ret_code;
 }
 
@@ -3440,8 +3486,9 @@ int wsrep_ignored_error_code(Log_event* ev, int error)
   const THD* thd= ev->thd;
 
   DBUG_ASSERT(error);
-  DBUG_ASSERT(wsrep_thd_is_applying(thd) &&
-              !wsrep_thd_is_local_toi(thd));
+  /* Note that binlog events can be executed on master also with
+     BINLOG '....'; */
+  DBUG_ASSERT(!wsrep_thd_is_local_toi(thd));
 
   if ((wsrep_ignore_apply_errors & WSREP_IGNORE_ERRORS_ON_RECONCILING_DML))
   {
@@ -3778,6 +3825,30 @@ my_bool get_wsrep_recovery()
 bool wsrep_consistency_check(THD *thd)
 {
   return thd->wsrep_consistency_check == CONSISTENCY_CHECK_RUNNING;
+}
+
+// Wait until wsrep has reached ready state
+void wsrep_wait_ready(THD *thd)
+{
+  mysql_mutex_lock(&LOCK_wsrep_ready);
+  while(!wsrep_ready)
+  {
+    WSREP_INFO("Waiting to reach ready state");
+    mysql_cond_wait(&COND_wsrep_ready, &LOCK_wsrep_ready);
+  }
+  WSREP_INFO("ready state reached");
+  mysql_mutex_unlock(&LOCK_wsrep_ready);
+}
+
+void wsrep_ready_set(bool ready_value)
+{
+  WSREP_DEBUG("Setting wsrep_ready to %d", ready_value);
+  mysql_mutex_lock(&LOCK_wsrep_ready);
+  wsrep_ready= ready_value;
+  // Signal if we have reached ready state
+  if (wsrep_ready)
+    mysql_cond_signal(&COND_wsrep_ready);
+  mysql_mutex_unlock(&LOCK_wsrep_ready);
 }
 
 

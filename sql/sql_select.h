@@ -34,6 +34,8 @@
 #include "opt_range.h"                /* SQL_SELECT, QUICK_SELECT_I */
 #include "filesort.h"
 
+#include "cset_narrowing.h"
+
 typedef struct st_join_table JOIN_TAB;
 /* Values in optimize */
 #define KEY_OPTIMIZE_EXISTS		1U
@@ -227,7 +229,7 @@ enum sj_strategy_enum
 
 typedef enum_nested_loop_state
 (*Next_select_func)(JOIN *, struct st_join_table *, bool);
-Next_select_func setup_end_select_func(JOIN *join, JOIN_TAB *tab);
+Next_select_func setup_end_select_func(JOIN *join);
 int rr_sequential(READ_RECORD *info);
 int read_record_func_for_rr_and_unpack(READ_RECORD *info);
 Item *remove_pushed_top_conjuncts(THD *thd, Item *cond);
@@ -408,7 +410,6 @@ typedef struct st_join_table {
   /* TRUE <=> it is prohibited to join this table using join buffer */
   bool          no_forced_join_cache;
   uint          used_join_cache_level;
-  ulong         join_buffer_size_limit;
   JOIN_CACHE	*cache;
   /*
     Index condition for BKA access join
@@ -553,19 +554,24 @@ typedef struct st_join_table {
   /* Becomes true just after the used range filter has been built / filled */
   bool is_rowid_filter_built;
 
-  void build_range_rowid_filter_if_needed();
+  bool build_range_rowid_filter_if_needed();
 
   void cleanup();
   inline bool is_using_loose_index_scan()
   {
-    const SQL_SELECT *sel= filesort ? filesort->select : select;
+    const SQL_SELECT *sel= get_sql_select();
     return (sel && sel->quick &&
             (sel->quick->get_type() == QUICK_SELECT_I::QS_TYPE_GROUP_MIN_MAX));
   }
   bool is_using_agg_loose_index_scan ()
   {
+    const SQL_SELECT *sel= get_sql_select();
     return (is_using_loose_index_scan() &&
-            ((QUICK_GROUP_MIN_MAX_SELECT *)select->quick)->is_agg_distinct());
+            ((QUICK_GROUP_MIN_MAX_SELECT *)sel->quick)->is_agg_distinct());
+  }
+  const SQL_SELECT *get_sql_select()
+  {
+    return filesort ? filesort->select : select;
   }
   bool is_inner_table_of_semi_join_with_first_match()
   {
@@ -1723,7 +1729,8 @@ public:
   void join_free();
   /** Cleanup this JOIN, possibly for reuse */
   void cleanup(bool full);
-  void clear();
+  void clear(table_map *cleared_tables);
+  void inline clear_sum_funcs();
   bool send_row_on_empty_set()
   {
     return (do_send_rows && implicit_grouping && !group_optimized_away &&
@@ -1939,7 +1946,14 @@ public:
   {
     enum_check_fields org_count_cuted_fields= thd->count_cuted_fields;
     Use_relaxed_field_copy urfc(to_field->table->in_use);
+
+    /* If needed, perform CharsetNarrowing for making ref access lookup keys. */
+    Utf8_narrow do_narrow(to_field, do_cset_narrowing);
+
     store_key_result result= copy_inner();
+
+    do_narrow.stop();
+
     thd->count_cuted_fields= org_count_cuted_fields;
     return result;
   }
@@ -1948,6 +1962,12 @@ public:
   Field *to_field;				// Store data here
   uchar *null_ptr;
   uchar err;
+
+  /*
+    This is set to true if we need to do Charset Narrowing when making a lookup
+    key.
+  */
+  bool do_cset_narrowing= false;
 
   virtual enum store_key_result copy_inner()=0;
 };
@@ -1968,6 +1988,7 @@ class store_key_field: public store_key
     if (to_field)
     {
       copy_field.set(to_field,from_field,0);
+      setup_charset_narrowing();
     }
   }  
 
@@ -1978,6 +1999,15 @@ class store_key_field: public store_key
   {
     copy_field.set(to_field, fld_item->field, 0);
     field_name= fld_item->full_name();
+    setup_charset_narrowing();
+  }
+
+  /* Setup CharsetNarrowing if necessary */
+  void setup_charset_narrowing()
+  {
+    do_cset_narrowing=
+      Utf8_narrow::should_do_narrowing(copy_field.to_field,
+                                            copy_field.from_field->charset());
   }
 
  protected: 
@@ -2018,7 +2048,12 @@ public:
     :store_key(thd, to_field_arg, ptr,
 	       null_ptr_arg ? null_ptr_arg : item_arg->maybe_null() ?
 	       &err : (uchar*) 0, length), item(item_arg), use_value(val)
-  {}
+  {
+    /* Setup CharsetNarrowing to be done if necessary */
+    do_cset_narrowing=
+      Utf8_narrow::should_do_narrowing(to_field,
+                                       item->collation.collation);
+  }
   store_key_item(store_key &arg, Item *new_item, bool val)
     :store_key(arg), item(new_item), use_value(val)
   {}
@@ -2406,7 +2441,7 @@ Item_equal *find_item_equal(COND_EQUAL *cond_equal, Field *field,
 extern bool test_if_ref(Item *, 
                  Item_field *left_item,Item *right_item);
 
-inline bool optimizer_flag(THD *thd, ulonglong flag)
+inline bool optimizer_flag(const THD *thd, ulonglong flag)
 { 
   return (thd->variables.optimizer_switch & flag);
 }
@@ -2525,8 +2560,6 @@ class derived_handler;
 
 class Pushdown_derived: public Sql_alloc
 {
-private:
-  bool is_analyze;
 public:
   TABLE_LIST *derived;
   derived_handler *handler;

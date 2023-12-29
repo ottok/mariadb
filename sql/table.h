@@ -356,6 +356,9 @@ typedef struct st_grant_info
                      const char *table);
   inline privilege_t aggregate_privs();
   inline privilege_t aggregate_cols();
+
+  /* OR table and all column privileges */
+  privilege_t all_privilege();
 } GRANT_INFO;
 
 enum tmp_table_type
@@ -634,99 +637,55 @@ enum open_frm_error {
   from persistent statistical tables
 */
 
+
+#define TABLE_STAT_NO_STATS    0
+#define TABLE_STAT_TABLE       1
+#define TABLE_STAT_COLUMN      2
+#define TABLE_STAT_INDEX       4
+#define TABLE_STAT_HISTOGRAM   8
+
+/*
+  EITS statistics information for a table.
+
+  This data is loaded from mysql.{table|index|column}_stats tables and
+  then most of the time is owned by table's TABLE_SHARE object.
+
+  Individual TABLE objects also have pointer to this object, and we do
+  reference counting to know when to free it. See
+  TABLE::update_engine_stats(), TABLE::free_engine_stats(),
+  TABLE_SHARE::update_engine_stats(), TABLE_SHARE::destroy().
+  These implement a "shared pointer"-like functionality.
+
+  When new statistics is loaded, we create new TABLE_STATISTICS_CB and make
+  the TABLE_SHARE point to it. Some TABLE object may still be using older
+  TABLE_STATISTICS_CB objects.  Reference counting allows to free
+  TABLE_STATISTICS_CB when it is no longer used.
+*/
+
 class TABLE_STATISTICS_CB
 {
-  class Statistics_state
-  {
-    enum state_codes
-    {
-      EMPTY,   /** data is not loaded */
-      LOADING, /** data is being loaded in some connection */
-      READY    /** data is loaded and available for use */
-    };
-    int32 state;
-
-  public:
-    /** No state copy */
-    Statistics_state &operator=(const Statistics_state &) { return *this; }
-
-    /** Checks if data loading have been completed */
-    bool is_ready() const
-    {
-      return my_atomic_load32_explicit(const_cast<int32*>(&state),
-                                       MY_MEMORY_ORDER_ACQUIRE) == READY;
-    }
-
-    /**
-      Sets mutual exclusion for data loading
-
-      If stats are in LOADING state, waits until state change.
-
-      @return
-        @retval true atomic EMPTY -> LOADING transfer completed, ok to load
-        @retval false stats are in READY state, no need to load
-    */
-    bool start_load()
-    {
-      for (;;)
-      {
-        int32 expected= EMPTY;
-        if (my_atomic_cas32_weak_explicit(&state, &expected, LOADING,
-                                          MY_MEMORY_ORDER_RELAXED,
-                                          MY_MEMORY_ORDER_RELAXED))
-          return true;
-        if (expected == READY)
-          return false;
-        (void) LF_BACKOFF();
-      }
-    }
-
-    /** Marks data available for subsequent use */
-    void end_load()
-    {
-      DBUG_ASSERT(my_atomic_load32_explicit(&state, MY_MEMORY_ORDER_RELAXED) ==
-                  LOADING);
-      my_atomic_store32_explicit(&state, READY, MY_MEMORY_ORDER_RELEASE);
-    }
-
-    /** Restores empty state on error (e.g. OOM) */
-    void abort_load()
-    {
-      DBUG_ASSERT(my_atomic_load32_explicit(&state, MY_MEMORY_ORDER_RELAXED) ==
-                  LOADING);
-      my_atomic_store32_explicit(&state, EMPTY, MY_MEMORY_ORDER_RELAXED);
-    }
-  };
-
-  class Statistics_state stats_state;
-  class Statistics_state hist_state;
+  uint usage_count;                             // Instances of this stat
 
 public:
+  TABLE_STATISTICS_CB();
+  ~TABLE_STATISTICS_CB();
   MEM_ROOT  mem_root; /* MEM_ROOT to allocate statistical data for the table */
   Table_statistics *table_stats; /* Structure to access the statistical data */
+  uint  stats_available;
+  bool  histograms_exists_on_disk;
 
-  /*
-    Whether the table has histograms.
-    (If the table has none, histograms_are_ready() can finish sooner)
-  */
-  bool have_histograms;
-
-  bool histograms_are_ready() const
+  bool histograms_exists() const
   {
-    return !have_histograms || hist_state.is_ready();
+    return histograms_exists_on_disk;
   }
-
-  bool start_histograms_load()
+  bool unused()
   {
-    return have_histograms && hist_state.start_load();
+    return usage_count == 0;
   }
-
-  void end_histograms_load() { hist_state.end_load(); }
-  void abort_histograms_load() { hist_state.abort_load(); }
-  bool stats_are_ready() const { return stats_state.is_ready(); }
-  bool start_stats_load() { return stats_state.start_load(); }
-  void end_stats_load() { stats_state.end_load(); }
-  void abort_stats_load() { stats_state.abort_load(); }
+  /* Copy (latest) state from TABLE_SHARE to TABLE */
+  void update_stats_in_table(TABLE *table);
+  friend struct TABLE;
+  friend struct TABLE_SHARE;
 };
 
 /**
@@ -749,6 +708,7 @@ struct TABLE_SHARE
   TYPELIB *intervals;			/* pointer to interval info */
   mysql_mutex_t LOCK_ha_data;           /* To protect access to ha_data */
   mysql_mutex_t LOCK_share;             /* To protect TABLE_SHARE */
+  mysql_mutex_t LOCK_statistics;        /* To protect against concurrent load */
 
   TDC_element *tdc;
 
@@ -765,7 +725,17 @@ struct TABLE_SHARE
   uint	*blob_field;			/* Index to blobs in Field arrray*/
   LEX_CUSTRING vcol_defs;              /* definitions of generated columns */
 
-  TABLE_STATISTICS_CB stats_cb;
+  /*
+    EITS statistics data from the last time the table was opened or ANALYZE
+    table was run.
+    This is typically same as any related TABLE::stats_cb until ANALYZE
+    table is run.
+    This pointer is only to be de-referenced under LOCK_share as the
+    pointer can change by another thread running ANALYZE TABLE.
+    Without using a LOCK_share one can check if the statistics has been
+    updated by checking if TABLE::stats_cb != TABLE_SHARE::stats_cb.
+  */
+  TABLE_STATISTICS_CB *stats_cb;
 
   uchar	*default_values;		/* row with default values */
   LEX_CSTRING comment;			/* Comment about table */
@@ -888,6 +858,8 @@ struct TABLE_SHARE
   bool has_update_default_function;
   bool can_do_row_logging;              /* 1 if table supports RBR */
   bool long_unique_table;
+  /* 1 if frm version cannot be updated as part of upgrade */
+  bool keep_original_mysql_version;
 
   ulong table_map_id;                   /* for row-based replication */
 
@@ -1194,7 +1166,6 @@ struct TABLE_SHARE
   void set_overlapped_keys();
   void set_ignored_indexes();
   key_map usable_indexes(THD *thd);
-
   bool old_long_hash_function() const
   {
     return mysql_version < 100428 ||
@@ -1209,6 +1180,8 @@ struct TABLE_SHARE
   Item_func_hash *make_long_hash_func(THD *thd,
                                       MEM_ROOT *mem_root,
                                       List<Item> *field_list) const;
+  void update_engine_independent_stats(TABLE_STATISTICS_CB *stat);
+  bool histograms_exists();
 };
 
 /* not NULL, but cannot be dereferenced */
@@ -1597,6 +1570,7 @@ public:
     and can be useful for range optimizer.
   */
   Item *notnull_cond;
+  TABLE_STATISTICS_CB *stats_cb;
 
   inline void reset() { bzero((void*)this, sizeof(*this)); }
   void init(THD *thd, TABLE_LIST *tl);
@@ -1626,6 +1600,8 @@ public:
   void mark_columns_used_by_virtual_fields(void);
   void mark_check_constraint_columns_for_read(void);
   int verify_constraints(bool ignore_failure);
+  void free_engine_stats();
+  void update_engine_independent_stats();
   inline void column_bitmaps_set(MY_BITMAP *read_set_arg)
   {
     read_set= read_set_arg;
@@ -1919,8 +1895,8 @@ enum enum_schema_table_state
   PROCESSED_BY_JOIN_EXEC
 };
 
-enum enum_fk_option { FK_OPTION_UNDEF, FK_OPTION_RESTRICT, FK_OPTION_CASCADE,
-               FK_OPTION_SET_NULL, FK_OPTION_NO_ACTION, FK_OPTION_SET_DEFAULT};
+enum enum_fk_option { FK_OPTION_UNDEF, FK_OPTION_RESTRICT, FK_OPTION_NO_ACTION,
+  FK_OPTION_CASCADE, FK_OPTION_SET_NULL, FK_OPTION_SET_DEFAULT };
 
 typedef struct st_foreign_key_info
 {
@@ -1937,7 +1913,11 @@ typedef struct st_foreign_key_info
 } FOREIGN_KEY_INFO;
 
 LEX_CSTRING *fk_option_name(enum_fk_option opt);
-bool fk_modifies_child(enum_fk_option opt);
+static inline bool fk_modifies_child(enum_fk_option opt)
+{
+  return opt >= FK_OPTION_CASCADE;
+}
+
 
 class IS_table_read_plan;
 
@@ -2820,7 +2800,7 @@ struct TABLE_LIST
   bool prepare_security(THD *thd);
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
   Security_context *find_view_security_context(THD *thd);
-  bool prepare_view_security_context(THD *thd);
+  bool prepare_view_security_context(THD *thd, bool upgrade_check);
 #endif
   /*
     Cleanup for re-execution in a prepared statement or a stored
@@ -3376,10 +3356,16 @@ inline void mark_as_null_row(TABLE *table)
     bfill(table->null_flags,table->s->null_bytes,255);
 }
 
+/*
+  Restore table to state before mark_as_null_row() call.
+  This assumes that the caller has restored table->null_flags,
+  as is done in unclear_tables().
+*/
+
 inline void unmark_as_null_row(TABLE *table)
 {
-  table->null_row=0;
-  table->status= STATUS_NO_RECORD;
+  table->null_row= 0;
+  table->status&= ~STATUS_NULL_ROW;
 }
 
 bool is_simple_order(ORDER *order);

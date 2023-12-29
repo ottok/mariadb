@@ -416,7 +416,7 @@ static int read_strn(json_engine_t *j)
     return 1;
 
   j->state= j->stack[j->stack_p];
-  j->value_len= (int)(j->s.c_str - j->value) - 1;
+  j->value_len= (int)(j->s.c_str - j->value) - j->s.c_next_len;
   return 0;
 }
 
@@ -1324,7 +1324,7 @@ int json_skip_key(json_engine_t *j)
 }
 
 
-#define SKIPPED_STEP_MARK ((int) ~0)
+#define SKIPPED_STEP_MARK INT_MAX32
 
 /*
   Current step of the patch matches the JSON construction.

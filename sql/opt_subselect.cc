@@ -663,6 +663,14 @@ int check_and_do_in_subquery_rewrites(JOIN *join)
         my_error(ER_OPERAND_COLUMNS, MYF(0), ncols);
         DBUG_RETURN(-1);
       }
+
+      uint cols_num= in_subs->left_exp()->cols();
+      for (uint i= 0; i < cols_num; i++)
+      {
+        if (select_lex->ref_pointer_array[i]->
+           check_cols(in_subs->left_exp()->element_index(i)->cols()))
+             DBUG_RETURN(-1);
+      }
     }
     /* Check if any table is not supporting comparable rowids */
     {
@@ -4206,6 +4214,7 @@ bool setup_sj_materialization_part1(JOIN_TAB *sjm_tab)
   
   sjm->materialized= FALSE;
   sjm_tab->table= sjm->table;
+  sjm_tab->tab_list= emb_sj_nest;
   sjm->table->pos_in_table_list= emb_sj_nest;
  
   DBUG_RETURN(FALSE);

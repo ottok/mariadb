@@ -383,12 +383,6 @@ public:
     IO_CACHE *file,
     uint32 arg_length
   );
-  bool append_with_prefill(
-    const char *s,
-    uint32 arg_length,
-    uint32 full_length,
-    char fill_char
-  );
   int strstr(
     const String &search,
     uint32 offset = 0
@@ -1423,9 +1417,6 @@ public:
     ulong *realloced
   ) = 0;
   virtual int reset_sql(
-    ulong sql_type
-  ) = 0;
-  virtual bool need_lock_before_set_sql_for_exec(
     ulong sql_type
   ) = 0;
   virtual int set_sql_for_exec(

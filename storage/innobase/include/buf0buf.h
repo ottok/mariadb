@@ -75,8 +75,7 @@ struct buf_pool_info_t
 	ulint	flush_list_len;		/*!< Length of buf_pool.flush_list */
 	ulint	n_pend_unzip;		/*!< buf_pool.n_pend_unzip, pages
 					pending decompress */
-	ulint	n_pend_reads;		/*!< buf_pool.n_pend_reads, pages
-					pending read */
+	ulint	n_pend_reads;		/*!< os_aio_pending_reads() */
 	ulint	n_pending_flush_lru;	/*!< Pages pending flush in LRU */
 	ulint	n_pending_flush_list;	/*!< Pages pending flush in FLUSH
 					LIST */
@@ -787,8 +786,10 @@ public:
   dberr_t read_complete(const fil_node_t &node);
 
   /** Note that a block is no longer dirty, while not removing
-  it from buf_pool.flush_list */
-  inline void write_complete(bool temporary);
+  it from buf_pool.flush_list
+  @param temporary   whether the page belongs to the temporary tablespace
+  @param error       whether an error may have occurred while writing */
+  inline void write_complete(bool temporary, bool error);
 
   /** Write a flushable page to a file or free a freeable block.
   @param evict       whether to evict the page on write completion
@@ -1766,6 +1767,10 @@ public:
   /** Decrement the number of pending LRU flush */
   inline void n_flush_dec();
 
+  /** Decrement the number of pending LRU flush
+  while holding flush_list_mutex */
+  inline void n_flush_dec_holding_mutex();
+
   /** @return whether flush_list flushing is active */
   bool flush_list_active() const
   {
@@ -1790,6 +1795,15 @@ public:
     mysql_mutex_assert_owner(&flush_list_mutex);
     return page_cleaner_status & PAGE_CLEANER_IDLE;
   }
+
+  /** @return whether the page cleaner may be initiating writes */
+  bool page_cleaner_active() const
+  {
+    mysql_mutex_assert_owner(&flush_list_mutex);
+    static_assert(PAGE_CLEANER_IDLE == 1, "efficiency");
+    return page_cleaner_status > PAGE_CLEANER_IDLE;
+  }
+
   /** Wake up the page cleaner if needed.
   @param for_LRU  whether to wake up for LRU eviction */
   void page_cleaner_wakeup(bool for_LRU= false);

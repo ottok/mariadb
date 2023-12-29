@@ -99,7 +99,6 @@ int yylex(void *yylval, void *yythd);
 #define MYSQL_YYABORT                         \
   do                                          \
   {                                           \
-    LEX::cleanup_lex_after_parse_error(thd);  \
     YYABORT;                                  \
   } while (0)
 
@@ -150,13 +149,6 @@ static Item* escape(THD *thd)
 
 static void yyerror(THD *thd, const char *s)
 {
-  /*
-    Restore the original LEX if it was replaced when parsing
-    a stored procedure. We must ensure that a parsing error
-    does not leave any side effects in the THD.
-  */
-  LEX::cleanup_lex_after_parse_error(thd);
-
   /* "parse error" changed into "syntax error" between bison 1.75 and 1.875 */
   if (strcmp(s,"parse error") == 0 || strcmp(s,"syntax error") == 0)
     s= ER_THD(thd, ER_SYNTAX_ERROR);
@@ -821,8 +813,6 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %token  <kwd>  DATE_SYM                      /* SQL-2003-R, Oracle-R, PLSQL-R */
 %token  <kwd>  DAY_SYM                       /* SQL-2003-R */
 %token  <kwd>  DEALLOCATE_SYM                /* SQL-2003-R */
-%token  <kwd>  DECODE_MARIADB_SYM            /* Function, non-reserved */
-%token  <kwd>  DECODE_ORACLE_SYM             /* Function, non-reserved */
 %token  <kwd>  DEFINER_SYM
 %token  <kwd>  DELAYED_SYM
 %token  <kwd>  DELAY_KEY_WRITE_SYM
@@ -1321,6 +1311,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
         sp_opt_label BIN_NUM TEXT_STRING_filesystem
         opt_constraint constraint opt_ident
         sp_block_label sp_control_label opt_place opt_db
+        udt_name
 
 %type <ident_sys>
         IDENT_sys
@@ -1543,7 +1534,6 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %type <item_list>
         expr_list opt_udf_expr_list udf_expr_list when_list when_list_opt_else
         ident_list ident_list_arg opt_expr_list
-        decode_when_list_oracle
         execute_using
         execute_params
 
@@ -1554,6 +1544,56 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %type <expr_lex>
         expr_lex
 
+%destructor
+{
+  /*
+     In case of a syntax/oom error let's free the sp_expr_lex
+     instance, but only if it has not been linked to any structures
+     such as sp_instr_jump_if_not::m_lex_keeper yet, e.g.:
+       IF f1() THEN1
+     i.e. THEN1 came instead of the expected THEN causing a syntax error.
+  */
+  if (!$$->sp_lex_in_use)
+    delete $$;
+} <expr_lex>
+
+
+/*
+
+// COMMENT_FOR_DESCTRUCTOR:
+//
+// %destructor is only invoked if the rule parsing fails in the middle.
+// If we call YYABORT from the last code block %destructor is not called,
+// because Bison's stack already contains the reduced upper level rule.
+// If we need to invoke the %destructor after the YYABORT in the last code
+// block, we have to add another dummy empty end-of-rule action {} at the end.
+
+// So to have a %destructor work properly with YYABORT,
+// make sure to turn a grammar like this:
+
+rule:
+        KEYWORD expr_lex
+        {
+          if (condition) // End-of-rule action
+            YYABORT;
+        }
+        ;
+
+// into:
+
+rule:
+        KEYWORD expr_lex
+        {
+          if (condition) // This is now a mid-rule action
+            YYABORT;
+        }
+        {
+          // A dummy empty end-of-rule action.
+        }
+        ;
+*/
+
+
 %type <assignment_lex>
         assignment_source_lex
         assignment_source_expr
@@ -1562,6 +1602,21 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %type <sp_assignment_lex_list>
         cursor_actual_parameters
         opt_parenthesized_cursor_actual_parameters
+
+%destructor
+{
+  if ($$)
+  {
+    sp_assignment_lex *elem;
+    List_iterator<sp_assignment_lex> li(*$$);
+    while ((elem= li++))
+    {
+      if (!elem->sp_lex_in_use)
+        delete elem;
+    }
+  }
+} <sp_assignment_lex_list>
+
 
 %type <var_type>
         option_type opt_var_type opt_var_ident_type
@@ -3766,6 +3821,7 @@ sp_proc_stmt_return:
                                                           $2->get_item(), $2)))
               MYSQL_YYABORT;
           }
+          { /* See the comment 'COMMENT_FOR_DESCTRUCTOR' near %destructor */ }
         | RETURN_ORACLE_SYM
           {
             LEX *lex= Lex;
@@ -3792,11 +3848,13 @@ sp_proc_stmt_exit_oracle:
             if (unlikely($3->sp_exit_statement(thd, $3->get_item())))
               MYSQL_YYABORT;
           }
+          { /* See the comment 'COMMENT_FOR_DESCTRUCTOR' near %destructor */ }
         | EXIT_ORACLE_SYM label_ident WHEN_SYM expr_lex
           {
             if (unlikely($4->sp_exit_statement(thd, &$2, $4->get_item())))
               MYSQL_YYABORT;
           }
+          { /* See the comment 'COMMENT_FOR_DESCTRUCTOR' near %destructor */ }
         ;
 
 sp_proc_stmt_continue_oracle:
@@ -3815,11 +3873,13 @@ sp_proc_stmt_continue_oracle:
             if (unlikely($3->sp_continue_when_statement(thd)))
               MYSQL_YYABORT;
           }
+          { /* See the comment 'COMMENT_FOR_DESCTRUCTOR' near %destructor */ }
         | CONTINUE_ORACLE_SYM label_ident WHEN_SYM expr_lex
           {
             if (unlikely($4->sp_continue_when_statement(thd, &$2)))
               MYSQL_YYABORT;
           }
+          { /* See the comment 'COMMENT_FOR_DESCTRUCTOR' near %destructor */ }
         ;
 
 
@@ -3861,7 +3921,6 @@ expr_lex:
           expr
           {
             $$= $<expr_lex>1;
-            $$->sp_lex_in_use= true;
             $$->set_item($2);
             Lex->pop_select(); //min select
             if (Lex->check_cte_dependencies_and_resolve_references())
@@ -3893,7 +3952,6 @@ assignment_source_expr:
           {
             DBUG_ASSERT($1 == thd->lex);
             $$= $1;
-            $$->sp_lex_in_use= true;
             $$->set_item_and_free_list($3, thd->free_list);
             thd->free_list= NULL;
             Lex->pop_select(); //min select
@@ -3914,7 +3972,6 @@ for_loop_bound_expr:
           {
             DBUG_ASSERT($1 == thd->lex);
             $$= $1;
-            $$->sp_lex_in_use= true;
             $$->set_item_and_free_list($3, NULL);
             Lex->pop_select(); //main select
             if (unlikely($$->sphead->restore_lex(thd)))
@@ -6027,23 +6084,19 @@ qualified_field_type:
           }
         ;
 
+udt_name:
+          IDENT_sys                     { $$= $1; }
+        | reserved_keyword_udt          { $$= $1; }
+        | non_reserved_keyword_udt      { $$= $1; }
+        ;
+
 field_type_all:
           field_type_numeric
         | field_type_temporal
         | field_type_string
         | field_type_lob
         | field_type_misc
-        | IDENT_sys float_options srid_option
-          {
-            if (Lex->set_field_type_udt(&$$, $1, $2))
-              MYSQL_YYABORT;
-          }
-        | reserved_keyword_udt float_options srid_option
-          {
-            if (Lex->set_field_type_udt(&$$, $1, $2))
-              MYSQL_YYABORT;
-          }
-        | non_reserved_keyword_udt float_options srid_option
+        | udt_name float_options srid_option
           {
             if (Lex->set_field_type_udt(&$$, $1, $2))
               MYSQL_YYABORT;
@@ -7991,6 +8044,7 @@ mi_repair_type:
 
 opt_view_repair_type:
           /* empty */    { }
+        | FOR_SYM UPGRADE_SYM { Lex->check_opt.sql_flags|= TT_FOR_UPGRADE; }
         | FROM MYSQL_SYM { Lex->check_opt.sql_flags|= TT_FROM_MYSQL; }
         ;
 
@@ -10103,18 +10157,6 @@ function_call_nonkeyword:
             if (unlikely($$ == NULL))
               MYSQL_YYABORT;
           }
-        | DECODE_MARIADB_SYM '(' expr ',' expr ')'
-          {
-            $$= new (thd->mem_root) Item_func_decode(thd, $3, $5);
-            if (unlikely($$ == NULL))
-              MYSQL_YYABORT;
-          }
-        | DECODE_ORACLE_SYM '(' expr ',' decode_when_list_oracle ')'
-          {
-            $5->push_front($3, thd->mem_root);
-            if (unlikely(!($$= new (thd->mem_root) Item_func_decode_oracle(thd, *$5))))
-              MYSQL_YYABORT;
-          }
         | EXTRACT_SYM '(' interval FROM expr ')'
           {
             $$=new (thd->mem_root) Item_extract(thd, $3, $5);
@@ -10499,7 +10541,7 @@ function_call_generic:
 
               This will be revised with WL#2128 (SQL PATH)
             */
-            if ((builder= find_native_function_builder(thd, &$1)))
+            if ((builder= native_functions_hash.find(thd, $1)))
             {
               item= builder->create_func(thd, &$1, $4);
             }
@@ -11189,17 +11231,7 @@ cast_type:
           }
         | cast_type_numeric  { $$= $1; }
         | cast_type_temporal { $$= $1; }
-        | IDENT_sys
-          {
-            if (Lex->set_cast_type_udt(&$$, $1))
-              MYSQL_YYABORT;
-          }
-        | reserved_keyword_udt
-          {
-            if (Lex->set_cast_type_udt(&$$, $1))
-              MYSQL_YYABORT;
-          }
-        | non_reserved_keyword_udt
+        | udt_name
           {
             if (Lex->set_cast_type_udt(&$$, $1))
               MYSQL_YYABORT;
@@ -11293,25 +11325,6 @@ when_list_opt_else:
             $$= $1;
           }
         ;
-
-decode_when_list_oracle:
-          expr ',' expr
-          {
-            $$= new (thd->mem_root) List<Item>;
-            if (unlikely($$ == NULL) ||
-                unlikely($$->push_back($1, thd->mem_root)) ||
-                unlikely($$->push_back($3, thd->mem_root)))
-              MYSQL_YYABORT;
-
-          }
-        | decode_when_list_oracle ',' expr
-          {
-            $$= $1;
-            if (unlikely($$->push_back($3, thd->mem_root)))
-              MYSQL_YYABORT;
-          }
-        ;
-
 
 /* Equivalent to <table reference> in the SQL:2003 standard. */
 /* Warning - may return NULL in case of incomplete SELECT */
@@ -15831,8 +15844,6 @@ keyword_sp_var_and_label:
         | DATAFILE_SYM
         | DATE_FORMAT_SYM
         | DAY_SYM
-        | DECODE_MARIADB_SYM
-        | DECODE_ORACLE_SYM
         | DEFINER_SYM
         | DELAY_KEY_WRITE_SYM
         | DES_KEY_FILE
@@ -19239,8 +19250,6 @@ create_routine:
           }
         | create_or_replace definer_opt PACKAGE_ORACLE_SYM
           opt_if_not_exists sp_name opt_create_package_chistics_init
-          sp_tail_is
-          remember_name
           {
             sp_package *pkg;
             if (unlikely(!(pkg= Lex->
@@ -19250,17 +19259,17 @@ create_routine:
                                                 $5, $1 | $4))))
               MYSQL_YYABORT;
             pkg->set_c_chistics(Lex->sp_chistics);
+            Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
+          sp_tail_is
           opt_package_specification_element_list END
           remember_end_opt opt_sp_name
           {
-            if (unlikely(Lex->create_package_finalize(thd, $5, $13, $8, $12)))
+            if (unlikely(Lex->create_package_finalize(thd, $5, $12, $11)))
               MYSQL_YYABORT;
           }
         | create_or_replace definer_opt PACKAGE_ORACLE_SYM BODY_ORACLE_SYM
           opt_if_not_exists sp_name opt_create_package_chistics_init
-          sp_tail_is
-          remember_name
           {
             sp_package *pkg;
             if (unlikely(!(pkg= Lex->
@@ -19270,8 +19279,10 @@ create_routine:
                                                 $6, $1 | $5))))
               MYSQL_YYABORT;
             pkg->set_c_chistics(Lex->sp_chistics);
+            Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
             Lex->sp_block_init(thd);
           }
+          sp_tail_is
           package_implementation_declare_section
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
@@ -19279,13 +19290,13 @@ create_routine:
           }
           package_implementation_executable_section
           {
-            $11.hndlrs+= $13.hndlrs;
-            if (unlikely(Lex->sp_block_finalize(thd, $11)))
+            $10.hndlrs+= $12.hndlrs;
+            if (unlikely(Lex->sp_block_finalize(thd, $10)))
               MYSQL_YYABORT;
           }
           remember_end_opt opt_sp_name
           {
-            if (unlikely(Lex->create_package_finalize(thd, $6, $16, $9, $15)))
+            if (unlikely(Lex->create_package_finalize(thd, $6, $15, $14)))
               MYSQL_YYABORT;
           }
         ;
