@@ -15,3 +15,4 @@ install-files-into-usr.patch
 MDEV-32975-chartset-collation-fix-php.patch
 startup-message.patch
 fix-spelling-mariadb.patch
+3154-openssl-alert-protocol-string.patch

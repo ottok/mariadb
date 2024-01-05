@@ -1,0 +1,39 @@
+Forwarded: https://github.com/MariaDB/server/pull/3154
+Origin: https://patch-diff.githubusercontent.com/raw/MariaDB/server/pull/3154.patch
+From: Zhibo Zhang <zhibo@amazon.com>
+Date: Tue, 19 Mar 2024 19:16:46 +0000
+Subject: [PATCH] Update tests to be compatible with OpenSSL 3.2.0
+
+As of version 3.2.0, OpenSSL updated the error message in new versions
+("https://github.com/openssl/openssl/commit/81b741f68984"). Update the
+tests and result files such that they are compatible with both original
+and new error messages.
+
+All new code of the whole pull request, including one or several files that are
+either new files or modified ones, are contributed under the BSD-new license. I
+am contributing on behalf of my employer Amazon Web Services, Inc.
+---
+ mysql-test/main/ssl_crl.result | 2 +-
+ mysql-test/main/ssl_crl.test   | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+--- a/mysql-test/main/ssl_crl.result
++++ b/mysql-test/main/ssl_crl.result
+@@ -2,4 +2,4 @@
+ Variable_name	Value
+ Ssl_version	TLS_VERSION
+ # try logging in with a certificate in the server's --ssl-crl : should fail
+-ERROR 2026 (HY000): TLS/SSL error: sslv3 alert certificate revoked
++ERROR 2026 (HY000): TLS/SSL error: ssl/tls alert certificate revoked
+--- a/mysql-test/main/ssl_crl.test
++++ b/mysql-test/main/ssl_crl.test
+@@ -7,7 +7,7 @@
+ --exec $MYSQL --ssl-ca=$MYSQL_TEST_DIR/std_data/cacert.pem --ssl-key=$MYSQL_TEST_DIR/std_data/server-new-key.pem --ssl-cert=$MYSQL_TEST_DIR/std_data/server-new-cert.pem test -e "SHOW STATUS LIKE 'Ssl_version'"
+ 
+ --echo # try logging in with a certificate in the server's --ssl-crl : should fail
+-# OpenSSL 1.1.1a correctly rejects the certificate, but the error message is different
+---replace_regex /ERROR 2013 \(HY000\): Lost connection to server at '.*', system error: [0-9]+/ERROR 2026 (HY000): TLS\/SSL error: sslv3 alert certificate revoked/
++# OpenSSL 1.1.1a and later releases correctly rejects the certificate, but the error message is different
++--replace_regex /(ERROR 2013 \(HY000\): Lost connection to server at '.*', system error: [0-9]+|ERROR 2026 \(HY000\): TLS\/SSL error: sslv3 alert certificate revoked)/ERROR 2026 (HY000): TLS\/SSL error: ssl\/tls alert certificate revoked/
+ --error 1
+ --exec $MYSQL --ssl-ca=$MYSQL_TEST_DIR/std_data/cacert.pem --ssl-key=$MYSQL_TEST_DIR/std_data/client-key.pem --ssl-cert=$MYSQL_TEST_DIR/std_data/client-cert.pem test -e "SHOW STATUS LIKE 'Ssl_version'" 2>&1
