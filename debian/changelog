@@ -1,3 +1,13 @@
+mariadb (1:10.11.6-2) unstable; urgency=medium
+
+  [ Otto Kekäläinen ]
+  * Make the transitional dummy package description explicit
+  * Ensure 'clean' target works
+  * Use upstream patch to fix subselect test regressions (Closes: #1059904)
+  * Disable innodb_ext_key crashing on ppc64el (Related: #1059904)
+  * Apply upstream patch to use RDTIME in RISC-V (Closes: #1060007)
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 05 Jan 2024 16:32:12 +0800
+
 mariadb (1:10.11.6-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
