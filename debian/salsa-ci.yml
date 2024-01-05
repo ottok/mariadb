@@ -164,7 +164,8 @@ blhc:
   - cd $(mktemp -d) # Use temp dir where apt can download and unpack files
   - apt-get -y download libcrypt1
   - dpkg-deb -x libcrypt1_*.deb .
-  - cp -ra lib/* /lib/
+  - cp -ra lib/* /lib/ || true # libcryp1 < 1:4.4.36-3
+  - cp -ra usr/lib/* /lib/ || true # libxcrypt 1:4.4.36-3+
   - cd - # Back to /builds/$USER/mariadb-server/debian/output
   - find /lib/*/libcrypt.* -ls # Show that new libcrypt is there
   - apt-get -y --fix-broken install
