@@ -9,3 +9,4 @@ mroonga-mrn-lib-dirs-path-reproducible-build.patch
 fix-spelling-libmarias3.patch
 fix-spelling-libmariadb.patch
 2777-fix-disks-disk-test.patch
+2883-subselect-test-failures.patch

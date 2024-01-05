@@ -1,0 +1,323 @@
+Forwarded: https://github.com/MariaDB/server/pull/2883
+Origin: https://patch-diff.githubusercontent.com/raw/MariaDB/server/pull/2883.patch
+Bug: https://jira.mariadb.org/browse/MDEV-32843
+From: Daniel Black <daniel@mariadb.org>
+Date: Thu, 30 Nov 2023 14:14:10 +1100
+Subject: [PATCH] main.subselect* often fails on CI with ER_SUBQUERY_NO_1_ROW
+
+Using mysql.slow_log was a test table would generate more than
+one row if there was more than one row in the table.
+
+Replace this table with a empty table with PK.
+
+Reviewer: Rex Johnston
+---
+ mysql-test/main/subselect.result                 | 13 ++++++++-----
+ mysql-test/main/subselect.test                   | 13 ++++++++-----
+ mysql-test/main/subselect_no_exists_to_in.result | 13 ++++++++-----
+ mysql-test/main/subselect_no_mat.result          | 13 ++++++++-----
+ mysql-test/main/subselect_no_opts.result         | 13 ++++++++-----
+ mysql-test/main/subselect_no_scache.result       | 13 ++++++++-----
+ mysql-test/main/subselect_no_semijoin.result     | 13 ++++++++-----
+ 7 files changed, 56 insertions(+), 35 deletions(-)
+
+--- a/mysql-test/main/subselect.result
++++ b/mysql-test/main/subselect.result
+@@ -7161,23 +7161,26 @@ drop table t1;
+ #
+ # MDEV-7565: Server crash with Signal 6 (part 2)
+ #
++create table t1 (id int not null primary key);
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+ From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+ Group By  TestCase.Revenue, TestCase.TemplateID;
+ ControlRev
+ NULL
++drop table t1;
+ #
+ # MDEV-7445:Server crash with Signal 6
+ #
++create table t1 (id int not null primary key);
+ CREATE PROCEDURE procedure2()
+ BEGIN
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E           
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+   From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+@@ -7190,6 +7193,7 @@ call procedure2();
+ ControlRev
+ NULL
+ drop procedure procedure2;
++drop table t1;
+ #
+ # MDEV-7846:Server crashes in Item_subselect::fix
+ #_fields or fails with Thread stack overrun
+--- a/mysql-test/main/subselect.test
++++ b/mysql-test/main/subselect.test
+@@ -1180,8 +1180,10 @@ create table t1 (a int, b decimal(13, 3)
+ insert into t1 values (1, 0.123);
+ let $outfile_abs= $MYSQLTEST_VARDIR/tmp/subselect.out.file.1;
+ let $outfile_rel= ../../tmp/subselect.out.file.1;
++--disable_warnings
+ --error 0,1
+ --remove_file $outfile_abs
++--enable_warnings
+ eval select a, (select max(b) from t1) into outfile "$outfile_rel" from t1;
+ delete from t1;
+ eval load data infile "$outfile_rel" into table t1;
+@@ -6000,24 +6002,28 @@ drop table t1;
+ --echo #
+ --echo # MDEV-7565: Server crash with Signal 6 (part 2)
+ --echo #
++
++create table t1 (id int not null primary key);
+ Select 
+-  (Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-    Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++  (Select Sum(`TestCase`.Revenue) From t1 E
++    Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+   ) As `ControlRev`
+ From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+ Group By  TestCase.Revenue, TestCase.TemplateID;
++drop table t1;
+ 
+ --echo #
+ --echo # MDEV-7445:Server crash with Signal 6
+ --echo #
+ 
++create table t1 (id int not null primary key);
+ --delimiter |
+ CREATE PROCEDURE procedure2()
+ BEGIN
+   Select 
+-    (Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-      Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++    (Select Sum(`TestCase`.Revenue) From t1 E           
++      Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+      ) As `ControlRev`
+   From 
+   (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+@@ -6029,6 +6035,7 @@ call procedure2();
+ call procedure2();
+ 
+ drop procedure procedure2;
++drop table t1;
+ 
+ 
+ --echo #
+--- a/mysql-test/main/subselect_no_exists_to_in.result
++++ b/mysql-test/main/subselect_no_exists_to_in.result
+@@ -7161,23 +7161,26 @@ drop table t1;
+ #
+ # MDEV-7565: Server crash with Signal 6 (part 2)
+ #
++create table t1 (id int not null primary key);
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+ From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+ Group By  TestCase.Revenue, TestCase.TemplateID;
+ ControlRev
+ NULL
++drop table t1;
+ #
+ # MDEV-7445:Server crash with Signal 6
+ #
++create table t1 (id int not null primary key);
+ CREATE PROCEDURE procedure2()
+ BEGIN
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E           
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+   From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+@@ -7190,6 +7193,7 @@ call procedure2();
+ ControlRev
+ NULL
+ drop procedure procedure2;
++drop table t1;
+ #
+ # MDEV-7846:Server crashes in Item_subselect::fix
+ #_fields or fails with Thread stack overrun
+--- a/mysql-test/main/subselect_no_mat.result
++++ b/mysql-test/main/subselect_no_mat.result
+@@ -7154,23 +7154,26 @@ drop table t1;
+ #
+ # MDEV-7565: Server crash with Signal 6 (part 2)
+ #
++create table t1 (id int not null primary key);
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+ From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+ Group By  TestCase.Revenue, TestCase.TemplateID;
+ ControlRev
+ NULL
++drop table t1;
+ #
+ # MDEV-7445:Server crash with Signal 6
+ #
++create table t1 (id int not null primary key);
+ CREATE PROCEDURE procedure2()
+ BEGIN
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E           
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+   From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+@@ -7183,6 +7186,7 @@ call procedure2();
+ ControlRev
+ NULL
+ drop procedure procedure2;
++drop table t1;
+ #
+ # MDEV-7846:Server crashes in Item_subselect::fix
+ #_fields or fails with Thread stack overrun
+--- a/mysql-test/main/subselect_no_opts.result
++++ b/mysql-test/main/subselect_no_opts.result
+@@ -7152,23 +7152,26 @@ drop table t1;
+ #
+ # MDEV-7565: Server crash with Signal 6 (part 2)
+ #
++create table t1 (id int not null primary key);
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+ From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+ Group By  TestCase.Revenue, TestCase.TemplateID;
+ ControlRev
+ NULL
++drop table t1;
+ #
+ # MDEV-7445:Server crash with Signal 6
+ #
++create table t1 (id int not null primary key);
+ CREATE PROCEDURE procedure2()
+ BEGIN
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E           
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+   From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+@@ -7181,6 +7184,7 @@ call procedure2();
+ ControlRev
+ NULL
+ drop procedure procedure2;
++drop table t1;
+ #
+ # MDEV-7846:Server crashes in Item_subselect::fix
+ #_fields or fails with Thread stack overrun
+--- a/mysql-test/main/subselect_no_scache.result
++++ b/mysql-test/main/subselect_no_scache.result
+@@ -7167,23 +7167,26 @@ drop table t1;
+ #
+ # MDEV-7565: Server crash with Signal 6 (part 2)
+ #
++create table t1 (id int not null primary key);
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+ From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+ Group By  TestCase.Revenue, TestCase.TemplateID;
+ ControlRev
+ NULL
++drop table t1;
+ #
+ # MDEV-7445:Server crash with Signal 6
+ #
++create table t1 (id int not null primary key);
+ CREATE PROCEDURE procedure2()
+ BEGIN
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E           
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+   From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+@@ -7196,6 +7199,7 @@ call procedure2();
+ ControlRev
+ NULL
+ drop procedure procedure2;
++drop table t1;
+ #
+ # MDEV-7846:Server crashes in Item_subselect::fix
+ #_fields or fails with Thread stack overrun
+--- a/mysql-test/main/subselect_no_semijoin.result
++++ b/mysql-test/main/subselect_no_semijoin.result
+@@ -7152,23 +7152,26 @@ drop table t1;
+ #
+ # MDEV-7565: Server crash with Signal 6 (part 2)
+ #
++create table t1 (id int not null primary key);
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+ From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+ Group By  TestCase.Revenue, TestCase.TemplateID;
+ ControlRev
+ NULL
++drop table t1;
+ #
+ # MDEV-7445:Server crash with Signal 6
+ #
++create table t1 (id int not null primary key);
+ CREATE PROCEDURE procedure2()
+ BEGIN
+ Select 
+-(Select Sum(`TestCase`.Revenue) From mysql.slow_log E           
+-Where TestCase.TemplateID not in (Select 1 from mysql.slow_log where 2=2)
++(Select Sum(`TestCase`.Revenue) From t1 E           
++Where TestCase.TemplateID not in (Select 1 from t1 where 2=2)
+ ) As `ControlRev`
+   From 
+ (Select  3 as Revenue, 4 as TemplateID) As `TestCase` 
+@@ -7181,6 +7184,7 @@ call procedure2();
+ ControlRev
+ NULL
+ drop procedure procedure2;
++drop table t1;
+ #
+ # MDEV-7846:Server crashes in Item_subselect::fix
+ #_fields or fails with Thread stack overrun
