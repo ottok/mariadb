@@ -160,16 +160,6 @@ override_dh_auto_install:
 	dh_testdir
 	dh_testroot
 
-ifneq (,$(filter linux,$(DEB_HOST_ARCH_OS)))
-	# Copy systemd files to a location available for dh_installinit
-	cp $(BUILDDIR)/support-files/mariadb.service debian/mariadb-server.mariadb.service
-	cp $(BUILDDIR)/support-files/mariadb.socket debian/mariadb-server.mariadb.socket
-	cp $(BUILDDIR)/support-files/mariadb-extra.socket debian/mariadb-server.mariadb-extra.socket
-	cp $(BUILDDIR)/support-files/mariadb@.service debian/mariadb-server.mariadb@.service
-	cp $(BUILDDIR)/support-files/mariadb@.socket debian/mariadb-server.mariadb@.socket
-	cp $(BUILDDIR)/support-files/mariadb-extra@.socket debian/mariadb-server.mariadb-extra@.socket
-endif
-
 	# Run 'make install' without output since it is uninteresting and
 	# silencing it helps to make overall build log shorter and more readable
 	@echo "Running $(MAKE) install DESTDIR=$(TMP) ..."
@@ -214,8 +204,7 @@ override_dh_installsystemd:
 	dh_installsystemd -pmariadb-server mariadb.service
 
 override_dh_installinit-arch:
-	dh_installinit --name=mariadb --no-start -- defaults 19 21
-	dh_systemd_start --restart-after-upgrade
+	dh_installinit --name=mariadb
 
 # Use custom server version string variable
 override_dh_gencontrol:
