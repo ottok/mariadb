@@ -1,16 +1,22 @@
+mariadb (1:10.11.6-0ubuntu0.23.10.2) mantic-security; urgency=medium
+
+  * Bugfix release to previous security release to pass autopkgtests:
+    - Update configuration tracing to match what is expected for 10.11.5
+      so autopkgtests that check for unaccounted configuration changes
+      pass
+    - Use upstream patch to fix subselect test regressions which may
+      randomly fail in autopkgtests
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 23 Jan 2024 19:53:02 -0800
+
 mariadb (1:10.11.6-0ubuntu0.23.10.1) mantic-security; urgency=medium
 
   * SECURITY UPDATE: New upstream version 10.11.6 includes fixes for regressions
     as noted at https://mariadb.com/kb/en/mariadb-10-11-6-release-notes/ and
     also fixes the following security vulnerabilities (LP: #2045452):
     - CVE-2023-22084
-  * Update configuration tracing to match what is expected for 10.11.5
-    so autopkgtests that check for unaccounted configuration changes
-    pass
-  * Use upstream patch to fix subselect test regressions which may
-    randomly fail in autopkgtests
 
- -- Otto Kekäläinen <otto@debian.org>  Sat, 20 Jan 2024 19:07:07 -0800
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 29 Dec 2023 12:29:11 +0800
 
 mariadb (1:10.11.4-1) unstable; urgency=medium
 
