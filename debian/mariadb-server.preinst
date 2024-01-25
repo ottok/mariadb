@@ -148,7 +148,7 @@ if [ -z "$found_version" ] &&
    [ -z "$(find $mysql_datadir/debian-*.flag 2> /dev/null)" ] &&
    [ -f "$mysql_datadir/undo_001" ]
 then
-  echo "$mysql_datadir: no server version flag found, assuming MySQL 8.0 data encountered"
+  echo "$mysql_datadir: no server version flag found, assuming MySQL 8.0 data encountered" 1>&2
   downgrade_detected=true
   found_version="previous" # Just use dummy name as we don't know real version
 fi
@@ -159,7 +159,7 @@ if [ -n "$downgrade_detected" ]
 then
   db_input critical "mariadb-server/old_data_directory_saved" || true
   db_go
-  echo "The file $mysql_datadir/debian-$found_version.flag indicates a" 1>&2
+  echo "The contents of $mysql_datadir/ indicates a" 1>&2
   echo "version that cannot automatically be upgraded. Therefore the" 1>&2
   echo "previous data directory will be renamed to $mysql_datadir-$found_version and" 1>&2
   echo "a new data directory will be initialized at $mysql_datadir." 1>&2
