@@ -11,3 +11,4 @@ fix-spelling-libmariadb.patch
 2777-fix-disks-disk-test.patch
 2883-subselect-test-failures.patch
 2980-riscv-use-rdtime.patch
+install-files-into-usr.patch
