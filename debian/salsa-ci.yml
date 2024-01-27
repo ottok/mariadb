@@ -154,28 +154,30 @@ blhc:
   mysql --table -e "SHOW PLUGINS;" mysql
 
 .test-enable-sid-repos: &test-enable-sid-repos
-  # Apply usrmerge workaround for Stretch/Buster/Bullseye to Bookworm/Sid upgrades
-  - echo 'this system will not be supported in the future' > /etc/unsupported-skip-usrmerge-conversion
   # Replace any old repos with just Sid
   - echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list
   # Upgrade minimal stack first
   - apt-get update -qq
-  # Next step will fail on https://bugs.debian.org/993755
+  # Complete upgrade of minimal stack
+  - apt-get install -qq --yes apt || export APT_STATUS="failed"
+  # Due to https://bugs.debian.org/993755 and #975077 upgrades from Buster or
+  # older to Bookworm or newer fails on:
   #   /usr/bin/perl: error while loading shared libraries: libcrypt.so.1: cannot
   #     open shared object file: No such file or directory
   #   dpkg: error processing package libc6:amd64 (--configure):
-  - apt-get install -y apt || true
-  # Apply workaround
-  - cd $(mktemp -d) # Use temp dir where apt can download and unpack files
-  - apt-get -y download libcrypt1
-  - dpkg-deb -x libcrypt1_*.deb .
-  - cp -ra lib/* /lib/ || true # libcryp1 < 1:4.4.36-3
-  - cp -ra usr/lib/* /lib/ || true # libxcrypt 1:4.4.36-3+
-  - cd - # Back to /builds/$USER/mariadb-server/debian/output
-  - find /lib/*/libcrypt.* -ls # Show that new libcrypt is there
-  - apt-get -y --fix-broken install
-  # Complete upgrade of minimal stack
-  - apt-get install -y apt
+  # Therefore, run this extra workaround if first run of apt-get install failed:
+  - |
+    if [ "$APT_STATUS" = "failed" ]
+    then
+      cd $(mktemp -d) # Use temp dir where apt can download and unpack files
+      apt-get -y download libcrypt1
+      dpkg-deb -x libcrypt1_*.deb .
+      cp -ra usr/lib/* /lib/ || true # libcrypt 1:4.4.36-3+
+      cd - # Back to /builds/$USER/mariadb-server/debian/output
+      find /lib/*/libcrypt.* -ls # Show that new libcrypt is there
+      apt-get -qq --yes --fix-broken install
+      apt-get install -qq --yes apt
+    fi
 
 .test-enable-bookworm-backports-repos: &test-enable-bookworm-backports-repos |
   # Enable bookworm-backports (assumes environment already Debian Bookworm)
@@ -471,8 +473,6 @@ mariadb-10.6 and Bookworm-20230208 upgrade:
     - *test-enable-sid-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mariadb restart
-    - *test-enable-artifacts-repo
-    - apt-get install -y mariadb-server
     - *test-full-upgrade
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
@@ -491,7 +491,10 @@ mariadb-10.5 and Bullseye upgrade:
     - *test-enable-sid-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mariadb restart
-    - *test-full-upgrade
+    - *test-enable-artifacts-repo
+    - apt-get install -qq --simulate
+    - apt-get install -qq --yes mariadb-server
+    # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
@@ -509,10 +512,14 @@ mariadb-10.3 and Buster upgrade:
     - *test-enable-sid-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mysql restart # in 10.3 service name is still 'mysql'
-    - *test-full-upgrade
+    - *test-enable-artifacts-repo
+    - apt-get install -qq --simulate
+    - apt-get install -qq --yes mariadb-server
+    # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
+    - service mysql status
     # mariadb-10.3 in Buster ships a /etc/init.d/mysql and it continues to exist
-    # after upgrade, but is be removed on purge
-    - service mysql status || service mariadb status
+    # after upgrade, and is removed only on purge
+    - service mariadb status
     - *test-verify-final
 
 # Similar to the Cacti install test, check that MariaDB consumer Zoph upgrades
@@ -547,9 +554,9 @@ default-mysql-server and Bullseye upgrade:
     - *test-verify-initial
     - *test-enable-sid-repos
     - *test-enable-artifacts-repo
-    # Start with partial upgrade
-    - apt-get install -y default-mysql-server
-    - *test-full-upgrade
+    - apt-get install -qq --simulate
+    - apt-get install -qq --yes default-mysql-server
+    # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
@@ -705,7 +712,8 @@ default-libmysqlclient-dev and Bullseye upgrade:
     - apt-get install -qq --yes pkg-config default-libmysqlclient-dev
     - pkg-config --list-all
     - *test-enable-sid-repos
-    - *test-full-upgrade-libs
+    # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
+    - *test-install-all-libs
     - *test-verify-libs
 
 default-libmysqlclient-dev and Buster upgrade:
@@ -717,7 +725,8 @@ default-libmysqlclient-dev and Buster upgrade:
     - apt-get install -qq --yes pkg-config default-libmysqlclient-dev
     - pkg-config --list-all
     - *test-enable-sid-repos
-    - *test-full-upgrade-libs
+    # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
+    - *test-install-all-libs
     - *test-verify-libs
 
 default-libmysqlclient-dev with Bookworm backports upgrade:
