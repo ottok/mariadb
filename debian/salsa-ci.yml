@@ -477,6 +477,31 @@ mariadb-10.6 and Bookworm-20230208 upgrade:
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
+mariadb-10.6 and Jammy upgrade:
+  extends: .salsa-ci-template-for-mariadb
+  stage: upgrade MariaDB and distro
+  image: ubuntu:jammy
+  script:
+    - *test-prepare-container
+    # Install everything MariaDB currently in Ubuntu Jammy
+    - apt-get install -qq --yes 'mariadb-*' 'libmariadb*'
+    # Verify installation of MariaDB from Jammy
+    - dpkg -l | grep -e "mariadb-server.*10\.6"
+    - *test-verify-initial
+    # Install Debian Sid signing keys as Ubuntu does not have them by default
+    - apt-get install -qq --yes --no-install-recommends curl
+    - curl -sSLO http://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2023.4_all.deb
+    - apt-get install -qq --yes ./debian-archive-keyring_*
+    - *test-enable-sid-repos
+    # Ensure mariadbd will not crash on next shutdown for any reason
+    - service mariadb restart
+    - *test-enable-artifacts-repo
+    - apt-get install -qq --simulate
+    - apt-get install -qq --yes mariadb-server
+    # Due to usrmerge, full-upgrade from Jammy to Trixie or newer cannot work
+    - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
+    - *test-verify-final
+
 mariadb-10.5 and Bullseye upgrade:
   extends: .salsa-ci-template-for-mariadb
   stage: upgrade MariaDB and distro
@@ -520,6 +545,33 @@ mariadb-10.3 and Buster upgrade:
     # mariadb-10.3 in Buster ships a /etc/init.d/mysql and it continues to exist
     # after upgrade, and is removed only on purge
     - service mariadb status
+    - *test-verify-final
+
+mariadb-10.3 and Focal upgrade:
+  extends: .salsa-ci-template-for-mariadb
+  stage: upgrade MariaDB and distro
+  image: ubuntu:focal
+  script:
+    - *test-prepare-container
+    # Install everything MariaDB currently in Ubuntu Focal
+    - apt-get install -qq --yes 'mariadb-*' 'libmariadb*'
+    # Verify installation of MariaDB from Focal
+    - dpkg -l | grep -e "mariadb-server.*10\.3"
+    - *test-verify-initial
+    # Install Debian Sid signing keys as Ubuntu does not have them by default
+    - apt-get install -qq --yes --no-install-recommends curl
+    - curl -sSLO http://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2023.4_all.deb
+    - apt-get install -qq --yes ./debian-archive-keyring_*
+    - *test-enable-sid-repos
+    # Ensure mariadbd will not crash on next shutdown for any reason
+    - service mysql restart # in 10.3 service name is still 'mysql'
+    - *test-enable-artifacts-repo
+    - apt-get install -qq --simulate mariadb-server
+    - apt-get install -qq --yes mariadb-server
+    # Due to usrmerge, full-upgrade from Focal to Trixie or newer cannot work
+    - service mysql status
+    # mariadb-10.3 in Focal ships a /etc/init.d/mysql and it continues to exist
+    # after upgrade, and is removed only on purge
     - *test-verify-final
 
 # Similar to the Cacti install test, check that MariaDB consumer Zoph upgrades
@@ -970,7 +1022,7 @@ mariadb.org-10.3 upgrade:
     - *test-verify-initial
     - *test-install-all
     # mariadb-10.3 in Buster ships a /etc/init.d/mysql and it continues to exist
-    # after upgrade, but is be removed on purge
+    # after upgrade, and is removed only on purge
     - service mysql status || service mariadb status
     # Give the mariadb-upgrade plenty of time to complete, otherwise next commands
     # fail on non-existing mariadb.sys user
@@ -998,7 +1050,7 @@ mariadb.org-10.2 upgrade:
       mysql --defaults-file=/etc/mysql/debian.cnf --table -e "SELECT * FROM mysql.plugin; SHOW PLUGINS;"
     - *test-install-all
     # mariadb-10.2 in ships a /etc/init.d/mysql and it continues to exist
-    # after upgrade, but is be removed on purge
+    # after upgrade, and is removed only on purge
     - service mysql status || service mariadb status
     # Give the mariadb-upgrade plenty of time to complete, otherwise next commands
     # fail on non-existing mariadb.sys user
