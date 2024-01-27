@@ -534,7 +534,8 @@ Description: MariaDB database server binaries
 Package: mariadb-server-10.5
 Architecture: any
 Depends: mariadb-server (>= 1:10.11),
-         ${shlibs:Depends}
+         ${shlibs:Depends},
+         ${misc:Depends}
 Priority: optional
 Description: MariaDB database server binaries (transitional dummy package)
  MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
