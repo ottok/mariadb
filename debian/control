@@ -534,6 +534,7 @@ Description: MariaDB database server binaries
 Package: mariadb-server-10.5
 Architecture: any
 Depends: mariadb-server (>= 1:10.11),
+         ${misc:Depends},
          ${shlibs:Depends}
 Priority: optional
 Description: MariaDB database server binaries (transitional dummy package)
