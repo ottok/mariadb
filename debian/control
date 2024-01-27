@@ -536,7 +536,6 @@ Architecture: any
 Depends: mariadb-server (>= 1:10.11),
          ${shlibs:Depends},
          ${misc:Depends}
-Priority: optional
 Description: MariaDB database server binaries (transitional dummy package)
  MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
  server. SQL (Structured Query Language) is the most popular database query
