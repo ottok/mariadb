@@ -10,7 +10,7 @@ variables:
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
   RELEASE: sid
   # Reprotest works, but takes very long time and often fails due to timeouts.
-  # Thus is is best kept disabled and only occasionally manually enabled to
+  # Thus is best kept disabled and only occasionally manually enabled to
   # test that reproducibility works, along with atomic reprotest to directly
   # pinpoint what aspect of the build is broken if not reproducible.
   SALSA_CI_DISABLE_REPROTEST: 1
@@ -216,7 +216,7 @@ blhc:
   - dpkg -l | grep -iE 'maria|mysql|galera'
   - find /etc -name '*mariadb*' -ls -or -name '*mysql*' -ls | sort -k 11
   # Purge old versions if they exist
-  - apt-get purge -y mariadb*10.?
+  - apt-get purge --yes mariadb*10.?
   - find /etc -name '*mariadb*' -ls -or -name '*mysql*' -ls | sort -k 11
 
 .test-full-upgrade: &test-full-upgrade
@@ -228,7 +228,7 @@ blhc:
   - dpkg -l | grep -iE 'maria|mysql|galera'
   - find /etc -name '*mariadb*' -ls -or -name '*mysql*' -ls | sort -k 11
   # Purge old versions if they exist
-  - apt-get purge -y mariadb*10.?
+  - apt-get purge --yes mariadb*10.?
   - find /etc -name '*mariadb*' -ls -or -name '*mysql*' -ls | sort -k 11
   # Purging the old server might stop the running server, so restart it just in case
   - service mariadb restart
@@ -246,6 +246,7 @@ blhc:
   # library tests don't have the mariadb client nor server, so don't check them
 
 .test-verify-final: &test-verify-final |
+  dpkg -l | grep -e "mariadb-server.*10\.11"
   mkdir -p debug # Ensure dir exists before using it
   find /var/lib/mysql -ls > debug/var-lib-mysql.list || true # Ignore errors about "no such file or directory"
   cp -ra /etc/mysql debug/etc-mysql
@@ -431,11 +432,12 @@ mariadb-10.5 with Bullseye backports upgrade:
     # Install everything MariaDB currently in Debian Bullseye
     - apt-get install -qq --yes 'default-mysql*' 'mariadb-*' 'libmariadb*'
     # Verify installation of MariaDB from Bullseye
-    - dpkg -l | grep -e "mariadb-server.*10.5"
+    - dpkg -l | grep -e "mariadb-server.*10\.5"
     - *test-verify-initial
     - *test-enable-bullseye-backports-repos
     - *test-full-upgrade
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
+    - apt-get purge --yes mariadb*10.?
     - *test-verify-final
 
 mariadb and Bookworm upgrade:
@@ -467,14 +469,16 @@ mariadb-10.6 and Bookworm-20230208 upgrade:
       rm /etc/apt/sources.list.d/debian.sources
       apt-get update -qq
     # In February 2023 Bookworm snapshot this will install MariaDB 10.6
-    - apt-get install -y mariadb-server
-    - dpkg -l | grep -e "mariadb-server.*10.6"
+    - apt-get install -qq --yes mariadb-server
+    # Verify installation of MariaDB from (February 2023) Bookworm
+    - dpkg -l | grep -e "mariadb-server.*10\.6"
     - *test-verify-initial
     - *test-enable-sid-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mariadb restart
     - *test-full-upgrade
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
+    - apt-get purge --yes mariadb*10.?
     - *test-verify-final
 
 mariadb-10.6 and Jammy upgrade:
@@ -500,6 +504,7 @@ mariadb-10.6 and Jammy upgrade:
     - apt-get install -qq --yes mariadb-server
     # Due to usrmerge, full-upgrade from Jammy to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
+    - apt-get purge --yes mariadb*10.?
     - *test-verify-final
 
 mariadb-10.5 and Bullseye upgrade:
@@ -511,7 +516,7 @@ mariadb-10.5 and Bullseye upgrade:
     # Install everything MariaDB currently in Debian Bullseye
     - apt-get install -qq --yes 'default-mysql*' 'mariadb-*' 'libmariadb*'
     # Verify installation of MariaDB from Bullseye
-    - dpkg -l | grep -e "mariadb-server.*10.5"
+    - dpkg -l | grep -e "mariadb-server.*10\.5"
     - *test-verify-initial
     - *test-enable-sid-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
@@ -521,6 +526,7 @@ mariadb-10.5 and Bullseye upgrade:
     - apt-get install -qq --yes mariadb-server
     # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
+    - apt-get purge --yes mariadb*10.?
     - *test-verify-final
 
 mariadb-10.3 and Buster upgrade:
@@ -532,7 +538,7 @@ mariadb-10.3 and Buster upgrade:
     # Install everything MariaDB currently in Debian Buster
     - apt-get install -qq --yes 'default-mysql*' 'mariadb-*' 'libmariadb*'
     # Verify installation of MariaDB from Buster
-    - dpkg -l | grep -e "mariadb-server.*10.3"
+    - dpkg -l | grep -e "mariadb-server.*10\.3"
     - *test-verify-initial
     - *test-enable-sid-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
@@ -544,6 +550,7 @@ mariadb-10.3 and Buster upgrade:
     - service mysql status
     # mariadb-10.3 in Buster ships a /etc/init.d/mysql and it continues to exist
     # after upgrade, and is removed only on purge
+    - apt-get purge --yes mariadb*10.?
     - service mariadb status
     - *test-verify-final
 
@@ -572,6 +579,7 @@ mariadb-10.3 and Focal upgrade:
     - service mysql status
     # mariadb-10.3 in Focal ships a /etc/init.d/mysql and it continues to exist
     # after upgrade, and is removed only on purge
+    - apt-get purge --yes mariadb*10.?
     - *test-verify-final
 
 # Similar to the Cacti install test, check that MariaDB consumer Zoph upgrades
@@ -584,6 +592,7 @@ default-mysql-server and Bookworm upgrade:
     # Install everything MariaDB currently in Debian Bookworm
     - apt-get install -qq --yes default-mysql-server zoph
     # Verify installation of MariaDB from Bookworm
+    - dpkg -l | grep -e "mariadb-server.*10\.11"
     - *test-verify-initial
     - *test-enable-sid-repos
     - *test-enable-artifacts-repo
@@ -603,6 +612,7 @@ default-mysql-server and Bullseye upgrade:
     # Install everything MariaDB currently in Debian Bullseye
     - apt-get install -qq --yes default-mysql-server zoph
     # Verify installation of MariaDB from Bullseye
+    - dpkg -l | grep -e "mariadb-server.*10\.5"
     - *test-verify-initial
     - *test-enable-sid-repos
     - *test-enable-artifacts-repo
@@ -706,7 +716,7 @@ build mariadbclient consumer Python-MySQLdb:
     # libmariadb-dev-compat on-the-fly.
     # Python 3.11 needs `--break-system-packages` to proceed with this.
     - pip3 install --break-system-packages mysqlclient # Compiles module against libmysqlclient
-    - apt-get purge -y libmariadb-dev # Not needed for run-time
+    - apt-get purge --yes libmariadb-dev # Not needed for run-time
     - python3 -c "import MySQLdb; print(MySQLdb.get_client_info())"
 
 libmysql* to libmariadb* upgrade:
@@ -820,7 +830,7 @@ mysql-8.0 in Sid upgrade:
     # The postinst fails often if 'ps' is missing from system, so install procps
     - apt-get install -qq --yes procps mysql-server 'libmysqlc*'
     # Ensure MySQL 8.0 package actually got installed
-    - dpkg -l | grep -e "mysql-server.*8.0"
+    - dpkg -l | grep -e "mysql-server.*8\.0"
     - *test-verify-initial
     - *test-install-all
     # Due to some (currently unknown) changes in MySQL 8.0 packaging or apt
@@ -846,12 +856,11 @@ mysql-8.0 from Ubuntu 23.04 with Bookworm backports upgrade:
   script:
     - *test-prepare-container
     # Add Ubuntu Focal archive keys and repository
-    - apt-get install --no-install-recommends --yes ca-certificates curl systemctl
-    - curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x871920D1991BC93C" -o /etc/apt/trusted.gpg.d/ubuntu.asc
-    - echo "deb http://archive.ubuntu.com/ubuntu/ mantic main restricted" > /etc/apt/sources.list.d/ubuntu.list
-    - apt-get update -qq
-    # Show what will happen
-    - apt-get install -qq --simulate mysql-server 'libmysqlc*'
+    - |
+      apt-get install -qq --yes --no-install-recommends ca-certificates curl systemctl
+      curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x871920D1991BC93C" -o /etc/apt/trusted.gpg.d/ubuntu.asc
+      echo "deb http://archive.ubuntu.com/ubuntu/ mantic main restricted" > /etc/apt/sources.list.d/ubuntu.list
+      apt-get update -qq
     - apt-get install -qq --yes mysql-server 'libmysqlc*'
     # Ensure MySQL 8.0 package actually got installed
     - dpkg -l | grep -e "mysql-server.*8\.0"
@@ -873,10 +882,11 @@ mysql-community-cluster-8.0 from MySQL.com with Bookworm backports upgrade:
   image: debian:bookworm
   script:
     - *test-prepare-container
-    - apt-get install -qq --yes --no-install-recommends ca-certificates curl systemctl
-    - curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xbca43417c3b485dd128ec6d4b7b3b788a8d3785c" -o /etc/apt/trusted.gpg.d/mysql.asc
-    - echo "deb https://repo.mysql.com/apt/debian/ bookworm mysql-cluster-8.0" > /etc/apt/sources.list.d/mysql.list
-    - apt-get update -qq
+    - |
+      apt-get install -qq --yes --no-install-recommends ca-certificates curl systemctl
+      curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xbca43417c3b485dd128ec6d4b7b3b788a8d3785c" -o /etc/apt/trusted.gpg.d/mysql.asc
+      echo "deb https://repo.mysql.com/apt/debian/ bookworm mysql-cluster-8.0" > /etc/apt/sources.list.d/mysql.list
+      apt-get update -qq
     - apt-get install -qq --yes mysql-cluster-community-server
     - sed 's/ExecStartPre=+/ExecStartPre=/' -i /lib/systemd/system/mysql.service # Hack to make file compatible with systemctl shim
     - systemctl start mysql
