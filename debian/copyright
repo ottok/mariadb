@@ -21,7 +21,7 @@ Comment:
  special exceptions to the terms and conditions of the GPLv2
  as applied to these client libraries, which are identified
  and described in more detail in the FOSS License Exception at
- <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
+ <https://www.mysql.com/about/legal/licensing/foss-exception/>.
  .
  The text of the Above URL is quoted below, as of Aug 17, 2011.
  .
@@ -150,7 +150,7 @@ Copyright:
  2011 Ondřej Surý <ondrej@debian.org>
  2012 Nicholas Bamber <nicholas@periapt.co.uk>
  2013,2016 Kristian Nielsen <knielsen@askmonty.org>
- 2013-2020 Otto Kekäläinen <otto@debian.org>
+ 2013-2024 Otto Kekäläinen <otto@debian.org>
  2014 Daniel Schepler <schepler@debian.org>
  2014 Julien Muchembled <jm@jmuchemb.eu>
  2014 Tobias Frost <tobi@coldtobi.de>
@@ -549,7 +549,7 @@ License: GPL-3+-with-bison-exception
  GNU General Public License for more details.
  .
  You should have received a copy of the GNU General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  .
  As a special exception, you may create a larger work that contains
  part or all of the Bison parser skeleton and distribute that work
@@ -688,7 +688,7 @@ License: GPL-2
 Files: wsrep-lib/*
  sql/wsrep_*
  scripts/wsrep_*
-Copyright: 2008-2019 Codership Oy <http://www.codership.com>
+Copyright: 2008-2019 Codership Oy <https://www.codership.com>
 License: GPL-2
 
 Files: libmariadb/*
@@ -772,7 +772,7 @@ License: GPL-2
  `/usr/share/common-licenses/GPL-2`
  .
  You should have received a copy of the GNU General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 License: GPL-2+
  This program is free software; you can redistribute it and/or modify
@@ -790,7 +790,7 @@ License: GPL-2+
  `/usr/share/common-licenses/GPL-2`
  .
  You should have received a copy of the GNU General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 License: LGPL
  This library is free software; you can redistribute it and/or
