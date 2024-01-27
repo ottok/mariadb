@@ -80,10 +80,10 @@ override_dh_auto_clean:
 	rm -rf storage/columnstore
 	# Delete precompiled binaries in upstream sources to ensure they are not used in Debian
 	rm -rf storage/connect/JavaWrappers.jar	storage/columnstore/columnstore/utils/jemalloc/libjemalloc.so.2
-	
+
 	# Update po-files when clean runs before each build
 	debconf-updatepo
-	
+
 	# Clean up files created by custom sections in build that 'dh clean' does not see automatically
 	rm -rf debian/mariadb-server.*.socket debian/substvars
 
@@ -210,19 +210,9 @@ endif
 	# Move test plugins that are only needed by the client to the libmariadb path
 	mv -v $(TMP)/usr/lib/mysql/plugin/qa_auth_client.so $(TMP)/usr/lib/$(DEB_HOST_MULTIARCH)/libmariadb3/plugin/
 
-# Install mariadb.socket without enabling it, keep using mariadb.service by default
-# @TODO: Temporarily disable extra and socket systemd file installation until
-# a '--build=all' compatible mechanism is found
-override_dh_systemd_enable:
-	dh_systemd_enable --name=mariadb
-	dh_systemd_enable --no-enable --name=mariadb@ # mariadb@.service
-#	dh_systemd_enable --no-enable --name=mariadb mariadb.socket
-#	dh_systemd_enable --no-enable --name=mariadb-extra mariadb-extra.socket
-#	dh_systemd_enable --no-enable --name=mariadb@ mariadb.socket
-#	dh_systemd_enable --no-enable --name=mariadb-extra@ mariadb-extra.socket
+override_dh_installsystemd:
+	dh_installsystemd -pmariadb-server mariadb.service
 
-# Start mariadbd at sequence number 19 before 20 where apache, proftpd etc gets
-# started which might depend on a running database server.
 override_dh_installinit-arch:
 	dh_installinit --name=mariadb --no-start -- defaults 19 21
 	dh_systemd_start --restart-after-upgrade
@@ -236,6 +226,6 @@ override_dh_gencontrol:
 # white list file only starting from Debian Stretch and Ubuntu Xenial.
 # To find more, grep build logs for 'but is not installed to anywhere'.
 %:
-	dh $@ --fail-missing
+	dh $@
 
 # vim: ts=8

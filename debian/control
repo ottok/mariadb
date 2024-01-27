@@ -6,7 +6,7 @@ Uploaders: Otto Kekäläinen <otto@debian.org>
 Build-Depends: bison,
                cmake,
                cracklib-runtime <!nocheck>,
-               debhelper (>= 10),
+               debhelper-compat (= 13),
                dh-exec,
                gdb <!nocheck>,
                libboost-dev,
