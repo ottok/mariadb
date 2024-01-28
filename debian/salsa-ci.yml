@@ -552,6 +552,9 @@ mariadb-10.3 and Buster upgrade:
     # after upgrade, and is removed only on purge
     - apt-get purge --yes mariadb*10.?
     - service mariadb status
+    # Give the mariadb-upgrade plenty of time to complete, otherwise next commands
+    # fail on non-existing mariadb.sys user
+    - sleep 15
     - *test-verify-final
 
 mariadb-10.3 and Focal upgrade:
@@ -580,6 +583,9 @@ mariadb-10.3 and Focal upgrade:
     # mariadb-10.3 in Focal ships a /etc/init.d/mysql and it continues to exist
     # after upgrade, and is removed only on purge
     - apt-get purge --yes mariadb*10.?
+    # Give the mariadb-upgrade plenty of time to complete, otherwise next commands
+    # fail on non-existing mariadb.sys user
+    - sleep 15
     - *test-verify-final
 
 # Similar to the Cacti install test, check that MariaDB consumer Zoph upgrades
