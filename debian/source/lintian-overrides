@@ -69,7 +69,6 @@ very-long-line-length-in-source-file * [*theme.css:*]
 # Font files
 very-long-line-length-in-source-file * [*.eot:*]
 # General storage ignores
-very-long-line-length-in-source-file * [storage/mroonga/vendor/groonga/examples/dictionary/html/css/smoothness/jquery-ui-1.8.12.custom.css:*]
 very-long-line-length-in-source-file * [storage/rocksdb/mysql-test/rocksdb/t/bypass_select_basic_bloom-master.opt:*]
 very-long-line-length-in-source-file * [storage/rocksdb/mysql-test/rocksdb/t/type_enum.inc:*]
 very-long-line-length-in-source-file * [storage/rocksdb/mysql-test/rocksdb/t/type_set.inc:*]
