@@ -6,7 +6,7 @@ include:
 
 # Override Salsa-CI with MariaDB specific variations
 variables:
-  BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19 libmariadbd-dev mariadb-common mariadb-client mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-cracklib-password-check mariadb-test mariadb-test-data"
+  BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19 libmariadbd-dev mariadb-common mariadb-client-core mariadb-client mariadb-server-core mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-gssapi-server mariadb-plugin-gssapi-client mariadb-plugin-cracklib-password-check mariadb-plugin-hashicorp-key-management mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy mariadb-test mariadb-test-data"
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
   RELEASE: sid
   # Reprotest works, but takes very long time and often fails due to timeouts.
