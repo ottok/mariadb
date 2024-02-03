@@ -500,7 +500,7 @@ mariadb-10.6 and Jammy upgrade:
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mariadb restart
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate
+    - apt-get install -qq --simulate mariadb-server
     - apt-get install -qq --yes mariadb-server
     # Due to usrmerge, full-upgrade from Jammy to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
@@ -522,7 +522,7 @@ mariadb-10.5 and Bullseye upgrade:
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mariadb restart
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate
+    - apt-get install -qq --simulate mariadb-server
     - apt-get install -qq --yes mariadb-server
     # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
@@ -544,7 +544,7 @@ mariadb-10.3 and Buster upgrade:
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mysql restart # in 10.3 service name is still 'mysql'
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate
+    - apt-get install -qq --simulate mariadb-server
     - apt-get install -qq --yes mariadb-server
     # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mysql status
@@ -602,7 +602,7 @@ default-mysql-server and Bookworm upgrade:
     - *test-verify-initial
     - *test-enable-sid-repos
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate
+    - apt-get install -qq --simulate default-mysql-server
     - apt-get install -qq --yes default-mysql-server
     - *test-full-upgrade
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
@@ -622,7 +622,7 @@ default-mysql-server and Bullseye upgrade:
     - *test-verify-initial
     - *test-enable-sid-repos
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate
+    - apt-get install -qq --simulate default-mysql-server
     - apt-get install -qq --yes default-mysql-server
     # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
