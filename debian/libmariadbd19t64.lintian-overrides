@@ -4,3 +4,4 @@ spelling-error-in-binary thats that's [usr/lib/*/libmariadbd.so.19]
 spelling-error-in-binary theres there's [usr/lib/*/libmariadbd.so.19]
 # False positive from Lintian, these strings are nowhere in test in source code
 spelling-error-in-binary AfE Safe [usr/lib/*/libmariadbd.so.19]
+libmariadbd19t64: package-name-doesnt-match-sonames libmariadbd19

@@ -129,7 +129,10 @@ Description: MariaDB database client library
  .
  This package includes the client library.
 
-Package: libmariadbd19
+Package: libmariadbd19t64
+Provides: ${t64:Provides}
+Replaces: libmariadbd19
+Breaks: libmariadbd19 (<< ${source:Version})
 Architecture: any
 Section: libs
 Depends: ${misc:Depends},
@@ -149,7 +152,7 @@ Section: libdevel
 Provides: libmysqld-dev
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libmariadb-dev (= ${binary:Version}),
-         libmariadbd19 (= ${binary:Version}),
+         libmariadbd19t64 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Breaks: libmariadb-dev (<< 1:10.4),
