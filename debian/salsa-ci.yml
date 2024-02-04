@@ -6,7 +6,7 @@ include:
 
 # Override Salsa-CI with MariaDB specific variations
 variables:
-  BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19 libmariadbd-dev mariadb-common mariadb-client-core mariadb-client mariadb-server-core mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-gssapi-server mariadb-plugin-gssapi-client mariadb-plugin-cracklib-password-check mariadb-plugin-hashicorp-key-management mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy mariadb-test mariadb-test-data"
+  BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19t64 libmariadbd-dev mariadb-common mariadb-client-core mariadb-client mariadb-server-core mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-gssapi-server mariadb-plugin-gssapi-client mariadb-plugin-cracklib-password-check mariadb-plugin-hashicorp-key-management mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy mariadb-test mariadb-test-data"
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
   RELEASE: sid
   # Reprotest works, but takes very long time and often fails due to timeouts.
@@ -205,7 +205,7 @@ blhc:
   - *test-enable-artifacts-repo
   - apt-get install -yq --no-install-recommends libmariadb-dev-compat libmariadbd-dev
   # Installs 31 packages, including:
-  # libmariadb3 libmariadb-dev libmariadb-dev-compat libmariadbd19 libmariadbd-dev
+  # libmariadb3 libmariadb-dev libmariadb-dev-compat libmariadbd19t64 libmariadbd-dev
 
 .test-full-upgrade-libs: &test-full-upgrade-libs
   - *test-enable-artifacts-repo
@@ -366,7 +366,9 @@ simple upgrade:
   stage: upgrade MariaDB
   script:
     - *test-prepare-container
-    - apt-get install -qq --yes 'default-mysql*' ${BUILT_PACKAGES}
+    # @TODO: Re-enable the line below once libmariadbd19t64 exists in repository
+    #- apt-get install -qq --yes 'default-mysql*' ${BUILT_PACKAGES}
+    - apt-get install -qq --yes 'default-mysql*' libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19 libmariadbd-dev mariadb-common mariadb-client-core mariadb-client mariadb-server-core mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-gssapi-server mariadb-plugin-gssapi-client mariadb-plugin-cracklib-password-check mariadb-plugin-hashicorp-key-management mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy mariadb-test mariadb-test-data
     - *test-full-upgrade
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
@@ -673,7 +675,7 @@ libmysql* to libmariadb* upgrade:
     - apt-get install -qq --yes libmariadb-dev-compat
     - pkg-config --cflags mysqlclient # mysqlclient.pc from compat package
     - pkg-config --list-all
-    - apt-get install -qq --yes libmariadbd19
+    - apt-get install -qq --yes libmariadbd19t64
     - pkg-config --list-all
     - apt-get install -qq --yes libmariadbd-dev
     - pkg-config --list-all
