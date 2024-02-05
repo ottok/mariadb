@@ -3,10 +3,13 @@
 # See https://mariadb.com/kb/en/mariadb/feedback-plugin/
 # for more configuration options
 
-# Enable (ON) or disable (OFF) the Feedback plugin.
+# Enable (ON) or disable (OFF) the Feedback plugin to contribute to statistics
+# at https://mariadb.org/feedback-plugin/
 feedback=OFF
 
 # URL to which the data is sent.
 # More than one URL, separated by spaces, can be specified.
 # Set it to an empty string to disable data sending.
-#feedback_url=https://mariadb.org/feedback_plugin/post
+# Note! New API endpoint since 2023
+# https://github.com/MariaDB/server/blob/11.4/plugin/feedback/feedback.cc#L369
+feedback_url=https://feedback.mariadb.org/rest/v1/post

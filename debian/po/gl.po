@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
+"POT-Creation-Date: 2024-02-04 16:52-0800\n"
 "PO-Revision-Date: 2023-01-30 10:35+0100\n"
 "Last-Translator: Pablo <parodper@gmail.com>\n"
 "Language-Team: Galician <proxecto@trasno.net>\n"
@@ -132,15 +132,16 @@ msgstr ""
 #. Description
 #: ../mariadb-server.templates:5001
 msgid ""
-"The plugin gathers only non-sensitive information; no personal data or "
-"anything that would enable tracking of the user will be sent."
+"The User Feedback plugin will never send any personal or sensitive "
+"information such as user names, database names or contents, or anything that "
+"would enable the tracking of the user."
 msgstr ""
 
 #. Type: boolean
 #. Description
 #: ../mariadb-server.templates:5001
 msgid ""
-"See https://mariadb.org/about/statistics/ for more information on how to "
-"configure the User Feedback plugin, as well as collected MariaDB usage "
-"statistics."
+"See https://mariadb.org/about/#usage-statistics for more information on how "
+"to configure the User Feedback plugin, and to view the collected MariaDB "
+"usage statistics."
 msgstr ""
