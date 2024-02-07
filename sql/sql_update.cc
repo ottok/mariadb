@@ -587,7 +587,8 @@ int mysql_update(THD *thd,
 
   select= make_select(table, 0, 0, conds, (SORT_INFO*) 0, 0, &error);
   if (unlikely(error || !limit || thd->is_error() ||
-               (select && select->check_quick(thd, safe_update, limit))))
+               (select && select->check_quick(thd, safe_update, limit,
+                                              Item_func::BITMAP_ALL))))
   {
     query_plan.set_impossible_where();
     if (thd->lex->describe || thd->lex->analyze_stmt)
@@ -2444,7 +2445,8 @@ loop_end:
     group.direction= ORDER::ORDER_ASC;
     group.item= (Item**) temp_fields.head_ref();
 
-    tmp_param->quick_group= 1;
+    tmp_param->init();
+    tmp_param->tmp_name="update";
     tmp_param->field_count= temp_fields.elements;
     tmp_param->func_count=  temp_fields.elements - 1;
     calc_group_buffer(tmp_param, &group);

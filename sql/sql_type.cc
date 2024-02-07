@@ -1446,22 +1446,6 @@ Type_handler_string_result::charset_for_protocol(const Item *item) const
 }
 
 
-const Type_handler *
-Type_handler::get_handler_by_cmp_type(Item_result type)
-{
-  switch (type) {
-  case REAL_RESULT:       return &type_handler_double;
-  case INT_RESULT:        return &type_handler_slonglong;
-  case DECIMAL_RESULT:    return &type_handler_newdecimal;
-  case STRING_RESULT:     return &type_handler_long_blob;
-  case TIME_RESULT:       return &type_handler_datetime;
-  case ROW_RESULT:        return &type_handler_row;
-  }
-  DBUG_ASSERT(0);
-  return &type_handler_string;
-}
-
-
 /*
   If we have a mixture of:
   - a MariaDB standard (built-in permanent) data type, and
@@ -2255,6 +2239,34 @@ Type_handler::get_handler_by_real_type(enum_field_types type)
   case MYSQL_TYPE_NEWDATE:     return &type_handler_newdate;
   };
   return NULL;
+}
+
+
+const Type_handler *
+Type_handler::handler_by_log_event_data_type(THD *thd,
+                                             const Log_event_data_type &type)
+{
+  if (type.data_type_name().length)
+  {
+    const Type_handler *th= handler_by_name(thd, type.data_type_name());
+    if (th)
+      return th;
+  }
+  switch (type.type()) {
+  case STRING_RESULT:
+  case ROW_RESULT:
+  case TIME_RESULT:
+    break;
+  case REAL_RESULT:
+    return &type_handler_double;
+  case INT_RESULT:
+    if (type.is_unsigned())
+      return &type_handler_ulonglong;
+    return &type_handler_slonglong;
+  case DECIMAL_RESULT:
+    return &type_handler_newdecimal;
+  }
+  return &type_handler_long_blob;
 }
 
 
@@ -5664,6 +5676,14 @@ Type_handler_string_result::Item_func_hybrid_field_type_get_date(
   String *res= item->str_op(&tmp);
   DBUG_ASSERT((res == NULL) == item->null_value);
   new(ltime) Temporal_hybrid(thd, warn, res, mode);
+}
+
+/***************************************************************************/
+
+bool Type_handler::Item_bool_rowready_func2_fix_length_and_dec(THD *thd,
+                                          Item_bool_rowready_func2 *func) const
+{
+  return func->fix_length_and_dec_generic(thd, this);
 }
 
 /***************************************************************************/

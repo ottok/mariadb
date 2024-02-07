@@ -341,8 +341,9 @@ static bool fil_node_open_file_low(fil_node_t *node)
   ut_ad(!node->is_open());
   ut_ad(node->space->is_closing());
   mysql_mutex_assert_owner(&fil_system.mutex);
-  ulint type;
   static_assert(((UNIV_ZIP_SIZE_MIN >> 1) << 3) == 4096, "compatibility");
+#if defined _WIN32 || defined HAVE_FCNTL_DIRECT
+  ulint type;
   switch (FSP_FLAGS_GET_ZIP_SSIZE(node->space->flags)) {
   case 1:
   case 2:
@@ -351,6 +352,9 @@ static bool fil_node_open_file_low(fil_node_t *node)
   default:
     type= OS_DATA_FILE;
   }
+#else
+  constexpr auto type= OS_DATA_FILE;
+#endif
 
   for (;;)
   {
@@ -560,7 +564,7 @@ fil_space_extend_must_retry(
 	ut_ad(UT_LIST_GET_LAST(space->chain) == node);
 	ut_ad(size >= FIL_IBD_FILE_INITIAL_SIZE);
 	ut_ad(node->space == space);
-	ut_ad(space->referenced() || space->is_being_truncated);
+	ut_ad(space->referenced());
 
 	*success = space->size >= size;
 
@@ -649,8 +653,7 @@ fil_space_extend_must_retry(
 	default:
 		ut_ad(space->purpose == FIL_TYPE_TABLESPACE
 		      || space->purpose == FIL_TYPE_IMPORT);
-		if (space->purpose == FIL_TYPE_TABLESPACE
-		    && !space->is_being_truncated) {
+		if (space->purpose == FIL_TYPE_TABLESPACE) {
 			goto do_flush;
 		}
 		break;
@@ -735,12 +738,10 @@ bool fil_space_extend(fil_space_t *space, uint32_t size)
   bool success= false;
   const bool acquired= space->acquire();
   mysql_mutex_lock(&fil_system.mutex);
-  if (acquired || space->is_being_truncated)
-  {
+  if (acquired)
     while (fil_space_extend_must_retry(space, UT_LIST_GET_LAST(space->chain),
                                        size, &success))
       mysql_mutex_lock(&fil_system.mutex);
-  }
   mysql_mutex_unlock(&fil_system.mutex);
   if (acquired)
     space->release();
@@ -1903,9 +1904,10 @@ fil_ibd_create(
 	mtr.flag_wr_unlock();
 	log_write_up_to(lsn, true);
 
-	ulint type;
 	static_assert(((UNIV_ZIP_SIZE_MIN >> 1) << 3) == 4096,
 		      "compatibility");
+#if defined _WIN32 || defined HAVE_FCNTL_DIRECT
+	ulint type;
 	switch (FSP_FLAGS_GET_ZIP_SSIZE(flags)) {
 	case 1:
 	case 2:
@@ -1914,6 +1916,9 @@ fil_ibd_create(
 	default:
 		type = OS_DATA_FILE;
 	}
+#else
+	constexpr auto type = OS_DATA_FILE;
+#endif
 
 	file = os_file_create(
 		innodb_data_file_key, path,
@@ -2184,8 +2189,6 @@ func_exit:
 			goto corrupted;
 		}
 
-		os_file_get_last_error(operation_not_for_export,
-				       !operation_not_for_export);
 		if (!operation_not_for_export) {
 			goto corrupted;
 		}
@@ -2448,21 +2451,15 @@ fil_ibd_load(uint32_t space_id, const char *filename, fil_space_t *&space)
 	mysql_mutex_unlock(&fil_system.mutex);
 
 	if (space) {
-		/* Compare the filename we are trying to open with the
-		filename from the first node of the tablespace we opened
-		previously. Fail if it is different. */
-		fil_node_t* node = UT_LIST_GET_FIRST(space->chain);
-		if (0 != strcmp(innobase_basename(filename),
-				innobase_basename(node->name))) {
-			ib::info()
-				<< "Ignoring data file '" << filename
-				<< "' with space ID " << space->id
-				<< ". Another data file called " << node->name
-				<< " exists with the same space ID.";
-			space = NULL;
-			return(FIL_LOAD_ID_CHANGED);
-		}
-		return(FIL_LOAD_OK);
+		sql_print_information("InnoDB: Ignoring data file '%s'"
+				      " with space ID " ULINTPF
+				      ". Another data file called %s"
+				      " exists"
+				      " with the same space ID.",
+				      filename, space->id,
+				      UT_LIST_GET_FIRST(space->chain)->name);
+		space = NULL;
+		return FIL_LOAD_ID_CHANGED;
 	}
 
 	if (srv_operation == SRV_OPERATION_RESTORE) {
@@ -3027,11 +3024,9 @@ fil_space_validate_for_mtr_commit(
 	ut_ad(!is_predefined_tablespace(space->id));
 
 	/* We are serving mtr_commit(). While there is an active
-	mini-transaction, we should have !space->stop_new_ops. This is
+	mini-transaction, we should have !space->is_stopping(). This is
 	guaranteed by meta-data locks or transactional locks. */
-	ut_ad(!space->is_stopping()
-	      || space->is_being_truncated /* fil_truncate_prepare() */
-	      || space->referenced());
+	ut_ad(!space->is_stopping() || space->referenced());
 }
 #endif /* UNIV_DEBUG */
 
@@ -3080,7 +3075,7 @@ ATTRIBUTE_NOINLINE ATTRIBUTE_COLD void mtr_t::name_write()
 and write out FILE_MODIFY if needed, and write FILE_CHECKPOINT.
 @param lsn  checkpoint LSN
 @return current LSN */
-lsn_t fil_names_clear(lsn_t lsn)
+ATTRIBUTE_COLD lsn_t fil_names_clear(lsn_t lsn)
 {
 	mtr_t	mtr;
 

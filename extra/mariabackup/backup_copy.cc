@@ -1618,6 +1618,7 @@ ibx_copy_incremental_over_full()
 		NULL};
 	const char *sup_files[] = {"xtrabackup_binlog_info",
 				   "xtrabackup_galera_info",
+				   "donor_galera_info",
 				   "xtrabackup_slave_info",
 				   "xtrabackup_info",
 				   "ib_lru_dump",
@@ -2290,7 +2291,7 @@ ds_ctxt_t::make_hardlink(const char *from_path, const char *to_path)
 	}
 	else
 	{
-		strncpy(to_path_full, to_path, sizeof(to_path_full));
+		strncpy(to_path_full, to_path, sizeof(to_path_full)-1);
 	}
 #ifdef _WIN32
 	return  CreateHardLink(to_path_full, from_path, NULL);

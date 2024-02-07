@@ -262,8 +262,6 @@ buf_block_t*
 buf_page_create_deferred(uint32_t space_id, ulint zip_size, mtr_t *mtr,
                          buf_block_t *free_block);
 
-/** Move a block to the start of the LRU list. */
-void buf_page_make_young(buf_page_t *bpage);
 /** Mark the page status as FREED for the given tablespace and page number.
 @param[in,out]	space	tablespace
 @param[in]	page	page number
@@ -284,15 +282,6 @@ there is danger of dropping from the buffer pool.
 @param[in]	bpage		buffer pool page
 @return true if bpage should be made younger */
 inline bool buf_page_peek_if_too_old(const buf_page_t *bpage);
-
-/** Move a page to the start of the buffer pool LRU list if it is too old.
-@param[in,out]	bpage		buffer pool page */
-inline void buf_page_make_young_if_needed(buf_page_t *bpage)
-{
-	if (UNIV_UNLIKELY(buf_page_peek_if_too_old(bpage))) {
-		buf_page_make_young(bpage);
-	}
-}
 
 /********************************************************************//**
 Increments the modify clock of a frame by 1. The caller must (1) own the
@@ -656,12 +645,9 @@ public:
     access_time= 0;
   }
 
-  void set_os_unused()
+  void set_os_unused() const
   {
     MEM_NOACCESS(frame, srv_page_size);
-#ifdef MADV_FREE
-    madvise(frame, srv_page_size, MADV_FREE);
-#endif
   }
 
   void set_os_used() const
@@ -1301,6 +1287,11 @@ public:
   /** Resize from srv_buf_pool_old_size to srv_buf_pool_size. */
   inline void resize();
 
+#ifdef __linux__
+  /** Collect garbage (release pages from the LRU list) */
+  inline void garbage_collect();
+#endif
+
   /** @return whether resize() is in progress */
   bool resize_in_progress() const
   {
@@ -1507,10 +1498,8 @@ public:
         n_chunks_new / 4 * chunks->size;
   }
 
-  /** @return whether the buffer pool has run out */
-  TPOOL_SUPPRESS_TSAN
-  bool ran_out() const
-  { return UNIV_UNLIKELY(!try_LRU_scan || !UT_LIST_GET_LEN(free)); }
+  /** @return whether the buffer pool is running low */
+  bool need_LRU_eviction() const;
 
   /** @return whether the buffer pool is shrinking */
   inline bool is_shrinking() const
@@ -1836,6 +1825,9 @@ public:
   Set whenever the free list grows, along with a broadcast of done_free.
   Protected by buf_pool.mutex. */
   Atomic_relaxed<bool> try_LRU_scan;
+  /** Whether we have warned to be running out of buffer pool */
+  std::atomic_flag LRU_warned;
+
 	/* @} */
 
 	/** @name LRU replacement algorithm fields */
@@ -1898,7 +1890,8 @@ public:
   a delete-buffering operation is pending. Protected by mutex. */
   buf_page_t watch[innodb_purge_threads_MAX + 1];
   /** Reserve a buffer. */
-  buf_tmp_buffer_t *io_buf_reserve() { return io_buf.reserve(); }
+  buf_tmp_buffer_t *io_buf_reserve(bool wait_for_reads)
+  { return io_buf.reserve(wait_for_reads); }
 
   /** Remove a block from flush_list.
   @param bpage   buffer pool page */
@@ -1933,7 +1926,7 @@ private:
     void close();
 
     /** Reserve a buffer */
-    buf_tmp_buffer_t *reserve();
+    buf_tmp_buffer_t *reserve(bool wait_for_reads);
   } io_buf;
 
   /** whether resize() is in the critical path */

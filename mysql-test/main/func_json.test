@@ -948,6 +948,22 @@ SELECT JSON_VALUE('["foo"]', '$**[0]') AS f;
 SET @@COLLATION_CONNECTION= @old_collation_connection;
 
 --echo #
+--echo # MDEV-32587 JSON_VALID fail to validate integer zero in scientific notation
+--echo #
+# Passing
+select JSON_VALID(' {"number": 1E-4}');
+select JSON_VALID(' {"number": 0E-4}');
+select JSON_VALID(' {"number": 0.0}');
+select JSON_VALID(' {"number": 0.1E-4}');
+select JSON_VALID(' {"number": 0e-4}');
+select JSON_VALID(' {"number": -0E-4}');
+select JSON_VALUE(' {"number": 0E-4}', '$.number');
+# Failing
+select JSON_VALID(' {"number": 00E-4}');
+select JSON_VALID(' {"number": 01E-4}');
+select JSON_VALID(' {"number": 0E-4.0}');
+
+--echo #
 --echo # End of 10.4 tests
 --echo #
 
@@ -1110,6 +1126,16 @@ DROP TABLE arrNestTest;
 SELECT JSON_OBJECTAGG('"', 1);
 SELECT JSON_OBJECTAGG('\"', 1);
 SELECT JSON_OBJECTAGG('\\', 1);
+
+--echo #
+--echo # MDEV-24784 JSON_ARRAYAGG charset issue
+--echo #
+--disable_service_connection
+set names utf8;
+select json_arrayagg('ä'), json_objectagg(1, 'ä');
+set names latin1;
+select json_arrayagg('ä'), json_objectagg(1, 'ä');
+--enable_service_connection
 
 --echo #
 --echo # End of 10.5 tests
