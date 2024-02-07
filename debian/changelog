@@ -1,8 +1,26 @@
-mariadb (1:10.11.6-3) UNRELEASED; urgency=medium
+mariadb (1:10.11.7-1) unstable; urgency=medium
 
-  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+  [ Otto Kekäläinen ]
+  * New upstream version 10.11.7. Includes fixes for several regressions
+    as noted at https://mariadb.com/kb/en/mariadb-10-11-7-release-notes/
+  * Add missing ${misc:Depends} to Depends for mariadb-server-10.5
+  * Re-export upstream signing key without extra signatures
+  * Remove field Priority on binary package mariadb-server-10.5 that duplicates
+    source
+  * Update debian/copyright for 2024
+  * Delete test plugin pam_mariadb_mtr.so to keep mariadb-test-data clean
+  * Clean away unused Lintian overrides
+  * Remove unneeded CMAKE_SYSTEM_PROCESSOR from debian/rules
+  * Add patch to skip building AUTH_SOCKET on Hurd (Related: #1006531)
+  * Use Pre-Depends to ensure init-system-helpers is present
 
- -- Otto Kekäläinen <otto@debian.org>  Fri, 26 Jan 2024 23:29:09 -0800
+  [ Michael Biebl ]
+  * Install PAM module and systemd files into /usr (Closes: #1061348)
+  * Install .service files via .install and let dh_installinit/dh_systemd
+    generate the maintscript code
+  * Switch to dh_installsystemd and debhelper compat 13
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 06 Feb 2024 20:14:49 -0800
 
 mariadb (1:10.11.6-2) unstable; urgency=medium
 
