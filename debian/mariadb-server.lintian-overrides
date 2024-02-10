@@ -8,6 +8,3 @@ spelling-error-in-binary theres there's [usr/bin/*]
 spelling-error-in-binary AfE Safe [usr/bin/*]
 # Intentional in-context documentation
 package-contains-documentation-outside-usr-share-doc [usr/share/mysql/errmsg-utf8.txt]
-# mysql(d).service are symlinks to mariadb.service, and there is indeed a init.d/mariadb shipped
-package-supports-alternative-init-but-no-init.d-script [usr/lib/systemd/system/mysql.service]
-package-supports-alternative-init-but-no-init.d-script [usr/lib/systemd/system/mysqld.service]
