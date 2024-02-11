@@ -7,10 +7,12 @@ main.func_math : MDEV-27954
 main.func_str : MDEV-27954
 main.group_by : MDEV-27954
 main.group_by_null : MDEV-27954
+main.index_merge_innodb : MDEV-30728
 main.long_unique_bugs : MDEV-30928
 main.partition_order : MDEV-27954
 main.repair_symlink-5543 : MDEV-23920
 main.type_datetime : MDEV-27954
+main.xa_prepared_binlog_off : Likely also MDEV-30728
 main.xml : MDEV-27954
 maria.maria-purge : MDEV-31349
 type_test.type_test_double : MDEV-22243, but wasn't actually fixed yet
