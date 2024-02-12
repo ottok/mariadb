@@ -10,3 +10,4 @@ fix-spelling-libmariadb.patch
 2980-riscv-use-rdtime.patch
 install-files-into-usr.patch
 1006531-hurd-no-auth-socket.patch
+3039-os-data-file-no-o-direct.patch
