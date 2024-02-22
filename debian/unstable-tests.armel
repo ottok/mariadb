@@ -1,4 +1,5 @@
 main.partition_key_cache : MDEV-23427
+main.table_value_constr : MDEV-33520
 maria.maria-purge : MDEV-31349
 type_test.type_test_double : MDEV-22243, but wasn't actually fixed yet
 unit.conc_connection : CONC-640: unit.conc_connection fails on test_conc21

@@ -9,6 +9,7 @@ main.index_intersect : MDEV-23921
 main.index_intersect_innodb : MDEV-23921
 main.join_cache_notasan : MDEV-31893 (fixed but perhaps not for hppa)
 main.rowid_filter_innodb : MDEV-32375
+main.table_value_constr : MDEV-33520
 maria.maria-purge : MDEV-31349
 repair_symlink-5543  : MDEV-23920
 type_test.type_test_double : MDEV-22243, but wasn't actually fixed yet
