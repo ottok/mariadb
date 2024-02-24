@@ -20,8 +20,8 @@ variables:
   # Thus is best kept disabled and only occasionally manually enabled to
   # test that reproducibility works, along with atomic reprotest to directly
   # pinpoint what aspect of the build is broken if not reproducible.
-  SALSA_CI_DISABLE_REPROTEST: 1
-  SALSA_CI_ENABLE_ATOMIC_REPROTEST: 0
+  SALSA_CI_DISABLE_REPROTEST: 0
+  SALSA_CI_ENABLE_ATOMIC_REPROTEST: 1
   SALSA_CI_DISABLE_MISSING_BREAKS: 0
   SALSA_CI_DISABLE_RC_BUGS: 0
 
