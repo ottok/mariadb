@@ -100,6 +100,18 @@ packaging-fix-checks:
 test-crossbuild-arm64:
   stage: build
 
+test-crossbuild-armhf:
+  stage: build
+  extends: .test-crossbuild-package-arm64
+  variables:
+    HOST_ARCH: armhf
+
+test-crossbuild-armel:
+  stage: build
+  extends: .test-crossbuild-package-arm64
+  variables:
+    HOST_ARCH: armel
+
 autopkgtest:
   extends: .test-autopkgtest
   artifacts:
