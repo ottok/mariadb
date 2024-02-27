@@ -26,7 +26,7 @@ to the ID of the default collation for the character set.
 +      A workaround for a 2-byte collation ID: translate it into
 +      the ID of the primary collation of this character set.
 +    */
-+    CHARSET_INFO *cs= get_charset_by_csname(handshake_cs->csname,
++    CHARSET_INFO *cs= get_charset_by_csname(handshake_cs->cs_name.str,
 +                                            MY_CS_PRIMARY, MYF(MY_WME));
 +    /*
 +      cs should not normally be NULL, however it may be possible
