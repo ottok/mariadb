@@ -283,6 +283,33 @@ centos7:
       - rpm
       - builddir/_CPack_Packages/Linux/RPM/SPECS/
 
+ubuntu-22.04-vector-build:
+  stage: build
+  image: ubuntu:22.04
+  variables:
+    GIT_STRATEGY: fetch
+    GIT_SUBMODULE_STRATEGY: normal
+  before_script:
+    # Install dependencies for MariaDB build
+    - apt-get update
+    - apt-get install -y --no-install-recommends devscripts equivs ccache ninja-build curl
+    - curl -LO https://github.com/MariaDB/server/raw/HEAD/debian/control
+    - mk-build-deps -r -i control -t 'apt-get -y -o Debug::pkgProblemResolver=yes --no-install-recommends'
+  script:
+    - mkdir builddir; cd builddir
+    - ../support-files/ann-benchmark/server-vector-build.sh --source-dir .. --build-dir .  2>&1 | tee -a ../build-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG.log
+    - ninja package
+    - ninja test
+    - tar tzf *.tar.gz > filelist-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG.log
+    - mkdir ../package; mv *.tar.gz ../package
+  artifacts:
+    when: always  # Must be able to see logs
+    paths:
+      - build-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG.log
+      - filelist-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG.log
+      - package
+      - support-files/ann-benchmark
+
 .mysql-test-run: &mysql-test-run-def
   stage: test
   script:
@@ -518,6 +545,28 @@ mini-benchmark:
     reports:
       metrics:
         - metrics.txt
+
+ann-benchmark:
+  stage: test
+  image: ubuntu:22.04
+  needs:
+    - ubuntu-22.04-vector-build
+  before_script:
+    - apt-get update
+    # Dependencies to run ann-benchmarks
+    - apt-get install -y --no-install-recommends python3-numpy python3-scipy python3-pip build-essential git libmariadb-dev
+    - pip3 install mariadb
+    # Dependencies to run MariaDB server
+    - apt-get install -y --no-install-recommends libnuma-dev libpmem-dev liburing-dev
+  script:
+    - mkdir installed ann-workspace
+    - tar zxvf package/*.tar.gz -C ./installed --strip-components 1
+    # Run a size XS random dataset
+    - ./support-files/ann-benchmark/run-local.sh --ann-workspace ann-workspace --installed-dir installed --dataset random-xs-20-euclidean
+  artifacts:
+    when: always
+    paths:
+      - ann-workspace/ann-benchmarks/results
 
 cppcheck: 
   stage: sast
