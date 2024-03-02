@@ -1,8 +1,19 @@
-mariadb (1:10.11.7-2) UNRELEASED; urgency=medium
+mariadb (1:10.11.7-2) unstable; urgency=medium
 
-  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+  [ Graham Inggs ]
+  * Rename libraries for 64-bit time_t transition (Closes: #1062841)
 
- -- Otto Kekäläinen <otto@debian.org>  Fri, 09 Feb 2024 20:27:53 -0800
+  [ Otto Kekäläinen ]
+  * Salsa-CI: Adopt new libmariadbd19t64 library name in CI
+  * Remove obsolete Lintian override:
+    package-supports-alternative-init-but-no-init.d-script
+  * Disable more tests not passing for sparc64 on Debian
+  * Add patch to fix hurd-i386 build failure (Closes: #1063739)
+  * Add patch to partially revert upstream c432c9ef (Closes: #1063738)
+  * Disable table_value_constr failing on armhf on Launchpad
+  * Backport patch for MDEV-32975 (collation fix for PHP connector)
+
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 01 Mar 2024 17:43:11 -0800
 
 mariadb (1:10.11.7-1) unstable; urgency=medium
 
