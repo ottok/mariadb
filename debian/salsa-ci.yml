@@ -892,3 +892,29 @@ percona-xtradb-5.7 upgrade:
   except:
     variables:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+
+ann-benchmark:
+  stage: test
+  needs:
+    - job: build
+  image: debian:${RELEASE}
+  artifacts:
+    when: always
+    name: "$CI_BUILD_NAME"
+    paths:
+      - ${WORKING_DIR}/debug
+      - ann-workspace/ann-benchmarks/results
+  script:
+    - *test-prepare-container
+    - *test-install
+    # Install the required python lib for ann-benchmarks in advance.
+    - apt-get install -qq --yes python3-numpy python3-scipy python3-pip build-essential git
+    # Ann-benchmarks requires python 3.10, but higher version should also work
+    - python3 -c 'import sys; exit(sys.version_info < (3,10))'
+    - curl -LO https://github.com/HugoWenTD/ann-benchmarks/raw/mariadb/requirements.txt
+    - pip3 install -r requirements.txt
+    - pip3 install mariadb
+    - mkdir installed ann-workspace
+    - tar zxvf package/*.tar.gz -C ./installed --strip-components 1
+    # Run a size XS random dataset
+    - ./support-files/ann-benchmark/run-local.sh --ann-workspace ann-workspace --installed-dir installed --dataset random-xs-20-euclidean

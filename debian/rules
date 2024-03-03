@@ -103,8 +103,17 @@ endif
 	    -DCONC_DEFAULT_CHARSET=utf8mb4 \
 	    -DPLUGIN_AWS_KEY_MANAGEMENT=NO \
 	    -DPLUGIN_COLUMNSTORE=NO \
+			-DPLUGIN_SPIDER=NO \
 	    -DIGNORE_AIO_CHECK=ON \
 	    -DDEB=$(DEB_VENDOR)
+
+			#-DPLUGIN_CONNECT=NO \
+			#-DPLUGIN_MROONGA=NO \
+			#-DPLUGIN_S3=NO \
+			#-DPLUGIN_TOKUDB=NO \
+	    #-DPLUGIN_ROCKSDB=NO \
+			#-DPLUGIN_PERFSCHEMA=NO \
+			#-DWITH_WSREP=OFF \
 
 # This is needed, otherwise 'make test' will run before binaries have been built
 override_dh_auto_build:
