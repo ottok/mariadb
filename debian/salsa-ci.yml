@@ -897,24 +897,55 @@ ann-benchmark:
   stage: test
   needs:
     - job: build
+  variables:
+    GIT_STRATEGY: fetch
+    GIT_SUBMODULE_STRATEGY: normal
   image: debian:${RELEASE}
+  script:
+    - *test-prepare-container
+    # Install dependencies for MariaDB build
+￼   - apt-get update
+￼   - apt-get install -qq --yes --no-install-recommends devscripts equivs ccache ninja-build curl
+￼   - mk-build-deps -r -i debian/control -t 'apt-get -y -o Debug::pkgProblemResolver=yes --no-install-recommends'
+    - mkdir -p builddir
+    - export CCACHE_DIR="$(pwd)/.ccache"; update-ccache-symlinks; ccache --zero-stats  # Zero out ccache counters
+    - cmake builddir/ -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache -DWITH_SSL=system -DPLUGIN_COLUMNSTORE=NO -DPLUGIN_ROCKSDB=NO -DPLUGIN_S3=NO -DPLUGIN_MROONGA=NO -DPLUGIN_CONNECT=NO -DPLUGIN_MROONGA=NO -DPLUGIN_TOKUDB=NO -DPLUGIN_PERFSCHEMA=NO -DWITH_WSREP=OFF -DPLUGIN_SPIDER=NO
+    - cmake --build builddir/
+    - ccache -s  # Show ccache stats to validate it worked
+    - ln -sf builddir/sql builddir/bin
+    - mkdir -p ann-workspace
+    - apt-get install -qq --yes  python3-pip build-essential git libmariadb-dev
+    # Ann-benchmarks requires python 3.10, but higher version should also work
+    - python3 -c 'import sys; exit(sys.version_info < (3,10))'
+    #- pip3 install --break-system-packages -r requirements.txt
+    - apt-get install -q --yes --no-install-recommends \
+      python3-colors \
+      python3-docker \
+      python3-h5py \
+      python3-jinja2 \
+      python3-matplotlib \
+      python3-numpy \
+      python3-psutil \
+      python3-sklearn
+    - pip3 install --break-system-packages mariadb
+    # Set variables read by
+    - export MARIADB_INSTALL_DIR="$PWD/builddir"
+    - export MARIADB_DB_WORKSPACE="$PWD/ann-workspace"
+    - git clone --depth 1 --branch mariadb https://github.com/HugoWenTD/ann-benchmarks.git ann-workspace/ann-benchmarks
+    - cd ann-workspace/ann-benchmarks/
+    # Run a size XS random dataset
+    - rm -rfv results/ ../data/
+    - sed 's|--datadir={MariaDB.DATA_DIR}|--datadir={MariaDB.DATA_DIR} --srcdir={MariaDB.MARIADB_INSTALL_DIR}/..|' -i algorithms/mariadb/module.py
+    - python3 -u run.py --local --algorithm mariadb --dataset random-xs-20-euclidean
+    - python3 -u data_export.py --out results/res.csv
+    - python3 -u plot.py --dataset random-xs-20-euclidean
   artifacts:
     when: always
     name: "$CI_BUILD_NAME"
     paths:
       - ${WORKING_DIR}/debug
       - ann-workspace/ann-benchmarks/results
-  script:
-    - *test-prepare-container
-    - *test-install
-    # Install the required python lib for ann-benchmarks in advance.
-    - apt-get install -qq --yes python3-numpy python3-scipy python3-pip build-essential git
-    # Ann-benchmarks requires python 3.10, but higher version should also work
-    - python3 -c 'import sys; exit(sys.version_info < (3,10))'
-    - curl -LO https://github.com/HugoWenTD/ann-benchmarks/raw/mariadb/requirements.txt
-    - pip3 install -r requirements.txt
-    - pip3 install mariadb
-    - mkdir installed ann-workspace
-    - tar zxvf package/*.tar.gz -C ./installed --strip-components 1
-    # Run a size XS random dataset
-    - ./support-files/ann-benchmark/run-local.sh --ann-workspace ann-workspace --installed-dir installed --dataset random-xs-20-euclidean
+  cache:
+    key: $MARIADB_MAJOR_VERSION
+    paths:
+      - .ccache

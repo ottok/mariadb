@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -x
 
 display_help() {
   echo "Usage   : $(basename "$0") [-h] --installed-dir <dir> --ann-workspace <dir> [--skip-init-db] [--dataset]"
@@ -141,16 +142,16 @@ cd $WORK_DIR
 # Download ann-benchmarks in the target folder and install dependencies
 function install_ann_benchmarks() {
   target_dir=$1
-  
+
   # Check if Python 3.10 or newer is available, required by ann-benchmarks
   if ! python3 -c 'import sys; exit(sys.version_info < (3,10))'; then
       echo -e "Python is required but not found. Please install Python 3.10 or higher to proceed.\n"
       exit 1
   fi
-  
+
   ann_git_repo="https://github.com/HugoWenTD/ann-benchmarks.git"
   ann_git_branch="mariadb"
-  
+
   echo -e "Downloading ann-benchmark...\n"
   if [ ! -d "$target_dir" ]; then
       # Only clone ann-benchmarks repository if it doesn't exist
@@ -166,9 +167,9 @@ function install_ann_benchmarks() {
       # Do not overwrite the script to allow user customization
       echo -e "[WARN] ann-benchmarks repository already exists. Skipping cloning. Remove $target_dir if you want it to be re-initialized.\n"
   fi
-  
+
   echo -e "Installing ann-benchmark dependencies...\n"
-  if ! pip3 install -q -r $target_dir/requirements.txt; then
+  if ! pip3 install l --break-system-packages -r $target_dir/requirements.txt; then
       echo -e "Failed to install dependencies. Please make sure pip is installed and try again.\n"
       exit 1
   fi
@@ -198,4 +199,3 @@ python3 -u plot.py --dataset $DATASET
 # Note that QPS nuber could be different on different instance type.
 echo -e "\nAnn-benchmark plot done, the last two colunms in above output for 'recall rate' and 'QPS'. ^^^ \n"
 echo -e "\n[COMPLETED]\n"
-
