@@ -1,3 +1,5 @@
+Forwarded: no
+From: Otto Kekäläinen <otto@debian.org>
 Date: Wed, 21 Feb 2024 20:34:12 -0800
 Subject: [PATCH] Revert compile_time_assert() changes from "MDEV-32862 MYSQL struct in C/C and server differs"
 

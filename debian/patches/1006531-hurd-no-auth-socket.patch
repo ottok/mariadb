@@ -1,6 +1,6 @@
 Forwarded: no
+Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1006531
 From: Daniel Black <daniel@mariadb.org>
-To: 1006531@bugs.debian.org
 Subject: mariadb: FTBFS on hurd-i386: undefined reference to misc functions and files
 
 requires https://github.com/MariaDB/server/pull/2893 as debian

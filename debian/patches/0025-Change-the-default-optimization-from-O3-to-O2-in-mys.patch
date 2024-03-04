@@ -2,7 +2,8 @@ From: Ondrej Sury <ondrej@debian.org>
 Date: Wed, 22 Nov 2017 20:32:51 +0000
 Subject: Change the default optimization from -O3 to -O2 in
  mysql_release.cmake BUILD_CONFIG profile
-Forwarded: https://jira.mariadb.org/browse/MDEV-19734?focusedCommentId=156606&page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-156606
+Forwarded: no
+Bug: https://jira.mariadb.org/browse/MDEV-19734?focusedCommentId=156606&page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-156606
 
 ---
  cmake/build_configurations/mysql_release.cmake           | 12 ++++++------

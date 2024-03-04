@@ -1,5 +1,6 @@
 Forwarded: https://github.com/facebook/rocksdb/pull/9653
 Origin: https://patch-diff.githubusercontent.com/raw/facebook/rocksdb/pull/9653.patch
+# Merged in RocksDB 7.3.1, but not updated into MariaDB yet
 From: Otto Kekäläinen <otto@debian.org>
 Date: Wed, 2 Mar 2022 18:13:18 -0800
 Subject: Fix various spelling errors still found in code
