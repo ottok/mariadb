@@ -13,3 +13,4 @@ install-files-into-usr.patch
 3039-os-data-file-no-o-direct.patch
 1063738-revert-c432c9ef.patch
 MDEV-32975-chartset-collation-fix-php.patch
+startup-message.patch
