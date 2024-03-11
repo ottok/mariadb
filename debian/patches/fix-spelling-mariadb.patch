@@ -1,0 +1,16 @@
+Forwarded: no
+Author: Otto Kekäläinen <otto@debian.org>
+Date: Sun, 10 Mar 2024 16:56:13 +0000
+Subject: [PATCH] Fix misc spelling in MariaDB Server repository
+
+--- a/storage/connect/odbconn.cpp
++++ b/storage/connect/odbconn.cpp
+@@ -281,7 +281,7 @@ static CATPARM *AllocCatInfo(PGLOBAL g,
+ 		cap->Status = (UWORD *)PlugSubAlloc(g, NULL, m * sizeof(UWORD));
+ 
+ 	} catch (int n) {
+-		htrc("Exeption %d: %s\n", n, g->Message);
++		htrc("Exception %d: %s\n", n, g->Message);
+ 		cap = NULL;
+ 	} catch (const char *msg) {
+ 		htrc(g->Message, msg);
