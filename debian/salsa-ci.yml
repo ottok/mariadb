@@ -6,7 +6,16 @@ include:
 
 # Override Salsa-CI with MariaDB specific variations
 variables:
-  BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19t64 libmariadbd-dev mariadb-common mariadb-client-core mariadb-client mariadb-server-core mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-gssapi-server mariadb-plugin-gssapi-client mariadb-plugin-cracklib-password-check mariadb-plugin-hashicorp-key-management mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy mariadb-test mariadb-test-data"
+  BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3
+    libmariadbd19t64 libmariadbd-dev mariadb-common mariadb-client-core
+    mariadb-client mariadb-server-core mariadb-server mariadb-backup
+    mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb
+    mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider
+    mariadb-plugin-gssapi-server mariadb-plugin-gssapi-client
+    mariadb-plugin-cracklib-password-check mariadb-plugin-hashicorp-key-management
+    mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4
+    mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo
+    mariadb-plugin-provider-snappy mariadb-test mariadb-test-data"
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
   RELEASE: sid
   # Reprotest works, but takes very long time and often fails due to timeouts.
@@ -366,9 +375,7 @@ simple upgrade:
   stage: upgrade MariaDB
   script:
     - *test-prepare-container
-    # @TODO: Re-enable the line below once libmariadbd19t64 exists in repository
-    #- apt-get install -qq --yes 'default-mysql*' ${BUILT_PACKAGES}
-    - apt-get install -qq --yes 'default-mysql*' libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19 libmariadbd-dev mariadb-common mariadb-client-core mariadb-client mariadb-server-core mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-gssapi-server mariadb-plugin-gssapi-client mariadb-plugin-cracklib-password-check mariadb-plugin-hashicorp-key-management mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy mariadb-test mariadb-test-data
+    - apt-get install -qq --yes 'default-mysql*' ${BUILT_PACKAGES}
     - *test-full-upgrade
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
@@ -717,18 +724,9 @@ default-libmysqlclient-dev and Bullseye upgrade:
     - *test-install-all-libs
     - *test-verify-libs
 
-default-libmysqlclient-dev and Buster upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB and distro
-  image: debian:buster
-  script:
-    - *test-prepare-container
-    - apt-get install -qq --yes pkg-config default-libmysqlclient-dev
-    - pkg-config --list-all
-    - *test-enable-sid-repos
-    # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
-    - *test-install-all-libs
-    - *test-verify-libs
+# No longer possible since as it pulls as dependencies packages that trigger
+# usrmerge, which cannot run in a container
+#default-libmysqlclient-dev and Buster upgrade:
 
 # Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
 # The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
@@ -739,7 +737,7 @@ mysql-8.0 in Sid upgrade:
   script:
     - *test-prepare-container
     # The postinst fails often if 'ps' is missing from system, so install procps
-    - apt-get install -qq --yes procps mysql-server 'libmysqlc*'
+    - apt-get install -qq --yes 'mysql*' libmysqlcppconn7t64
     # Ensure MySQL 8.0 package actually got installed
     - dpkg -l | grep -e "mysql-server.*8\.0"
     - *test-verify-initial
@@ -764,7 +762,7 @@ mysql-8.0 in Ubuntu 23.10 upgrade:
   image: ubuntu:mantic
   script:
     - *test-prepare-container
-    - apt-get install -qq --yes mysql-server 'libmysqlc*'
+    - apt-get install -qq --yes procps mysql-server 'libmysqlc*'
     # Ensure MySQL 8.0 package actually got installed
     - dpkg -l | grep mysql
     - service mysql status
@@ -993,7 +991,7 @@ mysql.com-5.7 with Buster upgrade:
       apt-key adv --recv-keys --keyserver hkps://keyserver.ubuntu.com:443 B7B3B788A8D3785C
       echo "deb https://repo.mysql.com/apt/debian/ buster mysql-5.7" > /etc/apt/sources.list.d/mysql.list
       apt-get update -qq
-    - apt-get install -qq --yes 'mysql*' 'libmysqlc*'
+    - apt-get install -qq --yes mysql-server 'libmysqlc*'
     # Ensure MySQL 5.7 package actually got installed
     - dpkg -l | grep -e "mysql-server.*5.7"
     - *test-verify-initial
