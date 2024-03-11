@@ -1,0 +1,4 @@
+# Most likely false positive
+hardening-no-fortify-functions [usr/lib/x86_64-linux-gnu/libmariadb3/plugin/caching_sha2_password.so]
+hardening-no-fortify-functions [usr/lib/x86_64-linux-gnu/libmariadb3/plugin/dialog.so]
+hardening-no-fortify-functions [usr/lib/x86_64-linux-gnu/libmariadb3/plugin/sha256_password.so]

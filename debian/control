@@ -166,14 +166,15 @@ Description: MariaDB embedded database, development files
  language in the world. The main goals of MariaDB are speed, robustness and
  ease of use.
  .
- This package includes the MariaDB embedded server library development and header files.
+ This package includes the MariaDB embedded server library development and
+ header files.
 
 Package: mariadb-common
 Architecture: all
 Depends: mysql-common (>= 5.6.25),
          ${misc:Depends}
 Multi-Arch: foreign
-Description: MariaDB database common files (e.g. /etc/mysql/mariadb.conf.d/)
+Description: MariaDB database common config files (/etc/mysql/mariadb.conf.d/)
  MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
  server. SQL (Structured Query Language) is the most popular database query
  language in the world. The main goals of MariaDB are speed, robustness and
@@ -714,7 +715,8 @@ Description: CrackLib Password Validation Plugin for MariaDB server
  This password validation plugin uses cracklib to allow only
  sufficiently secure (as defined by cracklib) user passwords in MariaDB server.
  .
- Install and configure this to enforce stronger passwords for MariaDB server users.
+ Install and configure this to enforce stronger passwords for MariaDB server
+ users.
 
 Package: mariadb-plugin-hashicorp-key-management
 Architecture: any

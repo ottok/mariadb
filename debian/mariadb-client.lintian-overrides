@@ -1,2 +1,4 @@
 # The Innotop changelog has this name for a valid reason
 wrong-name-for-upstream-changelog [usr/share/doc/mariadb-client/changelog.innotop.gz]
+# Man syntax needs to be fixed upstream
+groff-message troff:<standard input>:*: warning: macro 'an-trap' not defined [usr/share/man/*]

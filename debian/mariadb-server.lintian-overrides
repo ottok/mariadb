@@ -8,3 +8,17 @@ spelling-error-in-binary theres there's [usr/bin/*]
 spelling-error-in-binary AfE Safe [usr/bin/*]
 # Intentional in-context documentation
 package-contains-documentation-outside-usr-share-doc [usr/share/mysql/errmsg-utf8.txt]
+# Man syntax needs to be fixed upstream
+groff-message troff:<standard input>:*: warning: macro 'an-trap' not defined [usr/share/man/*]
+# Most likely false positive
+hardening-no-fortify-functions [usr/lib/mysql/plugin/auth_pam_v1.so]
+hardening-no-fortify-functions [usr/lib/mysql/plugin/auth_pam.so]
+hardening-no-fortify-functions [usr/lib/mysql/plugin/file_key_management.so]
+hardening-no-fortify-functions [usr/lib/mysql/plugin/ha_archive.so]
+hardening-no-fortify-functions [usr/lib/mysql/plugin/ha_blackhole.so]
+hardening-no-fortify-functions [usr/lib/x86_64-linux-gnu/security/pam_user_map.so]
+# Special purpose executable to implement custom system permissions
+executable-in-usr-lib [usr/lib/mysql/plugin/auth_pam_tool_dir/auth_pam_tool]
+# Intentional to handle upgrades from versioned package names to versionless
+# (e.g. mariadb-server-10.5 -> mariadb-server)
+uses-dpkg-database-directly [postinst]
