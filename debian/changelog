@@ -1,8 +1,14 @@
-mariadb (1:10.11.7-4) UNRELEASED; urgency=medium
+mariadb (1:10.11.7-4) unstable; urgency=medium
 
-  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+  [ Michael Biebl ]
+  * Drop unnecessary mariadb-server.prerm (Closes: #1067491)
+  * Rely on dh_installsystemd to stop the service in postrm
 
- -- Otto Kekäläinen <otto@debian.org>  Sat, 06 Apr 2024 22:11:33 -0700
+  [ Otto Kekäläinen ]
+  * Remove direct dependencies on libcurl4 (Closes: #1068403, #1068404)
+  * Make tests compatible with OpenSSL 3.2.0
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 13 Apr 2024 11:07:08 -0700
 
 mariadb (1:10.11.7-3) unstable; urgency=medium
 
