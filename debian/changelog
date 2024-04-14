@@ -1,3 +1,9 @@
+mariadb (1:10.11.7-5) UNRELEASED; urgency=medium
+
+  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 14 Apr 2024 10:03:40 -0700
+
 mariadb (1:10.11.7-4) unstable; urgency=medium
 
   [ Michael Biebl ]
