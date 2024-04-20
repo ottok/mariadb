@@ -1,0 +1,19 @@
+Forwarded: no
+Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1069094
+Author: Svante Signell <svante.signell@gmail.com>
+Subject: Bug#1069094: mariadb: FTBFS on hurd-i386
+
+Define PATH_MAX if not defined.
+
+--- a/plugin/disks/information_schema_disks.cc
++++ b/plugin/disks/information_schema_disks.cc
+@@ -32,6 +32,9 @@
+ #include <sys/mntent.h>
+ #endif
+ #endif
++#ifndef PATH_MAX
++#define PATH_MAX 4096
++#endif
+ #include <sql_class.h>
+ #include <sql_i_s.h>
+ #include <sql_acl.h>                            /* check_global_access() */
