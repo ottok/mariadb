@@ -154,6 +154,13 @@ blhc:
   curl -sS -O https://snapshot.debian.org/archive/debian/20220507T034236Z/pool/main/o/openssl/libssl1.1_1.1.1o-1_amd64.deb
   apt-get -qq install --no-install-recommends --yes ./libssl1.1_1.1.1o-1_amd64.deb
 
+# Package libaio1 was replaced by libaio1t64 in Debian Sid in April 2024. To
+# continue installing old MariaDB versions that depend on libaio1, use libaio1
+# from snapshots.
+.test-install-libaio-in-sid-for-backwards-compat: &test-install-libaio-in-sid-for-backwards-compat |
+  curl -sS -O https://snapshot.debian.org/archive/debian/20240331T210805Z/pool/main/liba/libaio/libaio1_0.3.113-5_amd64.deb
+  apt-get -qq install --no-install-recommends --yes ./libaio1_0.3.113-5_amd64.deb
+
 .test-verify-initial: &test-verify-initial |
   dpkg -l | grep -iE 'maria|mysql|galera' || true # List installed
   # MariaDB until 10.5 only had 'mysql', and since only 'mariadb', so try both
@@ -930,6 +937,7 @@ mariadb.org-10.4 upgrade:
   script:
     - *test-install-readline-in-sid-for-backwards-compat
     - *test-install-openssl1-in-sid-for-backwards-compat
+    - *test-install-libaio-in-sid-for-backwards-compat
     - apt-get install -qq --yes mariadb-server-10.4
     # MariaDB.org version of 10.4 and early 10.5 do not install an init file, so
     # it must be installed here manually
@@ -950,6 +958,7 @@ mariadb.org-10.3 upgrade:
   script:
     - *test-install-readline-in-sid-for-backwards-compat
     - *test-install-openssl1-in-sid-for-backwards-compat
+    - *test-install-libaio-in-sid-for-backwards-compat
     - apt-get install -qq --yes mariadb-server-10.3
     - *test-verify-initial
     - *test-install-all
@@ -970,6 +979,7 @@ mariadb.org-10.2 upgrade:
   script:
     - *test-install-readline-in-sid-for-backwards-compat
     - *test-install-openssl1-in-sid-for-backwards-compat
+    - *test-install-libaio-in-sid-for-backwards-compat
     - apt-get install -qq --yes mariadb-server-10.2
     # Verify initial state before upgrade
     - dpkg -l | grep -iE 'maria|mysql|galera' || true # List installed
