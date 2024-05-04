@@ -8,7 +8,7 @@ include:
 variables:
   BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19t64 libmariadbd-dev mariadb-common mariadb-client-core mariadb-client mariadb-server-core mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-gssapi-server mariadb-plugin-gssapi-client mariadb-plugin-cracklib-password-check mariadb-plugin-hashicorp-key-management mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy mariadb-test mariadb-test-data"
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
-  RELEASE: sid
+  RELEASE: noble
   # Reprotest works, but takes very long time and often fails due to timeouts.
   # Thus is best kept disabled and only occasionally manually enabled to
   # test that reproducibility works, along with atomic reprotest to directly

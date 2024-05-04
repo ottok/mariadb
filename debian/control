@@ -1,7 +1,8 @@
 Source: mariadb
 Section: database
 Priority: optional
-Maintainer: Debian MySQL Maintainers <pkg-mysql-maint@lists.alioth.debian.org>
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Debian MySQL Maintainers <pkg-mysql-maint@lists.alioth.debian.org>
 Uploaders: Otto Kekäläinen <otto@debian.org>
 Build-Depends: bison,
                cmake,
@@ -595,8 +596,7 @@ Description: Connect storage engine for MariaDB server
 
 Package: mariadb-plugin-s3
 Architecture: any
-Depends: libcurl4,
-         mariadb-server (= ${server:Version}),
+Depends: mariadb-server (= ${server:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Description: Amazon S3 archival storage engine for MariaDB
@@ -717,8 +717,7 @@ Description: CrackLib Password Validation Plugin for MariaDB server
 
 Package: mariadb-plugin-hashicorp-key-management
 Architecture: any
-Depends: libcurl4,
-         mariadb-server,
+Depends: mariadb-server,
          ${misc:Depends},
          ${shlibs:Depends}
 Description: Hashicorp Key Management plugin for MariaDB

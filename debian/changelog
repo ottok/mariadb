@@ -1,3 +1,27 @@
+mariadb (1:10.11.7-2ubuntu2) noble; urgency=medium
+
+  * No-change rebuild for CVE-2024-3094
+
+ -- Steve Langasek <steve.langasek@ubuntu.com>  Sun, 31 Mar 2024 20:03:40 +0000
+
+mariadb (1:10.11.7-2ubuntu1) noble; urgency=medium
+
+  * Actually remove manual dependencies on libcurl4
+
+ -- Julian Andres Klode <juliank@ubuntu.com>  Sat, 23 Mar 2024 14:29:00 +0100
+
+mariadb (1:10.11.7-2build2) noble; urgency=medium
+
+  * No-change rebuild against libcurl4t64
+
+ -- Steve Langasek <steve.langasek@ubuntu.com>  Sat, 16 Mar 2024 06:44:55 +0000
+
+mariadb (1:10.11.7-2build1) noble; urgency=medium
+
+  * No-change rebuild against libssl3t64
+
+ -- Steve Langasek <steve.langasek@ubuntu.com>  Mon, 04 Mar 2024 19:58:43 +0000
+
 mariadb (1:10.11.7-2) unstable; urgency=medium
 
   [ Graham Inggs ]
