@@ -60,7 +60,12 @@ packaging-fix-checks:
   stage: provisioning
   image: debian:sid-slim
   script:
-    - apt-get update -qq && apt-get -qq install --no-install-recommends --yes git devscripts python3-debian shellcheck make lsb-release
+    - apt-get update -qq && apt-get -qq install --no-install-recommends --yes git devscripts python3-debian shellcheck make lsb-release dh-debputy python3-pygls
+    # Check debian/* for typical errors. Don't check spelling as there are too
+    # many false positives and anyway spelling issues are level 'pedantic' in
+    # Debputy and do not emit an exit code, so wouldn't show up as failure in CI
+    # anyway.
+    - debputy lint
     - |
       if [ "$(find debian/patches/ -type f -not -name series | wc -l)" -eq "$(cat debian/patches/series | wc -l)" ]
       then
