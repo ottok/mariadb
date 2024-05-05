@@ -122,7 +122,7 @@ endif
 	    -DIGNORE_AIO_CHECK=ON \
 	    -DWITH_URING=ON \
 	    -DWITH_INNODB_SNAPPY=ON \
-			-DHAVE_SYSTEM_LIBFMT_EXITCODE=0 \
+	    -DHAVE_SYSTEM_LIBFMT_EXITCODE=0 \
 	    -DDEB=$(DEB_VENDOR)
 
 # This is needed, otherwise 'make test' will run before binaries have been built
