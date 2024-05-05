@@ -142,7 +142,7 @@ https://salsa.debian.org/mariadb-team/mariadb-server/-/commit/7972a38e
 
 Ensure most packaging files are formatted correctly:
 
-    wrap-and-sort -av
+    wrap-and-sort -vast
 
 Check man pages for syntax errors:
 

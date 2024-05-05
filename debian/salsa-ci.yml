@@ -74,15 +74,15 @@ packaging-fix-checks:
         exit 1
       fi
     - |
-      wrap-and-sort -a
+      wrap-and-sort -ast
       git checkout debian/tests/control # Revert touching this file, wrap-and-sort shouldn't do it
       if [ "$(git diff --name-only | wc -l)" -eq 0 ]
       then
-        echo "No uncommitted changes after 'wrap-and-sort -av', maintainer has done good job keeping files in order."
+        echo "No uncommitted changes after 'wrap-and-sort -ast', maintainer has done good job keeping files in order."
       else
         git diff
         echo
-        echo "Debian packaging files are unordered! Please run 'wrap-and-sort -av'."
+        echo "Debian packaging files are unordered! Please run 'wrap-and-sort -vast'."
         exit 1
       fi
     # Print syntax errors if found, otherwise continue silently
