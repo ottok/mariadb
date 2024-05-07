@@ -36,8 +36,8 @@ function check_for_crashed_tables() {
     SELECT CONCAT("select count(*) into @discard from '\''", TABLE_SCHEMA, "'\''.'\''", TABLE_NAME, "'\''")
     FROM information_schema.TABLES WHERE TABLE_SCHEMA<>"INFORMATION_SCHEMA" AND TABLE_SCHEMA<>"PERFORMANCE_SCHEMA"
     AND (ENGINE="MyISAM" OR ENGINE="Aria")
-    ' | \
-    $MARIADB --skip-column-names --batch | \
+    ' |
+    $MARIADB --skip-column-names --batch |
     xargs -i $MARIADB --skip-column-names --silent --batch --force -e "{}" &> "${tempfile}"
   set -e
 

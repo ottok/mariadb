@@ -127,7 +127,7 @@ EOF
        ! lsof -nt "$mysql_datadir"/mysql/user.MYD > /dev/null &&
        [ ! -f "$mysql_datadir/undo_001" ]
     then
-      echo "UPDATE mysql.user SET plugin='unix_socket' WHERE plugin='auth_socket';" | \
+      echo "UPDATE mysql.user SET plugin='unix_socket' WHERE plugin='auth_socket';" |
         mariadbd --skip-innodb --key_buffer_size=0  --default-storage-engine=MyISAM --bootstrap 2> /dev/null
     fi
 
@@ -194,7 +194,7 @@ EOF
     TMPDIR='' bash /usr/bin/mariadb-install-db \
       --rpm --cross-bootstrap \
       --user=mysql --disable-log-bin \
-      --skip-test-db 2>&1 | \
+      --skip-test-db 2>&1 |
       $ERR_LOGGER
     set -e
 
@@ -302,4 +302,3 @@ esac
 db_stop # in case invoke fails
 
 #DEBHELPER#
-
