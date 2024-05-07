@@ -45,14 +45,6 @@ main.mysqld--help : For unknown reason table-cache is 4000 instead of default 42
 EOF
 fi
 
-if [ "$ARCH" = "s390x" ]
-then
-  echo "main.func_regexp_pcre : recursion fails on s390x https://bugs.launchpad.net/ubuntu/+source/mariadb-10.1/+bug/1723947" >> "$MTR_SKIP_TEST_LIST"
-elif [ "$ARCH" = "armhf" ] || [ "$ARCH" = "i386" ]
-then
-  echo "main.failed_auth_unixsocket : Test returns wrong exit code on armhf and i386 (but only in debci) https://jira.mariadb.org/browse/MDEV-23933" >> "$MTR_SKIP_TEST_LIST"
-fi
-
 # Store skipped test list in artifacts so it can be viewed while debugging
 # failed autopkgtest runs
 cp -v "$MTR_SKIP_TEST_LIST" "$AUTOPKGTEST_ARTIFACTS"
