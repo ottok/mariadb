@@ -1,6 +1,4 @@
-Forwarded: https://github.com/MariaDB/server/pull/2541
-Origin: https://patch-diff.githubusercontent.com/raw/MariaDB/server/pull/2541.patch
-Bug: https://jira.mariadb.org/browse/MDEV-31151
+From fd83a9431cd16e6c61b8cdbb89810c554a315338 Mon Sep 17 00:00:00 2001
 From: Hugo Wen <wenhug@amazon.com>
 Date: Sat, 11 Mar 2023 00:27:42 +0000
 Subject: [PATCH] Fix a stack overflow in pinbox allocator
@@ -126,7 +124,7 @@ Services, Inc.
    {
      for (i= 0; i < LF_PINBOX_PINS; i++)
      {
-       void *p= el->pin[i];
+       void *p= my_atomic_loadptr((void **)&el->pin[i]);
        if (p)
 -        *hv->granary++= p;
 +      {
@@ -172,7 +170,7 @@ Services, Inc.
 -  LF_PINS *el_end= el+LF_DYNARRAY_LEVEL_LENGTH;
 -  for (; el < el_end; el++)
 -    for (i= 0; i < LF_PINBOX_PINS; i++)
--      if (el->pin[i] == addr)
+-      if (my_atomic_loadptr((void **)&el->pin[i]) == addr)
 -        return 1;
 -  return 0;
 -}

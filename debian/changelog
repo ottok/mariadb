@@ -1,8 +1,21 @@
-mariadb (1:10.11.7-5) UNRELEASED; urgency=medium
+mariadb (1:10.11.8-1) UNRELEASED; urgency=medium
 
-  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+  [ Michael Biebl ]
+  * Ensure debconf database is purged after it has been used in postrm
 
- -- Otto Kekäläinen <otto@debian.org>  Sun, 14 Apr 2024 10:03:40 -0700
+  [ Svante Signell ]
+  * Make hurd-i386 build fully pass (Closes: #1069094)
+
+  [ Otto Kekäläinen ]
+  * Add CMake flag to ignore libfmt exit code so cross-building works
+  * Extend skip test list for latest failures in reproducible builds on armhf
+  * Disable tests that fail on armhf when full test suite is run
+  * Remove temporary exceptions for bugs that should by now be fixed
+  * MDEV-31530 Localizations for Swahili language
+  * Update Innotop to be compatible with MariaDB 11.x series
+  * Replace use of trailing line `| \` with just `|` in Bash scripts
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 15 May 2024 18:10:26 -0700
 
 mariadb (1:10.11.7-4) unstable; urgency=medium
 

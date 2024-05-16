@@ -27,7 +27,7 @@ Server output if build in git directory:
 
 --- a/client/mysql.cc
 +++ b/client/mysql.cc
-@@ -1326,6 +1326,9 @@ int main(int argc,char *argv[])
+@@ -1328,6 +1328,9 @@ int main(int argc,char *argv[])
              mysql_thread_id(&mysql), server_version_string(&mysql));
      put_info((char*) glob_buffer.ptr(),INFO_INFO);
      put_info(ORACLE_WELCOME_COPYRIGHT_NOTICE("2000"), INFO_INFO);
@@ -39,16 +39,16 @@ Server output if build in git directory:
  #ifdef HAVE_READLINE
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
-@@ -4983,12 +4983,21 @@ static int init_server_components()
-   proc_info_hook= set_thd_stage_info;
+@@ -4985,12 +4985,21 @@ static int init_server_components()
+   my_sleep_for_space= mariadb_sleep_for_space;
  
    /*
--￼    Print source revision hash, as one of the first lines, if not the
--￼    first in error log, for troubleshooting and debugging purposes
-+￼    Print source revision hash, if set, for troubleshooting and debugging
-+     purposes. If not, suggest database adming to help project by giving a
-+     star on GitHub.
- ￼  */
+-    Print source revision hash, as one of the first lines, if not the
+-    first in error log, for troubleshooting and debugging purposes
++    Print source revision hash, if set, for troubleshooting and debugging
++    purposes. If not, suggest database adming to help project by giving a
++    star on GitHub.
+   */
 -  if (!opt_help)
 -    sql_print_information("Starting MariaDB %s source revision %s as process %lu",
 -                          server_version, SOURCE_REVISION, (ulong) getpid());
