@@ -1,0 +1,16 @@
+[Unit]
+Description=mariadb-columnstore
+After=network.target
+
+[Service]
+Type=oneshot
+
+# Execute a dummy program
+ExecStart=@ENGINE_BINDIR@/mariadb-columnstore-start.sh
+ExecStop=@ENGINE_BINDIR@/mariadb-columnstore-stop.sh
+
+# This service shall be considered active after start
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

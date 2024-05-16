@@ -1,0 +1,19 @@
+[Unit]
+Description=mcs-ddlproc
+
+# restart/start mcs-ddlproc on restart/start of mcs-writeengineserver
+# PartOf=mcs-writeengineserver.service
+After=network.target mcs-dmlproc.service
+
+[Service]
+Type=forking
+
+User=@DEFAULT_USER@
+Group=@DEFAULT_GROUP@
+LimitNOFILE=65536
+LimitNPROC=65536
+
+ExecStart=@ENGINE_BINDIR@/DDLProc
+
+Restart=on-failure
+TimeoutStopSec=2
