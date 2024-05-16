@@ -1,0 +1,8 @@
+#ifndef VERSIONNUMBER_H_
+#define VERSIONNUMBER_H_
+#include <string>
+const std::string columnstore_version("${PACKAGE_VERSION}");
+const std::string columnstore_release("${PACKAGE_RELEASE}");
+const std::string columnstore_commit_hash("${GIT_VERSION}");
+#endif
+
