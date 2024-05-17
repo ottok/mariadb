@@ -1,12 +1,10 @@
-mariadb (1:10.11.8-1) UNRELEASED; urgency=medium
-
-  [ Michael Biebl ]
-  * Ensure debconf database is purged after it has been used in postrm
-
-  [ Svante Signell ]
-  * Make hurd-i386 build fully pass (Closes: #1069094)
+mariadb (1:10.11.8-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
+  * New upstream version 10.11.8. Includes fixes for several severe regressions
+    as noted at https://mariadb.com/kb/en/mariadb-10-11-8-release-notes/ as well
+    as security issues:
+    - CVE-2024-21096
   * Add CMake flag to ignore libfmt exit code so cross-building works
   * Extend skip test list for latest failures in reproducible builds on armhf
   * Disable tests that fail on armhf when full test suite is run
@@ -14,8 +12,21 @@ mariadb (1:10.11.8-1) UNRELEASED; urgency=medium
   * MDEV-31530 Localizations for Swahili language
   * Update Innotop to be compatible with MariaDB 11.x series
   * Replace use of trailing line `| \` with just `|` in Bash scripts
+  * Remove libmariadb file no longer present in MariaDB Connector C v3.3
+  * Replace autopkgtest smoke test dependency hack with arch list
+  * Update client program 'mariadb' trace to match new libmariadb v3.3
+    - New parameter 'sandbox' to fix a vulnerability and new mariadb-dump
+      output that always has the sandbox header and is backwards incompatible
+  * Update server trace to include new parameters innodb-log-spin-wait-delay
+    and innodb-snapshot-isolation
+  [ Michael Biebl ]
+  * Ensure debconf database is purged after it has been used in postrm
 
- -- Otto Kekäläinen <otto@debian.org>  Wed, 15 May 2024 18:10:26 -0700
+  [ Svante Signell ]
+  * Make hurd-i386 build fully pass (Closes: #1069094)
+
+
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 16 May 2024 22:02:04 -0700
 
 mariadb (1:10.11.7-4) unstable; urgency=medium
 
