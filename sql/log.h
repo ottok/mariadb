@@ -426,6 +426,7 @@ struct wait_for_commit;
 
 class MYSQL_BIN_LOG: public TC_LOG, private MYSQL_LOG
 {
+#ifdef HAVE_PSI_INTERFACE
   /** The instrumentation key to use for @ LOCK_index. */
   PSI_mutex_key m_key_LOCK_index;
   /** The instrumentation key to use for @ COND_relay_log_updated */
@@ -440,6 +441,16 @@ class MYSQL_BIN_LOG: public TC_LOG, private MYSQL_LOG
   PSI_cond_key m_key_COND_queue_busy;
   /** The instrumentation key to use for LOCK_binlog_end_pos. */
   PSI_mutex_key m_key_LOCK_binlog_end_pos;
+#else
+  static constexpr PSI_mutex_key m_key_LOCK_index= 0;
+  static constexpr PSI_cond_key m_key_relay_log_update= 0;
+  static constexpr PSI_cond_key m_key_bin_log_update= 0;
+  static constexpr PSI_file_key m_key_file_log= 0, m_key_file_log_cache= 0;
+  static constexpr PSI_file_key m_key_file_log_index= 0;
+  static constexpr PSI_file_key m_key_file_log_index_cache= 0;
+  static constexpr PSI_cond_key m_key_COND_queue_busy= 0;
+  static constexpr PSI_mutex_key m_key_LOCK_binlog_end_pos= 0;
+#endif
 
   struct group_commit_entry
   {
@@ -824,6 +835,7 @@ public:
   int  write_cache(THD *thd, IO_CACHE *cache);
   void set_write_error(THD *thd, bool is_transactional);
   bool check_write_error(THD *thd);
+  bool check_cache_error(THD *thd, binlog_cache_data *cache_data);
 
   void start_union_events(THD *thd, query_id_t query_id_param);
   void stop_union_events(THD *thd);
@@ -1253,6 +1265,7 @@ static inline TC_LOG *get_tc_log_implementation()
 
 #ifdef WITH_WSREP
 IO_CACHE* wsrep_get_cache(THD *, bool);
+bool wsrep_is_binlog_cache_empty(THD *);
 void wsrep_thd_binlog_trx_reset(THD * thd);
 void wsrep_thd_binlog_stmt_rollback(THD * thd);
 #endif /* WITH_WSREP */

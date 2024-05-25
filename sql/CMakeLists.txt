@@ -52,8 +52,8 @@ ENDIF()
 INCLUDE_DIRECTORIES(
 ${CMAKE_SOURCE_DIR}/include
 ${CMAKE_SOURCE_DIR}/sql
-${PCRE_INCLUDES}
-${ZLIB_INCLUDE_DIR}
+${PCRE_INCLUDE_DIRS}
+${ZLIB_INCLUDE_DIRS}
 ${SSL_INCLUDE_DIRS}
 ${CMAKE_BINARY_DIR}/sql
 ${CMAKE_SOURCE_DIR}/tpool
@@ -175,6 +175,7 @@ SET (SQL_SOURCE
                table_cache.cc encryption.cc temporary_tables.cc
                json_table.cc
                proxy_protocol.cc backup.cc xa.cc
+               socketpair.c socketpair.h
                ${CMAKE_CURRENT_BINARY_DIR}/lex_hash.h
                ${CMAKE_CURRENT_BINARY_DIR}/lex_token.h
                ${GEN_SOURCES}

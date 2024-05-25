@@ -147,7 +147,7 @@ elif [ "x$warning_mode" = "xmaintainer" ]; then
   debug_extra_cflags="-g3"
 else
 # Both C and C++ warnings
-  warnings="-Wall -Wextra -Wunused -Wwrite-strings -Wno-uninitialized -Wno-strict-aliasing -Wimplicit-fallthrough=2 -Wformat-security -Wvla"
+  warnings="-Wall -Wextra -Wunused -Wwrite-strings -Wno-uninitialized -Wno-strict-aliasing -Wformat-security -Wvla"
 
 # For more warnings, uncomment the following line
 # warnings="$warnings -Wshadow"
@@ -265,6 +265,12 @@ if test `$CC -v 2>&1 | tail -1 | sed 's/ .*$//'` = 'gcc' ; then
     c_warnings="$c_warnings -Wimplicit-fallthrough=2"
     cxx_warnings="$cxx_warnings -Wimplicit-fallthrough=2"
   fi
+fi
+
+if test `$CC -v 2>&1 | head -1 | sed 's/ .*$//'` = 'clang' ; then
+    dbug_cflags="$dbug_cflags -Wframe-larger-than=16384 -fno-inline"
+    c_warnings="$c_warnings -Wframe-larger-than=16384"
+    cxx_warnings="$cxx_warnings -Wframe-larger-than=16384"
 fi
 
 

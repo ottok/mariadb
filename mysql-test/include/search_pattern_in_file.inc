@@ -9,9 +9,6 @@
 #
 #    The environment variables SEARCH_FILE and SEARCH_PATTERN must be set
 #    before sourcing this routine.
-#    SEARCH_TYPE can also be set to either NULL(default) or _gm_
-#    NULL is equivalent of using m/SEARCH_PATTERN/gs
-#    _gm_ is equivalent of using m/SEARCH_RANGE/gm
 #
 #    Optionally, SEARCH_RANGE can be set to the max number of bytes of the file
 #    to search. If negative, it will search that many bytes at the end of the
@@ -38,7 +35,7 @@
 #    let SEARCH_FILE= $error_log;
 #    # Stop the server
 #    let $restart_file= $MYSQLTEST_VARDIR/tmp/mysqld.1.expect;
-#    --exec echo "wait" > $restart_file
+#    --write_line wait $restart_file
 #    --shutdown_server
 #    --source include/wait_until_disconnected.inc
 #
@@ -80,25 +77,19 @@ perl;
         close(FILE);
         $content.= $file_content;
     }
-    my @matches;
-    if (not defined($ENV{SEARCH_TYPE}))
-    {
-      @matches=($content =~ /$search_pattern/gs);
-    }
-    elsif($ENV{SEARCH_TYPE} == "_gm_")
-    {
-      @matches=($content =~ /$search_pattern/gm);
-    }
+    my @matches= ($content =~ /$search_pattern/gs);
     my $res=@matches ? "FOUND " . scalar(@matches) : "NOT FOUND";
+
     $ENV{SEARCH_FILE} =~ s{^.*?([^/\\]+)$}{$1};
 
     if ($ENV{SEARCH_OUTPUT} eq "matches") {
-      foreach (@matches) {
-        print $_ . "\n";
-      }
-    } else {
-      print "$res /$search_pattern/ in $ENV{SEARCH_FILE}\n";
+        foreach (@matches) {
+            print $_ . "\n";
+        }
     }
-    die "$ENV{SEARCH_ABORT}\n"
-      if $ENV{SEARCH_ABORT} && $res =~ /^$ENV{SEARCH_ABORT}/;
+    elsif ($ENV{SEARCH_ABORT} and $res =~ /^$ENV{SEARCH_ABORT}/) {
+        die "$res /$search_pattern/ in $ENV{SEARCH_FILE}\n";
+    } else {
+        print "$res /$search_pattern/ in $ENV{SEARCH_FILE}\n";
+    }
 EOF

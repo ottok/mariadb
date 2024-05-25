@@ -900,8 +900,8 @@ public:
   uint64_t recovered_binlog_offset;
   /** Latest recovered binlog file name */
   char recovered_binlog_filename[TRX_SYS_MYSQL_LOG_NAME_LEN];
-  /** FIL_PAGE_LSN of the page with the latest recovered binlog metadata */
-  lsn_t recovered_binlog_lsn;
+  /** Set when latest position is from pre-version 10.3.5 TRX_SYS. */
+  bool recovered_binlog_is_legacy_pos;
 
 
   /**
@@ -1188,6 +1188,11 @@ public:
 
     return count;
   }
+
+  /** Disable further allocation of transactions in a rollback segment
+  that are subject to innodb_undo_log_truncate=ON
+  @param space   undo tablespace that will be truncated */
+  inline void undo_truncate_start(fil_space_t &space);
 
 private:
   static my_bool find_same_or_older_callback(rw_trx_hash_element_t *element,

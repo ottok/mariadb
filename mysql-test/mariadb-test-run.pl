@@ -434,6 +434,10 @@ sub main {
     {
       $opt_parallel= $ENV{NUMBER_OF_PROCESSORS} || 1;
     }
+    elsif (IS_MAC)
+    {
+      $opt_parallel= `sysctl -n hw.ncpu`;
+    }
     else
     {
       my $sys_info= My::SysInfo->new();
@@ -3100,6 +3104,7 @@ sub mysql_install_db {
   mtr_add_arg($args, "--core-file");
   mtr_add_arg($args, "--console");
   mtr_add_arg($args, "--character-set-server=latin1");
+  mtr_add_arg($args, "--loose-disable-performance-schema");
 
   if ( $opt_debug )
   {
@@ -4454,6 +4459,7 @@ sub extract_warning_lines ($$) {
      qr/InnoDB: Warning: a long semaphore wait:/,
      qr/InnoDB: Dumping buffer pool.*/,
      qr/InnoDB: Buffer pool.*/,
+     qr/InnoDB: Could not free any blocks in the buffer pool!/,
      qr/InnoDB: Warning: Writer thread is waiting this semaphore:/,
      qr/InnoDB: innodb_open_files .* should not be greater than/,
      qr/Slave: Unknown table 't1' .* 1051/,
@@ -4484,6 +4490,14 @@ sub extract_warning_lines ($$) {
      qr/Slave I\/0: Master command COM_BINLOG_DUMP failed/,
      qr/Error reading packet/,
      qr/Lost connection to MariaDB server at 'reading initial communication packet'/,
+     qr/Could not read packet:.* state: [2-3] /,
+     qr/Could not read packet:.* errno: 104 /,
+     qr/Could not read packet:.* errno: 0 .* length: 0/,
+     qr/Could not write packet:.* errno: 32 /,
+     qr/Could not write packet:.* errno: 104 /,
+     qr/Semisync ack receiver got error 1158/,
+     qr/Semisync ack receiver got hangup/,
+     qr/Connection was killed/,
      qr/Failed on request_dump/,
      qr/Slave: Can't drop database.* database doesn't exist/,
      qr/Slave: Operation DROP USER failed for 'create_rout_db'/,
@@ -4506,7 +4520,7 @@ sub extract_warning_lines ($$) {
      qr|InnoDB: io_setup\(\) failed with EAGAIN|,
      qr|io_uring_queue_init\(\) failed with|,
      qr|InnoDB: liburing disabled|,
-     qr/InnoDB: Failed to set (O_DIRECT|DIRECTIO_ON) on file/,
+     qr/InnoDB: Failed to set O_DIRECT on file/,
      qr|setrlimit could not change the size of core files to 'infinity';|,
      qr|feedback plugin: failed to retrieve the MAC address|,
      qr|Plugin 'FEEDBACK' init function returned error|,
@@ -4539,12 +4553,14 @@ sub extract_warning_lines ($$) {
      qr/WSREP: Failed to guess base node address/,
      qr/WSREP: Guessing address for incoming client/,
 
-     # for UBSAN
-     qr/decimal\.c.*: runtime error: signed integer overflow/,
+     qr/InnoDB: Difficult to find free blocks in the buffer pool*/,
      # Disable test for UBSAN on dynamically loaded objects
      qr/runtime error: member call.*object.*'Handler_share'/,
      qr/sql_type\.cc.* runtime error: member call.*object.* 'Type_collection'/,
     );
+
+  push @antipatterns, qr/though there are still open handles to table/
+    if $mysql_version_id < 100600;
 
   my $matched_lines= [];
   LINE: foreach my $line ( @lines )
@@ -5699,6 +5715,8 @@ sub start_mysqltest ($) {
   if ( defined $tinfo->{'result_file'} ) {
     mtr_add_arg($args, "--result-file=%s", $tinfo->{'result_file'});
   }
+
+  mtr_add_arg($args, "--wait-for-pos-timeout=%d", $opt_debug_sync_timeout);
 
   client_debug_arg($args, "mysqltest");
 

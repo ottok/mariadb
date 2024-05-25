@@ -1,0 +1,33 @@
+#!/bin/bash
+#
+# $Id: post-mysqld-install 3661 2013-06-25 22:04:33Z dhill $
+#
+# Post-install steps for columnstore-mysql install
+
+user=mysql
+tmpdir="/tmp"
+
+password=" "
+pwprompt=
+
+if [ $EUID -ne 0 ]; then
+	USER=`whoami 2>/dev/null`
+	user=$USER
+fi
+
+for arg in "$@"; do
+	if [ `expr -- "$arg" : '--user='` -eq 7 ]; then
+		user="`echo $arg | awk -F= '{print $2}'`"
+	elif [ $(expr -- "$arg" : '--password=') -eq 11 ]; then
+		password="$(echo $arg | awk -F= '{print $2}')"
+	elif [ $(expr -- "$arg" : '--tmpdir=') -eq 9 ]; then
+		tmpdir="$(echo $arg | awk -F= '{print $2}')"
+	else
+		echo "post-mysqld-install: ignoring unknown argument: $arg" 1>&2
+	fi
+done
+
+### Don't give the user the notes, we'll fix them ourselves...
+mysql_install_db --rpm --user=$user >/dev/null
+
+exit 0

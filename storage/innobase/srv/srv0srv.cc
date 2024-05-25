@@ -107,9 +107,6 @@ segment). It is quite possible that some of the tablespaces doesn't host
 any of the rollback-segment based on configuration used. */
 ulint	srv_undo_tablespaces_active;
 
-/** Rate at which UNDO records should be purged. */
-ulong	srv_purge_rseg_truncate_frequency;
-
 /** Enable or Disable Truncate of UNDO tablespace.
 Note: If enabled then UNDO tablespace will be selected for truncate.
 While Server waits for undo-tablespace to truncate if user disables
@@ -1641,7 +1638,8 @@ inline void purge_coordinator_state::do_purge()
     ulint n_pages_handled= trx_purge(n_threads, history_size);
     if (!trx_sys.history_exists())
       goto no_history;
-    if (purge_sys.truncate.current || srv_shutdown_state != SRV_SHUTDOWN_NONE)
+    if (purge_sys.truncating_tablespace() ||
+        srv_shutdown_state != SRV_SHUTDOWN_NONE)
     {
       purge_truncation_task.wait();
       trx_purge_truncate_history();

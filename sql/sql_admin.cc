@@ -819,7 +819,7 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
     if (lock_type == TL_WRITE && table->mdl_request.type > MDL_SHARED_WRITE)
     {
       if (table->table->s->tmp_table)
-        thd->close_unused_temporary_table_instances(tables);
+        thd->close_unused_temporary_table_instances(table);
       else
       {
         /* Store information about table for ddl log */
@@ -906,7 +906,7 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
       */
       collect_eis=
         (table->table->s->table_category == TABLE_CATEGORY_USER &&
-        !(lex->alter_info.flags & ALTER_PARTITION_ADMIN) &&
+        !(lex->alter_info.partition_flags & ALTER_PARTITION_ADMIN) &&
          (check_eits_collection_allowed(thd) ||
           lex->with_persistent_for_clause));
     }

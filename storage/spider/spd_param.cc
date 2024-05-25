@@ -38,15 +38,10 @@
 #include <my_global.h>
 #include "mysql_version.h"
 #include "spd_environ.h"
-#if MYSQL_VERSION_ID < 50500
-#include "mysql_priv.h"
-#include <mysql/plugin.h>
-#else
 #include "sql_priv.h"
 #include "probes_mysql.h"
 #include "sql_class.h"
 #include "sql_partition.h"
-#endif
 #include <my_getopt.h>
 #include "spd_err.h"
 #include "spd_db_include.h"
@@ -57,10 +52,8 @@
 
 extern struct st_mysql_plugin spider_i_s_alloc_mem;
 extern struct st_mysql_plugin spider_i_s_wrapper_protocols;
-#ifdef MARIADB_BASE_VERSION
 extern struct st_maria_plugin spider_i_s_alloc_mem_maria;
 extern struct st_maria_plugin spider_i_s_wrapper_protocols_maria;
-#endif
 
 extern volatile ulonglong spider_mon_table_cache_version;
 extern volatile ulonglong spider_mon_table_cache_version_req;
@@ -116,73 +109,72 @@ extern volatile ulonglong spider_mon_table_cache_version_req;
       MYSQL_SYSVAR_NAME(param_name).def_val;                            \
   }
 
-#ifdef HANDLER_HAS_DIRECT_UPDATE_ROWS
-static int spider_direct_update(THD *thd, SHOW_VAR *var, char *buff)
+extern handlerton *spider_hton_ptr;
+static void spider_trx_status_var(THD *thd, SHOW_VAR *var, void *buff,
+                                 ulonglong SPIDER_TRX::*counter)
 {
-  int error_num = 0;
-  SPIDER_TRX *trx;
   DBUG_ENTER("spider_direct_update");
   var->type = SHOW_LONGLONG;
-  if ((trx = spider_get_trx(thd, TRUE, &error_num)))
-    var->value = (char *) &trx->direct_update_count;
-  DBUG_RETURN(error_num);
+  var->value= buff;
+  if (thd != current_thd)
+    mysql_mutex_lock(&thd->LOCK_thd_data);
+  SPIDER_TRX *trx = (SPIDER_TRX*)thd_get_ha_data(thd, spider_hton_ptr);
+  *(ulonglong*)buff= trx ? trx->*counter : 0;
+  if (thd != current_thd)
+    mysql_mutex_unlock(&thd->LOCK_thd_data);
+  DBUG_VOID_RETURN;
 }
 
-static int spider_direct_delete(THD *thd, SHOW_VAR *var, char *buff)
+
+#ifdef HANDLER_HAS_DIRECT_UPDATE_ROWS
+static int spider_direct_update(THD *thd, SHOW_VAR *var, void *buff,
+                                system_status_var *, enum_var_type)
 {
-  int error_num = 0;
-  SPIDER_TRX *trx;
+  DBUG_ENTER("spider_direct_update");
+  spider_trx_status_var(thd, var, buff, &SPIDER_TRX::direct_update_count);
+  DBUG_RETURN(0);
+}
+
+static int spider_direct_delete(THD *thd, SHOW_VAR *var, void *buff,
+                                system_status_var *, enum_var_type)
+{
   DBUG_ENTER("spider_direct_delete");
-  var->type = SHOW_LONGLONG;
-  if ((trx = spider_get_trx(thd, TRUE, &error_num)))
-    var->value = (char *) &trx->direct_delete_count;
-  DBUG_RETURN(error_num);
+  spider_trx_status_var(thd, var, buff, &SPIDER_TRX::direct_delete_count);
+  DBUG_RETURN(0);
 }
 #endif
 
-static int spider_direct_order_limit(THD *thd, SHOW_VAR *var, char *buff)
+static int spider_direct_order_limit(THD *thd, SHOW_VAR *var, void *buff,
+                                     system_status_var *, enum_var_type)
 {
-  int error_num = 0;
-  SPIDER_TRX *trx;
   DBUG_ENTER("spider_direct_order_limit");
-  var->type = SHOW_LONGLONG;
-  if ((trx = spider_get_trx(thd, TRUE, &error_num)))
-    var->value = (char *) &trx->direct_order_limit_count;
-  DBUG_RETURN(error_num);
+  spider_trx_status_var(thd, var, buff, &SPIDER_TRX::direct_order_limit_count);
+  DBUG_RETURN(0);
 }
 
-static int spider_direct_aggregate(THD *thd, SHOW_VAR *var, char *buff)
+static int spider_direct_aggregate(THD *thd, SHOW_VAR *var, void *buff,
+                                   system_status_var *, enum_var_type)
 {
-  int error_num = 0;
-  SPIDER_TRX *trx;
   DBUG_ENTER("spider_direct_aggregate");
-  var->type = SHOW_LONGLONG;
-  if ((trx = spider_get_trx(thd, TRUE, &error_num)))
-    var->value = (char *) &trx->direct_aggregate_count;
-  DBUG_RETURN(error_num);
+  spider_trx_status_var(thd, var, buff, &SPIDER_TRX::direct_aggregate_count);
+  DBUG_RETURN(0);
 }
 
-static int spider_parallel_search(THD *thd, SHOW_VAR *var, char *buff)
+static int spider_parallel_search(THD *thd, SHOW_VAR *var, void *buff,
+                                  system_status_var *, enum_var_type)
 {
-  int error_num = 0;
-  SPIDER_TRX *trx;
   DBUG_ENTER("spider_parallel_search");
-  var->type = SHOW_LONGLONG;
-  if ((trx = spider_get_trx(thd, TRUE, &error_num)))
-    var->value = (char *) &trx->parallel_search_count;
-  DBUG_RETURN(error_num);
+  spider_trx_status_var(thd, var, buff, &SPIDER_TRX::parallel_search_count);
+  DBUG_RETURN(0);
 }
 
 #if defined(HS_HAS_SQLCOM) && defined(HAVE_HANDLERSOCKET)
-static int spider_hs_result_free(THD *thd, SHOW_VAR *var, char *buff)
+static int spider_hs_result_free(THD *thd, SHOW_VAR *var, void *buff,
+                                 system_status_var *, enum_var_type)
 {
-  int error_num = 0;
-  SPIDER_TRX *trx;
   DBUG_ENTER("spider_hs_result_free");
-  var->type = SHOW_LONGLONG;
-  if ((trx = spider_get_trx(thd, TRUE, &error_num)))
-    var->value = (char *) &trx->hs_result_free_count;
-  DBUG_RETURN(error_num);
+  spider_trx_status_var(thd, var, buff, &SPIDER_TRX::hs_result_free_count);
+  DBUG_RETURN(0);
 }
 #endif
 
@@ -227,13 +219,8 @@ struct st_mysql_show_var spider_status_variables[] =
 };
 
 typedef DECLARE_MYSQL_THDVAR_SIMPLE(thdvar_int_t, int);
-#if MYSQL_VERSION_ID < 50500
-extern bool throw_bounds_warning(THD *thd, bool fixed, bool unsignd,
-  const char *name, long long val);
-#else
 extern bool throw_bounds_warning(THD *thd, const char *name, bool fixed,
   bool is_unsignd, longlong v);
-#endif
 
 static my_bool spider_support_xa;
 static MYSQL_SYSVAR_BOOL(
@@ -696,14 +683,9 @@ static int spider_param_semi_table_lock_check(
     (long) ((MYSQL_SYSVAR_NAME(thdvar_int_t) *) var)->blk_sz;
   options.arg_type = REQUIRED_ARG;
   *((int *) save) = (int) getopt_ll_limit_value(tmp, &options, &fixed);
-#if MYSQL_VERSION_ID < 50500
-  DBUG_RETURN(throw_bounds_warning(thd, fixed, FALSE,
-    ((MYSQL_SYSVAR_NAME(thdvar_int_t) *) var)->name, (long long) tmp));
-#else
   DBUG_RETURN(throw_bounds_warning(thd,
     ((MYSQL_SYSVAR_NAME(thdvar_int_t) *) var)->name, fixed, FALSE,
     (longlong) tmp));
-#endif
 }
 
 /*
@@ -754,14 +736,9 @@ static int spider_param_semi_table_lock_connection_check(
     (long) ((MYSQL_SYSVAR_NAME(thdvar_int_t) *) var)->blk_sz;
   options.arg_type = REQUIRED_ARG;
   *((int *) save) = (int) getopt_ll_limit_value(tmp, &options, &fixed);
-#if MYSQL_VERSION_ID < 50500
-  DBUG_RETURN(throw_bounds_warning(thd, fixed, FALSE,
-    ((MYSQL_SYSVAR_NAME(thdvar_int_t) *) var)->name, (long long) tmp));
-#else
   DBUG_RETURN(throw_bounds_warning(thd,
     ((MYSQL_SYSVAR_NAME(thdvar_int_t) *) var)->name, fixed, FALSE,
     (longlong) tmp));
-#endif
 }
 
 /*
@@ -1739,7 +1716,6 @@ SPIDER_THDVAR_OVERRIDE_VALUE_FUNC(int, udf_ds_table_loop_mode)
 static char *spider_remote_access_charset;
 /*
  */
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100000
 static MYSQL_SYSVAR_STR(
   remote_access_charset,
   spider_remote_access_charset,
@@ -1750,30 +1726,6 @@ static MYSQL_SYSVAR_STR(
   NULL,
   NULL
 );
-#else
-#ifdef PLUGIN_VAR_CAN_MEMALLOC
-static MYSQL_SYSVAR_STR(
-  remote_access_charset,
-  spider_remote_access_charset,
-  PLUGIN_VAR_MEMALLOC |
-  PLUGIN_VAR_RQCMDARG,
-  "Set remote access charset at connecting for improvement performance of connection if you know",
-  NULL,
-  NULL,
-  NULL
-);
-#else
-static MYSQL_SYSVAR_STR(
-  remote_access_charset,
-  spider_remote_access_charset,
-  PLUGIN_VAR_RQCMDARG,
-  "Set remote access charset at connecting for improvement performance of connection if you know",
-  NULL,
-  NULL,
-  NULL
-);
-#endif
-#endif
 
 SPIDER_SYSVAR_VALUE_FUNC(char*, remote_access_charset)
 
@@ -1801,7 +1753,6 @@ SPIDER_SYSVAR_VALUE_FUNC(int, remote_autocommit)
 static char *spider_remote_time_zone;
 /*
  */
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100000
 static MYSQL_SYSVAR_STR(
   remote_time_zone,
   spider_remote_time_zone,
@@ -1812,30 +1763,6 @@ static MYSQL_SYSVAR_STR(
   NULL,
   NULL
 );
-#else
-#ifdef PLUGIN_VAR_CAN_MEMALLOC
-static MYSQL_SYSVAR_STR(
-  remote_time_zone,
-  spider_remote_time_zone,
-  PLUGIN_VAR_MEMALLOC |
-  PLUGIN_VAR_RQCMDARG,
-  "Set remote time_zone at connecting for improvement performance of connection if you know",
-  NULL,
-  NULL,
-  NULL
-);
-#else
-static MYSQL_SYSVAR_STR(
-  remote_time_zone,
-  spider_remote_time_zone,
-  PLUGIN_VAR_RQCMDARG,
-  "Set remote time_zone at connecting for improvement performance of connection if you know",
-  NULL,
-  NULL,
-  NULL
-);
-#endif
-#endif
 
 SPIDER_SYSVAR_VALUE_FUNC(char *, remote_time_zone)
 
@@ -1886,7 +1813,6 @@ SPIDER_SYSVAR_VALUE_FUNC(int, remote_trx_isolation)
 static char *spider_remote_default_database;
 /*
  */
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100000
 static MYSQL_SYSVAR_STR(
   remote_default_database,
   spider_remote_default_database,
@@ -1897,30 +1823,6 @@ static MYSQL_SYSVAR_STR(
   NULL,
   NULL
 );
-#else
-#ifdef PLUGIN_VAR_CAN_MEMALLOC
-static MYSQL_SYSVAR_STR(
-  remote_default_database,
-  spider_remote_default_database,
-  PLUGIN_VAR_MEMALLOC |
-  PLUGIN_VAR_RQCMDARG,
-  "Set remote database at connecting for improvement performance of connection if you know",
-  NULL,
-  NULL,
-  NULL
-);
-#else
-static MYSQL_SYSVAR_STR(
-  remote_default_database,
-  spider_remote_default_database,
-  PLUGIN_VAR_RQCMDARG,
-  "Set remote database at connecting for improvement performance of connection if you know",
-  NULL,
-  NULL,
-  NULL
-);
-#endif
-#endif
 
 SPIDER_SYSVAR_VALUE_FUNC(char *, remote_default_database)
 
@@ -1974,7 +1876,6 @@ int spider_param_connect_retry_count(
 
 /*
  */
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100000
 static MYSQL_THDVAR_STR(
   bka_engine, /* name */
   PLUGIN_VAR_MEMALLOC |
@@ -1984,28 +1885,6 @@ static MYSQL_THDVAR_STR(
   NULL, /* update */
   NULL /* def */
 );
-#else
-#ifdef PLUGIN_VAR_CAN_MEMALLOC
-static MYSQL_THDVAR_STR(
-  bka_engine, /* name */
-  PLUGIN_VAR_MEMALLOC |
-  PLUGIN_VAR_RQCMDARG,
-  "Temporary table's engine for BKA", /* comment */
-  NULL, /* check */
-  NULL, /* update */
-  NULL /* def */
-);
-#else
-static MYSQL_THDVAR_STR(
-  bka_engine, /* name */
-  PLUGIN_VAR_RQCMDARG,
-  "Temporary table's engine for BKA", /* comment */
-  NULL, /* check */
-  NULL, /* update */
-  NULL /* def */
-);
-#endif
-#endif
 
 char *spider_param_bka_engine(
   THD *thd,
@@ -2346,8 +2225,6 @@ static MYSQL_SYSVAR_INT(
 SPIDER_SYSVAR_OVERRIDE_VALUE_FUN(int, bulk_access_free)
 #endif
 
-#if MYSQL_VERSION_ID < 50500
-#else
 /*
  -1 :fallback to default
   0 :can not use
@@ -2366,7 +2243,6 @@ static MYSQL_THDVAR_INT(
 );
 
 SPIDER_THDVAR_OVERRIDE_VALUE_FUNC(int, udf_ds_use_real_table)
-#endif
 
 static my_bool spider_general_log;
 static MYSQL_SYSVAR_BOOL(
@@ -2688,7 +2564,7 @@ static MYSQL_SYSVAR_UINT(
   "Static thread count of table sts",
   NULL,
   NULL,
-  10,
+  1,
   1,
   4294967295U,
   0
@@ -2707,7 +2583,7 @@ static MYSQL_SYSVAR_UINT(
   "Static thread count of table crd",
   NULL,
   NULL,
-  10,
+  1,
   1,
   4294967295U,
   0
@@ -2967,10 +2843,7 @@ static struct st_mysql_sys_var* spider_system_variables[] = {
 #ifdef HA_CAN_BULK_ACCESS
   MYSQL_SYSVAR(bulk_access_free),
 #endif
-#if MYSQL_VERSION_ID < 50500
-#else
   MYSQL_SYSVAR(udf_ds_use_real_table),
-#endif
   MYSQL_SYSVAR(general_log),
   MYSQL_SYSVAR(index_hint_pushdown),
   MYSQL_SYSVAR(max_connections),
@@ -3012,15 +2885,12 @@ mysql_declare_plugin(spider)
   spider_status_variables,
   spider_system_variables,
   NULL,
-#if MYSQL_VERSION_ID >= 50600
   0,
-#endif
 },
 spider_i_s_alloc_mem,
 spider_i_s_wrapper_protocols
 mysql_declare_plugin_end;
 
-#ifdef MARIADB_BASE_VERSION
 maria_declare_plugin(spider)
 {
   MYSQL_STORAGE_ENGINE_PLUGIN,
@@ -3040,4 +2910,3 @@ maria_declare_plugin(spider)
 spider_i_s_alloc_mem_maria,
 spider_i_s_wrapper_protocols_maria
 maria_declare_plugin_end;
-#endif

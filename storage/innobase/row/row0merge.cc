@@ -462,8 +462,6 @@ row_merge_buf_redundant_convert(
 @param[in,out]	row		table row
 @param[in]	ext		cache of externally stored
 				column prefixes, or NULL
-@param[in]	history_fts	row is historical in a system-versioned table
-				on which a FTS_DOC_ID_INDEX(FTS_DOC_ID) exists
 @param[in,out]	doc_id		Doc ID if we are creating
 				FTS index
 @param[in,out]	conv_heap	memory heap where to allocate data when
@@ -486,7 +484,6 @@ row_merge_buf_add(
 	fts_psort_t*		psort_info,
 	dtuple_t*		row,
 	const row_ext_t*	ext,
-	const bool		history_fts,
 	doc_id_t*		doc_id,
 	mem_heap_t*		conv_heap,
 	dberr_t*		err,
@@ -551,7 +548,7 @@ error:
 			: NULL;
 
 		/* Process the Doc ID column */
-		if (!v_col && (history_fts || *doc_id)
+		if (!v_col && *doc_id
 		    && col->ind == index->table->fts->doc_col) {
 			fts_write_doc_id((byte*) &write_doc_id, *doc_id);
 
@@ -612,7 +609,7 @@ error:
 			}
 
 			/* Tokenize and process data for FTS */
-			if (!history_fts && (index->type & DICT_FTS)) {
+			if (index->type & DICT_FTS) {
 				fts_doc_item_t*	doc_item;
 				byte*		value;
 				void*		ptr;
@@ -1711,6 +1708,7 @@ row_merge_read_clustered_index(
 	DBUG_ENTER("row_merge_read_clustered_index");
 
 	ut_ad((old_table == new_table) == !col_map);
+	ut_ad(old_table->fts || !new_table->fts || !new_table->versioned());
 	ut_ad(!defaults || col_map);
 	ut_ad(trx_state_eq(trx, TRX_STATE_ACTIVE));
 	ut_ad(trx->id);
@@ -1936,7 +1934,6 @@ corrupted_metadata:
 		dtuple_t*	row;
 		row_ext_t*	ext;
 		page_cur_t*	cur	= btr_pcur_get_page_cur(&pcur);
-		bool history_row, history_fts = false;
 
 		stage->n_pk_recs_inc();
 
@@ -2050,6 +2047,8 @@ end_of_index:
 				if (!block) {
 					goto err_exit;
 				}
+
+				buf_page_make_young_if_needed(&block->page);
 
 				page_cur_set_before_first(block, cur);
 				if (!page_cur_move_to_next(cur)
@@ -2196,11 +2195,6 @@ end_of_index:
 					   row_heap);
 		ut_ad(row);
 
-		history_row = new_table->versioned()
-		       && dtuple_get_nth_field(row, new_table->vers_end)
-		       ->vers_history_row();
-		history_fts = history_row && new_table->fts;
-
 		for (ulint i = 0; i < n_nonnull; i++) {
 			dfield_t*	field	= &row->fields[nonnull[i]];
 
@@ -2229,7 +2223,7 @@ end_of_index:
 		}
 
 		/* Get the next Doc ID */
-		if (add_doc_id && !history_fts) {
+		if (add_doc_id) {
 			doc_id++;
 		} else {
 			doc_id = 0;
@@ -2269,7 +2263,9 @@ end_of_index:
 								add_autoinc);
 
 			if (new_table->versioned()) {
-				if (history_row) {
+				if (dtuple_get_nth_field(row,
+							 new_table->vers_end)
+				    ->vers_history_row()) {
 					if (dfield_get_type(dfield)->prtype & DATA_NOT_NULL) {
 						err = DB_UNSUPPORTED;
 						my_error(ER_UNSUPPORTED_EXTENSION, MYF(0),
@@ -2385,7 +2381,7 @@ write_buffers:
 			if (UNIV_LIKELY
 			    (row && (rows_added = row_merge_buf_add(
 					buf, fts_index, old_table, new_table,
-					psort_info, row, ext, history_fts,
+					psort_info, row, ext,
 					&doc_id, conv_heap, &err,
 					&v_heap, eval_table, trx,
 					col_collate)))) {
@@ -2714,7 +2710,7 @@ write_buffers:
 				    (!(rows_added = row_merge_buf_add(
 						buf, fts_index, old_table,
 						new_table, psort_info,
-						row, ext, history_fts, &doc_id,
+						row, ext, &doc_id,
 						conv_heap, &err, &v_heap,
 						eval_table, trx, col_collate)))) {
                                         /* An empty buffer should have enough
@@ -3357,17 +3353,6 @@ row_merge_sort(
 	of file marker).  Thus, it must be at least one block. */
 	ut_ad(file->offset > 0);
 
-	/* These thd_progress* calls will crash on sol10-64 when innodb_plugin
-	is used. MDEV-9356: innodb.innodb_bug53290 fails (crashes) on
-	sol10-64 in buildbot.
-	*/
-#ifndef __sun__
-	/* Progress report only for "normal" indexes. */
-	if (!(dup->index->type & DICT_FTS)) {
-		thd_progress_init(trx->mysql_thd, 1);
-	}
-#endif /* __sun__ */
-
 	if (global_system_variables.log_warnings > 2) {
 		sql_print_information("InnoDB: Online DDL : merge-sorting"
 				      " has estimated " ULINTPF " runs",
@@ -3376,15 +3361,6 @@ row_merge_sort(
 
 	/* Merge the runs until we have one big run */
 	do {
-		/* Report progress of merge sort to MySQL for
-		show processlist progress field */
-		/* Progress report only for "normal" indexes. */
-#ifndef __sun__
-		if (!(dup->index->type & DICT_FTS)) {
-			thd_progress_report(trx->mysql_thd, file->offset - num_runs, file->offset);
-		}
-#endif /* __sun__ */
-
 		error = row_merge(trx, dup, file, block, tmpfd,
 				  &num_runs, run_offset, stage,
 				  crypt_block, space);
@@ -3407,13 +3383,6 @@ row_merge_sort(
 	} while (num_runs > 1);
 
 	ut_free(run_offset);
-
-	/* Progress report only for "normal" indexes. */
-#ifndef __sun__
-	if (!(dup->index->type & DICT_FTS)) {
-		thd_progress_end(trx->mysql_thd);
-	}
-#endif /* __sun__ */
 
 	DBUG_RETURN(error);
 }
@@ -4218,13 +4187,14 @@ row_merge_file_create(
 	merge_file->fd = row_merge_file_create_low(path);
 	merge_file->offset = 0;
 	merge_file->n_rec = 0;
-
+#ifdef HAVE_FCNTL_DIRECT
 	if (merge_file->fd != OS_FILE_CLOSED) {
 		if (srv_disable_sort_file_cache) {
 			os_file_set_nocache(merge_file->fd,
 				"row0merge.cc", "sort");
 		}
 	}
+#endif
 	return(merge_file->fd);
 }
 

@@ -1,0 +1,28 @@
+language: c
+version: ~> 1.0
+
+cache:
+  apt: true
+  ccache: true
+  directories:
+    - $HOME/docker
+
+env:
+  global: local=0 DB=testc CLEAR_TEXT=0
+
+import: mariadb-corporation/connector-test-machine:common-build.yml@master
+
+jobs:
+  include:
+    - stage: Community
+      env: srv=mariadb v=10.11 local=1 TEST_OPTION=--ps-protocol
+      name: "CS 10.11 with ps-protocol"
+    - stage: Other
+      env: server_branch=10.6
+      name: "CS 10.6 Server unit testing"
+    - env: server_branch=10.11
+      name: "CS 10.11 Server unit testing"
+    - env: server_branch=11.3 TEST_OPTION=--ps-protocol
+      name: "11.3 Server unit testing with ps-protocol"
+
+script: ./travis.sh

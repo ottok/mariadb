@@ -143,7 +143,6 @@ SET(INNOBASE_SOURCES
 	btr/btr0pcur.cc
 	btr/btr0sea.cc
 	btr/btr0defragment.cc
-	buf/buf0block_hint.cc
 	buf/buf0buddy.cc
 	buf/buf0buf.cc
 	buf/buf0dblwr.cc
@@ -440,24 +439,11 @@ SET(INNOBASE_SOURCES
 	ut/ut0vec.cc
 	ut/ut0wqueue.cc)
 
-OPTION(WITH_PMEM "Support redo log in persistent memory" OFF)
-FIND_PACKAGE(PMEM)
-IF(PMEM_FOUND)
-  INCLUDE_DIRECTORIES(${PMEM_INCLUDES})
-  ADD_COMPILE_FLAGS(log/log0log.cc COMPILE_FLAGS "-DHAVE_PMEM")
-  SET(PMEM_LIBRARY ${PMEM_LIBRARIES})
-ELSE()
-  IF(WITH_PMEM)
-    MESSAGE(FATAL_ERROR "WITH_PMEM=ON cannot be satisfied")
-  ENDIF()
-ENDIF()
-
 MYSQL_ADD_PLUGIN(innobase ${INNOBASE_SOURCES} STORAGE_ENGINE
   MODULE_OUTPUT_NAME ha_innodb
   DEFAULT RECOMPILE_FOR_EMBEDDED
   LINK_LIBRARIES
-	${ZLIB_LIBRARY}
-	${PMEM_LIBRARY}
+	${ZLIB_LIBRARIES}
 	${NUMA_LIBRARY}
 	${LIBSYSTEMD}
 	${LINKER_SCRIPT})

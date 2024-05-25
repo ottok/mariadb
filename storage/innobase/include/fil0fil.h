@@ -347,7 +347,6 @@ struct fil_space_t final
   ~fil_space_t()
   {
     ut_ad(!latch_owner);
-    ut_ad(!latch_count);
     latch.destroy();
   }
 
@@ -362,8 +361,6 @@ struct fil_space_t final
 				Protected by log_sys.mutex.
 				If and only if this is nonzero, the
 				tablespace will be in named_spaces. */
-	/** whether undo tablespace truncation is in progress */
-	bool		is_being_truncated;
 	fil_type_t	purpose;/*!< purpose */
 	UT_LIST_BASE_NODE_T(fil_node_t) chain;
 				/*!< base node for the file chain */
@@ -416,9 +413,9 @@ private:
   /** The reference count */
   static constexpr uint32_t PENDING= ~(STOPPING | CLOSING | NEEDS_FSYNC);
   /** latch protecting all page allocation bitmap pages */
-  srw_lock latch;
+  IF_DBUG(srw_lock_debug, srw_lock) latch;
+  /** the thread that holds the exclusive latch, or 0 */
   pthread_t latch_owner;
-  ut_d(Atomic_relaxed<uint32_t> latch_count;)
 public:
   /** MariaDB encryption data */
   fil_space_crypt_t *crypt_data;
@@ -442,12 +439,20 @@ private:
   /** LSN of freeing last page; protected by freed_range_mutex */
   lsn_t last_freed_lsn;
 
+  /** LSN of undo tablespace creation or 0; protected by latch */
+  lsn_t create_lsn;
 public:
   /** @return whether doublewrite buffering is needed */
   inline bool use_doublewrite() const;
 
   /** @return whether a page has been freed */
   inline bool is_freed(uint32_t page);
+
+  /** Set create_lsn. */
+  inline void set_create_lsn(lsn_t lsn);
+
+  /** @return the latest tablespace rebuild LSN, or 0 */
+  lsn_t get_create_lsn() const { return create_lsn; }
 
   /** Apply freed_ranges to the file.
   @param writable whether the file is writable
@@ -525,9 +530,6 @@ public:
 
   /** Note that operations on the tablespace must stop. */
   inline void set_stopping();
-
-  /** Note that operations on the tablespace can resume after truncation */
-  inline void clear_stopping();
 
   /** Drop the tablespace and wait for any pending operations to cease
   @param id               tablespace identifier
@@ -1062,40 +1064,32 @@ public:
                                      bool recheck, bool encrypt);
 
 #ifdef UNIV_DEBUG
-  bool is_latched() const { return latch_count != 0; }
+  bool is_latched() const { return latch.have_any(); }
 #endif
-  bool is_owner() const { return latch_owner == pthread_self(); }
+  bool is_owner() const
+  {
+    const bool owner{latch_owner == pthread_self()};
+    ut_ad(owner == latch.have_wr());
+    return owner;
+  }
   /** Acquire the allocation latch in exclusive mode */
   void x_lock()
   {
     latch.wr_lock(SRW_LOCK_CALL);
     ut_ad(!latch_owner);
     latch_owner= pthread_self();
-    ut_ad(!latch_count.fetch_add(1));
   }
   /** Release the allocation latch from exclusive mode */
   void x_unlock()
   {
-    ut_ad(latch_count.fetch_sub(1) == 1);
     ut_ad(latch_owner == pthread_self());
     latch_owner= 0;
     latch.wr_unlock();
   }
   /** Acquire the allocation latch in shared mode */
-  void s_lock()
-  {
-    ut_ad(!is_owner());
-    latch.rd_lock(SRW_LOCK_CALL);
-    ut_ad(!latch_owner);
-    ut_d(latch_count.fetch_add(1));
-  }
+  void s_lock() { latch.rd_lock(SRW_LOCK_CALL); }
   /** Release the allocation latch from shared mode */
-  void s_unlock()
-  {
-    ut_ad(latch_count.fetch_sub(1));
-    ut_ad(!latch_owner);
-    latch.rd_unlock();
-  }
+  void s_unlock() { latch.rd_unlock(); }
 
   typedef span<const char> name_type;
 
@@ -1625,14 +1619,6 @@ inline void fil_space_t::set_stopping()
 #endif
 }
 
-inline void fil_space_t::clear_stopping()
-{
-  mysql_mutex_assert_owner(&fil_system.mutex);
-  static_assert(STOPPING_WRITES == 1U << 30, "compatibility");
-  ut_d(auto n=) n_pending.fetch_sub(STOPPING_WRITES, std::memory_order_relaxed);
-  ut_ad((n & STOPPING) == STOPPING_WRITES);
-}
-
 /** Flush pending writes from the file system cache to the file. */
 template<bool have_reference> inline void fil_space_t::flush()
 {
@@ -1730,16 +1716,33 @@ void fil_close_tablespace(ulint id);
 /*******************************************************************//**
 Allocates and builds a file name from a path, a table or tablespace name
 and a suffix. The string must be freed by caller with ut_free().
-@param[in] path NULL or the directory path or the full path and filename.
+@param[in] path nullptr or the directory path or the full path and filename
 @param[in] name {} if path is full, or Table/Tablespace name
-@param[in] ext the file extension to use
-@param[in] trim_name true if the last name on the path should be trimmed.
+@param[in] extension the file extension to use
+@param[in] trim_name true if the last name on the path should be trimmed
 @return own: file name */
-char* fil_make_filepath(const char *path, const fil_space_t::name_type &name,
-                        ib_extention ext, bool trim_name);
+char* fil_make_filepath_low(const char *path,
+                            const fil_space_t::name_type &name,
+                            ib_extention extension, bool trim_name);
 
 char *fil_make_filepath(const char* path, const table_name_t name,
                         ib_extention suffix, bool strip_name);
+
+/** Wrapper function over fil_make_filepath_low to build file name.
+@param path nullptr or the directory path or the full path and filename
+@param name {} if path is full, or Table/Tablespace name
+@param extension the file extension to use
+@param trim_name true if the last name on the path should be trimmed
+@return own: file name */
+static inline char*
+fil_make_filepath(const char* path, const fil_space_t::name_type &name,
+                  ib_extention extension, bool trim_name)
+{
+  /* If we are going to strip a name off the path, there better be a
+  path and a new name to put back on. */
+  ut_ad(!trim_name || (path && name.data()));
+  return fil_make_filepath_low(path, name, extension, trim_name);
+}
 
 /** Create a tablespace file.
 @param[in]	space_id	Tablespace ID

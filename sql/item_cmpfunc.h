@@ -57,6 +57,7 @@ class Arg_comparator: public Sql_alloc
                                    //   when one of arguments is NULL.
 
   int set_cmp_func(THD *thd, Item_func_or_sum *owner_arg,
+                   const Type_handler *compare_handler,
                    Item **a1, Item **a2);
 
   int compare_not_null_values(longlong val1, longlong val2)
@@ -95,11 +96,24 @@ public:
   bool set_cmp_func_decimal(THD *thd);
 
   inline int set_cmp_func(THD *thd, Item_func_or_sum *owner_arg,
-			  Item **a1, Item **a2, bool set_null_arg)
+                          const Type_handler *compare_handler,
+                          Item **a1, Item **a2, bool set_null_arg)
   {
     set_null= set_null_arg;
-    return set_cmp_func(thd, owner_arg, a1, a2);
+    return set_cmp_func(thd, owner_arg, compare_handler, a1, a2);
   }
+  int set_cmp_func(THD *thd, Item_func_or_sum *owner_arg,
+                   Item **a1, Item **a2, bool set_null_arg)
+  {
+    Item *tmp_args[2]= { *a1, *a2 };
+    Type_handler_hybrid_field_type tmp;
+    if (tmp.aggregate_for_comparison(owner_arg->func_name_cstring(),
+                                     tmp_args, 2, false))
+      return 1;
+    return set_cmp_func(thd, owner_arg, tmp.type_handler(),
+                        a1, a2, set_null_arg);
+  }
+
   inline int compare() { return (this->*func)(); }
 
   int compare_string();		 // compare args[0] & args[1]
@@ -415,6 +429,7 @@ public:
   void fix_after_pullout(st_select_lex *new_parent, Item **ref,
                          bool merge) override;
   bool invisible_mode();
+  bool walk(Item_processor processor, bool walk_subquery, void *arg) override;
   void reset_cache() { cache= NULL; }
   void print(String *str, enum_query_type query_type) override;
   void restore_first_argument();
@@ -562,9 +577,17 @@ public:
     return this;
   }
   bool fix_length_and_dec() override;
+  bool fix_length_and_dec_generic(THD *thd,
+                                  const Type_handler *compare_handler)
+  {
+    DBUG_ASSERT(args == tmp_arg);
+    return cmp.set_cmp_func(thd, this, compare_handler,
+                            tmp_arg, tmp_arg + 1, true/*set_null*/);
+  }
   int set_cmp_func(THD *thd)
   {
-    return cmp.set_cmp_func(thd, this, tmp_arg, tmp_arg + 1, true);
+    DBUG_ASSERT(args == tmp_arg);
+    return cmp.set_cmp_func(thd, this, tmp_arg, tmp_arg + 1, true/*set_null*/);
   }
   CHARSET_INFO *compare_collation() const override
   { return cmp.compare_collation(); }
@@ -2449,9 +2472,10 @@ public:
   Item_func_decode_oracle(THD *thd, List<Item> &list)
    :Item_func_case_simple(thd, list)
   { }
+  const Schema *schema() const override { return &oracle_schema_ref; }
   LEX_CSTRING func_name_cstring() const override
   {
-    static LEX_CSTRING name= {STRING_WITH_LEN("decode_oracle") };
+    static LEX_CSTRING name= {STRING_WITH_LEN("decode") };
     return name;
   }
   void print(String *str, enum_query_type query_type) override;
@@ -3033,11 +3057,11 @@ public:
     m_pcre(NULL), m_pcre_match_data(NULL),
     m_conversion_is_needed(true), m_is_const(0),
     m_library_flags(0),
-    m_library_charset(&my_charset_utf8mb3_general_ci)
+    m_library_charset(&my_charset_utf8mb4_general_ci)
   {}
   int default_regex_flags();
   void init(CHARSET_INFO *data_charset, int extra_flags);
-  void fix_owner(Item_func *owner, Item *subject_arg, Item *pattern_arg);
+  bool fix_owner(Item_func *owner, Item *subject_arg, Item *pattern_arg);
   bool compile(String *pattern, bool send_error);
   bool compile(Item *item, bool send_error);
   bool recompile(Item *item)
@@ -3505,13 +3529,11 @@ template <template<class> class LI, typename T> class Item_equal_iterator
 {
 protected:
   Item_equal *item_equal;
-  Item *curr_item;
+  Item *curr_item= nullptr;
 public:
-  Item_equal_iterator<LI,T>(Item_equal &item_eq) 
-    :LI<T> (item_eq.equal_items)
+  Item_equal_iterator(Item_equal &item_eq)
+    :LI<T> (item_eq.equal_items), item_equal(&item_eq)
   {
-    curr_item= NULL;
-    item_equal= &item_eq;
     if (item_eq.with_const)
     {
       LI<T> *list_it= this;

@@ -1439,9 +1439,10 @@ bool backup_start(ds_ctxt *ds_data, ds_ctxt *ds_meta,
 
         if (!backup_files_from_datadir(ds_data, fil_path_to_mysql_datadir,
 	                               "aws-kms-key") ||
-            !backup_files_from_datadir(ds_data,
-                                       aria_log_dir_path,
-                                       "aria_log")) {
+            (aria_log_dir_path &&
+             !backup_files_from_datadir(ds_data,
+                                        aria_log_dir_path,
+                                        "aria_log"))) {
 		return false;
 	}
 
@@ -1618,6 +1619,7 @@ ibx_copy_incremental_over_full()
 		NULL};
 	const char *sup_files[] = {"xtrabackup_binlog_info",
 				   "xtrabackup_galera_info",
+				   "donor_galera_info",
 				   "xtrabackup_slave_info",
 				   "xtrabackup_info",
 				   "ib_lru_dump",
@@ -1891,8 +1893,6 @@ copy_back()
 		msg("syntax error in innodb_data_file_path");
 		return(false);
 	}
-
-	srv_max_n_threads = 1000;
 
 	/* copy undo tablespaces */
 
@@ -2171,8 +2171,6 @@ decrypt_decompress()
 	bool ret;
 	datadir_iter_t *it = NULL;
 
-	srv_max_n_threads = 1000;
-
 	/* cd to backup directory */
 	if (my_setwd(xtrabackup_target_dir, MYF(MY_WME)))
 	{
@@ -2307,7 +2305,7 @@ ds_ctxt_t::make_hardlink(const char *from_path, const char *to_path)
 	}
 	else
 	{
-		strncpy(to_path_full, to_path, sizeof(to_path_full));
+		strncpy(to_path_full, to_path, sizeof(to_path_full)-1);
 	}
 #ifdef _WIN32
 	return  CreateHardLink(to_path_full, from_path, NULL);

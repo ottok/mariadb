@@ -59,7 +59,7 @@ struct alignas(CPU_LEVEL1_DCACHE_LINESIZE) trx_rseg_t
   /** tablespace containing the rollback segment; constant after init() */
   fil_space_t *space;
   /** latch protecting everything except page_no, space */
-  srw_spin_lock latch;
+  IF_DBUG(srw_lock_debug,srw_spin_lock) latch;
   /** rollback segment header page number; constant after init() */
   uint32_t page_no;
   /** length of the TRX_RSEG_HISTORY list (number of transactions) */
@@ -73,14 +73,15 @@ private:
   /** Reference counter to track is_persistent() transactions,
   with SKIP flag. */
   std::atomic<uint32_t> ref;
-
+public:
   /** Whether undo tablespace truncation is pending */
   static constexpr uint32_t SKIP= 1;
   /** Transaction reference count multiplier */
   static constexpr uint32_t REF= 2;
 
+  /** @return the reference count and flags */
   uint32_t ref_load() const { return ref.load(std::memory_order_relaxed); }
-
+private:
   /** Set the SKIP bit */
   void ref_set_skip()
   {
@@ -169,19 +170,21 @@ public:
   /** Last not yet purged undo log header; FIL_NULL if all purged */
   uint32_t last_page_no;
 
-  /** trx_t::no | last_offset << 48 */
+  /** trx_t::no << 16 | last_offset */
   uint64_t last_commit_and_offset;
 
   /** @return the commit ID of the last committed transaction */
   trx_id_t last_trx_no() const
-  { return last_commit_and_offset & ((1ULL << 48) - 1); }
+  { return last_commit_and_offset >> 16; }
   /** @return header offset of the last committed transaction */
   uint16_t last_offset() const
-  { return static_cast<uint16_t>(last_commit_and_offset >> 48); }
+  {
+    return static_cast<uint16_t>(last_commit_and_offset);
+  }
 
   void set_last_commit(uint16_t last_offset, trx_id_t trx_no)
   {
-    last_commit_and_offset= static_cast<uint64_t>(last_offset) << 48 | trx_no;
+    last_commit_and_offset= trx_no << 16 | static_cast<uint64_t>(last_offset);
   }
 
   /** @return the page identifier */

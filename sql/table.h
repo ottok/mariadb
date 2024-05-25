@@ -851,7 +851,7 @@ struct TABLE_SHARE
   /* 1 if frm version cannot be updated as part of upgrade */
   bool keep_original_mysql_version;
 
-  ulong table_map_id;                   /* for row-based replication */
+  ulonglong table_map_id;               /* for row-based replication */
 
   /*
     Things that are incompatible between the stored version and the
@@ -1006,7 +1006,7 @@ struct TABLE_SHARE
     return (table_category == TABLE_CATEGORY_LOG);
   }
 
-  inline ulong get_table_def_version()
+  inline ulonglong get_table_def_version()
   {
     return table_map_id;
   }
@@ -1085,7 +1085,7 @@ struct TABLE_SHARE
 
    @sa TABLE_LIST::is_the_same_definition()
   */
-  ulong get_table_ref_version() const
+  ulonglong get_table_ref_version() const
   {
     return (tmp_table == SYSTEM_TMP_TABLE) ? 0 : table_map_id;
   }
@@ -1568,7 +1568,7 @@ public:
   void mark_index_columns_no_reset(uint index, MY_BITMAP *bitmap);
   void mark_index_columns_for_read(uint index);
   void restore_column_maps_after_keyread(MY_BITMAP *backup);
-  void mark_auto_increment_column(void);
+  void mark_auto_increment_column(bool insert_fl);
   void mark_columns_needed_for_update(void);
   void mark_columns_needed_for_delete(void);
   void mark_columns_needed_for_insert(void);
@@ -1795,6 +1795,7 @@ public:
   ulonglong vers_end_id() const;
 
   int update_generated_fields();
+  void period_prepare_autoinc();
   int period_make_insert(Item *src, Field *dst);
   int insert_portion_of_time(THD *thd, const vers_select_conds_t &period_conds,
                              ha_rows *rows_inserted);
@@ -2043,7 +2044,6 @@ public:
   void empty() { unit= VERS_TIMESTAMP; item= NULL; }
   void print(String *str, enum_query_type, const char *prefix, size_t plen) const;
   bool check_unit(THD *thd);
-  void bad_expression_data_type_error(const char *type) const;
   bool eq(const vers_history_point_t &point) const;
 };
 
@@ -2175,8 +2175,23 @@ struct TABLE_CHAIN
   void set_end_pos(TABLE_LIST **pos) { end_pos= pos; }
 };
 
+class Table_ident;
 struct TABLE_LIST
 {
+  TABLE_LIST(THD *thd,
+             LEX_CSTRING db_str,
+             bool fqtn,
+             LEX_CSTRING alias_str,
+             bool has_alias_ptr,
+             Table_ident *table_ident,
+             thr_lock_type lock_t,
+             enum_mdl_type mdl_t,
+             ulong table_opts,
+             bool info_schema,
+             st_select_lex *sel,
+             List<Index_hint> *index_hints_ptr,
+             LEX_STRING *option_ptr);
+
   TABLE_LIST() = default;                          /* Remove gcc warning */
 
   enum prelocking_types
@@ -2775,7 +2790,7 @@ struct TABLE_LIST
   { set_table_ref_id(s->get_table_ref_type(), s->get_table_ref_version()); }
 
   inline void set_table_ref_id(enum_table_ref_type table_ref_type_arg,
-                        ulong table_ref_version_arg)
+                               ulonglong table_ref_version_arg)
   {
     m_table_ref_type= table_ref_type_arg;
     m_table_ref_version= table_ref_version_arg;
@@ -2930,7 +2945,7 @@ private:
   /** See comments for set_table_ref_id() */
   enum enum_table_ref_type m_table_ref_type;
   /** See comments for set_table_ref_id() */
-  ulong m_table_ref_version;
+  ulonglong m_table_ref_version;
 };
 
 class Item;

@@ -158,14 +158,25 @@ buf_block_free(
 #define buf_page_get(ID, SIZE, LA, MTR)					\
 	buf_page_get_gen(ID, SIZE, LA, NULL, BUF_GET, MTR)
 
-/** Try to acquire a page latch.
-@param rw_latch      RW_S_LATCH or RW_X_LATCH
+/** Try to buffer-fix a page.
 @param block         guessed block
+@param id            expected block->page.id()
+@return block if it was buffer-fixed
+@retval nullptr if the block no longer is valid */
+buf_block_t *buf_page_optimistic_fix(buf_block_t *block, page_id_t id)
+  MY_ATTRIBUTE((nonnull, warn_unused_result));
+
+/** Try to acquire a page latch after buf_page_optimistic_fix().
+@param block         buffer-fixed block
+@param rw_latch      RW_S_LATCH or RW_X_LATCH
 @param modify_clock  expected value of block->modify_clock
 @param mtr           mini-transaction
-@return whether the latch was acquired (the page is an allocated file page) */
-bool buf_page_optimistic_get(ulint rw_latch, buf_block_t *block,
-                             uint64_t modify_clock, mtr_t *mtr);
+@return block if the latch was acquired
+@retval nullptr if block->unfix() was called because it no longer is valid */
+buf_block_t *buf_page_optimistic_get(buf_block_t *block,
+                                     rw_lock_type_t rw_latch,
+                                     uint64_t modify_clock, mtr_t *mtr)
+  MY_ATTRIBUTE((nonnull, warn_unused_result));
 
 /** Try to S-latch a page.
 Suitable for using when holding the lock_sys latches (as it avoids deadlock).
@@ -262,8 +273,6 @@ buf_block_t*
 buf_page_create_deferred(uint32_t space_id, ulint zip_size, mtr_t *mtr,
                          buf_block_t *free_block);
 
-/** Move a block to the start of the LRU list. */
-void buf_page_make_young(buf_page_t *bpage);
 /** Mark the page status as FREED for the given tablespace and page number.
 @param[in,out]	space	tablespace
 @param[in]	page	page number
@@ -285,15 +294,6 @@ there is danger of dropping from the buffer pool.
 @return true if bpage should be made younger */
 inline bool buf_page_peek_if_too_old(const buf_page_t *bpage);
 
-/** Move a page to the start of the buffer pool LRU list if it is too old.
-@param[in,out]	bpage		buffer pool page */
-inline void buf_page_make_young_if_needed(buf_page_t *bpage)
-{
-	if (UNIV_UNLIKELY(buf_page_peek_if_too_old(bpage))) {
-		buf_page_make_young(bpage);
-	}
-}
-
 /********************************************************************//**
 Increments the modify clock of a frame by 1. The caller must (1) own the
 buf_pool.mutex and block bufferfix count has to be zero, (2) or own an x-lock
@@ -301,15 +301,6 @@ on the block. */
 UNIV_INLINE
 void
 buf_block_modify_clock_inc(
-/*=======================*/
-	buf_block_t*	block);	/*!< in: block */
-/********************************************************************//**
-Returns the value of the modify clock. The caller must have an s-lock
-or x-lock on the block.
-@return value */
-UNIV_INLINE
-ib_uint64_t
-buf_block_get_modify_clock(
 /*=======================*/
 	buf_block_t*	block);	/*!< in: block */
 #endif /* !UNIV_INNOCHECKSUM */
@@ -777,17 +768,16 @@ public:
   @retval DB_FAIL              if the page contains the wrong ID */
   dberr_t read_complete(const fil_node_t &node);
 
-  /** Note that a block is no longer dirty, while not removing
-  it from buf_pool.flush_list
-  @param temporary   whether the page belongs to the temporary tablespace
-  @param error       whether an error may have occurred while writing */
-  inline void write_complete(bool temporary, bool error);
+  /** Release a write fix after a page write was completed.
+  @param persistent  whether the page belongs to a persistent tablespace
+  @param error       whether an error may have occurred while writing
+  @param state       recently read state() value with the correct io-fix */
+  void write_complete(bool persistent, bool error, uint32_t state);
 
   /** Write a flushable page to a file or free a freeable block.
-  @param evict       whether to evict the page on write completion
   @param space       tablespace
   @return whether a page write was initiated and buf_pool.mutex released */
-  bool flush(bool evict, fil_space_t *space);
+  bool flush(fil_space_t *space);
 
   /** Notify that a page in a temporary tablespace has been modified. */
   void set_temp_modified()
@@ -1499,10 +1489,8 @@ public:
         n_chunks_new / 4 * chunks->size;
   }
 
-  /** @return whether the buffer pool has run out */
-  TPOOL_SUPPRESS_TSAN
-  bool ran_out() const
-  { return UNIV_UNLIKELY(!try_LRU_scan || !UT_LIST_GET_LEN(free)); }
+  /** @return whether the buffer pool is running low */
+  bool need_LRU_eviction() const;
 
   /** @return whether the buffer pool is shrinking */
   inline bool is_shrinking() const
@@ -1753,10 +1741,6 @@ public:
   /** Decrement the number of pending LRU flush */
   inline void n_flush_dec();
 
-  /** Decrement the number of pending LRU flush
-  while holding flush_list_mutex */
-  inline void n_flush_dec_holding_mutex();
-
   /** @return whether flush_list flushing is active */
   bool flush_list_active() const
   {
@@ -1822,6 +1806,9 @@ public:
   Set whenever the free list grows, along with a broadcast of done_free.
   Protected by buf_pool.mutex. */
   Atomic_relaxed<bool> try_LRU_scan;
+  /** Whether we have warned to be running out of buffer pool */
+  std::atomic_flag LRU_warned;
+
 	/* @} */
 
 	/** @name LRU replacement algorithm fields */
@@ -1884,7 +1871,8 @@ public:
   a delete-buffering operation is pending. Protected by mutex. */
   buf_page_t watch[innodb_purge_threads_MAX + 1];
   /** Reserve a buffer. */
-  buf_tmp_buffer_t *io_buf_reserve() { return io_buf.reserve(); }
+  buf_tmp_buffer_t *io_buf_reserve(bool wait_for_reads)
+  { return io_buf.reserve(wait_for_reads); }
 
 private:
   /** Remove a block from the flush list. */
@@ -1902,6 +1890,9 @@ public:
   /** Free a page whose underlying file page has been freed. */
   ATTRIBUTE_COLD void release_freed_page(buf_page_t *bpage);
 
+  /** Issue a warning that we could not free up buffer pool pages. */
+  ATTRIBUTE_COLD void LRU_warn();
+
 private:
   /** Temporary memory for page_compressed and encrypted I/O */
   struct io_buf_t
@@ -1916,7 +1907,7 @@ private:
     void close();
 
     /** Reserve a buffer */
-    buf_tmp_buffer_t *reserve();
+    buf_tmp_buffer_t *reserve(bool wait_for_reads);
   } io_buf;
 
   /** whether resize() is in the critical path */

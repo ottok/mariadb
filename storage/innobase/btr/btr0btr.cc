@@ -216,10 +216,11 @@ ATTRIBUTE_COLD void btr_decryption_failed(const dict_index_t &index)
 @param[in]	merge	whether change buffer merge should be attempted
 @param[in,out]	mtr	mini-transaction
 @param[out]	err	error code
+@param[out]	first	set if this is a first-time access to the page
 @return block */
 buf_block_t *btr_block_get(const dict_index_t &index,
                            uint32_t page, rw_lock_type_t mode, bool merge,
-                           mtr_t *mtr, dberr_t *err)
+                           mtr_t *mtr, dberr_t *err, bool *first)
 {
   ut_ad(mode != RW_NO_LATCH);
   dberr_t local_err;
@@ -242,6 +243,8 @@ buf_block_t *btr_block_get(const dict_index_t &index,
       *err= DB_PAGE_CORRUPTED;
       block= nullptr;
     }
+    else if (!buf_page_make_young_if_needed(&block->page) && first)
+      *first= true;
   }
   else if (*err == DB_DECRYPTION_FAILED)
     btr_decryption_failed(index);
@@ -261,6 +264,8 @@ btr_root_block_get(
 	mtr_t*			mtr,	/*!< in: mtr */
 	dberr_t*		err)	/*!< out: error code */
 {
+  ut_ad(mode != RW_NO_LATCH);
+
   if (!index->table || !index->table->space)
   {
     *err= DB_TABLESPACE_NOT_FOUND;
@@ -282,13 +287,12 @@ btr_root_block_get(
 
   if (UNIV_LIKELY(block != nullptr))
   {
-    if (UNIV_UNLIKELY(mode == RW_NO_LATCH));
-    else if (!!page_is_comp(block->page.frame) !=
-             index->table->not_redundant() ||
-             btr_page_get_index_id(block->page.frame) != index->id ||
-             !fil_page_index_page_check(block->page.frame) ||
-             index->is_spatial() !=
-             (fil_page_get_type(block->page.frame) == FIL_PAGE_RTREE))
+    if (!!page_is_comp(block->page.frame) !=
+        index->table->not_redundant() ||
+        btr_page_get_index_id(block->page.frame) != index->id ||
+        !fil_page_index_page_check(block->page.frame) ||
+        index->is_spatial() !=
+        (fil_page_get_type(block->page.frame) == FIL_PAGE_RTREE))
     {
       *err= DB_PAGE_CORRUPTED;
       block= nullptr;
@@ -302,6 +306,8 @@ btr_root_block_get(
       *err= DB_CORRUPTION;
       block= nullptr;
     }
+    else
+      buf_page_make_young_if_needed(&block->page);
   }
   else if (*err == DB_DECRYPTION_FAILED)
     btr_decryption_failed(*index);
@@ -553,11 +559,40 @@ btr_page_alloc_for_ibuf(
                                                 root->page.frame)),
                      0, RW_X_LATCH, nullptr, BUF_GET, mtr, err);
   if (new_block)
+  {
+    buf_page_make_young_if_needed(&new_block->page);
     *err= flst_remove(root, PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST, new_block,
-                PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST_NODE, mtr);
+                      PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST_NODE,
+                      fil_system.sys_space->free_limit, mtr);
+  }
   ut_d(if (*err == DB_SUCCESS)
          flst_validate(root, PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST, mtr));
   return new_block;
+}
+
+static MY_ATTRIBUTE((nonnull, warn_unused_result))
+/** Acquire a latch on the index root page for allocating or freeing pages.
+@param index   index tree
+@param mtr     mini-transaction
+@param err     error code
+@return root page
+@retval nullptr if an error occurred */
+buf_block_t *btr_root_block_sx(dict_index_t *index, mtr_t *mtr, dberr_t *err)
+{
+  buf_block_t *root=
+    mtr->get_already_latched(page_id_t{index->table->space_id, index->page},
+                             MTR_MEMO_PAGE_SX_FIX);
+  if (!root)
+  {
+    root= btr_root_block_get(index, RW_SX_LATCH, mtr, err);
+    if (UNIV_UNLIKELY(!root))
+      return root;
+  }
+#ifdef BTR_CUR_HASH_ADAPT
+  else
+    ut_ad(!root->index || !root->index->freed());
+#endif
+  return root;
 }
 
 /**************************************************************//**
@@ -581,21 +616,9 @@ btr_page_alloc_low(
 					page should be initialized. */
 	dberr_t*	err)		/*!< out: error code */
 {
-  const auto savepoint= mtr->get_savepoint();
-  buf_block_t *root= btr_root_block_get(index, RW_NO_LATCH, mtr, err);
+  buf_block_t *root= btr_root_block_sx(index, mtr, err);
   if (UNIV_UNLIKELY(!root))
     return root;
-
-  const bool have_latch= mtr->have_u_or_x_latch(*root);
-#ifdef BTR_CUR_HASH_ADAPT
-  ut_ad(!have_latch || !root->index || !root->index->freed());
-#endif
-  mtr->rollback_to_savepoint(savepoint);
-
-  if (!have_latch &&
-      UNIV_UNLIKELY(!(root= btr_root_block_get(index, RW_SX_LATCH, mtr, err))))
-    return root;
-
   fseg_header_t *seg_header= root->page.frame +
     (level ? PAGE_HEADER + PAGE_BTR_SEG_TOP : PAGE_HEADER + PAGE_BTR_SEG_LEAF);
   return fseg_alloc_free_page_general(seg_header, hint_page_no, file_direction,
@@ -644,7 +667,8 @@ btr_page_free_for_ibuf(
   buf_block_t *root= btr_get_latched_root(*index, mtr);
   dberr_t err=
     flst_add_first(root, PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST,
-                   block, PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST_NODE, mtr);
+                   block, PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST_NODE,
+                   fil_system.sys_space->free_limit, mtr);
   ut_d(if (err == DB_SUCCESS)
          flst_validate(root, PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST, mtr));
   return err;
@@ -688,24 +712,16 @@ dberr_t btr_page_free(dict_index_t* index, buf_block_t* block, mtr_t* mtr,
   fil_space_t *space= index->table->space;
   dberr_t err;
 
-  const auto savepoint= mtr->get_savepoint();
-  if (buf_block_t *root= btr_root_block_get(index, RW_NO_LATCH, mtr, &err))
+  if (buf_block_t *root= btr_root_block_sx(index, mtr, &err))
   {
-    const bool have_latch= mtr->have_u_or_x_latch(*root);
-#ifdef BTR_CUR_HASH_ADAPT
-    ut_ad(!have_latch || !root->index || !root->index->freed());
-#endif
-    mtr->rollback_to_savepoint(savepoint);
-    if (have_latch ||
-        (root= btr_root_block_get(index, RW_SX_LATCH, mtr, &err)))
-      err= fseg_free_page(&root->page.frame[blob ||
-                                            page_is_leaf(block->page.frame)
-                                            ? PAGE_HEADER + PAGE_BTR_SEG_LEAF
-                                            : PAGE_HEADER + PAGE_BTR_SEG_TOP],
-                          space, page, mtr, space_latched);
+    err= fseg_free_page(&root->page.frame[blob ||
+                                          page_is_leaf(block->page.frame)
+                                          ? PAGE_HEADER + PAGE_BTR_SEG_LEAF
+                                          : PAGE_HEADER + PAGE_BTR_SEG_TOP],
+                        space, page, mtr, space_latched);
+    if (err == DB_SUCCESS)
+      buf_page_free(space, page, mtr);
   }
-  if (err == DB_SUCCESS)
-    buf_page_free(space, page, mtr);
 
   /* The page was marked free in the allocation bitmap, but it
   should remain exclusively latched until mtr_t::commit() or until it
@@ -873,7 +889,8 @@ static rec_offs *btr_page_get_parent(rec_offs *offsets, mem_heap_t *heap,
 /************************************************************//**
 Returns the upper level node pointer to a page. It is assumed that mtr holds
 an x-latch on the tree.
-@return rec_get_offsets() of the node pointer record */
+@return rec_get_offsets() of the node pointer record
+@retval nullptr on corruption */
 static
 rec_offs*
 btr_page_get_father_block(
@@ -1282,54 +1299,71 @@ btr_read_autoinc(dict_index_t* index)
 	return autoinc;
 }
 
+dict_index_t *dict_table_t::get_index(const dict_col_t &col) const
+{
+  dict_index_t *index= dict_table_get_first_index(this);
+
+  while (index && (index->fields[0].col != &col || index->is_corrupted()))
+    index= dict_table_get_next_index(index);
+
+  return index;
+}
+
 /** Read the last used AUTO_INCREMENT value from PAGE_ROOT_AUTO_INC,
 or fall back to MAX(auto_increment_column).
-@param[in]	table	table containing an AUTO_INCREMENT column
-@param[in]	col_no	index of the AUTO_INCREMENT column
-@return	the AUTO_INCREMENT value
-@retval	0 on error or if no AUTO_INCREMENT value was used yet */
-ib_uint64_t
-btr_read_autoinc_with_fallback(const dict_table_t* table, unsigned col_no)
+@param table          table containing an AUTO_INCREMENT column
+@param col_no         index of the AUTO_INCREMENT column
+@param mysql_version  TABLE_SHARE::mysql_version
+@param max            the maximum value of the AUTO_INCREMENT column
+@return the AUTO_INCREMENT value
+@retval 0 on error or if no AUTO_INCREMENT value was used yet */
+uint64_t btr_read_autoinc_with_fallback(const dict_table_t *table,
+                                        unsigned col_no, ulong mysql_version,
+                                        uint64_t max)
 {
-	ut_ad(table->persistent_autoinc);
-	ut_ad(!table->is_temporary());
+  ut_ad(table->persistent_autoinc);
+  ut_ad(!table->is_temporary());
 
-	dict_index_t*	index = dict_table_get_first_index(table);
+  uint64_t autoinc= 0;
+  mtr_t mtr;
+  mtr.start();
 
-	if (index == NULL) {
-		return 0;
-	}
+  if (buf_block_t *block=
+      buf_page_get(page_id_t(table->space_id,
+                             dict_table_get_first_index(table)->page),
+                   table->space->zip_size(), RW_SX_LATCH, &mtr))
+  {
+    autoinc= page_get_autoinc(block->page.frame);
 
-	mtr_t		mtr;
-	mtr.start();
-	buf_block_t*	block = buf_page_get(
-		page_id_t(index->table->space_id, index->page),
-		index->table->space->zip_size(),
-		RW_S_LATCH, &mtr);
+    if (autoinc > 0 && autoinc <= max && mysql_version >= 100210);
+    else if (dict_index_t *index=
+             table->get_index(*dict_table_get_nth_col(table, col_no)))
+    {
+      /* Read MAX(autoinc_col), in case this table had originally been
+      created before MariaDB 10.2.4 introduced persistent AUTO_INCREMENT
+      and MariaDB 10.2.10 fixed MDEV-12123, and there could be a garbage
+      value in the PAGE_ROOT_AUTO_INC field. */
+      const uint64_t max_autoinc= row_search_max_autoinc(index);
+      const bool need_adjust{autoinc > max || autoinc < max_autoinc};
+      ut_ad(max_autoinc <= max);
 
-	ib_uint64_t	autoinc	= block
-		? page_get_autoinc(block->page.frame) : 0;
-	const bool	retry	= block && autoinc == 0
-		&& !page_is_empty(block->page.frame);
-	mtr.commit();
+      if (UNIV_UNLIKELY(need_adjust) && !high_level_read_only && !opt_readonly)
+      {
+        sql_print_information("InnoDB: Resetting PAGE_ROOT_AUTO_INC from "
+                              UINT64PF " to " UINT64PF
+                              " on table %`.*s.%`s (created with version %lu)",
+                              autoinc, max_autoinc,
+                              int(table->name.dblen()), table->name.m_name,
+                              table->name.basename(), mysql_version);
+        autoinc= max_autoinc;
+        index->set_modified(mtr);
+        page_set_autoinc(block, max_autoinc, &mtr, true);
+      }
+    }
+  }
 
-	if (retry) {
-		/* This should be an old data file where
-		PAGE_ROOT_AUTO_INC was initialized to 0.
-		Fall back to reading MAX(autoinc_col).
-		There should be an index on it. */
-		const dict_col_t*	autoinc_col
-			= dict_table_get_nth_col(table, col_no);
-		while (index && index->fields[0].col != autoinc_col) {
-			index = dict_table_get_next_index(index);
-		}
-
-		if (index) {
-			autoinc = row_search_max_autoinc(index);
-		}
-	}
-
-	return autoinc;
+  mtr.commit();
+  return autoinc;
 }
 
 /** Write the next available AUTO_INCREMENT value to PAGE_ROOT_AUTO_INC.
@@ -1351,6 +1385,7 @@ btr_write_autoinc(dict_index_t* index, ib_uint64_t autoinc, bool reset)
   if (buf_block_t *root= buf_page_get(page_id_t(space->id, index->page),
 				      space->zip_size(), RW_SX_LATCH, &mtr))
   {
+    buf_page_make_young_if_needed(&root->page);
     mtr.set_named_space(space);
     page_set_autoinc(root, autoinc, &mtr, reset);
   }
@@ -2541,6 +2576,11 @@ btr_attach_half_pages(
 		offsets = btr_page_get_father_block(nullptr, heap, mtr,
 						    &cursor);
 
+		if (UNIV_UNLIKELY(!offsets)) {
+			mem_heap_free(heap);
+			return DB_CORRUPTION;
+		}
+
 		/* Replace the address of the old child node (= page) with the
 		address of the new lower half */
 
@@ -3476,6 +3516,14 @@ btr_lift_page_up(
 			offsets = btr_page_get_father_block(offsets, heap,
 							    mtr, &cursor);
 		}
+
+		if (UNIV_UNLIKELY(!offsets)) {
+parent_corrupted:
+			mem_heap_free(heap);
+			*err = DB_CORRUPTION;
+			return nullptr;
+		}
+
 		father_block = btr_cur_get_block(&cursor);
 		father_page_zip = buf_block_get_page_zip(father_block);
 
@@ -3498,6 +3546,10 @@ btr_lift_page_up(
 								    heap,
 								    mtr,
 								    &cursor);
+			}
+
+			if (UNIV_UNLIKELY(!offsets)) {
+				goto parent_corrupted;
 			}
 
 			blocks[n_blocks++] = b = btr_cur_get_block(&cursor);
@@ -3713,6 +3765,11 @@ btr_compress(
 	} else {
 		offsets = btr_page_get_father_block(
 			NULL, heap, mtr, &father_cursor);
+	}
+
+	if (UNIV_UNLIKELY(!offsets)) {
+		err = DB_CORRUPTION;
+		goto func_exit;
 	}
 
 	if (adjust) {

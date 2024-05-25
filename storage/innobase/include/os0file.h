@@ -151,9 +151,11 @@ static const ulint OS_FILE_NORMAL = 62;
 /* @} */
 
 /** Types for file create @{ */
-static const ulint OS_DATA_FILE = 100;
-static const ulint OS_LOG_FILE = 101;
-static const ulint OS_DATA_FILE_NO_O_DIRECT = 103;
+static constexpr ulint OS_DATA_FILE = 100;
+static constexpr ulint OS_LOG_FILE = 101;
+#if defined _WIN32 || defined HAVE_FCNTL_DIRECT
+static constexpr ulint OS_DATA_FILE_NO_O_DIRECT = 103;
+#endif
 /* @} */
 
 /** Error codes from os_file_get_last_error @{ */
@@ -198,14 +200,10 @@ public:
     WRITE_ASYNC= WRITE_SYNC | 1,
     /** A doublewrite batch */
     DBLWR_BATCH= WRITE_ASYNC | 8,
-    /** Write data; evict the block on write completion */
-    WRITE_LRU= WRITE_ASYNC | 32,
     /** Write data and punch hole for the rest */
-    PUNCH= WRITE_ASYNC | 64,
-    /** Write data and punch hole; evict the block on write completion */
-    PUNCH_LRU= PUNCH | WRITE_LRU,
+    PUNCH= WRITE_ASYNC | 16,
     /** Zero out a range of bytes in fil_space_t::io() */
-    PUNCH_RANGE= WRITE_SYNC | 128,
+    PUNCH_RANGE= WRITE_SYNC | 32,
   };
 
   constexpr IORequest(buf_page_t *bpage, buf_tmp_buffer_t *slot,
@@ -218,7 +216,6 @@ public:
 
   bool is_read() const { return (type & READ_SYNC) != 0; }
   bool is_write() const { return (type & WRITE_SYNC) != 0; }
-  bool is_LRU() const { return (type & (WRITE_LRU ^ WRITE_ASYNC)) != 0; }
   bool is_async() const { return (type & (READ_SYNC ^ READ_ASYNC)) != 0; }
 
   void write_complete(int io_error) const;
@@ -382,7 +379,7 @@ os_file_create_simple_no_error_handling_func(
 	bool*		success)
 	MY_ATTRIBUTE((warn_unused_result));
 
-#ifdef  _WIN32
+#ifndef HAVE_FCNTL_DIRECT
 #define os_file_set_nocache(fd, file_name, operation_name) do{}while(0)
 #else
 /** Tries to disable OS caching on an opened file descriptor.

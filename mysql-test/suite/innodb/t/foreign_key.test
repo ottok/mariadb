@@ -2,6 +2,8 @@
 --source include/count_sessions.inc
 --source include/default_charset.inc
 
+SET GLOBAL innodb_stats_persistent = 0;
+
 --echo #
 --echo # Bug #19027905 ASSERT RET.SECOND DICT_CREATE_FOREIGN_CONSTRAINTS_LOW
 --echo # DICT_CREATE_FOREIGN_CONSTR
@@ -125,6 +127,9 @@ FLUSH TABLES;
 --source include/restart_mysqld.inc
 --let $shutdown_timeout=
 disconnect incomplete;
+
+SET @save_stats_persistent = @@GLOBAL.innodb_stats_persistent;
+SET GLOBAL innodb_stats_persistent = 0;
 
 INSERT INTO child SET a=0;
 --error ER_NO_REFERENCED_ROW_2
@@ -728,7 +733,9 @@ SELECT a FROM t1 FORCE INDEX(a);
 # the "goto rollback_to_savept" in row_mysql_handle_errors() is reverted.
 SELECT * FROM t1;
 # Allow purge to continue by closing the read view.
-disconnect con1;
+connection con1;
+COMMIT;
+connection default;
 
 # Wait for purge. With the fix reverted, the server would crash here.
 --source include/wait_all_purged.inc
@@ -949,8 +956,36 @@ ALTER TABLE t1 MODIFY id INT unsigned AUTO_INCREMENT;
 DROP TABLE t1,t2;
 
 --echo #
---echo # End of 10.4 tests
+--echo # MDEV-31441 BLOB corruption on UPDATE of PRIMARY KEY with FOREIGN KEY
 --echo #
+
+CREATE TABLE t1 (pk INT PRIMARY KEY, t TEXT) ENGINE=InnoDB;
+CREATE TABLE t2 (pk INT PRIMARY KEY, FOREIGN KEY (pk) REFERENCES t1(pk))
+ENGINE=InnoDB;
+
+SET @blob = REPEAT('A', @@innodb_page_size / 2);
+INSERT INTO t1 SET pk=1, t=@blob;
+INSERT INTO t2 SET pk=1;
+--connection con1
+BEGIN;
+DELETE FROM t2;
+--connection default
+# The following will be blocked by a FOREIGN KEY check on pk=1 in t2.
+--send
+UPDATE t1 SET pk=12;
+--connection con1
+let $wait_condition=
+SELECT count(*) > 0 FROM INFORMATION_SCHEMA.PROCESSLIST WHERE state='Updating';
+--source include/wait_condition.inc
+COMMIT;
+--disconnect con1
+--connection default
+--reap
+UPDATE t1 SET pk=1;
+SELECT pk,t=@blob FROM t1;
+DROP TABLE t2, t1;
+
+--echo # End of 10.4 tests
 
 --echo #
 --echo # MDEV-20729 Fix REFERENCES constraint in column definition
@@ -1042,9 +1077,22 @@ BEGIN;
 --error ER_NO_REFERENCED_ROW_2
 INSERT INTO child SET a=1;
 connection default;
+--error ER_TRUNCATE_ILLEGAL_FK
+TRUNCATE TABLE parent;
+--error ER_ROW_IS_REFERENCED_2
+DROP TABLE parent;
+SET innodb_lock_wait_timeout=0;
+--error ER_LOCK_WAIT_TIMEOUT
+RENAME TABLE parent TO transparent;
+--error ER_LOCK_WAIT_TIMEOUT
+ALTER TABLE parent FORCE, ALGORITHM=COPY;
+--error ER_LOCK_WAIT_TIMEOUT
+ALTER TABLE parent FORCE, ALGORITHM=INPLACE;
 SET innodb_lock_wait_timeout=0, foreign_key_checks=0;
 --error ER_LOCK_WAIT_TIMEOUT
 TRUNCATE TABLE parent;
+--error ER_LOCK_WAIT_TIMEOUT
+DROP TABLE parent;
 --error ER_LOCK_WAIT_TIMEOUT
 ALTER TABLE parent FORCE, ALGORITHM=COPY;
 --error ER_LOCK_WAIT_TIMEOUT
@@ -1060,7 +1108,13 @@ TRUNCATE TABLE parent;
 ALTER TABLE parent FORCE, ALGORITHM=COPY;
 ALTER TABLE parent FORCE, ALGORITHM=INPLACE;
 ALTER TABLE parent ADD COLUMN b INT, ALGORITHM=INSTANT;
-DROP TABLE child, parent;
+SET foreign_key_checks=ON;
+--error ER_TRUNCATE_ILLEGAL_FK
+TRUNCATE TABLE parent;
+ALTER TABLE parent FORCE, ALGORITHM=COPY;
+ALTER TABLE parent FORCE, ALGORITHM=INPLACE;
+RENAME TABLE parent TO transparent;
+DROP TABLE child, transparent;
 
 --echo #
 --echo # MDEV-26217 Failing assertion: list.count > 0 in ut_list_remove
@@ -1131,5 +1185,7 @@ CHECK TABLE binaries, collections EXTENDED;
 DROP TABLE binaries, collections;
 
 --echo # End of 10.6 tests
+
+SET GLOBAL innodb_stats_persistent = @save_stats_persistent;
 
 --source include/wait_until_count_sessions.inc

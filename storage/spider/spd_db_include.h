@@ -28,56 +28,31 @@
 #define SPIDER_DB_WRAPPER_MYSQL "mysql"
 #define SPIDER_DB_WRAPPER_MARIADB "mariadb"
 
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100204
 #define PLUGIN_VAR_CAN_MEMALLOC
 /*
-#define ITEM_FUNC_CASE_PARAMS_ARE_PUBLIC
 #define HASH_UPDATE_WITH_HASH_VALUE
 */
-#else
-#ifdef HANDLER_HAS_DIRECT_UPDATE_ROWS
-#define HANDLER_HAS_DIRECT_UPDATE_ROWS_WITH_HS
-#endif
-#endif
 
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100002
 #define SPIDER_HAS_DISCOVER_TABLE_STRUCTURE
 #define SPIDER_HAS_APPEND_FOR_SINGLE_QUOTE
 #define SPIDER_HAS_SHOW_SIMPLE_FUNC
 #define SPIDER_HAS_JT_HASH_INDEX_MERGE
 #define SPIDER_HAS_EXPR_CACHE_ITEM
-#else
-#define SPIDER_NEED_CHECK_CONDITION_AT_CHECKING_DIRECT_ORDER_LIMIT
-#endif
 
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100007
 #define SPIDER_ITEM_HAS_CMP_TYPE
-#endif
 
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100004
 #define SPIDER_HAS_TIME_STATUS
 #define SPIDER_HAS_DECIMAL_OPERATION_RESULTS_VALUE_TYPE
-#endif
 
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100014
 #define SPIDER_ITEM_STRING_WITHOUT_SET_STR_WITH_COPY
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100100
 #define SPIDER_ITEM_STRING_WITHOUT_SET_STR_WITH_COPY_AND_THDPTR
-#endif
-#endif
 
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100108
 #define SPIDER_HAS_GROUP_BY_HANDLER
-#endif
 
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100200
 #define SPIDER_ORDER_HAS_ENUM_ORDER
-#endif
 
-#if defined(MARIADB_BASE_VERSION)
 #define SPIDER_ITEM_GEOFUNC_NAME_HAS_MBR
 #define SPIDER_HANDLER_AUTO_REPAIR_HAS_ERROR
-#endif
 
 class spider_db_conn;
 typedef spider_db_conn SPIDER_DB_CONN;
@@ -139,7 +114,6 @@ typedef st_spider_result SPIDER_RESULT;
 #define SPIDER_SQL_HS_LTEQUAL_STR "<="
 #define SPIDER_SQL_HS_LTEQUAL_LEN (sizeof(SPIDER_SQL_HS_LTEQUAL_STR) - 1)
 
-#ifdef ITEM_FUNC_CASE_PARAMS_ARE_PUBLIC
 #define SPIDER_SQL_CASE_STR "case "
 #define SPIDER_SQL_CASE_LEN (sizeof(SPIDER_SQL_CASE_STR) - 1)
 #define SPIDER_SQL_WHEN_STR " when "
@@ -150,7 +124,6 @@ typedef st_spider_result SPIDER_RESULT;
 #define SPIDER_SQL_ELSE_LEN (sizeof(SPIDER_SQL_ELSE_STR) - 1)
 #define SPIDER_SQL_END_STR " end"
 #define SPIDER_SQL_END_LEN (sizeof(SPIDER_SQL_END_STR) - 1)
-#endif
 
 #define SPIDER_SQL_USING_STR " using "
 #define SPIDER_SQL_USING_LEN (sizeof(SPIDER_SQL_USING_STR) - 1)
@@ -613,34 +586,26 @@ typedef struct spider_conn_holder
   spider_conn_holder *next;
 } SPIDER_CONN_HOLDER;
 
+/* Record information of a local (spider) table, for use of the spider
+group by handler. */
 typedef struct spider_table_holder
 {
   TABLE *table;
   ha_spider *spider;
+  /* alias of the table, in the form of tk, where k is the index of
+  the table from `query->from' indexed by next_local. */
   spider_string *alias;
 } SPIDER_TABLE_HOLDER;
 
-typedef struct spider_field_holder
-{
-  Field *field;
-  ha_spider *spider;
-  spider_string *alias;
-  spider_field_holder *next;
-} SPIDER_FIELD_HOLDER;
-
-typedef struct spider_field_chain
-{
-  spider_field_holder *field_holder;
-  spider_field_chain *next;
-} SPIDER_FIELD_CHAIN;
-
+/* For use of the spider group by handler. */
 class spider_fields
 {
   uint dbton_count;
   uint current_dbton_num;
   uint dbton_ids[SPIDER_DBTON_SIZE];
+  /* Number of tables in `query->from'. */
   uint table_count;
-  uint current_table_num;
+  /* All tables in `query->from', in the same order by next_local. */
   SPIDER_TABLE_HOLDER *table_holder;
   SPIDER_LINK_IDX_CHAIN *first_link_idx_chain;
   SPIDER_LINK_IDX_CHAIN *last_link_idx_chain;
@@ -649,13 +614,6 @@ class spider_fields
   SPIDER_CONN_HOLDER *first_conn_holder;
   SPIDER_CONN_HOLDER *last_conn_holder;
   SPIDER_CONN_HOLDER *current_conn_holder;
-  SPIDER_FIELD_HOLDER *first_field_holder;
-  SPIDER_FIELD_HOLDER *last_field_holder;
-  SPIDER_FIELD_HOLDER *current_field_holder;
-  SPIDER_FIELD_CHAIN *first_field_chain;
-  SPIDER_FIELD_CHAIN *last_field_chain;
-  SPIDER_FIELD_CHAIN *current_field_chain;
-  Field **first_field_ptr;
   Field **current_field_ptr;
 public:
   spider_fields();
@@ -698,8 +656,6 @@ public:
     long access_balance
   );
   SPIDER_CONN_HOLDER *create_conn_holder();
-  void set_pos_to_first_conn_holder();
-  SPIDER_CONN_HOLDER *get_next_conn_holder();
   bool has_conn_holder();
   void clear_conn_holder_from_conn();
   bool check_conn_same_conn(
@@ -713,24 +669,14 @@ public:
   void free_conn_holder(
     SPIDER_CONN_HOLDER *conn_holder_arg
   );
-  SPIDER_TABLE_HOLDER *add_table(
-    ha_spider *spider_arg
-  );
-  bool all_query_fields_are_query_table_members();
-  int create_table_holder(
+  SPIDER_TABLE_HOLDER *find_table(Field *field);
+  void set_table_holder(
+    SPIDER_TABLE_HOLDER *table_holder_arg,
     uint table_count_arg
   );
-  void set_pos_to_first_table_holder();
-  SPIDER_TABLE_HOLDER *get_next_table_holder();
+  SPIDER_TABLE_HOLDER *get_first_table_holder();
   SPIDER_TABLE_HOLDER *get_table_holder(TABLE *table);
   uint get_table_count();
-  int add_field(Field *field_arg);
-  SPIDER_FIELD_HOLDER *create_field_holder();
-  void set_pos_to_first_field_holder();
-  SPIDER_FIELD_HOLDER *get_next_field_holder();
-  SPIDER_FIELD_CHAIN *create_field_chain();
-  void set_pos_to_first_field_chain();
-  SPIDER_FIELD_CHAIN *get_next_field_chain();
   void set_field_ptr(Field **field_arg);
   Field **get_next_field_ptr();
   int ping_table_mon_from_table(
@@ -935,11 +881,6 @@ public:
     spider_string *str,
     TABLE_LIST *table_list,
     uint table_count
-  ) = 0;
-  virtual int reappend_tables(
-    spider_fields *fields,
-    SPIDER_LINK_IDX_CHAIN *link_idx_chain,
-    spider_string *str
   ) = 0;
   virtual int append_where(
     spider_string *str
@@ -1200,10 +1141,6 @@ public:
     Time_zone *time_zone,
     int *need_mon
   ) = 0;
-  virtual bool set_loop_check_in_bulk_sql();
-  virtual int set_loop_check(
-    int *need_mon
-  );
   virtual int fin_loop_check();
   virtual int show_master_status(
     SPIDER_TRX *trx,
@@ -1784,10 +1721,6 @@ public:
     spider_fields *fields,
     ulong sql_type
   ) = 0;
-  virtual int reappend_tables_part(
-    spider_fields *fields,
-    ulong sql_type
-  ) = 0;
   virtual int append_where_part(
     ulong sql_type
   ) = 0;
@@ -1931,6 +1864,12 @@ static const LEX_CSTRING maturity_name[] =
   { STRING_WITH_LEN("Stable") }
 };
 
+/*
+  Type of singletons based on the type of the remote database.
+
+  All such singletons are stored in the array `spider_dbton', see
+  `spider_db_init()'.
+*/
 typedef struct st_spider_dbton
 {
   uint dbton_id;

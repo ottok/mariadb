@@ -4,7 +4,7 @@ MariaBackup: hot backup tool for InnoDB
 Originally Created 3/3/2009 Yasufumi Kinoshita
 Written by Alexey Kopytov, Aleksandr Kuzminsky, Stewart Smith, Vadim Tkachenko,
 Yasufumi Kinoshita, Ignacio Nin and Baron Schwartz.
-(c) 2017, 2022, MariaDB Corporation.
+(c) 2017, 2024, MariaDB Corporation.
 Portions written by Marko Mäkelä.
 
 This program is free software; you can redistribute it and/or modify
@@ -100,7 +100,6 @@ Street, Fifth Floor, Boston, MA 02110-1335 USA
 #include "ds_buffer.h"
 #include "ds_tmpfile.h"
 #include "xbstream.h"
-#include "changed_page_bitmap.h"
 #include "read_filt.h"
 #include "backup_wsrep.h"
 #include "innobackupex.h"
@@ -126,7 +125,8 @@ int sd_notifyf() { return 0; }
 int sys_var_init();
 
 /* === xtrabackup specific options === */
-char xtrabackup_real_target_dir[FN_REFLEN] = "./xtrabackup_backupfiles/";
+#define DEFAULT_TARGET_DIR "./xtrabackup_backupfiles/"
+char xtrabackup_real_target_dir[FN_REFLEN] = DEFAULT_TARGET_DIR;
 char *xtrabackup_target_dir= xtrabackup_real_target_dir;
 static my_bool xtrabackup_version;
 static my_bool verbose;
@@ -153,7 +153,6 @@ char *xtrabackup_incremental;
 lsn_t incremental_lsn;
 lsn_t incremental_to_lsn;
 lsn_t incremental_last_lsn;
-xb_page_bitmap *changed_page_bitmap;
 
 char *xtrabackup_incremental_basedir; /* for --backup */
 char *xtrabackup_extra_lsndir; /* for --backup with --extra-lsndir */
@@ -411,6 +410,9 @@ uint opt_safe_slave_backup_timeout = 0;
 
 const char *opt_history = NULL;
 
+/* Whether xtrabackup_binlog_info should be created on recovery */
+static bool recover_binlog_info;
+
 
 char mariabackup_exe[FN_REFLEN];
 char orig_argv1[FN_REFLEN];
@@ -420,6 +422,8 @@ pthread_cond_t  scanned_lsn_cond;
 
 /** Store the deferred tablespace name during --backup */
 static std::set<std::string> defer_space_names;
+
+typedef decltype(fil_space_t::id) space_id_t;
 
 typedef std::map<space_id_t,std::string> space_id_to_name_t;
 
@@ -1268,22 +1272,25 @@ struct my_option xb_client_options[]= {
 
     {"compress", OPT_XTRA_COMPRESS,
      "Compress individual backup files using the "
-     "specified compression algorithm. Currently the only supported algorithm "
-     "is 'quicklz'. It is also the default algorithm, i.e. the one used when "
-     "--compress is used without an argument.",
+     "specified compression algorithm. It uses no longer maintained QuickLZ "
+     "library hence this option was deprecated with MariaDB 10.1.31 and 10.2.13.",
      (G_PTR *) &xtrabackup_compress_alg, (G_PTR *) &xtrabackup_compress_alg, 0,
      GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
 
     {"compress-threads", OPT_XTRA_COMPRESS_THREADS,
      "Number of threads for parallel data compression. The default value is "
-     "1.",
+     "1. "
+     "This option was deprecated as it relies on the no longer "
+     "maintained QuickLZ library.",
      (G_PTR *) &xtrabackup_compress_threads,
      (G_PTR *) &xtrabackup_compress_threads, 0, GET_UINT, REQUIRED_ARG, 1, 1,
      UINT_MAX, 0, 0, 0},
 
     {"compress-chunk-size", OPT_XTRA_COMPRESS_CHUNK_SIZE,
      "Size of working buffer(s) for compression threads in bytes. The default "
-     "value is 64K.",
+     "value is 64K. "
+     "This option was deprecated as it relies on the no longer "
+     "maintained QuickLZ library.",
      (G_PTR *) &xtrabackup_compress_chunk_size,
      (G_PTR *) &xtrabackup_compress_chunk_size, 0, GET_ULL, REQUIRED_ARG,
      (1 << 16), 1024, ULONGLONG_MAX, 0, 0, 0},
@@ -1404,7 +1411,9 @@ struct my_option xb_client_options[]= {
 
     {"decompress", OPT_DECOMPRESS,
      "Decompresses all files with the .qp "
-     "extension in a backup previously made with the --compress option.",
+     "extension in a backup previously made with the --compress option. "
+     "This option was deprecated as it relies on the no longer "
+     "maintained QuickLZ library.",
      (uchar *) &opt_decompress, (uchar *) &opt_decompress, 0, GET_BOOL, NO_ARG,
      0, 0, 0, 0, 0, 0},
 
@@ -1681,8 +1690,11 @@ struct my_option xb_server_options[] =
    "Path to InnoDB log files.", &srv_log_group_home_dir,
    &srv_log_group_home_dir, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"innodb_max_dirty_pages_pct", OPT_INNODB_MAX_DIRTY_PAGES_PCT,
-   "Percentage of dirty pages allowed in bufferpool.", (G_PTR*) &srv_max_buf_pool_modified_pct,
-   (G_PTR*) &srv_max_buf_pool_modified_pct, 0, GET_ULONG, REQUIRED_ARG, 90, 0, 100, 0, 0, 0},
+   "Percentage of dirty pages allowed in bufferpool.",
+   (G_PTR*) &srv_max_buf_pool_modified_pct,
+   (G_PTR*) &srv_max_buf_pool_modified_pct, 0, GET_DOUBLE, REQUIRED_ARG,
+   (longlong)getopt_double2ulonglong(90), (longlong)getopt_double2ulonglong(0),
+   getopt_double2ulonglong(100), 0, 0, 0},
   {"innodb_use_native_aio", OPT_INNODB_USE_NATIVE_AIO,
    "Use native AIO if supported on this platform.",
    (G_PTR*) &srv_use_native_aio,
@@ -1747,7 +1759,7 @@ struct my_option xb_server_options[] =
    &aria_log_dir_path, &aria_log_dir_path,
    0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 
-  {"open_files_limit", OPT_OPEN_FILES_LIMIT, "the maximum number of file "
+  {"open_files_limit", 0, "the maximum number of file "
    "descriptors to reserve with setrlimit().",
    (G_PTR*) &xb_open_files_limit, (G_PTR*) &xb_open_files_limit, 0, GET_ULONG,
    REQUIRED_ARG, 0, 0, UINT_MAX, 0, 1, 0},
@@ -2178,7 +2190,7 @@ static bool innodb_init_param()
 
 	/* Check that values don't overflow on 32-bit systems. */
 	if (sizeof(ulint) == 4) {
-		if (xtrabackup_use_memory > UINT_MAX32) {
+          if (xtrabackup_use_memory > (longlong) UINT_MAX32) {
 			msg("mariabackup: use-memory can't be over 4GB"
 			    " on 32-bit systems");
 		}
@@ -2380,6 +2392,7 @@ xtrabackup_read_metadata(char *filename)
 {
 	FILE	*fp;
 	my_bool	 r = TRUE;
+	int	 t;
 
 	fp = fopen(filename,"r");
 	if(!fp) {
@@ -2410,6 +2423,9 @@ xtrabackup_read_metadata(char *filename)
 	}
 	/* Optional fields */
 
+	if (fscanf(fp, "recover_binlog_info = %d\n", &t) == 1) {
+		recover_binlog_info = (t == 1);
+	}
 end:
 	fclose(fp);
 
@@ -2428,11 +2444,13 @@ xtrabackup_print_metadata(char *buf, size_t buf_len)
 		 "backup_type = %s\n"
 		 "from_lsn = " UINT64PF "\n"
 		 "to_lsn = " UINT64PF "\n"
-		 "last_lsn = " UINT64PF "\n",
+		 "last_lsn = " UINT64PF "\n"
+		 "recover_binlog_info = %d\n",
 		 metadata_type,
 		 metadata_from_lsn,
 		 metadata_to_lsn,
-		 metadata_last_lsn);
+		 metadata_last_lsn,
+		 MY_TEST(opt_binlog_info == BINLOG_INFO_LOCKLESS));
 }
 
 /***********************************************************************
@@ -2929,12 +2947,7 @@ static my_bool xtrabackup_copy_datafile(ds_ctxt *ds_data,
 		goto skip;
 	}
 
-	if (!changed_page_bitmap) {
-		read_filter = &rf_pass_through;
-	}
-	else {
-		read_filter = &rf_bitmap;
-	}
+	read_filter = &rf_pass_through;
 
 	res = xb_fil_cur_open(&cursor, read_filter, node, thread_n, ULLONG_MAX);
 	if (res == XB_FIL_CUR_SKIP) {
@@ -4701,22 +4714,6 @@ fail:
 		return(false);
 	}
 
-	if (srv_buf_pool_size >= 1000 * 1024 * 1024) {
-                                  /* Here we still have srv_pool_size counted
-                                  in kilobytes (in 4.0 this was in bytes)
-				  srv_boot() converts the value to
-                                  pages; if buffer pool is less than 1000 MB,
-                                  assume fewer threads. */
-                srv_max_n_threads = 50000;
-
-	} else if (srv_buf_pool_size >= 8 * 1024 * 1024) {
-
-                srv_max_n_threads = 10000;
-        } else {
-		srv_max_n_threads = 1000;       /* saves several MB of memory,
-                                                especially in 64-bit
-                                                computers */
-        }
 	srv_thread_pool_init();
 	/* Reset the system variables in the recovery module. */
 	trx_pool_init();
@@ -4887,11 +4884,6 @@ fail_before_log_copying_thread_start:
 
 	std::thread(log_copying_thread).detach();
 
-	/* FLUSH CHANGED_PAGE_BITMAPS call */
-	if (!flush_changed_page_bitmaps()) {
-		goto fail;
-	}
-
 	ut_a(xtrabackup_parallel > 0);
 
 	if (xtrabackup_parallel > 1) {
@@ -4966,9 +4958,6 @@ fail_before_log_copying_thread_start:
 		goto fail;
 	}
 
-	if (changed_page_bitmap) {
-		xb_page_bitmap_deinit(changed_page_bitmap);
-	}
 	backup_datasinks.destroy();
 
 	msg("Redo log (from LSN " LSN_PF " to " LSN_PF
@@ -6053,6 +6042,26 @@ static ibool prepare_handle_del_files(const char *datadir, const char *db, const
 	return TRUE;
 }
 
+
+/**************************************************************************
+Store the current binary log coordinates in a specified file.
+@return 'false' on error. */
+static bool
+store_binlog_info(const char *filename, const char* name, ulonglong pos)
+{
+	FILE *fp = fopen(filename, "w");
+
+	if (!fp) {
+		msg("mariabackup: failed to open '%s'\n", filename);
+		return(false);
+	}
+
+	fprintf(fp, "%s\t%llu\n", name, pos);
+	fclose(fp);
+
+	return(true);
+}
+
 /** Implement --prepare
 @return	whether the operation succeeded */
 static bool xtrabackup_prepare_func(char** argv)
@@ -6141,7 +6150,6 @@ static bool xtrabackup_prepare_func(char** argv)
 		return(false);
 	}
 
-	srv_max_n_threads = 1000;
 	srv_n_purge_threads = 1;
 
 	xb_filters_init();
@@ -6242,6 +6250,20 @@ static bool xtrabackup_prepare_func(char** argv)
 		msg("Last binlog file %s, position %lld",
 		    trx_sys.recovered_binlog_filename,
 		    longlong(trx_sys.recovered_binlog_offset));
+
+                /* output to xtrabackup_binlog_pos_innodb and (if
+                backup_safe_binlog_info was available on the server) to
+                xtrabackup_binlog_info. In the latter case
+                xtrabackup_binlog_pos_innodb becomes redundant and is created
+                only for compatibility. */
+                ok = store_binlog_info(
+                        "xtrabackup_binlog_pos_innodb",
+                        trx_sys.recovered_binlog_filename,
+                        trx_sys.recovered_binlog_offset)
+                        && (!recover_binlog_info || store_binlog_info(
+                                    XTRABACKUP_BINLOG_INFO,
+                                    trx_sys.recovered_binlog_filename,
+                                    trx_sys.recovered_binlog_offset));
 	}
 
 	/* Check whether the log is applied enough or not. */
@@ -6444,7 +6466,7 @@ static bool check_all_privileges()
 	}
 
 	/* KILL ... */
-	if (!opt_no_lock && (opt_kill_long_queries_timeout || opt_kill_long_query_type)) {
+	if (!opt_no_lock && opt_kill_long_queries_timeout) {
 		check_result |= check_privilege(
 			granted_privileges,
 			"CONNECTION ADMIN", "*", "*",
@@ -6465,7 +6487,7 @@ static bool check_all_privileges()
 	if (opt_galera_info || opt_slave_info
 		|| opt_safe_slave_backup) {
 		check_result |= check_privilege(granted_privileges,
-			"SLAVE MONITOR", "*", "*",
+			"REPLICA MONITOR", "*", "*",
 			PRIVILEGE_WARNING);
 	}
 
@@ -6673,9 +6695,10 @@ void handle_options(int argc, char **argv, char ***argv_server,
         server_default_groups.push_back(NULL);
 	snprintf(conf_file, sizeof(conf_file), "my");
 
-	if (prepare && target_dir) {
+	if (prepare) {
 		snprintf(conf_file, sizeof(conf_file),
-			 "%s/backup-my.cnf", target_dir);
+			 "%s/backup-my.cnf", target_dir ? target_dir:
+			DEFAULT_TARGET_DIR);
 			if (!strncmp(argv[1], "--defaults-file=", 16)) {
 				/* Remove defaults-file*/
 				for (int i = 2; ; i++) {
