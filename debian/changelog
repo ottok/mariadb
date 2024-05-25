@@ -1,3 +1,15 @@
+mariadb (1:10.11.8-0ubuntu0.23.10.1) mantic-security; urgency=medium
+
+  * Update gdb.conf to be aligned with other branches and easier to maintain
+  * SECURITY UPDATE: New upstream version 10.11.8 includes fixes for regressions
+    as noted at https://mariadb.com/kb/en/mariadb-10-11-8-release-notes/ and
+    also fixes the following security vulnerabilities (LP: #2067125):
+    - CVE-2024-21096
+  * Drop multiple patches dropped upstream, and re-import PR#2541 which had been
+    rebased in the original (and still open) PR.
+
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 24 May 2024 22:02:01 -0700
+
 mariadb (1:10.11.6-0ubuntu0.23.10.2) mantic-security; urgency=medium
 
   * SECURITY UPDATE: New upstream version 10.11.6 includes fixes for regressions
