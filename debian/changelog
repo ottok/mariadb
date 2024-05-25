@@ -1,3 +1,14 @@
+mariadb-10.6 (1:10.6.18-0ubuntu0.22.04.1) jammy-security; urgency=medium
+
+  * Update gdb.conf to be aligned with other branches and easier to maintain
+  * Update upstream signing key
+  * SECURITY UPDATE: New upstream version 10.6.18 includes fixes for regressions
+    as noted at https://mariadb.com/kb/en/mariadb-10-6-18-release-notes/ and
+    also fixes the following security vulnerabilities (LP: #2067125):
+    - CVE-2024-21096
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 25 May 2024 14:07:17 -0700
+
 mariadb-10.6 (1:10.6.16-0ubuntu0.22.04.1) jammy-security; urgency=medium
 
   * SECURITY UPDATE: New upstream version 10.6.16includes fixes for the
