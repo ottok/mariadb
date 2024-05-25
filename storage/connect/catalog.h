@@ -39,9 +39,9 @@ typedef struct _colinfo {
   PCSZ   Name;
   int    Type;
   int    Offset;
-  int    Length;
+  unsigned    Length;
   int    Key;
-  int    Precision;
+  unsigned    Precision;
   int    Scale;
   int    Opt;
   int    Freq;
@@ -61,7 +61,7 @@ class DllExport CATALOG {
   friend class OEMDEF;
  public:
   CATALOG(void);                       // Constructor
-  virtual ~CATALOG() { }               // Make -Wdelete-non-virtual-dtor happy
+  virtual ~CATALOG() = default;        // Make -Wdelete-non-virtual-dtor happy
 
   // Implementation
   int     GetCblen(void) {return Cblen;}

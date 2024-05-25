@@ -126,6 +126,25 @@ public:
     bool use_fields,
     spider_fields *fields
   ) override;
+protected:
+  int check_item_func(
+    Item_func *item_func,
+    ha_spider *spider,
+    const char *alias,
+    uint alias_length,
+    bool use_fields,
+    spider_fields *fields
+  );
+  int print_item_func(
+    Item_func *item_func,
+    ha_spider *spider,
+    spider_string *str,
+    const char *alias,
+    uint alias_length,
+    bool use_fields,
+    spider_fields *fields
+  );
+public:
 #ifdef HANDLER_HAS_DIRECT_AGGREGATE
   int open_item_sum_func(
     Item_sum *item_sum,
@@ -142,51 +161,28 @@ public:
     String *from
   ) override;
 #ifdef SPIDER_HAS_GROUP_BY_HANDLER
-  int append_table(
-    ha_spider *spider,
-    spider_fields *fields,
-    spider_string *str,
-    TABLE_LIST *table_list,
-    TABLE_LIST **used_table_list,
-    uint *current_pos,
-    TABLE_LIST **cond_table_list_ptr,
-    bool top_down,
-    bool first
-  );
-  int append_tables_top_down(
-    ha_spider *spider,
-    spider_fields *fields,
-    spider_string *str,
-    TABLE_LIST *table_list,
-    TABLE_LIST **used_table_list,
-    uint *current_pos,
-    TABLE_LIST **cond_table_list_ptr
-  );
   int append_tables_top_down_check(
     TABLE_LIST *table_list,
     TABLE_LIST **used_table_list,
     uint *current_pos
   );
-  int append_embedding_tables(
-    ha_spider *spider,
-    spider_fields *fields,
-    spider_string *str,
-    TABLE_LIST *table_list,
-    TABLE_LIST **used_table_list,
-    uint *current_pos,
-    TABLE_LIST **cond_table_list_ptr
-  );
+  int append_table_list(spider_fields *fields,
+                        spider_string *str, TABLE_LIST *table,
+                        table_map *upper_usable_tables,
+                        table_map eliminated_tables);
+  int append_table_array(spider_fields *fields,
+                         spider_string *str, TABLE_LIST **table,
+                         TABLE_LIST **end, table_map *upper_usable_tables,
+                         table_map eliminated_tables);
+  int append_join(spider_fields *fields, spider_string *str,
+                  List<TABLE_LIST> *tables, table_map *upper_usable_tables,
+                  table_map eliminated_tables);
   int append_from_and_tables(
     ha_spider *spider,
     spider_fields *fields,
     spider_string *str,
     TABLE_LIST *table_list,
     uint table_count
-  ) override;
-  int reappend_tables(
-    spider_fields *fields,
-    SPIDER_LINK_IDX_CHAIN *link_idx_chain,
-    spider_string *str
   ) override;
   int append_where(
     spider_string *str
@@ -448,9 +444,7 @@ public:
   bool is_xa_nota_error(
     int error_num
   );
-  int print_warnings(
-    struct tm *l_time
-  );
+  int fetch_and_print_warnings(struct tm *l_time);
   spider_db_result *store_result(
     spider_db_result_buffer **spider_res_buf,
     st_spider_db_request_key *request_key,
@@ -539,11 +533,6 @@ public:
     Time_zone *time_zone,
     int *need_mon
   );
-  bool set_loop_check_in_bulk_sql();
-  int set_loop_check(
-    int *need_mon
-  );
-  int fin_loop_check();
   int exec_simple_sql_with_result(
     SPIDER_TRX *trx,
     SPIDER_SHARE *share,
@@ -681,8 +670,11 @@ public:
   spider_string      *show_table_status;
   spider_string      *show_records;
   spider_string      *show_index;
+  /* The remote table names */
   spider_string      *table_names_str;
+  /* The remote db names */
   spider_string      *db_names_str;
+  /* fixme: this field looks useless */
   spider_string      *db_table_str;
 #ifdef SPIDER_HAS_HASH_VALUE_TYPE
   my_hash_value_type *db_table_str_hash_value;
@@ -1476,9 +1468,6 @@ public:
     SPIDER_HS_STRING_REF &info
   );
 #endif
-  bool need_lock_before_set_sql_for_exec(
-    ulong sql_type
-  );
 #ifdef SPIDER_HAS_GROUP_BY_HANDLER
   int set_sql_for_exec(
     ulong sql_type,
@@ -1608,10 +1597,6 @@ public:
   );
 #ifdef SPIDER_HAS_GROUP_BY_HANDLER
   int append_from_and_tables_part(
-    spider_fields *fields,
-    ulong sql_type
-  );
-  int reappend_tables_part(
     spider_fields *fields,
     ulong sql_type
   );

@@ -218,7 +218,7 @@ class Dep_value : public Sql_alloc
 {
 public:
   Dep_value(): bound(FALSE) {}
-  virtual ~Dep_value(){} /* purecov: inspected */ /* stop compiler warnings */
+  virtual ~Dep_value() = default; /* purecov: inspected */
   
   bool is_bound() { return bound; }
   void make_bound() { bound= TRUE; }
@@ -342,7 +342,7 @@ const size_t Dep_value::iterator_size=
 class Dep_module : public Sql_alloc
 {
 public:
-  virtual ~Dep_module(){}  /* purecov: inspected */ /* stop compiler warnings */
+  virtual ~Dep_module() = default;  /* purecov: inspected */
   
   /* Mark as bound. Currently is non-virtual and does nothing */
   void make_bound() {};
@@ -1518,7 +1518,8 @@ void check_equality(Dep_analysis_context *ctx, Dep_module_expr **eq_mod,
       left->real_item()->type() == Item::FIELD_ITEM)
   {
     Field *field= ((Item_field*)left->real_item())->field;
-    if (!field->can_optimize_outer_join_table_elimination(cond, right))
+    if (field->can_optimize_outer_join_table_elimination(cond, right) !=
+        Data_type_compatibility::OK)
       return;
     Dep_value_field *field_val;
     if ((field_val= ctx->get_field_value(field)))

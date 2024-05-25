@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2012, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -43,8 +43,7 @@ protected:
   table_session_connect_attrs();
 
 public:
-  ~table_session_connect_attrs()
-  {}
+  ~table_session_connect_attrs() = default;
 
 private:
   /** Table share lock. */

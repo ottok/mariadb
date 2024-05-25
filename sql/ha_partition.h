@@ -399,6 +399,7 @@ private:
   */
   bool m_innodb;                        // Are all underlying handlers
                                         // InnoDB
+  bool m_myisammrg;                     // Are any of the handlers of type MERGE
   /*
     When calling extra(HA_EXTRA_CACHE) we do not pass this to the underlying
     handlers immediately. Instead we cache it and call the underlying
@@ -577,8 +578,7 @@ private:
   void cleanup_new_partition(uint part_count);
   int prepare_new_partition(TABLE *table, HA_CREATE_INFO *create_info,
                             handler *file, const char *part_name,
-                            partition_element *p_elem,
-                            uint disable_non_uniq_indexes);
+                            partition_element *p_elem);
   /*
     delete_table and rename_table uses very similar logic which
     is packed into this routine.
@@ -591,10 +591,11 @@ private:
   */
   bool create_handler_file(const char *name);
   bool setup_engine_array(MEM_ROOT *mem_root, handlerton *first_engine);
-  bool read_par_file(const char *name);
+  int read_par_file(const char *name);
   handlerton *get_def_part_engine(const char *name);
   bool get_from_handler_file(const char *name, MEM_ROOT *mem_root,
                              bool is_clone);
+  bool re_create_par_file(const char *name);
   bool new_handlers_from_part_info(MEM_ROOT *mem_root);
   bool create_handlers(MEM_ROOT *mem_root);
   void clear_handler_file();
@@ -987,6 +988,10 @@ private:
                                           handler *file, uint *n);
   static const uint NO_CURRENT_PART_ID= NOT_A_PARTITION_ID;
   int loop_partitions(handler_callback callback, void *param);
+  int loop_partitions_over_map(const MY_BITMAP *map,
+                               handler_callback callback,
+                               void *param);
+  int loop_read_partitions(handler_callback callback, void *param);
   int loop_extra_alter(enum ha_extra_function operations);
   void late_extra_cache(uint partition_id);
   void late_extra_no_cache(uint partition_id);
@@ -1304,7 +1309,18 @@ public:
       The following code is not safe if you are using different
       storage engines or different index types per partition.
     */
-    return m_file[0]->index_flags(inx, part, all_parts);
+    ulong part_flags= m_file[0]->index_flags(inx, part, all_parts);
+
+    /*
+      The underlying storage engine might support Rowid Filtering. But
+      ha_partition does not forward the needed SE API calls, so the feature
+      will not be used.
+
+      Note: It's the same with IndexConditionPushdown, except for its variant
+      of IndexConditionPushdown+BatchedKeyAccess (that one works). Because of
+      that, we do not clear HA_DO_INDEX_COND_PUSHDOWN here.
+    */
+    return part_flags & ~HA_DO_RANGE_FILTER_PUSHDOWN;
   }
 
   /**
@@ -1396,9 +1412,8 @@ private:
   {
     ulonglong nr= (((Field_num*) field)->unsigned_flag ||
                    field->val_int() > 0) ? field->val_int() : 0;
+    update_next_auto_inc_val();
     lock_auto_increment();
-    DBUG_ASSERT(part_share->auto_inc_initialized ||
-                !can_use_for_auto_inc_init());
     /* must check when the mutex is taken */
     if (nr >= part_share->next_auto_inc_val)
       part_share->next_auto_inc_val= nr + 1;
@@ -1569,8 +1584,8 @@ public:
     Enable/Disable Indexes are only supported by HEAP and MyISAM.
     -------------------------------------------------------------------------
   */
-    int disable_indexes(uint mode) override;
-    int enable_indexes(uint mode) override;
+    int disable_indexes(key_map map, bool persist) override;
+    int enable_indexes(key_map map, bool persist) override;
     int indexes_are_disabled() override;
 
   /*
@@ -1633,5 +1648,6 @@ public:
 
   bool can_convert_nocopy(const Field &field,
                           const Column_definition &new_field) const override;
+  void handler_stats_updated() override;
 };
 #endif /* HA_PARTITION_INCLUDED */

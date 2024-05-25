@@ -406,11 +406,11 @@ bool Item_subselect::mark_as_dependent(THD *thd, st_select_lex *select,
   {
     is_correlated= TRUE;
     Ref_to_outside *upper;
-    if (!(upper= new (thd->stmt_arena->mem_root) Ref_to_outside()))
+    if (!(upper= new (thd->mem_root) Ref_to_outside()))
       return TRUE;
     upper->select= select;
     upper->item= item;
-    if (upper_refs.push_back(upper, thd->stmt_arena->mem_root))
+    if (upper_refs.push_back(upper, thd->mem_root))
       return TRUE;
   }
   return FALSE;
@@ -567,6 +567,9 @@ void Item_subselect::recalc_used_tables(st_select_lex *new_parent,
   estimate of the number of rows the subquery will access during execution.
   This measure is used instead of JOIN::read_time, because it is considered
   to be much more reliable than the cost estimate.
+
+  Note: the logic in this function must agree with
+  JOIN::init_join_cache_and_keyread().
 
   @return true if the subquery is expensive
   @return false otherwise
@@ -1313,18 +1316,10 @@ bool Item_singlerow_subselect::fix_length_and_dec()
   }
   unsigned_flag= value->unsigned_flag;
   /*
-    If the subquery has no tables (1) and is not a UNION (2), like:
-
-      (SELECT subq_value)
-
+    If the subquery always returns a row, like "(SELECT subq_value)"
     then its NULLability is the same as subq_value's NULLability.
-
-    (1): A subquery that uses a table will return NULL when the table is empty.
-    (2): A UNION subquery will return NULL if it produces a "Subquery returns
-         more than one row" error.
   */
-  if (engine->no_tables() &&
-      engine->engine_type() != subselect_engine::UNION_ENGINE)
+  if (engine->always_returns_one_row())
     set_maybe_null(engine->may_be_null());
   else
   {
@@ -1334,6 +1329,32 @@ bool Item_singlerow_subselect::fix_length_and_dec()
   return FALSE;
 }
 
+
+
+/*
+  @brief
+     Check if we can guarantee that this engine will always produce exactly one
+     row.
+
+  @detail
+    Check if the subquery is just
+
+      (SELECT value)
+
+    Then we can guarantee we always return one row.
+    Selecting from tables may produce more than one row.
+    HAVING, WHERE or ORDER BY/LIMIT clauses may cause no rows to be produced.
+*/
+
+bool subselect_single_select_engine::always_returns_one_row() const
+{
+  st_select_lex *params= select_lex->master_unit()->global_parameters();
+  return no_tables() &&
+         !params->limit_params.select_limit &&
+         !params->limit_params.offset_limit &&
+         !select_lex->where &&
+         !select_lex->having;
+}
 
 /**
   Add an expression cache for this subquery if it is needed
@@ -2067,7 +2088,7 @@ Item_in_subselect::single_value_transformer(JOIN *join)
     thd->lex->current_select= current;
 
     /* We will refer to upper level cache array => we have to save it for SP */
-    optimizer->keep_top_level_cache();
+    DBUG_ASSERT(optimizer->get_cache()[0]->is_array_kept());
 
     /*
       As far as  Item_in_optimizer does not substitute itself on fix_fields
@@ -2464,7 +2485,7 @@ Item_in_subselect::row_value_transformer(JOIN *join)
     }
 
     // we will refer to upper level cache array => we have to save it in PS
-    optimizer->keep_top_level_cache();
+    DBUG_ASSERT(optimizer->get_cache()[0]->is_array_kept());
 
     thd->lex->current_select= current;
     /*
@@ -2565,10 +2586,6 @@ Item_in_subselect::create_row_in_to_exists_cond(JOIN * join,
                   (select_lex->ref_pointer_array[i]->type() == REF_ITEM &&
                    ((Item_ref*)(select_lex->ref_pointer_array[i]))->ref_type() ==
                     Item_ref::OUTER_REF));
-      if (select_lex->ref_pointer_array[i]->
-          check_cols(left_expr->element_index(i)->cols()))
-        DBUG_RETURN(true);
-
       Item *item_eq=
         new (thd->mem_root)
         Item_func_eq(thd, new (thd->mem_root)
@@ -2635,9 +2652,6 @@ Item_in_subselect::create_row_in_to_exists_cond(JOIN * join,
                   (select_lex->ref_pointer_array[i]->type() == REF_ITEM &&
                    ((Item_ref*)(select_lex->ref_pointer_array[i]))->ref_type() ==
                     Item_ref::OUTER_REF));
-      if (select_lex->ref_pointer_array[i]->
-          check_cols(left_expr->element_index(i)->cols()))
-        DBUG_RETURN(true);
       item= new (thd->mem_root)
         Item_func_eq(thd,
                      new (thd->mem_root)
@@ -2898,7 +2912,9 @@ bool Item_exists_subselect::select_prepare_to_be_in()
   bool trans_res= FALSE;
   DBUG_ENTER("Item_exists_subselect::select_prepare_to_be_in");
   if (!optimizer &&
-      thd->lex->sql_command == SQLCOM_SELECT &&
+      (thd->lex->sql_command == SQLCOM_SELECT ||
+       thd->lex->sql_command == SQLCOM_UPDATE_MULTI ||
+       thd->lex->sql_command == SQLCOM_DELETE_MULTI) &&
       !unit->first_select()->is_part_of_union() &&
       optimizer_flag(thd, OPTIMIZER_SWITCH_EXISTS_TO_IN) &&
       (is_top_level_item() ||
@@ -3260,8 +3276,12 @@ bool Item_exists_subselect::exists2in_processor(void *opt_arg)
           if (eqs.at(i).outer_exp->
               walk(&Item::find_item_processor, TRUE, upper->item))
             break;
+        DBUG_ASSERT(thd->stmt_arena->is_stmt_prepare_or_first_stmt_execute() ||
+                    thd->stmt_arena->is_conventional());
+        DBUG_ASSERT(thd->stmt_arena->mem_root == thd->mem_root);
         if (i == (uint)eqs.elements() &&
-            (in_subs->upper_refs.push_back(upper, thd->stmt_arena->mem_root)))
+            (in_subs->upper_refs.push_back(
+               upper, thd->mem_root)))
           goto out;
       }
     }
@@ -3968,14 +3988,14 @@ bool subselect_union_engine::fix_length_and_dec(Item_cache **row)
 
   if (unit->first_select()->item_list.elements == 1)
   {
-    if (set_row(unit->types, row))
+    if (set_row(unit->item_list, row))
       return TRUE;
     item->collation.set(row[0]->collation);
   }
   else
   {
     bool maybe_null_saved= maybe_null;
-    if (set_row(unit->types, row))
+    if (set_row(unit->item_list, row))
       return TRUE;
     maybe_null= maybe_null_saved;
   }
@@ -4612,10 +4632,11 @@ void subselect_union_engine::print(String *str, enum_query_type query_type)
 void subselect_uniquesubquery_engine::print(String *str,
                                             enum_query_type query_type)
 {
+  TABLE *table= tab->tab_list ? tab->tab_list->table : tab->table;
   str->append(STRING_WITH_LEN("<primary_index_lookup>("));
   tab->ref.items[0]->print(str, query_type);
   str->append(STRING_WITH_LEN(" in "));
-  if (tab->table->s->table_category == TABLE_CATEGORY_TEMPORARY)
+  if (table->s->table_category == TABLE_CATEGORY_TEMPORARY)
   {
     /*
       Temporary tables' names change across runs, so they can't be used for
@@ -4624,8 +4645,8 @@ void subselect_uniquesubquery_engine::print(String *str,
     str->append(STRING_WITH_LEN("<temporary table>"));
   }
   else
-    str->append(&tab->table->s->table_name);
-  KEY *key_info= tab->table->key_info+ tab->ref.key;
+    str->append(&table->s->table_name);
+  KEY *key_info= table->key_info+ tab->ref.key;
   str->append(STRING_WITH_LEN(" on "));
   str->append(&key_info->name);
   if (cond)
@@ -4643,12 +4664,13 @@ all other tests pass.
 
 void subselect_uniquesubquery_engine::print(String *str)
 {
-  KEY *key_info= tab->table->key_info + tab->ref.key;
+  TABLE *table= tab->tab_list ? tab->tab_list->table : tab->table;
+  KEY *key_info= table->key_info + tab->ref.key;
   str->append(STRING_WITH_LEN("<primary_index_lookup>("));
   for (uint i= 0; i < key_info->user_defined_key_parts; i++)
     tab->ref.items[i]->print(str);
   str->append(STRING_WITH_LEN(" in "));
-  str->append(&tab->table->s->table_name);
+  str->append(&table->s->table_name);
   str->append(STRING_WITH_LEN(" on "));
   str->append(&key_info->name);
   if (cond)
@@ -4663,11 +4685,12 @@ void subselect_uniquesubquery_engine::print(String *str)
 void subselect_indexsubquery_engine::print(String *str,
                                            enum_query_type query_type)
 {
+  TABLE *table= tab->tab_list ? tab->tab_list->table : tab->table;
   str->append(STRING_WITH_LEN("<index_lookup>("));
   tab->ref.items[0]->print(str, query_type);
   str->append(STRING_WITH_LEN(" in "));
-  str->append(tab->table->s->table_name.str, tab->table->s->table_name.length);
-  KEY *key_info= tab->table->key_info+ tab->ref.key;
+  str->append(&table->s->table_name);
+  KEY *key_info= table->key_info+ tab->ref.key;
   str->append(STRING_WITH_LEN(" on "));
   str->append(&key_info->name);
   if (check_null)
@@ -4785,7 +4808,7 @@ subselect_uniquesubquery_engine::change_result(Item_subselect *si,
   @retval
     FALSE there are some tables in subquery
 */
-bool subselect_single_select_engine::no_tables()
+bool subselect_single_select_engine::no_tables() const
 {
   return(select_lex->table_list.elements == 0);
 }
@@ -4815,7 +4838,7 @@ bool subselect_single_select_engine::may_be_null()
   @retval
     FALSE there are some tables in subquery
 */
-bool subselect_union_engine::no_tables()
+bool subselect_union_engine::no_tables() const
 {
   for (SELECT_LEX *sl= unit->first_select(); sl; sl= sl->next_select())
   {
@@ -4835,7 +4858,7 @@ bool subselect_union_engine::no_tables()
     FALSE there are some tables in subquery
 */
 
-bool subselect_uniquesubquery_engine::no_tables()
+bool subselect_uniquesubquery_engine::no_tables() const
 {
   /* returning value is correct, but this method should never be called */
   DBUG_ASSERT(FALSE);
@@ -5348,6 +5371,7 @@ subselect_hash_sj_engine::make_unique_engine()
     DBUG_RETURN(NULL);
 
   tab->table= tmp_table;
+  tab->tab_list= 0;
   tab->preread_init_done= FALSE;
   tab->ref.tmp_table_index_lookup_init(thd, tmp_key, it, FALSE);
 
@@ -5835,7 +5859,7 @@ void subselect_hash_sj_engine::exclude()
   DBUG_ASSERT(FALSE);
 }
 
-bool subselect_hash_sj_engine::no_tables()
+bool subselect_hash_sj_engine::no_tables() const
 {
   DBUG_ASSERT(FALSE);
   return FALSE;
@@ -6685,9 +6709,10 @@ exists_complementing_null_row(MY_BITMAP *keys_to_complement)
     return FALSE;
   }
 
-  return bitmap_exists_intersection((const MY_BITMAP**) null_bitmaps,
+  return bitmap_exists_intersection(null_bitmaps,
                                     count_null_keys,
-                                    (uint)highest_min_row, (uint)lowest_max_row);
+                                    (uint)highest_min_row,
+                                    (uint)lowest_max_row);
 }
 
 

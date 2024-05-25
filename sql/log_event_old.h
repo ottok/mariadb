@@ -131,7 +131,7 @@ public:
 
   MY_BITMAP const *get_cols() const { return &m_cols; }
   size_t get_width() const          { return m_width; }
-  ulong get_table_id() const        { return m_table_id; }
+  ulonglong get_table_id() const    { return m_table_id; }
 
 #ifndef MYSQL_CLIENT
   virtual bool write_data_header();
@@ -158,7 +158,7 @@ protected:
      this class, not create instances of this class.
   */
 #ifndef MYSQL_CLIENT
-  Old_rows_log_event(THD*, TABLE*, ulong table_id,
+  Old_rows_log_event(THD*, TABLE*, ulonglong table_id,
                      MY_BITMAP const *cols, bool is_transactional);
 #endif
   Old_rows_log_event(const uchar *row_data, uint event_len,
@@ -176,15 +176,15 @@ protected:
 #ifndef MYSQL_CLIENT
   TABLE *m_table;		/* The table the rows belong to */
 #endif
-  ulong       m_table_id;	/* Table ID */
+  ulonglong   m_table_id;	/* Table ID */
   MY_BITMAP   m_cols;		/* Bitmap denoting columns available */
   ulong       m_width;          /* The width of the columns bitmap */
 
   ulong       m_master_reclength; /* Length of record on master side */
 
   /* Bit buffers in the same memory as the class */
-  uint32    m_bitbuf[128/(sizeof(uint32)*8)];
-  uint32    m_bitbuf_ai[128/(sizeof(uint32)*8)];
+  my_bitmap_map  m_bitbuf[128/(sizeof(my_bitmap_map)*8)];
+  my_bitmap_map  m_bitbuf_ai[128/(sizeof(my_bitmap_map)*8)];
 
   uchar    *m_rows_buf;		/* The rows in packed format */
   uchar    *m_rows_cur;		/* One-after the end of the data */
@@ -359,7 +359,7 @@ class Write_rows_log_event_old : public Old_rows_log_event
   /********** BEGIN CUT & PASTE FROM Write_rows_log_event **********/
 public:
 #if !defined(MYSQL_CLIENT)
-  Write_rows_log_event_old(THD*, TABLE*, ulong table_id,
+  Write_rows_log_event_old(THD*, TABLE*, ulonglong table_id,
                            MY_BITMAP const *cols, bool is_transactional);
 #endif
 #ifdef HAVE_REPLICATION
@@ -430,7 +430,7 @@ class Update_rows_log_event_old : public Old_rows_log_event
   /********** BEGIN CUT & PASTE FROM Update_rows_log_event **********/
 public:
 #ifndef MYSQL_CLIENT
-  Update_rows_log_event_old(THD*, TABLE*, ulong table_id,
+  Update_rows_log_event_old(THD*, TABLE*, ulonglong table_id,
                             MY_BITMAP const *cols,
                             bool is_transactional);
 #endif
@@ -507,7 +507,7 @@ class Delete_rows_log_event_old : public Old_rows_log_event
   /********** BEGIN CUT & PASTE FROM Update_rows_log_event **********/
 public:
 #ifndef MYSQL_CLIENT
-  Delete_rows_log_event_old(THD*, TABLE*, ulong,
+  Delete_rows_log_event_old(THD*, TABLE*, ulonglong,
                             MY_BITMAP const *cols, bool is_transactional);
 #endif
 #ifdef HAVE_REPLICATION

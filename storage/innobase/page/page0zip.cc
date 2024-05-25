@@ -3270,7 +3270,6 @@ page_zip_validate_low(
 	ibool			sloppy)	/*!< in: FALSE=strict,
 					TRUE=ignore the MIN_REC_FLAG */
 {
-	page_zip_des_t	temp_page_zip;
 	ibool		valid;
 
 	if (memcmp(page_zip->data + FIL_PAGE_PREV, page + FIL_PAGE_PREV,
@@ -3311,7 +3310,7 @@ page_zip_validate_low(
 	MEM_CHECK_DEFINED(page, srv_page_size);
 	MEM_CHECK_DEFINED(page_zip->data, page_zip_get_size(page_zip));
 
-	temp_page_zip = *page_zip;
+	page_zip_des_t temp_page_zip(*page_zip);
 	valid = page_zip_decompress_low(&temp_page_zip, temp_page, TRUE);
 	if (!valid) {
 		fputs("page_zip_validate(): failed to decompress\n", stderr);
@@ -3372,7 +3371,7 @@ page_zip_validate_low(
 				differed.  Let us ignore it. */
 				page_zip_fail(("page_zip_validate:"
 					       " min_rec_flag"
-					       " (%s" ULINTPF "," ULINTPF
+					       " (%s" UINT32PF "," UINT32PF
 					       ",0x%02x)\n",
 					       sloppy ? "ignored, " : "",
 					       page_get_space_id(page),
@@ -3417,7 +3416,8 @@ page_zip_validate_low(
 			page + PAGE_NEW_INFIMUM, TRUE);
 		trec = page_rec_get_next_low(
 			temp_page + PAGE_NEW_INFIMUM, TRUE);
-		const ulint n_core = page_is_leaf(page) ? index->n_fields : 0;
+		const ulint n_core = (index && page_is_leaf(page))
+			? index->n_fields : 0;
 
 		do {
 			if (page_offset(rec) != page_offset(trec)) {
@@ -3975,9 +3975,6 @@ page_zip_write_trx_id_and_roll_ptr(
 	ut_ad(field + DATA_TRX_ID_LEN
 	      == rec_get_nth_field(rec, offsets, trx_id_col + 1, &len));
 	ut_ad(len == DATA_ROLL_PTR_LEN);
-#if defined UNIV_DEBUG || defined UNIV_ZIP_DEBUG
-	ut_a(!memcmp(storage, field, sys_len));
-#endif /* UNIV_DEBUG || UNIV_ZIP_DEBUG */
 	compile_time_assert(DATA_TRX_ID_LEN == 6);
 	mach_write_to_6(field, trx_id);
 	compile_time_assert(DATA_ROLL_PTR_LEN == 7);

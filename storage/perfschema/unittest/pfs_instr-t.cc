@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2008, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -85,6 +85,8 @@ void test_no_instruments()
 
   cleanup_instruments();
 }
+
+PRAGMA_DISABLE_CHECK_STACK_FRAME
 
 void test_no_instances()
 {
@@ -245,6 +247,7 @@ void test_no_instances()
   cleanup_file_hash();
   cleanup_instruments();
 }
+PRAGMA_REENABLE_CHECK_STACK_FRAME
 
 void test_with_instances()
 {

@@ -64,7 +64,7 @@ private:
 
 public:
   ha_maria(handlerton *hton, TABLE_SHARE * table_arg);
-  ~ha_maria() {}
+  ~ha_maria() = default;
   handler *clone(const char *name, MEM_ROOT *mem_root) override final;
   const char *index_type(uint key_number) override final;
   ulonglong table_flags() const override final
@@ -122,8 +122,8 @@ public:
   int external_lock(THD * thd, int lock_type) override;
   int start_stmt(THD *thd, thr_lock_type lock_type) override final;
   int delete_all_rows(void) override final;
-  int disable_indexes(uint mode) override final;
-  int enable_indexes(uint mode) override final;
+  int disable_indexes(key_map map, bool persist) override final;
+  int enable_indexes(key_map map, bool persist) override final;
   int indexes_are_disabled(void) override final;
   void start_bulk_insert(ha_rows rows, uint flags) override final;
   int end_bulk_insert() override final;

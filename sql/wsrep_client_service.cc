@@ -1,4 +1,4 @@
-/* Copyright 2018-2022 Codership Oy <info@codership.com>
+/* Copyright 2018-2023 Codership Oy <info@codership.com>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -281,11 +281,18 @@ enum wsrep::provider::status Wsrep_client_service::replay()
     original THD state during replication event applying.
    */
   THD *replayer_thd= new THD(true, true);
+  // Replace the security context of the replayer with the security context
+  // of the original THD. Since security context class doesn't have proper
+  // copy constructors, we need to store the original one and set it back
+  // before destruction so that THD desctruction doesn't cause double-free
+  // on the replaced security context.
+  Security_context old_ctx = replayer_thd->main_security_ctx;
+  replayer_thd->main_security_ctx = m_thd->main_security_ctx;
   replayer_thd->thread_stack= m_thd->thread_stack;
   replayer_thd->real_id= pthread_self();
   replayer_thd->prior_thr_create_utime=
       replayer_thd->start_utime= microsecond_interval_timer();
-  replayer_thd->set_command(COM_SLEEP);
+  replayer_thd->mark_connection_idle();
   replayer_thd->reset_for_next_command(true);
 
   enum wsrep::provider::status ret;
@@ -297,6 +304,7 @@ enum wsrep::provider::status Wsrep_client_service::replay()
     replayer_service.replay_status(ret);
   }
 
+  replayer_thd->main_security_ctx = old_ctx;
   delete replayer_thd;
   DBUG_RETURN(ret);
 }
@@ -347,22 +355,34 @@ void Wsrep_client_service::debug_crash(const char* crash_point)
 int Wsrep_client_service::bf_rollback()
 {
   DBUG_ASSERT(m_thd == current_thd);
-  DBUG_ENTER("Wsrep_client_service::rollback");
+  DBUG_ENTER("Wsrep_client_service::bf_rollback");
 
   int ret= (trans_rollback_stmt(m_thd) || trans_rollback(m_thd));
-  if (m_thd->locked_tables_mode && m_thd->lock)
+
+  WSREP_DEBUG("::bf_rollback() thread: %lu, client_state %s "
+              "client_mode %s trans_state %s killed %d",
+              thd_get_thread_id(m_thd),
+              wsrep_thd_client_state_str(m_thd),
+              wsrep_thd_client_mode_str(m_thd),
+              wsrep_thd_transaction_state_str(m_thd),
+              m_thd->killed);
+
+  /* If client is quiting all below will be done in THD::cleanup()
+     TODO: why we need this any other case?  */
+  if (m_thd->wsrep_cs().state() != wsrep::client_state::s_quitting)
   {
-    if (m_thd->locked_tables_list.unlock_locked_tables(m_thd))
-      ret= 1;
-    m_thd->variables.option_bits&= ~OPTION_TABLE_LOCK;
+    if (m_thd->locked_tables_mode && m_thd->lock)
+    {
+      if (m_thd->locked_tables_list.unlock_locked_tables(m_thd))
+        ret= 1;
+      m_thd->variables.option_bits&= ~OPTION_TABLE_LOCK;
+    }
+    if (m_thd->global_read_lock.is_acquired())
+    {
+      m_thd->global_read_lock.unlock_global_read_lock(m_thd);
+    }
+    m_thd->release_transactional_locks();
   }
-  if (m_thd->global_read_lock.is_acquired())
-  {
-    m_thd->global_read_lock.unlock_global_read_lock(m_thd);
-  }
-  m_thd->release_transactional_locks();
-  mysql_ull_cleanup(m_thd);
-  m_thd->mdl_context.release_explicit_locks();
 
   DBUG_RETURN(ret);
 }

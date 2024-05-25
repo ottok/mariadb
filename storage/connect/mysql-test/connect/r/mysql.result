@@ -229,6 +229,7 @@ a
 20
 30
 # Start of mysqldump ------
+/*!999999\- enable the sandbox mode */ 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `t2` (
@@ -361,6 +362,17 @@ SELECT hex(col) from t2;
 hex(col)
 676C616365
 676C6163C383
+DROP TABLE t2;
+DROP TABLE t1;
+#
+# MDEV-29782 CONNECT engine converted YEAR to DATETIME, causing INSERT to fail
+#
+CREATE TABLE t1 (id year);
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL DBNAME='test' TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+INSERT INTO t2 VALUES (1999);
+SELECT * FROM t2;
+id
+1999
 DROP TABLE t2;
 DROP TABLE t1;
 #

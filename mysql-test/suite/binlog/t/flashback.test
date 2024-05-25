@@ -1,4 +1,4 @@
---source include/have_log_bin.inc
+--source include/have_binlog_format_row.inc
 --source include/have_innodb.inc
 
 --echo #
@@ -55,7 +55,7 @@ FLUSH LOGS;
 
 let $MYSQLD_DATADIR= `select @@datadir`;
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
---replace_regex /SQL_LOAD_MB-[0-9]-[0-9]/SQL_LOAD_MB-#-#/ /exec_time=[0-9]*/exec_time=#/ /end_log_pos [0-9]*/end_log_pos #/ /# at [0-9]*/# at #/ /Xid = [0-9]*/Xid = #/ /thread_id=[0-9]*/thread_id=#/ /table id [0-9]*/table id #/ /mapped to number [0-9]*/mapped to number #/ /server v [^ ]*/server v #.##.##/ /CRC32 0x[0-9a-f]*/CRC32 XXX/ /collation_server=[0-9]+/collation_server=X/ /character_set_client=[0-9]+/character_set_client=X/ /collation_connection=[0-9]+/collation_connection=X/ /xid=\d*/xid=<xid>/
+--replace_regex /SQL_LOAD_MB-[0-9]-[0-9]/SQL_LOAD_MB-#-#/ /exec_time=[0-9]*/exec_time=#/ /end_log_pos [0-9]*/end_log_pos #/ /# at [0-9]*/# at #/ /Xid = [0-9]*/Xid = #/ /thread_id=[0-9]*/thread_id=#/ /table id [0-9]*/table id #/ /mapped to number [0-9]*/mapped to number #/ /server v [^ ]*/server v #.##.##/ /CRC32 0x[0-9a-f]*/CRC32 XXX/ /collation_server=[0-9]+/collation_server=X/ /character_set_client=[a-zA-Z0-9]+/character_set_client=X/ /collation_connection=[0-9]+/collation_connection=X/ /xid=\d*/xid=<xid>/
 --exec $MYSQL_BINLOG --base64-output=decode-rows -v -v $MYSQLD_DATADIR/master-bin.000001
 
 --echo # < CASE 1 >
@@ -64,7 +64,7 @@ let $MYSQLD_DATADIR= `select @@datadir`;
 
 let $MYSQLD_DATADIR= `select @@datadir`;
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
---replace_regex /SQL_LOAD_MB-[0-9]-[0-9]/SQL_LOAD_MB-#-#/ /exec_time=[0-9]*/exec_time=#/ /end_log_pos [0-9]*/end_log_pos #/ /# at [0-9]*/# at #/ /Xid = [0-9]*/Xid = #/ /thread_id=[0-9]*/thread_id=#/ /table id [0-9]*/table id #/ /mapped to number [0-9]*/mapped to number #/ /server v [^ ]*/server v #.##.##/ /CRC32 0x[0-9a-f]*/CRC32 XXX/ /collation_server=[0-9]+/collation_server=X/ /character_set_client=[0-9]+/character_set_client=X/ /collation_connection=[0-9]+/collation_connection=X/ /xid=\d*/xid=<xid>/
+--replace_regex /SQL_LOAD_MB-[0-9]-[0-9]/SQL_LOAD_MB-#-#/ /exec_time=[0-9]*/exec_time=#/ /end_log_pos [0-9]*/end_log_pos #/ /# at [0-9]*/# at #/ /Xid = [0-9]*/Xid = #/ /thread_id=[0-9]*/thread_id=#/ /table id [0-9]*/table id #/ /mapped to number [0-9]*/mapped to number #/ /server v [^ ]*/server v #.##.##/ /CRC32 0x[0-9a-f]*/CRC32 XXX/ /collation_server=[0-9]+/collation_server=X/ /character_set_client=[a-zA-Z0-9]+/character_set_client=X/ /collation_connection=[0-9]+/collation_connection=X/ /xid=\d*/xid=<xid>/
 --exec $MYSQL_BINLOG -B --base64-output=decode-rows -v -v $MYSQLD_DATADIR/master-bin.000001
 
 --echo # < CASE 1 >
@@ -101,7 +101,7 @@ let $MYSQLD_DATADIR= `select @@datadir`;
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
 --exec $MYSQL_BINLOG -vv $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_original_1.sql
 --exec $MYSQL_BINLOG -B -vv $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_1.sql
---exec $MYSQL -e "SET binlog_format= ROW; source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_1.sql;"
+--exec $MYSQL -e "source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_1.sql;"
 
 SELECT * FROM t1;
 
@@ -126,7 +126,7 @@ let $MYSQLD_DATADIR= `select @@datadir`;
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
 --exec $MYSQL_BINLOG -vv $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_original_2.sql
 --exec $MYSQL_BINLOG -B -vv $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_2.sql
---exec $MYSQL -e "SET binlog_format= ROW; source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_2.sql;"
+--exec $MYSQL -e "source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_2.sql;"
 
 SELECT * FROM t1;
 
@@ -160,7 +160,7 @@ let $MYSQLD_DATADIR= `select @@datadir`;
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
 --exec $MYSQL_BINLOG -vv $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_original_3.sql
 --exec $MYSQL_BINLOG -B -vv $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_3.sql
---exec $MYSQL -e "SET binlog_format= ROW; source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_3.sql;"
+--exec $MYSQL -e "source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_3.sql;"
 
 SELECT * FROM t1;
 
@@ -202,7 +202,7 @@ let $MYSQLD_DATADIR= `select @@datadir`;
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
 --exec $MYSQL_BINLOG -vv $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_original_4.sql
 --exec $MYSQL_BINLOG -B $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_4.sql
---exec $MYSQL -e "SET binlog_format= ROW; source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_4.sql;"
+--exec $MYSQL -e "source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_4.sql;"
 
 SELECT * FROM t1;
 SELECT * FROM t2;
@@ -247,7 +247,7 @@ let $MYSQLD_DATADIR= `select @@datadir`;
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
 --exec $MYSQL_BINLOG -vv $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_original_5.sql
 --exec $MYSQL_BINLOG -B $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_5.sql
---exec $MYSQL -e "SET binlog_format= ROW; source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_5.sql;"
+--exec $MYSQL -e "source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_5.sql;"
 
 SELECT * FROM t1;
 
@@ -323,7 +323,7 @@ let $MYSQLD_DATADIR= `select @@datadir`;
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
 --exec $MYSQL_BINLOG --database=world --table=city -vv $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_original_6.sql
 --exec $MYSQL_BINLOG --database=world --table=city -B $MYSQLD_DATADIR/master-bin.000001 > $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_6.sql
---exec $MYSQL -e "SET binlog_format= ROW; source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_6.sql;"
+--exec $MYSQL -e "source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_6.sql;"
 
 SELECT * FROM world.city;
 
@@ -355,7 +355,7 @@ FLUSH LOGS;
 --source include/assert.inc
 
 --exec $MYSQL_BINLOG -vv -B --read-from-remote-server --user=root --host=127.0.0.1 --port=$MASTER_MYPORT master-bin.000002> $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_7.sql
---exec $MYSQL -e "SET binlog_format= ROW; source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_7.sql;"
+--exec $MYSQL -e "source $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_7.sql;"
 
 --echo # 6- Rows must be present upon restoring from flashback
 --let $assert_cond= COUNT(*) = 6 FROM t1
@@ -363,6 +363,14 @@ FLUSH LOGS;
 --source include/assert.inc
 
 DROP TABLE t1;
+
+--echo #
+--echo # MDEV-30698 Cover missing test cases for mariadb-binlog options
+--echo #            --raw [and] --flashback
+--echo #
+
+--error 1 # --raw mode and --flashback mode are not allowed
+--exec $MYSQL_BINLOG -vv -B --raw --read-from-remote-server --user=root --host=127.0.0.1 --port=$MASTER_MYPORT master-bin.000003> $MYSQLTEST_VARDIR/tmp/mysqlbinlog_row_flashback_8.sql
 
 ## Clear
 SET binlog_format=statement;

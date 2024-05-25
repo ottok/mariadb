@@ -27,6 +27,7 @@
 #include "sp_rcontext.h"
 #include "sp_head.h"
 #include "sql_trigger.h"
+#include "sql_parse.h"
 #include "sql_select.h"
 #include "sql_show.h"                           // append_identifier
 #include "sql_view.h"                           // VIEW_ANY_SQL
@@ -494,7 +495,10 @@ void Item::print_parenthesised(String *str, enum_query_type query_type,
   bool need_parens= precedence() < parent_prec;
   if (need_parens)
     str->append('(');
-  print(str, query_type);
+  if (check_stack_overrun(current_thd, STACK_MIN_SIZE, NULL))
+    str->append(STRING_WITH_LEN("<STACK OVERRUN>"));
+  else
+    print(str, query_type);
   if (need_parens)
     str->append(')');
 }
@@ -943,14 +947,15 @@ bool Item_field::register_field_in_write_map(void *arg)
 
   This is used by fix_vcol_expr() when a table is opened
 
-  We don't have to check fields that are marked as NO_DEFAULT_VALUE
-  as the upper level will ensure that all these will be given a value.
+  We don't have to check non-virtual fields that are marked as
+  NO_DEFAULT_VALUE as the upper level will ensure that all these
+  will be given a value.
 */
 
 bool Item_field::check_field_expression_processor(void *arg)
 {
   Field *org_field= (Field*) arg;
-  if (field->flags & NO_DEFAULT_VALUE_FLAG)
+  if (field->flags & NO_DEFAULT_VALUE_FLAG && !field->vcol_info)
     return 0;
   if ((field->default_value && field->default_value->flags) || field->vcol_info)
   {
@@ -1521,7 +1526,7 @@ int Item::save_in_field_no_warnings(Field *field, bool no_conversions)
 
 #ifndef DBUG_OFF
 static inline
-void mark_unsupported_func(const char *where, const char *processor_name)
+void dbug_mark_unsupported_func(const char *where, const char *processor_name)
 {
   char buff[64];
   my_snprintf(buff, sizeof(buff), "%s::%s", where ? where: "", processor_name);
@@ -1531,7 +1536,7 @@ void mark_unsupported_func(const char *where, const char *processor_name)
   DBUG_VOID_RETURN;
 }
 #else
-#define mark_unsupported_func(X,Y) {}
+#define dbug_mark_unsupported_func(X,Y) {}
 #endif
 
 bool mark_unsupported_function(const char *where, void *store, uint result)
@@ -1539,7 +1544,7 @@ bool mark_unsupported_function(const char *where, void *store, uint result)
   Item::vcol_func_processor_result *res=
     (Item::vcol_func_processor_result*) store;
   uint old_errors= res->errors;
-  mark_unsupported_func(where, "check_vcol_func_processor");
+  dbug_mark_unsupported_func(where, "check_vcol_func_processor");
   res->errors|= result;  /* Store type of expression */
   /* Store the name to the highest violation (normally VCOL_IMPOSSIBLE) */
   if (result > old_errors)
@@ -1560,33 +1565,19 @@ bool mark_unsupported_function(const char *w1, const char *w2,
 
 bool Item_field::check_vcol_func_processor(void *arg)
 {
+  uint r= VCOL_FIELD_REF;
   context= 0;
   vcol_func_processor_result *res= (vcol_func_processor_result *) arg;
   if (res && res->alter_info)
+    r|= res->alter_info->check_vcol_field(this);
+  else if (field)
   {
-    for (Key &k: res->alter_info->key_list)
-    {
-      if (k.type != Key::FOREIGN_KEY)
-        continue;
-      Foreign_key *fk= (Foreign_key*) &k;
-      if (fk->update_opt != FK_OPTION_CASCADE)
-        continue;
-      for (Key_part_spec& kp: fk->columns)
-      {
-        if (!lex_string_cmp(system_charset_info, &kp.field_name, &field_name))
-        {
-          return mark_unsupported_function(field_name.str, arg, VCOL_IMPOSSIBLE);
-        }
-      }
-    }
+    if (field->unireg_check == Field::NEXT_NUMBER)
+      r|= VCOL_AUTO_INC;
+    if (field->vcol_info &&
+        field->vcol_info->flags & (VCOL_NOT_STRICTLY_DETERMINISTIC | VCOL_AUTO_INC))
+      r|= VCOL_NON_DETERMINISTIC;
   }
-
-  uint r= VCOL_FIELD_REF;
-  if (field && field->unireg_check == Field::NEXT_NUMBER)
-    r|= VCOL_AUTO_INC;
-  if (field && field->vcol_info &&
-      field->vcol_info->flags & (VCOL_NOT_STRICTLY_DETERMINISTIC | VCOL_AUTO_INC))
-    r|= VCOL_NON_DETERMINISTIC;
   return mark_unsupported_function(field_name.str, arg, r);
 }
 
@@ -2536,7 +2527,8 @@ bool DTCollation::aggregate(const DTCollation &dt, uint flags)
 
 /******************************/
 static
-void my_coll_agg_error(DTCollation &c1, DTCollation &c2, const char *fname)
+void my_coll_agg_error(const DTCollation &c1, const DTCollation &c2,
+                       const char *fname)
 {
   my_error(ER_CANT_AGGREGATE_2COLLATIONS,MYF(0),
            c1.collation->coll_name.str, c1.derivation_name(),
@@ -2619,10 +2611,17 @@ bool Type_std_attributes::agg_item_collations(DTCollation &c,
 }
 
 
+/*
+  @param single_err  When nargs==1, use *single_err as the second aggregated
+                     collation when producing error message.
+*/
+
 bool Type_std_attributes::agg_item_set_converter(const DTCollation &coll,
                                                  const LEX_CSTRING &fname,
                                                  Item **args, uint nargs,
-                                                 uint flags, int item_sep)
+                                                 uint flags, int item_sep,
+                                                 const Single_coll_err
+                                                 *single_err)
 {
   THD *thd= current_thd;
   if (thd->lex->is_ps_or_view_context_analysis())
@@ -2660,26 +2659,45 @@ bool Type_std_attributes::agg_item_set_converter(const DTCollation &coll,
         args[0]= safe_args[0];
         args[item_sep]= safe_args[1];
       }
-      my_coll_agg_error(args, nargs, fname.str, item_sep);
+      if (nargs == 1 && single_err)
+      {
+        /*
+          Use *single_err to produce an error message mentioning two
+          collations.
+        */
+        if (single_err->first)
+          my_coll_agg_error(args[0]->collation, single_err->coll, fname.str);
+        else
+          my_coll_agg_error(single_err->coll, args[0]->collation, fname.str);
+      }
+      else
+        my_coll_agg_error(args, nargs, fname.str, item_sep);
       return TRUE;
     }
 
     if (conv->fix_fields_if_needed(thd, arg))
       return TRUE;
 
-    Query_arena *arena, backup;
-    arena= thd->activate_stmt_arena_if_needed(&backup);
-    if (arena)
+    if (!thd->stmt_arena->is_conventional() &&
+	((!thd->lex->current_select &&
+	  (thd->stmt_arena->is_stmt_prepare_or_first_sp_execute() ||
+           thd->stmt_arena->is_stmt_prepare_or_first_stmt_execute())) ||
+         thd->lex->current_select->first_cond_optimization))
     {
+      Query_arena *arena, backup;
+      arena= thd->activate_stmt_arena_if_needed(&backup);
+
       Item_direct_ref_to_item *ref=
         new (thd->mem_root) Item_direct_ref_to_item(thd, *arg);
       if ((ref == NULL) || ref->fix_fields(thd, (Item **)&ref))
       {
-        thd->restore_active_arena(arena, &backup);
+        if (arena)
+          thd->restore_active_arena(arena, &backup);
         return TRUE;
       }
       *arg= ref;
-      thd->restore_active_arena(arena, &backup);
+      if (arena)
+        thd->restore_active_arena(arena, &backup);
       ref->change_item(thd, conv);
     }
     else
@@ -2788,11 +2806,11 @@ Item_sp::func_name_cstring(THD *thd, bool is_package_function) const
       quoted `pkg` and `func` separately, so the entire result looks like:
          `db`.`pkg`.`func`
     */
-    Database_qualified_name tmp= Database_qualified_name::split(m_name->m_name);
-    DBUG_ASSERT(tmp.m_db.length);
-    append_identifier(thd, &qname, &tmp.m_db);
+    Identifier_chain2 tmp= Identifier_chain2::split(m_name->m_name);
+    DBUG_ASSERT(tmp[0].length);
+    append_identifier(thd, &qname, &tmp[0]);
     qname.append('.');
-    append_identifier(thd, &qname, &tmp.m_name);
+    append_identifier(thd, &qname, &tmp[1]);
   }
   else
     append_identifier(thd, &qname, &m_name->m_name);
@@ -2924,7 +2942,7 @@ Item_sp::execute_impl(THD *thd, Item **args, uint arg_count)
     init_sql_alloc(key_memory_sp_head_call_root, &sp_mem_root,
                    MEM_ROOT_BLOCK_SIZE, 0, MYF(0));
     *sp_query_arena= Query_arena(&sp_mem_root,
-                                 Query_arena::STMT_INITIALIZED_FOR_SP);
+                                 Query_arena::STMT_SP_QUERY_ARGUMENTS);
   }
 
   bool err_status= m_sp->execute_function(thd, args, arg_count,
@@ -4073,7 +4091,9 @@ Item_param::Item_param(THD *thd, const LEX_CSTRING *name_arg,
     as an actual parameter. See Item_param::set_from_item().
   */
   m_is_settable_routine_parameter(true),
-  m_clones(thd->mem_root)
+  m_clones(thd->mem_root),
+  m_associated_field(nullptr),
+  m_default_field(nullptr)
 {
   name= *name_arg;
   /*
@@ -4082,6 +4102,7 @@ Item_param::Item_param(THD *thd, const LEX_CSTRING *name_arg,
     value is set.
   */
   set_maybe_null();
+  with_flags= with_flags | item_with_t::PARAM;
 }
 
 
@@ -4479,10 +4500,29 @@ int Item_param::save_in_field(Field *field, bool no_conversions)
   case NULL_VALUE:
     return set_field_to_null_with_conversions(field, no_conversions);
   case DEFAULT_VALUE:
+    if (m_associated_field)
+      return assign_default(field);
     return field->save_in_field_default_value(field->table->pos_in_table_list->
                                               top_table() !=
                                               field->table->pos_in_table_list);
   case IGNORE_VALUE:
+    if (m_associated_field)
+    {
+      switch (find_ignore_reaction(field->table->in_use))
+      {
+        case IGNORE_MEANS_DEFAULT:
+          DBUG_ASSERT(0); // impossible now, but fully working code if needed
+          return assign_default(field);
+        case IGNORE_MEANS_FIELD_VALUE:
+          m_associated_field->save_val(field);
+          return false;
+        default:
+          ; // fall through to error
+      }
+      DBUG_ASSERT(0); //impossible
+      my_error(ER_INVALID_DEFAULT_PARAM, MYF(0));
+      return true;
+    }
     return field->save_in_field_ignore_value(field->table->pos_in_table_list->
                                              top_table() !=
                                              field->table->pos_in_table_list);
@@ -5047,6 +5087,92 @@ bool Item_param::append_for_log(THD *thd, String *str)
   StringBuffer<STRING_BUFFER_USUAL_SIZE> buf;
   const String *val= query_val_str(thd, &buf);
   return str->append(*val);
+}
+
+
+/**
+  Allocate a memory and create on it a copy of Field object.
+
+  @param thd        thread handler
+  @param field_arg  an instance of Field the new Field object be based on
+
+  @return a new created Field object on success, nullptr on error.
+*/
+
+static Field *make_default_field(THD *thd, Field *field_arg)
+{
+  Field *def_field;
+
+  if (!(def_field= (Field*) thd->alloc(field_arg->size_of())))
+    return nullptr;
+
+  memcpy((void *)def_field, (void *)field_arg, field_arg->size_of());
+  def_field->reset_fields();
+  // If non-constant default value expression or a blob
+  if (def_field->default_value &&
+      (def_field->default_value->flags || (def_field->flags & BLOB_FLAG)))
+  {
+    uchar *newptr= (uchar*) thd->alloc(1+def_field->pack_length());
+    if (!newptr)
+      return nullptr;
+
+    if (should_mark_column(thd->column_usage))
+      def_field->default_value->expr->update_used_tables();
+    def_field->move_field(newptr + 1, def_field->maybe_null() ? newptr : 0, 1);
+  }
+  else
+    def_field->move_field_offset((my_ptrdiff_t)
+                                 (def_field->table->s->default_values -
+                                  def_field->table->record[0]));
+  return def_field;
+}
+
+
+/**
+  Assign a default value of a table column to the positional parameter that
+  is performed on execution of a prepared statement with the clause
+  'USING DEFAULT'
+
+   @param field  a field that should be assigned an actual value of positional
+                 parameter passed via the clause 'USING DEFAULT'
+
+   @return false on success, true on failure
+*/
+
+bool Item_param::assign_default(Field *field)
+{
+  DBUG_ASSERT(m_associated_field);
+
+  if (m_associated_field->field->flags & NO_DEFAULT_VALUE_FLAG)
+  {
+    my_error(ER_NO_DEFAULT_FOR_FIELD, MYF(0),
+             m_associated_field->field->field_name.str);
+    return true;
+  }
+
+  if (!m_default_field)
+  {
+    m_default_field= make_default_field(field->table->in_use,
+                                        m_associated_field->field);
+
+    if (!m_default_field)
+      return true;
+  }
+
+  if (m_default_field->default_value)
+  {
+    return m_default_field->default_value->expr->save_in_field(field, 0);
+  }
+  else if (m_default_field->is_null())
+  {
+    field->set_null();
+    return false;
+  }
+  else
+  {
+    field->set_notnull();
+    return field_conv(field, m_default_field);
+  }
 }
 
 
@@ -5745,7 +5871,8 @@ Item_field::fix_outer_field(THD *thd, Field **from_field, Item **reference)
             max_arg_level for the function if it's needed.
           */
           if (thd->lex->in_sum_func &&
-              thd->lex == context->select_lex->parent_lex &&
+              last_checked_context->select_lex->parent_lex ==
+              context->select_lex->parent_lex &&
               thd->lex->in_sum_func->nest_level >= select->nest_level)
           {
             Item::Type ref_type= (*reference)->type();
@@ -5771,7 +5898,8 @@ Item_field::fix_outer_field(THD *thd, Field **from_field, Item **reference)
                              (Item_ident*) (*reference) :
                              0), false);
           if (thd->lex->in_sum_func &&
-              thd->lex == context->select_lex->parent_lex &&
+              last_checked_context->select_lex->parent_lex ==
+              context->select_lex->parent_lex &&
               thd->lex->in_sum_func->nest_level >= select->nest_level)
           {
             set_if_bigger(thd->lex->in_sum_func->max_arg_level,
@@ -6120,10 +6248,8 @@ bool Item_field::fix_fields(THD *thd, Item **reference)
         goto mark_non_agg_field;
     }
 
-    if (!thd->lex->current_select->no_wrap_view_item &&
+    if (select && !thd->lex->current_select->no_wrap_view_item &&
         thd->lex->in_sum_func &&
-        select &&
-        thd->lex == select->parent_lex &&
         thd->lex->in_sum_func->nest_level == 
         select->nest_level)
       set_if_bigger(thd->lex->in_sum_func->max_arg_level,
@@ -6856,6 +6982,7 @@ Item_basic_constant *
 Item_string::make_string_literal_concat(THD *thd, const LEX_CSTRING *str)
 {
   append(str->str, (uint32) str->length);
+  set_name(thd, &str_value);
   if (!(collation.repertoire & MY_REPERTOIRE_EXTENDED))
   {
     // If the string has been pure ASCII so far, check the new part.
@@ -6996,7 +7123,25 @@ Item *Item_float::neg(THD *thd)
   else if (value < 0 && max_length)
     max_length--;
   value= -value;
-  presentation= 0;
+  if (presentation)
+  {
+    if (*presentation == '-')
+    {
+      // Strip double minus: -(-1) -> '1' instead of '--1'
+      presentation++;
+    }
+    else
+    {
+      size_t presentation_length= strlen(presentation);
+      if (char *tmp= (char*) thd->alloc(presentation_length + 2))
+      {
+        tmp[0]= '-';
+        // Copy with the trailing '\0'
+        memcpy(tmp + 1, presentation, presentation_length + 1);
+        presentation= tmp;
+      }
+    }
+  }
   name= null_clex_str;
   return this;
 }
@@ -8146,7 +8291,7 @@ bool Item_ref::fix_fields(THD *thd, Item **reference)
       if (from_field != not_found_field)
       {
         Item_field* fld;
-        if (!(fld= new (thd->mem_root) Item_field(thd, from_field)))
+        if (!(fld= new (thd->mem_root) Item_field(thd, context, from_field)))
           goto error;
         thd->change_item_tree(reference, fld);
         mark_as_dependent(thd, last_checked_context->select_lex,
@@ -8157,7 +8302,8 @@ bool Item_ref::fix_fields(THD *thd, Item **reference)
           max_arg_level for the function if it's needed.
         */
         if (thd->lex->in_sum_func &&
-            thd->lex == context->select_lex->parent_lex &&
+            last_checked_context->select_lex->parent_lex ==
+            context->select_lex->parent_lex &&
             thd->lex->in_sum_func->nest_level >= 
             last_checked_context->select_lex->nest_level)
           set_if_bigger(thd->lex->in_sum_func->max_arg_level,
@@ -8181,7 +8327,8 @@ bool Item_ref::fix_fields(THD *thd, Item **reference)
         max_arg_level for the function if it's needed.
       */
       if (thd->lex->in_sum_func &&
-          thd->lex == context->select_lex->parent_lex &&
+          last_checked_context->select_lex->parent_lex ==
+          context->select_lex->parent_lex &&
           thd->lex->in_sum_func->nest_level >= 
           last_checked_context->select_lex->nest_level)
         set_if_bigger(thd->lex->in_sum_func->max_arg_level,
@@ -8196,7 +8343,8 @@ bool Item_ref::fix_fields(THD *thd, Item **reference)
       1. outer reference (will be fixed later by the fix_inner_refs function);
       2. an unnamed reference inside an aggregate function.
   */
-  if (!((*ref)->type() == REF_ITEM &&
+  if (!set_properties_only && 
+      !((*ref)->type() == REF_ITEM &&
        ((Item_ref *)(*ref))->ref_type() == OUTER_REF) &&
       (((*ref)->with_sum_func() && name.str &&
         !(current_sel->get_linkage() != GLOBAL_OPTIONS_TYPE &&
@@ -9507,75 +9655,21 @@ bool Item_default_value::eq(const Item *item, bool binary_cmp) const
 
 bool Item_default_value::check_field_expression_processor(void *)
 {
+  return Item_default_value::update_func_default_processor(0);
+}
+
+bool Item_default_value::update_func_default_processor(void *)
+{
   field->default_value= ((Item_field *)(arg->real_item()))->field->default_value;
   return 0;
 }
 
 bool Item_default_value::fix_fields(THD *thd, Item **items)
 {
-  Item *real_arg;
-  Item_field *field_arg;
-  Field *def_field;
   DBUG_ASSERT(fixed() == 0);
   DBUG_ASSERT(arg);
 
-  /*
-    DEFAULT() do not need table field so should not ask handler to bring
-    field value (mark column for read)
-  */
-  enum_column_usage save_column_usage= thd->column_usage;
-  /*
-    Fields which has defult value could be read, so it is better hide system
-    invisible columns.
-  */
-  thd->column_usage= COLUMNS_WRITE;
-  if (arg->fix_fields_if_needed(thd, &arg))
-  {
-    thd->column_usage= save_column_usage;
-    goto error;
-  }
-  thd->column_usage= save_column_usage;
-
-  real_arg= arg->real_item();
-  if (real_arg->type() != FIELD_ITEM)
-  {
-    my_error(ER_NO_DEFAULT_FOR_FIELD, MYF(0), arg->name.str);
-    goto error;
-  }
-
-  field_arg= (Item_field *)real_arg;
-  if ((field_arg->field->flags & NO_DEFAULT_VALUE_FLAG))
-  {
-    my_error(ER_NO_DEFAULT_FOR_FIELD, MYF(0),
-             field_arg->field->field_name.str);
-    goto error;
-  }
-  if (!(def_field= (Field*) thd->alloc(field_arg->field->size_of())))
-    goto error;
-  memcpy((void *)def_field, (void *)field_arg->field,
-         field_arg->field->size_of());
-  def_field->reset_fields();
-  // If non-constant default value expression or a blob
-  if (def_field->default_value &&
-      (def_field->default_value->flags || (def_field->flags & BLOB_FLAG)))
-  {
-    uchar *newptr= (uchar*) thd->alloc(1+def_field->pack_length());
-    if (!newptr)
-      goto error;
-    if (should_mark_column(thd->column_usage))
-      def_field->default_value->expr->update_used_tables();
-    def_field->move_field(newptr+1, def_field->maybe_null() ? newptr : 0, 1);
-  }
-  else
-    def_field->move_field_offset((my_ptrdiff_t)
-                                 (def_field->table->s->default_values -
-                                  def_field->table->record[0]));
-  set_field(def_field);
-  return FALSE;
-
-error:
-  context->process_error(thd);
-  return TRUE;
+  return tie_field(thd);
 }
 
 void Item_default_value::cleanup()
@@ -9763,6 +9857,79 @@ Item *Item_default_value::transform(THD *thd, Item_transformer transformer,
   return (this->*transformer)(thd, args);
 }
 
+
+bool Item_default_value::
+  associate_with_target_field(THD *thd,
+                              Item_field *field __attribute__((unused)))
+{
+  m_associated= true;
+  /*
+    arg set correctly in constructor (can also differ from field if
+    it is function with an argument)
+  */
+  return tie_field(thd);
+}
+
+
+/**
+  Call fix_fields for an item representing the default value, create
+  an instance of Field for representing the default value and assign it
+  to the Item_field::field.
+
+  @param thd  thread handler
+
+  @return false on success, true on error
+*/
+
+bool Item_default_value::tie_field(THD *thd)
+{
+  Item *real_arg;
+  Item_field *field_arg;
+  Field *def_field;
+
+  /*
+    DEFAULT() do not need table field so should not ask handler to bring
+    field value (mark column for read)
+  */
+  enum_column_usage save_column_usage= thd->column_usage;
+  /*
+    Fields which has defult value could be read, so it is better hide system
+    invisible columns.
+  */
+  thd->column_usage= COLUMNS_WRITE;
+  if (arg->fix_fields_if_needed(thd, &arg))
+  {
+    thd->column_usage= save_column_usage;
+    goto error;
+  }
+  thd->column_usage= save_column_usage;
+
+  real_arg= arg->real_item();
+  if (real_arg->type() != FIELD_ITEM)
+  {
+    my_error(ER_NO_DEFAULT_FOR_FIELD, MYF(0), arg->name.str);
+    goto error;
+  }
+
+  field_arg= (Item_field *)real_arg;
+  if ((field_arg->field->flags & NO_DEFAULT_VALUE_FLAG))
+  {
+    my_error(ER_NO_DEFAULT_FOR_FIELD, MYF(0),
+             field_arg->field->field_name.str);
+    goto error;
+  }
+  def_field= make_default_field(thd, field_arg->field);
+  if (!def_field)
+    goto error;
+
+  set_field(def_field);
+  return false;
+
+error:
+  context->process_error(thd);
+  return true;
+
+}
 
 bool Item_insert_value::eq(const Item *item, bool binary_cmp) const
 {
@@ -10526,7 +10693,8 @@ int Item_cache_str::save_in_field(Field *field, bool no_conversions)
 bool Item_cache_row::allocate(THD *thd, uint num)
 {
   item_count= num;
-  return (!(values= 
+  return (!values &&
+          !(values=
 	    (Item_cache **) thd->calloc(sizeof(Item_cache *)*item_count)));
 }
 
@@ -10562,11 +10730,12 @@ bool Item_cache_row::setup(THD *thd, Item *item)
     return 1;
   for (uint i= 0; i < item_count; i++)
   {
-    Item_cache *tmp;
     Item *el= item->element_index(i);
-    if (!(tmp= values[i]= el->get_cache(thd)))
+
+    if ((!values[i]) && !(values[i]= el->get_cache(thd)))
       return 1;
-    tmp->setup(thd, el);
+
+    values[i]->setup(thd, el);
   }
   return 0;
 }

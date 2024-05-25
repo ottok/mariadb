@@ -39,7 +39,7 @@ static int s3_read_file_from_disk(const char *filename, uchar **to,
 
 /* Used by ha_s3.cc and tools to define different protocol options */
 
-static const char *protocol_types[]= {"Auto", "Original", "Amazon", NullS};
+static const char *protocol_types[]= {"Auto", "Original", "Amazon", "Legacy", "Path", "Domain", NullS};
 TYPELIB s3_protocol_typelib= {array_elements(protocol_types)-1,"",
                               protocol_types, NULL};
 
@@ -154,9 +154,23 @@ ms3_st *s3_open_connection(S3_INFO *s3)
                     errno, ms3_error(errno));
     my_errno= HA_ERR_NO_SUCH_TABLE;
   }
-  if (s3->protocol_version)
+  if (s3->protocol_version > 2)
+  {
+    uint8_t protocol_version;
+    switch (s3->protocol_version)
+    {
+      case 3: /* Legacy means v1 */
+      case 4: /* Path means v1 */
+        protocol_version= 1;
+        break;
+      case 5: /* Domain means v2 */
+        protocol_version= 2;
+        break;
+    }
+
     ms3_set_option(s3_client, MS3_OPT_FORCE_PROTOCOL_VERSION,
-                   &s3->protocol_version);
+                   &protocol_version);
+  }
   if (s3->port)
     ms3_set_option(s3_client, MS3_OPT_PORT_NUMBER, &s3->port);
 
@@ -351,7 +365,7 @@ int aria_copy_to_s3(ms3_st *s3_client, const char *aws_bucket,
       if (display)
         printf("Copying frm file %s\n", filename);
 
-      end= strmov(aws_path_end,"/frm");
+      strmov(aws_path_end,"/frm");
       convert_frm_to_s3_format(alloc_block);
 
       /* Note that frm is not compressed! */
@@ -1232,7 +1246,7 @@ static void convert_index_to_s3_format(uchar *header, ulong block_size,
   uchar *base_pos;
   uint  base_offset;
 
-  memcpy(state.header.file_version, header, sizeof(state.header));
+  memcpy(&state.header, header, sizeof(state.header));
   base_offset= mi_uint2korr(state.header.base_pos);
   base_pos= header + base_offset;
 
@@ -1251,7 +1265,7 @@ static void convert_index_to_disk_format(uchar *header)
   uchar *base_pos;
   uint  base_offset;
 
-  memcpy(state.header.file_version, header, sizeof(state.header));
+  memcpy(&state.header, header, sizeof(state.header));
   base_offset= mi_uint2korr(state.header.base_pos);
   base_pos= header + base_offset;
 

@@ -2263,7 +2263,7 @@ static inline uint32_t rocksdb_perf_context_level(THD *const thd) {
 */
 
 interface Rdb_tx_list_walker {
-  virtual ~Rdb_tx_list_walker() {}
+  virtual ~Rdb_tx_list_walker() = default;
   virtual void process_tran(const Rdb_transaction *const) = 0;
 };
 
@@ -10832,7 +10832,7 @@ int ha_rocksdb::index_end() {
 
   release_scan_iterator();
 
-  bitmap_free(&m_lookup_bitmap);
+  my_bitmap_free(&m_lookup_bitmap);
 
   active_index = MAX_KEY;
   in_range_check_pushed_down = FALSE;

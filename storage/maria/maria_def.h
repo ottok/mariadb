@@ -332,6 +332,8 @@ void _ma_update_auto_increment_key(HA_CHECK *param, MARIA_HA *info,
 #define MARIA_MAX_TREE_LEVELS 32
 #define MARIA_MAX_RECORD_ON_STACK 16384
 
+#define MARIA_MIN_SORT_MEMORY (16384-MALLOC_OVERHEAD)
+
 /* maria_open() flag, specific for maria_pack */
 #define HA_OPEN_IGNORE_MOVED_STATE (1U << 30)
 
@@ -752,6 +754,11 @@ typedef struct st_maria_share
   ulong max_pack_length;
   ulong state_diff_length;
   uint rec_reflength;			/* rec_reflength in use now */
+  /*
+    Extra flag to use for my_malloc(); set to MY_THREAD_SPECIFIC for temporary
+    tables whose memory allocation should be accounted to the current THD.
+  */
+  uint malloc_flag;
   uint keypage_header;
   uint32 ftkeys;			/* Number of distinct full-text keys
 						   + 1 */
@@ -1576,7 +1583,6 @@ typedef struct st_maria_block_info
 #define PAGE_BUFFER_INIT	MY_ALIGN_DOWN(1024L*1024L*256L-MALLOC_OVERHEAD, 8192)
 #define READ_BUFFER_INIT	MY_ALIGN_DOWN(1024L*256L-MALLOC_OVERHEAD, 1024)
 #define SORT_BUFFER_INIT	MY_ALIGN_DOWN(1024L*1024L*256L-MALLOC_OVERHEAD, 1024)
-#define MIN_SORT_BUFFER		4096U
 
 #define fast_ma_writeinfo(INFO) if (!(INFO)->s->tot_locks) (void) _ma_writeinfo((INFO),0)
 #define fast_ma_readinfo(INFO) ((INFO)->lock_type == F_UNLCK) && _ma_readinfo((INFO),F_RDLCK,1)
@@ -1739,6 +1745,7 @@ extern my_bool ma_yield_and_check_if_killed(MARIA_HA *info, int inx);
 extern my_bool ma_killed_standalone(MARIA_HA *);
 
 extern uint _ma_file_callback_to_id(void *callback_data);
+extern uint _ma_write_flags_callback(void *callback_data, myf flags);
 extern void free_maria_share(MARIA_SHARE *share);
 
 static inline void unmap_file(MARIA_HA *info __attribute__((unused)))

@@ -75,8 +75,7 @@ struct buf_pool_info_t
 	ulint	flush_list_len;		/*!< Length of buf_pool.flush_list */
 	ulint	n_pend_unzip;		/*!< buf_pool.n_pend_unzip, pages
 					pending decompress */
-	ulint	n_pend_reads;		/*!< buf_pool.n_pend_reads, pages
-					pending read */
+	ulint	n_pend_reads;		/*!< os_aio_pending_reads() */
 	ulint	n_pending_flush_lru;	/*!< Pages pending flush in LRU */
 	ulint	n_pending_flush_list;	/*!< Pages pending flush in FLUSH
 					LIST */
@@ -159,14 +158,25 @@ buf_block_free(
 #define buf_page_get(ID, SIZE, LA, MTR)					\
 	buf_page_get_gen(ID, SIZE, LA, NULL, BUF_GET, MTR)
 
-/** Try to acquire a page latch.
-@param rw_latch      RW_S_LATCH or RW_X_LATCH
+/** Try to buffer-fix a page.
 @param block         guessed block
+@param id            expected block->page.id()
+@return block if it was buffer-fixed
+@retval nullptr if the block no longer is valid */
+buf_block_t *buf_page_optimistic_fix(buf_block_t *block, page_id_t id)
+  MY_ATTRIBUTE((nonnull, warn_unused_result));
+
+/** Try to acquire a page latch after buf_page_optimistic_fix().
+@param block         buffer-fixed block
+@param rw_latch      RW_S_LATCH or RW_X_LATCH
 @param modify_clock  expected value of block->modify_clock
 @param mtr           mini-transaction
-@return whether the latch was acquired (the page is an allocated file page) */
-bool buf_page_optimistic_get(ulint rw_latch, buf_block_t *block,
-                             uint64_t modify_clock, mtr_t *mtr);
+@return block if the latch was acquired
+@retval nullptr if block->unfix() was called because it no longer is valid */
+buf_block_t *buf_page_optimistic_get(buf_block_t *block,
+                                     rw_lock_type_t rw_latch,
+                                     uint64_t modify_clock, mtr_t *mtr)
+  MY_ATTRIBUTE((nonnull, warn_unused_result));
 
 /** Try to S-latch a page.
 Suitable for using when holding the lock_sys latches (as it avoids deadlock).
@@ -263,8 +273,6 @@ buf_block_t*
 buf_page_create_deferred(uint32_t space_id, ulint zip_size, mtr_t *mtr,
                          buf_block_t *free_block);
 
-/** Move a block to the start of the LRU list. */
-void buf_page_make_young(buf_page_t *bpage);
 /** Mark the page status as FREED for the given tablespace and page number.
 @param[in,out]	space	tablespace
 @param[in]	page	page number
@@ -286,15 +294,6 @@ there is danger of dropping from the buffer pool.
 @return true if bpage should be made younger */
 inline bool buf_page_peek_if_too_old(const buf_page_t *bpage);
 
-/** Move a page to the start of the buffer pool LRU list if it is too old.
-@param[in,out]	bpage		buffer pool page */
-inline void buf_page_make_young_if_needed(buf_page_t *bpage)
-{
-	if (UNIV_UNLIKELY(buf_page_peek_if_too_old(bpage))) {
-		buf_page_make_young(bpage);
-	}
-}
-
 /********************************************************************//**
 Increments the modify clock of a frame by 1. The caller must (1) own the
 buf_pool.mutex and block bufferfix count has to be zero, (2) or own an x-lock
@@ -302,15 +301,6 @@ on the block. */
 UNIV_INLINE
 void
 buf_block_modify_clock_inc(
-/*=======================*/
-	buf_block_t*	block);	/*!< in: block */
-/********************************************************************//**
-Returns the value of the modify clock. The caller must have an s-lock
-or x-lock on the block.
-@return value */
-UNIV_INLINE
-ib_uint64_t
-buf_block_get_modify_clock(
 /*=======================*/
 	buf_block_t*	block);	/*!< in: block */
 #endif /* !UNIV_INNOCHECKSUM */
@@ -724,13 +714,14 @@ public:
     ut_ad(s < REINIT);
   }
 
-  void read_unfix(uint32_t s)
+  uint32_t read_unfix(uint32_t s)
   {
     ut_ad(lock.is_write_locked());
     ut_ad(s == UNFIXED + 1 || s == IBUF_EXIST + 1 || s == REINIT + 1);
-    ut_d(auto old_state=) zip.fix.fetch_add(s - READ_FIX);
+    uint32_t old_state= zip.fix.fetch_add(s - READ_FIX);
     ut_ad(old_state >= READ_FIX);
     ut_ad(old_state < WRITE_FIX);
+    return old_state + (s - READ_FIX);
   }
 
   void set_freed(uint32_t prev_state, uint32_t count= 0)
@@ -773,18 +764,20 @@ public:
   @param node     data file
   @return whether the operation succeeded
   @retval DB_PAGE_CORRUPTED    if the checksum fails
-  @retval DB_DECRYPTION_FAILED if the page cannot be decrypted */
+  @retval DB_DECRYPTION_FAILED if the page cannot be decrypted
+  @retval DB_FAIL              if the page contains the wrong ID */
   dberr_t read_complete(const fil_node_t &node);
 
-  /** Note that a block is no longer dirty, while not removing
-  it from buf_pool.flush_list */
-  inline void write_complete(bool temporary);
+  /** Release a write fix after a page write was completed.
+  @param persistent  whether the page belongs to a persistent tablespace
+  @param error       whether an error may have occurred while writing
+  @param state       recently read state() value with the correct io-fix */
+  void write_complete(bool persistent, bool error, uint32_t state);
 
-  /** Write a flushable page to a file. buf_pool.mutex must be held.
-  @param lru         true=buf_pool.LRU; false=buf_pool.flush_list
+  /** Write a flushable page to a file or free a freeable block.
   @param space       tablespace
-  @return whether the page was flushed and buf_pool.mutex was released */
-  inline bool flush(bool lru, fil_space_t *space);
+  @return whether a page write was initiated and buf_pool.mutex released */
+  bool flush(fil_space_t *space);
 
   /** Notify that a page in a temporary tablespace has been modified. */
   void set_temp_modified()
@@ -854,8 +847,6 @@ public:
   /** @return whether the block is mapped to a data file */
   bool in_file() const { return state() >= FREED; }
 
-  /** @return whether the block is modified and ready for flushing */
-  inline bool ready_for_flush() const;
   /** @return whether the block can be relocated in memory.
   The block can be dirty, but it must not be I/O-fixed or bufferfixed. */
   inline bool can_relocate() const;
@@ -1028,14 +1019,14 @@ Compute the hash fold value for blocks in buf_pool.zip_hash. */
 #define BUF_POOL_ZIP_FOLD_BPAGE(b) BUF_POOL_ZIP_FOLD((buf_block_t*) (b))
 /* @} */
 
-/** A "Hazard Pointer" class used to iterate over page lists
-inside the buffer pool. A hazard pointer is a buf_page_t pointer
+/** A "Hazard Pointer" class used to iterate over buf_pool.LRU or
+buf_pool.flush_list. A hazard pointer is a buf_page_t pointer
 which we intend to iterate over next and we want it remain valid
-even after we release the buffer pool mutex. */
+even after we release the mutex that protects the list. */
 class HazardPointer
 {
 public:
-  virtual ~HazardPointer() {}
+  virtual ~HazardPointer() = default;
 
   /** @return current value */
   buf_page_t *get() const { mysql_mutex_assert_owner(m_mutex); return m_hp; }
@@ -1074,16 +1065,15 @@ protected:
 class FlushHp : public HazardPointer
 {
 public:
-  ~FlushHp() override {}
+  ~FlushHp() override = default;
 
   /** Adjust the value of hp. This happens when some
   other thread working on the same list attempts to
   remove the hp from the list.
   @param bpage  buffer block to be compared */
+  MY_ATTRIBUTE((nonnull))
   void adjust(const buf_page_t *bpage) override
   {
-    ut_ad(bpage != NULL);
-
     /* We only support reverse traversal for now. */
     if (is_hp(bpage))
       m_hp= UT_LIST_GET_PREV(list, m_hp);
@@ -1095,15 +1085,15 @@ public:
 /** Class implementing buf_pool.LRU hazard pointer */
 class LRUHp : public HazardPointer {
 public:
-  ~LRUHp() override {}
+  ~LRUHp() override = default;
 
   /** Adjust the value of hp. This happens when some
   other thread working on the same list attempts to
   remove the hp from the list.
   @param bpage  buffer block to be compared */
+  MY_ATTRIBUTE((nonnull))
   void adjust(const buf_page_t *bpage) override
   {
-    ut_ad(bpage);
     /** We only support reverse traversal for now. */
     if (is_hp(bpage))
       m_hp= UT_LIST_GET_PREV(LRU, m_hp);
@@ -1118,8 +1108,7 @@ itr in that position and the other thread can start scan from
 there */
 class LRUItr : public LRUHp {
 public:
-  LRUItr() : LRUHp() {}
-  ~LRUItr() override {}
+  ~LRUItr() override = default;
 
   /** Select from where to start a scan. If we have scanned
   too deep into the LRU list it resets the value to the tail
@@ -1148,7 +1137,8 @@ struct buf_buddy_free_t {
 				/*!< Node of zip_free list */
 };
 
-/** @brief The buffer pool statistics structure. */
+/** @brief The buffer pool statistics structure;
+protected by buf_pool.mutex unless otherwise noted. */
 struct buf_pool_stat_t{
 	/** Initialize the counters */
 	void init() { memset((void*) this, 0, sizeof *this); }
@@ -1157,9 +1147,8 @@ struct buf_pool_stat_t{
 				/*!< number of page gets performed;
 				also successful searches through
 				the adaptive hash index are
-				counted as page gets; this field
-				is NOT protected by the buffer
-				pool mutex */
+				counted as page gets;
+				NOT protected by buf_pool.mutex */
 	ulint	n_pages_read;	/*!< number read operations */
 	ulint	n_pages_written;/*!< number write operations */
 	ulint	n_pages_created;/*!< number of pages created
@@ -1177,10 +1166,9 @@ struct buf_pool_stat_t{
 				young because the first access
 				was not long enough ago, in
 				buf_page_peek_if_too_old() */
-	/** number of waits for eviction; writes protected by buf_pool.mutex */
+	/** number of waits for eviction */
 	ulint	LRU_waits;
 	ulint	LRU_bytes;	/*!< LRU size in bytes */
-	ulint	flush_list_bytes;/*!< flush_list size in bytes */
 };
 
 /** Statistics of buddy blocks of a given size. */
@@ -1471,14 +1459,12 @@ public:
     return !watch_is_sentinel(*page_hash.get(id, chain));
   }
 
-  /** Register a watch for a page identifier. The caller must hold an
-  exclusive page hash latch. The *hash_lock may be released,
-  relocated, and reacquired.
+  /** Register a watch for a page identifier.
   @param id         page identifier
-  @param chain      hash table chain with exclusively held page_hash
-  @return a buffer pool block corresponding to id
-  @retval nullptr   if the block was not present, and a watch was installed */
-  inline buf_page_t *watch_set(const page_id_t id, hash_chain &chain);
+  @param chain      page_hash.cell_get(id.fold())
+  @return a buffer page corresponding to id
+  @retval nullptr   if the block was not present in page_hash */
+  buf_page_t *watch_set(const page_id_t id, hash_chain &chain);
 
   /** Stop watching whether a page has been read in.
   watch_set(id) must have returned nullptr before.
@@ -1502,6 +1488,9 @@ public:
       UT_LIST_GET_LEN(free) + UT_LIST_GET_LEN(LRU) <
         n_chunks_new / 4 * chunks->size;
   }
+
+  /** @return whether the buffer pool is running low */
+  bool need_LRU_eviction() const;
 
   /** @return whether the buffer pool is shrinking */
   inline bool is_shrinking() const
@@ -1540,17 +1529,10 @@ public:
 
   /** Buffer pool mutex */
   alignas(CPU_LEVEL1_DCACHE_LINESIZE) mysql_mutex_t mutex;
-  /** Number of pending LRU flush; protected by mutex. */
-  ulint n_flush_LRU_;
-  /** broadcast when n_flush_LRU reaches 0; protected by mutex */
-  pthread_cond_t done_flush_LRU;
-  /** Number of pending flush_list flush; protected by mutex */
-  ulint n_flush_list_;
-  /** broadcast when n_flush_list reaches 0; protected by mutex */
-  pthread_cond_t done_flush_list;
-
-  TPOOL_SUPPRESS_TSAN ulint n_flush_LRU() const { return n_flush_LRU_; }
-  TPOOL_SUPPRESS_TSAN ulint n_flush_list() const { return n_flush_list_; }
+  /** current statistics; protected by mutex */
+  buf_pool_stat_t stat;
+  /** old statistics; protected by mutex */
+  buf_pool_stat_t old_stat;
 
 	/** @name General fields */
 	/* @{ */
@@ -1700,8 +1682,6 @@ public:
   /** map of block->frame to buf_block_t blocks that belong
   to buf_buddy_alloc(); protected by buf_pool.mutex */
   hash_table_t zip_hash;
-	/** number of pending read operations */
-	Atomic_counter<ulint> n_pend_reads;
 	Atomic_counter<ulint>
 			n_pend_unzip;	/*!< number of pending decompressions */
 
@@ -1711,10 +1691,11 @@ public:
 	buf_buddy_stat_t buddy_stat[BUF_BUDDY_SIZES_MAX + 1];
 					/*!< Statistics of buddy system,
 					indexed by block size */
-	buf_pool_stat_t	stat;		/*!< current statistics */
-	buf_pool_stat_t	old_stat;	/*!< old statistics */
 
 	/* @} */
+
+  /** number of index page splits */
+  Atomic_counter<ulint> pages_split;
 
   /** @name Page flushing algorithm fields */
   /* @{ */
@@ -1724,31 +1705,85 @@ public:
   alignas(CPU_LEVEL1_DCACHE_LINESIZE) mysql_mutex_t flush_list_mutex;
   /** "hazard pointer" for flush_list scans; protected by flush_list_mutex */
   FlushHp flush_hp;
-  /** modified blocks (a subset of LRU) */
+  /** flush_list size in bytes; protected by flush_list_mutex */
+  ulint flush_list_bytes;
+  /** possibly modified persistent pages (a subset of LRU);
+  os_aio_pending_writes() is approximately COUNT(is_write_fixed()) */
   UT_LIST_BASE_NODE_T(buf_page_t) flush_list;
 private:
-  /** whether the page cleaner needs wakeup from indefinite sleep */
-  bool page_cleaner_is_idle;
+  static constexpr unsigned PAGE_CLEANER_IDLE= 1;
+  static constexpr unsigned FLUSH_LIST_ACTIVE= 2;
+  static constexpr unsigned LRU_FLUSH= 4;
+
+  /** Number of pending LRU flush * LRU_FLUSH +
+  PAGE_CLEANER_IDLE + FLUSH_LIST_ACTIVE flags */
+  unsigned page_cleaner_status;
   /** track server activity count for signaling idle flushing */
   ulint last_activity_count;
 public:
   /** signalled to wake up the page_cleaner; protected by flush_list_mutex */
   pthread_cond_t do_flush_list;
+  /** broadcast when !n_flush(); protected by flush_list_mutex */
+  pthread_cond_t done_flush_LRU;
+  /** broadcast when a batch completes; protected by flush_list_mutex */
+  pthread_cond_t done_flush_list;
+
+  /** @return number of pending LRU flush */
+  unsigned n_flush() const
+  {
+    mysql_mutex_assert_owner(&flush_list_mutex);
+    return page_cleaner_status / LRU_FLUSH;
+  }
+
+  /** Increment the number of pending LRU flush */
+  inline void n_flush_inc();
+
+  /** Decrement the number of pending LRU flush */
+  inline void n_flush_dec();
+
+  /** @return whether flush_list flushing is active */
+  bool flush_list_active() const
+  {
+    mysql_mutex_assert_owner(&flush_list_mutex);
+    return page_cleaner_status & FLUSH_LIST_ACTIVE;
+  }
+
+  void flush_list_set_active()
+  {
+    ut_ad(!flush_list_active());
+    page_cleaner_status+= FLUSH_LIST_ACTIVE;
+  }
+  void flush_list_set_inactive()
+  {
+    ut_ad(flush_list_active());
+    page_cleaner_status-= FLUSH_LIST_ACTIVE;
+  }
 
   /** @return whether the page cleaner must sleep due to being idle */
   bool page_cleaner_idle() const
   {
     mysql_mutex_assert_owner(&flush_list_mutex);
-    return page_cleaner_is_idle;
+    return page_cleaner_status & PAGE_CLEANER_IDLE;
   }
-  /** Wake up the page cleaner if needed */
-  void page_cleaner_wakeup();
+
+  /** @return whether the page cleaner may be initiating writes */
+  bool page_cleaner_active() const
+  {
+    mysql_mutex_assert_owner(&flush_list_mutex);
+    static_assert(PAGE_CLEANER_IDLE == 1, "efficiency");
+    return page_cleaner_status > PAGE_CLEANER_IDLE;
+  }
+
+  /** Wake up the page cleaner if needed.
+  @param for_LRU  whether to wake up for LRU eviction */
+  void page_cleaner_wakeup(bool for_LRU= false);
 
   /** Register whether an explicit wakeup of the page cleaner is needed */
   void page_cleaner_set_idle(bool deep_sleep)
   {
     mysql_mutex_assert_owner(&flush_list_mutex);
-    page_cleaner_is_idle= deep_sleep;
+    page_cleaner_status= (page_cleaner_status & ~PAGE_CLEANER_IDLE) |
+      (PAGE_CLEANER_IDLE * deep_sleep);
   }
 
   /** Update server last activity count */
@@ -1757,9 +1792,6 @@ public:
     mysql_mutex_assert_owner(&flush_list_mutex);
     last_activity_count= activity_count;
   }
-
-  // n_flush_LRU() + n_flush_list()
-  // is approximately COUNT(is_write_fixed()) in flush_list
 
 	unsigned	freed_page_clock;/*!< a sequence number used
 					to count the number of buffer
@@ -1770,16 +1802,13 @@ public:
 					to read this for heuristic
 					purposes without holding any
 					mutex or latch */
-	bool		try_LRU_scan;	/*!< Cleared when an LRU
-					scan for free block fails. This
-					flag is used to avoid repeated
-					scans of LRU list when we know
-					that there is no free block
-					available in the scan depth for
-					eviction. Set whenever
-					we flush a batch from the
-					buffer pool. Protected by the
-					buf_pool.mutex */
+  /** Cleared when buf_LRU_get_free_block() fails.
+  Set whenever the free list grows, along with a broadcast of done_free.
+  Protected by buf_pool.mutex. */
+  Atomic_relaxed<bool> try_LRU_scan;
+  /** Whether we have warned to be running out of buffer pool */
+  std::atomic_flag LRU_warned;
+
 	/* @} */
 
 	/** @name LRU replacement algorithm fields */
@@ -1788,7 +1817,8 @@ public:
 	UT_LIST_BASE_NODE_T(buf_page_t) free;
 					/*!< base node of the free
 					block list */
-  /** signaled each time when the free list grows; protected by mutex */
+  /** broadcast each time when the free list grows or try_LRU_scan is set;
+  protected by mutex */
   pthread_cond_t done_free;
 
 	UT_LIST_BASE_NODE_T(buf_page_t) withdraw;
@@ -1841,36 +1871,16 @@ public:
   a delete-buffering operation is pending. Protected by mutex. */
   buf_page_t watch[innodb_purge_threads_MAX + 1];
   /** Reserve a buffer. */
-  buf_tmp_buffer_t *io_buf_reserve() { return io_buf.reserve(); }
-
-  /** @return whether any I/O is pending */
-  bool any_io_pending()
-  {
-    if (n_pend_reads)
-      return true;
-    mysql_mutex_lock(&mutex);
-    const bool any_pending{n_flush_LRU_ || n_flush_list_};
-    mysql_mutex_unlock(&mutex);
-    return any_pending;
-  }
-  /** @return total amount of pending I/O */
-  ulint io_pending() const
-  {
-    return n_pend_reads + n_flush_LRU() + n_flush_list();
-  }
+  buf_tmp_buffer_t *io_buf_reserve(bool wait_for_reads)
+  { return io_buf.reserve(wait_for_reads); }
 
 private:
   /** Remove a block from the flush list. */
   inline void delete_from_flush_list_low(buf_page_t *bpage);
-  /** Remove a block from flush_list.
-  @param bpage   buffer pool page
-  @param clear   whether to invoke buf_page_t::clear_oldest_modification() */
-  void delete_from_flush_list(buf_page_t *bpage, bool clear);
 public:
   /** Remove a block from flush_list.
   @param bpage   buffer pool page */
-  void delete_from_flush_list(buf_page_t *bpage)
-  { delete_from_flush_list(bpage, true); }
+  void delete_from_flush_list(buf_page_t *bpage);
 
   /** Insert a modified block into the flush list.
   @param block    modified block
@@ -1878,7 +1888,10 @@ public:
   void insert_into_flush_list(buf_block_t *block, lsn_t lsn);
 
   /** Free a page whose underlying file page has been freed. */
-  inline void release_freed_page(buf_page_t *bpage);
+  ATTRIBUTE_COLD void release_freed_page(buf_page_t *bpage);
+
+  /** Issue a warning that we could not free up buffer pool pages. */
+  ATTRIBUTE_COLD void LRU_warn();
 
 private:
   /** Temporary memory for page_compressed and encrypted I/O */
@@ -1889,34 +1902,12 @@ private:
     /** array of slots */
     buf_tmp_buffer_t *slots;
 
-    void create(ulint n_slots)
-    {
-      this->n_slots= n_slots;
-      slots= static_cast<buf_tmp_buffer_t*>
-        (ut_malloc_nokey(n_slots * sizeof *slots));
-      memset((void*) slots, 0, n_slots * sizeof *slots);
-    }
+    void create(ulint n_slots);
 
-    void close()
-    {
-      for (buf_tmp_buffer_t *s= slots, *e= slots + n_slots; s != e; s++)
-      {
-        aligned_free(s->crypt_buf);
-        aligned_free(s->comp_buf);
-      }
-      ut_free(slots);
-      slots= nullptr;
-      n_slots= 0;
-    }
+    void close();
 
     /** Reserve a buffer */
-    buf_tmp_buffer_t *reserve()
-    {
-      for (buf_tmp_buffer_t *s= slots, *e= slots + n_slots; s != e; s++)
-        if (s->acquire())
-          return s;
-      return nullptr;
-    }
+    buf_tmp_buffer_t *reserve(bool wait_for_reads);
   } io_buf;
 
   /** whether resize() is in the critical path */
@@ -2005,7 +1996,10 @@ inline void buf_page_t::set_oldest_modification(lsn_t lsn)
 /** Clear oldest_modification after removing from buf_pool.flush_list */
 inline void buf_page_t::clear_oldest_modification()
 {
-  mysql_mutex_assert_owner(&buf_pool.flush_list_mutex);
+#ifdef SAFE_MUTEX
+  if (oldest_modification() != 2)
+    mysql_mutex_assert_owner(&buf_pool.flush_list_mutex);
+#endif /* SAFE_MUTEX */
   ut_d(const auto s= state());
   ut_ad(s >= REMOVE_HASH);
   ut_ad(oldest_modification());
@@ -2015,17 +2009,6 @@ inline void buf_page_t::clear_oldest_modification()
   oldest_modification_acquire() will observe the block as
   being detached from buf_pool.flush_list, after reading the value 0. */
   oldest_modification_.store(0, std::memory_order_release);
-}
-
-/** @return whether the block is modified and ready for flushing */
-inline bool buf_page_t::ready_for_flush() const
-{
-  mysql_mutex_assert_owner(&buf_pool.mutex);
-  ut_ad(in_LRU_list);
-  const auto s= state();
-  ut_a(s >= FREED);
-  ut_ad(!fsp_is_system_temporary(id().space()) || oldest_modification() == 2);
-  return s < READ_FIX;
 }
 
 /** @return whether the block can be relocated in memory.

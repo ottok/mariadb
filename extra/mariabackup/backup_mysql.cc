@@ -47,6 +47,12 @@ Street, Fifth Floor, Boston, MA 02110-1335 USA
 #include <stdlib.h>
 #include <string.h>
 #include <limits>
+#ifdef HAVE_PWD_H
+#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#include <pwd.h>
+#endif
 #include "common.h"
 #include "xtrabackup.h"
 #include "srv0srv.h"
@@ -60,14 +66,13 @@ Street, Fifth Floor, Boston, MA 02110-1335 USA
 #include "page0zip.h"
 
 char *tool_name;
-char tool_args[2048];
+char tool_args[8192];
 
 /* mysql flavor and version */
 mysql_flavor_t server_flavor = FLAVOR_UNKNOWN;
 unsigned long mysql_server_version = 0;
 
 /* server capabilities */
-bool have_changed_page_bitmaps = false;
 bool have_backup_locks = false;
 bool have_lock_wait_timeout = false;
 bool have_galera_enabled = false;
@@ -95,11 +100,54 @@ MYSQL *mysql_connection;
 
 extern my_bool opt_ssl_verify_server_cert, opt_use_ssl;
 
+
+/*
+  get_os_user()
+  Ressemles read_user_name() from libmariadb/libmariadb/mariadb_lib.c.
+*/
+
+#if !defined(_WIN32)
+
+#if defined(HAVE_GETPWUID) && defined(NO_GETPWUID_DECL)
+struct passwd *getpwuid(uid_t);
+char* getlogin(void);
+#endif
+
+static const char *get_os_user() // Posix
+{
+  if (!geteuid())
+    return "root";
+#ifdef HAVE_GETPWUID
+  struct passwd *pw;
+  const char *str;
+  if ((pw= getpwuid(geteuid())) != NULL)
+    return pw->pw_name;
+  if ((str= getlogin()) != NULL)
+    return str;
+#endif
+  if ((str= getenv("USER")) ||
+      (str= getenv("LOGNAME")) ||
+      (str= getenv("LOGIN")))
+    return str;
+  return NULL;
+}
+
+#else
+
+static const char *get_os_user() // Windows
+{
+  return getenv("USERNAME");
+}
+
+#endif // _WIN32
+
+
 MYSQL *
 xb_mysql_connect()
 {
 	MYSQL *connection = mysql_init(NULL);
 	char mysql_port_str[std::numeric_limits<int>::digits10 + 3];
+	const char *user= opt_user ? opt_user : get_os_user();
 
 	sprintf(mysql_port_str, "%d", opt_port);
 
@@ -129,7 +177,7 @@ xb_mysql_connect()
 
 	msg("Connecting to MariaDB server host: %s, user: %s, password: %s, "
 	       "port: %s, socket: %s", opt_host ? opt_host : "localhost",
-	       opt_user ? opt_user : "not set",
+	       user ? user : "not set",
 	       opt_password ? "set" : "not set",
 	       opt_port != 0 ? mysql_port_str : "not set",
 	       opt_socket ? opt_socket : "not set");
@@ -150,7 +198,7 @@ xb_mysql_connect()
 
 	if (!mysql_real_connect(connection,
 				opt_host ? opt_host : "localhost",
-				opt_user,
+				user,
 				opt_password,
 				"" /*database*/, opt_port,
 				opt_socket, 0)) {
@@ -367,6 +415,7 @@ bool get_mysql_vars(MYSQL *connection)
   char *innodb_undo_directory_var= NULL;
   char *innodb_page_size_var= NULL;
   char *innodb_undo_tablespaces_var= NULL;
+  char *aria_log_dir_path_var= NULL;
   char *page_zip_level_var= NULL;
   char *ignore_db_dirs= NULL;
   char *endptr;
@@ -397,6 +446,7 @@ bool get_mysql_vars(MYSQL *connection)
       {"innodb_undo_tablespaces", &innodb_undo_tablespaces_var},
       {"innodb_compression_level", &page_zip_level_var},
       {"ignore_db_dirs", &ignore_db_dirs},
+      {"aria_log_dir_path", &aria_log_dir_path_var},
       {NULL, NULL}};
 
   read_mysql_variables(connection, "SHOW VARIABLES", mysql_vars, true);
@@ -528,6 +578,12 @@ bool get_mysql_vars(MYSQL *connection)
     ut_ad(*endptr == 0);
   }
 
+  if (aria_log_dir_path_var)
+  {
+    aria_log_dir_path= my_strdup(PSI_NOT_INSTRUMENTED,
+                                 aria_log_dir_path_var, MYF(MY_FAE));
+  }
+
   if (page_zip_level_var != NULL)
   {
     page_zip_level= static_cast<uint>(strtoul(page_zip_level_var, &endptr,
@@ -550,34 +606,6 @@ Query the server to find out what backup capabilities it supports.
 bool
 detect_mysql_capabilities_for_backup()
 {
-	const char *query = "SELECT 'INNODB_CHANGED_PAGES', COUNT(*) FROM "
-				"INFORMATION_SCHEMA.PLUGINS "
-			    "WHERE PLUGIN_NAME LIKE 'INNODB_CHANGED_PAGES'";
-	char *innodb_changed_pages = NULL;
-	mysql_variable vars[] = {
-		{"INNODB_CHANGED_PAGES", &innodb_changed_pages}, {NULL, NULL}};
-
-	if (xtrabackup_incremental) {
-
-		read_mysql_variables(mysql_connection, query, vars, true);
-
-		ut_ad(innodb_changed_pages != NULL);
-
-		have_changed_page_bitmaps = (atoi(innodb_changed_pages) == 1);
-
-		/* INNODB_CHANGED_PAGES are listed in
-		INFORMATION_SCHEMA.PLUGINS in MariaDB, but
-		FLUSH NO_WRITE_TO_BINLOG CHANGED_PAGE_BITMAPS
-		is not supported for versions below 10.1.6
-		(see MDEV-7472) */
-		if (server_flavor == FLAVOR_MARIADB &&
-		    mysql_server_version < 100106) {
-			have_changed_page_bitmaps = false;
-		}
-
-		free_mysql_variables(vars);
-	}
-
 	/* do some sanity checks */
 	if (opt_galera_info && !have_galera_enabled) {
 		msg("--galera-info is specified on the command "
@@ -1378,7 +1406,7 @@ variable.
 @returns true on success
 */
 bool
-write_slave_info(MYSQL *connection)
+write_slave_info(ds_ctxt *datasink, MYSQL *connection)
 {
   String sql, comment;
   bool show_all_slaves_status= false;
@@ -1408,7 +1436,8 @@ write_slave_info(MYSQL *connection)
   }
 
   mysql_slave_position= strdup(comment.c_ptr());
-  return backup_file_print_buf(XTRABACKUP_SLAVE_INFO, sql.ptr(), sql.length());
+  return datasink->backup_file_print_buf(XTRABACKUP_SLAVE_INFO,
+                               sql.ptr(), sql.length());
 }
 
 
@@ -1416,10 +1445,11 @@ write_slave_info(MYSQL *connection)
 Retrieves MySQL Galera and
 saves it in a file. It also prints it to stdout. */
 bool
-write_galera_info(MYSQL *connection)
+write_galera_info(ds_ctxt *datasink, MYSQL *connection)
 {
 	char *state_uuid = NULL, *state_uuid55 = NULL;
 	char *last_committed = NULL, *last_committed55 = NULL;
+	char *domain_id = NULL, *domain_id55 = NULL;
 	bool result;
 
 	mysql_variable status[] = {
@@ -1427,6 +1457,12 @@ write_galera_info(MYSQL *connection)
 		{"wsrep_local_state_uuid", &state_uuid55},
 		{"Wsrep_last_committed", &last_committed},
 		{"wsrep_last_committed", &last_committed55},
+		{NULL, NULL}
+	};
+
+	mysql_variable value[] = {
+		{"Wsrep_gtid_domain_id", &domain_id},
+		{"wsrep_gtid_domain_id", &domain_id55},
 		{NULL, NULL}
 	};
 
@@ -1448,12 +1484,29 @@ write_galera_info(MYSQL *connection)
 		goto cleanup;
 	}
 
-	result = backup_file_printf(XTRABACKUP_GALERA_INFO,
-		"%s:%s\n", state_uuid ? state_uuid : state_uuid55,
-			last_committed ? last_committed : last_committed55);
+	read_mysql_variables(connection, "SHOW VARIABLES LIKE 'wsrep%'", value, true);
+
+	if (domain_id == NULL && domain_id55 == NULL) {
+		msg("Warning: failed to get master wsrep state from SHOW VARIABLES.");
+		result = true;
+		goto cleanup;
+	}
+
+	result = datasink->backup_file_printf(XTRABACKUP_GALERA_INFO,
+		"%s:%s %s\n", state_uuid ? state_uuid : state_uuid55,
+			      last_committed ? last_committed : last_committed55,
+			      domain_id ? domain_id : domain_id55);
+
 	if (result)
 	{
-		write_current_binlog_file(connection);
+	  result= datasink->backup_file_printf(XTRABACKUP_DONOR_GALERA_INFO,
+		"%s:%s %s\n", state_uuid ? state_uuid : state_uuid55,
+			      last_committed ? last_committed : last_committed55,
+			      domain_id ? domain_id : domain_id55);
+	}
+	if (result)
+	{
+		write_current_binlog_file(datasink, connection);
 	}
 
 cleanup:
@@ -1467,7 +1520,7 @@ cleanup:
 Flush and copy the current binary log file into the backup,
 if GTID is enabled */
 bool
-write_current_binlog_file(MYSQL *connection)
+write_current_binlog_file(ds_ctxt *datasink, MYSQL *connection)
 {
 	char *executed_gtid_set = NULL;
 	char *gtid_binlog_state = NULL;
@@ -1537,7 +1590,7 @@ write_current_binlog_file(MYSQL *connection)
 
 		snprintf(filepath, sizeof(filepath), "%s%c%s",
 			 log_bin_dir, FN_LIBCHAR, log_bin_file);
-		result = copy_file(ds_data, filepath, log_bin_file, 0);
+		result = datasink->copy_file(filepath, log_bin_file, 0);
 	}
 
 cleanup:
@@ -1553,7 +1606,7 @@ cleanup:
 Retrieves MySQL binlog position and
 saves it in a file. It also prints it to stdout. */
 bool
-write_binlog_info(MYSQL *connection)
+write_binlog_info(ds_ctxt *datasink, MYSQL *connection)
 {
 	char *filename = NULL;
 	char *position = NULL;
@@ -1598,14 +1651,14 @@ write_binlog_info(MYSQL *connection)
 			"filename '%s', position '%s', "
 			"GTID of the last change '%s'",
 			filename, position, gtid) != -1);
-		result = backup_file_printf(XTRABACKUP_BINLOG_INFO,
+		result = datasink->backup_file_printf(XTRABACKUP_BINLOG_INFO,
 					    "%s\t%s\t%s\n", filename, position,
 					    gtid);
 	} else {
 		ut_a(asprintf(&mysql_binlog_position,
 			"filename '%s', position '%s'",
 			filename, position) != -1);
-		result = backup_file_printf(XTRABACKUP_BINLOG_INFO,
+		result = datasink->backup_file_printf(XTRABACKUP_BINLOG_INFO,
 					    "%s\t%s\n", filename, position);
 	}
 
@@ -1645,8 +1698,9 @@ PERCONA_SCHEMA.xtrabackup_history and writes a new history record to the
 table containing all the history info particular to the just completed
 backup. */
 bool
-write_xtrabackup_info(MYSQL *connection, const char * filename, bool history,
-                       bool stream)
+write_xtrabackup_info(ds_ctxt *datasink,
+                      MYSQL *connection, const char * filename, bool history,
+                      bool stream)
 {
 
 	bool result = true;
@@ -1722,7 +1776,7 @@ write_xtrabackup_info(MYSQL *connection, const char * filename, bool history,
 	}
 
 	if (stream) {
-		backup_file_printf(filename, "%s", buf);
+		datasink->backup_file_printf(filename, "%s", buf);
 	} else {
 		fp = fopen(filename, "w");
 		if (!fp) {
@@ -1843,9 +1897,9 @@ static std::string make_local_paths(const char *data_file_path)
 	return buf.str();
 }
 
-bool write_backup_config_file()
+bool write_backup_config_file(ds_ctxt *datasink)
 {
-	int rc= backup_file_printf("backup-my.cnf",
+	int rc= datasink->backup_file_printf("backup-my.cnf",
 		"# This options file was generated by innobackupex.\n\n"
 		"# The server\n"
 		"[mysqld]\n"
@@ -1888,9 +1942,11 @@ char *make_argv(char *buf, size_t len, int argc, char **argv)
 		if (strncmp(*argv, "--password", strlen("--password")) == 0) {
 			arg = "--password=...";
 		}
-		left-= snprintf(buf + len - left, left,
+		uint l= snprintf(buf + len - left, left,
 				"%s%c", arg, argc > 1 ? ' ' : 0);
 		++argv; --argc;
+                if (l < left)
+                  left-= l;
 	}
 
 	return buf;
@@ -1918,18 +1974,6 @@ select_history()
 	}
 	return(true);
 }
-
-bool
-flush_changed_page_bitmaps()
-{
-	if (xtrabackup_incremental && have_changed_page_bitmaps &&
-	    !xtrabackup_incremental_force_scan) {
-		xb_mysql_query(mysql_connection,
-			"FLUSH NO_WRITE_TO_BINLOG CHANGED_PAGE_BITMAPS", false);
-	}
-	return(true);
-}
-
 
 /*********************************************************************//**
 Deallocate memory, disconnect from server, etc.

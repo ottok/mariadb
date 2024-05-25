@@ -26,6 +26,7 @@ Created 2012-02-08 by Sunny Bains.
 
 #include "row0quiesce.h"
 #include "row0mysql.h"
+#include "buf0flu.h"
 #include "ibuf0ibuf.h"
 #include "srv0start.h"
 #include "trx0purge.h"
@@ -430,6 +431,10 @@ row_quiesce_write_header(
 /*********************************************************************//**
 Write the table meta data after quiesce.
 @return DB_SUCCESS or error code */
+
+/* Stack size 20904 with clang */
+PRAGMA_DISABLE_CHECK_STACK_FRAME
+
 static	MY_ATTRIBUTE((nonnull, warn_unused_result))
 dberr_t
 row_quiesce_write_cfg(
@@ -487,6 +492,7 @@ row_quiesce_write_cfg(
 
 	return(err);
 }
+PRAGMA_REENABLE_CHECK_STACK_FRAME
 
 /*********************************************************************//**
 Check whether a table has an FTS index defined on it.
@@ -553,7 +559,7 @@ row_quiesce_table_start(
 
 	if (!trx_is_interrupted(trx)) {
 		/* Ensure that all asynchronous IO is completed. */
-		os_aio_wait_until_no_pending_writes();
+		os_aio_wait_until_no_pending_writes(true);
 		table->space->flush<false>();
 
 		if (row_quiesce_write_cfg(table, trx->mysql_thd)

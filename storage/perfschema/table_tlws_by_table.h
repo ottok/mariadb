@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2010, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -76,8 +76,7 @@ protected:
   table_tlws_by_table();
 
 public:
-  ~table_tlws_by_table()
-  {}
+  ~table_tlws_by_table() = default;
 
 protected:
   void make_row(PFS_table_share *table_share);

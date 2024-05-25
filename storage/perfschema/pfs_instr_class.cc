@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2008, 2023, Oracle and/or its affiliates.
    Copyright (c) 2020, MariaDB Corporation.
 
   This program is free software; you can redistribute it and/or modify
@@ -55,7 +55,7 @@
   Indicate if the performance schema is enabled.
   This flag is set at startup, and never changes.
 */
-my_bool pfs_enabled= TRUE;
+my_bool pfs_enabled= FALSE;
 
 /**
   PFS_INSTRUMENT option settings array

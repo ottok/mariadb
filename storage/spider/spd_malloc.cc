@@ -18,15 +18,10 @@
 #include <my_global.h>
 #include "mysql_version.h"
 #include "spd_environ.h"
-#if MYSQL_VERSION_ID < 50500
-#include "mysql_priv.h"
-#include <mysql/plugin.h>
-#else
 #include "sql_priv.h"
 #include "probes_mysql.h"
 #include "sql_class.h"
 #include "sql_analyse.h"
-#endif
 #include "spd_db_include.h"
 #include "spd_include.h"
 #include "spd_malloc.h"
@@ -923,23 +918,6 @@ bool spider_string::append(
   DBUG_ASSERT((!current_alloc_mem && !str.is_alloced()) ||
     current_alloc_mem == str.alloced_length());
   bool res = str.append(file, arg_length);
-  SPIDER_STRING_CALC_MEM;
-  DBUG_RETURN(res);
-}
-
-bool spider_string::append_with_prefill(
-  const char *s,
-  uint32 arg_length,
-  uint32 full_length,
-  char fill_char
-) {
-  DBUG_ENTER("spider_string::append_with_prefill");
-  DBUG_PRINT("info",("spider this=%p", this));
-  DBUG_ASSERT(mem_calc_inited);
-  DBUG_ASSERT((!current_alloc_mem && !str.is_alloced()) ||
-    current_alloc_mem == str.alloced_length());
-  bool res = str.append_with_prefill(s, arg_length, full_length,
-    fill_char);
   SPIDER_STRING_CALC_MEM;
   DBUG_RETURN(res);
 }

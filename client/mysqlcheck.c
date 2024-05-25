@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2001, 2013, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2012, MariaDB
+   Copyright (c) 2010, 2024, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -57,16 +57,15 @@ DYNAMIC_ARRAY tables4repair, tables4rebuild, alter_table_cmds;
 DYNAMIC_ARRAY views4repair;
 static uint opt_protocol=0;
 
-static uint protocol_to_force= MYSQL_PROTOCOL_DEFAULT;
-
 enum operations { DO_CHECK=1, DO_REPAIR, DO_ANALYZE, DO_OPTIMIZE, DO_FIX_NAMES };
 const char *operation_name[]=
 {
   "???", "check", "repair", "analyze", "optimize", "fix names"
 };
 
-typedef enum { DO_VIEWS_NO, DO_VIEWS_YES, DO_VIEWS_FROM_MYSQL } enum_do_views;
-const char *do_views_opts[]= {"NO", "YES", "UPGRADE_FROM_MYSQL", NullS};
+typedef enum { DO_VIEWS_NO, DO_VIEWS_YES, DO_UPGRADE, DO_VIEWS_FROM_MYSQL } enum_do_views;
+const char *do_views_opts[]= {"NO", "YES", "UPGRADE", "UPGRADE_FROM_MYSQL",
+  NullS};
 TYPELIB do_views_typelib= { array_elements(do_views_opts) - 1, "",
     do_views_opts, NULL };
 static ulong opt_do_views= DO_VIEWS_NO;
@@ -83,11 +82,11 @@ static struct my_option my_long_options[] =
    "Instead of issuing one query for each table, use one query per database, naming all tables in the database in a comma-separated list.",
    &opt_all_in_1, &opt_all_in_1, 0, GET_BOOL, NO_ARG, 0, 0, 0,
    0, 0, 0},
-  {"auto-repair", OPT_AUTO_REPAIR,
+  {"auto-repair", 0,
    "If a checked table is corrupted, automatically fix it. Repairing will be done after all tables have been checked, if corrupted ones were found.",
    &opt_auto_repair, &opt_auto_repair, 0, GET_BOOL, NO_ARG, 0,
    0, 0, 0, 0, 0},
-  {"character-sets-dir", OPT_CHARSETS_DIR,
+  {"character-sets-dir", 0,
    "Directory for character set files.", (char**) &charsets_dir,
    (char**) &charsets_dir, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"check", 'c', "Check table for errors.", 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0,
@@ -98,7 +97,7 @@ static struct my_option my_long_options[] =
   {"check-upgrade", 'g',
    "Check tables for version-dependent changes. May be used with --auto-repair to correct tables requiring version-dependent updates.",
    0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"compress", OPT_COMPRESS, "Use compression in server/client protocol.",
+  {"compress", 0, "Use compression in server/client protocol.",
    &opt_compress, &opt_compress, 0, GET_BOOL, NO_ARG, 0, 0, 0,
    0, 0, 0},
   {"databases", 'B',
@@ -112,16 +111,16 @@ static struct my_option my_long_options[] =
   {"debug", '#', "Output debug log. Often this is 'd:t:o,filename'.",
    0, 0, 0, GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
 #endif
-  {"debug-check", OPT_DEBUG_CHECK, "Check memory and open file usage at exit.",
+  {"debug-check", 0, "Check memory and open file usage at exit.",
    &debug_check_flag, &debug_check_flag, 0,
    GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"debug-info", OPT_DEBUG_INFO, "Print some debug info at exit.",
+  {"debug-info", 0, "Print some debug info at exit.",
    &debug_info_flag, &debug_info_flag,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"default-character-set", OPT_DEFAULT_CHARSET,
+  {"default-character-set", 0,
    "Set the default character set.", &default_charset,
    &default_charset, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"default_auth", OPT_DEFAULT_AUTH,
+  {"default_auth", 0,
    "Default authentication client-side plugin to use.",
    &opt_default_auth, &opt_default_auth, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
@@ -141,7 +140,7 @@ static struct my_option my_long_options[] =
    "If you are using this option with CHECK TABLE, it will ensure that the table is 100 percent consistent, but will take a long time. If you are using this option with REPAIR TABLE, it will force using old slow repair with keycache method, instead of much faster repair by sorting.",
    &opt_extended, &opt_extended, 0, GET_BOOL, NO_ARG, 0, 0, 0,
    0, 0, 0},
-  {"flush", OPT_FLUSH_TABLES, "Flush each table after check. This is useful if you don't want to have the checked tables take up space in the caches after the check",
+  {"flush", 0, "Flush each table after check. This is useful if you don't want to have the checked tables take up space in the caches after the check",
    &opt_flush_tables, &opt_flush_tables, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0,
    0, 0 },
   {"help", '?', "Display this help message and exit.", 0, 0, 0, GET_NO_ARG,
@@ -151,7 +150,7 @@ static struct my_option my_long_options[] =
   {"medium-check", 'm',
    "Faster than extended-check, but only finds 99.99 percent of all errors. Should be good enough for most cases.",
    0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"write-binlog", OPT_WRITE_BINLOG,
+  {"write-binlog", 0,
    "Log ANALYZE, OPTIMIZE and REPAIR TABLE commands. Use --skip-write-binlog "
    "when commands should not be sent to replication slaves.",
    &opt_write_binlog, &opt_write_binlog, 0, GET_BOOL, NO_ARG,
@@ -169,7 +168,7 @@ static struct my_option my_long_options[] =
   {"pipe", 'W', "Use named pipes to connect to server.", 0, 0, 0, GET_NO_ARG,
    NO_ARG, 0, 0, 0, 0, 0, 0},
 #endif
-  {"plugin_dir", OPT_PLUGIN_DIR, "Directory for client-side plugins.",
+  {"plugin_dir", 0, "Directory for client-side plugins.",
    &opt_plugin_dir, &opt_plugin_dir, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"port", 'P', "Port number to use for connection or 0 for default to, in "
@@ -200,7 +199,7 @@ static struct my_option my_long_options[] =
 #include <sslopt-longopts.h>
   {"tables", OPT_TABLES, "Overrides option --databases (-B).", 0, 0, 0,
    GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"use-frm", OPT_FRM,
+  {"use-frm", 0,
    "When used with REPAIR, get table structure from .frm file, so the table can be repaired even if .MYI header is corrupted.",
    &opt_frm, &opt_frm, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0,
    0},
@@ -215,8 +214,9 @@ static struct my_option my_long_options[] =
   {"process-views", 0,
    "Perform the requested operation (check or repair) on views. "
    "One of: NO, YES (correct the checksum, if necessary, add the "
-   "mariadb-version field), UPGRADE_FROM_MYSQL (same as YES and toggle "
-   "the algorithm MERGE<->TEMPTABLE.", &opt_do_views, &opt_do_views,
+   "mariadb-version field), UPGRADE (run from mariadb-upgrade), "
+   "UPGRADE_FROM_MYSQL (same as YES and toggle the algorithm "
+   "MERGE<->TEMPTABLE.", &opt_do_views, &opt_do_views,
    &do_views_typelib, GET_ENUM, OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"process-tables", 0, "Perform the requested operation on tables.",
    &opt_do_tables, &opt_do_tables, 0, GET_BOOL, NO_ARG, 1, 0, 0, 0, 0, 0},
@@ -291,10 +291,6 @@ get_one_option(const struct my_option *opt,
                const char *filename)
 {
   int orig_what_to_do= what_to_do;
-
-  /* Track when protocol is set via CLI to not force overrides */
-  static my_bool ignore_protocol_override = FALSE;
-
   DBUG_ENTER("get_one_option");
 
   switch(opt->id) {
@@ -357,13 +353,6 @@ get_one_option(const struct my_option *opt,
   case 'W':
 #ifdef _WIN32
     opt_protocol = MYSQL_PROTOCOL_PIPE;
-
-    /* Prioritize pipe if explicit via command line */
-    if (filename[0] == '\0')
-    {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
 #endif
     break;
   case '#':
@@ -387,45 +376,26 @@ get_one_option(const struct my_option *opt,
       sf_leaking_memory= 1; /* no memory leak reports here */
       exit(1);
     }
-
-    /* Specification of protocol via CLI trumps implicit overrides */
-    if (filename[0] == '\0')
-    {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
     break;
   case 'P':
-    /* If port and socket are set, fall back to default behavior */
-    if (protocol_to_force == SOCKET_PROTOCOL_TO_FORCE)
+    if (filename[0] == '\0')
     {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
-    /* If port is set via CLI, try to force protocol to TCP */
-    if (filename[0] == '\0' &&
-        !ignore_protocol_override &&
-        protocol_to_force == MYSQL_PROTOCOL_DEFAULT)
-    {
-      protocol_to_force = MYSQL_PROTOCOL_TCP;
+      /* Port given on command line, switch protocol to use TCP */
+      opt_protocol= MYSQL_PROTOCOL_TCP;
     }
     break;
   case 'S':
-    /* If port and socket are set, fall back to default behavior */
-    if (protocol_to_force == MYSQL_PROTOCOL_TCP)
+    if (filename[0] == '\0')
     {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
-    /* Prioritize socket if set via command line */
-    if (filename[0] == '\0' &&
-        !ignore_protocol_override &&
-        protocol_to_force == MYSQL_PROTOCOL_DEFAULT)
-    {
-      protocol_to_force = SOCKET_PROTOCOL_TO_FORCE;
+      /*
+        Socket given on command line, switch protocol to use SOCKETSt
+        Except on Windows if 'protocol= pipe' has been provided in
+        the config file or command line.
+      */
+      if (opt_protocol != MYSQL_PROTOCOL_PIPE)
+      {
+        opt_protocol= MYSQL_PROTOCOL_SOCKET;
+      }
     }
     break;
   }
@@ -518,7 +488,7 @@ static int get_options(int *argc, char ***argv)
     DBUG_RETURN(1);
   }
   if (tty_password)
-    opt_password = get_tty_password(NullS);
+    opt_password = my_get_tty_password(NullS);
   if (debug_info_flag)
     my_end_arg= MY_CHECK_ERROR | MY_GIVE_INFO;
   if (debug_check_flag)
@@ -926,6 +896,7 @@ static int disable_binlog()
   return run_query("SET SQL_LOG_BIN=0", 0);
 }
 
+
 static int handle_request_for_tables(char *tables, size_t length,
                                      my_bool view, my_bool dont_quote)
 {
@@ -961,7 +932,10 @@ static int handle_request_for_tables(char *tables, size_t length,
     op= opt_write_binlog ?  "REPAIR" : "REPAIR NO_WRITE_TO_BINLOG";
     if (view)
     {
-      if (opt_do_views == DO_VIEWS_FROM_MYSQL) end = strmov(end, " FROM MYSQL");
+      if (opt_do_views == DO_VIEWS_FROM_MYSQL)
+        end = strmov(end, " FROM MYSQL");
+      else if (opt_do_views == DO_UPGRADE)
+        end = strmov(end, " FOR UPGRADE");
     }
     else
     {
@@ -1001,6 +975,7 @@ static int handle_request_for_tables(char *tables, size_t length,
     DBUG_RETURN(1);
   if (dont_quote)
   {
+    DBUG_ASSERT(op);
     DBUG_ASSERT(strlen(op)+strlen(tables)+strlen(options)+8+1 <= query_size);
 
     /* No backticks here as we added them before */
@@ -1053,7 +1028,10 @@ static void insert_table_name(DYNAMIC_ARRAY *arr, char *in, size_t dblen)
   insert_dynamic(arr, (uchar*) buf);
 }
 
-static void print_result()
+/* Ok as mysqlcheck is not multi threaded */
+PRAGMA_DISABLE_CHECK_STACK_FRAME
+
+static void __attribute__((noinline)) print_result()
 {
   MYSQL_RES *res;
   MYSQL_ROW row;
@@ -1144,6 +1122,7 @@ static void print_result()
   mysql_free_result(res);
   DBUG_VOID_RETURN;
 }
+PRAGMA_REENABLE_CHECK_STACK_FRAME
 
 
 static int dbConnect(char *host, char *user, char *passwd)
@@ -1246,14 +1225,6 @@ int main(int argc, char **argv)
   defaults_argv= argv;
   if (get_options(&argc, &argv))
     goto end1;
-
-
-  /* Command line options override configured protocol */
-  if (protocol_to_force > MYSQL_PROTOCOL_DEFAULT
-      && protocol_to_force != opt_protocol)
-  {
-    warn_protocol_override(current_host, &opt_protocol, protocol_to_force);
-  }
 
   sf_leaking_memory=0; /* from now on we cleanup properly */
 

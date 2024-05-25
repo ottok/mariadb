@@ -1,9 +1,0 @@
-# They are in fact used, but the server version string has a macro in it
-unused-debconf-template mariadb-server-10.6/old_data_directory_saved
-unused-debconf-template mariadb-server-10.6/postrm_remove_databases
-# myisam stopwords that cannot be changed and spelling errors remain
-spelling-error-in-binary usr/bin/* noone no one
-spelling-error-in-binary usr/bin/* thats that's
-spelling-error-in-binary usr/bin/* theres there's
-# Intentional in-context documentation
-package-contains-documentation-outside-usr-share-doc usr/share/mysql/errmsg-utf8.txt

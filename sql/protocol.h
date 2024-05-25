@@ -90,7 +90,7 @@ protected:
 public:
   THD	 *thd;
   Protocol(THD *thd_arg) { init(thd_arg); }
-  virtual ~Protocol() {}
+  virtual ~Protocol() = default;
   void init(THD* thd_arg);
 
   enum { SEND_NUM_ROWS= 1, SEND_EOF= 2, SEND_FORCE_COLUMN_INFO= 4 };
@@ -228,9 +228,9 @@ public:
 #ifdef EMBEDDED_LIBRARY
   void remove_last_row() override;
 #endif
-  virtual bool store_field_metadata(const THD *thd, const Send_field &field,
-                                    CHARSET_INFO *charset_for_protocol,
-                                    uint pos);
+  bool store_field_metadata(const THD *thd, const Send_field &field,
+                            CHARSET_INFO *charset_for_protocol,
+                            uint pos);
   bool store_item_metadata(THD *thd, Item *item, uint pos);
   bool store_field_metadata_for_list_fields(const THD *thd, Field *field,
                                             const TABLE_LIST *table_list,

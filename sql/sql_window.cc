@@ -207,27 +207,33 @@ setup_windows(THD *thd, Ref_ptr_array ref_pointer_array, TABLE_LIST *tables,
   DBUG_ENTER("setup_windows");
   List_iterator<Window_spec> it(win_specs);
 
-  /* 
-    Move all unnamed specifications after the named ones.
-    We could have avoided it if we had built two separate lists for
-    named and unnamed specifications.
-  */
-  Query_arena *arena, backup;
-  arena= thd->activate_stmt_arena_if_needed(&backup);
-  uint i = 0;
-  uint elems= win_specs.elements;
-  while ((win_spec= it++) && i++ < elems)
+  if (!thd->lex->current_select->is_win_spec_list_built)
   {
-    if (win_spec->name() == NULL)
-    {
-      it.remove();
-      win_specs.push_back(win_spec);
-    }
-  }
-  if (arena)
-    thd->restore_active_arena(arena, &backup);
 
-  it.rewind();
+    /*
+      Move all unnamed specifications after the named ones.
+      We could have avoided it if we had built two separate lists for
+      named and unnamed specifications.
+    */
+    Query_arena *arena, backup;
+    arena= thd->activate_stmt_arena_if_needed(&backup);
+    uint i = 0;
+    uint elems= win_specs.elements;
+    while ((win_spec= it++) && i++ < elems)
+    {
+      if (win_spec->name() == NULL)
+      {
+        it.remove();
+        win_specs.push_back(win_spec);
+      }
+    }
+    if (arena)
+      thd->restore_active_arena(arena, &backup);
+
+    it.rewind();
+
+    thd->lex->current_select->is_win_spec_list_built= true;
+  }
 
   List_iterator_fast<Window_spec> itp(win_specs);
 
@@ -944,7 +950,7 @@ protected:
 class Table_read_cursor : public Rowid_seq_cursor
 {
 public:
-  virtual ~Table_read_cursor() {}
+  virtual ~Table_read_cursor() = default;
 
   void init(READ_RECORD *info)
   {
@@ -1128,7 +1134,7 @@ public:
 
   virtual bool is_outside_computation_bounds() const { return false; };
 
-  virtual ~Frame_cursor() {}
+  virtual ~Frame_cursor() = default;
 
   /*
      Regular frame cursors add or remove values from the sum functions they
@@ -3081,7 +3087,7 @@ bool Window_funcs_sort::setup(THD *thd, SQL_SELECT *sel,
     spec= win_func->window_spec;
     int win_func_order_elements= spec->partition_list->elements +
                                   spec->order_list->elements;
-    if (win_func_order_elements > longest_order_elements)
+    if (win_func_order_elements >= longest_order_elements)
     {
       win_func_with_longest_order= win_func;
       longest_order_elements= win_func_order_elements;

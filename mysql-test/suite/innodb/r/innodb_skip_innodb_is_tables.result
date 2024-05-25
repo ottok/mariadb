@@ -48,7 +48,7 @@ lock_rec_locks	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	coun
 lock_table_lock_created	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of table locks created
 lock_table_lock_removed	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of table locks removed from the lock queue
 lock_table_locks	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Current number of table locks on tables
-lock_row_lock_current_waits	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	status_counter	Number of row locks currently being waited for (innodb_row_lock_current_waits)
+lock_row_lock_current_waits	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	Number of row locks currently being waited for (innodb_row_lock_current_waits)
 lock_row_lock_time	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	status_counter	Time spent in acquiring row locks, in milliseconds (innodb_row_lock_time)
 lock_row_lock_time_max	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	The maximum time to acquire a row lock, in milliseconds (innodb_row_lock_time_max)
 lock_row_lock_waits	lock	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	status_counter	Number of times a row lock had to be waited for (innodb_row_lock_waits)
@@ -88,7 +88,6 @@ buffer_flush_n_to_flush_by_age	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NUL
 buffer_flush_adaptive_avg_time	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Avg time (ms) spent for adaptive flushing recently.
 buffer_flush_adaptive_avg_pass	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of adaptive flushes passed during the recent Avg period.
 buffer_LRU_get_free_loops	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Total loops in LRU get free.
-buffer_LRU_get_free_waits	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Total sleep waits in LRU get free.
 buffer_flush_avg_page_rate	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Average number of pages at which flushing is happening
 buffer_flush_lsn_avg_rate	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Average redo generation rate
 buffer_flush_pct_for_dirty	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Percent of IO capacity used to avoid max dirty page limit
@@ -108,7 +107,6 @@ buffer_LRU_batch_num_scan	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NUL
 buffer_LRU_batch_scanned_per_call	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	set_member	Pages scanned per LRU batch call
 buffer_LRU_batch_flush_total_pages	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	status_counter	Total pages flushed as part of LRU batches
 buffer_LRU_batch_evict_total_pages	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	status_counter	Total pages evicted as part of LRU batches
-buffer_LRU_single_flush_failure_count	Buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of times attempt to flush a single page from LRU failed
 buffer_LRU_get_free_search	Buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of searches performed for a clean page
 buffer_LRU_search_scanned	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	set_owner	Total pages scanned as part of LRU search
 buffer_LRU_search_num_scan	buffer	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	set_member	Number of times LRU search is performed
@@ -164,8 +162,8 @@ trx_commits_insert_update	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NUL
 trx_rollbacks	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of transactions rolled back
 trx_rollbacks_savepoint	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of transactions rolled back to savepoint
 trx_rseg_history_len	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	Length of the TRX_RSEG_HISTORY list
-trx_undo_slots_used	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of undo slots used
-trx_undo_slots_cached	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of undo slots cached
+trx_undo_slots_used	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	Number of undo slots used
+trx_undo_slots_cached	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	Number of undo slots cached
 trx_rseg_current_size	transaction	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	value	Current rollback segment size in pages
 purge_del_mark_records	purge	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of delete-marked rows purged
 purge_upd_exist_or_extern_records	purge	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of purges on updates of existing records and updates on delete marked record with externally stored field
@@ -199,7 +197,7 @@ compress_pages_page_decompressed	compression	0	NULL	NULL	NULL	0	NULL	NULL	NULL	N
 compress_pages_page_compression_error	compression	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of page compression errors
 compress_pages_encrypted	compression	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of pages encrypted
 compress_pages_decrypted	compression	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of pages decrypted
-index_page_splits	index	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of index page splits
+index_page_splits	index	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	status_counter	Number of index page splits
 index_page_merge_attempts	index	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of index page merge attempts
 index_page_merge_successful	index	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of successful index page merges
 index_page_reorg_attempts	index	0	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	0	counter	Number of index page reorganization attempts

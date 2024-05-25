@@ -190,7 +190,7 @@
 /* The rest of the file is included in the server only */
 #ifndef MYSQL_CLIENT
 
-/* @@optimizer_switch flags. These must be in sync with optimizer_switch_typelib */
+/* @@optimizer_switch flags. These must be in sync with optimizer_switch_names */
 #define OPTIMIZER_SWITCH_INDEX_MERGE               (1ULL << 0)
 #define OPTIMIZER_SWITCH_INDEX_MERGE_UNION         (1ULL << 1)
 #define OPTIMIZER_SWITCH_INDEX_MERGE_SORT_UNION    (1ULL << 2)
@@ -234,6 +234,8 @@
 #define OPTIMIZER_SWITCH_USE_ROWID_FILTER          (1ULL << 33)
 #define OPTIMIZER_SWITCH_COND_PUSHDOWN_FROM_HAVING (1ULL << 34)
 #define OPTIMIZER_SWITCH_NOT_NULL_RANGE_SCAN       (1ULL << 35)
+#define OPTIMIZER_SWITCH_HASH_JOIN_CARDINALITY     (1ULL << 36)
+#define OPTIMIZER_SWITCH_CSET_NARROWING            (1ULL << 37)
 
 #define OPTIMIZER_SWITCH_DEFAULT   (OPTIMIZER_SWITCH_INDEX_MERGE | \
                                     OPTIMIZER_SWITCH_INDEX_MERGE_UNION | \
@@ -265,6 +267,13 @@
                                     OPTIMIZER_SWITCH_USE_ROWID_FILTER | \
                                     OPTIMIZER_SWITCH_COND_PUSHDOWN_FROM_HAVING | \
                                     OPTIMIZER_SWITCH_OPTIMIZE_JOIN_BUFFER_SIZE)
+
+/*
+  See adjust_secondary_key_cost in sys_vars.cc for symbolic names.
+*/
+#define OPTIMIZER_ADJ_SEC_KEY_COST (1)
+#define OPTIMIZER_ADJ_DISABLE_MAX_SEEKS (2)
+#define OPTIMIZER_ADJ_DISABLE_FORCE_INDEX_GROUP_BY (4)
 
 /*
   Replication uses 8 bytes to store SQL_MODE in the binary log. The day you

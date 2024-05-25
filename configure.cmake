@@ -60,15 +60,6 @@ IF(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND (NOT MSVC))
   ENDIF()
 ENDIF()
 
-# workaround for old gcc on x86, gcc atomic ops only work under -march=i686
-IF(CMAKE_SYSTEM_PROCESSOR STREQUAL "i686" AND CMAKE_COMPILER_IS_GNUCC AND
-   CMAKE_C_COMPILER_VERSION VERSION_LESS "4.4.0")
-  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=i686")
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=i686")
-  # query_response_time.cc causes "error: unable to find a register to spill"
-  SET(PLUGIN_QUERY_RESPONSE_TIME NO CACHE BOOL "Disabled, gcc is too old")
-ENDIF()
-
 # use runtime atomic-support detection in aarch64
 IF(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
   MY_CHECK_AND_SET_COMPILER_FLAG("-moutline-atomics")
@@ -417,7 +408,6 @@ CHECK_FUNCTION_EXISTS (strtoul HAVE_STRTOUL)
 CHECK_FUNCTION_EXISTS (strtoull HAVE_STRTOULL)
 CHECK_FUNCTION_EXISTS (strcasecmp HAVE_STRCASECMP)
 CHECK_FUNCTION_EXISTS (tell HAVE_TELL)
-CHECK_FUNCTION_EXISTS (thr_setconcurrency HAVE_THR_SETCONCURRENCY)
 CHECK_FUNCTION_EXISTS (thr_yield HAVE_THR_YIELD)
 CHECK_FUNCTION_EXISTS (vasprintf HAVE_VASPRINTF)
 CHECK_FUNCTION_EXISTS (vsnprintf HAVE_VSNPRINTF)
@@ -671,25 +661,11 @@ int main()
 }
 " HAVE_PTHREAD_YIELD_ZERO_ARG)
 
-IF(NOT STACK_DIRECTION)
-  IF(CMAKE_CROSSCOMPILING AND NOT DEFINED CMAKE_CROSSCOMPILING_EMULATOR)
-    MESSAGE(FATAL_ERROR 
-    "STACK_DIRECTION is not defined.  Please specify -DSTACK_DIRECTION=1 "
-    "or -DSTACK_DIRECTION=-1 when calling cmake.")
-  ELSE()
-    TRY_RUN(STACKDIR_RUN_RESULT STACKDIR_COMPILE_RESULT    
-     ${CMAKE_BINARY_DIR} 
-     ${CMAKE_SOURCE_DIR}/cmake/stack_direction.c
-     )
-     # Test program returns 0 (down) or 1 (up).
-     # Convert to -1 or 1
-     IF(STACKDIR_RUN_RESULT EQUAL 0)
-       SET(STACK_DIRECTION -1 CACHE INTERNAL "Stack grows direction")
-     ELSE()
-       SET(STACK_DIRECTION 1 CACHE INTERNAL "Stack grows direction")
-     ENDIF()
-     MESSAGE(STATUS "Checking stack direction : ${STACK_DIRECTION}")
-   ENDIF()
+IF(STACK_DIRECTION)
+ELSEIF(CMAKE_SYSTEM_PROCESSOR MATCHES "^(parisc|hppa)")
+  SET(STACK_DIRECTION 1 CACHE INTERNAL "Stack grows direction")
+ELSE()
+  SET(STACK_DIRECTION -1 CACHE INTERNAL "Stack grows direction")
 ENDIF()
 
 #
@@ -720,6 +696,7 @@ CHECK_SYMBOL_EXISTS(O_NONBLOCK "unistd.h;fcntl.h" HAVE_FCNTL_NONBLOCK)
 IF(NOT HAVE_FCNTL_NONBLOCK)
  SET(NO_FCNTL_NONBLOCK 1)
 ENDIF()
+CHECK_SYMBOL_EXISTS(O_DIRECT "fcntl.h" HAVE_FCNTL_DIRECT)
 
 #
 # Test for how the C compiler does inline, if at all
@@ -997,4 +974,9 @@ IF(have_C__Werror)
     HAVE_VFORK
   )
   SET(CMAKE_REQUIRED_FLAGS ${SAVE_CMAKE_REQUIRED_FLAGS})
+ENDIF()
+
+IF(CMAKE_C_COMPILER_ID MATCHES "Intel")
+  MY_CHECK_AND_SET_COMPILER_FLAG("-no-ansi-alias")
+  MY_CHECK_AND_SET_COMPILER_FLAG("-fp-model precise")
 ENDIF()

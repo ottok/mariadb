@@ -1,14 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2009, Google Inc.
 Copyright (c) 2014, 2022, MariaDB Corporation.
-
-Portions of this file contain modifications contributed and copyrighted by
-Google, Inc. Those modifications are gratefully acknowledged and are described
-briefly in the InnoDB documentation. The contributions by Google are
-incorporated with their permission, and subject to the conditions contained in
-the file COPYING.Google.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -168,11 +161,10 @@ log_set_capacity(ulonglong file_size)
 }
 
 /** Initialize the redo log subsystem. */
-void log_t::create()
+bool log_t::create()
 {
   ut_ad(this == &log_sys);
   ut_ad(!is_initialised());
-  m_initialised= true;
 
 #if defined(__aarch64__)
   mysql_mutex_init(log_sys_mutex_key, &mutex, MY_MUTEX_INIT_FAST);
@@ -194,9 +186,18 @@ void log_t::create()
 
   buf= static_cast<byte*>(ut_malloc_dontdump(srv_log_buffer_size,
                                              PSI_INSTRUMENT_ME));
-  TRASH_ALLOC(buf, srv_log_buffer_size);
+  if (!buf)
+    return false;
   flush_buf= static_cast<byte*>(ut_malloc_dontdump(srv_log_buffer_size,
                                                    PSI_INSTRUMENT_ME));
+  if (!flush_buf)
+  {
+    ut_free_dodump(buf, srv_log_buffer_size);
+    buf= nullptr;
+    return false;
+  }
+
+  TRASH_ALLOC(buf, srv_log_buffer_size);
   TRASH_ALLOC(flush_buf, srv_log_buffer_size);
 
   max_buf_free= srv_log_buffer_size / LOG_BUF_FLUSH_RATIO -
@@ -223,6 +224,8 @@ void log_t::create()
   buf_free= LOG_BLOCK_HDR_SIZE;
   checkpoint_buf= static_cast<byte*>
     (aligned_malloc(OS_FILE_LOG_BLOCK_SIZE, OS_FILE_LOG_BLOCK_SIZE));
+  m_initialised= true;
+  return true;
 }
 
 file_os_io::file_os_io(file_os_io &&rhs) : m_fd(rhs.m_fd)
@@ -273,6 +276,7 @@ dberr_t file_os_io::close() noexcept
   return DB_SUCCESS;
 }
 
+__attribute__((warn_unused_result))
 dberr_t file_os_io::read(os_offset_t offset, span<byte> buf) noexcept
 {
   return os_file_read(IORequestRead, m_fd, buf.data(), offset, buf.size(),
@@ -291,124 +295,11 @@ dberr_t file_os_io::flush() noexcept
   return os_file_flush(m_fd) ? DB_SUCCESS : DB_ERROR;
 }
 
-#ifdef HAVE_PMEM
-
-#include <libpmem.h>
-
-/** Memory mapped file */
-class mapped_file_t
-{
-public:
-  mapped_file_t()= default;
-  mapped_file_t(const mapped_file_t &)= delete;
-  mapped_file_t &operator=(const mapped_file_t &)= delete;
-  mapped_file_t(mapped_file_t &&)= delete;
-  mapped_file_t &operator=(mapped_file_t &&)= delete;
-  ~mapped_file_t() noexcept;
-
-  dberr_t map(const char *path, bool read_only= false,
-              bool nvme= false) noexcept;
-  dberr_t unmap() noexcept;
-  byte *data() noexcept { return m_area.data(); }
-
-private:
-  span<byte> m_area;
-};
-
-mapped_file_t::~mapped_file_t() noexcept
-{
-  if (!m_area.empty())
-    unmap();
-}
-
-dberr_t mapped_file_t::map(const char *path, bool read_only,
-                           bool nvme) noexcept
-{
-  auto fd= mysql_file_open(innodb_log_file_key, path,
-                           read_only ? O_RDONLY : O_RDWR, MYF(MY_WME));
-  if (fd == -1)
-    return DB_ERROR;
-
-  const auto file_size= size_t{os_file_get_size(path).m_total_size};
-
-  const int nvme_flag= nvme ? MAP_SYNC : 0;
-  void *ptr=
-      my_mmap(0, file_size, read_only ? PROT_READ : PROT_READ | PROT_WRITE,
-              MAP_SHARED_VALIDATE | nvme_flag, fd, 0);
-  mysql_file_close(fd, MYF(MY_WME));
-
-  if (ptr == MAP_FAILED)
-    return DB_ERROR;
-
-  m_area= {static_cast<byte *>(ptr), file_size};
-  return DB_SUCCESS;
-}
-
-dberr_t mapped_file_t::unmap() noexcept
-{
-  ut_ad(!m_area.empty());
-
-  if (my_munmap(m_area.data(), m_area.size()))
-    return DB_ERROR;
-
-  m_area= {};
-  return DB_SUCCESS;
-}
-
-static bool is_pmem(const char *path) noexcept
-{
-  mapped_file_t mf;
-  return mf.map(path, true, true) == DB_SUCCESS ? true : false;
-}
-
-class file_pmem_io final : public file_io
-{
-public:
-  file_pmem_io() noexcept : file_io(true) {}
-
-  dberr_t open(const char *path, bool read_only) noexcept final
-  {
-    return m_file.map(path, read_only, true);
-  }
-  dberr_t rename(const char *old_path, const char *new_path) noexcept final
-  {
-    return os_file_rename(innodb_log_file_key, old_path, new_path) ? DB_SUCCESS
-                                                                   : DB_ERROR;
-  }
-  dberr_t close() noexcept final { return m_file.unmap(); }
-  dberr_t read(os_offset_t offset, span<byte> buf) noexcept final
-  {
-    memcpy(buf.data(), m_file.data() + offset, buf.size());
-    return DB_SUCCESS;
-  }
-  dberr_t write(const char *, os_offset_t offset,
-                span<const byte> buf) noexcept final
-  {
-    pmem_memcpy_persist(m_file.data() + offset, buf.data(), buf.size());
-    return DB_SUCCESS;
-  }
-  dberr_t flush() noexcept final
-  {
-    ut_ad(0);
-    return DB_SUCCESS;
-  }
-
-private:
-  mapped_file_t m_file;
-};
-#endif
-
 dberr_t log_file_t::open(bool read_only) noexcept
 {
   ut_a(!is_opened());
 
-#ifdef HAVE_PMEM
-  auto ptr= is_pmem(m_path.c_str())
-                ? std::unique_ptr<file_io>(new file_pmem_io)
-                : std::unique_ptr<file_io>(new file_os_io);
-#else
   auto ptr= std::unique_ptr<file_io>(new file_os_io);
-#endif
 
   if (dberr_t err= ptr->open(m_path.c_str(), read_only))
     return err;
@@ -442,6 +333,8 @@ dberr_t log_file_t::close() noexcept
   return DB_SUCCESS;
 }
 
+
+__attribute__((warn_unused_result))
 dberr_t log_file_t::read(os_offset_t offset, span<byte> buf) noexcept
 {
   ut_ad(is_opened());
@@ -504,22 +397,13 @@ void log_t::file::write_header_durable(lsn_t lsn)
     log_sys.log.flush();
 }
 
-void log_t::file::read(os_offset_t offset, span<byte> buf)
-{
-  if (const dberr_t err= fd.read(offset, buf))
-    ib::fatal() << "read(" << fd.get_path() << ") returned "<< err;
-}
-
-bool log_t::file::writes_are_durable() const noexcept
-{
-  return fd.writes_are_durable();
-}
-
 void log_t::file::write(os_offset_t offset, span<byte> buf)
 {
   srv_stats.os_log_pending_writes.inc();
   if (const dberr_t err= fd.write(offset, buf))
-    ib::fatal() << "write(" << fd.get_path() << ") returned " << err;
+    ib::fatal() << "write(" << fd.get_path() << ") returned " << err
+                << ". Operating system error number "
+                << IF_WIN(GetLastError(), errno) << ".";
   srv_stats.os_log_pending_writes.dec();
   srv_stats.os_log_written.add(buf.size());
   srv_stats.log_writes.inc();
@@ -875,7 +759,6 @@ repeat:
 @param sync  whether to wait for a durable write to complete */
 void log_buffer_flush_to_disk(bool sync)
 {
-  ut_ad(!srv_read_only_mode);
   log_write_up_to(log_sys.get_lsn(std::memory_order_acquire), sync);
 }
 
@@ -1065,6 +948,16 @@ ATTRIBUTE_COLD void log_check_margins()
   while (log_sys.check_flush_or_checkpoint());
 }
 
+/** Wait for a log checkpoint if needed.
+NOTE that this function may only be called while not holding
+any synchronization objects except dict_sys.latch. */
+void log_free_check()
+{
+  ut_ad(!lock_sys.is_holder());
+  if (log_sys.check_flush_or_checkpoint())
+    log_check_margins();
+}
+
 extern void buf_resize_shutdown();
 
 /** Make a checkpoint at the latest lsn on shutdown. */
@@ -1173,14 +1066,6 @@ wait_suspend_loop:
 
 	if (!buf_pool.is_initialised()) {
 		ut_ad(!srv_was_started);
-	} else if (ulint pending_io = buf_pool.io_pending()) {
-		if (srv_print_verbose_log && count > 600) {
-			ib::info() << "Waiting for " << pending_io << " buffer"
-				" page I/Os to complete";
-			count = 0;
-		}
-
-		goto loop;
 	} else {
 		buf_flush_buffer_pool();
 	}

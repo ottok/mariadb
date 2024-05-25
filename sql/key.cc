@@ -605,13 +605,14 @@ int key_rec_cmp(void *key_p, uchar *first_rec, uchar *second_rec)
       }
       /*
         No null values in the fields
-        We use the virtual method cmp_max with a max length parameter.
+        We use the virtual method cmp_prefix with a max length parameter.
         For most field types this translates into a cmp without
         max length. The exceptions are the BLOB and VARCHAR field types
         that take the max length into account.
       */
       if ((result= field->cmp_prefix(field->ptr+first_diff, field->ptr+sec_diff,
-                                     key_part->length)))
+                                     key_part->length /
+                                     field->charset()->mbmaxlen)))
         DBUG_RETURN(result);
 next_loop:
       key_part++;

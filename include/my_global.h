@@ -322,13 +322,6 @@ C_MODE_END
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
-#if defined(__cplusplus) && defined(NO_CPLUSPLUS_ALLOCA)
-#undef HAVE_ALLOCA
-#undef HAVE_ALLOCA_H
-#endif
-#ifdef HAVE_ALLOCA_H
-#include <alloca.h>
-#endif
 
 #include <errno.h>				/* Recommended by debian */
 /* We need the following to go around a problem with openssl on solaris */
@@ -485,6 +478,7 @@ typedef unsigned short ushort;
 #endif
 
 #include <my_compiler.h>
+#include <my_alloca.h>
 
 /*
   Wen using the embedded library, users might run into link problems,
@@ -968,6 +962,7 @@ typedef struct st_mysql_lex_string LEX_STRING;
 #define SOCKET_ECONNRESET WSAECONNRESET
 #define SOCKET_ENFILE	ENFILE
 #define SOCKET_EMFILE	EMFILE
+#define SOCKET_CLOSED   EIO
 #else /* Unix */
 #define socket_errno	errno
 #define closesocket(A)	close(A)
@@ -977,6 +972,7 @@ typedef struct st_mysql_lex_string LEX_STRING;
 #define SOCKET_EADDRINUSE EADDRINUSE
 #define SOCKET_ETIMEDOUT ETIMEDOUT
 #define SOCKET_ECONNRESET ECONNRESET
+#define SOCKET_CLOSED   EIO
 #define SOCKET_ENFILE	ENFILE
 #define SOCKET_EMFILE	EMFILE
 #endif

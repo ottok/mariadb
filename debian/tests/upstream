@@ -25,7 +25,8 @@ echo "using tmpdir: $WORKDIR/tmp"
 echo "Setting up skip-tests-list"
 
 # Use unstable-tests list as base to skip all tests  considered unstable
-cp /usr/share/mysql/mysql-test/unstable-tests $SKIP_TEST_LST
+# or create an empty file if that upstream file does not exists on this branch
+cp /usr/share/mysql/mysql-test/unstable-tests $SKIP_TEST_LST || touch $SKIP_TEST_LST
 
 # Also use the arch specific skiplists if exist
 if [ -f /usr/share/mysql/mysql-test/unstable-tests.$ARCH ]

@@ -89,12 +89,13 @@ struct mtr_t {
   { auto s= m_memo.size(); rollback_to_savepoint(s - 1, s); }
 
   /** Commit a mini-transaction that is shrinking a tablespace.
-  @param space   tablespace that is being shrunk */
-  ATTRIBUTE_COLD void commit_shrink(fil_space_t &space);
+  @param space   tablespace that is being shrunk
+  @param size    new size in pages */
+  ATTRIBUTE_COLD void commit_shrink(fil_space_t &space, uint32_t size);
 
   /** Commit a mini-transaction that is deleting or renaming a file.
-  @param space   tablespace that is being renamed or deleted
-  @param name    new file name (nullptr=the file will be deleted)
+  @param space           tablespace that is being renamed or deleted
+  @param name            new file name (nullptr=the file will be deleted)
   @return whether the operation succeeded */
   ATTRIBUTE_COLD bool commit_file(fil_space_t &space, const char *name);
 
@@ -282,17 +283,6 @@ struct mtr_t {
     memo_push(lock, MTR_MEMO_SX_LOCK);
   }
 
-  /** Acquire a tablespace S-latch.
-  @param space  tablespace */
-  void s_lock_space(fil_space_t *space)
-  {
-    ut_ad(space->purpose == FIL_TYPE_TEMPORARY ||
-          space->purpose == FIL_TYPE_IMPORT ||
-          space->purpose == FIL_TYPE_TABLESPACE);
-    memo_push(space, MTR_MEMO_SPACE_S_LOCK);
-    space->s_lock();
-  }
-
   /** Acquire an exclusive tablespace latch.
   @param space  tablespace */
   void x_lock_space(fil_space_t *space);
@@ -348,18 +338,20 @@ public:
   {
     mtr_memo_slot_t &slot= m_memo[savepoint];
     ut_ad(slot.type <= MTR_MEMO_BUF_FIX);
-    ut_ad(type <= MTR_MEMO_BUF_FIX);
+    ut_ad(type < MTR_MEMO_S_LOCK);
     slot.type= type;
   }
 
   /** Upgrade U locks on a block to X */
   void page_lock_upgrade(const buf_block_t &block);
 
+  /** Upgrade index U lock to X */
+  ATTRIBUTE_COLD void index_lock_upgrade();
+
   /** Check if we are holding tablespace latch
   @param space  tablespace to search for
-  @param shared whether to look for shared latch, instead of exclusive
   @return whether space.latch is being held */
-  bool memo_contains(const fil_space_t& space, bool shared= false) const
+  bool memo_contains(const fil_space_t& space) const
     MY_ATTRIBUTE((warn_unused_result));
 #ifdef UNIV_DEBUG
   /** Check if we are holding an rw-latch in this mini-transaction
@@ -412,7 +404,7 @@ public:
       break;
     case MTR_MEMO_MODIFY:
     case MTR_MEMO_S_LOCK: case MTR_MEMO_X_LOCK: case MTR_MEMO_SX_LOCK:
-    case MTR_MEMO_SPACE_X_LOCK: case MTR_MEMO_SPACE_S_LOCK:
+    case MTR_MEMO_SPACE_X_LOCK:
       ut_ad("invalid type" == 0);
     }
 #endif

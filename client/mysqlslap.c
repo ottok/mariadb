@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2005, 2015, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2022, MariaDB
+   Copyright (c) 2010, 2024, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -172,8 +172,6 @@ File csv_file;
 
 static uint opt_protocol= 0;
 
-static uint protocol_to_force= MYSQL_PROTOCOL_DEFAULT;
-
 static int get_options(int *argc,char ***argv);
 static uint opt_mysql_port= 0;
 
@@ -333,13 +331,6 @@ int main(int argc, char **argv)
     free_defaults(defaults_argv);
     my_end(0);
     exit(1);
-  }
-
-  /* Command line options override configured protocol */
-  if (protocol_to_force > MYSQL_PROTOCOL_DEFAULT
-      && protocol_to_force != opt_protocol)
-  {
-    warn_protocol_override(host, &opt_protocol, protocol_to_force);
   }
 
   sf_leaking_memory=0; /* from now on we cleanup properly */
@@ -544,50 +535,45 @@ static struct my_option my_long_options[] =
     "Generate SQL where not supplied by file or command line.",
     &auto_generate_sql, &auto_generate_sql,
     0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"auto-generate-sql-add-autoincrement", OPT_SLAP_AUTO_GENERATE_ADD_AUTO,
+  {"auto-generate-sql-add-autoincrement", 0,
     "Add an AUTO_INCREMENT column to auto-generated tables.",
-    &auto_generate_sql_autoincrement,
-    &auto_generate_sql_autoincrement,
+    &auto_generate_sql_autoincrement, &auto_generate_sql_autoincrement,
     0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"auto-generate-sql-execute-number", OPT_SLAP_AUTO_GENERATE_EXECUTE_QUERIES,
+  {"auto-generate-sql-execute-number", 0,
     "Set this number to generate a set number of queries to run.",
     &auto_actual_queries, &auto_actual_queries,
     0, GET_ULL, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"auto-generate-sql-guid-primary", OPT_SLAP_AUTO_GENERATE_GUID_PRIMARY,
+  {"auto-generate-sql-guid-primary", 0,
     "Add GUID based primary keys to auto-generated tables.",
-    &auto_generate_sql_guid_primary,
-    &auto_generate_sql_guid_primary,
+    &auto_generate_sql_guid_primary, &auto_generate_sql_guid_primary,
     0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"auto-generate-sql-load-type", OPT_SLAP_AUTO_GENERATE_SQL_LOAD_TYPE,
+  {"auto-generate-sql-load-type", 0,
     "Specify test load type: mixed, update, write, key, or read; default is mixed.",
    (char**) &auto_generate_sql_type, (char**) &auto_generate_sql_type,
     0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"auto-generate-sql-secondary-indexes", 
-    OPT_SLAP_AUTO_GENERATE_SECONDARY_INDEXES, 
+  {"auto-generate-sql-secondary-indexes", 0,
     "Number of secondary indexes to add to auto-generated tables.",
     &auto_generate_sql_secondary_indexes,
     &auto_generate_sql_secondary_indexes, 0,
     GET_UINT, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"auto-generate-sql-unique-query-number", 
-    OPT_SLAP_AUTO_GENERATE_UNIQUE_QUERY_NUM,
+  {"auto-generate-sql-unique-query-number", 0,
     "Number of unique queries to generate for automatic tests.",
     &auto_generate_sql_unique_query_number,
     &auto_generate_sql_unique_query_number,
     0, GET_ULL, REQUIRED_ARG, 10, 0, 0, 0, 0, 0},
-  {"auto-generate-sql-unique-write-number", 
-    OPT_SLAP_AUTO_GENERATE_UNIQUE_WRITE_NUM,
+  {"auto-generate-sql-unique-write-number", 0,
     "Number of unique queries to generate for auto-generate-sql-write-number.",
     &auto_generate_sql_unique_write_number,
     &auto_generate_sql_unique_write_number,
     0, GET_ULL, REQUIRED_ARG, 10, 0, 0, 0, 0, 0},
-  {"auto-generate-sql-write-number", OPT_SLAP_AUTO_GENERATE_WRITE_NUM,
+  {"auto-generate-sql-write-number", 0,
     "Number of row inserts to perform for each thread (default is 100).",
     &auto_generate_sql_number, &auto_generate_sql_number,
     0, GET_ULL, REQUIRED_ARG, 100, 0, 0, 0, 0, 0},
   {"character-sets-dir", OPT_CHARSETS_DIR,
    "Directory for character set files.", (char **)&charsets_dir,
    (char **)&charsets_dir, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"commit", OPT_SLAP_COMMIT, "Commit records every X number of statements.",
+  {"commit", 0, "Commit records every X number of statements.",
     &commit_rate, &commit_rate, 0, GET_UINT, REQUIRED_ARG,
     0, 0, 0, 0, 0, 0},
   {"compress", 'C', "Use compression in server/client protocol.",
@@ -596,10 +582,10 @@ static struct my_option my_long_options[] =
   {"concurrency", 'c', "Number of clients to simulate for query to run.",
    (char**) &concurrency_str, (char**) &concurrency_str, 0, GET_STR,
     REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"create", OPT_SLAP_CREATE_STRING, "File or string to use create tables.",
+  {"create", 0, "File or string to use create tables.",
     &create_string, &create_string, 0, GET_STR, REQUIRED_ARG,
     0, 0, 0, 0, 0, 0},
-  {"create-schema", OPT_CREATE_SLAP_SCHEMA, "Schema to run tests in.",
+  {"create-schema", 0, "Schema to run tests in.",
    (char**) &create_schema_string, (char**) &create_schema_string, 0, GET_STR, 
     REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"csv", OPT_SLAP_CSV,
@@ -613,12 +599,12 @@ static struct my_option my_long_options[] =
    (char**) &default_dbug_option, (char**) &default_dbug_option, 0, GET_STR,
     OPT_ARG, 0, 0, 0, 0, 0, 0},
 #endif
-  {"debug-check", OPT_DEBUG_CHECK, "Check memory and open file usage at exit.",
+  {"debug-check", 0, "Check memory and open file usage at exit.",
    &debug_check_flag, &debug_check_flag, 0,
    GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"debug-info", 'T', "Print some debug info at exit.", &debug_info_flag,
    &debug_info_flag, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"default_auth", OPT_DEFAULT_AUTH,
+  {"default_auth", 0,
    "Default authentication client-side plugin to use.",
    &opt_default_auth, &opt_default_auth, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
@@ -626,7 +612,7 @@ static struct my_option my_long_options[] =
     "Delimiter to use in SQL statements supplied in file or command line.",
    (char**) &delimiter, (char**) &delimiter, 0, GET_STR, REQUIRED_ARG,
     0, 0, 0, 0, 0, 0},
-  {"detach", OPT_SLAP_DETACH,
+  {"detach", 0,
     "Detach (close and reopen) connections after X number of requests.",
     &detach_rate, &detach_rate, 0, GET_UINT, REQUIRED_ARG, 
     0, 0, 0, 0, 0, 0},
@@ -638,14 +624,14 @@ static struct my_option my_long_options[] =
     GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"host", 'h', "Connect to host.", &host, &host, 0, GET_STR,
     REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"init-command", OPT_INIT_COMMAND,
+  {"init-command", 0,
    "SQL Command to execute when connecting to MariaDB server. Will "
    "automatically be re-executed when reconnecting.",
    &opt_init_command, &opt_init_command, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"iterations", 'i', "Number of times to run the tests.", &iterations,
     &iterations, 0, GET_UINT, REQUIRED_ARG, 1, 0, 0, 0, 0, 0},
-  {"no-drop", OPT_SLAP_NO_DROP, "Do not drop the schema after the test.",
+  {"no-drop", 0, "Do not drop the schema after the test.",
    &opt_no_drop, &opt_no_drop, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"number-char-cols", 'x', 
     "Number of VARCHAR columns to create in table if specifying --auto-generate-sql.",
@@ -655,11 +641,11 @@ static struct my_option my_long_options[] =
     "Number of INT columns to create in table if specifying --auto-generate-sql.",
    (char**) &num_int_cols_opt, (char**) &num_int_cols_opt, 0, GET_STR, REQUIRED_ARG, 
     0, 0, 0, 0, 0, 0},
-  {"number-of-queries", OPT_MYSQL_NUMBER_OF_QUERY, 
+  {"number-of-queries", 0,
     "Limit each client to this number of queries (this is not exact).",
     &num_of_query, &num_of_query, 0,
     GET_ULL, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"only-print", OPT_MYSQL_ONLY_PRINT,
+  {"only-print", 0,
     "Do not connect to the databases, but instead print out what would have "
      "been done.",
     &opt_only_print, &opt_only_print, 0, GET_BOOL,  NO_ARG,
@@ -671,25 +657,25 @@ static struct my_option my_long_options[] =
   {"pipe", 'W', "Use named pipes to connect to server.", 0, 0, 0, GET_NO_ARG,
     NO_ARG, 0, 0, 0, 0, 0, 0},
 #endif
-  {"plugin_dir", OPT_PLUGIN_DIR, "Directory for client-side plugins.",
+  {"plugin_dir", 0, "Directory for client-side plugins.",
    &opt_plugin_dir, &opt_plugin_dir, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"port", 'P', "Port number to use for connection.", &opt_mysql_port,
     &opt_mysql_port, 0, GET_UINT, REQUIRED_ARG, MYSQL_PORT, 0, 0, 0, 0,
     0},
-  {"post-query", OPT_SLAP_POST_QUERY,
+  {"post-query", 0,
     "Query to run or file containing query to execute after tests have completed.",
     &user_supplied_post_statements, &user_supplied_post_statements,
     0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"post-system", OPT_SLAP_POST_SYSTEM,
+  {"post-system", 0,
     "system() string to execute after tests have completed.",
     &post_system, &post_system,
     0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"pre-query", OPT_SLAP_PRE_QUERY, 
+  {"pre-query", 0,
     "Query to run or file containing query to execute before running tests.",
     &user_supplied_pre_statements, &user_supplied_pre_statements,
     0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"pre-system", OPT_SLAP_PRE_SYSTEM, 
+  {"pre-system", 0,
     "system() string to execute before running tests.",
     &pre_system, &pre_system,
     0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
@@ -744,9 +730,6 @@ static my_bool
 get_one_option(const struct my_option *opt, const char *argument,
                const char *filename)
 {
-  /* Track when protocol is set via CLI to not force overrides */
-  static my_bool ignore_protocol_override = FALSE;
-
   DBUG_ENTER("get_one_option");
   switch(opt->id) {
   case 'v':
@@ -776,13 +759,6 @@ get_one_option(const struct my_option *opt, const char *argument,
   case 'W':
 #ifdef _WIN32
     opt_protocol= MYSQL_PROTOCOL_PIPE;
-
-    /* Prioritize pipe if explicit via command line */
-    if (filename[0] == '\0')
-    {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
 #endif
     break;
   case OPT_MYSQL_PROTOCOL:
@@ -792,45 +768,26 @@ get_one_option(const struct my_option *opt, const char *argument,
       sf_leaking_memory= 1; /* no memory leak reports here */
       exit(1);
     }
-
-    /* Specification of protocol via CLI trumps implicit overrides */
-    if (filename[0] == '\0')
-    {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
     break;
   case 'P':
-    /* If port and socket are set, fall back to default behavior */
-    if (protocol_to_force == SOCKET_PROTOCOL_TO_FORCE)
+    if (filename[0] == '\0')
     {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
-    /* If port is set via CLI, try to force protocol to TCP */
-    if (filename[0] == '\0' &&
-        !ignore_protocol_override &&
-        protocol_to_force == MYSQL_PROTOCOL_DEFAULT)
-    {
-      protocol_to_force = MYSQL_PROTOCOL_TCP;
+      /* Port given on command line, switch protocol to use TCP */
+      opt_protocol= MYSQL_PROTOCOL_TCP;
     }
     break;
   case 'S':
-    /* If port and socket are set, fall back to default behavior */
-    if (protocol_to_force == MYSQL_PROTOCOL_TCP)
+    if (filename[0] == '\0')
     {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
-    /* Prioritize socket if set via command line */
-    if (filename[0] == '\0' &&
-        !ignore_protocol_override &&
-        protocol_to_force == MYSQL_PROTOCOL_DEFAULT)
-    {
-      protocol_to_force = SOCKET_PROTOCOL_TO_FORCE;
+      /*
+        Socket given on command line, switch protocol to use SOCKETSt
+        Except on Windows if 'protocol= pipe' has been provided in
+        the config file or command line.
+      */
+      if (opt_protocol != MYSQL_PROTOCOL_PIPE)
+      {
+        opt_protocol= MYSQL_PROTOCOL_SOCKET;
+      }
     }
     break;
   case '#':
@@ -1590,7 +1547,7 @@ get_options(int *argc,char ***argv)
   }
 
   if (tty_password)
-    opt_password= get_tty_password(NullS);
+    opt_password= my_get_tty_password(NullS);
 
   DBUG_RETURN(0);
 }
@@ -1687,6 +1644,9 @@ drop_primary_key_list(void)
   return 0;
 }
 
+
+PRAGMA_DISABLE_CHECK_STACK_FRAME
+
 static int
 create_schema(MYSQL *mysql, const char *db, statement *stmt, 
               option_string *engine_stmt)
@@ -1782,6 +1742,7 @@ limit_not_met:
 
   DBUG_RETURN(0);
 }
+PRAGMA_REENABLE_CHECK_STACK_FRAME
 
 static int
 drop_schema(MYSQL *mysql, const char *db)
@@ -1835,6 +1796,7 @@ run_scheduler(stats *sptr, statement *stmts, uint concur, ulonglong limit)
   uint x;
   struct timeval start_time, end_time;
   thread_context con;
+  int error;
   pthread_t mainthread;            /* Thread descriptor */
   pthread_attr_t attr;          /* Thread attributes */
   DBUG_ENTER("run_scheduler");
@@ -1843,8 +1805,11 @@ run_scheduler(stats *sptr, statement *stmts, uint concur, ulonglong limit)
   con.limit= limit;
 
   pthread_attr_init(&attr);
-  pthread_attr_setdetachstate(&attr,
-		  PTHREAD_CREATE_DETACHED);
+  if ((error= pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)))
+  {
+    printf("Got error: %d from pthread_attr_setdetachstate\n", error);
+    exit(1);
+  }
 
   pthread_mutex_lock(&counter_mutex);
   thread_counter= 0;

@@ -18,17 +18,12 @@
 #include <my_global.h>
 #include "mysql_version.h"
 #include "spd_environ.h"
-#if MYSQL_VERSION_ID < 50500
-#include "mysql_priv.h"
-#include <mysql/plugin.h>
-#else
 #include "sql_priv.h"
 #include "probes_mysql.h"
 #include "sql_class.h"
 #include "sql_partition.h"
 #include "sql_table.h"
 #include "tztime.h"
-#endif
 #include "spd_err.h"
 #include "spd_param.h"
 #include "spd_db_include.h"
@@ -61,7 +56,7 @@ extern struct charset_info_st *spd_charset_utf8mb3_bin;
 extern LEX_CSTRING spider_unique_id;
 pthread_mutex_t spider_conn_id_mutex;
 pthread_mutex_t spider_ipport_conn_mutex;
-ulonglong spider_conn_id = 1;
+ulonglong spider_conn_id;
 
 #ifndef WITHOUT_SPIDER_BG_SEARCH
 extern pthread_attr_t spider_pt_attr;
@@ -102,7 +97,7 @@ extern sql_mode_t pushdown_sql_mode;
 HASH spider_open_connections;
 uint spider_open_connections_id;
 HASH spider_ipport_conns;
-long spider_conn_mutex_id = 0;
+long spider_conn_mutex_id;
 
 const char *spider_open_connections_func_name;
 const char *spider_open_connections_file_name;
@@ -174,12 +169,8 @@ int spider_conn_init(
 ) {
   int error_num = HA_ERR_OUT_OF_MEM;
   DBUG_ENTER("spider_conn_init");
-#if MYSQL_VERSION_ID < 50500
-  if (pthread_mutex_init(&conn->loop_check_mutex, MY_MUTEX_INIT_FAST))
-#else
   if (mysql_mutex_init(spd_key_mutex_conn_loop_check, &conn->loop_check_mutex,
     MY_MUTEX_INIT_FAST))
-#endif
   {
     goto error_loop_check_mutex_init;
   }
@@ -591,7 +582,7 @@ SPIDER_CONN *spider_create_conn(
       tables_on_different_db_are_joinable = TRUE;
     }
     if (!(conn = (SPIDER_CONN *)
-      spider_bulk_malloc(spider_current_trx, 18, MYF(MY_WME | MY_ZEROFILL),
+      spider_bulk_malloc(spider_current_trx,  SPD_MID_CREATE_CONN_1, MYF(MY_WME | MY_ZEROFILL),
         &conn, (uint) (sizeof(*conn)),
         &tmp_name, (uint) (share->conn_keys_lengths[link_idx] + 1),
         &tmp_host, (uint) (share->tgt_hosts_lengths[link_idx] + 1),
@@ -630,7 +621,7 @@ SPIDER_CONN *spider_create_conn(
       goto error_alloc_conn;
     }
 
-    conn->default_database.init_calc_mem(75);
+    conn->default_database.init_calc_mem(SPD_MID_CREATE_CONN_2);
     conn->conn_key_length = share->conn_keys_lengths[link_idx];
     conn->conn_key = tmp_name;
     memcpy(conn->conn_key, share->conn_keys[link_idx],
@@ -762,7 +753,7 @@ SPIDER_CONN *spider_create_conn(
 #if defined(HS_HAS_SQLCOM) && defined(HAVE_HANDLERSOCKET)
   } else if (conn_kind == SPIDER_CONN_KIND_HS_READ) {
     if (!(conn = (SPIDER_CONN *)
-      spider_bulk_malloc(spider_current_trx, 19, MYF(MY_WME | MY_ZEROFILL),
+      spider_bulk_malloc(spider_current_trx, SPD_MID_CREATE_CONN_3, MYF(MY_WME | MY_ZEROFILL),
         &conn, (uint) (sizeof(*conn)),
         &tmp_name, (uint) (share->hs_read_conn_keys_lengths[link_idx] + 1),
         &tmp_host, (uint) (share->tgt_hosts_lengths[link_idx] + 1),
@@ -776,7 +767,7 @@ SPIDER_CONN *spider_create_conn(
       goto error_alloc_conn;
     }
 
-    conn->default_database.init_calc_mem(76);
+    conn->default_database.init_calc_mem(SPD_MID_CREATE_CONN_4);
     conn->conn_key_length = share->hs_read_conn_keys_lengths[link_idx];
     conn->conn_key = tmp_name;
     memcpy(conn->conn_key, share->hs_read_conn_keys[link_idx],
@@ -804,7 +795,7 @@ SPIDER_CONN *spider_create_conn(
     conn->dbton_id = share->hs_dbton_ids[link_idx];
   } else {
     if (!(conn = (SPIDER_CONN *)
-      spider_bulk_malloc(spider_current_trx, 20, MYF(MY_WME | MY_ZEROFILL),
+      spider_bulk_malloc(spider_current_trx, SPD_MID_CREATE_CONN_5, MYF(MY_WME | MY_ZEROFILL),
         &conn, (uint) (sizeof(*conn)),
         &tmp_name, (uint) (share->hs_write_conn_keys_lengths[link_idx] + 1),
         &tmp_host, (uint) (share->tgt_hosts_lengths[link_idx] + 1),
@@ -818,7 +809,7 @@ SPIDER_CONN *spider_create_conn(
       goto error_alloc_conn;
     }
 
-    conn->default_database.init_calc_mem(77);
+    conn->default_database.init_calc_mem(SPD_MID_CREATE_CONN_6);
     conn->conn_key_length = share->hs_write_conn_keys_lengths[link_idx];
     conn->conn_key = tmp_name;
     memcpy(conn->conn_key, share->hs_write_conn_keys[link_idx],
@@ -891,12 +882,8 @@ SPIDER_CONN *spider_create_conn(
   else
     conn->need_mon = need_mon;
 
-#if MYSQL_VERSION_ID < 50500
-  if (pthread_mutex_init(&conn->mta_conn_mutex, MY_MUTEX_INIT_FAST))
-#else
   if (mysql_mutex_init(spd_key_mutex_mta_conn, &conn->mta_conn_mutex,
     MY_MUTEX_INIT_FAST))
-#endif
   {
     *error_num = HA_ERR_OUT_OF_MEM;
     goto error_mta_conn_mutex_init;
@@ -1430,11 +1417,37 @@ int spider_free_conn(
       ip_port_conn->ip_port_count--;
     pthread_mutex_unlock(&ip_port_conn->mutex);
   }
+  if (conn->conn_holder_for_direct_join)
+    conn->conn_holder_for_direct_join->conn= NULL;
   spider_free_conn_alloc(conn);
   spider_free(spider_current_trx, conn, MYF(0));
   DBUG_RETURN(0);
 }
 
+/**
+  May get or create a connection spawning a background thread
+
+  For each link (data node, formally representable as the tuple
+  (spider, link_idx)), there is an associated casual read value
+  (`spider->result_list.casual_read[link_idx]').
+
+  If the CRV is 0, do nothing. Otherwise, An casual read id
+  (`conn->casual_read_current_id`) is associated with the link and
+  query id. The CRI starts from 2, and is used only when CRV is 1, to
+  update the CRV (see below). The updated CRV is then used to
+  construct the connection key used for get or create a connection
+  that spawns a background thread to execute queries.
+
+  If the CRV is 1, it is assigned CRI. The latter is then incremented
+  by 1. The CRI will only go up to 63, before "wrapping" back to 2.
+
+  If 2 <= CRV <= 63, it is left alone.
+
+  Note that this function relies on the assumption that the CRV is
+  reset (e.g. using `spider_param_casual_read()') between consecutive
+  calls of this function for the CRV == 1 case to auto-increment as
+  expected.
+*/
 int spider_check_and_get_casual_read_conn(
   THD *thd,
   ha_spider *spider,
@@ -1442,41 +1455,35 @@ int spider_check_and_get_casual_read_conn(
 ) {
   int error_num;
   DBUG_ENTER("spider_check_and_get_casual_read_conn");
-  if (spider->result_list.casual_read[link_idx])
+  if (!spider->result_list.casual_read[link_idx])
+    DBUG_RETURN(0);
+  SPIDER_CONN *conn = spider->conns[link_idx];
+  if (conn->casual_read_query_id != thd->query_id)
   {
-    SPIDER_CONN *conn = spider->conns[link_idx];
-    if (conn->casual_read_query_id != thd->query_id)
-    {
-      conn->casual_read_query_id = thd->query_id;
-      conn->casual_read_current_id = 2;
-    }
-    if (spider->result_list.casual_read[link_idx] == 1)
-    {
-      spider->result_list.casual_read[link_idx] = conn->casual_read_current_id;
-      ++conn->casual_read_current_id;
-      if (conn->casual_read_current_id > 63)
-      {
-        conn->casual_read_current_id = 2;
-      }
-    }
-    char first_byte_bak = *spider->conn_keys[link_idx];
-    *spider->conn_keys[link_idx] =
-      '0' + spider->result_list.casual_read[link_idx];
-    if (
-      !(spider->conns[link_idx] =
-        spider_get_conn(spider->share, link_idx,
-          spider->conn_keys[link_idx], spider->wide_handler->trx,
-          spider, FALSE, TRUE, SPIDER_CONN_KIND_MYSQL,
-          &error_num))
-    ) {
-      *spider->conn_keys[link_idx] = first_byte_bak;
-      DBUG_RETURN(error_num);
-    }
-    *spider->conn_keys[link_idx] = first_byte_bak;
-    spider->conns[link_idx]->casual_read_base_conn = conn;
-    conn = spider->conns[link_idx];
-    spider_check_and_set_autocommit(thd, conn, NULL);
+    conn->casual_read_query_id = thd->query_id;
+    conn->casual_read_current_id = 2;
   }
+  if (spider->result_list.casual_read[link_idx] == 1)
+  {
+    spider->result_list.casual_read[link_idx] = conn->casual_read_current_id;
+    ++conn->casual_read_current_id;
+    if (conn->casual_read_current_id > 63)
+      conn->casual_read_current_id = 2;
+  }
+  char first_byte_bak = *spider->conn_keys[link_idx];
+  *spider->conn_keys[link_idx] =
+    '0' + spider->result_list.casual_read[link_idx];
+  if (!(spider->conns[link_idx]= spider_get_conn(
+          spider->share, link_idx, spider->conn_keys[link_idx],
+          spider->wide_handler->trx, spider, FALSE, TRUE,
+          SPIDER_CONN_KIND_MYSQL, &error_num)))
+  {
+    *spider->conn_keys[link_idx] = first_byte_bak;
+    DBUG_RETURN(error_num);
+  }
+  *spider->conn_keys[link_idx] = first_byte_bak;
+  spider->conns[link_idx]->casual_read_base_conn = conn;
+  spider_check_and_set_autocommit(thd, spider->conns[link_idx], NULL);
   DBUG_RETURN(0);
 }
 
@@ -1786,13 +1793,7 @@ int spider_conn_queue_and_merge_loop_check(
     lcptr->flag = SPIDER_LOP_CHK_MERAGED;
     lcptr->next = NULL;
     if (!conn->loop_check_meraged_first)
-    {
       conn->loop_check_meraged_first = lcptr;
-      conn->loop_check_meraged_last = lcptr;
-    } else {
-      conn->loop_check_meraged_last->next = lcptr;
-      conn->loop_check_meraged_last = lcptr;
-    }
   }
   DBUG_RETURN(0);
 
@@ -1895,7 +1896,7 @@ int spider_conn_queue_loop_check(
   loop_check_buf[lex_str.length] = '\0';
   DBUG_PRINT("info", ("spider param name=%s", lex_str.str));
   loop_check = get_variable(&thd->user_vars, &lex_str, FALSE);
-  if (!loop_check || loop_check->type != STRING_RESULT)
+  if (!loop_check || loop_check->type_handler()->result_type() != STRING_RESULT)
   {
     DBUG_PRINT("info", ("spider client is not Spider"));
     lex_str.str = "";
@@ -2190,6 +2191,11 @@ void spider_conn_set_timeout_from_direct_sql(
   DBUG_VOID_RETURN;
 }
 
+/**
+  Insert a connection to a binary tree ordered by priority
+
+  Starting from `top', find the correct spot for `conn' and insert it.
+*/
 void spider_tree_insert(
   SPIDER_CONN *top,
   SPIDER_CONN *conn
@@ -2227,6 +2233,7 @@ void spider_tree_insert(
   DBUG_VOID_RETURN;
 }
 
+/* Returns the connection with the smallest priority in a tree */
 SPIDER_CONN *spider_tree_first(
   SPIDER_CONN *top
 ) {
@@ -2242,6 +2249,7 @@ SPIDER_CONN *spider_tree_first(
   DBUG_RETURN(current);
 }
 
+/* Returns the connection with the biggest priority in a tree */
 SPIDER_CONN *spider_tree_last(
   SPIDER_CONN *top
 ) {
@@ -2257,6 +2265,12 @@ SPIDER_CONN *spider_tree_last(
   DBUG_RETURN(current);
 }
 
+/*
+  Returns the next connection
+
+  Find the connection in the tree with the smallest priority that is
+  bigger than that of the current connection.
+*/
 SPIDER_CONN *spider_tree_next(
   SPIDER_CONN *current
 ) {
@@ -2432,6 +2446,12 @@ int spider_set_conn_bg_param(
   DBUG_RETURN(0);
 }
 
+/**
+  Creates a background thread on `conn' to run `spider_bg_conn_action()'
+
+  Does not create when `conn' is NULL or a bg thread has already been
+  created for `conn'.
+*/
 int spider_create_conn_thread(
   SPIDER_CONN *conn
 ) {
@@ -2439,43 +2459,27 @@ int spider_create_conn_thread(
   DBUG_ENTER("spider_create_conn_thread");
   if (conn && !conn->bg_init)
   {
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_mutex_init(&conn->bg_conn_chain_mutex, MY_MUTEX_INIT_FAST))
-#else
     if (mysql_mutex_init(spd_key_mutex_bg_conn_chain,
       &conn->bg_conn_chain_mutex, MY_MUTEX_INIT_FAST))
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_chain_mutex_init;
     }
     conn->bg_conn_chain_mutex_ptr = NULL;
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_mutex_init(&conn->bg_conn_sync_mutex, MY_MUTEX_INIT_FAST))
-#else
     if (mysql_mutex_init(spd_key_mutex_bg_conn_sync,
       &conn->bg_conn_sync_mutex, MY_MUTEX_INIT_FAST))
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_sync_mutex_init;
     }
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_mutex_init(&conn->bg_conn_mutex, MY_MUTEX_INIT_FAST))
-#else
     if (mysql_mutex_init(spd_key_mutex_bg_conn, &conn->bg_conn_mutex,
       MY_MUTEX_INIT_FAST))
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_mutex_init;
     }
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_mutex_init(&conn->bg_job_stack_mutex, MY_MUTEX_INIT_FAST))
-#else
     if (mysql_mutex_init(spd_key_mutex_bg_job_stack, &conn->bg_job_stack_mutex,
       MY_MUTEX_INIT_FAST))
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_job_stack_mutex_init;
@@ -2486,42 +2490,28 @@ int spider_create_conn_thread(
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_job_stack_init;
     }
-    spider_alloc_calc_mem_init(conn->bg_job_stack, 163);
+    spider_alloc_calc_mem_init(conn->bg_job_stack, SPD_MID_CREATE_CONN_THREAD_1);
     spider_alloc_calc_mem(spider_current_trx,
       conn->bg_job_stack,
       conn->bg_job_stack.max_element *
       conn->bg_job_stack.size_of_element);
     conn->bg_job_stack_cur_pos = 0;
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_cond_init(&conn->bg_conn_sync_cond, NULL))
-#else
     if (mysql_cond_init(spd_key_cond_bg_conn_sync,
       &conn->bg_conn_sync_cond, NULL))
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_sync_cond_init;
     }
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_cond_init(&conn->bg_conn_cond, NULL))
-#else
     if (mysql_cond_init(spd_key_cond_bg_conn,
       &conn->bg_conn_cond, NULL))
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_cond_init;
     }
     pthread_mutex_lock(&conn->bg_conn_mutex);
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_create(&conn->bg_thread, &spider_pt_attr,
-      spider_bg_conn_action, (void *) conn)
-    )
-#else
     if (mysql_thread_create(spd_key_thd_bg, &conn->bg_thread,
       &spider_pt_attr, spider_bg_conn_action, (void *) conn)
     )
-#endif
     {
       pthread_mutex_unlock(&conn->bg_conn_mutex);
       error_num = HA_ERR_OUT_OF_MEM;
@@ -3261,11 +3251,6 @@ void *spider_bg_conn_action(
         }
 #endif
         pthread_mutex_assert_not_owner(&conn->mta_conn_mutex);
-        if (dbton_handler->need_lock_before_set_sql_for_exec(sql_type))
-        {
-          pthread_mutex_lock(&conn->mta_conn_mutex);
-          SPIDER_SET_FILE_POS(&conn->mta_conn_mutex_file_pos);
-        }
         if (spider->use_fields)
         {
           if ((error_num = dbton_handler->set_sql_for_exec(sql_type,
@@ -3284,11 +3269,8 @@ void *spider_bg_conn_action(
               strmov(result_list->bgs_error_msg, spider_stmt_da_message(thd));
           }
         }
-        if (!dbton_handler->need_lock_before_set_sql_for_exec(sql_type))
-        {
-          pthread_mutex_lock(&conn->mta_conn_mutex);
-          SPIDER_SET_FILE_POS(&conn->mta_conn_mutex_file_pos);
-        }
+        pthread_mutex_lock(&conn->mta_conn_mutex);
+        SPIDER_SET_FILE_POS(&conn->mta_conn_mutex_file_pos);
         sql_type &= ~SPIDER_SQL_TYPE_TMP_SQL;
         DBUG_PRINT("info",("spider sql_type=%lu", sql_type));
 #ifdef HA_CAN_BULK_ACCESS
@@ -3530,35 +3512,21 @@ int spider_create_sts_thread(
   DBUG_ENTER("spider_create_sts_thread");
   if (!share->bg_sts_init)
   {
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_cond_init(&share->bg_sts_cond, NULL))
-#else
     if (mysql_cond_init(spd_key_cond_bg_sts,
       &share->bg_sts_cond, NULL))
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_cond_init;
     }
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_cond_init(&share->bg_sts_sync_cond, NULL))
-#else
     if (mysql_cond_init(spd_key_cond_bg_sts_sync,
       &share->bg_sts_sync_cond, NULL))
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_sync_cond_init;
     }
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_create(&share->bg_sts_thread, &spider_pt_attr,
-      spider_bg_sts_action, (void *) share)
-    )
-#else
     if (mysql_thread_create(spd_key_thd_bg_sts, &share->bg_sts_thread,
       &spider_pt_attr, spider_bg_sts_action, (void *) share)
     )
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_thread_create;
@@ -3897,35 +3865,21 @@ int spider_create_crd_thread(
   DBUG_ENTER("spider_create_crd_thread");
   if (!share->bg_crd_init)
   {
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_cond_init(&share->bg_crd_cond, NULL))
-#else
     if (mysql_cond_init(spd_key_cond_bg_crd,
       &share->bg_crd_cond, NULL))
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_cond_init;
     }
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_cond_init(&share->bg_crd_sync_cond, NULL))
-#else
     if (mysql_cond_init(spd_key_cond_bg_crd_sync,
       &share->bg_crd_sync_cond, NULL))
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_sync_cond_init;
     }
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_create(&share->bg_crd_thread, &spider_pt_attr,
-      spider_bg_crd_action, (void *) share)
-    )
-#else
     if (mysql_thread_create(spd_key_thd_bg_crd, &share->bg_crd_thread,
       &spider_pt_attr, spider_bg_crd_action, (void *) share)
     )
-#endif
     {
       error_num = HA_ERR_OUT_OF_MEM;
       goto error_thread_create;
@@ -4289,7 +4243,7 @@ int spider_create_mon_threads(
       char *buf = (char *) my_alloca(share->table_name_length + SPIDER_SQL_INT_LEN + 1);
       spider_string conv_name_str(buf, share->table_name_length +
         SPIDER_SQL_INT_LEN + 1, system_charset_info);
-      conv_name_str.init_calc_mem(105);
+      conv_name_str.init_calc_mem(SPD_MID_CREATE_MON_THREADS_1);
       conv_name_str.length(0);
       conv_name_str.q_append(share->table_name, share->table_name_length);
       for (roop_count = 0; roop_count < (int) share->all_link_count;
@@ -4322,7 +4276,7 @@ int spider_create_mon_threads(
         }
       }
       if (!(share->bg_mon_thds = (THD **)
-        spider_bulk_malloc(spider_current_trx, 23, MYF(MY_WME | MY_ZEROFILL),
+        spider_bulk_malloc(spider_current_trx, SPD_MID_CREATE_MON_THREADS_2, MYF(MY_WME | MY_ZEROFILL),
           &share->bg_mon_thds,
             (uint) (sizeof(THD *) * share->all_link_count),
           &share->bg_mon_threads,
@@ -4344,13 +4298,8 @@ int spider_create_mon_threads(
       {
         if (
           share->monitoring_bg_kind[roop_count] &&
-#if MYSQL_VERSION_ID < 50500
-          pthread_mutex_init(&share->bg_mon_mutexes[roop_count],
-            MY_MUTEX_INIT_FAST)
-#else
           mysql_mutex_init(spd_key_mutex_bg_mon,
             &share->bg_mon_mutexes[roop_count], MY_MUTEX_INIT_FAST)
-#endif
         ) {
           error_num = HA_ERR_OUT_OF_MEM;
           my_afree(buf);
@@ -4362,12 +4311,8 @@ int spider_create_mon_threads(
       {
         if (
           share->monitoring_bg_kind[roop_count] &&
-#if MYSQL_VERSION_ID < 50500
-          pthread_cond_init(&share->bg_mon_conds[roop_count], NULL)
-#else
           mysql_cond_init(spd_key_cond_bg_mon,
             &share->bg_mon_conds[roop_count], NULL)
-#endif
         ) {
           error_num = HA_ERR_OUT_OF_MEM;
           my_afree(buf);
@@ -4379,12 +4324,8 @@ int spider_create_mon_threads(
       {
         if (
           share->monitoring_bg_kind[roop_count] &&
-#if MYSQL_VERSION_ID < 50500
-          pthread_cond_init(&share->bg_mon_sleep_conds[roop_count], NULL)
-#else
           mysql_cond_init(spd_key_cond_bg_mon_sleep,
             &share->bg_mon_sleep_conds[roop_count], NULL)
-#endif
         ) {
           error_num = HA_ERR_OUT_OF_MEM;
           my_afree(buf);
@@ -4399,16 +4340,10 @@ int spider_create_mon_threads(
         {
           link_pack.link_idx = roop_count;
           pthread_mutex_lock(&share->bg_mon_mutexes[roop_count]);
-#if MYSQL_VERSION_ID < 50500
-          if (pthread_create(&share->bg_mon_threads[roop_count],
-            &spider_pt_attr, spider_bg_mon_action, (void *) &link_pack)
-          )
-#else
           if (mysql_thread_create(spd_key_thd_bg_mon,
             &share->bg_mon_threads[roop_count], &spider_pt_attr,
             spider_bg_mon_action, (void *) &link_pack)
           )
-#endif
           {
             error_num = HA_ERR_OUT_OF_MEM;
             my_afree(buf);
@@ -4662,17 +4597,9 @@ int spider_conn_first_link_idx(
     my_afree(link_idxs);
     DBUG_RETURN(-1);
   }
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100002
   DBUG_PRINT("info",("spider server_id=%lu", thd->variables.server_id));
-#else
-  DBUG_PRINT("info",("spider server_id=%u", thd->server_id));
-#endif
   DBUG_PRINT("info",("spider thread_id=%lu", thd_get_thread_id(thd)));
-#if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100002
   rand_val = spider_rand(thd->variables.server_id + thd_get_thread_id(thd));
-#else
-  rand_val = spider_rand(thd->server_id + thd_get_thread_id(thd));
-#endif
   DBUG_PRINT("info",("spider rand_val=%f", rand_val));
   balance_val = (longlong) (rand_val * balance_total);
   DBUG_PRINT("info",("spider balance_val=%lld", balance_val));
@@ -5200,21 +5127,13 @@ SPIDER_IP_PORT_CONN* spider_create_ipport_conn(SPIDER_CONN *conn)
       goto err_return_direct;
     }
 
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_mutex_init(&ret->mutex, MY_MUTEX_INIT_FAST))
-#else
     if (mysql_mutex_init(spd_key_mutex_conn_i, &ret->mutex, MY_MUTEX_INIT_FAST))
-#endif
     {
       //error
       goto err_malloc_key;
     }
 
-#if MYSQL_VERSION_ID < 50500
-    if (pthread_cond_init(&ret->cond, NULL))
-#else
     if (mysql_cond_init(spd_key_cond_conn_i, &ret->cond, NULL))
-#endif
     {
       pthread_mutex_destroy(&ret->mutex);
       goto err_malloc_key;

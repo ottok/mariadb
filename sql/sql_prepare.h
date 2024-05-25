@@ -125,7 +125,7 @@ public:
                 MEM_ROOT *mem_root_arg);
 
   /** We don't call member destructors, they all are POD types. */
-  ~Ed_result_set() {}
+  ~Ed_result_set() = default;
 
   size_t get_field_count() const { return m_column_count; }
 
@@ -352,5 +352,7 @@ private:
   Ed_column *m_column_array;
   size_t m_column_count; /* TODO: change to point to metadata */
 };
+
+extern Atomic_counter<uint32_t> local_connection_thread_count;
 
 #endif // SQL_PREPARE_H

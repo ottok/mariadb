@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2011, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -51,8 +51,7 @@ protected:
   cursor_by_host(const PFS_engine_table_share *share);
 
 public:
-  ~cursor_by_host()
-  {}
+  ~cursor_by_host() = default;
 
 protected:
   virtual void make_row(PFS_host *host)= 0;

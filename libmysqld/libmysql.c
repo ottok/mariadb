@@ -2953,7 +2953,8 @@ my_bool STDCALL mysql_stmt_bind_param(MYSQL_STMT *stmt, MYSQL_BIND *my_bind)
       break;
     default:
       strmov(stmt->sqlstate, unknown_sqlstate);
-      sprintf(stmt->last_error,
+      snprintf(stmt->last_error,
+        sizeof(stmt->last_error),
 	      ER(stmt->last_errno= CR_UNSUPPORTED_PARAM_TYPE),
 	      param->buffer_type, count);
       DBUG_RETURN(1);
@@ -3040,7 +3041,9 @@ mysql_stmt_send_long_data(MYSQL_STMT *stmt, uint param_number,
   {
     /* Long data handling should be used only for string/binary types */
     strmov(stmt->sqlstate, unknown_sqlstate);
-    sprintf(stmt->last_error, ER(stmt->last_errno= CR_INVALID_BUFFER_USE),
+    snprintf(stmt->last_error,
+      sizeof(stmt->last_error),
+      ER(stmt->last_errno= CR_INVALID_BUFFER_USE),
 	    param->param_number);
     DBUG_RETURN(1);
   }
@@ -3226,7 +3229,8 @@ static void fetch_string_with_conversion(MYSQL_BIND *param, char *value, size_t 
   {
     longlong data= my_strtoll10(value, &endptr, &err);
     *param->error= (IS_TRUNCATED(data, param->is_unsigned,
-                                 INT_MIN32, INT_MAX32, UINT_MAX32) || err > 0);
+                                 (longlong) INT_MIN32, (longlong) INT_MAX32,
+                                 (longlong) UINT_MAX32) || err > 0);
     longstore(buffer, (int32) data);
     break;
   }
@@ -3343,7 +3347,8 @@ static void fetch_long_with_conversion(MYSQL_BIND *param, MYSQL_FIELD *field,
     break;
   case MYSQL_TYPE_LONG:
     *param->error= IS_TRUNCATED(value, param->is_unsigned,
-                                INT_MIN32, INT_MAX32, UINT_MAX32);
+                                (longlong) INT_MIN32, (longlong) INT_MAX32,
+                                (longlong) UINT_MAX32);
     longstore(buffer, (int32) value);
     break;
   case MYSQL_TYPE_LONGLONG:
@@ -4171,7 +4176,8 @@ my_bool STDCALL mysql_stmt_bind_result(MYSQL_STMT *stmt, MYSQL_BIND *my_bind)
     if (setup_one_fetch_function(param, field))
     {
       strmov(stmt->sqlstate, unknown_sqlstate);
-      sprintf(stmt->last_error,
+      snprintf(stmt->last_error,
+              sizeof(stmt->last_error),
               ER(stmt->last_errno= CR_UNSUPPORTED_PARAM_TYPE),
               field->type, param_count);
       DBUG_RETURN(1);

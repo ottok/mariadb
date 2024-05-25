@@ -1,14 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All rights reserved.
-Copyright (c) 2009, Google Inc.
 Copyright (c) 2017, 2022, MariaDB Corporation.
-
-Portions of this file contain modifications contributed and copyrighted by
-Google, Inc. Those modifications are gratefully acknowledged and are described
-briefly in the InnoDB documentation. The contributions by Google are
-incorporated with their permission, and subject to the conditions contained in
-the file COPYING.Google.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -73,15 +66,10 @@ log_reserve_and_write_fast(
 	const void*	str,
 	ulint		len,
 	lsn_t*		start_lsn);
-/***********************************************************************//**
-Checks if there is need for a log buffer flush or a new checkpoint, and does
-this if yes. Any database operation should call this when it has modified
-more than about 4 pages. NOTE that this function may only be called when the
-OS thread owns no synchronization objects except dict_sys.latch. */
-UNIV_INLINE
-void
-log_free_check(void);
-/*================*/
+/** Wait for a log checkpoint if needed.
+NOTE that this function may only be called while not holding
+any synchronization objects except dict_sys.latch. */
+void log_free_check();
 
 /** Extends the log buffer.
 @param[in]	len	requested minimum size in bytes */
@@ -509,12 +497,16 @@ public:
     void write_header_durable(lsn_t lsn);
     /** opens log file which must be closed prior this call */
     dberr_t rename(std::string path) { return fd.rename(path); }
+
+    MY_ATTRIBUTE((warn_unused_result))
     /** reads buffer from log file
     @param[in]	offset		offset in log file
     @param[in]	buf		buffer where to read */
-    void read(os_offset_t offset, span<byte> buf);
+    dberr_t read(os_offset_t offset, span<byte> buf)
+    { return fd.read(offset, buf); }
     /** Tells whether writes require calling flush() */
-    bool writes_are_durable() const noexcept;
+    bool writes_are_durable() const noexcept
+    { return fd.writes_are_durable(); }
     /** writes buffer to log file
     @param[in]	offset		offset in log file
     @param[in]	buf		buffer from which to write */
@@ -687,8 +679,9 @@ public:
     return flushes.load(std::memory_order_relaxed);
   }
 
-  /** Initialise the redo log subsystem. */
-  void create();
+  /** Initialise the redo log subsystem.
+  @return whether the initialisation succeeded */
+  bool create();
 
   /** Shut down the redo log subsystem. */
   void close();

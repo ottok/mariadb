@@ -25,7 +25,7 @@ Created 2011/12/19
 *******************************************************/
 
 #include "buf0dblwr.h"
-#include "buf0buf.h"
+#include "buf0flu.h"
 #include "buf0checksum.h"
 #include "srv0start.h"
 #include "srv0srv.h"
@@ -46,7 +46,17 @@ inline buf_block_t *buf_dblwr_trx_sys_get(mtr_t *mtr)
                       0, RW_X_LATCH, mtr);
 }
 
-/** Initialize the doublewrite buffer data structure.
+void buf_dblwr_t::init()
+{
+  if (!active_slot)
+  {
+    active_slot= &slots[0];
+    mysql_mutex_init(buf_dblwr_mutex_key, &mutex, nullptr);
+    pthread_cond_init(&cond, nullptr);
+  }
+}
+
+/** Initialise the persistent storage of the doublewrite buffer.
 @param header   doublewrite page header in the TRX_SYS page */
 inline void buf_dblwr_t::init(const byte *header)
 {
@@ -54,8 +64,6 @@ inline void buf_dblwr_t::init(const byte *header)
   ut_ad(!active_slot->reserved);
   ut_ad(!batch_running);
 
-  mysql_mutex_init(buf_dblwr_mutex_key, &mutex, nullptr);
-  pthread_cond_init(&cond, nullptr);
   block1= page_id_t(0, mach_read_from_4(header + TRX_SYS_DOUBLEWRITE_BLOCK1));
   block2= page_id_t(0, mach_read_from_4(header + TRX_SYS_DOUBLEWRITE_BLOCK2));
 
@@ -74,7 +82,7 @@ inline void buf_dblwr_t::init(const byte *header)
 @return whether the operation succeeded */
 bool buf_dblwr_t::create()
 {
-  if (is_initialised())
+  if (is_created())
     return true;
 
   mtr_t mtr;
@@ -330,11 +338,14 @@ func_exit:
     os_file_flush(file);
   }
   else
-    for (ulint i= 0; i < size * 2; i++, page += srv_page_size)
-      if (mach_read_from_8(my_assume_aligned<8>(page + FIL_PAGE_LSN)))
-        /* Each valid page header must contain a nonzero FIL_PAGE_LSN field. */
+  {
+    alignas(8) char checkpoint[8];
+    mach_write_to_8(checkpoint, log_sys.next_checkpoint_lsn);
+    for (auto i= size * 2; i--; page += srv_page_size)
+      if (memcmp_aligned<8>(page + FIL_PAGE_LSN, checkpoint, 8) >= 0)
+        /* Valid pages are not older than the log checkpoint. */
         recv_sys.dblwr.add(page);
-
+  }
   err= DB_SUCCESS;
   goto func_exit;
 }
@@ -343,7 +354,7 @@ func_exit:
 void buf_dblwr_t::recover()
 {
   ut_ad(recv_sys.parse_start_lsn);
-  if (!is_initialised())
+  if (!is_created())
     return;
 
   uint32_t page_no_dblwr= 0;
@@ -356,7 +367,7 @@ void buf_dblwr_t::recover()
   {
     byte *page= *i;
     const uint32_t page_no= page_get_page_no(page);
-    if (!page_no) /* recovered via Datafile::restore_from_doublewrite() */
+    if (!page_no) /* recovered via recv_dblwr_t::restore_first_page() */
       continue;
 
     const lsn_t lsn= mach_read_from_8(page + FIL_PAGE_LSN);
@@ -452,10 +463,9 @@ next_page:
 /** Free the doublewrite buffer. */
 void buf_dblwr_t::close()
 {
-  if (!is_initialised())
+  if (!active_slot)
     return;
 
-  /* Free the double write data structures. */
   ut_ad(!active_slot->reserved);
   ut_ad(!active_slot->first_free);
   ut_ad(!batch_running);
@@ -469,19 +479,18 @@ void buf_dblwr_t::close()
   mysql_mutex_destroy(&mutex);
 
   memset((void*) this, 0, sizeof *this);
-  active_slot= &slots[0];
 }
 
 /** Update the doublewrite buffer on write completion. */
 void buf_dblwr_t::write_completed()
 {
   ut_ad(this == &buf_dblwr);
-  ut_ad(srv_use_doublewrite_buf);
-  ut_ad(is_initialised());
   ut_ad(!srv_read_only_mode);
 
   mysql_mutex_lock(&mutex);
 
+  ut_ad(is_created());
+  ut_ad(srv_use_doublewrite_buf);
   ut_ad(batch_running);
   slot *flush_slot= active_slot == &slots[0] ? &slots[1] : &slots[0];
   ut_ad(flush_slot->reserved);
@@ -524,7 +533,7 @@ static void buf_dblwr_check_page_lsn(const page_t* page, const fil_space_t& s)
 
 static void buf_dblwr_check_page_lsn(const buf_page_t &b, const byte *page)
 {
-  if (fil_space_t *space= fil_space_t::get(b.id().space()))
+  if (fil_space_t *space= fil_space_t::get_for_write(b.id().space()))
   {
     buf_dblwr_check_page_lsn(page, *space);
     space->release();
@@ -592,7 +601,6 @@ bool buf_dblwr_t::flush_buffered_writes(const ulint size)
   const bool multi_batch= block1 + static_cast<uint32_t>(size) != block2 &&
     old_first_free > size;
   flushing_buffered_writes= 1 + multi_batch;
-  pages_submitted+= old_first_free;
   /* Now safe to release the mutex. */
   mysql_mutex_unlock(&mutex);
 #ifdef UNIV_DEBUG
@@ -642,7 +650,7 @@ void buf_dblwr_t::flush_buffered_writes_completed(const IORequest &request)
 {
   ut_ad(this == &buf_dblwr);
   ut_ad(srv_use_doublewrite_buf);
-  ut_ad(is_initialised());
+  ut_ad(is_created());
   ut_ad(!srv_read_only_mode);
   ut_ad(!request.bpage);
   ut_ad(request.node == fil_system.sys_space->chain.start);
@@ -708,7 +716,7 @@ posted, and also when we may have to wait for a page latch!
 Otherwise a deadlock of threads can occur. */
 void buf_dblwr_t::flush_buffered_writes()
 {
-  if (!is_initialised() || !srv_use_doublewrite_buf)
+  if (!is_created() || !srv_use_doublewrite_buf)
   {
     fil_flush_file_spaces();
     return;

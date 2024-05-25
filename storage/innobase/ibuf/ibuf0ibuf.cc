@@ -24,6 +24,7 @@ Insert buffer
 Created 7/19/1997 Heikki Tuuri
 *******************************************************/
 
+#include <tuple>
 #include "ibuf0ibuf.h"
 #include "btr0sea.h"
 
@@ -243,21 +244,11 @@ mysql_mutex_t ibuf_mutex,
 	ibuf_pessimistic_insert_mutex;
 
 /** The area in pages from which contract looks for page numbers for merge */
-const ulint		IBUF_MERGE_AREA = 8;
+constexpr ulint		IBUF_MERGE_AREA = 8;
 
-/** Inside the merge area, pages which have at most 1 per this number less
-buffered entries compared to maximum volume that can buffered for a single
-page are merged along with the page whose buffer became full */
-const ulint		IBUF_MERGE_THRESHOLD = 4;
-
-/** In ibuf_contract at most this number of pages is read to memory in one
-batch, in order to merge the entries for them in the insert buffer */
-const ulint		IBUF_MAX_N_PAGES_MERGED = IBUF_MERGE_AREA;
-
-/** If the combined size of the ibuf trees exceeds ibuf.max_size by
-this many pages, we start to contract it synchronous contract, but do
-not insert */
-const ulint		IBUF_CONTRACT_DO_NOT_INSERT = 10;
+/** In ibuf_contract() at most this number of pages is read to memory in one
+batch, in order to merge the entries for them in the change buffer */
+constexpr ulint		IBUF_MAX_N_PAGES_MERGED = IBUF_MERGE_AREA;
 
 /* TODO: how to cope with drop table if there are records in the insert
 buffer for the indexes of the table? Is there actually any problem,
@@ -319,8 +310,13 @@ ibuf_header_page_get(
 	buf_block_t* block = buf_page_get(
 		page_id_t(IBUF_SPACE_ID, FSP_IBUF_HEADER_PAGE_NO),
 		0, RW_X_LATCH, mtr);
+	if (UNIV_UNLIKELY(!block)) {
+		return nullptr;
+	}
 
-	return block ? block->page.frame : nullptr;
+	buf_page_make_young_if_needed(&block->page);
+
+	return block->page.frame;
 }
 
 /** Acquire the change buffer root page.
@@ -336,7 +332,12 @@ static buf_block_t *ibuf_tree_root_get(mtr_t *mtr, dberr_t *err= nullptr)
   buf_block_t *block=
     buf_page_get_gen(page_id_t{IBUF_SPACE_ID, FSP_IBUF_TREE_ROOT_PAGE_NO},
                      0, RW_SX_LATCH, nullptr, BUF_GET, mtr, err);
-  ut_ad(!block || ibuf.empty == page_is_empty(block->page.frame));
+  if (block)
+  {
+    ut_ad(ibuf.empty == page_is_empty(block->page.frame));
+    buf_page_make_young_if_needed(&block->page);
+  }
+
   return block;
 }
 
@@ -403,8 +404,13 @@ ibuf_init_at_db_start(void)
 
 	if (!header_page) {
 err_exit:
-		sql_print_error("InnoDB: The change buffer is corrupted");
+		sql_print_error("InnoDB: The change buffer is corrupted"
+				" or has been removed on upgrade"
+				" to MariaDB 11.0 or later");
 		mtr.commit();
+		if (innodb_change_buffering == IBUF_USE_NONE) {
+			err = DB_SUCCESS;
+		}
 		return err;
 	}
 
@@ -413,7 +419,8 @@ err_exit:
 			      + header_page->page.frame, &ibuf.seg_size, &mtr);
 
 	do {
-		DBUG_EXECUTE_IF("intermittent_read_failure", continue;);
+		IF_DBUG(if (_db_keyword_(nullptr, "intermittent_read_failure",
+					 1)) continue,);
 		ut_ad(ibuf.seg_size >= 2);
 	} while (0);
 
@@ -425,6 +432,10 @@ err_exit:
 	} else {
 		goto err_exit;
 	}
+
+	DBUG_EXECUTE_IF("ibuf_init_corrupt",
+			err = DB_CORRUPTION;
+			goto err_exit;);
 
 	if (page_is_comp(root) || fil_page_get_type(root) != FIL_PAGE_INDEX
 	    || btr_page_get_index_id(root) != DICT_IBUF_ID_MIN) {
@@ -1821,7 +1832,7 @@ corrupted:
 
 	err = flst_add_last(ibuf_root, PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST,
 			    block, PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST_NODE,
-			    &mtr);
+			    fil_system.sys_space->free_limit, &mtr);
 	if (UNIV_UNLIKELY(err != DB_SUCCESS)) {
 		goto corrupted;
 	}
@@ -1852,7 +1863,6 @@ Removes a page from the free list and frees it to the fsp system. */
 static void ibuf_remove_free_page()
 {
 	mtr_t	mtr;
-	mtr_t	mtr2;
 	page_t*	header_page;
 
 	log_free_check();
@@ -1879,26 +1889,28 @@ early_exit:
 		return;
 	}
 
-	ibuf_mtr_start(&mtr2);
-
-	buf_block_t* root = ibuf_tree_root_get(&mtr2);
+	buf_block_t* root = ibuf_tree_root_get(&mtr);
 
 	if (UNIV_UNLIKELY(!root)) {
-		ibuf_mtr_commit(&mtr2);
+		goto early_exit;
+	}
+
+	const auto root_savepoint = mtr.get_savepoint() - 1;
+	const uint32_t page_no = flst_get_last(PAGE_HEADER
+					       + PAGE_BTR_IBUF_FREE_LIST
+					       + root->page.frame).page;
+
+	if (page_no >= fil_system.sys_space->free_limit) {
 		goto early_exit;
 	}
 
 	mysql_mutex_unlock(&ibuf_mutex);
 
-	const uint32_t page_no = flst_get_last(PAGE_HEADER
-					       + PAGE_BTR_IBUF_FREE_LIST
-					       + root->page.frame).page;
-
 	/* NOTE that we must release the latch on the ibuf tree root
 	because in fseg_free_page we access level 1 pages, and the root
 	is a level 2 page. */
-
-	ibuf_mtr_commit(&mtr2);
+	root->page.lock.u_unlock();
+	mtr.lock_register(root_savepoint, MTR_MEMO_BUF_FIX);
 	ibuf_exit(&mtr);
 
 	/* Since pessimistic inserts were prevented, we know that the
@@ -1921,15 +1933,7 @@ early_exit:
 	ibuf_enter(&mtr);
 
 	mysql_mutex_lock(&ibuf_mutex);
-
-	root = ibuf_tree_root_get(&mtr, &err);
-	if (UNIV_UNLIKELY(!root)) {
-		mysql_mutex_unlock(&ibuf_pessimistic_insert_mutex);
-		goto func_exit;
-	}
-
-	ut_ad(page_no == flst_get_last(PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST
-				       + root->page.frame).page);
+	mtr.upgrade_buffer_fix(root_savepoint, RW_X_LATCH);
 
 	/* Remove the page from the free list and update the ibuf size data */
 	if (buf_block_t* block =
@@ -1938,7 +1942,7 @@ early_exit:
 		err = flst_remove(root, PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST,
 				  block,
 				  PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST_NODE,
-				  &mtr);
+				  fil_system.sys_space->free_limit, &mtr);
 	}
 
 	mysql_mutex_unlock(&ibuf_pessimistic_insert_mutex);
@@ -1974,6 +1978,7 @@ void
 ibuf_free_excess_pages(void)
 /*========================*/
 {
+	if (UNIV_UNLIKELY(!ibuf.index)) return;
 	/* Free at most a few pages at a time, so that we do not delay the
 	requested service too much */
 
@@ -1994,11 +1999,11 @@ ibuf_free_excess_pages(void)
 }
 
 #ifdef UNIV_DEBUG
-# define ibuf_get_merge_page_nos(contract,rec,mtr,ids,pages,n_stored) \
-	ibuf_get_merge_page_nos_func(contract,rec,mtr,ids,pages,n_stored)
+# define ibuf_get_merge_page_nos(rec,mtr,ids,pages,n_stored) \
+	ibuf_get_merge_page_nos_func(rec,mtr,ids,pages,n_stored)
 #else /* UNIV_DEBUG */
-# define ibuf_get_merge_page_nos(contract,rec,mtr,ids,pages,n_stored) \
-	ibuf_get_merge_page_nos_func(contract,rec,ids,pages,n_stored)
+# define ibuf_get_merge_page_nos(rec,mtr,ids,pages,n_stored) \
+	ibuf_get_merge_page_nos_func(rec,ids,pages,n_stored)
 #endif /* UNIV_DEBUG */
 
 /*********************************************************************//**
@@ -2009,10 +2014,6 @@ static
 ulint
 ibuf_get_merge_page_nos_func(
 /*=========================*/
-	ibool		contract,/*!< in: TRUE if this function is called to
-				contract the tree, FALSE if this is called
-				when a single page becomes full and we look
-				if it pays to read also nearby pages */
 	const rec_t*	rec,	/*!< in: insert buffer record */
 #ifdef UNIV_DEBUG
 	mtr_t*		mtr,	/*!< in: mini-transaction holding rec */
@@ -2143,22 +2144,10 @@ corruption:
 		     || rec_page_no != prev_page_no)
 		    && (prev_space_id != 0 || prev_page_no != 0)) {
 
-			if (contract
-			    || (prev_page_no == first_page_no
-				&& prev_space_id == first_space_id)
-			    || (volume_for_page
-				> ((IBUF_MERGE_THRESHOLD - 1)
-				   * 4U << srv_page_size_shift
-				   / IBUF_PAGE_SIZE_PER_FREE_SPACE)
-				/ IBUF_MERGE_THRESHOLD)) {
-
-				space_ids[*n_stored] = prev_space_id;
-				page_nos[*n_stored] = prev_page_no;
-
-				(*n_stored)++;
-
-				sum_volumes += volume_for_page;
-			}
+			space_ids[*n_stored] = prev_space_id;
+			page_nos[*n_stored] = prev_page_no;
+			(*n_stored)++;
+			sum_volumes += volume_for_page;
 
 			if (rec_space_id != first_space_id
 			    || rec_page_no / IBUF_MERGE_AREA
@@ -2335,7 +2324,8 @@ func_exit:
 
 /** Merge the change buffer to some pages. */
 static void ibuf_read_merge_pages(const uint32_t* space_ids,
-				  const uint32_t* page_nos, ulint n_stored)
+				  const uint32_t* page_nos, ulint n_stored,
+				  bool slow_shutdown_cleanup)
 {
 	for (ulint i = 0; i < n_stored; i++) {
 		const ulint space_id = space_ids[i];
@@ -2353,32 +2343,35 @@ tablespace_deleted:
 		}
 
 		const ulint zip_size = s->zip_size(), size = s->size;
+		s->x_lock();
 		s->release();
 		mtr_t mtr;
 
 		if (UNIV_LIKELY(page_nos[i] < size)) {
 			mtr.start();
 			dberr_t err;
-			buf_block_t *block =
+			/* Load the page and apply change buffers. */
+			std::ignore =
 			buf_page_get_gen(page_id_t(space_id, page_nos[i]),
 					 zip_size, RW_X_LATCH, nullptr,
 					 BUF_GET_POSSIBLY_FREED,
 					 &mtr, &err, true);
-			bool remove = !block
-				|| fil_page_get_type(block->page.frame)
-				!= FIL_PAGE_INDEX
-				|| !page_is_leaf(block->page.frame);
 			mtr.commit();
 			if (err == DB_TABLESPACE_DELETED) {
+				s->x_unlock();
 				goto tablespace_deleted;
-			}
-			if (!remove) {
-				continue;
 			}
 		}
 
-		if (srv_shutdown_state == SRV_SHUTDOWN_NONE
-		    || srv_fast_shutdown) {
+		s->x_unlock();
+
+		/* During slow shutdown cleanup, we apply all pending IBUF
+		changes and need to cleanup any left-over IBUF records. There
+		are a few cases when the changes are already discarded and IBUF
+		bitmap is cleaned but we miss to delete the record. Even after
+		the issues are fixed, we need to keep this safety measure for
+		upgraded DBs with such left over records. */
+		if (!slow_shutdown_cleanup) {
 			continue;
 		}
 
@@ -2405,7 +2398,7 @@ tablespace_deleted:
 		/* Prevent an infinite loop, by removing entries from
 		the change buffer in the case the bitmap bits were
 		wrongly clear even though buffered changes exist. */
-		ibuf_delete_recs(page_id_t(space_ids[i], page_nos[i]));
+		ibuf_delete_recs(page_id_t(space_id, page_nos[i]));
 	}
 }
 
@@ -2413,8 +2406,9 @@ tablespace_deleted:
 @return a lower limit for the combined size in bytes of entries which
 will be merged from ibuf trees to the pages read
 @retval 0 if ibuf.empty */
-ulint ibuf_contract()
+ATTRIBUTE_COLD ulint ibuf_contract()
 {
+	if (UNIV_UNLIKELY(!ibuf.index)) return 0;
 	mtr_t		mtr;
 	btr_cur_t	cur;
 	ulint		sum_sizes;
@@ -2444,13 +2438,11 @@ ulint ibuf_contract()
 	}
 
 	ulint n_pages = 0;
-	sum_sizes = ibuf_get_merge_page_nos(TRUE,
-					    btr_cur_get_rec(&cur), &mtr,
-					    space_ids,
-					    page_nos, &n_pages);
+	sum_sizes = ibuf_get_merge_page_nos(btr_cur_get_rec(&cur), &mtr,
+					    space_ids, page_nos, &n_pages);
 	ibuf_mtr_commit(&mtr);
 
-	ibuf_read_merge_pages(space_ids, page_nos, n_pages);
+	ibuf_read_merge_pages(space_ids, page_nos, n_pages, true);
 
 	return(sum_sizes + 1);
 }
@@ -2464,6 +2456,7 @@ ibuf_merge_space(
 /*=============*/
 	ulint		space)	/*!< in: tablespace id to merge */
 {
+	if (UNIV_UNLIKELY(!ibuf.index)) return 0;
 	mtr_t		mtr;
 	btr_pcur_t	pcur;
 
@@ -2530,34 +2523,10 @@ ibuf_merge_space(
 		}
 #endif /* UNIV_DEBUG */
 
-		ibuf_read_merge_pages(spaces, pages, n_pages);
+		ibuf_read_merge_pages(spaces, pages, n_pages, false);
 	}
 
 	return(n_pages);
-}
-
-/*********************************************************************//**
-Contract insert buffer trees after insert if they are too big. */
-UNIV_INLINE
-void
-ibuf_contract_after_insert(
-/*=======================*/
-	ulint	entry_size)	/*!< in: size of a record which was inserted
-				into an ibuf tree */
-{
-	/* dirty comparison, to avoid contention on ibuf_mutex */
-	if (ibuf.size < ibuf.max_size) {
-		return;
-	}
-
-	/* Contract at least entry_size many bytes */
-	ulint sum_sizes = 0;
-	ulint size;
-
-	do {
-		size = ibuf_contract();
-		sum_sizes += size;
-	} while (size > 0 && sum_sizes < entry_size);
 }
 
 /** Determine if a change buffer record has been encountered already.
@@ -2929,13 +2898,14 @@ void
 ibuf_update_max_tablespace_id(void)
 /*===============================*/
 {
+	if (UNIV_UNLIKELY(!ibuf.index)) return;
 	const rec_t*	rec;
 	const byte*	field;
 	ulint		len;
 	btr_pcur_t	pcur;
 	mtr_t		mtr;
 
-	ut_a(!dict_table_is_comp(ibuf.index->table));
+	ut_ad(!ibuf.index->table->not_redundant());
 
 	ibuf_mtr_start(&mtr);
 
@@ -3157,10 +3127,6 @@ ibuf_insert_low(
 	buf_block_t*	block		= NULL;
 	page_t*		root;
 	dberr_t		err;
-	ibool		do_merge;
-	uint32_t	space_ids[IBUF_MAX_N_PAGES_MERGED];
-	uint32_t	page_nos[IBUF_MAX_N_PAGES_MERGED];
-	ulint		n_stored;
 	mtr_t		mtr;
 	mtr_t		bitmap_mtr;
 
@@ -3171,28 +3137,9 @@ ibuf_insert_low(
 	ut_ad(page_id.space() == index->table->space_id);
 	ut_a(op < IBUF_OP_COUNT);
 
-	do_merge = FALSE;
-
 	/* Perform dirty comparison of ibuf.max_size and ibuf.size to
-	reduce ibuf_mutex contention. This should be OK; at worst we
-	are doing some excessive ibuf_contract() or occasionally
-	skipping an ibuf_contract(). */
-	const ulint max_size = ibuf.max_size;
-
-	if (max_size == 0) {
-		return(DB_STRONG_FAIL);
-	}
-
-	if (ibuf.size >= max_size + IBUF_CONTRACT_DO_NOT_INSERT) {
-		/* Insert buffer is now too big, contract it but do not try
-		to insert */
-
-
-#ifdef UNIV_IBUF_DEBUG
-		fputs("Ibuf too big\n", stderr);
-#endif
-		ibuf_contract();
-
+	reduce ibuf_mutex contention. */
+	if (ibuf.size >= ibuf.max_size) {
 		return(DB_STRONG_FAIL);
 	}
 
@@ -3244,17 +3191,6 @@ func_exit:
 		ibuf_mtr_commit(&mtr);
 		ut_free(pcur.old_rec_buf);
 		mem_heap_free(heap);
-
-		if (err == DB_SUCCESS && mode == BTR_INSERT_TREE) {
-			ibuf_contract_after_insert(entry_size);
-		}
-
-		if (do_merge) {
-#ifdef UNIV_IBUF_DEBUG
-			ut_a(n_stored <= IBUF_MAX_N_PAGES_MERGED);
-#endif
-			ibuf_read_merge_pages(space_ids, page_nos, n_stored);
-		}
 		return err;
 	}
 
@@ -3344,15 +3280,6 @@ commit_exit:
 							  bits)) {
 			/* Release the bitmap page latch early. */
 			ibuf_mtr_commit(&bitmap_mtr);
-
-			/* It may not fit */
-			do_merge = TRUE;
-
-			ibuf_get_merge_page_nos(FALSE,
-						btr_pcur_get_rec(&pcur), &mtr,
-						space_ids,
-						page_nos, &n_stored);
-
 			goto fail_exit;
 		}
 	}
@@ -3480,6 +3407,10 @@ ibuf_insert(
 	ulint			zip_size,
 	que_thr_t*		thr)
 {
+	if (!index->is_committed()) {
+		return false;
+	}
+
 	dberr_t		err;
 	ulint		entry_size;
 	ibool		no_counter;
@@ -4176,25 +4107,26 @@ dberr_t ibuf_merge_or_delete_for_page(buf_block_t *block,
 
 		ibuf_mtr_commit(&mtr);
 
-		if (bitmap_bits
-		    && DB_SUCCESS
+		if (!bitmap_bits) {
+		done:
+			/* No changes are buffered for this page. */
+			space->release();
+			return DB_SUCCESS;
+		}
+
+		if (!block
+		    || DB_SUCCESS
 		    == fseg_page_is_allocated(space, page_id.page_no())) {
 			ibuf_mtr_start(&mtr);
 			mtr.set_named_space(space);
 			ibuf_reset_bitmap(block, page_id, zip_size, &mtr);
 			ibuf_mtr_commit(&mtr);
-			bitmap_bits = 0;
 			if (!block
 			    || btr_page_get_index_id(block->page.frame)
 			    != DICT_IBUF_ID_MIN + IBUF_SPACE_ID) {
 				ibuf_delete_recs(page_id);
 			}
-		}
-
-		if (!bitmap_bits) {
-			/* No changes are buffered for this page. */
-			space->release();
-			return DB_SUCCESS;
+			goto done;
 		}
 	}
 
@@ -4414,6 +4346,8 @@ in DISCARD TABLESPACE, IMPORT TABLESPACE, or read-ahead.
 @param[in]	space		missing or to-be-discarded tablespace */
 void ibuf_delete_for_discarded_space(ulint space)
 {
+	if (UNIV_UNLIKELY(!ibuf.index)) return;
+
 	btr_pcur_t	pcur;
 	const rec_t*	ibuf_rec;
 	mtr_t		mtr;
@@ -4527,6 +4461,7 @@ ibuf_print(
 /*=======*/
 	FILE*	file)	/*!< in: file where to print */
 {
+	if (UNIV_UNLIKELY(!ibuf.index)) return;
 	mysql_mutex_lock(&ibuf_mutex);
 
 	fprintf(file,
@@ -4566,8 +4501,6 @@ dberr_t ibuf_check_bitmap_on_import(const trx_t* trx, fil_space_t* space)
 
 	mtr_t mtr;
 
-	mysql_mutex_lock(&ibuf_mutex);
-
 	/* The two bitmap pages (allocation bitmap and ibuf bitmap) repeat
 	every page_size pages. For example if page_size is 16 KiB, then the
 	two bitmap pages repeat every 16 KiB * 16384 = 256 MiB. In the loop
@@ -4576,18 +4509,14 @@ dberr_t ibuf_check_bitmap_on_import(const trx_t* trx, fil_space_t* space)
 
 	for (uint32_t page_no = 0; page_no < size; page_no += physical_size) {
 		if (trx_is_interrupted(trx)) {
-			mysql_mutex_unlock(&ibuf_mutex);
 			return(DB_INTERRUPTED);
 		}
 
 		mtr_start(&mtr);
-		ibuf_enter(&mtr);
 
 		buf_block_t* bitmap_page = ibuf_bitmap_get_map_page(
 			page_id_t(space->id, page_no), zip_size, &mtr);
 		if (!bitmap_page) {
-			mysql_mutex_unlock(&ibuf_mutex);
-			ibuf_exit(&mtr);
 			mtr.commit();
 			return DB_CORRUPTION;
 		}
@@ -4610,7 +4539,6 @@ dberr_t ibuf_check_bitmap_on_import(const trx_t* trx, fil_space_t* space)
 							    physical_size)));
 			}
 #endif /* UNIV_DEBUG */
-			ibuf_exit(&mtr);
 			mtr_commit(&mtr);
 			continue;
 		}
@@ -4625,8 +4553,6 @@ dberr_t ibuf_check_bitmap_on_import(const trx_t* trx, fil_space_t* space)
 				    cur_page_id, zip_size,
 				    IBUF_BITMAP_IBUF, &mtr)) {
 
-				mysql_mutex_unlock(&ibuf_mutex);
-				ibuf_exit(&mtr);
 				mtr_commit(&mtr);
 
 				ib_errf(trx->mysql_thd,
@@ -4660,11 +4586,9 @@ dberr_t ibuf_check_bitmap_on_import(const trx_t* trx, fil_space_t* space)
 			}
 		}
 
-		ibuf_exit(&mtr);
 		mtr_commit(&mtr);
 	}
 
-	mysql_mutex_unlock(&ibuf_mutex);
 	return(DB_SUCCESS);
 }
 

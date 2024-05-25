@@ -1712,14 +1712,14 @@ static MYSQL_METHODS client_methods=
   cli_use_result,                              /* use_result */
   cli_fetch_lengths,                           /* fetch_lengths */
   cli_flush_use_result,                        /* flush_use_result */
-  cli_read_change_user_result                  /* read_change_user_result */
+  cli_read_change_user_result,                 /* read_change_user_result */
+  NULL                                         /* on_close_free */
 #ifndef MYSQL_SERVER
   ,cli_list_fields,                            /* list_fields */
   cli_read_prepare_result,                     /* read_prepare_result */
   cli_stmt_execute,                            /* stmt_execute */
   cli_read_binary_rows,                        /* read_binary_rows */
   cli_unbuffered_fetch,                        /* unbuffered_fetch */
-  NULL,                                        /* free_embedded_thd */
   cli_read_statistics,                         /* read_statistics */
   cli_read_query_result,                       /* next_result */
   cli_read_binary_rows                         /* read_rows_from_cursor */
@@ -2137,7 +2137,7 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
      If the server does not support ssl, we abort the connection.
   */
   if (mysql->options.use_ssl &&
-      (mysql->client_flag & CLIENT_SSL_VERIFY_SERVER_CERT) &&
+      (mysql->options.extension && mysql->options.extension->tls_verify_server_cert) &&
       !(mysql->server_capabilities & CLIENT_SSL))
   {
     set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
@@ -2207,7 +2207,7 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
     DBUG_PRINT("info", ("IO layer change done!"));
 
     /* Verify server cert */
-    if ((mysql->client_flag & CLIENT_SSL_VERIFY_SERVER_CERT) &&
+    if ((mysql->options.extension && mysql->options.extension->tls_verify_server_cert) &&
         ssl_verify_server_cert(net->vio, mysql->host, &cert_error))
     {
       set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
@@ -3321,10 +3321,8 @@ static void mysql_close_free(MYSQL *mysql)
   my_free(mysql->user);
   my_free(mysql->passwd);
   my_free(mysql->db);
-#if defined(EMBEDDED_LIBRARY) || MYSQL_VERSION_ID >= 50100
-  my_free(mysql->info_buffer);
-  mysql->info_buffer= 0;
-#endif
+  if (mysql->methods && mysql->methods->on_close_free)
+    (*mysql->methods->on_close_free)(mysql);
   /* Clear pointers for better safety */
   mysql->host_info= mysql->user= mysql->passwd= mysql->db= 0;
 }
@@ -3443,13 +3441,6 @@ void STDCALL mysql_close(MYSQL *mysql)
     mysql_close_free_options(mysql);
     mysql_close_free(mysql);
     mysql_detach_stmt_list(&mysql->stmts, "mysql_close");
-#ifndef MYSQL_SERVER
-    if (mysql->thd)
-    {
-      (*mysql->methods->free_embedded_thd)(mysql);
-      mysql->thd= 0;
-    }
-#endif
     if (mysql->free_me)
       my_free(mysql);
   }
@@ -3820,10 +3811,13 @@ mysql_options(MYSQL *mysql,enum mysql_option option, const void *arg)
     mysql->options.use_thread_specific_memory= *(my_bool *) arg;
     break;
   case MYSQL_OPT_SSL_VERIFY_SERVER_CERT:
-    if (*(my_bool*) arg)
-      mysql->options.client_flag|= CLIENT_SSL_VERIFY_SERVER_CERT;
-    else
-      mysql->options.client_flag&= ~CLIENT_SSL_VERIFY_SERVER_CERT;
+    if (!mysql->options.extension)
+      mysql->options.extension= (struct st_mysql_options_extention *)
+        my_malloc(PSI_INSTRUMENT_ME,
+                  sizeof(struct st_mysql_options_extention),
+                  MYF(MY_WME | MY_ZEROFILL));
+    if (mysql->options.extension)
+      mysql->options.extension->tls_verify_server_cert= *(my_bool*) arg;
     break;
   case MYSQL_PLUGIN_DIR:
     EXTENSION_SET_STRING(&mysql->options, plugin_dir, arg);
@@ -4106,7 +4100,7 @@ int STDCALL mysql_set_character_set(MYSQL *mysql, const char *cs_name)
     /* Skip execution of "SET NAMES" for pre-4.1 servers */
     if (mysql_get_server_version(mysql) < 40100)
       return 0;
-    sprintf(buff, "SET NAMES %s", cs_name);
+    snprintf(buff, sizeof(buff),  "SET NAMES %s", cs_name);
     if (!mysql_real_query(mysql, buff, (uint) strlen(buff)))
     {
       mysql->charset= cs;

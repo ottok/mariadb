@@ -2167,6 +2167,11 @@ row_log_table_apply_op(
 
 	*error = DB_SUCCESS;
 
+	/* 3 = 1 (op type) + 1 (extra_size) + at least 1 byte payload */
+	if (mrec + 3 >= mrec_end) {
+		return(NULL);
+	}
+
 	const bool is_instant = log->is_instant(dup->index);
 	const mrec_t* const mrec_start = mrec;
 
@@ -2214,11 +2219,6 @@ row_log_table_apply_op(
 		break;
 
 	case ROW_T_DELETE:
-		/* 1 (extra_size) + at least 1 (payload) */
-		if (mrec + 2 >= mrec_end) {
-			return(NULL);
-		}
-
 		extra_size = *mrec++;
 		ut_ad(mrec < mrec_end);
 
@@ -3078,6 +3078,9 @@ row_log_apply_op_low(
 	mtr_start(&mtr);
 	index->set_modified(mtr);
 	cursor.page_cur.index = index;
+	if (has_index_lock) {
+		mtr_x_lock_index(index, &mtr);
+	}
 
 	/* We perform the pessimistic variant of the operations if we
 	already hold index->lock exclusively. First, search the
@@ -3085,7 +3088,8 @@ row_log_apply_op_low(
 	depending on when the row in the clustered index was
 	scanned. */
 	*error = cursor.search_leaf(entry, PAGE_CUR_LE, has_index_lock
-				    ? BTR_MODIFY_TREE : BTR_MODIFY_LEAF, &mtr);
+				    ? BTR_MODIFY_TREE_ALREADY_LATCHED
+				    : BTR_MODIFY_LEAF, &mtr);
 	if (UNIV_UNLIKELY(*error != DB_SUCCESS)) {
 		goto func_exit;
 	}
@@ -3821,6 +3825,12 @@ dberr_t dict_table_t::clear(que_thr_t *thr)
   return err;
 }
 
+inline bool UndorecApplier::is_same(roll_ptr_t roll_ptr) const
+{
+  return uint16_t(roll_ptr) == offset &&
+    uint32_t(roll_ptr >> 16) == page_id.page_no();
+}
+
 const rec_t *
 UndorecApplier::get_old_rec(const dtuple_t &tuple, dict_index_t *index,
                             const rec_t **clust_rec, rec_offs **offsets)
@@ -3946,8 +3956,7 @@ void UndorecApplier::log_insert(const dtuple_t &tuple,
       /* Update the row with virtual column values present
       in the undo log or update vector */
       if (type == TRX_UNDO_UPD_DEL_REC)
-        row_upd_replace_vcol(row, table, update, false,
-                             nullptr,
+        row_upd_replace_vcol(row, table, update, false, nullptr,
                              (cmpl_info & UPD_NODE_NO_ORD_CHANGE)
                              ? nullptr : undo_rec);
       else
@@ -4069,7 +4078,7 @@ void UndorecApplier::log_update(const dtuple_t &tuple,
   if (table->n_v_cols)
     row_upd_replace_vcol(row, table, update, false, nullptr,
                          (cmpl_info & UPD_NODE_NO_ORD_CHANGE)
-                         ? nullptr : this->undo_rec);
+                         ? nullptr : undo_rec);
 
   bool success= true;
   dict_index_t *index= dict_table_get_next_index(clust_index);

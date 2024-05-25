@@ -86,7 +86,7 @@ static int my_strnncoll_binary(CHARSET_INFO * cs __attribute__((unused)),
                                my_bool t_is_prefix)
 {
   size_t len=MY_MIN(slen,tlen);
-  int cmp= memcmp(s,t,len);
+  int cmp= len ? memcmp(s, t, len) : 0;
   return cmp ? cmp : (int)((t_is_prefix ? len : slen) - tlen);
 }
 
@@ -132,7 +132,8 @@ static int my_strnncollsp_binary(CHARSET_INFO * cs __attribute__((unused)),
 static int my_strnncollsp_nchars_binary(CHARSET_INFO * cs __attribute__((unused)),
                                         const uchar *s, size_t slen,
                                         const uchar *t, size_t tlen,
-                                        size_t nchars)
+                                        size_t nchars,
+                                        uint flags)
 {
   set_if_smaller(slen, nchars);
   set_if_smaller(tlen, nchars);
@@ -146,7 +147,7 @@ static int my_strnncoll_8bit_bin(CHARSET_INFO * cs __attribute__((unused)),
                                  my_bool t_is_prefix)
 {
   size_t len=MY_MIN(slen,tlen);
-  int cmp= memcmp(s,t,len);
+  int cmp= len ? memcmp(s, t, len) : 0;
   return cmp ? cmp : (int)((t_is_prefix ? len : slen) - tlen);
 }
 
@@ -217,7 +218,8 @@ static int my_strnncollsp_8bit_bin(CHARSET_INFO * cs __attribute__((unused)),
 static int my_strnncollsp_nchars_8bit_bin(CHARSET_INFO * cs,
                                           const uchar *a, size_t a_length,
                                           const uchar *b, size_t b_length,
-                                          size_t nchars)
+                                          size_t nchars,
+                                          uint flags)
 {
   set_if_smaller(a_length, nchars);
   set_if_smaller(b_length, nchars);

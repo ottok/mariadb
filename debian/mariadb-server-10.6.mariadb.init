@@ -21,9 +21,24 @@ test -x /usr/sbin/mariadbd || exit 0
 
 . /lib/lsb/init-functions
 
-SELF=$(cd $(dirname $0); pwd -P)/$(basename $0)
+SELF=$(cd "$(dirname $0)"; pwd -P)/$(basename $0)
 
-MYADMIN="/usr/bin/mysqladmin --defaults-file=/etc/mysql/debian.cnf"
+if [ -f /usr/bin/mariadb-admin ]
+then
+  MYADMIN="/usr/bin/mariadb-admin --defaults-file=/etc/mysql/debian.cnf"
+elif [ -f /usr/bin/mysqladmin ]
+then
+  MYADMIN="/usr/bin/mysqladmin --defaults-file=/etc/mysql/debian.cnf"
+else
+  log_failure_msg "Command mariadb-admin/mysqladmin not found! This SysV init script depends on it."
+  exit -1
+fi
+
+if [ ! -x /usr/bin/mariadbd-safe ]
+then
+  log_failure_msg "/usr/bin/mariadbd-safe not found or executable! This SysV init script depends on it."
+  exit -1
+fi
 
 # priority can be overridden and "-s" adds output to stderr
 ERR_LOGGER="logger -p daemon.err -t /etc/init.d/mariadb -i"
@@ -69,7 +84,28 @@ sanity_checks() {
 
   # check for diskspace shortage
   datadir=`mariadbd_get_param datadir`
-  if LC_ALL=C BLOCKSIZE= df --portability $datadir/. | tail -n 1 | awk '{ exit ($4>4096) }'; then
+
+  # If datadir location is not changed int configuration
+  # then it's not printed with /usr/sbin/mariadbd --print-defaults
+  # then we use 'sane' default.
+  if [ -z "$datadir" ]
+  then
+    datadir="/var/lib/mysql"
+  fi
+
+  # Check if there datadir location is available and
+  # fail if it's not
+  if [ ! -d "$datadir" ]
+  then
+    log_failure_msg "$0: ERROR: Can't locate MariaDB installation location $datadir"
+    echo                "ERROR: Can't locate MariaDB installation location $datadir" | $ERR_LOGGER
+    exit 1
+  fi
+
+  # As preset blocksize of GNU df is 1024 then available bytes is $df_available_blocks * 1024
+  # 4096 blocks is then lower than 4 MB
+  df_available_blocks="$(LC_ALL=C BLOCKSIZE='' df --output=avail "$datadir" | tail -n 1)"
+  if [ "$df_available_blocks" -lt "4096" ]; then
     log_failure_msg "$0: ERROR: The partition with $datadir is too full!"
     echo                "ERROR: The partition with $datadir is too full!" | $ERR_LOGGER
     exit 1
@@ -118,7 +154,7 @@ case "${1:-''}" in
     test -e /run/mysqld || install -m 755 -o mysql -g root -d /run/mysqld
 
     # Start MariaDB!
-    /usr/bin/mysqld_safe "${@:2}" 2>&1 >/dev/null | $ERR_LOGGER &
+    /usr/bin/mariadbd-safe "${@:2}" 2>&1 >/dev/null | $ERR_LOGGER &
 
     for i in $(seq 1 "${MYSQLD_STARTUP_TIMEOUT:-30}"); do
       sleep 1

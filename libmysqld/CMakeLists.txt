@@ -23,8 +23,8 @@ ${CMAKE_SOURCE_DIR}/libmysqld
 ${CMAKE_SOURCE_DIR}/sql
 ${CMAKE_SOURCE_DIR}/tpool
 ${CMAKE_BINARY_DIR}/sql 
-${PCRE_INCLUDES}
-${ZLIB_INCLUDE_DIR}
+${PCRE_INCLUDE_DIRS}
+${ZLIB_INCLUDE_DIRS}
 ${SSL_INCLUDE_DIRS}
 ${SSL_INTERNAL_INCLUDE_DIRS}
 )
@@ -50,6 +50,7 @@ ENDIF()
 SET(SQL_EMBEDDED_SOURCES emb_qcache.cc libmysqld.c lib_sql.cc 
            libmysql.c ../sql-common/errmsg.c
            ../sql-common/client.c
+           ../sql/cset_narrowing.cc
            ../sql-common/my_user.c ../sql-common/pack.c
            ../sql-common/client_plugin.c
            ../sql/password.c ../sql/discover.cc ../sql/derror.cc 
@@ -173,7 +174,7 @@ ENDIF()
 
 SET(LIBS 
   dbug strings mysys mysys_ssl pcre2-8 vio
-  ${ZLIB_LIBRARY} ${SSL_LIBRARIES} 
+  ${ZLIB_LIBRARIES} ${SSL_LIBRARIES}
   ${LIBWRAP} ${LIBCRYPT} ${CMAKE_DL_LIBS}
   ${EMBEDDED_PLUGIN_LIBS}
   sql_embedded

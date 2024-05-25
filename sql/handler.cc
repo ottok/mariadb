@@ -110,7 +110,7 @@ static handlerton *installed_htons[128];
 #define BITMAP_STACKBUF_SIZE (128/8)
 
 KEY_CREATE_INFO default_key_create_info=
-{ HA_KEY_ALG_UNDEF, 0, 0, {NullS, 0}, {NullS, 0}, true, false };
+{ HA_KEY_ALG_UNDEF, 0, 0, {NullS, 0}, {NullS, 0}, false };
 
 /* number of entries in handlertons[] */
 ulong total_ha= 0;
@@ -362,9 +362,6 @@ handlerton *ha_checktype(THD *thd, handlerton *hton, bool no_substitute)
 
   if (no_substitute)
     return NULL;
-#ifdef WITH_WSREP
-  (void)wsrep_after_rollback(thd, false);
-#endif /* WITH_WSREP */
 
   return ha_default_handlerton(thd);
 } /* ha_checktype */
@@ -632,11 +629,12 @@ int ha_finalize_handlerton(st_plugin_int *plugin)
 
 
 const char *hton_no_exts[]= { 0 };
-
+static bool ddl_recovery_done= false;
 
 int ha_initialize_handlerton(st_plugin_int *plugin)
 {
   handlerton *hton;
+  int ret= 0;
   DBUG_ENTER("ha_initialize_handlerton");
   DBUG_PRINT("plugin", ("initialize plugin: '%s'", plugin->name.str));
 
@@ -646,6 +644,7 @@ int ha_initialize_handlerton(st_plugin_int *plugin)
   {
     sql_print_error("Unable to allocate memory for plugin '%s' handlerton.",
                     plugin->name.str);
+    ret= 1;
     goto err_no_hton_memory;
   }
 
@@ -656,12 +655,8 @@ int ha_initialize_handlerton(st_plugin_int *plugin)
   hton->slot= HA_SLOT_UNDEF;
   /* Historical Requirement */
   plugin->data= hton; // shortcut for the future
-  if (plugin->plugin->init && plugin->plugin->init(hton))
-  {
-    sql_print_error("Plugin '%s' init function returned error.",
-                    plugin->name.str);
+  if (plugin->plugin->init && (ret= plugin->plugin->init(hton)))
     goto err;
-  }
 
   // hton_ext_based_table_discovery() works only when discovery
   // is supported and the engine if file-based.
@@ -699,6 +694,7 @@ int ha_initialize_handlerton(st_plugin_int *plugin)
     if (idx == (int) DB_TYPE_DEFAULT)
     {
       sql_print_warning("Too many storage engines!");
+      ret= 1;
       goto err_deinit;
     }
     if (hton->db_type != DB_TYPE_UNKNOWN)
@@ -726,6 +722,7 @@ int ha_initialize_handlerton(st_plugin_int *plugin)
     {
       sql_print_error("Too many plugins loaded. Limit is %lu. "
                       "Failed on '%s'", (ulong) MAX_HA, plugin->name.str);
+      ret= 1;
       goto err_deinit;
     }
     hton->slot= total_ha++;
@@ -775,7 +772,10 @@ int ha_initialize_handlerton(st_plugin_int *plugin)
   resolve_sysvar_table_options(hton);
   update_discovery_counters(hton, 1);
 
-  DBUG_RETURN(0);
+  if (ddl_recovery_done && hton->signal_ddl_recovery_done)
+    hton->signal_ddl_recovery_done(hton);
+
+  DBUG_RETURN(ret);
 
 err_deinit:
   /* 
@@ -793,7 +793,7 @@ err:
   my_free(hton);
 err_no_hton_memory:
   plugin->data= NULL;
-  DBUG_RETURN(1);
+  DBUG_RETURN(ret);
 }
 
 int ha_init()
@@ -961,7 +961,8 @@ static my_bool signal_ddl_recovery_done(THD *, plugin_ref plugin, void *)
 {
   handlerton *hton= plugin_hton(plugin);
   if (hton->signal_ddl_recovery_done)
-    (hton->signal_ddl_recovery_done)(hton);
+	  if ((hton->signal_ddl_recovery_done)(hton))
+		  plugin_ref_to_int(plugin)->state= PLUGIN_IS_DELETED;
   return 0;
 }
 
@@ -971,6 +972,7 @@ void ha_signal_ddl_recovery_done()
   DBUG_ENTER("ha_signal_ddl_recovery_done");
   plugin_foreach(NULL, signal_ddl_recovery_done, MYSQL_STORAGE_ENGINE_PLUGIN,
                  NULL);
+  ddl_recovery_done= true;
   DBUG_VOID_RETURN;
 }
 
@@ -1618,6 +1620,29 @@ ha_check_and_coalesce_trx_read_only(THD *thd, Ha_trx_info *ha_list,
   return rw_ha_count;
 }
 
+#ifdef WITH_WSREP
+/**
+  Check if transaction contains storage engine not supporting
+  two-phase commit and transaction is read-write.
+
+  @retval
+    true Transaction contains storage engine not supporting
+         two phase commit and transaction is read-write
+  @retval
+    false otherwise
+*/
+static bool wsrep_have_no2pc_rw_ha(Ha_trx_info* ha_list)
+{
+  for (Ha_trx_info *ha_info=ha_list; ha_info; ha_info= ha_info->next())
+  {
+    handlerton *ht= ha_info->ht();
+    // Transaction is read-write and handler does not support 2pc
+    if (ha_info->is_trx_read_write() && ht->prepare==0)
+      return true;
+  }
+  return false;
+}
+#endif /* WITH_WSREP */
 
 /**
   @retval
@@ -1726,8 +1751,7 @@ int ha_commit_trans(THD *thd, bool all)
 
   uint rw_ha_count= ha_check_and_coalesce_trx_read_only(thd, ha_info, all);
   /* rw_trans is TRUE when we in a transaction changing data */
-  bool rw_trans= is_real_trans &&
-                 (rw_ha_count > (thd->is_current_stmt_binlog_disabled()?0U:1U));
+  bool rw_trans= is_real_trans && rw_ha_count > 0;
   MDL_request mdl_backup;
   DBUG_PRINT("info", ("is_real_trans: %d  rw_trans:  %d  rw_ha_count: %d",
                       is_real_trans, rw_trans, rw_ha_count));
@@ -1759,10 +1783,7 @@ int ha_commit_trans(THD *thd, bool all)
     DEBUG_SYNC(thd, "ha_commit_trans_after_acquire_commit_lock");
   }
 
-  if (rw_trans &&
-      opt_readonly &&
-      !(thd->security_ctx->master_access & PRIV_IGNORE_READ_ONLY) &&
-      !thd->slave_thread)
+  if (rw_trans && thd->is_read_only_ctx())
   {
     my_error(ER_OPTION_PREVENTS_STATEMENT, MYF(0), "--read-only");
     goto err;
@@ -1824,7 +1845,28 @@ int ha_commit_trans(THD *thd, bool all)
       ordering is normally done. Commit ordering must be done here.
     */
     if (run_wsrep_hooks)
-      error= wsrep_before_commit(thd, all);
+    {
+      // This commit involves storage engines that do not support two phases.
+      // We allow read only transactions to such storage engines but not
+      // read write transactions.
+      if (trans->no_2pc && rw_ha_count > 1 && wsrep_have_no2pc_rw_ha(trans->ha_list))
+      {
+        // This commit involves more than one storage engine and requires
+        // two phases, but some engines don't support it.
+        // Issue a message to the client and roll back the transaction.
+
+        // REPLACE|INSERT INTO ... SELECT uses TOI for MyISAM|Aria
+        if (WSREP(thd) && thd->wsrep_cs().mode() != wsrep::client_state::m_toi)
+        {
+          my_message(ER_ERROR_DURING_COMMIT, "Transactional commit not supported "
+                     "by involved engine(s)", MYF(0));
+          error= 1;
+        }
+      }
+
+      if (!error)
+          error= wsrep_before_commit(thd, all);
+    }
     if (error)
     {
       ha_rollback_trans(thd, FALSE);
@@ -2157,14 +2199,26 @@ int ha_rollback_trans(THD *thd, bool all)
       attempt. Otherwise those following transactions can run too early, and
       possibly cause replication to fail. See comments in retry_event_group().
 
+      (This concerns rollbacks due to temporary errors where the transaction
+      will be retried afterwards. For non-recoverable errors, following
+      transactions will not start but just be skipped as the worker threads
+      perform the error stop).
+
       There were several bugs with this in the past that were very hard to
       track down (MDEV-7458, MDEV-8302). So we add here an assertion for
       rollback without signalling following transactions. And in release
       builds, we explicitly do the signalling before rolling back.
     */
-    DBUG_ASSERT(!(thd->rgi_slave && thd->rgi_slave->did_mark_start_commit) ||
-                thd->transaction->xid_state.is_explicit_XA());
-    if (thd->rgi_slave && thd->rgi_slave->did_mark_start_commit)
+    DBUG_ASSERT(
+        !(thd->rgi_slave &&
+          !thd->rgi_slave->worker_error &&
+          thd->rgi_slave->did_mark_start_commit) ||
+        (thd->transaction->xid_state.is_explicit_XA() ||
+         (thd->rgi_slave->gtid_ev_flags2 & Gtid_log_event::FL_PREPARED_XA)));
+
+    if (thd->rgi_slave &&
+        !thd->rgi_slave->worker_error &&
+        thd->rgi_slave->did_mark_start_commit)
       thd->rgi_slave->unmark_start_commit();
   }
 #endif
@@ -2184,8 +2238,12 @@ int ha_rollback_trans(THD *thd, bool all)
   }
 
 #ifdef WITH_WSREP
-  (void) wsrep_before_rollback(thd, all);
+  // REPLACE|INSERT INTO ... SELECT uses TOI in consistency check
+  if (thd->wsrep_consistency_check != CONSISTENCY_CHECK_RUNNING)
+    if (thd->wsrep_cs().mode() != wsrep::client_state::m_toi)
+      (void) wsrep_before_rollback(thd, all);
 #endif /* WITH_WSREP */
+
   if (ha_info)
   {
     /* Close all cursors that can not survive ROLLBACK */
@@ -2222,7 +2280,11 @@ int ha_rollback_trans(THD *thd, bool all)
                 thd->thread_id, all?"TRUE":"FALSE", wsrep_thd_query(thd),
                 thd->get_stmt_da()->message(), is_real_trans);
   }
-  (void) wsrep_after_rollback(thd, all);
+
+  // REPLACE|INSERT INTO ... SELECT uses TOI in consistency check
+  if (thd->wsrep_consistency_check != CONSISTENCY_CHECK_RUNNING)
+    if (thd->wsrep_cs().mode() != wsrep::client_state::m_toi)
+      (void) wsrep_after_rollback(thd, all);
 #endif /* WITH_WSREP */
 
   if (all || !thd->in_active_multi_stmt_transaction())
@@ -3211,6 +3273,7 @@ handler *handler::clone(const char *name, MEM_ROOT *mem_root)
   if (new_handler->ha_open(table, name, table->db_stat,
                            HA_OPEN_IGNORE_IF_LOCKED, mem_root))
     goto err;
+  new_handler->handler_stats= handler_stats;
 
   return new_handler;
 
@@ -3347,6 +3410,17 @@ int handler::ha_open(TABLE *table_arg, const char *name, int mode,
   DBUG_ASSERT(alloc_root_inited(&table->mem_root));
 
   set_partitions_to_open(partitions_to_open);
+  internal_tmp_table= MY_TEST(test_if_locked & HA_OPEN_INTERNAL_TABLE);
+
+  if (!internal_tmp_table && (test_if_locked & HA_OPEN_TMP_TABLE) &&
+      current_thd->slave_thread)
+  {
+    /*
+      This is a temporary table used by replication that is not attached
+      to a THD. Mark it as a global temporary table.
+    */
+    test_if_locked|= HA_OPEN_GLOBAL_TMP_TABLE;
+  }
 
   if (unlikely((error=open(name,mode,test_if_locked))))
   {
@@ -3392,7 +3466,6 @@ int handler::ha_open(TABLE *table_arg, const char *name, int mode,
     cached_table_flags= table_flags();
   }
   reset_statistics();
-  internal_tmp_table= MY_TEST(test_if_locked & HA_OPEN_INTERNAL_TABLE);
   DBUG_RETURN(error);
 }
 
@@ -4663,7 +4736,7 @@ int handler::check_collation_compatibility()
 {
   ulong mysql_version= table->s->mysql_version;
 
-  if (mysql_version < 50124)
+  if (mysql_version < Charset::latest_mariadb_version_with_collation_change())
   {
     KEY *key= table->key_info;
     KEY *key_end= key + table->s->keys;
@@ -4677,18 +4750,7 @@ int handler::check_collation_compatibility()
           continue;
         Field *field= table->field[key_part->fieldnr - 1];
         uint cs_number= field->charset()->number;
-        if ((mysql_version < 50048 &&
-             (cs_number == 11 || /* ascii_general_ci - bug #29499, bug #27562 */
-              cs_number == 41 || /* latin7_general_ci - bug #29461 */
-              cs_number == 42 || /* latin7_general_cs - bug #29461 */
-              cs_number == 20 || /* latin7_estonian_cs - bug #29461 */
-              cs_number == 21 || /* latin2_hungarian_ci - bug #29461 */
-              cs_number == 22 || /* koi8u_general_ci - bug #29461 */
-              cs_number == 23 || /* cp1251_ukrainian_ci - bug #29461 */
-              cs_number == 26)) || /* cp1250_general_ci - bug #29461 */
-             (mysql_version < 50124 &&
-             (cs_number == 33 || /* utf8mb3_general_ci - bug #27877 */
-              cs_number == 35))) /* ucs2_general_ci - bug #27877 */
+        if (Charset::collation_changed_order(mysql_version, cs_number))
           return HA_ADMIN_NEEDS_UPGRADE;
       }
     }
@@ -4807,8 +4869,12 @@ static bool update_frm_version(TABLE *table)
     by server with the same version. This also ensures that we do not
     update frm version for temporary tables as this code doesn't support
     temporary tables.
+
+    keep_original_mysql_version is set if the table version cannot be
+    changed without rewriting the frm file.
   */
-  if (table->s->mysql_version == MYSQL_VERSION_ID)
+  if (table->s->mysql_version == MYSQL_VERSION_ID ||
+      table->s->keep_original_mysql_version)
     DBUG_RETURN(0);
 
   strxmov(path, table->s->normalized_path.str, reg_ext, NullS);
@@ -4853,6 +4919,12 @@ uint handler::get_dup_key(int error)
       error == HA_ERR_DROP_INDEX_FK)
     info(HA_STATUS_ERRKEY | HA_STATUS_NO_LOCK);
   DBUG_RETURN(errkey);
+}
+
+bool handler::has_dup_ref() const
+{
+  DBUG_ASSERT(lookup_errkey != (uint)-1 || errkey != (uint)-1);
+  return ha_table_flags() & HA_DUPLICATE_POS || lookup_errkey != (uint)-1;
 }
 
 
@@ -4999,7 +5071,7 @@ int handler::ha_check(THD *thd, HA_CHECK_OPT *check_opt)
   if (unlikely((error= check(thd, check_opt))))
     return error;
   /* Skip updating frm version if not main handler. */
-  if (table->file != this)
+  if (table->file != this || opt_readonly)
     return error;
   return update_frm_version(table);
 }
@@ -5048,7 +5120,7 @@ int handler::ha_repair(THD* thd, HA_CHECK_OPT* check_opt)
   DBUG_ASSERT(result == HA_ADMIN_NOT_IMPLEMENTED ||
               ha_table_flags() & HA_CAN_REPAIR);
 
-  if (result == HA_ADMIN_OK)
+  if (result == HA_ADMIN_OK && !opt_readonly)
     result= update_frm_version(table);
   return result;
 }
@@ -5190,34 +5262,48 @@ handler::ha_check_and_repair(THD *thd)
 /**
   Disable indexes: public interface.
 
+  @param map            has 0 for all indexes that should be disabled
+  @param persist        indexes should stay disabled after server restart
+
+  Currently engines don't support disabling an arbitrary subset of indexes.
+
+  In particular, if the change is persistent:
+  * auto-increment index should not be disabled
+  * unique indexes should not be disabled
+
+  if unique or auto-increment indexes are disabled (non-persistently),
+  the caller should only insert data that does not require
+  auto-inc generation and does not violate uniqueness
+
   @sa handler::disable_indexes()
 */
 
 int
-handler::ha_disable_indexes(uint mode)
+handler::ha_disable_indexes(key_map map, bool persist)
 {
-  DBUG_ASSERT(table_share->tmp_table != NO_TMP_TABLE ||
-              m_lock_type != F_UNLCK);
+  DBUG_ASSERT(table->s->tmp_table != NO_TMP_TABLE || m_lock_type != F_UNLCK);
   mark_trx_read_write();
 
-  return disable_indexes(mode);
+  return disable_indexes(map, persist);
 }
 
 
 /**
   Enable indexes: public interface.
 
+  @param map            has 1 for all indexes that should be enabled
+  @param persist        indexes should stay enabled after server restart
+
   @sa handler::enable_indexes()
 */
 
 int
-handler::ha_enable_indexes(uint mode)
+handler::ha_enable_indexes(key_map map, bool persist)
 {
-  DBUG_ASSERT(table_share->tmp_table != NO_TMP_TABLE ||
-              m_lock_type != F_UNLCK);
+  DBUG_ASSERT(table->s->tmp_table != NO_TMP_TABLE || m_lock_type != F_UNLCK);
   mark_trx_read_write();
 
-  return enable_indexes(mode);
+  return enable_indexes(map, persist);
 }
 
 
@@ -5493,6 +5579,9 @@ handler::ha_create(const char *name, TABLE *form, HA_CREATE_INFO *info_arg)
 {
   DBUG_ASSERT(m_lock_type == F_UNLCK);
   mark_trx_read_write();
+  if ((info_arg->options & HA_LEX_CREATE_TMP_TABLE) &&
+      current_thd->slave_thread)
+    info_arg->options|= HA_LEX_CREATE_GLOBAL_TMP_TABLE;
   int error= create(name, form, info_arg);
   if (!error &&
       !(info_arg->options & (HA_LEX_CREATE_TMP_TABLE | HA_CREATE_TMP_ALTER)))
@@ -5520,8 +5609,6 @@ handler::ha_create_partitioning_metadata(const char *name,
   DBUG_ASSERT(m_lock_type == F_UNLCK ||
               (!old_name && strcmp(name, table_share->path.str)));
 
-
-  mark_trx_read_write();
   return create_partitioning_metadata(name, old_name, action_flag);
 }
 
@@ -5981,7 +6068,7 @@ err:
 
 void st_ha_check_opt::init()
 {
-  flags= sql_flags= 0;
+  flags= sql_flags= handler_flags= 0;
   start_time= my_time(0);
 }
 
@@ -7207,7 +7294,13 @@ static int wsrep_after_row(THD *thd)
       thd->wsrep_affected_rows > wsrep_max_ws_rows &&
       wsrep_thd_is_local(thd))
   {
-    trans_rollback_stmt(thd) || trans_rollback(thd);
+    /*
+      If we are inside stored function or trigger we should not commit or
+      rollback current statement transaction. See comment in ha_commit_trans()
+      call for more information.
+    */
+    if (!thd->in_sub_stmt)
+      trans_rollback_stmt(thd) || trans_rollback(thd);
     my_message(ER_ERROR_DURING_COMMIT, "wsrep_max_ws_rows exceeded", MYF(0));
     DBUG_RETURN(ER_ERROR_DURING_COMMIT);
   }
@@ -7230,6 +7323,7 @@ int handler::check_duplicate_long_entry_key(const uchar *new_rec, uint key_no)
   KEY *key_info= table->key_info + key_no;
   Field *hash_field= key_info->key_part->field;
   uchar ptr[HA_HASH_KEY_LENGTH_WITH_NULL];
+  String *blob_storage;
   DBUG_ENTER("handler::check_duplicate_long_entry_key");
 
   DBUG_ASSERT((key_info->flags & HA_NULL_PART_KEY &&
@@ -7244,9 +7338,11 @@ int handler::check_duplicate_long_entry_key(const uchar *new_rec, uint key_no)
   result= lookup_handler->ha_index_init(key_no, 0);
   if (result)
     DBUG_RETURN(result);
+  blob_storage= (String*)alloca(sizeof(String)*table->s->virtual_not_stored_blob_fields);
+  table->remember_blob_values(blob_storage);
   store_record(table, file->lookup_buffer);
-  result= lookup_handler->ha_index_read_map(table->record[0],
-                               ptr, HA_WHOLE_KEY, HA_READ_KEY_EXACT);
+  result= lookup_handler->ha_index_read_map(table->record[0], ptr,
+                                            HA_WHOLE_KEY, HA_READ_KEY_EXACT);
   if (!result)
   {
     bool is_same;
@@ -7254,6 +7350,13 @@ int handler::check_duplicate_long_entry_key(const uchar *new_rec, uint key_no)
     Item_func_hash * temp= (Item_func_hash *)hash_field->vcol_info->expr;
     Item ** arguments= temp->arguments();
     uint arg_count= temp->argument_count();
+    // restore pointers after swap_values in TABLE::update_virtual_fields()
+    for (Field **vf= table->vfield; *vf; vf++)
+    {
+      if (!(*vf)->stored_in_db() && (*vf)->flags & BLOB_FLAG &&
+          bitmap_is_set(table->read_set, (*vf)->field_index))
+        ((Field_blob*)*vf)->swap_value_and_read_value();
+    }
     do
     {
       my_ptrdiff_t diff= table->file->lookup_buffer - new_rec;
@@ -7294,13 +7397,11 @@ exit:
   if (error == HA_ERR_FOUND_DUPP_KEY)
   {
     table->file->lookup_errkey= key_no;
-    if (ha_table_flags() & HA_DUPLICATE_POS)
-    {
-      lookup_handler->position(table->record[0]);
-      memcpy(table->file->dup_ref, lookup_handler->ref, ref_length);
-    }
+    lookup_handler->position(table->record[0]);
+    memcpy(table->file->dup_ref, lookup_handler->ref, ref_length);
   }
   restore_record(table, file->lookup_buffer);
+  table->restore_blob_values(blob_storage);
   lookup_handler->ha_index_end();
   DBUG_RETURN(error);
 }
@@ -7376,7 +7477,7 @@ int handler::check_duplicate_long_entries_update(const uchar *new_rec)
           So also check for that too
         */
         if((field->is_null(0) != field->is_null(reclength)) ||
-                               field->cmp_binary_offset(reclength))
+                               field->cmp_offset(reclength))
         {
           if((error= check_duplicate_long_entry_key(new_rec, i)))
             return error;
@@ -7585,7 +7686,16 @@ int handler::ha_write_row(const uchar *buf)
               m_lock_type == F_WRLCK);
   DBUG_ENTER("handler::ha_write_row");
   DEBUG_SYNC_C("ha_write_row_start");
-
+#ifdef WITH_WSREP
+  DBUG_EXECUTE_IF("wsrep_ha_write_row",
+                  {
+                    const char act[]=
+                      "now "
+                      "SIGNAL wsrep_ha_write_row_reached "
+                      "WAIT_FOR wsrep_ha_write_row_continue";
+                    DBUG_ASSERT(!debug_sync_set_action(ha_thd(), STRING_WITH_LEN(act)));
+                  });
+#endif /* WITH_WSREP */
   if ((error= ha_check_overlaps(NULL, buf)))
     DBUG_RETURN(error);
 
@@ -7604,7 +7714,12 @@ int handler::ha_write_row(const uchar *buf)
   {
     DBUG_ASSERT(inited == NONE || lookup_handler != this);
     if ((error= check_duplicate_long_entries(buf)))
+    {
+      if (table->next_number_field && buf == table->record[0])
+        if (int err= update_auto_increment())
+          error= err;
       DBUG_RETURN(error);
+    }
   }
 
   MYSQL_INSERT_ROW_START(table_share->db.str, table_share->table_name.str);
@@ -7960,6 +8075,9 @@ Compare_keys handler::compare_key_parts(const Field &old_field,
   concurrent accesses. And it's an overkill to take LOCK_plugin and
   iterate the whole installed_htons[] array every time.
 
+  @note Object victim_thd is not guaranteed to exist after this
+        function returns.
+
   @param bf_thd       brute force THD asking for the abort
   @param victim_thd   victim THD to be aborted
 
@@ -7973,6 +8091,8 @@ int ha_abort_transaction(THD *bf_thd, THD *victim_thd, my_bool signal)
   if (!WSREP(bf_thd) &&
       !(bf_thd->variables.wsrep_OSU_method == WSREP_OSU_RSU &&
         wsrep_thd_is_toi(bf_thd))) {
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_kill);
     DBUG_RETURN(0);
   }
 
@@ -7984,6 +8104,8 @@ int ha_abort_transaction(THD *bf_thd, THD *victim_thd, my_bool signal)
   else
   {
     WSREP_WARN("Cannot abort InnoDB transaction");
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_data);
+    mysql_mutex_unlock(&victim_thd->LOCK_thd_kill);
   }
 
   DBUG_RETURN(0);
@@ -8015,11 +8137,13 @@ static
 int del_global_index_stats_for_table(THD *thd, uchar* cache_key, size_t cache_key_length)
 {
   int res = 0;
+  uint to_delete_counter= 0;
+  INDEX_STATS *index_stats_to_delete[MAX_INDEXES];
   DBUG_ENTER("del_global_index_stats_for_table");
 
   mysql_mutex_lock(&LOCK_global_index_stats);
 
-  for (uint i= 0; i < global_index_stats.records;)
+  for (uint i= 0; i < global_index_stats.records; i++)
   {
     INDEX_STATS *index_stats =
       (INDEX_STATS*) my_hash_element(&global_index_stats, i);
@@ -8029,18 +8153,12 @@ int del_global_index_stats_for_table(THD *thd, uchar* cache_key, size_t cache_ke
 	index_stats->index_name_length >= cache_key_length &&
 	!memcmp(index_stats->index, cache_key, cache_key_length))
     {
-      res= my_hash_delete(&global_index_stats, (uchar*)index_stats);
-      /*
-          In our HASH implementation on deletion one elements
-          is moved into a place where a deleted element was,
-          and the last element is moved into the empty space.
-          Thus we need to re-examine the current element, but
-          we don't have to restart the search from the beginning.
-      */
+      index_stats_to_delete[to_delete_counter++]= index_stats;
     }
-    else
-      i++;
   }
+
+  for (uint i= 0; i < to_delete_counter; i++)
+    res= my_hash_delete(&global_index_stats, (uchar*)index_stats_to_delete[i]);
 
   mysql_mutex_unlock(&LOCK_global_index_stats);
   DBUG_RETURN(res);

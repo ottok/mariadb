@@ -91,6 +91,13 @@ struct group_commit_orderer {
     FORCE_SWITCH= 2
   };
   uint8 flags;
+#ifndef DBUG_OFF
+  /*
+    Flag set when the GCO has been freed and entered the free list, to catch
+    (in debug) errors in the complex lifetime of this object.
+  */
+  bool gc_done;
+#endif
 };
 
 
@@ -260,7 +267,7 @@ struct rpl_parallel_thread {
 
 struct pool_bkp_for_pfs{
   uint32 count;
-  bool inited;
+  bool inited, is_valid;
   struct rpl_parallel_thread **rpl_thread_arr;
   void init(uint32 thd_count)
   {
@@ -287,6 +294,7 @@ struct pool_bkp_for_pfs{
       my_free(rpl_thread_arr);
       rpl_thread_arr= NULL;
     }
+    inited= false;
   }
 };
 
@@ -318,6 +326,27 @@ struct rpl_parallel_thread_pool {
 
 
 struct rpl_parallel_entry {
+  /*
+    A small struct to put worker threads references into a FIFO (using an
+    I_List) for round-robin scheduling.
+  */
+  struct sched_bucket : public ilink {
+    sched_bucket() : thr(nullptr) { }
+    rpl_parallel_thread *thr;
+  };
+  /*
+    A struct to keep track of into which "generation" an XA XID was last
+    scheduled. A "generation" means that we know that every worker thread
+    slot in the rpl_parallel_entry was scheduled at least once. When more
+    that two generations have passed, we can safely reuse the XID in a
+    different worker.
+  */
+  struct xid_active_generation {
+    uint64 generation;
+    sched_bucket *thr;
+    xid_t xid;
+  };
+
   mysql_mutex_t LOCK_parallel_entry;
   mysql_cond_t COND_parallel_entry;
   uint32 domain_id;
@@ -338,26 +367,45 @@ struct rpl_parallel_entry {
   /*
    At STOP SLAVE (force_abort=true), we do not want to process all events in
    the queue (which could unnecessarily delay stop, if a lot of events happen
-   to be queued). The stop_count provides a safe point at which to stop, so
+   to be queued). The stop_sub_id provides a safe point at which to stop, so
    that everything before becomes committed and nothing after does. The value
-   corresponds to group_commit_orderer::wait_count; if wait_count is less than
-   or equal to stop_count, we execute the associated event group, else we
-   skip it (and all following) and stop.
+   corresponds to rpl_group_info::gtid_sub_id; if that is less than or equal
+   to stop_sub_id, we execute the associated event group, else we skip it (and
+   all following) and stop.
   */
-  uint64 stop_count;
+  uint64 stop_sub_id;
 
   /*
-    Cyclic array recording the last rpl_thread_max worker threads that we
+    Array recording the last rpl_thread_max worker threads that we
     queued event for. This is used to limit how many workers a single domain
     can occupy (--slave-domain-parallel-threads).
+
+    The array is structured as a FIFO using an I_List thread_sched_fifo.
 
     Note that workers are never explicitly deleted from the array. Instead,
     we need to check (under LOCK_rpl_thread) that the thread still belongs
     to us before re-using (rpl_thread::current_owner).
   */
-  rpl_parallel_thread **rpl_threads;
+  sched_bucket *rpl_threads;
+  I_List<sched_bucket> *thread_sched_fifo;
   uint32 rpl_thread_max;
-  uint32 rpl_thread_idx;
+  /*
+    Keep track of all XA XIDs that may still be active in a worker thread.
+    The elements are of type xid_active_generation.
+  */
+  DYNAMIC_ARRAY maybe_active_xid;
+  /*
+    Keeping track of the current scheduling generation.
+
+    A new generation means that every worker thread in the rpl_threads array
+    have been scheduled at least one event group.
+
+    When we have scheduled to slot current_generation_idx= 0, 1, ..., N-1 in this
+    order, we know that (at least) one generation has passed.
+  */
+  uint64 current_generation;
+  uint32 current_generation_idx;
+
   /*
     The sub_id of the last transaction to commit within this domain_id.
     Must be accessed under LOCK_parallel_entry protection.
@@ -411,11 +459,19 @@ struct rpl_parallel_entry {
   /* The group_commit_orderer object for the events currently being queued. */
   group_commit_orderer *current_gco;
 
+  void check_scheduling_generation(sched_bucket *cur);
+  sched_bucket *check_xa_xid_dependency(xid_t *xid);
   rpl_parallel_thread * choose_thread(rpl_group_info *rgi, bool *did_enter_cond,
                                       PSI_stage_info *old_stage,
                                       Gtid_log_event *gtid_ev);
   int queue_master_restart(rpl_group_info *rgi,
                            Format_description_log_event *fdev);
+  /*
+    the initial size of maybe_ array corresponds to the case of
+    each worker receives perhaps unlikely XA-PREPARE and XA-COMMIT within
+    the same generation.
+  */
+  inline uint active_xid_init_alloc() { return 3 * 2 * rpl_thread_max; }
 };
 struct rpl_parallel {
   HASH domain_hash;
@@ -428,15 +484,17 @@ struct rpl_parallel {
   rpl_parallel_entry *find(uint32 domain_id);
   void wait_for_done(THD *thd, Relay_log_info *rli);
   void stop_during_until();
-  bool workers_idle();
   int wait_for_workers_idle(THD *thd);
   int do_event(rpl_group_info *serial_rgi, Log_event *ev, ulonglong event_size);
+
+  static bool workers_idle(Relay_log_info *rli);
 };
 
 
 extern struct rpl_parallel_thread_pool global_rpl_thread_pool;
 
 
+extern void wait_for_pending_deadlock_kill(THD *thd, rpl_group_info *rgi);
 extern int rpl_parallel_resize_pool_if_no_slaves(void);
 extern int rpl_parallel_activate_pool(rpl_parallel_thread_pool *pool);
 extern int rpl_parallel_inactivate_pool(rpl_parallel_thread_pool *pool);

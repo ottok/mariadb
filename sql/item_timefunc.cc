@@ -481,21 +481,33 @@ static bool make_date_time(const String *format, const MYSQL_TIME *l_time,
   uint hours_i;
   uint weekday;
   ulong length;
-  const char *ptr, *end;
+  const uchar *ptr, *end;
 
   str->length(0);
 
   if (l_time->neg)
-    str->append('-');
-  
-  end= (ptr= format->ptr()) + format->length();
-  for (; ptr != end ; ptr++)
+    str->append_wc('-');
+
+  end= (ptr= (const uchar *) format->ptr()) + format->length();
+
+  for ( ; ; )
   {
-    if (*ptr != '%' || ptr+1 == end)
-      str->append(*ptr);
+    my_wc_t wc;
+    int mblen= format->charset()->cset->mb_wc(format->charset(), &wc, ptr, end);
+    if (mblen < 1)
+      return false;
+    ptr+= mblen;
+
+    if (wc != '%' || ptr >= end)
+      str->append_wc(wc);
     else
     {
-      switch (*++ptr) {
+      mblen= format->charset()->cset->mb_wc(format->charset(), &wc, ptr, end);
+      if (mblen < 1)
+        return false;
+      ptr+= mblen;
+
+      switch (wc) {
       case 'M':
         if (type == MYSQL_TIMESTAMP_TIME || !l_time->month)
           return 1;
@@ -531,8 +543,7 @@ static bool make_date_time(const String *format, const MYSQL_TIME *l_time,
       case 'D':
 	if (type == MYSQL_TIMESTAMP_TIME)
 	  return 1;
-	length= (uint) (int10_to_str(l_time->day, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 1, '0');
+	str->append_zerofill(l_time->day, 1);
 	if (l_time->day >= 10 &&  l_time->day <= 19)
 	  str->append(STRING_WITH_LEN("th"));
 	else
@@ -556,73 +567,62 @@ static bool make_date_time(const String *format, const MYSQL_TIME *l_time,
       case 'Y':
         if (type == MYSQL_TIMESTAMP_TIME)
           return 1;
-	length= (uint) (int10_to_str(l_time->year, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 4, '0');
+	str->append_zerofill(l_time->year, 4);
 	break;
       case 'y':
         if (type == MYSQL_TIMESTAMP_TIME)
           return 1;
-	length= (uint) (int10_to_str(l_time->year%100, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 2, '0');
+	str->append_zerofill(l_time->year % 100, 2);
 	break;
       case 'm':
         if (type == MYSQL_TIMESTAMP_TIME)
           return 1;
-	length= (uint) (int10_to_str(l_time->month, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 2, '0');
+	str->append_zerofill(l_time->month, 2);
 	break;
       case 'c':
         if (type == MYSQL_TIMESTAMP_TIME)
           return 1;
-	length= (uint) (int10_to_str(l_time->month, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 1, '0');
+	str->append_zerofill(l_time->month, 1);
 	break;
       case 'd':
 	if (type == MYSQL_TIMESTAMP_TIME)
 	  return 1;
-	length= (uint) (int10_to_str(l_time->day, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 2, '0');
+	str->append_zerofill(l_time->day, 2);
 	break;
       case 'e':
 	if (type == MYSQL_TIMESTAMP_TIME)
 	  return 1;
-	length= (uint) (int10_to_str(l_time->day, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 1, '0');
+	str->append_zerofill(l_time->day, 1);
 	break;
       case 'f':
-	length= (uint) (int10_to_str(l_time->second_part, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 6, '0');
+	str->append_zerofill((uint) l_time->second_part, 6);
 	break;
       case 'H':
-	length= (uint) (int10_to_str(l_time->hour, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 2, '0');
+	str->append_zerofill(l_time->hour, 2);
 	break;
       case 'h':
       case 'I':
 	hours_i= (l_time->hour%24 + 11)%12+1;
-	length= (uint) (int10_to_str(hours_i, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 2, '0');
+	str->append_zerofill(hours_i, 2);
 	break;
       case 'i':					/* minutes */
-	length= (uint) (int10_to_str(l_time->minute, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 2, '0');
+	str->append_zerofill(l_time->minute, 2);
 	break;
       case 'j':
+      {
 	if (type == MYSQL_TIMESTAMP_TIME || !l_time->month || !l_time->year)
 	  return 1;
-	length= (uint) (int10_to_str(calc_daynr(l_time->year,l_time->month,
-					l_time->day) - 
-		     calc_daynr(l_time->year,1,1) + 1, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 3, '0');
+        long value= calc_daynr(l_time->year,l_time->month, l_time->day) -
+                    calc_daynr(l_time->year,1,1) + 1;
+	str->append_zerofill((uint) value, 3);
 	break;
+      }
       case 'k':
-	length= (uint) (int10_to_str(l_time->hour, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 1, '0');
+	str->append_zerofill(l_time->hour, 1);
 	break;
       case 'l':
 	hours_i= (l_time->hour%24 + 11)%12+1;
-	length= (uint) (int10_to_str(hours_i, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 1, '0');
+	str->append_zerofill(hours_i, 1);
 	break;
       case 'p':
 	hours_i= l_time->hour%24;
@@ -638,8 +638,7 @@ static bool make_date_time(const String *format, const MYSQL_TIME *l_time,
 	break;
       case 'S':
       case 's':
-	length= (uint) (int10_to_str(l_time->second, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 2, '0');
+	str->append_zerofill(l_time->second, 2);
 	break;
       case 'T':
 	length= sprintf(intbuff, "%02d:%02d:%02d",
@@ -652,42 +651,39 @@ static bool make_date_time(const String *format, const MYSQL_TIME *l_time,
 	uint year;
 	if (type == MYSQL_TIMESTAMP_TIME)
 	  return 1;
-	length= (uint) (int10_to_str(calc_week(l_time,
-				       (*ptr) == 'U' ?
-				       WEEK_FIRST_WEEKDAY : WEEK_MONDAY_FIRST,
-				       &year),
-			     intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 2, '0');
+
+        uint value= calc_week(l_time,
+                              wc == 'U' ? WEEK_FIRST_WEEKDAY :
+                                          WEEK_MONDAY_FIRST,
+                              &year);
+	str->append_zerofill(value, 2);
       }
       break;
       case 'v':
       case 'V':
       {
-	uint year;
-	if (type == MYSQL_TIMESTAMP_TIME)
-	  return 1;
-	length= (uint) (int10_to_str(calc_week(l_time,
-				       ((*ptr) == 'V' ?
-					(WEEK_YEAR | WEEK_FIRST_WEEKDAY) :
-					(WEEK_YEAR | WEEK_MONDAY_FIRST)),
-				       &year),
-			     intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 2, '0');
+        uint year;
+        if (type == MYSQL_TIMESTAMP_TIME)
+          return 1;
+        uint value= calc_week(l_time, wc == 'V' ?
+                                      (WEEK_YEAR | WEEK_FIRST_WEEKDAY) :
+                                      (WEEK_YEAR | WEEK_MONDAY_FIRST),
+                              &year);
+        str->append_zerofill(value, 2);
       }
       break;
       case 'x':
       case 'X':
       {
-	uint year;
-	if (type == MYSQL_TIMESTAMP_TIME)
-	  return 1;
-	(void) calc_week(l_time,
-			 ((*ptr) == 'X' ?
-			  WEEK_YEAR | WEEK_FIRST_WEEKDAY :
-			  WEEK_YEAR | WEEK_MONDAY_FIRST),
-			 &year);
-	length= (uint) (int10_to_str(year, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 4, '0');
+        uint year;
+        if (type == MYSQL_TIMESTAMP_TIME)
+          return 1;
+        (void) calc_week(l_time,
+                         (wc == 'X' ?
+                          WEEK_YEAR | WEEK_FIRST_WEEKDAY :
+                          WEEK_YEAR | WEEK_MONDAY_FIRST),
+                         &year);
+        str->append_zerofill(year, 4);
       }
       break;
       case 'w':
@@ -695,12 +691,11 @@ static bool make_date_time(const String *format, const MYSQL_TIME *l_time,
 	  return 1;
 	weekday=calc_weekday(calc_daynr(l_time->year,l_time->month,
 					l_time->day),1);
-	length= (uint) (int10_to_str(weekday, intbuff, 10) - intbuff);
-	str->append_with_prefill(intbuff, length, 1, '0');
+	str->append_zerofill(weekday, 1);
 	break;
 
       default:
-	str->append(*ptr);
+	str->append_wc(wc);
 	break;
       }
     }
@@ -2407,11 +2402,7 @@ error:
 
 static inline bool append_val(int val, int size, String *str)
 {
-  ulong len= 0;
-  char intbuff[15];
-
-  len= (ulong) (int10_to_str(val, intbuff, 10) - intbuff);
-  return str->append_with_prefill(intbuff, len, size, '0');
+  return str->append_zerofill(val, size);
 }
 
 
@@ -2955,7 +2946,7 @@ bool Item_extract::fix_length_and_dec()
   switch (int_type) {
   case INTERVAL_YEAR:             set_date_length(4); break; // YYYY
   case INTERVAL_YEAR_MONTH:       set_date_length(6); break; // YYYYMM
-  case INTERVAL_QUARTER:          set_date_length(2); break; // 1..4
+  case INTERVAL_QUARTER:          set_date_length(1); break; // 1..4
   case INTERVAL_MONTH:            set_date_length(2); break; // MM
   case INTERVAL_WEEK:             set_date_length(2); break; // 0..52
   case INTERVAL_DAY:              set_day_length(daylen); break; // DD
@@ -3093,6 +3084,13 @@ void Item_char_typecast::print(String *str, enum_query_type query_type)
   {
     str->append(STRING_WITH_LEN(" charset "));
     str->append(cast_cs->cs_name);
+    /*
+      Print the "binary" keyword in cases like:
+        CAST('str' AS CHAR CHARACTER SET latin1 BINARY)
+    */
+    if ((cast_cs->state & MY_CS_BINSORT) &&
+        Charset(cast_cs).can_have_collate_clause())
+      str->append(STRING_WITH_LEN(" binary"));
   }
   str->append(')');
 }
@@ -3512,6 +3510,24 @@ bool Item_func_timediff::get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzy
 
   if (l_time1.neg != l_time2.neg)
     l_sign= -l_sign;
+
+  if (l_time1.time_type == MYSQL_TIMESTAMP_TIME)
+  {
+    /*
+      In case of TIME-alike arguments:
+        TIMEDIFF('38:59:59', '839:00:00')
+      let's truncate extra fractional seconds that might appear if the argument
+      values were out of the supported TIME range. For example, args[n]->get_time()
+      for the string literal '839:00:00' returns TIME'838:59:59.999999'.
+      The fractional part must be truncated according to this->decimals,
+      to avoid returning more fractional seconds than it was detected
+      during this->fix_length_and_dec().
+      Note, the thd rounding mode should not be important here, as we're removing
+      redundant digits from the maximum possible value: '838:59:59.999999'.
+    */
+    my_time_trunc(&l_time1, decimals);
+    my_time_trunc(&l_time2, decimals);
+  }
 
   if (calc_time_diff(&l_time1, &l_time2, l_sign, &l_time3, fuzzydate))
     return (null_value= 1);

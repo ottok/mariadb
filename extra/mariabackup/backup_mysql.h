@@ -10,7 +10,6 @@ extern mysql_flavor_t server_flavor;
 extern unsigned long mysql_server_version;
 
 /* server capabilities */
-extern bool have_changed_page_bitmaps;
 extern bool have_backup_locks;
 extern bool have_lock_wait_timeout;
 extern bool have_galera_enabled;
@@ -39,9 +38,6 @@ capture_tool_command(int argc, char **argv);
 bool
 select_history();
 
-bool
-flush_changed_page_bitmaps();
-
 void
 backup_cleanup();
 
@@ -62,17 +58,18 @@ void
 unlock_all(MYSQL *connection);
 
 bool
-write_current_binlog_file(MYSQL *connection);
+write_current_binlog_file(ds_ctxt *datasink, MYSQL *connection);
 
 bool
-write_binlog_info(MYSQL *connection);
+write_binlog_info(ds_ctxt *datasink, MYSQL *connection);
 
 bool
-write_xtrabackup_info(MYSQL *connection, const char * filename, bool history,
-                       bool stream);
+write_xtrabackup_info(ds_ctxt *datasink,
+                      MYSQL *connection, const char * filename, bool history,
+                      bool stream);
 
 bool
-write_backup_config_file();
+write_backup_config_file(ds_ctxt *datasink);
 
 bool
 lock_binlog_maybe(MYSQL *connection);
@@ -84,10 +81,10 @@ bool
 wait_for_safe_slave(MYSQL *connection);
 
 bool
-write_galera_info(MYSQL *connection);
+write_galera_info(ds_ctxt *datasink, MYSQL *connection);
 
 bool
-write_slave_info(MYSQL *connection);
+write_slave_info(ds_ctxt *datasink, MYSQL *connection);
 
 
 #endif

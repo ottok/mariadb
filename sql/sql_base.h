@@ -130,6 +130,9 @@ TABLE *open_ltable(THD *thd, TABLE_LIST *table_list, thr_lock_type update,
 */
 #define MYSQL_OPEN_IGNORE_LOGGING_FORMAT        0x20000
 
+/* Don't use statistics tables */
+#define MYSQL_OPEN_IGNORE_ENGINE_STATS          0x40000
+
 /** Please refer to the internals manual. */
 #define MYSQL_OPEN_REOPEN  (MYSQL_OPEN_IGNORE_FLUSH |\
                             MYSQL_OPEN_IGNORE_GLOBAL_READ_LOCK |\
@@ -190,7 +193,8 @@ void unfix_fields(List<Item> &items);
 bool fill_record(THD * thd, TABLE *table_arg, List<Item> &fields,
                  List<Item> &values, bool ignore_errors, bool update);
 bool fill_record(THD *thd, TABLE *table, Field **field, List<Item> &values,
-                 bool ignore_errors, bool use_value);
+                 bool ignore_errors, bool use_value,
+                 bool check_for_evaluability);
 
 Field *
 find_field_in_tables(THD *thd, Item_ident *item,
@@ -394,7 +398,7 @@ inline bool setup_fields_with_no_wrap(THD *thd, Ref_ptr_array ref_pointer_array,
 class Prelocking_strategy
 {
 public:
-  virtual ~Prelocking_strategy() { }
+  virtual ~Prelocking_strategy() = default;
 
   virtual void reset(THD *thd) { };
   virtual bool handle_routine(THD *thd, Query_tables_list *prelocking_ctx,
@@ -640,7 +644,7 @@ class No_such_table_error_handler : public Internal_error_handler
 {
 public:
   No_such_table_error_handler()
-    : m_handled_errors(0), m_unhandled_errors(0)
+    : m_handled_errors(0), m_unhandled_errors(0), first_error(0)
   {}
 
   bool handle_condition(THD *thd,
@@ -655,11 +659,11 @@ public:
     trapped and no other errors have been seen. FALSE otherwise.
   */
   bool safely_trapped_errors();
+  uint got_error() { return first_error; }
 
 private:
   int m_handled_errors;
   int m_unhandled_errors;
+  uint first_error;
 };
-
-
 #endif /* SQL_BASE_INCLUDED */

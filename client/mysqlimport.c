@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2015, Oracle and/or its affiliates.
-   Copyright (c) 2011, 2022, MariaDB
+   Copyright (c) 2011, 2024, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -64,18 +64,16 @@ static char * opt_mysql_unix_port=0;
 static char *opt_plugin_dir= 0, *opt_default_auth= 0;
 static longlong opt_ignore_lines= -1;
 
-static uint protocol_to_force= MYSQL_PROTOCOL_DEFAULT;
-
 #include <sslopt-vars.h>
 
 static char **argv_to_free;
 
 static struct my_option my_long_options[] =
 {
-  {"character-sets-dir", OPT_CHARSETS_DIR,
+  {"character-sets-dir", 0,
    "Directory for character set files.", (char**) &charsets_dir,
    (char**) &charsets_dir, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"default-character-set", OPT_DEFAULT_CHARSET,
+  {"default-character-set", 0,
    "Set the default character set.", &default_charset,
    &default_charset, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"columns", 'c',
@@ -87,31 +85,31 @@ static struct my_option my_long_options[] =
    0, 0, 0},
   {"debug",'#', "Output debug log. Often this is 'd:t:o,filename'.", 0, 0, 0,
    GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
-  {"debug-check", OPT_DEBUG_CHECK, "Check memory and open file usage at exit.",
+  {"debug-check", 0, "Check memory and open file usage at exit.",
    &debug_check_flag, &debug_check_flag, 0,
    GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"debug-info", OPT_DEBUG_INFO, "Print some debug info at exit.",
+  {"debug-info", 0, "Print some debug info at exit.",
    &debug_info_flag, &debug_info_flag,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"default_auth", OPT_DEFAULT_AUTH,
+  {"default_auth", 0,
    "Default authentication client-side plugin to use.",
    &opt_default_auth, &opt_default_auth, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"delete", 'd', "First delete all rows from table.", &opt_delete,
    &opt_delete, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"fields-terminated-by", OPT_FTB,
+  {"fields-terminated-by", 0,
    "Fields in the input file are terminated by the given string.", 
    &fields_terminated, &fields_terminated, 0, 
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"fields-enclosed-by", OPT_ENC,
+  {"fields-enclosed-by", 0,
    "Fields in the import file are enclosed by the given character.", 
    &enclosed, &enclosed, 0, 
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"fields-optionally-enclosed-by", OPT_O_ENC,
+  {"fields-optionally-enclosed-by", 0,
    "Fields in the input file are optionally enclosed by the given character.", 
    &opt_enclosed, &opt_enclosed, 0, 
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"fields-escaped-by", OPT_ESC, 
+  {"fields-escaped-by", 0, 
    "Fields in the input file are escaped by the given character.",
    &escaped, &escaped, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0,
    0, 0},
@@ -128,10 +126,10 @@ static struct my_option my_long_options[] =
     "Disable foreign key checks while importing the data.",
     &ignore_foreign_keys, &ignore_foreign_keys, 0, GET_BOOL, NO_ARG,
     0, 0, 0, 0, 0, 0},
-  {"ignore-lines", OPT_IGN_LINES, "Ignore first n lines of data infile.",
+  {"ignore-lines", 0, "Ignore first n lines of data infile.",
    &opt_ignore_lines, &opt_ignore_lines, 0, GET_LL,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"lines-terminated-by", OPT_LTB, 
+  {"lines-terminated-by", 0, 
    "Lines in the input file are terminated by the given string.",
    &lines_terminated, &lines_terminated, 0, GET_STR,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
@@ -140,7 +138,7 @@ static struct my_option my_long_options[] =
   {"lock-tables", 'l', "Lock all tables for write (this disables threads).",
     &lock_tables, &lock_tables, 0, GET_BOOL, NO_ARG, 
     0, 0, 0, 0, 0, 0},
-  {"low-priority", OPT_LOW_PRIORITY,
+  {"low-priority", 0,
    "Use LOW_PRIORITY when updating the table.", &opt_low_priority,
    &opt_low_priority, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"password", 'p',
@@ -150,7 +148,7 @@ static struct my_option my_long_options[] =
   {"pipe", 'W', "Use named pipes to connect to server.", 0, 0, 0, GET_NO_ARG,
    NO_ARG, 0, 0, 0, 0, 0, 0},
 #endif
-  {"plugin_dir", OPT_PLUGIN_DIR, "Directory for client-side plugins.",
+  {"plugin_dir", 0, "Directory for client-side plugins.",
    &opt_plugin_dir, &opt_plugin_dir, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"port", 'P', "Port number to use for connection or 0 for default to, in "
@@ -172,7 +170,7 @@ static struct my_option my_long_options[] =
    &opt_mysql_unix_port, &opt_mysql_unix_port, 0, GET_STR,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 #include <sslopt-longopts.h>
-  {"use-threads", OPT_USE_THREADS,
+  {"use-threads", 0,
    "Load files in parallel. The argument is the number "
    "of threads to use for loading data.",
    &opt_use_threads, &opt_use_threads, 0, 
@@ -227,9 +225,6 @@ static my_bool
 get_one_option(const struct my_option *opt, const char *argument,
                const char *filename)
 {
-  /* Track when protocol is set via CLI to not force overrides */
-  static my_bool ignore_protocol_override = FALSE;
-
   switch(opt->id) {
   case 'p':
     if (argument == disabled_my_option)
@@ -256,14 +251,6 @@ get_one_option(const struct my_option *opt, const char *argument,
   case 'W':
     opt_protocol = MYSQL_PROTOCOL_PIPE;
     opt_local_file=1;
-
-    /* Prioritize pipe if explicit via command line */
-    if (filename[0] == '\0')
-    {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
     break;
 #endif
   case OPT_MYSQL_PROTOCOL:
@@ -273,45 +260,26 @@ get_one_option(const struct my_option *opt, const char *argument,
       sf_leaking_memory= 1; /* no memory leak reports here */
       exit(1);
     }
-
-    /* Specification of protocol via CLI trumps implicit overrides */
-    if (filename[0] == '\0')
-    {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
     break;
   case 'P':
-    /* If port and socket are set, fall back to default behavior */
-    if (protocol_to_force == SOCKET_PROTOCOL_TO_FORCE)
+    if (filename[0] == '\0')
     {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
-    /* If port is set via CLI, try to force protocol to TCP */
-    if (filename[0] == '\0' &&
-        !ignore_protocol_override &&
-        protocol_to_force == MYSQL_PROTOCOL_DEFAULT)
-    {
-      protocol_to_force = MYSQL_PROTOCOL_TCP;
+      /* Port given on command line, switch protocol to use TCP */
+      opt_protocol= MYSQL_PROTOCOL_TCP;
     }
     break;
   case 'S':
-    /* If port and socket are set, fall back to default behavior */
-    if (protocol_to_force == MYSQL_PROTOCOL_TCP)
+    if (filename[0] == '\0')
     {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
-    /* Prioritize socket if set via command line */
-    if (filename[0] == '\0' &&
-        !ignore_protocol_override &&
-        protocol_to_force == MYSQL_PROTOCOL_DEFAULT)
-    {
-      protocol_to_force = SOCKET_PROTOCOL_TO_FORCE;
+      /*
+        Socket given on command line, switch protocol to use SOCKETSt
+        Except on Windows if 'protocol= pipe' has been provided in
+        the config file or command line.
+      */
+      if (opt_protocol != MYSQL_PROTOCOL_PIPE)
+      {
+        opt_protocol= MYSQL_PROTOCOL_SOCKET;
+      }
     }
     break;
   case '#':
@@ -358,7 +326,7 @@ static int get_options(int *argc, char ***argv)
   current_db= *((*argv)++);
   (*argc)--;
   if (tty_password)
-    opt_password=get_tty_password(NullS);
+    opt_password=my_get_tty_password(NullS);
   return(0);
 }
 
@@ -707,13 +675,6 @@ int main(int argc, char **argv)
   {
     free_defaults(argv_to_free);
     return(1);
-  }
-
-  /* Command line options override configured protocol */
-  if (protocol_to_force > MYSQL_PROTOCOL_DEFAULT
-      && protocol_to_force != opt_protocol)
-  {
-    warn_protocol_override(current_host, &opt_protocol, protocol_to_force);
   }
 
   sf_leaking_memory=0; /* from now on we cleanup properly */

@@ -358,6 +358,7 @@ handle_option(const struct my_option *opt, const char *arg,
   return 0;
 }
 
+PRAGMA_DISABLE_CHECK_STACK_FRAME
 
 int
 main(int argc, char *argv[])
@@ -371,7 +372,7 @@ main(int argc, char *argv[])
   if (err)
     exit(err);
   if (tty_password)
-    opt_password= get_tty_password(NullS);
+    opt_password= my_get_tty_password(NullS);
 
   if (opt_query_file)
   {
@@ -433,3 +434,4 @@ main(int argc, char *argv[])
 
   return 0;
 }
+PRAGMA_REENABLE_CHECK_STACK_FRAME

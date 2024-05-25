@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2014, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2020, MariaDB
+   Copyright (c) 2009, 2024, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -97,8 +97,6 @@ static char *result_file_name= 0;
 static const char *output_prefix= "";
 static char **defaults_argv= 0;
 static MEM_ROOT glob_root;
-
-static uint protocol_to_force= MYSQL_PROTOCOL_DEFAULT;
 
 #ifndef DBUG_OFF
 static const char *default_dbug_option = "d:t:o,/tmp/mariadb-binlog.trace";
@@ -314,8 +312,8 @@ class Load_log_processor
     }
 
 public:
-  Load_log_processor() {}
-  ~Load_log_processor() {}
+  Load_log_processor() = default;
+  ~Load_log_processor() = default;
 
   int init()
   {
@@ -1533,7 +1531,7 @@ static struct my_option my_options[] =
     like this:
     SET @`a`:=_cp850 0x4DFC6C6C6572 COLLATE `cp850_general_ci`;
   */
-  {"character-sets-dir", OPT_CHARSETS_DIR,
+  {"character-sets-dir", 0,
    "Directory for character set files.", &charsets_dir,
    &charsets_dir, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"database", 'd', "List entries for just this database (local log only).",
@@ -1543,13 +1541,13 @@ static struct my_option my_options[] =
   {"debug", '#', "Output debug log.", &current_dbug_option,
    &current_dbug_option, 0, GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
 #endif
-  {"debug-check", OPT_DEBUG_CHECK, "Check memory and open file usage at exit .",
+  {"debug-check", 0, "Check memory and open file usage at exit .",
    &debug_check_flag, &debug_check_flag, 0,
    GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"debug-info", OPT_DEBUG_INFO, "Print some debug info at exit.",
+  {"debug-info", 0, "Print some debug info at exit.",
    &debug_info_flag, &debug_info_flag,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"default_auth", OPT_DEFAULT_AUTH,
+  {"default_auth", 0,
    "Default authentication client-side plugin to use.",
    &opt_default_auth, &opt_default_auth, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
@@ -1585,7 +1583,7 @@ static struct my_option my_options[] =
    0, GET_ULL, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"password", 'p', "Password to connect to remote server.",
    0, 0, 0, GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
-  {"plugin_dir", OPT_PLUGIN_DIR, "Directory for client-side plugins.",
+  {"plugin_dir", 0, "Directory for client-side plugins.",
     &opt_plugindir, &opt_plugindir, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"port", 'P', "Port number to use for connection or 0 for default to, in "
@@ -1611,14 +1609,14 @@ static struct my_option my_options[] =
    &result_file_name, &result_file_name, 0, GET_STR, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0},
 #ifdef WHEN_FLASHBACK_REVIEW_READY
-  {"review", opt_flashback_review, "Print review sql in output file.",
+  {"review", 0, "Print review sql in output file.",
    &opt_flashback_review, &opt_flashback_review, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0,
    0, 0},
-  {"review-dbname", opt_flashback_flashback_review_dbname,
+  {"review-dbname", 0,
    "Writing flashback original row data into this db",
    &flashback_review_dbname, &flashback_review_dbname,
    0, GET_STR_ALLOC, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"review-tablename", opt_flashback_flashback_review_tablename,
+  {"review-tablename", 0,
    "Writing flashback original row data into this table",
    &flashback_review_tablename, &flashback_review_tablename,
    0, GET_STR_ALLOC, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
@@ -1635,7 +1633,7 @@ static struct my_option my_options[] =
    "Extract only binlog entries created by the server having the given id.",
    &server_id, &server_id, 0, GET_ULONG,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"set-charset", OPT_SET_CHARSET,
+  {"set-charset", 0,
    "Add 'SET NAMES character_set' to the output.", &charset,
    &charset, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"short-form", 's', "Just show regular queries: no extra info, no "
@@ -1683,13 +1681,13 @@ static struct my_option my_options[] =
    "The slave server_id used for --read-from-remote-server --stop-never.",
    &opt_stop_never_slave_server_id, &opt_stop_never_slave_server_id, 0,
    GET_ULONG, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"stop-position", OPT_STOP_POSITION,
+  {"stop-position", 0,
    "Stop reading the binlog at position N. Applies to the last binlog "
    "passed on the command line.",
    &stop_position, &stop_position, 0, GET_ULL,
    REQUIRED_ARG, (longlong)(~(my_off_t)0), BIN_LOG_HEADER_SIZE,
    (ulonglong)(~(my_off_t)0), 0, 0, 0},
-  {"table", 'T', "List entries for just this table (local log only).",
+  {"table", 'T', "List entries for just this table (affects only row events).",
    &table, &table, 0, GET_STR_ALLOC, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0},
   {"to-last-log", 't', "Requires -R. Will not stop at the end of the \
@@ -1706,7 +1704,7 @@ that may lead to an endless loop.",
    0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"version", 'V', "Print version and exit.", 0, 0, 0, GET_NO_ARG, NO_ARG, 0,
    0, 0, 0, 0, 0},
-  {"open_files_limit", OPT_OPEN_FILES_LIMIT,
+  {"open_files_limit", 0,
    "Used to reserve file descriptors for use by this program.",
    &open_files_limit, &open_files_limit, 0, GET_ULONG,
    REQUIRED_ARG, MY_NFILE, 8, OS_FILE_LIMIT, 0, 1, 0},
@@ -1732,12 +1730,12 @@ that may lead to an endless loop.",
    "Updates to a database with a different name than the original. \
 Example: rewrite-db='from->to'.",
    0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"skip-annotate-row-events", OPT_SKIP_ANNOTATE_ROWS_EVENTS,
+  {"skip-annotate-row-events", 0,
    "Don't print Annotate_rows events stored in the binary log.",
    (uchar**) &opt_skip_annotate_row_events,
    (uchar**) &opt_skip_annotate_row_events,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"print-table-metadata", OPT_PRINT_TABLE_METADATA,
+  {"print-table-metadata", 0,
    "Print metadata stored in Table_map_log_event",
    &opt_print_table_metadata, &opt_print_table_metadata, 0,
    GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
@@ -1835,15 +1833,20 @@ static void cleanup()
   my_free_open_file_info();
   load_processor.destroy();
   mysql_server_end();
+  if (opt_flashback)
+  {
+    delete_dynamic(&binlog_events);
+    delete_dynamic(&events_in_stmt);
+  }
   DBUG_VOID_RETURN;
 }
 
 
-static void die()
+static void die(int err)
 {
   cleanup();
   my_end(MY_DONT_FREE_DBUG);
-  exit(1);
+  exit(err);
 }
 
 
@@ -1880,7 +1883,7 @@ static my_time_t convert_str_to_timestamp(const char* str)
       l_time.time_type != MYSQL_TIMESTAMP_DATETIME || status.warnings)
   {
     error("Incorrect date and time argument: %s", str);
-    die();
+    die(1);
   }
   /*
     Note that Feb 30th, Apr 31st cause no error messages and are mapped to
@@ -1893,12 +1896,10 @@ static my_time_t convert_str_to_timestamp(const char* str)
 
 
 extern "C" my_bool
-get_one_option(const struct my_option *opt, const char *argument, const char *filename)
+get_one_option(const struct my_option *opt, const char *argument,
+               const char *filename)
 {
   bool tty_password=0;
-
-  /* Track when protocol is set via CLI to not force overrides */
-  static my_bool ignore_protocol_override = FALSE;
 
   switch (opt->id) {
 #ifndef DBUG_OFF
@@ -1947,22 +1948,9 @@ get_one_option(const struct my_option *opt, const char *argument, const char *fi
                                               opt->name)) <= 0)
     {
       sf_leaking_memory= 1; /* no memory leak reports here */
-      die();
+      die(1);
     }
-
-    /* Specification of protocol via CLI trumps implicit overrides */
-    if (filename[0] == '\0')
-    {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
     break;
-#ifdef WHEN_FLASHBACK_REVIEW_READY
-  case opt_flashback_review:
-    opt_flashback_review= 1;
-    break;
-#endif
   case OPT_START_DATETIME:
     start_datetime= convert_str_to_timestamp(start_datetime_str);
     break;
@@ -1976,7 +1964,7 @@ get_one_option(const struct my_option *opt, const char *argument, const char *fi
                                      opt->name)) <= 0)
     {
       sf_leaking_memory= 1; /* no memory leak reports here */
-      die();
+      die(1);
     }
     opt_base64_output_mode= (enum_base64_output_mode)(val - 1);
     break;
@@ -2034,35 +2022,24 @@ get_one_option(const struct my_option *opt, const char *argument, const char *fi
     print_row_event_positions_used= 1;
     break;
   case 'P':
-    /* If port and socket are set, fall back to default behavior */
-    if (protocol_to_force == SOCKET_PROTOCOL_TO_FORCE)
+    if (filename[0] == '\0')
     {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
-    /* If port is set via CLI, try to force protocol to TCP */
-    if (filename[0] == '\0' &&
-        !ignore_protocol_override &&
-        protocol_to_force == MYSQL_PROTOCOL_DEFAULT)
-    {
-      protocol_to_force = MYSQL_PROTOCOL_TCP;
+      /* Port given on command line, switch protocol to use TCP */
+      opt_protocol= MYSQL_PROTOCOL_TCP;
     }
     break;
   case 'S':
-    /* If port and socket are set, fall back to default behavior */
-    if (protocol_to_force == MYSQL_PROTOCOL_TCP)
+    if (filename[0] == '\0')
     {
-      ignore_protocol_override = TRUE;
-      protocol_to_force = MYSQL_PROTOCOL_DEFAULT;
-    }
-
-    /* Prioritize socket if set via command line */
-    if (filename[0] == '\0' &&
-        !ignore_protocol_override &&
-        protocol_to_force == MYSQL_PROTOCOL_DEFAULT)
-    {
-      protocol_to_force = SOCKET_PROTOCOL_TO_FORCE;
+      /*
+        Socket given on command line, switch protocol to use SOCKETSt
+        Except on Windows if 'protocol= pipe' has been provided in
+        the config file or command line.
+      */
+      if (opt_protocol != MYSQL_PROTOCOL_PIPE)
+      {
+        opt_protocol= MYSQL_PROTOCOL_SOCKET;
+      }
     }
     break;
   case 'v':
@@ -2081,7 +2058,7 @@ get_one_option(const struct my_option *opt, const char *argument, const char *fi
     break;
   }
   if (tty_password)
-    pass= get_tty_password(NullS);
+    pass= my_get_tty_password(NullS);
 
   return 0;
 }
@@ -2093,7 +2070,7 @@ static int parse_args(int *argc, char*** argv)
 
   if ((ho_error=handle_options(argc, argv, my_options, get_one_option)))
   {
-    die();
+    die(ho_error);
   }
   if (debug_info_flag)
     my_end_arg= MY_CHECK_ERROR | MY_GIVE_INFO;
@@ -3038,18 +3015,12 @@ int main(int argc, char** argv)
 
   parse_args(&argc, (char***)&argv);
 
-  /* Command line options override configured protocol */
-  if (protocol_to_force > MYSQL_PROTOCOL_DEFAULT
-      && protocol_to_force != opt_protocol)
-  {
-    warn_protocol_override(host, &opt_protocol, protocol_to_force);
-  }
-
   if (!argc || opt_version)
   {
     if (!opt_version)
     {
-      usage();
+      error("Please provide the log file(s). Run with '--help' for usage "
+            "instructions.");
       retval= ERROR_STOP;
     }
     goto err;
@@ -3059,6 +3030,12 @@ int main(int argc, char** argv)
     opt_base64_output_mode= BASE64_OUTPUT_AUTO;
 
   my_set_max_open_files(open_files_limit);
+
+  if (opt_flashback && opt_raw_mode)
+  {
+    error("The --raw mode is not allowed with --flashback mode");
+    die(1);
+  }
 
   if (opt_flashback)
   {
@@ -3075,7 +3052,7 @@ int main(int argc, char** argv)
     if (!remote_opt)
     {
       error("The --raw mode only works with --read-from-remote-server");
-      die();
+      die(1);
     }
     if (one_database)
       warning("The --database option is ignored in raw mode");
@@ -3097,7 +3074,7 @@ int main(int argc, char** argv)
                                   O_WRONLY | O_BINARY, MYF(MY_WME))))
       {
         error("Could not create log file '%s'", result_file_name);
-        die();
+        die(1);
       }
     }
     else
@@ -3186,7 +3163,7 @@ int main(int argc, char** argv)
   /* Set delimiter back to semicolon */
   if (retval != ERROR_STOP)
   {
-    if (!stop_event_string.is_empty())
+    if (!stop_event_string.is_empty() && result_file)
       fprintf(result_file, "%s", stop_event_string.ptr());
     if (!opt_raw_mode && opt_flashback)
       fprintf(result_file, "DELIMITER ;\n");
@@ -3215,8 +3192,13 @@ int main(int argc, char** argv)
 
   if (tmpdir.list)
     free_tmpdir(&tmpdir);
-  if (result_file && result_file != stdout)
-    my_fclose(result_file, MYF(0));
+  if (result_file)
+  {
+    if (result_file != stdout)
+      my_fclose(result_file, MYF(0));
+    else
+      fflush(result_file);
+  }
   cleanup();
   /* We cannot free DBUG, it is used in global destructors after exit(). */
   my_end(my_end_arg | MY_DONT_FREE_DBUG);

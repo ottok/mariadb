@@ -203,6 +203,83 @@ public:
   {
     return m_charset != &my_charset_bin;
   }
+
+  /*
+    The MariaDB version when the last collation change happened,
+    e.g. due to a bug fix. See functions below.
+  */
+  static ulong latest_mariadb_version_with_collation_change()
+  {
+    return 110002;
+  }
+
+  /*
+    Check if the collation with the given ID changed its order
+    since the given MariaDB version.
+  */
+  static bool collation_changed_order(ulong mysql_version, uint cs_number)
+  {
+    if ((mysql_version < 50048 &&
+           (cs_number == 11 || /* ascii_general_ci - bug #29499, bug #27562 */
+            cs_number == 41 || /* latin7_general_ci - bug #29461 */
+            cs_number == 42 || /* latin7_general_cs - bug #29461 */
+            cs_number == 20 || /* latin7_estonian_cs - bug #29461 */
+            cs_number == 21 || /* latin2_hungarian_ci - bug #29461 */
+            cs_number == 22 || /* koi8u_general_ci - bug #29461 */
+            cs_number == 23 || /* cp1251_ukrainian_ci - bug #29461 */
+            cs_number == 26)) || /* cp1250_general_ci - bug #29461 */
+           (mysql_version < 50124 &&
+           (cs_number == 33 || /* utf8mb3_general_ci - bug #27877 */
+            cs_number == 35))) /* ucs2_general_ci - bug #27877 */
+        return true;
+
+    if (cs_number == 159 && /* ucs2_general_mysql500_ci - MDEV-30746 */
+        ((mysql_version >= 100400 && mysql_version < 100429) ||
+         (mysql_version >= 100500 && mysql_version < 100520) ||
+         (mysql_version >= 100600 && mysql_version < 100613) ||
+         (mysql_version >= 100700 && mysql_version < 100708) ||
+         (mysql_version >= 100800 && mysql_version < 100808) ||
+         (mysql_version >= 100900 && mysql_version < 100906) ||
+         (mysql_version >= 101000 && mysql_version < 101004) ||
+         (mysql_version >= 101100 && mysql_version < 101103) ||
+         (mysql_version >= 110000 && mysql_version < 110002)))
+      return true;
+    return false;
+  }
+
+  /**
+     Check if a collation has changed ID since the given version.
+     Return the new ID.
+
+     @param mysql_version
+     @param cs_number     - collation ID
+
+     @retval the new collation ID (or cs_number, if no change)
+  */
+
+  static uint upgrade_collation_id(ulong mysql_version, uint cs_number)
+  {
+    if (mysql_version >= 50300 && mysql_version <= 50399)
+    {
+      switch (cs_number) {
+      case 149: return MY_PAGE2_COLLATION_ID_UCS2;   // ucs2_crotian_ci
+      case 213: return MY_PAGE2_COLLATION_ID_UTF8;   // utf8_crotian_ci
+      }
+    }
+    if ((mysql_version >= 50500 && mysql_version <= 50599) ||
+        (mysql_version >= 100000 && mysql_version <= 100005))
+    {
+      switch (cs_number) {
+      case 149: return MY_PAGE2_COLLATION_ID_UCS2;   // ucs2_crotian_ci
+      case 213: return MY_PAGE2_COLLATION_ID_UTF8;   // utf8_crotian_ci
+      case 214: return MY_PAGE2_COLLATION_ID_UTF32;  // utf32_croatian_ci
+      case 215: return MY_PAGE2_COLLATION_ID_UTF16;  // utf16_croatian_ci
+      case 245: return MY_PAGE2_COLLATION_ID_UTF8MB4;// utf8mb4_croatian_ci
+      }
+    }
+    return cs_number;
+  }
+
 };
 
 
@@ -329,9 +406,10 @@ public:
   }
 
   // Returns offset to substring or -1
-  int strstr(const Binary_string &search, uint32 offset=0);
+  int strstr(const Binary_string &search, uint32 offset=0) const;
+  int strstr(const char *search, uint32 search_length, uint32 offset=0) const;
   // Returns offset to substring or -1
-  int strrstr(const Binary_string &search, uint32 offset=0);
+  int strrstr(const Binary_string &search, uint32 offset=0) const;
 
   /*
     The following append operations do not extend the strings and in production
@@ -367,6 +445,19 @@ public:
     ASSERT_LENGTH(8);
     float8store(Ptr + str_length, *d);
     str_length += 8;
+  }
+  /*
+    Append a wide character.
+    The caller must have allocated at least cs->mbmaxlen bytes.
+  */
+  int q_append_wc(my_wc_t wc, CHARSET_INFO *cs)
+  {
+    int mblen;
+    if ((mblen= cs->cset->wc_mb(cs, wc,
+                                (uchar *) end(),
+                                (uchar *) end() + cs->mbmaxlen)) > 0)
+      str_length+= (uint32) mblen;
+    return mblen;
   }
   void q_append(const char *data, size_t data_len)
   {
@@ -803,7 +894,7 @@ public:
 class String: public Charset, public Binary_string
 {
 public:
-  String() { }
+  String() = default;
   String(size_t length_arg) :Binary_string(length_arg)
   { }
   /*
@@ -817,9 +908,7 @@ public:
   String(char *str, size_t len, CHARSET_INFO *cs)
    :Charset(cs), Binary_string(str, len)
   { }
-  String(const String &str)
-   :Charset(str), Binary_string(str)
-  { }
+  String(const String &str) = default;
 
   void set(String &str,size_t offset,size_t arg_length)
   {
@@ -1006,8 +1095,6 @@ public:
       (quot && append(quot));
   }
   bool append(const char *s, size_t size);
-  bool append_with_prefill(const char *s, uint32 arg_length,
-			   uint32 full_length, char fill_char);
   bool append_parenthesized(long nr, int radix= 10);
 
   // Append with optional character set conversion from cs to charset()
@@ -1015,6 +1102,31 @@ public:
   bool append(const LEX_CSTRING &s, CHARSET_INFO *cs)
   {
     return append(s.str, s.length, cs);
+  }
+
+  // Append a wide character
+  bool append_wc(my_wc_t wc)
+  {
+    if (reserve(mbmaxlen()))
+      return true;
+    int mblen= q_append_wc(wc, charset());
+    if (mblen > 0)
+      return false;
+    else if (mblen == MY_CS_ILUNI && wc != '?')
+      return q_append_wc('?', charset()) <= 0;
+    return true;
+  }
+
+  // Append a number with zero prefilling
+  bool append_zerofill(uint num, uint width)
+  {
+    static const char zeros[15]= "00000000000000";
+    char intbuff[15];
+    uint length= (uint) (int10_to_str(num, intbuff, 10) - intbuff);
+    if (length < width &&
+        append(zeros, width - length, &my_charset_latin1))
+      return true;
+    return append(intbuff, length, &my_charset_latin1);
   }
 
   /*
@@ -1074,6 +1186,42 @@ public:
       print(to);
     else
       print_with_conversion(to, cs);
+  }
+
+  static my_wc_t escaped_wc_for_single_quote(my_wc_t ch)
+  {
+    switch (ch)
+    {
+    case '\\':   return '\\';
+    case '\0':   return '0';
+    case '\'':   return '\'';
+    case '\n':   return 'n';
+    case '\r':   return 'r';
+    case '\032': return 'Z';
+    }
+    return 0;
+  }
+
+  // Append for single quote using mb_wc/wc_mb Unicode conversion
+  bool append_for_single_quote_using_mb_wc(const char *str, size_t length,
+                                           CHARSET_INFO *cs);
+
+  // Append for single quote with optional mb_wc/wc_mb conversion
+  bool append_for_single_quote_opt_convert(const char *str,
+                                           size_t length,
+                                           CHARSET_INFO *cs)
+  {
+    return charset() == &my_charset_bin || cs == &my_charset_bin  ||
+           my_charset_same(charset(), cs) ?
+           append_for_single_quote(str, length) :
+           append_for_single_quote_using_mb_wc(str, length, cs);
+  }
+
+  bool append_for_single_quote_opt_convert(const String &str)
+  {
+    return append_for_single_quote_opt_convert(str.ptr(),
+                                               str.length(),
+                                               str.charset());
   }
 
   bool append_for_single_quote(const char *st, size_t len);

@@ -49,6 +49,7 @@ Created 4/20/1996 Heikki Tuuri
 #ifdef WITH_WSREP
 #include <wsrep.h>
 #include <mysql/service_wsrep.h>
+#include "ha_prototypes.h"
 #endif /* WITH_WSREP */
 
 /*************************************************************************
@@ -213,14 +214,14 @@ row_ins_sec_index_entry_by_modify(
 		made to the clustered index, and completed the
 		secondary index creation before we got here. In this
 		case, the change would already be there. The CREATE
-		INDEX should be waiting for a MySQL meta-data lock
-		upgrade at least until this INSERT or UPDATE
-		returns. After that point, set_committed(true)
-		would be invoked in commit_inplace_alter_table(). */
+		INDEX should be in wait_while_table_is_used() at least
+		until this INSERT or UPDATE returns. After that point,
+		set_committed(true) would be invoked in
+		commit_inplace_alter_table(). */
 		ut_a(update->n_fields == 0);
-		ut_a(!cursor->index()->is_committed());
 		ut_ad(!dict_index_is_online_ddl(cursor->index()));
-		return(DB_SUCCESS);
+		return cursor->index()->is_committed()
+			? DB_CORRUPTION : DB_SUCCESS;
 	}
 
 	if (mode == BTR_MODIFY_LEAF) {
@@ -1999,7 +2000,7 @@ row_ins_dupl_error_with_rec(
 	/* In a unique secondary index we allow equal key values if they
 	contain SQL NULLs */
 
-	if (!dict_index_is_clust(index) && !index->nulls_equal) {
+	if (!dict_index_is_clust(index)) {
 
 		for (i = 0; i < n_unique; i++) {
 			if (dfield_is_null(dtuple_get_nth_field(entry, i))) {
@@ -2101,16 +2102,8 @@ row_ins_scan_sec_index_for_duplicate(
 	/* If the secondary index is unique, but one of the fields in the
 	n_unique first fields is NULL, a unique key violation cannot occur,
 	since we define NULL != NULL in this case */
-
-	if (!index->nulls_equal) {
-		for (ulint i = 0; i < n_unique; i++) {
-			if (UNIV_SQL_NULL == dfield_get_len(
-					dtuple_get_nth_field(entry, i))) {
-
-				DBUG_RETURN(DB_SUCCESS);
-			}
-		}
-	}
+	if (index->n_nullable && dtuple_contains_null(entry, n_unique))
+		DBUG_RETURN(DB_SUCCESS);
 
 	/* Store old value on n_fields_cmp */
 
@@ -2400,7 +2393,10 @@ row_ins_duplicate_error_in_clust(
 duplicate:
 				trx->error_info = cursor->index();
 				err = DB_DUPLICATE_KEY;
-				if (cursor->index()->table->versioned()
+				if (thr->prebuilt
+				    && thr->prebuilt->upd_node
+				    && thr->prebuilt->upd_node->is_delete
+					== VERSIONED_DELETE
 				    && entry->vers_history_row())
 				{
 					ulint trx_id_len;
@@ -2561,53 +2557,11 @@ row_ins_index_entry_big_rec(
 	return(error);
 }
 
-#ifdef HAVE_REPLICATION /* Working around MDEV-24622 */
-extern "C" int thd_is_slave(const MYSQL_THD thd);
-#else
-# define thd_is_slave(thd) 0
-#endif
-
 #if defined __aarch64__&&defined __GNUC__&&__GNUC__==4&&!defined __clang__
 /* Avoid GCC 4.8.5 internal compiler error due to srw_mutex::wr_unlock().
 We would only need this for row_ins_clust_index_entry_low(),
 but GCC 4.8.5 does not support pop_options. */
 # pragma GCC optimize ("O0")
-#endif
-
-#ifdef WITH_WSREP
-/** Start bulk insert operation for Galera by appending
-table-level exclusive key for bulk insert.
-@param trx transaction
-@param index index
-@retval false on success
-@retval true on failure */
-ATTRIBUTE_COLD static bool row_ins_wsrep_start_bulk(trx_t *trx, const dict_index_t &index)
-{
-  char db_buf[NAME_LEN + 1];
-  char tbl_buf[NAME_LEN + 1];
-  ulint	db_buf_len, tbl_buf_len;
-
-  if (!index.table->parse_name(db_buf, tbl_buf, &db_buf_len, &tbl_buf_len))
-  {
-    WSREP_ERROR("Parse_name for bulk insert failed: %s",
-                wsrep_thd_query(trx->mysql_thd));
-    trx->error_state = DB_ROLLBACK;
-    return true;
-  }
-
-  /* Append table-level exclusive key for bulk insert. */
-  const int rcode = wsrep_thd_append_table_key(trx->mysql_thd, db_buf,
-                                               tbl_buf, WSREP_SERVICE_KEY_EXCLUSIVE);
-  if (rcode)
-  {
-    WSREP_ERROR("Appending table key for bulk insert failed: %s, %d",
-                wsrep_thd_query(trx->mysql_thd), rcode);
-    trx->error_state = DB_ROLLBACK;
-    return true;
-  }
-
-  return false;
-}
 #endif
 
 /***************************************************************//**
@@ -2666,14 +2620,17 @@ row_ins_clust_index_entry_low(
 		ut_ad(!dict_index_is_online_ddl(index));
 		ut_ad(!index->table->persistent_autoinc);
 		ut_ad(!index->is_instant());
+		ut_ad(!entry->info_bits);
 		mtr.set_log_mode(MTR_LOG_NO_REDO);
 	} else {
 		index->set_modified(mtr);
 
-		if (UNIV_UNLIKELY(entry->is_metadata())) {
+		if (UNIV_UNLIKELY(entry->info_bits != 0)) {
+			ut_ad(entry->is_metadata());
 			ut_ad(index->is_instant());
 			ut_ad(!dict_index_is_online_ddl(index));
 			ut_ad(mode == BTR_MODIFY_TREE);
+			ut_ad(flags == BTR_NO_LOCKING_FLAG);
 		} else {
 			if (mode == BTR_MODIFY_LEAF
 			    && dict_index_is_online_ddl(index)) {
@@ -2752,7 +2709,8 @@ err_exit:
 	    && !index->table->n_rec_locks
 	    && !index->table->is_active_ddl()
 	    && !index->table->versioned()
-	    && !thd_is_slave(trx->mysql_thd) /* FIXME: MDEV-24622 */) {
+            && (!dict_table_is_partition(index->table)
+	        || thd_sql_command(trx->mysql_thd) == SQLCOM_INSERT)) {
 		DEBUG_SYNC_C("empty_root_page_insert");
 
 		if (!index->table->is_temporary()) {
@@ -2770,10 +2728,13 @@ err_exit:
 #ifdef WITH_WSREP
 			if (trx->is_wsrep())
 			{
-			    if (!wsrep_thd_is_local_transaction(trx->mysql_thd))
-				    goto skip_bulk_insert;
-			    if (row_ins_wsrep_start_bulk(trx, *index))
-				    goto err_exit;
+				if (!wsrep_thd_is_local_transaction(trx->mysql_thd))
+					goto skip_bulk_insert;
+				if (wsrep_append_table_key(trx->mysql_thd, *index->table))
+				{
+					trx->error_state = DB_ROLLBACK;
+					goto err_exit;
+				}
 			}
 #endif /* WITH_WSREP */
 
@@ -2795,11 +2756,6 @@ err_exit:
 
 skip_bulk_insert:
 	if (UNIV_UNLIKELY(entry->info_bits != 0)) {
-		ut_ad(entry->is_metadata());
-		ut_ad(flags == BTR_NO_LOCKING_FLAG);
-		ut_ad(index->is_instant());
-		ut_ad(!dict_index_is_online_ddl(index));
-
 		const rec_t* rec = btr_pcur_get_rec(&pcur);
 
 		if (rec_get_info_bits(rec, page_rec_is_comp(rec))
@@ -2903,9 +2859,20 @@ do_insert:
 			}
 		}
 
+		if (err == DB_SUCCESS && entry->info_bits) {
+			if (buf_block_t* root
+			    = btr_root_block_get(index, RW_X_LATCH, &mtr,
+						 &err)) {
+				btr_set_instant(root, *index, &mtr);
+			} else {
+				ut_ad("cannot find root page" == 0);
+			}
+		}
+
 		mtr.commit();
 
 		if (big_rec) {
+			ut_ad(err == DB_SUCCESS);
 			/* Online table rebuild could read (and
 			ignore) the incomplete record at this point.
 			If online rebuild is in progress, the
@@ -3037,8 +3004,8 @@ row_ins_sec_index_entry_low(
 			search_mode = btr_latch_mode(
 				search_mode
 				| (thr_get_trx(thr)->check_unique_secondary
-				   ? BTR_INSERT | BTR_IGNORE_SEC_UNIQUE
-				   : BTR_INSERT));
+				   ? BTR_INSERT
+				   : BTR_INSERT | BTR_IGNORE_SEC_UNIQUE));
 		}
 
 		err = cursor.search_leaf(entry, PAGE_CUR_LE, search_mode,

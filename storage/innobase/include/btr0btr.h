@@ -89,10 +89,12 @@ ATTRIBUTE_COLD void btr_decryption_failed(const dict_index_t &index);
 @param[in]	merge	whether change buffer merge should be attempted
 @param[in,out]	mtr	mini-transaction
 @param[out]	err	error code
+@param[out]	first	set if this is a first-time access to the page
 @return block */
 buf_block_t *btr_block_get(const dict_index_t &index,
-                           uint32_t page, ulint mode, bool merge,
-                           mtr_t *mtr, dberr_t *err= nullptr);
+                           uint32_t page, rw_lock_type_t mode, bool merge,
+                           mtr_t *mtr, dberr_t *err= nullptr,
+                           bool *first= nullptr);
 
 /**************************************************************//**
 Gets the index id field of a page.
@@ -187,13 +189,16 @@ btr_read_autoinc(dict_index_t* index)
 
 /** Read the last used AUTO_INCREMENT value from PAGE_ROOT_AUTO_INC,
 or fall back to MAX(auto_increment_column).
-@param[in]	table	table containing an AUTO_INCREMENT column
-@param[in]	col_no	index of the AUTO_INCREMENT column
-@return	the AUTO_INCREMENT value
-@retval	0 on error or if no AUTO_INCREMENT value was used yet */
-ib_uint64_t
-btr_read_autoinc_with_fallback(const dict_table_t* table, unsigned col_no)
-	MY_ATTRIBUTE((nonnull, warn_unused_result));
+@param table          table containing an AUTO_INCREMENT column
+@param col_no         index of the AUTO_INCREMENT column
+@param mysql_version  TABLE_SHARE::mysql_version
+@param max            the maximum value of the AUTO_INCREMENT column
+@return the AUTO_INCREMENT value
+@retval 0 on error or if no AUTO_INCREMENT value was used yet */
+uint64_t btr_read_autoinc_with_fallback(const dict_table_t *table,
+                                        unsigned col_no, ulong mysql_version,
+                                        uint64_t max)
+  MY_ATTRIBUTE((nonnull, warn_unused_result));
 
 /** Write the next available AUTO_INCREMENT value to PAGE_ROOT_AUTO_INC.
 @param[in,out]	index	clustered index
@@ -445,7 +450,7 @@ Gets the root node of a tree and x- or s-latches it.
 buf_block_t*
 btr_root_block_get(
 /*===============*/
-	const dict_index_t*	index,	/*!< in: index tree */
+	dict_index_t*		index,	/*!< in: index tree */
 	rw_lock_type_t		mode,	/*!< in: either RW_S_LATCH
 					or RW_X_LATCH */
 	mtr_t*			mtr,	/*!< in: mtr */

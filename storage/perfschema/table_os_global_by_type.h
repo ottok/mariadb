@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2010, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -106,8 +106,7 @@ protected:
   table_os_global_by_type();
 
 public:
-  ~table_os_global_by_type()
-  {}
+  ~table_os_global_by_type() = default;
 
 protected:
   void make_table_row(PFS_table_share *table_share);

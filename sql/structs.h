@@ -33,6 +33,7 @@ struct TABLE;
 class Type_handler;
 class Field;
 class Index_statistics;
+struct Lex_ident_cli_st;
 
 class THD;
 
@@ -95,11 +96,11 @@ class engine_option_value;
 struct ha_index_option_struct;
 
 typedef struct st_key {
-  uint	key_length;			/* total length of user defined key parts  */
-  ulong flags;                          /* dupp key and pack flags */
-  uint	user_defined_key_parts;	   /* How many key_parts */
-  uint	usable_key_parts; /* Should normally be = user_defined_key_parts */
-  uint ext_key_parts;              /* Number of key parts in extended key */
+  uint  key_length;                /* total length of user defined key parts  */
+  ulong flags;                     /* dupp key and pack flags */
+  uint  user_defined_key_parts;    /* How many key_parts */
+  uint  usable_key_parts; /* Should normally be = user_defined_key_parts */
+  uint  ext_key_parts;             /* Number of key parts in extended key */
   ulong ext_key_flags;             /* Flags for extended key              */
   /*
     Parts of primary key that are in the extension of this index. 
@@ -758,12 +759,9 @@ public:
   {
     m_index= 0;
     m_target_bound= 0;
+    m_cursor_offset= 0;
     m_direction= 0;
     m_implicit_cursor= false;
-  }
-  void init(const Lex_for_loop_st &other)
-  {
-    *this= other;
   }
   bool is_for_loop_cursor() const { return m_target_bound == NULL; }
   bool is_for_loop_explicit_cursor() const
@@ -793,7 +791,6 @@ public:
   }
   Item *make_item_func_trim_std(THD *thd) const;
   Item *make_item_func_trim_oracle(THD *thd) const;
-  Item *make_item_func_trim(THD *thd) const;
 };
 
 
@@ -801,6 +798,25 @@ class Lex_trim: public Lex_trim_st
 {
 public:
   Lex_trim(trim_spec spec, Item *source) { set(spec, source); }
+};
+
+
+class Lex_substring_spec_st
+{
+public:
+  Item *m_subject;
+  Item *m_from;
+  Item *m_for;
+  static Lex_substring_spec_st init(Item *subject,
+                                    Item *from,
+                                    Item *xfor= NULL)
+  {
+    Lex_substring_spec_st res;
+    res.m_subject= subject;
+    res.m_from= from;
+    res.m_for= xfor;
+    return res;
+  }
 };
 
 
@@ -871,7 +887,7 @@ public:
 class Load_data_outvar
 {
 public:
-  virtual ~Load_data_outvar() {}
+  virtual ~Load_data_outvar() = default;
   virtual bool load_data_set_null(THD *thd, const Load_data_param *param)= 0;
   virtual bool load_data_set_value(THD *thd, const char *pos, uint length,
                                    const Load_data_param *param)= 0;
@@ -885,7 +901,7 @@ public:
 class Timeval: public timeval
 {
 protected:
-  Timeval() { }
+  Timeval() = default;
 public:
   Timeval(my_time_t sec, ulong usec)
   {

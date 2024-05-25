@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, 2022, Oracle and/or its affiliates.
+/* Copyright (c) 2010, 2023, Oracle and/or its affiliates.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License, version 2.0,
@@ -78,8 +78,7 @@ protected:
   table_esms_by_digest();
 
 public:
-  ~table_esms_by_digest()
-  {}
+  ~table_esms_by_digest() = default;
 
 protected:
   void make_row(PFS_statements_digest_stat*);

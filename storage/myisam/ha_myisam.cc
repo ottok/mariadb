@@ -80,7 +80,7 @@ static MYSQL_THDVAR_ULONG(repair_threads, PLUGIN_VAR_RQCMDARG,
 static MYSQL_THDVAR_ULONGLONG(sort_buffer_size, PLUGIN_VAR_RQCMDARG,
   "The buffer that is allocated when sorting the index when doing "
   "a REPAIR or when creating indexes with CREATE INDEX or ALTER TABLE", NULL, NULL,
-  SORT_BUFFER_INIT, MIN_SORT_BUFFER, SIZE_T_MAX, 1);
+  SORT_BUFFER_INIT, MIN_SORT_BUFFER, SIZE_T_MAX/16, 1);
 
 static MYSQL_SYSVAR_BOOL(use_mmap, opt_myisam_use_mmap, PLUGIN_VAR_NOCMDARG,
   "Use memory mapping for reading and writing MyISAM tables", NULL, NULL, FALSE);
@@ -709,6 +709,16 @@ my_bool mi_killed_in_mariadb(MI_INFO *info)
   return (((TABLE*) (info->external_ref))->in_use->killed != 0);
 }
 
+static void init_compute_vcols(void *table)
+{
+  /*
+    To evaluate vcols we must have current_thd set.
+    This will set current_thd in all threads to the same THD, but it's
+    safe, because vcols are always evaluated under info->s->intern_lock.
+  */
+  set_current_thd(static_cast<TABLE *>(table)->in_use);
+}
+
 static int compute_vcols(MI_INFO *info, uchar *record, int keynum)
 {
   /* This mutex is needed for parallel repair */
@@ -1010,6 +1020,7 @@ void ha_myisam::setup_vcols_for_repair(HA_CHECK *param)
   }
   DBUG_ASSERT(file->s->base.reclength < file->s->vreclength ||
               !table->s->stored_fields);
+  param->init_fix_record= init_compute_vcols;
   param->fix_record= compute_vcols;
   table->use_all_columns();
 }
@@ -1558,40 +1569,37 @@ int ha_myisam::preload_keys(THD* thd, HA_CHECK_OPT *check_opt)
 
   SYNOPSIS
     disable_indexes()
-    mode        mode of operation:
-                HA_KEY_SWITCH_NONUNIQ      disable all non-unique keys
-                HA_KEY_SWITCH_ALL          disable all keys
-                HA_KEY_SWITCH_NONUNIQ_SAVE dis. non-uni. and make persistent
-                HA_KEY_SWITCH_ALL_SAVE     dis. all keys and make persistent
 
-  IMPLEMENTATION
-    HA_KEY_SWITCH_NONUNIQ       is not implemented.
-    HA_KEY_SWITCH_ALL_SAVE      is not implemented.
+  DESCRIPTION
+    See handler::ha_disable_indexes()
 
   RETURN
     0  ok
     HA_ERR_WRONG_COMMAND  mode not implemented.
 */
 
-int ha_myisam::disable_indexes(uint mode)
+int ha_myisam::disable_indexes(key_map map, bool persist)
 {
   int error;
 
-  if (mode == HA_KEY_SWITCH_ALL)
+  if (!persist)
   {
     /* call a storage engine function to switch the key map */
+    DBUG_ASSERT(map.is_clear_all());
     error= mi_disable_indexes(file);
-  }
-  else if (mode == HA_KEY_SWITCH_NONUNIQ_SAVE)
-  {
-    mi_extra(file, HA_EXTRA_NO_KEYS, 0);
-    info(HA_STATUS_CONST);                        // Read new key info
-    error= 0;
   }
   else
   {
-    /* mode not implemented */
-    error= HA_ERR_WRONG_COMMAND;
+    ulonglong ullmap= map.to_ulonglong();
+
+    /* make sure auto-inc key is enabled even if it's > 64 */
+    if (map.length() > MI_KEYMAP_BITS &&
+        table->s->next_number_index < MAX_KEY)
+      mi_set_key_active(ullmap, table->s->next_number_index);
+
+    mi_extra(file, HA_EXTRA_NO_KEYS, &ullmap);
+    info(HA_STATUS_CONST);                        // Read new key info
+    error= 0;
   }
   return error;
 }
@@ -1602,21 +1610,14 @@ int ha_myisam::disable_indexes(uint mode)
 
   SYNOPSIS
     enable_indexes()
-    mode        mode of operation:
-                HA_KEY_SWITCH_NONUNIQ      enable all non-unique keys
-                HA_KEY_SWITCH_ALL          enable all keys
-                HA_KEY_SWITCH_NONUNIQ_SAVE en. non-uni. and make persistent
-                HA_KEY_SWITCH_ALL_SAVE     en. all keys and make persistent
 
   DESCRIPTION
     Enable indexes, which might have been disabled by disable_index() before.
-    The modes without _SAVE work only if both data and indexes are empty,
+    If persist=false, it works only if both data and indexes are empty,
     since the MyISAM repair would enable them persistently.
     To be sure in these cases, call handler::delete_all_rows() before.
 
-  IMPLEMENTATION
-    HA_KEY_SWITCH_NONUNIQ       is not implemented.
-    HA_KEY_SWITCH_ALL_SAVE      is not implemented.
+    See also handler::ha_enable_indexes()
 
   RETURN
     0  ok
@@ -1625,7 +1626,7 @@ int ha_myisam::disable_indexes(uint mode)
     HA_ERR_WRONG_COMMAND  mode not implemented.
 */
 
-int ha_myisam::enable_indexes(uint mode)
+int ha_myisam::enable_indexes(key_map map, bool persist)
 {
   int error;
   DBUG_ENTER("ha_myisam::enable_indexes");
@@ -1639,7 +1640,8 @@ int ha_myisam::enable_indexes(uint mode)
     DBUG_RETURN(0);
   }
 
-  if (mode == HA_KEY_SWITCH_ALL)
+  DBUG_ASSERT(map.is_prefix(table->s->keys));
+  if (!persist)
   {
     error= mi_enable_indexes(file);
     /*
@@ -1648,7 +1650,7 @@ int ha_myisam::enable_indexes(uint mode)
        but mode==HA_KEY_SWITCH_ALL forbids it.
     */
   }
-  else if (mode == HA_KEY_SWITCH_NONUNIQ_SAVE)
+  else
   {
     THD *thd= table->in_use;
     int was_error= thd->is_error();
@@ -1707,11 +1709,6 @@ int ha_myisam::enable_indexes(uint mode)
     thd_proc_info(thd, save_proc_info);
 
     restore_vcos_after_repair();
-  }
-  else
-  {
-    /* mode not implemented */
-    error= HA_ERR_WRONG_COMMAND;
   }
   DBUG_RETURN(error);
 }
@@ -1875,7 +1872,7 @@ int ha_myisam::end_bulk_insert()
         setting the indexes as active and  trying to recreate them. 
      */
    
-      if (((first_error= enable_indexes(HA_KEY_SWITCH_NONUNIQ_SAVE)) != 0) && 
+      if (((first_error= enable_indexes(key_map(table->s->keys), true))) &&
           table->in_use->killed)
       {
         delete_all_rows();
@@ -2143,9 +2140,17 @@ int ha_myisam::info(uint flag)
     share->keys_for_keyread.intersect(share->keys_in_use);
     share->db_record_offset= misam_info.record_offset;
     if (share->key_parts)
-      memcpy((char*) table->key_info[0].rec_per_key,
-	     (char*) misam_info.rec_per_key,
-             sizeof(table->key_info[0].rec_per_key[0])*share->key_parts);
+    {
+      ulong *from= misam_info.rec_per_key;
+      KEY *key, *key_end;
+      for (key= table->key_info, key_end= key + share->keys;
+           key < key_end ; key++)
+      {
+        memcpy(key->rec_per_key, from,
+               key->user_defined_key_parts * sizeof(*from));
+        from+= key->user_defined_key_parts;
+      }
+    }
     if (table_share->tmp_table == NO_TMP_TABLE)
       mysql_mutex_unlock(&table_share->LOCK_share);
   }

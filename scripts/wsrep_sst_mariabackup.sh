@@ -95,16 +95,19 @@ sst_ver=1
 
 declare -a RC
 
-BACKUP_BIN=$(commandex 'mariabackup')
+BACKUP_BIN=$(commandex 'mariadb-backup')
 if [ -z "$BACKUP_BIN" ]; then
-    wsrep_log_error 'mariabackup binary not found in path'
+    wsrep_log_error 'mariadb-backup binary not found in path'
     exit 42
 fi
 
 DATA="$WSREP_SST_OPT_DATA"
+
 INFO_FILE='xtrabackup_galera_info'
+DONOR_INFO_FILE='donor_galera_info'
 IST_FILE='xtrabackup_ist'
 MAGIC_FILE="$DATA/$INFO_FILE"
+DONOR_MAGIC_FILE="$DATA/$DONOR_INFO_FILE"
 
 INNOAPPLYLOG="$DATA/mariabackup.prepare.log"
 INNOMOVELOG="$DATA/mariabackup.move.log"
@@ -340,6 +343,9 @@ get_transfer()
                         "Use workaround for socat $SOCAT_VERSION bug"
                 fi
             fi
+            if check_for_version "$SOCAT_VERSION" '1.7.4'; then
+                tcmd="$tcmd,no-sni=1"
+            fi
         fi
 
         if [ "${sockopt#*,dhparam=}" = "$sockopt" ]; then
@@ -436,7 +442,7 @@ get_transfer()
 get_footprint()
 {
     cd "$DATA_DIR"
-    local payload_data=$(find . \
+    local payload_data=$(find $findopt . \
         -regex '.*undo[0-9]+$\|.*\.ibd$\|.*\.MYI$\|.*\.MYD$\|.*ibdata1$' \
         -type f -print0 | du --files0-from=- --block-size=1 -c -s | \
         awk 'END { print $1 }')
@@ -647,14 +653,14 @@ get_stream()
         if [ "$WSREP_SST_OPT_ROLE" = 'joiner' ]; then
             strmcmd="'$STREAM_BIN' -x"
         else
-            strmcmd="'$STREAM_BIN' -c '$INFO_FILE'"
+            strmcmd="'$STREAM_BIN' -c '$INFO_FILE' '$DONOR_INFO_FILE'"
         fi
     else
         sfmt='tar'
         if [ "$WSREP_SST_OPT_ROLE" = 'joiner' ]; then
             strmcmd='tar xfi -'
         else
-            strmcmd="tar cf - '$INFO_FILE'"
+            strmcmd="tar cf - '$INFO_FILE' '$DONOR_INFO_FILE'"
         fi
     fi
     wsrep_log_info "Streaming with $sfmt"
@@ -676,6 +682,7 @@ cleanup_at_exit()
     if [ $estatus -ne 0 ]; then
         wsrep_log_error "Removing $MAGIC_FILE file due to signal"
         [ -f "$MAGIC_FILE" ] && rm -f "$MAGIC_FILE" || :
+        [ -f "$DONOR_MAGIC_FILE" ] && rm -f "$DONOR_MAGIC_FILE" || :
     fi
 
     if [ "$WSREP_SST_OPT_ROLE" = 'joiner' ]; then
@@ -685,7 +692,7 @@ cleanup_at_exit()
         if [ -n "$BACKUP_PID" ]; then
             if check_pid "$BACKUP_PID" 1; then
                 wsrep_log_error \
-                    "mariabackup process is still running. Killing..."
+                    "mariadb-backup process is still running. Killing..."
                 cleanup_pid $CHECK_PID "$BACKUP_PID"
             fi
         fi
@@ -761,7 +768,7 @@ check_extra()
         if [ "$thread_handling" = 'pool-of-threads' ]; then
             local eport=$(parse_cnf '--mysqld' 'extra-port')
             if [ -n "$eport" ]; then
-                # mariabackup works only locally.
+                # mariadb-backup works only locally.
                 # Hence, setting host to 127.0.0.1 unconditionally:
                 wsrep_log_info "SST through extra_port $eport"
                 INNOEXTRA="$INNOEXTRA --host=127.0.0.1 --port=$eport"
@@ -795,10 +802,21 @@ recv_joiner()
     local ltcmd="$tcmd"
     if [ $tmt -gt 0 ]; then
         if [ -n "$(commandex timeout)" ]; then
-            if timeout --help | grep -qw -F -- '-k'; then
+            local koption=0
+            if [ "$OS" = 'FreeBSD' -o "$OS" = 'NetBSD' -o "$OS" = 'OpenBSD' -o \
+                 "$OS" = 'DragonFly' ]; then
+                if timeout 2>&1 | grep -qw -F -- '-k'; then
+                    koption=1
+                fi
+            else
+                if timeout --help | grep -qw -F -- '-k'; then
+                    koption=1
+                fi
+            fi
+            if [ $koption -ne 0 ]; then
                 ltcmd="timeout -k $(( tmt+10 )) $tmt $tcmd"
             else
-                ltcmd="timeout -s9 $tmt $tcmd"
+                ltcmd="timeout -s 9 $tmt $tcmd"
             fi
         fi
     fi
@@ -902,6 +920,7 @@ monitor_process()
 }
 
 [ -f "$MAGIC_FILE" ] && rm -f "$MAGIC_FILE"
+[ -f "$DONOR_MAGIC_FILE" ] && rm -rf "$DONOR_MAGIC_FILE"
 
 read_cnf
 setup_ports
@@ -930,7 +949,7 @@ cd "$OLD_PWD"
 
 if [ $ssyslog -eq 1 ]; then
     if [ -n "$(commandex logger)" ]; then
-        wsrep_log_info "Logging all stderr of SST/mariabackup to syslog"
+        wsrep_log_info "Logging all stderr of SST/mariadb-backup to syslog"
 
         exec 2> >(logger -p daemon.err -t ${ssystag}wsrep-sst-$WSREP_SST_OPT_ROLE)
 
@@ -1029,8 +1048,28 @@ setup_commands()
     INNOBACKUP="$BACKUP_BIN$WSREP_SST_OPT_CONF --backup$disver${iopts:+ }$iopts$tmpopts$INNOEXTRA --galera-info --stream=$sfmt --target-dir='$itmpdir' --datadir='$DATA'$mysqld_args $INNOBACKUP"
 }
 
+send_magic()
+{
+    # Store donor's wsrep GTID (state ID) and wsrep_gtid_domain_id
+    # (separated by a space).
+    echo "$WSREP_SST_OPT_GTID $WSREP_SST_OPT_GTID_DOMAIN_ID" > "$MAGIC_FILE"
+    echo "$WSREP_SST_OPT_GTID $WSREP_SST_OPT_GTID_DOMAIN_ID" > "$DONOR_MAGIC_FILE"
+    if [ -n "$WSREP_SST_OPT_REMOTE_PSWD" ]; then
+        # Let joiner know that we know its secret
+        echo "$SECRET_TAG $WSREP_SST_OPT_REMOTE_PSWD" >> "$MAGIC_FILE"
+    fi
+
+    if [ $WSREP_SST_OPT_BYPASS -eq 0 -a $WSREP_SST_OPT_PROGRESS -eq 1 ]; then
+        # Tell joiner what to expect:
+        echo "$TOTAL_TAG $payload" >> "$MAGIC_FILE"
+    fi
+}
+
 get_stream
 get_transfer
+
+findopt='-L'
+[ "$OS" = 'FreeBSD' ] && findopt="$findopt -E"
 
 if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
 
@@ -1053,11 +1092,11 @@ if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
             xtmpdir=$(TMPDIR="$tmpdir"; mktemp '-d')
         fi
 
-        wsrep_log_info "Using '$xtmpdir' as mariabackup temporary directory"
+        wsrep_log_info "Using '$xtmpdir' as mariadb-backup temporary directory"
         tmpopts=" --tmpdir='$xtmpdir'"
 
         itmpdir="$(mktemp -d)"
-        wsrep_log_info "Using '$itmpdir' as mariabackup working directory"
+        wsrep_log_info "Using '$itmpdir' as mariadb-abackup working directory"
 
         usrst=0
         if [ -n "$WSREP_SST_OPT_USER" ]; then
@@ -1083,20 +1122,7 @@ if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
         fi
 
         wsrep_log_info "Streaming GTID file before SST"
-
-        # Store donor's wsrep GTID (state ID) and wsrep_gtid_domain_id
-        # (separated by a space).
-        echo "$WSREP_SST_OPT_GTID $WSREP_SST_OPT_GTID_DOMAIN_ID" > "$MAGIC_FILE"
-
-        if [ -n "$WSREP_SST_OPT_REMOTE_PSWD" ]; then
-            # Let joiner know that we know its secret
-            echo "$SECRET_TAG $WSREP_SST_OPT_REMOTE_PSWD" >> "$MAGIC_FILE"
-        fi
-
-        if [ $WSREP_SST_OPT_PROGRESS -eq 1 ]; then
-            # Tell joiner what to expect:
-            echo "$TOTAL_TAG $payload" >> "$MAGIC_FILE"
-        fi
+        send_magic
 
         ttcmd="$tcmd"
 
@@ -1148,7 +1174,7 @@ if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
         fi
 
         # if compression is enabled for backup files, then add the
-        # appropriate options to the mariabackup command line:
+        # appropriate options to the mariadb-backup command line:
         if [ "$compress" != 'none' ]; then
             iopts="--compress${compress:+=$compress}${iopts:+ }$iopts"
             if [ -n "$compress_threads" ]; then
@@ -1170,7 +1196,7 @@ if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
         set -e
 
         if [ ${RC[0]} -ne 0 ]; then
-            wsrep_log_error "mariabackup finished with error: ${RC[0]}." \
+            wsrep_log_error "mariadb-backup finished with error: ${RC[0]}." \
                             "Check syslog or '$INNOBACKUPLOG' for details"
             exit 22
         elif [ ${RC[$(( ${#RC[@]}-1 ))]} -eq 1 ]; then
@@ -1178,18 +1204,17 @@ if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
             exit 22
         fi
 
-        # mariabackup implicitly writes PID to fixed location in $xtmpdir
+        # mariadb-backup implicitly writes PID to fixed location in $xtmpdir
         BACKUP_PID="$xtmpdir/xtrabackup_pid"
 
     else # BYPASS FOR IST
 
         wsrep_log_info "Bypassing the SST for IST"
-        echo "continue" # now server can resume updating data
+        echo 'continue' # now server can resume updating data
 
-        # Store donor's wsrep GTID (state ID) and wsrep_gtid_domain_id
-        # (separated by a space).
-        echo "$WSREP_SST_OPT_GTID $WSREP_SST_OPT_GTID_DOMAIN_ID" > "$MAGIC_FILE"
-        echo "1" > "$DATA/$IST_FILE"
+        send_magic
+
+        echo '1' > "$DATA/$IST_FILE"
 
         if [ -n "$scomp" ]; then
             tcmd="$scomp | $tcmd"
@@ -1294,13 +1319,13 @@ else # joiner
         impts="--parallel=$backup_threads${impts:+ }$impts"
     fi
 
-    SST_PID="$WSREP_SST_OPT_DATA/wsrep_sst.pid"
+    SST_PID="$DATA/wsrep_sst.pid"
 
     # give some time for previous SST to complete:
     check_round=0
     while check_pid "$SST_PID" 0; do
         wsrep_log_info "previous SST is not completed, waiting for it to exit"
-        check_round=$(( check_round + 1 ))
+        check_round=$(( check_round+1 ))
         if [ $check_round -eq 10 ]; then
             wsrep_log_error "previous SST script still running."
             exit 114 # EALREADY
@@ -1327,16 +1352,7 @@ else # joiner
         # backward-incompatible behavior:
         CN=""
         if [ -n "$tpem" ]; then
-            # find out my Common Name
-            get_openssl
-            if [ -z "$OPENSSL_BINARY" ]; then
-                wsrep_log_error \
-                    'openssl not found but it is required for authentication'
-                exit 42
-            fi
-            CN=$("$OPENSSL_BINARY" x509 -noout -subject -in "$tpem" | \
-                 tr ',' '\n' | grep -F 'CN =' | cut -d '=' -f2 | sed s/^\ // | \
-                 sed s/\ %//)
+            CN=$(openssl_getCN "$tpem")
         fi
         MY_SECRET="$(wsrep_gen_secret)"
         # Add authentication data to address
@@ -1425,43 +1441,35 @@ else # joiner
 
         wsrep_log_info \
             "Cleaning the existing datadir and innodb-data/log directories"
-        if [ "$OS" = 'FreeBSD' ]; then
-            find -E ${ib_home_dir:+"$ib_home_dir"} \
-                    ${ib_undo_dir:+"$ib_undo_dir"} \
-                    ${ib_log_dir:+"$ib_log_dir"} \
-                    ${ar_log_dir:+"$ar_log_dir"} \
-                    "$DATA" -mindepth 1 -prune -regex "$cpat" \
-                    -o -exec rm -rf {} >&2 \+
-        else
-            find ${ib_home_dir:+"$ib_home_dir"} \
-                 ${ib_undo_dir:+"$ib_undo_dir"} \
-                 ${ib_log_dir:+"$ib_log_dir"} \
-                 ${ar_log_dir:+"$ar_log_dir"} \
-                 "$DATA" -mindepth 1 -prune -regex "$cpat" \
-                 -o -exec rm -rf {} >&2 \+
-        fi
+
+        find $findopt ${ib_home_dir:+"$ib_home_dir"} \
+                ${ib_undo_dir:+"$ib_undo_dir"} \
+                ${ib_log_dir:+"$ib_log_dir"} \
+                ${ar_log_dir:+"$ar_log_dir"} \
+                "$DATA" -mindepth 1 -prune -regex "$cpat" \
+                -o -exec rm -rf {} >&2 \+
 
         TDATA="$DATA"
         DATA="$DATA/.sst"
-
         MAGIC_FILE="$DATA/$INFO_FILE"
+
         wsrep_log_info "Waiting for SST streaming to complete!"
         monitor_process $jpid
 
         if [ ! -s "$DATA/xtrabackup_checkpoints" ]; then
             wsrep_log_error "xtrabackup_checkpoints missing," \
-                            "failed mariabackup/SST on donor"
+                            "failed mariadb-backup/SST on donor"
             exit 2
         fi
 
-        # Compact backups are not supported by mariabackup
+        # Compact backups are not supported by mariadb-backup
         if grep -qw -F 'compact = 1' "$DATA/xtrabackup_checkpoints"; then
             wsrep_log_info "Index compaction detected"
-            wsrel_log_error "Compact backups are not supported by mariabackup"
+            wsrel_log_error "Compact backups are not supported by mariadb-backup"
             exit 2
         fi
 
-        qpfiles=$(find "$DATA" -maxdepth 1 -type f -name '*.qp' -print -quit)
+        qpfiles=$(find $findopt "$DATA" -maxdepth 1 -type f -name '*.qp' -print -quit)
         if [ -n "$qpfiles" ]; then
             wsrep_log_info "Compressed qpress files found"
 
@@ -1477,7 +1485,7 @@ else # joiner
             if [ -n "$progress" -a "$progress" != 'none' ] && \
                pv --help | grep -qw -F -- '--line-mode'
             then
-                count=$(find "$DATA" -maxdepth 1 -type f -name '*.qp' | wc -l)
+                count=$(find $findopt "$DATA" -maxdepth 1 -type f -name '*.qp' | wc -l)
                 count=$(( count*2 ))
                 pvopts='-f -l -N Decompression'
                 pvformat="-F '%N => Rate:%r Elapsed:%t %e Progress: [%b/$count]'"
@@ -1489,13 +1497,13 @@ else # joiner
             # Decompress the qpress files
             wsrep_log_info "Decompression with $nproc threads"
             timeit 'Joiner-Decompression' \
-                   "find '$DATA' -type f -name '*.qp' -printf '%p\n%h\n' | \
+                   "find $findopt '$DATA' -type f -name '*.qp' -printf '%p\n%h\n' | \
                    $dcmd"
             extcode=$?
 
             if [ $extcode -eq 0 ]; then
                 wsrep_log_info "Removing qpress files after decompression"
-                find "$DATA" -type f -name '*.qp' -delete
+                find $findopt "$DATA" -type f -name '*.qp' -delete
                 if [ $? -ne 0 ]; then
                     wsrep_log_error \
                         "Something went wrong with deletion of qpress files." \
@@ -1509,9 +1517,9 @@ else # joiner
 
         wsrep_log_info "Preparing the backup at $DATA"
         setup_commands
-        timeit 'mariabackup prepare stage' "$INNOAPPLY"
+        timeit 'mariadb-backup prepare stage' "$INNOAPPLY"
         if [ $? -ne 0 ]; then
-            wsrep_log_error "mariabackup apply finished with errors." \
+            wsrep_log_error "mariadb-backup apply finished with errors." \
                             "Check syslog or '$INNOAPPLYLOG' for details."
             exit 22
         fi
@@ -1556,7 +1564,7 @@ else # joiner
         MAGIC_FILE="$TDATA/$INFO_FILE"
 
         wsrep_log_info "Moving the backup to $TDATA"
-        timeit 'mariabackup move stage' "$INNOMOVE"
+        timeit 'mariadb-backup move stage' "$INNOMOVE"
         if [ $? -eq 0 ]; then
             wsrep_log_info "Move successful, removing $DATA"
             rm -rf "$DATA"
@@ -1582,9 +1590,16 @@ else # joiner
         exit 2
     fi
 
+    # use donor magic file, if present
+    # if IST was used, donor magic file was not created
     # Remove special tags from the magic file, and from the output:
-    coords=$(head -n1 "$MAGIC_FILE")
-    wsrep_log_info "Galera co-ords from recovery: $coords"
+    if [ -r "$DONOR_MAGIC_FILE" ]; then
+        coords=$(head -n1 "$DONOR_MAGIC_FILE")
+        wsrep_log_info "Galera co-ords from donor: $coords"
+    else
+        coords=$(head -n1 "$MAGIC_FILE")
+        wsrep_log_info "Galera co-ords from recovery: $coords"
+    fi
     echo "$coords" # Output : UUID:seqno wsrep_gtid_domain_id
 
     wsrep_log_info "Total time on joiner: $totime seconds"

@@ -2912,6 +2912,7 @@ while ($run)
 #           be wrong, please edit the while loop above and set $debug to 1.
 #--------------------------------------------------------------------------
 # 1.1 Check of top level VIEW
+--disable_ps2_protocol
 let $toplevel= `SELECT @max_level`;
 eval SHOW CREATE VIEW test3.v$toplevel;
 eval SELECT * FROM test3.v$toplevel;
@@ -2924,7 +2925,7 @@ eval SHOW CREATE VIEW test3.v$toplevel;
 eval SELECT * FROM test3.v$toplevel;
 --error ER_VIEW_INVALID
 eval EXPLAIN SELECT * FROM test3.v$toplevel;
-
+--enable_ps2_protocol
 
 # 2. Complicated nested VIEWs
 #       parameter @max_level = nesting level
@@ -3054,8 +3055,10 @@ let $toplevel= `SELECT @max_level`;
 # Show should be easy
 eval SHOW CREATE VIEW test1.v$toplevel;
 # SELECT is much more complicated
+--disable_ps2_protocol
 eval SELECT CAST(f1 AS SIGNED INTEGER) AS f1,
             CAST(f2 AS CHAR) AS f2 FROM test1.v$toplevel;
+--enable_ps2_protocol
 let $message= The output of following EXPLAIN is deactivated, because the result
               differs on some platforms
               FIXME Is this a bug ? ;
@@ -3082,8 +3085,10 @@ eval SHOW CREATE VIEW test1.v$level;
 # the following line as written as '--eror ER_TOO_MANY_TABLES' and the command
 # is successful so assuming no expected error was intended
 # --error ER_TOO_MANY_TABLES
+--disable_ps2_protocol
 eval SELECT CAST(f1 AS SIGNED INTEGER) AS f1,
             CAST(f2 AS CHAR) AS f2 FROM test1.v$level;
+--enable_ps2_protocol
 let $message= The output of following EXPLAIN is deactivated, because the result
               differs on some platforms
               FIXME Is this a bug ? ;
@@ -3113,16 +3118,20 @@ SELECT f1 as f2, f2 as f1 FROM test2.t1;
 CREATE OR REPLACE VIEW test2.v0 AS
 SELECT CAST('0001-01-01' AS DATE) as f1, f2 FROM test3.t1;
 eval SHOW CREATE VIEW test1.v$toplevel;
+--disable_ps2_protocol
 eval SELECT CAST(f1 AS SIGNED INTEGER) AS f1,
             CAST(f2 AS CHAR) AS f2 FROM test1.v$toplevel;
+--enable_ps2_protocol
 eval EXPLAIN SELECT CAST(f1 AS SIGNED INTEGER) AS f1,
                    CAST(f2 AS CHAR) AS f2 FROM test1.v$toplevel;
 # 2.3.3 UCS2 string instead of common string
 CREATE OR REPLACE VIEW test3.v0 AS
 SELECT f1 , CONVERT('ßÄäÖöÜü§' USING UCS2) as f2 FROM test1.t1;
 eval SHOW CREATE VIEW test1.v$toplevel;
+--disable_ps2_protocol
 eval SELECT CAST(f1 AS SIGNED INTEGER) AS f1,
             CAST(f2 AS CHAR) AS f2 FROM test1.v$toplevel;
+--enable_ps2_protocol
 eval EXPLAIN SELECT CAST(f1 AS SIGNED INTEGER) AS f1,
                    CAST(f2 AS CHAR) AS f2 FROM test1.v$toplevel;
 
@@ -3130,8 +3139,10 @@ eval EXPLAIN SELECT CAST(f1 AS SIGNED INTEGER) AS f1,
 CREATE OR REPLACE VIEW test3.v0 AS
 SELECT CONVERT('ßÄäÖöÜü§' USING UCS2) as f1, f2 FROM test1.t1;
 eval SHOW CREATE VIEW test1.v$toplevel;
+--disable_ps2_protocol
 eval SELECT CAST(f1 AS SIGNED INTEGER) AS f1,
             CAST(f2 AS CHAR) AS f2 FROM test1.v$toplevel;
+--enable_ps2_protocol
 eval EXPLAIN SELECT CAST(f1 AS SIGNED INTEGER) AS f1,
                    CAST(f2 AS CHAR) AS f2 FROM test1.v$toplevel;
 --enable_result_log

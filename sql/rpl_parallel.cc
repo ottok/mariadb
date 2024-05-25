@@ -27,6 +27,9 @@ struct rpl_parallel_thread_pool global_rpl_thread_pool;
 
 static void signal_error_to_sql_driver_thread(THD *thd, rpl_group_info *rgi,
                                               int err);
+static void
+register_wait_for_prior_event_group_commit(rpl_group_info *rgi,
+                                           rpl_parallel_entry *entry);
 
 static int
 rpt_handle_event(rpl_parallel_thread::queued_event *qev,
@@ -128,12 +131,13 @@ handle_queued_pos_update(THD *thd, rpl_parallel_thread::queued_event *qev)
   asynchronously, we need to be sure they will be completed before starting a
   new transaction. Otherwise the new transaction might suffer a spurious kill.
 */
-static void
+void
 wait_for_pending_deadlock_kill(THD *thd, rpl_group_info *rgi)
 {
   PSI_stage_info old_stage;
 
   mysql_mutex_lock(&thd->LOCK_wakeup_ready);
+  thd->set_time_for_next_stage();
   thd->ENTER_COND(&thd->COND_wakeup_ready, &thd->LOCK_wakeup_ready,
                   &stage_waiting_for_deadlock_kill, &old_stage);
   while (rgi->killed_for_retry == rpl_group_info::RETRY_KILL_PENDING)
@@ -151,15 +155,35 @@ finish_event_group(rpl_parallel_thread *rpt, uint64 sub_id,
   int err;
 
   thd->get_stmt_da()->set_overwrite_status(true);
+
+  if (unlikely(rgi->worker_error))
+  {
+    /*
+      In case a previous wait was killed, we need to re-register to be able to
+      repeat the wait.
+
+      And before doing that, we un-register any previous registration (in case
+      we got an error earlier and skipped waiting).
+    */
+    thd->wait_for_commit_ptr->unregister_wait_for_prior_commit();
+    mysql_mutex_lock(&entry->LOCK_parallel_entry);
+    register_wait_for_prior_event_group_commit(rgi, entry);
+    mysql_mutex_unlock(&entry->LOCK_parallel_entry);
+  }
+
   /*
     Remove any left-over registration to wait for a prior commit to
     complete. Normally, such wait would already have been removed at
     this point by wait_for_prior_commit() called from within COMMIT
-    processing. However, in case of MyISAM and no binlog, we might not
-    have any commit processing, and so we need to do the wait here,
-    before waking up any subsequent commits, to preserve correct
-    order of event execution. Also, in the error case we might have
-    skipped waiting and thus need to remove it explicitly.
+    processing.
+
+    However, in case of MyISAM and no binlog, we might not have any commit
+    processing, and so we need to do the wait here, before waking up any
+    subsequent commits, to preserve correct order of event execution.
+
+    Also, in the error case we might have skipped waiting and thus need to
+    remove it explicitly. Or the wait might have been killed and we need to
+    repeat the registration and the wait.
 
     It is important in the non-error case to do a wait, not just an
     unregister. Because we might be last in a group-commit that is
@@ -172,11 +196,28 @@ finish_event_group(rpl_parallel_thread *rpt, uint64 sub_id,
     all earlier event groups have also committed; this way no more
     mark_start_commit() calls can be made and it is safe to de-allocate
     the GCO.
+
+    Thus this final wait is done with kill ignored during the wait. This is
+    fine, at this point there is no active query or transaction to abort, and
+    the thread will continue as soon as earlier event groups complete.
+
+    Note though, that in the non-error case there is no guarantee that
+    finish_event_group() will be run in-order. For example, a successful
+    binlog group commit will wakeup all participating event groups
+    simultaneously so only thread scheduling will decide the order in which
+    finish_event_group() calls acquire LOCK_parallel_entry.
   */
-  err= wfc->wait_for_prior_commit(thd);
+  err= wfc->wait_for_prior_commit(thd, false);
   if (unlikely(err) && !rgi->worker_error)
     signal_error_to_sql_driver_thread(thd, rgi, err);
   thd->wait_for_commit_ptr= NULL;
+
+  /*
+    Calls to check_duplicate_gtid() must match up with
+    record_and_update_gtid() (or release_domain_owner() in error case). This
+    assertion tries to catch any missing release of the domain.
+  */
+  DBUG_ASSERT(rgi->gtid_ignore_duplicate_state != rpl_group_info::GTID_DUPLICATE_OWNER);
 
   mysql_mutex_lock(&entry->LOCK_parallel_entry);
   /*
@@ -185,6 +226,7 @@ finish_event_group(rpl_parallel_thread *rpt, uint64 sub_id,
     waiting for this). In most cases (normal DML), it will be a no-op.
   */
   rgi->mark_start_commit_no_lock();
+  rgi->commit_orderer.wakeup_blocked= false;
 
   if (entry->last_committed_sub_id < sub_id)
   {
@@ -242,8 +284,7 @@ finish_event_group(rpl_parallel_thread *rpt, uint64 sub_id,
     not yet started should just skip their group, preparing for stop of the
     SQL driver thread.
   */
-  if (unlikely(rgi->worker_error) &&
-      entry->stop_on_error_sub_id == (uint64)ULONGLONG_MAX)
+  if (unlikely(rgi->worker_error) && entry->stop_on_error_sub_id > sub_id)
     entry->stop_on_error_sub_id= sub_id;
   mysql_mutex_unlock(&entry->LOCK_parallel_entry);
 #ifdef ENABLED_DEBUG_SYNC
@@ -259,6 +300,12 @@ finish_event_group(rpl_parallel_thread *rpt, uint64 sub_id,
         DBUG_ASSERT(entry->stop_on_error_sub_id == sub_id);
         debug_sync_set_action(thd,
                               STRING_WITH_LEN("now WAIT_FOR proceed_by_1000"));
+      }
+    });
+  DBUG_EXECUTE_IF("hold_worker2_favor_worker3", {
+      if (rgi->current_gtid.seq_no == 2001) {
+        DBUG_ASSERT(!rgi->worker_error || entry->stop_on_error_sub_id == sub_id);
+        debug_sync_set_action(thd, STRING_WITH_LEN("now SIGNAL cont_worker3"));
       }
     });
 #endif
@@ -280,11 +327,11 @@ static void
 signal_error_to_sql_driver_thread(THD *thd, rpl_group_info *rgi, int err)
 {
   rgi->worker_error= err;
-  /*
-    In case we get an error during commit, inform following transactions that
-    we aborted our commit.
-  */
-  rgi->unmark_start_commit();
+  DBUG_EXECUTE_IF("hold_worker2_favor_worker3", {
+      if (rgi->current_gtid.seq_no == 2002) {
+        debug_sync_set_action(thd, STRING_WITH_LEN("now WAIT_FOR cont_worker2"));
+      }});
+
   rgi->cleanup_context(thd, true);
   rgi->rli->abort_slave= true;
   rgi->rli->stop_for_until= false;
@@ -331,7 +378,7 @@ register_wait_for_prior_event_group_commit(rpl_group_info *rgi,
   Do not start parallel execution of this event group until all prior groups
   have reached the commit phase that are not safe to run in parallel with.
 */
-static bool
+static void
 do_gco_wait(rpl_group_info *rgi, group_commit_orderer *gco,
             bool *did_enter_cond, PSI_stage_info *old_stage)
 {
@@ -355,12 +402,12 @@ do_gco_wait(rpl_group_info *rgi, group_commit_orderer *gco,
   if (wait_count > entry->count_committing_event_groups)
   {
     DEBUG_SYNC(thd, "rpl_parallel_start_waiting_for_prior");
+    thd->set_time_for_next_stage();
     thd->ENTER_COND(&gco->COND_group_commit_orderer,
                     &entry->LOCK_parallel_entry,
                     &stage_waiting_for_prior_transaction_to_start_commit,
                     old_stage);
     *did_enter_cond= true;
-    thd->set_time_for_next_stage();
     do
     {
       if (!rgi->worker_error && unlikely(thd->check_killed(1)))
@@ -383,18 +430,45 @@ do_gco_wait(rpl_group_info *rgi, group_commit_orderer *gco,
                       &entry->LOCK_parallel_entry);
     } while (wait_count > entry->count_committing_event_groups);
   }
+}
 
-  if (entry->force_abort && wait_count > entry->stop_count)
+
+static bool
+do_stop_handling(rpl_group_info *rgi)
+{
+  bool should_stop= false;
+  rpl_parallel_entry *entry=  rgi->parallel_entry;
+
+  mysql_mutex_assert_owner(&entry->LOCK_parallel_entry);
+
+  if (unlikely(entry->force_abort) && rgi->gtid_sub_id > entry->stop_sub_id)
   {
     /*
-      We are stopping (STOP SLAVE), and this event group is beyond the point
-      where we can safely stop. So return a flag that will cause us to skip,
-      rather than execute, the following events.
+      We are stopping (STOP SLAVE), and this event group need not be applied
+      before we can safely stop. So return a flag that will cause us to skip,
+      rather than execute, the following events. Once all queued events have
+      been skipped, the STOP SLAVE is complete (for this thread).
     */
-    return true;
+    should_stop= true;
   }
-  else
-    return false;
+
+  if (unlikely(entry->stop_on_error_sub_id <= rgi->wait_commit_sub_id))
+  {
+    rgi->worker_error= 1;
+    should_stop= true;
+  }
+
+  if (likely(!should_stop))
+  {
+    /*
+      Since we did not decide to stop, bump the largest_started_sub_id while
+      still holding LOCK_parallel_entry.
+    */
+    if (rgi->gtid_sub_id > entry->largest_started_sub_id)
+      entry->largest_started_sub_id= rgi->gtid_sub_id;
+  }
+
+  return should_stop;
 }
 
 
@@ -421,10 +495,10 @@ do_ftwrl_wait(rpl_group_info *rgi,
   */
   if (unlikely(sub_id > entry->pause_sub_id))
   {
+    thd->set_time_for_next_stage();
     thd->ENTER_COND(&entry->COND_parallel_entry, &entry->LOCK_parallel_entry,
                     &stage_waiting_for_ftwrl, old_stage);
     *did_enter_cond= true;
-    thd->set_time_for_next_stage();
     do
     {
       if (entry->force_abort || rgi->worker_error)
@@ -441,14 +515,24 @@ do_ftwrl_wait(rpl_group_info *rgi,
       mysql_cond_wait(&entry->COND_parallel_entry, &entry->LOCK_parallel_entry);
     } while (sub_id > entry->pause_sub_id);
 
+    DBUG_EXECUTE_IF("delay_ftwrl_wait_gtid_0_x_100", {
+        if (rgi->current_gtid.domain_id == 0 &&
+            rgi->current_gtid.seq_no == 100) {
+          /*
+            Simulate delayed wakeup from the mysql_cond_wait(). To do this, we
+            need to have the LOCK_parallel_entry mutex released during the wait.
+          */
+          mysql_mutex_unlock(&entry->LOCK_parallel_entry);
+          debug_sync_set_action(thd,
+              STRING_WITH_LEN("now SIGNAL pause_wait_started WAIT_FOR pause_wait_continue"));
+          mysql_mutex_lock(&entry->LOCK_parallel_entry);
+        }
+      });
     /*
       We do not call EXIT_COND() here, as this will be done later by our
       caller (since we set *did_enter_cond to true).
     */
   }
-
-  if (sub_id > entry->largest_started_sub_id)
-    entry->largest_started_sub_id= sub_id;
 
   DBUG_RETURN(aborted);
 }
@@ -477,9 +561,9 @@ pool_mark_busy(rpl_parallel_thread_pool *pool, THD *thd)
   mysql_mutex_lock(&pool->LOCK_rpl_thread_pool);
   if (thd)
   {
+    thd->set_time_for_next_stage();
     thd->ENTER_COND(&pool->COND_rpl_thread_pool, &pool->LOCK_rpl_thread_pool,
                     &stage_waiting_for_rpl_thread_pool, &old_stage);
-    thd->set_time_for_next_stage();
   }
   while (pool->busy)
   {
@@ -607,10 +691,20 @@ rpl_pause_for_ftwrl(THD *thd)
     mysql_mutex_unlock(&rpt->LOCK_rpl_thread);
     ++e->need_sub_id_signal;
     if (e->pause_sub_id == (uint64)ULONGLONG_MAX)
+    {
       e->pause_sub_id= e->largest_started_sub_id;
+      DBUG_EXECUTE_IF("pause_for_ftwrl_wait", {
+          mysql_mutex_unlock(&e->LOCK_parallel_entry);
+          debug_sync_set_action(thd,
+                                STRING_WITH_LEN("now "
+                                                "SIGNAL pause_ftwrl_waiting "
+                                                "WAIT_FOR pause_ftwrl_cont"));
+          mysql_mutex_lock(&e->LOCK_parallel_entry);
+        });
+    }
+    thd->set_time_for_next_stage();
     thd->ENTER_COND(&e->COND_parallel_entry, &e->LOCK_parallel_entry,
                     &stage_waiting_for_ftwrl_threads_to_pause, &old_stage);
-    thd->set_time_for_next_stage();
     while (e->pause_sub_id < (uint64)ULONGLONG_MAX &&
            e->last_committed_sub_id < e->pause_sub_id &&
            !err)
@@ -734,6 +828,10 @@ do_retry:
   event_count= 0;
   err= 0;
   errmsg= NULL;
+#ifdef WITH_WSREP
+  thd->wsrep_cs().reset_error();
+  WSREP_DEBUG("retrying async replication event");
+#endif /* WITH_WSREP */
 
   /*
     If we already started committing before getting the deadlock (or other
@@ -772,8 +870,7 @@ do_retry:
     thd->wait_for_commit_ptr->unregister_wait_for_prior_commit();
   DBUG_EXECUTE_IF("inject_mdev8031", {
       /* Simulate that we get deadlock killed at this exact point. */
-      rgi->killed_for_retry= rpl_group_info::RETRY_KILL_KILLED;
-      thd->set_killed(KILL_CONNECTION);
+      slave_background_kill_request(thd);
   });
 #ifdef ENABLED_DEBUG_SYNC
   DBUG_EXECUTE_IF("rpl_parallel_simulate_wait_at_retry", {
@@ -785,12 +882,25 @@ do_retry:
     });
 #endif
 
-  rgi->cleanup_context(thd, 1);
+  /*
+    We are still applying the event group, even though we will roll it back
+    and retry it. So for --gtid-ignore-duplicates, keep ownership of the
+    domain during the retry so another master connection will not try to take
+    over and duplicate apply the same event group (MDEV-33475).
+  */
+  rgi->cleanup_context(thd, 1, 1 /* keep_domain_owner */);
   wait_for_pending_deadlock_kill(thd, rgi);
   thd->reset_killed();
   thd->clear_error();
   rgi->killed_for_retry = rpl_group_info::RETRY_KILL_NONE;
-
+#ifdef ENABLED_DEBUG_SYNC
+    DBUG_EXECUTE_IF("hold_worker2_favor_worker3", {
+      if (rgi->current_gtid.seq_no == 2003) {
+        debug_sync_set_action(thd,
+                              STRING_WITH_LEN("now WAIT_FOR cont_worker3"));
+      }
+    });
+#endif
   /*
     If we retry due to a deadlock kill that occurred during the commit step, we
     might have already updated (but not committed) an update of table
@@ -809,11 +919,11 @@ do_retry:
   for (;;)
   {
     mysql_mutex_lock(&entry->LOCK_parallel_entry);
-    if (entry->stop_on_error_sub_id == (uint64) ULONGLONG_MAX ||
+    if (rgi->gtid_sub_id < entry->stop_on_error_sub_id
 #ifndef DBUG_OFF
-        (DBUG_EVALUATE_IF("simulate_mdev_12746", 1, 0)) ||
+        || DBUG_EVALUATE_IF("simulate_mdev_12746", 1, 0)
 #endif
-        rgi->gtid_sub_id < entry->stop_on_error_sub_id)
+        )
     {
       register_wait_for_prior_event_group_commit(rgi, entry);
     }
@@ -827,6 +937,7 @@ do_retry:
       err= rgi->worker_error= 1;
       my_error(ER_PRIOR_COMMIT_FAILED, MYF(0));
       mysql_mutex_unlock(&entry->LOCK_parallel_entry);
+
       goto err;
     }
     mysql_mutex_unlock(&entry->LOCK_parallel_entry);
@@ -868,7 +979,17 @@ do_retry:
     possibility of an old deadlock kill lingering on beyond this point.
   */
   thd->reset_killed();
+#ifdef WITH_WSREP
+  if (wsrep_before_command(thd))
+  {
+    WSREP_WARN("Parallel slave worker failed at wsrep_before_command() hook");
+    err= 1;
+    goto err;
+  }
+  wsrep_start_trx_if_not_started(thd);
+  WSREP_DEBUG("parallel slave retry, after trx start");
 
+#endif /* WITH_WSREP */
   strmake_buf(log_name, ir->name);
   if ((fd= open_binlog(&rlog, log_name, &errmsg)) <0)
   {
@@ -1209,6 +1330,11 @@ handle_rpl_parallel_thread(void *arg)
         bool did_enter_cond= false;
         PSI_stage_info old_stage;
 
+        DBUG_EXECUTE_IF("rpl_parallel_delay_gtid_0_x_100_start", {
+            if (rgi->current_gtid.domain_id==0 &&
+                rgi->current_gtid.seq_no == 100)
+              my_sleep(10000);
+          });
 #ifdef ENABLED_DEBUG_SYNC
         DBUG_EXECUTE_IF("hold_worker_on_schedule", {
             if (rgi->current_gtid.domain_id == 0 &&
@@ -1255,14 +1381,15 @@ handle_rpl_parallel_thread(void *arg)
         event_gtid_sub_id= rgi->gtid_sub_id;
         rgi->thd= thd;
 
-        mysql_mutex_lock(&entry->LOCK_parallel_entry);
-        skip_event_group= do_gco_wait(rgi, gco, &did_enter_cond, &old_stage);
+        DBUG_EXECUTE_IF("gco_wait_delay_gtid_0_x_99", {
+            if (rgi->current_gtid.domain_id == 0 && rgi->current_gtid.seq_no == 99) {
+              debug_sync_set_action(thd,
+                  STRING_WITH_LEN("now SIGNAL gco_wait_paused WAIT_FOR gco_wait_cont"));
+            } });
 
-        if (unlikely(entry->stop_on_error_sub_id <= rgi->wait_commit_sub_id))
-        {
-          skip_event_group= true;
-          rgi->worker_error= 1;
-        }
+        mysql_mutex_lock(&entry->LOCK_parallel_entry);
+        do_gco_wait(rgi, gco, &did_enter_cond, &old_stage);
+        skip_event_group= do_stop_handling(rgi);
         if (likely(!skip_event_group))
           skip_event_group= do_ftwrl_wait(rgi, &did_enter_cond, &old_stage);
 
@@ -1344,7 +1471,22 @@ handle_rpl_parallel_thread(void *arg)
         if (!thd->killed)
         {
           DEBUG_SYNC(thd, "rpl_parallel_before_mark_start_commit");
-          rgi->mark_start_commit();
+          if (thd->lex->stmt_accessed_temp_table())
+          {
+            /*
+              Temporary tables are special, they require strict
+              single-threaded use as they have no locks protecting concurrent
+              access. Therefore, we cannot safely use the optimization of
+              overlapping the commit of this transaction with the start of the
+              following.
+              So we skip the early mark_start_commit() and also block any
+              wakeup_subsequent_commits() until this event group is fully
+              done, inside finish_event_group().
+            */
+            rgi->commit_orderer.wakeup_blocked= true;
+          }
+          else
+            rgi->mark_start_commit();
           DEBUG_SYNC(thd, "rpl_parallel_after_mark_start_commit");
         }
       }
@@ -1387,8 +1529,13 @@ handle_rpl_parallel_thread(void *arg)
                         err= dbug_simulate_tmp_error(rgi, thd););
         if (unlikely(err))
         {
+          ulong max_retries= slave_trans_retries;
           convert_kill_to_deadlock_error(rgi);
-          if (has_temporary_error(thd) && slave_trans_retries > 0)
+          DBUG_EXECUTE_IF("rpl_mdev31655_zero_retries",
+                          if ((rgi->current_gtid.seq_no % 1000) == 0)
+                            max_retries= 0;
+                          );
+          if (has_temporary_error(thd) && max_retries > 0)
             err= retry_event_group(rgi, rpt, qev);
         }
       }
@@ -1781,6 +1928,7 @@ rpl_parallel_activate_pool(rpl_parallel_thread_pool *pool)
         }
         else
           bkp->init(pool->count);
+        bkp->is_valid= false; // Mark backup as stale during pool init
       }
     }
 
@@ -2026,6 +2174,9 @@ rpl_parallel_thread::get_gco(uint64 wait_count, group_commit_orderer *prev,
   gco->prior_sub_id= prior_sub_id;
   gco->installed= false;
   gco->flags= 0;
+#ifndef DBUG_OFF
+  gco->gc_done= false;
+#endif
   return gco;
 }
 
@@ -2033,6 +2184,10 @@ rpl_parallel_thread::get_gco(uint64 wait_count, group_commit_orderer *prev,
 void
 rpl_parallel_thread::loc_free_gco(group_commit_orderer *gco)
 {
+#ifndef DBUG_OFF
+  DBUG_ASSERT(!gco->gc_done);
+  gco->gc_done= true;
+#endif
   if (!loc_gco_list)
     loc_gco_last_ptr_ptr= &gco->next_gco;
   else
@@ -2050,7 +2205,7 @@ rpl_parallel_thread::rpl_parallel_thread()
 
 rpl_parallel_thread_pool::rpl_parallel_thread_pool()
   : threads(0), free_list(0), count(0), inited(false), busy(false),
-    pfs_bkp{0, false, NULL}
+    pfs_bkp{0, false, false, NULL}
 {
 }
 
@@ -2179,8 +2334,83 @@ rpl_parallel_thread_pool::copy_pool_for_pfs(Relay_log_info *rli)
       pfs_rpt->worker_idle_time= rpt->get_worker_idle_time();
       pfs_rpt->last_trans_retry_count= rpt->last_trans_retry_count;
     }
+    pfs_bkp.is_valid= true;
   }
 }
+
+
+/*
+  Check when we have done a complete round of scheduling for workers
+  0, 1, ..., (rpl_thread_max-1), in this order.
+  This often occurs every rpl_thread_max event group, but XA XID dependency
+  restrictions can cause insertion of extra out-of-order worker scheduling
+  in-between the normal round-robin scheduling.
+*/
+void
+rpl_parallel_entry::check_scheduling_generation(sched_bucket *cur)
+{
+  uint32 idx= static_cast<uint32>(cur - rpl_threads);
+  DBUG_ASSERT(cur >= rpl_threads);
+  DBUG_ASSERT(cur < rpl_threads + rpl_thread_max);
+  if (idx == current_generation_idx)
+  {
+    ++idx;
+    if (idx >= rpl_thread_max)
+    {
+      /* A new generation; all workers have been scheduled at least once. */
+      idx= 0;
+      ++current_generation;
+    }
+    current_generation_idx= idx;
+  }
+}
+
+
+rpl_parallel_entry::sched_bucket *
+rpl_parallel_entry::check_xa_xid_dependency(xid_t *xid)
+{
+  uint64 cur_gen= current_generation;
+  my_off_t i= 0;
+  while (i < maybe_active_xid.elements)
+  {
+    /*
+      Purge no longer active XID from the list:
+
+       - In generation N, XID might have been scheduled for worker W.
+       - Events in generation (N+1) might run freely in parallel with W.
+       - Events in generation (N+2) will have done wait_for_prior_commit for
+         the event group with XID (or a later one), but the XID might still be
+         active for a bit longer after wakeup_prior_commit().
+       - Events in generation (N+3) will have done wait_for_prior_commit() for
+         an event in W _after_ the XID, so are sure not to see the XID active.
+
+      Therefore, XID can be safely scheduled to a different worker in
+      generation (N+3) when last prior use was in generation N (or earlier).
+    */
+    xid_active_generation *a=
+      dynamic_element(&maybe_active_xid, i, xid_active_generation *);
+    if (a->generation + 3 <= cur_gen)
+    {
+      *a= *((xid_active_generation *)pop_dynamic(&maybe_active_xid));
+      continue;
+    }
+    if (xid->eq(&a->xid))
+    {
+      /* Update the last used generation and return the match. */
+      a->generation= cur_gen;
+      return a->thr;
+    }
+    ++i;
+  }
+  /* try to keep allocated memory in the range of [2,10] * initial_chunk_size */
+  if (maybe_active_xid.elements <= 2 * active_xid_init_alloc() &&
+      maybe_active_xid.max_element > 10 * active_xid_init_alloc())
+    freeze_size(&maybe_active_xid);
+
+  /* No matching XID conflicts. */
+  return nullptr;
+}
+
 
 /*
   Obtain a worker thread that we can queue an event to.
@@ -2214,33 +2444,57 @@ rpl_parallel_entry::choose_thread(rpl_group_info *rgi, bool *did_enter_cond,
                                   PSI_stage_info *old_stage,
                                   Gtid_log_event *gtid_ev)
 {
-  uint32 idx;
+  sched_bucket *cur_thr;
   Relay_log_info *rli= rgi->rli;
   rpl_parallel_thread *thr;
 
-  idx= rpl_thread_idx;
   if (gtid_ev)
   {
+    /* New event group; cycle the thread scheduling buckets round-robin. */
+    thread_sched_fifo->push_back(thread_sched_fifo->get());
+
     if (gtid_ev->flags2 &
         (Gtid_log_event::FL_COMPLETED_XA | Gtid_log_event::FL_PREPARED_XA))
-      idx= my_hash_sort(&my_charset_bin, gtid_ev->xid.key(),
-                        gtid_ev->xid.key_length()) % rpl_thread_max;
-    else
     {
-      ++idx;
-      if (idx >= rpl_thread_max)
-        idx= 0;
+      if ((cur_thr= check_xa_xid_dependency(&gtid_ev->xid)))
+      {
+        /*
+          A previously scheduled event group with the same XID might still be
+          active in a worker, so schedule this event group in the same worker
+          to avoid a conflict.
+        */
+        cur_thr->unlink();
+        thread_sched_fifo->append(cur_thr);
+      }
+      else
+      {
+        /* Record this XID now active. */
+        xid_active_generation *a=
+          (xid_active_generation *)alloc_dynamic(&maybe_active_xid);
+        if (!a)
+          return NULL;
+        a->thr= cur_thr= thread_sched_fifo->head();
+        a->generation= current_generation;
+        a->xid.set(&gtid_ev->xid);
+      }
     }
-    rpl_thread_idx= idx;
+    else
+      cur_thr= thread_sched_fifo->head();
+
+    check_scheduling_generation(cur_thr);
   }
-  thr= rpl_threads[idx];
+  else
+    cur_thr= thread_sched_fifo->head();
+
+
+  thr= cur_thr->thr;
   if (thr)
   {
     *did_enter_cond= false;
     mysql_mutex_lock(&thr->LOCK_rpl_thread);
     for (;;)
     {
-      if (thr->current_owner != &rpl_threads[idx])
+      if (thr->current_owner != &cur_thr->thr)
       {
         /*
           The worker thread became idle, and returned to the free list and
@@ -2256,21 +2510,6 @@ rpl_parallel_entry::choose_thread(rpl_group_info *rgi, bool *did_enter_cond,
       {
         /* The thread is ready to queue into. */
         break;
-      }
-      else if (unlikely(rli->sql_driver_thd->check_killed(1)))
-      {
-        unlock_or_exit_cond(rli->sql_driver_thd, &thr->LOCK_rpl_thread,
-                            did_enter_cond, old_stage);
-        my_error(ER_CONNECTION_KILLED, MYF(0));
-#ifdef ENABLED_DEBUG_SYNC
-        DBUG_EXECUTE_IF("rpl_parallel_wait_queue_max",
-          {
-            debug_sync_set_action(rli->sql_driver_thd,
-                      STRING_WITH_LEN("now SIGNAL wait_queue_killed"));
-          };);
-#endif
-        slave_output_error_info(rgi, rli->sql_driver_thd);
-        return NULL;
       }
       else
       {
@@ -2293,19 +2532,37 @@ rpl_parallel_entry::choose_thread(rpl_group_info *rgi, bool *did_enter_cond,
                         STRING_WITH_LEN("now SIGNAL wait_queue_ready"));
             };);
 #endif
+          rli->sql_driver_thd->set_time_for_next_stage();
           rli->sql_driver_thd->ENTER_COND(&thr->COND_rpl_thread_queue,
                                           &thr->LOCK_rpl_thread,
                                           &stage_waiting_for_room_in_worker_thread,
                                           old_stage);
           *did_enter_cond= true;
         }
+
+        if (unlikely(rli->sql_driver_thd->check_killed(1)))
+        {
+          unlock_or_exit_cond(rli->sql_driver_thd, &thr->LOCK_rpl_thread,
+                              did_enter_cond, old_stage);
+          my_error(ER_CONNECTION_KILLED, MYF(0));
+#ifdef ENABLED_DEBUG_SYNC
+          DBUG_EXECUTE_IF("rpl_parallel_wait_queue_max",
+            {
+              debug_sync_set_action(rli->sql_driver_thd,
+                        STRING_WITH_LEN("now SIGNAL wait_queue_killed"));
+            };);
+#endif
+          slave_output_error_info(rgi, rli->sql_driver_thd);
+          return NULL;
+        }
+
         mysql_cond_wait(&thr->COND_rpl_thread_queue, &thr->LOCK_rpl_thread);
       }
     }
   }
   if (!thr)
-    rpl_threads[idx]= thr= global_rpl_thread_pool.get_thread(&rpl_threads[idx],
-                                                             this);
+    cur_thr->thr= thr=
+      global_rpl_thread_pool.get_thread(&cur_thr->thr, this);
 
   return thr;
 }
@@ -2320,6 +2577,7 @@ free_rpl_parallel_entry(void *element)
     dealloc_gco(e->current_gco);
     e->current_gco= prev_gco;
   }
+  delete_dynamic(&e->maybe_active_xid);
   mysql_cond_destroy(&e->COND_parallel_entry);
   mysql_mutex_destroy(&e->LOCK_parallel_entry);
   my_free(e);
@@ -2362,28 +2620,48 @@ rpl_parallel::find(uint32 domain_id)
     ulong count= opt_slave_domain_parallel_threads;
     if (count == 0 || count > opt_slave_parallel_threads)
       count= opt_slave_parallel_threads;
-    rpl_parallel_thread **p;
+    rpl_parallel_entry::sched_bucket *p;
+    I_List<rpl_parallel_entry::sched_bucket> *fifo;
     if (!my_multi_malloc(PSI_INSTRUMENT_ME, MYF(MY_WME|MY_ZEROFILL),
                          &e, sizeof(*e),
                          &p, count*sizeof(*p),
+                         &fifo, sizeof(*fifo),
                          NULL))
     {
       my_error(ER_OUTOFMEMORY, MYF(0), (int)(sizeof(*e)+count*sizeof(*p)));
       return NULL;
     }
+    /* Initialize a FIFO of scheduled worker threads. */
+    e->thread_sched_fifo = new (fifo) I_List<rpl_parallel_entry::sched_bucket>;
+    /*
+      (We cycle the FIFO _before_ allocating next entry in
+      rpl_parallel_entry::choose_thread(). So initialize the FIFO with the
+      highest element at the front, just so that the first event group gets
+      scheduled on entry 0).
+    */
+    e->thread_sched_fifo->
+      push_back(::new (p+count-1) rpl_parallel_entry::sched_bucket);
+    for (ulong i= 0; i < count-1; ++i)
+      e->thread_sched_fifo->
+        push_back(::new (p+i) rpl_parallel_entry::sched_bucket);
     e->rpl_threads= p;
     e->rpl_thread_max= count;
+    e->current_generation = 0;
+    e->current_generation_idx = 0;
+    init_dynamic_array2(PSI_INSTRUMENT_ME, &e->maybe_active_xid,
+                        sizeof(rpl_parallel_entry::xid_active_generation),
+                        0, e->active_xid_init_alloc(), 0, MYF(0));
     e->domain_id= domain_id;
     e->stop_on_error_sub_id= (uint64)ULONGLONG_MAX;
     e->pause_sub_id= (uint64)ULONGLONG_MAX;
-    if (my_hash_insert(&domain_hash, (uchar *)e))
-    {
-      my_free(e);
-      return NULL;
-    }
     mysql_mutex_init(key_LOCK_parallel_entry, &e->LOCK_parallel_entry,
                      MY_MUTEX_INIT_FAST);
     mysql_cond_init(key_COND_parallel_entry, &e->COND_parallel_entry, NULL);
+    if (my_hash_insert(&domain_hash, (uchar *)e))
+    {
+      free_rpl_parallel_entry(e);
+      return NULL;
+    }
   }
   else
     e->force_abort= false;
@@ -2421,27 +2699,25 @@ rpl_parallel::wait_for_done(THD *thd, Relay_log_info *rli)
       are also executed, so that we stop at a consistent point in the binlog
       stream (per replication domain).
 
-      All event groups wait for e->count_committing_event_groups to reach
-      the value of group_commit_orderer::wait_count before starting to
-      execute. Thus, at this point we know that any event group with a
-      strictly larger wait_count are safe to skip, none of them can have
-      started executing yet. So we set e->stop_count here and use it to
-      decide in the worker threads whether to continue executing an event
-      group or whether to skip it, when force_abort is set.
+      At this point, we are holding LOCK_parallel_entry, and we know that no
+      event group after e->largest_started_sub_id has started running yet. We
+      record this value in e->stop_sub_id, and then each event group can check
+      their own sub_id against it. If their sub_id is strictly larger, then
+      that event group will be skipped.
 
       If we stop due to reaching the START SLAVE UNTIL condition, then we
       need to continue executing any queued events up to that point.
     */
     e->force_abort= true;
-    e->stop_count= rli->stop_for_until ?
-      e->count_queued_event_groups : e->count_committing_event_groups;
+    e->stop_sub_id= rli->stop_for_until ?
+      e->current_sub_id : e->largest_started_sub_id;
     mysql_mutex_unlock(&e->LOCK_parallel_entry);
     for (j= 0; j < e->rpl_thread_max; ++j)
     {
-      if ((rpt= e->rpl_threads[j]))
+      if ((rpt= e->rpl_threads[j].thr))
       {
         mysql_mutex_lock(&rpt->LOCK_rpl_thread);
-        if (rpt->current_owner == &e->rpl_threads[j])
+        if (rpt->current_owner == &e->rpl_threads[j].thr)
           mysql_cond_signal(&rpt->COND_rpl_thread);
         mysql_mutex_unlock(&rpt->LOCK_rpl_thread);
       }
@@ -2461,10 +2737,10 @@ rpl_parallel::wait_for_done(THD *thd, Relay_log_info *rli)
     e= (struct rpl_parallel_entry *)my_hash_element(&domain_hash, i);
     for (j= 0; j < e->rpl_thread_max; ++j)
     {
-      if ((rpt= e->rpl_threads[j]))
+      if ((rpt= e->rpl_threads[j].thr))
       {
         mysql_mutex_lock(&rpt->LOCK_rpl_thread);
-        while (rpt->current_owner == &e->rpl_threads[j])
+        while (rpt->current_owner == &e->rpl_threads[j].thr)
           mysql_cond_wait(&rpt->COND_rpl_thread_stop, &rpt->LOCK_rpl_thread);
         mysql_mutex_unlock(&rpt->LOCK_rpl_thread);
       }
@@ -2491,30 +2767,19 @@ rpl_parallel::stop_during_until()
     e= (struct rpl_parallel_entry *)my_hash_element(&domain_hash, i);
     mysql_mutex_lock(&e->LOCK_parallel_entry);
     if (e->force_abort)
-      e->stop_count= e->count_committing_event_groups;
+      e->stop_sub_id= e->largest_started_sub_id;
     mysql_mutex_unlock(&e->LOCK_parallel_entry);
   }
 }
 
 
 bool
-rpl_parallel::workers_idle()
+rpl_parallel::workers_idle(Relay_log_info *rli)
 {
-  struct rpl_parallel_entry *e;
-  uint32 i, max_i;
-
-  max_i= domain_hash.records;
-  for (i= 0; i < max_i; ++i)
-  {
-    bool active;
-    e= (struct rpl_parallel_entry *)my_hash_element(&domain_hash, i);
-    mysql_mutex_lock(&e->LOCK_parallel_entry);
-    active= e->current_sub_id > e->last_committed_sub_id;
-    mysql_mutex_unlock(&e->LOCK_parallel_entry);
-    if (active)
-      break;
-  }
-  return (i == max_i);
+  mysql_mutex_assert_owner(&rli->data_lock);
+  return !rli->last_inuse_relaylog ||
+    rli->last_inuse_relaylog->queued_count ==
+    rli->last_inuse_relaylog->dequeued_count;
 }
 
 
@@ -2522,7 +2787,7 @@ int
 rpl_parallel_entry::queue_master_restart(rpl_group_info *rgi,
                                          Format_description_log_event *fdev)
 {
-  uint32 idx;
+  sched_bucket *cur_thr;
   rpl_parallel_thread *thr;
   rpl_parallel_thread::queued_event *qev;
   Relay_log_info *rli= rgi->rli;
@@ -2537,12 +2802,12 @@ rpl_parallel_entry::queue_master_restart(rpl_group_info *rgi,
     Thus there is no need for the full complexity of choose_thread(). We only
     need to check if we have a current worker thread, and queue for it if so.
   */
-  idx= rpl_thread_idx;
-  thr= rpl_threads[idx];
+  cur_thr= thread_sched_fifo->head();
+  thr= cur_thr->thr;
   if (!thr)
     return 0;
   mysql_mutex_lock(&thr->LOCK_rpl_thread);
-  if (thr->current_owner != &rpl_threads[idx])
+  if (thr->current_owner != &cur_thr->thr)
   {
     /* No active worker thread, so no need to queue the master restart. */
     mysql_mutex_unlock(&thr->LOCK_rpl_thread);
@@ -2586,6 +2851,7 @@ rpl_parallel::wait_for_workers_idle(THD *thd)
     e= (struct rpl_parallel_entry *)my_hash_element(&domain_hash, i);
     mysql_mutex_lock(&e->LOCK_parallel_entry);
     ++e->need_sub_id_signal;
+    thd->set_time_for_next_stage();
     thd->ENTER_COND(&e->COND_parallel_entry, &e->LOCK_parallel_entry,
                     &stage_waiting_for_workers_idle, &old_stage);
     while (e->current_sub_id > e->last_committed_sub_id)
@@ -2909,7 +3175,12 @@ rpl_parallel::do_event(rpl_group_info *serial_rgi, Log_event *ev,
 
       if (mode <= SLAVE_PARALLEL_MINIMAL ||
           !(gtid_flags & Gtid_log_event::FL_GROUP_COMMIT_ID) ||
-          e->last_commit_id != gtid_ev->commit_id)
+          e->last_commit_id != gtid_ev->commit_id ||
+          /*
+            MULTI_BATCH is also set when the current gtid even being a member
+            of a commit group is flagged as DDL which disallows parallel.
+          */
+          (gtid_flags & Gtid_log_event::FL_DDL))
         flags|= group_commit_orderer::MULTI_BATCH;
       /* Make sure we do not attempt to run DDL in parallel speculatively. */
       if (gtid_flags & Gtid_log_event::FL_DDL)

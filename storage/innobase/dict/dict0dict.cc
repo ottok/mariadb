@@ -657,48 +657,22 @@ dict_table_t::parse_name<>(char(&)[NAME_LEN + 1], char(&)[NAME_LEN + 1],
 /** Acquire MDL shared for the table name.
 @tparam trylock whether to use non-blocking operation
 @param[in,out]  table           table object
-@param[in,out]  thd             background thread
-@param[out]     mdl             mdl ticket
+@param[in,out]  mdl_context     MDL context
+@param[out]     mdl             MDL ticket
 @param[in]      table_op        operation to perform when opening
 @return table object after locking MDL shared
 @retval nullptr if the table is not readable, or if trylock && MDL blocked */
-template<bool trylock, bool purge_thd>
+template<bool trylock>
+__attribute__((nonnull, warn_unused_result))
 dict_table_t*
 dict_acquire_mdl_shared(dict_table_t *table,
-                        THD *thd,
-                        MDL_ticket **mdl,
+                        MDL_context *mdl_context, MDL_ticket **mdl,
                         dict_table_op_t table_op)
 {
-  if (!table || !mdl)
-    return table;
-
-  MDL_context *mdl_context= static_cast<MDL_context*>(thd_mdl_context(thd));
-  size_t db_len;
-  dict_table_t *not_found= nullptr;
-
-  if (trylock)
-  {
-    static_assert(!trylock || !purge_thd, "usage");
-    dict_sys.freeze(SRW_LOCK_CALL);
-    db_len= dict_get_db_name_len(table->name.m_name);
-    dict_sys.unfreeze();
-  }
-  else
-  {
-    ut_ad(dict_sys.frozen_not_locked());
-    db_len= dict_get_db_name_len(table->name.m_name);
-  }
-
-  if (db_len == 0)
-    return table; /* InnoDB system tables are not covered by MDL */
-
-  if (!mdl_context)
-    return nullptr;
-
   table_id_t table_id= table->id;
   char db_buf[NAME_LEN + 1], db_buf1[NAME_LEN + 1];
   char tbl_buf[NAME_LEN + 1], tbl_buf1[NAME_LEN + 1];
-  size_t tbl_len;
+  size_t db_len, tbl_len;
   bool unaccessible= false;
 
   if (!table->parse_name<!trylock>(db_buf, tbl_buf, &db_len, &tbl_len))
@@ -749,13 +723,7 @@ retry:
     }
   }
 
-retry_table_open:
   dict_sys.freeze(SRW_LOCK_CALL);
-  if (purge_thd && purge_sys.must_wait_FTS())
-  {
-    not_found= reinterpret_cast<dict_table_t*>(-1);
-    goto return_without_mdl;
-  }
   table= dict_sys.find_table(table_id);
   if (table)
     table->acquire();
@@ -763,11 +731,6 @@ retry_table_open:
   {
     dict_sys.unfreeze();
     dict_sys.lock(SRW_LOCK_CALL);
-    if (purge_thd && purge_sys.must_wait_FTS())
-    {
-      dict_sys.unlock();
-      goto retry_table_open;
-    }
     table= dict_load_table_on_id(table_id,
                                  table_op == DICT_TABLE_OP_LOAD_TABLESPACE
                                  ? DICT_ERR_IGNORE_RECOVER_LOCK
@@ -780,7 +743,6 @@ retry_table_open:
 
   if (!table || !table->is_accessible())
   {
-    table= nullptr;
 return_without_mdl:
     if (trylock)
       dict_sys.unfreeze();
@@ -789,7 +751,7 @@ return_without_mdl:
       mdl_context->release_lock(*mdl);
       *mdl= nullptr;
     }
-    return not_found;
+    return nullptr;
   }
 
   size_t db1_len, tbl1_len;
@@ -826,24 +788,65 @@ return_without_mdl:
   goto retry;
 }
 
-template dict_table_t* dict_acquire_mdl_shared<false, false>
+template dict_table_t* dict_acquire_mdl_shared<false>
+(dict_table_t*,MDL_context*,MDL_ticket**,dict_table_op_t);
+
+/** Acquire MDL shared for the table name.
+@tparam trylock whether to use non-blocking operation
+@param[in,out]  table           table object
+@param[in,out]  thd             background thread
+@param[out]     mdl             mdl ticket
+@param[in]      table_op        operation to perform when opening
+@return table object after locking MDL shared
+@retval nullptr if the table is not readable, or if trylock && MDL blocked */
+template<bool trylock>
+dict_table_t*
+dict_acquire_mdl_shared(dict_table_t *table,
+                        THD *thd,
+                        MDL_ticket **mdl,
+                        dict_table_op_t table_op)
+{
+  if (!table || !mdl)
+    return table;
+
+  MDL_context *mdl_context= static_cast<MDL_context*>(thd_mdl_context(thd));
+  size_t db_len;
+
+  if (trylock)
+  {
+    dict_sys.freeze(SRW_LOCK_CALL);
+    db_len= dict_get_db_name_len(table->name.m_name);
+    dict_sys.unfreeze();
+  }
+  else
+  {
+    ut_ad(dict_sys.frozen_not_locked());
+    db_len= dict_get_db_name_len(table->name.m_name);
+  }
+
+  if (db_len == 0)
+    return table; /* InnoDB system tables are not covered by MDL */
+
+  return mdl_context
+    ? dict_acquire_mdl_shared<trylock>(table, mdl_context, mdl, table_op)
+    : nullptr;
+}
+
+template dict_table_t* dict_acquire_mdl_shared<false>
 (dict_table_t*,THD*,MDL_ticket**,dict_table_op_t);
-template dict_table_t* dict_acquire_mdl_shared<true, false>
+template dict_table_t* dict_acquire_mdl_shared<true>
 (dict_table_t*,THD*,MDL_ticket**,dict_table_op_t);
 
 /** Look up a table by numeric identifier.
-@tparam purge_thd Whether the function is called by purge thread
 @param[in]      table_id        table identifier
 @param[in]      dict_locked     data dictionary locked
 @param[in]      table_op        operation to perform when opening
 @param[in,out]  thd             background thread, or NULL to not acquire MDL
 @param[out]     mdl             mdl ticket, or NULL
 @return table, NULL if does not exist */
-template <bool purge_thd>
-dict_table_t*
-dict_table_open_on_id(table_id_t table_id, bool dict_locked,
-                      dict_table_op_t table_op, THD *thd,
-                      MDL_ticket **mdl)
+dict_table_t *dict_table_open_on_id(table_id_t table_id, bool dict_locked,
+                                    dict_table_op_t table_op, THD *thd,
+                                    MDL_ticket **mdl)
 {
   if (!dict_locked)
     dict_sys.freeze(SRW_LOCK_CALL);
@@ -852,16 +855,9 @@ dict_table_open_on_id(table_id_t table_id, bool dict_locked,
 
   if (table)
   {
-    if (purge_thd && purge_sys.must_wait_FTS())
-    {
-      table= reinterpret_cast<dict_table_t*>(-1);
-      goto func_exit;
-    }
-
     table->acquire();
     if (thd && !dict_locked)
-      table= dict_acquire_mdl_shared<false, purge_thd>(
-               table, thd, mdl, table_op);
+      table= dict_acquire_mdl_shared<false>(table, thd, mdl, table_op);
   }
   else if (table_op != DICT_TABLE_OP_OPEN_ONLY_IF_CACHED)
   {
@@ -875,43 +871,25 @@ dict_table_open_on_id(table_id_t table_id, bool dict_locked,
                                  ? DICT_ERR_IGNORE_RECOVER_LOCK
                                  : DICT_ERR_IGNORE_FK_NOKEY);
     if (table)
-    {
-      if (purge_thd && purge_sys.must_wait_FTS())
-      {
-        dict_sys.unlock();
-        return reinterpret_cast<dict_table_t*>(-1);
-      }
       table->acquire();
-    }
     if (!dict_locked)
     {
       dict_sys.unlock();
       if (table && thd)
       {
         dict_sys.freeze(SRW_LOCK_CALL);
-        table= dict_acquire_mdl_shared<false, purge_thd>(
-                 table, thd, mdl, table_op);
+        table= dict_acquire_mdl_shared<false>(table, thd, mdl, table_op);
         dict_sys.unfreeze();
       }
       return table;
     }
   }
 
-func_exit:
   if (!dict_locked)
     dict_sys.unfreeze();
 
   return table;
 }
-
-template dict_table_t* dict_table_open_on_id<false>
-(table_id_t table_id, bool dict_locked,
- dict_table_op_t table_op, THD *thd,
- MDL_ticket **mdl);
-template dict_table_t* dict_table_open_on_id<true>
-(table_id_t table_id, bool dict_locked,
- dict_table_op_t table_op, THD *thd,
- MDL_ticket **mdl);
 
 /********************************************************************//**
 Looks for column n position in the clustered index.
@@ -1000,9 +978,6 @@ void dict_sys_t::lock_wait(SRW_LOCK_ARGS(const char *file, unsigned line))
   {
     latch.wr_lock(SRW_LOCK_ARGS(file, line));
     latch_ex_wait_start.store(0, std::memory_order_relaxed);
-    ut_ad(!latch_readers);
-    ut_ad(!latch_ex);
-    ut_d(latch_ex= pthread_self());
     return;
   }
 
@@ -1018,31 +993,21 @@ void dict_sys_t::lock_wait(SRW_LOCK_ARGS(const char *file, unsigned line))
     ib::warn() << "A long wait (" << waited
                << " seconds) was observed for dict_sys.latch";
   latch.wr_lock(SRW_LOCK_ARGS(file, line));
-  ut_ad(!latch_readers);
-  ut_ad(!latch_ex);
-  ut_d(latch_ex= pthread_self());
 }
 
 #ifdef UNIV_PFS_RWLOCK
 ATTRIBUTE_NOINLINE void dict_sys_t::unlock()
 {
-  ut_ad(latch_ex == pthread_self());
-  ut_ad(!latch_readers);
-  ut_d(latch_ex= 0);
   latch.wr_unlock();
 }
 
 ATTRIBUTE_NOINLINE void dict_sys_t::freeze(const char *file, unsigned line)
 {
   latch.rd_lock(file, line);
-  ut_ad(!latch_ex);
-  ut_d(latch_readers++);
 }
 
 ATTRIBUTE_NOINLINE void dict_sys_t::unfreeze()
 {
-  ut_ad(!latch_ex);
-  ut_ad(latch_readers--);
   latch.rd_unlock();
 }
 #endif /* UNIV_PFS_RWLOCK */
@@ -1922,8 +1887,8 @@ void dict_sys_t::remove(dict_table_t* table, bool lru, bool keep)
 #ifdef BTR_CUR_HASH_ADAPT
 	if (table->fts) {
 		fts_optimize_remove_table(table);
-		fts_free(table);
-		table->fts = NULL;
+		table->fts->~fts_t();
+		table->fts = nullptr;
 	}
 
 	table->autoinc_mutex.wr_lock();
@@ -2022,7 +1987,6 @@ dict_index_add_to_cache(
 	new_index->n_fields = new_index->n_def;
 	new_index->trx_id = index->trx_id;
 	new_index->set_committed(index->is_committed());
-	new_index->nulls_equal = index->nulls_equal;
 
 	n_ord = new_index->n_uniq;
 	/* Flag the ordering columns and also set column max_prefix */
@@ -2843,8 +2807,7 @@ dict_foreign_find_index(
 	for (dict_index_t* index = dict_table_get_first_index(table);
 	     index;
 	     index = dict_table_get_next_index(index)) {
-		if (types_idx != index
-		    && !index->to_be_dropped
+		if (!index->to_be_dropped
 		    && !dict_index_is_online_ddl(index)
 		    && dict_foreign_qualify_index(
 			    table, col_names, columns, n_cols,
@@ -3564,6 +3527,7 @@ dict_foreign_parse_drop_constraints(
 	const char*		ptr1;
 	const char*		id;
 	CHARSET_INFO*		cs;
+	bool			if_exists = false;
 
 	ut_a(trx->mysql_thd);
 
@@ -3617,6 +3581,7 @@ loop:
 		ptr1 = dict_accept(cs, ptr1, "EXISTS", &success);
 		if (success) {
 			ptr = ptr1;
+			if_exists = true;
 		}
 	}
 
@@ -3627,14 +3592,14 @@ loop:
 		goto syntax_error;
 	}
 
-	ut_a(*n < 1000);
-	(*constraints_to_drop)[*n] = id;
-	(*n)++;
-
 	if (std::find_if(table->foreign_set.begin(),
-			 table->foreign_set.end(),
-			 dict_foreign_matches_id(id))
-	    == table->foreign_set.end()) {
+			    table->foreign_set.end(),
+			    dict_foreign_matches_id(id))
+	        == table->foreign_set.end()) {
+
+		if (if_exists) {
+			goto loop;
+		}
 
 		if (!srv_read_only_mode) {
 			FILE*	ef = dict_foreign_err_file;
@@ -3656,6 +3621,9 @@ loop:
 		return(DB_CANNOT_DROP_CONSTRAINT);
 	}
 
+	ut_a(*n < 1000);
+	(*constraints_to_drop)[*n] = id;
+	(*n)++;
 	goto loop;
 
 syntax_error:

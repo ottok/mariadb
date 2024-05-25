@@ -1,15 +1,10 @@
-# OK, these files are part of test suite and only used for a test
+# These should be moved, see https://jira.mariadb.org/browse/MDEV-21653
 arch-dependent-file-in-usr-share usr/share/mysql/mysql-test/lib/My/SafeProcess/my_safe_process
 arch-dependent-file-in-usr-share usr/share/mysql/mysql-test/lib/My/SafeProcess/wsrep_check_version
-# myisam stopwords and other variable names that cannot be changed and spelling errors remain
-spelling-error-in-binary usr/bin/* AfE Safe
-spelling-error-in-binary usr/bin/* yuR your
-spelling-error-in-binary usr/bin/* no one
-spelling-error-in-binary usr/bin/* that's
-spelling-error-in-binary usr/bin/* theres there's
-spelling-error-in-binary usr/lib/mysql/plugin/qa_auth_interface.so userA users
-# Valid reason for documentation in context in directory
-package-contains-documentation-outside-usr-share-doc usr/share/mysql/mysql-test/README*
-# Test plugins intentionally not fully featured
-shared-library-lacks-prerequisites usr/lib/mysql/plugin/auth_0x0100.so
-shared-library-lacks-prerequisites usr/lib/mysql/plugin/debug_key_management.so
+arch-dependent-file-in-usr-share [usr/share/mysql/mysql-test/lib/My/SafeProcess/my_safe_process]
+arch-dependent-file-in-usr-share [usr/share/mysql/mysql-test/lib/My/SafeProcess/wsrep_check_version]
+# Mainly for support for *BSD family. Not right way to do but this is test package and not for production
+incorrect-path-for-interpreter /usr/bin/env perl != /usr/bin/perl [usr/share/mysql/mysql-test/lib/process-purecov-annotations.pl]
+incorrect-path-for-interpreter /usr/bin/env perl != /usr/bin/perl [usr/share/mysql/mysql-test/lib/v1/mysql-test-run.pl]
+incorrect-path-for-interpreter /usr/bin/env perl != /usr/bin/perl [usr/share/mysql/mysql-test/mysql-stress-test.pl]
+incorrect-path-for-interpreter /usr/bin/env perl != /usr/bin/perl [usr/share/mysql/mysql-test/mysql-test-run.pl]

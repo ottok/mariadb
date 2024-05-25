@@ -114,7 +114,7 @@ void Expression_cache_tmptable::init()
 
   cache_table_param.init();
   /* dependent items and result */
-  cache_table_param.field_count= items.elements;
+  cache_table_param.field_count= cache_table_param.func_count= items.elements;
   /* postpone table creation to index description */
   cache_table_param.skip_create_table= 1;
 
@@ -271,7 +271,8 @@ my_bool Expression_cache_tmptable::put_value(Item *value)
   }
 
   *(items.head_ref())= value;
-  fill_record(table_thd, cache_table, cache_table->field, items, TRUE, TRUE);
+  fill_record(table_thd, cache_table, cache_table->field, items, true, true,
+              true);
   if (unlikely(table_thd->is_error()))
     goto err;;
 

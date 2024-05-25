@@ -822,14 +822,18 @@ from t1
 group by a, b
 order by a
 fetch first 1 rows with ties;
+--disable_ps2_protocol
 SELECT FOUND_ROWS();
+--enable_ps2_protocol
 
 --sorted_result
 select SQL_CALC_FOUND_ROWS a, b
 from t1
 order by a
 fetch first 1 rows with ties;
+--disable_ps2_protocol
 SELECT FOUND_ROWS();
+--enable_ps2_protocol
 --enable_view_protocol
 
 --echo #
@@ -1059,3 +1063,22 @@ SELECT a FROM t ORDER BY a FETCH FIRST 2 ROWS WITH TIES;
 
 # Cleanup
 DROP TABLE t;
+
+--echo #
+--echo # MDEV-30324: Wrong result upon SELECT DISTINCT .. WITH TIES using index
+--echo #
+CREATE TABLE t1 (a int, b char(3), KEY (a));
+INSERT INTO t1 VALUES (2,'foo'),(3,'bar'),(3,'bar'),(3,'zzz');
+
+EXPLAIN SELECT DISTINCT a, b FROM t1 ORDER BY a FETCH FIRST 1 ROWS WITH TIES;
+--sorted_result
+SELECT DISTINCT a, b FROM t1 ORDER BY a FETCH FIRST 1 ROWS WITH TIES;
+EXPLAIN SELECT DISTINCT a, b FROM t1 ORDER BY a FETCH FIRST 2 ROWS WITH TIES;
+--sorted_result
+SELECT DISTINCT a, b FROM t1 ORDER BY a FETCH FIRST 2 ROWS WITH TIES;
+EXPLAIN SELECT DISTINCT a, b FROM t1 ORDER BY a FETCH FIRST 3 ROWS WITH TIES;
+--sorted_result
+SELECT DISTINCT a, b FROM t1 ORDER BY a FETCH FIRST 3 ROWS WITH TIES;
+ 
+# Cleanup
+DROP TABLE t1;

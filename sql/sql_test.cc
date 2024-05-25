@@ -29,11 +29,16 @@
 #include <thr_alarm.h>
 #include "sql_connect.h"
 #include "thread_cache.h"
-#if defined(HAVE_MALLINFO) && defined(HAVE_MALLOC_H)
+
+#if defined(HAVE_MALLOC_H)
 #include <malloc.h>
-#elif defined(HAVE_MALLINFO) && defined(HAVE_SYS_MALLOC_H)
+#endif
+
+#if defined(HAVE_SYS_MALLOC_H)
 #include <sys/malloc.h>
-#elif defined(HAVE_MALLOC_ZONE)
+#endif
+
+#if defined(HAVE_MALLOC_ZONE)
 #include <malloc/malloc.h>
 #endif
 
@@ -627,6 +632,10 @@ Next alarm time: %lu\n",
   struct mallinfo2 info = mallinfo2();
 #elif defined(HAVE_MALLINFO)
   struct mallinfo info= mallinfo();
+#endif
+#if __has_feature(memory_sanitizer)
+  /* Work around missing MSAN instrumentation */
+  MEM_MAKE_DEFINED(&info, sizeof info);
 #endif
 #if defined(HAVE_MALLINFO) || defined(HAVE_MALLINFO2)
   char llbuff[10][22];

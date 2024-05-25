@@ -36,7 +36,7 @@ class ha_heap final : public handler
   my_bool internal_table;
 public:
   ha_heap(handlerton *hton, TABLE_SHARE *table);
-  ~ha_heap() {}
+  ~ha_heap() = default;
   handler *clone(const char *name, MEM_ROOT *mem_root);
   const char *index_type(uint inx)
   {
@@ -101,8 +101,8 @@ public:
   int external_lock(THD *thd, int lock_type);
   int delete_all_rows(void);
   int reset_auto_increment(ulonglong value);
-  int disable_indexes(uint mode);
-  int enable_indexes(uint mode);
+  int disable_indexes(key_map map, bool persist);
+  int enable_indexes(key_map map, bool persist);
   int indexes_are_disabled(void);
   ha_rows records_in_range(uint inx, const key_range *start_key,
                            const key_range *end_key, page_range *pages);

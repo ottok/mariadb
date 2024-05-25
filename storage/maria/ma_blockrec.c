@@ -488,7 +488,7 @@ my_bool _ma_init_block_record(MARIA_HA *info)
 {
   MARIA_ROW *row= &info->cur_row, *new_row= &info->new_row;
   MARIA_SHARE *share= info->s;
-  myf flag= MY_WME | (share->temporary ? MY_THREAD_SPECIFIC : 0);
+  myf flag= MY_WME | share->malloc_flag;
   uint default_extents;
   DBUG_ENTER("_ma_init_block_record");
 
@@ -2654,7 +2654,6 @@ static my_bool write_block_record(MARIA_HA *info,
   LSN lsn;
   my_off_t position;
   uint save_my_errno;
-  myf myflag= MY_WME | (share->temporary ? MY_THREAD_SPECIFIC : 0);
   DBUG_ENTER("write_block_record");
 
   head_block= bitmap_blocks->block;
@@ -2721,7 +2720,7 @@ static my_bool write_block_record(MARIA_HA *info,
     for every data segment we want to store.
   */
   if (_ma_alloc_buffer(&info->rec_buff, &info->rec_buff_size,
-                       row->head_length, myflag))
+                       row->head_length, MY_WME | share->malloc_flag))
     DBUG_RETURN(1);
 
   tmp_data_used= 0;                 /* Either 0 or last used uchar in 'data' */
@@ -2780,7 +2779,8 @@ static my_bool write_block_record(MARIA_HA *info,
     const uchar *field_pos;
     ulong length;
     if ((record[column->null_pos] & column->null_bit) ||
-        (row->empty_bits[column->empty_pos] & column->empty_bit))
+        (column->empty_bit &&
+         (row->empty_bits[column->empty_pos] & column->empty_bit)))
       continue;
 
     field_pos= record + column->offset;
@@ -4743,13 +4743,13 @@ int _ma_read_block_record2(MARIA_HA *info, uchar *record,
                            uchar *data, uchar *end_of_data)
 {
   MARIA_SHARE *share= info->s;
-  uchar *UNINIT_VAR(field_length_data), *UNINIT_VAR(blob_buffer), *start_of_data;
+  uchar *field_length_data= 0, *UNINIT_VAR(blob_buffer), *start_of_data;
   uint flag, null_bytes, cur_null_bytes, row_extents, field_lengths;
   my_bool found_blob= 0;
   MARIA_EXTENT_CURSOR extent;
   MARIA_COLUMNDEF *column, *end_column;
   MARIA_ROW *cur_row= &info->cur_row;
-  myf myflag= MY_WME | (share->temporary ? MY_THREAD_SPECIFIC : 0);
+  myf myflag= MY_WME | share->malloc_flag;
   DBUG_ENTER("_ma_read_block_record2");
 
   start_of_data= data;
@@ -4887,7 +4887,8 @@ int _ma_read_block_record2(MARIA_HA *info, uchar *record,
     uchar *field_pos= record + column->offset;
     /* First check if field is present in record */
     if ((record[column->null_pos] & column->null_bit) ||
-        (cur_row->empty_bits[column->empty_pos] & column->empty_bit))
+        (column->empty_bit &&
+         (cur_row->empty_bits[column->empty_pos] & column->empty_bit)))
     {
       bfill(record + column->offset, column->fill_length,
             type == FIELD_SKIP_ENDSPACE ? ' ' : 0);
@@ -4970,8 +4971,9 @@ int _ma_read_block_record2(MARIA_HA *info, uchar *record,
         {
           uint size_length;
           if ((record[blob_field->null_pos] & blob_field->null_bit) ||
-              (cur_row->empty_bits[blob_field->empty_pos] &
-               blob_field->empty_bit))
+              (blob_field->empty_bit &
+               (cur_row->empty_bits[blob_field->empty_pos] &
+                blob_field->empty_bit)))
             continue;
           size_length= blob_field->length - portable_sizeof_char_ptr;
           blob_lengths+= _ma_calc_blob_length(size_length, length_data);
@@ -5086,7 +5088,6 @@ static my_bool read_row_extent_info(MARIA_HA *info, uchar *buff,
   uint flag, row_extents, row_extents_size;
   uint field_lengths __attribute__ ((unused));
   uchar *extents, *end;
-  myf myflag= MY_WME | (share->temporary ? MY_THREAD_SPECIFIC : 0);
   DBUG_ENTER("read_row_extent_info");
 
   if (!(data= get_record_position(share, buff,
@@ -5110,7 +5111,7 @@ static my_bool read_row_extent_info(MARIA_HA *info, uchar *buff,
     if (info->cur_row.extents_buffer_length < row_extents_size &&
         _ma_alloc_buffer(&info->cur_row.extents,
                          &info->cur_row.extents_buffer_length,
-                         row_extents_size, myflag))
+                         row_extents_size, MY_WME | share->malloc_flag))
       DBUG_RETURN(1);
     memcpy(info->cur_row.extents, data, ROW_EXTENT_SIZE);
     data+= ROW_EXTENT_SIZE;
@@ -5280,7 +5281,7 @@ my_bool _ma_cmp_block_unique(MARIA_HA *info, MARIA_UNIQUEDEF *def,
 my_bool _ma_scan_init_block_record(MARIA_HA *info)
 {
   MARIA_SHARE *share= info->s;
-  myf flag= MY_WME | (share->temporary ? MY_THREAD_SPECIFIC : 0);
+  myf flag= MY_WME | share->malloc_flag;
   DBUG_ENTER("_ma_scan_init_block_record");
   DBUG_ASSERT(info->dfile.file == share->bitmap.file.file);
 
@@ -5825,7 +5826,8 @@ static size_t fill_insert_undo_parts(MARIA_HA *info, const uchar *record,
     const uchar *column_pos;
     size_t column_length;
     if ((record[column->null_pos] & column->null_bit) ||
-        cur_row->empty_bits[column->empty_pos] & column->empty_bit)
+        (column->empty_bit &&
+         cur_row->empty_bits[column->empty_pos] & column->empty_bit))
       continue;
 
     column_pos=    record+ column->offset;
@@ -6006,7 +6008,8 @@ static size_t fill_update_undo_parts(MARIA_HA *info, const uchar *oldrec,
       */
       continue;
     }
-    if (old_row->empty_bits[column->empty_pos] & column->empty_bit)
+    if (column->empty_bit &&
+        (old_row->empty_bits[column->empty_pos] & column->empty_bit))
     {
       if (new_row->empty_bits[column->empty_pos] & column->empty_bit)
         continue;                               /* Both are empty; skip */
@@ -6022,8 +6025,9 @@ static size_t fill_update_undo_parts(MARIA_HA *info, const uchar *oldrec,
       log the original value
     */
     new_column_is_empty= ((newrec[column->null_pos] & column->null_bit) ||
-                          (new_row->empty_bits[column->empty_pos] &
-                           column->empty_bit));
+                          (column->empty_bit &&
+                           (new_row->empty_bits[column->empty_pos] &
+                            column->empty_bit)));
 
     old_column_pos=      oldrec + column->offset;
     new_column_pos=      newrec + column->offset;
@@ -7196,7 +7200,8 @@ my_bool _ma_apply_undo_row_delete(MARIA_HA *info, LSN undo_lsn,
        column++, null_field_lengths++)
   {
     if ((record[column->null_pos] & column->null_bit) ||
-        row.empty_bits[column->empty_pos] & column->empty_bit)
+        (column->empty_bit &&
+         row.empty_bits[column->empty_pos] & column->empty_bit))
     {
       if (column->type != FIELD_BLOB)
         *null_field_lengths= 0;

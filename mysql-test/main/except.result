@@ -84,6 +84,7 @@ ANALYZE
               "r_rows": 2,
               "r_table_time_ms": "REPLACED",
               "r_other_time_ms": "REPLACED",
+              "r_engine_stats": REPLACED,
               "filtered": 100,
               "r_filtered": 100
             }
@@ -103,6 +104,7 @@ ANALYZE
               "r_rows": 2,
               "r_table_time_ms": "REPLACED",
               "r_other_time_ms": "REPLACED",
+              "r_engine_stats": REPLACED,
               "filtered": 100,
               "r_filtered": 100
             }
@@ -150,6 +152,7 @@ ANALYZE
                     "r_rows": 2,
                     "r_table_time_ms": "REPLACED",
                     "r_other_time_ms": "REPLACED",
+                    "r_engine_stats": REPLACED,
                     "filtered": 100,
                     "r_filtered": 100
                   }
@@ -169,6 +172,7 @@ ANALYZE
                     "r_rows": 2,
                     "r_table_time_ms": "REPLACED",
                     "r_other_time_ms": "REPLACED",
+                    "r_engine_stats": REPLACED,
                     "filtered": 100,
                     "r_filtered": 100
                   }
@@ -316,6 +320,7 @@ ANALYZE
               "r_rows": 2,
               "r_table_time_ms": "REPLACED",
               "r_other_time_ms": "REPLACED",
+              "r_engine_stats": REPLACED,
               "filtered": 100,
               "r_filtered": 100
             },
@@ -328,13 +333,18 @@ ANALYZE
                 "r_rows": 2,
                 "r_table_time_ms": "REPLACED",
                 "r_other_time_ms": "REPLACED",
+                "r_engine_stats": REPLACED,
                 "filtered": 100,
                 "r_filtered": 100
               },
               "buffer_type": "flat",
               "buffer_size": "119",
               "join_type": "BNL",
-              "r_filtered": 100
+              "r_loops": 2,
+              "r_filtered": 100,
+              "r_unpack_time_ms": "REPLACED",
+              "r_other_time_ms": "REPLACED",
+              "r_effective_rows": 2
             }
           }
         },
@@ -352,6 +362,7 @@ ANALYZE
               "r_rows": 2,
               "r_table_time_ms": "REPLACED",
               "r_other_time_ms": "REPLACED",
+              "r_engine_stats": REPLACED,
               "filtered": 100,
               "r_filtered": 100
             },
@@ -364,13 +375,18 @@ ANALYZE
                 "r_rows": 2,
                 "r_table_time_ms": "REPLACED",
                 "r_other_time_ms": "REPLACED",
+                "r_engine_stats": REPLACED,
                 "filtered": 100,
                 "r_filtered": 100
               },
               "buffer_type": "flat",
               "buffer_size": "119",
               "join_type": "BNL",
-              "r_filtered": 100
+              "r_loops": 2,
+              "r_filtered": 100,
+              "r_unpack_time_ms": "REPLACED",
+              "r_other_time_ms": "REPLACED",
+              "r_effective_rows": 2
             }
           }
         }
@@ -417,6 +433,7 @@ ANALYZE
                     "r_rows": 2,
                     "r_table_time_ms": "REPLACED",
                     "r_other_time_ms": "REPLACED",
+                    "r_engine_stats": REPLACED,
                     "filtered": 100,
                     "r_filtered": 100
                   },
@@ -429,13 +446,18 @@ ANALYZE
                       "r_rows": 2,
                       "r_table_time_ms": "REPLACED",
                       "r_other_time_ms": "REPLACED",
+                      "r_engine_stats": REPLACED,
                       "filtered": 100,
                       "r_filtered": 100
                     },
                     "buffer_type": "flat",
                     "buffer_size": "119",
                     "join_type": "BNL",
-                    "r_filtered": 100
+                    "r_loops": 2,
+                    "r_filtered": 100,
+                    "r_unpack_time_ms": "REPLACED",
+                    "r_other_time_ms": "REPLACED",
+                    "r_effective_rows": 2
                   }
                 }
               },
@@ -453,6 +475,7 @@ ANALYZE
                     "r_rows": 2,
                     "r_table_time_ms": "REPLACED",
                     "r_other_time_ms": "REPLACED",
+                    "r_engine_stats": REPLACED,
                     "filtered": 100,
                     "r_filtered": 100
                   },
@@ -465,13 +488,18 @@ ANALYZE
                       "r_rows": 2,
                       "r_table_time_ms": "REPLACED",
                       "r_other_time_ms": "REPLACED",
+                      "r_engine_stats": REPLACED,
                       "filtered": 100,
                       "r_filtered": 100
                     },
                     "buffer_type": "flat",
                     "buffer_size": "119",
                     "join_type": "BNL",
-                    "r_filtered": 100
+                    "r_loops": 2,
+                    "r_filtered": 100,
+                    "r_unpack_time_ms": "REPLACED",
+                    "r_other_time_ms": "REPLACED",
+                    "r_effective_rows": 2
                   }
                 }
               }

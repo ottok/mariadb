@@ -1,9 +1,0 @@
-0025-Change-the-default-optimization-from-O3-to-O2-in-mys.patch
-rocksdb-kfreebsd.patch
-mroonga-path-reproducible-build.patch
-env-perl-usr-bin-perl.patch
-fix-spelling-rocksdb.patch
-1556.patch
-fix-reproducible-builds-rocksdb.patch
-mroonga-mrn-lib-dirs-path-reproducible-build.patch
-2006-kfreebsd-amd64.patch

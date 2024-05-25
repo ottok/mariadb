@@ -102,10 +102,10 @@ protected:
   int sp_cache_package_routine(THD *thd,
                                const LEX_CSTRING &pkgname_cstr,
                                const Database_qualified_name *name,
-                               bool lookup_only, sp_head **sp) const;
+                               sp_head **sp) const;
   int sp_cache_package_routine(THD *thd,
                                const Database_qualified_name *name,
-                               bool lookup_only, sp_head **sp) const;
+                               sp_head **sp) const;
   sp_head *sp_find_package_routine(THD *thd,
                                    const LEX_CSTRING pkgname_str,
                                    const Database_qualified_name *name,
@@ -119,7 +119,7 @@ public: // TODO: make it private or protected
                                        const;
 
 public:
-  virtual ~Sp_handler() {}
+  virtual ~Sp_handler() = default;
   static const Sp_handler *handler(enum enum_sql_command cmd);
   static const Sp_handler *handler(enum_sp_type type);
   static const Sp_handler *handler(MDL_key::enum_mdl_namespace ns);
@@ -202,7 +202,7 @@ public:
                                    const Database_qualified_name *name,
                                    bool cache_only) const;
   virtual int sp_cache_routine(THD *thd, const Database_qualified_name *name,
-                               bool lookup_only, sp_head **sp) const;
+                               sp_head **sp) const;
 
   int sp_cache_routine_reentrant(THD *thd,
                                  const Database_qualified_name *nm,
@@ -283,9 +283,9 @@ class Sp_handler_package_procedure: public Sp_handler_procedure
 {
 public:
   int sp_cache_routine(THD *thd, const Database_qualified_name *name,
-                       bool lookup_only, sp_head **sp) const
+                       sp_head **sp) const
   {
-    return sp_cache_package_routine(thd, name, lookup_only, sp);
+    return sp_cache_package_routine(thd, name, sp);
   }
   sp_head *sp_find_routine(THD *thd,
                            const Database_qualified_name *name,
@@ -332,9 +332,9 @@ class Sp_handler_package_function: public Sp_handler_function
 {
 public:
   int sp_cache_routine(THD *thd, const Database_qualified_name *name,
-                       bool lookup_only, sp_head **sp) const
+                       sp_head **sp) const
   {
-    return sp_cache_package_routine(thd, name, lookup_only, sp);
+    return sp_cache_package_routine(thd, name, sp);
   }
   sp_head *sp_find_routine(THD *thd,
                            const Database_qualified_name *name,
@@ -632,7 +632,7 @@ public:
 
   const Sp_handler *m_handler;
 
-  int sp_cache_routine(THD *thd, bool lookup_only, sp_head **sp) const;
+  int sp_cache_routine(THD *thd, sp_head **sp) const;
 };
 
 

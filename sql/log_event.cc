@@ -154,7 +154,7 @@ public:
     reinit_io_cache(m_cache, WRITE_CACHE, 0L, FALSE, TRUE);
   }
 
-  ~Write_on_release_cache() {}
+  ~Write_on_release_cache() = default;
 
   bool flush_data()
   {
@@ -915,7 +915,8 @@ int Log_event::read_log_event(IO_CACHE* file, String* packet,
 
 Log_event* Log_event::read_log_event(IO_CACHE* file,
                                      const Format_description_log_event *fdle,
-                                     my_bool crc_check)
+                                     my_bool crc_check,
+                                     my_bool print_errors)
 {
   DBUG_ENTER("Log_event::read_log_event(IO_CACHE*,Format_description_log_event*...)");
   DBUG_ASSERT(fdle != 0);
@@ -954,8 +955,12 @@ Log_event* Log_event::read_log_event(IO_CACHE* file,
       goto err;
   }
 
+  /*
+    print_errors is false to prevent redundant error messages cluttering up the
+    log, as it will be printed below (if _our_ print_errors is true)
+  */
   if ((res= read_log_event((uchar*) event.ptr(), event.length(),
-                           &error, fdle, crc_check)))
+                           &error, fdle, crc_check, false)))
     res->register_temp_buf((uchar*) event.release(), true);
 
 err:
@@ -966,13 +971,7 @@ err:
     if (force_opt)
       DBUG_RETURN(new Unknown_log_event());
 #endif
-    if (event.length() >= OLD_HEADER_LEN)
-      sql_print_error("Error in Log_event::read_log_event(): '%s',"
-                      " data_len: %lu, event_type: %u", error,
-                      (ulong) uint4korr(&event[EVENT_LEN_OFFSET]),
-                      (uint) (uchar)event[EVENT_TYPE_OFFSET]);
-    else
-      sql_print_error("Error in Log_event::read_log_event(): '%s'", error);
+
     /*
       The SQL slave thread will check if file->error<0 to know
       if there was an I/O error. Even if there is no "low-level" I/O errors
@@ -982,6 +981,19 @@ err:
       only corrupt the slave's databases. So stop.
     */
     file->error= -1;
+
+#ifndef MYSQL_CLIENT
+    if (!print_errors)
+      DBUG_RETURN(res);
+#endif
+
+    if (event.length() >= OLD_HEADER_LEN)
+      sql_print_error("Error in Log_event::read_log_event(): '%s',"
+                      " data_len: %lu, event_type: %u", error,
+                      (ulong) uint4korr(&event[EVENT_LEN_OFFSET]),
+                      (uint) (uchar)event[EVENT_TYPE_OFFSET]);
+    else
+      sql_print_error("Error in Log_event::read_log_event(): '%s'", error);
   }
   DBUG_RETURN(res);
 }
@@ -995,7 +1007,8 @@ err:
 Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
                                      const char **error,
                                      const Format_description_log_event *fdle,
-                                     my_bool crc_check)
+                                     my_bool crc_check,
+                                     my_bool print_errors)
 {
   Log_event* ev;
   enum enum_binlog_checksum_alg alg;
@@ -1063,7 +1076,8 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
       DBUG_RETURN(NULL);
 #else
     *error= ER_THD_OR_DEFAULT(current_thd, ER_BINLOG_READ_EVENT_CHECKSUM_FAILURE);
-    sql_print_error("%s", *error);
+    if (print_errors)
+      sql_print_error("%s", *error);
     DBUG_RETURN(NULL);
 #endif
   }
@@ -2615,6 +2629,11 @@ Gtid_log_event::Gtid_log_event(const uchar *buf, uint event_len,
   }
   if (flags2 & (FL_PREPARED_XA | FL_COMPLETED_XA))
   {
+    if (event_len < static_cast<uint>(buf - buf_0) + 6)
+    {
+      seq_no= 0;
+      return;
+    }
     xid.formatID= uint4korr(buf);
     buf+= 4;
 
@@ -2623,6 +2642,11 @@ Gtid_log_event::Gtid_log_event(const uchar *buf, uint event_len,
     buf+= 2;
 
     long data_length= xid.bqual_length + xid.gtrid_length;
+    if (event_len < static_cast<uint>(buf - buf_0) + data_length)
+    {
+      seq_no= 0;
+      return;
+    }
     memcpy(xid.data, buf, data_length);
     buf+= data_length;
   }
@@ -2637,8 +2661,11 @@ Gtid_log_event::Gtid_log_event(const uchar *buf, uint event_len,
     */
     if (flags_extra & FL_EXTRA_MULTI_ENGINE)
     {
-      DBUG_ASSERT(static_cast<uint>(buf - buf_0) < event_len);
-
+      if (event_len < static_cast<uint>(buf - buf_0) + 1)
+      {
+        seq_no= 0;
+        return;
+      }
       extra_engines= *buf++;
 
       DBUG_ASSERT(extra_engines > 0);
@@ -2893,6 +2920,41 @@ XA_prepare_log_event(const uchar *buf,
   User_var_log_event methods
 **************************************************************************/
 
+bool Log_event_data_type::unpack_optional_attributes(const char *pos,
+                                                     const char *end)
+
+{
+  for ( ; pos < end; )
+  {
+    switch (*pos) {
+    case CHUNK_SIGNED:
+      m_is_unsigned= false;
+      pos++;
+      continue;
+    case CHUNK_UNSIGNED:
+      m_is_unsigned= true;
+      pos++;
+      continue;
+    case CHUNK_DATA_TYPE_NAME:
+      {
+        pos++;
+        if (pos >= end)
+          return true;
+        uint length= (uchar) *pos++;
+        if (pos + length > end)
+          return true;
+        m_data_type_name= {pos, length};
+        pos+= length;
+        continue;
+      }
+    default:
+      break; // Unknown chunk
+    }
+  }
+  return false;
+}
+
+
 User_var_log_event::
 User_var_log_event(const uchar *buf, uint event_len,
                    const Format_description_log_event* description_event)
@@ -2902,7 +2964,8 @@ User_var_log_event(const uchar *buf, uint event_len,
 #endif
 {
   bool error= false;
-  const uchar *buf_start= buf, *buf_end= buf + event_len;
+  const uchar *const buf_start= buf;
+  const char *buf_end= reinterpret_cast<const char*>(buf) + event_len;
 
   /* The Post-Header is empty. The Variable Data part begins immediately. */
   buf+= description_event->common_header_len +
@@ -2930,11 +2993,8 @@ User_var_log_event(const uchar *buf, uint event_len,
 
   buf+= UV_NAME_LEN_SIZE + name_len;
   is_null= (bool) *buf;
-  flags= User_var_log_event::UNDEF_F;    // defaults to UNDEF_F
   if (is_null)
   {
-    type= STRING_RESULT;
-    charset_number= my_charset_bin.number;
     val_len= 0;
     val= 0;  
   }
@@ -2949,8 +3009,8 @@ User_var_log_event(const uchar *buf, uint event_len,
       goto err;
     }
 
-    type= (Item_result) buf[UV_VAL_IS_NULL];
-    charset_number= uint4korr(buf + UV_VAL_IS_NULL + UV_VAL_TYPE_SIZE);
+    m_type= (Item_result) buf[UV_VAL_IS_NULL];
+    m_charset_number= uint4korr(buf + UV_VAL_IS_NULL + UV_VAL_TYPE_SIZE);
     val_len= uint4korr(buf + UV_VAL_IS_NULL + UV_VAL_TYPE_SIZE +
                        UV_CHARSET_NUMBER_SIZE);
 
@@ -2963,19 +3023,13 @@ User_var_log_event(const uchar *buf, uint event_len,
       the flags value.
 
       Old events will not have this extra byte, thence,
-      we keep the flags set to UNDEF_F.
+      we keep m_is_unsigned==false.
     */
-    size_t bytes_read= (val + val_len) - (char*) buf_start;
-    if (bytes_read > event_len)
+    const char *pos= val + val_len;
+    if (pos > buf_end || unpack_optional_attributes(pos, buf_end))
     {
       error= true;
       goto err;
-    }
-    if ((data_written - bytes_read) > 0)
-    {
-      flags= (uint) *(buf + UV_VAL_IS_NULL + UV_VAL_TYPE_SIZE +
-                    UV_CHARSET_NUMBER_SIZE + UV_VAL_LEN_SIZE +
-                    val_len);
     }
   }
 
@@ -3270,7 +3324,7 @@ Rows_log_event::Rows_log_event(const uchar *buf, uint event_len,
   }
   else
   {
-    m_table_id= (ulong) uint6korr(post_start);
+    m_table_id= (ulonglong) uint6korr(post_start);
     post_start+= RW_FLAGS_OFFSET;
   }
 
@@ -3346,22 +3400,17 @@ Rows_log_event::Rows_log_event(const uchar *buf, uint event_len,
 
   /* if my_bitmap_init fails, caught in is_valid() */
   if (likely(!my_bitmap_init(&m_cols,
-                          m_width <= sizeof(m_bitbuf)*8 ? m_bitbuf : NULL,
-                          m_width,
-                          false)))
+                             m_width <= sizeof(m_bitbuf)*8 ? m_bitbuf : NULL,
+                             m_width,
+                             false)))
   {
     DBUG_PRINT("debug", ("Reading from %p", ptr_after_width));
-    memcpy(m_cols.bitmap, ptr_after_width, (m_width + 7) / 8);
-    create_last_word_mask(&m_cols);
+    bitmap_import(&m_cols, ptr_after_width);
+    DBUG_DUMP("m_cols", (uchar*) ptr_after_width, no_bytes_in_export_map(&m_cols));
     ptr_after_width+= (m_width + 7) / 8;
-    DBUG_DUMP("m_cols", (uchar*) m_cols.bitmap, no_bytes_in_map(&m_cols));
   }
   else
-  {
-    // Needed because my_bitmap_init() does not set it to null on failure
-    m_cols.bitmap= NULL;
     DBUG_VOID_RETURN;
-  }
 
   m_cols_ai.bitmap= m_cols.bitmap; /* See explanation in is_valid() */
 
@@ -3371,23 +3420,18 @@ Rows_log_event::Rows_log_event(const uchar *buf, uint event_len,
 
     /* if my_bitmap_init fails, caught in is_valid() */
     if (likely(!my_bitmap_init(&m_cols_ai,
-                            m_width <= sizeof(m_bitbuf_ai)*8 ? m_bitbuf_ai : NULL,
-                            m_width,
-                            false)))
+                               m_width <= sizeof(m_bitbuf_ai)*8 ? m_bitbuf_ai :
+                               NULL,
+                               m_width,
+                               false)))
     {
       DBUG_PRINT("debug", ("Reading from %p", ptr_after_width));
-      memcpy(m_cols_ai.bitmap, ptr_after_width, (m_width + 7) / 8);
-      create_last_word_mask(&m_cols_ai);
+      bitmap_import(&m_cols_ai, ptr_after_width);
+      DBUG_DUMP("m_cols_ai", ptr_after_width, no_bytes_in_export_map(&m_cols_ai));
       ptr_after_width+= (m_width + 7) / 8;
-      DBUG_DUMP("m_cols_ai", (uchar*) m_cols_ai.bitmap,
-                no_bytes_in_map(&m_cols_ai));
     }
     else
-    {
-      // Needed because my_bitmap_init() does not set it to null on failure
-      m_cols_ai.bitmap= 0;
       DBUG_VOID_RETURN;
-    }
   }
 
   const uchar* const ptr_rows_data= (const uchar*) ptr_after_width;
@@ -3450,8 +3494,6 @@ void Rows_log_event::uncompress_buf()
 
 Rows_log_event::~Rows_log_event()
 {
-  if (m_cols.bitmap == m_bitbuf) // no my_malloc happened
-    m_cols.bitmap= 0; // so no my_free in my_bitmap_free
   my_bitmap_free(&m_cols); // To pair with my_bitmap_init().
   my_free(m_rows_buf);
   my_free(m_extra_row_data);
@@ -3465,9 +3507,10 @@ int Rows_log_event::get_data_size()
   uchar *end= net_store_length(buf, m_width);
 
   DBUG_EXECUTE_IF("old_row_based_repl_4_byte_map_id_master",
-                  return (int)(6 + no_bytes_in_map(&m_cols) + (end - buf) +
-                  (general_type_code == UPDATE_ROWS_EVENT ? no_bytes_in_map(&m_cols_ai) : 0) +
-                  m_rows_cur - m_rows_buf););
+                  return (int) (6 + no_bytes_in_export_map(&m_cols) + (end - buf) +
+                                (general_type_code == UPDATE_ROWS_EVENT ?
+                                 no_bytes_in_export_map(&m_cols_ai) : 0) +
+                                m_rows_cur - m_rows_buf););
   int data_size= 0;
   Log_event_type type= get_type_code();
   bool is_v2_event= LOG_EVENT_IS_ROW_V2(type);
@@ -3482,11 +3525,11 @@ int Rows_log_event::get_data_size()
   {
     data_size= ROWS_HEADER_LEN_V1;
   }
-  data_size+= no_bytes_in_map(&m_cols);
+  data_size+= no_bytes_in_export_map(&m_cols);
   data_size+= (uint) (end - buf);
 
   if (general_type_code == UPDATE_ROWS_EVENT)
-    data_size+= no_bytes_in_map(&m_cols_ai);
+    data_size+= no_bytes_in_export_map(&m_cols_ai);
 
   data_size+= (uint) (m_rows_cur - m_rows_buf);
   return data_size; 
@@ -3627,11 +3670,12 @@ Table_map_log_event::Table_map_log_event(const uchar *buf, uint event_len,
   else
   {
     DBUG_ASSERT(post_header_len == TABLE_MAP_HEADER_LEN);
-    m_table_id= (ulong) uint6korr(post_start);
+    m_table_id= (ulonglong) uint6korr(post_start);
     post_start+= TM_FLAGS_OFFSET;
   }
 
-  DBUG_ASSERT(m_table_id != ~0ULL);
+  DBUG_ASSERT((m_table_id & MAX_TABLE_MAP_ID) != UINT32_MAX &&
+              (m_table_id & MAX_TABLE_MAP_ID) != 0);
 
   m_flags= uint2korr(post_start);
 
@@ -4016,12 +4060,7 @@ Delete_rows_compressed_log_event::Delete_rows_compressed_log_event(
 
 Update_rows_log_event::~Update_rows_log_event()
 {
-  if (m_cols_ai.bitmap)
-  {
-    if (m_cols_ai.bitmap == m_bitbuf_ai) // no my_malloc happened
-      m_cols_ai.bitmap= 0; // so no my_free in my_bitmap_free
-    my_bitmap_free(&m_cols_ai); // To pair with my_bitmap_init().
-  }
+  my_bitmap_free(&m_cols_ai); // To pair with my_bitmap_init().
 }
 
 
@@ -4127,9 +4166,7 @@ Ignorable_log_event::Ignorable_log_event(const uchar *buf,
   DBUG_VOID_RETURN;
 }
 
-Ignorable_log_event::~Ignorable_log_event()
-{
-}
+Ignorable_log_event::~Ignorable_log_event() = default;
 
 bool copy_event_cache_to_file_and_reinit(IO_CACHE *cache, FILE *file)
 {
