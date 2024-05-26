@@ -7,3 +7,4 @@ fix-spelling-rocksdb.patch
 fix-reproducible-builds-rocksdb.patch
 mroonga-mrn-lib-dirs-path-reproducible-build.patch
 2006-kfreebsd-amd64.patch
+1063738-revert-c432c9ef.patch
