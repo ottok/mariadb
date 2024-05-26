@@ -91,10 +91,6 @@ Created 2/16/1996 Heikki Tuuri
 #include "zlib.h"
 #include "log.h"
 
-/** We are prepared for a situation that we have this many threads waiting for
-a transactional lock inside InnoDB. srv_start() sets the value. */
-ulint srv_max_n_threads;
-
 /** Log sequence number at shutdown */
 lsn_t	srv_shutdown_lsn;
 
@@ -201,7 +197,7 @@ static dberr_t create_log_file(bool create_new_db, lsn_t lsn)
 	bool ret;
 	os_file_t file{
           os_file_create_func(logfile0.c_str(),
-                              OS_FILE_CREATE | OS_FILE_ON_ERROR_NO_EXIT,
+                              OS_FILE_CREATE,
                               OS_FILE_NORMAL, OS_LOG_FILE, false, &ret)
         };
 
@@ -468,7 +464,7 @@ ATTRIBUTE_COLD static dberr_t srv_undo_tablespaces_reinit()
     rseg->init(nullptr, FIL_NULL);
   }
 
-  if (trx_sys.recovered_binlog_lsn
+  if (*trx_sys.recovered_binlog_filename
 #ifdef WITH_WSREP
       || !trx_sys.recovered_wsrep_xid.is_null()
 #endif /* WITH_WSREP */
@@ -476,7 +472,7 @@ ATTRIBUTE_COLD static dberr_t srv_undo_tablespaces_reinit()
   {
     /* Update binlog offset, binlog file name & wsrep xid in
     system tablespace rollback segment */
-    if (trx_sys.recovered_binlog_lsn)
+    if (*trx_sys.recovered_binlog_filename)
     {
       ut_d(const size_t len = strlen(trx_sys.recovered_binlog_filename) + 1);
       ut_ad(len > 1);
@@ -632,15 +628,15 @@ static uint32_t srv_undo_tablespace_open(bool create, const char* name,
     }
   }
 
-  pfs_os_file_t fh= os_file_create(innodb_data_file_key, name, OS_FILE_OPEN |
-                                   OS_FILE_ON_ERROR_NO_EXIT |
-                                   OS_FILE_ON_ERROR_SILENT,
+  pfs_os_file_t fh= os_file_create(innodb_data_file_key, name,
+                                   OS_FILE_OPEN_SILENT,
                                    OS_FILE_AIO, OS_DATA_FILE,
                                    srv_read_only_mode, &success);
 
   if (!success)
     return 0;
 
+  ulint n_retries = 5;
   os_offset_t size= os_file_get_size(fh);
   ut_a(size != os_offset_t(-1));
 
@@ -648,14 +644,24 @@ static uint32_t srv_undo_tablespace_open(bool create, const char* name,
   {
     page_t *page= static_cast<byte*>(aligned_malloc(srv_page_size,
                                                     srv_page_size));
+undo_retry:
     if (os_file_read(IORequestRead, fh, page, 0, srv_page_size, nullptr) !=
         DB_SUCCESS)
     {
 err_exit:
+      if (n_retries && srv_operation == SRV_OPERATION_BACKUP)
+      {
+        sql_print_information("InnoDB: Retrying to read undo "
+                              "tablespace %s", name);
+        n_retries--;
+        goto undo_retry;
+      }
       ib::error() << "Unable to read first page of file " << name;
       aligned_free(page);
       return ~0U;
     }
+
+    DBUG_EXECUTE_IF("undo_space_read_fail", goto err_exit;);
 
     uint32_t id= mach_read_from_4(FIL_PAGE_SPACE_ID + page);
     if (id == 0 || id >= SRV_SPACE_ID_UPPER_BOUND ||
@@ -731,9 +737,7 @@ srv_check_undo_redo_logs_exists()
 
 		fh = os_file_create_func(
 			name,
-			OS_FILE_OPEN_RETRY
-			| OS_FILE_ON_ERROR_NO_EXIT
-			| OS_FILE_ON_ERROR_SILENT,
+			OS_FILE_OPEN_RETRY_SILENT,
 			OS_FILE_NORMAL,
 			OS_DATA_FILE,
 			srv_read_only_mode,
@@ -755,8 +759,7 @@ srv_check_undo_redo_logs_exists()
 	auto logfilename = get_log_file_path();
 
 	fh = os_file_create_func(logfilename.c_str(),
-				 OS_FILE_OPEN_RETRY | OS_FILE_ON_ERROR_NO_EXIT
-				 | OS_FILE_ON_ERROR_SILENT,
+				 OS_FILE_OPEN_RETRY_SILENT,
 				 OS_FILE_NORMAL, OS_LOG_FILE,
 				 srv_read_only_mode, &ret);
 
@@ -1122,10 +1125,14 @@ dberr_t srv_start(bool create_new_db)
 	if (srv_force_recovery) {
 		ib::info() << "!!! innodb_force_recovery is set to "
 			<< srv_force_recovery << " !!!";
+		if (srv_force_recovery == SRV_FORCE_NO_LOG_REDO) {
+			srv_read_only_mode = true;
+		}
 	}
 
-	if (srv_force_recovery == SRV_FORCE_NO_LOG_REDO) {
-		srv_read_only_mode = true;
+	if (srv_read_only_mode) {
+		sql_print_information("InnoDB: Started in read only mode");
+		srv_use_doublewrite_buf = false;
 	}
 
 	high_level_read_only = srv_read_only_mode
@@ -1174,12 +1181,6 @@ dberr_t srv_start(bool create_new_db)
 	started which may need to be instrumented. */
 	mysql_stage_register("innodb", srv_stages,
 			     static_cast<int>(UT_ARR_SIZE(srv_stages)));
-
-	srv_max_n_threads =
-		1 /* dict_stats_thread */
-		+ 1 /* fts_optimize_thread */
-		+ 128 /* safety margin */
-		+ max_connections;
 
 	srv_boot();
 
@@ -1302,6 +1303,10 @@ dberr_t srv_start(bool create_new_db)
 		ut_ad(buf_page_cleaner_is_active);
 	}
 
+	if (innodb_encrypt_temporary_tables && !log_crypt_init()) {
+		return srv_init_abort(DB_ERROR);
+	}
+
 	/* Check if undo tablespaces and redo log files exist before creating
 	a new system tablespace */
 	if (create_new_db) {
@@ -1310,6 +1315,11 @@ dberr_t srv_start(bool create_new_db)
 			return(srv_init_abort(DB_ERROR));
 		}
 		recv_sys.debug_free();
+	} else {
+		err = recv_recovery_read_checkpoint();
+		if (err != DB_SUCCESS) {
+			return srv_init_abort(err);
+		}
 	}
 
 	/* Open or create the data files. */
@@ -1334,12 +1344,9 @@ dberr_t srv_start(bool create_new_db)
 			" old data files which contain your precious data!";
 		/* fall through */
 	default:
-		/* Other errors might come from Datafile::validate_first_page() */
-		return(srv_init_abort(err));
-	}
-
-	if (innodb_encrypt_temporary_tables && !log_crypt_init()) {
-		return srv_init_abort(DB_ERROR);
+		/* Other errors might be flagged by
+		Datafile::validate_first_page() */
+		return srv_init_abort(err);
 	}
 
 	if (create_new_db) {
@@ -1355,10 +1362,10 @@ dberr_t srv_start(bool create_new_db)
 			return srv_init_abort(err);
 		}
 
-		srv_undo_space_id_start= 1;
+		srv_undo_space_id_start = 1;
 	}
 
-	/* Open log file and data files in the systemtablespace: we keep
+	/* Open data files in the system tablespace: we keep
 	them open until database shutdown */
 	ut_d(fil_system.sys_space->recv_size = srv_sys_space_size_debug);
 
@@ -1513,6 +1520,71 @@ dberr_t srv_start(bool create_new_db)
 
 		fil_system.space_id_reuse_warned = false;
 
+		if (srv_operation > SRV_OPERATION_EXPORT_RESTORED) {
+			ut_ad(srv_operation == SRV_OPERATION_RESTORE_EXPORT
+			      || srv_operation == SRV_OPERATION_RESTORE);
+			return(err);
+		}
+
+		/* Upgrade or resize or rebuild the redo logs before
+		generating any dirty pages, so that the old redo log
+		file will not be written to. */
+
+		if (srv_force_recovery == SRV_FORCE_NO_LOG_REDO) {
+			/* Completely ignore the redo log. */
+		} else if (srv_read_only_mode) {
+			/* Leave the redo log alone. */
+		} else if (log_sys.file_size == srv_log_file_size
+			   && log_sys.format
+			   == (srv_encrypt_log
+			       ? log_t::FORMAT_ENC_10_8
+			       : log_t::FORMAT_10_8)) {
+			/* No need to add or remove encryption,
+			upgrade, or resize. */
+			delete_log_files();
+		} else {
+			/* Prepare to delete the old redo log file */
+			const lsn_t lsn{srv_prepare_to_delete_redo_log_file()};
+
+			DBUG_EXECUTE_IF("innodb_log_abort_1",
+					return(srv_init_abort(DB_ERROR)););
+			/* Prohibit redo log writes from any other
+			threads until creating a log checkpoint at the
+			end of create_log_file(). */
+			ut_d(recv_no_log_write = true);
+			ut_ad(!os_aio_pending_reads());
+			ut_d(mysql_mutex_lock(&buf_pool.flush_list_mutex));
+			ut_ad(!buf_pool.get_oldest_modification(0));
+			ut_d(mysql_mutex_unlock(&buf_pool.flush_list_mutex));
+			/* os_aio_pending_writes() may hold here if
+			some write_io_callback() did not release the
+			slot yet. However, the page write itself must
+			have completed, because the buf_pool.flush_list
+			is empty. In debug builds, we wait for this to
+			happen, hoping to get a hung process if this
+			assumption does not hold. */
+			ut_d(os_aio_wait_until_no_pending_writes(false));
+
+			/* Close the redo log file, so that we can replace it */
+			log_sys.close_file();
+
+			DBUG_EXECUTE_IF("innodb_log_abort_5",
+					return(srv_init_abort(DB_ERROR)););
+			DBUG_PRINT("ib_log", ("After innodb_log_abort_5"));
+
+			err = create_log_file(false, lsn);
+
+			if (err == DB_SUCCESS && log_sys.resize_rename()) {
+				err = DB_ERROR;
+			}
+
+			if (err != DB_SUCCESS) {
+				return(srv_init_abort(err));
+			}
+		}
+
+		recv_sys.debug_free();
+
 		if (!srv_read_only_mode) {
 			const uint32_t flags = FSP_FLAGS_PAGE_SSIZE();
 			for (uint32_t id = srv_undo_space_id_start;
@@ -1597,71 +1669,6 @@ dberr_t srv_start(bool create_new_db)
 				return(srv_init_abort(DB_ERROR));
 			}
 		}
-
-		if (srv_operation > SRV_OPERATION_EXPORT_RESTORED) {
-			ut_ad(srv_operation == SRV_OPERATION_RESTORE_EXPORT
-			      || srv_operation == SRV_OPERATION_RESTORE);
-			return(err);
-		}
-
-		/* Upgrade or resize or rebuild the redo logs before
-		generating any dirty pages, so that the old redo log
-		file will not be written to. */
-
-		if (srv_force_recovery == SRV_FORCE_NO_LOG_REDO) {
-			/* Completely ignore the redo log. */
-		} else if (srv_read_only_mode) {
-			/* Leave the redo log alone. */
-		} else if (log_sys.file_size == srv_log_file_size
-			   && log_sys.format
-			   == (srv_encrypt_log
-			       ? log_t::FORMAT_ENC_10_8
-			       : log_t::FORMAT_10_8)) {
-			/* No need to add or remove encryption,
-			upgrade, or resize. */
-			delete_log_files();
-		} else {
-			/* Prepare to delete the old redo log file */
-			const lsn_t lsn{srv_prepare_to_delete_redo_log_file()};
-
-			DBUG_EXECUTE_IF("innodb_log_abort_1",
-					return(srv_init_abort(DB_ERROR)););
-			/* Prohibit redo log writes from any other
-			threads until creating a log checkpoint at the
-			end of create_log_file(). */
-			ut_d(recv_no_log_write = true);
-			ut_ad(!os_aio_pending_reads());
-			ut_d(mysql_mutex_lock(&buf_pool.flush_list_mutex));
-			ut_ad(!buf_pool.get_oldest_modification(0));
-			ut_d(mysql_mutex_unlock(&buf_pool.flush_list_mutex));
-			/* os_aio_pending_writes() may hold here if
-			some write_io_callback() did not release the
-			slot yet. However, the page write itself must
-			have completed, because the buf_pool.flush_list
-			is empty. In debug builds, we wait for this to
-			happen, hoping to get a hung process if this
-			assumption does not hold. */
-			ut_d(os_aio_wait_until_no_pending_writes(false));
-
-			/* Close the redo log file, so that we can replace it */
-			log_sys.close_file();
-
-			DBUG_EXECUTE_IF("innodb_log_abort_5",
-					return(srv_init_abort(DB_ERROR)););
-			DBUG_PRINT("ib_log", ("After innodb_log_abort_5"));
-
-			err = create_log_file(false, lsn);
-
-			if (err == DB_SUCCESS && log_sys.resize_rename()) {
-				err = DB_ERROR;
-			}
-
-			if (err != DB_SUCCESS) {
-				return(srv_init_abort(err));
-			}
-		}
-
-		recv_sys.debug_free();
 	}
 
 	ut_ad(err == DB_SUCCESS);
@@ -1771,21 +1778,13 @@ dberr_t srv_start(bool create_new_db)
 		}
 
 		if (srv_force_recovery < SRV_FORCE_NO_UNDO_LOG_SCAN) {
-			/* The following call is necessary for the insert
+			/* The following call is necessary for the change
 			buffer to work with multiple tablespaces. We must
 			know the mapping between space id's and .ibd file
 			names.
 
-			In a crash recovery, we check that the info in data
-			dictionary is consistent with what we already know
-			about space id's from the calls to fil_ibd_load().
-
-			In a normal startup, we create the space objects for
-			every table in the InnoDB data dictionary that has
-			an .ibd file.
-
 			We also determine the maximum tablespace id used. */
-			dict_check_tablespaces_and_store_max_id();
+			dict_check_tablespaces_and_store_max_id(nullptr);
 		}
 
 		if (srv_force_recovery < SRV_FORCE_NO_TRX_UNDO
@@ -1933,7 +1932,7 @@ void innodb_preshutdown()
     better prevent any further changes from being buffered. */
     innodb_change_buffering= 0;
 
-    if (trx_sys.is_initialised())
+    if (srv_force_recovery < SRV_FORCE_NO_TRX_UNDO && srv_was_started)
       while (trx_sys.any_active_transactions())
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }

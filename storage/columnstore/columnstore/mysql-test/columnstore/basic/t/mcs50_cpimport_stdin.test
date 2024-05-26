@@ -1,0 +1,49 @@
+#
+# Bulk Load from STDIN 
+# Author: Susil, susil.behera@mariadb.com
+#
+
+if (!$MYSQL_TEST_ROOT){
+  skip Should be run by root to execute cpimport;
+}
+
+-- source ../include/have_columnstore.inc
+
+--disable_warnings
+DROP DATABASE IF EXISTS mcs50_db;
+--enable_warnings
+
+CREATE DATABASE mcs50_db;
+USE mcs50_db;
+
+CREATE TABLE t1(col1 INT, col2 INT, col3 CHAR(8)) ENGINE=Columnstore;
+
+#Valid data and table
+--exec cat $MTR_SUITE_DIR/../std_data/100Krows.dat | $MCS_CPIMPORT mcs50_db t1 >/dev/null
+SELECT * FROM t1 ORDER BY col1;
+SELECT COUNT(*) FROM t1;
+
+TRUNCATE t1;
+
+#Unknown db
+#Error getting OID for table unknown.t1: MCS-2006: 'unknown.t1' does not exist in Columnstore.
+--error 1
+--exec cat $MTR_SUITE_DIR/../100Krows.dat | $MCS_CPIMPORT unknown t1 >/dev/null
+
+#Unknown table
+#Error getting OID for table mcs50_db.unknown: MCS-2006: 'mcs50_db.unknown' does not exist in Columnstore.
+--error 1
+--exec cat $MTR_SUITE_DIR/../std_data/100Krows.dat | $MCS_CPIMPORT mcs50_db unknown >/dev/null
+
+#Wrong delimiter
+--error 1
+--exec cat $MTR_SUITE_DIR/../std_data/100Krows.dat | $MCS_CPIMPORT mcs50_db t1 -s ',' >/dev/null 
+
+#Unknown file
+--exec rm -f /tmp/UNKNOWN.dat
+--exec cat /tmp/UNKNOWN.dat | $MCS_CPIMPORT mcs50_db t1 >/dev/null
+SELECT * FROM t1 ORDER BY col1;
+SELECT COUNT(*) FROM t1;
+
+# Clean UP
+DROP DATABASE mcs50_db;

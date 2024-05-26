@@ -1,0 +1,117 @@
+create table t1 (
+pk int primary key auto_increment,
+nm varchar(32),
+fl1 tinyint default 0,
+fl2 tinyint default 0,
+index idx1(nm, fl1),
+index idx2(fl2)
+) engine=myisam;
+create table name (
+pk int primary key auto_increment,
+nm bigint
+) engine=myisam;
+create table flag2 (
+pk int primary key auto_increment,
+fl2 tinyint
+) engine=myisam;
+insert into name(nm) select seq from seq_1_to_1000 order by rand(17);
+insert into flag2(fl2) select seq mod 2 from seq_1_to_1000 order by rand(19);
+insert into t1(nm,fl2)
+select nm, fl2 from name, flag2 where name.pk = flag2.pk;
+analyze table t1 persistent for all;
+Table	Op	Msg_type	Msg_text
+test.t1	analyze	status	Engine-independent statistics collected
+test.t1	analyze	status	Table is already up to date
+set optimizer_trace="enabled=on";
+set optimizer_switch='rowid_filter=on';
+set statement optimizer_adjust_secondary_key_costs=0 for
+explain select * from t1  where nm like '500%' AND fl2 = 0;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	range	idx1,idx2	idx1	35	NULL	1	Using index condition; Using where
+set @trace=(select trace from information_schema.optimizer_trace);
+select json_detailed(json_extract(@trace, '$**.considered_access_paths'));
+json_detailed(json_extract(@trace, '$**.considered_access_paths'))
+[
+    [
+        {
+            "access_type": "ref",
+            "index": "idx2",
+            "used_range_estimates": true,
+            "rowid_filter_skipped": "worst/max seeks clipping",
+            "rows": 492,
+            "cost": 492.3171406,
+            "chosen": true
+        },
+        {
+            "access_type": "range",
+            "resulting_rows": 0.492,
+            "cost": 1.448699097,
+            "chosen": true
+        }
+    ]
+]
+
+The following trace should have a different rowid_filter_key cost
+
+set statement optimizer_adjust_secondary_key_costs=2 for
+explain select * from t1  where nm like '500%' AND fl2 = 0;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	range	idx1,idx2	idx1	35	NULL	1	Using index condition; Using where
+set @trace=(select trace from information_schema.optimizer_trace);
+select json_detailed(json_extract(@trace, '$**.considered_access_paths'));
+json_detailed(json_extract(@trace, '$**.considered_access_paths'))
+[
+    [
+        {
+            "access_type": "ref",
+            "index": "idx2",
+            "used_range_estimates": true,
+            "rowid_filter_key": "idx1",
+            "rows": 492,
+            "cost": 3.814364688,
+            "chosen": true
+        },
+        {
+            "access_type": "range",
+            "resulting_rows": 0.492,
+            "cost": 1.448699097,
+            "chosen": true
+        }
+    ]
+]
+drop table t1, name, flag2;
+select @@optimizer_adjust_secondary_key_costs;
+@@optimizer_adjust_secondary_key_costs
+
+set @@optimizer_adjust_secondary_key_costs=7;
+select @@optimizer_adjust_secondary_key_costs;
+@@optimizer_adjust_secondary_key_costs
+adjust_secondary_key_cost,disable_max_seek,disable_forced_index_in_group_by
+set @@optimizer_adjust_secondary_key_costs=default;
+#
+# MDEV-33306 Optimizer choosing incorrect index in 10.6, 10.5 but not in 10.4
+#
+create table t1 (a int primary key, b int, c int, d int, key(b),key(c)) engine=innodb;
+insert into t1 select seq, mod(seq,10), mod(seq,2), seq from seq_1_to_50000;
+explain select b, sum(d) from t1 where c=0 group by b;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	index	c	b	5	NULL	#	Using where
+select b, sum(d) from t1 where c=0 group by b;
+b	sum(d)
+0	125025000
+2	124985000
+4	124995000
+6	125005000
+8	125015000
+set @@optimizer_adjust_secondary_key_costs="disable_forced_index_in_group_by";
+explain select b, sum(d) from t1 where c=0 group by b;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	ALL	c	NULL	NULL	NULL	#	Using where; Using temporary; Using filesort
+select b, sum(d) from t1 where c=0 group by b;
+b	sum(d)
+0	125025000
+2	124985000
+4	124995000
+6	125005000
+8	125015000
+drop table t1;

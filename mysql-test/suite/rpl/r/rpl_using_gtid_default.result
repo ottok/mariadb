@@ -58,8 +58,6 @@ include/start_slave.inc
 # to its default of Slave_Pos after RESET SLAVE.
 include/stop_slave.inc
 CHANGE MASTER TO MASTER_USE_GTID=Current_Pos;
-Warnings:
-Warning	1681	'master_use_gtid=current_pos' is deprecated and will be removed in a future release. Please use master_demote_to_slave=1 instead
 include/start_slave.inc
 include/stop_slave.inc
 RESET SLAVE;
@@ -117,7 +115,10 @@ include/start_slave.inc
 # not master_use_gtid=no should warn the user that Using_Gtid is being
 # changed to No.
 #
+connection master;
+include/save_master_pos.inc
 connection slave;
+include/sync_io_with_master.inc
 include/stop_slave.inc
 CHANGE MASTER TO master_log_pos=io_log_pos, master_log_file='io_log_file';
 Warnings:

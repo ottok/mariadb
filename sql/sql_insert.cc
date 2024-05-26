@@ -83,6 +83,7 @@
 #include "rpl_rli.h"
 
 #ifdef WITH_WSREP
+#include "wsrep_mysqld.h" /* wsrep_append_table_keys() */
 #include "wsrep_trans_observer.h" /* wsrep_start_transction() */
 #endif /* WITH_WSREP */
 
@@ -95,7 +96,8 @@ static void end_delayed_insert(THD *thd);
 pthread_handler_t handle_delayed_insert(void *arg);
 static void unlink_blobs(TABLE *table);
 #endif
-static bool check_view_insertability(THD *thd, TABLE_LIST *view);
+static bool check_view_insertability(THD *thd, TABLE_LIST *view,
+                                     List<Item> &fields);
 static int binlog_show_create_table_(THD *thd, TABLE *table,
                                      Table_specification_st *create_info);
 
@@ -310,7 +312,7 @@ static int check_insert_fields(THD *thd, TABLE_LIST *table_list,
 
   if (check_key_in_view(thd, table_list) ||
       (table_list->view &&
-       check_view_insertability(thd, table_list)))
+       check_view_insertability(thd, table_list, fields)))
   {
     my_error(ER_NON_INSERTABLE_TABLE, MYF(0), table_list->alias.str, "INSERT");
     DBUG_RETURN(-1);
@@ -591,7 +593,8 @@ bool open_and_lock_for_insert_delayed(THD *thd, TABLE_LIST *table_list)
       Open tables used for sub-selects or in stored functions, will also
       cache these functions.
     */
-    if (open_and_lock_tables(thd, table_list->next_global, TRUE,
+    if (table_list->next_global &&
+        open_and_lock_tables(thd, table_list->next_global, TRUE,
                              MYSQL_OPEN_IGNORE_ENGINE_STATS))
     {
       end_delayed_insert(thd);
@@ -1424,6 +1427,7 @@ abort:
     check_view_insertability()
     thd     - thread handler
     view    - reference on VIEW
+    fields  - fields used in insert
 
   IMPLEMENTATION
     A view is insertable if the folloings are true:
@@ -1439,7 +1443,8 @@ abort:
     TRUE  - can't be used for insert
 */
 
-static bool check_view_insertability(THD * thd, TABLE_LIST *view)
+static bool check_view_insertability(THD *thd, TABLE_LIST *view,
+                                     List<Item> &fields)
 {
   uint num= view->view->first_select_lex()->item_list.elements;
   TABLE *table= view->table;
@@ -1447,9 +1452,11 @@ static bool check_view_insertability(THD * thd, TABLE_LIST *view)
 		   *trans_end= trans_start + num;
   Field_translator *trans;
   uint used_fields_buff_size= bitmap_buffer_size(table->s->fields);
-  uint32 *used_fields_buff= (uint32*)thd->alloc(used_fields_buff_size);
+  my_bitmap_map *used_fields_buff= (my_bitmap_map*)thd->alloc(used_fields_buff_size);
   MY_BITMAP used_fields;
   enum_column_usage saved_column_usage= thd->column_usage;
+  List_iterator_fast<Item> it(fields);
+  Item *ex;
   DBUG_ENTER("check_key_in_view");
 
   if (!used_fields_buff)
@@ -1478,6 +1485,17 @@ static bool check_view_insertability(THD * thd, TABLE_LIST *view)
     /* simple SELECT list entry (field without expression) */
     if (!(field= trans->item->field_for_view_update()))
     {
+      // Do not check fields which we are not inserting into
+      while((ex= it++))
+      {
+        // The field used in the INSERT
+        if (ex->real_item()->field_for_view_update() ==
+            trans->item->field_for_view_update())
+          break;
+      }
+      it.rewind();
+      if (!ex)
+        continue;
       thd->column_usage= saved_column_usage;
       DBUG_RETURN(TRUE);
     }
@@ -1492,11 +1510,12 @@ static bool check_view_insertability(THD * thd, TABLE_LIST *view)
   }
   thd->column_usage= saved_column_usage;
   /* unique test */
-  for (trans= trans_start; trans != trans_end; trans++)
+  while((ex= it++))
   {
     /* Thanks to test above, we know that all columns are of type Item_field */
-    Item_field *field= (Item_field *)trans->item;
-    /* check fields belong to table in which we are inserting */
+    DBUG_ASSERT(ex->real_item()->field_for_view_update()->type() ==
+                Item::FIELD_ITEM);
+    Item_field *field= (Item_field *)ex->real_item()->field_for_view_update();
     if (field->field->table == table &&
         bitmap_fast_test_and_set(&used_fields, field->field->field_index))
       DBUG_RETURN(TRUE);
@@ -1780,7 +1799,7 @@ int mysql_prepare_insert(THD *thd, TABLE_LIST *table_list,
 
 	/* Check if there is more uniq keys after field */
 
-static int last_uniq_key(TABLE *table,uint keynr)
+static int last_uniq_key(TABLE *table, const KEY *key, uint keynr)
 {
   /*
     When an underlying storage engine informs that the unique key
@@ -1800,7 +1819,7 @@ static int last_uniq_key(TABLE *table,uint keynr)
     return 0;
 
   while (++keynr < table->s->keys)
-    if (table->key_info[keynr].flags & HA_NOSAME)
+    if (key[keynr].flags & HA_NOSAME)
       return 0;
   return 1;
 }
@@ -1932,14 +1951,31 @@ int write_record(THD *thd, TABLE *table, COPY_INFO *info, select_result *sink)
 	was used.  This ensures that we don't get a problem when the
 	whole range of the key has been used.
       */
-      if (info->handle_duplicates == DUP_REPLACE && table->next_number_field &&
+      if (info->handle_duplicates == DUP_REPLACE &&
           key_nr == table->s->next_number_index && insert_id_for_cur_row > 0)
 	goto err;
-      if (table->file->ha_table_flags() & HA_DUPLICATE_POS)
+      if (table->file->has_dup_ref())
       {
+        /*
+          If engine doesn't support HA_DUPLICATE_POS, the handler may init to
+          INDEX, but dup_ref could also be set by lookup_handled (and then,
+          lookup_errkey is set, f.ex. long unique duplicate).
+
+          In such case, handler would stay uninitialized, so do it here.
+         */
+        bool init_lookup_handler= table->file->lookup_errkey != (uint)-1 &&
+                                  table->file->inited == handler::NONE;
+        if (init_lookup_handler && table->file->ha_rnd_init_with_error(false))
+          goto err;
+
         DBUG_ASSERT(table->file->inited == handler::RND);
-	if (table->file->ha_rnd_pos(table->record[1],table->file->dup_ref))
-	  goto err;
+	int rnd_pos_err= table->file->ha_rnd_pos(table->record[1],
+                                                 table->file->dup_ref);
+
+        if (init_lookup_handler)
+          table->file->ha_rnd_end();
+        if (rnd_pos_err)
+          goto err;
       }
       else
       {
@@ -2115,8 +2151,27 @@ int write_record(THD *thd, TABLE *table, COPY_INFO *info, select_result *sink)
           tables which have ON UPDATE but have no ON DELETE triggers,
           we just should not expose this fact to users by invoking
           ON UPDATE triggers.
+
+          Note, TABLE_SHARE and TABLE see long uniques differently:
+          - TABLE_SHARE sees as HA_KEY_ALG_LONG_HASH and HA_NOSAME
+          - TABLE sees as usual non-unique indexes
         */
-        if (last_uniq_key(table,key_nr) &&
+        bool is_long_unique= table->s->key_info &&
+                             table->s->key_info[key_nr].algorithm ==
+                             HA_KEY_ALG_LONG_HASH;
+        if ((is_long_unique ?
+             /*
+               We have a long unique. Test that there are no in-engine
+               uniques and the current long unique is the last long unique.
+             */
+             !(table->key_info[0].flags & HA_NOSAME) &&
+             last_uniq_key(table, table->s->key_info, key_nr) :
+             /*
+               We have a normal key - not a long unique.
+               Test is the current normal key is unique and
+               it is the last normal unique.
+             */
+             last_uniq_key(table, table->key_info, key_nr)) &&
             !table->file->referenced_by_foreign_key() &&
             (!table->triggers || !table->triggers->has_delete_triggers()))
         {
@@ -2363,7 +2418,7 @@ public:
     passed from connection thread to the handler thread.
   */
   MDL_request grl_protection;
-  Delayed_insert(SELECT_LEX *current_select)
+  Delayed_insert(LEX *lex)
     :locks_in_memory(0), thd(next_thread_id()),
      table(0),tables_in_use(0), stacked_inserts(0),
      status(0), retry(0), handler_thread_initialized(FALSE), group_count(0)
@@ -2376,8 +2431,9 @@ public:
     strmake_buf(thd.security_ctx->priv_user, thd.security_ctx->user);
     thd.current_tablenr=0;
     thd.set_command(COM_DELAYED_INSERT);
-    thd.lex->current_select= current_select;
-    thd.lex->sql_command= SQLCOM_INSERT;        // For innodb::store_lock()
+    thd.lex->current_select= lex->current_select;
+    thd.lex->sql_command= lex->sql_command;        // For innodb::store_lock()
+    thd.lex->duplicates= lex->duplicates;
     /*
       Prevent changes to global.lock_wait_timeout from affecting
       delayed insert threads as any timeouts in delayed inserts
@@ -2553,7 +2609,7 @@ bool delayed_get_table(THD *thd, MDL_request *grl_protection_request,
     */
     if (! (di= find_handler(thd, table_list)))
     {
-      if (!(di= new Delayed_insert(thd->lex->current_select)))
+      if (!(di= new Delayed_insert(thd->lex)))
         goto end_create;
 
       /*
@@ -2721,7 +2777,7 @@ TABLE *Delayed_insert::get_local_table(THD* client_thd)
     }
     THD_STAGE_INFO(client_thd, stage_got_handler_lock);
     if (client_thd->killed)
-      goto error;
+      goto error2;
     if (thd.killed)
     {
       /*
@@ -2746,7 +2802,7 @@ TABLE *Delayed_insert::get_local_table(THD* client_thd)
         my_message(thd.get_stmt_da()->sql_errno(),
                    thd.get_stmt_da()->message(), MYF(0));
       }
-      goto error;
+      goto error2;
     }
   }
   share= table->s;
@@ -2775,11 +2831,14 @@ TABLE *Delayed_insert::get_local_table(THD* client_thd)
                         &record, (uint) share->reclength,
                         &bitmap, (uint) share->column_bitmap_size*4,
                         NullS))
-    goto error;
+    goto error2;
 
   /* Copy the TABLE object. */
   copy= new (copy_tmp) TABLE;
   *copy= *table;
+  copy->vcol_refix_list.empty();
+  init_sql_alloc(key_memory_TABLE, &copy->mem_root, TABLE_ALLOC_BLOCK_SIZE, 0,
+                 MYF(MY_THREAD_SPECIFIC));
 
   /* We don't need to change the file handler here */
   /* Assign the pointers for the field pointers array and the record. */
@@ -2851,6 +2910,8 @@ TABLE *Delayed_insert::get_local_table(THD* client_thd)
   copy->def_read_set.bitmap= (my_bitmap_map*) bitmap;
   copy->def_write_set.bitmap= ((my_bitmap_map*)
                                (bitmap + share->column_bitmap_size));
+  create_last_bit_mask(&copy->def_read_set);
+  create_last_bit_mask(&copy->def_write_set);
   bitmaps_used= 2;
   if (share->default_fields || share->default_expressions)
   {
@@ -2863,11 +2924,15 @@ TABLE *Delayed_insert::get_local_table(THD* client_thd)
   bzero((char*) bitmap, share->column_bitmap_size * bitmaps_used);
   copy->read_set=  &copy->def_read_set;
   copy->write_set= &copy->def_write_set;
+  move_root(client_thd->mem_root, &copy->mem_root);
+  free_root(&copy->mem_root, 0);
 
   DBUG_RETURN(copy);
 
   /* Got fatal error */
  error:
+  free_root(&copy->mem_root, 0);
+error2:
   tables_in_use--;
   mysql_cond_signal(&cond);                     // Inform thread about abort
   DBUG_RETURN(0);
@@ -5115,17 +5180,13 @@ bool select_create::send_eof()
                   thd->wsrep_trx_id(), thd->thread_id, thd->query_id);
 
       /*
-        append table level exclusive key for CTAS
+        For CTAS, append table level exclusive key for created table
+        and table level shared key for selected table.
       */
-      wsrep_key_arr_t key_arr= {0, 0};
-      wsrep_prepare_keys_for_isolation(thd,
-                                       table_list->db.str,
-                                       table_list->table_name.str,
-                                       table_list,
-                                       &key_arr);
-      int rcode= wsrep_thd_append_key(thd, key_arr.keys, key_arr.keys_len,
-                                      WSREP_SERVICE_KEY_EXCLUSIVE);
-      wsrep_keys_free(&key_arr);
+      int rcode= wsrep_append_table_keys(thd, table_list, table_list,
+              WSREP_SERVICE_KEY_EXCLUSIVE);
+      rcode= rcode || wsrep_append_table_keys(thd, nullptr, select_tables,
+              WSREP_SERVICE_KEY_SHARED);
       if (rcode)
       {
         DBUG_PRINT("wsrep", ("row key failed: %d", rcode));

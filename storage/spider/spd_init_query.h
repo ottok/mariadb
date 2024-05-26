@@ -20,6 +20,17 @@
 */
 
 static LEX_STRING spider_init_queries[] = {
+  /* Use the default SQL_MODE for this connection. */
+  {C_STRING_WITH_LEN(
+    "SET @@SQL_MODE = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,"
+                      "NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';"
+  )},
+  {C_STRING_WITH_LEN(
+    "SET @@OLD_MODE = CONCAT(@@OLD_MODE, ',UTF8_IS_UTF8MB3');"
+  )},
+  {C_STRING_WITH_LEN(
+    "SET tx_read_only = off;"
+  )},
   {C_STRING_WITH_LEN(
     "create table if not exists mysql.spider_xa("
     "  format_id int not null default 0,"
@@ -651,6 +662,46 @@ static LEX_STRING spider_init_queries[] = {
   {C_STRING_WITH_LEN(
     "alter table mysql.spider_xa_member"
     "  add column if not exists dsn char(64) default null after default_group,"
+    "  algorithm=copy, lock=shared;"
+  )},
+  {C_STRING_WITH_LEN(
+    "alter table mysql.spider_link_mon_servers"
+    "  add column if not exists filedsn text default null after dsn,"
+    "  algorithm=copy, lock=shared;"
+  )},
+  {C_STRING_WITH_LEN(
+    "alter table mysql.spider_tables"
+    "  add column if not exists filedsn text default null after dsn,"
+    "  algorithm=copy, lock=shared;"
+  )},
+  {C_STRING_WITH_LEN(
+    "alter table mysql.spider_xa_failed_log"
+    "  add column if not exists filedsn text default null after dsn,"
+    "  algorithm=copy, lock=shared;"
+  )},
+  {C_STRING_WITH_LEN(
+    "alter table mysql.spider_xa_member"
+    "  add column if not exists filedsn text default null after dsn,"
+    "  algorithm=copy, lock=shared;"
+  )},
+  {C_STRING_WITH_LEN(
+    "alter table mysql.spider_link_mon_servers"
+    "  add column if not exists driver char(64) default null after filedsn,"
+    "  algorithm=copy, lock=shared;"
+  )},
+  {C_STRING_WITH_LEN(
+    "alter table mysql.spider_tables"
+    "  add column if not exists driver char(64) default null after filedsn,"
+    "  algorithm=copy, lock=shared;"
+  )},
+  {C_STRING_WITH_LEN(
+    "alter table mysql.spider_xa_failed_log"
+    "  add column if not exists driver char(64) default null after filedsn,"
+    "  algorithm=copy, lock=shared;"
+  )},
+  {C_STRING_WITH_LEN(
+    "alter table mysql.spider_xa_member"
+    "  add column if not exists driver char(64) default null after filedsn,"
     "  algorithm=copy, lock=shared;"
   )},
   {C_STRING_WITH_LEN(

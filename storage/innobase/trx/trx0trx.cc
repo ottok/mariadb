@@ -412,12 +412,12 @@ void trx_t::free()
 #endif
   read_view.mem_noaccess();
   MEM_NOACCESS(&lock, sizeof lock);
-  MEM_NOACCESS(&op_info, sizeof op_info);
-  MEM_NOACCESS(&isolation_level, sizeof isolation_level);
-  MEM_NOACCESS(&check_foreigns, sizeof check_foreigns);
+  MEM_NOACCESS(&op_info, sizeof op_info +
+               sizeof(unsigned) /* isolation_level, snapshot_isolation,
+                                   check_foreigns, check_unique_secondary,
+                                   bulk_insert */);
   MEM_NOACCESS(&is_registered, sizeof is_registered);
   MEM_NOACCESS(&active_commit_ordered, sizeof active_commit_ordered);
-  MEM_NOACCESS(&check_unique_secondary, sizeof check_unique_secondary);
   MEM_NOACCESS(&flush_log_later, sizeof flush_log_later);
   MEM_NOACCESS(&duplicates, sizeof duplicates);
   MEM_NOACCESS(&dict_operation, sizeof dict_operation);
@@ -582,6 +582,7 @@ static dberr_t trx_resurrect_table_locks(trx_t *trx, const trx_undo_t &undo)
                                  undo.top_page_no), 0, RW_S_LATCH, nullptr,
                        BUF_GET, &mtr, &err))
   {
+    buf_page_make_young_if_needed(&block->page);
     buf_block_t *undo_block= block;
     const trx_undo_rec_t *undo_rec= block->page.frame + undo.top_offset;
 
@@ -980,7 +981,13 @@ void trx_t::commit_empty(mtr_t *mtr)
   trx_undo_t *&undo= rsegs.m_redo.undo;
 
   ut_ad(undo->state == TRX_UNDO_ACTIVE || undo->state == TRX_UNDO_PREPARED);
-  ut_ad(undo->size == 1);
+
+  if (UNIV_UNLIKELY(undo->size != 1))
+  {
+    sql_print_error("InnoDB: Undo log for transaction " TRX_ID_FMT
+                    " is corrupted (" UINT32PF "!=1)", id, undo->size);
+    ut_ad("corrupted undo log" == 0);
+  }
 
   if (buf_block_t *u=
       buf_page_get(page_id_t(rseg->space->id, undo->hdr_page_no), 0,
@@ -1135,15 +1142,23 @@ inline void trx_t::write_serialisation_history(mtr_t *mtr)
     }
     else if (rseg->last_page_no == FIL_NULL)
     {
-      mysql_mutex_lock(&purge_sys.pq_mutex);
+      /* trx_sys.assign_new_trx_no() and
+      purge_sys.enqueue() must be invoked in the same
+      critical section protected with purge queue mutex to avoid rseg with
+      greater last commit number to be pushed to purge queue prior to rseg with
+      lesser last commit number. In other words pushing to purge queue must be
+      serialized along with assigning trx_no. Otherwise purge coordinator
+      thread can also fetch redo log records from rseg with greater last commit
+      number before rseg with lesser one. */
+      purge_sys.queue_lock();
       trx_sys.assign_new_trx_no(this);
       const trx_id_t end{rw_trx_hash_element->no};
+      rseg->last_page_no= undo->hdr_page_no;
       /* end cannot be less than anything in rseg. User threads only
       produce events when a rollback segment is empty. */
-      purge_sys.purge_queue.push(TrxUndoRsegs{end, *rseg});
-      mysql_mutex_unlock(&purge_sys.pq_mutex);
-      rseg->last_page_no= undo->hdr_page_no;
       rseg->set_last_commit(undo->hdr_offset, end);
+      purge_sys.enqueue(end, *rseg);
+      purge_sys.queue_unlock();
     }
     else
       trx_sys.assign_new_trx_no(this);
@@ -1504,6 +1519,7 @@ void trx_t::commit_cleanup()
 
   mutex.wr_lock();
   state= TRX_STATE_NOT_STARTED;
+  *detailed_error= '\0';
   mod_tables.clear();
 
   check_foreigns= true;

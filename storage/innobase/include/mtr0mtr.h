@@ -89,8 +89,9 @@ struct mtr_t {
   { auto s= m_memo.size(); rollback_to_savepoint(s - 1, s); }
 
   /** Commit a mini-transaction that is shrinking a tablespace.
-  @param space   tablespace that is being shrunk */
-  ATTRIBUTE_COLD void commit_shrink(fil_space_t &space);
+  @param space   tablespace that is being shrunk
+  @param size    new size in pages */
+  ATTRIBUTE_COLD void commit_shrink(fil_space_t &space, uint32_t size);
 
   /** Commit a mini-transaction that is deleting or renaming a file.
   @param space           tablespace that is being renamed or deleted
@@ -105,7 +106,7 @@ struct mtr_t {
   This is to be used at log_checkpoint().
   @param checkpoint_lsn   the log sequence number of a checkpoint, or 0
   @return current LSN */
-  lsn_t commit_files(lsn_t checkpoint_lsn= 0);
+  ATTRIBUTE_COLD lsn_t commit_files(lsn_t checkpoint_lsn= 0);
 
   /** @return mini-transaction savepoint (current size of m_memo) */
   ulint get_savepoint() const
@@ -694,14 +695,40 @@ private:
   /** Encrypt the log */
   ATTRIBUTE_NOINLINE void encrypt();
 
+  /** Commit the mini-transaction log.
+  @tparam pmem log_sys.is_pmem()
+  @param mtr   mini-transaction
+  @param lsns  {start_lsn,flush_ahead} */
+  template<bool pmem>
+  static void commit_log(mtr_t *mtr, std::pair<lsn_t,page_flush_ahead> lsns);
+
   /** Append the redo log records to the redo log buffer.
   @return {start_lsn,flush_ahead} */
   std::pair<lsn_t,page_flush_ahead> do_write();
 
   /** Append the redo log records to the redo log buffer.
+  @tparam spin whether to use the spin-only log_sys.lock_lsn()
+  @tparam pmem log_sys.is_pmem()
+  @param mtr   mini-transaction
   @param len   number of bytes to write
   @return {start_lsn,flush_ahead} */
-  std::pair<lsn_t,page_flush_ahead> finish_write(size_t len);
+  template<bool spin,bool pmem> static
+  std::pair<lsn_t,page_flush_ahead> finish_writer(mtr_t *mtr, size_t len);
+
+  /** The applicable variant of commit_log() */
+  static void (*commit_logger)(mtr_t *, std::pair<lsn_t,page_flush_ahead>);
+  /** The applicable variant of finish_writer() */
+  static std::pair<lsn_t,page_flush_ahead> (*finisher)(mtr_t *, size_t);
+
+  std::pair<lsn_t,page_flush_ahead> finish_write(size_t len)
+  { return finisher(this, len); }
+public:
+  /** Poll interval in log_sys.lock_lsn(); 0 to use log_sys.lsn_lock.
+  Protected by LOCK_global_system_variables and log_sys.latch. */
+  static unsigned spin_wait_delay;
+  /** Update finisher when spin_wait_delay is changing to or from 0. */
+  static void finisher_update();
+private:
 
   /** Release all latches. */
   void release();

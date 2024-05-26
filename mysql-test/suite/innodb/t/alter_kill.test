@@ -26,6 +26,7 @@ call mtr.add_suppression("Table .*bug16720368.* is corrupted");
 -- echo #
 
 SET GLOBAL innodb_file_per_table=1;
+SET GLOBAL innodb_stats_persistent=0;
 
 CREATE TABLE bug16720368_1 (a INT PRIMARY KEY) ENGINE=InnoDB;
 
@@ -75,7 +76,7 @@ EOF
 
 -- source include/start_mysqld.inc
 
---error ER_NO_SUCH_TABLE_IN_ENGINE
+--error ER_TABLE_CORRUPT
 SELECT COUNT(*) FROM bug16720368;
 --error ER_TABLE_CORRUPT
 INSERT INTO bug16720368 VALUES(1);

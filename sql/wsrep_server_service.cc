@@ -39,7 +39,7 @@ static void init_service_thd(THD* thd, char* thread_stack)
   thd->thread_stack= thread_stack;
   thd->real_id= pthread_self();
   thd->prior_thr_create_utime= thd->start_utime= microsecond_interval_timer();
-  thd->set_command(COM_SLEEP);
+  thd->mark_connection_idle();
   thd->reset_for_next_command(true);
   server_threads.insert(thd); // as wsrep_innobase_kill_one_trx() uses find_thread_by_id()
 }
@@ -345,7 +345,6 @@ void Wsrep_server_service::log_state_change(
   switch (current_state)
   {
   case Wsrep_server_state::s_synced:
-    wsrep_ready= TRUE;
     WSREP_INFO("Synchronized with group, ready for connections");
     wsrep_ready_set(true);
     /* fall through */

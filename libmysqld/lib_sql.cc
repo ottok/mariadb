@@ -111,7 +111,7 @@ emb_advanced_command(MYSQL *mysql, enum enum_server_command command,
                      MYSQL_STMT *stmt)
 {
   my_bool result= 1;
-  THD *thd=(THD *) mysql->thd;
+  THD *thd=(THD *) mysql->thd, *old_current_thd= current_thd;
   NET *net= &mysql->net;
   my_bool stmt_skip= stmt ? stmt->state != MYSQL_STMT_INIT_DONE : FALSE;
 
@@ -122,6 +122,8 @@ emb_advanced_command(MYSQL *mysql, enum enum_server_command command,
     else
     {
       free_embedded_thd(mysql);
+      if (old_current_thd == thd)
+        old_current_thd= 0;
       thd= 0;
     }
   }
@@ -179,6 +181,8 @@ emb_advanced_command(MYSQL *mysql, enum enum_server_command command,
 
 end:
   thd->reset_globals();
+  if (old_current_thd)
+    old_current_thd->store_globals();
   return result;
 }
 
@@ -265,6 +269,7 @@ static my_bool emb_read_prepare_result(MYSQL *mysql, MYSQL_STMT *stmt)
       mysql->server_status|= SERVER_STATUS_IN_TRANS;
 
     stmt->fields= mysql->fields;
+    free_root(&stmt->mem_root, MYF(0));
     stmt->mem_root= res->alloc;
     mysql->fields= NULL;
     my_free(res);
@@ -374,6 +379,7 @@ int emb_read_binary_rows(MYSQL_STMT *stmt)
     set_stmt_errmsg(stmt, &stmt->mysql->net);
     return 1;
   }
+  free_root(&stmt->result.alloc, MYF(0));
   stmt->result= *data;
   my_free(data);
   set_stmt_errmsg(stmt, &stmt->mysql->net);
@@ -432,12 +438,15 @@ int emb_unbuffered_fetch(MYSQL *mysql, char **row)
 
 static void free_embedded_thd(MYSQL *mysql)
 {
-  THD *thd= (THD*)mysql->thd;
+  THD *thd= (THD*)mysql->thd, *org_current_thd= current_thd;
   server_threads.erase(thd);
   thd->clear_data_list();
   thd->store_globals();
   delete thd;
-  set_current_thd(nullptr);
+  if (thd == org_current_thd)
+    set_current_thd(nullptr);
+  else
+    set_current_thd(org_current_thd);
   mysql->thd=0;
 }
 
@@ -459,6 +468,7 @@ static int emb_read_change_user_result(MYSQL *mysql)
   return mysql_errno(mysql) ? (int)packet_error : 1 /* length of the OK packet */;
 }
 
+
 static void emb_on_close_free(MYSQL *mysql)
 {
   my_free(mysql->info_buffer);
@@ -469,6 +479,7 @@ static void emb_on_close_free(MYSQL *mysql)
     mysql->thd= 0;
   }
 }
+
 
 MYSQL_METHODS embedded_methods= 
 {
@@ -632,8 +643,6 @@ int init_embedded_server(int argc, char **argv, char **groups)
     udf_init();
 #endif
 
-  (void) thr_setconcurrency(concurrency);	// 10 by default
-
   if (flush_time && flush_time != ~(ulong) 0L)
     start_handle_manager();
 
@@ -705,8 +714,7 @@ void *create_embedded_thd(ulong client_flag)
 
   if (thd->variables.max_join_size == HA_POS_ERROR)
     thd->variables.option_bits |= OPTION_BIG_SELECTS;
-  thd->proc_info=0;				// Remove 'login'
-  thd->set_command(COM_SLEEP);
+  thd->mark_connection_idle();
   thd->set_time();
   thd->init_for_queries();
   thd->client_capabilities= client_flag | MARIADB_CLIENT_EXTENDED_METADATA;
@@ -725,6 +733,17 @@ void *create_embedded_thd(ulong client_flag)
   thd->mysys_var= 0;
   thd->reset_globals();
   return thd;
+}
+
+
+THD *embedded_get_current_thd()
+{
+  return current_thd;
+}
+
+void embedded_set_current_thd(THD *thd)
+{
+  set_current_thd(thd);
 }
 
 
@@ -1446,4 +1465,3 @@ int vprint_msg_to_log(enum loglevel level __attribute__((unused)),
   }
   return 0;
 }
-

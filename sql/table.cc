@@ -49,6 +49,8 @@
 #ifdef WITH_WSREP
 #include "wsrep_schema.h"
 #endif
+#include "log_event.h"           // MAX_TABLE_MAP_ID
+#include "sql_class.h"
 
 /* For MySQL 5.7 virtual fields */
 #define MYSQL57_GENERATED_FIELD 128
@@ -108,7 +110,7 @@ LEX_CSTRING MYSQL_PROC_NAME= {STRING_WITH_LEN("proc")};
 */
 static LEX_CSTRING parse_vcol_keyword= { STRING_WITH_LEN("PARSE_VCOL_EXPR ") };
 
-static std::atomic<ulong> last_table_id;
+static std::atomic<ulonglong> last_table_id;
 
 	/* Functions defined in this file */
 
@@ -384,17 +386,20 @@ TABLE_SHARE *alloc_table_share(const char *db, const char *table_name,
 
     DBUG_EXECUTE_IF("simulate_big_table_id",
                     if (last_table_id < UINT_MAX32)
-                      last_table_id= UINT_MAX32 - 1;);
+                      last_table_id= UINT_MAX32-1;);
     /*
-      There is one reserved number that cannot be used. Remember to
-      change this when 6-byte global table id's are introduced.
+      Replication is using 6 bytes as table_map_id. Ensure that
+      the 6 lowest bytes are not 0.
+      We also have to ensure that we do not use the special value
+      UINT_MAX32 as this is used to mark a dummy event row event. See
+      comments in Rows_log_event::Rows_log_event().
     */
     do
     {
       share->table_map_id=
         last_table_id.fetch_add(1, std::memory_order_relaxed);
-    } while (unlikely(share->table_map_id == ~0UL ||
-                      share->table_map_id == 0));
+    } while (unlikely((share->table_map_id & MAX_TABLE_MAP_ID) == 0) ||
+             unlikely((share->table_map_id & MAX_TABLE_MAP_ID) == UINT_MAX32));
   }
   DBUG_RETURN(share);
 }
@@ -457,7 +462,7 @@ void init_tmp_table_share(THD *thd, TABLE_SHARE *share, const char *key,
     table_map_id is also used for MERGE tables to suppress repeated
     compatibility checks.
   */
-  share->table_map_id= (ulong) thd->query_id;
+  share->table_map_id= (ulonglong) thd->query_id;
   DBUG_VOID_RETURN;
 }
 
@@ -1286,12 +1291,11 @@ bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
         if (keypart->key_part_flag & HA_PART_KEY_SEG)
         {
           int length= keypart->length/keypart->field->charset()->mbmaxlen;
+          Field *kpf= table->field[keypart->field->field_index];
           list_item= new (mem_root) Item_func_left(thd,
-                       new (mem_root) Item_field(thd, keypart->field),
+                       new (mem_root) Item_field(thd, kpf),
                        new (mem_root) Item_int(thd, length));
           list_item->fix_fields(thd, NULL);
-          keypart->field->vcol_info=
-            table->field[keypart->field->field_index]->vcol_info;
         }
         else
           list_item= new (mem_root) Item_field(thd, keypart->field);
@@ -3328,6 +3332,8 @@ int TABLE_SHARE::init_from_binary_frm_image(THD *thd, bool write,
       goto err; // Wrong field definition
     reg_field->flags |= AUTO_INCREMENT_FLAG;
   }
+  else
+    share->next_number_index= MAX_KEY;
 
   if (share->blob_fields)
   {
@@ -5865,6 +5871,59 @@ void TABLE::reset_item_list(List<Item> *item_list, uint skip) const
   }
 }
 
+TABLE_LIST::TABLE_LIST(THD *thd,
+                       LEX_CSTRING db_str,
+                       bool fqtn,
+                       LEX_CSTRING alias_str,
+                       bool has_alias_ptr,
+                       Table_ident *table_ident,
+                       thr_lock_type lock_t,
+                       enum_mdl_type mdl_t,
+                       ulong table_opts,
+                       bool info_schema,
+                       st_select_lex *sel,
+                       List<Index_hint> *index_hints_ptr,
+                       LEX_STRING *option_ptr)
+{
+  db= db_str;
+  is_fqtn= fqtn;
+  alias= alias_str;
+  is_alias= has_alias_ptr;
+  if (lower_case_table_names)
+  {
+    if (table_ident->table.length)
+      table_ident->table.length= my_casedn_str(files_charset_info,
+                                         (char*) table_ident->table.str);
+    if (db.length && db.str != any_db.str)
+      db.length= my_casedn_str(files_charset_info, (char*) db.str);
+  }
+
+  table_name= table_ident->table;
+  lock_type= lock_t;
+  mdl_type= mdl_t;
+  table_options= table_opts;
+  updating= table_options & TL_OPTION_UPDATING;
+  /* TODO: remove TL_OPTION_FORCE_INDEX as it looks like it's not used */
+  force_index= table_options & TL_OPTION_FORCE_INDEX;
+  ignore_leaves= table_options & TL_OPTION_IGNORE_LEAVES;
+  sequence= table_options & TL_OPTION_SEQUENCE;
+  derived= table_ident->sel;
+
+  if (!table_ident->sel && info_schema)
+  {
+    schema_table= find_schema_table(thd, &table_name);
+    schema_table_name= table_name;
+  }
+  select_lex= sel;
+  /*
+    We can't cache internal temporary tables between prepares as the
+    table may be deleted before next exection.
+  */
+  cacheable_table= !table_ident->is_derived_table();
+  index_hints= index_hints_ptr;
+  option= option_ptr ? option_ptr->str : 0;
+}
+
 /*
   calculate md5 of query
 
@@ -5958,7 +6017,7 @@ allocate:
   /* Create view fields translation table */
 
   if (!(transl=
-        (Field_translator*)(thd->stmt_arena->
+        (Field_translator*)(thd->
                             alloc(select->item_list.elements *
                                   sizeof(Field_translator)))))
   {
@@ -7585,7 +7644,7 @@ inline void TABLE::mark_index_columns_for_read(uint index)
     always set and sometimes read.
 */
 
-void TABLE::mark_auto_increment_column()
+void TABLE::mark_auto_increment_column(bool is_insert)
 {
   DBUG_ASSERT(found_next_number_field);
   /*
@@ -7593,7 +7652,8 @@ void TABLE::mark_auto_increment_column()
     store() to check overflow of auto_increment values
   */
   bitmap_set_bit(read_set, found_next_number_field->field_index);
-  bitmap_set_bit(write_set, found_next_number_field->field_index);
+  if (is_insert)
+    bitmap_set_bit(write_set, found_next_number_field->field_index);
   if (s->next_number_keypart)
     mark_index_columns_for_read(s->next_number_index);
   file->column_bitmaps_signal();
@@ -7718,7 +7778,7 @@ void TABLE::mark_columns_needed_for_update()
   else
   {
     if (found_next_number_field)
-      mark_auto_increment_column();
+      mark_auto_increment_column(false);
   }
 
   if (file->ha_table_flags() & HA_PRIMARY_KEY_REQUIRED_FOR_DELETE)
@@ -7794,7 +7854,7 @@ void TABLE::mark_columns_needed_for_insert()
     triggers->mark_fields_used(TRG_EVENT_INSERT);
   }
   if (found_next_number_field)
-    mark_auto_increment_column();
+    mark_auto_increment_column(true);
   if (default_field)
     mark_default_fields_for_write(TRUE);
   if (s->versioned)
@@ -9155,10 +9215,9 @@ int TABLE::update_default_fields(bool ignore_errors)
 int TABLE::update_generated_fields()
 {
   int res= 0;
-  if (found_next_number_field)
+  if (next_number_field)
   {
-    next_number_field= found_next_number_field;
-    res= found_next_number_field->set_default();
+    res= next_number_field->set_default();
     if (likely(!res))
       res= file->update_auto_increment();
     next_number_field= NULL;
@@ -9173,6 +9232,18 @@ int TABLE::update_generated_fields()
   return res;
 }
 
+void TABLE::period_prepare_autoinc()
+{
+  if (!found_next_number_field)
+    return;
+  /* Don't generate a new value if the autoinc index is WITHOUT OVERLAPS */
+  DBUG_ASSERT(s->next_number_index < MAX_KEY);
+  if (key_info[s->next_number_index].without_overlaps)
+    return;
+
+  next_number_field= found_next_number_field;
+}
+
 int TABLE::period_make_insert(Item *src, Field *dst)
 {
   THD *thd= in_use;
@@ -9182,7 +9253,10 @@ int TABLE::period_make_insert(Item *src, Field *dst)
   int res= src->save_in_field(dst, true);
 
   if (likely(!res))
+  {
+    period_prepare_autoinc();
     res= update_generated_fields();
+  }
 
   if (likely(!res) && triggers)
     res= triggers->process_triggers(thd, TRG_EVENT_INSERT,
@@ -9507,7 +9581,8 @@ bool TABLE::insert_all_rows_into_tmp_table(THD *thd,
   }
    
   if (file->indexes_are_disabled())
-    tmp_table->file->ha_disable_indexes(HA_KEY_SWITCH_ALL);
+    tmp_table->file->ha_disable_indexes(key_map(0), false);
+
   file->ha_index_or_rnd_end();
 
   if (unlikely(file->ha_rnd_init_with_error(1)))
@@ -10467,6 +10542,12 @@ bool Vers_history_point::check_unit(THD *thd)
 {
   if (!item)
     return false;
+  if (item->real_type() == Item::FIELD_ITEM)
+  {
+    my_error(ER_ILLEGAL_PARAMETER_DATA_TYPE_FOR_OPERATION, MYF(0),
+             item->full_name(), "FOR SYSTEM_TIME");
+    return true;
+  }
   if (item->fix_fields_if_needed(thd, &item))
     return true;
   const Type_handler *t= item->this_item()->real_type_handler();
