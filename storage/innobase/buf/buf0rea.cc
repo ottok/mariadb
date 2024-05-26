@@ -575,7 +575,7 @@ fail:
     hash_lock.lock_shared();
 
     const buf_page_t* bpage= buf_pool.page_hash.get(i, chain);
-    if (!bpage)
+    if (!bpage || buf_pool.watch_is_sentinel(*bpage))
     {
       hash_lock.unlock_shared();
       if (i == page_id)
@@ -597,6 +597,12 @@ failed:
       uint32_t prev= mach_read_from_4(my_assume_aligned<4>(f + FIL_PAGE_PREV));
       uint32_t next= mach_read_from_4(my_assume_aligned<4>(f + FIL_PAGE_NEXT));
       hash_lock.unlock_shared();
+      /* The underlying file page of this buffer pool page could actually
+      be marked as freed, or a read of the page into the buffer pool might
+      be in progress. We may read uninitialized data here.
+      Suppress warnings of comparing uninitialized values. */
+      MEM_MAKE_DEFINED(&prev, sizeof prev);
+      MEM_MAKE_DEFINED(&next, sizeof next);
       if (prev == FIL_NULL || next == FIL_NULL)
         goto fail;
       page_id_t id= page_id;

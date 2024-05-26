@@ -2334,6 +2334,28 @@ SELECT DECODE(NULL, NULL, NULL);
 --echo #
 
 --echo #
+--echo # Start of 10.5 tests
+--echo #
+
+--echo #
+--echo # MDEV-28651 quote(NULL) returns incorrect result in view ('NU' instead of 'NULL')
+--echo #
+
+CREATE VIEW v1 AS SELECT quote(NULL);
+SELECT * FROM v1;
+DESCRIBE v1;
+CREATE TABLE t1 AS SELECT * FROM v1;
+SHOW CREATE TABLE t1;
+SELECT * FROM t1;
+DROP TABLE t1;
+DROP VIEW v1;
+
+
+--echo #
+--echo # End of 10.5 tests
+--echo #
+
+--echo #
 --echo # MDEV-25704 Function random_bytes
 --echo #
 
@@ -2434,4 +2456,26 @@ select "a" in ("abc", (convert(random_bytes(8) ,binary(2))));
 --enable_view_protocol
 --echo #
 --echo # End of 10.10 tests
+--echo #
+
+--echo #
+--echo # Start of 10.11 tests
+--echo #
+
+--echo #
+--echo # MDEV-33392 Server crashes when using RANDOM_BYTES function and GROUP BY clause on a column with a negative value
+--echo #
+
+SET sql_mode='';
+CREATE TABLE t1 (a VARCHAR(255)) ENGINE=MyISAM;
+INSERT INTO t1 VALUES (9494),(9495),(9496),(9497),(9498),(9499),(9500),(9501),(9502),(9503);
+SELECT RANDOM_BYTES (-1) f1,a f2 FROM t1 GROUP BY f1,f2;
+CREATE TABLE t2 AS SELECT RANDOM_BYTES (-1) f1,a f2 FROM t1 GROUP BY f1,f2;
+SHOW CREATE TABLE t2;
+DROP TABLE t2;
+DROP TABLE t1;
+SET sql_mode=DEFAULT;
+
+--echo #
+--echo # End of 10.11 tests
 --echo #

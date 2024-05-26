@@ -121,10 +121,6 @@ struct srv_stats_t
 	ulint_ctr_n_t		n_temp_blocks_decrypted;
 };
 
-/** We are prepared for a situation that we have this many threads waiting for
-a transactional lock inside InnoDB. srv_start() sets the value. */
-extern ulint srv_max_n_threads;
-
 extern const char*	srv_main_thread_op_info;
 
 /** Prefix used by MySQL to indicate pre-5.1 table name encoding */
@@ -210,14 +206,11 @@ extern unsigned long long	srv_max_undo_log_size;
 extern uint	srv_n_fil_crypt_threads;
 extern uint	srv_n_fil_crypt_threads_started;
 
-/** Rate at which UNDO records should be purged. */
-extern ulong	srv_purge_rseg_truncate_frequency;
-
 /** Enable or Disable Truncate of UNDO tablespace. */
 extern my_bool	srv_undo_log_truncate;
 
 /** Default size of UNDO tablespace (10MiB for innodb_page_size=16k) */
-constexpr ulint SRV_UNDO_TABLESPACE_SIZE_IN_PAGES= (10U << 20) /
+constexpr uint32_t SRV_UNDO_TABLESPACE_SIZE_IN_PAGES= (10U << 20) /
   UNIV_PAGE_SIZE_DEF;
 
 extern char*	srv_log_group_home_dir;

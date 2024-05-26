@@ -2692,7 +2692,7 @@ SQL_SELECT::test_quick_select(THD *thd,
                               bool ordered_output,
                               bool remove_false_parts_of_where,
                               bool only_single_index_range_scan,
-                              bool suppress_unusable_key_notes)
+                              Item_func::Bitmap note_unusable_keys)
 {
   uint idx;
   double scan_time;
@@ -2786,9 +2786,9 @@ SQL_SELECT::test_quick_select(THD *thd,
     param.max_key_parts= 0;
     param.remove_false_where_parts= remove_false_parts_of_where;
     param.force_default_mrr= ordered_output;
-    param.note_unusable_keys= (!suppress_unusable_key_notes &&
-                               thd->give_notes_for_unusable_keys());
-
+    param.note_unusable_keys= thd->give_notes_for_unusable_keys() ?
+                              note_unusable_keys :
+                              Item_func::BITMAP_NONE;
     param.possible_keys.clear_all();
 
     thd->no_errors=1;				// Don't warn about NULL
@@ -3136,6 +3136,53 @@ SQL_SELECT::test_quick_select(THD *thd,
 
 
 /*
+  @brief
+    Create a bitmap of columns for which to perform Range Analysis for EITS
+    condition selectivity estimates.
+
+  @detail
+    Walk through the bitmap of fields used in the query, and
+     - pick columns for which EITS data is usable (see is_eits_usable() call)
+     - do not produce more than MAX_KEY columns. Range Analyzer cannot handle
+       more than that. If there are more than MAX_KEY eligible columns,
+       this function should be called multiple times to produce multiple
+       bitmaps.
+
+  @param  used_fields  Columns used by the query
+  @param  col_no       Start from this column
+  @param  out          OUT Filled column bitmap
+
+  @return
+     (uint)-1   If there are no more columns for range analysis.
+     Other      Index of the last considered column. Pass this to next call to
+                this function
+*/
+
+uint get_columns_for_pseudo_indexes(const TABLE *table,
+                                    const MY_BITMAP *used_fields, int col_no,
+                                    MY_BITMAP *out)
+{
+  bitmap_clear_all(out);
+  int n_bits= 0;
+
+  for (; table->field[col_no]; col_no++)
+  {
+    if (bitmap_is_set(used_fields, col_no) &&
+        is_eits_usable(table->field[col_no]))
+    {
+      bitmap_set_bit(out, col_no);
+      if (++n_bits == MAX_KEY)
+      {
+        col_no++;
+        break;
+      }
+    }
+  }
+  return n_bits? col_no: (uint)-1;
+}
+
+
+/*
   Build descriptors of pseudo-indexes over columns to perform range analysis
 
   SYNOPSIS
@@ -3160,21 +3207,10 @@ bool create_key_parts_for_pseudo_indexes(RANGE_OPT_PARAM *param,
 {
   Field **field_ptr;
   TABLE *table= param->table;
-  uint parts= 0;
-
-  for (field_ptr= table->field; *field_ptr; field_ptr++)
-  {
-    Field *field= *field_ptr;
-    if (bitmap_is_set(used_fields, field->field_index) &&
-        is_eits_usable(field))
-      parts++;
-  }
+  uint parts= bitmap_bits_set(used_fields);
 
   KEY_PART *key_part;
   uint keys= 0;
-
-  if (!parts)
-    return TRUE;
 
   if (!(key_part= (KEY_PART *)  alloc_root(param->mem_root,
                                            sizeof(KEY_PART) * parts)))
@@ -3187,9 +3223,6 @@ bool create_key_parts_for_pseudo_indexes(RANGE_OPT_PARAM *param,
     Field *field= *field_ptr;
     if (bitmap_is_set(used_fields, field->field_index))
     {
-      if (!is_eits_usable(field))
-        continue;
-
       uint16 store_length;
       uint16 max_key_part_length= (uint16) table->file->max_key_part_length();
       key_part->key= keys;
@@ -3534,8 +3567,6 @@ bool calculate_cond_selectivity_for_table(THD *thd, TABLE *table, Item **cond)
     PARAM param;
     MEM_ROOT alloc;
     SEL_TREE *tree;
-    double rows;
-  
     init_sql_alloc(key_memory_quick_range_select_root, &alloc,
                    thd->variables.range_alloc_block_size, 0, MYF(MY_THREAD_SPECIFIC));
     bzero((void*) &param, sizeof(param));
@@ -3545,67 +3576,90 @@ bool calculate_cond_selectivity_for_table(THD *thd, TABLE *table, Item **cond)
     param.table= table;
     param.remove_false_where_parts= true;
 
-    if (create_key_parts_for_pseudo_indexes(&param, used_fields))
-      goto free_alloc;
-
     param.prev_tables= param.read_tables= 0;
     param.current_table= table->map;
     param.using_real_indexes= FALSE;
-    param.real_keynr[0]= 0;
+    MEM_UNDEFINED(&param.real_keynr, sizeof(param.real_keynr));
+
     param.alloced_sel_args= 0;
     param.max_key_parts= 0;
 
-    thd->no_errors=1;		    
-
-    tree= cond[0]->get_mm_tree(&param, cond);
-
-    if (!tree)
-      goto free_alloc;
-    
+    thd->no_errors=1;
     table->reginfo.impossible_range= 0;
-    if (tree->type == SEL_TREE::IMPOSSIBLE)
-    {
-      rows= 0;
-      table->reginfo.impossible_range= 1;
-      goto free_alloc;
-    }  
-    else if (tree->type == SEL_TREE::ALWAYS)
-    {
-      rows= table_records;
-      goto free_alloc;
-    }        
-    else if (tree->type == SEL_TREE::MAYBE)
-    {
-      rows= table_records;
-      goto free_alloc;
-    }        
 
-    for (uint idx= 0; idx < param.keys; idx++)
+    uint used_fields_buff_size= bitmap_buffer_size(table->s->fields);
+    my_bitmap_map *used_fields_buff= (my_bitmap_map*)thd->alloc(used_fields_buff_size);
+    MY_BITMAP cols_for_indexes;
+    (void) my_bitmap_init(&cols_for_indexes, used_fields_buff, table->s->fields);
+    bitmap_clear_all(&cols_for_indexes);
+
+    uint column_no= 0; // Start looping from the first column.
+    /*
+      Try getting selectivity estimates for every field that is used in the
+      query and has EITS statistics. We do this:
+
+        for every usable field col
+           create a pseudo INDEX(col);
+        Run the range analyzer (get_mm_tree) for these pseudo-indexes;
+        Look at produced ranges and get their selectivity estimates;
+
+      Note that the range analyzer can process at most MAX_KEY indexes. If
+      the table has >MAX_KEY eligible columns, we will do several range
+      analyzer runs.
+    */
+
+    while (1)
     {
-      SEL_ARG *key= tree->keys[idx];
-      if (key)
+      column_no= get_columns_for_pseudo_indexes(table, used_fields, column_no,
+                                                &cols_for_indexes);
+      if (column_no == (uint)-1)
+        break;  /* Couldn't create any pseudo-indexes. This means we're done */
+
+      if (create_key_parts_for_pseudo_indexes(&param, &cols_for_indexes))
+        goto free_alloc;
+
+      tree= cond[0]->get_mm_tree(&param, cond);
+
+      if (!tree ||
+          tree->type == SEL_TREE::ALWAYS ||
+          tree->type == SEL_TREE::MAYBE)
       {
-        Json_writer_object selectivity_for_column(thd);
-        selectivity_for_column.add("column_name", key->field->field_name);
-        if (key->type == SEL_ARG::IMPOSSIBLE)
+        /* Couldn't infer anything. But there could be more fields, so continue */
+        continue;
+      }
+
+      if (tree->type == SEL_TREE::IMPOSSIBLE)
+      {
+        table->reginfo.impossible_range= 1;
+        goto free_alloc;
+      }
+
+      for (uint idx= 0; idx < param.keys; idx++)
+      {
+        SEL_ARG *key= tree->keys[idx];
+        if (key)
         {
-          rows= 0;
-          table->reginfo.impossible_range= 1;
-          selectivity_for_column.add("selectivity_from_histogram", rows);
-          selectivity_for_column.add("cause", "impossible range");
-          goto free_alloc;
-        }          
-        else
-        {
-          enum_check_fields save_count_cuted_fields= thd->count_cuted_fields;
-          thd->count_cuted_fields= CHECK_FIELD_IGNORE;
-          rows= records_in_column_ranges(&param, idx, key);
-          thd->count_cuted_fields= save_count_cuted_fields;
-          if (rows != DBL_MAX)
+          Json_writer_object selectivity_for_column(thd);
+          selectivity_for_column.add("column_name", key->field->field_name);
+          if (key->type == SEL_ARG::IMPOSSIBLE)
           {
-            key->field->cond_selectivity= rows/table_records;
-            selectivity_for_column.add("selectivity_from_histogram",
-                                       key->field->cond_selectivity);
+            table->reginfo.impossible_range= 1;
+            selectivity_for_column.add("selectivity_from_histogram", 0);
+            selectivity_for_column.add("cause", "impossible range");
+            goto free_alloc;
+          }
+          else
+          {
+            enum_check_fields save_count_cuted_fields= thd->count_cuted_fields;
+            thd->count_cuted_fields= CHECK_FIELD_IGNORE;
+            double rows= records_in_column_ranges(&param, idx, key);
+            thd->count_cuted_fields= save_count_cuted_fields;
+            if (rows != DBL_MAX)
+            {
+              key->field->cond_selectivity= rows/table_records;
+              selectivity_for_column.add("selectivity_from_histogram",
+                                         key->field->cond_selectivity);
+            }
           }
         }
       }
@@ -3999,7 +4053,7 @@ bool prune_partitions(THD *thd, TABLE *table, Item *pprune_cond)
   range_par->remove_jump_scans= FALSE;
   range_par->real_keynr[0]= 0;
   range_par->alloced_sel_args= 0;
-  range_par->note_unusable_keys= 0;
+  range_par->note_unusable_keys= Item_func::BITMAP_NONE;
 
   thd->no_errors=1;				// Don't warn about NULL
   thd->mem_root=&alloc;
@@ -6733,8 +6787,7 @@ ROR_INTERSECT_INFO* ror_intersect_init(const PARAM *param)
 void ror_intersect_cpy(ROR_INTERSECT_INFO *dst, const ROR_INTERSECT_INFO *src)
 {
   dst->param= src->param;
-  memcpy(dst->covered_fields.bitmap, src->covered_fields.bitmap, 
-         no_bytes_in_map(&src->covered_fields));
+  bitmap_copy(&dst->covered_fields, &src->covered_fields);
   dst->out_rows= src->out_rows;
   dst->is_covering= src->is_covering;
   dst->index_records= src->index_records;
@@ -7391,7 +7444,7 @@ TRP_ROR_INTERSECT *get_best_covering_ror_intersect(PARAM *param,
       (*scan)->used_fields_covered=
         bitmap_bits_set(&(*scan)->covered_fields);
       (*scan)->first_uncovered_field=
-        bitmap_get_first(&(*scan)->covered_fields);
+        bitmap_get_first_clear(&(*scan)->covered_fields);
     }
 
     my_qsort(ror_scan_mark, ror_scans_end-ror_scan_mark, sizeof(ROR_SCAN_INFO*),
@@ -8762,9 +8815,11 @@ Item_func_like::get_mm_leaf(RANGE_OPT_PARAM *param,
   if (field->result_type() == STRING_RESULT &&
       field->charset() != compare_collation())
   {
-    if (param->note_unusable_keys)
+    if (param->note_unusable_keys & BITMAP_LIKE)
       field->raise_note_cannot_use_key_part(param->thd, keynr, key_part->part,
-                                            func_name_cstring(), value,
+                                            func_name_cstring(),
+                                            compare_collation(),
+                                            value,
                                             Data_type_compatibility::
                                             INCOMPATIBLE_COLLATION);
     DBUG_RETURN(0);
@@ -8780,9 +8835,11 @@ Item_func_like::get_mm_leaf(RANGE_OPT_PARAM *param,
       field->type_handler() == &type_handler_enum ||
       field->type_handler() == &type_handler_set)
   {
-    if (param->note_unusable_keys)
+    if (param->note_unusable_keys & BITMAP_LIKE)
       field->raise_note_cannot_use_key_part(param->thd, keynr, key_part->part,
-                                            func_name_cstring(), value,
+                                            func_name_cstring(),
+                                            compare_collation(),
+                                            value,
                                             Data_type_compatibility::
                                             INCOMPATIBLE_DATA_TYPE);
     DBUG_RETURN(0);
@@ -8887,7 +8944,8 @@ Field::can_optimize_scalar_range(const RANGE_OPT_PARAM *param,
     TODO: Perhaps we also need to raise a similar note when
     a partition could not be used (when using_real_indexes==false).
   */
-  if (param->using_real_indexes && param->note_unusable_keys)
+  if (param->using_real_indexes && param->note_unusable_keys &&
+      (param->note_unusable_keys & cond->bitmap_bit()))
   {
     DBUG_ASSERT(keynr < table->s->keys);
     /*
@@ -8901,6 +8959,7 @@ Field::can_optimize_scalar_range(const RANGE_OPT_PARAM *param,
     */
     raise_note_cannot_use_key_part(param->thd, keynr, key_part->part,
                                    scalar_comparison_op_to_lex_cstring(op),
+                                   cond->compare_collation(),
                                    value, compat);
   }
   return compat;
@@ -15173,13 +15232,6 @@ int QUICK_GROUP_MIN_MAX_SELECT::init()
 {
   if (group_prefix) /* Already initialized. */
     return 0;
-  
-  /*
-    We allocate one byte more to serve the case when the last field in
-    the buffer is compared using uint3korr (e.g. a Field_newdate field)
-  */
-  if (!(last_prefix= (uchar*) alloc_root(&alloc, group_prefix_len+1)))
-      return 1;
   /*
     We may use group_prefix to store keys with all select fields, so allocate
     enough space for it.
@@ -15436,8 +15488,7 @@ void QUICK_GROUP_MIN_MAX_SELECT::update_key_stat()
     QUICK_GROUP_MIN_MAX_SELECT::reset()
 
   DESCRIPTION
-    Initialize the index chosen for access and find and store the prefix
-    of the last group. The method is expensive since it performs disk access.
+    Initialize the index chosen for access.
 
   RETURN
     0      OK
@@ -15459,12 +15510,6 @@ int QUICK_GROUP_MIN_MAX_SELECT::reset(void)
   }
   if (quick_prefix_select && quick_prefix_select->reset())
     DBUG_RETURN(1);
-  result= file->ha_index_last(record);
-  if (result == HA_ERR_END_OF_FILE)
-    DBUG_RETURN(0);
-  /* Save the prefix of the last group. */
-  key_copy(last_prefix, record, index_info, group_prefix_len);
-
   DBUG_RETURN(0);
 }
 
@@ -15510,34 +15555,20 @@ int QUICK_GROUP_MIN_MAX_SELECT::get_next()
 #else
   int result;
 #endif
-  int is_last_prefix= 0;
-
   DBUG_ENTER("QUICK_GROUP_MIN_MAX_SELECT::get_next");
 
   /*
-    Loop until a group is found that satisfies all query conditions or the last
-    group is reached.
+    Loop until a group is found that satisfies all query conditions or
+    there are no satisfying groups left
   */
   do
   {
     result= next_prefix();
-    /*
-      Check if this is the last group prefix. Notice that at this point
-      this->record contains the current prefix in record format.
-    */
-    if (!result)
-    {
-      is_last_prefix= key_cmp(index_info->key_part, last_prefix,
-                              group_prefix_len);
-      DBUG_ASSERT(is_last_prefix <= 0);
-    }
-    else 
-    {
-      if (result == HA_ERR_KEY_NOT_FOUND)
-        continue;
+    if (result != 0)
       break;
-    }
-
+    /*
+      At this point this->record contains the current prefix in record format.
+    */
     if (have_min)
     {
       min_res= next_min();
@@ -15566,8 +15597,7 @@ int QUICK_GROUP_MIN_MAX_SELECT::get_next()
                                       HA_READ_KEY_EXACT);
 
     result= have_min ? min_res : have_max ? max_res : result;
-  } while ((result == HA_ERR_KEY_NOT_FOUND || result == HA_ERR_END_OF_FILE) &&
-           is_last_prefix != 0);
+  } while (result == HA_ERR_KEY_NOT_FOUND || result == HA_ERR_END_OF_FILE);
 
   if (result == HA_ERR_KEY_NOT_FOUND)
     result= HA_ERR_END_OF_FILE;

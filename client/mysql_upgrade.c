@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2006, 2013, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2017, MariaDB
+   Copyright (c) 2010, 2024, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -87,10 +87,10 @@ static struct my_option my_long_options[]=
   {"basedir", 'b',
    "Not used by mysql_upgrade. Only for backward compatibility.",
    0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"character-sets-dir", OPT_CHARSETS_DIR,
+  {"character-sets-dir", 0,
    "Not used by mysql_upgrade. Only for backward compatibility.",
    0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0 },
-  {"compress", OPT_COMPRESS,
+  {"compress", 0,
    "Not used by mysql_upgrade. Only for backward compatibility.",
    &not_used, &not_used, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"datadir", 'd',
@@ -103,12 +103,12 @@ static struct my_option my_long_options[]=
   {"debug", '#', "Output debug log.",
    0, 0, 0, GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
 #endif
-  {"debug-check", OPT_DEBUG_CHECK, "Check memory and open file usage at exit.",
+  {"debug-check", 0, "Check memory and open file usage at exit.",
    &debug_check_flag, &debug_check_flag,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"debug-info", 'T', "Print some debug info at exit.", &debug_info_flag,
    &debug_info_flag, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"default-character-set", OPT_DEFAULT_CHARSET,
+  {"default-character-set", 0,
    "Not used by mysql_upgrade. Only for backward compatibility.",
    0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"default_auth", OPT_DEFAULT_AUTH,
@@ -1159,6 +1159,8 @@ static int install_used_plugin_data_types(void)
   DYNAMIC_STRING ds_result;
   const char *query = "SELECT table_comment FROM information_schema.tables"
                       " WHERE table_comment LIKE 'Unknown data type: %'";
+  if (opt_systables_only)
+    return 0;
   if (init_dynamic_string(&ds_result, "", 512, 512))
     die("Out of memory");
   run_query(query, &ds_result, TRUE);
@@ -1475,7 +1477,12 @@ int main(int argc, char **argv)
   open_mysql_upgrade_file();
 
   if (opt_check_upgrade)
-    exit(upgrade_already_done(0) == 0);
+  {
+    int upgrade_needed = upgrade_already_done(0);
+    free_used_memory();
+    my_end(my_end_arg);
+    exit(upgrade_needed == 0);
+  }
 
   /* Find mysqlcheck */
   find_tool(mysqlcheck_path, IF_WIN("mariadb-check.exe", "mariadb-check"), self_name);

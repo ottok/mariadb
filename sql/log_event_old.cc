@@ -31,6 +31,9 @@
 #include "log_event_old.h"
 #include "rpl_record_old.h"
 #include "transaction.h"
+#ifdef WITH_WSREP
+#include "wsrep_mysqld.h"
+#endif /* WITH_WSREP */
 
 PSI_memory_key key_memory_log_event_old;
 
@@ -47,12 +50,12 @@ Old_rows_log_event::do_apply_event(Old_rows_log_event *ev, rpl_group_info *rgi)
   const Relay_log_info *rli= rgi->rli;
 
   /*
-    If m_table_id == ~0UL, then we have a dummy event that does not
+    If m_table_id == UINT32_MAX, then we have a dummy event that does not
     contain any data.  In that case, we just remove all tables in the
     tables_to_lock list, close the thread tables, and return with
     success.
    */
-  if (ev->m_table_id == ~0UL)
+  if (ev->m_table_id == UINT32_MAX)
   {
     /*
        This one is supposed to be set: just an extra check so that
@@ -205,7 +208,10 @@ Old_rows_log_event::do_apply_event(Old_rows_log_event *ev, rpl_group_info *rgi)
       TIMESTAMP column to a table with one.
       So we call set_time(), like in SBR. Presently it changes nothing.
     */
-    ev_thd->set_time(ev->when, ev->when_sec_part);
+#ifdef WITH_WSREP
+    if (!wsrep_thd_is_applying(thd))
+#endif
+      ev_thd->set_time(ev->when, ev->when_sec_part);
     /*
       There are a few flags that are replicated with each row event.
       Make sure to set/clear them before executing the main body of
@@ -1123,13 +1129,14 @@ int Update_rows_log_event_old::do_exec_row(TABLE *table)
 **************************************************************************/
 
 #ifndef MYSQL_CLIENT
-Old_rows_log_event::Old_rows_log_event(THD *thd_arg, TABLE *tbl_arg, ulong tid,
+Old_rows_log_event::Old_rows_log_event(THD *thd_arg, TABLE *tbl_arg,
+                                       ulonglong table_id,
                                        MY_BITMAP const *cols,
                                        bool is_transactional)
   : Log_event(thd_arg, 0, is_transactional),
     m_row_count(0),
     m_table(tbl_arg),
-    m_table_id(tid),
+    m_table_id(table_id),
     m_width(tbl_arg ? tbl_arg->s->fields : 1),
     m_rows_buf(0), m_rows_cur(0), m_rows_end(0), m_flags(0) 
 #ifdef HAVE_REPLICATION
@@ -1142,12 +1149,12 @@ Old_rows_log_event::Old_rows_log_event(THD *thd_arg, TABLE *tbl_arg, ulong tid,
 
   /*
     We allow a special form of dummy event when the table, and cols
-    are null and the table id is ~0UL.  This is a temporary
+    are null and the table id is UINT32_MAX.  This is a temporary
     solution, to be able to terminate a started statement in the
     binary log: the extraneous events will be removed in the future.
    */
-  DBUG_ASSERT((tbl_arg && tbl_arg->s && tid != ~0UL) ||
-              (!tbl_arg && !cols && tid == ~0UL));
+  DBUG_ASSERT((tbl_arg && tbl_arg->s && table_id != UINT32_MAX) ||
+              (!tbl_arg && !cols && table_id == UINT32_MAX));
 
   if (thd_arg->variables.option_bits & OPTION_NO_FOREIGN_KEY_CHECKS)
       set_flags(NO_FOREIGN_KEY_CHECKS_F);
@@ -1155,20 +1162,12 @@ Old_rows_log_event::Old_rows_log_event(THD *thd_arg, TABLE *tbl_arg, ulong tid,
       set_flags(RELAXED_UNIQUE_CHECKS_F);
   /* if my_bitmap_init fails, caught in is_valid() */
   if (likely(!my_bitmap_init(&m_cols,
-                          m_width <= sizeof(m_bitbuf)*8 ? m_bitbuf : NULL,
-                          m_width)))
+                             m_width <= sizeof(m_bitbuf)*8 ? m_bitbuf : NULL,
+                             m_width)))
   {
     /* Cols can be zero if this is a dummy binrows event */
     if (likely(cols != NULL))
-    {
-      memcpy(m_cols.bitmap, cols->bitmap, no_bytes_in_map(cols));
-      create_last_word_mask(&m_cols);
-    }
-  }
-  else
-  {
-    // Needed because my_bitmap_init() does not set it to null on failure
-    m_cols.bitmap= 0;
+      bitmap_copy(&m_cols, cols);
   }
 }
 #endif
@@ -1208,7 +1207,7 @@ Old_rows_log_event::Old_rows_log_event(const uchar *buf, uint event_len,
   }
   else
   {
-    m_table_id= (ulong) uint6korr(post_start);
+    m_table_id= (ulonglong) uint6korr(post_start);
     post_start+= RW_FLAGS_OFFSET;
   }
 
@@ -1230,25 +1229,20 @@ Old_rows_log_event::Old_rows_log_event(const uchar *buf, uint event_len,
 
   /* if my_bitmap_init fails, caught in is_valid() */
   if (likely(!my_bitmap_init(&m_cols,
-                          m_width <= sizeof(m_bitbuf)*8 ? m_bitbuf : NULL,
-                          m_width)))
+                             m_width <= sizeof(m_bitbuf)*8 ? m_bitbuf : NULL,
+                             m_width)))
   {
     DBUG_PRINT("debug", ("Reading from %p", ptr_after_width));
-    memcpy(m_cols.bitmap, ptr_after_width, (m_width + 7) / 8);
-    create_last_word_mask(&m_cols);
+    bitmap_import(&m_cols, ptr_after_width);
+    DBUG_DUMP("m_cols", ptr_after_width, no_bytes_in_export_map(&m_cols));
     ptr_after_width+= (m_width + 7) / 8;
-    DBUG_DUMP("m_cols", (uchar*) m_cols.bitmap, no_bytes_in_map(&m_cols));
   }
   else
-  {
-    // Needed because my_bitmap_init() does not set it to null on failure
-    m_cols.bitmap= NULL;
     DBUG_VOID_RETURN;
-  }
 
   const uchar* const ptr_rows_data= (const uchar*) ptr_after_width;
   size_t const data_size= event_len - (ptr_rows_data - (const uchar *) buf);
-  DBUG_PRINT("info",("m_table_id: %lu  m_flags: %d  m_width: %lu  data_size: %zu",
+  DBUG_PRINT("info",("m_table_id: %llu  m_flags: %d  m_width: %lu  data_size: %zu",
                      m_table_id, m_flags, m_width, data_size));
   DBUG_DUMP("rows_data", (uchar*) ptr_rows_data, data_size);
 
@@ -1262,8 +1256,6 @@ Old_rows_log_event::Old_rows_log_event(const uchar *buf, uint event_len,
     m_rows_cur= m_rows_end;
     memcpy(m_rows_buf, ptr_rows_data, data_size);
   }
-  else
-    m_cols.bitmap= 0; // to not free it
 
   DBUG_VOID_RETURN;
 }
@@ -1271,8 +1263,6 @@ Old_rows_log_event::Old_rows_log_event(const uchar *buf, uint event_len,
 
 Old_rows_log_event::~Old_rows_log_event()
 {
-  if (m_cols.bitmap == m_bitbuf) // no my_malloc happened
-    m_cols.bitmap= 0; // so no my_free in my_bitmap_free
   my_bitmap_free(&m_cols); // To pair with my_bitmap_init().
   my_free(m_rows_buf);
 }
@@ -1284,10 +1274,10 @@ int Old_rows_log_event::get_data_size()
   uchar *end= net_store_length(buf, (m_width + 7) / 8);
 
   DBUG_EXECUTE_IF("old_row_based_repl_4_byte_map_id_master",
-                  return (int)(6 + no_bytes_in_map(&m_cols) + (end - buf) +
-                  m_rows_cur - m_rows_buf););
+                  return (int)(6 + no_bytes_in_export_map(&m_cols) + (end - buf) +
+                               m_rows_cur - m_rows_buf););
   int data_size= ROWS_HEADER_LEN;
-  data_size+= no_bytes_in_map(&m_cols);
+  data_size+= no_bytes_in_export_map(&m_cols);
   data_size+= (uint) (end - buf);
 
   data_size+= (uint) (m_rows_cur - m_rows_buf);
@@ -1362,12 +1352,12 @@ int Old_rows_log_event::do_apply_event(rpl_group_info *rgi)
   Relay_log_info const *rli= rgi->rli;
 
   /*
-    If m_table_id == ~0UL, then we have a dummy event that does not
+    If m_table_id == UINT32_MAX, then we have a dummy event that does not
     contain any data.  In that case, we just remove all tables in the
     tables_to_lock list, close the thread tables, and return with
     success.
    */
-  if (m_table_id == ~0UL)
+  if (m_table_id == UINT32_MAX)
   {
     /*
        This one is supposed to be set: just an extra check so that
@@ -1507,7 +1497,10 @@ int Old_rows_log_event::do_apply_event(rpl_group_info *rgi)
       TIMESTAMP column to a table with one.
       So we call set_time(), like in SBR. Presently it changes nothing.
     */
-    thd->set_time(when, when_sec_part);
+#ifdef WITH_WSREP
+    if (!wsrep_thd_is_applying(thd))
+#endif
+      thd->set_time(when, when_sec_part);
     /*
       There are a few flags that are replicated with each row event.
       Make sure to set/clear them before executing the main body of
@@ -1784,10 +1777,10 @@ bool Old_rows_log_event::write_data_header()
   // This method should not be reached.
   assert(0);
 
-  DBUG_ASSERT(m_table_id != ~0UL);
+  DBUG_ASSERT(m_table_id != UINT32_MAX);
   DBUG_EXECUTE_IF("old_row_based_repl_4_byte_map_id_master",
                   {
-                    int4store(buf + 0, m_table_id);
+                    int4store(buf + 0, (ulong) m_table_id);
                     int2store(buf + 4, m_flags);
                     return write_data(buf, 6);
                   });
@@ -1805,6 +1798,8 @@ bool Old_rows_log_event::write_data_body()
   */
   uchar sbuf[MAX_INT_WIDTH];
   my_ptrdiff_t const data_size= m_rows_cur - m_rows_buf;
+  uint bitmap_size= no_bytes_in_export_map(&m_cols);
+  uchar *bitmap;
 
   // This method should not be reached.
   assert(0);
@@ -1816,10 +1811,14 @@ bool Old_rows_log_event::write_data_body()
   DBUG_DUMP("m_width", sbuf, (size_t) (sbuf_end - sbuf));
   res= res || write_data(sbuf, (size_t) (sbuf_end - sbuf));
 
-  DBUG_DUMP("m_cols", (uchar*) m_cols.bitmap, no_bytes_in_map(&m_cols));
-  res= res || write_data((uchar*)m_cols.bitmap, no_bytes_in_map(&m_cols));
+  bitmap= (uchar*) my_alloca(bitmap_size);
+  bitmap_export(bitmap, &m_cols);
+
+  DBUG_DUMP("m_cols", bitmap, no_bytes_in_export_map(&m_cols));
+  res= res || write_data(bitmap, no_bytes_in_export_map(&m_cols));
   DBUG_DUMP("rows", m_rows_buf, data_size);
   res= res || write_data(m_rows_buf, (size_t) data_size);
+  my_afree(bitmap);
 
   return res;
 
@@ -1834,7 +1833,7 @@ void Old_rows_log_event::pack_info(Protocol *protocol)
   char const *const flagstr=
     get_flags(STMT_END_F) ? " flags: STMT_END_F" : "";
   size_t bytes= my_snprintf(buf, sizeof(buf),
-                               "table_id: %lu%s", m_table_id, flagstr);
+                               "table_id: %llu%s", m_table_id, flagstr);
   protocol->store(buf, bytes, &my_charset_bin);
 }
 #endif
@@ -1856,9 +1855,10 @@ bool Old_rows_log_event::print_helper(FILE *file,
 
   if (!print_event_info->short_form)
   {
+    char llbuff[22];
     if (print_header(head, print_event_info, !do_print_encoded) ||
-        my_b_printf(head, "\t%s: table id %lu%s\n",
-                    name, m_table_id,
+        my_b_printf(head, "\t%s: table id %s%s\n",
+                    name, ullstr(m_table_id, llbuff),
                     do_print_encoded ? " flags: STMT_END_F" : "") ||
         print_base64(body, print_event_info, do_print_encoded))
       goto err;
@@ -2398,7 +2398,7 @@ int Old_rows_log_event::find_row(rpl_group_info *rgi)
 #if !defined(MYSQL_CLIENT)
 Write_rows_log_event_old::Write_rows_log_event_old(THD *thd_arg,
                                                    TABLE *tbl_arg,
-                                                   ulong tid_arg,
+                                                   ulonglong tid_arg,
                                                    MY_BITMAP const *cols,
                                                    bool is_transactional)
   : Old_rows_log_event(thd_arg, tbl_arg, tid_arg, cols, is_transactional)
@@ -2510,7 +2510,7 @@ bool Write_rows_log_event_old::print(FILE *file,
 #ifndef MYSQL_CLIENT
 Delete_rows_log_event_old::Delete_rows_log_event_old(THD *thd_arg,
                                                      TABLE *tbl_arg,
-                                                     ulong tid,
+                                                     ulonglong tid,
                                                      MY_BITMAP const *cols,
                                                      bool is_transactional)
   : Old_rows_log_event(thd_arg, tbl_arg, tid, cols, is_transactional),
@@ -2618,7 +2618,7 @@ bool Delete_rows_log_event_old::print(FILE *file,
 #if !defined(MYSQL_CLIENT)
 Update_rows_log_event_old::Update_rows_log_event_old(THD *thd_arg,
                                                      TABLE *tbl_arg,
-                                                     ulong tid,
+                                                     ulonglong tid,
                                                      MY_BITMAP const *cols,
                                                      bool is_transactional)
   : Old_rows_log_event(thd_arg, tbl_arg, tid, cols, is_transactional),

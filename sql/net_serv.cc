@@ -74,7 +74,13 @@ static int inline EXTRA_DEBUG_fflush(...) { return 0; }
 #ifdef MYSQL_SERVER
 #include <sql_class.h>
 #include <sql_connect.h>
-#define MYSQL_SERVER_my_error my_error
+
+static void inline MYSQL_SERVER_my_error(uint error, myf flags)
+{
+  my_error(error,
+           flags | MYF(global_system_variables.log_warnings > 3 ? ME_ERROR_LOG : 0));
+}
+
 #else
 static void inline MYSQL_SERVER_my_error(...) {}
 #endif
@@ -156,6 +162,8 @@ my_bool my_net_init(NET *net, Vio *vio, void *thd, uint my_flags)
   net->where_b = net->remain_in_buf=0;
   net->net_skip_rest_factor= 0;
   net->last_errno=0;
+  net->pkt_nr_can_be_reset= 0;
+  net->using_proxy_protocol= 0;
   net->thread_specific_malloc= MY_TEST(my_flags & MY_THREAD_SPECIFIC);
   net->thd= 0;
 #ifdef MYSQL_SERVER
@@ -210,6 +218,7 @@ void net_end(NET *net)
   DBUG_ENTER("net_end");
   my_free(net->buff);
   net->buff=0;
+  net->using_proxy_protocol= 0;
   DBUG_VOID_RETURN;
 }
 
@@ -765,7 +774,19 @@ net_real_write(NET *net,const uchar *packet, size_t len)
 #endif /* !defined(MYSQL_SERVER) */
       net->error= 2;				/* Close socket */
       net->last_errno= (interrupted ? ER_NET_WRITE_INTERRUPTED :
-                               ER_NET_ERROR_ON_WRITE);
+                        ER_NET_ERROR_ON_WRITE);
+#ifdef MYSQL_SERVER
+      if (global_system_variables.log_warnings > 3)
+      {
+        my_printf_error(net->last_errno,
+                        "Could not write packet: fd: %lld  state: %d  "
+                        "errno: %d  vio_errno: %d  length: %ld",
+                        MYF(ME_ERROR_LOG),
+                        (longlong) vio_fd(net->vio), (int) net->vio->state,
+                        vio_errno(net->vio), net->last_errno, (ulong) (end-pos));
+        break;
+      }
+#endif
       MYSQL_SERVER_my_error(net->last_errno, MYF(0));
       break;
     }
@@ -936,6 +957,7 @@ static handle_proxy_header_result handle_proxy_header(NET *net)
     return RETRY;
   /* Change peer address in THD and ACL structures.*/
   uint host_errors;
+  net->using_proxy_protocol= 1;
   return (handle_proxy_header_result)thd_set_peer_addr(thd,
                          &(peer_info.peer_addr), NULL, peer_info.port,
                          false, &host_errors);
@@ -1057,24 +1079,40 @@ retry:
 	  {					/* Probably in MIT threads */
 	    if (retry_count++ < net->retry_count)
 	      continue;
-	    EXTRA_DEBUG_fprintf(stderr, "%s: read looped with error %d, aborting thread\n",
-		    my_progname,vio_errno(net->vio));
+	    EXTRA_DEBUG_fprintf(stderr, "%s: read looped with error %d on "
+                                "file %lld, aborting thread\n",
+                                my_progname, vio_errno(net->vio),
+                                (longlong) vio_fd(net->vio));
 	  }
 #ifndef MYSQL_SERVER
-	  if (length != 0 && vio_errno(net->vio) == SOCKET_EINTR)
+	  if (length != 0 && vio_should_retry(net->vio))
 	  {
 	    DBUG_PRINT("warning",("Interrupted read. Retrying..."));
 	    continue;
 	  }
 #endif
-	  DBUG_PRINT("error",("Couldn't read packet: remain: %u  errno: %d  length: %ld",
+	  DBUG_PRINT("error",("Could not read packet: remain: %u  errno: %d  length: %ld",
 			      remain, vio_errno(net->vio), (long) length));
 	  len= packet_error;
 	  net->error= 2;				/* Close socket */
           net->last_errno= (vio_was_timeout(net->vio) ?
-                                   ER_NET_READ_INTERRUPTED :
-                                   ER_NET_READ_ERROR);
-          MYSQL_SERVER_my_error(net->last_errno, MYF(0));
+                            ER_NET_READ_INTERRUPTED :
+                            ER_NET_READ_ERROR);
+#ifdef MYSQL_SERVER
+          if (global_system_variables.log_warnings > 3)
+          {
+            my_printf_error(net->last_errno,
+                            "Could not read packet: fd: %lld  state: %d  "
+                            "remain: %u  errno: %d  vio_errno: %d  "
+                            "length: %lld",
+                            MYF(ME_ERROR_LOG),
+                            (longlong) vio_fd(net->vio), (int) net->vio->state,
+                            remain, vio_errno(net->vio), net->last_errno,
+                            (longlong) length);
+          }
+          else
+            my_error(net->last_errno, MYF(0));
+#endif /* MYSQL_SERVER */
 	  goto end;
 	}
 	remain -= (uint32) length;
@@ -1094,19 +1132,31 @@ retry:
 #endif
 	if (net->buff[net->where_b + 3] != (uchar) net->pkt_nr)
         {
-#ifndef MYSQL_SERVER
-          if (net->buff[net->where_b + 3] == (uchar) (net->pkt_nr -1))
+          if (net->pkt_nr_can_be_reset)
           {
             /*
-              If the server was killed then the server may have missed the
-              last sent client packet and the packet numbering may be one off.
+              We are using a protocol like semi-sync where master and slave
+              sends packets in parallel.
+              Copy current one as it can be useful for debugging.
             */
-            DBUG_PRINT("warning", ("Found possible out of order packets"));
-            expect_error_packet= 1;
+            net->pkt_nr= net->buff[net->where_b + 3];
           }
           else
+          {
+#ifndef MYSQL_SERVER
+            if (net->buff[net->where_b + 3] == (uchar) (net->pkt_nr -1))
+            {
+              /*
+                If the server was killed then the server may have missed the
+                last sent client packet and the packet numbering may be one off.
+              */
+              DBUG_PRINT("warning", ("Found possible out of order packets"));
+              expect_error_packet= 1;
+            }
+            else
 #endif
-            goto packets_out_of_order;
+              goto packets_out_of_order;
+          }
         }
         net->compress_pkt_nr= ++net->pkt_nr;
 #ifdef HAVE_COMPRESS
@@ -1267,7 +1317,10 @@ ulong
 my_net_read_packet(NET *net, my_bool read_from_server)
 {
   ulong reallen = 0;
-  return my_net_read_packet_reallen(net, read_from_server, &reallen); 
+  ulong length;
+  DBUG_ENTER("my_net_read_packet");
+  length= my_net_read_packet_reallen(net, read_from_server, &reallen);
+  DBUG_RETURN(length);
 }
 
 

@@ -34,7 +34,6 @@ this program; if not, write to the Free Software Foundation, Inc.,
 # define SUX_LOCK_GENERIC /* Use dummy implementation for debugging purposes */
 #endif
 
-#ifdef SUX_LOCK_GENERIC
 /** An exclusive-only variant of srw_lock */
 template<bool spinloop>
 class pthread_mutex_wrapper final
@@ -70,7 +69,6 @@ template<>
 inline void pthread_mutex_wrapper<true>::wr_lock()
 { if (!wr_lock_try()) wr_wait(); }
 # endif
-#endif
 
 /** Futex-based mutex */
 template<bool spinloop>
@@ -155,7 +153,7 @@ template<bool spinloop> class srw_lock_impl;
 
 /** Slim shared-update-exclusive lock with no recursion */
 template<bool spinloop>
-class ssux_lock_impl final
+class ssux_lock_impl
 {
 #ifdef UNIV_PFS_RWLOCK
   friend class ssux_lock;
@@ -541,7 +539,7 @@ public:
   /** @return whether any lock may be held by any thread */
   bool is_locked_or_waiting() const noexcept
   { return lock.is_locked_or_waiting(); }
-  /** @return whether an exclusive lock may be held by any thread */
+  /** @return whether a shared or exclusive lock may be held by any thread */
   bool is_locked() const noexcept { return lock.is_locked(); }
   /** @return whether an exclusive lock may be held by any thread */
   bool is_write_locked() const noexcept { return lock.is_write_locked(); }
@@ -551,4 +549,52 @@ public:
 typedef srw_lock_impl<false> srw_lock;
 typedef srw_lock_impl<true> srw_spin_lock;
 
+#endif
+
+#ifdef UNIV_DEBUG
+# include <unordered_set>
+
+class srw_lock_debug : private srw_lock
+{
+  /** The owner of the exclusive lock (0 if none) */
+  std::atomic<pthread_t> writer;
+  /** Protects readers */
+  mutable srw_mutex readers_lock;
+  /** Threads that hold the lock in shared mode */
+  std::atomic<std::unordered_multiset<pthread_t>*> readers;
+
+  /** Register a read lock. */
+  void readers_register();
+
+public:
+  void SRW_LOCK_INIT(mysql_pfs_key_t key);
+  void destroy();
+
+#ifndef SUX_LOCK_GENERIC
+  /** @return whether any lock may be held by any thread */
+  bool is_locked_or_waiting() const noexcept
+  { return srw_lock::is_locked_or_waiting(); }
+  /** @return whether an exclusive lock may be held by any thread */
+  bool is_write_locked() const noexcept { return srw_lock::is_write_locked(); }
+#endif
+
+  /** Acquire an exclusive lock */
+  void wr_lock(SRW_LOCK_ARGS(const char *file, unsigned line));
+  /** @return whether an exclusive lock was acquired */
+  bool wr_lock_try();
+  /** Release after wr_lock() */
+  void wr_unlock();
+  /** Acquire a shared lock */
+  void rd_lock(SRW_LOCK_ARGS(const char *file, unsigned line));
+  /** @return whether a shared lock was acquired */
+  bool rd_lock_try();
+  /** Release after rd_lock() */
+  void rd_unlock();
+  /** @return whether this thread is between rd_lock() and rd_unlock() */
+  bool have_rd() const noexcept;
+  /** @return whether this thread is between wr_lock() and wr_unlock() */
+  bool have_wr() const noexcept;
+  /** @return whether this thread is holding rd_lock() or wr_lock() */
+  bool have_any() const noexcept;
+};
 #endif

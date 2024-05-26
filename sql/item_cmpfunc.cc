@@ -457,40 +457,6 @@ void Item_bool_func::raise_note_if_key_become_unused(THD *thd, const Item_args &
 }
 
 
-bool Item_func::setup_args_and_comparator(THD *thd, Arg_comparator *cmp)
-{
-  DBUG_ASSERT(arg_count >= 2); // Item_func_nullif has arg_count == 3
-
-  if (args[0]->cmp_type() == STRING_RESULT &&
-      args[1]->cmp_type() == STRING_RESULT)
-  {
-    CHARSET_INFO *tmp;
-    /*
-      Use charset narrowing only for equalities, as that would allow
-      to construct ref access.
-      Non-equality comparisons with constants work without charset narrowing,
-      the constant gets converted.
-      Non-equality comparisons with non-constants would need narrowing to
-      enable range optimizer to handle e.g.
-        t1.mb3key_col <= const_table.mb4_col
-      But this doesn't look important.
-    */
-    bool allow_narrowing= MY_TEST(functype()==Item_func::EQ_FUNC ||
-                                  functype()==Item_func::EQUAL_FUNC);
-
-    if (agg_arg_charsets_for_comparison(&tmp, &args[0], &args[1],
-                                        allow_narrowing))
-      return true;
-    cmp->m_compare_collation= tmp;
-  }
-  //  Convert constants when compared to int/year field
-  DBUG_ASSERT(functype() != LIKE_FUNC);
-  convert_const_compared_to_int_field(thd);
-
-  return cmp->set_cmp_func(thd, this, &args[0], &args[1], true);
-}
-
-
 /*
   Comparison operators remove arguments' dependency on PAD_CHAR_TO_FULL_LENGTH
   in case of PAD SPACE comparison collations: trailing spaces do not affect
@@ -519,8 +485,15 @@ bool Item_bool_rowready_func2::fix_length_and_dec(THD *thd)
   if (!args[0] || !args[1])
     return FALSE;
   Item_args old_args(args[0], args[1]);
-  if (setup_args_and_comparator(thd, &cmp))
+  convert_const_compared_to_int_field(thd);
+  Type_handler_hybrid_field_type tmp;
+  if (tmp.aggregate_for_comparison(func_name_cstring(), args, 2, false) ||
+      tmp.type_handler()->Item_bool_rowready_func2_fix_length_and_dec(thd,
+                                                                      this))
+  {
+    DBUG_ASSERT(thd->is_error());
     return true;
+  }
   raise_note_if_key_become_unused(thd, old_args);
   return false;
 }
@@ -540,21 +513,14 @@ bool Item_bool_rowready_func2::fix_length_and_dec(THD *thd)
 */
 
 int Arg_comparator::set_cmp_func(THD *thd, Item_func_or_sum *owner_arg,
+                                 const Type_handler *compare_handler,
                                  Item **a1, Item **a2)
 {
   owner= owner_arg;
   set_null= set_null && owner_arg;
   a= a1;
   b= a2;
-  Item *tmp_args[2]= {*a1, *a2};
-  Type_handler_hybrid_field_type tmp;
-  if (tmp.aggregate_for_comparison(owner_arg->func_name_cstring(), tmp_args, 2,
-                                   false))
-  {
-    DBUG_ASSERT(thd->is_error());
-    return 1;
-  }
-  m_compare_handler= tmp.type_handler();
+  m_compare_handler= compare_handler;
   return m_compare_handler->set_comparator_func(thd, this);
 }
 
@@ -605,6 +571,14 @@ bool Arg_comparator::set_cmp_func_string(THD *thd)
       We must set cmp_collation here as we may be called from for an automatic
       generated item, like in natural join.
       Allow reinterpted superset as subset.
+      Use charset narrowing only for equalities, as that would allow
+      to construct ref access.
+      Non-equality comparisons with constants work without charset narrowing,
+      the constant gets converted.
+      Non-equality comparisons with non-constants would need narrowing to
+      enable range optimizer to handle e.g.
+        t1.mb3key_col <= const_table.mb4_col
+      But this doesn't look important.
     */
     bool allow_narrowing= false;
     if (owner->type() == Item::FUNC_ITEM)
@@ -1430,7 +1404,13 @@ bool Item_in_optimizer::fix_left(THD *thd)
   eval_not_null_tables(NULL);
   with_flags|= (args[0]->with_flags |
                (args[1]->with_flags & item_with_t::SP_VAR));
-  if ((const_item_cache= args[0]->const_item()))
+
+  /*
+    If left expression is a constant, cache its value.
+    But don't do that if that involves computing a subquery, as we are in a
+    prepare-phase rewrite.
+  */
+  if ((const_item_cache= args[0]->const_item()) && !args[0]->with_subquery())
   {
     cache->store(args[0]);
     cache->cache_value();
@@ -1506,6 +1486,23 @@ bool Item_in_optimizer::invisible_mode()
 {
   /* MAX/MIN transformed or EXISTS->IN prepared => do nothing */
   return (args[1]->get_IN_subquery() == NULL);
+}
+
+
+bool Item_in_optimizer::walk(Item_processor processor,
+                             bool walk_subquery,
+                             void *arg)
+{
+  bool res= FALSE;
+  if (args[1]->type() == Item::SUBSELECT_ITEM &&
+      ((Item_subselect *)args[1])->substype() != Item_subselect::EXISTS_SUBS &&
+      !(((Item_subselect *)args[1])->substype() == Item_subselect::IN_SUBS &&
+        ((Item_in_subselect *)args[1])->test_strategy(SUBS_IN_TO_EXISTS)))
+    res= args[0]->walk(processor, walk_subquery, arg);
+  if (!res)
+    res= args[1]->walk(processor, walk_subquery, arg);
+
+  return res || (this->*processor)(arg);
 }
 
 
@@ -2812,8 +2809,9 @@ Item_func_nullif::fix_length_and_dec(THD *thd)
   fix_char_length(args[2]->max_char_length());
   set_maybe_null();
   m_arg0= args[0];
-  if (setup_args_and_comparator(thd, &cmp))
-    return TRUE;
+  convert_const_compared_to_int_field(thd);
+  if (cmp.set_cmp_func(thd, this, &args[0], &args[1], true/*set_null*/))
+    return true;
   /*
     A special code for EXECUTE..PREPARE.
 
@@ -3484,7 +3482,13 @@ void Item_func_case_simple::print(String *str, enum_query_type query_type)
 
 void Item_func_decode_oracle::print(String *str, enum_query_type query_type)
 {
-  str->append(func_name_cstring());
+  if (query_type & QT_FOR_FRM)
+  {
+    // 10.3 downgrade compatibility for FRM
+    str->append(STRING_WITH_LEN("decode_oracle"));
+  }
+  else
+    print_sql_mode_qualified_name(str, query_type);
   str->append('(');
   args[0]->print(str, query_type);
   for (uint i= 1, count= when_count() ; i <= count; i++)
@@ -6092,7 +6096,7 @@ void Regexp_processor_pcre::init(CHARSET_INFO *data_charset, int extra_flags)
 
   // Convert text data to utf-8.
   m_library_charset= data_charset == &my_charset_bin ?
-                     &my_charset_bin : &my_charset_utf8mb3_general_ci;
+                     &my_charset_bin : &my_charset_utf8mb4_general_ci;
 
   m_conversion_is_needed= (data_charset != &my_charset_bin) &&
                           !my_charset_same(data_charset, m_library_charset);
@@ -6138,8 +6142,8 @@ bool Regexp_processor_pcre::compile(String *pattern, bool send_error)
     if (!stringcmp(pattern, &m_prev_pattern))
       return false;
     cleanup();
-    m_prev_pattern.copy(*pattern);
   }
+  m_prev_pattern.copy(*pattern);
 
   if (!(pattern= convert_if_needed(pattern, &pattern_converter)))
     return true;
@@ -6285,7 +6289,17 @@ bool Regexp_processor_pcre::exec(Item *item, int offset,
 }
 
 
-void Regexp_processor_pcre::fix_owner(Item_func *owner,
+/*
+  This method determines the owner's maybe_null flag.
+  Generally, the result is NULL-able. However, in case
+  of a constant pattern and a NOT NULL subject, the
+  result can also be NOT NULL.
+  @return  true - in case if the constant regex compilation failed
+           (e.g. due to a wrong regex syntax in the pattern).
+           The compilation error message is put to the DA in this case.
+           false - otherwise.
+*/
+bool Regexp_processor_pcre::fix_owner(Item_func *owner,
                                       Item *subject_arg,
                                       Item *pattern_arg)
 {
@@ -6293,16 +6307,30 @@ void Regexp_processor_pcre::fix_owner(Item_func *owner,
       pattern_arg->const_item() &&
       !pattern_arg->is_expensive())
   {
-    if (compile(pattern_arg, true))
+    if (compile(pattern_arg, true/* raise errors to DA, e.g. on bad syntax */))
     {
       owner->set_maybe_null(); // Will always return NULL
-      return;
+      if (pattern_arg->null_value)
+      {
+        /*
+          The pattern evaluated to NULL. Regex compilation did not happen.
+          No errors were put to DA. Continue with maybe_null==true.
+          The function will return NULL per row.
+        */
+        return false;
+      }
+      /*
+        A syntax error in the pattern, an error was raised to the DA.
+        Let's abort the query. The caller will send the error to the client.
+      */
+      return true;
     }
     set_const(true);
     owner->base_flags|= subject_arg->base_flags & item_base_t::MAYBE_NULL;
   }
   else
     owner->set_maybe_null();
+  return false;
 }
 
 
@@ -6314,8 +6342,7 @@ Item_func_regex::fix_length_and_dec(THD *thd)
     return TRUE;
 
   re.init(cmp_collation.collation, 0);
-  re.fix_owner(this, args[0], args[1]);
-  return FALSE;
+  return re.fix_owner(this, args[0], args[1]);
 }
 
 
@@ -6339,9 +6366,8 @@ Item_func_regexp_instr::fix_length_and_dec(THD *thd)
     return TRUE;
 
   re.init(cmp_collation.collation, 0);
-  re.fix_owner(this, args[0], args[1]);
   max_length= MY_INT32_NUM_DECIMAL_DIGITS; // See also Item_func_locate
-  return FALSE;
+  return re.fix_owner(this, args[0], args[1]);
 }
 
 

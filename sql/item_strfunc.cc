@@ -748,7 +748,7 @@ bool Item_func_des_encrypt::fix_length_and_dec(THD *thd)
 String *Item_func_des_encrypt::val_str(String *str)
 {
   DBUG_ASSERT(fixed());
-#if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
+#if defined(HAVE_des) && !defined(EMBEDDED_LIBRARY)
   uint code= ER_WRONG_PARAMETERS_TO_PROCEDURE;
   DES_cblock ivec;
   struct st_des_keyblock keyblock;
@@ -837,8 +837,8 @@ error:
   THD *thd= current_thd;
   push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
                       ER_FEATURE_DISABLED, ER_THD(thd, ER_FEATURE_DISABLED),
-                      "des_encrypt", "--with-ssl");
-#endif /* defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY) */
+                      "des_encrypt", "openssl des cipher (HAVE_des)");
+#endif /* defined(HAVE_des) && !defined(EMBEDDED_LIBRARY) */
   null_value=1;
   return 0;
 }
@@ -861,7 +861,7 @@ bool Item_func_des_decrypt::fix_length_and_dec(THD *thd)
 String *Item_func_des_decrypt::val_str(String *str)
 {
   DBUG_ASSERT(fixed());
-#if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
+#if defined(HAVE_des) && !defined(EMBEDDED_LIBRARY)
   uint code= ER_WRONG_PARAMETERS_TO_PROCEDURE;
   DES_cblock ivec;
   struct st_des_keyblock keyblock;
@@ -936,9 +936,9 @@ wrong_key:
     THD *thd= current_thd;
     push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
                         ER_FEATURE_DISABLED, ER_THD(thd, ER_FEATURE_DISABLED),
-                        "des_decrypt", "--with-ssl");
+                        "des_decrypt", "openssl des cipher (HAVE_des)");
   }
-#endif /* defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY) */
+#endif /* defined(HAVE_des) && !defined(EMBEDDED_LIBRARY) */
   null_value=1;
   return 0;
 }
@@ -1184,8 +1184,7 @@ bool Item_func_reverse::fix_length_and_dec(THD *thd)
     Fix that this works with binary strings when using USE_MB 
 */
 
-String *Item_func_replace::val_str_internal(String *str,
-                                            String *empty_string_for_null)
+String *Item_func_replace::val_str_internal(String *str, bool null_to_empty)
 {
   DBUG_ASSERT(fixed());
   String *res,*res2,*res3;
@@ -1203,13 +1202,8 @@ String *Item_func_replace::val_str_internal(String *str,
   res=args[0]->val_str(str);
   if (args[0]->null_value)
     goto null;
-  res2=args[1]->val_str(&tmp_value);
-  if (args[1]->null_value)
-  {
-    if (!empty_string_for_null)
-      goto null;
-    res2= empty_string_for_null;
-  }
+  if (!(res2= args[1]->val_str_null_to_empty(&tmp_value, null_to_empty)))
+    goto null;
   res->set_charset(collation.collation);
 
 #ifdef USE_MB
@@ -1226,12 +1220,8 @@ String *Item_func_replace::val_str_internal(String *str,
   if (binary_cmp && (offset=res->strstr(*res2)) < 0)
     return res;
 #endif
-  if (!(res3=args[2]->val_str(&tmp_value2)))
-  {
-    if (!empty_string_for_null)
-      goto null;
-    res3= empty_string_for_null;
-  }
+  if (!(res3= args[2]->val_str_null_to_empty(&tmp_value2, null_to_empty)))
+    goto null;
   from_length= res2->length();
   to_length=   res3->length();
 
@@ -1314,7 +1304,7 @@ redo:
     }
     while ((offset=res->strstr(*res2,(uint) offset)) >= 0);
   }
-  if (empty_string_for_null && !res->length())
+  if (null_to_empty && !res->length())
     goto null;
 
   return res;
@@ -1509,6 +1499,7 @@ String *Item_func_sformat::val_str(String *res)
 
 bool Item_func_random_bytes::fix_length_and_dec(THD *thd)
 {
+  set_maybe_null();
   used_tables_cache|= RAND_TABLE_BIT;
   if (args[0]->can_eval_in_optimize())
   {
@@ -1638,25 +1629,28 @@ bool Item_func_regexp_replace::append_replacement(String *str,
 }
 
 
-String *Item_func_regexp_replace::val_str(String *str)
+String *Item_func_regexp_replace::val_str_internal(String *str,
+                                                   bool null_to_empty)
 {
   DBUG_ASSERT(fixed());
   char buff0[MAX_FIELD_WIDTH];
   char buff2[MAX_FIELD_WIDTH];
   String tmp0(buff0,sizeof(buff0),&my_charset_bin);
   String tmp2(buff2,sizeof(buff2),&my_charset_bin);
-  String *source= args[0]->val_str(&tmp0);
-  String *replace= args[2]->val_str(&tmp2);
+  String *source, *replace;
   LEX_CSTRING src, rpl;
   size_t startoffset= 0;
 
-  if ((null_value= (args[0]->null_value || args[2]->null_value ||
-                    re.recompile(args[1]))))
-    return (String *) 0;
-
+  source= args[0]->val_str(&tmp0);
+  if (!source)
+    goto err;
+  replace= args[2]->val_str_null_to_empty(&tmp2, null_to_empty);
+  if (!replace || re.recompile(args[1]))
+    goto err;
   if (!(source= re.convert_if_needed(source, &re.subject_converter)) ||
       !(replace= re.convert_if_needed(replace, &re.replace_converter)))
     goto err;
+  null_value= false;
 
   source->get_value(&src);
   replace->get_value(&rpl);
@@ -1702,7 +1696,7 @@ String *Item_func_regexp_replace::val_str(String *str)
 
 err:
   null_value= true;
-  return (String *) 0;
+  return nullptr;
 }
 
 
@@ -1838,13 +1832,21 @@ bool Item_func_insert::fix_length_and_dec(THD *thd)
 String *Item_str_conv::val_str(String *str)
 {
   DBUG_ASSERT(fixed());
-  String *res;
-  size_t alloced_length, len;
+  String *res= args[0]->val_str(&tmp_value);
 
-  if ((null_value= (!(res= args[0]->val_str(&tmp_value)) ||
-                    str->alloc((alloced_length= res->length() * multiply)))))
-    return 0;
+  if (!res)
+  {
+  err:
+    null_value= true;
+    return nullptr;
+  }
 
+  size_t alloced_length= res->length() * multiply, len;
+
+  if (str->alloc((alloced_length)))
+    goto err;
+
+  null_value= false;
   len= converter(collation.collation, (char*) res->ptr(), res->length(),
                                       (char*) str->ptr(), alloced_length);
   DBUG_ASSERT(len <= alloced_length);
@@ -2417,13 +2419,31 @@ bool Item_func_trim::fix_length_and_dec(THD *thd)
 
 void Item_func_trim::print(String *str, enum_query_type query_type)
 {
+  LEX_CSTRING suffix= {STRING_WITH_LEN("_oracle")};
   if (arg_count == 1)
   {
-    Item_func::print(str, query_type);
+    if (query_type & QT_FOR_FRM)
+    {
+      // 10.3 downgrade compatibility for FRM
+      str->append(func_name_cstring());
+      if (schema() == &oracle_schema_ref)
+        str->append(suffix);
+    }
+    else
+      print_sql_mode_qualified_name(str, query_type, func_name_cstring());
+    print_args_parenthesized(str, query_type);
     return;
   }
-  str->append(Item_func_trim::func_name_cstring());
-  str->append(func_name_ext());
+
+  if (query_type & QT_FOR_FRM)
+  {
+    // 10.3 downgrade compatibility for FRM
+    str->append(Item_func_trim::func_name_cstring());
+    if (schema() == &oracle_schema_ref)
+      str->append(suffix);
+  }
+  else
+    print_sql_mode_qualified_name(str, query_type, Item_func_trim::func_name_cstring());
   str->append('(');
   str->append(mode_name());
   str->append(' ');
@@ -3463,13 +3483,13 @@ String *Item_func_binlog_gtid_pos::val_str(String *str)
   String name_str, *name;
   longlong pos;
 
-  if (args[0]->null_value || args[1]->null_value)
-    goto err;
-
   name= args[0]->val_str(&name_str);
   pos= args[1]->val_int();
 
-  if (pos < 0 || pos > UINT_MAX32)
+  if (args[0]->null_value || args[1]->null_value)
+    goto err;
+
+  if (pos < 0 || pos > (longlong) UINT_MAX32)
     goto err;
 
   if (gtid_state_from_binlog_pos(name->c_ptr_safe(), (uint32)pos, str))
@@ -3867,7 +3887,9 @@ bool Item_func_set_collation::fix_length_and_dec(THD *thd)
     return true;
   collation.set(cl.collation().charset_info(), DERIVATION_EXPLICIT,
                 args[0]->collation.repertoire);
-  max_length= args[0]->max_length;
+  ulonglong max_char_length= (ulonglong) args[0]->max_char_length();
+  fix_char_length_ulonglong(max_char_length * collation.collation->mbmaxlen);
+
   return FALSE;
 }
 
@@ -4951,6 +4973,11 @@ void Item_func_dyncol_create::print_arguments(String *str,
       {
         str->append(STRING_WITH_LEN(" charset "));
         str->append(defs[i].cs->cs_name);
+        if (Charset(defs[i].cs).can_have_collate_clause())
+        {
+          str->append(STRING_WITH_LEN(" collate "));
+          str->append(defs[i].cs->coll_name);
+        }
         str->append(' ');
       }
       break;
