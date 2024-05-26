@@ -1505,7 +1505,7 @@ static int plugin_initialize(MEM_ROOT *tmp_root, struct st_plugin_int *plugin,
   else
     ret= plugin_do_initialize(plugin, state);
 
-  if (ret)
+  if (ret && ret != HA_ERR_RETRY_INIT)
     plugin_variables_deinit(plugin);
 
   mysql_mutex_lock(&LOCK_plugin);
@@ -1786,6 +1786,7 @@ int plugin_init(int *argc, char **argv, int flags)
         uint state= plugin_ptr->state;
         mysql_mutex_unlock(&LOCK_plugin);
         error= plugin_do_initialize(plugin_ptr, state);
+        DBUG_EXECUTE_IF("fail_spider_init_retry", error= 1;);
         mysql_mutex_lock(&LOCK_plugin);
         plugin_ptr->state= state;
         if (error == HA_ERR_RETRY_INIT)
@@ -4261,7 +4262,7 @@ static int test_plugin_options(MEM_ROOT *tmp_root, struct st_plugin_int *tmp,
 
     if (unlikely(error))
     {
-       sql_print_error("Parsing options for plugin '%s' failed.",
+       sql_print_error("Parsing options for plugin '%s' failed. Disabling plugin",
                        tmp->name.str);
        goto err;
     }

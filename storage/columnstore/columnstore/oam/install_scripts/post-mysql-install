@@ -1,0 +1,63 @@
+#!/bin/bash
+#
+# $Id: post-mysql-install 3661 2013-06-25 22:04:33Z dhill $
+#
+# Post-install steps for calpont-mysql install
+
+# check if running systemd
+
+# check log for error
+checkForError() {
+	# check for password error
+	grep "ERROR 1045" ${tmpdir}/mysql_install.log > ${tmpdir}/error.check
+	if [ `cat ${tmpdir}/error.check | wc -c` -ne 0 ]; then
+		  echo "MySQL Password file missing or incorrect, check .my.cnf file"
+		  rm -f ${tmpdir}/error.check
+		  exit 2;
+	fi
+
+	rm -f ${tmpdir}/error.check
+
+        #---------------------------------------------------------------------------
+        # See if engine columnstore exist
+        #---------------------------------------------------------------------------
+        echo "checking for engine columnstore..."
+        su -s /bin/sh -c 'mysql --execute="show engines"' mysql 2> ${tmpdir}/post-mysql-install.log | grep -i columnstore
+
+        #
+        # Add compressiontype column to SYSCOLUMN if applicable
+        #
+        if [ $? -ne 0 ]; then
+                echo "columnstore doesn't exist"
+                exit 1
+        fi
+
+        echo "columnstore exist"
+
+	return 0;
+}
+
+rpmmode=install
+tmpdir="/tmp"
+
+for arg in "$@"; do
+	if [ $(expr -- "$arg" : '--rpmmode=') -eq 10 ]; then
+		rpmmode="$(echo $arg | awk -F= '{print $2}')"
+	elif [ $(expr -- "$arg" : '--tmpdir=') -eq 9 ]; then
+		tmpdir="$(echo $arg | awk -F= '{print $2}')"
+	else
+		echo "ignoring unknown argument: $arg" 1>&2
+	fi
+done
+
+# Install various Calpont stuff...
+install_mcs_mysql.sh  --tmpdir=$tmpdir
+
+checkForError
+if [ $? -ne 0 ]; then
+    echo "ERROR: Invalid password in .my.cnf, or Columnstore plugin install missing"
+    exit 2;
+fi
+
+exit 0
+

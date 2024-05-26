@@ -1972,7 +1972,10 @@ int Query_log_event::do_apply_event(rpl_group_info *rgi,
   {
     bool is_rb_alter= gtid_flags_extra & Gtid_log_event::FL_ROLLBACK_ALTER_E1;
 
-    thd->set_time(when, when_sec_part);
+#ifdef WITH_WSREP
+    if (!wsrep_thd_is_applying(thd))
+#endif
+      thd->set_time(when, when_sec_part);
     thd->set_query_and_id((char*)query_arg, q_len_arg,
                           thd->charset(), next_query_id());
     thd->variables.pseudo_thread_id= thread_id;		// for temp tables
@@ -3134,7 +3137,7 @@ int Load_log_event::do_apply_event(NET* net, rpl_group_info *rgi,
   thd->lex->local_file= local_fname;
   thd->reset_for_next_command(0);               // Errors are cleared above
 
-   /*
+  /*
     We test replicate_*_db rules. Note that we have already prepared
     the file to load, even if we are going to ignore and delete it
     now. So it is possible that we did a lot of disk writes for
@@ -3147,7 +3150,6 @@ int Load_log_event::do_apply_event(NET* net, rpl_group_info *rgi,
     filtering in the I/O thread (more efficient: no disk writes at
     all).
 
-
     Note:   We do not need to execute reset_one_shot_variables() if this
             db_ok() test fails.
     Reason: The db stored in binlog events is the same for SET and for
@@ -3159,7 +3161,10 @@ int Load_log_event::do_apply_event(NET* net, rpl_group_info *rgi,
   */
   if (rpl_filter->db_ok(thd->db.str))
   {
-    thd->set_time(when, when_sec_part);
+#ifdef WITH_WSREP
+    if (!wsrep_thd_is_applying(thd))
+#endif
+      thd->set_time(when, when_sec_part);
     thd->set_query_id(next_query_id());
     thd->get_stmt_da()->opt_clear_warning_info(thd->query_id);
 
@@ -3725,28 +3730,43 @@ Gtid_log_event::write()
     write_len= GTID_HEADER_LEN + 2;
   }
 
-  if (flags2 & (FL_PREPARED_XA | FL_COMPLETED_XA))
+  if (flags2 & (FL_PREPARED_XA | FL_COMPLETED_XA)
+      && !DBUG_IF("negate_xid_from_gtid"))
   {
     int4store(&buf[write_len],   xid.formatID);
     buf[write_len +4]=   (uchar) xid.gtrid_length;
     buf[write_len +4+1]= (uchar) xid.bqual_length;
     write_len+= 6;
     long data_length= xid.bqual_length + xid.gtrid_length;
-    memcpy(buf+write_len, xid.data, data_length);
-    write_len+= data_length;
+
+    if (!DBUG_IF("negate_xid_data_from_gtid"))
+    {
+      memcpy(buf+write_len, xid.data, data_length);
+      write_len+= data_length;
+    }
   }
+
+  DBUG_EXECUTE_IF("inject_fl_extra_multi_engine_into_gtid", {
+    flags_extra|= FL_EXTRA_MULTI_ENGINE_E1;
+  });
   if (flags_extra > 0)
   {
     buf[write_len]= flags_extra;
     write_len++;
   }
+  DBUG_EXECUTE_IF("inject_fl_extra_multi_engine_into_gtid", {
+    flags_extra&= ~FL_EXTRA_MULTI_ENGINE_E1;
+  });
+
   if (flags_extra & FL_EXTRA_MULTI_ENGINE_E1)
   {
     buf[write_len]= extra_engines;
     write_len++;
   }
 
-  if (flags_extra & (FL_COMMIT_ALTER_E1 | FL_ROLLBACK_ALTER_E1))
+  if (flags_extra & (FL_COMMIT_ALTER_E1 | FL_ROLLBACK_ALTER_E1)
+      && !DBUG_IF("negate_alter_fl_from_gtid")
+  )
   {
     int8store(buf + write_len, sa_seq_no);
     write_len+= 8;
@@ -4389,6 +4409,9 @@ int Xid_apply_log_event::do_apply_event(rpl_group_info *rgi)
   thd->wsrep_affected_rows= 0;
 #endif
 
+#ifndef DBUG_OFF
+  bool record_gtid_delayed_for_xa= false;
+#endif
   if (rgi->gtid_pending)
   {
     sub_id= rgi->gtid_sub_id;
@@ -4407,6 +4430,10 @@ int Xid_apply_log_event::do_apply_event(rpl_group_info *rgi)
                         return 1;
                       });
     }
+#ifndef DBUG_OFF
+    else
+      record_gtid_delayed_for_xa= true;
+#endif
   }
 
   general_log_print(thd, COM_QUERY, get_query());
@@ -4415,6 +4442,22 @@ int Xid_apply_log_event::do_apply_event(rpl_group_info *rgi)
   if (!res && rgi->gtid_pending)
   {
     DBUG_ASSERT(!thd->transaction->xid_state.is_explicit_XA());
+
+    DBUG_ASSERT(record_gtid_delayed_for_xa);
+    if (thd->rgi_slave->is_parallel_exec)
+    {
+      /*
+        With XA, since the transaction is prepared/committed without updating
+        the GTID pos (MDEV-32020...), we need here to clear any pending
+        deadlock kill.
+
+        Otherwise if the kill happened after the prepare/commit completed, it
+        might end up killing the subsequent GTID position update, causing the
+        slave to fail with error.
+      */
+      wait_for_pending_deadlock_kill(thd, thd->rgi_slave);
+      thd->reset_killed();
+    }
 
     if ((err= do_record_gtid(thd, rgi, false, &hton, true)))
       return err;
@@ -4522,7 +4565,8 @@ int XA_prepare_log_event::do_commit()
   thd->lex->xid= &xid;
   if (!one_phase)
   {
-    if ((res= thd->wait_for_prior_commit()))
+    if (thd->is_current_stmt_binlog_disabled() &&
+        (res= thd->wait_for_prior_commit()))
       return res;
 
     thd->lex->sql_command= SQLCOM_XA_PREPARE;
@@ -5634,20 +5678,12 @@ Rows_log_event::Rows_log_event(THD *thd_arg, TABLE *tbl_arg,
     set_flags(NO_CHECK_CONSTRAINT_CHECKS_F);
   /* if my_bitmap_init fails, caught in is_valid() */
   if (likely(!my_bitmap_init(&m_cols,
-                          m_width <= sizeof(m_bitbuf)*8 ? m_bitbuf : NULL,
-                          m_width)))
+                             m_width <= sizeof(m_bitbuf)*8 ? m_bitbuf : NULL,
+                             m_width)))
   {
     /* Cols can be zero if this is a dummy binrows event */
     if (likely(cols != NULL))
-    {
-      memcpy(m_cols.bitmap, cols->bitmap, no_bytes_in_map(cols));
-      create_last_word_mask(&m_cols);
-    }
-  }
-  else
-  {
-    // Needed because my_bitmap_init() does not set it to null on failure
-    m_cols.bitmap= 0;
+      bitmap_copy(&m_cols, cols);
   }
 }
 
@@ -6082,21 +6118,21 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
       which tested replicate-* rules).
     */
 
-     if (m_width == table->s->fields && bitmap_is_set_all(&m_cols))
+    if (m_width == table->s->fields && bitmap_is_set_all(&m_cols))
       set_flags(COMPLETE_ROWS_F);
 
-    /* 
+    /*
       Set tables write and read sets.
-      
+
       Read_set contains all slave columns (in case we are going to fetch
-      a complete record from slave)
-      
-      Write_set equals the m_cols bitmap sent from master but it can be 
-      longer if slave has extra columns. 
-     */ 
+      a complete record from slave).
+
+      Write_set equals the m_cols bitmap sent from master but it can be
+      longer if slave has extra columns.
+    */
 
     DBUG_PRINT_BITSET("debug", "Setting table's read_set from: %s", &m_cols);
-    
+
     bitmap_set_all(table->read_set);
     if (get_general_type_code() == DELETE_ROWS_EVENT ||
         get_general_type_code() == UPDATE_ROWS_EVENT)
@@ -6112,9 +6148,12 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
 
     if (table->versioned())
     {
+      bitmap_set_bit(table->read_set, table->s->vers.start_fieldno);
       bitmap_set_bit(table->write_set, table->s->vers.start_fieldno);
+      bitmap_set_bit(table->read_set, table->s->vers.end_fieldno);
       bitmap_set_bit(table->write_set, table->s->vers.end_fieldno);
     }
+    m_table->mark_columns_per_binlog_row_image();
 
     this->slave_exec_mode= slave_exec_mode_options; // fix the mode
 
@@ -6345,11 +6384,13 @@ static int rows_event_stmt_cleanup(rpl_group_info *rgi, THD * thd)
       Xid_log_event will come next which will, if some transactional engines
       are involved, commit the transaction and flush the pending event to the
       binlog.
-      If there was a deadlock the transaction should have been rolled back
-      already. So there should be no need to rollback the transaction.
+      We check for thd->transaction_rollback_request because it is possible
+      there was a deadlock that was ignored by slave-skip-errors. Normally, the
+      deadlock would have been rolled back already.
     */
-    DBUG_ASSERT(! thd->transaction_rollback_request);
-    error|= (int)(error ? trans_rollback_stmt(thd) : trans_commit_stmt(thd));
+    error|= (int) ((error || thd->transaction_rollback_request)
+                       ? trans_rollback_stmt(thd)
+                       : trans_commit_stmt(thd));
 
     /*
       Now what if this is not a transactional engine? we still need to
@@ -6460,29 +6501,36 @@ bool Rows_log_event::write_data_body()
   my_ptrdiff_t const data_size= m_rows_cur - m_rows_buf;
   bool res= false;
   uchar *const sbuf_end= net_store_length(sbuf, (size_t) m_width);
+  uint bitmap_size= no_bytes_in_export_map(&m_cols);
+  uchar *bitmap;
   DBUG_ASSERT(static_cast<size_t>(sbuf_end - sbuf) <= sizeof(sbuf));
 
   DBUG_DUMP("m_width", sbuf, (size_t) (sbuf_end - sbuf));
   res= res || write_data(sbuf, (size_t) (sbuf_end - sbuf));
 
-  DBUG_DUMP("m_cols", (uchar*) m_cols.bitmap, no_bytes_in_map(&m_cols));
-  res= res || write_data((uchar*)m_cols.bitmap, no_bytes_in_map(&m_cols));
+  bitmap= (uchar*) my_alloca(bitmap_size);
+  bitmap_export(bitmap, &m_cols);
+
+  DBUG_DUMP("m_cols", bitmap, bitmap_size);
+  res= res || write_data(bitmap, bitmap_size);
   /*
     TODO[refactor write]: Remove the "down cast" here (and elsewhere).
    */
   if (get_general_type_code() == UPDATE_ROWS_EVENT)
   {
-    DBUG_DUMP("m_cols_ai", (uchar*) m_cols_ai.bitmap,
-              no_bytes_in_map(&m_cols_ai));
-    res= res || write_data((uchar*)m_cols_ai.bitmap,
-                           no_bytes_in_map(&m_cols_ai));
+    DBUG_ASSERT(m_cols.n_bits == m_cols_ai.n_bits);
+    bitmap_export(bitmap, &m_cols_ai);
+
+    DBUG_DUMP("m_cols_ai", bitmap, bitmap_size);
+    res= res || write_data(bitmap, bitmap_size);
   }
   DBUG_DUMP("rows", m_rows_buf, data_size);
   res= res || write_data(m_rows_buf, (size_t) data_size);
+  my_afree(bitmap);
 
   return res;
-
 }
+
 
 bool Rows_log_event::write_compressed()
 {
@@ -7767,6 +7815,8 @@ Rows_log_event::write_row(rpl_group_info *rgi,
     TODO: Add safety measures against infinite looping. 
    */
 
+  DBUG_EXECUTE_IF("write_row_inject_sleep_before_ha_write_row",
+                  my_sleep(20000););
   if (table->s->sequence)
     error= update_sequence();
   else while (unlikely(error= table->file->ha_write_row(table->record[0])))
@@ -7962,6 +8012,7 @@ int Rows_log_event::update_sequence()
 #if defined(WITH_WSREP)
        ! WSREP(thd) &&
 #endif
+       table->in_use->rgi_slave &&
        !(table->in_use->rgi_slave->gtid_ev_flags2 & Gtid_log_event::FL_DDL) &&
        !(old_master=
          rpl_master_has_bug(thd->rgi_slave->rli,
@@ -8264,6 +8315,12 @@ static int row_not_found_error(rpl_group_info *rgi)
          ? HA_ERR_KEY_NOT_FOUND : HA_ERR_RECORD_CHANGED;
 }
 
+static int end_of_file_error(rpl_group_info *rgi)
+{
+  return rgi->speculation != rpl_group_info::SPECULATE_OPTIMISTIC
+         ? HA_ERR_END_OF_FILE : HA_ERR_RECORD_CHANGED;
+}
+
 /**
   Locate the current row in event's table.
 
@@ -8508,6 +8565,8 @@ int Rows_log_event::find_row(rpl_group_info *rgi)
       while ((error= table->file->ha_index_next(table->record[0])))
       {
         DBUG_PRINT("info",("no record matching the given row found"));
+        if (error == HA_ERR_END_OF_FILE)
+          error= end_of_file_error(rgi);
         table->file->print_error(error, MYF(0));
         table->file->ha_index_end();
         goto end;
@@ -8544,6 +8603,7 @@ int Rows_log_event::find_row(rpl_group_info *rgi)
         break;
 
       case HA_ERR_END_OF_FILE:
+        error= end_of_file_error(rgi);
         DBUG_PRINT("info", ("Record not found"));
         table->file->ha_rnd_end();
         goto end;
@@ -8759,10 +8819,7 @@ void Update_rows_log_event::init(MY_BITMAP const *cols)
   {
     /* Cols can be zero if this is a dummy binrows event */
     if (likely(cols != NULL))
-    {
-      memcpy(m_cols_ai.bitmap, cols->bitmap, no_bytes_in_map(cols));
-      create_last_word_mask(&m_cols_ai);
-    }
+      bitmap_copy(&m_cols_ai, cols);
   }
 }
 
@@ -8826,11 +8883,6 @@ Update_rows_log_event::do_exec_row(rpl_group_info *rgi)
 #endif /* WSREP_PROC_INFO */
 
   thd_proc_info(thd, message);
-  // Temporary fix to find out why it fails [/Matz]
-  memcpy(m_table->read_set->bitmap, m_cols.bitmap, (m_table->read_set->n_bits + 7) / 8);
-  memcpy(m_table->write_set->bitmap, m_cols_ai.bitmap, (m_table->write_set->n_bits + 7) / 8);
-
-  m_table->mark_columns_per_binlog_row_image();
 
   int error= find_row(rgi);
   if (unlikely(error))
@@ -8936,7 +8988,6 @@ Update_rows_log_event::do_exec_row(rpl_group_info *rgi)
     error= vers_insert_history_row(m_table);
     restore_record(m_table, record[2]);
   }
-  m_table->default_column_bitmaps();
 
   if (invoke_triggers && likely(!error) &&
       unlikely(process_triggers(TRG_EVENT_UPDATE, TRG_ACTION_AFTER, TRUE)))

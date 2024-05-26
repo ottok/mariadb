@@ -1,0 +1,69 @@
+# vim:ft=automake
+# Copyright (C) 2012 Data Differential
+# All rights reserved.
+#
+# Use and distribution licensed under the BSD license.  See
+# the COPYING file in the parent directory for full text.
+#
+# included from Top Level Makefile.am
+# All paths should be given relative to the root
+
+LIBTOOL_COMMAND= ${abs_top_builddir}/libtool --mode=execute
+GDB_COMMAND= $(LIBTOOL_COMMAND) gdb -f -x support/run.gdb
+
+t_error_SOURCES= tests/error.c
+t_error_LDADD= src/libmarias3.la
+check_PROGRAMS+= t/error
+noinst_PROGRAMS+= t/error
+
+t_basic_SOURCES= tests/basic.c
+t_basic_LDADD= src/libmarias3.la
+check_PROGRAMS+= t/basic
+noinst_PROGRAMS+= t/basic
+
+t_snowman_SOURCES= tests/snowman.c
+t_snowman_LDADD= src/libmarias3.la
+check_PROGRAMS+= t/snowman
+noinst_PROGRAMS+= t/snowman
+
+t_basic_host_SOURCES= tests/basic_host.c
+t_basic_host_LDADD= src/libmarias3.la
+check_PROGRAMS+= t/basic_host
+noinst_PROGRAMS+= t/basic_host
+
+t_copy_SOURCES= tests/copy.c
+t_copy_LDADD= src/libmarias3.la
+check_PROGRAMS+= t/copy
+noinst_PROGRAMS+= t/copy
+
+t_large_file_SOURCES= tests/large_file.c
+t_large_file_LDADD= src/libmarias3.la
+check_PROGRAMS+= t/large_file
+noinst_PROGRAMS+= t/large_file
+
+t_small_buffer_SOURCES= tests/small_buffer.c
+t_small_buffer_LDADD= src/libmarias3.la
+check_PROGRAMS+= t/small_buffer
+noinst_PROGRAMS+= t/small_buffer
+
+t_prefix_SOURCES= tests/prefix.c
+t_prefix_LDADD= src/libmarias3.la
+check_PROGRAMS+= t/prefix
+noinst_PROGRAMS+= t/prefix
+
+t_longlist_SOURCES= tests/longlist.c
+t_longlist_LDADD= src/libmarias3.la
+t_longlist_LDADD+= -lpthread
+check_PROGRAMS+= t/longlist
+noinst_PROGRAMS+= t/longlist
+
+t_custom_malloc_SOURCES= tests/custom_malloc.c
+t_custom_malloc_LDADD= src/libmarias3.la
+check_PROGRAMS+= t/custom_malloc
+noinst_PROGRAMS+= t/custom_malloc
+
+t_list_SOURCES= tests/list.c
+t_list_LDADD= src/libmarias3.la
+check_PROGRAMS+= t/list
+noinst_PROGRAMS+= t/list
+
