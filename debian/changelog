@@ -6,6 +6,9 @@ mariadb-10.6 (1:10.6.18-0ubuntu0.22.04.1) jammy-security; urgency=medium
     as noted at https://mariadb.com/kb/en/mariadb-10-6-18-release-notes/ and
     also fixes the following security vulnerabilities (LP: #2067125):
     - CVE-2024-21096
+  * Remove libmariadb file no longer present in MariaDB Connector C v3.3
+  * Fix failing build by including wsrep_sst_backup man page
+  * Add patch to partially revert upstream c432c9ef (Closes: #1063738)
 
  -- Otto Kekäläinen <otto@debian.org>  Sat, 25 May 2024 14:07:17 -0700
 
