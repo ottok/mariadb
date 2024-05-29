@@ -1,3 +1,14 @@
+mariadb (1:11.4.2-1) UNRELEASED; urgency=medium
+
+  * Update debian/watch for MariaDB 11.4 LTS
+  * New upstream major version 11.4.2. Includes new features as noted at
+    https://mariadb.com/kb/en/mariadb-11-4-2-release-notes/ for this
+    minor release that got announced for General Availabily and
+    https://mariadb.com/kb/en/changes-improvements-in-mariadb-11-4/
+    for an overview of what the MariaDB 11.4 series brings.
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 29 May 2024 21:30:52 +0300
+
 mariadb (1:10.11.8-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]

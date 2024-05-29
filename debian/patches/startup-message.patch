@@ -27,7 +27,7 @@ Server output if build in git directory:
 
 --- a/client/mysql.cc
 +++ b/client/mysql.cc
-@@ -1328,6 +1328,9 @@ int main(int argc,char *argv[])
+@@ -1333,6 +1333,9 @@ int main(int argc,char *argv[])
              mysql_thread_id(&mysql), server_version_string(&mysql));
      put_info((char*) glob_buffer.ptr(),INFO_INFO);
      put_info(ORACLE_WELCOME_COPYRIGHT_NOTICE("2000"), INFO_INFO);
@@ -39,7 +39,7 @@ Server output if build in git directory:
  #ifdef HAVE_READLINE
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
-@@ -4985,12 +4985,21 @@ static int init_server_components()
+@@ -4932,12 +4932,21 @@ static int init_server_components()
    my_sleep_for_space= mariadb_sleep_for_space;
  
    /*
