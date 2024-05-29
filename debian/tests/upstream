@@ -25,9 +25,9 @@ echo "using tmpdir: $WORKDIR/tmp"
 echo "Setting up skip-tests-list"
 
 # Use the arch specific skiplists if exist, otherwise list is empty
-if [ -f "/usr/share/mariadb/mysql-test/unstable-tests.$ARCH" ]
+if [ -f "/usr/share/mariadb/mariadb-test/unstable-tests.$ARCH" ]
 then
-  cat "/usr/share/mariadb/mysql-test/unstable-tests.$ARCH" >> "$MTR_SKIP_TEST_LIST"
+  cat "/usr/share/mariadb/mariadb-test/unstable-tests.$ARCH" >> "$MTR_SKIP_TEST_LIST"
 fi
 
 # Skip tests that cannot run properly on ci.debian.net / autopkgtests.ubuntu.com
@@ -49,7 +49,7 @@ fi
 # failed autopkgtest runs
 cp -v "$MTR_SKIP_TEST_LIST" "$AUTOPKGTEST_ARTIFACTS"
 
-cd /usr/share/mariadb/mysql-test
+cd /usr/share/mariadb/mariadb-test
 echo "starting mysql-test-tun.pl..."
 export MTR_PRINT_CORE=detailed
 # The $MTR_ARGUMENTS_APPEND is intentionally used to pass in extra arguments

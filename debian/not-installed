@@ -40,8 +40,8 @@ usr/share/mariadb/magic
 usr/share/mariadb/maria_add_gis_sp.sql # mariadb-server-core.install has *_bootstrap.sql
 usr/share/mariadb/mysqld_multi.server
 usr/share/mariadb/mysql.server # Debian packaging uses mariadb-server.mariadb.init
-usr/share/mariadb/mysql-test/asan.supp
-usr/share/mariadb/mysql-test/lsan.supp
+usr/share/mariadb/mariadb-test/asan.supp
+usr/share/mariadb/mariadb-test/lsan.supp
 usr/share/mariadb/policy/apparmor/README # In MariaDB we don't want to use AppArmor at the moment
 usr/share/mariadb/policy/apparmor/usr.sbin.mysqld # In MariaDB we don't want to use AppArmor at the moment
 usr/share/mariadb/policy/apparmor/usr.sbin.mysqld.local # In MariaDB we don't want to use AppArmor at the moment

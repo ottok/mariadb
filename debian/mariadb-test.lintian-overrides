@@ -1,6 +1,6 @@
 # These should be moved, see https://jira.mariadb.org/browse/MDEV-21653
-arch-dependent-file-in-usr-share [usr/share/mariadb/mysql-test/lib/My/SafeProcess/my_safe_process]
-arch-dependent-file-in-usr-share [usr/share/mariadb/mysql-test/lib/My/SafeProcess/wsrep_check_version]
+arch-dependent-file-in-usr-share [usr/share/mariadb/mariadb-test/lib/My/SafeProcess/my_safe_process]
+arch-dependent-file-in-usr-share [usr/share/mariadb/mariadb-test/lib/My/SafeProcess/wsrep_check_version]
 # MyISAM stopwords that cannot be changed and spelling errors remain
 spelling-error-in-binary noone no one [usr/bin/*]
 spelling-error-in-binary thats that's [usr/bin/*]
@@ -8,7 +8,7 @@ spelling-error-in-binary theres there's [usr/bin/*]
 # False positive from Lintian, these strings are nowhere in test in source code
 spelling-error-in-binary AfE Safe [usr/bin/*]
 # Valid reason for documentation in context in directory
-package-contains-documentation-outside-usr-share-doc [usr/share/mariadb/mysql-test/README*]
+package-contains-documentation-outside-usr-share-doc [usr/share/mariadb/mariadb-test/README*]
 # Test plugins intentionally not fully featured
 shared-library-lacks-prerequisites [usr/lib/mysql/plugin/auth_0x0100.so]
 shared-library-lacks-prerequisites [usr/lib/mysql/plugin/debug_key_management.so]
