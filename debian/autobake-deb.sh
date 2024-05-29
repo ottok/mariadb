@@ -19,27 +19,6 @@ export DEB_BUILD_OPTIONS="nocheck $DEB_BUILD_OPTIONS"
 # shellcheck source=/dev/null
 source ./VERSION
 
-# General CI optimizations to keep build output smaller
-if [[ $GITLAB_CI ]]
-then
-  # On Gitlab the output log must stay under 4MB so make the
-  # build less verbose
-  sed '/Add support for verbose builds/,/^$/d' -i debian/rules
-elif [ -d storage/columnstore/columnstore/debian ]
-then
-  # ColumnStore is explicitly disabled in the native Debian build. Enable it
-  # now when build is triggered by autobake-deb.sh (MariaDB.org) and when the
-  # build is not running on Gitlab-CI.
-  sed '/-DPLUGIN_COLUMNSTORE=NO/d' -i debian/rules
-  # Take the files and part of control from MCS directory
-  if [ ! -f debian/mariadb-plugin-columnstore.install ]
-  then
-    cp -v storage/columnstore/columnstore/debian/mariadb-plugin-columnstore.* debian/
-    echo >> debian/control
-    sed "s/-10.6//" <storage/columnstore/columnstore/debian/control >> debian/control
-  fi
-fi
-
 # Look up distro-version specific stuff
 #
 # Always keep the actual packaging as up-to-date as possible following the latest
@@ -72,12 +51,6 @@ replace_uring_with_aio()
       -e '/-DWITH_URING=ON/d' -i debian/rules
 }
 
-disable_pmem()
-{
-  sed '/libpmem-dev/d' -i debian/control
-  sed '/-DWITH_PMEM=ON/d' -i debian/rules
-}
-
 disable_libfmt()
 {
   # 7.0+ required
@@ -95,7 +68,7 @@ architecture=$(dpkg-architecture -q DEB_BUILD_ARCH)
 #   Release:	n/a
 #   Codename:	n/a
 LSBID="$(lsb_release -si  | tr '[:upper:]' '[:lower:]')"
-LSBVERSION="$(lsb_release -sr | sed -e "s#\.##g")"
+LSBVERSION="$(lsb_release -sr | sed -e "s/\.//g")"
 LSBNAME="$(lsb_release -sc)"
 
 # If 'n/a', assume 'sid'
@@ -117,10 +90,6 @@ in
   "buster")
     disable_libfmt
     replace_uring_with_aio
-    if [ ! "$architecture" = amd64 ]
-    then
-      disable_pmem
-    fi
     ;&
   "bullseye")
     add_lsb_base_depends
@@ -128,10 +97,6 @@ in
   "bookworm")
     # mariadb-plugin-rocksdb in control is 4 arches covered by the distro rocksdb-tools
     # so no removal is necessary.
-    if [[ ! "$architecture" =~ amd64|arm64|ppc64el ]]
-    then
-      disable_pmem
-    fi
     if [[ ! "$architecture" =~ amd64|arm64|armel|armhf|i386|mips64el|mipsel|ppc64el|s390x ]]
     then
       replace_uring_with_aio
@@ -142,10 +107,6 @@ in
     # there is intentionally no customizations whatsoever.
     ;;
   # Ubuntu
-  "bionic")
-    remove_rocksdb_tools
-    [ "$architecture" != amd64 ] && disable_pmem
-    ;&
   "focal")
     replace_uring_with_aio
     disable_libfmt
@@ -154,6 +115,12 @@ in
     add_lsb_base_depends
     ;&
   "lunar"|"mantic")
+    if [[ ! "$architecture" =~ amd64|arm64|armhf|ppc64el|s390x ]]
+    then
+      replace_uring_with_aio
+    fi
+    ;&
+  "noble")
     # mariadb-plugin-rocksdb s390x not supported by us (yet)
     # ubuntu doesn't support mips64el yet, so keep this just
     # in case something changes.
@@ -161,19 +128,32 @@ in
     then
       remove_rocksdb_tools
     fi
-    if [[ ! "$architecture" =~ amd64|arm64|ppc64el ]]
-    then
-      disable_pmem
-    fi
-    if [[ ! "$architecture" =~ amd64|arm64|armhf|ppc64el|s390x ]]
-    then
-      replace_uring_with_aio
-    fi
     ;;
   *)
     echo "Error: Unknown release '$LSBNAME'" >&2
     exit 1
 esac
+
+# General CI optimizations to keep build output smaller
+if [[ $GITLAB_CI ]]
+then
+  # On Gitlab the output log must stay under 4MB so make the
+  # build less verbose
+  sed '/Add support for verbose builds/,/^$/d' -i debian/rules
+elif [[ -d storage/columnstore/columnstore/debian ]] && [[ "$LSBNAME" = !(buster|bionic) ]]
+then
+  # ColumnStore is explicitly disabled in the native Debian build. Enable it
+  # now when build is triggered by autobake-deb.sh (MariaDB.org) and when the
+  # build is not running on Gitlab-CI.
+  sed '/-DPLUGIN_COLUMNSTORE=NO/d' -i debian/rules
+  # Take the files and part of control from MCS directory
+  if [[ ! -f debian/mariadb-plugin-columnstore.install ]]
+  then
+    cp -v storage/columnstore/columnstore/debian/mariadb-plugin-columnstore.* debian/
+    echo >> debian/control
+    cat storage/columnstore/columnstore/debian/control >> debian/control
+  fi
+fi
 
 if [ -n "${AUTOBAKE_PREP_CONTROL_RULES_ONLY:-}" ]
 then
@@ -203,7 +183,7 @@ fi
 
 # Use eatmydata is available to build faster with less I/O, skipping fsync()
 # during the entire build process (safe because a build can always be restarted)
-if command -v eatmydata > /dev/null
+if which eatmydata > /dev/null
 then
   BUILDPACKAGE_DPKGCMD+=("eatmydata")
 fi

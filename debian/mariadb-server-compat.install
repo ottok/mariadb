@@ -1,0 +1,6 @@
+usr/bin/mysqld_multi
+usr/bin/mysqld_safe
+usr/bin/mysqld_safe_helper
+usr/share/man/man1/mysqld_multi.1
+usr/share/man/man1/mysqld_safe.1
+usr/share/man/man1/mysqld_safe_helper.1

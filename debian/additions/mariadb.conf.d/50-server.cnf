@@ -5,8 +5,8 @@
 # this is read by the standalone daemon and embedded servers
 [server]
 
-# this is only for the mysqld standalone daemon
-[mysqld]
+# this is only for the mariadbd daemon
+[mariadbd]
 
 #
 # * Basic Settings
@@ -92,8 +92,8 @@ expire_logs_days        = 10
 
 # MySQL/MariaDB default is Latin1, but in Debian we rather default to the full
 # utf8 4-byte character set. See also client.cnf
-character-set-server  = utf8mb4
-collation-server      = utf8mb4_general_ci
+character-set-server     = utf8mb4
+character-set-collations = utf8mb4=uca1400_ai_ci
 
 #
 # * InnoDB
@@ -111,9 +111,9 @@ collation-server      = utf8mb4_general_ci
 # This group is only read by MariaDB servers, not by MySQL.
 # If you use the same .cnf file for MySQL and MariaDB,
 # you can put MariaDB-only options here
-[mariadb]
+[mariadbd]
 
-# This group is only read by MariaDB-10.11 servers.
+# This group is only read by MariaDB-11.4 servers.
 # If you use the same .cnf file for MariaDB of different versions,
 # use this group for options that older servers don't understand
-[mariadb-10.11]
+[mariadb-11.4]
