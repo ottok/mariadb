@@ -2,4 +2,4 @@
 spelling-error-in-binary nam name [usr/lib/mysql/plugin/ha_mroonga.so]
 spelling-error-in-binary tage stage [usr/lib/mysql/plugin/ha_mroonga.so]
 # Copyright information in debian/copyright, extra file unnecessary
-extra-license-file [usr/share/mysql/mroonga/COPYING]
+extra-license-file [usr/share/mariadb/mroonga/COPYING]

@@ -1,7 +1,7 @@
-debian/unstable-tests.* usr/share/mysql/mysql-test/
-usr/share/mysql/mysql-test/collections
-usr/share/mysql/mysql-test/include
-usr/share/mysql/mysql-test/main
-usr/share/mysql/mysql-test/plugin
-usr/share/mysql/mysql-test/std_data
-usr/share/mysql/mysql-test/suite
+debian/unstable-tests.* usr/share/mariadb/mysql-test/
+usr/share/mariadb/mysql-test/collections
+usr/share/mariadb/mysql-test/include
+usr/share/mariadb/mysql-test/main
+usr/share/mariadb/mysql-test/plugin
+usr/share/mariadb/mysql-test/std_data
+usr/share/mariadb/mysql-test/suite

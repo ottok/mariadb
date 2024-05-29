@@ -5,6 +5,6 @@ spelling-error-in-binary theres there's [usr/sbin/mariadbd]
 # False positive from Lintian, these strings are nowhere in test in source code
 spelling-error-in-binary AfE Safe [usr/sbin/mariadbd]
 # Valid reason for extra documentation in context in directory
-package-contains-documentation-outside-usr-share-doc [usr/share/mysql/charsets/README]
+package-contains-documentation-outside-usr-share-doc [usr/share/mariadb/charsets/README]
 # Man syntax needs to be fixed upstream
 groff-message troff:<standard input>:*: warning: macro 'an-trap' not defined [usr/share/man/*]
