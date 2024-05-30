@@ -1,1 +1,2 @@
 usr/bin/mariadb usr/bin/mysql
+usr/share/man/man1/mariadb.1 usr/share/man/man1/mysql.1

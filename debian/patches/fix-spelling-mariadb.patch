@@ -88,3 +88,34 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
  #
  
  extra_args=""
+--- a/sql/opt_subselect.cc
++++ b/sql/opt_subselect.cc
+@@ -6886,7 +6886,7 @@ bool JOIN::choose_subquery_plan(table_ma
+         add("rows", inner_record_count_1).
+         add("materialization_cost", materialize_strategy_cost).
+         add("in_exist_cost", in_exists_strategy_cost).
+-        add("choosen", strategy);
++        add("chosen", strategy);
+     }
+ 
+     DBUG_PRINT("info",
+@@ -6924,7 +6924,7 @@ bool JOIN::choose_subquery_plan(table_ma
+     {
+       Json_writer_object trace_wrapper(thd);
+       Json_writer_object trace_subquery(thd, "subquery_plan_revert");
+-      trace_subquery.add("choosen", "in_to_exists");
++      trace_subquery.add("chosen", "in_to_exists");
+     }
+   }
+ 
+--- a/sql/sql_select.cc
++++ b/sql/sql_select.cc
+@@ -14670,7 +14670,7 @@ void JOIN::drop_unused_derived_keys()
+       }
+       /*
+         We dropped all keys except the chosen one and unique keys.
+-        The choosen one is stored as the first key (number 0).
++        The chosen one is stored as the first key (number 0).
+       */
+       tab->ref.key= 0;
+     }

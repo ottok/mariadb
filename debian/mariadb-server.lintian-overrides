@@ -6,8 +6,6 @@ spelling-error-in-binary thats that's [usr/bin/*]
 spelling-error-in-binary theres there's [usr/bin/*]
 # False positive from Lintian, these strings are nowhere in test in source code
 spelling-error-in-binary AfE Safe [usr/bin/*]
-# Intentional in-context documentation
-package-contains-documentation-outside-usr-share-doc [usr/share/mariadb/errmsg-utf8.txt]
 # Man syntax needs to be fixed upstream
 groff-message troff:<standard input>:*: warning: macro 'an-trap' not defined [usr/share/man/*]
 # Most likely false positive

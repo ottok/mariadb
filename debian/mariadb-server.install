@@ -34,6 +34,7 @@ usr/bin/myisamchk
 usr/bin/myisamlog
 usr/bin/myisampack
 usr/bin/wsrep_sst_common
+usr/bin/wsrep_sst_backup
 usr/bin/wsrep_sst_mariabackup
 usr/bin/wsrep_sst_mysqldump
 usr/bin/wsrep_sst_rsync
