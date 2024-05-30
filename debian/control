@@ -26,6 +26,7 @@ Build-Depends:
  liblzma-dev,
  liblzo2-dev,
  libncurses-dev,
+ libnet-ssleay-perl <!nocheck>,
  libnuma-dev [linux-any],
  libpam0g-dev,
  libpcre2-dev,
@@ -885,6 +886,7 @@ Description: Snappy compression support in the server and storage engines
 Package: mariadb-test
 Architecture: any
 Depends:
+ libnet-ssleay-perl,
  mariadb-client (= ${binary:Version}),
  mariadb-server (= ${server:Version}),
  mariadb-test-data (= ${source:Version}),
