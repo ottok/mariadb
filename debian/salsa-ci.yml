@@ -250,7 +250,7 @@ blhc:
   # library tests don't have the mariadb client nor server, so don't check them
 
 .test-verify-final: &test-verify-final |
-  dpkg -l | grep -e "mariadb-server.*10\.11"
+  dpkg -l | grep -e "mariadb-server.*11\.4"
   mkdir -p debug # Ensure dir exists before using it
   find /var/lib/mysql -ls > debug/var-lib-mysql.list || true # Ignore errors about "no such file or directory"
   cp -ra /etc/mysql debug/etc-mysql
@@ -326,16 +326,15 @@ blhc:
     {
       MYSQL h;
       // Constants refer to server version
-      test_if_starts_with("1011", to_string(MARIADB_VERSION_ID), "MARIADB_VERSION_ID");
-      test_if_starts_with("1011", to_string(MYSQL_VERSION_ID), "MYSQL_VERSION_ID");
+      test_if_starts_with("1104", to_string(MARIADB_VERSION_ID), "MARIADB_VERSION_ID");
+      test_if_starts_with("1104", to_string(MYSQL_VERSION_ID), "MYSQL_VERSION_ID");
       // Client ABI returns connector version
-      test_if_starts_with("303", to_string(mysql_get_client_version()), "mysql_get_client_version()");
-      test_if_starts_with("3.3", mysql_get_client_info(), "mysql_get_client_info()");
+      test_if_starts_with("304", to_string(mysql_get_client_version()), "mysql_get_client_version()");
+      test_if_starts_with("3.4", mysql_get_client_info(), "mysql_get_client_info()");
       return 0;
     }
     EOF
     g++ b1031863.cpp -l mysqlclient && ./a.out
-
 
 .salsa-ci-template-for-mariadb:
   stage: test
@@ -638,7 +637,7 @@ test basic features:
       password=asdf234
       protocol=tcp
       EOF
-      export CERT_PATH=/usr/share/mysql/mysql-test/std_data
+      export CERT_PATH=/usr/share/mariadb/mariadb-test/std_data
       openssl verify -CAfile $CERT_PATH/cacert.pem $CERT_PATH/server-cert.pem
       openssl x509 -subject -issuer -noout -in $CERT_PATH/cacert.pem
       openssl x509 -subject -issuer -noout -in $CERT_PATH/server-cert.pem
@@ -840,20 +839,33 @@ mysql-community-cluster-8.0 from MySQL.com with Bookworm upgrade:
     - sleep 5 # Give the mysql_upgrade a bit of time to complete before querying the server
     - *test-verify-final
 
+mariadb.org-11.4 upgrade:
+  extends: .salsa-ci-template-for-mariadb-upgrade
+  stage: upgrade MariaDB variant
+  variables:
+    MARIADB_VERSION: "11.4"
+  script:
+    - apt-get install -qq --yes mariadb-server
+    - *test-verify-initial
+    # Install MariaDB built in this commit
+    # Force downgrades so our version installs on top of upstream revision, e.g. 1:11.4.2-1 vs 1:11.4.2+mariadb~debsid
+    - apt-get install -q --yes --allow-downgrades ./*.deb
+    # Verify installation of MariaDB built in this commit
+    - dpkg -l | grep -iE 'maria|mysql|galera' || true # List installed
+    - mariadb --version # Client version
+    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
+    - *test-verify-final
+
 mariadb.org-10.11 upgrade:
   extends: .salsa-ci-template-for-mariadb-upgrade
   stage: upgrade MariaDB variant
   variables:
     MARIADB_VERSION: "10.11"
   script:
-    - apt-get install -qq --yes mariadb-server
+    # this should not use Sid to begin with
+    - apt-get install -qq --yes mariadb-server=1:10.11.8+maria~debsid mariadb-client=1:10.11.8+maria~debsid
     - *test-verify-initial
-    # Install MariaDB built in this commit
-    # Force downgrades so our version installs on top of upstream revision, e.g. 1:11.10.1-1 vs 1:11.10.1+mariadb~sid
-    - apt-get install -qq --yes --allow-downgrades ./*.deb
-    # Verify installation of MariaDB built in this commit
-    - dpkg -l | grep -iE 'maria|mysql|galera' || true # List installed
-    - mariadb --version # Client version
+    - *test-full-upgrade
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
