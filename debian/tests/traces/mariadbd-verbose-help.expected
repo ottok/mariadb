@@ -6,7 +6,7 @@ Usage: /usr/sbin/mariadbd [OPTIONS]
 
 Default options are read from the following files in the given order:
 /etc/my.cnf /etc/mysql/my.cnf ~/.my.cnf 
-The following groups are read: mysqld server mysqld-10.11 mariadb mariadb-10.11 mariadbd mariadbd-10.11 client-server galera
+The following groups are read: mysqld server mysqld-11.4 mariadb mariadb-11.4 mariadbd mariadbd-11.4 client-server galera
 The following options may be given as the first argument:
 --print-defaults          Print the program argument list and exit.
 --no-defaults             Don't read default options from any option file.
@@ -183,9 +183,26 @@ The following specify which files/extra groups are read (specified before remain
                       involve user-defined functions (i.e. UDFs) or the UUID()
                       function; for those, row-based binary logging is
                       automatically used.
+  --binlog-gtid-index Enable the creation of a GTID index for every binlog
+                      file, and the use of such index for speeding up GTID
+                      lookup in the binlog.
+                      (Defaults to on; use --skip-binlog-gtid-index to disable.)
+  --binlog-gtid-index-page-size=# 
+                      Page size to use for the binlog GTID index.
+  --binlog-gtid-index-span-min=# 
+                      Control sparseness of the binlog GTID index. If set to N,
+                      at most one index record will be added for every N bytes
+                      of binlog file written, to reduce the size of the index.
+                      Normally does not need tuning.
   --binlog-ignore-db=name 
                       Tells the master that updates to the given database
                       should not be logged to the binary log.
+  --binlog-legacy-event-pos 
+                      Fill in the end_log_pos field of _all_ events in the
+                      binlog, even when doing so costs performance. Can be used
+                      in case some old application needs it for backwards
+                      compatibility. Setting this option can hurt binlog
+                      scalability.
   --binlog-optimize-thread-scheduling 
                       Run fast part of group commit in a single thread, to
                       optimize kernel thread scheduling. On by default. Disable
@@ -201,26 +218,36 @@ The following specify which files/extra groups are read (specified before remain
                       size if possible. The value has to be a multiple of 256.
   --binlog-row-image=name 
                       Controls whether rows should be logged in 'FULL',
-                      'NOBLOB' or 'MINIMAL' formats. 'FULL', means that all
-                      columns in the before and after image are logged.
-                      'NOBLOB', means that mysqld avoids logging blob columns
-                      whenever possible (eg, blob column was not changed or is
-                      not part of primary key). 'MINIMAL', means that a PK
-                      equivalent (PK columns or full row if there is no PK in
-                      the table) is logged in the before image, and only
-                      changed columns are logged in the after image. (Default:
-                      FULL).
+                      'FULL_NODUP', 'NOBLOB' or 'MINIMAL' formats. 'FULL',
+                      means that all columns in the before and after image are
+                      logged. 'FULL_NODUP', means that all columns are logged
+                      in before image, but only changed columns or all columns
+                      of inserted record are logged in after image, 'NOBLOB',
+                      means that mysqld avoids logging blob columns whenever
+                      possible (eg, blob column was not changed or is not part
+                      of primary key). 'MINIMAL', means that a PK equivalent
+                      (PK columns or full row if there is no PK in the table)
+                      is logged in the before image, and only changed columns
+                      are logged in the after image. (Default: FULL).
   --binlog-row-metadata=name 
                       Controls whether metadata is logged using FULL , MINIMAL
                       format and NO_LOG.FULL causes all metadata to be logged;
                       MINIMAL means that only metadata actually required by
                       slave is logged; NO_LOG NO metadata will be
                       logged.Default: NO_LOG.
+  --binlog-space-limit=# 
+                      Alias for max_binlog_total_size. Compatibility with
+                      Percona server.
   --binlog-stmt-cache-size=# 
                       The size of the statement cache for updates to
                       non-transactional engines for the binary log. If you
                       often use statements updating a great number of rows, you
                       can increase this to get more performance.
+  --block-encryption-mode=name 
+                      Default block encryption mode for AES_ENCRYPT() and
+                      AES_DECRYPT() functions. One of: aes-128-ecb, aes-192-ecb,
+                      aes-256-ecb, aes-128-cbc, aes-192-cbc, aes-256-cbc, 
+                      aes-128-ctr, aes-192-ctr, aes-256-ctr
   --bootstrap         Used by mysql installation scripts.
   --bulk-insert-buffer-size=# 
                       Size of tree cache used in bulk insert optimisation. Note
@@ -229,6 +256,8 @@ The following specify which files/extra groups are read (specified before remain
                       Don't ignore client side character set value sent during
                       handshake.
                       (Defaults to on; use --skip-character-set-client-handshake to disable.)
+  --character-set-collations=name 
+                      Overrides for character set default collations.
   --character-set-filesystem=name 
                       Set the filesystem character set.
   -C, --character-set-server=name 
@@ -279,9 +308,6 @@ The following specify which files/extra groups are read (specified before remain
                       window on windows.
   --core-file         Write core on crashes
   -h, --datadir=name  Path to the database root directory
-  --date-format=name  The DATE format (ignored)
-  --datetime-format=name 
-                      The DATETIME format (ignored)
   --deadlock-search-depth-long=# 
                       Long search depth for the two-step deadlock detection
   --deadlock-search-depth-short=# 
@@ -307,9 +333,6 @@ The following specify which files/extra groups are read (specified before remain
                       replication.
   --debug-no-sync     Disables system sync calls. Only for running tests or
                       debugging!
-  --debug-no-thread-alarm 
-                      Disable system thread alarm calls. Disabling it may be
-                      useful in debugging or testing, never do it in production
   --debug-sporadic-binlog-dump-fail 
                       Option used by mysql-test for debugging and testing of
                       replication.
@@ -605,12 +628,6 @@ The following specify which files/extra groups are read (specified before remain
                       of: ON, OFF, FORCE (don't start if the plugin fails to
                       load), FORCE_PLUS_PERMANENT (like FORCE, but the plugin
                       can not be uninstalled).
-  --innodb-change-buffer-max-size=# 
-                      Maximum on-disk size of change buffer in terms of
-                      percentage of the buffer pool.
-  --innodb-change-buffering=name 
-                      Buffer changes to secondary indexes.. One of: none, 
-                      inserts, deletes, changes, purges, all
   --innodb-checksum-algorithm=name 
                       The algorithm InnoDB uses for page checksumming. Possible
                       values are FULL_CRC32 for new files, always use CRC-32C;
@@ -669,8 +686,12 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-compression-pad-pct-max[=#] 
                       Percentage of empty space on a data page that can be
                       reserved to make the page compressible.
+  --innodb-data-file-buffering 
+                      Whether the file system cache for data files is enabled
   --innodb-data-file-path=name 
                       Path to individual files and their sizes.
+  --innodb-data-file-write-through 
+                      Whether each write to data files writes through
   --innodb-data-home-dir=name 
                       The common part for InnoDB table spaces.
   --innodb-deadlock-detect 
@@ -689,50 +710,13 @@ The following specify which files/extra groups are read (specified before remain
                       REDUNDANT, COMPACT, and DYNAMIC. The ROW_FORMAT value
                       COMPRESSED is not allowed. One of: redundant, compact, 
                       dynamic
-  --innodb-defragment Enable/disable InnoDB defragmentation (default FALSE).
-                      When set to FALSE, all existing defragmentation will be
-                      paused. And new defragmentation command will fail.Paused
-                      defragmentation commands will resume when this variable
-                      is set to true again.
-  --innodb-defragment-fill-factor=# 
-                      A number between [0.7, 1] that tells defragmentation how
-                      full it should fill a page. Default is 0.9. Number below
-                      0.7 won't make much sense.This variable, together with
-                      innodb_defragment_fill_factor_n_recs, is introduced so
-                      defragmentation won't pack the page too full and cause
-                      page split on the next insert on every page. The variable
-                      indicating more defragmentation gain is the one
-                      effective.
-  --innodb-defragment-fill-factor-n-recs=# 
-                      How many records of space defragmentation should leave on
-                      the page. This variable, together with
-                      innodb_defragment_fill_factor, is introduced so
-                      defragmentation won't pack the page too full and cause
-                      page split on the next insert on every page. The variable
-                      indicating more defragmentation gain is the one
-                      effective.
-  --innodb-defragment-frequency=# 
-                      Do not defragment a single index more than this number of
-                      time per second.This controls the number of time
-                      defragmentation thread can request X_LOCK on an index.
-                      Defragmentation thread will check whether
-                      1/defragment_frequency (s) has passed since it worked on
-                      this index last time, and put the index back to the queue
-                      if not enough time has passed. The actual frequency can
-                      only be lower than this given number.
-  --innodb-defragment-n-pages=# 
-                      Number of pages considered at once when merging multiple
-                      pages to defragment
-  --innodb-defragment-stats-accuracy=# 
-                      How many defragment stats changes there are before the
-                      stats are written to persistent storage. Set to 0 meaning
-                      disable defragment stats tracking.
   --innodb-disable-sort-file-cache 
                       Whether to disable OS system file cache for sort I/O
-  --innodb-doublewrite 
-                      Enable InnoDB doublewrite buffer (enabled by default).
-                      Disable with --skip-innodb-doublewrite.
-                      (Defaults to on; use --skip-innodb-doublewrite to disable.)
+  --innodb-doublewrite[=name] 
+                      Whether and how to use the doublewrite buffer. OFF=Assume
+                      that writes of innodb_page_size are atomic; ON=Prevent
+                      torn writes (the default); fast=Like ON, but do not
+                      synchronize writes to data files
   --innodb-encrypt-log 
                       Enable redo log encryption
   --innodb-encrypt-tables[=name] 
@@ -884,6 +868,8 @@ The following specify which files/extra groups are read (specified before remain
                       Whether the file system cache for ib_logfile0 is enabled
   --innodb-log-file-size=# 
                       Redo log size in bytes.
+  --innodb-log-file-write-through 
+                      Whether each write to ib_logfile0 is write through
   --innodb-log-group-home-dir=name 
                       Path to ib_logfile0
   --innodb-log-spin-wait-delay[=#] 
@@ -1082,6 +1068,8 @@ The following specify which files/extra groups are read (specified before remain
                       Path to files and their sizes making temp-tablespace.
   --innodb-tmpdir[=name] 
                       Directory for temporary non-tablespace files.
+  --innodb-truncate-temporary-tablespace-now 
+                      Shrink the temporary tablespace
   --innodb-trx[=name] Enable or disable INNODB_TRX plugin. One of: ON, OFF,
                       FORCE (don't start if the plugin fails to load),
                       FORCE_PLUS_PERMANENT (like FORCE, but the plugin can not
@@ -1206,8 +1194,8 @@ The following specify which files/extra groups are read (specified before remain
   --log-slow-admin-statements 
                       Log slow OPTIMIZE, ANALYZE, ALTER and other
                       administrative statements to the slow log if it is open. 
-                      Resets or sets the option 'admin' in
-                      log_slow_disabled_statements
+                      Resets or sets the option 'admin' in log_slow_filter.
+                      Deprecated, use log_slow_filter without 'admin'.
                       (Defaults to on; use --skip-log-slow-admin-statements to disable.)
   --log-slow-disabled-statements=name 
                       Don't log certain types of statements to slow log. Any
@@ -1291,6 +1279,11 @@ The following specify which files/extra groups are read (specified before remain
                       exceeds this value.
   --max-binlog-stmt-cache-size=# 
                       Sets the total size of the statement cache
+  --max-binlog-total-size=# 
+                      Maximum space to use for all binary logs. Extra logs are
+                      deleted on server start, log rotation, FLUSH LOGS or when
+                      writing to binlog. Default is 0, which means no size
+                      restrictions. See also slave_connections_needed_for_purge
   --max-connect-errors=# 
                       If there is more than this number of interrupted
                       connections from a host this host will be blocked from
@@ -1341,7 +1334,6 @@ The following specify which files/extra groups are read (specified before remain
                       seconds will be aborted. The argument will be treated as
                       a decimal value with microsecond precision. A value of 0
                       (default) means no timeout
-  --max-tmp-tables=#  Unused, will be removed.
   --max-user-connections=# 
                       The maximum number of active connections for a single
                       user (0 = no limit)
@@ -1407,16 +1399,12 @@ The following specify which files/extra groups are read (specified before remain
   Use 'ALL' to set all combinations.
   --old               Use compatible behavior from previous MariaDB version.
                       See also --old-mode
-  --old-alter-table[=name] 
-                      Alias for alter_algorithm. Deprecated. Use
-                      --alter-algorithm instead.. One of: DEFAULT, COPY, 
-                      INPLACE, NOCOPY, INSTANT
   --old-mode=name     Used to emulate old behavior from earlier MariaDB or
                       MySQL versions. Any combination of: 
                       NO_DUP_KEY_WARNINGS_WITH_IGNORE, NO_PROGRESS_INFO, 
                       ZERO_DATE_TIME_CAST, UTF8_IS_UTF8MB3, 
                       IGNORE_INDEX_ONLY_FOR_JOIN, COMPAT_5_1_CHECKSUM, 
-                      NO_NULL_COLLATION_IDS
+                      NO_NULL_COLLATION_IDS, LOCK_ALTER_TABLE_COPY
   Use 'ALL' to set all combinations.
   --old-passwords     Use old password encryption method (needed for 4.0 and
                       older clients)
@@ -1431,21 +1419,34 @@ The following specify which files/extra groups are read (specified before remain
                       max_connections*5 or max_connections + table_cache*2
                       (whichever is larger) number of file descriptors
                       (Automatically configured unless set explicitly)
-  --optimizer-adjust-secondary-key-costs=name 
-                      A bit field with the following values:
-                      adjust_secondary_key_cost = Update secondary key costs
-                      for ranges to be at least 5x of clustered primary key
-                      costs. disable_max_seek = Disable 'max_seek optimization'
-                      for secondary keys and slight adjustment of filter cost.
-                      disable_forced_index_in_group_by = Disable automatic
-                      forced index in GROUP BY. This variable will be deleted
-                      in MariaDB 11.0 as it is not needed with the new 11.0
-                      optimizer.
-  Use 'ALL' to set all combinations.
+  --optimizer-adjust-secondary-key-costs=# 
+                      Unused, will be removed.
+  --optimizer-disk-read-cost=# 
+                      Cost of reading a block of IO_SIZE (4096) from a disk (in
+                      usec).
+  --optimizer-disk-read-ratio=# 
+                      Chance that we have to do a disk read to find a row or
+                      index entry from the engine cache
+                      (cache_misses/total_cache_requests).  0.0 means that
+                      everything is cached and 1.0 means that nothing is
+                      expected to be in the engine cache.
   --optimizer-extra-pruning-depth=# 
                       If the optimizer needs to enumerate join prefix of this
                       size or larger, then it will try aggressively prune away
                       the search space.
+  --optimizer-index-block-copy-cost=# 
+                      Cost of copying a key block from the cache to intern
+                      storage as part of an index scan.
+  --optimizer-key-compare-cost=# 
+                      Cost of checking a key against the end key condition.
+  --optimizer-key-copy-cost=# 
+                      Cost of finding the next key in the engine and copying it
+                      to the SQL layer.
+  --optimizer-key-lookup-cost=# 
+                      Cost for finding a key based on a key value
+  --optimizer-key-next-find-cost=# 
+                      Cost of finding the next key and rowid when using
+                      filters.
   --optimizer-max-sel-arg-weight=# 
                       The maximum weight of the SEL_ARG graph. Set to 0 for no
                       limit
@@ -1460,6 +1461,21 @@ The following specify which files/extra groups are read (specified before remain
                       heuristic, thus perform exhaustive search: 1 - prune
                       plans based on cost and number of retrieved rows eq_ref:
                       2 - prune also if we find an eq_ref chain
+  --optimizer-row-copy-cost=# 
+                      Cost of copying a row from the engine or the join cache
+                      to the SQL layer.
+  --optimizer-row-lookup-cost=# 
+                      Cost of finding a row based on a rowid or a clustered
+                      key.
+  --optimizer-row-next-find-cost=# 
+                      Cost of finding the next row when scanning the table.
+  --optimizer-rowid-compare-cost=# 
+                      Cost of comparing two rowid's
+  --optimizer-rowid-copy-cost=# 
+                      Cost of copying a rowid
+  --optimizer-scan-setup-cost=# 
+                      Extra cost added to TABLE and INDEX scans to get
+                      optimizer to prefer index lookups.
   --optimizer-search-depth=# 
                       Maximum depth of search performed by the query optimizer.
                       Values larger than the number of relations in a query
@@ -1476,20 +1492,19 @@ The following specify which files/extra groups are read (specified before remain
                       list of option=value pairs, where value is on, off, or
                       default, and options are: index_merge, index_merge_union,
                       index_merge_sort_union, index_merge_intersection, 
-                      index_merge_sort_intersection, engine_condition_pushdown,
-                      index_condition_pushdown, derived_merge, 
-                      derived_with_keys, firstmatch, loosescan, materialization,
-                      in_to_exists, semijoin, partial_match_rowid_merge, 
-                      partial_match_table_scan, subquery_cache, mrr, 
-                      mrr_cost_based, mrr_sort_keys, outer_join_with_cache, 
-                      semijoin_with_cache, join_cache_incremental, 
-                      join_cache_hashed, join_cache_bka, 
+                      index_merge_sort_intersection, index_condition_pushdown, 
+                      derived_merge, derived_with_keys, firstmatch, loosescan, 
+                      materialization, in_to_exists, semijoin, 
+                      partial_match_rowid_merge, partial_match_table_scan, 
+                      subquery_cache, mrr, mrr_cost_based, mrr_sort_keys, 
+                      outer_join_with_cache, semijoin_with_cache, 
+                      join_cache_incremental, join_cache_hashed, join_cache_bka,
                       optimize_join_buffer_size, table_elimination, 
                       extended_keys, exists_to_in, orderby_uses_equalities, 
                       condition_pushdown_for_derived, split_materialized, 
                       condition_pushdown_for_subquery, rowid_filter, 
                       condition_pushdown_from_having, not_null_range_scan, 
-                      hash_join_cardinality, cset_narrowing
+                      hash_join_cardinality, cset_narrowing, sargable_casefold
   --optimizer-trace=name 
                       Controls tracing of the Optimizer:
                       optimizer_trace=option=val[,option=val...], where option
@@ -1513,6 +1528,10 @@ The following specify which files/extra groups are read (specified before remain
                       the cardinality of a partial join.5 - additionally use
                       selectivity of certain non-range predicates calculated on
                       record samples
+  --optimizer-where-cost=# 
+                      Cost of checking the row against the WHERE clause.
+                      Increasing this will have the optimizer to prefer plans
+                      with less row combinations.
   --partition[=name]  Enable or disable partition plugin. One of: ON, OFF,
                       FORCE (don't start if the plugin fails to load),
                       FORCE_PLUS_PERMANENT (like FORCE, but the plugin can not
@@ -1754,6 +1773,8 @@ The following specify which files/extra groups are read (specified before remain
   --read-rnd-buffer-size=# 
                       When reading rows in sorted order after a sort, the rows
                       are read through this buffer to avoid a disk seeks
+  --redirect-url=name URL of another server to redirect clients to. Empty
+                      string means no redirection
   --relay-log=name    The location and name to use for relay logs.
   --relay-log-index=name 
                       The location and name to use for the file that keeps a
@@ -1948,6 +1969,10 @@ The following specify which files/extra groups are read (specified before remain
   --skip-slave-start  If set, slave is not autostarted.
   --slave-compressed-protocol 
                       Use compression on master/slave protocol
+  --slave-connections-needed-for-purge=# 
+                      Minimum number of connected slaves required for automatic
+                      binary log purge with max_binlog_total_size,
+                      binlog_expire_logs_seconds or binlog_expire_logs_days.
   --slave-ddl-exec-mode=name 
                       How replication events should be executed. Legal values
                       are STRICT and IDEMPOTENT (default). In IDEMPOTENT mode,
@@ -2089,6 +2114,7 @@ The following specify which files/extra groups are read (specified before remain
                       deleting or updating every row in a table.
   --ssl               Enable SSL for connection (automatically enabled if an
                       ssl option is used).
+                      (Defaults to on; use --skip-ssl to disable.)
   --ssl-ca=name       CA file in PEM format (check OpenSSL docs, implies --ssl)
   --ssl-capath=name   CA directory (check OpenSSL docs, implies --ssl)
   --ssl-cert=name     X509 cert in PEM format (implies --ssl)
@@ -2227,7 +2253,6 @@ The following specify which files/extra groups are read (specified before remain
                       FORCE_PLUS_PERMANENT (like FORCE, but the plugin can not
                       be uninstalled).
   --thread-stack=#    The stack size for each thread
-  --time-format=name  The TIME format (ignored)
   --tls-version=name  TLS protocol version for secure connections.. Any
                       combination of: TLSv1.0, TLSv1.1, TLSv1.2, TLSv1.3
   Use 'ALL' to set all combinations.
@@ -2299,9 +2324,6 @@ The following specify which files/extra groups are read (specified before remain
                       To automatically control the assignment of autoincrement
                       variables
                       (Defaults to on; use --skip-wsrep-auto-increment-control to disable.)
-  --wsrep-causal-reads 
-                      Setting this variable is equivalent to setting
-                      wsrep_sync_wait READ flag
   --wsrep-certification-rules=name 
                       Certification rules to use in the cluster. Possible
                       values are: "strict": stricter rules that could result in
@@ -2380,6 +2402,11 @@ The following specify which files/extra groups are read (specified before remain
   --wsrep-on          To enable wsrep replication 
   --wsrep-provider=name 
                       Path to replication provider library
+  --wsrep-provider[=name] 
+                      Enable or disable wsrep_provider plugin. One of: ON, OFF,
+                      FORCE (don't start if the plugin fails to load),
+                      FORCE_PLUS_PERMANENT (like FORCE, but the plugin can not
+                      be uninstalled).
   --wsrep-provider-options=name 
                       Semicolon (;) separated list of wsrep options (see
                       wsrep_provider_options documentation).
@@ -2472,16 +2499,23 @@ binlog-direct-non-transactional-updates                      FALSE
 binlog-expire-logs-seconds                                   864000
 binlog-file-cache-size                                       16384
 binlog-format                                                MIXED
+binlog-gtid-index                                            TRUE
+binlog-gtid-index-page-size                                  4096
+binlog-gtid-index-span-min                                   65536
+binlog-legacy-event-pos                                      FALSE
 binlog-optimize-thread-scheduling                            TRUE
 binlog-row-event-max-size                                    8192
 binlog-row-image                                             FULL
 binlog-row-metadata                                          NO_LOG
+binlog-space-limit                                           0
 binlog-stmt-cache-size                                       32768
+block-encryption-mode                                        aes-128-ecb
 bulk-insert-buffer-size                                      8388608
 character-set-client-handshake                               TRUE
+character-set-collations                                     utf8mb4=uca1400_ai_ci
 character-set-filesystem                                     binary
 character-set-server                                         utf8mb4
-character-sets-dir                                           /usr/share/mysql/charsets/
+character-sets-dir                                           /usr/share/mariadb/charsets/
 chroot                                                       (No default value)
 collation-server                                             utf8mb4_general_ci
 column-compression-threshold                                 100
@@ -2494,8 +2528,6 @@ connect-timeout                                              10
 console                                                      FALSE
 core-file                                                    FALSE
 datadir                                                      /var/lib/mysql/
-date-format                                                  %Y-%m-%d
-datetime-format                                              %Y-%m-%d %H:%i:%s
 deadlock-search-depth-long                                   15
 deadlock-search-depth-short                                  4
 deadlock-timeout-long                                        50000000
@@ -2506,7 +2538,6 @@ debug-disconnect-slave-event-count                           0
 debug-gdb                                                    FALSE
 debug-max-binlog-dump-events                                 0
 debug-no-sync                                                FALSE
-debug-no-thread-alarm                                        FALSE
 debug-sporadic-binlog-dump-fail                              FALSE
 default-password-lifetime                                    0
 default-regex-flags                                          
@@ -2559,7 +2590,7 @@ gtid-pos-auto-engines
 gtid-strict-mode                                             FALSE
 help                                                         TRUE
 histogram-size                                               254
-histogram-type                                               DOUBLE_PREC_HB
+histogram-type                                               JSON_HB
 host-cache-size                                              279
 idle-readonly-transaction-timeout                            0
 idle-transaction-timeout                                     0
@@ -2591,8 +2622,6 @@ innodb-buffer-pool-load-at-startup                           TRUE
 innodb-buffer-pool-load-now                                  FALSE
 innodb-buffer-pool-size                                      134217728
 innodb-buffer-pool-stats                                     ON
-innodb-change-buffer-max-size                                25
-innodb-change-buffering                                      none
 innodb-checksum-algorithm                                    full_crc32
 innodb-cmp                                                   ON
 innodb-cmp-per-index                                         ON
@@ -2606,20 +2635,16 @@ innodb-compression-default                                   FALSE
 innodb-compression-failure-threshold-pct                     5
 innodb-compression-level                                     6
 innodb-compression-pad-pct-max                               50
+innodb-data-file-buffering                                   FALSE
 innodb-data-file-path                                        ibdata1:12M:autoextend
+innodb-data-file-write-through                               FALSE
 innodb-data-home-dir                                         (No default value)
 innodb-deadlock-detect                                       TRUE
 innodb-deadlock-report                                       full
 innodb-default-encryption-key-id                             1
 innodb-default-row-format                                    dynamic
-innodb-defragment                                            FALSE
-innodb-defragment-fill-factor                                0.9
-innodb-defragment-fill-factor-n-recs                         20
-innodb-defragment-frequency                                  40
-innodb-defragment-n-pages                                    7
-innodb-defragment-stats-accuracy                             0
 innodb-disable-sort-file-cache                               FALSE
-innodb-doublewrite                                           TRUE
+innodb-doublewrite                                           ON
 innodb-encrypt-log                                           FALSE
 innodb-encrypt-tables                                        OFF
 innodb-encrypt-temporary-tables                              FALSE
@@ -2666,6 +2691,7 @@ innodb-locks                                                 ON
 innodb-log-buffer-size                                       16777216
 innodb-log-file-buffering                                    FALSE
 innodb-log-file-size                                         100663296
+innodb-log-file-write-through                                FALSE
 innodb-log-group-home-dir                                    (No default value)
 innodb-log-spin-wait-delay                                   0
 innodb-lru-flush-size                                        32
@@ -2729,10 +2755,11 @@ innodb-table-locks                                           TRUE
 innodb-tablespaces-encryption                                ON
 innodb-temp-data-file-path                                   ibtmp1:12M:autoextend
 innodb-tmpdir                                                (No default value)
+innodb-truncate-temporary-tablespace-now                     FALSE
 innodb-trx                                                   ON
 innodb-undo-directory                                        (No default value)
 innodb-undo-log-truncate                                     FALSE
-innodb-undo-tablespaces                                      0
+innodb-undo-tablespaces                                      3
 innodb-use-atomic-writes                                     TRUE
 innodb-use-native-aio                                        TRUE
 innodb-write-io-threads                                      4
@@ -2793,6 +2820,7 @@ max-allowed-packet                                           16777216
 max-binlog-cache-size                                        18446744073709547520
 max-binlog-size                                              1073741824
 max-binlog-stmt-cache-size                                   18446744073709547520
+max-binlog-total-size                                        0
 max-connect-errors                                           100
 max-connections                                              151
 max-delayed-threads                                          20
@@ -2811,7 +2839,6 @@ max-session-mem-used                                         9223372036854775807
 max-sort-length                                              1024
 max-sp-recursion-depth                                       0
 max-statement-time                                           0
-max-tmp-tables                                               32
 max-user-connections                                         0
 max-write-lock-count                                         4294967295
 memlock                                                      FALSE
@@ -2835,22 +2862,35 @@ net-retry-count                                              10
 net-write-timeout                                            60
 note-verbosity                                               basic,explain
 old                                                          FALSE
-old-alter-table                                              DEFAULT
 old-mode                                                     UTF8_IS_UTF8MB3
 old-passwords                                                FALSE
 old-style-user-limits                                        FALSE
 open-files-limit                                             32000
-optimizer-adjust-secondary-key-costs                         
+optimizer-adjust-secondary-key-costs                         0
+optimizer-disk-read-cost                                     10.24
+optimizer-disk-read-ratio                                    0.02
 optimizer-extra-pruning-depth                                8
+optimizer-index-block-copy-cost                              0.0356
+optimizer-key-compare-cost                                   0.011361
+optimizer-key-copy-cost                                      0.015685
+optimizer-key-lookup-cost                                    0.435777
+optimizer-key-next-find-cost                                 0.082347
 optimizer-max-sel-arg-weight                                 32000
 optimizer-max-sel-args                                       16000
 optimizer-prune-level                                        2
+optimizer-row-copy-cost                                      0.060866
+optimizer-row-lookup-cost                                    0.130839
+optimizer-row-next-find-cost                                 0.045916
+optimizer-rowid-compare-cost                                 0.002653
+optimizer-rowid-copy-cost                                    0.002653
+optimizer-scan-setup-cost                                    10
 optimizer-search-depth                                       62
 optimizer-selectivity-sampling-limit                         100
-optimizer-switch                                             index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,index_merge_sort_intersection=off,engine_condition_pushdown=off,index_condition_pushdown=on,derived_merge=on,derived_with_keys=on,firstmatch=on,loosescan=on,materialization=on,in_to_exists=on,semijoin=on,partial_match_rowid_merge=on,partial_match_table_scan=on,subquery_cache=on,mrr=off,mrr_cost_based=off,mrr_sort_keys=off,outer_join_with_cache=on,semijoin_with_cache=on,join_cache_incremental=on,join_cache_hashed=on,join_cache_bka=on,optimize_join_buffer_size=on,table_elimination=on,extended_keys=on,exists_to_in=on,orderby_uses_equalities=on,condition_pushdown_for_derived=on,split_materialized=on,condition_pushdown_for_subquery=on,rowid_filter=on,condition_pushdown_from_having=on
+optimizer-switch                                             index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,index_merge_sort_intersection=off,index_condition_pushdown=on,derived_merge=on,derived_with_keys=on,firstmatch=on,loosescan=on,materialization=on,in_to_exists=on,semijoin=on,partial_match_rowid_merge=on,partial_match_table_scan=on,subquery_cache=on,mrr=off,mrr_cost_based=off,mrr_sort_keys=off,outer_join_with_cache=on,semijoin_with_cache=on,join_cache_incremental=on,join_cache_hashed=on,join_cache_bka=on,optimize_join_buffer_size=on,table_elimination=on,extended_keys=on,exists_to_in=on,orderby_uses_equalities=on,condition_pushdown_for_derived=on,split_materialized=on,condition_pushdown_for_subquery=on,rowid_filter=on,condition_pushdown_from_having=on,not_null_range_scan=off,hash_join_cardinality=on,cset_narrowing=off,sargable_casefold=on
 optimizer-trace                                              
 optimizer-trace-max-mem-size                                 1048576
 optimizer-use-condition-selectivity                          4
+optimizer-where-cost                                         0.032
 partition                                                    ON
 performance-schema                                           FALSE
 performance-schema-accounts-size                             -1
@@ -2933,6 +2973,7 @@ read-binlog-speed-limit                                      0
 read-buffer-size                                             131072
 read-only                                                    FALSE
 read-rnd-buffer-size                                         262144
+redirect-url                                                 
 relay-log                                                    (No default value)
 relay-log-index                                              (No default value)
 relay-log-info-file                                          relay-log.info
@@ -2965,7 +3006,7 @@ sequence                                                     ON
 server-id                                                    1
 session-track-schema                                         TRUE
 session-track-state-change                                   FALSE
-session-track-system-variables                               autocommit,character_set_client,character_set_connection,character_set_results,time_zone
+session-track-system-variables                               autocommit,character_set_client,character_set_connection,character_set_results,redirect_url,time_zone
 session-track-transaction-info                               OFF
 show-slave-auth-info                                         FALSE
 silent-startup                                               FALSE
@@ -2975,6 +3016,7 @@ skip-networking                                              FALSE
 skip-show-database                                           FALSE
 skip-slave-start                                             FALSE
 slave-compressed-protocol                                    FALSE
+slave-connections-needed-for-purge                           1
 slave-ddl-exec-mode                                          IDEMPOTENT
 slave-domain-parallel-threads                                0
 slave-exec-mode                                              STRICT
@@ -3000,7 +3042,7 @@ socket                                                       /run/mysqld/mysqld.
 sort-buffer-size                                             2097152
 sql-mode                                                     STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
 sql-safe-updates                                             FALSE
-ssl                                                          FALSE
+ssl                                                          TRUE
 ssl-ca                                                       (No default value)
 ssl-capath                                                   (No default value)
 ssl-cert                                                     (No default value)
@@ -3048,7 +3090,6 @@ thread-pool-stall-limit                                      500
 thread-pool-stats                                            ON
 thread-pool-waits                                            ON
 thread-stack                                                 299008
-time-format                                                  %H:%i:%s
 tls-version                                                  TLSv1.2,TLSv1.3
 tmp-disk-table-size                                          18446744073709551615
 tmp-memory-table-size                                        16777216
@@ -3076,7 +3117,6 @@ wsrep-OSU-method                                             TOI
 wsrep-SR-store                                               table
 wsrep-allowlist                                              
 wsrep-auto-increment-control                                 TRUE
-wsrep-causal-reads                                           FALSE
 wsrep-certification-rules                                    strict
 wsrep-certify-nonPK                                          TRUE
 wsrep-cluster-address                                        
@@ -3106,6 +3146,7 @@ wsrep-notify-cmd
 wsrep-on                                                     FALSE
 wsrep-patch-version                                          wsrep_26.22
 wsrep-provider                                               none
+wsrep-provider                                               ON
 wsrep-provider-options                                       
 wsrep-recover                                                FALSE
 wsrep-reject-queries                                         NONE

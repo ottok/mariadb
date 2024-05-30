@@ -130,6 +130,7 @@ The following specify which files/extra groups are read (specified before remain
                       (pre-4.1.1) protocol.
   --select-limit=#    Automatic limit for SELECT when using --safe-updates.
   --server-arg=name   Send embedded server this as a parameter.
+  --show-query-costs  Show query cost after every statement.
   --show-warnings     Show warnings after every statement.
   --sigint-ignore     Ignore SIGINT (CTRL-C).
   -s, --silent        Be more silent. Print results with a tab as separator,
@@ -147,10 +148,13 @@ The following specify which files/extra groups are read (specified before remain
   --ssl-crl=name      Certificate revocation list (implies --ssl).
   --ssl-crlpath=name  Certificate revocation list path (implies --ssl).
   --tls-version=name  TLS protocol version for secure connection.
+  --ssl-fp=name       Server certificate fingerprint (implies --ssl).
+  --ssl-fplist=name   File with accepted server certificate fingerprints, one
+                      per line (implies --ssl).
   --ssl-verify-server-cert 
-                      Verify server's "Common Name" in its cert against
-                      hostname used when connecting. This option is disabled by
-                      default.
+                      Verify server's certificate to prevent man-in-the-middle
+                      attacks
+                      (Defaults to on; use --skip-ssl-verify-server-cert to disable.)
   -t, --table         Output in table format.
   --tee=name          Append everything into outfile. See interactive help (\h)
                       also. Does not work in batch mode. Disable with
@@ -209,6 +213,7 @@ i-am-a-dummy                      FALSE
 sandbox                           FALSE
 secure-auth                       FALSE
 select-limit                      1000
+show-query-costs                  FALSE
 show-warnings                     FALSE
 sigint-ignore                     FALSE
 socket                            /run/mysqld/mysqld.sock
@@ -221,7 +226,9 @@ ssl-key                           (No default value)
 ssl-crl                           (No default value)
 ssl-crlpath                       (No default value)
 tls-version                       (No default value)
-ssl-verify-server-cert            FALSE
+ssl-fp                            (No default value)
+ssl-fplist                        (No default value)
+ssl-verify-server-cert            TRUE
 table                             FALSE
 unbuffered                        FALSE
 user                              (No default value)
