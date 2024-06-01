@@ -7,7 +7,7 @@ include:
 # Override Salsa-CI with MariaDB specific variations
 variables:
   BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3
-    libmariadbd19t64 libmariadbd-dev mariadb-common mariadb-client-core
+    mariadb-common mariadb-client-core
     mariadb-client mariadb-server-core mariadb-server mariadb-backup
     mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb
     mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider
@@ -239,9 +239,9 @@ blhc:
 
 .test-install-all-libs: &test-install-all-libs
   - *test-enable-artifacts-repo
-  - apt-get install -yq --no-install-recommends libmariadb-dev-compat libmariadbd-dev
+  - apt-get install -yq --no-install-recommends libmariadb-dev-compat
   # Installs 31 packages, including:
-  # libmariadb3 libmariadb-dev libmariadb-dev-compat libmariadbd19t64 libmariadbd-dev
+  # libmariadb3 libmariadb-dev libmariadb-dev-compat
 
 .test-full-upgrade-libs: &test-full-upgrade-libs
   - *test-enable-artifacts-repo
@@ -708,11 +708,7 @@ libmysql* to libmariadb* upgrade:
     - apt-get install -qq --yes libmariadb-dev-compat
     - pkg-config --cflags mysqlclient # mysqlclient.pc from compat package
     - pkg-config --list-all
-    - apt-get install -qq --yes libmariadbd19t64
-    - pkg-config --list-all
-    - apt-get install -qq --yes libmariadbd-dev
-    - pkg-config --list-all
-    - apt-get install -qq --yes default-libmysqlclient-dev default-libmysqld-dev
+    - apt-get install -qq --yes default-libmysqlclient-dev
     - *test-verify-libs
 
 default-libmysqlclient-dev upgrade:
@@ -720,7 +716,7 @@ default-libmysqlclient-dev upgrade:
   stage: upgrade MariaDB
   script:
     - *test-prepare-container
-    - apt-get install -qq --yes pkg-config default-libmysqlclient-dev default-libmysqld-dev
+    - apt-get install -qq --yes pkg-config default-libmysqlclient-dev
     - pkg-config --list-all
     - *test-full-upgrade-libs
     - *test-verify-libs
@@ -927,7 +923,7 @@ mariadb.org-10.6 upgrade:
   script:
     # Package libmariadbclient-dev from mariadb.org conflicts with libmariadb-dev in Sid, so cannot use wildcard that would include it
     # Enable this line when there is a way to install them only from the mariadb.org repo
-    # - apt-get install -qq --yes 'mariadb*' libmariadb3 'libmariadb-*' 'libmariadbd*'
+    # - apt-get install -qq --yes 'mariadb*' libmariadb3 'libmariadb-*'
     - apt-get install -qq --yes mariadb-server-10.6
     - *test-verify-initial
     - *test-install-all
