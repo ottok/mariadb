@@ -145,16 +145,16 @@ If your local Unix account is the one you want to have local super user
 access on your database with you can create the following account that will
 only work for the local Unix user connecting to the database locally.
 
-  sudo /usr/bin/mysql -e "GRANT ALL ON *.* TO '$USER'@'localhost' IDENTIFIED VIA unix_socket WITH GRANT OPTION"
+  sudo /usr/bin/mariadb -e "GRANT ALL ON *.* TO '$USER'@'localhost' IDENTIFIED VIA unix_socket WITH GRANT OPTION"
 
 To create a local machine account username=USERNAME with a password:
 
-  sudo /usr/bin/mysql -e "GRANT ALL ON *.* TO 'USERNAME'@'localhost' IDENTIFIED BY 'password' WITH GRANT OPTION"
+  sudo /usr/bin/mariadb -e "GRANT ALL ON *.* TO 'USERNAME'@'localhost' IDENTIFIED BY 'password' WITH GRANT OPTION"
 
 To create a USERNAME user with password 'password' admin user that can access
 the DB server over the network:
 
-  sudo /usr/bin/mysql -e "GRANT ALL ON *.* TO 'USERNAME'@'%' IDENTIFIED BY 'password' WITH GRANT OPTION"
+  sudo /usr/bin/mariadb -e "GRANT ALL ON *.* TO 'USERNAME'@'%' IDENTIFIED BY 'password' WITH GRANT OPTION"
 
 Scripts should run as a user who have the required grants and be identified via unix_socket.
 
