@@ -89,7 +89,13 @@ trace() {
     echo
     echo "If the change is intentional, update the debian/tests/traces to match"
     echo "the new values and document change to users in mariadb-server.NEWS"
-    exit 1
+
+    if [ -n "$ERRORS" ]
+    then
+      ERRORS="$ERRORS, $TRACE_NAME"
+    else
+      ERRORS="$TRACE_NAME"
+    fi
   fi
 }
 
@@ -97,6 +103,8 @@ echo "Running test 'configuration-tracing'"
 cd debian/tests/traces || exit 1
 
 set -e
+
+ERRORS=""
 
 # Dump out what parameters mariadb would be called with by default
 trace /usr/bin/mariadb --print-defaults
@@ -109,3 +117,10 @@ trace /usr/sbin/mariadbd --print-defaults
 
 # Dump out all help texts, server variables and their default values
 trace /usr/sbin/mariadbd --verbose --help
+
+# Emit non-zero exit code if there was errors
+if [ -n "$ERRORS" ]
+then
+  echo "Error: mismatch in $ERRORS"
+  exit 1
+fi
