@@ -225,7 +225,7 @@ revoke LOCK TABLES, ALTER on mysqltest.* from mysqltest_1@localhost;
 show grants for mysqltest_1@localhost;
 Grants for mysqltest_1@localhost
 GRANT USAGE ON *.* TO `mysqltest_1`@`localhost`
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, CREATE TEMPORARY TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, EVENT, TRIGGER, DELETE HISTORY ON `mysqltest`.* TO `mysqltest_1`@`localhost` WITH GRANT OPTION
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, CREATE TEMPORARY TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, EVENT, TRIGGER, DELETE HISTORY, SHOW CREATE ROUTINE ON `mysqltest`.* TO `mysqltest_1`@`localhost` WITH GRANT OPTION
 revoke all privileges on mysqltest.* from mysqltest_1@localhost;
 delete from mysql.user where user='mysqltest_1';
 flush privileges;
@@ -630,7 +630,7 @@ Select	Tables	To retrieve rows from table
 Show databases	Server Admin	To see all databases with SHOW DATABASES
 Show view	Tables	To see views with SHOW CREATE VIEW
 Shutdown	Server Admin	To shut down the server
-Super	Server Admin	To use KILL thread, SET GLOBAL, CHANGE MASTER, etc.
+Super	Server Admin	To set few server variables
 Trigger	Tables	To use triggers
 Create tablespace	Server Admin	To create/alter/drop tablespaces
 Update	Tables	To update existing rows
@@ -639,6 +639,7 @@ Federated admin	Server	To execute the CREATE SERVER, ALTER SERVER, DROP SERVER s
 Connection admin	Server	To bypass connection limits and kill other users' connections
 Read_only admin	Server	To perform write operations even if @@read_only=ON
 Usage	Server Admin	No privileges - allow connect only
+Show Create Routine	Databases,Functions,Procedures	To allow SHOW CREATE PROCEDURE/FUNCTION/PACKAGE
 connect  root,localhost,root,,test,$MASTER_MYPORT,$MASTER_MYSOCK;
 connection root;
 create database mysqltest;
@@ -776,7 +777,7 @@ flush privileges;
 use test;
 set @user123="non-existent";
 select * from mysql.db where user=@user123;
-Host	Db	User	Select_priv	Insert_priv	Update_priv	Delete_priv	Create_priv	Drop_priv	Grant_priv	References_priv	Index_priv	Alter_priv	Create_tmp_table_priv	Lock_tables_priv	Create_view_priv	Show_view_priv	Create_routine_priv	Alter_routine_priv	Execute_priv	Event_priv	Trigger_priv	Delete_history_priv
+Host	Db	User	Select_priv	Insert_priv	Update_priv	Delete_priv	Create_priv	Drop_priv	Grant_priv	References_priv	Index_priv	Alter_priv	Create_tmp_table_priv	Lock_tables_priv	Create_view_priv	Show_view_priv	Create_routine_priv	Alter_routine_priv	Execute_priv	Event_priv	Trigger_priv	Delete_history_priv	Show_create_routine_priv
 set names koi8r;
 create database ÂÄ;
 grant select on ÂÄ.* to root@localhost;
@@ -1472,8 +1473,6 @@ declare tmp varchar(30);
 select col1 from test limit 1 into tmp;
 return '1';
 end|
-Warnings:
-Warning	1287	'<select expression> INTO <destination>;' is deprecated and will be removed in a future release. Please use 'SELECT <select list> INTO <destination> FROM...' instead
 create view v1 as select test.* from test where test.col1=test_function();
 grant update (col1) on v1 to 'greg'@'localhost';
 drop user 'greg'@'localhost';
@@ -2663,9 +2662,9 @@ create database mysqltest_db1;
 create user mysqltest_u1;
 # Both GRANT statements below should fail with the same error.
 grant execute on function mysqltest_db1.f1 to mysqltest_u1;
-ERROR 42000: FUNCTION or PROCEDURE f1 does not exist
+ERROR 42000: FUNCTION f1 does not exist
 grant execute on procedure mysqltest_db1.p1 to mysqltest_u1;
-ERROR 42000: FUNCTION or PROCEDURE p1 does not exist
+ERROR 42000: PROCEDURE p1 does not exist
 # Let us show that GRANT behaviour for routines is consistent
 # with GRANT behaviour for tables. Attempt to grant privilege
 # on non-existent table also results in an error.
@@ -2848,11 +2847,11 @@ CREATE USER ten2;
 GRANT ALL ON *.* TO ten2;
 SHOW GRANTS FOR ten2;
 Grants for ten2@%
-GRANT ALL PRIVILEGES ON *.* TO `ten2`@`%`
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, SHUTDOWN, PROCESS, FILE, REFERENCES, INDEX, ALTER, SHOW DATABASES, SUPER, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, BINLOG MONITOR, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, CREATE TABLESPACE, DELETE HISTORY, SET USER, FEDERATED ADMIN, CONNECTION ADMIN, READ_ONLY ADMIN, REPLICATION SLAVE ADMIN, REPLICATION MASTER ADMIN, BINLOG ADMIN, BINLOG REPLAY, SLAVE MONITOR ON *.* TO `ten2`@`%`
 FLUSH PRIVILEGES;
 SHOW GRANTS FOR ten2;
 Grants for ten2@%
-GRANT ALL PRIVILEGES ON *.* TO `ten2`@`%`
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, SHUTDOWN, PROCESS, FILE, REFERENCES, INDEX, ALTER, SHOW DATABASES, SUPER, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, BINLOG MONITOR, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, CREATE TABLESPACE, DELETE HISTORY, SET USER, FEDERATED ADMIN, CONNECTION ADMIN, READ_ONLY ADMIN, REPLICATION SLAVE ADMIN, REPLICATION MASTER ADMIN, BINLOG ADMIN, BINLOG REPLAY, SLAVE MONITOR ON *.* TO `ten2`@`%`
 DROP USER ten2;
 # switching back from mysql.user to mysql.global_priv
 #

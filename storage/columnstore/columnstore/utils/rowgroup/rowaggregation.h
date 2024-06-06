@@ -18,8 +18,7 @@
    MA 02110-1301, USA.
 */
 
-#ifndef ROWAGGREGATION_H
-#define ROWAGGREGATION_H
+#pragma once
 
 /** @file rowaggregation.h
  * Classes in this file are used to aggregate Rows in RowGroups.
@@ -33,15 +32,10 @@
 #include <cstdint>
 #include <utility>
 #include <vector>
-#ifdef _MSC_VER
-#include <unordered_map>
-#include <unordered_set>
-#else
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
-#endif
 #include <boost/shared_ptr.hpp>
-#include <boost/shared_array.hpp>
+
 #include <boost/scoped_array.hpp>
 #include <boost/scoped_ptr.hpp>
 
@@ -56,6 +50,7 @@
 
 #include "resourcemanager.h"
 #include "rowstorage.h"
+#include "nullstring.h"
 
 // To do: move code that depends on joblist to a proper subsystem.
 namespace joblist
@@ -92,6 +87,8 @@ enum RowAggFunctionType
 
   // GROUP_CONCAT
   ROWAGG_GROUP_CONCAT,
+
+  ROWAGG_JSON_ARRAY,
 
   // DISTINCT: performed on UM only
   ROWAGG_COUNT_DISTINCT_COL_NAME,  // COUNT(distinct column_name) only counts non-null rows
@@ -302,22 +299,25 @@ inline void RowUDAFFunctionCol::deserialize(messageqcpp::ByteStream& bs)
 
 struct ConstantAggData
 {
-  std::string fConstValue;
+  utils::NullString fConstValue;
   std::string fUDAFName;  // If a UDAF is called with constant.
   RowAggFunctionType fOp;
-  bool fIsNull;
 
-  ConstantAggData() : fOp(ROWAGG_FUNCT_UNDEFINE), fIsNull(false)
+  ConstantAggData() : fOp(ROWAGG_FUNCT_UNDEFINE)
   {
   }
 
-  ConstantAggData(std::string v, RowAggFunctionType f, bool n) : fConstValue(std::move(v)), fOp(f), fIsNull(n)
+  ConstantAggData(utils::NullString v, RowAggFunctionType f, bool n) : fConstValue(v), fOp(f)
   {
   }
 
-  ConstantAggData(std::string v, std::string u, RowAggFunctionType f, bool n)
-   : fConstValue(std::move(v)), fUDAFName(std::move(u)), fOp(f), fIsNull(n)
+  ConstantAggData(utils::NullString v, std::string u, RowAggFunctionType f, bool n)
+   : fConstValue(v), fUDAFName(u), fOp(f)
   {
+  }
+  bool isNull() const
+  {
+    return fConstValue.isNull();
   }
 };
 
@@ -330,12 +330,12 @@ struct GroupConcat
   std::vector<std::pair<uint32_t, uint32_t>> fGroupCols;  // columns to concatenate, and position
   std::vector<std::pair<uint32_t, bool>> fOrderCols;      // columns to order by [asc/desc]
   std::string fSeparator;
-  std::vector<std::pair<std::string, uint32_t>> fConstCols;  // constant columns in group
+  std::vector<std::pair<utils::NullString, uint32_t>> fConstCols;  // constant columns in group
   bool fDistinct;
   uint64_t fSize;
 
   RowGroup fRowGroup;
-  boost::shared_array<int> fMapping;
+  std::shared_ptr<int[]> fMapping;
   std::vector<std::pair<int, bool>> fOrderCond;  // position to order by [asc/desc]
   joblist::ResourceManager* fRm;                 // resource manager
   boost::shared_ptr<int64_t> fSessionMemLimit;
@@ -358,7 +358,6 @@ class GroupConcatAg
   virtual void processRow(const rowgroup::Row&){};
   virtual void merge(const rowgroup::Row&, uint64_t){};
 
-  void getResult(uint8_t*){};
   uint8_t* getResult()
   {
     return nullptr;
@@ -390,7 +389,7 @@ class RowAggregation : public messageqcpp::Serializeable
   RowAggregation();
   RowAggregation(const std::vector<SP_ROWAGG_GRPBY_t>& rowAggGroupByCols,
                  const std::vector<SP_ROWAGG_FUNC_t>& rowAggFunctionCols,
-                 joblist::ResourceManager* rm = nullptr, boost::shared_ptr<int64_t> sessMemLimit = {});
+                 joblist::ResourceManager* rm = nullptr, boost::shared_ptr<int64_t> sessMemLimit = {}, bool withRollup = false);
   RowAggregation(const RowAggregation& rhs);
 
   /** @brief RowAggregation default destructor
@@ -423,6 +422,8 @@ class RowAggregation : public messageqcpp::Serializeable
     fRowGroupOut = pRowGroupOut;
     initialize();
   }
+
+  void clearRollup() { fRollupFlag = false; }
 
   /** @brief Define content of data to be joined
    *
@@ -530,7 +531,7 @@ class RowAggregation : public messageqcpp::Serializeable
   }
 
  protected:
-  virtual void initialize();
+  virtual void initialize(bool hasGroupConcat = false);
   virtual void initMapData(const Row& row);
   virtual void attachGroupConcatAg();
 
@@ -560,14 +561,14 @@ class RowAggregation : public messageqcpp::Serializeable
     copyRow(fNullRow, &row);
   }
 
-  inline void updateIntMinMax(int128_t* val1, int128_t* val2, int64_t col, int func);
+  inline void updateIntMinMax(int128_t val1, int128_t val2, int64_t col, int func);
   inline void updateIntMinMax(int64_t val1, int64_t val2, int64_t col, int func);
   inline void updateUintMinMax(uint64_t val1, uint64_t val2, int64_t col, int func);
   inline void updateCharMinMax(uint64_t val1, uint64_t val2, int64_t col, int func);
   inline void updateDoubleMinMax(double val1, double val2, int64_t col, int func);
   inline void updateLongDoubleMinMax(long double val1, long double val2, int64_t col, int func);
   inline void updateFloatMinMax(float val1, float val2, int64_t col, int func);
-  inline void updateStringMinMax(std::string val1, std::string val2, int64_t col, int func);
+  inline void updateStringMinMax(utils::NullString val1, utils::NullString val2, int64_t col, int func);
   std::vector<SP_ROWAGG_GRPBY_t> fGroupByCols;
   std::vector<SP_ROWAGG_FUNC_t> fFunctionCols;
   uint32_t fAggMapKeyCount;  // the number of columns that make up the key
@@ -581,14 +582,16 @@ class RowAggregation : public messageqcpp::Serializeable
   Row fNullRow;
   Row* tmpRow;  // used by the hashers & eq functors
   boost::scoped_array<uint8_t> fNullRowData;
+  rowgroup::RGData fNullRowRGData;
+  rowgroup::RowGroup fNullRowGroup;
 
   std::unique_ptr<RowAggStorage> fRowAggStorage;
 
   // for support PM aggregation after PM hashjoin
   std::vector<RowGroup>* fSmallSideRGs;
   RowGroup* fLargeSideRG;
-  boost::shared_array<boost::shared_array<int>> fSmallMappings;
-  boost::shared_array<int> fLargeMapping;
+  std::shared_ptr<std::shared_ptr<int[]>[]> fSmallMappings;
+  std::shared_ptr<int[]> fLargeMapping;
   uint32_t fSmallSideCount;
   boost::scoped_array<Row> rowSmalls;
 
@@ -629,6 +632,11 @@ class RowAggregation : public messageqcpp::Serializeable
   joblist::ResourceManager* fRm = nullptr;
   boost::shared_ptr<int64_t> fSessionMemLimit;
   std::unique_ptr<RGData> fCurRGData;
+  bool fRollupFlag = false;
+
+  std::string fTmpDir = config::Config::makeConfig()->getTempFileDir(config::Config::TempDirPurpose::Aggregates);
+  std::string fCompStr = config::Config::makeConfig()->getConfig("RowAggregation", "Compression");
+
 };
 
 //------------------------------------------------------------------------------
@@ -646,7 +654,7 @@ class RowAggregationUM : public RowAggregation
   }
   RowAggregationUM(const std::vector<SP_ROWAGG_GRPBY_t>& rowAggGroupByCols,
                    const std::vector<SP_ROWAGG_FUNC_t>& rowAggFunctionCols, joblist::ResourceManager*,
-                   boost::shared_ptr<int64_t> sessionMemLimit);
+                   boost::shared_ptr<int64_t> sessionMemLimit, bool withRollup);
   RowAggregationUM(const RowAggregationUM& rhs);
 
   /** @brief RowAggregationUM default destructor
@@ -668,6 +676,17 @@ class RowAggregationUM : public RowAggregation
    * @returns true if more data, else false if no more data.
    */
   bool nextRowGroup();
+
+  /** @brief Returns aggregated rows in a RowGroup as long as there are still not returned result RowGroups.
+   *
+   * This function should be called repeatedly until false is returned (meaning end of data).
+   * Returns data from in-memory storage, as well as spilled data from disk. If disk-based aggregation is
+   * happening, finalAggregation() should be called before returning result RowGroups to finalize the used
+   * RowAggStorages, merge different spilled generations and obtain correct aggregation results.
+   *
+   * @returns True if there are more result RowGroups, else false if all results have been returned.
+   */
+  bool nextOutputRowGroup();
 
   /** @brief Add an aggregator for DISTINCT aggregation
    */
@@ -725,7 +744,7 @@ class RowAggregationUM : public RowAggregation
 
  protected:
   // virtual methods from base
-  void initialize() override;
+  void initialize(bool hasGroupConcat = false) override;
 
   void attachGroupConcatAg() override;
   void updateEntry(const Row& row, std::vector<mcsv1sdk::mcsv1Context>* rgContextColl = nullptr) override;
@@ -764,6 +783,7 @@ class RowAggregationUM : public RowAggregation
 
   // @bug3362, group_concat
   virtual void doGroupConcat(const Row&, int64_t, int64_t);
+  virtual void doJsonAgg(const Row&, int64_t, int64_t);
   virtual void setGroupConcatString();
 
   bool fHasAvg;
@@ -810,7 +830,7 @@ class RowAggregationUMP2 : public RowAggregationUM
   }
   RowAggregationUMP2(const std::vector<SP_ROWAGG_GRPBY_t>& rowAggGroupByCols,
                      const std::vector<SP_ROWAGG_FUNC_t>& rowAggFunctionCols, joblist::ResourceManager*,
-                     boost::shared_ptr<int64_t> sessionMemLimit);
+                     boost::shared_ptr<int64_t> sessionMemLimit, bool withRollup);
   RowAggregationUMP2(const RowAggregationUMP2& rhs);
 
   /** @brief RowAggregationUMP2 default destructor
@@ -827,6 +847,7 @@ class RowAggregationUMP2 : public RowAggregationUM
   void doAvg(const Row&, int64_t, int64_t, int64_t, bool merge = false) override;
   void doStatistics(const Row&, int64_t, int64_t, int64_t) override;
   void doGroupConcat(const Row&, int64_t, int64_t) override;
+  void doJsonAgg(const Row&, int64_t, int64_t) override;
   void doBitOp(const Row&, int64_t, int64_t, int) override;
   void doUDAF(const Row&, int64_t, int64_t, int64_t, uint64_t& funcColsIdx,
               std::vector<mcsv1sdk::mcsv1Context>* rgContextColl = nullptr) override;
@@ -938,7 +959,7 @@ class RowAggregationSubDistinct : public RowAggregationUM
  protected:
   // virtual methods from RowAggregationUM
   void doGroupConcat(const Row&, int64_t, int64_t) override;
-
+  void doJsonAgg(const Row&, int64_t, int64_t) override;
   // for groupby columns and the aggregated distinct column
   Row fDistRow;
   boost::scoped_array<uint8_t> fDistRowData;
@@ -1013,5 +1034,3 @@ typedef boost::shared_ptr<RowAggregationUM> SP_ROWAGG_UM_t;
 typedef boost::shared_ptr<RowAggregationDistinct> SP_ROWAGG_DIST;
 
 }  // namespace rowgroup
-
-#endif  // ROWAGGREGATION_H

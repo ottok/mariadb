@@ -51,67 +51,68 @@ namespace fs = boost::filesystem;
 #include <cstring>
 //#define NDEBUG
 #include <cassert>
+#include <atomic>
 
 #include "configcpp.h"
 
 #include "exceptclasses.h"
 #include "installdir.h"
-#ifdef _MSC_VER
-#include "idbregistry.h"
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 
 #include "bytestream.h"
 
-namespace
-{
-const fs::path defaultCalpontConfigFile("Columnstore.xml");
-}
-
 namespace config
 {
-Config::configMap_t Config::fInstanceMap;
-boost::mutex Config::fInstanceMapMutex;
-boost::mutex Config::fXmlLock;
-boost::mutex Config::fWriteXmlLock;
+
+void Config::checkAndReloadConfig()
+{
+  struct stat statbuf;
+
+  if (stat(fConfigFile.c_str(), &statbuf) == 0)
+  {
+    if (statbuf.st_mtime != fMtime)
+    {
+      closeConfig();
+      fMtime = statbuf.st_mtime;
+      parseDoc();
+    }
+  }
+}
+
+Config& Config::globConfigInstance()
+{
+  std::string configFilePath =
+      std::string(MCSSYSCONFDIR) + std::string("/columnstore/") + configDefaultFileName();
+  static Config config(configFilePath);
+  return config;
+}
 
 Config* Config::makeConfig(const string& cf)
 {
-  return makeConfig(cf.c_str());
+  if (cf.empty() || cf == configDefaultFileName())
+  {
+    boost::mutex::scoped_lock lk(instanceMapMutex());
+    globConfigInstance().checkAndReloadConfig();
+    return &globConfigInstance();
+  }
+
+  boost::mutex::scoped_lock lk(instanceMapMutex());
+
+  if (instanceMap().find(cf) == instanceMap().end())
+  {
+    instanceMap()[cf].reset(new Config(cf));
+  }
+  else
+  {
+    instanceMap()[cf]->checkAndReloadConfig();
+  }
+
+  return instanceMap()[cf].get();
 }
 
 Config* Config::makeConfig(const char* cf)
 {
-  boost::mutex::scoped_lock lk(fInstanceMapMutex);
-
-  static string defaultFilePath;
-
-  if (cf == 0 || *cf == 0)
-  {
-    fs::path configFilePath;
-    configFilePath = fs::path(MCSSYSCONFDIR) / fs::path("columnstore") / defaultCalpontConfigFile;
-    defaultFilePath = configFilePath.string();
-
-    if (fInstanceMap.find(defaultFilePath) == fInstanceMap.end())
-    {
-      Config* instance = new Config(defaultFilePath);
-      fInstanceMap[defaultFilePath] = instance;
-    }
-
-    return fInstanceMap[defaultFilePath];
-  }
-
-  string configFile(cf);
-
-  if (fInstanceMap.find(configFile) == fInstanceMap.end())
-  {
-    Config* instance = new Config(configFile);
-    fInstanceMap[configFile] = instance;
-  }
-
-  return fInstanceMap[configFile];
+  return cf ? makeConfig(std::string(cf)) : makeConfig(std::string(""));
 }
 
 Config::Config(const string& configFile) : fDoc(0), fConfigFile(configFile), fMtime(0), fParser()
@@ -163,9 +164,9 @@ void Config::parseDoc(void)
       cerr << oss.str() << endl;
     }
 
-    fXmlLock.lock();
+    xmlMutex().lock();
     fDoc = xmlParseFile(fConfigFile.c_str());
-    fXmlLock.unlock();
+    xmlMutex().unlock();
 
     fl.l_type = F_UNLCK;  // unlock
     fcntl(fd, F_SETLK, &fl);
@@ -211,8 +212,6 @@ void Config::closeConfig(void)
 
 const string Config::getConfig(const string& section, const string& name)
 {
-  boost::recursive_mutex::scoped_lock lk(fLock);
-
   if (section.length() == 0 || name.length() == 0)
     throw invalid_argument("Config::getConfig: both section and name must have a length");
 
@@ -221,46 +220,50 @@ const string Config::getConfig(const string& section, const string& name)
     throw runtime_error("Config::getConfig: no XML document!");
   }
 
-  struct stat statbuf;
-
-  if (stat(fConfigFile.c_str(), &statbuf) == 0)
-  {
-    if (statbuf.st_mtime != fMtime)
-    {
-      closeConfig();
-      fMtime = statbuf.st_mtime;
-      parseDoc();
-    }
-  }
-
   return fParser.getConfig(fDoc, section, name);
 }
 
 void Config::getConfig(const string& section, const string& name, vector<string>& values)
 {
-  boost::recursive_mutex::scoped_lock lk(fLock);
-
   if (section.length() == 0)
     throw invalid_argument("Config::getConfig: section must have a length");
 
   if (fDoc == 0)
     throw runtime_error("Config::getConfig: no XML document!");
 
+  fParser.getConfig(fDoc, section, name, values);
+}
+
+const string Config::getFromActualConfig(const string& section, const string& name)
+{
+  if (section.length() == 0 || name.length() == 0)
+    throw invalid_argument("Config::getFromActualConfig: both section and name must have a length");
+
+  if (fDoc == 0)
+  {
+    throw runtime_error("Config::getFromActualConfig: no XML document!");
+  }
+
   struct stat statbuf;
 
   if (stat(fConfigFile.c_str(), &statbuf) == 0)
   {
+    // Config was changed on disk since last read.
     if (statbuf.st_mtime != fMtime)
     {
-      closeConfig();
-      fMtime = statbuf.st_mtime;
-      parseDoc();
+      boost::recursive_mutex::scoped_lock lk(fLock);
+      // To protect the potential race that happens right after
+      // the config was changed.
+      checkAndReloadConfig();
     }
   }
 
-  fParser.getConfig(fDoc, section, name, values);
+  return fParser.getConfig(fDoc, section, name);
 }
 
+// NB The only utility that uses setConfig is setConfig binary.
+// !!!Don't ever ever use this in the engine code b/c it might result in a race
+// b/w getConfig and setConfig methods.!!!
 void Config::setConfig(const string& section, const string& name, const string& value)
 {
   boost::recursive_mutex::scoped_lock lk(fLock);
@@ -276,7 +279,6 @@ void Config::setConfig(const string& section, const string& name, const string& 
   struct stat statbuf;
 
   memset(&statbuf, 0, sizeof(statbuf));
-
   if (stat(fConfigFile.c_str(), &statbuf) == 0)
   {
     if (statbuf.st_mtime != fMtime)
@@ -303,17 +305,7 @@ void Config::delConfig(const string& section, const string& name)
     throw runtime_error("Config::delConfig: no XML document!");
   }
 
-  struct stat statbuf;
-
-  if (stat(fConfigFile.c_str(), &statbuf) == 0)
-  {
-    if (statbuf.st_mtime != fMtime)
-    {
-      closeConfig();
-      fMtime = statbuf.st_mtime;
-      parseDoc();
-    }
-  }
+  checkAndReloadConfig();
 
   fParser.delConfig(fDoc, section, name);
   return;
@@ -327,38 +319,15 @@ void Config::writeConfig(const string& configFile) const
   if (fDoc == 0)
     throw runtime_error("Config::writeConfig: no XML document!");
 
-#ifdef _MSC_VER
-  fs::path configFilePth(configFile);
-  fs::path outFilePth(configFilePth);
-  outFilePth.replace_extension("temp");
-
-  if ((fi = fopen(outFilePth.string().c_str(), "wt")) == NULL)
-    throw runtime_error("Config::writeConfig: error opening config file for write " + outFilePth.string());
-
-  int rc = -1;
-  rc = xmlDocDump(fi, fDoc);
-
-  if (rc < 0)
-  {
-    throw runtime_error("Config::writeConfig: error writing config file " + outFilePth.string());
-  }
-
-  fclose(fi);
-
-  if (fs::exists(configFilePth))
-    fs::remove(configFilePth);
-
-  fs::rename(outFilePth, configFilePth);
-#else
-
-  const fs::path defaultCalpontConfigFileTemp("Columnstore.xml.temp");
-  const fs::path saveCalpontConfigFileTemp("Columnstore.xml.columnstoreSave");
-  const fs::path tmpCalpontConfigFileTemp("Columnstore.xml.temp1");
+  static const fs::path defaultConfigFilePath("Columnstore.xml");
+  static const fs::path defaultConfigFilePathTemp("Columnstore.xml.temp");
+  static const fs::path saveCalpontConfigFileTemp("Columnstore.xml.columnstoreSave");
+  static const fs::path tmpCalpontConfigFileTemp("Columnstore.xml.temp1");
 
   fs::path etcdir = fs::path(MCSSYSCONFDIR) / fs::path("columnstore");
 
-  fs::path dcf = etcdir / fs::path(defaultCalpontConfigFile);
-  fs::path dcft = etcdir / fs::path(defaultCalpontConfigFileTemp);
+  fs::path dcf = etcdir / fs::path(defaultConfigFilePath);
+  fs::path dcft = etcdir / fs::path(defaultConfigFilePathTemp);
   fs::path scft = etcdir / fs::path(saveCalpontConfigFileTemp);
   fs::path tcft = etcdir / fs::path(tmpCalpontConfigFileTemp);
 
@@ -438,18 +407,13 @@ void Config::writeConfig(const string& configFile) const
     fclose(fi);
   }
 
-#endif
   return;
 }
 
 void Config::write(void) const
 {
-  boost::mutex::scoped_lock lk(fWriteXmlLock);
-#ifdef _MSC_VER
-  writeConfig(fConfigFile);
-#else
+  boost::mutex::scoped_lock lk(writeXmlMutex());
   write(fConfigFile);
-#endif
 }
 
 void Config::write(const string& configFile) const
@@ -537,15 +501,6 @@ void Config::writeConfigFile(messageqcpp::ByteStream msg) const
 /* static */
 void Config::deleteInstanceMap()
 {
-  boost::mutex::scoped_lock lk(fInstanceMapMutex);
-
-  for (Config::configMap_t::iterator iter = fInstanceMap.begin(); iter != fInstanceMap.end(); ++iter)
-  {
-    Config* instance = iter->second;
-    delete instance;
-  }
-
-  fInstanceMap.clear();
 }
 
 /* static */
@@ -594,8 +549,6 @@ int64_t Config::fromText(const std::string& text)
 
 time_t Config::getCurrentMTime()
 {
-  boost::recursive_mutex::scoped_lock lk(fLock);
-
   struct stat statbuf;
 
   if (stat(fConfigFile.c_str(), &statbuf) == 0)
@@ -604,6 +557,7 @@ time_t Config::getCurrentMTime()
     return 0;
 }
 
+// Utilized by getConfig only
 const vector<string> Config::enumConfig()
 {
   boost::recursive_mutex::scoped_lock lk(fLock);
@@ -613,21 +567,12 @@ const vector<string> Config::enumConfig()
     throw runtime_error("Config::getConfig: no XML document!");
   }
 
-  struct stat statbuf;
-
-  if (stat(fConfigFile.c_str(), &statbuf) == 0)
-  {
-    if (statbuf.st_mtime != fMtime)
-    {
-      closeConfig();
-      fMtime = statbuf.st_mtime;
-      parseDoc();
-    }
-  }
+  checkAndReloadConfig();
 
   return fParser.enumConfig(fDoc);
 }
 
+// Utilized by getConfig only
 const vector<string> Config::enumSection(const string& section)
 {
   boost::recursive_mutex::scoped_lock lk(fLock);
@@ -637,17 +582,7 @@ const vector<string> Config::enumSection(const string& section)
     throw runtime_error("Config::getConfig: no XML document!");
   }
 
-  struct stat statbuf;
-
-  if (stat(fConfigFile.c_str(), &statbuf) == 0)
-  {
-    if (statbuf.st_mtime != fMtime)
-    {
-      closeConfig();
-      fMtime = statbuf.st_mtime;
-      parseDoc();
-    }
-  }
+  checkAndReloadConfig();
 
   return fParser.enumSection(fDoc, section);
 }

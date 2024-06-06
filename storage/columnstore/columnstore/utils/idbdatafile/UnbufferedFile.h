@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef UNBUFFEREDFILE_H_
-#define UNBUFFEREDFILE_H_
+#pragma once
 
 #include <stdexcept>
 #include <unistd.h>
@@ -53,13 +52,7 @@ class UnbufferedFile : public IDBDataFile, boost::noncopyable
   int close();
 
  private:
-#ifdef _MSC_VER
-  HANDLE m_fd;
-#else
   int m_fd;
-#endif
 };
 
 }  // namespace idbdatafile
-
-#endif /* UNBUFFEREDFILE_H_ */

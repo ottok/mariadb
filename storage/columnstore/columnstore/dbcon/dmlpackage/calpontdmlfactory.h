@@ -21,19 +21,14 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef CALPONTDMLFACTORY_H
-#define CALPONTDMLFACTORY_H
+#pragma once
 #include <string>
 #include "dmlpackage.h"
 #include "calpontdmlpackage.h"
 #include "vendordmlstatement.h"
 #include <boost/thread.hpp>
 
-#if defined(_MSC_VER) && defined(xxxCALPONTDMLFACTORY_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 namespace dmlpackage
 {
 class CalpontDMLFactory
@@ -71,5 +66,3 @@ class CalpontDMLFactory
 }  // namespace dmlpackage
 
 #undef EXPORT
-
-#endif  // CALPONTDMLFACTORY_H

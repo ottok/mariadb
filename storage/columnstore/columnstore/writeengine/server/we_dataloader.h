@@ -28,8 +28,7 @@
  *
  */
 
-#ifndef WE_DATALOADER_H_
-#define WE_DATALOADER_H_
+#pragma once
 
 #include "rwlock_local.h"
 #include "resourcemanager.h"
@@ -208,13 +207,14 @@ class WEDataLoader : public Observer
   };
 
  public:
-  static const int MIN_QSIZE = 25;
-  static const int MAX_QSIZE = 250;
+  enum
+  {
+    MIN_QSIZE = 25,
+    MAX_QSIZE = 250
+  };
 
  public:
   SimpleSysLog* fpSysLog;
 };
 
 }  // namespace WriteEngine
-
-#endif /* WE_DATALOADER_H_ */

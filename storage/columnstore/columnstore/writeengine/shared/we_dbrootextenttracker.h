@@ -32,8 +32,7 @@
  * countered.
  */
 
-#ifndef WE_DBROOTEXTENTTRACKER_H_
-#define WE_DBROOTEXTENTTRACKER_H_
+#pragma once
 
 #include <boost/thread/mutex.hpp>
 #include <vector>
@@ -41,11 +40,7 @@
 #include "we_type.h"
 #include "brmtypes.h"
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace WriteEngine
 {
@@ -221,5 +216,3 @@ class DBRootExtentTracker
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // WE_DBROOTEXTENTTRACKER_H_

@@ -18,16 +18,14 @@ else
   MDB="/usr/bin/mysql"
 fi
 
-$MDB <<EOD
+$MDB 2> ${tmpdir}/mysql_uninstall.log <<EOD
 DROP DATABASE IF EXISTS infinidb_querystats;
 DELETE FROM mysql.func WHERE dl="ha_columnstore.so";
 DELETE FROM mysql.func WHERE dl="libregr_mysql.so";
 DELETE FROM mysql.func WHERE dl="libudf_mysql.so";
-ALTER TABLE calpontsys.systable ENGINE=MyISAM;
-ALTER TABLE calpontsys.syscolumn ENGINE=MyISAM;
 DROP DATABASE IF EXISTS calpontsys;
 DROP PROCEDURE IF EXISTS infinidb_querystats.calSetUserPriority;
-DROP PROCEDURE IF EXISTS infinidb_querystats.calRemoveUserPriority;
+DROP PROCEDURE IF EXISTS infinidb_querystats.calRemoveUserPriority(IN host VARCHAR(50), IN usr VARCHAR(50));
 DROP PROCEDURE IF EXISTS infinidb_querystats.calShowProcessList;
 DROP DATABASE IF EXISTS columnstore_info;
 EOD
@@ -67,7 +65,7 @@ rm -rf @ENGINE_LOGDIR@
 rm -rf /tmp/columnstore_tmp_files
 
 lockdir=`@ENGINE_BINDIR@/mcsGetConfig Installation LockFileDirectory`
-rm -f $lockdir/columnstore # Dangerous remove command
+rm -f $lockdir/columnstore
 
 #uninstall MariaDB Columnstore system logging
 columnstoreSyslogSetup.sh uninstall >/dev/null 2>&1
@@ -96,8 +94,12 @@ if [ -n "$systemctl" ] && [ $(running_systemd) -eq 0 ]; then
     rm -f /lib/systemd/system/mcs-ddlproc.service
     rm -f /usr/lib/systemd/system/mcs-dmlproc.service
     rm -f /lib/systemd/system/mcs-dmlproc.service
-    rm -f /usr/lib/systemd/system/mcs-exemgr.service
-    rm -f /lib/systemd/system/mcs-exemgr.service
+    if [[ -f  /usr/lib/systemd/system/mcs-exemgr.service ]]; then
+        rm -f /usr/lib/systemd/system/mcs-exemgr.service
+    fi
+    if [[ -f  /lib/systemd/system/mcs-exemgr.service ]]; then
+        rm -f /lib/systemd/system/mcs-exemgr.service
+    fi
     rm -f /usr/lib/systemd/system/mcs-primproc.service
     rm -f /lib/systemd/system/mcs-primproc.service
     rm -f /usr/lib/systemd/system/mcs-workernode@.service
@@ -144,7 +146,7 @@ rm -rf /tmp/columnstore_tmp_files > /dev/null 2>&1
 
 #tell user to run post configure script
 echo " "
-echo "Mariab Columnstore uninstall completed"
+echo "MariaDB Columnstore uninstall completed"
 
 exit 0
 

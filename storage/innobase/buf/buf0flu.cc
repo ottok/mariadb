@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2013, 2022, MariaDB Corporation.
+Copyright (c) 2013, 2023, MariaDB Corporation.
 Copyright (c) 2013, 2014, Fusion-io
 
 This program is free software; you can redistribute it and/or modify it under
@@ -350,9 +350,9 @@ void buf_page_write_complete(const IORequest &request, bool error)
   else
   {
     bpage->write_complete(persistent, error, state);
-    if (state < buf_page_t::WRITE_FIX_REINIT &&
-        request.node->space->use_doublewrite())
+    if (request.is_doublewritten())
     {
+      ut_ad(state < buf_page_t::WRITE_FIX_REINIT);
       ut_ad(persistent);
       buf_dblwr.write_completed();
     }
@@ -1069,7 +1069,6 @@ static ulint buf_flush_try_neighbors(fil_space_t *space,
       {
         ut_ad(bpage == b);
         bpage= nullptr;
-        ut_ad(!buf_pool.watch_is_sentinel(*b));
         ut_ad(b->oldest_modification() > 1);
       flush:
         if (b->flush(space))
@@ -1083,7 +1082,6 @@ static ulint buf_flush_try_neighbors(fil_space_t *space,
       else if (b->oldest_modification() > 1 && b->lock.u_lock_try(true))
       {
         /* For the buf_pool.watch[] sentinels, oldest_modification() == 0 */
-        ut_ad(!buf_pool.watch_is_sentinel(*b));
         if (b->oldest_modification() < 2)
           b->lock.u_unlock(true);
         else
@@ -1197,7 +1195,7 @@ static void buf_flush_discard_page(buf_page_t *bpage)
 
   ut_d(const auto state= bpage->state());
   ut_ad(state == buf_page_t::FREED || state == buf_page_t::UNFIXED ||
-        state == buf_page_t::IBUF_EXIST || state == buf_page_t::REINIT);
+        state == buf_page_t::REINIT);
   bpage->lock.u_unlock(true);
   buf_LRU_free_page(bpage, true);
 }
@@ -1795,7 +1793,7 @@ inline void log_t::write_checkpoint(lsn_t end_lsn) noexcept
       resize_log.write(CHECKPOINT_1, {c, get_block_size()});
     }
 
-    if (srv_file_flush_method != SRV_O_DSYNC)
+    if (!log_write_through)
       ut_a(log.flush());
     latch.wr_lock(SRW_LOCK_CALL);
     ut_ad(checkpoint_pending);
@@ -1827,7 +1825,7 @@ inline void log_t::write_checkpoint(lsn_t end_lsn) noexcept
 
     if (!is_pmem())
     {
-      if (srv_file_flush_method != SRV_O_DSYNC)
+      if (!log_write_through)
         ut_a(resize_log.flush());
       IF_WIN(log.close(),);
     }
@@ -1969,13 +1967,7 @@ static bool log_checkpoint()
   if (recv_recovery_is_on())
     recv_sys.apply(true);
 
-  switch (srv_file_flush_method) {
-  case SRV_NOSYNC:
-  case SRV_O_DIRECT_NO_FSYNC:
-    break;
-  default:
-    fil_flush_file_spaces();
-  }
+  fil_flush_file_spaces();
 
   log_sys.latch.wr_lock(SRW_LOCK_CALL);
   const lsn_t end_lsn= log_sys.get_lsn();
@@ -2132,13 +2124,7 @@ ATTRIBUTE_COLD static void buf_flush_sync_for_checkpoint(lsn_t lsn)
                                    MONITOR_FLUSH_SYNC_PAGES, n_flushed);
     }
 
-    switch (srv_file_flush_method) {
-    case SRV_NOSYNC:
-    case SRV_O_DIRECT_NO_FSYNC:
-      break;
-    default:
-      fil_flush_file_spaces();
-    }
+    fil_flush_file_spaces();
 
     log_sys.latch.wr_lock(SRW_LOCK_CALL);
     const lsn_t newest_lsn= log_sys.get_lsn();

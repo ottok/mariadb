@@ -64,6 +64,7 @@ MarkPartitionProcessor::DDLResult MarkPartitionProcessor::processPackage(
   }
 
   std::vector<CalpontSystemCatalog::OID> oidList;
+  CalpontSystemCatalog::OID tableAuxColOid;
   CalpontSystemCatalog::RIDList tableColRidList;
   CalpontSystemCatalog::DictOIDList dictOIDList;
   std::string processName("DDLProc");
@@ -132,9 +133,6 @@ MarkPartitionProcessor::DDLResult MarkPartitionProcessor::processPackage(
 
       for (; i < numTries; i++)
       {
-#ifdef _MSC_VER
-        Sleep(rm_ts.tv_sec * 1000);
-#else
         struct timespec abs_ts;
 
         do
@@ -143,7 +141,6 @@ MarkPartitionProcessor::DDLResult MarkPartitionProcessor::processPackage(
           abs_ts.tv_nsec = rm_ts.tv_nsec;
         } while (nanosleep(&abs_ts, &rm_ts) < 0);
 
-#endif
         // reset
         sessionID = markPartitionStmt.fSessionID;
         txnID.id = fTxnid.id;
@@ -193,6 +190,7 @@ MarkPartitionProcessor::DDLResult MarkPartitionProcessor::processPackage(
     userTableName.table = markPartitionStmt.fTableName->fName;
 
     tableColRidList = systemCatalogPtr->columnRIDs(userTableName);
+    tableAuxColOid = systemCatalogPtr->tableAUXColumnOID(userTableName);
 
     dictOIDList = systemCatalogPtr->dictOIDs(userTableName);
 
@@ -201,6 +199,11 @@ MarkPartitionProcessor::DDLResult MarkPartitionProcessor::processPackage(
     {
       if (tableColRidList[i].objnum > 3000)
         oidList.push_back(tableColRidList[i].objnum);
+    }
+
+    if (tableAuxColOid > 3000)
+    {
+      oidList.push_back(tableAuxColOid);
     }
 
     for (unsigned i = 0; i < dictOIDList.size(); i++)

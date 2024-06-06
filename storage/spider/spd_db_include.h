@@ -19,12 +19,19 @@
 #define SPD_INIT_ALLOC_ROOT(A, B, C, D)                                       \
   init_alloc_root(PSI_INSTRUMENT_ME, A, B, C, D)
 
+/** Maximum possible number of `SPIDER_DBTON`s available to use */
 #define SPIDER_DBTON_SIZE 15
 
 #ifndef SIZEOF_STORED_DOUBLE
 #define SIZEOF_STORED_DOUBLE 8
 #endif
 
+/**
+  Possible wrapper values, e.g. for `SPIDER_DBTON::wrapper` and
+  `SPIDER_SHARE::tgt_wrappers`.
+
+  fixme: change this to enum
+*/
 #define SPIDER_DB_WRAPPER_MYSQL "mysql"
 #define SPIDER_DB_WRAPPER_MARIADB "mariadb"
 
@@ -166,8 +173,6 @@ typedef st_spider_result SPIDER_RESULT;
 #define SPIDER_SQL_LOP_CHK_PRM_PRF_STR "spider_lc_"
 #define SPIDER_SQL_LOP_CHK_PRM_PRF_LEN (sizeof(SPIDER_SQL_LOP_CHK_PRM_PRF_STR) - 1)
 
-#define SPIDER_CONN_KIND_MYSQL (1 << 0)
-
 #define SPIDER_SQL_TYPE_SELECT_SQL (1 << 0)
 #define SPIDER_SQL_TYPE_INSERT_SQL (1 << 1)
 #define SPIDER_SQL_TYPE_UPDATE_SQL (1 << 2)
@@ -176,11 +181,6 @@ typedef st_spider_result SPIDER_RESULT;
 #define SPIDER_SQL_TYPE_TMP_SQL (1 << 5)
 #define SPIDER_SQL_TYPE_DROP_TMP_TABLE_SQL (1 << 6)
 #define SPIDER_SQL_TYPE_OTHER_SQL (1 << 7)
-#define SPIDER_SQL_TYPE_SELECT_HS (1 << 9)
-#define SPIDER_SQL_TYPE_INSERT_HS (1 << 10)
-#define SPIDER_SQL_TYPE_UPDATE_HS (1 << 11)
-#define SPIDER_SQL_TYPE_DELETE_HS (1 << 12)
-#define SPIDER_SQL_TYPE_OTHER_HS (1 << 13)
 
 enum spider_bulk_upd_start {
   SPD_BU_NOT_START,
@@ -650,6 +650,8 @@ struct st_spider_db_request_key
 class spider_db_util
 {
 public:
+  /** Same as the `SPIDER_DBTON::dbton_id` of the `SPIDER_DBTON`
+  containing this `spider_db_util` */
   uint dbton_id;
   spider_db_util() = default;
   virtual ~spider_db_util() = default;
@@ -1640,7 +1642,10 @@ static const LEX_CSTRING maturity_name[] =
 */
 typedef struct st_spider_dbton
 {
+  /** The index of this dbton in `spider_dbton` */
   uint dbton_id;
+  /** The wrapper of this dbton, same possible values as each element
+  of `SPIDER_SHARE::tgt_wrappers` */
   const char *wrapper;
   enum spider_db_access_type db_access_type;
   int (*init)();

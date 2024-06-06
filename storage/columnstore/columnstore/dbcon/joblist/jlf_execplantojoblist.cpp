@@ -276,7 +276,7 @@ template <typename T>
 void convertValueNum(const string& str, const CalpontSystemCatalog::ColType& ct, bool isNull, uint8_t& rf,
                      const long timeZone, T& v)
 {
-  if (str.size() == 0 || isNull)
+  if (isNull)
   {
     valueNullNum(ct, timeZone, v);
     return;
@@ -307,20 +307,12 @@ void convertValueNum(const string& str, const CalpontSystemCatalog::ColType& ct,
 
     case CalpontSystemCatalog::MEDINT:
     case CalpontSystemCatalog::INT:
-#ifdef _MSC_VER
-      v = boost::any_cast<int>(anyVal);
-#else
       v = boost::any_cast<int32_t>(anyVal);
-#endif
       break;
 
     case CalpontSystemCatalog::UMEDINT:
     case CalpontSystemCatalog::UINT:
-#ifdef _MSC_VER
-      v = boost::any_cast<unsigned int>(anyVal);
-#else
       v = boost::any_cast<uint32_t>(anyVal);
-#endif
       break;
 
     case CalpontSystemCatalog::BIGINT: v = boost::any_cast<long long>(anyVal); break;
@@ -390,12 +382,7 @@ void convertValueNum(const string& str, const CalpontSystemCatalog::ColType& ct,
       else if (ct.colWidth == execplan::CalpontSystemCatalog::EIGHT_BYTE)
         v = boost::any_cast<long long>(anyVal);
       else if (ct.colWidth == execplan::CalpontSystemCatalog::FOUR_BYTE)
-#ifdef _MSC_VER
-        v = boost::any_cast<int>(anyVal);
-
-#else
         v = boost::any_cast<int32_t>(anyVal);
-#endif
       else if (ct.colWidth == execplan::CalpontSystemCatalog::TWO_BYTE)
         v = boost::any_cast<int16_t>(anyVal);
       else if (ct.colWidth == execplan::CalpontSystemCatalog::ONE_BYTE)
@@ -637,21 +624,15 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
   {
     // not strings, no need for dictionary steps, output fifo datalist
     AnyDataListSPtr spdl1(new AnyDataList());
-    FifoDataList* dl1 = new FifoDataList(1, jobInfo.fifoSize);
-    spdl1->fifoDL(dl1);
-    dl1->OID(sc1->oid());
 
     JobStepAssociation outJs1;
     outJs1.outAdd(spdl1);
     pcs1->outputAssociation(outJs1);
 
     AnyDataListSPtr spdl2(new AnyDataList());
-    FifoDataList* dl2 = new FifoDataList(1, jobInfo.fifoSize);
-    spdl2->fifoDL(dl2);
-    dl2->OID(sc2->oid());
-
     JobStepAssociation outJs2;
     outJs2.outAdd(spdl2);
+
     pcs2->outputAssociation(outJs2);
     pcs2->inputAssociation(outJs1);
 
@@ -695,9 +676,6 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
 
       // data list for column 1 step 1 (pcolstep) output
       AnyDataListSPtr spdl11(new AnyDataList());
-      FifoDataList* dl11 = new FifoDataList(1, jobInfo.fifoSize);
-      spdl11->fifoDL(dl11);
-      dl11->OID(sc1->oid());
 
       JobStepAssociation outJs1;
       outJs1.outAdd(spdl11);
@@ -705,9 +683,6 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
 
       // data list for column 1 step 2 (pdictionarystep) output
       AnyDataListSPtr spdl12(new AnyDataList());
-      StringFifoDataList* dl12 = new StringFifoDataList(1, jobInfo.fifoSize);
-      spdl12->stringDL(dl12);
-      dl12->OID(sc1->oid());
 
       JobStepAssociation outJs2;
       outJs2.outAdd(spdl12);
@@ -728,9 +703,6 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
 
       // data list for column 2 step 1 (pcolstep) output
       AnyDataListSPtr spdl21(new AnyDataList());
-      FifoDataList* dl21 = new FifoDataList(1, jobInfo.fifoSize);
-      spdl21->fifoDL(dl21);
-      dl21->OID(sc2->oid());
 
       JobStepAssociation outJs3;
       outJs3.outAdd(spdl21);
@@ -743,9 +715,6 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
 
       // data list for column 2 step 2 (pdictionarystep) output
       AnyDataListSPtr spdl22(new AnyDataList());
-      StringFifoDataList* dl22 = new StringFifoDataList(1, jobInfo.fifoSize);
-      spdl22->stringDL(dl22);
-      dl22->OID(sc2->oid());
 
       JobStepAssociation outJs4;
       outJs4.outAdd(spdl22);
@@ -802,9 +771,7 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
 
       // data list for column 1 step 1 (pcolstep) output
       AnyDataListSPtr spdl11(new AnyDataList());
-      FifoDataList* dl11 = new FifoDataList(1, jobInfo.fifoSize);
-      spdl11->fifoDL(dl11);
-      dl11->OID(sc1->oid());
+
 
       JobStepAssociation outJs1;
       outJs1.outAdd(spdl11);
@@ -812,9 +779,6 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
 
       // data list for column 1 step 2 (pdictionarystep) output
       AnyDataListSPtr spdl12(new AnyDataList());
-      StringFifoDataList* dl12 = new StringFifoDataList(1, jobInfo.fifoSize);
-      spdl12->stringDL(dl12);
-      dl12->OID(sc1->oid());
 
       JobStepAssociation outJs2;
       outJs2.outAdd(spdl12);
@@ -827,9 +791,6 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
 
       // data list for column 2 step 1 (pcolstep) output
       AnyDataListSPtr spdl21(new AnyDataList());
-      FifoDataList* dl21 = new FifoDataList(1, jobInfo.fifoSize);
-      spdl21->fifoDL(dl21);
-      dl21->OID(sc2->oid());
 
       JobStepAssociation outJs3;
       outJs3.outAdd(spdl21);
@@ -871,9 +832,7 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
       // extra steps for string column greater than eight bytes -- from token to string
       // data list for column 1 step 1 (pcolstep) output
       AnyDataListSPtr spdl11(new AnyDataList());
-      FifoDataList* dl11 = new FifoDataList(1, jobInfo.fifoSize);
-      spdl11->fifoDL(dl11);
-      dl11->OID(sc1->oid());
+
 
       JobStepAssociation outJs1;
       outJs1.outAdd(spdl11);
@@ -881,9 +840,6 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
 
       // data list for column 1 step 2 (pdictionarystep) output
       AnyDataListSPtr spdl12(new AnyDataList());
-      StringFifoDataList* dl12 = new StringFifoDataList(1, jobInfo.fifoSize);
-      spdl12->stringDL(dl12);
-      dl12->OID(sc1->oid());
 
       pDictionaryStep* pdss2 = new pDictionaryStep(dictOid2, tableOid2, ct2, jobInfo);
       jobInfo.keyInfo->dictOidToColOid[dictOid2] = sc2->oid();
@@ -895,9 +851,6 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
 
       // data list for column 2 step 1 (pcolstep) output
       AnyDataListSPtr spdl21(new AnyDataList());
-      FifoDataList* dl21 = new FifoDataList(1, jobInfo.fifoSize);
-      spdl21->fifoDL(dl21);
-      dl21->OID(sc2->oid());
 
       JobStepAssociation outJs3;
       outJs3.outAdd(spdl21);
@@ -910,9 +863,6 @@ const JobStepVector doColFilter(const SimpleColumn* sc1, const SimpleColumn* sc2
 
       // data list for column 2 step 2 (pdictionarystep) output
       AnyDataListSPtr spdl22(new AnyDataList());
-      StringFifoDataList* dl22 = new StringFifoDataList(1, jobInfo.fifoSize);
-      spdl22->stringDL(dl22);
-      dl22->OID(sc2->oid());
 
       JobStepAssociation outJs4;
       outJs4.outAdd(spdl22);
@@ -1166,7 +1116,9 @@ const JobStepVector doJoin(SimpleColumn* sc1, SimpleColumn* sc2, JobInfo& jobInf
   // MCOL-334 joins in views need to have higher priority than SEMI/ANTI
   if (!view1.empty() && view1 == view2)
   {
-    thj->joinId(-1);
+    // MCOL-5061. We could have a filters to be associated with a specific join id, therefore we cannot have
+    // the same join id for different `TupleHashJoin` steps.
+    thj->joinId(std::numeric_limits<int64_t>::min() + (++jobInfo.joinNumInView));
   }
   else
   {
@@ -1482,22 +1434,23 @@ bool optimizeIdbPatitionSimpleFilter(SimpleFilter* sf, JobStepVector& jsv, JobIn
   if (sf->op()->op() != opeq.op())
     return false;
 
-  const FunctionColumn* fc = static_cast<const FunctionColumn*>(sf->lhs());
-  const ConstantColumn* cc = static_cast<const ConstantColumn*>(sf->rhs());
+  const FunctionColumn* fc = dynamic_cast<const FunctionColumn*>(sf->lhs());
+  const ConstantColumn* cc = dynamic_cast<const ConstantColumn*>(sf->rhs());
 
-  if (fc == NULL)
+  if (fc == nullptr)
   {
-    cc = static_cast<const ConstantColumn*>(sf->lhs());
-    fc = static_cast<const FunctionColumn*>(sf->rhs());
+    cc = dynamic_cast<const ConstantColumn*>(sf->lhs());
+    fc = dynamic_cast<const FunctionColumn*>(sf->rhs());
   }
 
   // not a function or not idbparttition
-  if (fc == NULL || cc == NULL || fc->functionName().compare("idbpartition") != 0)
+  if (fc == nullptr || cc == nullptr || fc->functionName().compare("idbpartition") != 0)
     return false;
 
   // make sure the cc has 3 tokens
   vector<string> cv;
-  boost::split(cv, cc->constval(), boost::is_any_of("."));
+  auto str = cc->constval().safeString("");
+  boost::split(cv, str, boost::is_any_of("."));
 
   if (cv.size() != 3)
     return false;
@@ -1566,13 +1519,13 @@ const JobStepVector doSimpleFilter(SimpleFilter* sf, JobInfo& jobInfo)
     else if (sc->schemaName().empty())
     {
       // bug 3749, mark outer join table with isNull filter
-      if (ConstantColumn::NULLDATA == cc->type() && (opis == *sop || opisnull == *sop))
+      if (cc->isNull() && (opis == *sop || opisnull == *sop))
         jobInfo.tableHasIsNull.insert(getTableKey(jobInfo, tbl_oid, alias, "", view));
 
       return doExpressionFilter(sf, jobInfo);
     }
 
-    string constval(cc->constval());
+    utils::NullString constval(cc->constval());
 
     CalpontSystemCatalog::OID dictOid = 0;
     CalpontSystemCatalog::ColType ct = sc->colType();
@@ -1588,7 +1541,7 @@ const JobStepVector doSimpleFilter(SimpleFilter* sf, JobInfo& jobInfo)
     // X
 
     //@bug 339 nulls are not stored in dictionary
-    if ((dictOid = isDictCol(ct)) > 0 && ConstantColumn::NULLDATA != cc->type())
+    if ((dictOid = isDictCol(ct)) > 0 && !cc->isNull())
     {
       if (jobInfo.trace)
         cout << "Emit pTokenByScan/pCol for SimpleColumn op ConstantColumn" << endl;
@@ -1614,13 +1567,10 @@ const JobStepVector doSimpleFilter(SimpleFilter* sf, JobInfo& jobInfo)
         pds->cardinality(sc->cardinality());
 
         // Add the filter
-        pds->addFilter(cop, constval);
+        pds->addFilter(cop, constval.safeString(""));
 
         // data list for pcolstep output
         AnyDataListSPtr spdl1(new AnyDataList());
-        FifoDataList* dl1 = new FifoDataList(1, jobInfo.fifoSize);
-        spdl1->fifoDL(dl1);
-        dl1->OID(sc->oid());
 
         JobStepAssociation outJs1;
         outJs1.outAdd(spdl1);
@@ -1628,9 +1578,6 @@ const JobStepVector doSimpleFilter(SimpleFilter* sf, JobInfo& jobInfo)
 
         // data list for pdictionarystep output
         AnyDataListSPtr spdl2(new AnyDataList());
-        StringFifoDataList* dl2 = new StringFifoDataList(1, jobInfo.fifoSize);
-        spdl2->stringDL(dl2);
-        dl2->OID(sc->oid());
 
         JobStepAssociation outJs2;
         outJs2.outAdd(spdl2);
@@ -1677,7 +1624,7 @@ const JobStepVector doSimpleFilter(SimpleFilter* sf, JobInfo& jobInfo)
         pds->cardinality(sc->cardinality());
 
         // Add the filter
-        pds->addFilter(cop, constval);
+        pds->addFilter(cop, constval.safeString(""));
 
         // save for expression transformation
         pds->addFilter(sf);
@@ -1747,7 +1694,7 @@ const JobStepVector doSimpleFilter(SimpleFilter* sf, JobInfo& jobInfo)
         jsv.push_back(sjstep);
       }
     }
-    else if (ConstantColumn::NULLDATA != cc->type() && (cop & COMPARE_LIKE))  // both like and not like
+    else if (!cc->isNull() && (cop & COMPARE_LIKE))  // both like and not like
     {
       return doExpressionFilter(sf, jobInfo);
     }
@@ -1763,8 +1710,8 @@ const JobStepVector doSimpleFilter(SimpleFilter* sf, JobInfo& jobInfo)
       //   throwing
       try
       {
-        bool isNull = ConstantColumn::NULLDATA == cc->type();
-        convertValueNum(constval, ct, isNull, rf, jobInfo.timeZone, value);
+        bool isNull = cc->isNull();
+        convertValueNum(constval.safeString(""), ct, isNull, rf, jobInfo.timeZone, value);
 
         if (ct.colDataType == CalpontSystemCatalog::FLOAT && !isNull)
         {
@@ -1800,12 +1747,12 @@ const JobStepVector doSimpleFilter(SimpleFilter* sf, JobInfo& jobInfo)
       }
 
 #else
-      bool isNull = ConstantColumn::NULLDATA == cc->type();
+      bool isNull = cc->isNull();
 
       if (ct.isWideDecimalType())
-        convertValueNum(constval, ct, isNull, rf, jobInfo.timeZone, value128);
+        convertValueNum(constval.safeString(""), ct, isNull, rf, jobInfo.timeZone, value128);
       else
-        convertValueNum(constval, ct, isNull, rf, jobInfo.timeZone, value);
+        convertValueNum(constval.safeString(""), ct, isNull, rf, jobInfo.timeZone, value);
 
       if (ct.colDataType == CalpontSystemCatalog::FLOAT && !isNull)
       {
@@ -1821,12 +1768,12 @@ const JobStepVector doSimpleFilter(SimpleFilter* sf, JobInfo& jobInfo)
 #endif
 
       // @bug 2584, make "= null" to COMPARE_NIL.
-      if (ConstantColumn::NULLDATA == cc->type() && (opeq == *sop || opne == *sop))
+      if (cc->isNull() && (opeq == *sop || opne == *sop))
         cop = COMPARE_NIL;
 
       if (jobInfo.trace)
         cout << "doSimpleFilter Emit pCol for SimpleColumn op ConstantColumn = " << value << " ("
-             << cc->constval() << ')' << endl;
+             << cc->constval().safeString() << ')' << endl;
 
       if (sf->indexFlag() == 0)
       {
@@ -1866,7 +1813,7 @@ const JobStepVector doSimpleFilter(SimpleFilter* sf, JobInfo& jobInfo)
             jobInfo.tokenOnly[ti.key] = true;
         }
 
-        if (ConstantColumn::NULLDATA == cc->type() && (opis == *sop || opisnull == *sop))
+        if (cc->isNull() && (opis == *sop || opisnull == *sop))
           jobInfo.tableHasIsNull.insert(getTableKey(jobInfo, tbl_oid, alias, sc->schemaName(), view));
       }
       else
@@ -2710,10 +2657,10 @@ const JobStepVector doConstantFilter(const ConstantFilter* cf, JobInfo& jobInfo)
           int8_t cop = op2num(sop);
 
           // @bug 2584, make "= null" to COMPARE_NIL.
-          if (ConstantColumn::NULLDATA == cc->type() && (opeq == *sop || opne == *sop))
+          if (cc->isNull() && (opeq == *sop || opne == *sop))
             cop = COMPARE_NIL;
 
-          string value = cc->constval();
+          string value = cc->constval().safeString("");
           // Because, on a filter, we want to compare ignoring trailing spaces
           boost::algorithm::trim_right_if(value, boost::is_any_of(" "));
 
@@ -2722,9 +2669,6 @@ const JobStepVector doConstantFilter(const ConstantFilter* cf, JobInfo& jobInfo)
 
         // data list for pcolstep output
         AnyDataListSPtr spdl1(new AnyDataList());
-        FifoDataList* dl1 = new FifoDataList(1, jobInfo.fifoSize);
-        spdl1->fifoDL(dl1);
-        dl1->OID(sc->oid());
 
         JobStepAssociation outJs1;
         outJs1.outAdd(spdl1);
@@ -2732,9 +2676,6 @@ const JobStepVector doConstantFilter(const ConstantFilter* cf, JobInfo& jobInfo)
 
         // data list for pdictionarystep output
         AnyDataListSPtr spdl2(new AnyDataList());
-        StringFifoDataList* dl2 = new StringFifoDataList(1, jobInfo.fifoSize);
-        spdl2->stringDL(dl2);
-        dl2->OID(sc->oid());
 
         JobStepAssociation outJs2;
         outJs2.outAdd(spdl2);
@@ -2794,10 +2735,10 @@ const JobStepVector doConstantFilter(const ConstantFilter* cf, JobInfo& jobInfo)
           int8_t cop = op2num(sop);
 
           // @bug 2584, make "= null" to COMPARE_NIL.
-          if (ConstantColumn::NULLDATA == cc->type() && (opeq == *sop || opne == *sop))
+          if (cc->isNull() && (opeq == *sop || opne == *sop))
             cop = COMPARE_NIL;
 
-          string value = cc->constval();
+          string value = cc->constval().safeString("");
           // Because, on a filter, we want to compare ignoring trailing spaces
           boost::algorithm::trim_right_if(value, boost::is_any_of(" "));
 
@@ -2905,11 +2846,11 @@ const JobStepVector doConstantFilter(const ConstantFilter* cf, JobInfo& jobInfo)
           int8_t cop = op2num(sop);
           int64_t value = 0;
           int128_t value128 = 0;
-          string constval = cc->constval();
+          string constval = cc->constval().safeString("");
 
           // @bug 1151 string longer than colwidth of char/varchar.
           uint8_t rf = 0;
-          bool isNull = ConstantColumn::NULLDATA == cc->type();
+          bool isNull = cc->isNull();
 
           if (ct.isWideDecimalType())
             convertValueNum(constval, ct, isNull, rf, jobInfo.timeZone, value128);
@@ -2928,7 +2869,7 @@ const JobStepVector doConstantFilter(const ConstantFilter* cf, JobInfo& jobInfo)
           }
 
           // @bug 2584, make "= null" to COMPARE_NIL.
-          if (ConstantColumn::NULLDATA == cc->type() && (opeq == *sop || opne == *sop))
+          if (cc->isNull() && (opeq == *sop || opne == *sop))
             cop = COMPARE_NIL;
 
           if (ct.isWideDecimalType())
@@ -2993,7 +2934,8 @@ const JobStepVector doFunctionFilter(const ParseTree* n, JobInfo& jobInfo)
         if (cc)
         {
           vector<string> cv;
-          boost::split(cv, cc->constval(), boost::is_any_of("."));
+          auto str = cc->constval().safeString("");
+          boost::split(cv, str, boost::is_any_of("."));
 
           if (cv.size() == 3)
           {
@@ -3045,7 +2987,7 @@ const JobStepVector doFunctionFilter(const ParseTree* n, JobInfo& jobInfo)
 
         if (cc)
         {
-          constParms[0].push_back(cc->constval());
+          constParms[0].push_back(cc->constval().safeString(""));
           constParmsCount++;
         }
       }

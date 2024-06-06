@@ -22,29 +22,21 @@
  ****************************************************************************/
 /** @file */
 
-#ifndef DATACONVERT_H
-#define DATACONVERT_H
+#pragma once
 
 #include <unistd.h>
 #include <string>
 #include <boost/any.hpp>
 #include <vector>
-#ifdef _MSC_VER
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <stdio.h>
-#else
-#include <netinet/in.h>
-#endif
 
-#ifdef __linux__
+#include <netinet/in.h>
+
 #define POSIX_REGEX
-#endif
 
 #ifdef POSIX_REGEX
 #include <regex.h>
 #else
-#include <boost/regex.hpp>
+#include <regex>
 #endif
 
 #include "mcs_datatype.h"
@@ -55,8 +47,9 @@
 #include "bytestream.h"
 #include "errorids.h"
 
+#include "nullstring.h"
+
 // remove this block if the htonll is defined in library
-#ifdef __linux__
 #include <endian.h>
 #if __BYTE_ORDER == __BIG_ENDIAN  // 4312
 inline uint64_t htonll(uint64_t n)
@@ -72,15 +65,6 @@ inline uint64_t htonll(uint64_t n)
 inline uint64_t htonll(uint64_t n);
 // don't know 34127856 or 78563412, hope never be required to support this byte order.
 #endif
-#else  //!__linux__
-#if _MSC_VER < 1600
-// Assume we're on little-endian
-inline uint64_t htonll(uint64_t n)
-{
-  return ((((uint64_t)htonl(n & 0xFFFFFFFFULL)) << 32) | (htonl((n & 0xFFFFFFFF00000000ULL) >> 32)));
-}
-#endif  //_MSC_VER
-#endif  //__linux__
 
 #define LEAPS_THRU_END_OF(y) ((y) / 4 - (y) / 100 + (y) / 400)
 #define isleap(y) (((y) % 4) == 0 && (((y) % 100) != 0 || ((y) % 400) == 0))
@@ -93,11 +77,12 @@ inline uint64_t uint64ToStr(uint64_t n)
 
 using cscDataType = datatypes::SystemCatalog::ColDataType;
 
-#if defined(_MSC_VER) && defined(xxxDATACONVERT_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
+
+namespace rowgroup
+{
+const uint32_t MagicPrecisionForCountAgg = 9999;
+}
 
 const int64_t IDB_pow[19] = {1,
                              10,
@@ -119,26 +104,6 @@ const int64_t IDB_pow[19] = {1,
                              100000000000000000LL,
                              1000000000000000000LL};
 
-const std::string columnstore_big_precision[20] = {"9999999999999999999",
-                                                   "99999999999999999999",
-                                                   "999999999999999999999",
-                                                   "9999999999999999999999",
-                                                   "99999999999999999999999",
-                                                   "999999999999999999999999",
-                                                   "9999999999999999999999999",
-                                                   "99999999999999999999999999",
-                                                   "999999999999999999999999999",
-                                                   "9999999999999999999999999999",
-                                                   "99999999999999999999999999999",
-                                                   "999999999999999999999999999999",
-                                                   "9999999999999999999999999999999",
-                                                   "99999999999999999999999999999999",
-                                                   "999999999999999999999999999999999",
-                                                   "9999999999999999999999999999999999",
-                                                   "99999999999999999999999999999999999",
-                                                   "999999999999999999999999999999999999",
-                                                   "9999999999999999999999999999999999999",
-                                                   "99999999999999999999999999999999999999"};
 
 const int32_t SECS_PER_MIN = 60;
 const int32_t MINS_PER_HOUR = 60;
@@ -614,7 +579,7 @@ inline int64_t mySQLTimeToGmtSec(const MySQLTime& time, long offset, bool& isVal
     return 0;
   }
 
-    seconds = secSinceEpoch(time.year, time.month, time.day, time.hour, time.minute, time.second) - offset;
+  seconds = secSinceEpoch(time.year, time.month, time.day, time.hour, time.minute, time.second) - offset;
   /* make sure we have legit timestamps (i.e. we didn't over/underflow anywhere above) */
   if (seconds >= MIN_TIMESTAMP_VALUE && seconds <= MAX_TIMESTAMP_VALUE)
     return seconds;
@@ -977,7 +942,7 @@ struct Time
   signed is_neg : 1;
 
   // NULL column value = 0xFFFFFFFFFFFFFFFE
-  Time() : msecond(-2), second(-1), minute(-1), hour(-1), day(-1), is_neg(0b1)
+  Time() : msecond(-2), second(-1), minute(-1), hour(-1), day(-1), is_neg(-1)
   {
   }
 
@@ -996,7 +961,7 @@ struct Time
    : msecond(msec), second(sec), minute(min), hour(h), day(d), is_neg(neg)
   {
     if (h < 0)
-      is_neg = 0b1;
+      is_neg = -1;
   }
 
   int64_t convertToMySQLint() const;
@@ -1009,7 +974,7 @@ inline void Time::reset()
   second = -1;
   minute = -1;
   hour = -1;
-  is_neg = 0b1;
+  is_neg = -1;
   day = -1;
 }
 
@@ -1277,10 +1242,13 @@ class DataConvert
 
   // convert string to date
   EXPORT static int64_t stringToDate(const std::string& data);
+  EXPORT static int64_t stringToDate(const utils::NullString& data);
   // convert string to datetime
   EXPORT static int64_t stringToDatetime(const std::string& data, bool* isDate = NULL);
+  EXPORT static int64_t stringToDatetime(const utils::NullString& data, bool* isDate = NULL);
   // convert string to timestamp
   EXPORT static int64_t stringToTimestamp(const std::string& data, long timeZone);
+  EXPORT static int64_t stringToTimestamp(const utils::NullString& data, long timeZone);
   // convert integer to date
   EXPORT static int64_t intToDate(int64_t data);
   // convert integer to datetime
@@ -1289,14 +1257,18 @@ class DataConvert
   EXPORT static int64_t intToTime(int64_t data, bool fromString = false);
   // convert string to date. alias to stringToDate
   EXPORT static int64_t dateToInt(const std::string& date);
+  EXPORT static int64_t dateToInt(const utils::NullString& date);
   // convert string to datetime. alias to datetimeToInt
   EXPORT static int64_t datetimeToInt(const std::string& datetime);
+  EXPORT static int64_t datetimeToInt(const utils::NullString& datetime);
   EXPORT static int64_t timestampToInt(const std::string& timestamp, long timeZone);
   EXPORT static int64_t timeToInt(const std::string& time);
   EXPORT static int64_t stringToTime(const std::string& data);
+  EXPORT static int64_t stringToTime(const utils::NullString& data);
   // bug4388, union type conversion
   EXPORT static void joinColTypeForUnion(datatypes::SystemCatalog::TypeHolderStd& unionedType,
-                                         const datatypes::SystemCatalog::TypeHolderStd& type);
+                                         const datatypes::SystemCatalog::TypeHolderStd& type,
+                                         unsigned int& rc);
 
   static boost::any StringToBit(const datatypes::SystemCatalog::TypeAttributesStd& colType,
                                 const datatypes::ConvertFromStringParam& prm, const std::string& dataOrig,
@@ -1582,6 +1554,20 @@ inline int128_t strtoll128(const char* data, bool& saturate, char** ep)
   return res;
 }
 
+
+template <class T>
+T decimalRangeUp(int32_t precision)
+{
+  if (precision < 19)
+  {
+    return (T)datatypes::columnstore_precision[precision];
+  }
+  else
+  {
+    return datatypes::ConversionRangeMaxValue[precision - 19];
+  }
+}
+
 template <>
 inline int128_t string_to_ll<int128_t>(const std::string& data, bool& bSaturate)
 {
@@ -1601,5 +1587,3 @@ inline int128_t string_to_ll<int128_t>(const std::string& data, bool& bSaturate)
 }  // namespace dataconvert
 
 #undef EXPORT
-
-#endif  // DATACONVERT_H

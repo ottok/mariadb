@@ -21,16 +21,11 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef ALTERTABLEPROCESSOR_H
-#define ALTERTABLEPROCESSOR_H
+#pragma once
 
 #include "ddlpackageprocessor.h"
 
-#if defined(_MSC_VER) && defined(DDLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace ddlpackageprocessor
 {
@@ -161,5 +156,3 @@ class AlterTableProcessor : public DDLPackageProcessor
 }  // namespace ddlpackageprocessor
 
 #undef EXPORT
-
-#endif  // ALTERTABLEPROCESSOR_H

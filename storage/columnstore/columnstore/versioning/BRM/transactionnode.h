@@ -24,8 +24,7 @@
  * class XXX interface
  */
 
-#ifndef TRANSACTIONNODE_H_
-#define TRANSACTIONNODE_H_
+#pragma once
 
 #include <boost/thread.hpp>
 #include <boost/thread/condition.hpp>
@@ -33,11 +32,7 @@
 #include "brmtypes.h"
 #include "rgnode.h"
 
-#if defined(_MSC_VER) && defined(xxxTRANSACTIONNODE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace BRM
 {
@@ -68,5 +63,3 @@ class TransactionNode : public RGNode
 #undef EXPORT
 
 }  // namespace BRM
-
-#endif  // TRANSACTIONNODE_H_

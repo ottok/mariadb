@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2015, 2022, MariaDB Corporation.
+Copyright (c) 2015, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -796,6 +796,7 @@ public:
   /** normally set; "SET unique_checks=0, foreign_key_checks=0"
   enables bulk insert into an empty table */
   unsigned check_unique_secondary:1;
+
   /** whether an insert into an empty table is active */
   unsigned bulk_insert:1;
 	/*------------------------------*/

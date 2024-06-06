@@ -46,8 +46,7 @@
  *
  */
 
-#ifndef _SHA1_H_
-#define _SHA1_H_
+#pragma once
 
 namespace funcexp
 {
@@ -107,5 +106,3 @@ class SHA1
 };
 
 }  // namespace funcexp
-
-#endif

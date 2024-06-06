@@ -21,16 +21,11 @@
  *******************************************************************************/
 /** @file */
 
-#ifndef _WE_BLOCKOP_H_
-#define _WE_BLOCKOP_H_
+#pragma once
 
 #include <we_obj.h>
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -120,5 +115,3 @@ class BlockOp : public WEObj
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_BLOCKOP_H_

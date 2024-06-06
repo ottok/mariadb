@@ -17,8 +17,7 @@
 
 //  $Id: frameboundrow.h 3868 2013-06-06 22:13:05Z xlou $
 
-#ifndef UTILS_FRAMEBOUNDROW_H
-#define UTILS_FRAMEBOUNDROW_H
+#pragma once
 
 #include "framebound.h"
 
@@ -147,4 +146,3 @@ class FrameBoundExpressionRow : public FrameBoundConstantRow
 
 }  // namespace windowfunction
 
-#endif  // UTILS_FRAMEBOUNDROW_H

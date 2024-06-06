@@ -283,7 +283,7 @@ const string ArithmeticColumn::nextToken(string::size_type& pos, char end) const
   msg.append(1, end);
   msg.append(" found in " + fData);
   throw invalid_argument(msg);
-  return 0;
+  return {};
 }
 
 ostream& operator<<(ostream& output, const ArithmeticColumn& rhs)
@@ -309,6 +309,15 @@ const string ArithmeticColumn::toString() const
   return oss.str();
 }
 
+string ArithmeticColumn::toCppCode(IncludeSet& includes) const
+{
+  includes.insert("arithmeticcolumn.h");
+  stringstream ss;
+  ss << "ArithmeticColumn(" << std::quoted(fData) << ", " << sessionID() << ")";
+
+  return ss.str();
+}
+
 void ArithmeticColumn::serialize(messageqcpp::ByteStream& b) const
 {
   b << static_cast<ObjectReader::id_t>(ObjectReader::ARITHMETICCOLUMN);
@@ -316,8 +325,7 @@ void ArithmeticColumn::serialize(messageqcpp::ByteStream& b) const
   ObjectReader::writeParseTree(fExpression, b);
   b << fTableAlias;
   b << fData;
-  const ByteStream::doublebyte tmp = fAsc;
-  b << tmp;
+  b << (uint8_t)fAsc;
 }
 
 void ArithmeticColumn::unserialize(messageqcpp::ByteStream& b)
@@ -331,9 +339,7 @@ void ArithmeticColumn::unserialize(messageqcpp::ByteStream& b)
   fExpression = ObjectReader::createParseTree(b);
   b >> fTableAlias;
   b >> fData;
-  ByteStream::doublebyte tmp;
-  b >> tmp;
-  fAsc = (tmp);
+  b >> (uint8_t&)fAsc;
 
   fSimpleColumnList.clear();
   fExpression->walk(getSimpleCols, &fSimpleColumnList);

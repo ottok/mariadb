@@ -60,29 +60,20 @@
  * either.
  */
 
-#ifndef HEADER_mcsv1_udaf
-#define HEADER_mcsv1_udaf
+#pragma once
 
 #include <cstdlib>
 #include <string>
 #include <vector>
 #include <map>
 #include <boost/shared_ptr.hpp>
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 #include "any.hpp"
 #include "calpontsystemcatalog.h"
 #include "wf_frame.h"
 #include "my_decimal_limits.h"
 
-#if defined(_MSC_VER) && defined(xxxRGNODE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace mcsv1sdk
 {
@@ -405,7 +396,7 @@ class mcsv1Context
   mcsv1sdk::mcsv1_UDAF* func;
   int32_t fParamCount;
   std::vector<uint32_t> paramKeys;
-  enum_mariadb_return_type mariadbReturnType;
+  enum_mariadb_return_type mariadbReturnType = MYSQL_TYPE_LONGLONG;
   uint32_t fCharsetNumber;
 
  public:
@@ -1022,6 +1013,8 @@ inline mcsv1_UDAF::ReturnCode mcsv1_UDAF::createUserData(UserData*& userData, in
 }
 
 // Handy helper functions
+
+// Doesn't work with string
 template <typename T>
 inline T mcsv1_UDAF::convertAnyTo(static_any::any& valIn) const
 {
@@ -1092,5 +1085,3 @@ inline T mcsv1_UDAF::convertAnyTo(static_any::any& valIn) const
 };  // namespace mcsv1sdk
 
 #undef EXPORT
-
-#endif  // HEADER_mcsv1_udaf.h

@@ -29,14 +29,16 @@
 //
 //
 
+#include <mutex>
 #include <stdexcept>
 #include <unistd.h>
 #include <cstring>
-//#define NDEBUG
+// #define NDEBUG
 #include <cassert>
 #include <string>
 #include <sstream>
 #include <set>
+#include "serviceexemgr.h"
 #include <stdlib.h>
 using namespace std;
 
@@ -117,6 +119,7 @@ BatchPrimitiveProcessor::BatchPrimitiveProcessor()
  , validCPData(false)
  , minVal(MAX64)
  , maxVal(MIN64)
+ , cpDataFromDictScan(false)
  , lbidForCP(0)
  , hasWideColumnOut(false)
  , busyLoaderCount(0)
@@ -138,9 +141,13 @@ BatchPrimitiveProcessor::BatchPrimitiveProcessor()
  , processorThreads(0)
  , ptMask(0)
  , firstInstance(false)
+ , valuesLBID(0)
+ , initiatedByEM_(false)
+ , weight_(0)
 {
   pp.setLogicalBlockMode(true);
   pp.setBlockPtr((int*)blockData);
+  pp.setBlockPtrAux((int*)blockDataAux);
   pthread_mutex_init(&objLock, NULL);
 }
 
@@ -167,6 +174,7 @@ BatchPrimitiveProcessor::BatchPrimitiveProcessor(ByteStream& b, double prefetch,
  , validCPData(false)
  , minVal(MAX64)
  , maxVal(MIN64)
+ , cpDataFromDictScan(false)
  , lbidForCP(0)
  , hasWideColumnOut(false)
  , busyLoaderCount(0)
@@ -186,10 +194,12 @@ BatchPrimitiveProcessor::BatchPrimitiveProcessor(ByteStream& b, double prefetch,
  , sockIndex(0)
  , endOfJoinerRan(false)
  , processorThreads(_processorThreads)
- ,
  // processorThreads(32),
  // ptMask(processorThreads - 1),
- firstInstance(true)
+ , firstInstance(true)
+ , valuesLBID(0)
+ , initiatedByEM_(false)
+ , weight_(0)
 {
   // promote processorThreads to next power of 2.  also need to change the name to bucketCount or similar
   processorThreads = nextPowOf2(processorThreads);
@@ -197,6 +207,7 @@ BatchPrimitiveProcessor::BatchPrimitiveProcessor(ByteStream& b, double prefetch,
 
   pp.setLogicalBlockMode(true);
   pp.setBlockPtr((int*)blockData);
+  pp.setBlockPtrAux((int*)blockDataAux);
   sendThread = bppst;
   pthread_mutex_init(&objLock, NULL);
   initBPP(b);
@@ -271,7 +282,6 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
   if (ot == ROW_GROUP)
   {
     bs >> outputRG;
-    // outputRG.setUseStringTable(true);
     bs >> tmp8;
 
     if (tmp8)
@@ -294,18 +304,19 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
   if (doJoin)
   {
     pthread_mutex_lock(&objLock);
+    bs >> maxPmJoinResultCount;
+    maxPmJoinResultCount = std::max(maxPmJoinResultCount, (uint32_t)1);
 
     if (ot == ROW_GROUP)
     {
       bs >> joinerCount;
-      // 			cout << "joinerCount = " << joinerCount << endl;
       joinTypes.reset(new JoinType[joinerCount]);
 
-      tJoiners.reset(new boost::shared_array<boost::shared_ptr<TJoiner> >[joinerCount]);
+      tJoiners.reset(new std::shared_ptr<boost::shared_ptr<TJoiner>[]>[joinerCount]);
       for (uint j = 0; j < joinerCount; ++j)
         tJoiners[j].reset(new boost::shared_ptr<TJoiner>[processorThreads]);
 
-      tlJoiners.reset(new boost::shared_array<boost::shared_ptr<TLJoiner> >[joinerCount]);
+      tlJoiners.reset(new std::shared_ptr<boost::shared_ptr<TLJoiner>[]>[joinerCount]);
       for (uint j = 0; j < joinerCount; ++j)
         tlJoiners[j].reset(new boost::shared_ptr<TLJoiner>[processorThreads]);
 
@@ -338,8 +349,6 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
         uint32_t tmp32;
         bs >> tmp32;
         tJoinerSizes[i] = tmp32;
-        // bs >> tJoinerSizes[i];
-        // cout << "joiner size = " << tJoinerSizes[i] << endl;
         bs >> joinTypes[i];
         bs >> tmp8;
         typelessJoin[i] = (bool)tmp8;
@@ -358,7 +367,6 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
         {
           bs >> joinNullValues[i];
           bs >> largeSideKeyColumns[i];
-          // cout << "large side key is " << largeSideKeyColumns[i] << endl;
           for (uint j = 0; j < processorThreads; ++j)
             tJoiners[i][j].reset(new TJoiner(10, TupleJoiner::hasher()));
         }
@@ -399,8 +407,6 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
       if (getTupleJoinRowGroupData)
       {
         deserializeVector(bs, smallSideRGs);
-        // 				cout << "deserialized " << smallSideRGs.size() << " small-side
-        // rowgroups\n";
         idbassert(smallSideRGs.size() == joinerCount);
         smallSideRowLengths.reset(new uint32_t[joinerCount]);
         smallSideRowData.reset(new RGData[joinerCount]);
@@ -413,9 +419,6 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
           smallSideRowLengths[i] = smallSideRGs[i].getRowSize();
           ;
           smallSideRowData[i] = RGData(smallSideRGs[i], tJoinerSizes[i]);
-          //					smallSideRowData[i].reset(new uint8_t[
-          //					  smallSideRGs[i].getEmptySize() +
-          //					  (uint64_t) smallSideRowLengths[i] * tJoinerSizes[i]]);
           smallSideRGs[i].setData(&smallSideRowData[i]);
           smallSideRGs[i].resetRowGroup(0);
           ssrdPos[i] = smallSideRGs[i].getEmptySize();
@@ -435,24 +438,19 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
 
         bs >> largeSideRG;
         bs >> joinedRG;
-        // 				cout << "got the joined Rowgroup: " << joinedRG.toString() << "\n";
       }
     }
 
-#ifdef __FreeBSD__
     pthread_mutex_unlock(&objLock);
-#endif
   }
 
   bs >> filterCount;
   filterSteps.resize(filterCount);
-  // cout << "deserializing " << filterCount << " filters\n";
   hasScan = false;
   hasPassThru = false;
 
   for (i = 0; i < filterCount; ++i)
   {
-    // cout << "deserializing step " << i << endl;
     filterSteps[i] = SCommand(Command::makeCommand(bs, &type, filterSteps));
 
     if (type == Command::COLUMN_COMMAND)
@@ -477,12 +475,10 @@ void BatchPrimitiveProcessor::initBPP(ByteStream& bs)
   }
 
   bs >> projectCount;
-  // cout << "deserializing " << projectCount << " projected columns\n\n";
   projectSteps.resize(projectCount);
 
   for (i = 0; i < projectCount; ++i)
   {
-    // cout << "deserializing step " << i << endl;
     projectSteps[i] = SCommand(Command::makeCommand(bs, &type, projectSteps));
 
     if (type == Command::PASS_THRU)
@@ -539,8 +535,13 @@ void BatchPrimitiveProcessor::resetBPP(ByteStream& bs, const SP_UM_MUTEX& w, con
 
   // skip the header, sessionID, stepID, uniqueID, and priority
   bs.advance(sizeof(ISMPacketHeader) + 16);
+  bs >> weight_;
   bs >> dbRoot;
   bs >> count;
+  uint8_t u8 = 0;
+  bs >> u8;
+  initiatedByEM_ = u8;
+
   bs >> ridCount;
 
   if (gotAbsRids)
@@ -586,13 +587,11 @@ void BatchPrimitiveProcessor::resetBPP(ByteStream& bs, const SP_UM_MUTEX& w, con
 
   /* init vars not part of the BS */
   currentBlockOffset = 0;
-  memset(relLBID.get(), 0, sizeof(uint64_t) * (projectCount + 1));
-  memset(asyncLoaded.get(), 0, sizeof(bool) * (projectCount + 1));
+  memset(relLBID.get(), 0, sizeof(uint64_t) * (projectCount + 2));
+  memset(asyncLoaded.get(), 0, sizeof(bool) * (projectCount + 2));
 
   buildVSSCache(count);
-#ifdef __FreeBSD__
   pthread_mutex_unlock(&objLock);
-#endif
 }
 
 // This version of addToJoiner() is multithreaded.  Values are first
@@ -613,7 +612,7 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
   {
     uint64_t key;
     uint32_t value;
-  } * arr;
+  }* arr;
 #pragma pack(pop)
 
   /* skip the header */
@@ -700,7 +699,7 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
     }
     else
     {
-      boost::shared_array<boost::shared_ptr<TJoiner> > tJoiner = tJoiners[joinerNum];
+      std::shared_ptr<boost::shared_ptr<TJoiner>[]> tJoiner = tJoiners[joinerNum];
       uint64_t nullValue = joinNullValues[joinerNum];
       bool& l_doMatchNulls = doMatchNulls[joinerNum];
       joblist::JoinType joinType = joinTypes[joinerNum];
@@ -831,28 +830,11 @@ void BatchPrimitiveProcessor::addToJoiner(ByteStream& bs)
   idbassert(bs.length() == 0);
 }
 
-void BatchPrimitiveProcessor::doneSendingJoinerData()
-{
-  /*  to get wall-time of hash table construction
-if (!firstCallTime.is_not_a_date_time() && !(sessionID & 0x80000000))
-{
-  boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
-  Logger logger;
-  ostringstream os;
-  os << "id " << uniqueID << ": joiner construction time = " << now-firstCallTime;
-  logger.logMessage(os.str());
-  cout << os.str() << endl;
-}
-  */
-}
-
 int BatchPrimitiveProcessor::endOfJoiner()
 {
   /* Wait for all joiner elements to be added */
   uint32_t i;
   size_t currentSize;
-  // it should be safe to run this without grabbing this lock
-  // boost::mutex::scoped_lock scoped(addToJoinerLock);
 
   if (endOfJoinerRan)
     return 0;
@@ -873,34 +855,38 @@ int BatchPrimitiveProcessor::endOfJoiner()
       currentSize = 0;
       for (uint j = 0; j < processorThreads; ++j)
         if (!tJoiners[i] || !tJoiners[i][j])
+        {
           return -1;
+        }
         else
           currentSize += tJoiners[i][j]->size();
       if (currentSize != tJoinerSizes[i])
+      {
         return -1;
-      // if ((!tJoiners[i] || tJoiners[i]->size() != tJoinerSizes[i]))
-      //    return -1;
+      }
     }
     else
     {
       currentSize = 0;
       for (uint j = 0; j < processorThreads; ++j)
+      {
         if (!tlJoiners[i] || !tlJoiners[i][j])
+        {
           return -1;
+        }
         else
           currentSize += tlJoiners[i][j]->size();
+      }
       if (currentSize != tJoinerSizes[i])
+      {
         return -1;
-      // if ((!tJoiners[i] || tlJoiners[i]->size() != tJoinerSizes[i]))
-      //    return -1;
+      }
     }
   }
 
   endOfJoinerRan = true;
 
-#ifndef __FreeBSD__
   pthread_mutex_unlock(&objLock);
-#endif
   return 0;
 }
 
@@ -912,10 +898,10 @@ void BatchPrimitiveProcessor::initProcessor()
     absRids.reset(new uint64_t[LOGICAL_BLOCK_RIDS]);
 
   if (needStrValues)
-    strValues.reset(new string[LOGICAL_BLOCK_RIDS]);
+    strValues.reset(new utils::NullString[LOGICAL_BLOCK_RIDS]);
 
   outMsgSize = defaultBufferSize;
-  outputMsg.reset(reinterpret_cast<uint8_t*>(aligned_alloc(utils::MAXCOLUMNWIDTH, outMsgSize)));
+  outputMsg.reset(new (std::align_val_t(MAXCOLUMNWIDTH)) uint8_t[outMsgSize]);
 
   if (ot == ROW_GROUP)
   {
@@ -980,8 +966,8 @@ void BatchPrimitiveProcessor::initProcessor()
       {
         joinFERG->initRow(&joinFERow, true);
         joinFERowData.reset(new uint8_t[joinFERow.getSize()]);
-        joinFERow.setData(joinFERowData.get());
-        joinFEMappings.reset(new shared_array<int>[joinerCount + 1]);
+        joinFERow.setData(rowgroup::Row::Pointer(joinFERowData.get()));
+        joinFEMappings.reset(new std::shared_ptr<int[]>[joinerCount + 1]);
 
         for (i = 0; i < joinerCount; i++)
           joinFEMappings[i] = makeMapping(smallSideRGs[i], *joinFERG);
@@ -1042,8 +1028,8 @@ void BatchPrimitiveProcessor::initProcessor()
         smallSideRGs[i].initRow(&smallRows[i], true);
 
       baseJRowMem.reset(new uint8_t[baseJRow.getSize()]);
-      baseJRow.setData(baseJRowMem.get());
-      gjrgMappings.reset(new shared_array<int>[joinerCount + 1]);
+      baseJRow.setData(rowgroup::Row::Pointer(baseJRowMem.get()));
+      gjrgMappings.reset(new std::shared_ptr<int[]>[joinerCount + 1]);
 
       for (i = 0; i < joinerCount; i++)
         gjrgMappings[i] = makeMapping(smallSideRGs[i], joinedRG);
@@ -1064,7 +1050,7 @@ void BatchPrimitiveProcessor::initProcessor()
         fFiltCmdBinaryValues[i].reset(new int128_t[LOGICAL_BLOCK_RIDS]);
 
       if (filtOnString)
-        fFiltStrValues[i].reset(new string[LOGICAL_BLOCK_RIDS]);
+        fFiltStrValues[i].reset(new utils::NullString[LOGICAL_BLOCK_RIDS]);
     }
   }
 
@@ -1073,7 +1059,6 @@ void BatchPrimitiveProcessor::initProcessor()
   {
     for (i = 0; i < (uint32_t)filterCount - 1; ++i)
     {
-      // 			cout << "prepping filter " << i << endl;
       filterSteps[i]->setBatchPrimitiveProcessor(this);
 
       if (filterSteps[i + 1]->getCommandType() == Command::DICT_STEP)
@@ -1084,14 +1069,12 @@ void BatchPrimitiveProcessor::initProcessor()
         filterSteps[i]->prep(OT_RID, false);
     }
 
-    // 		cout << "prepping filter " << i << endl;
     filterSteps[i]->setBatchPrimitiveProcessor(this);
     filterSteps[i]->prep(OT_BOTH, false);
   }
 
   for (i = 0; i < projectCount; ++i)
   {
-    // 		cout << "prepping projection " << i << endl;
     projectSteps[i]->setBatchPrimitiveProcessor(this);
 
     if (noVB)
@@ -1117,7 +1100,6 @@ void BatchPrimitiveProcessor::initProcessor()
 
   if (fAggregator.get() != NULL)
   {
-    // fAggRowGroupData.reset(new uint8_t[fAggregateRG.getMaxDataSize()]);
     fAggRowGroupData.reinit(fAggregateRG);
     fAggregateRG.setData(&fAggRowGroupData);
 
@@ -1142,26 +1124,27 @@ void BatchPrimitiveProcessor::initProcessor()
   }
 
   // @bug 1269, initialize data used by execute() for async loading blocks
-  // +1 for the scan filter step with no predicate, if any
-  relLBID.reset(new uint64_t[projectCount + 1]);
-  asyncLoaded.reset(new bool[projectCount + 1]);
+  // +2 for:
+  //    1. the scan filter step with no predicate, if any
+  //    2. AUX column
+  relLBID.reset(new uint64_t[projectCount + 2]);
+  asyncLoaded.reset(new bool[projectCount + 2]);
 }
 
-/* This version does a join on projected rows */
+// This version does a join on projected rows
 // In order to prevent super size result sets in the case of near cartesian joins on three or more joins,
 // the startRid start at 0) is used to begin the rid loop and if we cut off processing early because of
 // the size of the result set, we return the next rid to start with. If we finish ridCount rids, return 0-
-uint32_t BatchPrimitiveProcessor::executeTupleJoin(uint32_t startRid)
+uint32_t BatchPrimitiveProcessor::executeTupleJoin(uint32_t startRid, RowGroup& largeSideRowGroup)
 {
   uint32_t newRowCount = 0, i, j;
   vector<uint32_t> matches;
   uint64_t largeKey;
   uint64_t resultCount = 0;
   uint32_t newStartRid = startRid;
-  outputRG.getRow(0, &oldRow);
+  largeSideRowGroup.getRow(startRid, &oldRow);
   outputRG.getRow(0, &newRow);
 
-  // cout << "before join, RG has " << outputRG.getRowCount() << " BPP ridcount= " << ridCount << endl;
   // ridCount gets modified based on the number of Rids actually processed during this call.
   // origRidCount is the number of rids for this thread after filter, which are the total
   // number of rids to be processed from all calls to this function during this thread.
@@ -1178,7 +1161,6 @@ uint32_t BatchPrimitiveProcessor::executeTupleJoin(uint32_t startRid)
      * 		  are NULL values to match against, but there is no filter, all rows can be eliminated.
      */
 
-    // cout << "large side row: " << oldRow.toString() << endl;
     for (j = 0; j < joinerCount; j++)
     {
       bool found;
@@ -1193,7 +1175,6 @@ uint32_t BatchPrimitiveProcessor::executeTupleJoin(uint32_t startRid)
 
       if (LIKELY(!typelessJoin[j]))
       {
-        // cout << "not typeless join\n";
         bool isNull;
         uint32_t colIndex = largeSideKeyColumns[j];
 
@@ -1217,16 +1198,11 @@ uint32_t BatchPrimitiveProcessor::executeTupleJoin(uint32_t startRid)
             ((joinTypes[j] & ANTI) && !joinerIsEmpty &&
              ((isNull && (joinTypes[j] & MATCHNULLS)) || (found && !isNull))))
         {
-          // cout << " - not in the result set\n";
           break;
         }
-
-        // else
-        //	cout << " - in the result set\n";
       }
       else
       {
-        // cout << " typeless join\n";
         // the null values are not sent by UM in typeless case.  null -> !found
         TypelessData tlLargeKey(&oldRow);
         uint bucket = oldRow.hashTypeless(tlLargeSideKeyColumns[j], mSmallSideKeyColumnsPtr,
@@ -1236,9 +1212,7 @@ uint32_t BatchPrimitiveProcessor::executeTupleJoin(uint32_t startRid)
 
         if ((!found && !(joinTypes[j] & (LARGEOUTER | ANTI))) || (joinTypes[j] & ANTI))
         {
-          /* Separated the ANTI join logic for readability.
-           *
-           */
+          // Separated the ANTI join logic for readability.
           if (joinTypes[j] & ANTI)
           {
             if (found)
@@ -1303,9 +1277,6 @@ uint32_t BatchPrimitiveProcessor::executeTupleJoin(uint32_t startRid)
             else
             {
               smallSideRGs[j].getRow(tSmallSideMatches[j][newRowCount][k], &smallRows[j]);
-              // uint64_t rowOffset = ((uint64_t) tSmallSideMatches[j][newRowCount][k]) *
-              //		smallRows[j].getSize() + smallSideRGs[j].getEmptySize();
-              // smallRows[j].setData(&smallSideRowData[j][rowOffset]);
             }
 
             applyMapping(joinFEMappings[j], smallRows[j], &joinFERow);
@@ -1378,43 +1349,28 @@ uint32_t BatchPrimitiveProcessor::executeTupleJoin(uint32_t startRid)
             wide128Values[newRowCount] = wide128Values[i];
           relRids[newRowCount] = relRids[i];
           copyRow(oldRow, &newRow);
-          // cout << "joined row: " << newRow.toString() << endl;
         }
 
         newRowCount++;
         newRow.nextRow();
       }
-      // else
-      // cout << "j != joinerCount\n";
     }
-    // If we've accumulated more than maxResultCount -- 1048576 (2^20)_ of resultCounts, cut off processing.
+    // If we've accumulated more than `maxPmJoinResultCount` of `resultCounts`, cut off processing.
     // The caller will restart to continue where we left off.
-    if (resultCount >= maxResultCount)
+    if (resultCount >= maxPmJoinResultCount)
     {
-      newStartRid += newRowCount;
+      // New start rid is a next row for large side.
+      newStartRid = i + 1;
       break;
     }
   }
 
-  if (resultCount < maxResultCount)
+  if (resultCount < maxPmJoinResultCount)
     newStartRid = 0;
 
   ridCount = newRowCount;
   outputRG.setRowCount(ridCount);
 
-  /* prints out the whole result set.
-      if (ridCount != 0) {
-              cout << "RG rowcount=" << outputRG.getRowCount() << " BPP ridcount=" << ridCount << endl;
-              for (i = 0; i < joinerCount; i++) {
-                      for (j = 0; j < ridCount; j++) {
-                              cout << "joiner " << i << " has " << tSmallSideMatches[i][j].size() << "
-     entries" << endl; cout << "row " << j << ":"; for (uint32_t k = 0; k < tSmallSideMatches[i][j].size();
-     k++) cout << "  " << tSmallSideMatches[i][j][k]; cout << endl;
-                      }
-                      cout << endl;
-              }
-      }
-  */
   return newStartRid;
 }
 
@@ -1454,6 +1410,19 @@ void BatchPrimitiveProcessor::execute()
           asyncLoaded[p] = true;
         }
 
+        if (col->hasAuxCol())
+        {
+          asyncLoaded[p + 1] = asyncLoaded[p + 1] && (relLBID[p + 1] % blocksReadAhead != 0);
+          relLBID[p + 1] += 1;
+
+          if (!asyncLoaded[p + 1])
+          {
+            loadBlockAsync(col->getLBIDAux(), versionInfo, txnID, 2, &cachedIO, &physIO, LBIDTrace, sessionID,
+                           &counterLock, &busyLoaderCount, sendThread, &vssCache);
+            asyncLoaded[p + 1] = true;
+          }
+        }
+
         asyncLoadProjectColumns();
       }
     }
@@ -1465,6 +1434,7 @@ void BatchPrimitiveProcessor::execute()
 
     // filters use relrids and values for intermediate results.
     if (bop == BOP_AND)
+    {
       for (j = 0; j < filterCount; ++j)
       {
 #ifdef PRIMPROC_STOPWATCH
@@ -1475,6 +1445,7 @@ void BatchPrimitiveProcessor::execute()
         filterSteps[j]->execute();
 #endif
       }
+    }
     else  // BOP_OR
     {
       /* XXXPAT: This is a hacky impl of OR logic.  Each filter is configured to
@@ -1564,10 +1535,12 @@ void BatchPrimitiveProcessor::execute()
     // projection commands read relrids and write output directly to a rowgroup
     // or the serialized bytestream
     if (ot != ROW_GROUP)
+    {
       for (j = 0; j < projectCount; ++j)
       {
         projectSteps[j]->project();
       }
+    }
     else
     {
       /* Function & Expression group 1 processing
@@ -1620,7 +1593,7 @@ void BatchPrimitiveProcessor::execute()
       }
 
       /* 7/7/09 PL: I Changed the projection alg to reduce block touches when there's
-       a join.  The key columns get projected first, the join is executed to further
+      a join.  The key columns get projected first, the join is executed to further
       reduce the ridlist, then the rest of the columns get projected */
 
       if (!doJoin)
@@ -1640,8 +1613,9 @@ void BatchPrimitiveProcessor::execute()
           }
 
           //				else
-          //					cout << "   no target found for OID " << projectSteps[j]->getOID() <<
-          //endl;
+          //					cout << "   no target found for OID " <<
+          // projectSteps[j]->getOID()
+          //<< endl;
         }
         if (fe2)
         {
@@ -1677,6 +1651,8 @@ void BatchPrimitiveProcessor::execute()
         {
           *serialized << (uint8_t)1;  // the "count this msg" var
 
+          // see TupleBPS::setFcnExpGroup2() and where it gets called.
+          // it sets fe2 there, on the other side of communication.
           RowGroup& toAggregate = (fe2 ? fe2Output : outputRG);
           // toAggregate.convertToInlineDataInPlace();
 
@@ -1743,16 +1719,24 @@ void BatchPrimitiveProcessor::execute()
           }
         }
 
+        // Duplicate projected `RGData` to `large side` row group.
+        // We create a `large side` row group from `output` row group,
+        // to save an original data, because 'output` row group is used
+        // to store matched rows from small side.
+        RGData largeSideRGData = outputRG.duplicate();
+        RowGroup largeSideRowGroup = outputRG;
+        largeSideRowGroup.setData(&largeSideRGData);
+
         do  // while (startRid > 0)
         {
 #ifdef PRIMPROC_STOPWATCH
           stopwatch->start("-- executeTupleJoin()");
-          startRid = executeTupleJoin(startRid);
+          startRid = executeTupleJoin(startRid, largeSideRowGroup);
           stopwatch->stop("-- executeTupleJoin()");
 #else
-          startRid = executeTupleJoin(startRid);
-//                    sStartRid = startRid;
+          startRid = executeTupleJoin(startRid, largeSideRowGroup);
 #endif
+
           /* project the non-key columns */
           for (j = 0; j < projectCount; ++j)
           {
@@ -1803,6 +1787,7 @@ void BatchPrimitiveProcessor::execute()
                 fe2Input->getRow(0, &fe2In);
 
                 for (j = 0; j < joinedRG.getRowCount(); j++, fe2In.nextRow())
+                {
                   if (fe2->evaluate(&fe2In))
                   {
                     applyMapping(fe2Mapping, fe2In, &fe2Out);
@@ -1810,6 +1795,7 @@ void BatchPrimitiveProcessor::execute()
                     fe2Output.incRowCount();
                     fe2Out.nextRow();
                   }
+                }
               }
 
               RowGroup& nextRG = (fe2 ? fe2Output : joinedRG);
@@ -1868,7 +1854,7 @@ void BatchPrimitiveProcessor::execute()
             }
             else
             {
-              // We hae no more use for this allocation
+              // We have no more use for this allocation
               for (i = 0; i < joinerCount; i++)
                 for (j = 0; j < ridCount; ++j)
                   tSmallSideMatches[i][j].clear();
@@ -1937,64 +1923,6 @@ void BatchPrimitiveProcessor::execute()
   }
   catch (NeedToRestartJob& n)
   {
-#if 0
-
-        /* This block of code will flush the problematic OIDs from the
-         * cache.  It seems to have no effect on the problem, so it's commented
-         * for now.
-         *
-         * This is currently thrown only on syscat queries.  If we find the problem
-         * in user tables also, we should avoid dropping entire OIDs if possible.
-         *
-         * In local testing there was no need for flushing, because DDL flushes
-         * the syscat constantly.  However, it can take a long time (>10 s) before
-         * that happens.  Doing it locally should make it much more likely only
-         * one restart is necessary.
-         */
-
-        try
-        {
-            vector<uint32_t> oids;
-            uint32_t oid;
-
-            for (uint32_t i = 0; i < filterCount; i++)
-            {
-                oid = filterSteps[i]->getOID();
-
-                if (oid > 0)
-                    oids.push_back(oid);
-            }
-
-            for (uint32_t i = 0; i < projectCount; i++)
-            {
-                oid = projectSteps[i]->getOID();
-
-                if (oid > 0)
-                    oids.push_back(oid);
-            }
-
-#if 0
-            Logger logger;
-            ostringstream os;
-            os << "dropping OIDs: ";
-
-            for (int i = 0; i < oids.size(); i++)
-                os << oids[i] << " ";
-
-            logger.logMessage(os.str());
-#endif
-
-            for (int i = 0; i < fCacheCount; i++)
-            {
-                dbbc::blockCacheClient bc(*BRPp[i]);
-//				bc.flushCache();
-                bc.flushOIDs(&oids[0], oids.size());
-            }
-        }
-        catch (...) { }     // doesn't matter if this fails, just avoid crashing
-
-#endif
-
 #ifndef __FreeBSD__
     pthread_mutex_unlock(&objLock);
 #endif
@@ -2069,6 +1997,7 @@ void BatchPrimitiveProcessor::writeProjectionPreamble()
     {
       *serialized << (uint8_t)1;
       *serialized << lbidForCP;
+      *serialized << ((uint8_t)cpDataFromDictScan);
       if (UNLIKELY(hasWideColumnOut))
       {
         // PSA width
@@ -2124,6 +2053,26 @@ void BatchPrimitiveProcessor::serializeStrings()
 
 void BatchPrimitiveProcessor::sendResponse()
 {
+  // Here is the fast path for local EM to PM interaction. PM puts into the
+  // input EM DEC queue directly.
+  // !writelock has a 'same host connection' semantics here.
+  if (initiatedByEM_ && !writelock)
+  {
+    // Flow Control now handles same node connections so the recieving DEC queue
+    // is limited.
+    if (sendThread->flowControlEnabled())
+    {
+      sendThread->sendResult({serialized, sock, writelock, 0}, false);
+    }
+    else
+    {
+      sock->write(serialized);
+      serialized.reset();
+    }
+
+    return;
+  }
+
   if (sendThread->flowControlEnabled())
   {
     // newConnection should be set only for the first result of a batch job
@@ -2167,6 +2116,7 @@ void BatchPrimitiveProcessor::makeResponse()
     {
       *serialized << (uint8_t)1;
       *serialized << lbidForCP;
+      *serialized << ((uint8_t)cpDataFromDictScan);
 
       if (UNLIKELY(hasWideColumnOut))
       {
@@ -2268,6 +2218,7 @@ int BatchPrimitiveProcessor::operator()()
     }
 
     validCPData = false;
+    cpDataFromDictScan = false;
 #ifdef PRIMPROC_STOPWATCH
     stopwatch->start("BPP() execute");
     execute(stopwatch);
@@ -2802,7 +2753,6 @@ void BatchPrimitiveProcessor::buildVSSCache(uint32_t loopCount)
     for (i = 0; i < vssData.size(); i++)
       vssCache.insert(make_pair(lbidList[i], vssData[i]));
 
-  //	cout << "buildVSSCache inserted " << vssCache.size() << " elements" << endl;
 }
 
 }  // namespace primitiveprocessor

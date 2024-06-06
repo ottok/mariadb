@@ -23,8 +23,7 @@
 
 /** @file */
 
-#ifndef LOGGING_SQLLOGGER_H_
-#define LOGGING_SQLLOGGER_H_
+#pragma once
 
 #include <string>
 
@@ -61,4 +60,3 @@ class SQLLogger
 };
 
 }  // namespace logging
-#endif

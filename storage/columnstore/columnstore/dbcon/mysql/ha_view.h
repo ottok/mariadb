@@ -23,8 +23,7 @@
 /** @file */
 /** class View interface */
 
-#ifndef HA_VIEW
-#define HA_VIEW
+#pragma once
 
 //#undef LOG_INFO
 #include "ha_mcs_impl_if.h"
@@ -63,5 +62,3 @@ class View
 };
 
 }  // namespace cal_impl_if
-
-#endif

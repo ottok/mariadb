@@ -265,7 +265,7 @@ int BulkLoad::loadJobInfo(const string& fullName, bool bUseTempJobFile, int argc
     return rc;
   }
 
-  const Job& curJob = fJobInfo.getJob();
+  Job& curJob = fJobInfo.getJob();
   string logFile, errlogFile;
   logFile = std::string(MCSLOGDIR) + "/cpimport/" + "Job_" + Convertor::int2Str(curJob.id) + LOG_SUFFIX;
   errlogFile =
@@ -313,6 +313,79 @@ int BulkLoad::loadJobInfo(const string& fullName, bool bUseTempJobFile, int argc
               curJob.jobTableList[i].tblName,
           rc, MSGLVL_ERROR);
       return rc;
+    }
+
+    // MCOL-5021
+    execplan::CalpontSystemCatalog::OID tableAUXColOid;
+    std::string tblName;
+    std::string curTblName = curJob.jobTableList[i].tblName;
+
+    // Parse out <tablename> from [<schemaname>.]<tablename> string
+    string::size_type startName = curTblName.rfind('.');
+
+    if (startName == std::string::npos)
+      tblName.assign(curTblName);
+    else
+      tblName.assign(curTblName.substr(startName + 1));
+
+    execplan::CalpontSystemCatalog::TableName table(curJob.schema, tblName);
+
+    try
+    {
+      boost::shared_ptr<execplan::CalpontSystemCatalog> cat =
+          execplan::CalpontSystemCatalog::makeCalpontSystemCatalog(BULK_SYSCAT_SESSION_ID);
+      tableAUXColOid = cat->tableAUXColumnOID(table);
+    }
+    catch (logging::IDBExcept& ie)
+    {
+      rc = ERR_UNKNOWN;
+      std::ostringstream oss;
+
+      if (ie.errorCode() == logging::ERR_TABLE_NOT_IN_CATALOG)
+      {
+        oss << "Table " << table.toString();
+        oss << "does not exist in the system catalog.";
+      }
+      else
+      {
+        oss << "Error getting AUX column OID for table " << table.toString();
+        oss << " due to:  " << ie.what();
+      }
+
+      fLog.logMsg(oss.str(), rc, MSGLVL_ERROR);
+      return rc;
+    }
+    catch(std::exception& ex)
+    {
+      rc = ERR_UNKNOWN;
+      std::ostringstream oss;
+      oss << "Error getting AUX column OID for table " << table.toString();
+      oss << " due to:  " << ex.what();
+      fLog.logMsg(oss.str(), rc, MSGLVL_ERROR);
+      return rc;
+    }
+    catch(...)
+    {
+      rc = ERR_UNKNOWN;
+      std::ostringstream oss;
+      oss << "Error getting AUX column OID for table " << table.toString();
+      fLog.logMsg(oss.str(), rc, MSGLVL_ERROR);
+      return rc;
+    }
+
+    // MCOL-5021 Valid AUX column OID for a table is > 3000
+    // Tables that were created before this feature was added will have
+    // tableAUXColOid = 0
+    if (tableAUXColOid > 3000)
+    {
+      JobColumn curColumn("aux", tableAUXColOid, execplan::AUX_COL_DATATYPE_STRING,
+        execplan::AUX_COL_WIDTH, execplan::AUX_COL_WIDTH,
+        execplan::AUX_COL_COMPRESSION_TYPE, execplan::AUX_COL_COMPRESSION_TYPE,
+        execplan::AUX_COL_MINVALUE, execplan::AUX_COL_MAXVALUE, true, 1);
+      curColumn.fFldColRelation = BULK_FLDCOL_COLUMN_DEFAULT;
+      curJob.jobTableList[i].colList.push_back(curColumn);
+      JobFieldRef fieldRef(BULK_FLDCOL_COLUMN_DEFAULT, curJob.jobTableList[i].colList.size() - 1);
+      curJob.jobTableList[i].fFldRefs.push_back(fieldRef);
     }
   }
 
@@ -739,7 +812,7 @@ int BulkLoad::preProcess(Job& job, int tableNo, TableInfo* tableInfo)
       // Setup import to start loading into starting HWM DB file
       RETURN_ON_ERROR(info->setupInitialColumnExtent(dbRoot, partition, segment,
                                                      job.jobTableList[tableNo].tblName, lbid, oldHwm, hwm,
-                                                     bSkippedToNewExtent, false));
+                                                     bSkippedToNewExtent, bSkippedToNewExtent || oldHwm < 1));
     }
 
     tableInfo->addColumn(info);
@@ -1292,12 +1365,7 @@ int BulkLoad::buildImportDataFileList(const std::string& location, const std::st
 
   for (str = filenames;; str = NULL)
   {
-#ifdef _MSC_VER
-    // On Windows, only comma and vertbar can separate input files
-    token = strtok(str, ",|");
-#else
     token = strtok(str, ", |");
-#endif
 
     if (token == NULL)
       break;
@@ -1317,9 +1385,6 @@ int BulkLoad::buildImportDataFileList(const std::string& location, const std::st
       fullPath += token;
     }
 
-#ifdef _MSC_VER
-    loadFiles.push_back(fullPath);
-#else
 
     // If running mode2, then support a filename with wildcards
     if (fBulkMode == BULK_MODE_REMOTE_MULTIPLE_SRC)
@@ -1404,7 +1469,6 @@ int BulkLoad::buildImportDataFileList(const std::string& location, const std::st
       loadFiles.push_back(fullPath);
     }  // not mode2
 
-#endif
   }  // loop through filename tokens
 
   delete[] filenames;

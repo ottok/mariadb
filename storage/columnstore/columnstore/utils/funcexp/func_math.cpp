@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <string>
 #include <cerrno>
+
 #define _USE_MATH_DEFINES  // MSC: enable math defines
 #include <cmath>
 #include <iomanip>
@@ -44,6 +45,8 @@ using namespace rowgroup;
 using namespace logging;
 
 #include "funchelpers.h"
+
+#include "utils/pron/pron.h"
 
 // Just in case they're missing...
 #ifndef M_LN2
@@ -65,12 +68,6 @@ inline double radians(double degree)
   return (degree * M_PI / 180.0);
 }
 
-#if defined(_MSC_VER) && MSC_VER < 1800
-inline double log2(double x)
-{
-  return (log(x) / M_LN2);
-}
-#endif
 }  // namespace
 
 namespace funcexp
@@ -1336,6 +1333,20 @@ CalpontSystemCatalog::ColType Func_sin::operationType(FunctionParm& fp,
 
 double Func_sin::getDoubleVal(Row& row, FunctionParm& parm, bool& isNull, CalpontSystemCatalog::ColType&)
 {
+  auto& pron = utils::Pron::instance();
+  if (pron.pron().count("megasinus") != 0)
+  {
+    try
+    {
+      double fakesin = std::stod(pron.pron().at("megasinus"));
+      return fakesin;
+    }
+    catch (std::exception&)
+    {
+      // do nothing
+    }
+  }
+
   switch (parm[0]->data()->resultType().colDataType)
   {
     case execplan::CalpontSystemCatalog::BIGINT:
@@ -1740,7 +1751,7 @@ string Func_format::getStrVal(Row& row, FunctionParm& parm, bool& isNull,
     case execplan::CalpontSystemCatalog::UTINYINT:
     case execplan::CalpontSystemCatalog::USMALLINT:
     {
-      value = parm[0]->data()->getStrVal(row, isNull);
+      value = parm[0]->data()->getStrVal(row, isNull).safeString("");
     }
     break;
 
@@ -2011,7 +2022,7 @@ string Func_format::getStrVal(Row& row, FunctionParm& parm, bool& isNull,
 
   while ((comma -= 3) > end)
   {
-    value.insert(comma, ",");
+    value.insert(comma, 1, ',');
   }
 
   return value;

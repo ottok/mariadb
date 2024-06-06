@@ -325,23 +325,24 @@ bool XMLGenProc::makeColumnData(const CalpontSystemCatalog::TableName& table)
       }
 
       // Include NotNull and Default value
-      const std::string col_defaultValue(col->colType.defaultValue);
+      const NullString col_defaultValue(col->colType.defaultValue);
 
       if (col->colType.constraintType == execplan::CalpontSystemCatalog::NOTNULL_CONSTRAINT)
       {
         int notNull = 1;
         xmlTextWriterWriteFormatAttribute(fWriter, BAD_CAST xmlTagTable[TAG_NOT_NULL], "%d", notNull);
 
-        if (!col_defaultValue.empty())
+        if (!col_defaultValue.isNull())
         {
           xmlTextWriterWriteAttribute(fWriter, BAD_CAST xmlTagTable[TAG_DEFAULT_VALUE],
-                                      BAD_CAST col_defaultValue.c_str());
+                                      BAD_CAST col_defaultValue.unsafeStringRef().c_str());
         }
       }
       else if (col->colType.constraintType == execplan::CalpontSystemCatalog::DEFAULT_CONSTRAINT)
       {
+        idbassert(!col_defaultValue.isNull()); // good enough for now. I have to figure out how to store the null.
         xmlTextWriterWriteAttribute(fWriter, BAD_CAST xmlTagTable[TAG_DEFAULT_VALUE],
-                                    BAD_CAST col_defaultValue.c_str());
+                                    BAD_CAST (col_defaultValue.unsafeStringRef().c_str()));
       }
     }  // end of "if fSysCatRpt"
 
@@ -424,11 +425,6 @@ std::string XMLGenProc::genJobXMLFileName() const
 
   // If the filespec doesn't begin with a '/' (i.e. it's not an absolute path),
   // attempt to make it absolute so that we can log the full pathname.
-#ifdef _MSC_VER
-  // We won't worry about being so fancy in Windows, just print a relative
-  // path if so given
-  xmlFileName = p.string();
-#else
 
   if (!p.has_root_path())
   {
@@ -446,7 +442,6 @@ std::string XMLGenProc::genJobXMLFileName() const
     xmlFileName = p.string();
   }
 
-#endif
 
   return xmlFileName;
 }

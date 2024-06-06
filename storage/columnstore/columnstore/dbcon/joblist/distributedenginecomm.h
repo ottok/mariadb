@@ -30,17 +30,19 @@
 //
 /** @file */
 
-#ifndef DISTENGINECOMM_H
-#define DISTENGINECOMM_H
+#pragma once
 
-#include <iostream>
-#include <vector>
-#include <queue>
-#include <string>
-#include <map>
 #include <boost/thread.hpp>
 #include <boost/thread/condition.hpp>
 #include <boost/scoped_array.hpp>
+#include <condition_variable>
+#include <ifaddrs.h>
+#include <iostream>
+#include <map>
+#include <mutex>
+#include <string>
+#include <queue>
+#include <vector>
 
 #include "bytestream.h"
 #include "primitivemsg.h"
@@ -51,11 +53,7 @@
 
 class TestDistributedEngineComm;
 
-#if defined(_MSC_VER) && defined(JOBLIST_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace messageqcpp
 {
@@ -85,7 +83,11 @@ class DECEventListener
  */
 class DistributedEngineComm
 {
+  using SharedPtrEMSock = boost::shared_ptr<messageqcpp::IOSocket>;
+
  public:
+  using SBSVector = std::vector<messageqcpp::SBS>;
+
   /**
    * Constructors
    */
@@ -140,7 +142,7 @@ class DistributedEngineComm
    * Writes a primitive message to a primitive server. Msg needs to conatin an ISMPacketHeader. The
    * LBID is extracted from the ISMPacketHeader and used to determine the actual P/M to send to.
    */
-  EXPORT void write(uint32_t key, messageqcpp::ByteStream& msg);
+  EXPORT int32_t write(uint32_t key, const messageqcpp::SBS& msg);
 
   // EXPORT void throttledWrite(const messageqcpp::ByteStream& msg);
 
@@ -182,7 +184,7 @@ class DistributedEngineComm
    */
   EXPORT uint32_t size(uint32_t key);
 
-  EXPORT void Setup();
+  EXPORT int32_t Setup();
 
   EXPORT void addDECEventListener(DECEventListener*);
   EXPORT void removeDECEventListener(DECEventListener*);
@@ -202,27 +204,43 @@ class DistributedEngineComm
     return fRm->getPsCount() * cpp;
   }
 
+  bool isExeMgrDEC() const
+  {
+    return fIsExeMgr;
+  }
+
+  template <typename T>
+  bool clientAtTheSameHost(T& client) const;
+  void getLocalNetIfacesSins();
+
   messageqcpp::Stats getNetworkStats(uint32_t uniqueID);
+  void addDataToOutput(messageqcpp::SBS sbs);
+  SBSVector& readLocalQueueMessagesOrWait(SBSVector&);
 
   friend class ::TestDistributedEngineComm;
 
  private:
   typedef std::vector<boost::thread*> ReaderList;
-  typedef std::vector<boost::shared_ptr<messageqcpp::MessageQueueClient> > ClientList;
+  typedef std::vector<boost::shared_ptr<messageqcpp::MessageQueueClient>> ClientList;
 
   // A queue of ByteStreams coming in from PrimProc heading for a JobStep
   typedef ThreadSafeQueue<messageqcpp::SBS> StepMsgQueue;
+  using AtomicSizeVec = std::vector<std::atomic<size_t>>;
+
+  // Creates a ByteStream as a command for Primitive Server and initializes it with a given `command`,
+  // `uniqueID` and `size`.
+  messageqcpp::SBS createBatchPrimitiveCommand(ISMPACKETCOMMAND command, uint32_t uniqueID, uint16_t size);
 
   /* To keep some state associated with the connection.  These aren't copyable. */
   struct MQE : public boost::noncopyable
   {
-    MQE(const uint32_t pmCount, const uint32_t initialInterleaverValue);
+    MQE(const uint32_t pmCount, const uint32_t initialInterleaverValue, const uint64_t recvQueueSize);
     uint32_t getNextConnectionId(const size_t pmIndex, const size_t pmConnectionsNumber,
                                  const uint32_t DECConnectionsPerQuery);
     messageqcpp::Stats stats;
     StepMsgQueue queue;
     uint32_t ackSocketIndex;
-    boost::scoped_array<volatile uint32_t> unackedWork;
+    AtomicSizeVec unackedWork;
     boost::scoped_array<uint32_t> interleaver;
     uint32_t initialConnectionId;
     uint32_t pmCount;
@@ -242,7 +260,7 @@ class DistributedEngineComm
   };
 
   // The mapping of session ids to StepMsgQueueLists
-  typedef std::map<unsigned, boost::shared_ptr<MQE> > MessageQueueMap;
+  typedef std::map<unsigned, boost::shared_ptr<MQE>> MessageQueueMap;
 
   explicit DistributedEngineComm(ResourceManager* rm, bool isExeMgr);
 
@@ -252,14 +270,14 @@ class DistributedEngineComm
    *
    */
   void addDataToOutput(messageqcpp::SBS, uint32_t connIndex, messageqcpp::Stats* statsToAdd);
-
   /** @brief Writes data to the client at the index
    *
    * Continues trying to write data to the client at the next index until all clients have been tried.
    */
-  int writeToClient(size_t index, const messageqcpp::ByteStream& bs,
+  int writeToClient(size_t index, const messageqcpp::SBS& bs,
                     uint32_t senderID = std::numeric_limits<uint32_t>::max(), bool doInterleaving = false);
 
+  void pushToTheLocalQueueAndNotifyRecv(const messageqcpp::SBS& bs);
   static DistributedEngineComm* fInstance;
   ResourceManager* fRm;
 
@@ -267,10 +285,10 @@ class DistributedEngineComm
   ReaderList fPmReader;       // all the reader threads for the pm servers
   MessageQueueMap
       fSessionMessages;  // place to put messages from the pm server to be returned by the Read method
-  boost::mutex fMlock;   // sessionMessages mutex
-  std::vector<boost::shared_ptr<boost::mutex> > fWlock;  // PrimProc socket write mutexes
+  std::mutex fMlock;     // sessionMessages mutex
+  std::vector<std::shared_ptr<std::mutex>> fWlock;  // PrimProc socket write mutexes
   bool fBusy;
-  volatile uint32_t pmCount;
+  std::atomic<uint32_t> pmCount;
   boost::mutex fOnErrMutex;  // to lock function scope to reset pmconnections under error condition
   boost::mutex fSetupMutex;
 
@@ -279,27 +297,32 @@ class DistributedEngineComm
   boost::mutex eventListenerLock;
 
   ClientList newClients;
-  std::vector<boost::shared_ptr<boost::mutex> > newLocks;
+  std::vector<std::shared_ptr<std::mutex>> newLocks;
 
   bool fIsExeMgr;
 
   // send-side throttling vars
-  uint64_t throttleThreshold;
-  static const uint32_t targetRecvQueueSize = 50000000;
-  static const uint32_t disableThreshold = 10000000;
+  uint64_t flowControlEnableBytesThresh = 50000000;
+  uint64_t flowControlDisableBytesThresh = 10000000;
+  uint64_t bigMessageSize = 300 * 1024 * 1024;
   uint32_t tbpsThreadCount;
   uint32_t fDECConnectionsPerQuery;
 
   void sendAcks(uint32_t uniqueID, const std::vector<messageqcpp::SBS>& msgs, boost::shared_ptr<MQE> mqe,
                 size_t qSize);
-  void nextPMToACK(boost::shared_ptr<MQE> mqe, uint32_t maxAck, uint32_t* sockIndex, uint16_t* numToAck);
+  size_t subsMsgCounterAndRotatePM(boost::shared_ptr<MQE> mqe, const size_t maxAck, uint32_t* sockIndex);
   void setFlowControl(bool enable, uint32_t uniqueID, boost::shared_ptr<MQE> mqe);
   void doHasBigMsgs(boost::shared_ptr<MQE> mqe, uint64_t targetSize);
   boost::mutex ackLock;
+
+  // localConnectionId_ is set running Setup() method
+  uint32_t localConnectionId_ = std::numeric_limits<uint32_t>::max();
+  std::vector<struct in_addr> localNetIfaceSins_;
+  std::mutex inMemoryEM2PPExchMutex_;
+  std::condition_variable inMemoryEM2PPExchCV_;
+  std::queue<messageqcpp::SBS> inMemoryEM2PPExchQueue_;
 };
 
 }  // namespace joblist
 
 #undef EXPORT
-
-#endif  // DISTENGINECOMM_H

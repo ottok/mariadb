@@ -15,15 +15,22 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef UTILS_COLWIDTH_H
-#define UTILS_COLWIDTH_H
+#pragma once
 
 #include "branchpred.h"
 
 namespace utils
 {
-const uint8_t MAXLEGACYWIDTH = 8ULL;
-const uint8_t MAXCOLUMNWIDTH = 16ULL;
+constexpr uint8_t MAXLEGACYWIDTH = 8ULL;
+constexpr uint8_t MAXCOLUMNWIDTH = 16ULL;
+
+struct AlignedDeleter
+{
+  void operator()(uint8_t* ptr)
+  {
+    operator delete[](ptr, std::align_val_t(utils::MAXCOLUMNWIDTH));
+  };
+};
 
 inline bool isWide(uint8_t width)
 {
@@ -80,5 +87,3 @@ inline uint8_t precisionByWidth(unsigned w)
 }
 
 }  // namespace utils
-
-#endif  // UTILS_COLWIDTH_H

@@ -19,8 +19,7 @@
  * $Id: we_cleartablelockcmd.h 4450 2013-01-21 14:13:24Z rdempsey $
  *
  *******************************************************************************/
-#ifndef WE_CLEARTABLELOCKCMD_H__
-#define WE_CLEARTABLELOCKCMD_H__
+#pragma once
 
 #include <string>
 
@@ -59,5 +58,3 @@ class WE_ClearTableLockCmd
 };
 
 }  // namespace WriteEngine
-
-#endif

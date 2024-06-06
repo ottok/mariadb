@@ -55,6 +55,12 @@ SimpleFilter::SimpleFilter(const string& sql) : Filter(sql)
   parse(sql);
 }
 
+// TODO: only handled simplecolumn operands for now
+SimpleFilter::SimpleFilter(const string& sql, ForTestPurposesWithoutColumnsOIDS) : Filter(sql)
+{
+  parse(sql, ForTestPurposesWithoutColumnsOIDS{});
+}
+
 SimpleFilter::SimpleFilter(const SOP& op, ReturnedColumn* lhs, ReturnedColumn* rhs, const long timeZone)
  : fOp(op), fLhs(lhs), fRhs(rhs), fIndexFlag(NOINDEX), fJoinFlag(EQUA), fTimeZone(timeZone)
 {
@@ -244,7 +250,17 @@ const string SimpleFilter::toString() const
   return output.str();
 }
 
-void SimpleFilter::parse(string sql)
+string SimpleFilter::toCppCode(IncludeSet& includes) const
+{
+  includes.insert("simplefilter.h");
+  stringstream ss;
+
+  ss << "SimpleFilter(" << std::quoted(data()) << ", SimpleFilter::ForTestPurposesWithoutColumnsOIDS{})";
+
+  return ss.str();
+}
+
+void SimpleFilter::parse(string sql, std::optional<ForTestPurposesWithoutColumnsOIDS> testFlag)
 {
   fLhs = 0;
   fRhs = 0;
@@ -267,18 +283,24 @@ void SimpleFilter::parse(string sql)
     if (lhs.at(lhs.length() - 1) == ' ')
       lhs = lhs.substr(0, pos - 1);
 
-    fLhs = new SimpleColumn(lhs);
+    if (testFlag)
+      fLhs = new SimpleColumn(lhs, SimpleColumn::ForTestPurposeWithoutOID{});
+    else
+      fLhs = new SimpleColumn(lhs);
 
     pos = pos + delimiter[i].length();
     string rhs = sql.substr(pos, sql.length());
 
     if (rhs.at(0) == ' ')
-      rhs = rhs.substr(1, pos);
+      rhs = rhs.substr(1, rhs.length());
 
     if (rhs.at(rhs.length() - 1) == ' ')
-      rhs = rhs.substr(0, pos - 1);
+      rhs = rhs.substr(0, rhs.length() - 1);
 
-    fRhs = new SimpleColumn(rhs);
+    if (testFlag)
+      fRhs = new SimpleColumn(rhs, SimpleColumn::ForTestPurposeWithoutOID{});
+    else
+      fRhs = new SimpleColumn(rhs);
     break;
   }
 
@@ -540,54 +562,50 @@ void SimpleFilter::convertConstant()
 
     if (fRhs->resultType().colDataType == CalpontSystemCatalog::DATE)
     {
-      if (lcc->constval().empty())
+      if (lcc->isNull())
       {
-        lcc->constval("0000-00-00");
         result.intVal = 0;
-        result.strVal = lcc->constval();
+        result.strVal.dropString();
       }
       else
       {
-        result.intVal = dataconvert::DataConvert::dateToInt(result.strVal);
+        result.intVal = dataconvert::DataConvert::dateToInt(result.strVal.safeString(""));
       }
     }
     else if (fRhs->resultType().colDataType == CalpontSystemCatalog::DATETIME)
     {
-      if (lcc->constval().empty())
+      if (lcc->isNull())
       {
-        lcc->constval("0000-00-00 00:00:00");
         result.intVal = 0;
-        result.strVal = lcc->constval();
+        result.strVal.dropString();
       }
       else
       {
-        result.intVal = dataconvert::DataConvert::datetimeToInt(result.strVal);
+        result.intVal = dataconvert::DataConvert::datetimeToInt(result.strVal.safeString(""));
       }
     }
     else if (fRhs->resultType().colDataType == CalpontSystemCatalog::TIMESTAMP)
     {
-      if (lcc->constval().empty())
+      if (lcc->isNull())
       {
-        lcc->constval("0000-00-00 00:00:00");
         result.intVal = 0;
-        result.strVal = lcc->constval();
+        result.strVal.dropString();
       }
       else
       {
-        result.intVal = dataconvert::DataConvert::timestampToInt(result.strVal, fTimeZone);
+        result.intVal = dataconvert::DataConvert::timestampToInt(result.strVal.safeString(""), fTimeZone);
       }
     }
     else if (fRhs->resultType().colDataType == CalpontSystemCatalog::TIME)
     {
-      if (lcc->constval().empty())
+      if (lcc->isNull())
       {
-        lcc->constval("00:00:00");
         result.intVal = 0;
-        result.strVal = lcc->constval();
+        result.strVal.dropString();
       }
       else
       {
-        result.intVal = dataconvert::DataConvert::timeToInt(result.strVal);
+        result.intVal = dataconvert::DataConvert::timeToInt(result.strVal.safeString(""));
       }
     }
 
@@ -600,54 +618,50 @@ void SimpleFilter::convertConstant()
 
     if (fLhs->resultType().colDataType == CalpontSystemCatalog::DATE)
     {
-      if (rcc->constval().empty())
+      if (rcc->isNull())
       {
-        rcc->constval("0000-00-00");
         result.intVal = 0;
-        result.strVal = rcc->constval();
+        result.strVal.dropString();
       }
       else
       {
-        result.intVal = dataconvert::DataConvert::dateToInt(result.strVal);
+        result.intVal = dataconvert::DataConvert::dateToInt(result.strVal.safeString(""));
       }
     }
     else if (fLhs->resultType().colDataType == CalpontSystemCatalog::DATETIME)
     {
-      if (rcc->constval().empty())
+      if (rcc->isNull())
       {
-        rcc->constval("0000-00-00 00:00:00");
         result.intVal = 0;
-        result.strVal = rcc->constval();
+        result.strVal.dropString();
       }
       else
       {
-        result.intVal = dataconvert::DataConvert::datetimeToInt(result.strVal);
+        result.intVal = dataconvert::DataConvert::datetimeToInt(result.strVal.safeString(""));
       }
     }
     else if (fLhs->resultType().colDataType == CalpontSystemCatalog::TIMESTAMP)
     {
-      if (rcc->constval().empty())
+      if (rcc->isNull())
       {
-        rcc->constval("0000-00-00 00:00:00");
         result.intVal = 0;
-        result.strVal = rcc->constval();
+        result.strVal.dropString();
       }
       else
       {
-        result.intVal = dataconvert::DataConvert::timestampToInt(result.strVal, fTimeZone);
+        result.intVal = dataconvert::DataConvert::timestampToInt(result.strVal.safeString(""), fTimeZone);
       }
     }
     else if (fLhs->resultType().colDataType == CalpontSystemCatalog::TIME)
     {
-      if (rcc->constval().empty())
+      if (rcc->isNull())
       {
-        rcc->constval("00:00:00");
         result.intVal = 0;
-        result.strVal = rcc->constval();
+        result.strVal.dropString();
       }
       else
       {
-        result.intVal = dataconvert::DataConvert::timeToInt(result.strVal);
+        result.intVal = dataconvert::DataConvert::timeToInt(result.strVal.safeString());
       }
     }
 

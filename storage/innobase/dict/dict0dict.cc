@@ -1157,6 +1157,7 @@ inline void dict_sys_t::add(dict_table_t* table)
 	ulint fold = my_crc32c(0, table->name.m_name,
 			       strlen(table->name.m_name));
 
+	table->row_id = 0;
 	table->autoinc_mutex.init();
 	table->lock_mutex_init();
 
@@ -1976,7 +1977,6 @@ dict_index_add_to_cache(
 	ut_ad(index->n_def == index->n_fields);
 	ut_ad(index->magic_n == DICT_INDEX_MAGIC_N);
 	ut_ad(!dict_index_is_online_ddl(index));
-	ut_ad(!dict_index_is_ibuf(index));
 
 	ut_d(mem_heap_validate(index->heap));
 	ut_a(!dict_index_is_clust(index)
@@ -2061,13 +2061,6 @@ dict_index_add_to_cache(
 
 	new_index->stat_index_size = 1;
 	new_index->stat_n_leaf_pages = 1;
-
-	new_index->stat_defrag_n_pages_freed = 0;
-	new_index->stat_defrag_n_page_split = 0;
-
-	new_index->stat_defrag_sample_next_slot = 0;
-	memset(&new_index->stat_defrag_data_size_sample,
-	       0x0, sizeof(ulint) * STAT_DEFRAG_DATA_SIZE_N_SAMPLE);
 
 	/* Add the new index as the last index for the table */
 
@@ -2357,15 +2350,7 @@ dict_index_copy_types(
 	ulint			n_fields)	/*!< in: number of
 						field types to copy */
 {
-	ulint		i;
-
-	if (dict_index_is_ibuf(index)) {
-		dtuple_set_types_binary(tuple, n_fields);
-
-		return;
-	}
-
-	for (i = 0; i < n_fields; i++) {
+	for (ulint i = 0; i < n_fields; i++) {
 		const dict_field_t*	ifield;
 		dtype_t*		dfield_type;
 
@@ -2604,17 +2589,14 @@ dict_index_build_internal_non_clust(
 	ulint		i;
 	ibool*		indexed;
 
-	ut_ad(table && index);
-	ut_ad(!dict_index_is_clust(index));
-	ut_ad(!dict_index_is_ibuf(index));
+	ut_ad(!index->is_primary());
 	ut_ad(dict_sys.locked());
 
 	/* The clustered index should be the first in the list of indexes */
 	clust_index = UT_LIST_GET_FIRST(table->indexes);
 
 	ut_ad(clust_index);
-	ut_ad(dict_index_is_clust(clust_index));
-	ut_ad(!dict_index_is_ibuf(clust_index));
+	ut_ad(clust_index->is_clust());
 
 	/* Create a new index */
 	new_index = dict_mem_index_create(
@@ -3749,24 +3731,7 @@ dict_index_build_node_ptr(
 	dtuple_t*	tuple;
 	dfield_t*	field;
 	byte*		buf;
-	ulint		n_unique;
-
-	if (dict_index_is_ibuf(index)) {
-		/* In a universal index tree, we take the whole record as
-		the node pointer if the record is on the leaf level,
-		on non-leaf levels we remove the last field, which
-		contains the page number of the child page */
-
-		ut_a(!dict_table_is_comp(index->table));
-		n_unique = rec_get_n_fields_old(rec);
-
-		if (level > 0) {
-			ut_a(n_unique > 1);
-			n_unique--;
-		}
-	} else {
-		n_unique = dict_index_get_n_unique_in_tree_nonleaf(index);
-	}
+	ulint n_unique = dict_index_get_n_unique_in_tree_nonleaf(index);
 
 	tuple = dtuple_create(heap, n_unique + 1);
 

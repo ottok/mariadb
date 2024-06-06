@@ -29,8 +29,7 @@
 //
 /** @file */
 
-#ifndef BATCHPRIMITIVEPROCESSORJL_H_
-#define BATCHPRIMITIVEPROCESSORJL_H_
+#pragma once
 
 #include <boost/scoped_array.hpp>
 #include <boost/shared_ptr.hpp>
@@ -44,7 +43,7 @@
 #include "brm.h"
 #include "command-jl.h"
 #include "resourcemanager.h"
-// #include "tableband.h"
+//#include "tableband.h"
 
 namespace joblist
 {
@@ -116,7 +115,9 @@ class BatchPrimitiveProcessorJL
     threadCount = tc;
   }
 
-  void addFilterStep(const pColScanStep&, std::vector<BRM::LBID_t> lastScannedLBID);
+  void addFilterStep(const pColScanStep&, std::vector<BRM::LBID_t> lastScannedLBID,
+                     bool hasAuxCol, const std::vector<BRM::EMEntry>& extentsAux,
+                     execplan::CalpontSystemCatalog::OID oidAux);
   void addFilterStep(const PseudoColStep&);
   void addFilterStep(const pColStep&);
   void addFilterStep(const pDictionaryStep&);
@@ -138,7 +139,7 @@ class BatchPrimitiveProcessorJL
   void addElementType(const StringElementType&, uint32_t dbroot);
   // void setRowGroupData(const rowgroup::RowGroup &);
 
-  void runBPP(messageqcpp::ByteStream&, uint32_t pmNum);
+  void runBPP(messageqcpp::ByteStream&, uint32_t pmNum, bool isExeMgrDEC);
   void abortProcessing(messageqcpp::ByteStream*);
 
   /* After serializing a BPP object, reset it and it's ready for more input */
@@ -168,9 +169,9 @@ class BatchPrimitiveProcessorJL
                  uint32_t* touchedBlocks) const;
   void deserializeAggregateResults(messageqcpp::ByteStream* in, std::vector<rowgroup::RGData>* out) const;
   void getRowGroupData(messageqcpp::ByteStream& in, std::vector<rowgroup::RGData>* out, bool* validCPData,
-                       uint64_t* lbid, int128_t* min, int128_t* max, uint32_t* cachedIO, uint32_t* physIO,
-                       uint32_t* touchedBlocks, bool* countThis, uint32_t threadID, bool* hasBinaryColumn,
-                       const execplan::CalpontSystemCatalog::ColType& colType) const;
+                       uint64_t* lbid, bool* fromDictScan, int128_t* min, int128_t* max, uint32_t* cachedIO,
+                       uint32_t* physIO, uint32_t* touchedBlocks, bool* countThis, uint32_t threadID,
+                       bool* hasBinaryColumn, const execplan::CalpontSystemCatalog::ColType& colType) const;
   void deserializeAggregateResult(messageqcpp::ByteStream* in, std::vector<rowgroup::RGData>* out) const;
   bool countThisMsg(messageqcpp::ByteStream& in) const;
 
@@ -183,8 +184,7 @@ class BatchPrimitiveProcessorJL
     return status;
   }
   void runErrorBPP(messageqcpp::ByteStream&);
-  //	uint32_t getErrorTableBand(uint16_t error, messageqcpp::ByteStream *out);
-  //	boost::shared_array<uint8_t> getErrorRowGroupData(uint16_t error) const;
+
   rowgroup::RGData getErrorRowGroupData(uint16_t error) const;
 
   // @bug 1098
@@ -208,7 +208,7 @@ class BatchPrimitiveProcessorJL
   void setJoinedRowGroup(const rowgroup::RowGroup& rg);
 
   /* Tuple hashjoin */
-  void useJoiners(const std::vector<boost::shared_ptr<joiner::TupleJoiner> >&);
+  void useJoiners(const std::vector<std::shared_ptr<joiner::TupleJoiner> >&);
   bool nextTupleJoinerMsg(messageqcpp::ByteStream&);
   // 	void setSmallSideKeyColumn(uint32_t col);
 
@@ -252,9 +252,33 @@ class BatchPrimitiveProcessorJL
     uuid = u;
   }
 
- private:
-  // void setLBIDForScan(uint64_t rid, uint32_t dbroot);
+  void setMaxPmJoinResultCount(uint32_t count)
+  {
+    maxPmJoinResultCount = count;
+  }
 
+ private:
+  const size_t perColumnProjectWeight_ = 10;
+  const size_t perColumnFilteringWeight_ = 10;
+  const size_t fe1Weight_ = 10;
+  const size_t fe2Weight_ = 10;
+  const size_t joinWeight_ = 500;
+  const size_t aggregationWeight_ = 500;
+
+  // This is simple SQL operations-based model leveraged by
+  // FairThreadPool run by PP facility.
+  // Every operation mentioned in this calculation spends
+  // some CPU so the morsel uses this op weights more.
+  uint32_t calculateBPPWeight() const
+  {
+    uint32_t weight = perColumnProjectWeight_ * projectCount;
+    weight += filterCount * perColumnFilteringWeight_;
+    weight += tJoiners.size() * joinWeight_;
+    weight += (aggregatorPM) ? aggregationWeight_ : 0;
+    weight += (fe1) ? fe1Weight_ : 0;
+    weight += (fe2) ? fe2Weight_ : 0;
+    return weight;
+  }
   BPSOutputType ot;
 
   bool needToSetLBID;
@@ -328,7 +352,7 @@ class BatchPrimitiveProcessorJL
   rowgroup::RowGroup aggregateRGPM;
 
   /* UM portion of the PM join alg */
-  std::vector<boost::shared_ptr<joiner::TupleJoiner> > tJoiners;
+  std::vector<std::shared_ptr<joiner::TupleJoiner> > tJoiners;
   std::vector<rowgroup::RowGroup> smallSideRGs;
   rowgroup::RowGroup largeSideRG;
   std::vector<std::vector<uint32_t> > smallSideKeys;
@@ -355,6 +379,7 @@ class BatchPrimitiveProcessorJL
   unsigned fJoinerChunkSize;
   uint32_t dbRoot;
   bool hasSmallOuterJoin;
+  uint32_t maxPmJoinResultCount = 1048576;
 
   uint32_t _priority;
 
@@ -366,5 +391,3 @@ class BatchPrimitiveProcessorJL
 };
 
 }  // namespace joblist
-
-#endif

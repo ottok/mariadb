@@ -20,8 +20,7 @@
 
 /** @file */
 
-#ifndef FUNCTOR_H
-#define FUNCTOR_H
+#pragma once
 
 #include <cstdlib>
 #include <string>
@@ -37,6 +36,8 @@
 #include "calpontsystemcatalog.h"
 
 #include "dataconvert.h"
+
+#include "nullstring.h"
 
 namespace rowgroup
 {
@@ -54,7 +55,14 @@ namespace funcexp
 // typedef std::vector<execplan::STNP> FunctionParm;
 typedef std::vector<execplan::SPTP> FunctionParm;
 
+constexpr const int32_t MAX_MICROSECOND_PRECISION = 6;
+
 /** @brief Func class
+ *
+ * @desc IMPOTRANT: functions are pure transformers, they should
+ * not have state shared between invocations. This is so because
+ * functions' objects are, essentially, singletons and the same
+ * objects will be used in diffeent threads.
  */
 class Func
 {
@@ -107,6 +115,18 @@ class Func
 
   virtual std::string getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
                                 execplan::CalpontSystemCatalog::ColType& op_ct) = 0;
+  utils::NullString getNullStrVal(rowgroup::Row& row, FunctionParm& fp,
+                                execplan::CalpontSystemCatalog::ColType& op_ct)
+  {
+    bool isNull;
+    std::string val = getStrVal(row, fp, isNull, op_ct);
+    utils::NullString result;
+    if (!isNull)
+    {
+      result.assign(val);
+    }
+    return result;
+  }
 
   virtual execplan::IDB_Decimal getDecimalVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
                                               execplan::CalpontSystemCatalog::ColType& op_ct)
@@ -246,5 +266,3 @@ class Arg2Eager
 };
 
 }  // namespace funcexp
-
-#endif

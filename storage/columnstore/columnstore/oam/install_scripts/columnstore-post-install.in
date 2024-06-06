@@ -164,6 +164,13 @@ if [ $user = "root" ]; then
 
     systemctl=`which systemctl 2>/dev/null`
     if [ -n "$systemctl" ]; then
+        # Removing a separate ExeMgr unit.
+        if [[ -f  /usr/lib/systemd/system/mcs-exemgr.service ]]; then
+            rm -f /usr/lib/systemd/system/mcs-exemgr.service
+        fi
+        if [[ -f  /lib/systemd/system/mcs-exemgr.service ]]; then
+            rm -f /lib/systemd/system/mcs-exemgr.service
+        fi
         cp @ENGINE_SUPPORTDIR@/mariadb-columnstore.service /usr/lib/systemd/system/. >/dev/null 2>&1
         cp @ENGINE_SUPPORTDIR@/mariadb-columnstore.service /lib/systemd/system/. >/dev/null 2>&1
         cp @ENGINE_SUPPORTDIR@/mcs-controllernode.service /usr/lib/systemd/system/. >/dev/null 2>&1
@@ -172,8 +179,6 @@ if [ $user = "root" ]; then
         cp @ENGINE_SUPPORTDIR@/mcs-ddlproc.service /lib/systemd/system/. >/dev/null 2>&1
         cp @ENGINE_SUPPORTDIR@/mcs-dmlproc.service /usr/lib/systemd/system/. >/dev/null 2>&1
         cp @ENGINE_SUPPORTDIR@/mcs-dmlproc.service /lib/systemd/system/. >/dev/null 2>&1
-        cp @ENGINE_SUPPORTDIR@/mcs-exemgr.service /usr/lib/systemd/system/. >/dev/null 2>&1
-        cp @ENGINE_SUPPORTDIR@/mcs-exemgr.service /lib/systemd/system/. >/dev/null 2>&1
         cp @ENGINE_SUPPORTDIR@/mcs-primproc.service /usr/lib/systemd/system/. >/dev/null 2>&1
         cp @ENGINE_SUPPORTDIR@/mcs-primproc.service /lib/systemd/system/. >/dev/null 2>&1
         cp @ENGINE_SUPPORTDIR@/mcs-workernode.service /usr/lib/systemd/system/mcs-workernode@.service  >/dev/null 2>&1
@@ -184,12 +189,10 @@ if [ $user = "root" ]; then
         cp @ENGINE_SUPPORTDIR@/mcs-loadbrm.service /lib/systemd/system/. >/dev/null 2>&1
         cp @ENGINE_SUPPORTDIR@/mcs-storagemanager.service /usr/lib/systemd/system/. >/dev/null 2>&1
         cp @ENGINE_SUPPORTDIR@/mcs-storagemanager.service /lib/systemd/system/. >/dev/null 2>&1
-
         systemctl enable mariadb-columnstore >/dev/null 2>&1
         systemctl enable mcs-controllernode > /dev/null 2>&1
         systemctl enable mcs-ddlproc > /dev/null 2>&1
         systemctl enable mcs-dmlproc > /dev/null 2>&1
-        systemctl enable mcs-exemgr > /dev/null 2>&1
         systemctl enable mcs-primproc > /dev/null 2>&1
         systemctl enable mcs-workernode@1 > /dev/null 2>&1
         systemctl enable mcs-writeengineserver > /dev/null 2>&1
@@ -240,9 +243,19 @@ NOTE: For non-root install, you will need to run the following commands as root 
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 columnstoreSyslogSetup.sh --user=$user install
-
 EOD
 fi
+
+#determine lock file directory
+
+# Lock directory for root user
+lockdir='/var/lock/subsys'
+
+@ENGINE_BINDIR@/mcsSetConfig -d Installation LockFileDirectory $lockdir
+
+mkdir $lockdir >/dev/null 2>&1
+
+rm -f $lockdir/columnstore
 
 # This was the last place of postConfigure. RIP
 
@@ -282,6 +295,9 @@ if [ -z "$MCS_USE_S3_STORAGE" ]; then
   MCS_S3_ROLE_NAME="$(find_env_var "MCS_S3_ROLE_NAME")"
   MCS_S3_STS_REGION="$(find_env_var "MCS_S3_STS_REGION")"
   MCS_S3_STS_ENDPOINT="$(find_env_var "MCS_S3_STS_ENDPOINT")"
+  MCS_S3_USE_HTTP="$(find_env_var "MCS_S3_USE_HTTP")"
+  MCS_S3_NO_SSL_VERIFY="$(find_env_var "MCS_S3_NO_SSL_VERIFY")"
+  MCS_S3_LIBS3_DEBUG="$(find_env_var "MCS_S3_LIBS3_DEBUG")"
 fi
 
 if [ ! -z "$MCS_USE_S3_STORAGE" ] && [ $MCS_USE_S3_STORAGE -eq 1 ]; then
@@ -312,6 +328,15 @@ if [ ! -z "$MCS_USE_S3_STORAGE" ] && [ $MCS_USE_S3_STORAGE -eq 1 ]; then
       fi
       if [ ! -z "$MCS_S3_STS_ENDPOINT" ]; then
           sed -i "s|^# sts_endpoint =.*|sts_endpoint = $MCS_S3_STS_ENDPOINT|" /etc/columnstore/storagemanager.cnf
+      fi
+      if [ ! -z "$MCS_S3_USE_HTTP" ]; then
+          sed -i "s|^# use_http =.*|use_http = enabled|" /etc/columnstore/storagemanager.cnf
+      fi
+      if [ ! -z "$MCS_S3_NO_SSL_VERIFY" ]; then
+          sed -i "s|^# ssl_verify =.*|ssl_verify = disabled|" /etc/columnstore/storagemanager.cnf
+      fi
+      if [ ! -z "$MCS_S3_LIBS3_DEBUG" ]; then
+          sed -i "s|^# libs3_debug =.*|libs3_debug = enabled|" /etc/columnstore/storagemanager.cnf
       fi
       sed -i "s|^bucket =.*|bucket = $MCS_S3_BUCKET|" /etc/columnstore/storagemanager.cnf
       sed -i "s|^# endpoint =.*|endpoint = $MCS_S3_ENDPOINT|" /etc/columnstore/storagemanager.cnf
@@ -354,6 +379,14 @@ fi
 
 systemctl cat mariadb-columnstore.service > /dev/null 2>&1
 if [ $? -eq 0 ] && [ $(running_systemd) -eq 0 ]; then
+
+    # mask mariadb-columnstore service to prevent starting services and dbbuilder
+    # after reinstallation on multinode configurations
+    num_workers=$(grep NumWorkers /etc/columnstore/Columnstore.xml | tr -dc '0-9')
+    if [[ $num_workers > 1 ]]; then
+        systemctl mask mariadb-columnstore
+    fi
+
     mkdir -p @ENGINE_DATADIR@/storagemanager
     chown -R mysql:mysql @ENGINE_DATADIR@/storagemanager
     IFLAG=@ENGINE_DATADIR@/storagemanager/storagemanager-lock

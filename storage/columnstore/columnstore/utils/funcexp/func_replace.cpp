@@ -48,21 +48,27 @@ std::string Func_replace::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& 
 {
   CHARSET_INFO* cs = ct.getCharset();
 
-  const string& str = fp[0]->data()->getStrVal(row, isNull);
-  if (isNull)
+  const auto& nstr = fp[0]->data()->getStrVal(row, isNull);
+  if (nstr.isNull())
     return "";
+
+  const auto& str = nstr.unsafeStringRef();
   size_t strLen = str.length();
 
-  const string& fromstr = fp[1]->data()->getStrVal(row, isNull);
-  if (isNull)
+  const auto& nfromstr = fp[1]->data()->getStrVal(row, isNull);
+  if (nfromstr.isNull())
     return "";
+  const auto& fromstr = nfromstr.unsafeStringRef();
+
   if (fromstr.length() == 0)
     return str;
   size_t fromLen = fromstr.length();
 
-  const string& tostr = fp[2]->data()->getStrVal(row, isNull);
-  if (isNull)
+  const auto& ntostr = fp[2]->data()->getStrVal(row, isNull);
+  if (ntostr.isNull())
     return "";
+  const auto& tostr = ntostr.unsafeStringRef();
+
   size_t toLen = tostr.length();
 
   bool binaryCmp = (cs->state & MY_CS_BINSORT) || !cs->use_mb();
@@ -71,19 +77,22 @@ std::string Func_replace::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& 
   if (binaryCmp)
   {
     // Count the number of fromstr in strend so we can reserve buffer space.
-    int count = 0;
-    do
+    size_t count = 0;
+    while ( string::npos != (pos = str.find(fromstr, pos)))
     {
       ++count;
-      pos = str.find(fromstr, pos + fromLen);
-    } while (pos != string::npos);
+      pos += fromLen;
+    }
 
-    newstr.reserve(strLen + (count * ((int)toLen - (int)fromLen)) + 1);
+    if (count == 0)
+    {
+      return str;
+    }
+
+    newstr.reserve(strLen + (count * (toLen - fromLen)) + 1);
 
     uint32_t i = 0;
     pos = str.find(fromstr);
-    if (pos == string::npos)
-      return str;
     // Move the stuff into newstr
     do
     {

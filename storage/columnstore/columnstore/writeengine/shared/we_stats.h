@@ -21,8 +21,7 @@
  *******************************************************************************/
 /** @file */
 
-#ifndef _WE_STATS_H_
-#define _WE_STATS_H_
+#pragma once
 #include <we_obj.h>
 #ifdef PROFILE
 #include <boost/thread/mutex.hpp>
@@ -183,4 +182,3 @@ class Stats
 };
 
 }  // namespace WriteEngine
-#endif  // _WE_STATIS_H_

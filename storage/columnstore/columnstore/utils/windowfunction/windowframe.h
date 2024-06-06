@@ -17,8 +17,7 @@
 
 //  $Id: windowframe.h 3932 2013-06-25 16:08:10Z xlou $
 
-#ifndef UTILS_WINDOWFRAME_H
-#define UTILS_WINDOWFRAME_H
+#pragma once
 
 #include <utility>  // std::pair, std::make_pair
 #include <boost/shared_ptr.hpp>
@@ -120,4 +119,3 @@ class WindowFrame
 
 }  // namespace windowfunction
 
-#endif  // UTILS_WINDOWFRAME_H

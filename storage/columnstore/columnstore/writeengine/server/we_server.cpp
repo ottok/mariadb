@@ -24,14 +24,10 @@
 #include <iostream>
 #include <string>
 #include <sstream>
-#ifndef _MSC_VER
 #include <signal.h>
 #include <stdexcept>
 #include "logger.h"
-#endif
-#ifndef _MSC_VER
 #include <sys/resource.h>
-#endif
 using namespace std;
 
 #include "messagequeue.h"
@@ -129,7 +125,6 @@ void added_a_pm(int)
 
 int ServiceWriteEngine::setupResources()
 {
-#ifndef _MSC_VER
   struct rlimit rlim;
 
   if (getrlimit(RLIMIT_NOFILE, &rlim) != 0)
@@ -149,18 +144,15 @@ int ServiceWriteEngine::setupResources()
     return -3;
   }
 
-  if (rlim.rlim_cur != 65536)
+  if (rlim.rlim_cur < 65536)
   {
     return -4;
   }
-
-#endif
   return 0;
 }
 
 void ServiceWriteEngine::setupChildSignalHandlers()
 {
-#ifndef _MSC_VER
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
   sa.sa_handler = added_a_pm;
@@ -173,7 +165,6 @@ void ServiceWriteEngine::setupChildSignalHandlers()
   sigaction(SIGSEGV, &sa, 0);
   sigaction(SIGABRT, &sa, 0);
   sigaction(SIGFPE, &sa, 0);
-#endif
 }
 
 int ServiceWriteEngine::Child()
@@ -183,11 +174,9 @@ int ServiceWriteEngine::Child()
   // Init WriteEngine Wrapper (including Config Columnstore.xml cache)
   WriteEngine::WriteEngineWrapper::init(WriteEngine::SUBSYSTEM_ID_WE_SRV);
 
-#ifdef _MSC_VER
-  // In windows, initializing the wrapper (A dll) does not set the static variables
-  // in the main program
-  idbdatafile::IDBPolicy::configIDBPolicy();
-#endif
+  // Initialize the charset library
+  MY_INIT("WriteEngineServer");
+
   Config weConfig;
 
   ostringstream serverParms;
@@ -235,6 +224,10 @@ int ServiceWriteEngine::Child()
         logging::MessageLog ml(lid);
         ml.logCriticalMessage(message);
         NotifyServiceInitializationFailed();
+
+        // Free up resources allocated by MY_INIT() above.
+        my_end(0);
+
         return 2;
       }
     }
@@ -272,6 +265,10 @@ int ServiceWriteEngine::Child()
     cerr << errMsg << endl;
 
     NotifyServiceInitializationFailed();
+
+    // Free up resources allocated by MY_INIT() above.
+    my_end(0);
+
     return 2;
   }
 
@@ -318,6 +315,9 @@ int ServiceWriteEngine::Child()
     }
   }
 
+  // Free up resources allocated by MY_INIT() above.
+  my_end(0);
+
   // It is an error to reach here...
   return 1;
 }
@@ -331,8 +331,6 @@ int main(int argc, char** argv)
   setlocale(LC_NUMERIC, "C");
   // This is unset due to the way we start it
   program_invocation_short_name = const_cast<char*>("WriteEngineServ");
-  // Initialize the charset library
-  MY_INIT(argv[0]);
 
   return ServiceWriteEngine(opt).Run();
 }

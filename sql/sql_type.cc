@@ -2727,7 +2727,9 @@ Type_handler::Column_definition_set_attributes(THD *thd,
                                                column_definition_type_t type)
                                                const
 {
-  def->set_charset_collation_attrs(attr.charset_collation_attrs());
+  def->set_charset_collation_attrs(thd,
+                                   thd->variables.character_set_collations,
+                                   attr.charset_collation_attrs());
   def->set_length_and_dec(attr);
   return false;
 }
@@ -2989,10 +2991,7 @@ void Type_handler_year::
   {
     char buff[sizeof("YEAR()") + MY_INT64_NUM_DECIMAL_DIGITS + 1];
     my_snprintf(buff, sizeof(buff), "YEAR(%llu)", def->length);
-    push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
-                        ER_WARN_DEPRECATED_SYNTAX,
-                        ER_THD(thd, ER_WARN_DEPRECATED_SYNTAX),
-                        buff, "YEAR(4)");
+    warn_deprecated<1007>(thd, buff, "YEAR(4)");
   }
 }
 
@@ -3035,7 +3034,9 @@ bool Type_handler_null::
                                               *derived_attr)
                                         const
 {
-  def->prepare_charset_for_string(derived_attr);
+  def->prepare_charset_for_string(thd,
+                                  thd->variables.character_set_collations,
+                                  derived_attr);
   def->create_length_to_internal_length_null();
   return false;
 }
@@ -3117,7 +3118,10 @@ bool Type_handler_typelib::
                                               *derived_attr)
                                         const
 {
-  return def->prepare_charset_for_string(derived_attr) ||
+  return def->prepare_charset_for_string(thd,
+                                         thd->variables.
+                                           character_set_collations,
+                                         derived_attr) ||
          def->prepare_stage1_typelib(thd, mem_root, type);
 }
 
@@ -3131,7 +3135,10 @@ bool Type_handler_string_result::
                                               *derived_attr)
                                         const
 {
-  return def->prepare_charset_for_string(derived_attr) ||
+  return def->prepare_charset_for_string(thd,
+                                         thd->variables.
+                                           character_set_collations,
+                                         derived_attr) ||
          def->prepare_stage1_string(thd, mem_root);
 }
 
@@ -7780,6 +7787,104 @@ Item *Type_handler_row::
 
 /***************************************************************************/
 
+/*
+  Check if in a predicate like:
+
+     WHERE timestamp_arg=datetime_arg
+
+  we can replace DATETIME comparison to TIMESTAMP comparison,
+  to avoid slow TIMESTAMP->DATETIME data type conversion per row.
+
+  TIMESTAMP and DATETIME are compared as DATETIME historically.
+  This may be inefficient, because involves a conversion of
+  the TIMESTAMP side to DATETIME per row.
+  The conversion happens in Timezone::gmt_sec_to_TIME().
+  E.g. in case of the SYSTEM timezone, it calls localtime_r(),
+  which is known to be slow.
+
+  It's generally not possible to compare TIMESTAMP and DATETIME
+  as TIMESTAMP without behavior change, because:
+  - DATETIME has a wider range.
+  - Two different TIMESTAMP values can have the same DATETIME value
+    near the "fall back" DST change, as well as for leap seconds.
+  - There are DATETIME gaps during the "spring forward" DST switch.
+
+  However, if the DATETIME side is a constant, then we can compare
+  it to TIMESTAMP as TIMESTAMP in many cases. The DATETIME argument can
+  be converted once to TIMESTAMP, so no data type conversion will
+  happen per row. This is faster for big tables.
+
+  The comparison predicates must satisfy the following conditions:
+    1. There must be a proper data type combination:
+       - other must be of the TIMESTAMP data type
+       - subject must be of the DATETIME data type,
+         or can convert to DATETIME.
+    2. subject must be a constant
+    3. subject must convert to TIMESTAMP safely
+       (without time zone anomalies near its value)
+*/
+
+Item *
+Type_handler_datetime_common::convert_item_for_comparison(
+                                                        THD *thd,
+                                                        Item *subject,
+                                                        const Item *counterpart)
+                                                        const
+{
+  if (!dynamic_cast<const Type_handler_timestamp_common*>(
+                                                 counterpart->type_handler()) ||
+      !subject->type_handler()->can_return_date())
+    return subject;
+
+  struct Count_handler : public Internal_error_handler
+  {
+    uint hit= 0;
+    bool handle_condition(THD *thd,
+                          uint sql_errno,
+                          const char *sqlstate,
+                          Sql_condition::enum_warning_level *level,
+                          const char *msg,
+                          Sql_condition **cond_hdl)
+    {
+      hit++;
+      return *level >= Sql_condition::WARN_LEVEL_WARN;
+    }
+  } cnt_handler;
+
+  // Suppress and count warnings
+  thd->push_internal_handler(&cnt_handler);
+  Datetime dt(thd, subject, Timestamp::DatetimeOptions(thd));
+  thd->pop_internal_handler();
+
+  if (!dt.is_valid_datetime() || cnt_handler.hit)
+  {
+    /*
+      SQL NULL DATETIME, or a DATETIME with zeros in YYYYMMDD,
+      or warnings during DATETIME evaluation.
+    */
+    return subject;
+  }
+
+  // '0000-00-00 00:00:00' is a special valid MariaDB TIMESTAMP value
+  if (!non_zero_date(dt.get_mysql_time()))
+    return new (thd->mem_root) Item_timestamp_literal(thd,
+                                          Timestamp_or_zero_datetime::zero(),
+                                          subject->datetime_precision(thd));
+
+  const Timeval_null tv(thd->safe_timeval_replacement_for_nonzero_datetime(dt));
+  if (tv.is_null())
+    return subject; // Time zone anomalies found around "dt"
+
+  // Should be safe to convert
+  const Timestamp_or_zero_datetime ts(Timestamp(tv.to_timeval()));
+  return new (thd->mem_root) Item_timestamp_literal(thd,
+                                          ts,
+                                          subject->datetime_precision(thd));
+}
+
+
+/***************************************************************************/
+
 static const char* item_name(Item *a, String *str)
 {
   if (a->name.str)
@@ -8797,6 +8902,43 @@ Type_handler_temporal_result::Item_const_eq(const Item_const *a,
           a->get_type_all_attributes_from_const()->decimals ==
           b->get_type_all_attributes_from_const()->decimals);
 }
+
+
+/*
+  @brief
+    Check if two costant timestamp values are identical.
+
+  @return
+    true <=> *a and *b are identical
+*/
+bool
+Type_handler_timestamp_common::Item_const_eq(const Item_const *a,
+                                             const Item_const *b,
+                                             bool binary_cmp) const
+{
+  /*
+    In a condition like:
+      WHERE IF(a='2001-01-01 00:00:00',1,0)=IF(a='2001-01-01 00:00:00',1,0);
+    Item_func_eq::fix_length_and_dec() calls get_timestamp_item_for_comparison()
+    which replaces string literals '2001-01-01 00:00:00' with
+    Item_timestamp_literal instances, which later during remove_eq_conds()
+    come to here.
+
+    Note, Item_param bound to TIMESTAMP is not detected here,
+    so trivial conditions of this kind do not get eliminated:
+      DECLARE ts TIMESTAMP DEFAULT (SELECT MAX(ts_col) FROM t1);
+      EXECUTE IMMEDIATE
+        'SELECT * FROM t1 WHERE COALESCE(ts_col,?)<=>COALESCE(ts_col,?)'
+         USING ts, ts;
+    It should be fixed by MDEV-14271.
+  */
+  const Item_timestamp_literal *ta, *tb;
+  if (!(ta= dynamic_cast<const Item_timestamp_literal*>(a)) ||
+      !(tb= dynamic_cast<const Item_timestamp_literal*>(b)))
+    return false;
+  return !ta->value().cmp(tb->value());
+}
+
 
 /***************************************************************************/
 

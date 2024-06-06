@@ -28,15 +28,9 @@ using namespace std;
 
 #include <unistd.h>
 #include <sys/types.h>
-#ifdef _MSC_VER
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <stdio.h>
-#else
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#endif
 
 #include "configcpp.h"
 using namespace config;
@@ -218,13 +212,17 @@ void MessageQueueClient::setup(bool syncProto)
 }
 
 MessageQueueClient::MessageQueueClient(const string& otherEnd, const string& config, bool syncProto)
- : fOtherEnd(otherEnd), fConfig(Config::makeConfig(config)), fLogger(31), fIsAvailable(true)
+ : fOtherEnd(otherEnd)
+ , fConfig(Config::makeConfig(config))
+ , fLogger(31)
+ , fIsAvailable(true)
+ , atTheSameHost_(false)
 {
   setup(syncProto);
 }
 
 MessageQueueClient::MessageQueueClient(const string& otherEnd, Config* config, bool syncProto)
- : fOtherEnd(otherEnd), fConfig(config), fLogger(31), fIsAvailable(true)
+ : fOtherEnd(otherEnd), fConfig(config), fLogger(31), fIsAvailable(true), atTheSameHost_(false)
 {
   if (fConfig == 0)
     fConfig = Config::makeConfig();
@@ -233,7 +231,7 @@ MessageQueueClient::MessageQueueClient(const string& otherEnd, Config* config, b
 }
 
 MessageQueueClient::MessageQueueClient(const string& dnOrIp, uint16_t port, bool syncProto)
- : fLogger(31), fIsAvailable(true)
+ : fLogger(31), fIsAvailable(true), atTheSameHost_(false)
 {
 #ifdef SKIP_IDB_COMPRESSION
   fClientSock.setSocketImpl(new InetStreamSocket());

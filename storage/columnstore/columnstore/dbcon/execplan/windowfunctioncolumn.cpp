@@ -22,6 +22,7 @@
  *
  ***********************************************************************/
 
+#include <cstddef>
 #include <string>
 #include <iostream>
 #include <sstream>
@@ -51,10 +52,6 @@ using namespace rowgroup;
 
 #include "joblisttypes.h"
 using namespace joblist;
-
-#ifdef _MSC_VER
-#define strcasecmp stricmp
-#endif
 
 namespace execplan
 {
@@ -236,7 +233,17 @@ WindowFunctionColumn::WindowFunctionColumn(const WindowFunctionColumn& rhs, cons
  , fTimeZone(rhs.timeZone())
 {
 }
-
+WindowFunctionColumn::WindowFunctionColumn(const std::string& functionName,
+                                           const std::vector<SRCP>& functionParms,
+                                           const std::vector<SRCP>& partitions, WF_OrderBy& orderby,
+                                           const uint32_t sessionID)
+ : ReturnedColumn(sessionID)
+ , fFunctionName(functionName)
+ , fFunctionParms(functionParms)
+ , fPartitions(partitions)
+ , fOrderBy(orderby)
+{
+}
 const string WindowFunctionColumn::toString() const
 {
   ostringstream output;
@@ -268,6 +275,35 @@ const string WindowFunctionColumn::toString() const
     output << colList[i]->toString() << endl;
 
   return output.str();
+}
+
+string WindowFunctionColumn::toCppCode(IncludeSet& includes) const
+{
+  includes.insert("windowfunctioncolumn.h");
+  stringstream ss;
+  ss << "WindowFunctionColumn(" << std::quoted(fFunctionName) << ", std::vector<SRCP>{";
+  if (!fFunctionParms.empty())
+  {
+    for (size_t i = 0; i < fFunctionParms.size() - 1; i++)
+      ss << "boost::shared_ptr<ReturnedColumn>(new " << fFunctionParms.at(i)->toCppCode(includes) << "), ";
+    ss << "boost::shared_ptr<ReturnedColumn>(new " << fFunctionParms.back()->toCppCode(includes) << ")";
+  }
+  ss << "}, std::vector<SRCP>{";
+  if (!fPartitions.empty())
+  {
+    for (size_t i = 0; i < fPartitions.size() - 1; i++)
+      ss << "boost::shared_ptr<ReturnedColumn>(new " << fPartitions.at(i)->toCppCode(includes) << "), ";
+    ss << "boost::shared_ptr<ReturnedColumn>(new " << fPartitions.back()->toCppCode(includes) << ")";
+  }
+  ss << "}, WF_OrderBy(std::vector<SRCP>{";
+  if (!fOrderBy.fOrders.empty())
+  {
+    for (size_t i = 0; i < fOrderBy.fOrders.size() - 1; i++)
+      ss << "boost::shared_ptr<ReturnedColumn>(new " << fOrderBy.fOrders.at(i)->toCppCode(includes) << "), ";
+    ss << "boost::shared_ptr<ReturnedColumn>(new " << fOrderBy.fOrders.back()->toCppCode(includes) << ")}))";
+  }
+
+  return ss.str();
 }
 
 void WindowFunctionColumn::serialize(messageqcpp::ByteStream& b) const
@@ -486,15 +522,18 @@ void WindowFunctionColumn::evaluate(Row& row, bool& isNull)
           // fallthrough
         default:
         {
-          const auto str = row.getConstString(fInputIndex);
-          if (str.eq(utils::ConstString(CPNULLSTRMARK)))
+          const auto str = row.getStringField(fInputIndex);
+          if (str.isNull())
+          {
             isNull = true;
+            fResult.strVal.dropString();
+          }
           else
-            fResult.strVal = str.toString();
+            fResult.strVal.assign(str.unsafeStringRef());
 
           // stringColVal is padded with '\0' to colWidth so can't use str.length()
-          if (strlen(fResult.strVal.c_str()) == 0)
-            isNull = true;
+          //if (strlen(fResult.strVal.str()) == 0)
+          //  isNull = true;
 
           break;
         }

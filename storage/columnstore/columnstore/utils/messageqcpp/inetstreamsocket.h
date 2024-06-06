@@ -21,25 +21,18 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef MESSAGEQCPP_INETSTREAMSOCKET_H
-#define MESSAGEQCPP_INETSTREAMSOCKET_H
+#pragma once
 
 #include <ctime>
 #include <unistd.h>
-#ifndef _MSC_VER
 #include <netinet/in.h>
-#endif
 #include <cstring>
 
 #include "socket.h"
 #include "socketparms.h"
 #include "bytestream.h"
 
-#if defined(_MSC_VER) && defined(xxxINETSTREAMSOCKET_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 class MessageQTestSuite;
 
@@ -202,6 +195,7 @@ class InetStreamSocket : public Socket
    *
    */
   virtual bool isSameAddr(const Socket* rhs) const;
+  virtual bool isSameAddr(const struct in_addr& ipv4Addr) const;
 
   /** ping an ip address
    *
@@ -288,5 +282,3 @@ inline std::ostream& operator<<(std::ostream& os, const InetStreamSocket& rhs)
 }  // namespace messageqcpp
 
 #undef EXPORT
-
-#endif  // MESSAGEQCPP_INETSTREAMSOCKET_H

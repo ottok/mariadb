@@ -19,8 +19,7 @@
  * $Id: we_redistributeworkerthread.h 4450 2013-01-21 14:13:24Z rdempsey $
  */
 
-#ifndef WE_REDISTRIBUTEWORKERTHREAD_H
-#define WE_REDISTRIBUTEWORKERTHREAD_H
+#pragma once
 
 #include <map>
 #include <set>
@@ -28,7 +27,6 @@
 #include <cstdio>
 
 #include "boost/shared_ptr.hpp"
-#include "boost/shared_array.hpp"
 #include "boost/thread/mutex.hpp"
 
 #include "brmtypes.h"
@@ -84,7 +82,7 @@ class RedistributeWorkerThread
   int connectToWes(int);
   int updateDbrm();
   void confirmToPeer();
-  bool checkDataTransferAck(SBS&, size_t);
+  bool checkDataTransferAck(messageqcpp::SBS&, size_t);
 
   void sendResponse(uint32_t);
 
@@ -127,7 +125,7 @@ class RedistributeWorkerThread
   FILE* fOldFilePtr;
   std::set<std::string> fNewDirSet;
   std::set<std::string> fOldDirSet;
-  boost::shared_array<char> fWriteBuffer;
+  std::shared_ptr<char[]> fWriteBuffer;
 
   boost::shared_ptr<BRM::DBRM> fDbrm;
 
@@ -142,4 +140,3 @@ class RedistributeWorkerThread
 
 }  // namespace redistribute
 
-#endif

@@ -21,6 +21,7 @@
  ****************************************************************************/
 
 #include <iostream>
+#include <unordered_set>
 #include <sys/types.h>
 #include <vector>
 #ifdef __linux__
@@ -42,6 +43,7 @@
 #include "configcpp.h"
 #include "sessionmanagerserver.h"
 #include "messagequeuepool.h"
+#include "blocksize.h"
 #define DBRM_DLLEXPORT
 #include "dbrm.h"
 #undef DBRM_DLLEXPORT
@@ -2731,6 +2733,25 @@ int DBRM::setReadOnly(bool b) DBRM_THROW
   return err;
 }
 
+int DBRM::startReadOnly() DBRM_THROW
+{
+  ByteStream command, response;
+  uint8_t err;
+
+  command << START_READONLY;
+  err = send_recv(command, response);
+
+  if (err != ERR_OK)
+    return err;
+
+  if (response.length() != 1)
+    return ERR_NETWORK;
+
+  response >> err;
+  CHECK_EMPTY(response);
+  return err;
+}
+
 int DBRM::isReadWrite() throw()
 {
 #ifdef BRM_INFO
@@ -3004,6 +3025,73 @@ const QueryContext DBRM::sysCatVerID()
   return ret;
 }
 
+uint8_t DBRM::newCpimportJob(uint32_t& jobId)
+{
+  ByteStream command, response;
+  uint8_t err;
+  command << NEW_CPIMPORT_JOB;
+  err = send_recv(command, response);
+
+  if (err != ERR_OK)
+  {
+    log("DBRM: SessionManager::newCpimportJob(): network error");
+    return err;
+  }
+
+  if (response.length() != 5)
+  {
+    log("DBRM: SessionManager::newCpimportJob(): bad response");
+    return ERR_READONLY;
+  }
+
+  response >> err;
+  response >> jobId;
+  return ERR_OK;
+}
+
+void DBRM::finishCpimportJob(uint32_t jobId)
+{
+  ByteStream command, response;
+  uint8_t err;
+
+  command << FINISH_CPIMPORT_JOB << (uint32_t)jobId;
+  err = send_recv(command, response);
+
+  if (err != ERR_OK)
+    log("DBRM: error: SessionManager::finishCpimportJob() failed");
+  else if (response.length() != 1)
+    log("DBRM: error: SessionManager::finishCpimportJob() failed (bad response)", logging::LOG_TYPE_ERROR);
+
+  response >> err;
+
+  if (err != ERR_OK)
+    log("DBRM: error: SessionManager::finishCpimportJob() failed (valid error code)",
+        logging::LOG_TYPE_ERROR);
+}
+
+int DBRM::forceClearCpimportJobs() DBRM_THROW
+{
+  ByteStream command, response;
+  uint8_t err;
+
+  command << FORCE_CLEAR_CPIMPORT_JOBS;
+  err = send_recv(command, response);
+
+  if (err != ERR_OK)
+    log("DBRM: error: SessionManager::forceClearAllCpimportJobs()) failed");
+  else if (response.length() != 1)
+    log("DBRM: error: SessionManager::forceClearAllCpimportJobs() failed (bad response)",
+        logging::LOG_TYPE_ERROR);
+
+  response >> err;
+
+  if (err != ERR_OK)
+    log("DBRM: error: SessionManager::forceClearAllCpimportJobs() failed (valid error code)",
+        logging::LOG_TYPE_ERROR);
+
+  return err;
+}
+
 const TxnID DBRM::newTxnID(const SessionManagerServer::SID session, bool block, bool isDDL)
 {
 #ifdef BRM_INFO
@@ -3182,7 +3270,7 @@ const TxnID DBRM::getTxnID(const SessionManagerServer::SID session)
   return ret;
 }
 
-boost::shared_array<SIDTIDEntry> DBRM::SIDTIDMap(int& len)
+std::shared_ptr<SIDTIDEntry[]> DBRM::SIDTIDMap(int& len)
 {
 #ifdef BRM_INFO
 
@@ -3199,7 +3287,7 @@ boost::shared_array<SIDTIDEntry> DBRM::SIDTIDMap(int& len)
   uint8_t err, tmp8;
   uint32_t tmp32;
   int i;
-  boost::shared_array<SIDTIDEntry> ret;
+  std::shared_ptr<SIDTIDEntry[]> ret;
 
   command << SID_TID_MAP;
   err = send_recv(command, response);
@@ -4453,6 +4541,95 @@ void DBRM::deleteAISequence(uint32_t OID)
   }
 }
 
+void DBRM::addToLBIDList(uint32_t sessionID, vector<LBID_t>& lbidList)
+{
+  boost::shared_ptr<execplan::CalpontSystemCatalog> systemCatalogPtr =
+      execplan::CalpontSystemCatalog::makeCalpontSystemCatalog(sessionID);
+
+  std::unordered_map<
+      execplan::CalpontSystemCatalog::OID,
+      std::unordered_map<execplan::CalpontSystemCatalog::OID, std::vector<struct BRM::EMEntry>>>
+      extentMap;
+
+  int err = 0;
+
+  std::unordered_set<LBID_t> lbidSet;
+  std::unordered_set<execplan::CalpontSystemCatalog::OID> tableOidSet;
+
+  for (const auto i : lbidList)
+  {
+    lbidSet.insert(i);
+    execplan::CalpontSystemCatalog::OID oid;
+    uint16_t dbRoot, segmentNum;
+    uint32_t partitionNum, fbo;
+    err = lookupLocal(i, 0, false, oid, dbRoot, partitionNum, segmentNum, fbo);
+
+    if (err)
+    {
+      ostringstream os;
+      std::string errorMsg;
+      BRM::errString(err, errorMsg);
+      os << "lookupLocal from extent map error encountered while looking up lbid " << i
+         << " and error code is " << err << " with message " << errorMsg;
+      throw runtime_error(os.str());
+    }
+
+    execplan::CalpontSystemCatalog::OID tableOid = systemCatalogPtr->isAUXColumnOID(oid);
+
+    if (tableOid >= 3000)
+    {
+      if (tableOidSet.find(tableOid) == tableOidSet.end())
+      {
+        tableOidSet.insert(tableOid);
+        execplan::CalpontSystemCatalog::TableName tableName = systemCatalogPtr->tableName(tableOid);
+        execplan::CalpontSystemCatalog::RIDList tableColRidList = systemCatalogPtr->columnRIDs(tableName);
+
+        for (unsigned j = 0; j < tableColRidList.size(); j++)
+        {
+          auto objNum = tableColRidList[j].objnum;
+          err = getExtents(objNum, extentMap[tableOid][objNum]);
+
+          if (err)
+          {
+            ostringstream os;
+            os << "BRM lookup error. Could not get extents for OID " << objNum;
+            throw runtime_error(os.str());
+          }
+        }
+      }
+
+      uint32_t extentNumAux = fbo / ((getExtentRows() * execplan::AUX_COL_WIDTH) / BLOCK_SIZE);
+
+      for (auto iter = extentMap[tableOid].begin(); iter != extentMap[tableOid].end(); iter++)
+      {
+        const std::vector<struct BRM::EMEntry>& extents = iter->second;
+
+        for (const struct BRM::EMEntry& extent : extents)
+        {
+          uint32_t extentNum = extent.blockOffset / (extent.range.size * 1024);
+
+          if (dbRoot == extent.dbRoot && partitionNum == extent.partitionNum &&
+              segmentNum == extent.segmentNum && extentNumAux == extentNum)
+          {
+            lbidSet.insert(extent.range.start);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  lbidList.clear();
+
+  for (auto iter = lbidSet.begin(); iter != lbidSet.end(); iter++)
+  {
+    lbidList.push_back(*iter);
+  }
+
+  // Sort the vector.
+  std::sort<vector<LBID_t>::iterator>(lbidList.begin(), lbidList.end());
+}
+
 void DBRM::invalidateUncommittedExtentLBIDs(execplan::CalpontSystemCatalog::SCN txnid, bool allExtents,
                                             vector<LBID_t>* plbidList)
 {
@@ -4488,6 +4665,22 @@ void DBRM::invalidateUncommittedExtentLBIDs(execplan::CalpontSystemCatalog::SCN 
   if (plbidList == NULL)
   {
     getUncommittedExtentLBIDs(static_cast<VER_t>(txnid), localLBIDList);
+
+    try
+    {
+      addToLBIDList(0, localLBIDList);
+    }
+    catch (exception& e)
+    {
+      cerr << e.what() << endl;
+      return;
+    }
+    catch (...)
+    {
+      cerr << "invalidateUncommittedExtentLBIDs: caught an exception" << endl;
+      return;
+    }
+
     plbidList = &localLBIDList;
   }
 

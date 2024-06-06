@@ -19,16 +19,25 @@
  * MetadataFile.cpp
  */
 #include "MetadataFile.h"
+#include <set>
 #include <boost/filesystem.hpp>
 #define BOOST_SPIRIT_THREADSAFE
+#ifndef __clang__
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 #include <boost/property_tree/ptree.hpp>
+
+#ifndef __clang__
+  #pragma GCC diagnostic pop
+#endif
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/foreach.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <unistd.h>
-#include <set>
 
 #define max(x, y) (x > y ? x : y)
 #define min(x, y) (x < y ? x : y)

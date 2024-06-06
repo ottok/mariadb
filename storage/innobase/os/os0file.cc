@@ -65,7 +65,9 @@ Created 10/21/1995 Heikki Tuuri
 #endif /* HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE */
 
 #ifdef _WIN32
-#include <winioctl.h>
+# include <winioctl.h>
+#elif !defined O_DSYNC
+# define O_DSYNC O_SYNC
 #endif
 
 // my_test_if_atomic_write() , my_win_secattr()
@@ -941,6 +943,8 @@ bool
 os_file_flush_func(
 	os_file_t	file)
 {
+	if (UNIV_UNLIKELY(my_disable_sync)) return true;
+
 	int	ret;
 
 	ret = os_file_sync_posix(file);
@@ -1003,46 +1007,35 @@ os_file_create_simple_func(
 		}
 	}
 
-	bool	retry;
-
+	if (fil_system.is_write_through()) create_flag |= O_DSYNC;
 #ifdef O_DIRECT
-	int direct_flag = 0;
-	/* This function is always called for data files, we should disable
-	OS caching (O_DIRECT) here as we do in os_file_create_func(), so
-	we open the same file in the same mode, see man page of open(2). */
-	switch (srv_file_flush_method) {
-	case SRV_O_DSYNC:
-	case SRV_O_DIRECT:
-	case SRV_O_DIRECT_NO_FSYNC:
-		direct_flag = O_DIRECT;
-		break;
-	}
+	int direct_flag = fil_system.is_buffered() ? 0 : O_DIRECT;
 #else
 	constexpr int direct_flag = 0;
 #endif
 
-	do {
+	for (;;) {
 		file = open(name, create_flag | direct_flag, os_innodb_umask);
 
 		if (file == -1) {
 #ifdef O_DIRECT
 			if (direct_flag && errno == EINVAL) {
 				direct_flag = 0;
-				retry = true;
 				continue;
 			}
 #endif
-			*success = false;
-			retry = os_file_handle_error_no_exit(
-				name,
-				create_mode == OS_FILE_CREATE
-				? "create" : "open", false);
+
+			if (!os_file_handle_error_no_exit(
+				    name,
+				    create_mode == OS_FILE_CREATE
+				    ? "create" : "open", false)) {
+				break;
+			}
 		} else {
 			*success = true;
-			retry = false;
+			break;
 		}
-
-	} while (retry);
+	}
 
 	if (!read_only
 	    && *success
@@ -1088,7 +1081,7 @@ os_file_create_directory(
 }
 
 #ifdef O_DIRECT
-# if defined __linux
+# ifdef __linux__
 /** Note that the log file uses buffered I/O. */
 static ATTRIBUTE_COLD void os_file_log_buffered()
 {
@@ -1192,6 +1185,8 @@ os_file_create_func(
 		create_flag = O_RDWR | O_CLOEXEC;
 	}
 
+	ut_a(purpose == OS_FILE_AIO || purpose == OS_FILE_NORMAL);
+
 #ifdef O_DIRECT
 	struct stat st;
 	ut_a(type == OS_LOG_FILE
@@ -1199,14 +1194,8 @@ os_file_create_func(
 	int direct_flag = 0;
 
 	if (type == OS_DATA_FILE) {
-		switch (srv_file_flush_method) {
-		case SRV_O_DSYNC:
-		case SRV_O_DIRECT:
-		case SRV_O_DIRECT_NO_FSYNC:
+		if (!fil_system.is_buffered()) {
 			direct_flag = O_DIRECT;
-			break;
-		default:
-			break;
 		}
 # ifdef __linux__
 	} else if (type != OS_LOG_FILE) {
@@ -1218,11 +1207,6 @@ os_file_create_func(
 		   && !log_sys.is_opened()) {
 		if (stat(name, &st)) {
 			if (errno == ENOENT) {
-				if (create_mode & OS_FILE_ON_ERROR_SILENT) {
-					goto not_found;
-				}
-				sql_print_error(
-					"InnoDB: File %s was not found", name);
 				goto not_found;
 			}
 			goto skip_o_direct;
@@ -1240,18 +1224,12 @@ os_file_create_func(
 	ut_a(type == OS_LOG_FILE || type == OS_DATA_FILE);
 	constexpr int direct_flag = 0;
 #endif
-	ut_a(purpose == OS_FILE_AIO || purpose == OS_FILE_NORMAL);
 
-	/* We let O_DSYNC only affect log files */
-
-	if (!read_only
-	    && type == OS_LOG_FILE
-	    && srv_file_flush_method == SRV_O_DSYNC) {
-#ifdef O_DSYNC
+	if (read_only) {
+	} else if (type == OS_LOG_FILE
+		   ? log_sys.log_write_through
+		   : fil_system.is_write_through()) {
 		create_flag |= O_DSYNC;
-#else
-		create_flag |= O_SYNC;
-#endif
 	}
 
 	os_file_t	file;
@@ -1276,24 +1254,22 @@ os_file_create_func(
 				}
 				continue;
 			}
+# ifdef __linux__
+not_found:
+# endif
 #endif
-			if (!os_file_handle_error_no_exit(
+			if (os_file_handle_error_no_exit(
 				    name, (create_flag & O_CREAT)
 				    ? "create" : "open",
 				    create_mode & OS_FILE_ON_ERROR_SILENT)) {
-				break;
+				continue;
 			}
+
+			return OS_FILE_CLOSED;
 		} else {
 			*success = true;
 			break;
 		}
-	}
-
-	if (!*success) {
-#ifdef __linux__
-not_found:
-#endif
-		return OS_FILE_CLOSED;
 	}
 
 #ifdef __linux__
@@ -1746,6 +1722,9 @@ Flushes the write buffers of a given file to the disk.
 @return true if success */
 bool os_file_flush_func(os_file_t file)
 {
+  if (UNIV_UNLIKELY(my_disable_sync))
+    return true;
+
   ++os_n_fsyncs;
   static bool disable_datasync;
 
@@ -1919,6 +1898,11 @@ os_file_create_simple_func(
 		access = GENERIC_READ | GENERIC_WRITE;
 	}
 
+	if (fil_system.is_write_through())
+		attributes |= FILE_FLAG_WRITE_THROUGH;
+	if (!fil_system.is_buffered())
+		attributes |= FILE_FLAG_NO_BUFFERING;
+
 	for (;;) {
 		/* Use default security attributes and no template file. */
 
@@ -2057,25 +2041,16 @@ os_file_create_func(
 		if (!log_sys.is_opened() && !log_sys.log_buffered) {
 			attributes|= FILE_FLAG_NO_BUFFERING;
 		}
-		if (srv_file_flush_method == SRV_O_DSYNC)
+		if (log_sys.log_write_through)
+			attributes|= FILE_FLAG_WRITE_THROUGH;
+	} else {
+		if (type == OS_DATA_FILE && !fil_system.is_buffered())
+			attributes|= FILE_FLAG_NO_BUFFERING;
+		if (fil_system.is_write_through())
 			attributes|= FILE_FLAG_WRITE_THROUGH;
 	}
-	else if (type == OS_DATA_FILE) {
-		switch (srv_file_flush_method) {
-		case SRV_FSYNC:
-		case SRV_LITTLESYNC:
-		case SRV_NOSYNC:
-			break;
-		default:
-			attributes|= FILE_FLAG_NO_BUFFERING;
-		}
-	}
 
-	DWORD	access = GENERIC_READ;
-
-	if (!read_only) {
-		access |= GENERIC_WRITE;
-	}
+	DWORD access = read_only ? GENERIC_READ : GENERIC_READ | GENERIC_WRITE;
 
 	for (;;) {
 		const  char *operation;

@@ -15,11 +15,11 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef PSEUDOCC_H
-#define PSEUDOCC_H
+#pragma once
 
 #include "columncommand.h"
 #include "blocksize.h"
+#include "oamcache.h"
 
 namespace primitiveprocessor
 {
@@ -78,7 +78,7 @@ void PseudoCC::loadSingleValue(W val)
 template <typename W>
 void PseudoCC::loadPMNumber()
 {
-  uint32_t pmNum = oamCache->getLocalPMId();
+  uint32_t pmNum = oam::OamCache::makeOamCache()->getLocalPMId();
   loadSingleValue<W>(pmNum);
 }
 
@@ -135,5 +135,3 @@ void PseudoCC::loadLBID()
 }
 
 }  // namespace primitiveprocessor
-
-#endif  // PseudoCC_H

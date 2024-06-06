@@ -1402,7 +1402,7 @@ bool backup_finish(ds_ctxt *ds_data)
 		return(false);
 	}
 
-	if (!write_xtrabackup_info(ds_data, mysql_connection, XTRABACKUP_INFO,
+	if (!write_xtrabackup_info(ds_data, mysql_connection, MB_INFO,
 				    opt_history != 0, true)) {
 		return(false);
 	}
@@ -1458,11 +1458,15 @@ ibx_copy_incremental_over_full()
 	const char *ext_list[] = {"frm", "isl", "MYD", "MYI", "MAD", "MAI",
 		"MRG", "TRG", "TRN", "ARM", "ARZ", "CSM", "CSV", "opt", "par",
 		NULL};
-	const char *sup_files[] = {"xtrabackup_binlog_info",
-				   "xtrabackup_galera_info",
-				   "donor_galera_info",
-				   "xtrabackup_slave_info",
-				   "xtrabackup_info",
+	const char *sup_files[] = {MB_BINLOG_INFO,
+				   MB_GALERA_INFO,
+				   XTRABACKUP_DONOR_GALERA_INFO,
+				   MB_SLAVE_INFO,
+				   MB_INFO,
+				   XTRABACKUP_BINLOG_INFO,
+				   XTRABACKUP_GALERA_INFO,
+				   XTRABACKUP_SLAVE_INFO,
+				   XTRABACKUP_INFO,
 				   "ib_lru_dump",
 				   NULL};
 	datadir_iter_t *it = NULL;
@@ -1800,8 +1804,12 @@ copy_back()
 
 	while (datadir_iter_next(it, &node)) {
 		const char *ext_list[] = {"backup-my.cnf",
-			"xtrabackup_binary", "xtrabackup_binlog_info",
-			"xtrabackup_checkpoints", ".qp", ".pmap", ".tmp",
+			"xtrabackup_binary",
+			MB_BINLOG_INFO,
+			MB_METADATA_FILENAME,
+			XTRABACKUP_BINLOG_INFO,
+			XTRABACKUP_METADATA_FILENAME,
+			".qp", ".pmap", ".tmp",
 			NULL};
 		const char *filename;
 		char c_tmp;
@@ -2124,7 +2132,7 @@ ds_ctxt_t::make_hardlink(const char *from_path, const char *to_path)
 	}
 	else
 	{
-		strncpy(to_path_full, to_path, sizeof(to_path_full)-1);
+		strmake(to_path_full, to_path, sizeof(to_path_full)-1);
 	}
 #ifdef _WIN32
 	return  CreateHardLink(to_path_full, from_path, NULL);

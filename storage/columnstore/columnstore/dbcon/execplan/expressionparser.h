@@ -21,8 +21,7 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef EXPRESSION_PARSER
-#define EXPRESSION_PARSER
+#pragma once
 
 #include <iostream>
 #include <cassert>
@@ -157,5 +156,3 @@ bool operator==(const ParseTree& t1, const ParseTree& t2);
 bool operator!=(const ParseTree& t1, const ParseTree& t2);
 
 }  // namespace execplan
-
-#endif

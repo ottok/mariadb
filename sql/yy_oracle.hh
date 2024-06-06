@@ -729,95 +729,99 @@ extern int ORAdebug;
     SONAME_SYM = 930,              /* SONAME_SYM  */
     SOUNDS_SYM = 931,              /* SOUNDS_SYM  */
     SOURCE_SYM = 932,              /* SOURCE_SYM  */
-    SQL_BUFFER_RESULT = 933,       /* SQL_BUFFER_RESULT  */
-    SQL_CACHE_SYM = 934,           /* SQL_CACHE_SYM  */
-    SQL_CALC_FOUND_ROWS = 935,     /* SQL_CALC_FOUND_ROWS  */
-    SQL_NO_CACHE_SYM = 936,        /* SQL_NO_CACHE_SYM  */
-    SQL_THREAD = 937,              /* SQL_THREAD  */
-    STAGE_SYM = 938,               /* STAGE_SYM  */
-    STARTS_SYM = 939,              /* STARTS_SYM  */
-    START_SYM = 940,               /* START_SYM  */
-    STATEMENT_SYM = 941,           /* STATEMENT_SYM  */
-    STATUS_SYM = 942,              /* STATUS_SYM  */
-    STOP_SYM = 943,                /* STOP_SYM  */
-    STORAGE_SYM = 944,             /* STORAGE_SYM  */
-    STORED_SYM = 945,              /* STORED_SYM  */
-    STRING_SYM = 946,              /* STRING_SYM  */
-    SUBCLASS_ORIGIN_SYM = 947,     /* SUBCLASS_ORIGIN_SYM  */
-    SUBDATE_SYM = 948,             /* SUBDATE_SYM  */
-    SUBJECT_SYM = 949,             /* SUBJECT_SYM  */
-    SUBPARTITIONS_SYM = 950,       /* SUBPARTITIONS_SYM  */
-    SUBPARTITION_SYM = 951,        /* SUBPARTITION_SYM  */
-    SUPER_SYM = 952,               /* SUPER_SYM  */
-    SUSPEND_SYM = 953,             /* SUSPEND_SYM  */
-    SWAPS_SYM = 954,               /* SWAPS_SYM  */
-    SWITCHES_SYM = 955,            /* SWITCHES_SYM  */
-    SYSTEM = 956,                  /* SYSTEM  */
-    SYSTEM_TIME_SYM = 957,         /* SYSTEM_TIME_SYM  */
-    TABLES = 958,                  /* TABLES  */
-    TABLESPACE = 959,              /* TABLESPACE  */
-    TABLE_CHECKSUM_SYM = 960,      /* TABLE_CHECKSUM_SYM  */
-    TABLE_NAME_SYM = 961,          /* TABLE_NAME_SYM  */
-    TEMPORARY = 962,               /* TEMPORARY  */
-    TEMPTABLE_SYM = 963,           /* TEMPTABLE_SYM  */
-    TEXT_SYM = 964,                /* TEXT_SYM  */
-    THAN_SYM = 965,                /* THAN_SYM  */
-    TIES_SYM = 966,                /* TIES_SYM  */
-    TIMESTAMP = 967,               /* TIMESTAMP  */
-    TIMESTAMP_ADD = 968,           /* TIMESTAMP_ADD  */
-    TIMESTAMP_DIFF = 969,          /* TIMESTAMP_DIFF  */
-    TIME_SYM = 970,                /* TIME_SYM  */
-    TRANSACTION_SYM = 971,         /* TRANSACTION_SYM  */
-    TRANSACTIONAL_SYM = 972,       /* TRANSACTIONAL_SYM  */
-    THREADS_SYM = 973,             /* THREADS_SYM  */
-    TRIGGERS_SYM = 974,            /* TRIGGERS_SYM  */
-    TRIM_ORACLE = 975,             /* TRIM_ORACLE  */
-    TRUNCATE_SYM = 976,            /* TRUNCATE_SYM  */
-    TYPE_SYM = 977,                /* TYPE_SYM  */
-    UDF_RETURNS_SYM = 978,         /* UDF_RETURNS_SYM  */
-    UNBOUNDED_SYM = 979,           /* UNBOUNDED_SYM  */
-    UNCOMMITTED_SYM = 980,         /* UNCOMMITTED_SYM  */
-    UNDEFINED_SYM = 981,           /* UNDEFINED_SYM  */
-    UNDOFILE_SYM = 982,            /* UNDOFILE_SYM  */
-    UNDO_BUFFER_SIZE_SYM = 983,    /* UNDO_BUFFER_SIZE_SYM  */
-    UNICODE_SYM = 984,             /* UNICODE_SYM  */
-    UNINSTALL_SYM = 985,           /* UNINSTALL_SYM  */
-    UNKNOWN_SYM = 986,             /* UNKNOWN_SYM  */
-    UNTIL_SYM = 987,               /* UNTIL_SYM  */
-    UPGRADE_SYM = 988,             /* UPGRADE_SYM  */
-    USER_SYM = 989,                /* USER_SYM  */
-    USE_FRM = 990,                 /* USE_FRM  */
-    VALUE_SYM = 991,               /* VALUE_SYM  */
-    VARCHAR2_MARIADB_SYM = 992,    /* VARCHAR2_MARIADB_SYM  */
-    VARCHAR2_ORACLE_SYM = 993,     /* VARCHAR2_ORACLE_SYM  */
-    VARIABLES = 994,               /* VARIABLES  */
-    VERSIONING_SYM = 995,          /* VERSIONING_SYM  */
-    VIA_SYM = 996,                 /* VIA_SYM  */
-    VIEW_SYM = 997,                /* VIEW_SYM  */
-    VISIBLE_SYM = 998,             /* VISIBLE_SYM  */
-    VIRTUAL_SYM = 999,             /* VIRTUAL_SYM  */
-    WAIT_SYM = 1000,               /* WAIT_SYM  */
-    WARNINGS = 1001,               /* WARNINGS  */
-    WEEK_SYM = 1002,               /* WEEK_SYM  */
-    WEIGHT_STRING_SYM = 1003,      /* WEIGHT_STRING_SYM  */
-    WINDOW_SYM = 1004,             /* WINDOW_SYM  */
-    WITHIN = 1005,                 /* WITHIN  */
-    WITHOUT = 1006,                /* WITHOUT  */
-    WORK_SYM = 1007,               /* WORK_SYM  */
-    WRAPPER_SYM = 1008,            /* WRAPPER_SYM  */
-    WRITE_SYM = 1009,              /* WRITE_SYM  */
-    X509_SYM = 1010,               /* X509_SYM  */
-    XA_SYM = 1011,                 /* XA_SYM  */
-    XML_SYM = 1012,                /* XML_SYM  */
-    YEAR_SYM = 1013,               /* YEAR_SYM  */
-    CONDITIONLESS_JOIN = 1014,     /* CONDITIONLESS_JOIN  */
-    ON_SYM = 1015,                 /* ON_SYM  */
-    PREC_BELOW_NOT = 1016,         /* PREC_BELOW_NOT  */
-    SUBQUERY_AS_EXPR = 1017,       /* SUBQUERY_AS_EXPR  */
-    PREC_BELOW_IDENTIFIER_OPT_SPECIAL_CASE = 1018, /* PREC_BELOW_IDENTIFIER_OPT_SPECIAL_CASE  */
-    USER = 1019,                   /* USER  */
-    PREC_BELOW_CONTRACTION_TOKEN2 = 1020, /* PREC_BELOW_CONTRACTION_TOKEN2  */
-    EMPTY_FROM_CLAUSE = 1021       /* EMPTY_FROM_CLAUSE  */
+    SQL_AFTER_GTIDS_SYM = 933,     /* SQL_AFTER_GTIDS_SYM  */
+    SQL_BEFORE_GTIDS_SYM = 934,    /* SQL_BEFORE_GTIDS_SYM  */
+    SQL_BUFFER_RESULT = 935,       /* SQL_BUFFER_RESULT  */
+    SQL_CACHE_SYM = 936,           /* SQL_CACHE_SYM  */
+    SQL_CALC_FOUND_ROWS = 937,     /* SQL_CALC_FOUND_ROWS  */
+    SQL_NO_CACHE_SYM = 938,        /* SQL_NO_CACHE_SYM  */
+    SQL_THREAD = 939,              /* SQL_THREAD  */
+    STAGE_SYM = 940,               /* STAGE_SYM  */
+    STARTS_SYM = 941,              /* STARTS_SYM  */
+    START_SYM = 942,               /* START_SYM  */
+    STATEMENT_SYM = 943,           /* STATEMENT_SYM  */
+    STATUS_SYM = 944,              /* STATUS_SYM  */
+    STOP_SYM = 945,                /* STOP_SYM  */
+    STORAGE_SYM = 946,             /* STORAGE_SYM  */
+    STORED_SYM = 947,              /* STORED_SYM  */
+    STRING_SYM = 948,              /* STRING_SYM  */
+    SUBCLASS_ORIGIN_SYM = 949,     /* SUBCLASS_ORIGIN_SYM  */
+    SUBDATE_SYM = 950,             /* SUBDATE_SYM  */
+    SUBJECT_SYM = 951,             /* SUBJECT_SYM  */
+    SUBPARTITIONS_SYM = 952,       /* SUBPARTITIONS_SYM  */
+    SUBPARTITION_SYM = 953,        /* SUBPARTITION_SYM  */
+    SUPER_SYM = 954,               /* SUPER_SYM  */
+    SUSPEND_SYM = 955,             /* SUSPEND_SYM  */
+    SWAPS_SYM = 956,               /* SWAPS_SYM  */
+    SWITCHES_SYM = 957,            /* SWITCHES_SYM  */
+    SYSTEM = 958,                  /* SYSTEM  */
+    SYSTEM_TIME_SYM = 959,         /* SYSTEM_TIME_SYM  */
+    TABLES = 960,                  /* TABLES  */
+    TABLESPACE = 961,              /* TABLESPACE  */
+    TABLE_CHECKSUM_SYM = 962,      /* TABLE_CHECKSUM_SYM  */
+    TABLE_NAME_SYM = 963,          /* TABLE_NAME_SYM  */
+    TEMPORARY = 964,               /* TEMPORARY  */
+    TEMPTABLE_SYM = 965,           /* TEMPTABLE_SYM  */
+    TEXT_SYM = 966,                /* TEXT_SYM  */
+    THAN_SYM = 967,                /* THAN_SYM  */
+    TIES_SYM = 968,                /* TIES_SYM  */
+    TIMESTAMP = 969,               /* TIMESTAMP  */
+    TIMESTAMP_ADD = 970,           /* TIMESTAMP_ADD  */
+    TIMESTAMP_DIFF = 971,          /* TIMESTAMP_DIFF  */
+    TIME_SYM = 972,                /* TIME_SYM  */
+    TRANSACTION_SYM = 973,         /* TRANSACTION_SYM  */
+    TRANSACTIONAL_SYM = 974,       /* TRANSACTIONAL_SYM  */
+    THREADS_SYM = 975,             /* THREADS_SYM  */
+    TRIGGERS_SYM = 976,            /* TRIGGERS_SYM  */
+    TRIM_ORACLE = 977,             /* TRIM_ORACLE  */
+    TRUNCATE_SYM = 978,            /* TRUNCATE_SYM  */
+    TYPE_SYM = 979,                /* TYPE_SYM  */
+    UDF_RETURNS_SYM = 980,         /* UDF_RETURNS_SYM  */
+    UNBOUNDED_SYM = 981,           /* UNBOUNDED_SYM  */
+    UNCOMMITTED_SYM = 982,         /* UNCOMMITTED_SYM  */
+    UNDEFINED_SYM = 983,           /* UNDEFINED_SYM  */
+    UNDOFILE_SYM = 984,            /* UNDOFILE_SYM  */
+    UNDO_BUFFER_SIZE_SYM = 985,    /* UNDO_BUFFER_SIZE_SYM  */
+    UNICODE_SYM = 986,             /* UNICODE_SYM  */
+    UNINSTALL_SYM = 987,           /* UNINSTALL_SYM  */
+    UNKNOWN_SYM = 988,             /* UNKNOWN_SYM  */
+    UNTIL_SYM = 989,               /* UNTIL_SYM  */
+    UPGRADE_SYM = 990,             /* UPGRADE_SYM  */
+    USER_SYM = 991,                /* USER_SYM  */
+    USE_FRM = 992,                 /* USE_FRM  */
+    VALIDATION_SYM = 993,          /* VALIDATION_SYM  */
+    VALUE_SYM = 994,               /* VALUE_SYM  */
+    VARCHAR2_MARIADB_SYM = 995,    /* VARCHAR2_MARIADB_SYM  */
+    VARCHAR2_ORACLE_SYM = 996,     /* VARCHAR2_ORACLE_SYM  */
+    VARIABLES = 997,               /* VARIABLES  */
+    VERSIONING_SYM = 998,          /* VERSIONING_SYM  */
+    VIA_SYM = 999,                 /* VIA_SYM  */
+    VIEW_SYM = 1000,               /* VIEW_SYM  */
+    VISIBLE_SYM = 1001,            /* VISIBLE_SYM  */
+    VIRTUAL_SYM = 1002,            /* VIRTUAL_SYM  */
+    WAIT_SYM = 1003,               /* WAIT_SYM  */
+    WARNINGS = 1004,               /* WARNINGS  */
+    WEEK_SYM = 1005,               /* WEEK_SYM  */
+    WEIGHT_STRING_SYM = 1006,      /* WEIGHT_STRING_SYM  */
+    WINDOW_SYM = 1007,             /* WINDOW_SYM  */
+    WITHIN = 1008,                 /* WITHIN  */
+    WITHOUT = 1009,                /* WITHOUT  */
+    WORK_SYM = 1010,               /* WORK_SYM  */
+    WRAPPER_SYM = 1011,            /* WRAPPER_SYM  */
+    WRITE_SYM = 1012,              /* WRITE_SYM  */
+    X509_SYM = 1013,               /* X509_SYM  */
+    XA_SYM = 1014,                 /* XA_SYM  */
+    XML_SYM = 1015,                /* XML_SYM  */
+    YEAR_SYM = 1016,               /* YEAR_SYM  */
+    CONDITIONLESS_JOIN = 1017,     /* CONDITIONLESS_JOIN  */
+    ON_SYM = 1018,                 /* ON_SYM  */
+    PREC_BELOW_NOT = 1019,         /* PREC_BELOW_NOT  */
+    SUBQUERY_AS_EXPR = 1020,       /* SUBQUERY_AS_EXPR  */
+    PREC_BELOW_IDENTIFIER_OPT_SPECIAL_CASE = 1021, /* PREC_BELOW_IDENTIFIER_OPT_SPECIAL_CASE  */
+    USER = 1022,                   /* USER  */
+    PREC_BELOW_SP_OBJECT_TYPE = 1023, /* PREC_BELOW_SP_OBJECT_TYPE  */
+    PREC_BELOW_CONTRACTION_TOKEN2 = 1024, /* PREC_BELOW_CONTRACTION_TOKEN2  */
+    EMPTY_FROM_CLAUSE = 1025       /* EMPTY_FROM_CLAUSE  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -826,7 +830,7 @@ extern int ORAdebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 192 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 195 "/home/buildbot/git/sql/sql_yacc.yy"
 
   int  num;
   ulong ulong_num;
@@ -963,8 +967,13 @@ union YYSTYPE
   enum Column_definition::enum_column_versioning vers_column_versioning;
   enum plsql_cursor_attr_t plsql_cursor_attr;
   privilege_t privilege;
+  struct
+  {
+    Item *expr;
+    LEX_CSTRING expr_str;
+  } expr_and_query_str;
 
-#line 968 "/home/buildbot/git/mkdist/sql/yy_oracle.hh"
+#line 977 "/home/buildbot/git/mkdist/sql/yy_oracle.hh"
 
 };
 typedef union YYSTYPE YYSTYPE;

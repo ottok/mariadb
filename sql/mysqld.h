@@ -158,6 +158,7 @@ extern bool opt_using_transactions;
 extern ulong current_pid;
 extern double expire_logs_days;
 extern ulong binlog_expire_logs_seconds;
+extern ulonglong binlog_space_limit;
 extern my_bool relay_log_recovery;
 extern uint sync_binlog_period, sync_relaylog_period, 
             sync_relayloginfo_period, sync_masterinfo_period;
@@ -173,6 +174,7 @@ extern ulong delay_key_write_options;
 extern char *opt_logname, *opt_slow_logname, *opt_bin_logname, 
             *opt_relay_logname;
 extern char *opt_binlog_index_name;
+extern my_bool opt_binlog_legacy_event_pos;
 extern char *opt_backup_history_logname, *opt_backup_progress_logname,
             *opt_backup_settings_name;
 extern const char *log_output_str;
@@ -216,12 +218,15 @@ extern ulonglong thd_startup_options;
 extern my_thread_id global_thread_id;
 extern ulong binlog_cache_use, binlog_cache_disk_use;
 extern ulong binlog_stmt_cache_use, binlog_stmt_cache_disk_use;
+extern ulong binlog_gtid_index_hit, binlog_gtid_index_miss;
 extern ulong aborted_threads, aborted_connects, aborted_connects_preauth;
 extern ulong delayed_insert_timeout;
 extern ulong delayed_insert_limit, delayed_queue_size;
 extern ulong delayed_insert_threads, delayed_insert_writes;
 extern ulong delayed_rows_in_use,delayed_insert_errors;
 extern Atomic_counter<uint32_t> slave_open_temp_tables;
+extern Atomic_counter<ulonglong> sending_new_binlog_file;
+extern uint slave_connections_needed_for_purge;
 extern ulonglong query_cache_size;
 extern ulong query_cache_limit;
 extern ulong query_cache_min_res_unit;
@@ -242,12 +247,17 @@ extern uint max_prepared_stmt_count, prepared_stmt_count;
 extern MYSQL_PLUGIN_IMPORT ulong open_files_limit;
 extern ulonglong binlog_cache_size, binlog_stmt_cache_size, binlog_file_cache_size;
 extern ulonglong max_binlog_cache_size, max_binlog_stmt_cache_size;
+extern ulonglong internal_binlog_space_limit;
+extern uint internal_slave_connections_needed_for_purge;
 extern ulong max_binlog_size;
 extern ulong slave_max_allowed_packet;
 extern ulonglong slave_max_statement_time;
 extern double slave_max_statement_time_double;
 extern ulong opt_binlog_rows_event_max_size;
 extern ulong binlog_row_metadata;
+extern my_bool opt_binlog_gtid_index;
+extern uint opt_binlog_gtid_index_page_size;
+extern uint opt_binlog_gtid_index_span_min;
 extern ulong thread_cache_size;
 extern ulong stored_program_cache_size;
 extern ulong opt_slave_parallel_threads;
@@ -326,9 +336,9 @@ extern PSI_mutex_key key_BINLOG_LOCK_index, key_BINLOG_LOCK_xid_list,
   key_LOCK_logger, key_LOCK_manager,
   key_LOCK_prepared_stmt_count,
   key_LOCK_rpl_status, key_LOCK_server_started,
-  key_LOCK_status,
+  key_LOCK_status, key_LOCK_optimizer_costs,
   key_LOCK_thd_data, key_LOCK_thd_kill,
-  key_LOCK_user_conn, key_LOG_LOCK_log,
+  key_LOCK_user_conn, key_LOG_LOCK_log, key_gtid_index_lock,
   key_master_info_data_lock, key_master_info_run_lock,
   key_master_info_sleep_lock, key_master_info_start_stop_lock,
   key_master_info_start_alter_lock,
@@ -406,7 +416,7 @@ extern PSI_file_key key_file_relaylog, key_file_relaylog_index,
                     key_file_relaylog_cache, key_file_relaylog_index_cache;
 extern PSI_socket_key key_socket_tcpip, key_socket_unix,
   key_socket_client_connection;
-extern PSI_file_key key_file_binlog_state;
+extern PSI_file_key key_file_binlog_state, key_file_gtid_index;
 
 #ifdef HAVE_des
 extern char* des_key_file;
@@ -458,6 +468,7 @@ extern PSI_memory_key key_memory_user_var_entry_value;
 extern PSI_memory_key key_memory_Slave_job_group_group_relay_log_name;
 extern PSI_memory_key key_memory_Relay_log_info_group_relay_log_name;
 extern PSI_memory_key key_memory_binlog_cache_mngr;
+extern PSI_memory_key key_memory_binlog_gtid_index;
 extern PSI_memory_key key_memory_Row_data_memory_memory;
 extern PSI_memory_key key_memory_errmsgs;
 extern PSI_memory_key key_memory_Event_queue_element_for_exec_names;
@@ -726,6 +737,7 @@ extern pthread_t signal_thread;
 
 #ifdef HAVE_OPENSSL
 extern struct st_VioSSLFd * ssl_acceptor_fd;
+extern LEX_CUSTRING ssl_acceptor_fingerprint();
 #endif /* HAVE_OPENSSL */
 
 /*
@@ -746,7 +758,6 @@ extern const char *mysql_real_data_home_ptr;
 extern ulong thread_handling;
 extern "C" MYSQL_PLUGIN_IMPORT char server_version[SERVER_VERSION_LENGTH];
 extern char *server_version_ptr;
-extern bool using_custom_server_version;
 extern MYSQL_PLUGIN_IMPORT char mysql_real_data_home[];
 extern char mysql_unpacked_real_data_home[];
 extern MYSQL_PLUGIN_IMPORT struct system_variables global_system_variables;
@@ -766,7 +777,8 @@ extern mysql_mutex_t
        LOCK_error_log, LOCK_delayed_insert, LOCK_short_uuid_generator,
        LOCK_delayed_status, LOCK_delayed_create, LOCK_crypt, LOCK_timezone,
        LOCK_active_mi, LOCK_manager, LOCK_user_conn,
-       LOCK_prepared_stmt_count, LOCK_error_messages,  LOCK_backup_log;
+       LOCK_prepared_stmt_count, LOCK_error_messages,  LOCK_backup_log,
+       LOCK_optimizer_costs;
 extern MYSQL_PLUGIN_IMPORT mysql_mutex_t LOCK_global_system_variables;
 extern mysql_rwlock_t LOCK_all_status_vars;
 extern mysql_mutex_t LOCK_start_thread;
@@ -797,6 +809,18 @@ enum options_mysqld
   OPT_BINLOG_IGNORE_DB,
   OPT_BIN_LOG,
   OPT_BOOTSTRAP,
+  OPT_COSTS_DISK_READ_COST,
+  OPT_COSTS_INDEX_BLOCK_COPY_COST,
+  OPT_COSTS_KEY_CMP_COST,
+  OPT_COSTS_KEY_COPY_COST,
+  OPT_COSTS_KEY_LOOKUP_COST,
+  OPT_COSTS_KEY_NEXT_FIND_COST,
+  OPT_COSTS_DISK_READ_RATIO,
+  OPT_COSTS_ROW_COPY_COST,
+  OPT_COSTS_ROW_LOOKUP_COST,
+  OPT_COSTS_ROW_NEXT_FIND_COST,
+  OPT_COSTS_ROWID_CMP_COST,
+  OPT_COSTS_ROWID_COPY_COST,
   OPT_EXPIRE_LOGS_DAYS,
   OPT_BINLOG_EXPIRE_LOGS_SECONDS,
   OPT_CONSOLE,
@@ -835,12 +859,7 @@ enum options_mysqld
   OPT_SSL_CRL,
   OPT_SSL_CRLPATH,
   OPT_SSL_KEY,
-  OPT_THREAD_CONCURRENCY,
   OPT_WANT_CORE,
-#ifdef WITH_WSREP
-  OPT_WSREP_CAUSAL_READS,
-  OPT_WSREP_SYNC_WAIT,
-#endif /* WITH_WSREP */
   OPT_MYSQL_COMPATIBILITY,
   OPT_TLS_VERSION, OPT_SECURE_AUTH,
   OPT_MYSQL_TO_BE_IMPLEMENTED,
@@ -914,7 +933,10 @@ enum enum_query_type
 
   /// Print for FRM file. Focus on parse-back.
   /// e.g. VIEW expressions and virtual column expressions
-  QT_FOR_FRM= (1 << 13)
+  QT_FOR_FRM= (1 << 13),
+
+  // Print only the SELECT part, even for INSERT...SELECT
+  QT_SELECT_ONLY = (1 << 14)
 };
 
 

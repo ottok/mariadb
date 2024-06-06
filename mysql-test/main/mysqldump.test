@@ -1602,6 +1602,8 @@ create database mysqldump_test_db;
 
 grant all privileges on mysqldump_test_db.*  to user1;
 grant all privileges on mysqldump_test_db.*  to user2;
+revoke SHOW CREATE ROUTINE on  mysqldump_test_db.* from user1;
+revoke SHOW CREATE ROUTINE on  mysqldump_test_db.* from user2;
 
 connect (user27293,localhost,user1,,mysqldump_test_db,$MASTER_MYPORT,$MASTER_MYSOCK);
 connection user27293;
@@ -2334,6 +2336,7 @@ CREATE VIEW v2 AS SELECT * FROM t2;
 --echo
 
 GRANT ALL PRIVILEGES ON BUG52792.* TO user1;
+REVOKE SHOW CREATE ROUTINE ON BUG52792.* FROM user1;
 
 connect (conn_1, localhost, user1, , BUG52792, $MASTER_MYPORT, $MASTER_MYSOCK);
 connection conn_1;
@@ -2479,12 +2482,12 @@ INSERT INTO t2 VALUES (3), (4);
 SELECT * FROM t1;
 SELECT * FROM t2;
 
---exec $MYSQL_DUMP --default-character-set=utf8mb4 --tab=$MYSQLTEST_VARDIR/tmp/ db_20772273
+--exec $MYSQL_DUMP --default-character-set=utf8mb4 --tab=$MYSQLTEST_VARDIR/tmp/ --parallel=2 db_20772273
 --exec $MYSQL db_20772273 < $MYSQLTEST_VARDIR/tmp/t1.sql
 --exec $MYSQL db_20772273 < $MYSQLTEST_VARDIR/tmp/t2.sql
 
 # Test mysqlimport with multiple threads
---exec $MYSQL_IMPORT --silent --use-threads=2 db_20772273 $MYSQLTEST_VARDIR/tmp/t1.txt $MYSQLTEST_VARDIR/tmp/t2.txt
+--exec $MYSQL_IMPORT --silent --parallel=2 db_20772273 $MYSQLTEST_VARDIR/tmp/t1.txt $MYSQLTEST_VARDIR/tmp/t2.txt
 
 SELECT * FROM t1;
 SELECT * FROM t2;
@@ -3039,3 +3042,24 @@ drop table t1;
 --exec $MYSQL_DUMP --xml --tab=$MYSQLTEST_VARDIR/tmp 2>&1
 
 --echo # End of 10.11 tests
+
+#
+# MDEV-32589 parallel-mysqldump - test "too many connections"
+#
+select @@max_connections into @save_max_connections;
+set global max_connections=10;
+--replace_result mariadb-dump.exe mariadb-dump
+--error 2
+--exec $MYSQL_DUMP --tab=$MYSQLTEST_VARDIR/tmp/ --parallel=20 mysql 2>&1
+#
+# MDEV-32589 test builtin 256 connections limit
+#
+set global max_connections=300;
+--replace_result mariadb-dump.exe mariadb-dump
+--error 1
+--exec $MYSQL_DUMP --tab=$MYSQLTEST_VARDIR/tmp/ --parallel=280 mysql 2>&1
+set global max_connections=@save_max_connections;
+
+--echo #
+--echo # End of 11.4 tests
+--echo #

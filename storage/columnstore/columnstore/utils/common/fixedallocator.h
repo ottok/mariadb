@@ -30,22 +30,17 @@
    TODO: make it STL and boost compliant...
 */
 
-#ifndef FIXEDALLOCATOR_H_
-#define FIXEDALLOCATOR_H_
+#pragma once
 
 #include <stdint.h>
-#include <boost/shared_array.hpp>
+
 #include <vector>
 #include <limits>
 #include <unistd.h>
 #include <atomic>
 #include "spinlock.h"
 
-#if defined(_MSC_VER) && defined(xxxFIXEDALLOCATOR_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace utils
 {
@@ -98,7 +93,7 @@ class FixedAllocator
  private:
   void newBlock();
 
-  std::vector<boost::shared_array<uint8_t> > mem;
+  std::vector<std::shared_ptr<uint8_t[]>> mem;
   unsigned long capacityRemaining;
   uint64_t elementCount;
   unsigned long elementSize;
@@ -147,4 +142,3 @@ inline void* FixedAllocator::allocate(uint32_t len)
 
 #undef EXPORT
 }  // namespace utils
-#endif

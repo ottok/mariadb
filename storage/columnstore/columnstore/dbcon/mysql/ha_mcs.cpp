@@ -45,7 +45,8 @@ group_by_handler* create_columnstore_group_by_handler(THD* thd, Query* query);
 
 derived_handler* create_columnstore_derived_handler(THD* thd, TABLE_LIST* derived);
 
-select_handler* create_columnstore_select_handler(THD* thd, SELECT_LEX* sel);
+select_handler* create_columnstore_select_handler(THD* thd, SELECT_LEX* sel_lex, SELECT_LEX_UNIT* sel_unit);
+select_handler* create_columnstore_unit_handler(THD* thd, SELECT_LEX_UNIT* sel_unit);
 
 /* Variables for example share methods */
 
@@ -55,10 +56,8 @@ select_handler* create_columnstore_select_handler(THD* thd, SELECT_LEX* sel);
 */
 static HASH mcs_open_tables;
 
-#ifndef _MSC_VER
 /* The mutex used to init the hash; variable for example share methods */
 pthread_mutex_t mcs_mutex;
-#endif
 
 #ifdef DEBUG_ENTER
 #undef DEBUG_ENTER
@@ -1810,17 +1809,15 @@ static int columnstore_init_func(void* p)
   fprintf(stderr, "Columnstore: Started; Version: %s-%s\n", columnstore_version.c_str(),
           columnstore_release.c_str());
 
-  strncpy(cs_version, columnstore_version.c_str(), sizeof(cs_version));
+  strncpy(cs_version, columnstore_version.c_str(), sizeof(cs_version) - 1);
   cs_version[sizeof(cs_version) - 1] = 0;
 
-  strncpy(cs_commit_hash, columnstore_commit_hash.c_str(), sizeof(cs_commit_hash));
+  strncpy(cs_commit_hash, columnstore_commit_hash.c_str(), sizeof(cs_commit_hash) - 1);
   cs_commit_hash[sizeof(cs_commit_hash) - 1] = 0;
 
   mcs_hton = (handlerton*)p;
 
-#ifndef _MSC_VER
   (void)pthread_mutex_init(&mcs_mutex, MY_MUTEX_INIT_FAST);
-#endif
   (void)my_hash_init(PSI_NOT_INSTRUMENTED, &mcs_open_tables, system_charset_info, 32, 0, 0,
                      (my_hash_get_key)mcs_get_key, 0, 0);
 
@@ -1835,6 +1832,7 @@ static int columnstore_init_func(void* p)
   mcs_hton->create_group_by = create_columnstore_group_by_handler;
   mcs_hton->create_derived = create_columnstore_derived_handler;
   mcs_hton->create_select = create_columnstore_select_handler;
+  mcs_hton->create_unit = create_columnstore_unit_handler;
   mcs_hton->db_type = DB_TYPE_AUTOASSIGN;
 
 #ifdef HAVE_PSI_INTERFACE
@@ -1854,9 +1852,7 @@ static int columnstore_done_func(void* p)
 
   config::Config::deleteInstanceMap();
   my_hash_free(&mcs_open_tables);
-#ifndef _MSC_VER
   pthread_mutex_destroy(&mcs_mutex);
-#endif
 
   if (plugin_maria)
   {
@@ -1945,7 +1941,7 @@ int ha_mcs_cache::flush_insert_cache()
   int error, error2;
   ha_maria* from = cache_handler;
   uchar* record = table->record[0];
-  ulonglong copied_rows = 0;
+  [[maybe_unused]] ulonglong copied_rows = 0;
   DBUG_ENTER("flush_insert_cache");
 
   DBUG_ASSERT(from->file->state->records == share->cached_rows);

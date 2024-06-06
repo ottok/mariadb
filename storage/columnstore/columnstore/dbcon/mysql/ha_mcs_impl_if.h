@@ -17,23 +17,20 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef HA_MCS_IMPL_IF_H__
-#define HA_MCS_IMPL_IF_H__
+#pragma once
+#include <bitset>
 #include <string>
 #include <stdint.h>
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 #include <iosfwd>
 #include <boost/shared_ptr.hpp>
 #include <stack>
 #include <vector>
-#include <bitset>
 
 #include "idb_mysql.h"
 #include "ha_mcs_sysvars.h"
+
+#include "dmlpkg.h"
 
 struct st_ha_create_information;
 class ha_columnstore_select_handler;
@@ -97,14 +94,14 @@ enum ClauseType
 };
 
 typedef std::vector<JoinInfo> JoinInfoVec;
+typedef dmlpackage::ColValuesList ColValuesList;
+typedef dmlpackage::TableValuesMap TableValuesMap;
 typedef std::map<execplan::CalpontSystemCatalog::TableAliasName, std::pair<int, TABLE_LIST*>> TableMap;
 typedef std::tr1::unordered_map<TABLE_LIST*, std::vector<COND*>> TableOnExprList;
 typedef std::tr1::unordered_map<TABLE_LIST*, uint> TableOuterJoinMap;
 
 struct gp_walk_info
 {
-  // MCOL-2178 Marked for removal after 1.4
-  std::vector<std::string> selectCols;
   execplan::CalpontSelectExecutionPlan::ReturnedColumnList returnedCols;
   execplan::CalpontSelectExecutionPlan::ReturnedColumnList groupByCols;
   execplan::CalpontSelectExecutionPlan::ReturnedColumnList subGroupByCols;
@@ -264,9 +261,7 @@ struct cal_group_info
 };
 
 typedef std::tr1::unordered_map<TABLE*, cal_table_info> CalTableMap;
-typedef std::vector<std::string> ColValuesList;
 typedef std::vector<std::string> ColNameList;
-typedef std::map<uint32_t, ColValuesList> TableValuesMap;
 typedef std::bitset<4096> NullValuesBitset;
 struct cal_connection_info
 {
@@ -369,14 +364,6 @@ struct cal_connection_info
   pid_t mysqld_pid;
   pid_t cpimport_pid;
   int fdt[2];
-#ifdef _MSC_VER
-  // Used for launching cpimport for Load Data Infile
-  HANDLE cpimport_stdin_Rd;
-  HANDLE cpimport_stdin_Wr;
-  HANDLE cpimport_stdout_Rd;
-  HANDLE cpimport_stdout_Wr;
-  PROCESS_INFORMATION cpimportProcInfo;
-#endif
   FILE* filePtr;
   uint8_t headerLength;
   bool useXbit;
@@ -400,9 +387,9 @@ int cp_get_group_plan(THD* thd, execplan::SCSEP& csep, cal_impl_if::cal_group_in
 int cs_get_derived_plan(ha_columnstore_derived_handler* handler, THD* thd, execplan::SCSEP& csep,
                         gp_walk_info& gwi);
 int cs_get_select_plan(ha_columnstore_select_handler* handler, THD* thd, execplan::SCSEP& csep,
-                       gp_walk_info& gwi);
+                       gp_walk_info& gwi, bool isSelectLexUnit);
 int getSelectPlan(gp_walk_info& gwi, SELECT_LEX& select_lex, execplan::SCSEP& csep, bool isUnion = false,
-                  bool isSelectHandlerTop = false,
+                  bool isSelectHandlerTop = false, bool isSelectLexUnit = false,
                   const std::vector<COND*>& condStack = std::vector<COND*>());
 int getGroupPlan(gp_walk_info& gwi, SELECT_LEX& select_lex, execplan::SCSEP& csep, cal_group_info& gi,
                  bool isUnion = false);
@@ -427,7 +414,7 @@ execplan::ArithmeticColumn* buildArithmeticColumn(Item_func* item, gp_walk_info&
 execplan::ConstantColumn* buildDecimalColumn(const Item* item, const std::string& str, gp_walk_info& gwi);
 execplan::SimpleColumn* buildSimpleColumn(Item_field* item, gp_walk_info& gwi);
 execplan::FunctionColumn* buildCaseFunction(Item_func* item, gp_walk_info& gwi, bool& nonSupport);
-execplan::ParseTree* buildParseTree(Item_func* item, gp_walk_info& gwi, bool& nonSupport);
+execplan::ParseTree* buildParseTree(Item* item, gp_walk_info& gwi, bool& nonSupport);
 execplan::ReturnedColumn* buildAggregateColumn(Item* item, gp_walk_info& gwi);
 execplan::ReturnedColumn* buildWindowFunctionColumn(Item* item, gp_walk_info& gwi, bool& nonSupport);
 execplan::ReturnedColumn* buildPseudoColumn(Item* item, gp_walk_info& gwi, bool& nonSupport,
@@ -488,5 +475,3 @@ inline bool isDMLStatement(const enum_sql_command& command)
 void debug_walk(const Item* item, void* arg);
 #endif
 }  // namespace cal_impl_if
-
-#endif

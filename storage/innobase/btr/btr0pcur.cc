@@ -158,20 +158,14 @@ before_first:
 		cursor->rel_pos = BTR_PCUR_ON;
 	}
 
-	if (index->is_ibuf()) {
-		ut_ad(!index->table->not_redundant());
-		cursor->old_n_fields = uint16_t(rec_get_n_fields_old(rec));
-	} else {
-		cursor->old_n_fields = static_cast<uint16>(
-			dict_index_get_n_unique_in_tree(index));
-		if (index->is_spatial() && !page_rec_is_leaf(rec)) {
-			ut_ad(dict_index_get_n_unique_in_tree_nonleaf(index)
-			      == DICT_INDEX_SPATIAL_NODEPTR_SIZE);
-			/* For R-tree, we have to compare
-			the child page numbers as well. */
-			cursor->old_n_fields
-				= DICT_INDEX_SPATIAL_NODEPTR_SIZE + 1;
-		}
+	cursor->old_n_fields = static_cast<uint16>(
+		dict_index_get_n_unique_in_tree(index));
+	if (index->is_spatial() && !page_rec_is_leaf(rec)) {
+		ut_ad(dict_index_get_n_unique_in_tree_nonleaf(index)
+		      == DICT_INDEX_SPATIAL_NODEPTR_SIZE);
+		/* For R-tree, we have to compare
+		the child page numbers as well. */
+		cursor->old_n_fields = DICT_INDEX_SPATIAL_NODEPTR_SIZE + 1;
 	}
 
 	cursor->old_n_core_fields = index->n_core_fields;
@@ -524,11 +518,11 @@ btr_pcur_move_to_next_page(
 	}
 
 	dberr_t err;
-        bool first_access = false;
+	bool first_access = false;
 	buf_block_t* next_block = btr_block_get(
 		*cursor->index(), next_page_no,
 		rw_lock_type_t(cursor->latch_mode & (RW_X_LATCH | RW_S_LATCH)),
-		page_is_leaf(page), mtr, &err, &first_access);
+		mtr, &err, &first_access);
 
 	if (UNIV_UNLIKELY(!next_block)) {
 		return err;
@@ -549,8 +543,7 @@ btr_pcur_move_to_next_page(
 	mtr->rollback_to_savepoint(s - 2, s - 1);
 	if (first_access) {
 		buf_read_ahead_linear(next_block->page.id(),
-				      next_block->zip_size(),
-				      ibuf_inside(mtr));
+				      next_block->zip_size());
 	}
 	return DB_SUCCESS;
 }

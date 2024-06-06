@@ -22,8 +22,7 @@
 /**
  * @file
  */
-#ifndef LOGGING_IDBERRORINFO_H
-#define LOGGING_IDBERRORINFO_H
+#pragma once
 
 #include <string>
 #include <map>
@@ -61,5 +60,3 @@ class IDBErrorInfo
 };
 
 }  // namespace logging
-
-#endif

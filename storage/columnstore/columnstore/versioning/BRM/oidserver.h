@@ -24,8 +24,7 @@
  * class OIDServer interface.
  */
 
-#ifndef OBJECTIDMANAGER_H_
-#define OBJECTIDMANAGER_H_
+#pragma once
 
 #include <string>
 #include <stdint.h>
@@ -34,11 +33,7 @@
 
 #include <boost/thread/mutex.hpp>
 
-#if defined(_MSC_VER) && defined(xxxBRMOIDSVR_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace idbdatafile
 {
@@ -208,5 +203,3 @@ class OIDServer
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

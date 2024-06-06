@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef EXECPLAN_VENDOREXECUTIONPLAN_H
-#define EXECPLAN_VENDOREXECUTIONPLAN_H
+#pragma once
 
 /**
  * Namespace
@@ -40,5 +39,3 @@ class VendorExecutionPlan
 };
 
 }  // namespace execplan
-
-#endif  // VENDOREXECUTIONPLAN_H

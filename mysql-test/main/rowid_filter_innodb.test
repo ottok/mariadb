@@ -40,6 +40,7 @@ insert into t1 values
   (81,'a','a',20),(82,'a','a',0),(83,'a','a',0),(84,'a','a',null),
   (85,'a','a',-1),(86,'a','a',5),(87,'a','a',null),(88,'a','a',160),
   (89,null,null,null),(90,'a','a',14785),(91,'a','a',0),(92,'a','a',null);
+insert into t1 values (100,null,null,null);
 
 analyze table t1;
 
@@ -52,6 +53,7 @@ let $q=
 
 eval $q;
 eval explain $q;
+--source include/explain-no-costs.inc
 eval explain format=json $q;
 
 drop table t1;
@@ -73,6 +75,7 @@ let $q=
 select * from t1 join t2 on t1.id = t2.x where t2.y = 2 and t1.id = 1;
 
 eval $q;
+--replace_column 9 # 10 #
 eval explain extended $q;
 
 drop table t1, t2;
@@ -135,13 +138,22 @@ INSERT INTO t1 VALUES
 ANALYZE TABLE t1;
 
 EXPLAIN EXTENDED
-SELECT a FROM t1 WHERE c < 'k' AND b > 't' ORDER BY a;
+SELECT a FROM t1 WHERE c < 'e' AND b > 't' ORDER BY a;
 
-SELECT a FROM t1 WHERE c < 'k' AND b > 't' ORDER BY a;
+SELECT a FROM t1 WHERE c < 'e' AND b > 't' ORDER BY a;
 
 --echo #
 --echo # MDEV-25163 Rowid filter does not process storage engine error correctly.
 --echo #
+#INSERT INTO t1 VALUES
+# (100,'z','a'),
+# (100,'z','a'),
+# (100,'z','a'),
+# (100,'z','a');
+
+
+#ANALYZE TABLE t1;
+
 
 CREATE TABLE two(tw int) Engine=MyISAM;
 INSERT INTO two VALUES (1),(2);
@@ -150,11 +162,12 @@ INSERT INTO two VALUES (1),(2);
 SET GLOBAL innodb_stats_persistent= OFF;
 
 # Make sure it's still rowid filter + filesort
+#--optimizer_trace
 EXPLAIN EXTENDED
-SELECT a FROM t1 WHERE c < 'k' AND b > 't' ORDER BY a FOR UPDATE;
+SELECT a FROM t1 WHERE c < 'e' AND b > 't' ORDER BY a FOR UPDATE;
 
 EXPLAIN EXTENDED
-SELECT a FROM t1,two WHERE c < 'k' AND b > 't' ORDER BY a FOR UPDATE;
+SELECT a FROM t1,two WHERE c < 'e' AND b > 't' ORDER BY a FOR UPDATE;
 
 SET @saved_dbug = @@SESSION.debug_dbug;
 # Deadlock error should be returned from InnoDB during rowid filter container
@@ -163,13 +176,13 @@ SET @saved_dbug = @@SESSION.debug_dbug;
 # operation.
 SET debug_dbug = '+d,innodb_report_deadlock';
 --error ER_LOCK_DEADLOCK
-SELECT a FROM t1 WHERE c < 'k' AND b > 't' ORDER BY a FOR UPDATE;
+SELECT a FROM t1 WHERE c < 'e' AND b > 't' ORDER BY a FOR UPDATE;
 SET debug_dbug = @saved_dbug;
 
 # Same as above for the join query:
 SET debug_dbug = '+d,innodb_report_deadlock';
 --error ER_LOCK_DEADLOCK
-SELECT a FROM t1,two WHERE c < 'k' AND b > 't' ORDER BY a FOR UPDATE;
+SELECT a FROM t1,two WHERE c < 'e' AND b > 't' ORDER BY a FOR UPDATE;
 SET debug_dbug = @saved_dbug;
 
 DROP TABLE two;
@@ -680,8 +693,8 @@ SELECT * FROM t1
 WHERE t1.c1 NOT IN (SELECT t2.c1 FROM t2, t1 AS a1
                       WHERE t2.i1 = t1.pk AND t2.i1 BETWEEN 3 AND 5);
 
-eval $q;
 eval EXPLAIN EXTENDED $q;
+eval $q;
 
 DROP TABLE t1,t2;
 

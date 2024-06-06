@@ -15,17 +15,13 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef BUFFEREDFILE_H_
-#define BUFFEREDFILE_H_
+#pragma once
 
 #include <stdexcept>
 #include <boost/utility.hpp>
 #include "IDBDataFile.h"
 #include <unistd.h>
 
-#ifdef _MSC_VER
-typedef void* HANDLE;
-#endif
 
 namespace idbdatafile
 {
@@ -63,4 +59,3 @@ class BufferedFile : public IDBDataFile, boost::noncopyable
 };
 
 }  // namespace idbdatafile
-#endif /* BUFFEREDFILE_H_ */

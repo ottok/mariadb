@@ -21,10 +21,10 @@
  *******************************************************************************/
 /** @file */
 
-#ifndef _WE_BRM_H_
-#define _WE_BRM_H_
+#pragma once
 
 #include <iostream>
+#include <memory>
 #include <vector>
 #include <boost/thread.hpp>
 #include <boost/thread/tss.hpp>
@@ -38,11 +38,7 @@
 #include "IDBDataFile.h"
 #include "IDBPolicy.h"
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -50,17 +46,19 @@ namespace WriteEngine
 // forward reference
 class DbFileOp;
 
-/** @brief Extended CPInfo - with type handler for all type-related information */
+/** @brief Extended CPInfo - with all type-related information and associated range data */
 struct ExtCPInfo
 {
   execplan::CalpontSystemCatalog::ColDataType fColType;
   int fColWidth;
   BRM::CPInfo fCPInfo;
+  std::shared_ptr<std::vector<int64_t>> fStringsPrefixes;
   ExtCPInfo(execplan::CalpontSystemCatalog::ColDataType colType, int colWidth)
    : fColType(colType), fColWidth(colWidth)
   {
     fCPInfo.isBinaryColumn = (unsigned int)colWidth > datatypes::MAXLEGACYWIDTH;
   }
+
   void toInvalid()
   {
     auto mm = datatypes::MinMaxInfo::invalidRange(fColType);
@@ -69,7 +67,22 @@ struct ExtCPInfo
     fCPInfo.bigMax = mm.int128Max;
     fCPInfo.bigMin = mm.int128Min;
   }
-
+  void addStringPrefix(int64_t strPrefix)
+  {
+    if (!fStringsPrefixes)
+    {
+      fStringsPrefixes.reset(new std::vector<int64_t>());
+    }
+    fStringsPrefixes->push_back(strPrefix);
+  }
+  bool hasStringsPrefixes() const
+  {
+    return fStringsPrefixes.get() != nullptr;
+  }
+  int64_t* stringsPrefixes() const
+  {
+    return hasStringsPrefixes() ? fStringsPrefixes->data() : nullptr;
+  }
   bool isInvalid()
   {
     datatypes::MinMaxInfo mm;
@@ -367,6 +380,8 @@ class BRMWrapper : public WEObj
    * @brief Commit the transaction
    */
   EXPORT int commit(const BRM::VER_t transID);
+  EXPORT uint8_t newCpimportJob(uint32_t &jobId);
+  EXPORT void finishCpimportJob(uint32_t jobId);
 
   /**
    * @brief Copy blocks between write engine and version buffer
@@ -453,10 +468,7 @@ class BRMWrapper : public WEObj
   static boost::thread_specific_ptr<int> m_ThreadDataPtr;
   static boost::mutex m_instanceCreateMutex;
 
-#if defined(_MSC_VER) && !defined(WRITEENGINE_DLLEXPORT)
-  __declspec(dllimport)
-#endif
-      EXPORT static bool m_useVb;
+  EXPORT static bool m_useVb;
 
   static OID m_curVBOid;
   static IDBDataFile* m_curVBFile;
@@ -634,5 +646,3 @@ inline int BRMWrapper::takeSnapshot()
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_BRM_H_

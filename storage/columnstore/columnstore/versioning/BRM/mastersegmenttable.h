@@ -31,8 +31,7 @@
  * XXXPAT: We should make a cleanup class here also.
  */
 
-#ifndef _MASTERSEGMENTTABLE_H_
-#define _MASTERSEGMENTTABLE_H_
+#pragma once
 
 #include <stdexcept>
 #include <sys/types.h>
@@ -44,11 +43,7 @@
 #include "rwlock.h"
 #include "shmkeys.h"
 
-#if defined(_MSC_VER) && defined(xxxMASTERSEGMENTTABLE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace BRM
 {
@@ -213,5 +208,3 @@ class MasterSegmentTable
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

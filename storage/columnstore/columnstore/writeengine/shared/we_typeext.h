@@ -27,8 +27,7 @@
  * in we_type.h and/or we_define.h.
  */
 
-#ifndef _WE_TYPEEXT_H_
-#define _WE_TYPEEXT_H_
+#pragma once
 #include <stdint.h>
 #include <sys/types.h>
 #include <pwd.h>
@@ -109,5 +108,3 @@ inline bool WeUIDGID::chownPath(std::ostringstream& error, const std::string& fi
 }
 
 }  // namespace WriteEngine
-
-#endif  // _WE_TYPEEXT_H_

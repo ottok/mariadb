@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef STORAGEMANGER_H_
-#define STORAGEMANGER_H_
+#pragma once
 
 #include "ClientRequestProcessor.h"
 #include "messageFormat.h"
@@ -75,5 +74,3 @@ class SessionManager
 };
 
 }  // namespace storagemanager
-
-#endif

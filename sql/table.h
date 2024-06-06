@@ -66,6 +66,7 @@ struct TABLE_LIST;
 class ACL_internal_schema_access;
 class ACL_internal_table_access;
 class Field;
+class Copy_field;
 class Table_statistics;
 class With_element;
 struct TDC_element;
@@ -79,6 +80,7 @@ class Pushdown_derived;
 struct Name_resolution_context;
 class Table_function_json_table;
 class Open_table_context;
+class MYSQL_LOG;
 
 /*
   Used to identify NESTED_JOIN structures within a join (applicable only to
@@ -93,6 +95,7 @@ typedef ulonglong nested_join_map;
 #define tmp_file_prefix "#sql"			/**< Prefix for tmp tables */
 #define tmp_file_prefix_length 4
 #define TMP_TABLE_KEY_EXTRA 8
+#define ROCKSDB_DIRECTORY_NAME "#rocksdb"
 
 /**
   Enumerate possible types of a table from re-execution
@@ -783,6 +786,7 @@ struct TABLE_SHARE
     return is_view   ? view_pseudo_hton :
            db_plugin ? plugin_hton(db_plugin) : NULL;
   }
+  OPTIMIZER_COSTS optimizer_costs;      /* Copy of get_optimizer_costs() */
   enum row_type row_type;		/* How rows are stored */
   enum Table_type table_type;
   enum tmp_table_type tmp_table;
@@ -821,7 +825,18 @@ struct TABLE_SHARE
   uint keys, key_parts;
   uint ext_key_parts;       /* Total number of key parts in extended keys */
   uint max_key_length, max_unique_length;
-  uint uniques;                         /* Number of UNIQUE index */
+
+  /*
+    Older versions had TABLE_SHARE::uniques but now it is replaced with
+    per-index HA_UNIQUE_HASH flag
+  */
+  bool have_unique_constraint() const
+  {
+    for (uint i=0; i < keys; i++)
+      if (key_info[i].flags & HA_UNIQUE_HASH)
+        return true;
+    return false;
+  }
   uint db_create_options;		/* Create options from database */
   uint db_options_in_use;		/* Options in use */
   uint db_record_offset;		/* if HA_REC_IN_SEQ */
@@ -860,6 +875,7 @@ struct TABLE_SHARE
   bool long_unique_table;
   /* 1 if frm version cannot be updated as part of upgrade */
   bool keep_original_mysql_version;
+  bool optimizer_costs_inited;
 
   ulonglong table_map_id;               /* for row-based replication */
 
@@ -886,6 +902,10 @@ struct TABLE_SHARE
   uint  partition_info_str_len;
   uint  partition_info_buffer_size;
   plugin_ref default_part_plugin;
+#endif
+
+#ifdef HAVE_REPLICATION
+  Cache_flip_event_log *online_alter_binlog;
 #endif
 
   /**
@@ -1180,6 +1200,7 @@ struct TABLE_SHARE
   Item_func_hash *make_long_hash_func(THD *thd,
                                       MEM_ROOT *mem_root,
                                       List<Item> *field_list) const;
+  void update_optimizer_costs(handlerton *hton);
   void update_engine_independent_stats(TABLE_STATISTICS_CB *stat);
   bool histograms_exists();
 };
@@ -1379,13 +1400,18 @@ public:
   {
     uint        key_parts;
     uint        ranges;
-    ha_rows     rows;
-    double      cost;
+    ha_rows     rows, max_index_blocks, max_row_blocks;
+    Cost_estimate cost;
+    /* Selectivity, in case of filters */
+    double      selectivity;
+    bool        first_key_part_has_only_one_value;
+
     /*
-      If there is a range access by i-th index then the cost of
-      index only access for it is stored in index_only_costs[i]
+      Cost of fetching keys with index only read and returning them to the
+      sql level.
     */
-    double      index_only_cost;
+    double index_only_fetch_cost(TABLE *table);
+    void get_costs(ALL_READ_COST *cost);
   } *opt_range;
   /* 
      Bitmaps of key parts that =const for the duration of join execution. If
@@ -1471,6 +1497,9 @@ public:
     bytes, it would take up 4.
   */
   bool force_index;
+
+  /* Flag set when the statement contains FORCE INDEX FOR JOIN */
+  bool force_index_join;
 
   /**
     Flag set when the statement contains FORCE INDEX FOR ORDER BY
@@ -1572,6 +1601,8 @@ public:
   Item *notnull_cond;
   TABLE_STATISTICS_CB *stats_cb;
 
+  online_alter_cache_data *online_alter_cache;
+
   inline void reset() { bzero((void*)this, sizeof(*this)); }
   void init(THD *thd, TABLE_LIST *tl);
   bool fill_item_list(List<Item> *item_list) const;
@@ -1657,7 +1688,7 @@ public:
                    bool unique);
   void create_key_part_by_field(KEY_PART_INFO *key_part_info,
                                 Field *field, uint fieldnr);
-  void use_index(int key_to_save);
+  void use_index(int key_to_save, key_map *map_to_update);
   void set_table_map(table_map map_arg, uint tablenr_arg)
   {
     map= map_arg;
@@ -1710,6 +1741,12 @@ public:
   uint actual_n_key_parts(KEY *keyinfo);
   ulong actual_key_flags(KEY *keyinfo);
   int update_virtual_field(Field *vf, bool ignore_warnings);
+  inline size_t key_storage_length(uint index)
+  {
+    if (is_clustering_key(index))
+      return s->stored_rec_length;
+    return key_info[index].key_length + file->ref_length;
+  }
   int update_virtual_fields(handler *h, enum_vcol_update_mode update_mode);
   int update_default_fields(bool ignore_errors);
   void evaluate_update_default_function();
@@ -1753,7 +1790,7 @@ public:
                                       bool with_cleanup);
   bool vcol_fix_expr(THD *thd);
   bool vcol_cleanup_expr(THD *thd);
-  Field *find_field_by_name(LEX_CSTRING *str) const;
+  Field *find_field_by_name(const LEX_CSTRING *str) const;
   bool export_structure(THD *thd, class Row_definition_list *defs);
   bool is_splittable() { return spl_opt_info != NULL; }
   void set_spl_opt_info(SplM_opt_info *spl_info);
@@ -1774,10 +1811,12 @@ public:
   void prune_range_rowid_filters();
   void trace_range_rowid_filters(THD *thd) const;
   Range_rowid_filter_cost_info *
-  best_range_rowid_filter_for_partial_join(uint access_key_no,
-                                           double records,
-                                           double access_cost_factor);
-
+  best_range_rowid_filter(uint access_key_no,
+                          double records,
+                          double fetch_cost,
+                          double index_only_cost,
+                          double prev_records,
+                          double *records_out);
   /**
     System Versioning support
    */
@@ -1830,7 +1869,44 @@ public:
     DBUG_ASSERT(s->period.name);
     return field[s->period.end_fieldno];
   }
+  inline void set_cond_selectivity(double selectivity)
+  {
+    DBUG_ASSERT(selectivity >= 0.0 && selectivity <= 1.0);
+    cond_selectivity= selectivity;
+    DBUG_PRINT("info", ("cond_selectivity: %g", cond_selectivity));
+  }
+  inline void multiply_cond_selectivity(double selectivity)
+  {
+    DBUG_ASSERT(selectivity >= 0.0 && selectivity <= 1.0);
+    cond_selectivity*= selectivity;
+    DBUG_PRINT("info", ("cond_selectivity: %g", cond_selectivity));
+  }
+  inline void set_opt_range_condition_rows(ha_rows rows)
+  {
+    if (opt_range_condition_rows > rows)
+      opt_range_condition_rows= rows;
+  }
 
+  /* Return true if the key is a clustered key */
+  inline bool is_clustering_key(uint index) const
+  {
+    return key_info[index].index_flags & HA_CLUSTERED_INDEX;
+  }
+
+  /*
+    Return true if we can use rowid filter with this index
+    rowid filter can be used if
+    - filter pushdown is supported by the engine for the index. If this is set then
+      file->ha_table_flags() should not contain HA_NON_COMPARABLE_ROWID!
+    - The index is not a clustered primary index
+  */
+
+  inline bool can_use_rowid_filter(uint index) const
+  {
+    return ((key_info[index].index_flags &
+             (HA_DO_RANGE_FILTER_PUSHDOWN | HA_CLUSTERED_INDEX)) ==
+            HA_DO_RANGE_FILTER_PUSHDOWN);
+  }
 
   ulonglong vers_start_id() const;
   ulonglong vers_end_id() const;
@@ -1932,7 +2008,8 @@ class IS_table_read_plan;
 #define DTYPE_MERGE                  4U
 #define DTYPE_MATERIALIZE            8U
 #define DTYPE_MULTITABLE             16U
-#define DTYPE_MASK                   (DTYPE_VIEW|DTYPE_TABLE|DTYPE_MULTITABLE)
+#define DTYPE_IN_PREDICATE           32U
+#define DTYPE_MASK                   (DTYPE_VIEW|DTYPE_TABLE|DTYPE_MULTITABLE|DTYPE_IN_PREDICATE)
 
 /*
   Phases of derived tables/views handling, see sql_derived.cc
@@ -2275,11 +2352,18 @@ struct TABLE_LIST
                      mdl_type, MDL_TRANSACTION);
   }
 
+  TABLE_LIST(const LEX_CSTRING *db_arg,
+             const LEX_CSTRING *table_name_arg,
+             const LEX_CSTRING *alias_arg,
+             enum thr_lock_type lock_type_arg)
+  {
+    init_one_table(db_arg, table_name_arg, alias_arg, lock_type_arg);
+  }
+
   TABLE_LIST(TABLE *table_arg, thr_lock_type lock_type)
+    : TABLE_LIST(&table_arg->s->db, &table_arg->s->table_name, NULL, lock_type)
   {
     DBUG_ASSERT(table_arg->s);
-    init_one_table(&table_arg->s->db, &table_arg->s->table_name,
-                   NULL, lock_type);
     table= table_arg;
     vers_conditions.name= table->s->vers.name;
   }
@@ -2405,6 +2489,7 @@ struct TABLE_LIST
   */
   select_unit  *derived_result;
   /* Stub used for materialized derived tables. */
+  bool delete_while_scanning;
   table_map	map;                    /* ID bit of table (1,2,4,8,16...) */
   table_map get_map()
   {
@@ -2464,8 +2549,6 @@ struct TABLE_LIST
   bool block_handle_derived;
   /* The interface employed to materialize the table by a foreign engine */
   derived_handler *dt_handler;
-  /* The text of the query specifying the derived table */
-  LEX_CSTRING derived_spec;
   /*
     The object used to organize execution of the query that specifies
     the derived table by a foreign engine
@@ -2593,9 +2676,8 @@ struct TABLE_LIST
   uint		outer_join;		/* Which join type */
   uint		shared;			/* Used in multi-upd */
   bool          updatable;		/* VIEW/TABLE can be updated now */
-  bool		straight;		/* optimize with prev table */
+  bool          straight;		/* optimize with prev table */
   bool          updating;               /* for replicate-do/ignore table */
-  bool		force_index;		/* prefer index over table scan */
   bool          ignore_leaves;          /* preload only non-leaf nodes */
   bool          crashed;                /* Table was found crashed */
   bool          skip_locked;            /* Skip locked in view defination */
@@ -3275,7 +3357,6 @@ static inline void dbug_tmp_restore_column_maps(MY_BITMAP **read_set,
 #endif
 }
 
-bool ok_for_lower_case_names(const char *names);
 
 enum get_table_share_flags {
   GTS_TABLE                = 1,
@@ -3309,13 +3390,12 @@ enum open_frm_error open_table_def(THD *thd, TABLE_SHARE *share,
 void open_table_error(TABLE_SHARE *share, enum open_frm_error error,
                       int db_errno);
 void update_create_info_from_table(HA_CREATE_INFO *info, TABLE *form);
-bool check_db_name(LEX_STRING *db);
+
 bool check_column_name(const char *name);
 bool check_period_name(const char *name);
 bool check_table_name(const char *name, size_t length, bool check_for_path_chars);
 int rename_file_ext(const char * from,const char * to,const char * ext);
 char *get_field(MEM_ROOT *mem, Field *field);
-bool get_field(MEM_ROOT *mem, Field *field, class String *res);
 
 bool validate_comment_length(THD *thd, LEX_CSTRING *comment, size_t max_len,
                              uint err_code, const char *name);

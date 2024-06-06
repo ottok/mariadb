@@ -20,4 +20,10 @@ elsif (-d $mcs_ins_dir_installed)
 
 sub is_default { 0 }
 
+sub start_test {
+  # we should guard this for --force-restart flag condition.
+  my ($self, $tinfo)= @_;
+  My::Suite::start_test(@_);
+}
+
 bless { };

@@ -19,8 +19,7 @@
 
 /** @file */
 
-#ifndef JOBLIST_JOBSTEP_H_
-#define JOBLIST_JOBSTEP_H_
+#pragma once
 
 #include <iostream>
 #include <vector>
@@ -30,7 +29,7 @@
 #include <stdexcept>
 
 #include <boost/shared_ptr.hpp>
-#include <boost/shared_array.hpp>
+
 #include <boost/uuid/uuid.hpp>
 
 #include "calpontsystemcatalog.h"
@@ -480,7 +479,7 @@ class JobStep
   bool fDelivery;
   bool fOnClauseFilter;
   volatile bool fDie;
-  volatile uint32_t fWaitToRunStepCnt;
+  uint32_t fWaitToRunStepCnt;
   std::string fExtendedInfo;
   std::string fMiniInfo;
 
@@ -498,6 +497,7 @@ class JobStep
   int64_t fStartTime;
   int64_t fLastStepTeleTime;
   long fTimeZone;
+  uint32_t fMaxPmJoinResultCount;
 
  private:
   static boost::mutex fLogMutex;
@@ -567,4 +567,3 @@ typedef boost::shared_ptr<JobStep> SJSTEP;
 
 }  // namespace joblist
 
-#endif  // JOBLIST_JOBSTEP_H_

@@ -21,19 +21,14 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef UPDATEPACKAGEPROCESSOR_H
-#define UPDATEPACKAGEPROCESSOR_H
+#pragma once
 #include <string>
 #include "dmlpackageprocessor.h"
 #include "dataconvert.h"
 #include <vector>
 #include "joblist.h"
 
-#if defined(_MSC_VER) && defined(DMLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace dmlpackageprocessor
 {
@@ -80,5 +75,3 @@ class UpdatePackageProcessor : public DMLPackageProcessor
 }  // namespace dmlpackageprocessor
 
 #undef EXPORT
-
-#endif  // UPDATEPACKAGEPROCESSOR_H

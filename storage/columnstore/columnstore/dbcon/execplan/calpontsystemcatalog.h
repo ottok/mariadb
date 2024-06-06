@@ -23,8 +23,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef EXECPLAN_CALPONTSYSTEMCATALOG_H
-#define EXECPLAN_CALPONTSYSTEMCATALOG_H
+#pragma once
 
 #include <unistd.h>
 #include <string>
@@ -51,6 +50,7 @@
 
 #include "mcs_datatype.h"
 #include "collation.h"  // CHARSET_INFO, class Charset
+#include "nullstring.h"
 
 class ExecPlanTest;
 namespace messageqcpp
@@ -134,6 +134,15 @@ class CalpontSystemCatalog : public datatypes::SystemCatalog
     DictOID() : dictOID(0), listOID(0), treeOID(0), compressionType(0)
     {
     }
+    DictOID(OID dictOID_, OID listOID_, OID treeOID_, int compressionType_) :
+      dictOID(dictOID_), listOID(listOID_), treeOID(treeOID_),
+      compressionType(compressionType_)
+    {
+    }
+    DictOID(const DictOID& rhs)
+    : dictOID(rhs.dictOID), listOID(rhs.listOID), treeOID(rhs.treeOID), compressionType(rhs.compressionType)
+    {
+    }
     OID dictOID;
     OID listOID;
     OID treeOID;
@@ -206,23 +215,26 @@ class CalpontSystemCatalog : public datatypes::SystemCatalog
    */
   struct ColType : public datatypes::SystemCatalog::TypeHolderStd
   {
-    ConstraintType constraintType;
+    ConstraintType constraintType = NO_CONSTRAINT;
     DictOID ddn;
-    std::string defaultValue;
-    int32_t colPosition;  // temporally put here. may need to have ColInfo struct later
-    int32_t compressionType;
-    OID columnOID;
-    bool autoincrement;  // set to true if  SYSCOLUMN autoincrement is �y�
-    uint64_t nextvalue;  // next autoincrement value
-    uint32_t charsetNumber;
-    const CHARSET_INFO* cs;
+    NullString defaultValue;
+    int32_t colPosition = -1;  // temporally put here. may need to have ColInfo struct later
+    int32_t compressionType = NO_COMPRESSION;
+    OID columnOID = 0;
+    bool autoincrement = 0;  // set to true if  SYSCOLUMN autoincrement is �y�
+    uint64_t nextvalue = 0;  // next autoincrement value
+    uint32_t charsetNumber = default_charset_info->number;
+    const CHARSET_INFO* cs = nullptr;
 
    private:
     long timeZone;
 
    public:
-    ColType();
+    ColType() = default;
     ColType(const ColType& rhs);
+    ColType(int32_t colWidth_, int32_t scale_, int32_t precision_,
+            const ConstraintType& constraintType_, const DictOID& ddn_, int32_t colPosition_,
+            int32_t compressionType_, OID columnOID_, const ColDataType& colDataType_);
     ColType& operator=(const ColType& rhs);
 
     CHARSET_INFO* getCharset();
@@ -272,6 +284,18 @@ class CalpontSystemCatalog : public datatypes::SystemCatalog
     boost::any convertColumnData(const std::string& data, bool& bSaturate, long timeZone,
                                  bool nulFlag = false, bool noRoundup = false, bool isUpdate = false) const;
 
+    /**
+     * @brief convert a columns data, represnted as a string,
+     * to its native format
+     * @param       data       - the string representation, with special NULL value
+     * @param [OUT] bSaturate  - the value was truncated/adjusted
+     * @param       timeZone   - the time zone name, for TIMESTAMP conversion
+     * @param       nRoundtrip
+     * @param       isUpdate
+     */
+    boost::any convertColumnData(const NullString& data, bool& bSaturate, long timeZone,
+                                 bool noRoundup = false, bool isUpdate = false) const;
+
     const std::string toString() const;
 
     // Put these here so udf doesn't need to link libexecplan
@@ -307,7 +331,7 @@ class CalpontSystemCatalog : public datatypes::SystemCatalog
       return !(*this == t);
     }
 
-    static ColType convertUnionColType(std::vector<ColType>&);
+    static ColType convertUnionColType(std::vector<ColType>&, unsigned int&);
   };
 
   /** the structure of a table infomation
@@ -427,7 +451,7 @@ class CalpontSystemCatalog : public datatypes::SystemCatalog
     }
     std::string schema;
     std::string table;
-    int64_t create_date;
+    int64_t create_date = 0;
     bool operator<(const TableName& rhs) const;
     bool operator>=(const TableName& rhs) const
     {
@@ -661,6 +685,17 @@ class CalpontSystemCatalog : public datatypes::SystemCatalog
    */
   const ROPair tableRID(const TableName& tableName, int lower_case_table_names = 0);
 
+  /** return the OID of the table's AUX column
+   *
+   * returns the OID of the table's AUX column
+   */
+  OID tableAUXColumnOID(const TableName& tableName, int lower_case_table_names = 0);
+
+  /** returns the table OID if the input OID is the AUX
+   *  column OID of the table.
+   */
+  CalpontSystemCatalog::OID isAUXColumnOID(const OID& oid);
+
   /** return the RID of the index for a table
    *
    * returns the RID of the indexes for a table
@@ -868,6 +903,14 @@ class CalpontSystemCatalog : public datatypes::SystemCatalog
   typedef std::map<TableName, RID> Tablemap;
   Tablemap fTablemap;
 
+  typedef std::map<TableName, OID> TableOIDmap;
+  TableOIDmap fTableAUXColumnOIDMap;
+  boost::mutex fTableAUXColumnOIDMapLock;
+
+  typedef std::map<OID, OID> AUXColumnOIDTableOIDmap;
+  AUXColumnOIDTableOIDmap fAUXColumnOIDToTableOIDMap;
+  boost::mutex fAUXColumnOIDToTableOIDMapLock;
+
   typedef std::map<OID, ColType> Colinfomap;
   Colinfomap fColinfomap;
   boost::mutex fColinfomapLock;
@@ -913,6 +956,16 @@ class CalpontSystemCatalog : public datatypes::SystemCatalog
   static uint32_t fModuleID;
 };
 
+// MCOL-5021
+const datatypes::SystemCatalog::ColDataType AUX_COL_DATATYPE = datatypes::SystemCatalog::UTINYINT;
+const int32_t AUX_COL_WIDTH = 1;
+// TODO MCOL-5021 compressionType is hardcoded to 2 (SNAPPY)
+const CalpontSystemCatalog::CompressionType AUX_COL_COMPRESSION_TYPE = CalpontSystemCatalog::COMPRESSION2;
+const std::string AUX_COL_DATATYPE_STRING = "unsigned-tinyint";
+const uint64_t AUX_COL_MINVALUE = MIN_UTINYINT;
+const uint64_t AUX_COL_MAXVALUE = MAX_UTINYINT;
+constexpr uint8_t AUX_COL_EMPTYVALUE = joblist::UTINYINTEMPTYROW;
+
 /** convenience function to make a TableColName from 3 strings
  */
 const CalpontSystemCatalog::TableColName make_tcn(const std::string& s, const std::string& t,
@@ -950,17 +1003,18 @@ inline bool isNull(int64_t val, const execplan::CalpontSystemCatalog::ColType& c
       break;
     }
 
+    case execplan::CalpontSystemCatalog::VARCHAR:
     case execplan::CalpontSystemCatalog::CHAR:
     {
       int colWidth = ct.colWidth;
 
       if (colWidth <= 8)
       {
-        if ((colWidth == 1) && ((int8_t)joblist::CHAR1NULL == val))
+        if ((colWidth == 1) && ((uint8_t)joblist::CHAR1NULL == (uint8_t)val))
           ret = true;
-        else if ((colWidth == 2) && ((int16_t)joblist::CHAR2NULL == val))
+        else if ((colWidth == 2) && ((uint16_t)joblist::CHAR2NULL == (uint16_t)val))
           ret = true;
-        else if ((colWidth < 5) && ((int32_t)joblist::CHAR4NULL == val))
+        else if ((colWidth < 5) && ((uint32_t)joblist::CHAR4NULL == (uint32_t)val))
           ret = true;
         else if ((int64_t)joblist::CHAR8NULL == val)
           ret = true;
@@ -969,7 +1023,6 @@ inline bool isNull(int64_t val, const execplan::CalpontSystemCatalog::ColType& c
       {
         throw std::logic_error("Not a int column.");
       }
-
       break;
     }
 
@@ -1080,27 +1133,6 @@ inline bool isNull(int64_t val, const execplan::CalpontSystemCatalog::ColType& c
       break;
     }
 
-    case execplan::CalpontSystemCatalog::VARCHAR:
-    {
-      int colWidth = ct.colWidth;
-
-      if (colWidth <= 8)
-      {
-        if ((colWidth < 3) && ((int16_t)joblist::CHAR2NULL == val))
-          ret = true;
-        else if ((colWidth < 5) && ((int32_t)joblist::CHAR4NULL == val))
-          ret = true;
-        else if ((int64_t)joblist::CHAR8NULL == val)
-          ret = true;
-      }
-      else
-      {
-        throw std::logic_error("Not a int column.");
-      }
-
-      break;
-    }
-
     case execplan::CalpontSystemCatalog::UTINYINT:
     {
       if (joblist::UTINYINTNULL == (uint8_t)val)
@@ -1185,6 +1217,8 @@ const std::string MINVALUE_COL = "minvalue";
 const std::string MAXVALUE_COL = "maxvalue";
 const std::string COMPRESSIONTYPE_COL = "compressiontype";
 const std::string NEXTVALUE_COL = "nextvalue";
+const std::string AUXCOLUMNOID_COL = "auxcolumnoid";
+const std::string CHARSETNUM_COL = "charsetnum";
 
 /*****************************************************
  * System tables OID definition
@@ -1208,7 +1242,8 @@ const int OID_SYSTABLE_NUMOFROWS = SYSTABLE_BASE + 8;      /** @brief total num 
 const int OID_SYSTABLE_AVGROWLEN = SYSTABLE_BASE + 9;      /** @brief avg. row length column */
 const int OID_SYSTABLE_NUMOFBLOCKS = SYSTABLE_BASE + 10;   /** @brief num. of blocks column */
 const int OID_SYSTABLE_AUTOINCREMENT = SYSTABLE_BASE + 11; /** @brief AUTOINCREMENT column */
-const int SYSTABLE_MAX = SYSTABLE_BASE + 12;               // be sure this is one more than the highest #
+const int OID_SYSTABLE_AUXCOLUMNOID = SYSTABLE_BASE + 12;  /** @brief AUXCOLUMNOID column */
+const int SYSTABLE_MAX = SYSTABLE_BASE + 13;               // be sure this is one more than the highest #
 
 /*****************************************************
  * SYSCOLUMN columns OID definition
@@ -1235,7 +1270,8 @@ const int OID_SYSCOLUMN_MINVALUE = SYSCOLUMN_BASE + 19;        /** @brief min va
 const int OID_SYSCOLUMN_MAXVALUE = SYSCOLUMN_BASE + 20;        /** @brief max value col */
 const int OID_SYSCOLUMN_COMPRESSIONTYPE = SYSCOLUMN_BASE + 21; /** @brief compression type */
 const int OID_SYSCOLUMN_NEXTVALUE = SYSCOLUMN_BASE + 22;       /** @brief next value */
-const int SYSCOLUMN_MAX = SYSCOLUMN_BASE + 23;                 // be sure this is one more than the highest #
+const int OID_SYSCOLUMN_CHARSETNUM = SYSCOLUMN_BASE + 23;      /** @brief character set number for the column */
+const int SYSCOLUMN_MAX = SYSCOLUMN_BASE + 24;                 // be sure this is one more than the highest #
 
 /*****************************************************
  * SYSTABLE columns dictionary OID definition
@@ -1283,5 +1319,3 @@ const std::string colDataTypeToString(CalpontSystemCatalog::ColDataType cdt);
 bool ctListSort(const CalpontSystemCatalog::ColType& a, const CalpontSystemCatalog::ColType& b);
 
 }  // namespace execplan
-
-#endif  // EXECPLAN_CALPONTSYSTEMCATALOG_H

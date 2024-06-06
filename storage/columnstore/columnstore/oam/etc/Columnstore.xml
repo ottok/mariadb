@@ -20,7 +20,6 @@
 	<DMLProc>
 		<IPAddr>127.0.0.1</IPAddr>
 		<Port>8614</Port>
-		<!-- <MaxDeleteRows>262144</MaxDeleteRows> -->
 	</DMLProc>
 	<BatchInsert>
 		<RowsPerBatch>10000</RowsPerBatch>
@@ -92,7 +91,7 @@
 		<ModuleSwapCriticalThreshold2>90</ModuleSwapCriticalThreshold2>
 		<ModuleSwapMajorThreshold2>80</ModuleSwapMajorThreshold2>
 		<ModuleSwapMinorThreshold2>70</ModuleSwapMinorThreshold2>
-		<ModuleDiskMonitorFileSystem1-2>/</ModuleDiskMonitorFileSystem1-2>  
+		<ModuleDiskMonitorFileSystem1-2>/</ModuleDiskMonitorFileSystem1-2>
 		<ModuleDBRootCount1-2>unassigned</ModuleDBRootCount1-2>
 		<ModuleDBRootID1-1-2>unassigned</ModuleDBRootID1-1-2>
 		<ModuleType3>pm</ModuleType3>
@@ -124,7 +123,7 @@
 	</SessionManager>
 	<VersionBuffer>
 		<!-- VersionBufferFileSize must be a multiple of 8192.
-		One version buffer file will be put on each DB root. -->
+         One version buffer file will be put on each DB root. -->
 		<VersionBufferFileSize>1GB</VersionBufferFileSize>
 	</VersionBuffer>
 	<OIDManager>
@@ -138,6 +137,7 @@
 		<BulkRollbackDir>/var/lib/columnstore/data1/systemFiles/bulkRollback</BulkRollbackDir>
 		<MaxFileSystemDiskUsagePct>98</MaxFileSystemDiskUsagePct>
 		<CompressedPaddingBlocks>1</CompressedPaddingBlocks> <!-- Number of blocks used to pad compressed chunks -->
+        <FastDelete>n</FastDelete>
 	</WriteEngine>
 	<DBRM_Controller>
 		<NumWorkers>1</NumWorkers>
@@ -152,8 +152,8 @@
 	</DBRM_Worker1>
 	<DBBC>
 		<!-- The percentage of RAM to use for the disk block cache. Defaults to 70% -->
-        <!-- Alternatively, this can be specified in absolute terms using
-             the suffixes 'm' or 'g' to denote size in megabytes or gigabytes.-->
+		<!-- Alternatively, this can be specified in absolute terms using
+		     the suffixes 'm' or 'g' to denote size in megabytes or gigabytes.-->
 		<!-- <NumBlocksPct>95</NumBlocksPct> -->
 		<!-- <NumThreads>16</NumThreads> --> <!-- 1-256.  Default is 16. -->
 		<NumCaches>1</NumCaches><!-- # of parallel caches to instantiate -->
@@ -172,6 +172,7 @@
 		<DBRootStorageType>internal</DBRootStorageType>
 		<UMStorageType>internal</UMStorageType>
 		<ProfileFile>/etc/profile.d/columnstoreAlias.sh</ProfileFile>
+		<DataRedundancyNetworkType/>
 	</Installation>
 	<ExtentMap>
 		<!--
@@ -194,17 +195,17 @@
 	<JobList>
 		<FlushInterval>16K</FlushInterval>
 		<FifoSize>16</FifoSize>
-		<RequestSize>1</RequestSize>  <!-- Number of extents per request, should be 
+		<RequestSize>1</RequestSize>  <!-- Number of extents per request, should be
 			  less than MaxOutstandingRequests. Otherwise, default value 1 is used. -->
 		<!--  ProcessorThreadsPerScan is the number of jobs issued to process
-			  each extent.  The default is 16.  MaxOutstandingRequests is the size of 
-			  the window of work in terms of extents.  A value of 20 means there 
+			  each extent.  The default is 16.  MaxOutstandingRequests is the size of
+			  the window of work in terms of extents.  A value of 20 means there
 			  is 20 extents worth of work for the PMs to process at any given time.
 			  ProcessorThreadsPerScan * MaxOutstandingRequests should be at least
 			  as many threads are available across all PMs.  -->
-		<!-- <ProcessorThreadsPerScan>16</ProcessorThreadsPerScan> --> 
-		<!-- MaxOutstandingRequests is going to default to the num of cores available 
-			 across all performance modules * 4 divided by the ProcessorThreadsPerScan, 
+		<!-- <ProcessorThreadsPerScan>16</ProcessorThreadsPerScan> -->
+		<!-- MaxOutstandingRequests is going to default to the num of cores available
+			 across all performance modules * 4 divided by the ProcessorThreadsPerScan,
 			 but will be lower bounded by 20 -->
 		<!-- <MaxOutstandingRequests>20</MaxOutstandingRequests>  -->
 		<ThreadPoolSize>100</ThreadPoolSize>
@@ -245,4 +246,7 @@
 	<DataRedundancyConfig>
 		<DBRoot1PMs/>
 	</DataRedundancyConfig>
+	<Rewrites>
+		<CommonLeafConjunctionsToTop>Y</CommonLeafConjunctionsToTop>
+	</Rewrites>
 </Columnstore>

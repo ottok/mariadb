@@ -15,23 +15,28 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef MESSAGEQCPP_MESSAGEQUEUECLIENT_H
-#define MESSAGEQCPP_MESSAGEQUEUECLIENT_H
+#pragma once
 
 #include <map>
 #include "messagequeue.h"
+#include <memory>
+
+#include <boost/stacktrace.hpp>
 
 namespace messageqcpp
 {
+
+
+static struct LockedClientMapInitilizer {
+  LockedClientMapInitilizer ();
+  ~LockedClientMapInitilizer ();
+} clientMapInitilizer; // static initializer for every translation unit
+
 struct ClientObject
 {
-  MessageQueueClient* client;
-  uint64_t lastUsed;
-  bool inUse;
-
-  ClientObject() : client(NULL), lastUsed(0), inUse(false)
-  {
-  }
+  std::unique_ptr<MessageQueueClient> client;
+  uint64_t lastUsed = 0;
+  bool inUse = false;
 };
 
 class MessageQueueClientPool
@@ -46,9 +51,6 @@ class MessageQueueClientPool
  private:
   MessageQueueClientPool(){};
   ~MessageQueueClientPool(){};
-
-  static std::multimap<std::string, ClientObject*> clientMap;
 };
 
 }  // namespace messageqcpp
-#endif  // MESSAGEQCPP_MESSAGEQUEUECLIENT_H

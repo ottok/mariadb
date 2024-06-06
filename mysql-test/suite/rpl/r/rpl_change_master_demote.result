@@ -24,7 +24,7 @@ GTID_CURRENT_POS
 GTID_SLAVE_POS	
 # First ensure gtid_slave_pos after master_demote_to_slave matches
 # gtid_current_pos calculation
-CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_use_gtid=slave_pos, master_demote_to_slave=1 ;
+CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_ssl_verify_server_cert=0, master_use_gtid=slave_pos, master_demote_to_slave=1 ;
 SELECT VARIABLE_NAME, GLOBAL_VALUE FROM INFORMATION_SCHEMA.SYSTEM_VARIABLES WHERE VARIABLE_NAME LIKE 'gtid_binlog_pos' OR VARIABLE_NAME LIKE 'gtid_slave_pos' OR VARIABLE_NAME LIKE 'gtid_current_pos' ORDER BY VARIABLE_NAME ASC;
 VARIABLE_NAME	GLOBAL_VALUE
 GTID_BINLOG_POS	
@@ -91,7 +91,7 @@ GTID_CURRENT_POS	0-1-2
 GTID_SLAVE_POS	
 # First ensure gtid_slave_pos after master_demote_to_slave matches
 # gtid_current_pos calculation
-CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_use_gtid=slave_pos, master_demote_to_slave=1 ;
+CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_ssl_verify_server_cert=0, master_use_gtid=slave_pos, master_demote_to_slave=1 ;
 SELECT VARIABLE_NAME, GLOBAL_VALUE FROM INFORMATION_SCHEMA.SYSTEM_VARIABLES WHERE VARIABLE_NAME LIKE 'gtid_binlog_pos' OR VARIABLE_NAME LIKE 'gtid_slave_pos' OR VARIABLE_NAME LIKE 'gtid_current_pos' ORDER BY VARIABLE_NAME ASC;
 VARIABLE_NAME	GLOBAL_VALUE
 GTID_BINLOG_POS	0-1-2
@@ -151,7 +151,7 @@ GTID_CURRENT_POS	0-1-6
 GTID_SLAVE_POS	0-2-5
 # First ensure gtid_slave_pos after master_demote_to_slave matches
 # gtid_current_pos calculation
-CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_use_gtid=slave_pos, master_demote_to_slave=1 ;
+CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_ssl_verify_server_cert=0, master_use_gtid=slave_pos, master_demote_to_slave=1 ;
 SELECT VARIABLE_NAME, GLOBAL_VALUE FROM INFORMATION_SCHEMA.SYSTEM_VARIABLES WHERE VARIABLE_NAME LIKE 'gtid_binlog_pos' OR VARIABLE_NAME LIKE 'gtid_slave_pos' OR VARIABLE_NAME LIKE 'gtid_current_pos' ORDER BY VARIABLE_NAME ASC;
 VARIABLE_NAME	GLOBAL_VALUE
 GTID_BINLOG_POS	0-1-6
@@ -213,7 +213,7 @@ GTID_CURRENT_POS	0-1-10
 GTID_SLAVE_POS	0-1-10
 # First ensure gtid_slave_pos after master_demote_to_slave matches
 # gtid_current_pos calculation
-CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_use_gtid=slave_pos, master_demote_to_slave=1 ;
+CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_ssl_verify_server_cert=0, master_use_gtid=slave_pos, master_demote_to_slave=1 ;
 SELECT VARIABLE_NAME, GLOBAL_VALUE FROM INFORMATION_SCHEMA.SYSTEM_VARIABLES WHERE VARIABLE_NAME LIKE 'gtid_binlog_pos' OR VARIABLE_NAME LIKE 'gtid_slave_pos' OR VARIABLE_NAME LIKE 'gtid_current_pos' ORDER BY VARIABLE_NAME ASC;
 VARIABLE_NAME	GLOBAL_VALUE
 GTID_BINLOG_POS	0-1-10
@@ -278,7 +278,7 @@ GTID_CURRENT_POS	0-1-14,1-1-2
 GTID_SLAVE_POS	0-2-13
 # First ensure gtid_slave_pos after master_demote_to_slave matches
 # gtid_current_pos calculation
-CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_use_gtid=slave_pos, master_demote_to_slave=1 ;
+CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_ssl_verify_server_cert=0, master_use_gtid=slave_pos, master_demote_to_slave=1 ;
 SELECT VARIABLE_NAME, GLOBAL_VALUE FROM INFORMATION_SCHEMA.SYSTEM_VARIABLES WHERE VARIABLE_NAME LIKE 'gtid_binlog_pos' OR VARIABLE_NAME LIKE 'gtid_slave_pos' OR VARIABLE_NAME LIKE 'gtid_current_pos' ORDER BY VARIABLE_NAME ASC;
 VARIABLE_NAME	GLOBAL_VALUE
 GTID_BINLOG_POS	0-1-14,1-1-2
@@ -361,7 +361,7 @@ GTID_CURRENT_POS	0-1-18,1-1-2,2-1-2
 GTID_SLAVE_POS	0-1-18,1-1-2
 # First ensure gtid_slave_pos after master_demote_to_slave matches
 # gtid_current_pos calculation
-CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_use_gtid=slave_pos, master_demote_to_slave=1 ;
+CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_ssl_verify_server_cert=0, master_use_gtid=slave_pos, master_demote_to_slave=1 ;
 SELECT VARIABLE_NAME, GLOBAL_VALUE FROM INFORMATION_SCHEMA.SYSTEM_VARIABLES WHERE VARIABLE_NAME LIKE 'gtid_binlog_pos' OR VARIABLE_NAME LIKE 'gtid_slave_pos' OR VARIABLE_NAME LIKE 'gtid_current_pos' ORDER BY VARIABLE_NAME ASC;
 VARIABLE_NAME	GLOBAL_VALUE
 GTID_BINLOG_POS	0-1-18,1-3-4,2-1-2,4-3-2
@@ -427,7 +427,7 @@ GTID_CURRENT_POS	0-2-21,1-3-4,2-1-3,3-1-2,4-3-2
 GTID_SLAVE_POS	0-2-21,1-3-4,2-1-2,4-3-2
 # First ensure gtid_slave_pos after master_demote_to_slave matches
 # gtid_current_pos calculation
-CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_use_gtid=slave_pos, master_demote_to_slave=1 , ignore_domain_ids=(2,3);
+CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_ssl_verify_server_cert=0, master_use_gtid=slave_pos, master_demote_to_slave=1 , ignore_domain_ids=(2,3);
 SELECT VARIABLE_NAME, GLOBAL_VALUE FROM INFORMATION_SCHEMA.SYSTEM_VARIABLES WHERE VARIABLE_NAME LIKE 'gtid_binlog_pos' OR VARIABLE_NAME LIKE 'gtid_slave_pos' OR VARIABLE_NAME LIKE 'gtid_current_pos' ORDER BY VARIABLE_NAME ASC;
 VARIABLE_NAME	GLOBAL_VALUE
 GTID_BINLOG_POS	0-1-18,1-3-4,2-1-3,3-1-2,4-3-2
@@ -527,7 +527,7 @@ GTID_CURRENT_POS	0-1-26,1-3-4,2-1-3,3-1-2,4-3-2
 GTID_SLAVE_POS	0-1-26,1-3-4,2-1-3,3-1-2,4-3-2
 # First ensure gtid_slave_pos after master_demote_to_slave matches
 # gtid_current_pos calculation
-CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_use_gtid=slave_pos, master_demote_to_slave=1 , ignore_domain_ids=(2,3);
+CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_ssl_verify_server_cert=0, master_use_gtid=slave_pos, master_demote_to_slave=1 , ignore_domain_ids=(2,3);
 SELECT VARIABLE_NAME, GLOBAL_VALUE FROM INFORMATION_SCHEMA.SYSTEM_VARIABLES WHERE VARIABLE_NAME LIKE 'gtid_binlog_pos' OR VARIABLE_NAME LIKE 'gtid_slave_pos' OR VARIABLE_NAME LIKE 'gtid_current_pos' ORDER BY VARIABLE_NAME ASC;
 VARIABLE_NAME	GLOBAL_VALUE
 GTID_BINLOG_POS	0-1-26,1-3-4,2-1-3,3-1-2,4-3-2
@@ -593,7 +593,7 @@ GTID_CURRENT_POS	0-2-29,1-3-4,2-1-3,3-1-2,4-3-2
 GTID_SLAVE_POS	0-2-29,1-3-4,2-1-3,3-1-2,4-3-2
 # First ensure gtid_slave_pos after master_demote_to_slave matches
 # gtid_current_pos calculation
-CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_use_gtid=slave_pos, master_demote_to_slave=1 , ignore_domain_ids=(2,3);
+CHANGE MASTER TO master_host='127.0.0.1', master_port=SLAVE_PORT, master_user='root', master_ssl_verify_server_cert=0, master_use_gtid=slave_pos, master_demote_to_slave=1 , ignore_domain_ids=(2,3);
 SELECT VARIABLE_NAME, GLOBAL_VALUE FROM INFORMATION_SCHEMA.SYSTEM_VARIABLES WHERE VARIABLE_NAME LIKE 'gtid_binlog_pos' OR VARIABLE_NAME LIKE 'gtid_slave_pos' OR VARIABLE_NAME LIKE 'gtid_current_pos' ORDER BY VARIABLE_NAME ASC;
 VARIABLE_NAME	GLOBAL_VALUE
 GTID_BINLOG_POS	0-1-26,1-3-4,2-1-3,3-1-2,4-3-2

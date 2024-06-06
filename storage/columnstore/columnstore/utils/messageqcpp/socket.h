@@ -21,8 +21,7 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef MESSAGEQCPP_SOCKET_H
-#define MESSAGEQCPP_SOCKET_H
+#pragma once
 
 #include <ctime>
 #include <unistd.h>
@@ -175,6 +174,7 @@ class Socket
    *
    */
   virtual bool isSameAddr(const Socket* rhs) const = 0;
+  virtual bool isSameAddr(const struct in_addr& ipv4Addr) const = 0;
 
   virtual bool isConnected() const = 0;
   virtual bool hasData() const = 0;
@@ -186,5 +186,3 @@ class Socket
 };
 
 }  // namespace messageqcpp
-
-#endif  // MESSAGEQCPP_SOCKET_H

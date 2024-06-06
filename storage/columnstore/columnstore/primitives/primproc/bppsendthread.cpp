@@ -25,6 +25,8 @@
 #include <stdexcept>
 #include <mutex>
 #include "bppsendthread.h"
+#include "resourcemanager.h"
+#include "serviceexemgr.h"
 
 namespace primitiveprocessor
 {
@@ -32,32 +34,9 @@ extern uint32_t connectionsPerUM;
 extern uint32_t BPPCount;
 
 BPPSendThread::BPPSendThread()
- : die(false)
- , gotException(false)
- , mainThreadWaiting(false)
- , sizeThreshold(100)
- , msgsLeft(-1)
- , waiting(false)
- , sawAllConnections(false)
- , fcEnabled(false)
- , currentByteSize(0)
 {
-  maxByteSize = joblist::ResourceManager::instance()->getMaxBPPSendQueue();
-  runner = boost::thread(Runner_t(this));
-}
-
-BPPSendThread::BPPSendThread(uint32_t initMsgsLeft)
- : die(false)
- , gotException(false)
- , mainThreadWaiting(false)
- , sizeThreshold(100)
- , msgsLeft(initMsgsLeft)
- , waiting(false)
- , sawAllConnections(false)
- , fcEnabled(false)
- , currentByteSize(0)
-{
-  maxByteSize = joblist::ResourceManager::instance()->getMaxBPPSendQueue();
+  queueBytesThresh = joblist::ResourceManager::instance()->getBPPSendThreadBytesThresh();
+  queueMsgThresh = joblist::ResourceManager::instance()->getBPPSendThreadMsgThresh();
   runner = boost::thread(Runner_t(this));
 }
 
@@ -73,7 +52,7 @@ void BPPSendThread::sendResult(const Msg_t& msg, bool newConnection)
   if (sizeTooBig())
   {
     std::unique_lock<std::mutex> sl1(respondLock);
-    while (currentByteSize >= maxByteSize && msgQueue.size() > 3 && !die)
+    while (currentByteSize >= queueBytesThresh && msgQueue.size() > 3 && !die)
     {
       fProcessorPool->incBlockedThreads();
       okToRespond.wait(sl1);
@@ -118,7 +97,7 @@ void BPPSendThread::sendResults(const vector<Msg_t>& msgs, bool newConnection)
   if (sizeTooBig())
   {
     std::unique_lock<std::mutex> sl1(respondLock);
-    while (currentByteSize >= maxByteSize && msgQueue.size() > 3 && !die)
+    while (currentByteSize >= queueBytesThresh && msgQueue.size() > 3 && !die)
     {
       fProcessorPool->incBlockedThreads();
       okToRespond.wait(sl1);
@@ -165,7 +144,6 @@ void BPPSendThread::sendMore(int num)
 {
   std::unique_lock<std::mutex> sl(ackLock);
 
-  //	cout << "got an ACK for " << num << " msgsLeft=" << msgsLeft << endl;
   if (num == -1)
     fcEnabled = false;
   else if (num == 0)
@@ -255,18 +233,25 @@ void BPPSendThread::mainLoop()
 
         bsSize = msg[msgsSent].msg->lengthWithHdrOverhead();
 
-        try
+        // Same node processing path
+        if (!lock)
         {
-          boost::mutex::scoped_lock sl2(*lock);
-          sock->write(*msg[msgsSent].msg);
-          // cout << "sent 1 msg\n";
+          msg[msgsSent].sock->write(msg[msgsSent].msg);
         }
-        catch (std::exception& e)
+        else
         {
-          sl.lock();
-          exceptionString = e.what();
-          gotException = true;
-          return;
+          try
+          {
+            boost::mutex::scoped_lock sl2(*lock);
+            sock->write(*msg[msgsSent].msg);
+          }
+          catch (std::exception& e)
+          {
+            sl.lock();
+            exceptionString = e.what();
+            gotException = true;
+            return;
+          }
         }
 
         (void)atomicops::atomicDec(&msgsLeft);
@@ -274,7 +259,7 @@ void BPPSendThread::mainLoop()
         msg[msgsSent].msg.reset();
       }
 
-      if (fProcessorPool->blockedThreadCount() > 0 && currentByteSize < maxByteSize)
+      if (fProcessorPool->blockedThreadCount() > 0 && currentByteSize < queueBytesThresh)
       {
         okToRespond.notify_one();
       }
@@ -287,9 +272,9 @@ void BPPSendThread::abort()
   std::lock_guard<std::mutex> sl(msgQueueLock);
   std::lock_guard<std::mutex> sl2(ackLock);
   std::lock_guard<std::mutex> sl3(respondLock);
-  {
-    die = true;
-  }
+
+  die = true;
+
   queueNotEmpty.notify_all();
   okToSend.notify_all();
   okToRespond.notify_all();

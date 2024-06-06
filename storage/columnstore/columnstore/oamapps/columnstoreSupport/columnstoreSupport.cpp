@@ -121,8 +121,7 @@ void* childReportThread(threadInfo_t* st)
   cout << "Get " + reportType + " report data for " + remoteModuleName + "      " << endl;
 
   string cmd = "remote_command.sh " + remoteModuleIP + " " + rootPassword + ";" + reportType + "Report.sh " +
-               remoteModuleName + "' " + debug_flag + " - forcetty";
-
+                remoteModuleName + "' " + debug_flag + " - forcetty";
   int rtnCode = system(cmd.c_str());
 
   if (WEXITSTATUS(rtnCode) != 0)

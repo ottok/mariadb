@@ -27,8 +27,7 @@
 
 /** @file */
 
-#ifndef THREADPOOL_H
-#define THREADPOOL_H
+#pragma once
 
 #include <string>
 #include <fstream>
@@ -48,11 +47,7 @@
 
 #include <memory>
 
-#if defined(_MSC_VER) && defined(xxxTHREADPOOL_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace threadpool
 {
@@ -355,7 +350,7 @@ class ThreadPool
   boost::condition_variable fNeedThread;       // triggered when a thread is needed
   ThreadPoolGroup fThreads;
 
-  bool fStop;
+  std::atomic<bool> fStop = false;
   long fGeneralErrors;
   long fFunctorErrors;
   uint32_t waitingFunctorsSize;
@@ -400,5 +395,3 @@ class ThreadPoolMonitor
 }  // namespace threadpool
 
 #undef EXPORT
-
-#endif  // THREADPOOL_H

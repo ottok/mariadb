@@ -21,13 +21,10 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef MESSAGEQCPP_COMPRESSED_ISS_H
-#define MESSAGEQCPP_COMPRESSED_ISS_H
+#pragma once
 
 #include <unistd.h>
-#ifndef _MSC_VER
 #include <netinet/in.h>
-#endif
 
 #include "socket.h"
 #include "iosocket.h"
@@ -62,5 +59,3 @@ class CompressedInetStreamSocket : public InetStreamSocket
 }  // namespace messageqcpp
 
 #undef EXPORT
-
-#endif

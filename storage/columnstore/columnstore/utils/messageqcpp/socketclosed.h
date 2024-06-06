@@ -25,8 +25,7 @@
 #include <exception>
 #include <string>
 
-#ifndef SOCKETCLOSED_H_
-#define SOCKETCLOSED_H_
+#pragma once
 
 namespace messageqcpp
 {
@@ -57,5 +56,3 @@ class SocketClosed : public std::exception
 };
 
 }  // namespace messageqcpp
-
-#endif

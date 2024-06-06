@@ -108,12 +108,12 @@ IF(NOT WIN32)
 ELSE()
   SET(GSSAPI_LIBS secur32)
   SET(GSSAPI_SOURCES ${AUTH_DIR}/auth_gssapi_client.c ${AUTH_DIR}/sspi_client.c ${AUTH_DIR}/sspi_errmsg.c)
-  SET(AUTH_GSSAPI_DEFAULT_CONFIG STATIC)
+  SET(AUTH_GSSAPI_DEFAULT_CONFIG DYNAMIC_AND_STATIC)
 ENDIF()
 IF(GSSAPI_SOURCES)
   REGISTER_PLUGIN(TARGET auth_gssapi_client
                   TYPE MARIADB_CLIENT_PLUGIN_AUTH
-                  CONFIGURATIONS DYNAMIC STATIC OFF
+                  CONFIGURATIONS DYNAMIC STATIC OFF DYNAMIC_AND_STATIC
                   DEFAULT ${AUTH_GSSAPI_DEFAULT_CONFIG}
                   SOURCES ${GSSAPI_SOURCES}
                   INCLUDES ${CC_SOURCE_DIR}/plugins/auth ${GSSAPI_INCS}
@@ -131,6 +131,7 @@ REGISTER_PLUGIN(TARGET mysql_old_password
                 TYPE MARIADB_CLIENT_PLUGIN_AUTH
                 CONFIGURATIONS STATIC DYNAMIC OFF
                 DEFAULT STATIC
+                DISABLED YES
                 SOURCES ${AUTH_DIR}/old_password.c)
 
 # Cleartext

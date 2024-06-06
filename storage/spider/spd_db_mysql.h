@@ -509,6 +509,10 @@ public:
     int wait_timeout,
     int *need_mon
   );
+
+  /** Reset the global lock wait time out */
+  int reset_lock_wait_timeout();
+
   bool set_sql_mode_in_bulk_sql();
   int set_sql_mode(
     sql_mode_t sql_mode,
@@ -1206,64 +1210,40 @@ public:
     ulong sql_type,
     int link_idx
   );
-  int append_flush_tables_part(
-    ulong sql_type,
-    int link_idx,
-    bool lock
-  );
+  int append_flush_tables_part(int link_idx, bool lock);
   int append_flush_tables(
     spider_string *str,
     int link_idx,
     bool lock
   );
-  int append_optimize_table_part(
-    ulong sql_type,
-    int link_idx
-  );
+  int append_optimize_table_part(int link_idx);
   int append_optimize_table(
     spider_string *str,
     int link_idx
   );
-  int append_analyze_table_part(
-    ulong sql_type,
-    int link_idx
-  );
+  int append_analyze_table_part(int link_idx);
   int append_analyze_table(
     spider_string *str,
     int link_idx
   );
-  int append_repair_table_part(
-    ulong sql_type,
-    int link_idx,
-    HA_CHECK_OPT* check_opt
-  );
+  int append_repair_table_part(int link_idx, HA_CHECK_OPT *check_opt);
   int append_repair_table(
     spider_string *str,
     int link_idx,
     HA_CHECK_OPT* check_opt
   );
-  int append_check_table_part(
-    ulong sql_type,
-    int link_idx,
-    HA_CHECK_OPT* check_opt
-  );
+  int append_check_table_part(int link_idx, HA_CHECK_OPT *check_opt);
   int append_check_table(
     spider_string *str,
     int link_idx,
     HA_CHECK_OPT* check_opt
   );
-  int append_enable_keys_part(
-    ulong sql_type,
-    int link_idx
-  );
+  int append_enable_keys_part(int link_idx);
   int append_enable_keys(
     spider_string *str,
     int link_idx
   );
-  int append_disable_keys_part(
-    ulong sql_type,
-    int link_idx
-  );
+  int append_disable_keys_part(int link_idx);
   int append_disable_keys(
     spider_string *str,
     int link_idx

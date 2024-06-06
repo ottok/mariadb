@@ -21,8 +21,7 @@
 
 /** @file */
 
-#ifndef LOGGING_LOGGER_H_
-#define LOGGING_LOGGER_H_
+#pragma once
 
 #include <string>
 #include <map>
@@ -90,5 +89,3 @@ class Logger
 typedef boost::shared_ptr<Logger> SPL;
 
 }  // namespace logging
-
-#endif

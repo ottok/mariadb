@@ -17,8 +17,7 @@
 
 //  $Id: wf_lead_lag.h 3868 2013-06-06 22:13:05Z xlou $
 
-#ifndef UTILS_WF_LEAD_LAG_H
-#define UTILS_WF_LEAD_LAG_H
+#pragma once
 
 #include "windowfunctiontype.h"
 
@@ -53,4 +52,3 @@ class WF_lead_lag : public WindowFunctionType
 
 }  // namespace windowfunction
 
-#endif  // UTILS_WF_LEAD_LAG_H

@@ -14,8 +14,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
-#ifndef UTILS_COMMON_CHECKS_H
-#define UTILS_COMMON_CHECKS_H
+#pragma once
 
 #include <type_traits>
 #include "mcs_int128.h"
@@ -51,5 +50,3 @@ typename std::enable_if<std::is_signed<T>::value || datatypes::is_int128_t<T>::v
 };
 
 }  // namespace utils
-
-#endif  // UTILS_COMMON_CHECKS_H

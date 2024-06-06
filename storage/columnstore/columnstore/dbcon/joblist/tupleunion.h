@@ -28,20 +28,17 @@
 //
 
 #include "jobstep.h"
-#ifndef _MSC_VER
 #include <tr1/unordered_set>
-#else
-#include <unordered_set>
-#endif
 
 #include "stlpoolallocator.h"
 #include "threadnaming.h"
 
-#ifndef TUPLEUNION2_H_
-#define TUPLEUNION2_H_
+#pragma once
 
 namespace joblist
 {
+using normalizeFunctionsT = std::vector<std::function<void(const rowgroup::Row& in, rowgroup::Row* out, uint32_t col)>>;
+
 class TupleUnion : public JobStep, public TupleDeliveryStep
 {
  public:
@@ -123,8 +120,8 @@ class TupleUnion : public JobStep, public TupleDeliveryStep
   };
 
   void getOutput(rowgroup::RowGroup* rg, rowgroup::Row* row, rowgroup::RGData* data);
-  void addToOutput(rowgroup::Row* r, rowgroup::RowGroup* rg, bool keepit, rowgroup::RGData& data);
-  void normalize(const rowgroup::Row& in, rowgroup::Row* out);
+  void addToOutput(rowgroup::Row* r, rowgroup::RowGroup* rg, bool keepit, rowgroup::RGData& data, uint32_t& tmpOutputRowCount);
+  void normalize(const rowgroup::Row& in, rowgroup::Row* out, const normalizeFunctionsT& normalizeFunctions);
   void writeNull(rowgroup::Row* out, uint32_t col);
   void readInput(uint32_t);
   void formatMiniStats();
@@ -204,5 +201,3 @@ class TupleUnion : public JobStep, public TupleDeliveryStep
 };
 
 }  // namespace joblist
-
-#endif

@@ -21,8 +21,7 @@
  *******************************************************************************/
 /** @file */
 
-#ifndef _WE_CONVERTOR_H_
-#define _WE_CONVERTOR_H_
+#pragma once
 
 #include <time.h>
 #include <sys/types.h>
@@ -36,11 +35,7 @@
 #include "we_obj.h"
 #include "we_config.h"
 #include "calpontsystemcatalog.h"
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -145,5 +140,3 @@ class Convertor
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_CONVERTOR_H_

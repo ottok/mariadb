@@ -127,7 +127,6 @@
 /* Functions we may want to use. */
 #cmakedefine HAVE_ACCEPT4 1
 #cmakedefine HAVE_ACCESS 1
-#cmakedefine HAVE_ALARM 1
 #cmakedefine HAVE_ALLOCA 1
 #cmakedefine HAVE_BFILL 1
 #cmakedefine HAVE_INDEX 1
@@ -255,6 +254,7 @@
 #cmakedefine HAVE_SOCKADDR_IN6_SIN6_LEN 1
 #cmakedefine STRUCT_TIMESPEC_HAS_TV_SEC 1
 #cmakedefine STRUCT_TIMESPEC_HAS_TV_NSEC 1
+#cmakedefine STRUCT_TM_HAS_TM_GMTOFF 1
 
 /* this means that valgrind headers and macros are available */
 #cmakedefine HAVE_VALGRIND_MEMCHECK_H 1
@@ -384,7 +384,6 @@
 #cmakedefine HAVE_GCC_C11_ATOMICS 1
 #cmakedefine HAVE_SOLARIS_ATOMIC 1
 #cmakedefine NO_FCNTL_NONBLOCK 1
-#cmakedefine NO_ALARM 1
 
 #cmakedefine _LARGE_FILES 1
 #cmakedefine _LARGEFILE_SOURCE 1
@@ -500,6 +499,7 @@
 #cmakedefine HAVE_EncryptAes128Ctr 1
 #cmakedefine HAVE_EncryptAes128Gcm 1
 #cmakedefine HAVE_des 1
+#cmakedefine HAVE_hkdf 1
 
 /*
   Stuff that always need to be defined (compile breaks without it)

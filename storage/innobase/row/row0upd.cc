@@ -1836,9 +1836,7 @@ row_upd_sec_index_entry(
 	dict_index_t*		index;
 	dberr_t			err	= DB_SUCCESS;
 	trx_t*			trx	= thr_get_trx(thr);
-	btr_latch_mode		mode;
 	ulint			flags;
-	enum row_search_result	search_result;
 
 	ut_ad(trx->id != 0);
 
@@ -1866,7 +1864,6 @@ row_upd_sec_index_entry(
 			    "before_row_upd_sec_index_entry");
 
 	mtr.start();
-	mode = BTR_MODIFY_LEAF;
 
 	switch (index->table->space_id) {
 	case SRV_TMP_SPACE_ID:
@@ -1876,24 +1873,17 @@ row_upd_sec_index_entry(
 	default:
 		index->set_modified(mtr);
 		/* fall through */
-	case IBUF_SPACE_ID:
+	case 0:
 		flags = index->table->no_rollback() ? BTR_NO_ROLLBACK : 0;
-		/* We can only buffer delete-mark operations if there
-		are no foreign key constraints referring to the index. */
-		if (!referenced) {
-			mode = BTR_DELETE_MARK_LEAF;
-		}
-		break;
 	}
 
-	/* Set the query thread, so that ibuf_insert_low() will be
-	able to invoke thd_get_trx(). */
-	pcur.btr_cur.thr = thr;
 	pcur.btr_cur.page_cur.index = index;
+	const rec_t *rec;
 
 	if (index->is_spatial()) {
-		mode = btr_latch_mode(BTR_MODIFY_LEAF | BTR_RTREE_DELETE_MARK);
-		if (UNIV_LIKELY(!rtr_search(entry, mode, &pcur, &mtr))) {
+		constexpr btr_latch_mode mode = btr_latch_mode(
+			BTR_MODIFY_LEAF | BTR_RTREE_DELETE_MARK);
+		if (UNIV_LIKELY(!rtr_search(entry, mode, &pcur, thr, &mtr))) {
 			goto found;
 		}
 
@@ -1903,20 +1893,8 @@ row_upd_sec_index_entry(
 		}
 
 		goto not_found;
-	}
-
-	search_result = row_search_index_entry(entry, mode, &pcur, &mtr);
-
-	switch (search_result) {
-	const rec_t* rec;
-	case ROW_NOT_DELETED_REF:	/* should only occur for BTR_DELETE */
-		ut_error;
-		break;
-	case ROW_BUFFERED:
-		/* Entry was delete marked already. */
-		break;
-
-	case ROW_NOT_FOUND:
+	} else if (!row_search_index_entry(entry, BTR_MODIFY_LEAF,
+                                           &pcur, &mtr)) {
 not_found:
 		rec = btr_pcur_get_rec(&pcur);
 		ib::error()
@@ -1930,8 +1908,7 @@ not_found:
 		ut_ad(btr_validate_index(index, 0) == DB_SUCCESS);
 		ut_ad(0);
 #endif /* UNIV_DEBUG */
-		break;
-	case ROW_FOUND:
+	} else {
 found:
 		ut_ad(err == DB_SUCCESS);
 		rec = btr_pcur_get_rec(&pcur);
@@ -1946,7 +1923,7 @@ found:
 				btr_pcur_get_block(&pcur),
 				btr_pcur_get_rec(&pcur), index, thr, &mtr);
 			if (err != DB_SUCCESS) {
-				break;
+				goto close;
 			}
 
 			btr_rec_set_deleted<true>(btr_pcur_get_block(&pcur),

@@ -118,7 +118,7 @@ int64_t Func_cast_signed::getIntVal(Row& row, FunctionParm& parm, bool& isNull,
     case execplan::CalpontSystemCatalog::UTINYINT:
     case execplan::CalpontSystemCatalog::USMALLINT:
     {
-      return (int64_t)parm[0]->data()->getUintVal(row, isNull);
+      return datatypes::TUInt64(parm[0]->data()->getUintVal(row, isNull)).toMCSInt64();
     }
     break;
 
@@ -127,15 +127,13 @@ int64_t Func_cast_signed::getIntVal(Row& row, FunctionParm& parm, bool& isNull,
     case execplan::CalpontSystemCatalog::DOUBLE:
     case execplan::CalpontSystemCatalog::UDOUBLE:
     {
-      datatypes::TDouble d(parm[0]->data()->getDoubleVal(row, isNull));
-      return d.toMCSSInt64Round();
+      return datatypes::TDouble(parm[0]->data()->getDoubleVal(row, isNull)).toMCSSInt64Round();
     }
     break;
 
     case execplan::CalpontSystemCatalog::LONGDOUBLE:
     {
-      datatypes::TLongDouble d(parm[0]->data()->getLongDoubleVal(row, isNull));
-      return d.toMCSSInt64Round();
+      return datatypes::TLongDouble(parm[0]->data()->getLongDoubleVal(row, isNull)).toMCSSInt64Round();
     }
     break;
 
@@ -143,22 +141,14 @@ int64_t Func_cast_signed::getIntVal(Row& row, FunctionParm& parm, bool& isNull,
     case execplan::CalpontSystemCatalog::CHAR:
     case execplan::CalpontSystemCatalog::TEXT:
     {
-      const string& value = parm[0]->data()->getStrVal(row, isNull);
-
-      if (isNull)
-      {
-        isNull = true;
-        return 0;
-      }
-
-      return atoll(value.c_str());
+      return parm[0]->data()->getStrVal(row, isNull).toMCSInt64();
     }
     break;
 
     case execplan::CalpontSystemCatalog::DECIMAL:
     case execplan::CalpontSystemCatalog::UDECIMAL:
     {
-      return parm[0]->data()->getDecimalVal(row, isNull).toSInt64Round();
+      return parm[0]->data()->getDecimalVal(row, isNull).toMCSInt64Round();
     }
     break;
 
@@ -224,7 +214,7 @@ uint64_t Func_cast_unsigned::getUintVal(Row& row, FunctionParm& parm, bool& isNu
     case execplan::CalpontSystemCatalog::TINYINT:
     case execplan::CalpontSystemCatalog::SMALLINT:
     {
-      return (int64_t)parm[0]->data()->getUintVal(row, isNull);
+      return parm[0]->data()->getUintVal(row, isNull);
     }
     break;
 
@@ -243,15 +233,13 @@ uint64_t Func_cast_unsigned::getUintVal(Row& row, FunctionParm& parm, bool& isNu
     case execplan::CalpontSystemCatalog::DOUBLE:
     case execplan::CalpontSystemCatalog::UDOUBLE:
     {
-      datatypes::TDouble d(parm[0]->data()->getDoubleVal(row, isNull));
-      return d.toMCSUInt64Round();
+      return datatypes::TDouble(parm[0]->data()->getDoubleVal(row, isNull)).toMCSUInt64Round();
     }
     break;
 
     case execplan::CalpontSystemCatalog::LONGDOUBLE:
     {
-      datatypes::TLongDouble d(parm[0]->data()->getLongDoubleVal(row, isNull));
-      return d.toMCSUInt64Round();
+      return datatypes::TLongDouble(parm[0]->data()->getLongDoubleVal(row, isNull)).toMCSUInt64Round();
     }
     break;
 
@@ -259,24 +247,14 @@ uint64_t Func_cast_unsigned::getUintVal(Row& row, FunctionParm& parm, bool& isNu
     case execplan::CalpontSystemCatalog::CHAR:
     case execplan::CalpontSystemCatalog::TEXT:
     {
-      const string& value = parm[0]->data()->getStrVal(row, isNull);
-
-      if (isNull)
-      {
-        isNull = true;
-        return 0;
-      }
-
-      uint64_t ret = strtoul(value.c_str(), 0, 0);
-      return ret;
+      return parm[0]->data()->getStrVal(row, isNull).toMCSUInt64();
     }
     break;
 
     case execplan::CalpontSystemCatalog::DECIMAL:
     case execplan::CalpontSystemCatalog::UDECIMAL:
     {
-      IDB_Decimal d = parm[0]->data()->getDecimalVal(row, isNull);
-      return d.toUInt64Round();
+      return parm[0]->data()->getDecimalVal(row, isNull).toMCSUInt64Round();
     }
     break;
 
@@ -336,14 +314,14 @@ string Func_cast_char::getStrVal(Row& row, FunctionParm& parm, bool& isNull,
 {
   // check for convert with 1 arg, return the argument
   if (parm.size() == 1)
-    return parm[0]->data()->getStrVal(row, isNull);
+    return parm[0]->data()->getStrVal(row, isNull).safeString("");
   ;
 
   int64_t length = parm[1]->data()->getIntVal(row, isNull);
 
   // @bug3488, a dummy parm is appended even the optional N is not present.
   if (length < 0)
-    return parm[0]->data()->getStrVal(row, isNull);
+    return parm[0]->data()->getStrVal(row, isNull).safeString("");
   ;
 
   switch (parm[0]->data()->resultType().colDataType)
@@ -392,15 +370,15 @@ string Func_cast_char::getStrVal(Row& row, FunctionParm& parm, bool& isNull,
     case execplan::CalpontSystemCatalog::CHAR:
     case execplan::CalpontSystemCatalog::TEXT:
     {
-      const string& value = parm[0]->data()->getStrVal(row, isNull);
+      const utils::NullString& value = parm[0]->data()->getStrVal(row, isNull);
 
       if (isNull)
       {
         isNull = true;
-        return value;
+        return string("");
       }
 
-      return value.substr(0, length);
+      return value.safeString("").substr(0, length);
     }
     break;
 
@@ -484,7 +462,6 @@ IDB_Decimal Func_cast_date::getDecimalVal(Row& row, FunctionParm& parm, bool& is
                                           CalpontSystemCatalog::ColType& operationColType)
 {
   IDB_Decimal decimal;
-
   if (parm[0]->data()->resultType().isWideDecimalType())
     decimal.s128Value = Func_cast_date::getDatetimeIntVal(row, parm, isNull, operationColType);
   else
@@ -550,7 +527,7 @@ int32_t Func_cast_date::getDateIntVal(rowgroup::Row& row, FunctionParm& parm, bo
     case execplan::CalpontSystemCatalog::CHAR:
     case execplan::CalpontSystemCatalog::TEXT:
     {
-      val = dataconvert::DataConvert::stringToDate(parm[0]->data()->getStrVal(row, isNull));
+      val = dataconvert::DataConvert::stringToDate(parm[0]->data()->getStrVal(row, isNull).safeString(""));
 
       if (val == -1)
         isNull = true;
@@ -660,7 +637,8 @@ int64_t Func_cast_date::getDatetimeIntVal(rowgroup::Row& row, FunctionParm& parm
     case execplan::CalpontSystemCatalog::CHAR:
     case execplan::CalpontSystemCatalog::TEXT:
     {
-      val = dataconvert::DataConvert::stringToDatetime(parm[0]->data()->getStrVal(row, isNull));
+      val =
+          dataconvert::DataConvert::stringToDatetime(parm[0]->data()->getStrVal(row, isNull).safeString(""));
 
       if (val == -1)
         isNull = true;
@@ -822,7 +800,8 @@ int64_t Func_cast_datetime::getDatetimeIntVal(rowgroup::Row& row, FunctionParm& 
     case execplan::CalpontSystemCatalog::CHAR:
     case execplan::CalpontSystemCatalog::TEXT:
     {
-      val = dataconvert::DataConvert::stringToDatetime(parm[0]->data()->getStrVal(row, isNull));
+      val =
+          dataconvert::DataConvert::stringToDatetime(parm[0]->data()->getStrVal(row, isNull).safeString(""));
 
       if (val == -1)
         isNull = true;
@@ -933,7 +912,7 @@ int64_t Func_cast_datetime::getTimeIntVal(rowgroup::Row& row, FunctionParm& parm
     case execplan::CalpontSystemCatalog::CHAR:
     case execplan::CalpontSystemCatalog::TEXT:
     {
-      val = dataconvert::DataConvert::stringToTime(parm[0]->data()->getStrVal(row, isNull));
+      val = dataconvert::DataConvert::stringToTime(parm[0]->data()->getStrVal(row, isNull).safeString(""));
 
       if (val == -1)
         isNull = true;
@@ -1007,6 +986,9 @@ IDB_Decimal Func_cast_decimal::getDecimalVal(Row& row, FunctionParm& parm, bool&
   int32_t decimals = parm[1]->data()->getIntVal(row, isNull);
   int64_t max_length = parm[2]->data()->getIntVal(row, isNull);
 
+  assert(max_length == rowgroup::MagicPrecisionForCountAgg ||
+         (max_length <= datatypes::INT128MAXPRECISION || max_length >= 0));
+
   if (max_length > datatypes::INT128MAXPRECISION || max_length <= 0)
     max_length = datatypes::INT128MAXPRECISION;
 
@@ -1022,10 +1004,7 @@ IDB_Decimal Func_cast_decimal::getDecimalVal(Row& row, FunctionParm& parm, bool&
     {
       if (decimal.isTSInt128ByPrecision())
       {
-        bool dummy = false;
-        char* ep = NULL;
-        int128_t max_number_decimal =
-            dataconvert::strtoll128(columnstore_big_precision[max_length - 19].c_str(), dummy, &ep);
+        int128_t max_number_decimal = datatypes::ConversionRangeMaxValue[max_length - 19];
         decimal.s128Value = parm[0]->data()->getIntVal(row, isNull);
         decimal.scale = 0;
         int128_t scaleDivisor;
@@ -1072,11 +1051,7 @@ IDB_Decimal Func_cast_decimal::getDecimalVal(Row& row, FunctionParm& parm, bool&
     {
       if (decimal.isTSInt128ByPrecision())
       {
-        bool dummy = false;
-        char* ep = NULL;
-        int128_t max_number_decimal =
-            dataconvert::strtoll128(columnstore_big_precision[max_length - 19].c_str(), dummy, &ep);
-
+        int128_t max_number_decimal = datatypes::ConversionRangeMaxValue[max_length - 19];
         uint128_t uval = parm[0]->data()->getUintVal(row, isNull);
 
         if (uval > (uint128_t)datatypes::Decimal::maxInt128)
@@ -1127,11 +1102,7 @@ IDB_Decimal Func_cast_decimal::getDecimalVal(Row& row, FunctionParm& parm, bool&
     {
       if (decimal.isTSInt128ByPrecision())
       {
-        bool dummy = false;
-        char* ep = NULL;
-        int128_t max_number_decimal =
-            dataconvert::strtoll128(columnstore_big_precision[max_length - 19].c_str(), dummy, &ep);
-
+        int128_t max_number_decimal = datatypes::ConversionRangeMaxValue[max_length - 19];
         float128_t value = parm[0]->data()->getDoubleVal(row, isNull);
 
         int128_t scaleDivisor;
@@ -1178,11 +1149,7 @@ IDB_Decimal Func_cast_decimal::getDecimalVal(Row& row, FunctionParm& parm, bool&
     {
       if (decimal.isTSInt128ByPrecision())
       {
-        bool dummy = false;
-        char* ep = NULL;
-        int128_t max_number_decimal =
-            dataconvert::strtoll128(columnstore_big_precision[max_length - 19].c_str(), dummy, &ep);
-
+        int128_t max_number_decimal = datatypes::ConversionRangeMaxValue[max_length - 19];
         float128_t value = parm[0]->data()->getLongDoubleVal(row, isNull);
 
         int128_t scaleDivisor;
@@ -1230,11 +1197,7 @@ IDB_Decimal Func_cast_decimal::getDecimalVal(Row& row, FunctionParm& parm, bool&
     {
       if (decimal.isTSInt128ByPrecision())
       {
-        bool dummy = false;
-        char* ep = NULL;
-        int128_t max_number_decimal =
-            dataconvert::strtoll128(columnstore_big_precision[max_length - 19].c_str(), dummy, &ep);
-
+        int128_t max_number_decimal = datatypes::ConversionRangeMaxValue[max_length - 19];
         decimal = parm[0]->data()->getDecimalVal(row, isNull);
 
         int128_t scaleDivisor;
@@ -1302,14 +1265,14 @@ IDB_Decimal Func_cast_decimal::getDecimalVal(Row& row, FunctionParm& parm, bool&
     case execplan::CalpontSystemCatalog::CHAR:
     case execplan::CalpontSystemCatalog::TEXT:
     {
-      const string& strValue = parm[0]->data()->getStrVal(row, isNull);
-      if (strValue.empty())
+      const utils::NullString& strValue = parm[0]->data()->getStrVal(row, isNull);
+      if (strValue.isNull())
       {
         isNull = true;
         return IDB_Decimal();  // need a null value for IDB_Decimal??
       }
       datatypes::DataCondition convError;
-      return IDB_Decimal(strValue.data(), strValue.length(), convError, decimals, max_length);
+      return IDB_Decimal(strValue.str(), strValue.length(), convError, decimals, max_length);
     }
 
     break;
@@ -1388,7 +1351,7 @@ IDB_Decimal Func_cast_decimal::getDecimalVal(Row& row, FunctionParm& parm, bool&
       string value = dataconvert::DataConvert::timeToString1(parm[0]->data()->getTimeIntVal(row, isNull));
 
       // strip off micro seconds
-      string date = value.substr(0, 14);
+      string date = value.substr(0, 6);
 
       int64_t x = atoll(date.c_str());
 
@@ -1531,9 +1494,9 @@ double Func_cast_double::getDoubleVal(Row& row, FunctionParm& parm, bool& isNull
     case execplan::CalpontSystemCatalog::CHAR:
     case execplan::CalpontSystemCatalog::TEXT:
     {
-      const string& strValue = parm[0]->data()->getStrVal(row, isNull);
+      const utils::NullString& strValue = parm[0]->data()->getStrVal(row, isNull);
 
-      dblval = strtod(strValue.c_str(), NULL);
+      dblval = strtod(strValue.str(), NULL);
     }
     break;
 

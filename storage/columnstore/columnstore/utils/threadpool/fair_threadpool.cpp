@@ -15,6 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
+#include <atomic>
 #include <stdexcept>
 #include <unistd.h>
 #include <exception>
@@ -34,7 +35,7 @@ namespace threadpool
 {
 FairThreadPool::FairThreadPool(uint targetWeightPerRun, uint highThreads, uint midThreads, uint lowThreads,
                                uint ID)
- : _stop(false), weightPerRun(targetWeightPerRun), id(ID), blockedThreads(0), extraThreads(0), stopExtra(true)
+ : weightPerRun(targetWeightPerRun), id(ID), stopExtra_(false)
 {
   boost::thread* newThread;
   size_t numberOfThreads = highThreads + midThreads + lowThreads;
@@ -44,7 +45,8 @@ FairThreadPool::FairThreadPool(uint targetWeightPerRun, uint highThreads, uint m
     newThread->detach();
   }
   cout << "FairThreadPool started " << numberOfThreads << " thread/-s.\n";
-  defaultThreadCounts = threadCounts = numberOfThreads;
+  threadCounts_.store(numberOfThreads, std::memory_order_relaxed);
+  defaultThreadCounts = numberOfThreads;
 }
 
 FairThreadPool::~FairThreadPool()
@@ -54,119 +56,124 @@ FairThreadPool::~FairThreadPool()
 
 void FairThreadPool::addJob(const Job& job)
 {
-  addJob_(job);
-}
-
-void FairThreadPool::addJob_(const Job& job, bool useLock)
-{
   boost::thread* newThread;
   std::unique_lock<std::mutex> lk(mutex, std::defer_lock_t());
 
-  if (useLock)
-    lk.lock();
-
   // Create any missing threads
-  if (defaultThreadCounts != threadCounts)
+  if (defaultThreadCounts != threadCounts_.load(std::memory_order_relaxed))
   {
     newThread = threads.create_thread(ThreadHelper(this, PriorityThreadPool::Priority::HIGH));
     newThread->detach();
-    ++threadCounts;
+    threadCounts_.fetch_add(1, std::memory_order_relaxed);
   }
 
+  lk.lock();
   // If some threads have blocked (because of output queue full)
   // Temporarily add some extra worker threads to make up for the blocked threads.
-  if (blockedThreads > extraThreads)
+  if (blockedThreads_ > extraThreads_)
   {
-    stopExtra = false;
+    stopExtra_ = false;
     newThread = threads.create_thread(ThreadHelper(this, PriorityThreadPool::Priority::EXTRA));
     newThread->detach();
-    extraThreads++;
+    ++extraThreads_;
   }
-  else if (blockedThreads == 0)
+  else if (blockedThreads_ == 0)
   {
     // Release the temporary threads -- some threads have become unblocked.
-    stopExtra = true;
+    stopExtra_ = true;
   }
 
   auto jobsListMapIter = txn2JobsListMap_.find(job.txnIdx_);
-  if (jobsListMapIter == txn2JobsListMap_.end())
+  if (jobsListMapIter == txn2JobsListMap_.end())  // there is no txn in the map
   {
     ThreadPoolJobsList* jobsList = new ThreadPoolJobsList;
     jobsList->push_back(job);
     txn2JobsListMap_[job.txnIdx_] = jobsList;
-    WeightT currentTopWeight = weightedTxnsQueue_.empty() ? 0 : weightedTxnsQueue_.top().first;
-    weightedTxnsQueue_.push({currentTopWeight, job.txnIdx_});
+    weightedTxnsQueue_.push({job.weight_, job.txnIdx_});
   }
-  else
+  else  // txn is in the map
   {
+    if (jobsListMapIter->second->empty())  // there are no jobs for the txn
+    {
+      weightedTxnsQueue_.push({job.weight_, job.txnIdx_});
+    }
     jobsListMapIter->second->push_back(job);
   }
 
-  if (useLock)
-    newJob.notify_one();
+  newJob.notify_one();
 }
 
 void FairThreadPool::removeJobs(uint32_t id)
 {
   std::unique_lock<std::mutex> lk(mutex);
 
-  for (auto& txnJobsMapPair : txn2JobsListMap_)
+  auto txnJobsMapIter = txn2JobsListMap_.begin();
+  while (txnJobsMapIter != txn2JobsListMap_.end())
   {
+    auto& txnJobsMapPair = *txnJobsMapIter;
     ThreadPoolJobsList* txnJobsList = txnJobsMapPair.second;
+    // txnJobsList must not be nullptr
+    if (txnJobsList && txnJobsList->empty())
+    {
+      txnJobsMapIter = txn2JobsListMap_.erase(txnJobsMapIter);
+      delete txnJobsList;
+      continue;
+      // There is no clean-up for PQ. It will happen later in threadFcn
+    }
     auto job = txnJobsList->begin();
     while (job != txnJobsList->end())
     {
       if (job->id_ == id)
       {
-        job = txnJobsList->erase(job); // update the job iter
-        if (txnJobsList->empty())
-        {
-          txn2JobsListMap_.erase(txnJobsMapPair.first);
-          delete txnJobsList;
-          break;
-          // There is no clean-up for PQ. It will happen later in threadFcn
-        }
-        continue; // go-on skiping job iter increment
+        job = txnJobsList->erase(job);  // update the job iter
+        continue;                       // go-on skiping job iter increment
       }
       ++job;
     }
+
+    if (txnJobsList->empty())
+    {
+      txnJobsMapIter = txn2JobsListMap_.erase(txnJobsMapIter);
+      delete txnJobsList;
+      continue;
+      // There is no clean-up for PQ. It will happen later in threadFcn
+    }
+    ++txnJobsMapIter;
   }
 }
 
 void FairThreadPool::threadFcn(const PriorityThreadPool::Priority preferredQueue)
 {
-  if (preferredQueue == PriorityThreadPool::Priority::EXTRA)
-    utils::setThreadName("Extra");
-  else
-    utils::setThreadName("Idle");
-  RunListT runList; // This is a vector to allow to grab multiple jobs
+  utils::setThreadName("Idle");
+  RunListT runList(1);  // This is a vector to allow to grab multiple jobs
   RescheduleVecType reschedule;
   bool running = false;
   bool rescheduleJob = false;
 
   try
   {
-    while (!_stop)
+    while (!stop_.load(std::memory_order_relaxed))
     {
-      runList.clear(); // remove the job
+      runList.clear();  // remove the job
       std::unique_lock<std::mutex> lk(mutex);
-
-      if (preferredQueue == PriorityThreadPool::Priority::EXTRA && stopExtra)
-      {
-        --extraThreads;
-        return;
-      }
 
       if (weightedTxnsQueue_.empty())
       {
+        // If this is an EXTRA thread due toother threads blocking, and all blockers are unblocked,
+        // we don't want this one any more.
+        if (preferredQueue == PriorityThreadPool::Priority::EXTRA && stopExtra_)
+        {
+          --extraThreads_;
+          return;
+        }
         newJob.wait(lk);
-        continue; // just go on w/o re-taking the lock
+        continue;  // just go on w/o re-taking the lock
       }
 
       WeightedTxnT weightedTxn = weightedTxnsQueue_.top();
       auto txnAndJobListPair = txn2JobsListMap_.find(weightedTxn.second);
       // Looking for non-empty jobsList in a loop
-      // Waiting on cond_var if PQ is empty(no jobs in this thread pool)
+      // The loop waits on newJob cond_var if PQ is empty(no jobs in this thread pool)
       while (txnAndJobListPair == txn2JobsListMap_.end() || txnAndJobListPair->second->empty())
       {
         // JobList is empty. This can happen when this method pops the last Job.
@@ -174,10 +181,11 @@ void FairThreadPool::threadFcn(const PriorityThreadPool::Priority preferredQueue
         {
           ThreadPoolJobsList* txnJobsList = txnAndJobListPair->second;
           delete txnJobsList;
+          // !txnAndJobListPair is invalidated after this!
           txn2JobsListMap_.erase(txnAndJobListPair->first);
         }
         weightedTxnsQueue_.pop();
-        if (weightedTxnsQueue_.empty()) // remove the empty
+        if (weightedTxnsQueue_.empty())  // remove the empty
         {
           break;
         }
@@ -187,7 +195,7 @@ void FairThreadPool::threadFcn(const PriorityThreadPool::Priority preferredQueue
 
       if (weightedTxnsQueue_.empty())
       {
-        newJob.wait(lk); // might need a lock here
+        newJob.wait(lk);  // might need a lock here
         continue;
       }
 
@@ -196,7 +204,6 @@ void FairThreadPool::threadFcn(const PriorityThreadPool::Priority preferredQueue
       weightedTxnsQueue_.pop();
       TransactionIdxT txnIdx = txnAndJobListPair->first;
       ThreadPoolJobsList* jobsList = txnAndJobListPair->second;
-      // Job& job = jobsList->front();
       runList.push_back(jobsList->front());
 
       jobsList->pop_front();
@@ -210,26 +217,32 @@ void FairThreadPool::threadFcn(const PriorityThreadPool::Priority preferredQueue
       lk.unlock();
 
       running = true;
-      rescheduleJob = (*(runList[0].functor_))();
+      jobsRunning_.fetch_add(1, std::memory_order_relaxed);
+      rescheduleJob = (*(runList[0].functor_))();  // run the functor
+      jobsRunning_.fetch_sub(1, std::memory_order_relaxed);
       running = false;
 
       utils::setThreadName("Idle");
 
       if (rescheduleJob)
       {
-        lk.lock();
-        addJob_(runList[0], false);
-        newJob.notify_one();
-        lk.unlock();
+        // to avoid excessive CPU usage waiting for data from storage
+        usleep(500);
+        runList[0].weight_ += (runList[0].weight_) ? runList[0].weight_ : RescheduleWeightIncrement;
+        addJob(runList[0]);
       }
     }
   }
   catch (std::exception& ex)
   {
+    if (running)
+    {
+      jobsRunning_.fetch_sub(1, std::memory_order_relaxed);
+    }
     // Log the exception and exit this thread
     try
     {
-      --threadCounts;
+      threadCounts_.fetch_sub(1, std::memory_order_relaxed);
 #ifndef NOLOGGING
       logging::Message::Args args;
       logging::Message message(5);
@@ -245,18 +258,26 @@ void FairThreadPool::threadFcn(const PriorityThreadPool::Priority preferredQueue
 #endif
 
       if (running)
-        sendErrorMsg(runList[0].uniqueID_, runList[0].stepID_, runList[0].sock_);
+      {
+        error_handling::sendErrorMsg(logging::primitiveServerErr, runList[0].uniqueID_, runList[0].stepID_,
+                                     runList[0].sock_);
+      }
     }
     catch (...)
     {
+      std::cout << "FairThreadPool::threadFcn(): std::exception - double exception: failed to send an error"
+                << std::endl;
     }
   }
   catch (...)
   {
-    // Log the exception and exit this thread
     try
     {
-      --threadCounts;
+      if (running)
+      {
+        jobsRunning_.fetch_sub(1, std::memory_order_relaxed);
+      }
+      threadCounts_.fetch_sub(1, std::memory_order_relaxed);
 #ifndef NOLOGGING
       logging::Message::Args args;
       logging::Message message(6);
@@ -271,32 +292,20 @@ void FairThreadPool::threadFcn(const PriorityThreadPool::Priority preferredQueue
 #endif
 
       if (running)
-        sendErrorMsg(runList[0].uniqueID_, runList[0].stepID_, runList[0].sock_);
+        error_handling::sendErrorMsg(logging::primitiveServerErr, runList[0].uniqueID_, runList[0].stepID_,
+                                     runList[0].sock_);
     }
     catch (...)
     {
+      std::cout << "FairThreadPool::threadFcn(): ... exception - double exception: failed to send an error"
+                << std::endl;
     }
   }
 }
 
-void FairThreadPool::sendErrorMsg(uint32_t id, uint32_t step, primitiveprocessor::SP_UM_IOSOCK sock)
-{
-  ISMPacketHeader ism;
-  PrimitiveHeader ph = {0, 0, 0, 0, 0, 0};
-
-  ism.Status = logging::primitiveServerErr;
-  ph.UniqueID = id;
-  ph.StepID = step;
-  messageqcpp::ByteStream msg(sizeof(ISMPacketHeader) + sizeof(PrimitiveHeader));
-  msg.append((uint8_t*)&ism, sizeof(ism));
-  msg.append((uint8_t*)&ph, sizeof(ph));
-
-  sock->write(msg);
-}
-
 void FairThreadPool::stop()
 {
-  _stop = true;
+  stop_.store(true, std::memory_order_relaxed);
 }
 
 }  // namespace threadpool

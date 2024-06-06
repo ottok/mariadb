@@ -27,10 +27,7 @@
 #include <fcntl.h>
 #include <cstdio>
 #include <ctime>
-#ifdef _MSC_VER
-#include <io.h>
-#include <psapi.h>
-#endif
+#include <memory>
 
 #include "messagequeue.h"
 #include "bytestream.h"
@@ -61,25 +58,18 @@ void timespec_sub(const struct timespec& tv1, const struct timespec& tv2, double
 
 namespace BRM
 {
-SlaveComm::SlaveComm(string hostname, SlaveDBRMNode* s)
- : slave(s)
- , currentSaveFile(NULL)
- , journalh(NULL)
-#ifdef _MSC_VER
- , fPids(0)
- , fMaxPids(64)
-#endif
+SlaveComm::SlaveComm(string hostname)
 {
   config::Config* config = config::Config::makeConfig();
   string tmp;
-
+  slave = std::make_unique<SlaveDBRMNode>();
   bool tellUser = true;
 
   for (;;)
   {
     try
     {
-      server = new MessageQueueServer(hostname);
+      server = std::make_unique<MessageQueueServer>(hostname);
       break;
     }
     catch (runtime_error& re)
@@ -141,8 +131,8 @@ SlaveComm::SlaveComm(string hostname, SlaveDBRMNode* s)
     journalName = savefile + "_journal";
     const char* filename = journalName.c_str();
 
-    journalh = IDBDataFile::open(IDBPolicy::getType(filename, IDBPolicy::WRITEENG), filename, "a", 0);
-    if (journalh == NULL)
+    journalh.reset(IDBDataFile::open(IDBPolicy::getType(filename, IDBPolicy::WRITEENG), filename, "a", 0));
+    if (journalh == nullptr)
       throw runtime_error("Could not open the BRM journal for writing!");
   }
   else
@@ -170,12 +160,6 @@ SlaveComm::SlaveComm(string hostname, SlaveDBRMNode* s)
 }
 
 SlaveComm::SlaveComm()
- : currentSaveFile(NULL)
- , journalh(NULL)
-#ifdef _MSC_VER
- , fPids(0)
- , fMaxPids(64)
-#endif
 {
   config::Config* config = config::Config::makeConfig();
 
@@ -204,22 +188,7 @@ SlaveComm::SlaveComm()
   server = NULL;
   standalone = true;
   printOnly = false;
-  slave = new SlaveDBRMNode();
-}
-
-SlaveComm::~SlaveComm()
-{
-  delete server;
-  server = NULL;
-
-  if (firstSlave)
-  {
-    delete currentSaveFile;
-    currentSaveFile = NULL;
-  }
-
-  delete journalh;
-  journalh = NULL;
+  slave = std::make_unique<SlaveDBRMNode>();
 }
 
 void SlaveComm::stop()
@@ -1958,8 +1927,8 @@ void SlaveComm::do_confirm()
   {
     if (!currentSaveFile)
     {
-      currentSaveFile =
-          IDBDataFile::open(IDBPolicy::getType(tmp.c_str(), IDBPolicy::WRITEENG), tmp.c_str(), "wb", 0);
+      currentSaveFile.reset(
+          IDBDataFile::open(IDBPolicy::getType(tmp.c_str(), IDBPolicy::WRITEENG), tmp.c_str(), "wb", 0));
     }
 
     if (currentSaveFile == NULL)
@@ -1972,9 +1941,7 @@ void SlaveComm::do_confirm()
 
     tmp = savefile + (saveFileToggle ? 'A' : 'B');
     slave->saveState(tmp);
-#ifndef _MSC_VER
     tmp += '\n';
-#endif
     int err = 0;
 
     // MCOL-1558.  Make the _current file relative to DBRMRoot.
@@ -1984,7 +1951,8 @@ void SlaveComm::do_confirm()
     if (err < (int)relative.length())
     {
       ostringstream os;
-      os << "WorkerComm: currentfile write() returned " << err << " file pointer is " << currentSaveFile;
+      os << "WorkerComm: currentfile write() returned " << err << " file pointer is "
+         << currentSaveFile.get();
 
       if (err < 0)
         os << " errno: " << strerror(errno);
@@ -1993,13 +1961,13 @@ void SlaveComm::do_confirm()
     }
 
     currentSaveFile->flush();
-    delete currentSaveFile;
-    currentSaveFile = NULL;
+
+    currentSaveFile = nullptr;
     saveFileToggle = !saveFileToggle;
 
-    delete journalh;
-    journalh = IDBDataFile::open(IDBPolicy::getType(journalName.c_str(), IDBPolicy::WRITEENG),
-                                 journalName.c_str(), "w+b", 0);
+    ;
+    journalh.reset(IDBDataFile::open(IDBPolicy::getType(journalName.c_str(), IDBPolicy::WRITEENG),
+                                     journalName.c_str(), "w+b", 0));
 
     if (!journalh)
       throw runtime_error("Could not open the BRM journal for writing!");
@@ -2024,7 +1992,6 @@ void SlaveComm::do_flushInodeCache()
     return;
   }
 
-#ifdef __linux__
 #ifdef USE_VERY_COMPLEX_DROP_CACHES
   double elapsedTime = 0.0;
   char msgChString[100];
@@ -2083,7 +2050,6 @@ void SlaveComm::do_flushInodeCache()
     }
   }
 
-#endif
 #endif
   reply << (uint8_t)ERR_OK;
 
@@ -2144,11 +2110,6 @@ int SlaveComm::replayJournal(string prefix)
     fName = prefix.substr(0, prefix.length() - 1) + "_journal";
   }
 
-#ifdef _MSC_VER
-  else if (tmp == "a" || tmp == "b")
-    fName = prefix.substr(0, prefix.length() - 1) + "_journal";
-
-#endif
   else
   {
     fName = prefix + "_journal";
@@ -2222,11 +2183,16 @@ void SlaveComm::saveDelta()
 {
   try
   {
-    uint32_t len = delta.length();
+    const uint32_t deltaLen = delta.length();
+    const uint32_t bufferSize = sizeof(deltaLen) + deltaLen;
+    std::unique_ptr<char[]> buffer(new char[bufferSize]);
+    uint32_t offset = 0;
+    std::memcpy(&buffer[offset], (char*)&deltaLen, sizeof(deltaLen));
+    offset += sizeof(deltaLen);
+    std::memcpy(&buffer[offset], (char*)delta.buf(), deltaLen);
 
     journalh->seek(0, SEEK_END);
-    journalh->write((const char*)&len, sizeof(len));
-    journalh->write((const char*)delta.buf(), delta.length());
+    journalh->write((const char*)buffer.get(), bufferSize);
     journalh->flush();
     journalCount++;
   }
@@ -2266,8 +2232,6 @@ void SlaveComm::do_ownerCheck(ByteStream& msg)
   master.write(reply);
 }
 
-// FIXME: needs to be refactored along with SessionManagerServer::lookupProcessStatus()
-#if defined(__linux__)
 bool SlaveComm::processExists(const uint32_t pid, const string& pname)
 {
   string stat;
@@ -2299,69 +2263,6 @@ bool SlaveComm::processExists(const uint32_t pid, const string& pname)
 
   return true;
 }
-
-#elif defined(_MSC_VER)
-// FIXME
-bool SlaveComm::processExists(const uint32_t pid, const string& pname)
-{
-  boost::mutex::scoped_lock lk(fPidMemLock);
-
-  if (!fPids)
-    fPids = (DWORD*)malloc(fMaxPids * sizeof(DWORD));
-
-  DWORD needed = 0;
-
-  if (EnumProcesses(fPids, fMaxPids * sizeof(DWORD), &needed) == 0)
-    return false;
-
-  while (needed == fMaxPids * sizeof(DWORD))
-  {
-    fMaxPids *= 2;
-    fPids = (DWORD*)realloc(fPids, fMaxPids * sizeof(DWORD));
-
-    if (EnumProcesses(fPids, fMaxPids * sizeof(DWORD), &needed) == 0)
-      return false;
-  }
-
-  DWORD numPids = needed / sizeof(DWORD);
-
-  for (DWORD i = 0; i < numPids; i++)
-  {
-    if (fPids[i] == pid)
-    {
-      TCHAR szProcessName[MAX_PATH] = TEXT("<unknown>");
-
-      // Get a handle to the process.
-      HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, fPids[i]);
-
-      // Get the process name.
-      if (hProcess != NULL)
-      {
-        HMODULE hMod;
-        DWORD cbNeeded;
-
-        if (EnumProcessModules(hProcess, &hMod, sizeof(hMod), &cbNeeded))
-          GetModuleBaseName(hProcess, hMod, szProcessName, sizeof(szProcessName) / sizeof(TCHAR));
-
-        CloseHandle(hProcess);
-
-        if (pname == szProcessName)
-          return true;
-      }
-    }
-  }
-
-  return false;
-}
-#elif defined(__FreeBSD__)
-// FIXME
-bool SlaveComm::processExists(const uint32_t pid, const string& pname)
-{
-  return false;
-}
-#else
-#error Need to port processExists()
-#endif
 
 void SlaveComm::do_dmlLockLBIDRanges(ByteStream& msg)
 {
@@ -2431,4 +2332,3 @@ void SlaveComm::do_dmlReleaseLBIDRanges(ByteStream& msg)
 }
 
 }  // namespace BRM
-

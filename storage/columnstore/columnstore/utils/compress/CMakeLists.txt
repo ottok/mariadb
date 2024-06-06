@@ -1,7 +1,10 @@
 
 include_directories( ${ENGINE_COMMON_INCLUDES} ${SNAPPY_INCLUDE_DIR} )
 
-########### next target ###############
+#hack for lz4 duplicate header
+GET_PROPERTY(dirs DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+LIST(REMOVE_ITEM dirs ${CMAKE_SOURCE_DIR}/include/providers)
+SET_PROPERTY(DIRECTORY PROPERTY INCLUDE_DIRECTORIES "${dirs}")
 
 set(compress_LIB_SRCS
     idbcompress.cpp)
@@ -9,7 +12,7 @@ set(compress_LIB_SRCS
 add_definitions(-DNDEBUG)
 
 add_library(compress SHARED ${compress_LIB_SRCS})
-add_dependencies(compress loggingcpp)
+add_dependencies(compress loggingcpp external_boost)
 
 target_link_libraries(compress ${SNAPPY_LIBRARIES})
 IF(HAVE_LZ4)

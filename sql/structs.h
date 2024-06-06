@@ -97,12 +97,22 @@ class engine_option_value;
 struct ha_index_option_struct;
 
 typedef struct st_key {
-  uint  key_length;                /* total length of user defined key parts  */
   ulong flags;                     /* dupp key and pack flags */
-  uint  user_defined_key_parts;    /* How many key_parts */
-  uint  usable_key_parts; /* Should normally be = user_defined_key_parts */
-  uint  ext_key_parts;             /* Number of key parts in extended key */
   ulong ext_key_flags;             /* Flags for extended key              */
+  ulong index_flags;               /* Copy of handler->index_flags(index_number, 0, 1) */
+  uint	key_length;		   /* total length of user defined key parts  */
+  uint	user_defined_key_parts;	   /* How many key_parts */
+  uint	usable_key_parts; /* Should normally be = user_defined_key_parts */
+  uint  ext_key_parts;             /* Number of key parts in extended key */
+  uint  block_size;
+  /*
+    The flag is on if statistical data for the index prefixes
+    has to be taken from the system statistical tables.
+  */
+  bool is_statistics_from_stat_tables;
+  bool without_overlaps;
+  bool is_ignored; // TRUE if index needs to be ignored
+
   /*
     Parts of primary key that are in the extension of this index. 
 
@@ -124,13 +134,7 @@ typedef struct st_key {
   /* Set of keys constraint correlated with this key */
   key_map constraint_correlated;
   LEX_CSTRING name;
-  uint  block_size;
   enum  ha_key_alg algorithm;
-  /* 
-    The flag is on if statistical data for the index prefixes
-    has to be taken from the system statistical tables.
-  */
-  bool is_statistics_from_stat_tables;
   /*
     Note that parser is used when the table is opened for use, and
     parser_name is used when the table is being created.
@@ -168,12 +172,6 @@ typedef struct st_key {
   ha_index_option_struct *option_struct;                  /* structure with parsed options */
 
   double actual_rec_per_key(uint i);
-
-  bool without_overlaps;
-  /*
-    TRUE if index needs to be ignored
-  */
-  bool is_ignored;
 } KEY;
 
 
@@ -540,7 +538,8 @@ public:
     OPT_OR_REPLACE_SLAVE_GENERATED= 32,// REPLACE was added on slave, it was
                                        // not in the original query on master.
     OPT_IF_EXISTS= 64,
-    OPT_CREATE_SELECT= 128             // CREATE ... SELECT
+    OPT_CREATE_SELECT= 128,             // CREATE ... SELECT
+    OPT_IMPORT_TABLESPACE= 256      // ALTER ... IMPORT TABLESPACE
   };
 
 private:
@@ -569,6 +568,7 @@ public:
   bool like() const { return m_options & OPT_LIKE; }
   bool if_exists() const { return m_options & OPT_IF_EXISTS; }
   bool is_create_select() const { return m_options & OPT_CREATE_SELECT; }
+  bool import_tablespace() const { return m_options & OPT_IMPORT_TABLESPACE; }
 
   void add(const DDL_options_st::Options other)
   {
@@ -774,10 +774,13 @@ public:
     m_ci= cs;
     Lex_length_and_dec_st::reset();
   }
-  bool set(int type, const Lex_column_charset_collation_attrs_st &collation,
+  bool set(int type,
+           Sql_used *used,
+           const Charset_collation_map_st &map,
+           const Lex_column_charset_collation_attrs_st &collation,
            CHARSET_INFO *charset)
   {
-    CHARSET_INFO *tmp= collation.resolved_to_character_set(charset);
+    CHARSET_INFO *tmp= collation.resolved_to_character_set(used, map, charset);
     if (!tmp)
       return true;
     set(type, tmp);
@@ -1029,6 +1032,31 @@ public:
   explicit Timeval(const timeval &tv)
    :timeval(tv)
   { }
+};
+
+
+/*
+  A value that's either a Timeval or SQL NULL
+*/
+
+class Timeval_null: protected Timeval
+{
+  bool m_is_null;
+public:
+  Timeval_null()
+   :Timeval(0, 0),
+    m_is_null(true)
+  { }
+  Timeval_null(const my_time_t sec, ulong usec)
+   :Timeval(sec, usec),
+    m_is_null(false)
+  { }
+  const Timeval & to_timeval() const
+  {
+    DBUG_ASSERT(!m_is_null);
+    return *this;
+  }
+  bool is_null() const { return m_is_null; }
 };
 
 

@@ -42,8 +42,7 @@
  *    soname 'libudf_mysql.so';
  *
  */
-#ifndef HEADER_distinct_count
-#define HEADER_distinct_count
+#pragma once
 
 #include <cstdlib>
 #include <string>
@@ -53,11 +52,7 @@
 #include "calpontsystemcatalog.h"
 #include "windowfunctioncolumn.h"
 
-#if defined(_MSC_VER) && defined(xxxRGNODE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace mcsv1sdk
 {
@@ -214,5 +209,3 @@ class distinct_count : public mcsv1_UDAF
 };  // namespace mcsv1sdk
 
 #undef EXPORT
-
-#endif  // HEADER_distinct_count.h

@@ -19,8 +19,7 @@
 
 /** @file */
 
-#ifndef _WE_COLOP_H_
-#define _WE_COLOP_H_
+#pragma once
 
 #include <stdlib.h>
 
@@ -29,11 +28,8 @@
 #include "we_dbrootextenttracker.h"
 #include "we_tablemetadata.h"
 #include "../dictionary/we_dctnry.h"
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
+#include "stopwatch.h"
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -197,7 +193,7 @@ class ColumnOp : public DbFileOp
    *        segment file that is opened.
    */
   EXPORT virtual int openColumnFile(Column& column, std::string& segFile, bool useTmpSuffix,
-                                    int ioBuffSize = DEFAULT_BUFSIZ) const;
+                                    int ioBuffSize = DEFAULT_BUFSIZ, bool isReadOnly = false) const;
 
   /**
    * @brief Open table file
@@ -229,6 +225,16 @@ class ColumnOp : public DbFileOp
                                const void* valArray, void* oldValArray = 0, bool bDelete = false);
 
   /**
+   * @brief MCOL-5021 Read-only version of the writeRows() function above.
+     This function only reads the values from the database file into
+     oldValArray for updating the CP information. As of MCOL-5021, we only
+     delete (i.e. write empty magic values) AUX column rows from the actual
+     database files.
+   */
+  EXPORT virtual int writeRowsReadOnly(Column& curCol, uint64_t totalRow, const RIDList& ridList,
+                                       void* oldValArray = 0);
+
+  /**
    * @brief Write row(s) for update @Bug 1886,2870
    */
   EXPORT virtual int writeRowsValues(Column& curCol, uint64_t totalRow, const RIDList& ridList,
@@ -247,14 +253,14 @@ class ColumnOp : public DbFileOp
   /**
    * @brief Clear a column
    */
-  EXPORT void clearColumn(Column& column) const;
+  EXPORT void clearColumn(Column& column, bool isFlush = true) const;
 
   /**
    * @brief open a data file of column
    */
   virtual IDBDataFile* openFile(const Column& column, uint16_t dbRoot, uint32_t partition, uint16_t segment,
                                 std::string& segFile, bool useTmpSuffix, const char* mode = "r+b",
-                                int ioBuffSize = DEFAULT_BUFSIZ) const = 0;
+                                int ioBuffSize = DEFAULT_BUFSIZ, bool isReadOnly = false) const = 0;
 
   /**
    * @brief backup blocks to version buffer
@@ -290,5 +296,3 @@ class ColumnOp : public DbFileOp
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_COLOP_H_

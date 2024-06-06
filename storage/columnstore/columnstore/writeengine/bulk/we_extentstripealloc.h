@@ -24,17 +24,12 @@
  * Contains class to allocate a "stripe" of extents for all columns across a tbl
  */
 
-#ifndef WE_EXTENTSTRIPEALLOC_H_
-#define WE_EXTENTSTRIPEALLOC_H_
+#pragma once
 
 #include <string>
 #include <vector>
 
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 #include <boost/thread/mutex.hpp>
 
 #include "we_type.h"
@@ -102,7 +97,7 @@ class AllocExtEntry
  *  the corresponding column OID as the key.
  */
 //------------------------------------------------------------------------------
-struct AllocExtHasher : public std::unary_function<OID, std::size_t>
+struct AllocExtHasher
 {
   std::size_t operator()(OID val) const
   {
@@ -133,7 +128,7 @@ class ExtentStripeAlloc
    *  @param colOID   Column OID to be added to extent allocation list.
    *  @param colWidth Width of column associated with colOID.
    */
-  void addColumn(OID colOID, int colWidth);
+  void addColumn(OID colOID, int colWidth, datatypes::SystemCatalog::ColDataType colDataType);
 
   /** @brief Request an extent allocation for the specified OID and DBRoot.
    *  A "stripe" of extents for the corresponding table will be allocated
@@ -164,6 +159,7 @@ class ExtentStripeAlloc
   boost::mutex fMapMutex;       // protects unordered map access
   std::vector<OID> fColOIDs;    // Vector of column OIDs
   std::vector<int> fColWidths;  // Widths associated with fColOIDs
+  std::vector<datatypes::SystemCatalog::ColDataType> fColDataTypes;
 
   // unordered map where we collect the allocated extents
   std::tr1::unordered_multimap<OID, AllocExtEntry, AllocExtHasher> fMap;
@@ -174,5 +170,3 @@ class ExtentStripeAlloc
 };
 
 }  // namespace WriteEngine
-
-#endif  // WE_EXTENTSTRIPEALLOC_H_

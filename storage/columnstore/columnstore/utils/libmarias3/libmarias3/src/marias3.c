@@ -33,6 +33,9 @@ ms3_calloc_callback ms3_ccalloc = (ms3_calloc_callback)calloc;
 
 /* Thread locking code for OpenSSL < 1.1.0 */
 #include <dlfcn.h>
+#ifndef RTLD_DEFAULT
+#define RTLD_DEFAULT ((void *)0)
+#endif
 static pthread_mutex_t *mutex_buf = NULL;
 #define CRYPTO_LOCK 1
 static void (*openssl_set_id_callback)(unsigned long (*func)(void));
@@ -49,7 +52,7 @@ static void locking_function(int mode, int n, const char *file, int line)
     pthread_mutex_unlock(&(mutex_buf[n]));
 }
 
-static int curl_needs_openssl_locking()
+static int curl_needs_openssl_locking(void)
 {
   curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
 
@@ -614,7 +617,7 @@ uint8_t ms3_set_option(ms3_st *ms3, ms3_set_option_t option, void *value)
         return MS3_ERR_PARAMETER;
       }
 
-      ms3->list_version = protocol_version;
+      ms3->protocol_version = protocol_version;
       break;
     }
 

@@ -26,17 +26,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#if __linux__
 #include <values.h>
-#endif
 #include <errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#ifndef _MSC_VER
 #include <ext/stdio_filebuf.h>
-#else
-#include <io.h>
-#endif
 
 #include <boost/interprocess/shared_memory_object.hpp>
 #include <boost/interprocess/mapped_region.hpp>
@@ -670,7 +664,7 @@ void VBBM::getBlocks(int num, OID_t vbOID, vector<VBRange>& freeRanges, VSS& vss
         {
           ostringstream msg;
           msg << "VBBM::getBlocks(): version buffer overflow. Increase VersionBufferFileSize. Overflow "
-                 "occured in aged blocks. Requested NumBlocks:VbOid:vbFBO:lastFBO = "
+                 "occurred in aged blocks. Requested NumBlocks:VbOid:vbFBO:lastFBO = "
               << num << ":" << vbOID << ":" << firstFBO << ":" << lastFBO << " lbid locked is "
               << storage[i].lbid << endl;
           log(msg.str(), logging::LOG_TYPE_CRITICAL);

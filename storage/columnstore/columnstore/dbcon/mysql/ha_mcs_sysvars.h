@@ -16,8 +16,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef MCS_SYSVARS_H__
-#define MCS_SYSVARS_H__
+#pragma once
 
 #include <my_config.h>
 #include "idb_mysql.h"
@@ -109,6 +108,15 @@ void set_diskjoin_largesidelimit(THD* thd, ulong value);
 ulong get_diskjoin_bucketsize(THD* thd);
 void set_diskjoin_bucketsize(THD* thd, ulong value);
 
+bool get_diskjoin_force_run(THD* thd);
+void set_diskjoin_force_run(THD* thd, bool value);
+
+ulong get_diskjoin_max_partition_tree_depth(THD* thd);
+void set_diskjoin_max_partition_tree_depth(THD* thd, ulong value);
+
+ulong get_max_pm_join_result_count(THD* thd);
+void set_max_pm_join_result_count(THD* thd, ulong value);
+
 ulong get_um_mem_limit(THD* thd);
 void set_um_mem_limit(THD* thd, ulong value);
 
@@ -145,4 +153,29 @@ void set_cache_use_import(THD* thd, bool value);
 ulonglong get_cache_flush_threshold(THD* thd);
 void set_cache_flush_threshold(THD* thd, ulonglong value);
 
-#endif
+ulong get_cmapi_port(THD* thd);
+void set_cmapi_port(THD* thd, ulong value);
+
+const char* get_cmapi_key(THD* thd);
+void set_cmapi_key(THD* thd, char* value);
+
+const char* get_cmapi_host(THD* thd);
+void set_cmapi_host(THD* thd, char* value);
+
+const char* get_cmapi_version(THD* thd);
+void set_cmapi_version(THD* thd, char* value);
+
+const char* get_s3_key(THD* thd);
+void set_s3_key(THD* thd, char* value);
+
+const char* get_s3_secret(THD* thd);
+void set_s3_secret(THD* thd, char* value);
+
+const char* get_s3_region(THD* thd);
+void set_s3_region(THD* thd, char* value);
+
+const char* get_pron(THD* thd);
+void set_pron(THD* thd, char* value);
+
+ulong get_max_allowed_in_values(THD* thd);
+void set_max_allowed_in_values(THD* thd, ulong value);

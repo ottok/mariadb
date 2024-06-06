@@ -33,11 +33,7 @@
 #include <cerrno>
 #include <cstdlib>
 #include <sys/time.h>
-#ifndef _MSC_VER
 #include <sys/resource.h>
-#else
-#include <cstdio>
-#endif
 #include <boost/filesystem/path.hpp>
 #include "idberrorinfo.h"
 #include "we_simplesyslog.h"
@@ -52,6 +48,7 @@
 #include "MonitorProcMem.h"
 #include "dataconvert.h"
 #include "mcsconfig.h"
+#include "mariadb_my_sys.h"
 
 using namespace std;
 using namespace WriteEngine;
@@ -62,6 +59,7 @@ namespace
 char* pgmName = 0;
 const std::string IMPORT_PATH_CWD(".");
 bool bDebug = false;
+uint32_t cpimportJobId = 0;
 
 //@bug 4643: cpimport job ended during setup w/o any err msg.
 //           Added a try/catch with logging to main() in case
@@ -172,11 +170,12 @@ void printUsage()
        << "        -T Timezone used for TIMESTAMP datatype" << endl
        << "           Possible values: \"SYSTEM\" (default)" << endl
        << "                          : Offset in the form +/-HH:MM" << endl
-//       << "        -y S3 Authentication Key (for S3 imports)" << endl
-//       << "        -K S3 Authentication Secret (for S3 imports)" << endl
-//       << "        -t S3 Bucket (for S3 imports)" << endl
-//       << "        -H S3 Hostname (for S3 imports, Amazon's S3 default)" << endl
-//       << "        -g S3 Regions (for S3 imports)" << endl
+       << endl
+       << "        -y S3 Authentication Key (for S3 imports)" << endl
+       << "        -K S3 Authentication Secret (for S3 imports)" << endl
+       << "        -t S3 Bucket (for S3 imports)" << endl
+       << "        -H S3 Hostname (for S3 imports, Amazon's S3 default)" << endl
+       << "        -g S3 Regions (for S3 imports)" << endl
        << "        -U username of new data files owner. Default is mysql" << endl;
 
   cout << "    Example1:" << endl
@@ -194,6 +193,7 @@ void printUsage()
 //------------------------------------------------------------------------------
 void handleSigTerm(int i)
 {
+  BRMWrapper::getInstance()->finishCpimportJob(cpimportJobId);
   std::cout << "Received SIGTERM to terminate the process..." << std::endl;
   BulkStatus::setJobStatus(EXIT_FAILURE);
 }
@@ -203,24 +203,32 @@ void handleSigTerm(int i)
 //------------------------------------------------------------------------------
 void handleControlC(int i)
 {
+  BRMWrapper::getInstance()->finishCpimportJob(cpimportJobId);
   if (!BulkLoad::disableConsoleOutput())
     std::cout << "Received Control-C to terminate the process..." << std::endl;
 
   BulkStatus::setJobStatus(EXIT_FAILURE);
 }
 
-#ifdef _MSC_VER
-BOOL WINAPI HandlerCtrlCRoutine(_In_ DWORD dwCtrlType)
+//------------------------------------------------------------------------------
+// Signal handler to catch SIGTERM signal to terminate the process
+//------------------------------------------------------------------------------
+void handleSigSegv(int i)
 {
-  // Log to syslog
-  logging::Message::Args errMsgArgs;
-  errMsgArgs.add("Received Break to terminate the process");
-  SimpleSysLog::instance()->logMsg(errMsgArgs, logging::LOG_TYPE_DEBUG, logging::M0087);
-
-  handleControlC(dwCtrlType);
-  return true;
+  BRMWrapper::getInstance()->finishCpimportJob(cpimportJobId);
+  std::cout << "Received SIGSEGV to terminate the process..." << std::endl;
+  BulkStatus::setJobStatus(EXIT_FAILURE);
 }
-#endif
+
+//------------------------------------------------------------------------------
+// Signal handler to catch SIGTERM signal to terminate the process
+//------------------------------------------------------------------------------
+void handleSigAbrt(int i)
+{
+  BRMWrapper::getInstance()->finishCpimportJob(cpimportJobId);
+  std::cout << "Received SIGABRT to terminate the process..." << std::endl;
+  BulkStatus::setJobStatus(EXIT_FAILURE);
+}
 
 //------------------------------------------------------------------------------
 // If error occurs during startup, this function is called to log the specified
@@ -228,6 +236,7 @@ BOOL WINAPI HandlerCtrlCRoutine(_In_ DWORD dwCtrlType)
 //------------------------------------------------------------------------------
 void startupError(const std::string& errMsg, bool showHint)
 {
+  BRMWrapper::getInstance()->finishCpimportJob(cpimportJobId);
   // Log to console
   if (!BulkLoad::disableConsoleOutput())
     cerr << errMsg << endl;
@@ -260,9 +269,6 @@ void startupError(const std::string& errMsg, bool showHint)
 //------------------------------------------------------------------------------
 void setupSignalHandlers()
 {
-#ifdef _MSC_VER
-  BOOL brtn = SetConsoleCtrlHandler(HandlerCtrlCRoutine, true);
-#else
   struct sigaction ign;
 
   // Ignore SIGPIPE signal
@@ -292,7 +298,17 @@ void setupSignalHandlers()
   memset(&act, 0, sizeof(act));
   act.sa_handler = handleSigTerm;
   sigaction(SIGTERM, &act, 0);
-#endif
+
+  // catch SIGSEGV signal to terminate the program
+  memset(&act, 0, sizeof(act));
+  act.sa_handler = handleSigSegv;
+  sigaction(SIGSEGV, &act, 0);
+
+  // catch SIGABRT signal to terminate the program
+  memset(&act, 0, sizeof(act));
+  act.sa_handler = handleSigAbrt;
+  sigaction(SIGABRT, &act, 0);
+
 }
 
 //------------------------------------------------------------------------------
@@ -309,7 +325,7 @@ void parseCmdLineArgs(int argc, char** argv, BulkLoad& curJob, std::string& sJob
   BulkModeType bulkMode = BULK_MODE_LOCAL;
   std::string jobUUID;
 
-  while ((option = getopt(argc, argv, "b:c:d:e:f:hij:kl:m:n:p:r:s:u:w:B:C:DE:I:P:R:ST:X:NL:U:")) !=
+  while ((option = getopt(argc, argv, "b:c:d:e:f:hij:kl:m:n:p:r:s:u:w:B:C:DE:I:P:R:ST:X:NL:y:K:t:H:g:U:")) !=
          EOF)
   {
     switch (option)
@@ -675,7 +691,7 @@ void parseCmdLineArgs(int argc, char** argv, BulkLoad& curJob, std::string& sJob
         BulkLoad::disableConsoleOutput(true);
         break;
       }
-/*
+
       case 'y':
       {
         curJob.setS3Key(optarg);
@@ -705,7 +721,7 @@ void parseCmdLineArgs(int argc, char** argv, BulkLoad& curJob, std::string& sJob
         curJob.setS3Region(optarg);
         break;
       }
-*/
+
       case 'U':
       {
         curJob.setUsername(optarg);
@@ -1019,10 +1035,10 @@ void logInitiateMsg(const char* initText)
 //------------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
-#ifdef _MSC_VER
-  _setmaxstdio(2048);
-#endif
   setupSignalHandlers();
+
+  // Initialize the charset library
+  MY_INIT(argv[0]);
 
   // Set locale language
   const char* pLoc = setlocale(LC_ALL, "");
@@ -1131,11 +1147,7 @@ int main(int argc, char** argv)
     //--------------------------------------------------------------------------
     // Set scheduling priority for this cpimport.bin process
     //--------------------------------------------------------------------------
-#ifdef _MSC_VER
-    // FIXME
-#else
     setpriority(PRIO_PROCESS, 0, Config::getBulkProcessPriority());
-#endif
 
     if (bDebug)
       logInitiateMsg("Config cache initialized");
@@ -1292,6 +1304,16 @@ int main(int argc, char** argv)
       new boost::thread(utils::MonitorProcMem(0, checkPct, SUBSYSTEM_ID_WE_BULK));
     }
 
+    rc = BRMWrapper::getInstance()->newCpimportJob(cpimportJobId);
+    if (rc != NO_ERROR)
+    {
+      WErrorCodes ec;
+      std::ostringstream oss;
+      oss << "Error in creating new cpimport job on Controller node; " << ec.errorString(rc)
+          << "; cpimport is terminating.";
+      startupError(oss.str(), false);
+    }
+
     //--------------------------------------------------------------------------
     // This is the real business
     //--------------------------------------------------------------------------
@@ -1341,6 +1363,10 @@ int main(int argc, char** argv)
 
     rc = ERR_UNKNOWN;
   }
+
+  BRMWrapper::getInstance()->finishCpimportJob(cpimportJobId);
+  // Free up resources allocated by MY_INIT() above.
+  my_end(0);
 
   //--------------------------------------------------------------------------
   // Log end of job to INFO log

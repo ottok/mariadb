@@ -50,6 +50,8 @@ using namespace messageqcpp;
 using namespace rowgroup;
 using namespace joiner;
 
+//#define XXX_BATCHPRIMPROC_TOKENS_RANGES_XXX
+
 namespace joblist
 {
 BatchPrimitiveProcessorJL::BatchPrimitiveProcessorJL(const ResourceManager* rm)
@@ -88,12 +90,16 @@ BatchPrimitiveProcessorJL::~BatchPrimitiveProcessorJL()
 {
 }
 
-void BatchPrimitiveProcessorJL::addFilterStep(const pColScanStep& scan, vector<BRM::LBID_t> lastScannedLBID)
+void BatchPrimitiveProcessorJL::addFilterStep(const pColScanStep& scan,
+                                              vector<BRM::LBID_t> lastScannedLBID,
+                                              bool hasAuxCol,
+                                              const std::vector<BRM::EMEntry>& extentsAux,
+                                              execplan::CalpontSystemCatalog::OID oidAux)
 {
   SCommand cc;
 
   tableOID = scan.tableOid();
-  cc.reset(new ColumnCommandJL(scan, lastScannedLBID));
+  cc.reset(new ColumnCommandJL(scan, lastScannedLBID, hasAuxCol, extentsAux, oidAux));
   cc->setBatchPrimitiveProcessor(this);
   cc->setQueryUuid(scan.queryUuid());
   cc->setStepUuid(uuid);
@@ -152,6 +158,21 @@ void BatchPrimitiveProcessorJL::addFilterStep(const pDictionaryStep& step)
   cc->setBatchPrimitiveProcessor(this);
   cc->setQueryUuid(step.queryUuid());
   cc->setStepUuid(uuid);
+
+#if defined(XXX_BATCHPRIMPROC_TOKENS_RANGES_XXX)
+  if (filterSteps.size() > 0)
+  {
+    size_t stepsIndex = filterSteps.size() - 1;
+    SCommand prevCC = filterSteps[stepsIndex];
+    ColumnCommandJL* pcc = dynamic_cast<ColumnCommandJL*>(prevCC.get());
+    DictStepJL* ccc = dynamic_cast<DictStepJL*>(cc.get());
+    if (pcc && ccc)
+    {
+      filterSteps[stepsIndex].reset(
+          new ColumnCommandJL(*pcc, *ccc));  // column command will use same filters.
+    }
+  }
+#endif
   filterSteps.push_back(cc);
   filterCount++;
   needStrValues = true;
@@ -443,6 +464,7 @@ void BatchPrimitiveProcessorJL::getElementTypes(ByteStream& in, vector<ElementTy
     if (*validCPData)
     {
       in >> *lbid;
+
       in >> tmp64;
       *min = (int64_t)tmp64;
       in >> tmp64;
@@ -712,8 +734,9 @@ bool BatchPrimitiveProcessorJL::countThisMsg(messageqcpp::ByteStream& in) const
     }
 
     if (data[offset] != 0)
-      offset += (data[offset + CP_FLAG_AND_LBID] * 2) + CP_FLAG_AND_LBID +
-                1;  // skip the CP data with wide min/max values (16/32 bytes each)
+      offset += (data[offset + CP_FLAG_AND_LBID + 1] * 2) + CP_FLAG_AND_LBID + 1 +
+                1;  // skip the CP data with wide min/max values (16/32 bytes each). we also skip
+                    // cpFromDictScan flag.
     else
       offset += CP_FLAG_AND_LBID;  // skip only the "valid CP data" & LBID bytes
   }
@@ -750,9 +773,10 @@ void BatchPrimitiveProcessorJL::deserializeAggregateResult(ByteStream* in, vecto
 }
 
 void BatchPrimitiveProcessorJL::getRowGroupData(ByteStream& in, vector<RGData>* out, bool* validCPData,
-                                                uint64_t* lbid, int128_t* min, int128_t* max,
-                                                uint32_t* cachedIO, uint32_t* physIO, uint32_t* touchedBlocks,
-                                                bool* countThis, uint32_t threadID, bool* hasWideColumn,
+                                                uint64_t* lbid, bool* fromDictScan, int128_t* min,
+                                                int128_t* max, uint32_t* cachedIO, uint32_t* physIO,
+                                                uint32_t* touchedBlocks, bool* countThis, uint32_t threadID,
+                                                bool* hasWideColumn,
                                                 const execplan::CalpontSystemCatalog::ColType& colType) const
 {
   uint64_t tmp64;
@@ -788,6 +812,8 @@ void BatchPrimitiveProcessorJL::getRowGroupData(ByteStream& in, vector<RGData>* 
     if (*validCPData)
     {
       in >> *lbid;
+      in >> tmp8;
+      *fromDictScan = tmp8 != 0;
       in >> tmp8;
       *hasWideColumn = (tmp8 > utils::MAXLEGACYWIDTH);
       if (UNLIKELY(*hasWideColumn))
@@ -847,7 +873,7 @@ void BatchPrimitiveProcessorJL::getRowGroupData(ByteStream& in, vector<RGData>* 
 
     if (!pmSendsFinalResult() || pmSendsMatchesAnyway)
     {
-      boost::shared_array<vector<uint32_t> > joinResults;
+      std::shared_ptr<vector<uint32_t>[]> joinResults;
       uint32_t i, j;
 
       if (pmSendsMatchesAnyway)
@@ -864,7 +890,8 @@ void BatchPrimitiveProcessorJL::getRowGroupData(ByteStream& in, vector<RGData>* 
 
         if (joinResults.get() == NULL)
         {
-          joinResults.reset(new vector<uint32_t>[8192]);
+          auto v = new vector<uint32_t>[8192];
+          joinResults.reset(v);
           tJoiners[j]->setPMJoinResults(joinResults, threadID);
         }
 
@@ -894,7 +921,6 @@ void BatchPrimitiveProcessorJL::getRowGroupData(ByteStream& in, vector<RGData>* 
   idbassert(in.length() == 0);
 }
 
-// boost::shared_array<uint8_t>
 RGData BatchPrimitiveProcessorJL::getErrorRowGroupData(uint16_t error) const
 {
   RGData ret;
@@ -1079,6 +1105,7 @@ void BatchPrimitiveProcessorJL::createBPP(ByteStream& bs) const
   /* if HAS_JOINER, send the init params */
   if (flags & HAS_JOINER)
   {
+    bs << (uint32_t)maxPmJoinResultCount;
     if (ot == ROW_GROUP)
     {
       idbassert(tJoiners.size() > 0);
@@ -1221,7 +1248,7 @@ void BatchPrimitiveProcessorJL::createBPP(ByteStream& bs) const
  * (projection count)x run msgs for projection Commands
  */
 
-void BatchPrimitiveProcessorJL::runBPP(ByteStream& bs, uint32_t pmNum)
+void BatchPrimitiveProcessorJL::runBPP(ByteStream& bs, uint32_t pmNum, bool isExeMgrDEC)
 {
   ISMPacketHeader ism;
   uint32_t i;
@@ -1252,8 +1279,14 @@ void BatchPrimitiveProcessorJL::runBPP(ByteStream& bs, uint32_t pmNum)
   bs << uniqueID;
   bs << _priority;
 
+  // The weight is used by PrimProc thread pool algo
+  uint32_t weight = calculateBPPWeight();
+  bs << weight;
+
   bs << dbRoot;
   bs << count;
+  uint8_t sentByEM = (isExeMgrDEC) ? 1 : 0;
+  bs << sentByEM;
 
   if (_hasScan)
     idbassert(ridCount == 0);
@@ -1330,7 +1363,7 @@ void BatchPrimitiveProcessorJL::destroyBPP(ByteStream& bs) const
   bs << uniqueID;
 }
 
-void BatchPrimitiveProcessorJL::useJoiners(const vector<boost::shared_ptr<joiner::TupleJoiner> >& j)
+void BatchPrimitiveProcessorJL::useJoiners(const vector<std::shared_ptr<joiner::TupleJoiner> >& j)
 {
   pos = 0;
   joinerNum = 0;

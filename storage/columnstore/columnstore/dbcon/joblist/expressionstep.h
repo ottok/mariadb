@@ -21,12 +21,13 @@
  * class ExpStep interface
  */
 
-#ifndef JOBLIST_EXPRESSION_STEP_H
-#define JOBLIST_EXPRESSION_STEP_H
+#pragma once
 
 //#define NDEBUG
 #include "jobstep.h"
 #include "filter.h"
+
+typedef boost::shared_ptr<SimpleColumn> SSC;
 
 namespace execplan
 {
@@ -265,5 +266,3 @@ class ExpressionStep : public JobStep
 };
 
 }  // namespace joblist
-
-#endif  //  JOBLIST_EXPRESSION_STEP_H

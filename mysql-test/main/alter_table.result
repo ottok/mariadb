@@ -268,28 +268,6 @@ ERROR 42000: Incorrect table name ''
 rename table t1 to ``;
 ERROR 42000: Incorrect table name ''
 drop table t1;
-drop table if exists t1, t2;
-Warnings:
-Note	1051	Unknown table 'test.t1,test.t2'
-create table t1 ( a varchar(10) not null primary key ) engine=myisam;
-create table t2 ( a varchar(10) not null primary key ) engine=merge union=(t1);
-flush tables;
-alter table t1 modify a varchar(10);
-show create table t2;
-Table	Create Table
-t2	CREATE TABLE `t2` (
-  `a` varchar(10) NOT NULL,
-  PRIMARY KEY (`a`)
-) ENGINE=MRG_MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci UNION=(`t1`)
-flush tables;
-alter table t1 modify a varchar(10) not null;
-show create table t2;
-Table	Create Table
-t2	CREATE TABLE `t2` (
-  `a` varchar(10) NOT NULL,
-  PRIMARY KEY (`a`)
-) ENGINE=MRG_MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci UNION=(`t1`)
-drop table if exists t1, t2;
 create table t1 (a int, b int, c int, d int, e int, f int, g int, h int,i int, primary key (a,b,c,d,e,f,g,i,h)) engine=MyISAM;
 insert ignore into t1 (a) values(1);
 Warnings:
@@ -1013,10 +991,14 @@ CREATE TEMPORARY TABLE `#sql1` (c1 INT);
 CREATE TEMPORARY TABLE `@0023sql2` (c1 INT);
 SHOW TABLES;
 Tables_in_test
+@0023sql2
+#sql1
 ALTER TABLE `#sql1`      RENAME `@0023sql1`;
 ALTER TABLE `@0023sql2`  RENAME `#sql2`;
 SHOW TABLES;
 Tables_in_test
+#sql2
+@0023sql1
 INSERT INTO `#sql2`      VALUES (1);
 INSERT INTO `@0023sql1`  VALUES (2);
 SHOW CREATE TABLE `#sql2`;
@@ -1672,18 +1654,16 @@ ALTER TABLE m1 ENABLE KEYS, ALGORITHM= INPLACE;
 affected rows: 0
 ALTER TABLE t1 DROP INDEX i1, DROP INDEX i2, DROP INDEX i3, DROP INDEX i4;
 #
-# 2: Test ALGORITHM + old_alter_table
+# 2: Test ALGORITHM + alter_algorithm
 #
-SET SESSION old_alter_table= 1;
+SET SESSION alter_algorithm= 1;
 affected rows: 0
-Warnings:
-Warning	1287	'@@old_alter_table' is deprecated and will be removed in a future release. Please use '@@alter_algorithm' instead
 ALTER TABLE t1 ADD INDEX i1(b);
 affected rows: 2
 info: Records: 2  Duplicates: 0  Warnings: 0
 ALTER TABLE t1 ADD INDEX i2(b), ALGORITHM= DEFAULT;
-affected rows: 2
-info: Records: 2  Duplicates: 0  Warnings: 1
+affected rows: 0
+info: Records: 0  Duplicates: 0  Warnings: 1
 Warnings:
 Note	1831	Duplicate index `i2`. This is deprecated and will be disallowed in a future release
 ALTER TABLE t1 ADD INDEX i3(b), ALGORITHM= COPY;
@@ -1696,10 +1676,8 @@ affected rows: 0
 info: Records: 0  Duplicates: 0  Warnings: 1
 Warnings:
 Note	1831	Duplicate index `i4`. This is deprecated and will be disallowed in a future release
-SET SESSION old_alter_table= 0;
+SET SESSION alter_algorithm= 0;
 affected rows: 0
-Warnings:
-Warning	1287	'@@old_alter_table' is deprecated and will be removed in a future release. Please use '@@alter_algorithm' instead
 ALTER TABLE t1 DROP INDEX i1, DROP INDEX i2, DROP INDEX i3, DROP INDEX i4;
 #
 # 3: Test unsupported in-place operation
@@ -1756,7 +1734,6 @@ info: Records: 0  Duplicates: 0  Warnings: 1
 Warnings:
 Note	1831	Duplicate index `i3`. This is deprecated and will be disallowed in a future release
 ALTER TABLE t1 ADD INDEX i4(b), ALGORITHM= COPY, LOCK= NONE;
-ERROR 0A000: LOCK=NONE is not supported. Reason: COPY algorithm requires a lock. Try LOCK=SHARED
 ALTER TABLE t1 ADD INDEX i5(b), ALGORITHM= COPY, LOCK= SHARED;
 affected rows: 2
 info: Records: 2  Duplicates: 0  Warnings: 1
@@ -1774,9 +1751,6 @@ ERROR 0A000: LOCK=NONE/SHARED is not supported for this operation. Try LOCK=EXCL
 ALTER TABLE m1 ENABLE KEYS, ALGORITHM= INPLACE, LOCK= EXCLUSIVE;
 affected rows: 0
 ALTER TABLE m1 ENABLE KEYS, ALGORITHM= COPY, LOCK= NONE;
-ERROR 0A000: LOCK=NONE is not supported. Reason: COPY algorithm requires a lock. Try LOCK=SHARED
-ALTER ONLINE TABLE m1 ADD COLUMN c int;
-ERROR 0A000: LOCK=NONE is not supported for this operation. Try LOCK=SHARED
 ALTER TABLE m1 ENABLE KEYS, ALGORITHM= COPY, LOCK= SHARED;
 affected rows: 2
 info: Records: 2  Duplicates: 0  Warnings: 0

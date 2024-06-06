@@ -25,8 +25,7 @@
  * This struct will be used in connector, brm and writeengine
  */
 
-#ifndef LOGICALPARTITION_H_
-#define LOGICALPARTITION_H_
+#pragma once
 
 #include "bytestream.h"
 
@@ -84,4 +83,3 @@ messageqcpp::ByteStream& operator<<(messageqcpp::ByteStream& bs, const LogicalPa
 messageqcpp::ByteStream& operator>>(messageqcpp::ByteStream& bs, LogicalPartition& rhs);
 
 }  // namespace BRM
-#endif

@@ -21,19 +21,14 @@
  *******************************************************************************/
 /** @file */
 
-#ifndef _WE_SIMPLESYSLOG_H_
-#define _WE_SIMPLESYSLOG_H_
+#pragma once
 
 #include <boost/thread.hpp>
 
 #include "messagelog.h"
 #include "messageobj.h"
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -77,4 +72,3 @@ class SimpleSysLog
 #undef EXPORT
 
 }  // namespace WriteEngine
-#endif  // _WE_SIMPLESYSLOG_H_

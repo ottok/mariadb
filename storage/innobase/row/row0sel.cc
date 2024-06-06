@@ -4039,7 +4039,8 @@ row_search_idx_cond_check(
 	ut_ad(rec_offs_validate(rec, prebuilt->index, offsets));
 
 	if (!prebuilt->idx_cond) {
-		if (!handler_rowid_filter_is_active(prebuilt->pk_filter)) {
+		if (!prebuilt->pk_filter ||
+                    !handler_rowid_filter_is_active(prebuilt->pk_filter)) {
 			return(CHECK_POS);
 		}
 	} else {
@@ -4081,7 +4082,8 @@ row_search_idx_cond_check(
 
 	switch (result) {
 	case CHECK_POS:
-	        if (handler_rowid_filter_is_active(prebuilt->pk_filter)) {
+	        if (prebuilt->pk_filter &&
+                  handler_rowid_filter_is_active(prebuilt->pk_filter)) {
 		        ut_ad(!prebuilt->index->is_primary());
 		        if (prebuilt->clust_index_was_generated) {
                                ulint len;
@@ -4765,14 +4767,13 @@ wait_table_again:
 		}
 
 	} else if (dtuple_get_n_fields(search_tuple) > 0) {
-		pcur->btr_cur.thr = thr;
 		pcur->old_rec = nullptr;
 
 		if (index->is_spatial()) {
 			if (!prebuilt->rtr_info) {
 				prebuilt->rtr_info = rtr_create_rtr_info(
-					set_also_gap_locks, true,
-					btr_pcur_get_btr_cur(pcur), index);
+					set_also_gap_locks, true, thr,
+					btr_pcur_get_btr_cur(pcur));
 				prebuilt->rtr_info->search_tuple = search_tuple;
 				prebuilt->rtr_info->search_mode = mode;
 				rtr_info_update_btr(btr_pcur_get_btr_cur(pcur),
@@ -4785,7 +4786,8 @@ wait_table_again:
 				prebuilt->rtr_info->search_mode = mode;
 			}
 
-			err = rtr_search_leaf(pcur, search_tuple, mode, &mtr);
+			err = rtr_search_leaf(pcur, thr, search_tuple, mode,
+					      &mtr);
 		} else {
 			err = btr_pcur_open_with_no_init(search_tuple, mode,
 							 BTR_SEARCH_LEAF,

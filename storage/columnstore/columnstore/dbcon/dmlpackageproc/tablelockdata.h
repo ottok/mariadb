@@ -19,19 +19,14 @@
 
 /** @file */
 
-#ifndef TABLELOCKDATA_H__
-#define TABLELOCKDATA_H__
+#pragma once
 
 #include <stdint.h>
 
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
 
-#if defined(_MSC_VER) && defined(DMLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace dmlpackageprocessor
 {
@@ -62,4 +57,3 @@ class TablelockData
 
 #undef EXPORT
 
-#endif

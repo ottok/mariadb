@@ -1,4 +1,5 @@
 /* Copyright (C) 2014 InfiniDB, Inc.
+   Copyright (C) 2022 Mariadb Corporation.
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License
@@ -22,8 +23,7 @@
 /**
  * @file
  */
-#ifndef JOBLIST_RESOURCEMANAGER_H
-#define JOBLIST_RESOURCEMANAGER_H
+#pragma once
 
 #include <vector>
 #include <iostream>
@@ -35,14 +35,9 @@
 #include "calpontselectexecutionplan.h"
 #include "resourcedistributor.h"
 #include "installdir.h"
+#include "branchpred.h"
 
 #include "atomicops.h"
-
-#if defined(_MSC_VER) && defined(JOBLIST_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
-#define EXPORT
-#endif
 
 namespace joblist
 {
@@ -56,13 +51,11 @@ const int defaultHJMaxBuckets = 32;             // hashjoin uses 4
 const uint64_t defaultHJPmMaxMemorySmallSide = 1 * 1024 * 1024 * 1024ULL;
 const uint64_t defaultHJUmMaxMemorySmallSide = 4 * 1024 * 1024 * 1024ULL;
 const uint64_t defaultTotalUmMemory = 8 * 1024 * 1024 * 1024ULL;
-
 const uint32_t defaultJLThreadPoolSize = 100;
 
 // pcolscan.cpp
 const uint32_t defaultScanLbidReqThreshold = 5000;
 const uint32_t defaultLogicalBlocksPerScan = 1024;  // added for bug 1264.
-
 const uint32_t defaultScanReceiveThreads = 8;
 
 // BatchPrimitiveStep
@@ -107,7 +100,10 @@ const uint64_t defaultRowsPerBatch = 10000;
 /* HJ CP feedback, see bug #1465 */
 const uint32_t defaultHjCPUniqueLimit = 100;
 
-const uint64_t defaultDECThrottleThreshold = 200000000;  // ~200 MB
+const constexpr uint64_t defaultFlowControlEnableBytesThresh = 50000000;     // ~50Mb
+const constexpr uint64_t defaultFlowControlDisableBytesThresh = 10000000;  // ~10 MB
+const constexpr uint64_t defaultBPPSendThreadBytesThresh = 250000000;       // ~250 MB
+const constexpr uint64_t BPPSendThreadMsgThresh = 100;
 
 const bool defaultAllowDiskAggregation = false;
 
@@ -121,11 +117,8 @@ class ResourceManager
   /** @brief ctor
    *
    */
-  EXPORT ResourceManager(bool runningInExeMgr = false);
-  static ResourceManager* instance(bool runningInExeMgr = false);
-  //     ResourceManager(const config::Config *cf);
-  //     ResourceManager(const std::string& config);
-  // passed by ExeMgr and DistributedEngineComm to MessageQueueServer or -Client
+  ResourceManager(bool runningInExeMgr = false, config::Config* aConfig = nullptr);
+  static ResourceManager* instance(bool runningInExeMgr = false, config::Config* aConfig = nullptr);
   config::Config* getConfig()
   {
     return fConfig;
@@ -157,7 +150,7 @@ class ResourceManager
   {
     return getUintVal(fExeMgrStr, "MaxPct", defaultEMMaxPct);
   }
-  EXPORT int getEmPriority() const;  // For Windows only
+  int getEmPriority() const;  // FOr Windows only
   int getEmExecQueueSize() const
   {
     return getIntVal(fExeMgrStr, "ExecQueueSize", defaultEMExecQueueSize);
@@ -206,6 +199,7 @@ class ResourceManager
   {
     return getUintVal(fJobListStr, "ScanLbidReqThreshold", defaultScanLbidReqThreshold);
   }
+
   // @MCOL-513 - Added threadpool to JobSteps
   int getJLThreadPoolSize() const
   {
@@ -243,7 +237,6 @@ class ResourceManager
   uint32_t getJlMaxOutstandingRequests() const
   {
     return fJlMaxOutstandingRequests;
-    // getUintVal(fJobListStr, "MaxOutstandingRequests", defaultMaxOutstandingRequests);
   }
   uint32_t getJlJoinerChunkSize() const
   {
@@ -258,7 +251,6 @@ class ResourceManager
   {
     return getUintVal(fPrimitiveServersStr, "ConnectionsPerPrimProc", defaultConnectionsPerPrimProc);
   }
-
   std::string getScTempDiskPath() const
   {
     return startup::StartUp::tmpDir();
@@ -292,35 +284,45 @@ class ResourceManager
     return getUintVal(fBatchInsertStr, "RowsPerBatch", defaultRowsPerBatch);
   }
 
-  uint64_t getDECThrottleThreshold() const
+  uint64_t getDECEnableBytesThresh() const
   {
-    return getUintVal(fJobListStr, "DECThrottleThreshold", defaultDECThrottleThreshold);
+    return getUintVal(FlowControlStr, "DECFlowControlEnableBytesThresh(", defaultFlowControlEnableBytesThresh);
   }
 
-  uint64_t getMaxBPPSendQueue() const
+  uint32_t getDECDisableBytesThresh() const
   {
-    return fMaxBPPSendQueue;
+    return getUintVal(FlowControlStr, "DECFlowControlDisableBytesThresh", defaultFlowControlDisableBytesThresh);
   }
 
-  EXPORT void emServerThreads();
-  EXPORT void emServerQueueSize();
-  EXPORT void emSecondsBetweenMemChecks();
-  EXPORT void emMaxPct();
-  EXPORT void emPriority();
-  EXPORT void emExecQueueSize();
+  uint32_t getBPPSendThreadBytesThresh() const
+  {
+    return getUintVal(FlowControlStr, "BPPSendThreadBytesThresh", defaultBPPSendThreadBytesThresh);
+  }
 
-  EXPORT void hjNumThreads();
-  EXPORT void hjMaxBuckets();
-  EXPORT void hjMaxElems();
-  EXPORT void hjFifoSizeLargeSide();
-  EXPORT void hjPmMaxMemorySmallSide();
+  uint32_t getBPPSendThreadMsgThresh() const
+  {
+    return getUintVal(FlowControlStr, "BPPSendThreadMsgThresh", BPPSendThreadMsgThresh);
+  }
+
+  void emServerThreads();
+  void emServerQueueSize();
+  void emSecondsBetweenMemChecks();
+  void emMaxPct();
+  void emPriority();
+  void emExecQueueSize();
+
+  void hjNumThreads();
+  void hjMaxBuckets();
+  void hjMaxElems();
+  void hjFifoSizeLargeSide();
+  void hjPmMaxMemorySmallSide();
 
   /* new HJ/Union/Aggregation mem interface, used by TupleBPS */
   /* sessionLimit is a pointer to the var holding the session-scope limit, should be JobInfo.umMemLimit
      for the query. */
   /* Temporary parameter 'patience', will wait for up to 10s to get the memory. */
-  EXPORT bool getMemory(int64_t amount, boost::shared_ptr<int64_t>& sessionLimit, bool patience = true);
-  EXPORT bool getMemory(int64_t amount, bool patience = true);
+  bool getMemory(int64_t amount, boost::shared_ptr<int64_t>& sessionLimit, bool patience = true);
+  bool getMemory(int64_t amount, bool patience = true);
   inline void returnMemory(int64_t amount)
   {
     atomicops::atomicAdd(&totalUmMemLimit, amount);
@@ -349,14 +351,14 @@ class ResourceManager
     return fHJUmMaxMemorySmallSideDistributor.getTotalResource();
   }
 
-  EXPORT void addHJUmMaxSmallSideMap(uint32_t sessionID, uint64_t mem);
+  void addHJUmMaxSmallSideMap(uint32_t sessionID, uint64_t mem);
 
   void removeHJUmMaxSmallSideMap(uint32_t sessionID)
   {
     fHJUmMaxMemorySmallSideDistributor.removeSession(sessionID);
   }
 
-  EXPORT void addHJPmMaxSmallSideMap(uint32_t sessionID, uint64_t mem);
+  void addHJPmMaxSmallSideMap(uint32_t sessionID, uint64_t mem);
   void removeHJPmMaxSmallSideMap(uint32_t sessionID)
   {
     fHJPmMaxMemorySmallSideSessionMap.removeSession(sessionID);
@@ -443,9 +445,9 @@ class ResourceManager
     return fUseHdfs;
   }
 
-  EXPORT bool getMysqldInfo(std::string& h, std::string& u, std::string& w, unsigned int& p) const;
-  EXPORT bool queryStatsEnabled() const;
-  EXPORT bool userPriorityEnabled() const;
+  bool getMysqldInfo(std::string& h, std::string& u, std::string& w, unsigned int& p) const;
+  bool queryStatsEnabled() const;
+  bool userPriorityEnabled() const;
 
   uint64_t getConfiguredUMMemLimit() const
   {
@@ -462,8 +464,8 @@ class ResourceManager
    * @param name the param name whose value is to be returned
    * @param defVal the default value returned if the value is missing
    */
-  std::string getStringVal(const std::string& section, const std::string& name,
-                           const std::string& defVal) const;
+  std::string getStringVal(const std::string& section, const std::string& name, const std::string& defVal,
+                           const bool reReadConfigIfNeeded = false) const;
 
   template <typename IntType>
   IntType getUintVal(const std::string& section, const std::string& name, IntType defval) const;
@@ -476,16 +478,17 @@ class ResourceManager
   void logMessage(logging::LOG_TYPE logLevel, logging::Message::MessageID mid, uint64_t value = 0,
                   uint32_t sessionId = 0);
 
-  /*static	const*/ std::string fExeMgrStr;
-  static const std::string fHashJoinStr;
-  static const std::string fJobListStr;
-  static const std::string fPrimitiveServersStr;
+  std::string fExeMgrStr;
+  inline static const std::string fHashJoinStr = "HashJoin";
+  inline static const std::string fJobListStr = "JobList";
+  inline static const std::string FlowControlStr = "FlowControl";
+
+  inline static const std::string fPrimitiveServersStr = "PrimitiveServers";
   /*static	const*/ std::string fSystemConfigStr;
-  static const std::string fExtentMapStr;
+  inline static const std::string fExtentMapStr = "ExtentMap";
   /*static	const*/ std::string fDMLProcStr;
   /*static	const*/ std::string fBatchInsertStr;
-  static const std::string fOrderByLimitStr;
-  static const std::string fRowAggregationStr;
+  inline static const std::string fRowAggregationStr = "RowAggregation";
   config::Config* fConfig;
   static ResourceManager* fInstance;
   uint32_t fTraceFlags;
@@ -517,18 +520,21 @@ class ResourceManager
   bool fUseHdfs;
   bool fAllowedDiskAggregation{false};
   uint64_t fDECConnectionsPerQuery;
-  uint64_t fMaxBPPSendQueue = 250000000;
 };
 
 inline std::string ResourceManager::getStringVal(const std::string& section, const std::string& name,
-                                                 const std::string& defval) const
+                                                 const std::string& defval,
+                                                 const bool reReadConfigIfNeeded) const
 {
-  std::string val = fConfig->getConfig(section, name);
+  std::string val = UNLIKELY(reReadConfigIfNeeded) ? fConfig->getFromActualConfig(section, name)
+                                                   : fConfig->getConfig(section, name);
 #ifdef DEBUGRM
   std::cout << "RM getStringVal for " << section << " : " << name << " val: " << val << " default: " << defval
             << std::endl;
 #endif
-  return (0 == val.length() ? defval : val);
+  if (val.empty())
+    val = defval;
+  return val;
 }
 
 template <typename IntType>
@@ -565,5 +571,3 @@ inline bool ResourceManager::getBoolVal(const std::string& section, const std::s
 }  // namespace joblist
 
 #undef EXPORT
-
-#endif

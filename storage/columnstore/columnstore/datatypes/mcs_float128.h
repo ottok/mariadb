@@ -16,8 +16,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA.
 */
-#ifndef MCS_TSFLOAT128_H_INCLUDED
-#define MCS_TSFLOAT128_H_INCLUDED
+#pragma once
 
 #include <cfloat>
 #include <cctype>
@@ -725,4 +724,3 @@ class TFloat128
 
 }  // namespace datatypes
 
-#endif  // MCS_TSFLOAT128_H_INCLUDED

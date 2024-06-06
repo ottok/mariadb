@@ -31,7 +31,6 @@ Created 4/20/1996 Heikki Tuuri
 #include "btr0btr.h"
 #include "btr0cur.h"
 #include "mach0data.h"
-#include "ibuf0ibuf.h"
 #include "que0que.h"
 #include "row0upd.h"
 #include "row0sel.h"
@@ -2686,8 +2685,6 @@ err_exit:
 		page_set_autoinc(root, auto_inc, &mtr, false);
 	}
 
-	btr_pcur_get_btr_cur(&pcur)->thr = thr;
-
 #ifdef UNIV_DEBUG
 	{
 		page_t*	page = btr_pcur_get_page(&pcur);
@@ -2972,7 +2969,6 @@ row_ins_sec_index_entry_low(
 	ut_ad(!dict_index_is_clust(index));
 	ut_ad(mode == BTR_MODIFY_LEAF || mode == BTR_INSERT_TREE);
 
-	cursor.thr = thr;
 	cursor.rtr_info = NULL;
 	cursor.page_cur.index = index;
 	ut_ad(thr_get_trx(thr)->id != 0);
@@ -2994,9 +2990,10 @@ row_ins_sec_index_entry_low(
 
 	if (index->is_spatial()) {
 		rtr_init_rtr_info(&rtr_info, false, &cursor, index, false);
+		rtr_info.thr = thr;
 		rtr_info_update_btr(&cursor, &rtr_info);
 
-		err = rtr_insert_leaf(&cursor, entry, search_mode, &mtr);
+		err = rtr_insert_leaf(&cursor, thr, entry, search_mode, &mtr);
 
 		if (err == DB_SUCCESS && search_mode == BTR_MODIFY_LEAF
 		    && rtr_info.mbr_adj) {
@@ -3005,6 +3002,7 @@ row_ins_sec_index_entry_low(
 			rtr_clean_rtr_info(&rtr_info, true);
 			rtr_init_rtr_info(&rtr_info, false, &cursor,
 					  index, false);
+			rtr_info.thr = thr;
 			rtr_info_update_btr(&cursor, &rtr_info);
 			mtr.start();
 			if (index->table->is_temporary()) {
@@ -3012,7 +3010,7 @@ row_ins_sec_index_entry_low(
 			} else {
 				index->set_modified(mtr);
 			}
-			err = rtr_insert_leaf(&cursor, entry,
+			err = rtr_insert_leaf(&cursor, thr, entry,
 					      search_mode, &mtr);
 		}
 
@@ -3021,14 +3019,6 @@ row_ins_sec_index_entry_low(
 			goto func_exit;});
 
 	} else {
-		if (!index->table->is_temporary()) {
-			search_mode = btr_latch_mode(
-				search_mode
-				| (thr_get_trx(thr)->check_unique_secondary
-				   ? BTR_INSERT
-				   : BTR_INSERT | BTR_IGNORE_SEC_UNIQUE));
-		}
-
 		err = cursor.search_leaf(entry, PAGE_CUR_LE, search_mode,
 					 &mtr);
 	}
@@ -3037,12 +3027,6 @@ row_ins_sec_index_entry_low(
 		if (err == DB_DECRYPTION_FAILED) {
 			btr_decryption_failed(*index);
 		}
-		goto func_exit;
-	}
-
-	if (cursor.flag == BTR_CUR_INSERT_TO_IBUF) {
-		ut_ad(!dict_index_is_spatial(index));
-		/* The insert was buffered during the search: we are done */
 		goto func_exit;
 	}
 
@@ -3105,13 +3089,9 @@ row_ins_sec_index_entry_low(
 		locked with s-locks the necessary records to
 		prevent any insertion of a duplicate by another
 		transaction. Let us now reposition the cursor and
-		continue the insertion (bypassing the change buffer). */
-		err = cursor.search_leaf(
-			entry, PAGE_CUR_LE,
-			btr_latch_mode(search_mode
-				       & ~(BTR_INSERT
-					   | BTR_IGNORE_SEC_UNIQUE)),
-			&mtr);
+		continue the insertion. */
+		err = cursor.search_leaf(entry, PAGE_CUR_LE, search_mode,
+					 &mtr);
 		if (err != DB_SUCCESS) {
 			goto func_exit;
 		}
@@ -3342,11 +3322,6 @@ row_ins_sec_index_entry(
 	if (err == DB_FAIL) {
 		mem_heap_empty(heap);
 
-		if (index->table->space == fil_system.sys_space
-		    && !(index->type & (DICT_UNIQUE | DICT_SPATIAL))) {
-			ibuf_free_excess_pages();
-		}
-
 		/* Try then pessimistic descent to the B-tree */
 		log_free_check();
 
@@ -3570,19 +3545,6 @@ row_ins_index_entry_step(
 }
 
 /***********************************************************//**
-Allocates a row id for row and inits the node->index field. */
-UNIV_INLINE
-void
-row_ins_alloc_row_id_step(
-/*======================*/
-	ins_node_t*	node)	/*!< in: row insert node */
-{
-  ut_ad(node->state == INS_NODE_ALLOC_ROW_ID);
-  if (dict_table_get_first_index(node->table)->is_gen_clust())
-    dict_sys_write_row_id(node->sys_buf, dict_sys.get_new_row_id());
-}
-
-/***********************************************************//**
 Gets a row to insert from the values list. */
 UNIV_INLINE
 void
@@ -3662,12 +3624,17 @@ row_ins(
 	DBUG_PRINT("row_ins", ("table: %s", node->table->name.m_name));
 
 	if (node->state == INS_NODE_ALLOC_ROW_ID) {
-
-		row_ins_alloc_row_id_step(node);
-
 		node->index = dict_table_get_first_index(node->table);
 		ut_ad(node->entry_list.empty() == false);
 		node->entry = node->entry_list.begin();
+
+		if (node->index->is_gen_clust()) {
+			const uint64_t db_row_id{++node->table->row_id};
+			if (db_row_id >> 48) {
+				DBUG_RETURN(DB_OUT_OF_FILE_SPACE);
+			}
+			mach_write_to_6(node->sys_buf, db_row_id);
+		}
 
 		if (node->ins_type == INS_SEARCHED) {
 

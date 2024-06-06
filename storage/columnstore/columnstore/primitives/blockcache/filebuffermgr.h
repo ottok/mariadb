@@ -22,16 +22,11 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef FILEBUFFERMGR_H
-#define FILEBUFFERMGR_H
+#pragma once
 #include <iostream>
 #include <fstream>
 #include <iomanip>
-#ifndef _MSC_VER
 #include <tr1/unordered_set>
-#else
-#include <unordered_set>
-#endif
 #include <boost/thread.hpp>
 #include <deque>
 
@@ -241,4 +236,3 @@ class FileBufferMgr
 };
 
 }  // namespace dbbc
-#endif

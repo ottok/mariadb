@@ -20,20 +20,16 @@
 
 /** @file */
 
-#ifndef FUNCHELPERS_H__
-#define FUNCHELPERS_H__
+#pragma once
 
 #include <string>
 
-#ifndef _MSC_VER
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
-#endif
 #endif
 
 #include <inttypes.h>
 #include <boost/algorithm/string/case_conv.hpp>
-#include <boost/regex.hpp>
 #include <boost/tokenizer.hpp>
 
 #include "dataconvert.h"
@@ -308,7 +304,7 @@ inline bool calc_time_diff(int64_t time1, int64_t time2, int l_sign, long long* 
 {
   int64_t days;
   bool neg;
-  int64_t microseconds;
+  int128_t microseconds;
 
   uint64_t year1 = 0, month1 = 0, day1 = 0, hour1 = 0, min1 = 0, sec1 = 0, msec1 = 0;
 
@@ -656,22 +652,14 @@ inline int dayOfWeek(std::string day)  // Sunday = 0
 inline string intToString(int64_t i)
 {
   char buf[32];
-#ifndef _MSC_VER
   snprintf(buf, 32, "%" PRId64 "", i);
-#else
-  snprintf(buf, 32, "%lld", i);
-#endif
   return buf;
 }
 
 inline string uintToString(uint64_t i)
 {
   char buf[32];
-#ifndef _MSC_VER
   snprintf(buf, 32, "%" PRIu64 "", i);
-#else
-  snprintf(buf, 32, "%llu", i);
-#endif
   return buf;
 }
 
@@ -701,5 +689,3 @@ const char* convNumToStr(int64_t, char*, int);
 
 }  // namespace helpers
 }  // namespace funcexp
-
-#endif

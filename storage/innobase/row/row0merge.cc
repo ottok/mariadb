@@ -150,7 +150,7 @@ public:
 					  false);
 			rtr_info_update_btr(&ins_cur, &rtr_info);
 
-			error = rtr_insert_leaf(&ins_cur, dtuple,
+			error = rtr_insert_leaf(&ins_cur, nullptr, dtuple,
 						BTR_MODIFY_LEAF, &mtr);
 
 			/* It need to update MBR in parent entry,
@@ -163,7 +163,8 @@ public:
 				rtr_info_update_btr(&ins_cur, &rtr_info);
 				mtr.start();
 				index->set_modified(mtr);
-				error = rtr_insert_leaf(&ins_cur, dtuple,
+				error = rtr_insert_leaf(&ins_cur, nullptr,
+							dtuple,
 							BTR_MODIFY_TREE, &mtr);
 			}
 
@@ -186,7 +187,8 @@ public:
 						  &ins_cur, index, false);
 
 				rtr_info_update_btr(&ins_cur, &rtr_info);
-				error = rtr_insert_leaf(&ins_cur, dtuple,
+				error = rtr_insert_leaf(&ins_cur, nullptr,
+							dtuple,
 							BTR_MODIFY_TREE, &mtr);
 
 				if (error == DB_SUCCESS) {
@@ -2227,7 +2229,7 @@ end_of_index:
 						  next_page_no),
 					old_table->space->zip_size(),
 					RW_S_LATCH, nullptr, BUF_GET, &mtr,
-					&err, false);
+					&err);
 				if (!block) {
 					goto err_exit;
 				}
@@ -3687,8 +3689,6 @@ row_merge_mtuple_to_dtuple(
 	dtuple_t*	dtuple,
 	const mtuple_t* mtuple)
 {
-	ut_ad(!dict_index_is_ibuf(index));
-
 	memcpy(dtuple->fields, mtuple->fields,
 	       dtuple->n_fields * sizeof *mtuple->fields);
 }

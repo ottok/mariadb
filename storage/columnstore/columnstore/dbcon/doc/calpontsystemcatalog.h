@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef DBCON_CALPONTSYSTEMCATALOG_H
-#define DBCON_CALPONTSYSTEMCATALOG_H
+#pragma once
 
 namespace dbcon
 {
@@ -52,5 +51,3 @@ class CalpontSystemCatalog
 };
 
 }  // namespace dbcon
-
-#endif  // DBCON_CALPONTSYSTEMCATALOG_H

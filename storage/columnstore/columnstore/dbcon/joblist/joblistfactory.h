@@ -22,18 +22,14 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef JOBLISTFACTORY_H
-#define JOBLISTFACTORY_H
+#pragma once
 
 #include <string>
 
 #include "joblist.h"
+#include "../../primitives/primproc/primitiveserverthreadpools.h"
 
-#if defined(_MSC_VER) && defined(JOBLIST_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace execplan
 {
@@ -62,6 +58,7 @@ class JobListFactory
    * @param cplan the CalpontExecutionPlan from which the JobList is constructed
    */
   EXPORT static SJLP makeJobList(execplan::CalpontExecutionPlan* cplan, ResourceManager* rm,
+                                 const PrimitiveServerThreadPools& primitiveServerThreadPools,
                                  bool tryTuple = false, bool isExeMgr = false);
 
  private:
@@ -70,5 +67,3 @@ class JobListFactory
 }  // namespace joblist
 
 #undef EXPORT
-
-#endif  // JOBLISTFACTORY_H

@@ -24,8 +24,7 @@
  * class SessionMonitor interface
  */
 
-#ifndef _SESSIONMONITOR_H
-#define _SESSIONMONITOR_H
+#pragma once
 
 #include <vector>
 #include <exception>
@@ -337,5 +336,3 @@ class SessionMonitor
 };
 
 }  // namespace execplan
-
-#endif

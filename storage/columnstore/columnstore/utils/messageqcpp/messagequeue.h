@@ -21,20 +21,13 @@
  *
  ******************************************************************************************/
 /** @file */
-#ifndef MESSAGEQCPP_MESSAGEQUEUE_H
-#define MESSAGEQCPP_MESSAGEQUEUE_H
+#pragma once
 #include <string>
 #include <ctime>
 
 #include <sys/types.h>
-#ifdef _MSC_VER
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <stdio.h>
-#else
 #include <netinet/in.h>
 #include <netdb.h>
-#endif
 
 #include "serversocket.h"
 #include "iosocket.h"
@@ -47,11 +40,7 @@ class Config;
 
 class MessageQTestSuite;
 
-#if defined(_MSC_VER) && defined(xxxMESSAGEQUEUE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace messageqcpp
 {
@@ -276,6 +265,7 @@ class MessageQueueClient
    * @brief compare the addresses of 2 MessageQueueClient
    */
   inline bool isSameAddr(const MessageQueueClient& rhs) const;
+  inline bool isSameAddr(const struct in_addr& ipv4Addr) const;
 
   bool isConnected()
   {
@@ -285,6 +275,17 @@ class MessageQueueClient
   bool hasData()
   {
     return fClientSock.hasData();
+  }
+
+  // This client's flag is set running DEC::Setup() call
+  bool atTheSameHost() const
+  {
+    return atTheSameHost_;
+  }
+
+  void atTheSameHost(const bool atTheSameHost)
+  {
+    atTheSameHost_ = atTheSameHost;
   }
   /*
    * allow test suite access to private data for OOB test
@@ -313,6 +314,7 @@ class MessageQueueClient
   mutable IOSocket fClientSock;  /// the socket to communicate with the server
   mutable logging::Logger fLogger;
   bool fIsAvailable;
+  bool atTheSameHost_;
   std::string fModuleName;
 };
 
@@ -328,6 +330,10 @@ inline bool MessageQueueClient::isSameAddr(const MessageQueueClient& rhs) const
 {
   return fClientSock.isSameAddr(&rhs.fClientSock);
 }
+inline bool MessageQueueClient::isSameAddr(const struct in_addr& ipv4Addr) const
+{
+  return fClientSock.isSameAddr(ipv4Addr);
+}
 inline void MessageQueueClient::syncProto(bool use)
 {
   fClientSock.syncProto(use);
@@ -336,5 +342,3 @@ inline void MessageQueueClient::syncProto(bool use)
 }  // namespace messageqcpp
 
 #undef EXPORT
-
-#endif  // MESSAGEQCPP_MESSAGEQUEUE_H

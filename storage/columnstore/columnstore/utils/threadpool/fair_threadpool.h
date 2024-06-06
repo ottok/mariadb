@@ -39,6 +39,19 @@
 
 namespace threadpool
 {
+
+// Meta Jobs, e.g. BATCH_PRIMITIVE_CREATE has very small weight if a number of such Jobs
+// stuck in the scheduler queue they will starve the whole queue so that no Job could be run
+// except these meta jobs.
+constexpr const uint32_t RescheduleWeightIncrement = 10000;
+constexpr const uint32_t MetaJobsInitialWeight = 1;
+
+// The idea of this thread pool is to run morsel jobs(primitive job) is to equaly distribute CPU time
+// b/w multiple parallel queries(thread maps morsel to query using txnId). Query(txnId) has its weight
+// stored in PriorityQueue that thread increases before run another morsel for the query. When query is
+// done(ThreadPoolJobsList is empty) it is removed from PQ and the Map(txn to ThreadPoolJobsList).
+// I tested multiple morsels per one loop iteration in ::threadFcn. This approach reduces CPU consumption
+// and increases query timings.
 class FairThreadPool
 {
  public:
@@ -63,6 +76,7 @@ class FairThreadPool
      , id_(id)
     {
     }
+
     uint32_t uniqueID_;
     uint32_t stepID_;
     TransactionIdxT txnIdx_;
@@ -92,6 +106,15 @@ class FairThreadPool
    */
   void dump();
 
+  size_t queueSize() const
+  {
+    return weightedTxnsQueue_.size();
+  }
+  // This method enables a pool current workload estimate.
+  size_t jobsRunning() const
+  {
+    return jobsRunning_.load(std::memory_order_relaxed);
+  }
   // If a job is blocked, we want to temporarily increase the number of threads managed by the pool
   // A problem can occur if all threads are running long or blocked for a single query. Other
   // queries won't get serviced, even though there are cpu cycles available.
@@ -99,19 +122,15 @@ class FairThreadPool
   // places, you need to consider atomicity.
   void incBlockedThreads()
   {
-    blockedThreads++;
+    ++blockedThreads_;
   }
   void decBlockedThreads()
   {
-    blockedThreads--;
+    --blockedThreads_;
   }
-  uint32_t blockedThreadCount() const
+  uint32_t blockedThreadCount()
   {
-    return blockedThreads;
-  }
-  size_t queueSize() const
-  {
-    return weightedTxnsQueue_.size();
+    return blockedThreads_;
   }
 
  protected:
@@ -133,16 +152,13 @@ class FairThreadPool
   explicit FairThreadPool(const FairThreadPool&);
   FairThreadPool& operator=(const FairThreadPool&);
 
-  void addJob_(const Job& job, bool useLock = true);
   void threadFcn(const PriorityThreadPool::Priority preferredQueue);
   void sendErrorMsg(uint32_t id, uint32_t step, primitiveprocessor::SP_UM_IOSOCK sock);
 
-  uint32_t threadCounts;
   uint32_t defaultThreadCounts;
   std::mutex mutex;
   std::condition_variable newJob;
   boost::thread_group threads;
-  bool _stop;
   uint32_t weightPerRun;
   volatile uint id;  // prevent it from being optimized out
 
@@ -165,9 +181,13 @@ class FairThreadPool
   using Txn2ThreadPoolJobsListMap = std::unordered_map<TransactionIdxT, ThreadPoolJobsList*>;
   Txn2ThreadPoolJobsListMap txn2JobsListMap_;
   WeightedTxnPrioQueue weightedTxnsQueue_;
-  std::atomic<uint32_t> blockedThreads;
-  std::atomic<uint32_t> extraThreads;
-  bool stopExtra;
+  std::atomic<size_t> jobsRunning_{0};
+  std::atomic<size_t> threadCounts_{0};
+  std::atomic<bool> stop_{false};
+
+  std::atomic<uint32_t> blockedThreads_{0};
+  std::atomic<uint32_t> extraThreads_{0};
+  bool stopExtra_;
 };
 
 }  // namespace threadpool

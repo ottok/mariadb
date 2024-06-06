@@ -344,11 +344,9 @@ void metadataJournalTest(std::size_t size, off_t offset)
   cmd->flen = std::strlen(filename);
   memcpy(&cmd->filename, filename, cmd->flen);
   data = (uint64_t*)&cmd->filename[cmd->flen];
-  int count = 0;
   for (uint64_t i = 0; i < (size / sizeof(uint64_t)); i++)
   {
     data[i] = i;
-    count++;
   }
   hdr->type = SM_MSG_START;
   hdr->payloadLen = sizeof(*cmd) + cmd->flen + cmd->count;
@@ -384,11 +382,9 @@ void metadataJournalTest_append(std::size_t size)
   cmd->flen = std::strlen(filename);
   memcpy(&cmd->filename, filename, cmd->flen);
   data = (uint64_t*)&cmd->filename[cmd->flen];
-  int count = 0;
   for (uint64_t i = 0; i < (size / sizeof(uint64_t)); i++)
   {
     data[i] = i;
-    count++;
   }
   hdr->type = SM_MSG_START;
   hdr->payloadLen = sizeof(*cmd) + cmd->flen + cmd->count;
@@ -1204,7 +1200,7 @@ bool mergeJournalTest()
   int i;
   IOCoordinator* ioc = IOCoordinator::get();
   size_t len = 8192, tmp;
-  boost::shared_array<uint8_t> data = ioc->mergeJournal("test-object", "test-journal", 0, len, &tmp);
+  std::shared_ptr<uint8_t[]> data = ioc->mergeJournal("test-object", "test-journal", 0, len, &tmp);
   assert(data);
   int* idata = (int*)data.get();
   for (i = 0; i < 5; i++)
@@ -1771,7 +1767,7 @@ void bigMergeJournal1()
     return;
   }
   IOCoordinator* ioc = IOCoordinator::get();
-  boost::shared_array<uint8_t> buf;
+  std::shared_ptr<uint8_t[]> buf;
   size_t tmp;
   buf = ioc->mergeJournal(fNamePath.string().c_str(), jNamePath.string().c_str(), 0, 68332, &tmp);
   assert(buf);

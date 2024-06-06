@@ -29,22 +29,6 @@
 
 #define HA_ERR_JSON_TABLE (HA_ERR_LAST+1)
 
-/*
-  Allocating memory and *also* using it (reading and
-  writing from it) because some build instructions cause
-  compiler to optimize out stack_used_up. Since alloca()
-  here depends on stack_used_up, it doesnt get executed
-  correctly and causes json_debug_nonembedded to fail
-  ( --error ER_STACK_OVERRUN_NEED_MORE does not occur).
-*/
-#define ALLOCATE_MEM_ON_STACK(A) do \
-                              { \
-                                uchar *array= (uchar*)alloca(A); \
-                                array[0]= 1; \
-                                array[0]++; \
-                                array[0] ? array[0]++ : array[0]--; \
-                              } while(0)
-
 class table_function_handlerton
 {
 public:
@@ -54,6 +38,7 @@ public:
     bzero(&m_hton, sizeof(m_hton));
     m_hton.tablefile_extensions= hton_no_exts;
     m_hton.slot= HA_SLOT_UNDEF;
+    m_hton.flags= HTON_HIDDEN;
   }
 };
 
@@ -245,6 +230,10 @@ public:
   int open(const char *name, int mode, uint test_if_locked) override
   { return 0; }
   int close(void) override { return 0; }
+  void update_optimizer_costs(OPTIMIZER_COSTS *costs) override
+  {
+    memcpy(costs, &heap_optimizer_costs, sizeof(*costs));
+  }
   int rnd_init(bool scan) override;
   int rnd_next(uchar *buf) override;
   int rnd_pos(uchar * buf, uchar *pos) override;
@@ -936,7 +925,10 @@ int Json_table_column::set(THD *thd, enum_type ctype, const LEX_CSTRING &path,
     return set(thd, ctype, path, nullptr);
 
   CHARSET_INFO *tmp;
-  if (!(tmp= cl.resolved_to_character_set(&my_charset_utf8mb4_general_ci)))
+  if (!(tmp= cl.resolved_to_character_set(
+                  thd,
+                  thd->variables.character_set_collations,
+                  &my_charset_utf8mb4_general_ci)))
     return 1;
   return set(thd, ctype, path, tmp);
 }

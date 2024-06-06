@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1997, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2022, MariaDB Corporation.
+Copyright (c) 2017, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -203,22 +203,9 @@ struct page_recv_t
   inline void will_not_read();
 };
 
-/** A page initialization operation that was parsed from the redo log */
-struct recv_init
-{
-  /** log sequence number of the page initialization */
-  lsn_t lsn;
-  /** Whether btr_page_create() avoided a read of the page.
-  At the end of the last recovery batch, mark_ibuf_exist()
-  will mark pages for which this flag is set. */
-  bool created;
-};
-
 /** Recovery system data structure */
 struct recv_sys_t
 {
-  using init= recv_init;
-
   /** mutex protecting this as well as some of page_recv_t */
   alignas(CPU_LEVEL1_DCACHE_LINESIZE) mysql_mutex_t mutex;
 private:
@@ -273,7 +260,10 @@ private:
     lsn_t lsn;
     /** truncated size of the tablespace, or 0 if not truncated */
     unsigned pages;
-  } truncated_undo_spaces[127];
+  };
+
+  trunc truncated_undo_spaces[127];
+  trunc truncated_sys_space;
 
 public:
   /** The contents of the doublewrite buffer */
@@ -299,23 +289,23 @@ public:
       pages_it= pages.end();
   }
 
+  /** Allow to apply system tablespace truncate redo log only
+  if the size to be extended is lesser than current size.
+  @retval true  To apply the truncate shrink redo log record
+  @retval false otherwise */
+  bool check_sys_truncate();
+
 private:
   /** Attempt to initialize a page based on redo log records.
   @param p        iterator
   @param mtr      mini-transaction
   @param b        pre-allocated buffer pool block
-  @param init     page initialization
+  @param init_lsn page initialization
   @return the recovered block
   @retval nullptr if the page cannot be initialized based on log records
   @retval -1      if the page cannot be recovered due to corruption */
   inline buf_block_t *recover_low(const map::iterator &p, mtr_t &mtr,
-                                  buf_block_t *b, init &init);
-  /** Attempt to initialize a page based on redo log records.
-  @param page_id  page identifier
-  @return the recovered block
-  @retval nullptr if the page cannot be initialized based on log records
-  @retval -1      if the page cannot be recovered due to corruption */
-  ATTRIBUTE_COLD buf_block_t *recover_low(const page_id_t page_id);
+                                  buf_block_t *b, lsn_t init_lsn);
 
   /** All found log files (multiple ones are possible if we are upgrading
   from before MariaDB Server 10.5.1) */
@@ -460,15 +450,14 @@ public:
   /** @return whether log file corruption was found */
   bool is_corrupt_log() const { return UNIV_UNLIKELY(found_corrupt_log); }
 
-  /** Attempt to initialize a page based on redo log records.
+  /** Read a page or recover it based on redo log records.
   @param page_id  page identifier
-  @return the recovered block
-  @retval nullptr if the page cannot be initialized based on log records
-  @retval -1      if the page cannot be recovered due to corruption */
-  buf_block_t *recover(const page_id_t page_id)
-  {
-    return UNIV_UNLIKELY(recovery_on) ? recover_low(page_id) : nullptr;
-  }
+  @param mtr      mini-transaction
+  @param err      error code
+  @return the requested block
+  @retval nullptr if the page cannot be accessed due to corruption */
+  ATTRIBUTE_COLD
+  buf_block_t *recover(const page_id_t page_id, mtr_t *mtr, dberr_t *err);
 
   /** Try to recover a tablespace that was not readable earlier
   @param p          iterator
@@ -484,16 +473,6 @@ public:
 /** The recovery system */
 extern recv_sys_t	recv_sys;
 
-/** If the following is TRUE, the buffer pool file pages must be invalidated
-after recovery and no ibuf operations are allowed; this will be set if
-recv_sys.pages becomes too full, and log records must be merged
-to file pages already before the recovery is finished: in this case no
-ibuf operations are allowed, as they could modify the pages read in the
-buffer pool before the pages have been recovered to the up-to-date state.
-
-TRUE means that recovery is running and no operations on the log files
-are allowed yet: the variable name is misleading. */
-extern bool		recv_no_ibuf_operations;
 /** TRUE when recv_init_crash_recovery() has been called. */
 extern bool		recv_needed_recovery;
 #ifdef UNIV_DEBUG

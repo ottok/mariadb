@@ -15,10 +15,10 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef _SOCKETPOOL_H_
-#define _SOCKETPOOL_H_
+#pragma once
 
 #include <deque>
+
 #include <boost/utility.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition_variable.hpp>
@@ -53,5 +53,3 @@ class SocketPool : public boost::noncopyable
 };
 
 }  // namespace idbdatafile
-
-#endif

@@ -27,21 +27,9 @@
  * a supporting class of UmModuleIPs.
  */
 
-#ifndef UMSOCKETSELECTOR_H__
-#define UMSOCKETSELECTOR_H__
+#pragma once
 
-#ifdef _MSC_VER
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <stdio.h>
-#include <stdint.h>
-typedef uint32_t in_addr_t;
-#else
 #include <netinet/in.h>
-#endif
 #include <list>
 #include <map>
 #include <sstream>
@@ -333,5 +321,3 @@ class UmIPSocketConns
 };
 
 }  // namespace primitiveprocessor
-
-#endif

@@ -23,6 +23,7 @@
 #include "mysql.h"
 #include "sp_head.h"
 #include "sql_cursor.h"
+#include "sp_instr.h"                       // class sp_instr, ...
 #include "sp_rcontext.h"
 #include "sp_pcontext.h"
 #include "sql_select.h"                     // create_virtual_tmp_table
@@ -62,11 +63,11 @@ const LEX_CSTRING *Sp_rcontext_handler_package_body::get_name_prefix() const
 ///////////////////////////////////////////////////////////////////////////
 
 
-sp_rcontext::sp_rcontext(const sp_head *owner,
+sp_rcontext::sp_rcontext(sp_head *owner,
                          const sp_pcontext *root_parsing_ctx,
                          Field *return_value_fld,
                          bool in_sub_stmt)
-  :end_partial_result_set(false),
+  :callers_arena(nullptr), end_partial_result_set(false),
    pause_state(false), quit_func(false), instr_ptr(0),
    m_sp(owner),
    m_root_parsing_ctx(root_parsing_ctx),
@@ -90,7 +91,7 @@ sp_rcontext::~sp_rcontext()
 
 
 sp_rcontext *sp_rcontext::create(THD *thd,
-                                 const sp_head *owner,
+                                 sp_head *owner,
                                  const sp_pcontext *root_parsing_ctx,
                                  Field *return_value_fld,
                                  Row_definition_list &field_def_lst)
@@ -225,7 +226,8 @@ check_column_grant_for_type_ref(THD *thd, TABLE_LIST *table_list,
 /**
   This method implementation is very close to fill_schema_table_by_open().
 */
-bool Qualified_column_ident::resolve_type_ref(THD *thd, Column_definition *def)
+bool Qualified_column_ident::resolve_type_ref(THD *thd,
+                                              Column_definition *def) const
 {
   Open_tables_backup open_tables_state_backup;
   thd->reset_n_backup_open_tables_state(&open_tables_state_backup);
@@ -243,7 +245,7 @@ bool Qualified_column_ident::resolve_type_ref(THD *thd, Column_definition *def)
   thd->temporary_tables= open_tables_state_backup.temporary_tables;
 
   if ((table_list=
-         lex.first_select_lex()->add_table_to_list(thd, this, NULL, 0,
+         lex.first_select_lex()->add_table_to_list(thd, (Table_ident*)this, NULL, 0,
                                                    TL_READ_NO_INSERT,
                                                    MDL_SHARED_READ)) &&
       !check_table_access(thd, SELECT_ACL, table_list, TRUE, UINT_MAX, FALSE) &&

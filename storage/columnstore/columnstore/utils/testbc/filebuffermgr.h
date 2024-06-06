@@ -22,8 +22,7 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef FILEBUFFERMGR_H
-#define FILEBUFFERMGR_H
+#pragma once
 #include <pthread.h>
 #include "blocksize.h"
 #include "filebuffer.h"
@@ -196,4 +195,3 @@ class FileBufferMgr
   void depleteCache();
 };
 }  // namespace dbbc
-#endif

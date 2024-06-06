@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef COMMANDPACKAGEPROCESSOR_H
-#define COMMANDPACKAGEPROCESSOR_H
+#pragma once
 #include <string>
 #include <vector>
 #include <set>
@@ -34,11 +33,7 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
 
-#if defined(_MSC_VER) && defined(DMLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace dmlpackageprocessor
 {
@@ -72,5 +67,3 @@ class CommandPackageProcessor : public DMLPackageProcessor
 }  // namespace dmlpackageprocessor
 
 #undef EXPORT
-
-#endif  // COMMANDPACKAGEPROCESSOR_H

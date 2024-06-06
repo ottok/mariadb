@@ -259,7 +259,7 @@ static inline bool read_str(const uchar **buf, const uchar *buf_end,
   Transforms a string into "" or its expression in X'HHHH' form.
 */
 
-char *str_to_hex(char *to, const char *from, size_t len)
+char *str_to_hex(char *to, const uchar *from, size_t len)
 {
   if (len)
   {
@@ -718,8 +718,10 @@ const char* Log_event::get_type_str()
 
 Log_event::Log_event(const uchar *buf,
                      const Format_description_log_event* description_event)
-  :temp_buf(0), exec_time(0), cache_type(Log_event::EVENT_INVALID_CACHE),
-    checksum_alg(BINLOG_CHECKSUM_ALG_UNDEF)
+  :temp_buf(0), exec_time(0), cache_type(Log_event::EVENT_INVALID_CACHE)
+#ifndef MYSQL_CLIENT
+    , slave_exec_mode(SLAVE_EXEC_MODE_STRICT)
+#endif
 {
 #ifndef MYSQL_CLIENT
   thd= 0;
@@ -728,40 +730,7 @@ Log_event::Log_event(const uchar *buf,
   when_sec_part= ~0UL;
   server_id= uint4korr(buf + SERVER_ID_OFFSET);
   data_written= uint4korr(buf + EVENT_LEN_OFFSET);
-  if (description_event->binlog_version==1)
-  {
-    log_pos= 0;
-    flags= 0;
-    return;
-  }
-  /* 4.0 or newer */
   log_pos= uint4korr(buf + LOG_POS_OFFSET);
-  /*
-    If the log is 4.0 (so here it can only be a 4.0 relay log read by
-    the SQL thread or a 4.0 master binlog read by the I/O thread),
-    log_pos is the beginning of the event: we transform it into the end
-    of the event, which is more useful.
-    But how do you know that the log is 4.0: you know it if
-    description_event is version 3 *and* you are not reading a
-    Format_desc (remember that mysqlbinlog starts by assuming that 5.0
-    logs are in 4.0 format, until it finds a Format_desc).
-  */
-  if (description_event->binlog_version==3 &&
-      (uchar)buf[EVENT_TYPE_OFFSET]<FORMAT_DESCRIPTION_EVENT && log_pos)
-  {
-      /*
-        If log_pos=0, don't change it. log_pos==0 is a marker to mean
-        "don't change rli->group_master_log_pos" (see
-        inc_group_relay_log_pos()). As it is unreal log_pos, adding the
-        event len's is nonsense. For example, a fake Rotate event should
-        not have its log_pos (which is 0) changed or it will modify
-        Exec_master_log_pos in SHOW SLAVE STATUS, displaying a nonsense
-        value of (a non-zero offset which does not exist in the master's
-        binlog, so which will cause problems if the user uses this value
-        in CHANGE MASTER).
-      */
-    log_pos+= data_written; /* purecov: inspected */
-  }
   DBUG_PRINT("info", ("log_pos: %llu", log_pos));
 
   flags= uint2korr(buf + FLAGS_OFFSET);
@@ -794,17 +763,13 @@ Log_event::Log_event(const uchar *buf,
 
 int Log_event::read_log_event(IO_CACHE* file, String* packet,
                               const Format_description_log_event *fdle,
-                              enum enum_binlog_checksum_alg checksum_alg_arg)
+                              enum_binlog_checksum_alg checksum_alg_arg,
+                              size_t max_allowed_packet)
 {
   ulong data_len;
   char buf[LOG_EVENT_MINIMAL_HEADER_LEN];
   uchar ev_offset= packet->length();
-#if !defined(MYSQL_CLIENT)
-  THD *thd=current_thd;
-  ulong max_allowed_packet= thd ? thd->slave_thread ? slave_max_allowed_packet
-                                                    : thd->variables.max_allowed_packet
-                                : ~(uint)0;
-#endif
+
   DBUG_ENTER("Log_event::read_log_event(IO_CACHE*,String*...)");
 
   if (my_b_read(file, (uchar*) buf, sizeof(buf)))
@@ -871,7 +836,7 @@ int Log_event::read_log_event(IO_CACHE* file, String* packet,
       DBUG_RETURN(LOG_READ_MEM);
     memcpy(newpkt, packet->ptr(), ev_offset);
 
-    uint dstlen;
+    uint dstlen= (uint) sz - ev_offset - 4;
     uchar *src= (uchar*)packet->ptr() + ev_offset;
     uchar *dst= (uchar*)newpkt + ev_offset;
     memcpy(src + EVENT_LEN_OFFSET, src, 4);
@@ -915,8 +880,8 @@ int Log_event::read_log_event(IO_CACHE* file, String* packet,
 
 Log_event* Log_event::read_log_event(IO_CACHE* file,
                                      const Format_description_log_event *fdle,
-                                     my_bool crc_check,
-                                     my_bool print_errors)
+                                     my_bool crc_check, my_bool print_errors,
+                                     size_t max_allowed_packet)
 {
   DBUG_ENTER("Log_event::read_log_event(IO_CACHE*,Format_description_log_event*...)");
   DBUG_ASSERT(fdle != 0);
@@ -924,7 +889,8 @@ Log_event* Log_event::read_log_event(IO_CACHE* file,
   const char *error= 0;
   Log_event *res= 0;
 
-  switch (read_log_event(file, &event, fdle, BINLOG_CHECKSUM_ALG_OFF))
+  switch (read_log_event(file, &event, fdle, BINLOG_CHECKSUM_ALG_OFF,
+                         max_allowed_packet))
   {
     case 0:
       break;
@@ -987,7 +953,7 @@ err:
       DBUG_RETURN(res);
 #endif
 
-    if (event.length() >= OLD_HEADER_LEN)
+    if (event.length() >= LOG_EVENT_MINIMAL_HEADER_LEN)
       sql_print_error("Error in Log_event::read_log_event(): '%s',"
                       " data_len: %lu, event_type: %u", error,
                       (ulong) uint4korr(&event[EVENT_LEN_OFFSET]),
@@ -1011,7 +977,7 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
                                      my_bool print_errors)
 {
   Log_event* ev;
-  enum enum_binlog_checksum_alg alg;
+  enum_binlog_checksum_alg alg;
   DBUG_ENTER("Log_event::read_log_event(char*,...)");
   DBUG_ASSERT(fdle != 0);
   DBUG_PRINT("info", ("binlog_version: %d", fdle->binlog_version));
@@ -1030,7 +996,8 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
   uint event_type= buf[EVENT_TYPE_OFFSET];
   // all following START events in the current file are without checksum
   if (event_type == START_EVENT_V3)
-    (const_cast< Format_description_log_event *>(fdle))->checksum_alg= BINLOG_CHECKSUM_ALG_OFF;
+    (const_cast< Format_description_log_event *>(fdle))->used_checksum_alg=
+      BINLOG_CHECKSUM_ALG_OFF;
   /*
     CRC verification by SQL and Show-Binlog-Events master side.
     The caller has to provide @fdle->checksum_alg to
@@ -1051,7 +1018,7 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
     Notice, a pre-checksum FD version forces alg := BINLOG_CHECKSUM_ALG_UNDEF.
   */
   alg= (event_type != FORMAT_DESCRIPTION_EVENT) ?
-    fdle->checksum_alg : get_checksum_alg(buf, event_len);
+    fdle->used_checksum_alg : get_checksum_alg(buf, event_len);
   // Emulate the corruption during reading an event
   DBUG_EXECUTE_IF("corrupt_read_log_event_char",
     if (event_type != FORMAT_DESCRIPTION_EVENT)
@@ -1142,12 +1109,6 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
       ev= new Query_compressed_log_event(buf, event_len, fdle,
                                           QUERY_COMPRESSED_EVENT);
       break;
-    case LOAD_EVENT:
-      ev= new Load_log_event(buf, event_len, fdle);
-      break;
-    case NEW_LOAD_EVENT:
-      ev= new Load_log_event(buf, event_len, fdle);
-      break;
     case ROTATE_EVENT:
       ev= new Rotate_log_event(buf, event_len, fdle);
       break;
@@ -1160,20 +1121,11 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
     case GTID_LIST_EVENT:
       ev= new Gtid_list_log_event(buf, event_len, fdle);
       break;
-    case CREATE_FILE_EVENT:
-      ev= new Create_file_log_event(buf, event_len, fdle);
-      break;
     case APPEND_BLOCK_EVENT:
       ev= new Append_block_log_event(buf, event_len, fdle);
       break;
     case DELETE_FILE_EVENT:
       ev= new Delete_file_log_event(buf, event_len, fdle);
-      break;
-    case EXEC_LOAD_EVENT:
-      ev= new Execute_load_log_event(buf, event_len, fdle);
-      break;
-    case START_EVENT_V3: /* this is sent only by MySQL <=4.x */
-      ev= new Start_log_event_v3(buf, event_len, fdle);
       break;
     case STOP_EVENT:
       ev= new Stop_log_event(buf, fdle);
@@ -1197,15 +1149,6 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
       ev= new Format_description_log_event(buf, event_len, fdle);
       break;
 #if defined(HAVE_REPLICATION) 
-    case PRE_GA_WRITE_ROWS_EVENT:
-      ev= new Write_rows_log_event_old(buf, event_len, fdle);
-      break;
-    case PRE_GA_UPDATE_ROWS_EVENT:
-      ev= new Update_rows_log_event_old(buf, event_len, fdle);
-      break;
-    case PRE_GA_DELETE_ROWS_EVENT:
-      ev= new Delete_rows_log_event_old(buf, event_len, fdle);
-      break;
     case WRITE_ROWS_EVENT_V1:
     case WRITE_ROWS_EVENT:
       ev= new Write_rows_log_event(buf, event_len, fdle);
@@ -1261,6 +1204,14 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
     case START_ENCRYPTION_EVENT:
       ev= new Start_encryption_log_event(buf, event_len, fdle);
       break;
+    case PRE_GA_WRITE_ROWS_EVENT:
+    case PRE_GA_UPDATE_ROWS_EVENT:
+    case PRE_GA_DELETE_ROWS_EVENT:
+    case START_EVENT_V3: /* this is sent only by MySQL <=4.x */
+    case CREATE_FILE_EVENT:
+    case EXEC_LOAD_EVENT:
+    case LOAD_EVENT:
+    case NEW_LOAD_EVENT:
     default:
       DBUG_PRINT("error",("Unknown event code: %d",
                           (uchar) buf[EVENT_TYPE_OFFSET]));
@@ -1272,11 +1223,10 @@ exit:
 
   if (ev)
   {
-    ev->checksum_alg= alg;
 #ifdef MYSQL_CLIENT
-    if (ev->checksum_alg != BINLOG_CHECKSUM_ALG_OFF &&
-        ev->checksum_alg != BINLOG_CHECKSUM_ALG_UNDEF)
-      ev->crc= uint4korr(buf + (event_len));
+    ev->read_checksum_alg= alg;
+    if (alg != BINLOG_CHECKSUM_ALG_OFF && alg != BINLOG_CHECKSUM_ALG_UNDEF)
+      ev->read_checksum_value= uint4korr(buf + (event_len));
 #endif
   }
 
@@ -1393,6 +1343,7 @@ code_name(int code)
   case Q_HRNOW: return "Q_HRNOW";
   case Q_XID: return "XID";
   case Q_GTID_FLAGS3: return "Q_GTID_FLAGS3";
+  case Q_CHARACTER_SET_COLLATIONS: return "Q_CHARACTER_SET_COLLATIONS";
   }
   sprintf(buf, "CODE#%d", code);
   return buf;
@@ -1438,14 +1389,14 @@ Query_log_event::Query_log_event(const uchar *buf, uint event_len,
                                  Log_event_type event_type)
   :Log_event(buf, description_event), data_buf(0), query(NullS),
    db(NullS), catalog_len(0), status_vars_len(0),
-   flags2_inited(0), sql_mode_inited(0), charset_inited(0), flags2(0),
+   flags2_inited(0), sql_mode_inited(0), charset_inited(0),
+   character_set_collations({0,0}), flags2(0),
    auto_increment_increment(1), auto_increment_offset(1),
    time_zone_len(0), lc_time_names_number(0), charset_database_number(0),
-   table_map_for_update(0), xid(0), master_data_written(0), gtid_flags_extra(0),
+   table_map_for_update(0), xid(0), gtid_flags_extra(0),
    sa_seq_no(0)
 {
   ulong data_len;
-  uint32 tmp;
   uint8 common_header_len, post_header_len;
   Log_event::Byte *start;
   const Log_event::Byte *end;
@@ -1474,45 +1425,23 @@ Query_log_event::Query_log_event(const uchar *buf, uint event_len,
   db_len = (uchar)buf[Q_DB_LEN_OFFSET]; // TODO: add a check of all *_len vars
   error_code = uint2korr(buf + Q_ERR_CODE_OFFSET);
 
+  status_vars_len= uint2korr(buf + Q_STATUS_VARS_LEN_OFFSET);
   /*
-    5.0 format starts here.
-    Depending on the format, we may or not have affected/warnings etc
-    The remnent post-header to be parsed has length:
+    Check if status variable length is corrupt and will lead to very
+    wrong data. We could be even more strict and require data_len to
+    be even bigger, but this will suffice to catch most corruption
+    errors that can lead to a crash.
   */
-  tmp= post_header_len - QUERY_HEADER_MINIMAL_LEN;
-  if (tmp)
+  if (status_vars_len > MY_MIN(data_len, MAX_SIZE_LOG_EVENT_STATUS))
   {
-    status_vars_len= uint2korr(buf + Q_STATUS_VARS_LEN_OFFSET);
-    /*
-      Check if status variable length is corrupt and will lead to very
-      wrong data. We could be even more strict and require data_len to
-      be even bigger, but this will suffice to catch most corruption
-      errors that can lead to a crash.
-    */
-    if (status_vars_len > MY_MIN(data_len, MAX_SIZE_LOG_EVENT_STATUS))
-    {
-      DBUG_PRINT("info", ("status_vars_len (%u) > data_len (%lu); query= 0",
-                          status_vars_len, data_len));
-      query= 0;
-      DBUG_VOID_RETURN;
-    }
-    data_len-= status_vars_len;
-    DBUG_PRINT("info", ("Query_log_event has status_vars_len: %u",
-                        (uint) status_vars_len));
-    tmp-= 2;
-  } 
-  else
-  {
-    /*
-      server version < 5.0 / binlog_version < 4 master's event is 
-      relay-logged with storing the original size of the event in
-      Q_MASTER_DATA_WRITTEN_CODE status variable.
-      The size is to be restored at reading Q_MASTER_DATA_WRITTEN_CODE-marked
-      event from the relay log.
-    */
-    DBUG_ASSERT(description_event->binlog_version < 4);
-    master_data_written= (uint32)data_written;
+    DBUG_PRINT("info", ("status_vars_len (%u) > data_len (%lu); query= 0",
+                        status_vars_len, data_len));
+    query= 0;
+    DBUG_VOID_RETURN;
   }
+  data_len-= status_vars_len;
+  DBUG_PRINT("info", ("Query_log_event has status_vars_len: %u",
+                      (uint) status_vars_len));
   /*
     We have parsed everything we know in the post header for QUERY_EVENT,
     the rest of post header is either comes from older version MySQL or
@@ -1566,6 +1495,17 @@ Query_log_event::Query_log_event(const uchar *buf, uint event_len,
       pos+= 6;
       break;
     }
+    case Q_CHARACTER_SET_COLLATIONS:
+    {
+      const uchar *pos0= pos;
+      CHECK_SPACE(pos, end, 1);
+      uint16 count= *pos++;
+      CHECK_SPACE(pos, end, count * 4);
+      pos+= count * 4;
+      character_set_collations= Lex_cstring((const char *) pos0,
+                                            (const char *) pos);
+      break;
+    }
     case Q_TIME_ZONE_CODE:
     {
       if (get_str_len_and_pointer(&pos, &time_zone_str, &time_zone_len, end))
@@ -1599,9 +1539,9 @@ Query_log_event::Query_log_event(const uchar *buf, uint event_len,
       table_map_for_update= uint8korr(pos);
       pos+= 8;
       break;
-    case Q_MASTER_DATA_WRITTEN_CODE:
+    case Q_MASTER_DATA_WRITTEN_CODE: // impossible
       CHECK_SPACE(pos, end, 4);
-      data_written= master_data_written= uint4korr(pos);
+      data_written= uint4korr(pos);
       pos+= 4;
       break;
     case Q_INVOKER:
@@ -1853,7 +1793,7 @@ Query_compressed_log_event::Query_compressed_log_event(const uchar *buf,
 */
 int
 Query_log_event::dummy_event(String *packet, ulong ev_offset,
-                             enum enum_binlog_checksum_alg checksum_alg)
+                             enum_binlog_checksum_alg checksum_alg)
 {
   uchar *p= (uchar *)packet->ptr() + ev_offset;
   size_t data_len= packet->length() - ev_offset;
@@ -1945,7 +1885,7 @@ Query_log_event::dummy_event(String *packet, ulong ev_offset,
 */
 int
 Query_log_event::begin_event(String *packet, ulong ev_offset,
-                             enum enum_binlog_checksum_alg checksum_alg)
+                             enum_binlog_checksum_alg checksum_alg)
 {
   uchar *p= (uchar *)packet->ptr() + ev_offset;
   uchar *q= p + LOG_EVENT_HEADER_LEN;
@@ -2005,32 +1945,6 @@ Query_log_event::begin_event(String *packet, ulong ev_offset,
 }
 
 
-/**************************************************************************
-	Start_log_event_v3 methods
-**************************************************************************/
-
-
-Start_log_event_v3::Start_log_event_v3(const uchar *buf, uint event_len,
-                                       const Format_description_log_event
-                                       *description_event)
-  :Log_event(buf, description_event), binlog_version(BINLOG_VERSION)
-{
-  if (event_len < LOG_EVENT_MINIMAL_HEADER_LEN + ST_COMMON_HEADER_LEN_OFFSET)
-  {
-    server_version[0]= 0;
-    return;
-  }
-  buf+= LOG_EVENT_MINIMAL_HEADER_LEN;
-  binlog_version= uint2korr(buf+ST_BINLOG_VER_OFFSET);
-  memcpy(server_version, buf+ST_SERVER_VER_OFFSET,
-	 ST_SERVER_VER_LEN);
-  // prevent overrun if log is corrupted on disk
-  server_version[ST_SERVER_VER_LEN-1]= 0;
-  created= uint4korr(buf+ST_CREATED_OFFSET);
-  dont_set_created= 1;
-}
-
-
 /***************************************************************************
        Format_description_log_event methods
 ****************************************************************************/
@@ -2053,11 +1967,13 @@ Start_log_event_v3::Start_log_event_v3(const uchar *buf, uint event_len,
 */
 
 Format_description_log_event::
-Format_description_log_event(uint8 binlog_ver, const char* server_ver)
-  :Start_log_event_v3(), event_type_permutation(0)
+Format_description_log_event(uint8 binlog_ver, const char* server_ver,
+                             enum_binlog_checksum_alg checksum_alg)
+  :Log_event(), created(0), binlog_version(binlog_ver),
+   dont_set_created(0), event_type_permutation(0),
+   used_checksum_alg(checksum_alg)
 {
-  binlog_version= binlog_ver;
-  switch (binlog_ver) {
+  switch (binlog_version) {
   case 4: /* MySQL 5.0 */
     memcpy(server_version, ::server_version, ST_SERVER_VER_LEN);
     DBUG_EXECUTE_IF("pretend_version_50034_in_binlog",
@@ -2175,51 +2091,12 @@ Format_description_log_event(uint8 binlog_ver, const char* server_ver)
 
   case 1: /* 3.23 */
   case 3: /* 4.0.x x>=2 */
-    /*
-      We build an artificial (i.e. not sent by the master) event, which
-      describes what those old master versions send.
-    */
-    if (binlog_ver==1)
-      strmov(server_version, server_ver ? server_ver : "3.23");
-    else
-      strmov(server_version, server_ver ? server_ver : "4.0");
-    common_header_len= binlog_ver==1 ? OLD_HEADER_LEN :
-      LOG_EVENT_MINIMAL_HEADER_LEN;
-    /*
-      The first new event in binlog version 4 is Format_desc. So any event type
-      after that does not exist in older versions. We use the events known by
-      version 3, even if version 1 had only a subset of them (this is not a
-      problem: it uses a few bytes for nothing but unifies code; it does not
-      make the slave detect less corruptions).
-    */
-    number_of_event_types= FORMAT_DESCRIPTION_EVENT - 1;
-    post_header_len=(uint8*) my_malloc(PSI_INSTRUMENT_ME,
-                                  number_of_event_types*sizeof(uint8), MYF(0));
-    if (post_header_len)
-    {
-      post_header_len[START_EVENT_V3-1]= START_V3_HEADER_LEN;
-      post_header_len[QUERY_EVENT-1]= QUERY_HEADER_MINIMAL_LEN;
-      post_header_len[STOP_EVENT-1]= 0;
-      post_header_len[ROTATE_EVENT-1]= (binlog_ver==1) ? 0 : ROTATE_HEADER_LEN;
-      post_header_len[INTVAR_EVENT-1]= 0;
-      post_header_len[LOAD_EVENT-1]= LOAD_HEADER_LEN;
-      post_header_len[SLAVE_EVENT-1]= 0;
-      post_header_len[CREATE_FILE_EVENT-1]= CREATE_FILE_HEADER_LEN;
-      post_header_len[APPEND_BLOCK_EVENT-1]= APPEND_BLOCK_HEADER_LEN;
-      post_header_len[EXEC_LOAD_EVENT-1]= EXEC_LOAD_HEADER_LEN;
-      post_header_len[DELETE_FILE_EVENT-1]= DELETE_FILE_HEADER_LEN;
-      post_header_len[NEW_LOAD_EVENT-1]= post_header_len[LOAD_EVENT-1];
-      post_header_len[RAND_EVENT-1]= 0;
-      post_header_len[USER_VAR_EVENT-1]= 0;
-    }
-    break;
   default: /* Includes binlog version 2 i.e. 4.0.x x<=1 */
     post_header_len= 0; /* will make is_valid() fail */
     break;
   }
   calc_server_version_split();
   deduct_options_written_to_bin_log();
-  checksum_alg= BINLOG_CHECKSUM_ALG_UNDEF;
   reset_crypto();
 }
 
@@ -2246,14 +2123,27 @@ Format_description_log_event::
 Format_description_log_event(const uchar *buf, uint event_len,
                              const Format_description_log_event*
                              description_event)
-  :Start_log_event_v3(buf, event_len, description_event),
+  :Log_event(buf, description_event), binlog_version(BINLOG_VERSION),
    common_header_len(0), post_header_len(NULL), event_type_permutation(0)
 {
   DBUG_ENTER("Format_description_log_event::Format_description_log_event(char*,...)");
-  if (!Start_log_event_v3::is_valid())
-    DBUG_VOID_RETURN; /* sanity check */
+  used_checksum_alg= BINLOG_CHECKSUM_ALG_UNDEF;
+  if (event_len < LOG_EVENT_MINIMAL_HEADER_LEN + ST_COMMON_HEADER_LEN_OFFSET)
+  {
+    server_version[0]= 0;
+    DBUG_VOID_RETURN;
+  }
   buf+= LOG_EVENT_MINIMAL_HEADER_LEN;
-  if ((common_header_len=buf[ST_COMMON_HEADER_LEN_OFFSET]) < OLD_HEADER_LEN)
+  binlog_version= uint2korr(buf+ST_BINLOG_VER_OFFSET);
+  memcpy(server_version, buf+ST_SERVER_VER_OFFSET, ST_SERVER_VER_LEN);
+  // prevent overrun if log is corrupted on disk
+  server_version[ST_SERVER_VER_LEN-1]= 0;
+  created= uint4korr(buf+ST_CREATED_OFFSET);
+  dont_set_created= 1;
+
+  if (server_version[0] == 0)
+    DBUG_VOID_RETURN; /* sanity check */
+  if ((common_header_len=buf[ST_COMMON_HEADER_LEN_OFFSET]) < LOG_EVENT_MINIMAL_HEADER_LEN)
     DBUG_VOID_RETURN; /* sanity check */
   number_of_event_types=
     event_len - (LOG_EVENT_MINIMAL_HEADER_LEN + ST_COMMON_HEADER_LEN_OFFSET + 1);
@@ -2271,11 +2161,11 @@ Format_description_log_event(const uchar *buf, uint event_len,
   {
     /* the last bytes are the checksum alg desc and value (or value's room) */
     number_of_event_types -= BINLOG_CHECKSUM_ALG_DESC_LEN;
-    checksum_alg= (enum_binlog_checksum_alg)post_header_len[number_of_event_types];
+    used_checksum_alg= (enum_binlog_checksum_alg)post_header_len[number_of_event_types];
   }
   else
   {
-    checksum_alg= BINLOG_CHECKSUM_ALG_UNDEF;
+    used_checksum_alg= BINLOG_CHECKSUM_ALG_OFF;
   }
   deduct_options_written_to_bin_log();
   reset_crypto();
@@ -2398,9 +2288,9 @@ Format_description_log_event::is_version_before_checksum(const master_version_sp
             checksum-unaware (effectively no checksum) and the actuall
             [1-254] range alg descriptor.
 */
-enum enum_binlog_checksum_alg get_checksum_alg(const uchar *buf, ulong len)
+enum_binlog_checksum_alg get_checksum_alg(const uchar *buf, ulong len)
 {
-  enum enum_binlog_checksum_alg ret;
+  enum_binlog_checksum_alg ret;
   char version[ST_SERVER_VER_LEN];
 
   DBUG_ENTER("get_checksum_alg");
@@ -2440,120 +2330,6 @@ Start_encryption_log_event(const uchar *buf, uint event_len,
     crypto_scheme= ~0; // invalid
 }
 
-
-/**************************************************************************
-        Load_log_event methods
-   General note about Load_log_event: the binlogging of LOAD DATA INFILE is
-   going to be changed in 5.0 (or maybe in 5.1; not decided yet).
-   However, the 5.0 slave could still have to read such events (from a 4.x
-   master), convert them (which just means maybe expand the header, when 5.0
-   servers have a UID in events) (remember that whatever is after the header
-   will be like in 4.x, as this event's format is not modified in 5.0 as we
-   will use new types of events to log the new LOAD DATA INFILE features).
-   To be able to read/convert, we just need to not assume that the common
-   header is of length LOG_EVENT_HEADER_LEN (we must use the description
-   event).
-   Note that I (Guilhem) manually tested replication of a big LOAD DATA INFILE
-   between 3.23 and 5.0, and between 4.0 and 5.0, and it works fine (and the
-   positions displayed in SHOW SLAVE STATUS then are fine too).
-**************************************************************************/
-
-
-/**
-  @note
-    The caller must do buf[event_len]= 0 before he starts using the
-    constructed event.
-*/
-
-Load_log_event::Load_log_event(const uchar *buf, uint event_len,
-                               const Format_description_log_event
-                               *description_event)
-  :Log_event(buf, description_event), num_fields(0), fields(0),
-   field_lens(0),field_block_len(0),
-   table_name(0), db(0), fname(0), local_fname(FALSE),
-   /*
-     Load_log_event which comes from the binary log does not contain
-     information about the type of insert which was used on the master.
-     Assume that it was an ordinary, non-concurrent LOAD DATA.
-    */
-   is_concurrent(FALSE)
-{
-  DBUG_ENTER("Load_log_event");
-  /*
-    I (Guilhem) manually tested replication of LOAD DATA INFILE for 3.23->5.0,
-    4.0->5.0 and 5.0->5.0 and it works.
-  */
-  if (event_len)
-    copy_log_event(buf, event_len,
-                   (((uchar)buf[EVENT_TYPE_OFFSET] == LOAD_EVENT) ?
-                   LOAD_HEADER_LEN + 
-                    description_event->common_header_len :
-                    LOAD_HEADER_LEN + LOG_EVENT_HEADER_LEN),
-                   description_event);
-  /* otherwise it's a derived class, will call copy_log_event() itself */
-  DBUG_VOID_RETURN;
-}
-
-
-/*
-  Load_log_event::copy_log_event()
-*/
-
-int Load_log_event::copy_log_event(const uchar *buf, ulong event_len,
-                                   int body_offset,
-                                   const Format_description_log_event
-                                   *description_event)
-{
-  DBUG_ENTER("Load_log_event::copy_log_event");
-  uint data_len;
-  if ((int) event_len <= body_offset)
-    DBUG_RETURN(1);
-  const uchar *buf_end= buf + event_len;
-  /* this is the beginning of the post-header */
-  const uchar *data_head= buf + description_event->common_header_len;
-  thread_id= slave_proxy_id= uint4korr(data_head + L_THREAD_ID_OFFSET);
-  exec_time= uint4korr(data_head + L_EXEC_TIME_OFFSET);
-  skip_lines= uint4korr(data_head + L_SKIP_LINES_OFFSET);
-  table_name_len= (uint)data_head[L_TBL_LEN_OFFSET];
-  db_len= (uint)data_head[L_DB_LEN_OFFSET];
-  num_fields= uint4korr(data_head + L_NUM_FIELDS_OFFSET);
-
-  /*
-    Sql_ex.init() on success returns the pointer to the first byte after
-    the sql_ex structure, which is the start of field lengths array.
-  */
-  if (!(field_lens= (uchar*) sql_ex.init(buf + body_offset, buf_end,
-                                         buf[EVENT_TYPE_OFFSET] != LOAD_EVENT)))
-    DBUG_RETURN(1);
-
-  data_len= event_len - body_offset;
-  if (num_fields > data_len) // simple sanity check against corruption
-    DBUG_RETURN(1);
-  for (uint i= 0; i < num_fields; i++)
-    field_block_len+= (uint)field_lens[i] + 1;
-
-  fields= (char*) field_lens + num_fields;
-  table_name= fields + field_block_len;
-  if (strlen(table_name) > NAME_LEN)
-    goto err;
-
-  db= table_name + table_name_len + 1;
-  DBUG_EXECUTE_IF("simulate_invalid_address", db_len= data_len;);
-  fname= db + db_len + 1;
-  if ((db_len > data_len) || (fname > (char*) buf_end))
-    goto err;
-  fname_len= (uint) strlen(fname);
-  if ((fname_len > data_len) || (fname + fname_len > (char*) buf_end))
-    goto err;
-  // null termination is accomplished by the caller doing buf[event_len]=0
-
-  DBUG_RETURN(0);
-
-err:
-  // Invalid event.
-  table_name= 0;
-  DBUG_RETURN(1);
-}
 
 
 /**************************************************************************
@@ -2796,7 +2572,7 @@ Gtid_list_log_event::Gtid_list_log_event(const uchar *buf, uint event_len,
 */
 bool
 Gtid_list_log_event::peek(const char *event_start, size_t event_len,
-                          enum enum_binlog_checksum_alg checksum_alg,
+                          enum_binlog_checksum_alg checksum_alg,
                           rpl_gtid **out_gtid_list, uint32 *out_list_len,
                           const Format_description_log_event *fdev)
 {
@@ -3080,68 +2856,6 @@ err:
 
 
 /**************************************************************************
-	Create_file_log_event methods
-**************************************************************************/
-
-/*
-  Create_file_log_event ctor
-*/
-
-Create_file_log_event::
-Create_file_log_event(const uchar *buf, uint len,
-                      const Format_description_log_event* description_event)
-  :Load_log_event(buf,0,description_event),fake_base(0),block(0),
-   inited_from_old(0)
-{
-  DBUG_ENTER("Create_file_log_event::Create_file_log_event(char*,...)");
-  uint block_offset;
-  uint header_len= description_event->common_header_len;
-  uint8 load_header_len= description_event->post_header_len[LOAD_EVENT-1];
-  uint8 create_file_header_len= description_event->post_header_len[CREATE_FILE_EVENT-1];
-  if (!(event_buf= (uchar*) my_memdup(PSI_INSTRUMENT_ME, buf, len,
-                                      MYF(MY_WME))) ||
-      copy_log_event(event_buf,len,
-                     (((uchar)buf[EVENT_TYPE_OFFSET] == LOAD_EVENT) ?
-                      load_header_len + header_len :
-                      (fake_base ? (header_len+load_header_len) :
-                       (header_len+load_header_len) +
-                       create_file_header_len)),
-                     description_event))
-    DBUG_VOID_RETURN;
-  if (description_event->binlog_version!=1)
-  {
-    file_id= uint4korr(buf + 
-                       header_len +
-		       load_header_len + CF_FILE_ID_OFFSET);
-    /*
-      Note that it's ok to use get_data_size() below, because it is computed
-      with values we have already read from this event (because we called
-      copy_log_event()); we are not using slave's format info to decode
-      master's format, we are really using master's format info.
-      Anyway, both formats should be identical (except the common_header_len)
-      as these Load events are not changed between 4.0 and 5.0 (as logging of
-      LOAD DATA INFILE does not use Load_log_event in 5.0).
-
-      The + 1 is for \0 terminating fname  
-    */
-    block_offset= (description_event->common_header_len +
-                   Load_log_event::get_data_size() +
-                   create_file_header_len + 1);
-    if (len < block_offset)
-      DBUG_VOID_RETURN;
-    block= const_cast<uchar*>(buf) + block_offset;
-    block_len= len - block_offset;
-  }
-  else
-  {
-    sql_ex.force_new_format();
-    inited_from_old= 1;
-  }
-  DBUG_VOID_RETURN;
-}
-
-
-/**************************************************************************
 	Append_block_log_event methods
 **************************************************************************/
 
@@ -3186,27 +2900,6 @@ Delete_file_log_event(const uchar *buf, uint len,
   if (len < (uint)(common_header_len + delete_file_header_len))
     return;
   file_id= uint4korr(buf + common_header_len + DF_FILE_ID_OFFSET);
-}
-
-
-/**************************************************************************
-	Execute_load_log_event methods
-**************************************************************************/
-
-/*
-  Execute_load_log_event ctor
-*/
-
-Execute_load_log_event::
-Execute_load_log_event(const uchar *buf, uint len,
-                       const Format_description_log_event* description_event)
-  :Log_event(buf, description_event), file_id(0)
-{
-  uint8 common_header_len= description_event->common_header_len;
-  uint8 exec_load_header_len= description_event->post_header_len[EXEC_LOAD_EVENT-1];
-  if (len < (uint)(common_header_len+exec_load_header_len))
-    return;
-  file_id= uint4korr(buf + common_header_len + EL_FILE_ID_OFFSET);
 }
 
 
@@ -3332,22 +3025,19 @@ Rows_log_event::Rows_log_event(const uchar *buf, uint event_len,
 #if !defined(MYSQL_CLIENT) && defined(HAVE_REPLICATION)
     , m_curr_row(NULL), m_curr_row_end(NULL),
     m_key(NULL), m_key_info(NULL), m_key_nr(0),
-    master_had_triggers(0)
+    m_usable_key_parts(0), master_had_triggers(0)
 #endif
 {
   DBUG_ENTER("Rows_log_event::Rows_log_event(const char*,...)");
   uint8 const common_header_len= description_event->common_header_len;
   Log_event_type event_type= (Log_event_type)(uchar)buf[EVENT_TYPE_OFFSET];
   m_type= event_type;
-  m_cols_ai.bitmap= 0;
+  m_cols_ai.bitmap= 0; // Set to invalid, so it can be processed in is_valid().
 
   uint8 const post_header_len= description_event->post_header_len[event_type-1];
 
   if (event_len < (uint)(common_header_len + post_header_len))
-  {
-    m_cols.bitmap= 0;
     DBUG_VOID_RETURN;
-  }
 
   DBUG_PRINT("enter",("event_len: %u  common_header_len: %d  "
 		      "post_header_len: %d",
@@ -3451,8 +3141,6 @@ Rows_log_event::Rows_log_event(const uchar *buf, uint event_len,
   else
     DBUG_VOID_RETURN;
 
-  m_cols_ai.bitmap= m_cols.bitmap; /* See explanation in is_valid() */
-
   if (LOG_EVENT_IS_UPDATE_ROW(event_type))
   {
     DBUG_PRINT("debug", ("Reading from %p", ptr_after_width));
@@ -3469,7 +3157,21 @@ Rows_log_event::Rows_log_event(const uchar *buf, uint event_len,
       ptr_after_width+= (m_width + 7) / 8;
     }
     else
+    {
+      DBUG_ASSERT(m_cols_ai.bitmap == NULL);
       DBUG_VOID_RETURN;
+    }
+  }
+  else
+  {
+    m_cols_ai= m_cols; /* Safety */
+#ifdef DBUG_OFF
+    /*
+      m_cols_ai should only be usable for update events. Make sure nobody
+      successfully manipulates it in debug builds.
+    */
+    m_cols_ai.bitmap= (my_bitmap_map*)1;
+#endif
   }
 
   const uchar* const ptr_rows_data= (const uchar*) ptr_after_width;

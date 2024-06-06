@@ -27,8 +27,7 @@
  *      Author: bpaul
  */
 
-#ifndef WE_FILEREADTHREAD_H_
-#define WE_FILEREADTHREAD_H_
+#pragma once
 
 #include "we_cmdargs.h"
 #include "libmarias3/marias3.h"
@@ -171,4 +170,3 @@ class WEFileReadThread
 };
 
 } /* namespace WriteEngine */
-#endif /* WE_FILEREADTHREAD_H_ */

@@ -22,15 +22,11 @@
 #include <cassert>
 #include <sstream>
 #include <iomanip>
-#ifdef _MSC_VER
-#include <unordered_set>
-#else
 #include <tr1/unordered_set>
-#endif
 using namespace std;
 
 #include <boost/shared_ptr.hpp>
-#include <boost/shared_array.hpp>
+
 #include <boost/uuid/uuid_io.hpp>
 using namespace boost;
 
@@ -302,7 +298,6 @@ void TupleAnnexStep::join()
 
 uint32_t TupleAnnexStep::nextBand(messageqcpp::ByteStream& bs)
 {
-  RGData rgDataOut;
   bool more = false;
   uint32_t rowCount = 0;
 
@@ -310,18 +305,18 @@ uint32_t TupleAnnexStep::nextBand(messageqcpp::ByteStream& bs)
   {
     bs.restart();
 
-    more = fOutputDL->next(fOutputIterator, &rgDataOut);
+    more = fOutputDL->next(fOutputIterator, &fRgDataOut);
 
     if (more && !cancelled())
     {
-      fRowGroupDeliver.setData(&rgDataOut);
+      fRowGroupDeliver.setData(&fRgDataOut);
       fRowGroupDeliver.serializeRGData(bs);
       rowCount = fRowGroupDeliver.getRowCount();
     }
     else
     {
       while (more)
-        more = fOutputDL->next(fOutputIterator, &rgDataOut);
+        more = fOutputDL->next(fOutputIterator, &fRgDataOut);
 
       fEndOfResult = true;
     }
@@ -331,7 +326,7 @@ uint32_t TupleAnnexStep::nextBand(messageqcpp::ByteStream& bs)
     handleException(std::current_exception(), logging::ERR_IN_DELIVERY, logging::ERR_ALWAYS_CRITICAL,
                     "TupleAnnexStep::nextBand()");
     while (more)
-      more = fOutputDL->next(fOutputIterator, &rgDataOut);
+      more = fOutputDL->next(fOutputIterator, &fRgDataOut);
 
     fEndOfResult = true;
   }
@@ -339,8 +334,8 @@ uint32_t TupleAnnexStep::nextBand(messageqcpp::ByteStream& bs)
   if (fEndOfResult)
   {
     // send an empty / error band
-    rgDataOut.reinit(fRowGroupDeliver, 0);
-    fRowGroupDeliver.setData(&rgDataOut);
+    fRgDataOut.reinit(fRowGroupDeliver, 0);
+    fRowGroupDeliver.setData(&fRgDataOut);
     fRowGroupDeliver.resetRowGroup(0);
     fRowGroupDeliver.setStatus(status());
     fRowGroupDeliver.serializeRGData(bs);

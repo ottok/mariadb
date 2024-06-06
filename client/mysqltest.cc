@@ -33,7 +33,7 @@
   And many others
 */
 
-#define MTEST_VERSION "3.5"
+#define VER "3.5"
 
 #include "client_priv.h"
 #include <mysql_version.h>
@@ -290,6 +290,13 @@ DYNAMIC_ARRAY q_lines;
 
 #include "sslopt-vars.h"
 
+#if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
+static void set_ssl_opts(MYSQL *mysql, my_bool opt_use_ssl, char *opt_ssl_cipher)
+{
+  SET_SSL_OPTS(mysql);
+}
+#endif
+
 struct Parser
 {
   int read_lines,current_line;
@@ -362,7 +369,7 @@ enum enum_commands {
   Q_INC,		    Q_DEC,
   Q_SOURCE,	    Q_DISCONNECT,
   Q_LET,		    Q_ECHO,
-  Q_WHILE,	    Q_END_BLOCK,
+  Q_WHILE,	    Q_END_BLOCK, Q_BREAK,
   Q_SYSTEM,	    Q_RESULT,
   Q_REQUIRE,	    Q_SAVE_MASTER_POS,
   Q_SYNC_WITH_MASTER,
@@ -433,6 +440,7 @@ const char *command_names[]=
   "echo",
   "while",
   "end",
+  "break",
   "system",
   "result",
   "require",
@@ -4841,6 +4849,19 @@ void do_wait_for_slave_to_stop(struct st_command *c __attribute__((unused)))
   return;
 }
 
+static const char *get_col_value(MYSQL_RES *res, MYSQL_ROW row, const char *name)
+{
+  uint num_fields= mysql_num_fields(res);
+  MYSQL_FIELD *fields= mysql_fetch_fields(res);
+
+  for (uint i= 0; i < num_fields; i++)
+  {
+    if (strcmp(fields[i].name, name) == 0)
+      return row[i];
+  }
+  return "NULL";
+}
+
 
 void do_sync_with_master2(struct st_command *command, long offset,
                           const char *connection_name)
@@ -4848,7 +4869,7 @@ void do_sync_with_master2(struct st_command *command, long offset,
   MYSQL_RES *res;
   MYSQL_ROW row;
   MYSQL *mysql= cur_con->mysql;
-  char query_buf[FN_REFLEN+128];
+  char query_buf[FN_REFLEN+128], query_buf2[120];
   int timeout= opt_wait_for_pos_timeout;
 
   if (!master_pos.file[0])
@@ -4882,6 +4903,23 @@ void do_sync_with_master2(struct st_command *command, long offset,
     /* master_pos_wait returned NULL or < 0 */
     fprintf(stderr, "analyze: sync_with_master\n");
 
+    sprintf(query_buf2, "show slave \"%s\" status", connection_name);
+
+    if (!mysql_query(mysql, query_buf2))
+    {
+      if ((res= mysql_store_result(mysql)))
+      {
+        if ((row= mysql_fetch_row(res)))
+        {
+          fprintf(stderr, "Slave position:  file: %s  position: %s\n",
+                  get_col_value(res, row, "Relay_Master_Log_File"),
+                  get_col_value(res, row, "Read_Master_Log_Pos"));
+          fprintf(stderr, "Master position: file: %s  position: %lld\n",
+                  master_pos.file, (longlong) (master_pos.pos + offset));
+        }
+        mysql_free_result(res);
+      }
+    }
     if (!result_str)
     {
       /*
@@ -4890,10 +4928,9 @@ void do_sync_with_master2(struct st_command *command, long offset,
         information is not initialized, the arguments are
         incorrect, or an error has occurred
       */
-      die("%.*b failed: '%s' returned NULL "          \
+      die("%.*b failed: '%s' returned NULL "            \
           "indicating slave SQL thread failure",
           command->first_word_len, command->query, query_buf);
-
     }
 
     if (result == -1)
@@ -6057,7 +6094,7 @@ void do_connect(struct st_command *command)
   int read_timeout= 0;
   int write_timeout= 0;
   int connect_timeout= 0;
-  char *csname=0;
+  char *csname=0, *rauth __attribute__((unused))= 0;
   struct st_connection* con_slot;
   my_bool default_db;
 
@@ -6135,58 +6172,58 @@ void do_connect(struct st_command *command)
     while (*end && !my_isspace(charset_info, *end))
       end++;
     length= (size_t) (end - con_options);
-    if (length == 3 && !strncmp(con_options, "SSL", 3))
+    if (length == 3 && !strncmp(con_options, STRING_WITH_LEN("SSL")))
       con_ssl= USE_SSL_REQUIRED;
-    else if (length == 5 && !strncmp(con_options, "NOSSL", 5))
+    else if (length == 5 && !strncmp(con_options, STRING_WITH_LEN("NOSSL")))
       con_ssl= USE_SSL_FORBIDDEN;
     else if (!strncmp(con_options, "SSL-CIPHER=", 11))
     {
       con_ssl= USE_SSL_REQUIRED;
       ssl_cipher=con_options + 11;
     }
-    else if (length == 8 && !strncmp(con_options, "COMPRESS", 8))
+    else if (length == 8 && !strncmp(con_options, STRING_WITH_LEN("COMPRESS")))
       con_compress= 1;
-    else if (length == 3 && !strncmp(con_options, "TCP", 3))
+    else if (length == 3 && !strncmp(con_options, STRING_WITH_LEN("TCP")))
       protocol= MYSQL_PROTOCOL_TCP;
-    else if (length == 7 && !strncmp(con_options, "DEFAULT", 7))
+    else if (length == 7 && !strncmp(con_options, STRING_WITH_LEN("DEFAULT")))
       protocol= MYSQL_PROTOCOL_DEFAULT;
-    else if (length == 4 && !strncmp(con_options, "PIPE", 4))
+    else if (length == 4 && !strncmp(con_options, STRING_WITH_LEN("PIPE")))
     {
 #ifdef _WIN32
       protocol= MYSQL_PROTOCOL_PIPE;
 #endif
     }
-    else if (length == 6 && !strncmp(con_options, "SOCKET", 6))
+    else if (length == 6 && !strncmp(con_options, STRING_WITH_LEN("SOCKET")))
     {
 #ifndef _WIN32
       protocol= MYSQL_PROTOCOL_SOCKET;
 #endif
     }
-    else if (length == 6 && !strncmp(con_options, "MEMORY", 6))
+    else if (length == 6 && !strncmp(con_options, STRING_WITH_LEN("MEMORY")))
     {
 #ifdef _WIN32
       protocol= MYSQL_PROTOCOL_MEMORY;
 #endif
     }
-    else if (strncasecmp(con_options, "read_timeout=",
-                         sizeof("read_timeout=")-1) == 0)
+    else if (strncasecmp(con_options, STRING_WITH_LEN("read_timeout=")) == 0)
     {
       read_timeout= atoi(con_options + sizeof("read_timeout=")-1);
     }
-    else if (strncasecmp(con_options, "write_timeout=",
-                         sizeof("write_timeout=")-1) == 0)
+    else if (strncasecmp(con_options, STRING_WITH_LEN("write_timeout=")) == 0)
     {
       write_timeout= atoi(con_options + sizeof("write_timeout=")-1);
     }
-    else if (strncasecmp(con_options, "connect_timeout=",
-                         sizeof("connect_timeout=")-1) == 0)
+    else if (strncasecmp(con_options, STRING_WITH_LEN("connect_timeout=")) == 0)
     {
       connect_timeout= atoi(con_options + sizeof("connect_timeout=")-1);
     }
-    else if (strncasecmp(con_options, "CHARSET=",
-      sizeof("CHARSET=") - 1) == 0)
+    else if (strncasecmp(con_options, STRING_WITH_LEN("CHARSET=")) == 0)
     {
       csname= strdup(con_options + sizeof("CHARSET=") - 1);
+    }
+    else if (strncasecmp(con_options, STRING_WITH_LEN("auth=")) == 0)
+    {
+      rauth= strdup(con_options + sizeof("auth=") - 1);
     }
     else
       die("Illegal option to connect: %.*b",
@@ -6226,21 +6263,13 @@ void do_connect(struct st_command *command)
   if (opt_charsets_dir)
     mysql_options(con_slot->mysql, MYSQL_SET_CHARSET_DIR,
                   opt_charsets_dir);
+#ifndef EMBEDDED_LIBRARY
+  if (rauth)
+    mysql_options(con_slot->mysql, MARIADB_OPT_RESTRICTED_AUTH, rauth);
 
-#if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
-  if (con_ssl == USE_SSL_IF_POSSIBLE && opt_use_ssl)
-    con_ssl= USE_SSL_REQUIRED;
-
-  if (con_ssl == USE_SSL_REQUIRED)
-  {
-    mysql_ssl_set(con_slot->mysql, opt_ssl_key, opt_ssl_cert, opt_ssl_ca,
-		  opt_ssl_capath, ssl_cipher ? ssl_cipher : opt_ssl_cipher);
-    mysql_options(con_slot->mysql, MYSQL_OPT_SSL_CRL, opt_ssl_crl);
-    mysql_options(con_slot->mysql, MYSQL_OPT_SSL_CRLPATH, opt_ssl_crlpath);
-    mysql_options(con_slot->mysql, MARIADB_OPT_TLS_VERSION, opt_tls_version);
-    mysql_options(con_slot->mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
-                  &opt_ssl_verify_server_cert);
-  }
+  set_ssl_opts(con_slot->mysql, con_ssl == USE_SSL_FORBIDDEN ? 0 :
+                                con_ssl == USE_SSL_REQUIRED ? 1 : opt_use_ssl,
+                                ssl_cipher ? ssl_cipher : opt_ssl_cipher);
 #endif
 
   if (protocol)
@@ -6314,6 +6343,7 @@ void do_connect(struct st_command *command)
   dynstr_free(&ds_options);
   dynstr_free(&ds_default_auth);
   free(csname);
+  free(rauth);
   DBUG_VOID_RETURN;
 }
 
@@ -6386,6 +6416,33 @@ enum block_op find_operand(const char *start)
  return ILLEG_OP;
 }
 
+/*
+  do_break
+
+  DESCRIPTION
+  Instruction to stop execution of the current loop
+*/
+void do_break(struct st_command* command)
+{
+  int depth= 0;
+  cur_block->ok= false;
+
+  /* Disable every outer block until while found or block stack ends */
+  while (cur_block->cmd != cmd_while && cur_block > block_stack)
+  {
+    cur_block--;
+    cur_block->ok= false;
+    depth++;
+  }
+
+  /*  Check if the top block is not 'while' */
+  if (cur_block->cmd != cmd_while)
+  {
+    die("Stray break was found");
+  }
+  /* Set current block back */
+  cur_block+= depth;
+}
 
 /*
   Process start of a "if" or "while" statement
@@ -7290,12 +7347,6 @@ static struct my_option my_long_options[] =
   { 0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0}
 };
 
-
-void print_version(void)
-{
-  printf("%s  Ver %s Distrib %s, for %s (%s)\n",my_progname,MTEST_VERSION,
-	 MYSQL_SERVER_VERSION,SYSTEM_TYPE,MACHINE_TYPE);
-}
 
 void usage()
 {
@@ -8874,6 +8925,7 @@ end:
 
   var_set_errno(mysql_stmt_errno(stmt));
 
+  display_optimizer_trace(cn, ds);
   revert_properties();
 
   /* Close the statement if reconnect, need new prepare */
@@ -9335,6 +9387,7 @@ int util_query(MYSQL* org_mysql, const char* query){
       /* enable local infile, in non-binary builds often disabled by default */
       mysql_options(mysql, MYSQL_OPT_LOCAL_INFILE, 0);
       mysql_options(mysql, MYSQL_OPT_NONBLOCK, 0);
+      SET_SSL_OPTS(mysql);
       safe_connect(mysql, "util", org_mysql->host, org_mysql->user,
           org_mysql->passwd, org_mysql->db, org_mysql->port,
           org_mysql->unix_socket);
@@ -10158,19 +10211,7 @@ int main(int argc, char **argv)
   if (opt_plugin_dir && *opt_plugin_dir)
     mysql_options(con->mysql, MYSQL_PLUGIN_DIR, opt_plugin_dir);
 
-#if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
-
-  if (opt_use_ssl)
-  {
-    mysql_ssl_set(con->mysql, opt_ssl_key, opt_ssl_cert, opt_ssl_ca,
-		  opt_ssl_capath, opt_ssl_cipher);
-    mysql_options(con->mysql, MYSQL_OPT_SSL_CRL, opt_ssl_crl);
-    mysql_options(con->mysql, MYSQL_OPT_SSL_CRLPATH, opt_ssl_crlpath);
-    mysql_options(con->mysql, MARIADB_OPT_TLS_VERSION, opt_tls_version);
-    mysql_options(con->mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
-                  &opt_ssl_verify_server_cert);
-  }
-#endif
+  SET_SSL_OPTS(con->mysql);
 
   if (!(con->name = my_strdup(PSI_NOT_INSTRUMENTED, "default", MYF(MY_WME))))
     die("Out of memory");
@@ -10324,6 +10365,7 @@ int main(int argc, char **argv)
       case Q_INC: do_modify_var(command, DO_INC); break;
       case Q_DEC: do_modify_var(command, DO_DEC); break;
       case Q_ECHO: do_echo(command); command_executed++; break;
+      case Q_BREAK: do_break(command); break;
       case Q_SYSTEM: do_system(command); break;
       case Q_REMOVE_FILE: do_remove_file(command); break;
       case Q_REMOVE_FILES_WILDCARD: do_remove_files_wildcard(command); break;

@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef GROUPCONCATCOLUMN_H
-#define GROUPCONCATCOLUMN_H
+#pragma once
 #include <string>
 
 #include "calpontselectexecutionplan.h"
@@ -65,13 +64,13 @@ class GroupConcatColumn : public AggregateColumn
   /**
    * Overloaded stream operator
    */
-  virtual const std::string toString() const;
+  virtual const std::string toString() const override;
 
   /** return a copy of this pointer
    *
    * deep copy of this pointer and return the copy
    */
-  virtual GroupConcatColumn* clone() const
+  virtual GroupConcatColumn* clone() const override
   {
     return new GroupConcatColumn(*this);
   }
@@ -99,8 +98,8 @@ class GroupConcatColumn : public AggregateColumn
   /**
    * Serialize interface
    */
-  virtual void serialize(messageqcpp::ByteStream&) const;
-  virtual void unserialize(messageqcpp::ByteStream&);
+  virtual void serialize(messageqcpp::ByteStream&) const override;
+  virtual void unserialize(messageqcpp::ByteStream&) override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -108,7 +107,7 @@ class GroupConcatColumn : public AggregateColumn
    * @return true iff every member of t is a duplicate copy of every member of this;
    *         false otherwise
    */
-  virtual bool operator==(const TreeNode* t) const;
+  virtual bool operator==(const TreeNode* t) const override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -125,7 +124,7 @@ class GroupConcatColumn : public AggregateColumn
    * @return false iff every member of t is a duplicate copy of every member of this;
    *         true otherwise
    */
-  virtual bool operator!=(const TreeNode* t) const;
+  virtual bool operator!=(const TreeNode* t) const override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -135,6 +134,8 @@ class GroupConcatColumn : public AggregateColumn
    */
   using AggregateColumn::operator!=;
   virtual bool operator!=(const GroupConcatColumn& t) const;
+
+  virtual string toCppCode(IncludeSet& includes) const override;
 
  private:
   std::vector<SRCP> fOrderCols;
@@ -147,4 +148,3 @@ class GroupConcatColumn : public AggregateColumn
 std::ostream& operator<<(std::ostream& os, const GroupConcatColumn& rhs);
 
 }  // namespace execplan
-#endif  // GROUPCONCATCOLUMN_H

@@ -19,19 +19,14 @@
 
 /** @file */
 
-#ifndef _WE_DBFILEOP_H_
-#define _WE_DBFILEOP_H_
+#pragma once
 
 #include "we_type.h"
 #include "we_fileop.h"
 #include "we_blockop.h"
 #include "we_cache.h"
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -180,5 +175,3 @@ class DbFileOp : public FileOp
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_DBFILEOP_H_

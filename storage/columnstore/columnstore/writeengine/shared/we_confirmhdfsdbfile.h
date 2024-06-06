@@ -17,19 +17,14 @@
 
 /** @file */
 
-#ifndef CONFIRM_HDFS_DBFILE_H
-#define CONFIRM_HDFS_DBFILE_H
+#pragma once
 
 #include <string>
 
 #include "IDBFileSystem.h"
 #include "we_type.h"
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace WriteEngine
 {
@@ -126,5 +121,3 @@ class ConfirmHdfsDbFile
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // CONFIRM_HDFS_DBFILE_H

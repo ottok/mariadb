@@ -656,7 +656,7 @@ bool mysql_derived_prepare(THD *thd, LEX *lex, TABLE_LIST *derived)
 {
   SELECT_LEX_UNIT *unit= derived->get_unit();
   SELECT_LEX *first_select;
-  bool res= FALSE, keep_row_order;
+  bool res= FALSE, keep_row_order, distinct;
   DBUG_ENTER("mysql_derived_prepare");
   DBUG_PRINT("enter", ("unit: %p  table_list: %p  alias: '%s'",
                        unit, derived, derived->alias.str));
@@ -855,18 +855,26 @@ bool mysql_derived_prepare(THD *thd, LEX *lex, TABLE_LIST *derived)
     goto exit;
 
   /*
-    Temp table is created so that it hounours if UNION without ALL is to be 
+    Temp table is created so that it honors if UNION without ALL is to be
     processed
 
-    As 'distinct' parameter we always pass FALSE (0), because underlying
-    query will control distinct condition by itself. Correct test of
-    distinct underlying query will be is_unit_op &&
-    !unit->union_distinct->next_select() (i.e. it is union and last distinct
-    SELECT is last SELECT of UNION).
+    We pass as 'distinct' parameter in any of the above cases
+
+    1) It is an UNION and the last part of an union is distinct (as
+       thus the final temporary table should not contain duplicates).
+    2) It is not an UNION and the unit->distinct flag is set. This is the
+       case for WHERE A IN (...).
+
+    Note that the underlying query will also control distinct condition.
   */
   thd->create_tmp_table_for_derived= TRUE;
+  distinct= (unit->first_select()->next_select() ?
+             unit->union_distinct && !unit->union_distinct->next_select() :
+             unit->distinct);
+
   if (!(derived->table) &&
-      derived->derived_result->create_result_table(thd, &unit->types, FALSE,
+      derived->derived_result->create_result_table(thd, &unit->types,
+                                                   distinct,
                                                    (first_select->options |
                                                    thd->variables.option_bits |
                                                    TMP_TABLE_ALL_COLUMNS),
@@ -886,22 +894,6 @@ bool mysql_derived_prepare(THD *thd, LEX *lex, TABLE_LIST *derived)
     first_select->mark_as_belong_to_derived(derived);
 
   derived->dt_handler= derived->find_derived_handler(thd);
-  if (derived->dt_handler)
-  {
-    char query_buff[4096];
-    String derived_query(query_buff, sizeof(query_buff), thd->charset());
-    derived_query.length(0);
-    derived->derived->print(&derived_query,
-                            enum_query_type(QT_VIEW_INTERNAL | 
-                                            QT_ITEM_ORIGINAL_FUNC_NULLIF |
-                                            QT_PARSABLE));
-    if (!thd->make_lex_string(&derived->derived_spec,
-                              derived_query.ptr(), derived_query.length()))
-    {
-      delete derived->dt_handler;
-      derived->dt_handler= NULL;
-    }
-  }
 
 exit:
   /* Hide "Unknown column" or "Unknown function" error */

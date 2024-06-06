@@ -24,8 +24,7 @@
  * class Hasher interface
  */
 
-#ifndef UTILS_HASHER_H
-#define UTILS_HASHER_H
+#pragma once
 
 #include <cstddef>
 #include <stdint.h>
@@ -485,5 +484,3 @@ class TupleComparator
 };
 
 }  // namespace utils
-
-#endif  // UTILS_HASHER_H

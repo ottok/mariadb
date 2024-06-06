@@ -18,8 +18,7 @@
 
 //  $Id: tuplehashjoin.h 9655 2013-06-25 23:08:13Z xlou $
 
-#ifndef TUPLEHASHJOIN_H_
-#define TUPLEHASHJOIN_H_
+#pragma once
 
 #include "jobstep.h"
 #include "calpontsystemcatalog.h"
@@ -443,13 +442,13 @@ class TupleHashJoinStep : public JobStep, public TupleDeliveryStep
 
   struct JoinerSorter
   {
-    inline bool operator()(const boost::shared_ptr<joiner::TupleJoiner>& j1,
-                           const boost::shared_ptr<joiner::TupleJoiner>& j2) const
+    inline bool operator()(const std::shared_ptr<joiner::TupleJoiner>& j1,
+                           const std::shared_ptr<joiner::TupleJoiner>& j2) const
     {
       return *j1 < *j2;
     }
   };
-  std::vector<boost::shared_ptr<joiner::TupleJoiner> > joiners;
+  std::vector<std::shared_ptr<joiner::TupleJoiner> > joiners;
   boost::scoped_array<std::vector<rowgroup::RGData> > rgData;
   TupleBPS* largeBPS;
   rowgroup::RowGroup largeRG, outputRG;
@@ -537,10 +536,10 @@ class TupleHashJoinStep : public JobStep, public TupleDeliveryStep
   void startJoinThreads();
   void generateJoinResultSet(const std::vector<std::vector<rowgroup::Row::Pointer> >& joinerOutput,
                              rowgroup::Row& baseRow,
-                             const boost::shared_array<boost::shared_array<int> >& mappings,
+                             const std::shared_ptr<std::shared_ptr<int[]>[] >& mappings,
                              const uint32_t depth, rowgroup::RowGroup& outputRG, rowgroup::RGData& rgData,
                              std::vector<rowgroup::RGData>& outputData,
-                             const boost::shared_array<rowgroup::Row>& smallRows, rowgroup::Row& joinedRow,
+                             const std::shared_ptr<rowgroup::Row[]>& smallRows, rowgroup::Row& joinedRow,
                              RowGroupDL* outputDL);
   void grabSomeWork(std::vector<rowgroup::RGData>* work);
   void sendResult(const std::vector<rowgroup::RGData>& res);
@@ -551,19 +550,19 @@ class TupleHashJoinStep : public JobStep, public TupleDeliveryStep
                  rowgroup::RowGroup& joinOutput, rowgroup::Row& largeSideRow, rowgroup::Row& joinFERow,
                  rowgroup::Row& joinedRow, rowgroup::Row& baseRow,
                  std::vector<std::vector<rowgroup::Row::Pointer> >& joinMatches,
-                 boost::shared_array<rowgroup::Row>& smallRowTemplates, RowGroupDL* outputDL,
-                 std::vector<boost::shared_ptr<joiner::TupleJoiner> >* joiners = NULL,
-                 boost::shared_array<boost::shared_array<int> >* rgMappings = NULL,
-                 boost::shared_array<boost::shared_array<int> >* feMappings = NULL,
-                 boost::scoped_array<boost::scoped_array<uint8_t> >* smallNullMem = NULL);
+                 std::shared_ptr<rowgroup::Row[]>& smallRowTemplates, RowGroupDL* outputDL,
+                 std::vector<std::shared_ptr<joiner::TupleJoiner> >* joiners = NULL,
+                 std::shared_ptr<std::shared_ptr<int[]>[] >* rgMappings = NULL,
+                 std::shared_ptr<std::shared_ptr<int[]>[] >* feMappings = NULL,
+                 boost::scoped_array<boost::scoped_array<uint8_t>>* smallNullMem = NULL);
   void finishSmallOuterJoin();
   void makeDupList(const rowgroup::RowGroup& rg);
   void processDupList(uint32_t threadID, rowgroup::RowGroup& ingrp, std::vector<rowgroup::RGData>* rowData);
 
   std::vector<uint64_t> joinRunners;  // thread handles from thread pool
   boost::mutex inputDLLock, outputDLLock;
-  boost::shared_array<boost::shared_array<int> > columnMappings, fergMappings;
-  boost::shared_array<int> fe2Mapping;
+  std::shared_ptr<std::shared_ptr<int[]>[]> columnMappings, fergMappings;
+  std::shared_ptr<int[]> fe2Mapping;
   uint32_t joinThreadCount;
   boost::scoped_array<boost::scoped_array<uint8_t> > smallNullMemory;
   uint64_t outputIt;
@@ -585,7 +584,7 @@ class TupleHashJoinStep : public JobStep, public TupleDeliveryStep
   std::set<uint32_t> fFunctionJoinKeys;  // for skipping CP forward
 
   /* Disk-based join support */
-  boost::scoped_array<DiskJoinStep> djs;
+  std::vector<std::shared_ptr<DiskJoinStep>> djs;
   boost::scoped_array<boost::shared_ptr<RowGroupDL> > fifos;
   void djsReaderFcn(int index);
   uint64_t djsReader;  // thread handle from thread pool
@@ -621,6 +620,8 @@ class TupleHashJoinStep : public JobStep, public TupleDeliveryStep
   int64_t djsSmallLimit;
   int64_t djsLargeLimit;
   uint64_t djsPartitionSize;
+  uint32_t djsMaxPartitionTreeDepth;
+  bool djsForceRun;
   bool isDML;
   bool allowDJS;
 
@@ -632,8 +633,8 @@ class TupleHashJoinStep : public JobStep, public TupleDeliveryStep
   bool ownsOutputDL;
 
   void segregateJoiners();
-  std::vector<boost::shared_ptr<joiner::TupleJoiner> > tbpsJoiners;
-  std::vector<boost::shared_ptr<joiner::TupleJoiner> > djsJoiners;
+  std::vector<std::shared_ptr<joiner::TupleJoiner> > tbpsJoiners;
+  std::vector<std::shared_ptr<joiner::TupleJoiner> > djsJoiners;
   std::vector<int> djsJoinerMap;
   boost::scoped_array<ssize_t> memUsedByEachJoin;
   boost::mutex djsLock;
@@ -653,4 +654,3 @@ class TupleHashJoinStep : public JobStep, public TupleDeliveryStep
 
 }  // namespace joblist
 
-#endif

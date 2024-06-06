@@ -21,8 +21,7 @@
  *******************************************************************************/
 /** @file */
 
-#ifndef _WE_XMLJOB_H_
-#define _WE_XMLJOB_H_
+#pragma once
 
 #include <iostream>
 #include <string>
@@ -32,11 +31,7 @@
 #include "we_xmlop.h"
 #include "calpontsystemcatalog.h"
 
-#if defined(_MSC_VER) && defined(xxxWRITEENGINEXMLJOB_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -81,6 +76,14 @@ class XMLJob : public XMLOp
    * @brief Get job structure
    */
   const Job& getJob() const
+  {
+    return fJob;
+  }
+
+  /**
+   * @brief Get reference to job structure
+   */
+  Job& getJob()
   {
     return fJob;
   }
@@ -153,5 +156,3 @@ class XMLJob : public XMLOp
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_XMLJOB_H_

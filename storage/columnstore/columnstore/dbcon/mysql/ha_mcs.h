@@ -16,8 +16,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
-#ifndef HA_MCS_H__
-#define HA_MCS_H__
+#pragma once
 
 #include <my_config.h>
 #include "idb_mysql.h"
@@ -360,5 +359,3 @@ class ha_mcs_cache : public ha_mcs
   friend my_bool get_status_and_flush_cache(void* param, my_bool concurrent_insert);
   friend my_bool cache_start_trans(void* param);
 };
-
-#endif  // HA_MCS_H__

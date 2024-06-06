@@ -17,8 +17,7 @@
 
 //  $Id: wf_min_max.h 3868 2013-06-06 22:13:05Z xlou $
 
-#ifndef UTILS_WF_MIN_MAX_H
-#define UTILS_WF_MIN_MAX_H
+#pragma once
 
 #include "windowfunctiontype.h"
 
@@ -47,4 +46,3 @@ class WF_min_max : public WindowFunctionType
 
 }  // namespace windowfunction
 
-#endif  // UTILS_WF_MIN_MAX_H

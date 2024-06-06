@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef UNBUFFEREDFILEFACTORY_H_
-#define UNBUFFEREDFILEFACTORY_H_
+#pragma once
 
 #include "FileFactoryBase.h"
 #include "UnbufferedFile.h"
@@ -38,4 +37,3 @@ inline IDBDataFile* UnbufferedFileFactory::open(const char* fname, const char* m
 }
 
 }  // namespace idbdatafile
-#endif /* UNBUFFEREDFILEFACTORY_H_ */

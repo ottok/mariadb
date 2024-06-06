@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef DELETEPACKAGEPROCESSOR_H
-#define DELETEPACKAGEPROCESSOR_H
+#pragma once
 #include <string>
 #include <iostream>
 #include <vector>
@@ -32,11 +31,7 @@
 #include <vector>
 #include "joblist.h"
 
-#if defined(_MSC_VER) && defined(DMLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace dmlpackageprocessor
 {
@@ -88,5 +83,3 @@ class DeletePackageProcessor : public DMLPackageProcessor
 }  // namespace dmlpackageprocessor
 
 #undef EXPORT
-
-#endif  // DELETEPACKAGEPROCESSOR_H

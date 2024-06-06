@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef REPLICATOR_H_
-#define REPLICATOR_H_
+#pragma once
 
 //#include "ThreadPool.h"
 #include "MetadataFile.h"
@@ -74,5 +73,3 @@ class Replicator
 };
 
 }  // namespace storagemanager
-
-#endif

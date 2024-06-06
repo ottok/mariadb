@@ -19,8 +19,7 @@
 
 /** @file */
 
-#ifndef LIMITED_ORDER_BY_H
-#define LIMITED_ORDER_BY_H
+#pragma once
 
 #include <string>
 #include "rowgroup.h"
@@ -61,5 +60,3 @@ class LimitedOrderBy : public ordering::IdbOrderBy
 };
 
 }  // namespace joblist
-
-#endif  // LIMITED_ORDER_BY_H

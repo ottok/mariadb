@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2022, MariaDB Corporation.
+Copyright (c) 2017, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -458,12 +458,12 @@ static dberr_t trx_rseg_mem_restore(trx_rseg_t *rseg, mtr_t *mtr)
   /* Access the tablespace header page to recover rseg->space->free_limit */
   page_id_t page_id{rseg->space->id, 0};
   dberr_t err;
-  if (!buf_page_get_gen(page_id, 0, RW_S_LATCH, nullptr, BUF_GET, mtr, &err))
+  if (!buf_page_get_gen(page_id, 0, RW_X_LATCH, nullptr, BUF_GET, mtr, &err))
     return err;
   mtr->release_last_page();
   page_id.set_page_no(rseg->page_no);
   const buf_block_t *rseg_hdr=
-    buf_page_get_gen(rseg->page_id(), 0, RW_S_LATCH, nullptr, BUF_GET, mtr,
+    buf_page_get_gen(rseg->page_id(), 0, RW_X_LATCH, nullptr, BUF_GET, mtr,
                      &err);
   if (!rseg_hdr)
     return err;
@@ -563,8 +563,6 @@ static dberr_t trx_rseg_mem_restore(trx_rseg_t *rseg, mtr_t *mtr)
       rseg->needs_purge= id;
 
     rseg->set_last_commit(node_addr.boffset, id);
-    ut_ad(mach_read_from_2(block->page.frame + node_addr.boffset +
-                           TRX_UNDO_NEEDS_PURGE) <= 1);
 
     if (rseg->last_page_no != FIL_NULL)
       /* There is no need to cover this operation by the purge
@@ -623,7 +621,7 @@ dberr_t trx_rseg_array_init()
 		purge_sys.queue_lock();
 	for (ulint rseg_id = 0; rseg_id < TRX_SYS_N_RSEGS; rseg_id++) {
 		mtr.start();
-		if (const buf_block_t* sys = trx_sysf_get(&mtr, false)) {
+		if (const buf_block_t* sys = trx_sysf_get(&mtr, true)) {
 			if (rseg_id == 0) {
 				/* In case this is an upgrade from
 				before MariaDB 10.3.5, fetch the base

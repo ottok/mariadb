@@ -24,27 +24,18 @@
  * class XXX interface
  */
 
-#ifndef LBIDRESOURCEGRAPH_H_
-#define LBIDRESOURCEGRAPH_H_
+#pragma once
 
 #include <map>
 #include <set>
-#ifndef _MSC_VER
 #include <tr1/unordered_set>
-#else
-#include <unordered_set>
-#endif
 #include <boost/thread.hpp>
 
 #include "brmtypes.h"
 #include "transactionnode.h"
 #include "resourcenode.h"
 
-#if defined(_MSC_VER) && defined(xxxLBIDRESOURCEGRAPH_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace BRM
 {
@@ -81,5 +72,3 @@ class LBIDResourceGraph
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

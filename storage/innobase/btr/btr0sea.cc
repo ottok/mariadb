@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2022, MariaDB Corporation.
+Copyright (c) 2017, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -297,13 +297,6 @@ static void btr_search_info_update_hash(btr_search_t *info, btr_cur_t *cursor)
 {
 	dict_index_t*	index = cursor->index();
 	int		cmp;
-
-	if (dict_index_is_ibuf(index)) {
-		/* So many deletes are performed on an insert buffer tree
-		that we do not consider a hash index useful on it: */
-
-		return;
-	}
 
 	uint16_t n_unique = dict_index_get_n_unique_in_tree(index);
 
@@ -705,7 +698,6 @@ btr_search_update_hash_ref(
 
 	ut_ad(block->page.id().space() == index->table->space_id);
 	ut_ad(index == cursor->index());
-	ut_ad(!dict_index_is_ibuf(index));
 	auto part = btr_search_sys.get_part(*index);
 	part->latch.wr_lock(SRW_LOCK_CALL);
 	ut_ad(!block->index || block->index == index);
@@ -1050,7 +1042,7 @@ btr_search_guess_on_hash(
 	index_id_t	index_id;
 
 	ut_ad(mtr->is_active());
-	ut_ad(index->is_btree() || index->is_ibuf());
+	ut_ad(index->is_btree());
 
 	/* Note that, for efficiency, the struct info may not be protected by
 	any latch here! */
@@ -1259,7 +1251,6 @@ retry:
 
 	ut_ad(block->page.id().space() == index->table->space_id);
 	ut_a(index_id == index->id);
-	ut_ad(!dict_index_is_ibuf(index));
 
 	n_fields = block->curr_n_fields;
 	n_bytes = block->curr_n_bytes;
@@ -1462,7 +1453,6 @@ btr_search_build_page_hash_index(
 	ut_ad(ahi_latch == &btr_search_sys.get_part(*index)->latch);
 	ut_ad(index);
 	ut_ad(block->page.id().space() == index->table->space_id);
-	ut_ad(!dict_index_is_ibuf(index));
 	ut_ad(page_is_leaf(block->page.frame));
 
 	ut_ad(block->page.lock.have_x() || block->page.lock.have_s());
@@ -1788,7 +1778,6 @@ void btr_search_update_hash_on_delete(btr_cur_t *cursor)
 	ut_ad(block->page.id().space() == index->table->space_id);
 	ut_a(index == cursor->index());
 	ut_a(block->curr_n_fields > 0 || block->curr_n_bytes > 0);
-	ut_ad(!dict_index_is_ibuf(index));
 
 	rec = btr_cur_get_rec(cursor);
 
@@ -1861,7 +1850,6 @@ void btr_search_update_hash_node_on_insert(btr_cur_t *cursor,
 	}
 
 	ut_a(cursor->index() == index);
-	ut_ad(!dict_index_is_ibuf(index));
 	ahi_latch->wr_lock(SRW_LOCK_CALL);
 
 	if (!block->index || !btr_search_enabled) {
@@ -1954,7 +1942,6 @@ drop:
 	}
 
 	ut_a(index == cursor->index());
-	ut_ad(!dict_index_is_ibuf(index));
 
 	n_fields = block->curr_n_fields;
 	n_bytes = block->curr_n_bytes;
@@ -2208,7 +2195,6 @@ func_exit:
 			invokes btr_search_drop_page_hash_index(). */
 			ut_a(block->page.state() == buf_page_t::REMOVE_HASH);
 state_ok:
-			ut_ad(!dict_index_is_ibuf(block->index));
 			ut_ad(block->page.id().space()
 			      == block->index->table->space_id);
 

@@ -1,4 +1,5 @@
 /* Copyright (C) 2014 InfiniDB, Inc.
+   Copyright (C) 2022 Mariadb Corporation.
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License
@@ -29,9 +30,6 @@
 #include <sys/time.h>
 using namespace std;
 
-#include <boost/regex.hpp>
-using namespace boost;
-
 #include "resourcemanager.h"
 
 #include "jl_logger.h"
@@ -43,36 +41,25 @@ using namespace config;
 
 namespace joblist
 {
-// const string ResourceManager::fExeMgrStr("ExeMgr1");
-const string ResourceManager::fHashJoinStr("HashJoin");
-const string ResourceManager::fJobListStr("JobList");
-const string ResourceManager::fPrimitiveServersStr("PrimitiveServers");
-// const string ResourceManager::fSystemConfigStr("SystemConfig");
-const string ResourceManager::fExtentMapStr("ExtentMap");
-// const string ResourceManager::fDMLProcStr("DMLProc");
-// const string ResourceManager::fBatchInsertStr("BatchInsert");
-const string ResourceManager::fOrderByLimitStr("OrderByLimit");
-const string ResourceManager::fRowAggregationStr("RowAggregation");
-
 ResourceManager* ResourceManager::fInstance = NULL;
 boost::mutex mx;
 
-ResourceManager* ResourceManager::instance(bool runningInExeMgr)
+ResourceManager* ResourceManager::instance(bool runningInExeMgr, config::Config* aConfig)
 {
   boost::mutex::scoped_lock lk(mx);
 
   if (!fInstance)
-    fInstance = new ResourceManager(runningInExeMgr);
+    fInstance = new ResourceManager(runningInExeMgr, aConfig);
 
   return fInstance;
 }
 
-ResourceManager::ResourceManager(bool runningInExeMgr)
+ResourceManager::ResourceManager(bool runningInExeMgr, config::Config* aConfig)
  : fExeMgrStr("ExeMgr1")
  , fSystemConfigStr("SystemConfig")
  , fDMLProcStr("DMLProc")
  , fBatchInsertStr("BatchInsert")
- , fConfig(Config::makeConfig())
+ , fConfig(aConfig == nullptr ? Config::makeConfig() : aConfig)
  , fNumCores(8)
  , fHjNumThreads(defaultNumThreads)
  , fJlProcessorThreadsPerScan(defaultProcessorThreadsPerScan)
@@ -252,8 +239,6 @@ ResourceManager::ResourceManager(bool runningInExeMgr)
   fAllowedDiskAggregation =
       getBoolVal(fRowAggregationStr, "AllowDiskBasedAggregation", defaultAllowDiskAggregation);
 
-  fMaxBPPSendQueue = getUintVal(fPrimitiveServersStr, "MaxBPPSendQueue", defaultMaxBPPSendQueue);
-
   if (!load_encryption_keys())
   {
     Logger log;
@@ -261,7 +246,6 @@ ResourceManager::ResourceManager(bool runningInExeMgr)
   }
 }
 
-// Used only for WIndows
 int ResourceManager::getEmPriority() const
 {
   int temp = getIntVal(fExeMgrStr, "Priority", defaultEMPriority);
@@ -331,21 +315,16 @@ bool ResourceManager::getMysqldInfo(std::string& h, std::string& u, std::string&
 {
   static const std::string hostUserUnassignedValue("unassigned");
   // MCS will read username and pass from disk if the config changed.
-  u = getStringVal("CrossEngineSupport", "User", hostUserUnassignedValue);
-  std::string encryptedPW = getStringVal("CrossEngineSupport", "Password", "");
+  bool reReadConfig = true;
+  u = getStringVal("CrossEngineSupport", "User", hostUserUnassignedValue, reReadConfig);
+  std::string encryptedPW = getStringVal("CrossEngineSupport", "Password", "", reReadConfig);
   // This will return back the plaintext password if there is no MCSDATADIR/.secrets file present
   w = decrypt_password(encryptedPW);
   // MCS will not read username and pass from disk if the config changed.
   h = getStringVal("CrossEngineSupport", "Host", hostUserUnassignedValue);
   p = getUintVal("CrossEngineSupport", "Port", 0);
-  u = getStringVal("CrossEngineSupport", "User", "unassigned");
 
-  bool rc = true;
-
-  if ((h.compare("unassigned") == 0) || (u.compare("unassigned") == 0) || (p == 0))
-    rc = false;
-
-  return rc;
+  return h != hostUserUnassignedValue && u != hostUserUnassignedValue && p;
 }
 
 bool ResourceManager::queryStatsEnabled() const

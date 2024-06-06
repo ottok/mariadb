@@ -26,8 +26,7 @@
  *      Author: bpaul
  */
 
-#ifndef WE_SPLITTERAPP_H_
-#define WE_SPLITTERAPP_H_
+#pragma once
 
 #include <boost/thread/condition.hpp>
 #include <boost/scoped_array.hpp>
@@ -92,4 +91,3 @@ class WESplitterApp
 };
 
 } /* namespace WriteEngine */
-#endif /* WE_SPLITTERAPP_H_ */

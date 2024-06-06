@@ -70,6 +70,29 @@ enum enum_used_fields
 
 
 /*
+  Allocate string field in MEM_ROOT and return it as String
+
+  SYNOPSIS
+    get_field()
+    mem         MEM_ROOT for allocating
+    field       Field for retrieving of string
+    res         result String
+*/
+
+static void get_field(MEM_ROOT *mem, Field *field, String *res)
+{
+  THD *thd= field->get_thd();
+  Sql_mode_instant_remove sms(thd, MODE_PAD_CHAR_TO_FULL_LENGTH);
+  LEX_STRING ls= field->val_lex_string_strmake(mem);
+  DBUG_ASSERT((!ls.str && !ls.length) || ls.str[ls.length] == '\0');
+  if (!ls.str)
+    res->length(0); // EOM
+  else
+    res->set((const char *) ls.str, ls.length, field->charset());
+}
+
+
+/*
   Fill st_find_field structure with pointers to fields
 
   SYNOPSIS
@@ -664,17 +687,19 @@ SQL_SELECT *prepare_simple_select(THD *thd, Item *cond,
 
   /* Assume that no indexes cover all required fields */
   table->covering_keys.clear_all();
+  table->file->info(HA_STATUS_VARIABLE);
+  table->used_stat_records= table->file->stats.records;
 
   SQL_SELECT *res= make_select(table, 0, 0, cond, 0, 0, error);
-  if (unlikely(*error) ||
-      (likely(res) && unlikely(res->check_quick(thd, 0, HA_POS_ERROR,
-                                                Item_func::BITMAP_ALL))) ||
-      (likely(res) && res->quick && unlikely(res->quick->reset())))
-  {
-    delete res;
-    res=0;
-  }
-  return res;
+  if (unlikely(!res) || unlikely(*error))
+    goto error;
+  (void) res->check_quick(thd, 0, HA_POS_ERROR, Item_func::BITMAP_ALL);
+  if (!res->quick || res->quick->reset() == 0)
+    return res;
+
+error:
+  delete res;
+  return 0;
 }
 
 /*
@@ -1077,7 +1102,9 @@ error:
   new_trans.restore_old_transaction();
 
 error2:
-  DBUG_RETURN(TRUE);
+  if (!thd->is_error())
+    my_eof(thd);
+  DBUG_RETURN(thd->is_error());
 }
 
 

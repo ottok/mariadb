@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef IOMANAGER_H
-#define IOMANAGER_H
+#pragma once
 // $Id: iomanager.h 2145 2013-08-09 22:38:19Z wweeks $
 //
 // C++ Interface: iomanager
@@ -43,7 +42,7 @@
 #include "fileblockrequestqueue.h"
 #include "filebuffermgr.h"
 
-// #define SHARED_NOTHING_DEMO_2
+//#define SHARED_NOTHING_DEMO_2
 
 namespace dbbc
 {
@@ -148,4 +147,3 @@ void dropFDCache();
 void purgeFDCache(std::vector<BRM::FileInfo>& files);
 
 }  // namespace dbbc
-#endif

@@ -25,27 +25,19 @@
 #include <string>
 #include <iostream>
 #include <stack>
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 #include <fstream>
 #include <sstream>
 #include <cerrno>
 #include <cstring>
-#ifdef _MSC_VER
-#include <unordered_set>
-#else
+#include <regex>
 #include <tr1/unordered_set>
-#endif
 #include <utility>
 #include <cassert>
 using namespace std;
 
 #include <boost/shared_ptr.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
-#include <boost/regex.hpp>
 #include <boost/tokenizer.hpp>
 using namespace boost;
 
@@ -143,16 +135,16 @@ CalpontSystemCatalog::ColDataType convertDataType(const ddlpackage::ColumnType& 
 
 int parseCompressionComment(std::string comment)
 {
-  algorithm::to_upper(comment);
-  regex compat("[[:space:]]*COMPRESSION[[:space:]]*=[[:space:]]*", regex_constants::extended);
+  boost::algorithm::to_upper(comment);
+  std::regex compat("[[:space:]]*COMPRESSION[[:space:]]*=[[:space:]]*", std::regex_constants::extended);
   int compressiontype = 0;
-  boost::match_results<std::string::const_iterator> what;
+  std::match_results<std::string::const_iterator> what;
   std::string::const_iterator start, end;
   start = comment.begin();
   end = comment.end();
-  boost::match_flag_type flags = boost::match_default;
+  std::regex_constants::match_flag_type flags = std::regex_constants::match_default;
 
-  if (boost::regex_search(start, end, what, compat, flags))
+  if (std::regex_search(start, end, what, compat, flags))
   {
     // Find the pattern, now get the compression type
     string compType(&(*(what[0].second)));
@@ -1392,10 +1384,10 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& tabl
           if (comment.length() > 0)
           {
             //@Bug 3782 This is for synchronization after calonlinealter to use
-            algorithm::to_upper(comment);
-            regex pat("[[:space:]]*SCHEMA[[:space:]]+SYNC[[:space:]]+ONLY", regex_constants::extended);
+            boost::algorithm::to_upper(comment);
+            std::regex pat("[[:space:]]*SCHEMA[[:space:]]+SYNC[[:space:]]+ONLY", std::regex_constants::extended);
 
-            if (regex_search(comment, pat))
+            if (std::regex_search(comment, pat))
             {
               return 0;
             }
@@ -2182,7 +2174,7 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& tabl
     {
       rc = 0;
       string errmsg(
-          "Error occured during file deletion. Restart DDLProc or use command tool ddlcleanup to clean up. ");
+          "Error occurred during file deletion. Restart DDLProc or use command tool ddlcleanup to clean up. ");
       push_warning(thd, Sql_condition::WARN_LEVEL_WARN, 9999, errmsg.c_str());
     }
 
@@ -2361,14 +2353,14 @@ int ha_mcs_impl_create_(const char* name, TABLE* table_arg, HA_CREATE_INFO* crea
   bool schemaSyncOnly = false;
   bool isCreate = true;
 
-  regex pat("[[:space:]]*SCHEMA[[:space:]]+SYNC[[:space:]]+ONLY", regex_constants::extended);
+  std::regex pat("[[:space:]]*SCHEMA[[:space:]]+SYNC[[:space:]]+ONLY", std::regex_constants::extended);
 
-  if (regex_search(tablecomment, pat))
+  if (std::regex_search(tablecomment, pat))
   {
     schemaSyncOnly = true;
     pat = createpatstr;
 
-    if (!regex_search(stmt, pat))
+    if (!std::regex_search(stmt, pat))
     {
       isCreate = false;
     }
@@ -2398,7 +2390,7 @@ int ha_mcs_impl_create_(const char* name, TABLE* table_arg, HA_CREATE_INFO* crea
 
   pat = alterpatstr;
 
-  if (regex_search(stmt, pat))
+  if (std::regex_search(stmt, pat))
   {
     ci.isAlter = true;
     ci.alterTableState = cal_connection_info::ALTER_FIRST_RENAME;
@@ -2523,7 +2515,8 @@ int ha_mcs_impl_create_(const char* name, TABLE* table_arg, HA_CREATE_INFO* crea
         const CHARSET_INFO* field_cs = (*field)->charset();
         if (field_cs && (!share->table_charset || field_cs->number != share->table_charset->number))
         {
-          oss << " CHARACTER SET " << field_cs->cs_name.str;
+          oss << " CHARACTER SET " << field_cs->cs_name.str <<
+          " COLLATE " << field_cs->coll_name.str;
         }
       }
 
@@ -2563,7 +2556,8 @@ int ha_mcs_impl_create_(const char* name, TABLE* table_arg, HA_CREATE_INFO* crea
 
     if (share->table_charset)
     {
-      oss << " DEFAULT CHARSET=" << share->table_charset->cs_name.str;
+      oss << " DEFAULT CHARSET=" << share->table_charset->cs_name.str <<
+      " COLLATE=" << share->table_charset->coll_name.str;
     }
 
     // Process table level options such as MIN_ROWS, MAX_ROWS, COMMENT
@@ -2747,9 +2741,6 @@ int ha_mcs_impl_rename_table_(const char* from, const char* to, cal_connection_i
 
 extern "C"
 {
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       long long calonlinealter(UDF_INIT* initid, UDF_ARGS* args, char* is_null, char* error)
   {
     string stmt(args->args[0], args->lengths[0]);
@@ -2788,9 +2779,6 @@ extern "C"
     return rc;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       my_bool calonlinealter_init(UDF_INIT* initid, UDF_ARGS* args, char* message)
   {
     if (args->arg_count != 1 || args->arg_type[0] != STRING_RESULT)
@@ -2802,9 +2790,6 @@ extern "C"
     return 0;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       void calonlinealter_deinit(UDF_INIT* initid)
   {
   }

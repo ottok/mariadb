@@ -65,7 +65,6 @@ combination of types */
 				auto-generated clustered indexes,
 				also DICT_UNIQUE will be set */
 #define DICT_UNIQUE	2	/*!< unique index */
-#define	DICT_IBUF	8	/*!< insert buffer tree */
 #define	DICT_CORRUPT	16	/*!< bit to store the corrupted flag
 				in SYS_INDEXES.TYPE */
 #define	DICT_FTS	32	/* FTS index; can't be combined with the
@@ -266,7 +265,8 @@ use its own tablespace instead of the system tablespace. */
 #define DICT_TF2_USE_FILE_PER_TABLE	16U
 
 /** Set when we discard/detach the tablespace */
-#define DICT_TF2_DISCARDED		32U
+constexpr unsigned DICT_TF2_POS_DISCARDED= 5;
+constexpr unsigned DICT_TF2_DISCARDED= 1U << DICT_TF2_POS_DISCARDED;
 
 /** This bit is set if all aux table names (both common tables and
 index tables) of a FTS table are in HEX format. */
@@ -947,10 +947,6 @@ struct zip_pad_info_t {
 				rounds */
 };
 
-/** Number of samples of data size kept when page compression fails for
-a certain index.*/
-#define STAT_DEFRAG_DATA_SIZE_N_SAMPLE	10
-
 /** "GEN_CLUST_INDEX" is the name reserved for InnoDB default
 system clustered index when there is no primary key. */
 const char innobase_index_reserve_name[] = "GEN_CLUST_INDEX";
@@ -996,7 +992,7 @@ struct dict_index_t {
 # define DICT_INDEX_MERGE_THRESHOLD_DEFAULT 50
 	unsigned	type:DICT_IT_BITS;
 				/*!< index type (DICT_CLUSTERED, DICT_UNIQUE,
-				DICT_IBUF, DICT_CORRUPT) */
+				DICT_CORRUPT) */
 #define MAX_KEY_LENGTH_BITS 12
 	unsigned	trx_id_offset:MAX_KEY_LENGTH_BITS;
 				/*!< position of the trx id column
@@ -1116,23 +1112,6 @@ struct dict_index_t {
 				/*!< has persistent statistics error printed
 				for this index ? */
 	/* @} */
-	/** Statistics for defragmentation, these numbers are estimations and
-	could be very inaccurate at certain times, e.g. right after restart,
-	during defragmentation, etc. */
-	/* @{ */
-	ulint		stat_defrag_modified_counter;
-	ulint		stat_defrag_n_pages_freed;
-				/* number of pages freed by defragmentation. */
-	ulint		stat_defrag_n_page_split;
-				/* number of page splits since last full index
-				defragmentation. */
-	ulint		stat_defrag_data_size_sample[STAT_DEFRAG_DATA_SIZE_N_SAMPLE];
-				/* data size when compression failure happened
-				the most recent 10 times. */
-	ulint		stat_defrag_sample_next_slot;
-				/* in which slot the next sample should be
-				saved. */
-	/* @} */
 private:
   /** R-tree split sequence number */
   Atomic_relaxed<node_seq_t> rtr_ssn;
@@ -1184,12 +1163,8 @@ public:
 	/** @return whether instant ALTER TABLE is in effect */
 	inline bool is_instant() const;
 
-	/** @return whether the index is the primary key index
-	(not the clustered index of the change buffer) */
-	bool is_primary() const
-	{
-		return DICT_CLUSTERED == (type & (DICT_CLUSTERED | DICT_IBUF));
-	}
+	/** @return whether the index is the primary key index */
+	bool is_primary() const { return is_clust(); }
 
 	/** @return whether this is a generated clustered index */
 	bool is_gen_clust() const { return type == DICT_CLUSTERED; }
@@ -1203,16 +1178,13 @@ public:
 	/** @return whether this is a spatial index */
 	bool is_spatial() const { return UNIV_UNLIKELY(type & DICT_SPATIAL); }
 
-	/** @return whether this is the change buffer */
-	bool is_ibuf() const { return UNIV_UNLIKELY(type & DICT_IBUF); }
-
 	/** @return whether this index requires locking */
-	bool has_locking() const { return !is_ibuf(); }
+	static constexpr bool has_locking() { return true; }
 
 	/** @return whether this is a normal B-tree index
         (not the change buffer, not SPATIAL or FULLTEXT) */
 	bool is_btree() const {
-		return UNIV_LIKELY(!(type & (DICT_IBUF | DICT_SPATIAL
+		return UNIV_LIKELY(!(type & (DICT_SPATIAL
 					     | DICT_FTS | DICT_CORRUPT)));
 	}
 
@@ -2126,8 +2098,9 @@ public:
 	process of altering partitions */
 	unsigned                                skip_alter_undo:1;
 
-	/*!< whether this is in a single-table tablespace and the .ibd
-	file is missing or page decryption failed and page is corrupted */
+	/** whether this is in a single-table tablespace and the .ibd file
+	is believed to be missing or page decryption failed and page is
+	corrupted */
 	unsigned				file_unreadable:1;
 
 	/** TRUE if the table object has been added to the dictionary cache. */
@@ -2355,6 +2328,8 @@ private:
   Atomic_relaxed<pthread_t> lock_mutex_owner{0};
 #endif
 public:
+  /** The next DB_ROW_ID value */
+  Atomic_counter<uint64_t> row_id{0};
   /** Autoinc counter value to give to the next inserted row. */
   uint64_t autoinc;
 
@@ -2630,19 +2605,6 @@ dict_col_get_spatial_status(
 	}
 
 	return(spatial_status);
-}
-
-/** Clear defragmentation summary. */
-inline void dict_stats_empty_defrag_summary(dict_index_t* index)
-{
-	index->stat_defrag_n_pages_freed = 0;
-}
-
-/** Clear defragmentation related index stats. */
-inline void dict_stats_empty_defrag_stats(dict_index_t* index)
-{
-	index->stat_defrag_modified_counter = 0;
-	index->stat_defrag_n_page_split = 0;
 }
 
 #include "dict0mem.inl"

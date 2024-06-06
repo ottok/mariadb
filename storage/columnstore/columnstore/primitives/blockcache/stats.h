@@ -21,15 +21,9 @@
 
 /** @file */
 
-#ifndef PRIMPROC_STATS_H
-#define PRIMPROC_STATS_H
+#pragma once
 
-#ifndef _MSC_VER
 #include <pthread.h>
-#else
-// FIXME: find a portable solution
-typedef int pthread_t;
-#endif
 #include <boost/thread.hpp>
 #include <iostream>
 #include <sstream>
@@ -70,5 +64,3 @@ class Stats
 };
 
 }  // namespace dbbc
-
-#endif  // PRIMPROC_STATS_H

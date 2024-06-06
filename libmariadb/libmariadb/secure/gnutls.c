@@ -995,9 +995,6 @@ static size_t ma_gnutls_get_protocol_version(const char *tls_version_option,
   if (!tls_version_option || !tls_version_option[0])
     goto end;
 
-
-  if (strstr(tls_version_option, "TLSv1.0"))
-    strcat(tls_versions, ":+VERS-TLS1.0");
   if (strstr(tls_version_option, "TLSv1.1"))
     strcat(tls_versions, ":+VERS-TLS1.1");
   if (strstr(tls_version_option, "TLSv1.2"))
@@ -1010,7 +1007,7 @@ end:
   if (tls_versions[0])
     snprintf(priority_string, prio_len - 1, "-VERS-TLS-ALL%s:NORMAL", tls_versions);
   else
-    strncpy(priority_string, "NORMAL:+VERS-ALL", prio_len - 1);
+    strncpy(priority_string, "NORMAL:+VERS-ALL+!VERS-TLS1.0", prio_len - 1);
   return strlen(priority_string);
 }
 
@@ -1176,6 +1173,8 @@ my_bool ma_tls_connect(MARIADB_TLS *ctls)
   MYSQL *mysql= (MYSQL *)gnutls_session_get_ptr(ssl);
   MARIADB_PVIO *pvio;
   int ret;
+  const gnutls_datum_t *cert_list;
+  unsigned int list_size= 0;
 
   if (!mysql)
     return 1;
@@ -1217,6 +1216,42 @@ my_bool ma_tls_connect(MARIADB_TLS *ctls)
     return 1;
   }
   ctls->ssl= (void *)ssl;
+
+  /* retrieve peer certificate information */
+  if ((cert_list= gnutls_certificate_get_peers(ssl, &list_size)))
+  {
+    gnutls_x509_crt_t cert;
+    
+    gnutls_x509_crt_init(&cert);
+    memset(&ctls->cert_info, 0, sizeof(MARIADB_X509_INFO));
+
+    if (!gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER))
+    {
+      size_t len= 0;
+      char fp[33];
+      time_t notBefore, notAfter;
+
+      ctls->cert_info.version= gnutls_x509_crt_get_version(cert);
+
+      gnutls_x509_crt_get_issuer_dn(cert, NULL, &len);
+      if ((ctls->cert_info.issuer= (char *)malloc(len)))
+        gnutls_x509_crt_get_issuer_dn(cert, ctls->cert_info.issuer, &len);
+
+      gnutls_x509_crt_get_dn(cert, NULL, &len);
+      if ((ctls->cert_info.subject= (char *)malloc(len)))
+        gnutls_x509_crt_get_dn(cert, ctls->cert_info.subject, &len);
+
+      notBefore= gnutls_x509_crt_get_activation_time(cert);
+      memcpy(&ctls->cert_info.not_before, gmtime(&notBefore), sizeof(struct tm));
+
+      notAfter= gnutls_x509_crt_get_expiration_time(cert);
+      memcpy(&ctls->cert_info.not_after, gmtime(&notAfter), sizeof(struct tm));
+
+      ma_tls_get_finger_print(ctls, MA_HASH_SHA256, fp, sizeof(fp));
+      mysql_hex_string(ctls->cert_info.fingerprint, fp, 32);
+    }
+    gnutls_x509_crt_deinit(cert);
+  }
   return 0;
 }
 
@@ -1324,6 +1359,8 @@ my_bool ma_tls_close(MARIADB_TLS *ctls)
     gnutls_certificate_free_ca_names(ctx);
     gnutls_certificate_free_credentials(ctx);
     gnutls_deinit((gnutls_session_t )ctls->ssl);
+    free(ctls->cert_info.issuer);
+    free(ctls->cert_info.subject);
     ctls->ssl= NULL;
   }
   return 0;
@@ -1357,7 +1394,7 @@ static int my_verify_callback(gnutls_session_t ssl)
 
   CLEAR_CLIENT_ERROR(mysql);
 
-  if ((mysql->options.extension->tls_verify_server_cert))
+  if (!mysql->options.extension->tls_allow_invalid_server_cert)
   {
     const char *hostname= mysql->host;
 
@@ -1371,10 +1408,22 @@ static int my_verify_callback(gnutls_session_t ssl)
   {
     gnutls_datum_t out;
     int type;
-    /* accept self signed certificates if we don't have to verify server cert */
-    if (!(mysql->options.extension->tls_verify_server_cert) &&
-        (status & GNUTLS_CERT_SIGNER_NOT_FOUND))
-      return 0;
+
+    if (status & GNUTLS_CERT_SIGNER_NOT_FOUND)
+    {
+      /* accept self signed certificates if we don't have to verify server cert */
+      if (mysql->options.extension->tls_allow_invalid_server_cert)
+        return 0;
+
+      /* postpone the error for self signed certificates if CA isn't set */
+      if (!mysql->options.ssl_ca && !mysql->options.ssl_capath)
+      {
+        type= gnutls_certificate_type_get(ssl);
+        gnutls_certificate_verification_status_print(status, type, &out, 0);
+        mysql->net.tls_self_signed_error= (char*)out.data;
+        return 0;
+      }
+    }
 
     /* gnutls default error message "certificate validation failed" isn't very
        descriptive, so we provide more information about the error here */
@@ -1391,17 +1440,42 @@ static int my_verify_callback(gnutls_session_t ssl)
   return 0;
 }
 
-unsigned int ma_tls_get_finger_print(MARIADB_TLS *ctls, char *fp, unsigned int len)
+unsigned int ma_tls_get_finger_print(MARIADB_TLS *ctls, uint hash_type, char *fp, unsigned int len)
 {
   MYSQL *mysql;
   size_t fp_len= len;
   const gnutls_datum_t *cert_list;
   unsigned int cert_list_size;
+  gnutls_digest_algorithm_t hash_alg;
 
   if (!ctls || !ctls->ssl)
     return 0;
 
   mysql= (MYSQL *)gnutls_session_get_ptr(ctls->ssl);
+
+  switch (hash_type)
+  {
+  case MA_HASH_SHA1:
+    hash_alg = GNUTLS_DIG_SHA1;
+    break;
+  case MA_HASH_SHA224:
+    hash_alg = GNUTLS_DIG_SHA224;
+    break;
+  case MA_HASH_SHA256:
+    hash_alg = GNUTLS_DIG_SHA256;
+    break;
+  case MA_HASH_SHA384:
+    hash_alg = GNUTLS_DIG_SHA384;
+    break;
+  case MA_HASH_SHA512:
+    hash_alg = GNUTLS_DIG_SHA512;
+    break;
+  default:
+    my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
+      ER(CR_SSL_CONNECTION_ERROR),
+      "Cannot detect hash algorithm for fingerprint verification");
+    return 0;
+  }
 
   cert_list = gnutls_certificate_get_peers (ctls->ssl, &cert_list_size);
   if (cert_list == NULL)
@@ -1412,7 +1486,7 @@ unsigned int ma_tls_get_finger_print(MARIADB_TLS *ctls, char *fp, unsigned int l
     return 0;
   }
 
-  if (gnutls_fingerprint(GNUTLS_DIG_SHA1, &cert_list[0], fp, &fp_len) == 0)
+  if (gnutls_fingerprint(hash_alg, &cert_list[0], fp, &fp_len) == 0)
     return fp_len;
   else
   {

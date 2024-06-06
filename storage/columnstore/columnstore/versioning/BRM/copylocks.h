@@ -24,8 +24,7 @@
  * class XXX interface
  */
 
-#ifndef COPYLOCKS_H_
-#define COPYLOCKS_H_
+#pragma once
 
 #include <set>
 #include <sys/types.h>
@@ -48,11 +47,7 @@
 #define CL_INITIAL_SIZE (50 * sizeof(CopyLockEntry))
 #define CL_INCREMENT (50 * sizeof(CopyLockEntry))
 
-#if defined(_MSC_VER) && defined(xxxCOPYLOCKS_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace idbdatafile
 {
@@ -167,5 +162,3 @@ class CopyLocks : public Undoable
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

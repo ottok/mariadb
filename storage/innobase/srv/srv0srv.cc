@@ -3,7 +3,7 @@
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2008, 2009 Google Inc.
 Copyright (c) 2009, Percona Inc.
-Copyright (c) 2013, 2022, MariaDB Corporation.
+Copyright (c) 2013, 2023, MariaDB Corporation.
 
 Portions of this file contain modifications contributed and copyrighted by
 Google, Inc. Those modifications are gratefully acknowledged and are described
@@ -48,7 +48,6 @@ Created 10/8/1995 Heikki Tuuri
 #include "buf0lru.h"
 #include "dict0boot.h"
 #include "dict0load.h"
-#include "ibuf0ibuf.h"
 #include "lock0lock.h"
 #include "log0recv.h"
 #include "mem0mem.h"
@@ -61,7 +60,6 @@ Created 10/8/1995 Heikki Tuuri
 #include "srv0start.h"
 #include "trx0i_s.h"
 #include "trx0purge.h"
-#include "btr0defragment.h"
 #include "ut0mem.h"
 #include "fil0fil.h"
 #include "fil0crypt.h"
@@ -123,9 +121,9 @@ my_bool	srv_read_only_mode;
 /** store to its own file each table created by an user; data
 dictionary tables are in the system tablespace 0 */
 my_bool	srv_file_per_table;
-/** Set if InnoDB operates in read-only mode or innodb-force-recovery
-is greater than SRV_FORCE_NO_TRX_UNDO. */
-my_bool	high_level_read_only;
+/** Set if innodb_read_only is set or innodb_force_recovery
+is SRV_FORCE_NO_UNDO_LOG_SCAN or greater. */
+bool high_level_read_only;
 
 /** Sort buffer size in index creation */
 ulong	srv_sort_buf_size;
@@ -216,13 +214,6 @@ in the buffer cache and accessed sequentially for InnoDB to trigger a
 readahead request. */
 ulong	srv_read_ahead_threshold;
 
-/** innodb_change_buffer_max_size; maximum on-disk size of change
-buffer in terms of percentage of the buffer pool. */
-uint	srv_change_buffer_max_size;
-
-ulong	srv_file_flush_method;
-
-
 /** copy of innodb_open_files; @see innodb_init_params() */
 ulint	srv_max_n_open_files;
 
@@ -279,7 +270,7 @@ my_bool	srv_print_all_deadlocks;
 INFORMATION_SCHEMA.innodb_cmp_per_index */
 my_bool	srv_cmp_per_index_enabled;
 
-/** innodb_fast_shutdown=1 skips purge and change buffer merge.
+/** innodb_fast_shutdown=1 skips the purge of transaction history.
 innodb_fast_shutdown=2 effectively crashes the server (no log checkpoint).
 innodb_fast_shutdown=3 is a clean shutdown that skips the rollback
 of active transaction (to be done on restart). */
@@ -313,8 +304,6 @@ unsigned long long srv_stats_modified_counter;
 based on number of configured pages */
 my_bool	srv_stats_sample_traditional;
 
-my_bool	srv_use_doublewrite_buf;
-
 /** innodb_sync_spin_loops */
 ulong	srv_n_spin_wait_rounds;
 /** innodb_spin_wait_delay */
@@ -322,21 +311,6 @@ uint	srv_spin_wait_delay;
 
 /** Number of initialized rollback segments for persistent undo log */
 ulong	srv_available_undo_logs;
-
-/* Defragmentation */
-my_bool	srv_defragment;
-/** innodb_defragment_n_pages */
-uint	srv_defragment_n_pages;
-uint	srv_defragment_stats_accuracy;
-/** innodb_defragment_fill_factor_n_recs */
-uint	srv_defragment_fill_factor_n_recs;
-/** innodb_defragment_fill_factor */
-double	srv_defragment_fill_factor;
-/** innodb_defragment_frequency */
-uint	srv_defragment_frequency;
-/** derived from innodb_defragment_frequency;
-@see innodb_defragment_frequency_update() */
-ulonglong	srv_defragment_interval;
 
 /** Current mode of operation */
 enum srv_operation_mode srv_operation;
@@ -381,8 +355,6 @@ FILE*	srv_misc_tmpfile;
 ulint		srv_main_active_loops;
 /** Iterations of the loop bounded by the 'srv_idle' label. */
 ulint		srv_main_idle_loops;
-/** Iterations of the loop bounded by the 'srv_shutdown' label. */
-static ulint		srv_main_shutdown_loops;
 /** Log writes involving flush. */
 ulint		srv_log_writes_and_flush;
 
@@ -548,10 +520,9 @@ srv_print_master_thread_info(
 	FILE  *file)    /* in: output stream */
 {
 	fprintf(file, "srv_master_thread loops: " ULINTPF " srv_active, "
-		ULINTPF " srv_shutdown, " ULINTPF " srv_idle\n"
+		ULINTPF " srv_idle\n"
 		"srv_master_thread log flush and writes: " ULINTPF "\n",
 		srv_main_active_loops,
-		srv_main_shutdown_loops,
 		srv_main_idle_loops,
 		srv_log_writes_and_flush);
 }
@@ -770,8 +741,6 @@ srv_printf_innodb_monitor(
 	      "--------\n", file);
 	os_aio_print(file);
 
-	ibuf_print(file);
-
 #ifdef BTR_CUR_HASH_ADAPT
 	if (btr_search_enabled) {
 		fputs("-------------------\n"
@@ -952,11 +921,6 @@ srv_export_innodb_status(void)
 
 	export_vars.innodb_n_temp_blocks_decrypted =
 		srv_stats.n_temp_blocks_decrypted;
-
-	export_vars.innodb_defragment_compression_failures =
-		btr_defragment_compression_failures;
-	export_vars.innodb_defragment_failures = btr_defragment_failures;
-	export_vars.innodb_defragment_count = btr_defragment_count;
 
 	export_vars.innodb_onlineddl_rowlog_rows = onlineddl_rowlog_rows;
 	export_vars.innodb_onlineddl_rowlog_pct_used = onlineddl_rowlog_pct_used;
@@ -1272,31 +1236,6 @@ static void srv_sync_log_buffer_in_background()
 	}
 }
 
-/** Report progress during shutdown.
-@param last   time of last output
-@param n_read number of page reads initiated for change buffer merge */
-static void srv_shutdown_print(time_t &last, ulint n_read)
-{
-  time_t now= time(nullptr);
-  if (now - last >= 15)
-  {
-    last= now;
-
-    const ulint ibuf_size= ibuf.size;
-    sql_print_information("Completing change buffer merge;"
-                          " %zu page reads initiated;"
-                          " %zu change buffer pages remain",
-                          n_read, ibuf_size);
-#if defined HAVE_SYSTEMD && !defined EMBEDDED_LIBRARY
-    service_manager_extend_timeout(INNODB_EXTEND_TIMEOUT_INTERVAL,
-                                   "Completing change buffer merge;"
-                                   " %zu page reads initiated;"
-                                   " %zu change buffer pages remain",
-                                   n_read, ibuf_size);
-#endif
-  }
-}
-
 /** Perform periodic tasks whenever the server is active.
 @param counter_time  microsecond_interval_timer() */
 static void srv_master_do_active_tasks(ulonglong counter_time)
@@ -1332,32 +1271,6 @@ static void srv_master_do_idle_tasks(ulonglong counter_time)
 	}
 	MONITOR_INC_TIME_IN_MICRO_SECS(
 		MONITOR_SRV_DICT_LRU_MICROSECOND, counter_time);
-}
-
-/**
-Complete the shutdown tasks such as background DROP TABLE,
-and optionally change buffer merge (on innodb_fast_shutdown=0). */
-void srv_shutdown(bool ibuf_merge)
-{
-	ulint		n_read = 0;
-	time_t		now = time(NULL);
-
-	do {
-		ut_ad(!srv_read_only_mode);
-		ut_ad(srv_shutdown_state == SRV_SHUTDOWN_CLEANUP);
-		++srv_main_shutdown_loops;
-
-		if (ibuf_merge) {
-			srv_main_thread_op_info = "doing insert buffer merge";
-			/* Disallow the use of change buffer to
-			avoid a race condition with
-			ibuf_read_merge_pages() */
-			ibuf_max_size_update(0);
-			log_free_check();
-			n_read = ibuf_contract();
-			srv_shutdown_print(now, n_read);
-		}
-	} while (n_read);
 }
 
 /** The periodic master task controlling the server. */

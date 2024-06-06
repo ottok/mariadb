@@ -17,14 +17,9 @@
   51 Franklin St., Fifth Floor, Boston, MA 02110, USA
  *************************************************************************************/
 
-#ifndef UTILS_WF_UDAF_H
-#define UTILS_WF_UDAF_H
+#pragma once
 
-#ifndef _MSC_VER
 #include <tr1/unordered_map>
-#else
-#include <unordered_map>
-#endif
 #include "windowfunctiontype.h"
 #include "mcsv1_udaf.h"
 
@@ -113,4 +108,3 @@ class WF_udaf : public WindowFunctionType
 
 }  // namespace windowfunction
 
-#endif  // UTILS_WF_UDAF_H

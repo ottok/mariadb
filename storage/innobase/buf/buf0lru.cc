@@ -381,13 +381,14 @@ we put it to free list to be used.
   * scan whole LRU list
   * scan LRU list even if buf_pool.try_LRU_scan is not set
 
-@param have_mutex  whether buf_pool.mutex is already being held
-@return the free control block, in state BUF_BLOCK_MEMORY */
-buf_block_t *buf_LRU_get_free_block(bool have_mutex)
+@param get  how to allocate the block
+@return the free control block, in state BUF_BLOCK_MEMORY
+@retval nullptr if get==have_no_mutex_soft and memory was not available */
+buf_block_t* buf_LRU_get_free_block(buf_LRU_get get)
 {
   bool waited= false;
   MONITOR_INC(MONITOR_LRU_GET_FREE_SEARCH);
-  if (!have_mutex)
+  if (UNIV_LIKELY(get != have_mutex))
     mysql_mutex_lock(&buf_pool.mutex);
 
   buf_LRU_check_size_of_non_data_objects();
@@ -414,7 +415,7 @@ got_block:
       mysql_mutex_unlock(&buf_pool.flush_list_mutex);
     }
 
-    if (!have_mutex)
+    if (UNIV_LIKELY(get != have_mutex))
       mysql_mutex_unlock(&buf_pool.mutex);
 
     block->page.zip.clear();
@@ -434,6 +435,12 @@ got_block:
     /* Tell other threads that there is no point in scanning the LRU
     list. */
     buf_pool.try_LRU_scan= false;
+  }
+
+  if (get == have_no_mutex_soft)
+  {
+    mysql_mutex_unlock(&buf_pool.mutex);
+    return nullptr;
   }
 
   waited= true;
@@ -765,7 +772,7 @@ bool buf_LRU_free_page(buf_page_t *bpage, bool zip)
 
 	/* We must hold an exclusive hash_lock to prevent
 	bpage->can_relocate() from changing due to a concurrent
-	execution of buf_page_get_low(). */
+	execution of buf_page_get_gen(). */
 	buf_pool_t::hash_chain& chain= buf_pool.page_hash.cell_get(id.fold());
 	page_hash_latch& hash_lock = buf_pool.page_hash.lock_get(chain);
 	/* We cannot use transactional_lock_guard here,
@@ -810,7 +817,6 @@ relocate_compressed:
 			ut_d(uint32_t s=) b->fix();
 			ut_ad(s == buf_page_t::FREED
 			      || s == buf_page_t::UNFIXED
-			      || s == buf_page_t::IBUF_EXIST
 			      || s == buf_page_t::REINIT);
 		}
 		break;
@@ -1279,6 +1285,51 @@ bool buf_LRU_scan_and_free_block(ulint limit)
 
   return buf_LRU_free_from_unzip_LRU_list(limit) ||
     buf_LRU_free_from_common_LRU_list(limit);
+}
+
+void buf_LRU_truncate_temp(uint32_t threshold)
+{
+  /* Set the extent descriptor page state as FREED */
+  for (uint32_t cur_xdes_page= xdes_calc_descriptor_page(
+         0, fil_system.temp_space->free_limit);
+       cur_xdes_page >= threshold;)
+  {
+    mtr_t mtr;
+    mtr.start();
+    if (buf_block_t* block= buf_page_get_gen(
+          page_id_t(SRV_TMP_SPACE_ID, cur_xdes_page), 0, RW_X_LATCH,
+          nullptr, BUF_PEEK_IF_IN_POOL, &mtr))
+    {
+      uint32_t state= block->page.state();
+      ut_ad(state > buf_page_t::UNFIXED);
+      ut_ad(state < buf_page_t::READ_FIX);
+      block->page.set_freed(state);
+    }
+    cur_xdes_page-= uint32_t(srv_page_size);
+    mtr.commit();
+  }
+
+  const page_id_t limit{SRV_TMP_SPACE_ID, threshold};
+  mysql_mutex_lock(&buf_pool.mutex);
+  for (buf_page_t* bpage = UT_LIST_GET_FIRST(buf_pool.LRU);
+       bpage;)
+  {
+    buf_page_t* next= UT_LIST_GET_NEXT(LRU, bpage);
+    if (bpage->id() >= limit)
+    {
+    #ifdef UNIV_DEBUG
+      if (bpage->lock.u_lock_try(0))
+      {
+        ut_ad(bpage->state() == buf_page_t::FREED);
+        bpage->lock.u_unlock();
+      }
+    #endif /* UNIV_DEBUG */
+      ut_ad(!reinterpret_cast<buf_block_t*>(bpage)->index);
+      buf_LRU_free_page(bpage, true);
+    }
+    bpage= next;
+  }
+  mysql_mutex_unlock(&buf_pool.mutex);
 }
 
 #ifdef UNIV_DEBUG

@@ -19,8 +19,7 @@
 
 /** @file */
 
-#ifndef AUTOINCREMENTDATA_H__
-#define AUTOINCREMENTDATA_H__
+#pragma once
 
 #include <stdint.h>
 
@@ -50,4 +49,3 @@ class AutoincrementData
   boost::mutex fOIDnextvalLock;
 };
 
-#endif

@@ -23,8 +23,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef SIMPLEFILTER_H
-#define SIMPLEFILTER_H
+#pragma once
 #include <string>
 #include <iosfwd>
 #include <boost/shared_ptr.hpp>
@@ -66,14 +65,17 @@ class SimpleFilter : public Filter
     SEMI
   };
 
+  struct ForTestPurposesWithoutColumnsOIDS{};
+
   SimpleFilter();
   SimpleFilter(const std::string& sql);
+  SimpleFilter(const std::string& sql, ForTestPurposesWithoutColumnsOIDS);
   SimpleFilter(const SOP& op, ReturnedColumn* lhs, ReturnedColumn* rhs, const long timeZone = 0);
   SimpleFilter(const SimpleFilter& rhs);
 
   virtual ~SimpleFilter();
 
-  inline virtual SimpleFilter* clone() const
+  inline virtual SimpleFilter* clone() const override
   {
     return new SimpleFilter(*this);
   }
@@ -104,7 +106,7 @@ class SimpleFilter : public Filter
   }
 
   using Filter::data;
-  virtual const std::string data() const;
+  virtual const std::string data() const override;
 
   /** assign fLhs
    *
@@ -127,20 +129,20 @@ class SimpleFilter : public Filter
    */
   void rhs(ReturnedColumn* rhs);
 
-  virtual const std::string toString() const;
+  virtual const std::string toString() const override;
 
   /**
    * The serialization interface
    */
-  virtual void serialize(messageqcpp::ByteStream&) const;
-  virtual void unserialize(messageqcpp::ByteStream&);
+  virtual void serialize(messageqcpp::ByteStream&) const override;
+  virtual void unserialize(messageqcpp::ByteStream&) override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
    * Do a deep, strict (as opposed to semantic) equivalence test.
    * @return true if every member of t is a duplicate copy of every member of this; false otherwise
    */
-  virtual bool operator==(const TreeNode* t) const;
+  virtual bool operator==(const TreeNode* t) const override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -155,6 +157,10 @@ class SimpleFilter : public Filter
    * @return true if filter operation are the same and
    * the sets of arguments are the same; false otherwise
    */
+
+  bool operator<(const SimpleFilter& t) const;
+
+
   bool semanticEq(const SimpleFilter& t) const;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
@@ -162,7 +168,7 @@ class SimpleFilter : public Filter
    * Do a deep, strict (as opposed to semantic) equivalence test.
    * @return false if every member of t is a duplicate copy of every member of this; true otherwise
    */
-  virtual bool operator!=(const TreeNode* t) const;
+  virtual bool operator!=(const TreeNode* t) const override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -209,11 +215,13 @@ class SimpleFilter : public Filter
   /** @brief this function is called by the connector to set constant values according to the compare type */
   void convertConstant();
 
-  void setDerivedTable();
+  void setDerivedTable() override;
 
   virtual void replaceRealCol(std::vector<SRCP>&);
 
   static std::string escapeString(const std::string& input);
+
+  virtual string toCppCode(IncludeSet& includes) const override;
 
  private:
   SOP fOp;               /// operator
@@ -223,16 +231,16 @@ class SimpleFilter : public Filter
   int fJoinFlag;         /// hash join type
   long fTimeZone;
 
-  void parse(std::string);
+  void parse(std::string, std::optional<ForTestPurposesWithoutColumnsOIDS> testFlag = std::nullopt);
 
   /***********************************************************
    *                      F&E framework                      *
    ***********************************************************/
  public:
-  inline virtual bool getBoolVal(rowgroup::Row& row, bool& isNull);
-  inline virtual int64_t getIntVal(rowgroup::Row& row, bool& isNull);
-  inline virtual double getDoubleVal(rowgroup::Row& row, bool& isNull);
-  inline virtual long double getLongDoubleVal(rowgroup::Row& row, bool& isNull);
+  inline virtual bool getBoolVal(rowgroup::Row& row, bool& isNull) override;
+  inline virtual int64_t getIntVal(rowgroup::Row& row, bool& isNull) override;
+  inline virtual double getDoubleVal(rowgroup::Row& row, bool& isNull) override;
+  inline virtual long double getLongDoubleVal(rowgroup::Row& row, bool& isNull) override;
 
   // get all simple columns involved in this column
   const std::vector<SimpleColumn*>& simpleColumnList();
@@ -284,4 +292,3 @@ typedef boost::shared_ptr<SimpleFilter> SSFP;
 std::ostream& operator<<(std::ostream& output, const SimpleFilter& rhs);
 
 }  // namespace execplan
-#endif  // SIMPLEFILTER_H

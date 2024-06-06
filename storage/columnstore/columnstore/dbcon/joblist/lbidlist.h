@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef JOBLIST_LBIDLIST_H
-#define JOBLIST_LBIDLIST_H
+#pragma once
 
 #include <boost/shared_ptr.hpp>
 #include "joblisttypes.h"
@@ -32,11 +31,7 @@
 #include "bytestream.h"
 #include <iostream>
 #include "brm.h"
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 
 namespace joblist
 {
@@ -99,8 +94,8 @@ class LBIDList
                  execplan::CalpontSystemCatalog::ColDataType type);
 
   template <typename T>
-  void UpdateMinMax(T min, T max, int64_t lbid, const execplan::CalpontSystemCatalog::ColType& type,
-                    bool validData = true);
+  void UpdateMinMax(T min, T max, int64_t lbid, bool dictScan,
+                    const execplan::CalpontSystemCatalog::ColType& type, bool validData = true);
 
   void UpdateAllPartitionInfo(const execplan::CalpontSystemCatalog::ColType& colType);
 
@@ -108,7 +103,8 @@ class LBIDList
 
   bool CasualPartitionPredicate(const BRM::EMCasualPartition_t& cpRange,
                                 const messageqcpp::ByteStream* MsgDataPtr, const uint16_t NOPS,
-                                const execplan::CalpontSystemCatalog::ColType& ct, const uint8_t BOP);
+                                const execplan::CalpontSystemCatalog::ColType& ct, const uint8_t BOP,
+                                bool isDict);
 
   template <typename T>
   bool checkSingleValue(T min, T max, T value, const execplan::CalpontSystemCatalog::ColType& type);
@@ -152,4 +148,3 @@ class LBIDList
 };  // LBIDList
 
 }  // namespace joblist
-#endif

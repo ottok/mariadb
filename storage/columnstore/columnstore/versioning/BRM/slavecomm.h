@@ -24,8 +24,7 @@
  * class XXX interface
  */
 
-#ifndef SLAVECOMM_H_
-#define SLAVECOMM_H_
+#pragma once
 
 #include <unistd.h>
 #include <iostream>
@@ -37,11 +36,7 @@
 #include "messagequeue.h"
 #include "bytestream.h"
 
-#if defined(_MSC_VER) && defined(xxxSLAVECOMM_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 // forward reference
 namespace idbdatafile
@@ -59,8 +54,10 @@ class SlaveComm
   EXPORT SlaveComm();
 
   /** Use this ctor to have it connected to the rest of the DBRM system */
-  EXPORT SlaveComm(std::string hostname, SlaveDBRMNode* s);  // hostname = 'DBRM_WorkerN'
-  EXPORT ~SlaveComm();
+  EXPORT SlaveComm(std::string hostname);  // hostname = 'DBRM_WorkerN'
+  EXPORT ~SlaveComm() {};
+
+  SlaveDBRMNode& getSlaveNode() { return *slave; }
 
   EXPORT void run();
   EXPORT void stop();
@@ -117,26 +114,19 @@ class SlaveComm
   void saveDelta();
   bool processExists(const uint32_t pid, const std::string& pname);
 
-  messageqcpp::MessageQueueServer* server;
+  std::unique_ptr<messageqcpp::MessageQueueServer> server;
   messageqcpp::IOSocket master;
-  SlaveDBRMNode* slave;
+  std::unique_ptr<SlaveDBRMNode> slave;
   std::string savefile;
   bool release, die, firstSlave, saveFileToggle, takeSnapshot, doSaveDelta, standalone, printOnly;
   messageqcpp::ByteStream delta;
-  idbdatafile::IDBDataFile* currentSaveFile;
+  std::unique_ptr<idbdatafile::IDBDataFile> currentSaveFile;
   std::string journalName;
-  idbdatafile::IDBDataFile* journalh;
+  std::unique_ptr<idbdatafile::IDBDataFile> journalh;
   int64_t snapshotInterval, journalCount;
   struct timespec MSG_TIMEOUT;
-#ifdef _MSC_VER
-  boost::mutex fPidMemLock;
-  DWORD* fPids;
-  DWORD fMaxPids;
-#endif
 };
 
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

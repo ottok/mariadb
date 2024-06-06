@@ -21,8 +21,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef SM_H__
-#define SM_H__
+#pragma once
 
 #include <stdint.h>
 #include <set>
@@ -40,11 +39,7 @@
 #define IDB_SM_DEBUG 0
 #define IDB_SM_PROFILE 0
 
-#if defined(_MSC_VER) && defined(xxxDLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 #if IDB_SM_PROFILE
 #include <sys/time.h>
@@ -308,5 +303,3 @@ extern status_t tpl_close(cpsm_tplh_t*, cpsm_conhdl_t**, querystats::QueryStats&
 }  // namespace sm
 
 #undef EXPORT
-
-#endif

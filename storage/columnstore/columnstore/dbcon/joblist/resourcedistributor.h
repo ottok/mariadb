@@ -22,8 +22,7 @@
 /**
  * @file
  */
-#ifndef JOBLIST_RESOURCEDISTRIBUTER_H
-#define JOBLIST_RESOURCEDISTRIBUTER_H
+#pragma once
 
 #include <unistd.h>
 #include <list>
@@ -144,5 +143,3 @@ class ResourceDistributor
 };
 
 }  // namespace joblist
-
-#endif

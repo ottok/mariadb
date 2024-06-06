@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef SERVICE_H_INCLUDED
-#define SERVICE_H_INCLUDED
+#pragma once
 
 #include <signal.h>
 #include <cstring>
@@ -28,7 +27,7 @@ class Service
  protected:
   // The read operation implicitly controls how long binary waits
   // before it starts. This is import for DMLProc to survive rollbacks. See MCOL-5105.
-  static constexpr const size_t PipeReadTimeout = 1200;
+  static constexpr const size_t PipeReadTimeout = 7200;
   // The service name, for logging
   const std::string m_name;
   // The pipe to send messages from the child to the parent
@@ -117,5 +116,3 @@ class Service
   // The main service process job
   virtual int Child() = 0;
 };
-
-#endif  // SERVICE_H_INCLUDED

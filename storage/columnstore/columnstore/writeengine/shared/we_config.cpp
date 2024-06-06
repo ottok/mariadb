@@ -68,6 +68,7 @@ unsigned Config::m_FilesPerColumnPartition = DEFAULT_FILES_PER_COLUMN_PARTITION;
 unsigned Config::m_ExtentsPerSegmentFile = DEFAULT_EXTENTS_PER_SEGMENT_FILE;
 int Config::m_BulkProcessPriority = DEFAULT_BULK_PROCESS_PRIORITY;
 string Config::m_BulkRollbackDir;
+bool Config::m_FastDelete;
 unsigned Config::m_MaxFileSystemDiskUsage = DEFAULT_MAX_FILESYSTEM_DISK_USAGE;
 unsigned Config::m_NumCompressedPadBlks = DEFAULT_COMPRESSED_PADDING_BLKS;
 bool Config::m_ParentOAMModuleFlag = DEFAULT_PARENT_OAM;
@@ -118,9 +119,7 @@ void Config::checkReload()
   if (m_bulkRoot.length() == 0)
   {
     m_bulkRoot = "/var/log/mariadb/columnstore";
-#ifndef _MSC_VER
     m_bulkRoot += "/data";
-#endif
     m_bulkRoot += "/bulk";
   }
 
@@ -183,6 +182,18 @@ void Config::checkReload()
   {
     m_BulkRollbackDir.assign(m_bulkRoot);
     m_BulkRollbackDir += "/rollback";
+  }
+
+  const std::string fastDeleteTemp = cf->getConfig("WriteEngine", "FastDelete");
+
+  if (fastDeleteTemp.length() != 0 &&
+      (fastDeleteTemp == "y" || fastDeleteTemp == "Y"))
+  {
+    m_FastDelete = true;
+  }
+  else
+  {
+    m_FastDelete = false;
   }
 
   //--------------------------------------------------------------------------
@@ -514,6 +525,20 @@ std::string Config::getBulkRollbackDir()
   checkReload();
 
   return m_BulkRollbackDir;
+}
+
+/*******************************************************************************
+ * DESCRIPTION:
+ *    Get the fast delete option
+ * PARAMETERS:
+ *    none
+ ******************************************************************************/
+bool Config::getFastDelete()
+{
+  boost::mutex::scoped_lock lk(fCacheLock);
+  checkReload();
+
+  return m_FastDelete;
 }
 
 /*******************************************************************************

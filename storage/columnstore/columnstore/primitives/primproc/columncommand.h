@@ -28,9 +28,10 @@
 //
 //
 
-#ifndef COLUMNCOMMAND_H_
-#define COLUMNCOMMAND_H_
+#pragma once
 
+#include <memory>
+#include "columnwidth.h"
 #include "command.h"
 #include "calpontsystemcatalog.h"
 
@@ -77,6 +78,16 @@ class ColumnCommand : public Command
   {
     return _isScan;
   }
+
+  bool hasAuxCol() const
+  {
+    return hasAuxCol_;
+  }
+  uint64_t getLBIDAux() const
+  {
+    return lbidAux;
+  }
+
   void createCommand(messageqcpp::ByteStream&);
   void createCommand(execplan::CalpontSystemCatalog::ColType& aColType, messageqcpp::ByteStream&);
   void resetCommand(messageqcpp::ByteStream&);
@@ -155,7 +166,7 @@ class ColumnCommand : public Command
 
   bool _isScan;
 
-  boost::scoped_array<uint8_t> inputMsg;
+  std::unique_ptr<uint8_t[], utils::AlignedDeleter> inputMsg;
   NewColRequestHeader* primMsg;
   ColResultHeader* outMsg;
 
@@ -164,6 +175,8 @@ class ColumnCommand : public Command
   uint32_t baseMsgLength;
 
   uint64_t lbid;
+  bool hasAuxCol_;
+  uint64_t lbidAux;
   uint32_t traceFlags;  // probably move this to Command
   uint8_t BOP;
   messageqcpp::ByteStream filterString;
@@ -307,4 +320,3 @@ inline void ColumnCommand::fillEmptyBlock<messageqcpp::ByteStream::hexbyte>(uint
 
 }  // namespace primitiveprocessor
 
-#endif

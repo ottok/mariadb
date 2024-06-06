@@ -21,8 +21,7 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef CREATEINDEXPROCESSOR_H
-#define CREATEINDEXPROCESSOR_H
+#pragma once
 
 #include "ddlpackageprocessor.h"
 #include "ddlpkg.h"
@@ -51,4 +50,3 @@ class CreateIndexProcessor : public DDLPackageProcessor
 };
 
 }  // namespace ddlpackageprocessor
-#endif  // CREATEINDEXPROCESSOR_H

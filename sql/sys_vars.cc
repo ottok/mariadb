@@ -38,9 +38,9 @@
 #include "my_sys.h"
 
 #include "events.h"
-#include <thr_alarm.h>
 #include "slave.h"
 #include "rpl_mi.h"
+#include "rpl_filter.h"
 #include "transaction.h"
 #include "mysqld.h"
 #include "lock.h"
@@ -53,8 +53,9 @@
 #include "debug_sync.h"                         // DEBUG_SYNC
 #include "sql_show.h"
 #include "opt_trace_context.h"
-
 #include "log_event.h"
+#include "optimizer_defaults.h"
+
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
 #include "../storage/perfschema/pfs_server.h"
 #endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
@@ -436,6 +437,14 @@ static bool update_auto_increment_increment (sys_var *self, THD *thd, enum_var_t
 
 #endif /* WITH_WSREP */
 
+
+static Sys_var_charset_collation_map Sys_character_set_collations(
+       "character_set_collations",
+       "Overrides for character set default collations",
+       SESSION_VAR(character_set_collations),
+       NO_CMD_LINE, NOT_IN_BINLOG);
+
+
 static Sys_var_double Sys_analyze_sample_percentage(
        "analyze_sample_percentage",
        "Percentage of rows from the table ANALYZE TABLE will sample "
@@ -722,13 +731,21 @@ Sys_binlog_direct(
        CMD_LINE(OPT_ARG), DEFAULT(FALSE),
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(binlog_direct_check));
 
+static bool deprecated_explicit_defaults_for_timestamp(sys_var *self, THD *thd,
+                                                       set_var *var)
+{
+  if (var->value && var->save_result.ulonglong_value == 0)
+    warn_deprecated<1100>(thd, "explicit_defaults_for_timestamp=0");
+  return false;
+}
 static Sys_var_bit Sys_explicit_defaults_for_timestamp(
        "explicit_defaults_for_timestamp",
        "This option causes CREATE TABLE to create all TIMESTAMP columns "
        "as NULL with DEFAULT NULL attribute, Without this option, "
        "TIMESTAMP columns are NOT NULL and have implicit DEFAULT clauses.",
        SESSION_VAR(option_bits), CMD_LINE(OPT_ARG),
-       OPTION_EXPLICIT_DEF_TIMESTAMP, DEFAULT(TRUE), NO_MUTEX_GUARD, IN_BINLOG);
+       OPTION_EXPLICIT_DEF_TIMESTAMP, DEFAULT(TRUE), NO_MUTEX_GUARD, IN_BINLOG,
+       ON_CHECK(deprecated_explicit_defaults_for_timestamp));
 
 static Sys_var_ulonglong Sys_bulk_insert_buff_size(
        "bulk_insert_buffer_size", "Size of tree cache used in bulk "
@@ -806,7 +823,7 @@ static bool check_charset(sys_var *self, THD *thd, set_var *var)
           ((thd->variables.pseudo_slave_mode || thd->slave_thread) &&
            (var->save_result.ptr=
              Lex_exact_charset_opt_extended_collate(cs, true).
-               find_default_collation())))
+               find_compiled_default_collation())))
         return false;
     }
     my_error(ER_UNKNOWN_CHARACTER_SET, MYF(0), llstr(csno, buff));
@@ -1120,7 +1137,7 @@ static bool event_scheduler_check(sys_var *self, THD *thd, set_var *var)
   if (Events::opt_event_scheduler == Events::EVENTS_DISABLED)
   {
     my_error(ER_OPTION_PREVENTS_STATEMENT, MYF(0),
-             "--event-scheduler=DISABLED or --skip-grant-tables");
+             opt_noacl ? "--skip-grant-tables" : "--event-scheduler=DISABLED");
     return true;
   }
   /* DISABLED is only accepted on the command line */
@@ -1230,6 +1247,68 @@ Sys_binlog_expire_logs_seconds(
        VALID_RANGE(0, 8553600), DEFAULT(0), BLOCK_SIZE(1), NO_MUTEX_GUARD,
        NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(copy_to_expire_logs_days));
 
+
+static bool update_binlog_space_limit(sys_var *, THD *,
+                                      enum_var_type type)
+{
+#ifdef HAVE_REPLICATION
+  /* Refresh summary of binlog sizes */
+  mysql_bin_log.lock_index();
+  binlog_space_limit= internal_binlog_space_limit;
+  slave_connections_needed_for_purge=
+    internal_slave_connections_needed_for_purge;
+
+  if (opt_bin_log)
+  {
+    if (binlog_space_limit)
+      mysql_bin_log.count_binlog_space();
+    /* Inform can_purge_log() that it should do a recheck of log_in_use() */
+    sending_new_binlog_file++;
+     mysql_bin_log.unlock_index();
+    mysql_bin_log.purge(1);
+    return 0;
+  }
+  mysql_bin_log.unlock_index();
+#endif
+  return 0;
+}
+
+static Sys_var_on_access_global<Sys_var_ulonglong,
+                                PRIV_SET_SYSTEM_GLOBAL_VAR_MAX_BINLOG_CACHE_SIZE>
+Sys_max_binlog_total_size(
+      "max_binlog_total_size",
+      "Maximum space to use for all binary logs. Extra logs are deleted on "
+      "server start, log rotation, FLUSH LOGS or when writing to binlog. "
+      "Default is 0, which means no size restrictions. "
+      "See also slave_connections_needed_for_purge",
+      GLOBAL_VAR(internal_binlog_space_limit), CMD_LINE(REQUIRED_ARG),
+      VALID_RANGE(0, ULONGLONG_MAX), DEFAULT(0), BLOCK_SIZE(1),
+      NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
+      ON_UPDATE(update_binlog_space_limit));
+
+static Sys_var_on_access_global<Sys_var_ulonglong,
+                                PRIV_SET_SYSTEM_GLOBAL_VAR_MAX_BINLOG_CACHE_SIZE>
+Sys_binlog_space_limit(
+      "binlog_space_limit",
+      "Alias for max_binlog_total_size. Compatibility with Percona server.",
+      GLOBAL_VAR(internal_binlog_space_limit), CMD_LINE(REQUIRED_ARG),
+      VALID_RANGE(0, ULONGLONG_MAX), DEFAULT(0), BLOCK_SIZE(1),
+      NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
+      ON_UPDATE(update_binlog_space_limit));
+
+static Sys_var_on_access_global<Sys_var_uint,
+                                PRIV_SET_SYSTEM_GLOBAL_VAR_MAX_BINLOG_CACHE_SIZE>
+Sys_slave_connections_needed_for_purge(
+      "slave_connections_needed_for_purge",
+      "Minimum number of connected slaves required for automatic binary "
+      "log purge with max_binlog_total_size, binlog_expire_logs_seconds "
+      "or binlog_expire_logs_days.",
+       GLOBAL_VAR(internal_slave_connections_needed_for_purge),
+       CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(0, UINT_MAX), DEFAULT(1), BLOCK_SIZE(1),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
+       ON_UPDATE(update_binlog_space_limit));
+
 static Sys_var_mybool Sys_flush(
        "flush", "Flush MyISAM tables to disk between SQL commands",
        GLOBAL_VAR(myisam_flush),
@@ -1333,12 +1412,11 @@ static bool check_master_connection(sys_var *self, THD *thd, set_var *var)
   return false;
 }
 
-static Sys_var_session_lexstring Sys_default_master_connection(
+static Sys_var_lexstring Sys_default_master_connection(
        "default_master_connection",
        "Master connection to use for all slave variables and slave commands",
-       SESSION_ONLY(default_master_connection),
-       NO_CMD_LINE,
-       DEFAULT(""), MAX_CONNECTION_NAME, ON_CHECK(check_master_connection));
+       SESSION_ONLY(default_master_connection), NO_CMD_LINE, DEFAULT(""),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(check_master_connection));
 #endif
 
 static Sys_var_charptr_fscs Sys_init_file(
@@ -1439,7 +1517,7 @@ static Sys_var_uint Sys_large_page_size(
        READ_ONLY GLOBAL_VAR(opt_large_page_size), NO_CMD_LINE,
        VALID_RANGE(0, UINT_MAX), DEFAULT(0), BLOCK_SIZE(1),
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
-       DEPRECATED(""));
+       DEPRECATED(1005, ""));
 
 static Sys_var_mybool Sys_large_pages(
        "large_pages", "Enable support for large pages",
@@ -1523,9 +1601,12 @@ static Sys_var_bit Sys_log_slow_admin_statements(
        "log_slow_admin_statements",
        "Log slow OPTIMIZE, ANALYZE, ALTER and other administrative statements "
        "to the slow log if it is open.  Resets or sets the option 'admin' in "
-       "log_slow_disabled_statements",
+       "log_slow_filter. "
+       "Deprecated, use log_slow_filter without 'admin'.",
        SESSION_VAR(log_slow_disabled_statements),
-       CMD_LINE(OPT_ARG), REVERSE(LOG_SLOW_DISABLE_ADMIN), DEFAULT(TRUE));
+       CMD_LINE(OPT_ARG), REVERSE(LOG_SLOW_DISABLE_ADMIN), DEFAULT(TRUE),
+       0, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
+       DEPRECATED(1100, "'@@log_slow_filter'"));
 
 static Sys_var_bit Sys_log_slow_slave_statements(
        "log_slow_slave_statements",
@@ -1720,10 +1801,6 @@ Sys_max_binlog_size(
 
 static bool fix_max_connections(sys_var *self, THD *thd, enum_var_type type)
 {
-#ifndef EMBEDDED_LIBRARY
-  resize_thr_alarm(max_connections + extra_max_connections +
-                   global_system_variables.max_insert_delayed_threads + 10);
-#endif
   return false;
 }
 
@@ -2618,13 +2695,6 @@ static Sys_var_max_user_conn Sys_max_user_connections(
        VALID_RANGE(-1, INT_MAX), DEFAULT(0), BLOCK_SIZE(1), NO_MUTEX_GUARD,
        NOT_IN_BINLOG, ON_CHECK(if_checking_enabled));
 
-static Sys_var_ulong Sys_max_tmp_tables(
-       "max_tmp_tables", "Unused, will be removed.",
-       SESSION_VAR(max_tmp_tables), CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(1, UINT_MAX), DEFAULT(32), BLOCK_SIZE(1),
-       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
-       DEPRECATED("")); // since 10.1.2
-
 static Sys_var_ulong Sys_max_write_lock_count(
        "max_write_lock_count",
        "After this many write locks, allow some read locks to run in between",
@@ -2743,7 +2813,7 @@ static bool set_old_mode (sys_var *self, THD *thd, enum_var_type type)
 static Sys_var_mybool Sys_old_mode(
        "old", "Use compatible behavior from previous MariaDB version. See also --old-mode",
        SESSION_VAR(old_mode), CMD_LINE(OPT_ARG), DEFAULT(FALSE), 0, NOT_IN_BINLOG, ON_CHECK(0),
-       ON_UPDATE(set_old_mode), DEPRECATED("'@@old_mode'"));
+       ON_UPDATE(set_old_mode), DEPRECATED(1009, "'@@old_mode'"));
 
 static Sys_var_mybool Sys_opt_allow_suspicious_udfs(
        "allow_suspicious_udfs",
@@ -2766,14 +2836,6 @@ static Sys_var_enum Sys_alter_algorithm(
 	"alter_algorithm", "Specify the alter table algorithm",
 	SESSION_VAR(alter_algorithm), CMD_LINE(OPT_ARG),
 	alter_algorithm_modes, DEFAULT(0));
-
-static Sys_var_enum Sys_old_alter_table(
-       "old_alter_table", "Alias for alter_algorithm. "
-       "Deprecated. Use --alter-algorithm instead.",
-       SESSION_VAR(alter_algorithm), CMD_LINE(OPT_ARG),
-       alter_algorithm_modes, DEFAULT(0), NO_MUTEX_GUARD, NOT_IN_BINLOG,
-       ON_CHECK(0), ON_UPDATE(0),
-       DEPRECATED("'@@alter_algorithm'")); // Since 10.5.1
 
 static bool check_old_passwords(sys_var *self, THD *thd, set_var *var)
 {
@@ -2859,7 +2921,6 @@ export const char *optimizer_switch_names[]=
 {
   "index_merge","index_merge_union","index_merge_sort_union",
   "index_merge_intersection","index_merge_sort_intersection",
-  "engine_condition_pushdown",
   "index_condition_pushdown",
   "derived_merge", "derived_with_keys",
   "firstmatch","loosescan","materialization","in_to_exists","semijoin",
@@ -2887,20 +2948,10 @@ export const char *optimizer_switch_names[]=
   "not_null_range_scan",
   "hash_join_cardinality",
   "cset_narrowing",
-  "default", 
+  "sargable_casefold",
+  "default",
   NullS
 };
-static bool fix_optimizer_switch(sys_var *self, THD *thd,
-                                 enum_var_type type)
-{
-  SV *sv= (type == OPT_GLOBAL) ? &global_system_variables : &thd->variables;
-  if (sv->optimizer_switch & deprecated_ENGINE_CONDITION_PUSHDOWN)
-    push_warning_printf(current_thd, Sql_condition::WARN_LEVEL_WARN,
-                        ER_WARN_DEPRECATED_SYNTAX_NO_REPLACEMENT,
-                        ER_THD(thd, ER_WARN_DEPRECATED_SYNTAX_NO_REPLACEMENT),
-                        "engine_condition_pushdown=on"); // since 10.1.1
-  return false;
-}
 static bool check_legal_optimizer_switch(sys_var *self, THD *thd,
                                          set_var *var)
 {
@@ -2917,8 +2968,7 @@ static Sys_var_flagset Sys_optimizer_switch(
        "Fine-tune the optimizer behavior",
        SESSION_VAR(optimizer_switch), CMD_LINE(REQUIRED_ARG),
        optimizer_switch_names, DEFAULT(OPTIMIZER_SWITCH_DEFAULT),
-       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(check_legal_optimizer_switch),
-       ON_UPDATE(fix_optimizer_switch));
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(check_legal_optimizer_switch));
 
 static Sys_var_flagset Sys_optimizer_trace(
     "optimizer_trace",
@@ -2937,29 +2987,13 @@ static Sys_var_ulong Sys_optimizer_trace_max_mem_size(
     SESSION_VAR(optimizer_trace_max_mem_size), CMD_LINE(REQUIRED_ARG),
     VALID_RANGE(0, ULONG_MAX), DEFAULT(1024 * 1024), BLOCK_SIZE(1));
 
-
-/*
-  Symbolic names for OPTIMIZER_ADJ_* flags in sql_priv.h
-*/
-static const char *adjust_secondary_key_cost[]=
-{
-  "adjust_secondary_key_cost", "disable_max_seek", "disable_forced_index_in_group_by", 0
-};
-
-
-static Sys_var_set Sys_optimizer_adjust_secondary_key_costs(
+static Sys_var_ulong Sys_optimizer_adjust_secondary_key_costs(
     "optimizer_adjust_secondary_key_costs",
-    "A bit field with the following values: "
-    "adjust_secondary_key_cost = Update secondary key costs for ranges to be at least "
-    "5x of clustered primary key costs. "
-    "disable_max_seek = Disable 'max_seek optimization' for secondary keys and slight "
-    "adjustment of filter cost. "
-    "disable_forced_index_in_group_by = Disable automatic forced index in GROUP BY. "
-    "This variable will be deleted in MariaDB 11.0 as it is not needed with the "
-    "new 11.0 optimizer.",
+    "Unused, will be removed.",
     SESSION_VAR(optimizer_adjust_secondary_key_costs), CMD_LINE(REQUIRED_ARG),
-    adjust_secondary_key_cost, DEFAULT(0));
-
+    VALID_RANGE(0, 2), DEFAULT(0), BLOCK_SIZE(1),
+    NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
+    DEPRECATED(1100, ""));
 
 static Sys_var_charptr_fscs Sys_pid_file(
        "pid_file", "Pid file used by safe_mysqld",
@@ -3158,7 +3192,6 @@ static Sys_var_ulong Sys_query_prealloc_size(
        DEFAULT(QUERY_ALLOC_PREALLOC_SIZE),
        BLOCK_SIZE(1024), NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
        ON_UPDATE(fix_thd_mem_root));
-
 
 // this has to be NO_CMD_LINE as the command-line option has a different name
 static Sys_var_mybool Sys_skip_external_locking(
@@ -3373,7 +3406,7 @@ Sys_secure_auth(
        "passwords",
        GLOBAL_VAR(opt_secure_auth), CMD_LINE(OPT_ARG, OPT_SECURE_AUTH),
        DEFAULT(TRUE), NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
-       DEPRECATED("")); // since 10.6.17
+       DEPRECATED(1006, ""));
 
 static bool check_require_secure_transport(sys_var *self, THD *thd, set_var *var)
 {
@@ -3542,6 +3575,19 @@ Sys_master_verify_checksum(
        "SHOW BINLOG EVENTS",
        GLOBAL_VAR(opt_master_verify_checksum), CMD_LINE(OPT_ARG),
        DEFAULT(FALSE));
+
+
+static Sys_var_on_access_global<Sys_var_mybool,
+                           PRIV_SET_SYSTEM_GLOBAL_VAR_BINLOG_LEGACY_EVENT_POS>
+Sys_binlog_legacy_event_pos(
+       "binlog_legacy_event_pos",
+       "Fill in the end_log_pos field of _all_ events in the binlog, even when "
+       "doing so costs performance. Can be used in case some old application needs "
+       "it for backwards compatibility. Setting this option can hurt binlog "
+       "scalability.",
+       GLOBAL_VAR(opt_binlog_legacy_event_pos), CMD_LINE(OPT_ARG),
+       DEFAULT(FALSE));
+
 
 /* These names must match RPL_SKIP_XXX #defines in slave.h. */
 static const char *replicate_events_marked_for_skip_names[]= {
@@ -3889,25 +3935,43 @@ static Sys_var_set Sys_sql_mode(
 
 static const char *old_mode_names[]=
 {
-  "NO_DUP_KEY_WARNINGS_WITH_IGNORE",
-  "NO_PROGRESS_INFO",
-  "ZERO_DATE_TIME_CAST",
+  "NO_DUP_KEY_WARNINGS_WITH_IGNORE",    // deprecated since 11.3
+  "NO_PROGRESS_INFO",                   // deprecated since 11.3
+  "ZERO_DATE_TIME_CAST",                // deprecated since 11.3
   "UTF8_IS_UTF8MB3",
-  "IGNORE_INDEX_ONLY_FOR_JOIN",
-  "COMPAT_5_1_CHECKSUM",
-  "NO_NULL_COLLATION_IDS",
+  "IGNORE_INDEX_ONLY_FOR_JOIN",         // deprecated since 11.3
+  "COMPAT_5_1_CHECKSUM",                // deprecated since 11.3
+  "NO_NULL_COLLATION_IDS",              // deprecated since 11.3
+  "LOCK_ALTER_TABLE_COPY",              // deprecated since 11.3
   0
 };
 
-/*
-  sql_mode should *not* be IN_BINLOG as the slave can't remember this
-  anyway on restart.
-*/
+void old_mode_deprecated_warnings(THD *thd, ulonglong v)
+{
+  v &= ~OLD_MODE_DEFAULT_VALUE;
+  for (uint i=0; old_mode_names[i]; i++)
+    if ((1ULL<<i) & v)
+    {
+      if (thd)
+        warn_deprecated<1103>(thd, old_mode_names[i]);
+      else
+        sql_print_warning("--old-mode='%s' is deprecated and will be "
+                          "removed in a future release", old_mode_names[i]);
+    }
+}
+
+static bool old_mode_deprecated(sys_var *self, THD *thd, set_var *var)
+{
+  old_mode_deprecated_warnings(thd, var->save_result.ulonglong_value);
+  return false;
+}
+
 static Sys_var_set Sys_old_behavior(
        "old_mode",
        "Used to emulate old behavior from earlier MariaDB or MySQL versions",
        SESSION_VAR(old_behavior), CMD_LINE(REQUIRED_ARG),
-       old_mode_names, DEFAULT(OLD_MODE_UTF8_IS_UTF8MB3));
+       old_mode_names, DEFAULT(OLD_MODE_DEFAULT_VALUE),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(old_mode_deprecated));
 
 #if defined(HAVE_OPENSSL) && !defined(EMBEDDED_LIBRARY)
 #define SSL_OPT(X) CMD_LINE(REQUIRED_ARG,X)
@@ -4210,7 +4274,7 @@ Sys_threadpool_dedicated_listener(
 #endif /* HAVE_POOL_OF_THREADS */
 
 /**
-  Can't change the 'next' tx_isolation if we are already in a
+  Can't change the 'next' transaction_isolation if we are already in a
   transaction.
 */
 
@@ -4227,14 +4291,22 @@ static bool check_tx_isolation(sys_var *self, THD *thd, set_var *var)
 
 // NO_CMD_LINE - different name of the option
 static Sys_var_tx_isolation Sys_tx_isolation(
-       "tx_isolation", "Default transaction isolation level",
-       NO_SET_STMT SESSION_VAR(tx_isolation), NO_CMD_LINE,
+       "tx_isolation", "Default transaction isolation level."
+       "This variable is deprecated and will be removed in a future release.",
+       SESSION_VAR(tx_isolation), NO_CMD_LINE,
+       tx_isolation_names, DEFAULT(ISO_REPEATABLE_READ),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(check_tx_isolation),
+       ON_UPDATE(0), DEPRECATED(1101, "'@@transaction_isolation'"));
+
+static Sys_var_tx_isolation Sys_transaction_isolation(
+       "transaction_isolation", "Default transaction isolation level",
+       SESSION_VAR(tx_isolation), NO_CMD_LINE,
        tx_isolation_names, DEFAULT(ISO_REPEATABLE_READ),
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(check_tx_isolation));
 
 
 /**
-  Can't change the tx_read_only state if we are already in a
+  Can't change the transaction_read_only state if we are already in a
   transaction.
 */
 
@@ -4274,9 +4346,19 @@ bool Sys_var_tx_read_only::session_update(THD *thd, set_var *var)
   return false;
 }
 
-
+// NO_CMD_LINE - different name of the option
 static Sys_var_tx_read_only Sys_tx_read_only(
        "tx_read_only", "Default transaction access mode. If set to OFF, "
+       "the default, access is read/write. If set to ON, access is read-only. "
+       "The SET TRANSACTION statement can also change the value of this variable. "
+       "See SET TRANSACTION and START TRANSACTION."
+       "This variable is deprecated and will be removed in a future release.",
+       SESSION_VAR(tx_read_only), NO_CMD_LINE, DEFAULT(0),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(check_tx_read_only),
+       ON_UPDATE(0), DEPRECATED(1101, "'@@transaction_read_only'"));
+
+static Sys_var_tx_read_only Sys_transaction_read_only(
+       "transaction_read_only", "Default transaction access mode. If set to OFF, "
        "the default, access is read/write. If set to ON, access is read-only. "
        "The SET TRANSACTION statement can also change the value of this variable. "
        "See SET TRANSACTION and START TRANSACTION.",
@@ -4402,7 +4484,7 @@ static Sys_var_plugin Sys_storage_engine(
        SESSION_VAR(table_plugin), NO_CMD_LINE,
        MYSQL_STORAGE_ENGINE_PLUGIN, DEFAULT(&default_storage_engine),
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(check_not_null), ON_UPDATE(0),
-       DEPRECATED("'@@default_storage_engine'")); // since 10.5.1
+       DEPRECATED(1005, "'@@default_storage_engine'"));
 
 static Sys_var_plugin Sys_default_tmp_storage_engine(
        "default_tmp_storage_engine", "The default storage engine for user-created temporary tables",
@@ -4477,39 +4559,6 @@ static Sys_var_debug_sync Sys_debug_sync(
        DEFAULT(0), NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(check_has_super));
 #endif /* defined(ENABLED_DEBUG_SYNC) */
 
-/**
- "time_format" "date_format" "datetime_format"
-
-  the following three variables are unused, and the source of confusion
-  (bug reports like "I've changed date_format, but date format hasn't changed.
-  I've made them read-only, to alleviate the situation somewhat.
-
-  @todo make them NO_CMD_LINE ?
-*/
-static Sys_var_charptr Sys_date_format(
-       "date_format", "The DATE format (ignored)",
-       READ_ONLY GLOBAL_VAR(global_date_format.format.str),
-       CMD_LINE(REQUIRED_ARG),
-       DEFAULT(known_date_time_formats[ISO_FORMAT].date_format),
-       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
-       DEPRECATED("")); // since 10.1.2
-
-static Sys_var_charptr Sys_datetime_format(
-       "datetime_format", "The DATETIME format (ignored)",
-       READ_ONLY GLOBAL_VAR(global_datetime_format.format.str),
-       CMD_LINE(REQUIRED_ARG),
-       DEFAULT(known_date_time_formats[ISO_FORMAT].datetime_format),
-       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
-       DEPRECATED("")); // since 10.1.2
-
-static Sys_var_charptr Sys_time_format(
-       "time_format", "The TIME format (ignored)",
-       READ_ONLY GLOBAL_VAR(global_time_format.format.str),
-       CMD_LINE(REQUIRED_ARG),
-       DEFAULT(known_date_time_formats[ISO_FORMAT].time_format),
-       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
-       DEPRECATED("")); //  since 10.1.2
-
 static bool fix_autocommit(sys_var *self, THD *thd, enum_var_type type)
 {
   if (type == OPT_GLOBAL)
@@ -4582,7 +4631,7 @@ static Sys_var_mybool Sys_big_tables(
        "longer needed, as the server now handles this automatically.",
        SESSION_VAR(big_tables), CMD_LINE(OPT_ARG), DEFAULT(FALSE),
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
-       DEPRECATED("")); // since 10.5.0
+       DEPRECATED(1005, ""));
 
 static Sys_var_bit Sys_big_selects(
        "sql_big_selects", "If set to 0, MariaDB will not perform large SELECTs."
@@ -4682,7 +4731,9 @@ static Sys_var_bit Sys_sql_notes(
        "See also note_verbosity, which allows one to define with notes are "
        "sent.",
        SESSION_VAR(option_bits), NO_CMD_LINE, OPTION_SQL_NOTES,
-       DEFAULT(TRUE));
+       DEFAULT(TRUE),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
+       DEPRECATED(1103, "'@@note_verbosity'"));
 
 static Sys_var_bit Sys_auto_is_null(
        "sql_auto_is_null", "If set to 1, the query SELECT * FROM table_name WHERE "
@@ -5055,7 +5106,7 @@ static Sys_var_mybool Sys_keep_files_on_create(
        SESSION_VAR(keep_files_on_create), CMD_LINE(OPT_ARG),
        DEFAULT(FALSE),
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
-       DEPRECATED("")); // since 10.8.0
+       DEPRECATED(1008, ""));
 
 static char *license;
 static Sys_var_charptr Sys_license(
@@ -5587,6 +5638,30 @@ Sys_var_rpl_filter::global_value_ptr(THD *thd,
   return ret;
 }
 
+const uchar *
+Sys_var_binlog_filter::global_value_ptr(THD *thd,
+                                        const LEX_CSTRING *base_name) const
+{
+  char buf[256];
+  String tmp(buf, sizeof(buf), &my_charset_bin);
+  uchar *ret;
+
+  tmp.length(0);
+
+  switch (opt_id) {
+  case OPT_BINLOG_DO_DB:
+    binlog_filter->get_do_db(&tmp);
+    break;
+  case OPT_BINLOG_IGNORE_DB:
+    binlog_filter->get_ignore_db(&tmp);
+    break;
+  }
+
+  ret= (uchar *) thd->strmake(tmp.ptr(), tmp.length());
+
+  return ret;
+}
+
 static Sys_var_rpl_filter Sys_replicate_do_db(
        "replicate_do_db", OPT_REPLICATE_DO_DB,
        "Tell the slave to restrict replication to updates of tables "
@@ -5596,6 +5671,12 @@ static Sys_var_rpl_filter Sys_replicate_do_db(
        "mentioned tables in the query. For row-based replication, the "
        "actual names of table(s) being updated are checked.",
        PRIV_SET_SYSTEM_GLOBAL_VAR_REPLICATE_DO_DB);
+
+static Sys_var_binlog_filter Sys_binlog_do_db(
+      "binlog_do_db", OPT_BINLOG_DO_DB,
+      "Tells the primary it should log updates for the specified database, "
+      "and exclude all others not explicitly mentioned.",
+      PRIV_SET_SYSTEM_GLOBAL_VAR_BINLOG_DO_DB);
 
 static Sys_var_rpl_filter Sys_replicate_rewrite_db(
        "replicate_rewrite_db", OPT_REPLICATE_REWRITE_DB,
@@ -5619,6 +5700,11 @@ static Sys_var_rpl_filter Sys_replicate_ignore_db(
        "mentioned tables in the query. For row-based replication, the "
        "actual names of table(s) being updated are checked.",
        PRIV_SET_SYSTEM_GLOBAL_VAR_REPLICATE_IGNORE_DB);
+
+static Sys_var_binlog_filter Sys_binlog_ignore_db(
+      "binlog_ignore_db", OPT_BINLOG_IGNORE_DB,
+      "Tells the primary that updates to the given database should not be logged to the binary log.",
+      PRIV_SET_SYSTEM_GLOBAL_VAR_BINLOG_IGNORE_DB);
 
 static Sys_var_rpl_filter Sys_replicate_ignore_table(
        "replicate_ignore_table", OPT_REPLICATE_IGNORE_TABLE,
@@ -5645,6 +5731,15 @@ static Sys_var_charptr_fscs Sys_slave_load_tmpdir(
        "its temporary files when replicating a LOAD DATA INFILE command",
        READ_ONLY GLOBAL_VAR(slave_load_tmpdir), CMD_LINE(REQUIRED_ARG),
        DEFAULT(0));
+
+static Sys_var_ulong Sys_opt_binlog_rows_event_max_size(
+      "binlog_row_event_max_size",
+      "The maximum size of a row-based binary log event in bytes. Rows will be "
+      "grouped into events smaller than this size if possible. "
+      "The value has to be a multiple of 256.",
+      READ_ONLY GLOBAL_VAR(opt_binlog_rows_event_max_size), CMD_LINE(REQUIRED_ARG),
+      VALID_RANGE(256, UINT_MAX32 - (UINT_MAX32 % 256)), DEFAULT(8192),
+      BLOCK_SIZE(256));
 
 static Sys_var_on_access_global<Sys_var_uint,
                                 PRIV_SET_SYSTEM_GLOBAL_VAR_SLAVE_NET_TIMEOUT>
@@ -6176,25 +6271,15 @@ static Sys_var_enum Sys_wsrep_certification_rules(
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
        ON_UPDATE(0));
 
-static Sys_var_mybool Sys_wsrep_causal_reads(
-       "wsrep_causal_reads", "Setting this variable is equivalent "
-       "to setting wsrep_sync_wait READ flag",
-       SESSION_VAR(wsrep_causal_reads),
-       CMD_LINE(OPT_ARG, OPT_WSREP_CAUSAL_READS), DEFAULT(FALSE),
-       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
-       ON_UPDATE(wsrep_causal_reads_update),
-       DEPRECATED("'@@wsrep_sync_wait=1'")); // since 10.1.3
-
 static Sys_var_uint Sys_wsrep_sync_wait(
        "wsrep_sync_wait", "Ensure \"synchronous\" read view before executing "
        "an operation of the type specified by bitmask: 1 - READ(includes "
        "SELECT, SHOW and BEGIN/START TRANSACTION); 2 - UPDATE and DELETE; 4 - "
        "INSERT and REPLACE",
-       SESSION_VAR(wsrep_sync_wait), CMD_LINE(OPT_ARG, OPT_WSREP_SYNC_WAIT),
+       SESSION_VAR(wsrep_sync_wait), CMD_LINE(OPT_ARG),
        VALID_RANGE(WSREP_SYNC_WAIT_NONE, WSREP_SYNC_WAIT_MAX),
        DEFAULT(WSREP_SYNC_WAIT_NONE), BLOCK_SIZE(1),
-       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
-       ON_UPDATE(wsrep_sync_wait_update));
+       NO_MUTEX_GUARD, NOT_IN_BINLOG);
 
 static const char *wsrep_mode_names[]=
 {
@@ -6265,7 +6350,7 @@ static Sys_var_mybool Sys_wsrep_load_data_splitting(
        "transaction after every 10K rows inserted (deprecated)",
        GLOBAL_VAR(wsrep_load_data_splitting), 
        CMD_LINE(OPT_ARG), DEFAULT(0), NO_MUTEX_GUARD, NOT_IN_BINLOG,
-       ON_CHECK(0), ON_UPDATE(0), DEPRECATED("")); // since 10.4.3
+       ON_CHECK(0), ON_UPDATE(0), DEPRECATED(1004, ""));
 
 static Sys_var_mybool Sys_wsrep_slave_FK_checks(
        "wsrep_slave_FK_checks", "Should slave thread do "
@@ -6725,14 +6810,7 @@ static Sys_var_enum Sys_histogram_type(
        "DOUBLE_PREC_HB - double precision height-balanced, "
        "JSON_HB - height-balanced, stored as JSON.",
        SESSION_VAR(histogram_type), CMD_LINE(REQUIRED_ARG),
-       histogram_types, DEFAULT(1));
-
-static Sys_var_mybool Sys_no_thread_alarm(
-       "debug_no_thread_alarm",
-       "Disable system thread alarm calls. Disabling it may be useful "
-       "in debugging or testing, never do it in production",
-       READ_ONLY GLOBAL_VAR(my_disable_thr_alarm), CMD_LINE(OPT_ARG),
-       DEFAULT(FALSE));
+       histogram_types, DEFAULT(2));
 
 static Sys_var_mybool Sys_query_cache_strip_comments(
        "query_cache_strip_comments",
@@ -6784,15 +6862,21 @@ static Sys_var_mybool Sys_binlog_encryption(
        READ_ONLY GLOBAL_VAR(encrypt_binlog), CMD_LINE(OPT_ARG),
        DEFAULT(FALSE));
 
-static const char *binlog_row_image_names[]= {"MINIMAL", "NOBLOB", "FULL", NullS};
+static const char *binlog_row_image_names[]=
+{
+  "MINIMAL", "NOBLOB", "FULL", "FULL_NODUP", NullS
+};
 static Sys_var_on_access<Sys_var_enum,
                          PRIV_SET_SYSTEM_VAR_BINLOG_ROW_IMAGE,
                          PRIV_SET_SYSTEM_VAR_BINLOG_ROW_IMAGE>
 Sys_binlog_row_image(
        "binlog_row_image",
-       "Controls whether rows should be logged in 'FULL', 'NOBLOB' or "
-       "'MINIMAL' formats. 'FULL', means that all columns in the before "
-       "and after image are logged. 'NOBLOB', means that mysqld avoids logging "
+       "Controls whether rows should be logged in 'FULL', 'FULL_NODUP', "
+       "'NOBLOB' or 'MINIMAL' formats. 'FULL', means that all columns in the "
+       "before and after image are logged. 'FULL_NODUP', means that all "
+       "columns are logged in before image, but only changed columns or all "
+       "columns of inserted record are logged in after image, "
+       "'NOBLOB', means that mysqld avoids logging "
        "blob columns whenever possible (eg, blob column was not changed or "
        "is not part of primary key). 'MINIMAL', means that a PK equivalent (PK "
        "columns or full row if there is no PK in the table) is logged in the "
@@ -6814,6 +6898,36 @@ Sys_binlog_row_metadata(
        binlog_row_metadata_names, DEFAULT(Table_map_log_event::BINLOG_ROW_METADATA_NO_LOG),
        NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(NULL),
        ON_UPDATE(NULL));
+
+
+static Sys_var_on_access_global<Sys_var_mybool,
+                           PRIV_SET_SYSTEM_GLOBAL_VAR_BINLOG_GTID_INDEX>
+Sys_binlog_gtid_index(
+       "binlog_gtid_index",
+       "Enable the creation of a GTID index for every binlog file, and the use "
+       "of such index for speeding up GTID lookup in the binlog.",
+       GLOBAL_VAR(opt_binlog_gtid_index), CMD_LINE(OPT_ARG),
+       DEFAULT(TRUE));
+
+
+static Sys_var_on_access_global<Sys_var_uint,
+                        PRIV_SET_SYSTEM_GLOBAL_VAR_BINLOG_GTID_INDEX_PAGE_SIZE>
+Sys_binlog_gtid_index_page_size(
+       "binlog_gtid_index_page_size",
+       "Page size to use for the binlog GTID index.",
+       GLOBAL_VAR(opt_binlog_gtid_index_page_size), CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(64, 1<<24), DEFAULT(4096), BLOCK_SIZE(1));
+
+
+static Sys_var_on_access_global<Sys_var_uint,
+                        PRIV_SET_SYSTEM_GLOBAL_VAR_BINLOG_GTID_INDEX_SPAN_MIN>
+Sys_binlog_gtid_index_span_min(
+       "binlog_gtid_index_span_min",
+       "Control sparseness of the binlog GTID index. If set to N, at most one "
+       "index record will be added for every N bytes of binlog file written, "
+       "to reduce the size of the index. Normally does not need tuning.",
+       GLOBAL_VAR(opt_binlog_gtid_index_span_min), CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(1, 1024*1024L*1024L), DEFAULT(65536), BLOCK_SIZE(1));
 
 
 static bool check_pseudo_slave_mode(sys_var *self, THD *thd, set_var *var)
@@ -6905,13 +7019,78 @@ static Sys_var_ulonglong Sys_max_session_mem_used(
        DEFAULT(LONGLONG_MAX), BLOCK_SIZE(1));
 
 #ifndef EMBEDDED_LIBRARY
+/**
+ Validate a redirect_url string.
+
+ A valid string is either empty, or of the format mysql://host[:port],
+ where host is an arbitrary string without any colon ':'.
+
+ @param  str    A string to validate
+ @param  len    Length of the string
+ @retval false  The string is valid
+ @retval true   The string is invalid
+*/
+export bool validate_redirect_url(char *str, size_t len)
+{
+  LEX_CSTRING mysql_prefix= {STRING_WITH_LEN("mysql://")};
+  LEX_CSTRING maria_prefix= {STRING_WITH_LEN("mariadb://")};
+  /* Empty string is valid */
+  if (len == 0)
+    return false;
+  const char* end= str + len;
+  if (!strncmp(str, mysql_prefix.str, mysql_prefix.length))
+    str+= mysql_prefix.length;
+  else if (!strncmp(str, maria_prefix.str, maria_prefix.length))
+    str+= maria_prefix.length;
+  else
+    return true;
+  /* Host name cannot be empty */
+  if (str == end)
+    return true;
+  /* Find the colon, if any */
+  while (str < end && *str != ':')
+    str++;
+  /* Found colon */
+  if (str < end)
+  {
+    /* Should have at least one number after the colon */
+    if (str + 1 == end)
+      return true;
+    int p= 0;
+    while (str < end && isdigit(*++str))
+      if ((p= p * 10 + (*str - '0')) > 65535)
+        return true;
+    /* Should be all numbers after the colon */
+    if (str < end)
+      return true;
+  }
+  return false;
+}
+
+static bool sysvar_validate_redirect_url(sys_var *self, THD *thd,
+                                         set_var *var)
+{
+  /* NULL is invalid. */
+  if (check_not_null(self, thd, var))
+    return true;
+  char *str= var->save_result.string_value.str;
+  size_t len= var->save_result.string_value.length;
+  return validate_redirect_url(str, len);
+}
+
+static Sys_var_charptr Sys_redirect_url(
+       "redirect_url",
+       "URL of another server to redirect clients to. "
+       "Empty string means no redirection",
+       SESSION_VAR(redirect_url), CMD_LINE(REQUIRED_ARG), DEFAULT(""),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(sysvar_validate_redirect_url));
 
 static Sys_var_sesvartrack Sys_track_session_sys_vars(
        "session_track_system_variables",
        "Track changes in registered system variables. ",
        CMD_LINE(REQUIRED_ARG),
        DEFAULT("autocommit,character_set_client,character_set_connection,"
-       "character_set_results,time_zone"));
+       "character_set_results,redirect_url,time_zone"));
 
 static bool update_session_track_schema(sys_var *self, THD *thd,
                                         enum_var_type type)
@@ -6991,28 +7170,6 @@ static Sys_var_mybool Sys_session_track_user_variables(
 
 #endif //EMBEDDED_LIBRARY
 
-static Sys_var_uint Sys_in_subquery_conversion_threshold(
-       "in_predicate_conversion_threshold",
-       "The minimum number of scalar elements in the value list of "
-       "IN predicate that triggers its conversion to IN subquery. Set to "
-       "0 to disable the conversion.",
-       SESSION_VAR(in_subquery_conversion_threshold), CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(0, UINT_MAX), DEFAULT(IN_SUBQUERY_CONVERSION_THRESHOLD), BLOCK_SIZE(1));
-
-static Sys_var_ulong Sys_optimizer_max_sel_arg_weight(
-       "optimizer_max_sel_arg_weight",
-       "The maximum weight of the SEL_ARG graph. Set to 0 for no limit",
-       SESSION_VAR(optimizer_max_sel_arg_weight), CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(0, UINT_MAX), DEFAULT(SEL_ARG::MAX_WEIGHT), BLOCK_SIZE(1));
-
-static Sys_var_ulong Sys_optimizer_max_sel_args(
-       "optimizer_max_sel_args",
-       "The maximum number of SEL_ARG objects created when optimizing a range. "
-       "If more objects would be needed, the range will not be used by the "
-       "optimizer.",
-       SESSION_VAR(optimizer_max_sel_args), CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(0, UINT_MAX), DEFAULT(SEL_ARG::DEFAULT_MAX_SEL_ARGS), BLOCK_SIZE(1));
-
 static Sys_var_enum Sys_secure_timestamp(
        "secure_timestamp", "Restricts direct setting of a session "
        "timestamp. Possible levels are: YES - timestamp cannot deviate from "
@@ -7037,3 +7194,143 @@ static Sys_var_bit Sys_system_versioning_insert_history(
        SESSION_VAR(option_bits), CMD_LINE(OPT_ARG),
        OPTION_INSERT_HISTORY, DEFAULT(FALSE),
        NO_MUTEX_GUARD, IN_BINLOG);
+
+/* Optimizer variables */
+
+static Sys_var_uint Sys_in_subquery_conversion_threshold(
+       "in_predicate_conversion_threshold",
+       "The minimum number of scalar elements in the value list of "
+       "IN predicate that triggers its conversion to IN subquery. Set to "
+       "0 to disable the conversion.",
+       SESSION_VAR(in_subquery_conversion_threshold), CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(0, UINT_MAX), DEFAULT(IN_SUBQUERY_CONVERSION_THRESHOLD),
+       BLOCK_SIZE(1));
+
+static Sys_var_ulong Sys_optimizer_max_sel_arg_weight(
+       "optimizer_max_sel_arg_weight",
+       "The maximum weight of the SEL_ARG graph. Set to 0 for no limit",
+       SESSION_VAR(optimizer_max_sel_arg_weight), CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(0, UINT_MAX), DEFAULT(SEL_ARG::MAX_WEIGHT), BLOCK_SIZE(1));
+
+static Sys_var_ulong Sys_optimizer_max_sel_args(
+       "optimizer_max_sel_args",
+       "The maximum number of SEL_ARG objects created when optimizing a range. "
+       "If more objects would be needed, the range will not be used by the "
+       "optimizer.",
+       SESSION_VAR(optimizer_max_sel_args), CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(0, UINT_MAX), DEFAULT(SEL_ARG::DEFAULT_MAX_SEL_ARGS), BLOCK_SIZE(1));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_disk_read_ratio(
+  "optimizer_disk_read_ratio",
+  "Chance that we have to do a disk read to find a row or index entry from "
+  "the engine cache (cache_misses/total_cache_requests).  0.0 means that "
+  "everything is cached and 1.0 means that nothing is expected to be in the "
+  "engine cache.",
+  COST_VAR(disk_read_ratio),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_DISK_READ_RATIO),
+  VALID_RANGE(0.0, 1.0), DEFAULT(DEFAULT_DISK_READ_RATIO), COST_ADJUST(1));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_key_lookup_cost(
+  "optimizer_key_lookup_cost",
+  "Cost for finding a key based on a key value",
+  COST_VAR(key_lookup_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_KEY_LOOKUP_COST),
+  VALID_RANGE(0, 1000), DEFAULT(DEFAULT_KEY_LOOKUP_COST), COST_ADJUST(1000));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_row_lookup_cost(
+  "optimizer_row_lookup_cost",
+  "Cost of finding a row based on a rowid or a clustered key.",
+  COST_VAR(row_lookup_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_ROW_LOOKUP_COST),
+  VALID_RANGE(0, 1000), DEFAULT(DEFAULT_ROW_LOOKUP_COST), COST_ADJUST(1000));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_disk_read_cost(
+  "optimizer_disk_read_cost",
+  "Cost of reading a block of IO_SIZE (4096) from a disk (in usec).",
+  COST_VAR(disk_read_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_DISK_READ_COST),
+  VALID_RANGE(0, 10000), DEFAULT(DEFAULT_DISK_READ_COST), COST_ADJUST(1000));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_key_copy_cost(
+  "optimizer_key_copy_cost",
+  "Cost of finding the next key in the engine and copying it to the SQL "
+  "layer.",
+  COST_VAR(key_copy_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_KEY_COPY_COST),
+  VALID_RANGE(0, 1000), DEFAULT(DEFAULT_KEY_COPY_COST), COST_ADJUST(1000));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_index_block_copy_cost(
+  "optimizer_index_block_copy_cost",
+  "Cost of copying a key block from the cache to intern storage as part of "
+  "an index scan.",
+  COST_VAR(index_block_copy_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_INDEX_BLOCK_COPY_COST),
+  VALID_RANGE(0, 1000), DEFAULT(DEFAULT_INDEX_BLOCK_COPY_COST), COST_ADJUST(1000));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_row_next_find_cost(
+  "optimizer_row_next_find_cost",
+  "Cost of finding the next row when scanning the table.",
+  COST_VAR(row_next_find_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_ROW_NEXT_FIND_COST),
+  VALID_RANGE(0, 1000), DEFAULT(DEFAULT_ROW_NEXT_FIND_COST), COST_ADJUST(1000));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_key_next_find_cost(
+  "optimizer_key_next_find_cost",
+  "Cost of finding the next key and rowid when using filters.",
+  COST_VAR(key_next_find_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_KEY_NEXT_FIND_COST),
+  VALID_RANGE(0, 1000), DEFAULT(DEFAULT_KEY_NEXT_FIND_COST), COST_ADJUST(1000));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_row_copy_cost(
+  "optimizer_row_copy_cost",
+  "Cost of copying a row from the engine or the join cache to the SQL layer.",
+  COST_VAR(row_copy_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_ROW_COPY_COST),
+  VALID_RANGE(0, 1000), DEFAULT(DEFAULT_ROW_COPY_COST), COST_ADJUST(1000));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_key_cmp_cost(
+  "optimizer_key_compare_cost",
+  "Cost of checking a key against the end key condition.",
+  COST_VAR(key_cmp_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_KEY_CMP_COST),
+  VALID_RANGE(0, 1000), DEFAULT(DEFAULT_KEY_COMPARE_COST), COST_ADJUST(1000));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_rowid_cmp_cost(
+  "optimizer_rowid_compare_cost",
+  "Cost of comparing two rowid's",
+  COST_VAR(rowid_cmp_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_ROWID_CMP_COST),
+  VALID_RANGE(0, 1000), DEFAULT(DEFAULT_ROWID_COMPARE_COST), COST_ADJUST(1000));
+
+static Sys_var_engine_optimizer_cost Sys_optimizer_rowid_copy_cost(
+  "optimizer_rowid_copy_cost",
+  "Cost of copying a rowid",
+  COST_VAR(rowid_copy_cost),
+  CMD_LINE(REQUIRED_ARG, OPT_COSTS_ROWID_COPY_COST),
+  VALID_RANGE(0, 1000), DEFAULT(DEFAULT_ROWID_COPY_COST), COST_ADJUST(1000));
+
+/* The following costs are stored in THD and handler */
+
+static Sys_var_optimizer_cost Sys_optimizer_where_cost(
+  "optimizer_where_cost",
+  "Cost of checking the row against the WHERE clause. Increasing this will "
+  "have the optimizer to prefer plans with less row combinations.",
+  SESSION_VAR(optimizer_where_cost),
+  CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(0, 100000), DEFAULT(DEFAULT_WHERE_COST), COST_ADJUST(1000));
+
+static Sys_var_optimizer_cost Sys_optimizer_scan_cost(
+  "optimizer_scan_setup_cost",
+  "Extra cost added to TABLE and INDEX scans to get optimizer to prefer "
+  "index lookups.",
+  SESSION_VAR(optimizer_scan_setup_cost),
+  CMD_LINE(REQUIRED_ARG),
+  VALID_RANGE(0, 100000000), DEFAULT(DEFAULT_TABLE_SCAN_SETUP_COST),
+  COST_ADJUST(1000));
+
+extern const char *block_encryption_mode_values[];
+static Sys_var_enum Sys_block_encryption_mode(
+  "block_encryption_mode", "Default block encryption mode for "
+  "AES_ENCRYPT() and AES_DECRYPT() functions",
+  SESSION_VAR(block_encryption_mode), CMD_LINE(REQUIRED_ARG),
+  block_encryption_mode_values, DEFAULT(0));

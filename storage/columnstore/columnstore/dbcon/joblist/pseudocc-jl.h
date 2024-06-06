@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef PSEUDOCCJL_H
-#define PSEUDOCCJL_H
+#pragma once
 
 #include "columncommand-jl.h"
 
@@ -42,4 +41,3 @@ class PseudoCCJL : public ColumnCommandJL
 };
 
 }  // namespace joblist
-#endif  // PSEUDOCCJL_H

@@ -3878,7 +3878,7 @@ restart:
       {
         pagecache_pthread_mutex_unlock(&pagecache->cache_lock);
         DBUG_ASSERT(0);
-        return (uchar*) 0;
+        DBUG_RETURN((uchar*) 0);
       }
     }
     /*
@@ -5229,7 +5229,7 @@ int flush_pagecache_blocks_with_filter(PAGECACHE *pagecache,
 {
   int res;
   DBUG_ENTER("flush_pagecache_blocks_with_filter");
-  DBUG_PRINT("enter", ("pagecache: %p", pagecache));
+  DBUG_PRINT("enter", ("pagecache: %p  fd: %di", pagecache, file->file));
 
   if (pagecache->disk_blocks <= 0)
     DBUG_RETURN(0);

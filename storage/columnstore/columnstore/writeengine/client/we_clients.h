@@ -19,8 +19,7 @@
 //
 /** @file */
 
-#ifndef WECLIENTS_H__
-#define WECLIENTS_H__
+#pragma once
 
 #include <iostream>
 #include <vector>
@@ -32,16 +31,12 @@
 #include <boost/scoped_array.hpp>
 
 #include "bytestream.h"
-// #include "we_message.h"
+//#include "we_message.h"
 #include "threadsafequeue.h"
 #include "rwlock_local.h"
 #include "resourcemanager.h"
 
-#if defined(_MSC_VER) && defined(xxxWECLIENTS_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace WriteEngine
 {
@@ -181,4 +176,3 @@ class WEClients
 
 #undef EXPORT
 
-#endif

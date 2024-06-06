@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef ORACLEEXECUTIONPLAN_H
-#define ORACLEEXECUTIONPLAN_H
+#pragma once
 #include <string>
 #include "vendorexecutionplan.h"
 
@@ -97,4 +96,3 @@ class OracleExecutionPlan : public VendorExecutionPlan
    */
 };
 }  // namespace execplan
-#endif  // ORACLEEXECUTIONPLAN_H

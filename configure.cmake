@@ -316,7 +316,6 @@ ENDIF()
 #
 CHECK_FUNCTION_EXISTS (accept4 HAVE_ACCEPT4)
 CHECK_FUNCTION_EXISTS (access HAVE_ACCESS)
-CHECK_FUNCTION_EXISTS (alarm HAVE_ALARM)
 SET(HAVE_ALLOCA 1)
 CHECK_FUNCTION_EXISTS (backtrace HAVE_BACKTRACE)
 CHECK_FUNCTION_EXISTS (backtrace_symbols HAVE_BACKTRACE_SYMBOLS)
@@ -826,7 +825,6 @@ CHECK_CXX_SOURCE_COMPILES("
   "
   HAVE_SOLARIS_STYLE_GETHOST)
 
-SET(NO_ALARM 1 CACHE BOOL  "No need to use alarm to implement timeout")
 
 # As a consequence of ALARMs no longer being used, thread
 # notification for KILL must close the socket to wake up
@@ -941,6 +939,8 @@ SET(SPRINTF_RETURNS_INT 1)
 
 CHECK_STRUCT_HAS_MEMBER("struct timespec" tv_sec "time.h" STRUCT_TIMESPEC_HAS_TV_SEC)
 CHECK_STRUCT_HAS_MEMBER("struct timespec" tv_nsec "time.h" STRUCT_TIMESPEC_HAS_TV_NSEC)
+
+CHECK_STRUCT_HAS_MEMBER("struct tm" tm_gmtoff "time.h" STRUCT_TM_HAS_TM_GMTOFF)
 
 IF(NOT MSVC)
   CHECK_C_SOURCE_COMPILES(

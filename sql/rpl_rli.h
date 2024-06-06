@@ -338,6 +338,8 @@ public:
   /* Condition for UNTIL master_gtid_pos. */
   slave_connection_state until_gtid_pos;
 
+  bool is_until_before_gtids;
+
   /*
     retried_trans is a cumulative counter: how many times the slave
     has retried a transaction (any) since slave started.
@@ -668,6 +670,22 @@ struct start_alter_info
   mysql_cond_t start_alter_cond;
 };
 
+struct Rpl_table_data
+{
+  const table_def *tabledef;
+  TABLE *conv_table;
+  const Copy_field *copy_fields;
+  const Copy_field *copy_fields_end;
+  Rpl_table_data(const RPL_TABLE_LIST &rpl_table_list)
+  {
+    tabledef= &rpl_table_list.m_tabledef;
+    conv_table= rpl_table_list.m_conv_table;
+    copy_fields= rpl_table_list.m_online_alter_copy_fields;
+    copy_fields_end= rpl_table_list.m_online_alter_copy_fields_end;
+  }
+  bool is_online_alter() const { return copy_fields != NULL; }
+};
+
 /*
   This is data for various state needed to be kept for the processing of
   one event group (transaction) during replication.
@@ -813,7 +831,7 @@ struct rpl_group_info
   longlong row_stmt_start_timestamp;
   bool long_find_row_note_printed;
   /* Needs room for "Gtid D-S-N\x00". */
-  char gtid_info_buf[5+10+1+10+1+20+1];
+  mutable char gtid_info_buf[5+10+1+10+1+20+1];
 
   /*
     The timestamp, from the master, of the commit event.
@@ -940,29 +958,12 @@ struct rpl_group_info
     }
   }
 
-  bool get_table_data(TABLE *table_arg, table_def **tabledef_var, TABLE **conv_table_var) const
-  {
-    DBUG_ASSERT(tabledef_var && conv_table_var);
-    for (TABLE_LIST *ptr= tables_to_lock ; ptr != NULL ; ptr= ptr->next_global)
-      if (ptr->table == table_arg)
-      {
-        *tabledef_var= &static_cast<RPL_TABLE_LIST*>(ptr)->m_tabledef;
-        *conv_table_var= static_cast<RPL_TABLE_LIST*>(ptr)->m_conv_table;
-        DBUG_PRINT("debug", ("Fetching table data for table %s.%s:"
-                             " tabledef: %p, conv_table: %p",
-                             table_arg->s->db.str, table_arg->s->table_name.str,
-                             *tabledef_var, *conv_table_var));
-        return true;
-      }
-    return false;
-  }
-
   void clear_tables_to_lock();
   void cleanup_context(THD *, bool, bool keep_domain_owner= false);
   void slave_close_thread_tables(THD *);
   void mark_start_commit_no_lock();
   void mark_start_commit();
-  char *gtid_info();
+  char *gtid_info() const;
   void unmark_start_commit();
 
   longlong get_row_stmt_start_timestamp()

@@ -24,19 +24,14 @@
  * class DBRM
  */
 
-#ifndef TRACER_H_
-#define TRACER_H_
+#pragma once
 
 #include <sys/types.h>
 #include <string>
 #include <vector>
 #include <stdint.h>
 
-#if defined(_MSC_VER) && defined(xxxTRACER_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace BRM
 {
@@ -174,5 +169,3 @@ class Tracer
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

@@ -20,8 +20,7 @@
 
 /** @file */
 
-#ifndef JOBLIST_JOBLIST_H_
-#define JOBLIST_JOBLIST_H_
+#pragma once
 
 #include <string>
 #include <vector>
@@ -40,11 +39,7 @@
 #endif
 #endif
 
-#if defined(_MSC_VER) && defined(JOBLIST_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace joblist
 {
@@ -261,4 +256,3 @@ typedef boost::shared_ptr<TupleJobList> STJLP;
 
 #undef EXPORT
 
-#endif

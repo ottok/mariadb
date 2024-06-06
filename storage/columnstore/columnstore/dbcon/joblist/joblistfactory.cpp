@@ -172,7 +172,7 @@ void projectSimpleColumn(const SimpleColumn* sc, JobStepVector& jsv, JobInfo& jo
       // This is a double-step step
       //			if (jobInfo.trace)
       //				cout << "doProject Emit pGetSignature for SimpleColumn " << dictOid <<
-      //endl;
+      // endl;
 
       pds = new pDictionaryStep(dictOid, tbl_oid, ct, jobInfo);
       jobInfo.keyInfo->dictOidToColOid[dictOid] = oid;
@@ -250,6 +250,7 @@ const JobStepVector doProject(const RetColsVector& retCols, JobInfo& jobInfo)
       const ArithmeticColumn* ac = NULL;
       const FunctionColumn* fc = NULL;
       const ConstantColumn* cc = NULL;
+      const RollupMarkColumn* mc = NULL;
       uint64_t eid = -1;
       CalpontSystemCatalog::ColType ct;
       ExpressionStep* es = new ExpressionStep(jobInfo);
@@ -270,6 +271,11 @@ const JobStepVector doProject(const RetColsVector& retCols, JobInfo& jobInfo)
       {
         eid = cc->expressionId();
         ct = cc->resultType();
+      }
+      else if ((mc = dynamic_cast<const RollupMarkColumn*>(retCols[i].get())) != NULL)
+      {
+        eid = mc->expressionId();
+        ct = mc->resultType();
       }
       else
       {
@@ -549,7 +555,13 @@ void checkGroupByCols(CalpontSelectExecutionPlan* csep, JobInfo& jobInfo)
     {
       // skip constant columns
       if (dynamic_cast<ConstantColumn*>(i->get()) != NULL)
+      {
+        if (csep->withRollup())
+        {
+          throw runtime_error("constant GROUP BY columns are not supported when WITH ROLLUP is used");
+        }
         continue;
+      }
 
       ReturnedColumn* rc = i->get();
       SimpleColumn* sc = dynamic_cast<SimpleColumn*>(rc);
@@ -691,6 +703,8 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
   const CalpontSelectExecutionPlan::GroupByColumnList& groupByCols = csep->groupByCols();
   uint64_t lastGroupByPos = 0;
 
+  jobInfo.hasRollup = csep->withRollup();
+
   for (uint64_t i = 0; i < groupByCols.size(); i++)
   {
     pcv.push_back(groupByCols[i]);
@@ -699,6 +713,7 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
     const SimpleColumn* sc = dynamic_cast<const SimpleColumn*>(groupByCols[i].get());
     const ArithmeticColumn* ac = NULL;
     const FunctionColumn* fc = NULL;
+    const RollupMarkColumn* mc = NULL;
 
     if (sc != NULL)
     {
@@ -770,6 +785,18 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
 
       if (find(projectKeys.begin(), projectKeys.end(), tupleKey) == projectKeys.end())
         projectKeys.push_back(tupleKey);
+    }
+    else if ((mc = dynamic_cast<const RollupMarkColumn*>(groupByCols[i].get())) != NULL)
+    {
+      uint64_t eid = mc->expressionId();
+      CalpontSystemCatalog::ColType ct = mc->resultType();
+      TupleInfo ti(setExpTupleInfo(ct, eid, mc->alias(), jobInfo));
+      uint32_t tupleKey = ti.key;
+      jobInfo.groupByColVec.push_back(tupleKey);
+      if (find(projectKeys.begin(), projectKeys.end(), tupleKey) == projectKeys.end())
+      {
+        projectKeys.push_back(tupleKey);
+      }
     }
     else
     {
@@ -898,6 +925,12 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
 
       if (gcc != NULL)
       {
+        if (jobInfo.hasRollup)
+        {
+          throw runtime_error(
+              "GROUP_CONCAT and JSONARRAYAGG aggregations are not supported when WITH ROLLUP modifier is "
+              "used");
+        }
         jobInfo.groupConcatCols.push_back(retCols[i]);
 
         uint64_t eid = gcc->expressionId();
@@ -979,7 +1012,9 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
             // Changing col type based on a parm if multiple parms
             // doesn't really make sense.
             if (op != AggregateColumn::SUM && op != AggregateColumn::DISTINCT_SUM &&
-                op != AggregateColumn::AVG && op != AggregateColumn::DISTINCT_AVG)
+                op != AggregateColumn::AVG && op != AggregateColumn::DISTINCT_AVG &&
+                op != AggregateColumn::BIT_AND && op != AggregateColumn::BIT_OR &&
+                op != AggregateColumn::BIT_XOR)
             {
               updateAggregateColType(aggc, srcp, op, jobInfo);
             }
@@ -1213,6 +1248,7 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
         const WindowFunctionColumn* wc = NULL;
         bool hasAggCols = false;
         bool hasWndCols = false;
+        bool hasFuncColsWithOneArgument = false;
 
         if ((ac = dynamic_cast<const ArithmeticColumn*>(srcp.get())) != NULL)
         {
@@ -1221,12 +1257,18 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
           if (ac->windowfunctionColumnList().size() > 0)
             hasWndCols = true;
         }
+        else if (dynamic_cast<const RollupMarkColumn*>(srcp.get()) != NULL)
+        {
+        }
         else if ((fc = dynamic_cast<const FunctionColumn*>(srcp.get())) != NULL)
         {
           if (fc->aggColumnList().size() > 0)
             hasAggCols = true;
           if (fc->windowfunctionColumnList().size() > 0)
             hasWndCols = true;
+          // MCOL-5476 Currently support function with only one argument for group by list.
+          if (fc->simpleColumnList().size() == 1)
+            hasFuncColsWithOneArgument = true;
         }
         else if (dynamic_cast<const AggregateColumn*>(srcp.get()) != NULL)
         {
@@ -1252,7 +1294,16 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
         tupleKey = ti.key;
 
         if (hasAggCols && !hasWndCols)
+        {
           jobInfo.expressionVec.push_back(tupleKey);
+        }
+
+        if (hasFuncColsWithOneArgument)
+        {
+          FunctionColumnInfo fcInfo(fcInfo.associatedColumnOid = fc->simpleColumnList().front()->oid(),
+                                    fc->functionName());
+          jobInfo.functionColumnMap.insert({tupleKey, fcInfo});
+        }
       }
 
       // add to project list
@@ -1321,11 +1372,11 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
 }
 
 template <typename T>
-class Uniqer : public unary_function<typename T::value_type, void>
+class Uniqer
 {
  private:
   typedef typename T::mapped_type Mt_;
-  class Pred : public unary_function<const Mt_, bool>
+  class Pred
   {
    public:
     Pred(const Mt_& retCol) : fRetCol(retCol)
@@ -1666,7 +1717,7 @@ void parseExecutionPlan(CalpontSelectExecutionPlan* csep, JobInfo& jobInfo, JobS
   }
 
   // special case, select without a table, like: select 1;
-  if (jobInfo.constantCol == CONST_COL_ONLY)
+  if (jobInfo.constantCol == CONST_COL_ONLY)  // XXX: WITH ROLLUP
     return;
 
   // If there are no filters (select * from table;) then add one simple scan
@@ -2004,8 +2055,9 @@ void handleException(std::exception_ptr e, JobList* jl, JobInfo& jobInfo, unsign
   jl = nullptr;
 }
 
-SJLP makeJobList_(CalpontExecutionPlan* cplan, ResourceManager* rm, bool isExeMgr, unsigned& errCode,
-                  string& emsg)
+SJLP makeJobList_(CalpontExecutionPlan* cplan, ResourceManager* rm,
+                  const PrimitiveServerThreadPools& primitiveServerThreadPools, bool isExeMgr,
+                  unsigned& errCode, string& emsg)
 {
   // TODO: This part requires a proper refactoring, we have to move common methods from
   // `CalpontSelectExecutionPlan` to the base class. I have no idea what's a point of
@@ -2042,6 +2094,7 @@ SJLP makeJobList_(CalpontExecutionPlan* cplan, ResourceManager* rm, bool isExeMg
     jobInfo.statementId = csep->statementID();
     jobInfo.queryType = csep->queryType();
     jobInfo.csc = csc;
+    jobInfo.primitiveServerThreadPools = primitiveServerThreadPools;
     // TODO: clean up the vestiges of the bool trace
     jobInfo.trace = csep->traceOn();
     jobInfo.traceFlags = csep->traceFlags();
@@ -2062,6 +2115,9 @@ SJLP makeJobList_(CalpontExecutionPlan* cplan, ResourceManager* rm, bool isExeMg
     jobInfo.smallSideLimit = csep->djsSmallSideLimit();
     jobInfo.largeSideLimit = csep->djsLargeSideLimit();
     jobInfo.partitionSize = csep->djsPartitionSize();
+    jobInfo.djsMaxPartitionTreeDepth = csep->djsMaxPartitionTreeDepth();
+    jobInfo.djsForceRun = csep->djsForceRun();
+    jobInfo.maxPmJoinResultCount = csep->maxPmJoinResultCount();
     jobInfo.umMemLimit.reset(new int64_t);
     *(jobInfo.umMemLimit) = csep->umMemLimit();
     jobInfo.isDML = csep->isDML();
@@ -2117,17 +2173,7 @@ SJLP makeJobList_(CalpontExecutionPlan* cplan, ResourceManager* rm, bool isExeMg
         gettimeofday(&stTime, 0);
 
         struct tm tmbuf;
-#ifdef _MSC_VER
-        errno_t p = 0;
-        time_t t = stTime.tv_sec;
-        p = localtime_s(&tmbuf, &t);
-
-        if (p != 0)
-          memset(&tmbuf, 0, sizeof(tmbuf));
-
-#else
         localtime_r(&stTime.tv_sec, &tmbuf);
-#endif
         ostringstream tms;
         tms << setfill('0') << setw(4) << (tmbuf.tm_year + 1900) << setw(2) << (tmbuf.tm_mon + 1) << setw(2)
             << (tmbuf.tm_mday) << setw(2) << (tmbuf.tm_hour) << setw(2) << (tmbuf.tm_min) << setw(2)
@@ -2138,16 +2184,7 @@ SJLP makeJobList_(CalpontExecutionPlan* cplan, ResourceManager* rm, bool isExeMg
         jlf_graphics::writeDotCmds(dotFile, querySteps, projectSteps);
 
         char timestamp[80];
-#ifdef _MSC_VER
-        t = stTime.tv_sec;
-        p = ctime_s(timestamp, 80, &t);
-
-        if (p != 0)
-          strcpy(timestamp, "UNKNOWN");
-
-#else
         ctime_r((const time_t*)&stTime.tv_sec, timestamp);
-#endif
         oss << "runtime updates: start at " << timestamp;
         cout << oss.str();
         Message::Args args;
@@ -2292,14 +2329,15 @@ SJLP makeJobList_(CalpontExecutionPlan* cplan, ResourceManager* rm, bool isExeMg
 namespace joblist
 {
 /* static */
-SJLP JobListFactory::makeJobList(CalpontExecutionPlan* cplan, ResourceManager* rm, bool tryTuple,
+SJLP JobListFactory::makeJobList(CalpontExecutionPlan* cplan, ResourceManager* rm,
+                                 const PrimitiveServerThreadPools& primitiveServerThreadPools, bool tryTuple,
                                  bool isExeMgr)
 {
   SJLP ret;
   string emsg;
   unsigned errCode = 0;
 
-  ret = makeJobList_(cplan, rm, isExeMgr, errCode, emsg);
+  ret = makeJobList_(cplan, rm, primitiveServerThreadPools, isExeMgr, errCode, emsg);
 
   if (!ret)
   {

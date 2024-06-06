@@ -286,7 +286,7 @@ int processPartition(SqlStatement* stmt)
   {
     rc = 0;
     string errmsg(
-        "Error occured during partitioning operation. Restart DMLProc or use command tool ddlcleanup to "
+        "Error occurred during partitioning operation. Restart DMLProc or use command tool ddlcleanup to "
         "clean up. ");
     push_warnings(thd, errmsg);
   }
@@ -462,7 +462,7 @@ void partitionByValue_common(UDF_ARGS* args,                              // inp
   }
   catch (...)
   {
-    errMsg = string("Error occured when calling ") + functionName;
+    errMsg = string("Error occurred when calling ") + functionName;
     return;
   }
 
@@ -546,9 +546,6 @@ extern "C"
    * CalShowPartitions
    */
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       my_bool calshowpartitions_init(UDF_INIT* initid, UDF_ARGS* args, char* message)
   {
     if (args->arg_count < 2 || args->arg_count > 3 || args->arg_type[0] != STRING_RESULT ||
@@ -570,17 +567,11 @@ extern "C"
     return 0;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       void calshowpartitions_deinit(UDF_INIT* initid)
   {
-    delete initid->ptr;
+    delete[] initid->ptr;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       const char* calshowpartitions(UDF_INIT* initid, UDF_ARGS* args, char* result, unsigned long* length,
                                     char* is_null, char* error)
   {
@@ -664,7 +655,7 @@ extern "C"
     catch (...)
     {
       current_thd->get_stmt_da()->set_overwrite_status(true);
-      current_thd->raise_error_printf(ER_INTERNAL_ERROR, "Error occured when calling CALSHOWPARTITIONS");
+      current_thd->raise_error_printf(ER_INTERNAL_ERROR, "Error occurred when calling CALSHOWPARTITIONS");
       return result;
     }
 
@@ -710,9 +701,6 @@ extern "C"
    * CalDisablePartitions
    */
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       my_bool caldisablepartitions_init(UDF_INIT* initid, UDF_ARGS* args, char* message)
   {
     bool err = false;
@@ -747,9 +735,6 @@ extern "C"
     return 0;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       const char* caldisablepartitions(UDF_INIT* initid, UDF_ARGS* args, char* result, unsigned long* length,
                                        char* is_null, char* error)
   {
@@ -787,9 +772,6 @@ extern "C"
     return result;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       void caldisablepartitions_deinit(UDF_INIT* initid)
   {
   }
@@ -798,9 +780,6 @@ extern "C"
    * CalEnablePartitions
    */
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       my_bool calenablepartitions_init(UDF_INIT* initid, UDF_ARGS* args, char* message)
   {
     bool err = false;
@@ -835,9 +814,6 @@ extern "C"
     return 0;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       const char* calenablepartitions(UDF_INIT* initid, UDF_ARGS* args, char* result, unsigned long* length,
                                       char* is_null, char* error)
   {
@@ -875,9 +851,6 @@ extern "C"
     return result;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       void calenablepartitions_deinit(UDF_INIT* initid)
   {
   }
@@ -886,9 +859,6 @@ extern "C"
    * CalDropPartitions
    */
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       my_bool caldroppartitions_init(UDF_INIT* initid, UDF_ARGS* args, char* message)
   {
     bool err = false;
@@ -923,9 +893,6 @@ extern "C"
     return 0;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       const char* caldroppartitions(UDF_INIT* initid, UDF_ARGS* args, char* result, unsigned long* length,
                                     char* is_null, char* error)
   {
@@ -963,9 +930,6 @@ extern "C"
     return result;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       void caldroppartitions_deinit(UDF_INIT* initid)
   {
   }
@@ -974,16 +938,10 @@ extern "C"
    * CalDropPartitionsByValue
    */
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       void caldroppartitionsbyvalue_deinit(UDF_INIT* initid)
   {
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       my_bool caldroppartitionsbyvalue_init(UDF_INIT* initid, UDF_ARGS* args, char* message)
   {
     bool err = false;
@@ -1021,9 +979,6 @@ extern "C"
     return 0;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       const char* caldroppartitionsbyvalue(UDF_INIT* initid, UDF_ARGS* args, char* result,
                                            unsigned long* length, char* is_null, char* error)
   {
@@ -1050,16 +1005,10 @@ extern "C"
    * CalDisablePartitionsByValue
    */
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       void caldisablepartitionsbyvalue_deinit(UDF_INIT* initid)
   {
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       my_bool caldisablepartitionsbyvalue_init(UDF_INIT* initid, UDF_ARGS* args, char* message)
   {
     bool err = false;
@@ -1093,9 +1042,6 @@ extern "C"
     return 0;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       const char* caldisablepartitionsbyvalue(UDF_INIT* initid, UDF_ARGS* args, char* result,
                                               unsigned long* length, char* is_null, char* error)
   {
@@ -1121,16 +1067,10 @@ extern "C"
   /**
    * CalEnablePartitionsByValue
    */
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       void calenablepartitionsbyvalue_deinit(UDF_INIT* initid)
   {
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       my_bool calenablepartitionsbyvalue_init(UDF_INIT* initid, UDF_ARGS* args, char* message)
   {
     bool err = false;
@@ -1164,9 +1104,6 @@ extern "C"
     return 0;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       const char* calenablepartitionsbyvalue(UDF_INIT* initid, UDF_ARGS* args, char* result,
                                              unsigned long* length, char* is_null, char* error)
   {
@@ -1192,9 +1129,6 @@ extern "C"
   /**
    * CalShowPartitionsByValue
    */
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       my_bool calshowpartitionsbyvalue_init(UDF_INIT* initid, UDF_ARGS* args, char* message)
   {
     bool err = false;
@@ -1228,17 +1162,11 @@ extern "C"
     return 0;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       void calshowpartitionsbyvalue_deinit(UDF_INIT* initid)
   {
-    delete initid->ptr;
+    delete[] initid->ptr;
   }
 
-#ifdef _MSC_VER
-  __declspec(dllexport)
-#endif
       const char* calshowpartitionsbyvalue(UDF_INIT* initid, UDF_ARGS* args, char* result,
                                            unsigned long* length, char* is_null, char* error)
   {
@@ -1359,7 +1287,7 @@ extern "C"
     catch (...)
     {
       current_thd->get_stmt_da()->set_overwrite_status(true);
-      current_thd->raise_error_printf(ER_INTERNAL_ERROR, "Error occured when calling CALSHOWPARTITIONS");
+      current_thd->raise_error_printf(ER_INTERNAL_ERROR, "Error occurred when calling CALSHOWPARTITIONS");
       return result;
     }
 

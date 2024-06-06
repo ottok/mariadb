@@ -15,12 +15,12 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef S3STORAGE_H_
-#define S3STORAGE_H_
+#pragma once
 
 #include <deque>
 #include <string>
 #include <map>
+#include <memory>
 #include "CloudStorage.h"
 #include "libmarias3/marias3.h"
 #include "Config.h"
@@ -36,9 +36,9 @@ class S3Storage : public CloudStorage
   virtual ~S3Storage();
 
   int getObject(const std::string& sourceKey, const std::string& destFile, size_t* size = NULL);
-  int getObject(const std::string& sourceKey, boost::shared_array<uint8_t>* data, size_t* size = NULL);
+  int getObject(const std::string& sourceKey, std::shared_ptr<uint8_t[]>* data, size_t* size = NULL);
   int putObject(const std::string& sourceFile, const std::string& destKey);
-  int putObject(const boost::shared_array<uint8_t> data, size_t len, const std::string& destKey);
+  int putObject(const std::shared_ptr<uint8_t[]> data, size_t len, const std::string& destKey);
   int deleteObject(const std::string& key);
   int copyObject(const std::string& sourceKey, const std::string& destKey);
   int exists(const std::string& key, bool* out);
@@ -90,5 +90,3 @@ class S3Storage : public CloudStorage
 };
 
 }  // namespace storagemanager
-
-#endif

@@ -33,8 +33,7 @@
 
 #include <time.h>
 
-#ifndef _BANDEDDL_HPP_
-#define _BANDEDDL_HPP_
+#pragma once
 
 namespace joblist
 {
@@ -382,5 +381,3 @@ uint64_t BandedDL<element_t>::totalSize()
 }
 
 }  // namespace joblist
-
-#endif

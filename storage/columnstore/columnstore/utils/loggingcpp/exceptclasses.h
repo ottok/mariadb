@@ -22,8 +22,7 @@
 
 /** @file */
 
-#ifndef LOGGING_EXCEPTCLASSES_H
-#define LOGGING_EXCEPTCLASSES_H
+#pragma once
 
 #include <iostream>
 #include <sstream>
@@ -306,5 +305,3 @@ class ProtocolError : public std::logic_error
   } while (0)
 
 }  // namespace logging
-
-#endif

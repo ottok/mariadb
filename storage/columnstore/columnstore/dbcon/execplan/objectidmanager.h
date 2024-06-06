@@ -24,8 +24,7 @@
  * class ObjectIDManager interface.
  */
 
-#ifndef OBJECTIDMANAGER_H_
-#define OBJECTIDMANAGER_H_
+#pragma once
 
 #include <string>
 #include <stdint.h>
@@ -190,5 +189,3 @@ class ObjectIDManager
 };
 
 }  // namespace execplan
-
-#endif

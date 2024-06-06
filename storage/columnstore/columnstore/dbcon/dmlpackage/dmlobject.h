@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef DMLOBJECT_H
-#define DMLOBJECT_H
+#pragma once
 #include <string>
 #include "bytestream.h"
 
@@ -61,4 +60,3 @@ class DMLObject
 };
 
 }  // namespace dmlpackage
-#endif  // DMLOBJECT_H

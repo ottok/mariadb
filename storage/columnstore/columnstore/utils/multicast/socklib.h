@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef SOCKLIB_H
-#define SOCKLIB_H
+#pragma once
 
 #ifndef UDPCAST_CONFIG_H
 #define UDPCAST_CONFIG_H
@@ -167,6 +166,4 @@ static inline void initMsgHdr(struct msghdr* hdr)
 
 #ifndef HAVE_IN_ADDR_T
 typedef unsigned long in_addr_t;
-#endif
-
 #endif

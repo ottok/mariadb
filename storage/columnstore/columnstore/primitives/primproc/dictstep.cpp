@@ -46,6 +46,8 @@ extern uint32_t dictBufferSize;
 
 DictStep::DictStep() : Command(DICT_STEP), strValues(NULL), filterCount(0), bufferSize(0)
 {
+  fMinMax[0] = MAX_UBIGINT;
+  fMinMax[1] = MIN_UBIGINT;
 }
 
 DictStep::~DictStep()
@@ -65,6 +67,8 @@ DictStep& DictStep::operator=(const DictStep& d)
   eqOp = d.eqOp;
   filterCount = d.filterCount;
   charsetNumber = d.charsetNumber;
+  fMinMax[0] = d.fMinMax[0];
+  fMinMax[1] = d.fMinMax[1];
   return *this;
 }
 
@@ -146,8 +150,11 @@ void DictStep::issuePrimitive(bool isFilter)
     bpp->physIO += blocksRead;
     bpp->touchedBlocks++;
   }
-
+#if !defined(XXX_PRIMITIVES_TOKEN_RANGES_XXX)
   bpp->pp.p_Dictionary(primMsg, &result, isFilter, charsetNumber, eqFilter, eqOp);
+#else
+  bpp->pp.p_Dictionary(primMsg, &result, isFilter, charsetNumber, eqFilter, eqOp, fMinMax);
+#endif
 }
 
 void DictStep::copyResultToTmpSpace(OrderedToken* ot)
@@ -176,13 +183,19 @@ void DictStep::copyResultToTmpSpace(OrderedToken* ot)
 
     if (primMsg->OutputType & OT_DATAVALUE)
     {
+      NullString ns;
+      uint8_t isnull = *pos;
+      pos += 1;
       len = *((uint16_t*)pos);
       pos += 2;
-      ot[rid16].str = string((char*)pos, len);
+      if (!isnull) {
+        ns.assign(pos, len);
+      }
       pos += len;
+      ot[rid16].str = ns;
 
-      if (rid64 & 0x8000000000000000LL)
-        ot[rid16].str = joblist::CPNULLSTRMARK;
+      //if (rid64 & 0x8000000000000000LL)
+      //  ot[rid16].str = joblist::CPNULLSTRMARK;
     }
   }
 }
@@ -230,22 +243,23 @@ void DictStep::processResult()
 
     if (primMsg->OutputType & OT_DATAVALUE)
     {
+      uint8_t isnull = *pos;
+      pos += 1;
+      NullString ns;
       len = *((uint16_t*)pos);
       pos += 2;
-      (*strValues)[tmpResultCounter] = string((char*)pos, len);
+      if (!isnull)
+      {
+        ns.assign(pos, len);
+      }
       pos += len;
+      (*strValues)[tmpResultCounter] = ns;
     }
 
     // cout << "  stored " << (*strValues)[tmpResultCounter] << endl;
     /* XXXPAT: disclaimer: this is how we do it in DictionaryStep; don't know
             if it's necessary or not yet */
-    if ((bpp->absRids[tmpResultCounter] & 0x8000000000000000LL) != 0)
-    {
-      if (primMsg->OutputType & OT_DATAVALUE)
-        (*strValues)[tmpResultCounter] = joblist::CPNULLSTRMARK.c_str();
-
-      bpp->absRids[tmpResultCounter] &= 0x7FFFFFFFFFFFFFFFLL;
-    }
+    bpp->absRids[tmpResultCounter] &= 0x7FFFFFFFFFFFFFFFLL;
   }
 }
 
@@ -255,12 +269,10 @@ void DictStep::projectResult(string* strings)
   uint8_t* pos;
   uint16_t len;
   DictOutput* header = (DictOutput*)&result[0];
-
   if (header->NVALS == 0)
     return;
 
   pos = &result[sizeof(DictOutput)];
-
   // cout << "projectResult() l: " << primMsg->LBID << " NVALS: " << header->NVALS << endl;
   for (i = 0; i < header->NVALS; i++)
   {
@@ -299,9 +311,11 @@ void DictStep::projectResult(StringPtr* strings)
   // cout << "projectResult() l: " << primMsg->LBID << " NVALS: " << header->NVALS << endl;
   for (i = 0; i < header->NVALS; i++)
   {
+    uint8_t isnull = *pos;
+    pos += 1;
     len = *((uint16_t*)pos);
     pos += 2;
-    strings[tmpResultCounter++] = StringPtr(pos, len);
+    strings[tmpResultCounter++] = StringPtr(isnull ? nullptr : pos, len);
     // cout << "serialized length is " << len << " string is " << strings[tmpResultCounter-1] << " string
     // length = " << 	strings[tmpResultCounter-1].length() << endl;
     pos += len;
@@ -338,8 +352,6 @@ void DictStep::_execute()
     newRidList[i].token = bpp->values[i];
     newRidList[i].pos = i;
   }
-
-  sort(&newRidList[0], &newRidList[bpp->ridCount], TokenSorter());
 
   tmpResultCounter = 0;
   i = 0;
@@ -388,6 +400,14 @@ void DictStep::_execute()
     sort(&newRidList[0], &newRidList[inputRidCount], PosSorter());
     copyResultToFinalPosition(newRidList.get());
     copyRidsForFilterCmd();
+  }
+  if (fMinMax[0] <= fMinMax[1] && bpp->valuesLBID != 0)
+  {
+    bpp->validCPData = true;
+    bpp->cpDataFromDictScan = true;
+    bpp->lbidForCP = bpp->valuesLBID;
+    bpp->maxVal = fMinMax[1];
+    bpp->minVal = fMinMax[0];
   }
 
   // cout << "DS: /_execute()\n";
@@ -570,6 +590,7 @@ void DictStep::_projectToRG(RowGroup& rg, uint32_t col)
         // If this is a multi-block blob, get all the blocks
         // We do string copy here, should maybe have a RowGroup
         // function to append strings or something?
+        // XXX: can NULLs be a valid value for multipart blob?
         if (((newRidList[i].token >> 46) < 0x3FFFF) && ((newRidList[i].token >> 46) > 0))
         {
           StringPtr multi_part[1];

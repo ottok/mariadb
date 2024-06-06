@@ -19,8 +19,7 @@
 
 /** @file */
 
-#ifndef JLF_SUBQUERY_H
-#define JLF_SUBQUERY_H
+#pragma once
 
 #include "jlf_common.h"
 
@@ -51,5 +50,3 @@ void preprocessSelectSubquery(execplan::CalpontSelectExecutionPlan*, JobInfo&);
 SJSTEP doUnionSub(execplan::CalpontExecutionPlan*, JobInfo&);
 
 }  // namespace joblist
-
-#endif  // JLF_SUBQUERY_H

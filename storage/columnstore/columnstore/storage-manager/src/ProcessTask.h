@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef PROCESS_TASK_H_
-#define PROCESS_TASK_H_
+#pragma once
 
 #include "ThreadPool.h"
 
@@ -40,5 +39,3 @@ class ProcessTask : public ThreadPool::Job
 };
 
 }  // namespace storagemanager
-
-#endif

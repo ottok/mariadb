@@ -19,26 +19,6 @@ export DEB_BUILD_OPTIONS="nocheck $DEB_BUILD_OPTIONS"
 # shellcheck source=/dev/null
 source ./VERSION
 
-# General CI optimizations to keep build output smaller
-if [[ $GITLAB_CI ]]
-then
-  # On Gitlab the output log must stay under 4MB so make the
-  # build less verbose
-  sed '/Add support for verbose builds/,/^$/d' -i debian/rules
-elif [ -d storage/columnstore/columnstore/debian ]
-then
-  # ColumnStore is explicitly disabled in the native Debian build. Enable it
-  # now when build is triggered by autobake-deb.sh (MariaDB.org) and when the
-  # build is not running on Gitlab-CI.
-  sed '/-DPLUGIN_COLUMNSTORE=NO/d' -i debian/rules
-  # Take the files and part of control from MCS directory
-  cp -v storage/columnstore/columnstore/debian/mariadb-plugin-columnstore.* debian/
-  # idempotent, except for the blank line, but that can be tolerated.
-  sed -e '/Package: mariadb-plugin-columnstore/,/^$/d' -i debian/control
-  echo >> debian/control
-  sed "s/-10.6//" <storage/columnstore/columnstore/debian/control >> debian/control
-fi
-
 # Look up distro-version specific stuff
 #
 # Always keep the actual packaging as up-to-date as possible following the latest
@@ -88,7 +68,7 @@ architecture=$(dpkg-architecture -q DEB_BUILD_ARCH)
 #   Release:	n/a
 #   Codename:	n/a
 LSBID="$(lsb_release -si  | tr '[:upper:]' '[:lower:]')"
-LSBVERSION="$(lsb_release -sr | sed -e "s#\.##g")"
+LSBVERSION="$(lsb_release -sr | sed -e "s/\.//g")"
 LSBNAME="$(lsb_release -sc)"
 
 # If 'n/a', assume 'sid'
@@ -153,6 +133,27 @@ in
     echo "Error: Unknown release '$LSBNAME'" >&2
     exit 1
 esac
+
+# General CI optimizations to keep build output smaller
+if [[ $GITLAB_CI ]]
+then
+  # On Gitlab the output log must stay under 4MB so make the
+  # build less verbose
+  sed '/Add support for verbose builds/,/^$/d' -i debian/rules
+elif [[ -d storage/columnstore/columnstore/debian ]] && [[ "$LSBNAME" = !(buster|bionic) ]]
+then
+  # ColumnStore is explicitly disabled in the native Debian build. Enable it
+  # now when build is triggered by autobake-deb.sh (MariaDB.org) and when the
+  # build is not running on Gitlab-CI.
+  sed '/-DPLUGIN_COLUMNSTORE=NO/d' -i debian/rules
+  # Take the files and part of control from MCS directory
+  if [[ ! -f debian/mariadb-plugin-columnstore.install ]]
+  then
+    cp -v storage/columnstore/columnstore/debian/mariadb-plugin-columnstore.* debian/
+    echo >> debian/control
+    cat storage/columnstore/columnstore/debian/control >> debian/control
+  fi
+fi
 
 if [ -n "${AUTOBAKE_PREP_CONTROL_RULES_ONLY:-}" ]
 then

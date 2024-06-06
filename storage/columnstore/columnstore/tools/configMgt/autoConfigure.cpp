@@ -1058,13 +1058,11 @@ int main(int argc, char* argv[])
         if (moduleName == systemParentOAMModuleName)
           sysConfigNew->setConfig(dbrmMainProc, "IPAddr", moduleIPAddr);
 
-        // if ( moduleDisableState == oam::ENABLEDSTATE )
-        //{
         DBRMworkernodeID++;
         string DBRMSection = dbrmSubProc + oam.itoa(DBRMworkernodeID);
         sysConfigNew->setConfig(DBRMSection, "IPAddr", moduleIPAddr);
         sysConfigNew->setConfig(DBRMSection, "Module", moduleName);
-        //}
+
       }  // end of nicID loop
 
       // set dbroot assigments

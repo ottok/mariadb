@@ -22,6 +22,7 @@ IF(WITH_WSREP AND NOT EMBEDDED_LIBRARY)
     wsrep_server_service.cc
     wsrep_storage_service.cc
     wsrep_server_state.cc
+    wsrep_event_service.cc
     wsrep_status.cc
     wsrep_allowlist_service.cc
     wsrep_utils.cc
@@ -37,7 +38,8 @@ IF(WITH_WSREP AND NOT EMBEDDED_LIBRARY)
     wsrep_schema.cc
     wsrep_plugin.cc
     service_wsrep.cc
-  )
+    )
+  MYSQL_ADD_PLUGIN(wsrep_provider ${WSREP_SOURCES} DEFAULT NOT_EMBEDDED LINK_LIBRARIES wsrep-lib wsrep_api_v26)
   MYSQL_ADD_PLUGIN(wsrep ${WSREP_SOURCES} MANDATORY NOT_EMBEDDED LINK_LIBRARIES wsrep-lib wsrep_api_v26)
   IF(VISIBILITY_HIDDEN_FLAG AND TARGET wsrep)
     # wsrep_info plugin needs some wsrep symbols from inside mysqld
@@ -108,11 +110,13 @@ SET (SQL_SOURCE
                key.cc log.cc lock.cc
                log_event.cc log_event_server.cc
                rpl_record.cc rpl_reporting.cc
-               log_event_old.cc rpl_record_old.cc
                mf_iocache.cc my_decimal.cc
                mysqld.cc net_serv.cc  keycaches.cc
                ../sql-common/client_plugin.c
-               opt_range.cc opt_sum.cc
+               opt_range.cc
+               opt_rewrite_date_cmp.cc
+               opt_rewrite_remove_casefold.cc
+               opt_sum.cc
                ../sql-common/pack.c parse_file.cc password.c procedure.cc
                protocol.cc records.cc repl_failsafe.cc rpl_filter.cc
                session_tracker.cc
@@ -160,12 +164,13 @@ SET (SQL_SOURCE
                opt_table_elimination.cc sql_expression_cache.cc
                gcalc_slicescan.cc gcalc_tools.cc
                my_apc.cc mf_iocache_encr.cc item_jsonfunc.cc
-               my_json_writer.cc
-               rpl_gtid.cc rpl_parallel.cc
+               my_json_writer.cc json_schema.cc json_schema_helper.cc
+               rpl_gtid.cc gtid_index.cc rpl_parallel.cc
                semisync.cc semisync_master.cc semisync_slave.cc
                semisync_master_ack_receiver.cc
+               sp_instr.cc
                sql_schema.cc
-               lex_charset.cc
+               lex_charset.cc charset_collations.cc
                sql_type.cc sql_mode.cc sql_type_json.cc
                sql_type_string.cc
                sql_type_geom.cc
@@ -176,6 +181,7 @@ SET (SQL_SOURCE
                sql_tvc.cc sql_tvc.h
                opt_split.cc
                rowid_filter.cc rowid_filter.h
+               optimizer_costs.h optimizer_defaults.h
                opt_trace.cc
                table_cache.cc encryption.cc temporary_tables.cc
                json_table.cc
@@ -216,6 +222,9 @@ MYSQL_ADD_PLUGIN(partition ha_partition.cc STORAGE_ENGINE DEFAULT STATIC_ONLY
 RECOMPILE_FOR_EMBEDDED)
 MYSQL_ADD_PLUGIN(sql_sequence ha_sequence.cc STORAGE_ENGINE MANDATORY STATIC_ONLY
 RECOMPILE_FOR_EMBEDDED)
+MYSQL_ADD_PLUGIN(online_alter_log online_alter.cc STORAGE_ENGINE MANDATORY
+STATIC_ONLY NOT_EMBEDDED)
+
 
 ADD_LIBRARY(sql STATIC ${SQL_SOURCE})
 MAYBE_DISABLE_IPO(sql)
@@ -223,10 +232,10 @@ DTRACE_INSTRUMENT(sql)
 TARGET_LINK_LIBRARIES(sql
   mysys mysys_ssl dbug strings vio pcre2-8
   tpool
+  online_alter_log
   ${LIBWRAP} ${LIBCRYPT} ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT}
   ${SSL_LIBRARIES}
   ${LIBSYSTEMD})
-
 IF(TARGET pcre2)
   ADD_DEPENDENCIES(sql pcre2)
 ENDIF()
@@ -290,6 +299,7 @@ IF(MSVC OR CMAKE_SYSTEM_NAME MATCHES AIX)
    sql_builtins
   )
   IF(MSVC)
+    TARGET_LINK_LIBRARIES(server PRIVATE icuuc icuin)
     IF(NOT WITHOUT_DYNAMIC_PLUGINS)
      SET_TARGET_PROPERTIES(server PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
     ENDIF()
@@ -482,14 +492,14 @@ IF(WIN32)
   ADD_CUSTOM_COMMAND(OUTPUT
     ${my_bootstrap_sql}
     COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR}/scripts
-    cmd /c copy mysql_system_tables.sql+mysql_system_tables_data.sql+fill_help_tables.sql+mysql_performance_tables.sql+mysql_test_db.sql+mysql_sys_schema.sql ${native_outfile}
+    cmd /c copy mariadb_system_tables.sql+mariadb_system_tables_data.sql+fill_help_tables.sql+mariadb_performance_tables.sql+mariadb_test_db.sql+mariadb_sys_schema.sql ${native_outfile}
     DEPENDS
-    ${CMAKE_SOURCE_DIR}/scripts/mysql_system_tables.sql
-    ${CMAKE_SOURCE_DIR}/scripts/mysql_system_tables_data.sql
+    ${CMAKE_SOURCE_DIR}/scripts/mariadb_system_tables.sql
+    ${CMAKE_SOURCE_DIR}/scripts/mariadb_system_tables_data.sql
     ${CMAKE_SOURCE_DIR}/scripts/fill_help_tables.sql
-    ${CMAKE_SOURCE_DIR}/scripts/mysql_performance_tables.sql
-    ${CMAKE_SOURCE_DIR}/scripts/mysql_test_db.sql
-    ${CMAKE_BINARY_DIR}/scripts/mysql_sys_schema.sql
+    ${CMAKE_SOURCE_DIR}/scripts/mariadb_performance_tables.sql
+    ${CMAKE_SOURCE_DIR}/scripts/mariadb_test_db.sql
+    ${CMAKE_BINARY_DIR}/scripts/mariadb_sys_schema.sql
   )
 
   ADD_CUSTOM_COMMAND(

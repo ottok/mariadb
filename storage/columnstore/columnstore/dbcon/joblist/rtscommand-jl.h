@@ -29,8 +29,7 @@
 //
 /** @file */
 
-#ifndef RTSCOMMANDJL_H_
-#define RTSCOMMANDJL_H_
+#pragma once
 
 #include "jobstep.h"
 #include "command-jl.h"
@@ -72,5 +71,3 @@ class RTSCommandJL : public CommandJL
 };
 
 };  // namespace joblist
-
-#endif

@@ -21,8 +21,7 @@
  *******************************************************************************/
 /** @file */
 
-#ifndef _WE_XMLOP_H_
-#define _WE_XMLOP_H_
+#pragma once
 
 #include "we_xmltag.h"
 #include "we_type.h"
@@ -111,4 +110,3 @@ class XMLOp
 };
 
 }  // namespace WriteEngine
-#endif  // _WE_XMLOP_H_

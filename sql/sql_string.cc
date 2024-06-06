@@ -1132,7 +1132,6 @@ String_copier::well_formed_copy(CHARSET_INFO *to_cs,
 }
 
 
-
 /*
   Append characters to a single-quoted string '...', escaping special
   characters with backslashes as necessary.

@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef CALPONTDMLPACKAGE_H
-#define CALPONTDMLPACKAGE_H
+#pragma once
 #include <string>
 #include <boost/uuid/uuid.hpp>
 
@@ -392,4 +391,3 @@ class CalpontDMLPackage
   WriteEngine::ChunkManager* fCM;
 };
 }  // namespace dmlpackage
-#endif  // CALPONTDMLPACKAGE_H

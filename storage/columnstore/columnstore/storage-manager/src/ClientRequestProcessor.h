@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef CLIENTREQUESTPROCESSOR_H_
-#define CLIENTREQUESTPROCESSOR_H_
+#pragma once
 
 #include "ThreadPool.h"
 #include <sys/types.h>
@@ -38,5 +37,3 @@ class ClientRequestProcessor : public boost::noncopyable
 };
 
 }  // namespace storagemanager
-
-#endif

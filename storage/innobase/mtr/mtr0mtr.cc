@@ -203,7 +203,6 @@ void mtr_t::start()
 
   m_made_dirty= false;
   m_latch_ex= false;
-  m_inside_ibuf= false;
   m_modifications= false;
   m_log_mode= MTR_LOG_ALL;
   ut_d(m_user_space_id= TRX_SYS_SPACE);
@@ -483,7 +482,6 @@ void mtr_t::commit_log(mtr_t *mtr, std::pair<lsn_t,page_flush_ahead> lsns)
 void mtr_t::commit()
 {
   ut_ad(is_active());
-  ut_ad(!is_inside_ibuf());
 
   /* This is a dirty read, for debugging. */
   ut_ad(!m_modifications || !recv_no_log_write);
@@ -561,14 +559,12 @@ inline void fil_space_t::set_create_lsn(lsn_t lsn)
 void mtr_t::commit_shrink(fil_space_t &space, uint32_t size)
 {
   ut_ad(is_active());
-  ut_ad(!is_inside_ibuf());
   ut_ad(!high_level_read_only);
   ut_ad(m_modifications);
   ut_ad(!m_memo.empty());
   ut_ad(!recv_recovery_is_on());
   ut_ad(m_log_mode == MTR_LOG_ALL);
   ut_ad(!m_freed_pages);
-  ut_ad(UT_LIST_GET_LEN(space.chain) == 1);
 
   log_write_and_flush_prepare();
   m_latch_ex= true;
@@ -580,8 +576,16 @@ void mtr_t::commit_shrink(fil_space_t &space, uint32_t size)
   fil_node_t *file= UT_LIST_GET_LAST(space.chain);
   mysql_mutex_lock(&fil_system.mutex);
   ut_ad(file->is_open());
-  space.size= file->size= size;
-  space.set_create_lsn(m_commit_lsn);
+  ut_ad(space.size >= size);
+  ut_ad(file->size >= space.size - size);
+  file->size-= space.size - size;
+  space.size= space.size_in_header= size;
+
+  if (space.id == TRX_SYS_SPACE)
+    srv_sys_space.set_last_file_size(file->size);
+  else
+    space.set_create_lsn(m_commit_lsn);
+
   mysql_mutex_unlock(&fil_system.mutex);
 
   space.clear_freed_ranges();
@@ -590,8 +594,8 @@ void mtr_t::commit_shrink(fil_space_t &space, uint32_t size)
   log_write_and_flush();
   ut_ad(log_sys.latch_have_wr());
 
-  os_file_truncate(space.chain.start->name, space.chain.start->handle,
-                   os_offset_t{size} << srv_page_size_shift, true);
+  os_file_truncate(file->name, file->handle,
+                   os_offset_t{file->size} << srv_page_size_shift, true);
 
   space.clear_freed_ranges();
 
@@ -667,7 +671,6 @@ void mtr_t::commit_shrink(fil_space_t &space, uint32_t size)
 bool mtr_t::commit_file(fil_space_t &space, const char *name)
 {
   ut_ad(is_active());
-  ut_ad(!is_inside_ibuf());
   ut_ad(!high_level_read_only);
   ut_ad(m_modifications);
   ut_ad(!m_made_dirty);
@@ -747,7 +750,6 @@ ATTRIBUTE_COLD lsn_t mtr_t::commit_files(lsn_t checkpoint_lsn)
 {
   ut_ad(log_sys.latch_have_wr());
   ut_ad(is_active());
-  ut_ad(!is_inside_ibuf());
   ut_ad(m_log_mode == MTR_LOG_ALL);
   ut_ad(!m_made_dirty);
   ut_ad(m_memo.empty());

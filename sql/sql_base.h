@@ -28,6 +28,7 @@ struct Name_resolution_context;
 class Open_table_context;
 class Open_tables_state;
 class Prelocking_strategy;
+class DML_prelocking_strategy;
 struct TABLE_LIST;
 class THD;
 struct handlerton;
@@ -178,7 +179,7 @@ bool fill_record_n_invoke_before_triggers(THD *thd, TABLE *table,
                                           bool ignore_errors,
                                           enum trg_event_type event);
 bool insert_fields(THD *thd, Name_resolution_context *context,
-		   const char *db_name, const char *table_name,
+                   const LEX_CSTRING &db_name, const LEX_CSTRING &table_name,
                    List_iterator<Item> *it, bool any_privileges,
                    uint *hidden_bit_fields, bool returning_field);
 void make_leaves_list(THD *thd, List<TABLE_LIST> &list, TABLE_LIST *tables,
@@ -292,6 +293,9 @@ bool open_normal_and_derived_tables(THD *thd, TABLE_LIST *tables, uint flags,
 bool open_tables_only_view_structure(THD *thd, TABLE_LIST *tables,
                                      bool can_deadlock);
 bool open_and_lock_internal_tables(TABLE *table, bool lock);
+bool open_tables_for_query(THD *thd, TABLE_LIST *tables,
+                           uint *table_count, uint flags,
+                           DML_prelocking_strategy *prelocking_strategy);
 bool lock_tables(THD *thd, TABLE_LIST *tables, uint counter, uint flags);
 int decide_logging_format(THD *thd, TABLE_LIST *tables);
 void close_thread_table(THD *thd, TABLE **table_ptr);
@@ -361,7 +365,7 @@ inline void setup_table_map(TABLE *table, TABLE_LIST *table_list, uint tablenr)
   }
   table->tablenr= tablenr;
   table->map= (table_map) 1 << tablenr;
-  table->force_index= table_list->force_index;
+  table->force_index= table->force_index_join= 0;
   table->force_index_order= table->force_index_group= 0;
   table->covering_keys= table->s->keys_for_keyread;
 }
@@ -431,6 +435,17 @@ public:
                             TABLE_LIST *table_list, bool *need_prelocking);
   virtual bool handle_view(THD *thd, Query_tables_list *prelocking_ctx,
                            TABLE_LIST *table_list, bool *need_prelocking);
+};
+
+
+
+class Multiupdate_prelocking_strategy : public DML_prelocking_strategy
+{
+  bool done;
+  bool has_prelocking_list;
+public:
+  void reset(THD *thd);
+  bool handle_end(THD *thd);
 };
 
 

@@ -22,34 +22,31 @@
 
 /** @file */
 
-#ifndef JOBLIST_PRIMITIVE_H
-#define JOBLIST_PRIMITIVE_H
+#pragma once
 
 #include <sys/types.h>
 
 #include "blocksize.h"
 #include "calpontsystemcatalog.h"
 #include "joblisttypes.h"
+#include <columnwidth.h>
 
 #include <vector>
 
 #pragma pack(push, 1)
 
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable : 4200)
-#endif
 
 // from blocksize.h
 const int32_t DATA_BLOCK_SIZE = BLOCK_SIZE;
 
-const int8_t COMPARE_NIL = 0x00;
+const int8_t COMPARE_NIL = 0x00;  // means c = NULL predicate
 const int8_t COMPARE_LT = 0x01;
 const int8_t COMPARE_EQ = 0x02;
 const int8_t COMPARE_LE = (COMPARE_LT | COMPARE_EQ);  // 0x03
 const int8_t COMPARE_GT = 0x04;
 const int8_t COMPARE_NE = (COMPARE_LT | COMPARE_GT);  // 0x05
 const int8_t COMPARE_GE = (COMPARE_GT | COMPARE_EQ);  // 0x06
+const int8_t COMPARE_NULLEQ = 0x07;                   // means c IS NULL(see column.cpp for details)
 const int8_t COMPARE_NOT = 0x08;
 const int8_t COMPARE_NLT = (COMPARE_LT | COMPARE_NOT);  // 0x09
 const int8_t COMPARE_NLE = (COMPARE_LE | COMPARE_NOT);  // 0x0b
@@ -75,6 +72,9 @@ class StringComparator : public datatypes::Charset
   {
     if (COP & COMPARE_LIKE)
       return like(COP & COMPARE_NOT, str1, str2);
+
+    if (COP == COMPARE_NULLEQ)
+      return str1.isNull() == str2.isNull(); // XXX: TODO: I do not know the logic here, so it is temporary solution.
 
     int cmp = strnncollsp(str1, str2);
 
@@ -580,6 +580,13 @@ struct DictTokenByIndexRequestHeader
 
 struct DataValue
 {
+  uint8_t isnull;
+  uint16_t len;
+  char data[];
+};
+
+struct NonNullDataValue
+{
   uint16_t len;
   char data[];
 };
@@ -705,7 +712,7 @@ const uint8_t ROUND_POS = 0x01;  // actual value larger/longer than the stored v
 const uint8_t ROUND_NEG = 0x80;  // actual value less than the stored value
 
 // Tied to ColByScanRequestHeader and ColByScanRangeRequestHeader.  Check other headers if modifying.
-struct NewColRequestHeader
+struct /*alignas(utils::MAXCOLUMNWIDTH)*/ NewColRequestHeader
 {
   ISMPacketHeader ism;
   PrimitiveHeader hdr;
@@ -718,6 +725,7 @@ struct NewColRequestHeader
   uint16_t NOPS;
   uint16_t NVALS;
   uint8_t sort;  // 1 to sort
+  bool hasAuxCol;
   // this follows the header
   // ColArgs ArgList[NOPS] (where the val field is DataSize bytes long)
   // uint16_t Rids[NVALS]  (each rid is relative to the given block)
@@ -879,10 +887,5 @@ struct LbidAtVer
   uint32_t Ver;
 };
 
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 
 #pragma pack(pop)
-
-#endif  // JOBLIST_PRIMITIVE_H

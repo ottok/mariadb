@@ -7,7 +7,23 @@ typedef unsigned (*my_crc32_t)(unsigned, const void *, size_t);
 
 #ifdef HAVE_ARMV8_CRC
 
-# ifdef HAVE_ARMV8_CRYPTO
+#ifdef _WIN32
+#include <windows.h>
+int crc32_aarch64_available(void)
+{
+  return IsProcessorFeaturePresent(PF_ARM_V8_CRC32_INSTRUCTIONS_AVAILABLE);
+}
+
+const char *crc32c_aarch64_available(void)
+{
+  if (crc32_aarch64_available() == 0)
+    return NULL;
+  /* TODO : pmull seems supported, but does not compile*/
+  return "Using ARMv8 crc32 instructions";
+}
+#endif /* _WIN32 */
+
+#ifdef HAVE_ARMV8_CRYPTO
 static unsigned crc32c_aarch64_pmull(unsigned, const void *, size_t);
 # endif
 
@@ -31,7 +47,8 @@ my_crc32_t crc32c_aarch64_available(void)
 # endif
   return NULL;
 }
-# else
+
+# else /* __APPLE__ */
 #  include <sys/auxv.h>
 #  ifdef __FreeBSD__
 static unsigned long getauxval(unsigned int key)
@@ -61,7 +78,7 @@ int crc32_aarch64_available(void)
   unsigned long auxv= getauxval(AT_HWCAP);
   return (auxv & HWCAP_CRC32) != 0;
 }
-# endif
+# endif /* __APPLE__ */
 
 # ifndef __APPLE__
 static unsigned crc32c_aarch64(unsigned, const void *, size_t);
@@ -78,7 +95,7 @@ my_crc32_t crc32c_aarch64_available(void)
 #  endif
   return crc32c_aarch64;
 }
-# endif
+# endif /* __APPLE__ */
 
 const char *crc32c_aarch64_impl(my_crc32_t c)
 {
@@ -123,7 +140,10 @@ asm(".arch_extension crypto");
 #else /* HAVE_ARMV8_CRC_CRYPTO_INTRINSICS  */
 
 /* Intrinsics header*/
+#ifndef _WIN32
 #include <arm_acle.h>
+#endif
+
 #include <arm_neon.h>
 
 #define CRC32CX(crc, value) (crc) = __crc32cd((crc), (value))

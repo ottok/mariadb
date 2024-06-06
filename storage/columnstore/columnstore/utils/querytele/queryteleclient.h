@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef QUERYTELECLIENT_H__
-#define QUERYTELECLIENT_H__
+#pragma once
 
 #include <unistd.h>
 #include <stdint.h>
@@ -27,11 +26,7 @@
 #include "queryteleserverparms.h"
 #include "querystepparms.h"
 
-#if defined(_MSC_VER) && defined(LIBQUERYTELE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace querytele
 {
@@ -87,5 +82,3 @@ class QueryTeleClient
 }  // namespace querytele
 
 #undef EXPORT
-
-#endif

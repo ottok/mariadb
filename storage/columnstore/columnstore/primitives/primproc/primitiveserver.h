@@ -22,22 +22,16 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef PRIMITIVESERVER_H
-#define PRIMITIVESERVER_H
+#pragma once
 
 #include <map>
-#ifdef _MSC_VER
-#include <unordered_map>
-#include <unordered_set>
-#else
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
 #include <unordered_map>
-#endif
 #include <boost/thread.hpp>
 
 #include "threadpool.h"
-#include "../../utils/threadpool/prioritythreadpool.h"
+#include "fair_threadpool.h"
 #include "messagequeue.h"
 #include "blockrequestprocessor.h"
 #include "batchprimitiveprocessor.h"
@@ -49,11 +43,12 @@ extern oam::OamCache* oamCache;
 
 namespace primitiveprocessor
 {
-extern boost::shared_ptr<threadpool::PriorityThreadPool> OOBPool;
 extern dbbc::BlockRequestProcessor** BRPp;
 extern BRM::DBRM* brm;
 extern boost::mutex bppLock;
 extern uint32_t highPriorityThreads, medPriorityThreads, lowPriorityThreads;
+
+class BPPSendThread;
 
 class PrimitiveServer;
 
@@ -71,7 +66,7 @@ class BPPV
   }
   void abort();
   bool aborted();
-  volatile bool joinDataReceived;
+  std::atomic<bool> joinDataReceived{false};
 
  private:
   std::vector<boost::shared_ptr<BatchPrimitiveProcessor> > v;
@@ -125,16 +120,20 @@ class PrimitiveServer
   /** @brief start the primitive server
    *
    */
-  void start(Service* p);
+  void start(Service* p, utils::USpaceSpinLock& startupRaceLock);
 
   /** @brief get a pointer the shared processor thread pool
    */
-  inline threadpool::PriorityThreadPool* getProcessorThreadPool() const
+  inline boost::shared_ptr<threadpool::FairThreadPool> getProcessorThreadPool() const
   {
     return fProcessorPool;
   }
 
-  // 			int fCacheCount;
+  inline std::shared_ptr<threadpool::PriorityThreadPool> getOOBProcessorThreadPool() const
+  {
+    return fOOBPool;
+  }
+
   int ReadAheadBlocks() const
   {
     return fReadAheadBlocks;
@@ -166,7 +165,8 @@ class PrimitiveServer
   /** @brief the thread pool used to process
    * primitive commands
    */
-  threadpool::PriorityThreadPool* fProcessorPool;
+  boost::shared_ptr<threadpool::FairThreadPool> fProcessorPool;
+  std::shared_ptr<threadpool::PriorityThreadPool> fOOBPool;
 
   int fServerThreads;
   int fServerQueueSize;
@@ -181,4 +181,3 @@ class PrimitiveServer
 };
 
 }  // namespace primitiveprocessor
-#endif  // PRIMITIVESERVER_H

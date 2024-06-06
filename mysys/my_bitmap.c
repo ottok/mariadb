@@ -544,9 +544,9 @@ uint bitmap_bits_set(const MY_BITMAP *map)
 
 
 /**
-  Copy bitmaps
+  Copy bitmaps (if source bigger tail is left unchanged)
 
-  @param map1   to-bitmap
+  @param map    to-bitmap
   @param map2   from-bitmap
 
   @notes
@@ -554,18 +554,19 @@ uint bitmap_bits_set(const MY_BITMAP *map)
   In this case, only up to to->n_bits will be copied.
 */
 
-void bitmap_copy(MY_BITMAP *map1, const MY_BITMAP *map2)
+void bitmap_copy(MY_BITMAP *map, const MY_BITMAP *map2)
 {
-  my_bitmap_map *to= map1->bitmap, *from= map2->bitmap;
-  uint map1_length= no_words_in_map(map1)*sizeof(my_bitmap_map);
-  uint map2_length= no_words_in_map(map2)*sizeof(my_bitmap_map);
-  uint length= MY_MIN(map1_length, map2_length);
-  DBUG_ASSERT_DIFFERENT_BITMAPS(map1,map2);
+  my_bitmap_map *to= map->bitmap, *from= map2->bitmap, *end;
+  uint len= no_words_in_map(map), len2 = no_words_in_map(map2);
+  DBUG_ASSERT_DIFFERENT_BITMAPS(map, map2);
 
-  memcpy(to, from, length);
-  if (length < map1_length)
-    bzero(to + length, map1_length - length);
-  *map1->last_word_ptr&= ~map1->last_bit_mask;
+  end= to + MY_MIN(len, len2 - 1);
+  while (to < end)
+    *to++ = *from++;
+
+  if (len2 <= len)
+    *to= (*from & ~map2->last_bit_mask) | (*to & map2->last_bit_mask);
+  *(map->last_word_ptr)&= ~map->last_bit_mask;
 }
 
 

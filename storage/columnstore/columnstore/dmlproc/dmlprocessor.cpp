@@ -263,7 +263,7 @@ struct CancellationThread
         // If there are any abandonded transactions without locks
         // release them.
         int len;
-        boost::shared_array<BRM::SIDTIDEntry> activeTxns = sessionManager.SIDTIDMap(len);
+        std::shared_ptr<BRM::SIDTIDEntry[]> activeTxns = sessionManager.SIDTIDMap(len);
 
         for (int i = 0; i < len; i++)
         {
@@ -839,7 +839,7 @@ void PackageHandler::run()
             }
             else
             {
-              // error occured. Receive all outstanding messages before erroring out.
+              // error occurred. Receive all outstanding messages before erroring out.
               batchProcessor->receiveOutstandingMsg();
               batchProcessor->sendlastBatch();  // needs to flush files
               batchProcessor->receiveAllMsg();
@@ -1340,12 +1340,10 @@ void DMLProcessor::operator()()
         fConcurrentSupport = false;
     }
 
-#ifndef _MSC_VER
     struct sigaction ign;
     memset(&ign, 0, sizeof(ign));
     ign.sa_handler = added_a_pm;
     sigaction(SIGHUP, &ign, 0);
-#endif
     fEC->Open();
 
     for (;;)
@@ -1389,7 +1387,7 @@ void DMLProcessor::operator()()
           0)  // > 0 implies succesful retrieval. It doesn't imply anything about the contents
       {
         messageqcpp::ByteStream results;
-        const char* responseMsg = 0;
+        std::string responseMsg;
         bool bReject = false;
 
         // Check to see if we're in write suspended mode
@@ -1433,6 +1431,14 @@ void DMLProcessor::operator()()
               status = DMLPackageProcessor::NOT_ACCEPTING_PACKAGES;
               bReject = true;
             }
+          }
+
+          // MCOL-4988 Check if DBRM is in READ ONLY mode
+          if (fDbrm->isReadWrite() == BRM::ERR_READONLY)
+          {
+            BRM::errString(BRM::ERR_READONLY, responseMsg);
+            status = DMLPackageProcessor::DBRM_READ_ONLY;
+            bReject = true;
           }
 
           if (bReject)
@@ -1626,9 +1632,6 @@ void DMLProcessor::operator()()
           {
             for (; i < numTries; i++)
             {
-#ifdef _MSC_VER
-              Sleep(rm_ts.tv_sec * 1000);
-#else
               struct timespec abs_ts;
 
               // cout << "session " << sessionID << " nanosleep on package type " << (int)packageType << endl;
@@ -1638,7 +1641,6 @@ void DMLProcessor::operator()()
                 abs_ts.tv_nsec = rm_ts.tv_nsec;
               } while (nanosleep(&abs_ts, &rm_ts) < 0);
 
-#endif
               anyOtherActiveTransaction =
                   sessionManager.checkActiveTransaction(sessionID, bIsDbrmUp, blockingsid);
 

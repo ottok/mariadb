@@ -15,71 +15,25 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
-#ifndef MCS_DATATYPE_H_INCLUDED
-#define MCS_DATATYPE_H_INCLUDED
+#pragma once
 
 #include <sstream>
 #include <boost/any.hpp>
 #include "exceptclasses.h"
 #include "conststring.h"
+#include "mcs_datatype_basic.h"
 #include "mcs_numeric_limits.h"
 #include "mcs_data_condition.h"
 #include "mcs_decimal.h"
 #include "mcs_double.h"
 #include "mcs_longdouble.h"
+#include "nullstring.h"
 
-#ifdef _MSC_VER
-typedef int mcs_sint32_t;
-#else
 typedef int32_t mcs_sint32_t;
-#endif
 
 // Because including my_sys.h in a Columnstore header causes too many conflicts
 struct charset_info_st;
 typedef const struct charset_info_st CHARSET_INFO;
-
-#ifdef _MSC_VER
-#define __attribute__(x)
-#endif
-
-namespace
-{
-const int64_t MIN_TINYINT __attribute__((unused)) = std::numeric_limits<int8_t>::min() + 2;    // -126;
-const int64_t MAX_TINYINT __attribute__((unused)) = std::numeric_limits<int8_t>::max();        //  127;
-const int64_t MIN_SMALLINT __attribute__((unused)) = std::numeric_limits<int16_t>::min() + 2;  // -32766;
-const int64_t MAX_SMALLINT __attribute__((unused)) = std::numeric_limits<int16_t>::max();      //  32767;
-const int64_t MIN_MEDINT __attribute__((unused)) = -(1ULL << 23);                              // -8388608;
-const int64_t MAX_MEDINT __attribute__((unused)) = (1ULL << 23) - 1;                           //  8388607;
-const int64_t MIN_INT __attribute__((unused)) = std::numeric_limits<int32_t>::min() + 2;       // -2147483646;
-const int64_t MAX_INT __attribute__((unused)) = std::numeric_limits<int32_t>::max();           //  2147483647;
-const int64_t MIN_BIGINT __attribute__((unused)) =
-    std::numeric_limits<int64_t>::min() + 2;  // -9223372036854775806LL;
-const int64_t MAX_BIGINT __attribute__((unused)) =
-    std::numeric_limits<int64_t>::max();  //  9223372036854775807
-
-const uint64_t MIN_UINT __attribute__((unused)) = 0;
-const uint64_t MIN_UTINYINT __attribute__((unused)) = 0;
-const uint64_t MIN_USMALLINT __attribute__((unused)) = 0;
-const uint64_t MIN_UMEDINT __attribute__((unused)) = 0;
-const uint64_t MIN_UBIGINT __attribute__((unused)) = 0;
-const uint64_t MAX_UINT __attribute__((unused)) = std::numeric_limits<uint32_t>::max() - 2;     // 4294967293
-const uint64_t MAX_UTINYINT __attribute__((unused)) = std::numeric_limits<uint8_t>::max() - 2;  // 253;
-const uint64_t MAX_USMALLINT __attribute__((unused)) = std::numeric_limits<uint16_t>::max() - 2;  // 65533;
-const uint64_t MAX_UMEDINT __attribute__((unused)) = (1ULL << 24) - 1;                            // 16777215
-const uint64_t MAX_UBIGINT __attribute__((unused)) =
-    std::numeric_limits<uint64_t>::max() - 2;  // 18446744073709551613
-
-const float MAX_FLOAT __attribute__((unused)) = std::numeric_limits<float>::max();  // 3.402823466385289e+38
-const float MIN_FLOAT __attribute__((unused)) = -std::numeric_limits<float>::max();
-const double MAX_DOUBLE __attribute__((unused)) =
-    std::numeric_limits<double>::max();  // 1.7976931348623157e+308
-const double MIN_DOUBLE __attribute__((unused)) = -std::numeric_limits<double>::max();
-const long double MAX_LONGDOUBLE __attribute__((unused)) =
-    std::numeric_limits<long double>::max();  // 1.7976931348623157e+308
-const long double MIN_LONGDOUBLE __attribute__((unused)) = -std::numeric_limits<long double>::max();
-
-const uint64_t AUTOINCR_SATURATED __attribute__((unused)) = std::numeric_limits<uint64_t>::max();
-}  // namespace
 
 using namespace std;  // e.g. string
 
@@ -249,6 +203,7 @@ class SystemCatalog
         @brief Convenience method to get int128 from a std::string.
     */
     int128_t decimal128FromString(const std::string& value, bool* saturate = 0) const;
+    int128_t decimal128FromString(const utils::NullString& value, bool* saturate = 0) const;
 
     /**
         @brief The method sets the legacy scale and precision of a wide decimal
@@ -472,10 +427,7 @@ inline bool isDecimal(const datatypes::SystemCatalog::ColDataType type)
   return (type == datatypes::SystemCatalog::DECIMAL || type == datatypes::SystemCatalog::UDECIMAL);
 }
 
-/** convenience function to determine if column type is an
- *  unsigned type
- */
-inline bool isUnsigned(const datatypes::SystemCatalog::ColDataType type)
+inline bool isUnsignedInteger(const datatypes::SystemCatalog::ColDataType type)
 {
   switch (type)
   {
@@ -484,6 +436,25 @@ inline bool isUnsigned(const datatypes::SystemCatalog::ColDataType type)
     case datatypes::SystemCatalog::UMEDINT:
     case datatypes::SystemCatalog::UINT:
     case datatypes::SystemCatalog::UBIGINT: return true;
+
+    default: return false;
+  }
+}
+
+/** convenience function to determine if column type is an
+ *  unsigned type
+ */
+inline bool isUnsigned(const datatypes::SystemCatalog::ColDataType type)
+{
+  if (isUnsignedInteger(type))
+    return true;
+
+  switch (type)
+  {
+    case datatypes::SystemCatalog::CHAR:
+    case datatypes::SystemCatalog::VARCHAR:
+    case datatypes::SystemCatalog::TEXT:
+    case datatypes::SystemCatalog::VARBINARY: return true;
 
     default: return false;
   }
@@ -503,6 +474,66 @@ inline bool isSignedInteger(const datatypes::SystemCatalog::ColDataType type)
   }
 }
 
+inline bool sameSignednessInteger(const datatypes::SystemCatalog::ColDataType type1,
+                                  const datatypes::SystemCatalog::ColDataType type2)
+{
+  return (isSignedInteger(type1) && isSignedInteger(type2)) ||
+         (isUnsignedInteger(type1) && isUnsignedInteger(type2));
+}
+
+inline bool differentSignednessInteger(const datatypes::SystemCatalog::ColDataType type1,
+                                       const datatypes::SystemCatalog::ColDataType type2)
+{
+  return (isSignedInteger(type1) && isUnsignedInteger(type2)) ||
+         (isUnsignedInteger(type1) && isSignedInteger(type2));
+}
+
+inline void promoteSignedInteger(datatypes::SystemCatalog::TypeHolderStd& unionedType)
+{
+  switch (unionedType.colDataType)
+  {
+    case datatypes::SystemCatalog::TINYINT:
+    case datatypes::SystemCatalog::UTINYINT:
+    {
+      unionedType.colDataType = datatypes::SystemCatalog::SMALLINT;
+      unionedType.colWidth = 2;
+      return;
+    }
+    case datatypes::SystemCatalog::SMALLINT:
+    case datatypes::SystemCatalog::USMALLINT:
+    {
+      unionedType.colDataType = datatypes::SystemCatalog::MEDINT;
+      unionedType.colWidth = 4;
+      return;
+    }
+    case datatypes::SystemCatalog::MEDINT:
+    case datatypes::SystemCatalog::UMEDINT:
+    {
+      unionedType.colDataType = datatypes::SystemCatalog::INT;
+      unionedType.colWidth = 4;
+      return;
+    }
+    case datatypes::SystemCatalog::INT:
+    case datatypes::SystemCatalog::UINT:
+    {
+      unionedType.colDataType = datatypes::SystemCatalog::BIGINT;
+      unionedType.colWidth = 8;
+      return;
+    }
+    case datatypes::SystemCatalog::BIGINT:
+    case datatypes::SystemCatalog::UBIGINT:
+    {
+      unionedType.colDataType = datatypes::SystemCatalog::DECIMAL;
+      unionedType.colWidth = MAXDECIMALWIDTH;
+      unionedType.precision = datatypes::INT128MAXPRECISION;
+      unionedType.scale = 0;
+      return;
+    }
+
+    default: idbassert(0); throw std::logic_error("datatypes::upcastSignedInteger: bad data type");
+  }
+}
+
 /**
     @brief The method netects whether type sum and avg aggregate will have
     wide decimal underlying type
@@ -518,40 +549,6 @@ namespace datatypes
 {
 static constexpr int128_t minInt128 = int128_t(0x8000000000000000LL) << 64;
 static constexpr int128_t maxInt128 = (int128_t(0x7FFFFFFFFFFFFFFFLL) << 64) + 0xFFFFFFFFFFFFFFFFLL;
-
-class ConstString
-{
-  const char* m_str;
-  size_t m_length;
-
- public:
-  ConstString(const char* str, size_t length) : m_str(str), m_length(length)
-  {
-  }
-  const char* str() const
-  {
-    return m_str;
-  }
-  const char* end() const
-  {
-    return m_str + m_length;
-  }
-  size_t length() const
-  {
-    return m_length;
-  }
-  void bin2hex(char* o)
-  {
-    static const char hexdig[] = {'0', '1', '2', '3', '4', '5', '6', '7',
-                                  '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
-    const char* e = end();
-    for (const char* s = m_str; s < e; s++)
-    {
-      *o++ = hexdig[*s >> 4];
-      *o++ = hexdig[*s & 0xf];
-    }
-  }
-};
 
 enum class round_style_t : uint8_t
 {
@@ -950,7 +947,8 @@ class StoreField
   virtual int store_timestamp(int64_t val) = 0;
   virtual int store_string(const char* str, size_t length) = 0;
   virtual int store_varbinary(const char* str, size_t length) = 0;
-  virtual int store_xlonglong(int64_t val) = 0;
+  virtual int store_longlong(int64_t val) = 0;
+  virtual int store_ulonglong(uint64_t val) = 0;
   virtual int store_float(float val) = 0;
   virtual int store_double(double val) = 0;
   virtual int store_long_double(long double val) = 0;
@@ -980,6 +978,8 @@ class WriteBatchField
   virtual size_t ColWriteBatchUInt64(const unsigned char* buf, bool nullVal, ColBatchWriter& ci) = 0;
   virtual size_t ColWriteBatchSInt32(const unsigned char* buf, bool nullVal, ColBatchWriter& ci) = 0;
   virtual size_t ColWriteBatchUInt32(const unsigned char* buf, bool nullVal, ColBatchWriter& ci) = 0;
+  virtual size_t ColWriteBatchSInt24(const unsigned char* buf, bool nullVal, ColBatchWriter& ci) = 0;
+  virtual size_t ColWriteBatchUInt24(const unsigned char* buf, bool nullVal, ColBatchWriter& ci) = 0;
   virtual size_t ColWriteBatchSInt16(const unsigned char* buf, bool nullVal, ColBatchWriter& ci) = 0;
   virtual size_t ColWriteBatchUInt16(const unsigned char* buf, bool nullVal, ColBatchWriter& ci) = 0;
   virtual size_t ColWriteBatchSInt8(const unsigned char* buf, bool nullVal, ColBatchWriter& ci) = 0;
@@ -1259,7 +1259,7 @@ class TypeHandlerSInt24 : public TypeHandlerInt
   size_t ColWriteBatch(WriteBatchField* field, const unsigned char* buf, bool nullVal,
                        ColBatchWriter& writer) const override
   {
-    return field->ColWriteBatchSInt32(buf, nullVal, writer);
+    return field->ColWriteBatchSInt24(buf, nullVal, writer);
   }
   int storeValueToField(rowgroup::Row& row, int pos, StoreField* f) const override
   {
@@ -1532,7 +1532,7 @@ class TypeHandlerUInt24 : public TypeHandlerInt
   size_t ColWriteBatch(WriteBatchField* field, const unsigned char* buf, bool nullVal,
                        ColBatchWriter& writer) const override
   {
-    return field->ColWriteBatchUInt32(buf, nullVal, writer);
+    return field->ColWriteBatchUInt24(buf, nullVal, writer);
   }
   int storeValueToField(rowgroup::Row& row, int pos, StoreField* f) const override
   {
@@ -2521,5 +2521,3 @@ class TypeHandlerTimestamp : public TypeHandlerTemporal
 };
 
 }  // end of namespace datatypes
-
-#endif  // MCS_DATATYPE_H_INCLUDED

@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef WIDE_DECIMAL_UTILS_H
-#define WIDE_DECIMAL_UTILS_H
+#pragma once
 
 #include <cstdint>
 #include "mcs_basic_types.h"
@@ -45,5 +44,3 @@ inline void uint128Max(uint128_t& val)
   ptr[1] = 0xFFFFFFFFFFFFFFFF;
 }
 }  // namespace utils
-
-#endif  // WIDE_DECIMAL_UTILS_H

@@ -60,13 +60,13 @@ public:
   const char         *mem_calc_file_name;
   ulong              mem_calc_line_no;
   ulonglong          *connection_ids;
-  uint               conn_kinds;
-  uint               *conn_kind;
   char               *conn_keys_first_ptr;
   char               **conn_keys;
   SPIDER_CONN        **conns;
-  /* for active-standby mode */
+  /* array of indexes of active servers */
   uint               *conn_link_idx;
+  /* A bitmap indicating whether each active server have some higher
+  numbered server in the same "group" left to try (can fail over) */
   uchar              *conn_can_fo;
   void               **quick_targets;
   int                *need_mons;
@@ -252,6 +252,7 @@ public:
     uint n_ranges,
     uint *bufsz,
     uint *flags,
+    ha_rows limit,
     Cost_estimate *cost
   );
   ha_rows multi_range_read_info(
@@ -445,12 +446,10 @@ public:
   );
   int delete_all_rows();
   int truncate();
-  double scan_time();
-  double read_time(
-    uint index,
-    uint ranges,
-    ha_rows rows
-  );
+  IO_AND_CPU_COST scan_time();
+  IO_AND_CPU_COST rnd_pos_time(ha_rows rows);
+  IO_AND_CPU_COST keyread_time(uint index, ulong ranges, ha_rows rows,
+                               ulonglong blocks);
   const key_map *keys_to_use_for_scanning();
   ha_rows estimate_rows_upper_bound();
   void print_error(

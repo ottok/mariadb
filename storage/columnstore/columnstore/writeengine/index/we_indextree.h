@@ -21,8 +21,7 @@
  ******************************************************************************************/
 /** @file */
 
-#ifndef _WE_INDEXTREE_H_
-#define _WE_INDEXTREE_H_
+#pragma once
 
 #include <stdlib.h>
 
@@ -31,11 +30,7 @@
 #include <we_freemgr.h>
 #include <we_indexlist.h>
 
-#if defined(_MSC_VER) && defined(WRITEENGINEINDEXTREE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -338,5 +333,3 @@ class IndexTree : public DbFileOp
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_INDEXTREE_H_

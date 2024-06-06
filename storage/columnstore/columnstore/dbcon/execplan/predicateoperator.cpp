@@ -264,20 +264,6 @@ void PredicateOperator::setOpType(Type& l, Type& r)
         fOperationType.colWidth = 8;
     }
   }
-  // If both sides are unsigned, use UBIGINT as result type, otherwise
-  // "promote" to BIGINT.
-  else if (isUnsigned(l.colDataType) && isUnsigned(r.colDataType))
-  {
-    fOperationType.colDataType = execplan::CalpontSystemCatalog::UBIGINT;
-    fOperationType.colWidth = 8;
-  }
-  else if ((isSignedInteger(l.colDataType) && isUnsigned(r.colDataType)) ||
-           (isUnsigned(l.colDataType) && isSignedInteger(r.colDataType)) ||
-           (isSignedInteger(l.colDataType) && isSignedInteger(r.colDataType)))
-  {
-    fOperationType.colDataType = execplan::CalpontSystemCatalog::BIGINT;
-    fOperationType.colWidth = 8;
-  }
   else if ((l.colDataType == execplan::CalpontSystemCatalog::CHAR ||
             l.colDataType == execplan::CalpontSystemCatalog::VARCHAR ||
             l.colDataType == execplan::CalpontSystemCatalog::TEXT) &&
@@ -320,6 +306,20 @@ void PredicateOperator::setOpType(Type& l, Type& r)
       fOperationType.colDataType = execplan::CalpontSystemCatalog::VARCHAR;
       fOperationType.colWidth = 255;
     }
+  }
+  // If both sides are unsigned, use UBIGINT as result type, otherwise
+  // "promote" to BIGINT.
+  else if (isUnsigned(l.colDataType) && isInteger(l.colDataType) && isUnsigned(r.colDataType) && isInteger(r.colDataType))
+  {
+    fOperationType.colDataType = execplan::CalpontSystemCatalog::UBIGINT;
+    fOperationType.colWidth = 8;
+  }
+  else if ((isSignedInteger(l.colDataType) && isUnsigned(r.colDataType) && isInteger(r.colDataType)) ||
+           (isUnsigned(l.colDataType) && isInteger(l.colDataType) && isSignedInteger(r.colDataType)) ||
+           (isSignedInteger(l.colDataType) && isSignedInteger(r.colDataType)))
+  {
+    fOperationType.colDataType = execplan::CalpontSystemCatalog::BIGINT;
+    fOperationType.colWidth = 8;
   }
   else if (l.colDataType == execplan::CalpontSystemCatalog::LONGDOUBLE ||
            r.colDataType == execplan::CalpontSystemCatalog::LONGDOUBLE)
@@ -367,14 +367,14 @@ bool PredicateOperator::getBoolVal(rowgroup::Row& row, bool& isNull, ReturnedCol
   // like operator. both sides are string.
   if (fOp == OP_LIKE || fOp == OP_NOTLIKE)
   {
-    const std::string& subject = lop->getStrVal(row, isNull);
+    const auto& subject = lop->getStrVal(row, isNull);
     if (isNull)
       return false;
-    const std::string& pattern = rop->getStrVal(row, isNull);
+    const auto& pattern = rop->getStrVal(row, isNull);
     if (isNull)
       return false;
-    return datatypes::Charset(cs).like(fOp == OP_NOTLIKE, utils::ConstString(subject),
-                                       utils::ConstString(pattern));
+    return datatypes::Charset(cs).like(fOp == OP_NOTLIKE, utils::ConstString(subject.str(), subject.length()),
+                                       utils::ConstString(pattern.str(), pattern.length()));
   }
 
   // fOpType should have already been set on the connector during parsing
@@ -410,7 +410,9 @@ bool PredicateOperator::getBoolVal(rowgroup::Row& row, bool& isNull, ReturnedCol
       if (isNull)
         return false;
 
-      return numericCompare(val1, rop->getIntVal(row, isNull)) && !isNull;
+      int64_t val2 = rop->getIntVal(row, isNull);
+
+      return numericCompare(val1, val2) && !isNull;
     }
 
     case execplan::CalpontSystemCatalog::UBIGINT:
@@ -707,11 +709,15 @@ bool PredicateOperator::getBoolVal(rowgroup::Row& row, bool& isNull, ReturnedCol
       if (isNull)
         return false;
 
-      const std::string& val1 = lop->getStrVal(row, isNull);
+      const auto& val1 = lop->getStrVal(row, isNull);
       if (isNull)
         return false;
 
-      return strTrimCompare(val1, rop->getStrVal(row, isNull)) && !isNull;
+      const auto& val2 = rop->getStrVal(row, isNull);
+      if (isNull)
+        return false;
+
+      return strTrimCompare(val1.safeString(""), val2.safeString(""));
     }
 
     case execplan::CalpontSystemCatalog::VARBINARY:

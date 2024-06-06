@@ -32,9 +32,7 @@ using namespace std;
 #include "rowgroup.h"
 using namespace execplan;
 
-#ifndef _MSC_VER
 #include "zlib.h"
-#endif
 
 namespace funcexp
 {
@@ -47,20 +45,20 @@ CalpontSystemCatalog::ColType Func_crc32::operationType(FunctionParm& fp,
 int64_t Func_crc32::getIntVal(rowgroup::Row& row, FunctionParm& parm, bool& isNull,
                               CalpontSystemCatalog::ColType& ct)
 {
-  unsigned crc = 0;
+  unsigned crc;
   switch (parm.size())
   {
     default: isNull = true; return 0;
-    case 1: break;
+    case 1: crc = 0; break;
     case 2:
       crc = static_cast<unsigned>(parm[0]->data()->getIntVal(row, isNull));
       if (isNull)
         return 0;
   }
-  const string& b = parm[parm.size() - 1]->data()->getStrVal(row, isNull);
+  const auto& b = parm[parm.size() - 1]->data()->getStrVal(row, isNull);
   if (isNull)
     return 0;
-  return crc32(crc, reinterpret_cast<const uint8_t*>(b.data()), b.size());
+  return crc32(crc, reinterpret_cast<const uint8_t*>(b.str()), b.length());
 }
 
 }  // namespace funcexp
