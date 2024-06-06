@@ -409,12 +409,14 @@ Breaks:
  mariadb-client (<< 11.0.0),
  mariadb-client-core (<< 11.0.0),
  mariadb-server (<< 11.0.0),
+ mariadb-server-10.5 (<< 1:10.11),
  mariadb-server-core (<< 11.0.0),
  mysql-client (<< 5.0.51),
 Replaces:
  mariadb-client (<< 11.0.0),
  mariadb-client-core (<< 11.0.0),
  mariadb-server (<< 11.0.0),
+ mariadb-server-10.5 (<< 1:10.11),
  mariadb-server-core (<< 11.0.0),
  mysql-client (<< 5.0.51),
 Conflicts:
@@ -449,7 +451,6 @@ Conflicts:
  mariadb-server-10.2,
  mariadb-server-10.3,
  mariadb-server-10.4,
- mariadb-server-10.5,
  mariadb-server-10.6,
  mariadb-server-10.7,
  mariadb-server-10.8,
@@ -685,9 +686,11 @@ Depends:
  ${misc:Depends},
 Breaks:
  mariadb-server (<< 11.0.0),
+ mariadb-server-10.5 (<< 1:10.11),
  mariadb-server-core (<< 11.0.0),
 Replaces:
  mariadb-server (<< 11.0.0),
+ mariadb-server-10.5 (<< 1:10.11),
  mariadb-server-core (<< 11.0.0),
 Conflicts:
  mariadb-server-10.0,
@@ -695,7 +698,6 @@ Conflicts:
  mariadb-server-10.2,
  mariadb-server-10.3,
  mariadb-server-10.4,
- mariadb-server-10.5,
  mariadb-server-10.6,
  mariadb-server-10.7,
  mariadb-server-10.8,
@@ -741,7 +743,7 @@ Description: MySQL compatibility links to mariadb-server binaries/scripts
 Package: mariadb-server-10.5
 Architecture: any
 Depends:
- mariadb-server (>= 1:10.11),
+ mariadb-server (>= 1:11.4),
  ${misc:Depends},
  ${shlibs:Depends},
 Description: MariaDB database server binaries (transitional dummy package)
