@@ -180,10 +180,15 @@ blhc:
   mysql --table -e "SHOW PLUGINS;" mysql
 
 .test-enable-sid-repos: &test-enable-sid-repos
+  - apt-get install -qq --yes --no-install-recommends ca-certificates curl
+  - curl -sS -O https://snapshot.debian.org/archive/debian/20240531T083821Z/pool/main/g/glibc/libc6_2.38-11_amd64.deb
   # Replace any old repos with just Sid
   - echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list
   # Upgrade minimal stack first
   - apt-get update -qq
+  - apt-get -qq install --no-install-recommends --yes ./libc6_2.38-11_amd64.deb || export APT_STATUS="failed"
+  # Ensure upgrades past 2.38-11 are blocked so
+  - apt-mark hold libc6
   # Complete upgrade of minimal stack
   - apt-get install -qq --yes apt || export APT_STATUS="failed"
   # Due to https://bugs.debian.org/993755 and #975077 upgrades from Buster or
@@ -297,7 +302,7 @@ blhc:
       return 0;
     }
     EOF
-    apt-get install -qq --yes ./*.deb # Server must be installed for client to connect
+    apt-get install -q --yes ./*.deb # Server must be installed for client to connect
     echo "Testing -l mysqlclient"
     g++ b933063.cpp -l mysqlclient && ./a.out | tee result
     if grep --quiet latin result; then echo "ERROR: Charset latin found!"; exit 1; fi
@@ -730,6 +735,8 @@ default-libmysqlclient-dev and Bookworm upgrade:
     - apt-get install -qq --yes pkg-config default-libmysqlclient-dev
     - pkg-config --list-all
     - *test-enable-sid-repos
+    # Must be reinstalled as libc6 upgrade removes them:
+    - apt-get install -qq --yes pkg-config default-libmysqlclient-dev
     - *test-full-upgrade-libs
     - *test-verify-libs
 
@@ -742,6 +749,14 @@ default-libmysqlclient-dev and Bullseye upgrade:
     - apt-get install -qq --yes pkg-config default-libmysqlclient-dev
     - pkg-config --list-all
     - *test-enable-sid-repos
+    # Don't use latest libc6-dev as trying to install it errors on:
+    #  The current installation does not have a merged-/usr layout.
+    #  This is unsupported and unpacking libc6 would break the system.
+    - curl -sS -O https://snapshot.debian.org/archive/debian/20240531T083821Z/pool/main/g/glibc/libc6-dev_2.38-11_amd64.deb
+    - curl -sS -O https://snapshot.debian.org/archive/debian/20240531T083821Z/pool/main/g/glibc/libc-dev-bin_2.38-11_amd64.deb
+    - apt-get -qq install --no-install-recommends --yes --allow-downgrades ./libc6-dev_2.38-11_amd64.deb ./libc-dev-bin_2.38-11_amd64.deb
+    # Must be reinstalled as libc6 upgrade removes them:
+    - apt-get install -qq --yes pkg-config default-libmysqlclient-dev
     # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - *test-install-all-libs
     - *test-verify-libs
