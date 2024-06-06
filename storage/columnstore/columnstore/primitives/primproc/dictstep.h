@@ -28,8 +28,7 @@
 //
 //
 
-#ifndef DICTSTEP_H_
-#define DICTSTEP_H_
+#pragma once
 
 #include "command.h"
 #include "primitivemsg.h"
@@ -107,7 +106,7 @@ class DictStep : public Command
     uint64_t rid;
     uint64_t token;
     uint16_t pos;
-    std::string str;
+    NullString str;
     bool inResult;
     OrderedToken() : inResult(false)
     {
@@ -148,7 +147,7 @@ class DictStep : public Command
   uint32_t traceFlags;  // probably move this to Command
   uint8_t BOP;
   int64_t* values;
-  boost::scoped_array<std::string>* strValues;
+  boost::scoped_array<utils::NullString>* strValues;
   int compressionType;
   messageqcpp::ByteStream filterString;
   uint32_t filterCount;
@@ -159,10 +158,9 @@ class DictStep : public Command
   bool hasEqFilter;
   boost::shared_ptr<primitives::DictEqualityFilter> eqFilter;
   uint8_t eqOp;  // COMPARE_EQ or COMPARE_NE
+  uint64_t fMinMax[2];
 
   friend class RTSCommand;
 };
 
 }  // namespace primitiveprocessor
-
-#endif

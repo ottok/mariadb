@@ -18,8 +18,7 @@
 
 //  $Id: windowfunctiontype.h 3932 2013-06-25 16:08:10Z xlou $
 
-#ifndef UTILS_WINDOWFUNCTIONTYPE_H
-#define UTILS_WINDOWFUNCTIONTYPE_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -33,6 +32,7 @@
 #include "windowframe.h"
 #include "constantcolumn.h"
 #include "mcs_decimal.h"
+#include "nullstring.h"
 
 namespace ordering
 {
@@ -304,4 +304,3 @@ extern std::map<int, std::string> colType2String;
 
 }  // namespace windowfunction
 
-#endif  // UTILS_WINDOWFUNCTIONTYPE_H

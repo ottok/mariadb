@@ -50,6 +50,7 @@
 #include "authors.h"
 #include "contributors.h"
 #include "sql_partition.h"
+#include "optimizer_defaults.h"
 #ifdef HAVE_EVENT_SCHEDULER
 #include "events.h"
 #include "event_data_objects.h"
@@ -120,6 +121,14 @@ static const LEX_CSTRING trg_event_type_names[]=
   { STRING_WITH_LEN("DELETE") }
 };
 
+static const LEX_CSTRING sp_data_access_name[]=
+{
+  { STRING_WITH_LEN("") },
+  { STRING_WITH_LEN("CONTAINS SQL") },
+  { STRING_WITH_LEN("NO SQL") },
+  { STRING_WITH_LEN("READS SQL DATA") },
+  { STRING_WITH_LEN("MODIFIES SQL DATA") }
+};
 
 LEX_CSTRING DATA_clex_str= { STRING_WITH_LEN("DATA") };
 LEX_CSTRING INDEX_clex_str= { STRING_WITH_LEN("INDEX") };
@@ -152,6 +161,7 @@ static const LEX_CSTRING *view_algorithm(TABLE_LIST *table);
 
 bool get_lookup_field_values(THD *, COND *, bool, TABLE_LIST *,
                              LOOKUP_FIELD_VALUES *);
+void process_i_s_table_temporary_tables(THD *thd, TABLE * table, TABLE *tmp_tbl);
 
 /**
   Try to lock a mutex, but give up after a short while to not cause deadlocks
@@ -522,7 +532,7 @@ static struct show_privileges_st sys_privileges[]=
   {"Show databases","Server Admin","To see all databases with SHOW DATABASES"},
   {"Show view","Tables","To see views with SHOW CREATE VIEW"},
   {"Shutdown","Server Admin", "To shut down the server"},
-  {"Super","Server Admin","To use KILL thread, SET GLOBAL, CHANGE MASTER, etc."},
+  {"Super","Server Admin","To set few server variables"},
   {"Trigger","Tables", "To use triggers"},
   {"Create tablespace", "Server Admin", "To create/alter/drop tablespaces"},
   {"Update", "Tables",  "To update existing rows"},
@@ -531,6 +541,7 @@ static struct show_privileges_st sys_privileges[]=
   {"Connection admin", "Server", "To bypass connection limits and kill other users' connections"},
   {"Read_only admin", "Server", "To perform write operations even if @@read_only=ON"},
   {"Usage","Server Admin","No privileges - allow connect only"},
+  {"Show Create Routine","Databases,Functions,Procedures","To allow SHOW CREATE PROCEDURE/FUNCTION/PACKAGE"},
   {NullS, NullS, NullS}
 };
 
@@ -938,7 +949,8 @@ enum find_files_result {
 
 
 static find_files_result
-find_files(THD *thd, Dynamic_array<LEX_CSTRING*> *files, LEX_CSTRING *db,
+find_files(THD *thd, Dynamic_array<LEX_CSTRING*> *files,
+           const Lex_ident_db *db,
            const char *path, const LEX_CSTRING *wild)
 {
   MY_DIR *dirp;
@@ -1619,6 +1631,20 @@ append_identifier(THD *thd, String *packet, const char *name, size_t length)
 }
 
 
+/**
+  Similar to append_identifier(), but with optional casedn conversion.
+*/
+bool append_identifier_opt_casedn(THD *thd, String *to,
+                                  const LEX_CSTRING &ident, bool casedn)
+{
+  if (!casedn)
+    return append_identifier(thd, to, &ident);
+  CharBuffer<MAX_ALIAS_NAME> buff;
+  LEX_CSTRING ls= buff.copy_casedn(system_charset_info, ident).to_lex_cstring();
+  return append_identifier(thd, to, &ls);
+}
+
+
 /*
   Get the quote character for displaying an identifier.
 
@@ -2222,7 +2248,7 @@ int show_create_table_ex(THD *thd, TABLE_LIST *table_list,
       packet->append(STRING_WITH_LEN(" GENERATED ALWAYS AS ("));
       packet->append(str);
       packet->append(STRING_WITH_LEN(")"));
-      if (field->vcol_info->stored_in_db)
+      if (field->vcol_info->is_stored())
         packet->append(STRING_WITH_LEN(" STORED"));
       else
         packet->append(STRING_WITH_LEN(" VIRTUAL"));
@@ -3365,11 +3391,11 @@ static my_bool processlist_callback(THD *tmp, processlist_callback_arg *arg)
       arg->table->field[7]->set_notnull();
 
       /* INFO_BINARY */
-      arg->table->field[16]->store(tmp->query(),
+      arg->table->field[17]->store(tmp->query(),
                                    MY_MIN(PROCESS_LIST_INFO_WIDTH,
                                           tmp->query_length()),
                                    &my_charset_bin);
-      arg->table->field[16]->set_notnull();
+      arg->table->field[17]->set_notnull();
     }
 
     /*
@@ -3405,12 +3431,13 @@ static my_bool processlist_callback(THD *tmp, processlist_callback_arg *arg)
                                FALSE);
   arg->table->field[13]->store((longlong) tmp->status_var.max_local_memory_used,
                                FALSE);
-  arg->table->field[14]->store((longlong) tmp->get_examined_row_count(), TRUE);
+  arg->table->field[14]->store((longlong) tmp->examined_row_count_for_statement, TRUE);
+  arg->table->field[15]->store((longlong) tmp->sent_row_count_for_statement, TRUE);
 
   /* QUERY_ID */
-  arg->table->field[15]->store(tmp->query_id, TRUE);
+  arg->table->field[16]->store(tmp->query_id, TRUE);
 
-  arg->table->field[17]->store(tmp->os_thread_id);
+  arg->table->field[18]->store(tmp->os_thread_id);
 
   if (schema_table_store_record(arg->thd, arg->table))
     return 1;
@@ -4533,7 +4560,7 @@ int schema_tables_add(THD *thd, Dynamic_array<LEX_CSTRING*> *files,
 static int
 make_table_name_list(THD *thd, Dynamic_array<LEX_CSTRING*> *table_names,
                      LEX *lex, LOOKUP_FIELD_VALUES *lookup_field_vals,
-                     LEX_CSTRING *db_name)
+                     const LEX_CSTRING *db_name)
 {
   char path[FN_REFLEN + 1];
   build_table_filename(path, sizeof(path) - 1, db_name->str, "", "", 0);
@@ -4579,10 +4606,12 @@ make_table_name_list(THD *thd, Dynamic_array<LEX_CSTRING*> *table_names,
     return (schema_tables_add(thd, table_names,
                               lookup_field_vals->table_value.str));
 
-  if (check_db_name((LEX_STRING*)db_name))
+  const DBNameBuffer dbbuf(*db_name, lower_case_table_names == 1);
+  const Lex_ident_db dbnorm= dbbuf.to_lex_ident_db();
+  if (!dbnorm.str)
     return 0; // Impossible TABLE_SCHEMA name
 
-  find_files_result res= find_files(thd, table_names, db_name, path,
+  find_files_result res= find_files(thd, table_names, &dbnorm, path,
                                     &lookup_field_vals->table_value);
   if (res != FIND_FILES_OK)
   {
@@ -4606,7 +4635,8 @@ make_table_name_list(THD *thd, Dynamic_array<LEX_CSTRING*> *table_names,
 
 
 static void get_table_engine_for_i_s(THD *thd, char *buf, TABLE_LIST *tl,
-                                     LEX_CSTRING *db, LEX_CSTRING *table)
+                                     const LEX_CSTRING *db,
+                                     const LEX_CSTRING *table)
 {
   LEX_CSTRING engine_name= { buf, 0 };
 
@@ -4656,7 +4686,7 @@ fill_schema_table_by_open(THD *thd, MEM_ROOT *mem_root,
   LEX *old_lex= thd->lex, temp_lex, *lex;
   LEX_CSTRING db_name, table_name;
   TABLE_LIST *table_list;
-  bool result= true;
+  bool result= true, open_result, run, ext_error_handling;
   DBUG_ENTER("fill_schema_table_by_open");
 
   /*
@@ -4733,7 +4763,7 @@ fill_schema_table_by_open(THD *thd, MEM_ROOT *mem_root,
   }
 
   DBUG_ASSERT(thd->lex == lex);
-  result= open_tables_only_view_structure(thd, table_list, can_deadlock);
+  open_result= open_tables_only_view_structure(thd, table_list, can_deadlock);
 
   DEBUG_SYNC(thd, "after_open_table_ignore_flush");
 
@@ -4748,28 +4778,41 @@ fill_schema_table_by_open(THD *thd, MEM_ROOT *mem_root,
     Again we don't do this for SHOW COLUMNS/KEYS because
     of backward compatibility.
   */
-  if (!is_show_fields_or_keys && result && thd->is_error() &&
-      (thd->get_stmt_da()->sql_errno() == ER_NO_SUCH_TABLE ||
-       thd->get_stmt_da()->sql_errno() == ER_WRONG_OBJECT ||
-       thd->get_stmt_da()->sql_errno() == ER_NOT_SEQUENCE))
+  result= open_result;
+  run= true;
+  ext_error_handling= schema_table->i_s_requested_object
+                                                  & I_S_EXTENDED_ERROR_HANDLING;
+  if (result && thd->is_error())
   {
-    /*
-      Hide error for a non-existing table.
-      For example, this error can occur when we use a where condition
-      with a db name and table, but the table does not exist or
-      there is a view with the same name.
-    */
-    result= false;
-    thd->clear_error();
+    if (!is_show_fields_or_keys)
+    {
+      /*
+        Hide error for a non-existing table and skip processing.
+        For example, this error can occur when we use a where condition
+        with a db name and table, but the table does not exist or
+        there is a view with the same name.
+        Some errors, like ER_UNKNOWN_STORAGE_ENGINE, can still allow table
+        processing, if the information schema table supports that.
+      */
+      run= run && thd->get_stmt_da()->sql_errno() != ER_NO_SUCH_TABLE
+               && thd->get_stmt_da()->sql_errno() != ER_WRONG_OBJECT
+               && thd->get_stmt_da()->sql_errno() != ER_NOT_SEQUENCE;
+      if (!run)
+        thd->clear_error();
+      else if (!ext_error_handling)
+        convert_error_to_warning(thd);
+      result= false;
+    }
   }
-  else
+
+  if (run && (!open_result || ext_error_handling))
   {
     char buf[NAME_CHAR_LEN + 1];
     if (unlikely(thd->is_error()))
       get_table_engine_for_i_s(thd, buf, table_list, &db_name, &table_name);
 
     result= schema_table->process_table(thd, table_list,
-                                        table, result,
+                                        table, open_result,
                                         orig_db_name,
                                         orig_table_name);
   }
@@ -5004,7 +5047,7 @@ static int fill_schema_table_from_frm(THD *thd, MEM_ROOT *mem_root,
   TABLE tbl;
   TABLE_LIST table_list;
   uint res= 0;
-  char db_name_buff[NAME_LEN + 1], table_name_buff[NAME_LEN + 1];
+  IdentBuffer<NAME_LEN> db_name_buff, table_name_buff;
   Query_arena i_s_arena(mem_root, Query_arena::STMT_CONVENTIONAL_EXECUTION);
   Query_arena backup_arena, *old_arena;
   bool i_s_arena_active= false;
@@ -5022,12 +5065,9 @@ static int fill_schema_table_from_frm(THD *thd, MEM_ROOT *mem_root,
       cache subsystems require normalized (lowercased) database and table
       names as input.
     */
-    strmov(db_name_buff, db_name->str);
-    strmov(table_name_buff, table_name->str);
-    table_list.db.length=         my_casedn_str(files_charset_info, db_name_buff);
-    table_list.table_name.length= my_casedn_str(files_charset_info, table_name_buff);
-    table_list.db.str= db_name_buff;
-    table_list.table_name.str= table_name_buff;
+    table_list.db= db_name_buff.copy_casedn(*db_name).to_lex_cstring();
+    table_list.table_name= table_name_buff.copy_casedn(*table_name).
+                             to_lex_cstring();
   }
   else
   {
@@ -5096,13 +5136,18 @@ static int fill_schema_table_from_frm(THD *thd, MEM_ROOT *mem_root,
     {
       res= 0;
     }
-    else
+    else if (schema_table->i_s_requested_object & I_S_EXTENDED_ERROR_HANDLING)
     {
       char buf[NAME_CHAR_LEN + 1];
       get_table_engine_for_i_s(thd, buf, &table_list, db_name, table_name);
 
       res= schema_table->process_table(thd, &table_list, table,
                                        true, db_name, table_name);
+    }
+    else
+    {
+      if (thd->is_error())
+        convert_error_to_warning(thd);
     }
     goto end;
   }
@@ -5184,6 +5229,29 @@ end:
 }
 
 
+static privilege_t get_schema_privileges_for_show(THD *thd, TABLE_LIST *tables,
+                                                  const privilege_t need,
+                                                  bool any)
+{
+#ifndef NO_EMBEDDED_ACCESS_CHECKS
+  /* 
+    We know that the table or at least some of the columns have
+    necessary privileges, but the caller didn't pass down the GRANT_INFO
+    object, so we have to rediscover everything again :( 
+  */
+  if (!(thd->col_access & need))
+  {
+    check_grant(thd, need, tables, 0, 1, 1);
+    return (any ? tables->grant.all_privilege() 
+                : tables->grant.privilege) & need;
+  }
+  return thd->col_access & need;
+#else
+  return need;
+#endif
+}
+
+
 class Warnings_only_error_handler : public Internal_error_handler
 {
 public:
@@ -5203,6 +5271,21 @@ public:
     return true; // handled!
   }
 };
+
+
+static bool wildcmpcs(const LEX_CSTRING &str, const LEX_CSTRING &pat)
+{
+  return table_alias_charset->wildcmp(str.str, str.str + str.length,
+                                      pat.str, pat.str + pat.length,
+                                      '\\', '_', '%');
+}
+
+static bool strcmpcs(const LEX_CSTRING &str, const LEX_CSTRING &pat)
+{
+  return table_alias_charset->strnncoll(str.str, str.length,
+                                        pat.str, pat.length, 0);
+}
+
 
 /**
   @brief          Fill I_S tables whose data are retrieved
@@ -5300,6 +5383,7 @@ int get_all_tables(THD *thd, TABLE_LIST *tables, COND *cond)
   */
   if (lsel && lsel->table_list.first)
   {
+    DBUG_ASSERT(thd->sql_command_flags() & CF_STATUS_COMMAND);
     error= fill_schema_table_by_open(thd, thd->mem_root, TRUE,
                                      table, schema_table,
                                      &lsel->table_list.first->db,
@@ -5322,14 +5406,62 @@ int get_all_tables(THD *thd, TABLE_LIST *tables, COND *cond)
     goto err;
   }
 
+  /* Use tmp_mem_root to allocate data for opened tables */
+  init_alloc_root(PSI_INSTRUMENT_ME, &tmp_mem_root, SHOW_ALLOC_BLOCK_SIZE,
+                  SHOW_ALLOC_BLOCK_SIZE, MY_THREAD_SPECIFIC);
+
+  /*
+    Separate handling for session temporary tables from the backup state
+    for table IS.tables and SHOW TABLES commands.
+  */
+  if ((schema_table_idx == SCH_TABLES || schema_table_idx == SCH_TABLE_NAMES) &&
+      open_tables_state_backup.temporary_tables)
+  {
+    All_tmp_tables_list::Iterator it(*open_tables_state_backup.temporary_tables);
+    TMP_TABLE_SHARE *share_temp;
+    bool (*cmp_db)(const LEX_CSTRING &, const LEX_CSTRING &)=
+      plan->lookup_field_vals.wild_db_value ? wildcmpcs : strcmpcs;
+    bool (*cmp_table)(const LEX_CSTRING &, const LEX_CSTRING &)=
+      plan->lookup_field_vals.wild_table_value ? wildcmpcs : strcmpcs;
+    while ((share_temp= it++))
+    {
+      if (plan->lookup_field_vals.db_value.str)
+      {
+        if (cmp_db(share_temp->db, plan->lookup_field_vals.db_value))
+          continue;
+      }
+      if (plan->lookup_field_vals.table_value.str)
+      {
+        if (cmp_table(share_temp->table_name, plan->lookup_field_vals.table_value))
+          continue;
+      }
+
+      TABLE *tmp_tbl= share_temp->all_tmp_tables.front();
+      if (schema_table_idx == SCH_TABLE_NAMES)
+      {
+        LEX_CSTRING *table_name= &tmp_tbl->s->table_name;
+        restore_record(table, s->default_values);
+        table->field[1]->store(share_temp->db.str, share_temp->db.length,
+                               system_charset_info);
+        table->field[2]->store(table_name->str, table_name->length,
+                               system_charset_info);
+        if (tmp_tbl->s->table_type == TABLE_TYPE_SEQUENCE)
+          table->field[3]->store(STRING_WITH_LEN("TEMPORARY SEQUENCE"),
+                                 system_charset_info);
+        else
+          table->field[3]->store(STRING_WITH_LEN("TEMPORARY TABLE"),
+                                 system_charset_info);
+        schema_table_store_record(thd, table);
+      }
+      else /* SCH_TABLES */
+        process_i_s_table_temporary_tables(thd, table, tmp_tbl);
+    }
+  }
+
   bzero((char*) &table_acl_check, sizeof(table_acl_check));
 
   if (make_db_list(thd, &db_names, &plan->lookup_field_vals))
     goto err;
-
-  /* Use tmp_mem_root to allocate data for opened tables */
-  init_alloc_root(PSI_INSTRUMENT_ME, &tmp_mem_root, SHOW_ALLOC_BLOCK_SIZE,
-                  SHOW_ALLOC_BLOCK_SIZE, MY_THREAD_SPECIFIC);
 
   for (size_t i=0; i < db_names.elements(); i++)
   {
@@ -5344,6 +5476,7 @@ int get_all_tables(THD *thd, TABLE_LIST *tables, COND *cond)
 #endif
     {
       Dynamic_array<LEX_CSTRING*> table_names(PSI_INSTRUMENT_MEM);
+
       int res= make_table_name_list(thd, &table_names, lex,
                                     &plan->lookup_field_vals, db_name);
       if (unlikely(res == 2))   /* Not fatal error, continue */
@@ -5351,9 +5484,9 @@ int get_all_tables(THD *thd, TABLE_LIST *tables, COND *cond)
       if (unlikely(res))
         goto err;
 
-      for (size_t i=0; i < table_names.elements(); i++)
+      for (size_t j=0; j < table_names.elements(); j++)
       {
-        LEX_CSTRING *table_name= table_names.at(i);
+        LEX_CSTRING *table_name= table_names.at(j);
         DBUG_ASSERT(table_name->length <= NAME_LEN);
 
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
@@ -5366,7 +5499,7 @@ int get_all_tables(THD *thd, TABLE_LIST *tables, COND *cond)
             continue;
         }
 #endif
-	restore_record(table, s->default_values);
+        restore_record(table, s->default_values);
         table->field[schema_table->idx_field1]->
           store(db_name->str, db_name->length, system_charset_info);
         table->field[schema_table->idx_field2]->
@@ -5556,6 +5689,14 @@ int fill_schema_schemata(THD *thd, TABLE_LIST *tables, COND *cond)
 }
 
 
+static int store_yesno(Field *field, bool predicate)
+{
+  static const LEX_CSTRING yes{STRING_WITH_LEN("YES")};
+  static const LEX_CSTRING no {STRING_WITH_LEN("NO")};
+  return field->store(predicate ? yes : no, system_charset_info);
+}
+
+
 static int get_schema_tables_record(THD *thd, TABLE_LIST *tables,
 				    TABLE *table, bool res,
 				    const LEX_CSTRING *db_name,
@@ -5609,8 +5750,12 @@ static int get_schema_tables_record(THD *thd, TABLE_LIST *tables,
 
     if (share->tmp_table == SYSTEM_TMP_TABLE)
       table->field[3]->store(STRING_WITH_LEN("SYSTEM VIEW"), cs);
+    else if (share->tmp_table && share->table_type == TABLE_TYPE_SEQUENCE)
+      table->field[3]->store(STRING_WITH_LEN("TEMPORARY SEQUENCE"), cs);
     else if (share->table_type == TABLE_TYPE_SEQUENCE)
       table->field[3]->store(STRING_WITH_LEN("SEQUENCE"), cs);
+    else if (share->tmp_table)
+      table->field[3]->store(STRING_WITH_LEN("TEMPORARY"), cs);
     else
     {
       DBUG_ASSERT(share->tmp_table == NO_TMP_TABLE);
@@ -5888,6 +6033,25 @@ err:
 
 
 /**
+ @brief           Fill IS.table with temporary tables
+ @param[in]       thd              thread handler
+ @param[in]       table            I_S table (TABLE)
+ @param[in]       tmp_tbl          temporary table to be represetned by IS.table
+ @return          Operation status
+   @retval        0   - success
+   @retval        1   - failure
+*/
+void process_i_s_table_temporary_tables(THD *thd, TABLE * table, TABLE *tmp_tbl)
+{
+  TABLE_LIST table_list;
+  bzero((char*) &table_list, sizeof(TABLE_LIST));
+  table_list.table= tmp_tbl;
+  get_schema_tables_record(thd, &table_list, table,
+                           0, &tmp_tbl->s->db, &tmp_tbl->s->table_name);
+}
+
+
+/**
   @brief    Store field characteristics into appropriate I_S table columns
 
   @param[in]      table             I_S table
@@ -6098,11 +6262,88 @@ static void store_variable_type(THD *thd, const sp_variable *spvar,
   }
 }
 
+static int store_schema_period_record(THD *thd, TABLE_LIST *tl,
+                                      TABLE *schema_table,
+                                      const LEX_CSTRING *db_name,
+                                      const LEX_CSTRING *table_name,
+                                      const TABLE_SHARE::period_info_t &period)
+{
+  TABLE_SHARE *s= tl->table->s;
+  const CHARSET_INFO *cs= system_charset_info;
 
-static int get_schema_column_record(THD *thd, TABLE_LIST *tables,
-				    TABLE *table, bool res,
-				    const LEX_CSTRING *db_name,
-				    const LEX_CSTRING *table_name)
+  if (period.start_field(s)->invisible >= INVISIBLE_SYSTEM)
+  {
+    // A system-versioned table without user-defined SYSTEM_TIME
+    DBUG_ASSERT(&period == &s->vers);
+    DBUG_ASSERT(period.end_field(s)->invisible >= INVISIBLE_SYSTEM);
+    return 0;
+  }
+
+  schema_table->field[0]->store(STRING_WITH_LEN("def"), cs);
+  schema_table->field[1]->store(db_name, cs);
+  schema_table->field[2]->store(table_name, cs);
+  schema_table->field[3]->store(period.name, cs);
+
+  /* need any privilege on any of the columns */
+  bool table_granted= get_schema_privileges_for_show(thd, tl, TABLE_ACLS, true);
+  if (!table_granted)
+    return 0;
+
+  int period_field= 4;
+  for (auto *field: {period.start_field(s), period.end_field(s)})
+  {
+    /* Reveal the value only if the user has any privilege on this column */
+    bool col_granted= get_column_grant(thd, &tl->grant, 
+                                        db_name->str, table_name->str,
+                                        field->field_name.str) & COL_DML_ACLS;
+    if (col_granted)
+    {
+      schema_table->field[period_field]->set_notnull();
+      schema_table->field[period_field]->store(field->field_name, cs);
+    }
+
+    period_field++;
+  }
+
+  return schema_table_store_record(thd, schema_table);
+}
+
+
+static int
+get_schema_period_records(THD *thd, TABLE_LIST *tl,
+                          TABLE *schema_table, //!< @ref
+                                               //!< Show::periods_fields_info
+                          bool res,
+                          const LEX_CSTRING *db_name,
+                          const LEX_CSTRING *table_name)
+{
+  TABLE *table= tl->table;
+
+  if (!table || (!table->s->period.name && !table->versioned()))
+    return 0;
+
+#ifndef NO_EMBEDDED_ACCESS_CHECKS
+  check_access(thd, SELECT_ACL, db_name->str,
+               &tl->grant.privilege, 0, 0, MY_TEST(tl->schema_table));
+  DBUG_ASSERT(!is_temporary_table(tl));
+#endif
+  int err= 0;
+  if (table->versioned())
+    err= store_schema_period_record(thd, tl, schema_table, db_name, table_name,
+                                    table->s->vers);
+  if (!err && table->s->period.name)
+    err= store_schema_period_record(thd, tl, schema_table, db_name, table_name,
+                                    table->s->period);
+
+  return err;
+}
+
+static
+int get_schema_column_record(THD *thd, TABLE_LIST *tables,
+                             TABLE *table, //!< @ref Show::columns_fields_info
+                             bool res,
+                             const LEX_CSTRING *db_name,
+                             const LEX_CSTRING *table_name)
 {
   LEX *lex= thd->lex;
   const char *wild= lex->wild ? lex->wild->ptr() : NullS;
@@ -6113,20 +6354,6 @@ static int get_schema_column_record(THD *thd, TABLE_LIST *tables,
   bool quoted_defaults= lex->sql_command != SQLCOM_SHOW_FIELDS;
   DBUG_ENTER("get_schema_column_record");
 
-  if (res)
-  {
-    if (lex->sql_command != SQLCOM_SHOW_FIELDS)
-    {
-      /*
-        I.e. we are in SELECT FROM INFORMATION_SCHEMA.COLUMS
-        rather than in SHOW COLUMNS
-      */
-      if (thd->is_error())
-        convert_error_to_warning(thd);
-      res= 0;
-    }
-    DBUG_RETURN(res);
-  }
   show_table= tables->table;
   count= 0;
   ptr= show_table->field;
@@ -6192,9 +6419,7 @@ static int get_schema_column_record(THD *thd, TABLE_LIST *tables,
       table->field[5]->store(type.ptr(), type.length(), cs);
       table->field[5]->set_notnull();
     }
-    pos=(uchar*) ((field->flags & NOT_NULL_FLAG) ?  "NO" : "YES");
-    table->field[6]->store((const char*) pos,
-                           strlen((const char*) pos), cs);
+    store_yesno(table->field[6], (field->flags & NOT_NULL_FLAG) == 0);
     store_column_type(table, field, cs, 7);
     pos=(uchar*) ((field->flags & PRI_KEY_FLAG) ? "PRI" :
                  (field->flags & UNIQUE_KEY_FLAG) ? "UNI" :
@@ -6216,7 +6441,7 @@ static int get_schema_column_record(THD *thd, TABLE_LIST *tables,
       table->field[21]->set_notnull();
       table->field[20]->store(STRING_WITH_LEN("ALWAYS"), cs);
 
-      if (field->vcol_info->stored_in_db)
+      if (field->vcol_info->is_stored())
         buf.set(STRING_WITH_LEN("STORED GENERATED"), cs);
       else
         buf.set(STRING_WITH_LEN("VIRTUAL GENERATED"), cs);
@@ -6253,6 +6478,12 @@ static int get_schema_column_record(THD *thd, TABLE_LIST *tables,
     }
     table->field[17]->store(buf.ptr(), buf.length(), cs);
     table->field[19]->store(field->comment.str, field->comment.length, cs);
+    const auto &vers= show_table->s->vers;
+    store_yesno(table->field[22], show_table->versioned() &&
+                                  vers.start_fieldno == field->field_index);
+    store_yesno(table->field[23], show_table->versioned() &&
+                                  vers.end_fieldno == field->field_index);
+
     if (schema_table_store_record(thd, table))
       DBUG_RETURN(1);
   }
@@ -6281,7 +6512,9 @@ int fill_schema_charsets(THD *thd, TABLE_LIST *tables, COND *cond)
       const char *comment;
       restore_record(table, s->default_values);
       table->field[0]->store(&tmp_cs->cs_name, scs);
-      table->field[1]->store(&tmp_cs->coll_name, scs);
+      CHARSET_INFO *def_cl= thd->variables.character_set_collations.
+                               get_collation_for_charset(thd, tmp_cs);
+      table->field[1]->store(&def_cl->coll_name, scs);
       comment= tmp_cs->comment ? tmp_cs->comment : "";
       table->field[2]->store(comment, strlen(comment), scs);
       table->field[3]->store((longlong) tmp_cs->mbmaxlen, TRUE);
@@ -6328,10 +6561,7 @@ static my_bool iter_schema_engines(THD *thd, plugin_ref plugin,
     if (!(wild && wild[0] &&
           wild_case_compare(scs, name->str,wild)))
     {
-      LEX_CSTRING yesno[2]= {{ STRING_WITH_LEN("NO") },
-                             { STRING_WITH_LEN("YES") }};
-      LEX_CSTRING *tmp;
-      const char *option_name= default_type != hton ? yesno[1].str
+      const char *option_name= default_type != hton ? "YES"
                                                     : "DEFAULT";
       restore_record(table, s->default_values);
 
@@ -6339,14 +6569,12 @@ static my_bool iter_schema_engines(THD *thd, plugin_ref plugin,
       table->field[1]->store(option_name, strlen(option_name), scs);
       table->field[2]->store(plugin_decl(plugin)->descr,
                              strlen(plugin_decl(plugin)->descr), scs);
-      tmp= &yesno[MY_TEST(hton->commit && !(hton->flags & HTON_NO_ROLLBACK))];
-      table->field[3]->store(tmp->str, tmp->length, scs);
+      store_yesno(table->field[3],
+                  hton->commit && !(hton->flags & HTON_NO_ROLLBACK));
       table->field[3]->set_notnull();
-      tmp= &yesno[MY_TEST(hton->prepare)];
-      table->field[4]->store(tmp->str, tmp->length, scs);
+      store_yesno(table->field[4], hton->prepare);
       table->field[4]->set_notnull();
-      tmp= &yesno[MY_TEST(hton->savepoint_set)];
-      table->field[5]->store(tmp->str, tmp->length, scs);
+      store_yesno(table->field[5], hton->savepoint_set);
       table->field[5]->set_notnull();
 
       if (schema_table_store_record(thd, table))
@@ -6384,6 +6612,8 @@ int fill_schema_collation(THD *thd, TABLE_LIST *tables, COND *cond)
          (tmp_cs->state & MY_CS_HIDDEN) ||
         !(tmp_cs->state & MY_CS_PRIMARY))
       continue;
+    CHARSET_INFO *def_cl= thd->variables.character_set_collations.
+                            get_collation_for_charset(thd, tmp_cs);
     for (cl= all_charsets;
          cl < all_charsets + array_elements(all_charsets)  ;
          cl ++)
@@ -6425,7 +6655,7 @@ int fill_schema_collation(THD *thd, TABLE_LIST *tables, COND *cond)
           table->field[2]->store((longlong) tmp_cl->number, TRUE);
           table->field[3]->set_notnull(); // IS_DEFAULT
           table->field[3]->store(
-            Show::Yes_or_empty::value(tmp_cl->default_flag()), scs);
+            Show::Yes_or_empty::value(def_cl == tmp_cl), scs);
         }
         table->field[4]->store(
           Show::Yes_or_empty::value(tmp_cl->compiled_flag()), scs);
@@ -6453,6 +6683,8 @@ int fill_schema_coll_charset_app(THD *thd, TABLE_LIST *tables, COND *cond)
     if (!tmp_cs || !(tmp_cs->state & MY_CS_AVAILABLE) ||
         !(tmp_cs->state & MY_CS_PRIMARY))
       continue;
+    CHARSET_INFO *def_cl= thd->variables.character_set_collations.
+                            get_collation_for_charset(thd, tmp_cs);
     for (cl= all_charsets;
          cl < all_charsets + array_elements(all_charsets) ;
          cl ++)
@@ -6472,7 +6704,7 @@ int fill_schema_coll_charset_app(THD *thd, TABLE_LIST *tables, COND *cond)
       table->field[2]->store(full_collation_name, scs);
       table->field[3]->store(tmp_cl->number);
       table->field[4]->store(
-        Show::Yes_or_empty::value(tmp_cl->default_flag()), scs);
+        Show::Yes_or_empty::value(def_cl == tmp_cl), scs);
       if (schema_table_store_record(thd, table))
         return 1;
     }
@@ -6604,7 +6836,9 @@ int store_schema_params(THD *thd, TABLE *table, TABLE *proc_table,
     DBUG_RETURN(0);
 
   if (!full_access)
-    full_access= !strcmp(sp_user, definer.str);
+    full_access= !strcmp(sp_user, definer.str) ||
+                 !check_db_routine_access(thd, SHOW_CREATE_ROUTINE_ACL,
+                                          db.str, name.str, sph, TRUE);
   if (!full_access &&
       check_some_routine_access(thd, db.str, name.str, sph))
     DBUG_RETURN(0);
@@ -6723,7 +6957,9 @@ int store_schema_proc(THD *thd, TABLE *table, TABLE *proc_table,
     return 0;
 
   if (!full_access)
-    full_access= !strcmp(sp_user, definer.str);
+    full_access= !strcmp(sp_user, definer.str) ||
+                 !check_db_routine_access(thd, SHOW_CREATE_ROUTINE_ACL,
+                                          db.str, name.str, sph, TRUE);
   if (!full_access &&
       check_some_routine_access(thd, db.str, name.str, sph))
     return 0;
@@ -6843,7 +7079,8 @@ int fill_schema_proc(THD *thd, TABLE_LIST *tables, COND *cond)
   proc_tables.alias= MYSQL_PROC_NAME;
   proc_tables.lock_type= TL_READ;
   full_access= !check_table_access(thd, SELECT_ACL, &proc_tables, FALSE,
-                                   1, TRUE);
+                                   1, TRUE) ||
+               !check_global_access(thd, SHOW_CREATE_ROUTINE_ACL, TRUE);
 
   LOOKUP_FIELD_VALUES lookup;
   if (get_lookup_field_values(thd, cond, false, tables, &lookup))
@@ -6934,24 +7171,7 @@ static int get_schema_stat_record(THD *thd, TABLE_LIST *tables,
 {
   CHARSET_INFO *cs= system_charset_info;
   DBUG_ENTER("get_schema_stat_record");
-  if (res)
-  {
-    if (thd->lex->sql_command != SQLCOM_SHOW_KEYS)
-    {
-      /*
-        I.e. we are in SELECT FROM INFORMATION_SCHEMA.STATISTICS
-        rather than in SHOW KEYS
-      */
-      if (unlikely(thd->is_error()))
-        push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
-                     thd->get_stmt_da()->sql_errno(),
-                     thd->get_stmt_da()->message());
-      thd->clear_error();
-      res= 0;
-    }
-    DBUG_RETURN(res);
-  }
-  else if (!tables->view)
+  if (!tables->view)
   {
     TABLE *show_table= tables->table;
     KEY *key_info=show_table->s->key_info;
@@ -6963,19 +7183,8 @@ static int get_schema_stat_record(THD *thd, TABLE_LIST *tables,
       set_statistics_for_table(thd, show_table);
     }
 
-#ifndef NO_EMBEDDED_ACCESS_CHECKS
-    bool need_column_checks= false;
-    /* we know that the table or at least some of the columns have
-       necessary privileges, but the caller didn't pass down the GRANT_INFO
-       object, so we have to rediscover everything again :( */
-    if (!(thd->col_access & TABLE_ACLS))
-    {
-      check_grant(thd, SELECT_ACL, tables, 0, 1, 1);
-
-      if (!(tables->grant.privilege & TABLE_ACLS))
-        need_column_checks= true;
-    }
-#endif
+    bool need_column_checks= !get_schema_privileges_for_show(thd, tables,
+                                                             TABLE_ACLS, false);
 
     for (uint i=0 ; i < show_table->s->keys ; i++,key_info++)
     {
@@ -6986,13 +7195,12 @@ static int get_schema_stat_record(THD *thd, TABLE_LIST *tables,
       LEX_CSTRING *str;
       LEX_CSTRING unknown= {STRING_WITH_LEN("?unknown field?") };
 
-#ifndef NO_EMBEDDED_ACCESS_CHECKS
       if (need_column_checks)
       {
         uint j;
         for (j=0 ; j < key_info->user_defined_key_parts ; j++,key_part++)
         {
-          uint access= get_column_grant(thd, &tables->grant, db_name->str,
+          auto access= get_column_grant(thd, &tables->grant, db_name->str,
                                         table_name->str,
                                         key_part->field->field_name.str);
 
@@ -7003,7 +7211,6 @@ static int get_schema_stat_record(THD *thd, TABLE_LIST *tables,
           continue;
         key_part= key_info->key_part;
       }
-#endif
 
       for (uint j=0 ; j < key_info->user_defined_key_parts ; j++,key_part++)
       {
@@ -7083,8 +7290,7 @@ static int get_schema_stat_record(THD *thd, TABLE_LIST *tables,
                                   key_info->comment.length, cs);
 
         // IGNORED column
-        const char *is_ignored= key_info->is_ignored ? "YES" : "NO";
-        table->field[16]->store(is_ignored, strlen(is_ignored), cs);
+        store_yesno(table->field[16], key_info->is_ignored);
         table->field[16]->set_notnull();
 
         if (schema_table_store_record(thd, table))
@@ -7203,10 +7409,7 @@ static int get_schema_views_record(THD *thd, TABLE_LIST *tables,
         if (updatable_view && !tables->view->can_be_merged())
           updatable_view= 0;
       }
-      if (updatable_view)
-        table->field[5]->store(STRING_WITH_LEN("YES"), cs);
-      else
-        table->field[5]->store(STRING_WITH_LEN("NO"), cs);
+      store_yesno(table->field[5], updatable_view);
     }
 
     definer_len= (uint)(strxmov(definer, tables->definer.user.str, "@",
@@ -7258,15 +7461,6 @@ static int get_check_constraints_record(THD *thd, TABLE_LIST *tables,
                                         const LEX_CSTRING *table_name)
 {
   DBUG_ENTER("get_check_constraints_record");
-  if (res)
-  {
-    if (thd->is_error())
-      push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
-                   thd->get_stmt_da()->sql_errno(),
-                   thd->get_stmt_da()->message());
-    thd->clear_error();
-    DBUG_RETURN(0);
-  }
   if (!tables->view)
   {
     StringBuffer<MAX_FIELD_WIDTH> str(system_charset_info);
@@ -7310,31 +7504,12 @@ static int get_schema_constraints_record(THD *thd, TABLE_LIST *tables,
 					 const LEX_CSTRING *table_name)
 {
   DBUG_ENTER("get_schema_constraints_record");
-  if (res)
+  if (!tables->view)
   {
-    if (unlikely(thd->is_error()))
-      push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
-                   thd->get_stmt_da()->sql_errno(),
-                   thd->get_stmt_da()->message());
-    thd->clear_error();
-    DBUG_RETURN(0);
-  }
-  else if (!tables->view)
-  {
-#ifndef NO_EMBEDDED_ACCESS_CHECKS
     /* need any non-SELECT privilege on the table or any of its columns */
-    const privilege_t need= TABLE_ACLS & ~SELECT_ACL;
-    if (!(thd->col_access & need))
-    {
-      /* we know that the table or at least some of the columns have
-         necessary privileges, but the caller didn't pass down the GRANT_INFO
-         object, so we have to rediscover everything again :( */
-      check_grant(thd, SELECT_ACL, tables, 0, 1, 1);
-
-      if (!(tables->grant.all_privilege() & need))
-        DBUG_RETURN(0);
-    }
-#endif
+    if (!get_schema_privileges_for_show(thd, tables, TABLE_ACLS & ~SELECT_ACL, 
+                                        true))
+      DBUG_RETURN(0);
 
     List<FOREIGN_KEY_INFO> f_key_list;
     TABLE *show_table= tables->table;
@@ -7447,19 +7622,6 @@ static int get_schema_triggers_record(THD *thd, TABLE_LIST *tables,
 				      const LEX_CSTRING *table_name)
 {
   DBUG_ENTER("get_schema_triggers_record");
-  /*
-    res can be non zero value when processed table is a view or
-    error happened during opening of processed table.
-  */
-  if (res)
-  {
-    if (unlikely(thd->is_error()))
-      push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
-                   thd->get_stmt_da()->sql_errno(),
-                   thd->get_stmt_da()->message());
-    thd->clear_error();
-    DBUG_RETURN(0);
-  }
   if (!tables->view && tables->table->triggers)
   {
     Table_triggers_list *triggers= tables->table->triggers;
@@ -7489,41 +7651,43 @@ ret:
   DBUG_RETURN(0);
 }
 
+static int
+store_key_column_usage(TABLE *table, const LEX_CSTRING &db_name,
+                       const LEX_CSTRING &table_name,
+                       const LEX_CSTRING &key_name,
+                       const LEX_CSTRING &col_name)
+{
+  CHARSET_INFO *cs= system_charset_info;
+  static const LEX_CSTRING def{STRING_WITH_LEN("def")};
+  const LEX_CSTRING *values[] { &def, &db_name, &key_name,
+                                &def, &db_name, &table_name, &col_name };
+  for (uint i = 0; i < array_elements(values); i++)
+    table->field[i]->store(values[i], cs);
+  return 0;
+}
 
 static void
 store_key_column_usage(TABLE *table, const LEX_CSTRING *db_name,
                        const LEX_CSTRING *table_name, const char *key_name,
-                       size_t key_len, const char *con_type, size_t con_len,
+                       size_t key_len, const char *col_name, size_t col_len,
                        longlong idx)
 {
-  CHARSET_INFO *cs= system_charset_info;
-  table->field[0]->store(STRING_WITH_LEN("def"), cs);
-  table->field[1]->store(db_name->str, db_name->length, cs);
-  table->field[2]->store(key_name, key_len, cs);
-  table->field[3]->store(STRING_WITH_LEN("def"), cs);
-  table->field[4]->store(db_name->str, db_name->length, cs);
-  table->field[5]->store(table_name->str, table_name->length, cs);
-  table->field[6]->store(con_type, con_len, cs);
+  store_key_column_usage(table, *db_name, *table_name, {key_name, key_len},
+                         {col_name, col_len});
   table->field[7]->store((longlong) idx, TRUE);
 }
 
 
-static int get_schema_key_column_usage_record(THD *thd, TABLE_LIST *tables,
-					      TABLE *table, bool res,
-					      const LEX_CSTRING *db_name,
-					      const LEX_CSTRING *table_name)
+static int
+get_schema_key_column_usage_record(THD *thd, TABLE_LIST *tables,
+                                   TABLE *table,
+                                   //!< @ref Show::key_column_usage_fields_info
+                                   bool res,
+                                   const LEX_CSTRING *db_name,
+                                   const LEX_CSTRING *table_name)
 {
   DBUG_ENTER("get_schema_key_column_usage_record");
-  if (res)
-  {
-    if (unlikely(thd->is_error()))
-      push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
-                   thd->get_stmt_da()->sql_errno(),
-                   thd->get_stmt_da()->message());
-    thd->clear_error();
-    DBUG_RETURN(0);
-  }
-  else if (!tables->view)
+  if (!tables->view)
   {
     List<FOREIGN_KEY_INFO> f_key_list;
     TABLE *show_table= tables->table;
@@ -7532,19 +7696,8 @@ static int get_schema_key_column_usage_record(THD *thd, TABLE_LIST *tables,
     show_table->file->info(HA_STATUS_VARIABLE | HA_STATUS_NO_LOCK |
                            HA_STATUS_TIME);
 
-#ifndef NO_EMBEDDED_ACCESS_CHECKS
-    bool need_column_checks= false;
-    /* we know that the table or at least some of the columns have
-       necessary privileges, but the caller didn't pass down the GRANT_INFO
-       object, so we have to rediscover everything again :( */
-    if (!(thd->col_access & TABLE_ACLS))
-    {
-      check_grant(thd, SELECT_ACL, tables, 0, 1, 1);
-
-      if (!(tables->grant.privilege & TABLE_ACLS))
-        need_column_checks= true;
-    }
-#endif
+    bool need_column_checks= !get_schema_privileges_for_show(thd, tables,
+                                                             TABLE_ACLS, false);
 
     for (uint i=0 ; i < show_table->s->keys ; i++, key_info++)
     {
@@ -7552,13 +7705,12 @@ static int get_schema_key_column_usage_record(THD *thd, TABLE_LIST *tables,
         continue;
       uint f_idx= 0;
       KEY_PART_INFO *key_part= key_info->key_part;
-#ifndef NO_EMBEDDED_ACCESS_CHECKS
       if (need_column_checks)
       {
         uint j;
         for (j=0 ; j < key_info->user_defined_key_parts ; j++,key_part++)
         {
-          uint access= get_column_grant(thd, &tables->grant, db_name->str,
+          auto access= get_column_grant(thd, &tables->grant, db_name->str,
                                         table_name->str,
                                         key_part->field->field_name.str);
 
@@ -7569,7 +7721,6 @@ static int get_schema_key_column_usage_record(THD *thd, TABLE_LIST *tables,
           continue;
         key_part= key_info->key_part;
       }
-#endif
 
       for (uint j=0 ; j < key_info->user_defined_key_parts ; j++,key_part++)
       {
@@ -7601,7 +7752,7 @@ static int get_schema_key_column_usage_record(THD *thd, TABLE_LIST *tables,
       {
         while ((r_info= it1++))
         {
-          uint access= get_column_grant(thd, &tables->grant, db_name->str,
+          auto access= get_column_grant(thd, &tables->grant, db_name->str,
                                         table_name->str, r_info->str);
 
           if (!access)
@@ -7641,6 +7792,40 @@ static int get_schema_key_column_usage_record(THD *thd, TABLE_LIST *tables,
     }
   }
   DBUG_RETURN(res);
+}
+
+
+static
+int get_schema_key_period_usage_record(THD *thd, TABLE_LIST *tables,
+                                       TABLE *schema_table, //!< @ref
+                                       //!< Show::key_period_usage_fields_info
+                                       bool res,
+                                       const LEX_CSTRING *db_name,
+                                       const LEX_CSTRING *table_name)
+{
+  const uint keys_total= tables->table->s->keys;
+  const KEY *keys= tables->table->s->key_info;
+  const Lex_ident &period_name= tables->table->s->period.name;
+  if (!period_name)
+    return 0;
+
+#ifndef NO_EMBEDDED_ACCESS_CHECKS
+  /* Need any non-SELECT privilege on the table or any of its columns */
+  if (!get_schema_privileges_for_show(thd, tables, TABLE_ACLS & ~SELECT_ACL,
+                                      true))
+    return 0;
+#endif
+
+  bool err= false;
+  for (uint k= 0; !err && k < keys_total; k++)
+  {
+    if (!keys[k].without_overlaps)
+      continue;
+    err= store_key_column_usage(schema_table, *db_name, *table_name,
+                                keys[k].name, period_name);
+    err= err || schema_table_store_record(thd, schema_table);
+  }
+  return err;
 }
 
 
@@ -7778,15 +7963,6 @@ static int get_schema_partitions_record(THD *thd, TABLE_LIST *tables,
 #endif
   DBUG_ENTER("get_schema_partitions_record");
 
-  if (res)
-  {
-    if (unlikely(thd->is_error()))
-      push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
-                   thd->get_stmt_da()->sql_errno(),
-                   thd->get_stmt_da()->message());
-    thd->clear_error();
-    DBUG_RETURN(0);
-  }
   file= show_table->file;
 #ifdef WITH_PARTITION_STORAGE_ENGINE
   part_info= show_table->part_info;
@@ -8371,15 +8547,6 @@ get_referential_constraints_record(THD *thd, TABLE_LIST *tables,
   LEX_CSTRING *s;
   DBUG_ENTER("get_referential_constraints_record");
 
-  if (res)
-  {
-    if (unlikely(thd->is_error()))
-      push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
-                   thd->get_stmt_da()->sql_errno(),
-                   thd->get_stmt_da()->message());
-    thd->clear_error();
-    DBUG_RETURN(0);
-  }
   if (!tables->view)
   {
     List<FOREIGN_KEY_INFO> f_key_list;
@@ -8387,20 +8554,10 @@ get_referential_constraints_record(THD *thd, TABLE_LIST *tables,
     show_table->file->info(HA_STATUS_VARIABLE | HA_STATUS_NO_LOCK |
                            HA_STATUS_TIME);
 
-#ifndef NO_EMBEDDED_ACCESS_CHECKS
     /* need any non-SELECT privilege on the table or any of its columns */
-    const privilege_t need= TABLE_ACLS & ~SELECT_ACL;
-    if (!(thd->col_access & need))
-    {
-      /* we know that the table or at least some of the columns have
-         necessary privileges, but the caller didn't pass down the GRANT_INFO
-         object, so we have to rediscover everything again :( */
-      check_grant(thd, SELECT_ACL, tables, 0, 1, 1);
-
-      if (!(tables->grant.all_privilege() & need))
-        DBUG_RETURN(0);
-    }
-#endif
+    privilege_t need= TABLE_ACLS & ~SELECT_ACL;
+    if (!get_schema_privileges_for_show(thd, tables, need, true))
+      DBUG_RETURN(0);
 
     show_table->file->get_foreign_key_list(thd, &f_key_list);
     FOREIGN_KEY_INFO *f_key_info;
@@ -9006,7 +9163,6 @@ bool optimize_schema_tables_memory_usage(List<TABLE_LIST> &tables)
       TMP_TABLE_PARAM *p= table_list->schema_table_param;
       TMP_ENGINE_COLUMNDEF *from_recinfo, *to_recinfo;
       DBUG_ASSERT(table->s->keys == 0);
-      DBUG_ASSERT(table->s->uniques == 0);
 
       uchar *cur= table->field[0]->ptr;
       /* first recinfo could be a NULL bitmap, not an actual Field */
@@ -9069,6 +9225,10 @@ bool optimize_schema_tables_reads(JOIN *join)
        tab; 
        tab= next_linear_tab(join, tab, WITH_BUSH_ROOTS))
   {
+    /*
+      The following is true for the temporary table that will hold the
+      final result.
+    */
     if (!tab->table || !tab->table->pos_in_table_list)
       continue;
 
@@ -9140,6 +9300,10 @@ bool get_schema_tables_result(JOIN *join,
        tab; 
        tab= next_linear_tab(join, tab, WITH_BUSH_ROOTS))
   {
+    /*
+      The following is true for the temporary table that will hold the
+      final result.
+    */
     if (!tab->table || !tab->table->pos_in_table_list)
       break;
 
@@ -9370,6 +9534,49 @@ int fill_key_cache_tables(THD *thd, TABLE_LIST *tables, COND *cond)
 }
 
 
+/* Ensure we return 'OPTIMIZER_COST_UNDEF' if cost < 0 */
+
+static double fix_cost(double cost)
+{
+  return cost < 0 ? OPTIMIZER_COST_UNDEF : cost;
+}
+
+static int run_fill_optimizer_costs_tables(const LEX_CSTRING *name,
+                                           const OPTIMIZER_COSTS *costs,
+                                           TABLE *table)
+{
+  THD *thd= table->in_use;
+  DBUG_ENTER("run_fill_optimizer_costs_tables");
+
+  restore_record(table, s->default_values);
+  table->field[0]->store(name->str, name->length, system_charset_info);
+  table->field[1]->store(fix_cost(costs->disk_read_cost*1000.0));
+  table->field[2]->store(fix_cost(costs->index_block_copy_cost*1000.0));
+  table->field[3]->store(fix_cost(costs->key_cmp_cost*1000.0));
+  table->field[4]->store(fix_cost(costs->key_copy_cost*1000.0));
+  table->field[5]->store(fix_cost(costs->key_lookup_cost*1000.0));
+  table->field[6]->store(fix_cost(costs->key_next_find_cost*1000.0));
+  table->field[7]->store(fix_cost(costs->disk_read_ratio));
+  table->field[8]->store(fix_cost(costs->row_copy_cost*1000.0));
+  table->field[9]->store(fix_cost(costs->row_lookup_cost*1000.0));
+  table->field[10]->store(fix_cost(costs->row_next_find_cost*1000.0));
+  table->field[11]->store(fix_cost(costs->rowid_cmp_cost*1000.0));
+  table->field[12]->store(fix_cost(costs->rowid_copy_cost*1000.0));
+
+  DBUG_RETURN(schema_table_store_record(thd, table));
+}
+
+
+int fill_optimizer_costs_tables(THD *thd, TABLE_LIST *tables, COND *cond)
+{
+  DBUG_ENTER("fill_optimizer_costs_tables");
+
+  int res= process_optimizer_costs(run_fill_optimizer_costs_tables,
+                                   tables->table);
+  DBUG_RETURN(res);
+}
+
+
 namespace Show {
 
 ST_FIELD_INFO schema_fields_info[]=
@@ -9445,7 +9652,9 @@ ST_FIELD_INFO columns_fields_info[]=
                                                                  OPEN_FRM_ONLY),
   Column("IS_GENERATED",            Varchar(6),  NOT_NULL,       OPEN_FRM_ONLY),
   Column("GENERATION_EXPRESSION",   Longtext(MAX_FIELD_VARCHARLENGTH),
-                                                 NULLABLE,       OPEN_FRM_ONLY),
+                                                 NULLABLE,       OPEN_FRM_ONLY), // 21
+  Column("IS_SYSTEM_TIME_PERIOD_START", Varchar(3),  NOT_NULL,   OPEN_FRM_ONLY), // 22
+  Column("IS_SYSTEM_TIME_PERIOD_END",   Varchar(3),  NOT_NULL,   OPEN_FRM_ONLY), // 23
   CEnd()
 };
 
@@ -9709,6 +9918,18 @@ ST_FIELD_INFO key_column_usage_fields_info[]=
   CEnd()
 };
 
+ST_FIELD_INFO key_period_usage_fields_info[]=
+{
+  Column("CONSTRAINT_CATALOG", Catalog(), NOT_NULL, OPEN_FULL_TABLE),
+  Column("CONSTRAINT_SCHEMA",  Name(),    NOT_NULL, OPEN_FULL_TABLE),
+  Column("CONSTRAINT_NAME",    Name(),    NOT_NULL, OPEN_FULL_TABLE),
+  Column("TABLE_CATALOG",      Catalog(), NOT_NULL, OPEN_FULL_TABLE),
+  Column("TABLE_SCHEMA",       Name(),    NOT_NULL, OPEN_FULL_TABLE),
+  Column("TABLE_NAME",         Name(),    NOT_NULL, OPEN_FULL_TABLE),
+  Column("PERIOD_NAME",        Name(),    NOT_NULL, OPEN_FULL_TABLE),
+  CEnd()
+};
+
 
 ST_FIELD_INFO table_names_fields_info[]=
 {
@@ -9822,6 +10043,17 @@ ST_FIELD_INFO sysvars_fields_info[]=
   CEnd()
 };
 
+ST_FIELD_INFO periods_fields_info[]=
+{
+  Column("TABLE_CATALOG", Catalog(), NOT_NULL, OPEN_FRM_ONLY),
+  Column("TABLE_SCHEMA",      Name(), NOT_NULL, OPEN_FRM_ONLY),
+  Column("TABLE_NAME",        Name(), NOT_NULL, OPEN_FRM_ONLY),
+  Column("PERIOD",            Name(), NOT_NULL, OPEN_FRM_ONLY),
+  Column("START_COLUMN_NAME", Name(), NULLABLE, OPEN_FRM_ONLY),
+  Column("END_COLUMN_NAME",   Name(), NULLABLE, OPEN_FRM_ONLY),
+  CEnd()
+};
+
 
 ST_FIELD_INFO processlist_fields_info[]=
 {
@@ -9839,12 +10071,13 @@ ST_FIELD_INFO processlist_fields_info[]=
   Column("STAGE",          STiny(2),                  NOT_NULL, "Stage"),
   Column("MAX_STAGE",      STiny(2),                  NOT_NULL, "Max_stage"),
   Column("PROGRESS",       Decimal(703),              NOT_NULL, "Progress"),
-  Column("MEMORY_USED",    SLonglong(7),              NOT_NULL, "Memory_used"),
-  Column("MAX_MEMORY_USED",SLonglong(7),              NOT_NULL, "Max_memory_used"),
-  Column("EXAMINED_ROWS",  SLong(7),                  NOT_NULL, "Examined_rows"),
-  Column("QUERY_ID",       SLonglong(4),              NOT_NULL),
+  Column("MEMORY_USED",    SLonglong(10),             NOT_NULL, "Memory_used"),
+  Column("MAX_MEMORY_USED",SLonglong(10),             NOT_NULL, "Max_memory_used"),
+  Column("EXAMINED_ROWS",  SLonglong(10),             NOT_NULL, "Examined_rows"),
+  Column("SENT_ROWS",      SLonglong(10),             NOT_NULL, "Sent_rows"),
+  Column("QUERY_ID",       SLonglong(10),             NOT_NULL),
   Column("INFO_BINARY",Blob(PROCESS_LIST_INFO_WIDTH),NULLABLE, "Info_binary"),
-  Column("TID",            SLonglong(4),              NOT_NULL, "Tid"),
+  Column("TID",            SLonglong(10),             NOT_NULL, "Tid"),
   CEnd()
 };
 
@@ -9998,6 +10231,25 @@ ST_FIELD_INFO keycache_fields_info[]=
 };
 
 
+ST_FIELD_INFO optimizer_costs_fields_info[]=
+{
+  Column("ENGINE",                              Varchar(NAME_LEN),NOT_NULL),
+  Column("OPTIMIZER_DISK_READ_COST",            Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_INDEX_BLOCK_COPY_COST",     Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_KEY_COMPARE_COST",          Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_KEY_COPY_COST",             Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_KEY_LOOKUP_COST",           Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_KEY_NEXT_FIND_COST",        Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_DISK_READ_RATIO",           Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_ROW_COPY_COST",             Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_ROW_LOOKUP_COST",           Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_ROW_NEXT_FIND_COST",        Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_ROWID_COMPARE_COST",        Decimal(906), NOT_NULL),
+  Column("OPTIMIZER_ROWID_COPY_COST",           Decimal(906), NOT_NULL),
+  CEnd()
+};
+
+
 ST_FIELD_INFO show_explain_tabular_fields_info[]=
 {
   Column("id",            SLonglong(3),                  NULLABLE, "id"),
@@ -10134,8 +10386,13 @@ ST_SCHEMA_TABLE schema_tables[]=
   {"KEY_COLUMN_USAGE", Show::key_column_usage_fields_info, 0,
    get_all_tables, 0, get_schema_key_column_usage_record, 4, 5, 0,
    OPTIMIZE_I_S_TABLE|OPEN_TABLE_ONLY},
+  {"KEY_PERIOD_USAGE", Show::key_period_usage_fields_info, 0,
+   get_all_tables, 0, get_schema_key_period_usage_record, 4, 5, 0,
+   OPTIMIZE_I_S_TABLE | OPEN_FRM_FILE_ONLY},
   {"OPEN_TABLES", Show::open_tables_fields_info, 0,
    fill_open_tables, make_old_format, 0, -1, -1, 1, 0},
+  {"OPTIMIZER_COSTS", Show::optimizer_costs_fields_info, 0,
+   fill_optimizer_costs_tables, 0, 0, -1,-1, 0, 0},
   {"OPTIMIZER_TRACE", Show::optimizer_trace_info, 0,
      fill_optimizer_trace_info, NULL, NULL, -1, -1, false, 0},
   {"PARAMETERS", Show::parameters_fields_info, 0,
@@ -10143,6 +10400,9 @@ ST_SCHEMA_TABLE schema_tables[]=
   {"PARTITIONS", Show::partitions_fields_info, 0,
    get_all_tables, 0, get_schema_partitions_record, 1, 2, 0,
    OPTIMIZE_I_S_TABLE|OPEN_TABLE_ONLY},
+  {"PERIODS", Show::periods_fields_info, 0,
+   get_all_tables, 0, get_schema_period_records, 1, 2, 0,
+   OPTIMIZE_I_S_TABLE | OPEN_TABLE_ONLY},
   {"PLUGINS", Show::plugin_fields_info, 0,
    fill_plugins, make_old_format, 0, -1, -1, 0, 0},
   {"PROCESSLIST", Show::processlist_fields_info, 0,
@@ -10172,7 +10432,7 @@ ST_SCHEMA_TABLE schema_tables[]=
    fill_sysvars, make_old_format, 0, 0, -1, 0, 0},
   {"TABLES", Show::tables_fields_info, 0,
    get_all_tables, make_old_format, get_schema_tables_record, 1, 2, 0,
-   OPTIMIZE_I_S_TABLE},
+   OPTIMIZE_I_S_TABLE|I_S_EXTENDED_ERROR_HANDLING},
   {"TABLESPACES", Show::tablespaces_fields_info, 0,
    hton_fill_schema_table, 0, 0, -1, -1, 0, 0},
   {"TABLE_CONSTRAINTS", Show::table_constraints_fields_info, 0,
@@ -10189,10 +10449,12 @@ ST_SCHEMA_TABLE schema_tables[]=
    fill_schema_user_privileges, 0, 0, -1, -1, 0, 0},
   {"VIEWS", Show::view_fields_info, 0,
    get_all_tables, 0, get_schema_views_record, 1, 2, 0,
-   OPEN_VIEW_ONLY|OPTIMIZE_I_S_TABLE},
+   OPEN_VIEW_ONLY|OPTIMIZE_I_S_TABLE|I_S_EXTENDED_ERROR_HANDLING},
   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
+static_assert(array_elements(schema_tables) == SCH_ENUM_SIZE + 1,
+              "Update enum_schema_tables as well.");
 
 int initialize_schema_table(st_plugin_int *plugin)
 {

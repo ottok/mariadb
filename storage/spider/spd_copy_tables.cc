@@ -257,7 +257,7 @@ int spider_udf_get_copy_tgt_tables(
     !(table_tables = spider_open_sys_table(
       thd, SPIDER_SYS_TABLES_TABLE_NAME_STR,
       SPIDER_SYS_TABLES_TABLE_NAME_LEN, FALSE, &open_tables_backup,
-      need_lock, &error_num))
+      &error_num))
   ) {
     my_error(error_num, MYF(0));
     goto error;
@@ -300,7 +300,7 @@ int spider_udf_get_copy_tgt_tables(
       (error_num = spider_get_sys_tables_connect_info(
         table_tables, tmp_share, mem_root)) ||
       (error_num = spider_get_sys_tables_link_status(
-        table_tables, tmp_share, 0, mem_root)) ||
+        table_tables, tmp_share->link_statuses, mem_root)) ||
       (error_num = spider_get_sys_tables_link_idx(
         table_tables, &table_conn->link_idx, mem_root))
     ) {
@@ -445,8 +445,7 @@ int spider_udf_get_copy_tgt_tables(
     error_num = spider_sys_index_next_same(table_tables, table_key);
   } while (error_num == 0);
   spider_sys_index_end(table_tables);
-  spider_close_sys_table(thd, table_tables,
-    &open_tables_backup, need_lock);
+  spider_sys_close_table(thd, &open_tables_backup);
   table_tables = NULL;
 
   if (!copy_tables->table_conn[0])
@@ -468,8 +467,7 @@ int spider_udf_get_copy_tgt_tables(
 
 error:
   if (table_tables)
-    spider_close_sys_table(thd, table_tables,
-      &open_tables_backup, need_lock);
+    spider_sys_close_table(thd, &open_tables_backup);
   if (table_conn)
   {
     spider_free_tmp_dbton_share(tmp_share);
@@ -495,11 +493,10 @@ int spider_udf_get_copy_tgt_conns(
     while (table_conn)
     {
       share = table_conn->share;
-      if (
-        !(table_conn->conn = spider_get_conn(
-          share, 0, share->conn_keys[0], trx, NULL, FALSE, FALSE,
-          SPIDER_CONN_KIND_MYSQL, &error_num))
-      ) {
+      if (!(table_conn->conn=
+                spider_get_conn(share, 0, share->conn_keys[0], trx, NULL,
+                                FALSE, FALSE, &error_num)))
+      {
         my_error(ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), share->server_names[0]);
         DBUG_RETURN(ER_CONNECT_TO_FOREIGN_DATA_SOURCE);
       }

@@ -22,14 +22,10 @@
 
 #include <ctime>
 #include <sys/time.h>
-#ifndef _MSC_VER
 #include <pthread.h>
-#else
-typedef int pthread_t;
-#endif
 #include <iomanip>
 #include <map>
-//#define NDEBUG
+// #define NDEBUG
 #include <cassert>
 #include <csignal>
 #include <fstream>
@@ -58,9 +54,6 @@ void pause_(unsigned delay)
 
   rem.tv_sec = 0;
   rem.tv_nsec = 0;
-#ifdef _MSC_VER
-  Sleep(req.tv_sec * 1000);
-#else
 again:
 
   if (nanosleep(&req, &rem) != 0)
@@ -70,7 +63,6 @@ again:
       goto again;
     }
 
-#endif
 }
 
 const string timestr()
@@ -104,11 +96,7 @@ class TraceFile
         outName = name;
 
       ostringstream oss;
-#ifdef _MSC_VER
-      oss << "C:/Calpont/log/trace/" << outName << '.' << sessionID;
-#else
       oss << MCSLOGDIR << "/trace/" << outName << '.' << sessionID;
-#endif
       oFile.reset(new ofstream());
       oFile->open(oss.str().c_str(), ios_base::out | ios_base::ate | ios_base::app);
     }
@@ -178,26 +166,24 @@ typedef map<uint32_t, TraceFileInfo> TraceFileMap_t;
 
 TraceFileMap_t traceFileMap;
 // map mutex
-boost::mutex traceFileMapMutex;
+std::mutex traceFileMapMutex;
 
 class StatMon
 {
  public:
   StatMon()
   {
-#ifndef _MSC_VER
     sigset_t sigset;
     sigemptyset(&sigset);
     sigaddset(&sigset, SIGPIPE);
     sigaddset(&sigset, SIGUSR1);
     sigaddset(&sigset, SIGUSR2);
     pthread_sigmask(SIG_BLOCK, &sigset, 0);
-#endif
   }
   void operator()() const
   {
     // struct timespec ts = { 60 * 1, 0 };
-    boost::mutex::scoped_lock lk(traceFileMapMutex);
+    std::unique_lock lk(traceFileMapMutex);
     TraceFileMap_t::iterator iter;
     TraceFileMap_t::iterator end;
 
@@ -256,7 +242,7 @@ void Stats::touchedLBID(uint64_t lbid, pthread_t thdid, uint32_t session)
   if (session == 0)
     return;
 
-  boost::mutex::scoped_lock lk(traceFileMapMutex);
+  std::lock_guard lk(traceFileMapMutex);
   TraceFileMap_t::iterator iter = traceFileMap.find(session);
 
   if (iter == traceFileMap.end())
@@ -274,7 +260,7 @@ void Stats::markEvent(const uint64_t lbid, const pthread_t thdid, const uint32_t
   if (session == 0)
     return;
 
-  boost::mutex::scoped_lock lk(traceFileMapMutex);
+  std::lock_guard lk(traceFileMapMutex);
   TraceFileMap_t::iterator iter = traceFileMap.find(session);
 
   if (iter == traceFileMap.end())

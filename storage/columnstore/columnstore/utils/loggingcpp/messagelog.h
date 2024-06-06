@@ -22,8 +22,7 @@
 /**
  * @file
  */
-#ifndef LOGGING_MESSAGELOG_H
-#define LOGGING_MESSAGELOG_H
+#pragma once
 
 #include <syslog.h>
 
@@ -150,5 +149,3 @@ void logCommand(unsigned sessionId, unsigned txnId, const std::string& statement
 void logEventToDataLog(unsigned messageId, const std::string& messageText);
 
 }  // namespace logging
-
-#endif

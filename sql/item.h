@@ -1052,7 +1052,7 @@ public:
 
   LEX_CSTRING name;			/* Name of item */
   /* Original item name (if it was renamed)*/
-  const char *orig_name;
+  LEX_CSTRING orig_name;
 
   /* All common bool variables for an Item is stored here */
   item_base_t base_flags;
@@ -2517,6 +2517,10 @@ public:
   { return this; }
   virtual Item *multiple_equality_transformer(THD *thd, uchar *arg)
   { return this; }
+  virtual Item* varchar_upper_cmp_transformer(THD *thd, uchar *arg)
+  { return this; }
+  virtual Item* date_conds_transformer(THD *thd, uchar *arg)
+  { return this; }
   virtual bool expr_cache_is_needed(THD *) { return FALSE; }
   virtual Item *safe_charset_converter(THD *thd, CHARSET_INFO *tocs);
   bool needs_charset_converter(uint32 length, CHARSET_INFO *tocs) const
@@ -3574,8 +3578,9 @@ public:
   */
   bool collect_outer_ref_processor(void *arg) override;
   friend bool insert_fields(THD *thd, Name_resolution_context *context,
-                            const char *db_name,
-                            const char *table_name, List_iterator<Item> *it,
+                            const LEX_CSTRING &db_name,
+                            const LEX_CSTRING &table_name,
+                            List_iterator<Item> *it,
                             bool any_privileges, bool returning_field);
 };
 
@@ -3796,6 +3801,7 @@ public:
   Item_equal *get_item_equal() override { return item_equal; }
   void set_item_equal(Item_equal *item_eq) override { item_equal= item_eq; }
   Item_equal *find_item_equal(COND_EQUAL *cond_equal) override;
+  bool contains(Field *field);
   Item* propagate_equal_fields(THD *, const Context &, COND_EQUAL *) override;
   Item *replace_equal_field(THD *thd, uchar *arg) override;
   uint32 max_display_length() const override
@@ -4521,15 +4527,24 @@ protected:
   MYSQL_TIME ltime;
 public:
   Item_datetime(THD *thd): Item_int(thd, 0) { unsigned_flag=0; }
+  Item_datetime(THD *thd, const Datetime &dt, decimal_digits_t dec)
+   :Item_int(thd, 0),
+    ltime(*dt.get_mysql_time())
+  {
+    unsigned_flag= 0;
+    decimals= dec;
+  }
   int save_in_field(Field *field, bool no_conversions) override;
   longlong val_int() override;
   double val_real() override { return (double)val_int(); }
-  void set(longlong packed, enum_mysql_timestamp_type ts_type);
+  void set(const MYSQL_TIME *datetime) { ltime= *datetime; }
+  void set_from_packed(longlong packed, enum_mysql_timestamp_type ts_type);
   bool get_date(THD *thd, MYSQL_TIME *to, date_mode_t fuzzydate) override
   {
     *to= ltime;
     return false;
   }
+  void print(String *str, enum_query_type query_type) override;
 };
 
 
@@ -5045,9 +5060,23 @@ class Item_timestamp_literal: public Item_literal
 public:
   Item_timestamp_literal(THD *thd)
    :Item_literal(thd)
-  { }
+  {
+    collation= DTCollation_numeric();
+  }
+  Item_timestamp_literal(THD *thd,
+                         const Timestamp_or_zero_datetime &value,
+                         decimal_digits_t dec)
+   :Item_literal(thd),
+    m_value(value)
+  {
+    DBUG_ASSERT(value.is_zero_datetime() ||
+                !value.to_timestamp().fraction_remainder(dec));
+    collation= DTCollation_numeric();
+    decimals= dec;
+  }
   const Type_handler *type_handler() const override
   { return &type_handler_timestamp2; }
+  void print(String *str, enum_query_type query_type) override;
   int save_in_field(Field *field, bool) override
   {
     Timestamp_or_zero_datetime_native native(m_value, decimals);
@@ -5078,6 +5107,10 @@ public:
   bool val_native(THD *thd, Native *to) override
   {
     return m_value.to_native(to, decimals);
+  }
+  const Timestamp_or_zero_datetime &value() const
+  {
+    return m_value;
   }
   void set_value(const Timestamp_or_zero_datetime &value)
   {
@@ -6285,6 +6318,7 @@ public:
   Item *field_transformer_for_having_pushdown(THD *, uchar *) override
   { return this; }
   Item *remove_item_direct_ref() override { return this; }
+  void print(String *str, enum_query_type query_type) override;
 };
 
 
@@ -7008,6 +7042,14 @@ private:
 public:
   /* Next in list of all Item_trigger_field's in trigger */
   Item_trigger_field *next_trg_field;
+
+  /**
+    Pointer to the next list of Item_trigger_field objects. This pointer
+    is used to organize an intrusive list of lists of Item_trigger_field
+    objects managed by sp_head.
+  */
+  SQL_I_List<Item_trigger_field> *next_trig_field_list;
+
   /* Pointer to Table_trigger_list object for table of this trigger */
   Table_triggers_list *triggers;
   /* Is this item represents row from NEW or OLD row ? */
@@ -7042,7 +7084,8 @@ Item_trigger_field(THD *thd, Name_resolution_context *context_arg,
                      const LEX_CSTRING &field_name_arg,
                      privilege_t priv, const bool ro)
     :Item_field(thd, context_arg, field_name_arg),
-    table_grants(NULL),  next_trg_field(NULL),  triggers(NULL),
+    table_grants(nullptr),  next_trg_field(nullptr),
+    next_trig_field_list(nullptr), triggers(nullptr),
     row_version(row_ver_arg), field_idx(NO_CACHED_FIELD_INDEX),
     read_only (ro),  original_privilege(priv), want_privilege(priv)
   {
@@ -7870,7 +7913,7 @@ bool fix_escape_item(THD *thd, Item *escape_item, String *tmp_str,
 inline bool Virtual_column_info::is_equal(const Virtual_column_info* vcol) const
 {
   return type_handler()  == vcol->type_handler()
-      && stored_in_db == vcol->is_stored()
+      && is_stored() == vcol->is_stored()
       && expr->eq(vcol->expr, true);
 }
 

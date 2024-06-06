@@ -1,9 +1,9 @@
 [Unit]
 Description=WriteEngineServer
 
-# restart/stop mcs-writeengineserver on restart/stop of mcs-exemgr
-# PartOf=mcs-exemgr.service
-After=network.target mcs-exemgr.service
+# restart/stop mcs-writeengineserver on restart/stop of mcs-primproc
+# PartOf=mcs-primproc.service
+After=network.target mcs-primproc.service
 
 [Service]
 Type=forking
@@ -12,8 +12,9 @@ User=@DEFAULT_USER@
 Group=@DEFAULT_GROUP@
 LimitNOFILE=65536
 LimitNPROC=65536
+LimitCORE=@CORE_DUMPS@
 
-ExecStart=/usr/bin/env bash -c "LD_PRELOAD=$(ldconfig -p | grep -m1 libjemalloc | awk '{print $1}') exec @ENGINE_BINDIR@/WriteEngineServer"
+ExecStart=/usr/bin/env bash -c "@WRITEENGINE_ALLOC_CONFIG@ @LD_PRELOAD_STRING@ exec @ENGINE_BINDIR@/WriteEngineServer"
 
 Restart=on-failure
 TimeoutStopSec=20

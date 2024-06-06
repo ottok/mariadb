@@ -26,11 +26,9 @@
 #include <ctime>
 #include <algorithm>
 #include <unistd.h>
-#ifndef _MSC_VER
 #include <arpa/inet.h>
 #if __FreeBSD__
 #include <sys/socket.h>
-#endif
 #endif
 using namespace std;
 
@@ -149,7 +147,7 @@ struct WEClientRunner
 };
 
 template <typename T>
-struct QueueShutdown : public unary_function<T&, void>
+struct QueueShutdown
 {
   void operator()(T& x)
   {
@@ -497,7 +495,6 @@ void WEClients::write_to_all(const messageqcpp::ByteStream& msg)
   }
 
   ClientList::iterator itor = fPmConnections.begin();
-
   while (itor != fPmConnections.end())
   {
     if (itor->second != NULL)

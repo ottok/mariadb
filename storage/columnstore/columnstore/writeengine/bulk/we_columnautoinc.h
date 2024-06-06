@@ -23,8 +23,7 @@
  * Contains classes to manage the "next value" for an auto-increment column.
  */
 
-#ifndef WE_COLUMNAUTOINC_H_
-#define WE_COLUMNAUTOINC_H_
+#pragma once
 
 #include <string>
 #include <boost/thread/mutex.hpp>
@@ -122,5 +121,3 @@ class ColumnAutoIncIncremental : public ColumnAutoInc
 };
 
 }  // namespace WriteEngine
-
-#endif  // WE_COLUMNAUTOINC_H_

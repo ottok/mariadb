@@ -460,6 +460,20 @@ static void init_federated_psi_keys(void)
 #endif /* HAVE_PSI_INTERFACE */
 
 /*
+  Federated doesn't need costs.disk_read_ratio as everything is one a
+  remote server and nothing is cached locally
+*/
+
+static void federated_update_optimizer_costs(OPTIMIZER_COSTS *costs)
+{
+  /*
+    Setting disk_read_ratios to 1.0, ensures we are using the costs
+    from rnd_pos_time() and scan_time()
+  */
+  costs->disk_read_ratio= 1.0;
+}
+
+/*
   Initialize the federated handler.
 
   SYNOPSIS
@@ -485,6 +499,7 @@ int federated_db_init(void *p)
   federated_hton->rollback= federated_rollback;
   federated_hton->create= federated_create_handler;
   federated_hton->drop_table= [](handlerton *, const char*) { return -1; };
+  federated_hton->update_optimizer_costs= federated_update_optimizer_costs;
   federated_hton->flags= HTON_ALTER_NOT_SUPPORTED | HTON_NO_PARTITION;
 
   /*
@@ -909,7 +924,6 @@ ha_federated::ha_federated(handlerton *hton,
   bzero(&bulk_insert, sizeof(bulk_insert));
 }
 
-
 /*
   Convert MySQL result set row to handler internal format
 
@@ -994,7 +1008,7 @@ static bool emit_key_part_element(String *to, KEY_PART_INFO *part,
 
     *buf++= '0';
     *buf++= 'x';
-    buf= octet2hex(buf, (char*) ptr, len);
+    buf= octet2hex(buf, ptr, len);
     if (to->append((char*) buff, (uint)(buf - buff)))
       DBUG_RETURN(1);
   }
@@ -2879,11 +2893,11 @@ int ha_federated::info(uint flag)
                                                       &error);
 
     /*
-      size of IO operations (This is based on a good guess, no high science
-      involved)
+      Size of IO operations. This is used to calculate time to scan a table.
+      See handler.cc::keyread_time
     */
     if (flag & HA_STATUS_CONST)
-      stats.block_size= 4096;
+      stats.block_size= 1500;                   // Typical size of an TCP packet
 
   }
 
@@ -3126,6 +3140,7 @@ int ha_federated::real_connect()
 {
   char buffer[FEDERATED_QUERY_BUFFER_SIZE];
   String sql_query(buffer, sizeof(buffer), &my_charset_bin);
+  my_bool my_false= 0;
   DBUG_ENTER("ha_federated::real_connect");
 
   DBUG_ASSERT(mysql == NULL);
@@ -3142,16 +3157,12 @@ int ha_federated::real_connect()
     of table
   */
   /* this sets the csname like 'set names utf8' */
-  mysql_options(mysql,MYSQL_SET_CHARSET_NAME,
-                this->table->s->table_charset->cs_name.str);
+  mysql_options(mysql,MYSQL_SET_CHARSET_NAME, table->s->table_charset->cs_name.str);
+  mysql_options(mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &my_false);
 
   sql_query.length(0);
-  if (!mysql_real_connect(mysql,
-                          share->hostname,
-                          share->username,
-                          share->password,
-                          share->database,
-                          share->port,
+  if (!mysql_real_connect(mysql, share->hostname, share->username,
+                          share->password, share->database, share->port,
                           share->socket, 0))
   {
     stash_remote_error();

@@ -24,16 +24,11 @@
  * class XXX interface
  */
 
-#ifndef RESOURCENODE_H_
-#define RESOURCENODE_H_
+#pragma once
 
 #include "rgnode.h"
 
-#if defined(_MSC_VER) && defined(xxxRESOURCENODE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace BRM
 {
@@ -86,5 +81,3 @@ struct RNEquals
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

@@ -21,8 +21,7 @@
  *******************************************************************************/
 /** @file */
 
-#ifndef _WE_LOG_H_
-#define _WE_LOG_H_
+#pragma once
 
 #include <time.h>
 #include <sys/types.h>
@@ -36,11 +35,7 @@
 
 #include <boost/thread.hpp>
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -110,5 +105,3 @@ class Log : public WEObj
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_LOG_H_

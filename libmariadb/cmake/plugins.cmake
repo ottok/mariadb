@@ -12,7 +12,7 @@ include(${CC_SOURCE_DIR}/cmake/sign.cmake)
 
 FUNCTION(REGISTER_PLUGIN)
 
-  SET(one_value_keywords TARGET DEFAULT TYPE)
+  SET(one_value_keywords TARGET DISABLED TYPE DEFAULT)
   SET(multi_value_keywords CONFIGURATIONS SOURCES LIBRARIES INCLUDES COMPILE_OPTIONS)
 
   cmake_parse_arguments(CC_PLUGIN
@@ -43,12 +43,19 @@ FUNCTION(REGISTER_PLUGIN)
     message(FATAL_ERROR "Invalid plugin type ${CC_PLUGIN_DEFAULT}. Allowed plugin types are ${CC_PLUGIN_CONFIGURATIONS}")
   endif()
 
+# check if plugin is disabled
+  string(TOUPPER "${CC_PLUGIN_DISABLED}" CC_PLUGIN_DISABLED)
+  if("${CC_PLUGIN_DISABLED}" STREQUAL "YES")
+    set(PLUGINS_DISABLED ${PLUGINS_DISABLED} ${CC_PLUGIN_TARGET} PARENT_SCOPE)
+  endif()
+
   if(NOT ${CC_PLUGIN_DEFAULT} STREQUAL "OFF")
     set(PLUGIN_${CC_PLUGIN_TARGET}_TYPE ${CC_PLUGIN_TYPE})
 
-    if(${CC_PLUGIN_DEFAULT} STREQUAL "DYNAMIC")
+    if(${CC_PLUGIN_DEFAULT} MATCHES "DYNAMIC")
 
       set(PLUGINS_DYNAMIC ${PLUGINS_DYNAMIC} ${CC_PLUGIN_TARGET} PARENT_SCOPE)
+      add_library(${CC_PLUGIN_TARGET} MODULE ${CC_PLUGIN_SOURCES})
       if(WIN32)
         set(target ${CC_PLUGIN_TARGET})
         set(FILE_TYPE "VFT_DLL")
@@ -58,9 +65,9 @@ FUNCTION(REGISTER_PLUGIN)
         configure_file(${CC_SOURCE_DIR}/win/resource.rc.in
                        ${CC_BINARY_DIR}/win/${target}.rc
                        @ONLY)
-        set(CC_PLUGIN_SOURCES ${CC_PLUGIN_SOURCES} ${CC_BINARY_DIR}/win/${target}.rc ${CC_SOURCE_DIR}/plugins/plugin.def)
+        target_sources(${CC_PLUGIN_TARGET} PRIVATE
+                       ${CC_BINARY_DIR}/win/${target}.rc ${CC_SOURCE_DIR}/plugins/plugin.def)
       endif()
-      add_library(${CC_PLUGIN_TARGET} MODULE ${CC_PLUGIN_SOURCES})
       target_link_libraries(${CC_PLUGIN_TARGET} ${CC_PLUGIN_LIBRARIES})
       set_target_properties(${CC_PLUGIN_TARGET} PROPERTIES PREFIX "")
       set_target_properties(${CC_PLUGIN_TARGET}
@@ -81,7 +88,8 @@ FUNCTION(REGISTER_PLUGIN)
         SIGN_TARGET(${target})
       endif()
       INSTALL_PLUGIN(${CC_PLUGIN_TARGET} ${CMAKE_CURRENT_BINARY_DIR})
-    elseif(${CC_PLUGIN_DEFAULT} STREQUAL "STATIC")
+    endif()
+    if(${CC_PLUGIN_DEFAULT} MATCHES "STATIC")
       set(PLUGINS_STATIC ${PLUGINS_STATIC} ${CC_PLUGIN_TARGET} PARENT_SCOPE)
       set(LIBMARIADB_PLUGIN_CFLAGS ${LIBMARIADB_PLUGIN_CFLAGS} ${CC_PLUGIN_COMPILE_OPTIONS} PARENT_SCOPE)
       set(LIBMARIADB_PLUGIN_INCLUDES ${LIBMARIADB_PLUGIN_INCLUDES} ${CC_PLUGIN_INCLUDES} PARENT_SCOPE)

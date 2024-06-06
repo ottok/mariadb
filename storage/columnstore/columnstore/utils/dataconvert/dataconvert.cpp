@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <type_traits>
+#include "mcs_decimal.h"
 using namespace std;
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string.hpp>
@@ -43,34 +44,10 @@ using namespace boost::algorithm;
 #include "dataconvert.h"
 #undef DATACONVERT_DLLEXPORT
 
-#ifndef __linux__
-typedef uint32_t ulong;
-#endif
-
 using namespace logging;
 
 namespace
 {
-const int64_t columnstore_precision[19] = {0,
-                                           9,
-                                           99,
-                                           999,
-                                           9999,
-                                           99999,
-                                           999999,
-                                           9999999,
-                                           99999999,
-                                           999999999,
-                                           9999999999LL,
-                                           99999999999LL,
-                                           999999999999LL,
-                                           9999999999999LL,
-                                           99999999999999LL,
-                                           999999999999999LL,
-                                           9999999999999999LL,
-                                           99999999999999999LL,
-                                           999999999999999999LL};
-
 template <class T>
 bool from_string(T& t, const std::string& s, std::ios_base& (*f)(std::ios_base&))
 {
@@ -249,24 +226,6 @@ void number_int_value(const string& data, cscDataType typeCode,
         ++dpos;
         leftStr = valStr.substr(dpos);
       }
-
-// add above to keep the old behavior, to comply with tdriver
-// uncomment code below to support negative scale
-#if 0
-            // check if enough digits in the integer part
-            size_t spos = intPart.find_first_of("0123456789");
-
-            if (string::npos == spos)
-                spos = intPart.length();
-
-            size_t len = intPart.substr(spos).length();
-
-            if (len < scale)
-                intPart.insert(spos, scale - len, '0');  // padding digit 0, not null.
-
-            leftStr = intPart.substr(intPart.length() - scale) + leftStr;
-            intPart.erase(intPart.length() - scale, scale);
-#endif
     }
 
     valStr = intPart;
@@ -496,20 +455,16 @@ void number_int_value(const string& data, cscDataType typeCode,
   if ((typeCode == datatypes::SystemCatalog::DECIMAL) || (typeCode == datatypes::SystemCatalog::UDECIMAL) ||
       (ct.scale > 0))
   {
-    T rangeUp, rangeLow;
-
-    if (ct.precision < 19)
+    auto precision =
+        ct.precision == rowgroup::MagicPrecisionForCountAgg ? datatypes::INT128MAXPRECISION : ct.precision;
+    if (precision > datatypes::INT128MAXPRECISION || precision < 0)
     {
-      rangeUp = (T)columnstore_precision[ct.precision];
-    }
-    else
-    {
-      bool dummy = false;
-      char* ep = NULL;
-      rangeUp = (T)dataconvert::strtoll128(columnstore_big_precision[ct.precision - 19].c_str(), dummy, &ep);
+      throw QueryDataExcept("Unsupported precision " + std::to_string(precision) + " converting DECIMAL ",
+                            dataTypeErr);
     }
 
-    rangeLow = -rangeUp;
+    T rangeUp = dataconvert::decimalRangeUp<T>(precision);
+    T rangeLow = -rangeUp;
 
     if (intVal > rangeUp)
     {
@@ -1131,7 +1086,7 @@ bool mysql_str_to_time(const string& input, Time& output, long decimals)
       output.minute = 59;
       output.second = 59;
       output.msecond = exp10(decimals) - 1;
-      output.is_neg = 1;
+      output.is_neg = -1;
     }
     // If neither of the above match then we return a 0 time
     else
@@ -1452,36 +1407,12 @@ boost::any DataConvert::StringToFloat(cscDataType typeCode, const std::string& d
   {
     float floatvalue;
     errno = 0;
-#ifdef _MSC_VER
-    double dval = strtod(data.c_str(), 0);
-
-    if (dval > MAX_FLOAT)
-    {
-      pushWarning = true;
-      floatvalue = MAX_FLOAT;
-    }
-    else if (dval < MIN_FLOAT)
-    {
-      pushWarning = true;
-      floatvalue = MIN_FLOAT;
-    }
-    else
-    {
-      floatvalue = (float)dval;
-    }
-#else
     floatvalue = strtof(data.c_str(), 0);
-#endif
 
     if (errno == ERANGE)
     {
       pushWarning = true;
-#ifdef _MSC_VER
-
-      if (abs(floatvalue) == HUGE_VAL)
-#else
       if (abs(floatvalue) == HUGE_VALF)
-#endif
       {
         if (floatvalue > 0)
           floatvalue = MAX_FLOAT;
@@ -1531,12 +1462,7 @@ boost::any DataConvert::StringToDouble(cscDataType typeCode, const std::string& 
     if (errno == ERANGE)
     {
       pushWarning = true;
-#ifdef _MSC_VER
-
-      if (abs(doublevalue) == HUGE_VAL)
-#else
       if (abs(doublevalue) == HUGE_VALL)
-#endif
       {
         if (doublevalue > 0)
           value = MAX_DOUBLE;
@@ -2357,16 +2283,16 @@ std::string DataConvert::timestampToString1(long long timestampvalue, long timez
   return buf;
 }
 
-std::string DataConvert::timeToString1(long long datetimevalue)
+std::string DataConvert::timeToString1(long long timevalue)
 {
   // @bug 4703 abandon multiple ostringstream's for conversion
-  DateTime dt(datetimevalue);
-  const int TIMETOSTRING1_LEN = 14;  // HHMMSSmmmmmm\0
+  Time t(timevalue);
+  const int TIMETOSTRING1_LEN = 22;  // HHMMSSmmmmmm\0
   char buf[TIMETOSTRING1_LEN];
 
   char* outbuf = buf;
 
-  sprintf(outbuf, "%02d%02d%02d%06d", dt.hour, dt.minute, dt.second, dt.msecond);
+  sprintf(outbuf, "%02d%02d%02d%06d", t.hour, t.minute, t.second, t.msecond);
   return buf;
 }
 
@@ -2375,7 +2301,17 @@ int64_t DataConvert::dateToInt(const string& date)
   return stringToDate(date);
 }
 
+int64_t DataConvert::dateToInt(const utils::NullString& date)
+{
+  return stringToDate(date);
+}
+
 int64_t DataConvert::datetimeToInt(const string& datetime)
+{
+  return stringToDatetime(datetime);
+}
+
+int64_t DataConvert::datetimeToInt(const utils::NullString& datetime)
 {
   return stringToDatetime(datetime);
 }
@@ -2402,6 +2338,15 @@ int64_t DataConvert::stringToDate(const string& data)
   else
     return -1;
 }
+int64_t DataConvert::stringToDate(const utils::NullString& data)
+{
+  if (data.isNull())
+  {
+    return -1;
+  }
+
+  return stringToDate(data.unsafeStringRef());
+}
 
 int64_t DataConvert::stringToDatetime(const string& data, bool* date)
 {
@@ -2413,6 +2358,20 @@ int64_t DataConvert::stringToDatetime(const string& data, bool* date)
     return -1;
 }
 
+int64_t DataConvert::stringToDatetime(const utils::NullString& data, bool* date)
+{
+  if (data.isNull())
+  {
+    if (date)
+    {
+      *date = false;
+    }
+    return -1;
+  }
+
+  return stringToDatetime(data.unsafeStringRef(), date);
+}
+
 int64_t DataConvert::stringToTimestamp(const string& data, long timeZone)
 {
   TimeStamp aTimestamp;
@@ -2421,6 +2380,15 @@ int64_t DataConvert::stringToTimestamp(const string& data, long timeZone)
     return getUInt64LE((const char*)&aTimestamp);
   else
     return -1;
+}
+
+int64_t DataConvert::stringToTimestamp(const utils::NullString& data, long timeZone)
+{
+  if (data.isNull())
+  {
+    return -1;
+  }
+  return stringToTimestamp(data.unsafeStringRef(), timeZone);
 }
 
 /* This is really painful and expensive b/c it seems the input is not normalized or
@@ -2815,6 +2783,11 @@ int64_t DataConvert::intToTime(int64_t data, bool fromString)
   return getSInt64LE((const char*)&atime);
 }
 
+int64_t DataConvert::stringToTime(const utils::NullString& data)
+{
+  return stringToTime(data.safeString(""));
+}
+
 int64_t DataConvert::stringToTime(const string& data)
 {
   // MySQL supported time value format 'D HHH:MM:SS.fraction'
@@ -2847,7 +2820,8 @@ int64_t DataConvert::stringToTime(const string& data)
   {
     if (!hasDate)
     {
-      day = strtol(data.substr(0, pos).c_str(), &end, 10);
+      std::string tmpDataSegment = data.substr(0, pos);
+      day = strtol(tmpDataSegment.c_str(), &end, 10);
 
       if (*end != '\0')
         return -1;
@@ -2934,7 +2908,7 @@ int64_t DataConvert::stringToTime(const string& data)
 }
 
 void DataConvert::joinColTypeForUnion(datatypes::SystemCatalog::TypeHolderStd& unionedType,
-                                      const datatypes::SystemCatalog::TypeHolderStd& type)
+                                      const datatypes::SystemCatalog::TypeHolderStd& type, unsigned int& rc)
 {
   // limited support for VARBINARY, no implicit conversion.
   if (type.colDataType == datatypes::SystemCatalog::VARBINARY ||
@@ -2974,7 +2948,31 @@ void DataConvert::joinColTypeForUnion(datatypes::SystemCatalog::TypeHolderStd& u
         case datatypes::SystemCatalog::UBIGINT:
         case datatypes::SystemCatalog::UDECIMAL:
 
-          unionedType.precision = std::max(type.precision, unionedType.precision);
+          if (type.scale != 0 && (unionedType.scale != 0 || isDecimal(unionedType.colDataType)))
+          {
+            const unsigned int digitsBeforeDecimal = type.precision - type.scale;
+            const unsigned int digitsBeforeDecimalUnion = unionedType.precision - unionedType.scale;
+
+            if ((std::max(digitsBeforeDecimal, digitsBeforeDecimalUnion) +
+                 std::max(type.scale, unionedType.scale)) > datatypes::INT128MAXPRECISION)
+            {
+              rc = logging::ERR_UNION_DECIMAL_OVERFLOW;
+              return;
+            }
+          }
+
+          // Handle the scenario where the upstream code assigns special values of 9999
+          // and -1 as the precision of the unionedType.
+          if ((unionedType.precision == 9999 || unionedType.precision == -1) &&
+              (type.precision != 9999 && type.precision != -1))
+          {
+            unionedType.precision = type.precision;
+          }
+          else
+          {
+            unionedType.precision = std::max(type.precision, unionedType.precision);
+          }
+
           unionedType.scale = std::max(type.scale, unionedType.scale);
 
           if (datatypes::Decimal::isWideDecimalTypeByPrecision(unionedType.precision))
@@ -2984,25 +2982,29 @@ void DataConvert::joinColTypeForUnion(datatypes::SystemCatalog::TypeHolderStd& u
             break;
           }
 
-          if (type.colWidth > unionedType.colWidth)
+          if (type.colDataType == unionedType.colDataType)
           {
-            unionedType.colDataType = type.colDataType;
-            unionedType.colWidth = type.colWidth;
+            if (type.colWidth > unionedType.colWidth)
+              unionedType.colWidth = type.colWidth;
+          }
+          else if (sameSignednessInteger(unionedType.colDataType, type.colDataType))
+          {
+            // Keep the signedness on the larger data type.
+            if (type.colWidth > unionedType.colWidth)
+            {
+              unionedType.colDataType = type.colDataType;
+              unionedType.colWidth = type.colWidth;
+            }
+          }
+          else if (differentSignednessInteger(unionedType.colDataType, type.colDataType))
+          {
+            // unionedType must be signed integer with upcasted size to prevent overflow & underflow.
+            if (type.colWidth > unionedType.colWidth)
+              unionedType.colDataType = type.colDataType;
+            promoteSignedInteger(unionedType);
           }
 
-          // If same size but different signedness
-          if (type.colWidth == unionedType.colWidth &&
-              ((!isUnsigned(unionedType.colDataType) && isUnsigned(type.colDataType)) ||
-               (!isUnsigned(type.colDataType) && isUnsigned(unionedType.colDataType))))
-          {
-            unionedType.colDataType = datatypes::SystemCatalog::DECIMAL;
-            unionedType.colWidth = datatypes::Decimal::isWideDecimalTypeByPrecision(unionedType.precision)
-                                       ? datatypes::MAXDECIMALWIDTH
-                                       : datatypes::MAXLEGACYWIDTH;
-          }
-
-          if (type.colDataType == datatypes::SystemCatalog::DECIMAL ||
-              type.colDataType == datatypes::SystemCatalog::UDECIMAL)
+          if (isDecimal(type.colDataType))
           {
             unionedType.colDataType = datatypes::SystemCatalog::DECIMAL;
           }
@@ -3038,6 +3040,10 @@ void DataConvert::joinColTypeForUnion(datatypes::SystemCatalog::TypeHolderStd& u
         case datatypes::SystemCatalog::UFLOAT:
         case datatypes::SystemCatalog::UDOUBLE:
         case datatypes::SystemCatalog::LONGDOUBLE:
+          if (datatypes::isWideDecimalType(type.colDataType, type.colWidth))
+            unionedType = type;
+          break;
+
         default: break;
       }
 

@@ -2150,7 +2150,7 @@ next_page:
     }
 
     next_page= false;
-    block= btr_block_get(*clust_index, next_page_no, RW_S_LATCH, false, &mtr);
+    block= btr_block_get(*clust_index, next_page_no, RW_S_LATCH, &mtr);
     if (!block)
       goto non_empty;
     page_cur_set_before_first(block, cur);
@@ -10319,7 +10319,16 @@ commit_try_rebuild(
 	"parent" table. */
 	if (!user_table->space) {
 		rebuilt_table->file_unreadable = true;
+#if defined __GNUC__ && !defined __clang__
+# pragma GCC diagnostic push
+# if __GNUC__ < 12 || defined WITH_UBSAN
+#  pragma GCC diagnostic ignored "-Wconversion"
+# endif
+#endif
 		rebuilt_table->flags2 |= DICT_TF2_DISCARDED;
+#if defined __GNUC__ && !defined __clang__
+# pragma GCC diagnostic pop
+#endif
 	}
 
 	/* We can now rename the old table as a temporary table,
@@ -10346,6 +10355,7 @@ commit_try_rebuild(
 
 	/* We must be still holding a table handle. */
 	DBUG_ASSERT(user_table->get_ref_count() == 1);
+	rebuilt_table->row_id = uint64_t{user_table->row_id};
 	DBUG_EXECUTE_IF("ib_rebuild_cannot_rename", error = DB_ERROR;);
 
 	switch (error) {

@@ -17,8 +17,7 @@
 
 //  $Id: wf_row_number.h 3868 2013-06-06 22:13:05Z xlou $
 
-#ifndef UTILS_WF_ROW_NUMBER_H
-#define UTILS_WF_ROW_NUMBER_H
+#pragma once
 
 #include <set>
 #include "windowfunctiontype.h"
@@ -46,4 +45,3 @@ class WF_row_number : public WindowFunctionType
 
 }  // namespace windowfunction
 
-#endif  // UTILS_WF_ROW_NUMBER_H

@@ -46,7 +46,7 @@ if ($tmp)
   --echo Until_Condition	#
   --echo Until_Log_File	#
   --echo Until_Log_Pos	#
-  --echo Master_SSL_Allowed	No
+  --echo Master_SSL_Allowed	Yes
   --echo Master_SSL_CA_File	
   --echo Master_SSL_CA_Path	
   --echo Master_SSL_Cert	
@@ -105,7 +105,7 @@ select count(*) from mysql.proc;
 call mtr.check_testcase();
 
 let $datadir=`select @@datadir`;
-list_files $datadir mysql_upgrade_info;
+list_files $datadir mariadb_upgrade_info;
 list_files $datadir/test #sql*;
 list_files $datadir/mysql #sql*;
 

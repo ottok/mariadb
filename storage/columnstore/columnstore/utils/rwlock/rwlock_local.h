@@ -24,17 +24,12 @@
  * class RWLock_local interface
  */
 
-#ifndef RWLock_local_LOCAL_H_
-#define RWLock_local_LOCAL_H_
+#pragma once
 
 #include <boost/thread.hpp>
 #include <boost/thread/condition.hpp>
 
-#if defined(_MSC_VER) && defined(xxxRWLOCK_LOCAL_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace rwlock
 {
@@ -195,5 +190,3 @@ class ScopedRWLock_local
 #undef EXPORT
 
 }  // namespace rwlock
-
-#endif

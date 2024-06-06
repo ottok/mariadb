@@ -19,8 +19,7 @@
  * $Id: we_ddlcommandproc.h 3043 2011-08-29 22:03:03Z chao $
  *
  *******************************************************************************/
-#ifndef WE_DMLCOMMANDPROC_H__
-#define WE_DMLCOMMANDPROC_H__
+#pragma once
 
 #include <unistd.h>
 #include <boost/scoped_ptr.hpp>
@@ -40,12 +39,9 @@
 #include "we_rbmetawriter.h"
 #include "rowgroup.h"
 #include "we_log.h"
+#include "nullstring.h"
 
-#if defined(_MSC_VER) && defined(xxxDDLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace WriteEngine
 {
@@ -102,7 +98,8 @@ class WE_DMLCommandProc
   EXPORT uint8_t getWrittenLbids(messageqcpp::ByteStream& bs, std::string& err, ByteStream::quadbyte& PMId);
   int validateColumnHWMs(execplan::CalpontSystemCatalog::RIDList& ridList,
                          boost::shared_ptr<execplan::CalpontSystemCatalog> systemCatalogPtr,
-                         const std::vector<DBRootExtentInfo>& segFileInfo, const char* stage);
+                         const std::vector<DBRootExtentInfo>& segFileInfo, const char* stage,
+                         bool hasAuxCol);
 
  private:
   WriteEngineWrapper fWEWrapper;
@@ -127,6 +124,10 @@ class WE_DMLCommandProc
                                            const std::vector<BRM::FileInfo>& files,
                                            const std::vector<BRM::OID_t>& oidsToFlush, std::string& err);
 
+  void processAuxCol(const std::vector<utils::NullString>& origVals,
+                     WriteEngine::ColValueList& colValuesList,
+                     WriteEngine::DictStrList& dicStringList);
+
   bool fIsFirstBatchPm;
   std::map<uint32_t, rowgroup::RowGroup*> rowGroups;
   std::map<uint32_t, dmlpackage::UpdateDMLPackage> cpackages;
@@ -138,4 +139,3 @@ class WE_DMLCommandProc
 
 }  // namespace WriteEngine
 #undef EXPORT
-#endif

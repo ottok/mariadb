@@ -20,8 +20,7 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef _WE_XMLGENDATA_H_
-#define _WE_XMLGENDATA_H_
+#pragma once
 
 #include <iosfwd>
 #include <string>
@@ -29,11 +28,7 @@
 #include <map>
 #include "calpontsystemcatalog.h"
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace WriteEngine
 {
@@ -53,24 +48,12 @@ class XMLGenData
   // Valid parms that can be stored and retrieved from XMLGenData
   EXPORT const static std::string DELIMITER;
   EXPORT const static std::string DESCRIPTION;
-#if defined(_MSC_VER) && !defined(WRITEENGINE_DLLEXPORT)
-  __declspec(dllimport)
-#endif
       EXPORT const static std::string ENCLOSED_BY_CHAR;
-#if defined(_MSC_VER) && !defined(WRITEENGINE_DLLEXPORT)
-  __declspec(dllimport)
-#endif
       EXPORT const static std::string ESCAPE_CHAR;
-#if defined(_MSC_VER) && !defined(WRITEENGINE_DLLEXPORT)
-  __declspec(dllimport)
-#endif
       EXPORT const static std::string JOBID;
   EXPORT const static std::string MAXERROR;
   EXPORT const static std::string NAME;
   EXPORT const static std::string PATH;
-#if defined(_MSC_VER) && !defined(WRITEENGINE_DLLEXPORT)
-  __declspec(dllimport)
-#endif
       EXPORT const static std::string RPT_DEBUG;
   EXPORT const static std::string USER;
   EXPORT const static std::string NO_OF_READ_BUFFER;
@@ -118,5 +101,3 @@ class XMLGenData
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif

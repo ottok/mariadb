@@ -18,11 +18,10 @@
 
 #include "client_priv.h"
 #include <sslopt-vars.h>
-#include <../scripts/mysql_fix_privilege_tables_sql.c>
-
-#include <welcome_copyright_notice.h> /* ORACLE_WELCOME_COPYRIGHT_NOTICE */
+#include <../scripts/mariadb_fix_privilege_tables_sql.c>
 
 #define VER "2.1"
+#include <welcome_copyright_notice.h> /* ORACLE_WELCOME_COPYRIGHT_NOTICE */
 
 #ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>
@@ -302,8 +301,7 @@ get_one_option(const struct my_option *opt, const char *argument,
   switch (opt->id) {
 
   case '?':
-    printf("%s  Ver %s Distrib %s, for %s (%s)\n",
-           my_progname, VER, MYSQL_SERVER_VERSION, SYSTEM_TYPE, MACHINE_TYPE);
+    print_version();
     puts(ORACLE_WELCOME_COPYRIGHT_NOTICE("2000"));
     puts("MariaDB utility for upgrading databases to new MariaDB versions.");
     print_defaults("my", load_default_groups);
@@ -709,7 +707,7 @@ static int get_upgrade_info_file_name(char* name)
 
   dynstr_free(&ds_datadir);
 
-  fn_format(name, "mysql_upgrade_info", name, "", MYF(0));
+  fn_format(name, "mariadb_upgrade_info", name, "", MYF(0));
   DBUG_PRINT("exit", ("name: %s", name));
   DBUG_RETURN(0);
 }
@@ -718,7 +716,7 @@ static char upgrade_info_file[FN_REFLEN]= {0};
 
 
 /*
-  Open or create mysql_upgrade_info file in servers data dir.
+  Open or create mariadb_upgrade_info file in servers data dir.
 
   Take a lock to ensure there cannot be any other mysql_upgrades
   running concurrently
@@ -733,10 +731,19 @@ const char *create_error_message=
 static void open_mysql_upgrade_file()
 {
   char errbuff[80];
+  char old_upgrade_info_file[FN_REFLEN]= {0};
+  size_t path_len;
+
   if (get_upgrade_info_file_name(upgrade_info_file))
   {
     die("Upgrade failed");
   }
+
+  // Delete old mysql_upgrade_info file
+  dirname_part(old_upgrade_info_file, upgrade_info_file, &path_len);
+  fn_format(old_upgrade_info_file, "mysql_upgrade_info", old_upgrade_info_file, "", MYF(0));
+  my_delete(old_upgrade_info_file, MYF(MY_IGNORE_ENOENT));
+
   if ((info_file= my_create(upgrade_info_file, 0,
                             O_RDWR | O_NOFOLLOW,
                             MYF(0))) < 0)
@@ -793,7 +800,7 @@ static int faulty_server_versions(const char *version)
 }
 
 /*
-  Read the content of mysql_upgrade_info file and
+  Read the content of mariadb_upgrade_info file and
   compare the version number form file against
   version number which mysql_upgrade was compiled for
 
@@ -870,15 +877,15 @@ static int upgrade_already_done(int silent)
   if (!silent)
   {
     verbose("This installation of MariaDB is already upgraded to %s.\n"
-            "There is no need to run mysql_upgrade again for %s.",
+            "There is no need to run mariadb-upgrade again for %s.",
             upgrade_from_version, version);
     if (!opt_check_upgrade)
-      verbose("You can use --force if you still want to run mysql_upgrade");
+      verbose("You can use --force if you still want to run mariadb-upgrade");
   }
   return 0;
 }
 
-static void finish_mysql_upgrade_info_file(void)
+static void finish_mariadb_upgrade_info_file(void)
 {
   if (info_file < 0)
     return;
@@ -1335,7 +1342,7 @@ static int run_sql_fix_privilege_tables(void)
     a forked mysql client, because the script uses session variables
     and prepared statements.
   */
-  for ( query_ptr= &mysql_fix_privilege_tables[0];
+  for ( query_ptr= &mariadb_fix_privilege_tables[0];
         *query_ptr != NULL;
         query_ptr++
       )
@@ -1491,7 +1498,7 @@ int main(int argc, char **argv)
     printf("The --upgrade-system-tables option was used, user tables won't be touched.\n");
 
   /*
-    Read the mysql_upgrade_info file to check if mysql_upgrade
+    Read the mariadb_upgrade_info file to check if mysql_upgrade
     already has been run for this installation of MariaDB
   */
   if (!opt_force && !upgrade_already_done(0))
@@ -1519,7 +1526,7 @@ int main(int argc, char **argv)
   verbose("OK");
 
   /* Finish writing indicating upgrade has been performed */
-  finish_mysql_upgrade_info_file();
+  finish_mariadb_upgrade_info_file();
 
   DBUG_ASSERT(phase == phases_total);
 

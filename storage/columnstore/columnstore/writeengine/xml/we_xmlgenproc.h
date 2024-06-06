@@ -20,8 +20,7 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef WE_XMLGENPROC_H
-#define WE_XMLGENPROC_H
+#pragma once
 
 #include <libxml/parser.h>
 #include <libxml/xmlwriter.h>
@@ -32,11 +31,7 @@
 #include "we_log.h"
 #include "we_xmlgendata.h"
 
-#if defined(_MSC_VER) && defined(WRITEENGINEXMLGENPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace WriteEngine
 {
@@ -135,5 +130,3 @@ class XMLGenProc
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif

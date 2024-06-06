@@ -23,8 +23,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef ARITHMETICOPERATOR_H
-#define ARITHMETICOPERATOR_H
+#pragma once
 #include <string>
 #include <iosfwd>
 #include <cmath>
@@ -32,6 +31,7 @@
 
 #include "operator.h"
 #include "parsetree.h"
+#include "mcs_datatype.h"
 
 namespace messageqcpp
 {
@@ -55,7 +55,7 @@ class ArithmeticOperator : public Operator
    *
    * deep copy of this pointer and return the copy
    */
-  inline virtual ArithmeticOperator* clone() const
+  inline virtual ArithmeticOperator* clone() const override
   {
     return new ArithmeticOperator(*this);
   }
@@ -72,15 +72,15 @@ class ArithmeticOperator : public Operator
   /**
    * The serialization interface
    */
-  virtual void serialize(messageqcpp::ByteStream&) const;
-  virtual void unserialize(messageqcpp::ByteStream&);
+  virtual void serialize(messageqcpp::ByteStream&) const override;
+  virtual void unserialize(messageqcpp::ByteStream&) override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
    * Do a deep, strict (as opposed to semantic) equivalence test.
    * @return true iff every member of t is a duplicate copy of every member of this; false otherwise
    */
-  virtual bool operator==(const TreeNode* t) const;
+  virtual bool operator==(const TreeNode* t) const override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -94,7 +94,7 @@ class ArithmeticOperator : public Operator
    * Do a deep, strict (as opposed to semantic) equivalence test.
    * @return false iff every member of t is a duplicate copy of every member of this; true otherwise
    */
-  virtual bool operator!=(const TreeNode* t) const;
+  virtual bool operator!=(const TreeNode* t) const override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -107,46 +107,50 @@ class ArithmeticOperator : public Operator
    *                 F&E framework                           *
    ***********************************************************/
   using Operator::evaluate;
-  inline virtual void evaluate(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop);
+  inline virtual void evaluate(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop) override;
 
   using Operator::getStrVal;
-  virtual const std::string& getStrVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual const utils::NullString& getStrVal(rowgroup::Row& row, bool& isNull, ParseTree* lop,
+                                             ParseTree* rop) override
   {
-    evaluate(row, isNull, lop, rop);
-    return TreeNode::getStrVal(fTimeZone);
+    bool localIsNull = false;
+    evaluate(row, localIsNull, lop, rop);
+    isNull = isNull || localIsNull;
+    return localIsNull ? fResult.strVal.dropString() : TreeNode::getStrVal(fTimeZone);
   }
   using Operator::getIntVal;
-  virtual int64_t getIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual int64_t getIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
     return TreeNode::getIntVal();
   }
   using Operator::getUintVal;
-  virtual uint64_t getUintVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual uint64_t getUintVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
     return TreeNode::getUintVal();
   }
   using Operator::getFloatVal;
-  virtual float getFloatVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual float getFloatVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
     return TreeNode::getFloatVal();
   }
   using Operator::getDoubleVal;
-  virtual double getDoubleVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual double getDoubleVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
     return TreeNode::getDoubleVal();
   }
   using Operator::getLongDoubleVal;
-  virtual long double getLongDoubleVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual long double getLongDoubleVal(rowgroup::Row& row, bool& isNull, ParseTree* lop,
+                                       ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
     return TreeNode::getLongDoubleVal();
   }
   using Operator::getDecimalVal;
-  virtual IDB_Decimal getDecimalVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual IDB_Decimal getDecimalVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
 
@@ -165,31 +169,32 @@ class ArithmeticOperator : public Operator
     return TreeNode::getDecimalVal();
   }
   using Operator::getDateIntVal;
-  virtual int32_t getDateIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual int32_t getDateIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
     return TreeNode::getDateIntVal();
   }
   using Operator::getDatetimeIntVal;
-  virtual int64_t getDatetimeIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual int64_t getDatetimeIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
     return TreeNode::getDatetimeIntVal();
   }
   using Operator::getTimestampIntVal;
-  virtual int64_t getTimestampIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual int64_t getTimestampIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop,
+                                     ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
     return TreeNode::getTimestampIntVal();
   }
   using Operator::getTimeIntVal;
-  virtual int64_t getTimeIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual int64_t getTimeIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
     return TreeNode::getTimeIntVal();
   }
   using Operator::getBoolVal;
-  virtual bool getBoolVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual bool getBoolVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop) override
   {
     evaluate(row, isNull, lop, rop);
     return TreeNode::getBoolVal();
@@ -202,6 +207,15 @@ class ArithmeticOperator : public Operator
   inline void setOverflowCheck(bool check)
   {
     fDecimalOverflowCheck = check;
+  }
+
+  inline virtual std::string toCppCode(IncludeSet& includes) const override
+  {
+    includes.insert("arithmeticoperator.h");
+    std::stringstream ss;
+    ss << "ArithmeticOperator(" << std::quoted(fData) << ")";
+
+    return ss.str();
   }
 
  private:
@@ -228,6 +242,51 @@ inline void ArithmeticOperator::evaluate(rowgroup::Row& row, bool& isNull, Parse
       break;
 
     case execplan::CalpontSystemCatalog::UBIGINT:
+    {
+      // XXX: this is bandaid solution for specific customer case (MCOL-5568).
+      // Despite that I tried to implement a proper solution: to have operations
+      // performed using int128_t amd then check the result.
+      int128_t x, y;
+      bool signedLeft = lop->data()->resultType().isSignedInteger();
+      bool signedRight = rop->data()->resultType().isSignedInteger();
+      if (signedLeft)
+      {
+        x = static_cast<int128_t>(lop->getIntVal(row, isNull));
+      }
+      else
+      {
+        x = static_cast<int128_t>(lop->getUintVal(row, isNull));
+      }
+      if (signedRight)
+      {
+        y = static_cast<int128_t>(rop->getIntVal(row, isNull));
+      }
+      else
+      {
+        y = static_cast<int128_t>(rop->getUintVal(row, isNull));
+      }
+      int128_t result = execute(x, y, isNull);
+      if (!isNull && (result > MAX_UBIGINT || result < 0))
+      {
+        logging::Message::Args args;
+        std::string func = "<unknown>";
+        switch (fOp)
+        {
+          case OP_ADD: func = "\"+\""; break;
+          case OP_SUB: func = "\"-\""; break;
+          case OP_MUL: func = "\"*\""; break;
+          case OP_DIV: func = "\"/\""; break;
+          default: break;
+        }
+        args.add(func);
+        args.add(static_cast<double>(x));
+        args.add(static_cast<double>(y));
+        unsigned errcode = logging::ERR_FUNC_OUT_OF_RANGE_RESULT;
+        throw logging::IDBExcept(logging::IDBErrorInfo::instance()->errorMsg(errcode, args), errcode);
+      }
+      fResult.uintVal = static_cast<uint64_t>(result);
+    }
+    break;
     case execplan::CalpontSystemCatalog::UINT:
     case execplan::CalpontSystemCatalog::UMEDINT:
     case execplan::CalpontSystemCatalog::USMALLINT:
@@ -433,5 +492,3 @@ inline void ArithmeticOperator::execute(IDB_Decimal& result, IDB_Decimal op1, ID
 
 std::ostream& operator<<(std::ostream& os, const ArithmeticOperator& rhs);
 }  // namespace execplan
-
-#endif

@@ -181,7 +181,7 @@ xb_mysql_connect()
 	       opt_socket ? opt_socket : "not set");
 
 #ifdef HAVE_OPENSSL
-	if (opt_use_ssl && opt_protocol <= MYSQL_PROTOCOL_SOCKET)
+	if (opt_use_ssl)
 	{
 		mysql_ssl_set(connection, opt_ssl_key, opt_ssl_cert,
 			      opt_ssl_ca, opt_ssl_capath,
@@ -190,6 +190,8 @@ xb_mysql_connect()
 		mysql_options(connection, MYSQL_OPT_SSL_CRLPATH,
 			      opt_ssl_crlpath);
 	}
+        else
+          opt_ssl_verify_server_cert= 0;
 	mysql_options(connection,MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
 		      (char*)&opt_ssl_verify_server_cert);
 #endif
@@ -1411,7 +1413,7 @@ write_slave_info(ds_ctxt *datasink, MYSQL *connection)
   }
 
   mysql_slave_position= strdup(comment.c_ptr());
-  return datasink->backup_file_print_buf(XTRABACKUP_SLAVE_INFO,
+  return datasink->backup_file_print_buf(MB_SLAVE_INFO,
                                sql.ptr(), sql.length());
 }
 
@@ -1488,7 +1490,7 @@ write_galera_info(ds_ctxt *datasink, MYSQL *connection)
     goto cleanup;
   }
 
-  result= datasink->backup_file_printf(XTRABACKUP_GALERA_INFO,
+  result= datasink->backup_file_printf(MB_GALERA_INFO,
     "%s:%s %s\n", state_uuid ? state_uuid : state_uuid55,
     last_committed ? last_committed : last_committed55,
     domain_id ? domain_id : domain_id55);
@@ -1634,7 +1636,7 @@ write_binlog_info(ds_ctxt *datasink, MYSQL *connection)
 	read_mysql_variables(connection, "SHOW VARIABLES", vars, true);
 
 	if (filename == NULL || position == NULL) {
-		/* Do not create xtrabackup_binlog_info if binary
+		/* Do not create MB_BINLOG_INFO if binary
 		log is disabled */
 		result = true;
 		goto cleanup;
@@ -1650,14 +1652,14 @@ write_binlog_info(ds_ctxt *datasink, MYSQL *connection)
 			"filename '%s', position '%s', "
 			"GTID of the last change '%s'",
 			filename, position, gtid) != -1);
-		result = datasink->backup_file_printf(XTRABACKUP_BINLOG_INFO,
+		result = datasink->backup_file_printf(MB_BINLOG_INFO,
 					    "%s\t%s\t%s\n", filename, position,
 					    gtid);
 	} else {
 		ut_a(asprintf(&mysql_binlog_position,
 			"filename '%s', position '%s'",
 			filename, position) != -1);
-		result = datasink->backup_file_printf(XTRABACKUP_BINLOG_INFO,
+		result = datasink->backup_file_printf(MB_BINLOG_INFO,
 					    "%s\t%s\n", filename, position);
 	}
 
@@ -1692,7 +1694,7 @@ operator<<(std::ostream& s, const escape_and_quote& eq)
 }
 
 /*********************************************************************//**
-Writes xtrabackup_info file and if backup_history is enable creates
+Writes MB_INFO file and if backup_history is enable creates
 mysql.mariabackup_history and writes a new history record to the
 table containing all the history info particular to the just completed
 backup. */
@@ -1769,7 +1771,7 @@ write_xtrabackup_info(ds_ctxt *datasink,
 		xb_stream_name[xtrabackup_stream_fmt], /* format */
 		xtrabackup_compress ? "compressed" : "N"); /* compressed */
 	if (buf_len < 0) {
-		msg("Error: cannot generate xtrabackup_info");
+		msg("Error: cannot generate " MB_INFO);
 		result = false;
 		goto cleanup;
 	}

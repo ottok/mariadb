@@ -20,8 +20,7 @@
 
 /** @file */
 
-#ifndef _WE_TYPE_H_
-#define _WE_TYPE_H_
+#pragma once
 
 #undef EXPORT
 #undef DELETE
@@ -40,6 +39,8 @@
 #include "calpontsystemcatalog.h"
 #include "IDBDataFile.h"
 #include "IDBPolicy.h"
+#include "nullstring.h"
+#include "collation.h" // For CHARSET_INFO struct
 
 #undef EXPORT
 #undef DELETE
@@ -332,7 +333,7 @@ typedef std::vector<ColTupleList> ColValueList;                            /** @
 typedef std::vector<RID> RIDList;                                          /** @brief RID list */
 typedef std::vector<execplan::CalpontSystemCatalog::ColType> CSCTypesList; /** @brief CSC column types list */
 
-typedef std::vector<std::string> dictStr;
+typedef std::vector<NullString> dictStr;
 typedef std::vector<dictStr> DictStrList;
 
 // dictionary
@@ -345,6 +346,7 @@ struct DctnryStruct /** @brief Dctnry Interface Struct*/
   uint16_t fColSegment;   /** @brief Segment for column file */
   uint16_t fColDbRoot;    /** @brief DBRoot for column file */
   int fCompressionType;   /** @brief Compression tpye for column file */
+  int fCharsetNumber;     /** @brief Charset number to account for collation when computing string prefixes */
   DctnryStruct()
    : dctnryOid(0)
    , columnOid(0)
@@ -354,6 +356,7 @@ struct DctnryStruct /** @brief Dctnry Interface Struct*/
    , fColSegment(0)
    , fColDbRoot(0)
    , fCompressionType(idbdatafile::IDBPolicy::useHdfs() ? 2 : 0)
+   , fCharsetNumber(8)
   {
   }
 };
@@ -398,8 +401,8 @@ struct JobColumn /** @brief Job Column Structure */
   int compressionType;             /** @brief compression type */
   bool autoIncFlag;                /** @brief auto increment flag */
   DctnryStruct dctnry;             /** @brief dictionary structure */
-  int64_t fMinIntSat;              /** @brief For integer type, the min saturation value */
-  uint64_t fMaxIntSat;             /** @brief For integer type, the max saturation value */
+  int128_t fMinIntSat;              /** @brief For integer type, the min saturation value */
+  uint128_t fMaxIntSat;             /** @brief For integer type, the max saturation value */
   double fMinDblSat;               /** @brief for float/double, the min saturation value */
   double fMaxDblSat;               /** @brief for float/double, the max saturation value */
   bool fWithDefault;               /** @brief With default */
@@ -407,7 +410,8 @@ struct JobColumn /** @brief Job Column Structure */
   unsigned long long fDefaultUInt; /** @brief UnsignedInt col default*/
   double fDefaultDbl;              /** @brief Dbl/Flt column default */
   int128_t fDefaultWideDecimal;    /** @brief Wide decimal column default */
-  std::string fDefaultChr;         /** @brief Char column default */
+  utils::NullString fDefaultChr;   /** @brief Char column default */
+  const CHARSET_INFO* cs;          /** @brief character set info for the column */
   JobColumn()
    : mapOid(0)
    , dataType(execplan::CalpontSystemCatalog::INT)
@@ -433,7 +437,41 @@ struct JobColumn /** @brief Job Column Structure */
    , fDefaultUInt(0)
    , fDefaultDbl(0.0)
    , fDefaultWideDecimal(0)
+   , cs(nullptr)
   {
+  }
+  JobColumn(const std::string& colName_, OID mapOid_, const std::string& typeName_,
+            int width_, int definedWidth_, int compressionType_, int dctnryCompressionType_,
+            int64_t minIntSat_, uint64_t maxIntSat_, bool withDefault_,
+            unsigned long long defaultUInt_)
+   : colName(colName_)
+   , mapOid(mapOid_)
+   , dataType(execplan::CalpontSystemCatalog::INT)
+   , weType(WR_INT)
+   , typeName(typeName_)
+   , emptyVal(nullptr)
+   , width(width_)
+   , definedWidth(definedWidth_)
+   , dctnryWidth(0)
+   , precision(0)
+   , scale(0)
+   , fNotNull(false)
+   , fFldColRelation(BULK_FLDCOL_COLUMN_FIELD)
+   , colType(' ')
+   , compressionType(compressionType_)
+   , autoIncFlag(false)
+   , fMinIntSat(minIntSat_)
+   , fMaxIntSat(maxIntSat_)
+   , fMinDblSat(0)
+   , fMaxDblSat(0)
+   , fWithDefault(withDefault_)
+   , fDefaultInt(0)
+   , fDefaultUInt(defaultUInt_)
+   , fDefaultDbl(0.0)
+   , fDefaultWideDecimal(0)
+   , cs(nullptr)
+  {
+    dctnry.fCompressionType = dctnryCompressionType_;
   }
 };
 
@@ -615,5 +653,3 @@ class WeException : public std::runtime_error
 };
 
 }  // namespace WriteEngine
-
-#endif  // _WE_TYPE_H_

@@ -24,12 +24,10 @@
  * class SessionManager interface
  */
 
-#ifndef _SESSIONMANAGER_H
-#define _SESSIONMANAGER_H
+#pragma once
 
 #include "calpontsystemcatalog.h"
 #include "brm.h"
-#include "boost/shared_array.hpp"
 
 namespace execplan
 {
@@ -69,7 +67,7 @@ namespace execplan
  * immediately, causing all subsequent references to fail.  This only affects
  * 'leakcheck'.
  */
-// #define DESTROYSHMSEG
+//#define DESTROYSHMSEG
 
 class SessionManager
 {
@@ -175,7 +173,7 @@ class SessionManager
    * @return A pointer to the array.  Note: The caller is responsible for
    * deallocating it.  Use delete[].
    */
-  boost::shared_array<BRM::SIDTIDEntry> SIDTIDMap(int& len);
+  std::shared_ptr<BRM::SIDTIDEntry[]> SIDTIDMap(int& len);
 
   /** @brief Returns a unique uint32_t.  It eventually wraps around, but who cares.
    *
@@ -214,4 +212,3 @@ class SessionManager
 
 }  // namespace execplan
 
-#endif

@@ -31,12 +31,10 @@ using namespace std;
 #include "messageobj.h"
 #include "exceptclasses.h"
 #include "dataconvert.h"
+#include "string_prefixes.h"
 #include <sstream>
 
 using namespace logging;
-
-const char* nullString = " ";  // this is not NULL to preempt segfaults.
-const int nullStringLen = 0;
 
 namespace
 {
@@ -49,6 +47,7 @@ inline bool PrimitiveProcessor::compare(const datatypes::Charset& cs, uint8_t CO
                                         size_t length1, const char* str2, size_t length2) throw()
 {
   int error = 0;
+  utils::NullString s1 (str1, length1), s2 (str2, length2);
   bool rc = primitives::StringComparator(cs).op(&error, COP, ConstString(str1, length1),
                                                 ConstString(str2, length2));
   if (error)
@@ -74,11 +73,11 @@ Notes:
 void PrimitiveProcessor::p_TokenByScan(const TokenByScanRequestHeader* h, TokenByScanResultHeader* ret,
                                        unsigned outSize, boost::shared_ptr<DictEqualityFilter> eqFilter)
 {
-  const DataValue* args;
+  const NonNullDataValue* args;
   const uint8_t* niceBlock;  // block cast to a byte-indexed type
   const uint8_t* niceInput;  // h cast to a byte-indexed type
   const uint16_t* offsets;
-  int offsetIndex, argIndex, argsOffset;
+  int offsetIndex, argsOffset;
   bool cmpResult = false;
   int i;
   const char* sig;
@@ -121,8 +120,7 @@ void PrimitiveProcessor::p_TokenByScan(const TokenByScanRequestHeader* h, TokenB
     siglen = offsets[offsetIndex - 1] - offsets[offsetIndex];
     sig = reinterpret_cast<const char*>(&niceBlock[offsets[offsetIndex]]);
     argsOffset = sizeof(TokenByScanRequestHeader);
-    argIndex = 0;
-    args = reinterpret_cast<const DataValue*>(&niceInput[argsOffset]);
+    args = reinterpret_cast<const NonNullDataValue*>(&niceInput[argsOffset]);
 
     if (eqFilter)
     {
@@ -138,7 +136,6 @@ void PrimitiveProcessor::p_TokenByScan(const TokenByScanRequestHeader* h, TokenB
 
       goto no_store;
     }
-
     cmpResult = compare(cs, h->COP1, sig, siglen, args->data, args->len);
 
     switch (h->NVALS)
@@ -159,9 +156,8 @@ void PrimitiveProcessor::p_TokenByScan(const TokenByScanRequestHeader* h, TokenB
         if (cmpResult && h->BOP == BOP_OR)
           goto store;
 
-        argsOffset += sizeof(uint16_t) + args->len;
-        argIndex++;
-        args = (DataValue*)&niceInput[argsOffset];
+        argsOffset += sizeof(*args) + args->len;
+        args = (NonNullDataValue*)&niceInput[argsOffset];
 
         cmpResult = compare(cs, h->COP2, sig, siglen, args->data, args->len);
 
@@ -184,9 +180,8 @@ void PrimitiveProcessor::p_TokenByScan(const TokenByScanRequestHeader* h, TokenB
           if (cmpResult && h->BOP == BOP_OR)
             goto store;
 
-          argsOffset += sizeof(uint16_t) + args->len;
-          argIndex++;
-          args = (DataValue*)&niceInput[argsOffset];
+          argsOffset += sizeof(*args) + args->len;
+          args = (NonNullDataValue*)&niceInput[argsOffset];
         }
 
         if (i == h->NVALS && cmpResult)
@@ -197,7 +192,6 @@ void PrimitiveProcessor::p_TokenByScan(const TokenByScanRequestHeader* h, TokenB
     }
 
   store:
-
     if (h->OutputType == OT_DATAVALUE)
     {
       if ((ret->NBYTES + sizeof(DataValue) + siglen) > outSize)
@@ -213,6 +207,7 @@ void PrimitiveProcessor::p_TokenByScan(const TokenByScanRequestHeader* h, TokenB
         throw logging::DictionaryBufferOverflow();
       }
 
+      retDataValues->isnull = false; //retDataValues->data == nullptr; XXX: SZ: verify.
       retDataValues->len = siglen;
       memcpy(retDataValues->data, sig, siglen);
       rdvOffset += sizeof(DataValue) + siglen;
@@ -262,6 +257,7 @@ void PrimitiveProcessor::p_TokenByScan(const TokenByScanRequestHeader* h, TokenB
         throw logging::DictionaryBufferOverflow();
       }
 
+      retDataValues->isnull = false;
       retDataValues->len = args->len;
       memcpy(retDataValues->data, args->data, args->len);
       rdvOffset += sizeof(DataValue) + args->len;
@@ -328,8 +324,8 @@ void PrimitiveProcessor::nextSig(int NVALS, const PrimToken* tokens, p_DataValue
           goto again;
         }
 
-        ret->len = nullStringLen;
-        ret->data = (const uint8_t*)nullString;
+        ret->len = 0;
+        ret->data = (const uint8_t*)nullptr;
       }
       else
       {
@@ -360,6 +356,7 @@ void PrimitiveProcessor::nextSig(int NVALS, const PrimToken* tokens, p_DataValue
     }
 
     /* XXXPAT: Need to check for the NULL token here */
+
     ret->len = tokens[dict_OffsetIndex].len;
     ret->data = &niceBlock[tokens[dict_OffsetIndex].offset];
 
@@ -391,8 +388,13 @@ void PrimitiveProcessor::nextSig(int NVALS, const PrimToken* tokens, p_DataValue
 }
 
 void PrimitiveProcessor::p_Dictionary(const DictInput* in, vector<uint8_t>* out, bool skipNulls,
+#if defined(XXX_PRIMITIVES_TOKEN_RANGES_XXX)
+                                      uint32_t charsetNumber, boost::shared_ptr<DictEqualityFilter> eqFilter,
+                                      uint8_t eqOp, uint64_t minMax[2])
+#else
                                       uint32_t charsetNumber, boost::shared_ptr<DictEqualityFilter> eqFilter,
                                       uint8_t eqOp)
+#endif
 {
   PrimToken* outToken;
   const DictFilterElement* filter = 0;
@@ -437,6 +439,14 @@ void PrimitiveProcessor::p_Dictionary(const DictInput* in, vector<uint8_t>* out,
        sigptr.len != -1;
        nextSig(in->NVALS, in->tokens, &sigptr, in->OutputType, (in->InputFlags ? true : false), skipNulls))
   {
+#if defined(XXX_PRIMITIVES_TOKEN_RANGES_XXX)
+    if (minMax)
+    {
+      uint64_t v = encodeStringPrefix_check_null(sigptr.data, sigptr.len, charsetNumber);
+      minMax[1] = minMax[1] < v ? v : minMax[1];
+      minMax[0] = minMax[0] > v ? v : minMax[0];
+    }
+#endif
     // do aggregate processing
     if (in->OutputType & OT_AGGREGATE)
     {
@@ -551,6 +561,7 @@ void PrimitiveProcessor::p_Dictionary(const DictInput* in, vector<uint8_t>* out,
         }
 
         outValue = reinterpret_cast<DataValue*>(&(*out)[header.NBYTES]);
+        outValue->isnull = false;
         outValue->len = filter->len;
         memcpy(outValue->data, filter->data, filter->len);
         header.NBYTES += sizeof(DataValue) + filter->len;
@@ -581,9 +592,13 @@ void PrimitiveProcessor::p_Dictionary(const DictInput* in, vector<uint8_t>* out,
           out->resize(out->size() * SCALE_FACTOR);
         }
 
+        idbassert(sigptr.data != nullptr || !sigptr.len);
+
         outValue = reinterpret_cast<DataValue*>(&(*out)[header.NBYTES]);
+        outValue->isnull = sigptr.data == nullptr;
         outValue->len = sigptr.len;
-        memcpy(outValue->data, sigptr.data, sigptr.len);
+        if (sigptr.data != nullptr)
+          memcpy(outValue->data, sigptr.data, sigptr.len);
         header.NBYTES += sizeof(DataValue) + sigptr.len;
       }
     }
@@ -604,8 +619,10 @@ void PrimitiveProcessor::p_Dictionary(const DictInput* in, vector<uint8_t>* out,
     DataValue* tmpDV = reinterpret_cast<DataValue*>(&(*out)[header.NBYTES + sizeof(uint16_t)]);
 
     *tmp16 = aggCount;
+    tmpDV->isnull = 0;
     tmpDV->len = min.len;
     memcpy(tmpDV->data, min.data, min.len);
+    idbassert(0); /// this is just plain wrong.
     header.NBYTES += 2 * sizeof(uint16_t) + min.len;
 
     tmpDV = reinterpret_cast<DataValue*>(&(*out)[header.NBYTES]);

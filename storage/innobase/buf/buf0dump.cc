@@ -576,7 +576,7 @@ buf_load()
 			}
 		}
 		if (!missing.empty()) {
-			dict_check_tablespaces_and_store_max_id(&missing);
+			dict_load_tablespaces(&missing);
 		}
 	}
 

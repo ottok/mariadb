@@ -17,8 +17,7 @@
 
 //  $Id: wf_ntile.h 3868 2013-06-06 22:13:05Z xlou $
 
-#ifndef UTILS_WF_NTILE_H
-#define UTILS_WF_NTILE_H
+#pragma once
 
 #include <set>
 #include "windowfunctiontype.h"
@@ -48,4 +47,3 @@ class WF_ntile : public WindowFunctionType
 
 }  // namespace windowfunction
 
-#endif  // UTILS_WF_NTILE_H

@@ -32,8 +32,7 @@
  * class BRMReporter
  */
 
-#ifndef _WE_BRMREPORTER_H_
-#define _WE_BRMREPORTER_H_
+#pragma once
 
 namespace WriteEngine
 {
@@ -139,5 +138,3 @@ class BRMReporter
 };
 
 }  // namespace WriteEngine
-
-#endif  // _WE_BRMREPORTER_H_

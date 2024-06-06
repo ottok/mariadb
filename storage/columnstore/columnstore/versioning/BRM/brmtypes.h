@@ -1,5 +1,5 @@
 /* Copyright (C) 2014 InfiniDB, Inc.
-
+   Copyright (C) 2016-2022 MariaDB Corporation
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License
    as published by the Free Software Foundation; version 2 of
@@ -23,8 +23,7 @@
 /** @file
  */
 
-#ifndef BRMTYPES_H_
-#define BRMTYPES_H_
+#pragma once
 
 #include <vector>
 #include <sys/types.h>
@@ -34,36 +33,10 @@
 #include "mcs_basic_types.h"
 #include "logicalpartition.h"
 
-#ifndef _MSC_VER
 #include <tr1/unordered_map>
 #ifndef _UNORDERED_MAP_FIX_
 #define _UNORDERED_MAP_FIX_
-#ifndef __LP64__
-
-#if __GNUC__ == 4 && __GNUC_MINOR__ < 2
-// This is needed for /usr/include/c++/4.1.1/tr1/functional on 32-bit compiles
-// tr1_hashtable_define_trivial_hash(long long int);
-namespace std
-{
-namespace tr1
-{
-template <>
-struct hash<long long int> : public std::unary_function<long long int, std::size_t>
-{
-  std::size_t operator()(long long int val) const
-  {
-    return static_cast<std::size_t>(val);
-  }
-};
-}  // namespace tr1
-}  // namespace std
-#endif  // if __GNUC__
-
-#endif  // if !__LP64__
 #endif  //_UNORDERED_MAP_FIX_
-#else
-#include <unordered_map>
-#endif  //_MSC_VER
 
 #include "calpontsystemcatalog.h"
 #include "bytestream.h"
@@ -71,11 +44,7 @@ struct hash<long long int> : public std::unary_function<long long int, std::size
 #include "messagelog.h"
 #include "loggingid.h"
 
-#if defined(_MSC_VER) && defined(xxxBRMTYPES_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace idbdatafile
 {
@@ -285,7 +254,12 @@ struct TableLockInfo : public messageqcpp::Serializeable
   EXPORT void deserialize(messageqcpp::ByteStream& bs);
   EXPORT void serialize(idbdatafile::IDBDataFile*) const;
   EXPORT void deserialize(idbdatafile::IDBDataFile*);
+  EXPORT void serialize(char* buffer, uint32_t& offset);
+  EXPORT uint32_t getInternalSize() const;
   bool operator<(const TableLockInfo&) const;
+
+ private:
+  void serializeElement(char* buffer, const char* src, const uint32_t size, uint32_t& offset);
 };
 
 /// A Serializeable version of InlineLBIDRange
@@ -296,6 +270,9 @@ class LBIDRange : public messageqcpp::Serializeable
   uint32_t size;
 
   EXPORT LBIDRange();
+  LBIDRange(const LBID_t aStart, const uint32_t aSize) : start(aStart), size(aSize)
+  {
+  }
   EXPORT LBIDRange(const LBIDRange& l);
   EXPORT LBIDRange(const InlineLBIDRange& l);
   EXPORT LBIDRange& operator=(const LBIDRange& l);
@@ -343,8 +320,8 @@ struct BulkUpdateDBRootArg
 /* Input Arg type for DBRM::createStripeColumnExtents() */
 struct CreateStripeColumnExtentsArgIn
 {
-  OID_t oid;       // column OID
-  uint32_t width;  // column width in bytes
+  OID_t oid = 0;       // column OID
+  uint32_t width = 0;  // column width in bytes
   execplan::CalpontSystemCatalog::ColDataType colDataType;
 };
 
@@ -555,6 +532,11 @@ const uint8_t BULK_UPDATE_DBROOT = 100;
 const uint8_t GET_SYSTEM_CATALOG = 101;
 const uint8_t BULK_WRITE_VB_ENTRY = 102;
 
+const uint8_t NEW_CPIMPORT_JOB = 103;
+const uint8_t FINISH_CPIMPORT_JOB = 104;
+const uint8_t START_READONLY = 105;
+const uint8_t FORCE_CLEAR_CPIMPORT_JOBS = 106;
+
 /* Error codes returned by the DBRM functions. */
 /// The operation was successful
 const int8_t ERR_OK = 0;
@@ -658,5 +640,3 @@ std::ostream& operator<<(std::ostream&, const QueryContext&);
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef UTILS_HASHFAMILY_H
-#define UTILS_HASHFAMILY_H
+#pragma once
 
 #include "hasher.h"
 #include "collation.h"
@@ -51,4 +50,3 @@ class HashFamily
 };
 
 }  // namespace utils
-#endif

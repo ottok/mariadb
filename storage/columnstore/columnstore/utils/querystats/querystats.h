@@ -21,8 +21,7 @@
  *
  ***********************************************************************/
 
-#ifndef QUERYSTATS_H_
-#define QUERYSTATS_H_
+#pragma once
 
 #include <ctime>
 #include <string>
@@ -139,5 +138,3 @@ struct QueryStats
 };
 
 }  // namespace querystats
-
-#endif

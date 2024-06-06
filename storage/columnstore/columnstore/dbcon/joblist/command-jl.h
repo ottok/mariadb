@@ -17,8 +17,7 @@
 
 /** @file */
 
-#ifndef COMMANDJL_H
-#define COMMANDJL_H
+#pragma once
 
 #include <string>
 #include <boost/uuid/uuid.hpp>
@@ -97,6 +96,11 @@ class CommandJL
 
   virtual CommandType getCommandType() = 0;
 
+  virtual bool getIsDict()
+  {
+    return false;
+  }
+
  protected:
   BatchPrimitiveProcessorJL* bpp;
   uint32_t OID;
@@ -111,5 +115,3 @@ class CommandJL
 typedef boost::shared_ptr<CommandJL> SCommand;
 
 }  // namespace joblist
-
-#endif

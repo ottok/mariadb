@@ -134,7 +134,7 @@ extern const char* fts_common_tables[];
 extern const  fts_index_selector_t fts_index_selector[];
 
 /* === xtrabackup specific options === */
-#define DEFAULT_TARGET_DIR "./xtrabackup_backupfiles/"
+#define DEFAULT_TARGET_DIR "./mariadb_backup_files/"
 char xtrabackup_real_target_dir[FN_REFLEN] = DEFAULT_TARGET_DIR;
 char *xtrabackup_target_dir= xtrabackup_real_target_dir;
 static my_bool xtrabackup_version;
@@ -225,15 +225,14 @@ static ulong max_buf_pool_modified_pct;
 /* Ignored option (--log) for MySQL option compatibility */
 static char*	log_ignored_opt;
 
-
 extern my_bool opt_use_ssl;
 extern char *opt_tls_version;
 my_bool opt_ssl_verify_server_cert;
+char *opt_ssl_fp, *opt_ssl_fplist;
 my_bool opt_extended_validation;
 my_bool opt_encrypted_backup;
 
 /* === metadata of backup === */
-#define XTRABACKUP_METADATA_FILENAME "xtrabackup_checkpoints"
 char metadata_type[30] = ""; /*[full-backuped|log-applied|incremental]*/
 static lsn_t metadata_from_lsn;
 lsn_t metadata_to_lsn;
@@ -380,8 +379,10 @@ static my_bool opt_check_privileges;
 
 extern const char *innodb_checksum_algorithm_names[];
 extern TYPELIB innodb_checksum_algorithm_typelib;
-extern const char *innodb_flush_method_names[];
 extern TYPELIB innodb_flush_method_typelib;
+extern TYPELIB innodb_doublewrite_typelib;
+/** Ignored option */
+static ulong innodb_flush_method;
 
 static const char *binlog_info_values[] = {"off", "lockless", "on", "auto",
 					   NullS};
@@ -1332,6 +1333,8 @@ enum options_xtrabackup
 #if defined __linux__ || defined _WIN32
   OPT_INNODB_LOG_FILE_BUFFERING,
 #endif
+  OPT_INNODB_DATA_FILE_BUFFERING,
+  OPT_INNODB_DATA_FILE_WRITE_THROUGH,
   OPT_INNODB_LOG_FILE_SIZE,
   OPT_INNODB_LOG_FILES_IN_GROUP,
   OPT_INNODB_OPEN_FILES,
@@ -1428,8 +1431,8 @@ struct my_option xb_client_options[]= {
      (G_PTR *) &xtrabackup_log_copy_interval, 0, GET_LONG, REQUIRED_ARG, 1000,
      0, LONG_MAX, 0, 1, 0},
     {"extra-lsndir", OPT_XTRA_EXTRA_LSNDIR,
-     "(for --backup): save an extra copy of the xtrabackup_checkpoints file "
-     "in this directory.",
+     "(for --backup): save an extra copy of the " MB_METADATA_FILENAME
+     " file in this directory.",
      (G_PTR *) &xtrabackup_extra_lsndir, (G_PTR *) &xtrabackup_extra_lsndir, 0,
      GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
     {"incremental-lsn", OPT_XTRA_INCREMENTAL,
@@ -1546,7 +1549,7 @@ struct my_option xb_client_options[]= {
 
     {"galera-info", OPT_GALERA_INFO,
      "This options creates the "
-     "xtrabackup_galera_info file which contains the local node state at "
+     MB_GALERA_INFO " file which contains the local node state at "
      "the time of the backup. Option should be used when performing the "
      "backup of MariaDB Galera Cluster. Has no effect when backup locks "
      "are used to create the backup.",
@@ -1557,10 +1560,10 @@ struct my_option xb_client_options[]= {
      "This option is useful when backing "
      "up a replication slave server. It prints the binary log position "
      "and name of the master server. It also writes this information to "
-     "the \"xtrabackup_slave_info\" file as a \"CHANGE MASTER\" command. "
+     "the \"" MB_SLAVE_INFO "\" file as a \"CHANGE MASTER\" command. "
      "A new slave for this master can be set up by starting a slave server "
      "on this backup and issuing a \"CHANGE MASTER\" command with the "
-     "binary log position saved in the \"xtrabackup_slave_info\" file.",
+     "binary log position saved in the \"" MB_SLAVE_INFO "\" file.",
      (uchar *) &opt_slave_info, (uchar *) &opt_slave_info, 0, GET_BOOL, NO_ARG,
      0, 0, 0, 0, 0, 0},
 
@@ -1855,8 +1858,8 @@ struct my_option xb_server_options[] =
    &innobase_data_home_dir, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"innodb_doublewrite", OPT_INNODB_DOUBLEWRITE,
    "Enable InnoDB doublewrite buffer during --prepare.",
-   (G_PTR*) &srv_use_doublewrite_buf,
-   (G_PTR*) &srv_use_doublewrite_buf, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+   (G_PTR*) &buf_dblwr.use, (G_PTR*) &buf_dblwr.use,
+   &innodb_doublewrite_typelib, GET_ENUM, OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"innodb_io_capacity", OPT_INNODB_IO_CAPACITY,
    "Number of IOPs the server can do. Tunes the background IO rate",
    (G_PTR*) &srv_io_capacity, (G_PTR*) &srv_io_capacity,
@@ -1880,10 +1883,10 @@ struct my_option xb_server_options[] =
    FALSE, 0, 0, 0, 0, 0},
 
   {"innodb_flush_method", OPT_INNODB_FLUSH_METHOD,
-   "With which method to flush data.",
-   &srv_file_flush_method, &srv_file_flush_method,
+   "Ignored parameter with no effect",
+   &innodb_flush_method, &innodb_flush_method,
    &innodb_flush_method_typelib, GET_ENUM, REQUIRED_ARG,
-   IF_WIN(SRV_ALL_O_DIRECT_FSYNC, SRV_O_DIRECT), 0, 0, 0, 0, 0},
+   4/* O_DIRECT */, 0, 0, 0, 0, 0},
 
   {"innodb_log_buffer_size", OPT_INNODB_LOG_BUFFER_SIZE,
    "Redo log buffer size in bytes.",
@@ -1897,6 +1900,16 @@ struct my_option xb_server_options[] =
    (G_PTR*) &log_sys.log_buffered, 0, GET_BOOL, NO_ARG,
    TRUE, 0, 0, 0, 0, 0},
 #endif
+  {"innodb_data_file_buffering", OPT_INNODB_DATA_FILE_BUFFERING,
+   "Whether the file system cache for data files is enabled during --backup",
+   (G_PTR*) &fil_system.buffered,
+   (G_PTR*) &fil_system.buffered, 0, GET_BOOL, NO_ARG,
+   FALSE, 0, 0, 0, 0, 0},
+  {"innodb_data_file_write_through", OPT_INNODB_DATA_FILE_WRITE_THROUGH,
+   "Whether each write to data files writes through",
+   (G_PTR*) &fil_system.write_through,
+   (G_PTR*) &fil_system.write_through, 0, GET_BOOL, NO_ARG,
+   FALSE, 0, 0, 0, 0, 0},
   {"innodb_log_file_size", OPT_INNODB_LOG_FILE_SIZE,
    "Ignored for mysqld option compatibility",
    (G_PTR*) &srv_log_file_size, (G_PTR*) &srv_log_file_size, 0,
@@ -1953,7 +1966,7 @@ struct my_option xb_server_options[] =
   {"innodb_undo_tablespaces", OPT_INNODB_UNDO_TABLESPACES,
    "Number of undo tablespaces to use.",
    (G_PTR*)&srv_undo_tablespaces, (G_PTR*)&srv_undo_tablespaces,
-   0, GET_UINT, REQUIRED_ARG, 0, 0, 126, 0, 1, 0},
+   0, GET_UINT, REQUIRED_ARG, 3, 0, 126, 0, 1, 0},
 
   {"innodb_compression_level", OPT_INNODB_COMPRESSION_LEVEL,
    "Compression level used for zlib compression.",
@@ -2233,27 +2246,6 @@ xb_get_one_option(const struct my_option *opt,
     ADD_PRINT_PARAM_OPT(srv_log_group_home_dir);
     break;
 
-  case OPT_INNODB_LOG_FILES_IN_GROUP:
-  case OPT_INNODB_LOG_FILE_SIZE:
-    break;
-
-  case OPT_INNODB_FLUSH_METHOD:
-#ifdef _WIN32
-    /* From: storage/innobase/handler/ha_innodb.cc:innodb_init_params */
-    switch (srv_file_flush_method) {
-    case SRV_ALL_O_DIRECT_FSYNC + 1 /* "async_unbuffered"="unbuffered" */:
-      srv_file_flush_method= SRV_ALL_O_DIRECT_FSYNC;
-      break;
-    case SRV_ALL_O_DIRECT_FSYNC + 2 /* "normal"="fsync" */:
-      srv_file_flush_method= SRV_FSYNC;
-      break;
-    }
-#endif
-    ut_a(srv_file_flush_method
-	 <= IF_WIN(SRV_ALL_O_DIRECT_FSYNC, SRV_O_DIRECT_NO_FSYNC));
-    ADD_PRINT_PARAM_OPT(innodb_flush_method_names[srv_file_flush_method]);
-    break;
-
   case OPT_INNODB_PAGE_SIZE:
 
     ADD_PRINT_PARAM_OPT(innobase_page_size);
@@ -2501,12 +2493,6 @@ static bool innodb_init_param()
 
 	srv_print_verbose_log = verbose ? 2 : 1;
 
-	/* Store the default charset-collation number of this MySQL
-	installation */
-
-	/* We cannot treat characterset here for now!! */
-	data_mysql_default_charset_coll = (ulint)default_charset_info->number;
-
 	ut_ad(DATA_MYSQL_BINARY_CHARSET_COLL == my_charset_bin.number);
 
 #ifdef _WIN32
@@ -2654,7 +2640,7 @@ static bool innodb_init()
 #else
                                       OS_DATA_FILE,
 #endif
-				      false, &ret);
+                                      false, &ret);
   if (!ret)
   {
   invalid_log:
@@ -2736,6 +2722,37 @@ end:
 	return(r);
 }
 
+
+/*
+Read backup meta info.
+@return TRUE on success, FALSE on failure. */
+static
+my_bool
+mb_read_metadata(const char *dir, const char *name)
+{
+	char	filename[FN_REFLEN];
+	snprintf(filename, sizeof(filename), "%s/%s", dir, name);
+	if (!xtrabackup_read_metadata(filename)) {
+		msg("mariabackup: error: failed to read metadata from "
+		    "%s", filename);
+		return false;
+	}
+	return true;
+}
+
+
+/*
+Read backup meta info from the given directory
+with backward compatibility. */
+static
+my_bool
+mb_read_metadata_from_dir(const char *dir)
+{
+	return mb_read_metadata(dir, MB_METADATA_FILENAME) ||
+		mb_read_metadata(dir, XTRABACKUP_METADATA_FILENAME);
+}
+
+
 /***********************************************************************
 Print backup meta info to a specified buffer. */
 static
@@ -2777,9 +2794,12 @@ xtrabackup_stream_metadata(ds_ctxt_t *ds_ctxt)
 	mystat.st_size = len;
 	mystat.st_mtime = my_time(0);
 
-	stream = ds_open(ds_ctxt, XTRABACKUP_METADATA_FILENAME, &mystat);
+	stream = ds_open(ds_ctxt, MB_METADATA_FILENAME, &mystat);
 	if (stream == NULL) {
-		msg("Error: cannot open output stream for %s", XTRABACKUP_METADATA_FILENAME);
+		stream = ds_open(ds_ctxt, XTRABACKUP_METADATA_FILENAME, &mystat);
+	}
+	if (stream == NULL) {
+		msg("Error: cannot open output stream for %s", MB_METADATA_FILENAME);
 		return(FALSE);
 	}
 
@@ -4775,14 +4795,14 @@ bool Backup_datasinks::backup_low()
 		char	filename[FN_REFLEN];
 
 		sprintf(filename, "%s/%s", xtrabackup_extra_lsndir,
-			XTRABACKUP_METADATA_FILENAME);
+			MB_METADATA_FILENAME);
 		if (!xtrabackup_write_metadata(filename)) {
 			msg("Error: failed to write metadata "
 			    "to '%s'.", filename);
 			return false;
 		}
 		sprintf(filename, "%s/%s", xtrabackup_extra_lsndir,
-			XTRABACKUP_INFO);
+			MB_INFO);
 		if (!write_xtrabackup_info(m_data,
 		                           mysql_connection, filename, false, false)) {
 			msg("Error: failed to write info "
@@ -6559,7 +6579,6 @@ store_binlog_info(const char *filename, const char* name, ulonglong pos)
 static bool xtrabackup_prepare_func(char** argv)
 {
 	CorruptedPages corrupted_pages;
-	char			 metadata_path[FN_REFLEN];
 
 	/* cd to target-dir */
 
@@ -6610,12 +6629,7 @@ static bool xtrabackup_prepare_func(char** argv)
 	/*
 	  read metadata of target
 	*/
-	sprintf(metadata_path, "%s/%s", xtrabackup_target_dir,
-		XTRABACKUP_METADATA_FILENAME);
-
-	if (!xtrabackup_read_metadata(metadata_path)) {
-		msg("Error: failed to read metadata from '%s'\n",
-		    metadata_path);
+	if (!mb_read_metadata_from_dir(xtrabackup_target_dir)) {
 		return(false);
 	}
 
@@ -6789,14 +6803,14 @@ error:
 			metadata_last_lsn = incremental_last_lsn;
 		}
 
-		sprintf(filename, "%s/%s", xtrabackup_target_dir, XTRABACKUP_METADATA_FILENAME);
+		sprintf(filename, "%s/%s", xtrabackup_target_dir, MB_METADATA_FILENAME);
 		if (!xtrabackup_write_metadata(filename)) {
 
 			msg("mariabackup: Error: failed to write metadata "
 			    "to '%s'", filename);
 			ok = false;
 		} else if (xtrabackup_extra_lsndir) {
-			sprintf(filename, "%s/%s", xtrabackup_extra_lsndir, XTRABACKUP_METADATA_FILENAME);
+			sprintf(filename, "%s/%s", xtrabackup_extra_lsndir, MB_METADATA_FILENAME);
 			if (!xtrabackup_write_metadata(filename)) {
 				msg("mariabackup: Error: failed to write "
 				    "metadata to '%s'", filename);
@@ -7384,6 +7398,12 @@ int main(int argc, char **argv)
 		}
 		if(strcmp(argv[1], "--innobackupex") == 0)
 		{
+			/*
+			  my_init() prints a "Deprecated program name"
+			  warning if argv[0] does not start with "mariadb".
+			  So pass the original argv[0] as the new argv[0].
+			*/
+			argv[1]= argv[0];
 			argv++;
 			argc--;
 			innobackupex_mode = true;
@@ -7459,6 +7479,8 @@ int main(int argc, char **argv)
 static int main_low(char** argv)
 {
 	if (innobackupex_mode) {
+		msg(ER_DEFAULT(ER_WARN_DEPRECATED_SYNTAX_NO_REPLACEMENT),
+			"--innobackupex");
 		if (!ibx_init()) {
 			return(EXIT_FAILURE);
 		}
@@ -7543,26 +7565,14 @@ static int main_low(char** argv)
 			return(EXIT_FAILURE);
 		}
 	} else if (xtrabackup_backup && xtrabackup_incremental_basedir) {
-		char	filename[FN_REFLEN];
-
-		sprintf(filename, "%s/%s", xtrabackup_incremental_basedir, XTRABACKUP_METADATA_FILENAME);
-
-		if (!xtrabackup_read_metadata(filename)) {
-			msg("mariabackup: error: failed to read metadata from "
-			    "%s", filename);
+		if (!mb_read_metadata_from_dir(xtrabackup_incremental_basedir)) {
 			return(EXIT_FAILURE);
 		}
 
 		incremental_lsn = metadata_to_lsn;
 		xtrabackup_incremental = xtrabackup_incremental_basedir; //dummy
 	} else if (xtrabackup_prepare && xtrabackup_incremental_dir) {
-		char	filename[FN_REFLEN];
-
-		sprintf(filename, "%s/%s", xtrabackup_incremental_dir, XTRABACKUP_METADATA_FILENAME);
-
-		if (!xtrabackup_read_metadata(filename)) {
-			msg("mariabackup: error: failed to read metadata from "
-			    "%s", filename);
+		if (!mb_read_metadata_from_dir(xtrabackup_incremental_dir)) {
 			return(EXIT_FAILURE);
 		}
 

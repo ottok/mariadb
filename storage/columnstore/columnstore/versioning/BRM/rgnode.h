@@ -24,18 +24,13 @@
  * class RGNode interface.  This is a base class for the nodes in the resource graph.
  */
 
-#ifndef RGNODE_H_
-#define RGNODE_H_
+#pragma once
 
 #include <set>
 
 #include "brmtypes.h"
 
-#if defined(_MSC_VER) && defined(xxxRGNODE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace BRM
 {
@@ -72,5 +67,3 @@ class RGNode
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

@@ -20,22 +20,15 @@
  */
 
 /** @file */
-#ifndef THREADSAFEQUEUE_H_
-#define THREADSAFEQUEUE_H_
+#pragma once
 
 #include <unistd.h>
 #include <queue>
 #include <stdexcept>
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
-#include <boost/shared_array.hpp>
 
-#if defined(_MSC_VER) && !defined(_WIN64)
-#ifndef InterlockedAdd
-#define InterlockedAdd64 InterlockedAdd
-#define InterlockedAdd(x, y) ((x) + (y))
-#endif
-#endif
+
 
 namespace joblist
 {
@@ -339,14 +332,8 @@ class ThreadSafeQueue
   SPBC fPimplCond;
   volatile bool fShutdown;
   T fBs0;
-#ifdef _MSC_VER
-  volatile LONG bytes;
-#else
   size_t bytes;
-#endif
   uint32_t zeroCount;  // counts the # of times read_some returned 0
 };
 
 }  // namespace joblist
-
-#endif

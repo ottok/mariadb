@@ -1,5 +1,4 @@
-#ifndef QFE_CSEPUTILS_H__
-#define QFE_CSEPUTILS_H__
+#pragma once
 
 #include <string>
 
@@ -33,4 +32,3 @@ void updateParseTree(boost::shared_ptr<execplan::CalpontSystemCatalog>&,
 
 }  // namespace utils
 }  // namespace qfe
-#endif

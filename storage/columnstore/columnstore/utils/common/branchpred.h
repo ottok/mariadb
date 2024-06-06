@@ -17,8 +17,7 @@
 
 /** @file */
 
-#ifndef COMMON_BRANCHPRED_H__
-#define COMMON_BRANCHPRED_H__
+#pragma once
 
 #if !defined(__GNUC__) || (__GNUC__ == 2 && __GNUC_MINOR__ < 96)
 #ifndef __builtin_expect
@@ -29,6 +28,4 @@
 #ifndef LIKELY
 #define LIKELY(x) __builtin_expect((x), 1)
 #define UNLIKELY(x) __builtin_expect((x), 0)
-#endif
-
 #endif

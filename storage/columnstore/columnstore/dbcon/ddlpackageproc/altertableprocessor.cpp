@@ -22,12 +22,12 @@
 
 #include <unistd.h>
 #include <typeinfo>
+#include <regex>
 #include <string>
 #include <vector>
 using namespace std;
 
 #include <boost/shared_ptr.hpp>
-#include <boost/regex.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 
 #include "altertableprocessor.h"
@@ -356,7 +356,7 @@ AlterTableProcessor::DDLResult AlterTableProcessor::processPackage(
   {
     logging::Message::Args args;
     logging::Message message(9);
-    args.add("Unknown error occured while getting unique number.");
+    args.add("Unknown error occurred while getting unique number.");
     message.format(args);
     result.result = ALTER_ERROR;
     result.message = message;
@@ -416,9 +416,6 @@ AlterTableProcessor::DDLResult AlterTableProcessor::processPackage(
 
       for (; i < numTries; i++)
       {
-#ifdef _MSC_VER
-        Sleep(rm_ts.tv_sec * 1000);
-#else
         struct timespec abs_ts;
 
         do
@@ -426,8 +423,6 @@ AlterTableProcessor::DDLResult AlterTableProcessor::processPackage(
           abs_ts.tv_sec = rm_ts.tv_sec;
           abs_ts.tv_nsec = rm_ts.tv_nsec;
         } while (nanosleep(&abs_ts, &rm_ts) < 0);
-
-#endif
 
         try
         {
@@ -943,7 +938,7 @@ void AlterTableProcessor::addColumn(uint32_t sessionID, execplan::CalpontSystemC
     createWriteDropLogFile(ropair.objnum, uniqueId, oidList);
 
     //@Bug 1358,1427 Always use the first column in the table, not the first one in columnlist to prevent
-    //random result
+    // random result
     //@Bug 4182. Use widest column as reference column
 
     // Find the widest column
@@ -1904,7 +1899,7 @@ void AlterTableProcessor::renameTable(uint32_t sessionID, execplan::CalpontSyste
   boost::shared_ptr<CalpontSystemCatalog> systemCatalogPtr =
       CalpontSystemCatalog::makeCalpontSystemCatalog(sessionID);
   execplan::CalpontSystemCatalog::TableName tableName;
-  tableName.schema = fTableName.fSchema;
+  tableName.schema = ataRenameTable.fQualifiedName->fSchema;
   tableName.table = ataRenameTable.fQualifiedName->fName;
   execplan::CalpontSystemCatalog::ROPair roPair;
   roPair.objnum = 0;
@@ -1929,6 +1924,7 @@ void AlterTableProcessor::renameTable(uint32_t sessionID, execplan::CalpontSyste
   bytestream << fTableName.fSchema;
   bytestream << fTableName.fName;
   bytestream << ataRenameTable.fQualifiedName->fName;
+  bytestream << ataRenameTable.fQualifiedName->fSchema;
 
   std::string errorMsg;
   uint16_t dbRoot;
@@ -2002,6 +1998,7 @@ void AlterTableProcessor::renameTable(uint32_t sessionID, execplan::CalpontSyste
   bytestream << fTableName.fSchema;
   bytestream << fTableName.fName;
   bytestream << ataRenameTable.fQualifiedName->fName;
+  bytestream << ataRenameTable.fQualifiedName->fSchema;
   sysOid = 1021;
   // Find out where syscolumn is
   rc = fDbrm->getSysCatDBRoot(sysOid, dbRoot);
@@ -2083,14 +2080,14 @@ void AlterTableProcessor::tableComment(uint32_t sessionID, execplan::CalpontSyst
       CalpontSystemCatalog::makeCalpontSystemCatalog(sessionID);
 
   boost::algorithm::to_upper(ataTableComment.fTableComment);
-  boost::regex compat("[[:space:]]*AUTOINCREMENT[[:space:]]*=[[:space:]]*", boost::regex_constants::extended);
-  boost::match_results<std::string::const_iterator> what;
+  std::regex compat("[[:space:]]*AUTOINCREMENT[[:space:]]*=[[:space:]]*", std::regex_constants::extended);
+  std::match_results<std::string::const_iterator> what;
   std::string::const_iterator start, end;
   start = ataTableComment.fTableComment.begin();
   end = ataTableComment.fTableComment.end();
-  boost::match_flag_type flags = boost::match_default;
+  std::regex_constants::match_flag_type flags = std::regex_constants::match_default;
 
-  if (boost::regex_search(start, end, what, compat, flags) && what[0].matched)
+  if (std::regex_search(start, end, what, compat, flags) && what[0].matched)
   {
     std::string params(&(*(what[0].second)));
     char* ep = NULL;

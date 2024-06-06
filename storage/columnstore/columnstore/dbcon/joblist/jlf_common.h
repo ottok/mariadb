@@ -21,14 +21,14 @@
 /** @file jlf_common.h
  *
  */
-#ifndef JLF_COMMON_H__
-#define JLF_COMMON_H__
+#pragma once
 
 #include <map>
 #include <set>
 #include <stack>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include <boost/shared_ptr.hpp>
 #include <boost/uuid/uuid.hpp>
@@ -43,10 +43,12 @@
 #include "joblist.h"
 #include "jobstep.h"
 #include "groupconcat.h"
+#include "jsonarrayagg.h"
 #include "jl_logger.h"
 
 #include "resourcemanager.h"
 #include "rowgroup.h"
+#include "../../primitives/primproc/primitiveserverthreadpools.h"
 
 // forward reference
 namespace execplan
@@ -89,6 +91,20 @@ struct TupleInfo
   uint32_t precision;
   execplan::CalpontSystemCatalog::ColDataType dtype;
   uint32_t csNum;  // For collations
+};
+
+// This struct holds information about `FunctionColumn`.
+struct FunctionColumnInfo
+{
+  // Function argument.
+  uint64_t associatedColumnOid;
+  // Function name.
+  std::string functionName;
+
+  FunctionColumnInfo(uint64_t colOid, std::string funcName)
+   : associatedColumnOid(colOid), functionName(funcName)
+  {
+  }
 };
 
 // for compound join
@@ -195,9 +211,11 @@ struct JobInfo
    , constantCol(CONST_COL_NONE)
    , hasDistinct(false)
    , hasAggregation(false)
+   , hasRollup(false)
    , limitStart(0)
    , limitCount(-1)
    , joinNum(0)
+   , joinNumInView(0)
    , subLevel(0)
    , subNum(0)
    , subId(0)
@@ -207,6 +225,8 @@ struct JobInfo
    , stringScanThreshold(1)
    , wfqLimitStart(0)
    , wfqLimitCount(-1)
+   , timeZone(0)
+   , maxPmJoinResultCount(1048576)
   {
   }
   ResourceManager* rm;
@@ -221,10 +241,6 @@ struct JobInfo
   JobStepVectorStack stack;
   uint32_t flushInterval;
   uint32_t fifoSize;
-  //...joblist does not use scanLbidReqLimit and SdanLbidReqThreshold.
-  //...They are actually used by pcolscan and pdictionaryscan, but
-  //...we have joblist get and report the values here since they
-  //...are global to the job.
   SPJL logger;
   uint32_t traceFlags;
   SErrorInfo errorInfo;
@@ -238,6 +254,7 @@ struct JobInfo
   // aggregation
   bool hasDistinct;
   bool hasAggregation;
+  bool hasRollup;
   std::vector<uint32_t> groupByColVec;
   std::vector<uint32_t> distinctColVec;
   std::vector<uint32_t> expressionVec;
@@ -288,6 +305,8 @@ struct JobInfo
 
   // bug 2634, 5311 and 5374, outjoin and predicates
   std::set<uint32_t> outerOnTable;
+  // MCOL-4715.
+  std::set<uint32_t> innerOnTable;
   std::set<uint32_t> tableHasIsNull;
   JobStepVector outerJoinExpressions;
 
@@ -295,6 +314,8 @@ struct JobInfo
   // mixed outer join
   std::map<int, uint64_t> tableSize;
   int64_t joinNum;
+  // MCOL-5061, MCOL-334.
+  int64_t joinNumInView;
 
   // for subquery
   boost::shared_ptr<int> subCount;  // # of subqueries in the query statement
@@ -360,13 +381,24 @@ struct JobInfo
   int64_t smallSideLimit;  // need to get these from a session var in execplan
   int64_t largeSideLimit;
   uint64_t partitionSize;
+  uint32_t djsMaxPartitionTreeDepth;
+  bool djsForceRun;
   bool isDML;
   long timeZone;
+  uint32_t maxPmJoinResultCount;
 
   // This is for tracking any dynamically allocated ParseTree objects
   // in simpleScalarFilterToParseTree() for later deletion in
   // ~csep() or csep.unserialize()
   std::vector<execplan::ParseTree*> dynamicParseTreeVec;
+
+  PrimitiveServerThreadPools primitiveServerThreadPools;
+  // Represents a `join edges` and `join id` to be restored in `join order` part.
+  std::map<std::pair<uint32_t, uint32_t>, int64_t> joinEdgesToRestore;
+  // Represents a pair of `table` to be on a large side and weight associated with that table.
+  std::unordered_map<uint32_t, int64_t> tablesForLargeSide;
+  // Represents a pair of `tupleId` and `FunctionColumnInfo`.
+  std::unordered_map<uint32_t, FunctionColumnInfo> functionColumnMap;
 
  private:
   // defaults okay
@@ -466,5 +498,3 @@ bool compatibleColumnTypes(const execplan::CalpontSystemCatalog::ColDataType& dt
                            bool forJoin = true);
 
 }  // namespace joblist
-
-#endif

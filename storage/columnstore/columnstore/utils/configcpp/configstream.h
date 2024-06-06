@@ -22,8 +22,7 @@
 /**
  * @file
  */
-#ifndef CONFIG_CONFIGSTREAM_H_
-#define CONFIG_CONFIGSTREAM_H_
+#pragma once
 
 #include <string>
 #include <libxml/parser.h>
@@ -62,4 +61,3 @@ class ConfigStream
 
 }  // namespace config
 
-#endif

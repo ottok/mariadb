@@ -32,10 +32,8 @@
 
 #define _FILE_OFFSET_BITS 64
 #define _LARGEFILE64_SOURCE
-#ifdef __linux__
 #include <sys/mount.h>
 #include <linux/fs.h>
-#endif
 #ifdef BLOCK_SIZE
 #undef BLOCK_SIZE
 #endif
@@ -50,13 +48,8 @@
 #include <stdlib.h>
 #include <string>
 #include <sstream>
-#ifdef _MSC_VER
-#include <unordered_map>
-#include <unordered_set>
-#else
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
-#endif
 #include <set>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -67,11 +60,7 @@
 #include <boost/scoped_array.hpp>
 #include <boost/thread.hpp>
 #include <boost/thread/condition.hpp>
-#ifdef _MSC_VER
-typedef int pthread_t;
-#else
 #include <pthread.h>
-#endif
 //#define NDEBUG
 #include <cassert>
 
@@ -257,7 +246,7 @@ typedef FdCountEntry FdCountEntry_t;
 
 struct fdCountCompare
 {
-  bool operator()(const FdCountEntry_t& lhs, const FdCountEntry_t& rhs)
+  bool operator()(const FdCountEntry_t& lhs, const FdCountEntry_t& rhs) const
   {
     return lhs.cnt > rhs.cnt;
   }
@@ -388,7 +377,6 @@ void* thr_popper(ioManager* arg)
   utils::setThreadName("thr_popper");
   ioManager* iom = arg;
   FileBufferMgr* fbm;
-  int totalRqst = 0;
   fileRequest* fr = 0;
   BRM::LBID_t lbid = 0;
   BRM::OID_t oid = 0;
@@ -432,13 +420,8 @@ void* thr_popper(ioManager* arg)
 
   if (iom->IOTrace())
   {
-#ifdef _MSC_VER
-    threadId = GetCurrentThreadId();
-    iomLogFileName << "C:/Calpont/log/trace/iom." << threadId;
-#else
     threadId = pthread_self();
     iomLogFileName << MCSLOGDIR << "/trace/iom." << threadId;
-#endif
     lFile.open(iomLogFileName.str().c_str(), ios_base::app | ios_base::ate);
   }
 
@@ -748,7 +731,6 @@ void* thr_popper(ioManager* arg)
 
     longSeekOffset = (uint64_t)offset * (uint64_t)fileBlockSize;
     lldiv_t cmpOffFact = lldiv(longSeekOffset, (4LL * 1024LL * 1024LL));
-    totalRqst++;
 
     uint32_t readCount = 0;
     uint32_t bytesRead = 0;
@@ -1007,11 +989,7 @@ void* thr_popper(ioManager* arg)
 
         if (blocksThisRead > 0 && fdit->second->isCompressed())
         {
-#ifdef _MSC_VER
-          unsigned int blen = 4 * 1024 * 1024 + 4;
-#else
           size_t blen = 4 * 1024 * 1024 + 4;
-#endif
 #ifdef IDB_COMP_POC_DEBUG
           {
             boost::mutex::scoped_lock lk(primitiveprocessor::compDebugMutex);
@@ -1310,11 +1288,7 @@ ioManager::ioManager(FileBufferMgr& fbm, fileBlockRequestQueue& fbrq, int thrCou
   if (temp > 0)
   {
     fFDCacheTrace = true;
-#ifdef _MSC_VER
-    FDTraceFile().open("C:/Calpont/log/trace/fdcache", ios_base::ate | ios_base::app);
-#else
     FDTraceFile().open(string(MCSLOGDIR) + "/trace/fdcache", ios_base::ate | ios_base::app);
-#endif
   }
 
   fThreadCount = thrCount;

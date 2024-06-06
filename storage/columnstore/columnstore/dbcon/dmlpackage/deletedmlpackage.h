@@ -22,17 +22,12 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef DELETEDMLPACKAGE_H
-#define DELETEDMLPACKAGE_H
+#pragma once
 #include <string>
 #include "calpontdmlpackage.h"
 #include "bytestream.h"
 
-#if defined(_MSC_VER) && defined(xxxDELETEDMLPKG_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace dmlpackage
 {
@@ -99,5 +94,3 @@ class DeleteDMLPackage : public CalpontDMLPackage
 }  // namespace dmlpackage
 
 #undef EXPORT
-
-#endif  // DELETEDMLPACKAGE_H

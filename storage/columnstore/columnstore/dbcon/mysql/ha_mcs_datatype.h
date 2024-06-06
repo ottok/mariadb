@@ -15,8 +15,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
-#ifndef HA_MCS_DATATYPE_H_INCLUDED
-#define HA_MCS_DATATYPE_H_INCLUDED
+#pragma once
 
 /*
   Interface classes for MariaDB data types (e.g. Field) for TypeHandler.
@@ -85,6 +84,11 @@ class StoreFieldMariaDB : public StoreField
 
   int store_string(const char* str, size_t length) override
   {
+    if (!str)
+    {
+      m_field->set_null();
+      return 1;
+    }
     return m_field->store(str, length, m_field->charset());
   }
   int store_varbinary(const char* str, size_t length) override
@@ -93,16 +97,20 @@ class StoreFieldMariaDB : public StoreField
     {
       size_t ll = length * 2;
       boost::scoped_array<char> sca(new char[ll]);
-      ConstString(str, length).bin2hex(sca.get());
+      utils::ConstString(str, length).bin2hex(sca.get());
       return m_field->store_binary(sca.get(), ll);
     }
     return m_field->store_binary(str, length);
   }
 
-  int store_xlonglong(int64_t val) override
+  int store_longlong(int64_t val) override
   {
-    idbassert(dynamic_cast<Field_num*>(m_field));
-    return m_field->store(val, static_cast<Field_num*>(m_field)->unsigned_flag);
+    return m_field->store(val, 0);
+  }
+
+  int store_ulonglong(uint64_t val) override
+  {
+    return m_field->store(static_cast<int64_t>(val), 1);
   }
 
   int store_float(float dl) override
@@ -443,6 +451,40 @@ class WriteBatchFieldMariaDB : public WriteBatchField
     else
       fprintf(ci.filePtr(), "%u%c", *((uint32_t*)buf), ci.delimiter());
     return 4;
+  }
+
+  size_t ColWriteBatchSInt24(const uchar* buf, bool nullVal, ColBatchWriter& ci) override
+  {
+    if (nullVal && (m_type.constraintType != CalpontSystemCatalog::NOTNULL_CONSTRAINT))
+    {
+      fprintf(ci.filePtr(), "%c", ci.delimiter());
+    }
+    else
+    {
+      int32_t tmp = (
+                     (*const_cast<uint8_t*>(buf) << 8) |
+                     (*const_cast<uint8_t*>(buf+1) << 16) |
+                     (*const_cast<uint8_t*>(buf+2) << 24)
+                    ) >> 8;
+      fprintf(ci.filePtr(), "%d%c", tmp, ci.delimiter());
+    }
+    return 3;
+  }
+
+  size_t ColWriteBatchUInt24(const uchar* buf, bool nullVal, ColBatchWriter& ci) override
+  {
+    if (nullVal && (m_type.constraintType != CalpontSystemCatalog::NOTNULL_CONSTRAINT))
+      fprintf(ci.filePtr(), "%c", ci.delimiter());
+    else
+    {
+      uint32_t tmp = (
+                      (*const_cast<uint8_t*>(buf)) |
+                      (*const_cast<uint8_t*>(buf+1) << 8) |
+                      (*const_cast<uint8_t*>(buf+2) << 16)
+                     );
+      fprintf(ci.filePtr(), "%u%c", tmp, ci.delimiter());
+    }
+    return 3;
   }
 
   size_t ColWriteBatchSInt16(const uchar* buf, bool nullVal, ColBatchWriter& ci) override
@@ -841,5 +883,3 @@ class WriteBatchFieldMariaDB : public WriteBatchField
 };
 
 }  // end of namespace datatypes
-
-#endif

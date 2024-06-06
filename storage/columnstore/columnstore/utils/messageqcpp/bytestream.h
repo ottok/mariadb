@@ -18,9 +18,7 @@
    MA 02110-1301, USA.
 */
 
-#ifndef MESSAGEQCPP_BYTESTREAM_H
-#define MESSAGEQCPP_BYTESTREAM_H
-
+#pragma once
 #include <string>
 #include <iostream>
 #include <sys/types.h>
@@ -28,7 +26,7 @@
 #include <vector>
 #include <set>
 #include <boost/shared_ptr.hpp>
-#include <boost/shared_array.hpp>
+
 #include <boost/version.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <stdint.h>
@@ -38,14 +36,11 @@
 #include "exceptclasses.h"
 #include "serializeable.h"
 #include "any.hpp"
+#include "nullstring.h"
 
 class ByteStreamTestSuite;
 
-#if defined(_MSC_VER) && defined(xxxBYTESTREAM_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace messageqcpp
 {
@@ -128,15 +123,6 @@ class ByteStream : public Serializeable
    *	push a uint32_t onto the end of the stream. The byte order is whatever the native byte order is.
    */
   EXPORT ByteStream& operator<<(const uint32_t q);
-#ifdef _MSC_VER
-#if BOOST_VERSION < 104500
-  // These 2 are to make MS VC++ w/ boost < 1.45 happy
-  // TODO: Do we still need these?
-  EXPORT ByteStream& operator<<(const uint32_t ui);
-
-  EXPORT ByteStream& operator>>(uint32_t& ui);
-#endif
-#endif
   /**
    *	push an int64_t onto the end of the stream. The byte order is whatever the native byte order is.
    */
@@ -173,6 +159,10 @@ class ByteStream : public Serializeable
    * push a std::string onto the end of the stream.
    */
   EXPORT ByteStream& operator<<(const std::string& s);
+  /**
+   * push a NullString onto the end of the stream.
+   */
+  EXPORT ByteStream& operator<<(const utils::NullString& s);
   /**
    * push an arbitrary class onto the end of the stream.
    */
@@ -246,6 +236,10 @@ class ByteStream : public Serializeable
    * extract a std::string from the front of the stream.
    */
   EXPORT ByteStream& operator>>(std::string& s);
+  /**
+   * extract a NullString from the front of the stream.
+   */
+  EXPORT ByteStream& operator>>(utils::NullString& s);
   /**
    *	write the current stream into b. The ByteStream will be empty after this operation.
    * @warning the caller is responsible for making sure b is big enough to hold all the data (perhaps by
@@ -450,9 +444,9 @@ class ByteStream : public Serializeable
       3 * sizeof(uint32_t);  // space for the BS magic & length & number of long strings.
 
   // Methods to get and set `long strings`.
-  EXPORT std::vector<boost::shared_array<uint8_t>>& getLongStrings();
-  EXPORT const std::vector<boost::shared_array<uint8_t>>& getLongStrings() const;
-  EXPORT void setLongStrings(const std::vector<boost::shared_array<uint8_t>>& other);
+  EXPORT std::vector<std::shared_ptr<uint8_t[]>>& getLongStrings();
+  EXPORT const std::vector<std::shared_ptr<uint8_t[]>>& getLongStrings() const;
+  EXPORT void setLongStrings(const std::vector<std::shared_ptr<uint8_t[]>>& other);
 
   friend class ::ByteStreamTestSuite;
 
@@ -484,7 +478,7 @@ class ByteStream : public Serializeable
   uint8_t* fCurOutPtr;  // the point in fBuf where data is extracted from next
   uint32_t fMaxLen;     // how big fBuf is currently
   // Stores `long strings`.
-  std::vector<boost::shared_array<uint8_t>> longStrings;
+    std::vector<std::shared_ptr<uint8_t[]>> longStrings;
 };
 
 template <int W, typename T = void>
@@ -675,11 +669,6 @@ void deserializeVector(ByteStream& bs, std::vector<T>& v)
   }
 }
 
-#ifdef _MSC_VER
-// Until the API is fixed to be 64-bit clean...
-#pragma warning(push)
-#pragma warning(disable : 4267)
-#endif
 
 template <typename T>
 void serializeInlineVector(ByteStream& bs, const std::vector<T>& v)
@@ -714,9 +703,6 @@ void deserializeInlineVector(ByteStream& bs, std::vector<T>& v)
   }
 }
 
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 
 inline void deserializeVector(ByteStream& bs, std::vector<int64_t>& v)
 {
@@ -774,5 +760,3 @@ inline void swap<messageqcpp::ByteStream>(messageqcpp::ByteStream& lhs, messageq
 }  // namespace std
 
 #undef EXPORT
-
-#endif  // MESSAGEQCPP_BYTESTREAM_H

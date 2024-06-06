@@ -4,15 +4,13 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated
  */
-#ifndef querytele_TYPES_H
-#define querytele_TYPES_H
+#pragma once
 
 #include <thrift/Thrift.h>
 #include <thrift/TApplicationException.h>
 #include <thrift/protocol/TProtocol.h>
 #include <thrift/transport/TTransport.h>
 
-#include <thrift/cxxfunctional.h>
 
 namespace querytele
 {
@@ -945,5 +943,3 @@ class ImportTele
 void swap(ImportTele& a, ImportTele& b);
 
 }  // namespace querytele
-
-#endif

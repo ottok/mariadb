@@ -41,6 +41,8 @@ using namespace logging;
 
 #include "funchelpers.h"
 
+#include "exceptclasses.h"
+
 namespace
 {
 using namespace funcexp;
@@ -136,18 +138,27 @@ int64_t Func_round::getIntVal(Row& row, FunctionParm& parm, bool& isNull,
 uint64_t Func_round::getUintVal(Row& row, FunctionParm& parm, bool& isNull,
                                 CalpontSystemCatalog::ColType& op_ct)
 {
-  uint64_t x;
-  if (UNLIKELY(op_ct.colDataType == execplan::CalpontSystemCatalog::DATE))
+  IDB_Decimal x = getDecimalVal(row, parm, isNull, op_ct);
+
+  if (!op_ct.isWideDecimalType())
   {
-    IDB_Decimal d = getDecimalVal(row, parm, isNull, op_ct);
-    x = static_cast<uint64_t>(d.value);
+    if (x.scale > 0)
+    {
+      while (x.scale-- > 0)
+        x.value /= 10;
+    }
+    else
+    {
+      while (x.scale++ < 0)
+        x.value *= 10;
+    }
+
+    return x.value;
   }
   else
   {
-    x = parm[0]->data()->getUintVal(row, isNull);
+    return static_cast<uint64_t>(x.getIntegralPart());
   }
-
-  return x;
 }
 
 double Func_round::getDoubleVal(Row& row, FunctionParm& parm, bool& isNull,
@@ -183,6 +194,13 @@ double Func_round::getDoubleVal(Row& row, FunctionParm& parm, bool& isNull,
     }
 
     return x;
+  }
+
+  if (execplan::CalpontSystemCatalog::VARCHAR == op_ct.colDataType ||
+      execplan::CalpontSystemCatalog::CHAR == op_ct.colDataType ||
+      execplan::CalpontSystemCatalog::TEXT == op_ct.colDataType)
+  {
+    return getIntVal(row, parm, isNull, op_ct);
   }
 
   if (isUnsigned(op_ct.colDataType))
@@ -250,6 +268,13 @@ long double Func_round::getLongDoubleVal(Row& row, FunctionParm& parm, bool& isN
     }
 
     return x;
+  }
+
+  if (execplan::CalpontSystemCatalog::VARCHAR == op_ct.colDataType ||
+      execplan::CalpontSystemCatalog::CHAR == op_ct.colDataType ||
+      execplan::CalpontSystemCatalog::TEXT == op_ct.colDataType)
+  {
+    return getIntVal(row, parm, isNull, op_ct);
   }
 
   if (isUnsigned(op_ct.colDataType))
@@ -434,10 +459,11 @@ IDB_Decimal Func_round::getDecimalVal(Row& row, FunctionParm& parm, bool& isNull
     {
       uint64_t x = parm[0]->data()->getUintVal(row, isNull);
 
-      if (x > (uint64_t)helpers::maxNumber_c[18])
-      {
-        x = helpers::maxNumber_c[18];
-      }
+      // why it is here at all???
+      // if (x > (uint64_t)helpers::maxNumber_c[18])
+      //{
+      //    x = helpers::maxNumber_c[18];
+      //}
 
       decimal.value = x;
       decimal.scale = 0;
@@ -472,7 +498,9 @@ IDB_Decimal Func_round::getDecimalVal(Row& row, FunctionParm& parm, bool& isNull
         else
           x = ceil(x - 0.5);
 
-        decimal.value = (int64_t)x;
+        decimal.value = x <= static_cast<double>(INT64_MIN)   ? INT64_MIN
+                        : x >= static_cast<double>(INT64_MAX) ? INT64_MAX
+                                                              : int64_t(x);
         decimal.scale = s;
       }
     }
@@ -523,7 +551,7 @@ IDB_Decimal Func_round::getDecimalVal(Row& row, FunctionParm& parm, bool& isNull
         else
         {
           if (-s >= (int32_t)value.size())
-            value = "0";
+            value = '0';
           else
           {
             // check to see if last digit needs to be rounded up
@@ -593,7 +621,7 @@ IDB_Decimal Func_round::getDecimalVal(Row& row, FunctionParm& parm, bool& isNull
         else
         {
           if (-s >= (int32_t)value.size())
-            value = "0";
+            value = '0';
           else
           {
             // check to see if last digit needs to be rounded up
@@ -706,13 +734,49 @@ string Func_round::getStrVal(Row& row, FunctionParm& parm, bool& isNull, Calpont
 int64_t Func_round::getDatetimeIntVal(Row& row, FunctionParm& parm, bool& isNull,
                                       CalpontSystemCatalog::ColType& op_ct)
 {
-  return parm[0]->data()->getIntVal(row, isNull);
+  int32_t s = parm.size() > 1 ? parm[1]->data()->getIntVal(row, isNull) : 0;
+  if (isNull)
+    return 0;
+  s = (s > MAX_MICROSECOND_PRECISION) ? MAX_MICROSECOND_PRECISION : s;
+  if (s < 0) 
+  {
+    s = 0;
+  }
+  int64_t x = parm[0]->data()->getDatetimeIntVal(row, isNull) + (s <= MAX_MICROSECOND_PRECISION - 1 ? 5 * helpers::powerOf10_c[MAX_MICROSECOND_PRECISION - s - 1] : 0) + (s == 0 ? 48576 : 0); // 48576 = 0xfffff - 1000000;
+  int32_t m_x = x & 0xfffff;
+  return (x ^ m_x) | (m_x / helpers::powerOf10_c[MAX_MICROSECOND_PRECISION - s] * helpers::powerOf10_c[MAX_MICROSECOND_PRECISION - s]);
 }
 
 int64_t Func_round::getTimestampIntVal(rowgroup::Row& row, FunctionParm& parm, bool& isNull,
                                        execplan::CalpontSystemCatalog::ColType& op_ct)
 {
-  return parm[0]->data()->getTimestampIntVal(row, isNull);
+  int32_t s = parm.size() > 1 ? parm[1]->data()->getIntVal(row, isNull) : 0;
+  if (isNull)
+    return 0;
+  s = (s > MAX_MICROSECOND_PRECISION) ? MAX_MICROSECOND_PRECISION : s;
+  if (s < 0) 
+  {
+    s = 0;
+  }
+  int64_t x = parm[0]->data()->getTimestampIntVal(row, isNull) + (s <= MAX_MICROSECOND_PRECISION - 1 ? 5 * helpers::powerOf10_c[MAX_MICROSECOND_PRECISION - s - 1] : 0) + (s == 0 ? 48576 : 0); // 48576 = 0xfffff - 1000000;
+  int32_t m_x = x & 0xfffff;
+  return (x ^ m_x) | (m_x / helpers::powerOf10_c[MAX_MICROSECOND_PRECISION - s] * helpers::powerOf10_c[MAX_MICROSECOND_PRECISION - s]);
+}
+
+int64_t Func_round::getTimeIntVal(rowgroup::Row& row, FunctionParm& parm, bool& isNull,
+                                       execplan::CalpontSystemCatalog::ColType& op_ct)
+{
+  int32_t s = parm.size() > 1 ? parm[1]->data()->getIntVal(row, isNull) : 0;
+  if (isNull)
+    return 0;
+  s = (s > MAX_MICROSECOND_PRECISION) ? MAX_MICROSECOND_PRECISION : s;
+  if (s < 0) 
+  {
+    s = 0;
+  }
+  int64_t x = parm[0]->data()->getTimeIntVal(row, isNull) + (s <= MAX_MICROSECOND_PRECISION - 1 ? 5 * helpers::powerOf10_c[MAX_MICROSECOND_PRECISION - 1 - s] : 0) + (s == 0 ? 15777215 : 0); // 15777215 = 0xffffff - 1000000;
+  int32_t m_x = x & 0xffffff;
+  return (x ^ m_x) | (m_x / helpers::powerOf10_c[MAX_MICROSECOND_PRECISION - s] * helpers::powerOf10_c[MAX_MICROSECOND_PRECISION - s]);
 }
 
 }  // namespace funcexp

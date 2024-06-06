@@ -50,27 +50,18 @@
  * is also used to describe the interface that is used for
  * either.
  */
-#ifndef HEADER_median
-#define HEADER_median
+#pragma once
 
 #include <cstdlib>
 #include <string>
 #include <vector>
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 
 #include "mcsv1_udaf.h"
 #include "calpontsystemcatalog.h"
 #include "windowfunctioncolumn.h"
 
-#if defined(_MSC_VER) && defined(xxxRGNODE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace mcsv1sdk
 {
@@ -277,5 +268,3 @@ class median : public mcsv1_UDAF
 };  // namespace mcsv1sdk
 
 #undef EXPORT
-
-#endif  // HEADER_median.h

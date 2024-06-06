@@ -20,8 +20,7 @@
 
 /** @file */
 
-#ifndef FUNCTOR_STR_H
-#define FUNCTOR_STR_H
+#pragma once
 
 #include "functor.h"
 #include "sql_crypt.h"
@@ -80,28 +79,28 @@ class Func_Str : public Func
   int32_t getDateIntVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
                         execplan::CalpontSystemCatalog::ColType& op_ct)
   {
-    std::string str = getStrVal(row, fp, isNull, op_ct);
+    auto str = getStrVal(row, fp, isNull, op_ct);
     return (isNull ? 0 : stringToDate(str));
   }
 
   int64_t getDatetimeIntVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
                             execplan::CalpontSystemCatalog::ColType& op_ct)
   {
-    std::string str = getStrVal(row, fp, isNull, op_ct);
+    auto str = getStrVal(row, fp, isNull, op_ct);
     return (isNull ? 0 : stringToDatetime(str));
   }
 
   int64_t getTimestampIntVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
                              execplan::CalpontSystemCatalog::ColType& op_ct)
   {
-    std::string str = getStrVal(row, fp, isNull, op_ct);
+    auto str = getStrVal(row, fp, isNull, op_ct);
     return (isNull ? 0 : stringToTimestamp(str, op_ct.getTimeZone()));
   }
 
   int64_t getTimeIntVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
                         execplan::CalpontSystemCatalog::ColType& op_ct)
   {
-    std::string str = getStrVal(row, fp, isNull, op_ct);
+    auto str = getStrVal(row, fp, isNull, op_ct);
     return (isNull ? 0 : stringToTime(str));
   }
 
@@ -126,9 +125,14 @@ class Func_Str : public Func
       case execplan::CalpontSystemCatalog::FLOAT: floatVal = fp->data()->getFloatVal(row, isNull); break;
 
       default:
-        fFloatStr = fp->data()->getStrVal(row, isNull);
+        fFloatStr = fp->data()->getStrVal(row, isNull).safeString("");
         return;
         break;
+    }
+
+    if (isNull)
+    {
+      return;
     }
 
     exponent = (int)floor(log10(fabsl(floatVal)));
@@ -652,6 +656,8 @@ class Func_monthname : public Func_Str
 
   int64_t getIntVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
                     execplan::CalpontSystemCatalog::ColType& op_ct);
+  int64_t getIntValInternal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
+                            execplan::CalpontSystemCatalog::ColType& op_ct);
 
   double getDoubleVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
                       execplan::CalpontSystemCatalog::ColType& op_ct);
@@ -1061,5 +1067,3 @@ class Func_decode : public Func_Str
 };
 
 }  // namespace funcexp
-
-#endif

@@ -24,8 +24,7 @@
  * class XXX interface
  */
 
-#ifndef _LARGEDATALIST_HPP
-#define _LARGEDATALIST_HPP
+#pragma once
 
 #include <iostream>
 #include <fstream>
@@ -1196,5 +1195,3 @@ void LargeDataList<container_t, element_t>::setCompressionMode()
 }
 
 }  // namespace joblist
-
-#endif

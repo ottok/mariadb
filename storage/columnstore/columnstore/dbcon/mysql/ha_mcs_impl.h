@@ -16,8 +16,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef HA_MCS_IMPL_H__
-#define HA_MCS_IMPL_H__
+#pragma once
 
 #include "idb_mysql.h"
 
@@ -45,7 +44,7 @@ extern int ha_mcs_impl_direct_update_delete_rows(bool execute, ha_rows* affected
                                                  const std::vector<COND*>& condStack);
 extern int ha_mcs_impl_delete_row();
 extern int ha_mcs_impl_rnd_pos(uchar* buf, uchar* pos);
-extern int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table);
+extern int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table, bool isSelectLexUnit = false);
 extern int ha_mcs_impl_select_next(uchar* buf, TABLE* table, long timeZone);
 extern int ha_mcs_impl_group_by_init(mcs_handler_info* handler_info, TABLE* table);
 extern int ha_mcs_impl_group_by_next(TABLE* table, long timeZone);
@@ -79,6 +78,4 @@ extern std::string ha_mcs_impl_droppartition_(execplan::CalpontSystemCatalog::Ta
 extern std::string ha_mcs_impl_viewtablelock(cal_impl_if::cal_connection_info& ci,
                                              execplan::CalpontSystemCatalog::TableName& tablename);
 extern std::string ha_mcs_impl_cleartablelock(cal_impl_if::cal_connection_info& ci, uint64_t tableLockID);
-#endif
-
 #endif

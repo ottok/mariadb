@@ -48,7 +48,6 @@
 #include "sql_audit.h"
 #include <m_ctype.h>
 #include <sys/stat.h>
-#include <thr_alarm.h>
 #include <mysys_err.h>
 #include <limits.h>
 
@@ -637,11 +636,14 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
    protocol_text(this), protocol_binary(this), initial_status_var(0),
    m_current_stage_key(0), m_psi(0),
    in_sub_stmt(0), log_all_errors(0),
-   binlog_unsafe_warning_flags(0), used(0),
+   binlog_unsafe_warning_flags(0),
    current_stmt_binlog_format(BINLOG_FORMAT_MIXED),
    bulk_param(0),
    table_map_for_update(0),
+   m_sent_row_count(0),
+   sent_row_count_for_statement(0),
    m_examined_row_count(0),
+   examined_row_count_for_statement(0),
    accessed_rows_and_keys(0),
    m_digest(NULL),
    m_statement_psi(NULL),
@@ -776,7 +778,6 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
   my_hash_clear(&ull_hash);
   tmp_table=0;
   cuted_fields= 0L;
-  m_sent_row_count= 0L;
   limit_found_rows= 0;
   m_row_count_func= -1;
   statement_id_counter= 0UL;
@@ -1133,31 +1134,31 @@ ret:
 }
 
 extern "C"
-void *thd_alloc(MYSQL_THD thd, size_t size)
+void *thd_alloc(const MYSQL_THD thd, size_t size)
 {
   return thd->alloc(size);
 }
 
 extern "C"
-void *thd_calloc(MYSQL_THD thd, size_t size)
+void *thd_calloc(const MYSQL_THD thd, size_t size)
 {
   return thd->calloc(size);
 }
 
 extern "C"
-char *thd_strdup(MYSQL_THD thd, const char *str)
+char *thd_strdup(const MYSQL_THD thd, const char *str)
 {
   return thd->strdup(str);
 }
 
 extern "C"
-char *thd_strmake(MYSQL_THD thd, const char *str, size_t size)
+char *thd_strmake(const MYSQL_THD thd, const char *str, size_t size)
 {
   return thd->strmake(str, size);
 }
 
 extern "C"
-LEX_CSTRING *thd_make_lex_string(THD *thd, LEX_CSTRING *lex_str,
+LEX_CSTRING *thd_make_lex_string(const THD *thd, LEX_CSTRING *lex_str,
                                 const char *str, size_t size,
                                 int allocate_lex_string)
 {
@@ -1166,7 +1167,7 @@ LEX_CSTRING *thd_make_lex_string(THD *thd, LEX_CSTRING *lex_str,
 }
 
 extern "C"
-void *thd_memdup(MYSQL_THD thd, const void* str, size_t size)
+void *thd_memdup(const MYSQL_THD thd, const void* str, size_t size)
 {
   return thd->memdup(str, size);
 }
@@ -1193,6 +1194,63 @@ void thd_gmt_sec_to_TIME(MYSQL_THD thd, MYSQL_TIME *ltime, my_time_t t)
   Time_zone *tz= thd ? thd->variables.time_zone :
                        global_system_variables.time_zone;
   tz->gmt_sec_to_TIME(ltime, t);
+}
+
+
+/*
+  @brief
+  Convert a non-zero DATETIME to its safe timeval based representation,
+  which guarantees a safe roundtrip DATETIME->timeval->DATETIME,
+  e.g. to optimize:
+
+     WHERE timestamp_arg0 = datetime_arg1
+
+  in the way that we replace "datetime_arg1" to its TIMESTAMP equivalent
+  "timestamp_arg1" and switch from DATETIME comparison to TIMESTAMP comparison:
+
+     WHERE timestamp_arg0 = timestamp_arg1
+
+  This helps to avoid slow TIMESTAMP->DATETIME data type conversion
+  for timestamp_arg0 per row.
+
+  @detail
+  Round trip is possible if the input "YYYY-MM-DD hh:mm:ss" value
+  satisfies the following conditions:
+
+    1. TIME_to_gmt_sec() returns no errors or warnings,
+       which means the input value
+       a. has no zeros in YYYYMMDD
+       b. fits into the TIMESTAMP range
+       c. does not fall into the spring forward gap
+          (because values inside gaps get adjusted to the beginning of the gap)
+
+    2. The my_time_t value returned by TIME_to_gmt_sec() must not be
+       near a DST change or near a leap second, to avoid anomalies:
+       - "YYYY-MM-DD hh:mm:ss" has more than one matching my_time_t values
+       - "YYYY-MM-DD hh:mm:ss" has no matching my_time_t values
+         (e.g. fall into the spring forward gap)
+
+  @param dt   The DATETIME value to convert.
+              Must not be zero '0000-00-00 00:00:00.000000'.
+              (The zero value must be handled by the caller).
+
+  @return     The conversion result
+  @retval     If succeeded, non-NULL Timeval value.
+  @retval     Timeval_null value representing SQL NULL if the argument
+              does not have a safe replacement.
+*/
+Timeval_null
+THD::safe_timeval_replacement_for_nonzero_datetime(const Datetime &dt)
+{
+  used|= THD::TIME_ZONE_USED;
+  DBUG_ASSERT(non_zero_date(dt.get_mysql_time()));
+  uint error= 0;
+  const MYSQL_TIME *ltime= dt.get_mysql_time();
+  my_time_t sec= variables.time_zone->TIME_to_gmt_sec(ltime, &error);
+  if (error /* (1) */ ||
+      !variables.time_zone->is_monotone_continuous_around(sec) /* (2) */)
+    return Timeval_null();
+  return Timeval_null(sec, ltime->second_part);
 }
 
 
@@ -1230,10 +1288,6 @@ void THD::init()
   */
   variables.pseudo_thread_id= thread_id;
 
-  variables.default_master_connection.str= default_master_connection_buff;
-  ::strmake(default_master_connection_buff,
-            global_system_variables.default_master_connection.str,
-            variables.default_master_connection.length);
   mysql_mutex_unlock(&LOCK_global_system_variables);
 
   user_time.val= start_time= start_time_sec_part= 0;
@@ -1346,7 +1400,7 @@ void THD::update_stats(void)
     /* A SQL query. */
     if (lex->sql_command == SQLCOM_SELECT)
       select_commands++;
-    else if (sql_command_flags[lex->sql_command] & CF_STATUS_COMMAND)
+    else if (sql_command_flags() & CF_STATUS_COMMAND)
     {
       /* Ignore 'SHOW ' commands */
     }
@@ -1545,6 +1599,8 @@ void THD::cleanup(void)
     trans_xa_detach(this);
   else
     trans_rollback(this);
+
+  DEBUG_SYNC(this, "THD_cleanup_after_trans_cleanup");
 
   DBUG_ASSERT(open_tables == NULL);
   DBUG_ASSERT(m_transaction_psi == NULL);
@@ -1900,9 +1956,6 @@ void THD::awake_no_mutex(killed_state state_to_set)
         vio_shutdown(active_vio, SHUT_RDWR);
     }
 #endif
-
-    /* Mark the target thread's alarm request expired, and signal alarm. */
-    thr_alarm_kill(thread_id);
 
     /* Send an event to the scheduler that a thread should be killed. */
     if (!slave_thread)
@@ -2352,7 +2405,7 @@ void THD::cleanup_after_query()
 
 bool THD::convert_string(LEX_STRING *to, CHARSET_INFO *to_cs,
 			 const char *from, size_t from_length,
-			 CHARSET_INFO *from_cs)
+			 CHARSET_INFO *from_cs) const
 {
   DBUG_ENTER("THD::convert_string");
   size_t new_length= to_cs->mbmaxlen * from_length;
@@ -2389,7 +2442,7 @@ bool THD::convert_string(LEX_STRING *to, CHARSET_INFO *to_cs,
 */
 
 bool THD::reinterpret_string_from_binary(LEX_CSTRING *to, CHARSET_INFO *cs,
-                                         const char *str, size_t length)
+                                         const char *str, size_t length) const
 {
   /*
     When reinterpreting from binary to tricky character sets like
@@ -2431,7 +2484,7 @@ bool THD::reinterpret_string_from_binary(LEX_CSTRING *to, CHARSET_INFO *cs,
 */
 bool THD::convert_fix(CHARSET_INFO *dstcs, LEX_STRING *dst,
                       CHARSET_INFO *srccs, const char *src, size_t src_length,
-                      String_copier *status)
+                      String_copier *status) const
 {
   DBUG_ENTER("THD::convert_fix");
   size_t dst_length= dstcs->mbmaxlen * src_length;
@@ -2449,7 +2502,7 @@ bool THD::convert_fix(CHARSET_INFO *dstcs, LEX_STRING *dst,
 */
 bool THD::copy_fix(CHARSET_INFO *dstcs, LEX_STRING *dst,
                    CHARSET_INFO *srccs, const char *src, size_t src_length,
-                   String_copier *status)
+                   String_copier *status) const
 {
   DBUG_ENTER("THD::copy_fix");
   size_t dst_length= dstcs->mbmaxlen * src_length;
@@ -2481,7 +2534,7 @@ public:
 
 bool THD::convert_with_error(CHARSET_INFO *dstcs, LEX_STRING *dst,
                              CHARSET_INFO *srccs,
-                             const char *src, size_t src_length)
+                             const char *src, size_t src_length) const
 {
   String_copier_with_error status;
   return convert_fix(dstcs, dst, srccs, src, src_length, &status) ||
@@ -2491,7 +2544,7 @@ bool THD::convert_with_error(CHARSET_INFO *dstcs, LEX_STRING *dst,
 
 bool THD::copy_with_error(CHARSET_INFO *dstcs, LEX_STRING *dst,
                           CHARSET_INFO *srccs,
-                          const char *src, size_t src_length)
+                          const char *src, size_t src_length) const
 {
   String_copier_with_error status;
   return copy_fix(dstcs, dst, srccs, src, src_length, &status) ||
@@ -2514,7 +2567,8 @@ bool THD::copy_with_error(CHARSET_INFO *dstcs, LEX_STRING *dst,
    !0   out of memory
 */
 
-bool THD::convert_string(String *s, CHARSET_INFO *from_cs, CHARSET_INFO *to_cs)
+bool THD::convert_string(String *s, CHARSET_INFO *from_cs,
+                         CHARSET_INFO *to_cs)
 {
   uint dummy_errors;
   if (unlikely(convert_buffer.copy(s->ptr(), s->length(), from_cs, to_cs,
@@ -2546,7 +2600,8 @@ bool THD::check_string_for_wellformedness(const char *str,
 }
 
 
-bool THD::to_ident_sys_alloc(Lex_ident_sys_st *to, const Lex_ident_cli_st *ident)
+bool THD::to_ident_sys_alloc(Lex_ident_sys_st *to,
+                             const Lex_ident_cli_st *ident) const
 {
   if (ident->is_quoted())
   {
@@ -3395,6 +3450,9 @@ int select_export::send_data(List<Item> &items)
   uint used_length=0,items_left=items.elements;
   List_iterator_fast<Item> li(items);
 
+  DBUG_EXECUTE_IF("select_export_kill", {
+    thd->killed= KILL_QUERY;
+  });
   if (my_b_write(&cache,(uchar*) exchange->line_start->ptr(),
 		 exchange->line_start->length()))
     goto err;
@@ -3977,6 +4035,49 @@ Statement::Statement(LEX *lex_arg, MEM_ROOT *mem_root_arg,
 Query_arena::Type Statement::type() const
 {
   return STATEMENT;
+}
+
+
+/*
+  Return an internal database name:
+  - validated with Lex_ident_db::check_db_name()
+  - optionally converted to lower-case when lower_case_table_names==1
+
+  The lower-cased copy is made on mem_root when needed.
+  An error is raised in case of EOM or a bad database name.
+
+  @param src   - the database name
+  @returns     - {NULL,0} on EOM or a bad database name,
+                 or a good database name otherwise
+*/
+
+Lex_ident_db
+Query_arena::to_ident_db_internal_with_error(const LEX_CSTRING &src)
+{
+  DBUG_ASSERT(src.str);
+  if (src.str == any_db.str) // e.g. JSON table
+    return any_db; // preserve any_db - it has a special meaning
+
+  bool casedn= lower_case_table_names == 1;
+  const LEX_CSTRING tmp= casedn ? make_ident_casedn(src) : src;
+  if (!tmp.str /*EOM*/ ||
+      Lex_ident_fs(tmp).check_db_name_with_error())
+    return Lex_ident_db();
+
+  return Lex_ident_db(tmp.str, tmp.length);
+}
+
+
+Lex_ident_db
+Table_ident::to_ident_db_internal_with_error(Query_arena *arena) const
+{
+  if (is_derived_table())
+  {
+    DBUG_ASSERT(db.str == empty_c_string && db.length == 0);
+    return Lex_ident_db(empty_c_string, 0);
+  }
+  // Normal table or JSON table
+  return arena->to_ident_db_internal_with_error(db);
 }
 
 
@@ -5833,7 +5934,7 @@ void THD::reset_sub_statement_state(Sub_statement_state *backup,
   cuted_fields= 0;
   transaction->savepoints= 0;
   first_successful_insert_id_in_cur_stmt= 0;
-  reset_slow_query_state();
+  reset_slow_query_state(backup);
 }
 
 void THD::restore_sub_statement_state(Sub_statement_state *backup)
@@ -5875,11 +5976,14 @@ void THD::restore_sub_statement_state(Sub_statement_state *backup)
   first_successful_insert_id_in_cur_stmt= 
     backup->first_successful_insert_id_in_cur_stmt;
   limit_found_rows= backup->limit_found_rows;
-  set_sent_row_count(backup->sent_row_count);
   client_capabilities= backup->client_capabilities;
 
   /* Restore statistic needed for slow log */
   add_slow_query_state(backup);
+  if (backup->sent_row_count)
+    MYSQL_SET_STATEMENT_ROWS_SENT(m_statement_psi, m_sent_row_count);
+  if (backup->examined_row_count)
+    MYSQL_SET_STATEMENT_ROWS_EXAMINED(m_statement_psi, m_examined_row_count);
 
   /*
     If we've left sub-statement mode, reset the fatal error flag.
@@ -5913,18 +6017,20 @@ void THD::store_slow_query_state(Sub_statement_state *backup)
   backup->affected_rows=           affected_rows;
   backup->bytes_sent_old=          bytes_sent_old;
   backup->examined_row_count=      m_examined_row_count;
+  backup->examined_row_count_for_statement= examined_row_count_for_statement;
   backup->query_plan_flags=        query_plan_flags;
   backup->query_plan_fsort_passes= query_plan_fsort_passes;
   backup->sent_row_count=          m_sent_row_count;
+  backup->sent_row_count_for_statement= sent_row_count_for_statement;
   backup->tmp_tables_disk_used=    tmp_tables_disk_used;
   backup->tmp_tables_size=         tmp_tables_size;
   backup->tmp_tables_used=         tmp_tables_used;
-  backup->handler_stats=            handler_stats;
+  backup->handler_stats=           handler_stats;
 }
 
 /* Reset variables related to slow query log */
 
-void THD::reset_slow_query_state()
+void THD::reset_slow_query_state(Sub_statement_state *backup)
 {
   affected_rows=                0;
   bytes_sent_old=               status_var.bytes_sent;
@@ -5935,6 +6041,17 @@ void THD::reset_slow_query_state()
   tmp_tables_disk_used=         0;
   tmp_tables_size=              0;
   tmp_tables_used=              0;
+  if (backup && (backup->in_stored_procedure= in_stored_procedure()))
+  {
+    /*
+      For stored procedures, we want to see stats in show processlist
+      for the current statement, not for the call to stored procedure.
+      This is because 'show processlist' shows the stored procedure
+      query string, not the CALL query.
+    */
+    examined_row_count_for_statement= 0;
+    sent_row_count_for_statement= 0;
+  }
   if ((variables.log_slow_verbosity & LOG_SLOW_VERBOSITY_ENGINE))
     handler_stats.reset();
 }
@@ -5955,6 +6072,17 @@ void THD::add_slow_query_state(Sub_statement_state *backup)
   tmp_tables_disk_used+=         backup->tmp_tables_disk_used;
   tmp_tables_size+=              backup->tmp_tables_size;
   tmp_tables_used+=              backup->tmp_tables_used;
+  if (backup->in_stored_procedure)
+  {
+    /*
+      For stored procedures, we want to see stats in show processlist
+      for the current statement, not for the call to stored procedure.
+      This is because 'show processlist' shows the stored procedure
+      query string, not the CALL query.
+    */
+    examined_row_count_for_statement+= backup->examined_row_count_for_statement;
+    sent_row_count_for_statement+=     backup->sent_row_count_for_statement;
+  }
   if ((variables.log_slow_verbosity & LOG_SLOW_VERBOSITY_ENGINE))
     handler_stats.add(&backup->handler_stats);
 }
@@ -5967,28 +6095,21 @@ void THD::set_statement(Statement *stmt)
   mysql_mutex_unlock(&LOCK_thd_data);
 }
 
+/*
+  This functions is only called when we send the result from the query
+  cache or in case of select_export().
+*/
 void THD::set_sent_row_count(ha_rows count)
 {
   m_sent_row_count= count;
+  sent_row_count_for_statement+= count;
   MYSQL_SET_STATEMENT_ROWS_SENT(m_statement_psi, m_sent_row_count);
 }
 
-void THD::set_examined_row_count(ha_rows count)
+void THD::ps_report_examined_row_count()
 {
-  m_examined_row_count= count;
-  MYSQL_SET_STATEMENT_ROWS_EXAMINED(m_statement_psi, m_examined_row_count);
-}
-
-void THD::inc_sent_row_count(ha_rows count)
-{
-  m_sent_row_count+= count;
-  MYSQL_SET_STATEMENT_ROWS_SENT(m_statement_psi, m_sent_row_count);
-}
-
-void THD::inc_examined_row_count(ha_rows count)
-{
-  m_examined_row_count+= count;
-  MYSQL_SET_STATEMENT_ROWS_EXAMINED(m_statement_psi, m_examined_row_count);
+  if (m_examined_row_count)
+    MYSQL_SET_STATEMENT_ROWS_EXAMINED(m_statement_psi, m_examined_row_count);
 }
 
 void THD::inc_status_created_tmp_disk_tables()
@@ -6166,6 +6287,26 @@ void THD::get_definer(LEX_USER *definer, bool role)
   else
 #endif
     get_default_definer(this, definer, role);
+}
+
+
+bool THD::check_slave_ignored_db_with_error(const Lex_ident_db &db) const
+{
+#ifdef HAVE_REPLICATION
+  if (slave_thread)
+  {
+    Rpl_filter *rpl_filter;
+    rpl_filter= system_thread_info.rpl_sql_info->rpl_filter;
+    if (!rpl_filter->db_ok(db.str) ||
+        !rpl_filter->db_ok_with_wild_table(db.str))
+    {
+      my_message(ER_SLAVE_IGNORED_TABLE,
+                 ER_THD(this, ER_SLAVE_IGNORED_TABLE), MYF(0));
+      return true;
+    }
+  }
+#endif
+  return false;
 }
 
 
@@ -6611,8 +6752,8 @@ int THD::decide_logging_format(TABLE_LIST *tables)
           blackhole_table_found= 1;
 
         if (share->non_determinstic_insert &&
-            (sql_command_flags[lex->sql_command] & CF_CAN_GENERATE_ROW_EVENTS
-             && !(sql_command_flags[lex->sql_command] & CF_SCHEMA_CHANGE)))
+            (sql_command_flags() & CF_CAN_GENERATE_ROW_EVENTS
+             && !(sql_command_flags() & CF_SCHEMA_CHANGE)))
           has_write_tables_with_unsafe_statements= true;
 
         trans= table->file->has_transactions();
@@ -6861,8 +7002,7 @@ int THD::decide_logging_format(TABLE_LIST *tables)
 
     if (blackhole_table_found &&
         variables.binlog_format == BINLOG_FORMAT_ROW &&
-        (sql_command_flags[lex->sql_command] &
-         (CF_UPDATES_DATA | CF_DELETES_DATA)))
+        (sql_command_flags() & (CF_UPDATES_DATA | CF_DELETES_DATA)))
     {
       String table_names;
       /*
@@ -6882,8 +7022,7 @@ int THD::decide_logging_format(TABLE_LIST *tables)
       }
       if (!table_names.is_empty())
       {
-        bool is_update= MY_TEST(sql_command_flags[lex->sql_command] &
-                                CF_UPDATES_DATA);
+        bool is_update= MY_TEST(sql_command_flags() & CF_UPDATES_DATA);
         /*
           Replace the last ',' with '.' for table_names
         */
@@ -7016,98 +7155,6 @@ bool THD::binlog_table_should_be_logged(const LEX_CSTRING *db)
            binlog_filter->db_ok(db->str)));
 }
 
-/*
-  Template member function for ensuring that there is an rows log
-  event of the apropriate type before proceeding.
-
-  PRE CONDITION:
-    - Events of type 'RowEventT' have the type code 'type_code'.
-
-  POST CONDITION:
-    If a non-NULL pointer is returned, the pending event for thread 'thd' will
-    be an event of type 'RowEventT' (which have the type code 'type_code')
-    will either empty or have enough space to hold 'needed' bytes.  In
-    addition, the columns bitmap will be correct for the row, meaning that
-    the pending event will be flushed if the columns in the event differ from
-    the columns suppled to the function.
-
-  RETURNS
-    If no error, a non-NULL pending event (either one which already existed or
-    the newly created one).
-    If error, NULL.
- */
-
-template <class RowsEventT> Rows_log_event*
-THD::binlog_prepare_pending_rows_event(TABLE* table, uint32 serv_id,
-                                       size_t needed,
-                                       bool is_transactional,
-                                       RowsEventT *hint __attribute__((unused)))
-{
-  DBUG_ENTER("binlog_prepare_pending_rows_event");
-  /* Pre-conditions */
-  DBUG_ASSERT((table->s->table_map_id & MAX_TABLE_MAP_ID) != UINT32_MAX &&
-              (table->s->table_map_id & MAX_TABLE_MAP_ID) != 0);
-
-  /* Fetch the type code for the RowsEventT template parameter */
-  int const general_type_code= RowsEventT::TYPE_CODE;
-
-  /* Ensure that all events in a GTID group are in the same cache */
-  if (variables.option_bits & OPTION_GTID_BEGIN)
-    is_transactional= 1;
-
-  /*
-    There is no good place to set up the transactional data, so we
-    have to do it here.
-  */
-  if (binlog_setup_trx_data() == NULL)
-    DBUG_RETURN(NULL);
-
-  Rows_log_event* pending= binlog_get_pending_rows_event(is_transactional);
-
-  if (unlikely(pending && !pending->is_valid()))
-    DBUG_RETURN(NULL);
-
-  /*
-    Check if the current event is non-NULL and a write-rows
-    event. Also check if the table provided is mapped: if it is not,
-    then we have switched to writing to a new table.
-    If there is no pending event, we need to create one. If there is a pending
-    event, but it's not about the same table id, or not of the same type
-    (between Write, Update and Delete), or not the same affected columns, or
-    going to be too big, flush this event to disk and create a new pending
-    event.
-  */
-  if (!pending ||
-      pending->server_id != serv_id ||
-      pending->get_table_id() != table->s->table_map_id ||
-      pending->get_general_type_code() != general_type_code ||
-      pending->get_data_size() + needed > opt_binlog_rows_event_max_size ||
-      pending->read_write_bitmaps_cmp(table) == FALSE)
-  {
-    /* Create a new RowsEventT... */
-    Rows_log_event* const
-        ev= new RowsEventT(this, table, table->s->table_map_id,
-                           is_transactional);
-    if (unlikely(!ev))
-      DBUG_RETURN(NULL);
-    ev->server_id= serv_id; // I don't like this, it's too easy to forget.
-    /*
-      flush the pending event and replace it with the newly created
-      event...
-    */
-    if (unlikely(
-        mysql_bin_log.flush_and_set_pending_rows_event(this, ev,
-                                                       is_transactional)))
-    {
-      delete ev;
-      DBUG_RETURN(NULL);
-    }
-
-    DBUG_RETURN(ev);               /* This is the new pending event */
-  }
-  DBUG_RETURN(pending);        /* This is the current pending event */
-}
-
 /* Declare in unnamed namespace. */
 CPP_UNNAMED_NS_START
   /**
@@ -7232,13 +7279,10 @@ CPP_UNNAMED_NS_START
 
 CPP_UNNAMED_NS_END
 
-int THD::binlog_write_row(TABLE* table, bool is_trans,
+int THD::binlog_write_row(TABLE* table, Event_log *bin_log,
+                          binlog_cache_data *cache_data, bool is_trans,
                           uchar const *record)
 {
-
-  DBUG_ASSERT(is_current_stmt_binlog_format_row());
-  DBUG_ASSERT((WSREP_NNULL(this) && wsrep_emulate_bin_log) ||
-              mysql_bin_log.is_open());
   /*
     Pack records into format for transfer. We are allocating more
     memory than needed, but that doesn't matter.
@@ -7252,21 +7296,13 @@ int THD::binlog_write_row(TABLE* table, bool is_trans,
 
   size_t const len= pack_row(table, table->rpl_write_set, row_data, record);
 
-  /* Ensure that all events in a GTID group are in the same cache */
-  if (variables.option_bits & OPTION_GTID_BEGIN)
-    is_trans= 1;
+  auto creator= binlog_should_compress(len) ?
+                Rows_event_factory::get<Write_rows_compressed_log_event>() :
+                Rows_event_factory::get<Write_rows_log_event>();
 
-  Rows_log_event* ev;
-  if (binlog_should_compress(len))
-    ev =
-    binlog_prepare_pending_rows_event(table, variables.server_id,
-                                      len, is_trans,
-                                      static_cast<Write_rows_compressed_log_event*>(0));
-  else
-    ev =
-    binlog_prepare_pending_rows_event(table, variables.server_id,
-                                      len, is_trans,
-                                      static_cast<Write_rows_log_event*>(0));
+  auto *ev= bin_log->prepare_pending_rows_event(this, table, cache_data,
+                                                variables.server_id,
+                                                len, is_trans, creator);
 
   if (unlikely(ev == 0))
     return HA_ERR_OUT_OF_MEM;
@@ -7274,14 +7310,12 @@ int THD::binlog_write_row(TABLE* table, bool is_trans,
   return ev->add_row_data(row_data, len);
 }
 
-int THD::binlog_update_row(TABLE* table, bool is_trans,
+int THD::binlog_update_row(TABLE* table,  Event_log *bin_log,
+                           binlog_cache_data *cache_data, bool is_trans,
+                           enum_binlog_row_image row_image,
                            const uchar *before_record,
                            const uchar *after_record)
 {
-  DBUG_ASSERT(is_current_stmt_binlog_format_row());
-  DBUG_ASSERT((WSREP_NNULL(this) && wsrep_emulate_bin_log) ||
-              mysql_bin_log.is_open());
-
   /**
     Save a reference to the original read bitmaps
     We will need this to restore the bitmaps at the end as
@@ -7293,10 +7327,9 @@ int THD::binlog_update_row(TABLE* table, bool is_trans,
 
   /**
      This will remove spurious fields required during execution but
-     not needed for binlogging. This is done according to the:
-     binlog-row-image option.
+     not needed for binlogging, according to the row_image argument.
    */
-  binlog_prepare_row_images(table);
+  binlog_prepare_row_images(table, row_image);
 
   size_t const before_maxlen= max_row_length(table, table->read_set,
                                              before_record);
@@ -7314,11 +7347,6 @@ int THD::binlog_update_row(TABLE* table, bool is_trans,
                                      before_record);
   size_t const after_size= pack_row(table, table->rpl_write_set, after_row,
                                     after_record);
-
-  /* Ensure that all events in a GTID group are in the same cache */
-  if (variables.option_bits & OPTION_GTID_BEGIN)
-    is_trans= 1;
-
   /*
     Don't print debug messages when running valgrind since they can
     trigger false warnings.
@@ -7330,17 +7358,13 @@ int THD::binlog_update_row(TABLE* table, bool is_trans,
   DBUG_DUMP("after_row",     after_row, after_size);
 #endif
 
-  Rows_log_event* ev;
-  if(binlog_should_compress(before_size + after_size))
-    ev =
-      binlog_prepare_pending_rows_event(table, variables.server_id,
-                                      before_size + after_size, is_trans,
-                                      static_cast<Update_rows_compressed_log_event*>(0));
-  else
-    ev =
-      binlog_prepare_pending_rows_event(table, variables.server_id,
-                                      before_size + after_size, is_trans,
-                                      static_cast<Update_rows_log_event*>(0));
+  auto creator= binlog_should_compress(before_size + after_size) ?
+                Rows_event_factory::get<Update_rows_compressed_log_event>() :
+                Rows_event_factory::get<Update_rows_log_event>();
+  auto *ev= bin_log->prepare_pending_rows_event(this, table, cache_data,
+                                                variables.server_id,
+                                                before_size + after_size,
+                                                is_trans, creator);
 
   if (unlikely(ev == 0))
     return HA_ERR_OUT_OF_MEM;
@@ -7355,12 +7379,11 @@ int THD::binlog_update_row(TABLE* table, bool is_trans,
 
 }
 
-int THD::binlog_delete_row(TABLE* table, bool is_trans, 
+int THD::binlog_delete_row(TABLE* table, Event_log *bin_log,
+                           binlog_cache_data *cache_data, bool is_trans,
+                           enum_binlog_row_image row_image,
                            uchar const *record)
 {
-  DBUG_ASSERT(is_current_stmt_binlog_format_row());
-  DBUG_ASSERT((WSREP_NNULL(this) && wsrep_emulate_bin_log) ||
-              mysql_bin_log.is_open());
   /**
     Save a reference to the original read bitmaps
     We will need this to restore the bitmaps at the end as
@@ -7375,7 +7398,7 @@ int THD::binlog_delete_row(TABLE* table, bool is_trans,
      not needed for binlogging. This is done according to the:
      binlog-row-image option.
    */
-  binlog_prepare_row_images(table);
+  binlog_prepare_row_images(table, row_image);
 
   /*
      Pack records into format for transfer. We are allocating more
@@ -7391,21 +7414,12 @@ int THD::binlog_delete_row(TABLE* table, bool is_trans,
   DBUG_DUMP("table->read_set", (uchar*) table->read_set->bitmap, (table->s->fields + 7) / 8);
   size_t const len= pack_row(table, table->read_set, row_data, record);
 
-  /* Ensure that all events in a GTID group are in the same cache */
-  if (variables.option_bits & OPTION_GTID_BEGIN)
-    is_trans= 1;
-
-  Rows_log_event* ev;
-  if(binlog_should_compress(len))
-    ev =
-      binlog_prepare_pending_rows_event(table, variables.server_id,
-                                      len, is_trans,
-                                      static_cast<Delete_rows_compressed_log_event*>(0));
-  else
-    ev =
-      binlog_prepare_pending_rows_event(table, variables.server_id,
-                                      len, is_trans,
-                                      static_cast<Delete_rows_log_event*>(0));
+  auto creator= binlog_should_compress(len) ?
+                Rows_event_factory::get<Delete_rows_compressed_log_event>() :
+                Rows_event_factory::get<Delete_rows_log_event>();
+  auto *ev= bin_log->prepare_pending_rows_event(this, table, cache_data,
+                                                variables.server_id,
+                                                len, is_trans, creator);
 
   if (unlikely(ev == 0))
     return HA_ERR_OUT_OF_MEM;
@@ -7425,14 +7439,12 @@ int THD::binlog_delete_row(TABLE* table, bool is_trans,
    Remove from read_set spurious columns. The write_set has been
    handled before in table->mark_columns_needed_for_update.
 */
-
-void THD::binlog_prepare_row_images(TABLE *table)
+void binlog_prepare_row_images(TABLE *table, enum_binlog_row_image row_image)
 {
   DBUG_ENTER("THD::binlog_prepare_row_images");
 
   DBUG_PRINT_BITSET("debug", "table->read_set (before preparing): %s",
                     table->read_set);
-  THD *thd= table->in_use;
 
   /**
     if there is a primary key in the table (ie, user declared PK or a
@@ -7440,7 +7452,7 @@ void THD::binlog_prepare_row_images(TABLE *table)
     and the handler involved supports this.
    */
   if (table->s->primary_key < MAX_KEY &&
-      (thd->variables.binlog_row_image < BINLOG_ROW_IMAGE_FULL) &&
+      row_image < BINLOG_ROW_IMAGE_FULL &&
       !ha_check_storage_engine_flag(table->s->db_type(),
                                     HTON_NO_BINLOG_ROW_OPT))
   {
@@ -7450,7 +7462,7 @@ void THD::binlog_prepare_row_images(TABLE *table)
     */
     DBUG_ASSERT(table->read_set != &table->tmp_set);
 
-    switch (thd->variables.binlog_row_image)
+    switch (row_image)
     {
       case BINLOG_ROW_IMAGE_MINIMAL:
         /* MINIMAL: Mark only PK */
@@ -7485,28 +7497,6 @@ void THD::binlog_prepare_row_images(TABLE *table)
   DBUG_VOID_RETURN;
 }
 
-
-
-int THD::binlog_remove_pending_rows_event(bool reset_stmt,
-                                          bool is_transactional)
-{
-  DBUG_ENTER("THD::binlog_remove_pending_rows_event");
-
-  if(!WSREP_EMULATE_BINLOG_NNULL(this) && !mysql_bin_log.is_open())
-    DBUG_RETURN(0);
-
-  /* Ensure that all events in a GTID group are in the same cache */
-  if (variables.option_bits & OPTION_GTID_BEGIN)
-    is_transactional= 1;
-
-  mysql_bin_log.remove_pending_rows_event(this, is_transactional);
-
-  if (reset_stmt)
-    reset_binlog_for_next_statement();
-  DBUG_RETURN(0);
-}
-
-
 int THD::binlog_flush_pending_rows_event(bool stmt_end, bool is_transactional)
 {
   DBUG_ENTER("THD::binlog_flush_pending_rows_event");
@@ -7522,22 +7512,15 @@ int THD::binlog_flush_pending_rows_event(bool stmt_end, bool is_transactional)
   if (variables.option_bits & OPTION_GTID_BEGIN)
     is_transactional= 1;
 
-  /*
-    Mark the event as the last event of a statement if the stmt_end
-    flag is set.
-  */
-  int error= 0;
-  if (Rows_log_event *pending= binlog_get_pending_rows_event(is_transactional))
-  {
-    if (stmt_end)
-    {
-      pending->set_flags(Rows_log_event::STMT_END_F);
-      reset_binlog_for_next_statement();
-    }
-    error= mysql_bin_log.flush_and_set_pending_rows_event(this, 0,
-                                                          is_transactional);
-  }
+  auto *cache_mngr= binlog_get_cache_mngr();
+  if (!cache_mngr)
+    DBUG_RETURN(0);
+  auto *cache= binlog_get_cache_data(cache_mngr,
+                                     use_trans_cache(this, is_transactional));
 
+  int error=
+    ::binlog_flush_pending_rows_event(this, stmt_end, is_transactional,
+                                      mysql_bin_log.as_event_log(), cache);
   DBUG_RETURN(error);
 }
 
@@ -8458,14 +8441,18 @@ void AUTHID::parse(const char *str, size_t length)
 }
 
 
-void Database_qualified_name::copy(MEM_ROOT *mem_root,
-                                   const LEX_CSTRING &db,
-                                   const LEX_CSTRING &name)
+bool Database_qualified_name::copy_sp_name_internal(MEM_ROOT *mem_root,
+                                                    const LEX_CSTRING &db,
+                                                    const LEX_CSTRING &name)
 {
-  m_db.length= db.length;
-  m_db.str= strmake_root(mem_root, db.str, db.length);
-  m_name.length= name.length;
-  m_name.str= strmake_root(mem_root, name.str, name.length);
+  DBUG_ASSERT(db.str);
+  DBUG_ASSERT(name.str);
+  m_db= lower_case_table_names == 1 ?
+        lex_string_casedn_root(mem_root, &my_charset_utf8mb3_general_ci,
+                               db.str, db.length) :
+        lex_string_strmake_root(mem_root, db.str, db.length);
+  m_name= lex_string_strmake_root(mem_root, name.str, name.length);
+  return m_db.str == NULL || m_name.str == NULL; // check if EOM
 }
 
 
@@ -8578,4 +8565,12 @@ void Charset_loader_server::raise_not_applicable_error(const char *cs,
                                                        const char *cl) const
 {
   my_error(ER_COLLATION_CHARSET_MISMATCH, MYF(0), cl, cs);
+}
+
+
+LEX_CSTRING make_string(THD *thd, const char *start_ptr,
+                        const char *end_ptr)
+{
+  size_t length= end_ptr - start_ptr;
+  return {strmake_root(thd->mem_root, start_ptr, length), length};
 }

@@ -37,7 +37,7 @@ FOREACH(p CMP0022 CMP0046 CMP0040 CMP0048 CMP0054 CMP0074 CMP0075 CMP0069 CMP013
   ENDIF()
 ENDFOREACH()
 
-PROJECT(MySQL)
+PROJECT(MariaDB)
 
 MESSAGE(STATUS "Running cmake version ${CMAKE_VERSION}")
 
@@ -88,6 +88,7 @@ ELSE()
   SET(CMAKE_CXX_STANDARD 11)
 ENDIF()
 
+# Lower case package names from PROJECT are used if not explictly upper case.
 SET(CPACK_PACKAGE_NAME "MariaDB")
 SET(CPACK_PACKAGE_DESCRIPTION_SUMMARY "MariaDB: a very fast and robust SQL database server")
 SET(CPACK_PACKAGE_URL "http://mariadb.org")

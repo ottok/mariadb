@@ -105,10 +105,10 @@ public:
 
 	int close(void) override;
 
-	double scan_time() override;
-
-	double read_time(uint index, uint ranges, ha_rows rows) override;
-
+#ifdef NOT_USED
+	IO_AND_CPU_COST scan_time() override;
+        double rnd_pos_time(ha_rows rows) override;
+#endif
 	int write_row(const uchar * buf) override;
 
 	int update_row(const uchar * old_data, const uchar * new_data) override;
@@ -207,7 +207,6 @@ public:
 	int delete_table(const char *name) override;
 
 	int rename_table(const char* from, const char* to) override;
-	inline int defragment_table();
 	int check(THD* thd, HA_CHECK_OPT* check_opt) override;
 	int check_for_upgrade(HA_CHECK_OPT* check_opt) override;
 
@@ -215,11 +214,11 @@ public:
 
 	char* get_foreign_key_create_info() override;
 
-        int get_foreign_key_list(THD *thd,
+        int get_foreign_key_list(const THD *thd,
                                  List<FOREIGN_KEY_INFO> *f_key_list) override;
 
 	int get_parent_foreign_key_list(
-		THD*			thd,
+		const THD*		thd,
 		List<FOREIGN_KEY_INFO>*	f_key_list) override;
 
 	bool can_switch_engines() override;
@@ -384,6 +383,7 @@ public:
 		uint			n_ranges,
 		uint*			bufsz,
 		uint*			flags,
+                ha_rows                 limit,
 		Cost_estimate*		cost) override;
 
 	/** Initialize multi range read and get information.
@@ -522,6 +522,10 @@ protected:
 
         /** If mysql has locked with external_lock() */
         bool                    m_mysql_has_locked;
+
+	/** If true, disable the Rowid Filter. It is disabled when
+	the enigne is intialized for making rnd_pos() calls */
+	bool                    m_disable_rowid_filter;
 };
 
 
@@ -702,6 +706,8 @@ public:
 	ulint flags2() const
 	{ return(m_flags2); }
 
+	bool creating_stub() const { return UNIV_UNLIKELY(m_creating_stub); }
+
 	/** Get trx. */
 	trx_t* trx() const
 	{ return(m_trx); }
@@ -768,6 +774,9 @@ private:
 
 	/** Table flags2 */
 	ulint		m_flags2;
+
+	/** Whether we are creating a stub table for importing. */
+	const bool	m_creating_stub;
 };
 
 /**

@@ -646,7 +646,7 @@ int Repl_semi_sync_master::report_reply_packet(uint32 server_id,
 l_end:
   {
     char buf[256];
-    octet2hex(buf, (const char*) packet,
+    octet2hex(buf, (const unsigned char*) packet,
               MY_MIN(sizeof(buf)-1, (size_t) packet_len));
     sql_print_information("First bytes of the packet from semisync slave "
                           "server-id %d: %s", server_id, buf);

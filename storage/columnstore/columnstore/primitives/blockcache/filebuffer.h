@@ -23,8 +23,7 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef FILEBUFFER_H
-#define FILEBUFFER_H
+#pragma once
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -178,4 +177,3 @@ class FileBuffer
 typedef std::vector<FileBuffer> FileBufferPool_t;
 
 }  // namespace dbbc
-#endif

@@ -25,8 +25,7 @@
  * class RWLock interface
  */
 
-#ifndef RWLOCK_H_
-#define RWLOCK_H_
+#pragma once
 
 #include <array>
 
@@ -38,38 +37,21 @@
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
-#if defined(_MSC_VER) && defined(xxxRWLOCK_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace rwlock
 {
 const std::array<const std::string, 7> RWLockNames = {{
-    "all",
-    "VSS",
-    "ExtentMap",
-    "FreeList",
-    "VBBM",
-    "CopyLocks",
-    "ExtentMapIndex",
+    "all", "VSS", "ExtentMap", "FreeList", "VBBM", "CopyLocks", "ExtentMapIndex",
 }};
 
 /// the layout of the shmseg
 struct State
 {
-#ifdef _MSC_VER
-  volatile LONG writerswaiting;
-  volatile LONG writing;
-  volatile LONG readerswaiting;
-  volatile LONG reading;
-#else
-  volatile int writerswaiting;
-  volatile int writing;
-  volatile int readerswaiting;
-  volatile int reading;
-#endif
+  int writerswaiting;
+  int writing;
+  int readerswaiting;
+  int reading;
   boost::interprocess::interprocess_semaphore sems[3];
 };
 
@@ -78,19 +60,11 @@ class RWLockMonitor
 */
 struct LockState
 {
-#ifdef _MSC_VER
-  LONG writerswaiting;
-  LONG writing;
-  LONG readerswaiting;
-  LONG reading;
-  bool mutexLocked;
-#else
   int writerswaiting;
   int writing;
   int readerswaiting;
   int reading;
   bool mutexLocked;
-#endif
 };
 
 class RWLockShmImpl
@@ -289,4 +263,3 @@ class RWLock
 
 #undef EXPORT
 
-#endif

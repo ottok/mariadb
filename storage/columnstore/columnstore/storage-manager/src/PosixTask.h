@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef POSIX_TASK_H_
-#define POSIX_TASK_H_
+#pragma once
 
 #include <vector>
 #include <sys/types.h>
@@ -63,4 +62,3 @@ class PosixTask
 };
 
 }  // namespace storagemanager
-#endif

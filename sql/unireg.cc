@@ -802,7 +802,7 @@ static bool pack_vcols(THD *thd, String *buf, List<Create_field> &create_fields,
   {
     if (field->vcol_info && field->vcol_info->expr)
       if (pack_expression(buf, field->vcol_info, field_nr,
-                          field->vcol_info->stored_in_db
+                          field->vcol_info->is_stored()
                           ? VCOL_GENERATED_STORED : VCOL_GENERATED_VIRTUAL))
         return 1;
     if (field->has_default_expression() && !field->has_default_now_unireg_check())
@@ -930,7 +930,7 @@ static bool pack_header(THD *thd, uchar *forminfo,
           hex_length= length * 2;
           tmpint->type_lengths[pos]= (uint) hex_length;
           tmpint->type_names[pos]= dst= (char*) thd->alloc(hex_length + 1);
-          octet2hex(dst, src, length);
+          octet2hex(dst, (uchar*)src, length);
         }
       }
 

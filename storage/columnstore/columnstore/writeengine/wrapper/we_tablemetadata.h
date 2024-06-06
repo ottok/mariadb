@@ -19,8 +19,7 @@
 //
 /** @file */
 
-#ifndef WE_TABLEMETADATA_H__
-#define WE_TABLEMETADATA_H__
+#pragma once
 
 #include <stdint.h>
 #include "we_type.h"
@@ -28,11 +27,7 @@
 #include <map>
 #include <vector>
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace WriteEngine
 {
@@ -99,4 +94,3 @@ class TableMetaData
 
 #undef EXPORT
 
-#endif  // WE_TABLEMETADATA_H__

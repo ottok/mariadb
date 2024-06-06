@@ -61,13 +61,7 @@ BRMShmImpl::BRMShmImpl(unsigned key, off_t size, bool readOnly) : BRMShmImplPare
     {
       bi::shared_memory_object shm(bi::open_only, keyName.c_str(), bi::read_write);
       off_t curSize = 0;
-#ifdef _MSC_VER
-      bi::offset_t tmp = 0;
-      shm.get_size(tmp);
-      curSize = static_cast<off_t>(tmp);
-#else
       shm.get_size(curSize);
-#endif
 
       if (curSize == 0)
         throw bi::interprocess_exception("shm size is zero");
@@ -117,13 +111,7 @@ BRMShmImpl::BRMShmImpl(unsigned key, off_t size, bool readOnly) : BRMShmImplPare
       throw;
     }
     off_t curSize = 0;
-#ifdef _MSC_VER
-    bi::offset_t tmp = 0;
-    shm->get_size(tmp);
-    curSize = static_cast<off_t>(tmp);
-#else
     shm->get_size(curSize);
-#endif
     idbassert(curSize > 0);
     idbassert(curSize >= fSize);
     fShmobj.swap(*shm);
@@ -408,5 +396,117 @@ void BRMManagedShmImpl::remap(const bool readOnly)
     fShmSegment = new bi::managed_shared_memory(bi::open_only, keyName.c_str());
 }
 
-}  // namespace BRM
+BRMManagedShmImplRBTree::BRMManagedShmImplRBTree(unsigned key, off_t size, bool readOnly)
+ : BRMShmImplParent(key, size, readOnly)
+{
+  // FIXME: Take a right size.
+  // Actually this means to open a segment at the default code.
+  if (fSize == 0)
+    fSize = 64000;
 
+  try
+  {
+    bi::permissions perms;
+    perms.set_unrestricted();
+
+    fShmSegment = new boost::interprocess::managed_shared_memory(boost::interprocess::open_or_create,
+                                                                 segmentName, fSize, 0, perms);
+
+    fSize = fShmSegment->get_size();
+  }
+  catch (exception& e)
+  {
+    std::cout << "Cannot create boost::interprocess::managed_shared_memory object: " << e.what() << std::endl;
+  }
+}
+
+BRMManagedShmImplRBTree::~BRMManagedShmImplRBTree()
+{
+}
+
+void BRMManagedShmImplRBTree::setReadOnly()
+{
+  try
+  {
+    if (fShmSegment)
+    {
+      delete fShmSegment;
+      fShmSegment = new bi::managed_shared_memory(bi::open_read_only, segmentName);
+      fReadOnly = true;
+    }
+  }
+  catch (exception& e)
+  {
+    std::cout << "BRMManagedShmImpl::setReadOnly() error " << e.what() << std::endl;
+    throw;
+  }
+}
+
+int32_t BRMManagedShmImplRBTree::grow(unsigned key, off_t incSize)
+{
+  try
+  {
+    if (fShmSegment)
+    {
+      // Update key for this process.
+      fKey = key;
+      // Call destructor to unmap the segment.
+      delete fShmSegment;
+      // Grow the segment.
+      bi::managed_shared_memory::grow(segmentName, incSize);
+      // Open only.
+      fShmSegment = new bi::managed_shared_memory(bi::open_only, segmentName);
+      // Update size.
+      fSize = fShmSegment->get_size();
+    }
+  }
+  catch (exception& e)
+  {
+    std::cout << "BRMManagedShmImpl::grow() error " << e.what() << std::endl;
+    throw;
+  }
+
+  return 0;
+}
+
+// Dummy method that has no references in the code.
+int BRMManagedShmImplRBTree::clear(unsigned newKey, off_t newSize)
+{
+  return 0;
+}
+
+void BRMManagedShmImplRBTree::reMapSegment()
+{
+  try
+  {
+    if (fShmSegment)
+    {
+      // Call destructor to unmap the segment.
+      delete fShmSegment;
+      // Map.
+      fShmSegment = new bi::managed_shared_memory(bi::open_only, segmentName);
+      // Update size.
+      fSize = fShmSegment->get_size();
+    }
+  }
+  catch (exception& e)
+  {
+    std::cout << "BRMManagedShmImpl::remap() error " << e.what() << std::endl;
+    throw;
+  }
+}
+
+void BRMManagedShmImplRBTree::destroy()
+{
+  try
+  {
+    bi::shared_memory_object::remove(segmentName);
+  }
+  catch (exception& e)
+  {
+    std::cout << "BRMManagedShmImplRBTree::destroy() " << std::endl;
+    throw;
+  }
+}
+
+}  // namespace BRM

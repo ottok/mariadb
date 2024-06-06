@@ -462,7 +462,11 @@ bs:
       else if ( wc>='A' && wc<='Z')
         wc = wc - 'A' + 10;
       else if ( wc>='a' && wc<='z')
+      {
         wc = wc - 'a' + 10;
+        if (base > 36)
+          wc += 26;
+      }
       else
         break;
       if ((int)wc >= base)
@@ -500,8 +504,12 @@ bs:
   
   if (negative)
   {
-    if (res  > (ulonglong) LONGLONG_MIN)
+    if (res >= (ulonglong) LONGLONG_MIN)
+    {
+      if (res == (ulonglong) LONGLONG_MIN)
+        return LONGLONG_MIN;
       overflow = 1;
+    }
   }
   else if (res > (ulonglong) LONGLONG_MAX)
     overflow = 1;
@@ -575,7 +583,11 @@ bs:
       else if ( wc>='A' && wc<='Z')
         wc = wc - 'A' + 10;
       else if ( wc>='a' && wc<='z')
+      {
         wc = wc - 'a' + 10;
+        if (base > 36)
+          wc += 26;
+      }
       else
         break;
       if ((int)wc >= base)

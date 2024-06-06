@@ -106,6 +106,8 @@ TupleHashJoinStep::TupleHashJoinStep(const JobInfo& jobInfo)
   djsSmallLimit = jobInfo.smallSideLimit;
   djsLargeLimit = jobInfo.largeSideLimit;
   djsPartitionSize = jobInfo.partitionSize;
+  djsMaxPartitionTreeDepth = jobInfo.djsMaxPartitionTreeDepth;
+  djsForceRun = jobInfo.djsForceRun;
   isDML = jobInfo.isDML;
 
   config::Config* config = config::Config::makeConfig();
@@ -137,8 +139,8 @@ TupleHashJoinStep::~TupleHashJoinStep()
     for (uint i = 0; i < smallDLs.size(); i++)
     {
       if (memUsedByEachJoin[i])
-        resourceManager->returnMemory(memUsedByEachJoin[i], sessionMemLimit);
-    }
+      resourceManager->returnMemory(memUsedByEachJoin[i], sessionMemLimit);
+  }
   }
   returnMemory();
   // cout << "deallocated THJS, UM memory available: " << resourceManager.availableMemory() << endl;
@@ -198,10 +200,10 @@ void TupleHashJoinStep::join()
   joinRan = true;
   jobstepThreadPool.join(mainRunner);
 
-  if (djs)
+  if (djs.size())
   {
-    for (int i = 0; i < (int)djsJoiners.size(); i++)
-      djs[i].join();
+    for (auto& diskJoinStep : djs)
+      diskJoinStep->join();
 
     jobstepThreadPool.join(djsReader);
     jobstepThreadPool.join(djsRelay);
@@ -214,7 +216,7 @@ void TupleHashJoinStep::join()
 // the threads inserting into Joiner.
 void TupleHashJoinStep::trackMem(uint index)
 {
-  boost::shared_ptr<TupleJoiner> joiner = joiners[index];
+  auto joiner = joiners[index];
   ssize_t memBefore = 0, memAfter = 0;
   bool gotMem;
 
@@ -226,7 +228,7 @@ void TupleHashJoinStep::trackMem(uint index)
     {
       gotMem = resourceManager->getMemory(memAfter - memBefore, sessionMemLimit, true);
       if (gotMem)
-        atomicops::atomicAdd(&memUsedByEachJoin[index], memAfter - memBefore);
+      atomicops::atomicAdd(&memUsedByEachJoin[index], memAfter - memBefore);
       else
         return;
 
@@ -243,7 +245,7 @@ void TupleHashJoinStep::trackMem(uint index)
   gotMem = resourceManager->getMemory(memAfter - memBefore, sessionMemLimit, true);
   if (gotMem)
   {
-    atomicops::atomicAdd(&memUsedByEachJoin[index], memAfter - memBefore);
+  atomicops::atomicAdd(&memUsedByEachJoin[index], memAfter - memBefore);
   }
   else
   {
@@ -268,10 +270,14 @@ void TupleHashJoinStep::startSmallRunners(uint index)
   utils::setThreadName("HJSStartSmall");
   string extendedInfo;
   JoinType jt;
-  boost::shared_ptr<TupleJoiner> joiner;
+  std::shared_ptr<TupleJoiner> joiner;
 
   jt = joinTypes[index];
-  extendedInfo += toString();
+
+  if (traceOn())
+  {
+    extendedInfo += toString();
+  }
 
   if (typelessJoin[index])
   {
@@ -349,36 +355,47 @@ void TupleHashJoinStep::startSmallRunners(uint index)
       " size = " << joiner->size() << endl;
   */
 
-  extendedInfo += "\n";
+  if (traceOn())
+  {
+    extendedInfo += "\n";
+  }
 
   ostringstream oss;
   if (!joiner->onDisk())
   {
     // add extended info, and if not aborted then tell joiner
     // we're done reading the small side.
-    if (joiner->inPM())
+    if (traceOn())
     {
-      oss << "PM join (" << index << ")" << endl;
-#ifdef JLF_DEBUG
-      cout << oss.str();
-#endif
-      extendedInfo += oss.str();
-    }
-    else if (joiner->inUM())
-    {
-      oss << "UM join (" << index << ")" << endl;
-#ifdef JLF_DEBUG
-      cout << oss.str();
-#endif
-      extendedInfo += oss.str();
+      if (joiner->inPM())
+      {
+        {
+          oss << "PM join (" << index << ")" << endl;
+  #ifdef JLF_DEBUG
+          cout << oss.str();
+  #endif
+          extendedInfo += oss.str();
+        }
+      }
+      else if (joiner->inUM())
+      {
+        oss << "UM join (" << index << ")" << endl;
+  #ifdef JLF_DEBUG
+        cout << oss.str();
+  #endif
+        extendedInfo += oss.str();
+      }
     }
     if (!cancelled())
       joiner->doneInserting();
   }
 
-  boost::mutex::scoped_lock lk(*fStatsMutexPtr);
-  fExtendedInfo += extendedInfo;
-  formatMiniStats(index);
+  if (traceOn())
+  {
+    boost::mutex::scoped_lock lk(*fStatsMutexPtr);
+    fExtendedInfo += extendedInfo;
+    formatMiniStats(index);
+  }
 }
 
 /* Index is which small input to read. */
@@ -391,7 +408,7 @@ void TupleHashJoinStep::smallRunnerFcn(uint32_t index, uint threadID, uint64_t* 
   RowGroupDL* smallDL;
   uint32_t smallIt;
   RowGroup smallRG;
-  boost::shared_ptr<TupleJoiner> joiner = joiners[index];
+  auto joiner = joiners[index];
 
   smallDL = smallDLs[index];
   smallIt = smallIts[index];
@@ -418,7 +435,7 @@ void TupleHashJoinStep::smallRunnerFcn(uint32_t index, uint threadID, uint64_t* 
       gotMem = resourceManager->getMemory(rgSize, sessionMemLimit, true);
       if (gotMem)
       {
-        atomicops::atomicAdd(&memUsedByEachJoin[index], rgSize);
+      atomicops::atomicAdd(&memUsedByEachJoin[index], rgSize);
       }
       else
       {
@@ -515,7 +532,7 @@ void TupleHashJoinStep::djsRelayFcn()
 
   RowGroup djsInputRG = largeRG + outputRG;
   RowGroup l_largeRG = (tbpsJoiners.empty() ? largeRG : largeRG + outputRG);
-  boost::shared_array<int> relayMapping = makeMapping(l_largeRG, djsInputRG);
+  std::shared_ptr<int[]> relayMapping = makeMapping(l_largeRG, djsInputRG);
   bool more;
   RGData inData, outData;
   Row l_largeRow, djsInputRow;
@@ -614,10 +631,10 @@ void TupleHashJoinStep::djsReaderFcn(int index)
   while (more)
     more = fifos[index]->next(it, &rgData);
 
-  for (int i = 0; i < (int)djsJoiners.size(); i++)
+  for (auto& diskJoinStep : djs)
   {
-    fExtendedInfo += djs[i].extendedInfo();
-    fMiniInfo += djs[i].miniInfo();
+    fExtendedInfo += diskJoinStep->extendedInfo();
+    fMiniInfo += diskJoinStep->miniInfo();
   }
 
   outputDL->endOfInput();
@@ -733,7 +750,6 @@ void TupleHashJoinStep::hjRunner()
       outputIt = outputDL->getIterator();
     }
 
-    djs.reset(new DiskJoinStep[smallSideCount]);
     fifos.reset(new boost::shared_ptr<RowGroupDL>[smallSideCount + 1]);
 
     for (i = 0; i <= smallSideCount; i++)
@@ -745,7 +761,8 @@ void TupleHashJoinStep::hjRunner()
     {
       // these link themselves fifos[0]->DSJ[0]->fifos[1]->DSJ[1] ... ->fifos[smallSideCount],
       // THJS puts data into fifos[0], reads it from fifos[smallSideCount]
-      djs[i] = DiskJoinStep(this, i, djsJoinerMap[i], (i == smallSideCount - 1));
+      djs.push_back(std::shared_ptr<DiskJoinStep>(
+          new DiskJoinStep(this, i, djsJoinerMap[i], (i == smallSideCount - 1))));
     }
 
     sl.unlock();
@@ -757,7 +774,7 @@ void TupleHashJoinStep::hjRunner()
         vector<RGData> empty;
         resourceManager->returnMemory(memUsedByEachJoin[djsJoinerMap[i]], sessionMemLimit);
         atomicops::atomicZero(&memUsedByEachJoin[i]);
-        djs[i].loadExistingData(rgData[djsJoinerMap[i]]);
+        djs[i]->loadExistingData(rgData[djsJoinerMap[i]]);
         rgData[djsJoinerMap[i]].swap(empty);
       }
     }
@@ -784,7 +801,7 @@ void TupleHashJoinStep::hjRunner()
       reader = true;
 
       for (i = 0; i < smallSideCount; i++)
-        djs[i].run();
+        djs[i]->run();
     }
     catch (thread_resource_error&)
     {
@@ -866,7 +883,7 @@ void TupleHashJoinStep::hjRunner()
   }
 
   // todo: forwardCPData needs to grab data from djs
-  if (!djs)
+  if (djs.empty())
     forwardCPData();  // this fcn has its own exclusion list
 
   // decide if perform aggregation on PM
@@ -916,7 +933,7 @@ void TupleHashJoinStep::hjRunner()
   {
     largeBPS->useJoiners(tbpsJoiners);
 
-    if (djs)
+    if (djs.size())
       largeBPS->setJoinedResultRG(largeRG + outputRG);
     else
       largeBPS->setJoinedResultRG(outputRG);
@@ -931,7 +948,7 @@ void TupleHashJoinStep::hjRunner()
     For now, the alg is "assume if any joins are done on the UM, fe2 has to go on
     the UM."  The structs and logic aren't in place yet to track all of the tables
     through a joblist. */
-    if (fe2 && !djs)
+    if (fe2 && !djs.size())
     {
       /* Can't do a small outer join when the PM sends back joined rows */
       runFE2onPM = true;
@@ -957,7 +974,7 @@ void TupleHashJoinStep::hjRunner()
     else if (fe2)
       runFE2onPM = false;
 
-    if (!fDelivery && !djs)
+    if (!fDelivery && !djs.size())
     {
       /* connect the largeBPS directly to the next step */
       JobStepAssociation newJsa;
@@ -976,7 +993,7 @@ void TupleHashJoinStep::hjRunner()
     // there are no in-mem UM or PM joins, only disk-joins
     startAdjoiningSteps();
   }
-  else if (!djs)
+  else if (!djs.size())
     // if there's no largeBPS, all joins are either done by DJS or join threads,
     // this clause starts the THJS join threads.
     startJoinThreads();
@@ -1009,7 +1026,7 @@ uint32_t TupleHashJoinStep::nextBand(messageqcpp::ByteStream& bs)
   else
     deliveredRG = &outputRG;
 
-  if (largeBPS && !djs)
+  if (largeBPS && !djs.size())
   {
     dl = largeDL;
     it = largeIt;
@@ -1092,13 +1109,15 @@ const string TupleHashJoinStep::toString() const
 {
   ostringstream oss;
   size_t idlsz = fInputJobStepAssociation.outSize();
-  idbassert(idlsz > 1);
+  // Avoid assertion on empty `TupleHashJoinStep`.
+  idbassert(idlsz > 1 || idlsz == 0);
   oss << "TupleHashJoinStep    ses:" << fSessionId << " st:" << fStepId;
   oss << omitOidInDL;
 
   for (size_t i = 0; i < idlsz; ++i)
   {
-    RowGroupDL* idl = fInputJobStepAssociation.outAt(i)->rowGroupDL();
+    const AnyDataListSPtr& dl = fInputJobStepAssociation.outAt(i);
+    RowGroupDL* idl = dl->rowGroupDL();
     CalpontSystemCatalog::OID oidi = 0;
 
     if (idl)
@@ -1110,7 +1129,7 @@ const string TupleHashJoinStep::toString() const
       oss << "*";
 
     oss << "tb/col:" << fTableOID1 << "/" << oidi;
-    oss << " " << fInputJobStepAssociation.outAt(i);
+    oss << " " << dl;
   }
 
   idlsz = fOutputJobStepAssociation.outSize();
@@ -1184,6 +1203,7 @@ void TupleHashJoinStep::configJoinKeyIndex(const vector<JoinType>& jt, const vec
 {
   joinTypes.insert(joinTypes.begin(), jt.begin(), jt.end());
   typelessJoin.insert(typelessJoin.begin(), typeless.begin(), typeless.end());
+
   smallSideKeys.insert(smallSideKeys.begin(), smallkey.begin(), smallkey.end());
   largeSideKeys.insert(largeSideKeys.begin(), largekey.begin(), largekey.end());
 #ifdef JLF_DEBUG
@@ -1348,7 +1368,7 @@ void TupleHashJoinStep::startJoinThreads()
   for (i = 0; i < smallSideCount; i++)
     smallRGs[i] = joiners[i]->getSmallRG();
 
-  columnMappings.reset(new shared_array<int>[smallSideCount + 1]);
+  columnMappings.reset(new std::shared_ptr<int[]>[smallSideCount + 1]);
 
   for (i = 0; i < smallSideCount; i++)
     columnMappings[i] = makeMapping(smallRGs[i], outputRG);
@@ -1357,7 +1377,7 @@ void TupleHashJoinStep::startJoinThreads()
 
   if (!feIndexes.empty())
   {
-    fergMappings.reset(new shared_array<int>[smallSideCount + 1]);
+    fergMappings.reset(new std::shared_ptr<int[]>[smallSideCount + 1]);
 
     for (i = 0; i < smallSideCount; i++)
       fergMappings[i] = makeMapping(smallRGs[i], joinFilterRG);
@@ -1375,7 +1395,7 @@ void TupleHashJoinStep::startJoinThreads()
     Row smallRow;
     smallRGs[i].initRow(&smallRow, true);
     smallNullMemory[i].reset(new uint8_t[smallRow.getSize()]);
-    smallRow.setData(smallNullMemory[i].get());
+    smallRow.setData(rowgroup::Row::Pointer(smallNullMemory[i].get()));
     smallRow.initToNull();
   }
 
@@ -1404,11 +1424,11 @@ void TupleHashJoinStep::finishSmallOuterJoin()
   vector<Row::Pointer> unmatched;
   uint32_t smallSideCount = smallDLs.size();
   uint32_t i, j, k;
-  shared_array<uint8_t> largeNullMemory;
+  std::shared_ptr<uint8_t[]> largeNullMemory;
   RGData joinedData;
   Row joinedBaseRow, fe2InRow, fe2OutRow;
-  shared_array<Row> smallRowTemplates;
-  shared_array<Row> smallNullRows;
+  std::shared_ptr<Row[]> smallRowTemplates;
+  std::shared_ptr<Row[]> smallNullRows;
   Row largeNullRow;
   RowGroup l_outputRG = outputRG;
   RowGroup l_fe2Output = fe2Output;
@@ -1425,12 +1445,12 @@ void TupleHashJoinStep::finishSmallOuterJoin()
   {
     smallRGs[i].initRow(&smallRowTemplates[i]);
     smallRGs[i].initRow(&smallNullRows[i], true);
-    smallNullRows[i].setData(smallNullMemory[i].get());
+    smallNullRows[i].setData(rowgroup::Row::Pointer(smallNullMemory[i].get()));
   }
 
   largeRG.initRow(&largeNullRow, true);
   largeNullMemory.reset(new uint8_t[largeNullRow.getSize()]);
-  largeNullRow.setData(largeNullMemory.get());
+  largeNullRow.setData(rowgroup::Row::Pointer(largeNullMemory.get()));
   largeNullRow.initToNull();
 
   joinedData.reinit(l_outputRG);
@@ -1509,11 +1529,11 @@ void TupleHashJoinStep::joinRunnerFcn(uint32_t threadID)
   uint32_t i;
 
   /* thread-local scratch space for join processing */
-  shared_array<uint8_t> joinFERowData;
+  std::shared_ptr<uint8_t[]> joinFERowData;
   Row largeRow, joinFERow, joinedRow, baseRow;
-  shared_array<uint8_t> baseRowData;
+  std::shared_ptr<uint8_t[]> baseRowData;
   vector<vector<Row::Pointer> > joinMatches;
-  shared_array<Row> smallRowTemplates;
+  std::shared_ptr<Row[]> smallRowTemplates;
 
   /* F & E vars */
   FuncExpWrapper local_fe;
@@ -1527,14 +1547,14 @@ void TupleHashJoinStep::joinRunnerFcn(uint32_t threadID)
   local_outputRG.initRow(&joinedRow);
   local_outputRG.initRow(&baseRow, true);
   baseRowData.reset(new uint8_t[baseRow.getSize()]);
-  baseRow.setData(baseRowData.get());
+  baseRow.setData(rowgroup::Row::Pointer(baseRowData.get()));
 
   if (hasJoinFE)
   {
     local_joinFERG = joinFilterRG;
     local_joinFERG.initRow(&joinFERow, true);
     joinFERowData.reset(new uint8_t[joinFERow.getSize()]);
-    joinFERow.setData(joinFERowData.get());
+    joinFERow.setData(rowgroup::Row::Pointer(joinFERowData.get()));
   }
 
   if (fe2)
@@ -1704,11 +1724,11 @@ void TupleHashJoinStep::grabSomeWork(vector<RGData>* work)
 void TupleHashJoinStep::joinOneRG(
     uint32_t threadID, vector<RGData>& out, RowGroup& inputRG, RowGroup& joinOutput, Row& largeSideRow,
     Row& joinFERow, Row& joinedRow, Row& baseRow, vector<vector<Row::Pointer> >& joinMatches,
-    shared_array<Row>& smallRowTemplates, RowGroupDL* outputDL,
+    std::shared_ptr<Row[]>& smallRowTemplates, RowGroupDL* outputDL,
     // disk-join support vars.  This param list is insane; refactor attempt would be nice at some point.
-    vector<boost::shared_ptr<joiner::TupleJoiner> >* tjoiners,
-    boost::shared_array<boost::shared_array<int> >* rgMappings,
-    boost::shared_array<boost::shared_array<int> >* feMappings,
+    vector<std::shared_ptr<joiner::TupleJoiner> >* tjoiners,
+    std::shared_ptr<std::shared_ptr<int[]>[] >* rgMappings,
+    std::shared_ptr<std::shared_ptr<int[]>[] >* feMappings,
     boost::scoped_array<boost::scoped_array<uint8_t> >* smallNullMem)
 {
   /* Disk-join support.
@@ -1839,9 +1859,9 @@ void TupleHashJoinStep::joinOneRG(
 }
 
 void TupleHashJoinStep::generateJoinResultSet(const vector<vector<Row::Pointer> >& joinerOutput, Row& baseRow,
-                                              const shared_array<shared_array<int> >& mappings,
+                                              const std::shared_ptr<std::shared_ptr<int[]>[] >& mappings,
                                               const uint32_t depth, RowGroup& l_outputRG, RGData& rgData,
-                                              vector<RGData>& outputData, const shared_array<Row>& smallRows,
+                                              vector<RGData>& outputData, const std::shared_ptr<Row[]>& smallRows,
                                               Row& joinedRow, RowGroupDL* dlp)
 {
   uint32_t i;
@@ -1874,6 +1894,19 @@ void TupleHashJoinStep::generateJoinResultSet(const vector<vector<Row::Pointer> 
         // Count the memory
         if (UNLIKELY(!getMemory(l_outputRG.getMaxDataSize())))
         {
+          // MCOL-5512
+          if (fe2)
+          {
+            RowGroup l_fe2RG;
+            Row fe2InRow;
+            Row fe2OutRow;
+
+            l_fe2RG = fe2Output;
+            l_outputRG.initRow(&fe2InRow);
+            l_fe2RG.initRow(&fe2OutRow);
+
+            processFE2(l_outputRG, l_fe2RG, fe2InRow, fe2OutRow, &outputData, fe2.get());
+          }
           // Don't let the join results buffer get out of control.
           sendResult(outputData);
           outputData.clear();
@@ -1953,53 +1986,55 @@ void TupleHashJoinStep::segregateJoiners()
     return;
   }
 
-  /* If they are all inner joins they can be segregated w/o respect to
-  ordering; if they're not, the ordering has to stay consistent therefore
-  the first joiner that isn't finished and everything after has to be
-  done by DJS. */
-
-  if (allInnerJoins)
+  // Force all joins into disk based.
+  if (djsForceRun)
   {
-    for (i = 0; i < smallSideCount; i++)
+    for (i = 0; i < smallSideCount; ++i)
     {
-      // if (joiners[i]->isFinished() && (rand() % 2)) {    // for debugging
-      if (joiners[i]->isFinished())
-      {
-        // cout << "1joiner " << i << "  " << hex << (uint64_t) joiners[i].get() << dec << " -> TBPS" << endl;
-        tbpsJoiners.push_back(joiners[i]);
-      }
-      else
-      {
-        joinIsTooBig = true;
-        joiners[i]->setConvertToDiskJoin();
-        // cout << "1joiner " << i << "  " << hex << (uint64_t) joiners[i].get() << dec << " -> DJS" << endl;
-        djsJoiners.push_back(joiners[i]);
-        djsJoinerMap.push_back(i);
-      }
+      joinIsTooBig = true;
+      joiners[i]->setConvertToDiskJoin();
+      djsJoiners.push_back(joiners[i]);
+      djsJoinerMap.push_back(i);
     }
   }
   else
   {
-    // uint limit = rand() % smallSideCount;
-    for (i = 0; i < smallSideCount; i++)
+    /* If they are all inner joins they can be segregated w/o respect to
+    ordering; if they're not, the ordering has to stay consistent therefore
+    the first joiner that isn't finished and everything after has to be
+    done by DJS. */
+    if (allInnerJoins)
     {
-      // if (joiners[i]->isFinished() && i < limit) {  // debugging
-      if (joiners[i]->isFinished())
+      for (i = 0; i < smallSideCount; i++)
       {
-        // cout << "2joiner " << i << "  " << hex << (uint64_t) joiners[i].get() << dec << " -> TBPS" << endl;
-        tbpsJoiners.push_back(joiners[i]);
+        if (joiners[i]->isFinished())
+          tbpsJoiners.push_back(joiners[i]);
+        else
+        {
+          joinIsTooBig = true;
+          joiners[i]->setConvertToDiskJoin();
+          djsJoiners.push_back(joiners[i]);
+          djsJoinerMap.push_back(i);
+        }
       }
-      else
-        break;
     }
-
-    for (; i < smallSideCount; i++)
+    else
     {
-      joinIsTooBig = true;
-      joiners[i]->setConvertToDiskJoin();
-      // cout << "2joiner " << i << "  " << hex << (uint64_t) joiners[i].get() << dec << " -> DJS" << endl;
-      djsJoiners.push_back(joiners[i]);
-      djsJoinerMap.push_back(i);
+      for (i = 0; i < smallSideCount; i++)
+      {
+        if (joiners[i]->isFinished())
+          tbpsJoiners.push_back(joiners[i]);
+        else
+          break;
+      }
+
+      for (; i < smallSideCount; i++)
+      {
+        joinIsTooBig = true;
+        joiners[i]->setConvertToDiskJoin();
+        djsJoiners.push_back(joiners[i]);
+        djsJoinerMap.push_back(i);
+      }
     }
   }
 }
@@ -2009,10 +2044,10 @@ void TupleHashJoinStep::abort()
   JobStep::abort();
   boost::mutex::scoped_lock sl(djsLock);
 
-  if (djs)
+  if (djs.size())
   {
-    for (uint32_t i = 0; i < djsJoiners.size(); i++)
-      djs[i].abort();
+    for (uint32_t i = 0, e = djs.size(); e < i; i++)
+      djs[i]->abort();
   }
 }
 

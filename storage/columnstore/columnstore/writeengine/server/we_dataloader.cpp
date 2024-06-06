@@ -33,15 +33,7 @@
 #include <cerrno>
 
 #include <unistd.h>  //pipe() && fork()
-#if defined(__linux__)
 #include <wait.h>  //wait()
-#elif defined(__FreeBSD__)
-#include <sys/types.h>
-#include <sys/stat.h>  // For stat().
-#include <sys/wait.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -168,10 +160,8 @@ WEDataLoader::~WEDataLoader()
 
 void WEDataLoader::setupSignalHandlers()
 {
-#ifndef _MSC_VER
   signal(SIGPIPE, SIG_IGN);
   signal(SIGCHLD, WEDataLoader::onSigChild);
-#endif
 }
 //------------------------------------------------------------------------------
 // handles on signal Terminate
@@ -891,7 +881,7 @@ void WEDataLoader::onReceiveData(ByteStream& Ibs)
       if (aQsz < MAX_QSIZE)
         sendDataRequest();
 
-      if (aQsz > 1.5 * MAX_QSIZE)  // > 2*250
+      if (aQsz > 1.5 * static_cast<int>(MAX_QSIZE))  // > 2*250
       {
         cout << "WARNING : Data Queuing up : QSize = " << aQsz << endl;
 
@@ -968,7 +958,7 @@ void WEDataLoader::onReceiveEod(ByteStream& Ibs)
   aLock.unlock();
 
   // if(( 1 == getMode())||( 2 == getMode()))
-  if (1 == getMode())  // BUG 4370 - seperated mode 1 & 2
+  if (1 == getMode())  // BUG 4370 - separated mode 1 & 2
   {
     // if(getChPid()) teardownCpimport(false); // @bug 4267
     if (getChPid())

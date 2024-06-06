@@ -19,18 +19,13 @@
 
 /** @file */
 
-#ifndef _WE_DCTNRY_COMPRESS_H_
-#define _WE_DCTNRY_COMPRESS_H_
+#pragma once
 
 #include <stdlib.h>
 
 #include "../dictionary/we_dctnry.h"
 #include "we_chunkmanager.h"
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -164,5 +159,3 @@ class DctnryCompress1 : public Dctnry
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_DCTNRY_COMPRESS_H_

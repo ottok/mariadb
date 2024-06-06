@@ -28,27 +28,18 @@
  *    CREATE AGGREGATE FUNCTION covar_samp returns REAL soname 'libregr_mysql.so';
  *
  */
-#ifndef HEADER_covar_samp
-#define HEADER_covar_samp
+#pragma once
 
 #include <cstdlib>
 #include <string>
 #include <vector>
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 
 #include "mcsv1_udaf.h"
 #include "calpontsystemcatalog.h"
 #include "windowfunctioncolumn.h"
 
-#if defined(_MSC_VER) && defined(xxxRGNODE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace mcsv1sdk
 {
@@ -79,5 +70,3 @@ class covar_samp : public mcsv1_UDAF
 };  // namespace mcsv1sdk
 
 #undef EXPORT
-
-#endif  // HEADER_covar_samp.h

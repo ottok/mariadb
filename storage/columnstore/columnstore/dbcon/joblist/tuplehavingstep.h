@@ -17,8 +17,7 @@
 
 //  $Id: tuplehavingstep.h 9596 2013-06-04 19:59:04Z xlou $
 
-#ifndef JOBLIST_TUPLEHAVINGSTEP_H
-#define JOBLIST_TUPLEHAVINGSTEP_H
+#pragma once
 
 #include "jobstep.h"
 #include "expressionstep.h"
@@ -116,4 +115,3 @@ class TupleHavingStep : public ExpressionStep, public TupleDeliveryStep
 
 }  // namespace joblist
 
-#endif  // JOBLIST_TUPLEHAVINGSTEP_H

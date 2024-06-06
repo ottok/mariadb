@@ -28,18 +28,13 @@
 //
 //
 
-#ifndef BPPSEEDER_H_
-#define BPPSEEDER_H_
+#pragma once
 
 #include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <unistd.h>
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 #include <boost/shared_ptr.hpp>
 
 #include "batchprimitiveprocessor.h"
@@ -48,7 +43,7 @@
 
 namespace primitiveprocessor
 {
-class BPPSeeder : public threadpool::PriorityThreadPool::Functor
+class BPPSeeder : public threadpool::FairThreadPool::Functor
 {
  public:
   BPPSeeder(const messageqcpp::SBS&, const SP_UM_MUTEX& wLock, const SP_UM_IOSOCK& ios, const int pmThreads,
@@ -72,11 +67,15 @@ class BPPSeeder : public threadpool::PriorityThreadPool::Functor
   {
     return _priority;
   }
+  size_t getWeight() const
+  {
+    assert(bpp);
+    return bpp->getWeight();
+  }
 
  private:
   BPPSeeder();
   void catchHandler(const std::string& s, uint32_t uniqueID, uint32_t step);
-  void sendErrorMsg(uint32_t id, uint16_t status, uint32_t step);
   void flushSyscatOIDs();
 
   messageqcpp::SBS bs;
@@ -96,5 +95,3 @@ class BPPSeeder : public threadpool::PriorityThreadPool::Functor
 };
 
 };  // namespace primitiveprocessor
-
-#endif

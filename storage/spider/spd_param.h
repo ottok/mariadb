@@ -316,7 +316,6 @@ my_bool spider_param_index_hint_pushdown(
 );
 uint spider_param_max_connections();
 uint spider_param_conn_wait_timeout();
-uint spider_param_internal_lock_wait_timeout();
 uint spider_param_log_result_errors();
 uint spider_param_log_result_error_with_sql();
 uint spider_param_internal_xa_id_type(
@@ -368,3 +367,5 @@ int spider_param_strict_group_by(
 );
 bool spider_param_direct_aggregate(THD *thd);
 bool spider_param_disable_group_by_handler(THD *thd);
+bool spider_param_suppress_comment_ignored_warning(THD *thd);
+bool spider_param_ignore_comments(THD *thd);

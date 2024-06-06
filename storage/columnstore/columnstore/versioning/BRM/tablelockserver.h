@@ -25,14 +25,9 @@
 #include "brmtypes.h"
 #include "sessionmanagerserver.h"
 
-#ifndef TABLELOCKSERVER_H_
-#define TABLELOCKSERVER_H_
+#pragma once
 
-#if defined(_MSC_VER) && defined(xxxBRMTBLLOCKSVR_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace BRM
 {
@@ -66,5 +61,3 @@ class TableLockServer
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif /* TABLELOCKSERVER_H_ */

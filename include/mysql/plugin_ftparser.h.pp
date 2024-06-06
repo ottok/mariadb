@@ -57,10 +57,17 @@ static inline int encryption_crypt(const unsigned char* src, unsigned int slen,
 {
   void *ctx= alloca(encryption_handler.encryption_ctx_size_func((key_id),(key_version)));
   int res1, res2;
-  unsigned int d1, d2;
+  unsigned int d1, d2= *dlen;
+  assert(*dlen >= slen);
+  assert((dst[*dlen - 1]= 1));
+  if (src < dst)
+    assert(src + slen <= dst);
+  else
+    assert(dst + *dlen <= src);
   if ((res1= encryption_handler.encryption_ctx_init_func((ctx),(key),(klen),(iv),(ivlen),(flags),(key_id),(key_version))))
     return res1;
   res1= encryption_handler.encryption_ctx_update_func((ctx),(src),(slen),(dst),(&d1));
+  d2-= d1;
   res2= encryption_handler.encryption_ctx_finish_func((ctx),(dst + d1),(&d2));
   *dlen= d1 + d2;
   return res1 ? res1 : res2;
@@ -294,35 +301,39 @@ void my_sha512_input(void *context, const unsigned char *buf, size_t len);
 void my_sha512_result(void *context, unsigned char *digest);
 }
 extern "C" {
-struct st_mysql_lex_string
-{
-  char *str;
-  size_t length;
-};
-typedef struct st_mysql_lex_string MYSQL_LEX_STRING;
 struct st_mysql_const_lex_string
 {
   const char *str;
   size_t length;
 };
 typedef struct st_mysql_const_lex_string MYSQL_CONST_LEX_STRING;
+struct st_mysql_lex_string
+{
+  char *str;
+  size_t length;
+  operator struct st_mysql_const_lex_string() const
+  {
+    return {str, length};
+  }
+};
+typedef struct st_mysql_lex_string MYSQL_LEX_STRING;
 extern struct thd_alloc_service_st {
-  void *(*thd_alloc_func)(THD*, size_t);
-  void *(*thd_calloc_func)(THD*, size_t);
-  char *(*thd_strdup_func)(THD*, const char *);
-  char *(*thd_strmake_func)(THD*, const char *, size_t);
-  void *(*thd_memdup_func)(THD*, const void*, size_t);
-  MYSQL_CONST_LEX_STRING *(*thd_make_lex_string_func)(THD*,
+  void *(*thd_alloc_func)(const THD*, size_t);
+  void *(*thd_calloc_func)(const THD*, size_t);
+  char *(*thd_strdup_func)(const THD*, const char *);
+  char *(*thd_strmake_func)(const THD*, const char *, size_t);
+  void *(*thd_memdup_func)(const THD*, const void*, size_t);
+  MYSQL_CONST_LEX_STRING *(*thd_make_lex_string_func)(const THD*,
                                         MYSQL_CONST_LEX_STRING *,
                                         const char *, size_t, int);
 } *thd_alloc_service;
-void *thd_alloc(THD* thd, size_t size);
-void *thd_calloc(THD* thd, size_t size);
-char *thd_strdup(THD* thd, const char *str);
-char *thd_strmake(THD* thd, const char *str, size_t size);
-void *thd_memdup(THD* thd, const void* str, size_t size);
+void *thd_alloc(const THD* thd, size_t size);
+void *thd_calloc(const THD* thd, size_t size);
+char *thd_strdup(const THD* thd, const char *str);
+char *thd_strmake(const THD* thd, const char *str, size_t size);
+void *thd_memdup(const THD* thd, const void* str, size_t size);
 MYSQL_CONST_LEX_STRING
-*thd_make_lex_string(THD* thd, MYSQL_CONST_LEX_STRING *lex_str,
+*thd_make_lex_string(const THD* thd, MYSQL_CONST_LEX_STRING *lex_str,
                      const char *str, size_t size,
                      int allocate_lex_string);
 }
@@ -487,9 +498,12 @@ extern struct sql_service_st {
   int (STDCALL *mysql_set_character_set_func)(MYSQL *mysql, const char *cs_name);
   unsigned int (STDCALL *mysql_num_fields_func)(MYSQL_RES *res);
   int (STDCALL *mysql_select_db_func)(MYSQL *mysql, const char *db);
+  MYSQL_RES *(STDCALL *mysql_use_result_func)(MYSQL *mysql);
+  MYSQL_FIELD *(STDCALL *mysql_fetch_fields_func)(MYSQL_RES *res);
+  unsigned long (STDCALL *mysql_real_escape_string_func)(MYSQL *mysql, char *to,
+                                        const char *from, unsigned long length);
   my_bool (STDCALL *mysql_ssl_set_func)(MYSQL *mysql, const char *key,
-                                        const char *cert, const char *ca,
-                                        const char *capath, const char *cipher);
+      const char *cert, const char *ca, const char *capath, const char *cipher);
 } *sql_service;
 MYSQL *mysql_real_connect_local(MYSQL *mysql);
 }

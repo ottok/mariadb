@@ -57,7 +57,6 @@
 #include <sstream>
 
 /* wsrep-lib */
-Wsrep_server_state* Wsrep_server_state::m_instance;
 
 my_bool wsrep_emulate_bin_log= FALSE; // activating parts of binlog interface
 my_bool wsrep_preordered_opt= FALSE;
@@ -871,12 +870,13 @@ int wsrep_init()
   wsrep_init_position();
   wsrep_sst_auth_init();
 
-  if (strlen(wsrep_provider)== 0 ||
-      !strcmp(wsrep_provider, WSREP_NONE))
+  if (!*wsrep_provider ||
+      !strcasecmp(wsrep_provider, WSREP_NONE))
   {
     // enable normal operation in case no provider is specified
     global_system_variables.wsrep_on= 0;
-    int err= Wsrep_server_state::instance().load_provider(wsrep_provider, wsrep_provider_options ? wsrep_provider_options : "");
+    int err= Wsrep_server_state::init_provider(
+        wsrep_provider, wsrep_provider_options ? wsrep_provider_options : "");
     if (err)
     {
       DBUG_PRINT("wsrep",("wsrep::init() failed: %d", err));
@@ -918,14 +918,14 @@ int wsrep_init()
                 "wsrep_trx_fragment_size to 0 or use wsrep_provider that "
                 "supports streaming replication.",
                 wsrep_provider, global_system_variables.wsrep_trx_fragment_size);
-    Wsrep_server_state::instance().unload_provider();
+    Wsrep_server_state::instance().deinit_provider();
     Wsrep_server_state::deinit_provider_services();
     return 1;
   }
 
   /* Now WSREP is fully initialized */
   global_system_variables.wsrep_on= 1;
-  WSREP_ON_= wsrep_provider && strcmp(wsrep_provider, WSREP_NONE);
+  WSREP_ON_= wsrep_provider && *wsrep_provider && strcasecmp(wsrep_provider, WSREP_NONE);
   wsrep_service_started= 1;
 
   wsrep_init_provider_status_variables();
@@ -934,7 +934,6 @@ int wsrep_init()
 
   WSREP_DEBUG("SR storage init for: %s",
               (wsrep_SR_store_type == WSREP_SR_STORE_TABLE) ? "table" : "void");
-
   return 0;
 }
 
@@ -995,7 +994,8 @@ void wsrep_init_startup (bool sst_first)
     wsrep_plugins_pre_init();
 
   /* Skip replication start if dummy wsrep provider is loaded */
-  if (!strcmp(wsrep_provider, WSREP_NONE)) return;
+  if (!wsrep_provider || !*wsrep_provider ||
+      !strcasecmp(wsrep_provider, WSREP_NONE)) return;
 
   /* Skip replication start if no cluster address */
   if (!wsrep_cluster_address_exists()) return;
@@ -1008,6 +1008,11 @@ void wsrep_init_startup (bool sst_first)
 
   wsrep_create_rollbacker();
   wsrep_create_appliers(1);
+
+  if (Wsrep_server_state::init_options())
+  {
+    WSREP_WARN("Failed to initialize provider options");
+  }
 
   Wsrep_server_state& server_state= Wsrep_server_state::instance();
   /*
@@ -1040,7 +1045,7 @@ void wsrep_deinit(bool free_options)
   DBUG_ASSERT(wsrep_inited == 1);
   WSREP_DEBUG("wsrep_deinit");
 
-  Wsrep_server_state::instance().unload_provider();
+  Wsrep_server_state::deinit_provider();
   Wsrep_server_state::deinit_provider_services();
 
   provider_name[0]=    '\0';
@@ -1596,7 +1601,7 @@ bool wsrep_sync_wait (THD* thd, uint mask)
       {
       case wsrep::e_not_supported_error:
         msg= "synchronous reads by wsrep backend. "
-          "Please unset wsrep_causal_reads variable.";
+          "Please unset wsrep_sync_wait variable.";
         err= ER_NOT_SUPPORTED_YET;
         break;
       default:
@@ -2191,16 +2196,16 @@ int wsrep_to_buf_helper(
     THD* thd, const char *query, uint query_len, uchar** buf, size_t* buf_len)
 {
   IO_CACHE tmp_io_cache;
-  Log_event_writer writer(&tmp_io_cache, 0);
+  enum_binlog_checksum_alg current_binlog_check_alg=
+    (enum_binlog_checksum_alg) binlog_checksum_options;
+  Log_event_writer writer(&tmp_io_cache, NULL, current_binlog_check_alg, NULL);
   if (open_cached_file(&tmp_io_cache, mysql_tmpdir, TEMP_PREFIX,
                        65536, MYF(MY_WME)))
     return 1;
   int ret(0);
-  enum enum_binlog_checksum_alg current_binlog_check_alg=
-    (enum_binlog_checksum_alg) binlog_checksum_options;
 
-  Format_description_log_event *tmp_fd= new Format_description_log_event(4);
-  tmp_fd->checksum_alg= current_binlog_check_alg;
+  Format_description_log_event *tmp_fd=
+    new Format_description_log_event(4, NULL, current_binlog_check_alg);
   writer.write(tmp_fd);
   delete tmp_fd;
 
@@ -2249,7 +2254,6 @@ int wsrep_to_buf_helper(
     Query_log_event ev(thd, thd->wsrep_TOI_pre_query,
 		       thd->wsrep_TOI_pre_query_len,
 		       FALSE, FALSE, FALSE, 0);
-    ev.checksum_alg= current_binlog_check_alg;
     if (writer.write(&ev)) ret= 1;
   }
 
@@ -2258,7 +2262,6 @@ int wsrep_to_buf_helper(
   /* WSREP GTID mode, we need to change server_id */
   if (wsrep_gtid_mode && !thd->variables.gtid_seq_no)
     ev.server_id= wsrep_gtid_server.server_id;
-  ev.checksum_alg= current_binlog_check_alg;
   if (!ret && writer.write(&ev)) ret= 1;
   if (!ret && wsrep_write_cache_buf(&tmp_io_cache, buf, buf_len)) ret= 1;
   close_cached_file(&tmp_io_cache);
@@ -3543,7 +3546,7 @@ ignore_error:
   WSREP_WARN("Ignoring error '%s' on query. "
              "Default database: '%s'. Query: '%s', Error_code: %d",
              thd->get_stmt_da()->message(),
-             print_slave_db_safe(thd->db.str),
+             safe_str(thd->db.str),
              thd->query(),
              error);
   return 1;

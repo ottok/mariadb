@@ -1,9 +1,10 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.10)
+
 project(storagemanager)
 
 include_directories(include ${CMAKE_BINARY_DIR}/include ${ENGINE_UTILS_COMMON_INCLUDE} ${S3API_DIR})
 
-set(storagemanager_SRCS 
+set(storagemanager_SRCS
     src/AppendTask.cpp
     src/ClientRequestProcessor.cpp
     src/ListDirectoryTask.cpp
@@ -59,15 +60,17 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/storagemanager.cnf.in" "${CMAKE_CURR
 link_directories(${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_INSTALL_RPATH $ORIGIN $ORIGIN/../lib)
 
+
+
 add_library(storagemanager SHARED ${storagemanager_SRCS})
-add_dependencies(storagemanager marias3)
+add_dependencies(storagemanager marias3 external_boost)
+
 target_compile_definitions(storagemanager PUBLIC BOOST_NO_CXX11_SCOPED_ENUMS)
 target_link_libraries(storagemanager boost_chrono boost_system boost_thread boost_filesystem boost_regex pthread ${S3API_DEPS})
-set_property(TARGET storagemanager PROPERTY CXX_STANDARD 11)
 
 add_executable(StorageManager src/main.cpp)
 target_link_libraries(StorageManager storagemanager)
-set_property(TARGET StorageManager PROPERTY CXX_STANDARD 11)
+set_property(TARGET StorageManager PROPERTY CXX_STANDARD 20)
 
 set(TMPDIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
@@ -75,12 +78,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 add_executable(unit_tests src/unit_tests.cpp)
 target_compile_definitions(unit_tests PUBLIC BOOST_NO_CXX11_SCOPED_ENUMS)
 target_link_libraries(unit_tests storagemanager)
-set_property(TARGET unit_tests PROPERTY CXX_STANDARD 11)
 
 add_executable(testS3Connection src/testS3Connection.cpp)
 target_compile_definitions(testS3Connection PUBLIC BOOST_NO_CXX11_SCOPED_ENUMS)
 target_link_libraries(testS3Connection storagemanager)
-set_property(TARGET testS3Connection PROPERTY CXX_STANDARD 11)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TMPDIR})
 
@@ -94,12 +95,9 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/test_data
                 ${CMAKE_CURRENT_BINARY_DIR}/test_data
-#        COMMAND ${CMAKE_COMMAND} -E copy
-#                ../bin/unit_tests      # what is putting our bins in ../bin?
-#                ${CMAKE_CURRENT_BINARY_DIR} 
 )
 
-# The includes and lib linkages required to link against cloudio ... 
+# The includes and lib linkages required to link against cloudio ...
 # pretty crazy.  When lib dependencies are eventually config'd right,
 # change this to only include and link against cloudio.
 include_directories(${ENGINE_SRC_DIR}/utils/cloudio ${ENGINE_COMMON_INCLUDES})
@@ -137,12 +135,12 @@ install(TARGETS StorageManager smcat smput smls smrm testS3Connection
     COMPONENT columnstore-engine
 )
 
-install(FILES storagemanager.cnf 
+install(FILES storagemanager.cnf
     DESTINATION ${ENGINE_SYSCONFDIR}/columnstore
     COMPONENT columnstore-engine
 )
 
-install(FILES storagemanager.cnf 
+install(FILES storagemanager.cnf
     RENAME storagemanager.cnf.example
     DESTINATION ${ENGINE_SYSCONFDIR}/columnstore
     COMPONENT columnstore-engine

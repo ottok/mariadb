@@ -190,7 +190,6 @@ trx_purge_add_undo_to_history(const trx_t* trx, trx_undo_t*& undo, mtr_t* mtr)
   ut_a(undo_page);
   trx_ulogf_t *undo_header= undo_page->page.frame + undo->hdr_offset;
 
-  ut_ad(mach_read_from_2(undo_header + TRX_UNDO_NEEDS_PURGE) <= 1);
   ut_ad(rseg->needs_purge > trx->id);
   ut_ad(rseg->last_page_no != FIL_NULL);
 
@@ -274,8 +273,6 @@ trx_purge_add_undo_to_history(const trx_t* trx, trx_undo_t*& undo, mtr_t* mtr)
                 undo_page->page.frame, undo_state);
   mtr->write<8,mtr_t::MAYBE_NOP>(*undo_page, undo_header + TRX_UNDO_TRX_NO,
                                  trx->rw_trx_hash_element->no);
-  mtr->write<2,mtr_t::MAYBE_NOP>(*undo_page, undo_header +
-                                 TRX_UNDO_NEEDS_PURGE, 1U);
 }
 
 /** Free an undo log segment.
@@ -836,7 +833,6 @@ bool purge_sys_t::rseg_get_next_history_log()
     {
       const byte *log_hdr= undo_page->page.frame + prev_log_addr.boffset;
       trx_no= mach_read_from_8(log_hdr + TRX_UNDO_TRX_NO);
-      ut_ad(mach_read_from_2(log_hdr + TRX_UNDO_NEEDS_PURGE) <= 1);
     }
 
     if (UNIV_LIKELY(trx_no != 0))

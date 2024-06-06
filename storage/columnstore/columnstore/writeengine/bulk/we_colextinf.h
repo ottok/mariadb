@@ -25,17 +25,12 @@
  * For ex: this is where we track the min/max values per extent for a column.
  */
 
-#ifndef WE_COLEXTINF_H_
-#define WE_COLEXTINF_H_
+#pragma once
 
 #include <limits>
 #include <stdint.h>
 #include <set>
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 #include <boost/thread/mutex.hpp>
 
 #include "brmtypes.h"
@@ -125,7 +120,7 @@ class ColExtInfEntry
  *  the last input Row number in the extent, as the key.
  */
 //------------------------------------------------------------------------------
-struct uint64Hasher : public std::unary_function<RID, std::size_t>
+struct uint64Hasher
 {
   std::size_t operator()(RID val) const
   {
@@ -260,5 +255,3 @@ class ColExtInf : public ColExtInfBase
 };
 
 }  // namespace WriteEngine
-
-#endif  // WE_COLEXTINF_H_

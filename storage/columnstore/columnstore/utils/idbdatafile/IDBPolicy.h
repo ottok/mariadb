@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef IDBPOLICY_H_
-#define IDBPOLICY_H_
+#pragma once
 
 #include <string>
 #include <vector>
@@ -235,5 +234,3 @@ inline int IDBPolicy::copyFile(const char* srcPath, const char* destPath)
 }
 
 }  // namespace idbdatafile
-
-#endif /* IDBPOLICY_H_ */

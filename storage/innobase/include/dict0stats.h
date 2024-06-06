@@ -218,30 +218,15 @@ dict_stats_save_index_stat(
 	trx_t*		trx)
 	MY_ATTRIBUTE((nonnull(1, 3, 6, 7)));
 
-/** Report an error if updating table statistics failed because
-.ibd file is missing, table decryption failed or table is corrupted.
-@param[in,out]	table	Table
-@param[in]	defragment	true if statistics is for defragment
-@retval DB_DECRYPTION_FAILED if decryption of the table failed
-@retval DB_TABLESPACE_DELETED if .ibd file is missing
-@retval DB_CORRUPTION if table is marked as corrupted */
-dberr_t
-dict_stats_report_error(dict_table_t* table, bool defragment = false)
-	MY_ATTRIBUTE((nonnull, warn_unused_result));
-
 #include "dict0stats.inl"
 
 #ifdef UNIV_ENABLE_UNIT_TEST_DICT_STATS
 void test_dict_stats_all();
 #endif /* UNIV_ENABLE_UNIT_TEST_DICT_STATS */
 
-/** Write all zeros (or 1 where it makes sense) into a table
-and its indexes'statistics members. The resulting stats
-correspond to an empty table.
-@param	table			table stats to be emptied
-@param  empty_defrag_stats	empty the defrag stats */
-void
-dict_stats_empty_table(
-	dict_table_t*	table,
-	bool		empty_defrag_stats);
+/** Write all zeros (or 1 where it makes sense) into a table and its indexes'
+statistics members. The resulting stats correspond to an empty table.
+@param table  table statistics to be emptied */
+void dict_stats_empty_table(dict_table_t *table);
+
 #endif /* dict0stats_h */

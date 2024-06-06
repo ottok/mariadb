@@ -1,5 +1,5 @@
 /* Copyright (C) 2014 InfiniDB, Inc.
-   Copyright (C) 2016 MariaDB Corporation
+   Copyright (C) 2016-2022 MariaDB Corporation
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License
@@ -30,22 +30,20 @@
 #endif
 #include <csignal>
 #include <sys/time.h>
-#ifndef _MSC_VER
 #include <sys/resource.h>
 #include <tr1/unordered_set>
-#else
-#include <unordered_set>
-#endif
+
 #include <clocale>
 #include <iterator>
 #include <algorithm>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 //#define NDEBUG
 #include <cassert>
 using namespace std;
 
 #include <boost/thread.hpp>
-#include <boost/regex.hpp>
-#include <boost/tokenizer.hpp>
 using namespace boost;
 
 #include "configcpp.h"
@@ -61,6 +59,9 @@ using namespace logging;
 #include "umsocketselector.h"
 using namespace primitiveprocessor;
 
+#include "archcheck.h"
+using namespace archcheck;
+
 #include "liboamcpp.h"
 using namespace oam;
 
@@ -74,51 +75,9 @@ using namespace idbdatafile;
 
 #include "mariadb_my_sys.h"
 
+#include "spinlock.h"
 #include "service.h"
-#include "threadnaming.h"
-
-class Opt
-{
- public:
-  int m_debug;
-  bool m_fg;
-  Opt(int argc, char* argv[]) : m_debug(0), m_fg(false)
-  {
-    int c;
-
-    while ((c = getopt(argc, argv, "df")) != EOF)
-    {
-      switch (c)
-      {
-        case 'd': m_debug++; break;
-        case 'f': m_fg = true; break;
-        case '?':
-        default: break;
-      }
-    }
-  }
-};
-
-class ServicePrimProc : public Service, public Opt
-{
- public:
-  ServicePrimProc(const Opt& opt) : Service("PrimProc"), Opt(opt)
-  {
-  }
-  void LogErrno() override
-  {
-    cerr << strerror(errno) << endl;
-  }
-  void ParentLogChildMessage(const std::string& str) override
-  {
-    cout << str << endl;
-  }
-  int Child() override;
-  int Run()
-  {
-    return m_fg ? Child() : RunForking();
-  }
-};
+#include "serviceexemgr.h"
 
 namespace primitiveprocessor
 {
@@ -154,28 +113,10 @@ int toInt(const string& val)
 
 void setupSignalHandlers()
 {
-#ifndef _MSC_VER
-  signal(SIGHUP, SIG_IGN);
-
   struct sigaction ign;
-
-  memset(&ign, 0, sizeof(ign));
-  ign.sa_handler = SIG_IGN;
-  sigaction(SIGPIPE, &ign, 0);
-
-  memset(&ign, 0, sizeof(ign));
-  ign.sa_handler = SIG_IGN;
-  sigaction(SIGUSR1, &ign, 0);
-
   memset(&ign, 0, sizeof(ign));
   ign.sa_handler = SIG_IGN;
   sigaction(SIGUSR2, &ign, 0);
-
-  memset(&ign, 0, sizeof(ign));
-  ign.sa_handler = fatalHandler;
-  sigaction(SIGSEGV, &ign, 0);
-  sigaction(SIGABRT, &ign, 0);
-  sigaction(SIGFPE, &ign, 0);
 
   sigset_t sigset;
   sigemptyset(&sigset);
@@ -184,7 +125,6 @@ void setupSignalHandlers()
   sigaddset(&sigset, SIGUSR2);
   sigprocmask(SIG_BLOCK, &sigset, 0);
 
-#endif
 }
 
 int8_t setupCwd(Config* cf)
@@ -204,7 +144,6 @@ int8_t setupCwd(Config* cf)
 
 int setupResources()
 {
-#ifndef _MSC_VER
   struct rlimit rlim;
 
   if (getrlimit(RLIMIT_NOFILE, &rlim) != 0)
@@ -229,7 +168,6 @@ int setupResources()
     return -4;
   }
 
-#endif
   return 0;
 }
 
@@ -283,9 +221,7 @@ class QszMonThd
 };
 #endif
 
-#ifndef _MSC_VER
 #define DUMP_CACHE_CONTENTS
-#endif
 #ifdef DUMP_CACHE_CONTENTS
 void* waitForSIGUSR1(void* p)
 {
@@ -296,7 +232,6 @@ void* waitForSIGUSR1(void* p)
 #else
   int cacheCount = reinterpret_cast<int>(p);
 #endif
-#ifndef _MSC_VER
   sigset_t oset;
   int rec_sig;
   int32_t rpt_state = 0;
@@ -308,7 +243,6 @@ void* waitForSIGUSR1(void* p)
   sigemptyset(&oset);
   sigaddset(&oset, SIGUSR1);
   sigaddset(&oset, SIGUSR2);
-#endif
 
   for (;;)
   {
@@ -347,6 +281,15 @@ void* waitForSIGUSR1(void* p)
 
 }  // namespace
 
+ServicePrimProc* ServicePrimProc::fInstance = nullptr;
+ServicePrimProc* ServicePrimProc::instance()
+{
+  if (!fInstance)
+    fInstance = new ServicePrimProc();
+
+  return fInstance;
+}
+
 int ServicePrimProc::Child()
 {
   Config* cf = Config::makeConfig();
@@ -355,6 +298,9 @@ int ServicePrimProc::Child()
 
   int err = 0;
   err = setupCwd(cf);
+
+  // Initialize the charset library
+  MY_INIT("PrimProc");
 
   mlp = new primitiveprocessor::Logger();
 
@@ -385,8 +331,24 @@ int ServicePrimProc::Child()
     cerr << errMsg << endl;
 
     NotifyServiceInitializationFailed();
+
+    // Free up resources allocated by MY_INIT() above.
+    my_end(0);
+
     return 2;
   }
+  utils::USpaceSpinLock startupRaceLock(getStartupRaceFlag());
+  std::thread exeMgrThread(
+      [this, cf]()
+      {
+        exemgr::Opt opt;
+        exemgr::globServiceExeMgr = new exemgr::ServiceExeMgr(opt, cf);
+        // primitive delay to avoid 'not connected to PM' log error messages
+        // from EM. PrimitiveServer::start() releases SpinLock after sockets
+        // are available.
+        utils::USpaceSpinLock startupRaceLock(this->getStartupRaceFlag());
+        exemgr::globServiceExeMgr->Child();
+      });
 
   int serverThreads = 1;
   int serverQueueSize = 10;
@@ -400,7 +362,6 @@ int ServicePrimProc::Child()
   bool rotatingDestination = false;
   uint32_t deleteBlocks = 128;
   bool PTTrace = false;
-  int temp;
   string strTemp;
   int priority = -1;
   const string primitiveServers("PrimitiveServers");
@@ -419,7 +380,7 @@ int ServicePrimProc::Child()
 
   gDebugLevel = primitiveprocessor::NONE;
 
-  temp = toInt(cf->getConfig(primitiveServers, "ServerThreads"));
+  int temp = toInt(cf->getConfig(primitiveServers, "ServerThreads"));
 
   if (temp > 0)
     serverThreads = temp;
@@ -505,27 +466,6 @@ int ServicePrimProc::Child()
   string strBlockPct = cf->getConfig(dbbc, "NumBlocksPct");
   temp = atoi(strBlockPct.c_str());
 
-#ifdef _MSC_VER
-  /* TODO: implement handling for the 'm' or 'g' chars in NumBlocksPct */
-  if (temp > 0)
-    BRPBlocksPct = temp;
-
-  MEMORYSTATUSEX memStat;
-  memStat.dwLength = sizeof(memStat);
-
-  if (GlobalMemoryStatusEx(&memStat) == 0)
-    // FIXME: Assume 2GB?
-    BRPBlocks = 2621 * BRPBlocksPct;
-  else
-  {
-#ifndef _WIN64
-    memStat.ullTotalPhys = std::min(memStat.ullTotalVirtual, memStat.ullTotalPhys);
-#endif
-    // We now have the total phys mem in bytes
-    BRPBlocks = memStat.ullTotalPhys / (8 * 1024) / 100 * BRPBlocksPct;
-  }
-
-#else
   bool absCache = false;
   if (temp > 0)
   {
@@ -543,7 +483,6 @@ int ServicePrimProc::Child()
     BRPBlocks = BRPBlocksPct / 8192;
   else
     BRPBlocks = ((BRPBlocksPct / 100.0) * (double)cg.getTotalMemory()) / 8192;
-#endif
 #if 0
     temp = toInt(cf->getConfig(dbbc, "NumThreads"));
 
@@ -629,11 +568,7 @@ int ServicePrimProc::Child()
   if (priority < -20)
     priority = -20;
 
-#ifdef _MSC_VER
-    // FIXME:
-#else
   setpriority(PRIO_PROCESS, 0, priority);
-#endif
   //..Instantiate UmSocketSelector singleton.  Disable rotating destination
   //..selection if no UM IP addresses are in the Calpo67108864LLnt.xml file.
   UmSocketSelector* pUmSocketSelector = UmSocketSelector::instance();
@@ -705,7 +640,6 @@ int ServicePrimProc::Child()
   if (temp > 0)
     BRPThreads = temp;
 
-#ifndef _MSC_VER
   // @bug4598, switch for O_DIRECT to support gluster fs.
   // directIOFlag == O_DIRECT, by default
   strVal = cf->getConfig(primitiveServers, "DirectIO");
@@ -713,7 +647,6 @@ int ServicePrimProc::Child()
   if ((strVal == "n") || (strVal == "N"))
     directIOFlag = 0;
 
-#endif
 
   IDBPolicy::configIDBPolicy();
 
@@ -736,11 +669,7 @@ int ServicePrimProc::Child()
 
   if (gDebugLevel >= STATS)
   {
-#ifdef _MSC_VER
-    ofstream* qszLog = new ofstream("C:/Calpont/log/trace/ppqsz.dat");
-#else
     ofstream* qszLog = new ofstream("/var/log/mariadb/columnstore/trace/ppqsz.dat");
-#endif
 
     if (!qszLog->good())
     {
@@ -765,24 +694,32 @@ int ServicePrimProc::Child()
   }
 #endif
 
-  server.start(this);
+  primServerThreadPool = server.getProcessorThreadPool();
+
+  server.start(this, startupRaceLock);
 
   cerr << "server.start() exited!" << endl;
+
+  // Free up resources allocated by MY_INIT() above.
+  my_end(0);
 
   return 1;
 }
 
 int main(int argc, char** argv)
 {
+  if (checkArchitecture() != arcitecture::SSE4_2 && checkArchitecture() != arcitecture::ASIMD)
+  {
+    std::cerr << "Unsupported CPU architecture. ARM Advanced SIMD or x86_64 SSE4.2 required; aborting. \n";
+    return 1;
+  }
   Opt opt(argc, argv);
-
   // Set locale language
   setlocale(LC_ALL, "");
   setlocale(LC_NUMERIC, "C");
   // This is unset due to the way we start it
   program_invocation_short_name = const_cast<char*>("PrimProc");
-  // Initialize the charset library
-  MY_INIT(argv[0]);
 
-  return ServicePrimProc(opt).Run();
+  ServicePrimProc::instance()->setOpt(opt);
+  return ServicePrimProc::instance()->Run();
 }

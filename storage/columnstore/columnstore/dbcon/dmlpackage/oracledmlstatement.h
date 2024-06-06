@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef ORACLEDMLSTATEMENT_H
-#define ORACLEDMLSTATEMENT_H
+#pragma once
 #include <string>
 #include "vendordmlstatement.h"
 
@@ -43,4 +42,3 @@ class OracleDMLStatement : public VendorDMLStatement
  private:
 };
 }  // namespace dmlpackage
-#endif  // ORACLEDMLSTATEMENT_H

@@ -27,7 +27,7 @@
 using namespace std;
 
 #include <boost/shared_ptr.hpp>
-#include <boost/shared_array.hpp>
+
 #include <boost/uuid/uuid_io.hpp>
 using namespace boost;
 
@@ -161,9 +161,9 @@ void CrossEngineStep::setField(int i, const char* value, unsigned long length, M
       row.getColumnWidth(i) > 8)
   {
     if (value != NULL)
-      row.setStringField(value, i);
+      row.setStringField((const uint8_t*)value, length, i);
     else
-      row.setStringField("", i);
+      row.setStringField(nullptr, 0, i);
   }
   else if ((colType == CalpontSystemCatalog::BLOB) || (colType == CalpontSystemCatalog::TEXT) ||
            (colType == CalpontSystemCatalog::VARBINARY))
@@ -196,7 +196,8 @@ void CrossEngineStep::setField(int i, const char* value, unsigned long length, M
       ct.precision = row.getPrecision(i);
     }
 
-    row.setIntField(convertValueNum<int64_t>(value, ct), i);
+    int64_t v = convertValueNum<int64_t>(value, ct);
+    row.setIntField(v, i);
   }
 }
 
@@ -223,9 +224,8 @@ T CrossEngineStep::convertValueNum(const char* str, const CalpontSystemCatalog::
   T rv = 0;
   bool pushWarning = false;
   bool nullFlag = (str == NULL);
-  boost::any anyVal =
-      ct.convertColumnData((nullFlag ? "" : str), pushWarning, fTimeZone, nullFlag, true, false);
-
+  boost::any anyVal;
+  anyVal = ct.convertColumnData((nullFlag ? "" : str), pushWarning, fTimeZone, nullFlag, true, false);
   // Out of range values are treated as NULL as discussed during design review.
   if (pushWarning)
   {
@@ -252,20 +252,12 @@ T CrossEngineStep::convertValueNum(const char* str, const CalpontSystemCatalog::
 
     case CalpontSystemCatalog::MEDINT:
     case CalpontSystemCatalog::INT:
-#ifdef _MSC_VER
-      rv = boost::any_cast<int>(anyVal);
-#else
       rv = boost::any_cast<int32_t>(anyVal);
-#endif
       break;
 
     case CalpontSystemCatalog::UMEDINT:
     case CalpontSystemCatalog::UINT:
-#ifdef _MSC_VER
-      rv = boost::any_cast<unsigned int>(anyVal);
-#else
       rv = boost::any_cast<uint32_t>(anyVal);
-#endif
       break;
 
     case CalpontSystemCatalog::BIGINT: rv = boost::any_cast<long long>(anyVal); break;
@@ -310,10 +302,17 @@ T CrossEngineStep::convertValueNum(const char* str, const CalpontSystemCatalog::
     case CalpontSystemCatalog::TEXT:
     case CalpontSystemCatalog::CLOB:
     {
-      std::string i = boost::any_cast<std::string>(anyVal);
-      // bug 1932, pad nulls up to the size of v
-      i.resize(sizeof(rv), 0);
-      rv = *((uint64_t*)i.data());
+      if (nullFlag)
+      {
+        rv = joblist::CHAR8NULL; // SZ: I hate that.
+      }
+      else
+      {
+        std::string i = boost::any_cast<std::string>(anyVal);
+        // bug 1932, pad nulls up to the size of v
+        i.resize(sizeof(rv), 0);
+        rv = *((uint64_t*)i.data());
+      }
     }
     break;
 
@@ -332,12 +331,7 @@ T CrossEngineStep::convertValueNum(const char* str, const CalpontSystemCatalog::
       else if (ct.colWidth == execplan::CalpontSystemCatalog::EIGHT_BYTE)
         rv = boost::any_cast<long long>(anyVal);
       else if (ct.colWidth == execplan::CalpontSystemCatalog::FOUR_BYTE)
-#ifdef _MSC_VER
-        rv = boost::any_cast<int>(anyVal);
-
-#else
         rv = boost::any_cast<int32_t>(anyVal);
-#endif
       else if (ct.colWidth == execplan::CalpontSystemCatalog::TWO_BYTE)
         rv = boost::any_cast<int16_t>(anyVal);
       else if (ct.colWidth == execplan::CalpontSystemCatalog::ONE_BYTE)
@@ -414,7 +408,6 @@ void CrossEngineStep::execute()
     int num_fields = mysql->getFieldCount();
 
     char** rowIn;  // input
-    // shared_array<uint8_t> rgDataDelivered;      // output
     RGData rgDataDelivered;
     fRowGroupAdded.initRow(&fRowDelivered);
     // use getDataSize() i/o getMaxDataSize() to make sure there are 8192 rows.
@@ -444,11 +437,11 @@ void CrossEngineStep::execute()
 
     else if (doFE1 && !doFE3)  // FE in WHERE clause only
     {
-      shared_array<uint8_t> rgDataFe1;  // functions in where clause
+      std::shared_ptr<uint8_t[]> rgDataFe1;  // functions in where clause
       Row rowFe1;                       // row for fe evaluation
       fRowGroupFe1.initRow(&rowFe1, true);
       rgDataFe1.reset(new uint8_t[rowFe1.getSize()]);
-      rowFe1.setData(rgDataFe1.get());
+      rowFe1.setData(rowgroup::Row::Pointer(rgDataFe1.get()));
 
       while ((rowIn = mysql->nextRow()) && !cancelled())
       {
@@ -495,11 +488,11 @@ void CrossEngineStep::execute()
 
     else if (!doFE1 && doFE3)  // FE in SELECT clause only
     {
-      shared_array<uint8_t> rgDataFe3;  // functions in select clause
+      std::shared_ptr<uint8_t[]> rgDataFe3;  // functions in select clause
       Row rowFe3;                       // row for fe evaluation
       fRowGroupOut.initRow(&rowFe3, true);
       rgDataFe3.reset(new uint8_t[rowFe3.getSize()]);
-      rowFe3.setData(rgDataFe3.get());
+      rowFe3.setData(rowgroup::Row::Pointer(rgDataFe3.get()));
 
       while ((rowIn = mysql->nextRow()) && !cancelled())
       {
@@ -516,17 +509,17 @@ void CrossEngineStep::execute()
 
     else  // FE in SELECT clause, FE join and WHERE clause
     {
-      shared_array<uint8_t> rgDataFe1;  // functions in where clause
+      std::shared_ptr<uint8_t[]> rgDataFe1;  // functions in where clause
       Row rowFe1;                       // row for fe1 evaluation
       fRowGroupFe1.initRow(&rowFe1, true);
       rgDataFe1.reset(new uint8_t[rowFe1.getSize()]);
-      rowFe1.setData(rgDataFe1.get());
+      rowFe1.setData(rowgroup::Row::Pointer(rgDataFe1.get()));
 
-      shared_array<uint8_t> rgDataFe3;  // functions in select clause
+      std::shared_ptr<uint8_t[]> rgDataFe3;  // functions in select clause
       Row rowFe3;                       // row for fe3 evaluation
       fRowGroupOut.initRow(&rowFe3, true);
       rgDataFe3.reset(new uint8_t[rowFe3.getSize()]);
-      rowFe3.setData(rgDataFe3.get());
+      rowFe3.setData(rowgroup::Row::Pointer(rgDataFe3.get()));
 
       while ((rowIn = mysql->nextRow()) && !cancelled())
       {
@@ -714,7 +707,6 @@ const RowGroup& CrossEngineStep::getDeliveredRowGroup() const
 
 uint32_t CrossEngineStep::nextBand(messageqcpp::ByteStream& bs)
 {
-  // shared_array<uint8_t> rgDataOut;
   RGData rgDataOut;
   bool more = false;
   uint32_t rowCount = 0;

@@ -21,17 +21,10 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef MESSAGEQCPP_SERVERSOCKET_H
-#define MESSAGEQCPP_SERVERSOCKET_H
+#pragma once
 
 #include <sys/types.h>
-#ifdef _MSC_VER
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <stdio.h>
-#else
 #include <netinet/in.h>
-#endif
 
 class MessageQTestSuite;
 
@@ -171,5 +164,3 @@ inline void ServerSocket::syncProto(bool use)
 }
 
 }  // namespace messageqcpp
-
-#endif  // MESSAGEQCPP_SERVERSOCKET_H

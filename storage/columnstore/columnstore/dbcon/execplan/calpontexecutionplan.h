@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef CALPONTEXECUTIONPLAN_H
-#define CALPONTEXECUTIONPLAN_H
+#pragma once
 #include <string>
 #include <boost/shared_ptr.hpp>
 
@@ -161,4 +160,3 @@ class CalpontExecutionPlan
 typedef boost::shared_ptr<CalpontExecutionPlan> SCEP;
 
 }  // namespace execplan
-#endif  // CALPONTEXECUTIONPLAN_H

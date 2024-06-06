@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef SYNCHRONIZER_H_
-#define SYNCHRONIZER_H_
+#pragma once
 
 #include <string>
 #include <map>
@@ -137,4 +136,3 @@ class Synchronizer : public boost::noncopyable, public ConfigListener
 };
 
 }  // namespace storagemanager
-#endif

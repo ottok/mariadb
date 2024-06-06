@@ -21,16 +21,11 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef RESTOREPARTITIONEPROCESSOR_H
-#define RESTOREPARTITIONEPROCESSOR_H
+#pragma once
 
 #include "ddlpackageprocessor.h"
 
-#if defined(_MSC_VER) && defined(DDLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace ddlpackageprocessor
 {
@@ -56,5 +51,3 @@ class RestorePartitionProcessor : public DDLPackageProcessor
 }  // namespace ddlpackageprocessor
 
 #undef EXPORT
-
-#endif  // RESTOREPARTITIONEPROCESSOR_H

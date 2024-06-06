@@ -33,8 +33,7 @@
  *  delete tokens.  But this function is not currently used.
  */
 
-#ifndef _WE_DctnryStore_H_
-#define _WE_DctnryStore_H_
+#pragma once
 
 #include <string>
 
@@ -42,11 +41,7 @@
 #include "we_type.h"
 #include "we_dctnry.h"
 
-#if defined(_MSC_VER) && defined(WRITEENGINEDCTSTORE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /**@brief Namespace WriteEngine */
 
@@ -141,22 +136,6 @@ class DctnryStore : public DbFileOp
   EXPORT const int updateDctnryStore(unsigned char* sigValue, int& sigSize, Token& token);
 
   /**
-   * @brief Update dictionary store with tokenized strings (for Bulk use)
-   *
-   * @param buf       - bulk buffer containing strings to be parsed
-   * @param pos       - list of offsets into buf
-   * @param totalRow  - total number of rows in buf
-   * @param col       - the column to be parsed from buf
-   * @param colWidth  - width of the dictionary column being parsed
-   * @param tokenBuf  - (output) list of tokens for the parsed strings
-   */
-  const int updateDctnryStore(const char* buf, ColPosPair** pos, const int totalRow, const int col,
-                              const int colWidth, char* tokenBuf)
-  {
-    return (m_dctnry.insertDctnry(buf, pos, totalRow, col, colWidth, tokenBuf));
-  }
-
-  /**
    * @brief TransId related function
    *
    * @param transId   - Current transaction id (for DDL/DML use)
@@ -215,5 +194,3 @@ class DctnryStore : public DbFileOp
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_DctnryStore_H_

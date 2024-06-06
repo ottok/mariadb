@@ -21,17 +21,12 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef DMLPACKAGEPROCESSORFACTORY_H
-#define DMLPACKAGEPROCESSORFACTORY_H
+#pragma once
 #include <string>
 #include "calpontdmlpackage.h"
 #include "dmlpackageprocessor.h"
 
-#if defined(_MSC_VER) && defined(DMLPKGPROCFACTORY_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace dmlpackageprocessor
 {
@@ -56,5 +51,3 @@ class DMLPackageProcessorFactory
 }  // namespace dmlpackageprocessor
 
 #undef EXPORT
-
-#endif  // DMLPACKAGEPROCESSORFACTORY_H

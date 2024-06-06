@@ -19,8 +19,7 @@
  * $Id: we_messages.h 4609 2013-04-19 15:32:02Z chao $
  *
  *******************************************************************************/
-#ifndef WE_MESSAGES_H__
-#define WE_MESSAGES_H__
+#pragma once
 
 namespace WriteEngine
 {
@@ -49,7 +48,6 @@ enum ServerMessages
   WE_SVR_UPDATE_SYSCOLUMN_COLPOS,
   WE_SVR_UPDATE_SYSCOLUMN_RENAMECOLUMN,
   WE_SVR_UPDATE_SYSTABLE_TABLENAME,
-  WE_SVR_UPDATE_SYSTABLES_TABLENAME,
   WE_SVR_DROP_PARTITIONS,
   WE_SVR_SINGLE_INSERT,
   WE_SVR_BATCH_KEEPALIVE,
@@ -113,5 +111,3 @@ enum ServerMessages
 };
 
 }
-
-#endif

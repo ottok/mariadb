@@ -22,8 +22,7 @@
 /**
  * @file
  */
-#ifndef STARTUP_INSTALLDIR_H__
-#define STARTUP_INSTALLDIR_H__
+#pragma once
 
 #include <string>
 #include <boost/thread/mutex.hpp>
@@ -53,4 +52,3 @@ class StartUp
 
 }  // namespace startup
 
-#endif

@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef NUMERICLITERAL_H
-#define NUMERICLITERAL_H
+#pragma once
 
 #include "genericparser.h"
 #include "mcs_datatype.h"
@@ -337,6 +336,7 @@ class SignedInteger : public Parser::DD2OM<Sign, UnsignedInteger>
 {
  public:
   using DD2OM::DD2OM;
+
   bool isNull() const
   {
     return UnsignedInteger::isNull();
@@ -615,5 +615,3 @@ class SignedNumericLiteral : public Parser::DD2OM<Sign, UnsignedNumericLiteral>
 };
 
 }  // namespace literal
-
-#endif  // NUMERICLITERAL_H

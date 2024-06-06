@@ -15,12 +15,12 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef ROWSTORAGE_H
-#define ROWSTORAGE_H
+#pragma once
 
 #include "resourcemanager.h"
 #include "rowgroup.h"
 #include "idbcompress.h"
+#include <cstdint>
 #include <random>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -36,10 +36,15 @@ class RowPosHashStorage;
 using RowPosHashStoragePtr = std::unique_ptr<RowPosHashStorage>;
 class RowGroupStorage;
 
+using RGDataUnPtr = std::unique_ptr<RGData>;
+using PosOpos = std::pair<uint64_t, uint64_t>;
+using FgidTgid = std::pair<uint64_t, uint64_t>;
+
 uint64_t hashRow(const rowgroup::Row& r, std::size_t lastCol);
 
 constexpr const size_t MaxConstStrSize = 2048ULL;
 constexpr const size_t MaxConstStrBufSize = MaxConstStrSize << 1;
+constexpr const uint64_t HashMaskElements = 64ULL;
 
 class RowAggStorage
 {
@@ -98,6 +103,12 @@ class RowAggStorage
    */
   std::unique_ptr<RGData> getNextRGData();
 
+  /** @brief Remove last RGData from in-memory storage or disk.
+   * Iterates over all generations on disk if available.
+   * @returns True if RGData is returned in parameter or false if no more RGDatas can be returned.
+   */
+  bool getNextOutputRGData(std::unique_ptr<RGData>& rgdata);
+
   /** @brief TODO
    *
    * @param mergeFunc
@@ -148,34 +159,22 @@ class RowAggStorage
    */
   void shiftUp(size_t startIdx, size_t insIdx);
 
-  /** @brief Find best position of row and save it's hash.
-   *
-   * @param row(in)   input row
-   * @param info(out) info data
-   * @param idx(out)  index computed from row hash
-   * @param hash(out) row hash value
-   */
-  void rowToIdx(const Row& row, uint32_t& info, size_t& idx, uint64_t& hash) const;
-  void rowToIdx(const Row& row, uint32_t& info, size_t& idx, uint64_t& hash, const Data* curData) const;
-
-  /** @brief Find best position using precomputed hash
-   *
-   * @param h(in)     row hash
-   * @param info(out) info data
-   * @param idx(out)  index
-   */
-  inline void rowHashToIdx(uint64_t h, uint32_t& info, size_t& idx, const Data* curData) const
+  using InfoIdxType = std::pair<uint32_t, size_t>;
+  inline InfoIdxType rowHashToIdx(uint64_t h, const size_t mask, const uint64_t hashMultiplier,
+                                  const uint32_t infoInc, const uint32_t infoHashShift) const
   {
     // An addition from the original robin hood HM.
-    h *= fCurData->hashMultiplier_;
+    h *= hashMultiplier;
     h ^= h >> 33U;
-    info = curData->fInfoInc + static_cast<uint32_t>((h & INFO_MASK) >> curData->fInfoHashShift);
-    idx = (h >> INIT_INFO_BITS) & curData->fMask;
+    uint32_t info = infoInc + static_cast<uint32_t>((h & INFO_MASK) >> infoHashShift);
+    size_t idx = (h >> INIT_INFO_BITS) & mask;
+    return {info, idx};
   }
 
-  inline void rowHashToIdx(uint64_t h, uint32_t& info, size_t& idx) const
+  inline InfoIdxType rowHashToIdx(uint64_t h) const
   {
-    return rowHashToIdx(h, info, idx, fCurData);
+    return rowHashToIdx(h, fCurData->fMask, fCurData->hashMultiplier_, fCurData->fInfoInc,
+                        fCurData->fInfoHashShift);
   }
 
   /** @brief Iterate over internal info until info with less-or-equal distance
@@ -236,13 +235,6 @@ class RowAggStorage
 #endif
     idx += n;
     info = fCurData->fInfo[idx];
-  }
-
-  void nextHashMultiplier()
-  {
-      // adding an *even* number, so that the multiplier will always stay odd. This is necessary
-      // so that the hash stays a mixing function (and thus doesn't have any information loss).
-      fCurData->hashMultiplier_ += 0xc4ceb9fe1a85ec54;
   }
 
   /** @brief Increase internal data size if needed
@@ -311,8 +303,8 @@ class RowAggStorage
    */
   void loadGeneration(uint16_t gen);
   /** @brief Load previously dumped data into the tmp storage */
-  void loadGeneration(uint16_t gen, size_t& size, size_t& mask, size_t& maxSize, uint32_t& infoInc,
-                      uint32_t& infoHashShift, std::unique_ptr<uint8_t[]>& info);
+  void loadGeneration(uint16_t gen, size_t& size, size_t& mask, size_t& maxSize, size_t& hashMultiplier,
+                      uint32_t& infoInc, uint32_t& infoHashShift, std::unique_ptr<uint8_t[]>& info);
 
   /** @brief Remove temporary data files */
   void cleanup();
@@ -331,12 +323,27 @@ class RowAggStorage
   static constexpr uint8_t INIT_INFO_HASH_SHIFT{0};
   static constexpr uint16_t MAX_INMEMORY_GENS{4};
 
+  // This is SplitMix64 implementation borrowed from here
+  // https://thompsonsed.co.uk/random-number-generators-for-c-performance-tested
+  inline uint64_t nextRandom()
+  {
+    uint64_t z = (fRandom += UINT64_C(0x9E3779B97F4A7C15));
+    z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
+    z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
+    return z ^ (z >> 31);
+  }
+
+  inline uint64_t nextRandDistib()
+  {
+    return nextRandom() % 100;
+  }
+
   struct Data
   {
     RowPosHashStoragePtr fHashes;
     std::unique_ptr<uint8_t[]> fInfo;
     // This is a power of 2 that controls a potential number of hash buckets
-    // w/o rehashing.
+    // w/o rehashing
     size_t fSize{0};
     size_t fMask{0};
     size_t fMaxSize{0};
@@ -369,11 +376,7 @@ class RowAggStorage
   bool fInitialized{false};
   rowgroup::RowGroup* fRowGroupOut;
   rowgroup::RowGroup* fKeysRowGroup;
-  std::random_device fRD;
-  std::mt19937 fRandGen;
-  std::uniform_int_distribution<uint8_t> fRandDistr;
+  uint64_t fRandom = 0xc4ceb9fe1a85ec53ULL;  // initial integer to set PRNG up
 };
 
 }  // namespace rowgroup
-
-#endif  // MYSQL_ROWSTORAGE_H

@@ -20,8 +20,7 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef INPUTMGR_H
-#define INPUTMGR_H
+#pragma once
 
 #include <string>
 #include "we_xmlgendata.h"
@@ -64,5 +63,3 @@ class InputMgr : public WriteEngine::XMLGenData
 };
 
 }  // namespace bulkloadxml
-
-#endif

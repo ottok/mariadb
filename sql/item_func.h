@@ -83,6 +83,8 @@ protected:
     return print_sql_mode_qualified_name(to, query_type, func_name_cstring());
   }
 
+  bool aggregate_args2_for_comparison_with_conversion(THD *thd,
+                                           Type_handler_hybrid_field_type *th);
 public:
 
   // Print an error message for a builtin-schema qualified function call
@@ -110,6 +112,7 @@ public:
                   JSON_EXTRACT_FUNC, JSON_VALID_FUNC, ROWNUM_FUNC,
                   CASE_SEARCHED_FUNC, // Used by ColumnStore/Spider
                   CASE_SIMPLE_FUNC,   // Used by ColumnStore/spider,
+                  DATE_FUNC, YEAR_FUNC
                 };
 
   /*
@@ -3875,10 +3878,12 @@ public:
   }
   bool set(const Type_handler *handler,
            const Lex_length_and_dec_st & length_and_dec,
+           Sql_used *used,
+           const Charset_collation_map_st &map,
            const Lex_column_charset_collation_attrs_st &cscl,
            CHARSET_INFO *defcs)
   {
-    CHARSET_INFO *tmp= cscl.resolved_to_character_set(defcs);
+    CHARSET_INFO *tmp= cscl.resolved_to_character_set(used, map, defcs);
     if (!tmp)
       return true;
     set(handler, length_and_dec, tmp);
@@ -4227,6 +4232,7 @@ class Item_func_nextval :public Item_longlong_func
 protected:
   TABLE_LIST *table_list;
   TABLE *table;
+  bool print_table_list_identifier(THD *thd, String *to) const;
 public:
   Item_func_nextval(THD *thd, TABLE_LIST *table_list_arg):
   Item_longlong_func(thd), table_list(table_list_arg) {}

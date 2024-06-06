@@ -20,13 +20,12 @@
 
 /** @file */
 
-#ifndef BATCHINSERTPROCESSOR_H__
-#define BATCHINSERTPROCESSOR_H__
+#pragma once
 
 #include <stdint.h>
 #include <queue>
 #include <boost/shared_ptr.hpp>
-#include <boost/shared_array.hpp>
+
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
 #include <boost/thread.hpp>
@@ -94,4 +93,3 @@ class BatchInsertProc
 };
 
 }  // namespace dmlprocessor
-#endif

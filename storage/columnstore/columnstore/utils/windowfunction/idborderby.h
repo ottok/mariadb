@@ -20,21 +20,16 @@
 
 /** @file */
 
-#ifndef IDB_ORDER_BY_H
-#define IDB_ORDER_BY_H
+#pragma once
 
 #include <queue>
 #include <utility>
 #include <vector>
 #include <sstream>
-#include <boost/shared_array.hpp>
+
 #include <boost/scoped_ptr.hpp>
 
-#ifdef _MSC_VER
-#include <unordered_set>
-#else
 #include <tr1/unordered_set>
-#endif
 
 #include "rowgroup.h"
 #include "hasher.h"
@@ -477,5 +472,3 @@ class IdbOrderBy : public IdbCompare
 };
 
 }  // namespace ordering
-
-#endif  // IDB_ORDER_BY_H

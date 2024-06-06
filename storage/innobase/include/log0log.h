@@ -291,6 +291,8 @@ public:
   bool log_maybe_unbuffered;
 # endif
 #endif
+  /** whether each write to ib_logfile0 is durable (O_DSYNC) */
+  my_bool log_write_through;
 
 	/** Fields involved in checkpoints @{ */
 	lsn_t		log_capacity;	/*!< capacity of the log; if
@@ -407,6 +409,8 @@ public:
   /** Try to enable or disable file system caching (update log_buffered) */
   void set_buffered(bool buffered);
 #endif
+  /** Try to enable or disable durable writes (update log_write_through) */
+  void set_write_through(bool write_through);
 
   void close_file();
 

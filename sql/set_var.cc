@@ -214,8 +214,9 @@ bool sys_var::update(THD *thd, set_var *var)
 
     /*
       Make sure we don't session-track variables that are not actually
-      part of the session. tx_isolation and and tx_read_only for example
-      exist as GLOBAL, SESSION, and one-shot ("for next transaction only").
+      part of the session. transaction_isolation and transaction_read_only for
+      example exist as GLOBAL, SESSION, and one-shot ("for next transaction
+      only").
     */
     if ((var->type == OPT_SESSION) && (!ret))
     {
@@ -310,7 +311,7 @@ do {                                                \
     case SHOW_HA_ROWS:  do_num_val (ha_rows,CMD);
 
 #define case_for_double(CMD)                        \
-    case SHOW_DOUBLE:   do_num_val (double,CMD)
+    case SHOW_DOUBLE:   do_num_val (double,CMD);
 
 #define case_get_string_as_lex_string               \
     case SHOW_CHAR:                                 \
@@ -423,20 +424,7 @@ void sys_var::do_deprecated_warning(THD *thd)
   {
     char buf1[NAME_CHAR_LEN + 3];
     strxnmov(buf1, sizeof(buf1)-1, "@@", name.str, 0);
-
-    /* 
-       if deprecation_substitute is an empty string,
-       there is no replacement for the syntax
-    */
-    uint errmsg= deprecation_substitute[0] == '\0'
-      ? ER_WARN_DEPRECATED_SYNTAX_NO_REPLACEMENT
-      : ER_WARN_DEPRECATED_SYNTAX;
-    if (thd)
-      push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
-                          ER_WARN_DEPRECATED_SYNTAX, ER_THD(thd, errmsg),
-                          buf1, deprecation_substitute);
-    else
-      sql_print_warning(ER_DEFAULT(errmsg), buf1, deprecation_substitute);
+    warn_deprecated<999999>(thd, buf1, deprecation_substitute);
   }
 }
 
@@ -1550,4 +1538,3 @@ ulonglong get_system_variable_hash_version(void)
 {
   return system_variable_hash_version;
 }
-

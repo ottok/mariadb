@@ -75,8 +75,7 @@
                                        HA_REC_NOT_IN_SEQ | \
                                        HA_CAN_REPAIR | \
                                        HA_REUSES_FILE_NAMES)
-#define PARTITION_DISABLED_TABLE_FLAGS (HA_CAN_GEOMETRY | \
-                                        HA_DUPLICATE_POS | \
+#define PARTITION_DISABLED_TABLE_FLAGS (HA_DUPLICATE_POS | \
                                         HA_CAN_INSERT_DELAYED | \
                                         HA_READ_BEFORE_WRITE_REMOVAL |\
                                         HA_CAN_TABLES_WITHOUT_ROLLBACK)
@@ -99,19 +98,19 @@ int ha_partition::notify_tabledef_changed(LEX_CSTRING *db,
                                           LEX_CUSTRING *frm,
                                           LEX_CUSTRING *version)
 {
-  char from_buff[FN_REFLEN + 1], from_lc_buff[FN_REFLEN + 1];
-  const char *from_path, *name_buffer_ptr, *from;
+  char from_buff[FN_REFLEN + 1];
+  Table_path_buffer from_lc_buff;
+  const char *from_path, *name_buffer_ptr;
   int res= 0;
   handler **file= m_file;
   DBUG_ENTER("ha_partition::notify_tabledef_changed");
-
-  from= table->s->normalized_path.str;
 
   /* setup m_name_buffer_ptr */
   if (read_par_file(table->s->normalized_path.str))
     DBUG_RETURN(1);
 
-  from_path= get_canonical_filename(*file, from, from_lc_buff);
+  from_path= file[0]->get_canonical_filename(table->s->normalized_path,
+                                             &from_lc_buff).str;
   name_buffer_ptr= m_name_buffer_ptr;
   do
   {
@@ -771,7 +770,8 @@ int ha_partition::create(const char *name, TABLE *table_arg,
 {
   int error;
   THD *thd= ha_thd();
-  char name_buff[FN_REFLEN + 1], name_lc_buff[FN_REFLEN];
+  char name_buff[FN_REFLEN + 1];
+  Table_path_buffer name_lc_buff;
   char *name_buffer_ptr;
   const char *path;
   uint i;
@@ -821,7 +821,8 @@ int ha_partition::create(const char *name, TABLE *table_arg,
     The appended #P#<partname>[#SP#<subpartname>] will remain in current case.
     Using the first partitions handler, since mixing handlers is not allowed.
   */
-  path= get_canonical_filename(*file, name, name_lc_buff);
+  path= file[0]->get_canonical_filename(Lex_cstring_strlen(name),
+                                        &name_lc_buff).str;
   for (i= 0; i < m_part_info->num_parts; i++)
   {
     part_elem= part_it++;
@@ -913,8 +914,8 @@ int ha_partition::drop_partitions(const char *path)
     Assert that it works without HA_FILE_BASED and lower_case_table_name = 2.
     We use m_file[0] as long as all partitions have the same storage engine.
   */
-  DBUG_ASSERT(!strcmp(path, get_canonical_filename(m_file[0], path,
-                                                   part_name_buff)));
+  DBUG_ASSERT(m_file[0]->is_canonical_filename(Lex_cstring_strlen(path)));
+
   do
   {
     partition_element *part_elem= part_it++;
@@ -1018,8 +1019,7 @@ int ha_partition::rename_partitions(const char *path)
     Assert that it works without HA_FILE_BASED and lower_case_table_name = 2.
     We use m_file[0] as long as all partitions have the same storage engine.
   */
-  DBUG_ASSERT(!strcmp(path, get_canonical_filename(m_file[0], path,
-                                                   norm_name_buff)));
+  DBUG_ASSERT(m_file[0]->is_canonical_filename(Lex_cstring_strlen(path)));
 
   DEBUG_SYNC(ha_thd(), "before_rename_partitions");
   if (temp_partitions)
@@ -1857,8 +1857,8 @@ int ha_partition::change_partitions(HA_CREATE_INFO *create_info,
     Assert that it works without HA_FILE_BASED and lower_case_table_name = 2.
     We use m_file[0] as long as all partitions have the same storage engine.
   */
-  DBUG_ASSERT(!strcmp(path, get_canonical_filename(m_file[0], path,
-                                                   part_name_buff)));
+  DBUG_ASSERT(m_file[0]->is_canonical_filename(Lex_cstring_strlen(path)));
+
   m_reorged_parts= 0;
   if (!m_part_info->is_sub_partitioned())
     num_subparts= 1;
@@ -2441,8 +2441,8 @@ uint ha_partition::del_ren_table(const char *from, const char *to)
 {
   int save_error= 0;
   int error;
-  char from_buff[FN_REFLEN + 1], to_buff[FN_REFLEN + 1],
-       from_lc_buff[FN_REFLEN], to_lc_buff[FN_REFLEN];
+  char from_buff[FN_REFLEN + 1], to_buff[FN_REFLEN + 1];
+  Table_path_buffer from_lc_buff, to_lc_buff;
   char *name_buffer_ptr;
   const char *from_path;
   const char *to_path= NULL;
@@ -2482,9 +2482,11 @@ uint ha_partition::del_ren_table(const char *from, const char *to)
     The appended #P#<partname>[#SP#<subpartname>] will remain in current case.
     Using the first partitions handler, since mixing handlers is not allowed.
   */
-  from_path= get_canonical_filename(*file, from, from_lc_buff);
+  from_path= file[0]->get_canonical_filename(Lex_cstring_strlen(from),
+                                             &from_lc_buff).str;
   if (to != NULL)
-    to_path= get_canonical_filename(*file, to, to_lc_buff);
+    to_path= file[0]->get_canonical_filename(Lex_cstring_strlen(to),
+                                             &to_lc_buff).str;
   do
   {
     if (unlikely((error= create_partition_name(from_buff, sizeof(from_buff),
@@ -4775,8 +4777,8 @@ exit:
     part_share->next_auto_inc_val if needed.
     (not to be used if auto_increment on secondary field in a multi-column
     index)
-    mysql_update does not set table->next_number_field, so we use
-    table->found_next_number_field instead.
+    Sql_cmd_update::update_single_table() does not set table->next_number_field,
+    so we use table->found_next_number_field instead.
     Also checking that the field is marked in the write set.
   */
   if (table->found_next_number_field &&
@@ -4889,7 +4891,7 @@ int ha_partition::delete_row(const uchar *buf)
 
     Called from item_sum.cc by Item_func_group_concat::clear(),
     Item_sum_count::clear(), and Item_func_group_concat::clear().
-    Called from sql_delete.cc by mysql_delete().
+    Called from sql_delete.cc by Sql_cmd_delete::delete_single_table().
     Called from sql_select.cc by JOIN::reset().
     Called from sql_union.cc by st_select_lex_unit::exec().
 */
@@ -6655,7 +6657,7 @@ ha_rows ha_partition::multi_range_read_info_const(uint keyno,
                                                   RANGE_SEQ_IF *seq,
                                                   void *seq_init_param,
                                                   uint n_ranges, uint *bufsz,
-                                                  uint *mrr_mode,
+                                                  uint *mrr_mode, ha_rows limit,
                                                   Cost_estimate *cost)
 {
   int error;
@@ -6709,14 +6711,14 @@ ha_rows ha_partition::multi_range_read_info_const(uint keyno,
       ha_rows tmp_rows;
       uint tmp_mrr_mode;
       m_mrr_buffer_size[i]= 0;
-      part_cost.reset();
+      part_cost.reset(*file);
       tmp_mrr_mode= *mrr_mode;
       tmp_rows= (*file)->
         multi_range_read_info_const(keyno, &m_part_seq_if,
                                     &m_partition_part_key_multi_range_hld[i],
                                     m_part_mrr_range_length[i],
                                     &m_mrr_buffer_size[i],
-                                    &tmp_mrr_mode, &part_cost);
+                                    &tmp_mrr_mode, limit, &part_cost);
       if (tmp_rows == HA_POS_ERROR)
       {
         m_part_spec= save_part_spec;
@@ -6760,7 +6762,7 @@ ha_rows ha_partition::multi_range_read_info(uint keyno, uint n_ranges,
     {
       ha_rows tmp_rows;
       m_mrr_buffer_size[i]= 0;
-      part_cost.reset();
+      part_cost.reset(*file);
       if ((tmp_rows= (*file)->multi_range_read_info(keyno, n_ranges, keys,
                                                     key_parts,
                                                     &m_mrr_buffer_size[i],
@@ -9860,16 +9862,28 @@ uint ha_partition::get_biggest_used_partition(uint *part_index)
     time for scan
 */
 
-double ha_partition::scan_time()
+IO_AND_CPU_COST ha_partition::scan_time()
 {
-  double scan_time= 0;
+  IO_AND_CPU_COST scan_time= {0,0};
   uint i;
   DBUG_ENTER("ha_partition::scan_time");
 
   for (i= bitmap_get_first_set(&m_part_info->read_partitions);
        i < m_tot_parts;
        i= bitmap_get_next_set(&m_part_info->read_partitions, i))
-    scan_time+= m_file[i]->scan_time();
+  {
+    IO_AND_CPU_COST cost= m_file[i]->scan_time();
+    scan_time.io+=  cost.io;
+    scan_time.cpu+= cost.cpu;
+  }
+  if (m_tot_parts)
+  {
+    /*
+      Add TABLE_SCAN_SETUP_COST for partitions to make cost similar to
+      in ha_scan_time()
+    */
+    scan_time.cpu+= TABLE_SCAN_SETUP_COST * (m_tot_parts - 1);
+  }
   DBUG_RETURN(scan_time);
 }
 
@@ -9883,31 +9897,75 @@ double ha_partition::scan_time()
   @return time for scanning index inx
 */
 
-double ha_partition::key_scan_time(uint inx)
+IO_AND_CPU_COST ha_partition::key_scan_time(uint inx, ha_rows rows)
 {
-  double scan_time= 0;
+  IO_AND_CPU_COST scan_time= {0,0};
   uint i;
+  uint partitions= bitmap_bits_set(&m_part_info->read_partitions);
+  ha_rows rows_per_part;
   DBUG_ENTER("ha_partition::key_scan_time");
+
+  if (partitions == 0)
+    DBUG_RETURN(scan_time);
+  set_if_bigger(rows, 1);
+  rows_per_part= (rows + partitions - 1)/partitions;
+
   for (i= bitmap_get_first_set(&m_part_info->read_partitions);
        i < m_tot_parts;
        i= bitmap_get_next_set(&m_part_info->read_partitions, i))
-    scan_time+= m_file[i]->key_scan_time(inx);
+  {
+    IO_AND_CPU_COST cost= m_file[i]->key_scan_time(inx, rows_per_part);
+    scan_time.io+=  cost.io;
+    scan_time.cpu+= cost.cpu;
+  }
   DBUG_RETURN(scan_time);
 }
 
 
-double ha_partition::keyread_time(uint inx, uint ranges, ha_rows rows)
+IO_AND_CPU_COST ha_partition::keyread_time(uint inx, ulong ranges, ha_rows rows,
+                                           ulonglong blocks)
 {
-  double read_time= 0;
+  IO_AND_CPU_COST read_time= {0,0};
   uint i;
+  uint partitions= bitmap_bits_set(&m_part_info->read_partitions);
   DBUG_ENTER("ha_partition::keyread_time");
-  if (!ranges)
-    DBUG_RETURN(handler::keyread_time(inx, ranges, rows));
+  if (partitions == 0)
+    DBUG_RETURN(read_time);
+
+  ha_rows rows_per_part= (rows + partitions - 1)/partitions;
   for (i= bitmap_get_first_set(&m_part_info->read_partitions);
        i < m_tot_parts;
        i= bitmap_get_next_set(&m_part_info->read_partitions, i))
-    read_time+= m_file[i]->keyread_time(inx, ranges, rows);
+  {
+    IO_AND_CPU_COST cost= m_file[i]->keyread_time(inx, ranges, rows_per_part,
+                                                  blocks);
+    read_time.io+= cost.io;
+    read_time.cpu+= cost.cpu;
+  }
+  /* Add that we have to do a key lookup for all ranges in all partitions */
+  read_time.cpu= (partitions-1) * ranges * KEY_LOOKUP_COST;
   DBUG_RETURN(read_time);
+}
+
+
+IO_AND_CPU_COST ha_partition::rnd_pos_time(ha_rows rows)
+{
+  IO_AND_CPU_COST read_time= {0,0};
+  uint i;
+  uint partitions= bitmap_bits_set(&m_part_info->read_partitions);
+  if (partitions == 0)
+    return read_time;
+
+  ha_rows rows_per_part= (rows + partitions - 1)/partitions;
+  for (i= bitmap_get_first_set(&m_part_info->read_partitions);
+       i < m_tot_parts;
+       i= bitmap_get_next_set(&m_part_info->read_partitions, i))
+  {
+    IO_AND_CPU_COST cost= m_file[i]->rnd_pos_time(rows_per_part);
+    read_time.io+=  cost.io;
+    read_time.cpu+= cost.cpu;
+  }
+  return read_time;
 }
 
 
@@ -9967,6 +10025,8 @@ ha_rows ha_partition::records_in_range(uint inx, const key_range *min_key,
     if (estimated_rows && checked_rows &&
         checked_rows >= min_rows_to_check)
     {
+      /* We cannot use page ranges when there is more than one partion */
+      *pages= unused_page_range;
       DBUG_PRINT("info",
                  ("records_in_range(inx %u): %lu (%lu * %lu / %lu)",
                   inx,
@@ -9980,6 +10040,8 @@ ha_rows ha_partition::records_in_range(uint inx, const key_range *min_key,
   DBUG_PRINT("info", ("records_in_range(inx %u): %lu",
                       inx,
                       (ulong) estimated_rows));
+  /* We cannot use page ranges when there is more than one partion */
+  *pages= unused_page_range;
   DBUG_RETURN(estimated_rows);
 }
 
@@ -10007,33 +10069,6 @@ ha_rows ha_partition::estimate_rows_upper_bound()
     }
   } while (*(++file));
   DBUG_RETURN(tot_rows);
-}
-
-
-/*
-  Get time to read
-
-  SYNOPSIS
-    read_time()
-    index                Index number used
-    ranges               Number of ranges
-    rows                 Number of rows
-
-  RETURN VALUE
-    time for read
-
-  DESCRIPTION
-    This will be optimised later to include whether or not the index can
-    be used with partitioning. To achieve we need to add another parameter
-    that specifies how many of the index fields that are bound in the ranges.
-    Possibly added as a new call to handlers.
-*/
-
-double ha_partition::read_time(uint index, uint ranges, ha_rows rows)
-{
-  DBUG_ENTER("ha_partition::read_time");
-
-  DBUG_RETURN(get_open_file_sample()->read_time(index, ranges, rows));
 }
 
 
@@ -10874,13 +10909,6 @@ int ha_partition::cmp_ref(const uchar *ref1, const uchar *ref2)
     DBUG_RETURN(0);
   }
 
-  /*
-    In Innodb we compare with either primary key value or global DB_ROW_ID so
-    it is not possible that the two references are equal and are in different
-    partitions, but in myisam it is possible since we are comparing offsets.
-    Remove this assert if DB_ROW_ID is changed to be per partition.
-  */
-  DBUG_ASSERT(!m_innodb);
   DBUG_RETURN(diff2 > diff1 ? -1 : 1);
 }
 
@@ -12255,6 +12283,59 @@ ha_partition::can_convert_nocopy(const Field &field,
   }
   return true;
 }
+
+/*
+  Get table costs for the current statement that should be stored in
+  handler->cost variables.
+
+  When we want to support many different table handlers, we should set
+  m_file[i]->costs to point to an unique cost structure per open
+  instance and call something similar as
+  TABLE_SHARE::update_optimizer_costs(handlerton *hton) and
+  handler::update_optimizer_costs(&costs) on it.
+*/
+
+
+void ha_partition::set_optimizer_costs(THD *thd)
+{
+  handler::set_optimizer_costs(thd);
+  for (uint i= bitmap_get_first_set(&m_part_info->read_partitions);
+       i < m_tot_parts;
+       i= bitmap_get_next_set(&m_part_info->read_partitions, i))
+    m_file[i]->set_optimizer_costs(thd);
+}
+
+/*
+  Get unique table costs for the first instance of the handler and store
+  in table->share
+*/
+
+void ha_partition::update_optimizer_costs(OPTIMIZER_COSTS *costs)
+{
+  uint i= bitmap_get_first_set(&m_part_info->read_partitions);
+  m_file[i]->update_optimizer_costs(costs);
+}
+
+ulonglong ha_partition::row_blocks()
+{
+  ulonglong active_partitions= bitmap_bits_set(&m_part_info->read_partitions);
+  return handler::row_blocks() + MY_MAX(active_partitions,1)-1;
+}
+
+ulonglong ha_partition::index_blocks(uint index, uint ranges, ha_rows rows)
+{
+  ulonglong blocks= 0;
+  ulonglong active_partitions= bitmap_bits_set(&m_part_info->read_partitions);
+  /* Assume rows are evenly dived among partitions */
+  rows= (rows+ active_partitions -1) / MY_MAX(active_partitions, 1);
+
+  for (uint i= bitmap_get_first_set(&m_part_info->read_partitions);
+       i < m_tot_parts;
+       i= bitmap_get_next_set(&m_part_info->read_partitions, i))
+    blocks+= m_file[i]->index_blocks(index, ranges, rows);
+  return blocks;
+}
+
 
 struct st_mysql_storage_engine partition_storage_engine=
 { MYSQL_HANDLERTON_INTERFACE_VERSION };

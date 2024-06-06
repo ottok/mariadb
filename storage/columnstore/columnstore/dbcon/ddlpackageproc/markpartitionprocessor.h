@@ -21,16 +21,11 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef MARKPARTITIONPROCESSOR_H
-#define MARKPARTITIONPROCESSOR_H
+#pragma once
 
 #include "ddlpackageprocessor.h"
 
-#if defined(_MSC_VER) && defined(DDLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace ddlpackageprocessor
 {
@@ -57,5 +52,3 @@ class MarkPartitionProcessor : public DDLPackageProcessor
 }  // namespace ddlpackageprocessor
 
 #undef EXPORT
-
-#endif  // MARKPARTITIONPROCESSOR_H

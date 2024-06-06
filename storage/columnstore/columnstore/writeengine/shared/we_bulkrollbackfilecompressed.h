@@ -23,8 +23,7 @@
  * Contains class to restore compressed db files on behalf of BulkRollBackMgr.
  */
 
-#ifndef WE_BULKROLLBACKFILECOMPRESSED_H_
-#define WE_BULKROLLBACKFILECOMPRESSED_H_
+#pragma once
 
 #include <cstdio>
 #include <cstring>
@@ -125,5 +124,3 @@ class BulkRollbackFileCompressed : public BulkRollbackFile
 };
 
 }  // namespace WriteEngine
-
-#endif  // WE_BULKROLLBACKFILECOMPRESSED_H_

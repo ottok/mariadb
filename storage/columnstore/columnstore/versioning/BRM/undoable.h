@@ -25,18 +25,13 @@
  * to support revoking any changes made on error.
  */
 
-#ifndef _UNDOABLE_H_
-#define _UNDOABLE_H_
+#pragma once
 
 #include <vector>
 
 #include "brmtypes.h"
 
-#if defined(_MSC_VER) && defined(xxxUNDOABLE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace BRM
 {
@@ -57,5 +52,3 @@ class Undoable
 #undef EXPORT
 
 }  // namespace BRM
-
-#endif

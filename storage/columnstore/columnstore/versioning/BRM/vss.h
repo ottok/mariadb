@@ -24,8 +24,7 @@
  * class XXX interface
  */
 
-#ifndef _VSS_H_
-#define _VSS_H_
+#pragma once
 
 #include <set>
 //#define NDEBUG
@@ -69,11 +68,7 @@
 #define VSS_SIZE(entries) \
   ((entries * sizeof(VSSEntry)) + (entries / 4 * sizeof(int)) + sizeof(VSSShmsegHeader))
 
-#if defined(_MSC_VER) && defined(xxxVSS_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace BRM
 {
@@ -294,5 +289,3 @@ class VSS : public Undoable
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif  // _VSS_H_

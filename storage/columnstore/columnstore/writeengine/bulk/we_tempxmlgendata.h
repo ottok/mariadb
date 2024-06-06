@@ -21,8 +21,7 @@
  *******************************************************************************/
 /** @file */
 
-#ifndef _WE_TEMPXMLGENDATA_H_
-#define _WE_TEMPXMLGENDATA_H_
+#pragma once
 
 #include <string>
 #include <iosfwd>
@@ -49,5 +48,3 @@ class TempXMLGenData : public XMLGenData
 };
 
 }  // namespace WriteEngine
-
-#endif  // _WE_TEMPXMLGENDATA_H_

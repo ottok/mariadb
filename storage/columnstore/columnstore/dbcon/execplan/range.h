@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef RANGE_H
-#define RANGE_H
+#pragma once
 #include <string>
 
 /**
@@ -96,4 +95,3 @@ class Range
    */
 };
 }  // namespace execplan
-#endif  // RANGE_H

@@ -27,7 +27,16 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/random_generator.hpp>
 #define BOOST_SPIRIT_THREADSAFE
+#ifndef __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 #include <boost/property_tree/ptree.hpp>
+
+#ifndef __clang__
+#pragma GCC diagnostic pop
+#endif
 #include <boost/property_tree/json_parser.hpp>
 #include "Utilities.h"
 
@@ -52,8 +61,7 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* use
 inline bool retryable_error(uint8_t s3err)
 {
   return (s3err == MS3_ERR_RESPONSE_PARSE || s3err == MS3_ERR_REQUEST_ERROR || s3err == MS3_ERR_OOM ||
-          s3err == MS3_ERR_IMPOSSIBLE || s3err == MS3_ERR_SERVER ||
-          s3err == MS3_ERR_AUTH_ROLE);
+          s3err == MS3_ERR_IMPOSSIBLE || s3err == MS3_ERR_SERVER || s3err == MS3_ERR_AUTH_ROLE);
 }
 
 // Best effort to map the errors returned by the ms3 API to linux errnos
@@ -72,7 +80,8 @@ const int s3err_to_errno[] = {
     ENOENT,        // 9 MS3_ERR_NOT_FOUND
     EPROTO,        // 10 MS3_ERR_SERVER
     EMSGSIZE,      // 11 MS3_ERR_TOO_BIG
-    EKEYREJECTED   // 12 MS3_ERR_AUTH_ROLE
+    EKEYREJECTED,  // 12 MS3_ERR_AUTH_ROLE
+    EFAULT         // 13 MS3_ERR_ENDPOINT
 };
 
 const char* s3err_msgs[] = {"All is well",
@@ -87,7 +96,8 @@ const char* s3err_msgs[] = {"All is well",
                             "Object not found",
                             "Unknown error code in response",
                             "Data to PUT is too large; 4GB maximum length",
-                            "Authentication failed, token has expired"};
+                            "Authentication failed, token has expired",
+                            "Configured bucket does not match endpoint location"};
 
 S3Storage::ScopedConnection::ScopedConnection(S3Storage* s, ms3_st* m) : s3(s), conn(m)
 {
@@ -120,6 +130,7 @@ S3Storage::S3Storage(bool skipRetry) : skipRetryableErrors(skipRetry)
   string use_http = tolower(config->getValue("S3", "use_http"));
   string ssl_verify = tolower(config->getValue("S3", "ssl_verify"));
   string port_number = config->getValue("S3", "port_number");
+  string libs3_debug = config->getValue("S3", "libs3_debug");
 
   bool keyMissing = false;
   isEC2Instance = false;
@@ -201,7 +212,10 @@ S3Storage::S3Storage(bool skipRetry) : skipRetryableErrors(skipRetry)
   endpoint = config->getValue("S3", "endpoint");
 
   ms3_library_init();
-  // ms3_debug();
+  if (libs3_debug == "enabled")
+  {
+    ms3_debug();
+  }
   testConnectivityAndPerms();
 }
 
@@ -272,7 +286,7 @@ bool S3Storage::getCredentialsFromMetadataEC2()
 
 void S3Storage::testConnectivityAndPerms()
 {
-  boost::shared_array<uint8_t> testObj(new uint8_t[1]);
+  std::shared_ptr<uint8_t[]> testObj(new uint8_t[1]);
   testObj[0] = 0;
   boost::uuids::uuid u = boost::uuids::random_generator()();
   ostringstream oss;
@@ -297,7 +311,8 @@ void S3Storage::testConnectivityAndPerms()
   err = exists(testObjKey, &_exists);
   if (err)
   {
-    logger->log(LOG_CRIT, "S3Storage::exists() failed on nonexistent object. Check 'ListBucket' permissions.");
+    logger->log(LOG_CRIT,
+                "S3Storage::exists() failed on nonexistent object. Check 'ListBucket' permissions.");
     FAIL(HEAD)
   }
   logger->log(LOG_INFO, "S3Storage: S3 connectivity & permissions are OK");
@@ -306,7 +321,7 @@ void S3Storage::testConnectivityAndPerms()
 int S3Storage::getObject(const string& sourceKey, const string& destFile, size_t* size)
 {
   int fd, err;
-  boost::shared_array<uint8_t> data;
+  std::shared_ptr<uint8_t[]> data;
   size_t len, count = 0;
   char buf[80];
 
@@ -342,7 +357,7 @@ int S3Storage::getObject(const string& sourceKey, const string& destFile, size_t
   return 0;
 }
 
-int S3Storage::getObject(const string& _sourceKey, boost::shared_array<uint8_t>* data, size_t* size)
+int S3Storage::getObject(const string& _sourceKey, std::shared_ptr<uint8_t[]>* data, size_t* size)
 {
   uint8_t err;
   size_t len = 0;
@@ -407,7 +422,7 @@ int S3Storage::getObject(const string& _sourceKey, boost::shared_array<uint8_t>*
 
 int S3Storage::putObject(const string& sourceFile, const string& destKey)
 {
-  boost::shared_array<uint8_t> data;
+  std::shared_ptr<uint8_t[]> data;
   int err, fd;
   size_t len, count = 0;
   char buf[80];
@@ -455,7 +470,7 @@ int S3Storage::putObject(const string& sourceFile, const string& destKey)
   return putObject(data, len, destKey);
 }
 
-int S3Storage::putObject(const boost::shared_array<uint8_t> data, size_t len, const string& _destKey)
+int S3Storage::putObject(const std::shared_ptr<uint8_t[]> data, size_t len, const string& _destKey)
 {
   string destKey = prefix + _destKey;
   uint8_t s3err;
@@ -506,6 +521,11 @@ int S3Storage::putObject(const boost::shared_array<uint8_t> data, size_t len, co
       logger->log(LOG_ERR, "S3Storage::putObject(): failed to PUT, got '%s'.  bucket = %s, key = %s.",
                   s3err_msgs[s3err], bucket.c_str(), destKey.c_str());
     errno = s3err_to_errno[s3err];
+    if (s3err == MS3_ERR_ENDPOINT)
+      logger->log(
+          LOG_ERR,
+          "S3Storage::putObject(): Bucket location not match provided endpoint:, bucket = %s, endpoint = %s.",
+          bucket.c_str(), endpoint.c_str());
     return -1;
   }
   return 0;
@@ -632,9 +652,9 @@ int S3Storage::copyObject(const string& _sourceKey, const string& _destKey)
 
 #if 0
     // no s3-s3 copy yet.  get & put for now.
-    
+
     int err;
-    boost::shared_array<uint8_t> data;
+    std::shared_ptr<uint8_t[]> data;
     size_t len;
     err = getObject(sourceKey, &data, &len);
     if (err)

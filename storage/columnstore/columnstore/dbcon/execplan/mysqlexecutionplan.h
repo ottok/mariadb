@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef MYSQLEXECUTIONPLAN_H
-#define MYSQLEXECUTIONPLAN_H
+#pragma once
 #include <string>
 #include "vendorexecutionplan.h"
 
@@ -97,4 +96,3 @@ class MySQLExecutionPlan : public VendorExecutionPlan
    */
 };
 }  // namespace execplan
-#endif  // MYSQLEXECUTIONPLAN_H

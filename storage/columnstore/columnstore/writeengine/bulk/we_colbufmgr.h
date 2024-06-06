@@ -24,8 +24,7 @@
  * class ColumnBufferManager
  */
 
-#ifndef WRITEENGINE_COLBUFMGR_H
-#define WRITEENGINE_COLBUFMGR_H
+#pragma once
 
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
@@ -269,4 +268,3 @@ class ColumnBufferManagerDctnry : public ColumnBufferManager
 };
 
 }  // namespace WriteEngine
-#endif /*WRITEENGINE_COLBUFMGR_H*/

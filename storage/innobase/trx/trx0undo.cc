@@ -185,7 +185,7 @@ trx_undo_get_prev_rec_from_prev_page(buf_block_t *&block, uint16_t rec,
     return nullptr;
 
   if (!buf_page_make_young_if_needed(&block->page))
-    buf_read_ahead_linear(block->page.id(), 0, false);
+    buf_read_ahead_linear(block->page.id(), 0);
   return trx_undo_page_get_last_rec(block, page_no, offset);
 }
 
@@ -282,7 +282,7 @@ trx_undo_get_first_rec(const fil_space_t &space, uint32_t page_no,
     return nullptr;
 
   if (!buf_page_make_young_if_needed(&b->page))
-    buf_read_ahead_linear(b->page.id(), 0, false);
+    buf_read_ahead_linear(b->page.id(), 0);
 
   if (trx_undo_rec_t *rec= trx_undo_page_get_first_rec(b, page_no, offset))
     return rec;
@@ -572,13 +572,8 @@ static uint16_t trx_undo_header_create(buf_block_t *undo_page, trx_id_t trx_id,
                                      undo_page->page.frame) != 0))
     mtr->memset(undo_page, free + TRX_UNDO_TRX_NO, 8, 0);
 
-  /* Write TRX_UNDO_NEEDS_PURGE=1 and TRX_UNDO_LOG_START. */
-  mach_write_to_2(buf, 1);
-  memcpy_aligned<2>(buf + 2, start, 2);
-  static_assert(TRX_UNDO_NEEDS_PURGE + 2 == TRX_UNDO_LOG_START,
-                "compatibility");
-  mtr->memcpy<mtr_t::MAYBE_NOP>(*undo_page, free + TRX_UNDO_NEEDS_PURGE +
-                                undo_page->page.frame, buf, 4);
+  mtr->memcpy<mtr_t::MAYBE_NOP>(*undo_page, free + TRX_UNDO_LOG_START +
+                                undo_page->page.frame, start, 2);
   /* Initialize all fields TRX_UNDO_XID_EXISTS to TRX_UNDO_HISTORY_NODE. */
   if (prev_log)
   {
@@ -985,7 +980,7 @@ trx_undo_mem_create_at_db_start(trx_rseg_t *rseg, ulint id, uint32_t page_no)
 
 	mtr.start();
 	const page_id_t page_id{rseg->space->id, page_no};
-	const buf_block_t* block = buf_page_get(page_id, 0, RW_X_LATCH, &mtr);
+	const buf_block_t* block = recv_sys.recover(page_id, &mtr, nullptr);
 	if (UNIV_UNLIKELY(!block)) {
 corrupted:
 		mtr.commit();
@@ -1099,9 +1094,8 @@ corrupted_type:
 	undo->last_page_no = last_addr.page;
 	undo->top_page_no = last_addr.page;
 
-	const buf_block_t* last = buf_page_get(
-		page_id_t(rseg->space->id, undo->last_page_no), 0,
-		RW_X_LATCH, &mtr);
+	const buf_block_t* last = recv_sys.recover(
+		page_id_t(rseg->space->id, undo->last_page_no), &mtr, nullptr);
 
 	if (UNIV_UNLIKELY(!last)) {
 		goto corrupted_undo;

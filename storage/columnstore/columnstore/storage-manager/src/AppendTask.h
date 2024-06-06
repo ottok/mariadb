@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef APPENDTASK_H_
-#define APPENDTASK_H_
+#pragma once
 
 #include "PosixTask.h"
 
@@ -35,4 +34,3 @@ class AppendTask : public PosixTask
 };
 
 }  // namespace storagemanager
-#endif

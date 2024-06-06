@@ -27,8 +27,7 @@
  *      Author: bpaul@calpont.com
  */
 
-#ifndef OBSERVER_H_
-#define OBSERVER_H_
+#pragma once
 
 #include <list>
 
@@ -62,5 +61,3 @@ class Subject
 };
 
 }  // namespace WriteEngine
-
-#endif /* OBSERVER_H_ */

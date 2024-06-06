@@ -21,8 +21,7 @@
  */
 /** @file */
 
-#ifndef JOBLISTTYPES_
-#define JOBLISTTYPES_
+#pragma once
 
 #include <stdint.h>
 #include <string>
@@ -46,7 +45,7 @@ const uint32_t UINTEMPTYROW = 0xFFFFFFFF;
 const uint16_t USMALLINTNULL = 0xFFFE;
 const uint16_t USMALLINTEMPTYROW = 0xFFFF;
 const uint8_t UTINYINTNULL = 0xFE;
-const uint8_t UTINYINTEMPTYROW = 0xFF;
+constexpr uint8_t UTINYINTEMPTYROW = 0xFF;
 
 const uint32_t FLOATNULL = 0xFFAAAAAA;
 const uint32_t FLOATEMPTYROW = 0xFFAAAAAB;
@@ -93,5 +92,3 @@ const JoinType INIT = 0, INNER = 0x1, LARGEOUTER = 0x2, SMALLOUTER = 0x4,
     RIGHTOUTER = 0x5,            // deprecated..
     SEMI = 0x8, ANTI = 0x10, SCALAR = 0x20, MATCHNULLS = 0x40, WITHFCNEXP = 0x80, CORRELATED = 0x100;
 }  // namespace joblist
-
-#endif

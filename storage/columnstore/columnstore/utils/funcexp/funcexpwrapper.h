@@ -32,8 +32,7 @@
 
 /** @file */
 
-#ifndef FUNCEXPWRAPPER_H_
-#define FUNCEXPWRAPPER_H_
+#pragma once
 
 #include <parsetree.h>
 #include <returnedcolumn.h>
@@ -79,5 +78,3 @@ inline uint32_t FuncExpWrapper::getFilterCount() const
 }
 
 }  // namespace funcexp
-
-#endif

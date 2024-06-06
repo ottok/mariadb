@@ -548,7 +548,7 @@ set default_storage_engine=myisam;
 set global thread_cache_size=100;
 set timestamp=1, timestamp=default;
 set tmp_table_size=1024;
-set tx_isolation="READ-COMMITTED";
+set transaction_isolation="READ-COMMITTED";
 set wait_timeout=100;
 set log_warnings=1;
 set global log_warnings=1;
@@ -777,16 +777,16 @@ select @@lc_time_names;
 @@lc_time_names
 en_US
 LC_TIME_NAMES: testing locale with the last ID:
-set lc_time_names=111;
-select @@lc_time_names;
-@@lc_time_names
-ka_GE
-LC_TIME_NAMES: testing a number beyond the valid ID range:
 set lc_time_names=112;
-ERROR HY000: Unknown locale: '112'
 select @@lc_time_names;
 @@lc_time_names
-ka_GE
+sw_KE
+LC_TIME_NAMES: testing a number beyond the valid ID range:
+set lc_time_names=113;
+ERROR HY000: Unknown locale: '113'
+select @@lc_time_names;
+@@lc_time_names
+sw_KE
 LC_TIME_NAMES: testing that 0 is en_US:
 set lc_time_names=0;
 select @@lc_time_names;
@@ -892,6 +892,8 @@ VARIABLE_NAME	VARIABLE_VALUE
 SQL_BIG_SELECTS	ON
 set @@sql_big_selects = @old_sql_big_selects;
 set @@sql_notes = 0, @@sql_warnings = 0;
+Warnings:
+Warning	1287	'@@sql_notes' is deprecated and will be removed in a future release. Please use '@@note_verbosity' instead
 show variables like 'sql_notes';
 Variable_name	Value
 sql_notes	OFF
@@ -905,6 +907,8 @@ select * from information_schema.session_variables where variable_name like 'sql
 VARIABLE_NAME	VARIABLE_VALUE
 SQL_WARNINGS	OFF
 set @@sql_notes = 1, @@sql_warnings = 1;
+Warnings:
+Warning	1287	'@@sql_notes' is deprecated and will be removed in a future release. Please use '@@note_verbosity' instead
 show variables like 'sql_notes';
 Variable_name	Value
 sql_notes	ON
@@ -1561,6 +1565,8 @@ End of 5.1 tests
 SET @sql_notes_saved = @@sql_notes;
 
 SET @@sql_notes = ON;
+Warnings:
+Warning	1287	'@@sql_notes' is deprecated and will be removed in a future release. Please use '@@note_verbosity' instead
 SELECT @@sql_notes;
 @@sql_notes
 1
@@ -1572,11 +1578,15 @@ SELECT @@sql_notes;
 1
 
 SET @@sql_notes = OFF;
+Warnings:
+Warning	1287	'@@sql_notes' is deprecated and will be removed in a future release. Please use '@@note_verbosity' instead
 SELECT @@sql_notes;
 @@sql_notes
 0
 
 SET @@sql_notes = @sql_notes_saved;
+Warnings:
+Warning	1287	'@@sql_notes' is deprecated and will be removed in a future release. Please use '@@note_verbosity' instead
 
 # Checking delay_key_write...
 SET @delay_key_write_saved = @@delay_key_write;

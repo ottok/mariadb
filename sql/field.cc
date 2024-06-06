@@ -10613,7 +10613,6 @@ void Column_definition::create_length_to_internal_length_newdecimal()
 
 bool check_expression(Virtual_column_info *vcol, const LEX_CSTRING *name,
                       enum_vcol_info_type type, Alter_info *alter_info)
-
 {
   bool ret;
   Item::vcol_func_processor_result res;
@@ -10758,7 +10757,7 @@ bool Column_definition::check(THD *thd)
   {
     DBUG_ASSERT(vcol_info->expr);
     vcol_info->set_handler(type_handler());
-    if (check_expression(vcol_info, &field_name, vcol_info->stored_in_db
+    if (check_expression(vcol_info, &field_name, vcol_info->is_stored()
                          ? VCOL_GENERATED_STORED : VCOL_GENERATED_VIRTUAL))
       DBUG_RETURN(TRUE);
   }
@@ -11162,9 +11161,7 @@ bool Column_definition::set_compressed(const char *method)
 
 bool Column_definition::set_compressed_deprecated(THD *thd, const char *method)
 {
-  push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
-                      ER_WARN_DEPRECATED_SYNTAX,
-                      ER_THD(thd, ER_WARN_DEPRECATED_SYNTAX),
+  warn_deprecated<1004>(thd,
                       "<data type> <character set clause> ... COMPRESSED...",
                       "'<data type> COMPRESSED... <character set clause> ...'");
   return set_compressed(method);
@@ -11604,6 +11601,15 @@ void Field::register_field_in_read_map()
     vcol_item->walk(&Item::register_field_in_read_map, 1, 0);
   }
   bitmap_set_bit(table->read_set, field_index);
+}
+
+
+LEX_STRING Field::val_lex_string_strmake(MEM_ROOT *mem)
+{
+  StringBuffer<MAX_FIELD_WIDTH> str;
+  val_str(&str);
+  char *to= strmake_root(mem, str.ptr(), str.length());
+  return to ? LEX_STRING{to, str.length()} : LEX_STRING{NULL, 0};
 }
 
 

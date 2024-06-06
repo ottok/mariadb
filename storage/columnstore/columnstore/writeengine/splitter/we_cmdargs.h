@@ -19,8 +19,7 @@
  * $Id$
  *
  *******************************************************************************/
-#ifndef WE_CMDARGS_H_
-#define WE_CMDARGS_H_
+#pragma once
 
 #include <set>
 
@@ -351,5 +350,3 @@ inline std::string& WECmdArgs::getUsername()
 }
 
 }  // namespace WriteEngine
-
-#endif /* WE_CMDARGS_H_ */

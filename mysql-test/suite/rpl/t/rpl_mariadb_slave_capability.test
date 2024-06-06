@@ -28,7 +28,6 @@ CHANGE MASTER TO MASTER_USE_GTID=NO;
 --let $wait_condition= select count(*)=1 from information_schema.processlist where state LIKE '%Master has sent all binlog to slave%' and command='Binlog Dump'
 --source include/wait_condition.inc
 
-
 --connection slave
 --source include/stop_slave.inc
 --echo # Test slave with no capability gets dummy event, which is ignored.

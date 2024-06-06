@@ -21,8 +21,7 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef MYSQLDMLSTATEMENT_H
-#define MYSQLDMLSTATEMENT_H
+#pragma once
 #include <string>
 #include "vendordmlstatement.h"
 
@@ -42,4 +41,3 @@ class MySQLDMLStatement : public VendorDMLStatement
  private:
 };
 }  // namespace dmlpackage
-#endif  // MYSQLDMLSTATEMENT_H

@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2013, 2022, MariaDB Corporation.
+Copyright (c) 2013, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -47,38 +47,6 @@ struct space_list_tag_t;
 struct named_spaces_tag_t;
 
 using space_list_t= ilist<fil_space_t, space_list_tag_t>;
-
-// Forward declaration
-extern my_bool srv_use_doublewrite_buf;
-
-/** Possible values of innodb_flush_method */
-enum srv_flush_t
-{
-  /** fsync, the default */
-  SRV_FSYNC= 0,
-  /** open log files in O_DSYNC mode */
-  SRV_O_DSYNC,
-  /** do not call os_file_flush() when writing data files, but do flush
-  after writing to log files */
-  SRV_LITTLESYNC,
-  /** do not flush after writing */
-  SRV_NOSYNC,
-  /** Open or create files with O_DIRECT. This implies using
-  unbuffered I/O but still fdatasync(), because some filesystems might
-  not flush meta-data on write completion */
-  SRV_O_DIRECT,
-  /** Like O_DIRECT, but skip fdatasync(), assuming that the data is
-  durable on write completion */
-  SRV_O_DIRECT_NO_FSYNC
-#ifdef _WIN32
-  /** Traditional Windows appoach to open all files without caching,
-  and do FileFlushBuffers() */
-  ,SRV_ALL_O_DIRECT_FSYNC
-#endif
-};
-
-/** innodb_flush_method */
-extern ulong srv_file_flush_method;
 
 /** Undo tablespaces starts with space_id. */
 extern uint32_t srv_undo_space_id_start;
@@ -645,6 +613,8 @@ private:
   }
 
 public:
+  /** Reopen all files on set_write_through() or set_buffered(). */
+  static void reopen_all();
   /** Try to close a file to adhere to the innodb_open_files limit.
   @param print_info   whether to diagnose why a file cannot be closed
   @return whether a file was closed */
@@ -958,6 +928,11 @@ public:
     freed_ranges.add_range(range);
   }
 
+  /** Clear the freed range in temporary tablespace
+  which are in shrinking ranges.
+  @param threshold  to be truncated value*/
+  inline void clear_freed_ranges(uint32_t threshold);
+
   /** Set the tablespace size in pages */
   void set_sizes(uint32_t s)
   {
@@ -1035,6 +1010,9 @@ public:
   /** @return the tablespace name (databasename/tablename) */
   name_type name() const;
 
+  /** Update the data structures on write completion */
+  void complete_write();
+
 private:
   /** @return whether the file is usable for io() */
   ATTRIBUTE_COLD bool prepare_acquired();
@@ -1107,9 +1085,6 @@ struct fil_node_t final
   @return detached handle or OS_FILE_CLOSED */
   inline pfs_os_file_t close_to_free(bool detach_handle= false);
 
-  /** Update the data structures on write completion */
-  inline void complete_write();
-
 private:
   /** Does stuff common for close() and detach() */
   void prepare_to_close_or_detach();
@@ -1117,8 +1092,7 @@ private:
 
 inline bool fil_space_t::use_doublewrite() const
 {
-  return !UT_LIST_GET_FIRST(chain)->atomic_write && srv_use_doublewrite_buf &&
-    buf_dblwr.is_created();
+  return !UT_LIST_GET_FIRST(chain)->atomic_write && buf_dblwr.in_use();
 }
 
 inline void fil_space_t::set_imported()
@@ -1285,11 +1259,11 @@ constexpr uint16_t FIL_PAGE_RTREE= 17854;
 constexpr uint16_t FIL_PAGE_UNDO_LOG= 2;
 /** Index node (of file-in-file metadata) */
 constexpr uint16_t FIL_PAGE_INODE= 3;
-/** Insert buffer free list */
+/** Former change buffer free list */
 constexpr uint16_t FIL_PAGE_IBUF_FREE_LIST= 4;
 /** Freshly allocated page */
 constexpr uint16_t FIL_PAGE_TYPE_ALLOCATED= 0;
-/** Change buffer bitmap (pages n*innodb_page_size+1) */
+/** Former change buffer bitmap pages (pages n*innodb_page_size+1) */
 constexpr uint16_t FIL_PAGE_IBUF_BITMAP= 5;
 /** System page */
 constexpr uint16_t FIL_PAGE_TYPE_SYS= 6;
@@ -1379,9 +1353,9 @@ struct fil_system_t
     Some members may require late initialisation, thus we just mark object as
     uninitialised. Real initialisation happens in create().
   */
-  fil_system_t() : m_initialised(false) {}
+  fil_system_t() {}
 
-  bool is_initialised() const { return m_initialised; }
+  bool is_initialised() const { return spaces.array; }
 
   /**
     Create the file system interface at database start.
@@ -1394,8 +1368,6 @@ struct fil_system_t
   void close();
 
 private:
-  bool m_initialised;
-
   /** Points to the last opened space in space_list. Protected with
   fil_system.mutex. */
   fil_space_t *space_list_last_opened= nullptr;
@@ -1430,6 +1402,33 @@ public:
 	fil_space_t*	temp_space;	/*!< The innodb_temporary tablespace */
   /** Map of fil_space_t::id to fil_space_t* */
   hash_table_t spaces;
+
+  /** false=invoke fsync() or fdatasync() on data files before checkpoint;
+  true=each write is durable (O_DSYNC) */
+  my_bool write_through;
+  /** whether data files are buffered (not O_DIRECT) */
+  my_bool buffered;
+  /** whether fdatasync() is needed on data files */
+  Atomic_relaxed<bool> need_unflushed_spaces;
+
+  /** Try to enable or disable write-through of data files */
+  void set_write_through(bool write_through);
+  /** Update innodb_doublewrite */
+  void set_use_doublewrite(ulong use)
+  {
+    buf_dblwr.set_use(use);
+    need_unflushed_spaces= !write_through && buf_dblwr.need_fsync();
+  }
+
+  /** Try to enable or disable file system caching of data files */
+  void set_buffered(bool buffered);
+
+  TPOOL_SUPPRESS_TSAN bool is_write_through() const { return write_through; }
+  TPOOL_SUPPRESS_TSAN bool is_buffered() const { return buffered; }
+
+  /** @return whether to update unflushed_spaces */
+  bool use_unflushed_spaces() const { return need_unflushed_spaces; }
+
   /** tablespaces for which fil_space_t::needs_flush() holds */
   sized_ilist<fil_space_t, unflushed_spaces_tag_t> unflushed_spaces;
   /** number of currently open files; protected by mutex */
@@ -1555,12 +1554,7 @@ template<bool have_reference> inline void fil_space_t::flush()
   mysql_mutex_assert_not_owner(&fil_system.mutex);
   ut_ad(!have_reference || (pending() & PENDING));
   ut_ad(purpose == FIL_TYPE_TABLESPACE || purpose == FIL_TYPE_IMPORT);
-  if (srv_file_flush_method == SRV_O_DIRECT_NO_FSYNC)
-  {
-    ut_ad(!is_in_unflushed_spaces);
-    ut_ad(!needs_flush());
-  }
-  else if (have_reference)
+  if (have_reference)
     flush_low();
   else
   {

@@ -246,16 +246,12 @@ int RedistributeWorkerThread::grabTableLock()
 
         // always wait long enough for ddl/dml/cpimport to get table lock
         // for now, triple the ddl/dml/cpimport retry interval: 3 * 100ms
-#ifdef _MSC_VER
-      Sleep(ts.tv_nsec * 1000);
-#else
       struct timespec tmp = ts;
 
       while (nanosleep(&tmp, &ts) < 0)
         ;
 
       tmp = ts;
-#endif
 
       try
       {
@@ -308,6 +304,7 @@ int RedistributeWorkerThread::buildEntryList()
     boost::shared_ptr<CalpontSystemCatalog> csc = CalpontSystemCatalog::makeCalpontSystemCatalog(0);
     const CalpontSystemCatalog::TableName table = csc->tableName(fPlanEntry.table);
     CalpontSystemCatalog::RIDList cols = csc->columnRIDs(table, true);
+    CalpontSystemCatalog::OID tableAuxColOid = csc->tableAUXColumnOID(table);
 
     for (CalpontSystemCatalog::RIDList::iterator i = cols.begin(); i != cols.end(); i++)
       fOids.push_back(i->objnum);
@@ -316,6 +313,11 @@ int RedistributeWorkerThread::buildEntryList()
 
     for (CalpontSystemCatalog::DictOIDList::iterator i = dicts.begin(); i != dicts.end(); i++)
       fOids.push_back(i->dictOID);
+
+    if (tableAuxColOid > 3000)
+    {
+      fOids.push_back(tableAuxColOid);
+    }
 
     bool firstOid = true;  // for adding segments, all columns have the same lay out.
     uint16_t source = fPlanEntry.source;
@@ -765,13 +767,13 @@ int RedistributeWorkerThread::sendData()
           // msg that IDBFileSystem::copyFile() currently swallows.
           try
           {
-            filesystem::copy_file(sourceName, destName);
+            boost::filesystem::copy_file(sourceName, destName);
           }
 
 #if BOOST_VERSION >= 105200
-          catch (filesystem::filesystem_error& e)
+          catch (boost::filesystem::filesystem_error& e)
 #else
-          catch (filesystem::basic_filesystem_error<filesystem::path>& e)
+          catch (boost::filesystem::basic_filesystem_error<filesystem::path>& e)
 #endif
           {
             fErrorCode = RED_EC_COPY_FILE_FAIL;

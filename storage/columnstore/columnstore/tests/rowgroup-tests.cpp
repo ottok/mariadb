@@ -27,6 +27,7 @@
 #define INITIAL_ROW_OFFSET 2
 
 using CSCDataType = execplan::CalpontSystemCatalog::ColDataType;
+using datatypes::TSInt128;
 
 class RowDecimalTest : public ::testing::Test
 {
@@ -89,6 +90,9 @@ class RowDecimalTest : public ::testing::Test
 
     rg.initRow(&r);
     rg.initRow(&rOutMappingCheck);
+    rg.initRow(&rOut);
+    rg.initRow(&sameRow);
+    rg.initRow(&nonequiRow);
     rowSize = r.getSize();
     rg.getRow(0, &r);
 
@@ -141,7 +145,7 @@ class RowDecimalTest : public ::testing::Test
       r.setIntField(s32ValueVector[i], 3);
       r.setIntField(s16ValueVector[i], 4);
       r.setIntField(s8ValueVector[i], 5);
-      r.nextRow(rowSize);
+      r.nextRow();
     }
 
     rowCount = sValueVector.size();
@@ -176,7 +180,7 @@ TEST_F(RowDecimalTest, NonNullValueCheck)
     EXPECT_FALSE(r.isNullValue(3));
     EXPECT_FALSE(r.isNullValue(4));
     EXPECT_FALSE(r.isNullValue(5));
-    r.nextRow(rowSize);
+    r.nextRow();
   }
 }
 
@@ -196,20 +200,20 @@ TEST_F(RowDecimalTest, InitToNullAndIsNullValueCheck)
 TEST_F(RowDecimalTest, GetBinaryFieldCheck)
 {
   rg.getRow(0, &r);
-  int128_t* a128Value;
-  int128_t* s128Value;
+  TSInt128 a128Value;
+  TSInt128 s128Value;
 
   for (size_t i = 0; i < sValueVector.size(); i++)
   {
-    s128Value = r.getBinaryField<int128_t>(0);
-    EXPECT_EQ(sValueVector[i], *s128Value);
-    a128Value = r.getBinaryField<int128_t>(1);
-    EXPECT_EQ(anotherValueVector[i], *a128Value);
+    s128Value = r.getTSInt128Field(0);
+    EXPECT_EQ(sValueVector[i], s128Value.getValue());
+    a128Value = r.getTSInt128Field(1);
+    EXPECT_EQ(anotherValueVector[i], a128Value.getValue());
     // EXPECT_EQ(s64ValueVector[i], r.getIntField(2));
     // EXPECT_EQ(s32ValueVector[i],r.getIntField(3));
     // EXPECT_EQ(r.getIntField(4),s16ValueVector[i]);
     // EXPECT_EQ(r.getIntField(5),s8ValueVector[i]);
-    r.nextRow(rowSize);
+    r.nextRow();
   }
 }
 
@@ -232,7 +236,7 @@ TEST_F(RowDecimalTest, ToStringCheck)
   for (auto& el : exemplarVector)
   {
     EXPECT_EQ(el, r.toString());
-    r.nextRow(rowSize);
+    r.nextRow();
   }
 }
 
@@ -245,29 +249,31 @@ TEST_F(RowDecimalTest, ApplyMappingCheck)
   int mapping[] = {0, 1, -1, -1, -1, -1};
   rg.getRow(1, &r);
   rg.getRow(2, &rOutMappingCheck);
-  int128_t* s128Value = rOutMappingCheck.getBinaryField<int128_t>(0);
-  int128_t* a128Value = rOutMappingCheck.getBinaryField<int128_t>(1);
-  EXPECT_NE(sValueVector[1], *s128Value);
-  EXPECT_NE(anotherValueVector[1], *a128Value);
+
+  auto s128Value = rOutMappingCheck.getTSInt128Field(0);
+  auto a128Value = rOutMappingCheck.getTSInt128Field(1);
+  EXPECT_NE(s128Value.getValue(), sValueVector[1]);
+  EXPECT_NE(a128Value.getValue(), anotherValueVector[1]);
+
   applyMapping(mapping, r, &rOutMappingCheck);
-  s128Value = rOutMappingCheck.getBinaryField<int128_t>(0);
-  a128Value = rOutMappingCheck.getBinaryField<int128_t>(1);
-  EXPECT_EQ(sValueVector[1], *s128Value);
-  EXPECT_EQ(anotherValueVector[1], *a128Value);
+  s128Value = rOutMappingCheck.getTSInt128Field(0);
+  a128Value = rOutMappingCheck.getTSInt128Field(1);
+  EXPECT_EQ(sValueVector[1], s128Value.getValue());
+  EXPECT_EQ(anotherValueVector[1], a128Value.getValue());
 }
 
 TEST_F(RowDecimalTest, CopyBinaryFieldCheck)
 {
   int128_t constVal = 1;
-  int128_t *col1Out, *col1In;
-  int128_t *col2Out, *col2In;
+  TSInt128 col1Out, col1In;
+  TSInt128 col2Out, col2In;
   rgOut.getRow(0, &rOut);
 
   for (size_t i = 0; i < sValueVector.size(); i++)
   {
     rOut.setBinaryField_offset(&constVal, 16, offsets[0]);
     rOut.setBinaryField_offset(&constVal, 16, offsets[1]);
-    rOut.nextRow(rowSize);
+    rOut.nextRow();
   }
 
   rgOut.initRow(&rOut);
@@ -276,20 +282,20 @@ TEST_F(RowDecimalTest, CopyBinaryFieldCheck)
 
   for (size_t i = 0; i < sValueVector.size(); i++)
   {
-    col1In = r.getBinaryField<int128_t>(0);
-    col1Out = rOut.getBinaryField<int128_t>(0);
-    col2In = r.getBinaryField<int128_t>(1);
-    col2Out = rOut.getBinaryField<int128_t>(1);
-    EXPECT_NE(*col1In, *col1Out);
-    EXPECT_NE(*col2In, *col2Out);
-    r.copyBinaryField<int128_t>(rOut, 0, 0);
-    r.copyBinaryField<int128_t>(rOut, 1, 1);
-    col1Out = rOut.getBinaryField<int128_t>(0);
-    col2Out = rOut.getBinaryField<int128_t>(1);
-    EXPECT_EQ(*col1In, *col1Out);
-    EXPECT_EQ(*col2In, *col2Out);
-    r.nextRow(rowSize);
-    rOut.nextRow(rowSize);
+    col1In = r.getTSInt128Field(0);
+    col1Out = rOut.getTSInt128Field(0);
+    col2In = r.getTSInt128Field(1);
+    col2Out = rOut.getTSInt128Field(1);
+    EXPECT_NE(col1In, col1Out);
+    EXPECT_NE(col2In, col2Out);
+    r.copyBinaryField(rOut, 0, 0);
+    r.copyBinaryField(rOut, 1, 1);
+    col1Out = rOut.getTSInt128Field(0);
+    col2Out = rOut.getTSInt128Field(1);
+    EXPECT_EQ(col1In.getValue(), col1Out.getValue());
+    EXPECT_EQ(col2In.getValue(), col2Out.getValue());
+    r.nextRow();
+    rOut.nextRow();
   }
 }
 
@@ -306,11 +312,11 @@ TEST_F(RowDecimalTest, RowEqualsCheck)
     {
       EXPECT_FALSE(r.equals(nonequiRow));
     }
-    r.nextRow(rowSize);
-    sameRow.nextRow(rowSize);
+    r.nextRow();
+    sameRow.nextRow();
     if (i < sValueVector.size() - 1)
     {
-      nonequiRow.nextRow(rowSize);
+      nonequiRow.nextRow();
     }
   }
 }

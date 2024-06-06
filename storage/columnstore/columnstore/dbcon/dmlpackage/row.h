@@ -22,19 +22,14 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef ROW_H
-#define ROW_H
+#pragma once
 #include <string>
 #include "dmlobject.h"
 #include "bytestream.h"
 #include "dmlcolumn.h"
 #include "we_typeext.h"
 
-#if defined(_MSC_VER) && defined(xxxDMLPKGROW_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace dmlpackage
 {
@@ -115,5 +110,3 @@ typedef std::vector<Row*> RowList;
 }  // namespace dmlpackage
 
 #undef EXPORT
-
-#endif  // ROW_H

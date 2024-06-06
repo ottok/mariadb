@@ -22,8 +22,7 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef BLOCKCACHEREQUESTCLIENT_H
-#define BLOCKCACHEREQUESTCLIENT_H
+#pragma once
 
 #include "blockrequestprocessor.h"
 #include "brmtypes.h"
@@ -103,5 +102,3 @@ class blockCacheClient
 };
 
 }  // namespace dbbc
-
-#endif

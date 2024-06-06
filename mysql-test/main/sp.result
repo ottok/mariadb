@@ -320,8 +320,6 @@ repeat(select 1) into outfile 'b2';
 insert into test.t1 values (repeat("b2",3), x);
 set x = x-1;
 until x = 0 end repeat|
-Warnings:
-Warning	1287	'<select expression> INTO <destination>;' is deprecated and will be removed in a future release. Please use 'SELECT <select list> INTO <destination> FROM...' instead
 drop procedure b2|
 drop procedure if exists c|
 create procedure c(x int)
@@ -4283,9 +4281,6 @@ select i as  'A local variable in a nested compound statement takes precedence o
 end;
 end;
 end|
-Warnings:
-Warning	1287	'<select expression> INTO <destination>;' is deprecated and will be removed in a future release. Please use 'SELECT <select list> INTO <destination> FROM...' instead
-Warning	1287	'<select expression> INTO <destination>;' is deprecated and will be removed in a future release. Please use 'SELECT <select list> INTO <destination> FROM...' instead
 call bug5967("a - stored procedure parameter")|
 a
 a - stored procedure parameter
@@ -5779,8 +5774,6 @@ end;
 select 1 from no_such_view limit 1 into x;
 return x;
 end|
-Warnings:
-Warning	1287	'<select expression> INTO <destination>;' is deprecated and will be removed in a future release. Please use 'SELECT <select list> INTO <destination> FROM...' instead
 create function func_8407_b() returns int
 begin
 declare x int default 0;
@@ -6782,7 +6775,7 @@ call p1$
 a
 alter table t1 add b integer$
 call p1$
-a
+a	b
 drop table t1;
 drop procedure p1;
 # ------------------------------------------------------------------
@@ -7246,12 +7239,12 @@ create table t1 (a int);
 insert into t1 (a) values (1), (2), (3), (4), (5);
 #
 # Do we correctly resolve identifiers in LIMIT?
-# Since DROP and CREATE did not invalidate
-# the SP cache, we can't test until
-# we drop and re-create the procedure.
+# DROP and CREATE results in SP statement recompilation
+# so second execution of the procedure p1() doesn't lead
+# to issuing an error
 #
 call p1();
-ERROR 42S22: Unknown column 'test.t1.c1' in 'field list'
+a
 # 
 # Drop and recreate the procedure, then repeat
 #

@@ -28,7 +28,7 @@ declare msg_detail varchar(512);
 declare cmd_1 varchar(512);
 declare cmd_2 varchar(512);
 declare done integer default 0;
-declare debug integer default 0;
+declare dbg integer default 0;
 declare pfs_cursor CURSOR FOR
 select table_name from information_schema.tables
 where table_schema= 'performance_schema'
@@ -106,7 +106,7 @@ set count_expected = save_count_expected - count_global_expected;
 end if;
 select concat("Checking table ", pfs_table_name, " ...") as status;
 select concat(cmd_1, pfs_table_name, cmd_2) into @cmd;
-if debug = 1
+if dbg = 1
 then
 select @cmd;
 end if;
@@ -218,10 +218,6 @@ close pfs_cursor;
 signal sqlstate '01000' set message_text='Done', mysql_errno=12000;
 end
 $
-Warnings:
-Warning	1287	'<select expression> INTO <destination>;' is deprecated and will be removed in a future release. Please use 'SELECT <select list> INTO <destination> FROM...' instead
-Warning	1287	'<select expression> INTO <destination>;' is deprecated and will be removed in a future release. Please use 'SELECT <select list> INTO <destination> FROM...' instead
-Warning	1287	'<select expression> INTO <destination>;' is deprecated and will be removed in a future release. Please use 'SELECT <select list> INTO <destination> FROM...' instead
 show global variables like "performance_schema%";
 Variable_name	Value
 performance_schema	ON

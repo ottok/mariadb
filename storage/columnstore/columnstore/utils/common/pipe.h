@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef PIPE_H_INCLUDED
-#define PIPE_H_INCLUDED
+#pragma once
 
 /*
   A helper class to hold the file descriptors returned from a pipe() call.
@@ -98,5 +97,3 @@ class Pipe
     }
   }
 };
-
-#endif  // PIPE_H_INCLUDED

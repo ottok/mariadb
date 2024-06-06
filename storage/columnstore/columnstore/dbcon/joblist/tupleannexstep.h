@@ -18,8 +18,7 @@
 
 //  $Id: tupleannexstep.h 9596 2013-06-04 19:59:04Z xlou $
 
-#ifndef JOBLIST_TUPLEANNEXSTEP_H
-#define JOBLIST_TUPLEANNEXSTEP_H
+#pragma once
 
 #include <queue>
 #include <boost/thread/thread.hpp>
@@ -119,6 +118,7 @@ class TupleAnnexStep : public JobStep, public TupleDeliveryStep
   rowgroup::RowGroup fRowGroupIn;
   rowgroup::RowGroup fRowGroupOut;
   rowgroup::RowGroup fRowGroupDeliver;
+  rowgroup::RGData fRgDataOut;
   rowgroup::Row fRowIn;
   rowgroup::Row fRowOut;
 
@@ -194,4 +194,3 @@ class reservablePQ : private std::priority_queue<T>
 
 }  // namespace joblist
 
-#endif  // JOBLIST_TUPLEANNEXSTEP_H

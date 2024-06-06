@@ -18,20 +18,12 @@
 
 #define PREFER_MY_CONFIG_H
 #include <my_config.h>
-#ifndef _MSC_VER
 #include <unistd.h>
-#endif
 #include <string>
 #include <iostream>
 #include <stack>
-#ifdef _MSC_VER
-#include <unordered_map>
-#include <unordered_set>
-#include <stdio.h>
-#else
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
-#endif
 #include <fstream>
 #include <sstream>
 #include <cerrno>
@@ -41,20 +33,11 @@
 #include <vector>
 #include <map>
 #include <limits>
-#if defined(__linux__)
 #include <wait.h>  //wait()
-#elif defined(__FreeBSD__)
-#include <sys/types.h>
-#include <sys/stat.h>  // For stat().
-#include <sys/wait.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#endif
 using namespace std;
 
 #include <boost/shared_ptr.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
-#include <boost/regex.hpp>
 #include <boost/thread.hpp>
 
 #include "mcs_basic_types.h"
@@ -420,7 +403,8 @@ int fetchNextRow(uchar* buf, cal_table_info& ti, cal_connection_info* ci, long t
             colType.colDataType == CalpontSystemCatalog::VARCHAR ||
             colType.colDataType == CalpontSystemCatalog::VARBINARY)
         {
-          (*f)->store("", 0, (*f)->charset());
+          (*f)->reset();
+          (*f)->set_null();
         }
 
         continue;
@@ -435,7 +419,6 @@ int fetchNextRow(uchar* buf, cal_table_info& ti, cal_connection_info* ci, long t
       }
       else
       {
-        // fetch and store data
         (*f)->set_notnull();
         datatypes::StoreFieldMariaDB mf(*f, colType, timeZone);
         h->storeValueToField(row, s, &mf);
@@ -756,7 +739,7 @@ vector<string> getOnUpdateTimestampColumns(string& schema, string& tableName, in
         {
           rowGroup->getRow(i, &row);
           // we are only fetching a single column
-          returnVal.push_back(row.getStringField(0));
+          returnVal.push_back(row.getStringField(0).safeString(""));
         }
       }
       else
@@ -909,12 +892,10 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
     List_iterator_fast<Item> value_it(thd->lex->value_list);
     updateCP->queryType(CalpontSelectExecutionPlan::UPDATE);
     ci->stats.fQueryType = updateCP->queryType();
-    uint32_t cnt = 0;
     tr1::unordered_set<string> timeStampColumnNames;
 
     while ((item = (Item_field*)field_it++))
     {
-      cnt++;
 
       string tmpTableName = bestTableName(item);
 
@@ -1028,7 +1009,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
 
           if (constCol)
           {
-            columnAssignmentPtr->fScalarExpression = constCol->constval();
+            columnAssignmentPtr->fScalarExpression = constCol->constval().safeString("");
             isFromCol = false;
             columnAssignmentPtr->fFromCol = false;
           }
@@ -1395,7 +1376,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
 
     gwi.clauseType = WHERE;
 
-    if (getSelectPlan(gwi, select_lex, updateCP, false, false, condStack) !=
+    if (getSelectPlan(gwi, select_lex, updateCP, false, false, false, condStack) !=
         0)  //@Bug 3030 Modify the error message for unsupported functions
     {
       if (gwi.cs_vtable_is_update_with_derive)
@@ -1605,25 +1586,10 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
   try
   {
     timespec* tsp = 0;
-#ifndef _MSC_VER
     timespec ts;
     ts.tv_sec = 3L;
     ts.tv_nsec = 0L;
     tsp = &ts;
-#else
-    // FIXME: @#$%^&! mysql has buggered up timespec!
-    // The definition in my_pthread.h isn't the same as in winport/unistd.h...
-    struct timespec_foo
-    {
-      long tv_sec;
-      long tv_nsec;
-    } ts_foo;
-    ts_foo.tv_sec = 3;
-    ts_foo.tv_nsec = 0;
-    // This is only to get the compiler to not carp below at the read() call.
-    // The messagequeue lib uses the correct struct
-    tsp = reinterpret_cast<timespec*>(&ts_foo);
-#endif
     bool isTimeOut = true;
     int maxRetries = 2;
     std::string exMsg;
@@ -1992,6 +1958,7 @@ bool sendExecutionPlanToExeMgr(sm::cpsm_conhdl_t* hndl, ByteStream::quadbyte qb,
 
 }  // namespace
 
+// Called only for ANALYZE TABLE
 int ha_mcs_impl_analyze(THD* thd, TABLE* table)
 {
   uint32_t sessionID = execplan::CalpontSystemCatalog::idb_tid2sid(thd->thread_id);
@@ -2211,11 +2178,12 @@ int ha_mcs::impl_rnd_init(TABLE* table, const std::vector<COND*>& condStack)
   gp_walk_info gwi(timeZoneOffset);
   gwi.thd = thd;
 
-  if (thd->slave_thread && !get_replication_slave(thd) && isDMLStatement(thd->lex->sql_command))
+  if (thd->slave_thread && !get_replication_slave(thd) &&
+      (isDMLStatement(thd->lex->sql_command) ||
+       thd->lex->sql_command == SQLCOM_ALTER_TABLE))
     return 0;
 
     // check whether the system is ready to process statement.
-#ifndef _MSC_VER
   static DBRM dbrm(true);
   int bSystemQueryReady = dbrm.getSystemQueryReady();
 
@@ -2231,7 +2199,6 @@ int ha_mcs::impl_rnd_init(TABLE* table, const std::vector<COND*>& condStack)
     setError(thd, ER_INTERNAL_ERROR, "DBRM is not responding. Cannot accept queries");
     return ER_INTERNAL_ERROR;
   }
-#endif
 
   // Set this to close all outstanding FEP connections on
   // client disconnect in handlerton::closecon_handlerton().
@@ -2587,7 +2554,9 @@ int ha_mcs_impl_rnd_next(uchar* buf, TABLE* table, long timeZone)
 {
   THD* thd = current_thd;
 
-  if (thd->slave_thread && !get_replication_slave(thd) && isDMLStatement(thd->lex->sql_command))
+  if (thd->slave_thread && !get_replication_slave(thd) &&
+      (isDMLStatement(thd->lex->sql_command) ||
+       thd->lex->sql_command == SQLCOM_ALTER_TABLE))
     return HA_ERR_END_OF_FILE;
 
   if (isMCSTableUpdate(thd) || isMCSTableDelete(thd))
@@ -2668,7 +2637,9 @@ int ha_mcs_impl_rnd_end(TABLE* table, bool is_pushdown_hand)
   int rc = 0;
   THD* thd = current_thd;
 
-  if (thd->slave_thread && !get_replication_slave(thd) && isDMLStatement(thd->lex->sql_command))
+  if (thd->slave_thread && !get_replication_slave(thd) &&
+      (isDMLStatement(thd->lex->sql_command) ||
+       thd->lex->sql_command == SQLCOM_ALTER_TABLE))
     return 0;
 
   cal_connection_info* ci = nullptr;
@@ -2687,6 +2658,26 @@ int ha_mcs_impl_rnd_end(TABLE* table, bool is_pushdown_hand)
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     ci = reinterpret_cast<cal_connection_info*>(get_fe_conn_info_ptr());
     thd_set_ha_data(thd, mcs_hton, ci);
+  }
+
+  if (thd->lex->analyze_stmt && ci->cal_conn_hndl && ci->cal_conn_hndl->exeMgr)
+  {
+    // The ANALYZE statement leaves ExeMgr hanging. This clears it up.
+    ci->cal_conn_hndl->exeMgr->read(); // Ignore the returned buffer
+    ByteStream msg;
+    ByteStream::quadbyte qb = 1; // Tell PrimProc front session to eat all the rows
+    msg << qb;
+    ci->cal_conn_hndl->exeMgr->write(msg);
+    // This is the command to start sending return values. because we previously sent the swallow
+    // rows command, there won't be anything useful coming back, but it needs this to flush internal queues.
+    qb = 5; // Read the result data.
+    msg.reset();
+    msg << qb;
+    ci->cal_conn_hndl->exeMgr->write(msg);
+    qb = 0; // End the query
+    msg.reset();
+    msg << qb;
+    ci->cal_conn_hndl->exeMgr->write(msg);
   }
 
   if (thd->killed == KILL_QUERY || thd->killed == KILL_QUERY_HARD)
@@ -2726,7 +2717,7 @@ int ha_mcs_impl_rnd_end(TABLE* table, bool is_pushdown_hand)
     try
     {
       {
-        bool ask_4_stats = (ci->traceFlags) ? true : false;
+        bool ask_4_stats = (is_pushdown_hand && ci->traceFlags) ? true : false;
         sm::tpl_close(ti.tpl_ctx, &hndl, ci->stats, ask_4_stats);
       }
 
@@ -3182,25 +3173,15 @@ void ha_mcs_impl_start_bulk_insert(ha_rows rows, TABLE* table, bool is_cache_ins
         }
         else
         {
-#ifdef _MSC_VER
-          aCmdLine = "cpimport.exe -N -P " + to_string(localModuleId) + " -s " + ci->delimiter + " -e 0" +
-                     " -E " + escapechar + ci->enclosed_by + " ";
-#else
           aCmdLine = "cpimport -m 1 -N -P " + boost::to_string(localModuleId) + " -s " + ci->delimiter +
                      " -e 0" + " -T " + thd->variables.time_zone->get_name()->ptr() + " -E " + escapechar +
                      ci->enclosed_by + " ";
-#endif
         }
       }
       else
       {
-#ifdef _MSC_VER
-        aCmdLine =
-            "cpimport.exe -N -s " + ci->delimiter + " -e 0" + " -E " + escapechar + ci->enclosed_by + " ";
-#else
         aCmdLine = std::string("cpimport -m 1 -N -s ") + ci->delimiter + " -e 0" + " -T " +
                    thd->variables.time_zone->get_name()->ptr() + " -E " + escapechar + ci->enclosed_by + " ";
-#endif
       }
 
       aCmdLine = aCmdLine + table->s->db.str + " " + table->s->table_name.str;
@@ -3222,130 +3203,6 @@ void ha_mcs_impl_start_bulk_insert(ha_rows rows, TABLE* table, bool is_cache_ins
 
       Cmds.push_back(0);  // null terminate
 
-#ifdef _MSC_VER
-      BOOL bSuccess = false;
-      BOOL bInitialized = false;
-      SECURITY_ATTRIBUTES saAttr;
-      saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
-      saAttr.bInheritHandle = TRUE;
-      saAttr.lpSecurityDescriptor = nullptr;
-      HANDLE handleList[2];
-      const char* pSectionMsg;
-      bSuccess = true;
-
-      // Create a pipe for the child process's STDIN.
-      if (bSuccess)
-      {
-        pSectionMsg = "Create Stdin";
-        bSuccess = CreatePipe(&ci->cpimport_stdin_Rd, &ci->cpimport_stdin_Wr, &saAttr, 65536);
-
-        // Ensure the write handle to the pipe for STDIN is not inherited.
-        if (bSuccess)
-        {
-          pSectionMsg = "SetHandleInformation(stdin)";
-          bSuccess = SetHandleInformation(ci->cpimport_stdin_Wr, HANDLE_FLAG_INHERIT, 0);
-        }
-      }
-
-      // Launch cpimport
-      LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList = nullptr;
-      SIZE_T attrSize = 0;
-      STARTUPINFOEX siStartInfo;
-
-      // To ensure the child only inherits the STDIN and STDOUT Handles, we add a list of
-      // Handles that can be inherited to the call to CreateProcess
-      if (bSuccess)
-      {
-        pSectionMsg = "InitializeProcThreadAttributeList(NULL)";
-        bSuccess = InitializeProcThreadAttributeList(NULL, 1, 0, &attrSize) ||
-                   GetLastError() == ERROR_INSUFFICIENT_BUFFER;  // Asks how much buffer to alloc
-      }
-
-      if (bSuccess)
-      {
-        pSectionMsg = "HeapAlloc for AttrList";
-        lpAttributeList =
-            reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(HeapAlloc(GetProcessHeap(), 0, attrSize));
-        bSuccess = lpAttributeList != nullptr;
-      }
-
-      if (bSuccess)
-      {
-        pSectionMsg = "InitializeProcThreadAttributeList";
-        bSuccess = InitializeProcThreadAttributeList(lpAttributeList, 1, 0, &attrSize);
-      }
-
-      if (bSuccess)
-      {
-        pSectionMsg = "UpdateProcThreadAttribute";
-        bInitialized = true;
-        handleList[0] = ci->cpimport_stdin_Rd;
-        bSuccess = UpdateProcThreadAttribute(lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-                                             handleList, sizeof(HANDLE), NULL, NULL);
-      }
-
-      if (bSuccess)
-      {
-        pSectionMsg = "CreateProcess";
-        // In order for GenerateConsoleCtrlEvent (used when job is canceled) to work,
-        // this process must have a Console, which Services don't have. We create this
-        // when we create the child process. Once created, we leave it around for next time.
-        // AllocConsole will silently fail if it already exists, so no pain.
-        AllocConsole();
-        // Set up members of the PROCESS_INFORMATION structure.
-        memset(&ci->cpimportProcInfo, 0, sizeof(PROCESS_INFORMATION));
-
-        // Set up members of the STARTUPINFOEX structure.
-        // This structure specifies the STDIN and STDOUT handles for redirection.
-        memset(&siStartInfo, 0, sizeof(STARTUPINFOEX));
-        siStartInfo.StartupInfo.cb = sizeof(STARTUPINFOEX);
-        siStartInfo.lpAttributeList = lpAttributeList;
-        siStartInfo.StartupInfo.hStdError = nullptr;
-        siStartInfo.StartupInfo.hStdOutput = nullptr;
-        siStartInfo.StartupInfo.hStdInput = ci->cpimport_stdin_Rd;
-        siStartInfo.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
-        // Create the child process.
-        bSuccess = CreateProcess(NULL,                                 // program. NULL means use command line
-                                 const_cast<LPSTR>(aCmdLine.c_str()),  // command line
-                                 NULL,                                 // process security attributes
-                                 NULL,                                 // primary thread security attributes
-                                 TRUE,                                 // handles are inherited
-                                 EXTENDED_STARTUPINFO_PRESENT | CREATE_NEW_PROCESS_GROUP,  // creation flags
-                                 NULL,                      // use parent's environment
-                                 NULL,                      // use parent's current directory
-                                 &siStartInfo.StartupInfo,  // STARTUPINFO pointer
-                                 &ci->cpimportProcInfo);    // receives PROCESS_INFORMATION
-      }
-
-      // We need to clean up the memory created by InitializeProcThreadAttributeList
-      // and HeapAlloc
-      if (bInitialized)
-        DeleteProcThreadAttributeList(lpAttributeList);
-
-      if (lpAttributeList)
-        HeapFree(GetProcessHeap(), 0, lpAttributeList);
-
-      if (!bSuccess)
-      {
-        // If an error occurs, Log and return.
-        int errnum = GetLastError();
-        char errmsg[512];
-        FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, errnum, 0, errmsg, 512, NULL);
-        ostringstream oss;
-        oss << " : Error in " << pSectionMsg << " (errno-" << errnum << "); " << errmsg;
-        setError(current_thd, ER_INTERNAL_ERROR, oss.str());
-        ci->singleInsert = true;
-        ha_mcs_impl::log_this(thd, oss.str(), logging::LOG_TYPE_ERROR, tid2sid(thd->thread_id));
-        ha_mcs_impl::log_this(thd, "End SQL statement", logging::LOG_TYPE_DEBUG, tid2sid(thd->thread_id));
-        return;
-      }
-
-      // Close the read handle that the child is using. We won't be needing this.
-      CloseHandle(ci->cpimport_stdin_Rd);
-      // The write functions all want a FILE*
-      ci->fdt[1] = _open_osfhandle((intptr_t)ci->cpimport_stdin_Wr, _O_APPEND);
-      ci->filePtr = _fdopen(ci->fdt[1], "w");
-#else
       long maxFD = -1;
       maxFD = sysconf(_SC_OPEN_MAX);
 
@@ -3423,7 +3280,6 @@ void ha_mcs_impl_start_bulk_insert(ha_rows rows, TABLE* table, bool is_cache_ins
       // from Field_blob|Field_varstring. Used in ColWriteBatchString()
       bitmap_set_all(table->read_set);
 
-#endif
     }
     else
     {
@@ -3565,34 +3421,6 @@ int ha_mcs_impl_end_bulk_insert(bool abort, TABLE* table)
          ((thd->lex)->sql_command == SQLCOM_LOAD) || ((thd->lex)->sql_command == SQLCOM_INSERT_SELECT) ||
          ci->isCacheInsert))
     {
-#ifdef _MSC_VER
-
-      if (thd->killed > 0)
-      {
-        errno = 0;
-        // GenerateConsoleCtrlEvent sends a signal to cpimport
-        BOOL brtn = GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, ci->cpimportProcInfo.dwProcessId);
-
-        if (!brtn)
-        {
-          int errnum = GetLastError();
-          char errmsg[512];
-          FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, errnum, 0, errmsg, 512, NULL);
-          ostringstream oss;
-          oss << "GenerateConsoleCtrlEvent: (errno-" << errnum << "); " << errmsg;
-          ha_mcs_impl::log_this(thd, oss.str(), logging::LOG_TYPE_DEBUG, 0);
-        }
-
-        // Close handles to the cpimport process and its primary thread.
-        fclose(ci->filePtr);
-        ci->filePtr = 0;
-        ci->fdt[1] = -1;
-        CloseHandle(ci->cpimportProcInfo.hProcess);
-        CloseHandle(ci->cpimportProcInfo.hThread);
-        WaitForSingleObject(ci->cpimportProcInfo.hProcess, INFINITE);
-      }
-
-#else
 
       if ((thd->killed > 0) && (ci->cpimport_pid > 0))  // handle CTRL-C
       {
@@ -3606,29 +3434,9 @@ int ha_mcs_impl_end_bulk_insert(bool abort, TABLE* table)
         waitpid(ci->cpimport_pid, &aStatus, 0);  // wait until cpimport finishs
       }
 
-#endif
       else
       {
         // tear down cpimport
-#ifdef _MSC_VER
-        fclose(ci->filePtr);
-        ci->filePtr = 0;
-        ci->fdt[1] = -1;
-        DWORD exitCode;
-        WaitForSingleObject(ci->cpimportProcInfo.hProcess, INFINITE);
-        GetExitCodeProcess(ci->cpimportProcInfo.hProcess, &exitCode);
-
-        if (exitCode != 0)
-        {
-          rc = 1;
-          setError(thd, ER_INTERNAL_ERROR,
-                   "load failed. The detailed error information is listed in InfiniDBLog.txt.");
-        }
-
-        // Close handles to the cpimport process and its primary thread.
-        CloseHandle(ci->cpimportProcInfo.hProcess);
-        CloseHandle(ci->cpimportProcInfo.hThread);
-#else
         fclose(ci->filePtr);
         ci->filePtr = 0;
         ci->fdt[1] = -1;
@@ -3685,7 +3493,6 @@ int ha_mcs_impl_end_bulk_insert(bool abort, TABLE* table)
           }
         }
 
-#endif
         if (rc == 0)
         {
           ha_mcs_impl::log_this(thd, "End SQL statement", logging::LOG_TYPE_DEBUG, tid2sid(thd->thread_id));
@@ -4188,7 +3995,6 @@ int ha_mcs_impl_group_by_init(mcs_handler_info* handler_info, TABLE* table)
   THD* thd = current_thd;
 
   // check whether the system is ready to process statement.
-#ifndef _MSC_VER
   static DBRM dbrm(true);
   int bSystemQueryReady = dbrm.getSystemQueryReady();
 
@@ -4205,7 +4011,6 @@ int ha_mcs_impl_group_by_init(mcs_handler_info* handler_info, TABLE* table)
     return ER_INTERNAL_ERROR;
   }
 
-#endif
 
   uint32_t sessionID = tid2sid(thd->thread_id);
   boost::shared_ptr<CalpontSystemCatalog> csc = CalpontSystemCatalog::makeCalpontSystemCatalog(sessionID);
@@ -4855,14 +4660,14 @@ int ha_mcs_impl_group_by_end(TABLE* table)
  * Execute the query and saves derived table query.
  * There is an extra handler argument so I ended up with a
  * new init function. The code is a copy of
- * ha_mcs_impl_rnd_init() mostly.
+ * impl_rnd_init() mostly.
  * PARAMETERS:
  * mcs_handler_info* pnt to an envelope struct
  * TABLE* table - dest table to put the results into
  * RETURN:
  *    rc as int
  ***********************************************************/
-int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table)
+int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table, bool isSelectLexUnit)
 {
   IDEBUG(cout << "pushdown_init for table " << endl);
   THD* thd = current_thd;
@@ -4878,7 +4683,6 @@ int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table)
   bool err = false;
 
   // check whether the system is ready to process statement.
-#ifndef _MSC_VER
   static DBRM dbrm(true);
   int bSystemQueryReady = dbrm.getSystemQueryReady();
 
@@ -4894,7 +4698,6 @@ int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table)
     setError(thd, ER_INTERNAL_ERROR, "DBRM is not responding. Cannot accept queries");
     return ER_INTERNAL_ERROR;
   }
-#endif
 
   // Set this to close all outstanding FEP connections on
   // client disconnect in handlerton::closecon_handlerton().
@@ -5052,7 +4855,7 @@ int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table)
       if (handler_info->hndl_type == mcs_handler_types_t::SELECT)
       {
         sh = reinterpret_cast<ha_columnstore_select_handler*>(handler_info->hndl_ptr);
-        status = cs_get_select_plan(sh, thd, csep, gwi);
+        status = cs_get_select_plan(sh, thd, csep, gwi, isSelectLexUnit);
       }
       else if (handler_info->hndl_type == DERIVED)
       {

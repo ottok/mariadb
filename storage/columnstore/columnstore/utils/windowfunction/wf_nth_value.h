@@ -17,8 +17,7 @@
 
 //  $Id: wf_nth_value.h 3868 2013-06-06 22:13:05Z xlou $
 
-#ifndef UTILS_WF_NTH_VALUE_H
-#define UTILS_WF_NTH_VALUE_H
+#pragma once
 
 #include "windowfunctiontype.h"
 
@@ -51,4 +50,3 @@ class WF_nth_value : public WindowFunctionType
 
 }  // namespace windowfunction
 
-#endif  // UTILS_WF_NTH_VALUE_H

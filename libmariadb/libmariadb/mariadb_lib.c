@@ -693,6 +693,7 @@ struct st_default_options mariadb_defaults[] =
   {{MYSQL_OPT_SSL_ENFORCE}, MARIADB_OPTION_BOOL, "ssl-enforce"},
   {{MARIADB_OPT_RESTRICTED_AUTH}, MARIADB_OPTION_STR, "restricted-auth"},
   {{.option_func=parse_connection_string}, MARIADB_OPTION_FUNC, "connection"},
+  {{MARIADB_OPT_BULK_UNIT_RESULTS}, MARIADB_OPTION_BOOL, "bulk-unit-results"},
   /* Aliases */
   {{MARIADB_OPT_SCHEMA}, MARIADB_OPTION_STR, "db"},
   {{MARIADB_OPT_UNIXSOCKET}, MARIADB_OPTION_STR, "unix_socket"},
@@ -714,10 +715,19 @@ struct st_default_options mariadb_defaults[] =
   {{0}, 0, NULL}
 };
 
+#ifdef DEFAULT_SSL_VERIFY_SERVER_CERT
+#define FIX_SSL_VERIFY_SERVER_CERT(OPTS)
+#else
+#define FIX_SSL_VERIFY_SERVER_CERT(OPTS) (OPTS)->extension->tls_allow_invalid_server_cert=1
+#endif
+
 #define CHECK_OPT_EXTENSION_SET(OPTS)\
     if (!(OPTS)->extension)                                     \
+    {                                                           \
       (OPTS)->extension= (struct st_mysql_options_extension *)  \
-        calloc(1, sizeof(struct st_mysql_options_extension));
+        calloc(1, sizeof(struct st_mysql_options_extension));   \
+      FIX_SSL_VERIFY_SERVER_CERT(OPTS);                         \
+    }
 
 #define OPT_SET_EXTENDED_VALUE_BIN(OPTS, KEY, KEY_LEN, VAL, LEN)\
     CHECK_OPT_EXTENSION_SET(OPTS)                                \
@@ -1448,6 +1458,8 @@ mysql_real_connect(MYSQL *mysql, const char *host, const char *user,
   /* set default */
   if (!mysql->options.extension || !mysql->options.extension->status_callback)
     mysql_optionsv(mysql, MARIADB_OPT_STATUS_CALLBACK, NULL, NULL);
+
+  reset_tls_self_signed_error(mysql);
 
   /* if host contains a semicolon, we need to parse connection string */
   if (host && strchr(host, ';'))
@@ -2453,6 +2465,7 @@ mysql_close(MYSQL *mysql)
     mysql_close_memory(mysql);
     mysql_close_options(mysql);
     ma_clear_session_state(mysql);
+    reset_tls_self_signed_error(mysql);
 
     if (mysql->net.extension)
     {
@@ -3300,10 +3313,17 @@ mysql_refresh(MYSQL *mysql,uint options)
 int STDCALL
 mysql_kill(MYSQL *mysql,ulong pid)
 {
-  char buff[12];
-  int4store(buff,pid);
-  /* if we kill our own thread, reading the response packet will fail */
-  return(ma_simple_command(mysql, COM_PROCESS_KILL,buff,4,0,0));
+  char buff[16];
+
+  /* process id can't be larger than 4-bytes */
+  if (pid & (~0xFFFFFFFFUL))
+  {
+    my_set_error(mysql, CR_CONNECTION_ERROR, SQLSTATE_UNKNOWN, 0);
+    return 1;
+  }
+
+  snprintf(buff, sizeof buff, "KILL %lu", pid);
+  return mysql_real_query(mysql, (char *)buff, (ulong)strlen(buff));
 }
 
 
@@ -3528,6 +3548,7 @@ mysql_optionsv(MYSQL *mysql,enum mysql_option option, ...)
       goto end;
     }
     if (!mysql->options.extension)
+    {
       if(!(mysql->options.extension= (struct st_mysql_options_extension *)
         calloc(1, sizeof(struct st_mysql_options_extension))))
       {
@@ -3535,6 +3556,8 @@ mysql_optionsv(MYSQL *mysql,enum mysql_option option, ...)
         SET_CLIENT_ERROR(mysql, CR_OUT_OF_MEMORY, SQLSTATE_UNKNOWN, 0);
         goto end;
       }
+      FIX_SSL_VERIFY_SERVER_CERT(&mysql->options);
+    }
     mysql->options.extension->async_context= ctxt;
     break;
   case MYSQL_OPT_MAX_ALLOWED_PACKET:
@@ -3556,7 +3579,7 @@ mysql_optionsv(MYSQL *mysql,enum mysql_option option, ...)
     mysql->options.use_ssl= (*(my_bool *)arg1);
     break;
   case MYSQL_OPT_SSL_VERIFY_SERVER_CERT:
-    OPT_SET_EXTENDED_VALUE(&mysql->options, tls_verify_server_cert, *(my_bool *)arg1);
+    OPT_SET_EXTENDED_VALUE(&mysql->options, tls_allow_invalid_server_cert, !*(my_bool *)arg1);
     break;
   case MYSQL_OPT_SSL_KEY:
     OPT_SET_VALUE_STR(&mysql->options, ssl_key, (char *)arg1);
@@ -3824,6 +3847,9 @@ mysql_optionsv(MYSQL *mysql,enum mysql_option option, ...)
       }
     }
     break;
+  case MARIADB_OPT_BULK_UNIT_RESULTS:
+    OPT_SET_EXTENDED_VALUE_INT(&mysql->options, bulk_unit_results, *(my_bool *)arg1);
+    break;
   default:
     va_end(ap);
     SET_CLIENT_ERROR(mysql, CR_NOT_IMPLEMENTED, SQLSTATE_UNKNOWN, 0);
@@ -3922,7 +3948,7 @@ mysql_get_optionv(MYSQL *mysql, enum mysql_option option, void *arg, ...)
     *((my_bool *)arg)= mysql->options.use_ssl;
     break;
   case MYSQL_OPT_SSL_VERIFY_SERVER_CERT:
-    *((my_bool*)arg) = mysql->options.extension ? mysql->options.extension->tls_verify_server_cert : 0;
+    *((my_bool*)arg) = mysql->options.extension ? !mysql->options.extension->tls_allow_invalid_server_cert: 1;
     break;
   case MYSQL_OPT_SSL_KEY:
     *((char **)arg)= mysql->options.ssl_key;
@@ -4045,6 +4071,9 @@ mysql_get_optionv(MYSQL *mysql, enum mysql_option option, void *arg, ...)
     break;
   case MARIADB_OPT_SKIP_READ_RESPONSE:
     *((my_bool*)arg)= mysql->options.extension ? mysql->options.extension->skip_read_response : 0;
+    break;
+  case MARIADB_OPT_BULK_UNIT_RESULTS:
+    *((my_bool *)arg)= mysql->options.extension ? mysql->options.extension->bulk_unit_results : 0;
     break;
   default:
     va_end(ap);
@@ -4506,6 +4535,11 @@ my_bool mariadb_get_infov(MYSQL *mysql, enum mariadb_value value, void *arg, ...
   va_start(ap, arg);
 
   switch(value) {
+#ifdef HAVE_TLS
+  case MARIADB_TLS_PEER_CERT_INFO:
+    *((MARIADB_X509_INFO **)arg)= mysql->net.pvio->ctls ? (MARIADB_X509_INFO *)&mysql->net.pvio->ctls->cert_info : NULL;
+    break;
+#endif
   case MARIADB_MAX_ALLOWED_PACKET:
     *((size_t *)arg)= (size_t)max_allowed_packet;
     break;

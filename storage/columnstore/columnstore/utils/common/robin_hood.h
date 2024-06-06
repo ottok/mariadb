@@ -30,8 +30,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef ROBIN_HOOD_H_INCLUDED
-#define ROBIN_HOOD_H_INCLUDED
+#pragma once
 
 // see https://semver.org/
 #define ROBIN_HOOD_VERSION_MAJOR 3   // for incompatible API changes
@@ -111,20 +110,11 @@ static Counts& counts()
 #endif
 
 // endianess
-#ifdef _MSC_VER
-#define ROBIN_HOOD_PRIVATE_DEFINITION_LITTLE_ENDIAN() 1
-#define ROBIN_HOOD_PRIVATE_DEFINITION_BIG_ENDIAN() 0
-#else
 #define ROBIN_HOOD_PRIVATE_DEFINITION_LITTLE_ENDIAN() (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 #define ROBIN_HOOD_PRIVATE_DEFINITION_BIG_ENDIAN() (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
-#endif
 
 // inline
-#ifdef _MSC_VER
-#define ROBIN_HOOD_PRIVATE_DEFINITION_NOINLINE() __declspec(noinline)
-#else
 #define ROBIN_HOOD_PRIVATE_DEFINITION_NOINLINE() __attribute__((noinline))
-#endif
 
 // exceptions
 #if !defined(__cpp_exceptions) && !defined(__EXCEPTIONS) && !defined(_CPPUNWIND)
@@ -135,21 +125,6 @@ static Counts& counts()
 
 // count leading/trailing bits
 #if !defined(ROBIN_HOOD_DISABLE_INTRINSICS)
-#ifdef _MSC_VER
-#if ROBIN_HOOD(BITNESS) == 32
-#define ROBIN_HOOD_PRIVATE_DEFINITION_BITSCANFORWARD() _BitScanForward
-#else
-#define ROBIN_HOOD_PRIVATE_DEFINITION_BITSCANFORWARD() _BitScanForward64
-#endif
-#include <intrin.h>
-#pragma intrinsic(ROBIN_HOOD(BITSCANFORWARD))
-#define ROBIN_HOOD_COUNT_TRAILING_ZEROES(x)                                                          \
-  [](size_t mask) noexcept -> int                                                                    \
-  {                                                                                                  \
-    unsigned long index;                                                                             \
-    return ROBIN_HOOD(BITSCANFORWARD)(&index, mask) ? static_cast<int>(index) : ROBIN_HOOD(BITNESS); \
-  }(x)
-#else
 #if ROBIN_HOOD(BITNESS) == 32
 #define ROBIN_HOOD_PRIVATE_DEFINITION_CTZ() __builtin_ctzl
 #define ROBIN_HOOD_PRIVATE_DEFINITION_CLZ() __builtin_clzl
@@ -159,7 +134,6 @@ static Counts& counts()
 #endif
 #define ROBIN_HOOD_COUNT_LEADING_ZEROES(x) ((x) ? ROBIN_HOOD(CLZ)(x) : ROBIN_HOOD(BITNESS))
 #define ROBIN_HOOD_COUNT_TRAILING_ZEROES(x) ((x) ? ROBIN_HOOD(CTZ)(x) : ROBIN_HOOD(BITNESS))
-#endif
 #endif
 
 // fallthrough
@@ -175,32 +149,13 @@ static Counts& counts()
 #endif
 
 // likely/unlikely
-#ifdef _MSC_VER
-#define ROBIN_HOOD_LIKELY(condition) condition
-#define ROBIN_HOOD_UNLIKELY(condition) condition
-#else
 #define ROBIN_HOOD_LIKELY(condition) __builtin_expect(condition, 1)
 #define ROBIN_HOOD_UNLIKELY(condition) __builtin_expect(condition, 0)
-#endif
 
 // detect if native wchar_t type is availiable in MSVC
-#ifdef _MSC_VER
-#ifdef _NATIVE_WCHAR_T_DEFINED
 #define ROBIN_HOOD_PRIVATE_DEFINITION_HAS_NATIVE_WCHART() 1
-#else
-#define ROBIN_HOOD_PRIVATE_DEFINITION_HAS_NATIVE_WCHART() 0
-#endif
-#else
-#define ROBIN_HOOD_PRIVATE_DEFINITION_HAS_NATIVE_WCHART() 1
-#endif
 
-// workaround missing "is_trivially_copyable" in g++ < 5.0
-// See https://stackoverflow.com/a/31798726/48181
-#if defined(__GNUC__) && __GNUC__ < 5
-#define ROBIN_HOOD_IS_TRIVIALLY_COPYABLE(...) __has_trivial_copy(__VA_ARGS__)
-#else
 #define ROBIN_HOOD_IS_TRIVIALLY_COPYABLE(...) std::is_trivially_copyable<__VA_ARGS__>::value
-#endif
 
 // helpers for C++ versions, see https://gcc.gnu.org/onlinedocs/cpp/Standard-Predefined-Macros.html
 #define ROBIN_HOOD_PRIVATE_DEFINITION_CXX() __cplusplus
@@ -2736,5 +2691,3 @@ using unordered_set =
                   MaxLoadFactor100, Key, void, Hash, KeyEqual>;
 
 }  // namespace robin_hood
-
-#endif

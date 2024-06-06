@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2020 MariaDB Corporation
+   Copyright (C) 2020-2022 MariaDB Corporation
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License
@@ -15,8 +15,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
-#ifndef COLLATION_H_INCLUDED
-#define COLLATION_H_INCLUDED
+#pragma once
 
 #if defined(PREFER_MY_CONFIG_H)
 
@@ -89,6 +88,8 @@ typedef double pfloat; /* Mixed prototypes can't take float */
 typedef const struct charset_info_st CHARSET_INFO;
 extern "C" MYSQL_PLUGIN_IMPORT CHARSET_INFO* default_charset_info;
 
+#define HAVE_PSI_INTERFACE
+
 #include "m_ctype.h"
 
 #undef FALSE
@@ -134,16 +135,19 @@ class Charset
 {
  protected:
   const struct charset_info_st* mCharset;
+
  private:
   static constexpr const uint flags_ = MY_STRXFRM_PAD_WITH_SPACE | MY_STRXFRM_PAD_TO_MAXLEN;
+
  public:
   Charset(CHARSET_INFO& cs) : mCharset(&cs)
   {
   }
-  Charset(CHARSET_INFO* cs) : mCharset(cs ? cs : &my_charset_bin)
+  Charset(CHARSET_INFO* cs = nullptr) : mCharset(cs ? cs : &my_charset_bin)
   {
   }
   Charset(uint32_t charsetNumber);
+  void setCharset(uint32_t charsetNumber);
   CHARSET_INFO& getCharset() const
   {
     return *mCharset;
@@ -156,9 +160,17 @@ class Charset
   {
     return mCharset->strnncollsp(str1.data(), str1.length(), str2.data(), str2.length()) == 0;
   }
+  int strnncollsp(const std::string& str1, const std::string& str2) const
+  {
+    return mCharset->strnncollsp(str1.data(), str1.length(), str2.data(), str2.length());
+  }
   int strnncollsp(const utils::ConstString& str1, const utils::ConstString& str2) const
   {
-    return mCharset->strnncollsp(str1.str(), str1.length(), str2.str(), str2.length());
+    // nullptr handling below should return values as if nulls are substituted with empty string.
+    // please note that ConstString has an assertion so that nullptr data has zero length.
+    const char* s1 = str1.str();
+    const char* s2 = str2.str();
+    return mCharset->strnncollsp(s1 ? s1 : "", str1.length(), s2 ? s2 : "" , str2.length());
   }
   int strnncollsp(const char* str1, size_t length1, const char* str2, size_t length2) const
   {
@@ -179,13 +191,37 @@ class Charset
     bool res = !mCharset->wildcmp(subject.str(), subject.end(), pattern.str(), pattern.end(), '\\', '_', '%');
     return neg ? !res : res;
   }
+  size_t strnxfrm(uchar* dst, size_t dstlen, uint nweights, const uchar* src, size_t srclen, uint flags)
+  {
+    assert(mCharset->coll);
+    return mCharset->coll->strnxfrm(mCharset, dst, dstlen, nweights, src, srclen, flags);
+  }
+  // The magic check that tells that bytes are mapped to weights as 1:1
+  bool strnxfrmIsValid() const
+  {
+    return (mCharset->state & MY_CS_NON1TO1) == 0;
+  }
+  template <typename T>
+  T strnxfrm(const char* src) const
+  {
+    T ret = 0;
+    size_t len __attribute__((unused)) =
+        mCharset->strnxfrm((char*)&ret, sizeof(T), sizeof(T), src, sizeof(T), flags_);
+    assert(len <= sizeof(T));
+    return ret;
+  }
+  template <typename T>
+  T strnxfrm(const utils::ConstString& src) const
+  {
+    T ret = 0;
+    size_t len __attribute__((unused)) =
+        mCharset->strnxfrm((char*)&ret, sizeof(T), sizeof(T), (char*)src.str(), src.length(), flags_);
+    assert(len <= sizeof(T));
+    return ret;
+  }
   static uint getDefaultFlags()
   {
     return flags_;
-  }
-  size_t strnxfrm(uchar* dst, size_t dstlen, uint nweights, const uchar* src, size_t srclen, uint flags)
-  {
-    return mCharset->coll->strnxfrm(mCharset, dst, dstlen, nweights, src, srclen, flags);
   }
 };
 
@@ -218,5 +254,3 @@ class CollationAwareComparator : public Charset
 };
 
 }  // end of namespace datatypes
-
-#endif

@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef FIFO_H
-#define FIFO_H
+#pragma once
 
 #include "threads.h"
 #include "produconsum.h"
@@ -32,5 +31,3 @@ typedef struct fifo
 
   pthread_t thread;
 } * fifo_t;
-
-#endif

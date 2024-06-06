@@ -1450,7 +1450,7 @@ SPIDER_THDVAR_OVERRIDE_VALUE_FUNC(int, sts_mode)
 /*
  -1 :fallback to default
   0 :No synchronization.
-  1 :Table state is synchronized when opening a table.
+  1 :Table stat is synchronized when opening a table.
      Then no synchronization.
   2 :Synchronization.
  */
@@ -1565,7 +1565,7 @@ SPIDER_THDVAR_VALUE_FUNC(bool, local_lock_table)
 static MYSQL_THDVAR_INT(
   use_pushdown_udf, /* name */
   PLUGIN_VAR_RQCMDARG, /* opt */
-  "Remote server transmission existence when UDF is used at condition and \"engine_condition_pushdown=1\"", /* comment */
+  "Remote server transmission existence when UDF is used at condition", /* comment */
   NULL, /* check */
   NULL, /* update */
   0, /* def */
@@ -2380,6 +2380,30 @@ static MYSQL_THDVAR_BOOL(
 
 SPIDER_THDVAR_VALUE_FUNC(bool, disable_group_by_handler)
 
+static MYSQL_THDVAR_BOOL(
+  suppress_comment_ignored_warning,
+  PLUGIN_VAR_RQCMDARG,
+  "Whether to suppress warnings that table COMMENT or CONNECTION strings "
+  "are ignored due to specified table options",
+  NULL,
+  NULL,
+  FALSE
+);
+
+SPIDER_THDVAR_VALUE_FUNC(bool, suppress_comment_ignored_warning)
+
+static MYSQL_THDVAR_BOOL(
+  ignore_comments,
+  PLUGIN_VAR_RQCMDARG,
+  "Whether to unconditionally ignore COMMENT and CONNECTION strings "
+  "without checking whether table options are specified",
+  NULL,
+  NULL,
+  FALSE
+);
+
+SPIDER_THDVAR_VALUE_FUNC(bool, ignore_comments)
+
 static struct st_mysql_storage_engine spider_storage_engine =
 { MYSQL_HANDLERTON_INTERFACE_VERSION };
 
@@ -2496,6 +2520,8 @@ static struct st_mysql_sys_var* spider_system_variables[] = {
   MYSQL_SYSVAR(strict_group_by),
   MYSQL_SYSVAR(direct_aggregate),
   MYSQL_SYSVAR(disable_group_by_handler),
+  MYSQL_SYSVAR(suppress_comment_ignored_warning),
+  MYSQL_SYSVAR(ignore_comments),
   NULL
 };
 

@@ -43,7 +43,11 @@ using namespace messageqcpp;
 
 namespace joblist
 {
-ColumnCommandJL::ColumnCommandJL(const pColScanStep& scan, vector<BRM::LBID_t> lastLBID)
+ColumnCommandJL::ColumnCommandJL(const pColScanStep& scan, vector<BRM::LBID_t> lastLBID,
+                                 bool hasAuxCol_, const std::vector<BRM::EMEntry>& extentsAux_,
+                                 execplan::CalpontSystemCatalog::OID oidAux) :
+                                extentsAux(extentsAux_), hasAuxCol(hasAuxCol_),
+                                fOidAux(oidAux)
 {
   BRM::DBRM dbrm;
   isScan = true;
@@ -88,6 +92,7 @@ ColumnCommandJL::ColumnCommandJL(const pColStep& step)
   BRM::DBRM dbrm;
 
   isScan = false;
+  hasAuxCol = false;
 
   /* grab necessary vars from step */
   traceFlags = step.fTraceFlags;
@@ -130,6 +135,61 @@ ColumnCommandJL::ColumnCommandJL(const pColStep& step)
     fFilesPerColumnPartition = cf->uFromText(fpc);
 }
 
+ColumnCommandJL::ColumnCommandJL(const ColumnCommandJL& prevCmd, const DictStepJL& dictWithFilters)
+{
+  BRM::DBRM dbrm;
+
+  /* grab necessary vars from scan */
+  traceFlags = prevCmd.traceFlags;
+  // we should call this constructor only when paired with dictionary
+  // and in that case previous command should not have any filters and
+  // should be "dict" (tokens) column command.
+  idbassert(dictWithFilters.getFilterCount() == 0 || prevCmd.filterCount == 0);
+  idbassert(prevCmd.fIsDict);
+
+  // need to reencode filters.
+  filterString = dictWithFilters.reencodedFilterString();
+  // we have a limitation here.
+  // consider this: textcol IS NULL AND textcol IN ('a', 'b')
+  // XXX: should check.
+  if (filterString.length() > 0 && (BOP = dictWithFilters.getBop() || prevCmd.filterString.length() < 1))
+  {
+    filterCount = dictWithFilters.getFilterCount();
+    BOP = dictWithFilters.getBop();
+    fContainsRanges = true;
+  }
+  else
+  {
+    filterCount = prevCmd.filterCount;
+    filterString = prevCmd.filterString;
+    BOP = prevCmd.BOP;
+  }
+  isScan = prevCmd.isScan;
+  hasAuxCol = prevCmd.hasAuxCol;
+  extentsAux = prevCmd.extentsAux;
+  colType = prevCmd.colType;
+  extents = prevCmd.extents;
+  OID = prevCmd.OID;
+  colName = prevCmd.colName;
+  rpbShift = prevCmd.rpbShift;
+  fIsDict = prevCmd.fIsDict;
+  fLastLbid = prevCmd.fLastLbid;
+  lbid = prevCmd.lbid;
+  traceFlags = prevCmd.traceFlags;
+  dbroot = prevCmd.dbroot;
+  numDBRoots = prevCmd.numDBRoots;
+
+  /* I think modmask isn't necessary for scans */
+  divShift = prevCmd.divShift;
+  modMask = (1 << divShift) - 1;
+
+  // @Bug 2889.  Drop partition enhancement.  Read FilesPerColumnPartition and ExtentsPerSegmentFile for use
+  // in RID calculation.
+  fFilesPerColumnPartition = prevCmd.fFilesPerColumnPartition;
+  // MCOL-4685 remove the option to set more than 2 extents per file (ExtentsPreSegmentFile).
+  fExtentsPerSegmentFile = prevCmd.fExtentsPerSegmentFile;
+}
+
 ColumnCommandJL::~ColumnCommandJL()
 {
 }
@@ -141,9 +201,26 @@ void ColumnCommandJL::createCommand(ByteStream& bs) const
   colType.serialize(bs);
   bs << (uint8_t)isScan;
   bs << traceFlags;
-  bs << filterString;
-  bs << BOP;
-  bs << filterCount;
+  if (isDict() && fContainsRanges)
+  {
+    // XXX: we should discern here between IS (NOT) NULL and other filters.
+    ByteStream empty;
+    auto zeroFC = filterCount;
+    bs << empty;
+    bs << BOP;
+    zeroFC = 0;
+    bs << zeroFC;
+  }
+  else
+  {
+    bs << filterString;
+    bs << BOP;
+    bs << filterCount;
+  }
+  if (hasAuxCol)
+    bs << (uint8_t)1;
+  else
+    bs << (uint8_t)0;
   serializeInlineVector(bs, fLastLbid);
 
   CommandJL::createCommand(bs);
@@ -152,6 +229,9 @@ void ColumnCommandJL::createCommand(ByteStream& bs) const
 void ColumnCommandJL::runCommand(ByteStream& bs) const
 {
   bs << lbid;
+
+  if (hasAuxCol)
+    bs << lbidAux;
 }
 
 void ColumnCommandJL::setLBID(uint64_t rid, uint32_t dbRoot)
@@ -181,11 +261,31 @@ void ColumnCommandJL::setLBID(uint64_t rid, uint32_t dbRoot)
           "; blockNum = " << blockNum << "; OID=" << OID << " LBID=" << lbid;
       cout << os.str() << endl;
       */
-      return;
+      break;
     }
   }
 
-  throw logic_error("ColumnCommandJL: setLBID didn't find the extent for the rid.");
+  if (i == extents.size())
+  {
+    throw logic_error("ColumnCommandJL: setLBID didn't find the extent for the rid.");
+  }
+
+  uint32_t j;
+
+  for (j = 0; j < extentsAux.size(); j++)
+  {
+    if (extentsAux[j].dbRoot == dbRoot && extentsAux[j].partitionNum == partNum &&
+        extentsAux[j].segmentNum == segNum && extentsAux[j].blockOffset == (extentNum * 1 * 1024))
+    {
+      lbidAux = extentsAux[j].range.start + (blockNum * 1);
+      break;
+    }
+  }
+
+  if (hasAuxCol && j == extentsAux.size())
+  {
+    throw logic_error("ColumnCommandJL: setLBID didn't find the extent for the rid.");
+  }
 
   //		ostringstream os;
   //		os << "CCJL: rid=" << rid << "; dbroot=" << dbRoot << "; partitionNum=" << partitionNum << ";
@@ -250,7 +350,7 @@ string ColumnCommandJL::toString()
 {
   ostringstream ret;
 
-  ret << "ColumnCommandJL: " << filterCount << " filters  colwidth=" << colType.colWidth << " oid=" << OID
+  ret << "ColumnCommandJL: " << filterCount << " filters, BOP=" << ((int)BOP) << ", colwidth=" << colType.colWidth << " oid=" << OID
       << " name=" << colName;
 
   if (isScan)
@@ -284,6 +384,25 @@ void ColumnCommandJL::reloadExtents()
   }
 
   sort(extents.begin(), extents.end(), BRM::ExtentSorter());
+
+  if (hasAuxCol)
+  {
+    err = dbrm.getExtents(fOidAux, extentsAux);
+
+    if (err)
+    {
+      ostringstream os;
+      os << "BRM lookup error. Could not get extents for Aux OID " << fOidAux;
+      throw runtime_error(os.str());
+    }
+
+    sort(extentsAux.begin(), extentsAux.end(), BRM::ExtentSorter());
+  }
+}
+
+bool ColumnCommandJL::getIsDict()
+{
+  return fIsDict;
 }
 
 };  // namespace joblist

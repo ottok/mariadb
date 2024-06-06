@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef IDBDATAFILE_H_
-#define IDBDATAFILE_H_
+#pragma once
 #define _FILE_OFFSET_BITS 64
 #include <stdlib.h>
 #include <string>
@@ -24,11 +23,7 @@
 #include <sys/types.h>
 #include "stdint.h"
 #include <unistd.h>
-#ifdef _MSC_VER
-#undef tell
-#else
 #define INVALID_HANDLE_VALUE 0  // Defined already in MSC
-#endif
 
 namespace idbdatafile
 {
@@ -241,4 +236,3 @@ inline const std::string& IDBDataFile::name() const
 }
 
 }  // namespace idbdatafile
-#endif /* IDBDATAFILE_H_ */

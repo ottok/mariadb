@@ -329,6 +329,7 @@ i
 1
 SHOW TABLES;
 Tables_in_temp_db
+temp_t1
 DROP TABLE temp_t1;
 #
 # Create and drop a temporary table.
@@ -611,6 +612,9 @@ test.t1	optimize	status	Table is already up to date
 test.t2	optimize	status	Table is already up to date
 SHOW TABLES;
 Tables_in_test
+t2
+t1
+tmp
 # in 11.2 and above here should be listed above used temporary tables
 DROP TEMPORARY TABLE t1, t2;
 #

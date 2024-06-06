@@ -33,10 +33,6 @@ using namespace boost;
 #include "intervalcolumn.h"
 using namespace funcexp;
 
-#ifdef _MSC_VER
-#define strcasecmp stricmp
-#endif
-
 namespace execplan
 {
 /**
@@ -69,6 +65,16 @@ const string IntervalColumn::toString() const
 
   output << " IntervalType=" << fIntervalType << endl;
   return output.str();
+}
+
+string IntervalColumn::toCppCode(IncludeSet& includes) const
+{
+  includes.insert("intervalcolumn.h");
+  stringstream ss;
+
+  ss << "IntervalColumn(boost::shared_ptr<ReturnedColumn>(new " << fVal->toCppCode(includes) << "), " << fIntervalType << ")";
+
+  return ss.str();
 }
 
 ostream& operator<<(ostream& output, const IntervalColumn& rhs)

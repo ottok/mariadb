@@ -24,8 +24,7 @@
  * class SimpleAllocator interface
  */
 
-#ifndef UTILS_SIMPLEALLOCATOR_H
-#define UTILS_SIMPLEALLOCATOR_H
+#pragma once
 
 #include <unistd.h>
 #include <list>
@@ -143,18 +142,10 @@ class SimpleAllocator
     fPool->deallocate(p, n * sizeof(T));
   }
 
-#ifdef _MSC_VER
-  // The MSVC STL library really needs this to return a big number...
-  size_type max_size() const throw()
-  {
-    return std::numeric_limits<size_type>::max();
-  }
-#else
   inline size_type max_size() const throw()
   {
     return fPool->max_size() / sizeof(T);
   }
-#endif
   inline void construct(pointer ptr, const T& val)
   {
     new ((void*)ptr) T(val);
@@ -260,5 +251,3 @@ inline bool operator!=(const SimpleAllocator<T1>&, const SimpleAllocator<T2>&)
   return false;
 }
 }  // namespace utils
-
-#endif  // UTILS_SIMPLEALLOCATOR_H

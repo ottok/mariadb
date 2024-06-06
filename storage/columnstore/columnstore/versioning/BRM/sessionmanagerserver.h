@@ -24,12 +24,12 @@
  * class SessionManagerServer interface
  */
 
-#ifndef _SESSIONMANAGERSERVER_H
-#define _SESSIONMANAGERSERVER_H
+#pragma once
 
 #include <map>
+#include <condition_variable>
 
-#include <boost/shared_array.hpp>
+#include <unordered_set>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition_variable.hpp>
 
@@ -38,16 +38,7 @@
 
 #include "atomicops.h"
 
-#if defined(_MSC_VER) && defined(xxxSESSIONMANAGERSERVER_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
-
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable : 4200)
-#endif
 
 namespace BRM
 {
@@ -155,6 +146,15 @@ class SessionManagerServer
    */
   EXPORT const TxnID newTxnID(const SID session, bool block = true, bool isDDL = false);
 
+  // Adds a new job into `active` cpimport job list and return id of that job.
+  EXPORT uint32_t newCpimportJob();
+
+  // Removes the given `jobId` from `active` cpimort job list.
+  EXPORT void finishCpimortJob(uint32_t jobId);
+
+  // Clears all active cpimport jobs.
+  EXPORT void clearAllCpimportJobs();
+
   /** @brief Record that a transaction has been committed
    *
    * Record that a transaction has been committed.
@@ -202,7 +202,7 @@ class SessionManagerServer
    * @return A pointer to the array.  Note: The caller is responsible for
    * deallocating it.  Use delete[].
    */
-  EXPORT boost::shared_array<SIDTIDEntry> SIDTIDMap(int& len);
+  EXPORT std::shared_ptr<SIDTIDEntry[]> SIDTIDMap(int& len);
 
   /**
    * get a unique 32-bit number
@@ -262,6 +262,9 @@ class SessionManagerServer
    */
   EXPORT uint32_t getTxnCount();
 
+
+  EXPORT uint32_t getCpimportJobsCount();
+
  private:
   SessionManagerServer(const SessionManagerServer&);
   SessionManagerServer& operator=(const SessionManagerServer&);
@@ -286,14 +289,12 @@ class SessionManagerServer
   boost::mutex mutex;
   boost::condition_variable condvar;  // used to synthesize a semaphore
   uint32_t semValue;
+
+  std::unordered_set<uint32_t> activeCpimportJobs;
+  uint32_t cpimportJobId{0};
+  std::mutex cpimportMutex;
 };
 
 }  // namespace BRM
 
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
-
 #undef EXPORT
-
-#endif

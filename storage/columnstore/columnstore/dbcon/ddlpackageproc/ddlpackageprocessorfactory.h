@@ -21,8 +21,7 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef DDLPACKAGEPROCESSORFACTORY_H
-#define DDLPACKAGEPROCESSORFACTORY_H
+#pragma once
 #include <string>
 #include "ddlpkg.h"
 #include "ddlpackageprocessor.h"
@@ -47,4 +46,3 @@ class DDLPackageProcessorFactory
 };
 
 }  // namespace ddlpackageprocessor
-#endif  // DDLPACKAGEPROCESSORFACTORY_H

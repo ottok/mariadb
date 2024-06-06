@@ -22,6 +22,7 @@ set(execplan_LIB_SRCS
     functioncolumn.cpp
     groupconcatcolumn.cpp
     intervalcolumn.cpp
+    jsonarrayaggcolumn.cpp
     logicoperator.cpp
     mysqlexecutionplan.cpp
     objectidmanager.cpp
@@ -33,6 +34,7 @@ set(execplan_LIB_SRCS
     pseudocolumn.cpp
     range.cpp
     returnedcolumn.cpp
+    rewrites.cpp
     rowcolumn.cpp
     selectfilter.cpp
     sessionmanager.cpp
@@ -49,6 +51,6 @@ add_library(execplan SHARED ${execplan_LIB_SRCS})
 
 add_dependencies(execplan loggingcpp)
 
-target_link_libraries(execplan ${NETSNMP_LIBRARIES} ${MARIADB_STRING_LIBS} ${ENGINE_DT_LIB})
+target_link_libraries(execplan messageqcpp ${NETSNMP_LIBRARIES} ${MARIADB_STRING_LIBS} ${ENGINE_DT_LIB} pron)
 
 install(TARGETS execplan DESTINATION ${ENGINE_LIBDIR} COMPONENT columnstore-engine)

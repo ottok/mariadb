@@ -29,6 +29,10 @@
 #include <openssl/err.h> /* error reporting */
 #include <openssl/conf.h>
 #include <openssl/md4.h>
+#include <ma_tls.h>
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#include <time.h>
+#endif
 
 #if defined(_WIN32) && !defined(_OPENSSL_Applink) && defined(HAVE_OPENSSL_APPLINK_C)
 #include <openssl/applink.c>
@@ -103,8 +107,6 @@ static long ma_tls_version_options(const char *version)
   if (!version)
     return 0;
 
-  if (strstr(version, "TLSv1.0"))
-    protocol_options&= ~SSL_OP_NO_TLSv1;
   if (strstr(version, "TLSv1.1"))
     protocol_options&= ~SSL_OP_NO_TLSv1_1;
   if (strstr(version, "TLSv1.2"))
@@ -420,7 +422,8 @@ void *ma_tls_init(MYSQL *mysql)
   SSL_CTX *ctx= NULL;
   long default_options= SSL_OP_ALL |
                         SSL_OP_NO_SSLv2 |
-                        SSL_OP_NO_SSLv3;
+                        SSL_OP_NO_SSLv3 |
+                        SSL_OP_NO_TLSv1;
   long options= 0;
   pthread_mutex_lock(&LOCK_openssl_config);
 
@@ -463,6 +466,7 @@ my_bool ma_tls_connect(MARIADB_TLS *ctls)
   MYSQL *mysql;
   MARIADB_PVIO *pvio;
   int rc;
+  X509 *cert;
 #ifdef OPENSSL_USE_BIOMETHOD
   BIO_METHOD *bio_method= NULL;
   BIO *bio;
@@ -505,13 +509,17 @@ my_bool ma_tls_connect(MARIADB_TLS *ctls)
   /* In case handshake failed or if a root certificate (ca) was specified,
      we need to check the result code of X509 verification. A detailed check
      of the peer certificate (hostname checking will follow later) */
-  if (rc != 1 || mysql->options.extension->tls_verify_server_cert ||
+  if (rc != 1 || !mysql->options.extension->tls_allow_invalid_server_cert ||
       mysql->options.ssl_ca || mysql->options.ssl_capath)
   {
     long x509_err= SSL_get_verify_result(ssl);
-    if (x509_err != X509_V_OK)
+    if ((x509_err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT ||
+         x509_err == X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN) && rc == 1 &&
+        !mysql->options.ssl_ca && !mysql->options.ssl_capath)
+      mysql->net.tls_self_signed_error= X509_verify_cert_error_string(x509_err);
+    else if (x509_err != X509_V_OK)
     {
-      my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN, 
+      my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
                    ER(CR_SSL_CONNECTION_ERROR), X509_verify_cert_error_string(x509_err));
       /* restore blocking mode */
       if (!blocking)
@@ -524,6 +532,40 @@ my_bool ma_tls_connect(MARIADB_TLS *ctls)
     }
   }
   pvio->ctls->ssl= ctls->ssl= (void *)ssl;
+
+  /* Store peer certificate information */
+  if ((cert= SSL_get_peer_certificate(ssl)))
+  {
+    char fp[33];
+#if OPENSSL_VERSION_NUMBER >= 0x10101000L
+    const ASN1_TIME *not_before= X509_get0_notBefore(cert),
+                    *not_after= X509_get0_notAfter(cert);
+    ASN1_TIME_to_tm(not_before, (struct tm *)&ctls->cert_info.not_before);
+    ASN1_TIME_to_tm(not_after, (struct tm *)&ctls->cert_info.not_after);
+#else
+    const ASN1_TIME *not_before= X509_get_notBefore(cert),
+                    *not_after= X509_get_notAfter(cert);
+    time_t  now, from, to;
+    int pday, psec;
+    /* ANS1_TIME_diff returns days and seconds between now and the
+       specified ASN1_TIME */
+    time(&now);
+    ASN1_TIME_diff(&pday, &psec, not_before, NULL);
+    from= now - (pday * 86400 + psec);
+    gmtime_r(&from, &ctls->cert_info.not_before);
+    ASN1_TIME_diff(&pday, &psec, NULL, not_after);
+    to= now + (pday * 86400 + psec);
+    gmtime_r(&to, &ctls->cert_info.not_after);
+#endif
+    ctls->cert_info.subject= X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
+    ctls->cert_info.issuer= X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
+    ctls->cert_info.version= X509_get_version(cert) + 1;
+
+    ma_tls_get_finger_print(ctls, MA_HASH_SHA256, fp, 33);
+    mysql_hex_string(ctls->cert_info.fingerprint, fp, 32);
+
+    X509_free(cert);
+  }
 
   return 0;
 }
@@ -650,6 +692,9 @@ my_bool ma_tls_close(MARIADB_TLS *ctls)
   SSL_free(ssl);
   ctls->ssl= NULL;
 
+  OPENSSL_free(ctls->cert_info.issuer);
+  OPENSSL_free(ctls->cert_info.subject);
+
   return rc;
 }
 
@@ -729,17 +774,55 @@ const char *ma_tls_get_cipher(MARIADB_TLS *ctls)
   return SSL_get_cipher_name(ctls->ssl);
 }
 
-unsigned int ma_tls_get_finger_print(MARIADB_TLS *ctls, char *fp, unsigned int len)
+unsigned int ma_tls_get_finger_print(MARIADB_TLS *ctls, uint hash_type, char *fp, unsigned int len)
 {
   X509 *cert= NULL;
   MYSQL *mysql;
   unsigned int fp_len;
+  const EVP_MD *hash_alg;
+  unsigned int max_len= EVP_MAX_MD_SIZE;
 
   if (!ctls || !ctls->ssl)
     return 0;
 
-  mysql= SSL_get_app_data(ctls->ssl);
+  mysql = SSL_get_app_data(ctls->ssl);
 
+  switch (hash_type)
+  {
+  case MA_HASH_SHA1:
+    hash_alg = EVP_sha1();
+    max_len= 20;
+    break;
+  case MA_HASH_SHA224:
+    hash_alg = EVP_sha224();
+    max_len= 28;
+    break;
+  case MA_HASH_SHA256:
+    hash_alg = EVP_sha256();
+    max_len= 32;
+    break;
+  case MA_HASH_SHA384:
+    hash_alg = EVP_sha384();
+    max_len= 48;
+    break;
+  case MA_HASH_SHA512:
+    hash_alg = EVP_sha512();
+    break;
+  default:
+    my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
+      ER(CR_SSL_CONNECTION_ERROR),
+      "Cannot detect hash algorithm for fingerprint verification");
+    return 0;
+  }
+
+  if (len < max_len)
+  {
+    my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
+                        ER(CR_SSL_CONNECTION_ERROR), 
+                        "Finger print buffer too small");
+    return 0;
+  }
+  
   if (!(cert= SSL_get_peer_certificate(ctls->ssl)))
   {
     my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
@@ -748,14 +831,7 @@ unsigned int ma_tls_get_finger_print(MARIADB_TLS *ctls, char *fp, unsigned int l
     goto end;
   }
 
-  if (len < EVP_MAX_MD_SIZE)
-  {
-    my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
-                        ER(CR_SSL_CONNECTION_ERROR), 
-                        "Finger print buffer too small");
-    goto end;
-  }
-  if (!X509_digest(cert, EVP_sha1(), (unsigned char *)fp, &fp_len))
+  if (!X509_digest(cert, hash_alg, (unsigned char *)fp, &fp_len))
   {
     my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
                         ER(CR_SSL_CONNECTION_ERROR), 

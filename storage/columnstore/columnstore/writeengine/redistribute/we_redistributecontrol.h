@@ -19,8 +19,7 @@
  * $Id: we_redistributecontrol.h 4450 2013-01-21 14:13:24Z rdempsey $
  */
 
-#ifndef WE_REDISTRIBUTECONTROL_H
-#define WE_REDISTRIBUTECONTROL_H
+#pragma once
 
 #include <vector>
 #include <stdio.h>
@@ -29,6 +28,8 @@
 #include "boost/thread/mutex.hpp"
 
 #include "liboamcpp.h"
+
+#include "we_redistributedef.h"
 
 // forward reference
 namespace messageqcpp
@@ -125,4 +126,3 @@ class RedistributeControl
 
 }  // namespace redistribute
 
-#endif  // WE_REDISTRIBUTECONTROL_H

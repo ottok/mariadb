@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef WE_DMLCOMMANDCLIENT_H__
-#define WE_DMLCOMMANDCLIENT_H__
+#pragma once
 
 #include <unistd.h>
 
@@ -28,11 +27,7 @@
 #include "liboamcpp.h"
 #include "writeengine.h"
 
-#if defined(_MSC_VER) && defined(xxxWE_DDLCOMMANDCLIENT_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 #include "dataconvert.h"
 
@@ -53,5 +48,3 @@ class WE_DMLCommandClient
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif

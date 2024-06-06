@@ -22,8 +22,7 @@
 /**
  * @file
  */
-#ifndef TPCHPOPULATE_H
-#define TPCHPOPULATE_H
+#pragma once
 
 class TpchPopulate
 {
@@ -37,5 +36,3 @@ class TpchPopulate
  private:
   void insert(std::string insertStmt);
 };
-
-#endif  // TPCHPOPULATE_H

@@ -56,8 +56,7 @@
  * [including the GNU Public Licence.]
  */
 
-#ifndef HEADER_MD5_H
-#define HEADER_MD5_H
+#pragma once
 
 #include <stddef.h>
 
@@ -112,6 +111,4 @@ extern "C"
   void MD5_Transform(MD5_CTX* c, const unsigned char* b);
 #ifdef __cplusplus
 }
-#endif
-
 #endif

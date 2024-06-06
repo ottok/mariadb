@@ -152,17 +152,17 @@ void ByteStream::growBuf(uint32_t toSize)
   }
 }
 
-std::vector<boost::shared_array<uint8_t>>& ByteStream::getLongStrings()
+std::vector<std::shared_ptr<uint8_t[]>>& ByteStream::getLongStrings()
 {
   return longStrings;
 }
 
-const std::vector<boost::shared_array<uint8_t>>& ByteStream::getLongStrings() const
+const std::vector<std::shared_ptr<uint8_t[]>>& ByteStream::getLongStrings() const
 {
   return longStrings;
 }
 
-void ByteStream::setLongStrings(const std::vector<boost::shared_array<uint8_t>>& other)
+void ByteStream::setLongStrings(const std::vector<std::shared_ptr<uint8_t[]>>& other)
 {
   longStrings = other;
 }
@@ -298,6 +298,16 @@ ByteStream& ByteStream::operator<<(const string& s)
 
   return *this;
 }
+ByteStream& ByteStream::operator<<(const utils::NullString& s)
+{
+  uint8_t isNull = s.isNull();
+  (*this) << isNull;
+  if (!isNull)
+  {
+    (*this) << s.unsafeStringRef();
+  }
+  return *this;
+}
 
 ByteStream& ByteStream::operator>>(int8_t& b)
 {
@@ -375,6 +385,24 @@ ByteStream& ByteStream::operator>>(string& s)
   fCurOutPtr += 4 + s.length();
   return *this;
 }
+
+ByteStream& ByteStream::operator>>(utils::NullString& s)
+{
+  uint8_t isNull;
+  (*this) >> isNull;
+  if (isNull)
+  {
+    s = utils::NullString();
+  }
+  else
+  {
+    string t;
+    (*this) >> t;
+    s = utils::NullString(t);
+  }
+  return *this;
+}
+
 
 ByteStream& ByteStream::operator>>(uint8_t*& bpr)
 {
@@ -625,30 +653,6 @@ void ByteStream::needAtLeast(size_t amount)
     growBuf(fMaxLen + amount);
 }
 
-#ifdef _MSC_VER
-#if BOOST_VERSION < 104500
-ByteStream& ByteStream::operator<<(const uint32_t ui)
-{
-  if (fBuf == 0 || (fCurInPtr - fBuf + 4U > fMaxLen + ISSOverhead))
-    growBuf(fMaxLen + BlockSize);
-
-  uint32_t q = ui;
-  *((uint32_t*)fCurInPtr) = q;
-  fCurInPtr += 4;
-
-  return *this;
-}
-
-ByteStream& ByteStream::operator>>(uint32_t& ui)
-{
-  uint32_t q;
-  peek(q);
-  fCurOutPtr += 4;
-  ui = q;
-  return *this;
-}
-#endif
-#endif
 
 ByteStream& ByteStream::operator<<(const ByteStream& bs)
 {

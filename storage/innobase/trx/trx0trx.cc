@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2015, 2022, MariaDB Corporation.
+Copyright (c) 2015, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -1256,7 +1256,7 @@ static void trx_flush_log_if_needed(lsn_t lsn, trx_t *trx)
     return;
 
   const bool flush=
-    (srv_file_flush_method != SRV_NOSYNC &&
+    (!my_disable_sync &&
      (srv_flush_log_at_trx_commit & 1));
 
   completion_callback cb;
@@ -2019,8 +2019,7 @@ trx_prepare(
 
 		We must not be holding any mutexes or latches here. */
 		if (auto f = srv_flush_log_at_trx_commit) {
-			log_write_up_to(lsn, (f & 1) && srv_file_flush_method
-					!= SRV_NOSYNC);
+			log_write_up_to(lsn, (f & 1) && !my_disable_sync);
 		}
 
 		if (!UT_LIST_GET_LEN(trx->lock.trx_locks)

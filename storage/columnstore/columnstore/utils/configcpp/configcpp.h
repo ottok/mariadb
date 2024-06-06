@@ -22,8 +22,7 @@
 /**
  * @file
  */
-#ifndef CONFIG_CONFIGCPP_H
-#define CONFIG_CONFIGCPP_H
+#pragma once
 
 #include <string>
 #include <map>
@@ -43,11 +42,6 @@ class ByteStream;
 
 }
 
-#if defined(_MSC_VER) && defined(LIBCONFIG_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
-#define EXPORT
-#endif
 
 namespace config
 {
@@ -61,21 +55,22 @@ namespace config
 class Config
 {
  public:
-  /** @brief Config factory method
-   *
-   * Creates a singleton Config object
-   */
-  EXPORT static Config* makeConfig(const char* cf = 0);
 
   /** @brief Config factory method
    *
    * Creates a singleton Config object
    */
-  EXPORT static Config* makeConfig(const std::string& cf);
+  static Config* makeConfig(const char* cf = 0);
+
+  /** @brief Config factory method
+   *
+   * Creates a singleton Config object
+   */
+  static Config* makeConfig(const std::string& cf);
 
   /** @brief dtor
    */
-  EXPORT virtual ~Config();
+  virtual ~Config();
 
   /** @brief get name's value from section
    *
@@ -83,7 +78,16 @@ class Config
    * @param section the name of the config file section to search
    * @param name the param name whose value is to be returned
    */
-  EXPORT const std::string getConfig(const std::string& section, const std::string& name);
+  const std::string getConfig(const std::string& section, const std::string& name);
+
+  /** @brief get name's value from section
+   *
+   * get name's value from section in the current config file re-reading the
+   * config file if it was updated.
+   * @param section the name of the config file section to search
+   * @param name the param name whose value is to be returned
+   */
+  const std::string getFromActualConfig(const std::string& section, const std::string& name);
 
   /** @brief get all name's values from a section
    *
@@ -92,7 +96,7 @@ class Config
    * @param name the param name whose value is to be returned
    * @param values the values in the section are returned in this vector
    */
-  EXPORT void getConfig(const std::string& section, const std::string& name,
+  void getConfig(const std::string& section, const std::string& name,
                         std::vector<std::string>& values);
 
   /** @brief set name's value in section
@@ -102,7 +106,9 @@ class Config
    * @param name the param name whose value is to be updated
    * @param value the param value
    */
-  EXPORT void setConfig(const std::string& section, const std::string& name, const std::string& value);
+  // !!!Don't ever ever use this in the engine code b/c it might result in a race
+  // b/w getConfig and setConfig methods.!!!
+  void setConfig(const std::string& section, const std::string& name, const std::string& value);
 
   /** @brief delete name from section
    *
@@ -111,33 +117,40 @@ class Config
    * @param name the param name whose entry is to be deleted
    * @note if you delete the last param from a section, the section will still remain
    */
-  EXPORT void delConfig(const std::string& section, const std::string& name);
+  void delConfig(const std::string& section, const std::string& name);
 
   /** @brief write the config file back out to disk
    *
    * write the config file back out to disk using the current filename.
    */
-  EXPORT void write(void) const;
+  void write(void) const;
 
   /** @brief write the config file back out to disk as fileName
    *
    * write the config file out to disk as a new file fileName. Does not affect the current
    * config filename.
    */
-  EXPORT void write(const std::string& fileName) const;
+  void write(const std::string& fileName) const;
 
   /** @brief write a stream copy of config file to disk
    *
    * write a stream copy of config file to disk. used to distributed mass updates to system nodes
    *
    */
-  EXPORT void writeConfigFile(messageqcpp::ByteStream msg) const;
+  void writeConfigFile(messageqcpp::ByteStream msg) const;
 
   /** @brief return the name of this config file
    *
    * return the name of this config file.
    */
-  EXPORT inline const std::string& configFile() const
+
+  static std::string configDefaultFileName()
+  {
+    static std::string defaultConfigName = "Columnstore.xml";
+    return defaultConfigName;
+  }
+
+  inline const std::string& configFile() const
   {
     return fConfigFile;
   }
@@ -146,7 +159,7 @@ class Config
    *
    * deletes \b all config file maps
    */
-  EXPORT static void deleteInstanceMap();
+  static void deleteInstanceMap();
 
   /** @brief parse config file numerics
    *
@@ -156,13 +169,13 @@ class Config
    * An empty string or an unparseable string returns 0.
    * Return a signed numeric value.
    */
-  EXPORT static int64_t fromText(const std::string& text);
+  static int64_t fromText(const std::string& text);
 
   /** @brief parse config file numerics
    *
    * Return an unsigned numeric value.
    */
-  EXPORT static inline uint64_t uFromText(const std::string& text)
+  static inline uint64_t uFromText(const std::string& text)
   {
     return static_cast<uint64_t>(fromText(text));
   }
@@ -178,17 +191,17 @@ class Config
   /** @brief Used externally to check whether there has been a config change without loading everything
    *
    */
-  EXPORT time_t getCurrentMTime();
+  time_t getCurrentMTime();
 
   /** @brief Enumerate all the sections in the config file
    *
    */
-  EXPORT const std::vector<std::string> enumConfig();
+  const std::vector<std::string> enumConfig();
 
   /** @brief Enumerate all the names in a section in the config file
    *
    */
-  EXPORT const std::vector<std::string> enumSection(const std::string& section);
+  const std::vector<std::string> enumSection(const std::string& section);
 
   enum class TempDirPurpose
   {
@@ -196,7 +209,7 @@ class Config
     Aggregates  ///< disk-based aggregation
   };
   /** @brief Return temporaru directory path for the specified purpose */
-  EXPORT std::string getTempFileDir(TempDirPurpose what);
+  std::string getTempFileDir(TempDirPurpose what);
 
  protected:
   /** @brief parse the XML file
@@ -207,7 +220,7 @@ class Config
   /** @brief write the XML tree to disk
    *
    */
-  EXPORT void writeConfig(const std::string& fileName) const;
+  void writeConfig(const std::string& fileName) const;
 
   /** @brief stop processing this XML file
    *
@@ -215,33 +228,55 @@ class Config
   void closeConfig(void);
 
  private:
-  typedef std::map<std::string, Config*> configMap_t;
+  typedef std::map<std::string, std::unique_ptr<Config>> configMap_t;
 
-  /*
-   */
+  static configMap_t& instanceMap()
+  {
+    static configMap_t instanceMap;
+    return instanceMap;
+  }
+
+  static boost::mutex& instanceMapMutex()
+  {
+    static boost::mutex instanceMapMutex;
+    return instanceMapMutex;
+  }
+
+  static boost::mutex& xmlMutex()
+  {
+    static boost::mutex xmlMutex;
+    return xmlMutex;
+  }
+
+  static boost::mutex& writeXmlMutex()
+  {
+    static boost::mutex writeXmlMutex;
+    return writeXmlMutex;
+  }
+
+  static Config& globConfigInstance();
+
+
   Config(const Config& rhs);
-  /*
-   */
   Config& operator=(const Config& rhs);
-
-  /** @brief ctor with config file specified
-   */
   Config(const std::string& configFile);
 
-  static configMap_t fInstanceMap;
-  static boost::mutex fInstanceMapMutex;
-  static boost::mutex fXmlLock;
-  static boost::mutex fWriteXmlLock;
 
   xmlDocPtr fDoc;
   const std::string fConfigFile;
   time_t fMtime;
   mutable boost::recursive_mutex fLock;
   XMLParser fParser;
+
+  /** @brief Re-read the config file if it was updated
+   *
+   */
+  void checkAndReloadConfig();
+
 };
+
 
 }  // namespace config
 
 #undef EXPORT
 
-#endif

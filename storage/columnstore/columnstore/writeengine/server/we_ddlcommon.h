@@ -20,8 +20,7 @@
  *
  *******************************************************************************/
 
-#ifndef WE_DDLCOMMON_H
-#define WE_DDLCOMMON_H
+#pragma once
 
 #include <string>
 #include <stdexcept>
@@ -44,11 +43,7 @@
 #include "brmtypes.h"
 #include "joblist.h"
 
-#if defined(_MSC_VER) && defined(xxxDDLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 #include <boost/algorithm/string/case_conv.hpp>
 
@@ -271,4 +266,3 @@ inline void convertRidToColumn(uint64_t& rid, unsigned& dbRoot, unsigned& partit
 
 }  // namespace WriteEngine
 #undef EXPORT
-#endif

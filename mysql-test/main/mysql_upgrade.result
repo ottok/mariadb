@@ -57,6 +57,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -151,8 +152,8 @@ Phase 7/8: uninstalling plugins
 Phase 8/8: Running 'FLUSH PRIVILEGES'
 OK
 Run it again - should say already completed
-This installation of MariaDB is already upgraded to VERSION.There is no need to run mysql_upgrade again for VERSION.
-You can use --force if you still want to run mysql_upgrade
+This installation of MariaDB is already upgraded to VERSION.There is no need to run mariadb-upgrade again for VERSION.
+You can use --force if you still want to run mariadb-upgrade
 Force should run it regardless of whether it has been run before
 Phase 1/8: Checking and upgrading mysql database
 Processing databases
@@ -210,6 +211,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -362,6 +364,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -520,6 +523,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -678,6 +682,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -839,6 +844,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -982,7 +988,7 @@ OK
 # Bug#11827359 60223: MYSQL_UPGRADE PROBLEM WITH OPTION
 #                     SKIP-WRITE-BINLOG
 #
-# Droping the previously created mysql_upgrade_info file..
+# Droping the previously created mariadb_upgrade_info file..
 # Running mysql_upgrade with --skip-write-binlog..
 Phase 1/8: Checking and upgrading mysql database
 Processing databases
@@ -1040,6 +1046,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -1212,6 +1219,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -1332,7 +1340,7 @@ length(table_name)
 drop table extralongname_extralongname_extralongname_extralongname_ext;
 # End of 10.0 tests
 set sql_mode=default;
-# Droping the previously created mysql_upgrade_info file..
+# Droping the previously created mariadb_upgrade_info file..
 create table test.t1(a int) engine=MyISAM;
 # Trying to enforce InnoDB for all tables
 SET GLOBAL enforce_storage_engine=InnoDB;
@@ -1392,6 +1400,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -1614,6 +1623,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -1794,6 +1804,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -1912,24 +1923,24 @@ FLUSH PRIVILEGES;
 # MDEV-27279: mariadb_upgrade add --check-if-upgrade-is-needed
 #
 This installation of MariaDB is already upgraded to MariaDB .
-There is no need to run mysql_upgrade again for MariaDB .
+There is no need to run mariadb-upgrade again for MariaDB .
 Looking for 'mariadb' as: mariadb
 This installation of MariaDB is already upgraded to MariaDB .
-There is no need to run mysql_upgrade again for MariaDB .
+There is no need to run mariadb-upgrade again for MariaDB .
 #
 # MDEV-27279: mariadb_upgrade check-if-upgrade absence is do it
 #
 Looking for 'mariadb' as: mariadb
-Empty or non existent ...mysql_upgrade_info. Assuming mysql_upgrade has to be run!
+Empty or non existent ...mariadb_upgrade_info. Assuming mysql_upgrade has to be run!
 #
 # MDEV-27279: mariadb_upgrade check-if-upgrade with minor version change
 #
 Looking for 'mariadb' as: mariadb
 This installation of MariaDB is already upgraded to MariaDB .
-There is no need to run mysql_upgrade again for MariaDB .
+There is no need to run mariadb-upgrade again for MariaDB .
 This installation of MariaDB is already upgraded to MariaDB .
-There is no need to run mysql_upgrade again for MariaDB .
-You can use --force if you still want to run mysql_upgrade
+There is no need to run mariadb-upgrade again for MariaDB .
+You can use --force if you still want to run mariadb-upgrade
 #
 # MDEV-27279: mariadb_upgrade check-if-upgrade with major version change
 #
@@ -2026,6 +2037,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -2123,7 +2135,7 @@ SET GLOBAL alter_algorithm=DEFAULT;
 SHOW GLOBAL VARIABLES LIKE 'alter_algorithm';
 Variable_name	Value
 alter_algorithm	DEFAULT
-End of 10.3 tests
+# End of 10.3 tests
 # switching from mysql.global_priv to mysql.user
 drop view mysql.user_bak;
 create user 'user3'@'localhost' identified with mysql_native_password as password('a_password');
@@ -2246,6 +2258,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -2411,6 +2424,7 @@ sys.memory_by_user_by_current_bytes                OK
 sys.memory_global_by_current_bytes                 OK
 sys.memory_global_total                            OK
 sys.metrics                                        OK
+sys.privileges_by_table_by_level                   OK
 sys.processlist                                    OK
 sys.ps_check_lost_instrumentation                  OK
 sys.schema_auto_increment_columns                  OK
@@ -2574,3 +2588,29 @@ mysql.user has data
 SELECT COUNT(*) > 0 AS `mysql.user has data` FROM mysql.user;
 mysql.user has data
 1
+# End of 10.5 tests
+#
+# MDEV-33554 Upgrade from 11.2 to 11.3 changes root's privileges
+#
+alter table mysql.db drop column show_create_routine_priv;
+flush privileges;
+create user foo@bar;
+grant all privileges on mysql.* to foo@bar;
+show grants for foo@bar;
+Grants for foo@bar
+GRANT USAGE ON *.* TO `foo`@`bar`
+GRANT ALL PRIVILEGES ON `mysql`.* TO `foo`@`bar`
+flush privileges;
+show grants for foo@bar;
+Grants for foo@bar
+GRANT USAGE ON *.* TO `foo`@`bar`
+GRANT ALL PRIVILEGES ON `mysql`.* TO `foo`@`bar`
+select show_create_routine_priv from mysql.db where user='foo';
+show_create_routine_priv
+Y
+show grants for foo@bar;
+Grants for foo@bar
+GRANT USAGE ON *.* TO `foo`@`bar`
+GRANT ALL PRIVILEGES ON `mysql`.* TO `foo`@`bar`
+drop user foo@bar;
+# End of 11.3 tests

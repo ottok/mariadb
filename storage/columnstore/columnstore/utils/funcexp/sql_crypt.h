@@ -1,5 +1,4 @@
-#ifndef _SQL_CRYPT_H_
-#define _SQL_CRYPT_H_
+#pragma once
 
 //#include "my_global.h"
 /* Macros to make switching between C and C++ mode easier */
@@ -44,5 +43,3 @@ class SQL_CRYPT
 };
 
 }  // namespace funcexp
-
-#endif /* _SQL_CRYPT_H_ */

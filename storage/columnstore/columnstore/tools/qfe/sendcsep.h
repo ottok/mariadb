@@ -1,5 +1,4 @@
-#ifndef QFE_SENDCSEP_H__
-#define QFE_SENDCSEP_H__
+#pragma once
 
 #include "messagequeue.h"
 #include "calpontselectexecutionplan.h"
@@ -11,5 +10,3 @@ namespace qfe
 messageqcpp::MessageQueueClient* sendCSEP(execplan::CalpontSelectExecutionPlan*);
 
 }  // namespace qfe
-
-#endif

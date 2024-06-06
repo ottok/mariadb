@@ -21,8 +21,7 @@
  ******************************************************************************************/
 /** @file */
 
-#ifndef _WE_FREEMGR_H_
-#define _WE_FREEMGR_H_
+#pragma once
 
 #include <stdlib.h>
 
@@ -124,4 +123,3 @@ class FreeMgr : public DbFileOp
 };
 
 }  // namespace WriteEngine
-#endif  // _WE_FREEMGR_H_

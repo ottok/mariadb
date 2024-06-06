@@ -21,8 +21,7 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef DROPINDEXPROCESSOR_H
-#define DROPINDEXPROCESSOR_H
+#pragma once
 
 #include "ddlpackageprocessor.h"
 
@@ -46,4 +45,3 @@ class DropIndexProcessor : public DDLPackageProcessor
 };
 
 }  // namespace ddlpackageprocessor
-#endif  // DROPINDEXPROCESSOR_H

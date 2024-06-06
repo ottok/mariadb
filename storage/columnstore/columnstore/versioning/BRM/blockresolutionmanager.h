@@ -24,8 +24,7 @@
  * class BlockResolutionManager
  */
 
-#ifndef BLOCKRESOLUTIONMANAGER_H_
-#define BLOCKRESOLUTIONMANAGER_H_
+#pragma once
 
 #include <sys/types.h>
 #include <vector>
@@ -38,11 +37,7 @@
 #include "vss.h"
 #include "copylocks.h"
 
-#if defined(_MSC_VER) && defined(xxxBLOCKRESOLUTIONMANAGER_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace BRM
 {
@@ -124,5 +119,3 @@ class BlockResolutionManager
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

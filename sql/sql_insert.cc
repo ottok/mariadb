@@ -1133,11 +1133,7 @@ bool mysql_insert(THD *thd, TABLE_LIST *table_list,
         }
       }
 
-      if ((res= table_list->view_check_option(thd,
-                                              (values_list.elements == 1 ?
-                                               0 :
-                                               ignore))) ==
-          VIEW_CHECK_SKIP)
+      if ((res= table_list->view_check_option(thd, ignore)) == VIEW_CHECK_SKIP)
         continue;
       else if (res == VIEW_CHECK_ERROR)
       {
@@ -1416,6 +1412,7 @@ abort:
   thd->abort_on_warning= 0;
   if (readbuff)
     my_free(readbuff);
+  status_var_add(thd->status_var.rows_sent, thd->get_sent_row_count());
   DBUG_RETURN(retval);
 }
 

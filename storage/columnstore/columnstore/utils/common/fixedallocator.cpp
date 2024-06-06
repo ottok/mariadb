@@ -25,20 +25,19 @@
 #if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 1)
 #error "This is a very old GCC, and it's probably not going to work."
 #endif
-#elif defined(_MSC_VER)
 #else
 #error "This compiler is not known and it's probably not going to work."
 #endif
 
 #include <stdint.h>
 #include <iostream>
+#include <memory>
 
 #define FIXEDALLOCATOR_DLLEXPORT
 #include "fixedallocator.h"
 #undef FIXEDALLOCATOR_DLLEXPORT
 
 using namespace std;
-using namespace boost;
 
 namespace utils
 {
@@ -76,7 +75,7 @@ void FixedAllocator::setAllocSize(uint allocSize)
 
 void FixedAllocator::newBlock()
 {
-  shared_array<uint8_t> next;
+  std::shared_ptr<uint8_t[]> next;
 
   capacityRemaining = elementCount * elementSize;
 

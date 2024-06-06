@@ -103,7 +103,7 @@ fi
 
 DATA="$WSREP_SST_OPT_DATA"
 
-INFO_FILE='xtrabackup_galera_info'
+INFO_FILE='mariadb_backup_galera_info'
 DONOR_INFO_FILE='donor_galera_info'
 IST_FILE='xtrabackup_ist'
 MAGIC_FILE="$DATA/$INFO_FILE"
@@ -1336,9 +1336,9 @@ else # joiner
 
     [ -f "$DATA/$IST_FILE" ] && rm -f "$DATA/$IST_FILE"
 
-    # May need xtrabackup_checkpoints later on
+    # May need mariadb_backup_checkpoints later on
     [ -f "$DATA/xtrabackup_binary" ]      && rm -f "$DATA/xtrabackup_binary"
-    [ -f "$DATA/xtrabackup_galera_info" ] && rm -f "$DATA/xtrabackup_galera_info"
+    [ -f "$DATA/mariadb_backup_galera_info" ] && rm -f "$DATA/mariadb_backup_galera_info"
 
     ADDR="$WSREP_SST_OPT_HOST"
 
@@ -1450,14 +1450,14 @@ else # joiner
         wsrep_log_info "Waiting for SST streaming to complete!"
         monitor_process $jpid
 
-        if [ ! -s "$DATA/xtrabackup_checkpoints" ]; then
-            wsrep_log_error "xtrabackup_checkpoints missing," \
+        if [ ! -s "$DATA/mariadb_backup_checkpoints" ]; then
+            wsrep_log_error "mariadb_backup_checkpoints missing," \
                             "failed mariadb-backup/SST on donor"
             exit 2
         fi
 
         # Compact backups are not supported by mariadb-backup
-        if grep -qw -F 'compact = 1' "$DATA/xtrabackup_checkpoints"; then
+        if grep -qw -F 'compact = 1' "$DATA/mariadb_backup_checkpoints"; then
             wsrep_log_info "Index compaction detected"
             wsrel_log_error "Compact backups are not supported by mariadb-backup"
             exit 2
@@ -1521,14 +1521,14 @@ else # joiner
         if [ -n "$WSREP_SST_OPT_BINLOG" ]; then
             cd "$DATA"
             binlogs=""
-            if [ -f 'xtrabackup_binlog_info' ]; then
+            if [ -f 'mariadb_backup_binlog_info' ]; then
                 NL=$'\n'
                 while read bin_string || [ -n "$bin_string" ]; do
                     bin_file=$(echo "$bin_string" | cut -f1)
                     if [ -f "$bin_file" ]; then
                         binlogs="$binlogs${binlogs:+$NL}$bin_file"
                     fi
-                done < 'xtrabackup_binlog_info'
+                done < 'mariadb_backup_binlog_info'
             else
                 binlogs=$(ls -d -1 "$binlog_base".[0-9]* 2>/dev/null || :)
             fi

@@ -121,10 +121,16 @@ ERROR 42000: Incorrect column specifier for column 'c'
 #
 SET @save_file_per_table=@@GLOBAL.innodb_file_per_table;
 SET GLOBAL innodb_file_per_table=0;
+Warnings:
+Warning	1287	'@@innodb_file_per_table' is deprecated and will be removed in a future release
 CREATE TABLE t (c INT PRIMARY KEY) ENGINE=INNODB;
 SET GLOBAL innodb_file_per_table=1;
+Warnings:
+Warning	1287	'@@innodb_file_per_table' is deprecated and will be removed in a future release
 ALTER TABLE t page_compressed=1;
 SET GLOBAL innodb_file_per_table=@save_file_per_table;
+Warnings:
+Warning	1287	'@@innodb_file_per_table' is deprecated and will be removed in a future release
 SELECT space>0 FROM information_schema.innodb_sys_tables WHERE name='test/t';
 space>0
 1

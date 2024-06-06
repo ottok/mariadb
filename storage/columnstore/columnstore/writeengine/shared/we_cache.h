@@ -21,28 +21,19 @@
  ******************************************************************************************/
 /** @file */
 
-#ifndef _WE_CACHE_H_
-#define _WE_CACHE_H_
+#pragma once
 #include <iostream>
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #if __GNUC__ == 4 && __GNUC_MINOR__ < 2
 #include <ext/hash_map>
 #else
 #include <tr1/unordered_map>
-#endif
 #endif
 #include <map>
 
 #include <we_obj.h>
 #include <we_convertor.h>
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 /** Namespace WriteEngine */
 namespace WriteEngine
 {
@@ -224,9 +215,6 @@ class Cache
   static CacheMap* m_lruList;         // LRU buffer list
   static CacheMap* m_writeList;       // Write buffer list
 
-#if defined(_MSC_VER) && !defined(WRITEENGINE_DLLEXPORT)
-  __declspec(dllimport)
-#endif
       EXPORT static bool m_useCache;  // Use cache flag
  private:
 };
@@ -234,5 +222,3 @@ class Cache
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_CACHE_H_

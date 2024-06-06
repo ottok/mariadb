@@ -43,39 +43,10 @@
 
 #include "joblisttypes.h"
 
-#include "utils_utf8.h"  // utf8_truncate_point()
-
 using namespace std;
 using namespace boost;
 using namespace execplan;
 
-#if defined(_MSC_VER) && !defined(isnan)
-#define isnan _isnan
-namespace
-{
-inline int __signbitf(float __x)
-{
-  union
-  {
-    float __f;
-    int __i;
-  } __u;
-  __u.__f = __x;
-  return __u.__i < 0;
-}
-inline int __signbit(double __x)
-{
-  union
-  {
-    double __d;
-    int __i[2];
-  } __u;
-  __u.__d = __x;
-  return __u.__i[1] < 0;
-}
-}  // namespace
-#define signbit(x) (sizeof(x) == sizeof(float) ? __signbitf(x) : __signbit(x))
-#endif
 
 namespace
 {
@@ -368,20 +339,11 @@ void BulkLoadBuffer::convert(char* field, int fieldLength, bool nullFlag, unsign
         {
           errno = 0;
 
-#ifdef _MSC_VER
-          fVal = (float)strtod(field, 0);
-#else
           fVal = strtof(field, 0);
-#endif
 
           if (errno == ERANGE)
           {
-#ifdef _MSC_VER
-
-            if (abs(fVal) == HUGE_VAL)
-#else
             if (abs(fVal) == HUGE_VALF)
-#endif
             {
               if (fVal > 0)
                 fVal = maxFltSat;
@@ -473,12 +435,7 @@ void BulkLoadBuffer::convert(char* field, int fieldLength, bool nullFlag, unsign
 
           if (errno == ERANGE)
           {
-#ifdef _MSC_VER
-
-            if (abs(dVal) == HUGE_VAL)
-#else
             if (abs(dVal) == HUGE_VALL)
-#endif
             {
               if (dVal > 0)
                 dVal = column.fMaxDblSat;
@@ -524,8 +481,8 @@ void BulkLoadBuffer::convert(char* field, int fieldLength, bool nullFlag, unsign
       {
         if (column.fWithDefault)
         {
-          int defLen = column.fDefaultChr.size();
-          const char* defData = column.fDefaultChr.c_str();
+          int defLen = column.fDefaultChr.length();
+          const char* defData = column.fDefaultChr.str();
 
           if (defLen > column.definedWidth)
             memcpy(charTmpBuf, defData, column.definedWidth);
@@ -556,14 +513,32 @@ void BulkLoadBuffer::convert(char* field, int fieldLength, bool nullFlag, unsign
         // from storing characters beyond the column's defined width.
         // It contains the column definition width rather than the bytes
         // on disk (e.g. 5 for a varchar(5) instead of 8).
-        if (fieldLength > column.definedWidth)
+        if (column.cs->mbmaxlen > 1)
         {
-          uint8_t truncate_point = utf8::utf8_truncate_point(field, column.definedWidth);
-          memcpy(charTmpBuf, field, column.definedWidth - truncate_point);
-          bufStats.satCount++;
+          const CHARSET_INFO* cs = column.cs;
+          const char* start = (const char*) field;
+          const char* end = (const char*)(field + fieldLength);
+          size_t numChars = cs->numchars(start, end);
+          size_t maxCharLength = column.definedWidth / cs->mbmaxlen;
+
+          if (numChars > maxCharLength)
+          {
+            MY_STRCOPY_STATUS status;
+            cs->well_formed_char_length(start, end, maxCharLength, &status);
+            fieldLength = status.m_source_end_pos - start;
+            bufStats.satCount++;
+          }
         }
-        else
-          memcpy(charTmpBuf, field, fieldLength);
+        else // cs->mbmaxlen == 1
+        {
+          if (fieldLength > column.definedWidth)
+          {
+            fieldLength = column.definedWidth;
+            bufStats.satCount++;
+          }
+        }
+
+        memcpy(charTmpBuf, field, fieldLength);
       }
 
       // Swap byte order before comparing character string
@@ -1717,7 +1692,7 @@ int BulkLoadBuffer::parseCol(ColumnInfo& columnInfo)
 
         lastInputRowInExtent += columnInfo.rowsPerExtent();
 
-        if (isUnsigned(columnInfo.column.dataType) || isCharType(columnInfo.column.dataType))
+        if (isUnsigned(columnInfo.column.dataType))
         {
           if (columnInfo.column.width <= 8)
           {
@@ -2456,12 +2431,10 @@ void BulkLoadBuffer::tokenize(const boost::ptr_vector<ColumnInfo>& columnsInfo,
       //------------------------------------------------------------------
       case FLD_PARSE_ENCLOSED_STATE:
       {
-        char next = *(p + 1);
-
         if ((p + 1 < pEndOfData) &&
-            (((c == ESCAPE_CHAR) && ((next == STRING_ENCLOSED_CHAR) || (next == ESCAPE_CHAR) ||
-                                     (next == LINE_FEED) || (next == CARRIAGE_RETURN))) ||
-             ((c == STRING_ENCLOSED_CHAR) && (next == STRING_ENCLOSED_CHAR))))
+            (((c == ESCAPE_CHAR) && ((*(p + 1) == STRING_ENCLOSED_CHAR) || (*(p + 1) == ESCAPE_CHAR) ||
+                                     (*(p + 1) == LINE_FEED) || (*(p + 1) == CARRIAGE_RETURN))) ||
+             ((c == STRING_ENCLOSED_CHAR) && (*(p + 1) == STRING_ENCLOSED_CHAR))))
         {
           // Create/save original data before stripping out bytes
           if (rawDataRowLength == 0)
@@ -2556,7 +2529,7 @@ void BulkLoadBuffer::tokenize(const boost::ptr_vector<ColumnInfo>& columnsInfo,
           // cout << "triming ... " << endl;
           char* tmp = p;
 
-          while (*(--tmp) == ' ')
+          while (tmp != lastRowHead && *(--tmp) == ' ')
           {
             // cout << "offset is " << offset <<endl;
             offset--;

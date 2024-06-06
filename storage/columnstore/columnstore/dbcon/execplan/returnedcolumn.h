@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef RETURNEDCOLUMN_H
-#define RETURNEDCOLUMN_H
+#pragma once
 #include <string>
 #include <iosfwd>
 #include <vector>
@@ -96,8 +95,8 @@ class ReturnedColumn : public TreeNode
   /**
    * Accessor Methods
    */
-  virtual const std::string data() const;
-  virtual void data(const std::string data)
+  virtual const std::string data() const override;
+  virtual void data(const std::string data) override
   {
     fData = data;
   }
@@ -232,22 +231,22 @@ class ReturnedColumn : public TreeNode
   /**
    * Operations
    */
-  virtual ReturnedColumn* clone() const = 0;
+  virtual ReturnedColumn* clone() const override = 0;
 
   /**
    * The serialize interface
    */
-  virtual void serialize(messageqcpp::ByteStream&) const;
-  virtual void unserialize(messageqcpp::ByteStream&);
+  virtual void serialize(messageqcpp::ByteStream&) const override;
+  virtual void unserialize(messageqcpp::ByteStream&) override;
 
-  virtual const std::string toString() const;
-
+  virtual const std::string toString() const override;
+  virtual std::string toCppCode(IncludeSet& includes) const override;
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
    * Do a deep, strict (as opposed to semantic) equivalence test.
    * @return true iff every member of t is a duplicate copy of every member of this; false otherwise
    */
-  virtual bool operator==(const TreeNode* t) const;
+  virtual bool operator==(const TreeNode* t) const override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -262,7 +261,7 @@ class ReturnedColumn : public TreeNode
    * Do a deep, strict (as opposed to semantic) equivalence test.
    * @return false iff every member of t is a duplicate copy of every member of this; true otherwise
    */
-  virtual bool operator!=(const TreeNode* t) const;
+  virtual bool operator!=(const TreeNode* t) const override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -371,9 +370,8 @@ class ReturnedColumn : public TreeNode
   }
 
  protected:
-  std::string fErrMsg;     /// error occured in evaluation
+  std::string fErrMsg;     /// error occurred in evaluation
   uint32_t fInputIndex;    /// index to the input rowgroup
-  uint32_t fInputOffset;   /// index to the input rowgroup
   uint32_t fOutputIndex;   /// index to the output rowgroup
   uint32_t fExpressionId;  /// unique id for this expression
 };
@@ -381,4 +379,3 @@ class ReturnedColumn : public TreeNode
 std::ostream& operator<<(std::ostream& os, const ReturnedColumn& rhs);
 
 }  // namespace execplan
-#endif  // RETURNEDCOLUMN_H

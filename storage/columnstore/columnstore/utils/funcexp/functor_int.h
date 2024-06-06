@@ -20,8 +20,7 @@
 
 /** @file */
 
-#ifndef FUNCTOR_INT_H
-#define FUNCTOR_INT_H
+#pragma once
 
 #include "functor.h"
 
@@ -805,5 +804,3 @@ class Func_find_in_set : public Func_Int
 };
 
 }  // namespace funcexp
-
-#endif

@@ -20,6 +20,9 @@
 #include "ma_schannel.h"
 #include "schannel_certs.h"
 #include <string.h>
+#include <ma_crypt.h>
+#include <wincrypt.h>
+#include <bcrypt.h>
 
 extern my_bool ma_tls_initialized;
 char tls_library_version[] = "Schannel";
@@ -28,6 +31,8 @@ char tls_library_version[] = "Schannel";
 #define PROT_TLS1_0 2
 #define PROT_TLS1_2 4
 #define PROT_TLS1_3 8
+
+unsigned int ma_set_tls_x509_info(MARIADB_TLS *ctls);
 
 static struct
 {
@@ -418,15 +423,13 @@ my_bool ma_tls_connect(MARIADB_TLS *ctls)
 
   if (mysql->options.extension && mysql->options.extension->tls_version)
   {
-    if (strstr(mysql->options.extension->tls_version, "TLSv1.0"))
-      Cred.grbitEnabledProtocols|= SP_PROT_TLS1_0_CLIENT;
     if (strstr(mysql->options.extension->tls_version, "TLSv1.1"))
       Cred.grbitEnabledProtocols|= SP_PROT_TLS1_1_CLIENT;
     if (strstr(mysql->options.extension->tls_version, "TLSv1.2"))
       Cred.grbitEnabledProtocols|= SP_PROT_TLS1_2_CLIENT;
   }
   if (!Cred.grbitEnabledProtocols)
-    Cred.grbitEnabledProtocols = SP_PROT_TLS1_0_CLIENT | SP_PROT_TLS1_1_CLIENT | SP_PROT_TLS1_2_CLIENT;
+    Cred.grbitEnabledProtocols = SP_PROT_TLS1_1_CLIENT | SP_PROT_TLS1_2_CLIENT;
 
 
   if (ma_tls_set_client_certs(ctls, &cert_context))
@@ -448,14 +451,15 @@ my_bool ma_tls_connect(MARIADB_TLS *ctls)
     goto end;
 
    verify_certs =  mysql->options.ssl_ca || mysql->options.ssl_capath ||
-     (mysql->options.extension->tls_verify_server_cert);
+     !mysql->options.extension->tls_allow_invalid_server_cert;
 
   if (verify_certs)
   {
-    if (!ma_schannel_verify_certs(ctls, mysql->options.extension->tls_verify_server_cert))
+    if (!ma_schannel_verify_certs(ctls, !mysql->options.extension->tls_allow_invalid_server_cert))
       goto end;
   }
 
+  ma_set_tls_x509_info(ctls);
   rc = 0;
 
 end:
@@ -510,6 +514,8 @@ my_bool ma_tls_close(MARIADB_TLS *ctls)
       DeleteSecurityContext(&sctx->hCtxt);
   }
   LocalFree(sctx);
+  LocalFree(ctls->cert_info.issuer);
+  LocalFree(ctls->cert_info.subject);
   return 0;
 }
 /* }}} */
@@ -550,15 +556,87 @@ const char *ma_tls_get_cipher(MARIADB_TLS *ctls)
   return cipher_name(&CipherInfo);
 }
 
-unsigned int ma_tls_get_finger_print(MARIADB_TLS *ctls, char *fp, unsigned int len)
+unsigned char *ma_cert_blob_to_str(PCERT_NAME_BLOB cnblob)
 {
+  DWORD type= CERT_X500_NAME_STR;
+  DWORD size= CertNameToStrA(X509_ASN_ENCODING, cnblob, type, NULL, 0);
+  char *str= NULL;
+ 
+  if (!size)
+    return NULL;
+
+  str= (char *)LocalAlloc(LMEM_ZEROINIT,size);
+  CertNameToStrA(X509_ASN_ENCODING, cnblob, type, str, size);
+  return str;
+}
+
+static void ma_systime_to_tm(SYSTEMTIME sys_tm, struct tm *tm)
+{
+  memset(tm, 0, sizeof(struct tm));
+  tm->tm_year= sys_tm.wYear - 1900;
+  tm->tm_mon= sys_tm.wMonth - 1;
+  tm->tm_mday= sys_tm.wDay;
+  tm->tm_hour = sys_tm.wHour;
+  tm->tm_min = sys_tm.wMinute;
+}
+
+unsigned int ma_set_tls_x509_info(MARIADB_TLS *ctls)
+{
+  PCCERT_CONTEXT pCertCtx= NULL;
+  SC_CTX *sctx= (SC_CTX *)ctls->ssl;
+  PCERT_INFO pci= NULL;
+  DWORD size´= 0;
+  SYSTEMTIME tm;
+  char fp[33];
+
+  if (QueryContextAttributes(&sctx->hCtxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, (PVOID)&pCertCtx) != SEC_E_OK)
+    return 1;
+
+  pci= pCertCtx->pCertInfo;
+
+  ctls->cert_info.version= pci->dwVersion;
+  ctls->cert_info.subject = ma_cert_blob_to_str(&pci->Subject);
+  ctls->cert_info.issuer = ma_cert_blob_to_str(&pci->Issuer);
+
+  FileTimeToSystemTime(&pci->NotBefore, &tm);
+  ma_systime_to_tm(tm, &ctls->cert_info.not_before);
+  FileTimeToSystemTime(&pci->NotAfter, &tm);
+  ma_systime_to_tm(tm, &ctls->cert_info.not_after);
+
+  ma_tls_get_finger_print(ctls, MA_HASH_SHA256, fp, 33);
+  mysql_hex_string(ctls->cert_info.fingerprint, fp, 32);
+
+  return 0; 
+}
+
+
+unsigned int ma_tls_get_finger_print(MARIADB_TLS *ctls, uint hash_type, char *fp, unsigned int len)
+{
+  MA_HASH_CTX* hash_ctx;
+
   SC_CTX *sctx= (SC_CTX *)ctls->ssl;
   PCCERT_CONTEXT pRemoteCertContext = NULL;
+  int rc= 0;
+
+  if (hash_type == MA_HASH_SHA224)
+  {
+    MYSQL *mysql = ctls->pvio->mysql;
+    my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
+      ER(CR_SSL_CONNECTION_ERROR),
+      "SHA224 hash for fingerprint verification is not supported in Schannel");
+    return 0;
+  }
+
   if (QueryContextAttributes(&sctx->hCtxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, (PVOID)&pRemoteCertContext) != SEC_E_OK)
     return 0;
-  CertGetCertificateContextProperty(pRemoteCertContext, CERT_HASH_PROP_ID, fp, (DWORD *)&len);
+
+  hash_ctx = ma_hash_new(hash_type);
+  ma_hash_input(hash_ctx, pRemoteCertContext->pbCertEncoded, pRemoteCertContext->cbCertEncoded);
+  ma_hash_result(hash_ctx, fp);
+  ma_hash_free(hash_ctx);
+
   CertFreeCertificateContext(pRemoteCertContext);
-  return len;
+  return (uint)ma_hash_digest_size(hash_type);
 }
 
 void ma_tls_set_connection(MYSQL *mysql __attribute__((unused)))

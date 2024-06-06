@@ -19,8 +19,7 @@
 
 /** @file */
 
-#ifndef _WE_COLOP_COMPRESS_H_
-#define _WE_COLOP_COMPRESS_H_
+#pragma once
 
 #include <stdlib.h>
 
@@ -28,11 +27,7 @@
 #include "we_chunkmanager.h"
 #include "calpontsystemcatalog.h"
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -57,7 +52,7 @@ class ColumnOpCompress0 : public ColumnOp
    */
   IDBDataFile* openFile(const Column& column, uint16_t dbRoot, uint32_t partition, uint16_t segment,
                         std::string& segFile, bool useTmpSuffix, const char* mode = "r+b",
-                        int ioBuffSize = DEFAULT_BUFSIZ) const;
+                        int ioBuffSize = DEFAULT_BUFSIZ, bool isReadOnly = false) const;
 
   /**
    * @brief virtual method in ColumnOp
@@ -113,7 +108,7 @@ class ColumnOpCompress1 : public ColumnOp
    */
   IDBDataFile* openFile(const Column& column, uint16_t dbRoot, uint32_t partition, uint16_t segment,
                         std::string& segFile, bool useTmpSuffix, const char* mode = "r+b",
-                        int ioBuffSize = DEFAULT_BUFSIZ) const;
+                        int ioBuffSize = DEFAULT_BUFSIZ, bool isReadOnly = false) const;
 
   /**
    * @brief virtual method in ColumnOp
@@ -184,5 +179,3 @@ class ColumnOpCompress1 : public ColumnOp
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_COLOP_COMPRESS_H_

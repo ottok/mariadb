@@ -21,8 +21,7 @@
 /**
  * @file
  */
-#ifndef LIBOAMCPP_H
-#define LIBOAMCPP_H
+#pragma once
 
 #include <exception>
 #include <stdexcept>
@@ -34,10 +33,8 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
-#ifdef __linux__
 #include <sys/sysinfo.h>
 #include <netdb.h>
-#endif
 #include <fcntl.h>
 #include <sys/file.h>
 
@@ -48,11 +45,7 @@
 
 #include "messagequeue.h"
 
-#if defined(_MSC_VER) && defined(xxxLIBOAM_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace oam
 {
@@ -113,9 +106,16 @@ const std::string UnassignedName = "unassigned";
 
 /** @brief Calpont System Configuration file sections
  */
-const std::string configSections[] = {
-    "SystemConfig", "SystemModuleConfig", "SystemModuleConfig", "SessionManager", "VersionBuffer",
-    "OIDManager",   "PrimitiveServers",   "Installation",       "ExtentMap",      ""};
+const std::string configSections[] = {"SystemConfig",
+                                      "SystemModuleConfig",
+                                      "SystemModuleConfig",
+                                      "SessionManager",
+                                      "VersionBuffer",
+                                      "OIDManager",
+                                      "PrimitiveServers",
+                                      "Installation",
+                                      "ExtentMap",
+                                      ""};
 
 // const uint32_t NOTIFICATIONKEY = 0x49444231;
 
@@ -425,4 +425,3 @@ class Oam
 
 #undef EXPORT
 
-#endif

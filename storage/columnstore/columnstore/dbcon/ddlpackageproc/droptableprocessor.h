@@ -21,16 +21,11 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef DROPTABLEPROCESSOR_H
-#define DROPTABLEPROCESSOR_H
+#pragma once
 
 #include "ddlpackageprocessor.h"
 
-#if defined(_MSC_VER) && defined(DDLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace ddlpackageprocessor
 {
@@ -77,5 +72,3 @@ class TruncTableProcessor : public DDLPackageProcessor
 }  // namespace ddlpackageprocessor
 
 #undef EXPORT
-
-#endif  // DROPTABLEPROCESSOR_H

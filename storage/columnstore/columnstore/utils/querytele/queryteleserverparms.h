@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef QUERYTELESERVERPARMS_H__
-#define QUERYTELESERVERPARMS_H__
+#pragma once
 
 #include <string>
 
@@ -43,5 +42,3 @@ class QueryTeleServerParms
 };
 
 }  // namespace querytele
-
-#endif

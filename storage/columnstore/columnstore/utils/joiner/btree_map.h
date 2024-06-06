@@ -19,8 +19,7 @@
 // multimap<>) using a btree. See btree.h for details of the btree
 // implementation and caveats.
 
-#ifndef UTIL_BTREE_BTREE_MAP_H__
-#define UTIL_BTREE_BTREE_MAP_H__
+#pragma once
 
 #include <algorithm>
 #include <functional>
@@ -120,5 +119,3 @@ inline void swap(btree_multimap<K, V, C, A, N>& x, btree_multimap<K, V, C, A, N>
 }
 
 }  // namespace btree
-
-#endif  // UTIL_BTREE_BTREE_MAP_H__

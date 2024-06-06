@@ -27,8 +27,7 @@
  *      Author: bpaul
  */
 
-#ifndef WE_XMLGETTER_H_
-#define WE_XMLGETTER_H_
+#pragma once
 
 #include <libxml/parser.h>
 
@@ -62,4 +61,3 @@ class WEXmlgetter
 };
 
 } /* namespace WriteEngine */
-#endif /* WE_XMLGETTER_H_ */

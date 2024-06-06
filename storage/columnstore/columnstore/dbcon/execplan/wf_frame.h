@@ -18,8 +18,7 @@
    MA 02110-1301, USA.
 */
 
-#ifndef WINDOW_FUNCTION_FRAME_H
-#define WINDOW_FUNCTION_FRAME_H
+#pragma once
 #include <string>
 #include <iosfwd>
 #include <vector>
@@ -99,4 +98,3 @@ struct WF_OrderBy
 };
 
 }  // namespace execplan
-#endif

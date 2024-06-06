@@ -1,6 +1,6 @@
 
 # Copyright (c) 2006, 2017, Oracle and/or its affiliates. All rights reserved.
-# Copyright (c) 2014, 2022, MariaDB Corporation.
+# Copyright (c) 2014, 2023, MariaDB Corporation.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -139,7 +139,6 @@ SET(INNOBASE_SOURCES
 	btr/btr0cur.cc
 	btr/btr0pcur.cc
 	btr/btr0sea.cc
-	btr/btr0defragment.cc
 	buf/buf0buddy.cc
 	buf/buf0buf.cc
 	buf/buf0dblwr.cc
@@ -157,7 +156,6 @@ SET(INNOBASE_SOURCES
 	dict/dict0mem.cc
 	dict/dict0stats.cc
 	dict/dict0stats_bg.cc
-	dict/dict0defrag_bg.cc
 	dict/drop.cc
 	eval/eval0eval.cc
 	eval/eval0proc.cc
@@ -192,7 +190,6 @@ SET(INNOBASE_SOURCES
 	include/btr0bulk.h
 	include/btr0cur.h
 	include/btr0cur.inl
-	include/btr0defragment.h
 	include/btr0pcur.h
 	include/btr0pcur.inl
 	include/btr0sea.h
@@ -217,7 +214,6 @@ SET(INNOBASE_SOURCES
 	include/dict0boot.h
 	include/dict0crea.h
 	include/dict0crea.inl
-	include/dict0defrag_bg.h
 	include/dict0dict.h
 	include/dict0dict.inl
 	include/dict0load.h
@@ -270,7 +266,6 @@ SET(INNOBASE_SOURCES
 	include/handler0alter.h
 	include/hash0hash.h
 	include/ibuf0ibuf.h
-	include/ibuf0ibuf.inl
 	include/lock0iter.h
 	include/lock0lock.h
 	include/lock0lock.inl

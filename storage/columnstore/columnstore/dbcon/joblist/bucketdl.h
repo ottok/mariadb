@@ -33,8 +33,7 @@
 #include <boost/function_equal.hpp>
 #include <boost/shared_ptr.hpp>
 #include <sstream>
-#ifndef _BUCKETDL_HPP_
-#define _BUCKETDL_HPP_
+#pragma once
 namespace joblist
 {
 /** @brief class BucketDL
@@ -845,5 +844,3 @@ std::list<DiskIoInfo>& BucketDL<element_t>::diskIoInfoList(uint64_t bucket)
 }
 
 }  // namespace joblist
-
-#endif

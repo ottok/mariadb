@@ -85,7 +85,6 @@
 
 #define SPIDER_TEST(A) MY_TEST(A)
 
-#define SPIDER_FIELD_FIELDPTR_REQUIRES_THDPTR
 #define SPIDER_ENGINE_CONDITION_PUSHDOWN_IS_ALWAYS_ON
 
 #define SPIDER_Item_args_arg_count_IS_PROTECTED
@@ -108,7 +107,6 @@
 
 #define SPIDER_read_record_read_record(A) read_record()
 #define SPIDER_has_Item_with_subquery
-#define SPIDER_use_LEX_CSTRING_for_Field_blob_constructor
 #define SPIDER_use_LEX_CSTRING_for_database_tablename_alias
 #define SPIDER_THD_db_str(A) (A)->db.str
 #define SPIDER_THD_db_length(A) (A)->db.length
@@ -150,9 +148,14 @@ typedef start_new_trans *SPIDER_Open_tables_backup;
 #define spider_bit_is_set(BITMAP, BIT) \
   (uint) ((BITMAP)[(BIT) / 8] & (1 << ((BIT) & 7)))
 
+/* Change status of the remote backend server link. */
+/* 0 Doesn't change status.  */
 #define SPIDER_LINK_STATUS_NO_CHANGE         0
+/* 1 Changes status to OK.  */
 #define SPIDER_LINK_STATUS_OK                1
+/* 2 Changes status to RECOVERY.  */
 #define SPIDER_LINK_STATUS_RECOVERY          2
+/* 3 Changes status to no more in group communication. */
 #define SPIDER_LINK_STATUS_NG                3
 
 #define SPIDER_LINK_MON_OK                   0
@@ -599,7 +602,6 @@ typedef struct st_spider_conn_loop_check SPIDER_CONN_LOOP_CHECK;
 /* database connection */
 typedef struct st_spider_conn
 {
-  uint               conn_kind;
   char               *conn_key;
   uint               conn_key_length;
   my_hash_value_type conn_key_hash_value;
@@ -981,22 +983,30 @@ typedef struct st_spider_share
   char               *table_name;
   uint               table_name_length;
   uint               use_count;
+  /**
+    Probably equals `active_link_count`. See also commit ddff602 of
+    https://github.com/nayuta-yanagisawa/spider-history
+
+    FIXME: consider removing it and using `active_link_count` instead.
+  */
   uint               link_count;
+  /* Number of all links, i.e. all remote servers for the spider
+  table. */
   uint               all_link_count;
   uint               link_bitmap_size;
   pthread_mutex_t    mutex;
   pthread_mutex_t    sts_mutex;
   pthread_mutex_t    crd_mutex;
-/*
-  pthread_mutex_t    auto_increment_mutex;
-*/
   TABLE_SHARE        *table_share;
   SPIDER_LGTM_TBLHND_SHARE *lgtm_tblhnd_share;
   my_hash_value_type table_name_hash_value;
   my_hash_value_type table_path_hash_value;
 
+  /* Whether the share has been initialised */
   volatile bool      init;
+  /* Whether an error occurred in initialisation of this share */
   volatile bool      init_error;
+  /* The time of the initialisation error */
   volatile time_t    init_error_time;
   volatile bool      link_status_init;
   uchar              *table_mon_mutex_bitmap;
@@ -1052,10 +1062,6 @@ typedef struct st_spider_share
 
   MEM_ROOT           mem_root;
 
-/*
-  volatile bool      auto_increment_init;
-  volatile ulonglong auto_increment_lclval;
-*/
   ha_statistics      stat;
 
   longlong           static_records_for_status;
@@ -1070,17 +1076,27 @@ typedef struct st_spider_share
   longlong           additional_table_flags;
   bool               have_recovery_link;
 
+  /** See `mysql_sysvar_sts_bg_mode` */
   int                sts_bg_mode;
+  /** See `mysql_sysvar_sts_interval` */
   double             sts_interval;
+  /** See `mysql_sysvar_sts_mode` */
   int                sts_mode;
+  /** See `mysql_sysvar_sts_sync` */
   int                sts_sync;
   int                store_last_sts;
+  /** See `mysql_sysvar_load_sts_at_startup` */
   int                load_sts_at_startup;
+  /** See `mysql_sysvar_crd_bg_mode` */
   int                crd_bg_mode;
+  /** See `mysql_sysvar_crd_interval` */
   double             crd_interval;
+  /** See `mysql_sysvar_crd_mode` */
   int                crd_mode;
+  /** See `mysql_sysvar_crd_sync` */
   int                crd_sync;
   int                store_last_crd;
+  /** See `mysql_sysvar_load_crd_at_startup` */
   int                load_crd_at_startup;
   int                crd_type;
   double             crd_weight;
@@ -1118,6 +1134,7 @@ typedef struct st_spider_share
   longlong           bgs_second_read;
   longlong           first_read;
   longlong           second_read;
+  /** See `mysql_sysvar_auto_increment_mode` */
   int                auto_increment_mode;
   int                use_table_charset;
   int                use_pushdown_udf;
@@ -1128,6 +1145,8 @@ typedef struct st_spider_share
   int                read_only_mode;
   int                error_read_mode;
   int                error_write_mode;
+  /* Number of active remote servers, for use in load balancing read
+  connections */
   int                active_link_count;
 #ifdef HA_CAN_FORCE_BULK_UPDATE
   int                force_bulk_update;
@@ -1150,6 +1169,8 @@ typedef struct st_spider_share
   char               **tgt_usernames;
   char               **tgt_passwords;
   char               **tgt_sockets;
+  /** The wrapper of target servers, each element has the same
+  possible values as `SPIDER_DBTON::wrapper` */
   char               **tgt_wrappers;
   char               **tgt_ssl_cas;
   char               **tgt_ssl_capaths;
@@ -1167,6 +1188,7 @@ typedef struct st_spider_share
   char               **conn_keys;
   long               *tgt_ports;
   long               *tgt_ssl_vscs;
+  /* See SPIDER_LINK_STATUS_* in spd_include.h */
   long               *link_statuses;
   long               *monitoring_bg_flag;
   long               *monitoring_bg_kind;
@@ -1179,6 +1201,7 @@ typedef struct st_spider_share
   long               *connect_timeouts;
   long               *net_read_timeouts;
   long               *net_write_timeouts;
+  /* Connection load balancing integer weight */
   long               *access_balances;
   long               *bka_table_name_types;
   long               *strict_group_bys;
@@ -1271,10 +1294,16 @@ typedef struct st_spider_share
   uint               bka_table_name_types_length;
   uint               strict_group_bys_length;
 
-  /* for dbton */
+  /*
+    For dbton. A `SPIDER_SHARE` uses all `SPIDER_DBTON`s with the same
+    wrappers as any its `tgt_wrappers`
+  */
+  /* Specifies which dbtons of the `spider_dbton` to use */
   uchar              dbton_bitmap[spider_bitmap_size(SPIDER_DBTON_SIZE)];
   spider_db_share    *dbton_share[SPIDER_DBTON_SIZE];
+  /* Number of `SPIDER_DBTON`s used */
   uint               use_dbton_count;
+  /* Index of each `SPIDER_DBTON` in `spider_dbton` to use */
   /* Actual size is `use_dbton_count'. Values are the indices of item
   in `spider_dbton'. */
   uint               use_dbton_ids[SPIDER_DBTON_SIZE];
@@ -1297,14 +1326,23 @@ typedef struct st_spider_link_pack
   int                        link_idx;
 } SPIDER_LINK_PACK;
 
+/** A struct storing the initialisation error of a table. All
+instances are in `spider_init_error_tables` */
 typedef struct st_spider_init_error_table
 {
+  /* The associated table name */
   char               *table_name;
+  /* Length of the associated table name */
   uint               table_name_length;
+  /* Hash value of the associated table name for lookup */
   my_hash_value_type table_name_hash_value;
+  /* Whether the error has a message */
   bool               init_error_with_message;
+  /* The error message */
   char               init_error_msg[MYSQL_ERRMSG_SIZE];
+  /* The error code */
   volatile int       init_error;
+  /* The error time */
   volatile time_t    init_error_time;
 } SPIDER_INIT_ERROR_TABLE;
 

@@ -23,8 +23,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef DMLPARSER_H
-#define DMLPARSER_H
+#pragma once
 
 #include <stdexcept>
 #include "dmlpkg.h"
@@ -114,4 +113,3 @@ class DMLFileParser : public DMLParser
 };
 
 }  // namespace dmlpackage
-#endif  // DMLPARSER_H

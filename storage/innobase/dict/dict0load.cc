@@ -887,20 +887,19 @@ static uint32_t dict_find_max_space_id(btr_pcur_t *pcur, mtr_t *mtr)
 /** Check MAX(SPACE) FROM SYS_TABLES and store it in fil_system.
 Open each data file if an encryption plugin has been loaded.
 
-@param spaces  set of tablespace files to open */
-void dict_check_tablespaces_and_store_max_id(const std::set<uint32_t> *spaces)
+@param spaces  set of tablespace files to open
+@param upgrade whether we need to invoke ibuf_upgrade() */
+void dict_load_tablespaces(const std::set<uint32_t> *spaces, bool upgrade)
 {
 	uint32_t	max_space_id = 0;
 	btr_pcur_t	pcur;
 	mtr_t		mtr;
 
-	DBUG_ENTER("dict_check_tablespaces_and_store_max_id");
-
 	mtr.start();
 
 	dict_sys.lock(SRW_LOCK_CALL);
 
-	if (!spaces && ibuf.empty
+	if (!spaces && !upgrade
 	    && !encryption_key_id_exists(FIL_DEFAULT_ENCRYPTION_KEY)) {
 		max_space_id = dict_find_max_space_id(&pcur, &mtr);
 		goto done;
@@ -1000,8 +999,6 @@ done:
 	fil_set_max_space_id_if_bigger(max_space_id);
 
 	dict_sys.unlock();
-
-	DBUG_VOID_RETURN;
 }
 
 /** Error message for a delete-marked record in dict_load_column_low() */
@@ -1149,7 +1146,7 @@ err_len:
 
 			prtype = dtype_form_prtype(
 				prtype,
-				data_mysql_default_charset_coll);
+				default_charset_info->number);
 		}
 	}
 
@@ -2493,9 +2490,7 @@ corrupted:
 				goto corrupted;
 			}
 
-			if (table->supports_instant()) {
-				err = btr_cur_instant_init(table);
-			}
+			err = btr_cur_instant_init(table);
 		}
 	} else {
 		ut_ad(ignore_err & DICT_ERR_IGNORE_INDEX);

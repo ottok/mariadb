@@ -21,11 +21,8 @@
  *******************************************************************************/
 /** @file */
 
-#ifndef _WE_BULKLOAD_H_
-#define _WE_BULKLOAD_H_
-#ifndef _MSC_VER
+#pragma once
 #include <pthread.h>
-#endif
 #include <fstream>
 #include <string>
 #include <vector>
@@ -554,5 +551,3 @@ inline bool BulkLoad::disableTimeOut() const
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_BULKLOAD_H_

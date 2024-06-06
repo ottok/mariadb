@@ -3,13 +3,13 @@ CREATE DATABASE mcs180_db;
 USE mcs180_db;
 SET default_storage_engine=Columnstore;
 CREATE TABLE t1 (a CHAR(1), b INT);
-INSERT INTO t1 VALUES ('', NULL), ('m', 6), ('N', 5), ('o', 4);
+INSERT INTO t1 VALUES (NULL, NULL), ('m', 6), ('N', 5), ('o', 4);
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` char(1) DEFAULT NULL,
   `b` int(11) DEFAULT NULL
-) ENGINE=Columnstore DEFAULT CHARSET=latin1
+) ENGINE=Columnstore DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci
 SELECT ASCII(0);
 ASCII(0)
 48

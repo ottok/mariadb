@@ -101,6 +101,6 @@ DROP TABLE t1;
 --echo # MDEV-33462 Disallow LOCK=NONE operation on statistics table
 --echo #
 --error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
-ALTER TABLE mysql.innodb_table_stats FORCE, LOCK=NONE;
+ALTER TABLE mysql.innodb_table_stats FORCE, LOCK=NONE, ALGORITHM=INPLACE;
 --error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
-ALTER TABLE mysql.innodb_index_stats FORCE, LOCK=NONE;
+ALTER TABLE mysql.innodb_index_stats FORCE, LOCK=NONE, ALGORITHM=INPLACE;

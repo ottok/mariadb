@@ -1635,6 +1635,60 @@ mysql> select * from schema_object_overview;
 10 rows in set (1.58 sec)
 ```
 
+#### privileges_by_table_by_level
+
+##### Description
+
+-- Shows granted privileges broken down by table on which they allow access
+-- and level on which they were granted:
+-- - user_privileges
+-- - schema_privileges
+-- - table_privileges
+
+##### Structure
+
+```SQL
+MariaDB [test]> desc sys.privileges_by_table_by_level;
++--------------+--------------+------+-----+---------+-------+
+| Field        | Type         | Null | Key | Default | Extra |
++--------------+--------------+------+-----+---------+-------+
+| TABLE_SCHEMA | varchar(64)  | NO   |     | NULL    |       |
+| TABLE_NAME   | varchar(64)  | NO   |     | NULL    |       |
+| GRANTEE      | varchar(385) | NO   |     |         |       |
+| PRIVILEGE    | varchar(64)  | NO   |     |         |       |
+| LEVEL        | varchar(6)   | NO   |     |         |       |
++--------------+--------------+------+-----+---------+-------+
+5 rows in set (0.002 sec)
+```
+
+##### Example
+
+```SQL
+mysql> select * from sys.privileges_by_table_by_level;
++--------------+------------+--------------------+----------------+--------+
+| TABLE_SCHEMA | TABLE_NAME | GRANTEE            | PRIVILEGE_TYPE | LEVEL  |
++--------------+------------+--------------------+----------------+--------+
+| test         | v1         | 'oleg'@'localhost' | SELECT         | GLOBAL |
+| test         | t1         | 'oleg'@'localhost' | SELECT         | GLOBAL |
+| test         | v1         | 'oleg'@'localhost' | INSERT         | GLOBAL |
+| test         | t1         | 'oleg'@'localhost' | INSERT         | GLOBAL |
+| test         | v1         | 'oleg'@'localhost' | UPDATE         | GLOBAL |
+| test         | v1         | 'PUBLIC'@''        | SELECT         | SCHEMA |
+| test         | t1         | 'PUBLIC'@''        | SELECT         | SCHEMA |
+| test         | v1         | 'PUBLIC'@''        | INSERT         | SCHEMA |
+| test         | t1         | 'PUBLIC'@''        | INSERT         | SCHEMA |
+| test         | v1         | 'PUBLIC'@''        | UPDATE         | SCHEMA |
+| test         | t1         | 'PUBLIC'@''        | UPDATE         | SCHEMA |
+| test         | v1         | 'PUBLIC'@''        | DELETE HISTORY | SCHEMA |
+| test         | t1         | 'PUBLIC'@''        | DELETE HISTORY | SCHEMA |
+| test         | t1         | 'oleg'@'%'         | SELECT         | TABLE  |
+| test         | t1         | 'oleg'@'%'         | UPDATE         | TABLE  |
+| test         | v1         | 'oleg'@'%'         | SELECT         | TABLE  |
++--------------+------------+--------------------+----------------+--------+
+16 rows in set (1.58 sec)
+```
+
+
 #### schema_table_statistics / x$schema_table_statistics
 
 ##### Description
@@ -5323,8 +5377,8 @@ mysql> CREATE OR REPLACE VIEW mydb.my_statements AS
     -> SELECT sys.format_statement(DIGEST_TEXT) AS query,
     ->        SCHEMA_NAME AS db,
     ->        COUNT_STAR AS exec_count,
-    ->        sys.format_time(SUM_TIMER_WAIT) AS total_latency,
-    ->        sys.format_time(AVG_TIMER_WAIT) AS avg_latency,
+    ->        format_pico_time(SUM_TIMER_WAIT) AS total_latency,
+    ->        format_pico_time(AVG_TIMER_WAIT) AS avg_latency,
     ->        ROUND(IFNULL(SUM_ROWS_SENT / NULLIF(COUNT_STAR, 0), 0)) AS rows_sent_avg,
     ->        ROUND(IFNULL(SUM_ROWS_EXAMINED / NULLIF(COUNT_STAR, 0), 0)) AS rows_examined_avg,
     ->        ROUND(IFNULL(SUM_ROWS_AFFECTED / NULLIF(COUNT_STAR, 0), 0)) AS rows_affected_avg,

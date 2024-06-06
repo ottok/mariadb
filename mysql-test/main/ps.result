@@ -244,8 +244,6 @@ prepare stmt1 from "insert into t1 select i from t1";
 execute stmt1;
 execute stmt1;
 prepare stmt1 from "select * from t1 into outfile '<MYSQLTEST_VARDIR>/tmp/f1.txt'";
-Warnings:
-Warning	1287	'<select expression> INTO <destination>;' is deprecated and will be removed in a future release. Please use 'SELECT <select list> INTO <destination> FROM...' instead
 execute stmt1;
 deallocate prepare stmt1;
 drop table t1;
@@ -698,21 +696,21 @@ set @@time_zone:='Japan';
 execute stmt;
 @@time_zone
 Japan
-prepare stmt from "select @@tx_isolation";
+prepare stmt from "select @@transaction_isolation";
 execute stmt;
-@@tx_isolation
+@@transaction_isolation
 REPEATABLE-READ
 set transaction isolation level read committed;
 execute stmt;
-@@tx_isolation
+@@transaction_isolation
 REPEATABLE-READ
 set transaction isolation level serializable;
 execute stmt;
-@@tx_isolation
+@@transaction_isolation
 REPEATABLE-READ
-set @@tx_isolation=default;
+set @@transaction_isolation=default;
 execute stmt;
-@@tx_isolation
+@@transaction_isolation
 REPEATABLE-READ
 deallocate prepare stmt;
 prepare stmt from "create temporary table t1 (letter enum('','a','b','c')
@@ -5561,15 +5559,13 @@ CREATE TABLE t2 (c2 INT) ENGINE=MyISAM;
 CREATE TABLE t3 (c3 INT) ENGINE=MyISAM;
 EXPLAIN EXTENDED UPDATE t3 SET c3 = ( SELECT COUNT(d1.c1) FROM ( SELECT a11.c1 FROM t1 AS a11 STRAIGHT_JOIN t2 AS a21 ON a21.c2 = a11.c1 JOIN t1 AS a12 ON a12.c1 = a11.c1 ) d1 );
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-1	PRIMARY	t3	ALL	NULL	NULL	NULL	NULL	0	100.00	
-2	SUBQUERY	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	Impossible WHERE noticed after reading const tables
+1	SIMPLE	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	Impossible WHERE
 Warnings:
 Note	1003	/* select#1 */ update `test`.`t3` set `test`.`t3`.`c3` = (/* select#2 */ select count(NULL) from `test`.`t1` `a11` straight_join `test`.`t2` `a21` join `test`.`t1` `a12` where 0)
 PREPARE stmt FROM "EXPLAIN EXTENDED UPDATE t3 SET c3 = ( SELECT COUNT(d1.c1) FROM ( SELECT a11.c1 FROM t1 AS a11 STRAIGHT_JOIN t2 AS a21 ON a21.c2 = a11.c1 JOIN t1 AS a12 ON a12.c1 = a11.c1 ) d1 )";
 EXECUTE stmt;
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-1	PRIMARY	t3	ALL	NULL	NULL	NULL	NULL	0	100.00	
-2	SUBQUERY	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	Impossible WHERE noticed after reading const tables
+1	SIMPLE	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	Impossible WHERE
 Warnings:
 Note	1003	/* select#1 */ update `test`.`t3` set `test`.`t3`.`c3` = (/* select#2 */ select count(NULL) from `test`.`t1` `a11` straight_join `test`.`t2` `a21` join `test`.`t1` `a12` where 0)
 DEALLOCATE PREPARE stmt;

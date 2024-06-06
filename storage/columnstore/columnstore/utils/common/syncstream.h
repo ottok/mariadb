@@ -55,8 +55,7 @@ main()
 }
 */
 
-#ifndef SYNCSTREAM_H__
-#define SYNCSTREAM_H__
+#pragma once
 
 #include <iostream>
 #include <cstdio>
@@ -156,5 +155,3 @@ class osyncstream : public std::ostream
 };
 
 }  // namespace syncstream
-
-#endif

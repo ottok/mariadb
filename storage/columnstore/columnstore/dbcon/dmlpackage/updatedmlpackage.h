@@ -22,17 +22,12 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef UPDATEDMLPACKAGE_H
-#define UPDATEDMLPACKAGE_H
+#pragma once
 #include <string>
 #include "calpontdmlpackage.h"
 #include "bytestream.h"
 
-#if defined(_MSC_VER) && defined(xxxUPDATEDMLPKG_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace dmlpackage
 {
@@ -101,5 +96,3 @@ class UpdateDMLPackage : public CalpontDMLPackage
 }  // namespace dmlpackage
 
 #undef EXPORT
-
-#endif  // UPDATEDMLPACKAGE_H

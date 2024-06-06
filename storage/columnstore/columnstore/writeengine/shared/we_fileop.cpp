@@ -30,7 +30,7 @@
 #if defined(__FreeBSD__)
 #include <sys/param.h>
 #include <sys/mount.h>
-#elif !defined(_MSC_VER)
+#else
 #include <sys/vfs.h>
 #endif
 #include <boost/filesystem/operations.hpp>
@@ -60,7 +60,7 @@ namespace WriteEngine
 {
 /*static*/ boost::mutex FileOp::m_createDbRootMutexes;
 /*static*/ boost::mutex FileOp::m_mkdirMutex;
-/*static*/ std::map<int, boost::mutex*> FileOp::m_DbRootAddExtentMutexes;
+/*static*/ std::map<int, boost::mutex> FileOp::m_DbRootAddExtentMutexes;
 // in 1 call to fwrite(), during initialization
 
 // StopWatch timer;
@@ -737,13 +737,7 @@ int FileOp::extendFile(OID oid, const uint8_t* emptyVal, int width,
     }
   }
 
-#ifdef _MSC_VER
-
-  // Need to call the win version with a dir, not a file
-  if (!isDiskSpaceAvail(Config::getDBRootByNum(dbRoot), allocSize))
-#else
   if (!isDiskSpaceAvail(segFile, allocSize))
-#endif
   {
     return ERR_FILE_DISK_SPACE;
   }
@@ -868,13 +862,7 @@ int FileOp::addExtentExactFile(OID oid, const uint8_t* emptyVal, int width, int&
     }
   }
 
-#ifdef _MSC_VER
-
-  // Need to call the win version with a dir, not a file
-  if (!isDiskSpaceAvail(Config::getDBRootByNum(dbRoot), allocSize))
-#else
   if (!isDiskSpaceAvail(segFile, allocSize))
-#endif
   {
     return ERR_FILE_DISK_SPACE;
   }
@@ -1005,7 +993,7 @@ int FileOp::initColumnExtent(IDBDataFile* pFile, uint16_t dbRoot, int nBlocks, c
       Stats::startParseEvent(WE_STATS_WAIT_TO_CREATE_COL_EXTENT);
 
 #endif
-    boost::mutex::scoped_lock lk(*m_DbRootAddExtentMutexes[dbRoot]);
+    boost::mutex::scoped_lock lk(m_DbRootAddExtentMutexes[dbRoot]);
 #ifdef PROFILE
 
     if (bExpandExtent)
@@ -1726,7 +1714,7 @@ int FileOp::initDctnryExtent(IDBDataFile* pFile, uint16_t dbRoot, int nBlocks, u
       Stats::startParseEvent(WE_STATS_WAIT_TO_CREATE_DCT_EXTENT);
 #endif
 
-    boost::mutex::scoped_lock lk(*m_DbRootAddExtentMutexes[dbRoot]);
+    boost::mutex::scoped_lock lk(m_DbRootAddExtentMutexes[dbRoot]);
 
 #ifdef PROFILE
     if (bExpandExtent)
@@ -1821,30 +1809,10 @@ void FileOp::initDbRootExtentMutexes()
 
     for (size_t i = 0; i < rootIds.size(); i++)
     {
-      boost::mutex* pM = new boost::mutex;
-      m_DbRootAddExtentMutexes[rootIds[i]] = pM;
+      m_DbRootAddExtentMutexes.emplace(std::piecewise_construct,
+                                       std::forward_as_tuple(rootIds[i]),
+                                       std::forward_as_tuple());
     }
-  }
-}
-
-/***********************************************************
- * DESCRIPTION:
- *    Cleans up memory allocated to the DBRoot extent mutexes.  Calling
- *    this function is not necessary, but it is provided for completeness,
- *    to complement initDbRootExtentMutexes(), and to provide a way to
- *    free up memory at the end of program execution.
- ***********************************************************/
-/* static */
-void FileOp::removeDbRootExtentMutexes()
-{
-  boost::mutex::scoped_lock lk(m_createDbRootMutexes);
-
-  std::map<int, boost::mutex*>::iterator k = m_DbRootAddExtentMutexes.begin();
-
-  while (k != m_DbRootAddExtentMutexes.end())
-  {
-    delete k->second;
-    ++k;
   }
 }
 
@@ -2137,6 +2105,11 @@ int FileOp::oid2FileName(FID fid, char* fullFileName, bool bCreateDir, uint16_t 
   RETURN_ON_ERROR((Convertor::oid2FileName(fid, tempFileName, dbDir, partition, segment)));
 
   // see if file exists in specified DBRoot; return if found
+  if (fullFileName == nullptr)
+  {
+    return ERR_INTERNAL;
+  }
+
   if (dbRoot > 0)
   {
     sprintf(fullFileName, "%s/%s", Config::getDBRootByNum(dbRoot).c_str(), tempFileName);
@@ -2250,6 +2223,12 @@ int FileOp::oid2DirName(FID fid, char* oidDirName) const
 
     snprintf(oidDirName, FILE_NAME_SIZE, "%s", Config::getDBRootByNum(_dbroot).c_str());
     return NO_ERROR;
+  }
+
+
+  if (oidDirName == nullptr)
+  {
+    return ERR_INTERNAL;
   }
 
   RETURN_ON_ERROR((Convertor::oid2FileName(fid, tempFileName, dbDir, 0, 0)));
@@ -2556,25 +2535,6 @@ bool FileOp::isDiskSpaceAvail(const std::string& fileName, int nBlocks) const
 
   if (maxDiskUsage < 100)  // 100% means to disable the check
   {
-#ifdef _MSC_VER
-    ULARGE_INTEGER freeBytesAvail;
-    ULARGE_INTEGER totalBytesAvail;
-
-    if (GetDiskFreeSpaceEx(fileName.c_str(), &freeBytesAvail, &totalBytesAvail, 0) != 0)
-    {
-      double avail = (double)freeBytesAvail.QuadPart;
-      double total = (double)totalBytesAvail.QuadPart;
-      double wanted = (double)nBlocks * (double)BYTE_PER_BLOCK;
-
-      // If we want more than there is, return an error
-      if (wanted > avail)
-        bSpaceAvail = false;
-      // If the remaining bytes would be too few, return an error
-      else if ((total - (avail - wanted)) / total * 100.0 > maxDiskUsage)
-        bSpaceAvail = false;
-    }
-
-#else
     struct statfs fStats;
     int rc = statfs(fileName.c_str(), &fStats);
 
@@ -2596,7 +2556,6 @@ bool FileOp::isDiskSpaceAvail(const std::string& fileName, int nBlocks) const
       //"; bAvail: "      << bSpaceAvail          << std::endl;
     }
 
-#endif
   }
 
   return bSpaceAvail;

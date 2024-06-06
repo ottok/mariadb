@@ -23,8 +23,7 @@
 
 /** @file */
 
-#ifndef CLIENTROTATOR_H
-#define CLIENTROTATOR_H
+#pragma once
 
 #include <iostream>
 #include <vector>
@@ -167,4 +166,3 @@ class ClientRotator
 };
 
 }  // namespace execplan
-#endif

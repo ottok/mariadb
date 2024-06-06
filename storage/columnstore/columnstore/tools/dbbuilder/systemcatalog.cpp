@@ -52,15 +52,6 @@ void SystemCatalog::build()
   WErrorCodes ec;
 
   //------------------------------------------------------------------------------
-  // Get the DBRoot count, and rotate the tables through those DBRoots.
-  // All the columns in the first table (SYSTABLE) start on DBRoot1, all the
-  // columns in the second table (SYSCOLUMN) start on DBRoot2, etc.
-  //------------------------------------------------------------------------------
-  config::Config* cf = config::Config::makeConfig();
-  string root = cf->getConfig("SystemConfig", "DBRootCount");
-  uint32_t dbRootCount = cf->uFromText(root);
-
-  //------------------------------------------------------------------------------
   // Create SYSTABLE table
   //------------------------------------------------------------------------------
   uint32_t dbRoot = 1;
@@ -87,6 +78,7 @@ void SystemCatalog::build()
     oids[OID_SYSTABLE_AVGROWLEN] = OID_SYSTABLE_AVGROWLEN;
     oids[OID_SYSTABLE_NUMOFBLOCKS] = OID_SYSTABLE_NUMOFBLOCKS;
     oids[OID_SYSTABLE_AUTOINCREMENT] = OID_SYSTABLE_AUTOINCREMENT;
+    oids[OID_SYSTABLE_AUXCOLUMNOID] = OID_SYSTABLE_AUXCOLUMNOID;
   }
 
   fWriteEngine.setTransId(1);
@@ -234,12 +226,20 @@ void SystemCatalog::build()
 
   msg.str("");
 
+  // AUXCOLUMNOID
+  msg << "  Creating AUXCOLUMNOID column OID: " << OID_SYSTABLE_AUXCOLUMNOID;
+  cout << msg.str() << endl;
+  rc = fWriteEngine.createColumn(txnID, OID_SYSTABLE_AUXCOLUMNOID, CalpontSystemCatalog::INT, 4, dbRoot,
+                                 partition, compressionType);
+
+  if (rc)
+    throw runtime_error(msg.str() + ec.errorString(rc));
+
+  msg.str("");
+
   //------------------------------------------------------------------------------
   // Create SYSCOLUMN table
   //------------------------------------------------------------------------------
-  // dbRoot++;
-  // if (dbRoot > dbRootCount)
-  //  dbRoot = 1;
 
   // SYSCOLUMN
   if (rm->useHdfs())
@@ -272,6 +272,7 @@ void SystemCatalog::build()
     oids[DICTOID_SYSCOLUMN_MAXVALUE] = DICTOID_SYSCOLUMN_MAXVALUE;
     oids[OID_SYSCOLUMN_COMPRESSIONTYPE] = OID_SYSCOLUMN_COMPRESSIONTYPE;
     oids[OID_SYSCOLUMN_NEXTVALUE] = OID_SYSCOLUMN_NEXTVALUE;
+    oids[OID_SYSCOLUMN_CHARSETNUM] = OID_SYSCOLUMN_CHARSETNUM;
   }
 
   cout << endl;
@@ -573,13 +574,16 @@ void SystemCatalog::build()
 
   msg.str("");
 
-  //------------------------------------------------------------------------------
-  // Create SYSCONSTRAINT table
-  //------------------------------------------------------------------------------
-  dbRoot++;
+  // charsetnum
+  msg << "  Creating CHARSETNUM column OID: " << OID_SYSCOLUMN_CHARSETNUM;
+  cout << msg.str() << endl;
+  rc = fWriteEngine.createColumn(txnID, OID_SYSCOLUMN_CHARSETNUM, CalpontSystemCatalog::INT, 4, dbRoot,
+                                 partition, compressionType);
 
-  if (dbRoot > dbRootCount)
-    dbRoot = 1;
+  if (rc)
+    throw runtime_error(msg.str() + ec.errorString(rc));
+
+  msg.str("");
 
   // flush data files
   fWriteEngine.flushDataFiles(rc, 1, oids);
@@ -611,4 +615,52 @@ void SystemCatalog::remove()
 
   for (int d = 2001; d <= 2312; d++)
     colOp.deleteFile(d);
+}
+
+int SystemCatalog::upgrade(const std::unordered_map<int,
+                             std::pair<int, bool>>& upgradeOidMap,
+                           std::unordered_map<int, OidTypeT> upgradeOidTypeMap,
+                           std::unordered_map<int, std::string> upgradeOidDefaultValStrMap)
+{
+  TxnID txnID = 0;
+  int rc = 0;
+  int compressionType = 0;
+  ostringstream msg;
+  WErrorCodes ec;
+
+  cout << "Upgrading System Catalog..." << endl << endl;
+
+  for (auto iter = upgradeOidMap.begin(); iter != upgradeOidMap.end(); iter++)
+  {
+    if ((iter->second).second == true)
+    {
+      msg.str("");
+      msg << "  Creating column OID: " << iter->first;
+      cout << msg.str() << endl;
+
+      execplan::CalpontSystemCatalog::ColType colType;
+      colType.colDataType = upgradeOidTypeMap[iter->first].first;
+      colType.colWidth = upgradeOidTypeMap[iter->first].second;
+
+      ColTuple defaultVal;
+      std::string defaultValStr = upgradeOidDefaultValStrMap[iter->first];
+      bool pushWarning = false;
+      bool isNULL = false;
+      long timeZone = 0;
+      defaultVal.data = colType.convertColumnData(defaultValStr, pushWarning, timeZone, isNULL, false, false);
+
+      rc = fWriteEngine.fillColumn(txnID, iter->first, colType, defaultVal,
+                                   (iter->second).first,
+                                   upgradeOidTypeMap[iter->first].first,
+                                   upgradeOidTypeMap[iter->first].second, compressionType,
+                                   isNULL, compressionType, defaultValStr, 0, false);
+
+      if (rc)
+      {
+        throw runtime_error(msg.str() + ec.errorString(rc));
+      }
+    }
+  }
+
+  return rc;
 }

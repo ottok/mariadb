@@ -29,14 +29,15 @@
 //
 /** @file */
 
-#ifndef PASSTHRUCOMMAND_JL
-#define PASSTHRUCOMMAND_JL
+#pragma once
 
 #include "jobstep.h"
 #include "command-jl.h"
 
 namespace joblist
 {
+class PassThruStep;
+
 class PassThruCommandJL : public CommandJL
 {
  public:
@@ -65,5 +66,3 @@ class PassThruCommandJL : public CommandJL
 };
 
 };  // namespace joblist
-
-#endif

@@ -1,5 +1,5 @@
 
-include_directories( ${ENGINE_COMMON_INCLUDES} )
+include_directories( ${ENGINE_COMMON_INCLUDES} ${ENGINE_UTILS_COMMON_INCLUDE} )
 
 ########### next target ###############
 set(cspasswd_SRCS cspasswd.cpp secrets.cpp)
@@ -10,8 +10,8 @@ add_executable(cskeys ${cskeys_SRCS})
 
 target_include_directories(cspasswd BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
 target_include_directories(cskeys BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(cspasswd ${ENGINE_LDFLAGS} ${MARIADB_CLIENT_LIBS} ${ENGINE_EXEC_LIBS} ${SSL_LIBRARIES})
-target_link_libraries(cskeys ${ENGINE_LDFLAGS} ${MARIADB_CLIENT_LIBS} ${ENGINE_EXEC_LIBS} ${SSL_LIBRARIES})
+target_link_libraries(cspasswd ${ENGINE_LDFLAGS} ${ENGINE_EXEC_LIBS} ${SSL_LIBRARIES})
+target_link_libraries(cskeys ${ENGINE_LDFLAGS} ${ENGINE_EXEC_LIBS} ${SSL_LIBRARIES})
 
 install(TARGETS cspasswd DESTINATION ${ENGINE_BINDIR} COMPONENT columnstore-engine)
 install(TARGETS cskeys DESTINATION ${ENGINE_BINDIR} COMPONENT columnstore-engine)

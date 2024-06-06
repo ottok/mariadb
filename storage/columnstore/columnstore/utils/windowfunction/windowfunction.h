@@ -17,8 +17,7 @@
 
 //  $Id: windowfunction.h 3932 2013-06-25 16:08:10Z xlou $
 
-#ifndef UTILS_WINDOWFUNCTION_H
-#define UTILS_WINDOWFUNCTION_H
+#pragma once
 
 #include <vector>
 #include <utility>
@@ -112,4 +111,3 @@ class WindowFunction
 
 }  // namespace windowfunction
 
-#endif  // UTILS_WINDOWFUNCTION_H

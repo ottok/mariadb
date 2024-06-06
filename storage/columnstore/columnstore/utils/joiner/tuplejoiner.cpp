@@ -20,11 +20,7 @@
 #include <algorithm>
 #include <vector>
 #include <limits>
-#ifndef _MSC_VER
 #include <tr1/unordered_set>
-#else
-#include <unordered_set>
-#endif
 
 #include "hasher.h"
 #include "lbidlist.h"
@@ -578,7 +574,7 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
           return;
 
         for (; range.first != range.second; ++range.first)
-          matches->push_back(range.first->second);
+          matches->emplace_back(rowgroup::Row::Pointer(range.first->second));
       }
     }
     else
@@ -619,7 +615,7 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
       pair<iterator, iterator> range = h[bucket]->equal_range(nullVal);
 
       for (; range.first != range.second; ++range.first)
-        matches->push_back(range.first->second);
+        matches->emplace_back(rowgroup::Row::Pointer(range.first->second));
     }
     else
     {
@@ -652,7 +648,7 @@ void TupleJoiner::match(rowgroup::Row& largeSideRow, uint32_t largeRowIndex, uin
 
         for (uint i = 0; i < bucketCount; i++)
           for (it = h[i]->begin(); it != h[i]->end(); ++it)
-            matches->push_back(it->second);
+            matches->emplace_back(rowgroup::Row::Pointer(it->second));
       }
       else
       {
@@ -751,7 +747,7 @@ void TupleJoiner::doneInserting()
       {
         while (hit == h[bucket]->end())
           hit = h[++bucket]->begin();
-        smallRow.setPointer(hit->second);
+        smallRow.setPointer(rowgroup::Row::Pointer(hit->second));
         ++hit;
       }
       else
@@ -917,14 +913,14 @@ void TupleJoiner::setInUM(vector<RGData>& rgs)
   }
 }
 
-void TupleJoiner::setPMJoinResults(boost::shared_array<vector<uint32_t>> jr, uint32_t threadID)
+void TupleJoiner::setPMJoinResults(std::shared_ptr<vector<uint32_t>[]> jr, uint32_t threadID)
 {
   pmJoinResults[threadID] = jr;
 }
 
 void TupleJoiner::markMatches(uint32_t threadID, uint32_t rowCount)
 {
-  boost::shared_array<vector<uint32_t>> matches = pmJoinResults[threadID];
+  std::shared_ptr<vector<uint32_t>[]> matches = pmJoinResults[threadID];
   uint32_t i, j;
 
   for (i = 0; i < rowCount; i++)
@@ -950,7 +946,7 @@ void TupleJoiner::markMatches(uint32_t threadID, const vector<Row::Pointer>& mat
   }
 }
 
-boost::shared_array<std::vector<uint32_t>> TupleJoiner::getPMJoinArrays(uint32_t threadID)
+std::shared_ptr<std::vector<uint32_t>[]> TupleJoiner::getPMJoinArrays(uint32_t threadID)
 {
   return pmJoinResults[threadID];
 }
@@ -958,7 +954,7 @@ boost::shared_array<std::vector<uint32_t>> TupleJoiner::getPMJoinArrays(uint32_t
 void TupleJoiner::setThreadCount(uint32_t cnt)
 {
   threadCount = cnt;
-  pmJoinResults.reset(new boost::shared_array<vector<uint32_t>>[cnt]);
+  pmJoinResults.reset(new std::shared_ptr<vector<uint32_t>[]>[cnt]);
   smallRow.reset(new Row[cnt]);
 
   for (uint32_t i = 0; i < cnt; i++)
@@ -1037,10 +1033,10 @@ void TupleJoiner::getUnmarkedRows(vector<Row::Pointer>* out)
       for (uint i = 0; i < bucketCount; i++)
         for (it = h[i]->begin(); it != h[i]->end(); ++it)
         {
-          smallR.setPointer(it->second);
+          smallR.setPointer(rowgroup::Row::Pointer(it->second));
 
           if (!smallR.isMarked())
-            out->push_back(it->second);
+            out->emplace_back(rowgroup::Row::Pointer(it->second));
         }
     }
     else
@@ -1819,9 +1815,9 @@ void TupleJoiner::clearData()
   finished = false;
 }
 
-boost::shared_ptr<TupleJoiner> TupleJoiner::copyForDiskJoin()
+std::shared_ptr<TupleJoiner> TupleJoiner::copyForDiskJoin()
 {
-  boost::shared_ptr<TupleJoiner> ret(new TupleJoiner());
+  std::shared_ptr<TupleJoiner> ret(new TupleJoiner());
 
   ret->smallRG = smallRG;
   ret->largeRG = largeRG;

@@ -24,8 +24,7 @@
  * class Multicast interface
  */
 
-#ifndef MULTICAST_H
-#define MULTICAST_H
+#pragma once
 
 #include "messagequeue.h"
 
@@ -127,5 +126,3 @@ class MulticastSender : public Multicast
 };
 
 }  // namespace multicast
-
-#endif  // MULTICAST_H

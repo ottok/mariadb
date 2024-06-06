@@ -52,14 +52,14 @@ permission notice:
 #include <wsrep_api.h>
 
 /*! Name of file where Galera info is stored on recovery */
-#define XB_GALERA_INFO_FILENAME "xtrabackup_galera_info"
+#define MB_GALERA_INFO_FILENAME "mariadb_backup_galera_info"
 #define XB_GALERA_DONOR_INFO_FILENAME "donor_galera_info"
 
 /* backup copy of galera info file as sent by donor */
-#define XB_GALERA_INFO_FILENAME_SST "xtrabackup_galera_info_SST"
+#define MB_GALERA_INFO_FILENAME_SST "mariadb_backup_galera_info_SST"
 
 /***********************************************************************
-Store Galera checkpoint info in the 'xtrabackup_galera_info' file, if that
+Store Galera checkpoint info in the MB_GALERA_INFO_FILENAME file, if that
 information is present in the trx system header. Otherwise, do nothing. */
 void
 xb_write_galera_info(bool incremental_prepare)
@@ -87,9 +87,9 @@ xb_write_galera_info(bool incremental_prepare)
 	/* if SST brought in galera info file, copy it as *_SST file
 	   this will not be used, saved just for future reference
 	*/
-	if (my_stat(XB_GALERA_INFO_FILENAME, &statinfo, MYF(0)) != NULL) {
-		FILE* fp_in  = fopen(XB_GALERA_INFO_FILENAME, "r");
-		FILE* fp_out = fopen(XB_GALERA_INFO_FILENAME_SST, "w");
+	if (my_stat(MB_GALERA_INFO_FILENAME, &statinfo, MYF(0))) {
+		FILE* fp_in  = fopen(MB_GALERA_INFO_FILENAME, "r");
+		FILE* fp_out = fopen(MB_GALERA_INFO_FILENAME_SST, "w");
 
 		char buf[BUFSIZ] = {'\0'};
 		size_t size;
@@ -97,14 +97,14 @@ xb_write_galera_info(bool incremental_prepare)
 			if (fwrite(buf, 1, size, fp_out) != strlen(buf)) {
 				die(
 				    "could not write to "
-				    XB_GALERA_INFO_FILENAME_SST
+				    MB_GALERA_INFO_FILENAME_SST
 				    ", errno = %d\n",
 				    errno);
 			}
 		}
 		if (!feof(fp_in)) {
 			die(
-			    XB_GALERA_INFO_FILENAME_SST
+			    MB_GALERA_INFO_FILENAME_SST
 			    " not fully copied\n"
 			);
 		}
@@ -119,11 +119,11 @@ xb_write_galera_info(bool incremental_prepare)
 		return;
 	}
 
-	fp = fopen(XB_GALERA_INFO_FILENAME, "w");
+	fp = fopen(MB_GALERA_INFO_FILENAME, "w");
 	if (fp == NULL) {
 
 		die(
-		    "could not create " XB_GALERA_INFO_FILENAME
+		    "could not create " MB_GALERA_INFO_FILENAME
 		    ", errno = %d\n",
 		    errno);
 	}
@@ -137,7 +137,7 @@ xb_write_galera_info(bool incremental_prepare)
 		    (long long)wsrep_get_domain_id()) < 0) {
 
 		die(
-		    "could not write to " XB_GALERA_INFO_FILENAME
+		    "could not write to " MB_GALERA_INFO_FILENAME
 		    ", errno = %d\n",
 		    errno);;
 	}

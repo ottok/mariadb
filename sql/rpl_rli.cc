@@ -58,7 +58,8 @@ Relay_log_info::Relay_log_info(bool is_slave_recovery, const char* thread_name)
    abort_pos_wait(0), slave_run_id(0), sql_driver_thd(),
    gtid_skip_flag(GTID_SKIP_NOT), inited(0), abort_slave(0), stop_for_until(0),
    slave_running(MYSQL_SLAVE_NOT_RUN), until_condition(UNTIL_NONE),
-   until_log_pos(0), retried_trans(0), executed_entries(0),
+   until_log_pos(0), is_until_before_gtids(false),
+   retried_trans(0), executed_entries(0),
    last_trans_retry_count(0), sql_delay(0), sql_delay_end(0),
    until_relay_log_names_defer(false),
    m_flags(0)
@@ -523,13 +524,7 @@ read_relay_log_description_event(IO_CACHE *cur_log, ulonglong start_pos,
   Format_description_log_event *fdev;
   bool found= false;
 
-  /*
-    By default the relay log is in binlog format 3 (4.0).
-    Even if format is 4, this will work enough to read the first event
-    (Format_desc) (remember that format 4 is just lenghtened compared to format
-    3; format 3 is a prefix of format 4).
-  */
-  fdev= new Format_description_log_event(3);
+  fdev= new Format_description_log_event(4);
 
   while (!found)
   {
@@ -664,14 +659,7 @@ int init_relay_log_pos(Relay_log_info* rli,const char* log,
     running, say, CHANGE MASTER.
   */
   delete rli->relay_log.description_event_for_exec;
-  /*
-    By default the relay log is in binlog format 3 (4.0).
-    Even if format is 4, this will work enough to read the first event
-    (Format_desc) (remember that format 4 is just lenghtened compared to format
-    3; format 3 is a prefix of format 4).
-  */
-  rli->relay_log.description_event_for_exec= new
-    Format_description_log_event(3);
+  rli->relay_log.description_event_for_exec= new Format_description_log_event(4);
 
   mysql_mutex_lock(log_lock);
 
@@ -1557,7 +1545,7 @@ Relay_log_info::update_relay_log_state(rpl_gtid *gtid_list, uint32 count)
   int res= 0;
   while (count)
   {
-    if (relay_log_state.update_nolock(gtid_list, false))
+    if (relay_log_state.update_nolock(gtid_list))
       res= 1;
     ++gtid_list;
     --count;
@@ -1696,7 +1684,7 @@ scan_all_gtid_slave_pos_table(THD *thd, int (*cb)(THD *, LEX_CSTRING *, void *),
   MY_DIR *dirp;
 
   thd->reset_for_next_command();
-  if (lock_schema_name(thd, MYSQL_SCHEMA_NAME.str))
+  if (lock_schema_name(thd, Lex_ident_db_normalized(MYSQL_SCHEMA_NAME)))
     return 1;
 
   build_table_filename(path, sizeof(path) - 1, MYSQL_SCHEMA_NAME.str, "", "", 0);
@@ -2494,7 +2482,7 @@ rpl_group_info::mark_start_commit()
   If no GTID is available, then NULL is returned.
 */
 char *
-rpl_group_info::gtid_info()
+rpl_group_info::gtid_info() const
 {
   if (!gtid_sub_id || !current_gtid.seq_no)
     return NULL;

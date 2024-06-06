@@ -23,8 +23,7 @@
 /** @file
  * class ColumnBufferSection
  */
-#ifndef WRITEENGINE_COLBUFSEC_H
-#define WRITEENGINE_COLBUFSEC_H
+#pragma once
 
 #include "we_type.h"
 #include "we_colbuf.h"
@@ -110,5 +109,3 @@ class ColumnBufferSection
 };
 
 }  // namespace WriteEngine
-
-#endif /*WRITEENGINE_COLBUFSEC_H*/

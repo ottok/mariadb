@@ -46,6 +46,12 @@ extra_file=""
 dirname0=`dirname $0 2>/dev/null`
 dirname0=`dirname $dirname0 2>/dev/null`
 
+case "$0" in
+  *mysql_install_db)
+    echo "$0: Deprecated program name. It will be removed in a future release, use 'mariadb-install-db' instead" 1>&2
+    ;;
+esac
+
 usage()
 {
   cat <<EOF
@@ -76,7 +82,7 @@ Usage: $0 [OPTIONS]
   --defaults-group-suffix=name
                        In addition to the given groups, read also groups with
                        this suffix
-  --force              Causes mysql_install_db to run even if DNS does not
+  --force              Causes mariadb-install-db to run even if DNS does not
                        work.  In that case, grant table entries that
                        normally use hostnames will use IP addresses.
   --help               Display this help and exit.
@@ -122,7 +128,7 @@ s_echo()
 link_to_help()
 {
   echo
-  echo "The latest information about mysql_install_db is available at"
+  echo "The latest information about mariadb-install-db is available at"
   echo "https://mariadb.com/kb/en/installing-system-tables-mysql_install_db"
 }
 
@@ -376,12 +382,12 @@ fi
 
 # Set up paths to SQL scripts required for bootstrap
 fill_help_tables="$srcpkgdatadir/fill_help_tables.sql"
-create_system_tables="$srcpkgdatadir/mysql_system_tables.sql"
-create_system_tables2="$srcpkgdatadir/mysql_performance_tables.sql"
-fill_system_tables="$srcpkgdatadir/mysql_system_tables_data.sql"
+create_system_tables="$srcpkgdatadir/mariadb_system_tables.sql"
+create_system_tables2="$srcpkgdatadir/mariadb_performance_tables.sql"
+fill_system_tables="$srcpkgdatadir/mariadb_system_tables_data.sql"
 maria_add_gis_sp="$buildpkgdatadir/maria_add_gis_sp_bootstrap.sql"
-mysql_test_db="$srcpkgdatadir/mysql_test_db.sql"
-mysql_sys_schema="$buildpkgdatadir/mysql_sys_schema.sql"
+mysql_test_db="$srcpkgdatadir/mariadb_test_db.sql"
+mysql_sys_schema="$buildpkgdatadir/mariadb_sys_schema.sql"
 
 for f in "$fill_help_tables" "$create_system_tables" "$create_system_tables2" "$fill_system_tables" "$maria_add_gis_sp" "$mysql_test_db" "$mysql_sys_schema"
 do
@@ -450,7 +456,7 @@ fi
 
 if test "$ip_only" -eq 1
 then
-  hostname=`echo "$resolved" | awk '/ /{print $6}'`
+  hostname=`echo "$resolved" | while read a; do echo ${a##* }; done`
 fi
 
 # Create database directories
@@ -516,7 +522,7 @@ fi
 if test -f "$ldata/mysql/user.frm"
 then
     echo "mysql.user table already exists!"
-    echo "Run mysql_upgrade, not mysql_install_db"
+    echo "Run mariadb-upgrade, not mariadb-install-db"
     exit 0
 fi
 
@@ -596,7 +602,7 @@ cat_sql()
 s_echo "Installing MariaDB/MySQL system tables in '$ldata' ..."
 if cat_sql | eval "$filter_cmd_line" | mysqld_install_cmd_line > /dev/null
 then
-    printf "@VERSION@-MariaDB" > "$ldata/mysql_upgrade_info"
+    printf "@VERSION@-MariaDB" > "$ldata/mariadb_upgrade_info"
   s_echo "OK"
 else
   log_file_place=$ldata
@@ -677,7 +683,7 @@ then
     echo "You can start the MariaDB daemon with:"
     echo "cd '$basedir' ; $bindir/mariadbd-safe --datadir='$ldata'"
     echo
-    echo "You can test the MariaDB daemon with mysql-test-run.pl"
+    echo "You can test the MariaDB daemon with mariadb-test-run.pl"
     echo "cd '$basedir/@INSTALL_MYSQLTESTDIR@' ; perl mariadb-test-run.pl"
   fi
 

@@ -339,6 +339,33 @@ static void myrg_set_external_ref(MYRG_INFO *m_info, void *ext_ref_arg)
   }
 }
 
+IO_AND_CPU_COST ha_myisammrg::rnd_pos_time(ha_rows rows)
+{
+  IO_AND_CPU_COST cost= handler::rnd_pos_time(rows);
+  /*
+    Row data is not cached. costs.row_lookup_cost includes the cost of
+    the reading the row from system (probably cached by the OS).
+  */
+  cost.io= 0;
+  return cost;
+}
+
+IO_AND_CPU_COST ha_myisammrg::keyread_time(uint index, ulong ranges,
+                                           ha_rows rows,
+                                           ulonglong blocks)
+{
+  IO_AND_CPU_COST cost= handler::keyread_time(index, ranges, rows, blocks);
+  if (!blocks)
+  {
+    cost.io*= file->tables;
+    cost.cpu*= file->tables;
+  }
+  /* Add the cost of having to do a key lookup in all trees */
+  if (file->tables)
+    cost.cpu+= (file->tables-1) * (ranges * KEY_LOOKUP_COST);
+  return cost;
+}
+
 /**
   Open a MERGE parent table, but not its children.
 
@@ -1246,7 +1273,6 @@ int ha_myisammrg::delete_all_rows()
 int ha_myisammrg::info(uint flag)
 {
   MYMERGE_INFO mrg_info;
-  DBUG_ASSERT(this->file->children_attached);
   (void) myrg_status(file,&mrg_info,flag);
   /*
     The following fails if one has not compiled MySQL with -DBIG_TABLES
@@ -1273,26 +1299,17 @@ int ha_myisammrg::info(uint flag)
   table->s->keys_in_use.set_prefix(table->s->keys);
   stats.mean_rec_length= mrg_info.reclength;
   
-  /* 
+  /*
     The handler::block_size is used all over the code in index scan cost
     calculations. It is used to get number of disk seeks required to
     retrieve a number of index tuples.
-    If the merge table has N underlying tables, then (assuming underlying
-    tables have equal size, the only "simple" approach we can use)
-    retrieving X index records from a merge table will require N times more
-    disk seeks compared to doing the same on a MyISAM table with equal
-    number of records.
-    In the edge case (file_tables > myisam_block_size) we'll get
-    block_size==0, and index calculation code will act as if we need one
-    disk seek to retrieve one index tuple.
-
-    TODO: In 5.2 index scan cost calculation will be factored out into a
-    virtual function in class handler and we'll be able to remove this hack.
+    If the merge table has N underlying tables, there will be
+    N more disk seeks compared to a scanning a normal MyISAM table.
+    The number of bytes read is the rougly the same for a normal MyISAM
+    and a MyISAM merge tables.
   */
-  stats.block_size= 0;
-  if (file->tables)
-    stats.block_size= myisam_block_size / file->tables;
-  
+  stats.block_size= myisam_block_size;
+
   stats.update_time= 0;
 #if SIZEOF_OFF_T > 4
   ref_length=6;					// Should be big enough
@@ -1744,6 +1761,12 @@ int myisammrg_panic(handlerton *hton, ha_panic_function flag)
   return myrg_panic(flag);
 }
 
+static void myisammrg_update_optimizer_costs(OPTIMIZER_COSTS *costs)
+{
+  myisam_update_optimizer_costs(costs);
+}
+
+
 static int myisammrg_init(void *p)
 {
   handlerton *myisammrg_hton;
@@ -1759,7 +1782,7 @@ static int myisammrg_init(void *p)
   myisammrg_hton->panic= myisammrg_panic;
   myisammrg_hton->flags= HTON_NO_PARTITION;
   myisammrg_hton->tablefile_extensions= ha_myisammrg_exts;
-
+  myisammrg_hton->update_optimizer_costs= myisammrg_update_optimizer_costs;
   return 0;
 }
 

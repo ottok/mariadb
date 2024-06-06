@@ -413,7 +413,7 @@ static uint8_t build_request_headers(CURL *curl, struct curl_slist **head,
   time_t now;
   struct tm tmp_tm;
   char headerbuf[3072];
-  char secrethead[45];
+  char secrethead[MAX_S3_SECRET_LENGTH + S3_SECRET_EXTRA_LENGTH];
   char date[9];
   char sha256hash[65];
   char post_hash[65];
@@ -520,7 +520,7 @@ static uint8_t build_request_headers(CURL *curl, struct curl_slist **head,
 
   // User signing key hash
   // Date hashed using AWS4:secret_key
-  snprintf(secrethead, sizeof(secrethead), "AWS4%.*s", 40, secret);
+  snprintf(secrethead, sizeof(secrethead), "AWS4%.*s", MAX_S3_SECRET_LENGTH, secret);
   strftime(headerbuf, sizeof(headerbuf), "%Y%m%d", &tmp_tm);
   hmac_sha256((uint8_t *)secrethead, strlen(secrethead), (uint8_t *)headerbuf,
               strlen(headerbuf), hmac_hash);
@@ -848,6 +848,18 @@ uint8_t execute_request(ms3_st *ms3, command_t cmd, const char *bucket,
   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
   ms3debug("Response code: %ld", response_code);
 
+  if (response_code == 301)
+  {
+    char *message = parse_error_message((char *)mem.data, mem.length);
+
+    if (message)
+    {
+      ms3debug("Response message: %s", message);
+    }
+
+    set_error_nocopy(ms3, message);
+    res = MS3_ERR_ENDPOINT;
+  }
   if (response_code == 404)
   {
     char *message = parse_error_message((char *)mem.data, mem.length);

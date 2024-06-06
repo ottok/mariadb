@@ -2,7 +2,7 @@
 
 Copyright (c) 1996, 2018, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2012, Facebook Inc.
-Copyright (c) 2013, 2022, MariaDB Corporation.
+Copyright (c) 2013, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -649,8 +649,6 @@ dict_table_get_next_index(
 #define dict_index_is_auto_gen_clust(index) (index)->is_gen_clust()
 #define dict_index_is_unique(index) (index)->is_unique()
 #define dict_index_is_spatial(index) (index)->is_spatial()
-#define dict_index_is_ibuf(index) (index)->is_ibuf()
-#define dict_index_is_sec_or_ibuf(index) !(index)->is_primary()
 #define dict_index_has_virtual(index) (index)->has_virtual()
 
 /** Get all the FTS indexes on a table.
@@ -665,7 +663,7 @@ dict_table_get_all_fts_indexes(
 /********************************************************************//**
 Gets the number of user-defined non-virtual columns in a table in the
 dictionary cache.
-@return number of user-defined (e.g., not ROW_ID) non-virtual
+@return number of user-defined (e.g., not DB_ROW_ID) non-virtual
 columns of a table */
 UNIV_INLINE
 unsigned
@@ -1381,26 +1379,9 @@ private:
   std::atomic<table_id_t> temp_table_id{DICT_HDR_FIRST_ID};
   /** hash table of temporary table IDs */
   hash_table_t temp_id_hash;
-  /** the next value of DB_ROW_ID, backed by DICT_HDR_ROW_ID
-  (FIXME: remove this, and move to dict_table_t) */
-  Atomic_relaxed<row_id_t> row_id;
-  /** The synchronization interval of row_id */
-  static constexpr size_t ROW_ID_WRITE_MARGIN= 256;
 public:
   /** Diagnostic message for exceeding the lock_wait() timeout */
   static const char fatal_msg[];
-
-  /** @return A new value for GEN_CLUST_INDEX(DB_ROW_ID) */
-  inline row_id_t get_new_row_id();
-
-  /** Ensure that row_id is not smaller than id, on IMPORT TABLESPACE */
-  inline void update_row_id(row_id_t id);
-
-  /** Recover the global DB_ROW_ID sequence on database startup */
-  void recover_row_id(row_id_t id)
-  {
-    row_id= ut_uint64_align_up(id, ROW_ID_WRITE_MARGIN) + ROW_ID_WRITE_MARGIN;
-  }
 
   /** @return a new temporary table ID */
   table_id_t acquire_temporary_table_id()

@@ -21,8 +21,7 @@
  *
  ***********************************************************************/
 /** @file */
-#ifndef DMLPROCESSOR_H
-#define DMLPROCESSOR_H
+#pragma once
 
 #include <boost/scoped_ptr.hpp>
 #include "threadpool.h"
@@ -331,4 +330,3 @@ class RollbackTransactionProcessor : public dmlpackageprocessor::DMLPackageProce
 
 }  // namespace dmlprocessor
 
-#endif  // DMLPROCESSOR_H

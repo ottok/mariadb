@@ -43,6 +43,7 @@
                                        // RESOLVED_AGAINST_ALIAS, ...
 #include "sql_expression_cache.h"
 #include "sql_lex.h"                   // empty_clex_str
+#include "my_json_writer.h"            // for dbug_print_opt_trace()
 
 const String my_null_string("NULL", 4, default_charset_info);
 const String my_default_string("DEFAULT", 7, default_charset_info);
@@ -412,7 +413,7 @@ int Item::save_str_value_in_field(Field *field, String *result)
 
 
 Item::Item(THD *thd):
-  name(null_clex_str), orig_name(0), is_expensive_cache(-1)
+  name(null_clex_str), orig_name(null_clex_str), is_expensive_cache(-1)
 {
   DBUG_ASSERT(thd);
   base_flags= item_base_t::FIXED;
@@ -445,7 +446,7 @@ Item::Item(THD *thd):
 */
 
 Item::Item():
-  name(null_clex_str), orig_name(0), is_expensive_cache(-1)
+  name(null_clex_str), orig_name(null_clex_str), is_expensive_cache(-1)
 {
   DBUG_ASSERT(!mysqld_server_started);          // Created early
   base_flags= item_base_t::FIXED;
@@ -556,11 +557,8 @@ void Item::cleanup()
   DBUG_PRINT("enter", ("this: %p", this));
   marker= MARKER_UNUSED;
   join_tab_idx= MAX_TABLES;
-  if (orig_name)
-  {
-    name.str=    orig_name;
-    name.length= strlen(orig_name);
-  }
+  if (orig_name.str)
+    name= orig_name;
   DBUG_VOID_RETURN;
 }
 
@@ -1568,7 +1566,7 @@ bool Item_field::check_vcol_func_processor(void *arg)
   uint r= VCOL_FIELD_REF;
   context= 0;
   vcol_func_processor_result *res= (vcol_func_processor_result *) arg;
-  if (res && res->alter_info)
+  if (res->alter_info)
     r|= res->alter_info->check_vcol_field(this);
   else if (field)
   {
@@ -3281,9 +3279,6 @@ LEX_CSTRING Item_ident::full_name_cstring() const
 void Item_ident::print(String *str, enum_query_type query_type)
 {
   THD *thd= current_thd;
-  char d_name_buff[MAX_ALIAS_NAME], t_name_buff[MAX_ALIAS_NAME];
-  LEX_CSTRING d_name= db_name;
-  LEX_CSTRING t_name= table_name;
   bool use_table_name= table_name.str && table_name.str[0];
   bool use_db_name= use_table_name && db_name.str && db_name.str[0] &&
                     !alias_name_used;
@@ -3324,32 +3319,18 @@ void Item_ident::print(String *str, enum_query_type query_type)
     return;
   }
 
-  if (lower_case_table_names== 1 ||
-      (lower_case_table_names == 2 && !alias_name_used))
-  {
-    if (use_table_name)
-    {
-      strmov(t_name_buff, table_name.str);
-      my_casedn_str(files_charset_info, t_name_buff);
-      t_name= Lex_cstring_strlen(t_name_buff);
-    }
-    if (use_db_name)
-    {
-      strmov(d_name_buff, db_name.str);
-      my_casedn_str(files_charset_info, d_name_buff);
-      d_name= Lex_cstring_strlen(d_name_buff);
-    }
-  }
+  bool casedn= lower_case_table_names== 1 ||
+               (lower_case_table_names == 2 && !alias_name_used);
 
   if (use_db_name)
   {
-    append_identifier(thd, str, d_name.str, (uint) d_name.length);
+    append_identifier_opt_casedn(thd, str, db_name, casedn);
     str->append('.');
     DBUG_ASSERT(use_table_name);
   }
   if (use_table_name)
   {
-    append_identifier(thd, str, t_name.str, (uint) t_name.length);
+    append_identifier_opt_casedn(thd, str, table_name, casedn);
     str->append('.');
   }
   append_identifier(thd, str, &field_name);
@@ -5474,7 +5455,7 @@ static Item** find_field_in_group_list(Item *find_item, ORDER *group_list)
   LEX_CSTRING field_name;
   ORDER      *found_group= NULL;
   int         found_match_degree= 0;
-  char        name_buff[SAFE_NAME_LEN+1];
+  IdentBuffer<SAFE_NAME_LEN> db_name_buff;
 
   if (find_item->type() == Item::FIELD_ITEM ||
       find_item->type() == Item::REF_ITEM)
@@ -5489,9 +5470,7 @@ static Item** find_field_in_group_list(Item *find_item, ORDER *group_list)
   if (db_name.str && lower_case_table_names)
   {
     /* Convert database to lower case for comparison */
-    strmake_buf(name_buff, db_name.str);
-    my_casedn_str(files_charset_info, name_buff);
-    db_name= Lex_cstring_strlen(name_buff);
+    db_name= db_name_buff.copy_casedn(db_name).to_lex_cstring();
   }
 
   DBUG_ASSERT(field_name.str != 0);
@@ -6479,6 +6458,24 @@ Item_equal *Item_field::find_item_equal(COND_EQUAL *cond_equal)
 }
 
 
+/*
+  Check if field is is equal to current field or any of the fields in
+  item_equal
+*/
+
+bool Item_field::contains(Field *field_arg)
+{
+  if (field == field_arg)
+    return 1;
+  /*
+    Check if there is a multiple equality that allows to infer that field
+    (see also: compute_part_of_sort_key_for_equals)
+  */
+  if (item_equal && item_equal->contains(field_arg))
+    return 1;
+  return 0;
+}
+
 /**
   Set a pointer to the multiple equality the field reference belongs to
   (if any).
@@ -6664,7 +6661,7 @@ String *Item::check_well_formed_result(String *str, bool send_error)
     char hexbuf[7];
     uint diff= str->length() - wlen;
     set_if_smaller(diff, 3);
-    octet2hex(hexbuf, str->ptr() + wlen, diff);
+    octet2hex(hexbuf, (uchar*)str->ptr() + wlen, diff);
     if (send_error)
     {
       my_error(ER_INVALID_CHARACTER_STRING, MYF(0),
@@ -6716,7 +6713,7 @@ String_copier_for_item::copy_with_warn(CHARSET_INFO *dstcs, String *dst,
     char buf[16];
     int mblen= srccs->charlen(pos, src + src_length);
     DBUG_ASSERT(mblen > 0 && mblen * 2 + 1 <= (int) sizeof(buf));
-    octet2hex(buf, pos, mblen);
+    octet2hex(buf, (uchar*)pos, mblen);
     push_warning_printf(m_thd, Sql_condition::WARN_LEVEL_WARN,
                         ER_CANNOT_CONVERT_CHARACTER,
                         ER_THD(m_thd, ER_CANNOT_CONVERT_CHARACTER),
@@ -7073,7 +7070,8 @@ Item *Item_int::clone_item(THD *thd)
 }
 
 
-void Item_datetime::set(longlong packed, enum_mysql_timestamp_type ts_type)
+void Item_datetime::set_from_packed(longlong packed,
+                                    enum_mysql_timestamp_type ts_type)
 {
   unpack_time(packed, &ltime, ts_type);
 }
@@ -7087,6 +7085,16 @@ int Item_datetime::save_in_field(Field *field, bool no_conversions)
 longlong Item_datetime::val_int()
 {
   return TIME_to_ulonglong(&ltime);
+}
+
+void Item_datetime::print(String *str, enum_query_type query_type)
+{
+  Datetime dt(current_thd, this);
+  String dt_str;
+  dt.to_string(&dt_str, decimals);
+  str->append('\'');
+  str->append(dt_str);
+  str->append('\'');
 }
 
 int Item_decimal::save_in_field(Field *field, bool no_conversions)
@@ -7452,6 +7460,17 @@ void Item_datetime_literal::print(String *str, enum_query_type query_type)
   str->append(STRING_WITH_LEN("TIMESTAMP'"));
   char buf[MAX_DATE_STRING_REP_LENGTH];
   int length= my_datetime_to_str(cached_time.get_mysql_time(), buf, decimals);
+  str->append(buf, length);
+  str->append('\'');
+}
+
+
+void Item_timestamp_literal::print(String *str, enum_query_type query_type)
+{
+  str->append(STRING_WITH_LEN("TIMESTAMP/*WITH LOCAL TIME ZONE*/'"));
+  char buf[MAX_DATE_STRING_REP_LENGTH];
+  Datetime dt= m_value.to_datetime(current_thd);
+  int length= my_datetime_to_str(dt.get_mysql_time(), buf, decimals);
   str->append(buf, length);
   str->append('\'');
 }
@@ -11009,6 +11028,25 @@ table_map Item_direct_view_ref::not_null_tables() const
    return get_null_ref_table()->map;
 }
 
+void Item_direct_view_ref::print(String *str, enum_query_type query_type)
+{
+  /*
+    If the view/derived table was not merged then this field name must
+    be complemented with the view name/derived table alias.
+    For example, for "SELECT a FROM (SELECT a FROM t1) q" field `a` in the
+    select list must be printed as `q`.`a`.
+    Ancestor class Item_ident contains the correct table_name for that case.
+    But if the view was merged then the initial `q` does not make sense
+    any more so print the Item_ref contents. Field `a` will be printed
+    as `t1`.`a` then
+  */
+  if (!view->merged)
+    Item_ident::print(str, query_type);
+  else
+    Item_ref::print(str, query_type);
+
+}
+
 /*
   we add RAND_TABLE_BIT to prevent moving this item from HAVING to WHERE
 */
@@ -11046,6 +11084,29 @@ const char *dbug_print_item(Item *item)
   else
     return "Couldn't fit into buffer";
 }
+
+
+/*
+  Return the optimizer trace collected so far for the current thread.
+*/
+
+const char *dbug_print_opt_trace()
+{
+  if (current_thd)
+  {
+    if (current_thd->opt_trace.is_started())
+    {
+      String *s= const_cast<String *>(current_thd->opt_trace
+                    .get_current_json()->output.get_string());
+      return s->c_ptr();
+    }
+    else
+      return "Trace empty";
+  }
+  else
+    return "No Thread";
+}
+
 
 const char *dbug_print_select(SELECT_LEX *sl)
 {

@@ -22,8 +22,7 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef DMLPACKAGEPROCESSOR_H
-#define DMLPACKAGEPROCESSOR_H
+#pragma once
 #include <stdexcept>
 #include <string>
 #include <sstream>
@@ -44,11 +43,7 @@
 #include "querystats.h"
 #include "clientrotator.h"
 
-#if defined(_MSC_VER) && defined(DMLPKGPROC_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 //#define IDB_DML_DEBUG
 namespace dmlpackageprocessor
@@ -102,7 +97,8 @@ class DMLPackageProcessor
     ACTIVE_TRANSACTION_ERROR,
     TABLE_LOCK_ERROR,
     JOB_ERROR,
-    JOB_CANCELED
+    JOB_CANCELED,
+    DBRM_READ_ONLY
   };
 
   enum DebugLevel /** @brief Debug level type enumeration */
@@ -249,6 +245,9 @@ class DMLPackageProcessor
 
   EXPORT int rollBackTransaction(uint64_t uniqueId, BRM::TxnID txnID, uint32_t sessionID,
                                  std::string& errorMsg);
+
+  EXPORT int32_t tryToRollBackTransaction(uint64_t uniqueId, BRM::TxnID txnID, uint32_t sessionID,
+                                          std::string& errorMsg);
 
   EXPORT int rollBackBatchAutoOnTransaction(uint64_t uniqueId, BRM::TxnID txnID, uint32_t sessionID,
                                             const uint32_t tableOid, std::string& errorMsg);
@@ -549,5 +548,3 @@ bool from_string(T& t, const std::string& s, std::ios_base& (*f)(std::ios_base&)
 }  // namespace dmlpackageprocessor
 
 #undef EXPORT
-
-#endif  // DMLPACKAGEPROCESSOR_H

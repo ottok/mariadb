@@ -27,8 +27,7 @@
  *      Author: bpaul
  */
 
-#ifndef WE_RESPREADTHREAD_H_
-#define WE_RESPREADTHREAD_H_
+#pragma once
 
 namespace WriteEngine
 {
@@ -46,4 +45,3 @@ class WERespReadThread
 };
 
 } /* namespace WriteEngine */
-#endif /* WE_RESPREADTHREAD_H_ */

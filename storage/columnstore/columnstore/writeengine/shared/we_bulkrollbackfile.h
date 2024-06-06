@@ -27,8 +27,7 @@
  * file did not exist prior to an aborted bulk load.
  */
 
-#ifndef WE_BULKROLLBACKFILE_H_
-#define WE_BULKROLLBACKFILE_H_
+#pragma once
 
 #include <string>
 
@@ -173,5 +172,3 @@ inline int BulkRollbackFile::buildDirName(OID oid, uint16_t dbRoot, uint32_t par
 }
 
 }  // namespace WriteEngine
-
-#endif  // WE_BULKROLLBACKFILE_H_

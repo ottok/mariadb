@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef MCS_DATA_CONDITION_H
-#define MCS_DATA_CONDITION_H
+#pragma once
 
 namespace datatypes
 {
@@ -80,5 +79,3 @@ class DataCondition
 };
 
 }  // namespace datatypes
-
-#endif  // MCS_DATA_CONDITION_H

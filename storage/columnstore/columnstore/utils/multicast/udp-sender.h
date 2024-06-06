@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef UDP_SENDER_H
-#define UDP_SENDER_H
+#pragma once
 
 #include "udp-sender.h"
 #include "udpcast.h"
@@ -99,5 +98,3 @@ int localReader(struct fifo* fifo, int in);
  * Streaming mode: allow receiver to join a running transmission
  */
 #define FLAG_STREAMING 0x0100
-
-#endif

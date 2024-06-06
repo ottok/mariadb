@@ -84,7 +84,7 @@ protected:
   typedef bool (*on_update_function)(sys_var *self, THD *thd, enum_var_type type);
 
   int flags;            ///< or'ed flag_enum values
-  const SHOW_TYPE show_val_type; ///< what value_ptr() returns for sql_show.cc
+  SHOW_TYPE show_val_type; ///< what value_ptr() returns for sql_show.cc
   PolyLock *guard;      ///< *second* lock that protects the variable
   ptrdiff_t offset;     ///< offset to the value from global_system_variables
   on_check_function on_check;
@@ -134,6 +134,8 @@ public:
     return system_charset_info;
   }
   bool is_readonly() const { return flags & READONLY; }
+  void update_flags(int new_flags) { flags = new_flags; }
+  int get_flags() const { return flags; }
   /**
     the following is only true for keycache variables,
     that support the syntax @@keycache_name.variable_name
@@ -463,6 +465,9 @@ inline bool IS_SYSVAR_AUTOSIZE(void *ptr)
 bool fix_delay_key_write(sys_var *self, THD *thd, enum_var_type type);
 
 sql_mode_t expand_sql_mode(sql_mode_t sql_mode);
+#ifndef EMBEDDED_LIBRARY
+bool validate_redirect_url(char *str, size_t len);
+#endif
 const char *sql_mode_string_representation(uint bit_number);
 bool sql_mode_string_representation(THD *thd, sql_mode_t sql_mode,
                                     LEX_CSTRING *ls);
@@ -485,5 +490,4 @@ void free_engine_list(plugin_ref *list);
 plugin_ref *copy_engine_list(plugin_ref *list);
 plugin_ref *temp_copy_engine_list(THD *thd, plugin_ref *list);
 char *pretty_print_engine_list(THD *thd, plugin_ref *list);
-
 #endif

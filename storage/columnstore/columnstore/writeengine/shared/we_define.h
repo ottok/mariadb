@@ -21,17 +21,12 @@
 
 #undef NO_ERROR
 
-#ifndef _WE_DEFINE_H_
-#define _WE_DEFINE_H_
+#pragma once
 #include <string>
 #include <map>
 #include <stdint.h>
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 /** Namespace WriteEngine */
 namespace WriteEngine
@@ -156,6 +151,7 @@ const int ERR_FILE_FLUSH = ERR_FILEBASE + 18;           // Error flushing file
 const int ERR_FILE_GLOBBING = ERR_FILEBASE + 19;        // Error globbing a file name
 const int ERR_FILE_EOF = ERR_FILEBASE + 20;             // EOF
 const int ERR_FILE_CHOWN = ERR_FILEBASE + 21;           // EOF
+const int ERR_INTERNAL = ERR_FILEBASE + 22;             // EOF
 
 //--------------------------------------------------------------------------
 // XML level error
@@ -409,5 +405,3 @@ struct WErrorCodes
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_DEFINE_H_

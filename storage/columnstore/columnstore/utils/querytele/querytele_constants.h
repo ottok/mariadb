@@ -4,8 +4,7 @@
  * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
  *  @generated
  */
-#ifndef querytele_CONSTANTS_H
-#define querytele_CONSTANTS_H
+#pragma once
 
 #include "querytele_types.h"
 
@@ -20,5 +19,3 @@ class queryteleConstants
 extern const queryteleConstants g_querytele_constants;
 
 }  // namespace querytele
-
-#endif

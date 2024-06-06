@@ -28,17 +28,12 @@
 //
 //
 
-#ifndef BATCHPRIMITIVEPROCESSOR_H_
-#define BATCHPRIMITIVEPROCESSOR_H_
+#pragma once
 
 #include <boost/scoped_array.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/scoped_ptr.hpp>
-#ifndef _MSC_VER
 #include <tr1/unordered_map>
-#else
-#include <unordered_map>
-#endif
 #include <boost/thread.hpp>
 
 #include "errorcodes.h"
@@ -54,7 +49,6 @@
 #include "bppsendthread.h"
 #include "columnwidth.h"
 
-//#define PRIMPROC_STOPWATCH
 #ifdef PRIMPROC_STOPWATCH
 #include "stopwatch.h"
 #endif
@@ -102,7 +96,6 @@ class BatchPrimitiveProcessor
   void resetBPP(messageqcpp::ByteStream&, const SP_UM_MUTEX& wLock, const SP_UM_IOSOCK& outputSock);
   void addToJoiner(messageqcpp::ByteStream&);
   int endOfJoiner();
-  void doneSendingJoinerData();
   int operator()();
   void setLBIDForScan(uint64_t rid);
 
@@ -136,6 +129,11 @@ class BatchPrimitiveProcessor
   inline void busy(bool b)
   {
     fBusy = b;
+  }
+
+  size_t getWeight() const
+  {
+    return weight_;
   }
 
   uint16_t FilterCount() const
@@ -224,7 +222,7 @@ class BatchPrimitiveProcessor
   int64_t values[LOGICAL_BLOCK_RIDS];
   int128_t wide128Values[LOGICAL_BLOCK_RIDS];
   boost::scoped_array<uint64_t> absRids;
-  boost::scoped_array<std::string> strValues;
+  boost::scoped_array<utils::NullString> strValues;
   uint16_t origRidCount;
   uint16_t ridCount;
   bool needStrValues;
@@ -232,7 +230,8 @@ class BatchPrimitiveProcessor
 
   /* Common space for primitive data */
   alignas(utils::MAXCOLUMNWIDTH) uint8_t blockData[BLOCK_SIZE * utils::MAXCOLUMNWIDTH];
-  boost::scoped_array<uint8_t> outputMsg;
+  uint8_t blockDataAux[BLOCK_SIZE * execplan::AUX_COL_WIDTH];
+  std::unique_ptr<uint8_t[], utils::AlignedDeleter>  outputMsg;
   uint32_t outMsgSize;
 
   std::vector<SCommand> filterSteps;
@@ -258,6 +257,7 @@ class BatchPrimitiveProcessor
     int128_t max128Val;
     int64_t maxVal;
   };
+  bool cpDataFromDictScan;
 
   uint64_t lbidForCP;
   bool hasWideColumnOut;
@@ -294,7 +294,7 @@ class BatchPrimitiveProcessor
   boost::scoped_array<uint16_t> fFiltCmdRids[2];
   boost::scoped_array<int64_t> fFiltCmdValues[2];
   boost::scoped_array<int128_t> fFiltCmdBinaryValues[2];
-  boost::scoped_array<std::string> fFiltStrValues[2];
+  boost::scoped_array<utils::NullString> fFiltStrValues[2];
   uint64_t fFiltRidCount[2];
 
   // query density threshold for prefetch & async loading
@@ -303,8 +303,8 @@ class BatchPrimitiveProcessor
   /* RowGroup support */
   rowgroup::RowGroup outputRG;
   boost::scoped_ptr<rowgroup::RGData> outRowGroupData;
-  boost::shared_array<int> rgMap;          // maps input cols to output cols
-  boost::shared_array<int> projectionMap;  // maps the projection steps to the output RG
+  std::shared_ptr<int[]> rgMap;          // maps input cols to output cols
+  std::shared_ptr<int[]> projectionMap;  // maps the projection steps to the output RG
   bool hasRowGroup;
 
   /* Rowgroups + join */
@@ -330,40 +330,40 @@ class BatchPrimitiveProcessor
   boost::scoped_array<uint8_t> baseJRowMem;
   boost::scoped_ptr<rowgroup::RGData> joinedRGMem;
   boost::scoped_array<rowgroup::Row> smallRows;
-  boost::shared_array<boost::shared_array<int>> gjrgMappings;
+  std::shared_ptr<std::shared_ptr<int[]>[]> gjrgMappings;
 
-  boost::shared_array<boost::shared_array<boost::shared_ptr<TJoiner>>> tJoiners;
+  std::shared_ptr<std::shared_ptr<boost::shared_ptr<TJoiner>[]>[]> tJoiners;
   typedef std::vector<uint32_t> MatchedData[LOGICAL_BLOCK_RIDS];
-  boost::shared_array<MatchedData> tSmallSideMatches;
-  uint32_t executeTupleJoin(uint32_t startRid);
+  std::shared_ptr<MatchedData[]> tSmallSideMatches;
+  uint32_t executeTupleJoin(uint32_t startRid, rowgroup::RowGroup& largeSideRowGroup);
   bool getTupleJoinRowGroupData;
   std::vector<rowgroup::RowGroup> smallSideRGs;
   rowgroup::RowGroup largeSideRG;
-  boost::shared_array<rowgroup::RGData> smallSideRowData;
-  boost::shared_array<rowgroup::RGData> smallNullRowData;
-  boost::shared_array<rowgroup::Row::Pointer> smallNullPointers;
-  boost::shared_array<uint64_t> ssrdPos;  // this keeps track of position when building smallSideRowData
-  boost::shared_array<uint32_t> smallSideRowLengths;
-  boost::shared_array<joblist::JoinType> joinTypes;
+  std::shared_ptr<rowgroup::RGData[]> smallSideRowData;
+  std::shared_ptr<rowgroup::RGData[]> smallNullRowData;
+  std::shared_ptr<rowgroup::Row::Pointer[]> smallNullPointers;
+  std::shared_ptr<uint64_t[]> ssrdPos;  // this keeps track of position when building smallSideRowData
+  std::shared_ptr<uint32_t[]> smallSideRowLengths;
+  std::shared_ptr<joblist::JoinType[]> joinTypes;
   uint32_t joinerCount;
-  boost::shared_array<std::atomic<uint32_t>> tJoinerSizes;
+  std::shared_ptr<std::atomic<uint32_t>[]> tJoinerSizes;
   // LSKC[i] = the column in outputRG joiner i uses as its key column
-  boost::shared_array<uint32_t> largeSideKeyColumns;
+  std::shared_ptr<uint32_t[]> largeSideKeyColumns;
   // KCPP[i] = true means a joiner uses projection step i as a key column
-  boost::shared_array<bool> keyColumnProj;
+  std::shared_ptr<bool[]> keyColumnProj;
   rowgroup::Row oldRow, newRow;  // used by executeTupleJoin()
-  boost::shared_array<uint64_t> joinNullValues;
-  boost::shared_array<bool> doMatchNulls;
+  std::shared_ptr<uint64_t[]> joinNullValues;
+  std::shared_ptr<bool[]> doMatchNulls;
   boost::scoped_array<boost::scoped_ptr<funcexp::FuncExpWrapper>> joinFEFilters;
   bool hasJoinFEFilters;
   bool hasSmallOuterJoin;
 
   /* extra typeless join vars & fcns*/
-  boost::shared_array<bool> typelessJoin;
-  boost::shared_array<std::vector<uint32_t>> tlLargeSideKeyColumns;
+  std::shared_ptr<bool[]> typelessJoin;
+  std::shared_ptr<std::vector<uint32_t>[]> tlLargeSideKeyColumns;
   std::shared_ptr<std::vector<uint32_t>> tlSmallSideKeyColumns;
-  boost::shared_array<boost::shared_array<boost::shared_ptr<TLJoiner>>> tlJoiners;
-  boost::shared_array<uint32_t> tlSmallSideKeyLengths;
+  std::shared_ptr<std::shared_ptr<boost::shared_ptr<TLJoiner>[]>[]> tlJoiners;
+  std::shared_ptr<uint32_t[]> tlSmallSideKeyLengths;
   // True if smallSide and largeSide TypelessData key column differs,e.g BIGINT vs DECIMAL(38).
   bool mJOINHasSkewedKeyColumn;
   const rowgroup::RowGroup* mSmallSideRGPtr;
@@ -371,7 +371,7 @@ class BatchPrimitiveProcessor
 
   inline void getJoinResults(const rowgroup::Row& r, uint32_t jIndex, std::vector<uint32_t>& v);
   // these allocators hold the memory for the keys stored in tlJoiners
-  boost::shared_array<utils::PoolAllocator> storedKeyAllocators;
+  std::shared_ptr<utils::PoolAllocator[]> storedKeyAllocators;
 
   /* PM Aggregation */
   rowgroup::RowGroup joinedRG;  // if there's a join, the rows are formatted with this
@@ -392,9 +392,9 @@ class BatchPrimitiveProcessor
   boost::scoped_array<uint8_t> joinFERowData;
   boost::scoped_ptr<rowgroup::RGData> fe1Data,
       fe2Data;  // can probably make these RGDatas not pointers to RGDatas
-  boost::shared_array<int> projectForFE1;
-  boost::shared_array<int> fe1ToProjection, fe2Mapping;  // RG mappings
-  boost::scoped_array<boost::shared_array<int>> joinFEMappings;
+  std::shared_ptr<int[]> projectForFE1;
+  std::shared_ptr<int[]> fe1ToProjection, fe2Mapping;  // RG mappings
+  boost::scoped_array<std::shared_ptr<int[]>> joinFEMappings;
   rowgroup::Row fe1In, fe1Out, fe2In, fe2Out, joinFERow;
 
   bool hasDictStep;
@@ -433,9 +433,11 @@ class BatchPrimitiveProcessor
   uint processorThreads;
   uint ptMask;
   bool firstInstance;
+  uint64_t valuesLBID;
+  bool initiatedByEM_;
+  uint32_t weight_;
 
-  static const uint64_t maxResultCount = 1048576;  // 2^20
-
+  uint32_t maxPmJoinResultCount = 1048576;
   friend class Command;
   friend class ColumnCommand;
   friend class DictStep;
@@ -448,5 +450,3 @@ class BatchPrimitiveProcessor
 };
 
 }  // namespace primitiveprocessor
-
-#endif

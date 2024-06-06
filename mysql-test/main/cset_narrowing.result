@@ -57,12 +57,15 @@ EXPLAIN
 {
   "query_block": {
     "select_id": 1,
+    "cost": "COST_REPLACED",
     "nested_loop": [
       {
         "table": {
           "table_name": "t10",
           "access_type": "ALL",
+          "loops": 1,
           "rows": 4,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "attached_condition": "t10.mb4 is not null"
         }
@@ -76,7 +79,9 @@ EXPLAIN
           "key_length": "99",
           "used_key_parts": ["mb3"],
           "ref": ["test.t10.mb4"],
+          "loops": 4,
           "rows": 1,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "index_condition": "t1.mb3 = t10.mb4"
         }
@@ -102,12 +107,15 @@ EXPLAIN
 {
   "query_block": {
     "select_id": 1,
+    "cost": "COST_REPLACED",
     "nested_loop": [
       {
         "table": {
           "table_name": "t10",
           "access_type": "ALL",
+          "loops": 1,
           "rows": 4,
+          "cost": "COST_REPLACED",
           "filtered": 100
         }
       },
@@ -120,7 +128,9 @@ EXPLAIN
           "key_length": "99",
           "used_key_parts": ["mb3"],
           "ref": ["test.t10.mb4"],
+          "loops": 4,
           "rows": 1,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "index_condition": "t10.mb4 <=> t1.mb3"
         }
@@ -141,12 +151,15 @@ EXPLAIN
 {
   "query_block": {
     "select_id": 1,
+    "cost": "COST_REPLACED",
     "nested_loop": [
       {
         "table": {
           "table_name": "t10",
           "access_type": "ALL",
+          "loops": 1,
           "rows": 4,
+          "cost": "COST_REPLACED",
           "filtered": 100
         }
       },
@@ -154,7 +167,9 @@ EXPLAIN
         "table": {
           "table_name": "t1",
           "access_type": "ALL",
+          "loops": 4,
           "rows": 10002,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "attached_condition": "t10.mb4 = convert(t1.mb3 using utf8mb4)"
         }
@@ -171,12 +186,15 @@ EXPLAIN
 {
   "query_block": {
     "select_id": 1,
+    "cost": "COST_REPLACED",
     "nested_loop": [
       {
         "table": {
           "table_name": "t10",
           "access_type": "ALL",
+          "loops": 1,
           "rows": 4,
+          "cost": "COST_REPLACED",
           "filtered": 100
         }
       },
@@ -189,7 +207,9 @@ EXPLAIN
           "key_length": "99",
           "used_key_parts": ["mb3"],
           "ref": ["func"],
+          "loops": 4,
           "rows": 1,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "index_condition": "t1.mb3 = concat('',t10.mb4)"
         }
@@ -239,7 +259,7 @@ JS
             "using_mrr": false,
             "index_only": false,
             "rows": 3,
-            "cost": 3.760377105,
+            "cost": "COST_REPLACED",
             "chosen": true
         }
     ]
@@ -256,6 +276,7 @@ EXPLAIN
 {
   "query_block": {
     "select_id": 1,
+    "cost": "COST_REPLACED",
     "nested_loop": [
       {
         "table": {
@@ -278,7 +299,9 @@ EXPLAIN
           "key": "mb3",
           "key_length": "99",
           "used_key_parts": ["mb3"],
+          "loops": 1,
           "rows": 4,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "index_condition": "t1.mb3 = '????' or t1.mb3 = 'hello'"
         }
@@ -292,6 +315,7 @@ EXPLAIN
 {
   "query_block": {
     "select_id": 1,
+    "cost": "COST_REPLACED",
     "nested_loop": [
       {
         "table": {
@@ -310,7 +334,9 @@ EXPLAIN
         "table": {
           "table_name": "t1",
           "access_type": "ALL",
+          "loops": 1,
           "rows": 10002,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "attached_condition": "convert(t1.mb3 using utf8mb4) > '????'"
         }
@@ -331,6 +357,7 @@ EXPLAIN
 {
   "query_block": {
     "select_id": 1,
+    "cost": "COST_REPLACED",
     "nested_loop": [
       {
         "table": {
@@ -353,7 +380,9 @@ EXPLAIN
           "key": "mb4",
           "key_length": "131",
           "used_key_parts": ["mb4"],
+          "loops": 1,
           "rows": 3,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "index_condition": "t2.mb4 > '????'"
         }
@@ -374,12 +403,15 @@ EXPLAIN
 {
   "query_block": {
     "select_id": 1,
+    "cost": "COST_REPLACED",
     "nested_loop": [
       {
         "table": {
           "table_name": "t10",
           "access_type": "ALL",
+          "loops": 1,
           "rows": 4,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "attached_condition": "t10.mb4 is not null and t10.mb4 is not null"
         }
@@ -393,7 +425,9 @@ EXPLAIN
           "key_length": "99",
           "used_key_parts": ["mb3"],
           "ref": ["test.t10.mb4"],
+          "loops": 4,
           "rows": 1,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "index_condition": "t1.mb3 = t10.mb4"
         }
@@ -407,7 +441,9 @@ EXPLAIN
           "key_length": "131",
           "used_key_parts": ["mb4"],
           "ref": ["test.t10.mb4"],
+          "loops": 4,
           "rows": 1,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "index_condition": "concat(convert(t1.mb3 using utf8mb4),t2.mb4,t10.mb4) <> 'Bebebe'"
         }
@@ -458,12 +494,15 @@ EXPLAIN
 {
   "query_block": {
     "select_id": 1,
+    "cost": "COST_REPLACED",
     "nested_loop": [
       {
         "table": {
           "table_name": "t10",
           "access_type": "ALL",
+          "loops": 1,
           "rows": 4,
+          "cost": "COST_REPLACED",
           "filtered": 25,
           "attached_condition": "t10.mb4 = 'hello'"
         }
@@ -477,7 +516,9 @@ EXPLAIN
           "key_length": "99",
           "used_key_parts": ["mb3"],
           "ref": ["const"],
+          "loops": 1,
           "rows": 1,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "index_condition": "t1.mb3 = t10.mb4"
         }
@@ -491,7 +532,9 @@ EXPLAIN
           "key_length": "131",
           "used_key_parts": ["mb4"],
           "ref": ["const"],
+          "loops": 1,
           "rows": 1,
+          "cost": "COST_REPLACED",
           "filtered": 100,
           "index_condition": "t2.mb4 = t10.mb4 and concat(convert(t1.mb3 using utf8mb4),t2.mb4,t10.mb4) <> 'Bebebe'"
         }

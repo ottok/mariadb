@@ -27,8 +27,7 @@
  *      Author: bpaul
  */
 
-#ifndef WE_TABLELOCKGRABBER_H_
-#define WE_TABLELOCKGRABBER_H_
+#pragma once
 
 namespace WriteEngine
 {
@@ -56,4 +55,3 @@ class WETableLockGrabber
 };
 
 } /* namespace WriteEngine */
-#endif /* WE_TABLELOCKGRABBER_H_ */

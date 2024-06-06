@@ -264,6 +264,7 @@ ha_s3::ha_s3(handlerton *hton, TABLE_SHARE *table_arg)
   /* Remove things that S3 doesn't support */
   int_table_flags&= ~(HA_BINLOG_ROW_CAPABLE | HA_BINLOG_STMT_CAPABLE |
                       HA_CAN_EXPORT);
+  int_table_flags|= HA_NO_ONLINE_ALTER;
   can_enable_indexes= 0;
 }
 
@@ -852,7 +853,7 @@ static int s3_discover_table_existence(handlerton *hton, const char *db,
 */
 
 static int s3_discover_table_names(handlerton *hton __attribute__((unused)),
-                                   LEX_CSTRING *db,
+                                   const LEX_CSTRING *db,
                                    MY_DIR *dir __attribute__((unused)),
                                    handlerton::discovered_list *result)
 {

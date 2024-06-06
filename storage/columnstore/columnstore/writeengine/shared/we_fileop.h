@@ -19,8 +19,7 @@
 
 /** @file */
 
-#ifndef _WE_FILEOP_H_
-#define _WE_FILEOP_H_
+#pragma once
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string>
@@ -28,15 +27,6 @@
 #include <map>
 #include <boost/thread.hpp>
 
-#ifdef _MSC_VER
-#include <direct.h>
-#define S_IRWXU 0
-#define S_IRWXG 0
-#ifndef S_IROTH
-#define S_IROTH 0
-#endif
-#define S_IXOTH 0
-#endif
 
 #include "we_blockop.h"
 #include "we_brm.h"
@@ -45,11 +35,7 @@
 #include "idbcompress.h"
 #include "calpontsystemcatalog.h"
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 #define MAX_NBLOCKS 8192
 
@@ -457,7 +443,6 @@ class FileOp : public BlockOp, public WeUIDGID
                                  execplan::CalpontSystemCatalog::ColDataType colDataType);
 
   static void initDbRootExtentMutexes();
-  static void removeDbRootExtentMutexes();
 
   int writeInitialCompColumnChunk(IDBDataFile* pFile, int nBlocksAllocated, int nRows,
                                   const uint8_t* emptyVal, int width, BRM::LBID_t lbid,
@@ -471,7 +456,7 @@ class FileOp : public BlockOp, public WeUIDGID
   static boost::mutex m_createDbRootMutexes;
 
   // Mutexes used to serialize extent creation within each DBRoot
-  static std::map<int, boost::mutex*> m_DbRootAddExtentMutexes;
+  static std::map<int, boost::mutex> m_DbRootAddExtentMutexes;
 
   // protect race condition in creating directories
   static boost::mutex m_mkdirMutex;
@@ -520,5 +505,3 @@ inline TxnID FileOp::getTransId() const
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WE_FILEOP_H_

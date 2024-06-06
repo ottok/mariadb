@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2014, 2022, MariaDB Corporation.
+Copyright (c) 2014, 2023, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -36,7 +36,6 @@ Created 12/9/1995 Heikki Tuuri
 #include "log0recv.h"
 #include "fil0fil.h"
 #include "dict0stats_bg.h"
-#include "btr0defragment.h"
 #include "srv0srv.h"
 #include "srv0start.h"
 #include "trx0sys.h"
@@ -435,6 +434,31 @@ void log_t::set_buffered(bool buffered)
   log_resize_release();
 }
 #endif
+
+  /** Try to enable or disable durable writes (update log_write_through) */
+void log_t::set_write_through(bool write_through)
+{
+  if (is_pmem() || high_level_read_only)
+    return;
+  log_resize_acquire();
+  if (!resize_in_progress() && is_opened() &&
+      bool(log_write_through) != write_through)
+  {
+    os_file_close_func(log.m_file);
+    log.m_file= OS_FILE_CLOSED;
+    std::string path{get_log_file_path()};
+    log_write_through= write_through;
+    bool success;
+    log.m_file= os_file_create_func(path.c_str(),
+                                    OS_FILE_OPEN, OS_FILE_NORMAL, OS_LOG_FILE,
+                                    false, &success);
+    ut_a(log.m_file != OS_FILE_CLOSED);
+    sql_print_information(log_write_through
+                          ? "InnoDB: Log writes write through"
+                          : "InnoDB: Log writes may be cached");
+  }
+  log_resize_release();
+}
 
 /** Start resizing the log and release the exclusive latch.
 @param size  requested new file_size
@@ -892,7 +916,7 @@ bool log_t::flush(lsn_t lsn) noexcept
 {
   ut_ad(lsn >= get_flushed_lsn());
   flush_lock.set_pending(lsn);
-  const bool success{srv_file_flush_method == SRV_O_DSYNC || log.flush()};
+  const bool success{log_write_through || log.flush()};
   if (UNIV_LIKELY(success))
   {
     flushed_to_disk_lsn.store(lsn, std::memory_order_release);
@@ -929,15 +953,6 @@ void log_write_up_to(lsn_t lsn, bool durable,
   ut_ad(!srv_read_only_mode || log_sys.buf_free_ok());
   ut_ad(lsn != LSN_MAX);
   ut_ad(lsn != 0);
-
-  if (UNIV_UNLIKELY(recv_no_ibuf_operations))
-  {
-    /* A non-final batch of recovery is active no writes to the log
-    are allowed yet. */
-    ut_a(!callback);
-    return;
-  }
-
   ut_ad(lsn <= log_sys.get_lsn());
 
 #ifdef HAVE_PMEM
@@ -963,6 +978,7 @@ repeat:
   if (write_lock.acquire(lsn, durable ? nullptr : callback) ==
       group_commit_lock::ACQUIRED)
   {
+    ut_ad(!recv_no_log_write || srv_operation != SRV_OPERATION_NORMAL);
     log_sys.latch.wr_lock(SRW_LOCK_CALL);
     pending_write_lsn= write_lock.release(log_sys.write_buf<true>());
   }
@@ -1081,18 +1097,15 @@ ATTRIBUTE_COLD void logs_empty_and_mark_files_at_shutdown()
 
 	ib::info() << "Starting shutdown...";
 
-	/* Wait until the master thread and all other operations are idle: our
+	/* Wait until the master task and all other operations are idle: our
 	algorithm only works if the server is idle at shutdown */
-	bool do_srv_shutdown = false;
 	if (srv_master_timer) {
-		do_srv_shutdown = srv_fast_shutdown < 2;
 		srv_master_timer.reset();
 	}
 
 	/* Wait for the end of the buffer resize task.*/
 	buf_resize_shutdown();
 	dict_stats_shutdown();
-	btr_defragment_shutdown();
 
 	srv_shutdown_state = SRV_SHUTDOWN_CLEANUP;
 
@@ -1101,11 +1114,6 @@ ATTRIBUTE_COLD void logs_empty_and_mark_files_at_shutdown()
 		buf_dump_start();
 	}
 	srv_monitor_timer.reset();
-
-	if (do_srv_shutdown) {
-		srv_shutdown(srv_fast_shutdown == 0);
-	}
-
 
 loop:
 	ut_ad(lock_sys.is_initialised() || !srv_was_started);

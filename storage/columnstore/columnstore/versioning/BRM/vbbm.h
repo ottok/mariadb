@@ -24,8 +24,7 @@
  * class XXX interface
  */
 
-#ifndef _VBBM_H_
-#define _VBBM_H_
+#pragma once
 
 #include <vector>
 //#define NDEBUG
@@ -57,11 +56,7 @@
   ((entries * sizeof(VBBMEntry)) + (entries / 4 * sizeof(int)) + (files * sizeof(VBFileMetadata)) + \
    sizeof(VBShmsegHeader))
 
-#if defined(_MSC_VER) && defined(xxxVBBM_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace idbdatafile
 {
@@ -254,5 +249,3 @@ class VBBM : public Undoable
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif  // _VBBM_H_

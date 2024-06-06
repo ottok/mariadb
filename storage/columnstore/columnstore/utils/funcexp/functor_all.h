@@ -20,8 +20,7 @@
 
 /** @file */
 
-#ifndef FUNCTOR_ALL_H
-#define FUNCTOR_ALL_H
+#pragma once
 
 #include "functor.h"
 
@@ -468,5 +467,3 @@ class Func_nullif : public Func_All
 };
 
 }  // namespace funcexp
-
-#endif

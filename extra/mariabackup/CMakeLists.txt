@@ -76,7 +76,7 @@ MYSQL_ADD_EXECUTABLE(mariadb-backup
   common_engine.cc
   ${PROJECT_SOURCE_DIR}/sql/net_serv.cc
   ${PROJECT_SOURCE_DIR}/libmysqld/libmysql.c
-  COMPONENT backup
+  COMPONENT Backup
   )
 
 # Export all symbols on Unix, for better crash callstacks
@@ -100,7 +100,7 @@ MYSQL_ADD_EXECUTABLE(mbstream
   xbstream.cc
   xbstream_read.cc
   xbstream_write.cc
-  COMPONENT backup
+  COMPONENT Backup
   )
 
 

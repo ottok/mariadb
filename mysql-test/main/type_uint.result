@@ -68,7 +68,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	t2	index	PRIMARY	PRIMARY	4	NULL	2	Using where; Using index
 Warnings:
 Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`a` of type `int unsigned` = "`t1`.`a`" of type `date`
-Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`a` of type `int unsigned` = "'1999-01-01'" of type `date`
 DROP TABLE t1,t2;
 #
 # End of 10.0 tests

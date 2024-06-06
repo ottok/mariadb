@@ -1905,7 +1905,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	t2	index	PRIMARY	PRIMARY	1	NULL	2	Using where; Using index
 Warnings:
 Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`c1` of type `enum` = "`t1`.`c1`" of type `date`
-Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`c1` of type `enum` = "'2001-01-01'" of type `date`
 SELECT t1.* FROM t1 LEFT JOIN t2 USING (c1);
 c1
 2001-01-01
@@ -1917,7 +1916,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	t2	index	PRIMARY	PRIMARY	1	NULL	2	Using where; Using index
 Warnings:
 Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`c1` of type `enum` = "`t1`.`c1`" of type `date`
-Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`c1` of type `enum` = "'2001-01-01'" of type `date`
 DROP TABLE t1, t2;
 #
 # MDEV-6978 Bad results with join comparing case insensitive VARCHAR/ENUM/SET expression to a _bin ENUM column
@@ -1950,7 +1948,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	t2	index	PRIMARY	PRIMARY	1	NULL	2	Using where; Using index
 Warnings:
 Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`c1` of collation `latin1_bin` = "`t1`.`c1` collate latin1_swedish_ci" of collation `latin1_swedish_ci`
-Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`c1` of collation `latin1_bin` = "<cache>('a' collate latin1_swedish_ci)" of collation `latin1_swedish_ci`
 DROP TABLE IF EXISTS t1,t2;
 CREATE TABLE t1 (c1 SET('a') CHARACTER SET latin1 PRIMARY KEY);
 INSERT INTO t1 VALUES ('a');
@@ -1980,7 +1977,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	t2	index	PRIMARY	PRIMARY	1	NULL	2	Using where; Using index
 Warnings:
 Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`c1` of collation `latin1_bin` = "`t1`.`c1` collate latin1_swedish_ci" of collation `latin1_swedish_ci`
-Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`c1` of collation `latin1_bin` = "<cache>('a' collate latin1_swedish_ci)" of collation `latin1_swedish_ci`
 DROP TABLE IF EXISTS t1,t2;
 CREATE TABLE t1 (c1 VARCHAR(10) CHARACTER SET latin1 PRIMARY KEY);
 INSERT INTO t1 VALUES ('a');
@@ -2010,7 +2006,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	t2	index	PRIMARY	PRIMARY	1	NULL	2	Using where; Using index
 Warnings:
 Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`c1` of collation `latin1_bin` = "`t1`.`c1` collate latin1_swedish_ci" of collation `latin1_swedish_ci`
-Note	1105	Cannot use key `PRIMARY` part[0] for lookup: `test`.`t2`.`c1` of collation `latin1_bin` = "<cache>('a' collate latin1_swedish_ci)" of collation `latin1_swedish_ci`
 DROP TABLE IF EXISTS t1,t2;
 #
 # MDEV-6991 GROUP_MIN_MAX optimization is erroneously applied in some cases
@@ -2594,7 +2589,7 @@ t2	CREATE TABLE `t2` (
 DROP TABLE t2;
 SELECT c_int FROM t1 UNION SELECT c_enum FROM t1;
 Catalog	Database	Table	Table_alias	Column	Column_alias	Type	Length	Max length	Is_null	Flags	Decimals	Charsetnr
-def				c_int	c_int	253	11	0	Y	0	0	8
+def				c_int	c_int	253	11	0	Y	16384	0	8
 c_int
 SELECT COALESCE(c_int, c_enum)  FROM t1;
 Catalog	Database	Table	Table_alias	Column	Column_alias	Type	Length	Max length	Is_null	Flags	Decimals	Charsetnr

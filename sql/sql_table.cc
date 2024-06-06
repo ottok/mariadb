@@ -55,6 +55,7 @@
 #include "sql_audit.h"
 #include "sql_sequence.h"
 #include "tztime.h"
+#include "rpl_rli.h"
 #include "sql_insert.h"                // binlog_drop_table
 #include "ddl_log.h"
 #include "debug.h"                     // debug_crash_here()
@@ -94,6 +95,7 @@ class Enable_wsrep_ctas_guard
 #endif /* WITH_WSREP */
 
 #include "sql_debug.h"
+#include "scope.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -111,9 +113,11 @@ static bool make_unique_constraint_name(THD *, LEX_CSTRING *, const char *,
                                         List<Virtual_column_info> *, uint *);
 static const char *make_unique_invisible_field_name(THD *, const char *,
                                                     List<Create_field> *);
-static int copy_data_between_tables(THD *, TABLE *,TABLE *, bool, uint,
-                                    ORDER *, ha_rows *, ha_rows *,
-                                    Alter_info *, Alter_table_ctx *);
+static int copy_data_between_tables(THD *, TABLE *,TABLE *,
+                                    bool, uint, ORDER *,
+                                    ha_rows *, ha_rows *,
+                                    Alter_info *,
+                                    Alter_table_ctx *, bool, uint64);
 static int append_system_key_parts(THD *, HA_CREATE_INFO *, Key *);
 static int mysql_prepare_create_table(THD *, HA_CREATE_INFO *, Alter_info *,
                                       uint *, handler *, KEY **, uint *, int);
@@ -670,20 +674,11 @@ void build_lower_case_table_filename(char *buff, size_t bufflen,
                                      const LEX_CSTRING *table,
                                      uint flags)
 {
-  char table_name[SAFE_NAME_LEN+1], db_name[SAFE_NAME_LEN+1];
-
   DBUG_ASSERT(db->length <= SAFE_NAME_LEN && table->length <= SAFE_NAME_LEN);
-
-  memcpy(db_name, db->str, db->length);
-  db_name[db->length]= 0;
-  my_casedn_str(files_charset_info, db_name);
-
-  memcpy(table_name, table->str, table->length);
-  table_name[table->length]= 0;
-  my_casedn_str(files_charset_info, table_name);
-
-  build_table_filename(buff, bufflen, db_name, table_name, "",
-                       flags & FN_IS_TMP);
+  build_table_filename(buff, bufflen,
+          IdentBufferCasedn<SAFE_NAME_LEN>(*db).to_lex_cstring().str,
+          IdentBufferCasedn<SAFE_NAME_LEN>(*table).to_lex_cstring().str, "",
+          flags & FN_IS_TMP);
 }
 
 
@@ -2135,7 +2130,8 @@ static int sort_keys(KEY *a, KEY *b)
       return -1;
     /*
       Long Unique keys should always be last unique key.
-      Before this patch they used to change order wrt to partial keys (MDEV-19049)
+      Before this patch they used to change order wrt to partial keys
+      (MDEV-19049)
     */
     if (a->algorithm == HA_KEY_ALG_LONG_HASH)
       return 1;
@@ -2230,10 +2226,12 @@ bool check_duplicates_in_interval(const char *set_or_name,
   Generates an error to the diagnostics area in case of a failure.
 */
 bool Column_definition::
-       prepare_charset_for_string(const Column_derived_attributes *dattr)
+       prepare_charset_for_string(Sql_used *used,
+                                  const Charset_collation_map_st &map,
+                                  const Column_derived_attributes *dattr)
 {
   CHARSET_INFO *tmp= charset_collation_attrs().
-                       resolved_to_character_set(dattr->charset());
+                       resolved_to_character_set(used, map, dattr->charset());
   if (!tmp)
     return true;
   charset= tmp;
@@ -2632,7 +2630,7 @@ static Create_field * add_hash_field(THD * thd, List<Create_field> *create_list,
   cf->invisible= INVISIBLE_FULL;
   cf->pack_flag|= FIELDFLAG_MAYBE_NULL;
   cf->vcol_info= new (thd->mem_root) Virtual_column_info();
-  cf->vcol_info->stored_in_db= false;
+  cf->vcol_info->set_vcol_type(VCOL_GENERATED_VIRTUAL);
   uint num= 1;
   LEX_CSTRING field_name;
   field_name.str= (char *)thd->alloc(LONG_HASH_FIELD_NAME_LENGTH);
@@ -3745,7 +3743,7 @@ without_overlaps_err:
     {
       if (sql_field->vcol_info && sql_field->vcol_info->expr &&
           check_expression(sql_field->vcol_info, &sql_field->field_name,
-                           sql_field->vcol_info->stored_in_db
+                           sql_field->vcol_info->is_stored()
                            ? VCOL_GENERATED_STORED : VCOL_GENERATED_VIRTUAL,
                            alter_info))
         DBUG_RETURN(TRUE);
@@ -4303,7 +4301,7 @@ handler *mysql_create_frm_image(THD *thd, HA_CREATE_INFO *create_info,
     {
       if (key->type == Key::FOREIGN_KEY)
       {
-        my_error(ER_FEATURE_NOT_SUPPORTED_WITH_PARTITIONING, MYF(0), 
+        my_error(ER_FEATURE_NOT_SUPPORTED_WITH_PARTITIONING, MYF(0),
                  "FOREIGN KEY");
         goto err;
       }
@@ -4435,8 +4433,8 @@ int create_table_impl(THD *thd,
       If a table exists, it must have been pre-opened. Try looking for one
       in-use in THD::all_temp_tables list of TABLE_SHAREs.
     */
-    TABLE *tmp_table= thd->find_temporary_table(db.str, table_name.str,
-                                                THD::TMP_TABLE_ANY);
+    TABLE *tmp_table= internal_tmp_table ? NULL :
+      thd->find_temporary_table(db.str, table_name.str, THD::TMP_TABLE_ANY);
 
     if (tmp_table)
     {
@@ -9600,25 +9598,19 @@ static bool fk_prepare_copy_alter_table(THD *thd, TABLE *table,
         continue;
 
       Foreign_key *fk= static_cast<Foreign_key*>(key);
-      char dbuf[NAME_LEN];
-      char tbuf[NAME_LEN];
-      const char *ref_db= (fk->ref_db.str ?
-                           fk->ref_db.str :
-                           alter_ctx->new_db.str);
-      const char *ref_table= fk->ref_table.str;
+      IdentBuffer<NAME_LEN> dbuf, tbuf;
+      LEX_CSTRING ref_db= fk->ref_db.str ? fk->ref_db : alter_ctx->new_db;
+      LEX_CSTRING ref_table= fk->ref_table;
       MDL_request mdl_request;
 
       if (lower_case_table_names)
       {
-        strmake_buf(dbuf, ref_db);
-        my_casedn_str(system_charset_info, dbuf);
-        strmake_buf(tbuf, ref_table);
-        my_casedn_str(system_charset_info, tbuf);
-        ref_db= dbuf;
-        ref_table= tbuf;
+        ref_db= dbuf.copy_casedn(ref_db).to_lex_cstring();
+        ref_table= tbuf.copy_casedn(ref_table).to_lex_cstring();
       }
 
-      MDL_REQUEST_INIT(&mdl_request, MDL_key::TABLE, ref_db, ref_table,
+      MDL_REQUEST_INIT(&mdl_request, MDL_key::TABLE,
+                       ref_db.str, ref_table.str,
                        MDL_SHARED_NO_WRITE, MDL_TRANSACTION);
       if (thd->mdl_context.acquire_lock(&mdl_request,
                                         thd->variables.lock_wait_timeout))
@@ -10065,6 +10057,152 @@ static uint64 get_start_alter_id(THD *thd)
 }
 
 
+static
+bool online_alter_check_autoinc(const THD *thd, const Alter_info *alter_info,
+                                const TABLE *table)
+{
+  /*
+    We can't go online, if all of the following is presented:
+    * Autoinc is added to existing field
+    * Disabled NO_AUTO_VALUE_ON_ZERO
+    * No non-nullable unique key in the old table, that has all the key parts
+      remaining unchanged.
+  */
+
+  // Exit earlier when possible
+  if (thd->variables.sql_mode & MODE_NO_AUTO_VALUE_ON_ZERO)
+    return true;
+  if ((alter_info->flags | ALTER_CHANGE_COLUMN) != alter_info->flags)
+    return true;
+
+  /*
+    Find at least one unique index (without NULLs), all columns of which
+    remain in the table unchanged to presume it's a safe ALTER TABLE.
+  */
+  for (uint k= 0; k < table->s->keys; k++)
+  {
+    const KEY &key= table->key_info[k];
+    if ((key.flags & HA_NOSAME) == 0 || key.flags & HA_NULL_PART_KEY)
+      continue;
+    bool key_parts_good= true;
+    for (uint kp= 0; kp < key.user_defined_key_parts && key_parts_good; kp++)
+    {
+      const Field *f= key.key_part[kp].field;
+      // tmp_set contains dropped fields after mysql_prepare_alter_table
+      key_parts_good= !bitmap_is_set(&table->tmp_set, f->field_index);
+
+      if (key_parts_good)
+        for (const auto &c: alter_info->create_list)
+          if (c.field == f)
+          {
+            key_parts_good= f->is_equal(c);
+            break;
+          }
+    }
+    if (key_parts_good)
+      return true;
+  }
+
+  for (const auto &c: alter_info->create_list)
+  {
+    if (c.flags & AUTO_INCREMENT_FLAG)
+    {
+      if (c.field && !(c.field->flags & AUTO_INCREMENT_FLAG))
+        return false;
+      break;
+    }
+  }
+  return true;
+}
+
+static
+const char *online_alter_check_supported(const THD *thd,
+                                         const Alter_info *alter_info,
+                                         const TABLE *table,
+                                         const TABLE *new_table, bool *online)
+{
+  DBUG_ASSERT(*online);
+
+  *online= thd->locked_tables_mode != LTM_LOCK_TABLES && !table->s->tmp_table;
+  if (!*online)
+    return NULL;
+
+  *online= (new_table->file->ha_table_flags() & HA_NO_ONLINE_ALTER) == 0;
+  if (!*online)
+    return new_table->file->engine_name()->str;
+
+  *online= table->s->sequence == NULL;
+  if (!*online)
+    return "SEQUENCE";
+
+  *online= (alter_info->flags & ALTER_DROP_SYSTEM_VERSIONING) == 0;
+  if (!*online)
+    return "DROP SYSTEM VERSIONING";
+
+  *online= !thd->lex->ignore;
+  if (!*online)
+    return "ALTER IGNORE TABLE";
+
+  *online= !table->versioned(VERS_TRX_ID);
+  if (!*online)
+    return "BIGINT GENERATED ALWAYS AS ROW_START";
+
+  List<FOREIGN_KEY_INFO> fk_list;
+  table->file->get_foreign_key_list(thd, &fk_list);
+  for (auto &fk: fk_list)
+  {
+    if (fk_modifies_child(fk.delete_method) ||
+        fk_modifies_child(fk.update_method))
+    {
+      *online= false;
+      // Don't fall to a common unsupported case to avoid heavy string ops.
+      if (alter_info->requested_lock == Alter_info::ALTER_TABLE_LOCK_NONE)
+      {
+        return fk_modifies_child(fk.delete_method)
+               ? thd->strcat({STRING_WITH_LEN("ON DELETE ")},
+                             *fk_option_name(fk.delete_method)).str
+               : thd->strcat({STRING_WITH_LEN("ON UPDATE ")},
+                             *fk_option_name(fk.update_method)).str;
+      }
+      return NULL;
+    }
+  }
+
+  for (auto &c: alter_info->create_list)
+  {
+    *online= c.field || !(c.flags & AUTO_INCREMENT_FLAG);
+    if (!*online)
+      return "ADD COLUMN ... AUTO_INCREMENT";
+
+    auto *def= c.default_value;
+    *online= !(def && def->flags & VCOL_NEXTVAL
+            // either it's a new field, or a NULL -> NOT NULL change
+             && (!c.field || (!(c.field->flags & NOT_NULL_FLAG)
+                              && (c.flags & NOT_NULL_FLAG))));
+    if (!*online)
+    {
+      if (alter_info->requested_lock != Alter_info::ALTER_TABLE_LOCK_NONE)
+        return NULL; // Avoid heavy string op
+      const char *fmt= ER_THD(thd, ER_GENERATED_COLUMN_FUNCTION_IS_NOT_ALLOWED);
+
+      LEX_CSTRING dflt{STRING_WITH_LEN("DEFAULT")};
+      LEX_CSTRING nxvl{STRING_WITH_LEN("NEXTVAL()")};
+      size_t len= strlen(fmt) + nxvl.length + c.field_name.length + dflt.length;
+      char *resp= (char*)thd->alloc(len);
+      // expression %s cannot be used in the %s clause of %`s
+      my_snprintf(resp, len, fmt, nxvl.str, dflt.str, c.field_name.str);
+      return resp;
+    }
+  }
+
+  *online= online_alter_check_autoinc(thd, alter_info, table);
+  if (!*online)
+    return "CHANGE COLUMN ... AUTO_INCREMENT";
+
+  return NULL;
+}
+
+
 /**
   Alter table
 
@@ -10152,6 +10290,11 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
   MDL_request target_mdl_request;
   MDL_ticket *mdl_ticket= 0;
   Alter_table_prelocking_strategy alter_prelocking_strategy;
+#ifdef HAVE_REPLICATION
+  bool online= order == NULL && !opt_bootstrap;
+#else
+  bool online= false;
+#endif
   TRIGGER_RENAME_PARAM trigger_param;
 
   /*
@@ -10235,6 +10378,24 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
   */
   table_list->required_type= TABLE_TYPE_NORMAL;
 
+  if ((alter_info->requested_lock == Alter_info::ALTER_TABLE_LOCK_DEFAULT
+       && (thd->variables.old_behavior & OLD_MODE_LOCK_ALTER_TABLE_COPY))
+      || alter_info->requested_lock > Alter_info::ALTER_TABLE_LOCK_NONE
+      || thd->lex->sql_command == SQLCOM_OPTIMIZE
+      || alter_info->algorithm(thd) > Alter_info::ALTER_TABLE_ALGORITHM_COPY)
+    online= false;
+
+  if (online)
+  {
+    table_list->lock_type= TL_READ;
+  }
+
+  enum_tx_isolation iso_level_initial= thd->tx_isolation;
+  SCOPE_EXIT([thd, iso_level_initial](){
+    thd->tx_isolation= iso_level_initial;
+  });
+  thd->tx_isolation= ISO_REPEATABLE_READ;
+
   DEBUG_SYNC(thd, "alter_table_before_open_tables");
 
   thd->open_options|= HA_OPEN_FOR_ALTER;
@@ -10265,7 +10426,7 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
 
   table= table_list->table;
   bool is_reg_table= table->s->tmp_table == NO_TMP_TABLE;
-
+  
 #ifdef WITH_WSREP
   /*
     If this ALTER TABLE is actually SEQUENCE we need to check
@@ -10334,8 +10495,7 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
       a new one if needed.
     */
     table->s->tdc->flushed= 1;         // Force close of all instances
-    if (thd->mdl_context.upgrade_shared_lock(mdl_ticket,
-                                             MDL_EXCLUSIVE,
+    if (thd->mdl_context.upgrade_shared_lock(mdl_ticket, MDL_EXCLUSIVE,
                                              thd->variables.lock_wait_timeout))
       DBUG_RETURN(1);
     quick_rm_table(thd, table->file->ht, &table_list->db,
@@ -10344,8 +10504,7 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
     goto end_inplace;
   }
   if (!if_exists &&
-      (table->file->partition_ht()->flags &
-       HTON_TABLE_MAY_NOT_EXIST_ON_SLAVE))
+      (table->file->partition_ht()->flags & HTON_TABLE_MAY_NOT_EXIST_ON_SLAVE))
   {
     /*
       Table is a shared table that may not exist on the slave.
@@ -10485,7 +10644,7 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
    till this point for the alter operation.
   */
   if ((alter_info->flags & ALTER_ADD_FOREIGN_KEY) &&
-      check_fk_parent_table_access(thd, create_info, alter_info, new_db->str))
+      check_fk_parent_table_access(thd, create_info, alter_info, *new_db))
     DBUG_RETURN(true);
 
   /*
@@ -10784,31 +10943,25 @@ do_continue:;
 #endif /* WITH_WSREP */
 
   /*
-    Use copy algorithm if:
-    - old_alter_table system variable is set without in-place requested using
-      the ALGORITHM clause.
-    - Or if in-place is impossible for given operation.
+    We can use only copy algorithm if one of the following is true:
+    - In-place is impossible for given operation.
     - Changes to partitioning which were not handled by fast_alter_part_table()
       needs to be handled using table copying algorithm unless the engine
       supports auto-partitioning as such engines can do some changes
       using in-place API.
   */
-  if ((thd->variables.alter_algorithm == Alter_info::ALTER_TABLE_ALGORITHM_COPY &&
-       alter_info->algorithm(thd) !=
-       Alter_info::ALTER_TABLE_ALGORITHM_INPLACE)
-      || is_inplace_alter_impossible(table, create_info, alter_info)
+  if (is_inplace_alter_impossible(table, create_info, alter_info)
       || IF_PARTITIONING((partition_changed &&
-          !(old_db_type->partition_flags() & HA_USE_AUTO_PARTITION)), 0))
+                          !(old_db_type->partition_flags() & HA_USE_AUTO_PARTITION)), 0))
   {
-    if (alter_info->algorithm(thd) ==
-        Alter_info::ALTER_TABLE_ALGORITHM_INPLACE)
+    if (alter_info->algorithm_is_nocopy(thd))
     {
       my_error(ER_ALTER_OPERATION_NOT_SUPPORTED, MYF(0),
-               "ALGORITHM=INPLACE", "ALGORITHM=COPY");
+               alter_info->algorithm_clause(thd), "ALGORITHM=COPY");
       DBUG_RETURN(true);
     }
-    alter_info->set_requested_algorithm(
-      Alter_info::ALTER_TABLE_ALGORITHM_COPY);
+
+    alter_info->set_requested_algorithm(Alter_info::ALTER_TABLE_ALGORITHM_COPY);
   }
 
   /*
@@ -11059,7 +11212,7 @@ do_continue:;
     }
 
     if (alter_info->supports_algorithm(thd, &ha_alter_info) ||
-        alter_info->supports_lock(thd, &ha_alter_info))
+        alter_info->supports_lock(thd, online, &ha_alter_info))
     {
       cleanup_table_after_inplace_alter(&altered_table);
       goto err_new_table_cleanup;
@@ -11117,16 +11270,6 @@ do_continue:;
 
   if (!table->s->tmp_table)
   {
-    // COPY algorithm doesn't work with concurrent writes.
-    if (alter_info->requested_lock == Alter_info::ALTER_TABLE_LOCK_NONE)
-    {
-      my_error(ER_ALTER_OPERATION_NOT_SUPPORTED_REASON, MYF(0),
-               "LOCK=NONE",
-               ER_THD(thd, ER_ALTER_OPERATION_NOT_SUPPORTED_REASON_COPY),
-               "LOCK=SHARED");
-      goto err_new_table_cleanup;
-    }
-
     // If EXCLUSIVE lock is requested, upgrade already.
     if (alter_info->requested_lock == Alter_info::ALTER_TABLE_LOCK_EXCLUSIVE &&
         wait_while_table_is_used(thd, table, HA_EXTRA_FORCE_REOPEN))
@@ -11184,11 +11327,9 @@ do_continue:;
   DEBUG_SYNC(thd, "alter_table_intermediate_table_created");
 
   /* Open the table since we need to copy the data. */
-  new_table= thd->create_and_open_tmp_table(&frm,
-                                            alter_ctx.get_tmp_path(),
+  new_table= thd->create_and_open_tmp_table(&frm, alter_ctx.get_tmp_path(),
                                             alter_ctx.new_db.str,
-                                            alter_ctx.new_name.str,
-                                            true);
+                                            alter_ctx.new_name.str, true);
   if (!new_table)
     goto err_new_table_cleanup;
 
@@ -11196,6 +11337,21 @@ do_continue:;
   {
     /* in case of alter temp table send the tracker in OK packet */
     thd->session_tracker.state_change.mark_as_changed(thd);
+  }
+
+  if (online)
+  {
+    const char *reason= online_alter_check_supported(thd, alter_info, table,
+                                                     new_table,
+                                                     &online);
+    if (reason &&
+        alter_info->requested_lock == Alter_info::ALTER_TABLE_LOCK_NONE)
+    {
+      DBUG_ASSERT(!online);
+      my_error(ER_ALTER_OPERATION_NOT_SUPPORTED_REASON, MYF(0),
+               "LOCK=NONE", reason, "LOCK=SHARED");
+      goto err_new_table_cleanup;
+    }
   }
 
   /*
@@ -11265,11 +11421,22 @@ do_continue:;
       binlog_as_create_select= 1;
       DBUG_ASSERT(new_table->file->row_logging);
       new_table->mark_columns_needed_for_insert();
-      thd->binlog_write_table_map(new_table, 1);
+      mysql_bin_log.write_table_map(thd, new_table, 1);
     }
-    if (copy_data_between_tables(thd, table, new_table, ignore, order_num,
-                                 order, &copied, &deleted, alter_info,
-                                 &alter_ctx))
+
+    /*
+      if ORDER BY: sorting
+      always: copying, building indexes.
+      if online: reading up the binlog (second binlog is being written)
+                 reading up the second binlog under exclusive lock
+    */
+    thd_progress_init(thd, MY_TEST(order) + 2 + 2 * MY_TEST(online));
+    
+    if (copy_data_between_tables(thd, table, new_table,
+                                 ignore,
+                                 order_num, order, &copied, &deleted,
+                                 alter_info,
+                                 &alter_ctx, online, start_alter_id))
       goto err_new_table_cleanup;
   }
   else
@@ -11433,6 +11600,8 @@ do_continue:;
                             NULL);
   table_list->table= table= NULL;                  /* Safety */
 
+  thd_progress_end(thd);
+
   DBUG_PRINT("info", ("is_table_renamed: %d  engine_changed: %d",
                       alter_ctx.is_table_renamed(), engine_changed));
 
@@ -11580,7 +11749,7 @@ end_inplace:
                 thd->is_current_stmt_binlog_format_row() &&
                 (create_info->tmp_table())));
 
-  if(start_alter_id)
+  if (start_alter_id)
   {
     if (!is_reg_table)
     {
@@ -11661,6 +11830,8 @@ end_temporary:
 err_new_table_cleanup:
   DBUG_PRINT("error", ("err_new_table_cleanup"));
   thd->variables.option_bits&= ~OPTION_BIN_COMMIT_OFF;
+
+  thd_progress_end(thd);
 
   /*
     No default value was provided for a DATE/DATETIME field, the
@@ -11766,12 +11937,74 @@ bool mysql_trans_commit_alter_copy_data(THD *thd)
   DBUG_RETURN(error);
 }
 
+#ifdef HAVE_REPLICATION
+/*
+  locking ALTER TABLE doesn't issue ER_NO_DEFAULT_FOR_FIELD, so online
+  ALTER shouldn't either
+*/
+class Has_default_error_handler : public Internal_error_handler
+{
+public:
+  bool handle_condition(THD *, uint sql_errno, const char *,
+                        Sql_condition::enum_warning_level *,
+                        const char *, Sql_condition **)
+  {
+    return sql_errno == ER_NO_DEFAULT_FOR_FIELD;
+  }
+};
+
+
+static int online_alter_read_from_binlog(THD *thd, rpl_group_info *rgi,
+                                         Cache_flip_event_log *log,
+                                         ha_rows *found_rows)
+{
+  int error= 0;
+
+  IO_CACHE *log_file= log->flip();
+
+  thd_progress_report(thd, 1, MY_MAX(1, my_b_write_tell(log_file)));
+
+  Has_default_error_handler hdeh;
+  thd->push_internal_handler(&hdeh);
+  do
+  {
+    const auto *descr_event= rgi->rli->relay_log.description_event_for_exec;
+    auto *ev= Log_event::read_log_event(log_file, descr_event, 0, 1, ~0UL);
+    error= log_file->error;
+    if (unlikely(!ev))
+    {
+      if (error)
+        my_error(ER_IO_READ_ERROR,MYF(0), (ulong)EIO, strerror(EIO), "");
+      break;
+    }
+    DBUG_ASSERT(!error);
+
+    ev->thd= thd;
+    error= ev->apply_event(rgi);
+
+    error= error || thd->is_error();
+    if(likely(!error))
+      ev->online_alter_update_row_count(found_rows);
+
+    if (ev != rgi->rli->relay_log.description_event_for_exec)
+      delete ev;
+    thd_progress_report(thd, my_b_tell(log_file), thd->progress.max_counter);
+    DEBUG_SYNC(thd, "alter_table_online_progress");
+  } while(!error);
+  thd->pop_internal_handler();
+
+  return MY_TEST(error);
+}
+#endif
 
 static int
-copy_data_between_tables(THD *thd, TABLE *from, TABLE *to, bool ignore,
-                         uint order_num, ORDER *order, ha_rows *copied,
-                         ha_rows *deleted, Alter_info *alter_info,
-                         Alter_table_ctx *alter_ctx)
+copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
+                         bool ignore,
+                         uint order_num, ORDER *order,
+                         ha_rows *copied, ha_rows *deleted,
+                         Alter_info *alter_info,
+                         Alter_table_ctx *alter_ctx, bool online,
+                         uint64 start_alter_id)
 {
   int error= 1;
   Copy_field *copy= NULL, *copy_end;
@@ -11795,9 +12028,6 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to, bool ignore,
   Field *to_row_start= NULL, *to_row_end= NULL, *from_row_end= NULL;
   MYSQL_TIME query_start;
   DBUG_ENTER("copy_data_between_tables");
-
-  /* Two or 3 stages; Sorting, copying data and update indexes */
-  thd_progress_init(thd, 2 + MY_TEST(order));
 
   if (!(copy= new (thd->mem_root) Copy_field[to->s->fields]))
     DBUG_RETURN(-1);
@@ -11840,6 +12070,7 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to, bool ignore,
   Create_field *def;
   copy_end=copy;
   to->s->default_fields= 0;
+  error= 1;
   for (Field **ptr=to->field ; *ptr ; ptr++)
   {
     def=it++;
@@ -11958,145 +12189,171 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to, bool ignore,
   if (!ignore) /* for now, InnoDB needs the undo log for ALTER IGNORE */
     to->file->extra(HA_EXTRA_BEGIN_ALTER_COPY);
 
-  while (likely(!(error= info.read_record())))
+  if (!(error= info.read_record()))
   {
-    if (unlikely(thd->killed))
+#ifdef HAVE_REPLICATION
+    if (online)
     {
-      thd->send_kill_message();
-      error= 1;
-      break;
-    }
+      DBUG_ASSERT(from->s->online_alter_binlog == NULL);
+      from->s->online_alter_binlog= new Cache_flip_event_log();
+      if (!from->s->online_alter_binlog)
+        goto err;
+      from->s->online_alter_binlog->init_pthread_objects();
+      error= from->s->online_alter_binlog->open(WRITE_CACHE);
 
-    if (make_unversioned)
-    {
-      if (!from_row_end->is_max())
-        continue; // Drop history rows.
-    }
-
-    if (unlikely(++thd->progress.counter >= time_to_report_progress))
-    {
-      time_to_report_progress+= MY_HOW_OFTEN_TO_WRITE/10;
-      thd_progress_report(thd, thd->progress.counter,
-                          thd->progress.max_counter);
-    }
-
-    /* Return error if source table isn't empty. */
-    if (unlikely(alter_ctx->error_if_not_empty))
-    {
-      error= 1;
-      break;
-    }
-
-    for (Copy_field *copy_ptr=copy ; copy_ptr != copy_end ; copy_ptr++)
-    {
-      copy_ptr->do_copy(copy_ptr);
-    }
-
-    if (make_versioned)
-    {
-      to_row_start->set_notnull();
-      to_row_start->store_time(&query_start);
-      to_row_end->set_max();
-    }
-
-    prev_insert_id= to->file->next_insert_id;
-    if (to->default_field)
-      to->update_default_fields(ignore);
-    if (to->vfield)
-      to->update_virtual_fields(to->file, VCOL_UPDATE_FOR_WRITE);
-
-    /* This will set thd->is_error() if fatal failure */
-    if (to->verify_constraints(ignore) == VIEW_CHECK_SKIP)
-      continue;
-    if (unlikely(thd->is_error()))
-    {
-      error= 1;
-      break;
-    }
-    if (keep_versioned && to->versioned(VERS_TRX_ID))
-      to->vers_write= false;
-
-    if (to->next_number_field)
-    {
-      if (auto_increment_field_copied)
-        to->auto_increment_field_not_null= TRUE;
-      else
-        to->next_number_field->reset();
-    }
-    error= to->file->ha_write_row(to->record[0]);
-    to->auto_increment_field_not_null= FALSE;
-    if (unlikely(error))
-    {
-      if (to->file->is_fatal_error(error, HA_CHECK_DUP))
+      if (error)
       {
-        /* Not a duplicate key error. */
-	to->file->print_error(error, MYF(0));
-        error= 1;
-	break;
+        from->s->online_alter_binlog->release();
+        from->s->online_alter_binlog= NULL;
+        goto err;
       }
-      else
-      {
-        /* Duplicate key error. */
-        if (unlikely(alter_ctx->fk_error_if_delete_row))
-        {
-          /*
-            We are trying to omit a row from the table which serves as parent
-            in a foreign key. This might have broken referential integrity so
-            emit an error. Note that we can't ignore this error even if we are
-            executing ALTER IGNORE TABLE. IGNORE allows to skip rows, but
-            doesn't allow to break unique or foreign key constraints,
-          */
-          my_error(ER_FK_CANNOT_DELETE_PARENT, MYF(0),
-                   alter_ctx->fk_error_id,
-                   alter_ctx->fk_error_table);
-          break;
-        }
 
-        if (ignore)
+      from->mdl_ticket->downgrade_lock(MDL_SHARED_UPGRADABLE);
+      DEBUG_SYNC(thd, "alter_table_online_downgraded");
+    }
+#else
+    DBUG_ASSERT(!online);
+#endif // HAVE_REPLICATION
+
+    do
+    {
+      if (unlikely(thd->killed))
+      {
+        thd->send_kill_message();
+        error= 1;
+        break;
+      }
+
+      if (make_unversioned)
+      {
+        if (!from_row_end->is_max())
+          continue; // Drop history rows.
+      }
+
+      if (unlikely(++thd->progress.counter >= time_to_report_progress))
+      {
+        time_to_report_progress+= MY_HOW_OFTEN_TO_WRITE/10;
+        thd_progress_report(thd, thd->progress.counter,
+                            thd->progress.max_counter);
+      }
+
+      /* Return error if source table isn't empty. */
+      if (unlikely(alter_ctx->error_if_not_empty))
+      {
+        error= 1;
+        break;
+      }
+
+      for (Copy_field *copy_ptr=copy ; copy_ptr != copy_end ; copy_ptr++)
+      {
+        copy_ptr->do_copy(copy_ptr);
+      }
+
+      if (make_versioned)
+      {
+        to_row_start->set_notnull();
+        to_row_start->store_time(&query_start);
+        to_row_end->set_max();
+      }
+
+      prev_insert_id= to->file->next_insert_id;
+      if (to->default_field)
+        to->update_default_fields(ignore);
+      if (to->vfield)
+        to->update_virtual_fields(to->file, VCOL_UPDATE_FOR_WRITE);
+
+      /* This will set thd->is_error() if fatal failure */
+      if (to->verify_constraints(ignore) == VIEW_CHECK_SKIP)
+        continue;
+      if (unlikely(thd->is_error()))
+      {
+        error= 1;
+        break;
+      }
+      if (keep_versioned && to->versioned(VERS_TRX_ID))
+        to->vers_write= false;
+
+      if (to->next_number_field)
+      {
+        if (auto_increment_field_copied)
+          to->auto_increment_field_not_null= TRUE;
+        else
+          to->next_number_field->reset();
+      }
+      error= to->file->ha_write_row(to->record[0]);
+      to->auto_increment_field_not_null= FALSE;
+      if (unlikely(error))
+      {
+        if (to->file->is_fatal_error(error, HA_CHECK_DUP))
         {
-          /* This ALTER IGNORE TABLE. Simply skip row and continue. */
-          to->file->restore_auto_increment(prev_insert_id);
-          delete_count++;
+          /* Not a duplicate key error. */
+          to->file->print_error(error, MYF(0));
+          error= 1;
+          break;
         }
         else
         {
-          /* Ordinary ALTER TABLE. Report duplicate key error. */
-          uint key_nr= to->file->get_dup_key(error);
-          if ((int) key_nr >= 0)
+          /* Duplicate key error. */
+          if (unlikely(alter_ctx->fk_error_if_delete_row))
           {
-            const char *err_msg= ER_THD(thd, ER_DUP_ENTRY_WITH_KEY_NAME);
-            if (key_nr == 0 && to->s->keys > 0 &&
-                (to->key_info[0].key_part[0].field->flags &
-                 AUTO_INCREMENT_FLAG))
-              err_msg= ER_THD(thd, ER_DUP_ENTRY_AUTOINCREMENT_CASE);
-            print_keydup_error(to,
-                               key_nr >= to->s->keys ? NULL :
-                                   &to->key_info[key_nr],
-                               err_msg, MYF(0));
+            /*
+              We are trying to omit a row from the table which serves as parent
+              in a foreign key. This might have broken referential integrity so
+              emit an error. Note that we can't ignore this error even if we are
+              executing ALTER IGNORE TABLE. IGNORE allows to skip rows, but
+              doesn't allow to break unique or foreign key constraints,
+            */
+            my_error(ER_FK_CANNOT_DELETE_PARENT, MYF(0),
+                     alter_ctx->fk_error_id,
+                     alter_ctx->fk_error_table);
+            break;
+          }
+
+          if (ignore)
+          {
+            /* This ALTER IGNORE TABLE. Simply skip row and continue. */
+            to->file->restore_auto_increment(prev_insert_id);
+            delete_count++;
           }
           else
-            to->file->print_error(error, MYF(0));
-          break;
+          {
+            /* Ordinary ALTER TABLE. Report duplicate key error. */
+            uint key_nr= to->file->get_dup_key(error);
+            if ((int) key_nr >= 0)
+            {
+              const char *err_msg= ER_THD(thd, ER_DUP_ENTRY_WITH_KEY_NAME);
+              if (key_nr == 0 && to->s->keys > 0 &&
+                  (to->key_info[0].key_part[0].field->flags &
+                   AUTO_INCREMENT_FLAG))
+                err_msg= ER_THD(thd, ER_DUP_ENTRY_AUTOINCREMENT_CASE);
+              print_keydup_error(to,
+                                 key_nr >= to->s->keys ? NULL :
+                                     &to->key_info[key_nr],
+                                 err_msg, MYF(0));
+            }
+            else
+              to->file->print_error(error, MYF(0));
+            break;
+          }
         }
       }
-    }
-    else
-    {
-      DEBUG_SYNC(thd, "copy_data_between_tables_before");
-      found_count++;
-      mysql_stage_set_work_completed(thd->m_stage_progress_psi, found_count);
-    }
-    thd->get_stmt_da()->inc_current_row_for_warning();
+      else
+      {
+        DEBUG_SYNC(thd, "copy_data_between_tables_before");
+        found_count++;
+        mysql_stage_set_work_completed(thd->m_stage_progress_psi, found_count);
+      }
+      thd->get_stmt_da()->inc_current_row_for_warning();
+    } while (!(error= info.read_record()));
   }
+  else
+    online= false;
+
+  DEBUG_SYNC(thd, "alter_table_copy_end");
 
   THD_STAGE_INFO(thd, stage_enabling_keys);
   thd_progress_next_stage(thd);
 
-  if (error > 0 && !from->s->tmp_table)
-  {
-    /* We are going to drop the temporary table */
-    to->file->extra(HA_EXTRA_PREPARE_FOR_DROP);
-  }
   if (bulk_insert_started && to->file->ha_end_bulk_insert() && error <= 0)
   {
     /* Give error, if not already given */
@@ -12104,6 +12361,7 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to, bool ignore,
       to->file->print_error(my_errno,MYF(0));
     error= 1;
   }
+
   bulk_insert_started= 0;
   if (!ignore)
     to->file->extra(HA_EXTRA_END_ALTER_COPY);
@@ -12111,18 +12369,119 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to, bool ignore,
   cleanup_done= 1;
   to->file->extra(HA_EXTRA_NO_IGNORE_DUP_KEY);
 
+#ifdef HAVE_REPLICATION
+  if (online && error < 0)
+  {
+    MEM_UNDEFINED(from->record[0], from->s->rec_buff_length * 2);
+    MEM_UNDEFINED(to->record[0], to->s->rec_buff_length * 2);
+    thd_progress_next_stage(thd);
+    enum_sql_command saved_sql_command= thd->lex->sql_command;
+    Table_map_log_event table_event(thd, from, from->s->table_map_id,
+                                    from->file->has_transactions());
+    Relay_log_info rli(false);
+    rpl_group_info rgi(&rli);
+    RPL_TABLE_LIST rpl_table(to, TL_WRITE, from, table_event.get_table_def(),
+                             copy, copy_end);
+    DBUG_ASSERT(to->pos_in_table_list == NULL);
+    to->pos_in_table_list= &rpl_table;
+    rgi.thd= thd;
+    rgi.tables_to_lock= &rpl_table;
+
+    rgi.m_table_map.set_table(from->s->table_map_id, to);
+
+    Cache_flip_event_log *binlog= from->s->online_alter_binlog;
+    DBUG_ASSERT(binlog->is_open());
+
+    rli.relay_log.description_event_for_exec=
+                                            new Format_description_log_event(4);
+
+    // We'll be filling from->record[0] from row events
+    bitmap_set_all(from->write_set);
+    // We restore bitmaps, because update event is going to mess up with them.
+    to->default_column_bitmaps();
+
+    end_read_record(&info);
+    init_read_record_done= false;
+    mysql_unlock_tables(thd, thd->lock);
+    thd->lock= NULL;
+
+    error= online_alter_read_from_binlog(thd, &rgi, binlog, &found_count);
+    if (start_alter_id)
+    {
+      DBUG_ASSERT(thd->slave_thread);
+
+      int rpl_error= wait_for_master(thd);
+      if (rpl_error)
+        error= 1;
+    }
+
+    DEBUG_SYNC(thd, "alter_table_online_before_lock");
+
+    int lock_error=
+        thd->mdl_context.upgrade_shared_lock(from->mdl_ticket, MDL_SHARED_NO_WRITE,
+                                     (double)thd->variables.lock_wait_timeout);
+    if (!error)
+      error= lock_error;
+
+    if (!error)
+    {
+      thd_progress_next_stage(thd);
+      error= online_alter_read_from_binlog(thd, &rgi, binlog, &found_count);
+    }
+
+    /*
+      We'll do it earlier than usually in mysql_alter_table to handle the
+      online-related errors more comfortably.
+    */
+    lock_error= thd->mdl_context.upgrade_shared_lock(from->mdl_ticket,
+                                                     MDL_EXCLUSIVE,
+                                      (double)thd->variables.lock_wait_timeout);
+    if (!error)
+      error= lock_error;
+
+    to->pos_in_table_list= NULL; // Safety
+    DBUG_ASSERT(thd->lex->sql_command == saved_sql_command);
+    thd->lex->sql_command= saved_sql_command; // Just in case
+  }
+#endif
+
+  if (error > 0 && !from->s->tmp_table)
+  {
+    /* We are going to drop the temporary table */
+    to->file->extra(HA_EXTRA_PREPARE_FOR_DROP);
+  }
+
   DEBUG_SYNC(thd, "copy_data_between_tables_before_reset_backup_lock");
   if (backup_reset_alter_copy_lock(thd))
     error= 1;
 
   if (unlikely(mysql_trans_commit_alter_copy_data(thd)))
     error= 1;
+  
+  if (unlikely(error) && online)
+  {
+    /*
+       We can't free the resources properly now, as we can still be in
+       non-exclusive state. So this s->online_alter_binlog will be used
+       until all transactions will release it.
+       Once the transaction commits, it can release online_alter_binlog
+       by decreasing ref_count.
+
+       online_alter_binlog->ref_count can be reached 0 only once.
+       Proof:
+       If share exists, we'll always have ref_count >= 1.
+       Once it reaches destroy(), nobody can acquire it again,
+       therefore, only release() is possible at this moment.
+       
+       Also, this will release the binlog.
+    */
+    from->s->tdc->flush_unused(1);
+  }
 
  err:
   if (bulk_insert_started)
     (void) to->file->ha_end_bulk_insert();
 
-/* Free resources */
   if (init_read_record_done)
     end_read_record(&info);
   delete [] copy;
@@ -12147,7 +12506,6 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to, bool ignore,
   if (error < 0 && !from->s->tmp_table &&
       to->file->extra(HA_EXTRA_PREPARE_FOR_RENAME))
     error= 1;
-  thd_progress_end(thd);
   DBUG_RETURN(error > 0 ? -1 : 0);
 }
 
@@ -12815,7 +13173,8 @@ bool HA_CREATE_INFO::
                 thd->stmt_arena->is_stmt_execute() ||
                 thd->stmt_arena->state == Query_arena::STMT_INITIALIZED_FOR_SP);
     if (!(default_table_charset=
-            default_cscl.resolved_to_context(ctx)))
+            default_cscl.resolved_to_context(thd,
+                           thd->variables.character_set_collations, ctx)))
       return true;
   }
 
@@ -12828,7 +13187,8 @@ bool HA_CREATE_INFO::
                 thd->stmt_arena->is_stmt_execute() ||
                 thd->stmt_arena->state == Query_arena::STMT_INITIALIZED_FOR_SP);
     if (!(alter_table_convert_to_charset=
-            convert_cscl.resolved_to_context(ctx)))
+            convert_cscl.resolved_to_context(thd,
+                           thd->variables.character_set_collations, ctx)))
       return true;
   }
   return false;

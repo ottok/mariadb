@@ -28,27 +28,18 @@
  *    CREATE AGGREGATE FUNCTION regr_avgx returns REAL soname 'libregr_mysql.so';
  *
  */
-#ifndef HEADER_regr_avgx
-#define HEADER_regr_avgx
+#pragma once
 
 #include <cstdlib>
 #include <string>
 #include <vector>
-#ifdef _MSC_VER
-#include <unordered_map>
-#else
 #include <tr1/unordered_map>
-#endif
 
 #include "mcsv1_udaf.h"
 #include "calpontsystemcatalog.h"
 #include "windowfunctioncolumn.h"
 
-#if defined(_MSC_VER) && defined(xxxRGNODE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace mcsv1sdk
 {
@@ -89,5 +80,3 @@ class regr_avgx : public mcsv1_UDAF
 };  // namespace mcsv1sdk
 
 #undef EXPORT
-
-#endif  // HEADER_regr_avgx.h

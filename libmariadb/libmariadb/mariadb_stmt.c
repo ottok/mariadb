@@ -123,6 +123,26 @@ void stmt_set_error(MYSQL_STMT *stmt,
   return;
 }
 
+/* checks if there are any other statements which have a
+   pending result set */
+static my_bool madb_have_pending_results(MYSQL_STMT *stmt)
+{
+  LIST *li_stmt;
+
+  if (!stmt->mysql)
+    return 0;
+
+  li_stmt= stmt->mysql->stmts;
+  for (;li_stmt;li_stmt= li_stmt->next)
+  {
+    MYSQL_STMT *s= (MYSQL_STMT *)li_stmt->data;
+    if (s != stmt && s->state == MYSQL_STMT_WAITING_USE_OR_STORE &&
+        !(s->flags & CURSOR_TYPE_READ_ONLY))
+      return 1;
+  }
+  return 0;
+}
+
 my_bool mthd_supported_buffer_type(enum enum_field_types type)
 {
   switch (type) {
@@ -911,7 +931,7 @@ unsigned char* ma_stmt_execute_generate_bulk_request(MYSQL_STMT *stmt, size_t *r
      0             4      Statement id
      4             2      Flags (cursor type):
                             STMT_BULK_FLAG_CLIENT_SEND_TYPES = 128
-                            STMT_BULK_FLAG_INSERT_ID_REQUEST = 64
+                            STMT_BULK_FLAG_SEND_UNIT_RESULTS = 64
      -----------------------------------------
      if (stmt->send_types_to_server):
      for (i=0; i < param_count; i++)
@@ -964,6 +984,9 @@ unsigned char* ma_stmt_execute_generate_bulk_request(MYSQL_STMT *stmt, size_t *r
   /* todo: request to return auto generated ids */
   if (stmt->send_types_to_server)
     flags|= STMT_BULK_FLAG_CLIENT_SEND_TYPES;
+  if (MARIADB_STMT_BULK_UNIT_RESULTS_SUPPORTED(stmt))
+    flags|= STMT_BULK_FLAG_SEND_UNIT_RESULTS;
+
   int2store(p, flags);
   p+=2;
 
@@ -1486,6 +1509,12 @@ my_bool STDCALL mysql_stmt_close(MYSQL_STMT *stmt)
 {
   my_bool rc= 1;
 
+  if (madb_have_pending_results(stmt))
+  {
+    stmt_set_error(stmt, CR_COMMANDS_OUT_OF_SYNC, SQLSTATE_UNKNOWN, 0);
+    return 1;
+  }
+
   if (stmt)
   {
     if (stmt->mysql && stmt->mysql->net.pvio)
@@ -1610,6 +1639,12 @@ unsigned int STDCALL mysql_stmt_field_count(MYSQL_STMT *stmt)
 
 my_bool STDCALL mysql_stmt_free_result(MYSQL_STMT *stmt)
 {
+  if (stmt->state < MYSQL_STMT_EXECUTED || !stmt->field_count)
+  {
+    stmt_set_error(stmt, CR_STMT_NO_RESULT, SQLSTATE_UNKNOWN, 0);
+    return 1;
+  }
+
   return madb_reset_stmt(stmt, MADB_RESET_LONGDATA | MADB_RESET_STORED |
                                MADB_RESET_BUFFER | MADB_RESET_ERROR);
 }
@@ -2196,6 +2231,14 @@ static my_bool madb_reset_stmt(MYSQL_STMT *stmt, unsigned int flags)
   MYSQL *mysql= stmt->mysql;
   my_bool ret= 0;
 
+  /* CONC-667: If an other statement has a pending result set, we
+     need to return an error */
+  if (madb_have_pending_results(stmt))
+  {
+    stmt_set_error(stmt, CR_COMMANDS_OUT_OF_SYNC, SQLSTATE_UNKNOWN, 0);
+    return 1;
+  }
+
   if (!stmt->mysql)
   {
     stmt_set_error(stmt, CR_SERVER_LOST, SQLSTATE_UNKNOWN, 0);
@@ -2294,7 +2337,8 @@ static my_bool mysql_stmt_internal_reset(MYSQL_STMT *stmt, my_bool is_close)
       stmt->fetch_row_func == stmt_unbuffered_fetch)
     flags|= MADB_RESET_BUFFER;
 
-  ret= madb_reset_stmt(stmt, flags);
+  if ((ret= madb_reset_stmt(stmt, flags)))
+    return ret;
 
   if (stmt->stmt_id)
   {

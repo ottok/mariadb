@@ -42,6 +42,7 @@ X
   },
   "query_block": {
     "select_id": 1,
+    "cost": "REPLACED",
     "r_loops": 1,
     "r_total_time_ms": "REPLACED",
     "nested_loop": [
@@ -49,9 +50,11 @@ X
         "table": {
           "table_name": "t1",
           "access_type": "ALL",
+          "loops": 1,
           "r_loops": 1,
           "rows": 500,
           "r_rows": 500,
+          "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
@@ -69,13 +72,15 @@ X
             "key_length": "5",
             "used_key_parts": ["b"],
             "ref": ["test.t1.b"],
+            "loops": 500,
             "r_loops": 1,
             "rows": 500,
             "r_rows": 500,
+            "cost": "REPLACED",
             "r_table_time_ms": "REPLACED",
             "r_other_time_ms": "REPLACED",
             "r_engine_stats": REPLACED,
-            "filtered": 100,
+            "filtered": 10,
             "r_filtered": 20,
             "attached_condition": "t2.a < 100"
           },
@@ -135,6 +140,7 @@ X
   },
   "query_block": {
     "select_id": 1,
+    "cost": "REPLACED",
     "r_loops": 1,
     "r_total_time_ms": "REPLACED",
     "nested_loop": [
@@ -142,9 +148,11 @@ X
         "table": {
           "table_name": "t1",
           "access_type": "ALL",
+          "loops": 1,
           "r_loops": 1,
           "rows": 1000,
           "r_rows": 1000,
+          "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
@@ -162,13 +170,15 @@ X
             "key_length": "5",
             "used_key_parts": ["a"],
             "ref": ["test.t1.a"],
+            "loops": 1000,
             "r_loops": 1,
             "rows": 2000,
             "r_rows": 2000,
+            "cost": "REPLACED",
             "r_table_time_ms": "REPLACED",
             "r_other_time_ms": "REPLACED",
             "r_engine_stats": REPLACED,
-            "filtered": 100,
+            "filtered": 10,
             "r_filtered": 100
           },
           "buffer_type": "flat",

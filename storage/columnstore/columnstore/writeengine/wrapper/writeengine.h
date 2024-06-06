@@ -19,8 +19,7 @@
 
 /** @file */
 
-#ifndef _WRITE_ENGINE_H_
-#define _WRITE_ENGINE_H_
+#pragma once
 #include <stdio.h>
 #include <string>
 
@@ -30,11 +29,7 @@
 #include <fcntl.h>
 // end
 #include <boost/lexical_cast.hpp>
-#ifdef _MSC_VER
-#include <unordered_set>
-#else
 #include <tr1/unordered_set>
-#endif
 
 #include "we_brm.h"
 #include "we_colop.h"
@@ -47,11 +42,7 @@
 
 #define IO_BUFF_SIZE 81920
 
-#if defined(_MSC_VER) && defined(WRITEENGINE_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 /** Namespace WriteEngine */
 namespace WriteEngine
 {
@@ -255,7 +246,8 @@ class WriteEngineWrapper : public WEObj
    */
   EXPORT int deleteRow(const TxnID& txnid, const std::vector<CSCTypesList>& colExtentsColType,
                        std::vector<ColStructList>& colExtentsStruct, std::vector<void*>& colOldValueList,
-                       std::vector<RIDList>& ridLists, const int32_t tableOid);
+                       std::vector<RIDList>& ridLists, const int32_t tableOid,
+                       bool hasAUXCol = false);
 
   /**
    * @brief Delete a list of rows from a table
@@ -565,7 +557,8 @@ class WriteEngineWrapper : public WEObj
                              std::vector<ColStructList>& colExtentsStruct, ColValueList& colValueList,
                              std::vector<void*>& colOldValueList, std::vector<RIDList>& ridLists,
                              std::vector<DctnryStructList>& dctnryExtentsStruct,
-                             DctnryValueList& dctnryValueList, const int32_t tableOid);
+                             DctnryValueList& dctnryValueList, const int32_t tableOid,
+                             bool hasAUXCol = false);
 
   /**
    * @brief Update values into columns
@@ -721,7 +714,8 @@ class WriteEngineWrapper : public WEObj
                            const ColStructList& colStructList, const ColValueList& colValueList,
                            std::vector<void*>& colOldValueList, const RIDList& ridList,
                            const int32_t tableOid, bool convertStructFlag = true,
-                           ColTupleList::size_type nRows = 0, std::vector<ExtCPInfo*>* cpInfos = NULL);
+                           ColTupleList::size_type nRows = 0, std::vector<ExtCPInfo*>* cpInfos = NULL,
+                           bool hasAUXCol = false);
 
   // For update column from column to use
   int writeColumnRecords(const TxnID& txnid, const CSCTypesList& cscColTypeList,
@@ -786,5 +780,3 @@ class WriteEngineWrapper : public WEObj
 }  // namespace WriteEngine
 
 #undef EXPORT
-
-#endif  // _WRITE_ENGINE_H_

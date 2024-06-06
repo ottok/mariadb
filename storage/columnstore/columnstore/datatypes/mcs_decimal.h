@@ -15,8 +15,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef H_DECIMALDATATYPE
-#define H_DECIMALDATATYPE
+#pragma once
 
 #include <cstdint>
 #include <cfloat>
@@ -31,6 +30,7 @@
 #include "checks.h"
 #include "branchpred.h"
 #include "mcs_data_condition.h"
+#include "nullstring.h"
 
 namespace datatypes
 {
@@ -164,6 +164,47 @@ const int128_t mcs_pow_10_128[20] = {
     10000000000000000000000000000000000000_xxl,
     100000000000000000000000000000000000000_xxl,
 };
+
+const long long columnstore_precision[19] = {0,
+                                             9,
+                                             99,
+                                             999,
+                                             9999,
+                                             99999,
+                                             999999,
+                                             9999999,
+                                             99999999,
+                                             999999999,
+                                             9999999999LL,
+                                             99999999999LL,
+                                             999999999999LL,
+                                             9999999999999LL,
+                                             99999999999999LL,
+                                             999999999999999LL,
+                                             9999999999999999LL,
+                                             99999999999999999LL,
+                                             999999999999999999LL};
+
+const int128_t ConversionRangeMaxValue[20] = {9999999999999999999_xxl,
+                                              99999999999999999999_xxl,
+                                              999999999999999999999_xxl,
+                                              9999999999999999999999_xxl,
+                                              99999999999999999999999_xxl,
+                                              999999999999999999999999_xxl,
+                                              9999999999999999999999999_xxl,
+                                              99999999999999999999999999_xxl,
+                                              999999999999999999999999999_xxl,
+                                              9999999999999999999999999999_xxl,
+                                              99999999999999999999999999999_xxl,
+                                              999999999999999999999999999999_xxl,
+                                              9999999999999999999999999999999_xxl,
+                                              99999999999999999999999999999999_xxl,
+                                              999999999999999999999999999999999_xxl,
+                                              9999999999999999999999999999999999_xxl,
+                                              99999999999999999999999999999999999_xxl,
+                                              999999999999999999999999999999999999_xxl,
+                                              9999999999999999999999999999999999999_xxl,
+                                              99999999999999999999999999999999999999_xxl};
 
 constexpr uint32_t maxPowOf10 = sizeof(mcs_pow_10) / sizeof(mcs_pow_10[0]) - 1;
 constexpr int128_t Decimal128Null = TSInt128::NullValue;
@@ -319,12 +360,12 @@ class TDecimal128 : public TSInt128
   static constexpr int128_t minInt128 = TFloat128::minInt128;
   static constexpr int128_t maxInt128 = TFloat128::maxInt128;
 
-  static inline bool isWideDecimalNullValue(const int128_t& val)
+  static inline bool isWideDecimalNullValue(const int128_t val)
   {
     return (val == TSInt128::NullValue);
   }
 
-  static inline bool isWideDecimalEmptyValue(const int128_t& val)
+  static inline bool isWideDecimalEmptyValue(const int128_t val)
   {
     return (val == TSInt128::EmptyValue);
   }
@@ -343,10 +384,10 @@ class TDecimal128 : public TSInt128
   TDecimal128()
   {
   }
-  explicit TDecimal128(const int128_t& val) : TSInt128(val)
+  explicit TDecimal128(const int128_t val) : TSInt128(val)
   {
   }
-  explicit TDecimal128(const TSInt128& val) : TSInt128(val)
+  explicit TDecimal128(const TSInt128 val) : TSInt128(val)
   {
   }
   explicit TDecimal128(const int128_t* valPtr) : TSInt128(valPtr)
@@ -625,6 +666,18 @@ class Decimal : public TDecimal128, public TDecimal64
                                                    : TDecimal64::toUInt64Round((uint32_t)scale);
   }
 
+  int64_t toMCSInt64Round() const
+  {
+    //@Bug 4632 and 4648: Don't return marker value for NULL, but allow return of marker value for EMPTYROW.
+    return std::max(toSInt64Round(), static_cast<int64_t>(joblist::BIGINTEMPTYROW));
+  }
+  uint64_t toMCSUInt64Round() const
+  {
+    const auto val = toUInt64Round();
+    //@Bug 4632 and 4648: Don't return marker value for NULL, but allow return of marker value for EMPTYROW.
+    return val == joblist::UBIGINTNULL ? MAX_UBIGINT : val;
+  }
+
   // FLOOR related routines
   int64_t toSInt64Floor() const
   {
@@ -791,6 +844,7 @@ class Decimal : public TDecimal128, public TDecimal64
   // where precision can't detect decimal type properly, e.g.
   // DECIMAL(10)/DECIMAL(38)
   std::string toString(bool hasTSInt128 = false) const;
+  utils::NullString toNullString(bool hasTSInt128 = false) const;
   friend std::ostream& operator<<(std::ostream& os, const Decimal& dec);
 
   int8_t scale;       // 0~38
@@ -967,4 +1021,3 @@ struct NoOverflowCheck
 };
 
 }  // namespace datatypes
-#endif

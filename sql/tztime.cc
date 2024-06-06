@@ -29,6 +29,7 @@
 #pragma implementation				// gcc: Class implementation
 #endif
 
+#define VER "1.1"
 #include "mariadb.h"
 #if !defined(TZINFO2SQL) && !defined(TESTTIME)
 #include "sql_priv.h"
@@ -43,6 +44,7 @@
 #include <my_getopt.h>
 #endif
 
+#include <welcome_copyright_notice.h>
 #include "tztime.h"
 #include "tzfile.h"
 #include <m_string.h>
@@ -50,30 +52,12 @@
 #include <mysql/psi/mysql_file.h>
 #include "lock.h"                               // MYSQL_LOCK_IGNORE_FLUSH,
                                                 // MYSQL_LOCK_IGNORE_TIMEOUT
-
-/*
-  Now we don't use abbreviations in server but we will do this in future.
-*/
-#if defined(TZINFO2SQL) || defined(TESTTIME)
-#define ABBR_ARE_USED
-#else
-#if !defined(DBUG_OFF)
-/* Let use abbreviations for debug purposes */
-#undef ABBR_ARE_USED
-#define ABBR_ARE_USED
-#endif /* !defined(DBUG_OFF) */
-#endif /* defined(TZINFO2SQL) || defined(TESTTIME) */
-
-#define PROGRAM_VERSION "1.1"
-
 /* Structure describing local time type (e.g. Moscow summer time (MSD)) */
 typedef struct ttinfo
 {
   long tt_gmtoff; // Offset from UTC in seconds
   uint tt_isdst;   // Is daylight saving time or not. Used to set tm_isdst
-#ifdef ABBR_ARE_USED
   uint tt_abbrind; // Index of start of abbreviation for this time type.
-#endif
   /*
     We don't use tt_ttisstd and tt_ttisgmt members of original elsie-code
     struct since we don't support POSIX-style TZ descriptions in variables.
@@ -120,10 +104,8 @@ typedef struct st_time_zone_info
   my_time_t *ats;       // Times of transitions between time types
   uchar	*types; // Local time types for transitions
   TRAN_TYPE_INFO *ttis; // Local time types descriptions
-#ifdef ABBR_ARE_USED
   /* Storage for local time types abbreviations. They are stored as ASCIIZ */
   char *chars;
-#endif
   /*
     Leap seconds corrections descriptions, this array is shared by
     all time zones who use leap seconds.
@@ -179,9 +161,7 @@ tz_load(const char *name, TIME_ZONE_INFO *sp, MEM_ROOT *storage)
       struct tzhead tzhead;
       uchar buf[sizeof(struct tzhead) + sizeof(my_time_t) * TZ_MAX_TIMES +
                 TZ_MAX_TIMES + sizeof(TRAN_TYPE_INFO) * TZ_MAX_TYPES +
-#ifdef ABBR_ARE_USED
                MY_MAX(TZ_MAX_CHARS + 1, (2 * (MY_TZNAME_MAX + 1))) +
-#endif
                sizeof(LS_INFO) * TZ_MAX_LEAPS];
     } u;
     uint ttisstdcnt;
@@ -226,9 +206,7 @@ tz_load(const char *name, TIME_ZONE_INFO *sp, MEM_ROOT *storage)
                                          ALIGN_SIZE(sp->timecnt) +
                                          ALIGN_SIZE(sp->typecnt *
                                                     sizeof(TRAN_TYPE_INFO)) +
-#ifdef ABBR_ARE_USED
                                          ALIGN_SIZE(sp->charcnt+1) +
-#endif
                                          sp->leapcnt * sizeof(LS_INFO))))
       return 1;
 
@@ -238,10 +216,8 @@ tz_load(const char *name, TIME_ZONE_INFO *sp, MEM_ROOT *storage)
     tzinfo_buf+= ALIGN_SIZE(sp->timecnt);
     sp->ttis= (TRAN_TYPE_INFO *)tzinfo_buf;
     tzinfo_buf+= ALIGN_SIZE(sp->typecnt * sizeof(TRAN_TYPE_INFO));
-#ifdef ABBR_ARE_USED
     sp->chars= tzinfo_buf;
     tzinfo_buf+= ALIGN_SIZE(sp->charcnt+1);
-#endif
     sp->lsis= (LS_INFO *)tzinfo_buf;
 
     for (i= 0; i < sp->timecnt; i++, p+= 4)
@@ -1031,6 +1007,7 @@ public:
   virtual my_time_t TIME_to_gmt_sec(const MYSQL_TIME *t, uint *error_code) const;
   virtual void gmt_sec_to_TIME(MYSQL_TIME *tmp, my_time_t t) const;
   virtual const String * get_name() const;
+  virtual void get_timezone_information(struct my_tz* curr_tz, const MYSQL_TIME *local_TIME) const;
 };
 
 
@@ -1098,6 +1075,15 @@ Time_zone_system::gmt_sec_to_TIME(MYSQL_TIME *tmp, my_time_t t) const
 }
 
 
+void
+Time_zone_system::get_timezone_information(struct my_tz* curr_tz, const MYSQL_TIME *local_TIME) const
+{
+  uint error;
+  time_t time_sec= TIME_to_gmt_sec(local_TIME, &error);
+  my_tzinfo(time_sec, curr_tz);
+}
+
+
 /*
   Get name of time zone
 
@@ -1128,6 +1114,7 @@ public:
                                     uint *error_code) const;
   virtual void gmt_sec_to_TIME(MYSQL_TIME *tmp, my_time_t t) const;
   virtual const String * get_name() const;
+  virtual void get_timezone_information(struct my_tz* curr_tz, const MYSQL_TIME *local_TIME) const;
 };
 
 
@@ -1175,6 +1162,13 @@ Time_zone_utc::gmt_sec_to_TIME(MYSQL_TIME *tmp, my_time_t t) const
   adjust_leap_second(tmp);
 }
 
+void
+Time_zone_utc::get_timezone_information(struct my_tz* curr_tz, const MYSQL_TIME *local_TIME) const
+{
+  strmake_buf(curr_tz->abbreviation, "UTC");
+  curr_tz->seconds_offset= 0;
+}
+
 
 /*
   Get name of time zone
@@ -1210,6 +1204,7 @@ public:
   virtual my_time_t TIME_to_gmt_sec(const MYSQL_TIME *t, uint *error_code) const;
   virtual void gmt_sec_to_TIME(MYSQL_TIME *tmp, my_time_t t) const;
   virtual const String * get_name() const;
+  virtual void get_timezone_information(struct my_tz* curr_tz, const MYSQL_TIME *local_TIME) const;
 private:
   TIME_ZONE_INFO *tz_info;
   const String *tz_name;
@@ -1280,6 +1275,22 @@ Time_zone_db::gmt_sec_to_TIME(MYSQL_TIME *tmp, my_time_t t) const
   adjust_leap_second(tmp);
 }
 
+void
+Time_zone_db::get_timezone_information(struct my_tz* curr_tz, const MYSQL_TIME *local_TIME) const
+{
+  uint error;
+  my_time_t sec_in_utc;
+  const TRAN_TYPE_INFO *ttisp;
+
+  /* Get seconds since epoch. */
+  sec_in_utc= TIME_to_gmt_sec(local_TIME, &error);
+  /* Get local timezone information. */
+  ttisp= find_transition_type(sec_in_utc, tz_info);
+
+  curr_tz->seconds_offset= ttisp->tt_gmtoff;
+  strmake_buf(curr_tz->abbreviation, &(tz_info->chars[ttisp->tt_abbrind]));
+}
+
 
 /*
   Get name of time zone
@@ -1309,6 +1320,7 @@ public:
                                     uint *error_code) const;
   virtual void   gmt_sec_to_TIME(MYSQL_TIME *tmp, my_time_t t) const;
   virtual const String * get_name() const;
+  virtual void get_timezone_information(struct my_tz* curr_tz, const MYSQL_TIME *local_TIME) const;
   /*
     This have to be public because we want to be able to access it from
     my_offset_tzs_get_key() function
@@ -1432,6 +1444,14 @@ const String *
 Time_zone_offset::get_name() const
 {
   return &name;
+}
+
+void
+Time_zone_offset::get_timezone_information(struct my_tz* curr_tz, const MYSQL_TIME *local_TIME) const
+{
+  curr_tz->seconds_offset= offset;
+  const char *name= get_name()->ptr();
+  strmake_buf(curr_tz->abbreviation, name);
 }
 
 
@@ -1623,6 +1643,8 @@ my_tz_init(THD *org_thd, const char *default_tzname, my_bool bootstrap)
     DBUG_RETURN(1);
   thd->thread_stack= (char*) &thd;
   thd->store_globals();
+  thd->set_query_inner((char*) STRING_WITH_LEN("intern:my_tz_init"),
+                       default_charset_info);
 
   /* Init all memory structures that require explicit destruction */
   if (my_hash_init(key_memory_tz_storage, &tz_names, &my_charset_latin1, 20, 0,
@@ -1870,15 +1892,14 @@ tz_load_from_open_tables(const String *tz_name, TABLE_LIST *tz_tables)
   my_time_t ats[TZ_MAX_TIMES];
   uchar types[TZ_MAX_TIMES];
   TRAN_TYPE_INFO ttis[TZ_MAX_TYPES];
-#ifdef ABBR_ARE_USED
   char chars[MY_MAX(TZ_MAX_CHARS + 1, (2 * (MY_TZNAME_MAX + 1)))];
-#endif
   /*
     Used as a temporary tz_info until we decide that we actually want to
     allocate and keep the tz info and tz name in tz_storage.
   */
   TIME_ZONE_INFO tmp_tz_info;
   memset(&tmp_tz_info, 0, sizeof(TIME_ZONE_INFO));
+  memset(ttis, 0, sizeof(ttis));
 
   DBUG_ENTER("tz_load_from_open_tables");
 
@@ -1977,7 +1998,6 @@ tz_load_from_open_tables(const String *tz_name, TABLE_LIST *tz_tables)
     ttis[ttid].tt_gmtoff= (long)table->field[2]->val_int();
     ttis[ttid].tt_isdst= (table->field[3]->val_int() > 0);
 
-#ifdef ABBR_ARE_USED
     // FIXME should we do something with duplicates here ?
     table->field[4]->val_str(&abbr, &abbr);
     if (tmp_tz_info.charcnt + abbr.length() + 1 > sizeof(chars))
@@ -1997,11 +2017,6 @@ tz_load_from_open_tables(const String *tz_name, TABLE_LIST *tz_tables)
       ("time_zone_transition_type table: tz_id=%u tt_id=%u tt_gmtoff=%ld "
        "abbr='%s' tt_isdst=%u", tzid, ttid, ttis[ttid].tt_gmtoff,
        chars + ttis[ttid].tt_abbrind, ttis[ttid].tt_isdst));
-#else
-    DBUG_PRINT("info",
-      ("time_zone_transition_type table: tz_id=%u tt_id=%u tt_gmtoff=%ld "
-       "tt_isdst=%u", tzid, ttid, ttis[ttid].tt_gmtoff, ttis[ttid].tt_isdst));
-#endif
 
     /* ttid is increasing because we are reading using index */
     if (ttid < tmp_tz_info.typecnt)
@@ -2117,9 +2132,7 @@ tz_load_from_open_tables(const String *tz_name, TABLE_LIST *tz_tables)
                                        ALIGN_SIZE(sizeof(my_time_t) *
                                                   tz_info->timecnt) +
                                        ALIGN_SIZE(tz_info->timecnt) +
-#ifdef ABBR_ARE_USED
                                        ALIGN_SIZE(tz_info->charcnt) +
-#endif
                                        sizeof(TRAN_TYPE_INFO) *
                                        tz_info->typecnt)))
   {
@@ -2133,11 +2146,9 @@ tz_load_from_open_tables(const String *tz_name, TABLE_LIST *tz_tables)
   tz_info->types= (uchar *)alloc_buff;
   memcpy(tz_info->types, types, tz_info->timecnt);
   alloc_buff+= ALIGN_SIZE(tz_info->timecnt);
-#ifdef ABBR_ARE_USED
   tz_info->chars= alloc_buff;
   memcpy(tz_info->chars, chars, tz_info->charcnt);
   alloc_buff+= ALIGN_SIZE(tz_info->charcnt);
-#endif
   tz_info->ttis= (TRAN_TYPE_INFO *)alloc_buff;
   memcpy(tz_info->ttis, ttis, tz_info->typecnt * sizeof(TRAN_TYPE_INFO));
 
@@ -2378,6 +2389,59 @@ void Time_zone::adjust_leap_second(MYSQL_TIME *t)
 {
   if (t->second == 60 || t->second == 61)
     t->second= 59;
+}
+
+
+/*
+  @brief
+    Check if timestamp<->datetime conversion is guaranteed to be reversible
+    around the given time value.
+*/
+
+bool Time_zone::is_monotone_continuous_around(my_time_t sec) const
+{
+  const my_time_t width= 24 * 60 * 60;
+  /*
+    Let's check that the TIMESTAMP range [sec - width, sec + width]
+    converts back to a DATETIME range [dtmin, dtmax], and the difference
+    (dtmax-dtmin), calculated using DATETIME arithmetics,
+    is also equal to exactly 2*width.
+
+    This should almost guarantee that the TIMESTAMP range around sec
+    is monotone and continuous and thus has no DST changes or leap seconds.
+
+    It's still possible that there are two or more timezone offset changes
+    in the given range. But there are no such time zones according to
+    our knowledge.
+    Note, DST changes and leap seconds do not interfere on a short time_t range:
+    - Leap seconds happen in winter and summer
+    - DST changes happen in spring and fall
+
+    The largest time zone change that ever happened in a single place
+    was 24 hours:
+    - from SST (UTC-11) - the American Samoa Time Zone
+    - to WST (UTC+13) - the Independent State of Samoa Time Zone
+    The Independent State of Samoa used SST until it moved across
+    the International Date Line at the end of 29 December 2011, to WST.
+    It is now 24 hours ahead of American Samoa
+    (and 25 hours in Southern hemisphere summer).
+    Let's use 24 hours as width (48 hours range total).
+  */
+
+  if (sec < width || sec > TIMESTAMP_MAX_VALUE - width)
+    return false;
+
+  MYSQL_TIME dtmin, dtmax;
+  gmt_sec_to_TIME(&dtmin, sec - width);
+  gmt_sec_to_TIME(&dtmax, sec + width);
+
+  ulonglong seconds;
+  ulong useconds;
+  if (calc_time_diff(&dtmax, &dtmin, 1, &seconds, &useconds))
+    return false; // dtmax is smaller than dtmin, should not happen.
+  if (seconds != (ulonglong) width * 2)
+    return false; // Anomalies found (DST changes or leap seconds)
+  return true;
 }
 
 #endif /* !defined(TESTTIME) && !defined(TZINFO2SQL) */
@@ -2665,12 +2729,6 @@ C_MODE_START
 static my_bool get_one_option(const struct my_option *, const char *,
                               const char *);
 C_MODE_END
-
-static void print_version(void)
-{
-  printf("%s  Ver %s Distrib %s, for %s (%s)\n",my_progname, PROGRAM_VERSION,
-	 MYSQL_SERVER_VERSION,SYSTEM_TYPE,MACHINE_TYPE);
-}
 
 static const char *default_timezone_dir= "/usr/share/zoneinfo/";
 

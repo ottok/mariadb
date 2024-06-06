@@ -595,7 +595,6 @@ private:
 
 public:
   /* Flag indicating  that the field is physically stored in the database */
-  bool stored_in_db;
   bool utf8;                                    /* Already in utf8 */
   bool automatic_name;
   bool if_not_exists;
@@ -607,7 +606,7 @@ public:
   Virtual_column_info()
    :Type_handler_hybrid_field_type(&type_handler_null),
     vcol_type((enum_vcol_info_type)VCOL_TYPE_NONE),
-    in_partitioning_expr(FALSE), stored_in_db(FALSE),
+    in_partitioning_expr(FALSE),
     utf8(TRUE), automatic_name(FALSE), expr(NULL), flags(0)
   {
     name.str= NULL;
@@ -636,11 +635,8 @@ public:
   }
   bool is_stored() const
   {
-    return stored_in_db;
-  }
-  void set_stored_in_db_flag(bool stored)
-  {
-    stored_in_db= stored;
+    /* after reading the row vcol value is already in the buffer */
+    return vcol_type == VCOL_GENERATED_STORED;
   }
   bool is_in_partitioning_expr() const
   {
@@ -770,15 +766,15 @@ protected:
   }
   void error_generated_column_function_is_not_allowed(THD *thd, bool error)
                                                       const;
-  static void do_field_eq(Copy_field *copy);
-  static void do_field_int(Copy_field *copy);
-  static void do_field_real(Copy_field *copy);
-  static void do_field_string(Copy_field *copy);
-  static void do_field_date(Copy_field *copy);
-  static void do_field_temporal(Copy_field *copy, date_mode_t fuzzydate);
-  static void do_field_datetime(Copy_field *copy);
-  static void do_field_timestamp(Copy_field *copy);
-  static void do_field_decimal(Copy_field *copy);
+  static void do_field_eq(const Copy_field *copy);
+  static void do_field_int(const Copy_field *copy);
+  static void do_field_real(const Copy_field *copy);
+  static void do_field_string(const Copy_field *copy);
+  static void do_field_date(const Copy_field *copy);
+  static void do_field_temporal(const Copy_field *copy, date_mode_t fuzzydate);
+  static void do_field_datetime(const Copy_field *copy);
+  static void do_field_timestamp(const Copy_field *copy);
+  static void do_field_decimal(const Copy_field *copy);
 public:
   static void *operator new(size_t size, MEM_ROOT *mem_root) throw ()
   { return alloc_root(mem_root, size); }
@@ -927,7 +923,7 @@ public:
     Convenience definition of a copy function returned by
     Field::get_copy_func()
   */
-  typedef void Copy_func(Copy_field*);
+  typedef void Copy_func(const Copy_field*);
   virtual Copy_func *get_copy_func(const Field *from) const= 0;
   virtual Copy_func *get_copy_func_to(const Field *to) const
   {
@@ -994,11 +990,6 @@ public:
             enum_check_fields check_level);
   int store_text(const char *to, size_t length, CHARSET_INFO *cs,
                  enum_check_fields check_level);
-  int store(const LEX_STRING *ls, CHARSET_INFO *cs)
-  {
-    DBUG_ASSERT(ls->length < UINT_MAX32);
-    return store(ls->str, (uint) ls->length, cs);
-  }
   int store(const LEX_CSTRING *ls, CHARSET_INFO *cs)
   {
     DBUG_ASSERT(ls->length < UINT_MAX32);
@@ -1074,6 +1065,20 @@ public:
     return to->copy((const char *) ptr, pack_length());
   }
   String *val_int_as_str(String *val_buffer, bool unsigned_flag);
+
+  /*
+    Copy the Field::val_str() value to MEM_ROOT as a 0x00-teminated string.
+
+    @param    mem_root   The memory root to put the value to.
+    @returns             {NULL,0} in case of EOM, or the field value otherwise.
+
+    Only one 0x00 terminating byte is put in the end, even in case
+    of complex character sets like UCS2/UTF16/UTF32.
+    This is OK, since this method is used to read system tables,
+    which are in utf8.
+  */
+  LEX_STRING val_lex_string_strmake(MEM_ROOT *mem_root);
+
   /*
     Return the field value as a LEX_CSTRING, without padding to full length
     (MODE_PAD_CHAR_TO_FULL_LENGTH is temporarily suppressed during the call).
@@ -1206,7 +1211,7 @@ public:
   {
     bitmap_set_bit(&table->has_value_set, field_index);
   }
-  bool has_explicit_value()
+  bool has_explicit_value() const
   {
     return bitmap_is_set(&table->has_value_set, field_index);
   }
@@ -1443,7 +1448,7 @@ public:
     null_bit= static_cast<uchar>(p_null_bit);
   }
 
-  bool stored_in_db() const { return !vcol_info || vcol_info->stored_in_db; }
+  bool stored_in_db() const { return !vcol_info || vcol_info->is_stored(); }
   bool check_vcol_sql_mode_dependency(THD *, vcol_init_mode mode) const;
 
   virtual sql_mode_t value_depends_on_sql_mode() const
@@ -3608,7 +3613,7 @@ protected:
   void store_TIME(const Time &t) { return store_TIME(t.get_mysql_time()); }
   int store_TIME_with_warning(const Time *ltime, const ErrConv *str, int warn);
   bool check_zero_in_date_with_warn(date_mode_t fuzzydate);
-  static void do_field_time(Copy_field *copy);
+  static void do_field_time(const Copy_field *copy);
 public:
   Field_time(uchar *ptr_arg, uint length_arg, uchar *null_ptr_arg,
              uchar null_bit_arg, enum utype unireg_check_arg,
@@ -4408,8 +4413,8 @@ protected:
   */
   String read_value;
 
-  static void do_copy_blob(Copy_field *copy);
-  static void do_conv_blob(Copy_field *copy);
+  static void do_copy_blob(const Copy_field *copy);
+  static void do_conv_blob(const Copy_field *copy);
   uint get_key_image_itRAW(const uchar *ptr_arg, uchar *buff, uint length) const;
 public:
   Field_blob(uchar *ptr_arg, uchar *null_ptr_arg, uchar null_bit_arg,
@@ -4767,7 +4772,7 @@ private:
 
 
 class Field_enum :public Field_str {
-  static void do_field_enum(Copy_field *copy_field);
+  static void do_field_enum(const Copy_field *copy_field);
   longlong val_int(const uchar *) const;
   Data_type_compatibility can_optimize_range_or_keypart_ref(
                                          const Item_bool_func *cond,
@@ -5376,7 +5381,9 @@ public:
     - find a _bin collation if the BINARY comparison style was specified, e.g.:
        CREATE TABLE t1 (a VARCHAR(10) BINARY) CHARSET utf8;
   */
-  bool prepare_charset_for_string(const Column_derived_attributes *dattr);
+  bool prepare_charset_for_string(Sql_used *used,
+                                  const Charset_collation_map_st &map,
+                                  const Column_derived_attributes *dattr);
 
   /**
     Prepare a SET/ENUM field.
@@ -5457,7 +5464,7 @@ public:
   bool check(THD *thd);
   bool validate_check_constraint(THD *thd);
 
-  bool stored_in_db() const { return !vcol_info || vcol_info->stored_in_db; }
+  bool stored_in_db() const { return !vcol_info || vcol_info->is_stored(); }
 
   ha_storage_media field_storage_type() const
   {
@@ -5531,10 +5538,11 @@ public:
 
   bool check_vcol_for_key(THD *thd) const;
 
-  void set_charset_collation_attrs(const
+  void set_charset_collation_attrs(Sql_used *used,
+                                   const Charset_collation_map_st &map, const
                                    Lex_column_charset_collation_attrs_st &lc)
   {
-    charset= lc.charset_info();
+    charset= lc.charset_info(used, map);
     if (lc.is_contextually_typed_collation())
       flags|= CONTEXT_COLLATION_FLAG;
     else
@@ -5613,8 +5621,8 @@ public:
 */
 class Spvar_definition: public Column_definition
 {
-  Qualified_column_ident *m_column_type_ref; // for %TYPE
-  Table_ident *m_table_rowtype_ref;          // for table%ROWTYPE
+  const Qualified_column_ident *m_column_type_ref; // for %TYPE
+  Table_ident *m_table_rowtype_ref;                // for table%ROWTYPE
   bool m_cursor_rowtype_ref;                       // for cursor%ROWTYPE
   uint m_cursor_rowtype_offset;                    // for cursor%ROWTYPE
   Row_definition_list *m_row_field_definitions;    // for ROW
@@ -5647,11 +5655,11 @@ public:
            !is_table_rowtype_ref() &&
            !is_cursor_rowtype_ref();
   }
-  Qualified_column_ident *column_type_ref() const
+  const Qualified_column_ident *column_type_ref() const
   {
     return m_column_type_ref;
   }
-  void set_column_type_ref(Qualified_column_ident *ref)
+  void set_column_type_ref(const Qualified_column_ident *ref)
   {
     m_column_type_ref= ref;
   }
@@ -5892,14 +5900,14 @@ public:
   */
   uint from_length,to_length;
   Field *from_field,*to_field;
-  String tmp;					// For items
+  mutable String tmp;					// For items
 
   Copy_field() = default;
   ~Copy_field() = default;
   void set(Field *to,Field *from,bool save);	// Field to field 
   void set(uchar *to,Field *from);		// Field to string
-  void (*do_copy)(Copy_field *);
-  void (*do_copy2)(Copy_field *);		// Used to handle null values
+  void (*do_copy)(const Copy_field *);
+  void (*do_copy2)(const Copy_field *);		// Used to handle null values
 };
 
 

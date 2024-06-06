@@ -31,7 +31,7 @@ static void init_master_log_pos(Master_info* mi);
 Master_info::Master_info(LEX_CSTRING *connection_name_arg,
                          bool is_slave_recovery)
   :Slave_reporting_capability("I/O"),
-   ssl(0), ssl_verify_server_cert(1), fd(-1), io_thd(0), 
+   ssl(1), ssl_verify_server_cert(1), fd(-1), io_thd(0),
    rli(is_slave_recovery), port(MYSQL_PORT),
    checksum_alg_before_fd(BINLOG_CHECKSUM_ALG_UNDEF),
    connect_retry(DEFAULT_CONNECT_RETRY), inited(0), abort_slave(0),
@@ -220,8 +220,6 @@ void init_master_log_pos(Master_info* mi)
   mi->gtid_reconnect_event_skip_count= 0;
   mi->gtid_event_seen= false;
 
-  /* Intentionally init ssl_verify_server_cert to 0, no option available  */
-  mi->ssl_verify_server_cert= 0;
   /* 
     always request heartbeat unless master_heartbeat_period is set
     explicitly zero.  Here is the default value for heartbeat period
@@ -1370,20 +1368,15 @@ Master_info_index::get_master_info(const LEX_CSTRING *connection_name,
                                    Sql_condition::enum_warning_level warning)
 {
   Master_info *mi;
-  char buff[MAX_CONNECTION_NAME+1], *res;
-  size_t buff_length;
   DBUG_ENTER("get_master_info");
   DBUG_PRINT("enter",
              ("connection_name: '%.*s'", (int) connection_name->length,
               connection_name->str));
 
   /* Make name lower case for comparison */
-  res= strmake(buff, connection_name->str, connection_name->length);
-  my_casedn_str(system_charset_info, buff); 
-  buff_length= (size_t) (res-buff);
-
+  IdentBufferCasedn<MAX_CONNECTION_NAME> buff(*connection_name);
   mi= (Master_info*) my_hash_search(&master_info_hash,
-                                    (uchar*) buff, buff_length);
+                                    (const uchar*) buff.ptr(), buff.length());
   if (!mi && warning != Sql_condition::WARN_LEVEL_NOTE)
   {
     my_error(WARN_NO_MASTER_INFO,

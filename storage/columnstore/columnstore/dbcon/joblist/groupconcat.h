@@ -19,25 +19,20 @@
 
 /** @file */
 
-#ifndef GROUP_CONCAT_H
-#define GROUP_CONCAT_H
+#pragma once
 
 #include <utility>
 #include <set>
 #include <vector>
 #include <boost/scoped_ptr.hpp>
-#include <boost/shared_array.hpp>
+
 
 #include "returnedcolumn.h"  // SRCP
 #include "rowgroup.h"        // RowGroup
 #include "rowaggregation.h"  // SP_GroupConcat
 #include "limitedorderby.h"  // IdbOrderBy
 
-#if defined(_MSC_VER) && defined(JOBLIST_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace joblist
 {
@@ -68,7 +63,7 @@ class GroupConcatInfo
 
  protected:
   uint32_t getColumnKey(const execplan::SRCP& srcp, JobInfo& jobInfo);
-  boost::shared_array<int> makeMapping(const rowgroup::RowGroup&, const rowgroup::RowGroup&);
+  std::shared_ptr<int[]> makeMapping(const rowgroup::RowGroup&, const rowgroup::RowGroup&);
 
   std::set<uint32_t> fColumns;
   std::vector<rowgroup::SP_GroupConcat> fGroupConcat;
@@ -89,15 +84,16 @@ class GroupConcatAgUM : public rowgroup::GroupConcatAg
     return fConcator;
   }
 
-  EXPORT void getResult(uint8_t*);
   EXPORT uint8_t* getResult();
 
  protected:
-  void applyMapping(const boost::shared_array<int>&, const rowgroup::Row&);
+  void applyMapping(const std::shared_ptr<int[]>&, const rowgroup::Row&);
 
   boost::scoped_ptr<GroupConcator> fConcator;
   boost::scoped_array<uint8_t> fData;
   rowgroup::Row fRow;
+  rowgroup::RGData fRowRGData;
+  rowgroup::RowGroup fRowGroup;
   bool fNoOrder;
 };
 
@@ -112,8 +108,9 @@ class GroupConcator
   virtual void processRow(const rowgroup::Row&) = 0;
 
   virtual void merge(GroupConcator*) = 0;
-  virtual void getResult(uint8_t* buff, const std::string& sep) = 0;
+  virtual uint8_t* getResultImpl(const std::string& sep) = 0;
   virtual uint8_t* getResult(const std::string& sep);
+  uint8_t* swapStreamWithStringAndReturnBuf(ostringstream& oss, bool isNull);
 
   virtual const std::string toString() const;
 
@@ -123,11 +120,11 @@ class GroupConcator
   virtual int64_t lengthEstimate(const rowgroup::Row&);
 
   std::vector<uint32_t> fConcatColumns;
-  std::vector<std::pair<std::string, uint32_t> > fConstCols;
+  std::vector<std::pair<utils::NullString, uint32_t> > fConstCols;
   int64_t fCurrentLength;
   int64_t fGroupConcatLen;
   int64_t fConstantLen;
-  boost::scoped_array<uint8_t> fOutputString;
+  std::unique_ptr<std::string> outputBuf_;
   long fTimeZone;
 };
 
@@ -143,7 +140,8 @@ class GroupConcatNoOrder : public GroupConcator
 
   void merge(GroupConcator*);
   using GroupConcator::getResult;
-  void getResult(uint8_t* buff, const std::string& sep);
+  uint8_t* getResultImpl(const std::string& sep);
+  //uint8_t* getResult(const std::string& sep);
 
   const std::string toString() const;
 
@@ -174,7 +172,8 @@ class GroupConcatOrderBy : public GroupConcator, public ordering::IdbOrderBy
 
   void merge(GroupConcator*);
   using GroupConcator::getResult;
-  void getResult(uint8_t* buff, const std::string& sep);
+  uint8_t* getResultImpl(const std::string& sep);
+  //uint8_t* getResult(const std::string& sep);
 
   const std::string toString() const;
 
@@ -184,5 +183,3 @@ class GroupConcatOrderBy : public GroupConcator, public ordering::IdbOrderBy
 }  // namespace joblist
 
 #undef EXPORT
-
-#endif  // GROUP_CONCAT_H

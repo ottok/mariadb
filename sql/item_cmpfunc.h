@@ -25,6 +25,7 @@
 
 #include "item_func.h"             /* Item_int_func, Item_bool_func */
 #include "item.h"
+#include "opt_rewrite_date_cmp.h"
 
 extern Item_result item_cmp_type(Item_result a,Item_result b);
 inline Item_result item_cmp_type(const Item *a, const Item *b)
@@ -811,6 +812,9 @@ public:
   friend class  Arg_comparator;
   Item *get_copy(THD *thd) override
   { return get_item_copy<Item_func_eq>(thd, this); }
+  Item* date_conds_transformer(THD *thd, uchar *arg) override
+  { return do_date_conds_transformation(thd, this); }
+  Item* varchar_upper_cmp_transformer(THD *thd, uchar *arg) override;
 };
 
 class Item_func_equal final :public Item_bool_rowready_func2
@@ -860,6 +864,8 @@ public:
   Item *negated_item(THD *thd) override;
   Item *get_copy(THD *thd) override
   { return get_item_copy<Item_func_ge>(thd, this); }
+  Item* date_conds_transformer(THD *thd, uchar *arg) override
+  { return do_date_conds_transformation(thd, this); }
 };
 
 
@@ -880,6 +886,8 @@ public:
   Item *negated_item(THD *thd) override;
   Item *get_copy(THD *thd) override
   { return get_item_copy<Item_func_gt>(thd, this); }
+  Item* date_conds_transformer(THD *thd, uchar *arg) override
+  { return do_date_conds_transformation(thd, this); }
 };
 
 
@@ -900,6 +908,8 @@ public:
   Item *negated_item(THD *thd) override;
   Item *get_copy(THD *thd) override
   { return get_item_copy<Item_func_le>(thd, this); }
+  Item* date_conds_transformer(THD *thd, uchar *arg) override
+  { return do_date_conds_transformation(thd, this); }
 };
 
 
@@ -920,6 +930,8 @@ public:
   Item *negated_item(THD *thd) override;
   Item *get_copy(THD *thd) override
   { return get_item_copy<Item_func_lt>(thd, this); }
+  Item* date_conds_transformer(THD *thd, uchar *arg) override
+  { return do_date_conds_transformation(thd, this); }
 };
 
 
@@ -1613,7 +1625,7 @@ public:
   {
     packed_longlong *val= reinterpret_cast<packed_longlong*>(base)+pos;
     Item_datetime *dt= static_cast<Item_datetime*>(item);
-    dt->set(val->val, type_handler()->mysql_timestamp_type());
+    dt->set_from_packed(val->val, type_handler()->mysql_timestamp_type());
   }
   friend int cmp_longlong(void *cmp_arg, packed_longlong *a,packed_longlong *b);
 };
@@ -2662,6 +2674,7 @@ public:
   Item *in_predicate_to_in_subs_transformer(THD *thd, uchar *arg) override;
   Item *in_predicate_to_equality_transformer(THD *thd, uchar *arg) override;
   uint32 max_length_of_left_expr();
+  Item* varchar_upper_cmp_transformer(THD *thd, uchar *arg) override;
 };
 
 class cmp_item_row :public cmp_item
@@ -3083,6 +3096,7 @@ public:
   bool is_const() const { return m_is_const; }
   void set_const(bool arg) { m_is_const= arg; }
   CHARSET_INFO * library_charset() const { return m_library_charset; }
+  void unset_flag(int flag) { m_library_flags&= ~flag; }
 };
 
 

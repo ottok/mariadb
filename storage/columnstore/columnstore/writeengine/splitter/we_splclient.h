@@ -27,8 +27,7 @@
  *      Author: bpaul
  */
 
-#ifndef WE_SPLCLIENT_H_
-#define WE_SPLCLIENT_H_
+#pragma once
 
 #include "threadsafequeue.h"
 #include "resourcemanager.h"
@@ -415,4 +414,3 @@ class WESplClient
 //------------------------------------------------------------------------------
 
 } /* namespace WriteEngine */
-#endif /* WE_SPLCLIENT_H_ */

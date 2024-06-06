@@ -19,8 +19,7 @@
  * $Id: cleartablelockthread.h 2101 2013-01-21 14:12:52Z rdempsey $
  *
  *******************************************************************************/
-#ifndef ClearTableLockThread_H__
-#define ClearTableLockThread_H__
+#pragma once
 
 #include <string>
 
@@ -129,5 +128,3 @@ class ClearTableLockThread
   ClearTableLockStatus* fStatus;          // Status object used to track request
   static boost::mutex fStdOutLock;        // Synchronize logging to stdout
 };
-
-#endif

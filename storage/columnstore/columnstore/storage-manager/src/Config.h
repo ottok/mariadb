@@ -15,10 +15,19 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
 
-#ifndef CONFIG_H_
-#define CONFIG_H_
+#pragma once
+
+#ifndef __clang__
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
 
 #include <boost/property_tree/ptree.hpp>
+
+#ifndef __clang__
+  #pragma GCC diagnostic pop
+#endif
+
 #include <boost/thread.hpp>
 #include <sys/types.h>
 #include <functional>
@@ -68,5 +77,3 @@ class Config : public boost::noncopyable
 };
 
 }  // namespace storagemanager
-
-#endif

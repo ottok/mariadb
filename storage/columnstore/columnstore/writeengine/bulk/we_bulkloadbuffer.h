@@ -19,8 +19,7 @@
  *   $Id: we_bulkloadbuffer.h 4489 2013-01-30 18:47:53Z dcathey $
  *
  ********************************************************************/
-#ifndef _WE_BULKLOADBUFFER_H
-#define _WE_BULKLOADBUFFER_H
+#pragma once
 
 #include "we_type.h"
 #include "limits"
@@ -55,7 +54,7 @@ class BLBufferStats
   };
   BLBufferStats(ColDataType colDataType) : satCount(0)
   {
-    if (isUnsigned(colDataType) || isCharType(colDataType))
+    if (isUnsigned(colDataType))
     {
       minBufferVal = static_cast<int64_t>(MAX_UBIGINT);
       maxBufferVal = static_cast<int64_t>(MIN_UBIGINT);
@@ -405,4 +404,3 @@ inline bool isTrueWord(const char* field, int fieldLength)
 }
 
 }  // namespace WriteEngine
-#endif

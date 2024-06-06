@@ -24,8 +24,7 @@
  * class FilterCommand interface
  */
 
-#ifndef JOBLIST_FILTERCOMMANDJL_H_
-#define JOBLIST_FILTERCOMMANDJL_H_
+#pragma once
 
 #include "joblist.h"
 #include "command-jl.h"
@@ -59,5 +58,3 @@ class FilterCommandJL : public CommandJL
 };
 
 };  // namespace joblist
-
-#endif  // JOBLIST_FILTERCOMMANDJL_H_

@@ -129,6 +129,12 @@ public:
    :Item_str_func(thd, a) { }
   Item_str_binary_checksum_func(THD *thd, Item *a, Item *b)
    :Item_str_func(thd, a, b) { }
+  Item_str_binary_checksum_func(THD *thd, Item *a, Item *b, Item *c)
+   :Item_str_func(thd, a, b, c) { }
+  Item_str_binary_checksum_func(THD *thd, Item *a, Item *b, Item *c, Item *d)
+   :Item_str_func(thd, a, b, c, d) { }
+  Item_str_binary_checksum_func(THD *thd, Item *a, Item *b, Item *c, Item *d, Item *e)
+   :Item_str_func(thd, a, b, c, d, e) { }
   bool eq(const Item *item, bool binary_cmp) const
   {
     /*
@@ -229,23 +235,39 @@ public:
 
 class Item_aes_crypt :public Item_str_binary_checksum_func
 {
-  enum { AES_KEY_LENGTH = 128 };
   void create_key(String *user_key, uchar* key);
-
-protected:
-  int what;
+  int parse_mode();
   String tmp_value;
+  const int what;
+  uint aes_key_length;
+  enum my_aes_mode aes_mode;
+
 public:
-  Item_aes_crypt(THD *thd, Item *a, Item *b)
-   :Item_str_binary_checksum_func(thd, a, b) {}
-  String *val_str(String *);
+  Item_aes_crypt(THD *thd, int what, Item *a, Item *b)
+   : Item_str_binary_checksum_func(thd, a, b), what(what) {}
+  Item_aes_crypt(THD *thd, int what, Item *a, Item *b, Item *c)
+   : Item_str_binary_checksum_func(thd, a, b, c), what(what) {}
+  Item_aes_crypt(THD *thd, int what, Item *a, Item *b, Item *c, Item *d)
+   : Item_str_binary_checksum_func(thd, a, b, c, d), what(what) {}
+  bool fix_fields(THD *thd, Item **ref) override;
+  String *val_str(String *) override;
+  bool check_vcol_func_processor(void *arg) override
+  {
+    if (arg_count > 3)
+      return FALSE;
+    return mark_unsupported_function(func_name(), "()", arg, VCOL_SESSION_FUNC);
+  }
 };
 
 class Item_func_aes_encrypt :public Item_aes_crypt
 {
 public:
   Item_func_aes_encrypt(THD *thd, Item *a, Item *b)
-   :Item_aes_crypt(thd, a, b) {}
+   :Item_aes_crypt(thd, ENCRYPTION_FLAG_ENCRYPT, a, b) {}
+  Item_func_aes_encrypt(THD *thd, Item *a, Item *b, Item *c)
+   :Item_aes_crypt(thd, ENCRYPTION_FLAG_ENCRYPT, a, b, c) {}
+  Item_func_aes_encrypt(THD *thd, Item *a, Item *b, Item *c, Item *d)
+   :Item_aes_crypt(thd, ENCRYPTION_FLAG_ENCRYPT, a, b, c, d) {}
   bool fix_length_and_dec(THD *thd) override;
   LEX_CSTRING func_name_cstring() const override
   {
@@ -260,7 +282,11 @@ class Item_func_aes_decrypt :public Item_aes_crypt
 {
 public:
   Item_func_aes_decrypt(THD *thd, Item *a, Item *b):
-    Item_aes_crypt(thd, a, b) {}
+    Item_aes_crypt(thd, ENCRYPTION_FLAG_DECRYPT, a, b) {}
+  Item_func_aes_decrypt(THD *thd, Item *a, Item *b, Item *c):
+    Item_aes_crypt(thd, ENCRYPTION_FLAG_DECRYPT, a, b, c) {}
+  Item_func_aes_decrypt(THD *thd, Item *a, Item *b, Item *c, Item *d):
+    Item_aes_crypt(thd, ENCRYPTION_FLAG_DECRYPT, a, b, c, d) {}
   bool fix_length_and_dec(THD *thd) override;
   LEX_CSTRING func_name_cstring() const override
   {
@@ -269,6 +295,35 @@ public:
   }
   Item *get_copy(THD *thd) override
   { return get_item_copy<Item_func_aes_decrypt>(thd, this); }
+};
+
+class Item_func_kdf :public Item_str_binary_checksum_func
+{
+  uint key_length;
+public:
+  Item_func_kdf(THD *thd, Item *a, Item *b)
+   : Item_str_binary_checksum_func(thd, a, b) {}
+  Item_func_kdf(THD *thd, Item *a, Item *b, Item *c)
+   : Item_str_binary_checksum_func(thd, a, b, c) {}
+  Item_func_kdf(THD *thd, Item *a, Item *b, Item *c, Item *d)
+   : Item_str_binary_checksum_func(thd, a, b, c, d) {}
+  Item_func_kdf(THD *thd, Item *a, Item *b, Item *c, Item *d, Item *e)
+   : Item_str_binary_checksum_func(thd, a, b, c, d, e) {}
+  bool fix_length_and_dec(THD *thd) override;
+  String *val_str(String *) override;
+  bool check_vcol_func_processor(void *arg) override
+  {
+    if (arg_count > 4)
+      return FALSE;
+    return mark_unsupported_function(func_name(), "()", arg, VCOL_SESSION_FUNC);
+  }
+  LEX_CSTRING func_name_cstring() const override
+  {
+    static LEX_CSTRING name= {STRING_WITH_LEN("kdf") };
+    return name;
+  }
+  Item *get_copy(THD *thd) override
+  { return get_item_copy<Item_func_kdf>(thd, this); }
 };
 
 class Item_func_natural_sort_key : public Item_str_func
@@ -412,8 +467,7 @@ public:
   }
   bool check_vcol_func_processor(void *arg) override
   {
-    return mark_unsupported_function(func_name(), "()", arg,
-                                     VCOL_NON_DETERMINISTIC | VCOL_NEXTVAL);
+    return mark_unsupported_function(func_name(), "()", arg, VCOL_NON_DETERMINISTIC);
   }
   Item *get_copy(THD *thd) override
   {
@@ -2311,6 +2365,33 @@ public:
   Item *get_copy(THD *thd) override
   { return get_item_copy<Item_temptable_rowid>(thd, this); }
 };
+
+class Item_func_format_pico_time : public Item_str_ascii_func
+{
+  /* Format is 'AAAA.BB UUU' = 11 characters or 'AAA ps' = 6 characters. */
+  char m_value_buffer[12];
+  String m_value;
+
+public:
+  Item_func_format_pico_time(THD *thd, Item *a): Item_str_ascii_func(thd, a) {}
+  String *val_str_ascii(String *) override;
+  LEX_CSTRING func_name_cstring() const override
+  {
+    static LEX_CSTRING name= {STRING_WITH_LEN("format_pico_time")};
+    return name;
+  }
+  bool fix_length_and_dec(THD *thd) override
+  {
+    m_value.set(m_value_buffer, sizeof(m_value_buffer), default_charset());
+    fix_length_and_charset(sizeof(m_value_buffer), default_charset());
+    return false;
+  }
+  Item *get_copy(THD *thd) override
+  {
+    return get_item_copy<Item_func_format_pico_time>(thd, this);
+  }
+};
+
 #ifdef WITH_WSREP
 
 #include "wsrep_api.h"

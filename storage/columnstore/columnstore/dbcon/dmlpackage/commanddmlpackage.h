@@ -22,17 +22,12 @@
  ***********************************************************************/
 /** @file */
 
-#ifndef COMMANDDMLPACKAGE_H
-#define COMMANDDMLPACKAGE_H
+#pragma once
 #include <string>
 #include "calpontdmlpackage.h"
 #include "bytestream.h"
 
-#if defined(_MSC_VER) && defined(xxxCOMMANDDMLPKG_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 namespace dmlpackage
 {
@@ -98,5 +93,3 @@ class CommandDMLPackage : public CalpontDMLPackage
 }  // namespace dmlpackage
 
 #undef EXPORT
-
-#endif  // COMMANDDMLPACKAGE_H

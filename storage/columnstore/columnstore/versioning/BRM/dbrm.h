@@ -24,8 +24,7 @@
  * class DBRM
  */
 
-#ifndef DBRM_H_
-#define DBRM_H_
+#pragma once
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -33,7 +32,7 @@
 #include <set>
 #include <string>
 #include <boost/thread.hpp>
-#include <boost/shared_array.hpp>
+
 #include <boost/scoped_ptr.hpp>
 
 #include "brmtypes.h"
@@ -48,11 +47,7 @@
 #include "configcpp.h"
 #include "mastersegmenttable.h"
 
-#if defined(_MSC_VER) && defined(xxxDBRM_DLLEXPORT)
-#define EXPORT __declspec(dllexport)
-#else
 #define EXPORT
-#endif
 
 #ifdef BRM_DEBUG
 #define DBRM_THROW
@@ -109,7 +104,7 @@ class DBRM
   EXPORT static void refreshShm()
   {
     MasterSegmentTableImpl::refreshShm();
-    ExtentMapImpl::refreshShm();
+    ExtentMapRBTreeImpl::refreshShm();
     FreeListImpl::refreshShm();
   }
 
@@ -621,6 +616,18 @@ class DBRM
    */
   EXPORT int getUncommittedExtentLBIDs(VER_t transID, std::vector<LBID_t>& lbidList) throw();
 
+  // MCOL-5021
+  /** @brief Adds LBIDs to an existing list of LBIDs retrieved via call
+   *  to getUncommittedExtentLBIDs().
+   *
+   * This function iterates over lbidList to find those LBIDs which belong to
+   * the AUX column. It then finds the corresponding LBIDs for all other columns
+   * which belong to the same table as the AUX LBID and appends them to lbidList.
+   * The updated lbidList is used by invalidateUncommittedExtentLBIDs().
+   * @param lbidList (in and out) This contains the ranges of LBIDs
+   */
+  EXPORT void addToLBIDList(uint32_t sessionID, vector<LBID_t>& lbidList);
+
   /** @brief Atomically prepare to copy data to the version buffer
    *
    * Atomically sets the copy flag on the specified LBID ranges
@@ -746,11 +753,13 @@ class DBRM
   /* SessionManager interface */
   EXPORT const QueryContext verID();
   EXPORT const QueryContext sysCatVerID();
+  EXPORT uint8_t newCpimportJob(uint32_t &jobId);
+  EXPORT void finishCpimportJob(uint32_t jobId);
   EXPORT const TxnID newTxnID(const SessionManagerServer::SID session, bool block, bool isDDL = false);
   EXPORT void committed(BRM::TxnID& txnid);
   EXPORT void rolledback(BRM::TxnID& txnid);
   EXPORT const BRM::TxnID getTxnID(const SessionManagerServer::SID session);
-  EXPORT boost::shared_array<SIDTIDEntry> SIDTIDMap(int& len);
+  EXPORT std::shared_ptr<SIDTIDEntry[]> SIDTIDMap(int& len);
   EXPORT void sessionmanager_reset();
 
   /* Note, these pull #s from two separate sequences.  That is, they both
@@ -819,6 +828,8 @@ class DBRM
   EXPORT int resume() DBRM_THROW;
   EXPORT int forceReload() DBRM_THROW;
   EXPORT int setReadOnly(bool b) DBRM_THROW;
+  EXPORT int startReadOnly() DBRM_THROW;
+  EXPORT int forceClearCpimportJobs() DBRM_THROW;
   EXPORT int isReadWrite() throw();
 
   EXPORT bool isEMEmpty() throw();
@@ -1010,5 +1021,3 @@ class DBRM
 }  // namespace BRM
 
 #undef EXPORT
-
-#endif

@@ -22,12 +22,9 @@
 
 #include <iostream>
 #include <signal.h>
+#include <memory>
 #include <string>
 #include <clocale>
-#ifdef _MSC_VER
-#include <process.h>
-#include <winsock2.h>
-#endif
 #include "slavedbrmnode.h"
 #include "slavecomm.h"
 #include "liboamcpp.h"
@@ -39,12 +36,13 @@
 #include "crashtrace.h"
 #include "service.h"
 #include "jobstep.h"
+#include <atomic>
 
 using namespace BRM;
 using namespace std;
 
-SlaveComm* comm;
-bool die = false;
+std::unique_ptr<SlaveComm> comm;
+std::atomic<bool> die{false};
 boost::thread_group monitorThreads;
 
 class Opt
@@ -124,18 +122,17 @@ int ServiceWorkerNode::Child()
 {
   setupChildSignalHandlers();
 
-  SlaveDBRMNode slave;
   ShmKeys keys;
 
   try
   {
-    comm = new SlaveComm(std::string(m_nodename), &slave);
+    comm = std::make_unique<SlaveComm>(std::string(m_nodename));
     NotifyServiceStarted();
   }
   catch (exception& e)
   {
     ostringstream os;
-    os << "An error occured: " << e.what();
+    os << "An error occurred: " << e.what();
     cerr << os.str() << endl;
     log(os.str());
     NotifyServiceInitializationFailed();
@@ -143,12 +140,12 @@ int ServiceWorkerNode::Child()
   }
 
   /* Start 4 threads to monitor write lock state */
-  monitorThreads.create_thread(RWLockMonitor(&die, slave.getEMFLLockStatus(), keys.KEYRANGE_EMFREELIST_BASE));
-  monitorThreads.create_thread(RWLockMonitor(&die, slave.getEMLockStatus(), keys.KEYRANGE_EXTENTMAP_BASE));
-  monitorThreads.create_thread(RWLockMonitor(&die, slave.getVBBMLockStatus(), keys.KEYRANGE_VBBM_BASE));
-  monitorThreads.create_thread(RWLockMonitor(&die, slave.getVSSLockStatus(), keys.KEYRANGE_VSS_BASE));
+  monitorThreads.create_thread(RWLockMonitor(&die, comm->getSlaveNode().getEMFLLockStatus(), keys.KEYRANGE_EMFREELIST_BASE));
+  monitorThreads.create_thread(RWLockMonitor(&die, comm->getSlaveNode().getEMLockStatus(), keys.KEYRANGE_EXTENTMAP_BASE));
+  monitorThreads.create_thread(RWLockMonitor(&die, comm->getSlaveNode().getVBBMLockStatus(), keys.KEYRANGE_VBBM_BASE));
+  monitorThreads.create_thread(RWLockMonitor(&die, comm->getSlaveNode().getVSSLockStatus(), keys.KEYRANGE_VSS_BASE));
   monitorThreads.create_thread(
-      RWLockMonitor(&die, slave.getEMIndexLockStatus(), keys.KEYRANGE_EXTENTMAP_INDEX_BASE));
+      RWLockMonitor(&die, comm->getSlaveNode().getEMIndexLockStatus(), keys.KEYRANGE_EXTENTMAP_INDEX_BASE));
 
   try
   {

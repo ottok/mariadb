@@ -24,8 +24,7 @@
  * class FilterCommand interface
  */
 
-#ifndef PRIMITIVES_FILTERCOMMAND_H_
-#define PRIMITIVES_FILTERCOMMAND_H_
+#pragma once
 
 #include <string>
 #include <boost/scoped_array.hpp>
@@ -161,5 +160,3 @@ class StrFilterCmd : public FilterCommand
 };
 
 };  // namespace primitiveprocessor
-
-#endif  // PRIMITIVES_FILTERCOMMAND_H_

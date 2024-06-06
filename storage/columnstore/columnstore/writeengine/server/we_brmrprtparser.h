@@ -26,8 +26,7 @@
  *      Author: bpaul
  */
 
-#ifndef WE_BRMRPRTPARSER_H_
-#define WE_BRMRPRTPARSER_H_
+#pragma once
 
 #include <fstream>
 #include <iostream>
@@ -69,4 +68,3 @@ class BrmReportParser
 };
 
 } /* namespace WriteEngine */
-#endif /* WE_BRMRPRTPARSER_H_ */
