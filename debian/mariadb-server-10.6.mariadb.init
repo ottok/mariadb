@@ -169,13 +169,16 @@ case "${1:-''}" in
       log_end_msg 1
       [ "$VERBOSE" != "no" ] && log_failure_msg "Error: $shutdown_out"
       log_daemon_msg "Killing MariaDB database server by signal" "mariadbd"
-      killall -15 mariadbd
+      killall -15 mariadbd || killall -15 mysqld
       server_down=
       for i in `seq 1 600`; do
         sleep 1
         if mariadbd_status check_dead nowarn; then server_down=1; break; fi
       done
-      if test -z "$server_down"; then killall -9 mariadbd; fi
+      if test -z "$server_down"
+      then
+        killall -9 mariadbd || killall -9 mysqld
+      fi
     fi
   fi
 
