@@ -98,6 +98,7 @@ packaging-fix-checks:
   except:
     variables:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+  allow_failure: true  # 'debputy lint' is in active development and failures can be false
 
 # Buster only has libfmt 6.1 but 7.0 is required, so backport build for Buster
 # is not possible unless somebody packages libfmt7-dev for Buster.
