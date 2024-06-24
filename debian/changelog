@@ -1,13 +1,23 @@
-mariadb (1:11.4.2-1) UNRELEASED; urgency=medium
+mariadb (1:11.4.2-1) unstable; urgency=medium
 
-  * Update debian/watch for MariaDB 11.4 LTS
   * New upstream major version 11.4.2. Includes new features as noted at
     https://mariadb.com/kb/en/mariadb-11-4-2-release-notes/ for this
     minor release that got announced for General Availabily and
     https://mariadb.com/kb/en/changes-improvements-in-mariadb-11-4/
     for an overview of what the MariaDB 11.4 series brings.
+  * Use new '/usr/share/mariadb' path instead of deprecated 'mysql' equivalent
+  * Use new 'mariadb-test' path and name instead of deprecated 'mysql-test'
+  * Use command 'mariadb' instead of deprecated 'mysql'
+  * Don't stop autopkgtest configuration-tracing on errors early
+  * Update server trace to include new parameters and values
+  * Add build/test dependency libnet-ssleay-perl
+  * Partially sync debian/ with upstream MariaDB 11.4.2
+  * Fix all Lintian errors, and more, for MariaDB 11.4.2
+  * Make transitional mariadb-server-10.5 package compatible with 11.4
+  * Stop building the embedded server to save disk space
+  * When shutting down 'mariadbd', fallback to 'mysqld'
 
- -- Otto Kekäläinen <otto@debian.org>  Wed, 29 May 2024 21:30:52 +0300
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 23 Jun 2024 21:46:13 -0700
 
 mariadb (1:10.11.8-1) unstable; urgency=medium
 
