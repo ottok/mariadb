@@ -1,4 +1,5 @@
-From fd83a9431cd16e6c61b8cdbb89810c554a315338 Mon Sep 17 00:00:00 2001
+Forwarded: https://github.com/MariaDB/server/pull/2541
+Origin: https://patch-diff.githubusercontent.com/raw/MariaDB/server/pull/2541.patch
 From: Hugo Wen <wenhug@amazon.com>
 Date: Sat, 11 Mar 2023 00:27:42 +0000
 Subject: [PATCH] Fix a stack overflow in pinbox allocator
