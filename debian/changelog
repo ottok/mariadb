@@ -1,3 +1,12 @@
+mariadb (1:11.4.2-2) unstable; urgency=medium
+
+  * Disable the 'mysql*' command deprecation warning
+  * Revert move of 'mysqldump' to compat package to avoid breaking dependencies
+  * Revert move of 'mysqladmin' to compat package to avoid breaking dependencies
+  * Use correct 1:11.0.0 version in Breaks/Replaces (Closes: #1074566)
+
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 01 Jul 2024 15:41:57 -0700
+
 mariadb (1:11.4.2-1) unstable; urgency=medium
 
   * New upstream major version 11.4.2. Includes new features as noted at
