@@ -7,7 +7,6 @@ usr/bin/mysql_setpermission
 usr/bin/mysql_tzinfo_to_sql
 usr/bin/mysql_waitpid
 usr/bin/mysqlaccess
-usr/bin/mysqladmin
 usr/bin/mysqlbinlog
 usr/bin/mysqlcheck
 usr/bin/mysqldumpslow
@@ -24,7 +23,6 @@ usr/share/man/man1/mysql_setpermission.1
 usr/share/man/man1/mysql_tzinfo_to_sql.1
 usr/share/man/man1/mysql_waitpid.1
 usr/share/man/man1/mysqlaccess.1
-usr/share/man/man1/mysqladmin.1
 usr/share/man/man1/mysqlbinlog.1
 usr/share/man/man1/mysqlcheck.1
 usr/share/man/man1/mysqldumpslow.1
