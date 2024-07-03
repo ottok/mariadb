@@ -147,6 +147,54 @@ Description: MariaDB database client library
  .
  This package includes the client library.
 
+Package: libmariadbd19t64
+Provides:
+ ${t64:Provides},
+Replaces:
+ libmariadbd19,
+Breaks:
+ libmariadbd19 (<< ${source:Version}),
+Architecture: any
+Section: libs
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+Multi-Arch: same
+Description: MariaDB embedded database, shared library
+ MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
+ server. SQL (Structured Query Language) is the most popular database query
+ language in the world. The main goals of MariaDB are speed, robustness and
+ ease of use.
+ .
+ This package includes a shared library for embedded MariaDB applications.
+
+Package: libmariadbd-dev
+Architecture: any
+Section: libdevel
+Provides:
+ libmysqld-dev,
+Pre-Depends:
+ ${misc:Pre-Depends},
+Depends:
+ libmariadb-dev (= ${binary:Version}),
+ libmariadbd19t64 (= ${binary:Version}),
+ ${misc:Depends},
+ ${shlibs:Depends},
+Breaks:
+ libmariadb-dev (<< 1:10.4),
+ libmysqld-dev,
+Replaces:
+ libmariadb-dev (<< 1:10.4),
+ libmysqld-dev,
+Description: MariaDB embedded database, development files
+ MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
+ server. SQL (Structured Query Language) is the most popular database query
+ language in the world. The main goals of MariaDB are speed, robustness and
+ ease of use.
+ .
+ This package includes the MariaDB embedded server library development and
+ header files.
+
 Package: mariadb-common
 Architecture: all
 Depends:
