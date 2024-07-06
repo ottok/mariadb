@@ -1,0 +1,1284 @@
+From 5666f404dc993b919bd71d3ac0ba4859570e87ad Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Wed, 3 Apr 2024 16:57:26 -0700
+Subject: [PATCH 01/11] Fix MTR for builds without performance schema
+
+Change `--disable-performance-schema` to `--loose-disable-performance-schema`.
+
+Sergei Golubchik broke this in 2bc940f7c940. See
+https://github.com/MariaDB/server/commit/2bc940f7c940#r140575671.
+
+It was subsequently fixed in
+https://github.com/MariaDB/server/commit/354e97cd722c6b8721f05e75084a6843e32b6b74,
+but that was never merged to 11.3 / 11.4 / 11.5.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ mysql-test/mariadb-test-run.pl | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mysql-test/mariadb-test-run.pl b/mysql-test/mariadb-test-run.pl
+index 9d3991fad2049..6dadd5209089d 100755
+--- a/mysql-test/mariadb-test-run.pl
++++ b/mysql-test/mariadb-test-run.pl
+@@ -3111,7 +3111,7 @@ sub mysql_install_db {
+   mtr_add_arg($args, "--core-file");
+   mtr_add_arg($args, "--console");
+   mtr_add_arg($args, "--character-set-server=latin1");
+-  mtr_add_arg($args, "--disable-performance-schema");
++  mtr_add_arg($args, "--loose-disable-performance-schema");
+ 
+   if ( $opt_debug )
+   {
+
+From bab0955e49182106df8c71a4409c966d0395a345 Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Fri, 26 Apr 2024 14:02:50 -0700
+Subject: [PATCH 02/11] Fix main.ssl_crl test failures on OpenSSL 3.2.0+
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Because MariaDB simply echoes most TLS-related error messages as they are
+produced by the TLS library, MTR tests that result in TLS error need to have their output normalized to
+account for changes in the literal text of TLS-related error messages.
+
+In the 2019 commit 576e85ad99ca, Sergei Golubchik noted that the error
+message produced by OpenSSL for a revoked certificate had changed in OpenSSL
+1.1.1a.
+
+As of OpenSSL 3.2.0, it has changed again ("sslv3 alert" → "ssl/tls alert"
+in https://github.com/openssl/openssl/commit/81b741f68984b2620166d0d6271fbd946bab9e7f).
+
+This change normalizes the test to the output of OpenSSL 3.2.0+, and uses
+`--replace_regex` to ensure that it will keep working with older versions of
+OpenSSL as well.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ mysql-test/main/ssl_crl.result | 2 +-
+ mysql-test/main/ssl_crl.test   | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/mysql-test/main/ssl_crl.result b/mysql-test/main/ssl_crl.result
+index d5603254ea585..58e3e07f746f0 100644
+--- a/mysql-test/main/ssl_crl.result
++++ b/mysql-test/main/ssl_crl.result
+@@ -2,4 +2,4 @@
+ Variable_name	Value
+ Ssl_version	TLS_VERSION
+ # try logging in with a certificate in the server's --ssl-crl : should fail
+-ERROR 2026 (HY000): TLS/SSL error: sslv3 alert certificate revoked
++ERROR 2026 (HY000): TLS/SSL error: ssl/tls alert certificate revoked
+diff --git a/mysql-test/main/ssl_crl.test b/mysql-test/main/ssl_crl.test
+index 9b4758578a70c..d69b0cf694e93 100644
+--- a/mysql-test/main/ssl_crl.test
++++ b/mysql-test/main/ssl_crl.test
+@@ -8,6 +8,7 @@
+ 
+ --echo # try logging in with a certificate in the server's --ssl-crl : should fail
+ # OpenSSL 1.1.1a correctly rejects the certificate, but the error message is different
+---replace_regex /ERROR 2013 \(HY000\): Lost connection to server at '.*', system error: [0-9]+/ERROR 2026 (HY000): TLS\/SSL error: sslv3 alert certificate revoked/
++# In OpenSSL 3.2.0, the error message has changed again ("sslv3 alert" changed to "ssl/tls alert" in https://github.com/openssl/openssl/commit/81b741f68984b2620166d0d6271fbd946bab9e7f)
++--replace_regex /ERROR 2013 \(HY000\): Lost connection to server at '.*', system error: [0-9]+/ERROR 2026 (HY000): TLS\/SSL error: ssl/tls alert certificate revoked/ /sslv3 alert/ssl\/tls alert/
+ --error 1
+ --exec $MYSQL --ssl-ca=$MYSQL_TEST_DIR/std_data/cacert.pem --ssl-key=$MYSQL_TEST_DIR/std_data/client-key.pem --ssl-cert=$MYSQL_TEST_DIR/std_data/client-cert.pem test -e "SHOW STATUS LIKE 'Ssl_version'" 2>&1
+
+From 8e00e155cc3a6ea6559cef0b6451df5a6d549af5 Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Tue, 30 May 2023 14:35:16 -0700
+Subject: [PATCH 03/11] [MDEV-34009] Basic framework for instant failover
+ mechanism
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This adds the system variables `INSTANT_FAILOVER_TARGET` and
+`INSTANT_FAILOVER_MODE` (`OFF`/`ON`/`ALL`), and the error code
+`ER_INSTANT_FAILOVER`.
+
+When `INSTANT_FAILOVER_MODE=ON`, the server will immediately respond
+to newly-connected clients with an error packet containing the error code
+4196 (`ER_INSTANT_FAILOVER`) and a specially-formatted message:
+
+    |Arbitary human-readable message|value of INSTANT_FAILOVER_TARGET
+
+For example:
+
+    |Server is directing clients to the alternative server 'other-mariadb-server.company.com:3307'.|other-mariadb-server.company.com:3307
+
+Updated and compatible clients can parse this message and redirect
+appropriately, or display the human-readable message if they do not wish to
+follow this redirection.  Older clients will display the message in its
+entirety, and end users should at least have an idea of what's going on.
+
+In my earliest implementation, the sending of the `ER_INSTANT_FAILOVER`
+error packet by the MariaDB server depended on the exploitation of the
+client vulnerability https://jira.mariadb.org/browse/CONC-648 (“Client
+improperly accepts error packets prior to TLS handshake”), which I
+discovered during its implementation.
+
+The server should obviously be able to redirect clients which don't suffer
+from this severe vulnerability.
+
+In order to do this, we need to move the redirection handling into
+`native_password_authentication()`.  This awkward arrangement is
+necessitated by the total entanglement of the APPLICATION-layer
+authentication code (e.g. username+password for "native" authentication)
+with the TRANSPORT-layer security mechanism (TLS literally stands for
+Transport Layer Security).
+
+An unfortunate consequence of this is that the redirection mechanism will
+not work unless the client is using the "native" authentication plugin, or
+until other authentication plugins are similarly updated similarly.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ sql/mysqld.cc             |  6 ++++++
+ sql/mysqld.h              |  8 ++++++++
+ sql/share/errmsg-utf8.txt |  4 ++++
+ sql/sql_acl.cc            | 38 ++++++++++++++++++++++++++++++++++++++
+ sql/sys_vars.cc           | 20 ++++++++++++++++++++
+ 5 files changed, 76 insertions(+)
+
+diff --git a/sql/mysqld.cc b/sql/mysqld.cc
+index 9d2be3c40191a..759458f4728ce 100644
+--- a/sql/mysqld.cc
++++ b/sql/mysqld.cc
+@@ -1526,6 +1526,12 @@ static Atomic_counter<uint> extra_connection_count;
+ 
+ my_bool opt_gtid_strict_mode= FALSE;
+ 
++/**
++ Instant failover
++ */
++
++const char *instant_failover_target = NullS;
++ulong instant_failover_mode= INSTANT_FAILOVER_MODE_OFF;
+ 
+ /* Function declarations */
+ 
+diff --git a/sql/mysqld.h b/sql/mysqld.h
+index f53d4ccf510a4..dfd2a2e142948 100644
+--- a/sql/mysqld.h
++++ b/sql/mysqld.h
+@@ -1002,6 +1002,14 @@ extern ulong opt_binlog_dbug_fsync_sleep;
+ extern uint volatile global_disable_checkpoint;
+ extern my_bool opt_help;
+ 
++extern const char *instant_failover_target;
++enum enum_instant_failover_mode {
++    INSTANT_FAILOVER_MODE_OFF = 0,
++    INSTANT_FAILOVER_MODE_ON = 1,
++    INSTANT_FAILOVER_MODE_ALL = 2
++};
++extern ulong instant_failover_mode;
++
+ extern int mysqld_main(int argc, char **argv);
+ 
+ #ifdef _WIN32
+diff --git a/sql/share/errmsg-utf8.txt b/sql/share/errmsg-utf8.txt
+index a632e57f98054..49e11bf2a064b 100644
+--- a/sql/share/errmsg-utf8.txt
++++ b/sql/share/errmsg-utf8.txt
+@@ -12280,3 +12280,7 @@ ER_SEQUENCE_TABLE_CANNOT_HAVE_ANY_CONSTRAINTS
+         eng "Sequence tables cannot have any constraints"
+ ER_SEQUENCE_TABLE_ORDER_BY
+         eng "ORDER BY"
++ER_INSTANT_FAILOVER
++        eng "|Server is directing clients to the alternative server '%1$s'|%1$s"
++        fra "|Ce serveur dirige ses clients vers le serveur alternatif '%1$s'|%1$s"
++        spa "|Este servidor está dirigiendo sus clientes al servidor alternativo '%1$s'|%1$s"
+diff --git a/sql/sql_acl.cc b/sql/sql_acl.cc
+index 7fb4fa1d476e3..f44f158bb1739 100644
+--- a/sql/sql_acl.cc
++++ b/sql/sql_acl.cc
+@@ -13980,6 +13980,44 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+     return packet_error;
+   }
+ 
++  /* If the server is configured to redirect clients to another server (pre-authentication),
++   * then send an error packet to signal that here.
++   *
++   * FIXME: it makes absolutely no sense for this pre-authentication redirection mechanism
++   *   to be invoked HERE, in the middle of the authentication process. Unfortunately, the
++   *   existing code structure deeply entangles two logically separate concerns:
++   *
++   *   1) Encrypting and authenticating the client->server connection at the TRANSPORT layer
++   *      using TLS/SSL (TLS stands for TRANSPORT-layer security).
++   *   2) Negotiating an appropriate APPLICATION-layer authentication mode, and then
++   *      authenticating the client.
++   *
++   *   It would be much more logical, simple, and universal to do this redirection right at
++   *   the beginning of sql_authenticate(), but -- because of the above entangling -- the
++   *   transport layer encryption has not yet been enabled at that point.
++   *
++   *   This means that a client which expects a secured transport SHOULD NOT trust any
++   *   redirection message (or any other error message) which it receives prior to the
++   *   the TLS handshake; existing clients DO present such errors as trustworthy, which is
++   *   a security vulnerability that needs a separate fix (see more details at
++   *   https://jira.mariadb.org/browse/CONC-648).
++   */
++  enum enum_vio_type type= vio_type(thd->net.vio);
++  bool local_connection= (type == VIO_TYPE_SOCKET) || (type == VIO_TYPE_NAMEDPIPE);
++
++  if (instant_failover_mode == INSTANT_FAILOVER_MODE_ALL ||
++      (instant_failover_mode == INSTANT_FAILOVER_MODE_ON && !local_connection))
++  {
++    sql_print_warning("Redirecting connection %lld via %s to INSTANT_FAILOVER_TARGET=%s (INSTANT_FAILOVER_MODE=%s)",
++                      thd->thread_id, safe_vio_type_name(thd->net.vio), instant_failover_target,
++                      (instant_failover_mode == INSTANT_FAILOVER_MODE_ON ? "ON" : "ALL"));
++    DBUG_PRINT("info", ("redirecting connection %lld via %s to INSTANT_FAILOVER_TARGET=%s (INSTANT_FAILOVER_MODE=%s)",
++                        thd->thread_id, safe_vio_type_name(thd->net.vio), instant_failover_target,
++                        (instant_failover_mode == INSTANT_FAILOVER_MODE_ON ? "ON" : "ALL")));
++    my_error(ER_INSTANT_FAILOVER, MYF(0), instant_failover_target);
++    DBUG_RETURN(packet_error);
++  }
++
+   if (client_capabilities & CLIENT_PROTOCOL_41)
+   {
+     thd->max_client_packet_length= uint4korr(net->read_pos+4);
+diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
+index 57dd29104e830..f2ded8b5a5b13 100644
+--- a/sql/sys_vars.cc
++++ b/sql/sys_vars.cc
+@@ -7328,3 +7328,23 @@ static Sys_var_enum Sys_block_encryption_mode(
+   "AES_ENCRYPT() and AES_DECRYPT() functions",
+   SESSION_VAR(block_encryption_mode), CMD_LINE(REQUIRED_ARG),
+   block_encryption_mode_values, DEFAULT(0));
++
++static Sys_var_charptr_fscs Sys_instant_failover_target(
++	"instant_failover_target",
++        "Instant failover target. This should be a hostname, an IP address, or "
++        "a hostname or IP address followed by ':PORT'. Instant failover will "
++        "not be activated unless INSTANT_FAILOVER_MODE is also set.",
++        GLOBAL_VAR(instant_failover_target), CMD_LINE(REQUIRED_ARG),
++        DEFAULT(NULL));
++
++static const char *instant_failover_mode_names[]= {
++        "OFF", "ON", "ALL", 0 };
++
++static Sys_var_enum Sys_instant_failover_mode(
++       "instant_failover_mode",
++       "Instant failover mode. "
++       "Possible modes are: OFF - No instant failover, "
++       "ON: Unconditionally redirect new clients connecting over the network to INSTANT_FAILOVER_TARGET (no redirection of local socket-based connections), "
++       "ALL: Unconditionally redirect all new clients to INSTANT_FAILOVER_TARGET (even via local socket-based connections).",
++       GLOBAL_VAR(instant_failover_mode), CMD_LINE(REQUIRED_ARG),
++       instant_failover_mode_names, DEFAULT(0));
+
+From 92d2952ac50f60460daf65ad368c7bda7bd11ff2 Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Tue, 13 Jun 2023 15:53:53 -0700
+Subject: [PATCH 04/11] Additional debug logging in sql_acl
+
+This additional logging is intended to demonstrate exactly when/where/how
+the switch from a plaintext TCP/IP socket to a TLS/SSL-wrapped socket
+occurs.
+
+The short summary is that the TLS-ification of the connection is completely
+entangled with the authentication process:
+
+- The mechanism for ensuring confidentiality and authenticity of the
+  client/server communications at the TRANSPORT-layer is TLS (which
+  literally stands for Transport Layer Security)
+- The APPLICATION-layer authentication mechanisms involve traffic exchanged
+  above the transport layer, and support multiple plugins, such as the
+  default "native" authentication plugin using usernames and passwords.
+- The transport-layer security mechanism is logically distinct from the
+  application-layer authentication mechanism, but in the MariaDB server
+  codebase these are thoroughly entangled and interdependent.
+
+This is a network-mislayering design problem with significant consequences
+for code complexity and flexibility.  It leads to several potential and
+actual security vulnerabilities whereby information is improperly
+transmitted and accepted in plaintext prior to the TLS handshake.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ sql/sql_acl.cc | 66 +++++++++++++++++++++++++++++++++++---------------
+ 1 file changed, 47 insertions(+), 19 deletions(-)
+
+diff --git a/sql/sql_acl.cc b/sql/sql_acl.cc
+index f44f158bb1739..3012032543887 100644
+--- a/sql/sql_acl.cc
++++ b/sql/sql_acl.cc
+@@ -13354,6 +13354,8 @@ static bool send_server_handshake_packet(MPVIO_EXT *mpvio,
+   char scramble_buf[SCRAMBLE_LENGTH];
+   char *end= buff;
+   DBUG_ENTER("send_server_handshake_packet");
++  DBUG_PRINT("info", ("send_server_handshake STARTING: vio_type=%s",
++                      safe_vio_type_name(thd->net.vio)));
+ 
+   *end++= protocol_version;
+ 
+@@ -13902,10 +13904,13 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+   THD *thd= mpvio->auth_info.thd;
+   NET *net= &thd->net;
+   char *end;
++  DBUG_ENTER("parse_client_handshake_packet");
+   DBUG_ASSERT(mpvio->status == MPVIO_EXT::FAILURE);
++  DBUG_PRINT("info", ("parse_client_handshake STARTING: vio_type=%s",
++                      safe_vio_type_name(thd->net.vio)));
+ 
+   if (pkt_len < MIN_HANDSHAKE_SIZE)
+-    return packet_error;
++    DBUG_RETURN(packet_error);
+ 
+   /*
+     Protocol buffer is guaranteed to always end with \0. (see my_net_read())
+@@ -13918,7 +13923,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+   if (client_capabilities & CLIENT_PROTOCOL_41)
+   {
+     if (pkt_len < 32)
+-      return packet_error;
++      DBUG_RETURN(packet_error);
+     client_capabilities|= ((ulong) uint2korr(net->read_pos+2)) << 16;
+     if (!(client_capabilities & CLIENT_MYSQL))
+     {
+@@ -13940,7 +13945,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+ 
+     /* Do the SSL layering. */
+     if (!ssl_acceptor_fd)
+-      return packet_error;
++      DBUG_RETURN(packet_error);
+ 
+     DBUG_PRINT("info", ("IO layer change in progress..."));
+     mysql_rwlock_rdlock(&LOCK_ssl_refresh);
+@@ -13951,16 +13956,19 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+     if(ssl_ret)
+     {
+       DBUG_PRINT("error", ("Failed to accept new SSL connection"));
+-      return packet_error;
++      DBUG_RETURN(packet_error);
+     }
+ 
++    DBUG_PRINT("info", ("Immediately following IO layer change: vio_type=%s",
++                        safe_vio_type_name(thd->net.vio)));
++
+     DBUG_PRINT("info", ("Reading user information over SSL layer"));
+     pkt_len= my_net_read(net);
+     if (unlikely(pkt_len == packet_error || pkt_len < NORMAL_HANDSHAKE_SIZE))
+     {
+       DBUG_PRINT("error", ("Failed to read user information (pkt_len= %lu)",
+ 			   pkt_len));
+-      return packet_error;
++      DBUG_RETURN(packet_error);
+     }
+   }
+   /*
+@@ -14023,19 +14031,19 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+     thd->max_client_packet_length= uint4korr(net->read_pos+4);
+     DBUG_PRINT("info", ("client_character_set: %d", (uint) net->read_pos[8]));
+     if (thd_init_client_charset(thd, (uint) net->read_pos[8]))
+-      return packet_error;
++      DBUG_RETURN(packet_error);
+     end= (char*) net->read_pos+32;
+   }
+   else
+   {
+     if (pkt_len < 5)
+-      return packet_error;
++      DBUG_RETURN(packet_error);
+     thd->max_client_packet_length= uint3korr(net->read_pos+2);
+     end= (char*) net->read_pos+5;
+   }
+ 
+   if (end >= (char*) net->read_pos+ pkt_len +2)
+-    return packet_error;
++    DBUG_RETURN(packet_error);
+ 
+   if (thd->client_capabilities & CLIENT_IGNORE_SPACE)
+     thd->variables.sql_mode|= MODE_IGNORE_SPACE;
+@@ -14043,7 +14051,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+     thd->variables.net_wait_timeout= thd->variables.net_interactive_timeout;
+ 
+   if (end >= (char*) net->read_pos+ pkt_len +2)
+-    return packet_error;
++    DBUG_RETURN(packet_error);
+ 
+   if ((thd->client_capabilities & CLIENT_TRANSACTIONS) &&
+       opt_using_transactions)
+@@ -14078,7 +14086,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+     len= safe_net_field_length_ll((uchar**)&passwd,
+                                       net->read_pos + pkt_len - (uchar*)passwd);
+     if (len > pkt_len)
+-      return packet_error;
++      DBUG_RETURN(packet_error);
+   }
+ 
+   passwd_len= (size_t)len;
+@@ -14087,7 +14095,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+ 
+   if (passwd == NULL ||
+       passwd + passwd_len + MY_TEST(db) > (char*) net->read_pos + pkt_len)
+-    return packet_error;
++    DBUG_RETURN(packet_error);
+ 
+   /* strlen() can't be easily deleted without changing protocol */
+   db_len= safe_strlen(db);
+@@ -14102,7 +14110,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+   if (unlikely(thd->copy_with_error(system_charset_info,
+                                     (LEX_STRING*) &mpvio->db,
+                                     thd->charset(), db, db_len)))
+-    return packet_error;
++    DBUG_RETURN(packet_error);
+ 
+   user_len= copy_and_convert(user_buff, sizeof(user_buff) - 1,
+                              system_charset_info, user, user_len,
+@@ -14129,7 +14137,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+ 
+   my_free(const_cast<char*>(sctx->user));
+   if (!(sctx->user= my_strndup(key_memory_MPVIO_EXT_auth_info, user, user_len, MYF(MY_WME))))
+-    return packet_error; /* The error is set by my_strdup(). */
++    DBUG_RETURN(packet_error); /* The error is set by my_strdup(). */
+ 
+ 
+   /*
+@@ -14143,12 +14151,12 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+   {
+     // if mysqld's been started with --skip-grant-tables option
+     mpvio->status= MPVIO_EXT::SUCCESS;
+-    return packet_error;
++    DBUG_RETURN(packet_error);
+   }
+ 
+   thd->password= passwd_len > 0;
+   if (find_mpvio_user(mpvio))
+-    return packet_error;
++    DBUG_RETURN(packet_error);
+ 
+   if ((thd->client_capabilities & CLIENT_PLUGIN_AUTH) &&
+       (client_plugin.str < (char *)net->read_pos + pkt_len))
+@@ -14213,16 +14221,17 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+     if (send_plugin_request_packet(mpvio,
+                                    (uchar*) mpvio->cached_server_packet.pkt,
+                                    mpvio->cached_server_packet.pkt_len))
+-      return packet_error;
++      DBUG_RETURN(packet_error);
+ 
+     passwd_len= my_net_read(&thd->net);
+     passwd= (char*)thd->net.read_pos;
+   }
+ 
+   *buff= (uchar*) passwd;
+-  return (ulong)passwd_len;
++  DBUG_RETURN((ulong)passwd_len);
+ #else
+-  return 0;
++  DBUG_ENTER("parse_client_handshake_packet (EMPTY STUB)");
++  DBUG_RETURN(0);
+ #endif
+ }
+ 
+@@ -14243,6 +14252,8 @@ static int server_mpvio_write_packet(MYSQL_PLUGIN_VIO *param,
+   MPVIO_EXT *mpvio= (MPVIO_EXT *) param;
+   int res;
+   DBUG_ENTER("server_mpvio_write_packet");
++  DBUG_PRINT("info", ("server_mpvio_write_packet STARTING: vio_type=%s",
++                      safe_vio_type_name(mpvio->auth_info.thd->net.vio)));
+ 
+   /* reset cached_client_reply */
+   mpvio->cached_client_reply.pkt= 0;
+@@ -14290,6 +14301,9 @@ static int server_mpvio_read_packet(MYSQL_PLUGIN_VIO *param, uchar **buf)
+   MYSQL_SERVER_AUTH_INFO * const ai= &mpvio->auth_info;
+   ulong pkt_len;
+   DBUG_ENTER("server_mpvio_read_packet");
++  DBUG_PRINT("info", ("server_mpvio_read_packet STARTING: vio_type=%s",
++                      safe_vio_type_name(mpvio->auth_info.thd->net.vio)));
++
+   if (mpvio->status == MPVIO_EXT::RESTART)
+   {
+     const char *client_auth_plugin=
+@@ -14367,6 +14381,8 @@ static int server_mpvio_read_packet(MYSQL_PLUGIN_VIO *param, uchar **buf)
+   ai->auth_string_length= (ulong) mpvio->acl_user->auth[mpvio->curr_auth].salt.length;
+   strmake_buf(ai->authenticated_as, mpvio->acl_user->user.str);
+ 
++  DBUG_PRINT("info", ("server_mpvio_read_packet FINISHING: vio_type=%s",
++                      safe_vio_type_name(mpvio->auth_info.thd->net.vio)));
+   DBUG_RETURN((int)pkt_len);
+ 
+ err:
+@@ -14375,6 +14391,8 @@ static int server_mpvio_read_packet(MYSQL_PLUGIN_VIO *param, uchar **buf)
+     if (!ai->thd->is_error())
+       my_error(ER_HANDSHAKE_ERROR, MYF(0));
+   }
++  DBUG_PRINT("info", ("server_mpvio_read_packet FINISHING WITH ERROR: vio_type=%s",
++                      safe_vio_type_name(mpvio->auth_info.thd->net.vio)));
+   DBUG_RETURN(-1);
+ }
+ 
+@@ -14529,18 +14547,26 @@ static int do_auth_once(THD *thd, const LEX_CSTRING *auth_plugin_name,
+   bool unlock_plugin= false;
+   plugin_ref plugin= get_auth_plugin(thd, *auth_plugin_name, &unlock_plugin);
+ 
++  DBUG_ENTER("do_auth_once");
++  DBUG_PRINT("info", ("do_auth_once STARTING: vio_type=%s",
++                      safe_vio_type_name(thd->net.vio)));
+   mpvio->plugin= plugin;
+   mpvio->auth_info.user_name= NULL;
+ 
+   if (plugin)
+   {
+     st_mysql_auth *info= (st_mysql_auth *) plugin_decl(plugin)->info;
++
++    DBUG_PRINT("info", ("auth_plugin_name: %s, interface_version: %d",
++                        auth_plugin_name->str, info->interface_version));
++
+     switch (info->interface_version >> 8) {
+     case 0x02:
+       res= info->authenticate_user(mpvio, &mpvio->auth_info);
+       break;
+     case 0x01:
+       {
++        DBUG_PRINT("info", ("Using compat downgrade for authentication"));
+         MYSQL_SERVER_AUTH_INFO_0x0100 compat;
+         compat.downgrade(&mpvio->auth_info);
+         res= info->authenticate_user(mpvio, (MYSQL_SERVER_AUTH_INFO *)&compat);
+@@ -14563,7 +14589,9 @@ static int do_auth_once(THD *thd, const LEX_CSTRING *auth_plugin_name,
+     res= CR_ERROR;
+   }
+ 
+-  return res;
++  DBUG_PRINT("info", ("do_auth_once FINISHING: vio_type=%s",
++                      safe_vio_type_name(thd->net.vio)));
++  DBUG_RETURN(res);
+ }
+ 
+ enum PASSWD_ERROR_ACTION
+
+From 6d8842be28d424eb63a7634e6fb96fa27225359d Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Tue, 20 Jun 2023 11:23:32 -0700
+Subject: [PATCH 05/11] Exclude connections to the EXTRA_PORT from
+ INSTANT_FAILOVER_MODE=ON
+
+MariaDB servers can optionally listen for client connections on an
+additional TCP port (configured with the system variable `EXTRA_PORT`) in
+addition to the "normal" TCP port (default 3306).  See
+https://mariadb.com/kb/en/thread-pool-in-mariadb/#configuring-the-extra-port
+for more information.
+
+This `EXTRA_PORT` is intended for emergency and/or administrative use, and
+we should therefore include it from redirection in
+`INSTANT_FAILOVER_MODE=ON`, just as we do for non-network based connections
+(Unix sockets and named pipes).
+
+The code required to check for connections to the EXTRA_PORT is greatly
+complicated by the fact that the `thd->net->vio->mysql_socket` and
+`thd->net->vio->local` data structures are not reliably or fully populated
+at the point where they are passed into `parse_client_handshake_packet.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ sql/sql_acl.cc  | 82 +++++++++++++++++++++++++++++++++++++++++++++++--
+ sql/sys_vars.cc |  4 +--
+ 2 files changed, 81 insertions(+), 5 deletions(-)
+
+diff --git a/sql/sql_acl.cc b/sql/sql_acl.cc
+index 3012032543887..9d590740545c0 100644
+--- a/sql/sql_acl.cc
++++ b/sql/sql_acl.cc
+@@ -13909,6 +13909,84 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+   DBUG_PRINT("info", ("parse_client_handshake STARTING: vio_type=%s",
+                       safe_vio_type_name(thd->net.vio)));
+ 
++  enum enum_vio_type type= vio_type(thd->net.vio);
++  bool local_connection= (type == VIO_TYPE_SOCKET) || (type == VIO_TYPE_NAMEDPIPE);
++  uint16_t server_port = 0;
++  bool is_extra_port= FALSE;
++
++  if (!local_connection) {
++    /* We want to determine if the client is connecting to the TCP
++     * port optionally configured via the system variable
++     * EXTRA_PORT. This is intended for emergency/administrative
++     * use. (See
++     * https://mariadb.com/kb/en/thread-pool-in-mariadb/#configuring-the-extra-port)
++     *
++     * Based on its name and usage elsewhere in the server codebase,
++     * I expected that the net->vio->mysql_socket data structure
++     * would be populated at this point, including the member
++     * .is_extra_port whose name suggests it is precisely intended
++     * to convey this information.
++     *
++     * However, debugging with GDB demonstrates that
++     * net->vio->mysql_socket is NOT reliably populated, and in
++     * particular .is_extra_port appears to have the value 127
++     * regardless of whether client has connected via the extra
++     * port, or not.
++     *
++     * This means that we need to compare the local socket
++     * address to mysqld_extra_port (which holds the value of the
++     * EXTRA_PORT system vairable).
++     *
++     * That leads to another data structure which is inexplicably
++     * unpopulated at this point: net->vio->local. Since we cannot
++     * rely on that data structure either, we have to populate it
++     * ourselves here.
++     *
++     * FIXME: If net->vio->mysql_socket were sanely and reliably
++     * populated here, this entire 'if'-block could be replaced
++     * with:
++     *
++     *   is_extra_port= net->vio->mysql_socket->is_extra_port.
++     */
++
++    union _sockaddr_ipv46 {
++      struct sockaddr_storage _nvl; /* This is the actual type of net->vio->local */
++      struct sockaddr_in inaddr;
++      struct sockaddr_in6 in6addr;
++      struct sockaddr addr;
++    } *a = (union _sockaddr_ipv46 *)&net->vio->local;
++
++    if (a->_nvl.ss_family == AF_UNSPEC)
++    {
++      /* FIXME: If we could rely on net->vio->local having already
++       * been populated, we could remove this entire 'if' block.
++       */
++      socklen_t addrlen = sizeof(a->_nvl);
++      memset(a, 0, addrlen);
++      if (mysql_socket_getsockname(net->vio->mysql_socket, &a->addr, &addrlen) == -1)
++        DBUG_PRINT("error", ("mysql_socket_getsockname(net->vio->mysql_socket.fd = %d) failed: errno = %d",
++                             net->vio->mysql_socket.fd, errno));
++      else if (a->addr.sa_family != AF_INET && a->addr.sa_family != AF_INET6)
++        DBUG_PRINT("error", ("mysql_socket_getsockname(net->vio->mysql_socket.fd = %d) unexpectedly returned non-IP address family: %d",
++                             net->vio->mysql_socket.fd, a->addr.sa_family));
++    }
++
++    if (a->_nvl.ss_family == AF_INET || a->_nvl.ss_family == AF_INET6) {
++      server_port= ntohs(a->addr.sa_family == AF_INET
++                         ? a->inaddr.sin_port
++                         : a->in6addr.sin6_port);
++      DBUG_PRINT("info", ("Client has connected via TCP/IP port %d (EXTRA_PORT is %d)",
++                          server_port, mysqld_extra_port));
++
++      /* FIXME: Should we set net->vio->mysql_socket.is_extra_port directly,
++       * or will that have unintended side effects?
++       *
++       * Err on the side of caution and simply set a local variable.
++       */
++      is_extra_port= (server_port == mysqld_extra_port);
++    }
++  }
++
+   if (pkt_len < MIN_HANDSHAKE_SIZE)
+     DBUG_RETURN(packet_error);
+ 
+@@ -14010,11 +14088,9 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
+    *   a security vulnerability that needs a separate fix (see more details at
+    *   https://jira.mariadb.org/browse/CONC-648).
+    */
+-  enum enum_vio_type type= vio_type(thd->net.vio);
+-  bool local_connection= (type == VIO_TYPE_SOCKET) || (type == VIO_TYPE_NAMEDPIPE);
+ 
+   if (instant_failover_mode == INSTANT_FAILOVER_MODE_ALL ||
+-      (instant_failover_mode == INSTANT_FAILOVER_MODE_ON && !local_connection))
++      (instant_failover_mode == INSTANT_FAILOVER_MODE_ON && !local_connection && !is_extra_port))
+   {
+     sql_print_warning("Redirecting connection %lld via %s to INSTANT_FAILOVER_TARGET=%s (INSTANT_FAILOVER_MODE=%s)",
+                       thd->thread_id, safe_vio_type_name(thd->net.vio), instant_failover_target,
+diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
+index f2ded8b5a5b13..134bfddaec134 100644
+--- a/sql/sys_vars.cc
++++ b/sql/sys_vars.cc
+@@ -7344,7 +7344,7 @@ static Sys_var_enum Sys_instant_failover_mode(
+        "instant_failover_mode",
+        "Instant failover mode. "
+        "Possible modes are: OFF - No instant failover, "
+-       "ON: Unconditionally redirect new clients connecting over the network to INSTANT_FAILOVER_TARGET (no redirection of local socket-based connections), "
+-       "ALL: Unconditionally redirect all new clients to INSTANT_FAILOVER_TARGET (even via local socket-based connections).",
++       "ON: Unconditionally redirect new clients connecting over the network via the standard server port to INSTANT_FAILOVER_TARGET (no redirection of local socket-based connections, nor of connections to the EXTRA_PORT), "
++       "ALL: Unconditionally redirect all new clients to INSTANT_FAILOVER_TARGET (even via local socket-based connections and the EXTRA_PORT).",
+        GLOBAL_VAR(instant_failover_mode), CMD_LINE(REQUIRED_ARG),
+        instant_failover_mode_names, DEFAULT(0));
+
+From 1287ad55a85c990131a92e8ef62837efe4bf474e Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Mon, 19 Jun 2023 17:37:31 -0700
+Subject: [PATCH 06/11] Use libmariadb as updated for instant failover
+
+The updated libmariadb parses the `ER_INSTANT_FAILOVER` error packets (with
+the message component formatted as
+`|Human-readable message|value of INSTANT_FAILOVER_TARGET system variable`)
+and reconnects accordingly.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ .gitmodules | 2 +-
+ libmariadb  | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/.gitmodules b/.gitmodules
+index 18bcb465fa251..25bde4458fe65 100644
+--- a/.gitmodules
++++ b/.gitmodules
+@@ -1,6 +1,6 @@
+ [submodule "libmariadb"]
+ 	path = libmariadb
+-	url = https://github.com/MariaDB/mariadb-connector-c.git
++	url = ../mariadb-connector-c
+ [submodule "storage/rocksdb/rocksdb"]
+ 	path = storage/rocksdb/rocksdb
+ 	url = https://github.com/facebook/rocksdb.git
+diff --git a/libmariadb b/libmariadb
+index 1e2968ade732d..2bed28f702c8b 160000
+--- a/libmariadb
++++ b/libmariadb
+@@ -1 +1 @@
+-Subproject commit 1e2968ade732d320e074e89c3e9d39a4a57cd70c
++Subproject commit 2bed28f702c8b328c367f785194d95a45ecd77a5
+
+From 05c820d5d78572cf82a9073231bea37178224629 Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Fri, 26 Apr 2024 14:02:50 -0700
+Subject: [PATCH 07/11] [MDEV-28634] Fix tests which depended on insecure
+ TLS-to-plaintext fallback.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In addition to handling server-initiated failover packets
+(https://jira.mariadb.org/browse/MDEV-34009), the update to the `libmariadb`
+submodule in the previous commit also includes fixes for:
+
+- https://jira.mariadb.org/browse/CONC-648
+  (Merged upstream as of https://github.com/mariadb-corporation/mariadb-connector-c/commit/ebcb9eca29295b3884b6bd7be099f0bf9e206025)
+
+- https://jira.mariadb.org/browse/MDEV-28634
+  (https://github.com/mariadb-corporation/mariadb-connector-c/pull/224, which
+  was REJECTED upstream).
+
+  This issue is indeed a Connector/C issue, not a server issue, despite its
+  categorization in MDEV rather than CONC (see my long-ago request to move it in
+  https://jira.mariadb.org/browse/MDEV-28634?focusedCommentId=261605#comment-261605).
+
+Due to the fix for https://jira.mariadb.org/browse/MDEV-28634, and related
+fixes that have already been merge dupstream, the Connector/C library and
+thus the `mariadb` CLI now (correctly!) fail to connect…
+
+- When `mariadb --ssl` is specified, but the server doesn't support SSL.
+- When `mariadb --ssl-verify-server-cert` is specified, but a self-signed
+  cert is found in the certificate chain and it's *not* in the `--ssl-ca`
+  list.
+
+The following tests need to be updated:
+
+- `main.mysql`: Trusted root certificate(s) must be specified (with
+  `--ssl-ca`) in order for `--ssl-verify-server-cert` not to fail
+  (correctly!) with an error about an untrusted self-signed cert.
+
+- `main.ssl_fp`: The combination of `--ssl-fp` (specifying an
+  otherwise-untrusted cert's fingerprint) with `--ssl-verify-server-cert`
+  does not make any logical sense, and indeed it correctly fails with
+  an error about an untrusted self-signed cert.
+
+  The purpose of `--ssl-verify-server-cert` is to verify a server's cert
+  based on a set of trusted self-signed root certificates.  The purpose of
+  `--ssl-fp` is to accept a server's cert based on its specific fingerprint.
+  These two are in conflict.
+
+- `main.ssl_7937`: Depended on insecure TLS-to-plaintext fallback.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ mysql-test/main/mysql.result          |  2 +-
+ mysql-test/main/mysql.test            |  4 ++--
+ mysql-test/main/ssl_7937,nossl.result | 10 ++++------
+ mysql-test/main/ssl_7937.test         |  8 ++++++++
+ mysql-test/main/ssl_crl.test          |  2 +-
+ mysql-test/main/ssl_fp.result         |  2 +-
+ mysql-test/main/ssl_fp.test           |  4 ++--
+ 7 files changed, 19 insertions(+), 13 deletions(-)
+
+diff --git a/mysql-test/main/mysql.result b/mysql-test/main/mysql.result
+index 8813d05a74aa1..8996ddcd63483 100644
+--- a/mysql-test/main/mysql.result
++++ b/mysql-test/main/mysql.result
+@@ -649,7 +649,7 @@ MYSQL --disable-ssl-verify-server-cert -e "\s"
+ SSL:			Cipher in use is XXX, cert is UNKNOWN
+ 
+ 
+-MYSQL --ssl-verify-server-cert -e "\s"
++MYSQL --ssl-verify-server-cert --ssl-ca=cacert.pem -e "\s"
+ 
+ SSL:			Cipher in use is XXX, cert is OK
+ 
+diff --git a/mysql-test/main/mysql.test b/mysql-test/main/mysql.test
+index 3f881807a051a..5550be4ad8f68 100644
+--- a/mysql-test/main/mysql.test
++++ b/mysql-test/main/mysql.test
+@@ -733,9 +733,9 @@ create user ser@localhost identified by "ass";
+ --echo MYSQL --disable-ssl-verify-server-cert -e "\\s"
+ --replace_regex /^.[^S].*// /\b[-A-Z_0-9]+,/XXX,/
+ --exec $MYSQL -user -pass --disable-ssl-verify-server-cert -e "\\s"
+---echo MYSQL --ssl-verify-server-cert -e "\\s"
++--echo MYSQL --ssl-verify-server-cert --ssl-ca=cacert.pem -e "\\s"
+ --replace_regex /^.[^S].*// /\b[-A-Z_0-9]+,/XXX,/
+---exec $MYSQL -user -pass --ssl-verify-server-cert -e "\\s"
++--exec $MYSQL -user -pass --ssl-verify-server-cert --ssl-ca=$MYSQL_TEST_DIR/std_data/cacert.pem -e "\\s"
+ drop user ser@localhost;
+ 
+ --echo #
+diff --git a/mysql-test/main/ssl_7937,nossl.result b/mysql-test/main/ssl_7937,nossl.result
+index 6ba2d23db7dfe..d3d0b1fad43e8 100644
+--- a/mysql-test/main/ssl_7937,nossl.result
++++ b/mysql-test/main/ssl_7937,nossl.result
+@@ -3,15 +3,13 @@ select if(variable_value > '','yes','no') as 'have_ssl'
+   from information_schema.session_status
+ where variable_name='ssl_cipher';
+ mysql --ssl-ca=cacert.pem -e "call test.have_ssl()"
+-have_ssl
+-no
++ERROR 2026 (HY000): Client requires TLS/SSL, but the server does not support it
+ mysql --ssl -e "call test.have_ssl()"
+-have_ssl
+-no
++ERROR 2026 (HY000): Client requires TLS/SSL, but the server does not support it
+ mysql --ssl-ca=cacert.pem --ssl-verify-server-cert -e "call test.have_ssl()"
+-ERROR 2026 (HY000): TLS/SSL error: SSL is required, but the server does not support it
++ERROR 2026 (HY000): Client requires TLS/SSL, but the server does not support it
+ mysql --ssl --ssl-verify-server-cert -e "call test.have_ssl()"
+-ERROR 2026 (HY000): TLS/SSL error: SSL is required, but the server does not support it
++ERROR 2026 (HY000): Client requires TLS/SSL, but the server does not support it
+ #
+ # MDEV-27105 --ssl option set as default for mariadb CLI
+ #
+diff --git a/mysql-test/main/ssl_7937.test b/mysql-test/main/ssl_7937.test
+index 444e3ec6a1b4b..34e94cf2dffc9 100644
+--- a/mysql-test/main/ssl_7937.test
++++ b/mysql-test/main/ssl_7937.test
+@@ -26,6 +26,14 @@ if($is_win)
+ {
+   let $host=--host=127.0.0.2;
+ }
++
++# The replace_regex below replaces
++# "self signed certificate in certificate chain" with "Failed to verify the server certificate"
++#
++# This replacement was added in 6484288cd260cc9ad34d93a35502e66c034f01a7, and it
++# is intended to paper over a difference between various versions of OpenSSL (and its derivatives)
++# in terms of exactly what error message is printed in case of a TLS error caused by a
++# self-signed certificate.
+ --echo mysql --ssl --ssl-verify-server-cert -e "call test.have_ssl()"
+ --replace_regex /TLS\/SSL error.*certificate[^\n]*/TLS\/SSL error: Failed to verify the server certificate/
+ --exec $MYSQL --protocol tcp $host --ssl --ssl-verify-server-cert -e "call test.have_ssl()" 2>&1
+diff --git a/mysql-test/main/ssl_crl.test b/mysql-test/main/ssl_crl.test
+index d69b0cf694e93..4e97644613248 100644
+--- a/mysql-test/main/ssl_crl.test
++++ b/mysql-test/main/ssl_crl.test
+@@ -9,6 +9,6 @@
+ --echo # try logging in with a certificate in the server's --ssl-crl : should fail
+ # OpenSSL 1.1.1a correctly rejects the certificate, but the error message is different
+ # In OpenSSL 3.2.0, the error message has changed again ("sslv3 alert" changed to "ssl/tls alert" in https://github.com/openssl/openssl/commit/81b741f68984b2620166d0d6271fbd946bab9e7f)
+---replace_regex /ERROR 2013 \(HY000\): Lost connection to server at '.*', system error: [0-9]+/ERROR 2026 (HY000): TLS\/SSL error: ssl/tls alert certificate revoked/ /sslv3 alert/ssl\/tls alert/
++--replace_regex /ERROR 2013 \(HY000\): Lost connection to server at '.*', system error: [0-9]+/ERROR 2026 (HY000): TLS\/SSL error: ssl\/tls alert certificate revoked/ /sslv3 alert/ssl\/tls alert/
+ --error 1
+ --exec $MYSQL --ssl-ca=$MYSQL_TEST_DIR/std_data/cacert.pem --ssl-key=$MYSQL_TEST_DIR/std_data/client-key.pem --ssl-cert=$MYSQL_TEST_DIR/std_data/client-cert.pem test -e "SHOW STATUS LIKE 'Ssl_version'" 2>&1
+diff --git a/mysql-test/main/ssl_fp.result b/mysql-test/main/ssl_fp.result
+index fe15e5f5a13b4..09b8c15603bf9 100644
+--- a/mysql-test/main/ssl_fp.result
++++ b/mysql-test/main/ssl_fp.result
+@@ -4,7 +4,7 @@ return (select if(variable_value > '','yes','no') as 'have_ssl'
+ where variable_name='ssl_cipher');
+ # mysql --protocol tcp -uroot --ssl-verify-server-cert -e "select test.have_ssl()"
+ ERROR 2026 (HY000): TLS/SSL error: Failed to verify the server certificate
+-# mysql --protocol tcp -uroot --ssl-fp=F1:D0:08:AF:A1:D2:F4:15:79:B4:39:06:41:F4:20:96:F1:90:A9:65 --ssl-verify-server-cert -e "select test.have_ssl()"
++# mysql --protocol tcp -uroot --ssl-fp=F1:D0:08:AF:A1:D2:F4:15:79:B4:39:06:41:F4:20:96:F1:90:A9:65 -e "select test.have_ssl()"
+ test.have_ssl()
+ yes
+ # mysql --protocol tcp -uroot --ssl-fp=00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33 --disable-ssl-verify-server-cert -e "select test.have_ssl()"
+diff --git a/mysql-test/main/ssl_fp.test b/mysql-test/main/ssl_fp.test
+index 9f3685c45935b..16d6ebff0ca0b 100644
+--- a/mysql-test/main/ssl_fp.test
++++ b/mysql-test/main/ssl_fp.test
+@@ -21,8 +21,8 @@ if($is_win)
+ #
+ # fingerprint based cert verification:
+ #
+---echo # mysql --protocol tcp -uroot --ssl-fp=F1:D0:08:AF:A1:D2:F4:15:79:B4:39:06:41:F4:20:96:F1:90:A9:65 --ssl-verify-server-cert -e "select test.have_ssl()"
+---exec $MYSQL --protocol tcp $host -uroot --ssl-fp=F1:D0:08:AF:A1:D2:F4:15:79:B4:39:06:41:F4:20:96:F1:90:A9:65 --ssl-verify-server-cert -e "select test.have_ssl()" 2>&1
++--echo # mysql --protocol tcp -uroot --ssl-fp=F1:D0:08:AF:A1:D2:F4:15:79:B4:39:06:41:F4:20:96:F1:90:A9:65 -e "select test.have_ssl()"
++--exec $MYSQL --protocol tcp $host -uroot --ssl-fp=F1:D0:08:AF:A1:D2:F4:15:79:B4:39:06:41:F4:20:96:F1:90:A9:65 -e "select test.have_ssl()" 2>&1
+ #
+ # wrong fingerprint fails even with --disable-ssl-verify-server-cert
+ #
+
+From 49b770e3f73fde79ddb443a2ca4817ab1f61cc0a Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Wed, 5 Jul 2023 13:42:59 -0700
+Subject: [PATCH 08/11] Add --follow-instant-failovers option to MariaDB CLI
+
+This option is ENABLED by default.
+
+The `main.mysqld--help` MTR test is updated as well, to reflect the addition
+of this option to the `mysqld --help` output.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ client/mysql.cc                     | 10 +++++++++-
+ mysql-test/main/mysqld--help.result | 16 ++++++++++++++++
+ 2 files changed, 25 insertions(+), 1 deletion(-)
+
+diff --git a/client/mysql.cc b/client/mysql.cc
+index d87c0b73aaa6a..c25788ec20995 100644
+--- a/client/mysql.cc
++++ b/client/mysql.cc
+@@ -248,7 +248,8 @@ static my_bool ignore_errors=0,wait_flag=0,quick=0,
+                default_pager_set= 0, opt_sigint_ignore= 0,
+                auto_vertical_output= 0, show_query_cost= 0,
+                show_warnings= 0, executing_query= 0,
+-               ignore_spaces= 0, opt_binhex= 0, opt_progress_reports;
++               ignore_spaces= 0, opt_binhex= 0, opt_progress_reports,
++               opt_follow_instant_failovers= 1;
+ static my_bool debug_info_flag, debug_check_flag, batch_abort_on_error;
+ static my_bool column_types_flag;
+ static my_bool preserve_comments= 0;
+@@ -1503,6 +1504,8 @@ static bool do_connect(MYSQL *mysql, const char *host, const char *user,
+   if (opt_secure_auth)
+     mysql_options(mysql, MYSQL_SECURE_AUTH, (char *) &opt_secure_auth);
+   SET_SSL_OPTS_WITH_CHECK(mysql);
++  mysql_options(mysql,MARIADB_OPT_FOLLOW_INSTANT_FAILOVERS,
++                (char*)&opt_follow_instant_failovers);
+   if (opt_protocol)
+     mysql_options(mysql,MYSQL_OPT_PROTOCOL,(char*)&opt_protocol);
+   if (opt_plugin_dir && *opt_plugin_dir)
+@@ -1805,6 +1808,11 @@ static struct my_option my_long_options[] =
+    &opt_mysql_unix_port, &opt_mysql_unix_port, 0, GET_STR_ALLOC,
+    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+ #include "sslopt-longopts.h"
++  {"follow-instant-failovers", 0,
++   "Follow instant failovers. Disable with "
++   "--disable-follow-instant-failovers. This option is enabled by default.",
++   &opt_follow_instant_failovers, &opt_follow_instant_failovers,
++   0, GET_BOOL, OPT_ARG, 1, 0, 0, 0, 0, 0},
+   {"table", 't', "Output in table format.", &output_tables,
+    &output_tables, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+   {"tee", OPT_TEE,
+diff --git a/mysql-test/main/mysqld--help.result b/mysql-test/main/mysqld--help.result
+index 431c37c25ed6f..c97ac70f3c1fc 100644
+--- a/mysql-test/main/mysqld--help.result
++++ b/mysql-test/main/mysqld--help.result
+@@ -433,6 +433,20 @@ The following specify which files/extra groups are read (specified before remain
+  Set the replication role. One of: MASTER, SLAVE
+  --init-slave=name   Command(s) that are executed by a slave server each time
+  the SQL thread starts
++ --instant-failover-mode=name 
++ Instant failover mode. Possible modes are: OFF - No
++ instant failover, ON: Unconditionally redirect new
++ clients connecting over the network via the standard
++ server port to INSTANT_FAILOVER_TARGET (no redirection of
++ local socket-based connections, nor of connections to the
++ EXTRA_PORT), ALL: Unconditionally redirect all new
++ clients to INSTANT_FAILOVER_TARGET (even via local
++ socket-based connections and the EXTRA_PORT).
++ --instant-failover-target=name 
++ Instant failover target. This should be a hostname, an IP
++ address, or a hostname or IP address followed by ':PORT'.
++ Instant failover will not be activated unless
++ INSTANT_FAILOVER_MODE is also set.
+  --interactive-timeout=# 
+  The number of seconds the server waits for activity on an
+  interactive connection before closing it
+@@ -1706,6 +1720,8 @@ init-connect
+ init-file (No default value)
+ init-rpl-role MASTER
+ init-slave 
++instant-failover-mode OFF
++instant-failover-target (No default value)
+ interactive-timeout 28800
+ join-buffer-size 262144
+ join-buffer-space-limit 2097152
+
+From b1bed1ae61859acab79fb468166d3637ad444a0e Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Mon, 22 Apr 2024 13:14:23 -0700
+Subject: [PATCH 09/11] Add main.instant_failover MTR
+
+This MTR test verifies the basic functionality of the
+INSTANT_FAILOVER_{MODE,TARGET} system variables, including:
+
+1. `INSTANT_FAILOVER_MODE=ON` as well as `ALL`
+2. The handling of the extra port and local-socket connections (redirected
+   in mode `ALL`, but not in mode `ON`)
+3. The behavior of the client both with `--follow-instant-failovers` (the
+   default) and with `--disable-follow-instant-failovers`
+4. The client's handling of redirect loops (>=8 redirections causes
+   `ER_INSTANT_FAILOVER`)
+5. The ability to turn `INSTANT_FAILOVER_MODE` back to `OFF`, and to
+   resume connections without redirection.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ mysql-test/main/instant_failover.cnf    |  7 +++
+ mysql-test/main/instant_failover.result | 40 ++++++++++++++++
+ mysql-test/main/instant_failover.test   | 64 +++++++++++++++++++++++++
+ 3 files changed, 111 insertions(+)
+ create mode 100644 mysql-test/main/instant_failover.cnf
+ create mode 100644 mysql-test/main/instant_failover.result
+ create mode 100644 mysql-test/main/instant_failover.test
+
+diff --git a/mysql-test/main/instant_failover.cnf b/mysql-test/main/instant_failover.cnf
+new file mode 100644
+index 0000000000000..f9762d04b33c3
+--- /dev/null
++++ b/mysql-test/main/instant_failover.cnf
+@@ -0,0 +1,7 @@
++!include include/default_my.cnf
++
++[mysqld.1]
++extra-port=@ENV.MASTER_EXTRA_PORT
++
++[ENV]
++MASTER_EXTRA_PORT= @OPT.port
+diff --git a/mysql-test/main/instant_failover.result b/mysql-test/main/instant_failover.result
+new file mode 100644
+index 0000000000000..83445390454fd
+--- /dev/null
++++ b/mysql-test/main/instant_failover.result
+@@ -0,0 +1,40 @@
++call mtr.add_suppression("\\[Warning\\] Redirecting connection \\d+ via \\S+ to INSTANT_FAILOVER_TARGET=\\S+ \\(INSTANT_FAILOVER_MODE=\\w+\\)");
++Verify that a TCP connection works with --disable-follow-instant-failovers (before enabling instant failover)
++default_port_tcp_works
++1
++Verify that connections via local socket and extra port SUCCEED
++connection default;
++connect local_sock,localhost,root,,test;
++disconnect local_sock;
++connect tcp_sock,127.0.0.1,root,,test,$MASTER_EXTRA_PORT;
++disconnect tcp_sock;
++Enable instant failover in its default mode (ON)
++connection default;
++set global instant_failover_mode=ON;
++set global instant_failover_target="127.0.0.1:$MASTER_EXTRA_PORT"
++With --disable-follow-instant-failovers, connecting to the default port should now fail
++With --follow-instant-failovers (the client library default), this should redirect to the extra port
++connect OKAY,127.0.0.1,root,,test,$MASTER_MYPORT;
++disconnect OKAY;
++Setup a redirect loop, and verify that connections fail due to the loop
++connection default;
++set global instant_failover_target="127.0.0.1:$MASTER_MYPORT"
++connect(127.0.0.1,root,,test,MASTER_MYPORT,MASTER_MYSOCK);
++connect fail_con,127.0.0.1,root,,test,$MASTER_MYPORT;
++ERROR HY000: Too many instant failovers (>= 8)
++Change instant failover mode to ALL, and verify that even connections via local socket and extra port now FAIL due to the loop
++connection default;
++set global instant_failover_mode=ALL;
++connect(localhost,root,,test,MASTER_MYPORT,MASTER_MYSOCK);
++connect fail_con,localhost,root,,test;
++ERROR HY000: Too many instant failovers (>= 8)
++connect(127.0.0.1,root,,test,MASTER_EXTRA_PORT,MASTER_MYSOCK);
++connect fail_con,127.0.0.1,root,,test,$MASTER_EXTRA_PORT;
++ERROR HY000: Too many instant failovers (>= 8)
++Turn instant failover back off
++connection default;
++set global instant_failover_mode=OFF;
++set global instant_failover_target=DEFAULT;
++Connections should now succeed again, even with --disable-follow-instant-failovers
++default_port_tcp_works
++1
+diff --git a/mysql-test/main/instant_failover.test b/mysql-test/main/instant_failover.test
+new file mode 100644
+index 0000000000000..60ed92bf63773
+--- /dev/null
++++ b/mysql-test/main/instant_failover.test
+@@ -0,0 +1,64 @@
++# We need to ignore the redirection warnings in the server logs, e.g.
++# "Redirecting connection N via SSL/TLS to INSTANT_FAILOVER_TARGET=127.0.0.1:$MASTER_EXTRA_PORT (INSTANT_FAILOVER_MODE=ON)"
++call mtr.add_suppression("\\[Warning\\] Redirecting connection \\d+ via \\S+ to INSTANT_FAILOVER_TARGET=\\S+ \\(INSTANT_FAILOVER_MODE=\\w+\\)");
++
++##########
++--echo Verify that a TCP connection works with --disable-follow-instant-failovers (before enabling instant failover)
++--exec $MYSQL --disable-follow-instant-failovers --host=127.0.0.1 --port=$MASTER_MYPORT test -e "select 1 as default_port_tcp_works"
++
++--echo Verify that connections via local socket and extra port SUCCEED
++--connection default
++--connect local_sock,localhost,root,,test
++--disconnect local_sock
++--connect tcp_sock,127.0.0.1,root,,test,$MASTER_EXTRA_PORT
++--disconnect tcp_sock
++
++##########
++--echo Enable instant failover in its default mode (ON)
++--connection default
++set global instant_failover_mode=ON;
++--echo set global instant_failover_target="127.0.0.1:\$MASTER_EXTRA_PORT"
++--disable_query_log
++--eval set global instant_failover_target="127.0.0.1:$MASTER_EXTRA_PORT"
++--enable_query_log
++
++##########
++--echo With --disable-follow-instant-failovers, connecting to the default port should now fail
++--error 1
++--exec $MYSQL --disable-follow-instant-failovers --host=127.0.0.1 --port=$MASTER_MYPORT test -e "select 1"
++
++--echo With --follow-instant-failovers (the client library default), this should redirect to the extra port
++--connect OKAY,127.0.0.1,root,,test,$MASTER_MYPORT
++--disconnect OKAY
++
++##########
++--echo Setup a redirect loop, and verify that connections fail due to the loop
++--connection default
++--echo set global instant_failover_target="127.0.0.1:\$MASTER_MYPORT"
++--disable_query_log
++--eval set global instant_failover_target="127.0.0.1:$MASTER_MYPORT"
++--enable_query_log
++--replace_result $MASTER_MYSOCK MASTER_MYSOCK $MASTER_MYPORT MASTER_MYPORT
++--error ER_INSTANT_FAILOVER
++--connect fail_con,127.0.0.1,root,,test,$MASTER_MYPORT
++
++##########
++--echo Change instant failover mode to ALL, and verify that even connections via local socket and extra port now FAIL due to the loop
++--connection default
++set global instant_failover_mode=ALL;
++--replace_result $MASTER_MYSOCK MASTER_MYSOCK $MASTER_MYPORT MASTER_MYPORT
++--error ER_INSTANT_FAILOVER
++--connect fail_con,localhost,root,,test
++--replace_result $MASTER_MYSOCK MASTER_MYSOCK $MASTER_EXTRA_PORT MASTER_EXTRA_PORT
++--error ER_INSTANT_FAILOVER
++--connect fail_con,127.0.0.1,root,,test,$MASTER_EXTRA_PORT
++
++##########
++--echo Turn instant failover back off
++--connection default
++set global instant_failover_mode=OFF;
++set global instant_failover_target=DEFAULT;
++
++--echo Connections should now succeed again, even with --disable-follow-instant-failovers
++--error 0
++--exec $MYSQL --disable-follow-instant-failovers --host=127.0.0.1 --port=$MASTER_MYPORT test -e "select 1 as default_port_tcp_works"
+
+From 1d05df4a973740305738c8c8bd8e28b14d95360e Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Wed, 3 Apr 2024 16:55:57 -0700
+Subject: [PATCH 10/11] [MDEV-33822] Comments about a TLS testing mistake
+
+When MTR tests use 'NOSSL' and think they are connecting *with SSL
+forbidden*, they may actually connecting *with SSL required*.
+
+This is a garbage-in, garbage-out situation: all of the tests that use
+'NOSSL', and all of the results, may be wrong.
+
+Adding a prominent FIXME comment here, and otherwise ignoring because this
+is too unrelated to the main point of the changes in this branch.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ client/mysqltest.cc   |  4 ++--
+ include/sslopt-vars.h | 16 ++++++++++++++--
+ 2 files changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/client/mysqltest.cc b/client/mysqltest.cc
+index 1fcd12a5e2a48..d59076f796caa 100644
+--- a/client/mysqltest.cc
++++ b/client/mysqltest.cc
+@@ -6015,8 +6015,8 @@ int connect_n_handle_errors(struct st_command *command,
+ enum use_ssl
+ {
+   USE_SSL_FORBIDDEN = -1,
+-  USE_SSL_IF_POSSIBLE,
+-  USE_SSL_REQUIRED
++  USE_SSL_IF_POSSIBLE = 0,
++  USE_SSL_REQUIRED = 1
+ };
+ 
+ void do_connect(struct st_command *command)
+diff --git a/include/sslopt-vars.h b/include/sslopt-vars.h
+index 3a3679a582940..3f81ec455eb3f 100644
+--- a/include/sslopt-vars.h
++++ b/include/sslopt-vars.h
+@@ -36,9 +36,21 @@ SSL_STATIC char *opt_ssl_fp      = 0;
+ SSL_STATIC char *opt_ssl_fplist  = 0;
+ SSL_STATIC my_bool opt_ssl_verify_server_cert= 2;
+ 
++/* FIXME: there's a major TLS-related hole here. This macro treats
++ * USE_SSL_FORBIDDEN (-1) identically to USE_SSL_REQUIRED (1). See
++ * 'enum use_ssl' in mysqltest.cc for their definitions.
++ *
++ * This means that, among other things, when MTR tests THINK they are
++ * connecting WITHOUT SSL, they may actually be connecting with
++ * obligatory SSL.
++ *
++ * Tests that use 'NOSSL' are NOT TESTING WHAT THEY INTEND TO TEST.
++ */
++
+ #define SET_SSL_OPTS(M)                                                 \
+   do {                                                                  \
+-    if (opt_use_ssl)                                                    \
++    /* if (opt_use_ssl == -1) {} else */ /* SSL forbidden */            \
++    if (opt_use_ssl) /* SSL required */                                 \
+     {                                                                   \
+       mysql_ssl_set((M), opt_ssl_key, opt_ssl_cert, opt_ssl_ca,         \
+                     opt_ssl_capath, opt_ssl_cipher);                    \
+@@ -48,7 +60,7 @@ SSL_STATIC my_bool opt_ssl_verify_server_cert= 2;
+       mysql_options((M), MARIADB_OPT_TLS_PEER_FP, opt_ssl_fp);          \
+       mysql_options((M), MARIADB_OPT_TLS_PEER_FP_LIST, opt_ssl_fplist); \
+     }                                                                   \
+-    else                                                                \
++    else /* SSL if available */                                         \
+       opt_ssl_verify_server_cert= 0;                                    \
+     mysql_options((M),MYSQL_OPT_SSL_VERIFY_SERVER_CERT,                 \
+                   &opt_ssl_verify_server_cert);                         \
+
+From 1970eb4ba691e96934c125dd3b2bd6ce0e53efb6 Mon Sep 17 00:00:00 2001
+From: Daniel Lenski <dlenski@amazon.com>
+Date: Mon, 22 Apr 2024 13:14:23 -0700
+Subject: [PATCH 11/11] Skip main.ssl_autoverify test in GitLab-CI
+
+See comments by dlenski@ on https://jira.mariadb.org/browse/MDEV-31855;
+almost everything about the "feature" AND the test are irredeemably wrong,
+and open new security holes.
+
+Changes in the `libmariadb` submodule in this server branch prevent the test
+from "passing"; the fact that the test "passes" does not indicate that its
+behavior is secure, safe, or correct.
+
+All new code of the whole pull request, including one or several files
+that are either new files or modified ones, are contributed under the
+BSD-new license. I am contributing on behalf of my employer Amazon Web
+Services, Inc.
+---
+ .gitlab-ci.yml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/.gitlab-ci.yml b/.gitlab-ci.yml
+index 32049e9484d9b..c9b4960fa994d 100644
+--- a/.gitlab-ci.yml
++++ b/.gitlab-ci.yml
+@@ -298,6 +298,7 @@ centos7:
+       main.flush_logs_not_windows : query 'flush logs' succeeded - should have failed with error ER_CANT_CREATE_FILE (1004)
+       main.mysql_upgrade_noengine : upgrade output order does not match the expected
+       main.func_math              : MDEV-20966 - Wrong error code
++      main.ssl_autoverify         : See comments by dlenski@ on https://jira.mariadb.org/browse/MDEV-31855; almost everything about the "feature" AND the test are wrong
+       " > skiplist
+     - ./mtr --suite=main --force --parallel=auto --xml-report=$CI_PROJECT_DIR/junit.xml --skip-test-list=skiplist $RESTART_POLICY
+ 
