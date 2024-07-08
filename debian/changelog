@@ -1,8 +1,10 @@
-mariadb (1:11.4.2-3) UNRELEASED; urgency=medium
+mariadb (1:11.4.2-3) unstable; urgency=medium
 
-  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+  * Make compile_time_assert compatible with x32 (Closes: #1063738)
+  * Revert "Stop building the embedded server to save disk space"
+    (Closes: #1074670)
 
- -- Otto Kekäläinen <otto@debian.org>  Tue, 02 Jul 2024 20:12:47 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 07 Jul 2024 21:59:40 -0700
 
 mariadb (1:11.4.2-2) unstable; urgency=medium
 
