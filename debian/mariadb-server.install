@@ -33,16 +33,17 @@ usr/bin/myisam_ftdump
 usr/bin/myisamchk
 usr/bin/myisamlog
 usr/bin/myisampack
-usr/bin/wsrep_sst_common
+usr/bin/mysqld_safe
 usr/bin/wsrep_sst_backup
+usr/bin/wsrep_sst_common
 usr/bin/wsrep_sst_mariabackup
 usr/bin/wsrep_sst_mysqldump
 usr/bin/wsrep_sst_rsync
 usr/bin/wsrep_sst_rsync_wan
 usr/lib/mysql/plugin/auth_ed25519.so
-usr/lib/mysql/plugin/auth_pam.so
 usr/lib/mysql/plugin/auth_pam_tool_dir/auth_pam_tool
 usr/lib/mysql/plugin/auth_pam_v1.so
+usr/lib/mysql/plugin/auth_pam.so
 [linux-any] usr/lib/mysql/plugin/disks.so
 usr/lib/mysql/plugin/file_key_management.so
 usr/lib/mysql/plugin/ha_archive.so
@@ -77,12 +78,13 @@ usr/share/man/man1/myisam_ftdump.1
 usr/share/man/man1/myisamchk.1
 usr/share/man/man1/myisamlog.1
 usr/share/man/man1/myisampack.1
+usr/share/man/man1/mysqld_safe.1
 usr/share/man/man1/wsrep_sst_backup.1
 usr/share/man/man1/wsrep_sst_common.1
 usr/share/man/man1/wsrep_sst_mariabackup.1
 usr/share/man/man1/wsrep_sst_mysqldump.1
-usr/share/man/man1/wsrep_sst_rsync.1
 usr/share/man/man1/wsrep_sst_rsync_wan.1
+usr/share/man/man1/wsrep_sst_rsync.1
 usr/share/mariadb/mini-benchmark
-usr/share/mariadb/wsrep.cnf
 usr/share/mariadb/wsrep_notify
+usr/share/mariadb/wsrep.cnf
