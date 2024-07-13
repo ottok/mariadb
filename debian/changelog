@@ -1,3 +1,9 @@
+mariadb (1:11.4.2-4) unstable; urgency=medium
+
+  * Revert move of 'mysqld_safe' to compat package to avoid breaking pdns
+
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 12 Jul 2024 20:52:32 -0700
+
 mariadb (1:11.4.2-3) unstable; urgency=medium
 
   * Make compile_time_assert compatible with x32 (Closes: #1063738)
