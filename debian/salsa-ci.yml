@@ -1,8 +1,9 @@
 ---
 # Include Salsa-CI as a base
 include:
-  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/salsa-ci.yml
-  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/pipeline-jobs.yml
+  - https://salsa.debian.org/ahmedsiam/salsa-pipeline/raw/add-ubuntu-support/salsa-ci.yml
+  - https://salsa.debian.org/ahmedsiam/salsa-pipeline/raw/add-ubuntu-support/pipeline-jobs.yml
+  - https://salsa.debian.org/ahmedsiam/salsa-pipeline/raw/add-ubuntu-support/vars/ubuntu.yml
 
 # Override Salsa-CI with MariaDB specific variations
 variables:
@@ -17,6 +18,9 @@ variables:
   SALSA_CI_ENABLE_ATOMIC_REPROTEST: 0
   SALSA_CI_DISABLE_MISSING_BREAKS: 0
   SALSA_CI_DISABLE_RC_BUGS: 0
+  SALSA_CI_IMAGES: 'registry.salsa.debian.org/ahmedsiam/salsa-pipeline'
+  IMAGE_VERSION: ${RELEASE}_add-ubuntu-support
+  SALSA_CI_DISABLE_BUILD_PACKAGE_I386: 1
 
 # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
 # timeout (1h) is often not enough
