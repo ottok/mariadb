@@ -1,0 +1,52 @@
+mariadb (1:10.11.8-1) unstable; urgency=medium
+
+   CVE-2024-21096 fixes break forward and backward compatibility
+   on client side. This occurs particularly during dump and
+   restore of database.
+
+   MariaDB Client now has an option --sandbox or the MariaDB client
+   prompt command \-. This enables sandbox mode for the rest of the session,
+   until disconnected. Once in sandbox mode, any command that could do
+   something on the shell is disabled.
+
+   The second part of the fix patch to mariadb-dump which adds a
+   command right at the very top of the dump, in a comment,
+   to trigger sandbox mode. It looks like this:
+
+   /*!999999\- enable the sandbox mode */
+
+   Newer version of MariaDB clients strip this down to the backslash
+   and dash (\-), and then try to execute the internal command
+   with a dash.
+
+   Older versions of MariaDB client and all versions of MySQL client
+   do not understand this command, and they will error on it.
+
+   If you are importing a dump from a new MariaDB client version into
+   a version that has not had this fix, or any version of MySQL,
+   that line will error. Other methods of importing into MariaDB Server,
+   such as using a language’s database connector, will be fine.
+
+   Note that, this error could occurs for restoring old dump (backup),
+   rolling back the database by using dump, or during disaster
+   recovery.
+
+   Possible workaround includes:
+   1. Always import the dump using the secure client from a fixed version
+     (recommended)
+   2. Use an older (insecure) version of mariadb-dump to take the backup
+      (remotely for instance)
+   3. Remove the line at backup time with something like the command:
+      mariadb-dump | tail -n +2.
+   4. Remove the line at import time with something like the command
+      tail -n +2|mariadb.
+
+   The last three options (2, 3, 4) expose to the risk of CVE-2024-21096, and
+   a risk analysis must be carried before using it.
+
+   We strongly recommend to use option 1. If dump is fully trusted, option 4
+   might be acceptable for disaster recovery purpose but will likely need
+   to take compensatory measures.
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 06 Aug 2024 22:11:24 +0000
+
