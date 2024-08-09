@@ -1087,7 +1087,6 @@ static ATTRIBUTE_COLD void os_file_log_buffered()
 {
   log_sys.log_maybe_unbuffered= false;
   log_sys.log_buffered= true;
-  log_sys.set_block_size(512);
 }
 # endif
 
@@ -1198,26 +1197,23 @@ os_file_create_func(
 			direct_flag = O_DIRECT;
 		}
 # ifdef __linux__
-	} else if (type != OS_LOG_FILE) {
-	} else if (log_sys.log_buffered) {
-	skip_o_direct:
-		os_file_log_buffered();
-	} else if (create_mode != OS_FILE_CREATE
+	} else if (type == OS_LOG_FILE && create_mode != OS_FILE_CREATE
 		   && create_mode != OS_FILE_CREATE_SILENT
 		   && !log_sys.is_opened()) {
 		if (stat(name, &st)) {
 			if (errno == ENOENT) {
 				goto not_found;
 			}
+			log_sys.set_block_size(512);
 			goto skip_o_direct;
+		} else if (!os_file_log_maybe_unbuffered(st)
+                           || log_sys.log_buffered) {
+skip_o_direct:
+			os_file_log_buffered();
+		} else {
+			direct_flag = O_DIRECT;
+			log_sys.log_maybe_unbuffered = true;
 		}
-
-		if (!os_file_log_maybe_unbuffered(st)) {
-			goto skip_o_direct;
-		}
-
-		direct_flag = O_DIRECT;
-		log_sys.log_maybe_unbuffered= true;
 # endif
 	}
 #else
@@ -3475,11 +3471,11 @@ int os_aio_resize(ulint n_reader_threads, ulint n_writer_threads)
 
 void os_aio_free()
 {
-  srv_thread_pool->disable_aio();
   delete read_slots;
   delete write_slots;
   read_slots= nullptr;
   write_slots= nullptr;
+  srv_thread_pool->disable_aio();
 }
 
 /** Wait until there are no pending asynchronous writes. */

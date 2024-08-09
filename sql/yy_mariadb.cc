@@ -3164,51 +3164,51 @@ static const yytype_int16 yyrline[] =
    16663, 16664, 16673, 16672, 16687, 16686, 16701, 16700, 16718, 16717,
    16732, 16731, 16746, 16745, 16762, 16761, 16776, 16775, 16790, 16789,
    16803, 16802, 16828, 16827, 16839, 16838, 16851, 16850, 16861, 16879,
-   16890, 16901, 16911, 16933, 16949, 16961, 16960, 16975, 16974, 16986,
-   16985, 16999, 17000, 17001, 17002, 17006, 17025, 17043, 17044, 17048,
-   17049, 17050, 17051, 17056, 17061, 17066, 17077, 17090, 17096, 17103,
-   17104, 17105, 17112, 17111, 17125, 17126, 17132, 17141, 17142, 17146,
-   17147, 17151, 17170, 17171, 17172, 17177, 17178, 17183, 17182, 17200,
-   17199, 17211, 17220, 17230, 17229, 17272, 17273, 17277, 17278, 17282,
-   17283, 17284, 17285, 17287, 17286, 17299, 17300, 17301, 17302, 17303,
-   17309, 17314, 17319, 17324, 17328, 17333, 17342, 17344, 17349, 17354,
-   17360, 17366, 17371, 17383, 17384, 17388, 17389, 17393, 17398, 17406,
-   17415, 17436, 17436, 17439, 17440, 17444, 17445, 17452, 17454, 17458,
-   17463, 17470, 17474, 17483, 17490, 17491, 17492, 17493, 17497, 17498,
-   17499, 17500, 17501, 17502, 17503, 17504, 17505, 17506, 17507, 17508,
-   17509, 17510, 17511, 17512, 17513, 17514, 17515, 17516, 17517, 17518,
-   17519, 17520, 17521, 17522, 17523, 17524, 17525, 17526, 17527, 17528,
-   17529, 17530, 17531, 17532, 17533, 17534, 17535, 17536, 17537, 17538,
-   17539, 17543, 17544, 17548, 17549, 17553, 17560, 17567, 17577, 17586,
-   17592, 17599, 17607, 17612, 17620, 17625, 17633, 17638, 17645, 17645,
-   17646, 17646, 17649, 17655, 17661, 17666, 17673, 17679, 17686, 17695,
-   17699, 17705, 17713, 17715, 17719, 17723, 17727, 17734, 17739, 17744,
-   17749, 17754, 17762, 17763, 17767, 17768, 17773, 17774, 17778, 17779,
-   17783, 17784, 17788, 17789, 17794, 17793, 17803, 17812, 17813, 17817,
-   17818, 17823, 17824, 17825, 17830, 17831, 17832, 17836, 17848, 17857,
-   17863, 17872, 17881, 17894, 17896, 17898, 17906, 17907, 17908, 17912,
-   17913, 17919, 17920, 17921, 17922, 17923, 17924, 17925, 17935, 17936,
-   17941, 17954, 17968, 17969, 17970, 17974, 17975, 17979, 17980, 17985,
-   17986, 17990, 17996, 18005, 18005, 18019, 18020, 18021, 18022, 18032,
-   18034, 18040, 18046, 18056, 18065, 18071, 18076, 18080, 18054, 18129,
-   18129, 18142, 18144, 18149, 18150, 18154, 18155, 18159, 18159, 18166,
-   18170, 18174, 18178, 18182, 18186, 18194, 18195, 18211, 18218, 18225,
-   18238, 18239, 18240, 18244, 18245, 18246, 18250, 18251, 18256, 18258,
-   18257, 18263, 18264, 18268, 18273, 18280, 18285, 18294, 18300, 18308,
-   18312, 18316, 18320, 18324, 18328, 18332, 18336, 18340, 18341, 18345,
-   18349, 18353, 18357, 18364, 18365, 18366, 18372, 18376, 18384, 18385,
-   18386, 18390, 18391, 18396, 18397, 18403, 18404, 18405, 18406, 18407,
-   18408, 18409, 18413, 18414, 18415, 18416, 18417, 18418, 18419, 18420,
-   18421, 18422, 18423, 18424, 18428, 18433, 18437, 18446, 18445, 18458,
-   18463, 18467, 18471, 18480, 18481, 18497, 18506, 18518, 18523, 18527,
-   18532, 18537, 18541, 18548, 18554, 18559, 18569, 18568, 18583, 18591,
-   18582, 18604, 18608, 18620, 18625, 18626, 18633, 18635, 18634, 18662,
-   18663, 18664, 18665, 18666, 18670, 18671, 18672, 18673, 18674, 18675,
-   18676, 18677, 18681, 18682, 18683, 18684, 18691, 18689, 18706, 18705,
-   18720, 18719, 19178, 19179, 19185, 19186, 19194, 19193, 19214, 19213,
-   19233, 19242, 19251, 19257, 19256, 19276, 19275, 19295, 19296, 19300,
-   19301, 19305, 19312, 19433, 19432, 19443, 19441, 19457, 19455, 19469,
-   19478, 19476, 19496, 19509, 19494
+   16890, 16897, 16903, 16925, 16941, 16953, 16952, 16967, 16966, 16978,
+   16977, 16991, 16992, 16993, 16994, 16998, 17017, 17035, 17036, 17040,
+   17041, 17042, 17043, 17048, 17053, 17058, 17069, 17082, 17088, 17095,
+   17096, 17097, 17104, 17103, 17117, 17118, 17124, 17133, 17134, 17138,
+   17139, 17143, 17162, 17163, 17164, 17169, 17170, 17175, 17174, 17192,
+   17191, 17203, 17212, 17222, 17221, 17264, 17265, 17269, 17270, 17274,
+   17275, 17276, 17277, 17279, 17278, 17291, 17292, 17293, 17294, 17295,
+   17301, 17306, 17311, 17316, 17320, 17325, 17334, 17336, 17341, 17346,
+   17352, 17358, 17363, 17375, 17376, 17380, 17381, 17385, 17390, 17398,
+   17407, 17428, 17428, 17431, 17432, 17436, 17437, 17444, 17446, 17450,
+   17455, 17462, 17466, 17475, 17482, 17483, 17484, 17485, 17489, 17490,
+   17491, 17492, 17493, 17494, 17495, 17496, 17497, 17498, 17499, 17500,
+   17501, 17502, 17503, 17504, 17505, 17506, 17507, 17508, 17509, 17510,
+   17511, 17512, 17513, 17514, 17515, 17516, 17517, 17518, 17519, 17520,
+   17521, 17522, 17523, 17524, 17525, 17526, 17527, 17528, 17529, 17530,
+   17531, 17535, 17536, 17540, 17541, 17545, 17552, 17559, 17569, 17578,
+   17584, 17591, 17599, 17604, 17612, 17617, 17625, 17630, 17637, 17637,
+   17638, 17638, 17641, 17647, 17653, 17658, 17665, 17671, 17678, 17687,
+   17691, 17697, 17705, 17707, 17711, 17715, 17719, 17726, 17731, 17736,
+   17741, 17746, 17754, 17755, 17759, 17760, 17765, 17766, 17770, 17771,
+   17775, 17776, 17780, 17781, 17786, 17785, 17795, 17804, 17805, 17809,
+   17810, 17815, 17816, 17817, 17822, 17823, 17824, 17828, 17840, 17849,
+   17855, 17864, 17873, 17886, 17888, 17890, 17898, 17899, 17900, 17904,
+   17905, 17911, 17912, 17913, 17914, 17915, 17916, 17917, 17927, 17928,
+   17933, 17946, 17960, 17961, 17962, 17966, 17967, 17971, 17972, 17977,
+   17978, 17982, 17988, 17997, 17997, 18011, 18012, 18013, 18014, 18024,
+   18026, 18032, 18038, 18048, 18057, 18063, 18068, 18072, 18046, 18121,
+   18121, 18134, 18136, 18141, 18142, 18146, 18147, 18151, 18151, 18158,
+   18162, 18166, 18170, 18174, 18178, 18186, 18187, 18203, 18210, 18217,
+   18230, 18231, 18232, 18236, 18237, 18238, 18242, 18243, 18248, 18250,
+   18249, 18255, 18256, 18260, 18265, 18272, 18277, 18286, 18292, 18300,
+   18304, 18308, 18312, 18316, 18320, 18324, 18328, 18332, 18333, 18337,
+   18341, 18345, 18349, 18356, 18357, 18358, 18364, 18368, 18376, 18377,
+   18378, 18382, 18383, 18388, 18389, 18395, 18396, 18397, 18398, 18399,
+   18400, 18401, 18405, 18406, 18407, 18408, 18409, 18410, 18411, 18412,
+   18413, 18414, 18415, 18416, 18420, 18425, 18429, 18438, 18437, 18450,
+   18455, 18459, 18463, 18472, 18473, 18489, 18498, 18510, 18515, 18519,
+   18524, 18529, 18533, 18540, 18546, 18551, 18561, 18560, 18575, 18583,
+   18574, 18596, 18600, 18612, 18617, 18618, 18625, 18627, 18626, 18654,
+   18655, 18656, 18657, 18658, 18662, 18663, 18664, 18665, 18666, 18667,
+   18668, 18669, 18673, 18674, 18675, 18676, 18683, 18681, 18698, 18697,
+   18712, 18711, 19170, 19171, 19177, 19178, 19186, 19185, 19206, 19205,
+   19225, 19234, 19243, 19249, 19248, 19268, 19267, 19287, 19288, 19292,
+   19293, 19297, 19304, 19425, 19424, 19435, 19433, 19449, 19447, 19461,
+   19470, 19468, 19488, 19501, 19486
 };
 #endif
 
@@ -44576,7 +44576,7 @@ yyreduce:
   case 1942: /* $@168: %empty  */
 #line 12444 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            thd->where= "ORDER clause";
+            thd->where= THD_WHERE::ORDER_CLAUSE;
           }
 #line 44582 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
@@ -49744,33 +49744,25 @@ yyreduce:
   case 3340: /* option_value_no_option_type: NAMES_SYM charset_name_or_default  */
 #line 16891 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            CHARSET_INFO *def= global_system_variables.character_set_client;
-            Lex_exact_charset_opt_extended_collate tmp((yyvsp[0].charset) ? (yyvsp[0].charset) : def, false);
-            Lex_extended_collation_st cl;
-            cl.set_collate_default();
-            if (tmp.merge_collation(thd, thd->variables.
-                                      character_set_collations, cl) ||
-                Lex->set_names((yyvsp[-1].kwd).pos(), tmp, yychar == YYEMPTY))
+            if (Lex->set_names((yyvsp[-1].kwd).pos(), (yyvsp[0].charset),
+                               Lex_extended_collation_st::collate_default(),
+                               yychar == YYEMPTY))
               MYSQL_YYABORT;
           }
-#line 49757 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49753 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3341: /* option_value_no_option_type: NAMES_SYM charset_name_or_default COLLATE_SYM collation_name_or_default  */
-#line 16903 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16899 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            CHARSET_INFO *def= global_system_variables.character_set_client;
-            Lex_exact_charset_opt_extended_collate tmp((yyvsp[-2].charset) ? (yyvsp[-2].charset) : def, false);
-            if (tmp.merge_collation(thd, thd->variables.
-                                      character_set_collations, (yyvsp[0].Lex_extended_collation)) ||
-                Lex->set_names((yyvsp[-3].kwd).pos(), tmp, yychar == YYEMPTY))
+            if (Lex->set_names((yyvsp[-3].kwd).pos(), (yyvsp[-2].charset), (yyvsp[0].Lex_extended_collation), yychar == YYEMPTY))
               MYSQL_YYABORT;
           }
-#line 49770 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49762 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3342: /* option_value_no_option_type: DEFAULT ROLE_SYM grant_role  */
-#line 16912 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16904 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-2].kwd).pos()))
               MYSQL_YYABORT;
@@ -49792,11 +49784,11 @@ yyreduce:
             if (unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49796 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49788 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3343: /* option_value_no_option_type: DEFAULT ROLE_SYM grant_role FOR_SYM user  */
-#line 16934 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16926 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-4].kwd).pos()))
               MYSQL_YYABORT;
@@ -49812,11 +49804,11 @@ yyreduce:
             if (unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49816 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49808 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3344: /* option_value_no_option_type: ROLE_SYM role_name  */
-#line 16950 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16942 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
@@ -49827,20 +49819,20 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49831 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49823 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3345: /* $@241: %empty  */
-#line 16961 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16953 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 49840 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49832 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3346: /* option_value_no_option_type: ROLE_SYM equal $@241 set_expr_or_default  */
-#line 16966 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16958 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-3].kwd));
 
@@ -49849,49 +49841,49 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49853 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49845 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3347: /* $@242: %empty  */
-#line 16975 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16967 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 49862 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49854 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3348: /* option_value_no_option_type: PASSWORD_SYM equal $@242 text_or_password  */
-#line 16980 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16972 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_create_set_password_instr(thd, (yyvsp[0].user_auth),
                                                            yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49872 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49864 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3349: /* $@243: %empty  */
-#line 16986 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16978 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 49881 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49873 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3350: /* option_value_no_option_type: PASSWORD_SYM FOR_SYM $@243 user equal text_or_password  */
-#line 16991 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16983 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_create_set_password_instr(thd, (yyvsp[-2].lex_user), (yyvsp[0].user_auth),
                                                            yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49891 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49883 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3355: /* transaction_access_mode: transaction_access_mode_types  */
-#line 17007 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16999 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             Item *item= new (thd->mem_root) Item_int(thd, (int32) (yyvsp[0].num));
@@ -49907,11 +49899,11 @@ yyreduce:
             if (unlikely(lex->var_list.push_back(var, thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49911 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49903 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3356: /* isolation_level: ISOLATION LEVEL_SYM isolation_types  */
-#line 17026 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17018 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             Item *item= new (thd->mem_root) Item_int(thd, (int32) (yyvsp[0].tx_isolation));
@@ -49926,65 +49918,65 @@ yyreduce:
                 unlikely(lex->var_list.push_back(var, thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49930 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49922 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3357: /* transaction_access_mode_types: READ_SYM ONLY_SYM  */
-#line 17043 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17035 "/home/buildbot/git/sql/sql_yacc.yy"
                             { (yyval.num)= true; }
-#line 49936 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49928 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3358: /* transaction_access_mode_types: READ_SYM WRITE_SYM  */
-#line 17044 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17036 "/home/buildbot/git/sql/sql_yacc.yy"
                              { (yyval.num)= false; }
-#line 49942 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49934 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3359: /* isolation_types: READ_SYM UNCOMMITTED_SYM  */
-#line 17048 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17040 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_READ_UNCOMMITTED; }
-#line 49948 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49940 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3360: /* isolation_types: READ_SYM COMMITTED_SYM  */
-#line 17049 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17041 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_READ_COMMITTED; }
-#line 49954 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49946 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3361: /* isolation_types: REPEATABLE_SYM READ_SYM  */
-#line 17050 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17042 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_REPEATABLE_READ; }
-#line 49960 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49952 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3362: /* isolation_types: SERIALIZABLE_SYM  */
-#line 17051 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17043 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_SERIALIZABLE; }
-#line 49966 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49958 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3363: /* text_or_password: TEXT_STRING  */
-#line 17057 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17049 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= new (thd->mem_root) USER_AUTH();
             (yyval.user_auth)->auth_str= (yyvsp[0].lex_string_with_metadata);
           }
-#line 49975 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49967 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3364: /* text_or_password: PASSWORD_SYM '(' TEXT_STRING ')'  */
-#line 17062 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17054 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= new (thd->mem_root) USER_AUTH();
             (yyval.user_auth)->pwtext= (yyvsp[-1].lex_string_with_metadata);
           }
-#line 49984 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49976 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3365: /* text_or_password: OLD_PASSWORD_SYM '(' TEXT_STRING ')'  */
-#line 17067 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17059 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= new (thd->mem_root) USER_AUTH();
             (yyval.user_auth)->pwtext= (yyvsp[-1].lex_string_with_metadata);
@@ -49992,11 +49984,11 @@ yyreduce:
                                    (yyvsp[-1].lex_string_with_metadata).str, (yyvsp[-1].lex_string_with_metadata).length, Item_func_password::OLD);
             (yyval.user_auth)->auth_str.length=  SCRAMBLED_PASSWORD_CHAR_LENGTH_323;
           }
-#line 49996 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 49988 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3366: /* set_expr_or_default: remember_cpp_ptr expr remember_end  */
-#line 17078 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17070 "/home/buildbot/git/sql/sql_yacc.yy"
           {
 	      LEX_CSTRING expr_str= empty_clex_str;
 
@@ -50009,47 +50001,47 @@ yyreduce:
 
               (yyval.expr_and_query_str)= { (yyvsp[-1].item), expr_str };
           }
-#line 50013 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50005 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3367: /* set_expr_or_default: remember_cpp_ptr set_expr_misc remember_end  */
-#line 17091 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17083 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely((yyvsp[-1].item) == nullptr))
               MYSQL_YYABORT;
             (yyval.expr_and_query_str)= {(yyvsp[-1].item), empty_clex_str};
           }
-#line 50023 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50015 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3368: /* set_expr_or_default: remember_cpp_ptr DEFAULT remember_end  */
-#line 17097 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17089 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.expr_and_query_str)= { nullptr, empty_clex_str };
           }
-#line 50031 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50023 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3369: /* set_expr_misc: ON  */
-#line 17103 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17095 "/home/buildbot/git/sql/sql_yacc.yy"
                  { (yyval.item)= new (thd->mem_root) Item_string_sys(thd, "ON",  2); }
-#line 50037 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50029 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3370: /* set_expr_misc: ALL  */
-#line 17104 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17096 "/home/buildbot/git/sql/sql_yacc.yy"
                  { (yyval.item)= new (thd->mem_root) Item_string_sys(thd, "ALL", 3); }
-#line 50043 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50035 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3371: /* set_expr_misc: BINARY  */
-#line 17105 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17097 "/home/buildbot/git/sql/sql_yacc.yy"
                  { (yyval.item)= new (thd->mem_root) Item_string_sys(thd, "binary", 6); }
-#line 50049 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50041 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3372: /* $@244: %empty  */
-#line 17112 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17104 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
 
@@ -50057,55 +50049,55 @@ yyreduce:
               my_yyabort_error((ER_SP_BADSTATEMENT, MYF(0), "LOCK"));
             lex->sql_command= SQLCOM_LOCK_TABLES;
           }
-#line 50061 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50053 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3373: /* lock: LOCK_SYM table_or_tables $@244 table_lock_list opt_lock_wait_timeout  */
-#line 17120 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17112 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 50067 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50059 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3374: /* opt_lock_wait_timeout: %empty  */
-#line 17125 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17117 "/home/buildbot/git/sql/sql_yacc.yy"
         {}
-#line 50073 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50065 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3375: /* opt_lock_wait_timeout: WAIT_SYM ulong_num  */
-#line 17127 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17119 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           if (unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("lock_wait_timeout"), (yyvsp[0].ulong_num))) ||
               unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("innodb_lock_wait_timeout"), (yyvsp[0].ulong_num))))
             MYSQL_YYABORT;
         }
-#line 50083 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50075 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3376: /* opt_lock_wait_timeout: NOWAIT_SYM  */
-#line 17133 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17125 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           if (unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("lock_wait_timeout"), 0)) ||
               unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("innodb_lock_wait_timeout"), 0)))
             MYSQL_YYABORT;
         }
-#line 50093 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50085 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3377: /* table_or_tables: TABLE_SYM  */
-#line 17141 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17133 "/home/buildbot/git/sql/sql_yacc.yy"
                            { }
-#line 50099 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50091 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3378: /* table_or_tables: TABLES  */
-#line 17142 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17134 "/home/buildbot/git/sql/sql_yacc.yy"
                            { }
-#line 50105 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50097 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3381: /* table_lock: table_ident opt_table_alias_clause lock_option  */
-#line 17152 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17144 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             thr_lock_type lock_type= (thr_lock_type) (yyvsp[0].num);
             bool lock_for_write= (lock_type >= TL_FIRST_WRITE);
@@ -50121,43 +50113,43 @@ yyreduce:
                                            lock_type, mdl_type)))
               MYSQL_YYABORT;
           }
-#line 50125 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50117 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3382: /* lock_option: READ_SYM  */
-#line 17170 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17162 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_READ_NO_INSERT; }
-#line 50131 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50123 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3383: /* lock_option: WRITE_SYM  */
-#line 17171 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17163 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_WRITE_DEFAULT; }
-#line 50137 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50129 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3384: /* lock_option: WRITE_SYM CONCURRENT  */
-#line 17173 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17165 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.num)= (Lex->sphead ? TL_WRITE_DEFAULT : TL_WRITE_CONCURRENT_INSERT);
           }
-#line 50145 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50137 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3385: /* lock_option: LOW_PRIORITY WRITE_SYM  */
-#line 17177 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17169 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_WRITE_LOW_PRIORITY; }
-#line 50151 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50143 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3386: /* lock_option: READ_SYM LOCAL_SYM  */
-#line 17178 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17170 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_READ; }
-#line 50157 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50149 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3387: /* $@245: %empty  */
-#line 17183 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17175 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
 
@@ -50165,34 +50157,34 @@ yyreduce:
               my_yyabort_error((ER_SP_BADSTATEMENT, MYF(0), "UNLOCK"));
             lex->sql_command= SQLCOM_UNLOCK_TABLES;
           }
-#line 50169 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50161 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3388: /* unlock: UNLOCK_SYM $@245 table_or_tables  */
-#line 17191 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17183 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 50175 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50167 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3389: /* $@246: %empty  */
-#line 17200 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17192 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->main_select_push())
               MYSQL_YYABORT;
           }
-#line 50184 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50176 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3390: /* handler: HANDLER_SYM $@246 handler_tail  */
-#line 17205 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17197 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->pop_select(); //main select
           }
-#line 50192 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50184 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3391: /* handler_tail: table_ident OPEN_SYM opt_table_alias_clause  */
-#line 17212 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17204 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             if (unlikely(lex->sphead))
@@ -50201,11 +50193,11 @@ yyreduce:
             if (!lex->current_select->add_table_to_list(thd, (yyvsp[-2].table), (yyvsp[0].lex_str_ptr), 0))
               MYSQL_YYABORT;
           }
-#line 50205 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50197 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3392: /* handler_tail: table_ident_nodb CLOSE_SYM  */
-#line 17221 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17213 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             if (unlikely(lex->sphead))
@@ -50214,11 +50206,11 @@ yyreduce:
             if (!lex->current_select->add_table_to_list(thd, (yyvsp[-1].table), 0, 0))
               MYSQL_YYABORT;
           }
-#line 50218 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50210 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3393: /* $@247: %empty  */
-#line 17230 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17222 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             SELECT_LEX *select= Select;
@@ -50236,11 +50228,11 @@ yyreduce:
             if (!lex->current_select->add_table_to_list(thd, (yyvsp[-1].table), 0, 0))
               MYSQL_YYABORT;
           }
-#line 50240 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50232 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3394: /* handler_tail: table_ident_nodb READ_SYM $@247 handler_read_or_scan opt_where_clause opt_global_limit_clause  */
-#line 17248 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17240 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             SELECT_LEX *select= Select;
@@ -50262,59 +50254,59 @@ yyreduce:
               MYSQL_YYABORT;
             }
           }
-#line 50266 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50258 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3395: /* handler_read_or_scan: handler_scan_function  */
-#line 17272 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17264 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->ident= null_clex_str; }
-#line 50272 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50264 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3396: /* handler_read_or_scan: ident handler_rkey_function  */
-#line 17273 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17265 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->ident= (yyvsp[-1].ident_sys); }
-#line 50278 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50270 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3397: /* handler_scan_function: FIRST_SYM  */
-#line 17277 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17269 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RFIRST; }
-#line 50284 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50276 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3398: /* handler_scan_function: NEXT_SYM  */
-#line 17278 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17270 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RNEXT;  }
-#line 50290 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50282 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3399: /* handler_rkey_function: FIRST_SYM  */
-#line 17282 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17274 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RFIRST; }
-#line 50296 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50288 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3400: /* handler_rkey_function: NEXT_SYM  */
-#line 17283 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17275 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RNEXT;  }
-#line 50302 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50294 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3401: /* handler_rkey_function: PREV_SYM  */
-#line 17284 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17276 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RPREV;  }
-#line 50308 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50300 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3402: /* handler_rkey_function: LAST_SYM  */
-#line 17285 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17277 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RLAST;  }
-#line 50314 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50306 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3403: /* $@248: %empty  */
-#line 17287 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17279 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->ha_read_mode = RKEY;
@@ -50322,143 +50314,143 @@ yyreduce:
             if (unlikely(!(lex->insert_list= new (thd->mem_root) List_item)))
               MYSQL_YYABORT;
           }
-#line 50326 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50318 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3404: /* handler_rkey_function: handler_rkey_mode $@248 '(' values ')'  */
-#line 17295 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17287 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 50332 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50324 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3405: /* handler_rkey_mode: '='  */
-#line 17299 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17291 "/home/buildbot/git/sql/sql_yacc.yy"
                   { (yyval.ha_rkey_mode)=HA_READ_KEY_EXACT;   }
-#line 50338 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50330 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3406: /* handler_rkey_mode: GE  */
-#line 17300 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17292 "/home/buildbot/git/sql/sql_yacc.yy"
                  { (yyval.ha_rkey_mode)=HA_READ_KEY_OR_NEXT; }
-#line 50344 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50336 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3407: /* handler_rkey_mode: LE  */
-#line 17301 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17293 "/home/buildbot/git/sql/sql_yacc.yy"
                  { (yyval.ha_rkey_mode)=HA_READ_KEY_OR_PREV; }
-#line 50350 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50342 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3408: /* handler_rkey_mode: '>'  */
-#line 17302 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17294 "/home/buildbot/git/sql/sql_yacc.yy"
               { (yyval.ha_rkey_mode)=HA_READ_AFTER_KEY;   }
-#line 50356 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50348 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3409: /* handler_rkey_mode: '<'  */
-#line 17303 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17295 "/home/buildbot/git/sql/sql_yacc.yy"
                   { (yyval.ha_rkey_mode)=HA_READ_BEFORE_KEY;  }
-#line 50362 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50354 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3410: /* revoke: REVOKE clear_privileges revoke_command  */
-#line 17310 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17302 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 50368 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50360 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3411: /* revoke_command: grant_privileges ON opt_table grant_ident FROM user_and_role_list  */
-#line 17315 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17307 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_revoke_table(thd, (yyvsp[-5].lex_grant), *(yyvsp[-2].lex_grant_ident)))
               MYSQL_YYABORT;
           }
-#line 50377 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50369 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3412: /* revoke_command: grant_privileges ON sp_handler grant_ident FROM user_and_role_list  */
-#line 17320 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17312 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_revoke_sp(thd, (yyvsp[-5].lex_grant), *(yyvsp[-2].lex_grant_ident), *(yyvsp[-3].sp_handler)))
               MYSQL_YYABORT;
           }
-#line 50386 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50378 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3413: /* revoke_command: ALL opt_privileges ',' GRANT OPTION FROM user_and_role_list  */
-#line 17325 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17317 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_REVOKE_ALL;
           }
-#line 50394 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50386 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3414: /* revoke_command: PROXY_SYM ON user FROM user_list  */
-#line 17329 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17321 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_revoke_proxy(thd, (yyvsp[-2].lex_user)))
               MYSQL_YYABORT;
           }
-#line 50403 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50395 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3415: /* revoke_command: admin_option_for_role FROM user_and_role_list  */
-#line 17334 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17326 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command= SQLCOM_REVOKE_ROLE;
             if (unlikely(Lex->users_list.push_front((yyvsp[-2].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50413 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50405 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3416: /* admin_option_for_role: ADMIN_SYM OPTION FOR_SYM grant_role  */
-#line 17343 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17335 "/home/buildbot/git/sql/sql_yacc.yy"
         { Lex->with_admin_option= true; (yyval.lex_user)= (yyvsp[0].lex_user); }
-#line 50419 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50411 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3417: /* admin_option_for_role: grant_role  */
-#line 17345 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17337 "/home/buildbot/git/sql/sql_yacc.yy"
         { Lex->with_admin_option= false; (yyval.lex_user)= (yyvsp[0].lex_user); }
-#line 50425 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50417 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3418: /* grant: GRANT clear_privileges grant_command  */
-#line 17350 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17342 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 50431 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50423 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3419: /* grant_command: grant_privileges ON opt_table grant_ident TO_SYM grant_list opt_require_clause opt_grant_options  */
-#line 17356 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17348 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_grant_table(thd, (yyvsp[-7].lex_grant), *(yyvsp[-4].lex_grant_ident), (yyvsp[0].privilege)))
               MYSQL_YYABORT;
           }
-#line 50440 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50432 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3420: /* grant_command: grant_privileges ON sp_handler grant_ident TO_SYM grant_list opt_require_clause opt_grant_options  */
-#line 17362 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17354 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_grant_sp(thd, (yyvsp[-7].lex_grant), *(yyvsp[-4].lex_grant_ident), *(yyvsp[-5].sp_handler), (yyvsp[0].privilege)))
               MYSQL_YYABORT;
           }
-#line 50449 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50441 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3421: /* grant_command: PROXY_SYM ON user TO_SYM grant_list opt_grant_option  */
-#line 17367 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17359 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_grant_proxy(thd, (yyvsp[-3].lex_user), (yyvsp[0].privilege)))
               MYSQL_YYABORT;
           }
-#line 50458 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50450 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3422: /* grant_command: grant_role TO_SYM grant_list opt_with_admin_option  */
-#line 17372 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17364 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->sql_command= SQLCOM_GRANT_ROLE;
@@ -50466,63 +50458,63 @@ yyreduce:
             if (unlikely(Lex->users_list.push_front((yyvsp[-3].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50470 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50462 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3423: /* opt_with_admin: %empty  */
-#line 17383 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17375 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->definer = 0; }
-#line 50476 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50468 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3424: /* opt_with_admin: WITH ADMIN_SYM user_or_role  */
-#line 17384 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17376 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->definer = (yyvsp[0].lex_user); }
-#line 50482 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50474 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3425: /* opt_with_admin_option: %empty  */
-#line 17388 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17380 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->with_admin_option= false; }
-#line 50488 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50480 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3426: /* opt_with_admin_option: WITH ADMIN_SYM OPTION  */
-#line 17389 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17381 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->with_admin_option= true; }
-#line 50494 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50486 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3427: /* role_list: grant_role  */
-#line 17394 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17386 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50503 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50495 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3428: /* role_list: role_list ',' grant_role  */
-#line 17399 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17391 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50512 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50504 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3429: /* current_role: CURRENT_ROLE optional_braces  */
-#line 17407 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17399 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(!((yyval.lex_user)=(LEX_USER*) thd->calloc(sizeof(LEX_USER)))))
               MYSQL_YYABORT;
             (yyval.lex_user)->user= current_role;
           }
-#line 50522 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50514 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3430: /* role_name: ident_or_text  */
-#line 17416 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17408 "/home/buildbot/git/sql/sql_yacc.yy"
            {
              CHARSET_INFO *cs= system_charset_info;
              /* trim end spaces (as they'll be lost in mysql.user anyway) */
@@ -50541,393 +50533,393 @@ yyreduce:
                MYSQL_YYABORT;
              (yyval.lex_user)->host= empty_clex_str;
            }
-#line 50545 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50537 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3436: /* grant_privileges: ALL opt_privileges  */
-#line 17446 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17438 "/home/buildbot/git/sql/sql_yacc.yy"
           { 
             if (!((yyval.lex_grant)= new (thd->mem_root) Lex_grant_privilege(GLOBAL_ACLS, true)))
               MYSQL_YYABORT;
           }
-#line 50554 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50546 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3439: /* object_privilege_list: object_privilege  */
-#line 17459 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17451 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant)= new (thd->mem_root) Lex_grant_privilege((yyvsp[0].privilege))))
               MYSQL_YYABORT;
           }
-#line 50563 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50555 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3440: /* object_privilege_list: column_list_privilege  */
-#line 17464 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17456 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant)= new (thd->mem_root) Lex_grant_privilege()) ||
                 (yyval.lex_grant)->add_column_list_privilege(thd, (yyvsp[0].column_list_privilege).m_columns[0],
                                                    (yyvsp[0].column_list_privilege).m_privilege))
               MYSQL_YYABORT;
           }
-#line 50574 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50566 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3441: /* object_privilege_list: object_privilege_list ',' object_privilege  */
-#line 17471 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17463 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             ((yyval.lex_grant)= (yyvsp[-2].lex_grant))->add_object_privilege((yyvsp[0].privilege));
           }
-#line 50582 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50574 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3442: /* object_privilege_list: object_privilege_list ',' column_list_privilege  */
-#line 17475 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17467 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (((yyval.lex_grant)= (yyvsp[-2].lex_grant))->add_column_list_privilege(thd, (yyvsp[0].column_list_privilege).m_columns[0],
                                                          (yyvsp[0].column_list_privilege).m_privilege))
               MYSQL_YYABORT;
           }
-#line 50592 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50584 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3443: /* column_list_privilege: column_privilege '(' comma_separated_ident_list ')'  */
-#line 17484 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17476 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.column_list_privilege)= Lex_column_list_privilege((yyvsp[-1].ident_sys_list), (yyvsp[-3].privilege));
           }
-#line 50600 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50592 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3444: /* column_privilege: SELECT_SYM  */
-#line 17490 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17482 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SELECT_ACL; }
-#line 50606 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50598 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3445: /* column_privilege: INSERT  */
-#line 17491 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17483 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= INSERT_ACL; }
-#line 50612 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50604 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3446: /* column_privilege: UPDATE_SYM  */
-#line 17492 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17484 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= UPDATE_ACL; }
-#line 50618 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50610 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3447: /* column_privilege: REFERENCES  */
-#line 17493 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17485 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= REFERENCES_ACL; }
-#line 50624 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50616 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3448: /* object_privilege: SELECT_SYM  */
-#line 17497 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17489 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SELECT_ACL; }
-#line 50630 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50622 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3449: /* object_privilege: INSERT  */
-#line 17498 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17490 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= INSERT_ACL; }
-#line 50636 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50628 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3450: /* object_privilege: UPDATE_SYM  */
-#line 17499 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17491 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= UPDATE_ACL; }
-#line 50642 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50634 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3451: /* object_privilege: REFERENCES  */
-#line 17500 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17492 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= REFERENCES_ACL; }
-#line 50648 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50640 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3452: /* object_privilege: DELETE_SYM  */
-#line 17501 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17493 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= DELETE_ACL;}
-#line 50654 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50646 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3453: /* object_privilege: USAGE  */
-#line 17502 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17494 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= NO_ACL; }
-#line 50660 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50652 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3454: /* object_privilege: INDEX_SYM  */
-#line 17503 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17495 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= INDEX_ACL;}
-#line 50666 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50658 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3455: /* object_privilege: ALTER  */
-#line 17504 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17496 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= ALTER_ACL;}
-#line 50672 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50664 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3456: /* object_privilege: CREATE  */
-#line 17505 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17497 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_ACL;}
-#line 50678 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50670 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3457: /* object_privilege: DROP  */
-#line 17506 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17498 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= DROP_ACL;}
-#line 50684 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50676 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3458: /* object_privilege: EXECUTE_SYM  */
-#line 17507 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17499 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= EXECUTE_ACL;}
-#line 50690 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50682 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3459: /* object_privilege: RELOAD  */
-#line 17508 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17500 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= RELOAD_ACL;}
-#line 50696 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50688 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3460: /* object_privilege: SHUTDOWN  */
-#line 17509 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17501 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SHUTDOWN_ACL;}
-#line 50702 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50694 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3461: /* object_privilege: PROCESS  */
-#line 17510 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17502 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= PROCESS_ACL;}
-#line 50708 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50700 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3462: /* object_privilege: FILE_SYM  */
-#line 17511 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17503 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= FILE_ACL;}
-#line 50714 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50706 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3463: /* object_privilege: GRANT OPTION  */
-#line 17512 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17504 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= GRANT_ACL;}
-#line 50720 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50712 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3464: /* object_privilege: SHOW DATABASES  */
-#line 17513 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17505 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SHOW_DB_ACL;}
-#line 50726 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50718 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3465: /* object_privilege: SUPER_SYM  */
-#line 17514 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17506 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SUPER_ACL;}
-#line 50732 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50724 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3466: /* object_privilege: CREATE TEMPORARY TABLES  */
-#line 17515 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17507 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_TMP_ACL;}
-#line 50738 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50730 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3467: /* object_privilege: LOCK_SYM TABLES  */
-#line 17516 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17508 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= LOCK_TABLES_ACL; }
-#line 50744 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50736 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3468: /* object_privilege: REPLICATION SLAVE  */
-#line 17517 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17509 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= REPL_SLAVE_ACL; }
-#line 50750 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50742 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3469: /* object_privilege: REPLICATION CLIENT_SYM  */
-#line 17518 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17510 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= BINLOG_MONITOR_ACL; /*Compatibility*/ }
-#line 50756 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50748 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3470: /* object_privilege: CREATE VIEW_SYM  */
-#line 17519 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17511 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_VIEW_ACL; }
-#line 50762 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50754 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3471: /* object_privilege: SHOW VIEW_SYM  */
-#line 17520 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17512 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SHOW_VIEW_ACL; }
-#line 50768 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50760 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3472: /* object_privilege: CREATE ROUTINE_SYM  */
-#line 17521 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17513 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_PROC_ACL; }
-#line 50774 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50766 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3473: /* object_privilege: ALTER ROUTINE_SYM  */
-#line 17522 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17514 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= ALTER_PROC_ACL; }
-#line 50780 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50772 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3474: /* object_privilege: CREATE USER_SYM  */
-#line 17523 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17515 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_USER_ACL; }
-#line 50786 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50778 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3475: /* object_privilege: EVENT_SYM  */
-#line 17524 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17516 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= EVENT_ACL;}
-#line 50792 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50784 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3476: /* object_privilege: TRIGGER_SYM  */
-#line 17525 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17517 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= TRIGGER_ACL; }
-#line 50798 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50790 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3477: /* object_privilege: CREATE TABLESPACE  */
-#line 17526 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17518 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_TABLESPACE_ACL; }
-#line 50804 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50796 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3478: /* object_privilege: DELETE_SYM HISTORY_SYM  */
-#line 17527 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17519 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= DELETE_HISTORY_ACL; }
-#line 50810 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50802 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3479: /* object_privilege: SET USER_SYM  */
-#line 17528 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17520 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SET_USER_ACL; }
-#line 50816 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50808 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3480: /* object_privilege: FEDERATED_SYM ADMIN_SYM  */
-#line 17529 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17521 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= FEDERATED_ADMIN_ACL; }
-#line 50822 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50814 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3481: /* object_privilege: CONNECTION_SYM ADMIN_SYM  */
-#line 17530 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17522 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= CONNECTION_ADMIN_ACL; }
-#line 50828 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50820 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3482: /* object_privilege: READ_SYM ONLY_SYM ADMIN_SYM  */
-#line 17531 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17523 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= READ_ONLY_ADMIN_ACL; }
-#line 50834 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50826 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3483: /* object_privilege: READ_ONLY_SYM ADMIN_SYM  */
-#line 17532 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17524 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= READ_ONLY_ADMIN_ACL; }
-#line 50840 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50832 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3484: /* object_privilege: BINLOG_SYM MONITOR_SYM  */
-#line 17533 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17525 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= BINLOG_MONITOR_ACL; }
-#line 50846 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50838 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3485: /* object_privilege: BINLOG_SYM ADMIN_SYM  */
-#line 17534 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17526 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= BINLOG_ADMIN_ACL; }
-#line 50852 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50844 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3486: /* object_privilege: BINLOG_SYM REPLAY_SYM  */
-#line 17535 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17527 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= BINLOG_REPLAY_ACL; }
-#line 50858 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50850 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3487: /* object_privilege: REPLICATION MASTER_SYM ADMIN_SYM  */
-#line 17536 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17528 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= REPL_MASTER_ADMIN_ACL; }
-#line 50864 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50856 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3488: /* object_privilege: REPLICATION SLAVE ADMIN_SYM  */
-#line 17537 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17529 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= REPL_SLAVE_ADMIN_ACL; }
-#line 50870 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50862 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3489: /* object_privilege: SLAVE MONITOR_SYM  */
-#line 17538 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17530 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= SLAVE_MONITOR_ACL; }
-#line 50876 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50868 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3490: /* object_privilege: SHOW CREATE ROUTINE_SYM  */
-#line 17539 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17531 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= SHOW_CREATE_ROUTINE_ACL; }
-#line 50882 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50874 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3491: /* opt_and: %empty  */
-#line 17543 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17535 "/home/buildbot/git/sql/sql_yacc.yy"
                       {}
-#line 50888 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50880 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3492: /* opt_and: AND_SYM  */
-#line 17544 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17536 "/home/buildbot/git/sql/sql_yacc.yy"
                   {}
-#line 50894 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50886 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3495: /* require_list_element: SUBJECT_SYM TEXT_STRING  */
-#line 17554 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17546 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             if (lex->account_options.x509_subject.str)
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "SUBJECT"));
             lex->account_options.x509_subject= (yyvsp[0].lex_string_with_metadata);
           }
-#line 50905 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50897 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3496: /* require_list_element: ISSUER_SYM TEXT_STRING  */
-#line 17561 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17553 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             if (lex->account_options.x509_issuer.str)
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "ISSUER"));
             lex->account_options.x509_issuer= (yyvsp[0].lex_string_with_metadata);
           }
-#line 50916 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50908 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3497: /* require_list_element: CIPHER_SYM TEXT_STRING  */
-#line 17568 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17560 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             if (lex->account_options.ssl_cipher.str)
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "CIPHER"));
             lex->account_options.ssl_cipher= (yyvsp[0].lex_string_with_metadata);
           }
-#line 50927 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50919 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3498: /* grant_ident: '*'  */
-#line 17578 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17570 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX_CSTRING db;
             if (unlikely(Lex->copy_db_to(&db)))
@@ -50936,411 +50928,411 @@ yyreduce:
                                             Lex_grant_object_name::STAR)))
               MYSQL_YYABORT;
           }
-#line 50940 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50932 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3499: /* grant_ident: ident '.' '*'  */
-#line 17587 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17579 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant_ident)= new (thd->mem_root) Lex_grant_object_name((yyvsp[-2].ident_sys),
                                             Lex_grant_object_name::IDENT_STAR)))
               MYSQL_YYABORT;
           }
-#line 50950 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50942 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3500: /* grant_ident: '*' '.' '*'  */
-#line 17593 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17585 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant_ident)= new (thd->mem_root) Lex_grant_object_name(
                                             null_clex_str,
                                             Lex_grant_object_name::STAR_STAR)))
               MYSQL_YYABORT;
           }
-#line 50961 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50953 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3501: /* grant_ident: table_ident  */
-#line 17600 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17592 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant_ident)= new (thd->mem_root) Lex_grant_object_name((yyvsp[0].table))))
               MYSQL_YYABORT;
           }
-#line 50970 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50962 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3502: /* user_list: user  */
-#line 17608 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17600 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50979 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50971 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3503: /* user_list: user_list ',' user  */
+#line 17605 "/home/buildbot/git/sql/sql_yacc.yy"
+          {
+            if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
+              MYSQL_YYABORT;
+          }
+#line 50980 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+    break;
+
+  case 3504: /* grant_list: grant_user  */
 #line 17613 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50988 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50989 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3504: /* grant_list: grant_user  */
-#line 17621 "/home/buildbot/git/sql/sql_yacc.yy"
+  case 3505: /* grant_list: grant_list ',' grant_user  */
+#line 17618 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50997 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 50998 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3505: /* grant_list: grant_list ',' grant_user  */
+  case 3506: /* user_and_role_list: user_or_role  */
 #line 17626 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 51006 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
-    break;
-
-  case 3506: /* user_and_role_list: user_or_role  */
-#line 17634 "/home/buildbot/git/sql/sql_yacc.yy"
-          {
-            if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
-              MYSQL_YYABORT;
-          }
-#line 51015 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51007 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3507: /* user_and_role_list: user_and_role_list ',' user_or_role  */
-#line 17639 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17631 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 51024 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51016 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3512: /* grant_user: user IDENTIFIED_SYM BY TEXT_STRING  */
-#line 17650 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17642 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.lex_user)= (yyvsp[-3].lex_user);
             (yyvsp[-3].lex_user)->auth= new (thd->mem_root) USER_AUTH();
             (yyvsp[-3].lex_user)->auth->pwtext= (yyvsp[0].lex_string_with_metadata);
           }
-#line 51034 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51026 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3513: /* grant_user: user IDENTIFIED_SYM BY PASSWORD_SYM TEXT_STRING  */
-#line 17656 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17648 "/home/buildbot/git/sql/sql_yacc.yy"
           { 
             (yyval.lex_user)= (yyvsp[-4].lex_user); 
             (yyvsp[-4].lex_user)->auth= new (thd->mem_root) USER_AUTH();
             (yyvsp[-4].lex_user)->auth->auth_str= (yyvsp[0].lex_string_with_metadata);
           }
-#line 51044 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51036 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3514: /* grant_user: user IDENTIFIED_SYM via_or_with auth_expression  */
-#line 17662 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17654 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.lex_user)= (yyvsp[-3].lex_user);
             (yyvsp[-3].lex_user)->auth= (yyvsp[0].user_auth);
           }
-#line 51053 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51045 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3515: /* grant_user: user_or_role  */
-#line 17667 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17659 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.lex_user)= (yyvsp[0].lex_user);
           }
-#line 51061 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51053 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3516: /* auth_expression: auth_token OR_SYM auth_expression  */
-#line 17674 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17666 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= (yyvsp[-2].user_auth);
             DBUG_ASSERT((yyval.user_auth)->next == NULL);
             (yyval.user_auth)->next= (yyvsp[0].user_auth);
           }
-#line 51071 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51063 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3517: /* auth_expression: auth_token  */
-#line 17680 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17672 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= (yyvsp[0].user_auth);
           }
-#line 51079 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51071 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3518: /* auth_token: ident_or_text opt_auth_str  */
-#line 17687 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17679 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           (yyval.user_auth)= (yyvsp[0].user_auth);
           (yyval.user_auth)->plugin= (yyvsp[-1].lex_str);
         }
-#line 51088 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51080 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3519: /* opt_auth_str: %empty  */
-#line 17695 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17687 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           if (!((yyval.user_auth)=(USER_AUTH*) thd->calloc(sizeof(USER_AUTH))))
             MYSQL_YYABORT;
         }
-#line 51097 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51089 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3520: /* opt_auth_str: using_or_as TEXT_STRING_sys  */
-#line 17700 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17692 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           if (!((yyval.user_auth)=(USER_AUTH*) thd->calloc(sizeof(USER_AUTH))))
             MYSQL_YYABORT;
           (yyval.user_auth)->auth_str= (yyvsp[0].lex_str);
         }
-#line 51107 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51099 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3521: /* opt_auth_str: using_or_as PASSWORD_SYM '(' TEXT_STRING ')'  */
-#line 17706 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17698 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           if (!((yyval.user_auth)=(USER_AUTH*) thd->calloc(sizeof(USER_AUTH))))
             MYSQL_YYABORT;
           (yyval.user_auth)->pwtext= (yyvsp[-1].lex_string_with_metadata);
         }
-#line 51117 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51109 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3523: /* opt_require_clause: REQUIRE_SYM require_list  */
-#line 17716 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17708 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.ssl_type= SSL_TYPE_SPECIFIED;
+          }
+#line 51117 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+    break;
+
+  case 3524: /* opt_require_clause: REQUIRE_SYM SSL_SYM  */
+#line 17712 "/home/buildbot/git/sql/sql_yacc.yy"
+          {
+            Lex->account_options.ssl_type= SSL_TYPE_ANY;
           }
 #line 51125 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3524: /* opt_require_clause: REQUIRE_SYM SSL_SYM  */
-#line 17720 "/home/buildbot/git/sql/sql_yacc.yy"
+  case 3525: /* opt_require_clause: REQUIRE_SYM X509_SYM  */
+#line 17716 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            Lex->account_options.ssl_type= SSL_TYPE_ANY;
+            Lex->account_options.ssl_type= SSL_TYPE_X509;
           }
 #line 51133 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3525: /* opt_require_clause: REQUIRE_SYM X509_SYM  */
-#line 17724 "/home/buildbot/git/sql/sql_yacc.yy"
+  case 3526: /* opt_require_clause: REQUIRE_SYM NONE_SYM  */
+#line 17720 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            Lex->account_options.ssl_type= SSL_TYPE_X509;
+            Lex->account_options.ssl_type= SSL_TYPE_NONE;
           }
 #line 51141 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3526: /* opt_require_clause: REQUIRE_SYM NONE_SYM  */
-#line 17728 "/home/buildbot/git/sql/sql_yacc.yy"
-          {
-            Lex->account_options.ssl_type= SSL_TYPE_NONE;
-          }
-#line 51149 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
-    break;
-
   case 3527: /* resource_option: MAX_QUERIES_PER_HOUR ulong_num  */
-#line 17735 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17727 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.questions=(yyvsp[0].ulong_num);
             Lex->account_options.specified_limits|= USER_RESOURCES::QUERIES_PER_HOUR;
           }
-#line 51158 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51150 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3528: /* resource_option: MAX_UPDATES_PER_HOUR ulong_num  */
-#line 17740 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17732 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.updates=(yyvsp[0].ulong_num);
             Lex->account_options.specified_limits|= USER_RESOURCES::UPDATES_PER_HOUR;
           }
-#line 51167 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51159 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3529: /* resource_option: MAX_CONNECTIONS_PER_HOUR ulong_num  */
-#line 17745 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17737 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.conn_per_hour= (yyvsp[0].ulong_num);
             Lex->account_options.specified_limits|= USER_RESOURCES::CONNECTIONS_PER_HOUR;
           }
-#line 51176 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51168 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3530: /* resource_option: MAX_USER_CONNECTIONS_SYM int_num  */
-#line 17750 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17742 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.user_conn= (yyvsp[0].num);
             Lex->account_options.specified_limits|= USER_RESOURCES::USER_CONNECTIONS;
           }
-#line 51185 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51177 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3531: /* resource_option: MAX_STATEMENT_TIME_SYM NUM_literal  */
-#line 17755 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17747 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.max_statement_time= (yyvsp[0].item_num)->val_real();
             Lex->account_options.specified_limits|= USER_RESOURCES::MAX_STATEMENT_TIME;
           }
-#line 51194 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51186 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3532: /* resource_option_list: resource_option_list resource_option  */
-#line 17762 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17754 "/home/buildbot/git/sql/sql_yacc.yy"
                                                {}
-#line 51200 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51192 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3533: /* resource_option_list: resource_option  */
-#line 17763 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17755 "/home/buildbot/git/sql/sql_yacc.yy"
                           {}
-#line 51206 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51198 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3534: /* opt_resource_options: %empty  */
-#line 17767 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17759 "/home/buildbot/git/sql/sql_yacc.yy"
                       {}
-#line 51212 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51204 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3536: /* opt_grant_options: %empty  */
-#line 17773 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17765 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.privilege)= NO_ACL;  }
-#line 51218 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51210 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3537: /* opt_grant_options: WITH grant_option_list  */
-#line 17774 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17766 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.privilege)= (yyvsp[0].privilege); }
-#line 51224 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51216 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3538: /* opt_grant_option: %empty  */
-#line 17778 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17770 "/home/buildbot/git/sql/sql_yacc.yy"
                             { (yyval.privilege)= NO_ACL;    }
-#line 51230 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51222 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3539: /* opt_grant_option: WITH GRANT OPTION  */
-#line 17779 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17771 "/home/buildbot/git/sql/sql_yacc.yy"
                             { (yyval.privilege)= GRANT_ACL; }
-#line 51236 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51228 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3540: /* grant_option_list: grant_option_list grant_option  */
-#line 17783 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17775 "/home/buildbot/git/sql/sql_yacc.yy"
                                          { (yyval.privilege)= (yyvsp[-1].privilege) | (yyvsp[0].privilege); }
-#line 51242 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51234 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3542: /* grant_option: GRANT OPTION  */
-#line 17788 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17780 "/home/buildbot/git/sql/sql_yacc.yy"
                           { (yyval.privilege)= GRANT_ACL;}
-#line 51248 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51240 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3543: /* grant_option: resource_option  */
-#line 17789 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17781 "/home/buildbot/git/sql/sql_yacc.yy"
                           { (yyval.privilege)= NO_ACL; }
-#line 51254 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51246 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3544: /* $@249: %empty  */
-#line 17794 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17786 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command = SQLCOM_BEGIN;
             lex->start_transaction_opt= 0;
           }
-#line 51264 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51256 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3545: /* begin_stmt_mariadb: BEGIN_MARIADB_SYM $@249 opt_work  */
-#line 17799 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17791 "/home/buildbot/git/sql/sql_yacc.yy"
                    {}
-#line 51270 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51262 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3546: /* compound_statement: sp_proc_stmt_compound_ok  */
-#line 17804 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17796 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command= SQLCOM_COMPOUND;
             if (Lex->sp_body_finalize_procedure(thd))
               MYSQL_YYABORT;
           }
-#line 51280 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51272 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3547: /* opt_not: %empty  */
-#line 17812 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17804 "/home/buildbot/git/sql/sql_yacc.yy"
                        { (yyval.num)= 0; }
-#line 51286 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51278 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3548: /* opt_not: not  */
-#line 17813 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17805 "/home/buildbot/git/sql/sql_yacc.yy"
                        { (yyval.num)= 1; }
-#line 51292 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51284 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3549: /* opt_work: %empty  */
-#line 17817 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17809 "/home/buildbot/git/sql/sql_yacc.yy"
                       {}
-#line 51298 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51290 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3550: /* opt_work: WORK_SYM  */
-#line 17818 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17810 "/home/buildbot/git/sql/sql_yacc.yy"
                     {}
-#line 51304 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51296 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3551: /* opt_chain: %empty  */
-#line 17823 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17815 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.m_yes_no_unk)= TVL_UNKNOWN; }
-#line 51310 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51302 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3552: /* opt_chain: AND_SYM NO_SYM CHAIN_SYM  */
-#line 17824 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17816 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.m_yes_no_unk)= TVL_NO; }
-#line 51316 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51308 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3553: /* opt_chain: AND_SYM CHAIN_SYM  */
-#line 17825 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17817 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.m_yes_no_unk)= TVL_YES; }
-#line 51322 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51314 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3554: /* opt_release: %empty  */
-#line 17830 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17822 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.m_yes_no_unk)= TVL_UNKNOWN; }
-#line 51328 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51320 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3555: /* opt_release: RELEASE_SYM  */
-#line 17831 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17823 "/home/buildbot/git/sql/sql_yacc.yy"
                              { (yyval.m_yes_no_unk)= TVL_YES; }
-#line 51334 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51326 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3556: /* opt_release: NO_SYM RELEASE_SYM  */
-#line 17832 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17824 "/home/buildbot/git/sql/sql_yacc.yy"
                              { (yyval.m_yes_no_unk)= TVL_NO; }
-#line 51340 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51332 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3557: /* commit: COMMIT_SYM opt_work opt_chain opt_release  */
-#line 17837 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17829 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_COMMIT;
@@ -51349,11 +51341,11 @@ yyreduce:
             lex->tx_chain= (yyvsp[-1].m_yes_no_unk);
             lex->tx_release= (yyvsp[0].m_yes_no_unk);
           }
-#line 51353 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51345 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3558: /* rollback: ROLLBACK_SYM opt_work opt_chain opt_release  */
-#line 17849 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17841 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_ROLLBACK;
@@ -51362,145 +51354,145 @@ yyreduce:
             lex->tx_chain= (yyvsp[-1].m_yes_no_unk);
             lex->tx_release= (yyvsp[0].m_yes_no_unk);
           }
-#line 51366 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51358 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3559: /* rollback: ROLLBACK_SYM opt_work TO_SYM SAVEPOINT_SYM ident  */
-#line 17858 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17850 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_ROLLBACK_TO_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 51376 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51368 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3560: /* rollback: ROLLBACK_SYM opt_work TO_SYM ident  */
-#line 17864 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17856 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_ROLLBACK_TO_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 51386 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51378 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3561: /* savepoint: SAVEPOINT_SYM ident  */
-#line 17873 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17865 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 51396 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51388 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3562: /* release: RELEASE_SYM SAVEPOINT_SYM ident  */
-#line 17882 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17874 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_RELEASE_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 51406 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51398 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3563: /* unit_type_decl: UNION_SYM union_option  */
-#line 17895 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17887 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.unit_operation).unit_type= UNION_TYPE; (yyval.unit_operation).distinct= (yyvsp[0].num); }
-#line 51412 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51404 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3564: /* unit_type_decl: INTERSECT_SYM union_option  */
-#line 17897 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17889 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.unit_operation).unit_type= INTERSECT_TYPE; (yyval.unit_operation).distinct= (yyvsp[0].num); }
-#line 51418 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51410 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3565: /* unit_type_decl: EXCEPT_SYM union_option  */
-#line 17899 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17891 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.unit_operation).unit_type= EXCEPT_TYPE; (yyval.unit_operation).distinct= (yyvsp[0].num); }
-#line 51424 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51416 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3566: /* union_option: %empty  */
-#line 17906 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17898 "/home/buildbot/git/sql/sql_yacc.yy"
                       { (yyval.num)=1; }
-#line 51430 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51422 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3567: /* union_option: DISTINCT  */
-#line 17907 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17899 "/home/buildbot/git/sql/sql_yacc.yy"
                     { (yyval.num)=1; }
-#line 51436 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51428 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3568: /* union_option: ALL  */
-#line 17908 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17900 "/home/buildbot/git/sql/sql_yacc.yy"
                     { (yyval.num)=0; }
-#line 51442 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51434 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3569: /* query_expression_option: STRAIGHT_JOIN  */
-#line 17912 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17904 "/home/buildbot/git/sql/sql_yacc.yy"
                         { Select->options|= SELECT_STRAIGHT_JOIN; }
-#line 51448 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51440 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3570: /* query_expression_option: HIGH_PRIORITY  */
-#line 17914 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17906 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             YYPS->m_lock_type= TL_READ_HIGH_PRIORITY;
             YYPS->m_mdl_type= MDL_SHARED_READ;
             Select->options|= SELECT_HIGH_PRIORITY;
           }
-#line 51458 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51450 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3571: /* query_expression_option: DISTINCT  */
-#line 17919 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17911 "/home/buildbot/git/sql/sql_yacc.yy"
                            { Select->options|= SELECT_DISTINCT; }
-#line 51464 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51456 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3572: /* query_expression_option: UNIQUE_SYM  */
-#line 17920 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17912 "/home/buildbot/git/sql/sql_yacc.yy"
                            { Select->options|= SELECT_DISTINCT; }
-#line 51470 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51462 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3573: /* query_expression_option: SQL_SMALL_RESULT  */
-#line 17921 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17913 "/home/buildbot/git/sql/sql_yacc.yy"
                            { Select->options|= SELECT_SMALL_RESULT; }
-#line 51476 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51468 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3574: /* query_expression_option: SQL_BIG_RESULT  */
-#line 17922 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17914 "/home/buildbot/git/sql/sql_yacc.yy"
                            { Select->options|= SELECT_BIG_RESULT; }
-#line 51482 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51474 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3575: /* query_expression_option: SQL_BUFFER_RESULT  */
-#line 17923 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17915 "/home/buildbot/git/sql/sql_yacc.yy"
                             { Select->options|= OPTION_BUFFER_RESULT; }
-#line 51488 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51480 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3576: /* query_expression_option: SQL_CALC_FOUND_ROWS  */
-#line 17924 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17916 "/home/buildbot/git/sql/sql_yacc.yy"
                               { Select->options|= OPTION_FOUND_ROWS; }
-#line 51494 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51486 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3577: /* query_expression_option: ALL  */
-#line 17925 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17917 "/home/buildbot/git/sql/sql_yacc.yy"
               { Select->options|= SELECT_ALL; }
-#line 51500 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51492 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3580: /* no_definer: %empty  */
-#line 17941 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17933 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             /*
               We have to distinguish missing DEFINER-clause from case when
@@ -51511,201 +51503,201 @@ yyreduce:
             */
             thd->lex->definer= 0;
           }
-#line 51515 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51507 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3581: /* definer: DEFINER_SYM '=' user_or_role  */
-#line 17955 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17947 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->definer= (yyvsp[0].lex_user);
             Lex->account_options.reset();
           }
-#line 51524 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51516 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3582: /* view_algorithm: ALGORITHM_SYM '=' UNDEFINED_SYM  */
-#line 17968 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17960 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= DTYPE_ALGORITHM_UNDEFINED; }
-#line 51530 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51522 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3583: /* view_algorithm: ALGORITHM_SYM '=' MERGE_SYM  */
-#line 17969 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17961 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_ALGORITHM_MERGE; }
-#line 51536 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51528 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3584: /* view_algorithm: ALGORITHM_SYM '=' TEMPTABLE_SYM  */
-#line 17970 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17962 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_ALGORITHM_TMPTABLE; }
-#line 51542 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51534 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3585: /* opt_view_suid: %empty  */
-#line 17974 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17966 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= VIEW_SUID_DEFAULT; }
-#line 51548 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51540 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3586: /* opt_view_suid: view_suid  */
-#line 17975 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17967 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= (yyvsp[0].view_suid); }
-#line 51554 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51546 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3587: /* view_suid: SQL_SYM SECURITY_SYM DEFINER_SYM  */
-#line 17979 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17971 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= VIEW_SUID_DEFINER; }
-#line 51560 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51552 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3588: /* view_suid: SQL_SYM SECURITY_SYM INVOKER_SYM  */
-#line 17980 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17972 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= VIEW_SUID_INVOKER; }
-#line 51566 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51558 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3589: /* view_list_opt: %empty  */
-#line 17985 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17977 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 51572 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51564 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3590: /* view_list_opt: '(' view_list ')'  */
-#line 17986 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17978 "/home/buildbot/git/sql/sql_yacc.yy"
                             { }
-#line 51578 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51570 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3591: /* view_list: ident  */
-#line 17991 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17983 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->view_list.push_back((LEX_CSTRING*)
                                      thd->memdup(&(yyvsp[0].ident_sys), sizeof(LEX_CSTRING)),
                                      thd->mem_root);
           }
-#line 51588 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51580 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3592: /* view_list: view_list ',' ident  */
-#line 17997 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17989 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->view_list.push_back((LEX_CSTRING*)
                                      thd->memdup(&(yyvsp[0].ident_sys), sizeof(LEX_CSTRING)),
                                      thd->mem_root);
           }
-#line 51598 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51590 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3593: /* $@250: %empty  */
-#line 18005 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17997 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->parsing_options.allows_variable= FALSE;
             lex->create_view->select.str= (char *) YYLIP->get_cpp_ptr();
           }
-#line 51608 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51600 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3594: /* view_select: $@250 query_expression view_check_option  */
-#line 18012 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18004 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->parsed_create_view((yyvsp[-1].select_lex_unit), (yyvsp[0].num)))
               MYSQL_YYABORT;
           }
-#line 51617 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51609 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3595: /* view_check_option: %empty  */
-#line 18019 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18011 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_NONE; }
-#line 51623 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51615 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3596: /* view_check_option: WITH CHECK_SYM OPTION  */
-#line 18020 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18012 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_CASCADED; }
-#line 51629 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51621 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3597: /* view_check_option: WITH CASCADED CHECK_SYM OPTION  */
-#line 18021 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18013 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_CASCADED; }
-#line 51635 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51627 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3598: /* view_check_option: WITH LOCAL_SYM CHECK_SYM OPTION  */
-#line 18022 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18014 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_LOCAL; }
-#line 51641 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51633 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3599: /* trigger_action_order: FOLLOWS_SYM  */
-#line 18033 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18025 "/home/buildbot/git/sql/sql_yacc.yy"
             { (yyval.trigger_action_order_type)= TRG_ORDER_FOLLOWS; }
-#line 51647 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51639 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3600: /* trigger_action_order: PRECEDES_SYM  */
-#line 18035 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18027 "/home/buildbot/git/sql/sql_yacc.yy"
             { (yyval.trigger_action_order_type)= TRG_ORDER_PRECEDES; }
-#line 51653 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51645 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3601: /* trigger_follows_precedes_clause: %empty  */
-#line 18040 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18032 "/home/buildbot/git/sql/sql_yacc.yy"
             {
               (yyval.trg_execution_order).ordering_clause= TRG_ORDER_NONE;
               (yyval.trg_execution_order).anchor_trigger_name.str= NULL;
               (yyval.trg_execution_order).anchor_trigger_name.length= 0;
             }
-#line 51663 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51655 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3602: /* trigger_follows_precedes_clause: trigger_action_order ident_or_text  */
-#line 18047 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18039 "/home/buildbot/git/sql/sql_yacc.yy"
             {
               (yyval.trg_execution_order).ordering_clause= (yyvsp[-1].trigger_action_order_type);
               (yyval.trg_execution_order).anchor_trigger_name= (yyvsp[0].lex_str);
             }
-#line 51672 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51664 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3603: /* $@251: %empty  */
-#line 18056 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18048 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->add_create_options_with_check((yyvsp[0].object_ddl_options))))
               MYSQL_YYABORT;
           }
-#line 51681 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51673 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3604: /* $@252: %empty  */
-#line 18065 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18057 "/home/buildbot/git/sql/sql_yacc.yy"
           { /* $9 */
             Lex->raw_trg_on_table_name_begin= YYLIP->get_tok_start();
+          }
+#line 51681 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+    break;
+
+  case 3605: /* $@253: %empty  */
+#line 18063 "/home/buildbot/git/sql/sql_yacc.yy"
+          { /* $13 */
+            Lex->raw_trg_on_table_name_end= YYLIP->get_tok_start();
           }
 #line 51689 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3605: /* $@253: %empty  */
-#line 18071 "/home/buildbot/git/sql/sql_yacc.yy"
-          { /* $13 */
-            Lex->raw_trg_on_table_name_end= YYLIP->get_tok_start();
+  case 3606: /* $@254: %empty  */
+#line 18068 "/home/buildbot/git/sql/sql_yacc.yy"
+          {
+            Lex->trg_chistics.ordering_clause_begin= YYLIP->get_cpp_ptr();
           }
 #line 51697 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3606: /* $@254: %empty  */
-#line 18076 "/home/buildbot/git/sql/sql_yacc.yy"
-          {
-            Lex->trg_chistics.ordering_clause_begin= YYLIP->get_cpp_ptr();
-          }
-#line 51705 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
-    break;
-
   case 3607: /* $@255: %empty  */
-#line 18080 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18072 "/home/buildbot/git/sql/sql_yacc.yy"
           { /* $18 */
             LEX *lex= thd->lex;
             Lex_input_stream *lip= YYLIP;
@@ -51726,11 +51718,11 @@ yyreduce:
 
             lex->sphead->set_body_start(thd, lip->get_cpp_tok_start());
           }
-#line 51730 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51722 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3608: /* trigger_tail: remember_name opt_if_not_exists $@251 sp_name trg_action_time trg_event ON remember_name $@252 table_ident FOR_SYM remember_name $@253 EACH_SYM ROW_SYM $@254 trigger_follows_precedes_clause $@255 sp_proc_stmt force_lookahead  */
-#line 18101 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18093 "/home/buildbot/git/sql/sql_yacc.yy"
           { /* $21 */
             LEX *lex= Lex;
 
@@ -51749,127 +51741,127 @@ yyreduce:
                                    MDL_SHARED_NO_WRITE))
               MYSQL_YYABORT;
           }
-#line 51753 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51745 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3609: /* $@256: %empty  */
-#line 18129 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18121 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->init_last_field(&lex->sphead->m_return_field_def,
                                  &empty_clex_str);
           }
-#line 51763 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51755 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3610: /* sf_return_type: $@256 field_type  */
-#line 18135 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18127 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sf_return_fill_definition((yyvsp[0].Lex_field_type))))
               MYSQL_YYABORT;
           }
-#line 51772 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51764 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3611: /* create_package_chistic: COMMENT_SYM TEXT_STRING_sys  */
-#line 18143 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18135 "/home/buildbot/git/sql/sql_yacc.yy"
           { Lex->sp_chistics.comment= (yyvsp[0].lex_str); }
-#line 51778 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51770 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3612: /* create_package_chistic: sp_suid  */
-#line 18145 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18137 "/home/buildbot/git/sql/sql_yacc.yy"
           { Lex->sp_chistics.suid= (yyvsp[0].sp_suid); }
-#line 51784 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51776 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3613: /* create_package_chistics: create_package_chistic  */
-#line 18149 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18141 "/home/buildbot/git/sql/sql_yacc.yy"
                                  {}
-#line 51790 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51782 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3614: /* create_package_chistics: create_package_chistics create_package_chistic  */
-#line 18150 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18142 "/home/buildbot/git/sql/sql_yacc.yy"
                                                          { }
-#line 51796 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51788 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3615: /* opt_create_package_chistics: %empty  */
-#line 18154 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18146 "/home/buildbot/git/sql/sql_yacc.yy"
                     { }
-#line 51802 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51794 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3616: /* opt_create_package_chistics: create_package_chistics  */
-#line 18155 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18147 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { }
-#line 51808 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51800 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3617: /* $@257: %empty  */
-#line 18159 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18151 "/home/buildbot/git/sql/sql_yacc.yy"
           { Lex->sp_chistics.init(); }
-#line 51814 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51806 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3619: /* xa: XA_SYM begin_or_start xid opt_join_or_resume  */
-#line 18167 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18159 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_START;
+          }
+#line 51814 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+    break;
+
+  case 3620: /* xa: XA_SYM END xid opt_suspend  */
+#line 18163 "/home/buildbot/git/sql/sql_yacc.yy"
+          {
+            Lex->sql_command = SQLCOM_XA_END;
           }
 #line 51822 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3620: /* xa: XA_SYM END xid opt_suspend  */
-#line 18171 "/home/buildbot/git/sql/sql_yacc.yy"
+  case 3621: /* xa: XA_SYM PREPARE_SYM xid  */
+#line 18167 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            Lex->sql_command = SQLCOM_XA_END;
+            Lex->sql_command = SQLCOM_XA_PREPARE;
           }
 #line 51830 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3621: /* xa: XA_SYM PREPARE_SYM xid  */
-#line 18175 "/home/buildbot/git/sql/sql_yacc.yy"
+  case 3622: /* xa: XA_SYM COMMIT_SYM xid opt_one_phase  */
+#line 18171 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            Lex->sql_command = SQLCOM_XA_PREPARE;
+            Lex->sql_command = SQLCOM_XA_COMMIT;
           }
 #line 51838 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3622: /* xa: XA_SYM COMMIT_SYM xid opt_one_phase  */
-#line 18179 "/home/buildbot/git/sql/sql_yacc.yy"
+  case 3623: /* xa: XA_SYM ROLLBACK_SYM xid  */
+#line 18175 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            Lex->sql_command = SQLCOM_XA_COMMIT;
+            Lex->sql_command = SQLCOM_XA_ROLLBACK;
           }
 #line 51846 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
-  case 3623: /* xa: XA_SYM ROLLBACK_SYM xid  */
-#line 18183 "/home/buildbot/git/sql/sql_yacc.yy"
-          {
-            Lex->sql_command = SQLCOM_XA_ROLLBACK;
-          }
-#line 51854 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
-    break;
-
   case 3624: /* xa: XA_SYM RECOVER_SYM opt_format_xid  */
-#line 18187 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18179 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_RECOVER;
             Lex->verbose= (yyvsp[0].num);
           }
-#line 51863 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51855 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3625: /* opt_format_xid: %empty  */
-#line 18194 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18186 "/home/buildbot/git/sql/sql_yacc.yy"
                      { (yyval.num)= false; }
-#line 51869 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51861 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3626: /* opt_format_xid: FORMAT_SYM '=' ident_or_text  */
-#line 18196 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18188 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (lex_string_eq(&(yyvsp[0].lex_str), STRING_WITH_LEN("SQL")))
               (yyval.num)= true;
@@ -51882,33 +51874,33 @@ yyreduce:
               (yyval.num)= false;
             }
           }
-#line 51886 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51878 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3627: /* xid: text_string  */
-#line 18212 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18204 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             MYSQL_YYABORT_UNLESS((yyvsp[0].string)->length() <= MAXGTRIDSIZE);
             if (unlikely(!(Lex->xid=(XID *)thd->alloc(sizeof(XID)))))
               MYSQL_YYABORT;
             Lex->xid->set(1L, (yyvsp[0].string)->ptr(), (yyvsp[0].string)->length(), 0, 0);
           }
-#line 51897 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51889 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3628: /* xid: text_string ',' text_string  */
-#line 18219 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18211 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             MYSQL_YYABORT_UNLESS((yyvsp[-2].string)->length() <= MAXGTRIDSIZE && (yyvsp[0].string)->length() <= MAXBQUALSIZE);
             if (unlikely(!(Lex->xid=(XID *)thd->alloc(sizeof(XID)))))
               MYSQL_YYABORT;
             Lex->xid->set(1L, (yyvsp[-2].string)->ptr(), (yyvsp[-2].string)->length(), (yyvsp[0].string)->ptr(), (yyvsp[0].string)->length());
           }
-#line 51908 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51900 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3629: /* xid: text_string ',' text_string ',' ulong_num  */
-#line 18226 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18218 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             MYSQL_YYABORT_UNLESS((yyvsp[-4].string)->length() <= MAXGTRIDSIZE &&
                                  (yyvsp[-2].string)->length() <= MAXBQUALSIZE &&
@@ -51918,225 +51910,225 @@ yyreduce:
               MYSQL_YYABORT;
             Lex->xid->set((yyvsp[0].ulong_num), (yyvsp[-4].string)->ptr(), (yyvsp[-4].string)->length(), (yyvsp[-2].string)->ptr(), (yyvsp[-2].string)->length());
           }
-#line 51922 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51914 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3630: /* begin_or_start: BEGIN_MARIADB_SYM  */
-#line 18238 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18230 "/home/buildbot/git/sql/sql_yacc.yy"
                             {}
-#line 51928 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51920 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3631: /* begin_or_start: BEGIN_ORACLE_SYM  */
-#line 18239 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18231 "/home/buildbot/git/sql/sql_yacc.yy"
                            {}
-#line 51934 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51926 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3632: /* begin_or_start: START_SYM  */
-#line 18240 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18232 "/home/buildbot/git/sql/sql_yacc.yy"
                     {}
-#line 51940 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51932 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3633: /* opt_join_or_resume: %empty  */
-#line 18244 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18236 "/home/buildbot/git/sql/sql_yacc.yy"
                         { Lex->xa_opt=XA_NONE;        }
-#line 51946 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51938 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3634: /* opt_join_or_resume: JOIN_SYM  */
-#line 18245 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18237 "/home/buildbot/git/sql/sql_yacc.yy"
                         { Lex->xa_opt=XA_JOIN;        }
-#line 51952 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51944 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3635: /* opt_join_or_resume: RESUME_SYM  */
-#line 18246 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18238 "/home/buildbot/git/sql/sql_yacc.yy"
                         { Lex->xa_opt=XA_RESUME;      }
-#line 51958 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51950 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3636: /* opt_one_phase: %empty  */
-#line 18250 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18242 "/home/buildbot/git/sql/sql_yacc.yy"
                             { Lex->xa_opt=XA_NONE;        }
-#line 51964 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51956 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3637: /* opt_one_phase: ONE_SYM PHASE_SYM  */
-#line 18251 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18243 "/home/buildbot/git/sql/sql_yacc.yy"
                             { Lex->xa_opt=XA_ONE_PHASE;   }
-#line 51970 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51962 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3638: /* opt_suspend: %empty  */
-#line 18256 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18248 "/home/buildbot/git/sql/sql_yacc.yy"
           { Lex->xa_opt=XA_NONE;        }
-#line 51976 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51968 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3639: /* $@258: %empty  */
-#line 18258 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18250 "/home/buildbot/git/sql/sql_yacc.yy"
           { Lex->xa_opt=XA_SUSPEND;     }
-#line 51982 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51974 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3641: /* opt_migrate: %empty  */
-#line 18263 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18255 "/home/buildbot/git/sql/sql_yacc.yy"
                               {}
-#line 51988 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51980 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3642: /* opt_migrate: FOR_SYM MIGRATE_SYM  */
-#line 18264 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18256 "/home/buildbot/git/sql/sql_yacc.yy"
                               { Lex->xa_opt=XA_FOR_MIGRATE; }
-#line 51994 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51986 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3643: /* install: INSTALL_SYM PLUGIN_SYM opt_if_not_exists ident SONAME_SYM TEXT_STRING_sys  */
-#line 18269 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18261 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_install_plugin((yyvsp[-3].object_ddl_options), (yyvsp[-2].ident_sys), (yyvsp[0].lex_str)))
               MYSQL_YYABORT;
           }
-#line 52003 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 51995 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3644: /* install: INSTALL_SYM SONAME_SYM TEXT_STRING_sys  */
-#line 18274 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18266 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->stmt_install_plugin((yyvsp[0].lex_str));
           }
-#line 52011 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52003 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3645: /* uninstall: UNINSTALL_SYM PLUGIN_SYM opt_if_exists ident  */
-#line 18281 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18273 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_uninstall_plugin_by_name((yyvsp[-1].object_ddl_options), (yyvsp[0].ident_sys)))
               MYSQL_YYABORT;
           }
-#line 52020 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52012 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3646: /* uninstall: UNINSTALL_SYM SONAME_SYM opt_if_exists TEXT_STRING_sys  */
-#line 18286 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18278 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_uninstall_plugin_by_soname((yyvsp[-1].object_ddl_options), (yyvsp[0].lex_str)))
               MYSQL_YYABORT;
           }
-#line 52029 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52021 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3647: /* keep_gcc_happy: IMPOSSIBLE_ACTION  */
-#line 18295 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18287 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             YYERROR;
           }
-#line 52037 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52029 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3653: /* sp_tail_is: %empty  */
-#line 18324 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18316 "/home/buildbot/git/sql/sql_yacc.yy"
                     { }
-#line 52043 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52035 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3656: /* opt_trailing_sp_name: %empty  */
-#line 18336 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18328 "/home/buildbot/git/sql/sql_yacc.yy"
                     { (yyval.spname)= NULL; }
-#line 52049 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52041 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3657: /* opt_package_routine_end_name: %empty  */
-#line 18340 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18332 "/home/buildbot/git/sql/sql_yacc.yy"
                           { (yyval.lex_str)= null_clex_str; }
-#line 52055 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52047 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3658: /* opt_package_routine_end_name: FORCE_LOOKAHEAD  */
-#line 18341 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18333 "/home/buildbot/git/sql/sql_yacc.yy"
                           { (yyval.lex_str)= null_clex_str; }
-#line 52061 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52053 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3662: /* package_implementation_item_declaration: DECLARE_MARIADB_SYM sp_decl_variable_list ';'  */
-#line 18357 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18349 "/home/buildbot/git/sql/sql_yacc.yy"
                                                         { (yyval.spblock)= (yyvsp[-1].spblock); }
-#line 52067 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52059 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3665: /* package_implementation_declare_section_list: package_implementation_declare_section_list1 package_implementation_declare_section_list2  */
-#line 18368 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18360 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.spblock).join((yyvsp[-1].spblock), (yyvsp[0].spblock)); }
-#line 52073 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52065 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3667: /* package_implementation_executable_section: sp_proc_stmts END  */
-#line 18377 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18369 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.spblock_handlers).init(0);
           }
-#line 52081 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52073 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3696: /* row_field_name: ident  */
-#line 18438 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18430 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.spvar_definition)= Lex->row_field_name(thd, (yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 52090 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52082 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3697: /* $@259: %empty  */
-#line 18446 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18438 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely((yyvsp[-1].expr_lex)->sp_while_loop_expression(thd)))
               MYSQL_YYABORT;
           }
-#line 52099 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52091 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3698: /* while_body: expr_lex DO_SYM $@259 sp_proc_stmts1 END WHILE_SYM  */
-#line 18451 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18443 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_while_loop_finalize(thd)))
               MYSQL_YYABORT;
           }
-#line 52108 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52100 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3699: /* for_loop_statements: DO_SYM sp_proc_stmts1 END FOR_SYM  */
-#line 18459 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18451 "/home/buildbot/git/sql/sql_yacc.yy"
           { }
-#line 52114 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52106 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3700: /* sp_label: label_ident ':'  */
-#line 18463 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18455 "/home/buildbot/git/sql/sql_yacc.yy"
                           { (yyval.lex_str)= (yyvsp[-1].ident_sys); }
-#line 52120 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52112 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3702: /* sp_block_label: sp_label  */
-#line 18472 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18464 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->spcont->block_label_declare(&(yyvsp[0].lex_str))))
               MYSQL_YYABORT;
             (yyval.lex_str)= (yyvsp[0].lex_str);
           }
-#line 52130 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52122 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3703: /* sp_opt_default: _empty  */
-#line 18480 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18472 "/home/buildbot/git/sql/sql_yacc.yy"
                        { (yyval.expr_and_query_str)= { nullptr, empty_clex_str}; }
-#line 52136 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52128 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3704: /* sp_opt_default: DEFAULT remember_cpp_ptr expr remember_end  */
-#line 18482 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18474 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX_CSTRING expr_str= empty_clex_str;
 
@@ -52149,155 +52141,155 @@ yyreduce:
 
             (yyval.expr_and_query_str)= { (yyvsp[-1].item), expr_str };
           }
-#line 52153 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52145 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3705: /* sp_decl_variable_list_anchored: sp_decl_idents_init_vars TYPE_SYM OF_SYM optionally_qualified_column_ident sp_opt_default  */
-#line 18500 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18492 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_variable_declarations_with_ref_finalize(
                            thd, (yyvsp[-4].num), (yyvsp[-1].qualified_column_ident), (yyvsp[0].expr_and_query_str).expr, (yyvsp[0].expr_and_query_str).expr_str)))
               MYSQL_YYABORT;
             (yyval.spblock).init_using_vars((yyvsp[-4].num));
           }
-#line 52164 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52156 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3706: /* sp_decl_variable_list_anchored: sp_decl_idents_init_vars ROW_SYM TYPE_SYM OF_SYM optionally_qualified_column_ident sp_opt_default  */
-#line 18509 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18501 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_variable_declarations_rowtype_finalize(
                            thd, (yyvsp[-5].num), (yyvsp[-1].qualified_column_ident), (yyvsp[0].expr_and_query_str).expr, (yyvsp[0].expr_and_query_str).expr_str)))
               MYSQL_YYABORT;
             (yyval.spblock).init_using_vars((yyvsp[-5].num));
           }
-#line 52175 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52167 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3707: /* sp_param_name_and_mode: sp_parameter_type sp_param_name  */
-#line 18519 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18511 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyvsp[0].spvar)->mode= (yyvsp[-1].spvar_mode);
             (yyval.spvar)= (yyvsp[0].spvar);
           }
-#line 52184 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52176 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3709: /* sp_param: sp_param_name_and_mode field_type  */
-#line 18528 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18520 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_param_fill_definition((yyval.spvar)= (yyvsp[-1].spvar), (yyvsp[0].Lex_field_type))))
               MYSQL_YYABORT;
           }
-#line 52193 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52185 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3710: /* sp_param: sp_param_name_and_mode ROW_SYM row_type_body  */
-#line 18533 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18525 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_row(thd, (yyval.spvar)= (yyvsp[-2].spvar), (yyvsp[0].spvar_definition_list))))
               MYSQL_YYABORT;
           }
-#line 52202 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52194 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3712: /* sp_param_anchored: sp_param_name_and_mode TYPE_SYM OF_SYM ident '.' ident  */
-#line 18542 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18534 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_type_reference(thd,
                                                                 (yyval.spvar)= (yyvsp[-5].spvar), (yyvsp[-2].ident_sys),
                                                                 (yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 52213 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52205 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3713: /* sp_param_anchored: sp_param_name_and_mode TYPE_SYM OF_SYM ident '.' ident '.' ident  */
-#line 18549 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18541 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_type_reference(thd, (yyval.spvar)= (yyvsp[-7].spvar),
                                                                 (yyvsp[-4].ident_sys), (yyvsp[-2].ident_sys), (yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 52223 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52215 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3714: /* sp_param_anchored: sp_param_name_and_mode ROW_SYM TYPE_SYM OF_SYM ident  */
-#line 18555 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18547 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_table_rowtype_reference(thd, (yyval.spvar)= (yyvsp[-4].spvar), (yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 52232 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52224 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3715: /* sp_param_anchored: sp_param_name_and_mode ROW_SYM TYPE_SYM OF_SYM ident '.' ident  */
-#line 18560 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18552 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_table_rowtype_reference(thd, (yyval.spvar)= (yyvsp[-6].spvar), (yyvsp[-2].ident_sys), (yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 52241 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52233 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3716: /* $@260: %empty  */
-#line 18569 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18561 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= thd->lex;
             lex->sphead->set_c_chistics(lex->sp_chistics);
             lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 52251 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52243 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3717: /* sf_c_chistics_and_body_standalone: sp_c_chistics $@260 sp_proc_stmt_in_returns_clause force_lookahead  */
-#line 18575 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18567 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_body_finalize_function(thd)))
               MYSQL_YYABORT;
           }
-#line 52260 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52252 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3718: /* $@261: %empty  */
-#line 18583 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18575 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(!Lex->make_sp_head_no_recursive(thd, (yyvsp[0].spname),
                                                          &sp_handler_procedure,
                                                          DEFAULT_AGGREGATE)))
               MYSQL_YYABORT;
           }
-#line 52271 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52263 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3719: /* $@262: %empty  */
-#line 18591 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18583 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sphead->set_c_chistics(Lex->sp_chistics);
             Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 52280 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52272 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3720: /* sp_tail_standalone: sp_name $@261 sp_parenthesized_pdparam_list sp_c_chistics $@262 sp_proc_stmt force_lookahead  */
-#line 18596 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18588 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_body_finalize_procedure(thd)))
               MYSQL_YYABORT;
           }
-#line 52289 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52281 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3721: /* sp_decls: _empty  */
-#line 18605 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18597 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.spblock).init();
           }
-#line 52297 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52289 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3722: /* sp_decls: sp_decls sp_decl ';'  */
-#line 18609 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18601 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             // We check for declarations out of (standard) order this way
             // because letting the grammar rules reflect it caused tricky
@@ -52306,36 +52298,36 @@ yyreduce:
             if (unlikely(Lex->sp_declarations_join(&(yyval.spblock), (yyvsp[-2].spblock), (yyvsp[-1].spblock))))
               MYSQL_YYABORT;
           }
-#line 52310 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52302 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3723: /* sp_decl: DECLARE_MARIADB_SYM sp_decl_body  */
-#line 18620 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18612 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.spblock)= (yyvsp[0].spblock); }
-#line 52316 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52308 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3725: /* sp_decl_body: sp_decl_ident CONDITION_SYM FOR_SYM sp_cond  */
-#line 18627 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18619 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->spcont->declare_condition(thd, &(yyvsp[-3].ident_sys), (yyvsp[0].spcondvalue))))
               MYSQL_YYABORT;
             (yyval.spblock).vars= (yyval.spblock).hndlrs= (yyval.spblock).curs= 0;
             (yyval.spblock).conds= 1;
           }
-#line 52327 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52319 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3727: /* $@263: %empty  */
-#line 18635 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18627 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd);
           }
-#line 52335 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52327 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3728: /* sp_decl_body: sp_decl_ident CURSOR_SYM $@263 opt_parenthesized_cursor_formal_parameters FOR_SYM sp_cursor_stmt  */
-#line 18640 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18632 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_pcontext *param_ctx= Lex->spcont;
             if (unlikely(Lex->sp_block_finalize(thd)))
@@ -52345,76 +52337,76 @@ yyreduce:
             (yyval.spblock).vars= (yyval.spblock).conds= (yyval.spblock).hndlrs= 0;
             (yyval.spblock).curs= 1;
           }
-#line 52349 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52341 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3746: /* $@264: %empty  */
-#line 18691 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18683 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd, &(yyvsp[-1].lex_str));
           }
-#line 52357 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52349 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3747: /* sp_labeled_block: sp_block_label BEGIN_MARIADB_SYM $@264 sp_decls sp_proc_stmts END sp_opt_label  */
-#line 18698 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18690 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-3].spblock), &(yyvsp[0].lex_str))))
               MYSQL_YYABORT;
           }
-#line 52366 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52358 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3748: /* $@265: %empty  */
-#line 18706 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18698 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd);
           }
-#line 52374 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52366 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3749: /* sp_unlabeled_block: BEGIN_MARIADB_SYM $@265 sp_decls sp_proc_stmts END  */
-#line 18712 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18704 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-2].spblock))))
               MYSQL_YYABORT;
           }
-#line 52383 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52375 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3750: /* $@266: %empty  */
-#line 18720 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18712 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->maybe_start_compound_statement(thd)))
               MYSQL_YYABORT;
             Lex->sp_block_init(thd);
           }
-#line 52393 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52385 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3751: /* sp_unlabeled_block_not_atomic: BEGIN_MARIADB_SYM not ATOMIC_SYM $@266 sp_decls sp_proc_stmts END  */
-#line 18728 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18720 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-2].spblock))))
               MYSQL_YYABORT;
           }
-#line 52402 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52394 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3753: /* package_implementation_declare_section_list1: package_implementation_declare_section_list1 package_implementation_item_declaration  */
-#line 19181 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19173 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.spblock).join((yyvsp[-1].spblock), (yyvsp[0].spblock)); }
-#line 52408 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52400 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3755: /* package_implementation_declare_section_list2: package_implementation_declare_section_list2 package_implementation_routine_definition  */
-#line 19188 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19180 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.spblock).join((yyvsp[-1].spblock), (yyvsp[0].spblock)); }
-#line 52414 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52406 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3756: /* $@267: %empty  */
-#line 19194 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19186 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= thd->lex->package_routine_start(thd,
                                    &sp_handler_package_function, (yyvsp[0].ident_sys));
@@ -52422,22 +52414,22 @@ yyreduce:
               MYSQL_YYABORT;
             thd->lex= lex;
           }
-#line 52426 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52418 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3757: /* package_specification_function: remember_lex ident $@267 sf_parameters sf_returned_type_clause sp_c_chistics  */
-#line 19204 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19196 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.lex)= thd->lex;
             sp_head *sp= thd->lex->sphead;
             sp->restore_thd_mem_root(thd);
             thd->lex= (yyvsp[-5].lex);
           }
-#line 52437 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52429 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3758: /* $@268: %empty  */
-#line 19214 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19206 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= thd->lex->package_routine_start(thd,
                                    &sp_handler_package_procedure, (yyvsp[0].ident_sys));
@@ -52445,22 +52437,22 @@ yyreduce:
               MYSQL_YYABORT;
             thd->lex= lex;
           }
-#line 52449 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52441 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3759: /* package_specification_procedure: remember_lex ident $@268 sp_parameters sp_c_chistics  */
-#line 19223 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19215 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.lex)= thd->lex;
             sp_head *sp= thd->lex->sphead;
             sp->restore_thd_mem_root(thd);
             thd->lex= (yyvsp[-4].lex);
           }
-#line 52460 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52452 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3760: /* package_implementation_routine_definition: FUNCTION_SYM package_specification_function package_implementation_function_body ';'  */
-#line 19235 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19227 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_implementation((yyvsp[-2].lex))))
@@ -52468,11 +52460,11 @@ yyreduce:
             pkg->m_current_routine= NULL;
             (yyval.spblock).init();
           }
-#line 52472 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52464 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3761: /* package_implementation_routine_definition: PROCEDURE_SYM package_specification_procedure package_implementation_procedure_body ';'  */
-#line 19244 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19236 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_implementation((yyvsp[-2].lex))))
@@ -52480,17 +52472,17 @@ yyreduce:
             pkg->m_current_routine= NULL;
             (yyval.spblock).init();
           }
-#line 52484 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52476 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3762: /* package_implementation_routine_definition: package_specification_element  */
-#line 19251 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19243 "/home/buildbot/git/sql/sql_yacc.yy"
                                         { (yyval.spblock).init(); }
-#line 52490 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52482 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3763: /* $@269: %empty  */
-#line 19257 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19249 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             sp_head *sp= pkg->m_current_routine->sphead;
@@ -52499,22 +52491,22 @@ yyreduce:
             sp->set_c_chistics(thd->lex->sp_chistics);
             sp->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 52503 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52495 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3764: /* package_implementation_function_body: sp_tail_is remember_lex $@269 sp_package_function_body opt_package_routine_end_name  */
-#line 19266 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19258 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(thd->lex->sp_body_finalize_function(thd) ||
                          thd->lex->sphead->check_package_routine_end_name((yyvsp[0].lex_str))))
               MYSQL_YYABORT;
             thd->lex= (yyvsp[-3].lex);
           }
-#line 52514 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52506 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3765: /* $@270: %empty  */
-#line 19276 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19268 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             sp_head *sp= pkg->m_current_routine->sphead;
@@ -52523,107 +52515,107 @@ yyreduce:
             sp->set_c_chistics(thd->lex->sp_chistics);
             sp->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 52527 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52519 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3766: /* package_implementation_procedure_body: sp_tail_is remember_lex $@270 sp_package_procedure_body opt_package_routine_end_name  */
-#line 19285 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19277 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(thd->lex->sp_body_finalize_procedure(thd) ||
                          thd->lex->sphead->check_package_routine_end_name((yyvsp[0].lex_str))))
               MYSQL_YYABORT;
             thd->lex= (yyvsp[-3].lex);
           }
-#line 52538 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52530 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3771: /* package_specification_element: FUNCTION_SYM package_specification_function ';'  */
-#line 19306 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19298 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_declaration((yyvsp[-1].lex))))
               MYSQL_YYABORT;
             pkg->m_current_routine= NULL;
           }
-#line 52549 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52541 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3772: /* package_specification_element: PROCEDURE_SYM package_specification_procedure ';'  */
-#line 19313 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19305 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_declaration((yyvsp[-1].lex))))
               MYSQL_YYABORT;
             pkg->m_current_routine= NULL;
           }
-#line 52560 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52552 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3773: /* $@271: %empty  */
-#line 19433 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19425 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_procedure_start((yyvsp[-3].object_ddl_options) | (yyvsp[0].object_ddl_options)))
               MYSQL_YYABORT;
           }
-#line 52569 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52561 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3774: /* create_routine: create_or_replace definer_opt PROCEDURE_SYM opt_if_not_exists $@271 sp_tail_standalone  */
-#line 19438 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19430 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->stmt_create_routine_finalize();
           }
-#line 52577 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52569 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3775: /* $@272: %empty  */
-#line 19443 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19435 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_start((yyvsp[-5].object_ddl_options) | (yyvsp[-1].object_ddl_options), (yyvsp[-3].sp_aggregate_type), (yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 52586 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52578 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3776: /* create_routine: create_or_replace definer opt_aggregate FUNCTION_SYM opt_if_not_exists sp_name $@272 sf_parameters sf_returned_type_clause sf_c_chistics_and_body_standalone opt_trailing_sp_name  */
-#line 19451 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19443 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_finalize_standalone((yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 52595 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52587 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3777: /* $@273: %empty  */
-#line 19457 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19449 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_start((yyvsp[-5].object_ddl_options) | (yyvsp[-1].object_ddl_options), (yyvsp[-3].sp_aggregate_type), (yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 52604 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52596 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3778: /* create_routine: create_or_replace no_definer opt_aggregate FUNCTION_SYM opt_if_not_exists sp_name $@273 sf_parameters sf_returned_type_clause sf_c_chistics_and_body_standalone opt_trailing_sp_name  */
-#line 19465 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19457 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_finalize_standalone((yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 52613 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52605 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3779: /* create_routine: create_or_replace no_definer opt_aggregate FUNCTION_SYM opt_if_not_exists ident RETURNS_SYM udf_type SONAME_SYM TEXT_STRING_sys  */
-#line 19471 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19463 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_udf_function((yyvsp[-9].object_ddl_options) | (yyvsp[-5].object_ddl_options), (yyvsp[-7].sp_aggregate_type), (yyvsp[-4].ident_sys),
                                               (Item_result) (yyvsp[-2].num), (yyvsp[0].lex_str)))
               MYSQL_YYABORT;
           }
-#line 52623 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52615 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3780: /* $@274: %empty  */
-#line 19478 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19470 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg;
             if (unlikely(!(pkg= Lex->
@@ -52633,20 +52625,20 @@ yyreduce:
               MYSQL_YYABORT;
             Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 52637 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52629 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3781: /* create_routine: create_or_replace definer_opt sp_handler_package_spec opt_if_not_exists sp_name opt_create_package_chistics_init $@274 sp_tail_is opt_package_specification_element_list END remember_end_opt opt_trailing_sp_name  */
-#line 19490 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19482 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->create_package_finalize(thd, (yyvsp[-7].spname), (yyvsp[0].spname), (yyvsp[-1].simple_string))))
               MYSQL_YYABORT;
           }
-#line 52646 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52638 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3782: /* $@275: %empty  */
-#line 19496 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19488 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg;
             if (unlikely(!(pkg= Lex->
@@ -52657,30 +52649,30 @@ yyreduce:
             Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
             Lex->sp_block_init(thd);
           }
-#line 52661 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52653 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3783: /* $@276: %empty  */
-#line 19509 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19501 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyvsp[-1].spblock).hndlrs+= (yyvsp[0].spblock_handlers).hndlrs;
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-1].spblock))))
               MYSQL_YYABORT;
           }
-#line 52671 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52663 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
   case 3784: /* create_routine: create_or_replace definer_opt sp_handler_package_body opt_if_not_exists sp_name opt_create_package_chistics_init $@275 sp_tail_is package_implementation_declare_section package_implementation_executable_section $@276 remember_end_opt opt_trailing_sp_name  */
-#line 19515 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19507 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->create_package_finalize(thd, (yyvsp[-8].spname), (yyvsp[0].spname), (yyvsp[-1].simple_string))))
               MYSQL_YYABORT;
           }
-#line 52680 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52672 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;
 
 
-#line 52684 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
+#line 52676 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
 
       default: break;
     }

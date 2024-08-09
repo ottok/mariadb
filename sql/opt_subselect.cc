@@ -684,8 +684,8 @@ int check_and_do_in_subquery_rewrites(JOIN *join)
     {
       SELECT_LEX *current= thd->lex->current_select;
       thd->lex->current_select= current->return_after_parsing();
-      char const *save_where= thd->where;
-      thd->where= "IN/ALL/ANY subquery";
+      THD_WHERE save_where= thd->where;
+      thd->where= THD_WHERE::IN_ALL_ANY_SUBQUERY;
 
       Item **left= in_subs->left_exp_ptr();
       bool failure= (*left)->fix_fields_if_needed(thd, left);
@@ -6039,7 +6039,7 @@ public:
   select_value_catcher(THD *thd_arg, Item_subselect *item_arg):
     select_subselect(thd_arg, item_arg)
   {}
-  int send_data(List<Item> &items);
+  int send_data(List<Item> &items) override;
   int setup(List<Item> *items);
   bool assigned;  /* TRUE <=> we've caught a value */
   uint n_elements; /* How many elements we get */

@@ -320,7 +320,7 @@ SPIDER_DBTON spider_dbton_mysql = {
   spider_mysql_create_conn,
   spider_mysql_support_direct_join,
   &spider_db_mysql_utility,
-  "For communicating to MySQL using native protocol",
+  "For communication with MySQL using the native protocol",
   "3.4.0",
   SPIDER_MATURITY_STABLE
 };
@@ -337,7 +337,7 @@ SPIDER_DBTON spider_dbton_mariadb = {
   spider_mariadb_create_conn,
   spider_mariadb_support_direct_join,
   &spider_db_mariadb_utility,
-  "For communicating to MariaDB using native protocol",
+  "For communication with MariaDB using the native protocol",
   "3.4.0",
   SPIDER_MATURITY_STABLE
 };
@@ -5230,7 +5230,23 @@ int spider_db_mbase_util::append_time_zone(
   to the value of `"$spider_unique_id$spider_table_path-"`, where
   $target_table_path is the path to the data node table ("to"), and
   $spider_table_path the path to the spider table ("from")
-*/
+
+
+  iterate over loop_check_queue and build queries for loop check
+
+  The query is in the form of
+
+  set @`spider_lc_.<to_table>` =
+  '-<mac1>-<pid1>-<from_table1>--<mac2>-<pid2>-<from_table2>-...'
+
+  where from_table1, from_table2 etc. are spider tables whose direct
+  or indirect remote data nodes contain to_table.
+
+  e.g. if t0->t1->t2, then the query could be:
+
+  set @`spider_lc_./test/t2` =
+  '-234567890abc-def012-./test/t1--1234567890ab-cdef01-./test/t0-'
+  */
 int spider_db_mbase_util::append_loop_check(
   spider_string *str,
   SPIDER_CONN *conn

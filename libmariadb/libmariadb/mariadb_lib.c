@@ -821,7 +821,10 @@ my_bool _mariadb_set_conf_option(MYSQL *mysql, const char *config_option, const 
           option_val= &val_sizet;
           break;
         case MARIADB_OPTION_STR:
-          option_val= (void*)config_value;
+          if (config_value && !config_value[0])
+            option_val= NULL;
+          else
+            option_val= (void*)config_value;
           break;
         case MARIADB_OPTION_NONE:
           break;
@@ -917,7 +920,7 @@ static int parse_connection_string(MYSQL *mysql, const char *unused __attribute_
         if (!key)
           goto error;
         *pos++= 0;
-        if (pos < end)
+        if (pos <= end)
           val= pos;
         continue;
         break;
@@ -1292,7 +1295,7 @@ mysql_init(MYSQL *mysql)
   }
   else
   {
-    memset((char*) (mysql), 0, sizeof(*(mysql)));
+    memset(mysql, 0, sizeof(MYSQL));
     mysql->net.pvio= 0;
     mysql->free_me= 0;
     mysql->net.extension= 0;
@@ -1459,7 +1462,7 @@ mysql_real_connect(MYSQL *mysql, const char *host, const char *user,
   if (!mysql->options.extension || !mysql->options.extension->status_callback)
     mysql_optionsv(mysql, MARIADB_OPT_STATUS_CALLBACK, NULL, NULL);
 
-  reset_tls_self_signed_error(mysql);
+  reset_tls_error(mysql);
 
   /* if host contains a semicolon, we need to parse connection string */
   if (host && strchr(host, ';'))
@@ -2465,7 +2468,7 @@ mysql_close(MYSQL *mysql)
     mysql_close_memory(mysql);
     mysql_close_options(mysql);
     ma_clear_session_state(mysql);
-    reset_tls_self_signed_error(mysql);
+    reset_tls_error(mysql);
 
     if (mysql->net.extension)
     {
@@ -4537,7 +4540,19 @@ my_bool mariadb_get_infov(MYSQL *mysql, enum mariadb_value value, void *arg, ...
   switch(value) {
 #ifdef HAVE_TLS
   case MARIADB_TLS_PEER_CERT_INFO:
-    *((MARIADB_X509_INFO **)arg)= mysql->net.pvio->ctls ? (MARIADB_X509_INFO *)&mysql->net.pvio->ctls->cert_info : NULL;
+    if (mysql->net.pvio->ctls)
+    {
+      unsigned int size;
+
+      size= va_arg(ap, unsigned int);
+      if (!ma_pvio_tls_get_peer_cert_info(mysql->net.pvio->ctls, size))
+        *((MARIADB_X509_INFO **)arg)= (MARIADB_X509_INFO *)&mysql->net.pvio->ctls->cert_info;
+      return 0;
+    }
+    *((MARIADB_X509_INFO **)arg)= NULL;
+    break;
+  case MARIADB_TLS_VERIFY_STATUS:
+    *((unsigned int *)arg)= (unsigned int)mysql->net.tls_verify_status;
     break;
 #endif
   case MARIADB_MAX_ALLOWED_PACKET:

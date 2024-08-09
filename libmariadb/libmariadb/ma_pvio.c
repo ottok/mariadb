@@ -522,54 +522,6 @@ my_bool ma_pvio_has_data(MARIADB_PVIO *pvio, ssize_t *data_len)
 /* }}} */
 
 #ifdef HAVE_TLS
-/**
-  Checks if self-signed certificate error should be ignored.
-*/
-static my_bool ignore_self_signed_cert_error(MARIADB_PVIO *pvio)
-{
-  const char *hostname= pvio->mysql->host;
-  const char *local_host_names[]= {
-#ifdef _WIN32
-  /*
-   On Unix, we consider TCP connections with "localhost"
-   an insecure transport, for the single reason to run tests for
-   insecure transport on CI.This is artificial, but should be ok.
-   Default client connections use unix sockets anyway, so it
-   would not hurt much.
-
-   On Windows, the situation is quite different.
-   Default connections type is TCP, default host name is "localhost",
-   non-password plugin gssapi is common (every installation)
-   In this environment, there would be a lot of faux/disruptive
-   "self-signed certificates" errors there. Thus, "localhost" TCP
-   needs to be considered secure transport.
-  */
-  "localhost",
-#endif
-  "127.0.0.1", "::1", NULL};
-  int i;
-  if (pvio->type != PVIO_TYPE_SOCKET)
-  {
-    pvio->ctls->cert_info.verify_mode=
-#ifdef WIN32
-      MARIADB_VERIFY_PIPE;
-#else
-      MARIADB_VERIFY_UNIXSOCKET;
-#endif
-    return TRUE;
-  }
-  if (!hostname)
-    return FALSE;
-  for (i= 0; local_host_names[i]; i++)
-  {
-    if (strcmp(hostname, local_host_names[i]) == 0)
-    {
-      pvio->ctls->cert_info.verify_mode= MARIADB_VERIFY_LOCALHOST;
-      return TRUE;
-    }
-  }
-  return FALSE;
-}
 
 /* {{{ my_bool ma_pvio_start_ssl */
 my_bool ma_pvio_start_ssl(MARIADB_PVIO *pvio)
@@ -587,34 +539,6 @@ my_bool ma_pvio_start_ssl(MARIADB_PVIO *pvio)
     pvio->ctls= NULL;
     return 1;
   }
-
-  /* default behaviour:
-     1. peer certificate verification
-     2. verify CN (requires option ssl_verify_check)
-     3. verrify finger print
-  */
-  if (!pvio->mysql->options.extension->tls_allow_invalid_server_cert &&
-         !pvio->mysql->net.tls_self_signed_error &&
-         ma_pvio_tls_verify_server_cert(pvio->ctls))
-    return 1;
-  else
-    pvio->ctls->cert_info.verify_mode= MARIADB_VERIFY_PEER_CERT;
-
-  if (pvio->mysql->options.extension &&
-      ((pvio->mysql->options.extension->tls_fp && pvio->mysql->options.extension->tls_fp[0]) ||
-      (pvio->mysql->options.extension->tls_fp_list && pvio->mysql->options.extension->tls_fp_list[0])))
-  {
-    if (ma_pvio_tls_check_fp(pvio->ctls, 
-        pvio->mysql->options.extension->tls_fp,
-        pvio->mysql->options.extension->tls_fp_list))
-      return 1;
-    pvio->ctls->cert_info.verify_mode= MARIADB_VERIFY_FINGERPRINT;
-    reset_tls_self_signed_error(pvio->mysql); // validated
-  }
-
-  if (pvio->mysql->net.tls_self_signed_error && ignore_self_signed_cert_error(pvio))
-    reset_tls_self_signed_error(pvio->mysql);
-
   return 0;
 }
 /* }}} */
