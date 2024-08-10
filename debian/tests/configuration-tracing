@@ -78,6 +78,9 @@ trace() {
     # ppc64el has larger default value: 393216
     normalize_value log-tc-size 24576
 
+    # feedback plugin submitter identified
+    normalize_value server-uid 1234567890abcdefghijklmnopq=
+
     mv "$TEMPFILE" "$TRACE_NAME.actual"
   fi
 

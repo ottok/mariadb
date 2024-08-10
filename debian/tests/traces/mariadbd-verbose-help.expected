@@ -571,6 +571,9 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-adaptive-hash-index-parts[=#] 
                       Number of InnoDB Adaptive Hash Index Partitions (default
                       8)
+  --innodb-alter-copy-bulk 
+                      Allow bulk insert operation for copy alter operation
+                      (Defaults to on; use --skip-innodb-alter-copy-bulk to disable.)
   --innodb-autoextend-increment=# 
                       Data file autoextend increment in megabytes
   --innodb-autoinc-lock-mode=# 
@@ -875,6 +878,9 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-log-spin-wait-delay[=#] 
                       Delay between log buffer spin lock polls (0 to use a
                       blocking latch)
+  --innodb-log-write-ahead-size=# 
+                      Redo log write size to avoid read-on-write; must be a
+                      power of two
   --innodb-lru-flush-size=# 
                       How many pages to flush on LRU eviction
   --innodb-lru-scan-depth=# 
@@ -1973,6 +1979,7 @@ The following specify which files/extra groups are read (specified before remain
                       Minimum number of connected slaves required for automatic
                       binary log purge with max_binlog_total_size,
                       binlog_expire_logs_seconds or binlog_expire_logs_days.
+                      Default is 0 when Galera is enabled and 1 otherwise.
   --slave-ddl-exec-mode=name 
                       How replication events should be executed. Legal values
                       are STRICT and IDEMPOTENT (default). In IDEMPOTENT mode,
@@ -2400,13 +2407,13 @@ The following specify which files/extra groups are read (specified before remain
                       nodes in a cluster can have the same name.
   --wsrep-notify-cmd=name 
   --wsrep-on          To enable wsrep replication 
-  --wsrep-provider=name 
-                      Path to replication provider library
   --wsrep-provider[=name] 
                       Enable or disable wsrep_provider plugin. One of: ON, OFF,
                       FORCE (don't start if the plugin fails to load),
                       FORCE_PLUS_PERMANENT (like FORCE, but the plugin can not
                       be uninstalled).
+  --wsrep-provider=name 
+                      Path to replication provider library
   --wsrep-provider-options=name 
                       Semicolon (;) separated list of wsrep options (see
                       wsrep_provider_options documentation).
@@ -2607,6 +2614,7 @@ innodb-adaptive-flushing                                     TRUE
 innodb-adaptive-flushing-lwm                                 10
 innodb-adaptive-hash-index                                   FALSE
 innodb-adaptive-hash-index-parts                             8
+innodb-alter-copy-bulk                                       TRUE
 innodb-autoextend-increment                                  64
 innodb-autoinc-lock-mode                                     1
 innodb-buf-dump-status-frequency                             0
@@ -2694,6 +2702,7 @@ innodb-log-file-size                                         100663296
 innodb-log-file-write-through                                FALSE
 innodb-log-group-home-dir                                    (No default value)
 innodb-log-spin-wait-delay                                   0
+innodb-log-write-ahead-size                                  512
 innodb-lru-flush-size                                        32
 innodb-lru-scan-depth                                        1536
 innodb-max-dirty-pages-pct                                   90
@@ -3004,6 +3013,7 @@ secure-file-priv                                             (No default value)
 secure-timestamp                                             NO
 sequence                                                     ON
 server-id                                                    1
+server-uid                                                   1234567890abcdefghijklmnopq=
 session-track-schema                                         TRUE
 session-track-state-change                                   FALSE
 session-track-system-variables                               autocommit,character_set_client,character_set_connection,character_set_results,redirect_url,time_zone
