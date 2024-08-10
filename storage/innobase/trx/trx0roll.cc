@@ -151,7 +151,7 @@ inline void trx_t::rollback_low(trx_savept_t *savept)
         mod_tables.erase(j);
       }
       else if (!apply_online_log)
-        apply_online_log= j->first->is_active_ddl();
+        apply_online_log= j->first->is_native_online_ddl();
     }
     MONITOR_INC(MONITOR_TRX_ROLLBACK_SAVEPOINT);
   }
@@ -221,7 +221,7 @@ dberr_t trx_rollback_for_mysql(trx_t* trx)
 		even if trx->state is TRX_STATE_NOT_STARTED. */
 		ut_ad(!(trx->lock.was_chosen_as_deadlock_victim & 1));
 #ifdef WITH_WSREP
-		trx->wsrep= false;
+		ut_ad(!trx->is_wsrep());
 		trx->lock.was_chosen_as_deadlock_victim= false;
 #endif
 		return(DB_SUCCESS);

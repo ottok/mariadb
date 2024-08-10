@@ -359,6 +359,8 @@ LEX_STRING opt_init_connect, opt_init_slave;
 static DYNAMIC_ARRAY all_options;
 static longlong start_memory_used;
 
+char server_uid[SERVER_UID_SIZE+1];   // server uid will be written here
+
 /* Global variables */
 
 bool opt_bin_log, opt_bin_log_used=0, opt_ignore_builtin_innodb= 0;
@@ -519,6 +521,7 @@ uint default_password_lifetime;
 my_bool disconnect_on_expired_password;
 
 bool max_user_connections_checking=0;
+
 /**
   Limit of the total number of prepared statements in the server.
   Is necessary to protect the server against out-of-memory attacks.
@@ -776,6 +779,12 @@ char *opt_relay_logname = 0, *opt_relaylog_index_name=0;
 char *opt_logname, *opt_slow_logname, *opt_bin_logname;
 char *opt_binlog_index_name=0;
 my_bool opt_binlog_legacy_event_pos= FALSE;
+
+/*
+  Flag if the METADATA_LOCK_INFO is used. In this case we store the time
+  when we take a MDL lock.
+*/
+bool metadata_lock_info_plugin_loaded= 0;
 
 /* Static variables */
 
@@ -1190,6 +1199,8 @@ PSI_file_key key_file_map;
 #ifdef HAVE_PSI_STATEMENT_INTERFACE
 PSI_statement_info stmt_info_new_packet;
 #endif
+
+static int calculate_server_uid(char *dest);
 
 #ifndef EMBEDDED_LIBRARY
 void net_before_header_psi(struct st_net *net, void *thd, size_t /* unused: count */)
@@ -2092,10 +2103,11 @@ static void wait_for_signal_thread_to_end()
   if (err && err != ESRCH)
   {
     sql_print_error("Failed to send kill signal to signal handler thread, "
-                    "pthread_kill() errno: %d", err);
+                    "pthread_kill() errno: %d",
+                    err);
   }
 
-  if (i == n_waits && signal_thread_in_use && !opt_bootstrap)
+  if (i == n_waits && signal_thread_in_use)
   {
     sql_print_warning("Signal handler thread did not exit in a timely manner. "
                       "Continuing to wait for it to stop..");
@@ -2322,6 +2334,7 @@ static void activate_tcp_port(uint port,
   else
     real_bind_addr_str= my_bind_addr_str;
 
+  DBUG_EXECUTE_IF("sabotage_port_number", port= UINT_MAX32;);
   my_snprintf(port_buf, NI_MAXSERV, "%d", port);
 
   if (real_bind_addr_str && *real_bind_addr_str)
@@ -2365,6 +2378,13 @@ static void activate_tcp_port(uint port,
   else
   {
     error= getaddrinfo(real_bind_addr_str, port_buf, &hints, &ai);
+    if (unlikely(error != 0))
+    {
+      sql_print_error("%s: %s", ER_DEFAULT(ER_IPSOCK_ERROR),
+                      gai_strerror(error));
+      unireg_abort(1); /* purecov: tested */
+    }
+
     head= ai;
   }
 
@@ -3137,8 +3157,10 @@ void init_signals(void)
   (void) sigemptyset(&set);
   my_sigset(SIGPIPE,SIG_IGN);
   sigaddset(&set,SIGPIPE);
+#ifndef IGNORE_SIGHUP_SIGQUIT
   sigaddset(&set,SIGQUIT);
   sigaddset(&set,SIGHUP);
+#endif
   sigaddset(&set,SIGTERM);
 
   /* Fix signals if blocked by parents (can happen on Mac OS X) */
@@ -3195,6 +3217,15 @@ static void start_signal_handler(void)
   DBUG_VOID_RETURN;
 }
 
+/** Called only from signal_hand function. */
+static void* exit_signal_handler()
+{
+  my_thread_end();
+  signal_thread_in_use= 0;
+  pthread_exit(0);  // Safety
+  return nullptr;  // Avoid compiler warnings
+}
+
 
 /** This threads handles all signals and alarms. */
 /* ARGSUSED */
@@ -3213,16 +3244,16 @@ pthread_handler_t signal_hand(void *)
     (void) pthread_sigmask(SIG_UNBLOCK,&set,NULL);
   }
   (void) sigemptyset(&set);			// Setup up SIGINT for debug
+#ifndef IGNORE_SIGHUP_SIGQUIT
   (void) sigaddset(&set,SIGQUIT);
+  (void) sigaddset(&set,SIGHUP);
+#endif
   (void) sigaddset(&set,SIGTERM);
   (void) sigaddset(&set,SIGTSTP);
 
   /* Save pid to this process (or thread on Linux) */
   if (!opt_bootstrap)
-  {
-    (void) sigaddset(&set,SIGHUP);
     create_pid_file();
-  }
 
   /*
     signal to start_signal_handler that we are ready
@@ -3298,7 +3329,7 @@ pthread_handler_t signal_hand(void *)
   my_thread_end();
   signal_thread_in_use= 0;
   pthread_exit(0); // Safety
-  return(0);					/* purecov: deadcode */
+  return exit_signal_handler();
 }
 
 static void check_data_home(const char *path)
@@ -4012,6 +4043,9 @@ static int init_common_variables()
   if (IS_SYSVAR_AUTOSIZE(&server_version_ptr))
     set_server_version(server_version, sizeof(server_version));
 
+  if (calculate_server_uid(server_uid))
+    strmov(server_uid, "unknown");
+
   mysql_real_data_home_len= uint(strlen(mysql_real_data_home));
 
   sf_leaking_memory= 0; // no memory leaks from now on
@@ -4245,8 +4279,10 @@ static int init_common_variables()
   if (is_supported_parser_charset(default_charset_info))
   {
     global_system_variables.collation_connection= default_charset_info;
-    global_system_variables.character_set_results= default_charset_info;
-    global_system_variables.character_set_client= default_charset_info;
+    global_system_variables.character_set_results=
+    global_system_variables.character_set_client=
+      Lex_exact_charset_opt_extended_collate(default_charset_info, true).
+        find_compiled_default_collation();
   }
   else
   {
@@ -4936,8 +4972,10 @@ static int init_server_components()
     first in error log, for troubleshooting and debugging purposes
   */
   if (!opt_help)
-    sql_print_information("Starting MariaDB %s source revision %s as process %lu",
-                          server_version, SOURCE_REVISION, (ulong) getpid());
+    sql_print_information("Starting MariaDB %s source revision %s "
+                          "server_uid %s as process %lu",
+                          server_version, SOURCE_REVISION, server_uid,
+                          (ulong) getpid());
 
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
   /*
@@ -5306,7 +5344,6 @@ static int init_server_components()
       MARIADB_REMOVED_OPTION("innodb-log-compressed-pages"),
       MARIADB_REMOVED_OPTION("innodb-log-files-in-group"),
       MARIADB_REMOVED_OPTION("innodb-log-optimize-ddl"),
-      MARIADB_REMOVED_OPTION("innodb-log-write-ahead-size"),
       MARIADB_REMOVED_OPTION("innodb-page-cleaners"),
       MARIADB_REMOVED_OPTION("innodb-replication-delay"),
       MARIADB_REMOVED_OPTION("innodb-scrub-log"),
@@ -5836,7 +5873,28 @@ int mysqld_main(int argc, char **argv)
 #ifdef WITH_WSREP
   wsrep_set_wsrep_on(nullptr);
   if (WSREP_ON && wsrep_check_opts()) unireg_abort(1);
-#endif
+
+  if (!opt_bootstrap && WSREP_PROVIDER_EXISTS && WSREP_ON)
+  {
+    if (global_system_variables.binlog_format != BINLOG_FORMAT_ROW)
+    {
+      sql_print_information("Binlog_format changed to \"ROW\" because of "
+                            "Galera");
+      SYSVAR_AUTOSIZE(global_system_variables.binlog_format, BINLOG_FORMAT_ROW);
+    }
+    binlog_format_used= 1;
+    if (IS_SYSVAR_AUTOSIZE(&internal_slave_connections_needed_for_purge))
+    {
+      slave_connections_needed_for_purge=
+        internal_slave_connections_needed_for_purge= 0;
+      SYSVAR_AUTOSIZE(internal_slave_connections_needed_for_purge, 0);
+      sql_print_information(
+      "slave_connections_needed_for_purge changed to 0 because "
+      "of Galera. Change it to 1 or higher if this Galera node "
+      "is also Master in a normal replication setup");
+    }
+  }
+#endif /* WITH_WSREP */
 
 #ifdef _WIN32
   /* 
@@ -6679,7 +6737,7 @@ struct my_option my_long_options[]=
 #ifdef HAVE_REPLICATION
   {"init-rpl-role", 0, "Set the replication role",
    &rpl_status, &rpl_status, &rpl_role_typelib,
-   GET_ENUM, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+   GET_ENUM, REQUIRED_ARG, RPL_AUTH_MASTER, 0, 0, 0, 0, 0},
 #endif /* HAVE_REPLICATION */
   {"memlock", 0, "Lock mysqld in memory.", &locked_in_memory,
    &locked_in_memory, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
@@ -8208,7 +8266,6 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
       ((enum_slave_parallel_mode)opt_slave_parallel_mode);
     break;
   }
-
   case (int)OPT_BINLOG_IGNORE_DB:
   {
     binlog_filter->add_ignore_db(argument);
@@ -8331,6 +8388,14 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
     */
     if (argument == NULL) /* no argument */
       log_error_file_ptr= const_cast<char*>("");
+    break;
+  case OPT_LOG_SLOW_FILTER:
+    if (argument == NULL || *argument == 0)
+    {
+      /* By default log_slow_filter_has all values except QPLAN_NOT_USING_INDEX */
+      global_system_variables.log_slow_filter= opt->def_value | QPLAN_NOT_USING_INDEX;
+      sql_print_warning("log_slow_filter=\"\" changed to log_slow_filter=ALL");
+    }
     break;
   case OPT_IGNORE_DB_DIRECTORY:
     opt_ignore_db_dirs= NULL; // will be set in ignore_db_dirs_process_additions
@@ -8703,18 +8768,14 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
     opt_bin_log= opt_bin_log_used= 1;
 
     /* Force format to row */
+    if (global_system_variables.binlog_format != BINLOG_FORMAT_ROW)
+    {
+      sql_print_information("Binlog_format changed to \"ROW\" because of "
+                            "flashback");
+      SYSVAR_AUTOSIZE(global_system_variables.binlog_format,
+                      BINLOG_FORMAT_ROW);
+    }
     binlog_format_used= 1;
-    global_system_variables.binlog_format= BINLOG_FORMAT_ROW;
-  }
-
-  if (!opt_bootstrap && WSREP_PROVIDER_EXISTS && WSREP_ON &&
-      global_system_variables.binlog_format != BINLOG_FORMAT_ROW)
-  {
-
-    WSREP_ERROR ("Only binlog_format = 'ROW' is currently supported. "
-                 "Configured value: '%s'. Please adjust your configuration.",
-                 binlog_format_names[global_system_variables.binlog_format]);
-    return 1;
   }
 
   // Synchronize @@global.autocommit on --autocommit
@@ -9266,6 +9327,7 @@ PSI_stage_info stage_deleting_from_reference_tables= { 0, "Deleting from referen
 PSI_stage_info stage_discard_or_import_tablespace= { 0, "Discard_or_import_tablespace", 0};
 PSI_stage_info stage_enabling_keys= { 0, "Enabling keys", 0};
 PSI_stage_info stage_end= { 0, "End of update loop", 0};
+PSI_stage_info stage_ending_io_thread= { 0, "Ending IO thread", 0};
 PSI_stage_info stage_executing= { 0, "Executing", 0};
 PSI_stage_info stage_execution_of_init_command= { 0, "Execution of init_command", 0};
 PSI_stage_info stage_explaining= { 0, "Explaining", 0};
@@ -9947,4 +10009,32 @@ my_thread_id next_thread_id(void)
 
   mysql_mutex_unlock(&LOCK_thread_id);
   return retval;
+}
+
+
+/**
+  calculates the server unique identifier
+
+  UID is a base64 encoded SHA1 hash of the MAC address of one of
+  the interfaces, and the tcp port that the server is listening on
+*/
+
+static int calculate_server_uid(char *dest)
+{
+  uchar rawbuf[2 + 6];
+  uchar shabuf[MY_SHA1_HASH_SIZE];
+
+  int2store(rawbuf, mysqld_port);
+  if (my_gethwaddr(rawbuf + 2))
+  {
+    sql_print_error("feedback plugin: failed to retrieve the MAC address");
+    return 1;
+  }
+
+  my_sha1((uint8*) shabuf, (char*) rawbuf, sizeof(rawbuf));
+
+  assert(my_base64_needed_encoded_length(sizeof(shabuf)) <= SERVER_UID_SIZE);
+  my_base64_encode(shabuf, sizeof(shabuf), dest);
+
+  return 0;
 }

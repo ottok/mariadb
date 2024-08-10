@@ -22,6 +22,7 @@
 #include "datadict.h"
 #include "sql_string.h"                         /* String */
 #include "lex_string.h"
+#include "lex_ident.h"
 
 #ifndef MYSQL_CLIENT
 
@@ -176,9 +177,9 @@ protected:
                               CHARSET_INFO *connection_cl);
 
 protected:
-  virtual Object_creation_ctx *create_backup_ctx(THD *thd) const;
+  Object_creation_ctx *create_backup_ctx(THD *thd) const override;
 
-  virtual void change_env(THD *thd) const;
+  void change_env(THD *thd) const override;
 
 protected:
   /**
@@ -536,8 +537,8 @@ enum enum_table_category
 
 typedef enum enum_table_category TABLE_CATEGORY;
 
-TABLE_CATEGORY get_table_category(const LEX_CSTRING *db,
-                                  const LEX_CSTRING *name);
+TABLE_CATEGORY get_table_category(const Lex_ident_db &db,
+                                  const Lex_ident_table &name);
 
 
 typedef struct st_table_field_type
@@ -578,7 +579,7 @@ public:
 class Table_check_intact_log_error : public Table_check_intact
 {
 protected:
-  void report_error(uint, const char *fmt, ...);
+  void report_error(uint, const char *fmt, ...) override;
 public:
   Table_check_intact_log_error() : Table_check_intact(true) {}
 };
@@ -604,9 +605,9 @@ public:
 
   MDL_context *get_ctx() const { return m_ctx; }
 
-  virtual bool accept_visitor(MDL_wait_for_graph_visitor *dvisitor);
+  bool accept_visitor(MDL_wait_for_graph_visitor *dvisitor) override;
 
-  virtual uint get_deadlock_weight() const;
+  uint get_deadlock_weight() const override;
 
   /**
     Pointers for participating in the list of waiters for table share.
@@ -3016,7 +3017,10 @@ struct TABLE_LIST
      @brief Returns the name of the database that the referenced table belongs
      to.
   */
-  const char *get_db_name() const { return view != NULL ? view_db.str : db.str; }
+  const LEX_CSTRING get_db_name() const
+  {
+    return view != NULL ? view_db : db;
+  }
 
   /**
      @brief Returns the name of the table that this TABLE_LIST represents.
@@ -3024,7 +3028,10 @@ struct TABLE_LIST
      @details The unqualified table name or view name for a table or view,
      respectively.
    */
-  const char *get_table_name() const { return view != NULL ? view_name.str : table_name.str; }
+  const LEX_CSTRING get_table_name() const
+  {
+    return view != NULL ? view_name : table_name;
+  }
   bool is_active_sjm();
   bool is_sjm_scan_table();
   bool is_jtbm() { return MY_TEST(jtbm_subselect != NULL); }
@@ -3112,13 +3119,13 @@ class Field_iterator_table: public Field_iterator
   Field **ptr;
 public:
   Field_iterator_table() :ptr(0) {}
-  void set(TABLE_LIST *table) { ptr= table->table->field; }
+  void set(TABLE_LIST *table) override { ptr= table->table->field; }
   void set_table(TABLE *table) { ptr= table->field; }
-  void next() { ptr++; }
-  bool end_of_fields() { return *ptr == 0; }
-  LEX_CSTRING *name();
-  Item *create_item(THD *thd);
-  Field *field() { return *ptr; }
+  void next() override { ptr++; }
+  bool end_of_fields() override { return *ptr == 0; }
+  LEX_CSTRING *name() override;
+  Item *create_item(THD *thd) override;
+  Field *field() override { return *ptr; }
 };
 
 
@@ -3130,13 +3137,13 @@ class Field_iterator_view: public Field_iterator
   TABLE_LIST *view;
 public:
   Field_iterator_view() :ptr(0), array_end(0) {}
-  void set(TABLE_LIST *table);
-  void next() { ptr++; }
-  bool end_of_fields() { return ptr == array_end; }
-  LEX_CSTRING *name();
-  Item *create_item(THD *thd);
+  void set(TABLE_LIST *table) override;
+  void next() override { ptr++; }
+  bool end_of_fields() override { return ptr == array_end; }
+  LEX_CSTRING *name() override;
+  Item *create_item(THD *thd) override;
   Item **item_ptr() {return &ptr->item; }
-  Field *field() { return 0; }
+  Field *field() override { return 0; }
   inline Item *item() { return ptr->item; }
   Field_translator *field_translator() { return ptr; }
 };
@@ -3154,12 +3161,12 @@ class Field_iterator_natural_join: public Field_iterator
 public:
   Field_iterator_natural_join() :cur_column_ref(NULL) {}
   ~Field_iterator_natural_join() = default;
-  void set(TABLE_LIST *table);
-  void next();
-  bool end_of_fields() { return !cur_column_ref; }
-  LEX_CSTRING *name() { return cur_column_ref->name(); }
-  Item *create_item(THD *thd) { return cur_column_ref->create_item(thd); }
-  Field *field() { return cur_column_ref->field(); }
+  void set(TABLE_LIST *table) override;
+  void next() override;
+  bool end_of_fields() override { return !cur_column_ref; }
+  LEX_CSTRING *name() override { return cur_column_ref->name(); }
+  Item *create_item(THD *thd) override { return cur_column_ref->create_item(thd); }
+  Field *field() override { return cur_column_ref->field(); }
   Natural_join_column *column_ref() { return cur_column_ref; }
 };
 
@@ -3190,16 +3197,16 @@ class Field_iterator_table_ref: public Field_iterator
   void set_field_iterator();
 public:
   Field_iterator_table_ref() :field_it(NULL) {}
-  void set(TABLE_LIST *table);
-  void next();
-  bool end_of_fields()
+  void set(TABLE_LIST *table) override;
+  void next() override;
+  bool end_of_fields() override
   { return (table_ref == last_leaf && field_it->end_of_fields()); }
-  LEX_CSTRING *name() { return field_it->name(); }
+  LEX_CSTRING *name() override { return field_it->name(); }
   const char *get_table_name();
   const char *get_db_name();
   GRANT_INFO *grant();
-  Item *create_item(THD *thd) { return field_it->create_item(thd); }
-  Field *field() { return field_it->field(); }
+  Item *create_item(THD *thd) override { return field_it->create_item(thd); }
+  Field *field() override { return field_it->field(); }
   Natural_join_column *get_or_create_column_ref(THD *thd, TABLE_LIST *parent_table_ref);
   Natural_join_column *get_natural_column_ref();
 };
@@ -3428,7 +3435,7 @@ extern LEX_CSTRING TRANSACTION_REG_NAME;
 
 /* information schema */
 extern LEX_CSTRING INFORMATION_SCHEMA_NAME;
-extern LEX_CSTRING MYSQL_SCHEMA_NAME;
+extern Lex_ident_db MYSQL_SCHEMA_NAME;
 
 /* table names */
 extern LEX_CSTRING MYSQL_PROC_NAME;

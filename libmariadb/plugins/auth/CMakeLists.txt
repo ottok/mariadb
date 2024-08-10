@@ -20,19 +20,26 @@ ELSE()
   UNSET(CRYPTO_PLUGIN)
 ENDIF()
 
+# GCC < 3.9 does not support thread-local storage in C
+IF(CMAKE_C_COMPILER_ID MATCHES "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_LESS "4.9")
+  SET(HAVE_C_THREAD_LOCAL 0)
+ELSE()
+  SET(HAVE_C_THREAD_LOCAL 1)
+ENDIF()
+
 #native password
 REGISTER_PLUGIN(TARGET mysql_native_password
                 TYPE MARIADB_CLIENT_PLUGIN_AUTH
                 CONFIGURATIONS STATIC
                 DEFAULT STATIC
-                SOURCES ${CC_SOURCE_DIR}/plugins/auth/my_auth.c)
+                SOURCES ${AUTH_DIR}/my_auth.c)
 
 #Dialog client authentication plugin
 REGISTER_PLUGIN(TARGET dialog
                 TYPE MARIADB_CLIENT_PLUGIN_AUTH
                 CONFIGURATIONS DYNAMIC STATIC OFF
                 DEFAULT DYNAMIC
-                SOURCES ${CC_SOURCE_DIR}/plugins/auth/dialog.c
+                SOURCES ${AUTH_DIR}/dialog.c
                         ${CC_SOURCE_DIR}/libmariadb/get_password.c)
 
 
@@ -40,7 +47,7 @@ REGISTER_PLUGIN(TARGET dialog
 IF(CRYPTO_PLUGIN)
 
   #ED25519 client authentication plugin
-  SET(REF10_DIR ${CC_SOURCE_DIR}/plugins/auth/ref10)
+  SET(REF10_DIR ${AUTH_DIR}/ref10)
   SET(REF10_SOURCES ${REF10_DIR}/fe_0.c ${REF10_DIR}/fe_isnegative.c ${REF10_DIR}/fe_sub.c ${REF10_DIR}/ge_p1p1_to_p2.c
                     ${REF10_DIR}/ge_p3_to_cached.c ${REF10_DIR}/open.c ${REF10_DIR}/fe_1.c ${REF10_DIR}/fe_isnonzero.c
                     ${REF10_DIR}/fe_tobytes.c ${REF10_DIR}/ge_p1p1_to_p3.c ${REF10_DIR}/ge_p3_to_p2.c ${REF10_DIR}/sc_muladd.c
@@ -56,12 +63,18 @@ IF(CRYPTO_PLUGIN)
                 TYPE MARIADB_CLIENT_PLUGIN_AUTH
                 CONFIGURATIONS DYNAMIC STATIC OFF
                 DEFAULT DYNAMIC
-                SOURCES ${CC_SOURCE_DIR}/plugins/auth/ed25519.c 
+                SOURCES ${AUTH_DIR}/ed25519.c
                         ${REF10_SOURCES}
                         ${CRYPT_SOURCE}
                 INCLUDES ${REF10_DIR}
                 LIBRARIES ${CRYPT_LIBS}
                 COMPILE_OPTIONS -DMYSQL_CLIENT=1)
+  SET_PROPERTY(TARGET client_ed25519 PROPERTY C_STANDARD 11)
+
+  IF(HAVE_C_THREAD_LOCAL)
+    TARGET_COMPILE_DEFINITIONS(client_ed25519 PRIVATE -DHAVE_THREAD_LOCAL)
+  ENDIF()
+
   IF(MSVC)
      # Silence conversion (integer truncation) warnings from reference code
      SET_SOURCE_FILES_PROPERTIES(${REF10_SOURCES} PROPERTY COMPILE_FLAGS "-DMYSQL_CLIENT=1 /wd4244 /wd4146")
@@ -78,12 +91,12 @@ IF(CRYPTO_PLUGIN)
                 TYPE MARIADB_CLIENT_PLUGIN_AUTH
                 CONFIGURATIONS DYNAMIC STATIC OFF
                 DEFAULT DYNAMIC
-                SOURCES ${CC_SOURCE_DIR}/plugins/auth/caching_sha2_pw.c 
+                SOURCES ${AUTH_DIR}/caching_sha2_pw.c
                         ${CRYPT_SOURCE}
                 LIBRARIES ${CRYPT_LIBS})
 
   IF(WITH_SSL STREQUAL "GNUTLS" AND NOT WIN32)
-    MESSAGE1(STATUS "sha256_password not supported by GnuTLS due to missing OAEP padding")
+    MESSAGE1(SHA256_PASSWORD "sha256_password not supported by GnuTLS due to missing OAEP padding")
   ELSE()
     REGISTER_PLUGIN(TARGET sha256_password
                     TYPE MARIADB_CLIENT_PLUGIN_AUTH
@@ -92,6 +105,30 @@ IF(CRYPTO_PLUGIN)
                     SOURCES ${AUTH_DIR}/sha256_pw.c
                     LIBRARIES ${CRYPT_LIBS})
   ENDIF()
+
+  find_path(NETTLE_INCLUDE_DIR NAMES nettle/version.h
+            HINTS ${NETTLE_ROOT_DIR}/include)
+
+  IF(WITH_SSL STREQUAL "GNUTLS" AND NETTLE_INCLUDE_DIR STREQUAL "NETTLE_INCLUDE_DIR-NOTFOUND")
+    MESSAGE1(PARSEC "PARSEC requires nettle library and headers when built with GnuTLS.")
+  ELSEIF(WITH_SSL STREQUAL "OPENSSL" AND NOT HAVE_evp_pkey)
+    MESSAGE1(PARSEC "PARSEC requires EVP_PKEY interface when built with OpenSSL.")
+  ELSEIF(WITH_SSL STREQUAL "SCHANNEL")
+    MESSAGE1(PARSEC "PARSEC does not support SCHANNEL.")
+  ELSEIF(NOT HAVE_C_THREAD_LOCAL)
+    MESSAGE1(PARSEC "PARSEC requires C11 Thread-local variables support by compiler (GNU >= 4.9).")
+  ELSE()
+    REGISTER_PLUGIN(TARGET parsec
+            TYPE MARIADB_CLIENT_PLUGIN_AUTH
+            CONFIGURATIONS DYNAMIC STATIC OFF
+            DEFAULT OFF
+            SOURCES ${AUTH_DIR}/parsec.c
+            LIBRARIES ${CRYPT_LIBS})
+    if (TARGET parsec)
+      set_property(TARGET parsec PROPERTY C_STANDARD 11)
+    endif()
+  ENDIF()
+
 ENDIF()
 
 #GSSAPI client authentication plugin
@@ -116,7 +153,7 @@ IF(GSSAPI_SOURCES)
                   CONFIGURATIONS DYNAMIC STATIC OFF DYNAMIC_AND_STATIC
                   DEFAULT ${AUTH_GSSAPI_DEFAULT_CONFIG}
                   SOURCES ${GSSAPI_SOURCES}
-                  INCLUDES ${CC_SOURCE_DIR}/plugins/auth ${GSSAPI_INCS}
+                  INCLUDES ${AUTH_DIR} ${GSSAPI_INCS}
                   LIBRARIES ${GSSAPI_LIBS})
   IF(CMAKE_C_COMPILER_ID MATCHES "Clang")
     SET_SOURCE_FILES_PROPERTIES(${GSSAPI_SOURCES} PROPERTY COMPILE_FLAGS "-Wno-deprecated-declarations")

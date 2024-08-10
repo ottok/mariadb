@@ -916,7 +916,7 @@ bool mysql_write_frm(ALTER_PARTITION_PARAM_TYPE *lpt, uint flags)
     */
     build_table_filename(path, sizeof(path) - 1, lpt->alter_info->db.str,
                          lpt->alter_info->table_name.str, "", 0);
-    strxnmov(frm_name, sizeof(frm_name), path, reg_ext, NullS);
+    strxnmov(frm_name, sizeof(frm_name)-1, path, reg_ext, NullS);
     /*
       When we are changing to use new frm file we need to ensure that we
       don't collide with another thread in process to open the frm file.
@@ -11820,6 +11820,7 @@ end_temporary:
 
   thd->variables.option_bits&= ~OPTION_BIN_COMMIT_OFF;
 
+  thd_progress_end(thd);
   *recreate_info= Recreate_info(copied, deleted);
   thd->my_ok_with_recreate_info(*recreate_info,
                                 (ulong) thd->get_stmt_da()->
@@ -11947,7 +11948,7 @@ class Has_default_error_handler : public Internal_error_handler
 public:
   bool handle_condition(THD *, uint sql_errno, const char *,
                         Sql_condition::enum_warning_level *,
-                        const char *, Sql_condition **)
+                        const char *, Sql_condition **) override
   {
     return sql_errno == ER_NO_DEFAULT_FOR_FIELD;
   }
@@ -11996,6 +11997,61 @@ static int online_alter_read_from_binlog(THD *thd, rpl_group_info *rgi,
   return MY_TEST(error);
 }
 #endif
+
+
+/** Handle the error when copying data from source to target table.
+@param error          error code
+@param ignore         alter ignore statement
+@param to             target table handler
+@param thd            Mysql Thread
+@param alter_ctx      Runtime context for alter statement
+@retval false in case of error
+@retval true in case of skipping the row and continue alter operation */
+static bool
+copy_data_error_ignore(int &error, bool ignore, TABLE *to,
+                       THD *thd, Alter_table_ctx *alter_ctx)
+{
+  if (to->file->is_fatal_error(error, HA_CHECK_DUP))
+  {
+    /* Not a duplicate key error. */
+    to->file->print_error(error, MYF(0));
+    error= 1;
+    return false;
+  }
+  /* Duplicate key error. */
+  if (unlikely(alter_ctx->fk_error_if_delete_row))
+  {
+    /* We are trying to omit a row from the table which serves
+    as parent in a foreign key. This might have broken
+    referential integrity so emit an error. Note that we
+    can't ignore this error even if we are
+    executing ALTER IGNORE TABLE. IGNORE allows to skip rows, but
+    doesn't allow to break unique or foreign key constraints, */
+    my_error(ER_FK_CANNOT_DELETE_PARENT, MYF(0),
+             alter_ctx->fk_error_id,
+             alter_ctx->fk_error_table);
+    return false;
+  }
+  if (ignore)
+    return true;
+  /* Ordinary ALTER TABLE. Report duplicate key error. */
+  uint key_nr= to->file->get_dup_key(error);
+  if (key_nr <= MAX_KEY)
+  {
+    const char *err_msg= ER_THD(thd, ER_DUP_ENTRY_WITH_KEY_NAME);
+    if (key_nr == 0 && to->s->keys > 0 &&
+        (to->key_info[0].key_part[0].field->flags &
+            AUTO_INCREMENT_FLAG))
+      err_msg= ER_THD(thd, ER_DUP_ENTRY_AUTOINCREMENT_CASE);
+    print_keydup_error(to,
+                       key_nr >= to->s->keys ? NULL :
+                       &to->key_info[key_nr],
+                       err_msg, MYF(0));
+  }
+  else
+    to->file->print_error(error, MYF(0));
+  return false;
+}
 
 static int
 copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
@@ -12363,9 +12419,15 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
   }
 
   bulk_insert_started= 0;
-  if (!ignore)
-    to->file->extra(HA_EXTRA_END_ALTER_COPY);
-
+  if (!ignore && error <= 0)
+  {
+    int alt_error= to->file->extra(HA_EXTRA_END_ALTER_COPY);
+    if (alt_error > 0)
+    {
+      error= alt_error;
+      copy_data_error_ignore(error, false, to, thd, alter_ctx);
+    }
+  }
   cleanup_done= 1;
   to->file->extra(HA_EXTRA_NO_IGNORE_DUP_KEY);
 

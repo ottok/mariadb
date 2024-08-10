@@ -1717,6 +1717,17 @@ SELECT JSON_REMOVE('{"A": { "B": 1 }}', '$.A.B.C.D');
 JSON_REMOVE('{"A": { "B": 1 }}', '$.A.B.C.D')
 {"A": {"B": 1}}
 #
+# MDEV-34143: Server crashes when executing JSON_EXTRACT after setting non-default collation_connection
+#
+SET @save_collation_connection= @@collation_connection;
+SET collation_connection='utf16_bin';
+SELECT JSON_EXTRACT('{"a": 1,"b": 2}','$.a');
+JSON_EXTRACT('{"a": 1,"b": 2}','$.a')
+NULL
+Warnings:
+Warning	4036	Character disallowed in JSON in argument 1 to function 'json_extract' at position 2
+SET @@collation_connection= @save_collation_connection;
+#
 # End of 10.5 tests
 #
 #
@@ -5185,6 +5196,16 @@ JSON_ARRAY_INTERSECT(c1, c2)
 [2, 3]
 [4]
 DROP TABLE t1;
+#
+# MDEV-31543: ASAN heap-buffer-overflow in strncpy when fetching keys using JSON_OBJECT_FILTER_KEYS function
+#
+SET @arr1='[1,2,"c"]';
+SET character_set_database=ucs2;
+SET CHARACTER SET utf8;
+SET @obj1='{ "a": 1,"b": 2,"c": 3}';
+SELECT JSON_OBJECT_FILTER_KEYS (@obj1,@arr1);
+JSON_OBJECT_FILTER_KEYS (@obj1,@arr1)
+NULL
 #
 # End of 11.2 Test
 #
