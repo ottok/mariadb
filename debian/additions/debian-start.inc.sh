@@ -32,13 +32,13 @@ function check_for_crashed_tables() {
   set +e
   # The $MARIADB is intentionally used to expand into a command and arguments
   # shellcheck disable=SC2086
-  LC_ALL=C echo '
+  echo '
     SELECT CONCAT("select count(*) into @discard from '\''", TABLE_SCHEMA, "'\''.'\''", TABLE_NAME, "'\''")
     FROM information_schema.TABLES WHERE TABLE_SCHEMA<>"INFORMATION_SCHEMA" AND TABLE_SCHEMA<>"PERFORMANCE_SCHEMA"
     AND (ENGINE="MyISAM" OR ENGINE="Aria")
-    ' |
-    $MARIADB --skip-column-names --batch |
-    xargs -i $MARIADB --skip-column-names --silent --batch --force -e "{}" &> "${tempfile}"
+    ' | \
+    LC_ALL=C $MARIADB --skip-column-names --batch | \
+    xargs --no-run-if-empty -i $MARIADB --skip-column-names --silent --batch --force -e "{}" &> "${tempfile}"
   set -e
 
   if [ -s "$tempfile" ]
@@ -84,7 +84,7 @@ function check_root_accounts() {
 
   logger -p daemon.info -i -t"$0" "Checking for insecure root accounts."
 
-  ret=$(echo "SELECT count(*) FROM mysql.user WHERE user='root' and password='' and plugin in ('', 'mysql_native_password', 'mysql_old_password');" | $MARIADB --skip-column-names)
+  ret=$(echo "SELECT count(*) FROM mysql.user WHERE user='root' and password='' and password_expired='N' and plugin in ('', 'mysql_native_password', 'mysql_old_password');" | $MARIADB --skip-column-names)
   if [ "$ret" -ne "0" ]
   then
     logger -p daemon.warn -i -t"$0" "WARNING: mysql.user contains $ret root accounts without password!"

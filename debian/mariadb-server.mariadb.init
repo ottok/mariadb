@@ -10,7 +10,7 @@
 # Default-Stop:      0 1 6
 # Short-Description: Start and stop the MariaDB database server daemon
 # Description:       Controls the main MariaDB database server daemon "mariadbd"
-#                    and its wrapper script "mysqld_safe".
+#                    and its wrapper script "mariadbd-safe".
 ### END INIT INFO
 #
 set -e
@@ -93,7 +93,7 @@ sanity_checks() {
 
   # If datadir location is not customized in configuration
   # then it's not printed with /usr/sbin/mariadbd --print-defaults
-  # and this should fall backt to a sane default value
+  # and this should fall back to a sane default value
   if [ -z "$datadir" ]
   then
     datadir="/var/lib/mysql"
