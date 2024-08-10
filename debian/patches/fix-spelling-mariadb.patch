@@ -45,20 +45,6 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
  in milliseconds (default is 1 second) */
  ulint xtrabackup_log_copy_interval = 1000;
  static ulong max_buf_pool_modified_pct;
-@@ -1600,11 +1600,11 @@ struct my_option xb_client_options[]= {
-      GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
- 
-     {"rsync", OPT_RSYNC,
--     "Obsolete depricated option",
-+     "Obsolete deprecated option",
-      &ignored_option, &ignored_option,  0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
- 
-     {"no-backup-locks", OPT_NO_BACKUP_LOCKS,
--     "Obsolete depricated option",
-+     "Obsolete deprecated option",
-      &ignored_option, &ignored_option,  0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
- 
-     {"force-non-empty-directories", OPT_FORCE_NON_EMPTY_DIRS,
 @@ -1732,7 +1732,7 @@ struct my_option xb_client_options[]= {
      {"startup-wait-timeout", OPT_LOCK_WAIT_TIMEOUT,
       "This option specifies time in seconds that mariadb-backup should wait for "
@@ -68,7 +54,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
       "If there are still such queries when the timeout expires, mariadb-backup "
       "terminates with an error. Default is 0, in which case mariadb-backup waits "
       "indefinitely for BACKUP STAGE START to finish",
-@@ -5642,7 +5642,7 @@ void CorruptedPages::backup_fix_ddl(ds_c
+@@ -5651,7 +5651,7 @@ void CorruptedPages::backup_fix_ddl(ds_c
  	}
  
  	/* Mariabackup doesn't detect any FILE_OP for the deferred
@@ -110,7 +96,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
  
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
-@@ -14670,7 +14670,7 @@ void JOIN::drop_unused_derived_keys()
+@@ -14683,7 +14683,7 @@ void JOIN::drop_unused_derived_keys()
        }
        /*
          We dropped all keys except the chosen one and unique keys.

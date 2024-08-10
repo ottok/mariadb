@@ -1,3 +1,13 @@
+mariadb (1:11.4.3-1) UNRELEASED; urgency=medium
+
+  * New upstream version 11.4.3. Includes fixes for several severe regressions
+    as noted at https://mariadb.com/kb/en/mariadb-11-4-3-release-notes/. This
+    release is not known to include any CVE assigned security fixes.
+  * Add Lintian override for metadata_lock_info.so not linked against libc
+  * Extend gbp.conf and update maintainer READMEs
+
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 09 Aug 2024 23:35:27 -0700
+
 mariadb (1:11.4.2-4) unstable; urgency=medium
 
   * Revert move of 'mysqld_safe' to compat package to avoid breaking pdns
