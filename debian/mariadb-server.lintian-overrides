@@ -6,8 +6,6 @@ spelling-error-in-binary thats that's [usr/bin/*]
 spelling-error-in-binary theres there's [usr/bin/*]
 # False positive from Lintian, these strings are nowhere in test in source code
 spelling-error-in-binary AfE Safe [usr/bin/*]
-# Man syntax needs to be fixed upstream
-groff-message troff:<standard input>:*: warning: macro 'an-trap' not defined [usr/share/man/*]
 # Most likely false positive
 hardening-no-fortify-functions [usr/lib/mysql/plugin/auth_pam_v1.so]
 hardening-no-fortify-functions [usr/lib/mysql/plugin/auth_pam.so]
