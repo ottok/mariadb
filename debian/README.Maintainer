@@ -25,9 +25,9 @@ This can be done by using dgit. The example command below will fetch the latest
 mariadb-10.1 package available in Ubuntu 18.04 (Bionic) base archive, security
 archive or updates archive (whichever has a newer version):
 
-    dgit -d ubuntu clone mariadb-10.6 jammy,-security,-updates
-    cp -ra mariadb-10.6/* .
-    rm -rf mariadb-10.6
+    dgit -d ubuntu clone mariadb jammy,-security,-updates
+    cp -ra mariadb/* .
+    rm -rf mariadb
 
 You can then compare these two directories with a recursive diff or `git diff`.
 
@@ -62,13 +62,20 @@ https://mariadb.com/kb/en/mariadb/development/release-notes/
 
 ### Steps to import new upstream version
 
-Download new source package:
+Check if upstream has tagged any releases and check tags for authenticity:
 
-    git checkout 10.11
-    git pull --tags upstream 10.11
-    git tag -v mariadb-10.11.3
+    git fetch upstream
+    git verify-tag mariadb-11.4.3
+
+If a new release is available and also the tarball is available, import it with:
+
     git checkout debian/latest
-    git merge -v mariadb-10.11.3
+    gbp import-orig --verbose --no-interactive --uscan
+
+If upstream import was already done once, and you want to import the same
+version on a different branch, simply run:
+
+    gbp import-ref --verbose --upstream-version=11.4.3
 
 Refresh patches:
 
@@ -80,28 +87,26 @@ _sure_ that it has been applied upstream.
 
 Generate new debian/changelog entry automatically with git-dch:
 
-    gbp dch -vR
-
-Edit the details to match correct release:
-
-    gedit debian/changelog &
+    gbp dch --verbose --release --distribution=UNRELEASED --new-version=1:11.4.3-1 -- debian
 
 Commit to git:
 
-    git citool
+    git commit -am "Update changelog and refresh patches after 11.4.3 import"
 
 Build and test locally to verify it works:
 
     gbp buildpackage
 
-Alternatively you can use Docker with something like this:
+Apply Debian packaging fixes done by upstream:
 
-    mkdir ccache buildout
-    docker run -it -v "${PWD}/buildout":/tmp/build -v "${PWD}/ccache":/.ccache \
-       -v "${PWD}/$PKG":/tmp/build/source -w /tmp/build/source \
-       -e DEB_BUILD_OPTIONS="$DEB_BUILD_OPTIONS" -e CCACHE_DIR=/var/cache/ccache \
-       --user=1001 registry.gitlab.com/mariadb/mariadb.org-build-containers:$PKG-debian-sid-build-env \
-       gbp buildpackage | tee latest.build
+    git difftool --dir-diff upstream/latest -- debian/
+    git log --oneline --first-parent 11.4 -- debian/
+    git cherry-pick -x id1 id2 id3
+
+Alternatively you can use [Debcraft](https://salsa.debian.org/debian/debcraft):
+
+    apt install debcraft
+    debcraft build
 
 If needed, add commits or amend the ones you made until the package is in
 perfect shape.
@@ -137,7 +142,7 @@ Once you are sure there are no regressions, finally upload to Debian:
 
 After the upload, check that everything is OK at
 * https://tracker.debian.org/mariadb (Debian)
-* https://launchpad.net/ubuntu/+source/mariadb-10.6 (Ubuntu)
+* https://launchpad.net/ubuntu/+source/mariadb (Ubuntu)
 
 ## Maintaining translations
 
@@ -152,14 +157,10 @@ needs to be tested on the Ubuntu release which most closely matches the Debian
 release in question. The following matrix maps what package should be tested
 where:
 
-- 10.6 for sid on Launchpad lunar
-- 10.6 for kinetic on Launchpad kinetic
+- 11.4 for sid on Launchpad oracular
+- 10.11 for noble on Launchpad noble
 - 10.6 for jammy on Launchpad jammy
 - 10.5 for bullseye on Launchpad hirsute (not available anymore)
-- 10.3 for focal on Launchpad focal
-- 10.3 for buster on Launchpad disco (not available anymore)
-- 10.1 for bionic on Launchpad bionic
-- 10.1 for stretch on Launchpad xenial (not available anymore)
 
 ## Uploading security releases to Debian
 
@@ -170,28 +171,27 @@ For details see https://www.debian.org/doc/manuals/developers-reference/pkgs.htm
 ## Uploading security releases to Ubuntu
 
 See example with documented procedure:
- * https://bugs.launchpad.net/ubuntu/+source/mariadb-10.3/+bug/1861260
+ * https://bugs.launchpad.net/ubuntu/+source/mariadb/+bug/2067125
 
 ### Upload priority
 
 Do the security uploads in this order for having the best chance of catching
 regressions before they spread out to too many users.
 
+Upload priority for 11.4
+- debian-13 trixie
+- ubuntu-24.10 oracular
+
+Upload priority for 10.11
+- debian-12 bookworm
+- ubuntu-24.04 noble
+
 Upload priority for 10.6
-- debian sid
-- ubuntu-22.10 kinetic
 - ubuntu-22.04 jammy
 
 Upload priority for 10.5
 - debian-11 bullseye
 
-Upload priority for 10.3
-- ubuntu-20.04 focal
-- debian-10 buster
-
-for 10.1 (only in case there are extra releases after official EOL)
-- ubuntu-18.04 bionic
-- debian-9 stretch
 
 ## Comparison to other distributions
 

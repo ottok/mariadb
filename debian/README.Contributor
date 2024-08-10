@@ -377,6 +377,7 @@ repositories one needs to run:
     deb http://archive.ubuntu.com/ubuntu/ bionic main restricted universe multiverse
     deb http://archive.ubuntu.com/ubuntu/ xenial main restricted universe multiverse
     deb http://archive.ubuntu.com/ubuntu/ trusty main restricted universe multiverse
+    deb https://archive.mariadb.org/mariadb-11.6/repo/debian bookworm main
     deb https://archive.mariadb.org/mariadb-11.5/repo/debian bookworm main
     deb https://archive.mariadb.org/mariadb-11.4/repo/debian bookworm main
     deb https://archive.mariadb.org/mariadb-11.3/repo/debian bookworm main
