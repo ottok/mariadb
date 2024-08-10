@@ -548,6 +548,9 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-adaptive-hash-index-parts[=#] 
                       Number of InnoDB Adaptive Hash Index Partitions (default
                       8)
+  --innodb-alter-copy-bulk 
+                      Allow bulk insert operation for copy alter operation
+                      (Defaults to on; use --skip-innodb-alter-copy-bulk to disable.)
   --innodb-autoextend-increment=# 
                       Data file autoextend increment in megabytes
   --innodb-autoinc-lock-mode=# 
@@ -889,6 +892,9 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-log-spin-wait-delay[=#] 
                       Delay between log buffer spin lock polls (0 to use a
                       blocking latch)
+  --innodb-log-write-ahead-size=# 
+                      Redo log write size to avoid read-on-write; must be a
+                      power of two
   --innodb-lru-flush-size=# 
                       How many pages to flush on LRU eviction
   --innodb-lru-scan-depth=# 
@@ -1438,9 +1444,10 @@ The following specify which files/extra groups are read (specified before remain
                       costs. disable_max_seek = Disable 'max_seek optimization'
                       for secondary keys and slight adjustment of filter cost.
                       disable_forced_index_in_group_by = Disable automatic
-                      forced index in GROUP BY. This variable will be deleted
-                      in MariaDB 11.0 as it is not needed with the new 11.0
-                      optimizer.
+                      forced index in GROUP BY. fix_innodb_cardinality =
+                      Disable doubling of the Cardinality for InnoDB secondary
+                      keys. This variable will be deleted in MariaDB 11.0 as it
+                      is not needed with the new 11.0 optimizer.
   Use 'ALL' to set all combinations.
   --optimizer-extra-pruning-depth=# 
                       If the optimizer needs to enumerate join prefix of this
@@ -2576,6 +2583,7 @@ innodb-adaptive-flushing                                     TRUE
 innodb-adaptive-flushing-lwm                                 10
 innodb-adaptive-hash-index                                   FALSE
 innodb-adaptive-hash-index-parts                             8
+innodb-alter-copy-bulk                                       TRUE
 innodb-autoextend-increment                                  64
 innodb-autoinc-lock-mode                                     1
 innodb-buf-dump-status-frequency                             0
@@ -2668,6 +2676,7 @@ innodb-log-file-buffering                                    FALSE
 innodb-log-file-size                                         100663296
 innodb-log-group-home-dir                                    (No default value)
 innodb-log-spin-wait-delay                                   0
+innodb-log-write-ahead-size                                  512
 innodb-lru-flush-size                                        32
 innodb-lru-scan-depth                                        1536
 innodb-max-dirty-pages-pct                                   90
@@ -2963,6 +2972,7 @@ secure-file-priv                                             (No default value)
 secure-timestamp                                             NO
 sequence                                                     ON
 server-id                                                    1
+server-uid                                                   1234567890abcdefghijklmnopq=
 session-track-schema                                         TRUE
 session-track-state-change                                   FALSE
 session-track-system-variables                               autocommit,character_set_client,character_set_connection,character_set_results,time_zone
