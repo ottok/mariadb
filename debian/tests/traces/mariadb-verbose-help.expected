@@ -111,6 +111,11 @@ The following specify which files/extra groups are read (specified before remain
   -P, --port=#        Port number to use for connection or 0 for default to, in
                       order of preference, my.cnf, $MYSQL_TCP_PORT,
                       /etc/services, built-in default (3306).
+  --print-query-on-error 
+                      Print the query if there was an error. Is only enabled in
+                      --batch mode if verbose is not set (as then the query
+                      would be printed anyway)
+                      (Defaults to on; use --skip-print-query-on-error to disable.)
   --progress-reports  Get progress reports for long running commands (like
                       ALTER TABLE)
                       (Defaults to on; use --skip-progress-reports to disable.)
@@ -198,6 +203,7 @@ net-buffer-length                 16384
 no-beep                           FALSE
 plugin-dir                        (No default value)
 port                              0
+print-query-on-error              TRUE
 progress-reports                  TRUE
 prompt                            \N [\d]> 
 protocol                          
