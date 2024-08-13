@@ -20,7 +20,7 @@ ${DEBIAN_SCRIPT_DEBUG:+ set -v -x}
 test -x /usr/sbin/mariadbd || exit 0
 
 # shellcheck source=/dev/null
-. /lib/lsb/init-functions
+. /usr/lib/lsb/init-functions
 
 SELF="$(cd "$(dirname "$0")"; pwd -P)/$(basename "$0")"
 
