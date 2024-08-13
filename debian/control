@@ -591,6 +591,7 @@ Pre-Depends:
  adduser (>= 3.40),
  debconf,
  mariadb-common (>= ${source:Version}),
+ procps,
  ${misc:Pre-Depends},
 Depends:
  galera-4 (>= 26.4),
@@ -602,7 +603,6 @@ Depends:
  mariadb-server-core (>= ${server:Version}),
  passwd,
  perl (>= 5.6),
- procps,
  psmisc,
  rsync,
  socat,
