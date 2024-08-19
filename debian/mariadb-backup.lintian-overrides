@@ -2,5 +2,3 @@
 spelling-error-in-binary noone no one [usr/bin/*]
 spelling-error-in-binary thats that's [usr/bin/*]
 spelling-error-in-binary theres there's [usr/bin/*]
-# False positive from Lintian, these strings are nowhere in test in source code
-spelling-error-in-binary AfE Safe [usr/bin/*]

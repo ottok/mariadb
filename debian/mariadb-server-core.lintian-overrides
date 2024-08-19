@@ -2,7 +2,5 @@
 spelling-error-in-binary noone no one [usr/sbin/mariadbd]
 spelling-error-in-binary thats that's [usr/sbin/mariadbd]
 spelling-error-in-binary theres there's [usr/sbin/mariadbd]
-# False positive from Lintian, these strings are nowhere in test in source code
-spelling-error-in-binary AfE Safe [usr/sbin/mariadbd]
 # Valid reason for extra documentation in context in directory
 package-contains-documentation-outside-usr-share-doc [usr/share/mariadb/charsets/README]

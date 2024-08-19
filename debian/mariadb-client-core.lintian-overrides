@@ -1,2 +1,0 @@
-# Man syntax needs to be fixed upstream
-groff-message troff:<standard input>:*: warning: macro 'an-trap' not defined [usr/share/man/*]
