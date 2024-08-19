@@ -1,12 +1,25 @@
-mariadb (1:11.4.3-1) UNRELEASED; urgency=medium
+mariadb (1:11.4.3-1) unstable; urgency=medium
 
+  [ Otto Kekäläinen ]
   * New upstream version 11.4.3. Includes fixes for several severe regressions
     as noted at https://mariadb.com/kb/en/mariadb-11-4-3-release-notes/. This
     release is not known to include any CVE assigned security fixes.
   * Add Lintian override for metadata_lock_info.so not linked against libc
-  * Extend gbp.conf and update maintainer READMEs
+  * Update Lintian overrides and MTR skiplists after 11.4.3 import
+  * Update server trace to include new parameters and values
+  * Refactor import * with only required imports
+  * Import upstream debian/ changes from MDEV-33750
+  * Pre-depend on 'procps' in mariadb-server
+  * Use /usr/lib/lsb/init-functions instead of old /lib location
+  * Rewrite the NEWS item to match latest status in MariaDB 11.4.3
+  * Extend gbp.conf and update maintainer READMEs to make git-buildpackage
+    and in general building and maintaining this package easier and more
+    approachable by new contributors
 
- -- Otto Kekäläinen <otto@debian.org>  Fri, 09 Aug 2024 23:35:27 -0700
+  [ Bastien Roucariès ]
+  * Add NEWS file
+
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 18 Aug 2024 21:59:29 -0700
 
 mariadb (1:11.4.2-4) unstable; urgency=medium
 
