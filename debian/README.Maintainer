@@ -1,17 +1,7 @@
 # README for Debian package maintainers
 
-This file mostly applies to how the packaging work-flow works for the official
-Debian packages, but it may contain useful information also for anybody doing
-their own private .deb builds.
-
-## Version control
-
-This package is maintained by the MariaDB/MySQL team in Debian using the
-git-buildpackage tool and storing the git repositories on the Debian Gitlab
-instance Salsa. For details see https://salsa.debian.org/mariadb-team/.
-
-The official Ubuntu packages are also maintained by the same team using the same
-source repository.
+This document complements README.source.md with additional information relevant
+only the the maintainer.
 
 ### Ensuring git contents match what has been uploaded to Debian/Ubuntu
 
@@ -22,10 +12,10 @@ Therefore, maintainers should check that the git contents match what has been
 uploaded to Debian/Ubuntu before making new changes on git.
 
 This can be done by using dgit. The example command below will fetch the latest
-mariadb-10.1 package available in Ubuntu 18.04 (Bionic) base archive, security
-archive or updates archive (whichever has a newer version):
+mariadb package available in Ubuntu 24.04 (Noble) base archive, security archive
+or updates archive (whichever has a newer version):
 
-    dgit -d ubuntu clone mariadb jammy,-security,-updates
+    dgit -d ubuntu clone mariadb noble,-security,-updates
     cp -ra mariadb/* .
     rm -rf mariadb
 
@@ -41,13 +31,7 @@ debian/ directory with:
 
 You can simply run `git diff` to see the report on differences.
 
-
-## Building from sources with git-buildpackage
-
-See README.Contributor for details.
-
-
-## Upgrading sources from upstream
+## Upstream release information
 
 Upstream will publish maintenance releases at least 5 years after the major
 version release, and security updates are likely to come even after that as
@@ -59,90 +43,14 @@ https://mariadb.com/kb/en/mariadb/development/mariadb-maintenance-policy/
 Release notes are available at
 https://mariadb.com/kb/en/mariadb/development/release-notes/
 
+## Comparing to upstream Debian packaging changes
 
-### Steps to import new upstream version
-
-Check if upstream has tagged any releases and check tags for authenticity:
-
-    git fetch upstream
-    git verify-tag mariadb-11.4.3
-
-If a new release is available and also the tarball is available, import it with:
-
-    git checkout debian/latest
-    gbp import-orig --verbose --no-interactive --uscan
-
-If upstream import was already done once, and you want to import the same
-version on a different branch, simply run:
-
-    gbp import-ref --verbose --upstream-version=11.4.3
-
-Refresh patches:
-
-    while quilt push; do quilt refresh; done; quilt pop -a
-
-Simple offsets will be updated automatically. If there are any rejects, inspect
-the files and update the patches or discard the patch completely if you are
-_sure_ that it has been applied upstream.
-
-Generate new debian/changelog entry automatically with git-dch:
-
-    gbp dch --verbose --release --distribution=UNRELEASED --new-version=1:11.4.3-1 -- debian
-
-Commit to git:
-
-    git commit -am "Update changelog and refresh patches after 11.4.3 import"
-
-Build and test locally to verify it works:
-
-    gbp buildpackage
-
-Apply Debian packaging fixes done by upstream:
+After importing a new upstream version, it is good to review Debian packaging
+fixes done by upstream:
 
     git difftool --dir-diff upstream/latest -- debian/
     git log --oneline --first-parent 11.4 -- debian/
     git cherry-pick -x id1 id2 id3
-
-Alternatively you can use [Debcraft](https://salsa.debian.org/debian/debcraft):
-
-    apt install debcraft
-    debcraft build
-
-If needed, add commits or amend the ones you made until the package is in
-perfect shape.
-
-Let Lintian automatically check as much as possible:
-
-    lintian -EvIL +pedantic --color=always *.changes
-
-Then proceed to make a source only build:
-
-    gbp buildpackage -S
-
-Test more with upload to Launchpad:
-
-    COMMIT_ID=`git log -n 1 --oneline | cut -d ' ' -f 1`
-    PKG=mariadb-10.6
-    backportpackage --yes -u ppa:mysql-ubuntu/$PKG -d groovy -S ~`date '+%s'`.$COMMIT_ID $PKG*.dsc
-
-When done, push to Salsa:
-
-    gbp push # gbp branches and tags
-    git push # master branch
-
-Wait until the Salsa CI pipeline finishes. If it did not either spot any
-regressions, proceed to tagging the commit:
-
-    gbp tag
-    gbp push
-
-Once you are sure there are no regressions, finally upload to Debian:
-
-    dput ftp-master *.changes
-
-After the upload, check that everything is OK at
-* https://tracker.debian.org/mariadb (Debian)
-* https://launchpad.net/ubuntu/+source/mariadb (Ubuntu)
 
 ## Maintaining translations
 

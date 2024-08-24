@@ -3,7 +3,7 @@
 include:
   - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/recipes/debian.yml
 
-# Override Salsa-CI with MariaDB specific variations
+# Override Salsa CI with MariaDB specific variations
 variables:
   BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3
     libmariadbd19t64 libmariadbd-dev mariadb-common mariadb-client-core
@@ -273,11 +273,16 @@ blhc:
     #     trying to overwrite '/etc/pam.d/su', which is also in package login 1:4.4-4.1+deb9u1
     #   dpkg: error processing archive /var/cache/apt/archives/util-linux_2.40.2-1_amd64.deb (--unpack):
     #     trying to overwrite '/usr/share/bash-completion/completions/findmnt', which is also in package mount 2.29.2-1+deb9u1
+    # Root cause fix: https://salsa.debian.org/debian/util-linux/-/merge_requests/34
+    #
     # Circumvent this by removing the conflicting packages first, as they are
     # not essential for the upgrade to run.
     # Note! If MariaDB is installed, this step will uninstall it.
     if dpkg -l login mount | grep -F '+deb9'
     then
+      apt-get remove login mount perl -qq --yes --allow-remove-essential || true
+      # Extra fix needed so MariaDB 10.1 shutdown in Stretch will proceed
+      test -L /lib || cp -av /usr/lib/lsb /lib/
       apt-get remove login mount perl -qq --yes --allow-remove-essential || true
     fi
   - |
@@ -302,8 +307,6 @@ blhc:
       test -f /bin/cp || /usr/bin/cp -av /usr/bin/cp /bin/
       usrmerge-temp-fix || true
     done
-  # Extra fix needed until MariaDB fixed in debian/mariadb-server.mariadb.init:. /lib/lsb/init-functions
-  - test -L /lib || cp -av /usr/lib/lsb /lib/
 
 .test-enable-artifacts-repo: &test-enable-artifacts-repo |
   find -ls -maxdepth 3

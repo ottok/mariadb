@@ -1,57 +1,244 @@
-# README for Debian packaging contributors
+# README for Debian package maintainers and contributors
 
-This documentation describes how to contribute to the official Debian packages
-of MariaDB. The packaging in Debian repositories is not identical to the packaging
-in mariadb.org repositories, but whatever is in Debian repositories will eventually
-be upstreamed.
-
-
-## Development environment and tools
-
-Use a recent version of Debian or Ubuntu as the environment for Debian packaging
-testing and development. Preferred environment is Debian Sid (unstable).
-
-Install the tool used to manage and build the source:
-
-    sudo apt-get install git-buildpackage
+This documentation describes how to contribute to the official Debian and Ubuntu
+packages of MariaDB. The packaging in Debian repositories is not identical to
+the packaging in mariadb.org repositories, but whatever is in Debian
+repositories will eventually be upstreamed.
 
 
-## Getting the source
+## Git repository structure
 
-The official Debian package source is hosted on the Debian Gitlab server under
-the MariaDB/MySQL packaging team at https://salsa.debian.org/mariadb-team/. You
-are welcome to fork it and make merge requests.
+This Debian packaging source code in directory `debian/` is maintained on branch
+`debian/latest` (naming following DEP-14) as part of a fork of the upstream
+repository. This structure is compatible with git-buildpackage and is
+preconfigured with `debian/gbp.conf` so the git-buildpackage commands don't need
+extra parameters most of the time.
 
-To get the latest official Debian packaging source of `mariadb`, clone the
-source repository with all relevant branches (main branch `debian/latest`) to
-your local environment using _git-buildpackage_:
-
-    gbp clone https://salsa.debian.org/mariadb-team/mariadb-server.git
-
-If you have your own fork and SSH keys set up on Salsa, you can run:
-
-    gbp clone git@salsa.debian.org:<username>/mariadb-server.git
+To understand what each git-buildpackage command in this README exactly does,
+run them with `--verbose` and read the respective man pages for details.
 
 
-The clone needs to be run only once. On later runs you can refresh your clone with
-relevant branches using:
+## Getting the Debian packaging source code
 
-    gbp pull --force
+To get the Debian packaging source code and have the upstream remote alongside
+it, simply run:
+
+    gbp clone vcsgit:mariadb \
+      --postclone="git remote add -t 11.4 -f upstreamvcs https://github.com/MariaDB/server.git"
+
+Using the `vcsgit:`prefix will automatically resolve the git repository
+location, which for most packages is on salsa.debian.org. To build the package
+one needs all three Debian branches (`debian/latest`, `upstream/latest`and
+`pristine-tar`). Using `gbp clone` and `gbp pull` ensures all three branches are
+automatically fetched.
+
+The command above also automatically adds the upstream repository as an extra
+remote, and fetches the latest upstream `11.4` branch commits and tags. The
+upstream development branch is not a requirement to build the Debian package,
+but is recommended for making collaboration with upstream easy.
+
+The repository structure and use of `gbp pq` makes it easy to cherry-pick
+commits between upstream and downstream Debian, ensuring improvements downstream
+in Debian and upstream in the original project are shared frictionlessly.
+
+
+## Updating an existing local git repository
+
+If you have an existing local repository created in this way, you can update it
+by simply running:
+
+    gbp pull --redo-pq
+
+To also get the upstream remote updated run:
+
+    git pull --verbose --all
+
+The recommended tool to inspect what branches and tags you have and what their
+state is on various remotes is:
+
+    gitk --all &
+
+
+## Contributing to the Debian packaging
+
+First clone the Debian packaging repository using git-buildpackage as described
+above. Then open https://salsa.debian.org/mariadb-team/mariadb-server and press
+"Fork". This is needed for Salsa to understand that your repository has the same
+origin. In your fork, note the git SSH address, e.g.
+`git@salsa.debian.org:otto/mariadb-server.git`, and add it as new remote (replace
+'otto' with your own Salsa username):
+
+    git remote add otto git@salsa.debian.org:otto/mariadb-server.git
+
+Do your code changes, commit and push to your repository:
+
+    git checkout -b bugfix/123456-fix-something
+    git commit # or `git citool`
+    git push --set-upstream otto
+
+If made further modifications, and need to update your submission, run:
+
+    git commit -a --amend # or `git citool --amend`
+    git push -fv
+
+Finally open a Merge Request on salsa.debian.org. If your submission is high
+enough quality, the maintainer is likely to approve it and include your
+improvement in the revision of the Debian package. The link to open an MR will
+automatically display on the command-line after each `git push` run.
+
+There is no need to update the `debian/changelog` file in the commit. It will be
+done automatically by the maintainer before next upload to Debian. There is also
+no need to submit multiple Merge Requests targeting different branches with the
+same change. Just submit the change for the `debian/latest` branch, and the
+maintainer will cherry-pick it to other branches as needed.
+
+The Debian packaging repository will only accept changes in the `debian/`
+subdirectory. Any fix for upstream code should be contributed directly to
+upstream.
+
+
+## Adding a patch to the Debian packaging
+
+The Debian packaging consists of the pristine upstream source code combined with
+the `debian/` subdirectory where all Debian packaging code resides. As the
+upstream source code needs to stay untouched, so any modification of upstream
+code must be done as a patch in the `debian/patches/` subdirectory, which is
+then applied on upstream source code at build-time.
+
+Instead of manually fiddling with patch files, the recommended way to update
+them is using `gbp pq`. Start by switching to the temporary patches-applied
+branch by running:
+
+    gbp pq switch
+    # Make changes, build, test
+    git commit -a --amend # or `git citool --amend`
+
+If your terminal prompt shows the git branch, you will see it change from e.g.
+`debian/latest` to `patch-queue/debian/latest`. On this branch do whatever
+modification you want. Still on this branch, build the sources and Debian
+package and test that everything works. When done, convert the commit to a
+correctly formatted patch file by running:
+
+    gbp pq export
+    git commit -a --amend # or `git citool --amend`
+
+If your terminal prompt shows the git branch, you will see it have changed back
+to `debian/latest`. The updates you committed in `debian/patches/...` can be
+sent as a Merge Request on Salsa to the Debian package. The commit done on the
+`patch-queue/debian/latest` can be sent upstream as-is.
+
+Once done, discard the temporary branch with:
+
+    gbp pq drop
+
+
+## Contributing upstream
+
+This Debian packaging repository and the upstream git repository can happily
+co-exist as separate branches in the same git repository. To contribute
+upstream, start by opening the upstream project GitHub page, press "Fork" and
+add it as yet another git remote to this repository just like in the section
+above.
+
+Make git commits, or cherry-pick a commit that is already on a `gbp pq` branch,
+push them to your GitHub fork and open a Pull Request on the upstream
+repository.
+
+
+## Importing a new upstream release
+
+To check for new upstream releases run:
+
+    git fetch --verbose upstreamvcs
+    # Note latest tag, e.g. 11.4.4
+    gbp import-orig --uscan
+    gbp dch --distribution=UNRELEASED \
+      --commit --commit-msg="Update changelog and refresh patches after %(version)s import" \
+      -- debian
+    gbp pq rebase
+    gbp pq export
+    git commit -a --amend # or `git citool --amend`
+
+If the upstream version is not detected correctly, you can pass to `gbp dch` the
+extra parameter `--new-version=11.4.4`.
+
+If rebasing the patch queue causes merge conflicts, run `git mergetool` to
+visually resolve them. You can also browse the upstream changes on a particular
+file easily with `gitk path/to/file`.
+
+When adding DEP3 metadata fields to patches, put them as the first lines in the
+git commit message on the `pq` branch, or alternatively edit the
+`debian/patches/*` files directly. Ensure the first three lines are always
+`From`, `Date` and `Subject` just like in `git am` managed patches.
+
+Remember that if you did more than just refreshed patches, you should save those
+changes in separate git commits. Remember to build the package, run autopkgtests
+and conduct other appropriate testing. Easiest way to do it is with:
+
+    debcraft validate
+    debcraft build
+    debcraft test
+
+You can also do manual testing and run `apt install <package>` in a `debcraft
+shell` session. Rinse and repeat until the Debian packaging has been properly
+updated in response to the changes in the new upstream version.
+
+After testing enough locally, push to your fork and open Merge Request on Salsa
+for review (replace 'otto' with your own Salsa username):
+
+    gbp push --verbose otto
+
+Note that git-buildpackage will automatically push all three branches
+(`debian/latest`, `upstream/latest` and `pristine-tar`) and upstream tags to
+your fork so it can run the CI. However, merging the MR will only merge one
+branch (`debian/latest`) so the Debian maintainer will need to push the other
+branches to the Debian packaging git repository manually with `git push`. It is
+not a problem though, as the upstream import is mechanical for the
+`upstream/latest` and `pristine-tar` branches. Only the `debian/latest` branch
+has changes that warrant a review and potentially new revisions.
+
+
+## Uploading a new release
+
+**You need to be a Debian Developer to be able to upload to Debian.**
+
+Before the upload, remember to ensure that the `debian/changelog` is
+up-to-date:
+
+    gbp dch --release --commit
+
+Create a source package with your preferred tool. In Debcraft, one would issue:
+
+    debcraft release
+
+Do the final checks and sign and upload with:
+
+    debsign *.changes
+    dput ftp-master *.changes
+
+After upload remember to monitor your email for the acknowledgement email from
+Debian systems. Once the upload has been accepted, remember to run:
+
+    gbp tag --verbose
+    gbp push --verbose
 
 
 ## Building the packages
 
-Build binaries, run testsuite and build Debian packages with:
+The easiest way to build this package is in a Ubuntu sid (unstable) container.
+Example commands:
 
+    podman run --interactive --network host --tty --rm --shm-size=1G --volume=$PWD:/tmp/build --workdir=/tmp/build debian:sid bash
+
+This will start a session, where you are as the root user in the path
+`/tmp/build` inside the container. Here you can `cd` into the source directory,
+install dependencies and start the build. Note that when you exit the session,
+everything will be lost apart from the files you had inside the mounted volume
+in `/tmp/build`.
+
+    cd <source directory>
+    mk-build-deps -r -i debian/control -t "apt-get -y -o Debug::pkgProblemResolver=yes --no-install-recommends"
     gbp buildpackage
-
-On the first run git-buildpackage will complain if some of the build dependencies
-defined in debian/control are missing. Simply install those packages and run the
-build again.
-
-A quick command to install all dependencies:
-
-    sudo mk-build-deps -r -i debian/control -t "apt-get -y -o Debug::pkgProblemResolver=yes --no-install-recommends"
 
 If the build fails, the easiest way to clean up before a new run is
 
@@ -70,72 +257,6 @@ If you want to run the build in parallel on 2 CPUs and have verbose output:
     export DEB_BUILD_OPTIONS="parallel=2 verbose"
 
 The options above can also be combined freely to get desired behavior.
-
-
-### Using special build environments
-
-If you want to ensure all build dependencies are clean, you can build inside a
-Docker or sbuild (Debian tool) environment.
-
-#### Build in Docker
-
-First make a working directory for the build artifacts. Inside that directory
-clone the repository. Then start a Docker session using whatever Debian/Ubuntu
-image you want with the command:
-
-    docker run -it -v ${PWD}:/build -w /build debian:sid bash
-
-This will start a session, where you are as the root user in the path /build
-inside the Docker container. Here you can `cd` into the source directory,
-install dependencies and start the build. Note that when you exit the session,
-everything will be lost apart from the files you had inside the mounted volume
-in `/build`.
-
-#### Build using sbuild
-
-If you prefer sbuild, you can build with something like:
-
-    gbp buildpackage --git-builder=sbuild -A -v -d unstable
-
-## Creating a feature or bugfix branch
-
-The repository layout follows the DEP-14 standard:
-https://dep-team.pages.debian.net/deps/dep14/
-
-All new features and also bug fixes are done only in the `debian/latest` branch.
-The release branches for Debian and Ubuntu are only used for security updates.
-
-To prepare the Salsa pull request, create a bugfix branch from master with:
-
-    git checkout -b bugfix/NNNNNN-example-name
-
-After this you can develop with all the usual git commit and push commands
-until you have in your fork at Salsa the desired change and you are ready
-to open the merge request.
-
-
-### Notes about how to make changes in the proper way
-
-First consider submitting your patch upstream. Upstream MariaDB makes frequent
-maintenance releases and any fix done upstream will therefore be included in
-Debian relatively quickly. You can send email to the developers mailing list
-or open a pull request at https://github.com/MariaDB/server.
-
-Follow these instructions if your fix is about packaging in Debian specifically.
-Start by using `gitk --all` or similar tool to browse the previous changes. Try
-to follow similar pattern in your new changes.
-
-Keep in mind that all changes must done only for files residing in the `debian/`
-sub-directory. If you need to create changes outside the `debian/` directory,
-then you need to create a patch file using the same pattern as the patches
-found in `debian/patches` and activated by a line in `debian/patches/series`.
-
-Do not bundle in your commit any changes to `debian/changelog`. The correct
-changelog entries will be created later by the maintainer using `git-dch` in an
-automated fashion.
-
-For an example of a patch adding commit see
-https://salsa.debian.org/mariadb-team/mariadb-server/-/commit/7972a38e
 
 
 # Quality assurance tips
