@@ -1,0 +1,36 @@
+#
+# Parallel distributed bulk Load 
+# Author: Susil, susil.behera@mariadb.com
+#
+
+if (!$MYSQL_TEST_ROOT){
+  skip Should be run by root to execute cpimport;
+}
+
+-- source ../include/have_columnstore.inc
+
+--disable_warnings
+DROP DATABASE IF EXISTS mcs49_db;
+--enable_warnings
+
+CREATE DATABASE mcs49_db;
+USE mcs49_db;
+
+CREATE TABLE t1(col1 INT, col2 INT, col3 CHAR(8)) ENGINE=Columnstore;
+
+# Parallel distributed bulk Load, cpimport -m3
+# This test needs to be extended to cover multi-node setup
+
+--disable_result_log #cpimport logs thread/timestamps
+--exec $MCS_CPIMPORT -m3 mcs49_db t1 -l '$MTR_SUITE_DIR/../std_data/100Krows.dat';
+--enable_result_log
+
+#Validate data
+SELECT COUNT(*) FROM t1;
+
+let $rowcount = query_get_value(SELECT COUNT(*) cnt FROM t1, cnt, 1);
+
+let $match_counts= SELECT $rowcount = 100001;
+--eval $match_counts
+
+DROP DATABASE mcs49_db;

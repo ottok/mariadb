@@ -1,0 +1,12 @@
+[Unit]
+Description=loadbrm
+PartOf=mcs-workernode@1.service mcs-workernode@2.service
+After=network.target mcs-storagemanager.service
+
+[Service]
+Type=oneshot
+ExecStart=@ENGINE_BINDIR@/mcs-loadbrm.py
+EnvironmentFile=-/etc/columnstore/systemd.env
+
+[Install]
+WantedBy=mcs-workernode@1.service mcs-workernode@2.service
