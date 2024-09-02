@@ -1,12 +1,12 @@
-mariadb (1:10.11.8-1~deb12u1) bookworm; urgency=medium
+mariadb (1:10.11.9-0+deb12u1) bookworm; urgency=medium
 
-  * Update gdb.conf to be aligned with other branches and easier to maintain
-  * New upstream version 10.11.8. Includes fixes for several severe regressions
+  * New upstream version 10.11.9. Includes fixes for several severe regressions
+    as noted at https://mariadb.com/kb/en/mariadb-10-11-9-release-notes/
+  * This release includes upstream version 10.11.8, with fixes for regressions
     as noted at https://mariadb.com/kb/en/mariadb-10-11-8-release-notes/ as well
-    as security issues:
+    as security issue:
     - CVE-2024-21096
-  * Drop multiple patches dropped upstream, and re-import PR#2541 which had been
-    rebased in the original (and still open) PR.
+  * Drop multiple patches dropped upstream, including PR#2541.
   * Remove libmariadb file no longer present in MariaDB Connector C v3.3
   * Update client program 'mariadb' trace to match new libmariadb v3.3
   * Update server trace to include new parameters and values from 10.11.7 and .8
@@ -16,8 +16,9 @@ mariadb (1:10.11.8-1~deb12u1) bookworm; urgency=medium
     from v3.2 to 3.3 in this stable maintenance release, but it does not cause
     any issues as the soname and list of public symbols continues to be exactly
     same as before
+  * Update gdb.conf to be aligned with other branches and easier to maintain
 
- -- Otto Kekäläinen <otto@debian.org>  Fri, 24 May 2024 22:02:01 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 02 Sep 2024 16:55:56 -0700
 
 mariadb (1:10.11.6-0+deb12u1) bookworm; urgency=medium
 
