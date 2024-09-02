@@ -156,7 +156,8 @@ thr_lock_type read_lock_type_for_table(THD *thd,
 
 my_bool mysql_rm_tmp_tables(void);
 void close_tables_for_reopen(THD *thd, TABLE_LIST **tables,
-                             const MDL_savepoint &start_of_statement_svp);
+                             const MDL_savepoint &start_of_statement_svp,
+                             bool remove_implicit_dependencies);
 bool table_already_fk_prelocked(TABLE_LIST *tl, LEX_CSTRING *db,
                                 LEX_CSTRING *table, thr_lock_type lock_type);
 TABLE_LIST *find_table_in_list(TABLE_LIST *table,
@@ -315,7 +316,8 @@ bool flush_tables(THD *thd, flush_tables_type flag);
 void close_all_tables_for_name(THD *thd, TABLE_SHARE *share,
                                ha_extra_function extra,
                                TABLE *skip_table);
-OPEN_TABLE_LIST *list_open_tables(THD *thd, const char *db, const char *wild);
+OPEN_TABLE_LIST *list_open_tables(THD *thd, const LEX_CSTRING &db,
+                                  const char *wild);
 bool tdc_open_view(THD *thd, TABLE_LIST *table_list, uint flags);
 
 TABLE *find_table_for_mdl_upgrade(THD *thd, const char *db,
@@ -424,13 +426,13 @@ public:
 class DML_prelocking_strategy : public Prelocking_strategy
 {
 public:
-  virtual bool handle_routine(THD *thd, Query_tables_list *prelocking_ctx,
-                              Sroutine_hash_entry *rt, sp_head *sp,
-                              bool *need_prelocking);
-  virtual bool handle_table(THD *thd, Query_tables_list *prelocking_ctx,
-                            TABLE_LIST *table_list, bool *need_prelocking);
-  virtual bool handle_view(THD *thd, Query_tables_list *prelocking_ctx,
-                           TABLE_LIST *table_list, bool *need_prelocking);
+  bool handle_routine(THD *thd, Query_tables_list *prelocking_ctx,
+                      Sroutine_hash_entry *rt, sp_head *sp,
+                      bool *need_prelocking) override;
+  bool handle_table(THD *thd, Query_tables_list *prelocking_ctx,
+                    TABLE_LIST *table_list, bool *need_prelocking) override;
+  bool handle_view(THD *thd, Query_tables_list *prelocking_ctx,
+                   TABLE_LIST *table_list, bool *need_prelocking) override;
 };
 
 
@@ -441,8 +443,8 @@ public:
 
 class Lock_tables_prelocking_strategy : public DML_prelocking_strategy
 {
-  virtual bool handle_table(THD *thd, Query_tables_list *prelocking_ctx,
-                            TABLE_LIST *table_list, bool *need_prelocking);
+  bool handle_table(THD *thd, Query_tables_list *prelocking_ctx,
+                    TABLE_LIST *table_list, bool *need_prelocking) override;
 };
 
 
@@ -457,13 +459,13 @@ class Lock_tables_prelocking_strategy : public DML_prelocking_strategy
 class Alter_table_prelocking_strategy : public Prelocking_strategy
 {
 public:
-  virtual bool handle_routine(THD *thd, Query_tables_list *prelocking_ctx,
-                              Sroutine_hash_entry *rt, sp_head *sp,
-                              bool *need_prelocking);
-  virtual bool handle_table(THD *thd, Query_tables_list *prelocking_ctx,
-                            TABLE_LIST *table_list, bool *need_prelocking);
-  virtual bool handle_view(THD *thd, Query_tables_list *prelocking_ctx,
-                           TABLE_LIST *table_list, bool *need_prelocking);
+  bool handle_routine(THD *thd, Query_tables_list *prelocking_ctx,
+                      Sroutine_hash_entry *rt, sp_head *sp,
+                      bool *need_prelocking) override;
+  bool handle_table(THD *thd, Query_tables_list *prelocking_ctx,
+                    TABLE_LIST *table_list, bool *need_prelocking) override;
+  bool handle_view(THD *thd, Query_tables_list *prelocking_ctx,
+                   TABLE_LIST *table_list, bool *need_prelocking) override;
 };
 
 
@@ -565,9 +567,21 @@ public:
     return m_timeout;
   }
 
-  enum_open_table_action get_action() const
+  /**
+    Return true in case tables and routines the statement implicilty
+    dependent on should be removed, else return false.
+
+    @note The use case when routines and tables the statement implicitly
+    dependent on shouldn't be removed is the one when a new partition be
+    created on handling the INSERT statement against a versioning partitioned
+    table. For this case re-opening a versioning table would result in adding
+    implicitly dependent routines (e.g. table's triggers) that lead to
+    allocation of memory on PS mem_root and so leaking a memory until the PS
+    statement be deallocated.
+  */
+  bool remove_implicitly_used_deps() const
   {
-    return m_action;
+    return m_action != OT_ADD_HISTORY_PARTITION;
   }
 
   uint get_flags() const { return m_flags; }
@@ -662,7 +676,7 @@ public:
                         const char* sqlstate,
                         Sql_condition::enum_warning_level *level,
                         const char* msg,
-                        Sql_condition ** cond_hdl);
+                        Sql_condition ** cond_hdl) override;
 
   /**
     Returns TRUE if one or more ER_NO_SUCH_TABLE errors have been
