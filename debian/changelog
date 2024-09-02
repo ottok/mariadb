@@ -17,6 +17,7 @@ mariadb (1:10.11.9-0+deb12u1) bookworm; urgency=medium
     any issues as the soname and list of public symbols continues to be exactly
     same as before
   * Update gdb.conf to be aligned with other branches and easier to maintain
+  * Add NEWS item to explain new `mariadb-dump` option `--sandbox`
 
  -- Otto Kekäläinen <otto@debian.org>  Mon, 02 Sep 2024 16:55:56 -0700
 
