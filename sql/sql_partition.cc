@@ -142,11 +142,11 @@ Item* convert_charset_partition_constant(Item *item, CHARSET_INFO *cs)
   THD *thd= current_thd;
   Name_resolution_context *context= &thd->lex->current_select->context;
   TABLE_LIST *save_list= context->table_list;
-  const char *save_where= thd->where;
+  THD_WHERE save_where= thd->where;
 
   item= item->safe_charset_converter(thd, cs);
   context->table_list= NULL;
-  thd->where= "convert character set partition constant";
+  thd->where= THD_WHERE::CONVERT_CHARSET_CONST;
   if (item && item->fix_fields_if_needed(thd, (Item**)NULL))
     item= NULL;
   thd->where= save_where;
@@ -841,7 +841,7 @@ static bool fix_fields_part_func(THD *thd, Item* func_expr, TABLE *table,
 
   func_expr->walk(&Item::change_context_processor, 0,
                   &lex.first_select_lex()->context);
-  thd->where= "partition function";
+  thd->where= THD_WHERE::PARTITION_FUNCTION;
   /*
     In execution we must avoid the use of thd->change_item_tree since
     we might release memory before statement is completed. We do this
@@ -2183,7 +2183,7 @@ static int add_keyword_path(String *str, const char *keyword,
                             const char *path)
 {
   char temp_path[FN_REFLEN];
-  strcpy(temp_path, path);
+  safe_strcpy(temp_path, sizeof(temp_path), path);
 #ifdef _WIN32
   /* Convert \ to / to be able to create table on unix */
   char *pos, *end;

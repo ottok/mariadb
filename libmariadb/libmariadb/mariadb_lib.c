@@ -811,7 +811,10 @@ my_bool _mariadb_set_conf_option(MYSQL *mysql, const char *config_option, const 
           option_val= &val_sizet;
           break;
         case MARIADB_OPTION_STR:
-          option_val= (void*)config_value;
+          if (config_value && !config_value[0])
+            option_val= NULL;
+          else
+            option_val= (void*)config_value;
           break;
         case MARIADB_OPTION_NONE:
           break;
@@ -907,7 +910,7 @@ static int parse_connection_string(MYSQL *mysql, const char *unused __attribute_
         if (!key)
           goto error;
         *pos++= 0;
-        if (pos < end)
+        if (pos <= end)
           val= pos;
         continue;
         break;
@@ -3300,10 +3303,17 @@ mysql_refresh(MYSQL *mysql,uint options)
 int STDCALL
 mysql_kill(MYSQL *mysql,ulong pid)
 {
-  char buff[12];
-  int4store(buff,pid);
-  /* if we kill our own thread, reading the response packet will fail */
-  return(ma_simple_command(mysql, COM_PROCESS_KILL,buff,4,0,0));
+  char buff[16];
+
+  /* process id can't be larger than 4-bytes */
+  if (pid & (~0xFFFFFFFFUL))
+  {
+    my_set_error(mysql, CR_CONNECTION_ERROR, SQLSTATE_UNKNOWN, 0);
+    return 1;
+  }
+
+  snprintf(buff, sizeof buff, "KILL %lu", pid);
+  return mysql_real_query(mysql, (char *)buff, (ulong)strlen(buff));
 }
 
 

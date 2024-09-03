@@ -374,10 +374,12 @@ found_j:
 			}
 		}
 
-		/* In case of discarded tablespace, InnoDB can't
-		read the root page. So assign the null bytes based
-		on nullabled fields */
-		if (!oindex.table->space) {
+		/* Discard tablespace doesn't remove the instantness
+		from the table definition. if n_core_null_bytes wasn't
+		initialized then assign it based on nullable fields */
+		if (!oindex.table->space
+		    && oindex.n_core_null_bytes
+		       == dict_index_t::NO_CORE_NULL_BYTES) {
 			oindex.n_core_null_bytes = static_cast<uint8_t>(
 				UT_BITS_IN_BYTES(unsigned(oindex.n_nullable)));
 		}
@@ -1168,7 +1170,7 @@ struct ha_innobase_inplace_ctx : public inplace_alter_handler_ctx
 		trx_start_for_ddl(trx);
 	}
 
-	~ha_innobase_inplace_ctx()
+	~ha_innobase_inplace_ctx() override
 	{
 		UT_DELETE(m_stage);
 		if (instant_table) {
@@ -1277,7 +1279,7 @@ struct ha_innobase_inplace_ctx : public inplace_alter_handler_ctx
 
 	/** Share context between partitions.
 	@param[in] ctx	context from another partition of the table */
-	void set_shared_data(const inplace_alter_handler_ctx& ctx)
+	void set_shared_data(const inplace_alter_handler_ctx& ctx) override
 	{
 		if (add_autoinc != ULINT_UNDEFINED) {
 			const ha_innobase_inplace_ctx& ha_ctx =
@@ -6521,16 +6523,16 @@ acquire_lock:
 		acquiring an InnoDB table lock even for online operation,
 		to ensure that the rollback of recovered transactions will
 		not run concurrently with online ADD INDEX. */
-		user_table->lock_mutex_lock();
+		user_table->lock_shared_lock();
 		for (lock_t *lock = UT_LIST_GET_FIRST(user_table->locks);
 		     lock;
 		     lock = UT_LIST_GET_NEXT(un_member.tab_lock.locks, lock)) {
 			if (lock->trx->is_recovered) {
-				user_table->lock_mutex_unlock();
+				user_table->lock_shared_unlock();
 				goto acquire_lock;
 			}
 		}
-		user_table->lock_mutex_unlock();
+		user_table->lock_shared_unlock();
 	}
 
 	if (fts_exist) {
@@ -7355,6 +7357,7 @@ error_handling_drop_uncached:
 		ut_d(dict_table_check_for_dup_indexes(user_table,
 						      CHECK_PARTIAL_OK));
 		if (ctx->need_rebuild()) {
+			export_vars.innodb_bulk_operations++;
 			ctx->new_table->acquire();
 		}
 
@@ -8503,6 +8506,15 @@ field_changed:
 			DBUG_RETURN(true);
 		}
 
+		if ((ha_alter_info->handler_flags & ALTER_OPTIONS)
+		    && ctx->page_compression_level
+		    && !ctx->old_table->not_redundant()) {
+			my_error(ER_ILLEGAL_HA_CREATE_OPTION, MYF(0),
+				 table_type(),
+				 "PAGE_COMPRESSED=1 ROW_FORMAT=REDUNDANT");
+			DBUG_RETURN(true);
+		}
+
 		if (!(ha_alter_info->handler_flags & INNOBASE_ALTER_DATA)
 		    && alter_templ_needs_rebuild(altered_table, ha_alter_info,
 						 ctx->new_table)
@@ -8771,10 +8783,11 @@ ok_exit:
 		}
 		s_templ = UT_NEW_NOKEY(dict_vcol_templ_t());
 
+		ctx->new_table->lock_mutex_lock();
 		innobase_build_v_templ(
-			altered_table, ctx->new_table, s_templ, NULL, false);
-
+			altered_table, ctx->new_table, s_templ);
 		ctx->new_table->vc_templ = s_templ;
+                ctx->new_table->lock_mutex_unlock();
 	} else if (ctx->num_to_add_vcol > 0 && ctx->num_to_drop_vcol == 0) {
 		/* if there is ongoing drop virtual column, then we disallow
 		inplace add index on newly added virtual column, so it does
@@ -8789,10 +8802,12 @@ ok_exit:
 		add_v->v_col = ctx->add_vcol;
 		add_v->v_col_name = ctx->add_vcol_name;
 
+		ctx->new_table->lock_mutex_lock();
 		innobase_build_v_templ(
-			altered_table, ctx->new_table, s_templ, add_v, false);
+			altered_table, ctx->new_table, s_templ, add_v);
 		old_templ = ctx->new_table->vc_templ;
 		ctx->new_table->vc_templ = s_templ;
+		ctx->new_table->lock_mutex_unlock();
 	}
 
 	/* Drop virtual column without rebuild will keep dict table
@@ -11065,11 +11080,10 @@ static bool alter_rebuild_apply_log(
 	if (ctx->new_table->n_v_cols > 0) {
 		s_templ = UT_NEW_NOKEY(
 				dict_vcol_templ_t());
-		s_templ->vtempl = NULL;
-
-		innobase_build_v_templ(altered_table, ctx->new_table, s_templ,
-				       NULL, true);
+		ctx->new_table->lock_mutex_lock();
+		innobase_build_v_templ(altered_table, ctx->new_table, s_templ);
 		ctx->new_table->vc_templ = s_templ;
+		ctx->new_table->lock_mutex_unlock();
 	}
 
 	dberr_t error = row_log_table_apply(

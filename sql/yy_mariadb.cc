@@ -44623,7 +44623,7 @@ yyreduce:
   case 1997: /* $@172: %empty  */
 #line 12522 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            thd->where= "ORDER clause";
+            thd->where= THD_WHERE::ORDER_CLAUSE;
           }
 #line 44629 "/home/buildbot/git/mkdist/sql/yy_mariadb.cc"
     break;

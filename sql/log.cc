@@ -40,6 +40,7 @@
 #include "sql_audit.h"
 #include "mysqld.h"
 #include "ddl_log.h"
+#include "repl_failsafe.h"
 
 #include <my_dir.h>
 #include <m_ctype.h>				// For test_if_number
@@ -213,14 +214,14 @@ public:
     m_message[0]= '\0';
   }
 
-  virtual ~Silence_log_table_errors() = default;
+  ~Silence_log_table_errors() override = default;
 
-  virtual bool handle_condition(THD *thd,
+  bool handle_condition(THD *thd,
                                 uint sql_errno,
                                 const char* sql_state,
                                 Sql_condition::enum_warning_level *level,
                                 const char* msg,
-                                Sql_condition ** cond_hdl);
+                                Sql_condition ** cond_hdl) override;
   const char *message() const { return m_message; }
 };
 
@@ -3283,10 +3284,12 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
 
       if (my_b_printf(&log_file,
                       "# Pages_accessed: %lu  Pages_read: %lu  "
+                      "Pages_prefetched: %lu  "
                       "Pages_updated: %lu  Old_rows_read: %lu\n"
                       "# Pages_read_time: %s  Engine_time: %s\n",
                       (ulong) stats->pages_accessed,
                       (ulong) stats->pages_read_count,
+                      (ulong) stats->pages_prefetched,
                       (ulong) stats->pages_updated,
                       (ulong) stats->undo_records_read,
                       query_time_buff, lock_time_buff))
@@ -3358,7 +3361,7 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
     }
     if (thd->db.str && strcmp(thd->db.str, db))
     {						// Database changed
-      if (my_b_printf(&log_file,"use %s;\n",thd->db.str))
+      if (my_b_printf(&log_file,"use %`s;\n",thd->db.str))
         goto err;
       strmov(db,thd->db.str);
     }
@@ -3571,16 +3574,6 @@ void MYSQL_BIN_LOG::cleanup()
 }
 
 
-/* Init binlog-specific vars */
-void MYSQL_BIN_LOG::init(ulong max_size_arg)
-{
-  DBUG_ENTER("MYSQL_BIN_LOG::init");
-  max_size= max_size_arg;
-  DBUG_PRINT("info",("max_size: %lu", max_size));
-  DBUG_VOID_RETURN;
-}
-
-
 void MYSQL_BIN_LOG::init_pthread_objects()
 {
   MYSQL_LOG::init_pthread_objects();
@@ -3772,7 +3765,7 @@ bool MYSQL_BIN_LOG::open(const char *log_name,
     DBUG_RETURN(1);                            /* all warnings issued */
   }
 
-  init(max_size_arg);
+  max_size= max_size_arg;
 
   open_count++;
 
@@ -5284,6 +5277,15 @@ MYSQL_BIN_LOG::is_xidlist_idle_nolock()
   return true;
 }
 
+#ifdef WITH_WSREP
+static bool is_gtid_written_on_trans_start(const THD *thd)
+{
+  return wsrep_on(thd) &&
+      (thd->variables.gtid_seq_no || thd->variables.wsrep_gtid_seq_no) &&
+      (thd->wsrep_cs().mode() == wsrep::client_state::m_local);
+}
+#endif
+
 /**
   Create a new log file name.
 
@@ -5397,10 +5399,8 @@ int MYSQL_BIN_LOG::new_file_impl()
   */
   if (unlikely((error= generate_new_name(new_name, name, 0))))
   {
-#ifdef ENABLE_AND_FIX_HANG
-    close_on_error= TRUE;
-#endif
-    goto end2;
+    mysql_mutex_unlock(&LOCK_index);
+    DBUG_RETURN(error);
   }
   new_name_ptr=new_name;
 
@@ -5508,7 +5508,6 @@ end:
     last_used_log_number--;
   }
 
-end2:
   if (delay_close)
   {
     clear_inuse_flag_when_closing(old_file);
@@ -5921,10 +5920,7 @@ THD::binlog_start_trans_and_stmt()
     Ha_trx_info *ha_info;
     ha_info= this->ha_data[binlog_hton->slot].ha_info + (mstmt_mode ? 1 : 0);
 
-    if (!ha_info->is_started() && 
-        (this->variables.gtid_seq_no || this->variables.wsrep_gtid_seq_no) &&
-        wsrep_on(this) && 
-        (this->wsrep_cs().mode() == wsrep::client_state::m_local))
+    if (!ha_info->is_started() && is_gtid_written_on_trans_start(this))
     {
       uchar *buf= 0;
       size_t len= 0;
@@ -11017,7 +11013,7 @@ Recovery_context::Recovery_context() :
   prev_event_pos(0),
   last_gtid_standalone(false), last_gtid_valid(false), last_gtid_no2pc(false),
   last_gtid_engines(0),
-  do_truncate(global_rpl_semi_sync_slave_enabled),
+  do_truncate(rpl_status == RPL_IDLE_SLAVE),
   truncate_validated(false), truncate_reset_done(false),
   truncate_set_in_1st(false), id_binlog(MAX_binlog_id),
   checksum_alg(BINLOG_CHECKSUM_ALG_UNDEF), gtid_maybe_to_truncate(NULL)
