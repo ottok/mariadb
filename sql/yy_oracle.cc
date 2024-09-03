@@ -3176,58 +3176,58 @@ static const yytype_int16 yyrline[] =
    16459, 16460, 16461, 16462, 16471, 16470, 16484, 16483, 16498, 16497,
    16515, 16514, 16528, 16527, 16541, 16540, 16556, 16555, 16569, 16568,
    16582, 16581, 16594, 16593, 16611, 16610, 16622, 16621, 16633, 16632,
-   16643, 16661, 16672, 16679, 16688, 16710, 16726, 16738, 16737, 16751,
-   16750, 16762, 16761, 16775, 16776, 16777, 16778, 16782, 16801, 16819,
-   16820, 16824, 16825, 16826, 16827, 16832, 16837, 16842, 16853, 16854,
-   16855, 16861, 16867, 16879, 16878, 16892, 16893, 16899, 16908, 16909,
-   16913, 16914, 16918, 16937, 16938, 16939, 16944, 16945, 16950, 16949,
-   16967, 16966, 16978, 16987, 16997, 16996, 17039, 17040, 17044, 17045,
-   17049, 17050, 17051, 17052, 17054, 17053, 17066, 17067, 17068, 17069,
-   17070, 17076, 17081, 17086, 17091, 17095, 17100, 17109, 17111, 17116,
-   17121, 17127, 17133, 17138, 17150, 17151, 17155, 17156, 17160, 17165,
-   17173, 17182, 17203, 17203, 17205, 17207, 17211, 17212, 17219, 17221,
-   17225, 17230, 17237, 17241, 17250, 17257, 17258, 17259, 17260, 17264,
-   17265, 17266, 17267, 17268, 17269, 17270, 17271, 17272, 17273, 17274,
-   17275, 17276, 17277, 17278, 17279, 17280, 17281, 17282, 17283, 17284,
-   17285, 17286, 17287, 17288, 17289, 17290, 17291, 17292, 17293, 17294,
-   17295, 17296, 17297, 17298, 17299, 17300, 17301, 17302, 17303, 17304,
-   17305, 17309, 17310, 17314, 17315, 17319, 17326, 17333, 17343, 17352,
-   17358, 17365, 17373, 17378, 17386, 17391, 17399, 17404, 17411, 17411,
-   17412, 17412, 17415, 17421, 17427, 17432, 17439, 17445, 17452, 17461,
-   17465, 17471, 17479, 17481, 17485, 17489, 17493, 17500, 17505, 17510,
-   17515, 17520, 17528, 17529, 17533, 17534, 17539, 17540, 17544, 17545,
-   17549, 17550, 17554, 17555, 17560, 17559, 17569, 17578, 17579, 17583,
-   17584, 17589, 17590, 17591, 17596, 17597, 17598, 17602, 17614, 17623,
-   17629, 17638, 17647, 17660, 17662, 17664, 17672, 17673, 17674, 17678,
-   17679, 17685, 17686, 17687, 17688, 17689, 17690, 17691, 17701, 17702,
-   17707, 17720, 17734, 17735, 17736, 17740, 17741, 17745, 17746, 17751,
-   17752, 17756, 17762, 17771, 17771, 17785, 17786, 17787, 17788, 17798,
-   17800, 17806, 17812, 17822, 17831, 17837, 17842, 17846, 17820, 17895,
-   17895, 17910, 17914, 17918, 17922, 17926, 17930, 17938, 17939, 17955,
-   17962, 17969, 17982, 17983, 17984, 17988, 17989, 17990, 17994, 17995,
-   18000, 18002, 18001, 18007, 18008, 18012, 18017, 18024, 18029, 18038,
-   18044, 18473, 18474, 18478, 18480, 18479, 18493, 18492, 18505, 18504,
-   18518, 18522, 18526, 18531, 18532, 18538, 18539, 18540, 18541, 18542,
-   18543, 18544, 18545, 18549, 18550, 18551, 18552, 18553, 18554, 18555,
-   18556, 18560, 18561, 18562, 18567, 18571, 18580, 18579, 18592, 18598,
-   18602, 18612, 18621, 18622, 18623, 18627, 18628, 18629, 18633, 18633,
-   18645, 18651, 18652, 18653, 18654, 18655, 18656, 18657, 18658, 18662,
-   18663, 18671, 18672, 18678, 18677, 18694, 18693, 18712, 18711, 18735,
-   18736, 18740, 18749, 18750, 18754, 18755, 18760, 18759, 18774, 18782,
-   18783, 18787, 18788, 18793, 18794, 18799, 18800, 18804, 18805, 18809,
-   18813, 18817, 18823, 18813, 18832, 18834, 18839, 18840, 18844, 18845,
-   18849, 18849, 18855, 18861, 18869, 18870, 18871, 18877, 18878, 18884,
-   18885, 18891, 18902, 18901, 18929, 18928, 18954, 18963, 18972, 18978,
-   18977, 18997, 18996, 19016, 19020, 19021, 19025, 19026, 19030, 19037,
-   19047, 19055, 19066, 19074, 19079, 19084, 19088, 19093, 19098, 19103,
-   19113, 19112, 19127, 19135, 19126, 19149, 19154, 19159, 19164, 19172,
-   19185, 19184, 19195, 19193, 19209, 19207, 19221, 19230, 19228, 19250,
-   19264, 19269, 19248, 19282, 19286, 19291, 19290, 19299, 19303, 19304,
-   19311, 19312, 19319, 19320, 19324, 19325, 19332, 19343, 19342, 19361,
-   19362, 19363, 19364, 19365, 19366, 19370, 19371, 19372, 19373, 19374,
-   19375, 19376, 19377, 19378, 19379, 19380, 19384, 19385, 19386, 19387,
-   19394, 19392, 19408, 19412, 19406, 19428, 19429, 19434, 19433, 19448,
-   19454, 19447, 19471, 19469
+   16643, 16661, 16672, 16679, 16685, 16707, 16723, 16735, 16734, 16748,
+   16747, 16759, 16758, 16772, 16773, 16774, 16775, 16779, 16798, 16816,
+   16817, 16821, 16822, 16823, 16824, 16829, 16834, 16839, 16850, 16851,
+   16852, 16858, 16864, 16876, 16875, 16889, 16890, 16896, 16905, 16906,
+   16910, 16911, 16915, 16934, 16935, 16936, 16941, 16942, 16947, 16946,
+   16964, 16963, 16975, 16984, 16994, 16993, 17036, 17037, 17041, 17042,
+   17046, 17047, 17048, 17049, 17051, 17050, 17063, 17064, 17065, 17066,
+   17067, 17073, 17078, 17083, 17088, 17092, 17097, 17106, 17108, 17113,
+   17118, 17124, 17130, 17135, 17147, 17148, 17152, 17153, 17157, 17162,
+   17170, 17179, 17200, 17200, 17202, 17204, 17208, 17209, 17216, 17218,
+   17222, 17227, 17234, 17238, 17247, 17254, 17255, 17256, 17257, 17261,
+   17262, 17263, 17264, 17265, 17266, 17267, 17268, 17269, 17270, 17271,
+   17272, 17273, 17274, 17275, 17276, 17277, 17278, 17279, 17280, 17281,
+   17282, 17283, 17284, 17285, 17286, 17287, 17288, 17289, 17290, 17291,
+   17292, 17293, 17294, 17295, 17296, 17297, 17298, 17299, 17300, 17301,
+   17302, 17306, 17307, 17311, 17312, 17316, 17323, 17330, 17340, 17349,
+   17355, 17362, 17370, 17375, 17383, 17388, 17396, 17401, 17408, 17408,
+   17409, 17409, 17412, 17418, 17424, 17429, 17436, 17442, 17449, 17458,
+   17462, 17468, 17476, 17478, 17482, 17486, 17490, 17497, 17502, 17507,
+   17512, 17517, 17525, 17526, 17530, 17531, 17536, 17537, 17541, 17542,
+   17546, 17547, 17551, 17552, 17557, 17556, 17566, 17575, 17576, 17580,
+   17581, 17586, 17587, 17588, 17593, 17594, 17595, 17599, 17611, 17620,
+   17626, 17635, 17644, 17657, 17659, 17661, 17669, 17670, 17671, 17675,
+   17676, 17682, 17683, 17684, 17685, 17686, 17687, 17688, 17698, 17699,
+   17704, 17717, 17731, 17732, 17733, 17737, 17738, 17742, 17743, 17748,
+   17749, 17753, 17759, 17768, 17768, 17782, 17783, 17784, 17785, 17795,
+   17797, 17803, 17809, 17819, 17828, 17834, 17839, 17843, 17817, 17892,
+   17892, 17907, 17911, 17915, 17919, 17923, 17927, 17935, 17936, 17952,
+   17959, 17966, 17979, 17980, 17981, 17985, 17986, 17987, 17991, 17992,
+   17997, 17999, 17998, 18004, 18005, 18009, 18014, 18021, 18026, 18035,
+   18041, 18470, 18471, 18475, 18477, 18476, 18490, 18489, 18502, 18501,
+   18515, 18519, 18523, 18528, 18529, 18535, 18536, 18537, 18538, 18539,
+   18540, 18541, 18542, 18546, 18547, 18548, 18549, 18550, 18551, 18552,
+   18553, 18557, 18558, 18559, 18564, 18568, 18577, 18576, 18589, 18595,
+   18599, 18609, 18618, 18619, 18620, 18624, 18625, 18626, 18630, 18630,
+   18642, 18648, 18649, 18650, 18651, 18652, 18653, 18654, 18655, 18659,
+   18660, 18668, 18669, 18675, 18674, 18691, 18690, 18709, 18708, 18732,
+   18733, 18737, 18746, 18747, 18751, 18752, 18757, 18756, 18771, 18779,
+   18780, 18784, 18785, 18790, 18791, 18796, 18797, 18801, 18802, 18806,
+   18810, 18814, 18820, 18810, 18829, 18831, 18836, 18837, 18841, 18842,
+   18846, 18846, 18852, 18858, 18866, 18867, 18868, 18874, 18875, 18881,
+   18882, 18888, 18899, 18898, 18926, 18925, 18951, 18960, 18969, 18975,
+   18974, 18994, 18993, 19013, 19017, 19018, 19022, 19023, 19027, 19034,
+   19044, 19052, 19063, 19071, 19076, 19081, 19085, 19090, 19095, 19100,
+   19110, 19109, 19124, 19132, 19123, 19146, 19151, 19156, 19161, 19169,
+   19182, 19181, 19192, 19190, 19206, 19204, 19218, 19227, 19225, 19247,
+   19261, 19266, 19245, 19279, 19283, 19288, 19287, 19296, 19300, 19301,
+   19308, 19309, 19316, 19317, 19321, 19322, 19329, 19340, 19339, 19358,
+   19359, 19360, 19361, 19362, 19363, 19367, 19368, 19369, 19370, 19371,
+   19372, 19373, 19374, 19375, 19376, 19377, 19381, 19382, 19383, 19384,
+   19391, 19389, 19405, 19409, 19403, 19425, 19426, 19431, 19430, 19445,
+   19451, 19444, 19468, 19466
 };
 #endif
 
@@ -43531,7 +43531,7 @@ yyreduce:
   case 1925: /* $@168: %empty  */
 #line 12249 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            thd->where= "ORDER clause";
+            thd->where= THD_WHERE::ORDER_CLAUSE;
           }
 #line 43537 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
@@ -48668,9 +48668,9 @@ yyreduce:
   case 3322: /* option_value_no_option_type: NAMES_SYM charset_name_or_default  */
 #line 16673 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            CHARSET_INFO *def= global_system_variables.character_set_client;
-            Lex_exact_charset_opt_extended_collate tmp((yyvsp[0].charset) ? (yyvsp[0].charset) : def, false);
-            if (Lex->set_names((yyvsp[-1].kwd).pos(), tmp, yychar == YYEMPTY))
+            if (Lex->set_names((yyvsp[-1].kwd).pos(), (yyvsp[0].charset),
+                               Lex_extended_collation_st::collate_default(),
+                               yychar == YYEMPTY))
               MYSQL_YYABORT;
           }
 #line 48677 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
@@ -48679,17 +48679,14 @@ yyreduce:
   case 3323: /* option_value_no_option_type: NAMES_SYM charset_name_or_default COLLATE_SYM collation_name_or_default  */
 #line 16681 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            CHARSET_INFO *def= global_system_variables.character_set_client;
-            Lex_exact_charset_opt_extended_collate tmp((yyvsp[-2].charset) ? (yyvsp[-2].charset) : def, false);
-            if (tmp.merge_collation((yyvsp[0].Lex_extended_collation)) ||
-                Lex->set_names((yyvsp[-3].kwd).pos(), tmp, yychar == YYEMPTY))
+            if (Lex->set_names((yyvsp[-3].kwd).pos(), (yyvsp[-2].charset), (yyvsp[0].Lex_extended_collation), yychar == YYEMPTY))
               MYSQL_YYABORT;
           }
-#line 48689 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48686 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3324: /* option_value_no_option_type: DEFAULT ROLE_SYM grant_role  */
-#line 16689 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16686 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-2].kwd).pos()))
               MYSQL_YYABORT;
@@ -48711,11 +48708,11 @@ yyreduce:
             if (unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48715 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48712 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3325: /* option_value_no_option_type: DEFAULT ROLE_SYM grant_role FOR_SYM user  */
-#line 16711 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16708 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-4].kwd).pos()))
               MYSQL_YYABORT;
@@ -48731,11 +48728,11 @@ yyreduce:
             if (unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48735 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48732 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3326: /* option_value_no_option_type: ROLE_SYM role_name  */
-#line 16727 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16724 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
@@ -48746,20 +48743,20 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48750 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48747 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3327: /* $@239: %empty  */
-#line 16738 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16735 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 48759 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48756 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3328: /* option_value_no_option_type: ROLE_SYM equal $@239 set_expr_or_default  */
-#line 16743 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16740 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-3].kwd));
             if (unlikely(!tmp.str) ||
@@ -48767,49 +48764,49 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48771 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48768 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3329: /* $@240: %empty  */
-#line 16751 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16748 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 48780 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48777 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3330: /* option_value_no_option_type: PASSWORD_SYM equal $@240 text_or_password  */
-#line 16756 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16753 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_create_set_password_instr(thd, (yyvsp[0].user_auth),
                                                            yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48790 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48787 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3331: /* $@241: %empty  */
-#line 16762 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16759 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 48799 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48796 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3332: /* option_value_no_option_type: PASSWORD_SYM FOR_SYM $@241 user equal text_or_password  */
-#line 16767 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16764 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_create_set_password_instr(thd, (yyvsp[-2].lex_user), (yyvsp[0].user_auth),
                                                            yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48809 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48806 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3337: /* transaction_access_mode: transaction_access_mode_types  */
-#line 16783 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16780 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             Item *item= new (thd->mem_root) Item_int(thd, (int32) (yyvsp[0].num));
@@ -48825,11 +48822,11 @@ yyreduce:
             if (unlikely(lex->var_list.push_back(var, thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 48829 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48826 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3338: /* isolation_level: ISOLATION LEVEL_SYM isolation_types  */
-#line 16802 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16799 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             Item *item= new (thd->mem_root) Item_int(thd, (int32) (yyvsp[0].tx_isolation));
@@ -48844,65 +48841,65 @@ yyreduce:
                 unlikely(lex->var_list.push_back(var, thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 48848 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48845 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3339: /* transaction_access_mode_types: READ_SYM ONLY_SYM  */
-#line 16819 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16816 "/home/buildbot/git/sql/sql_yacc.yy"
                             { (yyval.num)= true; }
-#line 48854 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48851 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3340: /* transaction_access_mode_types: READ_SYM WRITE_SYM  */
-#line 16820 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16817 "/home/buildbot/git/sql/sql_yacc.yy"
                              { (yyval.num)= false; }
-#line 48860 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48857 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3341: /* isolation_types: READ_SYM UNCOMMITTED_SYM  */
-#line 16824 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16821 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_READ_UNCOMMITTED; }
-#line 48866 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48863 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3342: /* isolation_types: READ_SYM COMMITTED_SYM  */
-#line 16825 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16822 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_READ_COMMITTED; }
-#line 48872 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48869 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3343: /* isolation_types: REPEATABLE_SYM READ_SYM  */
-#line 16826 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16823 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_REPEATABLE_READ; }
-#line 48878 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48875 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3344: /* isolation_types: SERIALIZABLE_SYM  */
-#line 16827 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16824 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_SERIALIZABLE; }
-#line 48884 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48881 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3345: /* text_or_password: TEXT_STRING  */
-#line 16833 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16830 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= new (thd->mem_root) USER_AUTH();
             (yyval.user_auth)->auth_str= (yyvsp[0].lex_string_with_metadata);
           }
-#line 48893 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48890 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3346: /* text_or_password: PASSWORD_SYM '(' TEXT_STRING ')'  */
-#line 16838 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16835 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= new (thd->mem_root) USER_AUTH();
             (yyval.user_auth)->pwtext= (yyvsp[-1].lex_string_with_metadata);
           }
-#line 48902 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48899 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3347: /* text_or_password: OLD_PASSWORD_SYM '(' TEXT_STRING ')'  */
-#line 16843 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16840 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= new (thd->mem_root) USER_AUTH();
             (yyval.user_auth)->pwtext= (yyvsp[-1].lex_string_with_metadata);
@@ -48910,53 +48907,53 @@ yyreduce:
                                    (yyvsp[-1].lex_string_with_metadata).str, (yyvsp[-1].lex_string_with_metadata).length, Item_func_password::OLD);
             (yyval.user_auth)->auth_str.length=  SCRAMBLED_PASSWORD_CHAR_LENGTH_323;
           }
-#line 48914 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48911 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3348: /* set_expr_or_default: expr  */
-#line 16853 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16850 "/home/buildbot/git/sql/sql_yacc.yy"
                { (yyval.item)=(yyvsp[0].item); }
-#line 48920 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48917 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3349: /* set_expr_or_default: DEFAULT  */
-#line 16854 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16851 "/home/buildbot/git/sql/sql_yacc.yy"
                   { (yyval.item)=0; }
-#line 48926 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48923 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3350: /* set_expr_or_default: ON  */
-#line 16856 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16853 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.item)=new (thd->mem_root) Item_string_sys(thd, "ON",  2);
             if (unlikely((yyval.item) == NULL))
               MYSQL_YYABORT;
           }
-#line 48936 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48933 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3351: /* set_expr_or_default: ALL  */
-#line 16862 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16859 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.item)=new (thd->mem_root) Item_string_sys(thd, "ALL", 3);
             if (unlikely((yyval.item) == NULL))
               MYSQL_YYABORT;
           }
-#line 48946 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48943 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3352: /* set_expr_or_default: BINARY  */
-#line 16868 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16865 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.item)=new (thd->mem_root) Item_string_sys(thd, "binary", 6);
             if (unlikely((yyval.item) == NULL))
               MYSQL_YYABORT;
           }
-#line 48956 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48953 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3353: /* $@242: %empty  */
-#line 16879 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16876 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
 
@@ -48964,55 +48961,55 @@ yyreduce:
               my_yyabort_error((ER_SP_BADSTATEMENT, MYF(0), "LOCK"));
             lex->sql_command= SQLCOM_LOCK_TABLES;
           }
-#line 48968 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48965 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3354: /* lock: LOCK_SYM table_or_tables $@242 table_lock_list opt_lock_wait_timeout  */
-#line 16887 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16884 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 48974 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48971 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3355: /* opt_lock_wait_timeout: %empty  */
-#line 16892 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16889 "/home/buildbot/git/sql/sql_yacc.yy"
         {}
-#line 48980 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48977 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3356: /* opt_lock_wait_timeout: WAIT_SYM ulong_num  */
-#line 16894 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16891 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           if (unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("lock_wait_timeout"), (yyvsp[0].ulong_num))) ||
               unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("innodb_lock_wait_timeout"), (yyvsp[0].ulong_num))))
             MYSQL_YYABORT;
         }
-#line 48990 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48987 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3357: /* opt_lock_wait_timeout: NOWAIT_SYM  */
-#line 16900 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16897 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           if (unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("lock_wait_timeout"), 0)) ||
               unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("innodb_lock_wait_timeout"), 0)))
             MYSQL_YYABORT;
         }
-#line 49000 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 48997 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3358: /* table_or_tables: TABLE_SYM  */
-#line 16908 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16905 "/home/buildbot/git/sql/sql_yacc.yy"
                            { }
-#line 49006 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49003 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3359: /* table_or_tables: TABLES  */
-#line 16909 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16906 "/home/buildbot/git/sql/sql_yacc.yy"
                            { }
-#line 49012 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49009 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3362: /* table_lock: table_ident opt_table_alias_clause lock_option  */
-#line 16919 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16916 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             thr_lock_type lock_type= (thr_lock_type) (yyvsp[0].num);
             bool lock_for_write= (lock_type >= TL_FIRST_WRITE);
@@ -49028,43 +49025,43 @@ yyreduce:
                                            lock_type, mdl_type)))
               MYSQL_YYABORT;
           }
-#line 49032 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49029 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3363: /* lock_option: READ_SYM  */
-#line 16937 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16934 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_READ_NO_INSERT; }
-#line 49038 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49035 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3364: /* lock_option: WRITE_SYM  */
-#line 16938 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16935 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_WRITE_DEFAULT; }
-#line 49044 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49041 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3365: /* lock_option: WRITE_SYM CONCURRENT  */
-#line 16940 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16937 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.num)= (Lex->sphead ? TL_WRITE_DEFAULT : TL_WRITE_CONCURRENT_INSERT);
           }
-#line 49052 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49049 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3366: /* lock_option: LOW_PRIORITY WRITE_SYM  */
-#line 16944 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16941 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_WRITE_LOW_PRIORITY; }
-#line 49058 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49055 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3367: /* lock_option: READ_SYM LOCAL_SYM  */
-#line 16945 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16942 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_READ; }
-#line 49064 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49061 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3368: /* $@243: %empty  */
-#line 16950 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16947 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
 
@@ -49072,34 +49069,34 @@ yyreduce:
               my_yyabort_error((ER_SP_BADSTATEMENT, MYF(0), "UNLOCK"));
             lex->sql_command= SQLCOM_UNLOCK_TABLES;
           }
-#line 49076 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49073 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3369: /* unlock: UNLOCK_SYM $@243 table_or_tables  */
-#line 16958 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16955 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 49082 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49079 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3370: /* $@244: %empty  */
-#line 16967 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16964 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->main_select_push())
               MYSQL_YYABORT;
           }
-#line 49091 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49088 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3371: /* handler: HANDLER_SYM $@244 handler_tail  */
-#line 16972 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16969 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->pop_select(); //main select
           }
-#line 49099 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49096 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3372: /* handler_tail: table_ident OPEN_SYM opt_table_alias_clause  */
-#line 16979 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16976 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             if (unlikely(lex->sphead))
@@ -49108,11 +49105,11 @@ yyreduce:
             if (!lex->current_select->add_table_to_list(thd, (yyvsp[-2].table), (yyvsp[0].lex_str_ptr), 0))
               MYSQL_YYABORT;
           }
-#line 49112 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49109 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3373: /* handler_tail: table_ident_nodb CLOSE_SYM  */
-#line 16988 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16985 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             if (unlikely(lex->sphead))
@@ -49121,11 +49118,11 @@ yyreduce:
             if (!lex->current_select->add_table_to_list(thd, (yyvsp[-1].table), 0, 0))
               MYSQL_YYABORT;
           }
-#line 49125 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49122 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3374: /* $@245: %empty  */
-#line 16997 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 16994 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             SELECT_LEX *select= Select;
@@ -49143,11 +49140,11 @@ yyreduce:
             if (!lex->current_select->add_table_to_list(thd, (yyvsp[-1].table), 0, 0))
               MYSQL_YYABORT;
           }
-#line 49147 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49144 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3375: /* handler_tail: table_ident_nodb READ_SYM $@245 handler_read_or_scan opt_where_clause opt_global_limit_clause  */
-#line 17015 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17012 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             SELECT_LEX *select= Select;
@@ -49169,59 +49166,59 @@ yyreduce:
               MYSQL_YYABORT;
             }
           }
-#line 49173 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49170 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3376: /* handler_read_or_scan: handler_scan_function  */
-#line 17039 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17036 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->ident= null_clex_str; }
-#line 49179 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49176 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3377: /* handler_read_or_scan: ident handler_rkey_function  */
-#line 17040 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17037 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->ident= (yyvsp[-1].ident_sys); }
-#line 49185 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49182 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3378: /* handler_scan_function: FIRST_SYM  */
-#line 17044 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17041 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RFIRST; }
-#line 49191 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49188 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3379: /* handler_scan_function: NEXT_SYM  */
-#line 17045 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17042 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RNEXT;  }
-#line 49197 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49194 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3380: /* handler_rkey_function: FIRST_SYM  */
-#line 17049 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17046 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RFIRST; }
-#line 49203 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49200 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3381: /* handler_rkey_function: NEXT_SYM  */
-#line 17050 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17047 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RNEXT;  }
-#line 49209 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49206 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3382: /* handler_rkey_function: PREV_SYM  */
-#line 17051 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17048 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RPREV;  }
-#line 49215 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49212 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3383: /* handler_rkey_function: LAST_SYM  */
-#line 17052 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17049 "/home/buildbot/git/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RLAST;  }
-#line 49221 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49218 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3384: /* $@246: %empty  */
-#line 17054 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17051 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->ha_read_mode = RKEY;
@@ -49229,143 +49226,143 @@ yyreduce:
             if (unlikely(!(lex->insert_list= new (thd->mem_root) List_item)))
               MYSQL_YYABORT;
           }
-#line 49233 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49230 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3385: /* handler_rkey_function: handler_rkey_mode $@246 '(' values ')'  */
-#line 17062 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17059 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 49239 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49236 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3386: /* handler_rkey_mode: '='  */
-#line 17066 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17063 "/home/buildbot/git/sql/sql_yacc.yy"
                   { (yyval.ha_rkey_mode)=HA_READ_KEY_EXACT;   }
-#line 49245 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49242 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3387: /* handler_rkey_mode: GE  */
-#line 17067 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17064 "/home/buildbot/git/sql/sql_yacc.yy"
                  { (yyval.ha_rkey_mode)=HA_READ_KEY_OR_NEXT; }
-#line 49251 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49248 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3388: /* handler_rkey_mode: LE  */
-#line 17068 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17065 "/home/buildbot/git/sql/sql_yacc.yy"
                  { (yyval.ha_rkey_mode)=HA_READ_KEY_OR_PREV; }
-#line 49257 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49254 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3389: /* handler_rkey_mode: '>'  */
-#line 17069 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17066 "/home/buildbot/git/sql/sql_yacc.yy"
               { (yyval.ha_rkey_mode)=HA_READ_AFTER_KEY;   }
-#line 49263 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49260 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3390: /* handler_rkey_mode: '<'  */
-#line 17070 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17067 "/home/buildbot/git/sql/sql_yacc.yy"
                   { (yyval.ha_rkey_mode)=HA_READ_BEFORE_KEY;  }
-#line 49269 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49266 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3391: /* revoke: REVOKE clear_privileges revoke_command  */
-#line 17077 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17074 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 49275 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49272 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3392: /* revoke_command: grant_privileges ON opt_table grant_ident FROM user_and_role_list  */
-#line 17082 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17079 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_revoke_table(thd, (yyvsp[-5].lex_grant), *(yyvsp[-2].lex_grant_ident)))
               MYSQL_YYABORT;
           }
-#line 49284 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49281 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3393: /* revoke_command: grant_privileges ON sp_handler grant_ident FROM user_and_role_list  */
-#line 17087 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17084 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_revoke_sp(thd, (yyvsp[-5].lex_grant), *(yyvsp[-2].lex_grant_ident), *(yyvsp[-3].sp_handler)))
               MYSQL_YYABORT;
           }
-#line 49293 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49290 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3394: /* revoke_command: ALL opt_privileges ',' GRANT OPTION FROM user_and_role_list  */
-#line 17092 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17089 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_REVOKE_ALL;
           }
-#line 49301 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49298 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3395: /* revoke_command: PROXY_SYM ON user FROM user_list  */
-#line 17096 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17093 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_revoke_proxy(thd, (yyvsp[-2].lex_user)))
               MYSQL_YYABORT;
           }
-#line 49310 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49307 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3396: /* revoke_command: admin_option_for_role FROM user_and_role_list  */
-#line 17101 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17098 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command= SQLCOM_REVOKE_ROLE;
             if (unlikely(Lex->users_list.push_front((yyvsp[-2].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49320 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49317 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3397: /* admin_option_for_role: ADMIN_SYM OPTION FOR_SYM grant_role  */
-#line 17110 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17107 "/home/buildbot/git/sql/sql_yacc.yy"
         { Lex->with_admin_option= true; (yyval.lex_user)= (yyvsp[0].lex_user); }
-#line 49326 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49323 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3398: /* admin_option_for_role: grant_role  */
-#line 17112 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17109 "/home/buildbot/git/sql/sql_yacc.yy"
         { Lex->with_admin_option= false; (yyval.lex_user)= (yyvsp[0].lex_user); }
-#line 49332 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49329 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3399: /* grant: GRANT clear_privileges grant_command  */
-#line 17117 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17114 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 49338 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49335 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3400: /* grant_command: grant_privileges ON opt_table grant_ident TO_SYM grant_list opt_require_clause opt_grant_options  */
-#line 17123 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17120 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_grant_table(thd, (yyvsp[-7].lex_grant), *(yyvsp[-4].lex_grant_ident), (yyvsp[0].privilege)))
               MYSQL_YYABORT;
           }
-#line 49347 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49344 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3401: /* grant_command: grant_privileges ON sp_handler grant_ident TO_SYM grant_list opt_require_clause opt_grant_options  */
-#line 17129 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17126 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_grant_sp(thd, (yyvsp[-7].lex_grant), *(yyvsp[-4].lex_grant_ident), *(yyvsp[-5].sp_handler), (yyvsp[0].privilege)))
               MYSQL_YYABORT;
           }
-#line 49356 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49353 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3402: /* grant_command: PROXY_SYM ON user TO_SYM grant_list opt_grant_option  */
-#line 17134 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17131 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_grant_proxy(thd, (yyvsp[-3].lex_user), (yyvsp[0].privilege)))
               MYSQL_YYABORT;
           }
-#line 49365 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49362 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3403: /* grant_command: grant_role TO_SYM grant_list opt_with_admin_option  */
-#line 17139 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17136 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->sql_command= SQLCOM_GRANT_ROLE;
@@ -49373,63 +49370,63 @@ yyreduce:
             if (unlikely(Lex->users_list.push_front((yyvsp[-3].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49377 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49374 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3404: /* opt_with_admin: %empty  */
-#line 17150 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17147 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->definer = 0; }
-#line 49383 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49380 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3405: /* opt_with_admin: WITH ADMIN_SYM user_or_role  */
-#line 17151 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17148 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->definer = (yyvsp[0].lex_user); }
-#line 49389 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49386 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3406: /* opt_with_admin_option: %empty  */
-#line 17155 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17152 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->with_admin_option= false; }
-#line 49395 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49392 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3407: /* opt_with_admin_option: WITH ADMIN_SYM OPTION  */
-#line 17156 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17153 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { Lex->with_admin_option= true; }
-#line 49401 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49398 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3408: /* role_list: grant_role  */
-#line 17161 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17158 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49410 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49407 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3409: /* role_list: role_list ',' grant_role  */
-#line 17166 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17163 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49419 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49416 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3410: /* current_role: CURRENT_ROLE optional_braces  */
-#line 17174 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17171 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(!((yyval.lex_user)=(LEX_USER*) thd->calloc(sizeof(LEX_USER)))))
               MYSQL_YYABORT;
             (yyval.lex_user)->user= current_role;
           }
-#line 49429 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49426 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3411: /* role_name: ident_or_text  */
-#line 17183 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17180 "/home/buildbot/git/sql/sql_yacc.yy"
            {
              CHARSET_INFO *cs= system_charset_info;
              /* trim end spaces (as they'll be lost in mysql.user anyway) */
@@ -49448,387 +49445,387 @@ yyreduce:
                MYSQL_YYABORT;
              (yyval.lex_user)->host= empty_clex_str;
            }
-#line 49452 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49449 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3417: /* grant_privileges: ALL opt_privileges  */
-#line 17213 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17210 "/home/buildbot/git/sql/sql_yacc.yy"
           { 
             if (!((yyval.lex_grant)= new (thd->mem_root) Lex_grant_privilege(GLOBAL_ACLS, true)))
               MYSQL_YYABORT;
           }
-#line 49461 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49458 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3420: /* object_privilege_list: object_privilege  */
-#line 17226 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17223 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant)= new (thd->mem_root) Lex_grant_privilege((yyvsp[0].privilege))))
               MYSQL_YYABORT;
           }
-#line 49470 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49467 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3421: /* object_privilege_list: column_list_privilege  */
-#line 17231 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17228 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant)= new (thd->mem_root) Lex_grant_privilege()) ||
                 (yyval.lex_grant)->add_column_list_privilege(thd, (yyvsp[0].column_list_privilege).m_columns[0],
                                                    (yyvsp[0].column_list_privilege).m_privilege))
               MYSQL_YYABORT;
           }
-#line 49481 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49478 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3422: /* object_privilege_list: object_privilege_list ',' object_privilege  */
-#line 17238 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17235 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             ((yyval.lex_grant)= (yyvsp[-2].lex_grant))->add_object_privilege((yyvsp[0].privilege));
           }
-#line 49489 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49486 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3423: /* object_privilege_list: object_privilege_list ',' column_list_privilege  */
-#line 17242 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17239 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (((yyval.lex_grant)= (yyvsp[-2].lex_grant))->add_column_list_privilege(thd, (yyvsp[0].column_list_privilege).m_columns[0],
                                                          (yyvsp[0].column_list_privilege).m_privilege))
               MYSQL_YYABORT;
           }
-#line 49499 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49496 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3424: /* column_list_privilege: column_privilege '(' comma_separated_ident_list ')'  */
-#line 17251 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17248 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.column_list_privilege)= Lex_column_list_privilege((yyvsp[-1].ident_sys_list), (yyvsp[-3].privilege));
           }
-#line 49507 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49504 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3425: /* column_privilege: SELECT_SYM  */
-#line 17257 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17254 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SELECT_ACL; }
-#line 49513 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49510 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3426: /* column_privilege: INSERT  */
-#line 17258 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17255 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= INSERT_ACL; }
-#line 49519 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49516 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3427: /* column_privilege: UPDATE_SYM  */
-#line 17259 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17256 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= UPDATE_ACL; }
-#line 49525 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49522 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3428: /* column_privilege: REFERENCES  */
-#line 17260 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17257 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= REFERENCES_ACL; }
-#line 49531 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49528 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3429: /* object_privilege: SELECT_SYM  */
-#line 17264 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17261 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SELECT_ACL; }
-#line 49537 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49534 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3430: /* object_privilege: INSERT  */
-#line 17265 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17262 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= INSERT_ACL; }
-#line 49543 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49540 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3431: /* object_privilege: UPDATE_SYM  */
-#line 17266 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17263 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= UPDATE_ACL; }
-#line 49549 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49546 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3432: /* object_privilege: REFERENCES  */
-#line 17267 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17264 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= REFERENCES_ACL; }
-#line 49555 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49552 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3433: /* object_privilege: DELETE_SYM  */
-#line 17268 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17265 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= DELETE_ACL;}
-#line 49561 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49558 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3434: /* object_privilege: USAGE  */
-#line 17269 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17266 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= NO_ACL; }
-#line 49567 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49564 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3435: /* object_privilege: INDEX_SYM  */
-#line 17270 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17267 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= INDEX_ACL;}
-#line 49573 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49570 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3436: /* object_privilege: ALTER  */
-#line 17271 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17268 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= ALTER_ACL;}
-#line 49579 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49576 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3437: /* object_privilege: CREATE  */
-#line 17272 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17269 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_ACL;}
-#line 49585 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49582 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3438: /* object_privilege: DROP  */
-#line 17273 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17270 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= DROP_ACL;}
-#line 49591 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49588 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3439: /* object_privilege: EXECUTE_SYM  */
-#line 17274 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17271 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= EXECUTE_ACL;}
-#line 49597 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49594 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3440: /* object_privilege: RELOAD  */
-#line 17275 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17272 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= RELOAD_ACL;}
-#line 49603 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49600 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3441: /* object_privilege: SHUTDOWN  */
-#line 17276 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17273 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SHUTDOWN_ACL;}
-#line 49609 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49606 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3442: /* object_privilege: PROCESS  */
-#line 17277 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17274 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= PROCESS_ACL;}
-#line 49615 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49612 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3443: /* object_privilege: FILE_SYM  */
-#line 17278 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17275 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= FILE_ACL;}
-#line 49621 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49618 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3444: /* object_privilege: GRANT OPTION  */
-#line 17279 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17276 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= GRANT_ACL;}
-#line 49627 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49624 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3445: /* object_privilege: SHOW DATABASES  */
-#line 17280 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17277 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SHOW_DB_ACL;}
-#line 49633 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49630 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3446: /* object_privilege: SUPER_SYM  */
-#line 17281 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17278 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SUPER_ACL;}
-#line 49639 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49636 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3447: /* object_privilege: CREATE TEMPORARY TABLES  */
-#line 17282 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17279 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_TMP_ACL;}
-#line 49645 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49642 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3448: /* object_privilege: LOCK_SYM TABLES  */
-#line 17283 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17280 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= LOCK_TABLES_ACL; }
-#line 49651 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49648 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3449: /* object_privilege: REPLICATION SLAVE  */
-#line 17284 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17281 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= REPL_SLAVE_ACL; }
-#line 49657 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49654 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3450: /* object_privilege: REPLICATION CLIENT_SYM  */
-#line 17285 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17282 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= BINLOG_MONITOR_ACL; /*Compatibility*/ }
-#line 49663 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49660 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3451: /* object_privilege: CREATE VIEW_SYM  */
-#line 17286 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17283 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_VIEW_ACL; }
-#line 49669 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49666 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3452: /* object_privilege: SHOW VIEW_SYM  */
-#line 17287 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17284 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SHOW_VIEW_ACL; }
-#line 49675 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49672 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3453: /* object_privilege: CREATE ROUTINE_SYM  */
-#line 17288 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17285 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_PROC_ACL; }
-#line 49681 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49678 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3454: /* object_privilege: ALTER ROUTINE_SYM  */
-#line 17289 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17286 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= ALTER_PROC_ACL; }
-#line 49687 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49684 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3455: /* object_privilege: CREATE USER_SYM  */
-#line 17290 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17287 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_USER_ACL; }
-#line 49693 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49690 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3456: /* object_privilege: EVENT_SYM  */
-#line 17291 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17288 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= EVENT_ACL;}
-#line 49699 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49696 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3457: /* object_privilege: TRIGGER_SYM  */
-#line 17292 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17289 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= TRIGGER_ACL; }
-#line 49705 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49702 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3458: /* object_privilege: CREATE TABLESPACE  */
-#line 17293 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17290 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_TABLESPACE_ACL; }
-#line 49711 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49708 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3459: /* object_privilege: DELETE_SYM HISTORY_SYM  */
-#line 17294 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17291 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= DELETE_HISTORY_ACL; }
-#line 49717 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49714 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3460: /* object_privilege: SET USER_SYM  */
-#line 17295 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17292 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SET_USER_ACL; }
-#line 49723 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49720 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3461: /* object_privilege: FEDERATED_SYM ADMIN_SYM  */
-#line 17296 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17293 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.privilege)= FEDERATED_ADMIN_ACL; }
-#line 49729 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49726 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3462: /* object_privilege: CONNECTION_SYM ADMIN_SYM  */
-#line 17297 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17294 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= CONNECTION_ADMIN_ACL; }
-#line 49735 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49732 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3463: /* object_privilege: READ_SYM ONLY_SYM ADMIN_SYM  */
-#line 17298 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17295 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= READ_ONLY_ADMIN_ACL; }
-#line 49741 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49738 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3464: /* object_privilege: READ_ONLY_SYM ADMIN_SYM  */
-#line 17299 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17296 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= READ_ONLY_ADMIN_ACL; }
-#line 49747 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49744 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3465: /* object_privilege: BINLOG_SYM MONITOR_SYM  */
-#line 17300 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17297 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= BINLOG_MONITOR_ACL; }
-#line 49753 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49750 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3466: /* object_privilege: BINLOG_SYM ADMIN_SYM  */
-#line 17301 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17298 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= BINLOG_ADMIN_ACL; }
-#line 49759 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49756 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3467: /* object_privilege: BINLOG_SYM REPLAY_SYM  */
-#line 17302 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17299 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= BINLOG_REPLAY_ACL; }
-#line 49765 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49762 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3468: /* object_privilege: REPLICATION MASTER_SYM ADMIN_SYM  */
-#line 17303 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17300 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= REPL_MASTER_ADMIN_ACL; }
-#line 49771 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49768 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3469: /* object_privilege: REPLICATION SLAVE ADMIN_SYM  */
-#line 17304 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17301 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= REPL_SLAVE_ADMIN_ACL; }
-#line 49777 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49774 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3470: /* object_privilege: SLAVE MONITOR_SYM  */
-#line 17305 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17302 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.privilege)= SLAVE_MONITOR_ACL; }
-#line 49783 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49780 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3471: /* opt_and: %empty  */
-#line 17309 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17306 "/home/buildbot/git/sql/sql_yacc.yy"
                       {}
-#line 49789 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49786 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3472: /* opt_and: AND_SYM  */
-#line 17310 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17307 "/home/buildbot/git/sql/sql_yacc.yy"
                   {}
-#line 49795 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49792 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3475: /* require_list_element: SUBJECT_SYM TEXT_STRING  */
-#line 17320 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17317 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             if (lex->account_options.x509_subject.str)
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "SUBJECT"));
             lex->account_options.x509_subject= (yyvsp[0].lex_string_with_metadata);
           }
-#line 49806 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49803 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3476: /* require_list_element: ISSUER_SYM TEXT_STRING  */
-#line 17327 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17324 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             if (lex->account_options.x509_issuer.str)
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "ISSUER"));
             lex->account_options.x509_issuer= (yyvsp[0].lex_string_with_metadata);
           }
-#line 49817 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49814 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3477: /* require_list_element: CIPHER_SYM TEXT_STRING  */
-#line 17334 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17331 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             if (lex->account_options.ssl_cipher.str)
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "CIPHER"));
             lex->account_options.ssl_cipher= (yyvsp[0].lex_string_with_metadata);
           }
-#line 49828 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49825 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3478: /* grant_ident: '*'  */
-#line 17344 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17341 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX_CSTRING db;
             if (unlikely(Lex->copy_db_to(&db)))
@@ -49837,411 +49834,411 @@ yyreduce:
                                             Lex_grant_object_name::STAR)))
               MYSQL_YYABORT;
           }
-#line 49841 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49838 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3479: /* grant_ident: ident '.' '*'  */
-#line 17353 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17350 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant_ident)= new (thd->mem_root) Lex_grant_object_name((yyvsp[-2].ident_sys),
                                             Lex_grant_object_name::IDENT_STAR)))
               MYSQL_YYABORT;
           }
-#line 49851 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49848 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3480: /* grant_ident: '*' '.' '*'  */
-#line 17359 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17356 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant_ident)= new (thd->mem_root) Lex_grant_object_name(
                                             null_clex_str,
                                             Lex_grant_object_name::STAR_STAR)))
               MYSQL_YYABORT;
           }
-#line 49862 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49859 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3481: /* grant_ident: table_ident  */
-#line 17366 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17363 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant_ident)= new (thd->mem_root) Lex_grant_object_name((yyvsp[0].table))))
               MYSQL_YYABORT;
           }
-#line 49871 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49868 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3482: /* user_list: user  */
-#line 17374 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17371 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49880 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49877 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3483: /* user_list: user_list ',' user  */
-#line 17379 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17376 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49889 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49886 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3484: /* grant_list: grant_user  */
-#line 17387 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17384 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49898 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49895 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3485: /* grant_list: grant_list ',' grant_user  */
-#line 17392 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17389 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49907 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49904 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3486: /* user_and_role_list: user_or_role  */
-#line 17400 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17397 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49916 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49913 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3487: /* user_and_role_list: user_and_role_list ',' user_or_role  */
-#line 17405 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17402 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49925 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49922 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3492: /* grant_user: user IDENTIFIED_SYM BY TEXT_STRING  */
-#line 17416 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17413 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.lex_user)= (yyvsp[-3].lex_user);
             (yyvsp[-3].lex_user)->auth= new (thd->mem_root) USER_AUTH();
             (yyvsp[-3].lex_user)->auth->pwtext= (yyvsp[0].lex_string_with_metadata);
           }
-#line 49935 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49932 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3493: /* grant_user: user IDENTIFIED_SYM BY PASSWORD_SYM TEXT_STRING  */
-#line 17422 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17419 "/home/buildbot/git/sql/sql_yacc.yy"
           { 
             (yyval.lex_user)= (yyvsp[-4].lex_user); 
             (yyvsp[-4].lex_user)->auth= new (thd->mem_root) USER_AUTH();
             (yyvsp[-4].lex_user)->auth->auth_str= (yyvsp[0].lex_string_with_metadata);
           }
-#line 49945 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49942 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3494: /* grant_user: user IDENTIFIED_SYM via_or_with auth_expression  */
-#line 17428 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17425 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.lex_user)= (yyvsp[-3].lex_user);
             (yyvsp[-3].lex_user)->auth= (yyvsp[0].user_auth);
           }
-#line 49954 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49951 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3495: /* grant_user: user_or_role  */
-#line 17433 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17430 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.lex_user)= (yyvsp[0].lex_user);
           }
-#line 49962 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49959 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3496: /* auth_expression: auth_token OR_SYM auth_expression  */
-#line 17440 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17437 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= (yyvsp[-2].user_auth);
             DBUG_ASSERT((yyval.user_auth)->next == NULL);
             (yyval.user_auth)->next= (yyvsp[0].user_auth);
           }
-#line 49972 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49969 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3497: /* auth_expression: auth_token  */
-#line 17446 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17443 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= (yyvsp[0].user_auth);
           }
-#line 49980 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49977 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3498: /* auth_token: ident_or_text opt_auth_str  */
-#line 17453 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17450 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           (yyval.user_auth)= (yyvsp[0].user_auth);
           (yyval.user_auth)->plugin= (yyvsp[-1].lex_str);
         }
-#line 49989 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49986 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3499: /* opt_auth_str: %empty  */
-#line 17461 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17458 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           if (!((yyval.user_auth)=(USER_AUTH*) thd->calloc(sizeof(USER_AUTH))))
             MYSQL_YYABORT;
         }
-#line 49998 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 49995 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3500: /* opt_auth_str: using_or_as TEXT_STRING_sys  */
-#line 17466 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17463 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           if (!((yyval.user_auth)=(USER_AUTH*) thd->calloc(sizeof(USER_AUTH))))
             MYSQL_YYABORT;
           (yyval.user_auth)->auth_str= (yyvsp[0].lex_str);
         }
-#line 50008 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50005 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3501: /* opt_auth_str: using_or_as PASSWORD_SYM '(' TEXT_STRING ')'  */
-#line 17472 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17469 "/home/buildbot/git/sql/sql_yacc.yy"
         {
           if (!((yyval.user_auth)=(USER_AUTH*) thd->calloc(sizeof(USER_AUTH))))
             MYSQL_YYABORT;
           (yyval.user_auth)->pwtext= (yyvsp[-1].lex_string_with_metadata);
         }
-#line 50018 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50015 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3503: /* opt_require_clause: REQUIRE_SYM require_list  */
-#line 17482 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17479 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.ssl_type= SSL_TYPE_SPECIFIED;
           }
-#line 50026 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50023 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3504: /* opt_require_clause: REQUIRE_SYM SSL_SYM  */
-#line 17486 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17483 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.ssl_type= SSL_TYPE_ANY;
           }
-#line 50034 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50031 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3505: /* opt_require_clause: REQUIRE_SYM X509_SYM  */
-#line 17490 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17487 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.ssl_type= SSL_TYPE_X509;
           }
-#line 50042 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50039 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3506: /* opt_require_clause: REQUIRE_SYM NONE_SYM  */
-#line 17494 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17491 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.ssl_type= SSL_TYPE_NONE;
           }
-#line 50050 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50047 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3507: /* resource_option: MAX_QUERIES_PER_HOUR ulong_num  */
-#line 17501 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17498 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.questions=(yyvsp[0].ulong_num);
             Lex->account_options.specified_limits|= USER_RESOURCES::QUERIES_PER_HOUR;
           }
-#line 50059 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50056 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3508: /* resource_option: MAX_UPDATES_PER_HOUR ulong_num  */
-#line 17506 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17503 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.updates=(yyvsp[0].ulong_num);
             Lex->account_options.specified_limits|= USER_RESOURCES::UPDATES_PER_HOUR;
           }
-#line 50068 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50065 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3509: /* resource_option: MAX_CONNECTIONS_PER_HOUR ulong_num  */
-#line 17511 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17508 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.conn_per_hour= (yyvsp[0].ulong_num);
             Lex->account_options.specified_limits|= USER_RESOURCES::CONNECTIONS_PER_HOUR;
           }
-#line 50077 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50074 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3510: /* resource_option: MAX_USER_CONNECTIONS_SYM int_num  */
-#line 17516 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17513 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.user_conn= (yyvsp[0].num);
             Lex->account_options.specified_limits|= USER_RESOURCES::USER_CONNECTIONS;
           }
-#line 50086 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50083 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3511: /* resource_option: MAX_STATEMENT_TIME_SYM NUM_literal  */
-#line 17521 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17518 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->account_options.max_statement_time= (yyvsp[0].item_num)->val_real();
             Lex->account_options.specified_limits|= USER_RESOURCES::MAX_STATEMENT_TIME;
           }
-#line 50095 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50092 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3512: /* resource_option_list: resource_option_list resource_option  */
-#line 17528 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17525 "/home/buildbot/git/sql/sql_yacc.yy"
                                                {}
-#line 50101 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50098 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3513: /* resource_option_list: resource_option  */
-#line 17529 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17526 "/home/buildbot/git/sql/sql_yacc.yy"
                           {}
-#line 50107 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50104 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3514: /* opt_resource_options: %empty  */
-#line 17533 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17530 "/home/buildbot/git/sql/sql_yacc.yy"
                       {}
-#line 50113 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50110 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3516: /* opt_grant_options: %empty  */
-#line 17539 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17536 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.privilege)= NO_ACL;  }
-#line 50119 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50116 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3517: /* opt_grant_options: WITH grant_option_list  */
-#line 17540 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17537 "/home/buildbot/git/sql/sql_yacc.yy"
                                  { (yyval.privilege)= (yyvsp[0].privilege); }
-#line 50125 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50122 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3518: /* opt_grant_option: %empty  */
-#line 17544 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17541 "/home/buildbot/git/sql/sql_yacc.yy"
                             { (yyval.privilege)= NO_ACL;    }
-#line 50131 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50128 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3519: /* opt_grant_option: WITH GRANT OPTION  */
-#line 17545 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17542 "/home/buildbot/git/sql/sql_yacc.yy"
                             { (yyval.privilege)= GRANT_ACL; }
-#line 50137 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50134 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3520: /* grant_option_list: grant_option_list grant_option  */
-#line 17549 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17546 "/home/buildbot/git/sql/sql_yacc.yy"
                                          { (yyval.privilege)= (yyvsp[-1].privilege) | (yyvsp[0].privilege); }
-#line 50143 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50140 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3522: /* grant_option: GRANT OPTION  */
-#line 17554 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17551 "/home/buildbot/git/sql/sql_yacc.yy"
                           { (yyval.privilege)= GRANT_ACL;}
-#line 50149 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50146 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3523: /* grant_option: resource_option  */
-#line 17555 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17552 "/home/buildbot/git/sql/sql_yacc.yy"
                           { (yyval.privilege)= NO_ACL; }
-#line 50155 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50152 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3524: /* $@247: %empty  */
-#line 17560 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17557 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command = SQLCOM_BEGIN;
             lex->start_transaction_opt= 0;
           }
-#line 50165 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50162 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3525: /* begin_stmt_mariadb: BEGIN_MARIADB_SYM $@247 opt_work  */
-#line 17565 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17562 "/home/buildbot/git/sql/sql_yacc.yy"
                    {}
-#line 50171 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50168 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3526: /* compound_statement: sp_proc_stmt_compound_ok  */
-#line 17570 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17567 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command= SQLCOM_COMPOUND;
             if (Lex->sp_body_finalize_procedure(thd))
               MYSQL_YYABORT;
           }
-#line 50181 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50178 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3527: /* opt_not: %empty  */
-#line 17578 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17575 "/home/buildbot/git/sql/sql_yacc.yy"
                        { (yyval.num)= 0; }
-#line 50187 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50184 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3528: /* opt_not: not  */
-#line 17579 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17576 "/home/buildbot/git/sql/sql_yacc.yy"
                        { (yyval.num)= 1; }
-#line 50193 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50190 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3529: /* opt_work: %empty  */
-#line 17583 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17580 "/home/buildbot/git/sql/sql_yacc.yy"
                       {}
-#line 50199 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50196 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3530: /* opt_work: WORK_SYM  */
-#line 17584 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17581 "/home/buildbot/git/sql/sql_yacc.yy"
                     {}
-#line 50205 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50202 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3531: /* opt_chain: %empty  */
-#line 17589 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17586 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.m_yes_no_unk)= TVL_UNKNOWN; }
-#line 50211 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50208 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3532: /* opt_chain: AND_SYM NO_SYM CHAIN_SYM  */
-#line 17590 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17587 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.m_yes_no_unk)= TVL_NO; }
-#line 50217 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50214 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3533: /* opt_chain: AND_SYM CHAIN_SYM  */
-#line 17591 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17588 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.m_yes_no_unk)= TVL_YES; }
-#line 50223 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50220 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3534: /* opt_release: %empty  */
-#line 17596 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17593 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.m_yes_no_unk)= TVL_UNKNOWN; }
-#line 50229 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50226 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3535: /* opt_release: RELEASE_SYM  */
-#line 17597 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17594 "/home/buildbot/git/sql/sql_yacc.yy"
                              { (yyval.m_yes_no_unk)= TVL_YES; }
-#line 50235 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50232 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3536: /* opt_release: NO_SYM RELEASE_SYM  */
-#line 17598 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17595 "/home/buildbot/git/sql/sql_yacc.yy"
                              { (yyval.m_yes_no_unk)= TVL_NO; }
-#line 50241 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50238 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3537: /* commit: COMMIT_SYM opt_work opt_chain opt_release  */
-#line 17603 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17600 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_COMMIT;
@@ -50250,11 +50247,11 @@ yyreduce:
             lex->tx_chain= (yyvsp[-1].m_yes_no_unk);
             lex->tx_release= (yyvsp[0].m_yes_no_unk);
           }
-#line 50254 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50251 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3538: /* rollback: ROLLBACK_SYM opt_work opt_chain opt_release  */
-#line 17615 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17612 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_ROLLBACK;
@@ -50263,145 +50260,145 @@ yyreduce:
             lex->tx_chain= (yyvsp[-1].m_yes_no_unk);
             lex->tx_release= (yyvsp[0].m_yes_no_unk);
           }
-#line 50267 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50264 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3539: /* rollback: ROLLBACK_SYM opt_work TO_SYM SAVEPOINT_SYM ident  */
-#line 17624 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17621 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_ROLLBACK_TO_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 50277 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50274 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3540: /* rollback: ROLLBACK_SYM opt_work TO_SYM ident  */
-#line 17630 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17627 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_ROLLBACK_TO_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 50287 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50284 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3541: /* savepoint: SAVEPOINT_SYM ident  */
-#line 17639 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17636 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 50297 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50294 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3542: /* release: RELEASE_SYM SAVEPOINT_SYM ident  */
-#line 17648 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17645 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_RELEASE_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 50307 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50304 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3543: /* unit_type_decl: UNION_SYM union_option  */
-#line 17661 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17658 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.unit_operation).unit_type= UNION_TYPE; (yyval.unit_operation).distinct= (yyvsp[0].num); }
-#line 50313 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50310 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3544: /* unit_type_decl: INTERSECT_SYM union_option  */
-#line 17663 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17660 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.unit_operation).unit_type= INTERSECT_TYPE; (yyval.unit_operation).distinct= (yyvsp[0].num); }
-#line 50319 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50316 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3545: /* unit_type_decl: EXCEPT_SYM union_option  */
-#line 17665 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17662 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.unit_operation).unit_type= EXCEPT_TYPE; (yyval.unit_operation).distinct= (yyvsp[0].num); }
-#line 50325 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50322 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3546: /* union_option: %empty  */
-#line 17672 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17669 "/home/buildbot/git/sql/sql_yacc.yy"
                       { (yyval.num)=1; }
-#line 50331 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50328 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3547: /* union_option: DISTINCT  */
-#line 17673 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17670 "/home/buildbot/git/sql/sql_yacc.yy"
                     { (yyval.num)=1; }
-#line 50337 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50334 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3548: /* union_option: ALL  */
-#line 17674 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17671 "/home/buildbot/git/sql/sql_yacc.yy"
                     { (yyval.num)=0; }
-#line 50343 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50340 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3549: /* query_expression_option: STRAIGHT_JOIN  */
-#line 17678 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17675 "/home/buildbot/git/sql/sql_yacc.yy"
                         { Select->options|= SELECT_STRAIGHT_JOIN; }
-#line 50349 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50346 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3550: /* query_expression_option: HIGH_PRIORITY  */
-#line 17680 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17677 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             YYPS->m_lock_type= TL_READ_HIGH_PRIORITY;
             YYPS->m_mdl_type= MDL_SHARED_READ;
             Select->options|= SELECT_HIGH_PRIORITY;
           }
-#line 50359 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50356 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3551: /* query_expression_option: DISTINCT  */
-#line 17685 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17682 "/home/buildbot/git/sql/sql_yacc.yy"
                            { Select->options|= SELECT_DISTINCT; }
-#line 50365 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50362 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3552: /* query_expression_option: UNIQUE_SYM  */
-#line 17686 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17683 "/home/buildbot/git/sql/sql_yacc.yy"
                            { Select->options|= SELECT_DISTINCT; }
-#line 50371 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50368 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3553: /* query_expression_option: SQL_SMALL_RESULT  */
-#line 17687 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17684 "/home/buildbot/git/sql/sql_yacc.yy"
                            { Select->options|= SELECT_SMALL_RESULT; }
-#line 50377 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50374 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3554: /* query_expression_option: SQL_BIG_RESULT  */
-#line 17688 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17685 "/home/buildbot/git/sql/sql_yacc.yy"
                            { Select->options|= SELECT_BIG_RESULT; }
-#line 50383 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50380 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3555: /* query_expression_option: SQL_BUFFER_RESULT  */
-#line 17689 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17686 "/home/buildbot/git/sql/sql_yacc.yy"
                             { Select->options|= OPTION_BUFFER_RESULT; }
-#line 50389 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50386 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3556: /* query_expression_option: SQL_CALC_FOUND_ROWS  */
-#line 17690 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17687 "/home/buildbot/git/sql/sql_yacc.yy"
                               { Select->options|= OPTION_FOUND_ROWS; }
-#line 50395 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50392 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3557: /* query_expression_option: ALL  */
-#line 17691 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17688 "/home/buildbot/git/sql/sql_yacc.yy"
               { Select->options|= SELECT_ALL; }
-#line 50401 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50398 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3560: /* no_definer: %empty  */
-#line 17707 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17704 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             /*
               We have to distinguish missing DEFINER-clause from case when
@@ -50412,201 +50409,201 @@ yyreduce:
             */
             thd->lex->definer= 0;
           }
-#line 50416 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50413 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3561: /* definer: DEFINER_SYM '=' user_or_role  */
-#line 17721 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17718 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->definer= (yyvsp[0].lex_user);
             Lex->account_options.reset();
           }
-#line 50425 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50422 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3562: /* view_algorithm: ALGORITHM_SYM '=' UNDEFINED_SYM  */
-#line 17734 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17731 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= DTYPE_ALGORITHM_UNDEFINED; }
-#line 50431 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50428 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3563: /* view_algorithm: ALGORITHM_SYM '=' MERGE_SYM  */
-#line 17735 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17732 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_ALGORITHM_MERGE; }
-#line 50437 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50434 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3564: /* view_algorithm: ALGORITHM_SYM '=' TEMPTABLE_SYM  */
-#line 17736 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17733 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_ALGORITHM_TMPTABLE; }
-#line 50443 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50440 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3565: /* opt_view_suid: %empty  */
-#line 17740 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17737 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= VIEW_SUID_DEFAULT; }
-#line 50449 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50446 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3566: /* opt_view_suid: view_suid  */
-#line 17741 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17738 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= (yyvsp[0].view_suid); }
-#line 50455 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50452 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3567: /* view_suid: SQL_SYM SECURITY_SYM DEFINER_SYM  */
-#line 17745 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17742 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= VIEW_SUID_DEFINER; }
-#line 50461 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50458 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3568: /* view_suid: SQL_SYM SECURITY_SYM INVOKER_SYM  */
-#line 17746 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17743 "/home/buildbot/git/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= VIEW_SUID_INVOKER; }
-#line 50467 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50464 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3569: /* view_list_opt: %empty  */
-#line 17751 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17748 "/home/buildbot/git/sql/sql_yacc.yy"
           {}
-#line 50473 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50470 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3570: /* view_list_opt: '(' view_list ')'  */
-#line 17752 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17749 "/home/buildbot/git/sql/sql_yacc.yy"
                             { }
-#line 50479 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50476 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3571: /* view_list: ident  */
-#line 17757 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17754 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->view_list.push_back((LEX_CSTRING*)
                                      thd->memdup(&(yyvsp[0].ident_sys), sizeof(LEX_CSTRING)),
                                      thd->mem_root);
           }
-#line 50489 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50486 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3572: /* view_list: view_list ',' ident  */
-#line 17763 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17760 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->view_list.push_back((LEX_CSTRING*)
                                      thd->memdup(&(yyvsp[0].ident_sys), sizeof(LEX_CSTRING)),
                                      thd->mem_root);
           }
-#line 50499 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50496 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3573: /* $@248: %empty  */
-#line 17771 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17768 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->parsing_options.allows_variable= FALSE;
             lex->create_view->select.str= (char *) YYLIP->get_cpp_ptr();
           }
-#line 50509 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50506 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3574: /* view_select: $@248 query_expression view_check_option  */
-#line 17778 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17775 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->parsed_create_view((yyvsp[-1].select_lex_unit), (yyvsp[0].num)))
               MYSQL_YYABORT;
           }
-#line 50518 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50515 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3575: /* view_check_option: %empty  */
-#line 17785 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17782 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_NONE; }
-#line 50524 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50521 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3576: /* view_check_option: WITH CHECK_SYM OPTION  */
-#line 17786 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17783 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_CASCADED; }
-#line 50530 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50527 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3577: /* view_check_option: WITH CASCADED CHECK_SYM OPTION  */
-#line 17787 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17784 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_CASCADED; }
-#line 50536 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50533 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3578: /* view_check_option: WITH LOCAL_SYM CHECK_SYM OPTION  */
-#line 17788 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17785 "/home/buildbot/git/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_LOCAL; }
-#line 50542 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50539 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3579: /* trigger_action_order: FOLLOWS_SYM  */
-#line 17799 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17796 "/home/buildbot/git/sql/sql_yacc.yy"
             { (yyval.trigger_action_order_type)= TRG_ORDER_FOLLOWS; }
-#line 50548 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50545 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3580: /* trigger_action_order: PRECEDES_SYM  */
-#line 17801 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17798 "/home/buildbot/git/sql/sql_yacc.yy"
             { (yyval.trigger_action_order_type)= TRG_ORDER_PRECEDES; }
-#line 50554 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50551 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3581: /* trigger_follows_precedes_clause: %empty  */
-#line 17806 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17803 "/home/buildbot/git/sql/sql_yacc.yy"
             {
               (yyval.trg_execution_order).ordering_clause= TRG_ORDER_NONE;
               (yyval.trg_execution_order).anchor_trigger_name.str= NULL;
               (yyval.trg_execution_order).anchor_trigger_name.length= 0;
             }
-#line 50564 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50561 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3582: /* trigger_follows_precedes_clause: trigger_action_order ident_or_text  */
-#line 17813 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17810 "/home/buildbot/git/sql/sql_yacc.yy"
             {
               (yyval.trg_execution_order).ordering_clause= (yyvsp[-1].trigger_action_order_type);
               (yyval.trg_execution_order).anchor_trigger_name= (yyvsp[0].lex_str);
             }
-#line 50573 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50570 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3583: /* $@249: %empty  */
-#line 17822 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17819 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->add_create_options_with_check((yyvsp[0].object_ddl_options))))
               MYSQL_YYABORT;
           }
-#line 50582 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50579 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3584: /* $@250: %empty  */
-#line 17831 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17828 "/home/buildbot/git/sql/sql_yacc.yy"
           { /* $9 */
             Lex->raw_trg_on_table_name_begin= YYLIP->get_tok_start();
           }
-#line 50590 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50587 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3585: /* $@251: %empty  */
-#line 17837 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17834 "/home/buildbot/git/sql/sql_yacc.yy"
           { /* $13 */
             Lex->raw_trg_on_table_name_end= YYLIP->get_tok_start();
           }
-#line 50598 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50595 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3586: /* $@252: %empty  */
-#line 17842 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17839 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->trg_chistics.ordering_clause_begin= YYLIP->get_cpp_ptr();
           }
-#line 50606 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50603 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3587: /* $@253: %empty  */
-#line 17846 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17843 "/home/buildbot/git/sql/sql_yacc.yy"
           { /* $18 */
             LEX *lex= thd->lex;
             Lex_input_stream *lip= YYLIP;
@@ -50627,11 +50624,11 @@ yyreduce:
 
             lex->sphead->set_body_start(thd, lip->get_cpp_tok_start());
           }
-#line 50631 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50628 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3588: /* trigger_tail: remember_name opt_if_not_exists $@249 sp_name trg_action_time trg_event ON remember_name $@250 table_ident FOR_SYM remember_name $@251 EACH_SYM ROW_SYM $@252 trigger_follows_precedes_clause $@253 sp_proc_stmt force_lookahead  */
-#line 17867 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17864 "/home/buildbot/git/sql/sql_yacc.yy"
           { /* $21 */
             LEX *lex= Lex;
 
@@ -50650,85 +50647,85 @@ yyreduce:
                                    MDL_SHARED_NO_WRITE))
               MYSQL_YYABORT;
           }
-#line 50654 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50651 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3589: /* $@254: %empty  */
-#line 17895 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17892 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->init_last_field(&lex->sphead->m_return_field_def,
                                  &empty_clex_str);
           }
-#line 50664 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50661 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3590: /* sf_return_type: $@254 field_type  */
-#line 17901 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17898 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sf_return_fill_definition((yyvsp[0].Lex_field_type))))
               MYSQL_YYABORT;
           }
-#line 50673 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50670 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3591: /* xa: XA_SYM begin_or_start xid opt_join_or_resume  */
-#line 17911 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17908 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_START;
           }
-#line 50681 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50678 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3592: /* xa: XA_SYM END xid opt_suspend  */
-#line 17915 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17912 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_END;
           }
-#line 50689 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50686 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3593: /* xa: XA_SYM PREPARE_SYM xid  */
-#line 17919 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17916 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_PREPARE;
           }
-#line 50697 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50694 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3594: /* xa: XA_SYM COMMIT_SYM xid opt_one_phase  */
-#line 17923 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17920 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_COMMIT;
           }
-#line 50705 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50702 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3595: /* xa: XA_SYM ROLLBACK_SYM xid  */
-#line 17927 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17924 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_ROLLBACK;
           }
-#line 50713 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50710 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3596: /* xa: XA_SYM RECOVER_SYM opt_format_xid  */
-#line 17931 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17928 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_RECOVER;
             Lex->verbose= (yyvsp[0].num);
           }
-#line 50722 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50719 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3597: /* opt_format_xid: %empty  */
-#line 17938 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17935 "/home/buildbot/git/sql/sql_yacc.yy"
                      { (yyval.num)= false; }
-#line 50728 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50725 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3598: /* opt_format_xid: FORMAT_SYM '=' ident_or_text  */
-#line 17940 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17937 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (lex_string_eq(&(yyvsp[0].lex_str), STRING_WITH_LEN("SQL")))
               (yyval.num)= true;
@@ -50741,33 +50738,33 @@ yyreduce:
               (yyval.num)= false;
             }
           }
-#line 50745 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50742 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3599: /* xid: text_string  */
-#line 17956 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17953 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             MYSQL_YYABORT_UNLESS((yyvsp[0].string)->length() <= MAXGTRIDSIZE);
             if (unlikely(!(Lex->xid=(XID *)thd->alloc(sizeof(XID)))))
               MYSQL_YYABORT;
             Lex->xid->set(1L, (yyvsp[0].string)->ptr(), (yyvsp[0].string)->length(), 0, 0);
           }
-#line 50756 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50753 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3600: /* xid: text_string ',' text_string  */
-#line 17963 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17960 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             MYSQL_YYABORT_UNLESS((yyvsp[-2].string)->length() <= MAXGTRIDSIZE && (yyvsp[0].string)->length() <= MAXBQUALSIZE);
             if (unlikely(!(Lex->xid=(XID *)thd->alloc(sizeof(XID)))))
               MYSQL_YYABORT;
             Lex->xid->set(1L, (yyvsp[-2].string)->ptr(), (yyvsp[-2].string)->length(), (yyvsp[0].string)->ptr(), (yyvsp[0].string)->length());
           }
-#line 50767 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50764 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3601: /* xid: text_string ',' text_string ',' ulong_num  */
-#line 17970 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17967 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             MYSQL_YYABORT_UNLESS((yyvsp[-4].string)->length() <= MAXGTRIDSIZE &&
                                  (yyvsp[-2].string)->length() <= MAXBQUALSIZE &&
@@ -50777,126 +50774,126 @@ yyreduce:
               MYSQL_YYABORT;
             Lex->xid->set((yyvsp[0].ulong_num), (yyvsp[-4].string)->ptr(), (yyvsp[-4].string)->length(), (yyvsp[-2].string)->ptr(), (yyvsp[-2].string)->length());
           }
-#line 50781 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50778 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3602: /* begin_or_start: BEGIN_MARIADB_SYM  */
-#line 17982 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17979 "/home/buildbot/git/sql/sql_yacc.yy"
                             {}
-#line 50787 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50784 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3603: /* begin_or_start: BEGIN_ORACLE_SYM  */
-#line 17983 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17980 "/home/buildbot/git/sql/sql_yacc.yy"
                            {}
-#line 50793 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50790 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3604: /* begin_or_start: START_SYM  */
-#line 17984 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17981 "/home/buildbot/git/sql/sql_yacc.yy"
                     {}
-#line 50799 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50796 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3605: /* opt_join_or_resume: %empty  */
-#line 17988 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17985 "/home/buildbot/git/sql/sql_yacc.yy"
                         { Lex->xa_opt=XA_NONE;        }
-#line 50805 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50802 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3606: /* opt_join_or_resume: JOIN_SYM  */
-#line 17989 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17986 "/home/buildbot/git/sql/sql_yacc.yy"
                         { Lex->xa_opt=XA_JOIN;        }
-#line 50811 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50808 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3607: /* opt_join_or_resume: RESUME_SYM  */
-#line 17990 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17987 "/home/buildbot/git/sql/sql_yacc.yy"
                         { Lex->xa_opt=XA_RESUME;      }
-#line 50817 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50814 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3608: /* opt_one_phase: %empty  */
-#line 17994 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17991 "/home/buildbot/git/sql/sql_yacc.yy"
                             { Lex->xa_opt=XA_NONE;        }
-#line 50823 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50820 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3609: /* opt_one_phase: ONE_SYM PHASE_SYM  */
-#line 17995 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17992 "/home/buildbot/git/sql/sql_yacc.yy"
                             { Lex->xa_opt=XA_ONE_PHASE;   }
-#line 50829 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50826 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3610: /* opt_suspend: %empty  */
-#line 18000 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17997 "/home/buildbot/git/sql/sql_yacc.yy"
           { Lex->xa_opt=XA_NONE;        }
-#line 50835 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50832 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3611: /* $@255: %empty  */
-#line 18002 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 17999 "/home/buildbot/git/sql/sql_yacc.yy"
           { Lex->xa_opt=XA_SUSPEND;     }
-#line 50841 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50838 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3613: /* opt_migrate: %empty  */
-#line 18007 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18004 "/home/buildbot/git/sql/sql_yacc.yy"
                               {}
-#line 50847 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50844 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3614: /* opt_migrate: FOR_SYM MIGRATE_SYM  */
-#line 18008 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18005 "/home/buildbot/git/sql/sql_yacc.yy"
                               { Lex->xa_opt=XA_FOR_MIGRATE; }
-#line 50853 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50850 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3615: /* install: INSTALL_SYM PLUGIN_SYM opt_if_not_exists ident SONAME_SYM TEXT_STRING_sys  */
-#line 18013 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18010 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_install_plugin((yyvsp[-3].object_ddl_options), (yyvsp[-2].ident_sys), (yyvsp[0].lex_str)))
               MYSQL_YYABORT;
           }
-#line 50862 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50859 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3616: /* install: INSTALL_SYM SONAME_SYM TEXT_STRING_sys  */
-#line 18018 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18015 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->stmt_install_plugin((yyvsp[0].lex_str));
           }
-#line 50870 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50867 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3617: /* uninstall: UNINSTALL_SYM PLUGIN_SYM opt_if_exists ident  */
-#line 18025 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18022 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_uninstall_plugin_by_name((yyvsp[-1].object_ddl_options), (yyvsp[0].ident_sys)))
               MYSQL_YYABORT;
           }
-#line 50879 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50876 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3618: /* uninstall: UNINSTALL_SYM SONAME_SYM opt_if_exists TEXT_STRING_sys  */
-#line 18030 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18027 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_uninstall_plugin_by_soname((yyvsp[-1].object_ddl_options), (yyvsp[0].lex_str)))
               MYSQL_YYABORT;
           }
-#line 50888 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50885 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3619: /* keep_gcc_happy: IMPOSSIBLE_ACTION  */
-#line 18039 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18036 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             YYERROR;
           }
-#line 50896 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50893 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3624: /* $@256: %empty  */
-#line 18480 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18477 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             // Direct procedure call (without the CALL keyword)
             Lex_ident_sys tmp(thd, &(yyvsp[0].ident_cli));
@@ -50904,206 +50901,206 @@ yyreduce:
                 unlikely(Lex->call_statement_start(thd, &tmp)))
               MYSQL_YYABORT;
           }
-#line 50908 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50905 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3625: /* sp_statement: ident_cli_directly_assignable $@256 opt_sp_cparam_list  */
-#line 18488 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18485 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->check_cte_dependencies_and_resolve_references())
               MYSQL_YYABORT;
           }
-#line 50917 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50914 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3626: /* $@257: %empty  */
-#line 18493 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18490 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-2].ident_cli));
             if (unlikely(!tmp.str) ||
                 unlikely(Lex->call_statement_start(thd, &tmp, &(yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 50928 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50925 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3627: /* sp_statement: ident_cli_directly_assignable '.' ident $@257 opt_sp_cparam_list  */
-#line 18500 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18497 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->check_cte_dependencies_and_resolve_references())
               MYSQL_YYABORT;
           }
-#line 50937 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50934 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3628: /* $@258: %empty  */
-#line 18505 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18502 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-4].ident_cli));
             if (unlikely(Lex->call_statement_start(thd, &tmp, &(yyvsp[-2].ident_sys), &(yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 50947 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50944 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3629: /* sp_statement: ident_cli_directly_assignable '.' ident '.' ident $@258 opt_sp_cparam_list  */
-#line 18511 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18508 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->check_cte_dependencies_and_resolve_references())
               MYSQL_YYABORT;
           }
-#line 50956 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50953 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3630: /* sp_if_then_statements: sp_proc_stmts1_implicit_block  */
-#line 18518 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18515 "/home/buildbot/git/sql/sql_yacc.yy"
                                         { }
-#line 50962 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50959 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3631: /* sp_case_then_statements: sp_proc_stmts1_implicit_block  */
-#line 18522 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18519 "/home/buildbot/git/sql/sql_yacc.yy"
                                         { }
-#line 50968 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50965 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3655: /* row_field_name: ident_directly_assignable  */
-#line 18572 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18569 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (!((yyval.spvar_definition)= Lex->row_field_name(thd, (yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 50977 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50974 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3656: /* $@259: %empty  */
-#line 18580 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18577 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely((yyvsp[-1].expr_lex)->sp_while_loop_expression(thd)))
               MYSQL_YYABORT;
           }
-#line 50986 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50983 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3657: /* while_body: expr_lex LOOP_SYM $@259 sp_proc_stmts1 END LOOP_SYM  */
-#line 18585 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18582 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_while_loop_finalize(thd)))
               MYSQL_YYABORT;
           }
-#line 50995 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50992 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3658: /* for_loop_statements: LOOP_SYM sp_proc_stmts1 END LOOP_SYM  */
-#line 18593 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18590 "/home/buildbot/git/sql/sql_yacc.yy"
           { }
-#line 51001 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 50998 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3660: /* sp_block_label: labels_declaration_oracle  */
-#line 18603 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18600 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->spcont->block_label_declare(&(yyvsp[0].lex_str))))
               MYSQL_YYABORT;
             (yyval.lex_str)= (yyvsp[0].lex_str);
           }
-#line 51011 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51008 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3661: /* remember_end_opt: %empty  */
-#line 18612 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18609 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (yychar == YYEMPTY)
               (yyval.simple_string)= (char*) YYLIP->get_cpp_ptr_rtrim();
             else
               (yyval.simple_string)= (char*) YYLIP->get_cpp_tok_end_rtrim();
           }
-#line 51022 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51019 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3662: /* sp_opt_default: _empty  */
-#line 18621 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18618 "/home/buildbot/git/sql/sql_yacc.yy"
                        { (yyval.item) = NULL; }
-#line 51028 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51025 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3663: /* sp_opt_default: DEFAULT expr  */
-#line 18622 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18619 "/home/buildbot/git/sql/sql_yacc.yy"
                        { (yyval.item) = (yyvsp[0].item); }
-#line 51034 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51031 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3664: /* sp_opt_default: SET_VAR expr  */
-#line 18623 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18620 "/home/buildbot/git/sql/sql_yacc.yy"
                        { (yyval.item) = (yyvsp[0].item); }
-#line 51040 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51037 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3665: /* sp_opt_inout: _empty  */
-#line 18627 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18624 "/home/buildbot/git/sql/sql_yacc.yy"
                          { (yyval.spvar_mode)= sp_variable::MODE_IN; }
-#line 51046 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51043 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3667: /* sp_opt_inout: IN_SYM OUT_SYM  */
-#line 18629 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18626 "/home/buildbot/git/sql/sql_yacc.yy"
                          { (yyval.spvar_mode)= sp_variable::MODE_INOUT; }
-#line 51052 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51049 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3668: /* $@260: %empty  */
-#line 18633 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18630 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd);
           }
-#line 51060 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51057 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3669: /* sp_proc_stmts1_implicit_block: $@260 sp_proc_stmts1  */
-#line 18637 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18634 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_finalize(thd)))
               MYSQL_YYABORT;
           }
-#line 51069 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51066 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3670: /* remember_lex: %empty  */
-#line 18645 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18642 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.lex)= thd->lex;
           }
-#line 51077 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51074 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3680: /* ident_directly_assignable: keyword_directly_assignable  */
-#line 18664 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18661 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely((yyval.ident_sys).copy_keyword(thd, &(yyvsp[0].kwd))))
               MYSQL_YYABORT;
           }
-#line 51086 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51083 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3682: /* ident_cli_directly_assignable: keyword_directly_assignable  */
-#line 18672 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18669 "/home/buildbot/git/sql/sql_yacc.yy"
                                       { (yyval.ident_cli)= (yyvsp[0].kwd); }
-#line 51092 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51089 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3683: /* $@261: %empty  */
-#line 18678 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18675 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->set_stmt_init();
             if (sp_create_assignment_lex(thd, (yyvsp[-1].ident_cli).pos()))
               MYSQL_YYABORT;
           }
-#line 51103 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51100 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3684: /* set_assign: ident_cli_directly_assignable SET_VAR $@261 set_expr_or_default  */
-#line 18685 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18682 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-3].ident_cli));
             if (unlikely(!tmp.str) ||
@@ -51112,22 +51109,22 @@ yyreduce:
                                                     false)))
               MYSQL_YYABORT;
           }
-#line 51116 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51113 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3685: /* $@262: %empty  */
-#line 18694 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18691 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->set_stmt_init();
             if (sp_create_assignment_lex(thd, (yyvsp[-3].ident_cli).pos()))
               MYSQL_YYABORT;
           }
-#line 51127 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51124 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3686: /* set_assign: ident_cli_directly_assignable '.' ident SET_VAR $@262 set_expr_or_default  */
-#line 18701 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18698 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             DBUG_ASSERT(lex->var_list.is_empty());
@@ -51138,11 +51135,11 @@ yyreduce:
                                                     false)))
               MYSQL_YYABORT;
           }
-#line 51142 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51139 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3687: /* $@263: %empty  */
-#line 18712 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18709 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             if (unlikely(!lex->is_trigger_new_or_old_reference(&(yyvsp[-3].ident_sys))))
@@ -51154,11 +51151,11 @@ yyreduce:
             if (sp_create_assignment_lex(thd, (yyvsp[-4].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 51158 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51155 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3688: /* set_assign: COLON_ORACLE_SYM ident '.' ident SET_VAR $@263 set_expr_or_default  */
-#line 18724 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18721 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX_CSTRING tmp= { (yyvsp[-5].ident_sys).str, (yyvsp[-5].ident_sys).length };
             if (unlikely(Lex->set_trigger_field(&tmp, &(yyvsp[-3].ident_sys), (yyvsp[0].item))) ||
@@ -51166,222 +51163,222 @@ yyreduce:
                                                     false)))
               MYSQL_YYABORT;
           }
-#line 51170 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51167 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3689: /* labels_declaration_oracle: label_declaration_oracle  */
-#line 18735 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18732 "/home/buildbot/git/sql/sql_yacc.yy"
                                    { (yyval.lex_str)= (yyvsp[0].lex_str); }
-#line 51176 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51173 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3690: /* labels_declaration_oracle: labels_declaration_oracle label_declaration_oracle  */
-#line 18736 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18733 "/home/buildbot/git/sql/sql_yacc.yy"
                                                              { (yyval.lex_str)= (yyvsp[0].lex_str); }
-#line 51182 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51179 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3691: /* label_declaration_oracle: SHIFT_LEFT label_ident SHIFT_RIGHT  */
-#line 18741 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18738 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_push_goto_label(thd, &(yyvsp[-1].ident_sys))))
               MYSQL_YYABORT;
             (yyval.lex_str)= (yyvsp[-1].ident_sys);
           }
-#line 51192 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51189 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3692: /* opt_exception_clause: _empty  */
-#line 18749 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18746 "/home/buildbot/git/sql/sql_yacc.yy"
                                                   { (yyval.num)= 0; }
-#line 51198 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51195 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3693: /* opt_exception_clause: EXCEPTION_ORACLE_SYM exception_handlers  */
-#line 18750 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18747 "/home/buildbot/git/sql/sql_yacc.yy"
                                                   { (yyval.num)= (yyvsp[0].num); }
-#line 51204 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51201 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3694: /* exception_handlers: exception_handler  */
-#line 18754 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18751 "/home/buildbot/git/sql/sql_yacc.yy"
                                                 { (yyval.num)= 1; }
-#line 51210 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51207 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3695: /* exception_handlers: exception_handlers exception_handler  */
-#line 18755 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18752 "/home/buildbot/git/sql/sql_yacc.yy"
                                                 { (yyval.num)= (yyvsp[-1].num) + 1; }
-#line 51216 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51213 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3696: /* $@264: %empty  */
-#line 18760 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18757 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_handler_declaration_init(thd, sp_handler::EXIT)))
               MYSQL_YYABORT;
           }
-#line 51225 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51222 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3697: /* exception_handler: WHEN_SYM $@264 sp_hcond_list THEN_SYM sp_proc_stmts1_implicit_block  */
-#line 18767 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18764 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_handler_declaration_finalize(thd, sp_handler::EXIT)))
               MYSQL_YYABORT;
           }
-#line 51234 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51231 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3698: /* sp_no_param: _empty  */
-#line 18775 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18772 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sphead->m_param_begin= Lex->sphead->m_param_end=
               YYLIP->get_cpp_tok_start() + 1;
           }
-#line 51243 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51240 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3703: /* opt_sp_name: _empty  */
-#line 18793 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18790 "/home/buildbot/git/sql/sql_yacc.yy"
                       { (yyval.spname)= NULL; }
-#line 51249 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51246 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3704: /* opt_sp_name: sp_name  */
-#line 18794 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18791 "/home/buildbot/git/sql/sql_yacc.yy"
                       { (yyval.spname)= (yyvsp[0].spname); }
-#line 51255 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51252 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3705: /* opt_package_routine_end_name: _empty  */
-#line 18799 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18796 "/home/buildbot/git/sql/sql_yacc.yy"
                       { (yyval.lex_str)= null_clex_str; }
-#line 51261 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51258 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3706: /* opt_package_routine_end_name: ident  */
-#line 18800 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18797 "/home/buildbot/git/sql/sql_yacc.yy"
                       { (yyval.lex_str)= (yyvsp[0].ident_sys); }
-#line 51267 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51264 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3709: /* sp_instr_addr: %empty  */
-#line 18809 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18806 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.sp_instr_addr)= Lex->sphead->instructions(); }
-#line 51273 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51270 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3710: /* $@265: %empty  */
-#line 18813 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18810 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd);
           }
-#line 51281 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51278 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3711: /* $@266: %empty  */
-#line 18817 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18814 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 51290 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51287 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3712: /* $@267: %empty  */
-#line 18823 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18820 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyvsp[-3].spblock).hndlrs+= (yyvsp[0].spblock_handlers).hndlrs;
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-3].spblock))))
               MYSQL_YYABORT;
           }
-#line 51300 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51297 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3714: /* create_package_chistic: COMMENT_SYM TEXT_STRING_sys  */
-#line 18833 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18830 "/home/buildbot/git/sql/sql_yacc.yy"
           { Lex->sp_chistics.comment= (yyvsp[0].lex_str); }
-#line 51306 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51303 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3715: /* create_package_chistic: sp_suid  */
-#line 18835 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18832 "/home/buildbot/git/sql/sql_yacc.yy"
           { Lex->sp_chistics.suid= (yyvsp[0].sp_suid); }
-#line 51312 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51309 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3716: /* create_package_chistics: create_package_chistic  */
-#line 18839 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18836 "/home/buildbot/git/sql/sql_yacc.yy"
                                  {}
-#line 51318 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51315 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3717: /* create_package_chistics: create_package_chistics create_package_chistic  */
-#line 18840 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18837 "/home/buildbot/git/sql/sql_yacc.yy"
                                                          { }
-#line 51324 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51321 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3719: /* opt_create_package_chistics: create_package_chistics  */
-#line 18845 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18842 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { }
-#line 51330 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51327 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3720: /* $@268: %empty  */
-#line 18849 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18846 "/home/buildbot/git/sql/sql_yacc.yy"
           { Lex->sp_chistics.init(); }
-#line 51336 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51333 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3722: /* package_implementation_executable_section: END  */
-#line 18856 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18853 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_add_empty(thd)))
               MYSQL_YYABORT;
             (yyval.spblock_handlers).init(0);
           }
-#line 51346 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51343 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3723: /* package_implementation_executable_section: BEGIN_ORACLE_SYM sp_block_statements_and_exceptions END  */
-#line 18861 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18858 "/home/buildbot/git/sql/sql_yacc.yy"
                                                                   { (yyval.spblock_handlers)= (yyvsp[-1].spblock_handlers); }
-#line 51352 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51349 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3726: /* package_implementation_declare_section: package_implementation_declare_section_list1 package_implementation_declare_section_list2  */
-#line 18873 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18870 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.spblock).join((yyvsp[-1].spblock), (yyvsp[0].spblock)); }
-#line 51358 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51355 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3728: /* package_implementation_declare_section_list1: package_implementation_declare_section_list1 package_implementation_item_declaration  */
-#line 18880 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18877 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.spblock).join((yyvsp[-1].spblock), (yyvsp[0].spblock)); }
-#line 51364 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51361 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3730: /* package_implementation_declare_section_list2: package_implementation_declare_section_list2 package_implementation_routine_definition  */
-#line 18887 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18884 "/home/buildbot/git/sql/sql_yacc.yy"
           { (yyval.spblock).join((yyvsp[-1].spblock), (yyvsp[0].spblock)); }
-#line 51370 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51367 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3731: /* package_routine_lex: %empty  */
-#line 18891 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18888 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(!((yyval.lex)= new (thd->mem_root)
                            sp_lex_local(thd, thd->lex))))
               MYSQL_YYABORT;
             thd->m_parser_state->m_yacc.reset_before_substatement();
           }
-#line 51381 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51378 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3732: /* $@269: %empty  */
-#line 18902 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18899 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             DBUG_ASSERT((yyvsp[-2].lex)->sphead->get_package());
             (yyvsp[-1].lex)->sql_command= SQLCOM_CREATE_FUNCTION;
@@ -51396,22 +51393,22 @@ yyreduce:
             (yyvsp[-2].lex)->sphead->get_package()->m_current_routine= (yyvsp[-1].lex);
             (void) is_native_function_with_warn(thd, &(yyvsp[0].ident_sys));
           }
-#line 51400 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51397 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3733: /* package_specification_function: remember_lex package_routine_lex ident $@269 opt_sp_parenthesized_fdparam_list RETURN_ORACLE_SYM sf_return_type sp_c_chistics  */
-#line 18919 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18916 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_head *sp= thd->lex->sphead;
             sp->restore_thd_mem_root(thd);
             thd->lex= (yyvsp[-7].lex);
             (yyval.lex)= (yyvsp[-6].lex);
           }
-#line 51411 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51408 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3734: /* $@270: %empty  */
-#line 18929 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18926 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             DBUG_ASSERT((yyvsp[-2].lex)->sphead->get_package());
             (yyvsp[-1].lex)->sql_command= SQLCOM_CREATE_PROCEDURE;
@@ -51425,22 +51422,22 @@ yyreduce:
               MYSQL_YYABORT;
             (yyvsp[-2].lex)->sphead->get_package()->m_current_routine= (yyvsp[-1].lex);
           }
-#line 51429 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51426 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3735: /* package_specification_procedure: remember_lex package_routine_lex ident $@270 opt_sp_parenthesized_pdparam_list sp_c_chistics  */
-#line 18944 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18941 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_head *sp= thd->lex->sphead;
             sp->restore_thd_mem_root(thd);
             thd->lex= (yyvsp[-5].lex);
             (yyval.lex)= (yyvsp[-4].lex);
           }
-#line 51440 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51437 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3736: /* package_implementation_routine_definition: FUNCTION_SYM package_specification_function package_implementation_function_body ';'  */
-#line 18956 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18953 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_implementation((yyvsp[-2].lex))))
@@ -51448,11 +51445,11 @@ yyreduce:
             pkg->m_current_routine= NULL;
             (yyval.spblock).init();
           }
-#line 51452 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51449 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3737: /* package_implementation_routine_definition: PROCEDURE_SYM package_specification_procedure package_implementation_procedure_body ';'  */
-#line 18965 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18962 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_implementation((yyvsp[-2].lex))))
@@ -51460,17 +51457,17 @@ yyreduce:
             pkg->m_current_routine= NULL;
             (yyval.spblock).init();
           }
-#line 51464 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51461 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3738: /* package_implementation_routine_definition: package_specification_element  */
-#line 18972 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18969 "/home/buildbot/git/sql/sql_yacc.yy"
                                         { (yyval.spblock).init(); }
-#line 51470 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51467 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3739: /* $@271: %empty  */
-#line 18978 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18975 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             sp_head *sp= pkg->m_current_routine->sphead;
@@ -51479,22 +51476,22 @@ yyreduce:
             sp->set_c_chistics(thd->lex->sp_chistics);
             sp->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 51483 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51480 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3740: /* package_implementation_function_body: sp_tail_is remember_lex $@271 sp_body opt_package_routine_end_name  */
-#line 18987 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18984 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(thd->lex->sp_body_finalize_function(thd) ||
                          thd->lex->sphead->check_package_routine_end_name((yyvsp[0].lex_str))))
               MYSQL_YYABORT;
             thd->lex= (yyvsp[-3].lex);
           }
-#line 51494 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51491 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3741: /* $@272: %empty  */
-#line 18997 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 18994 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             sp_head *sp= pkg->m_current_routine->sphead;
@@ -51503,202 +51500,202 @@ yyreduce:
             sp->set_c_chistics(thd->lex->sp_chistics);
             sp->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 51507 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51504 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3742: /* package_implementation_procedure_body: sp_tail_is remember_lex $@272 sp_body opt_package_routine_end_name  */
-#line 19006 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19003 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(thd->lex->sp_body_finalize_procedure(thd) ||
                          thd->lex->sphead->check_package_routine_end_name((yyvsp[0].lex_str))))
               MYSQL_YYABORT;
             thd->lex= (yyvsp[-3].lex);
           }
-#line 51518 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51515 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3748: /* package_specification_element: FUNCTION_SYM package_specification_function ';'  */
-#line 19031 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19028 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_declaration((yyvsp[-1].lex))))
               MYSQL_YYABORT;
             pkg->m_current_routine= NULL;
           }
-#line 51529 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51526 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3749: /* package_specification_element: PROCEDURE_SYM package_specification_procedure ';'  */
-#line 19038 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19035 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_declaration((yyvsp[-1].lex))))
               MYSQL_YYABORT;
             pkg->m_current_routine= NULL;
           }
-#line 51540 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51537 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3750: /* sp_decl_variable_list_anchored: sp_decl_idents_init_vars optionally_qualified_column_ident PERCENT_ORACLE_SYM TYPE_SYM sp_opt_default  */
-#line 19050 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19047 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_variable_declarations_with_ref_finalize(thd, (yyvsp[-4].num), (yyvsp[-3].qualified_column_ident), (yyvsp[0].item))))
               MYSQL_YYABORT;
             (yyval.spblock).init_using_vars((yyvsp[-4].num));
           }
-#line 51550 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51547 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3751: /* sp_decl_variable_list_anchored: sp_decl_idents_init_vars optionally_qualified_column_ident PERCENT_ORACLE_SYM ROWTYPE_ORACLE_SYM sp_opt_default  */
-#line 19058 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19055 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_variable_declarations_rowtype_finalize(thd, (yyvsp[-4].num), (yyvsp[-3].qualified_column_ident), (yyvsp[0].item))))
               MYSQL_YYABORT;
             (yyval.spblock).init_using_vars((yyvsp[-4].num));
           }
-#line 51560 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51557 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3752: /* sp_param_name_and_mode: sp_param_name sp_opt_inout  */
-#line 19067 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19064 "/home/buildbot/git/sql/sql_yacc.yy"
           {
              (yyvsp[-1].spvar)->mode= (yyvsp[0].spvar_mode);
              (yyval.spvar)= (yyvsp[-1].spvar);
           }
-#line 51569 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51566 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3753: /* sp_param: sp_param_name_and_mode field_type  */
-#line 19075 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19072 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_param_fill_definition((yyval.spvar)= (yyvsp[-1].spvar), (yyvsp[0].Lex_field_type))))
               MYSQL_YYABORT;
           }
-#line 51578 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51575 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3754: /* sp_param: sp_param_name_and_mode ROW_SYM row_type_body  */
-#line 19080 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19077 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_row(thd, (yyval.spvar)= (yyvsp[-2].spvar), (yyvsp[0].spvar_definition_list))))
               MYSQL_YYABORT;
           }
-#line 51587 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51584 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3756: /* sp_param_anchored: sp_param_name_and_mode sp_decl_ident '.' ident PERCENT_ORACLE_SYM TYPE_SYM  */
-#line 19089 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19086 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_type_reference(thd, (yyval.spvar)= (yyvsp[-5].spvar), (yyvsp[-4].ident_sys), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51596 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51593 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3757: /* sp_param_anchored: sp_param_name_and_mode sp_decl_ident '.' ident '.' ident PERCENT_ORACLE_SYM TYPE_SYM  */
-#line 19094 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19091 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_type_reference(thd, (yyval.spvar)= (yyvsp[-7].spvar), (yyvsp[-6].ident_sys), (yyvsp[-4].ident_sys), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51605 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51602 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3758: /* sp_param_anchored: sp_param_name_and_mode sp_decl_ident PERCENT_ORACLE_SYM ROWTYPE_ORACLE_SYM  */
-#line 19099 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19096 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_table_rowtype_reference(thd, (yyval.spvar)= (yyvsp[-3].spvar), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51614 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51611 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3759: /* sp_param_anchored: sp_param_name_and_mode sp_decl_ident '.' ident PERCENT_ORACLE_SYM ROWTYPE_ORACLE_SYM  */
-#line 19104 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19101 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_table_rowtype_reference(thd, (yyval.spvar)= (yyvsp[-5].spvar), (yyvsp[-4].ident_sys), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51623 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51620 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3760: /* $@273: %empty  */
-#line 19113 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19110 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= thd->lex;
             lex->sphead->set_c_chistics(lex->sp_chistics);
             lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 51633 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51630 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3761: /* sf_c_chistics_and_body_standalone: sp_c_chistics $@273 sp_tail_is sp_body force_lookahead  */
-#line 19119 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19116 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_body_finalize_function(thd)))
               MYSQL_YYABORT;
           }
-#line 51642 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51639 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3762: /* $@274: %empty  */
-#line 19127 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19124 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(!Lex->make_sp_head_no_recursive(thd, (yyvsp[0].spname),
                                                          &sp_handler_procedure,
                                                          DEFAULT_AGGREGATE)))
               MYSQL_YYABORT;
           }
-#line 51653 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51650 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3763: /* $@275: %empty  */
-#line 19135 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19132 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sphead->set_c_chistics(Lex->sp_chistics);
             Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 51662 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51659 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3764: /* sp_tail_standalone: sp_name $@274 opt_sp_parenthesized_pdparam_list sp_c_chistics $@275 sp_tail_is sp_body opt_sp_name  */
-#line 19142 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19139 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_body_finalize_procedure_standalone(thd, (yyvsp[0].spname))))
               MYSQL_YYABORT;
           }
-#line 51671 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51668 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3765: /* drop_routine: DROP FUNCTION_SYM opt_if_exists ident '.' ident  */
-#line 19150 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19147 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_drop_function((yyvsp[-3].object_ddl_options), (yyvsp[-2].ident_sys), (yyvsp[0].ident_sys)))
               MYSQL_YYABORT;
           }
-#line 51680 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51677 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3766: /* drop_routine: DROP FUNCTION_SYM opt_if_exists ident  */
-#line 19155 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19152 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_drop_function((yyvsp[-1].object_ddl_options), (yyvsp[0].ident_sys)))
               MYSQL_YYABORT;
           }
-#line 51689 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51686 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3767: /* drop_routine: DROP PROCEDURE_SYM opt_if_exists sp_name  */
-#line 19160 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19157 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_drop_procedure((yyvsp[-1].object_ddl_options), (yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 51698 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51695 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3768: /* drop_routine: DROP PACKAGE_ORACLE_SYM opt_if_exists sp_name  */
-#line 19165 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19162 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->set_command(SQLCOM_DROP_PACKAGE, (yyvsp[-1].object_ddl_options));
@@ -51706,11 +51703,11 @@ yyreduce:
               my_yyabort_error((ER_SP_NO_DROP_SP, MYF(0), "PACKAGE"));
             lex->spname= (yyvsp[0].spname);
           }
-#line 51710 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51707 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3769: /* drop_routine: DROP PACKAGE_ORACLE_SYM BODY_ORACLE_SYM opt_if_exists sp_name  */
-#line 19173 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19170 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->set_command(SQLCOM_DROP_PACKAGE_BODY, (yyvsp[-1].object_ddl_options));
@@ -51718,74 +51715,74 @@ yyreduce:
               my_yyabort_error((ER_SP_NO_DROP_SP, MYF(0), "PACKAGE BODY"));
             lex->spname= (yyvsp[0].spname);
           }
-#line 51722 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51719 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3770: /* $@276: %empty  */
-#line 19185 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19182 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_procedure_start((yyvsp[-3].object_ddl_options) | (yyvsp[0].object_ddl_options)))
               MYSQL_YYABORT;
           }
-#line 51731 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51728 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3771: /* create_routine: create_or_replace definer_opt PROCEDURE_SYM opt_if_not_exists $@276 sp_tail_standalone  */
-#line 19190 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19187 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->stmt_create_routine_finalize();
           }
-#line 51739 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51736 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3772: /* $@277: %empty  */
-#line 19195 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19192 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_start((yyvsp[-5].object_ddl_options) | (yyvsp[-1].object_ddl_options), (yyvsp[-3].sp_aggregate_type), (yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 51748 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51745 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3773: /* create_routine: create_or_replace definer opt_aggregate FUNCTION_SYM opt_if_not_exists sp_name $@277 opt_sp_parenthesized_fdparam_list RETURN_ORACLE_SYM sf_return_type sf_c_chistics_and_body_standalone opt_sp_name  */
-#line 19203 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19200 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_finalize_standalone((yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 51757 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51754 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3774: /* $@278: %empty  */
-#line 19209 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19206 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_start((yyvsp[-5].object_ddl_options) | (yyvsp[-1].object_ddl_options), (yyvsp[-3].sp_aggregate_type), (yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 51766 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51763 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3775: /* create_routine: create_or_replace no_definer opt_aggregate FUNCTION_SYM opt_if_not_exists sp_name $@278 opt_sp_parenthesized_fdparam_list RETURN_ORACLE_SYM sf_return_type sf_c_chistics_and_body_standalone opt_sp_name  */
-#line 19217 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19214 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_finalize_standalone((yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 51775 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51772 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3776: /* create_routine: create_or_replace no_definer opt_aggregate FUNCTION_SYM opt_if_not_exists ident RETURNS_SYM udf_type SONAME_SYM TEXT_STRING_sys  */
-#line 19223 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19220 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_udf_function((yyvsp[-9].object_ddl_options) | (yyvsp[-5].object_ddl_options), (yyvsp[-7].sp_aggregate_type), (yyvsp[-4].ident_sys),
                                               (Item_result) (yyvsp[-2].num), (yyvsp[0].lex_str)))
               MYSQL_YYABORT;
           }
-#line 51785 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51782 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3777: /* $@279: %empty  */
-#line 19230 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19227 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg;
             if (unlikely(!(pkg= Lex->
@@ -51797,20 +51794,20 @@ yyreduce:
             pkg->set_c_chistics(Lex->sp_chistics);
             Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 51801 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51798 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3778: /* create_routine: create_or_replace definer_opt PACKAGE_ORACLE_SYM opt_if_not_exists sp_name opt_create_package_chistics_init $@279 sp_tail_is opt_package_specification_element_list END remember_end_opt opt_sp_name  */
-#line 19244 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19241 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->create_package_finalize(thd, (yyvsp[-7].spname), (yyvsp[0].spname), (yyvsp[-1].simple_string))))
               MYSQL_YYABORT;
           }
-#line 51810 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51807 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3779: /* $@280: %empty  */
-#line 19250 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19247 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_package *pkg;
             if (unlikely(!(pkg= Lex->
@@ -51823,115 +51820,115 @@ yyreduce:
             Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
             Lex->sp_block_init(thd);
           }
-#line 51827 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51824 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3780: /* $@281: %empty  */
-#line 19264 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19261 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 51836 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51833 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3781: /* $@282: %empty  */
-#line 19269 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19266 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyvsp[-2].spblock).hndlrs+= (yyvsp[0].spblock_handlers).hndlrs;
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-2].spblock))))
               MYSQL_YYABORT;
           }
-#line 51846 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51843 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3782: /* create_routine: create_or_replace definer_opt PACKAGE_ORACLE_SYM BODY_ORACLE_SYM opt_if_not_exists sp_name opt_create_package_chistics_init $@280 sp_tail_is package_implementation_declare_section $@281 package_implementation_executable_section $@282 remember_end_opt opt_sp_name  */
-#line 19275 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19272 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->create_package_finalize(thd, (yyvsp[-9].spname), (yyvsp[0].spname), (yyvsp[-1].simple_string))))
               MYSQL_YYABORT;
           }
-#line 51855 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51852 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3783: /* opt_sp_decl_body_list: _empty  */
-#line 19283 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19280 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.spblock).init();
           }
-#line 51863 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51860 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3784: /* opt_sp_decl_body_list: sp_decl_body_list  */
-#line 19286 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19283 "/home/buildbot/git/sql/sql_yacc.yy"
                             { (yyval.spblock)= (yyvsp[0].spblock); }
-#line 51869 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51866 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3785: /* $@283: %empty  */
-#line 19291 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19288 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->sp_add_instr_cpush_for_cursors(thd, Lex->spcont)))
               MYSQL_YYABORT;
           }
-#line 51878 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51875 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3786: /* sp_decl_body_list: sp_decl_non_handler_list $@283 opt_sp_decl_handler_list  */
-#line 19296 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19293 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.spblock).join((yyvsp[-2].spblock), (yyvsp[0].spblock));
           }
-#line 51886 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51883 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3788: /* sp_decl_non_handler_list: sp_decl_non_handler ';'  */
-#line 19303 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19300 "/home/buildbot/git/sql/sql_yacc.yy"
                                   { (yyval.spblock)= (yyvsp[-1].spblock); }
-#line 51892 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51889 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3789: /* sp_decl_non_handler_list: sp_decl_non_handler_list sp_decl_non_handler ';'  */
-#line 19305 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19302 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.spblock).join((yyvsp[-2].spblock), (yyvsp[-1].spblock));
           }
-#line 51900 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51897 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3790: /* sp_decl_handler_list: sp_decl_handler ';'  */
-#line 19311 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19308 "/home/buildbot/git/sql/sql_yacc.yy"
                               { (yyval.spblock)= (yyvsp[-1].spblock); }
-#line 51906 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51903 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3791: /* sp_decl_handler_list: sp_decl_handler_list sp_decl_handler ';'  */
-#line 19313 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19310 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyval.spblock).join((yyvsp[-2].spblock), (yyvsp[-1].spblock));
           }
-#line 51914 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51911 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3792: /* opt_sp_decl_handler_list: _empty  */
-#line 19319 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19316 "/home/buildbot/git/sql/sql_yacc.yy"
                    { (yyval.spblock).init(); }
-#line 51920 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51917 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3795: /* sp_decl_non_handler: ident_directly_assignable CONDITION_SYM FOR_SYM sp_cond  */
-#line 19326 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19323 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->spcont->declare_condition(thd, &(yyvsp[-3].ident_sys), (yyvsp[0].spcondvalue))))
               MYSQL_YYABORT;
             (yyval.spblock).vars= (yyval.spblock).hndlrs= (yyval.spblock).curs= 0;
             (yyval.spblock).conds= 1;
           }
-#line 51931 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51928 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3796: /* sp_decl_non_handler: ident_directly_assignable EXCEPTION_ORACLE_SYM  */
-#line 19333 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19330 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_condition_value *spcond= new (thd->mem_root)
                                         sp_condition_value_user_defined();
@@ -51941,19 +51938,19 @@ yyreduce:
             (yyval.spblock).vars= (yyval.spblock).hndlrs= (yyval.spblock).curs= 0;
             (yyval.spblock).conds= 1;
           }
-#line 51945 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51942 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3797: /* $@284: %empty  */
-#line 19343 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19340 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd);
           }
-#line 51953 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51950 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3798: /* sp_decl_non_handler: CURSOR_SYM ident_directly_assignable $@284 opt_parenthesized_cursor_formal_parameters IS sp_cursor_stmt  */
-#line 19348 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19345 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             sp_pcontext *param_ctx= Lex->spcont;
             if (unlikely(Lex->sp_block_finalize(thd)))
@@ -51963,69 +51960,69 @@ yyreduce:
             (yyval.spblock).vars= (yyval.spblock).conds= (yyval.spblock).hndlrs= 0;
             (yyval.spblock).curs= 1;
           }
-#line 51967 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51964 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3804: /* sp_proc_stmt: labels_declaration_oracle sp_labelable_stmt  */
-#line 19366 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19363 "/home/buildbot/git/sql/sql_yacc.yy"
                                                       {}
-#line 51973 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51970 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3815: /* sp_labelable_stmt: NULL_SYM  */
-#line 19380 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19377 "/home/buildbot/git/sql/sql_yacc.yy"
                    { }
-#line 51979 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51976 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3820: /* $@285: %empty  */
-#line 19394 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19391 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd, &(yyvsp[-1].lex_str));
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 51989 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51986 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3821: /* sp_labeled_block: sp_block_label BEGIN_ORACLE_SYM $@285 sp_block_statements_and_exceptions END sp_opt_label  */
-#line 19402 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19399 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_finalize(thd, Lex_spblock((yyvsp[-2].spblock_handlers)), &(yyvsp[0].lex_str))))
               MYSQL_YYABORT;
           }
-#line 51998 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 51995 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3822: /* $@286: %empty  */
-#line 19408 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19405 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd, &(yyvsp[-1].lex_str));
           }
-#line 52006 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52003 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3823: /* $@287: %empty  */
-#line 19412 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19409 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 52015 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52012 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3824: /* sp_labeled_block: sp_block_label DECLARE_ORACLE_SYM $@286 opt_sp_decl_body_list $@287 BEGIN_ORACLE_SYM sp_block_statements_and_exceptions END sp_opt_label  */
-#line 19420 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19417 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyvsp[-5].spblock).hndlrs+= (yyvsp[-2].spblock_handlers).hndlrs;
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-5].spblock), &(yyvsp[0].lex_str))))
               MYSQL_YYABORT;
           }
-#line 52025 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52022 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3827: /* $@288: %empty  */
-#line 19434 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19431 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->maybe_start_compound_statement(thd)))
               MYSQL_YYABORT;
@@ -52033,68 +52030,68 @@ yyreduce:
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 52037 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52034 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3828: /* sp_unlabeled_block: BEGIN_ORACLE_SYM opt_not_atomic $@288 sp_block_statements_and_exceptions END  */
-#line 19443 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19440 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_finalize(thd, Lex_spblock((yyvsp[-1].spblock_handlers)))))
               MYSQL_YYABORT;
           }
-#line 52046 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52043 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3829: /* $@289: %empty  */
-#line 19448 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19445 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->maybe_start_compound_statement(thd)))
               MYSQL_YYABORT;
             Lex->sp_block_init(thd);
           }
-#line 52056 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52053 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3830: /* $@290: %empty  */
-#line 19454 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19451 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 52065 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52062 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3831: /* sp_unlabeled_block: DECLARE_ORACLE_SYM $@289 opt_sp_decl_body_list $@290 BEGIN_ORACLE_SYM sp_block_statements_and_exceptions END  */
-#line 19461 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19458 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             (yyvsp[-4].spblock).hndlrs+= (yyvsp[-1].spblock_handlers).hndlrs;
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-4].spblock))))
               MYSQL_YYABORT;
           }
-#line 52075 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52072 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3832: /* $@291: %empty  */
-#line 19471 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19468 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_executable_section(thd, (yyvsp[-1].sp_instr_addr))))
               MYSQL_YYABORT;
           }
-#line 52084 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52081 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3833: /* sp_block_statements_and_exceptions: sp_instr_addr sp_proc_stmts $@291 opt_exception_clause  */
-#line 19476 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 19473 "/home/buildbot/git/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_exceptions(thd, (yyvsp[-3].sp_instr_addr), (yyvsp[0].num))))
               MYSQL_YYABORT;
             (yyval.spblock_handlers).init((yyvsp[0].num));
           }
-#line 52094 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52091 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;
 
 
-#line 52098 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
+#line 52095 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
 
       default: break;
     }

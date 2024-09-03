@@ -67,7 +67,7 @@ public:
     max_length=6*MY_CHARSET_BIN_MB_MAXLEN;
     return FALSE;
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_period_add>(thd, this); }
 };
 
@@ -90,7 +90,7 @@ public:
     max_length=6*MY_CHARSET_BIN_MB_MAXLEN;
     return FALSE;
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_period_diff>(thd, this); }
 };
 
@@ -120,7 +120,7 @@ public:
   {
     return !has_date_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_to_days>(thd, this); }
 };
 
@@ -153,7 +153,7 @@ public:
   {
     return !has_date_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_to_seconds>(thd, this); }
 };
 
@@ -181,7 +181,7 @@ public:
   {
     return !has_date_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_dayofmonth>(thd, this); }
 };
 
@@ -210,7 +210,7 @@ public:
   {
     return !has_date_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_month>(thd, this); }
 };
 
@@ -236,7 +236,7 @@ public:
   {
     return mark_unsupported_function(func_name(), "()", arg, VCOL_SESSION_FUNC);
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_monthname>(thd, this); }
 };
 
@@ -264,7 +264,7 @@ public:
   {
     return !has_date_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_dayofyear>(thd, this); }
 };
 
@@ -292,7 +292,7 @@ public:
   {
     return !has_time_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_hour>(thd, this); }
 };
 
@@ -320,7 +320,7 @@ public:
   {
     return !has_time_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_minute>(thd, this); }
 };
 
@@ -348,7 +348,7 @@ public:
   {
     return !has_date_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_quarter>(thd, this); }
 };
 
@@ -376,7 +376,7 @@ public:
   {
     return !has_time_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_second>(thd, this); }
 };
 
@@ -414,7 +414,7 @@ public:
   {
     return arg_count == 2;
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_week>(thd, this); }
 };
 
@@ -447,7 +447,7 @@ public:
   {
     return !has_date_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_yearweek>(thd, this); }
 };
 
@@ -477,7 +477,7 @@ public:
   {
     return !has_date_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_year>(thd, this); }
 };
 
@@ -512,7 +512,7 @@ public:
   {
     return !has_date_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_weekday>(thd, this); }
 };
 
@@ -539,7 +539,7 @@ class Item_func_dayname :public Item_str_func
   {
     return !has_date_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_dayname>(thd, this); }
 };
 
@@ -560,9 +560,9 @@ public:
     else
       set_handler(type_handler_long_or_longlong());
   }
-  double real_op() { DBUG_ASSERT(0); return 0; }
-  String *str_op(String *str) { DBUG_ASSERT(0); return 0; }
-  bool date_op(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzydate)
+  double real_op() override { DBUG_ASSERT(0); return 0; }
+  String *str_op(String *str) override { DBUG_ASSERT(0); return 0; }
+  bool date_op(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzydate) override
   {
     DBUG_ASSERT(0);
     return true;
@@ -608,7 +608,7 @@ public:
   }
   longlong int_op() override;
   my_decimal *decimal_op(my_decimal* buf) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_unix_timestamp>(thd, this); }
 };
 
@@ -636,7 +636,7 @@ public:
   }
   longlong int_op() override;
   my_decimal *decimal_op(my_decimal* buf) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_time_to_sec>(thd, this); }
 };
 
@@ -744,7 +744,7 @@ public:
     return name;
   }
   void store_now_in_TIME(THD *thd, MYSQL_TIME *now_time) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_curtime_local>(thd, this); }
 };
 
@@ -759,7 +759,7 @@ public:
     return name;
   }
   void store_now_in_TIME(THD *thd, MYSQL_TIME *now_time) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_curtime_utc>(thd, this); }
 };
 
@@ -791,7 +791,7 @@ public:
     return name;
   }
   void store_now_in_TIME(THD *thd, MYSQL_TIME *now_time) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_curdate_local>(thd, this); }
 };
 
@@ -806,7 +806,7 @@ public:
     return name;
   }
   void store_now_in_TIME(THD* thd, MYSQL_TIME *now_time) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_curdate_utc>(thd, this); }
 };
 
@@ -849,7 +849,7 @@ public:
   int save_in_field(Field *field, bool no_conversions) override;
   void store_now_in_TIME(THD *thd, MYSQL_TIME *now_time) override;
   enum Functype functype() const override { return NOW_FUNC; }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_now_local>(thd, this); }
 };
 
@@ -870,7 +870,7 @@ public:
     return mark_unsupported_function(func_name(), "()", arg,
                                      VCOL_TIME_FUNC | VCOL_NON_DETERMINISTIC);
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_now_utc>(thd, this); }
 };
 
@@ -898,7 +898,7 @@ public:
                                      VCOL_TIME_FUNC | VCOL_NON_DETERMINISTIC);
   }
   enum Functype functype() const override { return SYSDATE_FUNC; }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_sysdate_local>(thd, this); }
 };
 
@@ -921,7 +921,7 @@ public:
   {
     return has_date_args() || has_time_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_from_days>(thd, this); }
 };
 
@@ -958,7 +958,7 @@ public:
       return false;
     return mark_unsupported_function(func_name(), "()", arg, VCOL_SESSION_FUNC);
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_date_format>(thd, this); }
 };
 
@@ -973,7 +973,7 @@ public:
     return name;
   }
   bool check_vcol_func_processor(void *arg) override { return false; }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_time_format>(thd, this); }
 };
 
@@ -1027,7 +1027,7 @@ public:
     return mark_unsupported_function(func_name(), "()", arg, VCOL_SESSION_FUNC);
   }
 
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_tochar>(thd, this); }
 };
 
@@ -1050,7 +1050,7 @@ class Item_func_from_unixtime :public Item_datetimefunc
   {
     return mark_unsupported_function(func_name(), "()", arg, VCOL_SESSION_FUNC);
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_from_unixtime>(thd, this); }
 };
 
@@ -1100,7 +1100,7 @@ class Item_func_convert_tz :public Item_datetimefunc
   }
   bool get_date(THD *thd, MYSQL_TIME *res, date_mode_t fuzzydate) override;
   void cleanup() override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_convert_tz>(thd, this); }
 };
 
@@ -1123,7 +1123,7 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("sec_to_time") };
     return name;
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_sec_to_time>(thd, this); }
 };
 
@@ -1147,7 +1147,7 @@ public:
   void print(String *str, enum_query_type query_type) override;
   enum precedence precedence() const override { return INTERVAL_PRECEDENCE; }
   bool need_parentheses_in_default() override { return true; }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_date_add_interval>(thd, this); }
 };
 
@@ -1259,7 +1259,7 @@ class Item_extract :public Item_int_func,
     }
     return true;
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_extract>(thd, this); }
 };
 
@@ -1306,7 +1306,7 @@ public:
   }
   void print(String *str, enum_query_type query_type) override;
   bool need_parentheses_in_default() override { return true; }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_char_typecast>(thd, this); }
 };
 
@@ -1320,7 +1320,7 @@ public:
                        &my_charset_latin1),
     m_fsp(fsp)
   { }
-  String *val_str(String *to)
+  String *val_str(String *to) override
   {
     Interval_DDhhmmssff it(current_thd, args[0], m_fsp);
     null_value= !it.is_valid_interval_DDhhmmssff();
@@ -1347,7 +1347,7 @@ public:
   {
     return args[0]->type_handler()->Item_date_typecast_fix_length_and_dec(this);
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_date_typecast>(thd, this); }
 };
 
@@ -1373,7 +1373,7 @@ public:
            Item_time_typecast_fix_length_and_dec(this);
   }
   Sql_mode_dependency value_depends_on_sql_mode() const override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_time_typecast>(thd, this); }
 };
 
@@ -1399,7 +1399,7 @@ public:
            Item_datetime_typecast_fix_length_and_dec(this);
   }
   Sql_mode_dependency value_depends_on_sql_mode() const override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_datetime_typecast>(thd, this); }
 };
 
@@ -1417,7 +1417,7 @@ public:
     return name;
   }
   bool get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzydate) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_makedate>(thd, this); }
 };
 
@@ -1458,7 +1458,7 @@ public:
     return (null_value= Sec6_add(dt.get_mysql_time(), it.get_mysql_time(), 1).
                            to_datetime(ltime));
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_timestamp>(thd, this); }
 };
 
@@ -1490,7 +1490,7 @@ public:
     static LEX_CSTRING subtime= { STRING_WITH_LEN("subtime") };
     return sign > 0 ? addtime : subtime;
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_add_time>(thd, this); }
 };
 
@@ -1515,7 +1515,7 @@ public:
     return FALSE;
   }
   bool get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzydate) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_timediff>(thd, this); }
 };
 
@@ -1542,7 +1542,7 @@ public:
     return name;
   }
   bool get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzydate) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_maketime>(thd, this); }
 };
 
@@ -1570,7 +1570,7 @@ public:
   {
     return !has_time_args();
   }
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_microsecond>(thd, this); }
 };
 
@@ -1599,7 +1599,7 @@ public:
     return FALSE;
   }
   void print(String *str, enum_query_type query_type) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_timestamp_diff>(thd, this); }
 };
 
@@ -1630,7 +1630,7 @@ public:
     return FALSE;
   }
   void print(String *str, enum_query_type query_type) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_get_format>(thd, this); }
 };
 
@@ -1654,7 +1654,7 @@ public:
     return name;
   }
   bool fix_length_and_dec(THD *thd) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_str_to_date>(thd, this); }
 };
 
@@ -1671,7 +1671,7 @@ public:
     return name;
   }
   bool get_date(THD *thd, MYSQL_TIME *res, date_mode_t fuzzydate) override;
-  Item *get_copy(THD *thd) override
+  Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_func_last_day>(thd, this); }
 };
 
@@ -1716,7 +1716,7 @@ class Func_handler_date_add_interval_datetime:
         public Func_handler_date_add_interval
 {
 public:
-  bool fix_length_and_dec(Item_handled_func *item) const
+  bool fix_length_and_dec(Item_handled_func *item) const override
   {
     uint dec= MY_MAX(item->arguments()[0]->datetime_precision(current_thd),
                      interval_dec(item->arguments()[1], int_type(item)));
@@ -1724,7 +1724,7 @@ public:
     return false;
   }
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     Datetime::Options opt(TIME_CONV_NONE, thd);
     Datetime dt(thd, item->arguments()[0], opt);
@@ -1743,7 +1743,7 @@ class Func_handler_date_add_interval_datetime_arg0_time:
 {
 public:
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const;
+                MYSQL_TIME *to, date_mode_t fuzzy) const override;
 };
 
 
@@ -1753,7 +1753,7 @@ class Func_handler_date_add_interval_date:
 {
 public:
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     /*
       The first argument is known to be of the DATE data type (not DATETIME).
@@ -1775,7 +1775,7 @@ class Func_handler_date_add_interval_time:
         public Func_handler_date_add_interval
 {
 public:
-  bool fix_length_and_dec(Item_handled_func *item) const
+  bool fix_length_and_dec(Item_handled_func *item) const override
   {
     uint dec= MY_MAX(item->arguments()[0]->time_precision(current_thd),
                      interval_dec(item->arguments()[1], int_type(item)));
@@ -1783,7 +1783,7 @@ public:
     return false;
   }
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     Time t(thd, item->arguments()[0]);
     if (!t.is_valid_time())
@@ -1800,7 +1800,7 @@ class Func_handler_date_add_interval_string:
         public Func_handler_date_add_interval
 {
 public:
-  bool fix_length_and_dec(Item_handled_func *item) const
+  bool fix_length_and_dec(Item_handled_func *item) const override
   {
     uint dec= MY_MAX(item->arguments()[0]->datetime_precision(current_thd),
                      interval_dec(item->arguments()[1], int_type(item)));
@@ -1812,7 +1812,7 @@ public:
     return false;
   }
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     if (item->arguments()[0]->
           get_date(thd, to, Datetime::Options(TIME_CONV_NONE, thd)) ||
@@ -1841,7 +1841,7 @@ public:
   Func_handler_add_time_datetime(int sign)
    :Func_handler_sign(sign)
   { }
-  bool fix_length_and_dec(Item_handled_func *item) const
+  bool fix_length_and_dec(Item_handled_func *item) const override
   {
     THD *thd= current_thd;
     uint dec0= item->arguments()[0]->datetime_precision(thd);
@@ -1850,7 +1850,7 @@ public:
     return false;
   }
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     DBUG_ASSERT(item->fixed());
     Datetime::Options opt(TIME_CONV_NONE, thd);
@@ -1875,7 +1875,7 @@ public:
   Func_handler_add_time_time(int sign)
    :Func_handler_sign(sign)
   { }
-  bool fix_length_and_dec(Item_handled_func *item) const
+  bool fix_length_and_dec(Item_handled_func *item) const override
   {
     THD *thd= current_thd;
     uint dec0= item->arguments()[0]->time_precision(thd);
@@ -1884,7 +1884,7 @@ public:
     return false;
   }
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     DBUG_ASSERT(item->fixed());
     Time t(thd, item->arguments()[0]);
@@ -1908,7 +1908,7 @@ public:
   Func_handler_add_time_string(int sign)
    :Func_handler_sign(sign)
   { }
-  bool fix_length_and_dec(Item_handled_func *item) const
+  bool fix_length_and_dec(Item_handled_func *item) const override
   {
     uint dec0= item->arguments()[0]->decimals;
     uint dec1= Interval_DDhhmmssff::fsp(current_thd, item->arguments()[1]);
@@ -1921,7 +1921,7 @@ public:
     return false;
   }
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     DBUG_ASSERT(item->fixed());
     // Detect a proper timestamp type based on the argument values
@@ -1945,13 +1945,13 @@ class Func_handler_str_to_date_datetime_sec:
         public Item_handled_func::Handler_datetime
 {
 public:
-  bool fix_length_and_dec(Item_handled_func *item) const
+  bool fix_length_and_dec(Item_handled_func *item) const override
   {
     item->fix_attributes_datetime(0);
     return false;
   }
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     return static_cast<Item_func_str_to_date*>(item)->
              get_date_common(thd, to, fuzzy, MYSQL_TIMESTAMP_DATETIME);
@@ -1963,13 +1963,13 @@ class Func_handler_str_to_date_datetime_usec:
         public Item_handled_func::Handler_datetime
 {
 public:
-  bool fix_length_and_dec(Item_handled_func *item) const
+  bool fix_length_and_dec(Item_handled_func *item) const override
   {
     item->fix_attributes_datetime(TIME_SECOND_PART_DIGITS);
     return false;
   }
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     return static_cast<Item_func_str_to_date*>(item)->
              get_date_common(thd, to, fuzzy, MYSQL_TIMESTAMP_DATETIME);
@@ -1981,7 +1981,7 @@ class Func_handler_str_to_date_date: public Item_handled_func::Handler_date
 {
 public:
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     return static_cast<Item_func_str_to_date*>(item)->
              get_date_common(thd, to, fuzzy, MYSQL_TIMESTAMP_DATE);
@@ -1993,7 +1993,7 @@ class Func_handler_str_to_date_time: public Item_handled_func::Handler_time
 {
 public:
   bool get_date(THD *thd, Item_handled_func *item,
-                MYSQL_TIME *to, date_mode_t fuzzy) const
+                MYSQL_TIME *to, date_mode_t fuzzy) const override
   {
     if (static_cast<Item_func_str_to_date*>(item)->
          get_date_common(thd, to, fuzzy, MYSQL_TIMESTAMP_TIME))
@@ -2016,7 +2016,7 @@ public:
 class Func_handler_str_to_date_time_sec: public Func_handler_str_to_date_time
 {
 public:
-  bool fix_length_and_dec(Item_handled_func *item) const
+  bool fix_length_and_dec(Item_handled_func *item) const override
   {
     item->fix_attributes_time(0);
     return false;
@@ -2027,7 +2027,7 @@ public:
 class Func_handler_str_to_date_time_usec: public Func_handler_str_to_date_time
 {
 public:
-  bool fix_length_and_dec(Item_handled_func *item) const
+  bool fix_length_and_dec(Item_handled_func *item) const override
   {
     item->fix_attributes_time(TIME_SECOND_PART_DIGITS);
     return false;
