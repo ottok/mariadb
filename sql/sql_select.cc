@@ -1245,7 +1245,7 @@ int SELECT_LEX::vers_setup_conds(THD *thd, TABLE_LIST *tables)
 
     if (vers_conditions.is_set() && vers_conditions.type != SYSTEM_TIME_HISTORY)
     {
-      thd->where= "FOR SYSTEM_TIME";
+      thd->where= THD_WHERE::FOR_SYSTEM_TIME;
       /* TODO: do resolve fix_length_and_dec(), fix_fields(). This requires
         storing vers_conditions as Item and make some magic related to
         vers_system_time_t/VERS_TRX_ID at stage of fix_fields()
@@ -1530,7 +1530,7 @@ JOIN::prepare(TABLE_LIST *tables_init, COND *conds_init, uint og_num,
   {
     nesting_map save_allow_sum_func= thd->lex->allow_sum_func;
     thd->lex->allow_sum_func.set_bit(select_lex->nest_level);
-    thd->where= "order clause";
+    thd->where= THD_WHERE::ORDER_CLAUSE;
     for (ORDER *order= select_lex->order_list.first; order; order= order->next)
     {
       /* Don't add the order items to all fields. Just resolve them to ensure
@@ -1546,7 +1546,7 @@ JOIN::prepare(TABLE_LIST *tables_init, COND *conds_init, uint og_num,
   if (having)
   {
     nesting_map save_allow_sum_func= thd->lex->allow_sum_func;
-    thd->where="having clause";
+    thd->where= THD_WHERE::HAVING_CLAUSE;
     thd->lex->allow_sum_func.set_bit(select_lex_arg->nest_level);
     select_lex->having_fix_field= 1;
     /*
@@ -1877,6 +1877,11 @@ bool JOIN::build_explain()
         curr_tab->tracker= tmp->get_using_temporary_read_tracker();
     }
   }
+  if (is_in_subquery())
+  {
+    Item_in_subselect *subq= unit->item->get_IN_subquery();
+    subq->init_subq_materialization_tracker(thd);
+  }
   DBUG_RETURN(0);
 }
 
@@ -1932,7 +1937,7 @@ int JOIN::optimize()
     the joined table.
 
   @retval false  Ok
-  @retval true   Error
+  @retval true   Error, query should abort
 */
 
 bool JOIN::make_range_rowid_filters()
@@ -1985,8 +1990,9 @@ bool JOIN::make_range_rowid_filters()
                                (ha_rows) HA_POS_ERROR, true, false, true,
                                true, Item_func::BITMAP_EXCEPT_ANY_EQUALITY);
     tab->table->force_index= force_index_save;
-    if (rc == SQL_SELECT::ERROR || thd->is_error())
+    if (rc == SQL_SELECT::ERROR || thd->is_error() || thd->check_killed())
     {
+      delete sel;
       DBUG_RETURN(true); /* Fatal error */
     }
     /*
@@ -2012,8 +2018,6 @@ bool JOIN::make_range_rowid_filters()
         continue;
     }
   no_filter:
-    if (sel->quick)
-      delete sel->quick;
     delete sel;
   }
 
@@ -2031,7 +2035,9 @@ bool JOIN::make_range_rowid_filters()
     rowid container employed by the filter. On success it lets the table engine
     know that what rowid filter will be used when accessing the table rows.
 
-  @retval false  always
+  @retval
+    false OK
+    true  Error, query should abort
 */
 
 bool
@@ -2312,8 +2318,12 @@ JOIN::optimize_inner()
     DBUG_RETURN(1);
   }
   if (select_lex->with_rownum && ! order && ! group_list &&
-      !select_distinct && conds && select_lex == unit->global_parameters())
+      !select_distinct && conds && select_lex == unit->global_parameters() &&
+      select_lex->first_rownum_optimization)
+  {
     optimize_rownum(thd, unit, conds);
+    select_lex->first_rownum_optimization= false;
+  }
 
   having= optimize_cond(this, having, join_list, TRUE,
                         &having_value, &having_equal);
@@ -3552,7 +3562,8 @@ bool JOIN::make_aggr_tables_info()
 {
   List<Item> *curr_all_fields= &all_fields;
   List<Item> *curr_fields_list= &fields_list;
-  JOIN_TAB *curr_tab= join_tab + const_tables;
+  // Avoid UB (applying .. offset to nullptr) when join_tab is nullptr
+  JOIN_TAB *curr_tab= join_tab ? join_tab + const_tables : nullptr;
   TABLE *exec_tmp_table= NULL;
   bool distinct= false;
   const bool has_group_by= this->group;
@@ -4113,9 +4124,9 @@ bool JOIN::make_aggr_tables_info()
     - duplicate value removal
     Both of these operations are done after window function computation step.
   */
-  curr_tab= join_tab + total_join_tab_cnt();
   if (select_lex->window_funcs.elements)
   {
+    curr_tab= join_tab + total_join_tab_cnt();
     if (!(curr_tab->window_funcs_step= new Window_funcs_computation))
       DBUG_RETURN(true);
     if (curr_tab->window_funcs_step->setup(thd, &select_lex->window_funcs,
@@ -24679,6 +24690,90 @@ void compute_part_of_sort_key_for_equals(JOIN *join, TABLE *table,
 }
 
 
+/*
+  @brief
+    This is called when switching table access to produce records
+    in reverse order.
+
+  @detail
+    - Disable "Range checked for each record" (Is this strictly necessary
+      here?)
+    - Disable Index Condition Pushdown and Rowid Filtering.
+
+  IndexConditionPushdownAndReverseScans, RowidFilteringAndReverseScans:
+  Suppose we're computing
+
+    select * from t1
+    where
+      key1 between 10 and 20 and extra_condition
+    order by key1 desc
+
+  here the range access uses a reverse-ordered scan on (1 <= key1 <= 10) and
+  extra_condition is checked by either ICP or Rowid Filtering.
+
+  Also suppose that extra_condition happens to be false for rows of t1 that
+  do not satisfy the "10 <= key1 <= 20" condition.
+
+  For forward ordered range scan, the SQL layer will make these calls:
+
+    h->read_range_first(RANGE(10 <= key1 <= 20));
+    while (h->read_range_next()) { ... }
+
+  The storage engine sees the end endpoint of "key1<=20" and can stop scanning
+  as soon as it encounters a row with key1>20.
+
+  For backward-ordered range scan, the SQL layer will make these calls:
+
+    h->index_read_map(key1=20, HA_READ_PREFIX_LAST_OR_PREV);
+    while (h->index_prev()) {
+      if (cmp_key(h->record, "key1=10" )<0)
+        break; // end of range
+      ...
+    }
+
+  Note that the check whether we've walked beyond the key=10 endpoint is
+  made at the SQL layer. The storage engine has no information about the left
+  endpoint of the interval we're scanning.  If all rows before that endpoint
+  do not satisfy ICP condition or do not pass the Rowid Filter, the storage
+  engine will enumerate the records until the table start.
+
+  In MySQL, the API is extended with set_end_range() call so that the storage
+  engine "knows" when to stop scanning.
+*/
+
+static void prepare_for_reverse_ordered_access(JOIN_TAB *tab)
+{
+  /* Cancel "Range checked for each record" */
+  if (tab->use_quick == 2)
+  {
+    tab->use_quick= 1;
+    tab->read_first_record= join_init_read_record;
+  }
+  /*
+    Cancel Pushed Index Condition, as it doesn't work for reverse scans.
+  */
+  if (tab->select && tab->select->pre_idx_push_select_cond)
+  {
+    tab->set_cond(tab->select->pre_idx_push_select_cond);
+     tab->table->file->cancel_pushed_idx_cond();
+  }
+  /*
+    The same with Rowid Filter: it doesn't work with reverse scans so cancel
+    it, too.
+  */
+  {
+    /*
+      Rowid Filter is initialized at a later stage. It is not pushed to
+      the storage engine yet:
+    */
+    DBUG_ASSERT(!tab->table->file->pushed_rowid_filter);
+    tab->range_rowid_filter_info= NULL;
+    delete tab->rowid_filter;
+    tab->rowid_filter= NULL;
+  }
+}
+
+
 /**
   Test if we can skip the ORDER BY by using an index.
 
@@ -25142,23 +25237,11 @@ check_reverse_order:
           tab->limit= 0;
           goto use_filesort;           // Reverse sort failed -> filesort
         }
-        /*
-          Cancel Pushed Index Condition, as it doesn't work for reverse scans.
-        */
-        if (tab->select && tab->select->pre_idx_push_select_cond)
-	{
-          tab->set_cond(tab->select->pre_idx_push_select_cond);
-           tab->table->file->cancel_pushed_idx_cond();
-        }
+        prepare_for_reverse_ordered_access(tab);
+
         if (select->quick == save_quick)
           save_quick= 0;                // make_reverse() consumed it
         select->set_quick(tmp);
-        /* Cancel "Range checked for each record" */
-        if (tab->use_quick == 2)
-        {
-          tab->use_quick= 1;
-          tab->read_first_record= join_init_read_record;
-        }
       }
       else if (tab->type != JT_NEXT && tab->type != JT_REF_OR_NULL &&
                tab->ref.key >= 0 && tab->ref.key_parts <= used_key_parts)
@@ -25171,20 +25254,7 @@ check_reverse_order:
         */
         tab->read_first_record= join_read_last_key;
         tab->read_record.read_record_func= join_read_prev_same;
-        /* Cancel "Range checked for each record" */
-        if (tab->use_quick == 2)
-        {
-          tab->use_quick= 1;
-          tab->read_first_record= join_init_read_record;
-        }
-        /*
-          Cancel Pushed Index Condition, as it doesn't work for reverse scans.
-        */
-        if (tab->select && tab->select->pre_idx_push_select_cond)
-	{
-          tab->set_cond(tab->select->pre_idx_push_select_cond);
-           tab->table->file->cancel_pushed_idx_cond();
-        }
+        prepare_for_reverse_ordered_access(tab);
       }
     }
     else if (select && select->quick)
@@ -25921,7 +25991,7 @@ find_order_in_list(THD *thd, Ref_ptr_array ref_pointer_array,
     if (!count || count > fields.elements)
     {
       my_error(ER_BAD_FIELD_ERROR, MYF(0),
-               order_item->full_name(), thd->where);
+               order_item->full_name(), thd_where(thd));
       return TRUE;
     }
     thd->change_item_tree((Item **)&order->item, (Item *)&ref_pointer_array[count - 1]);
@@ -26000,7 +26070,7 @@ find_order_in_list(THD *thd, Ref_ptr_array ref_pointer_array,
                           ER_NON_UNIQ_ERROR,
                           ER_THD(thd, ER_NON_UNIQ_ERROR),
                           ((Item_ident*) order_item)->field_name.str,
-                          thd->where);
+                          thd_where(thd));
     }
   }
   else if (from_window_spec)
@@ -26070,7 +26140,7 @@ int setup_order(THD *thd, Ref_ptr_array ref_pointer_array, TABLE_LIST *tables,
   SELECT_LEX *select = thd->lex->current_select;
   enum_parsing_place context_analysis_place=
                      thd->lex->current_select->context_analysis_place;
-  thd->where="order clause";
+  thd->where= THD_WHERE::ORDER_CLAUSE;
   const bool for_union= select->master_unit()->is_unit_op() &&
     select == select->master_unit()->fake_select_lex;
   for (uint number = 1; order; order=order->next, number++)
@@ -26149,7 +26219,7 @@ setup_group(THD *thd, Ref_ptr_array ref_pointer_array, TABLE_LIST *tables,
 
   uint org_fields=all_fields.elements;
 
-  thd->where="group statement";
+  thd->where= THD_WHERE::GROUP_STATEMENT;
   for (ord= order; ord; ord= ord->next)
   {
     if (find_order_in_list(thd, ref_pointer_array, tables, ord, fields,
@@ -26267,7 +26337,7 @@ setup_new_fields(THD *thd, List<Item> &fields,
       new_field->item=item;			/* Change to shared Item */
     else
     {
-      thd->where="procedure list";
+      thd->where= THD_WHERE::PROCEDURE_LIST;
       if ((*new_field->item)->fix_fields(thd, new_field->item))
 	DBUG_RETURN(1); /* purecov: inspected */
       all_fields.push_front(*new_field->item, thd->mem_root);

@@ -3051,6 +3051,7 @@ void st_select_lex::init_query()
   is_correlated= 0;
   first_natural_join_processing= 1;
   first_cond_optimization= 1;
+  first_rownum_optimization= true;
   no_wrap_view_item= 0;
   exclude_from_table_unique_test= 0;
   in_tvc= 0;
@@ -5500,6 +5501,9 @@ void st_select_lex::update_correlated_cache()
 
   while ((tl= ti++))
   {
+    if (tl->table_function)
+      is_correlated|= MY_TEST(tl->table_function->used_tables() &
+                                OUTER_REF_TABLE_BIT);
     //    is_correlated|= tl->is_with_table_recursive_reference();
     if (tl->on_expr)
       is_correlated|= MY_TEST(tl->on_expr->used_tables() & OUTER_REF_TABLE_BIT);
@@ -8143,7 +8147,7 @@ bool LEX::check_expr_allows_fields_or_error(THD *thd, const char *name) const
 {
   if (select_stack_top > 0)
     return false; // OK, fields are allowed
-  my_error(ER_BAD_FIELD_ERROR, MYF(0), name, thd->where);
+  my_error(ER_BAD_FIELD_ERROR, MYF(0), name, thd_where(thd));
   return true;    // Error, fields are not allowed
 }
 
@@ -8166,7 +8170,7 @@ Item *LEX::create_item_ident_nospvar(THD *thd,
 
   if (unlikely(current_select->no_table_names_allowed))
   {
-    my_error(ER_TABLENAME_NOT_ALLOWED_HERE, MYF(0), a->str, thd->where);
+    my_error(ER_TABLENAME_NOT_ALLOWED_HERE, MYF(0), a->str, thd_where(thd));
     return NULL;
   }
 
@@ -8381,7 +8385,7 @@ Item *LEX::create_item_ident(THD *thd,
 
   if (current_select->no_table_names_allowed)
   {
-    my_error(ER_TABLENAME_NOT_ALLOWED_HERE, MYF(0), b->str, thd->where);
+    my_error(ER_TABLENAME_NOT_ALLOWED_HERE, MYF(0), b->str, thd_where(thd));
     return NULL;
   }
 
@@ -11003,7 +11007,10 @@ void mark_or_conds_to_avoid_pushdown(Item *cond)
        (if cond is marked with MARKER_FULL_EXTRACTION or
            cond is an AND condition and some of its parts are marked with
            MARKER_FULL_EXTRACTION)
-       In this case condition is transformed and pushed into attach_to_conds
+       In this case condition is transformed with multiple_equality_transformer
+       transformer. It transforms all multiple equalities in the extracted
+       condition into the set of equalities.
+       After that the transformed condition is attached into attach_to_conds
        list.
     2. Part of some other condition c1 that can't be entirely pushed
        (if с1 isn't marked with any flag).
@@ -11019,10 +11026,6 @@ void mark_or_conds_to_avoid_pushdown(Item *cond)
 
        In this case build_pushable_cond() is called for c1.
        This method builds a clone of the c1 part that can be pushed.
-
-    Transformation mentioned above is made with multiple_equality_transformer
-    transformer. It transforms all multiple equalities in the extracted
-    condition into the set of equalities.
 
   @note
     Conditions that can be pushed are collected in attach_to_conds in this way:
@@ -11434,6 +11437,19 @@ Item *st_select_lex::pushdown_from_having_into_where(THD *thd, Item *having)
 
     if (item->walk(&Item::cleanup_excluding_immutables_processor, 0, STOP_PTR)
         || item->fix_fields(thd, NULL))
+    {
+      attach_to_conds.empty();
+      goto exit;
+    }
+  }
+
+  /*
+    Remove IMMUTABLE_FL only after all of the elements of the condition are processed.
+  */
+  it.rewind();
+  while ((item=it++))
+  {
+    if (item->walk(&Item::remove_immutable_flag_processor, 0, STOP_PTR))
     {
       attach_to_conds.empty();
       goto exit;

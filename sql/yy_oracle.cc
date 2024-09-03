@@ -43937,7 +43937,7 @@ yyreduce:
   case 1999: /* $@172: %empty  */
 #line 12522 "/home/buildbot/git/sql/sql_yacc.yy"
           {
-            thd->where= "ORDER clause";
+            thd->where= THD_WHERE::ORDER_CLAUSE;
           }
 #line 43943 "/home/buildbot/git/mkdist/sql/yy_oracle.cc"
     break;

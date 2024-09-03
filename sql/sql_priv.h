@@ -274,6 +274,7 @@
 #define OPTIMIZER_ADJ_SEC_KEY_COST (1)
 #define OPTIMIZER_ADJ_DISABLE_MAX_SEEKS (2)
 #define OPTIMIZER_ADJ_DISABLE_FORCE_INDEX_GROUP_BY (4)
+#define OPTIMIZER_FIX_INNODB_CARDINALITY (8)
 
 /*
   Replication uses 8 bytes to store SQL_MODE in the binary log. The day you
@@ -325,7 +326,10 @@
 */
 /* This subquery has fields from outer query (put by user) */
 #define UNCACHEABLE_DEPENDENT_GENERATED   1
-/* This subquery contains functions with random result */
+/*
+  This subquery contains functions with random result.
+  Something that is uncacheable is by default unmergeable.
+*/
 #define UNCACHEABLE_RAND        2
 /* This subquery contains functions with side effect */
 #define UNCACHEABLE_SIDEEFFECT	4

@@ -349,6 +349,8 @@ LEX_STRING opt_init_connect, opt_init_slave;
 static DYNAMIC_ARRAY all_options;
 static longlong start_memory_used;
 
+char server_uid[SERVER_UID_SIZE+1];   // server uid will be written here
+
 /* Global variables */
 
 bool opt_bin_log, opt_bin_log_used=0, opt_ignore_builtin_innodb= 0;
@@ -1143,6 +1145,8 @@ PSI_file_key key_file_map;
 #ifdef HAVE_PSI_STATEMENT_INTERFACE
 PSI_statement_info stmt_info_new_packet;
 #endif
+
+static int calculate_server_uid(char *dest);
 
 #ifndef EMBEDDED_LIBRARY
 void net_before_header_psi(struct st_net *net, void *thd, size_t /* unused: count */)
@@ -2068,10 +2072,11 @@ static void wait_for_signal_thread_to_end()
   if (err && err != ESRCH)
   {
     sql_print_error("Failed to send kill signal to signal handler thread, "
-                    "pthread_kill() errno: %d", err);
+                    "pthread_kill() errno: %d",
+                    err);
   }
 
-  if (i == n_waits && signal_thread_in_use && !opt_bootstrap)
+  if (i == n_waits && signal_thread_in_use)
   {
     sql_print_warning("Signal handler thread did not exit in a timely manner. "
                       "Continuing to wait for it to stop..");
@@ -3049,8 +3054,10 @@ void init_signals(void)
   (void) sigemptyset(&set);
   my_sigset(SIGPIPE,SIG_IGN);
   sigaddset(&set,SIGPIPE);
+#ifndef IGNORE_SIGHUP_SIGQUIT
   sigaddset(&set,SIGQUIT);
   sigaddset(&set,SIGHUP);
+#endif
   sigaddset(&set,SIGTERM);
 
   /* Fix signals if blocked by parents (can happen on Mac OS X) */
@@ -3108,6 +3115,15 @@ static void start_signal_handler(void)
   DBUG_VOID_RETURN;
 }
 
+/** Called only from signal_hand function. */
+static void* exit_signal_handler()
+{
+    my_thread_end();
+    signal_thread_in_use= 0;
+    pthread_exit(0);  // Safety
+    return nullptr;  // Avoid compiler warnings
+}
+
 
 /** This threads handles all signals and alarms. */
 /* ARGSUSED */
@@ -3132,20 +3148,20 @@ pthread_handler_t signal_hand(void *arg __attribute__((unused)))
     (void) sigaddset(&set,SIGINT);
     (void) pthread_sigmask(SIG_UNBLOCK,&set,NULL);
   }
-  (void) sigemptyset(&set);
+  (void) sigemptyset(&set);			// Setup up SIGINT for debug
 #ifdef USE_ONE_SIGNAL_HAND
   (void) sigaddset(&set,THR_SERVER_ALARM);	// For alarms
 #endif
+#ifndef IGNORE_SIGHUP_SIGQUIT
   (void) sigaddset(&set,SIGQUIT);
+  (void) sigaddset(&set,SIGHUP);
+#endif
   (void) sigaddset(&set,SIGTERM);
   (void) sigaddset(&set,SIGTSTP);
 
   /* Save pid to this process (or thread on Linux) */
   if (!opt_bootstrap)
-  {
-    (void) sigaddset(&set,SIGHUP);
     create_pid_file();
-  }
 
   /*
     signal to start_signal_handler that we are ready
@@ -3168,10 +3184,7 @@ pthread_handler_t signal_hand(void *arg __attribute__((unused)))
     if (abort_loop)
     {
       DBUG_PRINT("quit",("signal_handler: calling my_thread_end()"));
-      my_thread_end();
-      signal_thread_in_use= 0;
-      pthread_exit(0);				// Safety
-      return 0;                                 // Avoid compiler warnings
+      return exit_signal_handler();
     }
     switch (sig) {
     case SIGTERM:
@@ -3190,6 +3203,7 @@ pthread_handler_t signal_hand(void *arg __attribute__((unused)))
         PSI_CALL_delete_current_thread();
         my_sigset(sig, SIG_IGN);
         break_connect_loop(); // MIT THREAD has a alarm thread
+        return exit_signal_handler();
       }
       break;
     case SIGHUP:
@@ -4017,6 +4031,9 @@ static int init_common_variables()
     exit(opt_err);
   if (IS_SYSVAR_AUTOSIZE(&server_version_ptr))
     set_server_version(server_version, sizeof(server_version));
+
+  if (calculate_server_uid(server_uid))
+    strmov(server_uid, "unknown");
 
   mysql_real_data_home_len= uint(strlen(mysql_real_data_home));
 
@@ -4889,8 +4906,10 @@ static int init_server_components()
     first in error log, for troubleshooting and debugging purposes
   */
   if (!opt_help)
-    sql_print_information("Starting MariaDB %s source revision %s as process %lu",
-                          server_version, SOURCE_REVISION, (ulong) getpid());
+    sql_print_information("Starting MariaDB %s source revision %s "
+                          "server_uid %s as process %lu",
+                          server_version, SOURCE_REVISION, server_uid,
+                          (ulong) getpid());
 
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
   /*
@@ -6611,7 +6630,7 @@ struct my_option my_long_options[]=
 #ifdef HAVE_REPLICATION
   {"init-rpl-role", 0, "Set the replication role",
    &rpl_status, &rpl_status, &rpl_role_typelib,
-   GET_ENUM, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+   GET_ENUM, REQUIRED_ARG, RPL_AUTH_MASTER, 0, 0, 0, 0, 0},
 #endif /* HAVE_REPLICATION */
   {"memlock", 0, "Lock mysqld in memory.", &locked_in_memory,
    &locked_in_memory, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
@@ -8260,6 +8279,14 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
     if (argument == NULL) /* no argument */
       log_error_file_ptr= const_cast<char*>("");
     break;
+  case OPT_LOG_SLOW_FILTER:
+    if (argument == NULL || *argument == 0)
+    {
+      /* By default log_slow_filter_has all values except QPLAN_NOT_USING_INDEX */
+      global_system_variables.log_slow_filter= opt->def_value | QPLAN_NOT_USING_INDEX;
+      sql_print_warning("log_slow_filter=\"\" changed to log_slow_filter=ALL");
+    }
+    break;
   case OPT_IGNORE_DB_DIRECTORY:
     opt_ignore_db_dirs= NULL; // will be set in ignore_db_dirs_process_additions
     if (*argument == 0)
@@ -9818,4 +9845,32 @@ my_thread_id next_thread_id(void)
 
   mysql_mutex_unlock(&LOCK_thread_id);
   return retval;
+}
+
+
+/**
+  calculates the server unique identifier
+
+  UID is a base64 encoded SHA1 hash of the MAC address of one of
+  the interfaces, and the tcp port that the server is listening on
+*/
+
+static int calculate_server_uid(char *dest)
+{
+  uchar rawbuf[2 + 6];
+  uchar shabuf[MY_SHA1_HASH_SIZE];
+
+  int2store(rawbuf, mysqld_port);
+  if (my_gethwaddr(rawbuf + 2))
+  {
+    sql_print_error("feedback plugin: failed to retrieve the MAC address");
+    return 1;
+  }
+
+  my_sha1((uint8*) shabuf, (char*) rawbuf, sizeof(rawbuf));
+
+  assert(my_base64_needed_encoded_length(sizeof(shabuf)) <= SERVER_UID_SIZE);
+  my_base64_encode(shabuf, sizeof(shabuf), dest);
+
+  return 0;
 }
