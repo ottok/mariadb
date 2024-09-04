@@ -1,0 +1,9 @@
+---
+# Include Salsa-CI as a base
+include:
+  - https://salsa.debian.org/salsa-ci-team/pipeline/-/raw/master/recipes/ubuntu.yml
+
+# Extend Salsa-CI build jobs to have longer timeout as the default GitLab
+# timeout (1h) is often not enough
+.build-package:
+  timeout: 3h
