@@ -127,14 +127,14 @@ blhc:
 # Readline was removed from Debian Sid (and Bullseye) in Feb 2021. To be able to install older
 # versions of MariaDB that depend on it, fetch and install it from Buster.
 .test-install-readline-in-sid-for-backwards-compat: &test-install-readline-in-sid-for-backwards-compat |
-  curl -sS -O https://snapshot.debian.org/archive/debian/20190316T031117Z/pool/main/r/readline5/libreadline5_5.2%2Bdfsg-3%2Bb13_amd64.deb
+  curl -sL -O https://snapshot.debian.org/archive/debian/20190316T031117Z/pool/main/r/readline5/libreadline5_5.2%2Bdfsg-3%2Bb13_amd64.deb
   apt-get -qq install --no-install-recommends --yes ./libreadline5_5.2%2Bdfsg-3%2Bb13_amd64.deb
 
 # OpenSSL 1.1 was Debian Sid in Dec 2022 (as Bookworm will ship with OpenSSL 3.0
 # only). To be able to install versions of MariaDB that depend on OpenSSL 1.1,
 # fetch and install it manually.
 .test-install-openssl1-in-sid-for-backwards-compat: &test-install-openssl1-in-sid-for-backwards-compat |
-  curl -sS -O https://snapshot.debian.org/archive/debian/20220507T034236Z/pool/main/o/openssl/libssl1.1_1.1.1o-1_amd64.deb
+  curl -sL -O https://snapshot.debian.org/archive/debian/20220507T034236Z/pool/main/o/openssl/libssl1.1_1.1.1o-1_amd64.deb
   apt-get -qq install --no-install-recommends --yes ./libssl1.1_1.1.1o-1_amd64.deb
 
 .test-verify-initial: &test-verify-initial |
