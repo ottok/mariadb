@@ -7,14 +7,8 @@ include:
 variables:
   BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19t64 libmariadbd-dev mariadb-common mariadb-client-core mariadb-client mariadb-server-core mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-gssapi-server mariadb-plugin-gssapi-client mariadb-plugin-cracklib-password-check mariadb-plugin-hashicorp-key-management mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy mariadb-test mariadb-test-data"
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
-  # Reprotest works, but takes very long time and often fails due to timeouts.
-  # Thus is best kept disabled and only occasionally manually enabled to
-  # test that reproducibility works, along with atomic reprotest to directly
-  # pinpoint what aspect of the build is broken if not reproducible.
-  SALSA_CI_DISABLE_REPROTEST: 1
-  SALSA_CI_ENABLE_ATOMIC_REPROTEST: 0
-  SALSA_CI_DISABLE_MISSING_BREAKS: 0
-  SALSA_CI_DISABLE_RC_BUGS: 0
+  # These pass in Ubuntu 24.04 "Noble", so continue testing that they don't regress
+  SALSA_CI_DISABLE_LINTIAN: 0
 
 # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
 # timeout (1h) is often not enough
