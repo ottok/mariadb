@@ -3,6 +3,10 @@
 include:
   - https://salsa.debian.org/salsa-ci-team/pipeline/-/raw/master/recipes/ubuntu.yml
 
+variables:
+  # These pass in Ubuntu 22.04 "Jammy", so continue testing that they don't regress
+  SALSA_CI_DISABLE_LINTIAN: 0
+
 # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
 # timeout (1h) is often not enough
 .build-package:
