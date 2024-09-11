@@ -303,7 +303,7 @@ blhc:
   stage: test
   needs:
     - job: build
-  image: debian:${RELEASE}
+  image: ubuntu:${RELEASE}
   artifacts:
     when: always
     name: "$CI_BUILD_NAME"
@@ -321,7 +321,7 @@ blhc:
   stage: test
   needs:
     - job: build
-  image: debian:${RELEASE}
+  image: ubuntu:${RELEASE}
   artifacts:
     when: always
     name: "$CI_BUILD_NAME"
