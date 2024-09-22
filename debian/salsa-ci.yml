@@ -1,7 +1,7 @@
 ---
 # Include Salsa-CI as a base
 include:
-  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/recipes/debian.yml
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/recipes/ubuntu.yml
 
 # Override Salsa-CI with MariaDB specific variations
 variables:
