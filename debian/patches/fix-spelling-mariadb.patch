@@ -1,19 +1,19 @@
-Forwarded: no
-Author: Otto Kekäläinen <otto@debian.org>
+From: Otto Kekalainen <otto@debian.org>
 Date: Sun, 10 Mar 2024 16:56:13 +0000
-Subject: [PATCH] Fix misc spelling in MariaDB Server repository
+Subject: Fix misc spelling in MariaDB Server repository
 
---- a/storage/connect/odbconn.cpp
-+++ b/storage/connect/odbconn.cpp
-@@ -281,7 +281,7 @@ static CATPARM *AllocCatInfo(PGLOBAL g,
- 		cap->Status = (UWORD *)PlugSubAlloc(g, NULL, m * sizeof(UWORD));
- 
- 	} catch (int n) {
--		htrc("Exeption %d: %s\n", n, g->Message);
-+		htrc("Exception %d: %s\n", n, g->Message);
- 		cap = NULL;
- 	} catch (const char *msg) {
- 		htrc(g->Message, msg);
+Forwarded: no
+---
+ extra/mariabackup/innobackupex.cc | 4 ++--
+ extra/mariabackup/xtrabackup.cc   | 6 +++---
+ sql/opt_subselect.cc              | 4 ++--
+ sql/sql_select.cc                 | 2 +-
+ storage/connect/odbconn.cpp       | 2 +-
+ support-files/mysql.server.sh     | 2 +-
+ 6 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/extra/mariabackup/innobackupex.cc b/extra/mariabackup/innobackupex.cc
+index 60c3854..bb5656a 100644
 --- a/extra/mariabackup/innobackupex.cc
 +++ b/extra/mariabackup/innobackupex.cc
 @@ -188,7 +188,7 @@ enum innobackupex_options
@@ -25,7 +25,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
  	OPT_CLOSE_FILES,
  	OPT_COMPACT,
  	OPT_COMPRESS,
-@@ -447,7 +447,7 @@ static struct my_option ibx_long_options
+@@ -447,7 +447,7 @@ static struct my_option ibx_long_options[] =
  	{"startup-wait-timeout", OPT_LOCK_WAIT_TIMEOUT,
           "This option specifies time in seconds that mariadb-backup should wait for "
           "BACKUP STAGE START to complete. BACKUP STAGE START has to wait until all "
@@ -34,6 +34,8 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
           "If there are still such queries when the timeout expires, mariadb-backup "
           "terminates with an error. Default is 0, in which case mariadb-backup waits "
           "indefinitely for BACKUP STAGE START to finish",
+diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
+index 0a2768a..53b76ff 100644
 --- a/extra/mariabackup/xtrabackup.cc
 +++ b/extra/mariabackup/xtrabackup.cc
 @@ -217,7 +217,7 @@ uint xtrabackup_compress = FALSE;
@@ -54,7 +56,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
       "If there are still such queries when the timeout expires, mariadb-backup "
       "terminates with an error. Default is 0, in which case mariadb-backup waits "
       "indefinitely for BACKUP STAGE START to finish",
-@@ -5651,7 +5651,7 @@ void CorruptedPages::backup_fix_ddl(ds_c
+@@ -5651,7 +5651,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
  	}
  
  	/* Mariabackup doesn't detect any FILE_OP for the deferred
@@ -63,20 +65,11 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
  	been corrupted persistently in the disk */
  	for (auto space_name: defer_space_names) {
  		if (!check_if_skip_table(space_name.c_str())) {
---- a/support-files/mysql.server.sh
-+++ b/support-files/mysql.server.sh
-@@ -194,7 +194,7 @@ su_kill() {
- 
- #
- # Read defaults file from 'basedir'.   If there is no defaults file there
--# check if it's in the old (depricated) place (datadir) and read it from there
-+# check if it's in the old (deprecated) place (datadir) and read it from there
- #
- 
- extra_args=""
+diff --git a/sql/opt_subselect.cc b/sql/opt_subselect.cc
+index f577d03..6fcb7d3 100644
 --- a/sql/opt_subselect.cc
 +++ b/sql/opt_subselect.cc
-@@ -6886,7 +6886,7 @@ bool JOIN::choose_subquery_plan(table_ma
+@@ -6886,7 +6886,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
          add("rows", inner_record_count_1).
          add("materialization_cost", materialize_strategy_cost).
          add("in_exist_cost", in_exists_strategy_cost).
@@ -85,7 +78,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
      }
  
      DBUG_PRINT("info",
-@@ -6924,7 +6924,7 @@ bool JOIN::choose_subquery_plan(table_ma
+@@ -6924,7 +6924,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
      {
        Json_writer_object trace_wrapper(thd);
        Json_writer_object trace_subquery(thd, "subquery_plan_revert");
@@ -94,6 +87,8 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
      }
    }
  
+diff --git a/sql/sql_select.cc b/sql/sql_select.cc
+index 3bc832d..3b75dea 100644
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
 @@ -14683,7 +14683,7 @@ void JOIN::drop_unused_derived_keys()
@@ -105,3 +100,29 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
        */
        tab->ref.key= 0;
      }
+diff --git a/storage/connect/odbconn.cpp b/storage/connect/odbconn.cpp
+index 520b82d..a782570 100644
+--- a/storage/connect/odbconn.cpp
++++ b/storage/connect/odbconn.cpp
+@@ -281,7 +281,7 @@ static CATPARM *AllocCatInfo(PGLOBAL g, CATINFO fid, PCSZ db,
+ 		cap->Status = (UWORD *)PlugSubAlloc(g, NULL, m * sizeof(UWORD));
+ 
+ 	} catch (int n) {
+-		htrc("Exeption %d: %s\n", n, g->Message);
++		htrc("Exception %d: %s\n", n, g->Message);
+ 		cap = NULL;
+ 	} catch (const char *msg) {
+ 		htrc(g->Message, msg);
+diff --git a/support-files/mysql.server.sh b/support-files/mysql.server.sh
+index dd8cbd4..cc4b866 100644
+--- a/support-files/mysql.server.sh
++++ b/support-files/mysql.server.sh
+@@ -194,7 +194,7 @@ su_kill() {
+ 
+ #
+ # Read defaults file from 'basedir'.   If there is no defaults file there
+-# check if it's in the old (depricated) place (datadir) and read it from there
++# check if it's in the old (deprecated) place (datadir) and read it from there
+ #
+ 
+ extra_args=""

@@ -1,10 +1,17 @@
-Forwarded: no
-Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1069094
-Author: Svante Signell <svante.signell@gmail.com>
+From: Svante Signell <svante.signell@gmail.com>
+Date: Sat, 20 Apr 2024 16:51:00 -0700
 Subject: Bug#1069094: mariadb: FTBFS on hurd-i386
 
-Define PATH_MAX if not defined.
+Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1069094
+Forwarded: no
 
+Define PATH_MAX if not defined.
+---
+ plugin/disks/information_schema_disks.cc | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/plugin/disks/information_schema_disks.cc b/plugin/disks/information_schema_disks.cc
+index 01df325..d42d303 100644
 --- a/plugin/disks/information_schema_disks.cc
 +++ b/plugin/disks/information_schema_disks.cc
 @@ -32,6 +32,9 @@

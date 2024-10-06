@@ -1,8 +1,9 @@
-Forwarded: https://github.com/mariadb-corporation/mariadb-connector-c/pull/220
-Origin: https://patch-diff.githubusercontent.com/raw/mariadb-corporation/mariadb-connector-c/pull/220.patch
-Author: Otto Kekäläinen <otto@kekalainen.net>
+From: Otto Kekalainen <otto@debian.org>
 Date: Sat, 11 Mar 2023 11:22:24 -0800
-Subject: [PATCH] Fix trivial spelling errors
+Subject: Fix trivial spelling errors
+
+Origin: https://patch-diff.githubusercontent.com/raw/mariadb-corporation/mariadb-connector-c/pull/220.patch
+Forwarded: https://github.com/mariadb-corporation/mariadb-connector-c/pull/220
 
 - handshak -> handshake
 - occured -> occurred
@@ -11,24 +12,21 @@ Subject: [PATCH] Fix trivial spelling errors
 - seperated -> separated
 - sucess -> success
 - use use -> use
-
-All new code of the whole pull request, including one or several files
-that are either new files or modified ones, are contributed under the
-BSD-new license. I am contributing on behalf of my employer Amazon Web
-Services, Inc.
 ---
- man/mariadb_get_infov.3       | 4 ++--
- man/mariadb_reconnect.3       | 2 +-
- man/mysql_ping.3              | 2 +-
- man/mysql_real_connect.3      | 4 ++--
- man/mysql_send_query.3        | 2 +-
- man/mysql_set_character_set.3 | 2 +-
- man/mysql_stmt_error.3        | 2 +-
- man/mysql_stmt_reset.3        | 2 +-
- man/mysql_store_result.3      | 2 +-
- unittest/libmariadb/result.c  | 2 +-
+ libmariadb/man/mariadb_get_infov.3       | 4 ++--
+ libmariadb/man/mariadb_reconnect.3       | 2 +-
+ libmariadb/man/mysql_ping.3              | 2 +-
+ libmariadb/man/mysql_real_connect.3      | 4 ++--
+ libmariadb/man/mysql_send_query.3        | 2 +-
+ libmariadb/man/mysql_set_character_set.3 | 2 +-
+ libmariadb/man/mysql_stmt_error.3        | 2 +-
+ libmariadb/man/mysql_stmt_reset.3        | 2 +-
+ libmariadb/man/mysql_store_result.3      | 2 +-
+ libmariadb/unittest/libmariadb/result.c  | 2 +-
  10 files changed, 12 insertions(+), 12 deletions(-)
 
+diff --git a/libmariadb/man/mariadb_get_infov.3 b/libmariadb/man/mariadb_get_infov.3
+index 309cb93..c74473b 100644
 --- a/libmariadb/man/mariadb_get_infov.3
 +++ b/libmariadb/man/mariadb_get_infov.3
 @@ -5,7 +5,7 @@
@@ -40,7 +38,7 @@ Services, Inc.
  information
  .SS Synopsis
  .IP
-@@ -170,7 +170,7 @@ Retrieves character set information for
+@@ -170,7 +170,7 @@ Retrieves character set information for given connection.
  .PD 0
  .P
  .PD
@@ -49,9 +47,11 @@ Services, Inc.
  .IP \[bu] 2
  \f[C]MARIADB_CONNECTION_ERROR\f[R]
  .PD 0
+diff --git a/libmariadb/man/mariadb_reconnect.3 b/libmariadb/man/mariadb_reconnect.3
+index 3a89b54..8a2cfbb 100644
 --- a/libmariadb/man/mariadb_reconnect.3
 +++ b/libmariadb/man/mariadb_reconnect.3
-@@ -22,7 +22,7 @@ It uses the same credentials which were
+@@ -22,7 +22,7 @@ It uses the same credentials which were specified in
  \f[B]mysql_real_connect(3)\f[R].
  .SS Return value
  .PP
@@ -60,9 +60,11 @@ Services, Inc.
  .PP
  \f[B]Note\f[R]: The function will return an error, if the option
  \f[C]MYSQL_OPT_RECONNECT\f[R] wasn\[cq]t set before.
+diff --git a/libmariadb/man/mysql_ping.3 b/libmariadb/man/mysql_ping.3
+index 4015092..5e2d608 100644
 --- a/libmariadb/man/mysql_ping.3
 +++ b/libmariadb/man/mysql_ping.3
-@@ -36,7 +36,7 @@ Also resources bundled to the connection
+@@ -36,7 +36,7 @@ Also resources bundled to the connection (prepared statements, locks,
  temporary tables, \&...) will be released.
  .SS Return value
  .PP
@@ -71,6 +73,8 @@ Services, Inc.
  .SS See also
  .IP \[bu] 2
  \f[B]mysql_optionsv(3)\f[R]
+diff --git a/libmariadb/man/mysql_real_connect.3 b/libmariadb/man/mysql_real_connect.3
+index 3a7a7f6..aec9b9b 100644
 --- a/libmariadb/man/mysql_real_connect.3
 +++ b/libmariadb/man/mysql_real_connect.3
 @@ -141,11 +141,11 @@ since version 3.3.0).
@@ -87,6 +91,8 @@ Services, Inc.
  .IP \[bu] 2
  if only one host:port was specified, the host string needs to end with a
  comma.
+diff --git a/libmariadb/man/mysql_send_query.3 b/libmariadb/man/mysql_send_query.3
+index dea0813..86266de 100644
 --- a/libmariadb/man/mysql_send_query.3
 +++ b/libmariadb/man/mysql_send_query.3
 @@ -5,7 +5,7 @@
@@ -98,9 +104,11 @@ Services, Inc.
  .SS Synopsis
  .IP
  .nf
+diff --git a/libmariadb/man/mysql_set_character_set.3 b/libmariadb/man/mysql_set_character_set.3
+index d2b8e2c..60d7a8e 100644
 --- a/libmariadb/man/mysql_set_character_set.3
 +++ b/libmariadb/man/mysql_set_character_set.3
-@@ -34,7 +34,7 @@ of \f[C]SET NAMES ...\f[R] since \f[B]my
+@@ -34,7 +34,7 @@ of \f[C]SET NAMES ...\f[R] since \f[B]mysql_real_escape_string(3)\f[R]
  might fail or deliver unexpected results.
  .SS Return value
  .PP
@@ -109,9 +117,11 @@ Services, Inc.
  .SS Supported character sets
  .PP
  The client library supports the following character sets:
+diff --git a/libmariadb/man/mysql_stmt_error.3 b/libmariadb/man/mysql_stmt_error.3
+index c58d580..00e3561 100644
 --- a/libmariadb/man/mysql_stmt_error.3
 +++ b/libmariadb/man/mysql_stmt_error.3
-@@ -27,7 +27,7 @@ The string will be empty if no error occ
+@@ -27,7 +27,7 @@ The string will be empty if no error occurred.
  .SS Return value
  .IP \[bu] 2
  A string describing the last error or an empty string if no error
@@ -120,9 +130,11 @@ Services, Inc.
  .SS Notes
  .IP \[bu] 2
  Client error messages are listed in the \f[C]errmsg.h\f[R] header file,
+diff --git a/libmariadb/man/mysql_stmt_reset.3 b/libmariadb/man/mysql_stmt_reset.3
+index 84c7228..882eef6 100644
 --- a/libmariadb/man/mysql_stmt_reset.3
 +++ b/libmariadb/man/mysql_stmt_reset.3
-@@ -24,7 +24,7 @@ Resets a prepared statement on client an
+@@ -24,7 +24,7 @@ Resets a prepared statement on client and server to state after prepare.
  Returns zero on success, nonzero if an error occurred.
  .SS Return value
  .PP
@@ -131,9 +143,11 @@ Services, Inc.
  .SS Notes
  .IP \[bu] 2
  \f[C]mysql_stmt_reset()\f[R] resets the statement on the server,
+diff --git a/libmariadb/man/mysql_store_result.3 b/libmariadb/man/mysql_store_result.3
+index 5669063..5c2c658 100644
 --- a/libmariadb/man/mysql_store_result.3
 +++ b/libmariadb/man/mysql_store_result.3
-@@ -31,7 +31,7 @@ allocated by \f[B]mysql_init(3)\f[R] and
+@@ -31,7 +31,7 @@ allocated by \f[B]mysql_init(3)\f[R] and connected by
  \f[B]mysql_real_connect(3)\f[R].
  .SS Return value
  .PP
@@ -142,9 +156,11 @@ Services, Inc.
  query didn\[cq]t return data (e.g.\ when executing an INSERT, UPDATE,
  DELETE or REPLACE statement).
  ## See also * \f[B]mysql_free_result(3)\f[R] *
+diff --git a/libmariadb/unittest/libmariadb/result.c b/libmariadb/unittest/libmariadb/result.c
+index c4a5643..b319688 100644
 --- a/libmariadb/unittest/libmariadb/result.c
 +++ b/libmariadb/unittest/libmariadb/result.c
-@@ -65,7 +65,7 @@ static int client_use_result(MYSQL *mysq
+@@ -65,7 +65,7 @@ static int client_use_result(MYSQL *mysql)
    result= mysql_use_result(mysql);
    FAIL_IF(!result, "Invalid result set");
  

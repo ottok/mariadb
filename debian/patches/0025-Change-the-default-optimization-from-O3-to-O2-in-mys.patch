@@ -2,14 +2,15 @@ From: Ondrej Sury <ondrej@debian.org>
 Date: Wed, 22 Nov 2017 20:32:51 +0000
 Subject: Change the default optimization from -O3 to -O2 in
  mysql_release.cmake BUILD_CONFIG profile
+
 Forwarded: no
 Bug: https://jira.mariadb.org/browse/MDEV-19734?focusedCommentId=156606&page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-156606
-
 ---
- cmake/build_configurations/mysql_release.cmake           | 12 ++++++------
- .../PerconaFT/cmake_modules/TokuSetupCompiler.cmake      | 16 ++++++++--------
- 2 files changed, 14 insertions(+), 14 deletions(-)
+ cmake/build_configurations/mysql_release.cmake | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
 
+diff --git a/cmake/build_configurations/mysql_release.cmake b/cmake/build_configurations/mysql_release.cmake
+index 961db1b..2860fed 100644
 --- a/cmake/build_configurations/mysql_release.cmake
 +++ b/cmake/build_configurations/mysql_release.cmake
 @@ -174,12 +174,12 @@ IF(UNIX)

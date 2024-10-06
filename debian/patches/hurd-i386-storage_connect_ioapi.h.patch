@@ -1,10 +1,17 @@
-Forwarded: no
-Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1069094
-Author: Svante Signell <svante.signell@gmail.com>
+From: Svante Signell <svante.signell@gmail.com>
+Date: Sat, 20 Apr 2024 16:51:00 -0700
 Subject: Bug#1069094: mariadb: FTBFS on hurd-i386
 
-Add Hurd to define __USE_FILE_OFFSET64 et al.
+Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1069094
+Forwarded: no
 
+Add Hurd to define __USE_FILE_OFFSET64 et al.
+---
+ storage/connect/ioapi.h | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/storage/connect/ioapi.h b/storage/connect/ioapi.h
+index 94b292e..7971717 100644
 --- a/storage/connect/ioapi.h
 +++ b/storage/connect/ioapi.h
 @@ -21,9 +21,10 @@

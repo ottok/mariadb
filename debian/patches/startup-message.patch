@@ -1,7 +1,9 @@
-Forwarded: no
-Author: Otto Kekäläinen <otto@debian.org>
+From: Otto Kekalainen <otto@debian.org>
 Date: Sun, 10 Mar 2024 16:56:13 +0000
-Subject: [PATCH] Show banner in server and client startup to drive community engagement
+Subject: Show banner in server and client startup to drive community
+ engagement
+
+Forwarded: no
 
 Suggest to users that they can support MariaDB development by simply giving a
 star on GitHub. This patch experiments with how well such a banner works, and
@@ -24,7 +26,13 @@ Server output:
 
 Server output if build in git directory:
     [Note] Starting MariaDB 10.11.7-MariaDB-3 source revision 219efb0a6ab0ee8ce2ec831c715783586c4db2ef as process 5426
+---
+ client/mysql.cc |  3 +++
+ sql/mysqld.cc   | 20 +++++++++++++++-----
+ 2 files changed, 18 insertions(+), 5 deletions(-)
 
+diff --git a/client/mysql.cc b/client/mysql.cc
+index e012961..aa2b931 100644
 --- a/client/mysql.cc
 +++ b/client/mysql.cc
 @@ -1338,6 +1338,9 @@ int main(int argc,char *argv[])
@@ -37,6 +45,8 @@ Server output if build in git directory:
    }
  
  #ifdef HAVE_READLINE
+diff --git a/sql/mysqld.cc b/sql/mysqld.cc
+index 8d5f5d4..8f464b8 100644
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
 @@ -4969,13 +4969,23 @@ static int init_server_components()

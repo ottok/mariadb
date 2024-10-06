@@ -1,8 +1,9 @@
-Forwarded: no
-Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1061348
 From: Michael Biebl <biebl@debian.org>
 Date: Mon, 22 Jan 2024 22:52:25 +0100
 Subject: [PATCH] Install PAM modules and systemd units into /usr
+
+Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1061348
+Forwarded: no
 
 Since Debian trixie all files need to be installed into their canonical
 location under /usr.
@@ -10,9 +11,11 @@ location under /usr.
  cmake/install_layout.cmake | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)
 
+diff --git a/cmake/install_layout.cmake b/cmake/install_layout.cmake
+index eb96967..3be0498 100644
 --- a/cmake/install_layout.cmake
 +++ b/cmake/install_layout.cmake
-@@ -194,10 +194,10 @@ SET(INSTALL_SUPPORTFILESDIR_DEB
+@@ -194,10 +194,10 @@ SET(INSTALL_SUPPORTFILESDIR_DEB         "share/mariadb")
  SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mysql")
  
  SET(INSTALL_UNIX_ADDRDIR_DEB            "/run/mysqld/mysqld.sock")
