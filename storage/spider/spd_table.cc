@@ -17,7 +17,6 @@
 #define MYSQL_SERVER 1
 #include <my_global.h>
 #include "mysql_version.h"
-#include "spd_environ.h"
 #include "sql_priv.h"
 #include "probes_mysql.h"
 #include "my_getopt.h"
@@ -860,6 +859,8 @@ int spider_free_share_alloc(
     }
     spider_free(spider_current_trx, share->tgt_drivers, MYF(0));
   }
+  if (share->tgt_odbc_conn_str)
+    spider_free(spider_current_trx, share->tgt_odbc_conn_str, MYF(0));
   if (share->tgt_pk_names)
   {
     for (roop_count = 0; roop_count < (int) share->tgt_pk_names_length;
@@ -944,6 +945,7 @@ int spider_free_share_alloc(
   DBUG_RETURN(0);
 }
 
+/* Free a tmp_share, which has only one link */
 void spider_free_tmp_share_alloc(
   SPIDER_SHARE *share
 ) {
@@ -2483,9 +2485,6 @@ int st_spider_param_string_parse::fail(bool restore_delim)
 /*
   Parse connection information specified by COMMENT, CONNECT, or engine-defined
   options.
-
-  TODO: Deprecate the connection specification by COMMENT and CONNECT,
-  and then solely utilize engine-defined options.
 */
 int spider_parse_connect_info(
   SPIDER_SHARE *share,
@@ -2512,6 +2511,7 @@ int spider_parse_connect_info(
   DBUG_PRINT("info",("spider s->path=%s", table_share->path.str));
   DBUG_PRINT("info",
     ("spider s->normalized_path=%s", table_share->normalized_path.str));
+  parse.error_num = ER_SPIDER_INVALID_CONNECT_INFO_NUM;
   spider_get_partition_info(share->table_name, share->table_name_length,
     table_share, part_info, &part_elem, &sub_elem);
   /* Find the correct table options, depending on if we are parsing a
@@ -2600,8 +2600,11 @@ int spider_parse_connect_info(
       goto error_alloc_conn_string;
     }
     DBUG_ASSERT(error_num_1 == 0);
-    /* If the connect string is explicitly ignored for parsing, or if
-    any option is specified, skip the parsing. */
+    /*
+      If the COMMENT or CONNECTION string is explicitly ignored for
+      table param parsing, or if any option is specified, skip the
+      parsing.
+    */
     if (spider_param_ignore_comments(current_thd) || option_specified)
     {
       if (!spider_param_suppress_comment_ignored_warning(current_thd))
@@ -2621,7 +2624,6 @@ int spider_parse_connect_info(
                           "and will be removed in a future release. "
                           "Please use table options instead.");
     start_param = connect_string;
-    parse.error_num = ER_SPIDER_INVALID_CONNECT_INFO_NUM;
     while (*start_param != '\0')
     {
       if (parse.locate_param_def(start_param))
@@ -5898,6 +5900,7 @@ int spider_open_all_tables(
   THD *thd = trx->thd;
   TABLE *table_tables;
   int error_num, *need_mon, mon_val;
+  /* This share has only one link */
   SPIDER_SHARE tmp_share;
   char *db_name, *table_name;
   uint db_name_length, table_name_length;
@@ -5979,9 +5982,6 @@ int spider_open_all_tables(
         table_name_length
       )) ||
       (error_num = spider_create_conn_keys(&tmp_share)) ||
-/*
-      (error_num = spider_db_create_table_names_str(&tmp_share)) ||
-*/
       (error_num = spider_create_tmp_dbton_share(&tmp_share))
     ) {
       spider_sys_index_end(table_tables);
@@ -6004,22 +6004,10 @@ int spider_open_all_tables(
     }
     conn->error_mode &= spider_param_error_read_mode(thd, 0);
     conn->error_mode &= spider_param_error_write_mode(thd, 0);
-    pthread_mutex_assert_not_owner(&conn->mta_conn_mutex);
-    pthread_mutex_lock(&conn->mta_conn_mutex);
-    SPIDER_SET_FILE_POS(&conn->mta_conn_mutex_file_pos);
-    conn->need_mon = &mon_val;
-    DBUG_ASSERT(!conn->mta_conn_mutex_lock_already);
-    DBUG_ASSERT(!conn->mta_conn_mutex_unlock_later);
-    conn->mta_conn_mutex_lock_already = TRUE;
-    conn->mta_conn_mutex_unlock_later = TRUE;
+    spider_lock_before_query(conn, &mon_val);
     if ((error_num = spider_db_before_query(conn, &mon_val)))
     {
-      DBUG_ASSERT(conn->mta_conn_mutex_lock_already);
-      DBUG_ASSERT(conn->mta_conn_mutex_unlock_later);
-      conn->mta_conn_mutex_lock_already = FALSE;
-      conn->mta_conn_mutex_unlock_later = FALSE;
-      SPIDER_CLEAR_FILE_POS(&conn->mta_conn_mutex_file_pos);
-      pthread_mutex_unlock(&conn->mta_conn_mutex);
+      spider_unlock_after_query(conn, 0);
       spider_sys_index_end(table_tables);
       spider_sys_close_table(thd, &open_tables_backup);
       spider_free_tmp_dbton_share(&tmp_share);
@@ -6027,12 +6015,7 @@ int spider_open_all_tables(
       free_root(&mem_root, MYF(0));
       DBUG_RETURN(error_num);
     }
-    DBUG_ASSERT(conn->mta_conn_mutex_lock_already);
-    DBUG_ASSERT(conn->mta_conn_mutex_unlock_later);
-    conn->mta_conn_mutex_lock_already = FALSE;
-    conn->mta_conn_mutex_unlock_later = FALSE;
-    SPIDER_CLEAR_FILE_POS(&conn->mta_conn_mutex_file_pos);
-    pthread_mutex_unlock(&conn->mta_conn_mutex);
+    spider_unlock_after_query(conn, 0);
 
     if (lock && spider_param_use_snapshot_with_flush_tables(thd) == 2)
     {
@@ -6493,8 +6476,10 @@ bool spider_init_system_tables()
 
 
 /*
-  Spider is typically loaded before ddl_recovery, but DDL statements
-  cannot be executed before ddl_recovery, so we delay system table creation.
+  Spider may be loaded before ddl_recovery (e.g. with
+  --plugin-load-add), but DDL statements in spider init queries cannot
+  be executed before ddl_recovery, so we execute these queries only
+  after ddl recovery.
 */
 static int spider_after_ddl_recovery(handlerton *)
 {
@@ -6911,6 +6896,7 @@ error_pt_attr_setstate:
 */
   pthread_attr_destroy(&spider_pt_attr);
 error_pt_attr_init:
+  spider_hton_ptr= NULL;
   DBUG_RETURN(error_num);
 }
 
@@ -7403,6 +7389,10 @@ bool spider_check_pk_update(
   DBUG_RETURN(FALSE);
 }
 
+/*
+  Set fields of a tmp share which has only one link. For use in
+  monitoring, spider_copy_tables udf etc.
+*/
 void spider_set_tmp_share_pointer(
   SPIDER_SHARE *tmp_share,
   char **tmp_connect_info,

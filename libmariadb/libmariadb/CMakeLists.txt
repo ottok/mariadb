@@ -298,7 +298,7 @@ MESSAGE(STATUS "SYSTEM_LIBS: ${SYSTEM_LIBS}")
 INCLUDE_DIRECTORIES(${LIBMARIADB_PLUGIN_INCLUDES})
 ADD_DEFINITIONS(${LIBMARIADB_PLUGIN_DEFS})
 FOREACH(plugin ${PLUGINS_STATIC})
-  SET(EXTERNAL_PLUGINS "${EXTERNAL_PLUGINS} extern struct st_mysql_client_plugin ${plugin}_client_plugin;\n")
+  SET(EXTERNAL_PLUGINS "${EXTERNAL_PLUGINS} extern struct st_mysql_client_plugin_${PLUGIN_${plugin}_TYPE} ${plugin}_client_plugin;\n")
   SET(BUILTIN_PLUGINS "${BUILTIN_PLUGINS}   (struct st_mysql_client_plugin *)&${plugin}_client_plugin,\n")
 ENDFOREACH()
 CONFIGURE_FILE(${CC_SOURCE_DIR}/libmariadb/ma_client_plugin.c.in
@@ -324,7 +324,6 @@ ma_compress.c
 ma_init.c
 ma_password.c
 ma_ll2str.c
-ma_sha1.c
 mariadb_stmt.c
 ma_loaddata.c
 ma_stmt_codec.c
@@ -394,6 +393,9 @@ IF(WITH_DYNCOL)
 ENDIF()
 
 SET(LIBMARIADB_SOURCES ${LIBMARIADB_SOURCES} mariadb_async.c ma_context.c)
+IF(WITH_BOOST_CONTEXT)
+  SET(LIBMARIADB_SOURCES ${LIBMARIADB_SOURCES} ma_boost_context.cc)
+ENDIF()
 SET(MARIADB_LIB_SYMBOLS ${MARIADB_LIB_SYMBOLS} ${MARIADB_NONBLOCK_SYMBOLS})
 
 INCLUDE(${CC_SOURCE_DIR}/cmake/export.cmake)
@@ -448,7 +450,7 @@ IF(WIN32)
 ENDIF()
 
 ADD_LIBRARY(mariadbclient STATIC  ${MARIADB_OBJECTS} ${EMPTY_FILE})
-TARGET_LINK_LIBRARIES(mariadbclient ${SYSTEM_LIBS} ${CRYPTO_LIBS})
+TARGET_LINK_LIBRARIES(mariadbclient ${SYSTEM_LIBS} ${CRYPT_LIBS})
 
 IF(UNIX)
   ADD_LIBRARY(libmariadb SHARED ${libmariadb_RC} ${MARIADB_OBJECTS} ${EMPTY_FILE})
@@ -458,7 +460,7 @@ ELSE()
   SET_TARGET_PROPERTIES(libmariadb PROPERTIES LINKER_LANGUAGE C)
 ENDIF()
 
-TARGET_LINK_LIBRARIES(libmariadb LINK_PRIVATE ${SYSTEM_LIBS} ${CRYPTO_LIBS})
+TARGET_LINK_LIBRARIES(libmariadb LINK_PRIVATE ${SYSTEM_LIBS} ${CRYPT_LIBS})
 
 SIGN_TARGET(libmariadb)
 

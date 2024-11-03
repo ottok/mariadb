@@ -402,10 +402,10 @@ bool Sql_cmd_delete::delete_from_single_table(THD *thd)
     DBUG_RETURN(TRUE);
   }
 
-  const_cond_result= const_cond && (!conds || conds->val_int());
+  const_cond_result= const_cond && (!conds || conds->val_bool());
   if (unlikely(thd->is_error()))
   {
-    /* Error evaluating val_int(). */
+    /* Error evaluating val_bool(). */
     DBUG_RETURN(TRUE);
   }
 
@@ -500,6 +500,13 @@ bool Sql_cmd_delete::delete_from_single_table(THD *thd)
     if (thd->binlog_for_noop_dml(transactional_table))
       DBUG_RETURN(1);
 
+    if (!thd->lex->current_select->leaf_tables_saved)
+    {
+      thd->lex->current_select->save_leaf_tables(thd);
+      thd->lex->current_select->leaf_tables_saved= true;
+      thd->lex->current_select->first_cond_optimization= 0;
+    }
+
     my_ok(thd, 0);
     DBUG_RETURN(0);
   }
@@ -540,6 +547,7 @@ bool Sql_cmd_delete::delete_from_single_table(THD *thd)
     {
       thd->lex->current_select->save_leaf_tables(thd);
       thd->lex->current_select->leaf_tables_saved= true;
+      thd->lex->current_select->first_cond_optimization= 0;
     }
 
     my_ok(thd, 0);
@@ -814,13 +822,17 @@ bool Sql_cmd_delete::delete_from_single_table(THD *thd)
                                               delete_history);
     if (delete_record)
     {
+      void *save_bulk_param= thd->bulk_param;
+      thd->bulk_param= nullptr;
       if (!delete_history && table->triggers &&
           table->triggers->process_triggers(thd, TRG_EVENT_DELETE,
                                             TRG_ACTION_BEFORE, FALSE))
       {
         error= 1;
+        thd->bulk_param= save_bulk_param;
         break;
       }
+      thd->bulk_param= save_bulk_param;
 
       // no LIMIT / OFFSET
       if (returning && result->send_data(returning->item_list) < 0)
@@ -851,13 +863,16 @@ bool Sql_cmd_delete::delete_from_single_table(THD *thd)
       if (likely(!error))
       {
 	deleted++;
+	thd->bulk_param= nullptr;
         if (!delete_history && table->triggers &&
             table->triggers->process_triggers(thd, TRG_EVENT_DELETE,
                                               TRG_ACTION_AFTER, FALSE))
         {
           error= 1;
+          thd->bulk_param= save_bulk_param;
           break;
         }
+        thd->bulk_param= save_bulk_param;
 	if (!--limit && using_limit)
 	{
 	  error= -1;
@@ -918,6 +933,7 @@ cleanup:
   {
     thd->lex->current_select->save_leaf_tables(thd);
     thd->lex->current_select->leaf_tables_saved= true;
+    thd->lex->current_select->first_cond_optimization= false;
   }
 
   delete deltempfile;
