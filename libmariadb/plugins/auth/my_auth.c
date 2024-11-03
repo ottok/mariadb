@@ -267,6 +267,8 @@ error:
   return res;
 }
 
+#define MARIADB_TLS_VERIFY_AUTO (MARIADB_TLS_VERIFY_HOST | MARIADB_TLS_VERIFY_TRUST)
+
 static int send_client_reply_packet(MCPVIO_EXT *mpvio,
                                     const uchar *data, int data_len)
 {
@@ -290,6 +292,7 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
   if (mysql->options.ssl_key || mysql->options.ssl_cert ||
       mysql->options.ssl_ca || mysql->options.ssl_capath ||
       mysql->options.ssl_cipher || mysql->options.use_ssl ||
+      mysql->options.extension->tls_fp || mysql->options.extension->tls_fp_list ||
       !mysql->options.extension->tls_allow_invalid_server_cert)
     mysql->options.use_ssl= 1;
   if (mysql->options.use_ssl)
@@ -428,19 +431,22 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
     {
       verify_flags|= MARIADB_TLS_VERIFY_FINGERPRINT;
     } else {
-      verify_flags|= MARIADB_TLS_VERIFY_TRUST | MARIADB_TLS_VERIFY_HOST;
+      verify_flags|= MARIADB_TLS_VERIFY_TRUST;
+      /* Don't check host name on local (non globally resolvable) addresses */
+      if (!is_local_connection(mysql->net.pvio))
+        verify_flags |= MARIADB_TLS_VERIFY_HOST;
     }
 
-    if (ma_pvio_tls_verify_server_cert(mysql->net.pvio->ctls, verify_flags))
+    if (mysql->options.extension->tls_verification_callback(mysql->net.pvio->ctls, verify_flags))
     {
-      if (mysql->net.tls_verify_status > MARIADB_TLS_VERIFY_TRUST ||
+      if (mysql->net.tls_verify_status > MARIADB_TLS_VERIFY_AUTO ||
           (mysql->options.ssl_ca || mysql->options.ssl_capath))
         goto error;
 
       if (is_local_connection(mysql->net.pvio))
       {
         CLEAR_CLIENT_ERROR(mysql);
-        mysql->net.tls_verify_status&= ~MARIADB_TLS_VERIFY_TRUST;
+        mysql->net.tls_verify_status&= ~MARIADB_TLS_VERIFY_AUTO;
       }
       else if (!password_and_hashing(mysql, mpvio->plugin))
         goto error;

@@ -1342,7 +1342,6 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
         TEXT_STRING
         NCHAR_STRING
         json_text_literal
-        json_text_literal_or_num
 
 %type <lex_str_ptr>
         opt_table_alias_clause
@@ -1517,6 +1516,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %type <item>
         literal insert_ident order_ident temporal_literal
         simple_ident expr sum_expr in_sum_expr
+        search_condition
         variable variable_aux
         boolean_test
         predicate bit_expr parenthesized_expr
@@ -1544,6 +1544,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
         simple_target_specification
         condition_number
         opt_versioning_interval_start
+        json_default_literal
         set_expr_misc
 
 %type <num> opt_vers_auto_part
@@ -2133,7 +2134,11 @@ deallocate_or_drop:
 
 prepare:
           PREPARE_SYM ident FROM
-          { Lex->clause_that_disallows_subselect= "PREPARE..FROM"; }
+          {
+            thd->where= THD_WHERE::USE_WHERE_STRING;
+            thd->where_str=
+            Lex->clause_that_disallows_subselect= "PREPARE..FROM";
+          }
           expr
           {
             Lex->clause_that_disallows_subselect= NULL;
@@ -2149,7 +2154,11 @@ execute:
               MYSQL_YYABORT;
           }
         | EXECUTE_SYM IMMEDIATE_SYM
-          { Lex->clause_that_disallows_subselect= "EXECUTE IMMEDIATE"; }
+          {
+            thd->where= THD_WHERE::USE_WHERE_STRING;
+            thd->where_str=
+            Lex->clause_that_disallows_subselect= "EXECUTE IMMEDIATE";
+          }
           expr
           { Lex->clause_that_disallows_subselect= NULL; }
           execute_using
@@ -3189,7 +3198,11 @@ call:
 /* CALL parameters */
 opt_sp_cparam_list:
           /* Empty */
-        | '(' opt_sp_cparams ')'
+        | '('
+        {
+          thd->where= THD_WHERE::USE_WHERE_STRING;
+          thd->where_str= "CALL";
+        } opt_sp_cparams ')'
         ;
 
 opt_sp_cparams:
@@ -3664,9 +3677,14 @@ resignal_stmt:
         ;
 
 get_diagnostics:
-          GET_SYM which_area DIAGNOSTICS_SYM diagnostics_information
+          GET_SYM which_area DIAGNOSTICS_SYM
           {
-            Diagnostics_information *info= $4;
+            thd->where= THD_WHERE::USE_WHERE_STRING;
+            thd->where_str= "GET DIAGNOSTICS";
+          }
+          diagnostics_information
+          {
+            Diagnostics_information *info= $5;
 
             info->set_which_da($2);
 
@@ -4341,6 +4359,7 @@ simple_when_clause:
 searched_when_clause:
           WHEN_SYM expr_lex
           {
+            $2->get_item()->base_flags|= item_base_t::IS_COND;
             if (unlikely($2->case_stmt_action_when(false)))
               MYSQL_YYABORT;
           }
@@ -9306,6 +9325,10 @@ optional_braces:
         | '(' ')' {}
         ;
 
+search_condition:
+          expr { ($$= $1)->base_flags|= item_base_t::IS_COND ; }
+        ;
+
 /* all possible expressions */
 expr:
           expr or expr %prec OR_SYM
@@ -11499,37 +11522,10 @@ table_ref:
 
 json_text_literal:
           TEXT_STRING
-          {
-            Lex->json_table->m_text_literal_cs= NULL;
-          }
         | NCHAR_STRING
-          {
-            Lex->json_table->m_text_literal_cs= national_charset_info;
-          }
         | UNDERSCORE_CHARSET TEXT_STRING
           {
-            Lex->json_table->m_text_literal_cs= $1;
             $$= $2;
-          }
-        ;
-
-json_text_literal_or_num:
-          json_text_literal
-        | NUM
-          {
-            Lex->json_table->m_text_literal_cs= NULL;
-          }
-        | LONG_NUM
-          {
-            Lex->json_table->m_text_literal_cs= NULL;
-          }
-        | DECIMAL_NUM
-          {
-            Lex->json_table->m_text_literal_cs= NULL;
-          }
-        | FLOAT_NUM
-          {
-            Lex->json_table->m_text_literal_cs= NULL;
           }
         ;
 
@@ -11641,6 +11637,12 @@ json_opt_on_empty_or_error:
         | json_on_empty_response json_on_error_response
         ;
 
+json_default_literal:
+          literal
+        | signed_literal
+        ;
+
+
 json_on_response:
           ERROR_SYM
           {
@@ -11650,12 +11652,10 @@ json_on_response:
           {
             $$.m_response= Json_table_column::RESPONSE_NULL;
           }
-        | DEFAULT json_text_literal_or_num
+        | DEFAULT json_default_literal
           {
             $$.m_response= Json_table_column::RESPONSE_DEFAULT;
             $$.m_default= $2;
-            Lex->json_table->m_cur_json_table_column->m_defaults_cs=
-                                    thd->variables.collation_connection;
           }
         ;
 
@@ -11811,7 +11811,7 @@ join_table:
               MYSQL_YYABORT;
             Select->parsing_place= IN_ON;
           }
-          expr
+          search_condition
           {
             add_join_on(thd, $5, $8);
             $5->on_context= Lex->pop_context();
@@ -12169,7 +12169,7 @@ opt_where_clause:
           {
             Select->parsing_place= IN_WHERE;
           }
-          expr
+          search_condition
           {
             SELECT_LEX *select= Select;
             select->where= normalize_cond(thd, $3);
@@ -12185,7 +12185,7 @@ opt_having_clause:
           {
             Select->parsing_place= IN_HAVING;
           }
-          expr
+          search_condition
           {
             SELECT_LEX *sel= Select;
             sel->having= normalize_cond(thd, $3);
@@ -14315,7 +14315,7 @@ wild_and_where:
               MYSQL_YYABORT;
             $$= $2;
           }
-        | WHERE remember_tok_start expr
+        | WHERE remember_tok_start search_condition
           {
             Select->where= normalize_cond(thd, $3);
             if ($3)
@@ -14712,6 +14712,8 @@ kill:
             lex->users_list.empty();
             lex->sql_command= SQLCOM_KILL;
             lex->kill_type= KILL_TYPE_ID;
+            thd->where= THD_WHERE::USE_WHERE_STRING;
+            thd->where_str= "KILL";
           }
           kill_type kill_option
           {

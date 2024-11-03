@@ -279,7 +279,8 @@ static int check_insert_fields(THD *thd, TABLE_LIST *table_list,
       unfix_fields(fields);
 
     res= setup_fields(thd, Ref_ptr_array(),
-                      fields, MARK_COLUMNS_WRITE, 0, NULL, 0);
+                      fields, MARK_COLUMNS_WRITE, 0, NULL, 0,
+                      THD_WHERE::INSERT_LIST);
 
     /* Restore the current context. */
     ctx_state.restore_state(context, table_list);
@@ -395,7 +396,8 @@ static int check_update_fields(THD *thd, TABLE_LIST *insert_table_list,
 
   /* Check the fields we are going to modify */
   if (setup_fields(thd, Ref_ptr_array(),
-                   update_fields, MARK_COLUMNS_WRITE, 0, NULL, 0))
+                   update_fields, MARK_COLUMNS_WRITE, 0, NULL, 0,
+                   THD_WHERE::UPDATE_CLAUSE))
   {
     thd->lex->sql_command= sql_command_save;
     return -1;
@@ -1053,19 +1055,11 @@ bool mysql_insert(THD *thd, TABLE_LIST *table_list,
         */
         restore_record(table,s->default_values);	// Get empty record
         table->reset_default_fields();
-        /*
-          Reset the sentinel thd->bulk_param in order not to consume the next
-          values of a bound array in case one of statement executed by
-          the trigger's body is INSERT statement.
-        */
-        void *save_bulk_param= thd->bulk_param;
-        thd->bulk_param= nullptr;
 
         if (unlikely(fill_record_n_invoke_before_triggers(thd, table, fields,
                                                           *values, 0,
                                                           TRG_EVENT_INSERT)))
         {
-          thd->bulk_param= save_bulk_param;
           if (values_list.elements != 1 && ! thd->is_error())
           {
             info.records++;
@@ -1079,7 +1073,6 @@ bool mysql_insert(THD *thd, TABLE_LIST *table_list,
 	  error=1;
 	  break;
         }
-        thd->bulk_param= save_bulk_param;
       }
       else
       {
@@ -1368,7 +1361,18 @@ values_loop_end:
     */
    if (returning)
       result->send_eof();
-   else
+   else if (!(thd->in_sub_stmt & SUB_STMT_TRIGGER))
+     /*
+       Set the status and the number of affected rows in Diagnostics_area
+       only in case the INSERT statement is not processed as part of a trigger
+       invoked by some other DML statement. Else we would result in incorrect
+       number of affected rows for bulk DML operations, e.g. the UPDATE
+       statement (called via PS protocol). It would happen since the data
+       member Diagnostics_area::m_affected_rows modified twice per DML
+       statement - first time at the end of handling the INSERT statement
+       invoking by a trigger fired on handling the original DML statement,
+       and the second time at the end of handling the original DML statement.
+     */
       my_ok(thd, info.copied + info.deleted +
                ((thd->client_capabilities & CLIENT_FOUND_ROWS) ?
                 info.touched : info.updated), id);
@@ -1390,7 +1394,18 @@ values_loop_end:
               (long) thd->get_stmt_da()->current_statement_warn_count());
     if (returning)
       result->send_eof();
-    else
+    else if (!(thd->in_sub_stmt & SUB_STMT_TRIGGER))
+      /*
+        Set the status and the number of affected rows in Diagnostics_area
+        only in case the INSERT statement is not processed as part of a trigger
+        invoked by some other DML statement. Else we would result in incorrect
+        number of affected rows for bulk DML operations, e.g. the UPDATE
+        statement (called via PS protocol). It would happen since the data
+        member Diagnostics_area::m_affected_rows modified twice per DML
+        statement - first time at the end of handling the INSERT statement
+        invoking by a trigger fired on handling the original DML statement,
+        and the second time at the end of handling the original DML statement.
+      */
       ::my_ok(thd, info.copied + info.deleted + updated, id, buff);
   }
   thd->abort_on_warning= 0;
@@ -1743,8 +1758,8 @@ int mysql_prepare_insert(THD *thd, TABLE_LIST *table_list,
     context->resolve_in_table_list_only(table_list);
 
     res= setup_returning_fields(thd, table_list) ||
-         setup_fields(thd, Ref_ptr_array(),
-                      *values, MARK_COLUMNS_READ, 0, NULL, 0) ||
+         setup_fields(thd, Ref_ptr_array(), *values, MARK_COLUMNS_READ, 0,
+                      NULL, 0, THD_WHERE::VALUES_CLAUSE) ||
           check_insert_fields(thd, context->table_list, fields, *values,
                               !insert_into_view, 0, &map);
 
@@ -1863,10 +1878,6 @@ int vers_insert_history_row(TABLE *table)
   Field *row_end= table->vers_end_field();
   if (row_start->cmp(row_start->ptr, row_end->ptr) >= 0)
     return 0;
-
-  if (table->vfield &&
-      table->update_virtual_fields(table->file, VCOL_UPDATE_FOR_READ))
-    return HA_ERR_GENERIC;
 
   return table->file->ha_write_row(table->record[0]);
 }
@@ -3286,7 +3297,6 @@ pthread_handler_t handle_delayed_insert(void *arg)
   else
   {
     DBUG_ENTER("handle_delayed_insert");
-    thd->thread_stack= (char*) &thd;
     if (init_thr_lock())
     {
       thd->get_stmt_da()->set_error_status(ER_OUT_OF_RESOURCES);
@@ -3561,7 +3571,6 @@ pthread_handler_t handle_delayed_insert(void *arg)
     DBUG_LEAVE;
   }
   my_thread_end();
-  pthread_exit(0);
 
   return 0;
 }
@@ -4081,7 +4090,8 @@ select_insert::prepare(List<Item> &values, SELECT_LEX_UNIT *u)
     }
 
     res= res || setup_fields(thd, Ref_ptr_array(), *info.update_values,
-                             MARK_COLUMNS_READ, 0, NULL, 0) ||
+                             MARK_COLUMNS_READ, 0, NULL, 0,
+                             THD_WHERE::UPDATE_CLAUSE) ||
                 /*
                   Check that all col=expr pairs are compatible for assignment in
                     INSERT INTO t1 SELECT ... FROM t2
@@ -4609,19 +4619,13 @@ TABLE *select_create::create_table_from_items(THD *thd, List<Item> *items,
   bool save_table_creation_was_logged;
   DBUG_ENTER("select_create::create_table_from_items");
 
+  tmp_table.reset();
   tmp_table.s= &share;
   init_tmp_table_share(thd, &share, "", 0, "", "");
-
-  tmp_table.s->db_create_options=0;
-  tmp_table.null_row= 0;
-  tmp_table.maybe_null= 0;
   tmp_table.in_use= thd;
 
   if (!(thd->variables.option_bits & OPTION_EXPLICIT_DEF_TIMESTAMP))
     promote_first_timestamp_column(&alter_info->create_list);
-
-  if (create_info->fix_create_fields(thd, alter_info, *table_list))
-    DBUG_RETURN(NULL);
 
   while ((item=it++))
   {
@@ -4659,6 +4663,9 @@ TABLE *select_create::create_table_from_items(THD *thd, List<Item> *items,
       cr_field->flags &= ~NOT_NULL_FLAG;
     alter_info->create_list.push_back(cr_field, thd->mem_root);
   }
+
+  if (create_info->fix_create_fields(thd, alter_info, *table_list))
+    DBUG_RETURN(NULL);
 
   /*
     Item*::type_handler() always returns pointers to

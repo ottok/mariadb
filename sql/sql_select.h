@@ -1295,6 +1295,20 @@ public:
     passing 1st non-const table to filesort(). NULL means no such table exists.
   */
   TABLE    *sort_by_table;
+
+  /*
+    If true, there is ORDER BY x LIMIT n clause and for certain join orders, it
+    is possible to short-cut the join execution, i.e. stop it as soon as n
+    output rows were produced. See join_limit_shortcut_is_applicable().
+  */
+  bool    limit_shortcut_applicable;
+
+  /*
+    Used during join optimization: if true, we're building a join order that
+    will short-cut join execution as soon as #LIMIT rows are produced.
+  */
+  bool    limit_optimization_mode;
+
   /* 
     Number of tables in the join. 
     (In MySQL, it is named 'tables' and is also the number of elements in 
@@ -1611,7 +1625,7 @@ public:
 
     Then, ORDER/GROUP BY and Window Function code add columns that need to
     be saved to be available in the post-group-by context. These extra columns
-    are added to the front, because this->all_fields points to the suffix of
+    are added to the front, because this->fields_list points to the suffix of
     this list.
   */
   List<Item> all_fields;
@@ -2695,5 +2709,16 @@ void propagate_new_equalities(THD *thd, Item *cond,
                               COND_EQUAL *inherited,
                               bool *is_simplifiable_cond);
 
+template<typename T> T prev_bits(T n_bits)
+{
+  if (!n_bits)
+    return 0;
+  T tmp= ((T)1 << (n_bits - 1));
+  return (tmp - 1) | tmp;
+}
+// A wrapper for the above function:
+#define PREV_BITS(type, A) prev_bits<type>(A)
+
 bool dbug_user_var_equals_str(THD *thd, const char *name, const char *value);
+
 #endif /* SQL_SELECT_INCLUDED */

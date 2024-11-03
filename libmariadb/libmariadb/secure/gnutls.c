@@ -1445,15 +1445,6 @@ int ma_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int flags)
 
   CLEAR_CLIENT_ERROR(mysql);
 
-  if (flags & MARIADB_TLS_VERIFY_FINGERPRINT)
-  {
-    if (ma_pvio_tls_check_fp(ctls, mysql->options.extension->tls_fp, mysql->options.extension->tls_fp_list))
-    {
-      mysql->net.tls_verify_status= MARIADB_TLS_VERIFY_FINGERPRINT;
-      goto end;
-    }
-  }
-
   if (gnutls_certificate_verify_peers2(ssl, &status))
     return GNUTLS_E_CERTIFICATE_ERROR;
 
@@ -1463,13 +1454,12 @@ int ma_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int flags)
     if (status & GNUTLS_CERT_REVOKED)
       mysql->net.tls_verify_status|= MARIADB_TLS_VERIFY_REVOKED;
     if (status & GNUTLS_CERT_SIGNER_NOT_FOUND)
-      if (flags & MARIADB_TLS_VERIFY_TRUST)
-        mysql->net.tls_verify_status|= MARIADB_TLS_VERIFY_TRUST;
+      mysql->net.tls_verify_status|= MARIADB_TLS_VERIFY_TRUST;
     if ((status & GNUTLS_CERT_NOT_ACTIVATED) || (status & GNUTLS_CERT_EXPIRED))
       mysql->net.tls_verify_status|= MARIADB_TLS_VERIFY_PERIOD;
   }
 
-  if (!status && (flags & MARIADB_TLS_VERIFY_HOST))
+  if (flags & MARIADB_TLS_VERIFY_HOST)
   {
     gnutls_x509_crt_t cert= ma_get_cert(ctls);
     int rc;
@@ -1488,14 +1478,15 @@ int ma_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int flags)
 
     if (!rc)
     {
-      my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
-                   ER(CR_SSL_CONNECTION_ERROR), 
-                   "Certificate subject name doesn't match specified hostname");
+      if (!(mysql->net.tls_verify_status & MARIADB_TLS_VERIFY_TRUST))
+        my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
+                     ER(CR_SSL_CONNECTION_ERROR),
+                     "Certificate subject name doesn't match specified hostname");
       mysql->net.tls_verify_status|= MARIADB_TLS_VERIFY_HOST;
     }    
   }
 end:
-  return (mysql->net.tls_verify_status > 0);
+  return mysql->net.tls_verify_status & flags;
 }
 
 const char *ma_tls_get_cipher(MARIADB_TLS *ctls)

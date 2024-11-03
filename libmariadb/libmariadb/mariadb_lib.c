@@ -66,7 +66,6 @@
 #ifndef INADDR_NONE
 #define INADDR_NONE -1
 #endif
-#include <ma_sha1.h>
 #ifndef _WIN32
 #include <poll.h>
 #endif
@@ -1318,6 +1317,7 @@ mysql_init(MYSQL *mysql)
   mysql->extension->auto_local_infile= ENABLED_LOCAL_INFILE == LOCAL_INFILE_MODE_AUTO
                                        ? WAIT_FOR_QUERY : ALWAYS_ACCEPT;
   mysql->options.reconnect= 0;
+  mysql_optionsv(mysql, MARIADB_OPT_TLS_VERIFICATION_CALLBACK, ma_pvio_tls_verify_server_cert);
   return mysql;
 error:
   if (mysql->free_me)
@@ -1464,8 +1464,8 @@ mysql_real_connect(MYSQL *mysql, const char *host, const char *user,
 
   reset_tls_error(mysql);
 
-  /* if host contains a semicolon, we need to parse connection string */
-  if (host && strchr(host, ';'))
+  /* if host contains a semicolon or equal sign, we need to parse connection string */
+  if (host && (strchr(host, ';') || strchr(host, '=')))
   {
     if (parse_connection_string(mysql, NULL, host, strlen(host)))
       return NULL;
@@ -2121,7 +2121,9 @@ my_bool STDCALL mariadb_reconnect(MYSQL *mysql)
     my_context_install_suspend_resume_hook(ctxt, my_suspend_hook, &hook_data);
   }
 
-  if (!mysql_real_connect(&tmp_mysql,mysql->host,mysql->user,mysql->passwd,
+  if (!mysql_real_connect(&tmp_mysql,
+        mysql->options.host ? NULL : mysql->host,
+        mysql->user,mysql->passwd,
 			  mysql->db, mysql->port, mysql->unix_socket,
 			  mysql->client_flag | CLIENT_REMEMBER_OPTIONS) ||
       mysql_set_character_set(&tmp_mysql, mysql->charset->csname))
@@ -3853,6 +3855,14 @@ mysql_optionsv(MYSQL *mysql,enum mysql_option option, ...)
   case MARIADB_OPT_BULK_UNIT_RESULTS:
     OPT_SET_EXTENDED_VALUE_INT(&mysql->options, bulk_unit_results, *(my_bool *)arg1);
     break;
+  case MARIADB_OPT_TLS_VERIFICATION_CALLBACK:
+    if (!arg1)
+    {
+      OPT_SET_EXTENDED_VALUE(&mysql->options, tls_verification_callback, ma_pvio_tls_verify_server_cert);
+    } else {
+      OPT_SET_EXTENDED_VALUE(&mysql->options, tls_verification_callback, arg1);
+    }
+    break;
   default:
     va_end(ap);
     SET_CLIENT_ERROR(mysql, CR_NOT_IMPLEMENTED, SQLSTATE_UNKNOWN, 0);
@@ -4552,7 +4562,7 @@ my_bool mariadb_get_infov(MYSQL *mysql, enum mariadb_value value, void *arg, ...
     *((MARIADB_X509_INFO **)arg)= NULL;
     break;
   case MARIADB_TLS_VERIFY_STATUS:
-    *((unsigned int *)arg)= (unsigned int)mysql->net.tls_verify_status;
+    *((unsigned int *)arg)= (unsigned int)mysql->extension->tls_validation;
     break;
 #endif
   case MARIADB_MAX_ALLOWED_PACKET:

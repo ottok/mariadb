@@ -17,7 +17,6 @@
 #define MYSQL_SERVER 1
 #include <my_global.h>
 #include "mysql_version.h"
-#include "spd_environ.h"
 #include "sql_priv.h"
 #include "probes_mysql.h"
 #include "sql_class.h"
@@ -2746,6 +2745,7 @@ int spider_internal_xa_rollback_by_xid(
   int error_num;
   char xa_key[MAX_KEY_LENGTH];
   char xa_member_key[MAX_KEY_LENGTH];
+  /* This share has only one link */
   SPIDER_SHARE tmp_share;
   char *tmp_connect_info[SPIDER_TMP_SHARE_CHAR_PTR_COUNT];
   uint tmp_connect_info_length[SPIDER_TMP_SHARE_UINT_COUNT];

@@ -3901,7 +3901,8 @@ bool MYSQL_BIN_LOG::open(const char *log_name,
           if (!gtid_index)
             sql_print_information("Could not create GTID index for binlog "
                                   "file '%s'. Accesses to this binlog file will "
-                                  "fallback to slower sequential scan.");
+                                  "fallback to slower sequential scan.",
+                                  log_file_name);
         }
         else
           gtid_index= nullptr;
@@ -4434,6 +4435,9 @@ bool MYSQL_BIN_LOG::reset_logs(THD *thd, bool create_new_log,
 
     mark_xids_active(current_binlog_id, 1);
     do_checkpoint_request(current_binlog_id);
+
+    /* Flush all engine logs to force checkpoint responses to come through. */
+    ha_flush_logs();
 
     /* Now wait for all checkpoint requests and pending unlog() to complete. */
     mysql_mutex_lock(&LOCK_xid_list);
@@ -9744,6 +9748,25 @@ static void print_buffer_to_nt_eventlog(enum loglevel level, char *buff,
 
 
 #ifndef EMBEDDED_LIBRARY
+#ifndef _WIN32
+#define fprintf_stderr(format, ...) fprintf(stderr, format, __VA_ARGS__)
+#else
+/*
+ On Windows, if FILE* is unbuffered, fprintf() writes output byte by byte.
+ This is suboptimal for printing to error log, we want full message at once.
+*/
+#define fprintf_stderr(format, ...)                                           \
+  do                                                                          \
+  {                                                                           \
+    char buf[256];                                                            \
+    size_t len= snprintf(buf, sizeof(buf), format, __VA_ARGS__);              \
+    if (len >= sizeof(buf))                                                   \
+      fprintf(stderr, format, __VA_ARGS__);                                   \
+    else                                                                      \
+      fwrite(buf, len, 1, stderr);                                            \
+  } while (0)
+#endif
+
 static void print_buffer_to_file(enum loglevel level, const char *buffer,
                                  size_t length)
 {
@@ -9777,7 +9800,7 @@ static void print_buffer_to_file(enum loglevel level, const char *buffer,
   localtime_r(&skr, &tm_tmp);
   start=&tm_tmp;
 
-  fprintf(stderr, "%d-%02d-%02d %2d:%02d:%02d %lu [%s] %.*s%.*s\n",
+  fprintf_stderr( "%d-%02d-%02d %2d:%02d:%02d %lu [%s] %.*s%.*s\n",
           start->tm_year + 1900,
           start->tm_mon+1,
           start->tm_mday,
@@ -11119,7 +11142,6 @@ binlog_background_thread(void *arg __attribute__((unused)))
 
   thd= new THD(next_thread_id());
   thd->system_thread= SYSTEM_THREAD_BINLOG_BACKGROUND;
-  thd->thread_stack= (char*) &thd;           /* Set approximate stack start */
   thd->store_globals();
   thd->security_ctx->skip_grants();
   thd->set_command(COM_DAEMON);

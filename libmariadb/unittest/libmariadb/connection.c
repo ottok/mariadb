@@ -2336,7 +2336,80 @@ static int test_conc505(MYSQL *my __attribute__((unused)))
   return OK;
 }
 
+static int test_parsec(MYSQL *my)
+{
+  int rc;
+  int verify= 0;
+  MYSQL *mysql;
+  rc= mysql_query(my, "INSTALL soname 'auth_parsec'");
+  if (rc)
+  {
+    diag("server doesn't support parsec plugin");
+    return SKIP;
+  }
+  rc= mysql_query(my, "CREATE OR REPLACE USER test1@'%' IDENTIFIED VIA parsec using PASSWORD('123')");
+  check_mysql_rc(rc, my);
+
+  mysql= mysql_init(NULL);
+  if (!mysql_client_find_plugin(mysql, "parsec", MYSQL_CLIENT_AUTHENTICATION_PLUGIN))
+  {
+    diag("parsec plugin not available");
+    diag("error: %s", mysql_error(mysql));
+    mysql_close(mysql);
+    return SKIP;
+  }
+
+  mysql_options(mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify);
+  if (!my_test_connect(mysql, hostname, "test1", "123", NULL, port, socketname, 0, 0))
+  {
+    diag("Connection failed. Error: %s", mysql_error(mysql));
+    mysql_close(mysql);
+    return FAIL;
+  }
+
+  rc= mysql_query(my, "DROP USER test1@'%'");
+  check_mysql_rc(rc, my);
+
+  mysql_close(mysql);
+  return OK;
+}
+
+/* Test for PR250 */
+int test_tls_timeout(MYSQL *unused __attribute__((unused)))
+{
+  unsigned int connect_timeout= 5;
+  unsigned int read_write_timeout= 10;
+  int rc;
+  time_t start, elapsed;
+
+  MYSQL *mysql= mysql_init(NULL);
+  mysql_ssl_set(mysql, NULL, NULL, NULL, NULL, NULL);
+  mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (unsigned int *)&connect_timeout);
+  mysql_options(mysql, MYSQL_OPT_READ_TIMEOUT, (unsigned int *)&read_write_timeout);
+  mysql_options(mysql, MYSQL_OPT_WRITE_TIMEOUT, (unsigned int *)&read_write_timeout);
+  if (!my_test_connect(mysql, hostname, username, password, schema, port, socketname, CLIENT_REMEMBER_OPTIONS, 1))
+  {
+    mysql_close(mysql);
+    return FAIL;
+  }
+
+  start= time(NULL);
+  rc= mysql_query(mysql, "SET @a:=SLEEP(12)");
+  elapsed= time(NULL) - start;
+  diag("elapsed: %lu", (unsigned long)elapsed);
+  FAIL_IF((unsigned int)elapsed > read_write_timeout + 1, "timeout ignored");
+
+  FAIL_IF(!rc, "expected timeout error");
+  diag("Error: %s", mysql_error(mysql));
+
+  mysql_close(mysql);
+  return OK;
+}
+
+
 struct my_tests_st my_tests[] = {
+  {"test_tls_timeout", test_tls_timeout, TEST_CONNECTION_NONE, 0, NULL, NULL},
+  {"test_parsec", test_parsec, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_conc505", test_conc505, TEST_CONNECTION_NONE, 0, NULL, NULL},
   {"test_conc632", test_conc632, TEST_CONNECTION_NONE, 0, NULL, NULL},
   {"test_status_callback", test_status_callback, TEST_CONNECTION_NONE, 0, NULL, NULL},
@@ -2384,6 +2457,7 @@ struct my_tests_st my_tests[] = {
   {"test_connection_timeout", test_connection_timeout, TEST_CONNECTION_NONE, 0, NULL, NULL},
   {"test_connection_timeout2", test_connection_timeout2, TEST_CONNECTION_NONE, 0, NULL, NULL}, 
   {"test_connection_timeout3", test_connection_timeout3, TEST_CONNECTION_NONE, 0, NULL, NULL},
+  {"test_tls_timeout", test_tls_timeout, TEST_CONNECTION_NONE, 0, NULL, NULL},
   {NULL, NULL, 0, 0, NULL, NULL}
 };
 
