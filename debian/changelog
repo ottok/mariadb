@@ -1,8 +1,13 @@
-mariadb (1:11.4.3-2) UNRELEASED; urgency=medium
+mariadb (1:11.4.4-1) UNRELEASED; urgency=medium
 
-  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+  * New upstream version 11.4.4. Includes fixes for several severe regressions
+    as noted at https://mariadb.com/kb/en/mariadb-11-4-4-release-notes/. This
+    release is not known to include any CVE assigned security fixes.
+  * Update MTR skiplists based on buildd results after 1:11.4.3-1 upload
+  * Rename README.Contributor to README.source.md
+  * Update debian/patches to be compatible with `gbp pq` to avoid `quilt`
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 19 Aug 2024 18:41:36 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 03 Nov 2024 06:34:53 -0800
 
 mariadb (1:11.4.3-1) unstable; urgency=medium
 

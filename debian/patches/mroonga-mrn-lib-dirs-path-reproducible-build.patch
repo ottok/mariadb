@@ -13,7 +13,7 @@ breaking reproducibility.
  1 file changed, 4 insertions(+), 8 deletions(-)
 
 diff --git a/storage/mroonga/CMakeLists.txt b/storage/mroonga/CMakeLists.txt
-index 4553fd4..1cb8a9c 100644
+index 399201a..f1b26dd 100644
 --- a/storage/mroonga/CMakeLists.txt
 +++ b/storage/mroonga/CMakeLists.txt
 @@ -214,7 +214,7 @@ set(MYSQL_INCLUDE_DIRS

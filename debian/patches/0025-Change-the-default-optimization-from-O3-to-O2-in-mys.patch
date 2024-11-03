@@ -10,18 +10,18 @@ Bug: https://jira.mariadb.org/browse/MDEV-19734?focusedCommentId=156606&page=com
  1 file changed, 6 insertions(+), 6 deletions(-)
 
 diff --git a/cmake/build_configurations/mysql_release.cmake b/cmake/build_configurations/mysql_release.cmake
-index 961db1b..2860fed 100644
+index c11feb6..5a44a43 100644
 --- a/cmake/build_configurations/mysql_release.cmake
 +++ b/cmake/build_configurations/mysql_release.cmake
 @@ -174,12 +174,12 @@ IF(UNIX)
    IF(CMAKE_COMPILER_IS_GNUCC)
-     SET(COMMON_C_FLAGS               "-g -static-libgcc -fno-omit-frame-pointer -fno-strict-aliasing  -Wno-uninitialized")
+     SET(COMMON_C_FLAGS               "-g -fno-omit-frame-pointer -fno-strict-aliasing  -Wno-uninitialized")
      SET(CMAKE_C_FLAGS_DEBUG          "-O ${COMMON_C_FLAGS}")
 -    SET(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 ${COMMON_C_FLAGS}")
 +    SET(CMAKE_C_FLAGS_RELWITHDEBINFO "-O2 ${COMMON_C_FLAGS}")
    ENDIF()
    IF(CMAKE_COMPILER_IS_GNUCXX)
-     SET(COMMON_CXX_FLAGS               "-g -static-libgcc -fno-omit-frame-pointer -fno-strict-aliasing -Wno-uninitialized")
+     SET(COMMON_CXX_FLAGS               "-g -fno-omit-frame-pointer -fno-strict-aliasing -Wno-uninitialized")
      SET(CMAKE_CXX_FLAGS_DEBUG          "-O ${COMMON_CXX_FLAGS}")
 -    SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 ${COMMON_CXX_FLAGS}")
 +    SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 ${COMMON_CXX_FLAGS}")

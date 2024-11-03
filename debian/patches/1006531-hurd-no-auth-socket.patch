@@ -16,7 +16,7 @@ output. And wiki reference https://en.wikipedia.org/wiki/Uname
  1 file changed, 4 insertions(+), 1 deletion(-)
 
 diff --git a/cmake/build_configurations/mysql_release.cmake b/cmake/build_configurations/mysql_release.cmake
-index 2860fed..87ea059 100644
+index 5a44a43..e86a02d 100644
 --- a/cmake/build_configurations/mysql_release.cmake
 +++ b/cmake/build_configurations/mysql_release.cmake
 @@ -118,7 +118,10 @@ ELSEIF(DEB)
