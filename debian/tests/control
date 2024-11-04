@@ -1,10 +1,14 @@
-Tests: configuration-tracing
+Tests:
+ configuration-tracing,
 Depends:
  diffutils,
  mariadb-server,
-Restrictions: allow-stderr needs-root
+Restrictions:
+ allow-stderr,
+ needs-root,
 
-Tests: smoke
+Tests:
+ smoke,
 Depends:
  mariadb-plugin-provider-bzip2,
  mariadb-plugin-provider-lz4,
@@ -12,10 +16,16 @@ Depends:
  mariadb-plugin-provider-lzo,
  mariadb-plugin-provider-snappy,
  mariadb-plugin-rocksdb [amd64 arm64 mips64el ppc64el riscv64],
-Restrictions: allow-stderr needs-root isolation-container
+Restrictions:
+ allow-stderr,
+ isolation-container,
+ needs-root,
 
-Tests: upstream
+Tests:
+ upstream,
 Depends:
  eatmydata,
  mariadb-test,
-Restrictions: allow-stderr breaks-testbed
+Restrictions:
+ allow-stderr,
+ breaks-testbed,
