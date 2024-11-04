@@ -869,6 +869,10 @@ The following specify which files/extra groups are read (specified before remain
                       Redo log buffer size in bytes.
   --innodb-log-file-buffering 
                       Whether the file system cache for ib_logfile0 is enabled
+  --innodb-log-file-mmap 
+                      Whether ib_logfile0 resides in persistent memory or
+                      should initially be memory-mapped
+                      (Defaults to on; use --skip-innodb-log-file-mmap to disable.)
   --innodb-log-file-size=# 
                       Redo log size in bytes.
   --innodb-log-file-write-through 
@@ -881,8 +885,6 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-log-write-ahead-size=# 
                       Redo log write size to avoid read-on-write; must be a
                       power of two
-  --innodb-lru-flush-size=# 
-                      How many pages to flush on LRU eviction
   --innodb-lru-scan-depth=# 
                       How deep to scan LRU to keep it clean
   --innodb-max-dirty-pages-pct=# 
@@ -941,8 +943,6 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-purge-batch-size[=#] 
                       Number of UNDO log pages to purge in one batch from the
                       history list.
-  --innodb-purge-rseg-truncate-frequency[=#] 
-                      Deprecated parameter with no effect
   --innodb-purge-threads[=#] 
                       Number of tasks for purging transaction history
   --innodb-random-read-ahead 
@@ -1443,6 +1443,16 @@ The following specify which files/extra groups are read (specified before remain
   --optimizer-index-block-copy-cost=# 
                       Cost of copying a key block from the cache to intern
                       storage as part of an index scan.
+  --optimizer-join-limit-pref-ratio=# 
+                      For queries with JOIN and ORDER BY LIMIT : make the
+                      optimizer consider a join order that allows one to
+                      short-cut execution after producing #LIMIT matches if
+                      that promises N times speedup. (A conservative setting
+                      here would be is a high value, like 100 so the
+                      short-cutting plan is used if it promises a speedup of
+                      100x or more). Short-cutting plans are inherently risky
+                      so the default is 0 which means do not consider this
+                      optimization
   --optimizer-key-compare-cost=# 
                       Cost of checking a key against the end key condition.
   --optimizer-key-copy-cost=# 
@@ -2698,12 +2708,12 @@ innodb-lock-waits                                            ON
 innodb-locks                                                 ON
 innodb-log-buffer-size                                       16777216
 innodb-log-file-buffering                                    FALSE
+innodb-log-file-mmap                                         TRUE
 innodb-log-file-size                                         100663296
 innodb-log-file-write-through                                FALSE
 innodb-log-group-home-dir                                    (No default value)
 innodb-log-spin-wait-delay                                   0
 innodb-log-write-ahead-size                                  512
-innodb-lru-flush-size                                        32
 innodb-lru-scan-depth                                        1536
 innodb-max-dirty-pages-pct                                   90
 innodb-max-dirty-pages-pct-lwm                               0
@@ -2725,8 +2735,7 @@ innodb-optimize-fulltext-only                                FALSE
 innodb-page-size                                             16384
 innodb-prefix-index-cluster-optimization                     TRUE
 innodb-print-all-deadlocks                                   FALSE
-innodb-purge-batch-size                                      1000
-innodb-purge-rseg-truncate-frequency                         128
+innodb-purge-batch-size                                      127
 innodb-purge-threads                                         4
 innodb-random-read-ahead                                     FALSE
 innodb-read-ahead-threshold                                  56
@@ -2880,6 +2889,7 @@ optimizer-disk-read-cost                                     10.24
 optimizer-disk-read-ratio                                    0.02
 optimizer-extra-pruning-depth                                8
 optimizer-index-block-copy-cost                              0.0356
+optimizer-join-limit-pref-ratio                              0
 optimizer-key-compare-cost                                   0.011361
 optimizer-key-copy-cost                                      0.015685
 optimizer-key-lookup-cost                                    0.435777
