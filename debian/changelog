@@ -1,13 +1,24 @@
-mariadb (1:11.4.4-1) UNRELEASED; urgency=medium
+mariadb (1:11.4.4-1) unstable; urgency=medium
 
   * New upstream version 11.4.4. Includes fixes for several severe regressions
     as noted at https://mariadb.com/kb/en/mariadb-11-4-4-release-notes/. This
     release is not known to include any CVE assigned security fixes.
-  * Update MTR skiplists based on buildd results after 1:11.4.3-1 upload
+  * Update server trace to include new parameters and values. This includes now
+    MariaDB client parameter 'quick-max-column-width' and new MariaDB Server
+    parameters 'innodb-log-file-mmap' and 'optimizer-join-limit-pref-ratio'.
+    Also the parameters 'innodb-lru-flush-size' and
+    'innodb-purge-rseg-truncate-frequency' seems to have been removed.
+  * Update MTR skiplists based on buildd results after 1:11.4.3-1 upload.
   * Rename README.Contributor to README.source.md
-  * Update debian/patches to be compatible with `gbp pq` to avoid `quilt`
+  * Update debian/patches to be compatible with `gbp pq` to avoid `quilt`.
+  * Update Lintian overrides for libmariadb-dev regarding man page syntax.
+  * Add patch to fix Lintian nag about spelling of 'allows one to' and drop one
+    patch about spelling fixes that got applied upstream.
+  * Apply `debputy reformat --style black`.
+  * Allow use of patched libfmt-dev with thousands separator fixed
+    (Related: #1086722).
 
- -- Otto Kekäläinen <otto@debian.org>  Sun, 03 Nov 2024 06:34:53 -0800
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 04 Nov 2024 08:36:00 -0800
 
 mariadb (1:11.4.3-1) unstable; urgency=medium
 
