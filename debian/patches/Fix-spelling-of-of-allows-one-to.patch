@@ -1,0 +1,100 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Mon, 4 Nov 2024 08:00:42 -0800
+Subject: Fix spelling of 'allows one to'
+
+Forwarded: no
+
+Fix the following Lintian nags introduced in commit
+c8d040938a7ebe10e62506a726702c5990ef4dda:
+
+I: mariadb-backup: spelling-error-in-binary "allows to" "allows one to" [usr/bin/mariadb-backup]
+I: mariadb-server-core: spelling-error-in-binary "allows to" "allows one to" [usr/sbin/mariadbd]
+I: mariadb-test: spelling-error-in-binary "allows to" "allows one to" [usr/bin/mariadb-client-test-embedded]
+I: mariadb-test: spelling-error-in-binary "allows to" "allows one to" [usr/bin/mariadb-test-embedded]
+I: mariadb-test: spelling-error-in-binary "allows to" "allows one to" [usr/bin/test-connect-t]
+---
+ mysql-test/main/mysqld--help.result                       | 15 ++++++++-------
+ .../suite/sys_vars/r/sysvars_server_embedded.result       |  2 +-
+ .../suite/sys_vars/r/sysvars_server_notembedded.result    |  2 +-
+ sql/sql_select.cc                                         |  2 +-
+ sql/sys_vars.cc                                           |  2 +-
+ 5 files changed, 12 insertions(+), 11 deletions(-)
+
+diff --git a/mysql-test/main/mysqld--help.result b/mysql-test/main/mysqld--help.result
+index 9a15039..223117b 100644
+--- a/mysql-test/main/mysqld--help.result
++++ b/mysql-test/main/mysqld--help.result
+@@ -782,13 +782,14 @@ The following specify which files/extra groups are read (specified before remain
+  storage as part of an index scan.
+  --optimizer-join-limit-pref-ratio=# 
+  For queries with JOIN and ORDER BY LIMIT : make the
+- optimizer consider a join order that allows to short-cut
+- execution after producing #LIMIT matches if that promises
+- N times speedup. (A conservative setting here would be is
+- a high value, like 100 so the short-cutting plan is used
+- if it promises a speedup of 100x or more). Short-cutting
+- plans are inherently risky so the default is 0 which
+- means do not consider this optimization
++ optimizer consider a join order that allows one to
++ short-cut execution after producing #LIMIT matches if
++ that promises N times speedup. (A conservative setting
++ here would be is a high value, like 100 so the
++ short-cutting plan is used if it promises a speedup of
++ 100x or more). Short-cutting plans are inherently risky
++ so the default is 0 which means do not consider this
++ optimization
+  --optimizer-key-compare-cost=# 
+  Cost of checking a key against the end key condition.
+  --optimizer-key-copy-cost=# 
+diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
+index 0417b41b..6531ce4 100644
+--- a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
++++ b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
+@@ -2405,7 +2405,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
+ VARIABLE_NAME	OPTIMIZER_JOIN_LIMIT_PREF_RATIO
+ VARIABLE_SCOPE	SESSION
+ VARIABLE_TYPE	BIGINT UNSIGNED
+-VARIABLE_COMMENT	For queries with JOIN and ORDER BY LIMIT : make the optimizer consider a join order that allows to short-cut execution after producing #LIMIT matches if that promises N times speedup. (A conservative setting here would be is a high value, like 100 so the short-cutting plan is used if it promises a speedup of 100x or more). Short-cutting plans are inherently risky so the default is 0 which means do not consider this optimization
++VARIABLE_COMMENT	For queries with JOIN and ORDER BY LIMIT : make the optimizer consider a join order that allows one to short-cut execution after producing #LIMIT matches if that promises N times speedup. (A conservative setting here would be is a high value, like 100 so the short-cutting plan is used if it promises a speedup of 100x or more). Short-cutting plans are inherently risky so the default is 0 which means do not consider this optimization
+ NUMERIC_MIN_VALUE	0
+ NUMERIC_MAX_VALUE	4294967295
+ NUMERIC_BLOCK_SIZE	1
+diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
+index 2cc1a6b..85d08d4 100644
+--- a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
++++ b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
+@@ -2615,7 +2615,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
+ VARIABLE_NAME	OPTIMIZER_JOIN_LIMIT_PREF_RATIO
+ VARIABLE_SCOPE	SESSION
+ VARIABLE_TYPE	BIGINT UNSIGNED
+-VARIABLE_COMMENT	For queries with JOIN and ORDER BY LIMIT : make the optimizer consider a join order that allows to short-cut execution after producing #LIMIT matches if that promises N times speedup. (A conservative setting here would be is a high value, like 100 so the short-cutting plan is used if it promises a speedup of 100x or more). Short-cutting plans are inherently risky so the default is 0 which means do not consider this optimization
++VARIABLE_COMMENT	For queries with JOIN and ORDER BY LIMIT : make the optimizer consider a join order that allows one to short-cut execution after producing #LIMIT matches if that promises N times speedup. (A conservative setting here would be is a high value, like 100 so the short-cutting plan is used if it promises a speedup of 100x or more). Short-cutting plans are inherently risky so the default is 0 which means do not consider this optimization
+ NUMERIC_MIN_VALUE	0
+ NUMERIC_MAX_VALUE	4294967295
+ NUMERIC_BLOCK_SIZE	1
+diff --git a/sql/sql_select.cc b/sql/sql_select.cc
+index 17c0aac..665f412 100644
+--- a/sql/sql_select.cc
++++ b/sql/sql_select.cc
+@@ -11699,7 +11699,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
+ 
+ /*
+   @brief
+-    Finalize building the join order which allows to short-cut the join
++    Finalize building the join order which allows one to short-cut the join
+     execution.
+ 
+   @detail
+diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
+index 9fd51fb..0164595 100644
+--- a/sql/sys_vars.cc
++++ b/sql/sys_vars.cc
+@@ -2883,7 +2883,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
+ static Sys_var_ulonglong Sys_optimizer_join_limit_pref_ratio(
+        "optimizer_join_limit_pref_ratio",
+        "For queries with JOIN and ORDER BY LIMIT : make the optimizer "
+-       "consider a join order that allows to short-cut execution after "
++       "consider a join order that allows one to short-cut execution after "
+        "producing #LIMIT matches if that promises N times speedup. "
+        "(A conservative setting here would be is a high value, like 100 so "
+        "the short-cutting plan is used if it promises a speedup of 100x or "
