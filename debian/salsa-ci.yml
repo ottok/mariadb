@@ -618,6 +618,7 @@ mariadb-10.5 and Bullseye upgrade:
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - apt-get purge --yes mariadb*10.?
     - *test-verify-final
+  allow_failure: true  # Temporarily allow failure due to usrmerge related changes in fall 2024
 
 mariadb-10.3 and Buster upgrade:
   extends: .salsa-ci-template-for-mariadb
@@ -646,6 +647,7 @@ mariadb-10.3 and Buster upgrade:
     # fail on non-existing mariadb.sys user
     - sleep 15
     - *test-verify-final
+  allow_failure: true  # Temporarily allow failure due to usrmerge related changes in fall 2024
 
 mariadb-10.3 and Focal upgrade:
   extends: .salsa-ci-template-for-mariadb
@@ -717,6 +719,7 @@ default-mysql-server and Bullseye upgrade:
     # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
+  allow_failure: true  # Temporarily allow failure due to usrmerge related changes in fall 2024
 
 test basic features:
   extends: .salsa-ci-template-for-mariadb
@@ -883,6 +886,7 @@ default-libmysqlclient-dev and Bullseye upgrade:
     # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - *test-install-all-libs
     - *test-verify-libs
+  allow_failure: true  # Temporarily allow failure due to usrmerge related changes in fall 2024
 
 # No longer possible since as it pulls as dependencies packages that trigger
 # usrmerge, which cannot run in a container
@@ -1192,6 +1196,7 @@ mysql.com-5.7 with Buster upgrade:
     - service mysql status || service mariadb status
     - sleep 15 # Give the mysql_upgrade a bit of extra time to complete with MySQL 5.7 before querying the server
     - *test-verify-final
+  allow_failure: true  # Temporarily allow failure due to usrmerge related changes in fall 2024
 
 # Note: pmm2-client does not exist in the Bookworm repository anymore
 percona-xtradb-5.7 with Bookworm upgrade:
