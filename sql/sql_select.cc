@@ -234,12 +234,14 @@ static COND *make_cond_for_table_from_pred(THD *thd, Item *root_cond,
 
 static Item* part_of_refkey(TABLE *form,Field *field);
 uint find_shortest_key(TABLE *table, const key_map *usable_keys);
-static bool test_if_cheaper_ordering(const JOIN_TAB *tab,
+static bool test_if_cheaper_ordering(bool in_join_optimizer,
+                                     const JOIN_TAB *tab,
                                      ORDER *order, TABLE *table,
                                      key_map usable_keys, int key,
                                      ha_rows select_limit,
                                      int *new_key, int *new_key_direction,
                                      ha_rows *new_select_limit,
+                                     double *new_read_time,
                                      uint *new_used_key_parts= NULL,
                                      uint *saved_best_key_parts= NULL);
 static int test_if_order_by_key(JOIN *, ORDER *, TABLE *, uint, uint *);
@@ -328,6 +330,18 @@ static void fix_items_after_optimize(THD *thd, SELECT_LEX *select_lex);
 static void optimize_rownum(THD *thd, SELECT_LEX_UNIT *unit, Item *cond);
 static bool process_direct_rownum_comparison(THD *thd, SELECT_LEX_UNIT *unit,
                                              Item *cond);
+
+static
+bool join_limit_shortcut_is_applicable(const JOIN *join);
+POSITION *join_limit_shortcut_finalize_plan(JOIN *join, double *cost);
+
+static
+bool find_indexes_matching_order(JOIN *join, TABLE *table, ORDER *order,
+                                 key_map *usable_keys);
+static
+void compute_part_of_sort_key_for_equals(JOIN *join, TABLE *table,
+                                         Item_field *item_field,
+                                         key_map *col_keys);
 
 #ifndef DBUG_OFF
 
@@ -2249,12 +2263,14 @@ JOIN::optimize_inner()
 
     add_table_function_dependencies(join_list, table_map(-1));
 
-    if (thd->is_error() || select_lex->save_leaf_tables(thd))
+    if (thd->is_error() ||
+        (!select_lex->leaf_tables_saved && select_lex->save_leaf_tables(thd)))
     {
       if (arena)
         thd->restore_active_arena(arena, &backup);
       DBUG_RETURN(1);
     }
+    select_lex->leaf_tables_saved= true;
     build_bitmap_for_nested_joins(join_list, 0);
 
     sel->prep_where= conds ? conds->copy_andor_structure(thd) : 0;
@@ -3217,19 +3233,22 @@ int JOIN::optimize_stage2()
     which do not use aggregate functions. In such case
     temporary table may not be used and const condition
     elements may be lost during further having
-    condition transformation in JOIN::exec.
+    condition transformation.
   */
   if (having && const_table_map && !having->with_sum_func())
   {
     having->update_used_tables();
-    having= having->remove_eq_conds(thd, &select_lex->having_value, true);
-    if (select_lex->having_value == Item::COND_FALSE)
+    if (having->const_item() && !having->is_expensive())
     {
-      having= (Item*) Item_false;
-      zero_result_cause= "Impossible HAVING noticed after reading const tables";
-      error= 0;
-      select_lex->mark_const_derived(zero_result_cause);
-      goto setup_subq_exit;
+      if (!having->val_bool())
+      {
+        having= Item_false;
+        zero_result_cause= "Impossible HAVING noticed after reading const tables";
+        error= 0;
+        select_lex->mark_const_derived(zero_result_cause);
+        goto setup_subq_exit;
+      }
+      having= Item_true;
     }
   }
 
@@ -3652,7 +3671,9 @@ bool JOIN::make_aggr_tables_info()
         original DISTINCT. Thus, we set select_distinct || group_optimized_away
         to Query::distinct.
       */
-      Query query= {&all_fields, select_distinct || group_optimized_away,
+      Query query= {&all_fields,
+                    (int) all_fields.elements - (int) fields_list.elements,
+                    select_distinct || group_optimized_away,
                     tables_list, conds,
                     group_list, order ? order : group_list, having,
                     &select_lex->master_unit()->lim};
@@ -4800,8 +4821,8 @@ void JOIN::exec_inner()
       DBUG_ASSERT(error == 0);
       if (cond_value != Item::COND_FALSE &&
           having_value != Item::COND_FALSE &&
-          (!conds || conds->val_int()) &&
-          (!having || having->val_int()))
+          (!conds || conds->val_bool()) &&
+          (!having || having->val_bool()))
       {
 	if (do_send_rows &&
             (procedure ? (procedure->send_row(procedure_fields_list) ||
@@ -4834,11 +4855,11 @@ void JOIN::exec_inner()
   */
   if (!zero_result_cause &&
       exec_const_cond && !(select_options & SELECT_DESCRIBE) &&
-      !exec_const_cond->val_int())
+      !exec_const_cond->val_bool())
     zero_result_cause= "Impossible WHERE noticed after reading const tables";
 
   /* 
-    We've called exec_const_cond->val_int(). This may have caused an error.
+    We've called exec_const_cond->val_bool(). This may have caused an error.
   */
   if (unlikely(thd->is_error()))
   {
@@ -5857,6 +5878,7 @@ make_join_statistics(JOIN *join, List<TABLE_LIST> &tables_list,
   join->sort_by_table= get_sort_by_table(join->order, join->group_list,
                                          join->select_lex->leaf_tables,
                                          join->const_table_map);
+  join->limit_shortcut_applicable= join_limit_shortcut_is_applicable(join);
   /* 
     Update info on indexes that can be used for search lookups as
     reading const tables may has added new sargable predicates. 
@@ -6998,12 +7020,13 @@ Item_equal::add_key_fields(JOIN *join, KEY_FIELD **key_fields,
 }
 
 
-static uint
+static inline uint
 max_part_bit(key_part_map bits)
 {
-  uint found;
-  for (found=0; bits & 1 ; found++,bits>>=1) ;
-  return found;
+  if (bits == 0)
+    return 0;
+  /* find first zero bit by reverting all bits and find first bit */
+  return my_find_first_bit(~(ulonglong) bits);
 }
 
 
@@ -8100,6 +8123,30 @@ double hash_join_fanout(JOIN *join, JOIN_TAB *s, table_map remaining_tables,
 }
 
 
+#ifndef DBUG_OFF
+
+static char dbug_join_prefix_buf[256];
+
+const char* dbug_print_join_prefix(const POSITION *join_positions,
+                                   uint idx,
+                                   JOIN_TAB *s)
+{
+  char *buf= dbug_join_prefix_buf;
+  String str(buf, sizeof(dbug_join_prefix_buf), &my_charset_bin);
+  str.length(0);
+  for (uint i=0; i!=idx; i++)
+  {
+    str.append(join_positions[i].table->table->alias);
+    str.append(',');
+  }
+  str.append(s->table->alias);
+  if (str.c_ptr_safe() == buf)
+   return buf;
+  else
+    return "Couldn't fit into buffer";
+}
+#endif
+
 /**
   Find the best access path for an extension of a partial execution
   plan and add this path to the plan.
@@ -8123,6 +8170,14 @@ double hash_join_fanout(JOIN *join, JOIN_TAB *s, table_map remaining_tables,
   @param pos              OUT Table access plan
   @param loose_scan_pos   OUT Table plan that uses loosescan, or set cost to 
                               DBL_MAX if not possible.
+  @detail
+   Use this to print the current join prefix:
+
+      dbug_print_join_prefix(join_positions, idx, s)
+
+   Use this as breakpoint condition to stop at join prefix "t1,t2,t3":
+
+    $_streq(dbug_print_join_prefix(join_positions, idx, s), "t1,t2,t3")
 
   @return
     None
@@ -8175,7 +8230,6 @@ best_access_path(JOIN      *join,
   SplM_plan_info *spl_plan= 0;
   table_map spl_pd_boundary= 0;
   Range_rowid_filter_cost_info *filter= 0;
-  const char* cause= NULL;
   enum join_type best_type= JT_UNKNOWN, type= JT_UNKNOWN;
 
   disable_jbuf= disable_jbuf || idx == join->const_tables;  
@@ -8205,6 +8259,7 @@ best_access_path(JOIN      *join,
     TABLE *table= s->table;
     double best_records= DBL_MAX;
     uint max_key_part=0;
+    const char *cause= NULL;
 
     /* Test how we can use keys */
     rec= s->records/MATCHING_ROWS_IN_OTHER_TABLE;  // Assumed records/key
@@ -8217,6 +8272,7 @@ best_access_path(JOIN      *join,
       key_part_map notnull_part=0; // key parts which won't have NULL in lookup tuple.
       table_map found_ref= 0;
       uint key= keyuse->key;
+      uint max_const_parts;
       filter= 0;
       bool ft_key=  (keyuse->keypart == FT_KEYPART);
       /* Bitmap of keyparts where the ref access is over 'keypart=const': */
@@ -8320,6 +8376,8 @@ best_access_path(JOIN      *join,
         rec= MATCHING_ROWS_IN_OTHER_TABLE;      // Fix for small tables
 
       Json_writer_object trace_access_idx(thd);
+      max_const_parts= max_part_bit(const_part);
+
       /*
         full text keys require special treatment
       */
@@ -8341,7 +8399,7 @@ best_access_path(JOIN      *join,
         loose_scan_opt.check_ref_access_part1(s, key, start_key, found_part);
 
         /* Check if we found full key */
-        const key_part_map all_key_parts= PREV_BITS(uint, key_parts);
+        const key_part_map all_key_parts= PREV_BITS(key_part_map, key_parts);
         if (found_part == all_key_parts && !ref_or_null_part)
         {                                         /* use eq key */
           max_key_part= (uint) ~0;
@@ -8437,9 +8495,7 @@ best_access_path(JOIN      *join,
                 in ReuseRangeEstimateForRef-3.
               */
               if (table->opt_range_keys.is_set(key) &&
-                  (const_part &
-                   (((key_part_map)1 << table->opt_range[key].key_parts)-1)) ==
-                  (((key_part_map)1 << table->opt_range[key].key_parts)-1) &&
+                  table->opt_range[key].key_parts <= max_const_parts &&
                   table->opt_range[key].ranges == 1 &&
                   records > (double) table->opt_range[key].rows)
               {
@@ -8482,9 +8538,21 @@ best_access_path(JOIN      *join,
           */
           if ((found_part & 1) &&
               (!(table->file->index_flags(key, 0, 0) & HA_ONLY_WHOLE_INDEX) ||
-               found_part == PREV_BITS(uint,keyinfo->user_defined_key_parts)))
+               found_part == PREV_BITS(key_part_map,
+                                       keyinfo->user_defined_key_parts)))
           {
             max_key_part= max_part_bit(found_part);
+            bool all_used_equalities_are_const;
+            if ((thd->variables.optimizer_adjust_secondary_key_costs &
+                OPTIMIZER_ADJ_FIX_REUSE_RANGE_FOR_REF))
+            {
+              all_used_equalities_are_const= (max_key_part == max_const_parts);
+            }
+            else
+            {
+              // Old, incorrect check:
+              all_used_equalities_are_const= !found_ref;
+            }
             /*
               ReuseRangeEstimateForRef-3:
               We're now considering a ref[or_null] access via
@@ -8499,7 +8567,7 @@ best_access_path(JOIN      *join,
               create quick select over another index), so we can't compare
               them to (**). We'll make indirect judgements instead.
               The sufficient conditions for re-use are:
-              (C1) All e_i in (**) are constants, i.e. found_ref==FALSE. (if
+              (C1) All e_i in (**) are constants (if
                    this is not satisfied we have no way to know which ranges
                    will be actually scanned by 'ref' until we execute the 
                    join)
@@ -8509,7 +8577,7 @@ best_access_path(JOIN      *join,
               We also have a property that "range optimizer produces equal or 
               tighter set of scan intervals than ref(const) optimizer". Each
               of the intervals in (**) are "tightest possible" intervals when 
-              one limits itself to using keyparts 1..K (which we do in #2).              
+              one limits itself to using keyparts 1..K (which we do in #2).
               From here it follows that range access used either one, or
               both of the (I1) and (I2) intervals:
               
@@ -8524,7 +8592,8 @@ best_access_path(JOIN      *join,
 
               (C3) "range optimizer used (have ref_or_null?2:1) intervals"
             */
-            if (table->opt_range_keys.is_set(key) && !found_ref &&      //(C1)
+            if (table->opt_range_keys.is_set(key) &&
+                all_used_equalities_are_const && // (C1)
                 table->opt_range[key].key_parts == max_key_part &&      //(C2)
                 table->opt_range[key].ranges == 1 + MY_TEST(ref_or_null_part)) //(C3)
             {
@@ -8557,10 +8626,10 @@ best_access_path(JOIN      *join,
                 */
                 if (table->opt_range_keys.is_set(key))
                 {
+                  double rows= (double) table->opt_range[key].rows;
                   if (table->opt_range[key].key_parts >= max_key_part) // (2)
                   {
-                    double rows= (double) table->opt_range[key].rows;
-                    if (!found_ref &&                                  // (1)
+                    if (all_used_equalities_are_const &&               // (1)
                         records < rows)                                // (3)
                     {
                       trace_access_idx.add("used_range_estimates", "clipped up");
@@ -8628,15 +8697,26 @@ best_access_path(JOIN      *join,
               */
               if (table->opt_range_keys.is_set(key) &&
                   table->opt_range[key].key_parts <= max_key_part &&
-                  const_part &
-                  ((key_part_map)1 << table->opt_range[key].key_parts) &&
                   table->opt_range[key].ranges == (1 +
                                                    MY_TEST(ref_or_null_part &
                                                            const_part)) &&
                   records > (double) table->opt_range[key].rows)
               {
-                trace_access_idx.add("used_range_estimates", true);
-                records= (double) table->opt_range[key].rows;
+                bool all_parts_used;
+                if ((thd->variables.optimizer_adjust_secondary_key_costs &
+                     OPTIMIZER_ADJ_FIX_REUSE_RANGE_FOR_REF))
+                {
+                  all_parts_used= table->opt_range[key].key_parts <= max_const_parts;
+                }
+                else
+                  all_parts_used= (bool) (const_part &
+                                          ((key_part_map)1
+                                           << table->opt_range[key].key_parts));
+                if (all_parts_used)
+                {
+                  trace_access_idx.add("used_range_estimates", true);
+                  records= (double) table->opt_range[key].rows;
+                }
               }
             }
 
@@ -8752,7 +8832,9 @@ best_access_path(JOIN      *join,
                                table->key_info[filter->key_no].name);
         }
       }
-      trace_access_idx.add("rows", records).add("cost", tmp);
+
+      if (!cause)
+        trace_access_idx.add("rows", records).add("cost", tmp);
 
       if (tmp + 0.0001 < best_time - records/TIME_FOR_COMPARE)
       {
@@ -8771,7 +8853,6 @@ best_access_path(JOIN      *join,
         trace_access_idx.add("chosen", false)
                         .add("cause", cause ? cause : "cost");
       }
-      cause= nullptr;
     } /* for each key */
     records= best_records;
   }
@@ -9279,6 +9360,7 @@ choose_plan(JOIN *join, table_map join_tables)
   THD *thd= join->thd;
   DBUG_ENTER("choose_plan");
 
+  join->limit_optimization_mode= false;
   join->cur_embedding_map= 0;
   join->extra_heuristic_pruning= false;
   join->prune_level= join->thd->variables.optimizer_prune_level;
@@ -9346,8 +9428,53 @@ choose_plan(JOIN *join, table_map join_tables)
       join->extra_heuristic_pruning= true;
     }
 
+    double limit_cost= DBL_MAX;
+    POSITION *limit_plan= NULL;
+
+    /*
+      First, build a join plan that can short-cut ORDER BY...LIMIT.
+      Do it if
+      (1) The SELECT in query makes it possible to do short-cutting for
+          some table TBL.
+      (2) We are optimizing the whole JOIN, not a semi-join nest
+      (3) The table TBL has not been marked as constant (in this case,
+          ORDER BY LIMIT will be optimized away)
+    */
+    if (join->limit_shortcut_applicable &&                  // (1)
+        !join->emb_sjm_nest &&                              // (2)
+        !(join->sort_by_table->map & join->const_table_map)) //(3)
+    {
+      bool res;
+      Json_writer_object wrapper(join->thd);
+      Json_writer_array trace(join->thd, "join_limit_shortcut_plan_search");
+      join->limit_optimization_mode= true;
+      res= greedy_search(join, join_tables, search_depth,
+                         use_cond_selectivity);
+      join->limit_optimization_mode= false;
+
+      if (res)
+        DBUG_RETURN(TRUE);
+      DBUG_ASSERT(join->best_read != DBL_MAX);
+
+      /*
+        We've built a join order. Adjust its cost based on ORDER BY...LIMIT
+        short-cutting.
+      */
+      limit_plan= join_limit_shortcut_finalize_plan(join, &limit_cost);
+    }
+
+    /* The main call to search for the query plan: */
     if (greedy_search(join, join_tables, search_depth, use_cond_selectivity))
       DBUG_RETURN(TRUE);
+
+    DBUG_ASSERT(join->best_read != DBL_MAX);
+    if (limit_plan && limit_cost < join->best_read)
+    {
+      /* Plan that uses ORDER BY ... LIMIT shortcutting is better. */
+      memcpy((uchar*)join->best_positions, (uchar*)limit_plan,
+             sizeof(POSITION)*join->table_count);
+      join->best_read= limit_cost;
+    }
   }
 
   /* 
@@ -10575,6 +10702,326 @@ get_costs_for_tables(JOIN *join, table_map remaining_tables, uint idx,
   DBUG_RETURN(found_eq_ref);
 }
 
+
+/*
+  @brief
+    Check if it is potentally possible to short-cut the JOIN execution due to
+    ORDER BY ... LIMIT clause
+
+  @detail
+    It is possible when the join has "ORDER BY ... LIMIT n" clause, and the
+    sort+limit operation is done right after the join operation (there's no
+    grouping or DISTINCT in between).
+    Then we can potentially build a join plan that enumerates rows in the
+    ORDER BY order and so will be able to terminate as soon as it has produced
+    #limit rows.
+
+    Note that it is not a requirement that sort_by_table has an index that
+    matches ORDER BY. If it doesn't have one, the optimizer will pass
+    sort_by_table to filesort. Reading from sort_by_table won't use
+    short-cutting but the rest of the join will.
+*/
+
+static
+bool join_limit_shortcut_is_applicable(const JOIN *join)
+{
+  /*
+    Any post-join operation like GROUP BY or DISTINCT or window functions
+    means we cannot short-cut join execution
+  */
+  if (!join->thd->variables.optimizer_join_limit_pref_ratio ||
+      !join->order ||
+      join->select_limit == HA_POS_ERROR ||
+      join->group_list ||
+      join->select_distinct ||
+      join->select_options & SELECT_BIG_RESULT ||
+      join->rollup.state != ROLLUP::STATE_NONE ||
+      join->select_lex->have_window_funcs() ||
+      join->select_lex->with_sum_func)
+  {
+    return false;
+  }
+
+  /*
+    Cannot do short-cutting if
+    (1) ORDER BY refers to more than one table or
+    (2) the table it refers to cannot be first table in the join order
+  */
+  if (!join->sort_by_table ||                           // (1)
+      join->sort_by_table->reginfo.join_tab->dependent) // (2)
+    return false;
+
+  Json_writer_object wrapper(join->thd);
+  Json_writer_object trace(join->thd, "join_limit_shortcut_is_applicable");
+  trace.add("applicable", 1);
+  /* It looks like we can short-cut limit due to join */
+  return true;
+}
+
+
+/*
+  @brief
+    Check if we could use an index-based access method to produce rows
+    in the order for ORDER BY ... LIMIT.
+
+  @detail
+  This should do what test_if_skip_sort_order() does. We can't use that
+  function directly, because:
+
+  1. We're at the join optimization stage and have not done query plan
+     fix-ups done in get_best_combination() and co.
+
+  2. The code in test_if_skip_sort_order() does modify query plan structures,
+     for example it may change the table's quick select. This is done even if
+     it's called with no_changes=true parameter.
+
+  @param  access_method_changed  OUT Whether the function changed the access
+                                     method to get rows in desired order.
+  @param  new_access_cost        OUT if access method changed: its cost.
+
+  @return
+    true  - Can skip sorting
+    false - Cannot skip sorting
+*/
+
+bool test_if_skip_sort_order_early(JOIN *join,
+                                   bool *access_method_changed,
+                                   double *new_access_cost)
+{
+  const POSITION *pos= &join->best_positions[join->const_tables];
+  TABLE *table= pos->table->table;
+  key_map usable_keys= table->keys_in_use_for_order_by;
+
+  *access_method_changed= false;
+
+  // Step #1: Find indexes that produce the required ordering.
+  if (find_indexes_matching_order(join, table, join->order, &usable_keys))
+  {
+    return false; // Cannot skip sorting
+  }
+
+  // Step #2: Check if the index we're using produces the needed ordering
+  uint ref_key;
+  if (pos->key)
+  {
+    // Mirror the (wrong) logic in test_if_skip_sort_order:
+    if (pos->spl_plan || pos->type == JT_REF_OR_NULL)
+      return false; // Use filesort
+
+    ref_key= pos->key->key;
+  }
+  else
+  {
+    if (pos->table->quick)
+    {
+      if (pos->table->quick->get_type() == QUICK_SELECT_I::QS_TYPE_RANGE)
+        ref_key= pos->table->quick->index;
+      else
+        ref_key= MAX_KEY;
+    }
+    else
+      ref_key= MAX_KEY;
+  }
+
+  if (ref_key != MAX_KEY && usable_keys.is_set(ref_key))
+  {
+    return true;  // we're using an index that produces the reqired ordering.
+  }
+
+  /*
+    Step #3: check if we can switch to using an index that would produce the
+    ordering.
+    (But don't actually switch, this will be done by test_if_skip_sort_order)
+  */
+  int best_key= -1;
+  uint UNINIT_VAR(best_key_parts);
+  uint saved_best_key_parts= 0;
+  int best_key_direction= 0;
+  JOIN_TAB *tab= pos->table;
+  ha_rows new_limit;
+  double new_read_time;
+  if (test_if_cheaper_ordering(/*in_join_optimizer */TRUE,
+                               tab, join->order, table, usable_keys,
+                               ref_key, join->select_limit,
+                               &best_key, &best_key_direction,
+                               &new_limit, &new_read_time,
+                               &best_key_parts,
+                               &saved_best_key_parts))
+  {
+    // Ok found a way to skip sorting
+    *access_method_changed= true;
+    *new_access_cost= new_read_time;
+    return true;
+  }
+
+  return false;
+}
+
+
+/*
+  Compute the cost of join assuming we only need fraction of the output.
+*/
+
+double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
+                                      double *first_table_cost,
+                                      double fraction)
+{
+  POSITION *pos= join->best_positions + join->const_tables;
+  /*
+    Generally, we assume that producing X% of output takes X% of the cost.
+
+    best_extension_by_limited_search() subtracts COST_EPS from
+    join->best_read, add it back.
+  */
+  double partial_join_cost= (join->best_read + COST_EPS) * fraction;
+
+  if (skip_sorting)
+  {
+    /*
+      First table produces rows in required order. Two options:
+
+      A. first_table_cost=NULL means we use whatever access method the join
+        optimizer has picked. Its cost was included in join->best_read and
+        we've already took a fraction of it.
+
+      B. first_table_cost!=NULL means we will need to switch to another access
+        method, we have the cost to read rows to produce #LIMIT rows in join
+        output.
+    */
+    if (first_table_cost)
+    {
+      /*
+        Compute the cost of accessing the first table in the same way as
+        it was done in greedy_search():
+      */
+      double prev_first_table_cost;
+      prev_first_table_cost= pos->read_time +
+                             (double)pos->records_read / TIME_FOR_COMPARE;
+      prev_first_table_cost *= fraction;
+      /*
+        Subtract the remainder of the first table's cost we had in
+        join->best_read:
+      */
+      partial_join_cost -= prev_first_table_cost;
+      DBUG_ASSERT(partial_join_cost >= 0.0);
+
+      /* Add the cost of the new access method we've got: */
+      partial_join_cost= COST_ADD(partial_join_cost, *first_table_cost);
+    }
+  }
+  else
+  {
+    DBUG_ASSERT(!first_table_cost);
+    /*
+      Cannot skip sorting. We read the first table entirely, then sort it.
+
+      partial_join_cost includes pos->read_time*fraction. Add to it
+      pos->read_time*(1-fraction) so we have the cost to read the entire first
+      table.  Do the same for costs of checking the WHERE.
+    */
+    double extra_first_table_cost= pos->read_time * (1.0 - fraction);
+    double extra_first_table_where= pos->records_read * (1.0 - fraction) /
+                                      TIME_FOR_COMPARE;
+
+    partial_join_cost= COST_ADD(partial_join_cost,
+                            COST_ADD(extra_first_table_cost,
+                                     extra_first_table_where));
+  }
+  return partial_join_cost;
+}
+
+
+/*
+  @brief
+    Finalize building the join order which allows to short-cut the join
+    execution.
+
+  @detail
+    This is called after we have produced a join order that allows short-
+    cutting.
+    Here, we decide if it is cheaper to use this one or the original join
+    order.
+*/
+
+POSITION *join_limit_shortcut_finalize_plan(JOIN *join, double *cost)
+{
+  Json_writer_object wrapper(join->thd);
+  Json_writer_object trace(join->thd, "join_limit_shortcut_choice");
+
+  double fraction= join->select_limit / join->join_record_count;
+  trace.add("limit_fraction", fraction);
+
+  /* Check which fraction of join output we need */
+  if (fraction >= 1.0)
+  {
+    trace.add("skip_adjustment", "no short-cutting");
+    return NULL;
+  }
+
+  /*
+    Check if the first table's access method produces the required ordering.
+    Possible options:
+    1. Yes: we can just take a fraction of the execution cost.
+    2A No: change the access method to one that does produce the required
+           ordering, update the costs.
+    2B No: Need to pass the first table to filesort().
+  */
+  bool skip_sorting;
+  bool access_method_changed;
+  double new_access_cost;
+  {
+    Json_writer_array tmp(join->thd, "test_if_skip_sort_order_early");
+    skip_sorting= test_if_skip_sort_order_early(join,
+                                                &access_method_changed,
+                                                &new_access_cost);
+  }
+  trace.add("can_skip_filesort", skip_sorting);
+
+  double cost_with_shortcut=
+    recompute_join_cost_with_limit(join, skip_sorting,
+                                   access_method_changed ?
+                                     &new_access_cost : (double*)0,
+                                   fraction);
+  double risk_ratio=
+    (double)join->thd->variables.optimizer_join_limit_pref_ratio;
+  trace.add("full_join_cost", join->best_read);
+  trace.add("risk_ratio", risk_ratio);
+  trace.add("shortcut_join_cost", cost_with_shortcut);
+  cost_with_shortcut *= risk_ratio;
+  trace.add("shortcut_cost_with_risk", cost_with_shortcut);
+  if (cost_with_shortcut < join->best_read)
+  {
+    trace.add("use_shortcut_cost", true);
+    POSITION *pos= (POSITION*)memdup_root(join->thd->mem_root,
+                                          join->best_positions,
+                                          sizeof(POSITION)*
+                                          (join->table_count + 1));
+    *cost= cost_with_shortcut;
+    return pos;
+  }
+  trace.add("use_shortcut_cost", false);
+  return NULL;
+}
+
+
+/*
+  @brief
+    If we're in Limit Optimization Mode, allow only join->sort_by_table as
+    the first table in the join order
+*/
+
+static
+bool join_limit_shortcut_limits_tables(const JOIN *join, uint idx, table_map *map)
+{
+  if (join->limit_optimization_mode && idx == join->const_tables)
+  {
+    *map= join->sort_by_table->map;
+    return true;
+  }
+  return false;
+}
+
+
 /**
   Find a good, possibly optimal, query execution plan (QEP) by a possibly
   exhaustive search.
@@ -10757,6 +11204,9 @@ best_extension_by_limited_search(JOIN      *join,
     */
     allowed_tables= remaining_tables;
     allowed_current_tables= join->get_allowed_nj_tables(idx) & remaining_tables;
+    table_map sort_table;
+    if (join_limit_shortcut_limits_tables(join, idx, &sort_table))
+      allowed_current_tables= sort_table;
   }
   DBUG_ASSERT(allowed_tables & remaining_tables);
 
@@ -11039,6 +11489,10 @@ best_extension_by_limited_search(JOIN      *join,
           memcpy((uchar*) join->best_positions, (uchar*) join->positions,
                  sizeof(POSITION) * (idx + 1));
           join->join_record_count= partial_join_cardinality;
+          /*
+            note: recompute_join_cost_with_limit() relies on this COST_EPS
+            subtraction:
+          */
           join->best_read= current_read_time - COST_EPS;
         }
         DBUG_EXECUTE("opt", print_plan(join, idx+1,
@@ -12788,7 +13242,7 @@ make_join_select(JOIN *join,SQL_SELECT *select,COND *cond)
             bool const_cond_result;
             {
               Json_writer_array a(thd, "computing_condition");
-              const_cond_result= const_cond->val_int() != 0;
+              const_cond_result= const_cond->val_bool() != 0;
             }
             if (!const_cond_result)
             {
@@ -12894,11 +13348,41 @@ make_join_select(JOIN *join,SQL_SELECT *select,COND *cond)
 
       used_tables|=current_map;
 
+      /*
+        Change from using ref access to using quick select on the same index
+        if the quick select uses more key parts.
+
+        There are two cases.
+        A. ref access is ref(const). quick select was also constructed using
+        equality restrictions that ref used, and so it will scan a subset of
+        rows that ref access scans.
+        Example: suppose the index is INDEX(kp1, kp2) and the WHERE has:
+
+          kp1='foo' and kp2 <= 10
+
+        here, ref access will use kp1='foo' and quick select will use
+        (foo) <= (kp1,kp2) <=(foo,10)
+
+        B. ref access is not constant.  In this case, quick select was
+        constructed from some other restriction and in general will scan
+        totally different set of rows (it maybe larger or smaller).
+        Example: for INDEX(kp1, kp2) and the WHERE:
+
+        kp1 <='foo' and kp1=prev_table.col and kp2 <= 10
+
+        the ref access will use kp1=prev_table.col, while quick select will
+        use (-inf) < (kp1, kp2) <= ('foo',10).
+
+        Because of the above, we perform the rewrite ONLY when ref is
+        ref(const).
+      */
       if (tab->type == JT_REF && tab->quick &&
 	  (((uint) tab->ref.key == tab->quick->index &&
 	    tab->ref.key_length < tab->quick->max_used_key_length) ||
            (!is_hash_join_key_no(tab->ref.key) &&
-            tab->table->intersect_keys.is_set(tab->ref.key))))
+            tab->table->intersect_keys.is_set(tab->ref.key))) &&
+          tab->ref.const_ref_part_map ==                       // (ref-is-const)
+              make_prev_keypart_map(tab->ref.key_parts))       // (ref-is-const)
       {
         /* Range uses longer key;  Use this instead of ref on key */
         Json_writer_object ref_to_range(thd);
@@ -14915,13 +15399,6 @@ void JOIN_TAB::cleanup()
     delete filesort->select;
   delete filesort;
   filesort= NULL;
-  /* Skip non-existing derived tables/views result tables */
-  if (table &&
-      (table->s->tmp_table != INTERNAL_TMP_TABLE || table->is_created()))
-  {
-    table->file->ha_end_keyread();
-    table->file->ha_index_or_rnd_end();
-  }
   if (table)
   {
     table->file->ha_end_keyread();
@@ -14930,8 +15407,7 @@ void JOIN_TAB::cleanup()
     else
       table->file->ha_index_or_rnd_end();
     preread_init_done= FALSE;
-    if (table->pos_in_table_list && 
-        table->pos_in_table_list->jtbm_subselect)
+    if (table->pos_in_table_list && table->pos_in_table_list->jtbm_subselect)
     {
       if (table->pos_in_table_list->jtbm_subselect->is_jtbm_const_tab)
       {
@@ -15942,7 +16418,7 @@ return_zero_rows(JOIN *join, select_result *result, List<TABLE_LIST> *tables,
     join->no_rows_in_result_called= 1;
     while ((item= it++))
       item->no_rows_in_result();
-    if (having && having->val_int() == 0)
+    if (having && having->val_bool() == false)
       send_row=0;
   }
 
@@ -17169,7 +17645,7 @@ Item *eliminate_item_equal(THD *thd, COND *cond, COND_EQUAL *upper_levels,
 {
   List<Item> eq_list;
   Item_func_eq *eq_item= 0;
-  if (((Item *) item_equal)->const_item() && !item_equal->val_int())
+  if (((Item *) item_equal)->const_item() && !item_equal->val_bool())
     return (Item*) Item_false;
   Item *item_const= item_equal->get_const();
   Item_equal_fields_iterator it(*item_equal);
@@ -17238,7 +17714,7 @@ Item *eliminate_item_equal(THD *thd, COND *cond, COND_EQUAL *upper_levels,
         Item_func_eq *func= new (thd->mem_root) Item_func_eq(thd, item_const, upper_const);
         func->set_cmp_func(thd);
         func->quick_fix_field();
-        if (func->val_int())
+        if (func->val_bool())
           item= 0;
       }
       else
@@ -17288,6 +17764,7 @@ Item *eliminate_item_equal(THD *thd, COND *cond, COND_EQUAL *upper_levels,
         return 0;
       eq_item->eval_not_null_tables(0);
       eq_item->quick_fix_field();
+      eq_item->base_flags|= item_base_t::IS_COND;
     }
     current_sjm= field_sjm;
   }
@@ -18804,7 +19281,7 @@ void propagate_new_equalities(THD *thd, Item *cond,
         List_iterator<Item_equal> ei(*cond_equalities);
         while ((equal_item= ei++))
 	{
-          if (equal_item->const_item() && !equal_item->val_int())
+          if (equal_item->const_item() && !equal_item->val_bool())
 	  {
             *is_simplifiable_cond= true;
             return;
@@ -18835,7 +19312,7 @@ void propagate_new_equalities(THD *thd, Item *cond,
     {
       equality->merge_with_check(thd, equal_item, true);
     }
-    if (equality->const_item() && !equality->val_int())
+    if (equality->const_item() && !equality->val_bool())
       *is_simplifiable_cond= true;
   }
   else
@@ -19000,7 +19477,7 @@ Item_cond::remove_eq_conds(THD *thd, Item::cond_result *cond_value,
      Item_equal *eq_item;
      while ((eq_item= it++))
      {
-       if (eq_item->const_item() && eq_item->val_int())
+       if (eq_item->const_item() && eq_item->val_bool())
          it.remove();
      }
      cond_arg_list->append((List<Item> *) cond_equalities);
@@ -19147,7 +19624,7 @@ Item_cond::remove_eq_conds(THD *thd, Item::cond_result *cond_value,
       List_iterator_fast<Item_equal> ei(*cond_equalities);
       while ((equality= ei++))
       {
-        if (equality->const_item() && !equality->val_int())
+        if (equality->const_item() && !equality->val_bool())
         {
           *cond_value= Item::COND_FALSE;
           return (COND*) 0;
@@ -20101,6 +20578,7 @@ TABLE *Create_tmp_table::start(THD *thd,
   table->copy_blobs= 1;
   table->in_use= thd;
   table->no_rows_with_nulls= param->force_not_null_cols;
+  table->group_concat= param->group_concat;
   table->expr_arena= thd;
 
   table->s= share;
@@ -21840,7 +22318,7 @@ do_select(JOIN *join, Procedure *procedure)
       sufficient to check only the condition pseudo_bits_cond.
     */
     DBUG_ASSERT(join->outer_ref_cond == NULL);
-    if (!join->pseudo_bits_cond || join->pseudo_bits_cond->val_int())
+    if (!join->pseudo_bits_cond || join->pseudo_bits_cond->val_bool())
     {
       // HAVING will be checked by end_select
       error= (*end_select)(join, 0, 0);
@@ -21868,7 +22346,7 @@ do_select(JOIN *join, Procedure *procedure)
         */
         clear_tables(join, &cleared_tables);
       }
-      if (!join->having || join->having->val_int())
+      if (!join->having || join->having->val_bool())
       {
         List<Item> *columns_list= (procedure ? &join->procedure_fields_list :
                                    join->fields);
@@ -21901,7 +22379,7 @@ do_select(JOIN *join, Procedure *procedure)
 
     JOIN_TAB *join_tab= join->join_tab +
                         (join->tables_list ? join->const_tables : 0);
-    if (join->outer_ref_cond && !join->outer_ref_cond->val_int())
+    if (join->outer_ref_cond && !join->outer_ref_cond->val_bool())
       error= NESTED_LOOP_NO_MORE_ROWS;
     else
       error= join->first_select(join,join_tab,0);
@@ -22360,7 +22838,7 @@ sub_select(JOIN *join,JOIN_TAB *join_tab,bool end_of_records)
 
     /* Set first_unmatched for the last inner table of this group */
     join_tab->last_inner->first_unmatched= join_tab;
-    if (join_tab->on_precond && !join_tab->on_precond->val_int())
+    if (join_tab->on_precond && !join_tab->on_precond->val_bool())
       rc= NESTED_LOOP_NO_MORE_ROWS;
   }
   join->thd->get_stmt_da()->reset_current_row_for_warning(1);
@@ -22479,7 +22957,7 @@ evaluate_join_record(JOIN *join, JOIN_TAB *join_tab,
 
   if (select_cond)
   {
-    select_cond_result= MY_TEST(select_cond->val_int());
+    select_cond_result= MY_TEST(select_cond->val_bool());
 
     /* check for errors evaluating the condition */
     if (unlikely(join->thd->is_error()))
@@ -22539,7 +23017,7 @@ evaluate_join_record(JOIN *join, JOIN_TAB *join_tab,
         */
         if (tab->select_cond)
         {
-          const longlong res= tab->select_cond->val_int();
+          const longlong res= tab->select_cond->val_bool();
           if (join->thd->is_error())
             DBUG_RETURN(NESTED_LOOP_ERROR);
 
@@ -22678,7 +23156,7 @@ evaluate_null_complemented_join_record(JOIN *join, JOIN_TAB *join_tab)
     mark_as_null_row(join_tab->table);       // For group by without error
     select_cond= join_tab->select_cond;
     /* Check all attached conditions for inner table rows. */
-    if (select_cond && !select_cond->val_int())
+    if (select_cond && !select_cond->val_bool())
       return NESTED_LOOP_OK;
   }
   join_tab--;
@@ -22700,7 +23178,7 @@ evaluate_null_complemented_join_record(JOIN *join, JOIN_TAB *join_tab)
     first_unmatched->found= 1;
     for (JOIN_TAB *tab= first_unmatched; tab <= join_tab; tab++)
     {
-      if (tab->select_cond && !tab->select_cond->val_int())
+      if (tab->select_cond && !tab->select_cond->val_bool())
       {
         join->return_tab= tab;
         return NESTED_LOOP_OK;
@@ -22875,7 +23353,7 @@ join_read_const_table(THD *thd, JOIN_TAB *tab, POSITION *pos)
     (*tab->on_expr_ref)->update_used_tables();
     DBUG_ASSERT((*tab->on_expr_ref)->const_item());
 #endif
-    if ((table->null_row= MY_TEST((*tab->on_expr_ref)->val_int() == 0)))
+    if ((table->null_row= MY_TEST((*tab->on_expr_ref)->val_bool() == 0)))
       mark_as_null_row(table);  
   }
   if (!table->null_row && ! tab->join->mixed_implicit_grouping)
@@ -23631,7 +24109,7 @@ end_send(JOIN *join, JOIN_TAB *join_tab, bool end_of_records)
     /* Copy non-aggregated fields when loose index scan is used. */
     copy_fields(&join->tmp_table_param);
   }
-  if (join->having && join->having->val_int() == 0)
+  if (join->having && join->having->val_bool() == 0)
     DBUG_RETURN(NESTED_LOOP_OK);               // Didn't match having
   if (join->procedure)
   {
@@ -23796,7 +24274,7 @@ end_send_group(JOIN *join, JOIN_TAB *join_tab, bool end_of_records)
 	int error=0;
 	if (join->procedure)
 	{
-	  if (join->having && join->having->val_int() == 0)
+	  if (join->having && !join->having->val_bool())
 	    error= -1;				// Didn't satisfy having
 	  else
 	  {
@@ -23822,7 +24300,7 @@ end_send_group(JOIN *join, JOIN_TAB *join_tab, bool end_of_records)
             while ((item= it++))
               item->no_rows_in_result();
 	  }
-	  if (join->having && join->having->val_int() == 0)
+	  if (join->having && join->having->val_bool() == 0)// TODO: tests
 	    error= -1;				// Didn't satisfy having
 	  else
 	  {
@@ -23932,7 +24410,7 @@ end_write(JOIN *join, JOIN_TAB *join_tab __attribute__((unused)),
     if (copy_funcs(join_tab->tmp_table_param->items_to_copy, join->thd))
       DBUG_RETURN(NESTED_LOOP_ERROR);           /* purecov: inspected */
 
-    if (likely(!join_tab->having || join_tab->having->val_int()))
+    if (likely(!join_tab->having || join_tab->having->val_bool()))
     {
       int error;
       join->found_records++;
@@ -24183,7 +24661,7 @@ end_write_group(JOIN *join, JOIN_TAB *join_tab __attribute__((unused)),
         }
         copy_sum_funcs(join->sum_funcs,
                        join->sum_funcs_end[send_group_parts]);
-	if (!join_tab->having || join_tab->having->val_int())
+	if (!join_tab->having || join_tab->having->val_bool())
 	{
           int error= table->file->ha_write_tmp_row(table->record[0]);
           if (unlikely(error) &&
@@ -24802,7 +25280,7 @@ static int test_if_order_by_key(JOIN *join,
     if (have_pk_suffix &&
         reverse == 0 && // all were =const so far
         key_parts == table->key_info[idx].ext_key_parts && 
-        table->const_key_parts[pk] == PREV_BITS(uint, 
+        table->const_key_parts[pk] == PREV_BITS(key_part_map,
                                                 table->key_info[pk].
                                                 user_defined_key_parts))
     {
@@ -25103,6 +25581,7 @@ find_field_in_item_list (Field *field, void *data)
   that belong to 'table' and are equal to 'item_field'.
 */
 
+static
 void compute_part_of_sort_key_for_equals(JOIN *join, TABLE *table,
                                          Item_field *item_field,
                                          key_map *col_keys)
@@ -25247,6 +25726,59 @@ static void prepare_for_reverse_ordered_access(JOIN_TAB *tab)
 }
 
 
+/*
+  @brief
+    Given a table and order, find indexes that produce rows in the order
+
+  @param  usable_keys  IN   Bitmap of keys we can use
+                       OUT  Bitmap of indexes that produce rows in order.
+
+  @return
+     false  Some indexes were found
+     true   No indexes found
+*/
+
+static
+bool find_indexes_matching_order(JOIN *join, TABLE *table, ORDER *order,
+                                 key_map *usable_keys)
+{
+  /* Find indexes that cover all ORDER/GROUP BY fields */
+  for (ORDER *tmp_order=order; tmp_order ; tmp_order=tmp_order->next)
+  {
+    Item *item= (*tmp_order->item)->real_item();
+    if (item->type() != Item::FIELD_ITEM)
+    {
+      usable_keys->clear_all();
+      return true;  /* No suitable keys */
+    }
+
+    /*
+      Take multiple-equalities into account. Suppose we have
+        ORDER BY col1, col10
+      and there are
+         multiple-equal(col1, col2, col3),
+         multiple-equal(col10, col11).
+
+      Then,
+      - when item=col1, we find the set of indexes that cover one of {col1,
+        col2, col3}
+      - when item=col10, we find the set of indexes that cover one of {col10,
+        col11}
+
+      And we compute an intersection of these sets to find set of indexes that
+      cover all ORDER BY components.
+    */
+    key_map col_keys;
+    compute_part_of_sort_key_for_equals(join, table, (Item_field*)item,
+                                        &col_keys);
+    usable_keys->intersect(col_keys);
+    if (usable_keys->is_clear_all())
+      return true; // No usable keys
+  }
+  return false;
+
+}
+
 /**
   Test if we can skip the ORDER BY by using an index.
 
@@ -25308,41 +25840,17 @@ test_if_skip_sort_order(JOIN_TAB *tab,ORDER *order,ha_rows select_limit,
     been taken into account.
   */
   usable_keys= *map;
-  
-  /* Find indexes that cover all ORDER/GROUP BY fields */
-  for (ORDER *tmp_order=order; tmp_order ; tmp_order=tmp_order->next)
+
+  // Step #1: Find indexes that produce the required ordering.
+  if (find_indexes_matching_order(tab->join, table, order, &usable_keys))
   {
-    Item *item= (*tmp_order->item)->real_item();
-    if (item->type() != Item::FIELD_ITEM)
-    {
-      usable_keys.clear_all();
-      DBUG_RETURN(0);
-    }
-
-    /*
-      Take multiple-equalities into account. Suppose we have
-        ORDER BY col1, col10
-      and there are
-         multiple-equal(col1, col2, col3),
-         multiple-equal(col10, col11).
-
-      Then, 
-      - when item=col1, we find the set of indexes that cover one of {col1,
-        col2, col3}
-      - when item=col10, we find the set of indexes that cover one of {col10,
-        col11}
-
-      And we compute an intersection of these sets to find set of indexes that
-      cover all ORDER BY components.
-    */
-    key_map col_keys;
-    compute_part_of_sort_key_for_equals(tab->join, table, (Item_field*)item,
-                                        &col_keys);
-    usable_keys.intersect(col_keys);
-    if (usable_keys.is_clear_all())
-      goto use_filesort;                        // No usable keys
+    DBUG_RETURN(false); // Cannot skip sorting
   }
 
+  /*
+    Step #2: Analyze the current access method. Note the used index as ref_key
+    and #used keyparts in ref_key_parts.
+  */
   ref_key= -1;
   /* Test if constant range in WHERE */
   if (tab->ref.key >= 0 && tab->ref.key_parts)
@@ -25386,6 +25894,12 @@ test_if_skip_sort_order(JOIN_TAB *tab,ORDER *order,ha_rows select_limit,
     }
   }
 
+  /*
+    Step #3: Check if index ref_key that we're using produces the required
+    ordering or if there is another index new_ref_key such that
+    - ref_key is a prefix of new_ref_key  (so, access method can be reused)
+    - new_ref_key produces the required ordering
+  */
   if (ref_key >= 0 && ref_key != MAX_KEY)
   {
     /* Current access method uses index ref_key with ref_key_parts parts */
@@ -25505,17 +26019,24 @@ test_if_skip_sort_order(JOIN_TAB *tab,ORDER *order,ha_rows select_limit,
 					       &used_key_parts)))
       goto check_reverse_order;
   }
+
+  /*
+    Step #4: Go through all indexes that produce required ordering (in
+    usable_keys) and check if any of them is cheaper than ref_key
+  */
   {
     uint UNINIT_VAR(best_key_parts);
     uint saved_best_key_parts= 0;
     int best_key_direction= 0;
     JOIN *join= tab->join;
     ha_rows table_records= table->stat_records();
+    double new_read_time_dummy;
 
-    test_if_cheaper_ordering(tab, order, table, usable_keys,
+    test_if_cheaper_ordering(FALSE, tab, order, table, usable_keys,
                              ref_key, select_limit,
                              &best_key, &best_key_direction,
-                             &select_limit, &best_key_parts,
+                             &select_limit, &new_read_time_dummy,
+                             &best_key_parts,
                              &saved_best_key_parts);
 
     /*
@@ -26143,7 +26664,7 @@ static int remove_dup_with_compare(THD *thd, TABLE *table, Field **first_field,
 	break;
       goto err;
     }
-    if (having && !having->val_int())
+    if (having && !having->val_bool())
     {
       if (unlikely((error= file->ha_delete_row(record))))
 	goto err;
@@ -26281,7 +26802,7 @@ static int remove_dup_with_hash_index(THD *thd, TABLE *table,
 	break;
       goto err;
     }
-    if (having && !having->val_int())
+    if (having && !having->val_bool())
     {
       if (unlikely((error= file->ha_delete_row(record))))
 	goto err;
@@ -28429,7 +28950,7 @@ int JOIN::rollup_send_data(uint idx)
     int res= 0;
     /* Get reference pointers to sum functions in place */
     copy_ref_ptr_array(ref_ptrs, rollup.ref_pointer_arrays[i]);
-    if ((!having || having->val_int()))
+    if ((!having || having->val_bool()))
     {
       if (send_records < unit->lim.get_select_limit() && do_send_rows &&
 	  (res= result->send_data_with_check(rollup.fields[i],
@@ -28472,7 +28993,7 @@ int JOIN::rollup_write_data(uint idx, TMP_TABLE_PARAM *tmp_table_param_arg,
   {
     /* Get reference pointers to sum functions in place */
     copy_ref_ptr_array(ref_ptrs, rollup.ref_pointer_arrays[i]);
-    if ((!having || having->val_int()))
+    if ((!having || having->val_bool()))
     {
       int write_error;
       Item *item;
@@ -30023,6 +30544,18 @@ void st_select_lex::print_on_duplicate_key_clause(THD *thd, String *str,
   }
 }
 
+
+void st_select_lex::print_lock_type(String *str)
+{
+  if (select_lock == select_lock_type::IN_SHARE_MODE)
+    str->append(STRING_WITH_LEN(" lock in share mode"));
+  else if (select_lock == select_lock_type::FOR_UPDATE)
+    str->append(STRING_WITH_LEN(" for update"));
+  if (unlikely(skip_locked))
+    str->append(STRING_WITH_LEN(" skip locked"));
+}
+
+
 void st_select_lex::print(THD *thd, String *str, enum_query_type query_type)
 {
   DBUG_ASSERT(thd);
@@ -30294,12 +30827,9 @@ void st_select_lex::print(THD *thd, String *str, enum_query_type query_type)
   print_limit(thd, str, query_type);
 
   // lock type
-  if (select_lock == select_lock_type::IN_SHARE_MODE)
-    str->append(STRING_WITH_LEN(" lock in share mode"));
-  else if (select_lock == select_lock_type::FOR_UPDATE)
-    str->append(STRING_WITH_LEN(" for update"));
-  if (unlikely(skip_locked))
-    str->append(STRING_WITH_LEN(" skip locked"));
+  if (braces) /* no braces processed in
+                 SELECT_LEX_UNIT::print_lock_from_the_last_select */
+    print_lock_type(str);
 
   if ((sel_type == INSERT_CMD || sel_type == REPLACE_CMD) &&
       thd->lex->update_list.elements)
@@ -30758,11 +31288,13 @@ static bool get_range_limit_read_cost(const JOIN_TAB *tab,
 */
 
 static bool
-test_if_cheaper_ordering(const JOIN_TAB *tab, ORDER *order, TABLE *table,
+test_if_cheaper_ordering(bool in_join_optimizer,
+                         const JOIN_TAB *tab, ORDER *order, TABLE *table,
                          key_map usable_keys,  int ref_key,
                          ha_rows select_limit_arg,
                          int *new_key, int *new_key_direction,
-                         ha_rows *new_select_limit, uint *new_used_key_parts,
+                         ha_rows *new_select_limit, double *new_read_time,
+                         uint *new_used_key_parts,
                          uint *saved_best_key_parts)
 {
   DBUG_ENTER("test_if_cheaper_ordering");
@@ -30820,7 +31352,7 @@ test_if_cheaper_ordering(const JOIN_TAB *tab, ORDER *order, TABLE *table,
 
   if (join)
   {
-    uint tablenr= (uint)(tab - join->join_tab);
+    uint tablenr= join->const_tables;
     read_time= join->best_positions[tablenr].read_time;
     records= join->best_positions[tablenr].records_read;
     for (uint i= tablenr+1; i < join->table_count; i++)
@@ -30858,12 +31390,27 @@ test_if_cheaper_ordering(const JOIN_TAB *tab, ORDER *order, TABLE *table,
     Calculate the selectivity of the ref_key for REF_ACCESS. For
     RANGE_ACCESS we use table->opt_range_condition_rows.
   */
-  if (ref_key >= 0 && ref_key != MAX_KEY && tab->type == JT_REF)
+  if (in_join_optimizer)
+  {
+    if (ref_key >= 0 && ref_key != MAX_KEY &&
+        join->best_positions[join->const_tables].type == JT_REF)
+    {
+      refkey_rows_estimate=
+        (ha_rows)join->best_positions[join->const_tables].records_read;
+      set_if_bigger(refkey_rows_estimate, 1);
+    }
+  }
+  else if (ref_key >= 0 && ref_key != MAX_KEY && tab->type == JT_REF)
   {
     /*
       If ref access uses keypart=const for all its key parts,
       and quick select uses the same # of key parts, then they are equivalent.
       Reuse #rows estimate from quick select as it is more precise.
+
+      Note: we could just have used
+        join->best_positions[join->const_tables].records_read
+      here. That number was computed in best_access_path() and it already
+      includes adjustments based on table->opt_range[ref_key].rows.
     */
     if (tab->ref.const_ref_part_map ==
         make_prev_keypart_map(tab->ref.key_parts) &&
@@ -30873,7 +31420,8 @@ test_if_cheaper_ordering(const JOIN_TAB *tab, ORDER *order, TABLE *table,
     else
     {
       const KEY *ref_keyinfo= table->key_info + ref_key;
-      refkey_rows_estimate= ref_keyinfo->rec_per_key[tab->ref.key_parts - 1];
+      refkey_rows_estimate=
+        (ha_rows)ref_keyinfo->actual_rec_per_key(tab->ref.key_parts - 1);
     }
     set_if_bigger(refkey_rows_estimate, 1);
   }
@@ -31189,6 +31737,7 @@ test_if_cheaper_ordering(const JOIN_TAB *tab, ORDER *order, TABLE *table,
   *new_key= best_key;
   *new_key_direction= best_key_direction;
   *new_select_limit= has_limit ? best_select_limit : table_records;
+  *new_read_time= read_time;
   if (new_used_key_parts != NULL)
     *new_used_key_parts= best_key_parts;
   DBUG_RETURN(TRUE);
@@ -31288,10 +31837,11 @@ uint get_index_for_order(ORDER *order, TABLE *table, SQL_SELECT *select,
     table->opt_range_condition_rows= table->stat_records();
     
     int key, direction;
-    if (test_if_cheaper_ordering(NULL, order, table,
+    double new_cost;
+    if (test_if_cheaper_ordering(FALSE, NULL, order, table,
                                  table->keys_in_use_for_order_by, -1,
                                  limit,
-                                 &key, &direction, &limit) &&
+                                 &key, &direction, &limit, &new_cost) &&
         !is_key_used(table, key, table->write_set))
     {
       *need_sort= FALSE;

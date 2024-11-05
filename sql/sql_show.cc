@@ -1859,7 +1859,7 @@ static void add_table_options(THD *thd, TABLE *table,
     hton= table->part_info->default_engine_type;
   else
 #endif
-    hton= table->file->ht;
+    hton= table->file->storage_ht();
 
   bzero((char*) &create_info, sizeof(create_info));
   /* Allow update_create_info to update row type, page checksums and options */
@@ -3888,7 +3888,7 @@ static bool show_status_array(THD *thd, const char *wild,
       if ((wild_checked ||
            !(wild && wild[0] && wild_case_compare(system_charset_info,
                                                   name_buffer, wild))) &&
-          (!cond || cond->val_int()))
+          (!cond || cond->val_bool()))
       {
         const char *pos;                  // We assign a lot of const's
         size_t length;
@@ -5373,7 +5373,7 @@ int get_all_tables(THD *thd, TABLE_LIST *tables, COND *cond)
         table->field[schema_table->idx_field2]->
           store(table_name->str, table_name->length, system_charset_info);
 
-        if (!partial_cond || partial_cond->val_int())
+        if (!partial_cond || partial_cond->val_bool())
         {
           /*
             If table is I_S.tables and open_table_method is 0 (eg SKIP_OPEN)
@@ -8329,7 +8329,7 @@ int fill_status(THD *thd, TABLE_LIST *tables, COND *cond)
   COND *partial_cond= make_cond_for_info_schema(thd, cond, tables);
   // Evaluate and cache const subqueries now, before the mutex.
   if (partial_cond)
-    partial_cond->val_int();
+    partial_cond->val_bool();
 
   tmp.local_memory_used= 0; // meaning tmp was not populated yet
 
@@ -9601,7 +9601,7 @@ ST_FIELD_INFO stat_fields_info[]=
   Column("NON_UNIQUE",    SLonglong(1),NOT_NULL, "Non_unique",  OPEN_FRM_ONLY),
   Column("INDEX_SCHEMA",  Name(),      NOT_NULL,                OPEN_FRM_ONLY),
   Column("INDEX_NAME",    Name(),      NOT_NULL, "Key_name",    OPEN_FRM_ONLY),
-  Column("SEQ_IN_INDEX",  SLonglong(2),NOT_NULL, "Seq_in_index",OPEN_FRM_ONLY),
+  Column("SEQ_IN_INDEX",  ULong(2),    NOT_NULL, "Seq_in_index",OPEN_FRM_ONLY),
   Column("COLUMN_NAME",   Name(),      NOT_NULL, "Column_name", OPEN_FRM_ONLY),
   Column("COLLATION",     Varchar(1),  NULLABLE, "Collation",   OPEN_FULL_TABLE),
   Column("CARDINALITY",   SLonglong(), NULLABLE, "Cardinality", OPEN_FULL_TABLE),

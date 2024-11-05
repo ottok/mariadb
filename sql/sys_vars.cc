@@ -2097,15 +2097,6 @@ struct gtid_binlog_state_data { rpl_gtid *list; uint32 list_len; };
 bool
 Sys_var_gtid_binlog_state::do_check(THD *thd, set_var *var)
 {
-  String str, *res;
-  struct gtid_binlog_state_data *data;
-  rpl_gtid *list;
-  uint32 list_len;
-
-  DBUG_ASSERT(var->type == OPT_GLOBAL);
-
-  if (!(res= var->value->val_str(&str)))
-    return true;
   if (thd->in_active_multi_stmt_transaction())
   {
     my_error(ER_CANT_DO_THIS_DURING_AN_TRANSACTION, MYF(0));
@@ -2121,6 +2112,31 @@ Sys_var_gtid_binlog_state::do_check(THD *thd, set_var *var)
     my_error(ER_BINLOG_MUST_BE_EMPTY, MYF(0));
     return true;
   }
+  return false;
+}
+
+
+bool
+Sys_var_gtid_binlog_state::global_update(THD *thd, set_var *var)
+{
+  DBUG_ASSERT(var->type == OPT_GLOBAL);
+
+  if (!var->value)
+  {
+    my_error(ER_NO_DEFAULT, MYF(0), var->var->name.str);
+    return true;
+  }
+
+  bool result;
+  String str, *res;
+  struct gtid_binlog_state_data *data;
+  rpl_gtid *list;
+  uint32 list_len;
+
+  DBUG_ASSERT(var->type == OPT_GLOBAL);
+
+  if (!(res= var->value->val_str(&str)))
+    return true;
   if (res->length() == 0)
   {
     list= NULL;
@@ -2142,31 +2158,13 @@ Sys_var_gtid_binlog_state::do_check(THD *thd, set_var *var)
   data->list= list;
   data->list_len= list_len;
   var->save_result.ptr= data;
-  return false;
-}
-
-
-bool
-Sys_var_gtid_binlog_state::global_update(THD *thd, set_var *var)
-{
-  bool res;
-
-  DBUG_ASSERT(var->type == OPT_GLOBAL);
-
-  if (!var->value)
-  {
-    my_error(ER_NO_DEFAULT, MYF(0), var->var->name.str);
-    return true;
-  }
-
-  struct gtid_binlog_state_data *data=
-    (struct gtid_binlog_state_data *)var->save_result.ptr;
+  
   mysql_mutex_unlock(&LOCK_global_system_variables);
-  res= (reset_master(thd, data->list, data->list_len, 0) != 0);
+  result= (reset_master(thd, data->list, data->list_len, 0) != 0);
   mysql_mutex_lock(&LOCK_global_system_variables);
   my_free(data->list);
   my_free(data);
-  return res;
+  return result;
 }
 
 
@@ -2816,6 +2814,20 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
        VALID_RANGE(SELECTIVITY_SAMPLING_THRESHOLD, UINT_MAX),
        DEFAULT(SELECTIVITY_SAMPLING_LIMIT), BLOCK_SIZE(1));
 
+static Sys_var_ulonglong Sys_optimizer_join_limit_pref_ratio(
+       "optimizer_join_limit_pref_ratio",
+       "For queries with JOIN and ORDER BY LIMIT : make the optimizer "
+       "consider a join order that allows to short-cut execution after "
+       "producing #LIMIT matches if that promises N times speedup. "
+       "(A conservative setting here would be is a high value, like 100 so "
+       "the short-cutting plan is used if it promises a speedup of 100x or "
+       "more). Short-cutting plans are inherently risky so the default is 0 "
+       "which means do not consider this optimization",
+       SESSION_VAR(optimizer_join_limit_pref_ratio),
+       CMD_LINE(REQUIRED_ARG),
+       VALID_RANGE(0, UINT_MAX),
+       DEFAULT(0), BLOCK_SIZE(1));
+
 static Sys_var_ulong Sys_optimizer_use_condition_selectivity(
        "optimizer_use_condition_selectivity",
        "Controls selectivity of which conditions the optimizer takes into "
@@ -2944,7 +2956,9 @@ static Sys_var_ulong Sys_optimizer_trace_max_mem_size(
 */
 static const char *adjust_secondary_key_cost[]=
 {
-  "adjust_secondary_key_cost", "disable_max_seek", "disable_forced_index_in_group_by", "fix_innodb_cardinality",0
+  "adjust_secondary_key_cost", "disable_max_seek", "disable_forced_index_in_group_by",
+  "fix_innodb_cardinality", "fix_reuse_range_for_ref",
+  "fix_card_multiplier", 0
 };
 
 
@@ -2959,10 +2973,15 @@ static Sys_var_set Sys_optimizer_adjust_secondary_key_costs(
     "GROUP BY. "
     "fix_innodb_cardinality = Disable doubling of the Cardinality for InnoDB "
     "secondary keys. "
+    "fix_reuse_range_for_ref = Do a better job at reusing range access estimates "
+    "when estimating ref access. "
+    "fix_card_multiplier = Fix the computation in selectivity_for_indexes."
+    " selectivity_multiplier. "
+
     "This variable will be deleted in MariaDB 11.0 as it is not needed with the "
     "new 11.0 optimizer.",
     SESSION_VAR(optimizer_adjust_secondary_key_costs), CMD_LINE(REQUIRED_ARG),
-    adjust_secondary_key_cost, DEFAULT(0));
+    adjust_secondary_key_cost, DEFAULT(OPTIMIZER_ADJ_DEFAULT));
 
 
 static Sys_var_charptr_fscs Sys_pid_file(
@@ -4123,7 +4142,8 @@ static Sys_var_on_access_global<Sys_var_enum,
                                 PRIV_SET_SYSTEM_GLOBAL_VAR_THREAD_POOL>
 Sys_threadpool_mode(
   "thread_pool_mode",
-  "Chose implementation of the threadpool",
+  "Chose implementation of the threadpool. Use 'windows' unless you have a "
+  "workload with a lot of concurrent connections and minimal contention",
   READ_ONLY GLOBAL_VAR(threadpool_mode), CMD_LINE(REQUIRED_ARG),
   threadpool_mode_names, DEFAULT(TP_MODE_WINDOWS)
   );

@@ -368,7 +368,6 @@ end:
 static THD *new_bg_THD()
 {
   THD *thd= new THD(next_thread_id());
-  thd->thread_stack= (char*) &thd;
   thd->store_globals();
   thd->system_thread = SYSTEM_THREAD_SLAVE_BACKGROUND;
   thd->security_ctx->skip_grants();
@@ -629,7 +628,6 @@ int init_slave()
   {
     int error;
     THD *thd= new THD(next_thread_id());
-    thd->thread_stack= (char*) &thd;
     thd->store_globals();
 
     error= start_slave_threads(0, /* No active thd */
@@ -1089,6 +1087,8 @@ terminate_slave_thread(THD *thd,
 
     mysql_mutex_unlock(&thd->LOCK_thd_kill);
     mysql_mutex_unlock(&thd->LOCK_thd_data);
+
+    DEBUG_SYNC(current_thd, "after_thd_awake_kill");
 
     /*
       There is a small chance that slave thread might miss the first
@@ -3855,13 +3855,26 @@ sql_delay_event(Log_event *ev, THD *thd, rpl_group_info *rgi)
                         sql_delay, (long)ev->when,
                         rli->mi->clock_diff_with_master,
                         (long)now, (ulonglong)sql_delay_end, (long)nap_time));
-
-    if (sql_delay_end > now)
+    /* if using debug_sync for sql_delay, only delay once per event group */
+    if (DBUG_IF("sql_delay_by_debug_sync")
+        ? type == GTID_EVENT : sql_delay_end > now)
     {
       DBUG_PRINT("info", ("delaying replication event %lu secs",
                           nap_time));
       rli->start_sql_delay(sql_delay_end);
       mysql_mutex_unlock(&rli->data_lock);
+
+#ifdef ENABLED_DEBUG_SYNC
+      DBUG_EXECUTE_IF("sql_delay_by_debug_sync", {
+        DBUG_ASSERT(!debug_sync_set_action(
+            thd, STRING_WITH_LEN(
+                     "now SIGNAL at_sql_delay WAIT_FOR continue_sql_thread")));
+
+        // Skip the actual sleep if using DEBUG_SYNC to coordinate SQL_DELAY
+        DBUG_RETURN(0);
+      };);
+#endif
+
       DBUG_RETURN(slave_sleep(thd, nap_time, sql_slave_killed, rgi));
     }
   }
@@ -4833,7 +4846,12 @@ pthread_handler_t handle_slave_io(void *arg)
   thd->set_psi(PSI_CALL_get_thread());
 
   pthread_detach_this_thread();
-  thd->thread_stack= (char*) &thd; // remember where our stack is
+  /*
+    Remember where our stack is. This is needed for this function as
+    there are a lot of stack variables. It will be fixed in store_globals()
+    called by init_slave_thread().
+  */
+  thd->thread_stack= (void*) &thd; // remember where our stack is
   mi->clear_error();
   if (init_slave_thread(thd, mi, SLAVE_THD_IO))
   {
@@ -5478,7 +5496,7 @@ pthread_handler_t handle_slave_sql(void *arg)
 
   serial_rgi= new rpl_group_info(rli);
   thd = new THD(next_thread_id()); // note that contructor of THD uses DBUG_ !
-  thd->thread_stack = (char*)&thd; // remember where our stack is
+  thd->thread_stack= (void*) &thd; // Big stack, remember where our stack is
   thd->system_thread_info.rpl_sql_info= &sql_info;
 
   DBUG_ASSERT(rli->inited);

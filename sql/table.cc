@@ -281,17 +281,6 @@ const char *fn_frm_ext(const char *name)
 TABLE_CATEGORY get_table_category(const Lex_ident_db &db,
                                   const Lex_ident_table &name)
 {
-#ifdef WITH_WSREP
-  if (db.str && db.streq(MYSQL_SCHEMA_NAME))
-  {
-    if (name.streq(Lex_ident_table{STRING_WITH_LEN(WSREP_STREAMING_TABLE)}) ||
-        name.streq(Lex_ident_table{STRING_WITH_LEN(WSREP_CLUSTER_TABLE)}) ||
-        name.streq(Lex_ident_table{STRING_WITH_LEN(WSREP_MEMBERS_TABLE)}))
-    {
-      return TABLE_CATEGORY_INFORMATION;
-    }
-  }
-#endif /* WITH_WSREP */
   if (is_infoschema_db(&db))
     return TABLE_CATEGORY_INFORMATION;
 
@@ -312,6 +301,20 @@ TABLE_CATEGORY get_table_category(const Lex_ident_db &db,
     if (name.streq(TRANSACTION_REG_NAME))
       return TABLE_CATEGORY_LOG;
   }
+
+#ifdef WITH_WSREP
+  if (db.streq(WSREP_LEX_SCHEMA))
+  {
+    if(name.streq(WSREP_LEX_STREAMING))
+      return TABLE_CATEGORY_INFORMATION;
+    if (name.streq(WSREP_LEX_CLUSTER))
+      return TABLE_CATEGORY_INFORMATION;
+    if (name.streq(WSREP_LEX_MEMBERS))
+      return TABLE_CATEGORY_INFORMATION;
+    if (name.streq(WSREP_LEX_ALLOWLIST))
+      return TABLE_CATEGORY_INFORMATION;
+  }
+#endif /* WITH_WSREP */
 
   return TABLE_CATEGORY_USER;
 }
@@ -1725,9 +1728,9 @@ public:
 */
 
 #ifdef WITH_PARTITION_STORAGE_ENGINE
-static bool change_to_partiton_engine(LEX_CSTRING *name,
-                                      plugin_ref *se_plugin)
+static bool change_to_partiton_engine(plugin_ref *se_plugin)
 {
+  LEX_CSTRING name= { STRING_WITH_LEN("partition") };
   /*
     Use partition handler
     tmp_plugin is locked with a local lock.
@@ -1735,10 +1738,9 @@ static bool change_to_partiton_engine(LEX_CSTRING *name,
     replacing it with a globally locked version of tmp_plugin
   */
   /* Check if the partitioning engine is ready */
-  if (!plugin_is_ready(name, MYSQL_STORAGE_ENGINE_PLUGIN))
+  if (!plugin_is_ready(&name, MYSQL_STORAGE_ENGINE_PLUGIN))
   {
-    my_error(ER_OPTION_PREVENTS_STATEMENT, MYF(0),
-             "--skip-partition");
+    my_error(ER_OPTION_PREVENTS_STATEMENT, MYF(0), "--skip-partition");
     return 1;
   }
   plugin_unlock(NULL, *se_plugin);
@@ -2036,7 +2038,7 @@ int TABLE_SHARE::init_from_binary_frm_image(THD *thd, bool write,
       else if (str_db_type_length == 9 &&
                !strncmp((char *) next_chunk + 2, "partition", 9))
       {
-        if (change_to_partiton_engine(&se_name, &se_plugin))
+        if (change_to_partiton_engine(&se_plugin))
           goto err;
       }
 #endif
@@ -2075,7 +2077,7 @@ int TABLE_SHARE::init_from_binary_frm_image(THD *thd, bool write,
             share->mysql_version >= 50600 && share->mysql_version <= 50799)
         {
           share->keep_original_mysql_version= 1;
-          if (change_to_partiton_engine(&se_name, &se_plugin))
+          if (change_to_partiton_engine(&se_plugin))
             goto err;
         }
       }
@@ -6433,7 +6435,7 @@ int TABLE_LIST::view_check_option(THD *thd, bool ignore_failure)
     /* VIEW's CHECK OPTION CLAUSE */
     Counting_error_handler ceh;
     thd->push_internal_handler(&ceh);
-    bool res= check_option->val_int() == 0;
+    bool res= check_option->val_bool() == false;
     thd->pop_internal_handler();
     if (ceh.errors)
       return(VIEW_CHECK_ERROR);
@@ -6476,7 +6478,7 @@ int TABLE::verify_constraints(bool ignore_failure)
         yes! NULL is ok.
         see 4.23.3.4 Table check constraints, part 2, SQL:2016
       */
-      if (((*chk)->expr->val_int() == 0 && !(*chk)->expr->null_value) ||
+      if (((*chk)->expr->val_bool() == false && !(*chk)->expr->null_value) ||
           in_use->is_error())
       {
         enum_vcol_info_type vcol_type= (*chk)->get_vcol_type();
@@ -9378,6 +9380,8 @@ void TABLE::vers_update_end()
   if (vers_end_field()->store_timestamp(in_use->query_start(),
                                         in_use->query_start_sec_part()))
     DBUG_ASSERT(0);
+  if (vfield)
+    update_virtual_fields(file, VCOL_UPDATE_FOR_WRITE);
 }
 
 /**
@@ -10106,7 +10110,7 @@ uint TABLE_SHARE::actual_n_key_parts(THD *thd)
 }  
 
 
-double KEY::actual_rec_per_key(uint i)
+double KEY::actual_rec_per_key(uint i) const
 { 
   if (rec_per_key == 0)
     return 0;

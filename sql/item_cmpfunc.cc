@@ -197,7 +197,7 @@ static uint collect_cmp_types(Item **items, uint nitems, bool skip_nulls= FALSE)
   NULL if some arg is NULL.
 */
 
-longlong Item_func_not::val_int()
+bool Item_func_not::val_bool()
 {
   DBUG_ASSERT(fixed());
   bool value= args[0]->val_bool();
@@ -216,7 +216,7 @@ void Item_func_not::print(String *str, enum_query_type query_type)
 */
 
 
-longlong Item_func_not_all::val_int()
+bool Item_func_not_all::val_bool()
 {
   DBUG_ASSERT(fixed());
   bool value= args[0]->val_bool();
@@ -257,7 +257,7 @@ void Item_func_not_all::print(String *str, enum_query_type query_type)
     returns some rows it return same value as argument (TRUE/FALSE).
 */
 
-longlong Item_func_nop_all::val_int()
+bool Item_func_nop_all::val_bool()
 {
   DBUG_ASSERT(fixed());
   longlong value= args[0]->val_int();
@@ -1245,12 +1245,6 @@ bool Item_func_truth::val_bool()
 }
 
 
-longlong Item_func_truth::val_int()
-{
-  return (val_bool() ? 1 : 0);
-}
-
-
 void Item_in_optimizer::fix_after_pullout(st_select_lex *new_parent,
                                           Item **ref, bool merge)
 {
@@ -1640,17 +1634,17 @@ void Item_in_optimizer::get_cache_parameters(List<Item> &parameters)
      @see Item_is_not_null_test::val_int()
 */
 
-longlong Item_in_optimizer::val_int()
+bool Item_in_optimizer::val_bool()
 {
   bool tmp;
   DBUG_ASSERT(fixed());
   cache->store(args[0]);
   cache->cache_value();
-  DBUG_ENTER(" Item_in_optimizer::val_int");
+  DBUG_ENTER(" Item_in_optimizer::val_bool");
 
   if (invisible_mode())
   {
-    longlong res= args[1]->val_int();
+    longlong res= args[1]->val_bool();
     null_value= args[1]->null_value;
     DBUG_PRINT("info", ("pass trough"));
     DBUG_RETURN(res);
@@ -1749,7 +1743,7 @@ void Item_in_optimizer::cleanup()
 
 bool Item_in_optimizer::is_null()
 {
-  val_int();
+  val_bool();
   return null_value;
 }
 
@@ -1845,11 +1839,21 @@ bool Item_in_optimizer::is_expensive()
 }
 
 
-longlong Item_func_eq::val_int()
+bool Item_func_eq::val_bool()
 {
   DBUG_ASSERT(fixed());
   int value= cmp.compare();
   return value == 0 ? 1 : 0;
+}
+
+
+Item *Item_func_eq::do_build_clone(THD *thd) const
+{
+  /*
+    Clone the parent and cast to the child class since there is nothing
+    specific for Item_func_eq
+  */
+  return (Item_func_eq*) Item_bool_rowready_func2::do_build_clone(thd);
 }
 
 
@@ -1863,13 +1867,13 @@ bool Item_func_equal::fix_length_and_dec(THD *thd)
   return rc;
 }
 
-longlong Item_func_equal::val_int()
+bool Item_func_equal::val_bool()
 {
   DBUG_ASSERT(fixed());
   return cmp.compare();
 }
 
-longlong Item_func_ne::val_int()
+bool Item_func_ne::val_bool()
 {
   DBUG_ASSERT(fixed());
   int value= cmp.compare();
@@ -1877,7 +1881,7 @@ longlong Item_func_ne::val_int()
 }
 
 
-longlong Item_func_ge::val_int()
+bool Item_func_ge::val_bool()
 {
   DBUG_ASSERT(fixed());
   int value= cmp.compare();
@@ -1885,14 +1889,14 @@ longlong Item_func_ge::val_int()
 }
 
 
-longlong Item_func_gt::val_int()
+bool Item_func_gt::val_bool()
 {
   DBUG_ASSERT(fixed());
   int value= cmp.compare();
   return value > 0 ? 1 : 0;
 }
 
-longlong Item_func_le::val_int()
+bool Item_func_le::val_bool()
 {
   DBUG_ASSERT(fixed());
   int value= cmp.compare();
@@ -1900,7 +1904,7 @@ longlong Item_func_le::val_int()
 }
 
 
-longlong Item_func_lt::val_int()
+bool Item_func_lt::val_bool()
 {
   DBUG_ASSERT(fixed());
   int value= cmp.compare();
@@ -4863,7 +4867,7 @@ void Item_func_in::print(String *str, enum_query_type query_type)
     Value of the function
 */
 
-longlong Item_func_in::val_int()
+bool Item_func_in::val_bool()
 {
   DBUG_ASSERT(fixed());
   if (array)
@@ -5621,7 +5625,7 @@ void Item_cond_and::mark_as_condition_AND_part(TABLE_LIST *embedding)
 */
 
 
-longlong Item_cond_and::val_int()
+bool Item_cond_and::val_bool()
 {
   DBUG_ASSERT(fixed());
   List_iterator_fast<Item> li(list);
@@ -5639,7 +5643,7 @@ longlong Item_cond_and::val_int()
 }
 
 
-longlong Item_cond_or::val_int()
+bool Item_cond_or::val_bool()
 {
   DBUG_ASSERT(fixed());
   List_iterator_fast<Item> li(list);
@@ -5716,7 +5720,7 @@ bool Item_func_null_predicate::count_sargable_conds(void *arg)
 }
 
 
-longlong Item_func_isnull::val_int()
+bool Item_func_isnull::val_bool()
 {
   DBUG_ASSERT(fixed());
   if (const_item() && !args[0]->maybe_null())
@@ -5749,7 +5753,7 @@ void Item_func_isnull::print(String *str, enum_query_type query_type)
 }
 
 
-longlong Item_is_not_null_test::val_int()
+bool Item_is_not_null_test::val_bool()
 {
   DBUG_ASSERT(fixed());
   DBUG_ENTER("Item_is_not_null_test::val_int");
@@ -5777,7 +5781,7 @@ void Item_is_not_null_test::update_used_tables()
 }
 
 
-longlong Item_func_isnotnull::val_int()
+bool Item_func_isnotnull::val_bool()
 {
   DBUG_ASSERT(fixed());
   return args[0]->is_null() ? 0 : 1;
@@ -5816,7 +5820,7 @@ void Item_func_like::print(String *str, enum_query_type query_type)
 }
 
 
-longlong Item_func_like::val_int()
+bool Item_func_like::val_bool()
 {
   DBUG_ASSERT(fixed());
   DBUG_ASSERT(escape != ESCAPE_NOT_INITIALIZED);
@@ -6345,7 +6349,7 @@ Item_func_regex::fix_length_and_dec(THD *thd)
 }
 
 
-longlong Item_func_regex::val_int()
+bool Item_func_regex::val_bool()
 {
   DBUG_ASSERT(fixed());
   if ((null_value= re.recompile(args[1])))
@@ -6619,7 +6623,7 @@ bool Item_func_like::turboBM_matches(const char* text, int text_len) const
     very fast to use.
 */
 
-longlong Item_func_xor::val_int()
+bool Item_func_xor::val_bool()
 {
   DBUG_ASSERT(fixed());
   int result= 0;
@@ -7402,7 +7406,7 @@ bool Item_equal::count_sargable_conds(void *arg)
      1     otherwise
 */
 
-longlong Item_equal::val_int()
+bool Item_equal::val_bool()
 {
   if (cond_false)
     return 0;
@@ -7612,7 +7616,7 @@ Item* Item_equal::get_first(JOIN_TAB *context, Item *field_item)
 }
 
 
-longlong Item_func_dyncol_check::val_int()
+bool Item_func_dyncol_check::val_bool()
 {
   char buff[STRING_BUFFER_USUAL_SIZE];
   String tmp(buff, sizeof(buff), &my_charset_bin);
@@ -7640,7 +7644,7 @@ null:
   return 0;
 }
 
-longlong Item_func_dyncol_exists::val_int()
+bool Item_func_dyncol_exists::val_bool()
 {
   char buff[STRING_BUFFER_USUAL_SIZE], nmstrbuf[11];
   String tmp(buff, sizeof(buff), &my_charset_bin),
