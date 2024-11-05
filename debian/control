@@ -19,7 +19,7 @@ Build-Depends:
  libcurl4-openssl-dev | libcurl4-dev,
  libedit-dev,
  libedit-dev:native,
- libfmt-dev (>= 10.2.2) | libfmt-dev (<< 10),
+ libfmt-dev (>= 10.1.1+ds1-4) | libfmt-dev (<< 10),
  libjemalloc-dev [linux-any],
  libjudy-dev,
  libkrb5-dev,
