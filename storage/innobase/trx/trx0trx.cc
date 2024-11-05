@@ -114,6 +114,8 @@ trx_init(
 
 	trx->lock.n_rec_locks = 0;
 
+	trx->lock.set_nth_bit_calls = 0;
+
 	trx->dict_operation = false;
 
 	trx->error_state = DB_SUCCESS;
@@ -353,6 +355,7 @@ trx_t *trx_create()
 
 	ut_ad(trx->mod_tables.empty());
 	ut_ad(trx->lock.n_rec_locks == 0);
+	ut_ad(trx->lock.set_nth_bit_calls == 0);
 	ut_ad(trx->lock.table_cached == 0);
 	ut_ad(trx->lock.rec_cached == 0);
 	ut_ad(UT_LIST_GET_LEN(trx->lock.evicted_tables) == 0);
@@ -1260,20 +1263,20 @@ static void trx_flush_log_if_needed(lsn_t lsn, trx_t *trx)
   const bool flush=
     (srv_file_flush_method != SRV_NOSYNC &&
      (srv_flush_log_at_trx_commit & 1));
+  if (!log_sys.is_mmap())
+  {
+    completion_callback cb;
 
-  completion_callback cb;
-  if (!log_sys.is_pmem() &&
-      (cb.m_param= thd_increment_pending_ops(trx->mysql_thd)))
-  {
-    cb.m_callback = (void (*)(void *)) thd_decrement_pending_ops;
-    log_write_up_to(lsn, flush, &cb);
+    if ((cb.m_param= thd_increment_pending_ops(trx->mysql_thd)))
+    {
+      cb.m_callback= (void (*)(void *)) thd_decrement_pending_ops;
+      log_write_up_to(lsn, flush, &cb);
+      return;
+    }
   }
-  else
-  {
-    trx->op_info= "flushing log";
-    log_write_up_to(lsn, flush);
-    trx->op_info= "";
-  }
+  trx->op_info= "flushing log";
+  log_write_up_to(lsn, flush);
+  trx->op_info= "";
 }
 
 /** Process tables that were modified by the committing transaction. */
@@ -1822,7 +1825,7 @@ trx_print_low(
 			/*!< in: mem_heap_get_size(trx->lock.lock_heap) */
 {
 	if (const trx_id_t id = trx->id) {
-		fprintf(f, "TRANSACTION " TRX_ID_FMT, trx->id);
+		fprintf(f, "TRANSACTION " TRX_ID_FMT, id);
 	} else {
 		fprintf(f, "TRANSACTION (%p)", trx);
 	}

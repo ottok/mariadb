@@ -346,15 +346,7 @@ struct trx_lock_t
   /** Flag the lock owner as a victim in Galera conflict resolution. */
   void set_wsrep_victim()
   {
-# if defined __GNUC__ && (defined __i386__ || defined __x86_64__)
-    /* There is no 8-bit version of the 80386 BTS instruction.
-    Technically, this is the wrong addressing mode (16-bit), but
-    there are other data members stored after the byte. */
-    __asm__ __volatile__("lock btsw $1, %0"
-                         : "+m" (was_chosen_as_deadlock_victim));
-# else
     was_chosen_as_deadlock_victim.fetch_or(2);
-# endif
   }
 #else /* defined(UNIV_DEBUG) || !defined(DBUG_OFF) */
 
@@ -408,6 +400,9 @@ struct trx_lock_t
 
   /** number of record locks; protected by lock_sys.assert_locked(page_id) */
   ulint n_rec_locks;
+  /** number of lock_rec_set_nth_bit() calls since the start of transaction;
+  protected by lock_sys.is_writer() or trx->mutex_is_owner(). */
+  ulint set_nth_bit_calls;
 };
 
 /** Logical first modification time of a table in a transaction */
@@ -1084,15 +1079,7 @@ public:
 
   void reset_skip_lock_inheritance()
   {
-#if defined __GNUC__ && (defined __i386__ || defined __x86_64__)
-    __asm__("lock btrl $31, %0" : : "m"(skip_lock_inheritance_and_n_ref));
-#elif defined _MSC_VER && (defined _M_IX86 || defined _M_X64)
-    _interlockedbittestandreset(
-        reinterpret_cast<volatile long *>(&skip_lock_inheritance_and_n_ref),
-        31);
-#else
     skip_lock_inheritance_and_n_ref.fetch_and(~1U << 31);
-#endif
   }
 
   /** @return whether the table has lock on
@@ -1188,10 +1175,6 @@ public:
     return UNIV_UNLIKELY(bulk_insert) ? bulk_insert_apply_low(): DB_SUCCESS;
   }
 
-  /** Do the bulk insert for the buffered insert operation of a table.
-  @param table bulk insert operation
-  @return DB_SUCCESS or error code. */
-  dberr_t bulk_insert_apply_for_table(dict_table_t *table);
 private:
   /** Apply the buffered bulk inserts. */
   dberr_t bulk_insert_apply_low();

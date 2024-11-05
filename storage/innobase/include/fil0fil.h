@@ -513,8 +513,9 @@ public:
   written while the space ID is being updated in each page. */
   inline void set_imported();
 
-  /** Report the tablespace as corrupted */
-  ATTRIBUTE_COLD void set_corrupted() const;
+  /** Report the tablespace as corrupted
+  @return whether this was the first call */
+  ATTRIBUTE_COLD bool set_corrupted() const noexcept;
 
   /** @return whether the storage device is rotational (HDD, not SSD) */
   inline bool is_rotational() const;
@@ -525,9 +526,6 @@ public:
   bool open(bool create_new_db);
   /** Close each file. Only invoked on fil_system.temp_space. */
   void close();
-
-  /** Note that operations on the tablespace must stop. */
-  inline void set_stopping();
 
   /** Drop the tablespace and wait for any pending operations to cease
   @param id               tablespace identifier
@@ -587,32 +585,14 @@ public:
   /** Clear the NEEDS_FSYNC flag */
   void clear_flush()
   {
-#if defined __GNUC__ && (defined __i386__ || defined __x86_64__)
-    static_assert(NEEDS_FSYNC == 1U << 28, "compatibility");
-    __asm__ __volatile__("lock btrl $28, %0" : "+m" (n_pending));
-#elif defined _MSC_VER && (defined _M_IX86 || defined _M_X64)
-    static_assert(NEEDS_FSYNC == 1U << 28, "compatibility");
-    _interlockedbittestandreset(reinterpret_cast<volatile long*>
-                                (&n_pending), 28);
-#else
     n_pending.fetch_and(~NEEDS_FSYNC, std::memory_order_release);
-#endif
   }
 
 private:
   /** Clear the CLOSING flag */
   void clear_closing()
   {
-#if defined __GNUC__ && (defined __i386__ || defined __x86_64__)
-    static_assert(CLOSING == 1U << 29, "compatibility");
-    __asm__ __volatile__("lock btrl $29, %0" : "+m" (n_pending));
-#elif defined _MSC_VER && (defined _M_IX86 || defined _M_X64)
-    static_assert(CLOSING == 1U << 29, "compatibility");
-    _interlockedbittestandreset(reinterpret_cast<volatile long*>
-                                (&n_pending), 29);
-#else
     n_pending.fetch_and(~CLOSING, std::memory_order_relaxed);
-#endif
   }
 
   /** @return pending operations (and flags) */
@@ -990,8 +970,10 @@ public:
   void flush_low();
 
   /** Read the first page of a data file.
+  @param dpage   copy of a first page, from the doublewrite buffer, or nullptr
+  @param no_lsn  whether to skip the FIL_PAGE_LSN check
   @return whether the page was found valid */
-  bool read_page0();
+  bool read_page0(const byte *dpage, bool no_lsn) noexcept;
 
   /** Determine the next tablespace for encryption key rotation.
   @param space    current tablespace (nullptr to start from the beginning)
@@ -1088,16 +1070,12 @@ struct fil_node_t final
   bool is_open() const { return handle != OS_FILE_CLOSED; }
 
   /** Read the first page of a data file.
+  @param dpage   copy of a first page, from the doublewrite buffer, or nullptr
+  @param no_lsn  whether to skip the FIL_PAGE_LSN check
   @return whether the page was found valid */
-  bool read_page0();
-
-  /** Determine some file metadata when creating or reading the file.
-  @param file   the file that is being created, or OS_FILE_CLOSED */
-  void find_metadata(os_file_t file= OS_FILE_CLOSED
-#ifndef _WIN32
-                     , bool create= false, struct stat *statbuf= nullptr
-#endif
-                     );
+  bool read_page0(const byte *dpage, bool no_lsn) noexcept;
+  /** Determine some file metadata when creating or reading the file. */
+  void find_metadata(IF_WIN(,bool create= false)) noexcept;
 
   /** Close the file handle. */
   void close();
@@ -1535,21 +1513,6 @@ inline void fil_space_t::reacquire()
 #endif /* SAFE_MUTEX */
 }
 
-/** Note that operations on the tablespace must stop. */
-inline void fil_space_t::set_stopping()
-{
-  mysql_mutex_assert_owner(&fil_system.mutex);
-#if defined __GNUC__ && (defined __i386__ || defined __x86_64__)
-  static_assert(STOPPING_WRITES == 1U << 30, "compatibility");
-  __asm__ __volatile__("lock btsl $30, %0" : "+m" (n_pending));
-#elif defined _MSC_VER && (defined _M_IX86 || defined _M_X64)
-  static_assert(STOPPING_WRITES == 1U << 30, "compatibility");
-  _interlockedbittestandset(reinterpret_cast<volatile long*>(&n_pending), 30);
-#else
-  n_pending.fetch_or(STOPPING_WRITES, std::memory_order_relaxed);
-#endif
-}
-
 /** Flush pending writes from the file system cache to the file. */
 template<bool have_reference> inline void fil_space_t::flush()
 {
@@ -1579,7 +1542,7 @@ inline uint32_t fil_space_t::get_size()
   if (!size)
   {
     mysql_mutex_lock(&fil_system.mutex);
-    read_page0();
+    read_page0(nullptr, false);
     mysql_mutex_unlock(&fil_system.mutex);
   }
   return size;
