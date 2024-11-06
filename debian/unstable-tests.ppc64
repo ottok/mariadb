@@ -1,5 +1,4 @@
 main.func_json_notembedded : MDEV-30518 / MDEV-27955
-main.having_cond_pushdown : MDEV-34650
 main.index_merge_innodb : MDEV-30728
 main.mysql_upgrade : https://bugs.debian.org/1053486
 maria.maria-purge : MDEV-31349

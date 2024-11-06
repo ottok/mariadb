@@ -8,7 +8,8 @@ mariadb (1:11.4.4-1) unstable; urgency=medium
     parameters 'innodb-log-file-mmap' and 'optimizer-join-limit-pref-ratio'.
     Also the parameters 'innodb-lru-flush-size' and
     'innodb-purge-rseg-truncate-frequency' seems to have been removed.
-  * Update MTR skiplists based on buildd results after 1:11.4.3-1 upload.
+  * Update MTR skiplists based on buildd results after 1:11.4.3-1 upload, but
+    re-enable main.having_cond_pushdown fixed in latest release (MDEV-34650)
   * Rename README.Contributor to README.source.md
   * Update debian/patches to be compatible with `gbp pq` to avoid `quilt`.
   * Update Lintian overrides for libmariadb-dev regarding man page syntax.

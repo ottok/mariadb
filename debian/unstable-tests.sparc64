@@ -7,7 +7,6 @@ main.func_math : MDEV-27954
 main.func_str : MDEV-27954
 main.group_by : MDEV-27954
 main.group_by_null : MDEV-27954
-main.having_cond_pushdown : MDEV-34650
 main.index_merge_innodb : MDEV-30728
 main.long_unique_bugs : MDEV-30928
 main.partition : MDEV-27954
