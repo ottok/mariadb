@@ -1,6 +1,7 @@
 disks.disks : MDEV-21587
 disks.disks_notembedded : MDEV-21587
 innodb.create_isl_with_direct : Will always have result mismatch when MTR running with --mysqld=--loose-innodb-flush-method=fsync
+main.mysqld--help-aria : MDEV-34733: feedback plugin: failed to retrieve the MAC address
 main.strings : MDEV-26644
 spider.spider_fixes_part : MDEV-30929
 sys_vars.innodb_flush_method_func : Will always have result mismatch when MTR running with --mysqld=--loose-innodb-flush-method=fsync
