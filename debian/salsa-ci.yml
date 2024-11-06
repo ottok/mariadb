@@ -21,6 +21,8 @@ variables:
   # the correct release before making an upload to that release
   SALSA_CI_IMAGES_LINTIAN: ${SALSA_CI_IMAGES}/lintian:${RELEASE}
   SALSA_CI_PIUPARTS_PRE_INSTALL_SCRIPT: 'debian/salsa-ci-enable-sec-and-update-repos.sh'
+  # For unknown reason Lintian v2.116.3 in Bookworm errors on valid changelog entry
+  SALSA_CI_LINTIAN_SUPPRESS_TAGS: 'bad-distribution-in-changes-file'
 
 # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
 # timeout (1h) is often not enough
