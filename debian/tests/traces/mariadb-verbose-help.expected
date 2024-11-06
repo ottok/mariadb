@@ -124,6 +124,9 @@ The following specify which files/extra groups are read (specified before remain
   -q, --quick         Don't cache result, print it row by row. This may slow
                       down the server if the output is suspended. Doesn't use
                       history file.
+  --quick-max-column-width=# 
+                      Maximum number of characters displayed in a column header
+                      when using --quick
   -r, --raw           Write fields without conversion. Used with --batch.
   --reconnect         Reconnect if the connection is lost.
                       (Defaults to on; use --skip-reconnect to disable.)
@@ -208,6 +211,7 @@ progress-reports                  TRUE
 prompt                            \N [\d]> 
 protocol                          
 quick                             FALSE
+quick-max-column-width            9223372036854775807
 raw                               FALSE
 reconnect                         TRUE
 safe-updates                      FALSE
