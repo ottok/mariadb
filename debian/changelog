@@ -1,3 +1,9 @@
+mariadb (1:10.11.10-1) UNRELEASED; urgency=medium
+
+  * Switch to branch debian/12-bookworm
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 05 Nov 2024 04:10:03 -0800
+
 mariadb (1:10.11.9-0+deb12u1) bookworm; urgency=medium
 
   * New upstream version 10.11.9. Includes fixes for several severe regressions
