@@ -72,6 +72,26 @@ If you have start/stop problems make sure that the /etc/mysql/debian.cnf file
 specifies the root user and no password. In the long run please stop using that
 file as is has been obsoleted.
 
+If you need to do a restore of a previous `mysql_dump`/`mariadb-dump` that
+includes the `mysql.user` table from before the passwordless transition, that
+will revert you to a non-passwordless root setup (and it's various drawbacks
+illustrated above and below). If you'd like to restore the now-standard
+passwordless-root setup, you can do so with:
+
+  GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' IDENTIFIED VIA unix_socket WITH GRANT OPTION
+
+And then drop the debian-sys-maint user with:
+
+  DROP USER 'debian-sys-maint'@'localhost' 
+
+And then:
+
+  FLUSH PRIVILEGES
+
+NOTE: Before modifying root permissions to the MariaDB instance, you should
+ensure you keep a mysql root connection open until you're sure the changes
+work and you can still create new root connections to your server.
+
 
 * MARIADB IS SECURE BY DEFAULT
 ==============================
