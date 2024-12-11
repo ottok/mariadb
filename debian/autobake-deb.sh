@@ -57,6 +57,12 @@ disable_libfmt()
   sed '/libfmt-dev/d' -i debian/control
 }
 
+remove_package_notes()
+{
+  # binutils >=2.39 + disto makefile /usr/share/debhelper/dh_package_notes/package-notes.mk
+  sed -e '/package.notes/d' -i debian/rules debian/control
+}
+
 architecture=$(dpkg-architecture -q DEB_BUILD_ARCH)
 
 # Parse release name and number from Linux standard base release
@@ -93,6 +99,7 @@ in
     ;&
   "bullseye")
     add_lsb_base_depends
+    remove_package_notes
     ;&
   "bookworm")
     # mariadb-plugin-rocksdb in control is 4 arches covered by the distro rocksdb-tools
@@ -113,6 +120,7 @@ in
     ;&
   "jammy"|"kinetic")
     add_lsb_base_depends
+    remove_package_notes
     ;&
   "lunar"|"mantic")
     if [[ ! "$architecture" =~ amd64|arm64|armhf|ppc64el|s390x ]]
