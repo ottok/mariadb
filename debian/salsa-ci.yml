@@ -921,10 +921,10 @@ mysql-8.0 in Sid upgrade:
 
 # Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
 # The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
-mysql-8.0 in Ubuntu 23.10 upgrade:
+mysql-8.0 in Ubuntu 24.04 upgrade:
   extends: .salsa-ci-template-for-mariadb
   stage: upgrade MariaDB variant
-  image: ubuntu:mantic
+  image: ubuntu:noble
   script:
     - *test-prepare-container
     - apt-get install -qq --yes procps mysql-server 'libmysqlc*'
