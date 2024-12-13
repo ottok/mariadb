@@ -13,3 +13,4 @@ hurd-i386-storage_connect_ioapi.h.patch
 hide-mysql-command-deprecation-warnings.patch
 1063738-x32-compile-time-assert.patch
 Fix-spelling-of-of-allows-one-to.patch
+MDEV-35528-mariadb-binlog-cannot-process-more-than-1-logf.patch

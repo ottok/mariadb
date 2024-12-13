@@ -1,0 +1,43 @@
+From: Xiaochuan Cui <xiaochuc@amazon.com>
+Date: Fri, 29 Nov 2024 13:52:19 -0800
+Subject: MDEV-35528: mariadb-binlog cannot process more than 1 logfiles when
+ --stop-datetime is specified
+
+Fix regression introduced by commits 9588526 and 242b67f which attempted to
+address MDEV-27037. With the regression, mariadb-binlog cannot process multiple
+log files when --stop-datetime is specified.
+
+Remove the code to set retval as OK_STOP if mariadb-binlog finished processing
+current log file but not reached specified --stop-datetime or --stop-position,
+to make it possible to continue process following log files.
+
+All new code of the whole pull request, including one or several files that are
+either new files or modified ones, are contributed under the BSD-new license. I
+am contributing on behalf of my employer Amazon Web Services, Inc.
+
+Forwarded: https://github.com/MariaDB/server/pull/3670
+Origin: https://patch-diff.githubusercontent.com/raw/MariaDB/server/pull/3670.patch
+---
+ client/mysqlbinlog.cc | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/client/mysqlbinlog.cc b/client/mysqlbinlog.cc
+index 2294613..8a1e872 100644
+--- a/client/mysqlbinlog.cc
++++ b/client/mysqlbinlog.cc
+@@ -3180,7 +3180,6 @@ static Exit_status dump_local_log_entries(PRINT_EVENT_INFO *print_event_info,
+       if (((longlong)stop_position != stop_position_default) &&
+           stop_position > my_b_tell(file))
+       {
+-          retval = OK_STOP;
+           warning("Did not reach stop position %llu before "
+                   "end of input", stop_position);
+       }
+@@ -3192,7 +3191,6 @@ static Exit_status dump_local_log_entries(PRINT_EVENT_INFO *print_event_info,
+       if (stop_datetime != MY_TIME_T_MAX &&
+           stop_datetime > last_ev_when)
+       {
+-          retval = OK_STOP;
+           warning("Did not reach stop datetime '%s' "
+                   "before end of input", stop_datetime_str);
+       }
