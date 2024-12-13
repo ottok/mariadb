@@ -3,6 +3,8 @@ mariadb (1:11.4.4-1) unstable; urgency=medium
   * New upstream version 11.4.4. Includes fixes for several severe regressions
     as noted at https://mariadb.com/kb/en/mariadb-11-4-4-release-notes/. This
     release is not known to include any CVE assigned security fixes.
+  * MariaDB 11.4.4 includes fix to crashes related to SST from older MariaDB
+    versions (Closes: #1089142)
   * Update server trace to include new parameters and values. This includes now
     MariaDB client parameter 'quick-max-column-width' and new MariaDB Server
     parameters 'innodb-log-file-mmap' and 'optimizer-join-limit-pref-ratio'.
@@ -16,10 +18,12 @@ mariadb (1:11.4.4-1) unstable; urgency=medium
   * Add patch to fix Lintian nag about spelling of 'allows one to' and drop one
     patch about spelling fixes that got applied upstream.
   * Apply `debputy reformat --style black`.
-  * Allow use of patched libfmt-dev with thousands separator fixed
-    (Related: #1086722).
+  * Allow use of patched libfmt-dev 10.1.1 with thousands separator fixed
+    (Related: #1086722, Closes: #1088198).
+  * Add patch to revert mysqlbinlog related regression MDEV-35528
+  * To follow gbp pq practices, place DEP-3 headers at the end of patches
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 04 Nov 2024 08:36:00 -0800
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 12 Dec 2024 21:56:05 -0800
 
 mariadb (1:11.4.3-1) unstable; urgency=medium
 
