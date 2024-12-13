@@ -2,11 +2,11 @@ From: Michael Biebl <biebl@debian.org>
 Date: Mon, 22 Jan 2024 22:52:25 +0100
 Subject: [PATCH] Install PAM modules and systemd units into /usr
 
-Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1061348
-Forwarded: no
-
 Since Debian trixie all files need to be installed into their canonical
 location under /usr.
+
+Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1061348
+Forwarded: no
 ---
  cmake/install_layout.cmake | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)

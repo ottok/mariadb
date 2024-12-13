@@ -2,12 +2,12 @@ From: Andrew Kryczka <andrewkr@fb.com>
 Date: Tue, 16 Jun 2020 19:34:21 -0700
 Subject: rocksdb-kfreebsd
 
+Upstream has merged this but we still need to wait for it to be included
+in a RocksDB release and imported into MariaDB and then into Debian.
+
 Bug: https://jira.mariadb.org/browse/MDEV-19251
 Forwarded: https://github.com/facebook/rocksdb/pull/6992
 # Merged in RocksDB 6.12.6 but not updated into MariaDB yet
-
-Upstream has merged this but we still need to wait for it to be included
-in a RocksDB release and imported into MariaDB and then into Debian.
 ---
  storage/rocksdb/build_rocksdb.cmake                       |  2 ++
  storage/rocksdb/rdb_io_watchdog.cc                        |  2 +-

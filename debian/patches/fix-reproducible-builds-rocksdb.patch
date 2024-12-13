@@ -2,10 +2,6 @@ From: Otto Kekalainen <otto@debian.org>
 Date: Tue, 29 Jun 2021 21:08:05 -0700
 Subject: Make RocksDB build reproducible
 
-Origin: https://github.com/facebook/rocksdb/commit/0a9a05ae12943b1529ef1eabbca5ce5a71c986bf
-Bug: https://github.com/facebook/rocksdb/issues/7035
-# Merged in RocksDB 6.19.3, but not updated into MariaDB yet
-
 The RocksDB binary included a string with the build timestamp:
 > rocksdb_build_git_date:@2021-05-23-16:04:38@
 
@@ -14,6 +10,10 @@ Simply removing it solves the issue.
 
 This temporary fix can be removed when a proper fix already done in upstream
 lands in MariaDB when the RocksDB submodule is updated to a newer release.
+
+Origin: https://github.com/facebook/rocksdb/commit/0a9a05ae12943b1529ef1eabbca5ce5a71c986bf
+Bug: https://github.com/facebook/rocksdb/issues/7035
+# Merged in RocksDB 6.19.3, but not updated into MariaDB yet
 ---
  storage/rocksdb/rocksdb/util/build_version.cc.in | 6 +++---
  1 file changed, 3 insertions(+), 3 deletions(-)

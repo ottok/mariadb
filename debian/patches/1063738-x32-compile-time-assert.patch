@@ -2,8 +2,6 @@ From: Otto Kekalainen <otto@debian.org>
 Date: Thu, 4 Jul 2024 00:03:58 -0700
 Subject: Make compile_time_assert compatible with x32 (Closes: #1063738)
 
-Forwarded: no
-
 The x32 build was failing on:
 
     compile_time_assert(sizeof(MYSQL) == 77*sizeof(void*)+656);
@@ -13,6 +11,8 @@ This is a regression from upstream commits c432c9ef and 06a884a57071.
 
 Fix is based on advice from https://lists.debian.org/debian-amd64/2024/07/msg00003.html
 which is also aligned with https://wiki.debian.org/X32Port.
+
+Forwarded: no
 ---
  tests/mysql_client_fw.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

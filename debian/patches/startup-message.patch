@@ -3,8 +3,6 @@ Date: Sun, 10 Mar 2024 16:56:13 +0000
 Subject: Show banner in server and client startup to drive community
  engagement
 
-Forwarded: no
-
 Suggest to users that they can support MariaDB development by simply giving a
 star on GitHub. This patch experiments with how well such a banner works, and
 may later change the contents to drive some other kind of engagement.
@@ -26,6 +24,8 @@ Server output:
 
 Server output if build in git directory:
     [Note] Starting MariaDB 10.11.7-MariaDB-3 source revision 219efb0a6ab0ee8ce2ec831c715783586c4db2ef as process 5426
+
+Forwarded: no
 ---
  client/mysql.cc |  3 +++
  sql/mysqld.cc   | 20 +++++++++++++++-----

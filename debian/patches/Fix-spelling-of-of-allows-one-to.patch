@@ -2,8 +2,6 @@ From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
 Date: Mon, 4 Nov 2024 08:00:42 -0800
 Subject: Fix spelling of 'allows one to'
 
-Forwarded: no
-
 Fix the following Lintian nags introduced in commit
 c8d040938a7ebe10e62506a726702c5990ef4dda:
 
@@ -12,6 +10,8 @@ I: mariadb-server-core: spelling-error-in-binary "allows to" "allows one to" [us
 I: mariadb-test: spelling-error-in-binary "allows to" "allows one to" [usr/bin/mariadb-client-test-embedded]
 I: mariadb-test: spelling-error-in-binary "allows to" "allows one to" [usr/bin/mariadb-test-embedded]
 I: mariadb-test: spelling-error-in-binary "allows to" "allows one to" [usr/bin/test-connect-t]
+
+Forwarded: no
 ---
  mysql-test/main/mysqld--help.result                       | 15 ++++++++-------
  .../suite/sys_vars/r/sysvars_server_embedded.result       |  2 +-

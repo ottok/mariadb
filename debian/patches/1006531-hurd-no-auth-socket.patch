@@ -4,13 +4,13 @@ Subject: mariadb: FTBFS on hurd-i386: undefined reference to misc functions
  and files requires https://github.com/MariaDB/server/pull/2893 as debian
  explicit architectures aren't needed since dh_auto_configure handles this.
 
-Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1006531
-Forwarded: no
-
 If it works, upstream welcome.
 
 Hurd string from uname -m, "SYSTEM processor: i686-AT386" in mariadb
 output. And wiki reference https://en.wikipedia.org/wiki/Uname
+
+Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1006531
+Forwarded: no
 ---
  cmake/build_configurations/mysql_release.cmake | 5 ++++-
  1 file changed, 4 insertions(+), 1 deletion(-)

@@ -2,12 +2,12 @@ From: Sutou Kouhei <kou@clear-code.com>
 Date: Sat, 5 Feb 2022 11:05:39 +0900
 Subject: cmake: add support for reproducible buildS
 
+We should use relative path not absolute path. We can use target without
+breaking reproducibility.
+
 Origin: https://github.com/mroonga/mroonga/issues/298#issuecomment-1030815927
 Bug: https://github.com/mroonga/mroonga/issues/298
 Forwarded: not-needed
-
-We should use relative path not absolute path. We can use target without
-breaking reproducibility.
 ---
  storage/mroonga/CMakeLists.txt | 12 ++++--------
  1 file changed, 4 insertions(+), 8 deletions(-)
