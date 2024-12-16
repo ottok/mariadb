@@ -1,5 +1,6 @@
 mariadb (1:11.4.4-1) unstable; urgency=medium
 
+  [ Otto Kekäläinen ]
   * New upstream version 11.4.4. Includes fixes for several severe regressions
     as noted at https://mariadb.com/kb/en/mariadb-11-4-4-release-notes/. This
     release is not known to include any CVE assigned security fixes.
@@ -22,6 +23,10 @@ mariadb (1:11.4.4-1) unstable; urgency=medium
     (Related: #1086722, Closes: #1088198).
   * Add patch to revert mysqlbinlog related regression MDEV-35528
   * To follow gbp pq practices, place DEP-3 headers at the end of patches
+  * Thanks to Jing Luo for review!
+
+  [ Phil Dibowitz ]
+  * Add some info on getting back to passwordless root (Closes: #1088133)
 
  -- Otto Kekäläinen <otto@debian.org>  Thu, 12 Dec 2024 21:56:05 -0800
 
