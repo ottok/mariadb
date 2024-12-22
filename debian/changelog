@@ -1,3 +1,9 @@
+mariadb (1:11.4.4-3) UNRELEASED; urgency=medium
+
+  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 22 Dec 2024 00:31:21 -0800
+
 mariadb (1:11.4.4-2) unstable; urgency=medium
 
   * Disable main.mysqld--help-aria on all architectures as if seems
