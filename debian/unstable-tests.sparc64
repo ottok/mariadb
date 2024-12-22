@@ -9,6 +9,7 @@ main.group_by : MDEV-27954
 main.group_by_null : MDEV-27954
 main.index_merge_innodb : MDEV-30728
 main.long_unique_bugs : MDEV-30928
+main.mysqld--help-aria : MDEV-34733
 main.partition : MDEV-27954
 main.partition_order : MDEV-27954
 main.repair_symlink-5543 : MDEV-23920

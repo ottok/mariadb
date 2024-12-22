@@ -1,3 +1,4 @@
+main.mysqld--help-aria : MDEV-34733
 main.partition_key_cache : MDEV-23427
 main.table_value_constr : MDEV-33520
 maria.maria-purge : MDEV-31349

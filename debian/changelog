@@ -1,3 +1,10 @@
+mariadb (1:11.4.4-2) unstable; urgency=medium
+
+  * Disable main.mysqld--help-aria on all architectures as if seems
+    they are all now affected by https://jira.mariadb.org/browse/MDEV-34733
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 21 Dec 2024 22:22:48 -0800
+
 mariadb (1:11.4.4-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
