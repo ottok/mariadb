@@ -5,13 +5,13 @@ Maintainer: Debian MySQL Maintainers <pkg-mysql-maint@lists.alioth.debian.org>
 Uploaders:
  Otto Kekäläinen <otto@debian.org>,
 Build-Depends:
+ debhelper-compat (= 13),
+ dh-exec,
+ dpkg-dev (>= 1.22.5),
  bison,
  cmake,
  cracklib-runtime <!nocheck>,
- debhelper-compat (= 13),
  default-jdk,
- dh-exec,
- dpkg-dev (>= 1.22.5),
  gdb <!nocheck>,
  libboost-dev,
  libbz2-dev,
