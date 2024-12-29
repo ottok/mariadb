@@ -263,7 +263,9 @@ blhc:
       apt-get install -q --yes apt
     fi
   # If system has not undergone usrmerge upgrade, don't attempt it in CI containers
-  - test -L /bin || apt-mark hold usrmerge usr-is-merged
+  - test -L /bin || apt-mark hold usrmerge usr-is-merged || true
+  # Ignore apt-mark exit code as Buster/Bookworm upgrades to Trixie/Sid will not
+  # have those transient packages at all
   # For debugging purposes show what packages are now on hold
   - apt-mark showhold
   # Update base system
@@ -566,6 +568,12 @@ mariadb-10.6 and Bookworm-20230208 upgrade:
     - apt-get purge --yes mariadb*10.?
     - *test-verify-final
 
+# TODO: failing on this and forced libc6 downgrade can't be resolved
+# Unpacking libc6-dev:amd64 (2.40-4) over (2.35-0ubuntu3.8) ...
+# dpkg: error processing archive /var/cache/apt/archives/libc6-dev_2.40-4_amd64.deb (--unpack):
+#  trying to overwrite '/usr/lib/x86_64-linux-gnu/audit/sotruss-lib.so', which is also in package libc6:amd64 2.35-0ubuntu3.8
+# dpkg-deb: error: paste subprocess was killed by signal (Broken pipe)
+#
 mariadb-10.6 and Jammy upgrade:
   extends: .salsa-ci-template-for-mariadb
   stage: upgrade MariaDB and distro
