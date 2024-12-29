@@ -1,4 +1,6 @@
 #!/bin/sh
+# shellcheck disable=SC2086
+#
 # dep8 smoke test for mariadbd
 # Author: Otto Kekäläinen <otto@debian.org>
 #
@@ -16,6 +18,9 @@
 # compares the result to expected values in original binary/build.
 #
 
+MARIADB_CLIENT_PATH="${MARIADB_CLIENT_PATH:-/usr/bin}"
+MARIADB_SERVER_PATH="${MARIADB_SERVER_PATH:-/usr/sbin}"
+
 normalize_value() {
   VARIABLE="$1"
   VALUE="$2"
@@ -24,7 +29,7 @@ normalize_value() {
 }
 
 trace() {
-  TRACE_NAME="$(echo "$*" | sed -E 's|/usr/(s?)bin/||' | sed 's/ //g' | sed 's/--/-/g')"
+  TRACE_NAME="$(basename "$*" | sed 's/ //g' | sed 's/--/-/g')"
 
   # Show in test what was run
   echo
@@ -45,7 +50,7 @@ trace() {
     sed "s/$(hostname)/HOSTNAME/g" -i "$TEMPFILE"
 
     # Version/revision increases on every release
-    VERSION=$(mariadbd --help --verbose | grep -e "^version " | rev | cut -d ' ' -f 1 | rev)
+    VERSION=$($MARIADB_SERVER_PATH/mariadbd --help --verbose | grep -e "^version " | rev | cut -d ' ' -f 1 | rev)
     sed "s/$VERSION/VERSION/g" -i "$TEMPFILE"
 
     # SSL library version inherited form dependency, not relevant for tracing
@@ -102,24 +107,25 @@ trace() {
   fi
 }
 
-echo "Running test 'configuration-tracing'"
-cd debian/tests/traces || exit 1
+TEST_DIR="$(dirname "$(realpath "$0")")"
+echo "Running test 'configuration-tracing' at $TEST_DIR"
+cd $TEST_DIR/traces || exit 1
 
 set -e
 
 ERRORS=""
 
 # Dump out what parameters mariadb would be called with by default
-trace /usr/bin/mariadb --print-defaults
+trace $MARIADB_CLIENT_PATH/mariadb --print-defaults
 
 # Dump out all help texts, client variables and their default values
-trace /usr/bin/mariadb --verbose --help
+trace $MARIADB_CLIENT_PATH/mariadb --verbose --help
 
 # Dump out what parameters mariadbd would be called with by default on system
-trace /usr/sbin/mariadbd --print-defaults
+trace $MARIADB_SERVER_PATH/mariadbd --print-defaults
 
 # Dump out all help texts, server variables and their default values
-trace /usr/sbin/mariadbd --verbose --help
+trace $MARIADB_SERVER_PATH/mariadbd --verbose --help
 
 # Emit non-zero exit code if there was errors
 if [ -n "$ERRORS" ]
