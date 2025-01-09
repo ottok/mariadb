@@ -73,8 +73,6 @@ override_dh_auto_clean:
 	rm -rf $(BUILDDIR) builddir-native extra/readline extra/wolfssl zlib libmariadb/external/zlib
 	# Remove columnstore as the source code is dirty and software not mature enough for Debian anyway
 	rm -rf storage/columnstore
-	# Delete precompiled binaries in upstream sources to ensure they are not used in Debian
-	rm -rf storage/connect/JavaWrappers.jar	storage/columnstore/columnstore/utils/jemalloc/libjemalloc.so.2
 
 	# Update po-files when clean runs before each build
 	debconf-updatepo
