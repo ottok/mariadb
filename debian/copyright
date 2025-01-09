@@ -122,13 +122,13 @@ Comment:
  The above text is subject to this copyright notice:
  © 2010, Oracle and/or its affiliates.
 Files-Excluded:
- extra/readline
- extra/wolfssl
- libmariadb/external/zlib
- storage/columnstore
+ extra/readline/*
+ extra/wolfssl/*
+ libmariadb/external/zlib/*
+ storage/columnstore/*
  storage/columnstore/columnstore/utils/jemalloc/libjemalloc.so.2
  storage/connect/JavaWrappers.jar
- zlib
+ zlib/*
 
 Files: *
 Copyright:
