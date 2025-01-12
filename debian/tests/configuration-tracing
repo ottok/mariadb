@@ -78,13 +78,22 @@ trace() {
     normalize_value max-binlog-stmt-cache-size 18446744073709547520 # 32-bit: 4294963200
     normalize_value myisam-max-sort-file-size 18446744073709551615 # 32-bit: 2146435072
     normalize_value myisam-mmap-size 9223372036853727232 # 32-bit: 4294967295
+    normalize_value quick-max-column-width 9223372036854775807 # 32-bit: 2147483647
     normalize_value tmp-disk-table-size 18446744073709551615 # 32-bit: 4294967295
 
     # ppc64el has larger default value: 393216
     normalize_value log-tc-size 24576
 
-    # feedback plugin submitter identified
+    # feedback plugin submitter identifier is random
     normalize_value server-uid 1234567890abcdefghijklmnopq=
+
+    # wsrep-provider exists twice as a system variable: both to control if
+    # plugin is on or off, and to define the path to the plugin. As according to
+    # https://mariadb.com/kb/en/galera-cluster-system-variables/#wsrep_provider)
+    # defining the path is the documented on, clean away the ON/OFF flag from
+    # causing issues in tracing:
+    sed '/wsrep-provider\s\+ON/d' -i "$TEMPFILE"
+    sed '/^  --wsrep-provider\[=name\]/,/^[[:blank:]]\+be uninstalled/d' -i "$TEMPFILE"
 
     mv "$TEMPFILE" "$TRACE_NAME.actual"
   fi

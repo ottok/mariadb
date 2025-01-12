@@ -2417,11 +2417,6 @@ The following specify which files/extra groups are read (specified before remain
                       nodes in a cluster can have the same name.
   --wsrep-notify-cmd=name 
   --wsrep-on          To enable wsrep replication 
-  --wsrep-provider[=name] 
-                      Enable or disable wsrep_provider plugin. One of: ON, OFF,
-                      FORCE (don't start if the plugin fails to load),
-                      FORCE_PLUS_PERMANENT (like FORCE, but the plugin can not
-                      be uninstalled).
   --wsrep-provider=name 
                       Path to replication provider library
   --wsrep-provider-options=name 
@@ -3166,7 +3161,6 @@ wsrep-notify-cmd
 wsrep-on                                                     FALSE
 wsrep-patch-version                                          wsrep_26.22
 wsrep-provider                                               none
-wsrep-provider                                               ON
 wsrep-provider-options                                       
 wsrep-recover                                                FALSE
 wsrep-reject-queries                                         NONE
