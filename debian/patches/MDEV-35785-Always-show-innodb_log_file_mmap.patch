@@ -1,0 +1,518 @@
+From: =?utf-8?b?TWFya28gTcOka2Vsw6Q=?= <marko.makela@mariadb.com>
+Date: Wed, 8 Jan 2025 12:59:28 +0200
+Subject: [PATCH 1/2] MDEV-35785 innodb_log_file_mmap is not defined on 32-bit
+ systems
+
+HAVE_INNODB_MMAP: Remove, and unconditionally enable this code.
+
+log_mmap(): On 32-bit systems, ensure that the size fits in 32 bits.
+
+log_t::resize_start(), log_t::resize_abort(): Only handle memory-mapping
+if HAVE_PMEM is defined. The generic memory-mapped interface is only for
+reading the log in recovery. Writable memory mappings are only for
+persistent memory, that is, Linux file systems with mount -o dax.
+
+Origin: https://patch-diff.githubusercontent.com/raw/MariaDB/server/pull/3732.patch (9057410ec72186fe9f9d0e6a73b9754e29c00afe)
+Forwarded: https://github.com/MariaDB/server/pull/3732
+---
+ extra/mariabackup/xtrabackup.cc                    |  9 +----
+ .../innodb_redo_log_overwrite.combinations         |  4 ++
+ mysql-test/suite/sys_vars/r/sysvars_innodb.result  | 13 ++++++-
+ mysql-test/suite/sys_vars/t/sysvars_innodb.test    |  2 +-
+ storage/innobase/CMakeLists.txt                    |  2 +-
+ storage/innobase/handler/ha_innodb.cc              |  4 --
+ storage/innobase/include/log0log.h                 | 11 ------
+ storage/innobase/include/log0recv.h                |  7 +---
+ storage/innobase/include/univ.i                    |  3 --
+ storage/innobase/log/log0log.cc                    | 44 ++++++++--------------
+ storage/innobase/log/log0recv.cc                   |  4 --
+ storage/innobase/mtr/mtr0mtr.cc                    |  2 +-
+ storage/innobase/srv/srv0start.cc                  |  4 --
+ 13 files changed, 37 insertions(+), 72 deletions(-)
+ create mode 100644 mysql-test/suite/mariabackup/innodb_redo_log_overwrite.combinations
+
+diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
+index 4ad1aa5..280307e 100644
+--- a/extra/mariabackup/xtrabackup.cc
++++ b/extra/mariabackup/xtrabackup.cc
+@@ -1326,9 +1326,7 @@ enum options_xtrabackup
+   OPT_INNODB_BUFFER_POOL_FILENAME,
+   OPT_INNODB_LOCK_WAIT_TIMEOUT,
+   OPT_INNODB_LOG_BUFFER_SIZE,
+-#ifdef HAVE_INNODB_MMAP
+   OPT_INNODB_LOG_FILE_MMAP,
+-#endif
+ #if defined __linux__ || defined _WIN32
+   OPT_INNODB_LOG_FILE_BUFFERING,
+ #endif
+@@ -1892,13 +1890,11 @@ struct my_option xb_server_options[] =
+    (G_PTR*) &log_sys.buf_size, (G_PTR*) &log_sys.buf_size, 0,
+    GET_UINT, REQUIRED_ARG, 2U << 20,
+    2U << 20, log_sys.buf_size_max, 0, 4096, 0},
+-#ifdef HAVE_INNODB_MMAP
+   {"innodb_log_file_mmap", OPT_INNODB_LOG_FILE_SIZE,
+    "Whether ib_logfile0 should be memory-mapped",
+    (G_PTR*) &log_sys.log_mmap,
+    (G_PTR*) &log_sys.log_mmap, 0, GET_BOOL, NO_ARG,
+    log_sys.log_mmap_default, 0, 0, 0, 0, 0},
+-#endif
+ #if defined __linux__ || defined _WIN32
+   {"innodb_log_file_buffering", OPT_INNODB_LOG_FILE_BUFFERING,
+    "Whether the file system cache for ib_logfile0 is enabled during --backup",
+@@ -3391,7 +3387,6 @@ static my_bool xtrabackup_copy_datafile(ds_ctxt *ds_data,
+ 	return(FALSE);
+ }
+ 
+-#ifdef HAVE_INNODB_MMAP
+ static int
+ xtrabackup_copy_mmap_snippet(ds_file_t *ds, const byte *start, const byte *end)
+ {
+@@ -3491,7 +3486,6 @@ static bool xtrabackup_copy_mmap_logfile()
+     msg(">> log scanned up to (" LSN_PF ")", recv_sys.lsn);
+   return false;
+ }
+-#endif
+ 
+ /** Copy redo log until the current end of the log is reached
+ @return whether the operation failed */
+@@ -3503,10 +3497,9 @@ static bool xtrabackup_copy_logfile()
+   ut_a(dst_log_file);
+   ut_ad(recv_sys.is_initialised());
+ 
+-#ifdef HAVE_INNODB_MMAP
+   if (log_sys.is_mmap())
+     return xtrabackup_copy_mmap_logfile();
+-#endif
++
+   const size_t sequence_offset{log_sys.is_encrypted() ? 8U + 5U : 5U};
+   const size_t block_size_1{log_sys.write_size - 1};
+ 
+diff --git a/mysql-test/suite/mariabackup/innodb_redo_log_overwrite.combinations b/mysql-test/suite/mariabackup/innodb_redo_log_overwrite.combinations
+new file mode 100644
+index 0000000..5221a97
+--- /dev/null
++++ b/mysql-test/suite/mariabackup/innodb_redo_log_overwrite.combinations
+@@ -0,0 +1,4 @@
++[pread]
++--innodb-log-file-mmap=OFF
++[mmap]
++--innodb-log-file-mmap=ON
+diff --git a/mysql-test/suite/sys_vars/r/sysvars_innodb.result b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
+index b3c18b2..8bb222e 100644
+--- a/mysql-test/suite/sys_vars/r/sysvars_innodb.result
++++ b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
+@@ -4,7 +4,6 @@ variable_name not in (
+ 'innodb_numa_interleave',           # only available WITH_NUMA
+ 'innodb_evict_tables_on_commit_debug', # one may want to override this
+ 'innodb_use_native_aio',            # default value depends on OS
+-'innodb_log_file_mmap',             # only available on 64-bit
+ 'innodb_log_file_buffering',        # only available on Linux and Windows
+ 'innodb_buffer_pool_load_pages_abort')            # debug build only, and is only for testing
+ order by variable_name;
+@@ -932,6 +931,18 @@ NUMERIC_BLOCK_SIZE	NULL
+ ENUM_VALUE_LIST	OFF,ON
+ READ_ONLY	NO
+ COMMAND_LINE_ARGUMENT	OPTIONAL
++VARIABLE_NAME	INNODB_LOG_FILE_MMAP
++SESSION_VALUE	NULL
++DEFAULT_VALUE	ON
++VARIABLE_SCOPE	GLOBAL
++VARIABLE_TYPE	BOOLEAN
++VARIABLE_COMMENT	Whether ib_logfile0 should initially be memory-mapped
++NUMERIC_MIN_VALUE	NULL
++NUMERIC_MAX_VALUE	NULL
++NUMERIC_BLOCK_SIZE	NULL
++ENUM_VALUE_LIST	OFF,ON
++READ_ONLY	YES
++COMMAND_LINE_ARGUMENT	OPTIONAL
+ VARIABLE_NAME	INNODB_LOG_FILE_SIZE
+ SESSION_VALUE	NULL
+ DEFAULT_VALUE	100663296
+diff --git a/mysql-test/suite/sys_vars/t/sysvars_innodb.test b/mysql-test/suite/sys_vars/t/sysvars_innodb.test
+index 86f5ffd..308936c 100644
+--- a/mysql-test/suite/sys_vars/t/sysvars_innodb.test
++++ b/mysql-test/suite/sys_vars/t/sysvars_innodb.test
+@@ -5,13 +5,13 @@
+ 
+ --vertical_results
+ --replace_regex /^\/\S+/PATH/ /\.\//PATH/
++--replace_result 'resides in persistent memory or ' ''
+ select VARIABLE_NAME, SESSION_VALUE, DEFAULT_VALUE, VARIABLE_SCOPE, VARIABLE_TYPE, VARIABLE_COMMENT, NUMERIC_MIN_VALUE, NUMERIC_MAX_VALUE, NUMERIC_BLOCK_SIZE, ENUM_VALUE_LIST, READ_ONLY, COMMAND_LINE_ARGUMENT from information_schema.system_variables
+   where variable_name like 'innodb%' and
+   variable_name not in (
+     'innodb_numa_interleave',           # only available WITH_NUMA
+     'innodb_evict_tables_on_commit_debug', # one may want to override this
+     'innodb_use_native_aio',            # default value depends on OS
+-    'innodb_log_file_mmap',             # only available on 64-bit
+     'innodb_log_file_buffering',        # only available on Linux and Windows
+     'innodb_buffer_pool_load_pages_abort')            # debug build only, and is only for testing
+   order by variable_name;
+diff --git a/storage/innobase/CMakeLists.txt b/storage/innobase/CMakeLists.txt
+index 5552e53..5db9417 100644
+--- a/storage/innobase/CMakeLists.txt
++++ b/storage/innobase/CMakeLists.txt
+@@ -49,7 +49,7 @@ IF(UNIX)
+       LINK_LIBRARIES(numa)
+     ENDIF()
+     IF(CMAKE_SIZEOF_VOID_P EQUAL 8)
+-      IF(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch|AARCH|p(ower)?pc|x86_|amd)64")
++      IF(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch|AARCH|p(ower)?pc|x86_|amd|loongarch|riscv)64")
+         OPTION(WITH_INNODB_PMEM "Support memory-mapped InnoDB redo log" ON)
+       ELSE() # Disable by default on ISA that are not covered by our CI
+         OPTION(WITH_INNODB_PMEM "Support memory-mapped InnoDB redo log" OFF)
+diff --git a/storage/innobase/handler/ha_innodb.cc b/storage/innobase/handler/ha_innodb.cc
+index 6928f66..1b2df27 100644
+--- a/storage/innobase/handler/ha_innodb.cc
++++ b/storage/innobase/handler/ha_innodb.cc
+@@ -19424,7 +19424,6 @@ static MYSQL_SYSVAR_UINT(log_buffer_size, log_sys.buf_size,
+   "Redo log buffer size in bytes.",
+   NULL, NULL, 16U << 20, 2U << 20, log_sys.buf_size_max, 4096);
+ 
+-#ifdef HAVE_INNODB_MMAP
+   static constexpr const char *innodb_log_file_mmap_description=
+     "Whether ib_logfile0"
+ # ifdef HAVE_PMEM
+@@ -19435,7 +19434,6 @@ static MYSQL_SYSVAR_BOOL(log_file_mmap, log_sys.log_mmap,
+   PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
+   innodb_log_file_mmap_description,
+   nullptr, nullptr, log_sys.log_mmap_default);
+-#endif
+ 
+ #if defined __linux__ || defined _WIN32
+ static MYSQL_SYSVAR_BOOL(log_file_buffering, log_sys.log_buffered,
+@@ -19909,9 +19907,7 @@ static struct st_mysql_sys_var* innobase_system_variables[]= {
+   MYSQL_SYSVAR(deadlock_report),
+   MYSQL_SYSVAR(page_size),
+   MYSQL_SYSVAR(log_buffer_size),
+-#ifdef HAVE_INNODB_MMAP
+   MYSQL_SYSVAR(log_file_mmap),
+-#endif
+ #if defined __linux__ || defined _WIN32
+   MYSQL_SYSVAR(log_file_buffering),
+ #endif
+diff --git a/storage/innobase/include/log0log.h b/storage/innobase/include/log0log.h
+index 9d8705d..19d4cf3 100644
+--- a/storage/innobase/include/log0log.h
++++ b/storage/innobase/include/log0log.h
+@@ -279,7 +279,6 @@ struct log_t
+   uint write_size;
+   /** format of the redo log: e.g., FORMAT_10_8 */
+   uint32_t format;
+-#ifdef HAVE_INNODB_MMAP
+   /** whether the memory-mapped interface is enabled for the log */
+   my_bool log_mmap;
+   /** the default value of log_mmap */
+@@ -291,7 +290,6 @@ struct log_t
+ # else /* an unnecessary read-ahead of a large ib_logfile0 is a risk */
+ # endif
+     false;
+-#endif
+ #if defined __linux__ || defined _WIN32
+   /** whether file system caching is enabled for the log */
+   my_bool log_buffered;
+@@ -346,11 +344,7 @@ struct log_t
+   void set_buf_free(size_t f) noexcept
+   { ut_ad(f < buf_free_LOCK); buf_free.store(f, std::memory_order_relaxed); }
+ 
+-#ifdef HAVE_INNODB_MMAP
+   bool is_mmap() const noexcept { return !flush_buf; }
+-#else
+-  static constexpr bool is_mmap() { return false; }
+-#endif
+ 
+   /** @return whether a handle to the log is open;
+   is_mmap() && !is_opened() holds for PMEM */
+@@ -411,14 +405,9 @@ struct log_t
+   @return whether the memory allocation succeeded */
+   bool attach(log_file_t file, os_offset_t size);
+ 
+-#ifdef HAVE_INNODB_MMAP
+   /** Disable memory-mapped access (update log_mmap) */
+   void clear_mmap();
+   void close_file(bool really_close= true);
+-#else
+-  static void clear_mmap() {}
+-  void close_file();
+-#endif
+ #if defined __linux__ || defined _WIN32
+   /** Try to enable or disable file system caching (update log_buffered) */
+   void set_buffered(bool buffered);
+diff --git a/storage/innobase/include/log0recv.h b/storage/innobase/include/log0recv.h
+index 6f6c9f0..a820b3a 100644
+--- a/storage/innobase/include/log0recv.h
++++ b/storage/innobase/include/log0recv.h
+@@ -408,12 +408,7 @@ struct recv_sys_t
+   @tparam storing   whether to store the records
+   @param  if_exists storing=YES: whether to check if the tablespace exists */
+   template<store storing>
+-  static parse_mtr_result parse_mmap(bool if_exists) noexcept
+-#ifdef HAVE_INNODB_MMAP
+-    ;
+-#else
+-  { return parse_mtr<storing>(if_exists); }
+-#endif
++  static parse_mtr_result parse_mmap(bool if_exists) noexcept;
+ 
+   /** Erase log records for a page. */
+   void erase(map::iterator p);
+diff --git a/storage/innobase/include/univ.i b/storage/innobase/include/univ.i
+index 7e1312e..855b452 100644
+--- a/storage/innobase/include/univ.i
++++ b/storage/innobase/include/univ.i
+@@ -169,9 +169,6 @@ using the call command. */
+ #define UNIV_INLINE static inline
+ 
+ #define UNIV_WORD_SIZE		SIZEOF_SIZE_T
+-#if SIZEOF_SIZE_T == 8
+-# define HAVE_INNODB_MMAP
+-#endif
+ 
+ /** The following alignment is used in memory allocations in memory heap
+ management to ensure correct alignment for doubles etc. */
+diff --git a/storage/innobase/log/log0log.cc b/storage/innobase/log/log0log.cc
+index ee16c55..63109f6 100644
+--- a/storage/innobase/log/log0log.cc
++++ b/storage/innobase/log/log0log.cc
+@@ -185,7 +185,6 @@ void log_file_t::write(os_offset_t offset, span<const byte> buf) noexcept
+   abort();
+ }
+ 
+-#ifdef HAVE_INNODB_MMAP
+ # ifdef HAVE_PMEM
+ #  include "cache.h"
+ # endif
+@@ -201,6 +200,10 @@ static void *log_mmap(os_file_t file,
+ # endif
+                       os_offset_t size)
+ {
++#if SIZEOF_SIZE_T < 8
++  if (size != os_offset_t(size_t(size)))
++    return MAP_FAILED;
++#endif
+   if (my_system_page_size > 4096)
+     return MAP_FAILED;
+ # ifndef HAVE_PMEM
+@@ -292,20 +295,17 @@ static void *log_mmap(os_file_t file,
+ # endif
+   return ptr;
+ }
+-#endif
+ 
+ #if defined __linux__ || defined _WIN32
+ /** Display a message about opening the log */
+ ATTRIBUTE_COLD static void log_file_message()
+ {
+   sql_print_information("InnoDB: %s (block size=%u bytes)",
+-# ifdef HAVE_INNODB_MMAP
+                         log_sys.log_mmap
+                         ? (log_sys.log_buffered
+                            ? "Memory-mapped log"
+                            : "Memory-mapped unbuffered log")
+                         :
+-# endif
+                         log_sys.log_buffered
+                         ? "Buffered log writes"
+                         : "File system buffers for log disabled",
+@@ -323,7 +323,6 @@ bool log_t::attach(log_file_t file, os_offset_t size)
+ 
+   ut_ad(!buf);
+   ut_ad(!flush_buf);
+-#ifdef HAVE_INNODB_MMAP
+   if (size)
+   {
+ # ifdef HAVE_PMEM
+@@ -354,7 +353,6 @@ bool log_t::attach(log_file_t file, os_offset_t size)
+     }
+   }
+   log_mmap= false;
+-#endif
+   buf= static_cast<byte*>(ut_malloc_dontdump(buf_size, PSI_INSTRUMENT_ME));
+   if (!buf)
+   {
+@@ -391,9 +389,7 @@ bool log_t::attach(log_file_t file, os_offset_t size)
+   mtr_t::finisher_update();
+   memset_aligned<512>(checkpoint_buf, 0, write_size);
+ 
+-#ifdef HAVE_INNODB_MMAP
+  func_exit:
+-#endif
+   log_file_message();
+   return true;
+ }
+@@ -468,25 +464,19 @@ ATTRIBUTE_COLD static void log_close_failed(dberr_t err)
+   ib::fatal() << "closing ib_logfile0 failed: " << err;
+ }
+ 
+-#ifdef HAVE_INNODB_MMAP
+ void log_t::close_file(bool really_close)
+-#else
+-void log_t::close_file()
+-#endif
+ {
+-#ifdef HAVE_INNODB_MMAP
+   if (is_mmap())
+   {
+     ut_ad(!checkpoint_buf);
+     ut_ad(!flush_buf);
+     if (buf)
+     {
+-      my_munmap(buf, file_size);
++      my_munmap(buf, size_t(file_size));
+       buf= nullptr;
+     }
+   }
+   else
+-#endif
+   {
+     ut_ad(!buf == !flush_buf);
+     ut_ad(!buf == !checkpoint_buf);
+@@ -501,9 +491,7 @@ void log_t::close_file()
+     checkpoint_buf= nullptr;
+   }
+ 
+-#ifdef HAVE_INNODB_MMAP
+   if (really_close)
+-#endif
+     if (is_opened())
+       if (const dberr_t err= log.close())
+         log_close_failed(err);
+@@ -635,14 +623,10 @@ log_t::resize_start_status log_t::resize_start(os_offset_t size) noexcept
+       void *ptr= nullptr, *ptr2= nullptr;
+       success= os_file_set_size(path.c_str(), resize_log.m_file, size);
+       if (!success);
+-#ifdef HAVE_INNODB_MMAP
++#ifdef HAVE_PMEM
+       else if (is_mmap())
+       {
+-        ptr= ::log_mmap(resize_log.m_file,
+-#ifdef HAVE_PMEM
+-                        is_pmem,
+-#endif
+-                        size);
++        ptr= ::log_mmap(resize_log.m_file, is_pmem, size);
+ 
+         if (ptr == MAP_FAILED)
+           goto alloc_fail;
+@@ -650,6 +634,7 @@ log_t::resize_start_status log_t::resize_start(os_offset_t size) noexcept
+ #endif
+       else
+       {
++        ut_ad(!is_mmap());
+         ptr= ut_malloc_dontdump(buf_size, PSI_INSTRUMENT_ME);
+         if (ptr)
+         {
+@@ -717,21 +702,26 @@ void log_t::resize_abort() noexcept
+ 
+   if (resize_in_progress() > 1)
+   {
+-    if (!is_mmap())
++#ifdef HAVE_PMEM
++    const bool is_mmap{this->is_mmap()};
++#else
++    constexpr bool is_mmap{false};
++#endif
++    if (!is_mmap)
+     {
+       ut_free_dodump(resize_buf, buf_size);
+       ut_free_dodump(resize_flush_buf, buf_size);
+       resize_flush_buf= nullptr;
+     }
+-#ifdef HAVE_INNODB_MMAP
+     else
+     {
+       ut_ad(!resize_log.is_opened());
+       ut_ad(!resize_flush_buf);
++#ifdef HAVE_PMEM
+       if (resize_buf)
+         my_munmap(resize_buf, resize_target);
++#endif /* HAVE_PMEM */
+     }
+-#endif
+     if (resize_log.is_opened())
+       resize_log.close();
+     resize_buf= nullptr;
+@@ -1197,7 +1187,6 @@ ATTRIBUTE_COLD void log_write_and_flush_prepare()
+          group_commit_lock::ACQUIRED);
+ }
+ 
+-#ifdef HAVE_INNODB_MMAP
+ void log_t::clear_mmap()
+ {
+   if (!is_mmap() ||
+@@ -1231,7 +1220,6 @@ void log_t::clear_mmap()
+   }
+   log_resize_release();
+ }
+-#endif
+ 
+ /** Durably write the log up to log_sys.get_lsn(). */
+ ATTRIBUTE_COLD void log_write_and_flush()
+diff --git a/storage/innobase/log/log0recv.cc b/storage/innobase/log/log0recv.cc
+index 443a3b6..ca0eae5 100644
+--- a/storage/innobase/log/log0recv.cc
++++ b/storage/innobase/log/log0recv.cc
+@@ -2195,7 +2195,6 @@ struct recv_buf
+   }
+ };
+ 
+-#ifdef HAVE_INNODB_MMAP
+ /** Ring buffer wrapper for log_sys.buf[]; recv_sys.len == log_sys.file_size */
+ struct recv_ring : public recv_buf
+ {
+@@ -2327,7 +2326,6 @@ struct recv_ring : public recv_buf
+     return log_decrypt_buf(iv, tmp + s, b, static_cast<uint>(len));
+   }
+ };
+-#endif
+ 
+ template<typename source>
+ void recv_sys_t::rewind(source &l, source &begin) noexcept
+@@ -3042,7 +3040,6 @@ template
+ recv_sys_t::parse_mtr_result
+ recv_sys_t::parse_mtr<recv_sys_t::store::BACKUP>(bool) noexcept;
+ 
+-#ifdef HAVE_INNODB_MMAP
+ template<recv_sys_t::store storing>
+ recv_sys_t::parse_mtr_result recv_sys_t::parse_mmap(bool if_exists) noexcept
+ {
+@@ -3063,7 +3060,6 @@ recv_sys_t::parse_mtr_result recv_sys_t::parse_mmap(bool if_exists) noexcept
+ template
+ recv_sys_t::parse_mtr_result
+ recv_sys_t::parse_mmap<recv_sys_t::store::BACKUP>(bool) noexcept;
+-#endif
+ 
+ /** Apply the hashed log records to the page, if the page lsn is less than the
+ lsn of a log record.
+diff --git a/storage/innobase/mtr/mtr0mtr.cc b/storage/innobase/mtr/mtr0mtr.cc
+index 04aafa0..95e41e1 100644
+--- a/storage/innobase/mtr/mtr0mtr.cc
++++ b/storage/innobase/mtr/mtr0mtr.cc
+@@ -1218,7 +1218,7 @@ inline void log_t::resize_write(lsn_t lsn, const byte *end, size_t len,
+     end-= len;
+     size_t s;
+ 
+-#ifdef HAVE_INNODB_MMAP
++#ifdef HAVE_PMEM
+     if (!resize_flush_buf)
+     {
+       ut_ad(is_mmap());
+diff --git a/storage/innobase/srv/srv0start.cc b/storage/innobase/srv/srv0start.cc
+index 5f872c4..be27327 100644
+--- a/storage/innobase/srv/srv0start.cc
++++ b/storage/innobase/srv/srv0start.cc
+@@ -1964,15 +1964,11 @@ dberr_t srv_start(bool create_new_db)
+ 	if (srv_print_verbose_log) {
+ 		sql_print_information("InnoDB: "
+ 				      "log sequence number " LSN_PF
+-#ifdef HAVE_INNODB_MMAP
+ 				      "%s"
+-#endif
+ 				      "; transaction id " TRX_ID_FMT,
+ 				      recv_sys.lsn,
+-#ifdef HAVE_INNODB_MMAP
+ 				      log_sys.is_mmap()
+ 				      ? " (memory-mapped)" : "",
+-#endif
+ 				      trx_sys.get_max_trx_id());
+ 	}
+ 
