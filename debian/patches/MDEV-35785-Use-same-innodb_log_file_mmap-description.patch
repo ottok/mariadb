@@ -1,0 +1,47 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Sun, 12 Jan 2025 13:31:16 -0800
+Subject: MDEV-35785: Use same innodb_log_file_mmap description on all systems
+
+On most 64-bit architectures `mariadbd --help --verbose` said:
+
+    Whether ib_logfile0 resides in persistent memory or
+    should initially be memory-mapped
+
+On 32-bit architectures and some 64-bit (e.g. s390x) it said:
+
+    Whether ib_logfile0 should initially be memory-mapped
+
+Having the help test vary with the same source code build with the same
+build flags and dependencies seems confusing. Unify the text to always
+be the same for clarity.
+
+Ideally the embedded help text would be the exact same first sentence
+as the wiki docs[1] but use this custom text now for better clarity.
+
+[1] https://mariadb.com/kb/en/innodb-system-variables/#innodb_log_file_mmap
+
+Forwarded: no
+---
+ storage/innobase/handler/ha_innodb.cc | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/storage/innobase/handler/ha_innodb.cc b/storage/innobase/handler/ha_innodb.cc
+index 1b2df27..87c8bc3 100644
+--- a/storage/innobase/handler/ha_innodb.cc
++++ b/storage/innobase/handler/ha_innodb.cc
+@@ -19424,12 +19424,9 @@ static MYSQL_SYSVAR_UINT(log_buffer_size, log_sys.buf_size,
+   "Redo log buffer size in bytes.",
+   NULL, NULL, 16U << 20, 2U << 20, log_sys.buf_size_max, 4096);
+ 
+-  static constexpr const char *innodb_log_file_mmap_description=
+-    "Whether ib_logfile0"
+-# ifdef HAVE_PMEM
+-    " resides in persistent memory or"
+-# endif
+-    " should initially be memory-mapped";
++static constexpr const char *innodb_log_file_mmap_description=
++  "Whether ib_logfile0 on InnoDB startup and recovery is memory-mapped, or in persistent memory (on supported platforms).";
++
+ static MYSQL_SYSVAR_BOOL(log_file_mmap, log_sys.log_mmap,
+   PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
+   innodb_log_file_mmap_description,

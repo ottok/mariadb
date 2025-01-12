@@ -870,8 +870,9 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-log-file-buffering 
                       Whether the file system cache for ib_logfile0 is enabled
   --innodb-log-file-mmap 
-                      Whether ib_logfile0 resides in persistent memory or
-                      should initially be memory-mapped
+                      Whether ib_logfile0 on InnoDB startup and recovery is
+                      memory-mapped, or in persistent memory (on supported
+                      platforms).
                       (Defaults to on; use --skip-innodb-log-file-mmap to disable.)
   --innodb-log-file-size=# 
                       Redo log size in bytes.

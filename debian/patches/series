@@ -15,3 +15,4 @@ hide-mysql-command-deprecation-warnings.patch
 Fix-spelling-of-of-allows-one-to.patch
 MDEV-35528-mariadb-binlog-cannot-process-more-than-1-logf.patch
 MDEV-35785-Always-show-innodb_log_file_mmap.patch
+MDEV-35785-Use-same-innodb_log_file_mmap-description.patch
