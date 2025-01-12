@@ -126,6 +126,11 @@ override_dh_auto_build:
 	dpkg-architecture
 	cd $(BUILDDIR) && $(MAKE)
 
+# Note that the 'nocheck' condition inside this section may potentially be
+# completely obsolete, as at least the Launchpad riscv64 builder completely
+# skips this section with message:
+# 	dh: command-omitted: The call to "debian/rules override_dh_auto_test" was
+# 	omitted due to "DEB_BUILD_OPTIONS=nocheck"
 override_dh_auto_test:
 	@echo "RULES.$@"
 	dh_testdir
