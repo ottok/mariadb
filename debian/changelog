@@ -1,8 +1,12 @@
-mariadb (1:11.4.4-3) UNRELEASED; urgency=medium
+mariadb (1:11.4.4-3) unstable; urgency=medium
 
-  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+  * Set CAP_IPC_LOCK capability if possible
+  * Stop depending on obsolete libpmem-dev, re-implemented in MariaDB
+  * Clean away duplicate wsrep-provider from configuration traces
+  * Add upstream patch to ensure innodb_log_file_mmap is always visible
+  * Add patch to use the same innodb_log_file_mmap description on all systems
 
- -- Otto Kekäläinen <otto@debian.org>  Sun, 22 Dec 2024 00:31:21 -0800
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 12 Jan 2025 14:10:40 -0800
 
 mariadb (1:11.4.4-2) unstable; urgency=medium
 
