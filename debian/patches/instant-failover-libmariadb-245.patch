@@ -1,6 +1,3 @@
-Forwarded: https://github.com/mariadb-corporation/mariadb-connector-c/pull/245
-Origin: https://patch-diff.githubusercontent.com/raw/mariadb-corporation/mariadb-connector-c/pull/245.patch
-Bug: https://jira.mariadb.org/browse/MDEV-15935
 From: Daniel Lenski <dlenski@amazon.com>
 Date: Wed, 14 Jun 2023 11:38:19 -0700
 Subject: [PATCH] [MDEV-34009] Introduce server-initiated instant failover mechanism (and TLS fixes)
@@ -16,9 +13,14 @@ All new code of the whole pull request, including one or several files
 that are either new files or modified ones, are contributed under the
 BSD-new license. I am contributing on behalf of my employer Amazon Web
 Services, Inc.
+
+Forwarded: https://github.com/mariadb-corporation/mariadb-connector-c/pull/245
+Origin: https://patch-diff.githubusercontent.com/raw/mariadb-corporation/mariadb-connector-c/pull/245.patch
+Bug: https://jira.mariadb.org/browse/MDEV-15935
+
 --- a/libmariadb/include/mysql.h
 +++ b/libmariadb/include/mysql.h
-@@ -228,6 +228,8 @@ extern const char *SQLSTATE_UNKNOWN;
+@@ -228,6 +228,8 @@
      /* MariaDB specific */
      MYSQL_PROGRESS_CALLBACK=5999,
      MYSQL_OPT_NONBLOCK,
@@ -27,7 +29,7 @@ Services, Inc.
      /* MariaDB Connector/C specific */
      MYSQL_DATABASE_DRIVER=7000,
      MARIADB_OPT_SSL_FP,             /* deprecated, use MARIADB_OPT_TLS_PEER_FP instead */
-@@ -340,12 +342,19 @@ struct st_mysql_options {
+@@ -342,12 +344,19 @@
      char *bind_address;
      my_bool secure_auth;
      my_bool report_data_truncation;
@@ -59,7 +61,7 @@ Services, Inc.
  #endif /* ER_ERROR_FIRST */
 --- a/libmariadb/libmariadb/mariadb_lib.c
 +++ b/libmariadb/libmariadb/mariadb_lib.c
-@@ -85,6 +85,7 @@
+@@ -84,6 +84,7 @@
  #define MA_RPL_VERSION_HACK "5.5.5-"
  
  #define CHARSET_NAME_LEN 64
@@ -67,7 +69,7 @@ Services, Inc.
  
  #undef max_allowed_packet
  #undef net_buffer_length
-@@ -668,6 +669,7 @@ struct st_default_options mariadb_defaul
+@@ -667,6 +668,7 @@
    {{MYSQL_SET_CHARSET_NAME}, MARIADB_OPTION_STR, "default-character-set"},
    {{MARIADB_OPT_INTERACTIVE}, MARIADB_OPTION_NONE, "interactive-timeout"},
    {{MYSQL_OPT_CONNECT_TIMEOUT}, MARIADB_OPTION_INT, "connect-timeout"},
@@ -75,7 +77,7 @@ Services, Inc.
    {{MYSQL_OPT_LOCAL_INFILE}, MARIADB_OPTION_BOOL, "local-infile"},
    {{0}, 0 ,"disable-local-infile",},
    {{MYSQL_OPT_SSL_CIPHER}, MARIADB_OPTION_STR, "ssl-cipher"},
-@@ -1305,6 +1307,7 @@ mysql_init(MYSQL *mysql)
+@@ -1307,6 +1309,7 @@
      goto error;
    mysql->options.report_data_truncation= 1;
    mysql->options.connect_timeout=CONNECT_TIMEOUT;
@@ -83,7 +85,7 @@ Services, Inc.
    mysql->charset= mysql_find_charset_name(MARIADB_DEFAULT_CHARSET);
    mysql->methods= &MARIADB_DEFAULT_METHODS;
    strcpy(mysql->net.sqlstate, "00000");
-@@ -1600,7 +1603,7 @@ MYSQL *mthd_my_real_connect(MYSQL *mysql
+@@ -1603,7 +1606,7 @@
    my_bool is_multi= 0;
    char *host_copy= NULL;
    struct st_host *host_list= NULL;
@@ -92,7 +94,7 @@ Services, Inc.
  
    if (!mysql->methods)
      mysql->methods= &MARIADB_DEFAULT_METHODS;
-@@ -1740,6 +1743,7 @@ restart:
+@@ -1743,6 +1746,7 @@
    else
  #endif
    {
@@ -100,7 +102,7 @@ Services, Inc.
      cinfo.unix_socket=0;				/* This is not used */
      if (!port)
        port=mysql_port;
-@@ -1952,6 +1956,27 @@ restart:
+@@ -1955,6 +1959,27 @@
      }
    }
  
@@ -128,7 +130,7 @@ Services, Inc.
    /* Set character set */
    if (mysql->options.charset_name)
      mysql->charset= mysql_find_charset_name(mysql->options.charset_name);
-@@ -1970,9 +1995,59 @@ restart:
+@@ -1973,9 +1998,59 @@
  
    mysql->client_flag= client_flag;
  
@@ -188,7 +190,7 @@ Services, Inc.
  
    if (mysql->client_flag & CLIENT_COMPRESS ||
        mysql->client_flag & CLIENT_ZSTD_COMPRESSION)
-@@ -3486,6 +3561,9 @@ mysql_optionsv(MYSQL *mysql,enum mysql_o
+@@ -3491,6 +3566,9 @@
    case MYSQL_OPT_RECONNECT:
      mysql->options.reconnect= *(my_bool *)arg1;
      break;
@@ -200,7 +202,7 @@ Services, Inc.
      break;
 --- a/libmariadb/plugins/auth/my_auth.c
 +++ b/libmariadb/plugins/auth/my_auth.c
-@@ -277,22 +277,6 @@ static int send_client_reply_packet(MCPV
+@@ -316,22 +316,6 @@
      mysql->options.extension->tls_allow_invalid_server_cert= 1;
    }
  
@@ -223,9 +225,9 @@ Services, Inc.
    /* Remove options that server doesn't support */
    mysql->client_flag= mysql->client_flag &
                         (~(CLIENT_COMPRESS | CLIENT_ZSTD_COMPRESSION | CLIENT_SSL | CLIENT_PROTOCOL_41) 
-@@ -371,8 +355,19 @@ static int send_client_reply_packet(MCPV
-       (mysql->client_flag & CLIENT_SSL))
+@@ -411,8 +395,19 @@
    {
+     unsigned int verify_flags= 0;
      /*
 -      Send mysql->client_flag, max_packet_size - unencrypted otherwise
 -      the server does not know we want to do SSL
@@ -245,13 +247,13 @@ Services, Inc.
      */
      if (ma_net_write(net, (unsigned char *)buff, (size_t) (end-buff)) || ma_net_flush(net))
      {
-@@ -382,6 +377,9 @@ static int send_client_reply_packet(MCPV
+@@ -422,6 +417,9 @@
                            errno);
        goto error;
      }
 +    /* This is where the socket is actually converted from a plain
 +     * TCP/IP socket to a TLS/SSL-wrapped socket.
 +     */
+     mysql->net.tls_verify_status = 0;
      if (ma_pvio_start_ssl(mysql->net.pvio))
        goto error;
-     if (mysql->net.tls_self_signed_error &&
