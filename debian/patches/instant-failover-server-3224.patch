@@ -1,6 +1,9 @@
 From: Daniel Lenski <dlenski@amazon.com>
 Date: Wed, 3 Apr 2024 16:57:26 -0700
 Subject: [MDEV-34009] Introduce server-initiated instant failover mechanism
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
 
 This PR proposes a new feature in the MariaDB client-server protocol: a server-initiated failover which can redirect new client connections to an alternate endpoint at the application layer.
 
@@ -16,10 +19,36 @@ Services, Inc.
 Forwarded: https://github.com/MariaDB/server/pull/3224
 Origin: https://patch-diff.githubusercontent.com/raw/MariaDB/server/pull/3224.patch
 Bug: https://jira.mariadb.org/browse/MDEV-15935
+---
+ .gitlab-ci.yml                          |   1 +
+ client/mysql.cc                         |  23 ++--
+ client/mysqltest.cc                     |   4 +-
+ include/sslopt-vars.h                   |  16 ++-
+ mysql-test/main/instant_failover.cnf    |   7 ++
+ mysql-test/main/instant_failover.result |  40 +++++++
+ mysql-test/main/instant_failover.test   |  64 ++++++++++++
+ mysql-test/main/mysql.result            |   2 +-
+ mysql-test/main/mysql.test              |   4 +-
+ mysql-test/main/mysqld--help.result     |  16 +++
+ mysql-test/main/ssl_7937,nossl.result   |  10 +-
+ mysql-test/main/ssl_7937.test           |   8 ++
+ mysql-test/main/ssl_fp.result           |   2 +-
+ mysql-test/main/ssl_fp.test             |   4 +-
+ sql/mysqld.cc                           |   6 ++
+ sql/mysqld.h                            |   8 ++
+ sql/share/errmsg-utf8.txt               |   4 +
+ sql/sql_acl.cc                          | 180 ++++++++++++++++++++++++++++----
+ sql/sys_vars.cc                         |  20 ++++
+ 19 files changed, 376 insertions(+), 43 deletions(-)
+ create mode 100644 mysql-test/main/instant_failover.cnf
+ create mode 100644 mysql-test/main/instant_failover.result
+ create mode 100644 mysql-test/main/instant_failover.test
 
+diff --git a/.gitlab-ci.yml b/.gitlab-ci.yml
+index fe5ba11..cc0e99c 100644
 --- a/.gitlab-ci.yml
 +++ b/.gitlab-ci.yml
-@@ -292,6 +292,7 @@
+@@ -292,6 +292,7 @@ centos7:
        main.flush_logs_not_windows : query 'flush logs' succeeded - should have failed with error ER_CANT_CREATE_FILE (1004)
        main.mysql_upgrade_noengine : upgrade output order does not match the expected
        main.func_math              : MDEV-20966 - Wrong error code
@@ -27,9 +56,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
        " > skiplist
      - ./mtr --suite=main --force --parallel=auto --xml-report=$CI_PROJECT_DIR/junit.xml --skip-test-list=skiplist $RESTART_POLICY
  
+diff --git a/client/mysql.cc b/client/mysql.cc
+index 7c390c0..b9fc14f 100644
 --- a/client/mysql.cc
 +++ b/client/mysql.cc
-@@ -238,18 +238,18 @@
+@@ -238,18 +238,18 @@ typedef enum enum_info_type INFO_TYPE;
  
  static MYSQL mysql;			/* The connection */
  static my_bool ignore_errors=0,wait_flag=0,quick=0,
@@ -56,7 +87,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  static my_bool debug_info_flag, debug_check_flag, batch_abort_on_error;
  static my_bool column_types_flag;
  static my_bool preserve_comments= 0;
-@@ -1514,6 +1514,8 @@
+@@ -1514,6 +1514,8 @@ static bool do_connect(MYSQL *mysql, const char *host, const char *user,
    if (opt_secure_auth)
      mysql_options(mysql, MYSQL_SECURE_AUTH, (char *) &opt_secure_auth);
    SET_SSL_OPTS_WITH_CHECK(mysql);
@@ -65,7 +96,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
    if (opt_protocol)
      mysql_options(mysql,MYSQL_OPT_PROTOCOL,(char*)&opt_protocol);
    if (opt_plugin_dir && *opt_plugin_dir)
-@@ -1860,6 +1862,11 @@
+@@ -1860,6 +1862,11 @@ static struct my_option my_long_options[] =
     &opt_mysql_unix_port, &opt_mysql_unix_port, 0, GET_STR_ALLOC,
     REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
  #include "sslopt-longopts.h"
@@ -77,9 +108,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
    {"table", 't', "Output in table format.", &output_tables,
     &output_tables, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
    {"tee", OPT_TEE,
+diff --git a/client/mysqltest.cc b/client/mysqltest.cc
+index 240fe50..7f1107d 100644
 --- a/client/mysqltest.cc
 +++ b/client/mysqltest.cc
-@@ -6091,8 +6091,8 @@
+@@ -6091,8 +6091,8 @@ int connect_n_handle_errors(struct st_command *command,
  enum use_ssl
  {
    USE_SSL_FORBIDDEN = -1,
@@ -90,9 +123,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  };
  
  void do_connect(struct st_command *command)
+diff --git a/include/sslopt-vars.h b/include/sslopt-vars.h
+index 3a3679a..3f81ec4 100644
 --- a/include/sslopt-vars.h
 +++ b/include/sslopt-vars.h
-@@ -36,9 +36,21 @@
+@@ -36,9 +36,21 @@ SSL_STATIC char *opt_ssl_fp      = 0;
  SSL_STATIC char *opt_ssl_fplist  = 0;
  SSL_STATIC my_bool opt_ssl_verify_server_cert= 2;
  
@@ -115,7 +150,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
      {                                                                   \
        mysql_ssl_set((M), opt_ssl_key, opt_ssl_cert, opt_ssl_ca,         \
                      opt_ssl_capath, opt_ssl_cipher);                    \
-@@ -48,7 +60,7 @@
+@@ -48,7 +60,7 @@ SSL_STATIC my_bool opt_ssl_verify_server_cert= 2;
        mysql_options((M), MARIADB_OPT_TLS_PEER_FP, opt_ssl_fp);          \
        mysql_options((M), MARIADB_OPT_TLS_PEER_FP_LIST, opt_ssl_fplist); \
      }                                                                   \
@@ -124,6 +159,9 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
        opt_ssl_verify_server_cert= 0;                                    \
      mysql_options((M),MYSQL_OPT_SSL_VERIFY_SERVER_CERT,                 \
                    &opt_ssl_verify_server_cert);                         \
+diff --git a/mysql-test/main/instant_failover.cnf b/mysql-test/main/instant_failover.cnf
+new file mode 100644
+index 0000000..f9762d0
 --- /dev/null
 +++ b/mysql-test/main/instant_failover.cnf
 @@ -0,0 +1,7 @@
@@ -134,6 +172,9 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
 +
 +[ENV]
 +MASTER_EXTRA_PORT= @OPT.port
+diff --git a/mysql-test/main/instant_failover.result b/mysql-test/main/instant_failover.result
+new file mode 100644
+index 0000000..8344539
 --- /dev/null
 +++ b/mysql-test/main/instant_failover.result
 @@ -0,0 +1,40 @@
@@ -177,6 +218,9 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
 +Connections should now succeed again, even with --disable-follow-instant-failovers
 +default_port_tcp_works
 +1
+diff --git a/mysql-test/main/instant_failover.test b/mysql-test/main/instant_failover.test
+new file mode 100644
+index 0000000..60ed92b
 --- /dev/null
 +++ b/mysql-test/main/instant_failover.test
 @@ -0,0 +1,64 @@
@@ -244,9 +288,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
 +--echo Connections should now succeed again, even with --disable-follow-instant-failovers
 +--error 0
 +--exec $MYSQL --disable-follow-instant-failovers --host=127.0.0.1 --port=$MASTER_MYPORT test -e "select 1 as default_port_tcp_works"
+diff --git a/mysql-test/main/mysql.result b/mysql-test/main/mysql.result
+index 6290f56..49f41fb 100644
 --- a/mysql-test/main/mysql.result
 +++ b/mysql-test/main/mysql.result
-@@ -695,7 +695,7 @@
+@@ -695,7 +695,7 @@ MYSQL --disable-ssl-verify-server-cert -e "\s"
  SSL:			Cipher in use is XXX, cert is UNKNOWN
  
  
@@ -255,9 +301,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
  SSL:			Cipher in use is XXX, cert is OK
  
+diff --git a/mysql-test/main/mysql.test b/mysql-test/main/mysql.test
+index c5a4011..91dad79 100644
 --- a/mysql-test/main/mysql.test
 +++ b/mysql-test/main/mysql.test
-@@ -793,9 +793,9 @@
+@@ -793,9 +793,9 @@ create user ser@localhost identified by "ass";
  --echo MYSQL --disable-ssl-verify-server-cert -e "\\s"
  --replace_regex /^.[^S].*// /\b[-A-Z_0-9]+,/XXX,/
  --exec $MYSQL -user -pass --disable-ssl-verify-server-cert -e "\\s"
@@ -269,9 +317,45 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  drop user ser@localhost;
  
  --echo #
+diff --git a/mysql-test/main/mysqld--help.result b/mysql-test/main/mysqld--help.result
+index 223117b..014d808 100644
+--- a/mysql-test/main/mysqld--help.result
++++ b/mysql-test/main/mysqld--help.result
+@@ -433,6 +433,20 @@ The following specify which files/extra groups are read (specified before remain
+  Set the replication role. One of: MASTER, SLAVE
+  --init-slave=name   Command(s) that are executed by a slave server each time
+  the SQL thread starts
++ --instant-failover-mode=name 
++ Instant failover mode. Possible modes are: OFF - No
++ instant failover, ON: Unconditionally redirect new
++ clients connecting over the network via the standard
++ server port to INSTANT_FAILOVER_TARGET (no redirection of
++ local socket-based connections, nor of connections to the
++ EXTRA_PORT), ALL: Unconditionally redirect all new
++ clients to INSTANT_FAILOVER_TARGET (even via local
++ socket-based connections and the EXTRA_PORT).
++ --instant-failover-target=name 
++ Instant failover target. This should be a hostname, an IP
++ address, or a hostname or IP address followed by ':PORT'.
++ Instant failover will not be activated unless
++ INSTANT_FAILOVER_MODE is also set.
+  --interactive-timeout=# 
+  The number of seconds the server waits for activity on an
+  interactive connection before closing it
+@@ -1717,6 +1731,8 @@ init-connect
+ init-file (No default value)
+ init-rpl-role MASTER
+ init-slave 
++instant-failover-mode OFF
++instant-failover-target (No default value)
+ interactive-timeout 28800
+ join-buffer-size 262144
+ join-buffer-space-limit 2097152
+diff --git a/mysql-test/main/ssl_7937,nossl.result b/mysql-test/main/ssl_7937,nossl.result
+index 6ba2d23..d3d0b1f 100644
 --- a/mysql-test/main/ssl_7937,nossl.result
 +++ b/mysql-test/main/ssl_7937,nossl.result
-@@ -3,15 +3,13 @@
+@@ -3,15 +3,13 @@ select if(variable_value > '','yes','no') as 'have_ssl'
    from information_schema.session_status
  where variable_name='ssl_cipher';
  mysql --ssl-ca=cacert.pem -e "call test.have_ssl()"
@@ -291,9 +375,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  #
  # MDEV-27105 --ssl option set as default for mariadb CLI
  #
+diff --git a/mysql-test/main/ssl_7937.test b/mysql-test/main/ssl_7937.test
+index 444e3ec..34e94cf 100644
 --- a/mysql-test/main/ssl_7937.test
 +++ b/mysql-test/main/ssl_7937.test
-@@ -26,6 +26,14 @@
+@@ -26,6 +26,14 @@ if($is_win)
  {
    let $host=--host=127.0.0.2;
  }
@@ -308,9 +394,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  --echo mysql --ssl --ssl-verify-server-cert -e "call test.have_ssl()"
  --replace_regex /TLS\/SSL error.*certificate[^\n]*/TLS\/SSL error: Failed to verify the server certificate/
  --exec $MYSQL --protocol tcp $host --ssl --ssl-verify-server-cert -e "call test.have_ssl()" 2>&1
+diff --git a/mysql-test/main/ssl_fp.result b/mysql-test/main/ssl_fp.result
+index ae2ccfb..83b8251 100644
 --- a/mysql-test/main/ssl_fp.result
 +++ b/mysql-test/main/ssl_fp.result
-@@ -4,7 +4,7 @@
+@@ -4,7 +4,7 @@ return (select if(variable_value > '','yes','no') as 'have_ssl'
  where variable_name='ssl_cipher');
  # mysql --protocol tcp -uroot --ssl-verify-server-cert -e "select test.have_ssl()"
  ERROR 2026 (HY000): TLS/SSL error: Failed to verify the server certificate
@@ -319,9 +407,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  test.have_ssl()
  yes
  # mysql --protocol tcp -uroot --ssl-fp=00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33 --disable-ssl-verify-server-cert -e "select test.have_ssl()"
+diff --git a/mysql-test/main/ssl_fp.test b/mysql-test/main/ssl_fp.test
+index 11d670d..2c9b880 100644
 --- a/mysql-test/main/ssl_fp.test
 +++ b/mysql-test/main/ssl_fp.test
-@@ -21,8 +21,8 @@
+@@ -21,8 +21,8 @@ if($is_win)
  #
  # fingerprint based cert verification:
  #
@@ -332,9 +422,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  #
  # --disable-ssl-verify-server-cert does not disable fingerprint checks
  #
+diff --git a/sql/mysqld.cc b/sql/mysqld.cc
+index c9d2c1b..caace4d 100644
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
-@@ -1536,6 +1536,12 @@
+@@ -1536,6 +1536,12 @@ static Atomic_counter<uint> extra_connection_count;
  
  my_bool opt_gtid_strict_mode= FALSE;
  
@@ -347,9 +439,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
  /* Function declarations */
  
+diff --git a/sql/mysqld.h b/sql/mysqld.h
+index aeb31e0..bf1cc61 100644
 --- a/sql/mysqld.h
 +++ b/sql/mysqld.h
-@@ -1011,6 +1011,14 @@
+@@ -1011,6 +1011,14 @@ extern char server_uid[SERVER_UID_SIZE+1];
  extern uint volatile global_disable_checkpoint;
  extern my_bool opt_help;
  
@@ -364,9 +458,23 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  extern int mysqld_main(int argc, char **argv);
  
  #ifdef _WIN32
+diff --git a/sql/share/errmsg-utf8.txt b/sql/share/errmsg-utf8.txt
+index 910f07d..b94ad0a 100644
+--- a/sql/share/errmsg-utf8.txt
++++ b/sql/share/errmsg-utf8.txt
+@@ -12270,3 +12270,7 @@ ER_JSON_SCHEMA_KEYWORD_UNSUPPORTED
+         sw "%s neno kuu halitumiki"
+ ER_JSON_NO_VARIABLE_SCHEMA
+         eng "Variable schema is not supported."
++ER_INSTANT_FAILOVER
++        eng "|Server is directing clients to the alternative server '%1$s'|%1$s"
++        fra "|Ce serveur dirige ses clients vers le serveur alternatif '%1$s'|%1$s"
++        spa "|Este servidor está dirigiendo sus clientes al servidor alternativo '%1$s'|%1$s"
+diff --git a/sql/sql_acl.cc b/sql/sql_acl.cc
+index aa61b29..1ee1ca6 100644
 --- a/sql/sql_acl.cc
 +++ b/sql/sql_acl.cc
-@@ -13335,6 +13335,8 @@
+@@ -13335,6 +13335,8 @@ static bool send_server_handshake_packet(MPVIO_EXT *mpvio,
    char scramble_buf[SCRAMBLE_LENGTH];
    char *end= buff;
    DBUG_ENTER("send_server_handshake_packet");
@@ -375,7 +483,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
    *end++= protocol_version;
  
-@@ -13902,10 +13904,91 @@
+@@ -13902,10 +13904,91 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
    THD *thd= mpvio->auth_info.thd;
    NET *net= &thd->net;
    char *end;
@@ -468,7 +576,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
    /*
      Protocol buffer is guaranteed to always end with \0. (see my_net_read())
-@@ -13918,7 +14001,7 @@
+@@ -13918,7 +14001,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
    if (client_capabilities & CLIENT_PROTOCOL_41)
    {
      if (pkt_len < 32)
@@ -477,7 +585,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
      client_capabilities|= ((ulong) uint2korr(net->read_pos+2)) << 16;
      if (!(client_capabilities & CLIENT_MYSQL))
      {
-@@ -13940,7 +14023,7 @@
+@@ -13940,7 +14023,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
  
      /* Do the SSL layering. */
      if (!ssl_acceptor_fd)
@@ -486,7 +594,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
      DBUG_PRINT("info", ("IO layer change in progress..."));
      mysql_rwlock_rdlock(&LOCK_ssl_refresh);
-@@ -13951,16 +14034,19 @@
+@@ -13951,16 +14034,19 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
      if(ssl_ret)
      {
        DBUG_PRINT("error", ("Failed to accept new SSL connection"));
@@ -508,7 +616,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
      }
    }
    /*
-@@ -13980,24 +14066,60 @@
+@@ -13980,24 +14066,60 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
      return packet_error;
    }
  
@@ -572,7 +680,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
    if (thd->client_capabilities & CLIENT_IGNORE_SPACE)
      thd->variables.sql_mode|= MODE_IGNORE_SPACE;
-@@ -14005,7 +14127,7 @@
+@@ -14005,7 +14127,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
      thd->variables.net_wait_timeout= thd->variables.net_interactive_timeout;
  
    if (end >= (char*) net->read_pos+ pkt_len +2)
@@ -581,7 +689,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
    if ((thd->client_capabilities & CLIENT_TRANSACTIONS) &&
        opt_using_transactions)
-@@ -14040,7 +14162,7 @@
+@@ -14040,7 +14162,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
      len= safe_net_field_length_ll((uchar**)&passwd,
                                        net->read_pos + pkt_len - (uchar*)passwd);
      if (len > pkt_len)
@@ -590,7 +698,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
    }
  
    passwd_len= (size_t)len;
-@@ -14049,7 +14171,7 @@
+@@ -14049,7 +14171,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
  
    if (passwd == NULL ||
        passwd + passwd_len + MY_TEST(db) > (char*) net->read_pos + pkt_len)
@@ -599,7 +707,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
    /* strlen() can't be easily deleted without changing protocol */
    db_len= safe_strlen(db);
-@@ -14066,7 +14188,7 @@
+@@ -14066,7 +14188,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
    if (unlikely(thd->copy_with_error(system_charset_info,
                                      (LEX_STRING*) &mpvio->db,
                                      thd->charset(), db ? db : "", db_len)))
@@ -608,7 +716,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
    user_len= copy_and_convert(user_buff, sizeof(user_buff) - 1,
                               system_charset_info, user, user_len,
-@@ -14093,7 +14215,7 @@
+@@ -14093,7 +14215,7 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
  
    my_free(const_cast<char*>(sctx->user));
    if (!(sctx->user= my_strndup(key_memory_MPVIO_EXT_auth_info, user, user_len, MYF(MY_WME))))
@@ -617,7 +725,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
  
    /*
-@@ -14107,12 +14229,12 @@
+@@ -14107,12 +14229,12 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
    {
      // if mysqld's been started with --skip-grant-tables option
      mpvio->status= MPVIO_EXT::SUCCESS;
@@ -632,7 +740,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
    if ((thd->client_capabilities & CLIENT_PLUGIN_AUTH) &&
        (client_plugin < (char *)net->read_pos + pkt_len))
-@@ -14177,16 +14299,17 @@
+@@ -14177,16 +14299,17 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
      if (send_plugin_request_packet(mpvio,
                                     (uchar*) mpvio->cached_server_packet.pkt,
                                     mpvio->cached_server_packet.pkt_len))
@@ -653,7 +761,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  #endif
  }
  
-@@ -14207,6 +14330,8 @@
+@@ -14207,6 +14330,8 @@ static int server_mpvio_write_packet(MYSQL_PLUGIN_VIO *param,
    MPVIO_EXT *mpvio= (MPVIO_EXT *) param;
    int res;
    DBUG_ENTER("server_mpvio_write_packet");
@@ -662,7 +770,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  
    /* reset cached_client_reply */
    mpvio->cached_client_reply.pkt= 0;
-@@ -14253,6 +14378,9 @@
+@@ -14253,6 +14378,9 @@ static int server_mpvio_read_packet(MYSQL_PLUGIN_VIO *param, uchar **buf)
    MYSQL_SERVER_AUTH_INFO * const ai= &mpvio->auth_info;
    ulong pkt_len;
    DBUG_ENTER("server_mpvio_read_packet");
@@ -672,7 +780,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
    if (mpvio->status == MPVIO_EXT::RESTART)
    {
      const char *client_auth_plugin=
-@@ -14330,6 +14458,8 @@
+@@ -14330,6 +14458,8 @@ static int server_mpvio_read_packet(MYSQL_PLUGIN_VIO *param, uchar **buf)
    ai->auth_string_length= (ulong) mpvio->acl_user->auth[mpvio->curr_auth].salt.length;
    strmake_buf(ai->authenticated_as, mpvio->acl_user->user.str);
  
@@ -681,7 +789,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
    DBUG_RETURN((int)pkt_len);
  
  err:
-@@ -14338,6 +14468,8 @@
+@@ -14338,6 +14468,8 @@ static int server_mpvio_read_packet(MYSQL_PLUGIN_VIO *param, uchar **buf)
      if (!ai->thd->is_error())
        my_error(ER_HANDSHAKE_ERROR, MYF(0));
    }
@@ -690,7 +798,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
    DBUG_RETURN(-1);
  }
  
-@@ -14492,18 +14624,26 @@
+@@ -14492,18 +14624,26 @@ static int do_auth_once(THD *thd, const LEX_CSTRING *auth_plugin_name,
    bool unlock_plugin= false;
    plugin_ref plugin= get_auth_plugin(thd, *auth_plugin_name, &unlock_plugin);
  
@@ -717,7 +825,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
          MYSQL_SERVER_AUTH_INFO_0x0100 compat;
          compat.downgrade(&mpvio->auth_info);
          res= info->authenticate_user(mpvio, (MYSQL_SERVER_AUTH_INFO *)&compat);
-@@ -14526,7 +14666,9 @@
+@@ -14526,7 +14666,9 @@ static int do_auth_once(THD *thd, const LEX_CSTRING *auth_plugin_name,
      res= CR_ERROR;
    }
  
@@ -728,9 +836,11 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  }
  
  
+diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
+index 0164595..272d2b3 100644
 --- a/sql/sys_vars.cc
 +++ b/sql/sys_vars.cc
-@@ -7361,3 +7361,23 @@
+@@ -7361,3 +7361,23 @@ static Sys_var_enum Sys_block_encryption_mode(
    "AES_ENCRYPT() and AES_DECRYPT() functions",
    SESSION_VAR(block_encryption_mode), CMD_LINE(REQUIRED_ARG),
    block_encryption_mode_values, DEFAULT(0));
@@ -754,45 +864,3 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
 +       "ALL: Unconditionally redirect all new clients to INSTANT_FAILOVER_TARGET (even via local socket-based connections and the EXTRA_PORT).",
 +       GLOBAL_VAR(instant_failover_mode), CMD_LINE(REQUIRED_ARG),
 +       instant_failover_mode_names, DEFAULT(0));
---- a/sql/share/errmsg-utf8.txt
-+++ b/sql/share/errmsg-utf8.txt
-@@ -12270,3 +12270,7 @@
-         sw "%s neno kuu halitumiki"
- ER_JSON_NO_VARIABLE_SCHEMA
-         eng "Variable schema is not supported."
-+ER_INSTANT_FAILOVER
-+        eng "|Server is directing clients to the alternative server '%1$s'|%1$s"
-+        fra "|Ce serveur dirige ses clients vers le serveur alternatif '%1$s'|%1$s"
-+        spa "|Este servidor está dirigiendo sus clientes al servidor alternativo '%1$s'|%1$s"
---- a/mysql-test/main/mysqld--help.result
-+++ b/mysql-test/main/mysqld--help.result
-@@ -433,6 +433,20 @@
-  Set the replication role. One of: MASTER, SLAVE
-  --init-slave=name   Command(s) that are executed by a slave server each time
-  the SQL thread starts
-+ --instant-failover-mode=name 
-+ Instant failover mode. Possible modes are: OFF - No
-+ instant failover, ON: Unconditionally redirect new
-+ clients connecting over the network via the standard
-+ server port to INSTANT_FAILOVER_TARGET (no redirection of
-+ local socket-based connections, nor of connections to the
-+ EXTRA_PORT), ALL: Unconditionally redirect all new
-+ clients to INSTANT_FAILOVER_TARGET (even via local
-+ socket-based connections and the EXTRA_PORT).
-+ --instant-failover-target=name 
-+ Instant failover target. This should be a hostname, an IP
-+ address, or a hostname or IP address followed by ':PORT'.
-+ Instant failover will not be activated unless
-+ INSTANT_FAILOVER_MODE is also set.
-  --interactive-timeout=# 
-  The number of seconds the server waits for activity on an
-  interactive connection before closing it
-@@ -1717,6 +1731,8 @@
- init-file (No default value)
- init-rpl-role MASTER
- init-slave 
-+instant-failover-mode OFF
-+instant-failover-target (No default value)
- interactive-timeout 28800
- join-buffer-size 262144
- join-buffer-space-limit 2097152
