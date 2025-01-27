@@ -1,14 +1,21 @@
 From: Daniel Lenski <dlenski@amazon.com>
 Date: Wed, 14 Jun 2023 11:38:19 -0700
-Subject: [PATCH] [MDEV-34009] Introduce server-initiated instant failover
- mechanism (and TLS fixes)
+Subject: [MDEV-34009] Introduce server-initiated instant failover mechanism
+ (and TLS fixes)
 
-This is the client counterpart of MariaDB/server#3224, which provides an initial server-initiated mechanism for instantly redirecting new client connections to a failover server.
+This is the client counterpart of MariaDB/server#3224, which provides an
+initial server-initiated mechanism for instantly redirecting new client
+connections to a failover server.
 
-It modifies the Connector/C library, so that if the server responds to our initial connection with an error packet having
-error number ER_INSTANT_FAILOVER), and an error string formatted as |Human-readable message|host[:port], the client will redirect its connection accordingly.
+It modifies the Connector/C library, so that if the server responds to
+our initial connection with an error packet having error number
+ER_INSTANT_FAILOVER), and an error string formatted as |Human-readable
+message|host[:port], the client will redirect its connection
+accordingly.
 
-This redirection is performed in mthd_my_real_connect, which appears to be the most appropriate location given that it already contains code for retrying/repeating a new server connection.
+This redirection is performed in mthd_my_real_connect, which appears to
+be the most appropriate location given that it already contains code for
+retrying/repeating a new server connection.
 
 All new code of the whole pull request, including one or several files
 that are either new files or modified ones, are contributed under the

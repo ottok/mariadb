@@ -5,11 +5,20 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 8bit
 
-This PR proposes a new feature in the MariaDB client-server protocol: a server-initiated failover which can redirect new client connections to an alternate endpoint at the application layer.
+This PR proposes a new feature in the MariaDB client-server protocol: a
+server-initiated failover which can redirect new client connections to
+an alternate endpoint at the application layer.
 
-It also provides an initial server-side implementation of that feature; the corresponding client-side implementation is in mariadb-corporation/mariadb-connector-c#246.
+It also provides an initial server-side implementation of that feature;
+the corresponding client-side implementation is in
+mariadb-corporation/mariadb-connector-c#246.
 
-We want the MariaDB server to be able to tell clients connecting to it, “Sorry, this server is unavailable. Connect to an alternate server instead.” This mechanism is inspired by HTTP 302 (“temporary redirect”) mechanism familiar to all developers of web applications, and is intended to have similar semantics and security properties, since these have now been widely deployed and tested for decades.
+We want the MariaDB server to be able to tell clients connecting to it,
+“Sorry, this server is unavailable. Connect to an alternate server
+instead.” This mechanism is inspired by HTTP 302 (“temporary redirect”)
+mechanism familiar to all developers of web applications, and is
+intended to have similar semantics and security properties, since these
+have now been widely deployed and tested for decades.
 
 All new code of the whole pull request, including one or several files
 that are either new files or modified ones, are contributed under the
@@ -21,7 +30,7 @@ Origin: https://patch-diff.githubusercontent.com/raw/MariaDB/server/pull/3224.pa
 Bug: https://jira.mariadb.org/browse/MDEV-15935
 ---
  .gitlab-ci.yml                          |   1 +
- client/mysql.cc                         |  23 ++--
+ client/mysql.cc                         |  13 ++-
  client/mysqltest.cc                     |   4 +-
  include/sslopt-vars.h                   |  16 ++-
  mysql-test/main/instant_failover.cnf    |   7 ++
@@ -39,7 +48,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  sql/share/errmsg-utf8.txt               |   4 +
  sql/sql_acl.cc                          | 180 ++++++++++++++++++++++++++++----
  sql/sys_vars.cc                         |  20 ++++
- 19 files changed, 376 insertions(+), 43 deletions(-)
+ 19 files changed, 371 insertions(+), 38 deletions(-)
  create mode 100644 mysql-test/main/instant_failover.cnf
  create mode 100644 mysql-test/main/instant_failover.result
  create mode 100644 mysql-test/main/instant_failover.test
@@ -57,7 +66,7 @@ index fe5ba11..cc0e99c 100644
      - ./mtr --suite=main --force --parallel=auto --xml-report=$CI_PROJECT_DIR/junit.xml --skip-test-list=skiplist $RESTART_POLICY
  
 diff --git a/client/mysql.cc b/client/mysql.cc
-index 7c390c0..b9fc14f 100644
+index 7c390c0..1554769 100644
 --- a/client/mysql.cc
 +++ b/client/mysql.cc
 @@ -238,18 +238,18 @@ typedef enum enum_info_type INFO_TYPE;
@@ -72,18 +81,13 @@ index 7c390c0..b9fc14f 100644
 -               opt_xml=0,opt_nopager=1, opt_outfile=0, named_cmds= 0,
 +         opt_xml=0,opt_nopager=1, opt_outfile=0, named_cmds= 0,
  	       tty_password= 0, opt_nobeep=0, opt_reconnect=1,
--               opt_secure_auth= 0,
--               default_pager_set= 0, opt_sigint_ignore= 0,
--               auto_vertical_output= 0, show_query_cost= 0,
--               show_warnings= 0, executing_query= 0,
--               ignore_spaces= 0, opt_binhex= 0, opt_progress_reports,
+                opt_secure_auth= 0,
+                default_pager_set= 0, opt_sigint_ignore= 0,
+                auto_vertical_output= 0, show_query_cost= 0,
+                show_warnings= 0, executing_query= 0,
+                ignore_spaces= 0, opt_binhex= 0, opt_progress_reports,
 -               opt_print_query_on_error;
-+         opt_secure_auth= 0,
-+         default_pager_set= 0, opt_sigint_ignore= 0,
-+         auto_vertical_output= 0, show_query_cost= 0,
-+         show_warnings= 0, executing_query= 0,
-+         ignore_spaces= 0, opt_binhex= 0, opt_progress_reports,
-+         opt_print_query_on_error opt_follow_instant_failovers= 1;
++               opt_print_query_on_error, opt_follow_instant_failovers= 1;
  static my_bool debug_info_flag, debug_check_flag, batch_abort_on_error;
  static my_bool column_types_flag;
  static my_bool preserve_comments= 0;

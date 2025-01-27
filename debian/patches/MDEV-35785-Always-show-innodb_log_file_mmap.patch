@@ -1,7 +1,6 @@
 From: =?utf-8?b?TWFya28gTcOka2Vsw6Q=?= <marko.makela@mariadb.com>
 Date: Wed, 8 Jan 2025 12:59:28 +0200
-Subject: [PATCH 1/2] MDEV-35785 innodb_log_file_mmap is not defined on 32-bit
- systems
+Subject: MDEV-35785 innodb_log_file_mmap is not defined on 32-bit systems
 
 HAVE_INNODB_MMAP: Remove, and unconditionally enable this code.
 
