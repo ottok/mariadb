@@ -30,8 +30,9 @@ Origin: https://patch-diff.githubusercontent.com/raw/MariaDB/server/pull/3224.pa
 Bug: https://jira.mariadb.org/browse/MDEV-15935
 ---
  .gitlab-ci.yml                          |   1 +
- client/mysql.cc                         |  13 ++-
+ client/mysql.cc                         |  14 ++-
  client/mysqltest.cc                     |   4 +-
+ include/mysql.h                         |   1 +
  include/sslopt-vars.h                   |  16 ++-
  mysql-test/main/instant_failover.cnf    |   7 ++
  mysql-test/main/instant_failover.result |  40 +++++++
@@ -48,7 +49,7 @@ Bug: https://jira.mariadb.org/browse/MDEV-15935
  sql/share/errmsg-utf8.txt               |   4 +
  sql/sql_acl.cc                          | 180 ++++++++++++++++++++++++++++----
  sql/sys_vars.cc                         |  20 ++++
- 19 files changed, 371 insertions(+), 38 deletions(-)
+ 20 files changed, 373 insertions(+), 38 deletions(-)
  create mode 100644 mysql-test/main/instant_failover.cnf
  create mode 100644 mysql-test/main/instant_failover.result
  create mode 100644 mysql-test/main/instant_failover.test
@@ -66,7 +67,7 @@ index fe5ba11..cc0e99c 100644
      - ./mtr --suite=main --force --parallel=auto --xml-report=$CI_PROJECT_DIR/junit.xml --skip-test-list=skiplist $RESTART_POLICY
  
 diff --git a/client/mysql.cc b/client/mysql.cc
-index 7c390c0..1554769 100644
+index 7c390c0..ff755d2 100644
 --- a/client/mysql.cc
 +++ b/client/mysql.cc
 @@ -238,18 +238,18 @@ typedef enum enum_info_type INFO_TYPE;
@@ -91,16 +92,17 @@ index 7c390c0..1554769 100644
  static my_bool debug_info_flag, debug_check_flag, batch_abort_on_error;
  static my_bool column_types_flag;
  static my_bool preserve_comments= 0;
-@@ -1514,6 +1514,8 @@ static bool do_connect(MYSQL *mysql, const char *host, const char *user,
-   if (opt_secure_auth)
-     mysql_options(mysql, MYSQL_SECURE_AUTH, (char *) &opt_secure_auth);
-   SET_SSL_OPTS_WITH_CHECK(mysql);
-+  mysql_options(mysql,MARIADB_OPT_FOLLOW_INSTANT_FAILOVERS,
-+                (char*)&opt_follow_instant_failovers);
-   if (opt_protocol)
-     mysql_options(mysql,MYSQL_OPT_PROTOCOL,(char*)&opt_protocol);
-   if (opt_plugin_dir && *opt_plugin_dir)
-@@ -1860,6 +1862,11 @@ static struct my_option my_long_options[] =
+@@ -1529,6 +1529,9 @@ static bool do_connect(MYSQL *mysql, const char *host, const char *user,
+   maybe_convert_charset(&user, &password, &database,default_charset);
+ #endif
+ 
++  // Enabled by default
++  mysql_options(mysql, MARIADB_OPT_FOLLOW_INSTANT_FAILOVERS, (char*) &opt_follow_instant_failovers);
++
+   return mysql_real_connect(mysql, host, user, password, database,
+                             opt_mysql_port, opt_mysql_unix_port, flags);
+ }
+@@ -1860,6 +1863,11 @@ static struct my_option my_long_options[] =
     &opt_mysql_unix_port, &opt_mysql_unix_port, 0, GET_STR_ALLOC,
     REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
  #include "sslopt-longopts.h"
@@ -127,6 +129,18 @@ index 240fe50..7f1107d 100644
  };
  
  void do_connect(struct st_command *command)
+diff --git a/include/mysql.h b/include/mysql.h
+index 3f59fa3..d90b4eb 100644
+--- a/include/mysql.h
++++ b/include/mysql.h
+@@ -180,6 +180,7 @@ enum mysql_option
+   MYSQL_OPT_SSL_KEY, MYSQL_OPT_SSL_CERT, 
+   MYSQL_OPT_SSL_CA, MYSQL_OPT_SSL_CAPATH, MYSQL_OPT_SSL_CIPHER,
+   MYSQL_OPT_SSL_CRL, MYSQL_OPT_SSL_CRLPATH,
++  MARIADB_OPT_FOLLOW_INSTANT_FAILOVERS,
+   MYSQL_OPT_CONNECT_ATTR_RESET, MYSQL_OPT_CONNECT_ATTR_ADD,
+   MYSQL_OPT_CONNECT_ATTR_DELETE,
+   MYSQL_SERVER_PUBLIC_KEY,
 diff --git a/include/sslopt-vars.h b/include/sslopt-vars.h
 index 3a3679a..3f81ec4 100644
 --- a/include/sslopt-vars.h
