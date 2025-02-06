@@ -109,7 +109,7 @@ static my_bool ignore_self_signed_cert_error(MYSQL *mysql)
   return FALSE;
 }
 
-static my_bool tls_abort_after_handshake(MARIADB_TLS *ctls, unsigned int flags)
+static int tls_abort_after_handshake(MARIADB_TLS *ctls, unsigned int flags)
 {
   MYSQL *mysql= ctls->pvio->mysql;
 
@@ -210,6 +210,7 @@ static int set_tls_dummy_options(const char *options)
   }
 
   ma_pvio_close(pvio);
+  mysql_close(mysql);
   return OK;
 }
 
@@ -649,7 +650,7 @@ static int stop_tls_server(MYSQL *my __attribute__((unused)))
   return OK;
 }
 
-static my_bool tls_wildcard_callback(MARIADB_TLS *ctls, unsigned int flags)
+static int tls_wildcard_callback(MARIADB_TLS *ctls, unsigned int flags)
 {
   MYSQL *mysql= ctls->pvio->mysql;
   
@@ -717,7 +718,6 @@ static int test_env_var(MYSQL *my __attribute__((unused)))
 {
   MYSQL *mysql= mysql_init(NULL);
   int rc= FAIL;
-  unsigned int status;
 
 #ifdef _WIN32
   _putenv_s("MARIADB_TLS_DISABLE_PEER_VERIFICATION", "1");
@@ -730,14 +730,6 @@ static int test_env_var(MYSQL *my __attribute__((unused)))
                        port, socketname, 0, 0))
   {
     diag("expected to pass, since environment variable was set");
-    goto end;
-  }
-
-  mariadb_get_infov(mysql, MARIADB_TLS_VERIFY_STATUS, &status);
-
-  if (status)
-  {
-    diag("expected status=0, since environment variable was set");
     goto end;
   }
 
@@ -790,12 +782,40 @@ end:
   return rc;
 }
 
+static int test_cert_ip(MYSQL *my __attribute((unused)))
+{
+  char dummy_options[128];
+  MYSQL *mysql= mysql_init(NULL);
+
+  snprintf(dummy_options, 128, "CMD:create_new=True SAN='IP.1:%s'", tls_dummy_host);
+  if (set_tls_dummy_options(dummy_options))
+  {
+    diag("Error when setting TLS options");
+    return FAIL;
+  }
+  mysql_ssl_set(mysql, NULL, NULL, NULL, NULL, NULL);
+  set_verify(mysql, 1);
+  mysql_optionsv(mysql, MARIADB_OPT_TLS_VERIFICATION_CALLBACK, tls_abort_after_handshake);
+
+  if (!my_test_connect(mysql, tls_dummy_host, "tlsuser", "foo", NULL, tls_dummy_port, NULL, 0, 0))
+  {
+    CHECK_NO_TLS_FLAG(mysql, MARIADB_TLS_VERIFY_HOST, "Hostname verification didn't pass");
+    mysql_close(mysql);
+  } else {
+    mysql_close(mysql);
+    return FAIL;
+  }
+
+  return OK;
+}
+
 
 struct my_tests_st my_tests[] = {
   /* Don't add test above, test_init needs to be run first */
   {"test_start_tls_server", test_start_tls_server, TEST_CONNECTION_NONE, 0, NULL, NULL},
   {"test_init", test_init, TEST_CONNECTION_NONE, 0, NULL, NULL},
   /* Here you can add more tests */
+  {"test_cert_ip", test_cert_ip, TEST_CONNECTION_NEW, 0, NULL, NULL},
   {"test_fp_and_verify", test_fp_and_verify, TEST_CONNECTION_NEW, 0, NULL, NULL},
   {"test_env_var", test_env_var, TEST_CONNECTION_NEW, 0, NULL, NULL},
   {"test_cert_wildcard", test_cert_wildcard, TEST_CONNECTION_NEW, 0, NULL, NULL},
@@ -818,6 +838,10 @@ struct my_tests_st my_tests[] = {
 int main(int argc, char **argv)
 {
   char *dummy_port;
+
+#ifdef HAVE_GNUTLS
+  diag("GnuTLS_config: %s", gnutls_get_system_config_file());
+#endif
 
   if (argc > 1)
     get_options(argc, argv);

@@ -14,7 +14,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1335 USA
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.12.0)
 
 IF(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   # Setting build type to RelWithDebInfo as none was specified.
@@ -31,7 +31,7 @@ ENDIF()
 # in RPM's:
 
 #set(CPACK_RPM_SPEC_MORE_DEFINE "%define __spec_install_post /bin/true")
-FOREACH(p CMP0022 CMP0046 CMP0040 CMP0048 CMP0054 CMP0074 CMP0075 CMP0069 CMP0135)
+FOREACH(p CMP0022 CMP0046 CMP0040 CMP0048 CMP0054 CMP0067 CMP0074 CMP0075 CMP0069 CMP0135)
   IF(POLICY ${p})
     CMAKE_POLICY(SET ${p} NEW)
   ENDIF()
@@ -507,7 +507,9 @@ IF(UNIX)
   ADD_SUBDIRECTORY(man)
 ENDIF()
 
-INCLUDE(cmake/abi_check.cmake)
+IF (NOT WITHOUT_ABI_CHECK)
+    INCLUDE(cmake/abi_check.cmake)
+ENDIF()
 INCLUDE(cmake/tags.cmake)
 INCLUDE(for_clients)
 ADD_SUBDIRECTORY(scripts)

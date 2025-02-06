@@ -21,6 +21,7 @@
 #include "slave.h"
 #include "strfunc.h"
 #include "sql_repl.h"
+#include "sql_acl.h"
 
 #ifdef HAVE_REPLICATION
 
@@ -864,12 +865,12 @@ void end_master_info(Master_info* mi)
 }
 
 /* Multi-Master By P.Linux */
-uchar *get_key_master_info(Master_info *mi, size_t *length,
-                           my_bool not_used __attribute__((unused)))
+const uchar *get_key_master_info(const void *mi_, size_t *length, my_bool)
 {
+  auto mi= static_cast<const Master_info *>(mi_);
   /* Return lower case name */
   *length= mi->cmp_connection_name.length;
-  return (uchar*) mi->cmp_connection_name.str;
+  return reinterpret_cast<const uchar *>(mi->cmp_connection_name.str);
 }
 
 /*
@@ -879,8 +880,9 @@ uchar *get_key_master_info(Master_info *mi, size_t *length,
   Stops associated slave threads and frees master_info
 */
 
-void free_key_master_info(Master_info *mi)
+void free_key_master_info(void *mi_)
 {
+  Master_info *mi= static_cast<Master_info*>(mi_);
   DBUG_ENTER("free_key_master_info");
   mysql_mutex_unlock(&LOCK_active_mi);
 
@@ -1117,10 +1119,9 @@ bool Master_info_index::init_all_master_info()
   }
 
   /* Initialize Master_info Hash Table */
-  if (my_hash_init(PSI_INSTRUMENT_ME, &master_info_hash, system_charset_info, 
-                   MAX_REPLICATION_THREAD, 0, 0, 
-                   (my_hash_get_key) get_key_master_info, 
-                   (my_hash_free_key)free_key_master_info, HASH_UNIQUE))
+  if (my_hash_init(PSI_INSTRUMENT_ME, &master_info_hash, system_charset_info,
+                   MAX_REPLICATION_THREAD, 0, 0, get_key_master_info,
+                   free_key_master_info, HASH_UNIQUE))
   {                                                      
     sql_print_error("Initializing Master_info hash table failed");
     DBUG_RETURN(1);
@@ -1373,7 +1374,9 @@ Master_info_index::get_master_info(const LEX_CSTRING *connection_name,
               connection_name->str));
 
   /* Make name lower case for comparison */
-  IdentBufferCasedn<MAX_CONNECTION_NAME> buff(*connection_name);
+  IdentBufferCasedn<MAX_CONNECTION_NAME> buff(connection_name->str ?
+                                              *connection_name :
+                                              empty_clex_str);
   mi= (Master_info*) my_hash_search(&master_info_hash,
                                     (const uchar*) buff.ptr(), buff.length());
   if (!mi && warning != Sql_condition::WARN_LEVEL_NOTE)
@@ -1641,6 +1644,9 @@ bool Master_info_index::start_all_slaves(THD *thd)
   DBUG_ENTER("start_all_slaves");
   mysql_mutex_assert_owner(&LOCK_active_mi);
 
+  if (check_global_access(thd, PRIV_STMT_START_SLAVE))
+    DBUG_RETURN(true);
+
   for (uint i= 0; i< master_info_hash.records; i++)
   {
     Master_info *mi;
@@ -1718,6 +1724,9 @@ bool Master_info_index::stop_all_slaves(THD *thd)
   DBUG_ENTER("stop_all_slaves");
   mysql_mutex_assert_owner(&LOCK_active_mi);
   DBUG_ASSERT(thd);
+
+  if (check_global_access(thd, PRIV_STMT_STOP_SLAVE))
+    DBUG_RETURN(true);
 
   for (uint i= 0; i< master_info_hash.records; i++)
   {

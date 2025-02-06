@@ -722,6 +722,26 @@ const struct st_cipher_map tls_ciphers[]=
     "TLS_DH_anon_WITH_AES_256_GCM_SHA384",
      NULL,
     "TLS_DH_ANON_AES_256_GCM_SHA384"},
+  { {0x13, 0x01},
+    "TLS_AES_128_GCM_SHA256",
+    "TLS_AES_128_GCM_SHA256",
+    "TLS_AES_128_GCM_SHA256"},
+  { {0x13, 0x02},
+    "TLS_AES_256_GCM_SHA384",
+    "TLS_AES_256_GCM_SHA384",
+    "TLS_AES_256_GCM_SHA384"},
+  { {0x13, 0x03},
+    "TLS_CHACHA20_POLY1305_SHA256",
+    "TLS_CHACHA20_POLY1305_SHA256",
+    "TLS_CHACHA20_POLY1305_SHA256"},
+  { {0x13, 0x04},
+    "TLS_AES_128_CCM_SHA256",
+    "TLS_AES_128_CCM_SHA256",
+    "TLS_AES_128_CCM_SHA256"},
+  { {0x13, 0x05},
+    "TLS_AES_128_CCM_8_SHA256",
+    "TLS_AES_128_CCM_8_SHA256",
+    "TLS_AES_128_CCM_8_SHA256"},
   { {0xC0, 0x84},
     "TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256",
      NULL,
@@ -792,6 +812,7 @@ const struct st_cipher_map tls_ciphers[]=
     NULL}
 };
 
+#if GNUTLS_VERSION_NUMBER < 0x030704
 /* map the gnutls cipher suite (defined by key exchange algorithm, cipher
    and mac algorithm) to the corresponding OpenSSL cipher name */
 static const char *openssl_cipher_name(gnutls_kx_algorithm_t kx,
@@ -828,6 +849,7 @@ static const char *openssl_cipher_name(gnutls_kx_algorithm_t kx,
   }
   return NULL;
 }
+#endif
 
 /* get priority string for a given openssl cipher name */
 static char *get_priority(const char *cipher_name, char *priority, size_t len)
@@ -856,10 +878,20 @@ static char *get_priority(const char *cipher_name, char *priority, size_t len)
       {
         if (!strcmp(name, tls_ciphers[i].gnutls_name))
         {
-          snprintf(priority, len - 1, ":+%s:+%s:+%s",
-                   gnutls_cipher_get_name(cipher),
-                   gnutls_mac_get_name(mac),
-                   gnutls_kx_get_name(kx));
+          const char *p;
+
+          if ((p= gnutls_cipher_get_name(cipher)))
+            snprintf(priority, len - 1, ":+%s",p);
+          if ((p= gnutls_mac_get_name(mac)))
+          {
+            strncat(priority, ":+", len - 1);
+            strncat(priority, p, len - 1);
+          }
+          if ((p= gnutls_kx_get_name(kx)))
+          {
+            strncat(priority, ":+", len - 1);
+            strncat(priority, p, len - 1);
+          }
           return priority;
         }
       }
@@ -1491,6 +1523,7 @@ end:
 
 const char *ma_tls_get_cipher(MARIADB_TLS *ctls)
 {
+#if GNUTLS_VERSION_NUMBER < 0x030704
   gnutls_kx_algorithm_t kx;
   gnutls_cipher_algorithm_t cipher;
   gnutls_mac_algorithm_t mac;
@@ -1502,6 +1535,24 @@ const char *ma_tls_get_cipher(MARIADB_TLS *ctls)
   cipher= gnutls_cipher_get((gnutls_session_t)ctls->ssl);
   kx= gnutls_kx_get((gnutls_session_t)ctls->ssl);
   return openssl_cipher_name(kx, cipher, mac);
+#else
+  const char *cs= gnutls_ciphersuite_get((gnutls_session_t)ctls->ssl);
+  int i=0;
+
+  while (tls_ciphers[i].iana_name)
+  {
+    if (!strcmp(tls_ciphers[i].gnutls_name, cs))
+    {
+      if (tls_ciphers[i].openssl_name)
+        return tls_ciphers[i].openssl_name;
+      if (tls_ciphers[i].gnutls_name)
+        return tls_ciphers[i].gnutls_name;
+      return tls_ciphers[i].iana_name;
+    }
+    i++;
+  }
+  return NULL;
+#endif
 }
 
 unsigned int ma_tls_get_finger_print(MARIADB_TLS *ctls, uint hash_type, char *fp, unsigned int len)

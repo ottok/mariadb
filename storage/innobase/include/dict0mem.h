@@ -420,7 +420,7 @@ void
 dict_mem_foreign_table_name_lookup_set(
 /*===================================*/
 	dict_foreign_t*	foreign,	/*!< in/out: foreign struct */
-	ibool		do_alloc);	/*!< in: is an alloc needed */
+	bool		do_alloc);	/*!< in: is an alloc needed */
 
 /**********************************************************************//**
 Sets the referenced_table_name_lookup pointer based on the value of
@@ -1186,6 +1186,14 @@ public:
 	bool is_btree() const {
 		return UNIV_LIKELY(!(type & (DICT_SPATIAL
 					     | DICT_FTS | DICT_CORRUPT)));
+	}
+
+	/** @return whether this is a normal, non-virtual B-tree index
+	(not SPATIAL or FULLTEXT) */
+	bool is_normal_btree() const noexcept {
+		return UNIV_LIKELY(!(type & (DICT_SPATIAL
+					     | DICT_FTS | DICT_CORRUPT
+					     | DICT_VIRTUAL)));
 	}
 
 	/** @return whether the index includes virtual columns */

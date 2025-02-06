@@ -277,7 +277,7 @@ the read requests for the whole area.
 
 #ifndef UNIV_INNOCHECKSUM
 # ifdef SUX_LOCK_GENERIC
-void page_hash_latch::read_lock_wait()
+void page_hash_latch::read_lock_wait() noexcept
 {
   /* First, try busy spinning for a while. */
   for (auto spin= srv_n_spin_wait_rounds; spin--; )
@@ -292,7 +292,7 @@ void page_hash_latch::read_lock_wait()
   while (!read_trylock());
 }
 
-void page_hash_latch::write_lock_wait()
+void page_hash_latch::write_lock_wait() noexcept
 {
   write_lock_wait_start();
 
@@ -486,7 +486,7 @@ bool
 buf_page_is_checksum_valid_crc32(
 	const byte*			read_buf,
 	ulint				checksum_field1,
-	ulint				checksum_field2)
+	ulint				checksum_field2) noexcept
 {
 	const uint32_t	crc32 = buf_calc_page_crc32(read_buf);
 
@@ -554,7 +554,7 @@ static bool buf_page_check_lsn(bool check_lsn, const byte *read_buf)
 /** Check if a buffer is all zeroes.
 @param[in]	buf	data to check
 @return whether the buffer is all zeroes */
-bool buf_is_zeroes(span<const byte> buf)
+bool buf_is_zeroes(span<const byte> buf) noexcept
 {
   ut_ad(buf.size() <= UNIV_PAGE_SIZE_MAX);
   return memcmp(buf.data(), field_ref_zero, buf.size()) == 0;
@@ -566,7 +566,7 @@ bool buf_is_zeroes(span<const byte> buf)
 @param fsp_flags   contents of FIL_SPACE_FLAGS
 @return whether the page is corrupted */
 buf_page_is_corrupted_reason
-buf_page_is_corrupted(bool check_lsn, const byte *read_buf, uint32_t fsp_flags)
+buf_page_is_corrupted(bool check_lsn, const byte *read_buf, uint32_t fsp_flags) noexcept
 {
 	if (fil_space_t::full_crc32(fsp_flags)) {
 		bool compressed = false, corrupted = false;
@@ -1014,7 +1014,7 @@ static inline byte hex_to_ascii(byte hex_digit)
 @param[in]	read_buf	database page
 @param[in]	zip_size	compressed page size, or 0 */
 ATTRIBUTE_COLD
-void buf_page_print(const byte *read_buf, ulint zip_size)
+void buf_page_print(const byte *read_buf, ulint zip_size) noexcept
 {
 #ifndef UNIV_DEBUG
   const size_t size = zip_size ? zip_size : srv_page_size;
@@ -1073,7 +1073,7 @@ buf_block_init(buf_block_t* block, byte* frame)
 /** Allocate a chunk of buffer frames.
 @param bytes    requested size
 @return whether the allocation succeeded */
-inline bool buf_pool_t::chunk_t::create(size_t bytes)
+inline bool buf_pool_t::chunk_t::create(size_t bytes) noexcept
 {
   DBUG_EXECUTE_IF("ib_buf_chunk_init_fails", return false;);
   /* Round down to a multiple of page size, although it already should be. */
@@ -1159,7 +1159,7 @@ inline bool buf_pool_t::chunk_t::create(size_t bytes)
 /** Check that all file pages in the buffer chunk are in a replaceable state.
 @return address of a non-free block
 @retval nullptr if all freed */
-inline const buf_block_t *buf_pool_t::chunk_t::not_freed() const
+inline const buf_block_t *buf_pool_t::chunk_t::not_freed() const noexcept
 {
   buf_block_t *block= blocks;
   for (auto i= size; i--; block++)
@@ -1199,7 +1199,7 @@ inline const buf_block_t *buf_pool_t::chunk_t::not_freed() const
 
 /** Create the hash table.
 @param n  the lower bound of n_cells */
-void buf_pool_t::page_hash_table::create(ulint n)
+void buf_pool_t::page_hash_table::create(ulint n) noexcept
 {
   n_cells= ut_find_prime(n);
   const size_t size= MY_ALIGN(pad(n_cells) * sizeof *array,
@@ -1337,7 +1337,7 @@ bool buf_pool_t::create()
 }
 
 /** Clean up after successful create() */
-void buf_pool_t::close()
+void buf_pool_t::close() noexcept
 {
   ut_ad(this == &buf_pool);
   if (!is_initialised())
@@ -1397,7 +1397,7 @@ void buf_pool_t::close()
 /** Try to reallocate a control block.
 @param block  control block to reallocate
 @return whether the reallocation succeeded */
-inline bool buf_pool_t::realloc(buf_block_t *block)
+inline bool buf_pool_t::realloc(buf_block_t *block) noexcept
 {
 	buf_block_t*	new_block;
 
@@ -1513,7 +1513,7 @@ inline bool buf_pool_t::realloc(buf_block_t *block)
 	return(true); /* free_list was enough */
 }
 
-void buf_pool_t::io_buf_t::create(ulint n_slots)
+void buf_pool_t::io_buf_t::create(ulint n_slots) noexcept
 {
   this->n_slots= n_slots;
   slots= static_cast<buf_tmp_buffer_t*>
@@ -1521,7 +1521,7 @@ void buf_pool_t::io_buf_t::create(ulint n_slots)
   memset((void*) slots, 0, n_slots * sizeof *slots);
 }
 
-void buf_pool_t::io_buf_t::close()
+void buf_pool_t::io_buf_t::close() noexcept
 {
   for (buf_tmp_buffer_t *s= slots, *e= slots + n_slots; s != e; s++)
   {
@@ -1533,7 +1533,7 @@ void buf_pool_t::io_buf_t::close()
   n_slots= 0;
 }
 
-buf_tmp_buffer_t *buf_pool_t::io_buf_t::reserve(bool wait_for_reads)
+buf_tmp_buffer_t *buf_pool_t::io_buf_t::reserve(bool wait_for_reads) noexcept
 {
   for (;;)
   {
@@ -1578,7 +1578,7 @@ buf_resize_status(
 
 /** Withdraw blocks from the buffer pool until meeting withdraw_target.
 @return whether retry is needed */
-inline bool buf_pool_t::withdraw_blocks()
+inline bool buf_pool_t::withdraw_blocks() noexcept
 {
 	buf_block_t*	block;
 	ulint		loop_count = 0;
@@ -1707,7 +1707,7 @@ realloc_frame:
 
 
 
-inline void buf_pool_t::page_hash_table::write_lock_all()
+inline void buf_pool_t::page_hash_table::write_lock_all() noexcept
 {
   for (auto n= pad(n_cells) & ~ELEMENTS_PER_LATCH;; n-= ELEMENTS_PER_LATCH + 1)
   {
@@ -1718,7 +1718,7 @@ inline void buf_pool_t::page_hash_table::write_lock_all()
 }
 
 
-inline void buf_pool_t::page_hash_table::write_unlock_all()
+inline void buf_pool_t::page_hash_table::write_unlock_all() noexcept
 {
   for (auto n= pad(n_cells) & ~ELEMENTS_PER_LATCH;; n-= ELEMENTS_PER_LATCH + 1)
   {
@@ -1736,7 +1736,7 @@ struct find_interesting_trx
 {
   void operator()(const trx_t &trx)
   {
-    if (trx.state == TRX_STATE_NOT_STARTED)
+    if (!trx.is_started())
       return;
     if (trx.mysql_thd == nullptr)
       return;
@@ -1745,12 +1745,12 @@ struct find_interesting_trx
 
     if (!found)
     {
-      ib::warn() << "The following trx might hold "
+      sql_print_warning("InnoDB: The following trx might hold "
                     "the blocks in buffer pool to "
                     "be withdrawn. Buffer pool "
                     "resizing can complete only "
                     "after all the transactions "
-                    "below release the blocks.";
+                    "below release the blocks.");
       found= true;
     }
 
@@ -2366,17 +2366,8 @@ static void buf_inc_get(ha_handler_stats *stats)
   ++buf_pool.stat.n_page_gets;
 }
 
-/** Get read access to a compressed page (usually of type
-FIL_PAGE_TYPE_ZBLOB or FIL_PAGE_TYPE_ZBLOB2).
-The page must be released with unfix().
-NOTE: the page is not protected by any latch.  Mutual exclusion has to
-be implemented at a higher level.  In other words, all possible
-accesses to a given page through this function must be protected by
-the same set of mutexes or latches.
-@param page_id   page identifier
-@return pointer to the block, s-latched */
 TRANSACTIONAL_TARGET
-buf_page_t* buf_page_get_zip(const page_id_t page_id)
+buf_page_t *buf_page_get_zip(const page_id_t page_id) noexcept
 {
   ha_handler_stats *const stats= mariadb_stats;
   buf_inc_get(stats);
@@ -2385,109 +2376,83 @@ buf_page_t* buf_page_get_zip(const page_id_t page_id)
   page_hash_latch &hash_lock= buf_pool.page_hash.lock_get(chain);
   buf_page_t *bpage;
 
-lookup:
-  for (bool discard_attempted= false;;)
+  for (;;)
   {
 #ifndef NO_ELISION
     if (xbegin())
     {
       if (hash_lock.is_locked())
-        xabort();
-      bpage= buf_pool.page_hash.get(page_id, chain);
-      if (!bpage)
-      {
         xend();
-        goto must_read_page;
-      }
-      if (!bpage->zip.data)
+      else
       {
-        /* There is no ROW_FORMAT=COMPRESSED page. */
+        bpage= buf_pool.page_hash.get(page_id, chain);
+        const bool got_s_latch= bpage && bpage->lock.s_lock_try();
         xend();
-        return nullptr;
-      }
-      if (discard_attempted || !bpage->frame)
-      {
-        if (!bpage->lock.s_lock_try())
-          xabort();
-        xend();
-        break;
-      }
-      xend();
-    }
-    else
-#endif
-    {
-      hash_lock.lock_shared();
-      bpage= buf_pool.page_hash.get(page_id, chain);
-      if (!bpage)
-      {
-        hash_lock.unlock_shared();
-        goto must_read_page;
-      }
-
-      ut_ad(bpage->in_file());
-      ut_ad(page_id == bpage->id());
-
-      if (!bpage->zip.data)
-      {
-        /* There is no ROW_FORMAT=COMPRESSED page. */
-        hash_lock.unlock_shared();
-        return nullptr;
-      }
-
-      if (discard_attempted || !bpage->frame)
-      {
-        const bool got_s_latch= bpage->lock.s_lock_try();
-        hash_lock.unlock_shared();
-        if (UNIV_LIKELY(got_s_latch))
+        if (got_s_latch)
           break;
-        /* We may fail to acquire bpage->lock because
-        buf_page_t::read_complete() may be invoking
-        buf_pool_t::corrupted_evict() on this block, which it would
-        hold an exclusive latch on.
-
-        Let us aqcuire and release buf_pool.mutex to ensure that any
-        buf_pool_t::corrupted_evict() will proceed before we reacquire
-        the hash_lock that it could be waiting for. */
-        mysql_mutex_lock(&buf_pool.mutex);
-        mysql_mutex_unlock(&buf_pool.mutex);
-        goto lookup;
       }
+    }
+#endif
 
+    hash_lock.lock_shared();
+    bpage= buf_pool.page_hash.get(page_id, chain);
+    if (!bpage)
+    {
       hash_lock.unlock_shared();
+      switch (dberr_t err= buf_read_page(page_id, chain, false)) {
+      case DB_SUCCESS:
+      case DB_SUCCESS_LOCKED_REC:
+        mariadb_increment_pages_read(stats);
+        continue;
+      case DB_TABLESPACE_DELETED:
+        return nullptr;
+      default:
+        sql_print_error("InnoDB: Reading compressed page "
+                        "[page id: space=" UINT32PF ", page number=" UINT32PF
+                        "] failed with error: %s",
+                        page_id.space(), page_id.page_no(), ut_strerr(err));
+        return nullptr;
+      }
     }
 
-    discard_attempted= true;
+    ut_ad(bpage->in_file());
+    ut_ad(page_id == bpage->id());
+
+    const bool got_s_latch= bpage->lock.s_lock_try();
+    hash_lock.unlock_shared();
+    if (UNIV_LIKELY(got_s_latch))
+      break;
+    /* We may fail to acquire bpage->lock because a read is holding an
+    exclusive latch on this block and either in progress or invoking
+    buf_pool_t::corrupted_evict().
+
+    Let us aqcuire and release buf_pool.mutex to ensure that any
+    buf_pool_t::corrupted_evict() will proceed before we reacquire
+    the hash_lock that it could be waiting for.
+
+    While we are at it, let us also try to discard any uncompressed
+    page frame of the compressed BLOB page, in case one had been
+    allocated for writing the BLOB. */
     mysql_mutex_lock(&buf_pool.mutex);
-    if (buf_page_t *bpage= buf_pool.page_hash.get(page_id, chain))
+    bpage= buf_pool.page_hash.get(page_id, chain);
+    if (bpage)
       buf_LRU_free_page(bpage, false);
     mysql_mutex_unlock(&buf_pool.mutex);
   }
 
+  if (UNIV_UNLIKELY(!bpage->zip.data))
   {
-    ut_d(const auto s=) bpage->fix();
-    ut_ad(s >= buf_page_t::UNFIXED);
-    ut_ad(s < buf_page_t::READ_FIX || s >= buf_page_t::WRITE_FIX);
+    ut_ad("no ROW_FORMAT=COMPRESSED page!" == 0);
+    bpage->lock.s_unlock();
+    bpage= nullptr;
   }
-
-  buf_page_make_young_if_needed(bpage);
+  else
+    buf_page_make_young_if_needed(bpage);
 
 #ifdef UNIV_DEBUG
   if (!(++buf_dbg_counter % 5771)) buf_pool.validate();
 #endif /* UNIV_DEBUG */
   return bpage;
-
-must_read_page:
-  switch (dberr_t err= buf_read_page(page_id, chain)) {
-  case DB_SUCCESS:
-  case DB_SUCCESS_LOCKED_REC:
-    mariadb_increment_pages_read(stats);
-    goto lookup;
-  default:
-    ib::error() << "Reading compressed page " << page_id
-                << " failed with error: " << err;
-    return nullptr;
-  }
 }
 
 /********************************************************************//**
@@ -2511,14 +2476,7 @@ buf_block_init_low(
 #endif /* BTR_CUR_HASH_ADAPT */
 }
 
-/********************************************************************//**
-Decompress a block.
-@return true if successful */
-bool
-buf_zip_decompress(
-/*===============*/
-	buf_block_t*	block,	/*!< in/out: block */
-	ibool		check)	/*!< in: TRUE=verify the page checksum */
+bool buf_zip_decompress(buf_block_t *block, bool check) noexcept
 {
 	const byte*	frame = block->page.zip.data;
 	ulint		size = page_zip_get_size(&block->page.zip);
@@ -2597,6 +2555,7 @@ err_exit:
 
 ATTRIBUTE_COLD
 buf_block_t *buf_pool_t::unzip(buf_page_t *b, buf_pool_t::hash_chain &chain)
+  noexcept
 {
   buf_block_t *block= buf_LRU_get_free_block(have_no_mutex);
   buf_block_init_low(block);
@@ -2686,7 +2645,7 @@ buf_block_t *buf_pool_t::unzip(buf_page_t *b, buf_pool_t::hash_chain &chain)
 
 buf_block_t *buf_pool_t::page_fix(const page_id_t id,
                                   dberr_t *err,
-                                  buf_pool_t::page_fix_conflicts c)
+                                  buf_pool_t::page_fix_conflicts c) noexcept
 {
   ha_handler_stats *const stats= mariadb_stats;
   buf_inc_get(stats);
@@ -2803,7 +2762,7 @@ buf_page_get_gen(
 	buf_block_t*		guess,
 	ulint			mode,
 	mtr_t*			mtr,
-	dberr_t*		err)
+	dberr_t*		err) noexcept
 {
 	ulint		retries = 0;
 
@@ -3073,7 +3032,7 @@ wait_for_unzip:
 }
 
 TRANSACTIONAL_TARGET
-buf_block_t *buf_page_optimistic_fix(buf_block_t *block, page_id_t id)
+buf_block_t *buf_page_optimistic_fix(buf_block_t *block, page_id_t id) noexcept
 {
   buf_pool_t::hash_chain &chain= buf_pool.page_hash.cell_get(id.fold());
   transactional_shared_lock_guard<page_hash_latch> g
@@ -3091,7 +3050,8 @@ buf_block_t *buf_page_optimistic_fix(buf_block_t *block, page_id_t id)
 
 buf_block_t *buf_page_optimistic_get(buf_block_t *block,
                                      rw_lock_type_t rw_latch,
-                                     uint64_t modify_clock, mtr_t *mtr)
+                                     uint64_t modify_clock,
+                                     mtr_t *mtr) noexcept
 {
   ut_ad(mtr->is_active());
   ut_ad(rw_latch == RW_S_LATCH || rw_latch == RW_X_LATCH);
@@ -3156,7 +3116,7 @@ Suitable for using when holding the lock_sys latches (as it avoids deadlock).
 @return the block
 @retval nullptr if an S-latch cannot be granted immediately */
 TRANSACTIONAL_TARGET
-buf_block_t *buf_page_try_get(const page_id_t page_id, mtr_t *mtr)
+buf_block_t *buf_page_try_get(const page_id_t page_id, mtr_t *mtr) noexcept
 {
   ut_ad(mtr);
   ut_ad(mtr->is_active());
@@ -3191,7 +3151,7 @@ buf_block_t *buf_page_try_get(const page_id_t page_id, mtr_t *mtr)
 @param zip_size ROW_FORMAT=COMPRESSED page size, or 0
 @param fix      initial buf_fix_count() */
 void buf_block_t::initialise(const page_id_t page_id, ulint zip_size,
-                             uint32_t fix)
+                             uint32_t fix) noexcept
 {
   ut_ad(!page.in_file());
   buf_block_init_low(this);
@@ -3203,6 +3163,7 @@ void buf_block_t::initialise(const page_id_t page_id, ulint zip_size,
 TRANSACTIONAL_TARGET
 static buf_block_t *buf_page_create_low(page_id_t page_id, ulint zip_size,
                                         mtr_t *mtr, buf_block_t *free_block)
+  noexcept
 {
   ut_ad(mtr->is_active());
   ut_ad(page_id.space() != 0 || !zip_size);
@@ -3263,6 +3224,8 @@ retry:
         ut_ad(!bpage->is_io_fixed(state));
         ut_ad(bpage->buf_fix_count(state));
       }
+      else
+        state= bpage->state();
 
       ut_ad(state >= buf_page_t::FREED);
       ut_ad(state < buf_page_t::READ_FIX);
@@ -3283,20 +3246,11 @@ retry:
       }
       else
       {
-        auto state= bpage->state();
-        ut_ad(state >= buf_page_t::FREED);
-        ut_ad(state < buf_page_t::READ_FIX);
-
         page_hash_latch &hash_lock= buf_pool.page_hash.lock_get(chain);
         /* It does not make sense to use transactional_lock_guard here,
         because buf_relocate() would likely make the memory transaction
         too large. */
         hash_lock.lock();
-
-        if (state < buf_page_t::UNFIXED)
-          bpage->set_reinit(buf_page_t::FREED);
-        else
-          bpage->set_reinit(state & buf_page_t::LRU_MASK);
 
         mysql_mutex_lock(&buf_pool.flush_list_mutex);
         buf_relocate(bpage, &free_block->page);
@@ -3409,7 +3363,7 @@ FILE_PAGE (the other is buf_page_get_gen).
 @return pointer to the block, page bufferfixed */
 buf_block_t*
 buf_page_create(fil_space_t *space, uint32_t offset,
-                ulint zip_size, mtr_t *mtr, buf_block_t *free_block)
+                ulint zip_size, mtr_t *mtr, buf_block_t *free_block) noexcept
 {
   space->free_page(offset, false);
   return buf_page_create_low({space->id, offset}, zip_size, mtr, free_block);
@@ -3423,7 +3377,8 @@ deferred tablespace
 @param free_block 	pre-allocated buffer block
 @return pointer to the block, page bufferfixed */
 buf_block_t* buf_page_create_deferred(uint32_t space_id, ulint zip_size,
-                                      mtr_t *mtr, buf_block_t *free_block)
+                                      mtr_t *mtr,
+                                      buf_block_t *free_block) noexcept
 {
   return buf_page_create_low({space_id, 0}, zip_size, mtr, free_block);
 }
@@ -3432,7 +3387,8 @@ buf_block_t* buf_page_create_deferred(uint32_t space_id, ulint zip_size,
 counter value in MONITOR_MODULE_BUF_PAGE.
 @param bpage   buffer page whose read or write was completed
 @param read    true=read, false=write */
-ATTRIBUTE_COLD void buf_page_monitor(const buf_page_t &bpage, bool read)
+ATTRIBUTE_COLD
+void buf_page_monitor(const buf_page_t &bpage, bool read) noexcept
 {
 	monitor_id_t	counter;
 
@@ -3500,7 +3456,7 @@ ATTRIBUTE_COLD void buf_page_monitor(const buf_page_t &bpage, bool read)
 @param[in]	is_compressed	compressed page
 @return true if page is corrupted or false if it isn't */
 static bool buf_page_full_crc32_is_corrupted(ulint space_id, const byte* d,
-                                             bool is_compressed)
+                                             bool is_compressed) noexcept
 {
   if (space_id != mach_read_from_4(d + FIL_PAGE_SPACE_ID))
     return true;
@@ -3543,8 +3499,7 @@ static dberr_t buf_page_check_corrupt(buf_page_t *bpage,
 	const bool seems_encrypted = !node.space->full_crc32() && key_version
 		&& node.space->crypt_data
 		&& node.space->crypt_data->type != CRYPT_SCHEME_UNENCRYPTED;
-	ut_ad(node.space->purpose != FIL_TYPE_TEMPORARY ||
-	      node.space->full_crc32());
+	ut_ad(!node.space->is_temporary() || node.space->full_crc32());
 
 	/* If traditional checksums match, we assume that page is
 	not anymore encrypted. */
@@ -3552,7 +3507,7 @@ static dberr_t buf_page_check_corrupt(buf_page_t *bpage,
 	    && !buf_is_zeroes(span<const byte>(dst_frame,
 					       node.space->physical_size()))
 	    && (key_version || node.space->is_compressed()
-		|| node.space->purpose == FIL_TYPE_TEMPORARY)) {
+		|| node.space->is_temporary())) {
 		if (buf_page_full_crc32_is_corrupted(
 			    bpage->id().space(), dst_frame,
 			    node.space->is_compressed())) {
@@ -3591,7 +3546,7 @@ static dberr_t buf_page_check_corrupt(buf_page_t *bpage,
 @return whether the operation succeeded
 @retval DB_PAGE_CORRUPTED    if the checksum or the page ID is incorrect
 @retval DB_DECRYPTION_FAILED if the page cannot be decrypted */
-dberr_t buf_page_t::read_complete(const fil_node_t &node)
+dberr_t buf_page_t::read_complete(const fil_node_t &node) noexcept
 {
   const page_id_t expected_id{id()};
   ut_ad(is_read_fixed());
@@ -3677,6 +3632,16 @@ database_corrupted_compressed:
     if (err == DB_PAGE_CORRUPTED || err == DB_DECRYPTION_FAILED)
     {
 release_page:
+      if (node.space->full_crc32() && node.space->crypt_data &&
+          recv_recovery_is_on() &&
+          recv_sys.dblwr.find_encrypted_page(node, id().page_no(),
+                                             const_cast<byte*>(read_frame)))
+      {
+        /* Recover from doublewrite buffer */
+        err= DB_SUCCESS;
+        goto success_page;
+      }
+
       if (recv_sys.free_corrupted_page(expected_id, node));
       else if (err == DB_FAIL)
         err= DB_PAGE_CORRUPTED;
@@ -3699,6 +3664,7 @@ release_page:
       return err;
     }
   }
+success_page:
 
   const bool recovery= frame && recv_recovery_is_on();
 
@@ -3725,7 +3691,7 @@ release_page:
 /** Check that all blocks are in a replaceable state.
 @return address of a non-free block
 @retval nullptr if all freed */
-void buf_pool_t::assert_all_freed()
+void buf_pool_t::assert_all_freed() noexcept
 {
   mysql_mutex_lock(&mutex);
   const chunk_t *chunk= chunks;
@@ -3737,7 +3703,7 @@ void buf_pool_t::assert_all_freed()
 #endif /* UNIV_DEBUG */
 
 /** Refresh the statistics used to print per-second averages. */
-void buf_refresh_io_stats()
+void buf_refresh_io_stats() noexcept
 {
 	buf_pool.last_printout_time = time(NULL);
 	buf_pool.old_stat = buf_pool.stat;
@@ -3745,7 +3711,7 @@ void buf_refresh_io_stats()
 
 /** Invalidate all pages in the buffer pool.
 All pages must be in a replaceable state (not modified or latched). */
-void buf_pool_invalidate()
+void buf_pool_invalidate() noexcept
 {
 	/* It is possible that a write batch that has been posted
 	earlier is still not complete. For buffer pool invalidation to
@@ -3772,7 +3738,7 @@ void buf_pool_invalidate()
 
 #ifdef UNIV_DEBUG
 /** Validate the buffer pool. */
-void buf_pool_t::validate()
+void buf_pool_t::validate() noexcept
 {
 	ulint		n_lru		= 0;
 	ulint		n_flushing	= 0;
@@ -3867,7 +3833,7 @@ void buf_pool_t::validate()
 
 #if defined UNIV_DEBUG_PRINT || defined UNIV_DEBUG
 /** Write information of the buf_pool to the error log. */
-void buf_pool_t::print()
+void buf_pool_t::print() noexcept
 {
 	index_id_t*	index_ids;
 	ulint*		counts;
@@ -3971,7 +3937,7 @@ void buf_pool_t::print()
 
 #ifdef UNIV_DEBUG
 /** @return the number of latched pages in the buffer pool */
-ulint buf_get_latched_pages_number()
+ulint buf_get_latched_pages_number() noexcept
 {
   ulint fixed_pages_number= 0;
 
@@ -3990,7 +3956,7 @@ ulint buf_get_latched_pages_number()
 
 /** Collect buffer pool metadata.
 @param[out]	pool_info	buffer pool metadata */
-void buf_stats_get_pool_info(buf_pool_info_t *pool_info)
+void buf_stats_get_pool_info(buf_pool_info_t *pool_info) noexcept
 {
 	time_t			current_time;
 	double			time_elapsed;
@@ -4223,7 +4189,7 @@ This function should be called only if tablespace contains crypt data metadata.
 @param page       page frame
 @param fsp_flags  contents of FSP_SPACE_FLAGS
 @return whether the page is encrypted and valid */
-bool buf_page_verify_crypt_checksum(const byte *page, uint32_t fsp_flags)
+bool buf_page_verify_crypt_checksum(const byte *page, uint32_t fsp_flags) noexcept
 {
 	if (!fil_space_t::full_crc32(fsp_flags)) {
 		return fil_space_verify_crypt_checksum(

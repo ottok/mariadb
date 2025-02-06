@@ -80,6 +80,9 @@ typedef struct
 } MADB_STMT_EXTENSION;
 
 static my_bool net_stmt_close(MYSQL_STMT *stmt, my_bool remove);
+extern MARIADB_CONST_STRING ma_const_string_copy_root(MA_MEM_ROOT *memroot,
+                                                      const char *str,
+                                                      size_t length);
 
 static my_bool is_not_null= 0;
 static my_bool is_null= 1;
@@ -129,7 +132,7 @@ static my_bool madb_have_pending_results(MYSQL_STMT *stmt)
 {
   LIST *li_stmt;
 
-  if (!stmt->mysql)
+  if (!stmt || !stmt->mysql)
     return 0;
 
   li_stmt= stmt->mysql->stmts;
@@ -1186,6 +1189,9 @@ unsigned long long STDCALL mysql_stmt_affected_rows(MYSQL_STMT *stmt)
 my_bool STDCALL mysql_stmt_attr_get(MYSQL_STMT *stmt, enum enum_stmt_attr_type attr_type, void *value)
 {
   switch (attr_type) {
+    case STMT_ATTR_SQL_STATEMENT:
+      *(MARIADB_CONST_STRING *)value= stmt->sql;
+      break;
     case STMT_ATTR_STATE:
       *(enum mysql_stmt_state *)value= stmt->state;
       break;
@@ -1841,6 +1847,8 @@ int STDCALL mysql_stmt_prepare(MYSQL_STMT *stmt, const char *query, unsigned lon
                                          sizeof(stmt_id), 1, stmt))
       goto fail;
   }
+  stmt->sql= ma_const_string_copy_root(&stmt->mem_root, query, length);
+
   if (mysql->methods->db_command(mysql, COM_STMT_PREPARE, query, length, 1, stmt))
     goto fail;
 
@@ -2398,10 +2406,16 @@ MYSQL_RES * STDCALL mysql_stmt_result_metadata(MYSQL_STMT *stmt)
 
 my_bool STDCALL mysql_stmt_reset(MYSQL_STMT *stmt)
 {
+  my_bool rc= 0;
   if (stmt->stmt_id > 0 &&
       stmt->stmt_id != (unsigned long) -1)
-    return mysql_stmt_internal_reset(stmt, 0);
-  return 0;
+    rc= mysql_stmt_internal_reset(stmt, 0);
+
+  /* clear last sql statement */
+  stmt->sql.str= 0;
+  stmt->sql.length= 0;
+
+  return rc;
 }
 
 const char * STDCALL mysql_stmt_sqlstate(MYSQL_STMT *stmt)
@@ -2543,6 +2557,8 @@ int STDCALL mysql_stmt_next_result(MYSQL_STMT *stmt)
     stmt->upsert_status.server_status= stmt->mysql->server_status;
     ma_status_callback(stmt->mysql, last_status);
     stmt->upsert_status.warning_count= stmt->mysql->warning_count;
+    if (!mysql_stmt_more_results(stmt))
+      stmt->state= MYSQL_STMT_FETCH_DONE;
   }
 
   stmt->field_count= stmt->mysql->field_count;

@@ -1081,7 +1081,7 @@ static int test_unix_socket_close(MYSQL *unused __attribute__((unused)))
 
   for (i=0; i < 10000; i++)
   {
-    my_test_connect(mysql, "localhost", "user", "passwd", NULL, 0, "./dummy_sock", 0, 1);
+    mysql_real_connect(mysql, "localhost", "user", "passwd", NULL, 0, "./dummy_sock", 0);
     /* check if we run out of sockets */
     if (mysql_errno(mysql) == 2001)
     {
@@ -2341,6 +2341,20 @@ static int test_parsec(MYSQL *my)
   int rc;
   int verify= 0;
   MYSQL *mysql;
+
+  if (!is_mariadb)
+  {
+    diag("feature not supported by MySQL server");
+    return SKIP;
+  }
+
+  if (!mysql_client_find_plugin(my, "parsec", MYSQL_CLIENT_AUTHENTICATION_PLUGIN))
+  {
+    diag("parsec plugin not available");
+    diag("error: %s", mysql_error(my));
+    return SKIP;
+  }
+
   rc= mysql_query(my, "INSTALL soname 'auth_parsec'");
   if (rc)
   {
@@ -2351,14 +2365,6 @@ static int test_parsec(MYSQL *my)
   check_mysql_rc(rc, my);
 
   mysql= mysql_init(NULL);
-  if (!mysql_client_find_plugin(mysql, "parsec", MYSQL_CLIENT_AUTHENTICATION_PLUGIN))
-  {
-    diag("parsec plugin not available");
-    diag("error: %s", mysql_error(mysql));
-    mysql_close(mysql);
-    return SKIP;
-  }
-
   mysql_options(mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify);
   if (!my_test_connect(mysql, hostname, "test1", "123", NULL, port, socketname, 0, 0))
   {
@@ -2368,6 +2374,9 @@ static int test_parsec(MYSQL *my)
   }
 
   rc= mysql_query(my, "DROP USER test1@'%'");
+  check_mysql_rc(rc, my);
+
+  rc= mysql_query(my, "UNINSTALL soname IF EXISTS 'auth_parsec'");
   check_mysql_rc(rc, my);
 
   mysql_close(mysql);
@@ -2407,9 +2416,96 @@ int test_tls_timeout(MYSQL *unused __attribute__((unused)))
 }
 
 
+#if defined(HAVE_GNUTLS) && GNUTLS_VERSION_NUMBER >= 0x030700 || defined(HAVE_OPENSSL)
+#define HAVE_test_conc748
+static int test_conc748(MYSQL *my __attribute__((unused)))
+{
+  MYSQL *mysql;
+  int i;
+  const char *ciphers[3]= {"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"};
+
+  SKIP_MAXSCALE;
+
+  for (i=0; i < 3; i++)
+  {
+    const char *tls_version;
+    mysql= mysql_init(NULL);
+
+    mysql_ssl_set(mysql, NULL, NULL, NULL, NULL, NULL);
+    mysql_optionsv(mysql, MYSQL_OPT_SSL_CIPHER, ciphers[i]);
+
+    if (!my_test_connect(mysql, hostname, username,
+                         password, schema, port, socketname, 0, 0))
+    {
+      diag("error: %s", mysql_error(mysql));
+      return FAIL;
+    }
+
+    FAIL_IF(strcmp(ciphers[i], mysql_get_ssl_cipher(mysql)), "Cipher mismatch");
+    mariadb_get_infov(mysql, MARIADB_CONNECTION_TLS_VERSION, &tls_version);
+    FAIL_IF(strcmp(tls_version, "TLSv1.3"), "TLS version mismatch");
+
+    mysql_close(mysql);
+  }
+  return OK;
+}
+#endif
+
+static int test_conc589(MYSQL *my)
+{
+  MYSQL *mysql= mysql_init(NULL);
+  MYSQL_RES *result;
+  int rc;
+  my_bool reconnect= 1, verify= 0;
+  unsigned long last_thread_id= 0;
+
+  SKIP_MAXSCALE;
+
+  mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
+  mysql_options(mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify);
+
+  if (!my_test_connect(mysql, hostname, username,
+                       password, schema, port, socketname, CLIENT_REMEMBER_OPTIONS, 0))
+  {
+    diag("error: %s", mysql_error(mysql));
+    return FAIL;
+  }
+
+  rc= mysql_query(mysql, "SET SESSION wait_timeout=5");
+  check_mysql_rc(rc, mysql);
+
+  last_thread_id= mysql_thread_id(mysql);
+  if ((rc= mysql_query(mysql, "SELECT 1")) || (result= mysql_store_result(mysql)) == NULL)
+    check_mysql_rc(rc, mysql);
+
+  mysql_free_result(result);
+  sleep(10);
+
+  if ((rc= mysql_query(mysql, "SELECT 2")) || (result= mysql_store_result(mysql)) == NULL)
+    check_mysql_rc(rc, mysql);
+  mysql_free_result(result);
+  FAIL_IF(mysql_thread_id(mysql) == last_thread_id, "Expected new connection id");
+  last_thread_id= mysql_thread_id(mysql);
+
+  mysql_kill(my, last_thread_id);
+
+  sleep(10);
+
+  if ((rc= mysql_query(mysql, "SELECT 3")) || (result= mysql_store_result(mysql)) == NULL)
+    check_mysql_rc(rc, mysql);
+  mysql_free_result(result);
+  FAIL_IF(mysql_thread_id(mysql) == last_thread_id, "Expected new connection id");
+  mysql_close(mysql);
+  return OK;
+}
+
 struct my_tests_st my_tests[] = {
+  {"test_conc589", test_conc589, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_tls_timeout", test_tls_timeout, TEST_CONNECTION_NONE, 0, NULL, NULL},
   {"test_parsec", test_parsec, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
+#ifdef HAVE_test_conc748
+  {"test_conc748", test_conc748, TEST_CONNECTION_NONE, 0, NULL, NULL},
+#endif
   {"test_conc505", test_conc505, TEST_CONNECTION_NONE, 0, NULL, NULL},
   {"test_conc632", test_conc632, TEST_CONNECTION_NONE, 0, NULL, NULL},
   {"test_status_callback", test_status_callback, TEST_CONNECTION_NONE, 0, NULL, NULL},

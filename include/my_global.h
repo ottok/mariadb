@@ -540,10 +540,9 @@ typedef int	pbool;		/* Mixed prototypes can't take char */
 typedef int	pshort;		/* Mixed prototypes can't take short int */
 typedef double	pfloat;		/* Mixed prototypes can't take float */
 #endif
-C_MODE_START
-typedef int	(*qsort_cmp)(const void *,const void *);
-typedef int	(*qsort_cmp2)(void*, const void *,const void *);
-C_MODE_END
+
+#include <my_cmp.h>
+
 #define qsort_t RETQSORTTYPE	/* Broken GCC can't handle typedef !!!! */
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
@@ -680,10 +679,10 @@ typedef SOCKET_SIZE_TYPE size_socket;
 */
 #define IO_SIZE			4096U
 /*
-  How much overhead does malloc have. The code often allocates
+  How much overhead does malloc/my_malloc have. The code often allocates
   something like 1024-MALLOC_OVERHEAD bytes
 */
-#define MALLOC_OVERHEAD 8
+#define MALLOC_OVERHEAD (8+24)
 
 	/* get memory in huncs */
 #define ONCE_ALLOC_INIT		(uint) 4096
