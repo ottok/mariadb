@@ -1,9 +1,25 @@
-mariadb (1:11.4.5-1) unstable; urgency=medium
+mariadb (1:11.4.5-1) UNRELEASED; urgency=medium
 
+  [ Otto Kekäläinen ]
   * New upstream version 11.4.5. Includes fixes for several defects
     as noted at https://mariadb.com/kb/en/mariadb-11-4-5-release-notes/ as well
     the following security issues:
     - CVE-2025-21490
+  * Include new packaging changes done upstream:
+    - MDEV-35907: debian-start script fails when using non-standard socket path
+    - MCOL-5819: Disable LTO for ColumnStore, otherwise enabled by default
+    - MDEV-32686: Include ELF package notes
+  * Update configuration traces to match changes done in MDEV-35785
+  * Update configuration traces with new query allocator values from MDEV-35750
+  * Build MariaDB RocksDB on loong64 now too
+  * Fix minor typos in Debian packaging files
+  * Fix broken links in d/copyright
+  * Unify spelling fix patches into one, and fix spelling of Enrypt->Encrypt
+
+  [ Matthew Vernon ]
+  * Add patch to fix `main.func_regexp_pcre` failing with latest PCRE2 10.45
+    due to backwards-incompatible case-sensitivity change in behavior in latest
+    PCRE2 version (Closes: #1095286).
 
  -- Otto Kekäläinen <otto@debian.org>  Wed, 05 Feb 2025 18:02:56 -0800
 
