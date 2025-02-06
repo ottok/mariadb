@@ -15,7 +15,7 @@ Depends:
  mariadb-plugin-provider-lzma,
  mariadb-plugin-provider-lzo,
  mariadb-plugin-provider-snappy,
- mariadb-plugin-rocksdb [amd64 arm64 mips64el ppc64el riscv64],
+ mariadb-plugin-rocksdb [amd64 arm64 mips64el ppc64el riscv64 loong64],
 Restrictions:
  allow-stderr,
  isolation-container,
