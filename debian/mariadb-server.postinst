@@ -142,7 +142,7 @@ EOF
       mkdir -Z "$mysql_datadir"
     fi
 
-    # When creating an ext3 jounal on an already mounted filesystem like e.g.
+    # When creating an ext3 journal on an already mounted filesystem like e.g.
     # /var/lib/mysql, you get a .journal file that is not modifiable by chown.
     # The mysql_statedir must not be writable by the mysql user under any
     # circumstances as it contains scripts that are executed by root.
@@ -263,7 +263,7 @@ EOF
     # The introduction of versionless server package is not fully backwards
     # compatible as the purge of an old mariadb-server-x.y package would
     # commands such as 'deb-systemd-helper purge mariadb.service' and
-    # 'update-rc.d mariadb remove'. Fix it by simly deleting any existing postrm
+    # 'update-rc.d mariadb remove'. Fix it by simply deleting any existing postrm
     # stanzas opportunistically.
     for old_postrm_file in /var/lib/dpkg/info/mariadb-server-10.?.postrm
     do

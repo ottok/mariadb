@@ -405,7 +405,7 @@ on an install or upgrade with an error message like:
     E: Unable to correct problems, you have held broken packages.
 
 To make apt show debug information on what it tried to resolve and how it failed
-enable debug features by addin a file in `/etc/apt/apt.conf.d/` with:
+enable debug features by adding a file in `/etc/apt/apt.conf.d/` with:
 
    Debug::pkgProblemResolver 1;
    Debug::pkgDepCache::AutoInstall 1;

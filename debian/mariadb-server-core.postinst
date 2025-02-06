@@ -30,7 +30,7 @@ case "$1" in
     then
       if ! setcap cap_ipc_lock+ep "$PROGRAM"
       then
-        echo "Setcap failed on $PROGRAM, required with --memlock if insufficent RLIMIT_MEMLOCK" >&2
+        echo "Setcap failed on $PROGRAM, required with --memlock if insufficient RLIMIT_MEMLOCK" >&2
       fi
     fi
     ;;
