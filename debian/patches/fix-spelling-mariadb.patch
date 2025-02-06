@@ -35,7 +35,7 @@ index 60c3854..bb5656a 100644
           "terminates with an error. Default is 0, in which case mariadb-backup waits "
           "indefinitely for BACKUP STAGE START to finish",
 diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
-index a92d47b..4ad1aa5 100644
+index 543052f..f43cf69 100644
 --- a/extra/mariabackup/xtrabackup.cc
 +++ b/extra/mariabackup/xtrabackup.cc
 @@ -219,7 +219,7 @@ uint xtrabackup_compress = FALSE;
@@ -47,7 +47,7 @@ index a92d47b..4ad1aa5 100644
  in milliseconds (default is 1 second) */
  ulint xtrabackup_log_copy_interval = 1000;
  static ulong max_buf_pool_modified_pct;
-@@ -1731,7 +1731,7 @@ struct my_option xb_client_options[]= {
+@@ -1736,7 +1736,7 @@ struct my_option xb_client_options[]= {
      {"startup-wait-timeout", OPT_LOCK_WAIT_TIMEOUT,
       "This option specifies time in seconds that mariadb-backup should wait for "
       "BACKUP STAGE START to complete. BACKUP STAGE START has to wait until all "
@@ -56,7 +56,7 @@ index a92d47b..4ad1aa5 100644
       "If there are still such queries when the timeout expires, mariadb-backup "
       "terminates with an error. Default is 0, in which case mariadb-backup waits "
       "indefinitely for BACKUP STAGE START to finish",
-@@ -5823,7 +5823,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
+@@ -5799,7 +5799,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
  	}
  
  	/* Mariabackup doesn't detect any FILE_OP for the deferred
@@ -88,10 +88,10 @@ index d43a3f1..1e4ac34 100644
    }
  
 diff --git a/sql/sql_select.cc b/sql/sql_select.cc
-index 96500ff..17c0aac 100644
+index c3f5098..1a354e2 100644
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
-@@ -15143,7 +15143,7 @@ void JOIN::drop_unused_derived_keys()
+@@ -15149,7 +15149,7 @@ void JOIN::drop_unused_derived_keys()
        }
        /*
          We dropped all keys except the chosen one and unique keys.

@@ -21,7 +21,7 @@ Forwarded: no
  5 files changed, 12 insertions(+), 11 deletions(-)
 
 diff --git a/mysql-test/main/mysqld--help.result b/mysql-test/main/mysqld--help.result
-index 9a15039..223117b 100644
+index adc10ec..e7227cb 100644
 --- a/mysql-test/main/mysqld--help.result
 +++ b/mysql-test/main/mysqld--help.result
 @@ -782,13 +782,14 @@ The following specify which files/extra groups are read (specified before remain
@@ -47,7 +47,7 @@ index 9a15039..223117b 100644
   Cost of checking a key against the end key condition.
   --optimizer-key-copy-cost=# 
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
-index 0417b41b..6531ce4 100644
+index de30858..e52ac38 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 @@ -2405,7 +2405,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
@@ -60,7 +60,7 @@ index 0417b41b..6531ce4 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
-index 2cc1a6b..85d08d4 100644
+index 347b5ee..774c7f6 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 @@ -2615,7 +2615,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
@@ -73,10 +73,10 @@ index 2cc1a6b..85d08d4 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/sql/sql_select.cc b/sql/sql_select.cc
-index 17c0aac..665f412 100644
+index 1a354e2..90524d4 100644
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
-@@ -11699,7 +11699,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
+@@ -11706,7 +11706,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
  
  /*
    @brief
@@ -86,10 +86,10 @@ index 17c0aac..665f412 100644
  
    @detail
 diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
-index 9fd51fb..0164595 100644
+index 590301c..fd35fd4 100644
 --- a/sql/sys_vars.cc
 +++ b/sql/sys_vars.cc
-@@ -2883,7 +2883,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
+@@ -2913,7 +2913,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
  static Sys_var_ulonglong Sys_optimizer_join_limit_pref_ratio(
         "optimizer_join_limit_pref_ratio",
         "For queries with JOIN and ORDER BY LIMIT : make the optimizer "

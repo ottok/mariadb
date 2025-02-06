@@ -18,7 +18,7 @@ Forwarded: no
  1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/mysys/my_init.c b/mysys/my_init.c
-index 383d45f..eb8f2e0 100644
+index 9c0d1f9..eef8d67 100644
 --- a/mysys/my_init.c
 +++ b/mysys/my_init.c
 @@ -198,7 +198,8 @@ my_bool my_init(void)

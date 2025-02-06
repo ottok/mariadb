@@ -1,4 +1,3 @@
-0025-Change-the-default-optimization-from-O3-to-O2-in-mys.patch
 rocksdb-kfreebsd.patch
 env-perl-usr-bin-perl.patch
 fix-spelling-rocksdb.patch
@@ -13,6 +12,3 @@ hurd-i386-storage_connect_ioapi.h.patch
 hide-mysql-command-deprecation-warnings.patch
 1063738-x32-compile-time-assert.patch
 Fix-spelling-of-of-allows-one-to.patch
-MDEV-35528-mariadb-binlog-cannot-process-more-than-1-logf.patch
-MDEV-35785-Always-show-innodb_log_file_mmap.patch
-MDEV-35785-Use-same-innodb_log_file_mmap-description.patch

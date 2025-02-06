@@ -1,3 +1,12 @@
+mariadb (1:11.4.5-1) unstable; urgency=medium
+
+  * New upstream version 11.4.5. Includes fixes for several defects
+    as noted at https://mariadb.com/kb/en/mariadb-11-4-5-release-notes/ as well
+    the following security issues:
+    - CVE-2025-21490
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 05 Feb 2025 18:02:56 -0800
+
 mariadb (1:11.4.4-3) unstable; urgency=medium
 
   * Set CAP_IPC_LOCK capability if possible
