@@ -1,6 +1,6 @@
 From: Michael Biebl <biebl@debian.org>
 Date: Mon, 22 Jan 2024 22:52:25 +0100
-Subject: [PATCH] Install PAM modules and systemd units into /usr
+Subject: Install PAM modules and systemd units into /usr
 
 Since Debian trixie all files need to be installed into their canonical
 location under /usr.
