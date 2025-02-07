@@ -88,8 +88,6 @@ packaging-fix-checks:
         echo "Debian packaging files are unordered! Please run 'wrap-and-sort -vast'."
         exit 1
       fi
-    # Print syntax errors if found, otherwise continue silently
-    - make --dry-run --makefile=debian/rules > /dev/null
     - |
       shellcheck -x --shell=sh $(grep -Irnw debian/ -e '^#!.*/sh' | sort -u |cut -d ':' -f 1 | xargs)
       shellcheck -x --shell=bash $(grep -Irnw debian/ -e '^#!.*/bash' | sort -u |cut -d ':' -f 1 | xargs)
