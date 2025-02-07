@@ -21,7 +21,8 @@ Comment:
  special exceptions to the terms and conditions of the GPLv2
  as applied to these client libraries, which are identified
  and described in more detail in the FOSS License Exception at
- <https://www.mysql.com/about/legal/licensing/foss-exception/>.
+ <https://www.mysql.com/about/legal/licensing/foss-exception/>
+ (and <https://oss.oracle.com/licenses/universal-foss-exception/>).
  .
  The text of the Above URL is quoted below, as of Aug 17, 2011.
  .
@@ -150,7 +151,7 @@ Copyright:
  2011 Ondřej Surý <ondrej@debian.org>
  2012 Nicholas Bamber <nicholas@periapt.co.uk>
  2013,2016 Kristian Nielsen <knielsen@askmonty.org>
- 2013-2024 Otto Kekäläinen <otto@debian.org>
+ 2013-2025 Otto Kekäläinen <otto@debian.org>
  2014 Daniel Schepler <schepler@debian.org>
  2014 Julien Muchembled <jm@jmuchemb.eu>
  2014 Tobias Frost <tobi@coldtobi.de>
@@ -688,7 +689,7 @@ License: GPL-2
 Files: wsrep-lib/*
  sql/wsrep_*
  scripts/wsrep_*
-Copyright: 2008-2019 Codership Oy <https://www.codership.com>
+Copyright: 2008-2019 Codership Oy <https://galeracluster.com/>
 License: GPL-2
 
 Files: libmariadb/*
@@ -1032,7 +1033,7 @@ License: Artistic
  .
  10. THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR
  IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
- WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  .
  The End
 
