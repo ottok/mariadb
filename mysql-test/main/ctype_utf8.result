@@ -11651,6 +11651,15 @@ CAST(_utf8 'яяя' AS INT)
 Warnings:
 Warning	1292	Truncated incorrect INTEGER value: 'яяя'
 #
+# MDEV-30111 InnoDB: Failing assertion: update->n_fields == 0 in row_ins_sec_index_entry_by_modify
+#
+select strcmp(_utf8mb3'' collate utf8mb3_general_nopad_ci, _utf8mb3 0x0001050001) as c1;
+c1
+-1
+select strcmp(_utf8mb3'' collate utf8mb3_nopad_bin, _utf8mb3 0x0001050001) as c1;
+c1
+-1
+#
 # End of 10.5 tests
 #
 #
@@ -11660,8 +11669,8 @@ Warning	1292	Truncated incorrect INTEGER value: 'яяя'
 # MDEV-28118 Wrong collation of `CAST(.. AS CHAR COLLATE DEFAULT)`
 #
 SET NAMES utf8mb3 COLLATE utf8mb3_bin;
-SELECT COLLATION(CAST('a' AS CHAR COLLATE DEFAULT));
-COLLATION(CAST('a' AS CHAR COLLATE DEFAULT))
+SELECT COLLATION(CAST('a' AS CHAR COLLATE DEFAULT)) AS c1;
+c1
 utf8mb3_general_ci
 CREATE TABLE t1 AS SELECT CAST('a' AS CHAR COLLATE DEFAULT) AS c1;
 SHOW CREATE TABLE t1;

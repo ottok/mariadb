@@ -6552,5 +6552,34 @@ SELECT CAST(CONVERT('-9223372036854775808' USING ucs2) AS SIGNED) AS c1;
 c1
 -9223372036854775808
 #
+# MDEV-30111 InnoDB: Failing assertion: update->n_fields == 0 in row_ins_sec_index_entry_by_modify
+#
+select strcmp(_ucs2'' collate ucs2_general_nopad_ci, _ucs2 0x00000001000500000001) as c1;
+c1
+-1
+select strcmp(_ucs2'' collate ucs2_nopad_bin, _ucs2 0x00000001000500000001) as c1;
+c1
+-1
+#
 # End of 10.5 tests
+#
+#
+# Start of 10.6 tests
+#
+#
+# MDEV-23895 Server crash, ASAN heap-buffer-overflow or Valgrind Invalid write in Item_func_rpad::val_str
+#
+CREATE TABLE t1 (a CHAR(8));
+INSERT INTO t1 VALUES ('foo'),('bar');
+SET collation_connection= ucs2_danish_ci;
+SET last_insert_id=0;
+SELECT * FROM t1 WHERE RPAD(a, 50, LAST_INSERT_ID());
+a
+Warnings:
+Warning	1292	Truncated incorrect DOUBLE value: 'foo00000000000000000000000000000000000000000000000'
+Warning	1292	Truncated incorrect DOUBLE value: 'bar00000000000000000000000000000000000000000000000'
+DROP TABLE t1;
+SET names latin1;
+#
+# End of 10.6 tests
 #

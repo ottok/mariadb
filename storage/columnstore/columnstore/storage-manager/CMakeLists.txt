@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(storagemanager)
 
-include_directories(include ${CMAKE_BINARY_DIR}/include ${ENGINE_UTILS_COMMON_INCLUDE} ${S3API_DIR})
+include_directories(include ${CMAKE_BINARY_DIR}/include ${ENGINE_COMMON_INCLUDES} ${S3API_DIR})
 
 set(storagemanager_SRCS
     src/AppendTask.cpp
@@ -36,6 +36,8 @@ set(storagemanager_SRCS
     src/Ownership.cpp
     src/PrefixCache.cpp
     src/SyncTask.cpp
+    src/ListIOTask.cpp
+    src/TerminateIOTask.cpp
     ../utils/common/crashtrace.cpp
 )
 
@@ -125,12 +127,24 @@ target_link_libraries(smrm storagemanager cloudio
     ${ENGINE_EXEC_LIBS}
 )
 
+add_executable(smps src/smps.cpp)
+target_link_libraries(smps storagemanager cloudio
+    ${ENGINE_LDFLAGS}
+    ${ENGINE_EXEC_LIBS}
+)
+
+
+add_executable(smkill src/smkill.cpp)
+target_link_libraries(smkill storagemanager cloudio
+    ${ENGINE_LDFLAGS}
+    ${ENGINE_EXEC_LIBS}
+)
 install(TARGETS storagemanager
     LIBRARY DESTINATION ${ENGINE_LIBDIR}
     COMPONENT columnstore-engine
 )
 
-install(TARGETS StorageManager smcat smput smls smrm testS3Connection
+install(TARGETS StorageManager smcat smkill smps smput smls smrm testS3Connection
     RUNTIME DESTINATION ${ENGINE_BINDIR}
     COMPONENT columnstore-engine
 )

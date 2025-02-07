@@ -1281,6 +1281,8 @@ public:
     return mark_unsupported_function(fully_qualified_func_name(), arg,
                                      VCOL_SESSION_FUNC);
   }
+  Item *do_get_copy(THD *thd) const override
+  { return get_item_copy<Item_func_current_user>(thd, this); }
 };
 
 
@@ -1649,7 +1651,7 @@ public:
   bool fix_length_and_dec(THD *thd) override
   {
     collation.set(default_charset());
-    fix_char_length(64);
+    fix_char_length(65);
     set_maybe_null();
     return FALSE;
   }
