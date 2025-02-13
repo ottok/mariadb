@@ -31,7 +31,6 @@ Build-Depends:
  libnet-ssleay-perl <!nocheck>,
  libnuma-dev [linux-any],
  libpam0g-dev,
- libpcre2-dev,
  libsnappy-dev,
  libssl-dev,
  libssl-dev:native,

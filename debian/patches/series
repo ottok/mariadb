@@ -10,5 +10,5 @@ hurd-i386-plugin_disks_information_schema_disks.cc.patch
 hurd-i386-storage_connect_ioapi.h.patch
 hide-mysql-command-deprecation-warnings.patch
 1063738-x32-compile-time-assert.patch
-1095286-pcre-tests-case-confusion.patch
 Fix-misc-spelling-in-MariaDB-Server-repository.patch
+use-vendored-pcre2.patch

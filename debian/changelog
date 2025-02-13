@@ -1,6 +1,5 @@
 mariadb (1:11.4.5-1) UNRELEASED; urgency=medium
 
-  [ Otto Kekäläinen ]
   * New upstream version 11.4.5. Includes fixes for several defects
     as noted at https://mariadb.com/kb/en/mariadb-11-4-5-release-notes/ as well
     the following security issues:
@@ -15,11 +14,6 @@ mariadb (1:11.4.5-1) UNRELEASED; urgency=medium
   * Fix minor typos in Debian packaging files
   * Fix broken links in d/copyright
   * Unify spelling fix patches into one, and fix spelling of Enrypt->Encrypt
-
-  [ Matthew Vernon ]
-  * Add patch to fix `main.func_regexp_pcre` failing with latest PCRE2 10.45
-    due to backwards-incompatible case-sensitivity change in behavior in latest
-    PCRE2 version (Closes: #1095286).
 
  -- Otto Kekäläinen <otto@debian.org>  Wed, 05 Feb 2025 18:02:56 -0800
 
