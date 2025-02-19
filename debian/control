@@ -4,11 +4,11 @@ Priority: optional
 Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
 XSBC-Original-Maintainer: Debian MySQL Maintainers <pkg-mysql-maint@lists.alioth.debian.org>
 Uploaders: Otto Kekäläinen <otto@debian.org>
-Build-Depends: bison,
+Build-Depends: debhelper-compat (= 13),
+               dh-exec,
+               bison,
                cmake,
                cracklib-runtime <!nocheck>,
-               debhelper-compat (= 13),
-               dh-exec,
                gdb <!nocheck>,
                libboost-dev,
                libbz2-dev,
