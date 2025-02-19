@@ -885,6 +885,10 @@ The following specify which files/extra groups are read (specified before remain
                       Redo log buffer size in bytes.
   --innodb-log-file-buffering 
                       Whether the file system cache for ib_logfile0 is enabled
+  --innodb-log-file-mmap 
+                      Whether ib_logfile0 resides in persistent memory (when
+                      supported) or should initially be memory-mapped
+                      (Defaults to on; use --skip-innodb-log-file-mmap to disable.)
   --innodb-log-file-size=# 
                       Redo log size in bytes.
   --innodb-log-group-home-dir=name 
@@ -2673,6 +2677,7 @@ innodb-lock-waits                                            ON
 innodb-locks                                                 ON
 innodb-log-buffer-size                                       16777216
 innodb-log-file-buffering                                    FALSE
+innodb-log-file-mmap                                         TRUE
 innodb-log-file-size                                         100663296
 innodb-log-group-home-dir                                    (No default value)
 innodb-log-spin-wait-delay                                   0
