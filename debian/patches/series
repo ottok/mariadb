@@ -1,4 +1,3 @@
-0025-Change-the-default-optimization-from-O3-to-O2-in-mys.patch
 rocksdb-kfreebsd.patch
 env-perl-usr-bin-perl.patch
 fix-spelling-rocksdb.patch

@@ -1,6 +1,10 @@
-mariadb (1:10.11.10-0+deb12u1) bookworm; urgency=medium
+mariadb (1:10.11.11-0+deb12u1) bookworm; urgency=medium
 
-  * New upstream version 10.11.10. Includes fixes for several severe regressions
+  * New upstream version 10.11.11. Includes fixes for several defects
+    as noted at https://mariadb.com/kb/en/mariadb-10-11-11-release-notes/ as well
+    the following security issues:
+    - CVE-2025-21490
+  * This release includes upstream version 10.11.10, with fixes for regressions
     as noted at https://mariadb.com/kb/en/mariadb-10-11-10-release-notes/
   * Includes fix for main.having_cond_pushdown test failure on s390x which also
     affected builds in Debian (https://jira.mariadb.org/browse/MDEV-34650)
@@ -14,9 +18,9 @@ mariadb (1:10.11.10-0+deb12u1) bookworm; urgency=medium
   * Add Lintian overrides for new upstream documentation JavaScript files
   * Skip test main.mysqld--help-aria due to MDEV-34733
 
- -- Otto Kekäläinen <otto@debian.org>  Tue, 05 Nov 2024 21:14:47 -0800
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 18 Feb 2025 16:56:41 -0800
 
-mariadb (1:10.11.9-0+deb12u1) bookworm; urgency=medium
+mariadb (1:10.11.9-0+deb12u1) bookworm-proposed-updates; urgency=medium
 
   * New upstream version 10.11.9. Includes fixes for several severe regressions
     as noted at https://mariadb.com/kb/en/mariadb-10-11-9-release-notes/
