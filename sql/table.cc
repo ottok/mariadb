@@ -246,11 +246,11 @@ View_creation_ctx * View_creation_ctx::create(THD *thd,
 
 /* Get column name from column hash */
 
-static uchar *get_field_name(Field **buff, size_t *length,
-                             my_bool not_used __attribute__((unused)))
+static const uchar *get_field_name(const void *buff_, size_t *length, my_bool)
 {
-  *length= (uint) (*buff)->field_name.length;
-  return (uchar*) (*buff)->field_name.str;
+  auto buff= static_cast<const Field *const *>(buff_);
+  *length= (*buff)->field_name.length;
+  return reinterpret_cast<const uchar *>((*buff)->field_name.str);
 }
 
 
@@ -348,8 +348,8 @@ TABLE_SHARE *alloc_table_share(const char *db, const char *table_name,
 
   path_length= build_table_filename(path, sizeof(path) - 1,
                                     db, table_name, "", 0);
-  init_sql_alloc(key_memory_table_share, &mem_root, TABLE_ALLOC_BLOCK_SIZE, 0,
-                 MYF(0));
+  init_sql_alloc(key_memory_table_share, &mem_root, TABLE_ALLOC_BLOCK_SIZE,
+                 TABLE_PREALLOC_BLOCK_SIZE, MYF(0));
   if (multi_alloc_root(&mem_root,
                        &share, sizeof(*share),
                        &key_buff, key_length,
@@ -438,10 +438,12 @@ void init_tmp_table_share(THD *thd, TABLE_SHARE *share, const char *key,
   bzero((char*) share, sizeof(*share));
   /*
     This can't be MY_THREAD_SPECIFIC for slaves as they are freed
-    during cleanup() from Relay_log_info::close_temporary_tables()
+    during cleanup() from Relay_log_info::close_temporary_tables().
+    We can also not use pre-alloc here, as internal temporary tables
+    are not freeing table->share->mem_root
   */
   init_sql_alloc(key_memory_table_share, &share->mem_root,
-                 TABLE_ALLOC_BLOCK_SIZE, 0,
+                 TABLE_PREALLOC_BLOCK_SIZE, 0,
                  MYF(thd->slave_thread ? 0 : MY_THREAD_SPECIFIC));
   share->table_category=         TABLE_CATEGORY_TEMPORARY;
   share->tmp_table=              INTERNAL_TMP_TABLE;
@@ -2342,7 +2344,7 @@ int TABLE_SHARE::init_from_binary_frm_image(THD *thd, bool write,
   if (use_hash)
     use_hash= !my_hash_init(PSI_INSTRUMENT_ME, &share->name_hash,
                             system_charset_info, share->fields, 0, 0,
-                            (my_hash_get_key) get_field_name, 0, 0);
+                            get_field_name, 0, 0);
 
   if (share->mysql_version >= 50700 && share->mysql_version < 100000 &&
       vcol_screen_length)
@@ -3682,6 +3684,27 @@ bool Virtual_column_info::cleanup_session_expr()
 }
 
 
+bool
+Virtual_column_info::is_equivalent(THD *thd, TABLE_SHARE *share, TABLE_SHARE *vcol_share,
+                                  const Virtual_column_info* vcol, bool &error) const
+{
+  error= true;
+  Item *cmp_expr= vcol->expr->build_clone(thd);
+  if (!cmp_expr)
+    return false;
+  Item::func_processor_rename_table param;
+  param.old_db=    Lex_ident_db(vcol_share->db);
+  param.old_table= Lex_ident_table(vcol_share->table_name);
+  param.new_db=    Lex_ident_db(share->db);
+  param.new_table= Lex_ident_table(share->table_name);
+  cmp_expr->walk(&Item::rename_table_processor, 1, &param);
+
+  error= false;
+  return type_handler()  == vcol->type_handler()
+      && is_stored() == vcol->is_stored()
+      && expr->eq(cmp_expr, true);
+}
+
 
 class Vcol_expr_context
 {
@@ -3970,50 +3993,54 @@ static void print_long_unique_table(TABLE *table)
           " fields->offset,field->null_bit, field->null_pos and key_info ... \n"
           "\nPrinting  Table  keyinfo\n");
   str.append(buff, strlen(buff));
-  my_snprintf(buff, sizeof(buff), "\ntable->s->reclength %d\n"
-          "table->s->fields %d\n",
+  my_snprintf(buff, sizeof(buff), "\ntable->s->reclength %lu\n"
+          "table->s->fields %u\n",
           table->s->reclength, table->s->fields);
   str.append(buff, strlen(buff));
   for (uint i= 0; i < table->s->keys; i++)
   {
     key_info_table= table->key_info + i;
     key_info_share= table->s->key_info + i;
-    my_snprintf(buff, sizeof(buff), "\ntable->key_info[%d] user_defined_key_parts = %d\n"
-                                    "table->key_info[%d] algorithm == HA_KEY_ALG_LONG_HASH = %d\n"
-                                    "table->key_info[%d] flags & HA_NOSAME = %d\n",
-                                   i, key_info_table->user_defined_key_parts,
-                                   i, key_info_table->algorithm == HA_KEY_ALG_LONG_HASH,
-                                   i, key_info_table->flags & HA_NOSAME);
+    my_snprintf(buff, sizeof(buff),
+                "\ntable->key_info[%u] user_defined_key_parts = %u\n"
+                "table->key_info[%u] algorithm == HA_KEY_ALG_LONG_HASH = %d\n"
+                "table->key_info[%u] flags & HA_NOSAME = %lu\n",
+                i, key_info_table->user_defined_key_parts,
+                i, key_info_table->algorithm == HA_KEY_ALG_LONG_HASH,
+                i, key_info_table->flags & HA_NOSAME);
     str.append(buff, strlen(buff));
-    my_snprintf(buff, sizeof(buff), "\ntable->s->key_info[%d] user_defined_key_parts = %d\n"
-                                    "table->s->key_info[%d] algorithm == HA_KEY_ALG_LONG_HASH = %d\n"
-                                    "table->s->key_info[%d] flags & HA_NOSAME = %d\n",
-                                   i, key_info_share->user_defined_key_parts,
-                                   i, key_info_share->algorithm == HA_KEY_ALG_LONG_HASH,
-                                   i, key_info_share->flags & HA_NOSAME);
+    my_snprintf(buff, sizeof(buff),
+                "\ntable->s->key_info[%u] user_defined_key_parts = %u\n"
+                "table->s->key_info[%u] algorithm == HA_KEY_ALG_LONG_HASH = %d\n"
+                "table->s->key_info[%u] flags & HA_NOSAME = %lu\n",
+                i, key_info_share->user_defined_key_parts,
+                i, key_info_share->algorithm == HA_KEY_ALG_LONG_HASH,
+                i, key_info_share->flags & HA_NOSAME);
     str.append(buff, strlen(buff));
     key_part = key_info_table->key_part;
-    my_snprintf(buff, sizeof(buff), "\nPrinting table->key_info[%d].key_part[0] info\n"
-            "key_part->offset = %d\n"
-            "key_part->field_name = %s\n"
-            "key_part->length = %d\n"
-            "key_part->null_bit = %d\n"
-            "key_part->null_offset = %d\n",
-            i, key_part->offset, key_part->field->field_name.str, key_part->length,
-            key_part->null_bit, key_part->null_offset);
+    my_snprintf(buff, sizeof(buff),
+                "\nPrinting table->key_info[%u].key_part[0] info\n"
+                "key_part->offset = %u\n"
+                "key_part->field_name = %s\n"
+                "key_part->length = %u\n"
+                "key_part->null_bit = %u\n"
+                "key_part->null_offset = %u\n",
+                i, key_part->offset, key_part->field->field_name.str, key_part->length,
+                key_part->null_bit, key_part->null_offset);
     str.append(buff, strlen(buff));
 
     for (uint j= 0; j < key_info_share->user_defined_key_parts; j++)
     {
       key_part= key_info_share->key_part + j;
-      my_snprintf(buff, sizeof(buff), "\nPrinting share->key_info[%d].key_part[%d] info\n"
-            "key_part->offset = %d\n"
-            "key_part->field_name = %s\n"
-            "key_part->length = %d\n"
-            "key_part->null_bit = %d\n"
-            "key_part->null_offset = %d\n",
-            i,j,key_part->offset, key_part->field->field_name.str, key_part->length,
-            key_part->null_bit, key_part->null_offset);
+      my_snprintf(buff, sizeof(buff),
+                  "\nPrinting share->key_info[%u].key_part[%u] info\n"
+                  "key_part->offset = %u\n"
+                  "key_part->field_name = %s\n"
+                  "key_part->length = %u\n"
+                  "key_part->null_bit = %u\n"
+                  "key_part->null_offset = %u\n",
+                  i, j, key_part->offset, key_part->field->field_name.str,
+                  key_part->length, key_part->null_bit, key_part->null_offset);
       str.append(buff, strlen(buff));
     }
   }
@@ -4022,16 +4049,17 @@ static void print_long_unique_table(TABLE *table)
   for(uint i= 0; i < table->s->fields; i++)
   {
     field= table->field[i];
-    my_snprintf(buff, sizeof(buff), "\ntable->field[%d]->field_name %s\n"
-            "table->field[%d]->offset = %d\n"
-            "table->field[%d]->field_length = %d\n"
-            "table->field[%d]->null_pos wrt to record 0 = %d\n"
-            "table->field[%d]->null_bit_pos = %d\n",
-            i, field->field_name.str,
-            i, field->ptr- table->record[0],
-            i, field->pack_length(),
-            i, field->null_bit ? field->null_ptr - table->record[0] : -1,
-            i, field->null_bit);
+    my_snprintf(buff, sizeof(buff),
+                "\ntable->field[%u]->field_name %s\n"
+                "table->field[%u]->offset = %" PRIdPTR "\n" // `%td` not available
+                "table->field[%u]->field_length = %d\n"
+                "table->field[%u]->null_pos wrt to record 0 = %" PRIdPTR "\n"
+                "table->field[%u]->null_bit_pos = %d",
+                i, field->field_name.str,
+                i, field->ptr- table->record[0],
+                i, field->pack_length(),
+                i, field->null_bit ? field->null_ptr - table->record[0] : -1,
+                i, field->null_bit);
     str.append(buff, strlen(buff));
   }
   (*error_handler_hook)(1, str.ptr(), ME_NOTE);
@@ -4085,6 +4113,24 @@ bool copy_keys_from_share(TABLE *outparam, MEM_ROOT *root)
     }
   }
   return 0;
+}
+
+void TABLE::update_keypart_vcol_info()
+{
+  for (uint k= 0; k < s->keys; k++)
+  {
+    KEY &info_k= key_info[k];
+    uint parts = (s->use_ext_keys ? info_k.ext_key_parts :
+                      info_k.user_defined_key_parts);
+    for (uint p= 0; p < parts; p++)
+    {
+      KEY_PART_INFO &kp= info_k.key_part[p];
+      if (kp.field != field[kp.fieldnr - 1])
+      {
+        kp.field->vcol_info = field[kp.fieldnr - 1]->vcol_info;
+      }
+    }
+  }
 }
 
 /*
@@ -4148,7 +4194,7 @@ enum open_frm_error open_table_from_share(THD *thd, TABLE_SHARE *share,
     goto err;
   }
   init_sql_alloc(key_memory_TABLE, &outparam->mem_root, TABLE_ALLOC_BLOCK_SIZE,
-                 0, MYF(0));
+                 TABLE_PREALLOC_BLOCK_SIZE, MYF(0));
 
   /*
     We have to store the original alias in mem_root as constraints and virtual
@@ -4319,20 +4365,7 @@ enum open_frm_error open_table_from_share(THD *thd, TABLE_SHARE *share,
     /* Update to use trigger fields */
     switch_defaults_to_nullable_trigger_fields(outparam);
 
-    for (uint k= 0; k < share->keys; k++)
-    {
-      KEY &key_info= outparam->key_info[k];
-      uint parts = (share->use_ext_keys ? key_info.ext_key_parts :
-                    key_info.user_defined_key_parts);
-      for (uint p= 0; p < parts; p++)
-      {
-        KEY_PART_INFO &kp= key_info.key_part[p];
-        if (kp.field != outparam->field[kp.fieldnr - 1])
-        {
-          kp.field->vcol_info = outparam->field[kp.fieldnr - 1]->vcol_info;
-        }
-      }
-    }
+    outparam->update_keypart_vcol_info();
   }
 
 #ifdef WITH_PARTITION_STORAGE_ENGINE
@@ -4526,8 +4559,8 @@ partititon_err:
 
   thd->lex->context_analysis_only= save_context_analysis_only;
   DBUG_EXECUTE_IF("print_long_unique_internal_state",
-   print_long_unique_table(outparam););
-  DBUG_RETURN (OPEN_FRM_OK);
+                  print_long_unique_table(outparam););
+  DBUG_RETURN(OPEN_FRM_OK);
 
  err:
   if (! error_reported)
@@ -7237,6 +7270,7 @@ void Field_iterator_natural_join::next()
 {
   cur_column_ref= column_ref_it++;
   DBUG_ASSERT(!cur_column_ref || ! cur_column_ref->table_field ||
+              !cur_column_ref->table_field->field ||
               cur_column_ref->table_ref->table ==
               cur_column_ref->table_field->field->table);
 }
@@ -9411,8 +9445,8 @@ void TABLE::prepare_triggers_for_insert_stmt_or_event()
 {
   if (triggers)
   {
-    if (triggers->has_triggers(TRG_EVENT_DELETE,
-                               TRG_ACTION_AFTER))
+    triggers->clear_extra_null_bitmap();
+    if (triggers->has_triggers(TRG_EVENT_DELETE, TRG_ACTION_AFTER))
     {
       /*
         The table has AFTER DELETE triggers that might access to
@@ -9421,8 +9455,7 @@ void TABLE::prepare_triggers_for_insert_stmt_or_event()
       */
       (void) file->extra(HA_EXTRA_DELETE_CANNOT_BATCH);
     }
-    if (triggers->has_triggers(TRG_EVENT_UPDATE,
-                               TRG_ACTION_AFTER))
+    if (triggers->has_triggers(TRG_EVENT_UPDATE, TRG_ACTION_AFTER))
     {
       /*
         The table has AFTER UPDATE triggers that might access to subject
@@ -9437,17 +9470,19 @@ void TABLE::prepare_triggers_for_insert_stmt_or_event()
 
 bool TABLE::prepare_triggers_for_delete_stmt_or_event()
 {
-  if (triggers &&
-      triggers->has_triggers(TRG_EVENT_DELETE,
-                             TRG_ACTION_AFTER))
+  if (triggers)
   {
-    /*
-      The table has AFTER DELETE triggers that might access to subject table
-      and therefore might need delete to be done immediately. So we turn-off
-      the batching.
-    */
-    (void) file->extra(HA_EXTRA_DELETE_CANNOT_BATCH);
-    return TRUE;
+    triggers->clear_extra_null_bitmap();
+    if (triggers->has_triggers(TRG_EVENT_DELETE, TRG_ACTION_AFTER))
+    {
+      /*
+        The table has AFTER DELETE triggers that might access to subject table
+        and therefore might need delete to be done immediately. So we turn-off
+        the batching.
+      */
+      (void) file->extra(HA_EXTRA_DELETE_CANNOT_BATCH);
+      return TRUE;
+    }
   }
   return FALSE;
 }
@@ -9455,17 +9490,19 @@ bool TABLE::prepare_triggers_for_delete_stmt_or_event()
 
 bool TABLE::prepare_triggers_for_update_stmt_or_event()
 {
-  if (triggers &&
-      triggers->has_triggers(TRG_EVENT_UPDATE,
-                             TRG_ACTION_AFTER))
+  if (triggers)
   {
-    /*
-      The table has AFTER UPDATE triggers that might access to subject
-      table and therefore might need update to be done immediately.
-      So we turn-off the batching.
-    */ 
-    (void) file->extra(HA_EXTRA_UPDATE_CANNOT_BATCH);
-    return TRUE;
+    triggers->clear_extra_null_bitmap();
+    if (triggers->has_triggers(TRG_EVENT_UPDATE, TRG_ACTION_AFTER))
+    {
+      /*
+        The table has AFTER UPDATE triggers that might access to subject
+        table and therefore might need update to be done immediately.
+        So we turn-off the batching.
+      */
+      (void) file->extra(HA_EXTRA_UPDATE_CANNOT_BATCH);
+      return TRUE;
+    }
   }
   return FALSE;
 }
@@ -10097,7 +10134,14 @@ bool TABLE_LIST::is_the_same_definition(THD* thd, TABLE_SHARE *s)
       tabledef_version.length= 0;
   }
   else
+  {
     set_tabledef_version(s);
+    if (m_table_ref_type == TABLE_REF_NULL)
+    {
+      set_table_ref_id(s);
+      return TRUE;
+    }
+  }
   return FALSE;
 }
 

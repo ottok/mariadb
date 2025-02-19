@@ -164,20 +164,24 @@ longlong Item::val_time_packed_result(THD *thd)
 String *Item::val_str_ascii(String *str)
 {
   DBUG_ASSERT(str != &str_value);
-  
-  uint errors;
-  String *res= val_str(&str_value);
+
+  if (!(collation.collation->state & MY_CS_NONASCII))
+    return val_str(str);
+
+  /*
+    We cannot use str_value as a buffer here,
+    because val_str() can use it. Let's have a local buffer.
+  */
+  StringBuffer<STRING_BUFFER_USUAL_SIZE> tmp;
+  String *res= val_str(&tmp);
+
   if (!res)
     return 0;
-  
-  if (!(res->charset()->state & MY_CS_NONASCII))
-    str= res;
-  else
-  {
-    if ((null_value= str->copy(res->ptr(), res->length(), collation.collation,
-                               &my_charset_latin1, &errors)))
-      return 0;
-  }
+
+  uint errors;
+  if ((null_value= str->copy(res->ptr(), res->length(), collation.collation,
+                             &my_charset_latin1, &errors)))
+    return 0;
 
   return str;
 }
@@ -838,6 +842,30 @@ bool Item_field::rename_fields_processor(void *arg)
       break;
     }
   }
+  return 0;
+}
+
+/**
+   Rename table and clean field for EXCHANGE comparison
+*/
+
+bool Item_field::rename_table_processor(void *arg)
+{
+  Item::func_processor_rename_table *p= (Item::func_processor_rename_table*) arg;
+
+  /* If (db_name, table_name) matches (p->old_db, p->old_table)
+     rename to (p->new_db, p->new_table) */
+  if (((!db_name.str && !p->old_db.str) ||
+       db_name.streq(p->old_db)) &&
+      ((!table_name.str && !p->old_table.str) ||
+       table_name.streq(p->old_table)))
+  {
+    db_name= p->new_db;
+    table_name= p->new_table;
+  }
+
+  /* Item_field equality is done by field pointer if it is set, we need to avoid that */
+  field= NULL;
   return 0;
 }
 
@@ -3984,7 +4012,7 @@ void Item_string::print(String *str, enum_query_type query_type)
     }
     else
     {
-      str_value.print(str, system_charset_info);
+      str_value.print(str, &my_charset_utf8mb4_general_ci);
     }
   }
   else
@@ -4251,6 +4279,7 @@ void Item_param::set_null(const DTCollation &c)
   decimals= 0;
   collation= c;
   state= NULL_VALUE;
+  value.set_handler(&type_handler_null);
   DBUG_VOID_RETURN;
 }
 
@@ -4509,6 +4538,7 @@ bool Item_param::set_from_item(THD *thd, Item *item)
     if (item->null_value)
     {
       set_null(DTCollation_numeric());
+      set_handler(&type_handler_null);
       DBUG_RETURN(false);
     }
     else
@@ -4526,7 +4556,10 @@ bool Item_param::set_from_item(THD *thd, Item *item)
     DBUG_RETURN(set_value(thd, item, &tmp, h));
   }
   else
+  {
     set_null_string(item->collation);
+    set_handler(&type_handler_null);
+  }
 
   DBUG_RETURN(0);
 }
@@ -5062,7 +5095,7 @@ Item_param::set_param_type_and_swap_value(Item_param *src)
 }
 
 
-void Item_param::set_default()
+void Item_param::set_default(bool set_type_handler_null)
 {
   m_is_settable_routine_parameter= false;
   state= DEFAULT_VALUE;
@@ -5075,13 +5108,23 @@ void Item_param::set_default()
     can misbehave (e.g. crash on asserts).
   */
   null_value= true;
+  if (set_type_handler_null)
+  {
+    value.set_handler(&type_handler_null);
+    set_handler(&type_handler_null);
+  }
 }
 
-void Item_param::set_ignore()
+void Item_param::set_ignore(bool set_type_handler_null)
 {
   m_is_settable_routine_parameter= false;
   state= IGNORE_VALUE;
   null_value= true;
+  if (set_type_handler_null)
+  {
+    value.set_handler(&type_handler_null);
+    set_handler(&type_handler_null);
+  }
 }
 
 /**
@@ -10418,7 +10461,7 @@ String *Item_cache_int::val_str(String *str)
 {
   if (!has_value())
     return NULL;
-  str->set_int(value, unsigned_flag, default_charset());
+  str->set_int(value, unsigned_flag, &my_charset_numeric);
   return str;
 }
 
@@ -10659,7 +10702,7 @@ String* Item_cache_double::val_str(String *str)
 {
   if (!has_value())
     return NULL;
-  str->set_real(value, decimals, default_charset());
+  str->set_real(value, decimals, &my_charset_numeric);
   return str;
 }
 

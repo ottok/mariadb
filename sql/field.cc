@@ -1411,7 +1411,8 @@ int Field::store_hex_hybrid(const char *str, size_t length)
     goto warn;
   }
   nr= (ulonglong) longlong_from_hex_hybrid(str, length);
-  if ((length == 8) && !(flags & UNSIGNED_FLAG) && (nr > LONGLONG_MAX))
+  if ((length == 8) && cmp_type()== INT_RESULT &&
+      !(flags & UNSIGNED_FLAG) && (nr > LONGLONG_MAX))
   {
     nr= LONGLONG_MAX;
     goto warn;
@@ -9624,8 +9625,7 @@ String *Field_set::val_str(String *val_buffer,
   ulonglong tmp=(ulonglong) Field_enum::val_int();
   uint bitnr=0;
 
-  val_buffer->set_charset(field_charset());
-  val_buffer->length(0);
+  val_buffer->copy("", 0, field_charset());
 
   while (tmp && bitnr < (uint) typelib->count)
   {

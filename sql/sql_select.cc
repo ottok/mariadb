@@ -101,7 +101,7 @@ static bool update_ref_and_keys(THD *thd, DYNAMIC_ARRAY *keyuse,
                                 uint tables, COND *conds,
                                 table_map table_map, SELECT_LEX *select_lex,
                                 SARGABLE_PARAM **sargables);
-static int sort_keyuse(KEYUSE *a,KEYUSE *b);
+static int sort_keyuse(const void *a, const void *b);
 static bool are_tables_local(JOIN_TAB *jtab, table_map used_tables);
 static bool create_ref_for_key(JOIN *join, JOIN_TAB *j, KEYUSE *org_keyuse,
 			       bool allow_full_scan, table_map used_tables);
@@ -129,9 +129,9 @@ best_extension_by_limited_search(JOIN *join,
                                  table_map *processed_eq_ref_tables);
 static uint determine_search_depth(JOIN* join);
 C_MODE_START
-static int join_tab_cmp(const void *dummy, const void* ptr1, const void* ptr2);
-static int join_tab_cmp_straight(const void *dummy, const void* ptr1, const void* ptr2);
-static int join_tab_cmp_embedded_first(const void *emb, const void* ptr1, const void *ptr2);
+static int join_tab_cmp(void *dummy, const void* ptr1, const void* ptr2);
+static int join_tab_cmp_straight(void *dummy, const void* ptr1, const void* ptr2);
+static int join_tab_cmp_embedded_first(void *emb, const void* ptr1, const void *ptr2);
 C_MODE_END
 static uint cache_record_length(JOIN *join,uint index);
 static store_key *get_store_key(THD *thd,
@@ -2158,6 +2158,7 @@ JOIN::optimize_inner()
     /* Merge all mergeable derived tables/views in this SELECT. */
     if (select_lex->handle_derived(thd->lex, DT_MERGE))
       DBUG_RETURN(TRUE);  
+    table_count= select_lex->leaf_tables.elements;
   }
 
   if (select_lex->first_cond_optimization &&
@@ -2204,6 +2205,8 @@ JOIN::optimize_inner()
   }
   
   eval_select_list_used_tables();
+
+  table_count= select_lex->leaf_tables.elements;
 
   if (select_lex->options & OPTION_SCHEMA_TABLE &&
       optimize_schema_tables_memory_usage(select_lex->leaf_tables))
@@ -7221,8 +7224,10 @@ add_ft_keys(DYNAMIC_ARRAY *keyuse_array,
 
 
 static int
-sort_keyuse(KEYUSE *a,KEYUSE *b)
+sort_keyuse(const void *a_, const void *b_)
 {
+  const KEYUSE *a= static_cast<const KEYUSE *>(a_);
+  const KEYUSE *b= static_cast<const KEYUSE *>(b_);
   int res;
   if (a->table->tablenr != b->table->tablenr)
     return (int) (a->table->tablenr - b->table->tablenr);
@@ -8811,8 +8816,11 @@ best_access_path(JOIN      *join,
         if (!(records < s->worst_seeks &&
               records <= thd->variables.max_seeks_for_key))
         {
-          // Don't use rowid filter
-          trace_access_idx.add("rowid_filter_skipped", "worst/max seeks clipping");
+          if (table->range_rowid_filter_cost_info_elems)
+          {
+            // Don't use rowid filter
+            trace_access_idx.add("rowid_filter_skipped", "worst/max seeks clipping");
+          }
           filter= NULL;
         }
         else
@@ -9366,7 +9374,7 @@ choose_plan(JOIN *join, table_map join_tables)
   join->prune_level= join->thd->variables.optimizer_prune_level;
 
   reset_nj_counters(join, join->join_list);
-  qsort2_cmp jtab_sort_func;
+  qsort_cmp2 jtab_sort_func;
 
   if (join->emb_sjm_nest)
   {
@@ -9501,7 +9509,7 @@ choose_plan(JOIN *join, table_map join_tables)
      1   -  jt1 > jt2
 */
 
-static int compare_embedding_subqueries(JOIN_TAB *jt1, JOIN_TAB *jt2)
+static int compare_embedding_subqueries(const JOIN_TAB *jt1, const JOIN_TAB *jt2)
 {
   /* Determine if the first table is originally from a subquery */
   TABLE_LIST *tbl1= jt1->table->pos_in_table_list;
@@ -9576,10 +9584,10 @@ static int compare_embedding_subqueries(JOIN_TAB *jt1, JOIN_TAB *jt2)
 */
 
 static int
-join_tab_cmp(const void *dummy, const void* ptr1, const void* ptr2)
+join_tab_cmp(void *, const void* ptr1, const void* ptr2)
 {
-  JOIN_TAB *jt1= *(JOIN_TAB**) ptr1;
-  JOIN_TAB *jt2= *(JOIN_TAB**) ptr2;
+  auto jt1= *(static_cast<const JOIN_TAB *const *>(ptr1));
+  auto jt2= *(static_cast<const JOIN_TAB *const *>(ptr2));
   int cmp;
 
   if ((cmp= compare_embedding_subqueries(jt1, jt2)) != 0)
@@ -9601,10 +9609,10 @@ join_tab_cmp(const void *dummy, const void* ptr1, const void* ptr2)
 */
 
 static int
-join_tab_cmp_straight(const void *dummy, const void* ptr1, const void* ptr2)
+join_tab_cmp_straight(void *, const void* ptr1, const void* ptr2)
 {
-  JOIN_TAB *jt1= *(JOIN_TAB**) ptr1;
-  JOIN_TAB *jt2= *(JOIN_TAB**) ptr2;
+  auto jt1= *(static_cast<const JOIN_TAB *const *>(ptr1));
+  auto jt2= *(static_cast<const JOIN_TAB *const *>(ptr2));
 
   /*
     We don't do subquery flattening if the parent or child select has
@@ -9637,11 +9645,11 @@ join_tab_cmp_straight(const void *dummy, const void* ptr1, const void* ptr2)
 */
 
 static int
-join_tab_cmp_embedded_first(const void *emb,  const void* ptr1, const void* ptr2)
+join_tab_cmp_embedded_first(void *emb,  const void* ptr1, const void* ptr2)
 {
-  const TABLE_LIST *emb_nest= (TABLE_LIST*) emb;
-  JOIN_TAB *jt1= *(JOIN_TAB**) ptr1;
-  JOIN_TAB *jt2= *(JOIN_TAB**) ptr2;
+  TABLE_LIST *emb_nest= static_cast<TABLE_LIST *>(emb);
+  auto jt1= *(static_cast<const JOIN_TAB *const *>(ptr1));
+  auto jt2= *(static_cast<const JOIN_TAB *const *>(ptr2));
 
   if (jt1->emb_sj_nest == emb_nest && jt2->emb_sj_nest != emb_nest)
     return -1;
@@ -10592,9 +10600,11 @@ struct SORT_POSITION
   (same table order as used in the original SQL query)
 */
 
-static int
-sort_positions(SORT_POSITION *a, SORT_POSITION *b)
+static int sort_positions(const void *a_, const void *b_)
 {
+  const SORT_POSITION *a= static_cast<const SORT_POSITION*>(a_);
+  const SORT_POSITION *b= static_cast<const SORT_POSITION*>(b_);
+
   int cmp;
   if ((cmp= compare_embedding_subqueries(*a->join_tab, *b->join_tab)) != 0)
     return cmp;
@@ -11254,8 +11264,7 @@ best_extension_by_limited_search(JOIN      *join,
       Sort tables in ascending order of generated row combinations
     */
     if (found_tables > 1)
-      my_qsort(sort, found_tables, sizeof(SORT_POSITION),
-               (qsort_cmp) sort_positions);
+      my_qsort(sort, found_tables, sizeof(SORT_POSITION), sort_positions);
   }
   DBUG_ASSERT(join->next_sort_position <=
               join->sort_positions + join->sort_space);
@@ -15809,6 +15818,7 @@ void JOIN::cleanup(bool full)
     /* Free the original optimized join created for the group_by_handler */
     join_tab= original_join_tab;
     original_join_tab= 0;
+    table_count= original_table_count;
   }
 
   if (join_tab)
@@ -17756,9 +17766,7 @@ Item *eliminate_item_equal(THD *thd, COND *cond, COND_EQUAL *upper_levels,
       */
       Item *head_item= (!item_const && current_sjm && 
                         current_sjm_head != field_item) ? current_sjm_head: head;
-      eq_item= new (thd->mem_root) Item_func_eq(thd,
-                                                field_item->remove_item_direct_ref(),
-                                                head_item->remove_item_direct_ref());
+      eq_item= new (thd->mem_root) Item_func_eq(thd, field_item, head_item);
 
       if (!eq_item || eq_item->set_cmp_func(thd))
         return 0;
@@ -20522,8 +20530,8 @@ TABLE *Create_tmp_table::start(THD *thd,
     copy_func_count+= param->sum_func_count;
   param->copy_func_count= copy_func_count;
   
-  init_sql_alloc(key_memory_TABLE, &own_root, TABLE_ALLOC_BLOCK_SIZE, 0,
-                 MYF(MY_THREAD_SPECIFIC));
+  init_sql_alloc(key_memory_TABLE, &own_root, TMP_TABLE_BLOCK_SIZE,
+                 TMP_TABLE_PREALLOC_SIZE, MYF(MY_THREAD_SPECIFIC));
 
   if (!multi_alloc_root(&own_root,
                         &table, sizeof(*table),
@@ -21051,7 +21059,7 @@ bool Create_tmp_table::finalize(THD *thd,
                                  MY_MIN(thd->variables.tmp_memory_table_size,
                                      thd->variables.max_heap_table_size) :
                                  thd->variables.tmp_disk_table_size) /
-                                share->reclength);
+                                MY_ALIGN(share->reclength, sizeof(char*)));
   set_if_bigger(share->max_rows,1);		// For dummy start options
   /*
     Push the LIMIT clause to the temporary table creation, so that we
@@ -22126,7 +22134,7 @@ free_tmp_table(THD *thd, TABLE *entry)
       thd->tmp_tables_size+= (entry->file->stats.data_file_length +
                               entry->file->stats.index_file_length);
     }
-    entry->file->ha_drop_table(entry->s->path.str);
+    entry->file->drop_table(entry->s->path.str);
     delete entry->file;
     entry->file= NULL;
     entry->reset_created();
@@ -26777,8 +26785,7 @@ static int remove_dup_with_hash_index(THD *thd, TABLE *table,
     (*field_length++)= (*ptr)->sort_length();
 
   if (my_hash_init(key_memory_hash_index_key_buffer, &hash, &my_charset_bin,
-                   (uint) file->stats.records, 0, key_length,
-                   (my_hash_get_key) 0, 0, 0))
+                   (uint) file->stats.records, 0, key_length, 0, 0, 0))
   {
     my_free(key_buffer);
     DBUG_RETURN(1);

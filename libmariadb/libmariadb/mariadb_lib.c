@@ -159,6 +159,16 @@ static int cli_report_progress(MYSQL *mysql, uchar *packet, uint length);
 extern int mysql_client_plugin_init();
 extern void mysql_client_plugin_deinit();
 
+/* Helper function to detect possible buffer over- or underflow */
+my_bool ma_check_buffer_boundaries(MYSQL *mysql, uchar *current_pos,
+                                  ulong packet_size, size_t required)
+{
+  if ( (packet_size < (ulong)(current_pos - mysql->net.read_pos)) ||
+       ((size_t)(packet_size - (current_pos - mysql->net.read_pos)) < required))
+    return 1;
+  return 0;
+}
+
 /* net_get_error */
 void net_get_error(char *buf, size_t buf_len,
        char *error, size_t error_len,
@@ -389,6 +399,16 @@ mthd_my_send_cmd(MYSQL *mysql,enum enum_server_command command, const char *arg,
 {
   NET *net= &mysql->net;
   int result= -1;
+
+  /* CONC-589: If reconnect option was specified, we have to check if the connection
+               (socket) is still available */
+  if (command != COM_QUIT && mysql->options.reconnect && ma_pvio_is_alive(mysql->net.pvio))
+  {
+    ma_pvio_close(mysql->net.pvio);
+    mysql->net.pvio= NULL;
+    mysql->net.error= 1;
+  }
+
   if (mysql->net.pvio == 0)
   {
     /* Do reconnect if possible */
@@ -711,6 +731,7 @@ struct st_default_options mariadb_defaults[] =
   {{MYSQL_OPT_SSL_ENFORCE}, MARIADB_OPTION_BOOL, "tls-enforce"},
   {{MYSQL_OPT_SSL_VERIFY_SERVER_CERT}, MARIADB_OPTION_BOOL,"tls-verify-peer"},
   {{MARIADB_OPT_RESTRICTED_AUTH}, MARIADB_OPTION_STR, "restricted-auth"},
+  {{MYSQL_OPT_ZSTD_COMPRESSION_LEVEL}, MARIADB_OPTION_INT, "zstd-compression-level"},
   {{0}, 0, NULL}
 };
 
@@ -893,10 +914,7 @@ static int parse_connection_string(MYSQL *mysql, const char *unused __attribute_
             pos += 2;
             continue;
           }
-          if (in_curly_brace)
-            in_curly_brace= 0;
-          else
-            goto error;
+          in_curly_brace= 0;
           *pos++= 0;
           continue;
         }
@@ -1036,6 +1054,35 @@ static size_t rset_field_offsets[]= {
   OFFSET(MYSQL_FIELD, org_name_length)
 };
 
+/* calculate lengths for field metadata:
+   returns zero on success, 1 if null_length was
+   detected */
+static my_bool ma_get_rset_field_lengths(MYSQL_ROW row, unsigned int field_count,
+                               unsigned long *lengths)
+{
+  unsigned long *last_length= 0;
+  char *pos= 0;
+  MYSQL_ROW end= row + field_count + 1;
+  my_bool rc= 0;
+
+  while (row != end)
+  {
+    if (*row)
+    {
+      if (pos)
+        *last_length= (ulong)(*row - pos - 1);
+      pos= *row;
+    } else {
+      /* NULL_LENGTH (see also CONC-709) */
+      rc= 1;
+      *last_length= 0;
+    }
+    last_length= lengths++;
+    row++;
+  }
+  return rc;
+}
+
 MYSQL_FIELD *
 unpack_fields(const MYSQL *mysql,
               MYSQL_DATA *data, MA_MEM_ROOT *alloc, uint fields,
@@ -1052,18 +1099,19 @@ unpack_fields(const MYSQL *mysql,
 
   for (row=data->data; row ; row = row->next,field++)
   {
+    unsigned long lengths[9];
+
     if (field >= result + fields)
+      goto error;
+
+    if (ma_get_rset_field_lengths(row->data, field_count, lengths))
       goto error;
 
     for (i=0; i < field_count; i++)
     {
-      uint length= (uint)(row->data[i+1] - row->data[i] - 1);
-      if (!row->data[i] || row->data[i][length])
-        goto error;
-
       *(char **)(((char *)field) + rset_field_offsets[i*2])=
         ma_strdup_root(alloc, (char *)row->data[i]);
-      *(unsigned int *)(((char *)field) + rset_field_offsets[i*2+1])= length;
+      *(unsigned int *)(((char *)field) + rset_field_offsets[i*2+1])= lengths[i];
     }
 
     field->extension= NULL;
@@ -2040,6 +2088,12 @@ error:
   if (!(client_flag & CLIENT_REMEMBER_OPTIONS) &&
       !(IS_MYSQL_ASYNC(mysql)))
     mysql_close_options(mysql);
+
+  /* CONC-703: If no error was set, we set CR_SERVER_LOST by default */
+  if (!mysql_errno(mysql))
+    my_set_error(mysql, CR_SERVER_LOST, SQLSTATE_UNKNOWN,
+                        "Can't connect to server (%d).",
+                        errno);
   return(0);
 }
 
@@ -2393,17 +2447,15 @@ void my_set_error(MYSQL *mysql,
 
 void mysql_close_slow_part(MYSQL *mysql)
 {
-  if (mysql->net.pvio)
-  {
-    free_old_query(mysql);
-    mysql->status=MYSQL_STATUS_READY; /* Force command */
-    mysql->options.reconnect=0;
-    if (mysql->net.pvio && mysql->net.buff)
-      ma_simple_command(mysql, COM_QUIT,NullS,0,1,0);
-    end_server(mysql);
-  }
+  free_old_query(mysql);
+  mysql->status=MYSQL_STATUS_READY; /* Force command */
+  mysql->options.reconnect=0;
+  if (mysql->net.pvio && mysql->net.buff)
+    ma_simple_command(mysql, COM_QUIT,NullS,0,1,0);
+  end_server(mysql);
+
   /* there is an ongoing async operation */
-  else if (mysql->options.extension && mysql->options.extension->async_context)
+  if (mysql->options.extension && mysql->options.extension->async_context)
   {
     if (mysql->options.extension->async_context->pending_gai_res)
     {
@@ -2587,6 +2639,9 @@ int ma_read_ok_packet(MYSQL *mysql, uchar *pos, ulong length)
   unsigned int last_status= mysql->server_status;
   mysql->affected_rows= net_field_length_ll(&pos);
   mysql->insert_id=	  net_field_length_ll(&pos);
+
+  if (ma_check_buffer_boundaries(mysql, pos, length, 2))
+    goto corrupted;
   mysql->server_status=uint2korr(pos);
 
   /* clear error */
@@ -2595,6 +2650,8 @@ int ma_read_ok_packet(MYSQL *mysql, uchar *pos, ulong length)
   /* callback */
   ma_status_callback(mysql, last_status);
   pos+=2;
+  if (ma_check_buffer_boundaries(mysql, pos, length, 2))
+    goto corrupted;
   mysql->warning_count=uint2korr(pos);
   pos+=2;
   if (pos > end)
@@ -2603,7 +2660,7 @@ int ma_read_ok_packet(MYSQL *mysql, uchar *pos, ulong length)
   {
     if ((item_len= net_field_length(&pos)))
       mysql->info=(char*) pos;
-    if (pos + item_len > end)
+    if (ma_check_buffer_boundaries(mysql, pos, length, item_len))
       goto corrupted;
 
     /* check if server supports session tracking */
@@ -2621,7 +2678,7 @@ int ma_read_ok_packet(MYSQL *mysql, uchar *pos, ulong length)
           uchar *old_pos= pos;
 
           item_len= net_field_length(&pos);  /* length for all items */
-          if (pos + item_len > end)
+          if (ma_check_buffer_boundaries(mysql, pos, length, item_len))
             goto corrupted;
           end= pos + item_len;
 
@@ -2652,7 +2709,7 @@ int ma_read_ok_packet(MYSQL *mysql, uchar *pos, ulong length)
                 net_field_length(&pos);
               }
               plen= net_field_length(&pos);
-              if (pos + plen > end)
+              if (ma_check_buffer_boundaries(mysql, pos, length, plen))
                 goto corrupted;
 
               data1.str= (char *)pos;
@@ -2681,7 +2738,7 @@ int ma_read_ok_packet(MYSQL *mysql, uchar *pos, ulong length)
                 if (!strncmp(data1.str, "character_set_client", plen))
                   set_charset= 1;
                 plen= net_field_length(&pos);
-                if (pos + plen > end)
+                if (ma_check_buffer_boundaries(mysql, pos, length, plen))
                   goto corrupted;
                 data2.str= (char *)pos;
                 data2.length= plen;
@@ -2708,7 +2765,7 @@ int ma_read_ok_packet(MYSQL *mysql, uchar *pos, ulong length)
             default:
               /* not supported yet */
               plen= net_field_length(&pos);
-              if (pos + plen > end)
+              if (ma_check_buffer_boundaries(mysql, pos, length, plen))
                 goto corrupted;
               pos+= plen;
               break;
@@ -3836,6 +3893,9 @@ mysql_optionsv(MYSQL *mysql,enum mysql_option option, ...)
       }
     }
     break;
+  case MYSQL_OPT_ZSTD_COMPRESSION_LEVEL:
+    OPT_SET_EXTENDED_VALUE(&mysql->options, zstd_compression_level, *((unsigned char *)arg1));
+    break;
   default:
     va_end(ap);
     SET_CLIENT_ERROR(mysql, CR_NOT_IMPLEMENTED, SQLSTATE_UNKNOWN, 0);
@@ -3861,6 +3921,9 @@ mysql_get_optionv(MYSQL *mysql, enum mysql_option option, void *arg, ...)
     break;
   case MYSQL_OPT_COMPRESS:
     *((my_bool *)arg)= mysql->options.compress;
+    break;
+  case MYSQL_OPT_ZSTD_COMPRESSION_LEVEL:
+    *((unsigned char *)arg)= mysql->options.extension->zstd_compression_level;
     break;
   case MYSQL_OPT_NAMED_PIPE:
     *((my_bool *)arg)= mysql->options.named_pipe;
@@ -4042,7 +4105,7 @@ mysql_get_optionv(MYSQL *mysql, enum mysql_option option, void *arg, ...)
                       (uint)strlen((char *)key))))
       {
         p+= strlen(key) + 1;
-        *((void **)data)= *((void **)p);
+        memcpy(data, p, sizeof(void *));
         break;
       }
       if (data)

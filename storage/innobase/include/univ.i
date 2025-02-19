@@ -134,7 +134,6 @@ using the call command. */
 						ut_ad(lock_rec_validate_page())
 						assertions. */
 #define UNIV_LRU_DEBUG				/* debug the buffer pool LRU */
-#define UNIV_HASH_DEBUG				/* debug HASH_ macros */
 #define UNIV_IBUF_DEBUG				/* debug the insert buffer */
 #define UNIV_PERF_DEBUG                         /* debug flag that enables
                                                 light weight performance
@@ -170,9 +169,6 @@ using the call command. */
 #define UNIV_INLINE static inline
 
 #define UNIV_WORD_SIZE		SIZEOF_SIZE_T
-#if SIZEOF_SIZE_T == 8
-# define HAVE_INNODB_MMAP
-#endif
 
 /** The following alignment is used in memory allocations in memory heap
 management to ensure correct alignment for doubles etc. */

@@ -608,13 +608,17 @@ int Repl_semi_sync_master::report_reply_packet(uint32 server_id,
       DBUG_RETURN(-1);
     }
     else
-      sql_print_error("Read semi-sync reply magic number error");
+      sql_print_error("Read semi-sync reply magic number error. "
+                      "Got magic: %u  command %u  length: %lu",
+                      (uint) packet[REPLY_MAGIC_NUM_OFFSET], (uint) packet[0],
+                      packet_len);
     goto l_end;
   }
 
   if (unlikely(packet_len < REPLY_BINLOG_NAME_OFFSET))
   {
-    sql_print_error("Read semi-sync reply length error: packet is too small");
+    sql_print_error("Read semi-sync reply length error: packet is too small: %lu",
+                    packet_len);
     goto l_end;
   }
 
@@ -622,7 +626,8 @@ int Repl_semi_sync_master::report_reply_packet(uint32 server_id,
   log_file_len = packet_len - REPLY_BINLOG_NAME_OFFSET;
   if (unlikely(log_file_len >= FN_REFLEN))
   {
-    sql_print_error("Read semi-sync reply binlog file length too large");
+    sql_print_error("Read semi-sync reply binlog file length too large: %llu",
+                    (ulonglong) log_file_pos);
     goto l_end;
   }
   strncpy(log_file_name, (const char*)packet + REPLY_BINLOG_NAME_OFFSET, log_file_len);
@@ -933,8 +938,8 @@ int Repl_semi_sync_master::commit_trx(const char *trx_wait_binlog_name,
             sql_print_information(
                 "Skipping semi-sync wait for transaction at pos %s, %lu. This "
                 "should be because semi-sync turned off and on during the "
-                "lifetime of this transaction.",
-                trx_wait_binlog_name, trx_wait_binlog_pos););
+                "lifetime of this transaction.", trx_wait_binlog_name,
+                static_cast<unsigned long>(trx_wait_binlog_pos)););
 
         /* The only known reason for a missing entry at this point is if
          * semi-sync was turned off then on, so on debug builds, we track
@@ -1468,7 +1473,7 @@ void Repl_semi_sync_master::await_all_slave_replies(const char *msg)
     if (msg && first)
     {
       first= false;
-      sql_print_information(msg);
+      sql_print_information("%s", msg);
     }
 
     wait_result=

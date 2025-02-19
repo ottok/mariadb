@@ -82,16 +82,16 @@ typedef struct st_spider_conn_loop_check
   LEX_CSTRING        merged_value;
 } SPIDER_CONN_LOOP_CHECK;
 
-uchar *spider_conn_get_key(
-  SPIDER_CONN *conn,
+const uchar *spider_conn_get_key(
+  const void *conn,
   size_t *length,
-  my_bool not_used __attribute__ ((unused))
+  my_bool
 );
 
-uchar *spider_ipport_conn_get_key(
-  SPIDER_IP_PORT_CONN *ip_port,
+const uchar *spider_ipport_conn_get_key(
+  const void *ip_port,
   size_t *length,
-  my_bool not_used __attribute__ ((unused))
+  my_bool
 );
 
 int spider_conn_init(
@@ -124,7 +124,6 @@ SPIDER_CONN *spider_create_conn(
   ha_spider *spider,
   int link_id,
   int base_link_id,
-  uint conn_kind,
   int *error_num
 );
 
@@ -136,7 +135,6 @@ SPIDER_CONN *spider_get_conn(
   ha_spider *spider,
   bool another,
   bool thd_chg,
-  uint conn_kind,
   int *error_num
 );
 
@@ -437,7 +435,6 @@ SPIDER_CONN* spider_get_conn_from_idle_connection
  int link_idx,
  char *conn_key,
  ha_spider *spider,
- uint conn_kind,
  int base_link_idx,
  int *error_num
  );

@@ -970,8 +970,10 @@ void dict_check_tablespaces_and_store_max_id(const std::set<uint32_t> *spaces)
 		const bool not_dropped{!rec_get_deleted_flag(rec, 0)};
 
 		/* Check that the .ibd file exists. */
-		if (fil_ibd_open(not_dropped, FIL_TYPE_TABLESPACE,
-				 space_id, dict_tf_to_fsp_flags(flags),
+		if (fil_ibd_open(space_id, dict_tf_to_fsp_flags(flags),
+				 not_dropped
+				 ? fil_space_t::VALIDATE_NOTHING
+				 : fil_space_t::MAYBE_MISSING,
 				 name, filepath)) {
 		} else if (!not_dropped) {
 		} else if (srv_operation == SRV_OPERATION_NORMAL
@@ -2289,8 +2291,8 @@ dict_load_tablespace(
 	}
 
 	table->space = fil_ibd_open(
-		2, FIL_TYPE_TABLESPACE, table->space_id,
-		dict_tf_to_fsp_flags(table->flags),
+		table->space_id, dict_tf_to_fsp_flags(table->flags),
+		fil_space_t::VALIDATE_SPACE_ID,
 		{table->name.m_name, strlen(table->name.m_name)}, filepath);
 
 	if (!table->space) {
@@ -2298,9 +2300,9 @@ dict_load_tablespace(
 		table->file_unreadable = true;
 
 		if (!(ignore_err & DICT_ERR_IGNORE_RECOVER_LOCK)) {
-			sql_print_error("InnoDB: Failed to load tablespace "
-					ULINTPF " for table %s",
-					table->space_id, table->name);
+			sql_print_error("InnoDB: Failed to load tablespace %"
+					PRIu32 " for table %s",
+					table->space_id, table->name.m_name);
 		}
 	}
 
@@ -2557,7 +2559,7 @@ corrupted:
 }
 
 dict_table_t *dict_sys_t::load_table(const span<const char> &name,
-                                     dict_err_ignore_t ignore)
+                                     dict_err_ignore_t ignore) noexcept
 {
   if (dict_table_t *table= find_table(name))
     return table;

@@ -441,7 +441,6 @@ bool stmt_causes_implicit_commit(THD *thd, uint mask)
   case SQLCOM_DROP_TABLE:
   case SQLCOM_DROP_SEQUENCE:
   case SQLCOM_CREATE_TABLE:
-  case SQLCOM_CREATE_SEQUENCE:
     /*
       If CREATE TABLE of non-temporary table and the table is not part
       if a BEGIN GTID ... COMMIT group, do a implicit commit.
@@ -2395,13 +2394,27 @@ resume:
     {
       WSREP_DEBUG("THD is killed at dispatch_end");
     }
-    wsrep_after_command_before_result(thd);
-    if (wsrep_current_error(thd) && !wsrep_command_no_result(command))
+    if (thd->lex->sql_command != SQLCOM_SET_OPTION)
     {
-      /* todo: Pass wsrep client state current error to override */
-      wsrep_override_error(thd, wsrep_current_error(thd),
-                           wsrep_current_error_status(thd));
-      WSREP_LOG_THD(thd, "leave");
+      DEBUG_SYNC(thd, "wsrep_at_dispatch_end_before_result");
+    }
+    if (thd->wsrep_cs().state() == wsrep::client_state::s_exec)
+    {
+      wsrep_after_command_before_result(thd);
+      if (wsrep_current_error(thd) && !wsrep_command_no_result(command))
+      {
+        /* todo: Pass wsrep client state current error to override */
+        wsrep_override_error(thd, wsrep_current_error(thd),
+                             wsrep_current_error_status(thd));
+        WSREP_LOG_THD(thd, "leave");
+      }
+    }
+    else
+    {
+      /* wsrep_after_command_before_result() already called elsewhere
+         or not necessary to call it */
+      assert(thd->wsrep_cs().state() == wsrep::client_state::s_none ||
+             thd->wsrep_cs().state() == wsrep::client_state::s_result);
     }
     if (WSREP(thd))
     {
@@ -5038,17 +5051,18 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
       lex->create_info.set(DDL_options_st::OPT_IF_EXISTS);
 
 #ifdef WITH_WSREP
-    if (WSREP(thd))
+    if (WSREP(thd) && !lex->tmp_table() && wsrep_thd_is_local(thd) &&
+        (!thd->is_current_stmt_binlog_format_row() ||
+         wsrep_table_list_has_non_temp_tables(thd, all_tables)))
     {
-      for (TABLE_LIST *table= all_tables; table; table= table->next_global)
+      wsrep::key_array keys;
+      if (wsrep_append_fk_parent_table(thd, all_tables, &keys))
       {
-        if (!lex->tmp_table() &&
-           (!thd->is_current_stmt_binlog_format_row() ||
-	    !is_temporary_table(table)))
-        {
-          WSREP_TO_ISOLATION_BEGIN(NULL, NULL, all_tables);
-          break;
-        }
+        goto wsrep_error_label;
+      }
+      if (wsrep_to_isolation_begin(thd, NULL, NULL, all_tables, NULL, &keys))
+      {
+        goto wsrep_error_label;
       }
     }
 #endif /* WITH_WSREP */

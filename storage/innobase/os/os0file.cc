@@ -152,18 +152,6 @@ static io_slots *write_slots;
 /** Number of retries for partial I/O's */
 constexpr ulint NUM_RETRIES_ON_PARTIAL_IO = 10;
 
-/* This specifies the file permissions InnoDB uses when it creates files in
-Unix; the value of os_innodb_umask is initialized in ha_innodb.cc to
-my_umask */
-
-#ifndef _WIN32
-/** Umask for creating files */
-static ulint	os_innodb_umask = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
-#else
-/** Umask for creating files */
-static ulint	os_innodb_umask	= 0;
-#endif /* _WIN32 */
-
 Atomic_counter<ulint> os_n_file_reads;
 static ulint	os_bytes_read_since_printout;
 Atomic_counter<size_t> os_n_file_writes;
@@ -196,7 +184,7 @@ os_file_handle_error_cond_exit(
 	const char*	name,
 	const char*	operation,
 	bool		should_abort,
-	bool		on_error_silent);
+	bool		on_error_silent) noexcept;
 
 /** Does error handling when a file operation fails.
 @param operation   name of operation that failed */
@@ -332,7 +320,7 @@ private:
 @param fd      file descriptor
 @param name    file name
 @return 0 on success */
-int os_file_lock(int fd, const char *name)
+int os_file_lock(int fd, const char *name) noexcept
 {
 	struct flock lk;
 
@@ -361,13 +349,7 @@ int os_file_lock(int fd, const char *name)
 }
 #endif /* !_WIN32 */
 
-
-/** Create a temporary file. This function is like tmpfile(3), but
-the temporary file is created in the in the mysql server configuration
-parameter (--tmpdir).
-@return temporary file handle, or NULL on error */
-FILE*
-os_file_create_tmpfile()
+FILE *os_file_create_tmpfile() noexcept
 {
 	FILE*	file	= NULL;
 	File	fd	= mysql_tmpfile("ib");
@@ -400,7 +382,7 @@ void
 os_file_read_string(
 	FILE*		file,
 	char*		str,
-	ulint		size)
+	ulint		size) noexcept
 {
 	if (size != 0) {
 		rewind(file);
@@ -411,21 +393,7 @@ os_file_read_string(
 	}
 }
 
-/** This function reduces a null-terminated full remote path name into
-the path that is sent by MySQL for DATA DIRECTORY clause.  It replaces
-the 'databasename/tablename.ibd' found at the end of the path with just
-'tablename'.
-
-Since the result is always smaller than the path sent in, no new memory
-is allocated. The caller should allocate memory for the path sent in.
-This function manipulates that path in place.
-
-If the path format is not as expected, just return.  The result is used
-to inform a SHOW CREATE TABLE command.
-@param[in,out]	data_dir_path		Full path/data_dir_path */
-void
-os_file_make_data_dir_path(
-	char*	data_dir_path)
+void os_file_make_data_dir_path(char *data_dir_path) noexcept
 {
 	/* Replace the period before the extension with a null byte. */
 	char*	ptr = strrchr(data_dir_path, '.');
@@ -474,11 +442,7 @@ to the last directory separator that the caller has fixed.
 @param[in]	path	path name
 @param[in]	path	last directory separator in the path
 @return true if this path is a drive root, false if not */
-UNIV_INLINE
-bool
-os_file_is_root(
-	const char*	path,
-	const char*	last_slash)
+static bool os_file_is_root(const char *path, const char *last_slash) noexcept
 {
 	return(
 #ifdef _WIN32
@@ -573,7 +537,7 @@ os_file_get_parent_dir(
 void
 test_os_file_get_parent_dir(
 	const char*	child_dir,
-	const char*	expected_dir)
+	const char*	expected_dir) noexcept
 {
 	char* child = mem_strdup(child_dir);
 	char* expected = expected_dir == NULL ? NULL
@@ -596,7 +560,7 @@ test_os_file_get_parent_dir(
 
 /* Test the function os_file_get_parent_dir. */
 void
-unit_test_os_file_get_parent_dir()
+unit_test_os_file_get_parent_dir() noexcept
 {
 	test_os_file_get_parent_dir("/usr/lib/a", "/usr/lib");
 	test_os_file_get_parent_dir("/usr/", NULL);
@@ -625,12 +589,7 @@ unit_test_os_file_get_parent_dir()
 #endif /* UNIV_ENABLE_UNIT_TEST_GET_PARENT_DIR */
 
 
-/** Creates all missing subdirectories along the given path.
-@param[in]	path		Path name
-@return DB_SUCCESS if OK, otherwise error code. */
-dberr_t
-os_file_create_subdirs_if_needed(
-	const char*	path)
+dberr_t os_file_create_subdirs_if_needed(const char *path) noexcept
 {
 	if (srv_read_only_mode) {
 
@@ -774,6 +733,7 @@ the OS error number + 100 is returned.
 					to the log
 @return error number, or OS error number + 100 */
 ulint os_file_get_last_error(bool report_all_errors, bool on_error_silent)
+  noexcept
 {
 	int	err = errno;
 
@@ -841,7 +801,7 @@ Returns the value 0 if successful; otherwise the value -1 is returned and
 the global variable errno is set to indicate the error.
 @param[in]	file		open file handle
 @return 0 if success, -1 otherwise */
-static int os_file_sync_posix(os_file_t file)
+static int os_file_sync_posix(os_file_t file) noexcept
 {
 #if !defined(HAVE_FDATASYNC) || HAVE_DECL_FDATASYNC == 0
   auto func= fsync;
@@ -895,7 +855,7 @@ bool
 os_file_status_posix(
 	const char*	path,
 	bool*		exists,
-	os_file_type_t* type)
+	os_file_type_t* type) noexcept
 {
 	struct stat	statinfo;
 
@@ -931,14 +891,7 @@ os_file_status_posix(
 	return(true);
 }
 
-/** NOTE! Use the corresponding macro os_file_flush(), not directly this
-function!
-Flushes the write buffers of a given file to the disk.
-@param[in]	file		handle to a file
-@return true if success */
-bool
-os_file_flush_func(
-	os_file_t	file)
+bool os_file_flush_func(os_file_t file) noexcept
 {
 	int	ret;
 
@@ -984,7 +937,7 @@ os_file_create_simple_func(
 	os_file_create_t create_mode,
 	ulint		access_type,
 	bool		read_only,
-	bool*		success)
+	bool*		success) noexcept
 {
 	pfs_os_file_t	file;
 
@@ -1021,7 +974,7 @@ os_file_create_simple_func(
 #endif
 
 	do {
-		file = open(name, create_flag | direct_flag, os_innodb_umask);
+		file = open(name, create_flag | direct_flag, my_umask);
 
 		if (file == -1) {
 #ifdef O_DIRECT
@@ -1057,20 +1010,8 @@ os_file_create_simple_func(
 	return(file);
 }
 
-/** This function attempts to create a directory named pathname. The new
-directory gets default permissions. On Unix the permissions are
-(0770 & ~umask). If the directory exists already, nothing is done and
-the call succeeds, unless the fail_if_exists arguments is true.
-If another error occurs, such as a permission error, this does not crash,
-but reports the error and returns false.
-@param[in]	pathname	directory name as null-terminated string
-@param[in]	fail_if_exists	if true, pre-existing directory is treated as
-				an error.
-@return true if call succeeds, false on error */
-bool
-os_file_create_directory(
-	const char*	pathname,
-	bool		fail_if_exists)
+bool os_file_create_directory(const char *pathname, bool fail_if_exists)
+  noexcept
 {
 	int	rcode;
 
@@ -1153,7 +1094,7 @@ os_file_create_func(
 	os_file_create_t create_mode,
 	ulint		type,
 	bool		read_only,
-	bool*		success)
+	bool*		success) noexcept
 {
 	*success = false;
 
@@ -1243,7 +1184,7 @@ skip_o_direct:
 	os_file_t	file;
 
 	for (;;) {
-		file = open(name, create_flag | direct_flag, os_innodb_umask);
+		file = open(name, create_flag | direct_flag, my_umask);
 
 		if (file == -1) {
 #ifdef O_DIRECT
@@ -1345,7 +1286,7 @@ os_file_create_simple_no_error_handling_func(
 	os_file_create_t create_mode,
 	ulint		access_type,
 	bool		read_only,
-	bool*		success)
+	bool*		success) noexcept
 {
 	os_file_t	file;
 	int		create_flag = O_RDONLY | O_CLOEXEC;
@@ -1365,7 +1306,7 @@ os_file_create_simple_no_error_handling_func(
 		}
 	}
 
-	file = open(name, create_flag, os_innodb_umask);
+	file = open(name, create_flag, my_umask);
 
 	*success = (file != -1);
 
@@ -1494,13 +1435,7 @@ os_offset_t os_file_get_size(os_file_t file) noexcept
   return lseek(file, 0, SEEK_END);
 }
 
-/** Gets a file size.
-@param[in]	filename	Full path to the filename to check
-@return file size if OK, else set m_total_size to ~0 and m_alloc_size to
-	errno */
-os_file_size_t
-os_file_get_size(
-	const char*	filename)
+os_file_size_t os_file_get_size(const char *filename) noexcept
 {
 	struct stat	s;
 	os_file_size_t	file_size;
@@ -1621,11 +1556,7 @@ os_file_truncate_posix(
 	return(res == 0);
 }
 
-/** Truncates a file at its current position.
-@return true if success */
-bool
-os_file_set_eof(
-	FILE*		file)	/*!< in: file to be truncated */
+bool os_file_set_eof(FILE *file) noexcept
 {
 	return(!ftruncate(fileno(file), ftell(file)));
 }
@@ -1638,8 +1569,8 @@ bool os_file_set_size(const char *name, os_file_t file, os_offset_t size,
 	if (is_sparse) {
 		bool success = !ftruncate(file, size);
 		if (!success) {
-			sql_print_error("InnoDB: ftruncate of file %s"
-					" to %llu bytes failed with error %d",
+			sql_print_error("InnoDB: ftruncate of file %s to %"
+					PRIu64 " bytes failed with error %d",
 					name, size, errno);
 		}
 		return success;
@@ -1677,7 +1608,7 @@ bool os_file_set_size(const char *name, os_file_t file, os_offset_t size,
 	case 0:
 		return true;
 	default:
-		sql_print_error("InnoDB: preallocating %llu"
+		sql_print_error("InnoDB: preallocating %" PRIu64
 				" bytes for file %s failed with error %d",
 				size, name, err);
 		/* fall through */
@@ -1827,7 +1758,7 @@ function!
 Flushes the write buffers of a given file to the disk.
 @param[in]	file		handle to a file
 @return true if success */
-bool os_file_flush_func(os_file_t file)
+bool os_file_flush_func(os_file_t file) noexcept
 {
   ++os_n_fsyncs;
   static bool disable_datasync;
@@ -1874,7 +1805,7 @@ printed of all errors
 					to the log
 @return error number, or OS error number + OS_FILE_ERROR_MAX */
 ulint os_file_get_last_error(bool report_all_errors, bool on_error_silent)
-
+  noexcept
 {
 	ulint	err = (ulint) GetLastError();
 
@@ -1972,7 +1903,7 @@ os_file_create_simple_func(
 	os_file_create_t create_mode,
 	ulint		access_type,
 	bool		read_only,
-	bool*		success)
+	bool*		success) noexcept
 {
 	os_file_t	file;
 
@@ -2026,20 +1957,8 @@ os_file_create_simple_func(
 	return(file);
 }
 
-/** This function attempts to create a directory named pathname. The new
-directory gets default permissions. On Unix the permissions are
-(0770 & ~umask). If the directory exists already, nothing is done and
-the call succeeds, unless the fail_if_exists arguments is true.
-If another error occurs, such as a permission error, this does not crash,
-but reports the error and returns false.
-@param[in]	pathname	directory name as null-terminated string
-@param[in]	fail_if_exists	if true, pre-existing directory is treated
-				as an error.
-@return true if call succeeds, false on error */
-bool
-os_file_create_directory(
-	const char*	pathname,
-	bool		fail_if_exists)
+bool os_file_create_directory(const char *pathname, bool fail_if_exists)
+  noexcept
 {
 	BOOL	rcode;
 
@@ -2087,7 +2006,7 @@ os_file_create_func(
 	os_file_create_t create_mode,
 	ulint		type,
 	bool		read_only,
-	bool*		success)
+	bool*		success) noexcept
 {
 	os_file_t	file;
 
@@ -2214,7 +2133,7 @@ os_file_create_simple_no_error_handling_func(
 	os_file_create_t create_mode,
 	ulint		access_type,
 	bool		read_only,
-	bool*		success)
+	bool*		success) noexcept
 {
 	os_file_t	file;
 
@@ -2431,13 +2350,7 @@ os_offset_t os_file_get_size(os_file_t file) noexcept
   return ((os_offset_t) -1);
 }
 
-/** Gets a file size.
-@param[in]	filename	Full path to the filename to check
-@return file size if OK, else set m_total_size to ~0 and m_alloc_size to
-	errno */
-os_file_size_t
-os_file_get_size(
-	const char*	filename)
+os_file_size_t os_file_get_size(const char *filename) noexcept
 {
 	struct __stat64	s;
 	os_file_size_t	file_size;
@@ -2555,7 +2468,7 @@ Sets a sparse flag on Windows file.
 @return true on success, false on error
 */
 #include <versionhelpers.h>
-bool os_file_set_sparse_win32(os_file_t file, bool is_sparse)
+bool os_file_set_sparse_win32(os_file_t file, bool is_sparse) noexcept
 {
 	if (!is_sparse && !IsWindows8OrGreater()) {
 		/* Cannot  unset sparse flag on older Windows.
@@ -2570,11 +2483,8 @@ bool os_file_set_sparse_win32(os_file_t file, bool is_sparse)
 		FSCTL_SET_SPARSE, &sparse_buffer, sizeof(sparse_buffer), 0, 0,&temp);
 }
 
-bool
-os_file_set_size(
-	const char*	pathname,
-	os_file_t	file,
-	os_offset_t	size)
+bool os_file_set_size(const char *pathname, os_file_t file, os_offset_t size)
+  noexcept
 {
 	LARGE_INTEGER	length;
 
@@ -2595,12 +2505,7 @@ os_file_set_size(
 	return(success);
 }
 
-/** Truncates a file at its current position.
-@param[in]	file		Handle to be truncated
-@return true if success */
-bool
-os_file_set_eof(
-	FILE*		file)
+bool os_file_set_eof(FILE *file) noexcept
 {
 	HANDLE	h = (HANDLE) _get_osfhandle(fileno(file));
 
@@ -2661,7 +2566,7 @@ os_file_io(
 
 		if (type.type != IORequest::READ_MAYBE_PARTIAL) {
 			sql_print_warning("InnoDB: %zu bytes should have been"
-					  " %s at %llu from %s,"
+					  " %s at %" PRIu64 " from %s,"
 					  " but got only %zd."
 					  " Retrying.",
 					  n, type.is_read()
@@ -2817,7 +2722,7 @@ os_file_read_func(
 	void*			buf,
 	os_offset_t		offset,
 	ulint			n,
-	ulint*			o)
+	ulint*			o) noexcept
 {
   ut_ad(!type.node || type.node->handle == file);
   ut_ad(n);
@@ -2835,7 +2740,7 @@ os_file_read_func(
 
   os_file_handle_error_no_exit(type.node ? type.node->name : nullptr, "read",
                                false);
-  sql_print_error("InnoDB: Tried to read %zu bytes at offset %llu"
+  sql_print_error("InnoDB: Tried to read %zu bytes at offset %" PRIu64
                   " of file %s, but was only able to read %zd",
                   n, offset, type.node ? type.node->name : "(unknown)",
                   n_bytes);
@@ -2855,7 +2760,7 @@ os_file_handle_error_cond_exit(
 	const char*	name,
 	const char*	operation,
 	bool		should_abort,
-	bool		on_error_silent)
+	bool		on_error_silent) noexcept
 {
 	ulint	err;
 
@@ -2940,7 +2845,7 @@ os_file_handle_error_cond_exit(
 /** Check if the file system supports sparse files.
 @param fh	file handle
 @return true if the file system supports sparse files */
-static bool os_is_sparse_file_supported(os_file_t fh)
+static bool os_is_sparse_file_supported(os_file_t fh) noexcept
 {
 #ifdef _WIN32
 	FILE_ATTRIBUTE_TAG_INFO info;
@@ -2969,7 +2874,7 @@ os_file_truncate(
 	const char*	pathname,
 	os_file_t	file,
 	os_offset_t	size,
-	bool		allow_shrink)
+	bool		allow_shrink) noexcept
 {
 	if (!allow_shrink) {
 		/* Do nothing if the size preserved is larger than or
@@ -2997,7 +2902,7 @@ bool
 os_file_status(
 	const char*	path,
 	bool*		exists,
-	os_file_type_t* type)
+	os_file_type_t* type) noexcept
 {
 #ifdef _WIN32
 	return(os_file_status_win32(path, exists, type));
@@ -3015,7 +2920,7 @@ dberr_t
 os_file_punch_hole(
 	os_file_t	fh,
 	os_offset_t	off,
-	os_offset_t	len)
+	os_offset_t	len) noexcept
 {
 #ifdef _WIN32
 	return os_file_punch_hole_win32(fh, off, len);
@@ -3028,7 +2933,7 @@ os_file_punch_hole(
 @param off   byte offset from the start (SEEK_SET)
 @param len   size of the hole in bytes
 @return DB_SUCCESS or error code */
-dberr_t IORequest::punch_hole(os_offset_t off, ulint len) const
+dberr_t IORequest::punch_hole(os_offset_t off, ulint len) const noexcept
 {
 	ulint trim_len = bpage ? bpage->physical_size() - len : 0;
 
@@ -3100,7 +3005,7 @@ os_file_get_status(
 	const char*	path,
 	os_file_stat_t* stat_info,
 	bool		check_rw_perm,
-	bool		read_only)
+	bool		read_only) noexcept
 {
 	dberr_t	ret;
 
@@ -3293,7 +3198,7 @@ static bool is_linux_native_aio_supported()
 }
 #endif
 
-int os_aio_init()
+int os_aio_init() noexcept
 {
   int max_write_events= int(srv_n_write_io_threads *
                             OS_AIO_N_PENDING_IOS_PER_THREAD);
@@ -3358,7 +3263,7 @@ more concurrent threads via thread_group setting.
   executing write callbacks
 @return 0 for success, !=0 for error.
 */
-int os_aio_resize(ulint n_reader_threads, ulint n_writer_threads)
+int os_aio_resize(ulint n_reader_threads, ulint n_writer_threads) noexcept
 {
   /* Lock the slots, and wait until all current IOs finish.*/
   auto &lk_read= read_slots->mutex(), &lk_write= write_slots->mutex();
@@ -3397,7 +3302,7 @@ int os_aio_resize(ulint n_reader_threads, ulint n_writer_threads)
   return ret;
 }
 
-void os_aio_free()
+void os_aio_free() noexcept
 {
   delete read_slots;
   delete write_slots;
@@ -3407,7 +3312,7 @@ void os_aio_free()
 }
 
 /** Wait until there are no pending asynchronous writes. */
-static void os_aio_wait_until_no_pending_writes_low(bool declare)
+static void os_aio_wait_until_no_pending_writes_low(bool declare) noexcept
 {
   const bool notify_wait= declare && write_slots->pending_io_count();
 
@@ -3422,14 +3327,14 @@ static void os_aio_wait_until_no_pending_writes_low(bool declare)
 
 /** Wait until there are no pending asynchronous writes.
 @param declare  whether the wait will be declared in tpool */
-void os_aio_wait_until_no_pending_writes(bool declare)
+void os_aio_wait_until_no_pending_writes(bool declare) noexcept
 {
   os_aio_wait_until_no_pending_writes_low(declare);
   buf_dblwr.wait_flush_buffered_writes();
 }
 
 /** @return number of pending reads */
-size_t os_aio_pending_reads()
+size_t os_aio_pending_reads() noexcept
 {
   mysql_mutex_lock(&read_slots->mutex());
   size_t pending= read_slots->pending_io_count();
@@ -3438,13 +3343,13 @@ size_t os_aio_pending_reads()
 }
 
 /** @return approximate number of pending reads */
-size_t os_aio_pending_reads_approx()
+size_t os_aio_pending_reads_approx() noexcept
 {
   return read_slots->pending_io_count();
 }
 
 /** @return number of pending writes */
-size_t os_aio_pending_writes()
+size_t os_aio_pending_writes() noexcept
 {
   mysql_mutex_lock(&write_slots->mutex());
   size_t pending= write_slots->pending_io_count();
@@ -3454,7 +3359,7 @@ size_t os_aio_pending_writes()
 
 /** Wait until all pending asynchronous reads have completed.
 @param declare  whether the wait will be declared in tpool */
-void os_aio_wait_until_no_pending_reads(bool declare)
+void os_aio_wait_until_no_pending_reads(bool declare) noexcept
 {
   const bool notify_wait= declare && read_slots->pending_io_count();
 
@@ -3470,7 +3375,7 @@ void os_aio_wait_until_no_pending_reads(bool declare)
 /** Submit a fake read request during crash recovery.
 @param type  fake read request
 @param offset additional context */
-void os_fake_read(const IORequest &type, os_offset_t offset)
+void os_fake_read(const IORequest &type, os_offset_t offset) noexcept
 {
   tpool::aiocb *cb= read_slots->acquire();
 
@@ -3497,6 +3402,7 @@ void os_fake_read(const IORequest &type, os_offset_t offset)
 @retval DB_SUCCESS if request was queued successfully
 @retval DB_IO_ERROR on I/O error */
 dberr_t os_aio(const IORequest &type, void *buf, os_offset_t offset, size_t n)
+  noexcept
 {
 	ut_ad(n > 0);
 	ut_ad(!(n & 511)); /* payload of page_compressed tables */
@@ -3574,10 +3480,7 @@ func_exit:
 	goto func_exit;
 }
 
-/** Prints info of the aio arrays.
-@param[in,out]	file		file where to print */
-void
-os_aio_print(FILE*	file)
+void os_aio_print(FILE *file) noexcept
 {
 	time_t		current_time;
 	double		time_elapsed;
@@ -3626,9 +3529,7 @@ os_aio_print(FILE*	file)
 	os_last_printout = current_time;
 }
 
-/** Refreshes the statistics used to print per-second averages. */
-void
-os_aio_refresh_stats()
+void os_aio_refresh_stats() noexcept
 {
 	os_n_fsyncs_old = os_n_fsyncs;
 
@@ -3643,16 +3544,6 @@ os_aio_refresh_stats()
 	os_bytes_read_since_printout = 0;
 
 	os_last_printout = time(NULL);
-}
-
-
-/**
-Set the file create umask
-@param[in]	umask		The umask to use for file creation. */
-void
-os_file_set_umask(ulint umask)
-{
-	os_innodb_umask = umask;
 }
 
 #ifdef _WIN32
@@ -3819,7 +3710,21 @@ void fil_node_t::find_metadata(IF_WIN(,bool create)) noexcept
     punch_hole= 2;
   else
     punch_hole= IF_WIN(, !create ||) os_is_sparse_file_supported(file);
-
+  /* For temporary tablespace or during IMPORT TABLESPACE, we
+  disable neighbour flushing and do not care about atomicity. */
+  if (space->is_temporary())
+  {
+    on_ssd= true;
+    atomic_write= true;
+    return;
+  }
+  if (space->is_being_imported())
+  {
+    on_ssd= true;
+    atomic_write= true;
+    if (!space->is_compressed())
+      return;
+  }
 #ifdef _WIN32
   on_ssd= is_file_on_ssd(file, name);
   FILE_STORAGE_INFO info;
@@ -3827,24 +3732,7 @@ void fil_node_t::find_metadata(IF_WIN(,bool create)) noexcept
     block_size= info.PhysicalBytesPerSectorForAtomicity;
   else
     block_size= 512;
-  if (space->purpose != FIL_TYPE_TABLESPACE)
-  {
-    /* For temporary tablespace or during IMPORT TABLESPACE, we
-    disable neighbour flushing and do not care about atomicity. */
-    on_ssd= true;
-    atomic_write= true;
-    return;
-  }
 #else
-  if (space->purpose != FIL_TYPE_TABLESPACE)
-  {
-    /* For temporary tablespace or during IMPORT TABLESPACE, we
-    disable neighbour flushing and do not care about atomicity. */
-    on_ssd= true;
-    atomic_write= true;
-    if (space->purpose == FIL_TYPE_TEMPORARY || !space->is_compressed())
-      return;
-  }
   struct stat statbuf;
   if (!fstat(file, &statbuf))
   {
@@ -3941,7 +3829,8 @@ bool fil_node_t::read_page0(const byte *dpage, bool no_lsn) noexcept
     invalid:
       if (dpage)
         goto retry_dpage;
-      sql_print_error("InnoDB: Expected tablespace flags 0x%zx but found 0x%zx"
+      sql_print_error("InnoDB: Expected tablespace flags 0x%" PRIx32
+                      " but found 0x%" PRIx32
                       " in the file %s", space->flags, flags, name);
       goto err_exit;
     }

@@ -112,11 +112,12 @@ SQL_HANDLER::~SQL_HANDLER()
     Pointer to the TABLE_LIST struct.
 */
 
-static char *mysql_ha_hash_get_key(SQL_HANDLER *table, size_t *key_len,
-                                   my_bool first __attribute__((unused)))
+static const uchar *mysql_ha_hash_get_key(const void *table_, size_t *key_len,
+                                          my_bool)
 {
+  auto table= static_cast<const SQL_HANDLER *>(table_);
   *key_len= table->handler_name.length + 1 ; /* include '\0' in comparisons */
-  return (char*) table->handler_name.str;
+  return reinterpret_cast<const uchar *>(table->handler_name.str);
 }
 
 
@@ -134,9 +135,9 @@ static char *mysql_ha_hash_get_key(SQL_HANDLER *table, size_t *key_len,
     Nothing
 */
 
-static void mysql_ha_hash_free(SQL_HANDLER *table)
+static void mysql_ha_hash_free(void *table)
 {
-  delete table;
+  delete static_cast<SQL_HANDLER *>(table);
 }
 
 static void mysql_ha_close_childs(THD *thd, TABLE_LIST *current_table_list,
@@ -291,8 +292,7 @@ bool mysql_ha_open(THD *thd, TABLE_LIST *tables, SQL_HANDLER *reopen)
     */
     if (my_hash_init(key_memory_THD_handler_tables_hash,
                      &thd->handler_tables_hash, &my_charset_latin1,
-                     HANDLER_TABLES_HASH_SIZE, 0, 0, (my_hash_get_key)
-                     mysql_ha_hash_get_key, (my_hash_free_key)
+                     HANDLER_TABLES_HASH_SIZE, 0, 0, mysql_ha_hash_get_key,
                      mysql_ha_hash_free, 0))
     {
       DBUG_PRINT("exit",("ERROR"));
@@ -714,7 +714,7 @@ mysql_ha_fix_cond_and_key(SQL_HANDLER *handler,
           MY_BITMAP *old_map= dbug_tmp_use_all_columns(table, &table->write_set);
           int res= item->save_in_field(key_part->field, 1);
           dbug_tmp_restore_column_map(&table->write_set, old_map);
-          if (res)
+          if (res < 0 || thd->is_error())
             return 1;
         }
         key_len+= key_part->store_length;

@@ -647,6 +647,43 @@ static void generate_key_container_name(wchar_t* key_container_name, size_t key_
               L"MariaDB-Connector-C-%u-%u-%lld",GetCurrentProcessId(),GetCurrentThreadId(),now.QuadPart);
 }
 
+/**
+  Execute CryptAcquireContext().
+  The preference order is persistent user key container with unique name,
+  with fallback machine key container with uniquename.
+
+  @param cert_handle - structure to store provider handle, key handle, and
+  certificate
+  @return TRUE on success, FALSE on failure.
+
+  @note If the function returns TRUE, the key_container_name and flags fields
+  of cert_handle are set.
+*/
+static BOOL crypt_acquire_context(client_cert_handle *cert_handle)
+{
+  DWORD all_flags[]= {CRYPT_NEWKEYSET, CRYPT_NEWKEYSET | CRYPT_MACHINE_KEYSET};
+  size_t i;
+  generate_key_container_name(cert_handle->key_container_name,
+      sizeof(cert_handle->key_container_name) / sizeof(wchar_t));
+  for (i= 0; i < ARRAYSIZE(all_flags); i++)
+  {
+    DWORD fl= all_flags[i];
+    if (CryptAcquireContextW(&cert_handle->prov, cert_handle->key_container_name,
+                             MS_ENHANCED_PROV_W, PROV_RSA_FULL, fl))
+    {
+      cert_handle->flags= fl;
+      return TRUE;
+    }
+    if (GetLastError() != ERROR_ACCESS_DENIED)
+      break;
+    cert_handle->prov= 0;
+  }
+  cert_handle->key_container_name[0]= 0;
+  cert_handle->flags= 0;
+  return FALSE;
+}
+
+
 /* Attach private key (in PEM format) to client certificate */
 static SECURITY_STATUS load_private_key(client_cert_handle *cert_handle, char *private_key_str,
                                         size_t len, char *errmsg,
@@ -656,7 +693,6 @@ static SECURITY_STATUS load_private_key(client_cert_handle *cert_handle, char *p
   BYTE* derbuf = NULL;
   DWORD keyblob_len = 0;
   BYTE* keyblob = NULL;
-
   PCRYPT_PRIVATE_KEY_INFO  pki = NULL;
   DWORD pki_len = 0;
   SECURITY_STATUS status = SEC_E_OK;
@@ -705,11 +741,8 @@ static SECURITY_STATUS load_private_key(client_cert_handle *cert_handle, char *p
   {
     FAIL("Failed to parse private key");
   }
-  generate_key_container_name(cert_handle->key_container_name, sizeof(cert_handle->key_container_name) / sizeof(wchar_t));
 
-  if (!CryptAcquireContextW(&cert_handle->prov,
-                            cert_handle->key_container_name, MS_ENHANCED_PROV_W,
-                            PROV_RSA_FULL, CRYPT_NEWKEYSET))
+  if (!crypt_acquire_context(cert_handle))
   {
     FAIL("CryptAcquireContext failed");
   }
@@ -719,12 +752,14 @@ static SECURITY_STATUS load_private_key(client_cert_handle *cert_handle, char *p
   {
     FAIL("CryptImportKey failed");
   }
+  cert_handle->flags &= ~CRYPT_NEWKEYSET;
+
   // Link the private key to the certificate
   CRYPT_KEY_PROV_INFO keyProvInfo= {0};
   keyProvInfo.pwszContainerName= cert_handle->key_container_name;
   keyProvInfo.pwszProvName= NULL;
   keyProvInfo.dwProvType= PROV_RSA_FULL;
-  keyProvInfo.dwFlags= 0;
+  keyProvInfo.dwFlags= cert_handle->flags;
   keyProvInfo.cProvParam= 0;
   keyProvInfo.rgProvParam= NULL;
   keyProvInfo.dwKeySpec= AT_KEYEXCHANGE;
@@ -864,10 +899,11 @@ void schannel_free_cert_context(client_cert_handle* cert_handle)
   {
     if (!CryptAcquireContextW(&cert_handle->prov, cert_handle->key_container_name,
                               MS_ENHANCED_PROV_W, PROV_RSA_FULL,
-                              CRYPT_DELETEKEYSET))
+                              CRYPT_DELETEKEYSET|cert_handle->flags))
     {
       assert(GetLastError() == NTE_BAD_KEYSET);
     }
     cert_handle->key_container_name[0] = 0;
   }
+  cert_handle->flags= 0;
 }
