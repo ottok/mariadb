@@ -18,12 +18,12 @@
 #ifndef _SOCKETPOOL_H_
 #define _SOCKETPOOL_H_
 
-#include <deque>
 #include <boost/utility.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition_variable.hpp>
 
 #include "bytestream.h"
+#include <deque>
 
 namespace idbdatafile
 {

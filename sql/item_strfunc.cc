@@ -58,7 +58,7 @@ C_MODE_END
 /* fmtlib include (https://fmt.dev/). */
 #define FMT_STATIC_THOUSANDS_SEPARATOR ','
 #define FMT_HEADER_ONLY 1
-#include "fmt/format-inl.h"
+#include "fmt/args.h"
 
 size_t username_char_length= USERNAME_CHAR_LENGTH;
 
@@ -66,14 +66,21 @@ size_t username_char_length= USERNAME_CHAR_LENGTH;
   Calculate max length of string from length argument to LEFT and RIGHT
 */
 
-static uint32 max_length_for_string(Item *item)
+static uint32 max_length_for_string(Item *item, bool *neg)
 {
+  *neg= false;
   ulonglong length= item->val_int();
-  /* Note that if value is NULL, val_int() returned 0 */
+  if (item->null_value)
+    return 0;
+  if (length > (ulonglong) LONGLONG_MAX && !item->unsigned_flag)
+  {
+    *neg= true;
+    return 0; // Negative
+  }
   if (length > (ulonglong) INT_MAX32)
   {
     /* Limit string length to maxium string length in MariaDB (2G) */
-    length= item->unsigned_flag ? (ulonglong) INT_MAX32 : 0;
+    length= (ulonglong) INT_MAX32;
   }
   return (uint32) length;
 }
@@ -155,6 +162,7 @@ double Item_str_func::val_real()
 
 longlong Item_str_func::val_int()
 {
+  DBUG_ASSERT(!is_cond());
   DBUG_ASSERT(fixed());
   StringBuffer<22> tmp;
   String *res= val_str(&tmp);
@@ -672,7 +680,7 @@ String *Item_func_concat_operator_oracle::val_str(String *str)
     goto null;
 
   if (res != str)
-    str->copy(res->ptr(), res->length(), res->charset());
+    str->copy_or_move(res->ptr(), res->length(), res->charset());
 
   for (i++ ; i < arg_count ; i++)
   {
@@ -1403,37 +1411,15 @@ namespace fmt {
 */
 String *Item_func_sformat::val_str(String *res)
 {
-  /*
-    A union that stores a numeric format arg value.
-    fmt::detail::make_arg does not accept temporaries, so all of its numeric
-    args are temporarily stored in the fmt_args array.
-    See: https://github.com/fmtlib/fmt/issues/3596
-  */
-  union Format_arg_store {
-    longlong val_int;
-    float    val_float;
-    double   val_double;
-  };
-
   DBUG_ASSERT(fixed());
-  using                         ctx=      fmt::format_context;
-  String                       *fmt_arg=  NULL;
-  String                       *parg=     NULL;
-  fmt::format_args::format_arg *vargs=    NULL;
-  Format_arg_store             *fmt_args= NULL;
+  using         ArgStore= fmt::dynamic_format_arg_store<fmt::format_context>;
+  String       *fmt_arg=  NULL;
+  String       *parg=     NULL;
+  ArgStore      arg_store;
 
   null_value= true;
   if (!(fmt_arg= args[0]->val_str(res)))
     return NULL;
-
-  if (!(vargs= new fmt::format_args::format_arg[arg_count - 1]))
-    return NULL;
-
-  if (!(fmt_args= new Format_arg_store[arg_count - 1]))
-  {
-    delete [] vargs;
-    return NULL;
-  }
 
   /* Creates the array of arguments for vformat */
   for (uint carg= 1; carg < arg_count; carg++)
@@ -1441,37 +1427,26 @@ String *Item_func_sformat::val_str(String *res)
     switch (args[carg]->result_type())
     {
     case INT_RESULT:
-      fmt_args[carg-1].val_int= args[carg]->val_int();
-      vargs[carg-1]= fmt::detail::make_arg<ctx>(fmt_args[carg-1].val_int);
+      arg_store.push_back(args[carg]->val_int());
       break;
     case DECIMAL_RESULT: // TODO
     case REAL_RESULT:
       if (args[carg]->field_type() == MYSQL_TYPE_FLOAT)
-      {
-        fmt_args[carg-1].val_float= (float)args[carg]->val_real();
-        vargs[carg-1]= fmt::detail::make_arg<ctx>(fmt_args[carg-1].val_float);
-      }
+        arg_store.push_back((float)args[carg]->val_real());
       else
-      {
-        fmt_args[carg-1].val_double= args[carg]->val_real();
-        vargs[carg-1]= fmt::detail::make_arg<ctx>(fmt_args[carg-1].val_double);
-      }
+        arg_store.push_back(args[carg]->val_real());
       break;
     case STRING_RESULT:
       if (!(parg= args[carg]->val_str(&val_arg[carg-1])))
       {
-        delete [] vargs;
-        delete [] fmt_args;
         return NULL;
       }
-      vargs[carg-1]= fmt::detail::make_arg<ctx>(*parg);
+      arg_store.push_back(*parg);
       break;
     case TIME_RESULT: // TODO
     case ROW_RESULT: // TODO
     default:
       DBUG_ASSERT(0);
-      delete [] vargs;
-      delete [] fmt_args;
       return NULL;
     }
   }
@@ -1480,8 +1455,7 @@ String *Item_func_sformat::val_str(String *res)
   /* Create the string output  */
   try
   {
-    auto text = fmt::vformat(fmt_arg->c_ptr_safe(),
-                             fmt::format_args(vargs, arg_count-1));
+    auto text = fmt::vformat(fmt_arg->c_ptr_safe(), arg_store);
     res->length(0);
     res->set_charset(collation.collation);
     res->append(text.c_str(), text.size(), fmt_arg->charset());
@@ -1494,8 +1468,6 @@ String *Item_func_sformat::val_str(String *res)
                         ER_THD(thd, WARN_SFORMAT_ERROR), ex.what());
     null_value= true;
   }
-  delete [] vargs;
-  delete [] fmt_args;
   return null_value ? NULL : res;
 }
 
@@ -1828,8 +1800,12 @@ bool Item_func_insert::fix_length_and_dec(THD *thd)
   // Handle character set for args[0] and args[3].
   if (agg_arg_charsets_for_string_result(collation, args, 2, 3))
     return TRUE;
-  char_length= ((ulonglong) args[0]->max_char_length() +
-                (ulonglong) args[3]->max_char_length());
+  if (collation.collation == &my_charset_bin)
+    char_length= (ulonglong) args[0]->max_length +
+                 (ulonglong) args[3]->max_length;
+  else
+    char_length= ((ulonglong) args[0]->max_char_length() +
+                  (ulonglong) args[3]->max_char_length());
   fix_char_length_ulonglong(char_length);
   return FALSE;
 }
@@ -1926,7 +1902,8 @@ void Item_str_func::left_right_max_length()
   uint32 char_length= args[0]->max_char_length();
   if (args[1]->can_eval_in_optimize())
   {
-    uint32 length= max_length_for_string(args[1]);
+    bool neg;
+    uint32 length= max_length_for_string(args[1], &neg);
     set_if_smaller(char_length, length);
   }
   fix_char_length(char_length);
@@ -2045,11 +2022,11 @@ bool Item_func_substr::fix_length_and_dec(THD *thd)
   }
   if (arg_count == 3 && args[2]->const_item())
   {
-    int32 length= (int32) args[2]->val_int();
-    if (args[2]->null_value || length <= 0)
+    longlong length= args[2]->val_int();
+    if (args[2]->null_value || (length <= 0 && !args[2]->unsigned_flag))
       max_length=0; /* purecov: inspected */
-    else
-      set_if_smaller(max_length,(uint) length);
+    else if (length < UINT32_MAX)
+      set_if_smaller(max_length, (uint32) length);
   }
   max_length*= collation.collation->mbmaxlen;
   return FALSE;
@@ -2513,7 +2490,7 @@ String *Item_func_password::val_str_ascii(String *str)
     if (args[0]->null_value || res->length() == 0)
       return make_empty_result(str);
     my_make_scrambled_password(tmp_value, res->ptr(), res->length());
-    str->set(tmp_value, SCRAMBLED_PASSWORD_CHAR_LENGTH, &my_charset_latin1);
+    str->copy(tmp_value, SCRAMBLED_PASSWORD_CHAR_LENGTH, &my_charset_latin1);
     break;
   case OLD:
     if ((null_value=args[0]->null_value))
@@ -2521,7 +2498,7 @@ String *Item_func_password::val_str_ascii(String *str)
     if (res->length() == 0)
       return make_empty_result(str);
     my_make_scrambled_password_323(tmp_value, res->ptr(), res->length());
-    str->set(tmp_value, SCRAMBLED_PASSWORD_CHAR_LENGTH_323, &my_charset_latin1);
+    str->copy(tmp_value, SCRAMBLED_PASSWORD_CHAR_LENGTH_323, &my_charset_latin1);
     break;
   default:
     DBUG_ASSERT(0);
@@ -3340,7 +3317,8 @@ bool Item_func_repeat::fix_length_and_dec(THD *thd)
   DBUG_ASSERT(collation.collation != NULL);
   if (args[1]->can_eval_in_optimize())
   {
-    uint32 length= max_length_for_string(args[1]);
+    bool neg;
+    uint32 length= max_length_for_string(args[1], &neg);
     ulonglong char_length= (ulonglong) args[0]->max_char_length() * length;
     fix_char_length_ulonglong(char_length);
     return false;
@@ -3414,7 +3392,8 @@ bool Item_func_space::fix_length_and_dec(THD *thd)
   collation.set(default_charset(), DERIVATION_COERCIBLE, MY_REPERTOIRE_ASCII);
   if (args[0]->can_eval_in_optimize())
   {
-    fix_char_length_ulonglong(max_length_for_string(args[0]));
+    bool neg;
+    fix_char_length_ulonglong(max_length_for_string(args[0], &neg));
     return false;
   }
   max_length= MAX_BLOB_WIDTH;
@@ -3540,7 +3519,10 @@ bool Item_func_pad::fix_length_and_dec(THD *thd)
   DBUG_ASSERT(collation.collation->mbmaxlen > 0);
   if (args[1]->can_eval_in_optimize())
   {
-    fix_char_length_ulonglong(max_length_for_string(args[1]));
+    bool neg;
+    fix_char_length_ulonglong(max_length_for_string(args[1], &neg));
+    if (neg)
+      set_maybe_null();
     return false;
   }
   max_length= MAX_BLOB_WIDTH;
@@ -3772,7 +3754,7 @@ String *Item_func_conv::val_str(String *str)
 {
   DBUG_ASSERT(fixed());
   String *res= args[0]->val_str(str);
-  char *endptr,ans[65],*ptr;
+  char *endptr,ans[66],*ptr;
   longlong dec;
   int from_base= (int) args[1]->val_int();
   int to_base= (int) args[2]->val_int();
@@ -4550,9 +4532,9 @@ longlong Item_func_uncompressed_length::val_int()
   if (res->length() <= 4)
   {
     THD *thd= current_thd;
-    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
-                        ER_ZLIB_Z_DATA_ERROR,
-                        ER_THD(thd, ER_ZLIB_Z_DATA_ERROR));
+    push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
+                 ER_ZLIB_Z_DATA_ERROR,
+                 ER_THD(thd, ER_ZLIB_Z_DATA_ERROR));
     null_value= 1;
     return 0;
   }
@@ -4687,7 +4669,7 @@ String *Item_func_uncompress::val_str(String *str)
   if (res->length() <= 4)
   {
     THD *thd= current_thd;
-    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+    push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
 			ER_ZLIB_Z_DATA_ERROR,
 			ER_THD(thd, ER_ZLIB_Z_DATA_ERROR));
     goto err;
@@ -5925,7 +5907,7 @@ String *Item_func_wsrep_last_written_gtid::val_str_ascii(String *str)
 {
   if (gtid_str.alloc(WSREP_MAX_WSREP_SERVER_GTID_STR_LEN+1))
   {
-    my_error(ER_OUTOFMEMORY, WSREP_MAX_WSREP_SERVER_GTID_STR_LEN);
+    my_error(ER_OUTOFMEMORY, MYF(0), WSREP_MAX_WSREP_SERVER_GTID_STR_LEN);
     null_value= TRUE;
     return 0;
   }
@@ -5950,7 +5932,7 @@ String *Item_func_wsrep_last_seen_gtid::val_str_ascii(String *str)
 {
   if (gtid_str.alloc(WSREP_MAX_WSREP_SERVER_GTID_STR_LEN+1))
   {
-    my_error(ER_OUTOFMEMORY, WSREP_MAX_WSREP_SERVER_GTID_STR_LEN);
+    my_error(ER_OUTOFMEMORY, MYF(0), WSREP_MAX_WSREP_SERVER_GTID_STR_LEN);
     null_value= TRUE;
     return 0;
   }
@@ -5995,7 +5977,7 @@ longlong Item_func_wsrep_sync_wait_upto::val_int()
   if (!(gtid_list= gtid_parse_string_to_list(gtid_str->ptr(), gtid_str->length(),
                                              &count)))
   {
-    my_error(ER_INCORRECT_GTID_STATE, MYF(0), func_name());
+    my_error(ER_INCORRECT_GTID_STATE, MYF(0));
     null_value= TRUE;
     return 0;
   }
@@ -6007,12 +5989,12 @@ longlong Item_func_wsrep_sync_wait_upto::val_int()
       wait_gtid_ret= wsrep_gtid_server.wait_gtid_upto(gtid_list[0].seq_no, timeout);
       if ((wait_gtid_ret == ETIMEDOUT) || (wait_gtid_ret == ETIME))
       {
-        my_error(ER_LOCK_WAIT_TIMEOUT, MYF(0), func_name());
+        my_error(ER_LOCK_WAIT_TIMEOUT, MYF(0));
         ret= 0;
       }
       else if (wait_gtid_ret == ENOMEM)
       {
-        my_error(ER_OUTOFMEMORY, MYF(0), func_name());
+        my_error(ER_OUTOFMEMORY, MYF(0), sizeof(std::pair<uint64, mysql_cond_t*>));
         ret= 0;
       }
     }

@@ -738,13 +738,15 @@ ibuf_set_free_bits_func(
   mtr.start();
   const page_id_t id(block->page.id());
   const fil_space_t *space= mtr.set_named_space_id(id.space());
+  /* all callers of ibuf_update_free_bits_if_full() or ibuf_reset_free_bits()
+  check this */
+  ut_ad(!space->is_temporary());
 
   if (buf_block_t *bitmap_page=
       ibuf_bitmap_get_map_page(id, block->zip_size(), &mtr))
   {
-    if (space->purpose != FIL_TYPE_TABLESPACE)
+    if (space->is_being_imported()) /* IndexPurge may invoke this */
       mtr.set_log_mode(MTR_LOG_NO_REDO);
-
 #ifdef UNIV_IBUF_DEBUG
     if (max_val != ULINT_UNDEFINED)
     {
@@ -925,14 +927,15 @@ ibuf_page_low(
 		return(false);
 	}
 
-	compile_time_assert(IBUF_SPACE_ID == 0);
-	ut_ad(fil_system.sys_space->purpose == FIL_TYPE_TABLESPACE);
+	static_assert(IBUF_SPACE_ID == 0, "compatiblity");
 
 #ifdef UNIV_DEBUG
-	if (!x_latch) {
-		mtr_start(&local_mtr);
-
-		/* Get the bitmap page without a page latch, so that
+	if (x_latch) {
+	} else if (buf_block_t* block = buf_pool.page_fix(
+			   ibuf_bitmap_page_no_calc(page_id, zip_size))) {
+		local_mtr.start();
+		local_mtr.memo_push(block, MTR_MEMO_BUF_FIX);
+		/* We got the bitmap page without a page latch, so that
 		we will not be violating the latching order when
 		another bitmap page has already been latched by this
 		thread. The page will be buffer-fixed, and thus it
@@ -942,16 +945,10 @@ ibuf_page_low(
 		not be modified by any other thread. Nobody should be
 		calling ibuf_add_free_page() or ibuf_remove_free_page()
 		while the page is linked to the insert buffer b-tree. */
-		buf_block_t* block = buf_page_get_gen(
-			ibuf_bitmap_page_no_calc(page_id, zip_size),
-			zip_size, RW_NO_LATCH, nullptr, BUF_GET, &local_mtr);
-
-		ret = block
-			&& ibuf_bitmap_page_get_bits_low(
+		ret = ibuf_bitmap_page_get_bits_low(
 			block->page.frame, page_id, zip_size,
 			MTR_MEMO_BUF_FIX, &local_mtr, IBUF_BITMAP_IBUF);
-
-		mtr_commit(&local_mtr);
+		local_mtr.commit();
 		return(ret);
 	}
 #endif /* UNIV_DEBUG */
@@ -2016,7 +2013,7 @@ static
 ulint
 ibuf_get_merge_page_nos_func(
 /*=========================*/
-	const rec_t*	rec,	/*!< in: insert buffer record */
+	const btr_cur_t&cur,	/*!< in: insert buffer record */
 #ifdef UNIV_DEBUG
 	mtr_t*		mtr,	/*!< in: mini-transaction holding rec */
 #endif /* UNIV_DEBUG */
@@ -2038,6 +2035,8 @@ ibuf_get_merge_page_nos_func(
 	ulint	rec_volume;
 	ulint	limit;
 	ulint	n_pages;
+	const rec_t* rec= btr_cur_get_rec(&cur);
+	const page_t* page= btr_cur_get_page(&cur);
 
 	ut_ad(mtr->memo_contains_page_flagged(rec, MTR_MEMO_PAGE_X_FIX
 					      | MTR_MEMO_PAGE_S_FIX));
@@ -2045,7 +2044,7 @@ ibuf_get_merge_page_nos_func(
 
 	*n_stored = 0;
 
-	if (page_rec_is_supremum(rec)) {
+	if (page_rec_is_supremum_low(rec - page)) {
 
 		rec = page_rec_get_prev_const(rec);
 		if (UNIV_UNLIKELY(!rec)) {
@@ -2055,9 +2054,9 @@ corruption:
 		}
 	}
 
-	if (page_rec_is_infimum(rec)) {
-		rec = page_rec_get_next_const(rec);
-		if (!rec || page_rec_is_supremum(rec)) {
+	if (page_rec_is_infimum_low(rec - page)) {
+		rec = page_rec_next_get<false>(page, rec);
+		if (!rec || page_rec_is_supremum_low(rec - page)) {
 			return 0;
 		}
 	}
@@ -2075,7 +2074,8 @@ corruption:
 	'merge area', or the page start or the limit of storeable pages is
 	reached */
 
-	while (!page_rec_is_infimum(rec) && UNIV_LIKELY(n_pages < limit)) {
+	while (!page_rec_is_infimum_low(rec - page)
+	       && UNIV_LIKELY(n_pages < limit)) {
 
 		rec_page_no = ibuf_rec_get_page_no(mtr, rec);
 		rec_space_id = ibuf_rec_get_space(mtr, rec);
@@ -2100,7 +2100,7 @@ corruption:
 		}
 	}
 
-	rec = page_rec_get_next_const(rec);
+	rec = page_rec_next_get<false>(page, rec);
 
 	/* At the loop start there is no prev page; we mark this with a pair
 	of space id, page no (0, 0) for which there can never be entries in
@@ -2112,7 +2112,7 @@ corruption:
 	volume_for_page = 0;
 
 	while (*n_stored < limit && rec) {
-		if (page_rec_is_supremum(rec)) {
+		if (page_rec_is_supremum_low(rec - page)) {
 			/* When no more records available, mark this with
 			another 'impossible' pair of space id, page no */
 			rec_page_no = 1;
@@ -2174,7 +2174,7 @@ corruption:
 		prev_page_no = rec_page_no;
 		prev_space_id = rec_space_id;
 
-		rec = page_rec_get_next_const(rec);
+		rec = page_rec_next_get<false>(page, rec);
 	}
 
 #ifdef UNIV_IBUF_DEBUG
@@ -2440,7 +2440,7 @@ ATTRIBUTE_COLD ulint ibuf_contract()
 	}
 
 	ulint n_pages = 0;
-	sum_sizes = ibuf_get_merge_page_nos(btr_cur_get_rec(&cur), &mtr,
+	sum_sizes = ibuf_get_merge_page_nos(cur, &mtr,
 					    space_ids, page_nos, &n_pages);
 	ibuf_mtr_commit(&mtr);
 
@@ -2732,10 +2732,10 @@ ibuf_get_volume_buffered(
 	}
 
 	rec = btr_pcur_get_rec(pcur);
-	page = page_align(rec);
+	page = btr_pcur_get_page(pcur);
 	ut_ad(page_validate(page, ibuf.index));
 
-	if (page_rec_is_supremum(rec)
+	if (rec == page + PAGE_OLD_SUPREMUM
 	    && UNIV_UNLIKELY(!(rec = page_rec_get_prev_const(rec)))) {
 corruption:
 		ut_ad("corrupted page" == 0);
@@ -2744,7 +2744,7 @@ corruption:
 
 	uint32_t prev_page_no;
 
-	for (; !page_rec_is_infimum(rec); ) {
+	while (rec != page + PAGE_OLD_INFIMUM) {
 		ut_ad(page_align(rec) == page);
 
 		if (page_no != ibuf_rec_get_page_no(mtr, rec)
@@ -2824,12 +2824,12 @@ corruption:
 count_later:
 	rec = btr_pcur_get_rec(pcur);
 
-	if (!page_rec_is_supremum(rec)) {
-		rec = page_rec_get_next_const(rec);
+	if (rec != page + PAGE_OLD_SUPREMUM) {
+		rec = page_rec_next_get<false>(page, rec);
 	}
 
-	for (; !page_rec_is_supremum(rec);
-	     rec = page_rec_get_next_const(rec)) {
+	for (; rec != page + PAGE_OLD_SUPREMUM;
+	     rec = page_rec_next_get<false>(page, rec)) {
 		if (UNIV_UNLIKELY(!rec)) {
 			return srv_page_size;
 		}
@@ -2870,11 +2870,11 @@ count_later:
 		return 0;
 	}
 
-	rec = page_get_infimum_rec(next_page);
-	rec = page_rec_get_next_const(rec);
+	rec = page_rec_next_get<false>(next_page,
+				       next_page + PAGE_OLD_INFIMUM);
 
-	for (; ; rec = page_rec_get_next_const(rec)) {
-		if (!rec || page_rec_is_supremum(rec)) {
+	for (;; rec = page_rec_next_get<false>(next_page, rec)) {
+		if (!rec || rec == next_page + PAGE_OLD_SUPREMUM) {
 			/* We give up */
 			return(srv_page_size);
 		}
@@ -3597,16 +3597,26 @@ ibuf_insert_to_index_page(
 	assert_block_ahi_empty(block);
 #endif /* BTR_CUR_HASH_ADAPT */
 	ut_ad(mtr->is_named_space(block->page.id().space()));
+        const auto comp = page_is_comp(page);
 
-	if (UNIV_UNLIKELY(dict_table_is_comp(index->table)
-			  != (ibool)!!page_is_comp(page))) {
+	if (UNIV_UNLIKELY(index->table->not_redundant() != !!comp)) {
 		return DB_CORRUPTION;
 	}
 
-	rec = page_rec_get_next(page_get_infimum_rec(page));
-
-	if (!rec || page_rec_is_supremum(rec)) {
-		return DB_CORRUPTION;
+	if (comp) {
+		rec = const_cast<rec_t*>(
+			page_rec_next_get<true>(page,
+						page + PAGE_NEW_INFIMUM));
+		if (!rec || rec == page + PAGE_NEW_SUPREMUM) {
+			return DB_CORRUPTION;
+		}
+	} else {
+		rec = const_cast<rec_t*>(
+			page_rec_next_get<false>(page,
+						page + PAGE_OLD_INFIMUM));
+		if (!rec || rec == page + PAGE_OLD_SUPREMUM) {
+			return DB_CORRUPTION;
+		}
 	}
 
 	if (!rec_n_fields_is_sane(index, rec, entry)) {
@@ -4220,7 +4230,8 @@ loop:
 			dict_index_t*	dummy_index;
 			ibuf_op_t	op = ibuf_rec_get_op_type(&mtr, rec);
 
-			max_trx_id = page_get_max_trx_id(page_align(rec));
+			max_trx_id =
+				page_get_max_trx_id(btr_pcur_get_page(&pcur));
 			page_update_max_trx_id(block,
 					       buf_block_get_page_zip(block),
 					       max_trx_id, &mtr);
@@ -4495,7 +4506,7 @@ ibuf_print(
 dberr_t ibuf_check_bitmap_on_import(const trx_t* trx, fil_space_t* space)
 {
 	ut_ad(trx->mysql_thd);
-	ut_ad(space->purpose == FIL_TYPE_IMPORT);
+	ut_ad(space->is_being_imported());
 
 	const unsigned zip_size = space->zip_size();
 	const unsigned physical_size = space->physical_size();

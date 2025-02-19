@@ -484,7 +484,9 @@ row_ins_cascade_calc_update_vec(
 			const upd_field_t*	parent_ufield
 				= &parent_update->fields[j];
 
-			if (parent_ufield->field_no == parent_field_no) {
+			if (parent_ufield->field_no == parent_field_no
+			    && !(parent_ufield->new_val.type.prtype
+				 & DATA_VIRTUAL)) {
 
 				ulint			min_size;
 				const dict_col_t*	col;
@@ -723,7 +725,7 @@ row_ins_foreign_trx_print(
 	ut_print_timestamp(dict_foreign_err_file);
 	fputs(" Transaction:\n", dict_foreign_err_file);
 
-	trx_print_low(dict_foreign_err_file, trx, 600,
+	trx_print_low(dict_foreign_err_file, trx,
 		      n_rec_locks, n_trx_locks, heap_size);
 
 	mysql_mutex_assert_owner(&dict_foreign_err_mutex);
@@ -910,10 +912,10 @@ row_ins_foreign_fill_virtual(
 		return DB_OUT_OF_MEMORY;
 	}
 	ut_ad(!node->is_delete
-	      || (foreign->type & DICT_FOREIGN_ON_DELETE_SET_NULL));
-	ut_ad(foreign->type & (DICT_FOREIGN_ON_DELETE_SET_NULL
-			       | DICT_FOREIGN_ON_UPDATE_SET_NULL
-			       | DICT_FOREIGN_ON_UPDATE_CASCADE));
+	      || (foreign->type & foreign->DELETE_SET_NULL));
+	ut_ad(foreign->type & (foreign->DELETE_SET_NULL
+			       | foreign->UPDATE_SET_NULL
+			       | foreign->UPDATE_CASCADE));
 
 	for (uint16_t i = 0; i < n_v_fld; i++) {
 
@@ -1029,8 +1031,8 @@ row_ins_foreign_check_on_constraint(
 	node = static_cast<upd_node_t*>(thr->run_node);
 
 	if (node->is_delete && 0 == (foreign->type
-				     & (DICT_FOREIGN_ON_DELETE_CASCADE
-					| DICT_FOREIGN_ON_DELETE_SET_NULL))) {
+				     & (foreign->DELETE_CASCADE
+					| foreign->DELETE_SET_NULL))) {
 
 		row_ins_foreign_report_err("Trying to delete",
 					   thr, foreign,
@@ -1040,8 +1042,8 @@ row_ins_foreign_check_on_constraint(
 	}
 
 	if (!node->is_delete && 0 == (foreign->type
-				      & (DICT_FOREIGN_ON_UPDATE_CASCADE
-					 | DICT_FOREIGN_ON_UPDATE_SET_NULL))) {
+				      & (foreign->UPDATE_CASCADE
+					 | foreign->UPDATE_SET_NULL))) {
 
 		/* This is an UPDATE */
 
@@ -1064,7 +1066,7 @@ row_ins_foreign_check_on_constraint(
 	cascade->foreign = foreign;
 
 	if (node->is_delete
-	    && (foreign->type & DICT_FOREIGN_ON_DELETE_CASCADE)) {
+	    && (foreign->type & foreign->DELETE_CASCADE)) {
 		cascade->is_delete = PLAIN_DELETE;
 	} else {
 		cascade->is_delete = NO_DELETE;
@@ -1212,8 +1214,8 @@ row_ins_foreign_check_on_constraint(
 	}
 
 	if (node->is_delete
-	    ? (foreign->type & DICT_FOREIGN_ON_DELETE_SET_NULL)
-	    : (foreign->type & DICT_FOREIGN_ON_UPDATE_SET_NULL)) {
+	    ? (foreign->type & foreign->DELETE_SET_NULL)
+	    : (foreign->type & foreign->UPDATE_SET_NULL)) {
 		/* Build the appropriate update vector which sets
 		foreign->n_fields first fields in rec to SQL NULL */
 
@@ -1258,12 +1260,12 @@ row_ins_foreign_check_on_constraint(
 		}
 	} else if (table->fts && cascade->is_delete == PLAIN_DELETE
 		   && foreign->affects_fulltext()) {
-		/* DICT_FOREIGN_ON_DELETE_CASCADE case */
+		/* dict_foreign_t::DELETE_CASCADE case */
 		fts_trx_add_op(trx, table, doc_id, FTS_DELETE, NULL);
 	}
 
 	if (!node->is_delete
-	    && (foreign->type & DICT_FOREIGN_ON_UPDATE_CASCADE)) {
+	    && (foreign->type & foreign->UPDATE_CASCADE)) {
 
 		/* Build the appropriate update vector which sets changing
 		foreign->n_fields first fields in rec to new values */
@@ -1635,7 +1637,7 @@ row_ins_check_foreign_constraint(
 		const rec_t*		rec = btr_pcur_get_rec(&pcur);
 		const buf_block_t*	block = btr_pcur_get_block(&pcur);
 
-		if (page_rec_is_infimum(rec)) {
+		if (page_rec_is_infimum_low(rec - block->page.frame)) {
 
 			continue;
 		}
@@ -1644,7 +1646,7 @@ row_ins_check_foreign_constraint(
 					  check_index->n_core_fields,
 					  ULINT_UNDEFINED, &heap);
 
-		if (page_rec_is_supremum(rec)) {
+		if (page_rec_is_supremum_low(rec - block->page.frame)) {
 
 			if (skip_gap_lock) {
 
@@ -2125,7 +2127,7 @@ row_ins_scan_sec_index_for_duplicate(
 		const buf_block_t*	block	= btr_pcur_get_block(&pcur);
 		const ulint		lock_type = LOCK_ORDINARY;
 
-		if (page_rec_is_infimum(rec)) {
+		if (page_rec_is_infimum_low(rec - block->page.frame)) {
 
 			continue;
 		}
@@ -2161,7 +2163,7 @@ row_ins_scan_sec_index_for_duplicate(
 			goto end_scan;
 		}
 
-		if (page_rec_is_supremum(rec)) {
+		if (page_rec_is_supremum_low(rec - block->page.frame)) {
 
 			continue;
 		}
@@ -2278,7 +2280,8 @@ row_ins_duplicate_error_in_clust_online(
 
 	ut_ad(!cursor->index()->is_instant());
 
-	if (cursor->low_match >= n_uniq && !page_rec_is_infimum(rec)) {
+	if (cursor->low_match >= n_uniq
+	    && !page_rec_is_infimum_low(rec - btr_cur_get_page(cursor))) {
 		*offsets = rec_get_offsets(rec, cursor->index(), *offsets,
 					   cursor->index()->n_fields,
 					   ULINT_UNDEFINED, heap);
@@ -2289,7 +2292,7 @@ row_ins_duplicate_error_in_clust_online(
 		}
 	}
 
-	if (!(rec = page_rec_get_next_const(btr_cur_get_rec(cursor)))) {
+	if (!(rec = page_rec_get_next_const(rec))) {
 		return DB_CORRUPTION;
 	}
 
@@ -2350,7 +2353,7 @@ row_ins_duplicate_error_in_clust(
 
 		rec = btr_cur_get_rec(cursor);
 
-		if (!page_rec_is_infimum(rec)) {
+		if (!page_rec_is_infimum_low(rec - btr_cur_get_page(cursor))) {
 			offsets = rec_get_offsets(rec, cursor->index(),
 						  offsets,
 						  cursor->index()
@@ -2561,6 +2564,22 @@ row_ins_index_entry_big_rec(
 	return(error);
 }
 
+/** Check whether the executed sql command is from insert
+statement
+@param thd thread information
+@return true if it is insert statement */
+static bool thd_sql_is_insert(const THD *thd) noexcept
+{
+  switch(thd_sql_command(thd))
+  {
+    case SQLCOM_INSERT:
+    case SQLCOM_INSERT_SELECT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 #if defined __aarch64__&&defined __GNUC__&&__GNUC__==4&&!defined __clang__
 /* Avoid GCC 4.8.5 internal compiler error due to srw_mutex::wr_unlock().
 We would only need this for row_ins_clust_index_entry_low(),
@@ -2711,7 +2730,7 @@ err_exit:
 	    && block->page.id().page_no() == index->page
 	    && !index->table->is_native_online_ddl()
 	    && (!dict_table_is_partition(index->table)
-	        || thd_sql_command(trx->mysql_thd) == SQLCOM_INSERT)) {
+		|| thd_sql_is_insert(trx->mysql_thd))) {
 
 		if (!index->table->n_rec_locks
 		    && !index->table->versioned()
@@ -2775,10 +2794,16 @@ avoid_bulk:
 
 		ut_ad(index->table->skip_alter_undo);
 		ut_ad(!entry->is_metadata());
+
+		/* If foreign key exist and foreign key is enabled
+		then avoid using bulk insert for copy algorithm */
 		if (innodb_alter_copy_bulk
 		    && !index->table->is_temporary()
 		    && !index->table->versioned()
-		    && !index->table->has_spatial_index()) {
+		    && !index->table->has_spatial_index()
+		    && (!trx->check_foreigns
+                        || (index->table->foreign_set.empty()
+                            && index->table->referenced_set.empty()))) {
 			ut_ad(page_is_empty(block->page.frame));
 			/* This code path has been executed at the
 			start of the alter operation. Consecutive
@@ -2788,7 +2813,7 @@ avoid_bulk:
 			trx_start_if_not_started(trx, true);
 			trx->bulk_insert = true;
 			auto m = trx->mod_tables.emplace(index->table, 0);
-			m.first->second.start_bulk_insert(index->table);
+			m.first->second.start_bulk_insert(index->table, true);
 			err = m.first->second.bulk_insert_buffered(
 					*entry, *index, trx);
 			goto err_exit;
@@ -2799,7 +2824,8 @@ row_level_insert:
 	if (UNIV_UNLIKELY(entry->info_bits != 0)) {
 		const rec_t* rec = btr_pcur_get_rec(&pcur);
 
-		if (rec_get_info_bits(rec, page_rec_is_comp(rec))
+		if (rec_get_info_bits(rec,
+				      page_is_comp(btr_pcur_get_page(&pcur)))
 		    & REC_INFO_MIN_REC_FLAG) {
 			trx->error_info = index;
 			err = DB_DUPLICATE_KEY;
@@ -3055,7 +3081,8 @@ row_ins_sec_index_entry_low(
 
 	if (err != DB_SUCCESS) {
 		if (err == DB_DECRYPTION_FAILED) {
-			btr_decryption_failed(*index);
+			innodb_decryption_failed(thr_get_trx(thr)->mysql_thd,
+						 index->table);
 		}
 		goto func_exit;
 	}
@@ -3244,7 +3271,8 @@ row_ins_clust_index_entry(
 
 #ifdef WITH_WSREP
 	const bool skip_locking
-		= wsrep_thd_skip_locking(thr_get_trx(thr)->mysql_thd);
+		= thr_get_trx(thr)->is_wsrep() &&
+		  wsrep_thd_skip_locking(thr_get_trx(thr)->mysql_thd);
 	ulint	flags = index->table->no_rollback() ? BTR_NO_ROLLBACK
 		: (index->table->is_temporary() || skip_locking)
 		? BTR_NO_LOCKING_FLAG : 0;
@@ -3404,7 +3432,12 @@ row_ins_index_entry(
 			return(DB_LOCK_WAIT);});
 
 	if (index->is_btree()) {
-		if (auto t= trx->check_bulk_buffer(index->table)) {
+		/* If the InnoDB skips the sorting of primary
+		index for bulk insert operation then InnoDB
+		should have called load_one_row() for the
+		first insert statement and shouldn't use
+		buffer for consecutive insert statement */
+		if (auto t= trx->use_bulk_buffer(index)) {
 			/* MDEV-25036 FIXME:
 			row_ins_check_foreign_constraint() check
 			should be done before buffering the insert
@@ -3454,24 +3487,22 @@ row_ins_spatial_index_entry_set_mbr_field(
 
 /** Sets the values of the dtuple fields in entry from the values of appropriate
 columns in row.
-@param[in]	index	index handler
-@param[out]	entry	index entry to make
-@param[in]	row	row
-@return DB_SUCCESS if the set is successful */
+@param[in]	node	row insert node
+@param[in]	thr	query thread
+@retval DB_SUCCESS if the set is successful
+@retval DB_CANT_CREATE_GEOMETRY_OBJECT when spatial index fails to
+create geometry object */
 static
 dberr_t
-row_ins_index_entry_set_vals(
-	const dict_index_t*	index,
-	dtuple_t*		entry,
-	const dtuple_t*		row)
+row_ins_index_entry_set_vals(const ins_node_t* node, que_thr_t* thr)
 {
-	ulint	n_fields;
-	ulint	i;
+	const dict_index_t* index = node->index;
+	dtuple_t* entry = *node->entry;
+	const dtuple_t* row = node->row;
 	ulint	num_v = dtuple_get_n_v_fields(entry);
+	ulint n_fields = dtuple_get_n_fields(entry);
 
-	n_fields = dtuple_get_n_fields(entry);
-
-	for (i = 0; i < n_fields + num_v; i++) {
+	for (ulint i = 0; i < n_fields + num_v; i++) {
 		dict_field_t*	ind_field = NULL;
 		dfield_t*	field;
 		const dfield_t*	row_field;
@@ -3541,6 +3572,7 @@ row_ins_index_entry_set_vals(
 		if ((i == 0) && dict_index_is_spatial(index)) {
 			if (!row_field->data
 			    || row_field->len < GEO_DATA_HEADER_SIZE) {
+				thr_get_trx(thr)->error_info = index;
 				return(DB_CANT_CREATE_GEOMETRY_OBJECT);
 			}
 			row_ins_spatial_index_entry_set_mbr_field(
@@ -3575,8 +3607,7 @@ row_ins_index_entry_step(
 
 	ut_ad(dtuple_check_typed(node->row));
 
-	err = row_ins_index_entry_set_vals(node->index, *node->entry,
-					   node->row);
+	err = row_ins_index_entry_set_vals(node, thr);
 
 	if (err != DB_SUCCESS) {
 		DBUG_RETURN(err);
