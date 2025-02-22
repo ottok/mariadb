@@ -30,21 +30,6 @@ then
   cat "/usr/share/mariadb/mariadb-test/unstable-tests.$ARCH" >> "$MTR_SKIP_TEST_LIST"
 fi
 
-# Skip tests that cannot run properly on ci.debian.net / autopkgtests.ubuntu.com
-cat >> "$MTR_SKIP_TEST_LIST" << EOF
-binlog.binlog_server_start_options : Requires writable /usr
-main.ctype_uca : Requires writable /usr
-rpl.rpl_gtid_mode : Requires starting server as root ref http://bugs.mysql.com/bug.php?id=70517
-EOF
-
-# Skip tests that cannot run properly on Gitlab-CI
-if [ -n "$GITLAB_CI" ]
-then
-  cat >> "$MTR_SKIP_TEST_LIST" << EOF
-main.mysqld--help : For unknown reason table-cache is 4000 instead of default 421
-EOF
-fi
-
 # Store skipped test list in artifacts so it can be viewed while debugging
 # failed autopkgtest runs
 cp -v "$MTR_SKIP_TEST_LIST" "$AUTOPKGTEST_ARTIFACTS"
