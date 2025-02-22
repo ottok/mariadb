@@ -22,7 +22,7 @@ msgstr ""
 #. Description
 #: ../mariadb-server.templates:2001
 msgid "The old data directory will be saved at new location"
-msgstr ""
+msgstr "Datu direktorio zaharra kokapen berri batean gordeko da"
 
 #. Type: note
 #. Description
@@ -32,6 +32,9 @@ msgid ""
 "indicates a database binary format version that cannot automatically be "
 "upgraded (or downgraded)."
 msgstr ""
+"Sistema honetan /var/lib/mysql/debian-*.flag izeneko fitxategi bat dago. "
+"Zenbakiak automatikoki eguneratu (edo zaharkitu) ezin den datu-basearen "
+"formatu binarioaren bertsioa adierazten du."
 
 #. Type: note
 #. Description
@@ -40,6 +43,8 @@ msgid ""
 "Therefore the previous data directory will be renamed to /var/lib/mysql-* "
 "and a new data directory will be initialized at /var/lib/mysql."
 msgstr ""
+"Beraz, aurreko datu direktorioa /var/lib/mysql-* gisa berrizendatuko da "
+"eta datu direktorio berri bat hasieratuko da /var/lib/mysql-en."
 
 #. Type: note
 #. Description
@@ -47,6 +52,8 @@ msgstr ""
 msgid ""
 "Please manually export/import your data (e.g. with mysqldump) if needed."
 msgstr ""
+"Mesedez, esportatu/inportatu zure datuak eskuz (adib. mysqldump erabiliz) "
+"beharrezkoa bada."
 
 #. Type: note
 #. Description
@@ -61,19 +68,17 @@ msgid ""
 "Using MariaDB under NIS/YP requires a mysql user account to be added on the "
 "local system with:"
 msgstr ""
+"MariaDB NIS/YP-ren azpian erabiltzeak mysql erabiltzaile kontu bat gehitzea "
+"eskatzen du sistema lokalean honekin:"
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
-#, fuzzy
-#| msgid ""
-#| "You should also check the permissions and the owner of the /var/lib/mysql "
-#| "directory:"
 msgid ""
 "You should also check the permissions and ownership of the /var/lib/mysql "
 "directory:"
 msgstr ""
-"Honetaz gain /var/lib/mysql direktorioaren jabea eta baimenak egiaztatu "
+"/var/lib/mysql direktorioaren baimenak eta jabetza ere egiaztatu "
 "beharko zenituzke:"
 
 #. Type: boolean
