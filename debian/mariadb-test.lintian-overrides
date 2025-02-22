@@ -5,6 +5,9 @@ arch-dependent-file-in-usr-share [usr/share/mariadb/mariadb-test/lib/My/SafeProc
 spelling-error-in-binary noone no one [usr/bin/*]
 spelling-error-in-binary thats that's [usr/bin/*]
 spelling-error-in-binary theres there's [usr/bin/*]
+spelling-error-in-binary yuR your [usr/bin/mariadb-client-test-embedded]
+spelling-error-in-binary yuR your [usr/bin/mariadb-test-embedded]
+spelling-error-in-binary yuR your [usr/bin/test-connect-t]
 # Valid reason for documentation in context in directory
 package-contains-documentation-outside-usr-share-doc [usr/share/mariadb/mariadb-test/README*]
 # Test plugins intentionally not fully featured

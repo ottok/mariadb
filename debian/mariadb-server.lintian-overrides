@@ -10,7 +10,7 @@ hardening-no-fortify-functions [usr/lib/mysql/plugin/auth_pam.so]
 hardening-no-fortify-functions [usr/lib/mysql/plugin/file_key_management.so]
 hardening-no-fortify-functions [usr/lib/mysql/plugin/ha_archive.so]
 hardening-no-fortify-functions [usr/lib/mysql/plugin/ha_blackhole.so]
-hardening-no-fortify-functions [usr/lib/x86_64-linux-gnu/security/pam_user_map.so]
+hardening-no-fortify-functions [usr/lib/*/security/pam_user_map.so]
 # Special purpose executable to implement custom system permissions
 executable-in-usr-lib [usr/lib/mysql/plugin/auth_pam_tool_dir/auth_pam_tool]
 # Intentional to handle upgrades from versioned package names to versionless

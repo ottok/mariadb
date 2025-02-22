@@ -2,3 +2,4 @@
 spelling-error-in-binary noone no one [usr/bin/*]
 spelling-error-in-binary thats that's [usr/bin/*]
 spelling-error-in-binary theres there's [usr/bin/*]
+spelling-error-in-binary yuR your [usr/bin/mariadb-backup]

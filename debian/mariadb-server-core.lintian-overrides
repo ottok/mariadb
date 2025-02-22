@@ -2,5 +2,6 @@
 spelling-error-in-binary noone no one [usr/sbin/mariadbd]
 spelling-error-in-binary thats that's [usr/sbin/mariadbd]
 spelling-error-in-binary theres there's [usr/sbin/mariadbd]
+spelling-error-in-binary yuR your [usr/sbin/mariadbd]
 # Valid reason for extra documentation in context in directory
 package-contains-documentation-outside-usr-share-doc [usr/share/mariadb/charsets/README]
