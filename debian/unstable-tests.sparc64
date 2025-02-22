@@ -14,6 +14,7 @@ main.partition : MDEV-27954
 main.partition_order : MDEV-27954
 main.repair_symlink-5543 : MDEV-23920
 main.type_datetime : MDEV-27954
+main.view : MDEV-36145
 main.xa_prepared_binlog_off : Likely also MDEV-30728
 main.xml : MDEV-27954
 maria.maria-purge : MDEV-31349
