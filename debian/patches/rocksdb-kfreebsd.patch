@@ -6,7 +6,7 @@ Description:
  in a RocksDB release and imported into MariaDB and then into Debian.
 --- a/storage/rocksdb/build_rocksdb.cmake
 +++ b/storage/rocksdb/build_rocksdb.cmake
-@@ -90,6 +90,8 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux"
+@@ -90,6 +90,8 @@
    add_definitions(-DOS_LINUX)
  elseif(CMAKE_SYSTEM_NAME MATCHES "SunOS")
    add_definitions(-DOS_SOLARIS)
@@ -17,7 +17,7 @@ Description:
  elseif(CMAKE_SYSTEM_NAME MATCHES "NetBSD")
 --- a/storage/rocksdb/rocksdb/CMakeLists.txt
 +++ b/storage/rocksdb/rocksdb/CMakeLists.txt
-@@ -91,7 +91,7 @@ if(MSVC)
+@@ -91,7 +91,7 @@
    option(WITH_XPRESS "build with windows built in compression" OFF)
    include(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty.inc)
  else()
@@ -26,7 +26,7 @@ Description:
      # FreeBSD has jemalloc as default malloc
      # but it does not have all the jemalloc files in include/...
      set(WITH_JEMALLOC ON)
-@@ -413,6 +413,8 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux"
+@@ -413,6 +413,8 @@
    add_definitions(-DOS_LINUX)
  elseif(CMAKE_SYSTEM_NAME MATCHES "SunOS")
    add_definitions(-DOS_SOLARIS)
@@ -37,7 +37,7 @@ Description:
  elseif(CMAKE_SYSTEM_NAME MATCHES "NetBSD")
 --- a/storage/rocksdb/rocksdb/build_tools/build_detect_platform
 +++ b/storage/rocksdb/rocksdb/build_tools/build_detect_platform
-@@ -190,6 +190,17 @@ EOF
+@@ -190,6 +190,17 @@
          PLATFORM_LDFLAGS="$PLATFORM_LDFLAGS -lpthread"
          # PORT_FILES=port/freebsd/freebsd_specific.cc
          ;;
@@ -66,7 +66,7 @@ Description:
  #elif defined(__MACH__)
  #include <Availability.h>
  #include <mach/clock.h>
-@@ -287,7 +287,8 @@ class PosixEnv : public CompositeEnvWrap
+@@ -287,7 +287,8 @@
    }
  
    uint64_t NowNanos() override {
@@ -76,7 +76,7 @@ Description:
      struct timespec ts;
      clock_gettime(CLOCK_MONOTONIC, &ts);
      return static_cast<uint64_t>(ts.tv_sec) * 1000000000 + ts.tv_nsec;
-@@ -307,8 +308,8 @@ class PosixEnv : public CompositeEnvWrap
+@@ -307,8 +308,8 @@
    }
  
    uint64_t NowCPUNanos() override {
@@ -89,7 +89,7 @@ Description:
      return static_cast<uint64_t>(ts.tv_sec) * 1000000000 + ts.tv_nsec;
 --- a/storage/rocksdb/rocksdb/port/stack_trace.cc
 +++ b/storage/rocksdb/rocksdb/port/stack_trace.cc
-@@ -32,7 +32,7 @@ namespace port {
+@@ -32,7 +32,7 @@
  
  namespace {
  
@@ -100,7 +100,7 @@ Description:
  
 --- a/storage/rocksdb/rdb_io_watchdog.h
 +++ b/storage/rocksdb/rdb_io_watchdog.h
-@@ -56,19 +56,19 @@ class Rdb_io_watchdog {
+@@ -56,19 +56,19 @@
    int stop_timers() {
      int ret = 0;
  
@@ -124,7 +124,7 @@ Description:
        }
      }
  
-@@ -93,8 +93,8 @@ class Rdb_io_watchdog {
+@@ -93,8 +93,8 @@
  
   public:
    explicit Rdb_io_watchdog(std::vector<std::string> &&directories)
@@ -137,7 +137,7 @@ Description:
          m_buf(nullptr) {
 --- a/storage/rocksdb/rdb_io_watchdog.cc
 +++ b/storage/rocksdb/rdb_io_watchdog.cc
-@@ -111,7 +111,7 @@ void Rdb_io_watchdog::io_check_callback(
+@@ -111,7 +111,7 @@
      sql_print_warning("Deleting the watchdog I/O timer failed with %d.", errno);
    }
  

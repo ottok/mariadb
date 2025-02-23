@@ -1,10 +1,15 @@
-mariadb-10.6 (1:10.6.19-0ubuntu0.22.04.1) jammy; urgency=medium
+mariadb-10.6 (1:10.6.21-0ubuntu0.22.04.1) jammy-security; urgency=medium
 
+  * SECURITY UPDATE: New upstream version 10.6.21 includes fixes for regressions
+    as noted at https://mariadb.com/kb/en/mariadb-10-6-21-release-notes/ and
+    also fixes the following security vulnerabilities (LP: #2099785):
+    - CVE-2025-21490
+  * Add main.having_cond_pushdown to MTR skiplist on s390x
   * New upstream version 10.6.19. Includes fixes for several severe regressions
     as noted at https://mariadb.com/kb/en/mariadb-10-6-19-release-notes/
   * Add NEWS item to explain new `mariadb-dump` option `--sandbox`
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 02 Sep 2024 17:23:42 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 22 Feb 2025 21:10:25 -0800
 
 mariadb-10.6 (1:10.6.18-0ubuntu0.22.04.1) jammy-security; urgency=medium
 

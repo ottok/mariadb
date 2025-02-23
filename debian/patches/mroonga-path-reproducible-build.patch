@@ -4,7 +4,7 @@ Subject: Mroonga plugin build in MariaDB is not reproducible (Closes: #976984)
 
 --- a/storage/mroonga/vendor/groonga/configure.ac
 +++ b/storage/mroonga/vendor/groonga/configure.ac
-@@ -1505,7 +1505,7 @@ GRN_DEFS="$GRN_DEFS -DGRN_DEFAULT_RELATI
+@@ -1505,7 +1505,7 @@
  AC_SUBST(GRN_DEFS)
  CFLAGS="$CFLAGS $OPT_CFLAGS "
  LIBS="$LIBS $WINDOWS_LIBS"

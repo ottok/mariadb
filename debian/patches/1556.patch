@@ -14,7 +14,7 @@ file.
 
 --- a/.gitignore
 +++ b/.gitignore
-@@ -261,7 +261,7 @@ support-files/my-innodb-heavy-4G.cnf
+@@ -261,7 +261,7 @@
  support-files/my-large.cnf
  support-files/my-medium.cnf
  support-files/my-small.cnf
@@ -25,7 +25,7 @@ file.
  support-files/mysql.service
 --- a/support-files/CMakeLists.txt
 +++ b/support-files/CMakeLists.txt
-@@ -32,6 +32,9 @@ ELSE()
+@@ -32,6 +32,9 @@
    SET(MYSQLD_GROUP "mysql")
    SET(ini_file_extension "cnf")
    SET(HOSTNAME "uname -n")
@@ -35,7 +35,7 @@ file.
  ENDIF()
  
  # XXX: shouldn't we just have variables for all this stuff and centralise
-@@ -51,16 +54,19 @@ ENDIF()
+@@ -51,16 +54,19 @@
  
  IF(UNIX AND NOT WITHOUT_SERVER)
    SET(prefix ${CMAKE_INSTALL_PREFIX})
@@ -57,7 +57,7 @@ file.
  
    IF(INSTALL_SUPPORTFILESDIR)
      INSTALL(FILES magic DESTINATION ${inst_location} COMPONENT SupportFiles)
-@@ -207,8 +213,9 @@ IF(UNIX AND NOT WITHOUT_SERVER)
+@@ -207,8 +213,9 @@
    ENDIF()
  
    IF (INSTALL_SYSCONFDIR)

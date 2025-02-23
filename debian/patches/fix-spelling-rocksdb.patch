@@ -5,7 +5,7 @@ Subject: Fix various spelling errors still found in code
 
 --- a/storage/rocksdb/rocksdb/db/external_sst_file_ingestion_job.cc
 +++ b/storage/rocksdb/rocksdb/db/external_sst_file_ingestion_job.cc
-@@ -46,7 +46,7 @@ Status ExternalSstFileIngestionJob::Prep
+@@ -46,7 +46,7 @@
              TablePropertiesCollectorFactory::Context::kUnknownColumnFamily &&
          f.cf_id != cfd_->GetID()) {
        return Status::InvalidArgument(
@@ -14,7 +14,7 @@ Subject: Fix various spelling errors still found in code
      }
    }
  
-@@ -646,7 +646,7 @@ Status ExternalSstFileIngestionJob::Assi
+@@ -646,7 +646,7 @@
      return Status::InvalidArgument("Global seqno is required, but disabled");
    } else if (file_to_ingest->global_seqno_offset == 0) {
      return Status::InvalidArgument(
@@ -25,7 +25,7 @@ Subject: Fix various spelling errors still found in code
  
 --- a/storage/rocksdb/rocksdb/include/rocksdb/cache.h
 +++ b/storage/rocksdb/rocksdb/include/rocksdb/cache.h
-@@ -60,7 +60,7 @@ struct LRUCacheOptions {
+@@ -60,7 +60,7 @@
    // If greater than zero, the LRU list will be split into a high-pri
    // list and a low-pri list. High-pri entries will be insert to the
    // tail of high-pri list, while low-pri entries will be first inserted to
