@@ -1,4 +1,4 @@
-mariadb (1:10.11.9-0ubuntu0.24.04.1) noble; urgency=medium
+mariadb (1:10.11.11-0ubuntu0.24.04.1) noble; urgency=medium
 
   Fixes related to CVE-2024-21096 may break forwards and backwards
   compatibility on in certain situations when doing logical backup and restore
@@ -15,16 +15,12 @@ mariadb (1:10.11.9-0ubuntu0.24.04.1) noble; urgency=medium
     /*M!999999\- enable the sandbox mode */
 
   Newer version of MariaDB clients strip away the backslash and dash (\-), and
-  then tries to execute the internal command with a dash. However, importing
-  a SQL dump from a newer version on an older version will result in an error:
+  then tries to execute the internal command with a dash.
 
-    $ mariadb --version
-    mariadb  Ver 15.1 Distrib 10.5.23-MariaDB, for debian-linux-gnu (x86_64) using  EditLine wrapper
-    $ mariadb -e '/*M!999999\- enable the sandbox mode */'
-    ERROR at line 1: Unknown command '\-'.
-
-  Importing new logical SQL dumps on old software versions is not advised for
-  potential other compatibility reasons either, so this scenario is likely rare.
+  Older versions of MariaDB client and all versions of MySQL client considers
+  this a comment, and will ignore it. There may however be situations where
+  importing logical SQL dump files may fail due to this, so users should be
+  advised.
 
   Users are best protected from both security issues and interoperability
   issues by using the latest `mariadb-dump` shipped in MariaDB 11.4.3, 10.11.9,
