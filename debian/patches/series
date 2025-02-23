@@ -1,9 +1,7 @@
-0025-Change-the-default-optimization-from-O3-to-O2-in-mys.patch
 rocksdb-kfreebsd.patch
 env-perl-usr-bin-perl.patch
 fix-spelling-rocksdb.patch
 fix-reproducible-builds-rocksdb.patch
 mroonga-mrn-lib-dirs-path-reproducible-build.patch
-fix-spelling-libmariadb.patch
 install-files-into-usr.patch
 1006531-hurd-no-auth-socket.patch

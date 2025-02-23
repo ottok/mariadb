@@ -14,7 +14,7 @@ output. And wiki reference https://en.wikipedia.org/wiki/Uname
 
 --- a/cmake/build_configurations/mysql_release.cmake
 +++ b/cmake/build_configurations/mysql_release.cmake
-@@ -118,7 +118,10 @@ ELSEIF(DEB)
+@@ -121,7 +121,10 @@
    SET(WITH_ZLIB system CACHE STRING "")
    SET(WITH_LIBWRAP ON)
    SET(HAVE_EMBEDDED_PRIVILEGE_CONTROL ON)

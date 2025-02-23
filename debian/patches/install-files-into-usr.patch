@@ -12,7 +12,7 @@ location under /usr.
 
 --- a/cmake/install_layout.cmake
 +++ b/cmake/install_layout.cmake
-@@ -194,10 +194,10 @@ SET(INSTALL_SUPPORTFILESDIR_DEB
+@@ -194,10 +194,10 @@
  SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mysql")
  
  SET(INSTALL_UNIX_ADDRDIR_DEB            "/run/mysqld/mysqld.sock")
