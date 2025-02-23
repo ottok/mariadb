@@ -1,3 +1,15 @@
+mariadb (1:11.4.5-2~exp1) experimental; urgency=medium
+
+  * Upload to experimental to get additional build and CI feedback
+  * Drop unused dh-exec from libmariadb-dev-compat.links
+  * Disable main.view test on sparc64 as it seems permanently failing now
+  * Complete and unfuzz all incomplete translations
+  * Add Hindi and Korean translations for MariaDB debconf templates
+  * Update Lintian overrides/mismatches
+  * Truncate all MTR skiplists for full test feedback from Debian experimental
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 22 Feb 2025 16:19:44 -0800
+
 mariadb (1:11.4.5-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
