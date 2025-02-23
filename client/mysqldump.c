@@ -857,11 +857,11 @@ static void write_footer(FILE *sql_file)
 } /* write_footer */
 
 
-uchar* get_table_key(const char *entry, size_t *length,
-                     my_bool not_used __attribute__((unused)))
+const uchar *get_table_key(const void *entry, size_t *length,
+                           my_bool not_used __attribute__((unused)))
 {
   *length= strlen(entry);
-  return (uchar*) entry;
+  return entry;
 }
 
 
@@ -1096,11 +1096,11 @@ static int get_options(int *argc, char ***argv)
   load_defaults_or_exit("my", load_default_groups, argc, argv);
   defaults_argv= *argv;
 
-  if (my_hash_init(PSI_NOT_INSTRUMENTED, &ignore_database, charset_info, 16, 0, 0,
-        (my_hash_get_key) get_table_key, my_free, 0))
+  if (my_hash_init(PSI_NOT_INSTRUMENTED, &ignore_database, charset_info, 16, 0,
+                   0, get_table_key, my_free, 0))
     return(EX_EOM);
   if (my_hash_init(PSI_NOT_INSTRUMENTED, &ignore_table, charset_info, 16, 0, 0,
-        (my_hash_get_key) get_table_key, my_free, 0))
+                   get_table_key, my_free, 0))
     return(EX_EOM);
   /* Don't copy internal log tables */
   if (my_hash_insert(&ignore_table, (uchar*) my_strdup(PSI_NOT_INSTRUMENTED,
@@ -1116,7 +1116,7 @@ static int get_options(int *argc, char ***argv)
     return(EX_EOM);
 
   if (my_hash_init(PSI_NOT_INSTRUMENTED, &ignore_data, charset_info, 16, 0, 0,
-                   (my_hash_get_key) get_table_key, my_free, 0))
+                   get_table_key, my_free, 0))
     return(EX_EOM);
 
   if ((ho_error= handle_options(argc, argv, my_long_options, get_one_option)))
@@ -1765,7 +1765,7 @@ static int switch_character_set_results(MYSQL *mysql, const char *cs_name)
   query_length= my_snprintf(query_buffer,
                             sizeof (query_buffer),
                             "SET SESSION character_set_results = '%s'",
-                            (const char *) cs_name);
+                            cs_name);
 
   return mysql_real_query(mysql, query_buffer, (ulong)query_length);
 }
@@ -3208,7 +3208,7 @@ static uint get_table_structure(const char *table, const char *db, char *table_t
 
           fprintf(sql_file,
                   "SET @saved_cs_client     = @@character_set_client;\n"
-                  "SET character_set_client = utf8;\n"
+                  "SET character_set_client = utf8mb4;\n"
                   "/*!50001 CREATE VIEW %s AS SELECT\n",
                   result_table);
 
@@ -3276,7 +3276,7 @@ static uint get_table_structure(const char *table, const char *db, char *table_t
       {
         fprintf(sql_file,
                 "/*!40101 SET @saved_cs_client     = @@character_set_client */;\n"
-                "/*!40101 SET character_set_client = utf8 */;\n"
+                "/*!40101 SET character_set_client = utf8mb4 */;\n"
                 "%s%s;\n"
                 "/*!40101 SET character_set_client = @saved_cs_client */;\n",
                 is_log_table ? "CREATE TABLE IF NOT EXISTS " : "",

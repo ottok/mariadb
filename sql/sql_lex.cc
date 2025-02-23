@@ -3052,6 +3052,7 @@ void st_select_lex::init_query()
   first_natural_join_processing= 1;
   first_cond_optimization= 1;
   first_rownum_optimization= true;
+  leaf_tables_saved= false;
   no_wrap_view_item= 0;
   exclude_from_table_unique_test= 0;
   in_tvc= 0;
@@ -3661,7 +3662,7 @@ bool st_select_lex::setup_ref_array(THD *thd, uint order_group_num)
     return false;
 
   Item **array= static_cast<Item**>(
-    thd->active_stmt_arena_to_use()->alloc(sizeof(Item*) * n_elems));
+    thd->active_stmt_arena_to_use()->calloc(sizeof(Item*) * n_elems));
   if (likely(array != NULL))
     ref_pointer_array= Ref_ptr_array(array, n_elems);
   return array == NULL;
@@ -3817,6 +3818,8 @@ void st_select_lex_unit::print(String *str, enum_query_type query_type)
   }
   else if (saved_fake_select_lex)
     saved_fake_select_lex->print_limit(thd, str, query_type);
+
+  print_lock_from_the_last_select(str);
 }
 
 
@@ -10715,6 +10718,22 @@ bool SELECT_LEX_UNIT::set_lock_to_the_last_select(Lex_select_lock l)
   }
   return FALSE;
 }
+
+
+void SELECT_LEX_UNIT::print_lock_from_the_last_select(String *str)
+{
+  SELECT_LEX *sel= first_select();
+  while (sel->next_select())
+    sel= sel->next_select();
+  if(sel->braces)
+    return; // braces processed in st_select_lex::print
+
+  // lock type
+  sel->print_lock_type(str);
+
+  return;
+}
+
 
 /**
   Generate unique name for generated derived table for this SELECT

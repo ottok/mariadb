@@ -1067,7 +1067,8 @@ default_encrypt_list only when
 default encrypt */
 static bool fil_crypt_must_remove(const fil_space_t &space)
 {
-  ut_ad(space.purpose == FIL_TYPE_TABLESPACE);
+  ut_ad(!space.is_temporary());
+  ut_ad(!space.is_being_imported());
   fil_space_crypt_t *crypt_data = space.crypt_data;
   mysql_mutex_assert_owner(&fil_system.mutex);
   const ulong encrypt_tables= srv_encrypt_tables;
@@ -1103,7 +1104,8 @@ fil_crypt_space_needs_rotation(
 	fil_space_t* space = &*state->space;
 
 	ut_ad(space->referenced());
-	ut_ad(space->purpose == FIL_TYPE_TABLESPACE);
+	ut_ad(!space->is_temporary());
+	ut_ad(!space->is_being_imported());
 
 	fil_space_crypt_t *crypt_data = space->crypt_data;
 
@@ -1362,7 +1364,7 @@ the encryption parameters were changed
 @retval nullptr upon reaching the end of the iteration */
 inline fil_space_t *fil_system_t::default_encrypt_next(fil_space_t *space,
                                                        bool recheck,
-                                                       bool encrypt)
+                                                       bool encrypt) noexcept
 {
   mysql_mutex_assert_owner(&mutex);
 
@@ -1429,7 +1431,7 @@ encryption parameters were changed
 @retval fil_system.temp_space if there is no work to do
 @retval end() upon reaching the end of the iteration */
 space_list_t::iterator fil_space_t::next(space_list_t::iterator space,
-                                         bool recheck, bool encrypt)
+                                         bool recheck, bool encrypt) noexcept
 {
   mysql_mutex_lock(&fil_system.mutex);
 
@@ -1455,7 +1457,7 @@ space_list_t::iterator fil_space_t::next(space_list_t::iterator space,
 
     for (; space != fil_system.space_list.end(); ++space)
     {
-      if (space->purpose != FIL_TYPE_TABLESPACE)
+      if (space->is_temporary() || space->is_being_imported())
         continue;
       const uint32_t n= space->acquire_low();
       if (UNIV_LIKELY(!(n & (STOPPING | CLOSING))))
@@ -1478,7 +1480,7 @@ space_list_t::iterator fil_space_t::next(space_list_t::iterator space,
 static bool fil_crypt_find_space_to_rotate(
 	key_state_t*		key_state,
 	rotate_thread_t*	state,
-	bool*			recheck)
+	bool*			recheck) noexcept
 {
 	/* we need iops to start rotating */
 	do {
@@ -2005,10 +2007,18 @@ static void fil_crypt_complete_rotate_space(rotate_thread_t* state)
 	mysql_mutex_unlock(&crypt_data->mutex);
 }
 
+#ifdef UNIV_PFS_THREAD
+mysql_pfs_key_t page_encrypt_thread_key;
+#endif /* UNIV_PFS_THREAD */
+
 /** A thread which monitors global key state and rotates tablespaces
 accordingly */
 static void fil_crypt_thread()
 {
+	my_thread_init();
+#ifdef UNIV_PFS_THREAD
+	pfs_register_thread(page_encrypt_thread_key);
+#endif /* UNIV_PFS_THREAD */
 	mysql_mutex_lock(&fil_crypt_threads_mutex);
 	rotate_thread_t thr(srv_n_fil_crypt_threads_started++);
 	pthread_cond_signal(&fil_crypt_cond); /* signal that we started */
@@ -2086,6 +2096,7 @@ wait_for_work:
 	pthread_cond_signal(&fil_crypt_cond); /* signal that we stopped */
 	mysql_mutex_unlock(&fil_crypt_threads_mutex);
 
+	my_thread_end();
 #ifdef UNIV_PFS_THREAD
 	pfs_delete_thread();
 #endif
@@ -2137,9 +2148,9 @@ static void fil_crypt_default_encrypt_tables_fill()
 	mysql_mutex_assert_owner(&fil_system.mutex);
 
 	for (fil_space_t& space : fil_system.space_list) {
-		if (space.purpose != FIL_TYPE_TABLESPACE
-		    || space.is_in_default_encrypt
+		if (space.is_in_default_encrypt
 		    || UT_LIST_GET_LEN(space.chain) == 0
+		    || space.is_temporary() || space.is_being_imported()
 		    || !space.acquire_if_not_stopped()) {
 			continue;
 		}
