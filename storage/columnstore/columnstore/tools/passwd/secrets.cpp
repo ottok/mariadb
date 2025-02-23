@@ -13,7 +13,6 @@
 #include "secrets.h"
 
 #include <cctype>
-#include <array>
 #include <fstream>
 #include <pwd.h>
 #include <sys/stat.h>
@@ -33,6 +32,7 @@
 #include "exceptclasses.h"
 #include "columnstoreversion.h"
 #include "vlarray.h"
+#include <array>
 
 using std::string;
 
