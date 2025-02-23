@@ -1976,18 +1976,18 @@ int Query_log_event::do_apply_event(rpl_group_info *rgi,
   {
     bool is_rb_alter= gtid_flags_extra & Gtid_log_event::FL_ROLLBACK_ALTER_E1;
 
-#ifdef WITH_WSREP
-    if (!wsrep_thd_is_applying(thd))
-#endif
-      thd->set_time(when, when_sec_part);
+    thd->set_time(when, when_sec_part);
     thd->set_query_and_id((char*)query_arg, q_len_arg,
                           thd->charset(), next_query_id());
     thd->variables.pseudo_thread_id= thread_id;		// for temp tables
     DBUG_PRINT("query",("%s", thd->query()));
 
 #ifdef WITH_WSREP
-    WSREP_DEBUG("Query_log_event thread=%llu for query=%s",
-		thd_get_thread_id(thd), wsrep_thd_query(thd));
+    if (WSREP(thd))
+    {
+      WSREP_DEBUG("Query_log_event thread=%llu for query=%s",
+		  thd_get_thread_id(thd), wsrep_thd_query(thd));
+    }
 #endif
 
     if (unlikely(!(expected_error= !is_rb_alter ? error_code : 0)) ||
@@ -2705,10 +2705,10 @@ static void check_and_remove_stale_alter(Relay_log_info *rli)
   {
     DBUG_ASSERT(info->state == start_alter_state::REGISTERED);
 
-    sql_print_warning("ALTER query started at %u-%u-%llu could not "
+    sql_print_warning("ALTER query started at %u-%lu-%llu could not "
                       "be completed because of unexpected master server "
-                      "or its binlog change", info->sa_seq_no, // todo:gtid
-                      0, 0);
+                      "or its binlog change", info->domain_id,
+                      mi->master_id, info->sa_seq_no);
     info_iterator.remove();
     mysql_mutex_lock(&mi->start_alter_lock);
     info->state= start_alter_state::ROLLBACK_ALTER;
@@ -3180,10 +3180,7 @@ int Load_log_event::do_apply_event(NET* net, rpl_group_info *rgi,
   */
   if (rpl_filter->db_ok(thd->db.str))
   {
-#ifdef WITH_WSREP
-    if (!wsrep_thd_is_applying(thd))
-#endif
-      thd->set_time(when, when_sec_part);
+    thd->set_time(when, when_sec_part);
     thd->set_query_id(next_query_id());
     thd->get_stmt_da()->opt_clear_warning_info(thd->query_id);
 
@@ -3735,7 +3732,12 @@ Gtid_log_event::peek(const uchar *event_start, size_t event_len,
 bool
 Gtid_log_event::write()
 {
-  uchar buf[GTID_HEADER_LEN+2+sizeof(XID) + /* flags_extra: */ 1+4];
+  uchar buf[GTID_HEADER_LEN+2
+    + sizeof(XID)
+    + 1 // flags_extra:
+    + 1 // extra_engines
+    + 8 // sa_seq_no
+  ];
   size_t write_len= 13;
 
   int8store(buf, seq_no);
@@ -4455,7 +4457,7 @@ int Xid_apply_log_event::do_apply_event(rpl_group_info *rgi)
 #endif
   }
 
-  general_log_print(thd, COM_QUERY, get_query());
+  general_log_print(thd, COM_QUERY, "%s", get_query());
   thd->variables.option_bits&= ~OPTION_GTID_BEGIN;
   res= do_commit();
   if (!res && rgi->gtid_pending)
@@ -5387,7 +5389,7 @@ int Execute_load_log_event::do_apply_event(rpl_group_info *rgi)
   char fname[FN_REFLEN+10];
   char *ext;
   int fd;
-  int error= 1;
+  int error= 1, read_error;
   IO_CACHE file;
   Load_log_event *lev= 0;
   Relay_log_info const *rli= rgi->rli;
@@ -5406,7 +5408,7 @@ int Execute_load_log_event::do_apply_event(rpl_group_info *rgi)
     goto err;
   }
   if (!(lev= (Load_log_event*)
-        Log_event::read_log_event(&file,
+        Log_event::read_log_event(&file, &read_error,
                                   rli->relay_log.description_event_for_exec,
                                   opt_slave_sql_verify_checksum)) ||
       lev->get_type_code() != NEW_LOAD_EVENT)
@@ -5962,15 +5964,17 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
     if (unlikely(open_and_lock_tables(thd, rgi->tables_to_lock, FALSE, 0)))
     {
 #ifdef WITH_WSREP
-      if (WSREP(thd))
+      if (WSREP(thd) && !thd->slave_thread)
       {
-        WSREP_WARN("BF applier failed to open_and_lock_tables: %u, fatal: %d "
+        WSREP_WARN("BF applier thread=%lu failed to open_and_lock_tables for "
+                   "%s, fatal: %d "
                    "wsrep = (exec_mode: %d conflict_state: %d seqno: %lld)",
-                    thd->get_stmt_da()->sql_errno(),
-                    thd->is_fatal_error,
-                    thd->wsrep_cs().mode(),
-                    thd->wsrep_trx().state(),
-                    (long long) wsrep_thd_trx_seqno(thd));
+                   thd_get_thread_id(thd),
+                   thd->get_stmt_da()->message(),
+                   thd->is_fatal_error,
+                   thd->wsrep_cs().mode(),
+                   thd->wsrep_trx().state(),
+                   wsrep_thd_trx_seqno(thd));
       }
 #endif /* WITH_WSREP */
       if (thd->is_error() &&
@@ -8318,7 +8322,7 @@ void issue_long_find_row_warning(Log_event_type type,
                             "while looking up records to be processed. Consider adding a "
                             "primary key (or unique key) to the table to improve "
                             "performance.",
-                            evt_type, table_name, (long) delta, scan_type);
+                            evt_type, table_name, delta, scan_type);
     }
   }
 }

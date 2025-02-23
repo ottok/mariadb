@@ -50,6 +50,7 @@
 #include "mysql.h"
 #include <math.h> /* ceil() */
 #include <limits.h>
+#include <stdint.h>
 
 #ifdef WIN32
 #include <malloc.h>
@@ -992,7 +993,7 @@ static void convert_from_double(MYSQL_BIND *r_param, const MYSQL_FIELD *field, d
        if (field->length < length || field->length > MAX_DOUBLE_STRING_REP_LENGTH - 1)
          break;
        ma_bmove_upp(buff + field->length, buff + length, length);
-       /* coverity [bad_memset] */
+       /* coverity[bad_memset] */
        memset((void*) buff, (int) '0', field->length - length);
        length= field->length;
      }
@@ -1105,6 +1106,7 @@ static void convert_to_datetime(MYSQL_TIME *t, unsigned char **row, uint len, en
   }
 }
 
+static const uint32_t sec_part_digits[]= {1000000, 100000, 10000, 1000, 100, 10, 1};
 
 /* {{{ ps_fetch_datetime */
 static
@@ -1145,29 +1147,25 @@ void ps_fetch_datetime(MYSQL_BIND *r_param, const MYSQL_FIELD * field,
         length= sprintf(dtbuffer, "%04u-%02u-%02u", tm.year, tm.month, tm.day);
         break;
       case MYSQL_TYPE_TIME:
-        length= sprintf(dtbuffer, "%s%02u:%02u:%02u", (tm.neg ? "-" : ""), tm.hour, tm.minute, tm.second);
-        if (field->decimals && field->decimals <= 6)
+        if (field->decimals && (field->decimals <= SEC_PART_DIGITS ||
+                               (field->decimals == AUTO_SEC_PART_DIGITS && tm.second_part)))
         {
-          char ms[8];
-          sprintf(ms, ".%06lu", tm.second_part);
-          if (field->decimals < 6)
-            ms[field->decimals + 1]= 0;
-          length+= strlen(ms);
-          strcat(dtbuffer, ms);
-        }
+          uint8_t decimals= (field->decimals == AUTO_SEC_PART_DIGITS) ? SEC_PART_DIGITS : field->decimals;
+          length= sprintf(dtbuffer, "%s%02u:%02u:%02u.%0*u", (tm.neg ? "-" : ""), tm.hour, tm.minute, tm.second,
+                          decimals, (uint32_t)(tm.second_part / sec_part_digits[decimals]));
+        } else
+          length= sprintf(dtbuffer, "%s%02u:%02u:%02u", (tm.neg ? "-" : ""), tm.hour, tm.minute, tm.second);
         break;
       case MYSQL_TYPE_DATETIME:
       case MYSQL_TYPE_TIMESTAMP:
-        length= sprintf(dtbuffer, "%04u-%02u-%02u %02u:%02u:%02u", tm.year, tm.month, tm.day, tm.hour, tm.minute, tm.second);
-        if (field->decimals && field->decimals <= 6)
+        if (field->decimals && (field->decimals <= SEC_PART_DIGITS ||
+                               (field->decimals == AUTO_SEC_PART_DIGITS && tm.second_part)))
         {
-          char ms[8];
-          sprintf(ms, ".%06lu", tm.second_part);
-          if (field->decimals < 6)
-            ms[field->decimals + 1]= 0;
-          length+= strlen(ms);
-          strcat(dtbuffer, ms);
-        }
+          uint8_t decimals= (field->decimals == AUTO_SEC_PART_DIGITS) ? SEC_PART_DIGITS : field->decimals;
+          length= sprintf(dtbuffer, "%04u-%02u-%02u %02u:%02u:%02u.%0*u", tm.year, tm.month, tm.day, tm.hour, tm.minute, tm.second,
+                          decimals, (uint32_t)(tm.second_part / sec_part_digits[decimals]));
+        } else
+          length= sprintf(dtbuffer, "%04u-%02u-%02u %02u:%02u:%02u", tm.year, tm.month, tm.day, tm.hour, tm.minute, tm.second);
         break;
       default:
         dtbuffer[0]= 0;

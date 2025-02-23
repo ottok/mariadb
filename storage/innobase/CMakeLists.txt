@@ -49,7 +49,7 @@ IF(UNIX)
       LINK_LIBRARIES(numa)
     ENDIF()
     IF(CMAKE_SIZEOF_VOID_P EQUAL 8)
-      IF(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch|AARCH|p(ower)?pc|x86_|amd)64")
+      IF(CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch|AARCH|p(ower)?pc|x86_|amd|loongarch|riscv)64")
         OPTION(WITH_INNODB_PMEM "Support memory-mapped InnoDB redo log" ON)
       ELSE() # Disable by default on ISA that are not covered by our CI
         OPTION(WITH_INNODB_PMEM "Support memory-mapped InnoDB redo log" OFF)
@@ -495,6 +495,14 @@ IF(MSVC)
   # silence "switch statement contains 'default' but no 'case' label
   # on generated file.
   TARGET_COMPILE_OPTIONS(innobase PRIVATE "/wd4065")
+ENDIF()
+
+OPTION(INNODB_ENABLE_XAP_UNLOCK_UNMODIFIED_FOR_PRIMARY "Enable innodb_enable_xap_unlock_unmodified_for_primary_debug system variable even for release build" OFF)
+IF(INNODB_ENABLE_XAP_UNLOCK_UNMODIFIED_FOR_PRIMARY)
+  ADD_COMPILE_FLAGS(
+     lock/lock0lock.cc
+     handler/ha_innodb.cc
+     COMPILE_FLAGS "-DINNODB_ENABLE_XAP_UNLOCK_UNMODIFIED_FOR_PRIMARY")
 ENDIF()
 
 IF(NOT (PLUGIN_INNOBASE STREQUAL DYNAMIC))
