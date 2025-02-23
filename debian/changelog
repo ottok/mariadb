@@ -1,5 +1,6 @@
 mariadb (1:10.11.11-0+deb12u1) bookworm; urgency=medium
 
+  [ Otto Kekäläinen ]
   * New upstream version 10.11.11. Includes fixes for several defects
     as noted at https://mariadb.com/kb/en/mariadb-10-11-11-release-notes/ as
     well the following security issues:
@@ -9,18 +10,31 @@ mariadb (1:10.11.11-0+deb12u1) bookworm; urgency=medium
   * Includes fix for main.having_cond_pushdown test failure on s390x which also
     affected builds in Debian (https://jira.mariadb.org/browse/MDEV-34650)
   * Previous version 10.11.7 included fix for InnoDB hang (Closes: #1069895)
+  * Include Debian packaging bugfixes done upstream:
+    - MDEV-35907: debian-start script fails when using non-standard socket path
+    - Set CAP_IPC_LOCK capability if possible
   * Update server trace to include new parameters and values. This includes now
     MariaDB client parameter 'quick-max-column-width' and new MariaDB Server
     parameters 'innodb-log-file-mmap' and 'optimizer-join-limit-pref-ratio'.
     Also the parameters 'innodb-lru-flush-size' and
     'innodb-purge-rseg-truncate-frequency' seems to have been removed, while
     'optimizer-adjust-secondary-key-costs' got new default values.
-  * Add Lintian overrides for new upstream documentation JavaScript files
-  * Skip test main.mysqld--help-aria due to MDEV-34733
-  * Make d/watch more specific to circumvent bug in .10 vs .11 detection
   * Update configuration traces to match innodb_log_file_mmap changes done in
     MDEV-35785
   * Update configuration traces with new query allocator values from MDEV-35750
+  * Skip test main.mysqld--help-aria due to MDEV-34733
+  * Include several restart/shutdown related fixes that have been in Debian
+    unstable in MariaDB 11.4 for a long time, and which are likely needed to
+    avoid occasional shutdown issues, in particular on upgrades (LP: #2034125)
+    in both Debian and Ubuntu
+    - Make SysV init more verbose in case of MariaDB start failures (Related: #1033234)
+    - Limit check of running mysqld/mariadbd to system users (Closes: #1032047)
+    - When shutting down 'mariadbd', fallback to 'mysqld'
+  * Add Lintian overrides for new upstream documentation JavaScript files
+  * Make d/watch more specific to circumvent bug in .10 vs .11 detection
+
+  [ Phil Dibowitz ]
+  * Add some info on getting back to passwordless root (Closes: #1088133)
 
  -- Otto Kekäläinen <otto@debian.org>  Tue, 18 Feb 2025 16:56:41 -0800
 
