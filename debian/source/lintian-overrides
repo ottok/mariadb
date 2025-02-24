@@ -93,3 +93,6 @@ very-long-line-length-in-source-file * [sql-bench/test-ATIS.sh:*]
 very-long-line-length-in-source-file * [sql-bench/test-wisconsin.sh:*]
 very-long-line-length-in-source-file * [storage/columnstore/columnstore/utils/windowfunction/windowfunctiontype.cpp:*]
 very-long-line-length-in-source-file * [strings/ctype-czech.c:*]
+# New in MariaDB 11.4.4 and should be fixed upstream, but not a severe issue
+source-is-missing [storage/maria/libmarias3/docs/_themes/sphinx_rtd_theme/static/js/badge_only.js]
+source-is-missing [storage/maria/libmarias3/docs/_themes/sphinx_rtd_theme/static/js/theme.js]
