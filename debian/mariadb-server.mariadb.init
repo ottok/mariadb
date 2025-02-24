@@ -247,7 +247,7 @@ case "${1:-''}" in
       done
       if test -z "$server_down"
       then
-        killall -9 mariadbd || killall -15 mysqld
+        killall -9 mariadbd || killall -9 mysqld
       fi
     fi
   fi
