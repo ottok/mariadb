@@ -1,13 +1,29 @@
 mariadb-10.6 (1:10.6.21-0ubuntu0.22.04.1) jammy-security; urgency=medium
 
-  * SECURITY UPDATE: New upstream version 10.6.21 includes fixes for regressions
-    as noted at https://mariadb.com/kb/en/mariadb-10-6-21-release-notes/ and
-    also fixes the following security vulnerabilities (LP: #2099785):
-    - CVE-2025-21490
-  * Add main.having_cond_pushdown to MTR skiplist on s390x
-  * New upstream version 10.6.19. Includes fixes for several severe regressions
-    as noted at https://mariadb.com/kb/en/mariadb-10-6-19-release-notes/
-  * Add NEWS item to explain new `mariadb-dump` option `--sandbox`
+[ Otto Kekäläinen ]
+* SECURITY UPDATE: New upstream version 10.6.21 includes fixes for regressions
+  as noted at https://mariadb.com/kb/en/mariadb-10-6-21-release-notes/ and
+  also fixes the following security vulnerabilities (LP: #2099785):
+  - CVE-2025-21490
+* New upstream version 10.6.20. Includes fixes for several severe regressions
+  as noted at https://mariadb.com/kb/en/mariadb-10-6-20-release-notes/
+* New upstream version 10.6.19. Includes fixes for several severe regressions
+  as noted at https://mariadb.com/kb/en/mariadb-10-6-19-release-notes/
+* Include Debian packaging bugfixes done upstream:
+  - MDEV-35907: debian-start script fails when using non-standard socket path
+* Add main.having_cond_pushdown to MTR skiplist on s390x
+* Include several restart/shutdown related fixes that have been in Debian
+  unstable in MariaDB 11.4 for a long time, and which are likely needed to
+  avoid occasional shutdown issues, in particular on upgrades (LP: #2011293)
+  in both Debian and Ubuntu
+  - Make SysV init more verbose in case of MariaDB start failures (Related: #1033234)
+  - Limit check of running mysqld/mariadbd to system users (Related: #1032047)
+  - When shutting down 'mariadbd', fallback to 'mysqld'
+* Add Lintian overrides for new issues that are not relevant for maintenance
+* Add NEWS item to explain new `mariadb-dump` option `--sandbox`
+
+[ Phil Dibowitz ]
+* Add some info on getting back to passwordless root (Related: #1088133)
 
  -- Otto Kekäläinen <otto@debian.org>  Sat, 22 Feb 2025 21:10:25 -0800
 
