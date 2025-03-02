@@ -29,10 +29,6 @@
 #ifndef _log_event_h
 #define _log_event_h
 
-#if defined(USE_PRAGMA_INTERFACE) && defined(MYSQL_SERVER)
-#pragma interface			/* gcc class implementation */
-#endif
-
 #include <my_bitmap.h>
 #include "rpl_constants.h"
 #include <vector>
@@ -332,6 +328,17 @@ class String;
 
 #define Q_HRNOW 128
 #define Q_XID   129
+
+/*
+  When sending transactions to old slaves that don't support GTID events, the
+  GTID event is over-written (in-place, i.e. within the same allocated memory)
+  to be a BEGIN query event. If the header length of the original GTID event
+  exceeds the standard length of the Query event header, Q_DUMMY bytes pad the
+  status var section of the Query header so the structure of the Query event
+  is valid. Old slaves will see the first Q_DUMMY byte, not recognize it, and
+  skip reading the rest of the status var section.
+*/
+#define Q_DUMMY 255
 
 #define Q_GTID_FLAGS3 130
 
@@ -806,6 +813,10 @@ static inline bool LOG_EVENT_IS_ROW_V2(enum Log_event_type type)
     (type >= WRITE_ROWS_COMPRESSED_EVENT && type <= DELETE_ROWS_COMPRESSED_EVENT);
 }
 
+static inline bool LOG_EVENT_IS_LOAD_DATA(enum Log_event_type type)
+{
+  return type == LOAD_EVENT || type == NEW_LOAD_EVENT;
+}
 
 /*
    The number of types we handle in Format_description_log_event (UNKNOWN_EVENT
@@ -1293,7 +1304,7 @@ public:
   my_time_t when;
   ulong     when_sec_part;
   /* The number of seconds the query took to run on the master. */
-  ulong exec_time;
+  my_time_t exec_time;
   /* Number of bytes written by write() function */
   size_t data_written;
 
@@ -1414,8 +1425,8 @@ public:
     log; used by SHOW BINLOG EVENTS, the binlog_dump thread on the
     master (reads master's binlog), the slave IO thread (reads the
     event sent by binlog_dump), the slave SQL thread (reads the event
-    from the relay log).  If mutex is 0, the read will proceed without
-    mutex.  We need the description_event to be able to parse the
+    from the relay log).
+    We need the description_event to be able to parse the
     event (to know the post-header's size); in fact in read_log_event
     we detect the event's type, then call the specific event's
     constructor and pass description_event as an argument.
@@ -1437,8 +1448,6 @@ public:
   /**
     Reads an event from a binlog or relay log. Used by the dump thread
     this method reads the event into a raw buffer without parsing it.
-
-    @Note If mutex is 0, the read will proceed without mutex.
 
     @Note If a log name is given than the method will check if the
     given binlog is still active.
@@ -3335,6 +3344,14 @@ public:
   uint64 sa_seq_no;   // start alter identifier for CA/RA
 #ifdef MYSQL_SERVER
   event_xid_t xid;
+  /*
+    Pad the event to this size if it is not zero. It is only used for renaming
+    a binlog cache to binlog file. There is some reserved space for gtid event
+    and the events at the begin of the binlog file. There must be some space
+    left after the events are filled. Thus the left space is padded into the
+    gtid event with 0.
+  */
+  uint64 pad_to_size;
 #else
   event_mysql_xid_t xid;
 #endif
@@ -3350,6 +3367,7 @@ public:
     When zero the event does not contain that information.
   */
   uint8 extra_engines;
+  my_thread_id thread_id;
 
   /* Flags2. */
 
@@ -3395,8 +3413,15 @@ public:
   static const uchar FL_START_ALTER_E1= 2;
   static const uchar FL_COMMIT_ALTER_E1= 4;
   static const uchar FL_ROLLBACK_ALTER_E1= 8;
+  static const uchar FL_EXTRA_THREAD_ID= 16; // thread_id like in BEGIN Query
 
 #ifdef MYSQL_SERVER
+  static const uint max_data_length= GTID_HEADER_LEN + 2 + sizeof(XID)
+                                     + 1 /* flags_extra: */
+                                     + 1 /* Extra Engines */
+                                     + 8 /* sa_seq_no */
+                                     + 4 /* FL_EXTRA_THREAD_ID */;
+
   Gtid_log_event(THD *thd_arg, uint64 seq_no, uint32 domain_id, bool standalone,
                  uint16 flags, bool is_transactional, uint64 commit_id,
                  bool has_xid= false, bool is_ro_1pc= false);
@@ -4925,7 +4950,7 @@ protected:
                         &m_curr_row_end, &m_master_reclength, m_rows_end);
   }
   bool process_triggers(trg_event_type event, trg_action_time_type time_type,
-                        bool old_row_is_record1);
+                        bool old_row_is_record1, bool *skip_row_indicator);
 
   /**
     Helper function to check whether there is an auto increment
@@ -5523,6 +5548,8 @@ int row_log_event_uncompress(const Format_description_log_event
                              const uchar *src, ulong src_len,
                              uchar* buf, ulong buf_size, bool *is_malloc,
                              uchar **dst, ulong *newlen);
+time_t query_event_get_end_time(
+    const uchar *buf, const Format_description_log_event *description_event);
 
 bool is_parallel_retry_error(rpl_group_info *rgi, int err);
 

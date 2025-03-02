@@ -36,7 +36,6 @@ static longlong getopt_ll(char *arg, const struct my_option *optp, int *err);
 static ulonglong getopt_ull(char *, const struct my_option *, int *);
 static double getopt_double(char *arg, const struct my_option *optp, int *err);
 static void init_variables(const struct my_option *, init_func_p);
-static void init_one_value(const struct my_option *, void *, longlong);
 static void fini_one_value(const struct my_option *, void *, longlong);
 static int setval(const struct my_option *, void *, char *, my_bool, const char *);
 static char *check_struct_option(char *cur_arg, char *key_name);
@@ -87,6 +86,7 @@ my_bool my_handle_options_init_variables = 1;
 
 my_getopt_value my_getopt_get_addr= 0;
 
+ATTRIBUTE_FORMAT(printf, 2, 3)
 static void default_reporter(enum loglevel level, const char *format, ...)
 {
   va_list args;
@@ -109,6 +109,13 @@ union ull_dbl
   ulonglong ull;
   double dbl;
 };
+
+
+static inline int cmp_opt_name(const char *a, const char *b)
+{
+  return my_strcasecmp_latin1(a, b);
+}
+
 
 /**
   Returns an ulonglong value containing a raw
@@ -173,6 +180,24 @@ static void validate_value(const char *key, const char *value,
 #endif
 
 #define SET_HO_ERROR_AND_CONTINUE(e) { ho_error= (e); (*argc)--; continue; }
+
+void warn_deprecated(const struct my_option *optp)
+{
+  char buf1[NAME_CHAR_LEN + 3];
+  strxmov(buf1, "--", optp->name, NullS);
+  convert_underscore_to_dash(buf1, strlen(buf1));
+  if (IS_DEPRECATED_NO_REPLACEMENT(optp->deprecation_substitute))
+    my_getopt_error_reporter(WARNING_LEVEL, "%s is deprecated and will be "
+      "removed in a future release", buf1);
+  else
+  {
+    char buf2[NAME_CHAR_LEN + 3];
+    strxmov(buf2, "--", optp->deprecation_substitute, NullS);
+    convert_underscore_to_dash(buf2, strlen(buf2));
+    my_getopt_error_reporter(WARNING_LEVEL, "%s is deprecated and will be "
+      "removed in a future release. Please use %s instead.", buf1, buf2);
+  }
+}
 
 /**
   Handle command line options.
@@ -253,7 +278,7 @@ int handle_options(int *argc, char ***argv, const struct my_option *longopts,
   (*argc)--; /* Skip the program name */
   (*argv)++; /*      --- || ----      */
   if (my_handle_options_init_variables)
-    init_variables(longopts, init_one_value);
+    init_variables(longopts, my_getopt_init_one_value);
 
   is_cmdline_arg= !is_file_marker(**argv);
 
@@ -474,12 +499,12 @@ int handle_options(int *argc, char ***argv, const struct my_option *longopts,
 	    */
 	    (*argc)--;
 	    if (!optend || *optend == '1' ||
-		!my_strcasecmp(&my_charset_latin1, optend, "true") ||
-		!my_strcasecmp(&my_charset_latin1, optend, "on"))
+		!cmp_opt_name(optend, "true") ||
+		!cmp_opt_name(optend, "on"))
 	      *((my_bool*) value)= (my_bool) 1;
 	    else if (*optend == '0' ||
-		     !my_strcasecmp(&my_charset_latin1, optend, "false") ||
-                     !my_strcasecmp(&my_charset_latin1, optend, "off"))
+		     !cmp_opt_name(optend, "false") ||
+                     !cmp_opt_name(optend, "off"))
 	      *((my_bool*) value)= (my_bool) 0;
 	    else
 	    {
@@ -493,6 +518,8 @@ int handle_options(int *argc, char ***argv, const struct my_option *longopts,
                                enabled_my_option : disabled_my_option,
                                filename))
               SET_HO_ERROR_AND_CONTINUE(EXIT_ARGUMENT_INVALID)
+            if (optp->deprecation_substitute)
+              warn_deprecated(optp);
 	    continue;
 	  }
 	  argument= optend;
@@ -568,6 +595,8 @@ int handle_options(int *argc, char ***argv, const struct my_option *longopts,
 		*((my_bool*) optp->value)= (my_bool) 1;
                 if (get_one_option(optp, argument, filename))
                   SET_HO_ERROR_AND_CONTINUE(EXIT_UNSPECIFIED_ERROR)
+                if (optp->deprecation_substitute)
+                  warn_deprecated(optp);
 		continue;
 	      }
 	      else if (optp->arg_type == REQUIRED_ARG ||
@@ -588,6 +617,8 @@ int handle_options(int *argc, char ***argv, const struct my_option *longopts,
                       *((my_bool*) optp->value)= (my_bool) 1;
                     if (get_one_option(optp, argument, filename))
                       SET_HO_ERROR_AND_CONTINUE(EXIT_UNSPECIFIED_ERROR)
+                    if (optp->deprecation_substitute)
+                      warn_deprecated(optp);
                     continue;
                   }
 		  /* Check if there are more arguments after this one */
@@ -609,6 +640,8 @@ int handle_options(int *argc, char ***argv, const struct my_option *longopts,
 		SET_HO_ERROR_AND_CONTINUE(error)
               if (get_one_option(optp, argument, filename))
                 SET_HO_ERROR_AND_CONTINUE(EXIT_UNSPECIFIED_ERROR)
+              if (optp->deprecation_substitute)
+                warn_deprecated(optp);
 	      break;
 	    }
 	  }
@@ -656,6 +689,8 @@ int handle_options(int *argc, char ***argv, const struct my_option *longopts,
 	SET_HO_ERROR_AND_CONTINUE(error)
       if (get_one_option(optp, argument, filename))
         SET_HO_ERROR_AND_CONTINUE(EXIT_UNSPECIFIED_ERROR)
+      if (optp->deprecation_substitute)
+        warn_deprecated(optp);
 
       (*argc)--; /* option handled (long), decrease argument count */
     }
@@ -732,13 +767,13 @@ static my_bool get_bool_argument(const struct my_option *opts,
 {
   DBUG_ENTER("get_bool_argument");
 
-  if (!my_strcasecmp(&my_charset_latin1, argument, "true") ||
-      !my_strcasecmp(&my_charset_latin1, argument, "on") ||
-      !my_strcasecmp(&my_charset_latin1, argument, "1"))
+  if (!cmp_opt_name(argument, "true") ||
+      !cmp_opt_name(argument, "on") ||
+      !cmp_opt_name(argument, "1"))
     DBUG_RETURN(1);
-  else if (!my_strcasecmp(&my_charset_latin1, argument, "false") ||
-      !my_strcasecmp(&my_charset_latin1, argument, "off") ||
-      !my_strcasecmp(&my_charset_latin1, argument, "0"))
+  else if (!cmp_opt_name(argument, "false") ||
+      !cmp_opt_name(argument, "off") ||
+      !cmp_opt_name(argument, "0"))
     DBUG_RETURN(0);
   my_getopt_error_reporter(WARNING_LEVEL,
       "option '%s': boolean value '%s' wasn't recognized. Set to OFF.",
@@ -842,7 +877,7 @@ static int setval(const struct my_option *opts, void *value, char *argument,
       if (err)
       {
         /* Check if option 'all' is used (to set all bits) */
-        if (!my_strcasecmp(&my_charset_latin1, argument, "all"))
+        if (!cmp_opt_name(argument, "all"))
           *(ulonglong*) value= ((1ULL << opts->typelib->count) - 1);
         else
         {
@@ -1346,13 +1381,13 @@ static double getopt_double(char *arg, const struct my_option *optp, int *err)
   Init one value to it's default values
 
   SYNOPSIS
-    init_one_value()
+    my_getopt_init_one_value()
     option              Option to initialize
     value               Pointer to variable
 */
 
-static void init_one_value(const struct my_option *option, void *variable,
-			   longlong value)
+void my_getopt_init_one_value(const struct my_option *option, void *variable,
+                              longlong value)
 {
   DBUG_ENTER("init_one_value");
   switch ((option->var_type & GET_TYPE_MASK)) {
@@ -1435,7 +1470,7 @@ static void init_one_value(const struct my_option *option, void *variable,
   Init one value to it's default values
 
   SYNOPSIS
-    init_one_value()
+    fini_one_value()
     option		Option to initialize
     value		Pointer to variable
 */
@@ -1652,6 +1687,23 @@ void my_print_help(const struct my_option *options)
           col= print_comment(optp->typelib->type_names[i], col, name_space, comment_space);
         }
       }
+      if ((optp->var_type & GET_TYPE_MASK) == GET_SET)
+        col= print_comment(", or ALL to set all combinations", col, name_space, comment_space);
+      if (optp->deprecation_substitute != NULL)
+      {
+        col= print_comment(". Deprecated, will be removed in a future release.",
+                           col, name_space, comment_space);
+        if (!IS_DEPRECATED_NO_REPLACEMENT(optp->deprecation_substitute))
+        {
+          char buf1[NAME_CHAR_LEN + 3];
+          DBUG_ASSERT(strlen(optp->deprecation_substitute) < NAME_CHAR_LEN);
+          strxmov(buf1, "--", optp->deprecation_substitute, NullS);
+          convert_underscore_to_dash(buf1, strlen(buf1));
+          col= print_comment(" Please use ", col, name_space, comment_space);
+          col= print_comment(buf1, col, name_space, comment_space);
+          col= print_comment(" instead.", col, name_space, comment_space);
+        }
+      }
     }
     putchar('\n');
     if ((optp->var_type & GET_TYPE_MASK) == GET_BOOL ||
@@ -1664,8 +1716,6 @@ void my_print_help(const struct my_option *options)
         printf(" to disable.)\n");
       }
     }
-    else if ((optp->var_type & GET_TYPE_MASK) == GET_SET)
-      printf("  Use 'ALL' to set all combinations.\n");
   }
   DBUG_VOID_RETURN;
 }
@@ -1769,7 +1819,7 @@ void my_print_variables(const struct my_option *options)
 	printf("%s\n", buff);
 	break;
       case GET_DOUBLE:
-	printf("%g\n", *(double*) value);
+	printf("%.10g\n", *(double*) value);
 	break;
       case GET_NO_ARG:
 	printf("(No default value)\n");

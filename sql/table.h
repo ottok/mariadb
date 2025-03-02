@@ -83,6 +83,7 @@ struct Name_resolution_context;
 class Table_function_json_table;
 class Open_table_context;
 class MYSQL_LOG;
+struct rpl_group_info;
 
 /*
   Used to identify NESTED_JOIN structures within a join (applicable only to
@@ -98,6 +99,9 @@ typedef ulonglong nested_join_map;
 #define tmp_file_prefix_length 4
 #define TMP_TABLE_KEY_EXTRA 8
 #define ROCKSDB_DIRECTORY_NAME "#rocksdb"
+
+#define HLINDEX_TEMPLATE "#i#%02u"
+#define HLINDEX_BUF_LEN  16 /* with extension .ibd/.MYI/etc and safety margin */
 
 /**
   Enumerate possible types of a table from re-execution
@@ -466,6 +470,11 @@ enum enum_table_category
   TABLE_CATEGORY_SYSTEM=3,
 
   /**
+     Persistent statistics table
+  */
+  TABLE_CATEGORY_STATISTICS= 4,
+
+  /**
     Log tables.
     These tables are an interface provided by the system
     to inspect the system logs.
@@ -485,7 +494,12 @@ enum enum_table_category
     The server implementation perform writes.
     Log tables are cached in the table cache.
   */
-  TABLE_CATEGORY_LOG=4,
+  TABLE_CATEGORY_LOG=5,
+
+  /**
+     Other tables in the mysql schema, like global_priv and db
+  */
+  TABLE_CATEGORY_MYSQL= 6,
 
   /*
     Types below are read only tables, not affected by FLUSH TABLES or
@@ -511,7 +525,7 @@ enum enum_table_category
     to I_S tables in the table cache, which should use
     this table type.
   */
-  TABLE_CATEGORY_INFORMATION=5,
+  TABLE_CATEGORY_INFORMATION=7,
 
   /**
     Performance schema tables.
@@ -533,7 +547,7 @@ enum enum_table_category
     The server implementation perform writes.
     Performance tables are cached in the table cache.
   */
-  TABLE_CATEGORY_PERFORMANCE=6
+  TABLE_CATEGORY_PERFORMANCE=8
 };
 
 typedef enum enum_table_category TABLE_CATEGORY;
@@ -563,6 +577,7 @@ class Table_check_intact
 {
 protected:
   bool has_keys;
+  ATTRIBUTE_FORMAT(printf, 3, 4) // 1st arg is the implicit `this`
   virtual void report_error(uint code, const char *fmt, ...)= 0;
 
 public:
@@ -580,6 +595,7 @@ public:
 class Table_check_intact_log_error : public Table_check_intact
 {
 protected:
+  ATTRIBUTE_FORMAT(printf, 3, 4)
   void report_error(uint, const char *fmt, ...) override;
 public:
   Table_check_intact_log_error() : Table_check_intact(true) {}
@@ -715,6 +731,9 @@ struct TABLE_SHARE
   mysql_mutex_t LOCK_share;             /* To protect TABLE_SHARE */
   mysql_mutex_t LOCK_statistics;        /* To protect against concurrent load */
 
+  void lock_share() { if (!tmp_table) mysql_mutex_lock(&LOCK_share); }
+  void unlock_share() { if (!tmp_table) mysql_mutex_unlock(&LOCK_share); }
+
   TDC_element *tdc;
 
   LEX_CUSTRING tabledef_version;
@@ -728,7 +747,12 @@ struct TABLE_SHARE
   KEY  *key_info;			/* data of keys in database */
   Virtual_column_info **check_constraints;
   uint	*blob_field;			/* Index to blobs in Field arrray*/
-  LEX_CUSTRING vcol_defs;              /* definitions of generated columns */
+  LEX_CUSTRING vcol_defs;               /* definitions of generated columns */
+
+  union {
+    void *hlindex_data;                 /* for hlindex tables */
+    TABLE_SHARE *hlindex;               /* for normal tables  */
+  };
 
   /*
     EITS statistics data from the last time the table was opened or ANALYZE
@@ -759,8 +783,8 @@ struct TABLE_SHARE
     To ensure this one can use set_table_cache() methods.
   */
   LEX_CSTRING table_cache_key;
-  LEX_CSTRING db;                        /* Pointer to db */
-  LEX_CSTRING table_name;                /* Table name (for open) */
+  Lex_ident_db db;                    /* Pointer to db */
+  Lex_ident_table table_name;            /* Table name (for open) */
   LEX_CSTRING path;                	/* Path to .frm file (from datadir) */
   LEX_CSTRING normalized_path;		/* unpack_filename(path) */
   LEX_CSTRING connect_string;
@@ -824,7 +848,12 @@ struct TABLE_SHARE
   uint table_check_constraints, field_check_constraints;
 
   uint rec_buff_length;                 /* Size of table->record[] buffer */
-  uint keys, key_parts;
+  uint keys;                            /* Number of KEY's for the engine */
+  uint total_keys;                      /* total number of KEY's, including
+                                           high level indexes             */
+  uint hlindexes() { return total_keys - keys; }
+
+  uint key_parts;
   uint ext_key_parts;       /* Total number of key parts in extended keys */
   uint max_key_length, max_unique_length;
 
@@ -917,8 +946,8 @@ struct TABLE_SHARE
   {
     field_index_t start_fieldno;
     field_index_t end_fieldno;
-    Lex_ident name;
-    Lex_ident constr_name;
+    Lex_ident_column name;
+    Lex_ident_column constr_name;
     uint unique_keys;
     Field *start_field(TABLE_SHARE *s) const
     {
@@ -1347,12 +1376,16 @@ public:
   /* Tables used in DEFAULT and CHECK CONSTRAINT (normally sequence tables) */
   TABLE_LIST *internal_tables;
 
+  TABLE *hlindex;
   /*
     Not-null for temporary tables only. Non-null values means this table is
     used to compute GROUP BY, it has a unique of GROUP BY columns.
     (set by create_tmp_table)
   */
-  ORDER		*group;
+  union {
+    ORDER       *group;                   /* only for temporary tables */
+    void        *context;                 /* only for hlindexes */
+  };
   String	alias;            	  /* alias or table name */
   uchar		*null_flags;
   MY_BITMAP     def_read_set, def_write_set, tmp_set;
@@ -1608,6 +1641,16 @@ public:
   bool fill_item_list(List<Item> *item_list) const;
   void reset_item_list(List<Item> *item_list, uint skip) const;
   void clear_column_bitmaps(void);
+  inline void clear_null_bits()
+  {
+    if (s->null_bytes)
+      bzero(null_flags, s->null_bytes);
+  }
+  inline void set_null_bits()
+  {
+    if (s->null_bytes)
+      bfill(null_flags, s->null_bytes, 255);
+  }
   void prepare_for_position(void);
   MY_BITMAP *prepare_for_keyread(uint index, MY_BITMAP *map);
   MY_BITMAP *prepare_for_keyread(uint index)
@@ -1753,6 +1796,19 @@ public:
   void evaluate_update_default_function();
   void reset_default_fields();
   inline ha_rows stat_records() { return used_stat_records; }
+
+  int hlindex_open(uint nr);
+  int hlindex_lock(uint nr);
+  int hlindex_read_first(uint nr, Item *item, ulonglong limit);
+  int hlindex_read_next();
+  int hlindex_read_end();
+
+  int open_hlindexes_for_write();
+  int hlindexes_on_insert();
+  int hlindexes_on_update();
+  int hlindexes_on_delete(const uchar *buf);
+  int hlindexes_on_delete_all(bool truncate);
+  int unlock_hlindexes();
 
   void prepare_triggers_for_insert_stmt_or_event();
   bool prepare_triggers_for_delete_stmt_or_event();
@@ -1915,6 +1971,7 @@ public:
   bool vers_switch_partition(THD *thd, TABLE_LIST *table_list,
                              Open_table_context *ot_ctx);
 #endif
+  bool vers_implicit() const;
 
   int update_generated_fields();
   void period_prepare_autoinc();
@@ -1928,6 +1985,9 @@ public:
   bool vers_update_fields();
   /* Used in DELETE, DUP REPLACE and insert history row */
   void vers_update_end();
+#ifdef HAVE_REPLICATION
+  void vers_fix_old_timestamp(rpl_group_info *rgi);
+#endif
   void find_constraint_correlated_indexes();
 
 /** Number of additional fields used in versioned tables */
@@ -2160,7 +2220,7 @@ Item *create_view_field(THD *thd, TABLE_LIST *view, Item **field_ref,
 struct Field_translator
 {
   Item *item;
-  LEX_CSTRING name;
+  Lex_ident_column name;
 };
 
 
@@ -2187,11 +2247,11 @@ public:
 public:
   Natural_join_column(Field_translator *field_param, TABLE_LIST *tab);
   Natural_join_column(Item_field *field_param, TABLE_LIST *tab);
-  LEX_CSTRING *name();
+  const Lex_ident_column name();
   Item *create_item(THD *thd);
   Field *field();
-  const char *safe_table_name();
-  const char *safe_db_name();
+  const Lex_ident_table safe_table_name() const;
+  const Lex_ident_db safe_db_name() const;
   GRANT_INFO *grant();
 };
 
@@ -2249,7 +2309,7 @@ struct vers_select_conds_t
   bool delete_history:1;
   Vers_history_point start;
   Vers_history_point end;
-  Lex_ident name;
+  Lex_ident_column name;
 
   Item_field *field_start;
   Item_field *field_end;
@@ -2269,7 +2329,7 @@ struct vers_select_conds_t
   void init(vers_system_time_t _type,
             Vers_history_point _start= Vers_history_point(),
             Vers_history_point _end= Vers_history_point(),
-            Lex_ident          _name= "SYSTEM_TIME")
+            Lex_ident_column   _name= "SYSTEM_TIME"_Lex_ident_column)
   {
     type= _type;
     orig_type= _type;
@@ -2284,7 +2344,7 @@ struct vers_select_conds_t
   void set_all()
   {
     type= SYSTEM_TIME_ALL;
-    name= "SYSTEM_TIME";
+    name= "SYSTEM_TIME"_Lex_ident_column;
   }
 
   void print(String *str, enum_query_type query_type) const;
@@ -2346,6 +2406,7 @@ struct vers_select_conds_t
 
 struct LEX;
 class Index_hint;
+class Lex_ident_sys;
 
 /*
   @struct TABLE_CHAIN
@@ -2373,9 +2434,9 @@ class Table_ident;
 struct TABLE_LIST
 {
   TABLE_LIST(THD *thd,
-             LEX_CSTRING db_str,
+             Lex_ident_db db_str,
              bool fqtn,
-             LEX_CSTRING alias_str,
+             Lex_ident_table alias_str,
              bool has_alias_ptr,
              Table_ident *table_ident,
              thr_lock_type lock_t,
@@ -2415,9 +2476,10 @@ struct TABLE_LIST
     DBUG_ASSERT(!db_arg->str || strlen(db_arg->str) == db_arg->length);
     DBUG_ASSERT(!table_name_arg->str || strlen(table_name_arg->str) == table_name_arg->length);
     DBUG_ASSERT(!alias_arg || strlen(alias_arg->str) == alias_arg->length);
-    db= *db_arg;
-    table_name= *table_name_arg;
-    alias= (alias_arg ? *alias_arg : *table_name_arg);
+    db= Lex_ident_db(*db_arg);
+    table_name= Lex_ident_table(*table_name_arg);
+    alias= alias_arg ? Lex_ident_table(*alias_arg) :
+                       Lex_ident_table(*table_name_arg);
     lock_type= lock_type_arg;
     updating= lock_type >= TL_FIRST_WRITE;
     MDL_REQUEST_INIT(&mdl_request, MDL_key::TABLE, db.str, table_name.str,
@@ -2478,10 +2540,10 @@ struct TABLE_LIST
   TABLE_LIST *next_local;
   /* link in a global list of all queries tables */
   TABLE_LIST *next_global, **prev_global;
-  LEX_CSTRING   db;
-  LEX_CSTRING   table_name;
-  LEX_CSTRING   schema_table_name;
-  LEX_CSTRING   alias;
+  Lex_ident_db db;
+  Lex_ident_table table_name;
+  Lex_ident_i_s_table schema_table_name;
+  Lex_ident_table alias;
   const char    *option;                /* Used by cache index  */
   Item		*on_expr;		/* Used with outer join */
   Name_resolution_context *on_context;  /* For ON expressions */
@@ -2611,9 +2673,18 @@ struct TABLE_LIST
      @note Inside views, a subquery in the @c FROM clause is not allowed.
      @note Do not use this field to separate views/base tables/anonymous
      derived tables. Use TABLE_LIST::is_anonymous_derived_table().
+     @note _column_names_ below are associated with these derived tables
+       SELECT * FROM (SELECT a FROM t1) b (list of column names)
+     @note _original_names_ below are used to save *item_list.name in the
+       select_lex for multiple executions
   */
   st_select_lex_unit *derived;		/* SELECT_LEX_UNIT of derived table */
   With_element *with;          /* With element defining this table (if any) */
+  List<Lex_ident_sys>   *column_names;  /* list of correlation column names */
+  List<Lex_ident_sys>   *original_names;/* list of original column names    */
+  st_select_lex         *original_names_source;
+  bool save_original_names(st_select_lex *derived);
+
   /* Bitmap of the defining with element */
   table_map with_internal_reference_map;
   TABLE_LIST * next_with_rec_ref;
@@ -2693,8 +2764,8 @@ struct TABLE_LIST
   LEX_STRING	select_stmt;		/* text of (CREATE/SELECT) statement */
   LEX_CSTRING	md5;			/* md5 of query text */
   LEX_CSTRING	source;			/* source of CREATE VIEW */
-  LEX_CSTRING	view_db;		/* saved view database */
-  LEX_CSTRING	view_name;		/* saved view name */
+  Lex_ident_db  view_db;		/* saved view database */
+  Lex_ident_table view_name;		/* saved view name */
   LEX_STRING	hr_timestamp;           /* time stamp of last operation */
   LEX_USER      definer;                /* definer of view */
   ulonglong	file_version;		/* version of file's field set */
@@ -3088,7 +3159,7 @@ struct TABLE_LIST
      @brief Returns the name of the database that the referenced table belongs
      to.
   */
-  const LEX_CSTRING get_db_name() const
+  const Lex_ident_db get_db_name() const
   {
     return view != NULL ? view_db : db;
   }
@@ -3099,7 +3170,7 @@ struct TABLE_LIST
      @details The unqualified table name or view name for a table or view,
      respectively.
    */
-  const LEX_CSTRING get_table_name() const
+  const Lex_ident_table get_table_name() const
   {
     return view != NULL ? view_name : table_name;
   }
@@ -3174,7 +3245,7 @@ public:
   virtual void set(TABLE_LIST *)= 0;
   virtual void next()= 0;
   virtual bool end_of_fields()= 0;              /* Return 1 at end of list */
-  virtual LEX_CSTRING *name()= 0;
+  virtual const Lex_ident_column name()= 0;
   virtual Item *create_item(THD *)= 0;
   virtual Field *field()= 0;
 };
@@ -3194,8 +3265,8 @@ public:
   void set_table(TABLE *table) { ptr= table->field; }
   void next() override { ptr++; }
   bool end_of_fields() override { return *ptr == 0; }
-  LEX_CSTRING *name() override;
-  Item *create_item(THD *thd) override;
+  const Lex_ident_column name() override;
+  Item *create_item(THD *thd) override ;
   Field *field() override { return *ptr; }
 };
 
@@ -3211,7 +3282,7 @@ public:
   void set(TABLE_LIST *table) override;
   void next() override { ptr++; }
   bool end_of_fields() override { return ptr == array_end; }
-  LEX_CSTRING *name() override;
+  const Lex_ident_column name() override;
   Item *create_item(THD *thd) override;
   Item **item_ptr() {return &ptr->item; }
   Field *field() override { return 0; }
@@ -3235,10 +3306,10 @@ public:
   void set(TABLE_LIST *table) override;
   void next() override;
   bool end_of_fields() override { return !cur_column_ref; }
-  LEX_CSTRING *name() override { return cur_column_ref->name(); }
+  const Lex_ident_column name() override { return cur_column_ref->name(); }
   Item *create_item(THD *thd) override { return cur_column_ref->create_item(thd); }
   Field *field() override { return cur_column_ref->field(); }
-  Natural_join_column *column_ref() { return cur_column_ref; }
+  Natural_join_column *column_ref() const { return cur_column_ref; }
 };
 
 
@@ -3272,9 +3343,9 @@ public:
   void next() override;
   bool end_of_fields() override
   { return (table_ref == last_leaf && field_it->end_of_fields()); }
-  LEX_CSTRING *name() override { return field_it->name(); }
-  const char *get_table_name();
-  const char *get_db_name();
+  const Lex_ident_column name() override { return field_it->name(); }
+  const Lex_ident_table get_table_name() const;
+  const Lex_ident_db get_db_name() const;
   GRANT_INFO *grant();
   Item *create_item(THD *thd) override { return field_it->create_item(thd); }
   Field *field() override { return field_it->field(); }
@@ -3459,8 +3530,8 @@ bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
 TABLE_SHARE *alloc_table_share(const char *db, const char *table_name,
                                const char *key, uint key_length);
 void init_tmp_table_share(THD *thd, TABLE_SHARE *share, const char *key,
-                          uint key_length,
-                          const char *table_name, const char *path);
+                          uint key_length, const char *table_name,
+                          const char *path, bool thread_specific);
 void free_table_share(TABLE_SHARE *share);
 enum open_frm_error open_table_def(THD *thd, TABLE_SHARE *share,
                                    uint flags = GTS_TABLE);
@@ -3471,7 +3542,6 @@ void update_create_info_from_table(HA_CREATE_INFO *info, TABLE *form);
 
 bool check_column_name(const char *name);
 bool check_period_name(const char *name);
-bool check_table_name(const char *name, size_t length, bool check_for_path_chars);
 int rename_file_ext(const char * from,const char * to,const char * ext);
 char *get_field(MEM_ROOT *mem, Field *field);
 
@@ -3498,35 +3568,34 @@ static inline int set_zone(int nr,int min_zone,int max_zone)
 }
 
 /* performance schema */
-extern LEX_CSTRING PERFORMANCE_SCHEMA_DB_NAME;
+extern Lex_ident_i_s_db PERFORMANCE_SCHEMA_DB_NAME;
 
-extern LEX_CSTRING GENERAL_LOG_NAME;
-extern LEX_CSTRING SLOW_LOG_NAME;
-extern LEX_CSTRING TRANSACTION_REG_NAME;
+extern Lex_ident_table GENERAL_LOG_NAME;
+extern Lex_ident_table SLOW_LOG_NAME;
+extern Lex_ident_table TRANSACTION_REG_NAME;
 
 /* information schema */
-extern LEX_CSTRING INFORMATION_SCHEMA_NAME;
+extern Lex_ident_i_s_db INFORMATION_SCHEMA_NAME;
 extern Lex_ident_db MYSQL_SCHEMA_NAME;
 
 /* table names */
-extern LEX_CSTRING MYSQL_PROC_NAME;
+extern Lex_ident_table MYSQL_PROC_NAME;
 
 inline bool is_infoschema_db(const LEX_CSTRING *name)
 {
-  return lex_string_eq(&INFORMATION_SCHEMA_NAME, name);
+  return INFORMATION_SCHEMA_NAME.streq(*name);
 }
 
 inline bool is_perfschema_db(const LEX_CSTRING *name)
 {
-  return lex_string_eq(&PERFORMANCE_SCHEMA_DB_NAME, name);
+  return PERFORMANCE_SCHEMA_DB_NAME.streq(*name);
 }
 
 inline void mark_as_null_row(TABLE *table)
 {
   table->null_row=1;
   table->status|=STATUS_NULL_ROW;
-  if (table->s->null_bytes)
-    bfill(table->null_flags,table->s->null_bytes,255);
+  table->set_null_bits();
 }
 
 /*
@@ -3599,7 +3668,7 @@ public:
      @param[in] field number in a TABLE
      @param[in] value to store
    */
-  void store(uint field_id, timeval ts);
+  void store(uint field_id, my_timeval ts);
   /**
     Update the transaction_registry right before commit.
     @param start_id    transaction identifier at start

@@ -1,3 +1,4 @@
+ALTER DATABASE test CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 SET default_storage_engine=InnoDB;
 # Test 1) Show the page size from Information Schema
 SELECT variable_value FROM information_schema.global_status
@@ -375,7 +376,7 @@ t1	CREATE TABLE `t1` (
   `d` text NOT NULL,
   PRIMARY KEY (`a`,`b`(255),`c`(255)),
   KEY `b` (`b`(767))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci STATS_PERSISTENT=0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci STATS_PERSISTENT=0
 CHECK TABLE t1;
 Table	Op	Msg_type	Msg_text
 test.t1	check	status	OK
@@ -637,3 +638,4 @@ INSERT INTO u SELECT a,CONCAT(prefix,REPEAT(chr(0),pad)) FROM t;
 DROP TABLE u, t;
 SET GLOBAL innodb_compression_level=@save_compression_level;
 # End of 10.6 tests
+ALTER DATABASE test CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;

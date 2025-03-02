@@ -1918,6 +1918,8 @@ Extra	Using filesort
 SELECT SUBSTRING(a,1,10), LENGTH(a), GROUP_CONCAT(b) FROM t1 GROUP BY a;
 SUBSTRING(a,1,10)	LENGTH(a)	GROUP_CONCAT(b)
 1111111111	1300	one,two
+Warnings:
+Warning	4203	2 values were longer than max_sort_length. Sorting used only the first 1024 bytes
 EXPLAIN 
 SELECT SUBSTRING(a,1,10), LENGTH(a) FROM t1 GROUP BY a;
 id	1
@@ -1933,6 +1935,8 @@ Extra	Using temporary; Using filesort
 SELECT SUBSTRING(a,1,10), LENGTH(a) FROM t1 GROUP BY a;
 SUBSTRING(a,1,10)	LENGTH(a)
 1111111111	1300
+Warnings:
+Warning	4203	1 values were longer than max_sort_length. Sorting used only the first 1024 bytes
 DROP TABLE t1;
 #
 # Bug#57688 Assertion `!table || (!table->write_set || bitmap_is_set(table->write_set, field
@@ -2453,7 +2457,7 @@ CREATE TABLE t1 (
 a int,
 b varchar(1),
 KEY (b,a)
-);
+) CHARSET=latin1;
 INSERT INTO t1 VALUES
 (1,NULL),(0,'a'),(1,NULL),(0,'a'), (1,'a'),(0,'a'),(2,'a'),(1,'a');
 ANALYZE TABLE t1;
@@ -2728,6 +2732,8 @@ f1	f2
 	                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 	NULL
 NULL	NULL
+Warnings:
+Warning	4203	116 values were longer than max_sort_length. Sorting used only the first 1024 bytes
 SET @@sort_buffer_size = @old_sort_buff_size;
 DROP TABLE t1;
 #

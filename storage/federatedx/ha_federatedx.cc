@@ -308,10 +308,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation                          // gcc: Class implementation
-#endif
-
 #define MYSQL_SERVER 1
 #include <my_global.h>
 #include <mysql/plugin.h>
@@ -1460,28 +1456,23 @@ static void fill_server(MEM_ROOT *mem_root, FEDERATEDX_SERVER *server,
   char buffer[STRING_BUFFER_USUAL_SIZE];
   const char *socket_arg= share->socket ? share->socket : "";
   const char *password_arg= share->password ? share->password : "";
+  const Lex_cstring_strlen ls_database(share->database);
+  const Lex_cstring_strlen ls_socket(socket_arg);
 
   String key(buffer, sizeof(buffer), &my_charset_bin);  
-  String scheme(share->scheme, strlen(share->scheme), &my_charset_latin1);
-  String hostname(share->hostname, strlen(share->hostname), &my_charset_latin1);
-  String database(share->database, strlen(share->database), system_charset_info);
+  String scheme, hostname;
+  String database(ls_database.str, ls_database.length, system_charset_info);
   String username(share->username, strlen(share->username), system_charset_info);
-  String socket(socket_arg, strlen(socket_arg), files_charset_info);
+  String socket(ls_socket.str, ls_socket.length, files_charset_info);
   String password(password_arg, strlen(password_arg), &my_charset_bin);
   DBUG_ENTER("fill_server");
 
   /* Do some case conversions */
-  scheme.reserve(scheme.length());
-  scheme.length(my_casedn_str(&my_charset_latin1, scheme.c_ptr_safe()));
-  
-  hostname.reserve(hostname.length());
-  hostname.length(my_casedn_str(&my_charset_latin1, hostname.c_ptr_safe()));
-  
+  scheme.copy_casedn(&my_charset_latin1, Lex_cstring_strlen(share->scheme));
+  hostname.copy_casedn(&my_charset_latin1, Lex_cstring_strlen(share->hostname));
+
   if (lower_case_table_names)
-  {
-    database.reserve(database.length());
-    database.length(my_casedn_str(system_charset_info, database.c_ptr_safe()));
-  }
+    database.copy_casedn(system_charset_info, ls_database);
 
 #ifndef _WIN32
   /*
@@ -1489,10 +1480,7 @@ static void fill_server(MEM_ROOT *mem_root, FEDERATEDX_SERVER *server,
     revised about using sockets in such environment.
   */
   if (lower_case_file_system && socket.length())
-  {
-    socket.reserve(socket.length());
-    socket.length(my_casedn_str(files_charset_info, socket.c_ptr_safe()));
-  }
+    socket.copy_casedn(files_charset_info, ls_socket);
 #endif
 
   /* start with all bytes zeroed */  
@@ -1785,9 +1773,9 @@ federatedx_txn *ha_federatedx::get_txn(THD *thd, bool no_create)
 }
 
 
-int ha_federatedx::disconnect(handlerton *hton, MYSQL_THD thd)
+int ha_federatedx::disconnect(MYSQL_THD thd)
 {
-  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, hton);
+  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, federatedx_hton);
   delete txn;
   return 0;
 }
@@ -3554,16 +3542,16 @@ int ha_federatedx::external_lock(MYSQL_THD thd, int lock_type)
 }
 
 
-int ha_federatedx::savepoint_set(handlerton *hton, MYSQL_THD thd, void *sv)
+int ha_federatedx::savepoint_set(MYSQL_THD thd, void *sv)
 {
   int error= 0;
-  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, hton);
+  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, federatedx_hton);
   DBUG_ENTER("ha_federatedx::savepoint_set");
 
   if (txn && txn->has_connections())
   {
     if (txn->txn_begin())
-      trans_register_ha(thd, TRUE, hton, 0);
+      trans_register_ha(thd, TRUE, federatedx_hton, 0);
     
     txn->sp_acquire((ulong *) sv);
 
@@ -3574,10 +3562,10 @@ int ha_federatedx::savepoint_set(handlerton *hton, MYSQL_THD thd, void *sv)
 }
 
 
-int ha_federatedx::savepoint_rollback(handlerton *hton, MYSQL_THD thd, void *sv)
+int ha_federatedx::savepoint_rollback(MYSQL_THD thd, void *sv)
  {
   int error= 0;
-  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, hton);
+  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, federatedx_hton);
   DBUG_ENTER("ha_federatedx::savepoint_rollback");
   
   if (txn)
@@ -3587,10 +3575,10 @@ int ha_federatedx::savepoint_rollback(handlerton *hton, MYSQL_THD thd, void *sv)
 }
 
 
-int ha_federatedx::savepoint_release(handlerton *hton, MYSQL_THD thd, void *sv)
+int ha_federatedx::savepoint_release(MYSQL_THD thd, void *sv)
 {
   int error= 0;
-  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, hton);
+  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, federatedx_hton);
   DBUG_ENTER("ha_federatedx::savepoint_release");
   
   if (txn)
@@ -3600,10 +3588,10 @@ int ha_federatedx::savepoint_release(handlerton *hton, MYSQL_THD thd, void *sv)
 }
 
 
-int ha_federatedx::commit(handlerton *hton, MYSQL_THD thd, bool all)
+int ha_federatedx::commit(MYSQL_THD thd, bool all)
 {
   int return_val;
-  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, hton);
+  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, federatedx_hton);
   DBUG_ENTER("ha_federatedx::commit");
 
   if (all)
@@ -3616,10 +3604,10 @@ int ha_federatedx::commit(handlerton *hton, MYSQL_THD thd, bool all)
 }
 
 
-int ha_federatedx::rollback(handlerton *hton, MYSQL_THD thd, bool all)
+int ha_federatedx::rollback(MYSQL_THD thd, bool all)
 {
   int return_val;
-  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, hton);
+  federatedx_txn *txn= (federatedx_txn *) thd_get_ha_data(thd, federatedx_hton);
   DBUG_ENTER("ha_federatedx::rollback");
 
   if (all)

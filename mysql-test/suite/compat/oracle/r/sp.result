@@ -16,7 +16,7 @@ RETURN 10;
 END
 character_set_client	latin1
 collation_connection	latin1_swedish_ci
-Database Collation	latin1_swedish_ci
+Database Collation	utf8mb4_uca1400_ai_ci
 SELECT f1();
 f1()
 10
@@ -37,7 +37,7 @@ SET @a=10;
 END
 character_set_client	latin1
 collation_connection	latin1_swedish_ci
-Database Collation	latin1_swedish_ci
+Database Collation	utf8mb4_uca1400_ai_ci
 SET @a=0;
 CALL p1();
 SELECT @a;
@@ -1698,7 +1698,7 @@ t2	CREATE TABLE "t2" (
   "dc209" decimal(20,9) DEFAULT NULL,
   "cc" char(10) DEFAULT NULL,
   "cv" varchar(10) DEFAULT NULL,
-  "cvu" varchar(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
+  "cvu" varchar(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
   "t1" tinytext DEFAULT NULL,
   "t2" text DEFAULT NULL,
   "t3" mediumtext DEFAULT NULL,
@@ -1860,7 +1860,7 @@ t2	CREATE TABLE "t2" (
   "dc209" decimal(20,9) DEFAULT NULL,
   "cc" char(10) DEFAULT NULL,
   "cv" varchar(10) DEFAULT NULL,
-  "cvu" varchar(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
+  "cvu" varchar(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
   "t1" tinytext DEFAULT NULL,
   "t2" text DEFAULT NULL,
   "t3" mediumtext DEFAULT NULL,
@@ -2140,15 +2140,19 @@ f1(20)
 DROP FUNCTION f1;
 DROP TABLE t1;
 #
-# %TYPE in function RETURN clause is not supported yet
+# var%TYPE in function RETURN clause is not supported yet
 #
-CREATE FUNCTION f1 RETURN t1.a%TYPE
+CREATE FUNCTION f1 RETURN a%TYPE
 AS
 BEGIN
 RETURN 0;
 END;
 $$
-ERROR HY000: Unknown data type: 't1'
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'TYPE
+AS
+BEGIN
+RETURN 0;
+END' at line 2
 #
 # End of MDEV-10577 sql_mode=ORACLE: %TYPE in variable declarations
 #

@@ -1,6 +1,7 @@
+ALTER DATABASE test CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 SET @@session.sql_mode = 'NO_ENGINE_SUBSTITUTION';
 DROP DATABASE IF EXISTS test1;
-CREATE DATABASE test1;
+CREATE DATABASE test1 CHARACTER SET latin1;
 USE test;
 drop table if exists tb1 ;
 create table tb1 (
@@ -145,7 +146,7 @@ f116 VARBINARY(64) null,
 f117 VARBINARY(192) null
 ) engine = myisam;
 Warnings:
-Warning	1287	'YEAR(3)' is deprecated and will be removed in a future release. Please use YEAR(4) instead
+Warning	1287	'YEAR(3)' is deprecated and will be removed in a future release. Please use 'YEAR(4)' instead
 load data infile '<MYSQLTEST_VARDIR>/std_data/funcs_1/myisam_tb2.txt'
 into table tb2;
 drop table if exists tb3 ;
@@ -286,7 +287,7 @@ f241 char(100),
 f242 bit(30)
 ) engine = myisam;
 Warnings:
-Warning	1287	'YEAR(3)' is deprecated and will be removed in a future release. Please use YEAR(4) instead
+Warning	1287	'YEAR(3)' is deprecated and will be removed in a future release. Please use 'YEAR(4)' instead
 load data infile '<MYSQLTEST_VARDIR>/std_data/funcs_1/myisam_tb4.txt'
 into table tb4;
 USE test1;
@@ -353,7 +354,7 @@ f116 VARBINARY(64) null,
 f117 VARBINARY(192) null
 ) engine = myisam;
 Warnings:
-Warning	1287	'YEAR(3)' is deprecated and will be removed in a future release. Please use YEAR(4) instead
+Warning	1287	'YEAR(3)' is deprecated and will be removed in a future release. Please use 'YEAR(4)' instead
 load data infile '<MYSQLTEST_VARDIR>/std_data/funcs_1/myisam_tb2.txt'
 into table tb2;
 USE test;
@@ -378,7 +379,7 @@ drop TABLE if exists t3;
 CREATE TABLE t3 (f1 char(20), f2 char(20), f3 integer) ENGINE = MyISAM;
 LOAD DATA INFILE '<MYSQLTEST_VARDIR>/std_data/funcs_1/t3.txt' INTO TABLE t3;
 drop database if exists test4;
-CREATE database test4;
+CREATE database test4 CHARACTER SET latin1;
 use test4;
 CREATE TABLE t6 (f1 char(20), f2 char(25), f3 date, f4 int, f5 char(25), f6 int)
 ENGINE = MyISAM;
@@ -590,7 +591,7 @@ def	test	tb3	f125	8	NULL	YES	tinyblob	255	255	NULL	NULL	NULL	NULL	NULL	tinyblob	
 def	test	tb3	f126	9	NULL	YES	blob	65535	65535	NULL	NULL	NULL	NULL	NULL	blob					NEVER	NULL	NO	NO
 def	test	tb3	f127	10	NULL	YES	mediumblob	16777215	16777215	NULL	NULL	NULL	NULL	NULL	mediumblob					NEVER	NULL	NO	NO
 def	test	tb3	f128	11	NULL	YES	longblob	4294967295	4294967295	NULL	NULL	NULL	NULL	NULL	longblob					NEVER	NULL	NO	NO
-def	test	tb3	f129	12	''	NO	binary	1	1	NULL	NULL	NULL	NULL	NULL	binary(1)					NEVER	NULL	NO	NO
+def	test	tb3	f129	12	x'05'	NO	binary	1	1	NULL	NULL	NULL	NULL	NULL	binary(1)					NEVER	NULL	NO	NO
 def	test	tb3	f130	13	99	NO	tinyint	NULL	NULL	3	0	NULL	NULL	NULL	tinyint(4)					NEVER	NULL	NO	NO
 def	test	tb3	f131	14	99	NO	tinyint	NULL	NULL	3	0	NULL	NULL	NULL	tinyint(3) unsigned					NEVER	NULL	NO	NO
 def	test	tb3	f132	15	099	NO	tinyint	NULL	NULL	3	0	NULL	NULL	NULL	tinyint(3) unsigned zerofill					NEVER	NULL	NO	NO
@@ -1214,3 +1215,4 @@ DROP TABLE test.tb1;
 DROP TABLE test.tb2;
 DROP TABLE test.tb3;
 DROP TABLE test.tb4;
+ALTER DATABASE test CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;

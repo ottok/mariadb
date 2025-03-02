@@ -62,7 +62,7 @@ rpt_handle_event(rpl_parallel_thread::queued_event *qev,
   safe_strcpy(rgi->future_event_master_log_name, sizeof(rgi->future_event_master_log_name),
               qev->future_event_master_log_name);
   if (event_can_update_last_master_timestamp(ev))
-    rgi->last_master_timestamp= ev->when + (time_t)ev->exec_time;
+    rgi->last_master_timestamp= ev->when + ev->exec_time;
   err= apply_event_and_update_pos_for_parallel(ev, thd, rgi);
 
   rli->executed_entries++;
@@ -1242,6 +1242,7 @@ handle_rpl_parallel_thread(void *arg)
   struct rpl_parallel_thread *rpt= (struct rpl_parallel_thread *)arg;
 
   my_thread_init();
+  my_thread_set_name("rpl_parallel");
   thd = new THD(next_thread_id());
   server_threads.insert(thd);
   set_current_thd(thd);
@@ -1253,8 +1254,6 @@ handle_rpl_parallel_thread(void *arg)
   thd->system_thread= SYSTEM_THREAD_SLAVE_SQL;
   thd->security_ctx->skip_grants();
   thd->variables.max_allowed_packet= slave_max_allowed_packet;
-  /* Ensure that slave can exeute any alter table it gets from master */
-  thd->variables.alter_algorithm= (ulong) Alter_info::ALTER_TABLE_ALGORITHM_DEFAULT;
   thd->slave_thread= 1;
 
   set_slave_thread_options(thd);
@@ -3615,6 +3614,12 @@ rpl_parallel::do_event(rpl_group_info *serial_rgi, Log_event *ev,
   {
     qev->rgi= e->current_group_info;
   }
+
+  /*
+    The original execution time of the event from the master is stored on the
+    serial_rgi, so copy it to our new one for parallel execution.
+  */
+  qev->rgi->orig_exec_time= serial_rgi->orig_exec_time;
 
   /*
     Queue the event for processing.

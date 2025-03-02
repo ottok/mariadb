@@ -1,3 +1,4 @@
+ALTER DATABASE test CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 SET optimizer_switch='outer_join_with_cache=off';
 create view v1 (c,d) as select a,b from t1;
 ERROR 42S02: Table 'test.t1' doesn't exist
@@ -2191,7 +2192,11 @@ create table t1 (s1 int);
 create view abc as select * from t1 as abc;
 drop table t1;
 drop view abc;
+#
+# Bug#12993 View column rename broken in subselect
+#
 flush status;
+flush global status;
 create table t1(f1 char(1));
 create view v1 as select * from t1;
 select * from (select f1 as f2, f1 as f3 from v1) v where v.f2='a';
@@ -3805,7 +3810,7 @@ CREATE TABLE t1 (c INT);
 CREATE VIEW v1 (view_column) AS SELECT c AS alias FROM t1 HAVING alias;
 SHOW CREATE VIEW v1;
 View	Create View	character_set_client	collation_connection
-v1	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v1` AS select `t1`.`c` AS `view_column` from `t1` having `view_column` <> 0	latin1	latin1_swedish_ci
+v1	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v1` AS select `t1`.`c` AS `view_column` from `t1` having `view_column` is true	latin1	latin1_swedish_ci
 SELECT * FROM v1;
 view_column
 
@@ -7018,7 +7023,7 @@ CREATE VIEW v AS SELECT 1;
 SELECT * FROM v WHERE UpdateXML('<user>N/A</user>','/a',CURRENT_USER());
 1
 Warnings:
-Warning	1292	Truncated incorrect DOUBLE value: '<user>N/A</user>'
+Warning	1292	Truncated incorrect BOOLEAN value: '<user>N/A</user>'
 DROP VIEW v;
 # End of 10.5 tests
 #
@@ -7122,3 +7127,4 @@ DROP TABLE table1;
 #
 # End of 10.11 test
 #
+ALTER DATABASE test CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;

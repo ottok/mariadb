@@ -1,6 +1,7 @@
 --source include/no_valgrind_without_big.inc
 --source include/have_stat_tables.inc
 --source include/have_innodb.inc
+--source include/test_db_charset_latin1.inc
 
 set @SINGLE_PREC_TYPE='single_prec_hb';
 set @DOUBLE_PREC_TYPE='double_prec_hb';
@@ -332,9 +333,7 @@ SELECT * FROM mysql.column_stats;
 --sorted_result
 SELECT * FROM mysql.index_stats;
 
---disable_cursor_protocol
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
---disable_ps2_protocol
 eval
 SELECT * INTO OUTFILE '$MYSQLTEST_VARDIR/tmp/save_column_stats'
   FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
@@ -344,8 +343,6 @@ eval
 SELECT * INTO OUTFILE '$MYSQLTEST_VARDIR/tmp/save_index_stats'
   FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\n'
   FROM mysql.index_stats WHERE index_name IN ('idx1', 'idx4');
---enable_ps2_protocol
---enable_cursor_protocol
 
 ALTER TABLE t1 CHANGE COLUMN b x varchar(30);
 SHOW CREATE TABLE t1;
@@ -1052,3 +1049,4 @@ set analyze_sample_percentage=@save_analyze_sample_percentage;
 set histogram_size=@save_histogram_size;
 set use_stat_tables=@save_use_stat_tables;
 set @@global.histogram_size=@save_histogram_size;
+--source include/test_db_charset_restore.inc

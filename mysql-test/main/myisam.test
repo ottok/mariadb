@@ -7,6 +7,8 @@
 call mtr.add_suppression("Can't find record in '.*'");
 call mtr.add_suppression("Table 't1' is marked as crashed and should be repaired");
 
+--source include/test_db_charset_latin1.inc
+
 #
 # Test problem with CHECK TABLE;
 #
@@ -435,7 +437,6 @@ drop table t1;
 #
 # space-stripping in _mi_prefix_search: BUG#5284
 #
-DROP TABLE IF EXISTS t1;
 CREATE TABLE t1 (a varchar(150) NOT NULL, KEY (a)); 
 INSERT t1 VALUES ("can \tcan"); 
 INSERT t1 VALUES ("can   can"); 
@@ -540,7 +541,7 @@ DROP TABLE t1,t2;
 #
 # Test RTREE index
 #
---error 1235, 1289
+--error ER_WRONG_ARGUMENTS
 CREATE TABLE t1 (`a` int(11) NOT NULL default '0', `b` int(11) NOT NULL default '0', UNIQUE KEY `a` USING RTREE (`a`,`b`)) ENGINE=MyISAM;
 # INSERT INTO t1 VALUES (1,1),(1,1);
 # DELETE FROM rt WHERE a<1;
@@ -1126,7 +1127,7 @@ drop table t1;
 create table t1 (c1 int) engine=myisam pack_keys=0;
 create table t2 (c1 int) engine=myisam pack_keys=1;
 create table t3 (c1 int) engine=myisam pack_keys=default;
---error 1064
+--error ER_PARSE_ERROR
 create table t4 (c1 int) engine=myisam pack_keys=2;
 drop table t1, t2, t3;
 
@@ -1313,9 +1314,9 @@ create table t1 (a int not null, key `a` (a) key_block_size=1025);
 show create table t1;
 drop table t1;
 
---error 1064
+--error ER_PARSE_ERROR
 create table t1 (a int not null, key key_block_size=1024 (a));
---error 1064
+--error ER_PARSE_ERROR
 create table t1 (a int not null, key `a` key_block_size=1024 (a));
 
 #
@@ -1948,3 +1949,5 @@ DROP TABLE t1, t2, t3, t4;
 --echo #
 --echo # End of 11.0 tests
 --echo #
+
+--source include/test_db_charset_restore.inc

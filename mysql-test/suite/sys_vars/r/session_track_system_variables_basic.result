@@ -151,4 +151,18 @@ SELECT @@session.session_track_system_variables;
 SET SESSION session_track_system_variables="sql_slave_skip_counter", sql_slave_skip_counter= 0;
 # Restoring the original values.
 SET @@global.session_track_system_variables = @global_saved_tmp;
-# End of tests.
+#
+# MDEV-31609 Send initial values of system variables in first OK packet
+#
+connect foo,localhost,root;
+-- Tracker : SESSION_TRACK_SYSTEM_VARIABLES
+-- autocommit: ON
+-- character_set_client: latin1
+-- character_set_connection: latin1
+-- character_set_results: latin1
+-- redirect_url: 
+-- time_zone: SYSTEM
+
+connection default;
+disconnect foo;
+# End of tests 11.5

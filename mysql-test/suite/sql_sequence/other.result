@@ -18,7 +18,7 @@ next value for s1
 flush tables;
 repair table s1;
 Table	Op	Msg_type	Msg_text
-test.s1	repair	note	The storage engine for the table doesn't support repair
+test.s1	repair	status	OK
 select next value for s1;
 next value for s1
 2001
@@ -29,7 +29,7 @@ next value for s1
 1
 repair table s1;
 Table	Op	Msg_type	Msg_text
-test.s1	repair	note	The storage engine for the table doesn't support repair
+test.s1	repair	status	OK
 check table s1;
 Table	Op	Msg_type	Msg_text
 test.s1	check	note	The storage engine for the table doesn't support check
@@ -202,11 +202,8 @@ CREATE SEQUENCE s;
 CREATE table t1 (a int);
 insert into t1 values (1),(2);
 DELETE s FROM s;
-ERROR HY000: Storage engine SEQUENCE of the table `test`.`s` doesn't have this option
 delete t1,s from s,t1;
-ERROR HY000: Storage engine SEQUENCE of the table `test`.`s` doesn't have this option
 delete s,t1 from t1,s;
-ERROR HY000: Storage engine SEQUENCE of the table `test`.`s` doesn't have this option
 DROP SEQUENCE s;
 DROP TABLE t1;
 #

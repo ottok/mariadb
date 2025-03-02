@@ -21,10 +21,6 @@
   The actual communction is handled by the net_xxx functions in net_serv.cc
 */
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation				// gcc: Class implementation
-#endif
-
 #include "mariadb.h"
 #include "sql_priv.h"
 #include "protocol.h"
@@ -593,6 +589,7 @@ void Protocol::end_statement()
 
   switch (thd->get_stmt_da()->status()) {
   case Diagnostics_area::DA_ERROR:
+    thd->stop_collecting_unit_results();
     /* The query failed, send error to log and abort bootstrap. */
     error= send_error(thd->get_stmt_da()->sql_errno(),
                       thd->get_stmt_da()->message(),
@@ -600,12 +597,36 @@ void Protocol::end_statement()
     break;
   case Diagnostics_area::DA_EOF:
   case Diagnostics_area::DA_EOF_BULK:
-    error= send_eof(thd->server_status,
+    if (thd->need_report_unit_results()) {
+      // bulk returning result-set, like INSERT ... RETURNING
+      // result is already send, needs an EOF with MORE_RESULT_EXISTS
+      // before sending unit result-set
+      error= send_eof(thd->server_status | SERVER_MORE_RESULTS_EXISTS,
+                          thd->get_stmt_da()->statement_warn_count());
+      if (thd->report_collected_unit_results() && thd->is_error())
+        error= send_error(thd->get_stmt_da()->sql_errno(),
+                          thd->get_stmt_da()->message(),
+                          thd->get_stmt_da()->get_sqlstate());
+      else
+        error= send_eof(thd->server_status,
+                    thd->get_stmt_da()->statement_warn_count());
+    }
+    else
+      error= send_eof(thd->server_status,
                     thd->get_stmt_da()->statement_warn_count());
     break;
   case Diagnostics_area::DA_OK:
   case Diagnostics_area::DA_OK_BULK:
-    error= send_ok(thd->server_status,
+    if (thd->report_collected_unit_results())
+      if (thd->is_error())
+        error= send_error(thd->get_stmt_da()->sql_errno(),
+                        thd->get_stmt_da()->message(),
+                        thd->get_stmt_da()->get_sqlstate());
+      else
+        error= send_eof(thd->server_status,
+                     thd->get_stmt_da()->statement_warn_count());
+    else
+      error= send_ok(thd->server_status,
                    thd->get_stmt_da()->statement_warn_count(),
                    thd->get_stmt_da()->affected_rows(),
                    thd->get_stmt_da()->last_insert_id(),
@@ -615,6 +636,7 @@ void Protocol::end_statement()
     break;
   case Diagnostics_area::DA_EMPTY:
   default:
+    thd->stop_collecting_unit_results();
     DBUG_ASSERT(0);
     error= send_ok(thd->server_status, 0, 0, 0, NULL);
     break;
@@ -1204,8 +1226,7 @@ bool Protocol::send_result_set_metadata(List<Item> *list, uint flags)
     Item *item;
     Protocol_text prot(thd, thd->variables.net_buffer_length);
 #ifndef DBUG_OFF
-    field_handlers= (const Type_handler **) thd->alloc(
-        sizeof(field_handlers[0]) * list->elements);
+    field_handlers= thd->alloc<const Type_handler *>(list->elements);
 #endif
 
     for (uint pos= 0; (item= it++); pos++)
@@ -1254,8 +1275,7 @@ bool Protocol::send_list_fields(List<Field> *list, const TABLE_LIST *table_list)
   Protocol_text prot(thd, thd->variables.net_buffer_length);
 
 #ifndef DBUG_OFF
-  field_handlers= (const Type_handler **) thd->alloc(sizeof(field_handlers[0]) *
-                                                     list->elements);
+  field_handlers= thd->alloc<const Type_handler *>(list->elements);
 #endif
 
   for (uint pos= 0; (fld= it++); pos++)
@@ -1391,33 +1411,6 @@ bool Protocol::store(I_List<i_string>* str_list)
   return store((char*) tmp.ptr(), tmp.length(),  tmp.charset());
 }
 
-
-/**
-  Send a set of strings as a string of key-value pairs with ',' in between.
-*/
-
-bool Protocol::store(I_List<i_string_pair>* str_list)
-{
-  char buf[256];
-  const char *delimiter= ",";
-  String tmp(buf, sizeof(buf), &my_charset_bin);
-  size_t delim_len= 0;
-  I_List_iterator<i_string_pair> it(*str_list);
-  i_string_pair* s;
-
-  tmp.length(0);
-  while ((s=it++))
-  {
-    tmp.append(delimiter, delim_len);
-    tmp.append(s->key, strlen(s->key));
-    tmp.append(STRING_WITH_LEN("->"));
-    tmp.append(s->val, strlen(s->val));
-    delim_len= 1;
-  }
-  return store((char*) tmp.ptr(), tmp.length(),  tmp.charset());
-}
-
-
 /****************************************************************************
   Functions to handle the simple (default) protocol where everything is
   This protocol is the one that is used by default between the MySQL server
@@ -1492,7 +1485,7 @@ bool Protocol_text::store_str(const char *from, size_t length,
                               CHARSET_INFO *fromcs, CHARSET_INFO *tocs)
 {
 #ifndef DBUG_OFF
-  DBUG_PRINT("info", ("Protocol_text::store field %u : %.*b", field_pos,
+  DBUG_PRINT("info", ("Protocol_text::store field %u : %.*sB", field_pos,
                       (int) length, (length == 0 ? "" : from)));
   DBUG_ASSERT(field_handlers == 0 || field_pos < field_count);
   DBUG_ASSERT(valid_handler(field_pos, PROTOCOL_SEND_STRING));
@@ -1508,7 +1501,7 @@ bool Protocol_text::store_numeric_zerofill_str(const char *from,
 {
 #ifndef DBUG_OFF
   DBUG_PRINT("info",
-       ("Protocol_text::store_numeric_zerofill_str field %u : %.*b",
+       ("Protocol_text::store_numeric_zerofill_str field %u : %.*sB",
         field_pos, (int) length, (length == 0 ? "" : from)));
   DBUG_ASSERT(field_handlers == 0 || field_pos < field_count);
   DBUG_ASSERT(valid_handler(field_pos, send_type));

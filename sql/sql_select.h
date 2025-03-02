@@ -24,15 +24,13 @@
   classes to use when handling where clause
 */
 
-#ifdef USE_PRAGMA_INTERFACE
-#pragma interface			/* gcc class implementation */
-#endif
-
 #include "procedure.h"
 #include "sql_array.h"                        /* Array */
 #include "records.h"                          /* READ_RECORD */
 #include "opt_range.h"                /* SQL_SELECT, QUICK_SELECT_I */
 #include "filesort.h"
+#include "sql_delete.h"
+#include "sql_update.h"
 
 #include "cset_narrowing.h"
 
@@ -557,6 +555,13 @@ typedef struct st_join_table {
 
   /** HAVING condition for checking prior saving a record into tmp table*/
   Item *having;
+
+  /**
+    Ordering to be produced when doing full index scan.
+    Important for vector indexes, set by test_if_skip_sort_order() when it
+    decides to use full index to produce rows in order.
+  */
+  ORDER *full_index_scan_order;
 
   /** TRUE <=> remove duplicates on this table. */
   bool distinct;
@@ -1737,6 +1742,13 @@ public:
   */
   bool is_orig_degenerated;
 
+  /*
+    DELETE and UPDATE may have an imitation JOIN, which is not NULL,
+    but has NULL join_tab. In such cases we may want to access
+    sql_cmd_dml::scanned_rows to choose optimization strategies.
+  */
+  Sql_cmd_dml *sql_cmd_dml;
+
   JOIN(THD *thd_arg, List<Item> &fields_arg, ulonglong select_options_arg,
        select_result *result_arg)
     :fields_list(fields_arg)
@@ -2713,5 +2725,7 @@ void propagate_new_equalities(THD *thd, Item *cond,
 #define PREV_BITS(type, N_BITS) ((type)my_set_bits(N_BITS))
 
 bool dbug_user_var_equals_str(THD *thd, const char *name, const char *value);
+
+#include "opt_vcol_substitution.h"
 
 #endif /* SQL_SELECT_INCLUDED */

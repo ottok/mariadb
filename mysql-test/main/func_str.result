@@ -1,3 +1,4 @@
+ALTER DATABASE test CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 set @save_max_allowed_packet=@@global.max_allowed_packet;
 set global max_allowed_packet=1048576;
 connect  conn1,localhost,root,,;
@@ -608,103 +609,103 @@ select _latin1'B' COLLATE latin1_general_ci in (_latin1'a',_latin1'b' COLLATE la
 ERROR HY000: Illegal mix of collations (latin1_general_ci,EXPLICIT), (latin1_swedish_ci,COERCIBLE), (latin1_bin,EXPLICIT) for operation 'in'
 select collation(bin(130)), coercibility(bin(130));
 collation(bin(130))	coercibility(bin(130))
-latin1_swedish_ci	4
+latin1_swedish_ci	6
 select collation(oct(130)), coercibility(oct(130));
 collation(oct(130))	coercibility(oct(130))
-latin1_swedish_ci	4
+latin1_swedish_ci	6
 select collation(conv(130,16,10)), coercibility(conv(130,16,10));
 collation(conv(130,16,10))	coercibility(conv(130,16,10))
-latin1_swedish_ci	4
+latin1_swedish_ci	6
 select collation(hex(130)), coercibility(hex(130));
 collation(hex(130))	coercibility(hex(130))
-latin1_swedish_ci	4
+latin1_swedish_ci	6
 select collation(char(130)), coercibility(hex(130));
 collation(char(130))	coercibility(hex(130))
-binary	4
+binary	6
 select collation(format(130,10)), coercibility(format(130,10));
 collation(format(130,10))	coercibility(format(130,10))
-latin1_swedish_ci	4
+latin1_swedish_ci	6
 select collation(lcase(_latin2'a')), coercibility(lcase(_latin2'a'));
 collation(lcase(_latin2'a'))	coercibility(lcase(_latin2'a'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(ucase(_latin2'a')), coercibility(ucase(_latin2'a'));
 collation(ucase(_latin2'a'))	coercibility(ucase(_latin2'a'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(left(_latin2'a',1)), coercibility(left(_latin2'a',1));
 collation(left(_latin2'a',1))	coercibility(left(_latin2'a',1))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(right(_latin2'a',1)), coercibility(right(_latin2'a',1));
 collation(right(_latin2'a',1))	coercibility(right(_latin2'a',1))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(substring(_latin2'a',1,1)), coercibility(substring(_latin2'a',1,1));
 collation(substring(_latin2'a',1,1))	coercibility(substring(_latin2'a',1,1))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(concat(_latin2'a',_latin2'b')), coercibility(concat(_latin2'a',_latin2'b'));
 collation(concat(_latin2'a',_latin2'b'))	coercibility(concat(_latin2'a',_latin2'b'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(lpad(_latin2'a',4,_latin2'b')), coercibility(lpad(_latin2'a',4,_latin2'b'));
 collation(lpad(_latin2'a',4,_latin2'b'))	coercibility(lpad(_latin2'a',4,_latin2'b'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(lpad(_latin2'a',4)), coercibility(lpad(_latin2'a',4));
 collation(lpad(_latin2'a',4))	coercibility(lpad(_latin2'a',4))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(rpad(_latin2'a',4,_latin2'b')), coercibility(rpad(_latin2'a',4,_latin2'b'));
 collation(rpad(_latin2'a',4,_latin2'b'))	coercibility(rpad(_latin2'a',4,_latin2'b'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(rpad(_latin2'a',4)), coercibility(rpad(_latin2'a',4));
 collation(rpad(_latin2'a',4))	coercibility(rpad(_latin2'a',4))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(concat_ws(_latin2'a',_latin2'b')), coercibility(concat_ws(_latin2'a',_latin2'b'));
 collation(concat_ws(_latin2'a',_latin2'b'))	coercibility(concat_ws(_latin2'a',_latin2'b'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(make_set(255,_latin2'a',_latin2'b',_latin2'c')), coercibility(make_set(255,_latin2'a',_latin2'b',_latin2'c'));
 collation(make_set(255,_latin2'a',_latin2'b',_latin2'c'))	coercibility(make_set(255,_latin2'a',_latin2'b',_latin2'c'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(export_set(255,_latin2'y',_latin2'n',_latin2' ')), coercibility(export_set(255,_latin2'y',_latin2'n',_latin2' '));
 collation(export_set(255,_latin2'y',_latin2'n',_latin2' '))	coercibility(export_set(255,_latin2'y',_latin2'n',_latin2' '))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(trim(_latin2' a ')), coercibility(trim(_latin2' a '));
 collation(trim(_latin2' a '))	coercibility(trim(_latin2' a '))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(ltrim(_latin2' a ')), coercibility(ltrim(_latin2' a '));
 collation(ltrim(_latin2' a '))	coercibility(ltrim(_latin2' a '))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(rtrim(_latin2' a ')), coercibility(rtrim(_latin2' a '));
 collation(rtrim(_latin2' a '))	coercibility(rtrim(_latin2' a '))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(trim(LEADING _latin2' ' FROM _latin2'a')), coercibility(trim(LEADING _latin2'a' FROM _latin2'a'));
 collation(trim(LEADING _latin2' ' FROM _latin2'a'))	coercibility(trim(LEADING _latin2'a' FROM _latin2'a'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(trim(TRAILING _latin2' ' FROM _latin2'a')), coercibility(trim(TRAILING _latin2'a' FROM _latin2'a'));
 collation(trim(TRAILING _latin2' ' FROM _latin2'a'))	coercibility(trim(TRAILING _latin2'a' FROM _latin2'a'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(trim(BOTH _latin2' ' FROM _latin2'a')), coercibility(trim(BOTH _latin2'a' FROM _latin2'a'));
 collation(trim(BOTH _latin2' ' FROM _latin2'a'))	coercibility(trim(BOTH _latin2'a' FROM _latin2'a'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(repeat(_latin2'a',10)), coercibility(repeat(_latin2'a',10));
 collation(repeat(_latin2'a',10))	coercibility(repeat(_latin2'a',10))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(reverse(_latin2'ab')), coercibility(reverse(_latin2'ab'));
 collation(reverse(_latin2'ab'))	coercibility(reverse(_latin2'ab'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(quote(_latin2'ab')), coercibility(quote(_latin2'ab'));
 collation(quote(_latin2'ab'))	coercibility(quote(_latin2'ab'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(soundex(_latin2'ab')), coercibility(soundex(_latin2'ab'));
 collation(soundex(_latin2'ab'))	coercibility(soundex(_latin2'ab'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(substring(_latin2'ab',1)), coercibility(substring(_latin2'ab',1));
 collation(substring(_latin2'ab',1))	coercibility(substring(_latin2'ab',1))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(insert(_latin2'abcd',2,3,_latin2'ef')), coercibility(insert(_latin2'abcd',2,3,_latin2'ef'));
 collation(insert(_latin2'abcd',2,3,_latin2'ef'))	coercibility(insert(_latin2'abcd',2,3,_latin2'ef'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(replace(_latin2'abcd',_latin2'b',_latin2'B')), coercibility(replace(_latin2'abcd',_latin2'b',_latin2'B'));
 collation(replace(_latin2'abcd',_latin2'b',_latin2'B'))	coercibility(replace(_latin2'abcd',_latin2'b',_latin2'B'))
-latin2_general_ci	4
+latin2_general_ci	6
 select collation(encode('abcd','ab')), coercibility(encode('abcd','ab'));
 collation(encode('abcd','ab'))	coercibility(encode('abcd','ab'))
-binary	4
+binary	6
 create table t1 
 select
 bin(130),
@@ -787,7 +788,7 @@ latin2	latin2_general_ci	2
 drop table t1;
 select charset(null), collation(null), coercibility(null);
 charset(null)	collation(null)	coercibility(null)
-binary	binary	6
+binary	binary	8
 CREATE TABLE t1 (a int, b int);
 CREATE TABLE t2 (a int, b int);
 INSERT INTO t1 VALUES (1,1),(2,2);
@@ -803,7 +804,7 @@ a	b	a	b
 1	1	NULL	NULL
 2	2	2	2
 select t1.*,t2.* from t1 left join t2 on (t1.b=t2.b)
-where coercibility(t2.a) = 5 order by t1.a,t2.a;
+where coercibility(t2.a) = 7 order by t1.a,t2.a;
 a	b	a	b
 1	1	NULL	NULL
 2	2	2	2
@@ -4904,7 +4905,7 @@ DROP TABLE t1;
 #
 # MDEV-10850 Wrong result for WHERE .. (f2=TO_BASE64('test') OR f2=TO_BASE64('TEST'))
 #
-CREATE TABLE t1 (f1 VARCHAR(4), f2 VARCHAR(255), UNIQUE KEY k1 (f1,f2));
+CREATE TABLE t1 (f1 VARCHAR(4), f2 VARCHAR(255), UNIQUE KEY k1 (f1,f2)) CHARSET=latin1;
 INSERT INTO t1 VALUES ('test',hex('test')), ('TEST', hex('TEST'));
 SELECT * FROM t1 IGNORE INDEX(k1) WHERE f1='test' AND (f2= hex("test") OR f2= hex("TEST"));
 f1	f2
@@ -4932,7 +4933,7 @@ DEALLOCATE PREPARE stmt;
 #
 # MDEV-10850 Wrong result for WHERE .. (f2=TO_BASE64('test') OR f2=TO_BASE64('TEST'))
 #
-CREATE TABLE t1 (f1 VARCHAR(4), f2 VARCHAR(255), UNIQUE KEY k1 (f1,f2));
+CREATE TABLE t1 (f1 VARCHAR(4), f2 VARCHAR(255), UNIQUE KEY k1 (f1,f2)) CHARSET=latin1;
 INSERT INTO t1 VALUES ('test',to_base64('test')), ('TEST', to_base64('TEST'));
 SELECT * FROM t1 IGNORE INDEX(k1) WHERE f1='test' AND (f2= to_base64("test") OR f2= to_base64("TEST"));
 f1	f2
@@ -5148,9 +5149,9 @@ FROM t1;
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `cn` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
-  `c0` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
-  `c1` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL
+  `cn` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
+  `c0` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
+  `c1` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1, t2;
 #
@@ -5166,9 +5167,9 @@ FROM t1;
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `cn` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
-  `c0` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
-  `c1` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL
+  `cn` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
+  `c0` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
+  `c1` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1, t2;
 CREATE TABLE t1 (i BIGINT);
@@ -5181,9 +5182,9 @@ FROM t1;
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `cn` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
-  `c0` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
-  `c1` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL
+  `cn` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
+  `c0` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
+  `c1` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1, t2;
 CREATE TABLE t1 (i BIGINT);
@@ -5196,9 +5197,9 @@ FROM t1;
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `cn` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
-  `c0` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
-  `c1` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL
+  `cn` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
+  `c0` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
+  `c1` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1, t2;
 CREATE TABLE t1 (i BIGINT);
@@ -5211,9 +5212,9 @@ FROM t1;
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `cn` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
-  `c0` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL,
-  `c1` varchar(20) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL
+  `cn` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
+  `c0` char(0) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL,
+  `c1` varchar(20) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 SELECT c1 FROM t2;
 c1
@@ -5259,7 +5260,7 @@ conv(i,16,2)
 SHOW CREATE TABLE t2;
 Table	Create Table
 t2	CREATE TABLE `t2` (
-  `conv(i,16,2)` varchar(65) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL
+  `conv(i,16,2)` varchar(65) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1,t2;
 #
@@ -5410,7 +5411,7 @@ CREATE TABLE t1 AS SELECT CONV(1<<63, 10, -2) AS c1;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c1` varchar(65) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL
+  `c1` varchar(65) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 DROP TABLE t1;
 #
@@ -5767,3 +5768,192 @@ CONV(-9223372036854775808, -10, -62)
 #
 # End of 11.4 tests
 #
+#
+# Start of 11.5 tests
+#
+#
+# MDEV-25829 Change default collation to utf8mb4_1400_ai_ci
+#
+SELECT
+coercibility(CAST(1 AS CHAR)),
+coercibility(CONVERT('a' USING latin1));
+coercibility(CAST(1 AS CHAR))	4
+coercibility(CONVERT('a' USING latin1))	4
+SELECT
+coercibility(CAST(1 AS BINARY)),
+coercibility(CONVERT('a' USING binary)),
+coercibility(binary'a');
+coercibility(CAST(1 AS BINARY))	2
+coercibility(CONVERT('a' USING binary))	2
+coercibility(binary'a')	2
+EXPLAIN EXTENDED SELECT
+CAST(1 AS BINARY) AS c,
+CONVERT('a' USING binary),
+BINARY'a';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	No tables used
+Warnings:
+Note	1003	select cast(1 as char charset binary) AS `c`,convert('a' using binary) AS `CONVERT('a' USING binary)`,cast('a' as char charset binary) AS `BINARY'a'`
+SELECT
+coercibility(collation('a')),
+coercibility(charset('a')),
+coercibility(user()),
+coercibility(database());
+coercibility(collation('a'))	3
+coercibility(charset('a'))	3
+coercibility(user())	3
+coercibility(database())	3
+#
+# End of 11.5 tests
+#
+#
+# MDEV-34911 Make conditions SUBSTR(col, 1, n) = const_str sargable
+#
+create table t (c varchar(5), key (c));
+insert into t values ('ddd'), ('bbcd'), ('bba'), ('b%_cd'), ('aaa');
+explain select * from t where substr(c, 1, 2) = 'bb';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	range	c	c	8	NULL	2	Using where; Using index
+select * from t where substr(c, 1, 2) = 'bb';
+c
+bba
+bbcd
+explain select * from t where 'bb' = substr(c, 1, 2);
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	range	c	c	8	NULL	2	Using where; Using index
+select * from t where 'bb' = substr(c, 1, 2);
+c
+bba
+bbcd
+explain select * from t where left(c, 2) = 'bb';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	range	c	c	8	NULL	2	Using where; Using index
+select * from t where left(c, 2) = 'bb';
+c
+bba
+bbcd
+explain select * from t where 'bb' = left(c, 2);
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	range	c	c	8	NULL	2	Using where; Using index
+select * from t where 'bb' = left(c, 2);
+c
+bba
+bbcd
+explain select * from t where substr(c, 1, 4) = 'b%_c';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	range	c	c	8	NULL	1	Using where; Using index
+select * from t where substr(c, 1, 4) = 'b%_c';
+c
+b%_cd
+explain select * from t where substr(c, 1, 2) = concat('b', 'b');
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	range	c	c	8	NULL	2	Using where; Using index
+select * from t where substr(c, 1, 2) = concat('b', 'b');
+c
+bba
+bbcd
+explain select * from t where substr(c, 1, 2) = substr('bb1', 1, 2);
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	range	c	c	8	NULL	2	Using where; Using index
+select * from t where substr(c, 1, 2) = substr('bb1', 1, 2);
+c
+bba
+bbcd
+create table t1 (a varchar(32), b int, index(a));
+insert into t1 select seq, seq / 33 from seq_1_to_100;
+explain select * from t1 where substr(a, 1, 2)='80';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	range	a	a	35	NULL	1	Using index condition
+explain select * from t1 where substr(a, 1, b)='80';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	range	a	a	35	NULL	1	Using where
+create view v1 as select a,b from t1;
+explain select * from v1 where substr(a, 1, 2)='80';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	range	a	a	35	NULL	1	Using index condition
+drop view v1;
+drop table t1;
+explain select * from t where substr(c, 1, 1) = 'bb';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	range	c	c	8	NULL	2	Using where; Using index
+select * from t where substr(c, 1, 1) = 'bb';
+c
+explain select * from t where substr(c, 1, 3) = 'bb';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	range	c	c	8	NULL	2	Using where; Using index
+select * from t where substr(c, 1, 3) = 'bb';
+c
+explain select * from t where substr(c, 1) = 'bb';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	range	c	c	8	NULL	2	Using where; Using index
+select * from t where substr(c, 1) = 'bb';
+c
+explain select * from t where substr(c, 1, 2) = substr(c, 2, 3);
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	index	NULL	c	8	NULL	5	Using where; Using index
+select * from t where substr(c, 1, 2) = substr(c, 2, 3);
+c
+aaa
+ddd
+drop index c on t;
+explain select * from t where substr(c, 1, 2) = 'bb';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t	ALL	NULL	NULL	NULL	NULL	5	Using where
+select * from t where substr(c, 1, 2) = 'bb';
+c
+bbcd
+bba
+drop table t;
+set @old_collation_connection=@@collation_connection;
+SET collation_connection=utf32_czech_ci;
+CREATE TABLE t1 AS SELECT REPEAT(' ', 10) AS s1 LIMIT 0;
+INSERT INTO t1 VALUES ('%c'),('%ce'),('%cé'),('%ch'), ('c'), ('d'), ('c%'), ('c\\g');
+SELECT * FROM t1 WHERE s1 LIKE '\\%c%';
+s1
+%c
+%ce
+%cé
+%ch
+SELECT * FROM t1 WHERE substr(s1, 1, 2) = '%c';
+s1
+%c
+%ce
+%cé
+%ch
+SELECT * FROM t1 WHERE s1 LIKE 'c\\\\%';
+s1
+c\g
+SELECT * FROM t1 WHERE substr(s1, 1, 2) = 'c\\';
+s1
+c\g
+ALTER TABLE t1 ADD KEY s1 (s1);
+SELECT * FROM t1 WHERE s1 LIKE '\\%c%';
+s1
+%c
+%ce
+%cé
+%ch
+SELECT * FROM t1 WHERE substr(s1, 1, 2) = '%c';
+s1
+%c
+%ce
+%cé
+%ch
+SELECT * FROM t1 WHERE s1 LIKE 'c\\\\%';
+s1
+c\g
+SELECT * FROM t1 WHERE substr(s1, 1, 2) = 'c\\';
+s1
+c\g
+DROP TABLE t1;
+set collation_connection=@old_collation_connection;
+create table t1 (a varchar(100), b varchar(100), key(a));
+insert into t1 select seq, seq from seq_1_to_1000;
+explain select * from t1 where LEFT(a, 20) ='%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%';
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	ALL	a	NULL	NULL	NULL	1000	Using where
+drop table t1;
+#
+# End of 11.8 tests
+#
+ALTER DATABASE test CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;

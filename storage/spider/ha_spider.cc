@@ -14,10 +14,6 @@
   along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335 USA */
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation
-#endif
-
 #define MYSQL_SERVER 1
 #include <my_global.h>
 #include "mysql_version.h"
@@ -69,6 +65,7 @@ void ha_spider::init_fields()
   append_tblnm_alias = NULL;
   use_index_merge = FALSE;
   is_clone = FALSE;
+  pushed_pos = NULL;
   pt_clone_source_handler = NULL;
   pt_clone_last_searcher = NULL;
   ft_handler = NULL;
@@ -5816,8 +5813,8 @@ const char *ha_spider::index_type(
   DBUG_PRINT("info",("spider flags=%ld", key_info->flags));
   DBUG_PRINT("info",("spider algorithm=%d", key_info->algorithm));
   DBUG_RETURN(
-    (key_info->flags & HA_FULLTEXT) ? "FULLTEXT" :
-    (key_info->flags & HA_SPATIAL) ? "SPATIAL" :
+    (key_info->algorithm == HA_KEY_ALG_FULLTEXT) ? "FULLTEXT" :
+    (key_info->algorithm == HA_KEY_ALG_RTREE) ? "SPATIAL" :
     (key_info->algorithm == HA_KEY_ALG_HASH) ? "HASH" :
     (key_info->algorithm == HA_KEY_ALG_RTREE) ? "RTREE" :
     "BTREE"
@@ -6787,6 +6784,11 @@ int ha_spider::create(
     sql_command == SQLCOM_DROP_INDEX
   )
     DBUG_RETURN(0);
+  if (form->s->hlindexes() > 0)
+  {
+    my_error(ER_ILLEGAL_HA_CREATE_OPTION, MYF(0), "SPIDER", "VECTOR");
+    DBUG_RETURN(HA_ERR_UNSUPPORTED);
+  }
   if (!is_supported_parser_charset(info->default_table_charset))
   {
     String charset_option;

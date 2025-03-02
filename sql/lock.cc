@@ -153,7 +153,8 @@ lock_tables_check(THD *thd, TABLE **tables, uint count, uint flags)
 
     if (t->reginfo.lock_type >= TL_FIRST_WRITE)
     {
-      if (t->s->table_category == TABLE_CATEGORY_SYSTEM)
+      if (t->s->table_category == TABLE_CATEGORY_SYSTEM ||
+          t->s->table_category == TABLE_CATEGORY_STATISTICS)
         system_count++;
 
       if (t->db_stat & HA_READ_ONLY)
@@ -1132,9 +1133,7 @@ void Global_read_lock::unlock_global_read_lock(THD *thd)
   {
     thd->global_disable_checkpoint= 0;
     if (!--global_disable_checkpoint)
-    {
-      ha_checkpoint_state(0);                   // Enable checkpoints
-    }
+       ha_disable_internal_writes(0);                   // Enable checkpoints
   }
 
   thd->mdl_context.release_lock(m_mdl_global_read_lock);

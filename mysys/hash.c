@@ -378,9 +378,8 @@ static int hashcmp(const HASH *hash, HASH_LINK *pos, const uchar *key,
   size_t rec_keylength;
   uchar *rec_key;
   rec_key= (uchar*) my_hash_key(hash, pos->data, &rec_keylength, 1);
-  return (length != rec_keylength) ||
-	  my_strnncoll(hash->charset, (uchar*) rec_key, rec_keylength,
-		       (uchar*) key, rec_keylength);
+  return my_strnncoll(hash->charset, (uchar*) rec_key, rec_keylength,
+		       (uchar*) key, length);
 }
 
 
@@ -763,7 +762,7 @@ my_bool my_hash_update(HASH *hash, uchar *record, uchar *old_key,
 }
 
 
-uchar *my_hash_element(HASH *hash, size_t idx)
+uchar *my_hash_element(const HASH *hash, size_t idx)
 {
   if (idx < hash->records)
     return dynamic_element(&hash->array,idx,HASH_LINK*)->data;

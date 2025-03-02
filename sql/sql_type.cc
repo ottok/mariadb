@@ -17,6 +17,7 @@
 #include "mariadb.h"
 #include "sql_type.h"
 #include "sql_type_geom.h"
+#include "sql_type_vector.h"
 #include "sql_const.h"
 #include "sql_class.h"
 #include "sql_time.h"
@@ -131,7 +132,7 @@ Named_type_handler<Type_handler_long> type_handler_slong("int");
 Named_type_handler<Type_handler_long_ge0> type_handler_slong_ge0("int");
 Named_type_handler<Type_handler_int24> type_handler_sint24("mediumint");
 Named_type_handler<Type_handler_longlong> type_handler_slonglong("bigint");
-Named_type_handler<Type_handler_utiny> type_handler_utiny("tiny unsigned");
+Named_type_handler<Type_handler_utiny> type_handler_utiny("tinyint unsigned");
 Named_type_handler<Type_handler_ushort> type_handler_ushort("smallint unsigned");
 Named_type_handler<Type_handler_ulong> type_handler_ulong("int unsigned");
 Named_type_handler<Type_handler_uint24> type_handler_uint24("mediumint unsigned");
@@ -260,10 +261,7 @@ const Type_collection *Type_handler_row::type_collection() const
 
 bool Type_handler_data::init()
 {
-#ifdef HAVE_SPATIAL
   return type_collection_geometry.init(this);
-#endif
-  return false;
 }
 
 
@@ -291,12 +289,10 @@ Type_handler::handler_by_name(THD *thd, const LEX_CSTRING &name)
     return ph;
   }
 
-#ifdef HAVE_SPATIAL
   const Type_handler *ha= Type_collection_geometry_handler_by_name(name);
-  if (ha)
-    return ha;
-#endif
-  return NULL;
+  if (!ha && type_handler_vector.name().eq(name))
+    return &type_handler_vector;
+  return ha;
 }
 
 
@@ -335,27 +331,7 @@ Type_handler_data *type_handler_data= NULL;
 
 bool Float::to_string(String *val_buffer, uint dec) const
 {
-  uint to_length= 70;
-  if (val_buffer->alloc(to_length))
-    return true;
-
-  char *to=(char*) val_buffer->ptr();
-  size_t len;
-
-  if (dec >= FLOATING_POINT_DECIMALS)
-    len= my_gcvt(m_value, MY_GCVT_ARG_FLOAT, to_length - 1, to, NULL);
-  else
-  {
-    /*
-      We are safe here because the buffer length is 70, and
-      fabs(float) < 10^39, dec < FLOATING_POINT_DECIMALS. So the resulting string
-      will be not longer than 69 chars + terminating '\0'.
-    */
-    len= my_fcvt(m_value, (int) dec, to, NULL);
-  }
-  val_buffer->length((uint) len);
-  val_buffer->set_charset(&my_charset_numeric);
-  return false;
+  return val_buffer->set_real(m_value, dec, &my_charset_numeric);
 }
 
 
@@ -468,7 +444,10 @@ bool Timestamp::to_native(Native *to, uint decimals) const
 {
   uint len= my_timestamp_binary_length(decimals);
   if (to->reserve(len))
+  {
+    to->length(0); // Safety: set to '0000-00-00 00:00:00' on falures
     return true;
+  }
   my_timestamp_to_binary(this, (uchar *) to->ptr(), decimals);
   to->length(len);
   return false;
@@ -477,7 +456,7 @@ bool Timestamp::to_native(Native *to, uint decimals) const
 
 bool Timestamp::to_TIME(THD *thd, MYSQL_TIME *to, date_mode_t fuzzydate) const
 {
-  return thd->timestamp_to_TIME(to, tv_sec, tv_usec, fuzzydate);
+  return thd->timestamp_to_TIME(to, (my_time_t) tv_sec, tv_usec, fuzzydate);
 }
 
 
@@ -537,7 +516,7 @@ int Timestamp_or_zero_datetime_native::save_in_field(Field *field,
     static Datetime zero(Datetime::zero());
     return field->store_time_dec(zero.get_mysql_time(), decimals);
   }
-  return field->store_timestamp_dec(Timestamp(*this).tv(), decimals);
+  return field->store_timestamp_dec(Timestamp(*this), decimals);
 }
 
 
@@ -1140,9 +1119,9 @@ void Datetime::make_from_datetime(THD *thd, int *warn, const MYSQL_TIME *from,
 }
 
 
-Datetime::Datetime(THD *thd, const timeval &tv)
+Datetime::Datetime(THD *thd, const my_timeval &tv)
 {
-  thd->variables.time_zone->gmt_sec_to_TIME(this, tv.tv_sec);
+  thd->variables.time_zone->gmt_sec_to_TIME(this, (my_time_t) tv.tv_sec);
   second_part= tv.tv_usec;
   thd->used|= THD::TIME_ZONE_USED;
   DBUG_ASSERT(is_valid_value_slow());
@@ -2254,12 +2233,7 @@ Type_handler::get_handler_by_field_type(enum_field_types type)
   case MYSQL_TYPE_STRING:      return &type_handler_string;
   case MYSQL_TYPE_ENUM:        return &type_handler_varchar; // Map to VARCHAR
   case MYSQL_TYPE_SET:         return &type_handler_varchar; // Map to VARCHAR
-  case MYSQL_TYPE_GEOMETRY:
-#ifdef HAVE_SPATIAL
-    return &type_handler_geometry;
-#else
-    return NULL;
-#endif
+  case MYSQL_TYPE_GEOMETRY:    return &type_handler_geometry;
   case MYSQL_TYPE_TIMESTAMP:   return &type_handler_timestamp2;// Map to timestamp2
   case MYSQL_TYPE_TIMESTAMP2:  return &type_handler_timestamp2;
   case MYSQL_TYPE_DATE:        return &type_handler_newdate;   // Map to newdate
@@ -2311,12 +2285,7 @@ Type_handler::get_handler_by_real_type(enum_field_types type)
   case MYSQL_TYPE_STRING:      return &type_handler_string;
   case MYSQL_TYPE_ENUM:        return &type_handler_enum;
   case MYSQL_TYPE_SET:         return &type_handler_set;
-  case MYSQL_TYPE_GEOMETRY:
-#ifdef HAVE_SPATIAL
-    return &type_handler_geometry;
-#else
-    return NULL;
-#endif
+  case MYSQL_TYPE_GEOMETRY:    return &type_handler_geometry;
   case MYSQL_TYPE_TIMESTAMP:   return &type_handler_timestamp;
   case MYSQL_TYPE_TIMESTAMP2:  return &type_handler_timestamp2;
   case MYSQL_TYPE_DATE:        return &type_handler_date;
@@ -2754,7 +2723,7 @@ Field *Type_handler_enum::make_conversion_table_field(MEM_ROOT *root,
          Field_enum(NULL, target->field_length,
                     (uchar *) "", 1, Field::NONE, &empty_clex_str,
                     metadata & 0x00ff/*pack_length()*/,
-                    ((const Field_enum*) target)->typelib, target->charset());
+                    ((const Field_enum*) target)->typelib(), target->charset());
 }
 
 
@@ -2770,7 +2739,7 @@ Field *Type_handler_set::make_conversion_table_field(MEM_ROOT *root,
          Field_set(NULL, target->field_length,
                    (uchar *) "", 1, Field::NONE, &empty_clex_str,
                    metadata & 0x00ff/*pack_length()*/,
-                   ((const Field_enum*) target)->typelib, target->charset());
+                   ((const Field_enum*) target)->typelib(), target->charset());
 }
 
 
@@ -2790,7 +2759,7 @@ Field *Type_handler_enum::make_schema_field(MEM_ROOT *root, TABLE *table,
                     addr.null_ptr(), addr.null_bit(),
                     Field::NONE, &name,
                     get_enum_pack_length(typelib->count),
-                    typelib, system_charset_info);
+                    typelib, system_charset_info_for_i_s);
 
 }
 
@@ -3065,7 +3034,8 @@ void Type_handler_typelib::
                                               const Field *field) const
 {
   DBUG_ASSERT(def->flags & (ENUM_FLAG | SET_FLAG));
-  def->interval= field->get_typelib();
+  const Field_enum *field_enum= static_cast<const Field_enum*>(field);
+  field_enum->Type_typelib_attributes::store(def);
 }
 
 
@@ -3424,7 +3394,7 @@ bool Type_handler_set::
   if (def->prepare_stage2_typelib("SET", FIELDFLAG_BITFIELD, &dup_count))
     return true;
   /* Check that count of unique members is not more then 64 */
-  if (def->interval->count - dup_count > sizeof(longlong)*8)
+  if (def->typelib()->count - dup_count > sizeof(longlong)*8)
   {
      my_error(ER_TOO_BIG_SET, MYF(0), def->field_name.str);
      return true;
@@ -3637,14 +3607,14 @@ Type_handler_string_result::calc_key_length(const Column_definition &def) const
 
 uint Type_handler_enum::calc_key_length(const Column_definition &def) const
 {
-  DBUG_ASSERT(def.interval);
-  return get_enum_pack_length(def.interval->count);
+  DBUG_ASSERT(def.typelib());
+  return get_enum_pack_length(def.typelib()->count);
 }
 
 uint Type_handler_set::calc_key_length(const Column_definition &def) const
 {
-  DBUG_ASSERT(def.interval);
-  return get_set_pack_length(def.interval->count);
+  DBUG_ASSERT(def.typelib());
+  return get_set_pack_length(def.typelib()->count);
 }
 
 uint Type_handler_blob_common::calc_key_length(const Column_definition &def) const
@@ -4019,13 +3989,14 @@ Field *Type_handler_enum::make_table_field(MEM_ROOT *root,
                                            const Type_all_attributes &attr,
                                            TABLE_SHARE *share) const
 {
-  const TYPELIB *typelib= attr.get_typelib();
-  DBUG_ASSERT(typelib);
+  const Type_typelib_attributes typelib_attr(attr.type_extra_attributes());
+  DBUG_ASSERT(typelib_attr.typelib());
   return new (root)
          Field_enum(addr.ptr(), attr.max_length,
                     addr.null_ptr(), addr.null_bit(),
                     Field::NONE, name,
-                    get_enum_pack_length(typelib->count), typelib,
+                    get_enum_pack_length(typelib_attr.typelib()->count),
+                    typelib_attr.typelib(),
                     attr.collation);
 }
 
@@ -4037,13 +4008,14 @@ Field *Type_handler_set::make_table_field(MEM_ROOT *root,
                                           TABLE_SHARE *share) const
 
 {
-  const TYPELIB *typelib= attr.get_typelib();
-  DBUG_ASSERT(typelib);
+  const Type_typelib_attributes typelib_attr(attr.type_extra_attributes());
+  DBUG_ASSERT(typelib_attr.typelib());
   return new (root)
          Field_set(addr.ptr(), attr.max_length,
                    addr.null_ptr(), addr.null_bit(),
                    Field::NONE, name,
-                   get_enum_pack_length(typelib->count), typelib,
+                   get_enum_pack_length(typelib_attr.typelib()->count),
+                   typelib_attr.typelib(),
                    attr.collation);
 }
 
@@ -4055,12 +4027,22 @@ Field *Type_handler_float::make_schema_field(MEM_ROOT *root, TABLE *table,
                                              const ST_FIELD_INFO &def) const
 {
   LEX_CSTRING name= def.name();
+  uint32 len= def.char_length();
+  uint dec= NOT_FIXED_DEC;
+  if (len >= 100)
+  {
+    dec= def.decimal_scale();
+    uint prec= def.decimal_precision();
+    /* Field defined in sql_show.cc with decimals */
+    len= my_decimal_precision_to_length(prec, dec, 0);
+  }
+
   return new (root)
-     Field_float(addr.ptr(), def.char_length(),
-                  addr.null_ptr(), addr.null_bit(),
-                  Field::NONE, &name,
-                  (uint8) NOT_FIXED_DEC,
-                  0/*zerofill*/, def.unsigned_flag());
+    Field_float(addr.ptr(), len,
+                addr.null_ptr(), addr.null_bit(),
+                Field::NONE, &name,
+                dec,
+                0/*zerofill*/, def.unsigned_flag());
 }
 
 
@@ -4119,7 +4101,7 @@ Field *Type_handler_varchar::make_schema_field(MEM_ROOT *root, TABLE *table,
   {
     Field *field= new (root)
       Field_blob(addr.ptr(), addr.null_ptr(), addr.null_bit(), Field::NONE,
-                 &name, table->s, 4, system_charset_info);
+                 &name, table->s, 4, system_charset_info_for_i_s);
     if (field)
       field->field_length= octet_length;
     return field;
@@ -4131,7 +4113,7 @@ Field *Type_handler_varchar::make_schema_field(MEM_ROOT *root, TABLE *table,
                       HA_VARCHAR_PACKLENGTH(octet_length),
                       addr.null_ptr(), addr.null_bit(),
                       Field::NONE, &name,
-                      table->s, system_charset_info);
+                      table->s, system_charset_info_for_i_s);
   }
 }
 
@@ -4814,8 +4796,8 @@ bool Type_handler_typelib::
   const TYPELIB *typelib= NULL;
   for (uint i= 0; i < nitems; i++)
   {
-    const TYPELIB *typelib2;
-    if ((typelib2= items[i]->get_typelib()))
+    const Type_extra_attributes eattr2= items[i]->type_extra_attributes();
+    if (eattr2.typelib())
     {
       if (typelib)
       {
@@ -4827,11 +4809,13 @@ bool Type_handler_typelib::
         handler->set_handler(&type_handler_varchar);
         return func->aggregate_attributes_string(func_name, items, nitems);
       }
-      typelib= typelib2;
+      typelib= eattr2.typelib();
     }
   }
   DBUG_ASSERT(typelib); // There must be at least one typelib
-  func->set_typelib(typelib);
+  Type_extra_attributes *eattr_addr= func->type_extra_attributes_addr();
+  if (eattr_addr)
+    eattr_addr->set_typelib(typelib);
   return func->aggregate_attributes_string(func_name, items, nitems);
 }
 
@@ -5274,7 +5258,7 @@ bool Type_handler_temporal_result::Item_val_bool(Item *item) const
 
 bool Type_handler_string_result::Item_val_bool(Item *item) const
 {
-  return item->val_real() != 0.0;
+  return item->val_bool_from_str();
 }
 
 
@@ -8184,6 +8168,12 @@ Item *Type_handler_interval_DDhhmmssff::
 }
 
 /***************************************************************************/
+Item_literal *Type_handler::create_boolean_false_item(THD *thd) const
+{
+  return new (thd->mem_root) Item_int(thd, 0);
+}
+
+/***************************************************************************/
 
 void Type_handler_string_result::Item_param_setup_conversion(THD *thd,
                                                              Item_param *param)
@@ -8745,7 +8735,7 @@ Field *Type_handler_enum::
   return new (mem_root)
     Field_enum(rec.ptr(), (uint32) attr->length, rec.null_ptr(), rec.null_bit(),
                attr->unireg_check, name, attr->pack_flag_to_pack_length(),
-               attr->interval, attr->charset);
+               attr->typelib(), attr->charset);
 }
 
 
@@ -8759,7 +8749,7 @@ Field *Type_handler_set::
   return new (mem_root)
     Field_set(rec.ptr(), (uint32) attr->length, rec.null_ptr(), rec.null_bit(),
               attr->unireg_check, name, attr->pack_flag_to_pack_length(),
-              attr->interval, attr->charset);
+              attr->typelib(), attr->charset);
 }
 
 

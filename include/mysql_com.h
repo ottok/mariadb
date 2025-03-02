@@ -124,8 +124,7 @@ enum enum_indicator_type
   bulk PS flags
 */
 #define STMT_BULK_FLAG_CLIENT_SEND_TYPES 128
-#define STMT_BULK_FLAG_INSERT_ID_REQUEST 64
-
+#define STMT_BULK_FLAG_SEND_UNIT_RESULTS 64
 
 /* sql type stored in .frm files for virtual fields */
 #define MYSQL_TYPE_VIRTUAL 245
@@ -197,8 +196,8 @@ enum enum_indicator_type
 #define REFRESH_HOSTS           (1ULL << 3)  /* Flush host cache */
 #define REFRESH_STATUS          (1ULL << 4)  /* Flush status variables */
 #define REFRESH_THREADS         (1ULL << 5)  /* Flush thread cache */
-#define REFRESH_SLAVE           (1ULL << 6)  /* Reset master info and restart slave
-                                             thread */
+#define REFRESH_SLAVE           (1ULL << 6)  /* Reset master info and restart
+                                                slave thread */
 #define REFRESH_MASTER          (1ULL << 7)  /* Remove all bin logs in the index
                                              and truncate the index */
 
@@ -219,6 +218,8 @@ enum enum_indicator_type
 #define REFRESH_USER_RESOURCES  (1ULL << 19)
 #define REFRESH_FOR_EXPORT      (1ULL << 20) /* FLUSH TABLES ... FOR EXPORT */
 #define REFRESH_SSL             (1ULL << 21)
+#define REFRESH_GLOBAL_STATUS   (1ULL << 22)  /* Flush global status */
+#define REFRESH_SESSION_STATUS  (1ULL << 23)  /* Flush session status */
 
 #define REFRESH_GENERIC         (1ULL << 30)
 #define REFRESH_FAST            (1ULL << 31) /* Intern flag */
@@ -288,6 +289,9 @@ enum enum_indicator_type
 /* Do not resend metadata for prepared statements, since 10.6*/
 #define MARIADB_CLIENT_CACHE_METADATA (1ULL << 36)
 
+/* permit sending unit result-set for BULK commands */
+#define MARIADB_CLIENT_BULK_UNIT_RESULTS (1ULL << 37)
+
 #ifdef HAVE_COMPRESS
 #define CAN_CLIENT_COMPRESS CLIENT_COMPRESS
 #else
@@ -328,7 +332,8 @@ enum enum_indicator_type
                            MARIADB_CLIENT_STMT_BULK_OPERATIONS |\
                            MARIADB_CLIENT_EXTENDED_METADATA|\
                            MARIADB_CLIENT_CACHE_METADATA |\
-                           CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS)
+                           CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS |\
+                           MARIADB_CLIENT_BULK_UNIT_RESULTS)
 /*
   Switch off the flags that are optional and depending on build flags
   If any of the optional flags is supported by the build it will be switched

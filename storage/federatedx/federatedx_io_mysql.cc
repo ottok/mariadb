@@ -39,11 +39,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "mysqld_error.h"
 #include "sql_servers.h"
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation                          // gcc: Class implementation
-#endif
-
-
 #define SAVEPOINT_REALIZED  1
 #define SAVEPOINT_RESTRICT  2
 #define SAVEPOINT_EMITTED 4
@@ -75,7 +70,8 @@ public:
   federatedx_io_mysql(FEDERATEDX_SERVER *);
   ~federatedx_io_mysql() override;
 
-  int simple_query(const char *fmt, ...);
+  // 1st arg is the implicit `this`
+  int simple_query(const char *fmt, ...) ATTRIBUTE_FORMAT(printf, 2, 3);
   int query(const char *buffer, size_t length) override;
   FEDERATEDX_IO_RESULT *store_result() override;
 

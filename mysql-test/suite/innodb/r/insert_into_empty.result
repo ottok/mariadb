@@ -393,7 +393,7 @@ SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `c` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 CREATE TABLE t2(d INT)ENGINE=InnoDB;
 DROP TABLE t2, t1;
 #
@@ -545,7 +545,8 @@ DROP TABLE t1;
 #  MDEV-35475 Assertion `!rec_offs_nth_extern(offsets1, n)'
 #               failed in cmp_rec_rec_simple_field
 #
-CREATE TABLE t1(a BLOB, b VARCHAR(2048), PRIMARY KEY (b)) ENGINE=InnoDB;
+CREATE TABLE t1(a BLOB, b VARCHAR(2048), PRIMARY KEY (b)) ENGINE=InnoDB
+CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 INSERT INTO t1 VALUES (REPEAT('x',4805),'a'), (REPEAT('x',16111),'b'),
 (REPEAT('x',65535),'c'), (REPEAT('x',11312),'d'),
 (REPEAT('x',35177),'e'), (REPEAT('x',65535),'f'),

@@ -148,7 +148,7 @@ t1	CREATE TABLE `t1` (
   `a` uuid DEFAULT NULL,
   `b` int(11) NOT NULL,
   KEY `a` (`a`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 # now let's use the table as above, but created in 10.11.4
 select * from t2 order by b;
 a	b
@@ -830,4 +830,22 @@ a	b	a	b
 13101234-5566-7777-e888-99aabbccddee	31	12501234-5566-6777-8888-99aabbccddee	25
 13101234-5566-7777-e888-99aabbccddee	31	12701234-5566-6777-e888-99aabbccddee	27
 13101234-5566-7777-e888-99aabbccddee	31	12901234-5566-7777-8888-99aabbccddee	29
+drop table t1;
+#
+# MDEV-32637 Implement native UUID7 function
+#
+CREATE TABLE t1 (a int primary key not null, u UUID DEFAULT UUID_v7(), unique key(u));
+insert into t1(a) select seq from seq_1_to_10;
+select a from t1 order by u asc;
+a
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
 drop table t1;

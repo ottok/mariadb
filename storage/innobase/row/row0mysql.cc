@@ -1208,7 +1208,7 @@ static dberr_t row_mysql_get_table_error(trx_t *trx, dict_table_t *table)
   }
 
   const int dblen= int(table->name.dblen());
-  sql_print_error("InnoDB .ibd file is missing for table %`.*s.%`s",
+  sql_print_error("InnoDB .ibd file is missing for table %.*sQ.%sQ",
                   dblen, table->name.m_name, table->name.m_name + dblen + 1);
   return DB_TABLESPACE_NOT_FOUND;
 }
@@ -2179,7 +2179,7 @@ row_create_index_for_mysql(
 
 			err = dict_create_index_tree_in_mem(index, trx);
 #ifdef BTR_CUR_HASH_ADAPT
-			ut_ad(!index->search_info->ref_count);
+			ut_ad(!index->search_info.ref_count);
 #endif /* BTR_CUR_HASH_ADAPT */
 
 			if (err != DB_SUCCESS) {
@@ -2586,17 +2586,16 @@ row_rename_table_for_mysql(
 		/* Check for the table using lower
 		case name, including the partition
 		separator "P" */
-		memcpy(par_case_name, old_name,
-			strlen(old_name));
-		par_case_name[strlen(old_name)] = 0;
-		my_casedn_str(system_charset_info, par_case_name);
+		system_charset_info->casedn_z(
+				old_name, strlen(old_name),
+				par_case_name, sizeof(par_case_name));
 #else
 		/* On Windows platfrom, check
 		whether there exists table name in
 		system table whose name is
 		not being normalized to lower case */
 		normalize_table_name_c_low(
-			par_case_name, old_name, FALSE);
+			par_case_name, sizeof(par_case_name), old_name, FALSE);
 #endif
 		table = dict_table_open_on_name(par_case_name, true,
 						DICT_ERR_IGNORE_FK_NOKEY);

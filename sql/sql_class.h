@@ -1,5 +1,6 @@
 /*
-   Copyright (c) 2009, 2022, MariaDB Corporation.
+   Copyright (c) 2000, 2016, Oracle and/or its affiliates.
+   Copyright (c) 2009, 2024, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -207,10 +208,12 @@ enum enum_binlog_row_image {
 #define OLD_MODE_COMPAT_5_1_CHECKSUM    (1 << 5)
 #define OLD_MODE_NO_NULL_COLLATION_IDS  (1 << 6)
 #define OLD_MODE_LOCK_ALTER_TABLE_COPY  (1 << 7)
+#define OLD_MODE_OLD_FLUSH_STATUS       (1 << 8)
+#define OLD_MODE_SESSION_USER_IS_USER   (1 << 9)
 
 #define OLD_MODE_DEFAULT_VALUE          OLD_MODE_UTF8_IS_UTF8MB3
 
-void old_mode_deprecated_warnings(THD *thd, ulonglong v);
+void old_mode_deprecated_warnings(ulonglong v);
 
 extern char internal_table_name[2];
 extern char empty_c_string[1];
@@ -331,7 +334,7 @@ typedef struct st_copy_info {
 
 class Key_part_spec :public Sql_alloc {
 public:
-  Lex_ident field_name;
+  Lex_ident_column field_name;
   uint length;
   bool generated, asc;
   Key_part_spec(const LEX_CSTRING *name, uint len, bool gen= false)
@@ -366,13 +369,15 @@ public:
 class Alter_drop :public Sql_alloc {
 public:
   enum drop_type { KEY, COLUMN, FOREIGN_KEY, CHECK_CONSTRAINT, PERIOD };
-  const char *name;
+  Lex_ident_column name;
   enum drop_type type;
   bool drop_if_exists;
-  Alter_drop(enum drop_type par_type,const char *par_name, bool par_exists)
+  Alter_drop(enum drop_type par_type,
+             const LEX_CSTRING &par_name,
+             bool par_exists)
     :name(par_name), type(par_type), drop_if_exists(par_exists)
   {
-    DBUG_ASSERT(par_name != NULL);
+    DBUG_ASSERT(par_name.str != NULL);
   }
   /**
     Used to make a clone of this object for ALTER/CREATE TABLE
@@ -417,8 +422,8 @@ public:
 class Alter_rename_key : public Sql_alloc
 {
 public:
-  LEX_CSTRING old_name;
-  LEX_CSTRING new_name;
+  const Lex_ident_column old_name;
+  const Lex_ident_column new_name;
   bool alter_if_exists;
 
   Alter_rename_key(LEX_CSTRING old_name_arg, LEX_CSTRING new_name_arg, bool exists)
@@ -434,13 +439,14 @@ public:
 class Alter_index_ignorability: public Sql_alloc
 {
 public:
-  Alter_index_ignorability(const char *name, bool is_ignored, bool if_exists) :
+  Alter_index_ignorability(const LEX_CSTRING &name,
+                           bool is_ignored, bool if_exists) :
     m_name(name), m_is_ignored(is_ignored), m_if_exists(if_exists)
   {
-    assert(name != NULL);
+    DBUG_ASSERT(name.str != NULL);
   }
 
-  const char *name() const { return m_name; }
+  const Lex_ident_column &name() const { return m_name; }
   bool if_exists() const { return m_if_exists; }
 
   /* The ignorability after the operation is performed. */
@@ -449,7 +455,7 @@ public:
     { return new (mem_root) Alter_index_ignorability(*this); }
 
 private:
-  const char *m_name;
+  const Lex_ident_column m_name;
   bool m_is_ignored;
   bool m_if_exists;
 };
@@ -457,19 +463,19 @@ private:
 
 class Key :public Sql_alloc, public DDL_options {
 public:
-  enum Keytype { PRIMARY, UNIQUE, MULTIPLE, FULLTEXT, SPATIAL, FOREIGN_KEY,
-                 IGNORE_KEY};
+  enum Keytype { PRIMARY, UNIQUE, MULTIPLE, FULLTEXT, SPATIAL, VECTOR,
+                 FOREIGN_KEY, IGNORE_KEY};
   enum Keytype type;
   KEY_CREATE_INFO key_create_info;
   List<Key_part_spec> columns;
-  LEX_CSTRING name;
+  Lex_ident_column name;
   engine_option_value *option_list;
   bool generated;
   bool invisible;
   bool without_overlaps;
   bool old;
   uint length;
-  Lex_ident period;
+  Lex_ident_column period;
 
   Key(enum Keytype type_par, const LEX_CSTRING *name_arg,
       ha_key_alg algorithm_arg, bool generated_arg, DDL_options_st ddl_options)
@@ -710,7 +716,8 @@ typedef struct system_variables
   ulonglong max_heap_table_size;
   ulonglong tmp_memory_table_size;
   ulonglong tmp_disk_table_size;
-  ulonglong long_query_time;
+  ulonglong log_slow_query_time;
+  ulonglong log_slow_always_query_time;
   ulonglong max_statement_time;
   ulonglong optimizer_switch;
   ulonglong optimizer_trace;
@@ -736,9 +743,11 @@ typedef struct system_variables
   */
   ulonglong slave_skip_counter;
   ulonglong max_relay_log_size;
+  ulonglong max_tmp_space_usage;
 
   double optimizer_where_cost, optimizer_scan_setup_cost;
-  double long_query_time_double, max_statement_time_double;
+  double log_slow_query_time_double, max_statement_time_double;
+  double log_slow_always_query_time_double;
   double sample_percentage;
 
   ha_rows select_limit;
@@ -816,7 +825,7 @@ typedef struct system_variables
   ulong query_cache_type;
   ulong tx_isolation;
   ulong updatable_views_with_limit;
-  ulong alter_algorithm;
+  ulong alter_algorithm_unused;
   ulong server_id;
   ulong session_track_transaction_info;
   ulong threadpool_priority;
@@ -948,6 +957,7 @@ typedef struct system_status_var
   ulong ha_read_first_count;
   ulong ha_read_last_count;
   ulong ha_read_key_count;
+  ulong ha_read_key_miss;
   ulong ha_read_next_count;
   ulong ha_read_prev_count;
   ulong ha_read_retry_count;
@@ -1057,12 +1067,18 @@ typedef struct system_status_var
   ulonglong cpu_time, busy_time, query_time;
   double last_query_cost;
   uint32 threads_running;
-  /* Don't initialize */
+
+  /* Following variables are not cleared by FLUSH STATUS */
+  ulonglong max_tmp_space_used;
   /* Memory used for thread local storage */
   int64 max_local_memory_used;
+  /* Don't copy variables back to THD after this in show status */
+  ulonglong tmp_space_used;
+  /* Don't reset variables after this */
   volatile int64 local_memory_used;
   /* Memory allocated for global usage */
   volatile int64 global_memory_used;
+  time_t flush_status_time;
 } STATUS_VAR;
 
 /*
@@ -1072,12 +1088,22 @@ typedef struct system_status_var
 */
 
 #define last_system_status_var questions
-#define last_cleared_system_status_var local_memory_used
+
+/* Parameters to set_status_var_init() */
+
+#define STATUS_OFFSET(A) offsetof(STATUS_VAR,A)
+/* Clear as part of flush */
+#define clear_for_flush_status      STATUS_OFFSET(tmp_space_used)
+/* Clear as part of startup */
+#define clear_for_new_connection         STATUS_OFFSET(local_memory_used)
+/* Full initialization. Note that global_memory_used is updated early! */
+#define clear_for_server_start  STATUS_OFFSET(global_memory_used)
+#define last_restored_status_var        clear_for_flush_status
+
 
 /** Number of contiguous global status variables */
-constexpr int COUNT_GLOBAL_STATUS_VARS= int(offsetof(STATUS_VAR,
-                                                     last_system_status_var) /
-                                            sizeof(ulong)) + 1;
+constexpr int COUNT_GLOBAL_STATUS_VARS=
+  int(STATUS_OFFSET(last_system_status_var) /sizeof(ulong)) + 1;
 
 /*
   Global status variables
@@ -1253,13 +1279,19 @@ public:
   inline bool is_conventional() const
   { return state == STMT_CONVENTIONAL_EXECUTION; }
 
-  inline void* alloc(size_t size) const { return alloc_root(mem_root,size); }
-  inline void* calloc(size_t size) const
+  template <typename T=char>
+  inline T* alloc(size_t size) const
   {
-    void *ptr;
-    if (likely((ptr=alloc_root(mem_root,size))))
-      bzero(ptr, size);
-    return ptr;
+    return (T*)alloc_root(mem_root, sizeof(T)*size);
+  }
+
+  template <typename T=char>
+  inline T* calloc(size_t size) const
+  {
+    void* ptr= alloc_root(mem_root, sizeof(T)*size);
+    if (ptr)
+      bzero(ptr, sizeof(T)*size);
+    return (T*)ptr;
   }
   inline char *strdup(const char *str) const
   { return strdup_root(mem_root,str); }
@@ -1267,7 +1299,7 @@ public:
   { return strmake_root(mem_root,str,size); }
   inline LEX_CSTRING strcat(const LEX_CSTRING &a, const LEX_CSTRING &b) const
   {
-    char *buf= (char*)alloc(a.length + b.length + 1);
+    char *buf= alloc(a.length + b.length + 1);
     if (unlikely(!buf))
       return null_clex_str;
     memcpy(buf, a.str, a.length);
@@ -1289,16 +1321,27 @@ public:
     Methods to copy a string to the memory root
     and return the value as a LEX_CSTRING.
   */
-  LEX_CSTRING strmake_lex_cstring(const char *str, size_t length) const
+  LEX_STRING strmake_lex_string(const char *str, size_t length) const
   {
-    const char *tmp= strmake_root(mem_root, str, length);
+    char *tmp= strmake_root(mem_root, str, length);
     if (!tmp)
       return {0,0};
     return {tmp, length};
   }
+  LEX_CSTRING strmake_lex_cstring(const char *str, size_t length) const
+  {
+    return strmake_lex_string(str, length);
+  }
   LEX_CSTRING strmake_lex_cstring(const LEX_CSTRING &from) const
   {
     return strmake_lex_cstring(from.str, from.length);
+  }
+  LEX_CUSTRING strmake_lex_custring(const LEX_CUSTRING &from) const
+  {
+    const void *tmp= memdup(from.str, from.length);
+    if (!tmp)
+      return {0,0};
+    return {(const uchar*)tmp, from.length};
   }
   LEX_CSTRING strmake_lex_cstring_trim_whitespace(const LEX_CSTRING &from,
                                                   CHARSET_INFO *cs)
@@ -1362,7 +1405,7 @@ public:
   // Allocate LEX_STRING for character set conversion
   bool alloc_lex_string(LEX_STRING *dst, size_t length) const
   {
-    if (likely((dst->str= (char*) alloc(length))))
+    if (likely((dst->str= alloc(length))))
       return false;
     dst->length= 0;  // Safety
     return true;     // EOM
@@ -1375,7 +1418,7 @@ public:
     const char *tmp= src->str;
     const char *tmpend= src->str + src->length;
     char *to;
-    if (!(dst->str= to= (char *) alloc(src->length + 1)))
+    if (!(dst->str= to= alloc(src->length + 1)))
     {
       dst->length= 0; // Safety
       return true;
@@ -1417,9 +1460,36 @@ public:
                     lex_string_strmake_root(mem_root, src.str, src.length);
   }
 
+  template <typename Lex_ident_XXX>
+  Lex_ident_XXX lex_ident_copy(const Lex_ident_XXX &src)
+  {
+    return Lex_ident_XXX(strmake_lex_cstring(src));
+  }
+
+  template <typename Lex_ident_XXX>
+  Lex_ident_XXX lex_ident_casedn(const Lex_ident_XXX &src)
+  {
+    return Lex_ident_XXX(make_ident_casedn(src));
+  }
+
+  /*
+    Convert a LEX_CSTRING to a valid database name:
+    - validated with Lex_ident_fs::check_db_name()
+    - optionally lower-cased
+    The lower-cased copy is created on Query_arena::mem_root, when needed.
+
+    @param name         - The name to normalize. Must not be {NULL,0}.
+    @param casedn       - If the name should be lower-cased.
+    @return             - {NULL,0} on EOM or a bad database name
+                          (with an errror is raised,
+                          or a good database name otherwise.
+  */
+  Lex_ident_db to_ident_db_opt_casedn_with_error(const LEX_CSTRING &name,
+                                                 bool casedn);
+
   /*
     Convert a LEX_CSTRING to a valid internal database name:
-    - validated with Lex_ident_fs::check_db_name()
+    - validated with Lex_ident_db::check_name()
     - optionally lower-cased when lower_case_table_names==1
     The lower-cased copy is created on Query_arena::mem_root, when needed.
 
@@ -1428,7 +1498,29 @@ public:
                           (with an errror is raised,
                           or a good database name otherwise.
   */
-  Lex_ident_db to_ident_db_internal_with_error(const LEX_CSTRING &name);
+  Lex_ident_db to_ident_db_internal_with_error(const LEX_CSTRING &name)
+  {
+    return to_ident_db_opt_casedn_with_error(name, lower_case_table_names == 1);
+  }
+
+  /*
+    Convert a LEX_CSTRING to a valid normalized database name:
+    - validated with Lex_ident_fs::check_db_name()
+    - optionally lower-cased when lower_case_table_names>0
+    The lower-cased copy is created on Query_arena::mem_root, when needed.
+
+    @param name         - The name to normalize. Must not be {NULL,0}.
+    @return             - {NULL,0} on EOM or a bad database name
+                          (with an errror is raised,
+                          or a good database name otherwise.
+  */
+  Lex_ident_db_normalized to_ident_db_normalized_with_error(
+                                                      const LEX_CSTRING &name)
+  {
+    Lex_ident_db tmp= to_ident_db_opt_casedn_with_error(name,
+                                                   lower_case_table_names > 0);
+    return Lex_ident_db_normalized(tmp);
+  }
 
   void set_query_arena(Query_arena *set);
 
@@ -1747,7 +1839,7 @@ public:
     @return True if the security context fulfills the access requirements.
   */
   bool check_access(const privilege_t want_access, bool match_any = false);
-  bool is_priv_user(const char *user, const char *host);
+  bool is_priv_user(const LEX_CSTRING &user, const LEX_CSTRING &host);
   bool is_user_defined() const
     { return user && user != delayed_user && user != slave_user; };
 };
@@ -2040,7 +2132,7 @@ public:
 #define SUB_STMT_TRIGGER 1
 #define SUB_STMT_FUNCTION 2
 #define SUB_STMT_STAT_TABLES 4
-
+#define SUB_STMT_BEFORE_TRIGGER 8
 
 class Sub_statement_state
 {
@@ -2058,6 +2150,7 @@ public:
   ulonglong sent_row_count_for_statement, examined_row_count_for_statement;
   ulonglong affected_rows;
   ulonglong bytes_sent_old;
+  ulonglong max_tmp_space_used;
   ha_handler_stats handler_stats;
   ulong     tmp_tables_used;
   ulong     tmp_tables_disk_used;
@@ -2067,6 +2160,7 @@ public:
   bool enable_slow_log;
   bool last_insert_id_used;
   bool in_stored_procedure;
+  bool do_union;
   enum enum_check_fields count_cuted_fields;
 };
 
@@ -2932,9 +3026,7 @@ public:
   */
   struct st_mysql_stmt *current_stmt;
 #endif
-#ifdef HAVE_QUERY_CACHE
   Query_cache_tls query_cache_tls;
-#endif
   NET	  net;				// client connection descriptor
   /** Aditional network instrumentation for the server only. */
   NET_SERVER m_net_server_extension;
@@ -3093,6 +3185,8 @@ public:
 
   /* If this is a semisync slave connection. */
   bool semi_sync_slave;
+  /* Several threads may share this thd. Used with parallel repair */
+  bool shared_thd;
   ulonglong client_capabilities;  /* What the client supports */
   ulong max_client_packet_length;
 
@@ -3243,7 +3337,8 @@ public:
             binlog_flush_pending_rows_event(stmt_end, TRUE));
   }
   int binlog_flush_pending_rows_event(bool stmt_end, bool is_transactional);
-
+  void binlog_remove_rows_events();
+  uint has_pending_row_events();
   bool binlog_need_stmt_format(bool is_transactional) const
   {
     if (!log_current_statement())
@@ -3373,7 +3468,7 @@ public:
     WT_THD wt;                          ///< for deadlock detection
     Rows_log_event *m_pending_rows_event;
 
-    struct st_trans_time : public timeval
+    struct st_trans_time : public my_timeval
     {
       void reset(THD *thd)
       {
@@ -3805,6 +3900,7 @@ public:
   ulonglong  tmp_tables_size;
   ulonglong  bytes_sent_old;
   ulonglong  affected_rows;                     /* Number of changed rows */
+  ulonglong  max_tmp_space_used= 0;
 
   Opt_trace_context opt_trace;
   pthread_t  real_id;                           /* For debugging */
@@ -3981,7 +4077,7 @@ public:
     execution stack when the event turns out to be ignored.
   */
   int	     slave_expected_error;
-  enum_sql_command last_sql_command;  // Last sql_command exceuted in mysql_execute_command()
+  enum_sql_command last_sql_command;  // Last sql_command executed in mysql_execute_command()
 
   sp_rcontext *spcont;		// SP runtime context
 
@@ -4229,7 +4325,8 @@ public:
     @retval  FALSE otherwise.
    */
   bool notify_shared_lock(MDL_context_owner *ctx_in_use,
-                          bool needs_thr_lock_abort) override;
+                          bool needs_thr_lock_abort,
+                          bool needs_non_slave_abort) override;
 
   // End implementation of MDL_context_owner interface.
 
@@ -4288,7 +4385,7 @@ private:
   }
 
 public:
-  timeval transaction_time()
+  my_timeval transaction_time()
   {
     if (!in_multi_stmt_transaction_mode())
       transaction->start_time.reset(this);
@@ -4376,8 +4473,13 @@ public:
   void update_server_status()
   {
     set_time_for_next_stage();
-    if (utime_after_query >= utime_after_lock + variables.long_query_time)
+    if (utime_after_query >= utime_after_lock + variables.log_slow_query_time)
       server_status|= SERVER_QUERY_WAS_SLOW;
+  }
+  /* True if query took longer than log_slow_always_query_time */
+  bool log_slow_always_query_time()
+  {
+    return (utime_after_query >= utime_after_lock + variables.log_slow_always_query_time);
   }
   inline ulonglong found_rows(void)
   {
@@ -4847,7 +4949,7 @@ public:
             (!transaction->stmt.modified_non_trans_table ||
              (variables.sql_mode & MODE_STRICT_ALL_TABLES)));
   }
-  void set_status_var_init();
+  void set_status_var_init(ulong offset);
   void reset_n_backup_open_tables_state(Open_tables_backup *backup);
   void restore_backup_open_tables_state(Open_tables_backup *backup);
   void reset_sub_statement_state(Sub_statement_state *backup, uint new_state);
@@ -4997,6 +5099,25 @@ public:
   /** Set the current database, without copying */
   void reset_db(const LEX_CSTRING *new_db);
 
+  bool check_if_current_db_is_set_with_error() const
+  {
+    if (db.str == NULL)
+    {
+      /*
+        No default database is set. In this case if it's guaranteed that
+        no CTE can be used in the statement then we can throw an error right
+        now at the parser stage. Otherwise the decision about throwing such
+        a message must be postponed until a post-parser stage when we are able
+        to resolve all CTE names as we don't need this message to be thrown
+        for any CTE references.
+      */
+      if (!lex->with_cte_resolution)
+        my_message(ER_NO_DB_ERROR, ER(ER_NO_DB_ERROR), MYF(0));
+      return TRUE;
+    }
+    return false;
+  }
+
   /*
     Copy the current database to the argument. Use the current arena to
     allocate memory for a deep copy: current database may be freed after
@@ -5006,24 +5127,34 @@ public:
   */
   bool copy_db_to(LEX_CSTRING *to)
   {
-    if (db.str)
-    {
-      to->str= strmake(db.str, db.length);
-      to->length= db.length;
-      return to->str == NULL;                     /* True on error */
-    }
+    if (check_if_current_db_is_set_with_error())
+      return true;
 
+    to->str= strmake(db.str, db.length);
+    to->length= db.length;
+    return to->str == NULL;                     /* True on error */
+  }
+
+
+  /*
+    Make a normalized copy of the current database.
+    Raise an error if no current database is set.
+    Note, in case of lower_case_table_names==2, thd->db can contain the
+    name in arbitrary case typed by the user, so it must be lower-cased.
+    For other lower_case_table_names values the name is already in
+    its normalized case, so it's copied as is.
+  */
+  Lex_ident_db_normalized copy_db_normalized()
+  {
+    if (check_if_current_db_is_set_with_error())
+      return Lex_ident_db_normalized();
+    LEX_CSTRING ident= make_ident_opt_casedn(db, lower_case_table_names == 2);
     /*
-      No default database is set. In this case if it's guaranteed that
-      no CTE can be used in the statement then we can throw an error right
-      now at the parser stage. Otherwise the decision about throwing such
-      a message must be postponed until a post-parser stage when we are able
-      to resolve all CTE names as we don't need this message to be thrown
-      for any CTE references.
+      A non-empty thd->db is always known to satisfy check_db_name().
+      So after optional lower-casing above it's safe to
+      make Lex_ident_db_normalized.
     */
-    if (!lex->with_cte_resolution)
-      my_message(ER_NO_DB_ERROR, ER(ER_NO_DB_ERROR), MYF(0));
-    return TRUE;
+    return Lex_ident_db_normalized(ident);
   }
   /* Get db name or "". */
   const char *get_db()
@@ -5383,7 +5514,7 @@ public:
         }
       }
       Security_context *sctx= &main_security_ctx;
-      sql_print_warning(ER_THD(this, ER_NEW_ABORTING_CONNECTION),
+      sql_print_warning(ER_DEFAULT(ER_NEW_ABORTING_CONNECTION),
                         thread_id, (db.str ? db.str : "unconnected"),
                         sctx->user ? sctx->user : "unauthenticated",
                         sctx->host_or_ip, real_ip_str, reason);
@@ -5540,19 +5671,20 @@ public:
 
   TABLE *create_and_open_tmp_table(LEX_CUSTRING *frm,
                                    const char *path,
-                                   const char *db,
-                                   const char *table_name,
+                                   const Lex_ident_db &db,
+                                   const Lex_ident_table &table_name,
                                    bool open_internal_tables);
 
-  TABLE *find_temporary_table(const char *db, const char *table_name,
+  TABLE *find_temporary_table(const Lex_ident_db &db,
+                              const Lex_ident_table &table_name,
                               Temporary_table_state state= TMP_TABLE_IN_USE);
   TABLE *find_temporary_table(const TABLE_LIST *tl,
                               Temporary_table_state state= TMP_TABLE_IN_USE);
 
   TMP_TABLE_SHARE *find_tmp_table_share_w_base_key(const char *key,
                                                    uint key_length);
-  TMP_TABLE_SHARE *find_tmp_table_share(const char *db,
-                                        const char *table_name);
+  TMP_TABLE_SHARE *find_tmp_table_share(const Lex_ident_db &db,
+                                        const Lex_ident_table &table_name);
   TMP_TABLE_SHARE *find_tmp_table_share(const TABLE_LIST *tl);
   TMP_TABLE_SHARE *find_tmp_table_share(const char *key, size_t key_length);
 
@@ -5575,14 +5707,16 @@ private:
   /* Whether a lock has been acquired? */
   bool m_tmp_tables_locked;
 
-  uint create_tmp_table_def_key(char *key, const char *db,
-                                const char *table_name);
+  uint create_tmp_table_def_key(char *key, const Lex_ident_db &db,
+                                const Lex_ident_table &table_name);
   TMP_TABLE_SHARE *create_temporary_table(LEX_CUSTRING *frm,
-                                          const char *path, const char *db,
-                                          const char *table_name);
+                                          const char *path,
+                                          const Lex_ident_db &db,
+                                          const Lex_ident_table &table_name);
   TABLE *find_temporary_table(const char *key, uint key_length,
                               Temporary_table_state state);
-  TABLE *open_temporary_table(TMP_TABLE_SHARE *share, const char *alias);
+  TABLE *open_temporary_table(TMP_TABLE_SHARE *share,
+                              const Lex_ident_table &alias);
   bool find_and_use_tmp_table(const TABLE_LIST *tl, TABLE **out_table);
   bool use_temporary_table(TABLE *table, TABLE **out_table);
   void close_temporary_table(TABLE *table);
@@ -5766,6 +5900,13 @@ public:
   /* Handling of timeouts for commands */
   thr_timer_t query_timer;
 
+  /*
+    Number of strings which were involved in sorting or grouping and whose
+    lengths were truncated according to the max_sort_length system variable
+    setting
+  */
+  ulonglong  num_of_strings_sorted_on_truncated_length;
+
 public:
   void set_query_timer()
   {
@@ -5925,7 +6066,7 @@ public:
     */
     handler_stats.active=
       ((variables.log_slow_verbosity & LOG_SLOW_VERBOSITY_ENGINE) ||
-       lex->analyze_stmt);
+       userstat_running || lex->analyze_stmt);
     return handler_stats.active;
   }
 
@@ -5966,6 +6107,15 @@ public:
     return (lex->sphead != 0 &&
             !(in_sub_stmt & (SUB_STMT_FUNCTION | SUB_STMT_TRIGGER)));
   }
+
+  /* Data and methods for bulk multiple unit result reporting */
+  DYNAMIC_ARRAY *unit_results;
+  void stop_collecting_unit_results();
+  bool collect_unit_results(ulonglong id, ulonglong affected_rows);
+  bool need_report_unit_results();
+  bool report_collected_unit_results();
+  bool init_collecting_unit_results();
+  void push_final_warnings();
 };
 
 
@@ -6517,7 +6667,7 @@ class select_insert :public select_result_interceptor {
   int prepare(List<Item> &list, SELECT_LEX_UNIT *u) override;
   int prepare2(JOIN *join) override;
   int send_data(List<Item> &items) override;
-  virtual bool store_values(List<Item> &values);
+  virtual bool store_values(List<Item> &values, bool *trg_skip_row);
   virtual bool can_rollback_data() { return 0; }
   bool prepare_eof();
   bool send_ok_packet();
@@ -6562,7 +6712,7 @@ public:
   int prepare(List<Item> &list, SELECT_LEX_UNIT *u) override;
 
   int binlog_show_create_table(TABLE **tables, uint count);
-  bool store_values(List<Item> &values) override;
+  bool store_values(List<Item> &values, bool *trg_skip_row) override;
   bool send_eof() override;
   void abort_result_set() override;
   bool can_rollback_data() override { return 1; }
@@ -7338,7 +7488,7 @@ public:
   inline Table_ident(SELECT_LEX_UNIT *s) : sel(s)
   {
     /* We must have a table name here as this is used with add_table_to_list */
-    db.str= empty_c_string;                    /* a subject to casedn_str */
+    db.str= empty_c_string;
     db.length= 0;
     table.str= internal_table_name;
     table.length=1;
@@ -7352,7 +7502,7 @@ public:
   bool append_to(THD *thd, String *to) const;
   /*
     Convert Table_ident::m_db to a valid internal database name:
-    - validated with Lex_ident_fs::check_db_name()
+    - validated with Lex_ident_db::check_name()
     - optionally lower-cased when lower_case_table_names==1
 
     @param arena - the arena to allocate the lower-cased copy on, when needed.
@@ -7366,7 +7516,7 @@ public:
 class Qualified_column_ident: public Table_ident
 {
 public:
-  LEX_CSTRING m_column;
+  const Lex_ident_column m_column;
 public:
   Qualified_column_ident(const LEX_CSTRING *column)
     :Table_ident(&null_clex_str),
@@ -7414,9 +7564,10 @@ class SORT_INFO;
 class multi_delete :public select_result_interceptor
 {
   TABLE_LIST *delete_tables, *table_being_deleted;
-  Unique **tempfiles;
+  TMP_TABLE_PARAM *tmp_table_param;
+  TABLE **tmp_tables, *main_table;
   ha_rows deleted, found;
-  uint num_of_tables;
+  uint table_count;
   int error;
   bool do_delete;
   /* True if at least one table we delete from is transactional */
@@ -7432,15 +7583,17 @@ class multi_delete :public select_result_interceptor
 
 public:
   // Methods used by ColumnStore
-  uint get_num_of_tables() const { return num_of_tables; }
+  uint get_num_of_tables() const { return table_count; }
   TABLE_LIST* get_tables() const { return delete_tables; }
 public:
   multi_delete(THD *thd_arg, TABLE_LIST *dt, uint num_of_tables);
   ~multi_delete();
   int prepare(List<Item> &list, SELECT_LEX_UNIT *u) override;
+  int prepare2(JOIN *join) override;
   int send_data(List<Item> &items) override;
   bool initialize_tables (JOIN *join) override;
   int do_deletes();
+  int rowid_table_deletes(TABLE *table, bool ignore);
   int do_table_deletes(TABLE *table, SORT_INFO *sort_info, bool ignore);
   bool send_eof() override;
   inline ha_rows num_deleted() const { return deleted; }
@@ -7453,7 +7606,8 @@ class multi_update :public select_result_interceptor
 {
   TABLE_LIST *all_tables; /* query/update command tables */
   List<TABLE_LIST> *leaves;     /* list of leaves of join table tree */
-  List<TABLE_LIST> updated_leaves;  /* list of of updated leaves */
+  List<TABLE_LIST> updated_leaves;  /* a superset of tables which will be updated */
+  List<TABLE_LIST> update_targets;  /* the tables that will be UPDATE'd */
   TABLE_LIST *update_tables;
   TABLE **tmp_tables, *main_table, *table_to_update;
   TMP_TABLE_PARAM *tmp_table_param;
@@ -7485,6 +7639,7 @@ class multi_update :public select_result_interceptor
   ha_rows updated_sys_ver;
 
   bool has_vers_fields;
+  const table_map tables_to_update;
 
 public:
   multi_update(THD *thd_arg, TABLE_LIST *ut, List<TABLE_LIST> *leaves_list,
@@ -8131,66 +8286,6 @@ public:
 };
 
 
-class Identifier_chain2
-{
-  LEX_CSTRING m_name[2];
-public:
-  Identifier_chain2()
-   :m_name{Lex_cstring(), Lex_cstring()}
-  { }
-  Identifier_chain2(const LEX_CSTRING &a, const LEX_CSTRING &b)
-   :m_name{a, b}
-  { }
-
-  const LEX_CSTRING& operator [] (size_t i) const
-  {
-    return m_name[i];
-  }
-
-  static Identifier_chain2 split(const LEX_CSTRING &txt)
-  {
-    DBUG_ASSERT(txt.str[txt.length] == '\0'); // Expect 0-terminated input
-    const char *dot= strchr(txt.str, '.');
-    if (!dot)
-      return Identifier_chain2(Lex_cstring(), txt);
-    size_t length0= dot - txt.str;
-    Lex_cstring name0(txt.str, length0);
-    Lex_cstring name1(txt.str + length0 + 1, txt.length - length0 - 1);
-    return Identifier_chain2(name0, name1);
-  }
-
-  // Export as a qualified name string: 'db.name'
-  size_t make_qname(char *dst, size_t dstlen, bool casedn_part1) const
-  {
-    size_t res= my_snprintf(dst, dstlen, "%.*s.%.*s",
-                            (int) m_name[0].length, m_name[0].str,
-                            (int) m_name[1].length, m_name[1].str);
-    if (casedn_part1 && dstlen > m_name[0].length)
-      my_casedn_str(system_charset_info, dst + m_name[0].length + 1);
-    return res;
-  }
-
-  // Export as a qualified name string, allocate on mem_root.
-  LEX_CSTRING make_qname(MEM_ROOT *mem_root, bool casedn_part1) const
-  {
-    LEX_STRING dst;
-    /* format: [pkg + dot] + name + '\0' */
-    size_t dst_size= m_name[0].length + 1 /*dot*/ + m_name[1].length + 1/*\0*/;
-    if (unlikely(!(dst.str= (char*) alloc_root(mem_root, dst_size))))
-      return {NULL, 0};
-    if (!m_name[0].length)
-    {
-      DBUG_ASSERT(!casedn_part1); // Should not be called this way
-      dst.length= my_snprintf(dst.str, dst_size, "%.*s",
-                              (int) m_name[1].length, m_name[1].str);
-      return {dst.str, dst.length};
-    }
-    dst.length= make_qname(dst.str, dst_size, casedn_part1);
-    return {dst.str, dst.length};
-  }
-};
-
-
 /**
   This class resembles the SQL Standard schema qualified object name:
   <schema qualified name> ::= [ <schema name> <period> ] <qualified identifier>
@@ -8198,54 +8293,33 @@ public:
 class Database_qualified_name
 {
 public:
-  LEX_CSTRING m_db;
-  LEX_CSTRING m_name;
-  Database_qualified_name(const LEX_CSTRING *db, const LEX_CSTRING *name)
-   :m_db(*db), m_name(*name)
+  Lex_ident_db m_db;
+  Lex_cstring m_name; // no comparison semantics
+  Database_qualified_name()
   { }
-  Database_qualified_name(const LEX_CSTRING &db, const LEX_CSTRING &name)
+  Database_qualified_name(const Lex_ident_db &db, const LEX_CSTRING &name)
    :m_db(db), m_name(name)
   { }
-  Database_qualified_name(const char *db, size_t db_length,
-                          const char *name, size_t name_length)
+
+  Identifier_chain2 to_identifier_chain2() const
   {
-    m_db.str= db;
-    m_db.length= db_length;
-    m_name.str= name;
-    m_name.length= name_length;
+    return Identifier_chain2(m_db, m_name);
   }
 
-  bool eq(const Database_qualified_name *other) const
+
+  bool eq_routine_name(const Database_qualified_name *other) const
   {
-    CHARSET_INFO *cs= lower_case_table_names ?
-                      &my_charset_utf8mb3_general_ci :
-                      &my_charset_utf8mb3_bin;
-    return
-      m_db.length == other->m_db.length &&
-      m_name.length == other->m_name.length &&
-      !cs->strnncoll(m_db.str, m_db.length,
-                     other->m_db.str, other->m_db.length) &&
-      !cs->strnncoll(m_name.str, m_name.length,
-                     other->m_name.str, other->m_name.length);
+
+    return m_db.streq(other->m_db) &&
+           Lex_ident_routine(m_name).streq(other->m_name);
   }
   /*
     Make copies of "db" and "name" on the memory root in internal format:
     - Lower-case "db" if lower-case-table-names==1.
     - Preserve "name" as is.
   */
-  bool copy_sp_name_internal(MEM_ROOT *mem_root, const LEX_CSTRING &db,
+  bool copy_sp_name_internal(MEM_ROOT *mem_root, const Lex_ident_db &db,
                              const LEX_CSTRING &name);
-
-  // Export db and name as a qualified name string: 'db.name'
-  size_t make_qname(char *dst, size_t dstlen, bool casedn_name) const
-  {
-    return Identifier_chain2(m_db, m_name).make_qname(dst, dstlen, casedn_name);
-  }
-  // Export db and name as a qualified name string, allocate on mem_root.
-  LEX_CSTRING make_qname(MEM_ROOT *mem_root, bool casedn_name) const
-  {
-    return Identifier_chain2(m_db, m_name).make_qname(mem_root, casedn_name);
-  }
 
   bool make_package_routine_name(MEM_ROOT *mem_root,
                                  const LEX_CSTRING &package,
@@ -8255,8 +8329,7 @@ public:
     size_t length= package.length + 1 + routine.length + 1;
     if (unlikely(!(tmp= (char *) alloc_root(mem_root, length))))
       return true;
-    m_name.length= Identifier_chain2(package, routine).make_qname(tmp, length,
-                                                                  false);
+    m_name.length= Identifier_chain2(package, routine).make_qname(tmp, length);
     m_name.str= tmp;
     return false;
   }
@@ -8285,7 +8358,8 @@ public:
   { }
   LEX_CSTRING lex_cstring() const override
   {
-    size_t length= m_name->make_qname(err_buffer, sizeof(err_buffer), false);
+    size_t length= m_name->to_identifier_chain2().make_qname(err_buffer,
+                                                           sizeof(err_buffer));
     return {err_buffer, length};
   }
 };
@@ -8293,18 +8367,19 @@ public:
 class Type_holder: public Sql_alloc,
                    public Item_args,
                    public Type_handler_hybrid_field_type,
-                   public Type_all_attributes
+                   public Type_all_attributes,
+                   public Type_extra_attributes
 {
-  const TYPELIB *m_typelib;
   bool m_maybe_null;
 public:
   Type_holder()
-   :m_typelib(NULL),
-    m_maybe_null(false)
+  :m_maybe_null(false)
   { }
 
   void set_type_maybe_null(bool maybe_null_arg) override
-  { m_maybe_null= maybe_null_arg; }
+  {
+    m_maybe_null= maybe_null_arg;
+  }
   bool get_maybe_null() const { return m_maybe_null; }
 
   decimal_digits_t decimal_precision() const override
@@ -8319,13 +8394,13 @@ public:
     DBUG_ASSERT(0);
     return 0;
   }
-  void set_typelib(const TYPELIB *typelib) override
+  Type_extra_attributes *type_extra_attributes_addr() override
   {
-    m_typelib= typelib;
+    return this;
   }
-  const TYPELIB *get_typelib() const override
+  const Type_extra_attributes type_extra_attributes() const override
   {
-    return m_typelib;
+    return *this;
   }
 
   bool aggregate_attributes(THD *thd)

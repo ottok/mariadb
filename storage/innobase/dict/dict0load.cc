@@ -168,7 +168,7 @@ name_of_col_is(
 					      dict_index_get_nth_field(
 						      index, i)));
 
-	return(strcmp(name, dict_table_get_col_name(table, tmp)) == 0);
+	return(strcmp(name, dict_table_get_col_name(table, tmp).str) == 0);
 }
 #endif /* UNIV_DEBUG */
 
@@ -1319,7 +1319,7 @@ static dberr_t dict_load_columns(dict_table_t *table, unsigned use_uncommitted,
 
 	dfield_t dfield;
 	dtuple_t tuple{
-		0,1,1,&dfield,0,nullptr
+		0,1,1,0,&dfield,nullptr
 #ifdef UNIV_DEBUG
 		, DATA_TUPLE_MAGIC_N
 #endif
@@ -1373,8 +1373,8 @@ static dberr_t dict_load_columns(dict_table_t *table, unsigned use_uncommitted,
 		/* Note: Currently we have one DOC_ID column that is
 		shared by all FTS indexes on a table. And only non-virtual
 		column can be used for FULLTEXT index */
-		if (innobase_strcasecmp(name,
-					FTS_DOC_ID_COL_NAME) == 0
+		if (Lex_ident_column(Lex_cstring_strlen(name)).
+		      streq(FTS_DOC_ID)
 		    && nth_v_col == ULINT_UNDEFINED) {
 			dict_col_t*	col;
 			/* As part of normal loading of tables the
@@ -1446,7 +1446,7 @@ dict_load_virtual_col(dict_table_t *table, bool uncommitted, ulint nth_v_col)
 
 	dfield_t dfield[2];
 	dtuple_t tuple{
-		0,2,2,dfield,0,nullptr
+		0,2,2,0,dfield,nullptr
 #ifdef UNIV_DEBUG
 		, DATA_TUPLE_MAGIC_N
 #endif
@@ -1690,7 +1690,7 @@ static dberr_t dict_load_fields(dict_index_t *index, bool uncommitted,
 
 	dfield_t dfield;
 	dtuple_t tuple{
-		0,1,1,&dfield,0,nullptr
+		0,1,1,0,&dfield,nullptr
 #ifdef UNIV_DEBUG
 		, DATA_TUPLE_MAGIC_N
 #endif
@@ -1949,7 +1949,7 @@ dberr_t dict_load_indexes(dict_table_t *table, bool uncommitted,
 
 	dfield_t dfield;
 	dtuple_t tuple{
-		0,1,1,&dfield,0,nullptr
+		0,1,1,0,&dfield,nullptr
 #ifdef UNIV_DEBUG
 		, DATA_TUPLE_MAGIC_N
 #endif
@@ -2145,7 +2145,7 @@ next_rec:
 
 	if (table->fts != NULL) {
 		dict_index_t *idx = dict_table_get_index_on_name(
-			table, FTS_DOC_ID_INDEX_NAME);
+			table, FTS_DOC_ID_INDEX.str);
 		if (idx && dict_index_is_unique(idx)) {
 			table->fts_doc_id_index = idx;
 		}
@@ -2338,7 +2338,7 @@ static dict_table_t *dict_load_table_one(const span<const char> &name,
 
 	dfield_t dfield;
 	dtuple_t tuple{
-		0,1,1,&dfield,0,nullptr
+		0,1,1,0,&dfield,nullptr
 #ifdef UNIV_DEBUG
 		, DATA_TUPLE_MAGIC_N
 #endif
@@ -2590,7 +2590,7 @@ dict_load_table_on_id(
 
 	dfield_t dfield;
 	dtuple_t tuple{
-		0,1,1,&dfield,0,nullptr
+		0,1,1,0,&dfield,nullptr
 #ifdef UNIV_DEBUG
 		, DATA_TUPLE_MAGIC_N
 #endif
@@ -2699,7 +2699,7 @@ static dberr_t dict_load_foreign_cols(dict_foreign_t *foreign, trx_id_t trx_id)
 
 	dfield_t dfield;
 	dtuple_t tuple{
-		0,1,1,&dfield,0,nullptr
+		0,1,1,0,&dfield,nullptr
 #ifdef UNIV_DEBUG
 		, DATA_TUPLE_MAGIC_N
 #endif
@@ -2875,7 +2875,7 @@ dict_load_foreign(
 
 	dfield_t dfield;
 	dtuple_t tuple{
-		0,1,1,&dfield,0,nullptr
+		0,1,1,0,&dfield,nullptr
 #ifdef UNIV_DEBUG
 		, DATA_TUPLE_MAGIC_N
 #endif
@@ -2963,7 +2963,7 @@ err_exit:
 
 	foreign->foreign_table_name = mem_heap_strdupl(
 		foreign->heap, (char*) field, len);
-	dict_mem_foreign_table_name_lookup_set(foreign, TRUE);
+	foreign->foreign_table_name_lookup_set();
 
 	const size_t foreign_table_name_len = len;
 	const size_t table_name_len = strlen(table_name);
@@ -2984,7 +2984,7 @@ err_exit:
 
 	foreign->referenced_table_name = mem_heap_strdupl(
 		foreign->heap, (const char*) field, len);
-	dict_mem_referenced_table_name_lookup_set(foreign, TRUE);
+	foreign->referenced_table_name_lookup_set();
 
 	mtr.commit();
 	if (UNIV_LIKELY_NULL(heap)) {
@@ -3086,7 +3086,7 @@ dict_load_foreigns(
 	bool check_recursive = !trx_id;
 	dfield_t dfield;
 	dtuple_t tuple{
-		0,1,1,&dfield,0,nullptr
+		0,1,1,0,&dfield,nullptr
 #ifdef UNIV_DEBUG
 		, DATA_TUPLE_MAGIC_N
 #endif

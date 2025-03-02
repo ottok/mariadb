@@ -64,7 +64,6 @@
 PSI_memory_key key_memory_log_event;
 #endif
 PSI_memory_key key_memory_Incident_log_event_message;
-PSI_memory_key key_memory_Rows_query_log_event_rows_query;
 
 /**
   BINLOG_CHECKSUM variable.
@@ -81,13 +80,7 @@ unsigned int binlog_checksum_type_length[]= {
   0
 };
 
-TYPELIB binlog_checksum_typelib=
-{
-  array_elements(binlog_checksum_type_names) - 1, "",
-  binlog_checksum_type_names,
-  binlog_checksum_type_length
-};
-
+TYPELIB binlog_checksum_typelib= CREATE_TYPELIB_FOR(binlog_checksum_type_names);
 
 #define FLAGSTR(V,F) ((V)&(F)?#F" ":"")
 
@@ -976,7 +969,6 @@ err:
   DBUG_RETURN(res);
 }
 
-
 /**
   Binlog format tolerance is in (buf, event_len, fdle)
   constructors.
@@ -1120,7 +1112,7 @@ Log_event* Log_event::read_log_event(const uchar *buf, uint event_len,
       break;
     case QUERY_COMPRESSED_EVENT:
       ev= new Query_compressed_log_event(buf, event_len, fdle,
-                                          QUERY_COMPRESSED_EVENT);
+                                         QUERY_COMPRESSED_EVENT);
       break;
     case ROTATE_EVENT:
       ev= new Rotate_log_event(buf, event_len, fdle);
@@ -1617,6 +1609,17 @@ Query_log_event::Query_log_event(const uchar *buf, uint event_len,
       }
       break;
     }
+    case Q_DUMMY:
+    {
+      /*
+        At some point, this query event was translated from a GTID event, with
+        these Q_DUMMY bytes added to pad the end of the header. We can skip the
+        rest of processing these vars. Note this is a separate case from the
+        default to avoid the DBUG_PRINT of an unknown status var.
+      */
+      pos= (const uchar*) end;
+      break;
+    }
     default:
       /* That's why you must write status vars in growing order of code */
       DBUG_PRINT("info",("Query_log_event has unknown status vars (first has\
@@ -1665,7 +1668,7 @@ Query_log_event::Query_log_event(const uchar *buf, uint event_len,
     sql_parse.cc
     */
 
-#if !defined(MYSQL_CLIENT) && defined(HAVE_QUERY_CACHE)
+#if !defined(MYSQL_CLIENT)
   if (!(start= data_buf= (Log_event::Byte*) my_malloc(PSI_INSTRUMENT_ME,
                                                        catalog_len + 1
                                                     +  time_zone_len + 1
@@ -1760,12 +1763,35 @@ Query_log_event::Query_log_event(const uchar *buf, uint event_len,
     Append the db length at the end of the buffer. This will be used by
     Query_cache::send_result_to_client() in case the query cache is On.
    */
-#if !defined(MYSQL_CLIENT) && defined(HAVE_QUERY_CACHE)
+#if !defined(MYSQL_CLIENT)
   size_t db_length= (size_t)db_len;
   memcpy(start + data_len + 1, &db_length, sizeof(size_t));
 #endif
   DBUG_VOID_RETURN;
 }
+
+
+/*
+  Get the time when the event had been executed on the master.
+  This works for both query events and load data events.
+*/
+
+#if Q_EXEC_TIME_OFFSET != L_EXEC_TIME_OFFSET
+#error "Q_EXEC_TIME_OFFSET is not same as L_EXEC_TIME_OFFSET"
+#endif
+
+time_t
+query_event_get_end_time(const uchar *buf,
+                         const Format_description_log_event *description_event)
+{
+  time_t when;
+  DBUG_ASSERT(LOG_EVENT_IS_QUERY((Log_event_type) buf[EVENT_TYPE_OFFSET]) ||
+              LOG_EVENT_IS_LOAD_DATA((Log_event_type) buf[EVENT_TYPE_OFFSET]));
+  when= uint4korr(buf);
+  buf+= description_event->common_header_len;
+  return when + uint4korr(buf + Q_EXEC_TIME_OFFSET);
+}
+
 
 Query_compressed_log_event::Query_compressed_log_event(const uchar *buf,
       uint event_len,
@@ -1921,6 +1947,7 @@ Query_log_event::begin_event(String *packet, ulong ev_offset,
   uchar *p= (uchar *)packet->ptr() + ev_offset;
   uchar *q= p + LOG_EVENT_HEADER_LEN;
   size_t data_len= packet->length() - ev_offset;
+  size_t dummy_bytes;
   uint16 flags;
 
   if (checksum_alg == BINLOG_CHECKSUM_ALG_CRC32)
@@ -1929,15 +1956,6 @@ Query_log_event::begin_event(String *packet, ulong ev_offset,
     DBUG_ASSERT(checksum_alg == BINLOG_CHECKSUM_ALG_UNDEF ||
                 checksum_alg == BINLOG_CHECKSUM_ALG_OFF);
 
-  /*
-    Currently we only need to replace GTID event.
-    The length of GTID differs depending on whether it contains commit id.
-  */
-  DBUG_ASSERT(data_len == LOG_EVENT_HEADER_LEN + GTID_HEADER_LEN ||
-              data_len == LOG_EVENT_HEADER_LEN + GTID_HEADER_LEN + 2);
-  if (data_len != LOG_EVENT_HEADER_LEN + GTID_HEADER_LEN &&
-      data_len != LOG_EVENT_HEADER_LEN + GTID_HEADER_LEN + 2)
-    return 1;
 
   flags= uint2korr(p + FLAGS_OFFSET);
   flags&= ~LOG_EVENT_THREAD_SPECIFIC_F;
@@ -1949,22 +1967,21 @@ Query_log_event::begin_event(String *packet, ulong ev_offset,
   int4store(q + Q_EXEC_TIME_OFFSET, 0);
   q[Q_DB_LEN_OFFSET]= 0;
   int2store(q + Q_ERR_CODE_OFFSET, 0);
-  if (data_len == LOG_EVENT_HEADER_LEN + GTID_HEADER_LEN)
-  {
-    int2store(q + Q_STATUS_VARS_LEN_OFFSET, 0);
-    q[Q_DATA_OFFSET]= 0;                    /* Zero terminator for empty db */
-    q+= Q_DATA_OFFSET + 1;
-  }
-  else
-  {
-    DBUG_ASSERT(data_len == LOG_EVENT_HEADER_LEN + GTID_HEADER_LEN + 2);
-    /* Put in an empty time_zone_str to take up the extra 2 bytes. */
-    int2store(q + Q_STATUS_VARS_LEN_OFFSET, 2);
-    q[Q_DATA_OFFSET]= Q_TIME_ZONE_CODE;
-    q[Q_DATA_OFFSET+1]= 0;           /* Zero length for empty time_zone_str */
-    q[Q_DATA_OFFSET+2]= 0;                  /* Zero terminator for empty db */
-    q+= Q_DATA_OFFSET + 3;
-  }
+
+  /*
+    If the allocated GTID event packet header is longer than the size of the
+    standard BEGIN query event's, then we need to fill in everything else with
+    "dummy" values. That is, old replicas won't recognize the meaning for the
+    DUMMY value, and will skip the rest of the status vars section.
+  */
+  DBUG_ASSERT(data_len >= LOG_EVENT_HEADER_LEN + GTID_HEADER_LEN);
+  dummy_bytes= data_len - (LOG_EVENT_HEADER_LEN + GTID_HEADER_LEN);
+  int2store(q + Q_STATUS_VARS_LEN_OFFSET, dummy_bytes);
+  for (size_t i= 0; i < dummy_bytes; i++)
+    q[Q_DATA_OFFSET + i]= Q_DUMMY;
+  q[Q_DATA_OFFSET + dummy_bytes]= 0; /* Zero terminator for empty db */
+  q+= Q_DATA_OFFSET + dummy_bytes + 1;
+
   memcpy(q, "BEGIN", 5);
 
   if (checksum_alg == BINLOG_CHECKSUM_ALG_CRC32)
@@ -2428,7 +2445,7 @@ Gtid_log_event::Gtid_log_event(const uchar *buf, uint event_len,
                                const Format_description_log_event
                                *description_event)
   : Log_event(buf, description_event), seq_no(0), commit_id(0),
-    flags_extra(0), extra_engines(0)
+    flags_extra(0), extra_engines(0), thread_id(0)
 {
   uint8 header_size= description_event->common_header_len;
   uint8 post_header_len= description_event->post_header_len[GTID_EVENT-1];
@@ -2505,6 +2522,13 @@ Gtid_log_event::Gtid_log_event(const uchar *buf, uint event_len,
       }
       sa_seq_no= uint8korr(buf);
       buf+= 8;
+    }
+
+    if (flags_extra & FL_EXTRA_THREAD_ID &&
+        static_cast<uint>(buf - buf_0) <= event_len + 4)
+    {
+      thread_id= uint4korr(buf);
+      buf+= 4;
     }
   }
   /*
@@ -3153,7 +3177,7 @@ Rows_log_event::Rows_log_event(const uchar *buf, uint event_len,
   uchar *ptr_after_width= (uchar*) ptr_width;
   DBUG_PRINT("debug", ("Reading from %p", ptr_after_width));
   m_width= net_field_length(&ptr_after_width);
-  DBUG_PRINT("debug", ("m_width=%lu", m_width));
+  DBUG_PRINT("debug", ("m_width=%u", m_width));
 
   /* Avoid reading out of buffer */
   if (ptr_after_width + (m_width + 7) / 8 > (uchar*)buf + event_len)
@@ -3216,7 +3240,7 @@ Rows_log_event::Rows_log_event(const uchar *buf, uint event_len,
     DBUG_VOID_RETURN;
   }
   size_t const data_size= event_len - read_size;
-  DBUG_PRINT("info",("m_table_id: %llu  m_flags: %d  m_width: %lu  data_size: %lu",
+  DBUG_PRINT("info",("m_table_id: %llu  m_flags: %d  m_width: %u  data_size: %lu",
                      m_table_id, m_flags, m_width, (ulong) data_size));
 
   m_rows_buf= (uchar*) my_malloc(PSI_INSTRUMENT_ME, data_size, MYF(MY_WME));
@@ -3528,8 +3552,7 @@ Table_map_log_event::Table_map_log_event(const uchar *buf, uint event_len,
 #ifdef MYSQL_SERVER
   if (!m_table)
     DBUG_VOID_RETURN;
-  binlog_type_info_array= (Binlog_type_info *)thd->alloc(m_table->s->fields *
-                                                         sizeof(Binlog_type_info));
+  binlog_type_info_array= thd->alloc<Binlog_type_info>(m_table->s->fields);
   for (uint i= 0; i <  m_table->s->fields; i++)
     binlog_type_info_array[i]= m_table->field[i]->binlog_type_info();
 #endif

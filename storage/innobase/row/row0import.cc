@@ -200,7 +200,7 @@ struct row_import {
 	  {
             const char* index_name=
               reinterpret_cast<const char*>(m_indexes[i].m_name);
-	    if (!strcmp(index_name, FTS_DOC_ID_INDEX_NAME))
+	    if (!strcmp(index_name, FTS_DOC_ID_INDEX.str))
               return i;
 	  }
 	  return ULINT_UNDEFINED;
@@ -223,7 +223,7 @@ struct row_import {
 	bool has_hidden_fts() const
 	{
           if (m_missing) return false;
-          ulint col_offset= find_col(FTS_DOC_ID_COL_NAME);
+          ulint col_offset= find_col(FTS_DOC_ID.str);
 	  if (col_offset == ULINT_UNDEFINED) return false;
 
           const dict_col_t *col= &m_cols[col_offset];
@@ -234,7 +234,7 @@ struct row_import {
 	      || col->len != sizeof(doc_id_t))
             return false;
 
-	  return find_index_by_name(FTS_DOC_ID_INDEX_NAME) != nullptr;
+	  return find_index_by_name(FTS_DOC_ID_INDEX.str) != nullptr;
 	}
 
         /** Need to check whether the table need to add system
@@ -1275,7 +1275,7 @@ row_import::match_table_columns(
 		ulint		cfg_col_index;
 
 		col_name = dict_table_get_col_name(
-			m_table, dict_col_get_no(col));
+			m_table, dict_col_get_no(col)).str;
 
 		cfg_col_index = find_col(col_name);
 
@@ -3225,7 +3225,7 @@ static size_t get_buf_size()
 static void add_fts_index(dict_table_t *table)
 {
   dict_index_t *fts_index= dict_mem_index_create(
-    table, FTS_DOC_ID_INDEX_NAME, DICT_UNIQUE, 2);
+    table, FTS_DOC_ID_INDEX.str, DICT_UNIQUE, 2);
   fts_index->lock.SRW_LOCK_INIT(index_tree_rw_lock_key);
   fts_index->page= FIL_NULL;
   fts_index->cached= 1;
@@ -3238,10 +3238,6 @@ static void add_fts_index(dict_table_t *table)
   for (ulint i= 0; i < clust_index->n_uniq; i++)
     dict_index_add_col(fts_index, table, clust_index->fields[i].col,
                        clust_index->fields[i].prefix_len);
-#ifdef BTR_CUR_HASH_ADAPT
-  fts_index->search_info= btr_search_info_create(fts_index->heap);
-  fts_index->search_info->ref_count= 0;
-#endif /* BTR_CUR_HASH_ADAPT */
   UT_LIST_ADD_LAST(fts_index->table->indexes, fts_index);
 }
 
@@ -3344,9 +3340,6 @@ static dict_table_t *build_fts_hidden_table(
       new_index->fields[old_index->n_fields].fixed_len= sizeof(doc_id_t);
     }
 
-#ifdef BTR_CUR_HASH_ADAPT
-    new_index->search_info= btr_search_info_create(new_index->heap);
-#endif /* BTR_CUR_HASH_ADAPT */
     UT_LIST_ADD_LAST(new_index->table->indexes, new_index);
     old_index= UT_LIST_GET_NEXT(indexes, old_index);
     if (UT_LIST_GET_LEN(new_table->indexes)
@@ -4633,7 +4626,7 @@ static void row_import_autoinc(dict_table_t *table, row_prebuilt_t *prebuilt,
     btr_write_autoinc(dict_table_get_first_index(table), autoinc - 1);
   autoinc_set:
     table->autoinc= autoinc;
-    sql_print_information("InnoDB: %`.*s.%`s autoinc value set to " UINT64PF,
+    sql_print_information("InnoDB: %.*sQ.%sQ autoinc value set to " UINT64PF,
                           int(table->name.dblen()), table->name.m_name,
                           table->name.basename(), autoinc);
   }
@@ -4687,7 +4680,7 @@ dberr_t innodb_insert_hidden_fts_col(dict_table_t* table,
                                      trx_t* trx)
 {
   dict_index_t* fts_idx=
-    dict_table_get_index_on_name(table, FTS_DOC_ID_INDEX_NAME);
+    dict_table_get_index_on_name(table, FTS_DOC_ID_INDEX.str);
   if (!fts_idx) return DB_ERROR;
   for (ulint new_i= 0; new_i < table->n_v_cols; new_i++)
   {
@@ -5044,7 +5037,7 @@ import_error:
 	if (prebuilt->table != table) {
 		/* Add fts_doc_id and fts_doc_idx in data dictionary */
 		err = innodb_insert_hidden_fts_col(
-			table, cfg.find_col(FTS_DOC_ID_COL_NAME), trx);
+			table, cfg.find_col(FTS_DOC_ID.str), trx);
                 DBUG_EXECUTE_IF("ib_import_fts_error",
 				err= DB_DUPLICATE_KEY;);
 		if (err != DB_SUCCESS) {

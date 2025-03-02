@@ -371,6 +371,7 @@ my_bool opt_noversioncheck = FALSE;
 my_bool opt_decompress = FALSE;
 my_bool opt_remove_original;
 my_bool opt_log_innodb_page_corruption;
+my_bool tty_password= FALSE;
 
 my_bool opt_lock_ddl_per_table = FALSE;
 static my_bool opt_check_privileges;
@@ -384,8 +385,7 @@ static ulong innodb_flush_method;
 
 static const char *binlog_info_values[] = {"off", "lockless", "on", "auto",
 					   NullS};
-static TYPELIB binlog_info_typelib = {array_elements(binlog_info_values)-1, "",
-				      binlog_info_values, NULL};
+static TYPELIB binlog_info_typelib = CREATE_TYPELIB_FOR(binlog_info_values);
 ulong opt_binlog_info;
 
 char *opt_incremental_history_name;
@@ -401,8 +401,7 @@ char *opt_log_bin;
 
 const char *query_type_names[] = { "ALL", "UPDATE", "SELECT", NullS};
 
-TYPELIB query_type_typelib= {array_elements(query_type_names) - 1, "",
-	query_type_names, NULL};
+TYPELIB query_type_typelib= CREATE_TYPELIB_FOR(query_type_names);
 
 ulong opt_lock_wait_query_type;
 ulong opt_kill_long_query_type;
@@ -1659,7 +1658,7 @@ struct my_option xb_client_options[]= {
      "This option specifies the password to use "
      "when connecting to the database. It accepts a string argument.  "
      "See mysql --help for details.",
-     0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+     0, 0, 0, GET_STR, OPT_ARG, 0, 0, 0, 0, 0, 0},
 
     {"protocol", OPT_PROTOCOL,
      "The protocol to use for connection (tcp, socket, pipe, memory).", 0, 0,
@@ -1845,8 +1844,8 @@ struct my_option xb_server_options[] =
 #ifdef BTR_CUR_HASH_ADAPT
   {"innodb_adaptive_hash_index", OPT_INNODB_ADAPTIVE_HASH_INDEX,
    "Enable InnoDB adaptive hash index (disabled by default).",
-   &btr_search_enabled,
-   &btr_search_enabled,
+   &btr_search.enabled,
+   &btr_search.enabled,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
 #endif /* BTR_CUR_HASH_ADAPT */
   {"innodb_autoextend_increment", OPT_INNODB_AUTOEXTEND_INCREMENT,
@@ -2342,6 +2341,7 @@ xb_get_one_option(const struct my_option *opt,
     break;
   case 'p':
     opt_password = argument;
+    tty_password = argument == NULL;
     break;
   case OPT_PROTOCOL:
     if (argument)
@@ -2399,7 +2399,7 @@ static bool innodb_init_param()
 	srv_page_size = 0;
 	srv_page_size_shift = 0;
 #ifdef BTR_CUR_HASH_ADAPT
-	btr_ahi_parts = 1;
+	btr_search.n_parts = 1;
 #endif /* BTR_CUR_HASH_ADAPT */
 
 	if (innobase_page_size != (1LL << 14)) {
@@ -2422,7 +2422,7 @@ static bool innodb_init_param()
 
 	/* Check that values don't overflow on 32-bit systems. */
 	if (sizeof(ulint) == 4) {
-          if (xtrabackup_use_memory > (longlong) UINT_MAX32) {
+		if (xtrabackup_use_memory > (longlong) UINT_MAX32) {
 			msg("mariabackup: use-memory can't be over 4GB"
 			    " on 32-bit systems");
 		}
@@ -7467,6 +7467,8 @@ void handle_options(int argc, char **argv, char ***argv_server,
           if (*start)
             start[1]= 0;
         }
+        else if (tty_password)
+          opt_password= my_get_tty_password(NullS);
 
         /* 4) Process --mysqld-args options, ignore unknown options */
 

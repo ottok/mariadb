@@ -845,6 +845,12 @@ void wsrep_init_globals()
                  global_system_variables.server_id, wsrep_gtid_server.server_id);
   }
   wsrep_init_schema();
+  {
+    /* apparently this thread has already called my_thread_init(),
+     * so we skip it, hence 'false' for initialization. */
+    wsp::thd thd(false, true);
+    wsrep_sst_cleanup_user(thd.ptr);
+  }
   if (WSREP_ON)
   {
     Wsrep_server_state::instance().initialized();
@@ -864,7 +870,6 @@ int wsrep_init()
   assert(wsrep_provider);
 
   wsrep_init_position();
-  wsrep_sst_auth_init();
 
   if (!*wsrep_provider ||
       !strcasecmp(wsrep_provider, WSREP_NONE))
@@ -1055,11 +1060,6 @@ void wsrep_deinit(bool free_options)
     char* p= wsrep_provider_capabilities;
     wsrep_provider_capabilities= NULL;
     free(p);
-  }
-
-  if (free_options)
-  {
-    wsrep_sst_auth_free();
   }
 }
 
@@ -1452,15 +1452,20 @@ bool wsrep_check_mode_after_open_table (THD *thd,
                    (db_type == DB_TYPE_ARIA && wsrep_check_mode(WSREP_MODE_REPLICATE_ARIA)));
   TABLE *tbl= tables->table;
 
+  DBUG_ASSERT(tbl);
   if (replicate)
   {
-    /* It is not recommended to replicate MyISAM as it lacks rollback feature
-    but if user demands then actions are replicated using TOI.
-    Following code will kick-start the TOI but this has to be done only once
-    per statement.
-    Note: kick-start will take-care of creating isolation key for all tables
-    involved in the list (provided all of them are MYISAM or Aria tables). */
-    if (!is_stat_table(&tables->db, &tables->alias))
+    /*
+      It is not recommended to replicate MyISAM as it lacks rollback
+      feature but if user demands then actions are replicated using TOI.
+      Following code will kick-start the TOI but this has to be done
+      only once per statement.
+
+      Note: kick-start will take care of creating isolation key for
+      all tables involved in the list (provided all of them are MYISAM
+      or Aria tables).
+    */
+    if (tbl->s->table_category != TABLE_CATEGORY_STATISTICS)
     {
       if (tbl->s->primary_key == MAX_KEY &&
           wsrep_check_mode(WSREP_MODE_REQUIRED_PRIMARY_KEY))
@@ -1493,13 +1498,14 @@ bool wsrep_check_mode_after_open_table (THD *thd,
              db_type != DB_TYPE_PERFORMANCE_SCHEMA)
   {
     bool is_system_db= (tbl &&
-                       ((strcmp(tbl->s->db.str, "mysql") == 0) ||
-                        (strcmp(tbl->s->db.str, "information_schema") == 0)));
+                        (!strcmp(tbl->s->db.str, "mysql") ||
+                         (tbl->s->table_category ==
+                          TABLE_CATEGORY_INFORMATION &&
+                          !strcmp(tbl->s->db.str, "information_schema"))));
 
     if (!is_system_db &&
 	!is_temporary_table(tables))
     {
-
       if (db_type != DB_TYPE_INNODB &&
 	  wsrep_check_mode(WSREP_MODE_STRICT_REPLICATION))
       {
@@ -2448,7 +2454,7 @@ static int wsrep_drop_table_query(THD* thd, uchar** buf, size_t* buf_len)
   bool found_temp_table= false;
   for (TABLE_LIST* table= first_table; table; table= table->next_global)
   {
-    if (thd->find_temporary_table(table->db.str, table->table_name.str))
+    if (thd->find_temporary_table(table->db, table->table_name))
     {
       found_temp_table= true;
       break;
@@ -2463,7 +2469,7 @@ static int wsrep_drop_table_query(THD* thd, uchar** buf, size_t* buf_len)
 
     for (TABLE_LIST* table= first_table; table; table= table->next_global)
     {
-      if (!thd->find_temporary_table(table->db.str, table->table_name.str))
+      if (!thd->find_temporary_table(table->db, table->table_name))
       {
         append_identifier(thd, &buff, table->db.str, table->db.length);
         buff.append('.');
@@ -2661,7 +2667,8 @@ bool wsrep_can_run_in_toi(THD *thd, const char *db, const char *table,
     }
     /* fallthrough */
   default:
-    if (table && !thd->find_temporary_table(db, table))
+    if (table && !thd->find_temporary_table(Lex_ident_db(Lex_cstring_strlen(db)),
+                                            Lex_cstring_strlen(table)))
     {
       return true;
     }
@@ -2670,7 +2677,7 @@ bool wsrep_can_run_in_toi(THD *thd, const char *db, const char *table,
     {
       for (const TABLE_LIST* table= first_table; table; table= table->next_global)
       {
-        if (!thd->find_temporary_table(table->db.str, table->table_name.str))
+        if (!thd->find_temporary_table(table->db, table->table_name))
         {
           return true;
         }
@@ -2704,7 +2711,7 @@ static int wsrep_create_sp(THD *thd, uchar** buf, size_t* buf_len)
 
   if (sp->m_handler->type() == SP_TYPE_FUNCTION)
   {
-    sp_returns_type(thd, retstr, sp);
+    sp->sp_returns_type(thd, retstr);
     retstr.get_value(&returns);
   }
   if (sp->m_handler->

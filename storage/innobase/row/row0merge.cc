@@ -4088,7 +4088,7 @@ row_merge_drop_indexes(
 					prebuilt->ins_node->entry_list
 					in ins_node_create_entry_list(). */
 #ifdef BTR_CUR_HASH_ADAPT
-					ut_ad(!index->search_info->ref_count);
+					ut_ad(!index->search_info.ref_count);
 #endif /* BTR_CUR_HASH_ADAPT */
 					dict_index_remove_from_cache(
 						table, index);
@@ -4534,10 +4534,10 @@ row_merge_create_index(
 				n_add_vcol++;
 			} else {
 				name = dict_table_get_v_col_name(
-					table, ifield->col_no);
+					table, ifield->col_no).str;
 			}
 		} else {
-			name = dict_table_get_col_name(table, ifield->col_no);
+			name = dict_table_get_col_name(table, ifield->col_no).str;
 		}
 
 		dict_mem_index_add_field(index, name, ifield->prefix_len,

@@ -62,8 +62,7 @@ extern struct st_maria_plugin *mysql_mandatory_plugins[];
 const char *global_plugin_typelib_names[]=
   { "OFF", "ON", "FORCE", "FORCE_PLUS_PERMANENT", NULL };
 static TYPELIB global_plugin_typelib=
-  { array_elements(global_plugin_typelib_names)-1,
-    "", global_plugin_typelib_names, NULL };
+  CREATE_TYPELIB_FOR(global_plugin_typelib_names);
 
 static I_List<i_string> opt_plugin_load_list;
 I_List<i_string> *opt_plugin_load_list_ptr= &opt_plugin_load_list;
@@ -207,7 +206,7 @@ static int cur_plugin_info_interface_version[MYSQL_MAX_PLUGIN_TYPE_NUM]=
 
 static struct
 {
-  const char *plugin_name;
+  Lex_ident_plugin plugin_name;
   enum enum_plugin_load_option override;
 } override_plugin_load_policy[]={
   /*
@@ -226,10 +225,10 @@ static struct
     - yet disable explicitly a component needed for the functionality
       to work, by using '--skip-performance-schema' (the plugin)
   */
-  { "performance_schema", PLUGIN_FORCE }
+  { "performance_schema"_Lex_ident_plugin, PLUGIN_FORCE }
 
   /* we disable few other plugins by default */
-  ,{ "feedback", PLUGIN_OFF }
+  ,{ "feedback"_Lex_ident_plugin, PLUGIN_OFF }
 };
 
 /* support for Services */
@@ -374,17 +373,17 @@ bool check_valid_path(const char *path, size_t len)
 
 static void fix_dl_name(MEM_ROOT *root, LEX_CSTRING *dl)
 {
-  const size_t so_ext_len= sizeof(SO_EXT) - 1;
-  if (dl->length < so_ext_len ||
-      my_strcasecmp(&my_charset_latin1, dl->str + dl->length - so_ext_len,
-                    SO_EXT))
+  const Lex_ident_plugin so_ext(STRING_WITH_LEN(SO_EXT));
+  if (dl->length < so_ext.length ||
+      !so_ext.streq(Lex_cstring(dl->str + dl->length - so_ext.length,
+                                so_ext.length)))
   {
-    size_t s_size= dl->length + so_ext_len + 1;
+    size_t s_size= dl->length + so_ext.length + 1;
     char *s= (char*)alloc_root(root, s_size);
     memcpy(s, dl->str, dl->length);
     safe_strcpy(s + dl->length, s_size - dl->length, SO_EXT);
     dl->str= s;
-    dl->length+= so_ext_len;
+    dl->length+= so_ext.length;
   }
 }
 
@@ -544,7 +543,7 @@ static my_bool read_mysql_plugin_info(struct st_plugin_dl *plugin_dl,
   /* Determine interface version */
   if (!sym)
   {
-    my_error(ER_CANT_FIND_DL_ENTRY, MyFlags, plugin_interface_version_sym);
+    my_error(ER_CANT_FIND_DL_ENTRY, MyFlags, plugin_interface_version_sym, dlpath);
     DBUG_RETURN(TRUE);
   }
   plugin_dl->mariaversion= 0;
@@ -560,7 +559,7 @@ static my_bool read_mysql_plugin_info(struct st_plugin_dl *plugin_dl,
   /* Find plugin declarations */
   if (!(sym= dlsym(plugin_dl->handle, plugin_declarations_sym)))
   {
-    my_error(ER_CANT_FIND_DL_ENTRY, MyFlags, plugin_declarations_sym);
+    my_error(ER_CANT_FIND_DL_ENTRY, MyFlags, plugin_declarations_sym, dlpath);
     DBUG_RETURN(TRUE);
   }
 
@@ -664,7 +663,7 @@ static my_bool read_maria_plugin_info(struct st_plugin_dl *plugin_dl,
       version we try mysql version.
     */
     my_error(ER_CANT_FIND_DL_ENTRY, MyFlags,
-                 maria_plugin_interface_version_sym);
+             maria_plugin_interface_version_sym, dlpath);
     DBUG_RETURN(TRUE);
   }
   plugin_dl->mariaversion= *(int *)sym;
@@ -680,7 +679,7 @@ static my_bool read_maria_plugin_info(struct st_plugin_dl *plugin_dl,
   /* Find plugin declarations */
   if (!(sym= dlsym(plugin_dl->handle, maria_plugin_declarations_sym)))
   {
-    my_error(ER_CANT_FIND_DL_ENTRY, MyFlags, maria_plugin_declarations_sym);
+    my_error(ER_CANT_FIND_DL_ENTRY, MyFlags, maria_plugin_declarations_sym, dlpath);
     DBUG_RETURN(TRUE);
   }
   if (plugin_dl->mariaversion != MARIA_PLUGIN_INTERFACE_VERSION)
@@ -693,7 +692,8 @@ static my_bool read_maria_plugin_info(struct st_plugin_dl *plugin_dl,
       sizeof_st_plugin= *(int *)sym;
     else
     {
-      my_error(ER_CANT_FIND_DL_ENTRY, MyFlags, maria_sizeof_st_plugin_sym);
+      my_error(ER_CANT_FIND_DL_ENTRY, MyFlags, maria_sizeof_st_plugin_sym,
+               dlpath);
       DBUG_RETURN(TRUE);
     }
 
@@ -1145,8 +1145,7 @@ static enum install_status plugin_add(MEM_ROOT *tmp_root, bool if_not_exists,
          tmp.plugin_dl->mariaversion == 0))
       continue; // unsupported plugin type
 
-    if (name->str && system_charset_info->strnncoll(name->str, name->length,
-                                                    tmp.name.str, tmp.name.length))
+    if (name->str && !Lex_ident_plugin(*name).streq(tmp.name))
       continue; // plugin name doesn't match
 
     if (!name->str &&
@@ -1223,7 +1222,8 @@ err:
   DBUG_ASSERT(!name->str || !dupes); // dupes is ONLY for name->str == 0
 
   if (errs == 0 && oks == 0 && !dupes) // no plugin was found
-    my_error(ER_CANT_FIND_DL_ENTRY, MyFlags, name->str);
+    my_error(ER_CANT_FIND_DL_ENTRY, MyFlags, name->str, tmp.plugin_dl->dl.str);
+
 
   plugin_dl_del(tmp.plugin_dl);
   if (errs > 0 || oks + dupes == 0)
@@ -1537,20 +1537,6 @@ const uchar *get_bookmark_hash_key(const void *buff, size_t *length, my_bool)
   return reinterpret_cast<const uchar *>(var->key);
 }
 
-static inline void convert_dash_to_underscore(char *str, size_t len)
-{
-  for (char *p= str; p <= str+len; p++)
-    if (*p == '-')
-      *p= '_';
-}
-
-static inline void convert_underscore_to_dash(char *str, size_t len)
-{
-  for (char *p= str; p <= str+len; p++)
-    if (*p == '_')
-      *p= '-';
-}
-
 #ifdef HAVE_PSI_INTERFACE
 static PSI_mutex_key key_LOCK_plugin;
 
@@ -1635,7 +1621,9 @@ int plugin_init(int *argc, char **argv, int flags)
 
   for (i= 0; i < MYSQL_MAX_PLUGIN_TYPE_NUM; i++)
   {
-    if (my_hash_init(key_memory_plugin_mem_root, &plugin_hash[i], system_charset_info, 32, 0, 0,
+    if (my_hash_init(key_memory_plugin_mem_root, &plugin_hash[i],
+                     Lex_ident_plugin::charset_info(),
+                     32, 0, 0,
                      get_plugin_hash_key, NULL, HASH_UNIQUE))
       goto err;
   }
@@ -1668,21 +1656,20 @@ int plugin_init(int *argc, char **argv, int flags)
     }
     for (plugin= *builtins; plugin->info; plugin++)
     {
+      Lex_ident_plugin tmp_plugin_name(Lex_cstring_strlen(plugin->name));
       if (opt_ignore_builtin_innodb &&
-          !my_charset_latin1.strnncoll(plugin->name, 6, "InnoDB", 6))
+          tmp_plugin_name.streq("InnoDB"_Lex_ident_plugin))
         continue;
 
       bzero(&tmp, sizeof(tmp));
       tmp.plugin= plugin;
-      tmp.name.str= (char *)plugin->name;
-      tmp.name.length= strlen(plugin->name);
+      tmp.name= tmp_plugin_name;
       tmp.state= 0;
       tmp.load_option= mandatory ? PLUGIN_FORCE : PLUGIN_ON;
 
       for (i=0; i < array_elements(override_plugin_load_policy); i++)
       {
-        if (!my_strcasecmp(&my_charset_latin1, plugin->name,
-                           override_plugin_load_policy[i].plugin_name))
+        if (tmp_plugin_name.streq(override_plugin_load_policy[i].plugin_name))
         {
           tmp.load_option= override_plugin_load_policy[i].override;
           break;
@@ -1728,8 +1715,7 @@ int plugin_init(int *argc, char **argv, int flags)
   {
     char path[FN_REFLEN + 1];
     build_table_filename(path, sizeof(path) - 1, "mysql", "plugin", reg_ext, 0);
-    Table_type ttype= dd_frm_type(0, path, &plugin_table_engine_name,
-                                  NULL, NULL);
+    Table_type ttype= dd_frm_type(0, path, &plugin_table_engine_name, NULL);
     if (ttype != TABLE_TYPE_NORMAL)
       plugin_table_engine_name=empty_clex_str;
   }
@@ -1975,7 +1961,7 @@ static void plugin_load(MEM_ROOT *tmp_root)
     mysql_mutex_unlock(&LOCK_plugin);
   }
   if (unlikely(error > 0))
-    sql_print_error(ER_THD(new_thd, ER_GET_ERRNO), my_errno,
+    sql_print_error(ER_DEFAULT(ER_GET_ERRNO), my_errno,
                            table->file->table_type());
   end_read_record(&read_record_info);
   table->mark_table_for_reopen();
@@ -3724,8 +3710,6 @@ bool sys_var_pluginvar::global_update(THD *thd, set_var *var)
 void plugin_opt_set_limits(struct my_option *options,
                            const struct st_mysql_sys_var *opt)
 {
-  options->sub_size= 0;
-
   switch (opt->flags & (PLUGIN_VAR_TYPEMASK |
                         PLUGIN_VAR_UNSIGNED | PLUGIN_VAR_THDLOCAL)) {
   /* global system variables */
@@ -3871,7 +3855,7 @@ static int construct_options(MEM_ROOT *mem_root, struct st_plugin_int *tmp,
 
   plugin_name_ptr= static_cast<char*>(alloc_root(mem_root, plugin_name_len + 1));
   safe_strcpy(plugin_name_ptr, plugin_name_len + 1, plugin_name);
-  my_casedn_str(&my_charset_latin1, plugin_name_ptr);
+  my_casedn_str_latin1(plugin_name_ptr); // Plugin names are pure ASCII
   convert_underscore_to_dash(plugin_name_ptr, plugin_name_len);
   plugin_name_with_prefix_ptr= (char*) alloc_root(mem_root,
                                                   plugin_name_len +
@@ -4093,6 +4077,9 @@ static int construct_options(MEM_ROOT *mem_root, struct st_plugin_int *tmp,
     else
       options->value= options->u_max_value= *(uchar***) (opt + 1);
 
+    if (opt->flags & PLUGIN_VAR_DEPRECATED)
+      options->deprecation_substitute= "";
+
     char *option_name_ptr;
     options[1]= options[0];
     options[1].name= option_name_ptr= (char*) alloc_root(mem_root,
@@ -4248,9 +4235,9 @@ static int test_plugin_options(MEM_ROOT *tmp_root, struct st_plugin_int *tmp,
           var= NULL;
           len= tmp->name.length + strlen(o->name) + 2;
           varname= (char*) alloc_root(mem_root, len);
-          strxmov(varname, tmp->name.str, "-", o->name, NullS);
-          my_casedn_str(&my_charset_latin1, varname);
-          convert_dash_to_underscore(varname, len-1);
+          strxmov(varname, tmp->name.str, "_", o->name, NullS);
+          // Ok to use latin1, as the variable name is pure ASCII
+          my_casedn_str_latin1(varname);
         }
         if (o->flags & PLUGIN_VAR_NOSYSVAR)
         {

@@ -19,11 +19,7 @@
 /* subselect Item */
 
 #include "item.h"
-#ifdef USE_PRAGMA_INTERFACE
-#pragma interface			/* gcc class implementation */
-#endif
-
-#include <queues.h>
+#include "sql_queue.h"
 
 class st_select_lex;
 class st_select_lex_unit;
@@ -297,7 +293,8 @@ public:
 /* single value subselect */
 
 class Item_cache;
-class Item_singlerow_subselect :public Item_subselect
+class Item_singlerow_subselect :public Item_subselect,
+                                public Type_extra_attributes
 {
 protected:
   Item_cache *value, **row;
@@ -322,6 +319,14 @@ public:
   bool get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzydate) override;
   const Type_handler *type_handler() const override;
   bool fix_length_and_dec() override;
+  Type_extra_attributes *type_extra_attributes_addr() override
+  {
+    return this;
+  }
+  const Type_extra_attributes type_extra_attributes() const override
+  {
+    return *this;
+  }
 
   uint cols() const override;
   Item* element_index(uint i) override
@@ -1507,7 +1512,7 @@ protected:
     Priority queue of Ordered_key indexes, one per NULLable column.
     This queue is used by the partial match algorithm in method exec().
   */
-  QUEUE pq;
+  Queue<Ordered_key> pq;
 protected:
   /*
     Comparison function to compare keys in order of decreasing bitmap

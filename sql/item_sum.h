@@ -19,10 +19,6 @@
 
 /* classes for sum functions */
 
-#ifdef USE_PRAGMA_INTERFACE
-#pragma interface			/* gcc class implementation */
-#endif
-
 #include <my_tree.h>
 #include "sql_udf.h"                            /* udf_handler */
 
@@ -706,7 +702,7 @@ public:
   Aggregator_type Aggrtype() override { return DISTINCT_AGGREGATOR; }
 
   bool setup(THD *) override;
-  void clear() override; 
+  void clear() override;
   bool add() override;
   void endup() override;
   my_decimal *arg_val_decimal(my_decimal * value) override;
@@ -1184,8 +1180,10 @@ public:
   {
     return get_arg(0)->real_type_handler();
   }
-  const TYPELIB *get_typelib() const override
-  { return args[0]->get_typelib(); }
+  const Type_extra_attributes type_extra_attributes() const override
+  {
+    return args[0]->type_extra_attributes();
+  }
   void update_field() override;
   void min_max_update_str_field();
   void min_max_update_real_field();

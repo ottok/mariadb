@@ -4,6 +4,7 @@
 --source include/have_partition.inc
 
 connection default;
+ALTER DATABASE federated CHARACTER SET latin1;
 
 set global federated_pushdown=1;
 
@@ -172,9 +173,7 @@ select * from federated.t4;
 
 select name into @var from federated.t1 where id=3 limit 1 ;
 select @var;
---disable_ps2_protocol
 select name into outfile 'tmp.txt' from federated.t1;
---enable_ps2_protocol
 
 let $path=`select concat(@@datadir, 'test/tmp.txt')`;
 remove_file $path;
@@ -324,6 +323,7 @@ CREATE TABLE federated.t3 (a INT)
 
 EXPLAIN SELECT * FROM federated.t3;
 SELECT * FROM federated.t3;
+DROP SERVER fedlink;
 
 --echo #
 --echo # MDEV-29655: ASAN heap-use-after-free in
@@ -863,4 +863,3 @@ set global federated_pushdown=0;
 --enable_cursor_protocol
 
 source include/federated_cleanup.inc;
-

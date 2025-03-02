@@ -407,8 +407,6 @@ static MY_CHARSET_HANDLER my_charset_handler=
     my_mb_wc_latin1,
     my_wc_mb_latin1,
     my_mb_ctype_8bit,
-    my_caseup_str_8bit,
-    my_casedn_str_8bit,
     my_caseup_8bit,
     my_casedn_8bit,
     my_snprintf_8bit,
@@ -675,25 +673,40 @@ static int my_strnncollsp_latin1_de(CHARSET_INFO *cs __attribute__((unused)),
 }
 
 
-static size_t
+static my_strnxfrm_ret_t
 my_strnxfrm_latin1_de(CHARSET_INFO *cs,
                       uchar *dst, size_t dstlen, uint nweights,
                       const uchar* src, size_t srclen, uint flags)
 {
+  my_strnxfrm_ret_t rc;
   uchar *de= dst + dstlen;
+  const uchar *src0= src;
   const uchar *se= src + srclen;
   uchar *d0= dst;
+  uint warnings= 0;
   for ( ; src < se && dst < de && nweights; src++, nweights--)
   {
     uchar chr= combo1map[*src];
     *dst++= chr;
-    if ((chr= combo2map[*src]) && dst < de && nweights > 1)
+    if ((chr= combo2map[*src]))
     {
-      *dst++= chr;
-      nweights--;
+      if (nweights > 1)
+      {
+        if (dst < de)
+        {
+          *dst++= chr;
+          nweights--;
+        }
+        else
+          warnings= MY_STRNXFRM_TRUNCATED_WEIGHT_REAL_CHAR;
+      }
     }
   }
-  return my_strxfrm_pad_desc_and_reverse(cs, d0, dst, de, nweights, flags, 0);
+  rc= my_strxfrm_pad_desc_and_reverse(cs, d0, dst, de,
+                                      nweights, flags, 0);
+  return my_strnxfrm_ret_construct(rc.m_result_length, src - src0,
+           rc.m_warnings | warnings |
+           (src < se ? MY_STRNXFRM_TRUNCATED_WEIGHT_REAL_CHAR : 0));
 }
 
 
@@ -734,7 +747,6 @@ static MY_COLLATION_HANDLER my_collation_german2_ci_handler=
   my_strnxfrmlen_simple,
   my_like_range_simple,
   my_wildcmp_8bit,
-  my_strcasecmp_8bit,
   my_instr_simple,
   my_hash_sort_latin1_de,
   my_propagate_complex,

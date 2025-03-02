@@ -37,20 +37,20 @@ SET @@global.character_set_client=utf8mb3;
 SET NAMES DEFAULT;
 SELECT @@character_set_connection, @@collation_connection, @@character_set_results;
 @@character_set_connection	@@collation_connection	@@character_set_results
-utf8mb3	utf8mb3_general_ci	utf8mb3
+utf8mb3	utf8mb3_uca1400_ai_ci	utf8mb3
 SET @@global.character_set_client=DEFAULT;
 SET NAMES DEFAULT;
 SELECT @@character_set_connection, @@collation_connection, @@character_set_results;
 @@character_set_connection	@@collation_connection	@@character_set_results
-utf8mb4	utf8mb4_general_ci	utf8mb4
+utf8mb4	utf8mb4_uca1400_ai_ci	utf8mb4
 SET NAMES DEFAULT;
 SELECT @@character_set_connection, @@collation_connection, @@character_set_results;
 @@character_set_connection	@@collation_connection	@@character_set_results
-utf8mb4	utf8mb4_general_ci	utf8mb4
+utf8mb4	utf8mb4_uca1400_ai_ci	utf8mb4
 SET NAMES DEFAULT COLLATE DEFAULT;
 SELECT @@character_set_connection, @@collation_connection, @@character_set_results;
 @@character_set_connection	@@collation_connection	@@character_set_results
-utf8mb4	utf8mb4_general_ci	utf8mb4
+utf8mb4	utf8mb4_uca1400_ai_ci	utf8mb4
 #
 # End of 10.11 tests
 #

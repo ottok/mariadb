@@ -245,6 +245,7 @@ where
   pk in (1,2,3,4,5) and
   key1 <= 4;
 
+--disable_view_protocol
 create temporary table opt_trace as
 select * from information_schema.optimizer_trace;
 
@@ -259,6 +260,7 @@ select
   json_detailed(json_extract(trace,'$**.best_access_path')) as JS
 from
   opt_trace;
+--enable_view_protocol
 drop table opt_trace;
 
 drop table t1;

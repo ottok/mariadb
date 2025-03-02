@@ -2419,6 +2419,7 @@ static void buf_flush_page_cleaner() noexcept
 #ifdef UNIV_PFS_THREAD
   pfs_register_thread(page_cleaner_thread_key);
 #endif /* UNIV_PFS_THREAD */
+  my_thread_set_name("page_cleaner");
   ut_ad(!srv_read_only_mode);
   ut_ad(buf_page_cleaner_is_active);
 

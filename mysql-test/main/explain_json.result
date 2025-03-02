@@ -955,7 +955,7 @@ EXPLAIN
                 "filtered": 10
               },
               "buffer_type": "flat",
-              "buffer_size": "206",
+              "buffer_size": "195",
               "join_type": "BNL",
               "attached_condition": "t1.b = t2.b and t1.a = t2.a"
             }
@@ -1313,6 +1313,7 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
+          "r_total_filtered": 100,
           "r_filtered": 100,
           "using_index_for_group_by": true
         }
@@ -1326,7 +1327,7 @@ drop table t1,t2;
 #
 create table t1 (
 a1 char(64), a2 char(64), b char(16), c char(16) not null, d char(16), dummy char(248) default ' '
-);
+) charset=latin1;
 insert into t1 (a1, a2, b, c, d) values
 ('a','a','a','a111','xy1'),('a','a','a','b111','xy2'),('a','a','a','c111','xy3'),('a','a','a','d111','xy4'),
 ('a','a','b','e112','xy1'),('a','a','b','f112','xy2'),('a','a','b','g112','xy3'),('a','a','b','h112','xy4'),
@@ -1723,6 +1724,7 @@ ANALYZE
           "r_rows": null,
           "r_engine_stats": REPLACED,
           "filtered": 0,
+          "r_total_filtered": null,
           "r_filtered": null,
           "impossible_on_condition": true
         }
@@ -1740,6 +1742,7 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
+          "r_total_filtered": 100,
           "r_filtered": 100
         }
       }
@@ -1817,6 +1820,7 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
+          "r_total_filtered": 100,
           "r_filtered": 100
         }
       },
@@ -1838,8 +1842,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
-          "r_filtered": 100,
+          "r_total_filtered": 100,
           "attached_condition": "trigcond(t2.pk is null) and trigcond(trigcond(t1.a is not null))",
+          "r_filtered": 100,
           "using_index": true,
           "not_exists": true
         }
@@ -1921,8 +1926,9 @@ ANALYZE
             "r_other_time_ms": "REPLACED",
             "r_engine_stats": REPLACED,
             "filtered": 100,
-            "r_filtered": 100,
-            "attached_condition": "t1.a is not null"
+            "r_total_filtered": 100,
+            "attached_condition": "t1.a is not null",
+            "r_filtered": 100
           }
         },
         {
@@ -1943,6 +1949,7 @@ ANALYZE
             "r_other_time_ms": "REPLACED",
             "r_engine_stats": REPLACED,
             "filtered": 100,
+            "r_total_filtered": 100,
             "r_filtered": 100,
             "using_index": true,
             "distinct": true
@@ -2007,7 +2014,7 @@ EXPLAIN
             "index_condition_bka": "t4.b + 1 <= t3.b + 1"
           },
           "buffer_type": "flat",
-          "buffer_size": "400",
+          "buffer_size": "380",
           "join_type": "BKA",
           "mrr_type": "Rowid-ordered scan"
         }
@@ -2041,8 +2048,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
-          "r_filtered": 100,
-          "attached_condition": "t3.a is not null"
+          "r_total_filtered": 100,
+          "attached_condition": "t3.a is not null",
+          "r_filtered": 100
         }
       },
       {
@@ -2064,11 +2072,12 @@ ANALYZE
             "r_other_time_ms": "REPLACED",
             "r_engine_stats": REPLACED,
             "filtered": 100,
-            "r_filtered": 100,
-            "index_condition_bka": "t4.b + 1 <= t3.b + 1"
+            "r_total_filtered": 100,
+            "index_condition_bka": "t4.b + 1 <= t3.b + 1",
+            "r_filtered": 100
           },
           "buffer_type": "flat",
-          "buffer_size": "400",
+          "buffer_size": "380",
           "join_type": "BKA",
           "mrr_type": "Rowid-ordered scan",
           "r_loops": 10,
@@ -2256,7 +2265,7 @@ EXPLAIN
                 "filtered": 100
               },
               "buffer_type": "flat",
-              "buffer_size": "152",
+              "buffer_size": "141",
               "join_type": "BNL",
               "attached_condition": "t2.a = t0.a"
             }

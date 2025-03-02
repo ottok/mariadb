@@ -157,8 +157,9 @@ int select_unit::send_data(List<Item> &values)
   switch (step)
   {
   case UNION_TYPE:
+    /* Errors not related to duplicate key are reported by write_record() */
     rc= write_record();
-    /* no reaction with conversion */
+    /* no reaction with conversion. rc == -1 (dupp key) is ignored by caller */
     if (rc == -2)
       rc= 0;
     break;
@@ -431,18 +432,11 @@ int select_unit::write_record()
                                               tmp_table_param.start_recinfo,
                                               &tmp_table_param.recinfo,
                                               write_err, 1, &is_duplicate))
-      {
         return -2;
-      }
-      else
-      {
-        return 1;
-      }
+      return 1;
     }
     if (is_duplicate)
-    {
       return -1;
-    }
   }
   return 0;
 }
@@ -498,26 +492,25 @@ bool select_unit_ext::disable_index_if_needed(SELECT_LEX *curr_sl)
   @retval
     0   no error
     -1  conversion happened
+    1   error
+
+    Note that duplicate keys are ignored (write_record() is returning -1)
 */
 
 int select_unit_ext::unfold_record(ha_rows cnt)
 {
 
   DBUG_ASSERT(cnt > 0);
-  int error= 0;
-  bool is_convertion_happened= false;
+  int ret= 0;
   while (--cnt)
   {
-    error= write_record();
+    int error= write_record();
     if (error == -2)
-    {
-      is_convertion_happened= true;
-      error= -1;
-    }
+      ret= -1;                                  // Conversion happened
+    else if (error > 0)
+      return error;
   }
-  if (is_convertion_happened)
-    return -1;
-  return error;
+  return ret;
 }
 
 /*
@@ -873,7 +866,7 @@ bool select_unit_ext::send_eof()
       if (unlikely(error))
         break;
 
-      if (unfold_record(dup_cnt) == -1)
+      if ((error= unfold_record(dup_cnt)) == -1)
       {
         /* restart the scan */
         if (unlikely(table->file->ha_rnd_init_with_error(1)))
@@ -884,7 +877,13 @@ bool select_unit_ext::send_eof()
           additional_cnt= table->field[addon_cnt - 2];
         else
           additional_cnt= NULL;
+        error= 0;
         continue;
+      }
+      else if (error > 0)
+      {
+        table->file->ha_index_or_rnd_end();
+        return 1;
       }
     } while (likely(!error));
     table->file->ha_rnd_end();
@@ -1057,7 +1056,7 @@ st_select_lex_unit::init_prepare_fake_select_lex(THD *thd_arg,
                                                   bool first_execution) 
 {
   thd_arg->lex->current_select= fake_select_lex;
-  fake_select_lex->table_list.link_in_list(&result_table_list,
+  fake_select_lex->table_list.insert(&result_table_list,
                                            &result_table_list.next_local);
   fake_select_lex->context.table_list= 
     fake_select_lex->context.first_name_resolution_table= 
@@ -1367,6 +1366,35 @@ static select_handler *find_unit_handler(THD *thd,
       return uh;
   }
   return nullptr;
+}
+
+
+inline bool st_select_lex_unit::rename_item_list(TABLE_LIST *derived_arg)
+{
+  if (derived_arg->save_original_names(first_select()))
+    return true;
+  if (first_select()->set_item_list_names(derived_arg->column_names))
+    return true;
+  return false;
+}
+
+
+inline bool st_select_lex_unit::rename_types_list(List<Lex_ident_sys> *newnames)
+{
+  if (item_list.elements != newnames->elements)
+  {
+    my_error(ER_INCORRECT_COLUMN_NAME_COUNT, MYF(0));
+    return true;
+  }
+
+  List_iterator<Lex_ident_sys> it(*newnames);
+  List_iterator_fast<Item> li(types);
+  Item *item;
+
+  while ((item= li++))
+    lex_string_set( &item->name, (it++)->str);
+
+  return false;
 }
 
 
@@ -1750,6 +1778,14 @@ bool st_select_lex_unit::prepare(TABLE_LIST *derived_arg,
     }      
   }
 
+  /*
+    We need to rename tvc BEFORE Item_holder pushed into result table
+    below in join_union_item_types().
+  */
+  if (first_select()->tvc && derived_arg && derived_arg->column_names)
+    if (rename_item_list(derived_arg))
+      goto err;
+
   // In case of a non-recursive UNION, join data types for all UNION parts.
   if (!is_recursive && join_union_item_types(thd, types, union_part_count))
     goto err;
@@ -1942,6 +1978,14 @@ cont:
                 global_parameters()->order_list.first,    // order
                 false, NULL, NULL, NULL, fake_select_lex, this);
     }
+    /*
+      Rename types used in result table for union.
+    */
+    if (derived_arg && derived_arg->column_names)
+    {
+      if (rename_types_list(derived_arg->column_names))
+        goto err;
+    }
 
     if (!thd->lex->is_view_context_analysis())
       pushdown_unit= find_unit_handler(thd, this);
@@ -1950,6 +1994,12 @@ cont:
       if (prepare_pushdown(use_direct_union_result, sel_result))
         goto err;
     }
+  }
+
+  if (derived_arg && derived_arg->column_names)
+  {
+    if (rename_item_list(derived_arg))
+      goto err;
   }
 
   thd->lex->current_select= lex_select_save;

@@ -116,9 +116,7 @@ static bool one_database=0, one_table=0, to_last_remote_log= 0, disable_log_bin=
 static bool opt_hexdump= 0, opt_version= 0;
 const char *base64_output_mode_names[]=
 {"NEVER", "AUTO", "UNSPEC", "DECODE-ROWS", NullS};
-TYPELIB base64_output_mode_typelib=
-  { array_elements(base64_output_mode_names) - 1, "",
-    base64_output_mode_names, NULL };
+TYPELIB base64_output_mode_typelib=CREATE_TYPELIB_FOR(base64_output_mode_names);
 static enum_base64_output_mode opt_base64_output_mode= BASE64_OUTPUT_UNSPEC;
 static char *opt_base64_output_mode_str= NullS;
 static char* database= 0;
@@ -161,8 +159,9 @@ static Domain_gtid_event_filter *domain_id_gtid_filter= NULL;
 static Server_gtid_event_filter *server_id_gtid_filter= NULL;
 
 static char *start_datetime_str, *stop_datetime_str;
-static my_time_t start_datetime= 0, stop_datetime= MY_TIME_T_MAX;
+static my_time_t start_datetime= 0, stop_datetime= 0;
 static my_time_t last_processed_datetime= MY_TIME_T_MAX;
+static bool stop_datetime_given= false;
 
 static ulonglong rec_count= 0;
 static MYSQL* mysql = NULL;
@@ -632,7 +631,7 @@ print_use_stmt(PRINT_EVENT_INFO* pinfo, const Query_log_event *ev)
     return;
 
   // In case of rewrite rule print USE statement for db_to
-  my_fprintf(result_file, "use %`s%s\n", db_to, pinfo->delimiter);
+  my_fprintf(result_file, "use %sQ%s\n", db_to, pinfo->delimiter);
 
   // Copy the *original* db to pinfo to suppress emitting
   // of USE stmts by log_event print-functions.
@@ -1032,7 +1031,7 @@ Exit_status process_event(PRINT_EVENT_INFO *print_event_info, Log_event *ev,
       if (ev_type != ROTATE_EVENT && is_server_id_excluded(ev->server_id))
         goto end;
     }
-    if ((ev->when >= stop_datetime)
+    if ((stop_datetime_given && ev->when >= stop_datetime)
         || (pos >= stop_position_mot))
     {
       /* end the program */
@@ -1489,8 +1488,9 @@ static struct my_option my_options[] =
   {"hexdump", 'H', "Augment output with hexadecimal and ASCII event dump.",
    &opt_hexdump, &opt_hexdump, 0, GET_BOOL, NO_ARG,
    0, 0, 0, 0, 0, 0},
-  {"host", 'h', "Get the binlog from server.", &host, &host,
-   0, GET_STR_ALLOC, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+  {"host", 'h', "Get the binlog from server. Defaults in the following order: "
+  "$MARIADB_HOST, and then localhost",
+   &host, &host, 0, GET_STR_ALLOC, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"local-load", 'l', "Prepare local temporary files for LOAD DATA INFILE in the specified directory.",
    &dirname_for_local_load, &dirname_for_local_load, 0,
    GET_STR_ALLOC, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
@@ -2125,6 +2125,7 @@ get_one_option(const struct my_option *opt, const char *argument,
     break;
   case OPT_STOP_DATETIME:
     stop_datetime= convert_str_to_timestamp(stop_datetime_str);
+    stop_datetime_given= true;
     break;
   case OPT_BASE64_OUTPUT_MODE:
     int val;
@@ -2269,6 +2270,11 @@ get_one_option(const struct my_option *opt, const char *argument,
 static int parse_args(int *argc, char*** argv)
 {
   int ho_error;
+  char *tmp;
+
+  tmp= getenv("MARIADB_HOST");
+  if (tmp && host == NULL)
+    host= my_strdup(PSI_NOT_INSTRUMENTED, tmp, MYF(MY_WME));
 
   if ((ho_error=handle_options(argc, argv, my_options, get_one_option)))
   {
@@ -3291,7 +3297,7 @@ int main(int argc, char** argv)
     if (stop_position != (ulonglong)(~(my_off_t)0))
       warning("The --stop-position option is ignored in raw mode");
 
-    if (stop_datetime != MY_TIME_T_MAX)
+    if (stop_datetime_given)
       warning("The --stop-datetime option is ignored in raw mode");
     result_file= 0;
     if (result_file_name)
@@ -3373,8 +3379,7 @@ int main(int argc, char** argv)
     start_position= BIN_LOG_HEADER_SIZE;
   }
 
-  if (stop_datetime != MY_TIME_T_MAX &&
-      stop_datetime > last_processed_datetime)
+  if (stop_datetime_given && stop_datetime > last_processed_datetime)
     warning("Did not reach stop datetime '%s' before end of input",
             stop_datetime_str);
 

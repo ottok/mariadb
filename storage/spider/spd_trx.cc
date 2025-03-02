@@ -2991,7 +2991,6 @@ error_open_table:
 }
 
 int spider_start_consistent_snapshot(
-  handlerton *hton,
   THD* thd
 ) {
   int error_num;
@@ -3079,7 +3078,6 @@ error:
 }
 
 int spider_commit(
-  handlerton *hton,
   THD *thd,
   bool all
 ) {
@@ -3117,7 +3115,7 @@ int spider_commit(
             {
 */
               /* rollback for semi_trx */
-              spider_rollback(hton, thd, all);
+              spider_rollback(thd, all);
 /*
             }
 */
@@ -3174,7 +3172,6 @@ int spider_commit(
 }
 
 int spider_rollback(
-  handlerton *hton,
   THD *thd,
   bool all
 ) {
@@ -3257,7 +3254,6 @@ int spider_rollback(
 }
 
 int spider_xa_prepare(
-  handlerton *hton,
   THD* thd,
   bool all
 ) {
@@ -3292,7 +3288,6 @@ error:
 }
 
 int spider_xa_recover(
-  handlerton *hton,
   XID* xid_list,
   uint len
 ) {
@@ -3308,7 +3303,6 @@ int spider_xa_recover(
 }
 
 int spider_xa_commit_by_xid(
-  handlerton *hton,
   XID* xid
 ) {
   SPIDER_TRX *trx;
@@ -3327,7 +3321,6 @@ int spider_xa_commit_by_xid(
 }
 
 int spider_xa_rollback_by_xid(
-  handlerton *hton,
   XID* xid
 ) {
   SPIDER_TRX *trx;

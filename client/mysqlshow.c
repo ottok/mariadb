@@ -204,8 +204,9 @@ static struct my_option my_long_options[] =
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"help", '?', "Display this help and exit.", 0, 0, 0, GET_NO_ARG, NO_ARG,
    0, 0, 0, 0, 0, 0},
-  {"host", 'h', "Connect to host.", &host, &host, 0, GET_STR,
-   REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+  {"host", 'h', "Connect to host. Defaults in the following order: "
+  "$MARIADB_HOST, and then localhost",
+   &host, &host, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"status", 'i', "Shows a lot of extra information about each table.",
    &opt_status, &opt_status, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0,
    0, 0},
@@ -363,6 +364,9 @@ get_options(int *argc,char ***argv)
 {
   int ho_error;
 
+  if (host == NULL)
+    host= getenv("MARIADB_HOST");
+
   if ((ho_error=handle_options(argc, argv, my_long_options, get_one_option)))
     exit(ho_error);
   
@@ -413,7 +417,7 @@ list_dbs(MYSQL *mysql,const char *wild)
   if (wild && mysql_num_rows(result) == 1)
   {
     row= mysql_fetch_row(result);
-    if (!my_strcasecmp(&my_charset_latin1, row[0], wild))
+    if (!my_strcasecmp_latin1(row[0], wild))
     {
       mysql_free_result(result);
       if (opt_status)

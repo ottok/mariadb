@@ -1223,11 +1223,6 @@ ATTRIBUTE_COLD static dberr_t ibuf_log_rebuild_if_needed()
   return err;
 }
 
-static tpool::task_group rollback_all_recovered_group(1);
-static tpool::task rollback_all_recovered_task(trx_rollback_all_recovered,
-					       nullptr,
-					       &rollback_all_recovered_group);
-
 /** Start InnoDB.
 @param[in]	create_new_db	whether to create a new database
 @return DB_SUCCESS or error code */
@@ -1905,9 +1900,11 @@ dberr_t srv_start(bool create_new_db)
 		    && !srv_read_only_mode) {
 			/* Drop partially created indexes. */
 			row_merge_drop_temp_indexes();
+#ifdef EMBEDDED_LIBRARY
 			/* Rollback incomplete non-DDL transactions */
 			trx_rollback_is_active = true;
 			srv_thread_pool->submit_task(&rollback_all_recovered_task);
+#endif
 		}
 	}
 
@@ -2026,6 +2023,20 @@ void innodb_preshutdown()
 
   if (srv_read_only_mode)
     return;
+
+#ifndef EMBEDDED_LIBRARY
+  if (srv_force_recovery < SRV_FORCE_NO_TRX_UNDO && srv_was_started &&
+      !trx_rollback_is_active && trx_sys.any_active_transaction_recovered())
+  {
+    /* Trx rollback thread may not be started yet, since error happened before
+       innobase_tc_log_recovery_done(), thus it is started here to finish the
+       normal shutdown process.
+     */
+    trx_rollback_is_active= true;
+    srv_thread_pool->submit_task(&rollback_all_recovered_task);
+  }
+#endif
+
   if (!srv_fast_shutdown && srv_operation <= SRV_OPERATION_EXPORT_RESTORED)
     if (srv_force_recovery < SRV_FORCE_NO_TRX_UNDO && srv_was_started)
       while (trx_sys.any_active_transactions())
@@ -2108,7 +2119,7 @@ void innodb_shutdown()
 
 #ifdef BTR_CUR_HASH_ADAPT
 	if (dict_sys.is_initialised()) {
-		btr_search_disable();
+		btr_search.disable();
 	}
 #endif /* BTR_CUR_HASH_ADAPT */
 	log_sys.close();

@@ -38,7 +38,7 @@ lineitem	CREATE TABLE `lineitem` (
   KEY `i_l_orderkey_quantity` (`l_orderkey`,`l_quantity`),
   KEY `i_l_commitdate` (`l_commitDATE`),
   KEY `i_l_quantity` (`l_quantity`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 show create table orders;
 Table	Create Table
 orders	CREATE TABLE `orders` (
@@ -55,7 +55,7 @@ orders	CREATE TABLE `orders` (
   KEY `i_o_orderdate` (`o_orderDATE`),
   KEY `i_o_custkey` (`o_custkey`),
   KEY `i_o_totalprice` (`o_totalprice`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 set optimizer_use_condition_selectivity=2;
 select
 100 *
@@ -152,15 +152,18 @@ ANALYZE
           "loops": 1,
           "r_loops": 1,
           "rows": 349,
+          "r_index_rows": 349,
           "r_rows": 34,
           "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 8.492922783,
-          "r_filtered": 100,
+          "r_total_filtered": 9.742120344,
           "index_condition": "lineitem.l_quantity > 47",
-          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30'"
+          "r_icp_filtered": 100,
+          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30'",
+          "r_filtered": 100
         }
       }
     ]
@@ -267,15 +270,18 @@ ANALYZE
           "loops": 1,
           "r_loops": 1,
           "rows": 349,
+          "r_index_rows": 349,
           "r_rows": 349,
           "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 8.492922783,
-          "r_filtered": 9.742120344,
+          "r_total_filtered": 9.742120344,
           "index_condition": "lineitem.l_quantity > 47",
-          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30'"
+          "r_icp_filtered": 100,
+          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30'",
+          "r_filtered": 9.742120344
         }
       }
     ]
@@ -420,8 +426,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
-          "r_filtered": 100,
+          "r_total_filtered": 100,
           "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-01-31'",
+          "r_filtered": 100,
           "using_index": true
         }
       },
@@ -444,8 +451,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 4.733333111,
-          "r_filtered": 11.2244898,
-          "attached_condition": "orders.o_totalprice between 200000 and 230000"
+          "r_total_filtered": 11.2244898,
+          "attached_condition": "orders.o_totalprice between 200000 and 230000",
+          "r_filtered": 11.2244898
         }
       }
     ]
@@ -568,8 +576,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
-          "r_filtered": 100,
+          "r_total_filtered": 100,
           "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-01-31'",
+          "r_filtered": 100,
           "using_index": true
         }
       },
@@ -592,8 +601,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 4.733333111,
-          "r_filtered": 11.2244898,
-          "attached_condition": "orders.o_totalprice between 200000 and 230000"
+          "r_total_filtered": 11.2244898,
+          "attached_condition": "orders.o_totalprice between 200000 and 230000",
+          "r_filtered": 11.2244898
         }
       }
     ]
@@ -737,15 +747,18 @@ ANALYZE
           "loops": 1,
           "r_loops": 1,
           "rows": 349,
+          "r_index_rows": 349,
           "r_rows": 34,
           "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 8.492922783,
-          "r_filtered": 100,
+          "r_total_filtered": 9.742120344,
           "index_condition": "lineitem.l_quantity > 47",
-          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30'"
+          "r_icp_filtered": 100,
+          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30'",
+          "r_filtered": 100
         }
       },
       {
@@ -766,8 +779,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 9.600000381,
-          "r_filtered": 26.47058824,
-          "attached_condition": "orders.o_totalprice between 180000 and 230000"
+          "r_total_filtered": 26.47058824,
+          "attached_condition": "orders.o_totalprice between 180000 and 230000",
+          "r_filtered": 26.47058824
         }
       }
     ]
@@ -889,8 +903,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
-          "r_filtered": 100,
+          "r_total_filtered": 100,
           "attached_condition": "orders.o_totalprice between 180000 and 230000",
+          "r_filtered": 100,
           "using_index": true
         }
       },
@@ -918,8 +933,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 0.493593663,
-          "r_filtered": 0.943396226,
-          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30' and lineitem.l_quantity > 47"
+          "r_total_filtered": 0.943396226,
+          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30' and lineitem.l_quantity > 47",
+          "r_filtered": 0.943396226
         }
       }
     ]
@@ -1044,8 +1060,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
-          "r_filtered": 100,
+          "r_total_filtered": 100,
           "attached_condition": "orders.o_totalprice between 200000 and 230000",
+          "r_filtered": 100,
           "using_index": true
         }
       },
@@ -1072,8 +1089,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 8.492922783,
-          "r_filtered": 7.773109244,
-          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30'"
+          "r_total_filtered": 7.773109244,
+          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30'",
+          "r_filtered": 7.773109244
         }
       }
     ]
@@ -1217,8 +1235,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
-          "r_filtered": 100,
+          "r_total_filtered": 100,
           "attached_condition": "orders.o_totalprice between 200000 and 230000",
+          "r_filtered": 100,
           "using_index": true
         }
       },
@@ -1245,8 +1264,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 8.492922783,
-          "r_filtered": 7.773109244,
-          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30'"
+          "r_total_filtered": 7.773109244,
+          "attached_condition": "lineitem.l_shipDATE between '1997-01-01' and '1997-06-30'",
+          "r_filtered": 7.773109244
         }
       }
     ]
@@ -1406,15 +1426,18 @@ ANALYZE
           "loops": 1,
           "r_loops": 1,
           "rows": 18,
+          "r_index_rows": 18,
           "r_rows": 18,
           "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 0.566194832,
-          "r_filtered": 38.88888889,
+          "r_total_filtered": 38.88888889,
           "index_condition": "lineitem.l_receiptDATE between '1996-10-05' and '1996-10-10'",
-          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-10-10'"
+          "r_icp_filtered": 100,
+          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-10-10'",
+          "r_filtered": 38.88888889
         }
       },
       {
@@ -1435,8 +1458,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 5.666666508,
-          "r_filtered": 14.28571429,
-          "attached_condition": "orders.o_totalprice between 200000 and 250000"
+          "r_total_filtered": 14.28571429,
+          "attached_condition": "orders.o_totalprice between 200000 and 250000",
+          "r_filtered": 14.28571429
         }
       }
     ]
@@ -1555,15 +1579,18 @@ ANALYZE
           "loops": 1,
           "r_loops": 1,
           "rows": 18,
+          "r_index_rows": 18,
           "r_rows": 18,
           "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 0.566194832,
-          "r_filtered": 38.88888889,
+          "r_total_filtered": 38.88888889,
           "index_condition": "lineitem.l_receiptDATE between '1996-10-05' and '1996-10-10'",
-          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-10-10'"
+          "r_icp_filtered": 100,
+          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-10-10'",
+          "r_filtered": 38.88888889
         }
       },
       {
@@ -1584,8 +1611,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 5.666666508,
-          "r_filtered": 14.28571429,
-          "attached_condition": "orders.o_totalprice between 200000 and 250000"
+          "r_total_filtered": 14.28571429,
+          "attached_condition": "orders.o_totalprice between 200000 and 250000",
+          "r_filtered": 14.28571429
         }
       }
     ]
@@ -1704,15 +1732,18 @@ ANALYZE
           "loops": 1,
           "r_loops": 1,
           "rows": 41,
+          "r_index_rows": 41,
           "r_rows": 41,
           "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 3.333333254,
-          "r_filtered": 2.43902439,
+          "r_total_filtered": 2.43902439,
           "index_condition": "orders.o_totaldiscount between 18000 and 20000",
-          "attached_condition": "orders.o_totalprice between 200000 and 220000"
+          "r_icp_filtered": 100,
+          "attached_condition": "orders.o_totalprice between 200000 and 220000",
+          "r_filtered": 2.43902439
         }
       },
       {
@@ -1738,8 +1769,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 3.047460556,
-          "r_filtered": 66.66666667,
-          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-12-01'"
+          "r_total_filtered": 66.66666667,
+          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-12-01'",
+          "r_filtered": 66.66666667
         }
       }
     ]
@@ -1854,15 +1886,18 @@ ANALYZE
           "loops": 1,
           "r_loops": 1,
           "rows": 41,
+          "r_index_rows": 41,
           "r_rows": 41,
           "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 3.333333254,
-          "r_filtered": 2.43902439,
+          "r_total_filtered": 2.43902439,
           "index_condition": "orders.o_totaldiscount between 18000 and 20000",
-          "attached_condition": "orders.o_totalprice between 200000 and 220000"
+          "r_icp_filtered": 100,
+          "attached_condition": "orders.o_totalprice between 200000 and 220000",
+          "r_filtered": 2.43902439
         }
       },
       {
@@ -1888,8 +1923,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 3.047460556,
-          "r_filtered": 66.66666667,
-          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-12-01'"
+          "r_total_filtered": 66.66666667,
+          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-12-01'",
+          "r_filtered": 66.66666667
         }
       }
     ]
@@ -2017,6 +2053,7 @@ ANALYZE
           "loops": 1,
           "r_loops": 1,
           "rows": 41,
+          "r_index_rows": 41,
           "r_rows": 41,
           "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
@@ -2025,9 +2062,11 @@ ANALYZE
             "pages_accessed": 84
           },
           "filtered": "REPLACED",
-          "r_filtered": 2.43902439,
+          "r_total_filtered": 2.43902439,
           "index_condition": "orders.o_totaldiscount between 18000 and 20000",
-          "attached_condition": "orders.o_totalprice between 200000 and 220000 and orders.o_orderDATE between '1992-12-01' and '1997-01-01'"
+          "r_icp_filtered": 100,
+          "attached_condition": "orders.o_totalprice between 200000 and 220000 and orders.o_orderDATE between '1992-12-01' and '1997-01-01'",
+          "r_filtered": 2.43902439
         }
       },
       {
@@ -2055,8 +2094,9 @@ ANALYZE
             "pages_accessed": 2
           },
           "filtered": "REPLACED",
-          "r_filtered": 66.66666667,
-          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-12-01'"
+          "r_total_filtered": 66.66666667,
+          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-12-01'",
+          "r_filtered": 66.66666667
         }
       }
     ]
@@ -2181,6 +2221,7 @@ ANALYZE
           "loops": 1,
           "r_loops": 1,
           "rows": 41,
+          "r_index_rows": 41,
           "r_rows": 41,
           "cost": "REPLACED",
           "r_table_time_ms": "REPLACED",
@@ -2189,9 +2230,11 @@ ANALYZE
             "pages_accessed": 84
           },
           "filtered": "REPLACED",
-          "r_filtered": 2.43902439,
+          "r_total_filtered": 2.43902439,
           "index_condition": "orders.o_totaldiscount between 18000 and 20000",
-          "attached_condition": "orders.o_totalprice between 200000 and 220000 and orders.o_orderDATE between '1992-12-01' and '1997-01-01'"
+          "r_icp_filtered": 100,
+          "attached_condition": "orders.o_totalprice between 200000 and 220000 and orders.o_orderDATE between '1992-12-01' and '1997-01-01'",
+          "r_filtered": 2.43902439
         }
       },
       {
@@ -2219,8 +2262,9 @@ ANALYZE
             "pages_accessed": 2
           },
           "filtered": "REPLACED",
-          "r_filtered": 66.66666667,
-          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-12-01'"
+          "r_total_filtered": 66.66666667,
+          "attached_condition": "lineitem.l_shipDATE between '1996-10-01' and '1996-12-01'",
+          "r_filtered": 66.66666667
         }
       }
     ]
@@ -2250,7 +2294,7 @@ SET GLOBAL innodb_stats_persistent=@save_stats_persistent;
 create table t1 (
 pk int not null primary key, f1 varchar(10), f2 varchar(30), a int(10),
 key (f1), key (f2)
-) engine=innodb stats_persistent=0;
+) engine=innodb stats_persistent=0 charset=latin1;
 insert into t1 values
 (2,'a','a',2),(3,'a','a',null),(4,'a','a',55),(5,'a','a',4),(6,'a','a',0),
 (7,'a','a',1),(8,'a','a',4),(9,'a','a',null),(10,'a','a',0),(11,'a','a',0),
@@ -2448,7 +2492,7 @@ b VARCHAR(10),
 c VARCHAR(1024),
 KEY (b),
 KEY (c)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB CHARSET=latin1;
 INSERT INTO t1 VALUES
 (1,'w','z'), (1,'X','o'), (1,'q','c'), (5,'w','c'), (2,'j','m'),
 (2,'Q','s'), (9,'e','J'), (2,'p','W'), (9,'o','F'), (2,'g','S'),
@@ -2507,14 +2551,14 @@ SET GLOBAL innodb_stats_persistent= @stats.save;
 #
 SET @stats.save= @@innodb_stats_persistent;
 SET GLOBAL innodb_stats_persistent= ON;
-CREATE TABLE t1 (ch varchar(1), id int, id2 int) ENGINE=InnoDB;
+CREATE TABLE t1 (ch varchar(1), id int, id2 int) ENGINE=InnoDB CHARSET=latin1;
 INSERT INTO t1 VALUES
 ('l',3,2), ('e',NULL,NULL), ('r',7,3), ('h',NULL,2), (NULL,4,4), ('c',4,NULL),
 ('k',NULL,NULL), ('h',NULL,NULL), ('b',9,NULL), ('f',6,NULL);
 CREATE TABLE t2 (
 pk int NOT NULL, col_date_key date, ch2 varchar(1), id2 int,
 PRIMARY KEY (pk), KEY (col_date_key), KEY (ch2), KEY (id2)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB CHARSET=latin1;
 INSERT INTO t2 VALUES
 (1,'2034-04-21','g',9), (2,'2006-09-08','y',1), (3,NULL,'h',2),
 (4,'1987-03-02','s',2), (5,'2019-07-02','u',NULL),(6,'2012-12-18','z',1),
@@ -3376,8 +3420,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
-          "r_filtered": 100,
+          "r_total_filtered": 100,
           "attached_condition": "t.tp = 121 and t.rid = 'B5FCC8C7111E4E3CBC21AAF5012F59C2'",
+          "r_filtered": 100,
           "using_index": true
         }
       },
@@ -3400,6 +3445,7 @@ ANALYZE
             "r_other_time_ms": "REPLACED",
             "r_engine_stats": REPLACED,
             "filtered": 100,
+            "r_total_filtered": 100,
             "r_filtered": 100
           },
           "buffer_type": "flat",
@@ -3440,12 +3486,14 @@ ANALYZE
             "loops": 3.5384,
             "r_loops": 1,
             "rows": 24,
+            "r_index_rows": 80,
             "r_rows": 32,
             "cost": "REPLACED",
             "r_table_time_ms": "REPLACED",
             "r_other_time_ms": "REPLACED",
             "r_engine_stats": REPLACED,
             "filtered": 14.46428585,
+            "r_total_filtered": 40,
             "r_filtered": 100
           },
           "buffer_type": "incremental",
@@ -3472,7 +3520,7 @@ set global innodb_stats_persistent= @stats.save;
 #
 set @stats.save= @@innodb_stats_persistent;
 set global innodb_stats_persistent=0;
-CREATE TABLE t1 (pk int NOT NULL, c1 varchar(1)) engine=innodb;
+CREATE TABLE t1 (pk int NOT NULL, c1 varchar(1)) engine=innodb charset=latin1;
 INSERT INTO t1 VALUES
 (1,NULL),(15,'o'),(16,'x'),(19,'t'),(35,'k'),(36,'h'),(42,'t'),(43,'h'),
 (53,'l'),(62,'a'),(71,NULL),(79,'u'),(128,'y'),(129,NULL),(133,NULL);
@@ -3482,7 +3530,7 @@ CREATE TABLE t2 (
 i1 int, c1 varchar(1) NOT NULL,
 filler1 char(255) default '0', filler2 char(255) default '0',
 KEY c1 (c1), KEY i1 (i1)
-) engine=innodb;
+) engine=innodb charset=latin1;
 INSERT INTO t2(i1,c1) VALUES
 (NULL,'1'),(1,'1'),(2,'t'),(3,'1'),(4,'u'),(5,'1'),
 (6,'4'),(7,'4'),(8,'1'),(1,'u'),(2,'1'),(NULL,'w');
@@ -3739,8 +3787,9 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 4.799086094,
-          "r_filtered": 100,
-          "attached_condition": "t1.a <=> 30100 and t1.b in (30100,30101,30102)"
+          "r_total_filtered": 100,
+          "attached_condition": "t1.a <=> 30100 and t1.b in (30100,30101,30102)",
+          "r_filtered": 100
         }
       }
     ]

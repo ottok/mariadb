@@ -8,7 +8,7 @@ ALTER TABLE t1 ALGORITHM=COPY, ADD INDEX(f2);
 ALTER TABLE t1 ALGORITHM=COPY, ADD PRIMARY KEY(f1(2));
 ERROR 23000: Duplicate entry 'bb' for key 'PRIMARY'
 INSERT INTO t1 VALUES(repeat('a', 200), 1);
-ALTER TABLE t1 ADD UNIQUE KEY(f2);
+ALTER TABLE t1 ALGORITHM=COPY, ADD UNIQUE KEY(f2);
 ERROR 23000: Duplicate entry '1' for key 'f2_2'
 ALTER IGNORE TABLE t1 MODIFY f1 CHAR(200) NOT NULL;
 CREATE TABLE t2(f1 INT NOT NULL,
@@ -70,7 +70,8 @@ DROP TABLE t1, t2, t;
 #  MDEV-35475 Assertion `!rec_offs_nth_extern(offsets1, n)'
 #            failed in cmp_rec_rec_simple_field
 #
-CREATE TABLE t1(a BLOB, b VARCHAR(2048), PRIMARY KEY (b)) ENGINE=InnoDB;
+CREATE TABLE t1(a BLOB, b VARCHAR(2048), PRIMARY KEY (b)) ENGINE=InnoDB
+CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 INSERT INTO t1 VALUES
 (REPEAT('x',4805),'a'), (REPEAT('x',16111),'b'),
 (REPEAT('x',65535),'c'), (REPEAT('x',11312),'d'),

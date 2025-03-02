@@ -1,3 +1,20 @@
+/*
+   Copyright (c) 2002, 2016, Oracle and/or its affiliates.
+   Copyright (c) 2011, 2024, MariaDB
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; version 2 of the License.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1335  USA */
+
 #include "sp_instr.h"
 
 #include "opt_trace.h"    // class Opt_trace_start
@@ -442,7 +459,7 @@ int sp_lex_keeper::validate_lex_and_exec_core(THD *thd, uint *nextp,
 
   while (true)
   {
-    if (instr->is_invalid())
+    if (instr->is_invalid() || m_lex->needs_reprepare)
     {
       thd->clear_error();
       free_lex(thd);
@@ -955,7 +972,8 @@ sp_instr_stmt::execute(THD *thd, uint *nextp)
       bool log_slow= !res && thd->enable_slow_log;
 
       /* Finalize server status flags after executing a statement. */
-      if (log_slow || thd->get_stmt_da()->is_eof())
+      if (log_slow || thd->get_stmt_da()->is_eof() ||
+          mysql_audit_general_enabled())
         thd->update_server_status();
 
       if (thd->get_stmt_da()->is_eof())
@@ -1100,6 +1118,50 @@ sp_instr_set::print(String *str)
   if (str->reserve(rsrv))
     return;
   str->qs_append(STRING_WITH_LEN("set "));
+  str->qs_append(prefix->str, prefix->length);
+  if (var)
+  {
+    str->qs_append(&var->name);
+    str->qs_append('@');
+  }
+  str->qs_append(m_offset);
+  str->qs_append(' ');
+  m_value->print(str, enum_query_type(QT_ORDINARY |
+                                      QT_ITEM_ORIGINAL_FUNC_NULLIF));
+}
+
+
+int sp_instr_set_default_param::execute(THD *thd, uint *nextp)
+{
+  DBUG_ENTER("sp_instr_set_default_param::execute");
+  DBUG_PRINT("info", ("offset: %u", m_offset));
+
+  auto rctx= get_rcontext(thd);
+  if (m_offset < rctx->get_inited_param_count())
+  {
+    // NOP
+    *nextp= m_ip + 1;
+    DBUG_RETURN(0);  
+  }
+
+  DBUG_RETURN(m_lex_keeper.validate_lex_and_exec_core(thd, nextp, true, this));
+}
+
+
+void
+sp_instr_set_default_param::print(String *str)
+{
+  /* set name@offset ... */
+  size_t rsrv = SP_INSTR_UINT_MAXLEN+20;
+  sp_variable *var = m_ctx->find_variable(m_offset);
+  const LEX_CSTRING *prefix= m_rcontext_handler->get_name_prefix();
+
+  /* 'var' should always be non-null, but just in case... */
+  if (var)
+    rsrv+= var->name.length + prefix->length;
+  if (str->reserve(rsrv))
+    return;
+  str->qs_append(STRING_WITH_LEN("set default param "));
   str->qs_append(prefix->str, prefix->length);
   if (var)
   {
@@ -1324,7 +1386,7 @@ bool sp_instr_set_trigger_field::on_after_expr_parsing(THD *thd)
   if (!val || !trigger_field)
     return true;
 
-  thd->spcont->m_sp->m_cur_instr_trig_field_items.link_in_list(
+  thd->spcont->m_sp->m_cur_instr_trig_field_items.insert(
     trigger_field, &trigger_field->next_trg_field);
 
   value= val;
@@ -2031,6 +2093,8 @@ sp_instr_cursor_copy_struct::exec_core(THD *thd, uint *nextp)
   int ret= 0;
   Item_field_row *row= (Item_field_row*) thd->spcont->get_variable(m_var);
   DBUG_ASSERT(row->type_handler() == &type_handler_row);
+  DBUG_ASSERT(row->field);
+  DBUG_ASSERT(dynamic_cast<Field_row*>(row->field));
 
   /*
     Copy structure only once. If the cursor%ROWTYPE variable is declared
@@ -2053,13 +2117,17 @@ sp_instr_cursor_copy_struct::exec_core(THD *thd, uint *nextp)
         where explicit ROW elements and table%ROWTYPE reside:
         - tmp.export_structure() allocates new Spvar_definition instances
           and their components (such as TYPELIBs).
-        - row->row_create_items() creates new Item_field instances.
+        - field->row_create_fields() creates a new Virtual_tmp_table instance
+          with Field instances, one Field instance per a ROW member.
+        - row->add_array_of_item_field() creates Item_field instances
+          corresponding to Field instances.
         They all are created on the same mem_root.
       */
       Query_arena current_arena;
       thd->set_n_backup_active_arena(thd->spcont->callers_arena, &current_arena);
-      if (!(ret= tmp.export_structure(thd, &defs)))
-        row->row_create_items(thd, &defs);
+      ret= tmp.export_structure(thd, &defs) ||
+           static_cast<Field_row*>(row->field)->row_create_fields(thd, &defs) ||
+           row->add_array_of_item_field(thd, *row->field->virtual_tmp_table());
       thd->restore_active_arena(thd->spcont->callers_arena, &current_arena);
       tmp.close(thd);
     }

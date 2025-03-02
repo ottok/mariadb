@@ -236,15 +236,6 @@ static int my_strnncollsp_8bit_nopad_bin(CHARSET_INFO * cs
 }
 
 
-/* This function is used for all conversion functions */
-
-static size_t my_case_str_bin(CHARSET_INFO *cs __attribute__((unused)),
-                              char *str __attribute__((unused)))
-{
-  return 0;
-}
-
-
 static size_t my_case_bin(CHARSET_INFO *cs __attribute__((unused)),
                           const char *src, size_t srclen,
                           char *dst, size_t dstlen __attribute__((unused)))
@@ -252,13 +243,6 @@ static size_t my_case_bin(CHARSET_INFO *cs __attribute__((unused)),
   DBUG_ASSERT(srclen <= dstlen);
   memcpy(dst, src, srclen);
   return srclen;
-}
-
-
-static int my_strcasecmp_bin(CHARSET_INFO * cs __attribute__((unused)),
-			     const char *s, const char *t)
-{
-  return strcmp(s,t);
 }
 
 
@@ -420,32 +404,46 @@ int my_wildcmp_bin(CHARSET_INFO *cs,
 }
 
 
-static size_t
+static my_strnxfrm_ret_t
 my_strnxfrm_8bit_bin(CHARSET_INFO *cs,
                      uchar * dst, size_t dstlen, uint nweights,
                      const uchar *src, size_t srclen, uint flags)
 {
+  my_strnxfrm_ret_t rcpad;
+  size_t srclen0= srclen;
   set_if_smaller(srclen, dstlen);
   set_if_smaller(srclen, nweights);
   if (srclen && dst != src)
     memcpy(dst, src, srclen);
-  return my_strxfrm_pad_desc_and_reverse(cs, dst, dst + srclen, dst + dstlen,
-                                         (uint)(nweights - srclen), flags, 0);
+  rcpad= my_strxfrm_pad_desc_and_reverse(cs, dst, dst + srclen,
+                                         dst + dstlen,
+                                         (uint)(nweights - srclen),
+                                         flags, 0);
+  return my_strnxfrm_ret_construct(rcpad.m_result_length, srclen,
+            (srclen < srclen0 ? MY_STRNXFRM_TRUNCATED_WEIGHT_REAL_CHAR : 0) |
+            rcpad.m_warnings);
 }
 
 
-static size_t
+static my_strnxfrm_ret_t
 my_strnxfrm_8bit_nopad_bin(CHARSET_INFO *cs,
                            uchar * dst, size_t dstlen, uint nweights,
                            const uchar *src, size_t srclen, uint flags)
 {
+  my_strnxfrm_ret_t rcpad;
+  size_t srclen0= srclen;
   set_if_smaller(srclen, dstlen);
   set_if_smaller(srclen, nweights);
   if (dst != src)
     memcpy(dst, src, srclen);
-  return my_strxfrm_pad_desc_and_reverse_nopad(cs, dst, dst + srclen,
-                                               dst + dstlen,(uint)(nweights - srclen),
+  rcpad= my_strxfrm_pad_desc_and_reverse_nopad(cs,
+                                               dst, dst + srclen,
+                                               dst + dstlen,
+                                               (uint)(nweights - srclen),
                                                flags, 0);
+  return my_strnxfrm_ret_construct(rcpad.m_result_length, srclen,
+            (srclen < srclen0 ? MY_STRNXFRM_TRUNCATED_WEIGHT_REAL_CHAR : 0) |
+            rcpad.m_warnings);
 }
 
 
@@ -520,7 +518,6 @@ MY_COLLATION_HANDLER my_collation_8bit_bin_handler =
   my_strnxfrmlen_simple,
   my_like_range_simple,
   my_wildcmp_bin,
-  my_strcasecmp_bin,
   my_instr_bin,
   my_hash_sort_8bit_bin,
   my_propagate_simple,
@@ -541,7 +538,6 @@ MY_COLLATION_HANDLER my_collation_8bit_nopad_bin_handler =
   my_strnxfrmlen_simple,
   my_like_range_simple,
   my_wildcmp_bin,
-  my_strcasecmp_bin,
   my_instr_bin,
   my_hash_sort_bin,
   my_propagate_simple,
@@ -562,7 +558,6 @@ static MY_COLLATION_HANDLER my_collation_binary_handler =
   my_strnxfrmlen_simple,
   my_like_range_simple,
   my_wildcmp_bin,
-  my_strcasecmp_bin,
   my_instr_bin,
   my_hash_sort_bin,
   my_propagate_simple,
@@ -583,8 +578,6 @@ static MY_CHARSET_HANDLER my_charset_handler=
   my_mb_wc_bin,
   my_wc_mb_bin,
   my_mb_ctype_8bit,
-  my_case_str_bin,
-  my_case_str_bin,
   my_case_bin,
   my_case_bin,
   my_snprintf_8bit,

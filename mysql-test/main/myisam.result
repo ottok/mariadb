@@ -1,5 +1,6 @@
 call mtr.add_suppression("Can't find record in '.*'");
 call mtr.add_suppression("Table 't1' is marked as crashed and should be repaired");
+ALTER DATABASE test CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 CREATE TABLE t1 (
 STRING_DATA char(255) default NULL,
 KEY string_data (STRING_DATA)
@@ -453,9 +454,6 @@ select * from t1 where a='807780' and b='477' and c='165';
 a	b	c
 807780	477	165
 drop table t1;
-DROP TABLE IF EXISTS t1;
-Warnings:
-Note	1051	Unknown table 'test.t1'
 CREATE TABLE t1 (a varchar(150) NOT NULL, KEY (a));
 INSERT t1 VALUES ("can \tcan");
 INSERT t1 VALUES ("can   can");
@@ -578,7 +576,7 @@ t1c1	t2c1
 UNLOCK TABLES;
 DROP TABLE t1,t2;
 CREATE TABLE t1 (`a` int(11) NOT NULL default '0', `b` int(11) NOT NULL default '0', UNIQUE KEY `a` USING RTREE (`a`,`b`)) ENGINE=MyISAM;
-Got one of the listed errors
+ERROR HY000: Incorrect arguments to RTREE INDEX
 create table t1 (a int, b varchar(200), c text not null) checksum=1;
 create table t2 (a int, b varchar(200), c text not null) checksum=0;
 insert t1 values (1, "aaa", "bbb"), (NULL, "", "ccccc"), (0, NULL, "");
@@ -1678,7 +1676,7 @@ create table t1 (v char(10) character set utf8);
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `v` char(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL
+  `v` char(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 drop table t1;
 create table t1 (v varchar(10), c char(10)) row_format=fixed;
@@ -1730,7 +1728,7 @@ Note	1246	Converting column 'v' from VARCHAR to TEXT
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `v` mediumtext CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT NULL
+  `v` mediumtext CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 drop table t1;
 set statement sql_mode='' for
@@ -2408,7 +2406,7 @@ KEY (c2)
 
 MyISAM file:         MYSQLD_DATADIR/test/t1
 Record format:       Packed
-Character set:       utf8mb3_general_ci (33)
+Character set:       ? (0)
 Data records:                    0  Deleted blocks:                 0
 Recordlength:                   94
 
@@ -2855,3 +2853,4 @@ DROP TABLE t1, t2, t3, t4;
 #
 # End of 11.0 tests
 #
+ALTER DATABASE test CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;

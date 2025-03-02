@@ -19,10 +19,6 @@
 #ifndef _SP_HEAD_H_
 #define _SP_HEAD_H_
 
-#ifdef USE_PRAGMA_INTERFACE
-#pragma interface			/* gcc class implementation */
-#endif
-
 /*
   It is necessary to include set_var.h instead of item.h because there
   are dependencies on include order for set_var.h and item.h. This
@@ -113,12 +109,16 @@ class sp_name : public Sql_alloc,
 public:
   bool       m_explicit_name;                   /**< Prepend the db name? */
 
-  sp_name(const LEX_CSTRING *db, const LEX_CSTRING *name,
+  sp_name(const Lex_ident_db_normalized &db, const LEX_CSTRING &name,
           bool use_explicit_name)
     : Database_qualified_name(db, name), m_explicit_name(use_explicit_name)
   {
-    if (lower_case_table_names && m_db.length)
-      m_db.length= my_casedn_str(files_charset_info, (char*) m_db.str);
+    /*
+      "db" can be {NULL,0} in case of a "DROP FUNCTION udf" statement.
+      Otherwise, a valid normalized non-NULL database name is expected.
+    */
+    DBUG_ASSERT((!db.str && !db.length) ||
+                !Lex_ident_fs(db).check_db_name_quick());
   }
 
   /** Create temporary sp_name object from MDL key. Store in qname_buff */
@@ -127,9 +127,6 @@ public:
   ~sp_name() = default;
 };
 
-
-bool
-check_routine_name(const LEX_CSTRING *ident);
 
 class sp_head :private Query_arena,
                public Database_qualified_name,
@@ -196,7 +193,7 @@ public:
   */
   PSI_sp_share *m_sp_share;
 
-  Column_definition m_return_field_def; /**< This is used for FUNCTIONs only. */
+  Spvar_definition m_return_field_def; /**< This is used for FUNCTIONs only. */
 
   const char *m_tmp_query;	///< Temporary pointer to sub query string
 private:
@@ -342,12 +339,12 @@ public:
 
 protected:
   sp_head(MEM_ROOT *mem_root, sp_package *parent, const Sp_handler *handler,
-          enum_sp_aggregate_type agg_type);
+          enum_sp_aggregate_type agg_type, sql_mode_t sql_mode);
   virtual ~sp_head();
 public:
   static void destroy(sp_head *sp);
   static sp_head *create(sp_package *parent, const Sp_handler *handler,
-                         enum_sp_aggregate_type agg_type,
+                         enum_sp_aggregate_type agg_type, sql_mode_t sql_mode,
                          MEM_ROOT *sp_mem_root);
 
   /// Initialize after we have reset mem_root
@@ -447,6 +444,14 @@ public:
   bool check_group_aggregate_instructions_function() const;
   bool check_group_aggregate_instructions_forbid() const;
   bool check_group_aggregate_instructions_require() const;
+
+  void sp_returns_type(THD *thd, String &result) const;
+
+protected:
+  void sp_returns_type_of(THD *thd, String &result,
+                          const Qualified_column_ident &ref) const;
+  void sp_returns_rowtype_of(THD *thd, String &result,
+                             const Table_ident &ref) const;
 private:
   /**
     Generate a code to set a single cursor parameter variable.
@@ -717,7 +722,9 @@ public:
 
   char *create_string(THD *thd, ulong *lenp);
 
-  Field *create_result_field(uint field_max_length, const LEX_CSTRING *field_name,
+  Field *create_result_field(uint field_max_length,
+                             const LEX_CSTRING *field_name,
+                             const Column_definition &def,
                              TABLE *table) const;
 
 
@@ -765,7 +772,7 @@ public:
     return false;
   }
   bool fill_spvar_definition(THD *thd, Column_definition *def,
-                             LEX_CSTRING *name)
+                             const Lex_ident_column *name)
   {
     def->field_name= *name;
     return fill_spvar_definition(thd, def);
@@ -807,6 +814,14 @@ public:
   bool spvar_fill_table_rowtype_reference(THD *thd, sp_variable *spvar,
                                           const LEX_CSTRING &db,
                                           const LEX_CSTRING &table);
+
+  bool spvar_def_fill_type_reference(THD *thd, Spvar_definition *def,
+                                 const LEX_CSTRING &table,
+                                 const LEX_CSTRING &column);
+  bool spvar_def_fill_type_reference(THD *thd, Spvar_definition *def,
+                                 const LEX_CSTRING &db,
+                                 const LEX_CSTRING &table,
+                                 const LEX_CSTRING &column);
 
   void set_c_chistics(const st_sp_chistics &chistics);
   void set_info(longlong created, longlong modified,
@@ -1082,11 +1097,13 @@ private:
   sp_package(MEM_ROOT *mem_root,
              LEX *top_level_lex,
              const sp_name *name,
-             const Sp_handler *sph);
+             const Sp_handler *sph,
+             sql_mode_t sql_mode);
   ~sp_package();
 public:
   static sp_package *create(LEX *top_level_lex, const sp_name *name,
-                            const Sp_handler *sph, MEM_ROOT *sp_mem_root);
+                            const Sp_handler *sph, sql_mode_t sql_mode,
+                            MEM_ROOT *sp_mem_root);
 
   bool add_routine_declaration(LEX *lex)
   {

@@ -21,10 +21,6 @@
   "public" interface to sys_var - server configuration variables.
 */
 
-#ifdef USE_PRAGMA_INTERFACE
-#pragma interface                       /* gcc class implementation */
-#endif
-
 #include <my_getopt.h>
 #include <my_attribute.h>
 
@@ -90,7 +86,6 @@ protected:
   ptrdiff_t offset;     ///< offset to the value from global_system_variables
   on_check_function on_check;
   on_update_function on_update;
-  const char *const deprecation_substitute;
 
 public:
   sys_var(sys_var_chain *chain, const char *name_arg, const char *comment,
@@ -132,7 +127,7 @@ public:
   int scope() const { return flags & SCOPE_MASK; }
   virtual CHARSET_INFO *charset(THD *thd) const
   {
-    return system_charset_info;
+    return system_charset_info_for_i_s;
   }
   bool is_readonly() const { return flags & READONLY; }
   void update_flags(int new_flags) { flags = new_flags; }
@@ -386,7 +381,7 @@ class set_var_default_role: public set_var_base
 {
   LEX_USER *user, *real_user;
   LEX_CSTRING role;
-  const char *real_role;
+  LEX_CSTRING real_role;
 public:
   set_var_default_role(LEX_USER *user_arg, LEX_CSTRING role_arg) :
     user(user_arg), role(role_arg) {}
@@ -480,7 +475,7 @@ extern sys_var *Sys_autocommit_ptr, *Sys_last_gtid_ptr,
   *Sys_character_set_client_ptr, *Sys_character_set_connection_ptr,
   *Sys_character_set_results_ptr;
 
-CHARSET_INFO *get_old_charset_by_name(const char *old_name);
+CHARSET_INFO *get_old_charset_by_name(const LEX_CSTRING &name);
 
 int sys_var_init();
 uint sys_var_elements();

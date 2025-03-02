@@ -21,6 +21,7 @@
 #ifndef SQL_LEX_INCLUDED
 #define SQL_LEX_INCLUDED
 
+#include "lex_ident_sys.h"
 #include "violite.h"                            /* SSL_type */
 #include "sql_trigger.h"
 #include "thr_lock.h"                  /* thr_lock_type, TL_UNLOCK */
@@ -45,153 +46,6 @@
 typedef Bitmap<SELECT_NESTING_MAP_SIZE> nesting_map;
 
 /* YACC and LEX Definitions */
-
-
-/**
-  A string with metadata. Usually points to a string in the client
-  character set, but unlike Lex_ident_cli_st (see below) it does not
-  necessarily point to a query fragment. It can also point to memory
-  of other kinds (e.g. an additional THD allocated memory buffer
-  not overlapping with the current query text).
-
-  We'll add more flags here eventually, to know if the string has, e.g.:
-  - multi-byte characters
-  - bad byte sequences
-  - backslash escapes:   'a\nb'
-  and reuse the original query fragments instead of making the string
-  copy too early, in Lex_input_stream::get_text().
-  This will allow to avoid unnecessary copying, as well as
-  create more optimal Item types in sql_yacc.yy
-*/
-struct Lex_string_with_metadata_st: public LEX_CSTRING
-{
-private:
-  bool m_is_8bit; // True if the string has 8bit characters
-  char m_quote;   // Quote character, or 0 if not quoted
-public:
-  void set_8bit(bool is_8bit) { m_is_8bit= is_8bit; }
-  void set_metadata(bool is_8bit, char quote)
-  {
-    m_is_8bit= is_8bit;
-    m_quote= quote;
-  }
-  void set(const char *s, size_t len, bool is_8bit, char quote)
-  {
-    str= s;
-    length= len;
-    set_metadata(is_8bit, quote);
-  }
-  void set(const LEX_CSTRING *s, bool is_8bit, char quote)
-  {
-    ((LEX_CSTRING &)*this)= *s;
-    set_metadata(is_8bit, quote);
-  }
-  bool is_8bit() const { return m_is_8bit; }
-  bool is_quoted() const { return m_quote != '\0'; }
-  char quote() const { return m_quote; }
-  // Get string repertoire by the 8-bit flag and the character set
-  my_repertoire_t repertoire(CHARSET_INFO *cs) const
-  {
-    return !m_is_8bit && my_charset_is_ascii_based(cs) ?
-           MY_REPERTOIRE_ASCII : MY_REPERTOIRE_UNICODE30;
-  }
-  // Get string repertoire by the 8-bit flag, for ASCII-based character sets
-  my_repertoire_t repertoire() const
-  {
-    return !m_is_8bit ? MY_REPERTOIRE_ASCII : MY_REPERTOIRE_UNICODE30;
-  }
-};
-
-
-/*
-  Used to store identifiers in the client character set.
-  Points to a query fragment.
-*/
-struct Lex_ident_cli_st: public Lex_string_with_metadata_st
-{
-public:
-  void set_keyword(const char *s, size_t len)
-  {
-    set(s, len, false, '\0');
-  }
-  void set_ident(const char *s, size_t len, bool is_8bit)
-  {
-    set(s, len, is_8bit, '\0');
-  }
-  void set_ident_quoted(const char *s, size_t len, bool is_8bit, char quote)
-  {
-    set(s, len, is_8bit, quote);
-  }
-  void set_unquoted(const LEX_CSTRING *s, bool is_8bit)
-  {
-    set(s, is_8bit, '\0');
-  }
-  const char *pos() const { return str - is_quoted(); }
-  const char *end() const { return str + length + is_quoted(); }
-};
-
-
-class Lex_ident_cli: public Lex_ident_cli_st
-{
-public:
-  Lex_ident_cli(const LEX_CSTRING *s, bool is_8bit)
-  {
-    set_unquoted(s, is_8bit);
-  }
-  Lex_ident_cli(const char *s, size_t len)
-  {
-    set_ident(s, len, false);
-  }
-};
-
-
-struct Lex_ident_sys_st: public LEX_CSTRING, Sql_alloc
-{
-public:
-  bool copy_ident_cli(const THD *thd, const Lex_ident_cli_st *str);
-  bool copy_keyword(const THD *thd, const Lex_ident_cli_st *str);
-  bool copy_sys(const THD *thd, const LEX_CSTRING *str);
-  bool convert(const THD *thd, const LEX_CSTRING *str, CHARSET_INFO *cs);
-  bool copy_or_convert(const THD *thd, const Lex_ident_cli_st *str,
-                       CHARSET_INFO *cs);
-  bool is_null() const { return str == NULL; }
-  bool to_size_number(ulonglong *to) const;
-  void set_valid_utf8(const LEX_CSTRING *name)
-  {
-    DBUG_ASSERT(Well_formed_prefix(system_charset_info, name->str,
-                                   name->length).length() == name->length);
-    str= name->str ; length= name->length;
-  }
-};
-
-
-class Lex_ident_sys: public Lex_ident_sys_st
-{
-public:
-  Lex_ident_sys(const THD *thd, const Lex_ident_cli_st *str)
-  {
-    if (copy_ident_cli(thd, str))
-      ((LEX_CSTRING &) *this)= null_clex_str;
-  }
-  Lex_ident_sys()
-  {
-    ((LEX_CSTRING &) *this)= null_clex_str;
-  }
-  Lex_ident_sys(const char *name, size_t length)
-  {
-    LEX_CSTRING tmp= {name, length};
-    set_valid_utf8(&tmp);
-  }
-  Lex_ident_sys(const THD *thd, const LEX_CSTRING *str)
-  {
-    set_valid_utf8(str);
-  }
-  Lex_ident_sys & operator=(const Lex_ident_sys_st &name)
-  {
-    Lex_ident_sys_st::operator=(name);
-    return *this;
-  }
-};
 
 
 struct Lex_column_list_privilege_st
@@ -463,11 +317,13 @@ typedef struct st_lex_server_options
 {
   long port;
   LEX_CSTRING server_name, host, db, username, password, scheme, socket, owner;
+  engine_option_value *option_list;
   void reset(LEX_CSTRING name)
   {
     server_name= name;
     host= db= username= password= scheme= socket= owner= null_clex_str;
     port= -1;
+    option_list= NULL;
   }
 } LEX_SERVER_OPTIONS;
 
@@ -499,6 +355,8 @@ struct LEX_MASTER_INFO
   int sql_delay;
   bool is_demotion_opt;
   bool is_until_before_gtids;
+  bool show_all_slaves;
+
   /*
     Enum is used for making it possible to detect if the user
     changed variable or if it should be left at old value
@@ -588,15 +446,13 @@ public:
     The index name. Empty (str=NULL) name represents an empty list 
     USE INDEX () clause 
   */ 
-  LEX_CSTRING key_name;
+  const Lex_ident_column key_name;
 
   Index_hint (enum index_hint_type type_arg, index_clause_map clause_arg,
               const char *str, size_t length) :
-    type(type_arg), clause(clause_arg)
-  {
-    key_name.str= str;
-    key_name.length= length;
-  }
+    type(type_arg), clause(clause_arg),
+    key_name(str, length)
+  { }
 
   void print(THD *thd, String *str);
 }; 
@@ -949,6 +805,8 @@ public:
   bool is_view:1;
   bool describe:1; /* union exec() called for EXPLAIN */
   bool columns_are_renamed:1;
+  inline bool rename_item_list(TABLE_LIST *derived_arg);
+  inline bool rename_types_list(List<Lex_ident_sys> *new_names);
 
 protected:
   /* This is bool, not bit, as it's used and set in many places */
@@ -1199,6 +1057,7 @@ public:
   */
   List<Item_func_in> in_funcs;
   List<TABLE_LIST> leaf_tables;
+  /* Saved leaf tables for subsequent executions */
   List<TABLE_LIST> leaf_tables_exec;
   List<TABLE_LIST> leaf_tables_prep;
 
@@ -1468,7 +1327,7 @@ public:
   List<Item>* get_item_list();
   bool save_item_list_names(THD *thd);
   void restore_item_list_names();
-
+  bool set_item_list_names( List<Lex_ident_sys> *overwrite );
   ulong get_table_join_options();
   void set_lock_for_tables(thr_lock_type lock_type, bool for_update,
                            bool skip_locks);
@@ -1738,6 +1597,11 @@ struct st_trg_chistics: public st_trg_execution_order
   const char *ordering_clause_begin;
   const char *ordering_clause_end;
 
+  /*
+    List of column names of a table on that the ON UPDATE trigger
+    must be fired.
+  */
+  List<LEX_CSTRING> *on_update_col_names;
 };
 
 enum xa_option_words {XA_NONE, XA_JOIN, XA_RESUME, XA_ONE_PHASE,
@@ -3278,6 +3142,13 @@ public:
   Explain_query *explain;
 
   /*
+    If true, query optimizer has encountered an unrecoverable error when doing
+    once-per-statement optimization and it is not safe to re-execute this
+    statement.
+  */
+  bool needs_reprepare{false};
+
+  /*
     LEX which represents current statement (conventional, SP or PS)
 
     For example during view parsing THD::lex will point to the views LEX and
@@ -3848,6 +3719,7 @@ public:
   }
 
   bool copy_db_to(LEX_CSTRING *to);
+  Lex_ident_db_normalized copy_db_normalized();
 
   void inc_select_stack_outer_barrier()
   {
@@ -3910,7 +3782,7 @@ public:
   bool restore_set_statement_var();
 
   void init_last_field(Column_definition *field, const LEX_CSTRING *name);
-  bool last_field_generated_always_as_row_start_or_end(Lex_ident *p,
+  bool last_field_generated_always_as_row_start_or_end(Lex_ident_column *p,
                                                        const char *type,
                                                        uint flags);
   bool last_field_generated_always_as_row_start();
@@ -3924,7 +3796,13 @@ public:
   sp_variable *sp_param_init(LEX_CSTRING *name);
   bool sp_param_fill_definition(sp_variable *spvar,
                                 const Lex_field_type_st &def);
+  bool sp_param_set_default_and_finalize(sp_variable *spvar,
+                                        Item *default_value,
+                                        const LEX_CSTRING &expr_str);
   bool sf_return_fill_definition(const Lex_field_type_st &def);
+  bool sf_return_fill_definition_row(Row_definition_list *def);
+  bool sf_return_fill_definition_rowtype_of(const Qualified_column_ident &col);
+  bool sf_return_fill_definition_type_of(const Qualified_column_ident &col);
 
   int case_stmt_action_then();
   bool setup_select_in_parentheses();
@@ -4006,6 +3884,10 @@ public:
                                          const LEX_CSTRING &expr_str);
   bool sp_variable_declarations_set_default(THD *thd, int nvars, Item *def,
                                             const LEX_CSTRING &expr_str);
+  bool sp_variable_declarations_rec_finalize(THD *thd, int nvars,
+                                             Row_definition_list *src_row,
+                                             Item *def,
+                                             const LEX_CSTRING &expr_str);
   bool sp_variable_declarations_row_finalize(THD *thd, int nvars,
                                              Row_definition_list *row,
                                              Item *def,
@@ -4204,8 +4086,9 @@ public:
   /*
     Create an item for "SETVAL(sequence_name, value [, is_used [, round]])
   */
-  Item *create_item_func_setval(THD *thd, Table_ident *ident, longlong value,
-                                ulonglong round, bool is_used);
+  Item *create_item_func_setval(THD *thd, Table_ident *ident,
+                                Longlong_hybrid value, ulonglong round,
+                                bool is_used);
 
   /*
     Create an item for a name in LIMIT clause: LIMIT var
@@ -4271,6 +4154,10 @@ public:
   Item *make_item_func_call_generic(THD *thd,
                                     const Lex_ident_sys &db,
                                     const Lex_ident_sys &name,
+                                    List<Item> *args);
+  Item *make_item_func_call_generic(THD *thd,
+                                    const Lex_ident_db &db,
+                                    const Lex_ident_routine &name,
                                     List<Item> *args);
   Item *make_item_func_call_generic(THD *thd,
                                     Lex_ident_cli_st *db,
@@ -4550,14 +4437,18 @@ public:
   bool add_constraint(const LEX_CSTRING &name, Virtual_column_info *constr,
                       bool if_not_exists)
   {
-    constr->name= name;
+    constr->name= Lex_ident_column(name);
     constr->if_not_exists= if_not_exists;
     alter_info.check_constraint_list.push_back(constr);
     return false;
   }
   bool add_alter_list(LEX_CSTRING par_name, Virtual_column_info *expr,
                       bool par_exists);
-  bool add_alter_list(LEX_CSTRING name, LEX_CSTRING new_name, bool exists);
+  bool add_alter_list(LEX_CSTRING name, LEX_CSTRING new_name, bool exists)
+  {
+    return alter_info.add_alter_list(thd, name, new_name, exists);
+  }
+
   bool add_alter_list_item_convert_to_charset(Sql_used *used,
                                               const Charset_collation_map_st &map,
                                               CHARSET_INFO *cs)
@@ -4745,14 +4636,15 @@ public:
     }
   }
 
-  int add_period(Lex_ident name, Lex_ident_sys_st start, Lex_ident_sys_st end)
+  int add_period(Lex_ident_column name,
+                 Lex_ident_sys_st start, Lex_ident_sys_st end)
   {
     if (check_period_name(name.str)) {
       my_error(ER_WRONG_COLUMN_NAME, MYF(0), name.str);
       return 1;
     }
 
-    if (lex_string_cmp(system_charset_info, &start, &end) == 0)
+    if (Lex_ident_column(start).streq(end))
     {
       my_error(ER_FIELD_SPECIFIED_TWICE, MYF(0), start.str);
       return 1;
@@ -4768,7 +4660,7 @@ public:
        my_error(ER_MORE_THAN_ONE_PERIOD, MYF(0));
        return 1;
     }
-    info.set_period(start, end);
+    info.set_period(Lex_ident_column(start), Lex_ident_column(end));
     info.name= name;
 
     info.constr= new Virtual_column_info();
@@ -4871,7 +4763,8 @@ public:
   SELECT_LEX *parsed_TVC_end();
   TABLE_LIST *parsed_derived_table(SELECT_LEX_UNIT *unit,
                                    int for_system_time,
-                                   LEX_CSTRING *alias);
+                                   LEX_CSTRING *alias,
+                                   List<Lex_ident_sys> *column_names= nullptr);
   bool parsed_create_view(SELECT_LEX_UNIT *unit, int check);
   bool select_finalize(st_select_lex_unit *expr);
   bool select_finalize(st_select_lex_unit *expr, Lex_select_lock l);

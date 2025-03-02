@@ -73,11 +73,11 @@ static const uint STATISTICS_TABLES= 3;
   The names of the statistical tables in this array must correspond the
   definitions of the tables in the file ../scripts/mysql_system_tables.sql
 */
-static const LEX_CSTRING stat_table_name[STATISTICS_TABLES]=
+static const Lex_ident_table stat_table_name[STATISTICS_TABLES]=
 {
-  { STRING_WITH_LEN("table_stats") },
-  { STRING_WITH_LEN("column_stats") },
-  { STRING_WITH_LEN("index_stats") }
+  "table_stats"_Lex_ident_table,
+  "column_stats"_Lex_ident_table,
+  "index_stats"_Lex_ident_table,
 };
 
 
@@ -320,7 +320,7 @@ static inline int open_stat_table_for_ddl(THD *thd, TABLE_LIST *table,
     push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
                         ER_CHECK_NO_SUCH_TABLE,
                         "Got error %d when trying to open statistics "
-                        "table %`s for updating statistics",
+                        "table %sQ for updating statistics",
                         error_handler.got_error(), stat_table_name->str);
   }
   return res;
@@ -1580,7 +1580,8 @@ public:
       return true;
 
     if (open_cached_file(&io_cache, mysql_tmpdir, TEMP_PREFIX,
-                         1024, MYF(MY_WME)))
+                         1024,
+                         MYF(MY_WME | MY_TRACK_WITH_LIMIT)))
       return true;
 
     handler *h= owner->stat_file;
@@ -1604,12 +1605,14 @@ public:
 
     do {
       h->position(owner->record[0]);
-      my_b_write(&io_cache, h->ref, rowid_size);
+      if (my_b_write(&io_cache, h->ref, rowid_size))
+        return true;
 
     } while (!h->ha_index_next_same(owner->record[0], key, prefix_len));
 
     /* Prepare for reading */
-    reinit_io_cache(&io_cache, READ_CACHE, 0L, 0, 0);
+    if (reinit_io_cache(&io_cache, READ_CACHE, 0L, 0, 0))
+      return true;
     h->ha_index_or_rnd_end();
     if (h->ha_rnd_init(false))
       return true;
@@ -1983,8 +1986,7 @@ public:
       return;
     }
         
-    if ((calc_state=
-         (Prefix_calc_state *) thd->alloc(sizeof(Prefix_calc_state)*key_parts)))
+    if ((calc_state= thd->alloc<Prefix_calc_state>(key_parts)))
     {
       uint keyno= (uint)(key_info-table->key_info);
       for (i= 0, state= calc_state; i < key_parts; i++, state++)
@@ -2653,7 +2655,7 @@ int collect_statistics_for_index(THD *thd, TABLE *table, uint index)
   DBUG_ENTER("collect_statistics_for_index");
 
   /* No statistics for FULLTEXT indexes. */
-  if (key_info->flags & (HA_FULLTEXT|HA_SPATIAL))
+  if (key_info->algorithm > HA_KEY_ALG_BTREE)
     DBUG_RETURN(rc);
 
   Index_prefix_calc index_prefix_calc(thd, table, key_info);
@@ -2962,12 +2964,12 @@ int update_statistics_for_table(THD *thd, TABLE *table)
 
   /* Update the statistical table index_stats */
   stat_table= tables[INDEX_STAT].table;
-  uint key;
-  key_map::Iterator it(table->keys_in_use_for_query);
   Index_stat index_stat(stat_table, table);
 
-  while ((key= it++) != key_map::Iterator::BITMAP_END)
+  for (uint key= 0; key < table->s->keys; key++)
   {
+    if (!table->keys_in_use_for_query.is_set(key))
+      continue;
     KEY *key_info= table->key_info+key;
     uint key_parts= table->actual_n_key_parts(key_info);
     for (i= 0; i < key_parts; i++)
@@ -3267,7 +3269,8 @@ read_statistics_for_tables(THD *thd, TABLE_LIST *tables, bool force_reload)
     TABLE_SHARE *table_share;
 
     /* Skip tables that can't have statistics. */
-    if (tl->is_view_or_derived() || !table || !(table_share= table->s))
+    if (tl->is_view_or_derived() || !table || !(table_share= table->s) ||
+        table_share->sequence)
       continue;
     /* Skip temporary tables */
     if (table_share->tmp_table != NO_TMP_TABLE)
@@ -3299,7 +3302,7 @@ read_statistics_for_tables(THD *thd, TABLE_LIST *tables, bool force_reload)
         statistics_for_tables_is_needed= true;
       }
     }
-    else if (is_stat_table(&tl->db, &tl->alias))
+    else if (table_share->table_category == TABLE_CATEGORY_STATISTICS)
       found_stat_table= true;
   }
 
@@ -4460,15 +4463,15 @@ double Histogram_binary::range_selectivity(Field *field,
 /*
   Check whether the table is one of the persistent statistical tables.
 */
-bool is_stat_table(const LEX_CSTRING *db, LEX_CSTRING *table)
+bool is_stat_table(const Lex_ident_db &db, const Lex_ident_table &table)
 {
-  DBUG_ASSERT(db->str && table->str);
+  DBUG_ASSERT(db.str && table.str);
 
-  if (!my_strcasecmp(table_alias_charset, db->str, MYSQL_SCHEMA_NAME.str))
+  if (db.streq(MYSQL_SCHEMA_NAME))
   {
     for (uint i= 0; i < STATISTICS_TABLES; i ++)
     {
-      if (!my_strcasecmp(table_alias_charset, table->str, stat_table_name[i].str))
+      if (table.streq(stat_table_name[i]))
         return true;
     }
   }

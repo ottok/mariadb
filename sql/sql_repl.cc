@@ -3269,8 +3269,7 @@ err:
       ER_ABORTING_CONNECTION.
     */
     info->errmsg=
-      "A slave with the same server_uuid/server_id is already "
-      "connected";
+      "A slave with the same server_id is already connected";
     info->error= ER_SLAVE_SAME_ID;
   }
 
@@ -3708,6 +3707,8 @@ int reset_slave(THD *thd, Master_info* mi)
   mi->rli.clear_until_condition();
   mi->rli.clear_sql_delay();
   mi->rli.slave_skip_counter= 0;
+  mi->rli.newest_master_timestamp= 0;
+  mi->rli.slave_timestamp= 0;
 
   // close master_info_file, relay_log_info_file, set mi->inited=rli->inited=0
   end_master_info(mi);
