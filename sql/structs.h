@@ -29,6 +29,8 @@
 #include <mysql_com.h>                  /* USERNAME_LENGTH */
 #include "sql_bitmap.h"
 #include "lex_charset.h"
+#include "lex_ident.h"
+#include "sql_basic_types.h"           /* query_id_t */
 
 struct TABLE;
 class Type_handler;
@@ -133,7 +135,7 @@ typedef struct st_key {
   key_map overlapped;
   /* Set of keys constraint correlated with this key */
   key_map constraint_correlated;
-  LEX_CSTRING name;
+  Lex_ident_column name;
   enum  ha_key_alg algorithm;
   /*
     Note that parser is used when the table is opened for use, and
@@ -322,11 +324,43 @@ typedef struct  user_conn {
   uint conn_per_hour, updates, questions;
   /* Maximum amount of resources which account is allowed to consume. */
   USER_RESOURCES user_resources;
+
+  /*
+    The CHARSET_INFO used for hashes to compare the entire 'user\0hash' key.
+    Eventually we should fix it as follows:
+    - the user part should be hashed and compared case sensitively,
+    - the host part should be hashed and compared case insensitively.
+  */
+  static CHARSET_INFO *user_host_key_charset_info_for_hash()
+  {
+    return &my_charset_utf8mb3_general1400_as_ci;
+  }
 } USER_CONN;
+
+
+/* Statistics used by user_stats */
+
+struct rows_stats
+{
+  ha_rows key_read_hit;
+  ha_rows key_read_miss;
+  ha_rows read;
+  ha_rows tmp_read;
+  ha_rows updated;
+  ha_rows inserted;
+  ha_rows deleted;
+  ha_rows pages_accessed;
+  ha_rows pages_read_count;                     // Read from disk
+};
+
 
 typedef struct st_user_stats
 {
   char user[MY_MAX(USERNAME_LENGTH, LIST_PROCESS_HOST_LEN) + 1];
+  static CHARSET_INFO *user_key_charset_info_for_hash()
+  {
+    return &my_charset_utf8mb3_general1400_as_ci;
+  }
   // Account name the user is mapped to when this is a user from mapped_user.
   // Otherwise, the same value as user.
   char priv_user[MY_MAX(USERNAME_LENGTH, LIST_PROCESS_HOST_LEN) + 1];
@@ -335,8 +369,8 @@ typedef struct st_user_stats
   uint total_ssl_connections;
   uint concurrent_connections;
   time_t connected_time;  // in seconds
-  ha_rows rows_read, rows_sent;
-  ha_rows rows_updated, rows_deleted, rows_inserted;
+  struct rows_stats rows_stats;
+  ha_rows rows_sent;
   ulonglong bytes_received;
   ulonglong bytes_sent;
   ulonglong binlog_bytes_written;
@@ -349,15 +383,17 @@ typedef struct st_user_stats
   double cpu_time;        // in seconds
 } USER_STATS;
 
+
 typedef struct st_table_stats
 {
   char table[NAME_LEN * 2 + 2];  // [db] + '\0' + [table] + '\0'
   size_t table_name_length;
-  ulonglong rows_read, rows_changed;
+  struct rows_stats rows_stats;
   ulonglong rows_changed_x_indexes;
   /* Stores enum db_type, but forward declarations cannot be done */
   int engine_type;
 } TABLE_STATS;
+
 
 typedef struct st_index_stats
 {
@@ -365,6 +401,8 @@ typedef struct st_index_stats
   char index[NAME_LEN * 3 + 3];
   size_t index_name_length;                       /* Length of 'index' */
   ulonglong rows_read;
+  ulonglong queries;
+  query_id_t query_id;
 } INDEX_STATS;
 
 
@@ -1013,26 +1051,31 @@ public:
 };
 
 
-class Timeval: public timeval
+class Timeval: public my_timeval
 {
 protected:
   Timeval() = default;
 public:
   Timeval(my_time_t sec, ulong usec)
   {
-    tv_sec= sec;
+    tv_sec= (longlong) sec;
     /*
       Since tv_usec is not always of type ulong, cast usec parameter
       explicitly to uint to avoid compiler warnings about losing
       integer precision.
     */
     DBUG_ASSERT(usec < 1000000);
-    tv_usec= (uint)usec;
+    tv_usec= usec;
   }
-  explicit Timeval(const timeval &tv)
-   :timeval(tv)
-  { }
+  explicit Timeval(const my_timeval &tv)
+    :my_timeval(tv)
+  {}
 };
+
+static inline void my_timeval_trunc(struct my_timeval *tv, uint decimals)
+{
+  tv->tv_usec-= (suseconds_t) my_time_fraction_remainder(tv->tv_usec, decimals);
+}
 
 
 /*

@@ -1,3 +1,4 @@
+ALTER DATABASE test CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 set optimizer_switch='mrr=on,mrr_sort_keys=on,index_condition_pushdown=on';
 set long_query_time=0.1;
 TEST GROUP 1:
@@ -5,7 +6,7 @@ Typical cases of in-to-exists and materialization subquery strategies
 =====================================================================
 drop database if exists world;
 set names utf8;
-create database world;
+create database world character set latin1;
 use world;
 CREATE TABLE Country (
 Code char(3) NOT NULL default '',
@@ -510,7 +511,7 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	PRIMARY	Country	index	PRIMARY	PRIMARY	3	NULL	239	Using index; Using temporary; Using filesort
 1	PRIMARY	City	ref	Country	Country	3	world.Country.Code	17	
 2	MATERIALIZED	Country	ALL	Name	NULL	NULL	NULL	239	Using where
-Last_query_cost	7.972882
+Last_query_cost	7.972473
 EXPLAIN
 SELECT City.Name, City.Population
 FROM Country LEFT JOIN City ON City.Country = Country.Code
@@ -520,7 +521,7 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	PRIMARY	Country	index	NULL	PRIMARY	3	NULL	239	Using index; Using temporary; Using filesort
 1	PRIMARY	City	ref	Country	Country	3	world.Country.Code	17	
 2	MATERIALIZED	Country	ALL	Name	NULL	NULL	NULL	239	Using where
-Last_query_cost	7.972882
+Last_query_cost	7.972473
 SELECT City.Name, City.Population
 FROM City JOIN Country ON City.Country = Country.Code
 GROUP BY City.Name
@@ -569,3 +570,4 @@ Tests of various combinations of optimizer switches, types of queries,
 available indexes, column nullability, constness of tables/predicates.
 =====================================================================
 set optimizer_switch=default;
+ALTER DATABASE test CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;

@@ -90,10 +90,6 @@
     -Brian
 */
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation        // gcc: Class implementation
-#endif
-
 #include <my_global.h>
 #include <mysql/plugin.h>
 #include "ha_example.h"
@@ -380,8 +376,6 @@ int ha_example::close(void)
   @endcode
 
   See ha_tina.cc for an example of extracting all of the data as strings.
-  ha_berekly.cc has an example of how to store it intact by "packing" it
-  for ha_berkeley's own native storage type.
 
   See the note for update_row() on auto_increments and timestamps. This
   case also applies to write_row().
@@ -976,7 +970,7 @@ ha_example::check_if_supported_inplace_alter(TABLE* altered_table,
       if (f_new)
       {
         push_warning_printf(ha_thd(), Sql_condition::WARN_LEVEL_NOTE,
-                            ER_UNKNOWN_ERROR, "EXAMPLE DEBUG: Field %`s COMPLEX '%s' -> '%s'",
+                            ER_UNKNOWN_ERROR, "EXAMPLE DEBUG: Field %sQ COMPLEX '%s' -> '%s'",
                             table->s->field[i]->field_name.str,
                             f_old->complex_param_to_parse_it_in_engine,
                             f_new->complex_param_to_parse_it_in_engine);
@@ -1002,17 +996,13 @@ const char *enum_var_names[]=
   "e1", "e2", NullS
 };
 
-TYPELIB enum_var_typelib=
-{
-  array_elements(enum_var_names) - 1, "enum_var_typelib",
-  enum_var_names, NULL
-};
+TYPELIB enum_var_typelib= CREATE_TYPELIB_FOR(enum_var_names);
 
 static MYSQL_SYSVAR_ENUM(
   enum_var,                       // name
   srv_enum_var,                   // varname
   PLUGIN_VAR_RQCMDARG,            // opt
-  "Sample ENUM system variable.", // comment
+  "Sample ENUM system variable",  // comment
   NULL,                           // check
   NULL,                           // update
   0,                              // def
@@ -1080,7 +1070,7 @@ static int show_func_example(MYSQL_THD thd, struct st_mysql_show_var *var,
   var->value= buf; // it's of SHOW_VAR_FUNC_BUFF_SIZE bytes
   my_snprintf(buf, SHOW_VAR_FUNC_BUFF_SIZE,
               "enum_var is %lu, ulong_var is %lu, int_var is %d, "
-              "double_var is %f, %.6b", // %b is a MariaDB/MySQL extension
+              "double_var is %f, %.6sB", // %sB is a MariaDB extension
               srv_enum_var, srv_ulong_var, THDVAR(thd, int_var),
               srv_double_var, "really");
   return 0;

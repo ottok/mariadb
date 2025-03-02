@@ -154,7 +154,7 @@ typedef struct st_mi_create_info
   ulonglong auto_increment;
   ulonglong data_file_length;
   ulonglong key_file_length;
-  uint old_options;
+  uint old_options, rec_reflength;
   uint16 language;
   my_bool with_auto_increment;
 } MI_CREATE_INFO;
@@ -357,6 +357,7 @@ typedef struct st_mi_sort_param
   MEM_ROOT wordroot;
   uchar *record;
   MY_TMPDIR *tmpdir;
+  HA_CHECK *check_param;
 
   /*
     The next two are used to collect statistics, see update_key_parts for

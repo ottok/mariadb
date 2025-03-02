@@ -22,10 +22,6 @@
 
 */
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation				// gcc: Class implementation
-#endif
-
 #include "mariadb.h"
 #include "sql_base.h"
 #include "sql_const.h"
@@ -439,7 +435,7 @@ tables. Note that this will disallow handling of cases like (CASE-FOR-SUBST).
 Currently, solution #2 is implemented.
 */
 
-LEX_CSTRING weedout_key= {STRING_WITH_LEN("weedout_key")};
+static const Lex_ident_column weedout_key= "weedout_key"_Lex_ident_column;
 
 static
 bool subquery_types_allow_materialization(THD *thd, Item_in_subselect *in_subs);
@@ -1758,7 +1754,7 @@ static bool convert_subq_to_sj(JOIN *parent_join, Item_in_subselect *subq_pred)
     {
       TABLE_LIST *outer_tbl= subq_pred->emb_on_expr_nest;
       TABLE_LIST *wrap_nest;
-      LEX_CSTRING sj_wrap_name= { STRING_WITH_LEN("(sj-wrap)") };
+      const Lex_ident_table sj_wrap_name= "(sj-wrap)"_Lex_ident_table;
       /*
         We're dealing with
 
@@ -1823,7 +1819,7 @@ static bool convert_subq_to_sj(JOIN *parent_join, Item_in_subselect *subq_pred)
 
   TABLE_LIST *sj_nest;
   NESTED_JOIN *nested_join;
-  LEX_CSTRING sj_nest_name= { STRING_WITH_LEN("(sj-nest)") };
+  const Lex_ident_table sj_nest_name= "(sj-nest)"_Lex_ident_table;
   if (!(sj_nest= alloc_join_nest(thd)))
   {
     DBUG_RETURN(TRUE);
@@ -2157,7 +2153,7 @@ static bool convert_subq_to_jtbm(JOIN *parent_join,
 
   *remove_item= TRUE;
 
-  if (!(tbl_alias.str= (char*)thd->calloc(SUBQERY_TEMPTABLE_NAME_MAX_LEN)) ||
+  if (!(tbl_alias.str= thd->calloc(SUBQERY_TEMPTABLE_NAME_MAX_LEN)) ||
       !(jtbm= alloc_join_nest(thd))) //todo: this is not a join nest!
   {
     DBUG_RETURN(TRUE);
@@ -2581,8 +2577,7 @@ bool optimize_semijoin_nests(JOIN *join, table_map all_table_map)
         uint n_tables= my_count_bits(sj_nest->sj_inner_tables & ~join->const_table_map);
         SJ_MATERIALIZATION_INFO* sjm;
         if (!(sjm= new SJ_MATERIALIZATION_INFO) ||
-            !(sjm->positions= (POSITION*)join->thd->alloc(sizeof(POSITION)*
-                                                          n_tables)))
+            !(sjm->positions= join->thd->alloc<POSITION>(n_tables)))
           DBUG_RETURN(TRUE); /* purecov: inspected */
         sjm->tables= n_tables;
         sjm->is_used= FALSE;
@@ -4442,12 +4437,9 @@ bool setup_sj_materialization_part2(JOIN_TAB *sjm_tab)
     tab_ref->key= 0; /* The only temp table index. */
     tab_ref->key_length= tmp_key->key_length;
     if (!(tab_ref->key_buff=
-          (uchar*) thd->calloc(ALIGN_SIZE(tmp_key->key_length) * 2)) ||
-        !(tab_ref->key_copy=
-          (store_key**) thd->alloc((sizeof(store_key*) *
-                                    (tmp_key_parts + 1)))) ||
-        !(tab_ref->items=
-          (Item**) thd->alloc(sizeof(Item*) * tmp_key_parts)))
+            thd->calloc<uchar>(ALIGN_SIZE(tmp_key->key_length) * 2)) ||
+        !(tab_ref->key_copy= thd->alloc<store_key*>(tmp_key_parts + 1)) ||
+        !(tab_ref->items= thd->alloc<Item*>(tmp_key_parts)))
       DBUG_RETURN(TRUE); /* purecov: inspected */
 
     tab_ref->key_buff2=tab_ref->key_buff+ALIGN_SIZE(tmp_key->key_length);
@@ -4485,7 +4477,7 @@ bool setup_sj_materialization_part2(JOIN_TAB *sjm_tab)
       We don't ever have guarded conditions for SJM tables, but code at SQL
       layer depends on cond_guards array being alloced.
     */
-    if (!(tab_ref->cond_guards= (bool**) thd->calloc(sizeof(uint*)*tmp_key_parts)))
+    if (!(tab_ref->cond_guards= thd->calloc<bool*>(tmp_key_parts)))
     {
       DBUG_RETURN(TRUE);
     }
@@ -4842,7 +4834,7 @@ SJ_TMP_TABLE::create_sj_weedout_tmp_table(THD *thd)
   table->in_use= thd;
 
   table->s= share;
-  init_tmp_table_share(thd, share, "", 0, tmpname, tmpname);
+  init_tmp_table_share(thd, share, "", 0, tmpname, tmpname, true);
   share->blob_field= blob_field;
   share->table_charset= NULL;
   share->primary_key= MAX_KEY;               // Indicate no primary key
@@ -4973,7 +4965,7 @@ SJ_TMP_TABLE::create_sj_weedout_tmp_table(THD *thd)
   if (TRUE)
   {
     DBUG_PRINT("info",("Creating group key in temporary table"));
-    share->keys=1;
+    share->total_keys= share->keys= 1;
     table->key_info= share->key_info= keyinfo;
     keyinfo->key_part=key_part_info;
     keyinfo->flags= HA_NOSAME | (using_unique_constraint ? HA_UNIQUE_HASH : 0);
@@ -5182,11 +5174,11 @@ int init_dups_weedout(JOIN *join, uint first_table, int first_fanout_table, uint
   SJ_TMP_TABLE *sjtbl;
   if (jt_rowid_offset) /* Temptable has at least one rowid */
   {
-    size_t tabs_size= (last_tab - sjtabs) * sizeof(SJ_TMP_TABLE::TAB);
-    if (!(sjtbl= (SJ_TMP_TABLE*)thd->alloc(sizeof(SJ_TMP_TABLE))) ||
-        !(sjtbl->tabs= (SJ_TMP_TABLE::TAB*) thd->alloc(tabs_size)))
+    size_t ntabs= last_tab - sjtabs;
+    if (!(sjtbl= thd->alloc<SJ_TMP_TABLE>(1)) ||
+        !(sjtbl->tabs= thd->alloc<SJ_TMP_TABLE::TAB>(ntabs)))
       DBUG_RETURN(TRUE); /* purecov: inspected */
-    memcpy(sjtbl->tabs, sjtabs, tabs_size);
+    memcpy(sjtbl->tabs, sjtabs, ntabs * sizeof(SJ_TMP_TABLE::TAB));
     sjtbl->is_degenerate= FALSE;
     sjtbl->tabs_end= sjtbl->tabs + (last_tab - sjtabs);
     sjtbl->rowid_len= jt_rowid_offset;
@@ -5203,7 +5195,7 @@ int init_dups_weedout(JOIN *join, uint first_table, int first_fanout_table, uint
       not depend on anything at all, ie this is 
         WHERE const IN (uncorrelated select)
     */
-    if (!(sjtbl= (SJ_TMP_TABLE*)thd->alloc(sizeof(SJ_TMP_TABLE))))
+    if (!(sjtbl= thd->alloc<SJ_TMP_TABLE>(1)))
       DBUG_RETURN(TRUE); /* purecov: inspected */
     sjtbl->tmp_table= NULL;
     sjtbl->is_degenerate= TRUE;
@@ -6053,7 +6045,7 @@ int select_value_catcher::setup(List<Item> *items)
   assigned= FALSE;
   n_elements= items->elements;
  
-  if (!(row= (Item_cache**) thd->alloc(sizeof(Item_cache*) * n_elements)))
+  if (!(row= thd->alloc<Item_cache*>(n_elements)))
     return TRUE;
   
   Item *sel_item;
@@ -6804,15 +6796,16 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
                                               &dummy,
                                               &outer_lookup_keys);
     }
+    /*
+      In case of a DELETE or UPDATE, get number of scanned rows as an
+      (upper bound) estimate of how many times the subquery will be
+      executed.
+    */
+    else if (outer_join && outer_join->sql_cmd_dml)
+      outer_lookup_keys=
+        rows2double(outer_join->sql_cmd_dml->get_scanned_rows());
     else
-    {
-      /*
-        TODO: outer_join can be NULL for DELETE statements.
-        How to compute its cost?
-      */
       outer_lookup_keys= 1;
-    }
-
     /*
       B. Estimate the cost and number of records of the subquery both
       unmodified, and with injected IN->EXISTS predicates.

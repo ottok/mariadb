@@ -737,7 +737,8 @@ bool Create_json_table::finalize(THD *thd, TABLE *table,
 
   table->db_stat= HA_OPEN_KEYFILE;
   if (unlikely(table->file->ha_open(table, table->s->path.str, O_RDWR,
-                                    HA_OPEN_TMP_TABLE | HA_OPEN_INTERNAL_TABLE)))
+                                    HA_OPEN_TMP_TABLE | HA_OPEN_INTERNAL_TABLE |
+                                    HA_OPEN_SIZE_TRACKING)))
     DBUG_RETURN(true);
 
   table->set_created();
@@ -786,8 +787,7 @@ bool Create_json_table::add_json_table_fields(THD *thd, TABLE *table,
 
     while ((jc2= it2++) != jc)
     {
-      if (lex_string_cmp(system_charset_info,
-            &sql_f->field_name, &jc2->m_field->field_name) == 0)
+      if (sql_f->field_name.streq(jc2->m_field->field_name))
       {
         my_error(ER_DUP_FIELDNAME, MYF(0), sql_f->field_name.str);
         goto err_exit;
@@ -1062,19 +1062,19 @@ int Json_table_column::On_response::print(const char *name, String *str) const
   switch (m_response)
   {
     case Json_table_column::RESPONSE_NULL:
-      lex_string_set3(&resp, STRING_WITH_LEN("NULL"));
+      resp= { STRING_WITH_LEN("NULL") };
       break;
     case Json_table_column::RESPONSE_ERROR:
-      lex_string_set3(&resp, STRING_WITH_LEN("ERROR"));
+      resp= { STRING_WITH_LEN("ERROR") };
       break;
     case Json_table_column::RESPONSE_DEFAULT:
     {
-      lex_string_set3(&resp, STRING_WITH_LEN("DEFAULT"));
+      resp= { STRING_WITH_LEN("DEFAULT") };
       ds= m_default->val_str(&val);
       break;
     }
     default:
-      lex_string_set3(&resp, "", 0);
+      resp= { "", 0 };
       DBUG_ASSERT(FALSE); /* should never happen. */
   }
 
@@ -1477,5 +1477,3 @@ table_map add_table_function_dependencies(List<TABLE_LIST> *join_list,
 
   return res;
 }
-
-

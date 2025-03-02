@@ -174,7 +174,6 @@ dict_create_sys_columns_tuple(
 	const dict_col_t*	column;
 	dfield_t*		dfield;
 	byte*			ptr;
-	const char*		col_name;
 	ulint			num_base = 0;
 	ulint			v_col_no = ULINT_UNDEFINED;
 
@@ -226,13 +225,11 @@ dict_create_sys_columns_tuple(
 	/* 4: NAME ---------------------------*/
 	dfield = dtuple_get_nth_field(entry, DICT_COL__SYS_COLUMNS__NAME);
 
-        if (i >= table->n_def) {
-		col_name = dict_table_get_v_col_name(table, i - table->n_def);
-	} else {
-		col_name = dict_table_get_col_name(table, i);
-	}
+	Lex_ident_column col_name= i >= table->n_def ?
+		dict_table_get_v_col_name(table, i - table->n_def) :
+		dict_table_get_col_name(table, i);
 
-	dfield_set_data(dfield, col_name, strlen(col_name));
+	dfield_set_data(dfield, col_name.str, col_name.length);
 
 	/* 5: MTYPE --------------------------*/
 	dfield = dtuple_get_nth_field(entry, DICT_COL__SYS_COLUMNS__MTYPE);
@@ -1284,7 +1281,7 @@ dict_create_index_step(
 			}
 
 #ifdef BTR_CUR_HASH_ADAPT
-			ut_ad(!node->index->search_info->ref_count);
+			ut_ad(!node->index->search_info.ref_count);
 #endif /* BTR_CUR_HASH_ADAPT */
 			dict_index_remove_from_cache(table, node->index);
 			node->index = NULL;
@@ -1677,7 +1674,7 @@ dict_foreign_base_for_stored(
 		for (ulint j = 0; j < s_col.num_base; j++) {
 			if (strcmp(col_name, dict_table_get_col_name(
 						table,
-						s_col.base_col[j]->ind)) == 0) {
+						s_col.base_col[j]->ind).str) == 0) {
 				return(true);
 			}
 		}

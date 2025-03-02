@@ -281,7 +281,12 @@ int _ma_create_index_by_sort(MARIA_SORT_PARAM *info, my_bool no_messages,
       printf("  - Last merge and dumping keys\n"); /* purecov: tested */
     if (merge_index(info,keys,sort_keys,dynamic_element(&buffpek,0,BUFFPEK *),
                     maxbuffer,&tempfile))
+    {
+      const char *format= "Got error %iE when merging index";
+      _ma_check_print_error(info->sort_info->param,
+                            format, (int) my_errno);
       goto err;					/* purecov: inspected */
+    }
   }
 
   if (flush_maria_ft_buf(info) || _ma_flush_pending_blocks(info))
@@ -449,7 +454,7 @@ static my_bool _ma_thr_find_all_keys_exec(MARIA_SORT_PARAM* sort_param)
     }
     if ((sort_keys= (uchar **)
          my_malloc(PSI_INSTRUMENT_ME, (size_t)(keys*(sort_length+sizeof(char*))+
-                   ((sort_param->keyinfo->flag & HA_FULLTEXT) ?
+                   (sort_param->keyinfo->key_alg == HA_KEY_ALG_FULLTEXT ?
                     HA_FT_MAXBYTELEN : 0)), MYF(0))))
     {
       if (my_init_dynamic_array(PSI_INSTRUMENT_ME, &sort_param->buffpek, sizeof(BUFFPEK),
@@ -543,8 +548,16 @@ pthread_handler_t _ma_thr_find_all_keys(void *arg)
   MARIA_SORT_PARAM *sort_param= (MARIA_SORT_PARAM*) arg;
   my_bool error= FALSE;
   /* If my_thread_init fails */
-  if (my_thread_init() || _ma_thr_find_all_keys_exec(sort_param))
+  if (my_thread_init())
     error= TRUE;
+  else
+  {
+    HA_CHECK *check= sort_param->check_param;
+    if (check->init_repair_thread)
+      check->init_repair_thread(check->init_repair_thread_arg);
+    if (_ma_thr_find_all_keys_exec(sort_param))
+      error= TRUE;
+  }
 
   /*
      Thread must clean up after itself.

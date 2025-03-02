@@ -224,7 +224,6 @@ bool reload_acl_and_cache(THD *thd, unsigned long long options,
     }
 #endif
   }
-#ifdef HAVE_QUERY_CACHE
   if (options & REFRESH_QUERY_CACHE_FREE)
   {
     query_cache.pack(thd);              // FLUSH QUERY CACHE
@@ -234,7 +233,6 @@ bool reload_acl_and_cache(THD *thd, unsigned long long options,
   {
     query_cache.flush();			// RESET QUERY CACHE
   }
-#endif /*HAVE_QUERY_CACHE*/
 
   DBUG_ASSERT(!thd || thd->locked_tables_mode ||
               !thd->mdl_context.has_locks() ||
@@ -379,7 +377,11 @@ bool reload_acl_and_cache(THD *thd, unsigned long long options,
   if (options & REFRESH_HOSTS)
     hostname_cache_refresh();
   if (thd && (options & REFRESH_STATUS))
-    refresh_status(thd);
+    refresh_status_legacy(thd);
+  if (thd && (options & REFRESH_SESSION_STATUS))
+    refresh_session_status(thd);
+  if ((options & REFRESH_GLOBAL_STATUS))
+    refresh_global_status();
   if (options & REFRESH_THREADS)
     thread_cache.flush();
 #ifdef HAVE_REPLICATION
@@ -639,6 +641,9 @@ bool flush_tables_with_read_lock(THD *thd, TABLE_LIST *all_tables)
           table_list->table &&
           table_list->table->file->extra(HA_EXTRA_FLUSH))
         goto error_reset_bits;
+      if (table_list->table &&
+          table_list->table->open_hlindexes_for_write())
+        goto error_reset_bits;
     }
   }
 
@@ -675,6 +680,6 @@ static void disable_checkpoints(THD *thd)
   {
     thd->global_disable_checkpoint= 1;
     if (!global_disable_checkpoint++)
-      ha_checkpoint_state(1);                   // Disable checkpoints
+      ha_disable_internal_writes(1);                   // Disable checkpoints
   }
 }

@@ -19,10 +19,6 @@
 
 /* Function items used by mysql */
 
-#ifdef USE_PRAGMA_INTERFACE
-#pragma interface			/* gcc class implementation */
-#endif
-
 #ifdef HAVE_IEEEFP_H
 extern "C"				/* Bug in BSDI include file */
 {
@@ -89,10 +85,6 @@ protected:
                                            Type_handler_hybrid_field_type *th);
 public:
 
-  // Print an error message for a builtin-schema qualified function call
-  static void wrong_param_count_error(const LEX_CSTRING &schema_name,
-                                      const LEX_CSTRING &func_name);
-
   table_map not_null_tables_cache= 0;
 
   enum Functype { UNKNOWN_FUNC,EQ_FUNC,EQUAL_FUNC,NE_FUNC,LT_FUNC,LE_FUNC,
@@ -114,7 +106,7 @@ public:
                   JSON_EXTRACT_FUNC, JSON_VALID_FUNC, ROWNUM_FUNC,
                   CASE_SEARCHED_FUNC, // Used by ColumnStore/Spider
                   CASE_SIMPLE_FUNC,   // Used by ColumnStore/spider,
-                  DATE_FUNC, YEAR_FUNC
+                  DATE_FUNC, YEAR_FUNC, SUBSTR_FUNC, LEFT_FUNC
                 };
 
   /*
@@ -136,6 +128,8 @@ public:
     BITMAP_BETWEEN=    1ULL << BETWEEN,
     BITMAP_IN=         1ULL << IN_FUNC,
     BITMAP_MULT_EQUAL= 1ULL << MULT_EQUAL_FUNC,
+    BITMAP_ISNULL=     1ULL << ISNULL_FUNC,
+    BITMAP_ISNOTNULL=  1ULL << ISNOTNULL_FUNC,
     BITMAP_OTHER=      1ULL << 63,
     BITMAP_ALL=        0xFFFFFFFFFFFFFFFFULL,
     BITMAP_ANY_EQUALITY= BITMAP_EQ | BITMAP_EQUAL | BITMAP_MULT_EQUAL,
@@ -503,7 +497,8 @@ public:
   Functions whose returned field type is determined at fix_fields() time.
 */
 class Item_hybrid_func: public Item_func,
-                        public Type_handler_hybrid_field_type
+                        public Type_handler_hybrid_field_type,
+                        public Type_extra_attributes
 {
 protected:
   bool fix_attributes(Item **item, uint nitems);
@@ -518,6 +513,14 @@ public:
     :Item_func(thd, item), Type_handler_hybrid_field_type(item) { }
   const Type_handler *type_handler() const override
   { return Type_handler_hybrid_field_type::type_handler(); }
+  Type_extra_attributes *type_extra_attributes_addr() override
+  {
+    return this;
+  }
+  const Type_extra_attributes type_extra_attributes() const override
+  {
+    return *this;
+  }
   void fix_length_and_dec_long_or_longlong(uint char_length, bool unsigned_arg)
   {
     collation= DTCollation_numeric();
@@ -3979,6 +3982,50 @@ public:
 
   const Type_handler *type_handler() const override;
 
+  uint cols() const override
+  {
+    return sp_result_field->cols();
+  }
+
+  Item* element_index(uint i) override
+  {
+    DBUG_ASSERT(sp_result_field_items.argument_count() || !i);
+    return sp_result_field_items.argument_count() ?
+           sp_result_field_items.arguments()[i] :
+           this;
+  }
+  Item** addr(uint i) override
+  {
+    DBUG_ASSERT(sp_result_field_items.argument_count() || !i);
+    return sp_result_field_items.argument_count() ?
+           &sp_result_field_items.arguments()[i] :
+           nullptr;
+  }
+
+  bool check_cols(uint c) override
+  {
+    if (cmp_type() != ROW_RESULT)
+      return Item_func::check_cols(c);
+    /*
+      We don't support ROWs with a single member yet, e.g. ROW(a INT).
+      Neither in stored function RETURNS, nor in SP variables.
+      There must be at least two members.
+      So raise an error in case of c==1, like Item_splocal does.
+      See comments in Item_splocal::check_cols() for more details.
+    */
+    if (cols() != c || c == 1)
+    {
+      my_error(ER_OPERAND_COLUMNS, MYF(0), c);
+      return true;
+    }
+    return false;
+  }
+
+  void bring_value() override
+  {
+    execute();
+  }
+
   Field *create_tmp_field_ex(MEM_ROOT *root, TABLE *table, Tmp_field_src *src,
                              const Tmp_field_param *param) override;
   Field *create_field_for_create_select(MEM_ROOT *root, TABLE *table) override
@@ -4251,7 +4298,8 @@ public:
   }
   bool fix_length_and_dec(THD *thd) override
   {
-    unsigned_flag= 0;
+    if (table_list->table)
+      unsigned_flag= table_list->table->s->sequence->is_unsigned;
     max_length= MAX_BIGINT_WIDTH;
     set_maybe_null();             /* In case of errors */
     return FALSE;
@@ -4305,11 +4353,11 @@ public:
 
 class Item_func_setval :public Item_func_nextval
 {
-  longlong nextval;
+  Longlong_hybrid nextval;
   ulonglong round;
   bool is_used;
 public:
-  Item_func_setval(THD *thd, TABLE_LIST *table_list_arg, longlong nextval_arg,
+  Item_func_setval(THD *thd, TABLE_LIST *table_list_arg, Longlong_hybrid nextval_arg,
                    ulonglong round_arg, bool is_used_arg)
     : Item_func_nextval(thd, table_list_arg),
     nextval(nextval_arg), round(round_arg), is_used(is_used_arg)

@@ -14,11 +14,6 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1335  USA */
 
-
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation                         // gcc: Class implementation
-#endif
-
 #include "mariadb.h"
 #include "sql_priv.h"
 #include "transaction.h"
@@ -588,16 +583,15 @@ bool trans_rollback_stmt(THD *thd)
 }
 
 /** Find a savepoint by name in a savepoint list */
-SAVEPOINT** find_savepoint_in_list(THD *thd, LEX_CSTRING name,
+SAVEPOINT** find_savepoint_in_list(THD *thd,
+                                   const Lex_ident_savepoint name,
                                    SAVEPOINT ** const list)
 {
   SAVEPOINT **sv= list;
 
   while (*sv)
   {
-    if (system_charset_info->strnncoll(
-            (uchar *) name.str, name.length,
-            (uchar *) (*sv)->name, (*sv)->length) == 0)
+    if (name.streq(Lex_cstring((*sv)->name, (*sv)->length)))
       break;
     sv= &(*sv)->prev;
   }
@@ -607,12 +601,12 @@ SAVEPOINT** find_savepoint_in_list(THD *thd, LEX_CSTRING name,
 
 /* Find a named savepoint in the current transaction. */
 static SAVEPOINT **
-find_savepoint(THD *thd, LEX_CSTRING name)
+find_savepoint(THD *thd, Lex_ident_savepoint name)
 {
   return find_savepoint_in_list(thd, name, &thd->transaction->savepoints);
 }
 
-SAVEPOINT* savepoint_add(THD *thd, LEX_CSTRING name, SAVEPOINT **list,
+SAVEPOINT* savepoint_add(THD *thd, Lex_ident_savepoint name, SAVEPOINT **list,
                          int (*release_old)(THD*, SAVEPOINT*))
 {
   DBUG_ENTER("savepoint_add");
@@ -664,7 +658,8 @@ bool trans_savepoint(THD *thd, LEX_CSTRING name)
   if (thd->transaction->xid_state.check_has_uncommitted_xa())
     DBUG_RETURN(TRUE);
 
-  SAVEPOINT *newsv= savepoint_add(thd, name, &thd->transaction->savepoints,
+  SAVEPOINT *newsv= savepoint_add(thd, Lex_ident_savepoint(name),
+                                  &thd->transaction->savepoints,
                                   ha_release_savepoint);
 
   if (newsv == NULL)
@@ -716,7 +711,7 @@ bool trans_savepoint(THD *thd, LEX_CSTRING name)
 bool trans_rollback_to_savepoint(THD *thd, LEX_CSTRING name)
 {
   int res= FALSE;
-  SAVEPOINT *sv= *find_savepoint(thd, name);
+  SAVEPOINT *sv= *find_savepoint(thd, Lex_ident_savepoint(name));
   DBUG_ENTER("trans_rollback_to_savepoint");
 
   if (sv == NULL)
@@ -771,7 +766,7 @@ bool trans_rollback_to_savepoint(THD *thd, LEX_CSTRING name)
 bool trans_release_savepoint(THD *thd, LEX_CSTRING name)
 {
   int res= FALSE;
-  SAVEPOINT *sv= *find_savepoint(thd, name);
+  SAVEPOINT *sv= *find_savepoint(thd, Lex_ident_savepoint(name));
   DBUG_ENTER("trans_release_savepoint");
 
   if (sv == NULL)

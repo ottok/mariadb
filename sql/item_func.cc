@@ -21,10 +21,6 @@
   This file defines all numerical functions
 */
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation				// gcc: Class implementation
-#endif
-
 #include "sql_plugin.h"
 #include "sql_priv.h"
 /*
@@ -97,7 +93,7 @@ bool Item_args::alloc_arguments(THD *thd, uint count)
     args= tmp_arg;
     return false;
   }
-  if ((args= (Item**) thd->alloc(sizeof(Item*) * count)) == NULL)
+  if ((args= thd->alloc<Item*>(count)) == NULL)
   {
     arg_count= 0;
     return true;
@@ -124,23 +120,13 @@ Item_args::Item_args(THD *thd, const Item_args *other)
   {
     args= tmp_arg;
   }
-  else if (!(args= (Item**) thd->alloc(sizeof(Item*) * arg_count)))
+  else if (!(args= thd->alloc<Item*>(arg_count)))
   {
     arg_count= 0;
     return;
   }
   if (arg_count)
     memcpy(args, other->args, sizeof(Item*) * arg_count);
-}
-
-
-void Item_func::wrong_param_count_error(const LEX_CSTRING &schema_name,
-                                        const LEX_CSTRING &func_name)
-{
-  DBUG_ASSERT(schema_name.length);
-  Database_qualified_name qname(schema_name, func_name);
-  my_error(ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT, MYF(0),
-           ErrConvDQName(&qname).ptr());
 }
 
 
@@ -678,7 +664,8 @@ bool Item_func::eq(const Item *item, bool binary_cmp) const
       (func_type != Item_func::FUNC_SP &&
        func_name() != item_func->func_name()) ||
       (func_type == Item_func::FUNC_SP &&
-       my_strcasecmp(system_charset_info, func_name(), item_func->func_name())))
+       !Lex_ident_routine(func_name_cstring()).
+         streq(item_func->func_name_cstring())))
     return 0;
   return Item_args::eq(item_func, binary_cmp);
 }
@@ -2845,8 +2832,8 @@ bool Item_func_rand::fix_fields(THD *thd,Item **ref)
                     Query_arena::STMT_SP_QUERY_ARGUMENTS
                  )
                 ) || rand);
-    if (!rand && !(rand= (struct my_rnd_struct*)
-                   thd->active_stmt_arena_to_use()->alloc(sizeof(*rand))))
+    if (!rand &&
+        !(rand= thd->active_stmt_arena_to_use()->alloc<my_rnd_struct>(1)))
       return TRUE;
   }
   else
@@ -3377,8 +3364,8 @@ bool Item_func_find_in_set::fix_length_and_dec(THD *thd)
       {
         // find is not NULL pointer so args[0] is not a null-value
         DBUG_ASSERT(!args[0]->null_value);
-	enum_value= find_type(((Field_enum*) field)->typelib,find->ptr(),
-			      find->length(), 0);
+        enum_value= find_type(((Field_enum*) field)->typelib(), find->ptr(),
+                              find->length(), 0);
 	enum_bit=0;
 	if (enum_value)
 	  enum_bit= 1ULL << (enum_value-1);
@@ -3558,8 +3545,7 @@ udf_handler::fix_fields(THD *thd, Item_func_or_sum *func,
 
   if ((f_args.arg_count=arg_count))
   {
-    if (!(f_args.arg_type= (Item_result*)
-	  thd->alloc(f_args.arg_count*sizeof(Item_result))))
+    if (!(f_args.arg_type= thd->alloc<Item_result>(f_args.arg_count)))
 
     {
     err_exit:
@@ -3980,8 +3966,10 @@ longlong Item_master_pos_wait::val_int()
     connection_name= thd->variables.default_master_connection;
 
   if (!(mi= get_master_info(&connection_name, Sql_condition::WARN_LEVEL_WARN)))
+  {
+    sql_print_information("Could not get master info for %s", connection_name.str);
     goto err;
-
+  }
   if ((event_count = mi->rli.wait_for_pos(thd, log_name, pos, timeout)) == -2)
   {
     null_value = 1;
@@ -4782,7 +4770,7 @@ bool Item_func_set_user_var::fix_fields(THD *thd, Item **ref)
                              &my_charset_numeric : args[0]->collation.collation);
   collation.set(m_var_entry->charset(),
                 args[0]->collation.derivation == DERIVATION_NUMERIC ?
-                DERIVATION_NUMERIC : DERIVATION_IMPLICIT);
+                DERIVATION_NUMERIC : DERIVATION_COERCIBLE);
   switch (args[0]->result_type()) {
   case STRING_RESULT:
   case TIME_RESULT:
@@ -4847,7 +4835,7 @@ Item_func_set_user_var::fix_length_and_dec(THD *thd)
   }
   else
   {
-    collation.set(DERIVATION_IMPLICIT);
+    collation.set(DERIVATION_COERCIBLE);
     fix_length_and_charset(args[0]->max_char_length(),
                            args[0]->collation.collation);
   }
@@ -5724,7 +5712,7 @@ bool Item_func_get_user_var::fix_length_and_dec(THD *thd)
         set_handler(&type_handler_slonglong);
       break;
     case STRING_RESULT:
-      collation.set(m_var_entry->charset(), DERIVATION_IMPLICIT);
+      collation.set(m_var_entry->charset(), DERIVATION_USERVAR);
       max_length= MAX_BLOB_WIDTH - 1;
       set_handler(&type_handler_long_blob);
       if (m_var_entry->type_handler()->field_type() == MYSQL_TYPE_GEOMETRY)
@@ -5744,7 +5732,7 @@ bool Item_func_get_user_var::fix_length_and_dec(THD *thd)
   }
   else
   {
-    collation.set(&my_charset_bin, DERIVATION_IMPLICIT);
+    collation.set(&my_charset_bin, DERIVATION_USERVAR);
     null_value= 1;
     set_handler(&type_handler_long_blob);
     max_length= MAX_BLOB_WIDTH;
@@ -5881,7 +5869,8 @@ Item_func_get_system_var(THD *thd, sys_var *var_arg, enum_var_type var_type_arg,
   orig_var_type(var_type_arg), component(*component_arg), cache_present(0)
 {
   /* set_name() will allocate the name */
-  set_name(thd, name_arg, (uint) name_len_arg, system_charset_info);
+  set_name(thd, name_arg, (uint) name_len_arg,
+           Lex_ident_column::charset_info());
 }
 
 
@@ -5936,6 +5925,8 @@ bool Item_func_get_system_var::fix_length_and_dec(THD *thd)
       break;
     case SHOW_CHAR:
     case SHOW_CHAR_PTR:
+    {
+      CHARSET_INFO *cs= system_charset_info_for_i_s;
       mysql_mutex_lock(&LOCK_global_system_variables);
       cptr= var->show_type() == SHOW_CHAR ?
           reinterpret_cast<const char*>(var->value_ptr(thd, var_type,
@@ -5943,26 +5934,26 @@ bool Item_func_get_system_var::fix_length_and_dec(THD *thd)
           *reinterpret_cast<const char* const*>(var->value_ptr(thd,
                                                                var_type,
                                                                &component));
-      if (cptr)
-        max_length= (uint32) system_charset_info->numchars(cptr,
-                                                           cptr + strlen(cptr));
+      uint char_length= cptr ?
+                        (uint32) cs->numchars(cptr, cptr + strlen(cptr)) : 0;
       mysql_mutex_unlock(&LOCK_global_system_variables);
-      collation.set(system_charset_info, DERIVATION_SYSCONST);
-      max_length*= system_charset_info->mbmaxlen;
+      collation.set(cs, DERIVATION_SYSCONST);
+      fix_char_length(char_length);
       decimals=NOT_FIXED_DEC;
       break;
+    }
     case SHOW_LEX_STRING:
       {
+        CHARSET_INFO *cs= system_charset_info_for_i_s;
         mysql_mutex_lock(&LOCK_global_system_variables);
         const LEX_STRING *ls=
                 reinterpret_cast<const LEX_STRING*>(var->value_ptr(current_thd,
                                                                    var_type,
                                                                    &component));
-        max_length= (uint32) system_charset_info->numchars(ls->str,
-                                                           ls->str + ls->length);
+        uint char_length= (uint32) cs->numchars(ls->str, ls->str + ls->length);
         mysql_mutex_unlock(&LOCK_global_system_variables);
-        collation.set(system_charset_info, DERIVATION_SYSCONST);
-        max_length*= system_charset_info->mbmaxlen;
+        collation.set(cs, DERIVATION_SYSCONST);
+        fix_char_length(char_length);
         decimals=NOT_FIXED_DEC;
       }
       break;
@@ -6370,7 +6361,7 @@ bool Item_func_match::fix_index()
 
   for (keynr=0 ; keynr < table->s->keys ; keynr++)
   {
-    if ((table->key_info[keynr].flags & HA_FULLTEXT) &&
+    if (table->key_info[keynr].algorithm == HA_KEY_ALG_FULLTEXT &&
         (match_flags & FT_BOOL ?
          table->keys_in_use_for_query.is_set(keynr) :
          table->s->usable_indexes(table->in_use).is_set(keynr)))
@@ -7239,8 +7230,20 @@ longlong Item_func_setval::val_int()
     DBUG_RETURN(0);
   }
 
-  value= nextval;
-  error= table->s->sequence->set_value(table, nextval, round, is_used);
+  /*
+    Truncate nextval according to the value type of the sequence if
+    out of bounds. If truncation happens i.e. nextval is out of
+    bounds for the value type, return null immediately.
+  */
+  value= table->s->sequence->truncate_value(nextval);
+  if (value != nextval.value())
+  {
+    null_value= 1;
+    value= 0;
+    DBUG_RETURN(0);
+  }
+  unsigned_flag= table->s->sequence->is_unsigned;
+  error= table->s->sequence->set_value(table, value, round, is_used);
   if (unlikely(error))
   {
     null_value= 1;
@@ -7266,7 +7269,10 @@ void Item_func_setval::print(String *str, enum_query_type query_type)
   print_table_list_identifier(thd, str);
 
   str->append(',');
-  str->append_longlong(nextval);
+  if (nextval.is_unsigned())
+    str->append_ulonglong(nextval.value());
+  else
+    str->append_longlong(nextval.value());
   str->append(',');
   str->append_longlong(is_used);
   str->append(',');

@@ -51,7 +51,7 @@ get_collation_number_internal(const char *name)
        cs++)
   {
     if (cs[0] && cs[0]->coll_name.str &&
-        !my_strcasecmp(&my_charset_latin1, cs[0]->coll_name.str, name))
+        !my_strcasecmp_latin1(cs[0]->coll_name.str, name))
       return cs[0]->number;
   }  
   return 0;
@@ -477,7 +477,7 @@ static int add_collation(struct charset_info_st *cs)
   Report character set initialization errors and warnings.
   Be silent by default: no warnings on the client side.
 */
-static void
+ATTRIBUTE_FORMAT(printf, 2, 3) static void
 default_reporter(enum loglevel level  __attribute__ ((unused)),
                  const char *format  __attribute__ ((unused)),
                  ...)
@@ -660,8 +660,7 @@ my_bool add_alias_for_collation(LEX_CSTRING *collation_name, uint org_id,
   if (!(org= all_charsets[org_id]))
     return 1;
 
-  DBUG_ASSERT(!my_strcasecmp(&my_charset_latin1, org->coll_name.str,
-                             collation_name->str));
+  DBUG_ASSERT(!strcmp(org->coll_name.str, collation_name->str));
 #ifdef DEBUG_PRINT_ALIAS
   fprintf(stderr, "alias: %s collation: %s org_id: %u\n",
           alias->str, collation_name->str, org_id);
@@ -887,7 +886,7 @@ get_charset_number_internal(const char *charset_name, uint cs_flags)
        cs++)
   {
     if ( cs[0] && cs[0]->cs_name.str && (cs[0]->state & cs_flags) &&
-         !my_strcasecmp(&my_charset_latin1, cs[0]->cs_name.str, charset_name))
+         !my_strcasecmp_latin1(cs[0]->cs_name.str, charset_name))
       return cs[0]->number;
   }  
   return 0;
@@ -902,7 +901,7 @@ uint get_charset_number(const char *charset_name, uint cs_flags, myf flags)
   my_pthread_once(&charsets_initialized, init_available_charsets);
   if ((id= get_charset_number_internal(charset_name, cs_flags)))
     return id;
-  if ((charset_name= !my_strcasecmp(&my_charset_latin1, charset_name, "utf8") ?
+  if ((charset_name= !my_strcasecmp_latin1(charset_name, "utf8") ?
                       new_charset_name : NULL))
     return get_charset_number_internal(charset_name, cs_flags);
   return 0;
@@ -1570,8 +1569,8 @@ static const MY_CSET_OS_NAME charsets[] =
 
   {"US-ASCII",       "latin1",   my_cs_approx},
 
-  {"utf8",           "utf8",     my_cs_exact},
-  {"utf-8",          "utf8",     my_cs_exact},
+  {"utf8",           "utf8mb4",  my_cs_exact},
+  {"utf-8",          "utf8mb4",  my_cs_exact},
 #endif
   {NULL,             NULL,       0}
 };

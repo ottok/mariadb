@@ -22,10 +22,6 @@
   Sum functions (COUNT, MIN...)
 */
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation				// gcc: Class implementation
-#endif
-
 #include "mariadb.h"
 #include "sql_priv.h"
 #include "sql_select.h"
@@ -467,10 +463,8 @@ bool Item_sum::collect_outer_ref_processor(void *param)
 
 Item_sum::Item_sum(THD *thd, List<Item> &list): Item_func_or_sum(thd, list)
 {
-  if (!(orig_args= (Item **) thd->alloc(sizeof(Item *) * arg_count)))
-  {
+  if (!(orig_args= thd->alloc<Item *>(arg_count)))
     args= NULL;
-  }
   mark_as_sum_func();
   init_aggregator();
   list.empty();					// Fields are used
@@ -494,7 +488,7 @@ Item_sum::Item_sum(THD *thd, Item_sum *item):
   }
   else
   {
-    if (!(orig_args= (Item**) thd->alloc(sizeof(Item*)*arg_count)))
+    if (!(orig_args= thd->alloc<Item*>(arg_count)))
       return;
   }
   if (arg_count)
@@ -850,7 +844,7 @@ bool Aggregator_distinct::setup(THD *thd)
           uint32 *length;
           compare_key= composite_key_cmp;
           cmp_arg= (void*) this;
-          field_lengths= (uint32*) thd->alloc(table->s->fields * sizeof(uint32));
+          field_lengths= thd->alloc<uint32>(table->s->fields);
           for (tree_key_length= 0, length= field_lengths, field= table->field;
                field < field_end; ++field, ++length)
           {
@@ -1004,7 +998,10 @@ bool Aggregator_distinct::add()
     }
     if (unlikely((error= table->file->ha_write_tmp_row(table->record[0]))) &&
         table->file->is_fatal_error(error, HA_CHECK_DUP))
+    {
+      table->file->print_error(error, MYF(0));
       return TRUE;
+    }
     return FALSE;
   }
   else
@@ -3768,18 +3765,10 @@ int group_concat_key_cmp_with_order_with_nulls(void *arg,
 
 static void report_cut_value_error(THD *thd, uint row_count, const char *fname)
 {
-  size_t fn_len= strlen(fname);
-  char *fname_upper= (char *) my_alloca(fn_len + 1);
-  if (!fname_upper)
-    fname_upper= (char*) fname;                 // Out of memory
-  else
-    memcpy(fname_upper, fname, fn_len+1);
-  my_caseup_str(&my_charset_latin1, fname_upper);
   push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
                       ER_CUT_VALUE_GROUP_CONCAT,
                       ER_THD(thd, ER_CUT_VALUE_GROUP_CONCAT),
-                      row_count, fname_upper);
-  my_afree(fname_upper);
+                      row_count, fname);
 }
 
 
@@ -4291,7 +4280,7 @@ Item_func_group_concat::fix_fields(THD *thd, Item **ref)
                   is_conventional() ||
                 thd->active_stmt_arena_to_use()->state ==
                   Query_arena::STMT_SP_QUERY_ARGUMENTS);
-    if (!(buf= (char*) thd->active_stmt_arena_to_use()->alloc(buflen)) ||
+    if (!(buf= thd->active_stmt_arena_to_use()->alloc(buflen)) ||
         !(new_separator= new(thd->active_stmt_arena_to_use()->mem_root)
                            String(buf, buflen, collation.collation)))
       return TRUE;
@@ -4352,7 +4341,7 @@ bool Item_func_group_concat::setup(THD *thd)
   if (arg_count_order)
   {
     uint n_elems= arg_count_order + all_fields.elements;
-    ref_pointer_array= static_cast<Item**>(thd->alloc(sizeof(Item*) * n_elems));
+    ref_pointer_array= thd->alloc<Item*>(n_elems);
     if (!ref_pointer_array)
       DBUG_RETURN(TRUE);
     memcpy(ref_pointer_array, args, arg_count * sizeof(Item*));

@@ -1222,7 +1222,8 @@ int spider_db_mbase_result::fetch_table_cardinality(
       if (
         mysql_row[4] &&
         mysql_row[6] &&
-        (field = find_field_in_table_sef(table, mysql_row[4]))
+        (field = find_field_in_table_sef(table,
+                                         Lex_cstring_strlen(mysql_row[4])))
       ) {
         if ((cardinality[field->field_index] =
           (longlong) my_strtoll10(mysql_row[6], (char**) NULL, &error_num))
@@ -1249,7 +1250,8 @@ int spider_db_mbase_result::fetch_table_cardinality(
       if (
         mysql_row[0] &&
         mysql_row[1] &&
-        (field = find_field_in_table_sef(table, mysql_row[0]))
+        (field = find_field_in_table_sef(table,
+                                         Lex_cstring_strlen(mysql_row[0])))
       ) {
         if ((cardinality[field->field_index] =
           (longlong) my_strtoll10(mysql_row[1], (char**) NULL, &error_num))
@@ -5026,6 +5028,8 @@ int spider_db_mbase_util::print_item_func(
       last_str = SPIDER_SQL_IS_NOT_NULL_STR;
       last_str_length = SPIDER_SQL_IS_NOT_NULL_LEN;
       break;
+    case Item_func::LEFT_FUNC:
+    case Item_func::SUBSTR_FUNC:
     case Item_func::UNKNOWN_FUNC:
       org_func_name= item_func->func_name_cstring();
       func_name= org_func_name.str;
@@ -6453,8 +6457,7 @@ int spider_db_mbase_util::append_join(spider_fields *fields,
   }
   ti.rewind();
 
-  if (!(table= static_cast<TABLE_LIST **>(thd->alloc(sizeof(TABLE_LIST*) *
-                                                     tables_to_print))))
+  if (!(table= thd->alloc<TABLE_LIST *>(tables_to_print)))
     DBUG_RETURN(HA_ERR_OUT_OF_MEM);
 
   TABLE_LIST *tmp, **t= table + (tables_to_print - 1);
@@ -7469,11 +7472,19 @@ int spider_mbase_share::discover_table_structure(
       DBUG_PRINT("info", ("spider column fetch error"));
       res->free_result();
       delete res;
+      /*
+        Use ErrConvString as db_names_str and table_names_str
+        are not necessarily 0-terminated.
+      */
       my_printf_error(ER_SPIDER_REMOTE_TABLE_NOT_FOUND_NUM,
-                      ER_SPIDER_REMOTE_TABLE_NOT_FOUND_STR, MYF(0),
-                      db_names_str[roop_count].ptr(),
-                      table_names_str[roop_count].ptr());
-      error_num= ER_SPIDER_REMOTE_TABLE_NOT_FOUND_NUM;
+        ER_SPIDER_REMOTE_TABLE_NOT_FOUND_STR, MYF(0),
+        ErrConvString(db_names_str[roop_count].ptr(),
+                      db_names_str[roop_count].length(),
+                      Lex_ident_db::charset_info()).ptr(),
+        ErrConvString(table_names_str[roop_count].ptr(),
+                      table_names_str[roop_count].length(),
+                      Lex_ident_table::charset_info()).ptr());
+      error_num = ER_SPIDER_REMOTE_TABLE_NOT_FOUND_NUM;
       spider_unlock_after_query(conn, 0);
       continue;
     }
@@ -12605,15 +12616,14 @@ int spider_mbase_handler::show_table_status(
       goto unlock;
     else if (sts_mode == 1)
     {
-      my_printf_error(ER_SPIDER_REMOTE_TABLE_NOT_FOUND_NUM,
+      my_printf_error(
+        ER_SPIDER_REMOTE_TABLE_NOT_FOUND_NUM,
         ER_SPIDER_REMOTE_TABLE_NOT_FOUND_STR, MYF(0),
-        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].ptr(),
-        mysql_share->table_names_str[spider->conn_link_idx[
-          link_idx]].ptr());
+        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe(),
+        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe());
       error_num= ER_SPIDER_REMOTE_TABLE_NOT_FOUND_NUM;
       goto unlock;
-    }
-    else                      /* sts_mode != 1 */
+    } else                      /* get from information schema */
     {
       error_num= ER_QUERY_ON_FOREIGN_DATA_SOURCE;
       goto unlock;
@@ -12632,15 +12642,15 @@ int spider_mbase_handler::show_table_status(
       my_printf_error(
         ER_SPIDER_REMOTE_TABLE_NOT_FOUND_NUM,
         ER_SPIDER_REMOTE_TABLE_NOT_FOUND_STR, MYF(0),
-        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].ptr(),
-        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].ptr());
+        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe(),
+        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe());
       break;
     case ER_SPIDER_INVALID_REMOTE_TABLE_INFO_NUM:
       my_printf_error(
         ER_SPIDER_INVALID_REMOTE_TABLE_INFO_NUM,
         ER_SPIDER_INVALID_REMOTE_TABLE_INFO_STR, MYF(0),
-        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].ptr(),
-        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].ptr());
+        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe(),
+        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe());
       break;
     default:
       break;
@@ -12656,8 +12666,8 @@ int spider_mbase_handler::show_table_status(
       my_printf_error(
         ER_SPIDER_TABLE_OPEN_LOCK_WAIT_TIMEOUT_NUM,
         ER_SPIDER_TABLE_OPEN_LOCK_WAIT_TIMEOUT_STR, MYF(0),
-        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].ptr(),
-        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].ptr());
+        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe(),
+        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe());
     }
     goto unlock;
   }
@@ -12784,15 +12794,15 @@ int spider_mbase_handler::show_index(
       my_printf_error(
         ER_SPIDER_REMOTE_TABLE_NOT_FOUND_NUM,
         ER_SPIDER_REMOTE_TABLE_NOT_FOUND_STR, MYF(0),
-        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].ptr(),
-        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].ptr());
+        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe(),
+        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe());
       break;
     case ER_SPIDER_INVALID_REMOTE_TABLE_INFO_NUM:
       my_printf_error(
         ER_SPIDER_INVALID_REMOTE_TABLE_INFO_NUM,
         ER_SPIDER_INVALID_REMOTE_TABLE_INFO_STR, MYF(0),
-        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].ptr(),
-        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].ptr());
+        mysql_share->db_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe(),
+        mysql_share->table_names_str[spider->conn_link_idx[link_idx]].c_ptr_safe());
       break;
     default:
       break;

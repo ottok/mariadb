@@ -691,7 +691,7 @@ int mysql_load(THD *thd, const sql_exchange *ex, TABLE_LIST *table_list,
       if ((error= table_list->table->file->ha_rnd_init_with_error(0)))
         goto err;
     }
-    table->file->prepare_for_insert(create_lookup_handler);
+    table->file->prepare_for_modify(true, create_lookup_handler);
     thd_progress_init(thd, 2);
     fix_rownum_pointers(thd, thd->lex->current_select, &info.copied);
     if (table_list->table->validate_default_values_of_unset_fields(thd))
@@ -1020,7 +1020,7 @@ read_fixed_length(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
   List_iterator_fast<Item> it(fields_vars);
   Item *item;
   TABLE *table= table_list->table;
-  bool err, progress_reports;
+  bool err= false, progress_reports;
   ulonglong counter, time_to_report_progress;
   DBUG_ENTER("read_fixed_length");
 
@@ -1096,10 +1096,11 @@ read_fixed_length(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
                           thd->get_stmt_da()->current_row_for_warning());
     }
 
+    bool trg_skip_row= false;
     if (thd->killed ||
         fill_record_n_invoke_before_triggers(thd, table, set_fields, set_values,
                                              ignore_check_option_errors,
-                                             TRG_EVENT_INSERT))
+                                             TRG_EVENT_INSERT, &trg_skip_row))
       DBUG_RETURN(1);
 
     switch (table_list->view_check_option(thd, ignore_check_option_errors)) {
@@ -1110,7 +1111,8 @@ read_fixed_length(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
       DBUG_RETURN(-1);
     }
 
-    err= write_record(thd, table, &info);
+    if (!trg_skip_row)
+      err= write_record(thd, table, &info);
     table->auto_increment_field_not_null= FALSE;
     if (err)
       DBUG_RETURN(1);
@@ -1244,12 +1246,20 @@ read_sep_field(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
       }
     }
 
+    bool trg_skip_row= false;
     if (unlikely(thd->killed) ||
         unlikely(fill_record_n_invoke_before_triggers(thd, table, set_fields,
                                                       set_values,
                                                       ignore_check_option_errors,
-                                                      TRG_EVENT_INSERT)))
+                                                      TRG_EVENT_INSERT,
+                                                      &trg_skip_row)))
       DBUG_RETURN(1);
+
+    if (trg_skip_row)
+    {
+      read_info.next_line();
+      continue;
+    }
 
     switch (table_list->view_check_option(thd,
                                           ignore_check_option_errors)) {
@@ -1366,11 +1376,18 @@ read_xml_field(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
 
     DBUG_ASSERT(!item);
 
+    bool trg_skip_row= false;
     if (thd->killed ||
         fill_record_n_invoke_before_triggers(thd, table, set_fields, set_values,
                                              ignore_check_option_errors,
-                                             TRG_EVENT_INSERT))
+                                             TRG_EVENT_INSERT, &trg_skip_row))
       DBUG_RETURN(1);
+
+    if (trg_skip_row)
+    {
+      read_info.next_line();
+      continue;
+    }
 
     switch (table_list->view_check_option(thd,
                                           ignore_check_option_errors)) {
@@ -1454,7 +1471,7 @@ READ_INFO::READ_INFO(THD *thd, File file_par,
   uint length= MY_MAX(charset()->mbmaxlen, MY_MAX(m_field_term.length(),
                                                   m_line_term.length())) + 1;
   set_if_bigger(length,line_start.length());
-  stack= stack_pos= (int*) thd->alloc(sizeof(int) * length);
+  stack= stack_pos= thd->alloc<int>(length);
 
   DBUG_ASSERT(m_fixed_length < UINT_MAX32);
   if (data.reserve((size_t) m_fixed_length))

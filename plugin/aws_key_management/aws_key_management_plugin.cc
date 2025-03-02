@@ -673,11 +673,7 @@ struct st_mariadb_encryption aws_key_management_plugin= {
 };
 
 
-static TYPELIB key_spec_typelib =
-{
-  array_elements(key_spec_names) - 1, "",
-  key_spec_names, NULL
-};
+static TYPELIB key_spec_typelib = CREATE_TYPELIB_FOR(key_spec_names);
 
 const char *log_level_names[] =
 {
@@ -691,11 +687,7 @@ const char *log_level_names[] =
   0
 };
 
-static TYPELIB log_level_typelib =
-{
-  array_elements(log_level_names) - 1, "",
-  log_level_names, NULL
-};
+static TYPELIB log_level_typelib = CREATE_TYPELIB_FOR(log_level_names);
 
 static MYSQL_SYSVAR_STR(master_key_id, master_key_id,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
@@ -704,7 +696,7 @@ static MYSQL_SYSVAR_STR(master_key_id, master_key_id,
 
 static MYSQL_SYSVAR_ENUM(key_spec, key_spec,
   PLUGIN_VAR_RQCMDARG,
-  "Encryption algorithm used to create new keys.",
+  "Encryption algorithm used to create new keys",
   NULL, NULL, 0, &key_spec_typelib);
 
 
@@ -722,12 +714,12 @@ static MYSQL_SYSVAR_INT(rotate_key, rotate_key,
 
 static MYSQL_SYSVAR_INT(request_timeout, request_timeout,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-  "Timeout in milliseconds for create HTTPS connection or execute AWS request. Specify 0 to use SDK default.",
+  "Timeout in milliseconds for create HTTPS connection or execute AWS request. Specify 0 to use SDK default",
   NULL, NULL, 0, 0, INT_MAX, 1);
 
 static MYSQL_SYSVAR_STR(region, region,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-  "AWS region. For example us-east-1, or eu-central-1. If no value provided, SDK default is used.",
+  "AWS region. For example us-east-1, or eu-central-1. If no value provided, SDK default is used",
   NULL, NULL, "");
 
 static MYSQL_SYSVAR_STR(endpoint_url, endpoint_url,
@@ -744,7 +736,7 @@ static MYSQL_SYSVAR_STR(keyfile_dir, keyfile_dir,
 #if WITH_AWS_MOCK
 static MYSQL_SYSVAR_BOOL(mock, mock,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
- "Mock AWS KMS calls (for testing).",
+ "Mock AWS KMS calls (for testing)",
   NULL,  NULL, 0);
 #endif
 

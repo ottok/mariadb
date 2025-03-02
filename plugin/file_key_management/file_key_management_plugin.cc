@@ -32,21 +32,16 @@ static const char *encryption_algorithm_names[]=
   0
 };
 
-static TYPELIB encryption_algorithm_typelib=
-{
-  array_elements(encryption_algorithm_names)-1,"",
-  encryption_algorithm_names, NULL
-};
-
+static TYPELIB encryption_algorithm_typelib=CREATE_TYPELIB_FOR(encryption_algorithm_names);
 
 static MYSQL_SYSVAR_STR(filename, filename,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-  "Path and name of the key file.",
+  "Path and name of the key file",
   NULL, NULL, "");
 
 static MYSQL_SYSVAR_STR(filekey, filekey,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-  "Key to encrypt / decrypt the keyfile.",
+  "Key to encrypt / decrypt the keyfile",
   NULL, NULL, "");
 
 #ifdef HAVE_EncryptAes128Ctr
@@ -56,7 +51,7 @@ static MYSQL_SYSVAR_STR(filekey, filekey,
 #endif
 static MYSQL_SYSVAR_ENUM(encryption_algorithm, encryption_algorithm,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-  "Encryption algorithm to use" recommendation ".",
+  "Encryption algorithm to use" recommendation,
   NULL, NULL, 0, &encryption_algorithm_typelib);
 
 static struct st_mysql_sys_var* settings[] = {

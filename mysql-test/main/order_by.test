@@ -8,6 +8,8 @@ call mtr.add_suppression("Sort aborted.*");
 call mtr.add_suppression("Out of sort memory; increase server sort buffer size");
 --source include/have_sequence.inc
 
+--source include/test_db_charset_latin1.inc
+
 #
 # Test old ORDER BY bug
 #
@@ -2641,7 +2643,7 @@ drop table t1;
 --echo # MDEV-21922: Allow packing addon fields even if they don't honour max_length_for_sort_data
 --echo #
 
-create table t1 (a varchar(200) character set utf8, b int);
+create table t1 (a varchar(200) character set utf8 collate utf8_general_ci, b int);
 insert into t1 select seq, seq from seq_1_to_10;
 select * from t1 order by a;
 --echo #
@@ -2816,3 +2818,5 @@ explain select * from t1 force index(r) order by a,b limit 20;
 explain select * from t1 force index(r) order by a desc,b limit 20;
         select * from t1 force index(r) order by a desc,b limit 20;
 drop table t1;
+
+--source include/test_db_charset_restore.inc

@@ -62,10 +62,6 @@
 #include "sql_select.h"
 #include "transaction.h"
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation				// gcc: Class implementation
-#endif
-
 #define HANDLER_TABLES_HASH_SIZE 120
 
 static enum enum_ha_read_modes rkey_to_rnext[]=
@@ -647,9 +643,8 @@ mysql_ha_fix_cond_and_key(SQL_HANDLER *handler,
   {
     /* Check if same as last keyname. If not, do a full lookup */
     if (handler->keyno < 0 ||
-        my_strcasecmp(&my_charset_latin1,
-                      keyname,
-                      table->s->key_info[handler->keyno].name.str))
+        !Lex_ident_column(Lex_cstring_strlen(keyname)).
+          streq(table->s->key_info[handler->keyno].name))
     {
       if ((handler->keyno= find_type(keyname, &table->s->keynames,
                                      FIND_TYPE_NO_PREFIX) - 1) < 0)
@@ -661,7 +656,9 @@ mysql_ha_fix_cond_and_key(SQL_HANDLER *handler,
     }
 
     const KEY *c_key= table->s->key_info + handler->keyno;
+
     if (c_key->algorithm == HA_KEY_ALG_FULLTEXT ||
+        c_key->algorithm == HA_KEY_ALG_VECTOR ||
         (ha_rkey_mode != HA_READ_KEY_EXACT &&
          (table->key_info[handler->keyno].index_flags &
           (HA_READ_NEXT | HA_READ_PREV | HA_READ_RANGE)) == 0))
@@ -954,7 +951,7 @@ retry:
     {
       DBUG_ASSERT(keyname != 0);
 
-      if (unlikely(!(key= (uchar*) thd->calloc(ALIGN_SIZE(handler->key_len)))))
+      if (unlikely(!(key= thd->calloc<uchar>(ALIGN_SIZE(handler->key_len)))))
 	goto err;
       if (unlikely((error= table->file->ha_index_or_rnd_end())))
         break;
@@ -1081,9 +1078,8 @@ static SQL_HANDLER *mysql_ha_find_match(THD *thd, TABLE_LIST *tables)
       if (tables->is_anonymous_derived_table())
         continue;
       if ((! tables->db.str[0] ||
-          Lex_ident_db(tables->get_db_name()).streq(hash_tables->db)) &&
-          Lex_ident_table(tables->get_table_name()).
-            streq(hash_tables->table_name))
+          tables->get_db_name().streq(hash_tables->db)) &&
+          tables->get_table_name().streq(hash_tables->table_name))
       {
         /* Link into hash_tables list */
         hash_tables->next= head;

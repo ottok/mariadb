@@ -66,8 +66,7 @@ const char *operation_name[]=
 typedef enum { DO_VIEWS_NO, DO_VIEWS_YES, DO_UPGRADE, DO_VIEWS_FROM_MYSQL } enum_do_views;
 const char *do_views_opts[]= {"NO", "YES", "UPGRADE", "UPGRADE_FROM_MYSQL",
   NullS};
-TYPELIB do_views_typelib= { array_elements(do_views_opts) - 1, "",
-    do_views_opts, NULL };
+TYPELIB do_views_typelib= CREATE_TYPELIB_FOR(do_views_opts);
 static ulong opt_do_views= DO_VIEWS_NO;
 
 static struct my_option my_long_options[] =
@@ -145,8 +144,9 @@ static struct my_option my_long_options[] =
    0, 0 },
   {"help", '?', "Display this help message and exit.", 0, 0, 0, GET_NO_ARG,
    NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"host",'h', "Connect to host.", &current_host,
-   &current_host, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+  {"host",'h', "Connect to host. Defaults in the following order: "
+  "$MARIADB_HOST, and then localhost",
+   &current_host, &current_host, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"medium-check", 'm',
    "Faster than extended-check, but only finds 99.99 percent of all errors. Should be good enough for most cases.",
    0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
@@ -245,6 +245,12 @@ static void print_result();
 static size_t fixed_name_length(const char *name);
 static char *fix_table_name(char *dest, char *src);
 int what_to_do = 0;
+
+
+static inline int cmp_database(const char *a, const char *b)
+{
+  return my_strcasecmp_latin1(a, b);
+}
 
 
 static void usage(void)
@@ -407,6 +413,9 @@ static int get_options(int *argc, char ***argv)
   int ho_error;
   DBUG_ENTER("get_options");
 
+  if (current_host == NULL)
+    current_host= getenv("MARIADB_HOST");
+
   if (*argc == 1)
   {
     usage();
@@ -542,7 +551,7 @@ static int is_view(const char *table)
   int view;
   DBUG_ENTER("is_view");
 
-  my_snprintf(query, sizeof(query), "SHOW CREATE TABLE %`s", table);
+  my_snprintf(query, sizeof(query), "SHOW CREATE TABLE %sQ", table);
   if (mysql_query(sock, query))
   {
     fprintf(stderr, "Failed to %s\n", query);
@@ -791,11 +800,11 @@ static int fix_table_storage_name(const char *name)
 
   if (strncmp(name, "#mysql50#", 9))
     DBUG_RETURN(1);
-  my_snprintf(qbuf, sizeof(qbuf), "RENAME TABLE %`s TO %`s",
+  my_snprintf(qbuf, sizeof(qbuf), "RENAME TABLE %sQ TO %sQ",
               name, name + 9);
 
   rc= run_query(qbuf, 1);
-  if (verbose)
+  if (!opt_silent)
     printf("%-50s %s\n", name, rc ? "FAILED" : "OK");
   DBUG_RETURN(rc);
 }
@@ -808,10 +817,10 @@ static int fix_database_storage_name(const char *name)
 
   if (strncmp(name, "#mysql50#", 9))
     DBUG_RETURN(1);
-  my_snprintf(qbuf, sizeof(qbuf), "ALTER DATABASE %`s UPGRADE DATA DIRECTORY "
+  my_snprintf(qbuf, sizeof(qbuf), "ALTER DATABASE %sQ UPGRADE DATA DIRECTORY "
               "NAME", name);
   rc= run_query(qbuf, 1);
-  if (verbose)
+  if (!opt_silent)
     printf("%-50s %s\n", name, rc ? "FAILED" : "OK");
   DBUG_RETURN(rc);
 }
@@ -834,8 +843,8 @@ static int rebuild_table(char *name)
     fprintf(stderr, "Error: %s\n", mysql_error(sock));
     rc= 1;
   }
-  if (verbose)
-    printf("%-50s %s\n", name, rc ? "FAILED" : "FIXED");
+  if (!opt_silent)
+    printf("%-50s %s\n", name, rc ? "FAILED" : "OK");
   my_free(query);
   DBUG_RETURN(rc);
 }
@@ -869,10 +878,10 @@ static int use_db(char *database)
   DBUG_ENTER("use_db");
 
   if (mysql_get_server_version(sock) >= FIRST_INFORMATION_SCHEMA_VERSION &&
-      !my_strcasecmp(&my_charset_latin1, database, INFORMATION_SCHEMA_DB_NAME))
+      !cmp_database(database, INFORMATION_SCHEMA_DB_NAME))
     DBUG_RETURN(1);
   if (mysql_get_server_version(sock) >= FIRST_PERFORMANCE_SCHEMA_VERSION &&
-      !my_strcasecmp(&my_charset_latin1, database, PERFORMANCE_SCHEMA_DB_NAME))
+      !cmp_database(database, PERFORMANCE_SCHEMA_DB_NAME))
     DBUG_RETURN(1);
   if (mysql_select_db(sock, database))
   {
@@ -1017,7 +1026,7 @@ static void insert_table_name(DYNAMIC_ARRAY *arr, char *in, size_t dblen)
 {
   char buf[NAME_LEN*2+2];
   in[dblen]= 0;
-  my_snprintf(buf, sizeof(buf), "%`s.%`s", in, in + dblen + 1);
+  my_snprintf(buf, sizeof(buf), "%sQ.%sQ", in, in + dblen + 1);
   insert_dynamic(arr, (uchar*) buf);
 }
 
@@ -1029,7 +1038,6 @@ static void __attribute__((noinline)) print_result()
   MYSQL_RES *res;
   MYSQL_ROW row;
   char prev[(NAME_LEN+9)*3+2];
-  char prev_alter[MAX_ALTER_STR_SIZE];
   size_t length_of_db= strlen(sock->db);
   my_bool found_error=0, table_rebuild=0;
   DYNAMIC_ARRAY *array4repair= &tables4repair;
@@ -1038,7 +1046,6 @@ static void __attribute__((noinline)) print_result()
   res = mysql_use_result(sock);
 
   prev[0] = '\0';
-  prev_alter[0]= 0;
   while ((row = mysql_fetch_row(res)))
   {
     int changed = strcmp(prev, row[0]);
@@ -1055,19 +1062,13 @@ static void __attribute__((noinline)) print_result()
 	  strcmp(row[3],"OK"))
       {
         if (table_rebuild)
-        {
-          if (prev_alter[0])
-            insert_dynamic(&alter_table_cmds, (uchar*) prev_alter);
-          else
-            insert_table_name(&tables4rebuild, prev, length_of_db);
-        }
+          insert_table_name(&tables4rebuild, prev, length_of_db);
         else
           insert_table_name(array4repair, prev, length_of_db);
       }
       array4repair= &tables4repair;
       found_error=0;
       table_rebuild=0;
-      prev_alter[0]= 0;
       if (opt_silent)
 	continue;
     }
@@ -1077,20 +1078,28 @@ static void __attribute__((noinline)) print_result()
     {
       /*
         If the error message includes REPAIR TABLE, we assume it means
-        we have to run upgrade on it. In this case we write a nicer message
+        we have to run REPAIR on it. In this case we write a nicer message
         than "Please do "REPAIR TABLE""...
+        If the message inclused ALTER TABLE then there is something wrong
+        with the table definition and we have to run ALTER TABLE to fix it.
+        Write also a nice error message for this csae.
       */
       if (!strcmp(row[2],"error") && strstr(row[3],"REPAIR "))
       {
-        printf("%-50s %s", row[0], "Needs upgrade");
+        printf("%-50s %s", row[0], "Needs upgrade with REPAIR");
         array4repair= strstr(row[3], "VIEW") ? &views4repair : &tables4repair;
+      }
+      else if (!strcmp(row[2],"error") && strstr(row[3],"ALTER TABLE"))
+      {
+        printf("%-50s %s", row[0], "Needs upgrade with ALTER TABLE FORCE");
+        array4repair= &tables4rebuild;
       }
       else
         printf("%s\n%-9s: %s", row[0], row[2], row[3]);
-      if (opt_auto_repair && strcmp(row[2],"note"))
+      if (strcmp(row[2],"note"))
       {
         found_error=1;
-        if (opt_auto_repair && strstr(row[3], "ALTER TABLE") != NULL)
+        if (strstr(row[3], "ALTER TABLE"))
           table_rebuild=1;
       }
     }
@@ -1103,12 +1112,7 @@ static void __attribute__((noinline)) print_result()
   if (found_error && opt_auto_repair && what_to_do != DO_REPAIR)
   {
     if (table_rebuild)
-    {
-      if (prev_alter[0])
-        insert_dynamic(&alter_table_cmds, prev_alter);
-      else
-        insert_table_name(&tables4rebuild, prev, length_of_db);
-    }
+      insert_table_name(&tables4rebuild, prev, length_of_db);
     else
       insert_table_name(array4repair, prev, length_of_db);
   }

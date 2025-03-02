@@ -3,6 +3,9 @@
 # Testing string functions
 --source include/have_sequence.inc
 
+--source include/test_db_charset_latin1.inc
+
+
 set @save_max_allowed_packet=@@global.max_allowed_packet;
 set global max_allowed_packet=1048576;
 connect (conn1,localhost,root,,);
@@ -471,7 +474,7 @@ where collation(t2.a) = _utf8'binary' order by t1.a,t2.a;
 select t1.*,t2.* from t1 left join t2 on (t1.b=t2.b)
 where charset(t2.a) = _utf8'binary' order by t1.a,t2.a;
 select t1.*,t2.* from t1 left join t2 on (t1.b=t2.b)
-where coercibility(t2.a) = 5 order by t1.a,t2.a;
+where coercibility(t2.a) = 7 order by t1.a,t2.a;
 DROP TABLE t1, t2;
 
 #
@@ -1534,11 +1537,7 @@ SELECT CONVERT(('' IN (REVERSE(CAST(('') AS DECIMAL)), '')), CHAR(3));
 --echo #
 CREATE TABLE t1 ( a TEXT );
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
---disable_cursor_protocol
---disable_ps2_protocol
 --eval SELECT 'aaaaaaaaaaaaaa' INTO OUTFILE '$MYSQLTEST_VARDIR/tmp/bug58165.txt';
---enable_ps2_protocol
---enable_cursor_protocol
 SELECT insert( substring_index( 'a', 'a', 'b' ), 1, 0, 'x' );
 --replace_result $MYSQLTEST_VARDIR MYSQLTEST_VARDIR
 --eval LOAD DATA INFILE '$MYSQLTEST_VARDIR/tmp/bug58165.txt' INTO TABLE t1;
@@ -2671,3 +2670,158 @@ SELECT CONV(-9223372036854775808, -10, -62);
 --echo #
 --echo # End of 11.4 tests
 --echo #
+
+
+--echo #
+--echo # Start of 11.5 tests
+--echo #
+
+--echo #
+--echo # MDEV-25829 Change default collation to utf8mb4_1400_ai_ci
+--echo #
+
+--vertical_results
+SELECT
+  coercibility(CAST(1 AS CHAR)),
+  coercibility(CONVERT('a' USING latin1));
+
+SELECT
+  coercibility(CAST(1 AS BINARY)),
+  coercibility(CONVERT('a' USING binary)),
+  coercibility(binary'a');
+--horizontal_results
+
+EXPLAIN EXTENDED SELECT
+  CAST(1 AS BINARY) AS c,
+  CONVERT('a' USING binary),
+  BINARY'a';
+
+--vertical_results
+SELECT
+  coercibility(collation('a')),
+  coercibility(charset('a')),
+  coercibility(user()),
+  coercibility(database());
+--horizontal_results
+
+--echo #
+--echo # End of 11.5 tests
+--echo #
+
+--echo #
+--echo # MDEV-34911 Make conditions SUBSTR(col, 1, n) = const_str sargable
+--echo #
+
+create table t (c varchar(5), key (c));
+insert into t values ('ddd'), ('bbcd'), ('bba'), ('b%_cd'), ('aaa');
+
+# positive cases
+
+let $query=
+select * from t where substr(c, 1, 2) = 'bb';
+eval explain $query;
+eval $query;
+
+let $query=
+select * from t where 'bb' = substr(c, 1, 2);
+eval explain $query;
+eval $query;
+
+let $query=
+select * from t where left(c, 2) = 'bb';
+eval explain $query;
+eval $query;
+
+let $query=
+select * from t where 'bb' = left(c, 2);
+eval explain $query;
+eval $query;
+
+let $query=
+select * from t where substr(c, 1, 4) = 'b%_c';
+eval explain $query;
+eval $query;
+
+# RHS can_eval_in_optimize()
+let $query=
+select * from t where substr(c, 1, 2) = concat('b', 'b');
+eval explain $query;
+eval $query;
+
+# RHS can_eval_in_optimize()
+let $query=
+select * from t where substr(c, 1, 2) = substr('bb1', 1, 2);
+eval explain $query;
+eval $query;
+
+# works with view
+create table t1 (a varchar(32), b int, index(a));
+insert into t1 select seq, seq / 33 from seq_1_to_100;
+explain select * from t1 where substr(a, 1, 2)='80';
+# The range is a necessary condition, and further filtering happens in
+# the exec stage
+explain select * from t1 where substr(a, 1, b)='80';
+create view v1 as select a,b from t1;
+explain select * from v1 where substr(a, 1, 2)='80';
+drop view v1;
+drop table t1;
+
+# negative cases
+
+let $query=
+select * from t where substr(c, 1, 1) = 'bb';
+eval explain $query;
+eval $query;
+
+let $query=
+select * from t where substr(c, 1, 3) = 'bb';
+eval explain $query;
+eval $query;
+
+let $query=
+select * from t where substr(c, 1) = 'bb';
+eval explain $query;
+eval $query;
+
+let $query=
+select * from t where substr(c, 1, 2) = substr(c, 2, 3);
+eval explain $query;
+eval $query;
+
+# full table scan when no index on sargable substr
+drop index c on t;
+
+let $query=
+select * from t where substr(c, 1, 2) = 'bb';
+eval explain $query;
+eval $query;
+
+drop table t;
+
+# czech has the same behaviour as in LIKE
+set @old_collation_connection=@@collation_connection;
+SET collation_connection=utf32_czech_ci;
+CREATE TABLE t1 AS SELECT REPEAT(' ', 10) AS s1 LIMIT 0;
+INSERT INTO t1 VALUES ('%c'),('%ce'),('%cé'),('%ch'), ('c'), ('d'), ('c%'), ('c\\g');
+SELECT * FROM t1 WHERE s1 LIKE '\\%c%';
+SELECT * FROM t1 WHERE substr(s1, 1, 2) = '%c';
+SELECT * FROM t1 WHERE s1 LIKE 'c\\\\%';
+SELECT * FROM t1 WHERE substr(s1, 1, 2) = 'c\\';
+ALTER TABLE t1 ADD KEY s1 (s1);
+SELECT * FROM t1 WHERE s1 LIKE '\\%c%';
+SELECT * FROM t1 WHERE substr(s1, 1, 2) = '%c';
+SELECT * FROM t1 WHERE s1 LIKE 'c\\\\%';
+SELECT * FROM t1 WHERE substr(s1, 1, 2) = 'c\\';
+DROP TABLE t1;
+set collation_connection=@old_collation_connection;
+
+# no stack overrun escaping long string
+create table t1 (a varchar(100), b varchar(100), key(a));
+insert into t1 select seq, seq from seq_1_to_1000;
+explain select * from t1 where LEFT(a, 20) ='%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%';
+drop table t1;
+
+--echo #
+--echo # End of 11.8 tests
+--echo #
+--source include/test_db_charset_restore.inc

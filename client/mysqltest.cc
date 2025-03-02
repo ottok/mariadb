@@ -594,8 +594,7 @@ struct st_command
   enum enum_commands type;
 };
 
-TYPELIB command_typelib= {array_elements(command_names),"",
-			  command_names, 0};
+TYPELIB command_typelib= CREATE_TYPELIB_FOR(command_names);
 
 DYNAMIC_STRING ds_res;
 /* Points to ds_warning in run_query, so it can be freed */
@@ -635,8 +634,9 @@ static void cleanup_and_exit(int exit_code, bool called_from_die);
 ATTRIBUTE_NORETURN
 static void really_die(const char *msg);
 void report_or_die(const char *fmt, ...);
-ATTRIBUTE_NORETURN
+ATTRIBUTE_NORETURN ATTRIBUTE_FORMAT(printf, 1, 2)
 static void die(const char *fmt, ...);
+ATTRIBUTE_FORMAT(printf, 3, 0)
 static void make_error_message(char *buf, size_t len, const char *fmt, va_list args);
 ATTRIBUTE_NORETURN ATTRIBUTE_FORMAT(printf, 1, 2)
 void abort_not_supported_test(const char *fmt, ...);
@@ -695,6 +695,7 @@ void enable_optimizer_trace(struct st_connection *con);
 void display_optimizer_trace(struct st_connection *con,
                              DYNAMIC_STRING *ds);
 
+static void append_session_track_info(DYNAMIC_STRING *ds, MYSQL *mysql);
 
 class LogFile {
   FILE* m_file;
@@ -1371,7 +1372,7 @@ void check_command_args(struct st_command *command,
 
     /* Check required arg */
     if (arg->ds->length == 0 && arg->required)
-      die("Missing required argument '%s' to command '%.*b'", arg->argname,
+      die("Missing required argument '%s' to command '%.*sB'", arg->argname,
           command->first_word_len, command->query);
 
   }
@@ -1380,7 +1381,7 @@ void check_command_args(struct st_command *command,
   while(ptr <= command->end && *ptr != '#')
   {
     if (*ptr && *ptr != ' ')
-      die("Extra argument '%s' passed to '%.*b'",
+      die("Extra argument '%s' passed to '%.*sB'",
           ptr, command->first_word_len, command->query);
     ptr++;
   }
@@ -1400,7 +1401,7 @@ void handle_command_error(struct st_command *command, uint error,
 
     if (command->abort_on_error)
     {
-      report_or_die("command \"%.*b\" failed with error: %u  my_errno: %d  "
+      report_or_die("command \"%.*sB\" failed with error: %u  my_errno: %d  "
                     "errno: %d",
           command->first_word_len, command->query, error, my_errno,
           sys_errno);
@@ -1418,7 +1419,7 @@ void handle_command_error(struct st_command *command, uint error,
       DBUG_VOID_RETURN;
     }
     if (command->expected_errors.count > 0)
-      report_or_die("command \"%.*b\" failed with wrong error: %u  "
+      report_or_die("command \"%.*sB\" failed with wrong error: %u  "
                     "my_errno: %d  errno: %d",
                     command->first_word_len, command->query, error, my_errno,
                     sys_errno);
@@ -1427,7 +1428,7 @@ void handle_command_error(struct st_command *command, uint error,
            command->expected_errors.err[0].code.errnum != 0)
   {
     /* Error code we wanted was != 0, i.e. not an expected success */
-    report_or_die("command \"%.*b\" succeeded - should have failed with "
+    report_or_die("command \"%.*sB\" succeeded - should have failed with "
                   "errno %d...",
         command->first_word_len, command->query,
         command->expected_errors.err[0].code.errnum);
@@ -1505,7 +1506,10 @@ void free_used_memory()
   DBUG_ENTER("free_used_memory");
 
   if (connections)
+  {
     close_connections();
+    cur_con= NULL;
+  }
   close_files();
   my_hash_free(&var_hash);
 
@@ -2399,7 +2403,7 @@ static int strip_surrounding(char* str, char c1, char c2)
 static void strip_parentheses(struct st_command *command)
 {
   if (strip_surrounding(command->first_argument, '(', ')'))
-    die("%.*b - argument list started with '%c' must be ended with '%c'",
+    die("%.*sB - argument list started with '%c' must be ended with '%c'",
         command->first_word_len, command->query, '(', ')');
 }
 
@@ -3057,7 +3061,7 @@ void eval_expr(VAR *v, const char *p, const char **p_end,
     /* Make sure there was just a $variable and nothing else */
     const char* end= *p_end + 1;
     if (end < expected_end && !open_end)
-      die("Found junk '%.*b' after $variable in expression",
+      die("Found junk '%.*sB' after $variable in expression",
           (int)(expected_end - end - 1), end);
 
     DBUG_VOID_RETURN;
@@ -3577,10 +3581,10 @@ int do_modify_var(struct st_command *command,
   const char *p= command->first_argument;
   VAR* v;
   if (!*p)
-    die("Missing argument to %.*b", command->first_word_len,
+    die("Missing argument to %.*sB", command->first_word_len,
         command->query);
   if (*p != '$')
-    die("The argument to %.*b must be a variable (start with $)",
+    die("The argument to %.*sB must be a variable (start with $)",
         command->first_word_len, command->query);
   v= var_get(p, &p, 1, 0);
   if (! v->is_int)
@@ -4931,17 +4935,17 @@ void do_sync_with_master2(struct st_command *command, long offset,
         information is not initialized, the arguments are
         incorrect, or an error has occurred
       */
-      die("%.*b failed: '%s' returned NULL "            \
+      die("%.*sB failed: '%s' returned NULL "            \
           "indicating slave SQL thread failure",
           command->first_word_len, command->query, query_buf);
     }
 
     if (result == -1)
-      die("%.*b failed: '%s' returned -1 "            \
+      die("%.*sB failed: '%s' returned -1 "            \
           "indicating timeout after %d seconds",
           command->first_word_len, command->query, query_buf, timeout);
     else
-      die("%.*b failed: '%s' returned unknown result :%d",
+      die("%.*sB failed: '%s' returned unknown result :%d",
           command->first_word_len, command->query, query_buf, result);
   }
 
@@ -5107,17 +5111,17 @@ int do_sleep(struct st_command *command, my_bool real_sleep)
   while (my_isspace(charset_info, *p))
     p++;
   if (!*p)
-    die("Missing argument to %.*b", command->first_word_len,
+    die("Missing argument to %.*sB", command->first_word_len,
         command->query);
   sleep_start= p;
   /* Check that arg starts with a digit, not handled by my_strtod */
   if (!my_isdigit(charset_info, *sleep_start))
-    die("Invalid argument to %.*b \"%s\"", command->first_word_len,
+    die("Invalid argument to %.*sB \"%s\"", command->first_word_len,
         command->query, sleep_start);
   sleep_val= my_strtod(sleep_start, &sleep_end, &error);
   check_eol_junk_line(sleep_end);
   if (error)
-    die("Invalid argument to %.*b \"%s\"", command->first_word_len,
+    die("Invalid argument to %.*sB \"%s\"", command->first_word_len,
         command->query, command->first_argument);
   dynstr_free(&ds_sleep);
 
@@ -6051,6 +6055,8 @@ do_handle_error:
     // Ignore errors intentionally
   }
 
+  if (display_session_track_info)
+    append_session_track_info(ds, con);
 
   var_set_errno(0);
   handle_no_error(command);
@@ -6235,7 +6241,7 @@ void do_connect(struct st_command *command)
       rauth= strdup(con_options + sizeof("auth=") - 1);
     }
     else
-      die("Illegal option to connect: %.*b",
+      die("Illegal option to connect: %.*sB",
           (int) (end - con_options), con_options);
     /* Process next option */
     con_options= end;
@@ -6557,7 +6563,7 @@ void do_block(enum block_cmd cmd, struct st_command* command)
 
     enum block_op operand= find_operand(curr_ptr);
     if (operand == ILLEG_OP)
-      die("Found junk '%.*b' after $variable in condition",
+      die("Found junk '%.*sB' after $variable in condition",
           (int)(expr_end - curr_ptr), curr_ptr);
 
     /* We could silently allow this, but may be confusing */
@@ -8068,6 +8074,8 @@ static const char *trking_info_desc[SESSION_TRACK_END + 1]=
 
 static void append_session_track_info(DYNAMIC_STRING *ds, MYSQL *mysql)
 {
+  if (!(mysql->server_status & SERVER_SESSION_STATE_CHANGED))
+    return;
 #ifndef EMBEDDED_LIBRARY
   DYNAMIC_STRING ds_sort, *ds_type= NULL;
   for (unsigned int type= SESSION_TRACK_BEGIN; type <= SESSION_TRACK_END; type++)
@@ -8718,7 +8726,7 @@ void run_query_stmt(struct st_connection *cn, struct st_command *command,
   DYNAMIC_STRING ds_res_1st_execution;
   my_bool ds_res_1st_execution_init = FALSE;
   my_bool compare_2nd_execution = TRUE;
-  int query_match_ps2_re;
+  int query_match_ps2_re, query_match_cursor_re;
   MYSQL_RES *res;
   DBUG_ENTER("run_query_stmt");
   DBUG_PRINT("query", ("'%-.60s'", query));
@@ -8777,6 +8785,9 @@ void run_query_stmt(struct st_connection *cn, struct st_command *command,
     parameter markers.
   */
 
+  query_match_cursor_re= cursor_protocol_enabled && cn->stmt->field_count &&
+                         match_re(&cursor_re, query);
+
   if (cursor_protocol_enabled)
   {
     ps2_protocol_enabled = 0;
@@ -8785,7 +8796,7 @@ void run_query_stmt(struct st_connection *cn, struct st_command *command,
       Use cursor for queries matching the filter,
       else reset cursor type
     */
-    if (match_re(&cursor_re, query))
+    if (query_match_cursor_re)
     {
       /*
       Use cursor when retrieving result
@@ -8797,12 +8808,13 @@ void run_query_stmt(struct st_connection *cn, struct st_command *command,
     }
   }
 
-  query_match_ps2_re = match_re(&ps2_re, query);
+  query_match_ps2_re = ps2_protocol_enabled && cn->stmt->field_count &&
+                       match_re(&ps2_re, query);
 
   /*
     Execute the query first time if second execution enable
   */
-  if (ps2_protocol_enabled && query_match_ps2_re)
+  if (query_match_ps2_re)
   {
     if (do_stmt_execute(cn))
     {
@@ -8858,8 +8870,7 @@ void run_query_stmt(struct st_connection *cn, struct st_command *command,
       and keep them in a separate string for later. Cursor_protocol is used
       only for queries matching the filter "cursor_re".
     */
-    if (cursor_protocol_enabled && match_re(&cursor_re, query) &&
-        !disable_warnings)
+    if (query_match_cursor_re && !disable_warnings)
       append_warnings(&ds_execute_warnings, mysql);
 
     if (read_stmt_results(stmt, ds, command))
@@ -8871,7 +8882,7 @@ void run_query_stmt(struct st_connection *cn, struct st_command *command,
         The results of the first and second execution are compared
         only if result logging is enabled
       */
-      if (compare_2nd_execution && ps2_protocol_enabled && query_match_ps2_re)
+      if (compare_2nd_execution && query_match_ps2_re)
       {
         if (ds->length != ds_res_1st_execution.length ||
            !(memcmp(ds_res_1st_execution.str, ds->str, ds->length) == 0))

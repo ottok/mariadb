@@ -13,7 +13,7 @@ Table	Create Table
 t	CREATE TABLE `t` (
   `c` int(11) NOT NULL,
   PRIMARY KEY (`c`)
-) ENGINE=SPIDER DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
+) ENGINE=SPIDER DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 Warnings:
 Error	1429	Unable to connect to foreign data source: localhost
 Error	1429	Unable to connect to foreign data source: localhost
@@ -35,7 +35,7 @@ t1	CREATE TABLE `t1` (
   `a` int(11) NOT NULL,
   `b` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`a`)
-) ENGINE=SPIDER DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci COMMENT='srv ''srv'', table ''t1'', read_only_mode ''1'''
+) ENGINE=SPIDER DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci COMMENT='srv ''srv'', table ''t1'', read_only_mode ''1'''
 Warnings:
 Error	12719	An infinite loop is detected when opening table test.t1
 DROP TABLE t1;
@@ -57,7 +57,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `c` int(11) DEFAULT NULL,
   KEY `c` (`c`)
-) ENGINE=SPIDER DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci COMMENT='WRAPPER "mysql", SRV "srv",TABLE "t2", PK_NAME "f"'
+) ENGINE=SPIDER DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci COMMENT='WRAPPER "mysql", SRV "srv",TABLE "t2", PK_NAME "f"'
 Warnings:
 Error	12702	Remote table 'test.t2' is not found
 DROP TABLE t1;

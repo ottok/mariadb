@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2017, Oracle and/or its affiliates.
-   Copyright (c) 2008, 2023, MariaDB
+   Copyright (c) 2008, 2024, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -126,7 +126,7 @@ static int  show_create_db(THD *thd, LEX *lex);
 static bool alter_routine(THD *thd, LEX *lex);
 static bool drop_routine(THD *thd, LEX *lex);
 
-const Lex_ident_db any_db(STRING_WITH_LEN("*any*"));
+const Lex_ident_db_normalized any_db(STRING_WITH_LEN("*any*"));
 
 const LEX_CSTRING command_name[257]={
   { STRING_WITH_LEN("Sleep") },           //0
@@ -1139,11 +1139,9 @@ void cleanup_items(Item *item)
 #ifdef WITH_WSREP
 static bool wsrep_tables_accessible_when_detached(const TABLE_LIST *tables)
 {
-  for (const TABLE_LIST *table= tables; table; table= table->next_global)
+  for (const TABLE_LIST *t= tables; t; t= t->next_global)
   {
-    if (get_table_category(Lex_ident_db(table->db),
-                           Lex_ident_table(table->table_name))
-                           < TABLE_CATEGORY_INFORMATION)
+    if (get_table_category(t->db, t->table_name) < TABLE_CATEGORY_INFORMATION)
       return false;
   }
   return tables != NULL;
@@ -2044,7 +2042,7 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
     }
     thd->convert_string(&table_name, system_charset_info,
 			packet, arg_length, thd->charset());
-    if (check_table_name(table_name.str, table_name.length, FALSE))
+    if (Lex_ident_table::check_name(table_name, false))
     {
       /* this is OK due to convert_string() null-terminating the string */
       my_error(ER_WRONG_TABLE_NAME, MYF(0), table_name.str);
@@ -2056,8 +2054,8 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
     /* Must be before we init the table list. */
     if (lower_case_table_names)
     {
-      table_name.length= my_casedn_str(files_charset_info, table_name.str);
-      db.length= my_casedn_str(files_charset_info, (char*) db.str);
+      table_name= thd->make_ident_casedn(table_name);
+      db= thd->make_ident_casedn(db);
     }
     table_list.init_one_table(&db, (LEX_CSTRING*) &table_name, 0, TL_READ);
     /*
@@ -2066,7 +2064,7 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
     */
     table_list.select_lex= thd->lex->first_select_lex();
     thd->lex->
-      first_select_lex()->table_list.link_in_list(&table_list,
+      first_select_lex()->table_list.insert(&table_list,
                                                   &table_list.next_local);
     thd->lex->add_to_query_tables(&table_list);
 
@@ -2195,7 +2193,11 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
     if (trans_commit_implicit(thd))
       break;
     thd->release_transactional_locks();
-    if (check_global_access(thd,RELOAD_ACL))
+    if (options & REFRESH_STATUS &&
+        !(thd->variables.old_behavior & OLD_MODE_OLD_FLUSH_STATUS))
+      options= (options & ~REFRESH_STATUS) | REFRESH_SESSION_STATUS;
+    if ((options & ~REFRESH_SESSION_STATUS) &&
+        check_global_access(thd,RELOAD_ACL))
       break;
     general_log_print(thd, command, NullS);
 #ifndef DBUG_OFF
@@ -2272,8 +2274,7 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
     char buff[250];
     uint buff_len= sizeof(buff);
 
-    if (!(current_global_status_var= (STATUS_VAR*)
-          thd->alloc(sizeof(STATUS_VAR))))
+    if (!(current_global_status_var= thd->alloc<STATUS_VAR>(1)))
       break;
     general_log_print(thd, command, NullS);
     status_var_increment(thd->status_var.com_stat[SQLCOM_SHOW_STATUS]);
@@ -2574,7 +2575,8 @@ void log_slow_statement(THD *thd)
   }
 
   if ((thd->server_status & SERVER_QUERY_WAS_SLOW) &&
-      thd->get_examined_row_count() >= thd->variables.min_examined_row_limit)
+      (thd->get_examined_row_count() >= thd->variables.min_examined_row_limit ||
+       thd->log_slow_always_query_time()))
   {
     thd->status_var.long_query_count++;
 
@@ -2594,6 +2596,7 @@ void log_slow_statement(THD *thd)
       this query to the log or not.
     */ 
     if (thd->variables.log_slow_rate_limit > 1 &&
+        !thd->log_slow_always_query_time() &&
         (global_query_id % thd->variables.log_slow_rate_limit) != 0)
       goto end;
 
@@ -2680,7 +2683,7 @@ int prepare_schema_table(THD *thd, LEX *lex, Table_ident *table_ident,
         lex->first_select_lex()->db=
           thd->make_ident_casedn(lex->first_select_lex()->db);
       schema_select_lex->db= lex->first_select_lex()->db;
-      if (Lex_ident_fs(lex->first_select_lex()->db).check_db_name_with_error())
+      if (Lex_ident_db::check_name_with_error(lex->first_select_lex()->db))
         DBUG_RETURN(1);
       break;
     }
@@ -2863,8 +2866,8 @@ bool sp_process_definer(THD *thd)
     bool curuser= !strcmp(d->user.str, thd->security_ctx->priv_user);
     bool currole= !curuser && !strcmp(d->user.str, thd->security_ctx->priv_role);
     bool curuserhost= curuser && d->host.str &&
-                  !my_strcasecmp(system_charset_info, d->host.str,
-                                 thd->security_ctx->priv_host);
+                      Lex_ident_host(d->host).
+                        streq(Lex_cstring_strlen(thd->security_ctx->priv_host));
     if (!curuserhost && !currole &&
         check_global_access(thd, PRIV_DEFINER_CLAUSE, false))
       DBUG_RETURN(TRUE);
@@ -2873,7 +2876,7 @@ bool sp_process_definer(THD *thd)
   /* Check that the specified definer exists. Emit a warning if not. */
 
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
-  if (!is_acl_user(lex->definer->host.str, lex->definer->user.str))
+  if (!is_acl_user(lex->definer->host, lex->definer->user))
   {
     push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
                         ER_NO_SUCH_USER, ER_THD(thd, ER_NO_SUCH_USER),
@@ -3105,7 +3108,7 @@ mysql_create_routine(THD *thd, LEX *lex)
   DBUG_ASSERT(lower_case_table_names != 1 ||
               Lex_ident_fs(lex->sphead->m_db).is_in_lower_case());
 
-  if (Lex_ident_fs(lex->sphead->m_db).check_db_name_with_error())
+  if (Lex_ident_db::check_name_with_error(lex->sphead->m_db))
     return true;
 
   if (check_access(thd, CREATE_PROC_ACL, lex->sphead->m_db.str,
@@ -3121,15 +3124,15 @@ mysql_create_routine(THD *thd, LEX *lex)
       return true;
   }
 
-  const LEX_CSTRING *name= lex->sphead->name();
+  const Lex_ident_routine name= Lex_ident_routine(*lex->sphead->name());
 #ifdef HAVE_DLOPEN
   if (lex->sphead->m_handler->type() == SP_TYPE_FUNCTION)
   {
-    udf_func *udf = find_udf(name->str, name->length);
+    udf_func *udf= find_udf(name.str, name.length);
 
     if (udf)
     {
-      my_error(ER_UDF_EXISTS, MYF(0), name->str);
+      my_error(ER_UDF_EXISTS, MYF(0), name.str);
       return true;
     }
   }
@@ -3173,7 +3176,7 @@ mysql_create_routine(THD *thd, LEX *lex)
       which doesn't any check routine privileges,
       so no routine privilege record  will insert into mysql.procs_priv.
     */
-    if (thd->slave_thread && is_acl_user(definer->host.str, definer->user.str))
+    if (thd->slave_thread && is_acl_user(definer->host, definer->user))
     {
       security_context.change_security_context(thd, &thd->lex->definer->user,
                                                &thd->lex->definer->host,
@@ -3184,10 +3187,10 @@ mysql_create_routine(THD *thd, LEX *lex)
 
     if (sp_automatic_privileges && !opt_noacl &&
         check_routine_access(thd, DEFAULT_CREATE_PROC_ACLS,
-                             &lex->sphead->m_db, name,
+                             &lex->sphead->m_db, &name,
                              Sp_handler::handler(lex->sql_command), 1))
     {
-      if (sp_grant_privileges(thd, lex->sphead->m_db.str, name->str,
+      if (sp_grant_privileges(thd, lex->sphead->m_db, name,
                               Sp_handler::handler(lex->sql_command)))
         push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
                      ER_PROC_AUTO_GRANT_FAIL, ER_THD(thd, ER_PROC_AUTO_GRANT_FAIL));
@@ -3537,8 +3540,8 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
                                        table_list.first);
 
   /*
-    Remember last commmand executed, so that we can use it in functions called by
-    dispatch_command()
+    Remember last commmand executed, so that we can use it in places
+    like mysql_audit_plugin.
   */
   thd->last_sql_command= lex->sql_command;
 
@@ -3938,6 +3941,7 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
   case SQLCOM_SHOW_COLLATIONS:
   case SQLCOM_SHOW_STORAGE_ENGINES:
   case SQLCOM_SHOW_PROFILE:
+  case SQLCOM_SHOW_SLAVE_STAT:
   case SQLCOM_SELECT:
   {
 #ifdef WITH_WSREP
@@ -5119,6 +5123,10 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
     WSREP_SYNC_WAIT(thd, WSREP_SYNC_WAIT_BEFORE_SHOW);
     res= show_create_db(thd, lex);
     break;
+  case SQLCOM_SHOW_CREATE_SERVER:
+    WSREP_SYNC_WAIT(thd, WSREP_SYNC_WAIT_BEFORE_SHOW);
+    res= mysql_show_create_server(thd, &lex->name);
+    break;
   case SQLCOM_CREATE_EVENT:
   case SQLCOM_ALTER_EVENT:
   #ifdef HAVE_EVENT_SCHEDULER
@@ -5280,7 +5288,8 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
   case SQLCOM_FLUSH:
   {
     int write_to_binlog;
-    if (check_global_access(thd,RELOAD_ACL))
+    if ((lex->type & ~REFRESH_SESSION_STATUS) &&
+        check_global_access(thd,RELOAD_ACL))
       goto error;
 
     if (first_table && lex->type & (REFRESH_READ_LOCK|REFRESH_FOR_EXPORT))
@@ -5315,10 +5324,10 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
     REFRESH_GENERAL_LOG                     |
     REFRESH_ENGINE_LOG                      |
     REFRESH_ERROR_LOG                       |
-#ifdef HAVE_QUERY_CACHE
     REFRESH_QUERY_CACHE_FREE                |
-#endif /* HAVE_QUERY_CACHE */
     REFRESH_STATUS                          |
+    REFRESH_SESSION_STATUS                  |
+    REFRESH_GLOBAL_STATUS                   |
     REFRESH_USER_RESOURCES))
     {
       WSREP_TO_ISOLATION_BEGIN_WRTCHK(WSREP_MYSQL_DB, NULL, NULL);
@@ -5643,7 +5652,7 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
   case SQLCOM_SHOW_PACKAGE_BODY_CODE:
     {
 #ifndef DBUG_OFF
-      Database_qualified_name pkgname(&null_clex_str, &null_clex_str);
+      Database_qualified_name pkgname;
       sp_head *sp;
       const Sp_handler *sph= Sp_handler::handler(lex->sql_command);
       WSREP_SYNC_WAIT(thd, WSREP_SYNC_WAIT_BEFORE_SHOW);
@@ -5865,7 +5874,6 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
       DBUG_ASSERT(first_table == all_tables && first_table != 0);
     /* fall through */
   case SQLCOM_ALTER_SEQUENCE:
-  case SQLCOM_SHOW_SLAVE_STAT:
   case SQLCOM_SIGNAL:
   case SQLCOM_RESIGNAL:
   case SQLCOM_GET_DIAGNOSTICS:
@@ -6238,8 +6246,7 @@ execute_show_status(THD *thd, TABLE_LIST *all_tables)
   mysql_mutex_lock(&LOCK_status);
   add_diff_to_status(&global_status_var, &thd->status_var,
                      &old_status_var);
-  memcpy(&thd->status_var, &old_status_var,
-         offsetof(STATUS_VAR, last_cleared_system_status_var));
+  memcpy(&thd->status_var, &old_status_var, last_restored_status_var);
   mysql_mutex_unlock(&LOCK_status);
   thd->initial_status_var= NULL;
   return res;
@@ -6394,7 +6401,7 @@ show_create_db(THD *thd, LEX *lex)
                   my_error(ER_UNKNOWN_ERROR, MYF(0)); return 1;);
 
   const DBNameBuffer dbbuf(lex->name, lower_case_table_names == 1);
-  if (Lex_ident_fs(dbbuf.to_lex_cstring()).check_db_name_with_error())
+  if (Lex_ident_db::check_name_with_error(dbbuf.to_lex_cstring()))
     return 1;
   LEX_CSTRING db= dbbuf.to_lex_cstring();
   return mysqld_show_create_db(thd, &db, &lex->name, lex->create_info);
@@ -6512,7 +6519,8 @@ absent:
 
   if (sp_result != SP_KEY_NOT_FOUND &&
       sp_automatic_privileges && !opt_noacl &&
-      sp_revoke_privileges(thd, lex->spname->m_db.str, lex->spname->m_name.str,
+      sp_revoke_privileges(thd, lex->spname->m_db,
+                           Lex_ident_routine(lex->spname->m_name),
                            Sp_handler::handler(lex->sql_command)))
   {
     push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
@@ -7061,8 +7069,8 @@ check_routine_access(THD *thd, privilege_t want_access, const LEX_CSTRING *db,
   TABLE_LIST tables[1];
   
   bzero((char *)tables, sizeof(TABLE_LIST));
-  tables->db= *db;
-  tables->table_name= tables->alias= *name;
+  tables->db= Lex_ident_db(*db);
+  tables->table_name= tables->alias= Lex_ident_table(*name);
   
   /*
     The following test is just a shortcut for check_access() (to avoid
@@ -7233,7 +7241,7 @@ bool check_fk_parent_table_access(THD *thd,
 
       // Check if tablename is valid or not.
       DBUG_ASSERT(table_name.str != NULL);
-      if (check_table_name(table_name.str, table_name.length, false))
+      if (Lex_ident_table::check_name(table_name, false))
       {
         my_error(ER_WRONG_TABLE_NAME, MYF(0), table_name.str);
         return true;
@@ -7245,7 +7253,7 @@ bool check_fk_parent_table_access(THD *thd,
 
       if (fk_key->ref_db.str)
       {
-        if (Lex_ident_fs(fk_key->ref_db).check_db_name_with_error() ||
+        if (Lex_ident_db::check_name_with_error(fk_key->ref_db) ||
             !(db_name= thd->make_ident_opt_casedn(fk_key->ref_db,
                                                   lower_case_table_names)).str)
           return true;
@@ -7255,7 +7263,7 @@ bool check_fk_parent_table_access(THD *thd,
         if (!thd->db.str)
         {
           DBUG_ASSERT(create_db.str);
-          if (Lex_ident_fs(create_db).check_db_name_with_error() ||
+          if (Lex_ident_db::check_name_with_error(create_db) ||
               !(db_name= thd->make_ident_opt_casedn(create_db,
                                                  lower_case_table_names)).str)
             return true;
@@ -7990,12 +7998,12 @@ add_proc_to_list(THD* thd, Item *item)
   ORDER *order;
   Item	**item_ptr;
 
-  if (unlikely(!(order = (ORDER *) thd->alloc(sizeof(ORDER)+sizeof(Item*)))))
+  if (unlikely(!(order= (ORDER *) thd->alloc(sizeof(ORDER)+sizeof(Item*)))))
     return 1;
   item_ptr = (Item**) (order+1);
   *item_ptr= item;
   order->item=item_ptr;
-  thd->lex->proc_list.link_in_list(order, &order->next);
+  thd->lex->proc_list.insert(order, &order->next);
   return 0;
 }
 
@@ -8008,7 +8016,7 @@ bool add_to_list(THD *thd, SQL_I_List<ORDER> &list, Item *item,bool asc)
 {
   ORDER *order;
   DBUG_ENTER("add_to_list");
-  if (unlikely(!(order = (ORDER *) thd->alloc(sizeof(ORDER)))))
+  if (unlikely(!(order= thd->alloc<ORDER>(1))))
     DBUG_RETURN(1);
   order->item_ptr= item;
   order->item= &order->item_ptr;
@@ -8016,7 +8024,7 @@ bool add_to_list(THD *thd, SQL_I_List<ORDER> &list, Item *item,bool asc)
   order->used=0;
   order->counter_used= 0;
   order->fast_field_copier_setup= 0; 
-  list.link_in_list(order, &order->next);
+  list.insert(order, &order->next);
   DBUG_RETURN(0);
 }
 
@@ -8080,7 +8088,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
   if (unlikely(!table))
     DBUG_RETURN(0);				// End of memory
   if (!(table_options & TL_OPTION_ALIAS) &&
-      unlikely(check_table_name(table->table.str, table->table.length, FALSE)))
+      unlikely(Lex_ident_table::check_name(table->table, FALSE)))
   {
     my_error(ER_WRONG_TABLE_NAME, MYF(0), table->table.str);
     DBUG_RETURN(0);
@@ -8088,16 +8096,16 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
 
   if (unlikely(table->is_derived_table() == FALSE && table->db.str &&
                !(table_options & TL_OPTION_TABLE_FUNCTION) &&
-               Lex_ident_fs(table->db).check_db_name_with_error()))
+               Lex_ident_db::check_name_with_error(table->db)))
     DBUG_RETURN(0);
 
-  LEX_CSTRING db{0, 0};
+  Lex_ident_db db{0, 0};
   bool fqtn= false;
   LEX *lex= thd->lex;
   if (table->db.str)
   {
     fqtn= TRUE;
-    db= table->db;
+    db= Lex_ident_db(table->db);
   }
   else if (!lex->with_cte_resolution && lex->copy_db_to(&db))
     DBUG_RETURN(0);
@@ -8117,7 +8125,8 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
     DBUG_RETURN(0);
   }
 
-  LEX_CSTRING alias_str= alias ? *alias : table->table;
+  Lex_ident_table alias_str= alias ? Lex_ident_table(*alias) :
+                                     Lex_ident_table(table->table);
   DBUG_ASSERT(alias_str.str);
   if (!alias)                            /* Alias is case sensitive */
   {
@@ -8139,6 +8148,8 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
                                               mdl_type, table_options,
                                               info_schema, this,
                                               index_hints_arg, option);
+  if (!ptr->table_name.str)
+    DBUG_RETURN(0); // EOM
 
   /* check that used name is unique. Sequences are ignored */
   if (lock_type != TL_IGNORE && !ptr->sequence)
@@ -8150,8 +8161,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
 	 tables ;
 	 tables=tables->next_local)
     {
-      if (unlikely(!my_strcasecmp(table_alias_charset, alias_str.str,
-                                  tables->alias.str) &&
+      if (unlikely(alias_str.streq(tables->alias) &&
                    (tables->db.str == any_db.str || ptr->db.str == any_db.str ||
                     !cmp(&ptr->db, &tables->db)) &&
                    !tables->sequence))
@@ -8192,7 +8202,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
     and SELECT.
   */
   if (likely(!ptr->sequence))
-    table_list.link_in_list(ptr, &ptr->next_local);
+    table_list.insert(ptr, &ptr->next_local);
   ptr->next_name_resolution_table= NULL;
 #ifdef WITH_PARTITION_STORAGE_ENGINE
   ptr->partition_names= partition_names;
@@ -8934,7 +8944,7 @@ Item *normalize_cond(THD *thd, Item *cond)
     {
       item_base_t is_cond_flag= cond->base_flags & item_base_t::IS_COND;
       cond->base_flags&= ~item_base_t::IS_COND;
-      cond= new (thd->mem_root) Item_func_ne(thd, cond, new (thd->mem_root) Item_int(thd, 0));
+      cond= new (thd->mem_root) Item_func_istrue(thd, cond);
       if (cond)
         cond->base_flags|= is_cond_flag;
     }
@@ -8948,8 +8958,7 @@ Item *normalize_cond(THD *thd, Item *cond)
           Item *arg= func_item->arguments()[0];
           if (arg->type() == Item::FIELD_ITEM ||
               arg->type() == Item::REF_ITEM)
-            cond= new (thd->mem_root) Item_func_eq(thd, arg,
-                                          new (thd->mem_root) Item_int(thd, 0));
+            cond= new (thd->mem_root) Item_func_isfalse(thd, arg);
         }
       }
     }
@@ -9360,8 +9369,7 @@ bool append_file_to_dir(THD *thd, const char **filename_ptr,
   /* Fix is using unix filename format on dos */
   strmov(buff,*filename_ptr);
   end=convert_dirname(buff, *filename_ptr, NullS);
-  if (unlikely(!(ptr= (char*) thd->alloc((size_t) (end-buff) +
-                                         table_name->length + 1))))
+  if (unlikely(!(ptr= thd->alloc((size_t)(end-buff) + table_name->length + 1))))
     return 1;					// End of memory
   *filename_ptr=ptr;
   strxmov(ptr,buff,table_name->str,NullS);
@@ -9601,12 +9609,12 @@ static TABLE_LIST *multi_delete_table_match(LEX *lex, TABLE_LIST *tbl,
     if (tbl->is_fqtn && elem->is_alias)
       continue; /* no match */
     if (tbl->is_fqtn && elem->is_fqtn)
-      res= (my_strcasecmp(table_alias_charset, tbl->table_name.str, elem->table_name.str) ||
+      res= (!tbl->table_name.streq(elem->table_name) ||
             cmp(&tbl->db, &elem->db));
     else if (elem->is_alias)
-      res= my_strcasecmp(table_alias_charset, tbl->alias.str, elem->alias.str);
+      res= !tbl->alias.streq(elem->alias);
     else
-      res= (my_strcasecmp(table_alias_charset, tbl->table_name.str, elem->table_name.str) ||
+      res= (!tbl->table_name.streq(elem->table_name) ||
             cmp(&tbl->db, &elem->db));
 
     if (res)
@@ -10009,7 +10017,7 @@ LEX_USER *create_default_definer(THD *thd, bool role)
 {
   LEX_USER *definer;
 
-  if (unlikely(! (definer= (LEX_USER*) thd->alloc(sizeof(LEX_USER)))))
+  if (unlikely(!(definer= thd->alloc<LEX_USER>(1))))
     return 0;
 
   thd->get_definer(definer, role);
@@ -10044,7 +10052,7 @@ LEX_USER *create_definer(THD *thd, LEX_CSTRING *user_name,
 
   /* Create and initialize. */
 
-  if (unlikely(!(definer= (LEX_USER*) thd->alloc(sizeof(LEX_USER)))))
+  if (unlikely(!(definer= thd->alloc<LEX_USER>(1))))
     return 0;
 
   definer->user= *user_name;
@@ -10124,7 +10132,8 @@ bool check_string_char_length(const LEX_CSTRING *str, uint err_msg,
 
 bool check_ident_length(const LEX_CSTRING *ident)
 {
-  if (check_string_char_length(ident, 0, NAME_CHAR_LEN, system_charset_info, 1))
+  if (check_string_char_length(ident, 0, NAME_CHAR_LEN,
+                               Lex_ident_ci::charset_info(), 1))
   {
     my_error(ER_TOO_LONG_IDENT, MYF(0), ident->str);
     return 1;

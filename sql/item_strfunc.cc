@@ -27,10 +27,6 @@
     (This shouldn't be needed)
 */
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation				// gcc: Class implementation
-#endif
-
 #include "mariadb.h"                          // HAVE_*
 
 #include "sql_priv.h"
@@ -334,7 +330,8 @@ const char *block_encryption_mode_values[]= {
   "aes-128-cbc", "aes-192-cbc", "aes-256-cbc",
   "aes-128-ctr", "aes-192-ctr", "aes-256-ctr",
   NullS };
-TYPELIB block_encryption_mode_typelib= {9, 0, block_encryption_mode_values, 0};
+TYPELIB block_encryption_mode_typelib=
+        CREATE_TYPELIB_FOR(block_encryption_mode_values);
 static inline uint block_encryption_mode_to_key_length(ulong bem)
 { return (bem % 3 + 2) * 64; }
 static inline my_aes_mode block_encryption_mode_to_aes_mode(ulong bem)
@@ -679,10 +676,7 @@ err:
 
 const char *histogram_types[] =
     {"SINGLE_PREC_HB", "DOUBLE_PREC_HB", "JSON_HB", 0};
-static TYPELIB histogram_types_typelib=
-  { array_elements(histogram_types),
-    "histogram_types",
-    histogram_types, NULL};
+static TYPELIB histogram_types_typelib= CREATE_TYPELIB_FOR(histogram_types);
 const char *representation_by_type[]= {"%.3f", "%.5f"};
 
 String *Item_func_decode_histogram::val_str(String *str)
@@ -2672,9 +2666,8 @@ String *Item_func_password::val_str_ascii(String *str)
 char *Item_func_password::alloc(THD *thd, const char *password,
                                 size_t pass_len, enum PW_Alg al)
 {
-  char *buff= (char *) thd->alloc((al==NEW)?
-                                  SCRAMBLED_PASSWORD_CHAR_LENGTH + 1:
-                                  SCRAMBLED_PASSWORD_CHAR_LENGTH_323 + 1);
+  char *buff= thd->alloc(al==NEW ? SCRAMBLED_PASSWORD_CHAR_LENGTH + 1
+                                 : SCRAMBLED_PASSWORD_CHAR_LENGTH_323 + 1);
   if (!buff)
     return NULL;
 
@@ -2814,7 +2807,7 @@ String *Item_func_database::val_str(String *str)
     return 0;
   }
   else
-    str->copy(thd->db.str, thd->db.length, system_charset_info);
+    str->copy(thd->db.str, thd->db.length, collation.collation);
   null_value= 0;
   return str;
 }
@@ -2830,11 +2823,11 @@ String *Item_func_sqlerrm::val_str(String *str)
   if ((err= it++))
   {
     str->copy(err->get_message_text(), err->get_message_octet_length(),
-              system_charset_info);
+              collation.collation);
     return str;
   }
   str->copy(STRING_WITH_LEN("normal, successful completion"),
-            system_charset_info);
+            collation.collation);
   return str;
 }
 
@@ -2909,6 +2902,17 @@ bool Item_func_current_user::fix_fields(THD *thd, Item **ref)
   return init(ctx->priv_user, ctx->priv_host);
 }
 
+bool Item_func_session_user::fix_fields(THD *thd, Item **ref)
+{
+  if (thd->variables.old_behavior & OLD_MODE_SESSION_USER_IS_USER)
+    return Item_func_user::fix_fields(thd, ref);
+
+  if (Item_func_sysconst::fix_fields(thd, ref))
+    return TRUE;
+
+  return init(thd->main_security_ctx.priv_user, thd->main_security_ctx.priv_host);
+}
+
 bool Item_func_current_role::fix_fields(THD *thd, Item **ref)
 {
   if (Item_func_sysconst::fix_fields(thd, ref))
@@ -2919,7 +2923,7 @@ bool Item_func_current_role::fix_fields(THD *thd, Item **ref)
   if (ctx->priv_role[0])
   {
     if (str_value.copy(ctx->priv_role, strlen(ctx->priv_role),
-                       system_charset_info))
+                       collation.collation))
       return 1;
     str_value.mark_as_const();
     null_value= 0;
@@ -3613,7 +3617,7 @@ err:
 
 bool Item_func_binlog_gtid_pos::fix_length_and_dec(THD *thd)
 {
-  collation.set(system_charset_info);
+  collation.set(system_charset_info_for_i_s);
   max_length= MAX_BLOB_WIDTH;
   set_maybe_null();
   return FALSE;
@@ -3625,7 +3629,7 @@ String *Item_func_binlog_gtid_pos::val_str(String *str)
   DBUG_ASSERT(fixed());
 #ifndef HAVE_REPLICATION
   null_value= 0;
-  str->copy("", 0, system_charset_info);
+  str->copy("", 0, system_charset_info_for_i_s);
   return str;
 #else
   String name_str, *name;
@@ -3637,7 +3641,7 @@ String *Item_func_binlog_gtid_pos::val_str(String *str)
   if (args[0]->null_value || args[1]->null_value)
     goto err;
 
-  if (pos < 0 || pos > (longlong) UINT_MAX32)
+  if (pos < 0 || (ulonglong) pos > UINT_MAX32)
     goto err;
 
   if (gtid_state_from_binlog_pos(name->c_ptr_safe(), (uint32)pos, str))
@@ -4005,7 +4009,9 @@ String *Item_func_conv_charset::val_str(String *str)
 
 bool Item_func_conv_charset::fix_length_and_dec(THD *thd)
 {
-  DBUG_ASSERT(collation.derivation == DERIVATION_IMPLICIT);
+  DBUG_ASSERT(collation.derivation == DERIVATION_CAST ||
+              (collation.derivation == DERIVATION_IMPLICIT &&
+               collation.collation == &my_charset_bin));
   fix_char_length(args[0]->max_char_length());
   return FALSE;
 }
@@ -4195,7 +4201,7 @@ String *Item_func_weight_string::val_str(String *str)
   frm_length= cs->strnxfrm((char*) str->ptr(), tmp_length,
                            nweights ? nweights : (uint) tmp_length,
                            res->ptr(), res->length(),
-                           weigth_flags);
+                           weigth_flags).m_result_length;
   DBUG_ASSERT(frm_length <= tmp_length);
 
   str->set_charset(&my_charset_bin);
@@ -4979,7 +4985,7 @@ bool Item_func_dyncol_create::prepare_arguments(THD *thd, bool force_names_arg)
         {
           uint strlen= res->length() * DYNCOL_UTF->mbmaxlen + 1;
           uint dummy_errors;
-          if (char *str= (char *) thd->alloc(strlen))
+          if (char *str= thd->alloc(strlen))
           {
             keys_str[i].length=
               copy_and_convert(str, strlen, DYNCOL_UTF,
@@ -5319,7 +5325,7 @@ bool Item_dyncol_get::get_dyn_value(THD *thd, DYNAMIC_COLUMN_VALUE *val,
     {
       uint strlen= nm->length() * DYNCOL_UTF->mbmaxlen + 1;
       uint dummy_errors;
-      buf.str= (char *) thd->alloc(strlen);
+      buf.str= thd->alloc(strlen);
       if (buf.str)
       {
         buf.length=
@@ -6061,6 +6067,7 @@ bool Item_func_natural_sort_key::check_vcol_func_processor(void *arg)
                                    VCOL_NON_DETERMINISTIC);
 }
 
+
 String *Item_func_format_pico_time::val_str_ascii(String *)
 {
   double time_val= args[0]->val_real();
@@ -6134,6 +6141,78 @@ String *Item_func_format_pico_time::val_str_ascii(String *)
       len= snprintf(m_value_buffer, sizeof(m_value_buffer), "%4.2e %s", value, unit);
     else
       len= my_snprintf(m_value_buffer, sizeof(m_value_buffer), "%4.2f %s", value, unit);
+  }
+  m_value.length(len);
+  return &m_value;
+}
+
+
+String *Item_func_format_bytes::val_str_ascii(String *)
+{
+  double bytes= args[0]->val_real();
+
+  null_value = args[0]->null_value;
+  if (null_value)
+    return 0;
+
+  double bytes_abs= fabs(bytes);
+
+  constexpr uint64_t kib{1024};
+  constexpr uint64_t mib{1024 * kib};
+  constexpr uint64_t gib{1024 * mib};
+  constexpr uint64_t tib{1024 * gib};
+  constexpr uint64_t pib{1024 * tib};
+  constexpr uint64_t eib{1024 * pib};
+
+  uint64_t divisor;
+  size_t len;
+  const char *unit;
+
+  if (bytes_abs >= eib)
+  {
+    divisor= eib;
+    unit= "EiB";
+  }
+  else if (bytes_abs >= pib)
+  {
+    divisor= pib;
+    unit= "PiB";
+  }
+  else if (bytes_abs >= tib)
+  {
+    divisor= tib;
+    unit= "TiB";
+  }
+  else if (bytes_abs >= gib)
+  {
+    divisor= gib;
+    unit= "GiB";
+  }
+  else if (bytes_abs >= mib)
+  {
+    divisor= mib;
+    unit= "MiB";
+  }
+  else if (bytes_abs >= kib)
+  {
+    divisor= kib;
+    unit= "KiB";
+  }
+  else
+  {
+    divisor= 1;
+    unit= "bytes";
+  }
+
+  if (divisor == 1)
+    len= snprintf(m_value_buffer, sizeof(m_value_buffer), "%4d %s", (int)bytes, unit);
+  else
+  {
+    double value= bytes / divisor;
+    if (fabs(value) >= 100000.0)
+      len= snprintf(m_value_buffer, sizeof(m_value_buffer), "%4.2e %s", value, unit);
+    else
+      len= snprintf(m_value_buffer, sizeof(m_value_buffer), "%4.2f %s", value, unit);
   }
   m_value.length(len);
   return &m_value;

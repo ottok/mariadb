@@ -34,13 +34,14 @@ static handlerton *sequence_hton;
 
 class Sequence_share : public Handler_share {
 public:
-  const char *name;
+  Lex_ident_table name;
   THR_LOCK lock;
 
   ulonglong from, to, step;
   bool reverse;
 
-  Sequence_share(const char *name_arg, ulonglong from_arg, ulonglong to_arg,
+  Sequence_share(const Lex_ident_table &name_arg,
+                 ulonglong from_arg, ulonglong to_arg,
                  ulonglong step_arg, bool reverse_arg):
     name(name_arg), from(from_arg), to(to_arg), step(step_arg),
     reverse(reverse_arg)
@@ -263,7 +264,7 @@ int ha_seq::open(const char *name, int mode, uint test_if_locked)
 {
   if (!(seqs= get_share()))
     return HA_ERR_OUT_OF_MEM;
-  DBUG_ASSERT(my_strcasecmp(table_alias_charset, name, seqs->name) == 0);
+  DBUG_ASSERT(seqs->name.streq(Lex_cstring_strlen(name)));
 
   ref_length= sizeof(cur);
   thr_lock_data_init(&seqs->lock,&lock,NULL);
@@ -328,7 +329,8 @@ Sequence_share *ha_seq::get_share()
 
     to= (to - from) / step * step + step + from;
 
-    tmp_share= new Sequence_share(table_share->normalized_path.str, from, to, step, reverse);
+    tmp_share= new Sequence_share(Lex_ident_table(table_share->normalized_path),
+                                  from, to, step, reverse);
 
     if (!tmp_share)
       goto err;
@@ -361,10 +363,6 @@ static int discover_table_existence(handlerton *hton, const char *db,
   ulonglong from, to, step;
   return !parse_table_name(table_name, strlen(table_name), &from, &to, &step);
 }
-
-static int dummy_commit_rollback(handlerton *, THD *, bool) { return 0; }
-
-static int dummy_savepoint(handlerton *, THD *, void *) { return 0; }
 
 /*****************************************************************************
   Example of a simple group by handler for queries like:
@@ -533,9 +531,10 @@ static int init(void *p)
   hton->drop_table= drop_table;
   hton->discover_table= discover_table;
   hton->discover_table_existence= discover_table_existence;
-  hton->commit= hton->rollback= dummy_commit_rollback;
+  hton->commit= hton->rollback= [](THD *, bool) { return 0; };
   hton->savepoint_set= hton->savepoint_rollback= hton->savepoint_release=
-    dummy_savepoint;
+    [](THD *, void *) { return 0; };
+
   hton->create_group_by= create_group_by_handler;
   hton->update_optimizer_costs= sequence_update_optimizer_costs;
   return 0;

@@ -1,3 +1,4 @@
+ALTER DATABASE test CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 reset master;
 set timestamp=1000000000;
 drop table if exists t1,t2,t3,t4,t5,t03,t04;
@@ -564,7 +565,7 @@ SET @@session.sql_mode=#/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=latin1,@@session.collation_connection=8,@@session.collation_server=#/*!*/;
-SET @@session.character_set_collations=''/*!*/;
+SET @@session.character_set_collations='utf8mb3=utf8mb3_uca1400_ai_ci,ucs2=ucs2_uca1400_ai_ci,utf8mb4=utf8mb4_uca1400_ai_ci,utf16=utf16_uca1400_ai_ci,utf32=utf32_uca1400_ai_ci'/*!*/;
 SET @@session.lc_time_names=0/*!*/;
 SET @@session.collation_database=DEFAULT/*!*/;
 create table t1 (a varchar(64) character set utf8)
@@ -1345,3 +1346,23 @@ FOUND 1 /Number of rows: 2/ in mdev24959_2.txt
 FOUND 1 /DROP TABLE/ in mdev24959_2.txt
 FOUND 1 /INSERT INTO .* VALUES/ in mdev24959_2.txt
 FOUND 1 /SET /[*] no columns [*]// in mdev24959_2.txt
+#
+# MDEV-33239: mysqlbinlog always stops at timestamp 0xffffffff
+#
+RESET MASTER;
+CREATE TABLE t (a INT);
+INSERT INTO t VALUES (1);
+SET @@timestamp= 0 + 0xffffffff;
+INSERT INTO t VALUES (2);
+SELECT * FROM t ORDER BY a;
+a
+1
+2
+FLUSH BINARY LOGS;
+DROP TABLE t;
+SELECT * FROM t ORDER BY a;
+a
+1
+2
+DROP TABLE t;
+ALTER DATABASE test CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;

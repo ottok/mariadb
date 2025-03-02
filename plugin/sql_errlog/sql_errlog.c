@@ -50,7 +50,7 @@ static void rotate_log(MYSQL_THD thd, struct st_mysql_sys_var *var,
                        void *var_ptr, const void *save);
 
 static MYSQL_SYSVAR_UINT(rate, rate, PLUGIN_VAR_RQCMDARG,
-       "Sampling rate. If set to 0(zero), the logging is disabled.", NULL, NULL,
+       "Sampling rate. If set to 0(zero), the logging is disabled", NULL, NULL,
        1, 0, 1000000, 1);
 
 static MYSQL_SYSVAR_ULONGLONG(size_limit, size_limit,
@@ -58,7 +58,7 @@ static MYSQL_SYSVAR_ULONGLONG(size_limit, size_limit,
        1000000, 100, ((long long) 0x7FFFFFFFFFFFFFFFLL), 1);
 
 static MYSQL_SYSVAR_UINT(rotations, rotations,
-       PLUGIN_VAR_READONLY, "Number of rotations before log is removed.",
+       PLUGIN_VAR_READONLY, "Number of rotations before log is removed",
        NULL, NULL, 9, 1, 999, 1);
 
 static MYSQL_SYSVAR_BOOL(rotate, rotate,
@@ -72,7 +72,7 @@ static MYSQL_SYSVAR_STR(filename, filename,
 
 static MYSQL_SYSVAR_BOOL(warnings, warnings,
                          PLUGIN_VAR_OPCMDARG,
-                         "Warnings. If set to 0, warnings are not logged.",
+                         "Warnings. If set to 0, warnings are not logged",
                          NULL, NULL, 1);
 
 static MYSQL_SYSVAR_BOOL(with_db_and_thread_info, with_db_and_thread_info,
@@ -118,7 +118,7 @@ static void log_sql_errors(MYSQL_THD thd __attribute__((unused)),
         if (event->database.str)
         {
           logger_printf(logfile, "%04d-%02d-%02d %2d:%02d:%02d %lu "
-                      "%s %`s %s %d: %s : %s \n",
+                      "%s %sQ %s %d: %s : %s \n",
               t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min,
               t.tm_sec, event->general_thread_id, event->general_user,
               event->database.str, type,

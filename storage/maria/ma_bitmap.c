@@ -3346,6 +3346,10 @@ static my_bool _ma_bitmap_create_missing(MARIA_HA *info,
     goto err;
 
   share->state.state.data_file_length= (page + 1) * bitmap->block_size;
+  if (info->s->tracked &&
+      _ma_update_tmp_file_size(&share->track_data,
+                               share->state.state.data_file_length))
+    goto err;
 
  DBUG_RETURN(FALSE);
 err:

@@ -27,10 +27,6 @@
    dynamic functions, so this shouldn't be a real problem.
 */
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation				// gcc: Class implementation
-#endif
-
 #include "mariadb.h"
 #include "sql_priv.h"
 #include "unireg.h"
@@ -98,7 +94,7 @@ static const char *init_syms(udf_func *tmp, char *nm)
     if (!opt_allow_suspicious_udfs)
       return nm;
     if (thd->variables.log_warnings)
-      sql_print_warning(ER_THD(thd, ER_CANT_FIND_DL_ENTRY), nm);
+      sql_print_warning(ER_DEFAULT(ER_CANT_FIND_DL_ENTRY), nm, tmp->name.str);
   }
   return 0;
 }
@@ -168,8 +164,9 @@ void udf_init()
   init_sql_alloc(key_memory_udf_mem, &mem, UDF_ALLOC_BLOCK_SIZE, 0, MYF(0));
   THD *new_thd = new THD(0);
   if (!new_thd ||
-      my_hash_init(key_memory_udf_mem,
-                   &udf_hash,system_charset_info,32,0,0,get_hash_key, NULL, 0))
+      my_hash_init(key_memory_udf_mem, &udf_hash,
+                   Lex_ident_routine::charset_info(),
+                   32,0,0,get_hash_key, NULL, 0))
   {
     sql_print_error("Can't allocate memory for udf structures");
     my_hash_free(&udf_hash);
@@ -250,7 +247,7 @@ void udf_init()
       if (!(dl= dlopen(dlpath, RTLD_NOW)))
       {
 	/* Print warning to log */
-        sql_print_error(ER_THD(new_thd, ER_CANT_OPEN_LIBRARY),
+        sql_print_error(ER_DEFAULT(ER_CANT_OPEN_LIBRARY),
                         tmp->dl, errno, my_dlerror(dlpath));
 	/* Keep the udf in the hash so that we can remove it later */
 	continue;
@@ -263,7 +260,8 @@ void udf_init()
       const char *missing;
       if ((missing= init_syms(tmp, buf)))
       {
-        sql_print_error(ER_THD(new_thd, ER_CANT_FIND_DL_ENTRY), missing);
+        sql_print_error(ER_DEFAULT(ER_CANT_FIND_DL_ENTRY), missing,
+                        tmp->name.str);
         del_udf(tmp);
         if (new_dl)
           dlclose(dl);
@@ -603,7 +601,7 @@ int mysql_create_function(THD *thd,udf_func *udf)
     const char *missing;
     if ((missing= init_syms(udf, buf)))
     {
-      my_error(ER_CANT_FIND_DL_ENTRY, MYF(0), missing);
+      my_error(ER_CANT_FIND_DL_ENTRY, MYF(0), missing, udf->dl);
       goto err;
     }
   }

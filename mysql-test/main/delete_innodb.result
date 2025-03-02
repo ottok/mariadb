@@ -87,8 +87,8 @@ INSERT INTO t2 values (3);
 disallows sj optimization
 analyze DELETE FROM t1 WHERE c1 IN (select c2 from t2) ORDER BY c1 limit 1;
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	r_rows	filtered	r_filtered	Extra
-1	PRIMARY	t1	ALL	NULL	NULL	NULL	NULL	5	1.00	100.00	100.00	Using where; Using filesort
-2	DEPENDENT SUBQUERY	t2	ALL	NULL	NULL	NULL	NULL	1	1.00	100.00	20.00	Using where
+1	PRIMARY	t1	ALL	NULL	NULL	NULL	NULL	5	2.00	100.00	100.00	Using filesort
+1	PRIMARY	t2	ALL	NULL	NULL	NULL	NULL	1	1.00	100.00	50.00	Using where; FirstMatch(t1)
 select * from t1;
 c1
 1
@@ -130,7 +130,7 @@ o_custkey =  c_custkey and
 c_nationkey = n_nationkey and
 n_name='PERU';
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
-1	SIMPLE	nation	ref	PRIMARY,i_n_name	i_n_name	26	const	1	Using where; Using index
+1	SIMPLE	nation	ref	PRIMARY,i_n_name	i_n_name	101	const	1	Using where; Using index
 1	SIMPLE	customer	ref	PRIMARY,i_c_nationkey	i_c_nationkey	5	dbt3_s001.nation.n_nationkey	6	Using index
 1	SIMPLE	orders	ref|filter	i_o_orderdate,i_o_custkey	i_o_custkey|i_o_orderdate	5|4	dbt3_s001.customer.c_custkey	15 (8%)	Using where; Using rowid filter
 explain format=json
@@ -150,7 +150,7 @@ EXPLAIN
           "access_type": "ref",
           "possible_keys": ["PRIMARY", "i_n_name"],
           "key": "i_n_name",
-          "key_length": "26",
+          "key_length": "101",
           "used_key_parts": ["n_name"],
           "ref": ["const"],
           "loops": 1,
@@ -228,7 +228,7 @@ o_custkey =  c_custkey and
 c_nationkey = n_nationkey and
 n_name='PERU';
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
-1	SIMPLE	nation	ref	PRIMARY,i_n_name	i_n_name	26	const	1	Using where; Using index
+1	SIMPLE	nation	ref	PRIMARY,i_n_name	i_n_name	101	const	1	Using where; Using index
 1	SIMPLE	customer	ref	PRIMARY,i_c_nationkey	i_c_nationkey	5	dbt3_s001.nation.n_nationkey	6	Using index
 1	SIMPLE	orders	ref|filter	i_o_orderdate,i_o_custkey	i_o_custkey|i_o_orderdate	5|4	dbt3_s001.customer.c_custkey	15 (8%)	Using where; Using rowid filter
 explain format=json
@@ -248,7 +248,7 @@ EXPLAIN
           "access_type": "ref",
           "possible_keys": ["PRIMARY", "i_n_name"],
           "key": "i_n_name",
-          "key_length": "26",
+          "key_length": "101",
           "used_key_parts": ["n_name"],
           "ref": ["const"],
           "loops": 1,
@@ -379,7 +379,7 @@ o_custkey in (select c_custkey from customer
 where c_nationkey in (select n_nationkey from nation
 where n_name='PERU'));
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
-1	PRIMARY	nation	ref	PRIMARY,i_n_name	i_n_name	26	const	1	Using where; Using index
+1	PRIMARY	nation	ref	PRIMARY,i_n_name	i_n_name	101	const	1	Using where; Using index
 1	PRIMARY	customer	ref	PRIMARY,i_c_nationkey	i_c_nationkey	5	dbt3_s001.nation.n_nationkey	6	Using index
 1	PRIMARY	orders	ref|filter	i_o_orderdate,i_o_custkey	i_o_custkey|i_o_orderdate	5|4	dbt3_s001.customer.c_custkey	15 (8%)	Using where; Using rowid filter
 explain format=json
@@ -399,7 +399,7 @@ EXPLAIN
           "access_type": "ref",
           "possible_keys": ["PRIMARY", "i_n_name"],
           "key": "i_n_name",
-          "key_length": "26",
+          "key_length": "101",
           "used_key_parts": ["n_name"],
           "ref": ["const"],
           "loops": 1,
@@ -477,7 +477,7 @@ o_custkey in (select c_custkey from customer
 where c_nationkey in (select n_nationkey from nation
 where n_name='PERU'));
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
-1	PRIMARY	nation	ref	PRIMARY,i_n_name	i_n_name	26	const	1	Using where; Using index
+1	PRIMARY	nation	ref	PRIMARY,i_n_name	i_n_name	101	const	1	Using where; Using index
 1	PRIMARY	customer	ref	PRIMARY,i_c_nationkey	i_c_nationkey	5	dbt3_s001.nation.n_nationkey	6	Using index
 1	PRIMARY	orders	ref|filter	i_o_orderdate,i_o_custkey	i_o_custkey|i_o_orderdate	5|4	dbt3_s001.customer.c_custkey	15 (8%)	Using where; Using rowid filter
 explain format=json
@@ -497,7 +497,7 @@ EXPLAIN
           "access_type": "ref",
           "possible_keys": ["PRIMARY", "i_n_name"],
           "key": "i_n_name",
-          "key_length": "26",
+          "key_length": "101",
           "used_key_parts": ["n_name"],
           "ref": ["const"],
           "loops": 1,

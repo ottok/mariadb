@@ -234,7 +234,7 @@ do_rename_temporary(THD *thd, TABLE_LIST *ren_table, TABLE_LIST *new_table)
 
 struct rename_param
 {
-  LEX_CSTRING old_alias, new_alias;
+  Lex_ident_table old_alias, new_alias;
   LEX_CUSTRING old_version;
   handlerton *from_table_hton;
 };
@@ -260,10 +260,10 @@ struct rename_param
 
 static int
 check_rename(THD *thd, rename_param *param,
-             TABLE_LIST *ren_table,
-             const LEX_CSTRING *new_db,
-             const LEX_CSTRING *new_table_name,
-             const LEX_CSTRING *new_table_alias,
+             const TABLE_LIST *ren_table,
+             const Lex_ident_db &new_db,
+             const Lex_ident_table &new_table_name,
+             const Lex_ident_table &new_table_alias,
              bool if_exists)
 {
   DBUG_ENTER("check_rename");
@@ -273,18 +273,17 @@ check_rename(THD *thd, rename_param *param,
   if (lower_case_table_names == 2)
   {
     param->old_alias= ren_table->alias;
-    param->new_alias= *new_table_alias;
+    param->new_alias= new_table_alias;
   }
   else
   {
     param->old_alias= ren_table->table_name;
-    param->new_alias= *new_table_name;
+    param->new_alias= new_table_name;
   }
   DBUG_ASSERT(param->new_alias.str);
 
   if (!ha_table_exists(thd, &ren_table->db, &param->old_alias,
-                       &param->old_version, NULL,
-                       &param->from_table_hton) ||
+                       &param->old_version, &param->from_table_hton) ||
       !param->from_table_hton)
   {
     my_error(ER_NO_SUCH_TABLE, MYF(if_exists ? ME_NOTE : 0),
@@ -300,11 +299,11 @@ check_rename(THD *thd, rename_param *param,
       Discovery will find the old table when it's accessed
      */
     tdc_remove_table(thd, ren_table->db.str, ren_table->table_name.str);
-    quick_rm_table(thd, 0, &ren_table->db, &param->old_alias, FRM_ONLY, 0);
+    quick_rm_table(thd, 0, &ren_table->db, &param->old_alias, QRMT_FRM);
     DBUG_RETURN(-1);
   }
 
-  if (ha_table_exists(thd, new_db, &param->new_alias, NULL, NULL, 0))
+  if (ha_table_exists(thd, &new_db, &param->new_alias))
   {
     my_error(ER_TABLE_EXISTS_ERROR, MYF(0), param->new_alias.str);
     DBUG_RETURN(1);                     // This can't be skipped
@@ -335,19 +334,18 @@ check_rename(THD *thd, rename_param *param,
 */
 
 static bool
-do_rename(THD *thd, rename_param *param, DDL_LOG_STATE *ddl_log_state,
-          TABLE_LIST *ren_table, const LEX_CSTRING *new_db,
+do_rename(THD *thd, const rename_param *param, DDL_LOG_STATE *ddl_log_state,
+          TABLE_LIST *ren_table, const Lex_ident_db *new_db,
           bool skip_error, bool *force_if_exists)
 {
   int rc= 1;
   handlerton *hton;
-  LEX_CSTRING *old_alias, *new_alias;
   TRIGGER_RENAME_PARAM rename_param;
   DBUG_ENTER("do_rename");
   DBUG_PRINT("enter", ("skip_error: %d", (int) skip_error));
 
-  old_alias= &param->old_alias;
-  new_alias= &param->new_alias;
+  const Lex_ident_table * const old_alias= &param->old_alias;
+  const Lex_ident_table * const new_alias= &param->new_alias;
   hton=      param->from_table_hton;
 
   DBUG_ASSERT(!thd->locked_tables_mode);
@@ -367,11 +365,11 @@ do_rename(THD *thd, rename_param *param, DDL_LOG_STATE *ddl_log_state,
 
     /* Check if we can rename triggers */
     if (Table_triggers_list::prepare_for_rename(thd, &rename_param,
-                                                &ren_table->db,
-                                                old_alias,
-                                                &ren_table->table_name,
-                                                new_db,
-                                                new_alias))
+                                                ren_table->db,
+                                                *old_alias,
+                                                ren_table->table_name,
+                                                *new_db,
+                                                *new_alias))
       DBUG_RETURN(!skip_error);
 
     thd->replication_flags= 0;
@@ -382,7 +380,8 @@ do_rename(THD *thd, rename_param *param, DDL_LOG_STATE *ddl_log_state,
 
     debug_crash_here("ddl_log_rename_before_rename_table");
     if (!(rc= mysql_rename_table(hton, &ren_table->db, old_alias,
-                                 new_db, new_alias, &param->old_version, 0)))
+                                 new_db, new_alias, &param->old_version,
+                                 QRMT_DEFAULT)))
     {
       /* Table rename succeded.
          It's safe to start recovery at rename trigger phase
@@ -417,7 +416,7 @@ do_rename(THD *thd, rename_param *param, DDL_LOG_STATE *ddl_log_state,
         debug_crash_here("ddl_log_rename_after_failed_rename_trigger");
         (void) mysql_rename_table(hton, new_db, new_alias,
                                   &ren_table->db, old_alias, &param->old_version,
-                                  NO_FK_CHECKS);
+                                  QRMT_DEFAULT | NO_FK_CHECKS);
         debug_crash_here("ddl_log_rename_after_revert_rename_table");
         ddl_log_disable_entry(ddl_log_state);
         debug_crash_here("ddl_log_rename_after_disable_entry");
@@ -510,7 +509,7 @@ rename_tables(THD *thd, TABLE_LIST *table_list, DDL_LOG_STATE *ddl_log_state,
         when only using temporary tables.  We don't need the log as
         all temporary tables will disappear anyway in a crash.
       */
-      TABLE_PAIR *pair= (TABLE_PAIR*) thd->alloc(sizeof(*pair));
+      TABLE_PAIR *pair= thd->alloc<TABLE_PAIR>(1);
       if (! pair || tmp_tables.push_front(pair, thd->mem_root))
         goto revert_rename;
       pair->from= ren_table;
@@ -523,9 +522,9 @@ rename_tables(THD *thd, TABLE_LIST *table_list, DDL_LOG_STATE *ddl_log_state,
     {
       int error;
       rename_param param;
-      error= check_rename(thd, &param, ren_table, &new_table->db,
-                          &new_table->table_name,
-                          &new_table->alias, (skip_error || if_exists));
+      error= check_rename(thd, &param, ren_table, new_table->db,
+                          new_table->table_name,
+                          new_table->alias, (skip_error || if_exists));
       if (error < 0)
         continue;                               // Ignore rename (if exists)
       if (error > 0)

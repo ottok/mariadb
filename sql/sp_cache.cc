@@ -16,9 +16,6 @@
 #include "mariadb.h"
 #include "sql_priv.h"
 #include "unireg.h"
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation
-#endif
 #include "sp_cache.h"
 #include "sp_head.h"
 
@@ -197,7 +194,8 @@ sp_head *sp_cache_lookup(sp_cache **cp, const Database_qualified_name *name)
   sp_cache *c= *cp;
   if (! c)
     return NULL;
-  return c->lookup(buf, name->make_qname(buf, sizeof(buf), true));
+  return c->lookup(buf, name->to_identifier_chain2().
+                          make_qname_casedn_part1(buf, sizeof(buf)));
 }
 
 

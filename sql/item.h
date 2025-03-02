@@ -17,11 +17,6 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1335  USA */
 
-
-#ifdef USE_PRAGMA_INTERFACE
-#pragma interface			/* gcc class implementation */
-#endif
-
 #include "sql_priv.h"                /* STRING_BUFFER_USUAL_SIZE */
 #include "unireg.h"
 #include "sql_const.h"                 /* RAND_TABLE_BIT, MAX_FIELD_NAME */
@@ -1055,9 +1050,9 @@ public:
   */
   String str_value;
 
-  LEX_CSTRING name;			/* Name of item */
+  Lex_ident_column name;                  /* Name of item */
   /* Original item name (if it was renamed)*/
-  LEX_CSTRING orig_name;
+  Lex_ident_column orig_name;
 
   /* All common bool variables for an Item is stored here */
   item_base_t base_flags;
@@ -1153,7 +1148,7 @@ public:
     set_name(thd, str->ptr(), str->length(), str->charset());
   }
   void set_name(THD *thd, const LEX_CSTRING &str,
-                CHARSET_INFO *cs= system_charset_info)
+                CHARSET_INFO *cs= Lex_ident_column::charset_info())
   {
     set_name(thd, str.str, str.length, cs);
   }
@@ -1335,7 +1330,14 @@ public:
   {
     return type_handler()->max_display_length(this);
   }
-  const TYPELIB *get_typelib() const override { return NULL; }
+  const Type_extra_attributes type_extra_attributes() const override
+  {
+    return Type_extra_attributes();
+  }
+  Type_extra_attributes *type_extra_attributes_addr() override
+  {
+    return nullptr;
+  }
   /* optimized setting of maybe_null without jumps. Minimizes code size */
   inline void set_maybe_null(bool maybe_null_arg)
   {
@@ -1373,11 +1375,6 @@ public:
   bool is_top_level_item() const
   { return (bool) (base_flags & item_base_t::AT_TOP_LEVEL); }
 
-  void set_typelib(const TYPELIB *typelib) override
-  {
-    // Non-field Items (e.g. hybrid functions) never have ENUM/SET types yet.
-    DBUG_ASSERT(0);
-  }
   Item_cache* get_cache(THD *thd) const
   {
     return type_handler()->Item_get_cache(thd, this);
@@ -1760,6 +1757,7 @@ public:
     return Converter_double_to_longlong_with_warn(val_real(), false).result();
   }
   longlong val_int_from_str(int *error);
+  bool val_bool_from_str();
 
   /*
     Returns true if this item can be calculated during
@@ -2083,6 +2081,7 @@ public:
   }
   virtual COND *remove_eq_conds(THD *thd, Item::cond_result *cond_value,
                                 bool top_level);
+  virtual key_map part_of_sortkey() const { return key_map(0); }
   virtual void add_key_fields(JOIN *join, KEY_FIELD **key_fields,
                               uint *and_level,
                               table_map usable_tables,
@@ -2473,6 +2472,9 @@ public:
   bool cache_const_expr_analyzer(uchar **arg);
   Item* cache_const_expr_transformer(THD *thd, uchar *arg);
 
+  bool vcol_subst_analyzer(uchar **);
+  virtual Item* vcol_subst_transformer(THD *thd, uchar *arg) { return this; }
+
   virtual Item* propagate_equal_fields(THD*, const Context &, COND_EQUAL *)
   {
     return this;
@@ -2619,9 +2621,9 @@ public:
     return needs_charset_converter(1, tocs);
   }
   Item *const_charset_converter(THD *thd, CHARSET_INFO *tocs, bool lossless,
-                                const char *func_name);
+                                const Lex_ident_routine &func_name);
   Item *const_charset_converter(THD *thd, CHARSET_INFO *tocs, bool lossless)
-  { return const_charset_converter(thd, tocs, lossless, NULL); }
+  { return const_charset_converter(thd, tocs, lossless, Lex_ident_routine()); }
   void delete_self()
   {
     cleanup();
@@ -2828,7 +2830,7 @@ inline Item* get_item_copy (THD *thd, const T* item)
   if (likely(copy))
     copy->register_in(thd);
   return copy;
-}	
+}
 
 
 #ifndef DBUG_OFF
@@ -2964,6 +2966,7 @@ public:
   {
     args[arg_count++]= item;
   }
+  bool add_array_of_item_field(THD *thd, const Virtual_tmp_table &vtable);
   /**
     Extract row elements from the given position.
     For example, for this input:  (1,2),(3,4),(5,6)
@@ -3598,17 +3601,17 @@ protected:
     updated during fix_fields() to values from Field object and life-time 
     of those is shorter than life-time of Item_field.
   */
-  Lex_table_name orig_db_name;
-  Lex_table_name orig_table_name;
-  Lex_ident      orig_field_name;
+  Lex_ident_db orig_db_name;
+  Lex_ident_table orig_table_name;
+  Lex_ident_column orig_field_name;
 
   void undeclared_spvar_error() const;
 
 public:
   Name_resolution_context *context;
-  Lex_table_name db_name;
-  Lex_table_name table_name;
-  Lex_ident      field_name;
+  Lex_ident_db db_name;
+  Lex_ident_table table_name;
+  Lex_ident_column field_name;
   /*
     Cached pointer to table which contains this field, used for the same reason
     by prep. stmt. too in case then we have not-fully qualified field.
@@ -3727,6 +3730,7 @@ public:
   bool eq(const Item *item, bool binary_cmp) const override;
   double val_real() override;
   longlong val_int() override;
+  bool val_bool() override;
   my_decimal *val_decimal(my_decimal *) override;
   String *val_str(String*) override;
   void save_result(Field *to) override;
@@ -3760,6 +3764,7 @@ public:
   {
     return field->field_length;
   }
+  key_map part_of_sortkey() const override { return field->part_of_sortkey; }
   void reset_field(Field *f);
   bool fix_fields(THD *, Item **) override;
   void fix_after_pullout(st_select_lex *new_parent, Item **ref, bool merge)
@@ -3792,7 +3797,10 @@ public:
   Field *create_tmp_field_ex(MEM_ROOT *root,
                              TABLE *table, Tmp_field_src *src,
                              const Tmp_field_param *param) override;
-  const TYPELIB *get_typelib() const override { return field->get_typelib(); }
+  const Type_extra_attributes type_extra_attributes() const override
+  {
+    return field->type_extra_attributes();
+  }
   enum_monotonicity_info get_monotonicity_info() const override
   {
     return MONOTONIC_STRICT_INCREASING;
@@ -3941,8 +3949,18 @@ public:
   const Type_handler *type_handler() const override
   { return &type_handler_row; }
   uint cols() const override { return arg_count; }
-  Item* element_index(uint i) override { return arg_count ? args[i] : this; }
-  Item** addr(uint i) override { return arg_count ? args + i : NULL; }
+  Item* element_index(uint i) override
+  {
+    DBUG_ASSERT(arg_count);
+    DBUG_ASSERT(i < arg_count);
+    return args[i];
+  }
+  Item** addr(uint i) override
+  {
+    DBUG_ASSERT(arg_count);
+    DBUG_ASSERT(i < arg_count);
+    return &args[i];
+  }
   bool check_cols(uint c) override
   {
     if (cols() != c)
@@ -3952,7 +3970,6 @@ public:
     }
     return false;
   }
-  bool row_create_items(THD *thd, List<Spvar_definition> *list);
 };
 
 
@@ -4775,15 +4792,15 @@ public:
 
 class Item_static_float_func :public Item_float
 {
-  const char *func_name;
+  const Lex_ident_routine func_name;
 public:
-  Item_static_float_func(THD *thd, const char *str, double val_arg,
+  Item_static_float_func(THD *thd, const Lex_ident_routine &str, double val_arg,
                          uint decimal_par, uint length):
     Item_float(thd, NullS, val_arg, decimal_par, length), func_name(str)
   {}
   void print(String *str, enum_query_type) override
   {
-    str->append(func_name, strlen(func_name));
+    str->append(func_name);
   }
   Item *safe_charset_converter(THD *thd, CHARSET_INFO *tocs) override
   {
@@ -4814,7 +4831,7 @@ protected:
   {
     collation.set(cs, dv);
     max_length= 0;
-    set_name(thd, NULL, 0, system_charset_info);
+    set_name(thd, NULL, 0, Lex_ident_column::charset_info());
     decimals= NOT_FIXED_DEC;
   }
 public:
@@ -4822,7 +4839,7 @@ public:
    :Item_literal(thd)
   {
     collation.set(csi, DERIVATION_COERCIBLE);
-    set_name(thd, NULL, 0, system_charset_info);
+    set_name(thd, NULL, 0, Lex_ident_column::charset_info());
     decimals= NOT_FIXED_DEC;
     str_value.copy(str_arg, length_arg, csi);
     max_length= str_value.numchars() * csi->mbmaxlen;
@@ -4962,10 +4979,10 @@ class Item_string_sys :public Item_string
 {
 public:
   Item_string_sys(THD *thd, const char *str, uint length):
-    Item_string(thd, str, length, system_charset_info)
+    Item_string(thd, str, length, system_charset_info_for_i_s)
   { }
   Item_string_sys(THD *thd, const char *str):
-    Item_string(thd, str, (uint) strlen(str), system_charset_info)
+    Item_string(thd, str, (uint) strlen(str), system_charset_info_for_i_s)
   { }
   Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_string_sys>(thd, this); }
@@ -4990,14 +5007,14 @@ public:
 
 class Item_static_string_func :public Item_string
 {
-  const LEX_CSTRING func_name;
+  const Lex_ident_routine func_name;
 public:
-  Item_static_string_func(THD *thd, const LEX_CSTRING &name_par,
+  Item_static_string_func(THD *thd, const Lex_ident_routine &name_par,
                           const LEX_CSTRING &str, CHARSET_INFO *cs,
                           Derivation dv= DERIVATION_COERCIBLE):
     Item_string(thd, LEX_CSTRING({NullS,0}), str, cs, dv), func_name(name_par)
   {}
-  Item_static_string_func(THD *thd, const LEX_CSTRING &name_par,
+  Item_static_string_func(THD *thd, const Lex_ident_routine &name_par,
                           const String *str,
                           CHARSET_INFO *tocs, uint *conv_errors,
                           Derivation dv, my_repertoire_t repertoire):
@@ -5006,7 +5023,7 @@ public:
   {}
   Item *safe_charset_converter(THD *thd, CHARSET_INFO *tocs) override
   {
-    return const_charset_converter(thd, tocs, true, func_name.str);
+    return const_charset_converter(thd, tocs, true, func_name);
   }
 
   void print(String *str, enum_query_type) override
@@ -5047,8 +5064,8 @@ public:
 
 /**
   Item_empty_string -- is a utility class to put an item into List<Item>
-  which is then used in protocol.send_result_set_metadata() when sending SHOW output to
-  the client.
+  which is then used in protocol.send_result_set_metadata() when sending SHOW
+  output to the client.
 */
 
 class Item_empty_string :public Item_partition_func_safe_string
@@ -5464,6 +5481,17 @@ public:
     set_maybe_null(cached_time.check_date(TIME_NO_ZERO_DATE |
                                           TIME_NO_ZERO_IN_DATE));
   }
+  Item_datetime_literal(THD *thd, const char *name_arg,
+                        decimal_digits_t dec_arg):
+    Item_temporal_literal(thd, dec_arg),
+    cached_time(Datetime::zero())
+  {
+    max_length= MAX_DATETIME_WIDTH + (decimals ? decimals + 1 : 0);
+    set_maybe_null(true);
+    // Set the name (see also a similar code in Item_int):
+    name.str= name_arg;
+    name.length= strlen(name.str);
+  }
   const Type_handler *type_handler() const override
   { return &type_handler_datetime2; }
   void print(String *str, enum_query_type query_type) override;
@@ -5644,6 +5672,8 @@ class Item_func_or_sum: public Item_result_field,
                         public Used_tables_and_const_cache
 {
 protected:
+  bool check_fsp_or_error() const;
+
   bool agg_arg_charsets(DTCollation &c, Item **items, uint nitems,
                         uint flags, int item_sep)
   {
@@ -5821,6 +5851,8 @@ public:
      The result field of the stored function.
   */
   Field *sp_result_field;
+  Item_args sp_result_field_items;
+
   Item_sp(THD *thd, Name_resolution_context *context_arg, sp_name *name_arg);
   Item_sp(THD *thd, Item_sp *item);
   LEX_CSTRING func_name_cstring(THD *thd, bool is_package_function) const;
@@ -5968,9 +6000,13 @@ public:
   {
     return const_cast<Item_ref*>(this)->Item_ref::real_item();
   }
-  const TYPELIB *get_typelib() const override
+  const Type_extra_attributes type_extra_attributes() const override
   {
-    return ref ? (*ref)->get_typelib() : NULL;
+    return ref ? (*ref)->type_extra_attributes() : Type_extra_attributes();
+  }
+  key_map part_of_sortkey() const override
+  {
+    return ref ? (*ref)->part_of_sortkey() : Item::part_of_sortkey();
   }
 
   bool walk(Item_processor processor, bool walk_subquery, void *arg) override
@@ -6810,7 +6846,8 @@ public:
     DBUG_ASSERT(sane());
     if (null_value)
       return set_field_to_null(field);
-    Timestamp_or_zero_datetime_native native(m_value, decimals);
+    decimal_digits_t dec= MY_MIN(decimals, TIME_SECOND_PART_DIGITS);
+    Timestamp_or_zero_datetime_native native(m_value, dec);
     return native.save_in_field(field, decimals);
   }
   longlong val_int() override
@@ -6847,7 +6884,8 @@ public:
   bool val_native(THD *thd, Native *to) override
   {
     DBUG_ASSERT(sane());
-    return null_value || m_value.to_native(to, decimals);
+    decimal_digits_t dec= MY_MIN(decimals, TIME_SECOND_PART_DIGITS);
+    return null_value || m_value.to_native(to, dec);
   }
   Item *do_get_copy(THD *thd) const override
   { return get_item_copy<Item_copy_timestamp>(thd, this); }
@@ -6985,6 +7023,7 @@ public:
   bool fix_fields(THD *, Item **) override;
   void cleanup() override;
   void print(String *str, enum_query_type query_type) override;
+  bool val_bool() override;
   String *val_str(String *str) override;
   double val_real() override;
   longlong val_int() override;
@@ -7427,6 +7466,12 @@ public:
 
   const Type_handler *type_handler() const override
   { return Type_handler_hybrid_field_type::type_handler(); }
+  const Type_extra_attributes type_extra_attributes() const override
+  {
+    DBUG_ASSERT(fixed());
+    return example ? example->type_extra_attributes() :
+                     Type_extra_attributes();
+  }
   Field *create_tmp_field_ex(MEM_ROOT *root, TABLE *table, Tmp_field_src *src,
                              const Tmp_field_param *param) override
   {
@@ -7980,15 +8025,17 @@ public:
   Item_type_holder do not need cleanup() because its time of live limited by
   single SP/PS execution.
 */
-class Item_type_holder: public Item, public Type_handler_hybrid_field_type
+class Item_type_holder: public Item,
+                        public Type_handler_hybrid_field_type,
+                        public Type_extra_attributes
 {
-protected:
-  const TYPELIB *enum_set_typelib;
 public:
   Item_type_holder(THD *thd, Item *item, const Type_handler *handler,
-                   const Type_all_attributes *attr, bool maybe_null_arg)
-   :Item(thd), Type_handler_hybrid_field_type(handler),
-    enum_set_typelib(attr->get_typelib())
+                   const Type_all_attributes *attr,
+                   bool maybe_null_arg)
+   :Item(thd),
+    Type_handler_hybrid_field_type(handler),
+    Type_extra_attributes(attr->type_extra_attributes())
   {
     name= item->name;
     Type_std_attributes::set(*attr);
@@ -8008,7 +8055,14 @@ public:
   }
 
   Type type() const override { return TYPE_HOLDER; }
-  const TYPELIB *get_typelib() const override { return enum_set_typelib; }
+  Type_extra_attributes *type_extra_attributes_addr() override
+  {
+    return this;
+  }
+  const Type_extra_attributes type_extra_attributes() const override
+  {
+    return *this;
+  }
   /*
     When handling a query like this:
       VALUES ('') UNION VALUES( _utf16 0x0020 COLLATE utf16_bin);

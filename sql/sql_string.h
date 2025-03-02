@@ -20,13 +20,13 @@
 
 /* This file is originally from the mysql distribution. Coded by monty */
 
-#ifdef USE_PRAGMA_INTERFACE
-#pragma interface			/* gcc class implementation */
-#endif
+#include <my_global.h>
+#include <cmath>
 
 #include "m_ctype.h"                            /* my_charset_bin */
 #include <my_sys.h>              /* alloc_root, my_free, my_realloc */
 #include "m_string.h"                           /* TRASH */
+#include "sql_const.h"
 #include "sql_list.h"
 
 class String;
@@ -53,48 +53,6 @@ inline uint32 copy_and_convert(char *to, size_t to_length, CHARSET_INFO *to_cs,
   return my_convert(to, (uint)to_length, to_cs, from, (uint)from_length,
                     from_cs, errors);
 }
-
-
-class String_copy_status: protected MY_STRCOPY_STATUS
-{
-public:
-  const char *source_end_pos() const
-  { return m_source_end_pos; }
-  const char *well_formed_error_pos() const
-  { return m_well_formed_error_pos; }
-};
-
-
-class Well_formed_prefix_status: public String_copy_status
-{
-public:
-  Well_formed_prefix_status(CHARSET_INFO *cs,
-                            const char *str, const char *end, size_t nchars)
-  { cs->well_formed_char_length(str, end, nchars, this); }
-};
-
-
-class Well_formed_prefix: public Well_formed_prefix_status
-{
-  const char *m_str; // The beginning of the string
-public:
-  Well_formed_prefix(CHARSET_INFO *cs, const char *str, const char *end,
-                     size_t nchars)
-   :Well_formed_prefix_status(cs, str, end, nchars), m_str(str)
-  { }
-  Well_formed_prefix(CHARSET_INFO *cs, const char *str, size_t length,
-                     size_t nchars)
-   :Well_formed_prefix_status(cs, str, str + length, nchars), m_str(str)
-  { }
-  Well_formed_prefix(CHARSET_INFO *cs, const char *str, size_t length)
-   :Well_formed_prefix_status(cs, str, str + length, length), m_str(str)
-  { }
-  Well_formed_prefix(CHARSET_INFO *cs, LEX_CSTRING str, size_t nchars)
-   :Well_formed_prefix_status(cs, str.str, str.str + str.length, nchars),
-    m_str(str.str)
-  { }
-  size_t length() const { return m_source_end_pos - m_str; }
-};
 
 
 class String_copier: public String_copy_status,
@@ -939,7 +897,11 @@ public:
   bool set(ulong num, CHARSET_INFO *cs) { return set_int(num, true, cs); }
   bool set(longlong num, CHARSET_INFO *cs) { return set_int(num, false, cs); }
   bool set(ulonglong num, CHARSET_INFO *cs) { return set_int((longlong)num, true, cs); }
-  bool set_real(double num,uint decimals, CHARSET_INFO *cs);
+  bool set_real_with_type(double num, uint decimals, CHARSET_INFO *cs, my_gcvt_arg_type);
+  bool set_real(double num,uint decimals, CHARSET_INFO *cs)
+  { return set_real_with_type(num,decimals,cs,MY_GCVT_ARG_DOUBLE); }
+  bool set_real(float num,uint decimals, CHARSET_INFO *cs)
+  { return set_real_with_type(num,decimals,cs,MY_GCVT_ARG_FLOAT); }
   bool set_fcvt(double num, uint decimals)
   {
     set_charset(&my_charset_latin1);
@@ -1030,11 +992,30 @@ public:
     set_charset(tocs);
     return false;
   }
+  bool copy_casedn(CHARSET_INFO *cs, const LEX_CSTRING &str)
+  {
+    size_t nbytes= str.length * cs->casedn_multiply();
+    DBUG_ASSERT(nbytes + 1 <= UINT_MAX32);
+    if (alloc(nbytes))
+      return true;
+    str_length= (uint32) cs->casedn_z(str.str, str.length, Ptr, nbytes + 1);
+    return false;
+  }
+  bool copy_caseup(CHARSET_INFO *cs, const LEX_CSTRING &str)
+  {
+    size_t nbytes= str.length * cs->caseup_multiply();
+    DBUG_ASSERT(nbytes + 1 <= UINT_MAX32);
+    if (alloc(nbytes))
+      return true;
+    str_length= (uint32) cs->caseup_z(str.str, str.length, Ptr, nbytes + 1);
+    return false;
+  }
   // Append without character set conversion
   bool append(const String &s)
   {
     return Binary_string::append(s);
   }
+
   inline bool append(char chr)
   {
     return Binary_string::append_char(chr);

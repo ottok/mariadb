@@ -167,7 +167,7 @@ protected:
   /** Severity (error, warning, note) of this condition. */
   enum_warning_level m_level;
 
-  void assign_defaults(const Sql_state_errno *value);
+  void assign_defaults(THD *thd, const Sql_state_errno *value);
 
 public:
   /**
@@ -1332,7 +1332,8 @@ void push_warning(THD *thd, Sql_condition::enum_warning_level level,
                   uint code, const char *msg);
 
 void push_warning_printf(THD *thd, Sql_condition::enum_warning_level level,
-                         uint code, const char *format, ...);
+                         uint code, const char *format, ...)
+                         ATTRIBUTE_FORMAT(printf, 4, 5);
 
 bool mysqld_show_warnings(THD *thd, ulong levels_to_show);
 

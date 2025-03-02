@@ -1,3 +1,4 @@
+ALTER DATABASE test CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 set sql_mode="";
 CREATE TABLE t1 (a varchar(30) binary NOT NULL DEFAULT ' ',
 b varchar(1) binary NOT NULL DEFAULT ' ',
@@ -2230,7 +2231,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `a` varchar(10) DEFAULT NULL,
   `b` varchar(10) CHARACTER SET latin1 COLLATE latin1_bin DEFAULT `a`,
-  `c` varchar(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci DEFAULT convert(`a` using utf8mb3),
+  `c` varchar(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci DEFAULT convert(`a` using utf8mb3),
   `d` varbinary(10) DEFAULT (cast(`a` as char charset binary))
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
 INSERT INTO t1 (a) VALUES ('a');
@@ -2969,7 +2970,7 @@ t1	CREATE TABLE `t1` (
 INSERT INTO t1 (a) VALUES ('test');
 SELECT * FROM t1;
 a	b	c
-test	2	5
+test	2	7
 DROP TABLE t1;
 #
 # String result metadata functions
@@ -3486,3 +3487,4 @@ drop table t1;
 #
 # End of 10.4 test
 #
+ALTER DATABASE test CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;

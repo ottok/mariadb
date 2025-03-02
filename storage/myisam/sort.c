@@ -432,7 +432,7 @@ static my_bool thr_find_all_keys_exec(MI_SORT_PARAM *sort_param)
     }
     if ((sort_keys= (uchar**) my_malloc(PSI_INSTRUMENT_ME,
                     (size_t)(keys * (sort_length + sizeof(char*)) +
-                   ((sort_param->keyinfo->flag & HA_FULLTEXT) ?
+                   (sort_param->keyinfo->key_alg == HA_KEY_ALG_FULLTEXT ?
                     HA_FT_MAXBYTELEN : 0)), MYF(0))))
     {
       if (my_init_dynamic_array(PSI_INSTRUMENT_ME, &sort_param->buffpek,
@@ -530,13 +530,17 @@ pthread_handler_t thr_find_all_keys(void *arg)
   MI_SORT_PARAM *sort_param= (MI_SORT_PARAM*) arg;
   my_bool error= FALSE;
 
-  MI_SORT_INFO *si= sort_param->sort_info;
-  if (si->param->init_fix_record)
-    si->param->init_fix_record(si->info->external_ref);
-
   /* If my_thread_init fails */
-  if (my_thread_init() || thr_find_all_keys_exec(sort_param))
+  if (my_thread_init())
     error= TRUE;
+  else
+  {
+    HA_CHECK *check= sort_param->check_param;
+    if (check->init_repair_thread)
+      check->init_repair_thread(check->init_repair_thread_arg);
+    if (thr_find_all_keys_exec(sort_param))
+      error= TRUE;
+  }
 
   /*
      Thread must clean up after itself.

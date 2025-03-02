@@ -33,6 +33,7 @@ pthread_handler_t ack_receive_handler(void *arg)
   Ack_receiver *recv= reinterpret_cast<Ack_receiver *>(arg);
 
   my_thread_init();
+  my_thread_set_name("Ack_receiver");
   recv->run();
   my_thread_end();
 
@@ -244,7 +245,7 @@ void Ack_receiver::run()
 
   if (listener.got_error())
   {
-    sql_print_error("Got error %M starting ack receiver thread",
+    sql_print_error("Got error %iE starting ack receiver thread",
                     listener.got_error());
     return;
   }

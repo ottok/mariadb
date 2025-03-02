@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2002, 2016, Oracle and/or its affiliates.
-   Copyright (c) 2011, 2020, MariaDB
+   Copyright (c) 2011, 2024, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -30,10 +30,6 @@
 #include "sql_select.h"        // Virtual_tmp_table
 #include "opt_trace.h"
 #include "my_json_writer.h"
-
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation
-#endif
 #include "sp_instr.h"
 #include "sp_head.h"
 #include "sp.h"
@@ -462,8 +458,8 @@ bool THD::sp_eval_expr(Field *result_field, Item **expr_item_ptr)
 */
 
 sp_name::sp_name(const MDL_key *key, char *qname_buff)
- :Database_qualified_name(key->db_name(), key->db_name_length(),
-                          key->name(),  key->name_length()),
+ :Database_qualified_name(Lex_ident_db(key->db_name(), key->db_name_length()),
+                          Lex_cstring(key->name(),  key->name_length())),
   m_explicit_name(false)
 {
   if (m_db.length)
@@ -487,17 +483,16 @@ sp_name::sp_name(const MDL_key *key, char *qname_buff)
 */
 
 bool
-check_routine_name(const LEX_CSTRING *ident)
+Lex_ident_routine::check_name_with_error(const LEX_CSTRING &ident)
 {
-  DBUG_ASSERT(ident);
-  DBUG_ASSERT(ident->str);
+  DBUG_ASSERT(ident.str);
 
-  if (!ident->str[0] || ident->str[ident->length-1] == ' ')
+  if (!ident.str[0] || ident.str[ident.length-1] == ' ')
   {
-    my_error(ER_SP_WRONG_NAME, MYF(0), ident->str);
+    my_error(ER_SP_WRONG_NAME, MYF(0), ident.str);
     return TRUE;
   }
-  if (check_ident_length(ident))
+  if (check_ident_length(&ident))
     return TRUE;
 
   return FALSE;
@@ -511,7 +506,8 @@ check_routine_name(const LEX_CSTRING *ident)
  */
  
 sp_head *sp_head::create(sp_package *parent, const Sp_handler *handler,
-                         enum_sp_aggregate_type agg_type, MEM_ROOT *sp_mem_root)
+                         enum_sp_aggregate_type agg_type, sql_mode_t sql_mode,
+                         MEM_ROOT *sp_mem_root)
 {
   MEM_ROOT own_root;
   if (!sp_mem_root)
@@ -520,7 +516,8 @@ sp_head *sp_head::create(sp_package *parent, const Sp_handler *handler,
                    MEM_ROOT_PREALLOC, MYF(0));
     sp_mem_root= &own_root;
   }
-  return new (sp_mem_root) sp_head(sp_mem_root, parent, handler, agg_type);
+  return new (sp_mem_root) sp_head(sp_mem_root, parent, handler,
+                                   agg_type, sql_mode);
 }
 
 
@@ -546,9 +543,9 @@ void sp_head::destroy(sp_head *sp)
  */
 
 sp_head::sp_head(MEM_ROOT *mem_root_arg, sp_package *parent,
-                 const Sp_handler *sph, enum_sp_aggregate_type agg_type)
+                 const Sp_handler *sph, enum_sp_aggregate_type agg_type,
+                 sql_mode_t sql_mode)
   :Query_arena(NULL, STMT_INITIALIZED_FOR_SP),
-   Database_qualified_name(&null_clex_str, &null_clex_str),
    main_mem_root(*mem_root_arg),
 #ifdef PROTECT_STATEMENT_MEMROOT
    executed_counter(0),
@@ -557,6 +554,7 @@ sp_head::sp_head(MEM_ROOT *mem_root_arg, sp_package *parent,
    m_handler(sph),
    m_flags(0),
    m_tmp_query(NULL),
+   m_sql_mode(sql_mode),
    m_explicit_name(false),
    /*
      FIXME: the only use case when name is NULL is events, and it should
@@ -602,9 +600,11 @@ sp_head::sp_head(MEM_ROOT *mem_root_arg, sp_package *parent,
   m_lex.empty();
   my_init_dynamic_array(key_memory_sp_head_main_root, &m_instr,
                         sizeof(sp_instr *), 16, 8, MYF(0));
-  my_hash_init(key_memory_sp_head_main_root, &m_sptabs, system_charset_info, 0,
-               0, 0, sp_table_key, 0, 0);
-  my_hash_init(key_memory_sp_head_main_root, &m_sroutines, system_charset_info,
+  my_hash_init(key_memory_sp_head_main_root, &m_sptabs,
+               Lex_ident_routine::charset_info(),
+               0, 0, 0, sp_table_key, 0, 0);
+  my_hash_init(key_memory_sp_head_main_root, &m_sroutines,
+               Lex_ident_routine::charset_info(),
                0, 0, 0, sp_sroutine_key, 0, 0);
 
   DBUG_VOID_RETURN;
@@ -612,7 +612,8 @@ sp_head::sp_head(MEM_ROOT *mem_root_arg, sp_package *parent,
 
 
 sp_package *sp_package::create(LEX *top_level_lex, const sp_name *name,
-                               const Sp_handler *sph, MEM_ROOT *sp_mem_root)
+                               const Sp_handler *sph, sql_mode_t sql_mode,
+                               MEM_ROOT *sp_mem_root)
 {
   MEM_ROOT own_root;
   if (!sp_mem_root)
@@ -622,7 +623,8 @@ sp_package *sp_package::create(LEX *top_level_lex, const sp_name *name,
     sp_mem_root= &own_root;
   }
   sp_package *sp;
-  if (!(sp= new (sp_mem_root) sp_package(sp_mem_root, top_level_lex, name, sph)))
+  if (!(sp= new (sp_mem_root) sp_package(sp_mem_root, top_level_lex,
+                                         name, sph, sql_mode)))
     free_root(sp_mem_root, MYF(0));
 
   return sp;
@@ -632,8 +634,9 @@ sp_package *sp_package::create(LEX *top_level_lex, const sp_name *name,
 sp_package::sp_package(MEM_ROOT *mem_root_arg,
                        LEX *top_level_lex,
                        const sp_name *name,
-                       const Sp_handler *sph)
- :sp_head(mem_root_arg, NULL, sph, DEFAULT_AGGREGATE),
+                       const Sp_handler *sph,
+                       sql_mode_t sql_mode)
+ :sp_head(mem_root_arg, NULL, sph, DEFAULT_AGGREGATE, sql_mode),
   m_current_routine(NULL),
   m_top_level_lex(top_level_lex),
   m_rcontext(NULL),
@@ -697,8 +700,7 @@ bool sp_package::validate_public_routines(THD *thd, sp_package *spec)
     for (LEX *lex2; (lex2= it2++); )
     {
       DBUG_ASSERT(lex2->sphead);
-      if (Sp_handler::eq_routine_name(lex2->sphead->m_name,
-                                      lex->sphead->m_name) &&
+      if (Lex_ident_routine(lex2->sphead->m_name).streq(lex->sphead->m_name) &&
           lex2->sphead->eq_routine_spec(lex->sphead))
       {
         found= true;
@@ -732,8 +734,7 @@ bool sp_package::validate_private_routines(THD *thd)
     for (LEX *lex2; (lex2= it2++); )
     {
       DBUG_ASSERT(lex2->sphead);
-      if (Sp_handler::eq_routine_name(lex2->sphead->m_name,
-                                      lex->sphead->m_name) &&
+      if (Lex_ident_routine(lex2->sphead->m_name).streq(lex->sphead->m_name) &&
           lex2->sphead->eq_routine_spec(lex->sphead))
       {
         found= true;
@@ -764,10 +765,10 @@ LEX *sp_package::LexList::find(const LEX_CSTRING &name,
         (dot= strrchr(lex->sphead->m_name.str, '.')))
     {
       size_t ofs= dot + 1 - lex->sphead->m_name.str;
-      LEX_CSTRING non_qualified_sphead_name= lex->sphead->m_name;
+      Lex_ident_routine non_qualified_sphead_name(lex->sphead->m_name);
       non_qualified_sphead_name.str+= ofs;
       non_qualified_sphead_name.length-= ofs;
-      if (Sp_handler::eq_routine_name(non_qualified_sphead_name, name))
+      if (non_qualified_sphead_name.streq(name))
         return lex;
     }
   }
@@ -783,7 +784,7 @@ LEX *sp_package::LexList::find_qualified(const LEX_CSTRING &name,
   {
     DBUG_ASSERT(lex->sphead);
     if (lex->sphead->m_handler->type() == type &&
-        Sp_handler::eq_routine_name(lex->sphead->m_name, name))
+        Lex_ident_routine(lex->sphead->m_name).streq(name))
       return lex;
   }
   return NULL;
@@ -938,7 +939,9 @@ void sp_package::LexList::cleanup()
 */
 
 Field *
-sp_head::create_result_field(uint field_max_length, const LEX_CSTRING *field_name,
+sp_head::create_result_field(uint field_max_length,
+                             const LEX_CSTRING *field_name,
+                             const Column_definition &def,
                              TABLE *table) const
 {
   Field *field;
@@ -947,7 +950,7 @@ sp_head::create_result_field(uint field_max_length, const LEX_CSTRING *field_nam
   DBUG_ENTER("sp_head::create_result_field");
 
   /*
-    m_return_field_def.length is always set to the field length calculated
+    def.length is always set to the field length calculated
     by the parser, according to the RETURNS clause. See prepare_create_field()
     in sql_table.cc. Value examples, depending on data type:
     - 11 for INT                          (character representation length)
@@ -983,22 +986,22 @@ sp_head::create_result_field(uint field_max_length, const LEX_CSTRING *field_nam
     than the user specified length, e.g. a field of the INT(1) data type
     is translated to the item with max_length=11.
   */
-  DBUG_ASSERT(field_max_length <= m_return_field_def.length ||
-              m_return_field_def.type_handler()->cmp_type() == INT_RESULT ||
+  DBUG_ASSERT(field_max_length <= def.length ||
+              def.type_handler()->cmp_type() == INT_RESULT ||
               (current_thd->stmt_arena->is_stmt_execute() &&
-               m_return_field_def.length == 8 &&
-               (m_return_field_def.pack_flag &
+               def.length == 8 &&
+               (def.pack_flag &
                 (FIELDFLAG_BLOB|FIELDFLAG_GEOM))));
 
   if (field_name)
     name= *field_name;
   else
     name= m_name;
-  field= m_return_field_def.make_field(table->s, /* TABLE_SHARE ptr */
-                                       table->in_use->mem_root,
-                                       &name);
+  field= def.make_field(table->s, /* TABLE_SHARE ptr */
+                        table->in_use->mem_root,
+                        &name);
 
-  field->vcol_info= m_return_field_def.vcol_info;
+  field->vcol_info= def.vcol_info;
   if (field)
     field->init(table);
 
@@ -1891,6 +1894,8 @@ sp_head::execute_function(THD *thd, Item **argp, uint argcount,
 {
   ulonglong UNINIT_VAR(binlog_save_options);
   bool need_binlog_call= FALSE;
+  uint params= m_pcont->context_var_count();
+  uint default_params= m_pcont->default_context_var_count();
   uint arg_no;
   sp_rcontext *octx = thd->spcont;
   char buf[STRING_BUFFER_USUAL_SIZE];
@@ -1909,7 +1914,8 @@ sp_head::execute_function(THD *thd, Item **argp, uint argcount,
     If it is not, use my_error() to report an error, or it will not terminate
     the invoking query properly.
   */
-  if (argcount != m_pcont->context_var_count())
+  if (argcount < (params - default_params) ||
+      argcount > params)
   {
     /*
       Need to use my_error here, or it will not terminate the
@@ -1961,6 +1967,7 @@ sp_head::execute_function(THD *thd, Item **argp, uint argcount,
     if (err_status)
       goto err_with_cleanup;
   }
+  (*func_ctx)->set_inited_param_count(arg_no);
 
   /*
     If row-based binlogging, we don't need to binlog the function's call, let
@@ -2139,6 +2146,7 @@ sp_head::execute_procedure(THD *thd, List<Item> *args)
 {
   bool err_status= FALSE;
   uint params = m_pcont->context_var_count();
+  uint default_params= m_pcont->default_context_var_count();
   /* Query start time may be reset in a multi-stmt SP; keep this for later. */
   ulonglong utime_before_sp_exec= thd->utime_after_lock;
   sp_rcontext *save_spcont, *octx;
@@ -2152,7 +2160,8 @@ sp_head::execute_procedure(THD *thd, List<Item> *args)
   if (m_parent && m_parent->instantiate_if_needed(thd))
     DBUG_RETURN(true);
 
-  if (args->elements != params)
+  if (args->elements < (params - default_params) ||
+      args->elements > params)
   {
     my_error(ER_SP_WRONG_NO_OF_ARGS, MYF(0), "PROCEDURE",
              ErrConvDQName(this).ptr(), params, args->elements);
@@ -2220,6 +2229,7 @@ sp_head::execute_procedure(THD *thd, List<Item> *args)
       if (err_status)
         break;
     }
+    nctx->set_inited_param_count(args->elements);
 
     /*
       Okay, got values for all arguments. Close tables that might be used by
@@ -2569,7 +2579,7 @@ int
 sp_head::push_backpatch(THD *thd, sp_instr *i, sp_label *lab,
                         List<bp_t> *list, backpatch_instr_type itype)
 {
-  bp_t *bp= (bp_t *) thd->alloc(sizeof(bp_t));
+  bp_t *bp= thd->alloc<bp_t>(1);
 
   if (!bp)
     return 1;
@@ -2659,7 +2669,7 @@ sp_head::backpatch_goto(THD *thd, sp_label *lab,sp_label *lab_begin_block)
       */
       continue;
     }
-    if (lex_string_cmp(system_charset_info, &bp->lab->name, &lab->name) == 0)
+    if (bp->lab->name.streq(lab->name))
     {
       if (bp->instr_type == GOTO)
       {
@@ -3156,7 +3166,7 @@ int sp_head::add_instr(sp_instr *instr)
     if (instr_trig_fld_list)
     {
       m_cur_instr_trig_field_items.save_and_clear(instr_trig_fld_list);
-      m_trg_table_fields.link_in_list(
+      m_trg_table_fields.insert(
         instr_trig_fld_list,
         &instr_trig_fld_list->first->next_trig_field_list);
     }
@@ -3573,7 +3583,7 @@ sp_head::merge_table_list(THD *thd, TABLE_LIST *table, LEX *lex_for_tmp_check)
       }
       else
       {
-        if (!(tab= (SP_TABLE *)thd->calloc(sizeof(SP_TABLE))))
+        if (!(tab= thd->calloc<SP_TABLE>(1)))
           return FALSE;
         if ((lex_for_tmp_check->sql_command == SQLCOM_CREATE_TABLE ||
              lex_for_tmp_check->sql_command == SQLCOM_CREATE_SEQUENCE) &&
@@ -3652,7 +3662,7 @@ sp_head::add_used_tables_to_table_list(THD *thd,
     if (stab->temp)
       continue;
 
-    if (!(tab_buff= (char *)thd->alloc(ALIGN_SIZE(sizeof(TABLE_LIST)) *
+    if (!(tab_buff= thd->alloc(ALIGN_SIZE(sizeof(TABLE_LIST)) *
                                         stab->lock_count)) ||
         !(key_buff= (char*)thd->memdup(stab->qname.str,
                                        stab->qname.length)))
@@ -3704,7 +3714,7 @@ sp_add_to_query_tables(THD *thd, LEX *lex,
 {
   TABLE_LIST *table;
 
-  if (!(table= (TABLE_LIST *)thd->calloc(sizeof(TABLE_LIST))))
+  if (!(table= thd->calloc<TABLE_LIST>(1)))
     return NULL;
   if (!thd->make_lex_string(&table->db, db->str, db->length) ||
       !thd->make_lex_string(&table->table_name, name->str, name->length) ||
@@ -3930,6 +3940,38 @@ bool sp_head::spvar_fill_type_reference(THD *thd,
 }
 
 
+bool sp_head::spvar_def_fill_type_reference(THD *thd, Spvar_definition *def,
+                                 const LEX_CSTRING &table,
+                                 const LEX_CSTRING &column)
+{
+  Qualified_column_ident *ref;
+  if (!(ref= new (thd->mem_root) Qualified_column_ident(&table, &column)))
+    return true;
+  
+  def->set_column_type_ref(ref);
+  m_flags|= sp_head::HAS_COLUMN_TYPE_REFS;
+
+  return false;
+}
+
+
+bool sp_head::spvar_def_fill_type_reference(THD *thd, Spvar_definition *def,
+                                const LEX_CSTRING &db,
+                                const LEX_CSTRING &table,
+                                const LEX_CSTRING &column)
+{
+  Qualified_column_ident *ref;
+  if (!(ref= new (thd->mem_root) Qualified_column_ident(thd, &db, &table,
+                                                        &column)))
+    return true;
+  
+  def->set_column_type_ref(ref);
+  m_flags|= sp_head::HAS_COLUMN_TYPE_REFS;
+
+  return false;
+}
+
+
 bool sp_head::spvar_fill_table_rowtype_reference(THD *thd,
                                                  sp_variable *spvar,
                                                  const LEX_CSTRING &table)
@@ -3997,7 +4039,7 @@ bool sp_head::check_group_aggregate_instructions_function() const
 
 bool sp_head::check_package_routine_end_name(const LEX_CSTRING &end_name) const
 {
-  LEX_CSTRING non_qualified_name= m_name;
+  Lex_ident_routine non_qualified_name(m_name);
   const char *errpos;
   size_t ofs;
   if (!end_name.length)
@@ -4011,7 +4053,7 @@ bool sp_head::check_package_routine_end_name(const LEX_CSTRING &end_name) const
   ofs= errpos - m_name.str;
   non_qualified_name.str+= ofs;
   non_qualified_name.length-= ofs;
-  if (Sp_handler::eq_routine_name(end_name, non_qualified_name))
+  if (non_qualified_name.streq(end_name))
     return false;
 err:
   my_error(ER_END_IDENTIFIER_DOES_NOT_MATCH, MYF(0), end_name.str, errpos);
@@ -4022,7 +4064,7 @@ err:
 bool
 sp_head::check_standalone_routine_end_name(const sp_name *end_name) const
 {
-  if (end_name && !end_name->eq(this))
+  if (end_name && !end_name->eq_routine_name(this))
   {
     my_error(ER_END_IDENTIFIER_DOES_NOT_MATCH, MYF(0),
              ErrConvDQName(end_name).ptr(), ErrConvDQName(this).ptr());

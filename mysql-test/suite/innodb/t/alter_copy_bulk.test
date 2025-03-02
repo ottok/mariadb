@@ -21,7 +21,7 @@ ALTER TABLE t1 ALGORITHM=COPY, ADD PRIMARY KEY(f1(2));
 INSERT INTO t1 VALUES(repeat('a', 200), 1);
 # Error while applying the bulk insert operation
 --error ER_DUP_ENTRY
-ALTER TABLE t1 ADD UNIQUE KEY(f2);
+ALTER TABLE t1 ALGORITHM=COPY, ADD UNIQUE KEY(f2);
 
 # Ignore shouldn't go through bulk operation
 ALTER IGNORE TABLE t1 MODIFY f1 CHAR(200) NOT NULL;
@@ -88,7 +88,8 @@ DROP TABLE t1, t2, t;
 --echo #  MDEV-35475 Assertion `!rec_offs_nth_extern(offsets1, n)'
 --echo #            failed in cmp_rec_rec_simple_field
 --echo #
-CREATE TABLE t1(a BLOB, b VARCHAR(2048), PRIMARY KEY (b)) ENGINE=InnoDB;
+CREATE TABLE t1(a BLOB, b VARCHAR(2048), PRIMARY KEY (b)) ENGINE=InnoDB
+CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 INSERT INTO t1 VALUES
  (REPEAT('x',4805),'a'), (REPEAT('x',16111),'b'),
  (REPEAT('x',65535),'c'), (REPEAT('x',11312),'d'),

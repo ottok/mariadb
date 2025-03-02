@@ -55,33 +55,6 @@ static unsigned long lfactor[9]=
 
 
 #ifdef HAVE_CHARSET_mb2_or_mb4
-static size_t
-my_caseup_str_mb2_or_mb4(CHARSET_INFO * cs  __attribute__((unused)), 
-                         char * s __attribute__((unused)))
-{
-  DBUG_ASSERT(0);
-  return 0;
-}
-
-
-static size_t
-my_casedn_str_mb2_or_mb4(CHARSET_INFO *cs __attribute__((unused)), 
-                         char * s __attribute__((unused)))
-{
-  DBUG_ASSERT(0);
-  return 0;
-}
-
-
-static int
-my_strcasecmp_mb2_or_mb4(CHARSET_INFO *cs __attribute__((unused)),
-                         const char *s __attribute__((unused)),
-                         const char *t __attribute__((unused)))
-{
-  DBUG_ASSERT(0);
-  return 0;
-}
-
 
 typedef enum
 {
@@ -820,6 +793,65 @@ cnv:
   return (int) (dst -db);
 }
 
+
+static inline my_bool
+my_char_eq_mb2_or_mb4_general_ci(CHARSET_INFO *cs, my_wc_t wc1, my_wc_t wc2)
+{
+  DBUG_ASSERT((cs->state & MY_CS_BINSORT) == 0);
+  return my_casefold_char_eq_general_ci(cs->casefold, wc1, wc2);
+}
+
+
+static inline my_bool
+my_char_eq_mb2_or_mb4_bin(CHARSET_INFO *cs, my_wc_t wc1, my_wc_t wc2)
+{
+  DBUG_ASSERT((cs->state & MY_CS_BINSORT) != 0);
+  return wc1 == wc2;
+}
+
+
+/*
+  my_wildcmp_mb2_or_mb4_general_ci_impl()
+  A generic function for ucs2, utf16, utf32, for general_ci-style collations.
+*/
+#define MY_FUNCTION_NAME(x)       my_ ## x ## _mb2_or_mb4_general_ci_impl
+#define MY_MB_WC(cs, pwc, s, e)   ((cs)->cset->mb_wc)(cs, pwc, s, e)
+#define MY_CHAR_EQ(cs, wc1, wc2)  my_char_eq_mb2_or_mb4_general_ci(cs, wc1, wc2)
+#include "ctype-wildcmp.inl"
+
+
+static int
+my_wildcmp_mb2_or_mb4_general_ci(CHARSET_INFO *cs,
+                                 const char *str,const char *str_end,
+                                 const char *wildstr,const char *wildend,
+                                 int escape, int w_one, int w_many)
+{
+  return my_wildcmp_mb2_or_mb4_general_ci_impl(cs, str, str_end,
+                                               wildstr, wildend,
+                                               escape, w_one, w_many, 1);
+}
+
+
+/*
+  my_wildcmp_mb2_or_mb4_bin_impl()
+  A generic function for ucs2, utf16, utf32, for _bin collations.
+*/
+#define MY_FUNCTION_NAME(x)       my_ ## x ## _mb2_or_mb4_bin_impl
+#define MY_MB_WC(cs, pwc, s, e)   ((cs)->cset->mb_wc)(cs, pwc, s, e)
+#define MY_CHAR_EQ(cs, wc1, wc2)  my_char_eq_mb2_or_mb4_bin(cs, wc1, wc2)
+#include "ctype-wildcmp.inl"
+
+
+static int
+my_wildcmp_mb2_or_mb4_bin(CHARSET_INFO *cs,
+                          const char *str,const char *str_end,
+                          const char *wildstr,const char *wildend,
+                          int escape, int w_one, int w_many)
+{
+  return my_wildcmp_mb2_or_mb4_bin_impl(cs, str, str_end, wildstr, wildend,
+                                        escape, w_one, w_many, 1);
+}
+
 #endif /* HAVE_CHARSET_mb2_or_mb4 */
 
 
@@ -1435,29 +1467,6 @@ my_charpos_utf16(CHARSET_INFO *cs,
 }
 
 
-static int
-my_wildcmp_utf16_ci(CHARSET_INFO *cs,
-                    const char *str,const char *str_end,
-                    const char *wildstr,const char *wildend,
-                    int escape, int w_one, int w_many)
-{
-  MY_CASEFOLD_INFO *uni_plane= cs->casefold;
-  return my_wildcmp_unicode(cs, str, str_end, wildstr, wildend,
-                            escape, w_one, w_many, uni_plane); 
-}
-
-
-static int
-my_wildcmp_utf16_bin(CHARSET_INFO *cs,
-                     const char *str,const char *str_end,
-                     const char *wildstr,const char *wildend,
-                     int escape, int w_one, int w_many)
-{
-  return my_wildcmp_unicode(cs, str, str_end, wildstr, wildend,
-                            escape, w_one, w_many, NULL); 
-}
-
-
 static void
 my_hash_sort_utf16_nopad_bin(CHARSET_INFO *cs  __attribute__((unused)),
                              const uchar *pos, size_t len,
@@ -1493,8 +1502,7 @@ static MY_COLLATION_HANDLER my_collation_utf16_general_ci_handler =
   my_strnxfrm_utf16_general_ci,
   my_strnxfrmlen_unicode,
   my_like_range_generic,
-  my_wildcmp_utf16_ci,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_general_ci,
   my_instr_mb,
   my_hash_sort_utf16,
   my_propagate_simple,
@@ -1514,8 +1522,7 @@ static MY_COLLATION_HANDLER my_collation_utf16_bin_handler =
   my_strnxfrm_unicode_full_bin,
   my_strnxfrmlen_unicode_full_bin,
   my_like_range_generic,
-  my_wildcmp_utf16_bin,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_bin,
   my_instr_mb,
   my_hash_sort_utf16_bin,
   my_propagate_simple,
@@ -1535,8 +1542,7 @@ static MY_COLLATION_HANDLER my_collation_utf16_general_nopad_ci_handler =
   my_strnxfrm_nopad_utf16_general_ci,
   my_strnxfrmlen_unicode,
   my_like_range_generic,
-  my_wildcmp_utf16_ci,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_general_ci,
   my_instr_mb,
   my_hash_sort_utf16_nopad,
   my_propagate_simple,
@@ -1556,8 +1562,7 @@ static MY_COLLATION_HANDLER my_collation_utf16_nopad_bin_handler =
   my_strnxfrm_unicode_full_nopad_bin,
   my_strnxfrmlen_unicode_full_bin,
   my_like_range_generic,
-  my_wildcmp_utf16_bin,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_bin,
   my_instr_mb,
   my_hash_sort_utf16_nopad_bin,
   my_propagate_simple,
@@ -1578,8 +1583,6 @@ MY_CHARSET_HANDLER my_charset_utf16_handler=
   my_utf16_uni,        /* mb_wc        */
   my_uni_utf16,        /* wc_mb        */
   my_mb_ctype_mb,
-  my_caseup_str_mb2_or_mb4,
-  my_casedn_str_mb2_or_mb4,
   my_caseup_utf16,
   my_casedn_utf16,
   my_snprintf_mb2,
@@ -1846,8 +1849,7 @@ static MY_COLLATION_HANDLER my_collation_utf16le_general_ci_handler =
   my_strnxfrm_utf16le_general_ci,
   my_strnxfrmlen_unicode,
   my_like_range_generic,
-  my_wildcmp_utf16_ci,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_general_ci,
   my_instr_mb,
   my_hash_sort_utf16,
   my_propagate_simple,
@@ -1867,8 +1869,7 @@ static MY_COLLATION_HANDLER my_collation_utf16le_bin_handler =
   my_strnxfrm_unicode_full_bin,
   my_strnxfrmlen_unicode_full_bin,
   my_like_range_generic,
-  my_wildcmp_utf16_bin,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_bin,
   my_instr_mb,
   my_hash_sort_utf16_bin,
   my_propagate_simple,
@@ -1888,8 +1889,7 @@ static MY_COLLATION_HANDLER my_collation_utf16le_general_nopad_ci_handler =
   my_strnxfrm_nopad_utf16le_general_ci,
   my_strnxfrmlen_unicode,
   my_like_range_generic,
-  my_wildcmp_utf16_ci,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_general_ci,
   my_instr_mb,
   my_hash_sort_utf16_nopad,
   my_propagate_simple,
@@ -1909,8 +1909,7 @@ static MY_COLLATION_HANDLER my_collation_utf16le_nopad_bin_handler =
   my_strnxfrm_unicode_full_nopad_bin,
   my_strnxfrmlen_unicode_full_bin,
   my_like_range_generic,
-  my_wildcmp_utf16_bin,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_bin,
   my_instr_mb,
   my_hash_sort_utf16_nopad_bin,
   my_propagate_simple,
@@ -1931,8 +1930,6 @@ static MY_CHARSET_HANDLER my_charset_utf16le_handler=
   my_utf16le_uni,      /* mb_wc        */
   my_uni_utf16le,      /* wc_mb        */
   my_mb_ctype_mb,
-  my_caseup_str_mb2_or_mb4,
-  my_casedn_str_mb2_or_mb4,
   my_caseup_utf16,
   my_casedn_utf16,
   my_snprintf_mb2,
@@ -2590,29 +2587,6 @@ void my_fill_utf32(CHARSET_INFO *cs,
 }
 
 
-static int
-my_wildcmp_utf32_ci(CHARSET_INFO *cs,
-                    const char *str, const char *str_end,
-                    const char *wildstr, const char *wildend,
-                    int escape, int w_one, int w_many)
-{
-  MY_CASEFOLD_INFO *uni_plane= cs->casefold;
-  return my_wildcmp_unicode(cs, str, str_end, wildstr, wildend,
-                            escape, w_one, w_many, uni_plane); 
-}
-
-
-static int
-my_wildcmp_utf32_bin(CHARSET_INFO *cs,
-                     const char *str,const char *str_end,
-                     const char *wildstr,const char *wildend,
-                     int escape, int w_one, int w_many)
-{
-  return my_wildcmp_unicode(cs, str, str_end, wildstr, wildend,
-                            escape, w_one, w_many, NULL); 
-}
-
-
 static size_t
 my_scan_utf32(CHARSET_INFO *cs,
               const char *str, const char *end, int sequence_type)
@@ -2649,8 +2623,7 @@ static MY_COLLATION_HANDLER my_collation_utf32_general_ci_handler =
   my_strnxfrm_utf32_general_ci,
   my_strnxfrmlen_unicode,
   my_like_range_generic,
-  my_wildcmp_utf32_ci,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_general_ci,
   my_instr_mb,
   my_hash_sort_utf32,
   my_propagate_simple,
@@ -2670,8 +2643,7 @@ static MY_COLLATION_HANDLER my_collation_utf32_bin_handler =
   my_strnxfrm_unicode_full_bin,
   my_strnxfrmlen_unicode_full_bin,
   my_like_range_generic,
-  my_wildcmp_utf32_bin,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_bin,
   my_instr_mb,
   my_hash_sort_utf32,
   my_propagate_simple,
@@ -2691,8 +2663,7 @@ static MY_COLLATION_HANDLER my_collation_utf32_general_nopad_ci_handler =
   my_strnxfrm_nopad_utf32_general_ci,
   my_strnxfrmlen_unicode,
   my_like_range_generic,
-  my_wildcmp_utf32_ci,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_general_ci,
   my_instr_mb,
   my_hash_sort_utf32_nopad,
   my_propagate_simple,
@@ -2712,8 +2683,7 @@ static MY_COLLATION_HANDLER my_collation_utf32_nopad_bin_handler =
   my_strnxfrm_unicode_full_nopad_bin,
   my_strnxfrmlen_unicode_full_bin,
   my_like_range_generic,
-  my_wildcmp_utf32_bin,
-  my_strcasecmp_mb2_or_mb4,
+  my_wildcmp_mb2_or_mb4_bin,
   my_instr_mb,
   my_hash_sort_utf32_nopad,
   my_propagate_simple,
@@ -2734,8 +2704,6 @@ MY_CHARSET_HANDLER my_charset_utf32_handler=
   my_utf32_uni,
   my_uni_utf32,
   my_mb_ctype_mb,
-  my_caseup_str_mb2_or_mb4,
-  my_casedn_str_mb2_or_mb4,
   my_caseup_utf32,
   my_casedn_utf32,
   my_snprintf_utf32,
@@ -3188,29 +3156,6 @@ my_well_formed_char_length_ucs2(CHARSET_INFO *cs __attribute__((unused)),
 }
 
 
-static
-int my_wildcmp_ucs2_ci(CHARSET_INFO *cs,
-		    const char *str,const char *str_end,
-		    const char *wildstr,const char *wildend,
-		    int escape, int w_one, int w_many)
-{
-  MY_CASEFOLD_INFO *uni_plane= cs->casefold;
-  return my_wildcmp_unicode(cs,str,str_end,wildstr,wildend,
-                            escape,w_one,w_many,uni_plane); 
-}
-
-
-static
-int my_wildcmp_ucs2_bin(CHARSET_INFO *cs,
-		    const char *str,const char *str_end,
-		    const char *wildstr,const char *wildend,
-		    int escape, int w_one, int w_many)
-{
-  return my_wildcmp_unicode(cs,str,str_end,wildstr,wildend,
-                            escape,w_one,w_many,NULL); 
-}
-
-
 static void
 my_hash_sort_ucs2_nopad_bin(CHARSET_INFO *cs __attribute__((unused)),
                             const uchar *key, size_t len,
@@ -3245,8 +3190,7 @@ static MY_COLLATION_HANDLER my_collation_ucs2_general_ci_handler =
     my_strnxfrm_ucs2_general_ci,
     my_strnxfrmlen_unicode,
     my_like_range_generic,
-    my_wildcmp_ucs2_ci,
-    my_strcasecmp_mb2_or_mb4,
+    my_wildcmp_mb2_or_mb4_general_ci,
     my_instr_mb,
     my_hash_sort_ucs2,
     my_propagate_simple,
@@ -3266,8 +3210,7 @@ static MY_COLLATION_HANDLER my_collation_ucs2_general_mysql500_ci_handler =
     my_strnxfrm_ucs2_general_mysql500_ci,
     my_strnxfrmlen_unicode,
     my_like_range_generic,
-    my_wildcmp_ucs2_ci,
-    my_strcasecmp_mb2_or_mb4,
+    my_wildcmp_mb2_or_mb4_general_ci,
     my_instr_mb,
     my_hash_sort_ucs2,
     my_propagate_simple,
@@ -3287,8 +3230,7 @@ static MY_COLLATION_HANDLER my_collation_ucs2_bin_handler =
     my_strnxfrm_ucs2_bin,
     my_strnxfrmlen_unicode,
     my_like_range_generic,
-    my_wildcmp_ucs2_bin,
-    my_strcasecmp_mb2_or_mb4,
+    my_wildcmp_mb2_or_mb4_bin,
     my_instr_mb,
     my_hash_sort_ucs2_bin,
     my_propagate_simple,
@@ -3308,8 +3250,7 @@ static MY_COLLATION_HANDLER my_collation_ucs2_general_nopad_ci_handler =
     my_strnxfrm_nopad_ucs2_general_ci,
     my_strnxfrmlen_unicode,
     my_like_range_generic,
-    my_wildcmp_ucs2_ci,
-    my_strcasecmp_mb2_or_mb4,
+    my_wildcmp_mb2_or_mb4_general_ci,
     my_instr_mb,
     my_hash_sort_ucs2_nopad,
     my_propagate_simple,
@@ -3329,8 +3270,7 @@ static MY_COLLATION_HANDLER my_collation_ucs2_nopad_bin_handler =
     my_strnxfrm_nopad_ucs2_bin,
     my_strnxfrmlen_unicode,
     my_like_range_generic,
-    my_wildcmp_ucs2_bin,
-    my_strcasecmp_mb2_or_mb4,
+    my_wildcmp_mb2_or_mb4_bin,
     my_instr_mb,
     my_hash_sort_ucs2_nopad_bin,
     my_propagate_simple,
@@ -3351,8 +3291,6 @@ MY_CHARSET_HANDLER my_charset_ucs2_handler=
     my_ucs2_uni,	/* mb_wc        */
     my_uni_ucs2,	/* wc_mb        */
     my_mb_ctype_mb,
-    my_caseup_str_mb2_or_mb4,
-    my_casedn_str_mb2_or_mb4,
     my_caseup_ucs2,
     my_casedn_ucs2,
     my_snprintf_mb2,

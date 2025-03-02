@@ -426,7 +426,7 @@ def					ORD('a')	3	7	2	N	32897	0	63
 def					CRC32('a')	3	10	10	N	32929	0	63
 def					UNCOMPRESSED_LENGTH(COMPRESS('a'))	3	10	1	Y	32896	0	63
 STRCMP('a','b')	OCTET_LENGTH('a')	CHAR_LENGTH('a')	COERCIBILITY('a')	ASCII('a')	ORD('a')	CRC32('a')	UNCOMPRESSED_LENGTH(COMPRESS('a'))
--1	1	1	4	97	97	3904355907	1
+-1	1	1	6	97	97	3904355907	1
 SELECT
 INTERVAL(2,1,2,3),
 REGEXP_INSTR('a','a'),
@@ -789,8 +789,8 @@ CREATE TABLE t1 AS SELECT @a;
 SHOW CREATE TABLE t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `@a` longtext DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
+  `@a` longtext CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 DROP TABLE t1;
 SELECT @b1:=10, @b2:=@b2:=111111111111;
 Catalog	Database	Table	Table_alias	Column	Column_alias	Type	Length	Max length	Is_null	Flags	Decimals	Charsetnr
@@ -804,7 +804,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `@b1:=10` int(2) NOT NULL,
   `@b2:=111111111111` bigint(12) NOT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 DROP TABLE t1;
 #
 # End of 10.3 tests

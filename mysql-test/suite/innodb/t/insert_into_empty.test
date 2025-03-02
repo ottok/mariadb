@@ -560,11 +560,7 @@ DROP TABLE t;
 --echo #
 CREATE TABLE t (id INT) ENGINE=InnoDB;
 --replace_result $MYSQLTEST_VARDIR VARDIR
---disable_cursor_protocol
---disable_ps2_protocol
 eval select 1 into outfile "$MYSQLTEST_VARDIR/tmp/t.outfile";
---enable_ps2_protocol
---enable_cursor_protocol
 BEGIN;
 --replace_result $MYSQLTEST_VARDIR VARDIR
 eval LOAD DATA INFILE '$MYSQLTEST_VARDIR/tmp/t.outfile' INTO TABLE t;
@@ -600,7 +596,8 @@ if ($page_size >= 16384) {
 --echo #  MDEV-35475 Assertion `!rec_offs_nth_extern(offsets1, n)'
 --echo #               failed in cmp_rec_rec_simple_field
 --echo #
-CREATE TABLE t1(a BLOB, b VARCHAR(2048), PRIMARY KEY (b)) ENGINE=InnoDB;
+CREATE TABLE t1(a BLOB, b VARCHAR(2048), PRIMARY KEY (b)) ENGINE=InnoDB
+CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 INSERT INTO t1 VALUES (REPEAT('x',4805),'a'), (REPEAT('x',16111),'b'),
                       (REPEAT('x',65535),'c'), (REPEAT('x',11312),'d'),
                       (REPEAT('x',35177),'e'), (REPEAT('x',65535),'f'),

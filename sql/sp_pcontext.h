@@ -18,10 +18,6 @@
 #ifndef _SP_PCONTEXT_H_
 #define _SP_PCONTEXT_H_
 
-#ifdef USE_PRAGMA_INTERFACE
-#pragma interface			/* gcc class implementation */
-#endif
-
 #include "sql_string.h"                         // LEX_STRING
 #include "field.h"                              // Create_field
 #include "sql_array.h"                          // Dynamic_array
@@ -41,7 +37,7 @@ public:
   };
 
   /// Name of the SP-variable.
-  LEX_CSTRING name;
+  Lex_ident_column name;
 
   /// Mode of the SP-variable.
   enum_mode mode;
@@ -116,7 +112,7 @@ public:
   };
 
   /// Name of the label.
-  LEX_CSTRING name;
+  Lex_ident_column name;
 
   /// Instruction pointer of the label.
   uint ip;
@@ -242,28 +238,20 @@ class sp_condition : public Sql_alloc
 {
 public:
   /// Name of the condition.
-  LEX_CSTRING name;
+  Lex_ident_column name;
 
   /// Value of the condition.
   sp_condition_value *value;
 
 public:
-  sp_condition(const LEX_CSTRING *name_arg, sp_condition_value *value_arg)
+  sp_condition(const Lex_ident_column &name_arg, sp_condition_value *value_arg)
    :Sql_alloc(),
-    name(*name_arg),
+    name(name_arg),
     value(value_arg)
   { }
-  sp_condition(const char *name_arg, size_t name_length_arg,
-               sp_condition_value *value_arg)
-   :value(value_arg)
-  {
-    name.str=    name_arg;
-    name.length= name_length_arg;
-  }
   bool eq_name(const LEX_CSTRING *str) const
   {
-    return system_charset_info->strnncoll(name.str, name.length,
-                                          str->str, str->length) == 0;
+    return name.streq(*str);
   }
 };
 
@@ -286,14 +274,14 @@ public:
     Note, m_param_context can be not NULL, but have no variables.
     This is also means a cursor with no parameters (similar to NULL).
 */
-class sp_pcursor: public LEX_CSTRING
+class sp_pcursor: public Lex_ident_column
 {
   class sp_pcontext *m_param_context; // Formal parameters
   class sp_lex_cursor *m_lex;         // The cursor statement LEX
 public:
   sp_pcursor(const LEX_CSTRING *name, class sp_pcontext *param_ctx,
              class sp_lex_cursor *lex)
-   :LEX_CSTRING(*name), m_param_context(param_ctx), m_lex(lex)
+   :Lex_ident_column(*name), m_param_context(param_ctx), m_lex(lex)
   { }
   class sp_pcontext *param_context() const { return m_param_context; }
   class sp_lex_cursor *lex() const { return m_lex; }
@@ -331,6 +319,31 @@ public:
     type(_type)
   { }
 };
+
+
+///////////////////////////////////////////////////////////////////////////
+
+/// This class represents 'DECLARE RECORD' statement.
+
+class sp_record : public Sql_alloc
+{
+public:
+  /// Name of the record.
+  Lex_ident_column name;
+  Row_definition_list *field;
+
+public:
+  sp_record(const Lex_ident_column &name_arg, Row_definition_list *prmfield) 
+   :Sql_alloc(),
+    name(name_arg),
+    field(prmfield)
+  { }
+  bool eq_name(const LEX_CSTRING *str) const
+  {
+    return name.streq(*str);
+  }
+};
+
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -467,6 +480,9 @@ public:
     DBUG_ASSERT(i < m_vars.elements());
     return m_vars.at(i);
   }
+
+  /// @return the number of variables with default values in this context.
+  uint default_context_var_count() const;
 
   /*
     Return the i-th last context variable.
@@ -605,7 +621,7 @@ public:
   // Conditions.
   /////////////////////////////////////////////////////////////////////////
 
-  bool add_condition(THD *thd, const LEX_CSTRING *name,
+  bool add_condition(THD *thd, const Lex_ident_column &name,
                                sp_condition_value *value);
 
   /// See comment for find_variable() above.
@@ -615,12 +631,12 @@ public:
   sp_condition_value *
   find_declared_or_predefined_condition(THD *thd, const LEX_CSTRING *name) const;
 
-  bool declare_condition(THD *thd, const LEX_CSTRING *name,
+  bool declare_condition(THD *thd, const Lex_ident_column &name,
                                    sp_condition_value *val)
   {
-    if (find_condition(name, true))
+    if (find_condition(&name, true))
     {
-      my_error(ER_SP_DUP_COND, MYF(0), name->str);
+      my_error(ER_SP_DUP_COND, MYF(0), name.str);
       return true;
     }
     return add_condition(thd, name, val);
@@ -708,6 +724,29 @@ public:
     return m_for_loop;
   }
 
+  /////////////////////////////////////////////////////////////////////////
+  // Record.
+  /////////////////////////////////////////////////////////////////////////
+
+  bool add_record(THD *thd,
+                  const Lex_ident_column &name,
+                  Row_definition_list *field);
+
+  sp_record *find_record(const LEX_CSTRING *name,
+                         bool current_scope_only) const;
+
+  bool declare_record(THD *thd,
+                      const Lex_ident_column &name,
+                      Row_definition_list *field)
+  {
+    if (find_record(&name, true))
+    {
+      my_error(ER_SP_DUP_DECL, MYF(0), name.str);
+      return true;
+    }
+    return add_record(thd, name, field);
+  }
+
 private:
   /// Constructor for a tree node.
   /// @param prev the parent parsing context
@@ -771,6 +810,9 @@ private:
 
   /// Stack of SQL-handlers.
   Dynamic_array<sp_handler *> m_handlers;
+
+  /// Stack of records.
+  Dynamic_array<sp_record *> m_records;
 
   /*
    In the below example the label <<lab>> has two meanings:

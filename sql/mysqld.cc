@@ -120,7 +120,7 @@
 #include "sp_cache.h"
 #include "sql_reload.h"  // reload_acl_and_cache
 #include "sp_head.h"  // init_sp_psi_keys
-
+#include "log_cache.h"
 #include <mysqld_default_groups.h>
 
 #ifdef HAVE_POLL_H
@@ -285,6 +285,7 @@ extern "C"
 {
   static void my_malloc_size_cb_func(long long size,
                                      my_bool is_thread_specific);
+  static int temp_file_size_cb_func(struct tmp_file_tracking *track, int no_error);
 }
 
 /* Constants */
@@ -347,12 +348,15 @@ static char *lc_messages;
 static char *lc_time_names_name;
 char *my_bind_addr_str;
 static char *default_collation_name;
-char *default_storage_engine, *default_tmp_storage_engine;
-char *enforced_storage_engine=NULL;
+const char *default_storage_engine, *default_tmp_storage_engine;
+const char *enforced_storage_engine=NULL;
 char *gtid_pos_auto_engines;
 plugin_ref *opt_gtid_pos_auto_plugins;
 static char compiled_default_collation_name[]= MYSQL_DEFAULT_COLLATION_NAME;
-static const char *character_set_collations_str= "";
+static const char *character_set_collations_str=
+  "utf8mb3=uca1400_ai_ci,utf8mb4=uca1400_ai_ci,ucs2=uca1400_ai_ci,"
+  "utf16=uca1400_ai_ci,utf32=uca1400_ai_ci";
+
 Thread_cache thread_cache;
 static bool binlog_format_used= false;
 LEX_STRING opt_init_connect, opt_init_slave;
@@ -451,7 +455,7 @@ my_bool opt_master_verify_checksum= 0;
 my_bool opt_slave_sql_verify_checksum= 1;
 const char *binlog_format_names[]= {"MIXED", "STATEMENT", "ROW", NullS};
 volatile sig_atomic_t calling_initgroups= 0; /**< Used in SIGSEGV handler. */
-uint mysqld_port, select_errors, dropping_tables, ha_open_options;
+uint mysqld_port, select_errors, ha_open_options;
 uint mysqld_extra_port;
 uint mysqld_port_timeout;
 ulong delay_key_write_options;
@@ -479,6 +483,8 @@ ulong slave_run_triggers_for_rbr= 0;
 ulong slave_ddl_exec_mode_options= SLAVE_EXEC_MODE_IDEMPOTENT;
 ulonglong slave_type_conversions_options;
 ulong thread_cache_size=0;
+ulonglong global_max_tmp_space_usage;
+Atomic_counter<ulonglong> global_tmp_space_used;
 ulonglong binlog_cache_size=0;
 ulonglong binlog_file_cache_size=0;
 uint slave_connections_needed_for_purge;
@@ -488,6 +494,7 @@ uint internal_slave_connections_needed_for_purge;
 ulong slave_max_allowed_packet= 0;
 double slave_max_statement_time_double;
 ulonglong slave_max_statement_time;
+double slave_abort_blocking_timeout;
 ulonglong binlog_stmt_cache_size=0;
 ulonglong  max_binlog_stmt_cache_size=0;
 ulonglong test_flags;
@@ -596,7 +603,7 @@ const double log_10[] = {
   1e300, 1e301, 1e302, 1e303, 1e304, 1e305, 1e306, 1e307, 1e308
 };
 
-time_t server_start_time, flush_status_time;
+time_t server_start_time;
 
 char mysql_home[FN_REFLEN], pidfile_name[FN_REFLEN], system_time_zone[30];
 char *default_tz_name;
@@ -627,10 +634,10 @@ my_bool encrypt_binlog;
 my_bool encrypt_tmp_disk_tables, encrypt_tmp_files;
 
 /** name of reference on left expression in rewritten IN subquery */
-const LEX_CSTRING in_left_expr_name= {STRING_WITH_LEN("<left expr>") };
+const Lex_ident_column in_left_expr_name= "<left expr>"_Lex_ident_column;
 /** name of additional condition */
-const LEX_CSTRING in_having_cond= {STRING_WITH_LEN("<IN HAVING>") };
-const LEX_CSTRING in_additional_cond= {STRING_WITH_LEN("<IN COND>") };
+const Lex_ident_column in_having_cond= "<IN HAVING>"_Lex_ident_column;
+const Lex_ident_column in_additional_cond= "<IN COND>"_Lex_ident_column;
 
 /** Number of connection errors when selecting on the listening port */
 ulong connection_errors_select= 0;
@@ -690,6 +697,7 @@ uint temp_pool_set_next()
 }
 
 CHARSET_INFO *system_charset_info, *files_charset_info ;
+CHARSET_INFO *system_charset_info_for_i_s;
 CHARSET_INFO *national_charset_info, *table_alias_charset;
 CHARSET_INFO *character_set_filesystem;
 CHARSET_INFO *error_message_charset_info;
@@ -817,87 +825,87 @@ static struct my_option pfs_early_options[]=
 {
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
   {"performance_schema_instrument", OPT_PFS_INSTRUMENT,
-    "Default startup value for a performance schema instrument.",
+    "Default startup value for a performance schema instrument",
     &pfs_param.m_pfs_instrument, &pfs_param.m_pfs_instrument, 0, GET_STR,
     OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_stages_current", 0,
-    "Default startup value for the events_stages_current consumer.",
+    "Default startup value for the events_stages_current consumer",
     &pfs_param.m_consumer_events_stages_current_enabled,
     &pfs_param.m_consumer_events_stages_current_enabled, 0, GET_BOOL,
     OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_stages_history", 0,
-    "Default startup value for the events_stages_history consumer.",
+    "Default startup value for the events_stages_history consumer",
     &pfs_param.m_consumer_events_stages_history_enabled,
     &pfs_param.m_consumer_events_stages_history_enabled, 0,
     GET_BOOL, OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_stages_history_long", 0,
-    "Default startup value for the events_stages_history_long consumer.",
+    "Default startup value for the events_stages_history_long consumer",
     &pfs_param.m_consumer_events_stages_history_long_enabled,
     &pfs_param.m_consumer_events_stages_history_long_enabled, 0,
     GET_BOOL, OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_statements_current", 0,
-    "Default startup value for the events_statements_current consumer.",
+    "Default startup value for the events_statements_current consumer",
     &pfs_param.m_consumer_events_statements_current_enabled,
     &pfs_param.m_consumer_events_statements_current_enabled, 0, GET_BOOL,
     OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_statements_history", 0,
-    "Default startup value for the events_statements_history consumer.",
+    "Default startup value for the events_statements_history consumer",
     &pfs_param.m_consumer_events_statements_history_enabled,
     &pfs_param.m_consumer_events_statements_history_enabled, 0,
     GET_BOOL, OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_statements_history_long", 0,
-    "Default startup value for the events_statements_history_long consumer.",
+    "Default startup value for the events_statements_history_long consumer",
     &pfs_param.m_consumer_events_statements_history_long_enabled,
     &pfs_param.m_consumer_events_statements_history_long_enabled, 0,
     GET_BOOL, OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_transactions_current", 0,
-    "Default startup value for the events_transactions_current consumer.",
+    "Default startup value for the events_transactions_current consumer",
     &pfs_param.m_consumer_events_transactions_current_enabled,
     &pfs_param.m_consumer_events_transactions_current_enabled, 0,
     GET_BOOL, OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_transactions_history", 0,
-    "Default startup value for the events_transactions_history consumer.",
+    "Default startup value for the events_transactions_history consumer",
     &pfs_param.m_consumer_events_transactions_history_enabled,
     &pfs_param.m_consumer_events_transactions_history_enabled, 0,
     GET_BOOL, OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_transactions_history_long", 0,
-    "Default startup value for the events_transactions_history_long consumer.",
+    "Default startup value for the events_transactions_history_long consumer",
     &pfs_param.m_consumer_events_transactions_history_long_enabled,
     &pfs_param.m_consumer_events_transactions_history_long_enabled, 0,
     GET_BOOL, OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_waits_current", 0,
-    "Default startup value for the events_waits_current consumer.",
+    "Default startup value for the events_waits_current consumer",
     &pfs_param.m_consumer_events_waits_current_enabled,
     &pfs_param.m_consumer_events_waits_current_enabled, 0,
     GET_BOOL, OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_waits_history", 0,
-    "Default startup value for the events_waits_history consumer.",
+    "Default startup value for the events_waits_history consumer",
     &pfs_param.m_consumer_events_waits_history_enabled,
     &pfs_param.m_consumer_events_waits_history_enabled, 0,
     GET_BOOL, OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_events_waits_history_long", 0,
-    "Default startup value for the events_waits_history_long consumer.",
+    "Default startup value for the events_waits_history_long consumer",
     &pfs_param.m_consumer_events_waits_history_long_enabled,
     &pfs_param.m_consumer_events_waits_history_long_enabled, 0,
     GET_BOOL, OPT_ARG, FALSE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_global_instrumentation", 0,
-    "Default startup value for the global_instrumentation consumer.",
+    "Default startup value for the global_instrumentation consumer",
     &pfs_param.m_consumer_global_instrumentation_enabled,
     &pfs_param.m_consumer_global_instrumentation_enabled, 0,
     GET_BOOL, OPT_ARG, TRUE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_thread_instrumentation", 0,
-    "Default startup value for the thread_instrumentation consumer.",
+    "Default startup value for the thread_instrumentation consumer",
     &pfs_param.m_consumer_thread_instrumentation_enabled,
     &pfs_param.m_consumer_thread_instrumentation_enabled, 0,
     GET_BOOL, OPT_ARG, TRUE, 0, 0, 0, 0, 0},
   {"performance_schema_consumer_statements_digest", 0,
-    "Default startup value for the statements_digest consumer.",
+    "Default startup value for the statements_digest consumer",
     &pfs_param.m_consumer_statement_digest_enabled,
     &pfs_param.m_consumer_statement_digest_enabled, 0,
     GET_BOOL, OPT_ARG, TRUE, 0, 0, 0, 0, 0},
 #endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
   {"getopt-prefix-matching", 0,
-    "Recognize command-line options by their unambiguos prefixes.",
+    "Recognize command-line options by their unambiguous prefixes",
     &my_getopt_prefix_matching, &my_getopt_prefix_matching, 0, GET_BOOL,
     NO_ARG, 1, 0, 1, 0, 0, 0}
 };
@@ -1185,9 +1193,9 @@ static PSI_thread_info all_server_threads[]=
   { &key_thread_main, "main", PSI_FLAG_GLOBAL},
   { &key_thread_one_connection, "one_connection", 0},
   { &key_thread_signal_hand, "signal_handler", PSI_FLAG_GLOBAL},
-  { &key_thread_slave_background, "slave_background", PSI_FLAG_GLOBAL},
+  { &key_thread_slave_background, "slave_bg", PSI_FLAG_GLOBAL},
   { &key_thread_ack_receiver, "Ack_receiver", PSI_FLAG_GLOBAL},
-  { &key_rpl_parallel_thread, "rpl_parallel_thread", 0}
+  { &key_rpl_parallel_thread, "rpl_parallel", 0}
 };
 
 #ifdef HAVE_MMAP
@@ -1427,6 +1435,7 @@ C_MODE_START
   @param level          log message level
   @param format         log message format string
 */
+ATTRIBUTE_FORMAT(printf, 2, 3)
 static void buffered_option_error_reporter(enum loglevel level,
                                            const char *format, ...)
 {
@@ -1457,6 +1466,7 @@ static void buffered_option_error_reporter(enum loglevel level,
   to print general character set subsystem initialization errors,
   such as Index.xml syntax problems, bad XML tag hierarchy, etc.
 */
+ATTRIBUTE_FORMAT(printf, 2, 3)
 static void charset_error_reporter(enum loglevel level,
                                    const char *format, ...)
 {
@@ -1494,11 +1504,8 @@ const char *libwrapName= NULL;
 int allow_severity = LOG_INFO;
 int deny_severity = LOG_WARNING;
 #endif
-#ifdef HAVE_QUERY_CACHE
 ulong query_cache_min_res_unit= QUERY_CACHE_MIN_RESULT_DATA_SIZE;
 Query_cache query_cache;
-#endif
-
 
 my_bool opt_use_ssl  = 1;
 char *opt_ssl_ca= NULL, *opt_ssl_capath= NULL, *opt_ssl_cert= NULL,
@@ -1824,7 +1831,6 @@ static void close_connections(void)
   {
     wsrep_deinit(true);
   }
-  wsrep_sst_auth_free();
 #endif
   /* All threads has now been aborted */
   DBUG_PRINT("quit", ("Waiting for threads to die (count=%u)",
@@ -1944,12 +1950,13 @@ static void mysqld_exit(int exit_code)
 #endif
   set_malloc_size_cb(NULL);
   if (global_status_var.global_memory_used)
-  {
-    fprintf(stderr, "Warning: Memory not freed: %lld\n",
+    fprintf(stderr, "Warning: Internal memory accounting error of %lld bytes\n",
             (longlong) global_status_var.global_memory_used);
-    if (exit_code == 0 || opt_endinfo)
-      SAFEMALLOC_REPORT_MEMORY(0);
-  }
+  if (global_tmp_space_used)
+    fprintf(stderr, "Warning: Internal tmp_space accounting error of %lld "
+            "bytes\n",
+            (longlong) global_tmp_space_used);
+
   DBUG_LEAVE;
 #ifdef _WIN32
   my_report_svc_status(SERVICE_STOPPED, exit_code, 0);
@@ -3225,6 +3232,7 @@ pthread_handler_t signal_hand(void *)
   sigset_t set;
   int sig;
   my_thread_init();				// Init new thread
+  my_thread_set_name("signal_handler");
   signal_thread_in_use= 1;
 
   if (test_flags & TEST_SIGINT)
@@ -3554,6 +3562,7 @@ SHOW_VAR com_status_vars[]= {
   {"show_create_package",  STMT_STATUS(SQLCOM_SHOW_CREATE_PACKAGE)},
   {"show_create_package_body",STMT_STATUS(SQLCOM_SHOW_CREATE_PACKAGE_BODY)},
   {"show_create_proc",     STMT_STATUS(SQLCOM_SHOW_CREATE_PROC)},
+  {"show_create_server",   STMT_STATUS(SQLCOM_SHOW_CREATE_SERVER)},
   {"show_create_table",    STMT_STATUS(SQLCOM_SHOW_CREATE)},
   {"show_create_trigger",  STMT_STATUS(SQLCOM_SHOW_CREATE_TRIGGER)},
   {"show_create_user",     STMT_STATUS(SQLCOM_SHOW_CREATE_USER)},
@@ -3762,7 +3771,7 @@ static void my_malloc_size_cb_func(long long size, my_bool is_thread_specific)
     DBUG_ASSERT((longlong) thd->status_var.local_memory_used >= 0 ||
                 !debug_assert_on_not_freed_memory);
   }
-  else if (likely(thd))
+  else if (likely(thd) && likely(!thd->shared_thd))
   {
     DBUG_PRINT("info", ("global thd memory_used: %lld  size: %lld",
                         (longlong) thd->status_var.global_memory_used, size));
@@ -3770,6 +3779,79 @@ static void my_malloc_size_cb_func(long long size, my_bool is_thread_specific)
   }
   else
     update_global_memory_status(size);
+}
+
+
+/* Collect temporary file space usage */
+
+static int temp_file_size_cb_func(struct tmp_file_tracking *track,
+                                  int no_error)
+{
+  THD *thd= current_thd;
+  int error= 0;
+  longlong size_change= (longlong) (track->file_size -
+                                    track->previous_file_size);
+  DBUG_ENTER("temp_file_size_cb_func");
+  DBUG_PRINT("enter", ("last: %llu  current: %llu  diff: %lld",
+                       track->previous_file_size,
+                       track->file_size,
+                       (longlong) (track->file_size -
+                                   track->previous_file_size)));
+  DBUG_ASSERT(thd);
+  if (thd)
+  {
+    /*
+      This has to be true as thd must contain all tmp space used and
+      any thus must have been called before with an allocation of
+      track->previous_file_size.
+    */
+    DBUG_ASSERT(thd->status_var.tmp_space_used >= track->previous_file_size);
+    if (unlikely(thd->shared_thd))
+      mysql_mutex_lock(&thd->LOCK_thd_data);
+
+    global_tmp_space_used+= size_change;
+    if (size_change > 0)
+    {
+      /* Cache to avoid reading global_tmp_space_used too many times */
+      ulonglong cached_space= global_tmp_space_used;
+
+      if (cached_space > global_max_tmp_space_usage && !no_error &&
+          global_max_tmp_space_usage)
+      {
+        global_tmp_space_used-= size_change;
+        error= EE_GLOBAL_TMP_SPACE_FULL;
+        my_errno= ENOSPC;
+        goto exit;
+      }
+      if (thd->status_var.tmp_space_used + size_change >
+          thd->variables.max_tmp_space_usage && !no_error &&
+          thd->variables.max_tmp_space_usage)
+      {
+        global_tmp_space_used-= size_change;
+        error= EE_LOCAL_TMP_SPACE_FULL;
+        my_errno= ENOSPC;
+        goto exit;
+      }
+      set_if_bigger(global_status_var.max_tmp_space_used, cached_space);
+    }
+    thd->status_var.tmp_space_used+= size_change;
+    /* Max value for the connection */
+    set_if_bigger(thd->status_var.max_tmp_space_used,
+                  thd->status_var.tmp_space_used);
+    /* Max value for the query */
+    set_if_bigger(thd->max_tmp_space_used,
+                  thd->status_var.tmp_space_used);
+    DBUG_ASSERT((longlong) global_tmp_space_used >= 0);
+    DBUG_ASSERT((longlong) thd->status_var.tmp_space_used >= 0);
+
+    /* Record that we have registered the change */
+    track->previous_file_size= track->file_size;
+
+exit:
+    if (unlikely(thd->shared_thd))
+      mysql_mutex_unlock(&thd->LOCK_thd_data);
+  }
+  DBUG_RETURN(error);
 }
 
 int json_escape_string(const char *str,const char *str_end,
@@ -3834,6 +3916,7 @@ static int init_early_variables()
 {
   set_current_thd(0);
   set_malloc_size_cb(my_malloc_size_cb_func);
+  update_tmp_file_size= temp_file_size_cb_func;
   global_status_var.global_memory_used= 0;
   init_alloc_root(PSI_NOT_INSTRUMENTED, &startup_root, 1024, 0, MYF(0));
   init_alloc_root(PSI_NOT_INSTRUMENTED, &read_only_root, 1024, 0,
@@ -3870,7 +3953,7 @@ static int init_common_variables()
   }
 
   max_system_variables.pseudo_thread_id= ~(my_thread_id) 0;
-  server_start_time= flush_status_time= my_time(0);
+  server_start_time= global_status_var.flush_status_time= my_time(0);
   my_disable_copystat_in_redel= 1;
 
   global_rpl_filter= new Rpl_filter;
@@ -3936,12 +4019,14 @@ static int init_common_variables()
   mysql_bin_log.init_pthread_objects();
   Gtid_index_writer::gtid_index_init();
 
+#if LONG_SIZE == 4
   /* TODO: remove this when my_time_t is 64 bit compatible */
   if (!IS_TIME_T_VALID_FOR_TIMESTAMP(server_start_time))
   {
     sql_print_error("This server doesn't support dates later than 2038");
     exit(1);
   }
+#endif
 
   opt_log_basename= const_cast<char *>("mysql");
 
@@ -4168,7 +4253,7 @@ static int init_common_variables()
 
   unireg_init(opt_specialflag); /* Set up extern variabels */
   if (!(my_default_lc_messages=
-        my_locale_by_name(lc_messages)))
+        my_locale_by_name(Lex_cstring_strlen(lc_messages))))
   {
     sql_print_error("Unknown locale: '%s'", lc_messages);
     return 1;
@@ -4194,7 +4279,7 @@ static int init_common_variables()
   myf utf8_flag= global_system_variables.old_behavior &
                  OLD_MODE_UTF8_IS_UTF8MB3 ? MY_UTF8_IS_UTF8MB3 : 0;
 
-  old_mode_deprecated_warnings(0, global_system_variables.old_behavior);
+  old_mode_deprecated_warnings(global_system_variables.old_behavior);
 
   if (character_set_collations_str[0])
   {
@@ -4285,7 +4370,7 @@ static int init_common_variables()
   global_system_variables.character_set_filesystem= character_set_filesystem;
 
   if (!(my_default_lc_time_names=
-        my_locale_by_name(lc_time_names_name)))
+        my_locale_by_name(Lex_cstring_strlen(lc_time_names_name))))
   {
     sql_print_error("Unknown locale: '%s'", lc_time_names_name);
     return 1;
@@ -4753,7 +4838,8 @@ static void add_file_to_crash_report(char *file)
   init_default_storage_engine_impl(#X, X, &global_system_variables.Y)
 
 static int init_default_storage_engine_impl(const char *opt_name,
-                                            char *engine_name, plugin_ref *res)
+                                            const char *engine_name,
+                                            plugin_ref *res)
 {
   if (!engine_name)
   {
@@ -5347,6 +5433,9 @@ static int init_server_components()
       MARIADB_REMOVED_OPTION("time-format"),
       MARIADB_REMOVED_OPTION("wsrep-causal-reads"),
 
+      /* removed in 11.5 */
+      MARIADB_REMOVED_OPTION("wsrep-load-data-splitting"),
+
       {0, 0, 0, 0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0}
     };
     /*
@@ -5496,6 +5585,8 @@ static int init_server_components()
   if (ha_recover(0))
     unireg_abort(1);
 
+  ha_signal_tc_log_recovery_done();
+
   if (opt_bin_log)
   {
     int error;
@@ -5507,6 +5598,9 @@ static int init_server_components()
     if (unlikely(error))
       unireg_abort(1);
   }
+
+  if (unlikely(init_binlog_cache_dir()))
+    unireg_abort(1);
 
 #ifdef HAVE_REPLICATION
   binlog_space_limit= internal_binlog_space_limit;
@@ -5623,7 +5717,7 @@ static void test_lc_time_sz()
         (*loc)->max_day_name_length != max_day_len)
     {
       DBUG_PRINT("Wrong max day name(or month name) length for locale:",
-                 ("%s", (*loc)->name));
+                 ("%s", (*loc)->name.str));
       DBUG_ASSERT(0);
     }
   }
@@ -5690,7 +5784,8 @@ int mysqld_main(int argc, char **argv)
   remaining_argv= argv;
 
   /* Must be initialized early for comparison of options name */
-  system_charset_info= &my_charset_utf8mb3_general_ci;
+  system_charset_info= &my_charset_utf8mb3_general1400_as_ci;
+  system_charset_info_for_i_s= &my_charset_utf8mb3_general_ci;
 
   sys_var_init();
 
@@ -6489,11 +6584,11 @@ int handle_early_options()
 
 struct my_option my_long_options[]=
 {
-  {"help", '?', "Display this help and exit.", 
+  {"help", '?', "Display this help and exit", 
    &opt_help, &opt_help, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0,
    0, 0},
-  {"ansi", 'a', "Use ANSI SQL syntax instead of MySQL syntax. This mode "
-   "will also set transaction isolation level 'serializable'.", 0, 0, 0,
+  {"ansi", 'a', "Use ANSI SQL syntax instead of MariaDB syntax. This mode "
+   "will also set transaction isolation level 'serializable'", 0, 0, 0,
    GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
   /*
     Because Sys_var_bit does not support command-line options, we need to
@@ -6504,48 +6599,48 @@ struct my_option my_long_options[]=
    GET_BOOL, OPT_ARG, 1, 0, 0, 0, 0, NULL},
   {"binlog-do-db", OPT_BINLOG_DO_DB,
    "Tells the master it should log updates for the specified database, "
-   "and exclude all others not explicitly mentioned.",
+   "and exclude all others not explicitly mentioned",
    0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"binlog-ignore-db", OPT_BINLOG_IGNORE_DB,
-   "Tells the master that updates to the given database should not be logged to the binary log.",
+   "Tells the master that updates to the given database should not be logged to the binary log",
    0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 #ifndef DISABLE_GRANT_OPTIONS
-  {"bootstrap", OPT_BOOTSTRAP, "Used by mysql installation scripts.", 0, 0, 0,
+  {"bootstrap", OPT_BOOTSTRAP, "Used by MariaDB installation scripts", 0, 0, 0,
    GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
 #endif
   {"character-set-client-handshake", 0,
-   "Don't ignore client side character set value sent during handshake.",
+   "Don't ignore client side character set value sent during handshake",
    &opt_character_set_client_handshake,
    &opt_character_set_client_handshake,
     0, GET_BOOL, NO_ARG, 1, 0, 0, 0, 0, 0},
   {"character-set-filesystem", 0,
-   "Set the filesystem character set.",
+   "Set the filesystem character set",
    &character_set_filesystem_name,
    &character_set_filesystem_name,
    0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0 },
-  {"character-set-server", 'C', "Set the default character set.",
+  {"character-set-server", 'C', "Set the default character set",
    &default_character_set_name, &default_character_set_name,
    0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0 },
-  {"chroot", 'r', "Chroot mysqld daemon during startup.",
+  {"chroot", 'r', "Chroot mariadbd process during startup",
    &mysqld_chroot, &mysqld_chroot, 0, GET_STR, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0},
-  {"collation-server", 0, "Set the default collation.",
+  {"collation-server", 0, "Set the default collation",
    &default_collation_name, &default_collation_name,
    0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0 },
-  {"character-set-collations", 0, "Overrides for character set default collations.",
+  {"character-set-collations", 0, "Overrides for character set default collations",
    &character_set_collations_str, &character_set_collations_str,
    0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0 },
-  {"console", OPT_CONSOLE, "Write error output on screen; don't remove the console window on windows.",
+  {"console", OPT_CONSOLE, "Write error output on screen; don't remove the console window on Windows",
    &opt_console, &opt_console, 0, GET_BOOL, NO_ARG, 0, 0, 0,
    0, 0, 0},
 #ifdef DBUG_OFF
-  {"debug", '#', "Built in DBUG debugger. Disabled in this build.",
+  {"debug", '#', "Built in DBUG debugger. Disabled in this build",
    &current_dbug_option, &current_dbug_option, 0, GET_STR, OPT_ARG,
    0, 0, 0, 0, 0, 0},
 #endif
 #ifdef HAVE_REPLICATION
   {"debug-abort-slave-event-count", 0,
-   "Option used by mysql-test for debugging and testing of replication.",
+   "Option used by mysql-test for debugging and testing of replication",
    &abort_slave_event_count,  &abort_slave_event_count,
    0, GET_INT, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 #endif /* HAVE_REPLICATION */
@@ -6565,28 +6660,28 @@ struct my_option my_long_options[]=
 #endif
 #ifdef HAVE_REPLICATION
   {"debug-disconnect-slave-event-count", 0,
-   "Option used by mysql-test for debugging and testing of replication.",
+   "Option used by mysql-test for debugging and testing of replication",
    &disconnect_slave_event_count, &disconnect_slave_event_count,
    0, GET_INT, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 #endif /* HAVE_REPLICATION */
-  {"debug-exit-info", 'T', "Used for debugging. Use at your own risk.",
+  {"debug-exit-info", 'T', "Used for debugging. Use at your own risk",
    0, 0, 0, GET_LONG, OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"debug-gdb", 0,
-   "Set up signals usable for debugging.",
+   "Set up signals usable for debugging",
    &opt_debugging, &opt_debugging,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
 #ifdef HAVE_REPLICATION
   {"debug-max-binlog-dump-events", 0,
-   "Option used by mysql-test for debugging and testing of replication.",
+   "Option used by mysql-test for debugging and testing of replication",
    &max_binlog_dump_events, &max_binlog_dump_events, 0,
    GET_INT, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 #endif /* HAVE_REPLICATION */
   {"debug-no-sync", 0,
-   "Disables system sync calls. Only for running tests or debugging!",
+   "Disables system sync calls. Only for running tests or debugging",
    &my_disable_sync, &my_disable_sync, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
 #ifdef HAVE_REPLICATION
   {"debug-sporadic-binlog-dump-fail", 0,
-   "Option used by mysql-test for debugging and testing of replication.",
+   "Option used by mysql-test for debugging and testing of replication",
    &opt_sporadic_binlog_dump_fail,
    &opt_sporadic_binlog_dump_fail, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0,
    0},
@@ -6608,20 +6703,20 @@ struct my_option my_long_options[]=
     "The default storage engine for user-created temporary tables",
    &default_tmp_storage_engine, 0, 0, GET_STR, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0 },
-  {"default-time-zone", 0, "Set the default time zone.",
+  {"default-time-zone", 0, "Set the default time zone",
    &default_tz_name, &default_tz_name,
    0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0 },
 #if defined(ENABLED_DEBUG_SYNC)
   {"debug-sync-timeout", OPT_DEBUG_SYNC_TIMEOUT,
    "Enable the debug sync facility "
    "and optionally specify a default wait timeout in seconds. "
-   "A zero value keeps the facility disabled.",
+   "A zero value keeps the facility disabled",
    &opt_debug_sync_timeout, 0,
    0, GET_UINT, OPT_ARG, 0, 0, UINT_MAX, 0, 0, 0},
 #endif /* defined(ENABLED_DEBUG_SYNC) */
 #ifdef HAVE_des
   {"des-key-file", 0,
-   "Load keys for des_encrypt() and des_encrypt from given file.",
+   "Load keys for des_encrypt() and des_encrypt from given file",
    &des_key_file, &des_key_file, 0, GET_STR, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0},
 #endif /* HAVE_des */
@@ -6634,8 +6729,8 @@ struct my_option my_long_options[]=
    0, 0, 0, 0, 0, 0 },
   {"external-locking", 0, "Use system (external) locking (disabled by "
    "default).  With this option enabled you can run myisamchk to test "
-   "(not repair) tables while the MySQL server is running. Disable with "
-   "--skip-external-locking.", &opt_external_locking, &opt_external_locking,
+   "(not repair) tables while the MariaDB server is running. Disable with "
+   "--skip-external-locking", &opt_external_locking, &opt_external_locking,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   /* We must always support the next option to make scripts like mysqltest
      easier to do */
@@ -6644,9 +6739,9 @@ struct my_option my_long_options[]=
    &opt_support_flashback, &opt_support_flashback,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"gdb", 0,
-   "Set up signals usable for debugging. Deprecated, use --debug-gdb instead.",
+   "Set up signals usable for debugging",
    &opt_debugging, &opt_debugging,
-   0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+   0, GET_BOOL, NO_ARG, 0, 0, 0, "debug_gdb", 0, 0},
   {"gtid-pos-auto-engines", 0,
    "List of engines for which to automatically create a "
    "mysql.gtid_slave_pos_ENGINE table, if a transaction using that engine "
@@ -6656,21 +6751,19 @@ struct my_option my_long_options[]=
    &gtid_pos_auto_engines, 0, 0, GET_STR, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0 },
 #ifdef HAVE_SOLARIS_LARGE_PAGES
-  {"super-large-pages", 0, "Enable support for super large pages.",
+  {"super-large-pages", 0, "Enable support for super large pages",
    &opt_super_large_pages, &opt_super_large_pages, 0,
    GET_BOOL, OPT_ARG, 0, 0, 1, 0, 1, 0},
 #endif
   {"language", 'L',
-   "Client error messages in given language. May be given as a full path. "
-   "Deprecated. Use --lc-messages-dir instead.",
-   0, 0, 0,
-   GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+   "Client error messages in given language. May be given as a full path",
+   0, 0, 0, GET_STR, REQUIRED_ARG, 0, 0, 0, "lc_messages_dir", 0, 0},
   {"lc-messages", 0,
-   "Set the language used for the error messages.",
+   "Set the language used for the error messages",
    &lc_messages, &lc_messages, 0, GET_STR, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0 },
   {"lc-time-names", 0,
-   "Set the language used for the month names and the days of the week.",
+   "Set the language used for the month names and the days of the week",
    &lc_time_names_name, &lc_time_names_name,
    0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0 },
   {"log-basename", OPT_LOG_BASENAME,
@@ -6687,11 +6780,11 @@ struct my_option my_long_options[]=
    "'datadir'/'log-basename'-bin or 'datadir'/mysql-bin will be used (the later if "
    "--log-basename is not specified). We strongly recommend to use either "
    "--log-basename or specify a filename to ensure that replication doesn't "
-   "stop if the real hostname of the computer changes.",
+   "stop if the real hostname of the computer changes",
    &opt_bin_logname, &opt_bin_logname, 0, GET_STR,
    OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"log-bin-index", 0,
-   "File that holds the names for last binary log files.",
+   "File that holds the names for last binary log files",
    &opt_binlog_index_name, &opt_binlog_index_name, 0, GET_STR,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"relay-log-index", 0,
@@ -6703,16 +6796,16 @@ struct my_option my_long_options[]=
    "Path to file used for recovery of DDL statements after a crash",
    &opt_ddl_recovery_file, &opt_ddl_recovery_file, 0, GET_STR,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"log-isam", OPT_ISAM_LOG, "Log all MyISAM changes to file.",
+  {"log-isam", OPT_ISAM_LOG, "Log all MyISAM changes to file",
    &myisam_log_filename, &myisam_log_filename, 0, GET_STR,
    OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"log-short-format", 0,
-   "Don't log extra information to update and slow-query logs.",
+   "Don't log extra information to update and slow-query logs",
    &opt_short_log_format, &opt_short_log_format,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"log-tc", 0,
    "Path to transaction coordinator log (used for transactions that affect "
-   "more than one storage engine, when binary log is disabled).",
+   "more than one storage engine, when binary log is disabled)",
    &opt_tc_log_file, &opt_tc_log_file, 0, GET_STR,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"master-info-file", 0,
@@ -6722,7 +6815,7 @@ struct my_option my_long_options[]=
    &master_info_file, &master_info_file, 0, GET_STR,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"master-retry-count", 0,
-   "The number of tries the slave will make to connect to the master before giving up.",
+   "The number of tries the slave will make to connect to the master before giving up",
    &master_retry_count, &master_retry_count, 0, GET_ULONG,
    REQUIRED_ARG, 100000, 0, 0, 0, 0, 0},
 #ifdef HAVE_REPLICATION
@@ -6730,16 +6823,16 @@ struct my_option my_long_options[]=
    &rpl_status, &rpl_status, &rpl_role_typelib,
    GET_ENUM, REQUIRED_ARG, RPL_AUTH_MASTER, 0, 0, 0, 0, 0},
 #endif /* HAVE_REPLICATION */
-  {"memlock", 0, "Lock mysqld in memory.", &locked_in_memory,
+  {"memlock", 0, "Lock mariadbd process in memory", &locked_in_memory,
    &locked_in_memory, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"old-style-user-limits", 0,
    "Enable old-style user limits (before 5.0.3, user resources were counted "
-   "per each user+host vs. per account).",
+   "per each user+host vs. per account)",
    &opt_old_style_user_limits, &opt_old_style_user_limits,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"port-open-timeout", 0,
    "Maximum time in seconds to wait for the port to become free. "
-   "(Default: No wait).", &mysqld_port_timeout, &mysqld_port_timeout, 0,
+   "(Default: No wait)", &mysqld_port_timeout, &mysqld_port_timeout, 0,
    GET_UINT, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"replicate-do-db", OPT_REPLICATE_DO_DB,
    "Tells the slave thread to restrict replication to the specified database. "
@@ -6748,13 +6841,13 @@ struct my_option my_long_options[]=
    "cross-database queries such as UPDATE some_db.some_table SET foo='bar' "
    "while having selected a different or no database. If you need cross "
    "database updates to work, make sure you have 3.23.28 or later, and use "
-   "replicate-wild-do-table=db_name.%.",
+   "replicate-wild-do-table=db_name.%",
    0, 0, 0, GET_STR | GET_ASK_ADDR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"replicate-do-table", OPT_REPLICATE_DO_TABLE,
    "Tells the slave thread to restrict replication to the specified table. "
    "To specify more than one table, use the directive multiple times, once "
    "for each table. This will work for cross-database updates, in contrast "
-   "to replicate-do-db.", 0, 0, 0, GET_STR | GET_ASK_ADDR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+   "to replicate-do-db", 0, 0, 0, GET_STR | GET_ASK_ADDR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"replicate-ignore-db", OPT_REPLICATE_IGNORE_DB,
    "Tells the slave thread to not replicate to the specified database. To "
    "specify more than one database to ignore, use the directive multiple "
@@ -6766,16 +6859,16 @@ struct my_option my_long_options[]=
    "Tells the slave thread to not replicate to the specified table. To specify "
    "more than one table to ignore, use the directive multiple times, once for "
    "each table. This will work for cross-database updates, in contrast to "
-   "replicate-ignore-db.", 0, 0, 0, GET_STR | GET_ASK_ADDR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
+   "replicate-ignore-db", 0, 0, 0, GET_STR | GET_ASK_ADDR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"replicate-rewrite-db", OPT_REPLICATE_REWRITE_DB,
    "Updates to a database with a different name than the original. Example: "
-   "replicate-rewrite-db=master_db_name->slave_db_name.",
+   "replicate-rewrite-db=master_db_name->slave_db_name",
    0, 0, 0, GET_STR | GET_ASK_ADDR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
 #ifdef HAVE_REPLICATION
   {"replicate-same-server-id", 0,
    "In replication, if set to 1, do not skip events having our server id. "
    "Default value is 0 (to break infinite loops in circular replication). "
-   "Can't be set to 1 if --log-slave-updates is used.",
+   "Can't be set to 1 if --log-slave-updates is used",
    &replicate_same_server_id, &replicate_same_server_id,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
 #endif
@@ -6785,7 +6878,7 @@ struct my_option my_long_options[]=
    "directive multiple times, once for each table. This will work for cross-"
    "database updates. Example: replicate-wild-do-table=foo%.bar% will "
    "replicate only updates to tables in all databases that start with foo "
-   "and whose table names start with bar.",
+   "and whose table names start with bar",
    0, 0, 0, GET_STR | GET_ASK_ADDR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"replicate-wild-ignore-table", OPT_REPLICATE_WILD_IGNORE_TABLE,
    "Tells the slave thread to not replicate to the tables that match the "
@@ -6793,24 +6886,24 @@ struct my_option my_long_options[]=
    "the directive multiple times, once for each table. This will work for "
    "cross-database updates. Example: replicate-wild-ignore-table=foo%.bar% "
    "will not do updates to tables in databases that start with foo and whose "
-   "table names start with bar.",
+   "table names start with bar",
    0, 0, 0, GET_STR | GET_ASK_ADDR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"safe-mode", OPT_SAFE, "Skip some optimize stages (for testing). Deprecated.",
-   0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
+  {"safe-mode", OPT_SAFE, "Skip some optimize stages (for testing)",
+   0, 0, 0, GET_NO_ARG, NO_ARG, 0, 0, 0, "", 0, 0},
   {"safe-user-create", 0,
-   "Don't allow new user creation by the user who has no write privileges to the mysql.user table.",
+   "Don't allow new user creation by the user who has no write privileges to the mysql.user table",
    &opt_safe_user_create, &opt_safe_user_create, 0, GET_BOOL,
    NO_ARG, 0, 0, 0, 0, 0, 0},
   {"show-slave-auth-info", 0,
-   "Show user and password in SHOW SLAVE HOSTS on this master.",
+   "Show user and password in SHOW SLAVE HOSTS on this master",
    &opt_show_slave_auth_info, &opt_show_slave_auth_info, 0,
    GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"silent-startup", OPT_SILENT, "Don't print [Note] to the error log during startup.",
+  {"silent-startup", OPT_SILENT, "Don't print [Note] to the error log during startup",
    &opt_silent_startup, &opt_silent_startup, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"skip-host-cache", OPT_SKIP_HOST_CACHE, "Don't cache host names.", 0, 0, 0,
+  {"skip-host-cache", OPT_SKIP_HOST_CACHE, "Don't cache host names", 0, 0, 0,
    GET_NO_ARG, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"skip-slave-start", 0,
-   "If set, slave is not autostarted.", &opt_skip_slave_start,
+   "If set, slave is not autostarted", &opt_skip_slave_start,
    &opt_skip_slave_start, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
 #ifdef HAVE_REPLICATION
   {"slave-parallel-mode", OPT_SLAVE_PARALLEL_MODE,
@@ -6821,7 +6914,7 @@ struct my_option my_long_options[]=
    "effort to avoid any conflicts. \"aggressive\" tries to maximise the "
    "parallelism, possibly at the cost of increased conflict rate. "
    "\"minimal\" only parallelizes the commit steps of transactions. "
-   "\"none\" disables parallel apply completely.",
+   "\"none\" disables parallel apply completely",
    &opt_slave_parallel_mode, &opt_slave_parallel_mode,
    &slave_parallel_mode_typelib, GET_ENUM | GET_ASK_ADDR, REQUIRED_ARG,
    SLAVE_PARALLEL_CONSERVATIVE, 0, 0, 0, 0, 0},
@@ -6829,22 +6922,22 @@ struct my_option my_long_options[]=
 #if defined(_WIN32) && !defined(EMBEDDED_LIBRARY)
   {"slow-start-timeout", 0,
    "Maximum number of milliseconds that the service control manager should wait "
-   "before trying to kill the windows service during startup"
-   "(Default: 15000).", &slow_start_timeout, &slow_start_timeout, 0,
+   "before trying to kill the windows service during startup",
+   &slow_start_timeout, &slow_start_timeout, 0,
    GET_ULONG, REQUIRED_ARG, 15000, 0, 0, 0, 0, 0},
 #endif
 #ifdef HAVE_OPENSSL
   {"ssl", 0,
-   "Enable SSL for connection (automatically enabled if an ssl option is used).",
+   "Enable SSL for connection (automatically enabled if an ssl option is used)",
    &opt_use_ssl, &opt_use_ssl, 0, GET_BOOL, OPT_ARG, 1, 0, 0,
    0, 0, 0},
 #endif
 #ifdef _WIN32
   {"standalone", 0,
-  "Dummy option to start as a standalone program (NT).", 0, 0, 0, GET_NO_ARG,
+  "Dummy option to start as a standalone program (NT)", 0, 0, 0, GET_NO_ARG,
    NO_ARG, 0, 0, 0, 0, 0, 0},
 #endif
-  {"symbolic-links", 's', "Enable symbolic link support.",
+  {"symbolic-links", 's', "Enable symbolic link support",
    &my_use_symdir, &my_use_symdir, 0, GET_BOOL, NO_ARG,
    /*
      The system call realpath() produces warnings under valgrind and
@@ -6857,7 +6950,7 @@ struct my_option my_long_options[]=
   {"sysdate-is-now", 0,
    "Non-default option to alias SYSDATE() to NOW() to make it safe-replicable. "
    "Since 5.0, SYSDATE() returns a `dynamic' value different for different "
-   "invocations, even within the same statement.",
+   "invocations, even within the same statement",
    &global_system_variables.sysdate_is_now,
    0, 0, GET_BOOL, NO_ARG, 0, 0, 1, 0, 1, 0},
   {"tc-heuristic-recover", 0,
@@ -6867,12 +6960,12 @@ struct my_option my_long_options[]=
   {"temp-pool", 0,
 #if (ENABLE_TEMP_POOL)
    "Using this option will cause most temporary files created to use a small "
-   "set of names, rather than a unique name for each new file. Deprecated.",
+   "set of names, rather than a unique name for each new file",
 #else
-   "This option is ignored on this OS.",
+   "This option is ignored on this OS",
 #endif
    &use_temp_pool, &use_temp_pool, 0, GET_BOOL, NO_ARG, 0,
-   0, 0, 0, 0, 0},
+   0, 0, "", 0, 0},
   {"transaction-isolation", 0,
    "Default transaction isolation level",
    &global_system_variables.tx_isolation,
@@ -6880,36 +6973,36 @@ struct my_option my_long_options[]=
    GET_ENUM, REQUIRED_ARG, ISO_REPEATABLE_READ, 0, 0, 0, 0, 0},
   {"transaction-read-only", 0,
    "Default transaction access mode. "
-   "True if transactions are read-only.",
+   "True if transactions are read-only",
    &global_system_variables.tx_read_only,
    &global_system_variables.tx_read_only, 0,
    GET_BOOL, OPT_ARG, 0, 0, 0, 0, 0, 0},
-  {"user", 'u', "Run mysqld daemon as user.", 0, 0, 0, GET_STR, REQUIRED_ARG,
+  {"user", 'u', "User to run mariadbd process as", 0, 0, 0, GET_STR, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0},
-  {"verbose", 'v', "Used with --help option for detailed help.",
+  {"verbose", 'v', "Used with --help option for detailed help",
    &opt_verbose, &opt_verbose, 0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
-  {"version", 'V', "Output version information and exit.", 0, 0, 0, GET_STR,
+  {"version", 'V', "Output version information and exit", 0, 0, 0, GET_STR,
    OPT_ARG, 0, 0, 0, 0, 0, 0},
   {"plugin-load", OPT_PLUGIN_LOAD,
    "Semicolon-separated list of plugins to load, where each plugin is "
    "specified as ether a plugin_name=library_file pair or only a library_file. "
-   "If the latter case, all plugins from a given library_file will be loaded.",
+   "If the latter case, all plugins from a given library_file will be loaded",
    0, 0, 0,
    GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
   {"plugin-load-add", OPT_PLUGIN_LOAD_ADD,
    "Optional semicolon-separated list of plugins to load. This option adds "
    "to the list specified by --plugin-load in an incremental way. "
-   "It can be specified many times, adding more plugins every time.",
+   "It can be specified many times, adding more plugins every time",
    0, 0, 0,
     GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"table_cache", 0, "Deprecated; use --table-open-cache instead.",
+  {"table_cache", 0, "Sets table_open_cache",
    &tc_size, &tc_size, 0, GET_ULONG,
-   REQUIRED_ARG, TABLE_OPEN_CACHE_DEFAULT, 1, 512*1024L, 0, 1, 0},
+   REQUIRED_ARG, TABLE_OPEN_CACHE_DEFAULT, 1, 512*1024L, "table_open_cache", 1, 0},
 #ifdef WITH_WSREP
   {"wsrep-new-cluster", 0, "Bootstrap a cluster. It works by overriding the "
    "current value of wsrep_cluster_address. It is recommended not to add this "
    "option to the config file as this will trigger bootstrap on every server "
-   "start.", &wsrep_new_cluster, &wsrep_new_cluster, 0, GET_BOOL, NO_ARG,
+   "start", &wsrep_new_cluster, &wsrep_new_cluster, 0, GET_BOOL, NO_ARG,
    0, 0, 0, 0, 0, 0},
 #endif
 };
@@ -6939,16 +7032,21 @@ static int show_starttime(THD *thd, SHOW_VAR *var, void *buff,
   return 0;
 }
 
-#ifdef ENABLED_PROFILING
 static int show_flushstatustime(THD *thd, SHOW_VAR *var, void *buff,
-                                system_status_var *, enum_var_type)
+                                system_status_var *status_var,
+                                enum_var_type type)
 {
+  if (type == SHOW_OPT_GLOBAL)
+  {
+    /* For global status, global_status_var.flush_status_time is up to date */
+    status_var= &global_status_var;
+  }
+
   var->type= SHOW_LONG;
   var->value= buff;
-  *((long *)buff)= (long) (thd->query_start() - flush_status_time);
+  *((long *)buff)= (long) (thd->query_start() - status_var->flush_status_time);
   return 0;
 }
-#endif
 
 #ifdef HAVE_REPLICATION
 static int show_rpl_status(THD *, SHOW_VAR *var, void *, system_status_var *,
@@ -7567,11 +7665,12 @@ SHOW_VAR status_vars[]= {
   {"Master_gtid_wait_count",   (char*) offsetof(STATUS_VAR, master_gtid_wait_count), SHOW_LONG_STATUS},
   {"Master_gtid_wait_timeouts", (char*) offsetof(STATUS_VAR, master_gtid_wait_timeouts), SHOW_LONG_STATUS},
   {"Master_gtid_wait_time",    (char*) offsetof(STATUS_VAR, master_gtid_wait_time), SHOW_LONG_STATUS},
+  {"Max_tmp_space_used",       (char*) offsetof(STATUS_VAR, max_tmp_space_used), SHOW_LONGLONG_STATUS},
   {"Max_used_connections",     (char*) &max_used_connections,  SHOW_LONG},
   {"Max_used_connections_time",(char*) &show_max_used_connections_time, SHOW_SIMPLE_FUNC},
   {"Max_memory_used",          (char*) &show_max_memory_used, SHOW_SIMPLE_FUNC},
   {"Memory_used",              (char*) &show_memory_used, SHOW_SIMPLE_FUNC},
-  {"Memory_used_initial",      (char*) &start_memory_used, SHOW_LONGLONG},
+  {"Memory_used_initial",      (char*) &start_memory_used, SHOW_LONGLONG_NOFLUSH},
   {"Resultset_metadata_skipped", (char *) offsetof(STATUS_VAR, skip_metadata_count),SHOW_LONG_STATUS},
   {"Not_flushed_delayed_rows", (char*) &delayed_rows_in_use,    SHOW_LONG_NOFLUSH},
   {"Open_files",               (char*) &my_file_opened,         SHOW_SINT},
@@ -7607,7 +7706,6 @@ SHOW_VAR status_vars[]= {
   SHOW_FUNC_ENTRY("Rpl_semi_sync_slave_status",  &rpl_semi_sync_enabled),
   {"Rpl_semi_sync_slave_send_ack", (char*) &rpl_semi_sync_slave_send_ack, SHOW_LONGLONG},
 #endif /* HAVE_REPLICATION */
-#ifdef HAVE_QUERY_CACHE
   {"Qcache_free_blocks",       (char*) &query_cache.free_memory_blocks, SHOW_LONG_NOFLUSH},
   {"Qcache_free_memory",       (char*) &query_cache.free_memory, SHOW_LONG_NOFLUSH},
   {"Qcache_hits",              (char*) &query_cache.hits,       SHOW_LONG},
@@ -7616,7 +7714,6 @@ SHOW_VAR status_vars[]= {
   {"Qcache_not_cached",        (char*) &query_cache.refused,    SHOW_LONG},
   {"Qcache_queries_in_cache",  (char*) &query_cache.queries_in_cache, SHOW_LONG_NOFLUSH},
   {"Qcache_total_blocks",      (char*) &query_cache.total_blocks, SHOW_LONG_NOFLUSH},
-#endif /*HAVE_QUERY_CACHE*/
   {"Queries",                  (char*) &show_queries,            SHOW_SIMPLE_FUNC},
   {"Query_time",               (char*) offsetof(STATUS_VAR, query_time), SHOW_MICROSECOND_STATUS},
   {"Questions",                (char*) offsetof(STATUS_VAR, questions), SHOW_LONG_STATUS},
@@ -7694,6 +7791,7 @@ SHOW_VAR status_vars[]= {
   {"Tc_log_page_size",         (char*) &tc_log_page_size,       SHOW_LONG_NOFLUSH},
   {"Tc_log_page_waits",        (char*) &tc_log_page_waits,      SHOW_LONG},
 #endif
+  {"Tmp_space_used",           (char*) offsetof(STATUS_VAR, tmp_space_used), SHOW_LONGLONG_STATUS},
 #ifdef HAVE_POOL_OF_THREADS
   {"Threadpool_idle_threads",  (char *) &show_threadpool_idle_threads, SHOW_SIMPLE_FUNC},
   {"Threadpool_threads",       (char *) &show_threadpool_threads, SHOW_SIMPLE_FUNC},
@@ -7707,14 +7805,12 @@ SHOW_VAR status_vars[]= {
   {"Transactions_gtid_foreign_engine", (char*) &transactions_gtid_foreign_engine, SHOW_LONG},
   {"Update_scan",	       (char*) offsetof(STATUS_VAR, update_scan_count), SHOW_LONG_STATUS},
   {"Uptime",                   (char*) &show_starttime,         SHOW_SIMPLE_FUNC},
-#ifdef ENABLED_PROFILING
   {"Uptime_since_flush_status",(char*) &show_flushstatustime,   SHOW_SIMPLE_FUNC},
-#endif
 #ifdef WITH_WSREP
   {"wsrep_connected",         (char*) &wsrep_connected,         SHOW_BOOL},
   {"wsrep_ready",             (char*) &wsrep_show_ready,        SHOW_FUNC},
   {"wsrep_cluster_state_uuid",(char*) &wsrep_cluster_state_uuid,SHOW_CHAR_PTR},
-  {"wsrep_cluster_conf_id",   (char*) &wsrep_cluster_conf_id,   SHOW_LONGLONG},
+  {"wsrep_cluster_conf_id",   (char*) &wsrep_cluster_conf_id,   SHOW_LONGLONG_NOFLUSH},
   {"wsrep_cluster_status",    (char*) &wsrep_cluster_status,    SHOW_CHAR_PTR},
   {"wsrep_cluster_size",      (char*) &wsrep_cluster_size,      SHOW_LONG_NOFLUSH},
   {"wsrep_local_index",       (char*) &wsrep_local_index,       SHOW_LONG_NOFLUSH},
@@ -7824,7 +7920,7 @@ static void usage(void)
   puts("Starts the MariaDB database server.\n");
   printf("Usage: %s [OPTIONS]\n", my_progname);
   if (!opt_verbose)
-    puts("\nFor more help options (several pages), use mysqld --verbose --help.");
+    puts("\nFor more help options (several pages), use mariadbd --verbose --help.");
   else
   {
 #ifdef _WIN32
@@ -7853,7 +7949,8 @@ static void usage(void)
   }
 
     puts("\nTo see what variables a running server is using, type"
-         "\n'SELECT * FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES' instead of 'mysqld --verbose --help' or 'mariadbd --verbose --help'.");
+         "\n'SELECT * FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES' instead "
+         "of 'mariadbd --verbose --help'.");
   }
   DBUG_VOID_RETURN;
 }
@@ -7895,7 +7992,7 @@ static int mysql_init_variables(void)
   disable_log_notes= 0;
   mqh_used= 0;
   cleanup_done= 0;
-  select_errors= dropping_tables= ha_open_options=0;
+  select_errors= ha_open_options= 0;
   THD_count::count= CONNECT::count= 0;
   slave_open_temp_tables= 0;
   opt_endinfo= using_udf_functions= 0;
@@ -7916,9 +8013,7 @@ static int mysql_init_variables(void)
   prepared_stmt_count= 0;
   mysqld_unix_port= opt_mysql_tmpdir= my_bind_addr_str= NullS;
   bzero((uchar*) &mysql_tmpdir_list, sizeof(mysql_tmpdir_list));
-  /* Clear all except global_memory_used */
-  bzero((char*) &global_status_var, offsetof(STATUS_VAR,
-                                             last_cleared_system_status_var));
+  bzero((char*) &global_status_var, clear_for_server_start);
   opt_large_pages= 0;
   opt_super_large_pages= 0;
 #if defined(ENABLED_DEBUG_SYNC)
@@ -7927,8 +8022,9 @@ static int mysql_init_variables(void)
   key_map_full.set_all();
 
   /* Character sets */
-  system_charset_info= &my_charset_utf8mb3_general_ci;
-  files_charset_info= &my_charset_utf8mb3_general_ci;
+  system_charset_info= &my_charset_utf8mb3_general1400_as_ci;
+  system_charset_info_for_i_s= &my_charset_utf8mb3_general_ci;
+  files_charset_info= &my_charset_utf8mb3_general1400_as_ci;
   national_charset_info= &my_charset_utf8mb3_general_ci;
   table_alias_charset= &my_charset_bin;
   character_set_filesystem= &my_charset_bin;
@@ -8014,21 +8110,9 @@ static int mysql_init_variables(void)
 #else
   have_dlopen=SHOW_OPTION_NO;
 #endif
-#ifdef HAVE_QUERY_CACHE
   have_query_cache=SHOW_OPTION_YES;
-#else
-  have_query_cache=SHOW_OPTION_NO;
-#endif
-#ifdef HAVE_SPATIAL
   have_geometry=SHOW_OPTION_YES;
-#else
-  have_geometry=SHOW_OPTION_NO;
-#endif
-#ifdef HAVE_RTREE_KEYS
   have_rtree_keys=SHOW_OPTION_YES;
-#else
-  have_rtree_keys=SHOW_OPTION_NO;
-#endif
 #ifdef HAVE_CRYPT
   have_crypt=SHOW_OPTION_YES;
 #else
@@ -8128,6 +8212,8 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
   case OPT_REMOVED_OPTION:
     sql_print_warning("'%s' was removed. It does nothing now and exists only "
                       "for compatibility with old my.cnf files.", opt->name);
+    /* Restore default value (to show that the option cannot be used) */
+    my_getopt_init_one_value(opt, opt->value, opt->def_value);
     break;
   case OPT_MYSQL_COMPATIBILITY:
     sql_print_warning("'%s' is MySQL 5.6 / 5.7 compatible option. Not used or "
@@ -8339,11 +8425,7 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
     SYSVAR_AUTOSIZE(delay_key_write_options, (uint) DELAY_KEY_WRITE_NONE);
     myisam_recover_options= HA_RECOVER_DEFAULT;
     ha_open_options&= ~(HA_OPEN_DELAY_KEY_WRITE);
-#ifdef HAVE_QUERY_CACHE
     SYSVAR_AUTOSIZE(query_cache_size, 0);
-#endif
-    sql_print_warning("The syntax '--safe-mode' is deprecated and will be "
-                      "removed in a future release.");
     break;
   case (int) OPT_SKIP_HOST_CACHE:
     opt_specialflag|= SPECIAL_NO_HOST_CACHE;
@@ -8494,7 +8576,8 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
     val= strmake_root(&startup_root, val, (size_t) (ptr - val));
 
     /* Add instrument name and value to array of configuration options */
-    if (add_pfs_instr_to_array(name, val))
+    if (add_pfs_instr_to_array(Lex_cstring_strlen(name),
+                               Lex_cstring_strlen(val)))
     {
        my_getopt_error_reporter(WARNING_LEVEL,
                              "Invalid value for performance_schema_instrument "
@@ -8506,6 +8589,7 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
     break;
   }
   }
+
   return 0;
 }
 
@@ -8638,7 +8722,7 @@ mysql_getopt_value(const char *name, uint length,
   return option->value;
 }
 
-
+ATTRIBUTE_FORMAT(printf, 2, 3)
 static void option_error_reporter(enum loglevel level, const char *format, ...)
 {
   va_list args;
@@ -8717,8 +8801,6 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
     global_system_variables.old_behavior|= (OLD_MODE_NO_PROGRESS_INFO |
                                            OLD_MODE_IGNORE_INDEX_ONLY_FOR_JOIN |
                                            OLD_MODE_COMPAT_5_1_CHECKSUM);
-    sql_print_warning("--old is deprecated and will be removed in a future "
-                      "release. Please use --old-mode instead. ");
   }
 
   if (global_system_variables.net_buffer_length > 
@@ -8859,10 +8941,12 @@ static int get_options(int *argc_ptr, char ***argv_ptr)
   if (my_assert_on_error)
     debug_assert_if_crashed_table= 1;
 
-  global_system_variables.long_query_time= (ulonglong)
-    (global_system_variables.long_query_time_double * 1e6 + 0.1);
+  global_system_variables.log_slow_query_time= (ulonglong)
+    (global_system_variables.log_slow_query_time_double * 1e6 + 0.1);
   global_system_variables.max_statement_time= (ulonglong)
     (global_system_variables.max_statement_time_double * 1e6 + 0.1);
+  global_system_variables.log_slow_always_query_time= (ulonglong)
+    (global_system_variables.log_slow_always_query_time_double * 1e6 + 0.1);
 
   if (opt_short_log_format)
     opt_specialflag|= SPECIAL_SHORT_LOG_FORMAT;
@@ -9170,7 +9254,7 @@ static int test_if_case_insensitive(const char *dir_name)
                                buff, 0666, O_RDWR, MYF(0))) < 0)
   {
     if (!opt_abort)
-      sql_print_warning("Can't create test file '%s' (Errcode: %M)", buff, my_errno);
+      sql_print_warning("Can't create test file '%s' (Errcode: %iE)", buff, my_errno);
     DBUG_RETURN(-1);
   }
   mysql_file_close(file, MYF(0));
@@ -9230,8 +9314,77 @@ static void delete_pid_file(myf flags)
 }
 
 
-/** Clear most status variables. */
-void refresh_status(THD *thd)
+/** Clear session (connection) status variables */
+
+void refresh_session_status(THD *thd)
+{
+  /* Add thread's status variables to global status */
+  mysql_mutex_lock(&LOCK_status);
+  add_to_status(&global_status_var, &thd->status_var);
+  mysql_mutex_unlock(&LOCK_status);
+
+  /* Reset thread's status variables */
+  thd->set_status_var_init(clear_for_flush_status);
+  thd->status_var.global_memory_used= 0;
+  bzero((uchar*) &thd->org_status_var, sizeof(thd->org_status_var)); 
+  thd->start_bytes_received= 0;
+}
+
+
+/*
+  Refresh (reset) global status variables
+*/
+
+void refresh_global_status()
+{
+  mysql_mutex_lock(&LOCK_status);
+
+  /*
+    Reset variables of type SHOW_LONG and SHOW_LONGLONG registered in
+    'all_status_vars' (includes all variables in 'status_vars[])
+  */
+  reset_status_vars();
+  /*
+    Reset accoumulated thread's status variables.
+    These are the variables in 'status_vars[]' with the prefix _STATUS.
+ */
+  bzero(&global_status_var, clear_for_flush_status);
+
+#ifdef WITH_WSREP
+  if (WSREP_ON)
+  {
+    Wsrep_server_state::instance().provider().reset_status();
+  }
+#endif /* WITH_WSREP */
+
+#ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
+  /* Reset aggregated status counters. */
+  reset_pfs_status_stats();
+#endif
+
+  /* Reset the counters of all key caches (default and named). */
+  process_key_caches(reset_key_cache_counters, 0);
+  global_status_var.flush_status_time= my_time(0);
+  mysql_mutex_unlock(&LOCK_status);
+
+#ifdef HAVE_REPLICATION
+  repl_semisync_master.reset_stats();
+#endif
+
+  /*
+    Set max_used_connections to the number of currently open
+    connections.  This is not perfect, but status data is not exact anyway.
+  */
+  max_used_connections= connection_count + extra_connection_count;
+  max_used_connections_time= time(nullptr);
+}
+
+/** Emulate the legacy FLUSH STATUS inconsistent behavior
+
+  * additive session variables are added to global and set to 0 in session
+  * non-additive global variables are set to 0
+*/
+void refresh_status_legacy(THD *thd)
 {
   mysql_mutex_lock(&LOCK_status);
 
@@ -9240,17 +9393,16 @@ void refresh_status(THD *thd)
   reset_pfs_status_stats();
 #endif
 
-  /* Add thread's status variabels to global status */
+  /* Add thread's status variabes to global status */
   add_to_status(&global_status_var, &thd->status_var);
 
   /* Reset thread's status variables */
-  thd->set_status_var_init();
+  thd->set_status_var_init(clear_for_flush_status);
   thd->status_var.global_memory_used= 0;
-  bzero((uchar*) &thd->org_status_var, sizeof(thd->org_status_var)); 
+  bzero((uchar*) &thd->org_status_var, sizeof(thd->org_status_var));
   thd->start_bytes_received= 0;
 
   /* Reset some global variables */
-  reset_status_vars();
 #ifdef WITH_WSREP
   if (WSREP_ON)
   {
@@ -9260,7 +9412,7 @@ void refresh_status(THD *thd)
 
   /* Reset the counters of all key caches (default and named). */
   process_key_caches(reset_key_cache_counters, 0);
-  flush_status_time= time((time_t*) 0);
+  global_status_var.flush_status_time= my_time(0);
   mysql_mutex_unlock(&LOCK_status);
 
   /*
@@ -9270,6 +9422,8 @@ void refresh_status(THD *thd)
   max_used_connections= connection_count + extra_connection_count;
   max_used_connections_time= time(nullptr);
 }
+
+
 
 #ifdef HAVE_PSI_INTERFACE
 static PSI_file_info all_server_files[]=
@@ -9712,33 +9866,22 @@ static PSI_memory_info all_server_memory[]=
   { &key_memory_locked_table_list, "Locked_tables_list::m_locked_tables_root", 0},
   { &key_memory_locked_thread_list, "display_table_locks", PSI_FLAG_THREAD},
   { &key_memory_thd_transactions, "THD::transactions::mem_root", PSI_FLAG_THREAD},
-//  { &key_memory_delegate, "Delegate::memroot", 0},
   { &key_memory_acl_mem, "sql_acl_mem", PSI_FLAG_GLOBAL},
   { &key_memory_acl_memex, "sql_acl_memex", PSI_FLAG_GLOBAL},
   { &key_memory_acl_cache, "acl_cache", PSI_FLAG_GLOBAL},
   { &key_memory_thd_main_mem_root, "thd::main_mem_root", PSI_FLAG_THREAD},
-//  { &key_memory_help, "help", 0},
-//  { &key_memory_new_frm_mem, "new_frm_mem", 0},
   { &key_memory_table_share, "TABLE_SHARE::mem_root", PSI_FLAG_GLOBAL}, /* table definition cache */
   { &key_memory_gdl, "gdl", 0},
   { &key_memory_table_triggers_list, "Table_triggers_list", 0},
 //  { &key_memory_servers, "servers", 0},
   { &key_memory_prepared_statement_map, "Prepared_statement_map", PSI_FLAG_THREAD},
   { &key_memory_prepared_statement_main_mem_root, "Prepared_statement::main_mem_root", PSI_FLAG_THREAD},
-//  { &key_memory_protocol_rset_root, "Protocol_local::m_rset_root", PSI_FLAG_THREAD},
-//  { &key_memory_warning_info_warn_root, "Warning_info::m_warn_root", PSI_FLAG_THREAD},
   { &key_memory_sp_cache, "THD::sp_cache", 0},
   { &key_memory_sp_head_main_root, "sp_head::main_mem_root", 0},
   { &key_memory_sp_head_execute_root, "sp_head::execute_mem_root", PSI_FLAG_THREAD},
   { &key_memory_sp_head_call_root, "sp_head::call_mem_root", PSI_FLAG_THREAD},
   { &key_memory_table_mapping_root, "table_mapping::m_mem_root", 0},
   { &key_memory_quick_range_select_root, "QUICK_RANGE_SELECT::alloc", PSI_FLAG_THREAD},
-//  { &key_memory_quick_index_merge_root, "QUICK_INDEX_MERGE_SELECT::alloc", PSI_FLAG_THREAD},
-//  { &key_memory_quick_ror_intersect_select_root, "QUICK_ROR_INTERSECT_SELECT::alloc", PSI_FLAG_THREAD},
-//  { &key_memory_quick_ror_union_select_root, "QUICK_ROR_UNION_SELECT::alloc", PSI_FLAG_THREAD},
-//  { &key_memory_quick_group_min_max_select_root, "QUICK_GROUP_MIN_MAX_SELECT::alloc", PSI_FLAG_THREAD},
-//  { &key_memory_test_quick_select_exec, "test_quick_select", PSI_FLAG_THREAD},
-//  { &key_memory_prune_partitions_exec, "prune_partitions::exec", 0},
   { &key_memory_binlog_recover_exec, "MYSQL_BIN_LOG::recover", 0},
   { &key_memory_blob_mem_storage, "Blob_mem_storage::storage", 0},
   { &key_memory_NAMED_ILINK_name, "NAMED_ILINK::name", 0},
@@ -9747,17 +9890,12 @@ static PSI_memory_info all_server_memory[]=
   { &key_memory_queue_item, "Queue::queue_item", 0},
   { &key_memory_THD_db, "THD::db", 0},
   { &key_memory_user_var_entry, "user_var_entry", 0},
-//  { &key_memory_Slave_job_group_group_relay_log_name, "Slave_job_group::group_relay_log_name", 0},
   { &key_memory_Relay_log_info_group_relay_log_name, "Relay_log_info::group_relay_log_name", 0},
   { &key_memory_binlog_cache_mngr, "binlog_cache_mngr", 0},
   { &key_memory_binlog_gtid_index, "binlog_gtid_index", 0},
   { &key_memory_Row_data_memory_memory, "Row_data_memory::memory", 0},
-//  { &key_memory_Gtid_set_to_string, "Gtid_set::to_string", 0},
-//  { &key_memory_Gtid_state_to_string, "Gtid_state::to_string", 0},
-//  { &key_memory_Owned_gtids_to_string, "Owned_gtids::to_string", 0},
 //  { &key_memory_log_event, "Log_event", 0},
 //  { &key_memory_Incident_log_event_message, "Incident_log_event::message", 0},
-//  { &key_memory_Rows_query_log_event_rows_query, "Rows_query_log_event::rows_query", 0},
   { &key_memory_Sort_param_tmp_buffer, "Sort_param::tmp_buffer", 0},
   { &key_memory_Filesort_info_merge, "Filesort_info::merge", 0},
   { &key_memory_Filesort_info_record_pointers, "Filesort_info::record_pointers", 0},
@@ -9770,7 +9908,6 @@ static PSI_memory_info all_server_memory[]=
   { &key_memory_User_level_lock, "User_level_lock", 0},
   { &key_memory_MYSQL_LOG_name, "MYSQL_LOG::name", 0},
   { &key_memory_TC_LOG_MMAP_pages, "TC_LOG_MMAP::pages", 0},
-//  { &key_memory_my_bitmap_map, "my_bitmap_map", 0},
   { &key_memory_QUICK_RANGE_SELECT_mrr_buf_desc, "QUICK_RANGE_SELECT::mrr_buf_desc", 0},
   { &key_memory_Event_queue_element_for_exec_names, "Event_queue_element_for_exec::names", 0},
   { &key_memory_my_str_malloc, "my_str_malloc", 0},
@@ -9781,39 +9918,21 @@ static PSI_memory_info all_server_memory[]=
   { &key_memory_rpl_filter, "rpl_filter memory", 0},
   { &key_memory_errmsgs, "errmsgs", 0},
   { &key_memory_Gis_read_stream_err_msg, "Gis_read_stream::err_msg", 0},
-//  { &key_memory_Geometry_objects_data, "Geometry::ptr_and_wkb_data", 0},
   { &key_memory_MYSQL_LOCK, "MYSQL_LOCK", 0},
 //  { &key_memory_NET_buff, "NET::buff", 0},
 //  { &key_memory_NET_compress_packet, "NET::compress_packet", 0},
   { &key_memory_Event_scheduler_scheduler_param, "Event_scheduler::scheduler_param", 0},
-//  { &key_memory_Gtid_set_Interval_chunk, "Gtid_set::Interval_chunk", 0},
-//  { &key_memory_Owned_gtids_sidno_to_hash, "Owned_gtids::sidno_to_hash", 0},
-//  { &key_memory_Sid_map_Node, "Sid_map::Node", 0},
-//  { &key_memory_Gtid_state_group_commit_sidno, "Gtid_state::group_commit_sidno_locks", 0},
-//  { &key_memory_Mutex_cond_array_Mutex_cond, "Mutex_cond_array::Mutex_cond", 0},
   { &key_memory_TABLE_RULE_ENT, "TABLE_RULE_ENT", 0},
-//  { &key_memory_Rpl_info_table, "Rpl_info_table", 0},
   { &key_memory_Rpl_info_file_buffer, "Rpl_info_file::buffer", 0},
-//  { &key_memory_db_worker_hash_entry, "db_worker_hash_entry", 0},
-//  { &key_memory_rpl_slave_check_temp_dir, "rpl_slave::check_temp_dir", 0},
-//  { &key_memory_rpl_slave_command_buffer, "rpl_slave::command_buffer", 0},
   { &key_memory_binlog_ver_1_event, "binlog_ver_1_event", 0},
   { &key_memory_SLAVE_INFO, "SLAVE_INFO", 0},
   { &key_memory_binlog_pos, "binlog_pos", 0},
-//  { &key_memory_HASH_ROW_ENTRY, "HASH_ROW_ENTRY", 0},
   { &key_memory_binlog_statement_buffer, "binlog_statement_buffer", 0},
-//  { &key_memory_partition_syntax_buffer, "partition_syntax_buffer", 0},
-//  { &key_memory_READ_INFO, "READ_INFO", 0},
   { &key_memory_JOIN_CACHE, "JOIN_CACHE", 0},
-//  { &key_memory_TABLE_sort_io_cache, "TABLE::sort_io_cache", 0},
-//  { &key_memory_frm, "frm", 0},
   { &key_memory_Unique_sort_buffer, "Unique::sort_buffer", 0},
   { &key_memory_Unique_merge_buffer, "Unique::merge_buffer", 0},
   { &key_memory_TABLE, "TABLE", PSI_FLAG_GLOBAL}, /* Table cache */
-//  { &key_memory_frm_extra_segment_buff, "frm::extra_segment_buff", 0},
-//  { &key_memory_frm_form_pos, "frm::form_pos", 0},
   { &key_memory_frm_string, "frm::string", 0},
-//  { &key_memory_LOG_name, "LOG_name", 0},
   { &key_memory_DATE_TIME_FORMAT, "DATE_TIME_FORMAT", 0},
   { &key_memory_DDL_LOG_MEMORY_ENTRY, "DDL_LOG_MEMORY_ENTRY", 0},
   { &key_memory_ST_SCHEMA_TABLE, "ST_SCHEMA_TABLE", 0},
@@ -9821,30 +9940,15 @@ static PSI_memory_info all_server_memory[]=
   { &key_memory_PROFILE, "PROFILE", 0},
   { &key_memory_global_system_variables, "global_system_variables", 0},
   { &key_memory_THD_variables, "THD::variables", 0},
-//  { &key_memory_Security_context, "Security_context", 0},
-//  { &key_memory_shared_memory_name, "Shared_memory_name", 0},
   { &key_memory_bison_stack, "bison_stack", 0},
   { &key_memory_THD_handler_tables_hash, "THD::handler_tables_hash", 0},
   { &key_memory_hash_index_key_buffer, "hash_index_key_buffer", 0},
   { &key_memory_dboptions_hash, "dboptions_hash", 0},
   { &key_memory_dbnames_cache, "dbnames_cache", 0},
   { &key_memory_user_conn, "user_conn", 0},
-//  { &key_memory_LOG_POS_COORD, "LOG_POS_COORD", 0},
-//  { &key_memory_XID_STATE, "XID_STATE", 0},
   { &key_memory_MPVIO_EXT_auth_info, "MPVIO_EXT::auth_info", 0},
-//  { &key_memory_opt_bin_logname, "opt_bin_logname", 0},
   { &key_memory_Query_cache, "Query_cache", PSI_FLAG_GLOBAL},
-//  { &key_memory_READ_RECORD_cache, "READ_RECORD_cache", 0},
-//  { &key_memory_Quick_ranges, "Quick_ranges", 0},
-//  { &key_memory_File_query_log_name, "File_query_log::name", 0},
   { &key_memory_Table_trigger_dispatcher, "Table_trigger_dispatcher::m_mem_root", 0},
-//  { &key_memory_thd_timer, "thd_timer", 0},
-//  { &key_memory_THD_Session_tracker, "THD::Session_tracker", 0},
-//  { &key_memory_THD_Session_sysvar_resource_manager, "THD::Session_sysvar_resource_manager", 0},
-//  { &key_memory_show_slave_status_io_gtid_set, "show_slave_status_io_gtid_set", 0},
-//  { &key_memory_write_set_extraction, "write_set_extraction", 0},
-//  { &key_memory_get_all_tables, "get_all_tables", 0},
-//  { &key_memory_fill_schema_schemata, "fill_schema_schemata", 0},
   { &key_memory_native_functions, "native_functions", PSI_FLAG_GLOBAL},
   { &key_memory_WSREP, "wsrep", 0 }
 };

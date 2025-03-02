@@ -21,48 +21,6 @@
 #ifdef USE_MB
 
 
-size_t my_caseup_str_mb(CHARSET_INFO * cs, char *str)
-{
-  register uint32 l;
-  register const uchar *map= cs->to_upper;
-  char *str_orig= str;
-  
-  while (*str)
-  {
-    /* Pointing after the '\0' is safe here. */
-    if ((l= my_ismbchar(cs, str, str + cs->mbmaxlen)))
-      str+= l;
-    else
-    { 
-      *str= (char) map[(uchar)*str];
-      str++;
-    }
-  }
-  return (size_t) (str - str_orig);
-}
-
-
-size_t my_casedn_str_mb(CHARSET_INFO * cs, char *str)
-{
-  register uint32 l;
-  register const uchar *map= cs->to_lower;
-  char *str_orig= str;
-  
-  while (*str)
-  {
-    /* Pointing after the '\0' is safe here. */
-    if ((l= my_ismbchar(cs, str, str + cs->mbmaxlen)))
-      str+= l;
-    else
-    {
-      *str= (char) map[(uchar)*str];
-      str++;
-    }
-  }
-  return (size_t) (str - str_orig);
-}
-
-
 static inline const MY_CASEFOLD_CHARACTER*
 get_case_info_for_ch(CHARSET_INFO *cs, uint page, uint offs)
 {
@@ -140,34 +98,6 @@ my_caseup_mb(CHARSET_INFO * cs, const char *src, size_t srclen,
   DBUG_ASSERT(dstlen >= srclen * cs->cset->caseup_multiply(cs));
   DBUG_ASSERT(src != dst || cs->cset->caseup_multiply(cs) == 1);
   return my_casefold_mb(cs, src, srclen, dst, dstlen, cs->to_upper, 1);
-}
-
-
-/*
-  my_strcasecmp_mb() returns 0 if strings are equal, non-zero otherwise.
- */
-
-int my_strcasecmp_mb(CHARSET_INFO * cs,const char *s, const char *t)
-{
-  register uint32 l;
-  register const uchar *map=cs->to_upper;
-  
-  while (*s && *t)
-  {
-    /* Pointing after the '\0' is safe here. */
-    if ((l=my_ismbchar(cs, s, s + cs->mbmaxlen)))
-    {
-      while (l--)
-        if (*s++ != *t++) 
-          return 1;
-    }
-    else if (my_ci_charlen(cs, (const uchar *) t, (const uchar *) t + cs->mbmaxlen) > 1)
-      return 1;
-    else if (map[(uchar) *s++] != map[(uchar) *t++])
-      return 1;
-  }
-  /* At least one of '*s' and '*t' is zero here. */
-  return (*t != *s);
 }
 
 
@@ -512,12 +442,16 @@ uint my_instr_mb(CHARSET_INFO *cs,
   characters having multibyte weights *equal* to their codes:
   cp932, euckr, gb2312, sjis, eucjpms, ujis.
 */
-size_t my_strnxfrm_mb_internal(CHARSET_INFO *cs, uchar *dst, uchar *de,
-                               uint *nweights, const uchar *src, size_t srclen)
+my_strnxfrm_ret_t my_strnxfrm_mb_internal(CHARSET_INFO *cs,
+                                          uchar *dst, uchar *de,
+                                          uint *nweights,
+                                          const uchar *src, size_t srclen)
 {
   uchar *d0= dst;
+  const uchar *src0= src;
   const uchar *se= src + srclen;
   const uchar *sort_order= cs->sort_order;
+  uint warnings= 0;
 
   DBUG_ASSERT(cs->mbmaxlen <= 4);
 
@@ -550,7 +484,7 @@ size_t my_strnxfrm_mb_internal(CHARSET_INFO *cs, uchar *dst, uchar *de,
           my_strnxfrm_mb_non_ascii_char(cs, dst, src, se);
       }
     }
-    goto end;
+    return my_strnxfrm_ret_construct(dst - d0, src - src0, 0);
   }
 
   /*
@@ -570,49 +504,53 @@ size_t my_strnxfrm_mb_internal(CHARSET_INFO *cs, uchar *dst, uchar *de,
     {
       /* Multi-byte character */
       size_t len= (dst + chlen <= de) ? chlen : de - dst;
+      if (dst + chlen > de)
+        warnings|= MY_STRNXFRM_TRUNCATED_WEIGHT_REAL_CHAR;
       memcpy(dst, src, len);
       dst+= len;
-      src+= len;
+      src+= chlen;
     }
   }
 
-end:
-  return dst - d0;
+  return my_strnxfrm_ret_construct(dst - d0, src - src0,
+           warnings |
+           (src < se ? MY_STRNXFRM_TRUNCATED_WEIGHT_REAL_CHAR : 0));
 }
 
 
-size_t
+my_strnxfrm_ret_t
 my_strnxfrm_mb(CHARSET_INFO *cs,
                uchar *dst, size_t dstlen, uint nweights,
                const uchar *src, size_t srclen, uint flags)
 {
   uchar *de= dst + dstlen;
-  uchar *d0= dst;
-  dst= d0 + my_strnxfrm_mb_internal(cs, dst, de, &nweights, src, srclen);
-  return my_strxfrm_pad_desc_and_reverse(cs, d0, dst, de, nweights, flags, 0);
+  my_strnxfrm_ret_t rc= my_strnxfrm_mb_internal(cs, dst, de, &nweights,
+                                                src, srclen);
+  my_strnxfrm_ret_t rcpad= my_strxfrm_pad_desc_and_reverse(cs, dst,
+                                                      dst + rc.m_result_length,
+                                                      de, nweights, flags, 0);
+
+  return my_strnxfrm_ret_construct(rcpad.m_result_length,
+                                   rc.m_source_length_used,
+                                   rc.m_warnings | rcpad.m_warnings);
 }
 
 
-size_t
+my_strnxfrm_ret_t
 my_strnxfrm_mb_nopad(CHARSET_INFO *cs,
                      uchar *dst, size_t dstlen, uint nweights,
                      const uchar *src, size_t srclen, uint flags)
 {
   uchar *de= dst + dstlen;
-  uchar *d0= dst;
-  dst= d0 + my_strnxfrm_mb_internal(cs, dst, de, &nweights, src, srclen);
-  return my_strxfrm_pad_desc_and_reverse_nopad(cs, d0, dst, de, nweights,
-                                               flags, 0);
+  my_strnxfrm_ret_t rc= my_strnxfrm_mb_internal(cs, dst, de, &nweights,
+                                                src, srclen);
+  my_strnxfrm_ret_t rcpad= my_strxfrm_pad_desc_and_reverse_nopad(cs, dst,
+                                                     dst + rc.m_result_length,
+                                                     de, nweights, flags, 0);
+  return my_strnxfrm_ret_construct(rcpad.m_result_length,
+                                   rc.m_source_length_used,
+                                   rc.m_warnings | rcpad.m_warnings);;
 }
-
-
-int
-my_strcasecmp_mb_bin(CHARSET_INFO * cs __attribute__((unused)),
-                     const char *s, const char *t)
-{
-  return strcmp(s,t);
-}
-
 
 
 void

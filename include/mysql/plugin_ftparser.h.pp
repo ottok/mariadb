@@ -130,8 +130,10 @@ extern struct logger_service_st {
                          unsigned long long size_limit,
                          unsigned int rotations);
   int (*close)(LOGGER_HANDLE *log);
-  int (*vprintf)(LOGGER_HANDLE *log, const char *fmt, va_list argptr);
-  int (*printf)(LOGGER_HANDLE *log, const char *fmt, ...);
+  int (*vprintf)(LOGGER_HANDLE *log, const char *fmt, va_list argptr)
+    __attribute__((format(printf, 2, 0)));
+  int (*printf)(LOGGER_HANDLE *log, const char *fmt, ...)
+    __attribute__((format(printf, 2, 3)));
   int (*write)(LOGGER_HANDLE *log, const char *buffer, size_t size);
   int (*rotate)(LOGGER_HANDLE *log);
 } *logger_service;
@@ -140,8 +142,10 @@ extern struct logger_service_st {
                              unsigned long long size_limit,
                              unsigned int rotations);
   int logger_close(LOGGER_HANDLE *log);
-  int logger_vprintf(LOGGER_HANDLE *log, const char *fmt, va_list argptr);
-  int logger_printf(LOGGER_HANDLE *log, const char *fmt, ...);
+  int logger_vprintf(LOGGER_HANDLE *log, const char *fmt, va_list argptr)
+    __attribute__((format(printf, 2, 0)));
+  int logger_printf(LOGGER_HANDLE *log, const char *fmt, ...)
+    __attribute__((format(printf, 2, 3)));
   int logger_write(LOGGER_HANDLE *log, const char *buffer, size_t size);
   int logger_rotate(LOGGER_HANDLE *log);
 }
@@ -195,20 +199,32 @@ unsigned int my_aes_ctx_size(enum my_aes_mode mode);
 extern "C" {
 extern struct my_print_error_service_st {
   void (*my_error_func)(unsigned int nr, unsigned long MyFlags, ...);
-  void (*my_printf_error_func)(unsigned int nr, const char *fmt, unsigned long MyFlags,...);
-  void (*my_printv_error_func)(unsigned int error, const char *format, unsigned long MyFlags, va_list ap);
+  void (*my_printf_error_func)(unsigned int nr, const char *fmt,
+                               unsigned long MyFlags, ...)
+                               __attribute__((format(printf, 2, 4)));
+  void (*my_printv_error_func)(unsigned int error, const char *format,
+                               unsigned long MyFlags, va_list ap)
+                               __attribute__((format(printf, 2, 0)));
 } *my_print_error_service;
 extern void my_error(unsigned int nr, unsigned long MyFlags, ...);
-extern void my_printf_error(unsigned int my_err, const char *format, unsigned long MyFlags, ...);
-extern void my_printv_error(unsigned int error, const char *format, unsigned long MyFlags,va_list ap);
+extern void my_printf_error(unsigned int my_err, const char *format,
+                            unsigned long MyFlags, ...)
+                            __attribute__((format(printf, 2, 4)));
+extern void my_printv_error(unsigned int error, const char *format,
+                            unsigned long MyFlags,va_list ap)
+                            __attribute__((format(printf, 2, 0)));
 }
 extern "C" {
 extern struct my_snprintf_service_st {
-  size_t (*my_snprintf_type)(char*, size_t, const char*, ...);
-  size_t (*my_vsnprintf_type)(char *, size_t, const char*, va_list);
+  size_t (*my_snprintf_type)(char*, size_t, const char*, ...)
+    __attribute__((format(printf, 3, 4)));
+  size_t (*my_vsnprintf_type)(char *, size_t, const char*, va_list)
+    __attribute__((format(printf, 3, 0)));
 } *my_snprintf_service;
-size_t my_snprintf(char* to, size_t n, const char* fmt, ...);
-size_t my_vsnprintf(char *to, size_t n, const char* fmt, va_list ap);
+size_t my_snprintf(char* to, size_t n, const char* fmt, ...)
+  __attribute__((format(printf, 3, 4)));
+size_t my_vsnprintf(char *to, size_t n, const char* fmt, va_list ap)
+  __attribute__((format(printf, 3, 0)));
 }
 extern "C" {
 extern struct progress_report_service_st {
@@ -385,7 +401,6 @@ void thd_key_delete(MYSQL_THD_KEY_T *key);
 void* thd_getspecific(THD* thd, MYSQL_THD_KEY_T key);
 int thd_setspecific(THD* thd, MYSQL_THD_KEY_T key, void *value);
 }
-typedef long my_time_t;
 enum enum_mysql_timestamp_type
 {
   MYSQL_TIMESTAMP_NONE= -2, MYSQL_TIMESTAMP_ERROR= -1,
@@ -596,7 +611,7 @@ struct st_mysql_storage_engine
 {
   int interface_version;
 };
-struct handlerton;
+struct transaction_participant;
  struct Mysql_replication {
    int interface_version;
  };
@@ -624,8 +639,8 @@ void thd_get_xid(const THD* thd, MYSQL_XID *xid);
 void mysql_query_cache_invalidate4(THD* thd,
                                    const char *key, unsigned int key_length,
                                    int using_trx);
-void *thd_get_ha_data(const THD* thd, const struct handlerton *hton);
-void thd_set_ha_data(THD* thd, const struct handlerton *hton,
+void *thd_get_ha_data(const THD* thd, const struct transaction_participant *hton);
+void thd_set_ha_data(THD* thd, const struct transaction_participant *hton,
                      const void *ha_data);
 void thd_wakeup_subsequent_commits(THD* thd, int wakeup_error);
 }

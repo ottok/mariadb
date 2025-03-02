@@ -64,17 +64,20 @@
 #define PARSED_EARLY sys_var::PARSE_EARLY+
 #define NO_SET_STMT sys_var::NO_SET_STATEMENT+
 
+extern const char *UNUSED_HELP;
+
 /*
   Sys_var_bit meaning is reversed, like in
   @@foreign_key_checks <-> OPTION_NO_FOREIGN_KEY_CHECKS
 */
 #define REVERSE(X) ~(X)
 #define DEPRECATED(V, REPL) (check_deprecated_version<V>(), REPL)
+#define DEPRECATED_NO_REPLACEMENT(V) DEPRECATED(V, "")
 
 #define session_var(THD, TYPE) (*(TYPE*)session_var_ptr(THD))
 #define global_var(TYPE) (*(TYPE*)global_var_ptr())
 
-#if SIZEOF_OFF_T > 4 && defined(BIG_TABLES)
+#if SIZEOF_OFF_T > 4
 #define GET_HA_ROWS GET_ULL
 #else
 #define GET_HA_ROWS GET_ULONG
@@ -102,7 +105,7 @@
 
 
 static const char *bool_values[3]= {"OFF", "ON", 0};
-TYPELIB bool_typelib={ array_elements(bool_values)-1, "", bool_values, 0 };
+TYPELIB bool_typelib= CREATE_TYPELIB_FOR(bool_values);
 
 
 template<class BASE, privilege_t GLOBAL_PRIV, privilege_t SESSION_PRIV>
@@ -1641,7 +1644,7 @@ public:
   Sys_var_plugin(const char *name_arg,
           const char *comment, int flag_args, ptrdiff_t off, size_t size,
           CMD_LINE getopt,
-          int plugin_type_arg, char **def_val, PolyLock *lock=0,
+          int plugin_type_arg, const char **def_val, PolyLock *lock=0,
           enum binlog_status_enum binlog_status_arg=VARIABLE_NOT_IN_BINLOG,
           on_check_function on_check_func=0,
           on_update_function on_update_func=0,
@@ -2933,7 +2936,7 @@ private:
       break;
     case SYSTEM_TIME_AS_OF:
     {
-      char *buf= (char*) thd->alloc(MAX_DATE_STRING_REP_LENGTH);
+      char *buf= thd->alloc(MAX_DATE_STRING_REP_LENGTH);
       MYSQL_TIME ltime;
 
       thd->variables.time_zone->gmt_sec_to_TIME(&ltime, val.unix_time);
@@ -2994,7 +2997,7 @@ private:
                                      const Charset_collation_map_st &map)
   {
     size_t nbytes= map.text_format_nbytes_needed();
-    char *buf= (char *) thd->alloc(nbytes + 1);
+    char *buf= thd->alloc(nbytes + 1);
     size_t length= map.print(buf, nbytes);
     buf[length]= '\0';
     return (uchar *) buf;
@@ -3004,8 +3007,7 @@ private:
 
   bool do_check(THD *thd, set_var *var) override
   {
-    Charset_collation_map_st *map= (Charset_collation_map_st*)
-                                   thd->alloc(sizeof(Charset_collation_map_st));
+    Charset_collation_map_st *map= thd->alloc<Charset_collation_map_st>(1);
     if (!map || charset_collation_map_from_item(map, var->value,
                                                 thd->get_utf8_flag()))
       return true;

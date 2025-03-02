@@ -2,9 +2,7 @@
 # Test timestamp
 #
 
---disable_warnings
-drop table if exists t1,t2;
---enable_warnings
+--source include/word_size.inc
 
 # Set timezone to GMT-3, to make it possible to use "interval 3 hour"
 set time_zone="+03:00";
@@ -742,11 +740,7 @@ FLUSH TABLES;
 # 0xFF       - record flags
 # 0x77777777 - TIMESTAMP integer part
 # 0xFFFFFF   - TIMESTAMP bad fractional part
---disable_cursor_protocol
---disable_ps2_protocol
 --eval SELECT CONCAT(0xFF,0x77777777,0xFFFFFF) INTO OUTFILE '$MYSQLD_DATADIR/test/t1.MYD' FIELDS TERMINATED BY '' ESCAPED BY '' LINES TERMINATED BY ''
---enable_ps2_protocol
---enable_cursor_protocol
 --eval SELECT HEX(LOAD_FILE('$MYSQLD_DATADIR/test/t1.MYD')) AS MYD
 --enable_query_log
 SELECT a, CAST(a AS DATETIME) AS dt0, CAST(a AS DATETIME(6)) AS dt6 FROM t1;
@@ -994,20 +988,20 @@ EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=FROM_UNIXTIME(24*3600-1);
 --echo # FROM_UNIXTIME(24*3600) .. FROM_UNIXTIME(0x7FFFFFFF-24*3600)
 --echo #
 
-EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=FROM_UNIXTIME(24*3600);
+EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=CAST(FROM_UNIXTIME(24*3600) AS DATETIME);
 EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=TIMESTAMP'1970-01-02 00:00:00';
 EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=TIMESTAMP'2038-01-18 03:14:07';
-EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=FROM_UNIXTIME(0x7FFFFFFF-24*3600);
+EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=CAST(FROM_UNIXTIME(0x7FFFFFFF-24*3600) AS DATETIME);
 
 --echo #
 --echo # Corner cases: DATETIME values after the supported optimization range
 --echo # FROM_UNIXTIME(0x7FFFFFFF-24*3600+1) .. FROM_UNIXTIME(0x7FFFFFFF)
 --echo #
 
-EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=FROM_UNIXTIME(0x7FFFFFFF-24*3600+1);
+EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=CAST(FROM_UNIXTIME(0x7FFFFFFF-24*3600+1) AS DATETIME);
 EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=TIMESTAMP'2038-01-18 03:14:08';
 EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=TIMESTAMP'2038-01-19 03:14:07';
-EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=FROM_UNIXTIME(0x7FFFFFFF);
+EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=CAST(FROM_UNIXTIME(0x7FFFFFFF) AS DATETIME);
 
 --echo #
 --echo # Corner cases: rounding
@@ -1366,12 +1360,7 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 DROP TABLE t1;
 
-
---echo #
 --echo # End of 11.3 tests
---echo #
-
---echo # Start of 11.4 tests
 
 --echo #
 --echo # MDEV-35677 Assertion `thd->is_error()' failed in virtual bool Field::sp_prepare_and_store_item(THD*, Item**)
@@ -1388,3 +1377,40 @@ DROP TABLE t;
 DROP FUNCTION f;
 
 --echo # End of 11.4 tests
+
+--echo #
+--echo # MDEV-35250 Assertion `dec <= 6' failed in my_timestamp_binary_length
+--echo #
+
+SET time_zone='+00:00';
+# Disable view protocol to workaround MDEV-29534
+--disable_view_protocol
+# Check after fix MDEV-31730
+--disable_cursor_protocol
+SELECT FROM_UNIXTIME('1922-02-10') AS c1, BIT_AND(1) AS c2;
+SELECT FROM_UNIXTIME('1922') AS c1, BIT_AND(1) AS c2;
+--enable_cursor_protocol
+--enable_view_protocol
+# Disable PS protocol to workaround CONC-739
+--disable_ps_protocol
+SELECT FROM_UNIXTIME('1922.1') AS c1, BIT_AND(1) AS c2;
+SELECT FROM_UNIXTIME('1922.1') AS c1;
+--enable_ps_protocol
+SELECT * FROM (SELECT FROM_UNIXTIME('1') AS c1, BIT_AND(1) AS c2) t;
+SELECT * FROM (SELECT FROM_UNIXTIME('1.1') AS c1, BIT_AND(1) AS c2) t;
+CREATE TABLE t1 (a TEXT, b TEXT);
+INSERT INTO t1 SELECT FROM_UNIXTIME('1') AS c1, BIT_AND(1) AS c2;
+INSERT INTO t1 SELECT FROM_UNIXTIME('1.1') AS c1, BIT_AND(1) AS c2;
+SELECT * FROM t1;
+DROP TABLE t1;
+
+SELECT 1 FROM (values(1),(2)) dt GROUP BY from_unixtime('a') WITH ROLLUP;
+
+CREATE TABLE t1 (a TEXT);
+INSERT INTO t1 VALUES (1),(2);
+SELECT * FROM t1 ORDER BY from_unixtime(a);
+DROP TABLE t1;
+
+SET time_zone=DEFAULT;
+
+--echo # End of 11.7 tests

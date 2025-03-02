@@ -27,6 +27,8 @@
 
 #define FRM_QUOTED_VALUE 0x8000U
 
+static const char *bools="NO,OFF,0,YES,ON,1";
+
 /**
   Links this item to the given list end
 
@@ -44,14 +46,12 @@ void engine_option_value::link(engine_option_value **start,
   engine_option_value *opt;
   /* check duplicates to avoid writing them to frm*/
   for(opt= *start;
-      opt && ((opt->parsed && !opt->value.str) ||
-              system_charset_info->strnncoll(name.str, name.length,
-                                             opt->name.str, opt->name.length));
+      opt && ((opt->parsed && !opt->value.str) || !name.streq(opt->name));
       opt= opt->next) /* no-op */;
   if (opt)
   {
-    opt->value.str= NULL;       /* remove previous value */
-    opt->parsed= TRUE;          /* and don't issue warnings for it anymore */
+    opt->value= Value(); /* remove previous value */
+    opt->parsed= TRUE;   /* and don't issue warnings for it anymore */
   }
   /*
     Add this option to the end of the list
@@ -119,7 +119,7 @@ static bool report_unknown_option(THD *thd, engine_option_value *val,
 #define value_ptr(STRUCT,OPT)    ((char*)(STRUCT) + (OPT)->offset)
 
 static bool set_one_value(ha_create_table_option *opt, THD *thd,
-                          const LEX_CSTRING *value, void *base,
+                          const engine_option_value::Value *value, void *base,
                           bool suppress_warning, MEM_ROOT *root)
 {
   DBUG_ENTER("set_one_value");
@@ -169,30 +169,17 @@ static bool set_one_value(ha_create_table_option *opt, THD *thd,
     }
   case HA_OPTION_TYPE_ENUM:
     {
-      uint *val= (uint *)value_ptr(base, opt), num;
+      uint *val= (uint *)value_ptr(base, opt);
 
       *val= (uint) opt->def_value;
       if (!value->str)
         DBUG_RETURN(0);
 
-      const char *start= opt->values, *end;
-
-      num= 0;
-      while (*start)
+      uint num= value->find_in_list(opt->values);
+      if (num != UINT_MAX)
       {
-        for (end=start;
-             *end && *end != ',';
-             end++) /* no-op */;
-        if (!system_charset_info->strnncoll(start, end-start,
-                                            value->str, value->length))
-        {
-          *val= num;
-          DBUG_RETURN(0);
-        }
-        if (*end)
-          end++;
-        start= end;
-        num++;
+        *val= num;
+        DBUG_RETURN(0);
       }
 
       DBUG_RETURN(report_wrong_value(thd, opt->name, value->str,
@@ -206,20 +193,11 @@ static bool set_one_value(ha_create_table_option *opt, THD *thd,
       if (!value->str)
         DBUG_RETURN(0);
 
-      if (!system_charset_info->strnncoll("NO", 2, value->str, value->length) ||
-          !system_charset_info->strnncoll("OFF", 3, value->str, value->length) ||
-          !system_charset_info->strnncoll("0", 1, value->str, value->length))
+      uint num= value->find_in_list(bools);
+      if (num != UINT_MAX)
       {
-        *val= FALSE;
-        DBUG_RETURN(FALSE);
-      }
-
-      if (!system_charset_info->strnncoll("YES", 3, value->str, value->length) ||
-          !system_charset_info->strnncoll("ON", 2, value->str, value->length) ||
-          !system_charset_info->strnncoll("1", 1, value->str, value->length))
-      {
-        *val= TRUE;
-        DBUG_RETURN(FALSE);
+        *val= num > 2;
+        DBUG_RETURN(0);
       }
 
       DBUG_RETURN(report_wrong_value(thd, opt->name, value->str,
@@ -246,9 +224,9 @@ static const size_t ha_option_type_sizeof[]=
   @retval FALSE OK
 */
 
-bool extend_option_list(THD* thd, handlerton *hton, bool create,
-                        engine_option_value **option_list,
-                        ha_create_table_option *rules)
+bool extend_option_list(THD* thd, st_plugin_int *plugin, bool create,
+                       engine_option_value **option_list,
+                       ha_create_table_option *rules)
 {
   DBUG_ENTER("extend_option_list");
   MEM_ROOT *root= thd->mem_root;
@@ -262,14 +240,13 @@ bool extend_option_list(THD* thd, handlerton *hton, bool create,
       for (engine_option_value *val= *option_list; val; val= val->next)
       {
         last= val;
-        if (!system_charset_info->strnncoll(opt->name, opt->name_length,
-                                            val->name.str, val->name.length))
+        if (val->name.streq(Lex_cstring(opt->name, opt->name_length)))
           found= val; // find the last matching
       }
       if (found ? !found->value.str : create)
       {
         /* add the current value of the corresponding sysvar to the list */
-        sys_var *sysvar= find_hton_sysvar(hton, opt->var);
+        sys_var *sysvar= find_plugin_sysvar(plugin, opt->var);
         DBUG_ASSERT(sysvar);
 
         if (!sysvar->session_is_default(thd))
@@ -277,24 +254,22 @@ bool extend_option_list(THD* thd, handlerton *hton, bool create,
           StringBuffer<256> sbuf(system_charset_info);
           String *str= sysvar->val_str(&sbuf, thd, OPT_SESSION, &null_clex_str);
           DBUG_ASSERT(str);
-
-          LEX_CSTRING name= { opt->name, opt->name_length };
-          LEX_CSTRING value= safe_lexcstrdup_root(root, str->to_lex_cstring());
+          engine_option_value::Name name(opt->name, opt->name_length);
+          engine_option_value::Value value;
+          value.str= strmake_root(root, str->ptr(), str->length());
+          value.length= str->length();
           if (found)
             found->value= value;
           else
           {
+            engine_option_value *val= new (root) engine_option_value(name,
+                                        value, opt->type != HA_OPTION_TYPE_ULL);
             if (!extended)
             {
               if (*option_list)
                 thd->register_item_tree_change((Item**)&(last->next));
               extended= true;
             }
-            engine_option_value *val=
-               new (root) engine_option_value(name, value,
-                                              opt->type != HA_OPTION_TYPE_ULL);
-            if (val == NULL)
-              DBUG_RETURN(TRUE);
             val->link(option_list, &last);
           }
         }
@@ -328,6 +303,7 @@ bool parse_option_list(THD* thd, void *option_struct_arg,
   size_t option_struct_size= 0;
   engine_option_value *val, *last;
   void **option_struct= (void**)option_struct_arg;
+  engine_option_value::Value default_value;
   DBUG_ENTER("parse_option_list");
   DBUG_PRINT("enter",
              ("struct: %p list: %p rules: %p suppress_warning: %u root: %p",
@@ -349,8 +325,7 @@ bool parse_option_list(THD* thd, void *option_struct_arg,
     for (val= *option_list; val; val= val->next)
     {
       last= val;
-      if (system_charset_info->strnncoll(opt->name, opt->name_length,
-                                         val->name.str, val->name.length))
+      if (!val->name.streq(Lex_cstring(opt->name, opt->name_length)))
         continue;
 
       /* skip duplicates (see engine_option_value constructor above) */
@@ -365,7 +340,7 @@ bool parse_option_list(THD* thd, void *option_struct_arg,
       break;
     }
     if (!seen || (opt->var && !last->value.str))
-      set_one_value(opt, thd, &null_clex_str, *option_struct,
+      set_one_value(opt, thd, &default_value, *option_struct,
                     suppress_warning, root);
   }
 
@@ -385,7 +360,7 @@ bool parse_option_list(THD* thd, void *option_struct_arg,
 
   This is done when an engine is loaded.
 */
-static bool resolve_sysvars(handlerton *hton, ha_create_table_option *rules)
+bool resolve_sysvar_table_options(ha_create_table_option *rules)
 {
   for (ha_create_table_option *opt= rules; rules && opt->name; opt++)
   {
@@ -438,13 +413,6 @@ static bool resolve_sysvars(handlerton *hton, ha_create_table_option *rules)
   return 0;
 }
 
-bool resolve_sysvar_table_options(handlerton *hton)
-{
-  return resolve_sysvars(hton, hton->table_options) ||
-         resolve_sysvars(hton, hton->field_options) ||
-         resolve_sysvars(hton, hton->index_options);
-}
-
 /*
   Restore HA_OPTION_TYPE_SYSVAR options back as they were
   before resolve_sysvars().
@@ -452,7 +420,7 @@ bool resolve_sysvar_table_options(handlerton *hton)
   This is done when the engine is unloaded, so that we could
   call resolve_sysvars() if the engine is installed again.
 */
-static void free_sysvars(handlerton *hton, ha_create_table_option *rules)
+void free_sysvar_table_options(ha_create_table_option *rules)
 {
   for (ha_create_table_option *opt= rules; rules && opt->name; opt++)
   {
@@ -468,14 +436,6 @@ static void free_sysvars(handlerton *hton, ha_create_table_option *rules)
     }
   }
 }
-
-void free_sysvar_table_options(handlerton *hton)
-{
-  free_sysvars(hton, hton->table_options);
-  free_sysvars(hton, hton->field_options);
-  free_sysvars(hton, hton->index_options);
-}
-
 
 /**
   Parses all table/fields/keys options
@@ -769,7 +729,9 @@ uchar *engine_option_value::frm_read(const uchar *buff, const uchar *buff_end,
   buff+= value.length;
 
   engine_option_value *ptr=
-      new (root) engine_option_value(name, value, len & FRM_QUOTED_VALUE);
+      new (root) engine_option_value(engine_option_value::Name(name),
+                                     engine_option_value::Value(value),
+                                     len & FRM_QUOTED_VALUE);
   if (!ptr)
     return NULL;
   ptr->link(start, end);
@@ -819,7 +781,7 @@ bool engine_table_options_frm_read(const uchar *buff, size_t length,
     buff++;
   }
 
-  for (count=0; count < share->keys; count++)
+  for (count=0; count < share->total_keys; count++)
   {
     while (buff < buff_end && *buff)
     {
@@ -885,8 +847,7 @@ bool is_engine_option_known(engine_option_value *opt,
 
   for (; rules->name; rules++)
   {
-      if (!system_charset_info->strnncoll(rules->name, rules->name_length,
-                                          opt->name.str, opt->name.length))
+      if (opt->name.streq(Lex_cstring(rules->name, rules->name_length)))
         return true;
   }
   return false;

@@ -156,16 +156,18 @@ class Session_sysvars_tracker: public State_tracker
     }
 
     sysvar_node_st *search(const sys_var *svar);
+  public:
+    vars_list(): track_all(false) { init(); }
+    ~vars_list() { if (my_hash_inited(&m_registered_sysvars)) free_hash(); }
+    void deinit() { free_hash(); }
+
+    ulong size() { return m_registered_sysvars.records; }
     sysvar_node_st *at(ulong i)
     {
       DBUG_ASSERT(i < m_registered_sysvars.records);
       return reinterpret_cast<sysvar_node_st*>(
                my_hash_element(&m_registered_sysvars, i));
     }
-  public:
-    vars_list(): track_all(false) { init(); }
-    ~vars_list() { if (my_hash_inited(&m_registered_sysvars)) free_hash(); }
-    void deinit() { free_hash(); }
 
     sysvar_node_st *insert_or_search(const sys_var *svar)
     {
@@ -200,6 +202,7 @@ class Session_sysvars_tracker: public State_tracker
   */
   vars_list orig_list;
   bool m_parsed;
+  void maybe_parse_all(THD *thd);
 
 public:
   void init(THD *thd);
@@ -208,6 +211,7 @@ public:
   bool update(THD *thd, set_var *var) override;
   bool store(THD *thd, String *buf) override;
   void mark_as_changed(THD *thd, const sys_var *var);
+  void mark_all_as_changed(THD *thd);
   void deinit() { orig_list.deinit(); }
   /* callback */
   static const uchar *sysvars_get_key(const void *entry, size_t *length,

@@ -45,7 +45,7 @@ C_MODE_START
   area, and we would like to avoid unexpected truncation.
 */
 #define MYSYS_ERRMSG_SIZE   (512)
-#define MYSYS_STRERROR_SIZE (128)
+#define MYSYS_STRERROR_SIZE (256)
 
 #define MY_FILE_ERROR	((size_t) -1)
 
@@ -95,6 +95,8 @@ C_MODE_START
 #define MY_ROOT_USE_MPROTECT 0x20000U /* init_alloc_root: read only segments */
 /* Tree that should delete things automatically */
 #define MY_TREE_WITH_DELETE 0x40000U
+#define MY_TRACK 0x80000U             /* Track tmp usage */
+#define MY_TRACK_WITH_LIMIT 0x100000U /* Give error if over tmp_file_usage */
 
 #define MY_CHECK_ERROR	1U	/* Params to my_end; Check open-close */
 #define MY_GIVE_INFO	2U	/* Give time info about process*/
@@ -179,6 +181,17 @@ uchar *my_large_malloc(size_t *size, myf my_flags);
 void my_large_free(void *ptr, size_t size);
 void my_large_page_truncate(size_t *size);
 
+/* Tracking tmp file usage */
+
+struct tmp_file_tracking
+{
+  ulonglong previous_file_size;
+  ulonglong file_size;
+};
+
+typedef int (*TMPFILE_SIZE_CB)(struct tmp_file_tracking *track, int no_error);
+extern TMPFILE_SIZE_CB update_tmp_file_size;
+
 #ifdef _WIN32
 extern BOOL my_obtain_privilege(LPCSTR lpPrivilege);
 #endif
@@ -248,7 +261,7 @@ extern ulong    my_file_total_opened;
 extern ulong    my_sync_count;
 extern uint	mysys_usage_id;
 extern int32    my_file_opened;
-extern my_bool	my_init_done, my_thr_key_mysys_exists;
+extern my_bool	my_init_done;
 extern my_bool my_assert;
 extern my_bool  my_assert_on_error;
 extern myf      my_global_flags;        /* Set to MY_WME for more error messages */
@@ -432,6 +445,8 @@ typedef struct st_io_cache		/* Used when caching files */
   */
   IO_CACHE_SHARE *share;
 
+  /* Track tmpfile usage. Done if (myflags & MY_TRACK) is true */
+  struct tmp_file_tracking tracking;
   /*
     A caller will use my_b_read() macro to read from the cache
     if the data is already in cache, it will be simply copied with
@@ -497,6 +512,7 @@ extern PSI_file_key key_file_io_cache;
 /* inline functions for mf_iocache */
 
 extern int my_b_flush_io_cache(IO_CACHE *info, int need_append_buffer_lock);
+extern void truncate_io_cache(IO_CACHE *info);
 extern int _my_b_get(IO_CACHE *info);
 extern int _my_b_read(IO_CACHE *info,uchar *Buffer,size_t Count);
 extern int _my_b_write(IO_CACHE *info,const uchar *Buffer,size_t Count);
@@ -707,9 +723,11 @@ extern FILE *my_fopen(const char *FileName,int Flags,myf MyFlags);
 extern FILE *my_fdopen(File Filedes,const char *name, int Flags,myf MyFlags);
 extern FILE *my_freopen(const char *path, const char *mode, FILE *stream);
 extern int my_fclose(FILE *fd,myf MyFlags);
-extern int my_vfprintf(FILE *stream, const char* format, va_list args);
+extern int my_vfprintf(FILE *stream, const char* format, va_list args)
+  ATTRIBUTE_FORMAT(printf, 2, 0);
 extern const char* my_strerror(char *buf, size_t len, int nr);
-extern int my_fprintf(FILE *stream, const char* format, ...);
+extern int my_fprintf(FILE *stream, const char* format, ...)
+  ATTRIBUTE_FORMAT(printf, 2, 3);
 extern File my_fileno(FILE *fd);
 extern int my_chsize(File fd,my_off_t newlength, int filler, myf MyFlags);
 extern int my_chmod(const char *name, mode_t mode, myf my_flags);
@@ -832,8 +850,10 @@ extern my_bool open_cached_file(IO_CACHE *cache,const char *dir,
 				 myf cache_myflags);
 extern my_bool real_open_cached_file(IO_CACHE *cache);
 extern void close_cached_file(IO_CACHE *cache);
-File create_temp_file(char *to, const char *dir, const char *pfx,
-		      int mode, myf MyFlags);
+extern File create_temp_file(char *to, const char *dir, const char *pfx,
+                             int mode, myf MyFlags);
+extern my_bool io_cache_tmp_file_track(IO_CACHE *info, ulonglong file_size);
+
 #define my_init_dynamic_array(A,B,C,D,E,F) init_dynamic_array2(A,B,C,NULL,D,E,F)
 #define my_init_dynamic_array2(A,B,C,D,E,F,G) init_dynamic_array2(A,B,C,D,E,F,G)
 extern my_bool init_dynamic_array2(PSI_memory_key psi_key, DYNAMIC_ARRAY *array,
@@ -905,8 +925,8 @@ extern void move_root(MEM_ROOT *to, MEM_ROOT *from);
 extern void set_prealloc_root(MEM_ROOT *root, char *ptr);
 extern void reset_root_defaults(MEM_ROOT *mem_root, size_t block_size,
                                 size_t prealloc_size);
-extern USED_MEM *get_last_memroot_block(MEM_ROOT* root);
-extern void free_all_new_blocks(MEM_ROOT *root, USED_MEM *last_block);
+extern void root_make_savepoint(MEM_ROOT *root, MEM_ROOT_SAVEPOINT *sv);
+extern void root_free_to_savepoint(const MEM_ROOT_SAVEPOINT *sv);
 extern void protect_root(MEM_ROOT *root, int prot);
 extern char *strdup_root(MEM_ROOT *root,const char *str);
 static inline char *safe_strdup_root(MEM_ROOT *root, const char *str)
@@ -930,6 +950,12 @@ static inline LEX_STRING lex_string_strmake_root(MEM_ROOT *mem_root,
 extern LEX_STRING lex_string_casedn_root(MEM_ROOT *root,
                                         CHARSET_INFO *cs,
                                         const char *str, size_t length);
+
+static inline size_t root_size(MEM_ROOT *root)
+{
+  size_t k = root->block_num >> 2;
+  return k * (k + 1) * 2 * root->block_size;
+}
 
 extern my_bool my_compress(uchar *, size_t *, size_t *);
 extern my_bool my_uncompress(uchar *, size_t , size_t *);

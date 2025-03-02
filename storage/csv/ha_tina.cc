@@ -169,9 +169,9 @@ static void init_tina_psi_keys(void)
   extensions exist for this handler.
 */
 static const char *ha_tina_exts[] = {
+  CSN_EXT,
   CSV_EXT,
   CSM_EXT,
-  CSN_EXT,
   NullS
 };
 
@@ -1672,7 +1672,7 @@ int ha_tina::delete_all_rows()
       DBUG_RETURN(-1);
 
   /* Truncate the file to zero size */
-  rc= mysql_file_chsize(share->tina_write_filedes, 0, 0, MYF(MY_WME));
+  rc= mysql_file_chsize(share->tina_write_filedes, 0, 0, MYF(MY_WME)) > 0;
 
   stats.records=0;
   /* Update shared info */

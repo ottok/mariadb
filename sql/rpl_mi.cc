@@ -57,16 +57,22 @@ Master_info::Master_info(LEX_CSTRING *connection_name_arg,
     Store connection name and lower case connection name
     It's safe to ignore any OMM errors as this is checked by error()
   */
-  connection_name.length= cmp_connection_name.length=
-    connection_name_arg->length;
+  connection_name.length= connection_name_arg->length;
+  size_t cmp_connection_name_nbytes= connection_name_arg->length *
+                                     system_charset_info->casedn_multiply() +
+                                     1;
   if ((connection_name.str= tmp= (char*)
-       my_malloc(PSI_INSTRUMENT_ME, connection_name_arg->length*2+2, MYF(MY_WME))))
+       my_malloc(PSI_INSTRUMENT_ME, connection_name_arg->length + 1 +
+                                    cmp_connection_name_nbytes,
+                 MYF(MY_WME))))
   {
     strmake(tmp, connection_name_arg->str, connection_name.length);
     tmp+= connection_name_arg->length+1;
     cmp_connection_name.str= tmp;
-    memcpy(tmp, connection_name_arg->str, connection_name.length+1);
-    my_casedn_str(system_charset_info, tmp);
+    cmp_connection_name.length=
+      system_charset_info->casedn_z(connection_name_arg->str,
+                                    connection_name_arg->length,
+                                    tmp, cmp_connection_name_nbytes);
   }
   /*
     When MySQL restarted, all Rpl_filter settings which aren't in the my.cnf
@@ -1119,10 +1125,11 @@ bool Master_info_index::init_all_master_info()
   }
 
   /* Initialize Master_info Hash Table */
-  if (my_hash_init(PSI_INSTRUMENT_ME, &master_info_hash, system_charset_info,
+  if (my_hash_init(PSI_INSTRUMENT_ME, &master_info_hash,
+                   Lex_ident_master_info::charset_info(),
                    MAX_REPLICATION_THREAD, 0, 0, get_key_master_info,
                    free_key_master_info, HASH_UNIQUE))
-  {                                                      
+  {
     sql_print_error("Initializing Master_info hash table failed");
     DBUG_RETURN(1);
   }
@@ -1181,8 +1188,7 @@ bool Master_info_index::init_all_master_info()
       else
       {
         /* Master_info already in HASH */
-        sql_print_error(ER_THD_OR_DEFAULT(current_thd,
-                                          ER_CONNECTION_ALREADY_EXISTS),
+        sql_print_error(ER_DEFAULT(ER_CONNECTION_ALREADY_EXISTS),
                         (int) connection_name.length, connection_name.str,
                         (int) connection_name.length, connection_name.str);
         mi->unlock_slave_threads();
@@ -1200,8 +1206,7 @@ bool Master_info_index::init_all_master_info()
                                              Sql_condition::WARN_LEVEL_NOTE))
       {
         /* Master_info was already registered */
-        sql_print_error(ER_THD_OR_DEFAULT(current_thd,
-                                          ER_CONNECTION_ALREADY_EXISTS),
+        sql_print_error(ER_DEFAULT(ER_CONNECTION_ALREADY_EXISTS),
                         (int) connection_name.length, connection_name.str,
                         (int) connection_name.length, connection_name.str);
         mi->unlock_slave_threads();
@@ -1517,7 +1522,7 @@ bool Master_info_index::remove_master_info(Master_info *mi, bool clear_log_files
         my_close(index_file_nr,MYF(0));
 
       sql_print_error("Create of Master Info Index file '%s' failed with "
-                      "error: %M",
+                      "error: %iE",
                       index_file_name, error);
       DBUG_RETURN(TRUE);
     }
@@ -1916,6 +1921,14 @@ void Domain_id_filter::store_ids(THD *thd)
   }
 }
 
+void Domain_id_filter::store_ids(Field ***field)
+{
+  for (int i= DO_DOMAIN_IDS; i <= IGNORE_DOMAIN_IDS; i ++)
+  {
+    field_store_ids(*((*field)++), &m_domain_ids[i]);
+  }
+}
+
 /**
   Initialize the given domain_id list (DYNAMIC_ARRAY) with the
   space-separated list of numbers from the specified IO_CACHE where
@@ -1990,6 +2003,32 @@ void update_change_master_ids(DYNAMIC_ARRAY *new_ids, DYNAMIC_ARRAY *old_ids)
   return;
 }
 
+static size_t store_ids(DYNAMIC_ARRAY *ids, char *buff, size_t buff_len)
+{
+  uint i;
+  size_t cur_len;
+
+  for (i= 0, buff[0]= 0, cur_len= 0; i < ids->elements; i++)
+  {
+    ulong id, len;
+    char dbuff[FN_REFLEN];
+    get_dynamic(ids, (void *) &id, i);
+    len= sprintf(dbuff, (i == 0 ? "%lu" : ", %lu"), id);
+    if (cur_len + len + 4 > buff_len)
+    {
+      /*
+        break the loop whenever remained space could not fit
+        ellipses on the next cycle
+      */
+      cur_len+= sprintf(dbuff + cur_len, "...");
+      break;
+    }
+    cur_len+= sprintf(buff + cur_len, "%s", dbuff);
+  }
+  return cur_len;
+}
+
+
 /**
   Serialize and store the ids from the given ids DYNAMIC_ARRAY into the thd's
   protocol buffer.
@@ -2003,27 +2042,16 @@ void update_change_master_ids(DYNAMIC_ARRAY *new_ids, DYNAMIC_ARRAY *old_ids)
 void prot_store_ids(THD *thd, DYNAMIC_ARRAY *ids)
 {
   char buff[FN_REFLEN];
-  uint i, cur_len;
-
-  for (i= 0, buff[0]= 0, cur_len= 0; i < ids->elements; i++)
-  {
-    ulong id, len;
-    char dbuff[FN_REFLEN];
-    get_dynamic(ids, (void *) &id, i);
-    len= sprintf(dbuff, (i == 0 ? "%lu" : ", %lu"), id);
-    if (cur_len + len + 4 > FN_REFLEN)
-    {
-      /*
-        break the loop whenever remained space could not fit
-        ellipses on the next cycle
-      */
-      cur_len+= sprintf(dbuff + cur_len, "...");
-      break;
-    }
-    cur_len+= sprintf(buff + cur_len, "%s", dbuff);
-  }
+  size_t cur_len= store_ids(ids, buff, sizeof(buff));
   thd->protocol->store(buff, cur_len, &my_charset_bin);
-  return;
+}
+
+
+void field_store_ids(Field *field, DYNAMIC_ARRAY *ids)
+{
+  char buff[FN_REFLEN];
+  size_t cur_len= store_ids(ids, buff, sizeof(buff));
+  field->store(buff, cur_len, &my_charset_bin);
 }
 
 

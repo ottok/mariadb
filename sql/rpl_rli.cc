@@ -54,7 +54,9 @@ Relay_log_info::Relay_log_info(bool is_slave_recovery, const char* thread_name)
    cur_log_old_open_count(0), error_on_rli_init_info(false),
    group_relay_log_pos(0), event_relay_log_pos(0),
    group_master_log_pos(0), log_space_total(0), ignore_log_space_limit(0),
-   last_master_timestamp(0), sql_thread_caught_up(true), slave_skip_counter(0),
+   sql_thread_caught_up(true),
+   last_master_timestamp(0), newest_master_timestamp(0), slave_timestamp(0),
+   slave_skip_counter(0),
    abort_pos_wait(0), slave_run_id(0), sql_driver_thd(),
    gtid_skip_flag(GTID_SKIP_NOT), inited(0), abort_slave(0), stop_for_until(0),
    slave_running(MYSQL_SLAVE_NOT_RUN), until_condition(UNTIL_NONE),
@@ -245,7 +247,7 @@ a file name for --relay-log-index option", opt_relaylog_index_name);
     {
       mysql_mutex_unlock(log_lock);
       mysql_mutex_unlock(&data_lock);
-      sql_print_error("Failed when trying to open logs for '%s' in Relay_log_info::init(). Error: %M", ln, my_errno);
+      sql_print_error("Failed when trying to open logs for '%s' in Relay_log_info::init(). Error: %iE", ln, my_errno);
       DBUG_RETURN(1);
     }
     mysql_mutex_unlock(log_lock);
@@ -938,6 +940,11 @@ int Relay_log_info::wait_for_pos(THD* thd, String* log_name,
     DBUG_PRINT("info",("Got signal of master update or timed out"));
     if (error == ETIMEDOUT || error == ETIME)
     {
+      my_printf_error(ER_UNKNOWN_ERROR,
+                      "Timeout waiting for %s:%llu. Current pos is %s:%llu",
+                      MYF(ME_ERROR_LOG | ME_NOTE),
+                      log_name_tmp, (ulonglong) log_pos,
+                      group_master_log_name, (ulonglong) group_master_log_pos);
       error= -1;
       break;
     }
@@ -958,6 +965,17 @@ improper_arguments: %d  timed_out: %d",
   if (thd->killed || init_abort_pos_wait != abort_pos_wait ||
       !slave_running)
   {
+    const char *cause= 0;
+    if (init_abort_pos_wait != abort_pos_wait)
+      cause= "CHANGE MASTER detected";
+    else if (!slave_running)
+      cause="slave is not running";
+    else
+      cause="connection was killed";
+    my_printf_error(ER_UNKNOWN_ERROR,
+                    "master_pos_wait() was aborted because %s",
+                    MYF(ME_ERROR_LOG | ME_NOTE),
+                    cause);
     error= -2;
   }
   DBUG_RETURN( error ? error : event_count );
@@ -1014,9 +1032,7 @@ void Relay_log_info::inc_group_relay_log_pos(ulonglong log_pos,
       potentially thousands of events are still queued up for worker threads
       waiting for execution.
     */
-    if (rgi->last_master_timestamp &&
-        rgi->last_master_timestamp > last_master_timestamp)
-      last_master_timestamp= rgi->last_master_timestamp;
+    set_if_bigger(last_master_timestamp, rgi->last_master_timestamp);
   }
   else
   {
@@ -1027,6 +1043,7 @@ void Relay_log_info::inc_group_relay_log_pos(ulonglong log_pos,
     if (log_pos) // not 3.23 binlogs (no log_pos there) and not Stop_log_event
       group_master_log_pos= log_pos;
   }
+  set_if_bigger(slave_timestamp, rgi->last_master_timestamp);
 
   /*
     If the slave does not support transactions and replicates a transaction,
@@ -1802,9 +1819,8 @@ gtid_pos_auto_create_tables(rpl_slave_state::gtid_pos_table **list_ptr)
        ++auto_engines)
   {
     void *hton= plugin_hton(*auto_engines);
-    char buf[FN_REFLEN+1];
+    CharBuffer<FN_REFLEN> buf;
     LEX_CSTRING table_name;
-    char *p;
     rpl_slave_state::gtid_pos_table *entry, **next_ptr;
 
     /* See if this engine is already in the list. */
@@ -1821,13 +1837,12 @@ gtid_pos_auto_create_tables(rpl_slave_state::gtid_pos_table **list_ptr)
       continue;
 
     /* Add an auto-create entry for this engine at end of list. */
-    p= strmake(buf, rpl_gtid_slave_state_table_name.str, FN_REFLEN);
-    p= strmake(p, "_", FN_REFLEN - (p - buf));
-    p= strmake(p, plugin_name(*auto_engines)->str, FN_REFLEN - (p - buf));
-    table_name.str= buf;
-    table_name.length= p - buf;
-    table_case_convert(const_cast<char*>(table_name.str),
-                       static_cast<uint>(table_name.length));
+    buf.append_opt_casedn(files_charset_info, rpl_gtid_slave_state_table_name,
+                          lower_case_table_names)
+       .append({STRING_WITH_LEN("_")})
+       .append_opt_casedn(files_charset_info, *plugin_name(*auto_engines),
+                          lower_case_table_names);
+    table_name= buf.to_lex_cstring();
     entry= rpl_global_gtid_slave_state->alloc_gtid_pos_table
       (&table_name, hton, rpl_slave_state::GTID_POS_AUTO_CREATE);
     if (!entry)
@@ -2143,6 +2158,7 @@ rpl_group_info::reinit(Relay_log_info *rli)
   gtid_ev_flags_extra= 0;
   gtid_ev_sa_seq_no= 0;
   last_master_timestamp = 0;
+  orig_exec_time= 0;
   gtid_ignore_duplicate_state= GTID_DUPLICATE_NULL;
   speculation= SPECULATE_NO;
   rpt= NULL;
@@ -2257,11 +2273,12 @@ void rpl_group_info::cleanup_context(THD *thd, bool error, bool keep_domain_owne
   
   DBUG_ASSERT(this->thd == thd);
   /*
-    1) Instances of Table_map_log_event, if ::do_apply_event() was called on them,
-    may have opened tables, which we cannot be sure have been closed (because
-    maybe the Rows_log_event have not been found or will not be, because slave
-    SQL thread is stopping, or relay log has a missing tail etc). So we close
-    all thread's tables. And so the table mappings have to be cancelled.
+    1) Instances of Table_map_log_event, if ::do_apply_event() was
+    called on them, may have opened tables, which we cannot be sure
+    have been closed (because maybe the Rows_log_event have not been
+    found or will not be, because slave SQL thread is stopping, or
+    relay log has a missing tail etc). So we close all thread's
+    tables. And so the table mappings have to be cancelled.
     2) Rows_log_event::do_apply_event() may even have started statements or
     transactions on them, which we need to rollback in case of error.
     3) If finding a Format_description_log_event after a BEGIN, we also need
@@ -2270,6 +2287,11 @@ void rpl_group_info::cleanup_context(THD *thd, bool error, bool keep_domain_owne
   */
   if (unlikely(error))
   {
+    /*
+      We have to reset the error as otherwise we get an assert in
+      trans_rollback() when it checks if the rollback caused an error.
+    */
+    thd->clear_error();
     trans_rollback_stmt(thd); // if a "statement transaction"
     /* trans_rollback() also resets OPTION_GTID_BEGIN */
     trans_rollback(thd);      // if a "real transaction"

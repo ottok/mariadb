@@ -14,10 +14,6 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
 
-#ifdef USE_PRAGMA_IMPLEMENTATION
-#pragma implementation  // gcc: Class implementation
-#endif
-
 #define MYSQL_SERVER 1
 
 /* For use of 'PRIu64': */
@@ -768,17 +764,13 @@ static std::shared_ptr<rocksdb::RateLimiter> rocksdb_rate_limiter;
 static const char *write_policy_names[] = {"write_committed", "write_prepared",
                                            "write_unprepared", NullS};
 
-static TYPELIB write_policy_typelib = {array_elements(write_policy_names) - 1,
-                                       "write_policy_typelib",
-                                       write_policy_names, nullptr};
+static TYPELIB write_policy_typelib = CREATE_TYPELIB_FOR(write_policy_names);
 
 #if 0 // MARIAROCKS_NOT_YET : read-free replication is not supported
 /* This array needs to be kept up to date with myrocks::read_free_rpl_type */
 static const char *read_free_rpl_names[] = {"OFF", "PK_ONLY", "PK_SK", NullS};
 
-static TYPELIB read_free_rpl_typelib = {array_elements(read_free_rpl_names) - 1,
-                                        "read_free_rpl_typelib",
-                                        read_free_rpl_names, nullptr};
+static TYPELIB read_free_rpl_typelib = CREATE_TYPELIB_FOR(read_free_rpl_names);
 #endif
 
 /* This enum needs to be kept up to date with rocksdb::InfoLogLevel */
@@ -786,9 +778,7 @@ static const char *info_log_level_names[] = {"debug_level", "info_level",
                                              "warn_level",  "error_level",
                                              "fatal_level", NullS};
 
-static TYPELIB info_log_level_typelib = {
-    array_elements(info_log_level_names) - 1, "info_log_level_typelib",
-    info_log_level_names, nullptr};
+static TYPELIB info_log_level_typelib = CREATE_TYPELIB_FOR(info_log_level_names);
 
 static void rocksdb_set_rocksdb_info_log_level(
     THD *const thd, struct st_mysql_sys_var *const var, void *const var_ptr,
@@ -903,9 +893,7 @@ static int rocksdb_compact_column_family(THD *const thd,
 
 static const char *index_type_names[] = {"kBinarySearch", "kHashSearch", NullS};
 
-static TYPELIB index_type_typelib = {array_elements(index_type_names) - 1,
-                                     "index_type_typelib", index_type_names,
-                                     nullptr};
+static TYPELIB index_type_typelib = CREATE_TYPELIB_FOR(index_type_names);
 
 const ulong RDB_MAX_LOCK_WAIT_SECONDS = 1024 * 1024 * 1024;
 const ulong RDB_DEFAULT_MAX_ROW_LOCKS = 1024 * 1024;
@@ -953,19 +941,19 @@ static MYSQL_THDVAR_BOOL(
 static MYSQL_THDVAR_BOOL(
     bulk_load, PLUGIN_VAR_RQCMDARG,
     "Use bulk-load mode for inserts. This disables "
-    "unique_checks and enables rocksdb_commit_in_the_middle.",
+    "unique_checks and enables rocksdb_commit_in_the_middle",
     rocksdb_check_bulk_load, nullptr, FALSE);
 
 static MYSQL_THDVAR_BOOL(bulk_load_allow_sk, PLUGIN_VAR_RQCMDARG,
                          "Allow bulk loading of sk keys during bulk-load. "
-                         "Can be changed only when bulk load is disabled.",
+                         "Can be changed only when bulk load is disabled",
                          /* Intentionally reuse unsorted's check function */
                          rocksdb_check_bulk_load_allow_unsorted, nullptr,
                          FALSE);
 
 static MYSQL_THDVAR_BOOL(bulk_load_allow_unsorted, PLUGIN_VAR_RQCMDARG,
                          "Allow unsorted input during bulk-load. "
-                         "Can be changed only when bulk load is disabled.",
+                         "Can be changed only when bulk load is disabled",
                          rocksdb_check_bulk_load_allow_unsorted, nullptr,
                          FALSE);
 
@@ -980,7 +968,7 @@ static MYSQL_SYSVAR_STR(git_hash, rocksdb_git_hash,
                         nullptr, nullptr, ROCKSDB_GIT_HASH);
 
 static MYSQL_THDVAR_STR(tmpdir, PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_MEMALLOC,
-                        "Directory for temporary files during DDL operations.",
+                        "Directory for temporary files during DDL operations",
                         nullptr, nullptr, "");
 
 #define DEFAULT_SKIP_UNIQUE_CHECK_TABLES ".*"
@@ -1075,7 +1063,7 @@ static MYSQL_SYSVAR_ENUM(
     "Use read-free replication on the slave (i.e. no row lookup during "
     "replication). Default is OFF, PK_SK will enable it on all tables with "
     "primary key. PK_ONLY will enable it on tables where the only key is the "
-    "primary key (i.e. no secondary keys).",
+    "primary key (i.e. no secondary keys)",
     nullptr, nullptr, read_free_rpl_type::OFF, &read_free_rpl_typelib);
 #endif
 
@@ -1092,7 +1080,7 @@ static MYSQL_THDVAR_ULONG(max_row_locks, PLUGIN_VAR_RQCMDARG,
 
 static MYSQL_THDVAR_ULONGLONG(
     write_batch_max_bytes, PLUGIN_VAR_RQCMDARG,
-    "Maximum size of write batch in bytes. 0 means no limit.", nullptr, nullptr,
+    "Maximum size of write batch in bytes. 0 means no limit", nullptr, nullptr,
     /* default */ 0, /* min */ 0, /* max */ SIZE_T_MAX, 1);
 
 static MYSQL_THDVAR_BOOL(
@@ -1110,7 +1098,7 @@ static MYSQL_THDVAR_ULONG(bulk_load_size, PLUGIN_VAR_RQCMDARG,
 static MYSQL_THDVAR_ULONGLONG(
     merge_buf_size, PLUGIN_VAR_RQCMDARG,
     "Size to allocate for merge sort buffers written out to disk "
-    "during inplace index creation.",
+    "during inplace index creation",
     nullptr, nullptr,
     /* default (64MB) */ RDB_DEFAULT_MERGE_BUF_SIZE,
     /* min (100B) */ RDB_MIN_MERGE_BUF_SIZE,
@@ -1120,7 +1108,7 @@ static MYSQL_THDVAR_ULONGLONG(
     merge_combine_read_size, PLUGIN_VAR_RQCMDARG,
     "Size that we have to work with during combine (reading from disk) phase "
     "of "
-    "external sort during fast index creation.",
+    "external sort during fast index creation",
     nullptr, nullptr,
     /* default (1GB) */ RDB_DEFAULT_MERGE_COMBINE_READ_SIZE,
     /* min (100B) */ RDB_MIN_MERGE_COMBINE_READ_SIZE,
@@ -1132,7 +1120,7 @@ static MYSQL_THDVAR_ULONGLONG(
     "creation.  Removing this large file all at once when index creation is "
     "complete can cause trim stalls on Flash.  This variable specifies a "
     "duration to sleep (in milliseconds) between calling chsize() to truncate "
-    "the file in chunks.  The chunk size is  the same as merge_buf_size.",
+    "the file in chunks.  The chunk size is  the same as merge_buf_size",
     nullptr, nullptr,
     /* default (0ms) */ RDB_DEFAULT_MERGE_TMP_FILE_REMOVAL_DELAY,
     /* min (0ms) */ RDB_MIN_MERGE_TMP_FILE_REMOVAL_DELAY,
@@ -1225,7 +1213,7 @@ static MYSQL_SYSVAR_ENUM(
     info_log_level, rocksdb_info_log_level, PLUGIN_VAR_RQCMDARG,
     "Filter level for info logs to be written mysqld error log. "
     "Valid values include 'debug_level', 'info_level', 'warn_level'"
-    "'error_level' and 'fatal_level'.",
+    "'error_level' and 'fatal_level'",
     nullptr, rocksdb_set_rocksdb_info_log_level,
     rocksdb::InfoLogLevel::ERROR_LEVEL, &info_log_level_typelib);
 
@@ -1532,7 +1520,7 @@ static MYSQL_SYSVAR_BOOL(
 
 static MYSQL_SYSVAR_BOOL(cache_dump, rocksdb_cache_dump,
                          PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-                         "Include RocksDB block cache content in core dump.",
+                         "Include RocksDB block cache content in core dump",
                          nullptr, nullptr, true);
 
 static MYSQL_SYSVAR_DOUBLE(cache_high_pri_pool_ratio,
@@ -1675,7 +1663,7 @@ static MYSQL_THDVAR_UINT(records_in_range, PLUGIN_VAR_RQCMDARG,
 
 static MYSQL_THDVAR_UINT(force_index_records_in_range, PLUGIN_VAR_RQCMDARG,
                          "Used to override the result of records_in_range() "
-                         "when FORCE INDEX is used.",
+                         "when FORCE INDEX is used",
                          nullptr, nullptr, 0,
                          /* min */ 0, /* max */ INT_MAX, 0);
 
@@ -1735,7 +1723,7 @@ static MYSQL_SYSVAR_BOOL(pause_background_work, rocksdb_pause_background_work,
 
 static MYSQL_SYSVAR_BOOL(
     enable_ttl, rocksdb_enable_ttl, PLUGIN_VAR_RQCMDARG,
-    "Enable expired TTL records to be dropped during compaction.", nullptr,
+    "Enable expired TTL records to be dropped during compaction", nullptr,
     nullptr, TRUE);
 
 static MYSQL_SYSVAR_BOOL(
@@ -1744,7 +1732,7 @@ static MYSQL_SYSVAR_BOOL(
     "For tables with TTL, expired records are skipped/filtered out during "
     "processing and in query results. Disabling this will allow these records "
     "to be seen, but as a result rows may disappear in the middle of "
-    "transactions as they are dropped during compaction. Use with caution.",
+    "transactions as they are dropped during compaction. Use with caution",
     nullptr, nullptr, TRUE);
 
 static MYSQL_SYSVAR_INT(
@@ -1753,7 +1741,7 @@ static MYSQL_SYSVAR_INT(
     "now() + debug_ttl_rec_ts.  The value can be +/- to simulate "
     "a record inserted in the past vs a record inserted in the 'future'. "
     "A value of 0 denotes that the variable is not set. This variable is a "
-    "no-op in non-debug builds.",
+    "no-op in non-debug builds",
     nullptr, nullptr, 0, /* min */ -3600, /* max */ 3600, 0);
 
 static MYSQL_SYSVAR_INT(
@@ -1762,7 +1750,7 @@ static MYSQL_SYSVAR_INT(
     "now() + debug_set_ttl_snapshot_ts.  The value can be +/- to simulate "
     "a snapshot in the past vs a snapshot created in the 'future'. "
     "A value of 0 denotes that the variable is not set. This variable is a "
-    "no-op in non-debug builds.",
+    "no-op in non-debug builds",
     nullptr, nullptr, 0, /* min */ -3600, /* max */ 3600, 0);
 
 static MYSQL_SYSVAR_INT(
@@ -1770,18 +1758,18 @@ static MYSQL_SYSVAR_INT(
     PLUGIN_VAR_RQCMDARG,
     "For debugging purposes only.  Overrides the TTL read filtering time to "
     "time + debug_ttl_read_filter_ts. A value of 0 denotes that the variable "
-    "is not set. This variable is a no-op in non-debug builds.",
+    "is not set. This variable is a no-op in non-debug builds",
     nullptr, nullptr, 0, /* min */ -3600, /* max */ 3600, 0);
 
 static MYSQL_SYSVAR_BOOL(
     debug_ttl_ignore_pk, rocksdb_debug_ttl_ignore_pk, PLUGIN_VAR_RQCMDARG,
     "For debugging purposes only. If true, compaction filtering will not occur "
-    "on PK TTL data. This variable is a no-op in non-debug builds.",
+    "on PK TTL data. This variable is a no-op in non-debug builds",
     nullptr, nullptr, FALSE);
 
 static MYSQL_SYSVAR_UINT(
     max_manual_compactions, rocksdb_max_manual_compactions, PLUGIN_VAR_RQCMDARG,
-    "Maximum number of pending + ongoing number of manual compactions.",
+    "Maximum number of pending + ongoing number of manual compactions",
     nullptr, nullptr, /* default */ 10, /* min */ 0, /* max */ UINT_MAX, 0);
 
 static MYSQL_SYSVAR_BOOL(
@@ -1794,17 +1782,17 @@ static MYSQL_SYSVAR_UINT(
     debug_manual_compaction_delay, rocksdb_debug_manual_compaction_delay,
     PLUGIN_VAR_RQCMDARG,
     "For debugging purposes only. Sleeping specified seconds "
-    "for simulating long running compactions.",
+    "for simulating long running compactions",
     nullptr, nullptr, 0, /* min */ 0, /* max */ UINT_MAX, 0);
 
 static MYSQL_SYSVAR_BOOL(
     reset_stats, rocksdb_reset_stats, PLUGIN_VAR_RQCMDARG,
-    "Reset the RocksDB internal statistics without restarting the DB.", nullptr,
+    "Reset the RocksDB internal statistics without restarting the DB", nullptr,
     rocksdb_set_reset_stats, FALSE);
 
 static MYSQL_SYSVAR_UINT(io_write_timeout, rocksdb_io_write_timeout_secs,
                          PLUGIN_VAR_RQCMDARG,
-                         "Timeout for experimental I/O watchdog.", nullptr,
+                         "Timeout for experimental I/O watchdog", nullptr,
                          rocksdb_set_io_write_timeout, /* default */ 0,
                          /* min */ 0L,
                          /* max */ UINT_MAX, 0);
@@ -1845,7 +1833,7 @@ static MYSQL_SYSVAR_BOOL(
 static MYSQL_SYSVAR_BOOL(
     force_flush_memtable_and_lzero_now,
     rocksdb_force_flush_memtable_and_lzero_now_var, PLUGIN_VAR_RQCMDARG,
-    "Acts similar to force_flush_memtable_now, but also compacts all L0 files.",
+    "Acts similar to force_flush_memtable_now, but also compacts all L0 files",
     rocksdb_force_flush_memtable_and_lzero_now,
     rocksdb_force_flush_memtable_and_lzero_now_stub, FALSE);
 
@@ -1853,7 +1841,7 @@ static MYSQL_SYSVAR_UINT(
     seconds_between_stat_computes, rocksdb_seconds_between_stat_computes,
     PLUGIN_VAR_RQCMDARG,
     "Sets a number of seconds to wait between optimizer stats recomputation. "
-    "Only changed indexes will be refreshed.",
+    "Only changed indexes will be refreshed",
     nullptr, nullptr, rocksdb_seconds_between_stat_computes,
     /* min */ 0L, /* max */ UINT_MAX, 0);
 
@@ -1910,7 +1898,7 @@ static MYSQL_THDVAR_BOOL(verify_row_debug_checksums, PLUGIN_VAR_RQCMDARG,
 
 static MYSQL_THDVAR_BOOL(master_skip_tx_api, PLUGIN_VAR_RQCMDARG,
                          "Skipping holding any lock on row access. "
-                         "Not effective on slave.",
+                         "Not effective on slave",
                          nullptr, nullptr, false);
 
 static MYSQL_SYSVAR_UINT(
@@ -1946,24 +1934,11 @@ static MYSQL_SYSVAR_UINT(
     table_stats_sampling_pct, rocksdb_table_stats_sampling_pct,
     PLUGIN_VAR_RQCMDARG,
     "Percentage of entries to sample when collecting statistics about table "
-    "properties. Specify either 0 to sample everything or percentage "
-    "[" STRINGIFY_ARG(RDB_TBL_STATS_SAMPLE_PCT_MIN) ".." STRINGIFY_ARG(
-        RDB_TBL_STATS_SAMPLE_PCT_MAX) "]. "
-                                      "By default " STRINGIFY_ARG(
-                                          RDB_DEFAULT_TBL_STATS_SAMPLE_PCT) "% "
-                                                                            "of"
-                                                                            " e"
-                                                                            "nt"
-                                                                            "ri"
-                                                                            "es"
-                                                                            " a"
-                                                                            "re"
-                                                                            " "
-                                                                            "sa"
-                                                                            "mp"
-                                                                            "le"
-                                                                            "d"
-                                                                            ".",
+    "properties. Specify either 0 to sample everything or percentage ["
+    STRINGIFY_ARG(RDB_TBL_STATS_SAMPLE_PCT_MIN) ".."
+    STRINGIFY_ARG(RDB_TBL_STATS_SAMPLE_PCT_MAX)
+    "]. By default " STRINGIFY_ARG(RDB_DEFAULT_TBL_STATS_SAMPLE_PCT)
+    "% of entries are sampled",
     nullptr, rocksdb_set_table_stats_sampling_pct, /* default */
     RDB_DEFAULT_TBL_STATS_SAMPLE_PCT, /* everything */ 0,
     /* max */ RDB_TBL_STATS_SAMPLE_PCT_MAX, 0);
@@ -1971,21 +1946,21 @@ static MYSQL_SYSVAR_UINT(
 static MYSQL_SYSVAR_UINT(
     stats_recalc_rate, rocksdb_stats_recalc_rate, PLUGIN_VAR_RQCMDARG,
     "The number of indexes per second to recalculate statistics for. 0 to "
-    "disable background recalculation.",
+    "disable background recalculation",
     nullptr, nullptr, 0 /* default value */, 0 /* min value */,
     UINT_MAX /* max value */, 0);
 
 static MYSQL_SYSVAR_BOOL(
     large_prefix, rocksdb_large_prefix, PLUGIN_VAR_RQCMDARG,
     "Support large index prefix length of 3072 bytes. If off, the maximum "
-    "index prefix length is 767.",
+    "index prefix length is 767",
     nullptr, nullptr, FALSE);
 
 static MYSQL_SYSVAR_BOOL(
     allow_to_start_after_corruption, rocksdb_allow_to_start_after_corruption,
     PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
     "Allow server still to start successfully even if RocksDB corruption is "
-    "detected.",
+    "detected",
     nullptr, nullptr, FALSE);
 
 static MYSQL_SYSVAR_BOOL(error_on_suboptimal_collation,
@@ -3823,7 +3798,7 @@ static Rdb_transaction *get_or_create_tx(THD *const thd) {
   return tx;
 }
 
-static int rocksdb_close_connection(handlerton *const hton, THD *const thd) {
+static int rocksdb_close_connection(THD *const thd) {
   Rdb_transaction *tx = get_tx_from_thd(thd);
   if (tx != nullptr) {
     bool is_critical_error;
@@ -3901,7 +3876,7 @@ static bool rocksdb_flush_wal(handlerton* hton __attribute__((__unused__)))
   For a slave, prepare() updates the slave_gtid_info table which tracks the
   replication progress.
 */
-static int rocksdb_prepare(handlerton* hton, THD* thd, bool prepare_tx)
+static int rocksdb_prepare(THD* thd, bool prepare_tx)
 {
   bool async=false; // This is "ASYNC_COMMIT" feature which is only present in webscalesql
 
@@ -3985,10 +3960,9 @@ static int rocksdb_prepare(handlerton* hton, THD* thd, bool prepare_tx)
  do nothing for prepare/commit by xid
  this is needed to avoid crashes in XA scenarios
 */
-static int rocksdb_commit_by_xid(handlerton *const hton, XID *const xid) {
+static int rocksdb_commit_by_xid(XID *const xid) {
   DBUG_ENTER_FUNC();
 
-  DBUG_ASSERT(hton != nullptr);
   DBUG_ASSERT(xid != nullptr);
   DBUG_ASSERT(commit_latency_stats != nullptr);
 
@@ -4018,11 +3992,9 @@ static int rocksdb_commit_by_xid(handlerton *const hton, XID *const xid) {
   DBUG_RETURN(HA_EXIT_SUCCESS);
 }
 
-static int rocksdb_rollback_by_xid(
-    handlerton *const hton MY_ATTRIBUTE((__unused__)), XID *const xid) {
+static int rocksdb_rollback_by_xid(XID *const xid) {
   DBUG_ENTER_FUNC();
 
-  DBUG_ASSERT(hton != nullptr);
   DBUG_ASSERT(xid != nullptr);
   DBUG_ASSERT(rdb != nullptr);
 
@@ -4074,7 +4046,7 @@ static void rdb_xid_from_string(const std::string &src, XID *const dst) {
   Reading last committed binary log info from RocksDB system row.
   The info is needed for crash safe slave/master to work.
 */
-static int rocksdb_recover(handlerton* hton, XID* xid_list, uint len)
+static int rocksdb_recover(XID* xid_list, uint len)
 #ifdef MARIAROCKS_NOT_YET
                            char* const binlog_file,
                            my_off_t *const binlog_pos,
@@ -4153,7 +4125,7 @@ static void rocksdb_checkpoint_request(void *cookie)
   @param all:   TRUE - commit the transaction
                 FALSE - SQL statement ended
 */
-static void rocksdb_commit_ordered(handlerton *hton, THD* thd, bool all)
+static void rocksdb_commit_ordered(THD* thd, bool all)
 {
   // Same assert as InnoDB has
   DBUG_ASSERT(all || (!thd_test_options(thd, OPTION_NOT_AUTOCOMMIT |
@@ -4179,11 +4151,10 @@ static void rocksdb_commit_ordered(handlerton *hton, THD* thd, bool all)
 }
 
 
-static int rocksdb_commit(handlerton* hton, THD* thd, bool commit_tx)
+static int rocksdb_commit(THD* thd, bool commit_tx)
 {
   DBUG_ENTER_FUNC();
 
-  DBUG_ASSERT(hton != nullptr);
   DBUG_ASSERT(thd != nullptr);
   DBUG_ASSERT(commit_latency_stats != nullptr);
 
@@ -4261,8 +4232,7 @@ static int rocksdb_commit(handlerton* hton, THD* thd, bool commit_tx)
 }
 
 
-static int rocksdb_rollback(handlerton *const hton, THD *const thd,
-                            bool rollback_tx) {
+static int rocksdb_rollback(THD *const thd, bool rollback_tx) {
   Rdb_transaction *tx = get_tx_from_thd(thd);
   Rdb_perf_context_guard guard(tx, rocksdb_perf_context_level(thd));
 
@@ -4900,7 +4870,6 @@ static bool rocksdb_explicit_snapshot(
     InnoDB and RocksDB transactions.
 */
 static int rocksdb_start_tx_and_assign_read_view(
-    handlerton *const hton,    /*!< in: RocksDB handlerton */
     THD *const thd             /*!< in: MySQL thread handle of the
                                user for whom the transaction should
                                be committed */
@@ -4943,7 +4912,7 @@ static int rocksdb_start_tx_and_assign_read_view(
 
   DBUG_ASSERT(!tx->has_snapshot());
   tx->set_tx_read_only(true);
-  rocksdb_register_tx(hton, thd, tx);
+  rocksdb_register_tx(rocksdb_hton, thd, tx);
   tx->acquire_snapshot(true);
 
 #ifdef MARIADB_NOT_YET
@@ -5051,19 +5020,16 @@ static int rocksdb_start_tx_with_shared_read_view(
  * Current SAVEPOINT does not correctly handle ROLLBACK and does not return
  * errors. This needs to be addressed in future versions (Issue#96).
  */
-static int rocksdb_savepoint(handlerton *const hton, THD *const thd,
-                             void *const savepoint) {
+static int rocksdb_savepoint(THD *const thd, void *const savepoint) {
   return HA_EXIT_SUCCESS;
 }
 
-static int rocksdb_rollback_to_savepoint(handlerton *const hton, THD *const thd,
-                                         void *const savepoint) {
+static int rocksdb_rollback_to_savepoint(THD *const thd, void *const savepoint) {
   Rdb_transaction *tx = get_tx_from_thd(thd);
   return tx->rollback_to_savepoint(savepoint);
 }
 
-static bool rocksdb_rollback_to_savepoint_can_release_mdl(
-    handlerton *const /* hton */, THD *const /* thd */) {
+static bool rocksdb_rollback_to_savepoint_can_release_mdl(THD *const) {
   return true;
 }
 
@@ -6936,6 +6902,7 @@ static const char *rdb_error_messages[] = {
     "File I/O error during merge/sort operation.",
     "RocksDB status: not found.",
     "RocksDB status: corruption.",
+    "RocksDB status: not supported.",
     "RocksDB status: invalid argument.",
     "RocksDB status: io error.",
     "RocksDB status: no space.",
@@ -7860,6 +7827,12 @@ int ha_rocksdb::create(const char *const name, TABLE *const table_arg,
 
   DBUG_ASSERT(table_arg != nullptr);
   DBUG_ASSERT(create_info != nullptr);
+
+  if (table_arg->s->total_keys > table_arg->s->keys)
+  {
+    my_error(ER_ILLEGAL_HA_CREATE_OPTION, MYF(0), "RocksDB", "VECTOR");
+    DBUG_RETURN(HA_ERR_UNSUPPORTED);
+  }
 
   if (create_info->data_file_name) {
     // DATA DIRECTORY is used to create tables under a specific location
@@ -14256,11 +14229,11 @@ int mysql_value_to_bool(struct st_mysql_value *value, my_bool *return_value) {
     char buf[16];
     int len = sizeof(buf);
     const char *str = value->val_str(value, buf, &len);
-    if (str && (my_strcasecmp(system_charset_info, "true", str) == 0 ||
-                my_strcasecmp(system_charset_info, "on", str) == 0)) {
+    if (str && (strcasecmp("true", str) == 0 ||
+                strcasecmp("on", str) == 0)) {
       *return_value = TRUE;
-    } else if (str && (my_strcasecmp(system_charset_info, "false", str) == 0 ||
-                       my_strcasecmp(system_charset_info, "off", str) == 0)) {
+    } else if (str && (strcasecmp("false", str) == 0 ||
+                       strcasecmp("off", str) == 0)) {
       *return_value = FALSE;
     } else {
       return 1;

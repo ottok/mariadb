@@ -10,7 +10,7 @@
 select @@slave_connections_needed_for_purge;
 set @old_dbug= @@global.debug_dbug;
 
-create table t1 (a int, b varchar(32768));
+create table t1 (a int, b varchar(32768) charset latin1);
 insert into t1 values(1,repeat("a",32768));
 --sync_slave_with_master
 select a from t1;

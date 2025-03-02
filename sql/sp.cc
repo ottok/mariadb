@@ -431,6 +431,7 @@ public:
   Proc_table_intact() : m_print_once(TRUE) { has_keys= TRUE; }
 
 protected:
+  ATTRIBUTE_FORMAT(printf, 3, 4)
   void report_error(uint code, const char *fmt, ...) override;
 };
 
@@ -1081,9 +1082,54 @@ end:
 }
 
 
-void
-sp_returns_type(THD *thd, String &result, const sp_head *sp)
+void sp_head::sp_returns_type_of(THD *thd, String &result,
+                                 const Qualified_column_ident &ref) const
 {
+  Sql_mode_instant_set sms(thd, m_sql_mode);
+  if (!(m_sql_mode & MODE_ORACLE))
+    result.append(STRING_WITH_LEN("TYPE OF "));
+  const LEX_CSTRING db= ref.db.str ? ref.db : m_db;
+  DBUG_ASSERT(db.str);
+  append_identifier(thd, &result, &db);
+  result.append('.');
+  append_identifier(thd, &result, &ref.table);
+  result.append('.');
+  append_identifier(thd, &result, &ref.m_column);
+  if (m_sql_mode & MODE_ORACLE)
+    result.append(STRING_WITH_LEN("%TYPE"));
+}
+
+
+void sp_head::sp_returns_rowtype_of(THD *thd, String &result,
+                                    const Table_ident &ref) const
+{
+  Sql_mode_instant_set sms(thd, m_sql_mode);
+  if (!(m_sql_mode & MODE_ORACLE))
+    result.append(STRING_WITH_LEN("ROW TYPE OF "));
+  const LEX_CSTRING db= ref.db.str ? ref.db : m_db;
+  DBUG_ASSERT(db.str);
+  append_identifier(thd, &result, &db);
+  result.append('.');
+  append_identifier(thd, &result, &ref.table);
+  if (m_sql_mode & MODE_ORACLE)
+    result.append(STRING_WITH_LEN("%ROWTYPE"));
+}
+
+
+void sp_head::sp_returns_type(THD *thd, String &result) const
+{
+  if (m_return_field_def.is_column_type_ref())
+  {
+    sp_returns_type_of(thd, result, *m_return_field_def.column_type_ref());
+    return;
+  }
+
+  if (m_return_field_def.is_table_rowtype_ref())
+  {
+    sp_returns_rowtype_of(thd, result, *m_return_field_def.table_rowtype_ref());
+    return;
+  }
+
   TABLE table;
   TABLE_SHARE share;
   Field *field;
@@ -1091,19 +1137,22 @@ sp_returns_type(THD *thd, String &result, const sp_head *sp)
   bzero((char*) &share, sizeof(share));
   table.in_use= thd;
   table.s = &share;
-  field= sp->create_result_field(0, 0, &table);
-  field->sql_type(result);
+  field= create_result_field(0, 0, m_return_field_def, &table);
 
-  if (field->has_charset())
+  if (m_return_field_def.is_row())
   {
-    result.append(STRING_WITH_LEN(" CHARSET "));
-    result.append(field->charset()->cs_name);
-    if (Charset(field->charset()).can_have_collate_clause())
-    {
-      result.append(STRING_WITH_LEN(" COLLATE "));
-      result.append(field->charset()->coll_name);
-    }
+    DBUG_ASSERT(dynamic_cast<Field_row*>(field));
+    Field_row *field_row= static_cast<Field_row*>(field);
+    if (field_row->row_create_fields(
+           thd, m_return_field_def.row_field_definitions()))
+      return;
   }
+  else
+  {
+    DBUG_ASSERT(m_return_field_def.type_handler()->is_scalar_type());
+  }
+
+  field->sql_type_for_sp_returns(result);
 
   delete field;
 }
@@ -1304,7 +1353,7 @@ Sp_handler::sp_create_routine(THD *thd, const sp_head *sp) const
         // Setting retstr as it is used for logging.
         if (type() == SP_TYPE_FUNCTION)
         {
-          sp_returns_type(thd, retstr, sp);
+          sp->sp_returns_type(thd, retstr);
           retstr.get_value(&returns);
         }
         goto log;
@@ -1387,7 +1436,7 @@ Sp_handler::sp_create_routine(THD *thd, const sp_head *sp) const
 
     if (type() == SP_TYPE_FUNCTION)
     {
-      sp_returns_type(thd, retstr, sp);
+      sp->sp_returns_type(thd, retstr);
       retstr.get_value(&returns);
 
       store_failed= store_failed ||
@@ -2081,7 +2130,7 @@ Sp_handler::sp_clone_and_link_routine(THD *thd,
 
   if (type() == SP_TYPE_FUNCTION)
   {
-    sp_returns_type(thd, retstr, sp);
+    sp->sp_returns_type(thd, retstr);
     retstr.get_value(&returns);
   }
 
@@ -2212,7 +2261,7 @@ Sp_handler::sp_find_package_routine(THD *thd,
                                     bool cache_only) const
 {
   DBUG_ENTER("sp_find_package_routine");
-  Database_qualified_name pkgname(&name->m_db, &pkgname_str);
+  Database_qualified_name pkgname(name->m_db, pkgname_str);
   sp_head *ph= sp_cache_lookup(&thd->sp_package_body_cache, &pkgname);
   if (!ph && !cache_only)
     sp_handler_package_body.db_find_and_cache_routine(thd, &pkgname, &ph);
@@ -2281,12 +2330,20 @@ Sp_handler::sp_exist_routines(THD *thd, TABLE_LIST *routines) const
   for (routine= routines; routine; routine= routine->next_global)
   {
     sp_name *name;
-    LEX_CSTRING lex_db;
-    LEX_CSTRING lex_name;
-    thd->make_lex_string(&lex_db, routine->db.str, routine->db.length);
-    thd->make_lex_string(&lex_name, routine->table_name.str,
-                         routine->table_name.length);
-    name= new sp_name(&lex_db, &lex_name, true);
+    LEX_CSTRING lex_db= thd->make_ident_opt_casedn(routine->db,
+                                                   lower_case_table_names);
+    if (!lex_db.str)
+      DBUG_RETURN(TRUE); // EOM, error was already sent
+    LEX_CSTRING lex_name= thd->strmake_lex_cstring(routine->table_name);
+    if (!lex_name.str)
+      DBUG_RETURN(TRUE); // EOM, error was already sent
+    /*
+      routine->db was earlier tested with Lex_ident_db::check_name().
+      Now it's lower-cased according to lower_case_table_names.
+      It's safe to make a Lex_ident_db_normalized.
+    */
+    name= new (thd->mem_root) sp_name(Lex_ident_db_normalized(lex_db),
+                                      lex_name, true);
     sp_object_found= sp_find_routine(thd, name, false) != NULL;
     thd->get_stmt_da()->clear_warning_info(thd->query_id);
     if (! sp_object_found)
@@ -2346,20 +2403,20 @@ bool sp_add_used_routine(Query_tables_list *prelocking_ctx, Query_arena *arena,
                          const Sp_handler *handler,
                          TABLE_LIST *belong_to_view)
 {
-  my_hash_init_opt(PSI_INSTRUMENT_ME, &prelocking_ctx->sroutines, system_charset_info,
+  my_hash_init_opt(PSI_INSTRUMENT_ME, &prelocking_ctx->sroutines,
+                   Lex_ident_routine::charset_info(),
                    Query_tables_list::START_SROUTINES_HASH_SIZE,
                    0, 0, sp_sroutine_key, 0, 0);
 
   if (!my_hash_search(&prelocking_ctx->sroutines, key->ptr(), key->length()))
   {
-    Sroutine_hash_entry *rn=
-      (Sroutine_hash_entry *)arena->alloc(sizeof(Sroutine_hash_entry));
+    Sroutine_hash_entry *rn= arena->alloc<Sroutine_hash_entry>(1);
     if (unlikely(!rn)) // OOM. Error will be reported using fatal_error().
       return FALSE;
     MDL_REQUEST_INIT_BY_KEY(&rn->mdl_request, key, MDL_SHARED, MDL_TRANSACTION);
     if (my_hash_insert(&prelocking_ctx->sroutines, (uchar *)rn))
       return FALSE;
-    prelocking_ctx->sroutines_list.link_in_list(rn, &rn->next);
+    prelocking_ctx->sroutines_list.insert(rn, &rn->next);
     rn->belong_to_view= belong_to_view;
     rn->m_handler= handler;
     rn->m_sp_cache_version= 0;
@@ -2423,7 +2480,7 @@ Sp_handler::sp_cache_routine_reentrant(THD *thd,
 
 static bool
 is_package_public_routine(THD *thd,
-                          const LEX_CSTRING &db,
+                          const Lex_ident_db &db,
                           const LEX_CSTRING &package,
                           const LEX_CSTRING &routine,
                           enum_sp_type type)
@@ -2457,7 +2514,7 @@ is_package_public_routine(THD *thd,
 
 static bool
 is_package_public_routine_quick(THD *thd,
-                                const LEX_CSTRING &db,
+                                const Lex_ident_db &db,
                                 const LEX_CSTRING &pkgname,
                                 const LEX_CSTRING &name,
                                 enum_sp_type type)
@@ -2481,7 +2538,7 @@ is_package_body_routine(THD *thd, sp_package *pkg,
                         const LEX_CSTRING &name2,
                         enum_sp_type type)
 {
-  return Sp_handler::eq_routine_name(pkg->m_name, name1) &&
+  return Lex_ident_routine(pkg->m_name).streq(name1) &&
          (pkg->m_routine_declarations.find(name2, type) ||
           pkg->m_routine_implementations.find(name2, type));
 }
@@ -2508,7 +2565,7 @@ bool Sp_handler::
     Rewrite name if name->m_db (xxx) is a known package,
     and name->m_name (yyy) is a known routine in this package.
   */
-  LEX_CSTRING tmpdb= thd->db;
+  const Lex_ident_db tmpdb= Lex_ident_db(thd->db);
   if (is_package_public_routine(thd, tmpdb, name->m_db, name->m_name, type()) ||
       // Check if a package routine calls a private routine
       (caller && caller->m_parent &&
@@ -2519,7 +2576,7 @@ bool Sp_handler::
        is_package_body_routine(thd, pkg, name->m_db, name->m_name, type())))
   {
     pkgname->m_db= tmpdb;
-    pkgname->m_name= name->m_db;
+    pkgname->m_name= Lex_ident_routine(name->m_db);
     *pkg_routine_handler= package_routine_handler();
     return name->make_package_routine_name(thd->mem_root, tmpdb,
                                            name->m_db, name->m_name);
@@ -2575,7 +2632,7 @@ bool Sp_handler::
       - yyy() has a forward declaration
       - yyy() is declared in the corresponding CREATE PACKAGE
     */
-    if (eq_routine_name(tmpname, name->m_name) ||
+    if (Lex_ident_routine(name->m_name).streq(tmpname) ||
         caller->m_parent->m_routine_implementations.find(name->m_name, type()) ||
         caller->m_parent->m_routine_declarations.find(name->m_name, type()) ||
         is_package_public_routine_quick(thd, caller->m_db,
@@ -2905,7 +2962,17 @@ Sp_handler::sp_cache_package_routine(THD *thd,
 {
   DBUG_ENTER("sp_cache_package_routine");
   DBUG_ASSERT(type() == SP_TYPE_FUNCTION || type() == SP_TYPE_PROCEDURE);
-  sp_name pkgname(&name->m_db, &pkgname_cstr, false);
+  const Lex_ident_db db= lower_case_table_names ?
+                         thd->lex_ident_casedn(name->m_db) :
+                         name->m_db;
+  if (!db.str)
+    DBUG_RETURN(true); // EOM, error was already sent
+  /*
+    name->m_db was earlier tested with Lex_ident_db::check_name().
+    Now it's lower-cased according to lower_case_table_names.
+    It's safe to make a Lex_ident_db_normalized.
+  */
+  sp_name pkgname(Lex_ident_db_normalized(db), pkgname_cstr, false);
   sp_head *ph= NULL;
   int ret= sp_handler_package_body.sp_cache_routine(thd, &pkgname,
                                                     &ph);
@@ -3068,7 +3135,21 @@ Sp_handler::sp_load_for_information_schema(THD *thd, TABLE *proc_table,
   const AUTHID definer= {{STRING_WITH_LEN("")}, {STRING_WITH_LEN("")}};
   sp_head *sp;
   sp_cache **spc= get_cache(thd);
-  sp_name sp_name_obj(&db, &name, true); // This can change "name"
+  DBUG_ASSERT(db.str);
+  LEX_CSTRING dbn= lower_case_table_names ? thd->make_ident_casedn(db) : db;
+  if (!dbn.str)
+    return 0; // EOM, error was already sent
+  if (Lex_ident_db::check_name(dbn))
+  {
+    my_error(ER_SP_WRONG_NAME, MYF(0), dbn.str);
+    return 0;
+  }
+  /*
+    db was earlier tested with Lex_ident_db::check_name().
+    Now it's lower-cased according to lower_case_table_names.
+    It's safe make a Lex_ident_db_normalized.
+  */
+  sp_name sp_name_obj(Lex_ident_db_normalized(dbn), name, true);
   *free_sp_head= 0;
   sp= sp_cache_lookup(spc, &sp_name_obj);
 

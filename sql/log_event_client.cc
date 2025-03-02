@@ -632,10 +632,8 @@ log_event_print_value(IO_CACHE *file, PRINT_EVENT_INFO *print_event_info,
       if (!ptr)
         goto return_null;
 
-      float fl;
-      float4get(fl, ptr);
       char tmp[320];
-      sprintf(tmp, "%-20g", (double) fl);
+      sprintf(tmp, "%-20g", (double) get_float(ptr));
       my_b_printf(file, "%s", tmp); /* my_snprintf doesn't support %-20g */
       return 4;
     }
@@ -685,7 +683,7 @@ log_event_print_value(IO_CACHE *file, PRINT_EVENT_INFO *print_event_info,
         goto return_null;
 
       char buf[MAX_DATE_STRING_REP_LENGTH];
-      struct timeval tm;
+      struct my_timeval tm;
       my_timestamp_from_binary(&tm, ptr, meta);
       int buflen= my_timeval_to_str(&tm, buf, meta);
       my_b_write(file, (uchar*)buf, buflen);
@@ -1010,7 +1008,8 @@ Rows_log_event::print_verbose_one_row(IO_CACHE *file, table_def *td,
         IO_CACHE tmp_cache;
 
         // Using a tmp IO_CACHE to get the value output
-        open_cached_file(&tmp_cache, NULL, NULL, 0, MYF(MY_WME | MY_NABP));
+        open_cached_file(&tmp_cache, NULL, NULL, 0,
+                         MYF(MY_WME | MY_NABP | MY_TRACK_WITH_LIMIT));
         size= log_event_print_value(&tmp_cache, print_event_info,
                                     is_null ? NULL: value,
                                     td->type(i), td->field_metadata(i),
@@ -1846,7 +1845,8 @@ bool Log_event::print_base64(IO_CACHE* file,
         IO_CACHE tmp_cache;
 
         if (open_cached_file(&tmp_cache, NULL, NULL, 0,
-                              MYF(MY_WME | MY_NABP)))
+                              MYF(MY_WME | MY_NABP |
+                                  MY_TRACK_WITH_LIMIT)))
         {
           delete ev;
           goto err;
@@ -3303,7 +3303,7 @@ static void get_type_name(uint type, unsigned char** meta_ptr,
 {
   switch (type) {
   case MYSQL_TYPE_LONG:
-    my_snprintf(typestr, typestr_length, "%s", "INT");
+    my_snprintf(typestr, typestr_length, "INT");
     break;
   case MYSQL_TYPE_TINY:
     my_snprintf(typestr, typestr_length, "TINYINT");
@@ -3373,20 +3373,21 @@ static void get_type_name(uint type, unsigned char** meta_ptr,
     break;
   case MYSQL_TYPE_BLOB:
     {
-      bool is_text= (cs && cs->number != my_charset_bin.number);
-      const char *names[5][2] = {
-        {"INVALID_BLOB(%d)", "INVALID_TEXT(%d)"},
-        {"TINYBLOB", "TINYTEXT"},
-        {"BLOB", "TEXT"},
-        {"MEDIUMBLOB", "MEDIUMTEXT"},
-        {"LONGBLOB", "LONGTEXT"}
+      const char *type_name=
+        (cs && cs->number != my_charset_bin.number) ? "TEXT" : "BLOB";
+      const char *names[5]= {
+        NullS,
+        "TINY",
+        "",
+        "MEDIUM",
+        "LONG"
       };
       unsigned char size= **meta_ptr;
 
       if (size == 0 || size > 4)
-        my_snprintf(typestr, typestr_length, names[0][is_text], size);
+        my_snprintf(typestr, typestr_length, "INVALID_%s(%d)", type_name, size);
       else
-        my_snprintf(typestr, typestr_length, names[**meta_ptr][is_text]);
+        my_snprintf(typestr, typestr_length, "%s%s", names[size], type_name);
 
       (*meta_ptr)++;
     }
@@ -3423,7 +3424,7 @@ static void get_type_name(uint type, unsigned char** meta_ptr,
         "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION"
       };
       if (geometry_type < 8)
-        my_snprintf(typestr, typestr_length, names[geometry_type]);
+        my_snprintf(typestr, typestr_length, "%s", names[geometry_type]);
       else
         my_snprintf(typestr, typestr_length, "INVALID_GEOMETRY_TYPE(%u)",
                     geometry_type);
@@ -3740,7 +3741,7 @@ bool Ignorable_log_event::print(FILE *file,
 */
 st_print_event_info::st_print_event_info()
 {
-  myf const flags = MYF(MY_WME | MY_NABP);
+  myf const flags = MYF(MY_WME | MY_NABP | MY_TRACK_WITH_LIMIT);
   /*
     Currently we only use static PRINT_EVENT_INFO objects, so zeroed at
     program's startup, but these explicit bzero() is for the day someone
@@ -3856,6 +3857,12 @@ Gtid_log_event::print(FILE *file, PRINT_EVENT_INFO *print_event_info)
     if (flags_extra & FL_ROLLBACK_ALTER_E1)
       if (my_b_printf(&cache, " ROLLBACK ALTER id= %lu", sa_seq_no))
         goto err;
+    if (flags_extra & FL_EXTRA_THREAD_ID)
+    {
+      longlong10_to_str(thread_id, buf2, 10);
+      if (my_b_printf(&cache, " thread_id=%s", buf2))
+        goto err;
+    }
     if (my_b_printf(&cache, "\n"))
       goto err;
 

@@ -8,9 +8,9 @@ drop table if exists t1, t2, t3, t4, t5, t1i, t2i, t3i;
 drop table if exists columns;
 drop table if exists t1_16, t2_16, t3_16;
 drop view if exists v1, v2, v1m, v2m;
-create table t1 (a1 char(8), a2 char(8));
-create table t2 (b1 char(8), b2 char(8));
-create table t3 (c1 char(8), c2 char(8));
+create table t1 (a1 char(8), a2 char(8)) charset=latin1;
+create table t2 (b1 char(8), b2 char(8)) charset=latin1;
+create table t3 (c1 char(8), c2 char(8)) charset=latin1;
 insert into t1 values ('1 - 00', '2 - 00');
 insert into t1 values ('1 - 01', '2 - 01');
 insert into t1 values ('1 - 02', '2 - 02');
@@ -23,9 +23,9 @@ insert into t3 values ('1 - 01', '2 - 01');
 insert into t3 values ('1 - 02', '2 - 02');
 insert into t3 values ('1 - 03', '2 - 03');
 insert into t3 values ('1 - 04', '2 - 04');
-create table t1i (a1 char(8), a2 char(8));
-create table t2i (b1 char(8), b2 char(8));
-create table t3i (c1 char(8), c2 char(8));
+create table t1i (a1 char(8), a2 char(8)) charset=latin1;
+create table t2i (b1 char(8), b2 char(8)) charset=latin1;
+create table t3i (c1 char(8), c2 char(8)) charset=latin1;
 create index it1i1 on t1i (a1);
 create index it1i2 on t1i (a2);
 create index it1i3 on t1i (a1, a2);
@@ -795,9 +795,9 @@ from t1_512
 where a1 in (select group_concat(b1) from t2_512 group by b2);
 left(a1,7)	left(a2,7)
 Warnings:
-Warning	1260	Row 1 was cut by GROUP_CONCAT()
-Warning	1260	Row 2 was cut by GROUP_CONCAT()
-Warning	1260	Row 3 was cut by GROUP_CONCAT()
+Warning	1260	Row 1 was cut by group_concat()
+Warning	1260	Row 2 was cut by group_concat()
+Warning	1260	Row 3 was cut by group_concat()
 set @@group_concat_max_len = 256;
 explain extended select left(a1,7), left(a2,7)
 from t1_512
@@ -812,9 +812,9 @@ from t1_512
 where a1 in (select group_concat(b1) from t2_512 group by b2);
 left(a1,7)	left(a2,7)
 Warnings:
-Warning	1260	Row 1 was cut by GROUP_CONCAT()
-Warning	1260	Row 2 was cut by GROUP_CONCAT()
-Warning	1260	Row 3 was cut by GROUP_CONCAT()
+Warning	1260	Row 1 was cut by group_concat()
+Warning	1260	Row 2 was cut by group_concat()
+Warning	1260	Row 3 was cut by group_concat()
 drop table t1_512, t2_512, t3_512;
 set @blob_len = 1024;
 set @suffix_len = @blob_len - @prefix_len;
@@ -896,9 +896,10 @@ from t1_1024
 where a1 in (select group_concat(b1) from t2_1024 group by b2);
 left(a1,7)	left(a2,7)
 Warnings:
-Warning	1260	Row 1 was cut by GROUP_CONCAT()
-Warning	1260	Row 2 was cut by GROUP_CONCAT()
-Warning	1260	Row 3 was cut by GROUP_CONCAT()
+Warning	1260	Row 1 was cut by group_concat()
+Warning	1260	Row 2 was cut by group_concat()
+Warning	1260	Row 3 was cut by group_concat()
+Warning	4203	3 values were longer than max_sort_length. Sorting used only the first 1024 bytes
 set @@group_concat_max_len = 256;
 explain extended select left(a1,7), left(a2,7)
 from t1_1024
@@ -913,9 +914,10 @@ from t1_1024
 where a1 in (select group_concat(b1) from t2_1024 group by b2);
 left(a1,7)	left(a2,7)
 Warnings:
-Warning	1260	Row 1 was cut by GROUP_CONCAT()
-Warning	1260	Row 2 was cut by GROUP_CONCAT()
-Warning	1260	Row 3 was cut by GROUP_CONCAT()
+Warning	1260	Row 1 was cut by group_concat()
+Warning	1260	Row 2 was cut by group_concat()
+Warning	1260	Row 3 was cut by group_concat()
+Warning	4203	3 values were longer than max_sort_length. Sorting used only the first 1024 bytes
 drop table t1_1024, t2_1024, t3_1024;
 set @blob_len = 1025;
 set @suffix_len = @blob_len - @prefix_len;
@@ -997,9 +999,10 @@ from t1_1025
 where a1 in (select group_concat(b1) from t2_1025 group by b2);
 left(a1,7)	left(a2,7)
 Warnings:
-Warning	1260	Row 1 was cut by GROUP_CONCAT()
-Warning	1260	Row 2 was cut by GROUP_CONCAT()
-Warning	1260	Row 3 was cut by GROUP_CONCAT()
+Warning	1260	Row 1 was cut by group_concat()
+Warning	1260	Row 2 was cut by group_concat()
+Warning	1260	Row 3 was cut by group_concat()
+Warning	4203	3 values were longer than max_sort_length. Sorting used only the first 1024 bytes
 set @@group_concat_max_len = 256;
 explain extended select left(a1,7), left(a2,7)
 from t1_1025
@@ -1014,9 +1017,10 @@ from t1_1025
 where a1 in (select group_concat(b1) from t2_1025 group by b2);
 left(a1,7)	left(a2,7)
 Warnings:
-Warning	1260	Row 1 was cut by GROUP_CONCAT()
-Warning	1260	Row 2 was cut by GROUP_CONCAT()
-Warning	1260	Row 3 was cut by GROUP_CONCAT()
+Warning	1260	Row 1 was cut by group_concat()
+Warning	1260	Row 2 was cut by group_concat()
+Warning	1260	Row 3 was cut by group_concat()
+Warning	4203	3 values were longer than max_sort_length. Sorting used only the first 1024 bytes
 drop table t1_1025, t2_1025, t3_1025;
 create table t1bit (a1 bit(3), a2 bit(3));
 create table t2bit (b1 bit(3), b2 bit(3));
@@ -1257,7 +1261,7 @@ min(a1)
 NULL
 set @@optimizer_switch= @local_optimizer_switch;
 drop table t1,t2;
-create table t1 (a char(2), b varchar(10));
+create table t1 (a char(2), b varchar(10)) charset=latin1;
 insert into t1 values ('a',  'aaa');
 insert into t1 values ('aa', 'aaaa');
 explain select a,b from t1 where b in (select a from t1);
@@ -1526,7 +1530,7 @@ b varchar(4),
 c varchar(4),
 d varchar(4),
 PRIMARY KEY (pk)
-);
+) CHARSET=latin1;
 INSERT INTO t1 VALUES (1,'o','ffff','ffff','ffoo'),(2,'f','ffff','ffff','ffff');
 insert into t1 select seq,'x','xxxx','xxxx','xxxx' from seq_10_to_40;
 CREATE TABLE t2 LIKE t1;
@@ -1880,8 +1884,8 @@ DROP TABLE t1,t2;
 #
 # BUG#922254: Assertion `0' failed at item_cmpfunc.cc:5899: Item* Item_equal::get_first(JOIN_TAB*, Item*)
 #
-CREATE TABLE t1 ( a VARCHAR(3) );
-CREATE TABLE t2 ( b VARCHAR(3), c VARCHAR(8), KEY(c) );
+CREATE TABLE t1 ( a VARCHAR(3)) CHARSET=latin1;
+CREATE TABLE t2 ( b VARCHAR(3), c VARCHAR(8), KEY(c)) CHARSET=latin1;
 INSERT INTO t2 VALUES ('USA','Abilene'),('USA','Akron');
 EXPLAIN
 SELECT * FROM
@@ -1985,7 +1989,7 @@ DROP TABLE t1,t2;
 #
 CREATE TABLE t1 (a int);
 INSERT INTO t1 VALUES (7);
-CREATE TABLE t2 (b int, c int, d varchar(1), e varchar(1), KEY (c), KEY (d, c));
+CREATE TABLE t2 (b int, c int, d varchar(1), e varchar(1), KEY (c), KEY (d, c)) CHARSET=latin1;
 INSERT INTO t2 VALUES 
 (4,2,'v','v'), (6,1,'v','v'), (0,5,'x','x'), (7,1,'x','x'),
 (7,3,'i','i'), (7,1,'e','e'), (1,4,'p','p'), (1,2,'j','j');
@@ -2181,7 +2185,7 @@ id int(11) unsigned NOT NULL AUTO_INCREMENT,
 db varchar(254) NOT NULL DEFAULT '',
 PRIMARY KEY (id),
 UNIQUE KEY db (db)
-) DEFAULT CHARSET=utf8;
+) DEFAULT CHARSET=utf8 COLLATE utf8_general_ci;
 INSERT INTO t1 (db) VALUES ('mysqltest1'),('mysqltest2'),('mysqltest3'),('mysqltest4');
 drop database if exists mysqltest1;
 drop database if exists mysqltest2;
@@ -2348,7 +2352,7 @@ sys_id char(32),
 PRIMARY KEY (sys_id),
 KEY idx1 (dispatch_group),
 KEY idx2 (assignment_group)
-) ENGINE=MyISAM;
+) ENGINE=MyISAM CHARSET=latin1;
 CREATE TABLE t2 (
 ugroup varchar(32),
 user varchar(32),
@@ -2356,12 +2360,12 @@ sys_id char(32),
 PRIMARY KEY (sys_id),
 KEY idx3 (ugroup),
 KEY idx4 (user)
-) ENGINE=MyISAM;
+) ENGINE=MyISAM CHARSET=latin1;
 CREATE TABLE t3 (
 type mediumtext,
 sys_id char(32),
 PRIMARY KEY (sys_id)
-) ENGINE=MyISAM;
+) ENGINE=MyISAM CHARSET=latin1;
 set optimizer_switch='materialization=off';
 explain SELECT t1.assignment_group
 FROM t1, t3
@@ -3116,6 +3120,7 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
+          "r_total_filtered": 100,
           "r_filtered": 100
         }
       }
@@ -3146,6 +3151,7 @@ ANALYZE
                   "r_other_time_ms": "REPLACED",
                   "r_engine_stats": REPLACED,
                   "filtered": 100,
+                  "r_total_filtered": 100,
                   "r_filtered": 100
                 }
               }
@@ -3189,6 +3195,7 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
+          "r_total_filtered": 100,
           "r_filtered": 100
         }
       }
@@ -3218,6 +3225,7 @@ ANALYZE
                   "r_other_time_ms": "REPLACED",
                   "r_engine_stats": REPLACED,
                   "filtered": 100,
+                  "r_total_filtered": 100,
                   "r_filtered": 100
                 }
               }
@@ -3262,6 +3270,7 @@ ANALYZE
           "r_other_time_ms": "REPLACED",
           "r_engine_stats": REPLACED,
           "filtered": 100,
+          "r_total_filtered": 100,
           "r_filtered": 100
         }
       }
@@ -3289,6 +3298,7 @@ ANALYZE
                   "r_other_time_ms": "REPLACED",
                   "r_engine_stats": REPLACED,
                   "filtered": 100,
+                  "r_total_filtered": 100,
                   "r_filtered": 100
                 }
               }
@@ -3334,10 +3344,11 @@ ANALYZE
       "access_type": "ALL",
       "rows": 4,
       "r_rows": 4,
-      "r_filtered": 25,
+      "r_total_filtered": 25,
       "r_total_time_ms": "REPLACED",
       "r_engine_stats": REPLACED,
-      "attached_condition": "!(<in_optimizer>(t1.a,t1.a in (subquery#2)))"
+      "attached_condition": "!(<in_optimizer>(t1.a,t1.a in (subquery#2)))",
+      "r_filtered": 25
     },
     "subqueries": [
       {
@@ -3365,6 +3376,7 @@ ANALYZE
                   "r_other_time_ms": "REPLACED",
                   "r_engine_stats": REPLACED,
                   "filtered": 100,
+                  "r_total_filtered": 100,
                   "r_filtered": 100
                 }
               }
@@ -3412,10 +3424,11 @@ ANALYZE
       "access_type": "ALL",
       "rows": 2,
       "r_rows": 2,
-      "r_filtered": 0,
+      "r_total_filtered": 0,
       "r_total_time_ms": "REPLACED",
       "r_engine_stats": REPLACED,
-      "attached_condition": "!(<in_optimizer>(t1.a,t1.a in (subquery#2)))"
+      "attached_condition": "!(<in_optimizer>(t1.a,t1.a in (subquery#2)))",
+      "r_filtered": 0
     },
     "subqueries": [
       {
@@ -3443,6 +3456,7 @@ ANALYZE
                   "r_other_time_ms": "REPLACED",
                   "r_engine_stats": REPLACED,
                   "filtered": 100,
+                  "r_total_filtered": 100,
                   "r_filtered": 100
                 }
               }

@@ -29,6 +29,7 @@
 
 #include "unireg.h"
 #include "log_event.h"
+#include "log_cache.h"
 #include "sql_base.h"                           // close_thread_tables
 #include "sql_cache.h"                       // QUERY_CACHE_FLAGS_SIZE
 #include "sql_locale.h" // MY_LOCALE, my_locale_by_number, my_locale_en_US
@@ -690,6 +691,13 @@ void Log_event::init_show_field_list(THD *thd, List<Item>* field_list)
 int Log_event_writer::write_internal(const uchar *pos, size_t len)
 {
   DBUG_ASSERT(!ctx || encrypt_or_write == &Log_event_writer::encrypt_and_write);
+  if (cache_data &&
+#ifdef WITH_WSREP
+      mysql_bin_log.is_open() &&
+#endif
+      cache_data->write_prepare(len))
+    return 1;
+
   if (my_b_safe_write(file, pos, len))
   {
     DBUG_PRINT("error", ("write to log failed: %d", my_errno));
@@ -829,7 +837,7 @@ int Log_event_writer::write_footer()
 bool Log_event::write_header(Log_event_writer *writer, size_t event_data_length)
 {
   uchar header[LOG_EVENT_HEADER_LEN];
-  ulong now;
+  my_time_t now;
   DBUG_ENTER("Log_event::write_header");
   DBUG_PRINT("enter", ("filepos: %lld  length: %zu type: %d",
                        (longlong) writer->pos(), event_data_length,
@@ -1328,8 +1336,6 @@ Query_log_event::Query_log_event(THD* thd_arg, const char* query_arg,
 {
   /* status_vars_len is set just before writing the event */
 
-  time_t end_time;
-
 #ifdef WITH_WSREP
   /*
     If Query_log_event will contain non trans keyword (not BEGIN, COMMIT,
@@ -1348,8 +1354,13 @@ Query_log_event::Query_log_event(THD* thd_arg, const char* query_arg,
   memset(&host, 0, sizeof(host));
   error_code= errcode;
 
-  end_time= my_time(0);
-  exec_time = (ulong) (end_time  - thd_arg->start_time);
+  /*
+    For slave threads, remember the original master exec time.
+    This is needed to be able to calculate the master commit time.
+  */
+  exec_time= ((thd->rgi_slave) ? thd->rgi_slave->orig_exec_time
+                               : (my_time(0) - thd_arg->start_time));
+
   /**
     @todo this means that if we have no catalog, then it is replicated
     as an existing catalog of length zero. is that safe? /sven
@@ -2836,9 +2847,10 @@ Gtid_log_event::Gtid_log_event(THD *thd_arg, uint64 seq_no_arg,
                                bool ro_1pc)
   : Log_event(thd_arg, flags_arg, is_transactional),
     seq_no(seq_no_arg), commit_id(commit_id_arg), domain_id(domain_id_arg),
-    flags2((standalone ? FL_STANDALONE : 0) |
+    pad_to_size(0), flags2((standalone ? FL_STANDALONE : 0) |
            (commit_id_arg ? FL_GROUP_COMMIT_ID : 0)),
-    flags_extra(0), extra_engines(0)
+    flags_extra(0), extra_engines(0),
+    thread_id(thd_arg->variables.pseudo_thread_id)
 {
   cache_type= Log_event::EVENT_NO_CACHE;
   bool is_tmp_table= thd_arg->lex->stmt_accessed_temp_table();
@@ -2862,6 +2874,9 @@ Gtid_log_event::Gtid_log_event(THD *thd_arg, uint64 seq_no_arg,
   /* Preserve any DDL or WAITED flag in the slave's binlog. */
   if (thd_arg->rgi_slave)
     flags2|= (thd_arg->rgi_slave->gtid_ev_flags2 & (FL_DDL|FL_WAITED));
+  if (!thd->rgi_slave ||
+      thd_arg->rgi_slave->gtid_ev_flags_extra & FL_EXTRA_THREAD_ID)
+    flags_extra|= FL_EXTRA_THREAD_ID;
 
   XID_STATE &xid_state= thd->transaction->xid_state;
   if (is_transactional)
@@ -2952,12 +2967,7 @@ Gtid_log_event::peek(const uchar *event_start, size_t event_len,
 bool
 Gtid_log_event::write(Log_event_writer *writer)
 {
-  uchar buf[GTID_HEADER_LEN+2
-    + sizeof(XID)
-    + 1 // flags_extra:
-    + 1 // extra_engines
-    + 8 // sa_seq_no
-  ];
+  uchar buf[max_data_length];
   size_t write_len= 13;
 
   int8store(buf, seq_no);
@@ -2987,6 +2997,19 @@ Gtid_log_event::write(Log_event_writer *writer)
     }
   }
 
+#ifndef DBUG_OFF
+  /*
+    The following debug_dbug flags which simulate invalid events are only
+    valid for pre-FL_EXTRA_THREAD_ID events (i.e. before 11.5). So do not write
+    the thread id attribute when simulating these invalid events.
+  */
+  if (DBUG_IF("negate_xid_from_gtid") ||
+      DBUG_IF("negate_xid_data_from_gtid") ||
+      DBUG_IF("inject_fl_extra_multi_engine_into_gtid") ||
+      DBUG_IF("negate_alter_fl_from_gtid"))
+    flags_extra&= ~FL_EXTRA_THREAD_ID;
+#endif
+
   DBUG_EXECUTE_IF("inject_fl_extra_multi_engine_into_gtid", {
     flags_extra|= FL_EXTRA_MULTI_ENGINE_E1;
   });
@@ -3013,11 +3036,38 @@ Gtid_log_event::write(Log_event_writer *writer)
     write_len+= 8;
   }
 
+  if (flags_extra & FL_EXTRA_THREAD_ID)
+  {
+    int4store(buf + write_len, thread_id);
+    write_len+= 4;
+  }
+
   if (write_len < GTID_HEADER_LEN)
   {
     bzero(buf+write_len, GTID_HEADER_LEN-write_len);
     write_len= GTID_HEADER_LEN;
   }
+
+  if (unlikely(pad_to_size > write_len))
+  {
+    if (write_header(writer, pad_to_size) ||
+        write_data(writer, buf, write_len))
+      return true;
+
+    pad_to_size-= write_len;
+
+    char pad_buf[IO_SIZE];
+    bzero(pad_buf,  pad_to_size);
+    while (pad_to_size)
+    {
+      uint64 size= pad_to_size >= IO_SIZE ? IO_SIZE : pad_to_size;
+      if (write_data(writer, pad_buf, size))
+        return true;
+      pad_to_size-= size;
+    }
+    return write_footer(writer);
+  }
+
   return write_header(writer, write_len) ||
          write_data(writer, buf, write_len) ||
          write_footer(writer);
@@ -3116,6 +3166,7 @@ Gtid_log_event::do_apply_event(rpl_group_info *rgi)
   thd->variables.server_id= this->server_id;
   thd->variables.gtid_domain_id= this->domain_id;
   thd->variables.gtid_seq_no= this->seq_no;
+  thd->variables.pseudo_thread_id= this->thread_id;
   rgi->gtid_ev_flags2= flags2;
 
   rgi->gtid_ev_flags_extra= flags_extra;
@@ -3692,6 +3743,15 @@ int Xid_apply_log_event::do_apply_event(rpl_group_info *rgi)
 
   general_log_print(thd, COM_QUERY, "%s", get_query());
   thd->variables.option_bits&= ~OPTION_GTID_BEGIN;
+  /*
+    Use the time from the current Xid_log_event for the generated
+    Xid_log_event in binlog_commit_flush_xid_caches().
+    This ensures that the time for Xid_log_events does not change
+    and allows slaves to give a consistent value for
+    Slave_last_event_time.
+  */
+  thd->start_time= when;
+
   res= do_commit();
   if (!res && rgi->gtid_pending)
   {
@@ -5067,7 +5127,8 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
     Rows_log_event::Db_restore_ctx restore_ctx(this);
     master_had_triggers= table->master_had_triggers;
     bool transactional_table= table->file->has_transactions_and_rollback();
-    table->file->prepare_for_insert(get_general_type_code() != WRITE_ROWS_EVENT);
+    table->file->prepare_for_modify(true,
+                                  get_general_type_code() != WRITE_ROWS_EVENT);
 
     /*
       table == NULL means that this table should not be replicated
@@ -5703,8 +5764,7 @@ Table_map_log_event::Table_map_log_event(THD *thd, TABLE *tbl, ulonglong tid,
               (tbl->s->db.str[tbl->s->db.length] == 0));
   DBUG_ASSERT(tbl->s->table_name.str[tbl->s->table_name.length] == 0);
 
-  binlog_type_info_array= (Binlog_type_info *)thd->alloc(m_table->s->fields *
-                                                   sizeof(Binlog_type_info));
+  binlog_type_info_array= thd->alloc<Binlog_type_info>(m_table->s->fields);
   for (uint i= 0; i <  m_table->s->fields; i++)
     binlog_type_info_array[i]= m_table->field[i]->binlog_type_info();
 
@@ -5887,6 +5947,12 @@ int Table_map_log_event::do_apply_event(rpl_group_info *rgi)
   RPL_TABLE_LIST *table_list;
   char *db_mem, *tname_mem, *ptr;
   size_t dummy_len, db_mem_length, tname_mem_length;
+  /*
+    The database name can be changed to a longer name after get_rewrite_db().
+    Allocate the maximum possible size.
+  */
+  const size_t db_mem_alloced= NAME_LEN + 1;
+  const size_t tname_mem_alloced= NAME_LEN + 1;
   void *memory;
   Rpl_filter *filter;
   Relay_log_info const *rli= rgi->rli;
@@ -5897,17 +5963,23 @@ int Table_map_log_event::do_apply_event(rpl_group_info *rgi)
 
   if (!(memory= my_multi_malloc(PSI_INSTRUMENT_ME, MYF(MY_WME),
                                 &table_list, (uint) sizeof(RPL_TABLE_LIST),
-                                &db_mem, (uint) NAME_LEN + 1,
-                                &tname_mem, (uint) NAME_LEN + 1,
+                                &db_mem, (uint) db_mem_alloced,
+                                &tname_mem, (uint) tname_mem_alloced,
                                 NullS)))
     DBUG_RETURN(HA_ERR_OUT_OF_MEM);
 
-  db_mem_length= strmov(db_mem, m_dbnam) - db_mem;
-  tname_mem_length= strmov(tname_mem, m_tblnam) - tname_mem;
   if (lower_case_table_names)
   {
-    my_casedn_str(files_charset_info, (char*)tname_mem);
-    my_casedn_str(files_charset_info, (char*)db_mem);
+    db_mem_length= files_charset_info->casedn_z(m_dbnam, m_dblen,
+                                                db_mem, db_mem_alloced);
+    tname_mem_length= files_charset_info->casedn_z(m_tblnam, m_tbllen,
+                                                   tname_mem,
+                                                   tname_mem_alloced);
+  }
+  else
+  {
+    db_mem_length= strmov(db_mem, m_dbnam) - db_mem;
+    tname_mem_length= strmov(tname_mem, m_tblnam) - tname_mem;
   }
 
   /* call from mysql_client_binlog_statement() will not set rli->mi */
@@ -6323,7 +6395,7 @@ bool Table_map_log_event::init_column_name_field()
 bool Table_map_log_event::init_set_str_value_field()
 {
   StringBuffer<1024> buf;
-  TYPELIB *typelib;
+  const TYPELIB *typelib;
 
   /*
     SET string values are stored in the same format:
@@ -6353,7 +6425,7 @@ bool Table_map_log_event::init_set_str_value_field()
 bool Table_map_log_event::init_enum_str_value_field()
 {
   StringBuffer<1024> buf;
-  TYPELIB *typelib;
+  const TYPELIB *typelib;
 
   /* ENUM is same to SET columns, see comment in init_set_str_value_field */
   for (unsigned int i= 0 ; i < m_table->s->fields ; ++i)
@@ -6619,7 +6691,8 @@ Write_rows_log_event::do_after_row_operations(int error)
 
 bool Rows_log_event::process_triggers(trg_event_type event,
                                       trg_action_time_type time_type,
-                                      bool old_row_is_record1)
+                                      bool old_row_is_record1,
+                                      bool *skip_row_indicator)
 {
   bool result;
   DBUG_ENTER("Rows_log_event::process_triggers");
@@ -6628,12 +6701,14 @@ bool Rows_log_event::process_triggers(trg_event_type event,
   {
     result= m_table->triggers->process_triggers(thd, event,
                                                 time_type,
-                                                old_row_is_record1);
+                                                old_row_is_record1,
+                                                skip_row_indicator);
   }
   else
     result= m_table->triggers->process_triggers(thd, event,
                                                 time_type,
-                                                old_row_is_record1);
+                                                old_row_is_record1,
+                                                skip_row_indicator);
 
   DBUG_RETURN(result);
 }
@@ -6806,11 +6881,17 @@ int Rows_log_event::write_row(rpl_group_info *rgi, const bool overwrite)
   if (table->s->long_unique_table)
     table->update_virtual_fields(table->file, VCOL_UPDATE_FOR_WRITE);
 
+  bool trg_skip_row= false;
   if (invoke_triggers &&
-      unlikely(process_triggers(TRG_EVENT_INSERT, TRG_ACTION_BEFORE, TRUE)))
+      unlikely(process_triggers(TRG_EVENT_INSERT, TRG_ACTION_BEFORE, true,
+                                &trg_skip_row)))
   {
     DBUG_RETURN(HA_ERR_GENERIC); // in case if error is not set yet
   }
+
+  /* In case any of triggers signals to skip the current row, do it. */
+  if (trg_skip_row)
+    return false;
 
   // Handle INSERT.
   if (table->versioned(VERS_TIMESTAMP))
@@ -6819,6 +6900,7 @@ int Rows_log_event::write_row(rpl_group_info *rgi, const bool overwrite)
     // Check whether a row came from unversioned table and fix vers fields.
     if (table->vers_start_field()->get_timestamp(&sec_part) == 0 && sec_part == 0)
       table->vers_update_fields();
+    table->vers_fix_old_timestamp(rgi);
   }
 
   /* 
@@ -6986,7 +7068,7 @@ int Rows_log_event::write_row(rpl_group_info *rgi, const bool overwrite)
       DBUG_PRINT("info",("Deleting offending row and trying to write new one again"));
       if (invoke_triggers &&
           unlikely(process_triggers(TRG_EVENT_DELETE, TRG_ACTION_BEFORE,
-                                    TRUE)))
+                                    true, &trg_skip_row)))
         error= HA_ERR_GENERIC; // in case if error is not set yet
       else
       {
@@ -6996,17 +7078,18 @@ int Rows_log_event::write_row(rpl_group_info *rgi, const bool overwrite)
           table->file->print_error(error, MYF(0));
           DBUG_RETURN(error);
         }
-        if (invoke_triggers &&
+        if (invoke_triggers && !trg_skip_row &&
             unlikely(process_triggers(TRG_EVENT_DELETE, TRG_ACTION_AFTER,
-                                      TRUE)))
+                                      true, nullptr)))
           DBUG_RETURN(HA_ERR_GENERIC); // in case if error is not set yet
       }
       /* Will retry ha_write_row() with the offending row removed. */
     }
   }
 
-  if (invoke_triggers &&
-      unlikely(process_triggers(TRG_EVENT_INSERT, TRG_ACTION_AFTER, TRUE)))
+  if (invoke_triggers && !trg_skip_row &&
+      unlikely(process_triggers(TRG_EVENT_INSERT, TRG_ACTION_AFTER, true,
+                                nullptr)))
     error= HA_ERR_GENERIC; // in case if error is not set yet
 
   DBUG_RETURN(error);
@@ -7555,6 +7638,11 @@ int Rows_log_event::find_row(rpl_group_info *rgi)
       table->vers_end_field()->set_max();
       m_vers_from_plain= true;
     }
+    else if (m_table->versioned(VERS_TIMESTAMP))
+    {
+      /* Change row_end in record[0] to new end date if old server */
+      m_table->vers_fix_old_timestamp(rgi);
+    }
   }
 
   DBUG_PRINT("info",("looking for the following record"));
@@ -7888,10 +7976,12 @@ int Delete_rows_log_event::do_exec_row(rpl_group_info *rgi)
 #endif
     thd_proc_info(thd, message);
 
+    bool trg_skip_row= false;
     if (invoke_triggers &&
-        unlikely(process_triggers(TRG_EVENT_DELETE, TRG_ACTION_BEFORE, FALSE)))
+        unlikely(process_triggers(TRG_EVENT_DELETE, TRG_ACTION_BEFORE, false,
+                                  &trg_skip_row)))
       error= HA_ERR_GENERIC; // in case if error is not set yet
-    if (likely(!error))
+    if (likely(!error) && !trg_skip_row)
     {
       if (m_vers_from_plain && m_table->versioned(VERS_TIMESTAMP))
       {
@@ -7906,8 +7996,9 @@ int Delete_rows_log_event::do_exec_row(rpl_group_info *rgi)
         error= m_table->file->ha_delete_row(m_table->record[0]);
       }
     }
-    if (invoke_triggers && likely(!error) &&
-        unlikely(process_triggers(TRG_EVENT_DELETE, TRG_ACTION_AFTER, FALSE)))
+    if (invoke_triggers && likely(!error) && !trg_skip_row &&
+        unlikely(process_triggers(TRG_EVENT_DELETE, TRG_ACTION_AFTER, false,
+                                  nullptr)))
       error= HA_ERR_GENERIC; // in case if error is not set yet
     m_table->file->ha_index_or_rnd_end();
   }
@@ -8010,6 +8101,7 @@ Update_rows_log_event::do_exec_row(rpl_group_info *rgi)
   const LEX_CSTRING &table_name= m_table->s->table_name;
   const char quote_char=
     get_quote_char_for_identifier(thd, table_name.str, table_name.length);
+  bool trg_skip_row= false;
   my_snprintf(msg, sizeof msg,
               "Update_rows_log_event::find_row() on table %c%.*s%c",
               quote_char, int(table_name.length), table_name.str, quote_char);
@@ -8105,16 +8197,26 @@ Update_rows_log_event::do_exec_row(rpl_group_info *rgi)
 
   thd_proc_info(thd, message);
   if (invoke_triggers &&
-      unlikely(process_triggers(TRG_EVENT_UPDATE, TRG_ACTION_BEFORE, TRUE)))
+      unlikely(process_triggers(TRG_EVENT_UPDATE, TRG_ACTION_BEFORE, true,
+                                &trg_skip_row)))
   {
     error= HA_ERR_GENERIC; // in case if error is not set yet
     goto err;
   }
 
+  if (trg_skip_row)
+  {
+    error= 0;
+    goto err;
+  }
   if (m_table->versioned())
   {
-    if (m_vers_from_plain && m_table->versioned(VERS_TIMESTAMP))
-      m_table->vers_update_fields();
+    if (m_table->versioned(VERS_TIMESTAMP))
+    {
+      if (m_vers_from_plain)
+        m_table->vers_update_fields();
+      m_table->vers_fix_old_timestamp(rgi);
+    }
     if (!history_change && !m_table->vers_end_field()->is_max())
     {
       tl->trg_event_map|= trg2bit(TRG_EVENT_DELETE);
@@ -8132,7 +8234,8 @@ Update_rows_log_event::do_exec_row(rpl_group_info *rgi)
   }
 
   if (invoke_triggers && likely(!error) &&
-      unlikely(process_triggers(TRG_EVENT_UPDATE, TRG_ACTION_AFTER, TRUE)))
+      unlikely(process_triggers(TRG_EVENT_UPDATE, TRG_ACTION_AFTER, true,
+                                nullptr)))
     error= HA_ERR_GENERIC; // in case if error is not set yet
 
 
