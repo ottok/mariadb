@@ -44,7 +44,7 @@ Forwarded: no
  2 files changed, 2 insertions(+), 28 deletions(-)
 
 diff --git a/mysql-test/main/func_regexp_pcre.result b/mysql-test/main/func_regexp_pcre.result
-index e7d8adc..ae3f199 100644
+index 3085d2a..eda2e9d 100644
 --- a/mysql-test/main/func_regexp_pcre.result
 +++ b/mysql-test/main/func_regexp_pcre.result
 @@ -60,7 +60,7 @@ INSERT INTO t1 VALUES ('1'),('௨');
@@ -54,7 +54,7 @@ index e7d8adc..ae3f199 100644
 -INSERT INTO t2 VALUES ('\\p{L}'),('\\p{Ll}'),('\\p{Lu}'),('\\p{L&}');
 +INSERT INTO t2 VALUES ('\\p{L}'),('\\p{L&}');
  INSERT INTO t2 VALUES ('[[:alpha:]]'),('[[:digit:]]');
- SELECT class, ch, ch RLIKE class FROM t1, t2 ORDER BY class, BINARY ch;
+ SELECT class, ch, ch RLIKE class FROM t1, t2 ORDER BY BINARY class, BINARY ch;
  class	ch	ch RLIKE class
 @@ -168,32 +168,6 @@ class	ch	ch RLIKE class
  \p{Latin}	ප	0
@@ -90,7 +90,7 @@ index e7d8adc..ae3f199 100644
  \p{L}	A	1
  \p{L}	a	1
 diff --git a/mysql-test/main/func_regexp_pcre.test b/mysql-test/main/func_regexp_pcre.test
-index 3dad14f..74ece2f 100644
+index 53280b7..4d5b4ad 100644
 --- a/mysql-test/main/func_regexp_pcre.test
 +++ b/mysql-test/main/func_regexp_pcre.test
 @@ -41,7 +41,7 @@ INSERT INTO t1 VALUES ('1'),('௨');
@@ -100,5 +100,5 @@ index 3dad14f..74ece2f 100644
 -INSERT INTO t2 VALUES ('\\p{L}'),('\\p{Ll}'),('\\p{Lu}'),('\\p{L&}');
 +INSERT INTO t2 VALUES ('\\p{L}'),('\\p{L&}');
  INSERT INTO t2 VALUES ('[[:alpha:]]'),('[[:digit:]]');
- SELECT class, ch, ch RLIKE class FROM t1, t2 ORDER BY class, BINARY ch;
- DROP TABLE t1, t2;
+ # Use "ORDER BY BINARY" to avoid dependency on the default utf8 collation
+ SELECT class, ch, ch RLIKE class FROM t1, t2 ORDER BY BINARY class, BINARY ch;

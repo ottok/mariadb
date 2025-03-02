@@ -58,7 +58,7 @@ index 60c3854..bb5656a 100644
           "terminates with an error. Default is 0, in which case mariadb-backup waits "
           "indefinitely for BACKUP STAGE START to finish",
 diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
-index 543052f..f43cf69 100644
+index 34d6314..d0b60a1 100644
 --- a/extra/mariabackup/xtrabackup.cc
 +++ b/extra/mariabackup/xtrabackup.cc
 @@ -219,7 +219,7 @@ uint xtrabackup_compress = FALSE;
@@ -70,7 +70,7 @@ index 543052f..f43cf69 100644
  in milliseconds (default is 1 second) */
  ulint xtrabackup_log_copy_interval = 1000;
  static ulong max_buf_pool_modified_pct;
-@@ -1736,7 +1736,7 @@ struct my_option xb_client_options[]= {
+@@ -1735,7 +1735,7 @@ struct my_option xb_client_options[]= {
      {"startup-wait-timeout", OPT_LOCK_WAIT_TIMEOUT,
       "This option specifies time in seconds that mariadb-backup should wait for "
       "BACKUP STAGE START to complete. BACKUP STAGE START has to wait until all "
@@ -89,11 +89,11 @@ index 543052f..f43cf69 100644
  	for (auto space_name: defer_space_names) {
  		if (!check_if_skip_table(space_name.c_str())) {
 diff --git a/mysql-test/main/mysqld--help.result b/mysql-test/main/mysqld--help.result
-index adc10ec..e7227cb 100644
+index 00fbdf5..02e27c2 100644
 --- a/mysql-test/main/mysqld--help.result
 +++ b/mysql-test/main/mysqld--help.result
-@@ -782,13 +782,14 @@ The following specify which files/extra groups are read (specified before remain
-  storage as part of an index scan.
+@@ -815,13 +815,14 @@ The following specify which files/extra groups are read (specified before remain
+  storage as part of an index scan
   --optimizer-join-limit-pref-ratio=# 
   For queries with JOIN and ORDER BY LIMIT : make the
 - optimizer consider a join order that allows to short-cut
@@ -112,26 +112,26 @@ index adc10ec..e7227cb 100644
 + so the default is 0 which means do not consider this
 + optimization
   --optimizer-key-compare-cost=# 
-  Cost of checking a key against the end key condition.
+  Cost of checking a key against the end key condition
   --optimizer-key-copy-cost=# 
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_innodb.result b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
-index ba7bbc7..b5b925f 100644
+index fe7c07c..0d58133 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_innodb.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
 @@ -528,7 +528,7 @@ SESSION_VALUE	NULL
  DEFAULT_VALUE	OFF
  VARIABLE_SCOPE	GLOBAL
  VARIABLE_TYPE	BOOLEAN
--VARIABLE_COMMENT	Enrypt the temporary table data.
+-VARIABLE_COMMENT	Encrypt the temporary table data
 +VARIABLE_COMMENT	Encrypt the temporary table data.
  NUMERIC_MIN_VALUE	NULL
  NUMERIC_MAX_VALUE	NULL
  NUMERIC_BLOCK_SIZE	NULL
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
-index de30858..e52ac38 100644
+index 2c1da01..9d94e48 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
-@@ -2405,7 +2405,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
+@@ -2485,7 +2485,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
  VARIABLE_NAME	OPTIMIZER_JOIN_LIMIT_PREF_RATIO
  VARIABLE_SCOPE	SESSION
  VARIABLE_TYPE	BIGINT UNSIGNED
@@ -141,10 +141,10 @@ index de30858..e52ac38 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
-index 347b5ee..774c7f6 100644
+index 00f5095..a44c9d1 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
-@@ -2615,7 +2615,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
+@@ -2695,7 +2695,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
  VARIABLE_NAME	OPTIMIZER_JOIN_LIMIT_PREF_RATIO
  VARIABLE_SCOPE	SESSION
  VARIABLE_TYPE	BIGINT UNSIGNED
@@ -154,10 +154,10 @@ index 347b5ee..774c7f6 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/sql/opt_subselect.cc b/sql/opt_subselect.cc
-index d43a3f1..1e4ac34 100644
+index 4ad0540..873e56a 100644
 --- a/sql/opt_subselect.cc
 +++ b/sql/opt_subselect.cc
-@@ -6887,7 +6887,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
+@@ -6880,7 +6880,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
          add("rows", inner_record_count_1).
          add("materialization_cost", materialize_strategy_cost).
          add("in_exist_cost", in_exists_strategy_cost).
@@ -166,7 +166,7 @@ index d43a3f1..1e4ac34 100644
      }
  
      DBUG_PRINT("info",
-@@ -6925,7 +6925,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
+@@ -6918,7 +6918,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
      {
        Json_writer_object trace_wrapper(thd);
        Json_writer_object trace_subquery(thd, "subquery_plan_revert");
@@ -176,10 +176,10 @@ index d43a3f1..1e4ac34 100644
    }
  
 diff --git a/sql/sql_select.cc b/sql/sql_select.cc
-index c3f5098..90524d4 100644
+index c14afdc..d3e5d38 100644
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
-@@ -11706,7 +11706,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
+@@ -11745,7 +11745,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
  
  /*
    @brief
@@ -188,7 +188,7 @@ index c3f5098..90524d4 100644
      execution.
  
    @detail
-@@ -15149,7 +15149,7 @@ void JOIN::drop_unused_derived_keys()
+@@ -15185,7 +15185,7 @@ void JOIN::drop_unused_derived_keys()
        }
        /*
          We dropped all keys except the chosen one and unique keys.
@@ -198,10 +198,10 @@ index c3f5098..90524d4 100644
        tab->ref.key= 0;
      }
 diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
-index 590301c..fd35fd4 100644
+index 4e4a77e..230b614 100644
 --- a/sql/sys_vars.cc
 +++ b/sql/sys_vars.cc
-@@ -2913,7 +2913,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
+@@ -2958,7 +2958,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
  static Sys_var_ulonglong Sys_optimizer_join_limit_pref_ratio(
         "optimizer_join_limit_pref_ratio",
         "For queries with JOIN and ORDER BY LIMIT : make the optimizer "
@@ -224,14 +224,14 @@ index 520b82d..a782570 100644
  	} catch (const char *msg) {
  		htrc(g->Message, msg);
 diff --git a/storage/innobase/handler/ha_innodb.cc b/storage/innobase/handler/ha_innodb.cc
-index e69d9a2..3372283 100644
+index 0d26b70..62d67f1 100644
 --- a/storage/innobase/handler/ha_innodb.cc
 +++ b/storage/innobase/handler/ha_innodb.cc
-@@ -19883,7 +19883,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
+@@ -19898,7 +19898,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
  
  static MYSQL_SYSVAR_BOOL(encrypt_temporary_tables, innodb_encrypt_temporary_tables,
    PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
--  "Enrypt the temporary table data.",
+-  "Encrypt the temporary table data",
 +  "Encrypt the temporary table data.",
    NULL, NULL, false);
  
