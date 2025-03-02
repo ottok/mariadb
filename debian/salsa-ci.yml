@@ -347,7 +347,7 @@ blhc:
   - test -f /bin/grep || cp -av /usr/bin/grep /bin/
   - test -f /bin/mkdir || cp -av /usr/bin/mkdir /bin/
   - |
-    dpkg -l | grep -e "mariadb-server.*11\.4"
+    dpkg -l | grep -e "mariadb-server.*11\.8"
     mkdir -p debug # Ensure dir exists before using it
     find /var/lib/mysql -ls > debug/var-lib-mysql.list || true # Ignore errors about "no such file or directory"
     cp -ra /etc/mysql debug/etc-mysql
@@ -431,8 +431,8 @@ blhc:
     {
       MYSQL h;
       // Constants refer to server version
-      test_if_starts_with("1104", to_string(MARIADB_VERSION_ID), "MARIADB_VERSION_ID");
-      test_if_starts_with("1104", to_string(MYSQL_VERSION_ID), "MYSQL_VERSION_ID");
+      test_if_starts_with("1108", to_string(MARIADB_VERSION_ID), "MARIADB_VERSION_ID");
+      test_if_starts_with("1108", to_string(MYSQL_VERSION_ID), "MYSQL_VERSION_ID");
       // Client ABI returns connector version
       test_if_starts_with("304", to_string(mysql_get_client_version()), "mysql_get_client_version()");
       test_if_starts_with("3.4", mysql_get_client_info(), "mysql_get_client_info()");
