@@ -44,6 +44,7 @@ usr/lib/mysql/plugin/auth_ed25519.so
 usr/lib/mysql/plugin/auth_pam_tool_dir/auth_pam_tool
 usr/lib/mysql/plugin/auth_pam_v1.so
 usr/lib/mysql/plugin/auth_pam.so
+usr/lib/mysql/plugin/auth_parsec.so
 [linux-any] usr/lib/mysql/plugin/disks.so
 usr/lib/mysql/plugin/file_key_management.so
 usr/lib/mysql/plugin/ha_archive.so
@@ -86,5 +87,6 @@ usr/share/man/man1/wsrep_sst_mysqldump.1
 usr/share/man/man1/wsrep_sst_rsync_wan.1
 usr/share/man/man1/wsrep_sst_rsync.1
 usr/share/mariadb/mini-benchmark
+usr/share/mariadb/wsrep.cnf
 usr/share/mariadb/wsrep_notify
 usr/share/mariadb/wsrep.cnf
