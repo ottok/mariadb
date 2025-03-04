@@ -71,7 +71,8 @@ The following specify which files/extra groups are read (specified before remain
                       file.)
   -f, --force         Continue even if we get an SQL error. Sets
                       abort-source-on-error to 0
-  -h, --host=name     Connect to host.
+  -h, --host=name     Connect to host. Defaults in the following order:
+                      $MARIADB_HOST, $MYSQL_HOST, and then localhost
   -H, --html          Produce HTML output.
   -i, --ignore-spaces Ignore space after function names.
   --init-command=name SQL Command to execute when connecting to MariaDB server.
