@@ -5,3 +5,4 @@ fix-reproducible-builds-rocksdb.patch
 mroonga-mrn-lib-dirs-path-reproducible-build.patch
 install-files-into-usr.patch
 1006531-hurd-no-auth-socket.patch
+MDEV-36217-Fix-building-with-older-Clang-on-RISC-V.patch
