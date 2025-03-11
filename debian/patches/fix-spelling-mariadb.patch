@@ -36,7 +36,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
           "indefinitely for BACKUP STAGE START to finish",
 --- a/extra/mariabackup/xtrabackup.cc
 +++ b/extra/mariabackup/xtrabackup.cc
-@@ -217,7 +217,7 @@ uint xtrabackup_compress = FALSE;
+@@ -219,7 +219,7 @@
  uint xtrabackup_compress_threads;
  ulonglong xtrabackup_compress_chunk_size = 0;
  
@@ -45,7 +45,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
  in milliseconds (default is 1 second) */
  ulint xtrabackup_log_copy_interval = 1000;
  static ulong max_buf_pool_modified_pct;
-@@ -1732,7 +1732,7 @@ struct my_option xb_client_options[]= {
+@@ -1736,7 +1736,7 @@
      {"startup-wait-timeout", OPT_LOCK_WAIT_TIMEOUT,
       "This option specifies time in seconds that mariadb-backup should wait for "
       "BACKUP STAGE START to complete. BACKUP STAGE START has to wait until all "
@@ -54,7 +54,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
       "If there are still such queries when the timeout expires, mariadb-backup "
       "terminates with an error. Default is 0, in which case mariadb-backup waits "
       "indefinitely for BACKUP STAGE START to finish",
-@@ -5651,7 +5651,7 @@ void CorruptedPages::backup_fix_ddl(ds_c
+@@ -5799,7 +5799,7 @@
  	}
  
  	/* Mariabackup doesn't detect any FILE_OP for the deferred
@@ -76,7 +76,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
  extra_args=""
 --- a/sql/opt_subselect.cc
 +++ b/sql/opt_subselect.cc
-@@ -6886,7 +6886,7 @@ bool JOIN::choose_subquery_plan(table_ma
+@@ -6887,7 +6887,7 @@
          add("rows", inner_record_count_1).
          add("materialization_cost", materialize_strategy_cost).
          add("in_exist_cost", in_exists_strategy_cost).
@@ -85,7 +85,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
      }
  
      DBUG_PRINT("info",
-@@ -6924,7 +6924,7 @@ bool JOIN::choose_subquery_plan(table_ma
+@@ -6925,7 +6925,7 @@
      {
        Json_writer_object trace_wrapper(thd);
        Json_writer_object trace_subquery(thd, "subquery_plan_revert");
@@ -96,7 +96,7 @@ Subject: [PATCH] Fix misc spelling in MariaDB Server repository
  
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
-@@ -14683,7 +14683,7 @@ void JOIN::drop_unused_derived_keys()
+@@ -15149,7 +15149,7 @@
        }
        /*
          We dropped all keys except the chosen one and unique keys.

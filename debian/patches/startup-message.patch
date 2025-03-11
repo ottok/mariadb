@@ -27,7 +27,7 @@ Server output if build in git directory:
 
 --- a/client/mysql.cc
 +++ b/client/mysql.cc
-@@ -1338,6 +1338,9 @@ int main(int argc,char *argv[])
+@@ -1339,6 +1339,9 @@
              mysql_thread_id(&mysql), server_version_string(&mysql));
      put_info((char*) glob_buffer.ptr(),INFO_INFO);
      put_info(ORACLE_WELCOME_COPYRIGHT_NOTICE("2000"), INFO_INFO);
@@ -39,7 +39,7 @@ Server output if build in git directory:
  #ifdef HAVE_READLINE
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
-@@ -4969,13 +4969,23 @@ static int init_server_components()
+@@ -4952,13 +4952,23 @@
  
    /*
      Print source revision hash, as one of the first lines, if not the

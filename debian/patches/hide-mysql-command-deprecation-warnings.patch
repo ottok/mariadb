@@ -16,7 +16,7 @@ https://ci.debian.net/packages/r/roundcube/testing/amd64/48373518/
 
 --- a/mysys/my_init.c
 +++ b/mysys/my_init.c
-@@ -200,7 +200,8 @@ my_bool my_init(void)
+@@ -198,7 +198,8 @@
  #endif
        if ((res == 0 || my_readlink(link_name, my_progname, MYF(0)) == 0) &&
             strncmp(link_name + dirname_length(link_name), "mariadb", 7) == 0)

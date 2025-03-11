@@ -1,3 +1,16 @@
+mariadb (1:11.4.5-0ubuntu0.24.10.1) oracular-security; urgency=medium
+
+  * SECURITY UPDATE: New upstream version 11.4.5. Includes fixes for several
+    defects as noted at https://mariadb.com/kb/en/mariadb-11--4-5-release-notes/
+    as well the following security issues (LP: #2099785):
+    - CVE-2025-21490
+  * This release includes upstream version 11.4.4, with fixes for regressions
+    as noted at https://mariadb.com/kb/en/mariadb-11-4-4-release-notes/
+  * Apply `wrap-and-sort -va` with latest devscripts 2.24.8
+  * Make d/watch more specific to circumvent bug in minor version detection
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 11 Mar 2025 12:29:24 -0700
+
 mariadb (1:11.4.3-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
