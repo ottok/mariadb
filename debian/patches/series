@@ -12,3 +12,4 @@ hurd-i386-storage_connect_ioapi.h.patch
 hide-mysql-command-deprecation-warnings.patch
 1063738-x32-compile-time-assert.patch
 MDEV-36217-Fix-building-with-older-Clang-on-RISC-V.patch
+1099515-insert-select-not-null.patch
