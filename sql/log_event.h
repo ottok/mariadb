@@ -681,6 +681,14 @@ enum Log_event_type
   /* not ignored */
   XA_PREPARE_LOG_EVENT= 38,
 
+  /**
+    Extension of UPDATE_ROWS_EVENT, allowing partial values according
+    to binlog_row_value_options.
+  */
+  PARTIAL_UPDATE_ROWS_EVENT = 39,
+  TRANSACTION_PAYLOAD_EVENT = 40,
+  HEARTBEAT_LOG_EVENT_V2 = 41,
+
   /*
     Add new events here - right above this comment!
     Existing events (except ENUM_END_EVENT) should never change their numbers
@@ -1412,18 +1420,18 @@ public:
     we detect the event's type, then call the specific event's
     constructor and pass description_event as an argument.
   */
-  static Log_event* read_log_event(IO_CACHE* file,
+  static Log_event* read_log_event(IO_CACHE* file, int *out_error,
                                    const Format_description_log_event
                                    *description_event,
                                    my_bool crc_check, my_bool print_errors,
                                    size_t max_allowed_packet);
-  static Log_event* read_log_event(IO_CACHE* file,
+  static Log_event* read_log_event(IO_CACHE* file, int *out_error,
                                    const Format_description_log_event
                                    *description_event,
                                    my_bool crc_check, my_bool print_errors= 1)
   {
-    return read_log_event(file, description_event, crc_check, print_errors,
-                          get_max_packet());
+    return read_log_event(file, out_error, description_event, crc_check,
+                          print_errors, get_max_packet());
   }
 
   /**
@@ -4755,7 +4763,7 @@ public:
   */
   bool is_valid() const override
   {
-    return m_rows_buf && m_cols.bitmap;
+    return m_cols.bitmap;
   }
 
   uint     m_row_count;         /* The number of rows added to the event */

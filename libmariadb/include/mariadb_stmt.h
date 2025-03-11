@@ -69,7 +69,8 @@ enum enum_stmt_attr_type
   STMT_ATTR_STATE,
   STMT_ATTR_CB_USER_DATA,
   STMT_ATTR_CB_PARAM,
-  STMT_ATTR_CB_RESULT
+  STMT_ATTR_CB_RESULT,
+  STMT_ATTR_SQL_STATEMENT
 };
 
 enum enum_cursor_type
@@ -160,7 +161,7 @@ typedef struct st_mysql_error_info
 
 typedef int  (*mysql_stmt_fetch_row_func)(MYSQL_STMT *stmt, unsigned char **row);
 typedef void (*ps_result_callback)(void *data, unsigned int column, unsigned char **row);
-typedef my_bool *(*ps_param_callback)(void *data, MYSQL_BIND *bind, unsigned int row_nr);
+typedef my_bool (*ps_param_callback)(void *data, MYSQL_BIND *bind, unsigned int row_nr);
 
 struct st_mysql_stmt
 {
@@ -204,6 +205,7 @@ struct st_mysql_stmt
   ps_result_callback result_callback;
   ps_param_callback param_callback;
   size_t request_length;
+  MARIADB_CONST_STRING sql;
 };
 
 typedef void (*ps_field_fetch_func)(MYSQL_BIND *r_param, const MYSQL_FIELD * field, unsigned char **row);

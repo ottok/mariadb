@@ -3095,12 +3095,19 @@ uint calculate_key_len(TABLE *, uint, const uchar *, key_part_map);
   bitmap with first N+1 bits set
   (keypart_map for a key prefix of [0..N] keyparts)
 */
-#define make_keypart_map(N) (((key_part_map)2 << (N)) - 1)
+inline key_part_map make_keypart_map(uint N)
+{
+  return ((key_part_map)2 << (N)) - 1;
+}
+
 /*
   bitmap with first N bits set
   (keypart_map for a key prefix of [0..N-1] keyparts)
 */
-#define make_prev_keypart_map(N) (((key_part_map)1 << (N)) - 1)
+inline key_part_map make_prev_keypart_map(uint N)
+{
+  return ((key_part_map)1 << (N)) - 1;
+}
 
 
 /** Base class to be used by handlers different shares */
@@ -3212,7 +3219,7 @@ protected:
 
   ha_rows estimation_rows_to_insert;
   handler *lookup_handler;
-  /* Statistics for the query. Updated if handler_stats.in_use is set */
+  /* Statistics for the query. Updated if handler_stats.active is set */
   ha_handler_stats active_handler_stats;
   void set_handler_stats();
 public:
@@ -3464,7 +3471,6 @@ public:
     */
     MEM_UNDEFINED(&optimizer_where_cost, sizeof(optimizer_where_cost));
     MEM_UNDEFINED(&optimizer_scan_setup_cost, sizeof(optimizer_scan_setup_cost));
-    active_handler_stats.active= 0;
   }
   virtual ~handler(void)
   {
@@ -3486,20 +3492,7 @@ public:
   
   int ha_open(TABLE *table, const char *name, int mode, uint test_if_locked,
               MEM_ROOT *mem_root= 0, List<String> *partitions_to_open=NULL);
-  int ha_index_init(uint idx, bool sorted)
-  {
-    DBUG_EXECUTE_IF("ha_index_init_fail", return HA_ERR_TABLE_DEF_CHANGED;);
-    int result;
-    DBUG_ENTER("ha_index_init");
-    DBUG_ASSERT(inited==NONE);
-    if (!(result= index_init(idx, sorted)))
-    {
-      inited=       INDEX;
-      active_index= idx;
-      end_range= NULL;
-    }
-    DBUG_RETURN(result);
-  }
+  int ha_index_init(uint idx, bool sorted);
   int ha_index_end()
   {
     DBUG_ENTER("ha_index_end");
@@ -3634,7 +3627,6 @@ public:
   int ha_enable_indexes(key_map map, bool persist);
   int ha_discard_or_import_tablespace(my_bool discard);
   int ha_rename_table(const char *from, const char *to);
-  void ha_drop_table(const char *name);
 
   int ha_create(const char *name, TABLE *form, HA_CREATE_INFO *info);
 
@@ -4485,7 +4477,7 @@ public:
     @return The handler error code or zero for success.
   */
   virtual int
-  get_foreign_key_list(const THD *thd, List<FOREIGN_KEY_INFO> *f_key_list)
+  get_foreign_key_list(THD *thd, List<FOREIGN_KEY_INFO> *f_key_list)
   { return 0; }
   /**
     Get the list of foreign keys referencing this table.
@@ -4499,9 +4491,9 @@ public:
     @return The handler error code or zero for success.
   */
   virtual int
-  get_parent_foreign_key_list(const THD *thd, List<FOREIGN_KEY_INFO> *f_key_list)
+  get_parent_foreign_key_list(THD *thd, List<FOREIGN_KEY_INFO> *f_key_list)
   { return 0; }
-  virtual uint referenced_by_foreign_key() { return 0;}
+  virtual bool referenced_by_foreign_key() const noexcept { return false;}
   virtual void init_table_handle_for_HANDLER()
   { return; }       /* prepare InnoDB for HANDLER */
   virtual void free_foreign_key_create_info(char* str) {}
@@ -5441,6 +5433,12 @@ public:
   virtual handlerton *partition_ht() const
   { return ht; }
   virtual bool partition_engine() { return 0;}
+  /*
+    Used with 'wrapper' engines, like SEQUENCE, to access to the
+    underlaying engine used for storage.
+  */
+  virtual handlerton *storage_ht() const
+  { return ht; }
   inline int ha_write_tmp_row(uchar *buf);
   inline int ha_delete_tmp_row(uchar *buf);
   inline int ha_update_tmp_row(const uchar * old_data, uchar * new_data);
@@ -5578,8 +5576,8 @@ static inline bool ha_storage_engine_is_enabled(const handlerton *db_type)
 int ha_init_errors(void);
 int ha_init(void);
 int ha_end(void);
-int ha_initialize_handlerton(st_plugin_int *plugin);
-int ha_finalize_handlerton(st_plugin_int *plugin);
+int ha_initialize_handlerton(void *plugin);
+int ha_finalize_handlerton(void *plugin);
 
 TYPELIB *ha_known_exts(void);
 int ha_panic(enum ha_panic_function flag);
@@ -5797,4 +5795,10 @@ inline void Cost_estimate::reset(handler *file)
   avg_io_cost= file->DISK_READ_COST * file->DISK_READ_RATIO;
 }
 
+int get_select_field_pos(Alter_info *alter_info, int select_field_count,
+                         bool versioned);
+
+#ifndef DBUG_OFF
+const char* dbug_print_row(TABLE *table, const uchar *rec, bool print_names= true);
+#endif /* DBUG_OFF */
 #endif /* HANDLER_INCLUDED */

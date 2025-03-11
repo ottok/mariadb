@@ -678,6 +678,7 @@ bool Log_to_csv_event_handler::
 {
   TABLE_LIST table_list;
   TABLE *table;
+  const char *cause= 0;
   bool result= TRUE;
   bool need_close= FALSE;
   bool need_pop= FALSE;
@@ -711,13 +712,19 @@ bool Log_to_csv_event_handler::
   need_pop= TRUE;
 
   if (!(table= open_log_table(thd, &table_list, &open_tables_backup)))
+  {
+    cause= "can't open file";
     goto err;
+  }
 
   need_close= TRUE;
 
   if (table->file->extra(HA_EXTRA_MARK_AS_LOG_TABLE) ||
       table->file->ha_rnd_init_with_error(0))
+  {
+    cause= "can't initialize table handler";
     goto err;
+  }
 
   need_rnd_end= TRUE;
 
@@ -736,12 +743,20 @@ bool Log_to_csv_event_handler::
 
   /* check that all columns exist */
   if (table->s->fields < 6)
+  {
+    cause= "incorrect number of fields in the log table";
     goto err;
+  }
 
   DBUG_ASSERT(table->field[0]->type() == MYSQL_TYPE_TIMESTAMP);
 
-  table->field[0]->store_timestamp(
-                  hrtime_to_my_time(event_time), hrtime_sec_part(event_time));
+  if (table->field[0]->store_timestamp(hrtime_to_my_time(event_time),
+                                       hrtime_sec_part(event_time)))
+  {
+    cause= "Can't write data (possible incorrect log table structure)";
+    goto err;
+  }
+
 
   /* do a write */
   if (table->field[1]->store(user_host, user_host_len, client_cs) ||
@@ -749,7 +764,10 @@ bool Log_to_csv_event_handler::
       table->field[3]->store((longlong) global_system_variables.server_id,
                              TRUE) ||
       table->field[4]->store(command_type, command_type_len, client_cs))
+  {
+    cause= "Can't write data (possible incorrect log table structure)";
     goto err;
+  }
 
   /*
     A positive return value in store() means truncation.
@@ -757,7 +775,10 @@ bool Log_to_csv_event_handler::
   */
   table->field[5]->flags|= FIELDFLAG_HEX_ESCAPE;
   if (table->field[5]->store(sql_text, sql_text_len, client_cs) < 0)
+  {
+    cause= "Can't write data (possible incorrect log table structure)";
     goto err;
+  }
 
   /* mark all fields as not null */
   table->field[1]->set_notnull();
@@ -773,14 +794,22 @@ bool Log_to_csv_event_handler::
   }
 
   if (table->file->ha_write_row(table->record[0]))
+  {
+    cause= "Can't write record";
     goto err;
+  }
 
   result= FALSE;
 
 err:
   if (result && !thd->killed)
+  {
+    const char *msg= error_handler.message();
+    if (!msg || !msg[0])
+      msg= cause;
     sql_print_error("Failed to write to mysql.general_log: %s",
-                    error_handler.message());
+                    msg);
+  }
 
   if (need_rnd_end)
   {
@@ -833,6 +862,8 @@ bool Log_to_csv_event_handler::
 {
   TABLE_LIST table_list;
   TABLE *table;
+  const char *cause= 0;
+  const char *msg;
   bool result= TRUE;
   bool need_close= FALSE;
   bool need_rnd_end= FALSE;
@@ -852,13 +883,19 @@ bool Log_to_csv_event_handler::
                             TL_WRITE_CONCURRENT_INSERT);
 
   if (!(table= open_log_table(thd, &table_list, &open_tables_backup)))
+  {
+    cause= "can't open file";
     goto err;
+  }
 
   need_close= TRUE;
 
   if (table->file->extra(HA_EXTRA_MARK_AS_LOG_TABLE) ||
       table->file->ha_rnd_init_with_error(0))
+  {
+    cause= "can't initialize table handler";
     goto err;
+  }
 
   need_rnd_end= TRUE;
 
@@ -869,12 +906,19 @@ bool Log_to_csv_event_handler::
 
   /* check that all columns exist */
   if (table->s->fields < 13)
+  {
+    cause= "incorrect number of fields in the log table";
     goto err;
+  }
+
+  // It can be used in 13 places below so assign it here
+  cause= "Can't write data (possible incorrect log table structure)";
 
   /* store the time and user values */
   DBUG_ASSERT(table->field[0]->type() == MYSQL_TYPE_TIMESTAMP);
-  table->field[0]->store_timestamp(
-             hrtime_to_my_time(current_time), hrtime_sec_part(current_time));
+  if(table->field[0]->store_timestamp(hrtime_to_my_time(current_time),
+                                      hrtime_sec_part(current_time)))
+    goto err;
   if (table->field[1]->store(user_host, user_host_len, client_cs))
     goto err;
 
@@ -954,9 +998,13 @@ bool Log_to_csv_event_handler::
                               (longlong) thd->get_stmt_da()->affected_rows() :
                               0, TRUE))
     goto err;
+  cause= 0; // just for safety
 
   if (table->file->ha_write_row(table->record[0]))
+  {
+    cause= "Can't write record";
     goto err;
+  }
 
   result= FALSE;
 
@@ -964,8 +1012,13 @@ err:
   thd->pop_internal_handler();
 
   if (result && !thd->killed)
+  {
+    msg= error_handler.message();
+    if (!msg || !msg[0])
+      msg= cause;
     sql_print_error("Failed to write to mysql.slow_log: %s",
-                    error_handler.message());
+                    msg);
+  }
 
   if (need_rnd_end)
   {
@@ -1308,7 +1361,7 @@ bool LOGGER::slow_log_print(THD *thd, const char *query, size_t query_length,
                     user_host_buff);
 
     DBUG_ASSERT(thd->start_utime);
-    DBUG_ASSERT(thd->start_time);
+    DBUG_ASSERT(thd->start_time || thd->start_time_sec_part);
     query_utime= (current_utime - thd->start_utime);
     lock_utime=  (thd->utime_after_lock - thd->start_utime);
     my_hrtime_t current_time= { hrtime_from_time(thd->start_time) +
@@ -3565,6 +3618,9 @@ void MYSQL_BIN_LOG::init_pthread_objects()
                   &COND_binlog_background_thread, 0);
   mysql_cond_init(key_BINLOG_COND_binlog_background_thread_end,
                   &COND_binlog_background_thread_end, 0);
+
+  /* Fix correct mutex order to catch violations quicker (MDEV-35197). */
+  mysql_mutex_record_order(&LOCK_log, &LOCK_global_system_variables);
 }
 
 
@@ -3901,7 +3957,8 @@ bool MYSQL_BIN_LOG::open(const char *log_name,
           if (!gtid_index)
             sql_print_information("Could not create GTID index for binlog "
                                   "file '%s'. Accesses to this binlog file will "
-                                  "fallback to slower sequential scan.");
+                                  "fallback to slower sequential scan.",
+                                  log_file_name);
         }
         else
           gtid_index= nullptr;
@@ -4434,6 +4491,9 @@ bool MYSQL_BIN_LOG::reset_logs(THD *thd, bool create_new_log,
 
     mark_xids_active(current_binlog_id, 1);
     do_checkpoint_request(current_binlog_id);
+
+    /* Flush all engine logs to force checkpoint responses to come through. */
+    ha_flush_logs();
 
     /* Now wait for all checkpoint requests and pending unlog() to complete. */
     mysql_mutex_lock(&LOCK_xid_list);
@@ -7321,8 +7381,8 @@ err:
           mysql_mutex_assert_not_owner(&LOCK_after_binlog_sync);
           mysql_mutex_assert_not_owner(&LOCK_commit_ordered);
 #ifdef HAVE_REPLICATION
-          if (repl_semisync_master.report_binlog_update(
-                  thd, thd, log_file_name, file->pos_in_file))
+          if (repl_semisync_master.report_binlog_update(thd, thd,
+                                                        log_file_name, offset))
           {
             sql_print_error("Failed to run 'after_flush' hooks");
             error= 1;
@@ -7349,13 +7409,14 @@ err:
       mysql_mutex_lock(&LOCK_after_binlog_sync);
       mysql_mutex_unlock(&LOCK_log);
 
+      DEBUG_SYNC(thd, "commit_after_release_LOCK_log");
+
       mysql_mutex_assert_not_owner(&LOCK_prepare_ordered);
       mysql_mutex_assert_not_owner(&LOCK_log);
       mysql_mutex_assert_owner(&LOCK_after_binlog_sync);
       mysql_mutex_assert_not_owner(&LOCK_commit_ordered);
 #ifdef HAVE_REPLICATION
-      if (repl_semisync_master.wait_after_sync(log_file_name,
-                                               file->pos_in_file))
+      if (repl_semisync_master.wait_after_sync(log_file_name, offset))
       {
         error=1;
         /* error is already printed inside hook */
@@ -9744,6 +9805,25 @@ static void print_buffer_to_nt_eventlog(enum loglevel level, char *buff,
 
 
 #ifndef EMBEDDED_LIBRARY
+#ifndef _WIN32
+#define fprintf_stderr(format, ...) fprintf(stderr, format, __VA_ARGS__)
+#else
+/*
+ On Windows, if FILE* is unbuffered, fprintf() writes output byte by byte.
+ This is suboptimal for printing to error log, we want full message at once.
+*/
+#define fprintf_stderr(format, ...)                                           \
+  do                                                                          \
+  {                                                                           \
+    char buf[256];                                                            \
+    size_t len= snprintf(buf, sizeof(buf), format, __VA_ARGS__);              \
+    if (len >= sizeof(buf))                                                   \
+      fprintf(stderr, format, __VA_ARGS__);                                   \
+    else                                                                      \
+      fwrite(buf, len, 1, stderr);                                            \
+  } while (0)
+#endif
+
 static void print_buffer_to_file(enum loglevel level, const char *buffer,
                                  size_t length)
 {
@@ -9777,7 +9857,7 @@ static void print_buffer_to_file(enum loglevel level, const char *buffer,
   localtime_r(&skr, &tm_tmp);
   start=&tm_tmp;
 
-  fprintf(stderr, "%d-%02d-%02d %2d:%02d:%02d %lu [%s] %.*s%.*s\n",
+  fprintf_stderr( "%d-%02d-%02d %2d:%02d:%02d %lu [%s] %.*s%.*s\n",
           start->tm_year + 1900,
           start->tm_mon+1,
           start->tm_mday,
@@ -11119,7 +11199,6 @@ binlog_background_thread(void *arg __attribute__((unused)))
 
   thd= new THD(next_thread_id());
   thd->system_thread= SYSTEM_THREAD_BINLOG_BACKGROUND;
-  thd->thread_stack= (char*) &thd;           /* Set approximate stack start */
   thd->store_globals();
   thd->security_ctx->skip_grants();
   thd->set_command(COM_DAEMON);
@@ -12042,7 +12121,8 @@ int TC_LOG_BINLOG::recover(LOG_INFO *linfo, const char *last_log_name,
   cur_log= first_log;
   for (round= 1;;)
   {
-    while ((ev= Log_event::read_log_event(cur_log, fdle,
+    int error;
+    while ((ev= Log_event::read_log_event(cur_log, &error, fdle,
                                           opt_master_verify_checksum))
            && ev->is_valid())
     {
@@ -12075,7 +12155,7 @@ int TC_LOG_BINLOG::recover(LOG_INFO *linfo, const char *last_log_name,
         Query_log_event *query_ev= (Query_log_event*) ev;
         if (query_ev->xid)
         {
-          DBUG_PRINT("QQ", ("xid: %llu xid"));
+          DBUG_PRINT("QQ", ("xid: %llu xid", query_ev->xid));
           DBUG_ASSERT(sizeof(query_ev->xid) == sizeof(my_xid));
           uchar *x= (uchar *) memdup_root(&mem_root,
                                           (uchar*) &query_ev->xid,
@@ -12436,7 +12516,8 @@ MYSQL_BIN_LOG::do_binlog_recovery(const char *opt_name, bool do_xa_recovery)
     return 1;
   }
 
-  if ((ev= Log_event::read_log_event(&log, &fdle,
+  int read_error;
+  if ((ev= Log_event::read_log_event(&log, &read_error, &fdle,
                                      opt_master_verify_checksum)) &&
       ev->get_type_code() == FORMAT_DESCRIPTION_EVENT)
   {
@@ -12521,6 +12602,7 @@ binlog_checksum_update(MYSQL_THD thd, struct st_mysql_sys_var *var,
   bool check_purge= false;
   ulong UNINIT_VAR(prev_binlog_id);
 
+  mysql_mutex_unlock(&LOCK_global_system_variables);
   mysql_mutex_lock(mysql_bin_log.get_log_lock());
   if(mysql_bin_log.is_open())
   {
@@ -12539,6 +12621,7 @@ binlog_checksum_update(MYSQL_THD thd, struct st_mysql_sys_var *var,
   mysql_mutex_unlock(mysql_bin_log.get_log_lock());
   if (check_purge)
     mysql_bin_log.checkpoint_and_purge(prev_binlog_id);
+  mysql_mutex_lock(&LOCK_global_system_variables);
 }
 
 
@@ -12658,10 +12741,11 @@ get_gtid_list_event(IO_CACHE *cache, Gtid_list_log_event **out_gtid_list)
   Format_description_log_event *fdle;
   Log_event *ev;
   const char *errormsg = NULL;
+  int read_error;
 
   *out_gtid_list= NULL;
 
-  if (!(ev= Log_event::read_log_event(cache, &init_fdle,
+  if (!(ev= Log_event::read_log_event(cache, &read_error, &init_fdle,
                                       opt_master_verify_checksum)) ||
       ev->get_type_code() != FORMAT_DESCRIPTION_EVENT)
   {
@@ -12677,7 +12761,8 @@ get_gtid_list_event(IO_CACHE *cache, Gtid_list_log_event **out_gtid_list)
   {
     Log_event_type typ;
 
-    ev= Log_event::read_log_event(cache, fdle, opt_master_verify_checksum);
+    ev= Log_event::read_log_event(cache, &read_error, fdle,
+                                  opt_master_verify_checksum);
     if (!ev)
     {
       errormsg= "Could not read GTID list event while looking for GTID "

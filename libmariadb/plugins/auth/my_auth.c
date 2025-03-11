@@ -7,7 +7,7 @@
 #include <mysql/client_plugin.h>
 
 typedef struct st_mysql_client_plugin_AUTHENTICATION auth_plugin_t;
-static int client_mpvio_write_packet(struct st_plugin_vio*, const uchar*, size_t);
+static int client_mpvio_write_packet(struct st_plugin_vio*, const uchar*, int);
 static int native_password_auth_client(MYSQL_PLUGIN_VIO *vio, MYSQL *mysql);
 static int native_password_hash(MYSQL *mysql, unsigned char *out, size_t *outlen);
 static int dummy_fallback_auth_client(MYSQL_PLUGIN_VIO *vio, MYSQL *mysql __attribute__((unused)));
@@ -22,7 +22,7 @@ extern const char *disabled_plugins;
 
 typedef struct {
   int (*read_packet)(struct st_plugin_vio *vio, uchar **buf);
-  int (*write_packet)(struct st_plugin_vio *vio, const uchar *pkt, size_t pkt_len);
+  int (*write_packet)(struct st_plugin_vio *vio, const uchar *pkt, int pkt_len);
   void (*info)(struct st_plugin_vio *vio, struct st_plugin_vio_info *info);
   /* -= end of MYSQL_PLUGIN_VIO =- */
   MYSQL *mysql;
@@ -267,6 +267,8 @@ error:
   return res;
 }
 
+#define MARIADB_TLS_VERIFY_AUTO (MARIADB_TLS_VERIFY_HOST | MARIADB_TLS_VERIFY_TRUST)
+
 static int send_client_reply_packet(MCPVIO_EXT *mpvio,
                                     const uchar *data, int data_len)
 {
@@ -290,6 +292,7 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
   if (mysql->options.ssl_key || mysql->options.ssl_cert ||
       mysql->options.ssl_ca || mysql->options.ssl_capath ||
       mysql->options.ssl_cipher || mysql->options.use_ssl ||
+      mysql->options.extension->tls_fp || mysql->options.extension->tls_fp_list ||
       !mysql->options.extension->tls_allow_invalid_server_cert)
     mysql->options.use_ssl= 1;
   if (mysql->options.use_ssl)
@@ -428,19 +431,22 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
     {
       verify_flags|= MARIADB_TLS_VERIFY_FINGERPRINT;
     } else {
-      verify_flags|= MARIADB_TLS_VERIFY_TRUST | MARIADB_TLS_VERIFY_HOST;
+      verify_flags|= MARIADB_TLS_VERIFY_TRUST;
+      /* Don't check host name on local (non globally resolvable) addresses */
+      if (!is_local_connection(mysql->net.pvio))
+        verify_flags |= MARIADB_TLS_VERIFY_HOST;
     }
 
-    if (ma_pvio_tls_verify_server_cert(mysql->net.pvio->ctls, verify_flags))
+    if (mysql->options.extension->tls_verification_callback(mysql->net.pvio->ctls, verify_flags))
     {
-      if (mysql->net.tls_verify_status > MARIADB_TLS_VERIFY_TRUST ||
+      if (mysql->net.tls_verify_status > MARIADB_TLS_VERIFY_AUTO ||
           (mysql->options.ssl_ca || mysql->options.ssl_capath))
         goto error;
 
       if (is_local_connection(mysql->net.pvio))
       {
         CLEAR_CLIENT_ERROR(mysql);
-        mysql->net.tls_verify_status&= ~MARIADB_TLS_VERIFY_TRUST;
+        mysql->net.tls_verify_status&= ~MARIADB_TLS_VERIFY_AUTO;
       }
       else if (!password_and_hashing(mysql, mpvio->plugin))
         goto error;
@@ -502,8 +508,14 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
   */
   if (mysql->client_flag & CLIENT_ZSTD_COMPRESSION)
   {
-    int4store(end, (unsigned int)3);
-    end+= 4;
+    uchar compression_level= 3;
+    if (mysql->options.extension &&
+        mysql->options.extension->zstd_compression_level >= 1 &&
+        mysql->options.extension->zstd_compression_level <= 20)
+    {
+        compression_level= mysql->options.extension->zstd_compression_level;
+    }
+    *end++= compression_level;
   }
 
   /* Write authentication package */
@@ -595,7 +607,7 @@ static int client_mpvio_read_packet(struct st_plugin_vio *mpv, uchar **buf)
 */
 
 static int client_mpvio_write_packet(struct st_plugin_vio *mpv,
-                                     const uchar *pkt, size_t pkt_len)
+                                     const uchar *pkt, int pkt_len)
 {
   int res;
   MCPVIO_EXT *mpvio= (MCPVIO_EXT*)mpv;
@@ -603,9 +615,9 @@ static int client_mpvio_write_packet(struct st_plugin_vio *mpv,
   if (mpvio->packets_written == 0)
   {
     if (mpvio->mysql_change_user)
-      res= send_change_user_packet(mpvio, pkt, (int)pkt_len);
+      res= send_change_user_packet(mpvio, pkt, pkt_len);
     else
-      res= send_client_reply_packet(mpvio, pkt, (int)pkt_len);
+      res= send_client_reply_packet(mpvio, pkt, pkt_len);
   }
   else
   {

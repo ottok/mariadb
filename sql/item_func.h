@@ -35,6 +35,8 @@ extern "C"				/* Bug in BSDI include file */
 #include <cmath>
 
 
+extern int st_append_json(String *s,
+             CHARSET_INFO *json_cs, const uchar *js, uint js_len);
 class Item_func :public Item_func_or_sum
 {
   void sync_with_sum_func_and_with_field(List<Item> &list);
@@ -463,7 +465,7 @@ public:
   void convert_const_compared_to_int_field(THD *thd);
   Item_func *get_item_func() override { return this; }
   bool is_simplified_cond_processor(void *) override
-  { return const_item() && !val_int(); }
+  { return const_item() && !val_bool(); }
 };
 
 
@@ -975,6 +977,7 @@ public:
   }
   longlong val_int() override
   {
+    DBUG_ASSERT(!is_cond());
     DBUG_ASSERT(fixed());
     return Item_func_hybrid_field_type::type_handler()->
            Item_func_hybrid_field_type_val_int(this);
@@ -2363,6 +2366,7 @@ public:
   String *val_str_native(String *str);
   double val_real_native();
   longlong val_int_native();
+  longlong val_uint_native();
   my_decimal *val_decimal_native(my_decimal *);
   bool get_date_native(THD *thd, MYSQL_TIME *res, date_mode_t fuzzydate);
   bool get_time_native(THD *thd, MYSQL_TIME *res);

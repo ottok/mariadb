@@ -469,6 +469,13 @@ bool Sql_cmd_update::update_single_table(THD *thd)
     if (thd->binlog_for_noop_dml(transactional_table))
       DBUG_RETURN(1);
 
+    if (!thd->lex->current_select->leaf_tables_saved)
+    {
+      thd->lex->current_select->save_leaf_tables(thd);
+      thd->lex->current_select->leaf_tables_saved= true;
+      thd->lex->current_select->first_cond_optimization= 0;
+    }
+
     my_ok(thd);				// No matching records
     DBUG_RETURN(0);
   }
@@ -507,6 +514,7 @@ bool Sql_cmd_update::update_single_table(THD *thd)
     {
       thd->lex->current_select->save_leaf_tables(thd);
       thd->lex->current_select->leaf_tables_saved= true;
+      thd->lex->current_select->first_cond_optimization= 0;
     }
 
     my_ok(thd);				// No matching records
@@ -890,9 +898,9 @@ update_begin:
     goto update_end;
   }
 
-  if ((table->file->ha_table_flags() & HA_CAN_FORCE_BULK_UPDATE) &&
-      !table->prepare_triggers_for_update_stmt_or_event() &&
-      !thd->lex->with_rownum)
+  if (!table->prepare_triggers_for_update_stmt_or_event() &&
+      !thd->lex->with_rownum &&
+      table->file->ha_table_flags() & HA_CAN_FORCE_BULK_UPDATE)
     will_batch= !table->file->start_bulk_update();
 
   /*
@@ -1067,6 +1075,7 @@ error:
                                                      TRG_ACTION_AFTER, TRUE)))
       {
         error= 1;
+
         break;
       }
 
@@ -1258,6 +1267,20 @@ update_end:
                   (ulong) thd->get_stmt_da()->current_statement_warn_count());
     my_ok(thd, (thd->client_capabilities & CLIENT_FOUND_ROWS) ? found : updated,
           id, buff);
+    if (thd->get_stmt_da()->is_bulk_op())
+    {
+      /*
+        Update the diagnostics message sent to a client with number of actual
+        rows update by the statement. For bulk UPDATE operation it should be
+        done after returning from my_ok() since the final number of updated
+        rows be knows on finishing the entire bulk update statement.
+      */
+      my_snprintf(buff, sizeof(buff), ER_THD(thd, ER_UPDATE_INFO),
+                  (ulong) thd->get_stmt_da()->affected_rows(),
+                  (ulong) thd->get_stmt_da()->affected_rows(),
+                  (ulong) thd->get_stmt_da()->current_statement_warn_count());
+      thd->get_stmt_da()->set_message(buff);
+    }
     DBUG_PRINT("info",("%ld records updated", (long) updated));
   }
   thd->count_cuted_fields= CHECK_FIELD_IGNORE;		/* calc cuted fields */
@@ -1266,6 +1289,7 @@ update_end:
   {
     thd->lex->current_select->save_leaf_tables(thd);
     thd->lex->current_select->leaf_tables_saved= true;
+    thd->lex->current_select->first_cond_optimization= 0;
   }
   ((multi_update *)result)->set_found(found);
   ((multi_update *)result)->set_updated(updated);
@@ -1588,8 +1612,8 @@ bool Multiupdate_prelocking_strategy::handle_end(THD *thd)
     DBUG_RETURN(true);
 
   List<Item> *fields= &lex->first_select_lex()->item_list;
-  if (setup_fields_with_no_wrap(thd, Ref_ptr_array(),
-                                *fields, MARK_COLUMNS_WRITE, 0, 0))
+  if (setup_fields_with_no_wrap(thd, Ref_ptr_array(), *fields,
+                                MARK_COLUMNS_WRITE, 0, 0, THD_WHERE::SET_LIST))
     DBUG_RETURN(1);
 
   // Check if we have a view in the list ...
@@ -2434,6 +2458,13 @@ void multi_update::abort_result_set()
                (!thd->transaction->stmt.modified_non_trans_table && !updated)))
     return;
 
+  /****************************************************************************
+
+    NOTE: if you change here be aware that almost the same code is in
+     multi_update::send_eof().
+
+  ***************************************************************************/
+
   /* Something already updated so we have to invalidate cache */
   if (updated)
     query_cache_invalidate3(thd, update_tables, 1);
@@ -2765,6 +2796,13 @@ bool multi_update::send_eof()
   */
   killed_status= (local_error == 0) ? NOT_KILLED : thd->killed;
   THD_STAGE_INFO(thd, stage_end);
+
+  /****************************************************************************
+
+    NOTE: if you change here be aware that almost the same code is in
+     multi_update::abort_result_set().
+
+  ***************************************************************************/
 
   /* We must invalidate the query cache before binlog writing and
   ha_autocommit_... */

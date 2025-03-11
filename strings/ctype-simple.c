@@ -253,6 +253,7 @@ size_t my_caseup_8bit(CHARSET_INFO * cs, const char *src, size_t srclen,
 {
   const char *end= src + srclen;
   register const uchar *map= cs->to_upper;
+  DBUG_ASSERT(src != NULL); /* Avoid UBSAN nullptr-with-offset */
   DBUG_ASSERT(srclen <= dstlen);
   for ( ; src != end ; src++)
     *dst++= (char) map[(uchar) *src];
@@ -265,6 +266,7 @@ size_t my_casedn_8bit(CHARSET_INFO * cs, const char *src, size_t srclen,
 {
   const char *end= src + srclen;
   register const uchar *map=cs->to_lower;
+  DBUG_ASSERT(src != NULL); /* Avoid UBSAN nullptr-with-offset */
   DBUG_ASSERT(srclen <= dstlen);
   for ( ; src != end ; src++)
     *dst++= (char) map[(uchar) *src];
@@ -777,7 +779,10 @@ ulonglong my_strntoull_8bit(CHARSET_INFO *cs,
     return (~(ulonglong) 0);
   }
 
-  return (negative ? -((longlong) i) : (longlong) i);
+  /* Avoid undefinite behavior - negation of LONGLONG_MIN */
+  return negative && (longlong) i != LONGLONG_MIN ?
+        -((longlong) i) :
+         (longlong) i;
 
 noconv:
   err[0]= EDOM;

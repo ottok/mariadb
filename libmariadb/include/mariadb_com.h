@@ -52,6 +52,8 @@
 #define MYSQL_AUTODETECT_CHARSET_NAME "auto"
 #define BINCMP_FLAG       131072
 
+enum Item_result {STRING_RESULT,REAL_RESULT,INT_RESULT,ROW_RESULT,DECIMAL_RESULT};
+
 enum mysql_enum_shutdown_level
 {
   SHUTDOWN_DEFAULT = 0,
@@ -297,7 +299,7 @@ typedef struct st_net {
   unsigned char reading_or_writing;
   char save_char;
   char unused_1;
-  my_bool tls_verify_status;
+  unsigned char tls_verify_status;
   my_bool compress;
   my_bool unused_2;
   char *unused_3;
@@ -426,30 +428,6 @@ struct rand_struct {
   unsigned long seed1,seed2,max_value;
   double max_value_dbl;
 };
-
-  /* The following is for user defined functions */
-
-enum Item_result {STRING_RESULT,REAL_RESULT,INT_RESULT,ROW_RESULT,DECIMAL_RESULT};
-
-typedef struct st_udf_args
-{
-  unsigned int arg_count;		/* Number of arguments */
-  enum Item_result *arg_type;		/* Pointer to item_results */
-  char **args;				/* Pointer to argument */
-  unsigned long *lengths;		/* Length of string arguments */
-  char *maybe_null;			/* Set to 1 for all maybe_null args */
-} UDF_ARGS;
-
-  /* This holds information about the result */
-
-typedef struct st_udf_init
-{
-  my_bool maybe_null;			/* 1 if function can return NULL */
-  unsigned int decimals;		/* for real functions */
-  unsigned int max_length;		/* For string functions */
-  char	  *ptr;				/* free pointer for function data */
-  my_bool const_item;			/* 0 if result is independent of arguments */
-} UDF_INIT;
 
 /* Connection types */
 #define MARIADB_CONNECTION_UNIXSOCKET   0

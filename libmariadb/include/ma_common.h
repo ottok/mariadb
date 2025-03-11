@@ -88,6 +88,8 @@ struct st_mysql_options_extension {
   void (*status_callback)(void *ptr, enum enum_mariadb_status_info type, ...);
   void *status_data;
   my_bool tls_allow_invalid_server_cert;
+  int (*tls_verification_callback)(MARIADB_TLS *ctls, unsigned int flags);
+  unsigned char zstd_compression_level;
 };
 
 typedef struct st_connection_handler
@@ -117,6 +119,7 @@ struct st_mariadb_extension {
   unsigned long mariadb_client_flag; /* MariaDB specific client flags */
   unsigned long mariadb_server_capabilities; /* MariaDB specific server capabilities */
   my_bool auto_local_infile;
+  my_bool tls_validation;
 };
 
 #define OPT_EXT_VAL(a,key) \

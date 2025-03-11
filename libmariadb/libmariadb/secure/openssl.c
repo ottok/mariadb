@@ -560,18 +560,21 @@ my_bool ma_tls_connect(MARIADB_TLS *ctls)
 #else
   SSL_set_fd(ssl, (int)mysql_get_socket(mysql));
 #endif
-  if (!mysql->options.extension->tls_allow_invalid_server_cert)
-    SSL_set_verify(ssl, SSL_VERIFY_PEER, ma_verification_callback);
+
+  /* CONC-732: Always set verification callback to avoid OpenSSL output */
+  SSL_set_verify(ssl, SSL_VERIFY_PEER, ma_verification_callback);
 
   while (try_connect && (rc= SSL_connect(ssl)) == -1)
   {
     switch((SSL_get_error(ssl, rc))) {
     case SSL_ERROR_WANT_READ:
-      if (pvio->methods->wait_io_or_timeout(pvio, TRUE, mysql->options.connect_timeout) < 1)
+      /* use low timeout, see ma_tls_read */
+      if (pvio->methods->wait_io_or_timeout(pvio, TRUE, 5) < 1)
         try_connect= 0;
       break;
     case SSL_ERROR_WANT_WRITE:
-      if (pvio->methods->wait_io_or_timeout(pvio, TRUE, mysql->options.connect_timeout) < 1)
+      /* use low timeout, see ma_tls_read */
+      if (pvio->methods->wait_io_or_timeout(pvio, TRUE, 5) < 1)
         try_connect= 0;
       break;
     default:
@@ -655,7 +658,10 @@ ssize_t ma_tls_read(MARIADB_TLS *ctls, const uchar* buffer, size_t length)
     int error= SSL_get_error((SSL *)ctls->ssl, rc);
     if (error != SSL_ERROR_WANT_READ)
       break;
-    if (pvio->methods->wait_io_or_timeout(pvio, TRUE, pvio->mysql->options.read_timeout) < 1)
+    /* To get a more precise error message than "resource temporary
+       unavailable" (=errno 11) after read timeout occured, we check
+       the socket status using a very small timeout (=5 ms) */
+    if (pvio->methods->wait_io_or_timeout(pvio, TRUE, 5) < 1)
       break;
   }
   if (rc <= 0)
@@ -676,7 +682,8 @@ ssize_t ma_tls_write(MARIADB_TLS *ctls, const uchar* buffer, size_t length)
     int error= SSL_get_error((SSL *)ctls->ssl, rc);
     if (error != SSL_ERROR_WANT_WRITE)
       break;
-    if (pvio->methods->wait_io_or_timeout(pvio, TRUE, pvio->mysql->options.write_timeout) < 1)
+    /* use low timeout, see ma_tls_read */
+    if (pvio->methods->wait_io_or_timeout(pvio, TRUE, 5) < 1)
       break;
   }
   if (rc <= 0)
@@ -780,19 +787,7 @@ int ma_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int verify_flags)
   if ((mysql->net.tls_verify_status > MARIADB_TLS_VERIFY_FINGERPRINT) ||
       (mysql->net.tls_verify_status & verify_flags))
   {
-    return 1;
-  }
-
-  if (verify_flags & MARIADB_TLS_VERIFY_FINGERPRINT)
-  {
-    if (ma_pvio_tls_check_fp(ctls, mysql->options.extension->tls_fp, mysql->options.extension->tls_fp_list))
-    {
-      mysql->net.tls_verify_status |= MARIADB_TLS_VERIFY_FINGERPRINT;
-      return 1;
-    }
-
-    mysql->net.tls_verify_status= MARIADB_TLS_VERIFY_OK;
-    return 0;
+    return MARIADB_TLS_VERIFY_ERROR;
   }
 
   if (verify_flags & MARIADB_TLS_VERIFY_HOST)

@@ -577,6 +577,15 @@ static int reset_connection(MYSQL *mysql) {
   return OK;
 }
 
+static char *check_envvar(const char *envvar)
+{
+  char *p = getenv(envvar);
+
+  if (p && p[0])
+    return p;
+  return NULL;
+}
+
 /*
  * function get_envvars((
  *
@@ -588,58 +597,51 @@ void get_envvars() {
   if (!getenv("MYSQLTEST_VARDIR") &&
       !getenv("MARIADB_CC_TEST"))
   {
-    skip_all("Tests skipped.\nFor running unittest suite outside of MariaDB server tests,\nplease specify MARIADB_CC_TEST environment variable.");
+    skip_all("Tests skipped.\nFor running unittest suite outside of MariaDB server tests,\nplease specify MARIADB_CC_TEST environment variable.\n");
     exit(0);
   }
 
   if (getenv("TRAVIS_JOB_ID"))
     travis_test= 1;
 
-  if (!hostname && (envvar= getenv("MYSQL_TEST_HOST")))
-    hostname= envvar;
+  if (!hostname)
+    hostname= check_envvar("MYSQL_TEST_HOST");
 
+  if (!username && !(username= check_envvar("MYSQL_TEST_USER")))
+    username= (char *)"root";
 
-  if (!username)
-  {
-    if ((envvar= getenv("MYSQL_TEST_USER")))
-      username= envvar;
-    else
-      username= (char *)"root";
-  }
-  if (!password && (envvar= getenv("MYSQL_TEST_PASSWD")))
-    password= envvar;
-  if (!schema && (envvar= getenv("MYSQL_TEST_DB")))
-    schema= envvar;
-  if (!schema)
+  if (!password)
+    password= check_envvar("MYSQL_TEST_PASSWD");
+
+  if (!schema && !(schema= check_envvar("MYSQL_TEST_DB")))
     schema= "test";
+
   if (!port)
   {
-    if ((envvar= getenv("MYSQL_TEST_PORT")))
+    if ((envvar= check_envvar("MYSQL_TEST_PORT")) ||
+        (envvar= check_envvar("MASTER_MYPORT")))
       port= atoi(envvar);
-    else if ((envvar= getenv("MASTER_MYPORT")))
-      port= atoi(envvar);
-    diag("port: %d", port);
   }
   if (!ssl_port)
   {
-    if ((envvar= getenv("MYSQL_TEST_SSL_PORT")))
+    if ((envvar= check_envvar("MYSQL_TEST_SSL_PORT")))
       ssl_port= atoi(envvar);
     else
       ssl_port = port;
     diag("ssl_port: %d", ssl_port);
   }
 
-  if (!force_tls && (envvar= getenv("MYSQL_TEST_TLS")))
+  if (!force_tls && (envvar= check_envvar("MYSQL_TEST_TLS")))
     force_tls= atoi(envvar);
+
   if (!socketname)
   {
-    if ((envvar= getenv("MYSQL_TEST_SOCKET")))
-      socketname= envvar;
-    else if ((envvar= getenv("MASTER_MYSOCK")))
+    if ((envvar= check_envvar("MYSQL_TEST_SOCKET")) ||
+        (envvar= check_envvar("MASTER_MYSOCK")))
       socketname= envvar;
     diag("socketname: %s", socketname);
   }
-  if ((envvar= getenv("MYSQL_TEST_PLUGINDIR")))
+  if ((envvar= check_envvar("MYSQL_TEST_PLUGINDIR")))
     plugindir= envvar;
 
   if (IS_XPAND())
@@ -664,7 +666,6 @@ MYSQL *my_test_connect(MYSQL *mysql,
   mysql_get_optionv(mysql, MARIADB_OPT_SSL_FP, &have_fp);
   if (fingerprint[0] && auto_fingerprint)
   {
-    printf("setting fingerprint\n");
     mysql_options(mysql, MARIADB_OPT_SSL_FP, fingerprint);
   }
   if (!mysql_real_connect(mysql, host, user, passwd, db, port, unix_socket, clientflag))

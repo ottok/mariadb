@@ -5224,7 +5224,46 @@ end:
   return error ? FAIL : OK;
 }
 
+static int test_conc691(MYSQL *mysql)
+{
+  MYSQL_STMT *stmt= mysql_stmt_init(mysql);
+  MARIADB_CONST_STRING sql;
+  const char *sql_stmt[]= {"SELECT 'test' FROM DUAL", "This will return an error", "SELECT 1 FROM DUAL"};
+  int rc, i;
+
+  rc= mysql_stmt_attr_get(stmt, STMT_ATTR_SQL_STATEMENT, &sql);
+  check_stmt_rc(rc, stmt);
+
+  FAIL_IF(sql.str, "Expected empty SQL string");
+  FAIL_IF(sql.length, "Expected length=0");
+
+
+  for (i=0; i < 3; i++)
+  {
+    rc= mysql_stmt_prepare(stmt, SL(sql_stmt[i]));
+
+    rc= mysql_stmt_attr_get(stmt, STMT_ATTR_SQL_STATEMENT, &sql);
+    check_stmt_rc(rc, stmt);
+
+    FAIL_IF(strncmp(sql.str, sql_stmt[i], strlen(sql_stmt[i])), "Wrong SQL statement");
+    FAIL_IF(sql.length != strlen(sql_stmt[i]), "Wrong statement length");
+  }
+
+  rc= mysql_stmt_reset(stmt);
+  check_stmt_rc(rc, stmt);
+
+  rc= mysql_stmt_attr_get(stmt, STMT_ATTR_SQL_STATEMENT, &sql);
+  check_stmt_rc(rc, stmt);
+
+  FAIL_IF(sql.str, "Expected empty SQL string");
+  FAIL_IF(sql.length, "Expected length=0");
+
+  mysql_stmt_close(stmt);
+  return OK;
+}
+
 struct my_tests_st my_tests[] = {
+  {"test_conc691", test_conc691, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_conc565", test_conc565, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_conc349", test_conc349, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_prepare_error", test_prepare_error, TEST_CONNECTION_NEW, 0, NULL, NULL},
