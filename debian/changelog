@@ -1,18 +1,25 @@
-mariadb (1:11.8.1-1) UNRELEASED; urgency=medium
+mariadb (1:11.8.1-1) unstable; urgency=medium
 
   * New major upstream release candidate MariaDB 11.8, which is going to be the
     next Long-Term Supported (LTS) version. For an overview of what is new in
     the upstream release, see
     https://mariadb.com/kb/en/changes-improvements-in-mariadb-11-8/.
+  * Update d/watch for MariaDB 11.8 series
+  * Update references to 11.4 with 11.8
+  * Drop 'utf8mb4' config as 'utf8mb4' and 'uca1400_ai_ci' is now default
+  * Include new authentication plugin PARSEC
+  * Temporarily disable the new SBOM generation incompatible with Debian
+  * Ensure mariadb-server-core can overwrite mariadb-server-compat
+  * Update configuration traces for 11.8(.1)
   * Drop unused dh-exec from libmariadb-dev-compat.links
   * Disable main.view test on sparc64 as it seems permanently failing now
   * Complete and unfuzz all incomplete translations
   * Add Hindi and Korean translations for MariaDB debconf templates
   * Update Lintian overrides/mismatches
+  * Manually strip debug symbols from libmariadbd.a
   * Fix incorrect SIGTERM/SIGKILL use in 98c3c0730
-  * Update d/watch for MariaDB 11.8 series
 
- -- Otto Kekäläinen <otto@debian.org>  Sun, 02 Mar 2025 12:53:52 -0800
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 13 Mar 2025 13:58:11 -0700
 
 mariadb (1:11.4.5-1) unstable; urgency=medium
 
