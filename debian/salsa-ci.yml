@@ -25,10 +25,17 @@ variables:
   SALSA_CI_DISABLE_MISSING_BREAKS: 0
   SALSA_CI_DISABLE_RC_BUGS: 0
 
-# Extend Salsa-CI build jobs to have longer timeout as the default GitLab
-# timeout (1h) is often not enough
 .build-package:
+  # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
+  # timeout (1h) is often not enough
   timeout: 3h
+  # Default 5G sporadically fails builds on not having enough disk space
+  variables:
+    CCACHE_MAXSIZE: 3G
+  # Salsa instance runners typically have 30G volumes with 14G free disk space
+  before_script:
+    - echo "Total and free disk space:"
+    - df -h .
 
 stages:
   - provisioning
