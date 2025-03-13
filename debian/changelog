@@ -1,5 +1,6 @@
 mariadb (1:11.4.5-0ubuntu0.24.10.1) oracular-security; urgency=medium
 
+  [ Otto Kekäläinen ]
   * SECURITY UPDATE: New upstream version 11.4.5. Includes fixes for several
     defects as noted at https://mariadb.com/kb/en/mariadb-11--4-5-release-notes/
     as well the following security issues (LP: #2099785):
@@ -8,8 +9,25 @@ mariadb (1:11.4.5-0ubuntu0.24.10.1) oracular-security; urgency=medium
     as noted at https://mariadb.com/kb/en/mariadb-11-4-4-release-notes/
   * Apply `wrap-and-sort -va` with latest devscripts 2.24.8
   * Make d/watch more specific to circumvent bug in minor version detection
+  * Adapt Salsa CI for Ubuntu 24.10 regression testing
+  * Add Lintian overrides for new issues that are not relevant for maintenance
+  * Stop depending on obsolete libpmem-dev, re-implemented in MariaDB
+  * Update server trace to include new parameters and values
+  * Update configuration traces to match changes done in MDEV-35785
+  * Update configuration traces with new query allocator values from MDEV-35750
+  * Include Debian packaging bugfixes done upstream:
+    - MDEV-35907: debian-start script fails when using non-standard socket path
+  * Add patch to remove unnecessary capabilities from AmbientCapabilities as
+    justified by upstream issue MDEV-36229 discovered after 11.4.5 release
+  * Backport upstream fix for INSERT SELECT on NOT NULL (Closes: #1099515) as
+    justified by upstream issue MDEV-36026 discovered after 11.4.5 release
+  * Fix building with Clang on RISC-V that refressed in 11.4.5 (MDEV-36217)
 
- -- Otto Kekäläinen <otto@debian.org>  Tue, 11 Mar 2025 12:29:24 -0700
+  [ Joe Bliss ]
+  * Revert backticks change in commit 0300a915 to be compatible with databases
+    containing hyphenated table names (LP: #2085554)
+
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 13 Mar 2025 11:25:10 -0700
 
 mariadb (1:11.4.3-1) unstable; urgency=medium
 
