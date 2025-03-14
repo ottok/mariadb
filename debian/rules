@@ -204,6 +204,11 @@ override_dh_auto_install:
 	# Move test plugins that are only needed by the client to the libmariadb path
 	mv -v $(TMP)/usr/lib/mysql/plugin/qa_auth_client.so $(TMP)/usr/lib/$(DEB_HOST_MULTIARCH)/libmariadb3/plugin/
 
+	# dh_strip skips libmariadbd.a in MariaDB 11.8 for an unknown reason, so strip
+	# it manually to keep total artifact size under 250 MB
+	strip --strip-debug --remove-section=.comment --remove-section=.note --enable-deterministic-archives -R .gnu.lto_\* \
+		-R .gnu.debuglto_\* -N __gnu_lto_slim -N __gnu_lto_v1 debian/tmp/usr/lib/*/libmariadbd.a
+
 # Define name used for service, and install mariadb.service on Linux only
 override_dh_installsystemd:
 ifneq (,$(filter linux,$(DEB_HOST_ARCH_OS)))
