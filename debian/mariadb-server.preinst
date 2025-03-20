@@ -59,7 +59,8 @@ stop_server() {
   then
     echo "Attempt to stop MariaDB/MySQL server returned exitcode $errno" 1>&2
     echo "There is a MariaDB/MySQL server running, but we failed in our attempts to stop it." 1>&2
-    echo "Stop it yourself and try again!" 1>&2
+    echo "Check if there is any server running with 'pgrep -af \"mysqld|mariadbd\"' and" 1>&2
+    echo "try to stop it yourself by issuing 'invoke-rc.d mariadb stop'." 1>&2
     db_stop
     exit 1
   fi
