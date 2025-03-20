@@ -1,0 +1,2 @@
+# Override project-top level gitignore for '*.i*86'
+!*.i*86
