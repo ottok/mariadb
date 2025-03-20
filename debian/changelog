@@ -1,3 +1,12 @@
+mariadb (1:11.8.1-2) unstable; urgency=medium
+
+  * Disable test func_format on i386 (MDEV-36334) to get i386 builds
+    pass on official Debian buildd while upstream fixes the issue
+  * Restore better error message on service stop failures from c789cdaf
+  * Revert "Set CAP_IPC_LOCK capability if possible" to follow upstream
+
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 20 Mar 2025 12:31:04 -0700
+
 mariadb (1:11.8.1-1) unstable; urgency=medium
 
   * New major upstream release candidate MariaDB 11.8, which is going to be the
