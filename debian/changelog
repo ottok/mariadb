@@ -27,12 +27,13 @@ mariadb-10.6 (1:10.6.21-0ubuntu0.22.04.1) jammy-security; urgency=medium
     unstable in MariaDB 11.4 for a long time, and which are likely needed to
     avoid occasional shutdown issues, in particular on upgrades (LP: #2011293)
     in both Debian and Ubuntu
-    - Make SysV init more verbose in case of MariaDB start failures (Related: #1033234)
+    - Make SysV init more verbose in case of MariaDB start failures
+      (Related: #1033234)
     - Limit check of running mysqld/mariadbd to system users (Related: #1032047)
     - When shutting down 'mariadbd', fallback to 'mysqld'
   * Add Lintian overrides for new issues that are not relevant for maintenance
   * Add NEWS item to explain new `mariadb-dump` option `--sandbox`
-  
+
   [ Phil Dibowitz ]
   * Add some info on getting back to passwordless root (Related: #1088133)
 
