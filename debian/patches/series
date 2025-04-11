@@ -14,3 +14,4 @@ hide-mysql-command-deprecation-warnings.patch
 Fix-misc-spelling-in-MariaDB-Server-repository.patch
 1084293-allow-cest-in-timezone-test.patch
 1101397-revert-CONC-710.patch
+MDEV-36009-Systemd-Restart-on-OOM.patch
