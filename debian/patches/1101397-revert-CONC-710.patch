@@ -1,0 +1,59 @@
+From: Georg Richter <georg@mariadb.com>
+Date: Tue, 18 Feb 2025 16:19:50 +0100
+Subject: Revert "CONC-710: Remove UDF declarations"
+
+Since UDF declarations are used  e.g. by lib_mysqludf_sys, I'm reverting
+this commit. (See also CONC-757).
+
+This reverts (mariadb-connector-c) commit 1a2ed3f67af698b394b2faed069b49d4f409a155.
+
+Closes: Debian Bug#1101397
+Forwarded: https://github.com/mariadb-corporation/mariadb-connector-c/commit/d4eec05d00ce77d2bab3848ff49d04acf0ed2cc0
+---
+ libmariadb/include/mariadb_com.h | 26 ++++++++++++++++++++++++--
+ 1 file changed, 24 insertions(+), 2 deletions(-)
+
+diff --git a/libmariadb/include/mariadb_com.h b/libmariadb/include/mariadb_com.h
+index 8e89c24..63185db 100644
+--- a/libmariadb/include/mariadb_com.h
++++ b/libmariadb/include/mariadb_com.h
+@@ -52,8 +52,6 @@
+ #define MYSQL_AUTODETECT_CHARSET_NAME "auto"
+ #define BINCMP_FLAG       131072
+ 
+-enum Item_result {STRING_RESULT,REAL_RESULT,INT_RESULT,ROW_RESULT,DECIMAL_RESULT};
+-
+ enum mysql_enum_shutdown_level
+ {
+   SHUTDOWN_DEFAULT = 0,
+@@ -429,6 +427,30 @@ struct rand_struct {
+   double max_value_dbl;
+ };
+ 
++  /* The following is for user defined functions */
++
++enum Item_result {STRING_RESULT,REAL_RESULT,INT_RESULT,ROW_RESULT,DECIMAL_RESULT};
++
++typedef struct st_udf_args
++{
++  unsigned int arg_count;		/* Number of arguments */
++  enum Item_result *arg_type;		/* Pointer to item_results */
++  char **args;				/* Pointer to argument */
++  unsigned long *lengths;		/* Length of string arguments */
++  char *maybe_null;			/* Set to 1 for all maybe_null args */
++} UDF_ARGS;
++
++  /* This holds information about the result */
++
++typedef struct st_udf_init
++{
++  my_bool maybe_null;			/* 1 if function can return NULL */
++  unsigned int decimals;		/* for real functions */
++  unsigned int max_length;		/* For string functions */
++  char	  *ptr;				/* free pointer for function data */
++  my_bool const_item;			/* 0 if result is independent of arguments */
++} UDF_INIT;
++
+ /* Connection types */
+ #define MARIADB_CONNECTION_UNIXSOCKET   0
+ #define MARIADB_CONNECTION_TCP          1
