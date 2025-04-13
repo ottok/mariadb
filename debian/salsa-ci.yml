@@ -921,10 +921,10 @@ mysql-8.0 in Sid upgrade:
 
 # Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
 # The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
-mysql-8.0 in Ubuntu 24.04 upgrade:
+mysql-8.0 in Ubuntu 24.10 upgrade:
   extends: .salsa-ci-template-for-mariadb
   stage: upgrade MariaDB variant
-  image: ubuntu:noble
+  image: ubuntu:oracular
   script:
     - *test-prepare-container
     - apt-get install -qq --yes procps mysql-server 'libmysqlc*'
@@ -942,7 +942,6 @@ mysql-8.0 in Ubuntu 24.04 upgrade:
     - *test-enable-artifacts-repo
     - apt-get install -qq --simulate mariadb-server
     - apt-get install -qq --yes mariadb-server
-    # Due to usrmerge, full-upgrade from Mantic to Trixie or newer may not work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     # Remove everything MySQL except mysql-common which also MariaDB depends on
     - apt-get purge --yes mysql-s* mysql-cl* libmysql*
