@@ -102,6 +102,37 @@ packaging-fix-checks:
     variables:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
+build trixie-backports:
+  extends: .build-package
+  variables:
+    RELEASE: trixie-backports
+
+build bookworm-backports:
+  extends: .build-package
+  variables:
+    RELEASE: bookworm-backports
+
+build plucky-backports:
+  extends: .build-package
+  variables:
+    RELEASE: plucky
+    VENDOR: ubuntu
+    SALSA_CI_MIRROR: archive.ubuntu.com/ubuntu
+
+build oracular-backports:
+  extends: .build-package
+  variables:
+    RELEASE: oracular
+    VENDOR: ubuntu
+    SALSA_CI_MIRROR: archive.ubuntu.com/ubuntu
+
+build noble-backports:
+  extends: .build-package
+  variables:
+    RELEASE: noble
+    VENDOR: ubuntu
+    SALSA_CI_MIRROR: archive.ubuntu.com/ubuntu
+
 # Bookworm and Bullseye backports can be enabled if
 # https://salsa.debian.org/mariadb-team/mariadb-server/-/merge_requests/67 is
 # reverted.
@@ -301,6 +332,17 @@ blhc:
       test -f /bin/cp || /usr/bin/cp -av /usr/bin/cp /bin/
       usrmerge-temp-fix || true
     done
+
+.test-enable-bookworm-backports-repos: &test-enable-bookworm-backports-repos |
+  # Enable bookworm-backports (assumes environment already Debian Bookworm)
+  sed 's/Suites: bookworm bookworm-updates/Suites: bookworm bookworm-updates bookworm-backports/' -i /etc/apt/sources.list.d/debian.sources
+  # Increase default backports priority policy from '100' to '500' so it can actually be used
+  cat << EOF > /etc/apt/preferences.d/enable-backports-to-satisfy-dependencies
+  Package: *
+  Pin: release n=bookworm-*
+  Pin-Priority: 500
+  EOF
+  apt-get update -qq
 
 .test-enable-artifacts-repo: &test-enable-artifacts-repo |
   find -ls -maxdepth 3
@@ -515,6 +557,60 @@ simple upgrade:
   script:
     - *test-prepare-container
     - apt-get install -qq --yes 'default-mysql*' ${BUILT_PACKAGES}
+    - *test-full-upgrade
+    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
+    - *test-verify-final
+
+mariadb and Trixie upgrade:
+  extends: .salsa-ci-template-for-mariadb
+  stage: upgrade MariaDB and distro
+  image: debian:trixie
+  script:
+    - *test-prepare-container
+    # Install everything MariaDB currently in Debian Bookworm
+    - apt-get install -qq --yes 'default-mysql*' 'mariadb-*' 'libmariadb*'
+    # Verify installation of MariaDB from Bookworm
+    - dpkg -l | grep -e "mariadb-server.*11\.8"
+    - *test-verify-initial
+    - *test-enable-sid-repos
+    # Ensure mariadbd will not crash on next shutdown for any reason
+    - service mariadb restart
+    - *test-full-upgrade
+    - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
+    - *test-verify-final
+
+mariadb with Oracular backports upgrade:
+  extends: .salsa-ci-template-for-mariadb
+  stage: upgrade MariaDB
+  needs:
+    - job: build oracular-backports
+  image: ubuntu:oracular
+  script:
+    - *test-prepare-container
+    # Install everything MariaDB currently in Debian Bookworm
+    - apt-get install -qq --yes 'default-mysql*' 'mariadb-*' 'libmariadb*'
+    # Verify installation of MariaDB from Bookworm
+    - dpkg -l | grep -e "mariadb-server.*11\.4"
+    - *test-verify-initial
+    - *test-enable-bookworm-backports-repos
+    - *test-full-upgrade
+    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
+    - *test-verify-final
+
+mariadb with Bookworm backports upgrade:
+  extends: .salsa-ci-template-for-mariadb
+  stage: upgrade MariaDB
+  needs:
+    - job: build bookworm-backports
+  image: debian:bookworm
+  script:
+    - *test-prepare-container
+    # Install everything MariaDB currently in Debian Bookworm
+    - apt-get install -qq --yes 'default-mysql*' 'mariadb-*' 'libmariadb*'
+    # Verify installation of MariaDB from Bookworm
+    - dpkg -l | grep -e "mariadb-server.*10\.11"
+    - *test-verify-initial
+    - *test-enable-bookworm-backports-repos
     - *test-full-upgrade
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
