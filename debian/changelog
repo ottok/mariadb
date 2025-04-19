@@ -1,3 +1,18 @@
+mariadb (1:11.8.1-3) unstable; urgency=medium
+
+  * Add patch to have CEST as allowed in main.timezone test (Closes: #1084293)
+  * Backport revert of CONC-710 that broke building UDFs (Closes: #1101397)
+  * Backport systemd service fix for restarts on crashes (Closes: #1073847)
+  * Update standards version to 4.7.2, no changes needed
+  * Re-enable tests that were passing recently in experimental when MariaDB
+    Debian revision 1:11.4.5-2~exp1 built or which otherwise was confirmed to
+    passing now: mariabackup.encrypted_page_corruption, mariadb_upgrade,
+    MDEV-22243, MDEV-23427, MDEV-23921, MDEV-27955, MDEV-30518, MDEV-30676,
+    MDEV-30728, MDEV-30918, MDEV-30929, MDEV-31349, MDEV-33520, MDEV-33520,
+    MDEV-34084, MDEV-34733, MDEV-34781, MDEV-34788, MDEV-36334
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 19 Apr 2025 12:06:11 -0700
+
 mariadb (1:11.8.1-2) unstable; urgency=medium
 
   * Disable test func_format on i386 (MDEV-36334) to get i386 builds
