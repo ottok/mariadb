@@ -1,19 +1,11 @@
-index_intersect_innodb : MDEV-23921
 main.analyze_engine_stats : MDEV-32375
 main.analyze_stmt_orderby : MDEV-32375
 main.analyze_stmt_slow_query_log : MDEV-12237
 main.cte_recursive : MDEV-32375
 main.derived_split_innodb : MDEV-32375
 main.explain_json_format_partitions : MDEV-32375
-main.func_json_notembedded : MDEV-27955 / MDEV-30518 / https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1006529 (timeout)
-main.index_intersect : MDEV-23921
-main.index_intersect : MDEV-23921
-main.index_intersect_innodb : MDEV-23921
 main.join_cache_notasan : MDEV-31893 (fixed but perhaps not for hppa)
 main.join_cache_notasan : MDEV-34084
 main.rowid_filter_innodb : MDEV-32375
-main.table_value_constr : MDEV-33520
-maria.maria-purge : MDEV-31349
 repair_symlink-5543  : MDEV-23920
-type_test.type_test_double : MDEV-22243, but wasn't actually fixed yet
 unit.conc_connection : CONC-640: unit.conc_connection fails on test_conc21
