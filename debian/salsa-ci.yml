@@ -296,10 +296,17 @@ blhc:
         fi
       done
     }
+    ATTEMPT=0
     until apt-get install -q --yes bash dash util-linux coreutils lsb-base login mount
     do
       test -f /bin/cp || /usr/bin/cp -av /usr/bin/cp /bin/
       usrmerge-temp-fix || true
+      ATTEMPT=$((ATTEMPT + 1))
+      if [ $ATTEMPT -ge 10 ]
+      then
+        echo "ERROR: Unable to apply usrmerge upgrade workaround"
+        exit 1
+      fi
     done
 
 .test-enable-artifacts-repo: &test-enable-artifacts-repo |
