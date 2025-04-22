@@ -1,3 +1,157 @@
+mariadb (1:11.8.2-1) unstable; urgency=medium
+
+  MariaDB 11.8.2 was released on June 4th 2025 by the MariaDB Foundation
+  (https://mariadb.org/mariadb-11-8-2-ga-now-available/). This is the first
+  release in the 11.8 series to be announced GA (general availability). The
+  11.8 series has long-term support with commitment from the MariaDB Foundation
+  (https://mariadb.org/about/#maintenance-policy) to publish maintenance
+  versions with fixes to software defects and security vulnerabilities until
+  May 2030. Commercial extended support may be available past 2030 as well.
+
+  The previous major long-term supported MariaDB release 11.4 was available only
+  in Debian unstable and in some intermediate Ubuntu releases, so this 11.8 is
+  the first new long-term supported MariaDB release available in long-term
+  supported Debian and Ubuntu releases after MariaDB 10.11.
+
+  To learn what is new in 11.8 it is recommended to read all the previous
+  release notes since 10.11:
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-11-0/
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-11-1/
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-11-2/
+  * https://mariadb.com/kb/en/what-is-mariadb-113/
+  * https://mariadb.com/kb/en/what-is-mariadb-114/
+    - also includes summary of 11.0-11.3
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-11-5/
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-11-6/
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-11-7/
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-11-8/
+    - also includes summary of 11.5-11.7
+
+  Notable new features:
+  - New vector functions and system variables to allow MariaDB to store AI
+    embeddings and search them efficiently: https://mariadb.com/kb/en/vectors/
+  - Change default Unicode collation to uca1400_ai_ci, a modern Unicode
+    collation with proper support for SMP characters (including emoji)
+  - Charset narrowing optimization by default:
+    https://mariadb.com/kb/en/charset-narrowing-optimization/
+  - Unix socket authentication now supports an authentication_string, so the
+    system username and database username can be different
+  - New authentication plugin intended to be the default in a future release:
+    https://mariadb.com/kb/en/authentication-plugin-parsec/
+  - The TIMESTAMP range of values is extended and all of MariaDB validated to
+    support running in 2038
+  - New native functions UUID_v4 and UUID_v7 to make tables that have UUIDs
+    use less space and run operations faster
+  - Multiple extensions to the JSON_* functions
+  - Major improvements to the optimizer:
+    https://mariadb.com/kb/en/the-optimizer-cost-model-from-mariadb-11-0/
+  - The 'mariadb' client has a new argument --show-query-costs to show the
+    query costs after every statement, making optimizing queries easier
+  - InnoDB change buffering removed:
+    https://mariadb.com/kb/en/innodb-change-buffering/
+  - Extended features in SQL_MODE='ORACLE' to help migrations from Oracle
+  - Online schema changes by default
+  - Automatic reclaiming of unused system table space and temporary table space
+  - Most temporary tables now visible in SHOW TABLES and SHOW TABLE STATUS
+  - New SHOW CREATE SERVER statement for easier replication management
+  - All binlog* variables now visible as system variables
+  - New database-level privilege, SHOW CREATE ROUTINE that allows one to see the
+    routine definition even if the user isn't the routine owner
+  - New view sys.privileges_by_table_by_level
+  - TLS encryption use by default expanded. Use --disable-ssl or
+    --disable-ssl-verify-server-cert to revert to the old behavior.
+  - New 'mariadb' client arguments --ssl-fp and -ssl-fplist to ensure the remote
+    server certificate matches a predefined fingerprint
+  - New mariadb-dump and mariadb-import option --parallel for faster batch
+    operations and --dir for easier large database management
+  - The xtrabackup_* files have been renamed to mariadb_backup_*
+  - Multiple occurrences of 'MySQL' has been renamed to 'MariaDB' in
+    documentation, user visible strings and commands
+
+  Things to consider when upgrading from 10.11 to 11.8 are listed on the page
+  https://mariadb.com/kb/en/upgrading-from-mariadb-10-11-to-mariadb-11-4/ and
+  https://mariadb.com/kb/en/upgrading-from-mariadb-11-4-to-mariadb-11-8/.
+
+  Removed in 11.8 (compared to 10.11):
+  - date-format, datetime-format, time-format
+  - debug-no-thread-alarm
+  - innodb-change-buffer-max-size, innodb-change-buffering
+  - innodb-defragment, innodb-defragment-fill-factor,
+    innodb-defragment-fill-factor-n-recs, innodb-defragment-frequency,
+    innodb-defragment-n-pages, innodb-defragment-stats-accuracy
+  - max-tmp-tables (use 'max-temp-*' instead)
+  - old-alter-table (use 'alter-algorithm' instead)
+  - wsrep-causal-reads, wsrep-load-data-splitting
+
+  Deprecated server variables (marked as deprecated in 11.8):
+  - alter-algorithm
+  - big-tables
+  - binlog-optimize-thread-scheduling
+  - innodb-file-per-table
+  - innodb-flush-method
+  - innodb-prefix-index-cluster-optimization
+  - keep-files-on-create
+  - language (use 'lc-messages-dir' instead)
+  - log-slow-admin-statements (use 'log-slow-filter' instead)
+  - long-query-time (use 'log-slow-query-time' instead)
+  - old (use 'old-mode' instead)
+  - optimizer-adjust-secondary-key-costs
+  - secure-auth
+
+  Changed behavior in server variables in 11.8 (compared to 10.11):
+  - binlog-row-image has new available option: FULL_NODUP
+  - collation-server defaults now to 'utf8mb4_uca1400_ai_ci'
+  - histogram-type defaults now to 'JSON_HB'
+  - innodb-doublewrite now accepts 'ON', 'OFF', 'fast' (default remains 'ON')
+  - innodb-prefix-index-cluster-optimization defaults now to FALSE (also
+    deprecated)
+  - innodb-snapshot-isolation defaults now to TRUE
+  - innodb-undo-tablespaces defaults now to 3
+  - old-mode has new available options: LOCK_ALTER_TABLE_COPY, OLD_FLUSH_STATUS,
+    SESSION_USER_IS_USER
+  - optimizer-switch has new available option: sargable_casefold
+  - optimizer-switch defaults now include: not_null_range_scan=off,
+    hash_join_cardinality=on, cset_narrowing=on, sargable_casefold=on
+    (and no longer any engine_condition_pushdown)
+  - ssl defaults to 'on'; use --skip-ssl to disable
+
+  New server variables in 11.8 (compared to 10.11):
+  - New variables to control binary logs and GTID: binlog-gtid-index,
+    binlog-gtid-index-page-size, binlog-gtid-index-span-min (control GTID
+    indexing for faster lookups); binlog-large-commit-threshold (improve
+    concurrency for large transactions); binlog-legacy-event-pos (add
+    end_log_pos to all events for compatibility); binlog-space-limit,
+    max-binlog-total-size (limit total disk space used by binary logs)
+  - block-encryption-mode: Default mode for AES_ENCRYPT/AES_DECRYPT functions
+  - character-set-collations: Override default collations for character sets
+  - innodb-data-file-buffering, innodb-data-file-write-through,
+    innodb-log-file-write-through: Control file system caching and write-through
+    behavior for InnoDB data and log files
+  - innodb-truncate-temporary-tablespace-now: Trigger immediate shrinking of the
+    temporary tablespace
+  - log-slow-always-query-time: Set a time threshold above which slow queries
+    are *always* logged, regardless of rate limits
+  - max-tmp-session-space-usage, max-tmp-total-space-usage: Limit temporary
+    file/table usage per session and globally
+  - mhnsw-default-distance, mhnsw-default-m, mhnsw-ef-search,
+    mhnsw-max-cache-size: Control parameters for the MHNSW vector index used
+    for AI embeddings
+  - optimizer-disk-read-cost, optimizer-disk-read-ratio,
+    optimizer-index-block-copy-cost, optimizer-key-compare-cost,
+    optimizer-key-copy-cost, optimizer-key-lookup-cost,
+    optimizer-key-next-find-cost, optimizer-row-copy-cost,
+    optimizer-row-lookup-cost, optimizer-row-next-find-cost,
+    optimizer-rowid-compare-cost, optimizer-rowid-copy-cost,
+    optimizer-scan-setup-cost, optimizer-where-cost: Fine-tune the optimizer's
+    cost model calculations for various operations
+  - redirect-url: URL for redirecting clients to another server
+  - slave-abort-blocking-timeout: Timeout for slave DDL waiting on blocking
+    queries
+  - slave-connections-needed-for-purge: Minimum slaves needed for automatic
+    binlog purge based on size/time limits
+
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 08 Jun 2025 11:19:07 +0300
+
 mariadb (1:10.11.2-1) unstable; urgency=medium
 
   MariaDB 10.11.2 was released on February 16th 2023 by the MariaDB Foundation
