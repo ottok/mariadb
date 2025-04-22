@@ -186,6 +186,27 @@ blhc:
       apt-get install -qq --yes --no-install-recommends ca-certificates curl
       # Replace any old repos with just Sid, and trust blindly as old Debian releases won't have latest Sid in their keyring
       echo 'deb [trusted=yes] http://deb.debian.org/debian sid main' > /etc/apt/sources.list
+
+      # Attempting upgrade from Bullseye or older to Debian Sid is no longer
+      # possible in April 2025, as even with all usrmerge workarounds applied
+      # the util-linux upgrade is practically impossible due to versioned hard
+      # dependencies:
+      #
+      #    coreutils : PreDepends: libsystemd0 (>= 254) but 247.3-7+deb11u6 is to be installed
+      #    util-linux : PreDepends: libc6 (>= 2.41) but 2.38-11 is to be installed
+      # Also with older util-linux these dependencies must be fetched manually:
+      #    util-linux : PreDepends: libblkid1 (= 2.40.4-5) but 2.41-4 is to be installed
+      #                 PreDepends: libmount1 (= 2.40.4-5) but 2.41-4 is to be installed
+      #                 PreDepends: libsmartcols1 (= 2.40.4-5) but 2.41-4 is to be installed
+      #                 PreDepends: libuuid1 (= 2.40.4-5) but 2.41-4 is to be installed
+      #
+      # Thus, on these older distros, test upgrade only up until the Debian Sid
+      # March 2025 version:
+      if grep -q -E 'bullseye|buster|stretch' /etc/os-release
+      then
+        echo 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20250315T025205Z sid main' > /etc/apt/sources.list
+      fi
+      # Run update to ensure next install command uses latest apt sources
       apt-get update -q
     fi
   # Upgrade minimal stack first
