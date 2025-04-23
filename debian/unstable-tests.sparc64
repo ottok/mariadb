@@ -1,3 +1,5 @@
+main.check : MDEV-36670
+main.concurrent_innodb_safelog : MDEV-36670
 main.ctype_binary : https://bugs.debian.org/1053485
 main.ctype_latin1 : https://bugs.debian.org/1053485
 main.features : MDEV-27954
@@ -13,11 +15,13 @@ main.partition : MDEV-27954
 main.partition_icp : MDEV-36669
 main.partition_order : MDEV-27954
 main.repair_symlink-5543 : MDEV-23920
+main.sp-innodb : MDEV-36670
 main.type_datetime : MDEV-27954
 main.vector : MDEV-36670
 main.vector_aria : MDEV-36670
 main.vector_funcs : MDEV-36670
 main.vector_innodb : MDEV-36670
+main.vector2 : MDEV-36670
 main.vector2_notembedded : MDEV-36670
 main.view : MDEV-36145
 main.xml : MDEV-21968
