@@ -151,6 +151,8 @@ blhc:
   sed -i "s/101/0/g" -i /usr/sbin/policy-rc.d
   # Fake /sbin/runlevel to avoid warnings of "invoke-rc.d: could not determine current runlevel"
   echo -e '#!/bin/sh\necho "N 5"' > /sbin/runlevel; chmod +x /sbin/runlevel
+  # Never stop apt to ask for confirmation, just assume `--yes` all the time
+  echo 'APT::Get::Assume-Yes "true";' > /etc/apt/apt.conf.d/assume-yes
   # Avoid the warnings of "debconf: unable to initialize frontend: Dialog"
   echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
   # Emit non-zero exit code also on warnings to ensure CI stops on any issue
