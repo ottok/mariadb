@@ -1,0 +1,73 @@
+From: Sergei Golubchik <serg@mariadb.org>
+Date: Wed, 2 Apr 2025 18:06:29 +0200
+Subject: MDEV-36334 test main.func_format fails on i386 on exabyte/petabyte
+ mismatch
+
+snprintf below uses %4.2f. values above 1023.99 MiB should be shown
+as 1.00 GiB not as 1024.00 MiB
+
+(cherry picked from commit e5574d8b94681755becead56fa67c95792f83668)
+
+Origin: upstream, https://github.com/MariaDB/server/commit/e5574d8b94681755becead56fa67c95792f83668
+Bug: https://jira.mariadb.org/browse/MDEV-36334
+---
+ mysql-test/main/func_format.result | 8 ++++----
+ sql/item_strfunc.cc                | 5 ++++-
+ 2 files changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/mysql-test/main/func_format.result b/mysql-test/main/func_format.result
+index eb0ee1d..c1b7389 100644
+--- a/mysql-test/main/func_format.result
++++ b/mysql-test/main/func_format.result
+@@ -248,7 +248,7 @@ format_bytes(1024 * 1024 - 200)
+ 
+ SELECT format_bytes(1024 * 1024 - 1);
+ format_bytes(1024 * 1024 - 1)
+-1024.00 KiB
++1.00 MiB
+ 
+ SELECT format_bytes(1024 * 1024);
+ format_bytes(1024 * 1024)
+@@ -264,7 +264,7 @@ format_bytes(1024 * 1024 + 200)
+ 
+ SELECT format_bytes(1024 * 1024 * 1024 - 1);
+ format_bytes(1024 * 1024 * 1024 - 1)
+-1024.00 MiB
++1.00 GiB
+ 
+ SELECT format_bytes(1024 * 1024 * 1024);
+ format_bytes(1024 * 1024 * 1024)
+@@ -276,7 +276,7 @@ format_bytes(1024 * 1024 * 1024 + 1)
+ 
+ SELECT format_bytes(1024 * 1024 * 1024 * 1024 - 1);
+ format_bytes(1024 * 1024 * 1024 * 1024 - 1)
+-1024.00 GiB
++1.00 TiB
+ 
+ SELECT format_bytes(1024 * 1024 * 1024 * 1024);
+ format_bytes(1024 * 1024 * 1024 * 1024)
+@@ -288,7 +288,7 @@ format_bytes(1024 * 1024 * 1024 * 1024 + 1)
+ 
+ SELECT format_bytes(1024 * 1024 * 1024 * 1024 * 1024 - 1);
+ format_bytes(1024 * 1024 * 1024 * 1024 * 1024 - 1)
+-1024.00 TiB
++1.00 PiB
+ 
+ SELECT format_bytes(1024 * 1024 * 1024 * 1024 * 1024);
+ format_bytes(1024 * 1024 * 1024 * 1024 * 1024)
+diff --git a/sql/item_strfunc.cc b/sql/item_strfunc.cc
+index ef95894..51b1cdd 100644
+--- a/sql/item_strfunc.cc
++++ b/sql/item_strfunc.cc
+@@ -6155,7 +6155,10 @@ String *Item_func_format_bytes::val_str_ascii(String *)
+   if (null_value)
+     return 0;
+ 
+-  double bytes_abs= fabs(bytes);
++  /*
++    snprintf below uses %4.2f, so 1023.99 MiB should be shown as 1.00 GiB
++  */
++  double bytes_abs= fabs(bytes)/1023.995*1024;
+ 
+   constexpr uint64_t kib{1024};
+   constexpr uint64_t mib{1024 * kib};

@@ -15,3 +15,4 @@ Fix-misc-spelling-in-MariaDB-Server-repository.patch
 1084293-allow-cest-in-timezone-test.patch
 1101397-revert-CONC-710.patch
 MDEV-36009-Systemd-Restart-on-OOM.patch
+MDEV-36334-test-main.func_format-fails-on-i386-on-exabyte.patch
