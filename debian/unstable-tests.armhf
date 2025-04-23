@@ -1,6 +1,7 @@
 # MDEV-33381: The full test suite (including --big-test) has numerous failures
 # on armhf and a Raspberry Pi enthusiast is needed to debug them
 federated.federatedx_versioning : MDEV-33381
+main.mysqld--help-aria : MDEV-36334
 main.xml : MDEV-21968
 period.versioning : MDEV-33381
 spider.basic_sql : MDEV-33381
