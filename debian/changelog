@@ -1,3 +1,12 @@
+mariadb (1:11.8.1-4) unstable; urgency=medium
+
+  * Disable main.mysqld--help-aria test that failed on nearly every
+    architecture in previous upload due to new upstream issue (MDEV-36334)
+  * Disable some vector related tests that failed on sparc64 (MDEV-36670)
+  * Backport main.func_format fix for exabyte/petabyte mismatch on i386
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 23 Apr 2025 07:29:38 -0700
+
 mariadb (1:11.8.1-3) unstable; urgency=medium
 
   * Add patch to have CEST as allowed in main.timezone test (Closes: #1084293)
