@@ -1,3 +1,9 @@
+mariadb (1:11.4.5-0ubuntu0.25.04.1) UNRELEASED; urgency=medium
+
+  * Start new git branch for Ubuntu 25.04 (Plucky Puffin) maintenance
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 07 May 2025 09:43:28 -0700
+
 mariadb (1:11.4.5-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
