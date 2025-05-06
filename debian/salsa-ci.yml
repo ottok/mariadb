@@ -164,6 +164,19 @@ blhc:
   EOF
   # Avoid the warnings of "debconf: unable to initialize frontend: Dialog"
   echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
+  # In CI runs we do not enforce strict supply-chain security and thus expired
+  # and missing keys are ignored. In particular when testing upgrades from old
+  # releases, the old repositories may have expired keys by design, and must be
+  # ignored for CI to be able to run. Instead of adding '[trusted=yes
+  # check-valid-until=no check-date=no]' to every 'deb https://' line in
+  # sources, lax apt security settings system-wide.
+  cat > /etc/apt/apt.conf.d/99ignore-keys <<EOF
+  APT::Get::AllowUnauthenticated "true";
+  Acquire::AllowInsecureRepositories "true";
+  Acquire::AllowDowngradeToInsecureRepositories "true";
+  Acquire::Check-Valid-Until "false";
+  Acquire::Check-Date "false";
+  EOF
   # Emit non-zero exit code also on warnings to ensure CI stops on any issue
   echo 'APT::Update::Error-Mode "any";' > /etc/apt/apt.conf.d/non-zero-exit-on-warnings
   # Prime the apt cache so later apt commands can run
