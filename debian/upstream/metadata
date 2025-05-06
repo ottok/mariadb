@@ -1,6 +1,6 @@
 Bug-Database: https://jira.mariadb.org
 Bug-Submit: https://jira.mariadb.org
 Donation: https://mariadb.org/donate/
-Repository: git://github.com/MariaDB/server.git
+Repository: https://github.com/MariaDB/server.git
 Repository-Browse: https://github.com/MariaDB/server
 Security-Contact: security@mariadb.org
