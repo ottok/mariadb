@@ -3,7 +3,7 @@
 include:
   - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/recipes/debian.yml
 
-# Override Salsa CI with MariaDB specific variations
+# Override Salsa CI defaults with MariaDB specific variations
 variables:
   BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3
     libmariadbd19t64 libmariadbd-dev mariadb-common mariadb-client-core
@@ -40,12 +40,12 @@ variables:
 stages:
   - provisioning
   - build
-  - test
+  - test  # Stage referenced by Salsa CI template reprotest stanza, so must exist
   - upgrade MariaDB
   - upgrade MariaDB and distro
   - upgrade MariaDB variant
   - test extras
-  - publish # Stage referenced by Salsa-CI template aptly stanza, so must exist even though not used
+  - publish  # Stage referenced by Salsa CI template aptly stanza, so must exist even though not used
 
 gnitpick:
   stage: provisioning
@@ -85,7 +85,6 @@ packaging-fix-checks:
       fi
     - |
       wrap-and-sort -ast
-      git checkout debian/tests/control # Revert touching this file, wrap-and-sort shouldn't do it
       if [ "$(git diff --name-only | wc -l)" -eq 0 ]
       then
         echo "No uncommitted changes after 'wrap-and-sort -ast', maintainer has done good job keeping files in order."
@@ -212,20 +211,16 @@ blhc:
       echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list
       # Attempting upgrade from Bullseye or older to Debian Sid is no longer
       # possible in April 2025, as even with all usrmerge workarounds applied
-      # the util-linux upgrade is practically impossible due to versioned hard
-      # dependencies:
+      # the coreutils and util-linux upgrade is practically impossible due to
+      # versioned hard dependencies:
       #
       #    coreutils : PreDepends: libsystemd0 (>= 254) but 247.3-7+deb11u6 is to be installed
       #    util-linux : PreDepends: libc6 (>= 2.41) but 2.38-11 is to be installed
-      # Also with older util-linux these dependencies must be fetched manually:
-      #    util-linux : PreDepends: libblkid1 (= 2.40.4-5) but 2.41-4 is to be installed
-      #                 PreDepends: libmount1 (= 2.40.4-5) but 2.41-4 is to be installed
-      #                 PreDepends: libsmartcols1 (= 2.40.4-5) but 2.41-4 is to be installed
-      #                 PreDepends: libuuid1 (= 2.40.4-5) but 2.41-4 is to be installed
       #
       # Thus, on these older distros, test upgrade only up until the Debian Sid
-      # March 2025 version:
-      if grep -q -E 'bullseye|buster|stretch' /etc/os-release
+      # March 2025 version (snapshot chosen just before coreutils/util-linux
+      # gained hard dependencies making upgrades from Bullseye/older impossible):
+      if grep -q -E 'bullseye|buster|stretch|jammy|focal' /etc/os-release
       then
         echo 'deb http://snapshot.debian.org/archive/debian/20250315T025205Z sid main' > /etc/apt/sources.list
       fi
@@ -249,6 +244,9 @@ blhc:
   #   *************************************************************************
   # Therefore, an older base-files must be used:
   - |
+    # If apt install failed, it might be due to base-files needing usrmerge.
+    # Attempt workaround using base-files 13.2 (snapshot chosen just before
+    # base-files 13.3 started requiring usrmerge).
     if [ "$APT_STATUS" = "failed" ]
     then
       curl -sLO https://snapshot.debian.org/archive/debian/20240531T083821Z/pool/main/b/base-files/base-files_13.2_amd64.deb
@@ -262,6 +260,9 @@ blhc:
   #   libc6 : Breaks: base-files (< 13.3~) but 13.2 is to be installed
   # Therefore, older libc6 and it's dependency libc6-bin must be used:
   - |
+    # If base-files workaround failed, it might be due to libc6 breaking older
+    # base-files. Attempt workaround using libc6 2.38 (snapshot chosen just
+    # before libc6 2.39 started breaking base-files < 13.3).
     if [ "$BASE_FILES_STATUS" = "failed" ]
     then
       curl -sLO https://snapshot.debian.org/archive/debian/20240531T083821Z/pool/main/g/glibc/libc6_2.38-11_amd64.deb
@@ -270,7 +271,7 @@ blhc:
       curl -sLO https://snapshot.debian.org/archive/debian/20240531T083821Z/pool/main/g/glibc/libc6-dev_2.38-11_amd64.deb
       curl -sLO https://snapshot.debian.org/archive/debian/20240531T083821Z/pool/main/g/glibc/libc-dev-bin_2.38-11_amd64.deb
       # Apt version in Jessie does not support 'apt install ./package.deb', use this only for Stretch or newer
-      apt-get install -q --yes --no-install-recommends ./libc*_amd64.deb || true
+      apt-get install -q --yes --no-install-recommends ./libc*_*.deb || true
       # Ensure upgrades past 2.38-11 are blocked to avoid failure on usrmerge issue
       apt-mark hold libc6 libc-bin libc6-dev libc-dev-bin
       apt-get install -q --yes --fix-broken apt
@@ -293,15 +294,13 @@ blhc:
       cd - # Back to CI run directory
       find /lib/*/libcrypt.* -ls # Show that new libcrypt is there
       apt-mark unhold libc6 libc-bin libc6-dev libc-dev-bin
-      apt-get install -q --yes --fix-broken --no-install-recommends ./libc*_amd64.deb || true
+      apt-get install -q --yes --fix-broken --no-install-recommends ./libc*_*.deb || true
       # Ensure upgrades past 2.38-11 are blocked to avoid failure on usrmerge issue
       apt-mark hold libc6 libc-bin libc6-dev libc-dev-bin
       apt-get install -q --yes apt
     fi
   # If system has not undergone usrmerge upgrade, don't attempt it in CI containers
-  - test -L /bin || apt-mark hold usrmerge usr-is-merged || true
-  # Ignore apt-mark exit code as Buster/Bookworm upgrades to Trixie/Sid will not
-  # have those transient packages at all
+  - test -L /bin || apt-mark hold usrmerge usr-is-merged
   # For debugging purposes show what packages are now on hold
   - apt-mark showhold
   # Update base system
@@ -332,7 +331,7 @@ blhc:
     #   update-alternatives: error: alternative path /bin/more doesn't exist
     # Repeat upgrade attempts until passes
     function usrmerge-temp-fix {
-      for x in bash dash sh more cp ln sleep
+      for x in bash cat cp dash ln more sh sleep
       do
         if [ -x /usr/bin/$x ]
         then
@@ -354,6 +353,7 @@ blhc:
     done
 
 .test-enable-artifacts-repo: &test-enable-artifacts-repo |
+  # List files so it can be verified from logs that correct artifacts are present
   find -ls -maxdepth 3
   apt-get install -qq --yes apt-utils
   apt-ftparchive packages . > Packages
