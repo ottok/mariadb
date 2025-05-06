@@ -766,12 +766,11 @@ License: GPL-2
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
  .
- On Debian and systems the full text of the GNU General Public
- License version 2 can be found in the file
- `/usr/share/common-licenses/GPL-2`
- .
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+Comment:
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in `/usr/share/common-licenses/GPL-2`.
 
 License: GPL-2+
  This program is free software; you can redistribute it and/or modify
@@ -784,12 +783,11 @@ License: GPL-2+
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
  .
- On Debian and systems the full text of the GNU General Public
- License version 2 can be found in the file
- `/usr/share/common-licenses/GPL-2`
- .
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+Comment:
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in `/usr/share/common-licenses/GPL-2`.
 
 License: LGPL
  This library is free software; you can redistribute it and/or
@@ -804,10 +802,9 @@ License: LGPL
  .
  You should have received a copy of the GNU Library General Public
  License along with this library; if not, see <https://www.gnu.org/licenses/>.
- .
- On Debian and systems the full text of the GNU Library General Public
- License version 2 can be found in the file
- `/usr/share/common-licenses/LGPL-2`
+Comment:
+ On Debian systems, the complete text of the GNU Library General Public
+ License version 2 can be found in "/usr/share/common-licenses/LGPL-2".
 
 License: LGPL-2
  This library is free software; you can redistribute it and/or
@@ -822,10 +819,9 @@ License: LGPL-2
  .
  You should have received a copy of the GNU Library General Public
  License along with this library; if not, see <https://www.gnu.org/licenses/>.
- .
- On Debian and systems the full text of the GNU Library General Public
- License version 2 can be found in the file
- `/usr/share/common-licenses/LGPL-2`
+Comment:
+ On Debian systems, the complete text of the GNU Library General Public
+ License version 2 can be found in "/usr/share/common-licenses/LGPL-2".
 
 License: LGPL-2+
  This library is free software; you can redistribute it and/or
@@ -840,7 +836,7 @@ License: LGPL-2+
  .
  You should have received a copy of the GNU Library General Public
  License along with this library; if not, see <https://www.gnu.org/licenses>.
- .
+Comment:
  On Debian systems, the complete text of the GNU Library General Public
  License version 2 can be found in "/usr/share/common-licenses/LGPL-2".
 
@@ -857,10 +853,9 @@ License: LGPL-2.1+
  .
  You should have received a copy of the GNU Lesser General Public License along
  with this program; if not, see <https://www.gnu.org/licenses/>.
- .
- On Debian and systems the full text of the GNU Library General Public
- License version 2.1 can be found in the file
- `/usr/share/common-licenses/LGPL-2.1`
+Comment:
+ On Debian systems, the complete text of the GNU Library General Public
+ License version 2.1 can be found in `/usr/share/common-licenses/LGPL-2.1`.
 
 License: BSD-2-clause
  Redistribution and use in source and binary forms, with or without
