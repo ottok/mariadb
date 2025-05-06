@@ -209,8 +209,7 @@ blhc:
       # Install tools that may be needed to circumvent issues in the upgrade
       apt-get install -qq --yes --no-install-recommends ca-certificates curl
       # Replace any old repos with just Sid, and trust blindly as old Debian releases won't have latest Sid in their keyring
-      echo 'deb [trusted=yes] http://deb.debian.org/debian sid main' > /etc/apt/sources.list
-
+      echo 'deb http://deb.debian.org/debian sid main' > /etc/apt/sources.list
       # Attempting upgrade from Bullseye or older to Debian Sid is no longer
       # possible in April 2025, as even with all usrmerge workarounds applied
       # the util-linux upgrade is practically impossible due to versioned hard
@@ -228,7 +227,7 @@ blhc:
       # March 2025 version:
       if grep -q -E 'bullseye|buster|stretch' /etc/os-release
       then
-        echo 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20250315T025205Z sid main' > /etc/apt/sources.list
+        echo 'deb http://snapshot.debian.org/archive/debian/20250315T025205Z sid main' > /etc/apt/sources.list
       fi
       # Run update to ensure next install command uses latest apt sources
       apt-get update -q
@@ -359,7 +358,7 @@ blhc:
   apt-get install -qq --yes apt-utils
   apt-ftparchive packages . > Packages
   apt-ftparchive release . > Release
-  echo "deb [trusted=yes] file:$(pwd) ./" > /etc/apt/sources.list.d/local.list
+  echo "deb file:$(pwd) ./" > /etc/apt/sources.list.d/local.list
   apt-get update -q
 
 .test-install-all: &test-install-all
@@ -530,17 +529,14 @@ blhc:
       - ${WORKING_DIR}/debug
   before_script:
     - *test-prepare-container
-    - apt-get install -qq --yes --no-install-recommends ca-certificates curl
+    - apt-get install -qq --yes --no-install-recommends ca-certificates
     - |
-      [[ -d /etc/apt/keyrings ]] || mkdir /etc/apt/keyrings
-      curl -sL https://mariadb.org/mariadb_release_signing_key.pgp -o /etc/apt/keyrings/mariadb-keyring.pgp
       cat >/etc/apt/sources.list.d/mariadb.sources <<EOF
       X-Repolib-Name: MariaDB
       Types: deb
       URIs: https://archive.mariadb.org/mariadb-${MARIADB_VERSION}/repo/debian
       Suites: sid
       Components: main
-      Signed-By: /etc/apt/keyrings/mariadb-keyring.pgp
       EOF
     - apt-get update -qq
   script:
@@ -596,7 +592,7 @@ mariadb-10.6 and Bookworm-20230208 upgrade:
   script:
     - *test-prepare-container
     - |
-      echo 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20230208T130000Z bookworm main' > /etc/apt/sources.list.d/bookworm.list
+      echo 'deb http://snapshot.debian.org/archive/debian/20230208T130000Z bookworm main' > /etc/apt/sources.list.d/bookworm.list
       rm /etc/apt/sources.list.d/debian.sources
       apt-get update -qq
     # In February 2023 Bookworm snapshot this will install MariaDB 10.6
@@ -629,10 +625,6 @@ mariadb-10.6 and Jammy upgrade:
     # Verify installation of MariaDB from Jammy
     - dpkg -l | grep -e "mariadb-server.*10\.6"
     - *test-verify-initial
-    # Install Debian Sid signing keys as Ubuntu does not have them by default
-    - apt-get install -qq --yes --no-install-recommends curl
-    - curl -sLO http://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2023.4_all.deb
-    - apt-get install -qq --yes ./debian-archive-keyring_*
     - *test-enable-sid-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mariadb restart
@@ -712,10 +704,6 @@ mariadb-10.3 and Focal upgrade:
     # Verify installation of MariaDB from Focal
     - dpkg -l | grep -e "mariadb-server.*10\.3"
     - *test-verify-initial
-    # Install Debian Sid signing keys as Ubuntu does not have them by default
-    - apt-get install -qq --yes --no-install-recommends curl
-    - curl -sLO http://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2023.4_all.deb
-    - apt-get install -qq --yes ./debian-archive-keyring_*
     - *test-enable-sid-repos
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mysql restart # in 10.3 service name is still 'mysql'
@@ -984,10 +972,6 @@ mysql-8.0 in Ubuntu 24.10 upgrade:
     - dpkg -l | grep mysql
     - service mysql status
     - *test-verify-initial
-    # Install Debian Sid signing keys as Ubuntu does not have them by default
-    - apt-get install -qq --yes --no-install-recommends curl
-    - curl -sSLO http://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2023.4_all.deb
-    - apt-get install -qq --yes ./debian-archive-keyring_*
     - *test-enable-sid-repos
     # Ensure mysqld will not crash on next shutdown for any reason
     - service mysql restart
@@ -1007,11 +991,9 @@ mysql-community-cluster-8.0 from MySQL.com with Bookworm upgrade:
   image: debian:bookworm
   script:
     - *test-prepare-container
-    - |
-      apt-get install -qq --yes --no-install-recommends ca-certificates curl systemctl
-      curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xbca43417c3b485dd128ec6d4b7b3b788a8d3785c" -o /etc/apt/trusted.gpg.d/mysql.asc
-      echo "deb https://repo.mysql.com/apt/debian/ bookworm mysql-cluster-8.0" > /etc/apt/sources.list.d/mysql.list
-      apt-get update -qq
+    - apt-get install -qq --yes --no-install-recommends ca-certificates
+    - echo "deb https://repo.mysql.com/apt/debian/ bookworm mysql-cluster-8.0" > /etc/apt/sources.list.d/mysql.list
+    - apt-get update -qq
     - apt-get install -qq --yes mysql-cluster-community-server
     - sed 's/ExecStartPre=+/ExecStartPre=/' -i /lib/systemd/system/mysql.service # Hack to make file compatible with systemctl shim
     - systemctl start mysql
@@ -1147,11 +1129,9 @@ mysql.com-5.7 with Buster upgrade:
   image: debian:buster
   script:
     - *test-prepare-container
-    - |
-      apt-get install -qq --yes --no-install-recommends gpg gpg-agent dirmngr ca-certificates # Bare minimal (<4MB) for apt-key to work
-      apt-key adv --recv-keys --keyserver hkps://keyserver.ubuntu.com:443 B7B3B788A8D3785C BCA43417C3B485DD128EC6D4B7B3B788A8D3785C
-      echo "deb https://repo.mysql.com/apt/debian/ buster mysql-5.7" > /etc/apt/sources.list.d/mysql.list
-      apt-get update -qq
+    - apt-get install -qq --yes --no-install-recommends ca-certificates
+    - echo "deb https://repo.mysql.com/apt/debian/ buster mysql-5.7" > /etc/apt/sources.list.d/mysql.list
+    - apt-get update -qq
     - apt-get install -qq --yes mysql-server 'libmysqlc*'
     # Ensure MySQL 5.7 package actually got installed
     - dpkg -l | grep -e "mysql-server.*5.7"
@@ -1179,11 +1159,9 @@ percona-xtradb-5.7 with Bookworm upgrade:
   image: debian:bookworm
   script:
     - *test-prepare-container
-    - |
-      apt-get install -qq --yes --no-install-recommends ca-certificates curl systemctl
-      curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x9334A25F8507EFA5" -o /etc/apt/trusted.gpg.d/percona.asc
-      echo "deb https://repo.percona.com/apt/ bookworm main" > /etc/apt/sources.list.d/percona.list
-      apt-get update -qq
+    - apt-get install -qq --yes --no-install-recommends ca-certificates
+    - echo "deb https://repo.percona.com/apt/ bookworm main" > /etc/apt/sources.list.d/percona.list
+    - apt-get update -qq
     - apt-get install -qq --yes percona-xtradb-cluster-full-57 percona-xtrabackup-24 percona-toolkit
     # Ensure Percona 5.7 package actually got installed
     - dpkg -l | grep -e "percona.*5\.7"
