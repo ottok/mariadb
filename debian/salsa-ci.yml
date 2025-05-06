@@ -323,6 +323,24 @@ blhc:
       apt-get remove login mount perl -qq --yes --allow-remove-essential || true
     fi
   - |
+    # Upgrades from Ubuntu Noble fail on:
+    #   Prevent: dpkg-divert: error:
+    #   'diversion of /lib32 to /.lib32.usr-is-merged by base-files' clashes
+    #    with 'diversion of /lib32 to /lib32.usr-is-merged by base-files'
+    # This is because Noble already has these:
+    #   $ dpkg-divert --list | grep 'by base-files'
+    #   diversion of /libx32 to /.libx32.usr-is-merged by base-files
+    #   diversion of /lib32 to /.lib32.usr-is-merged by base-files
+    #   diversion of /libo32 to /.libo32.usr-is-merged by base-files
+    # Circumvent them by simply removing them before starting upgrade, as the
+    # upgrade of base-files will immediately put them back again:
+    if grep -q -E 'noble' /etc/os-release
+    then
+      BASE_DIVERSIONS="$(dpkg-divert --list | grep 'by base-files' | \
+                       grep --only-matching --perl-regex 'of\K /[a-z0-9]+ ')"
+      for x in $BASE_DIVERSIONS; do dpkg-divert --no-rename --remove $x; done
+    fi
+  - |
     # First 'apt-get upgrade' run fails on:
     #   dpkg (subprocess): unable to execute installed bash package post-installation script (/var/lib/dpkg/info/bash.postinst): No such file or directory
     # Second run fails on:
