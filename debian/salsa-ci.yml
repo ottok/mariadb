@@ -153,6 +153,15 @@ blhc:
   echo -e '#!/bin/sh\necho "N 5"' > /sbin/runlevel; chmod +x /sbin/runlevel
   # Never stop apt to ask for confirmation, just assume `--yes` all the time
   echo 'APT::Get::Assume-Yes "true";' > /etc/apt/apt.conf.d/assume-yes
+  # Ensure dpkg does not ask questions
+  export DEBIAN_FRONTEND=noninteractive
+  # Ensure dpkg does not stop to ask if config files should be kept, but instead
+  # just installs the maintainer version from the new package
+  cat > /etc/apt/apt.conf.d/99force-confnew <<EOF
+  Dpkg::Options {
+    "--force-confnew";
+  };
+  EOF
   # Avoid the warnings of "debconf: unable to initialize frontend: Dialog"
   echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
   # Emit non-zero exit code also on warnings to ensure CI stops on any issue
