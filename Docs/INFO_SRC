@@ -1,8 +1,8 @@
-commit: e69f8cae1a15e15b9e4f5e0f8497e1f17bdc81a4
-date: 2025-01-30 11:55:13 +0100
-build-date: 2025-01-30 11:01:27 +0000 
-short: e69f8cae1a1
+commit: cafd22db7970ce081bafd887359aa0a77cfb769d
+date: 2025-04-28 15:58:16 +0300
+build-date: 2025-04-28 13:44:27 +0000 
+short: cafd22db797
 branch: HEAD
 
 
-MariaDB source 10.11.11
+MariaDB source 10.11.12

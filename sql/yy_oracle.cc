@@ -39022,7 +39022,7 @@ yyreduce:
             if ((yyvsp[0].lex_str).str)
             {
               if (unlikely(Lex->sql_command == SQLCOM_CREATE_VIEW &&
-                          check_column_name((yyvsp[0].lex_str).str)))
+                          check_column_name((yyvsp[0].lex_str))))
                 my_yyabort_error((ER_WRONG_COLUMN_NAME, MYF(0), (yyvsp[0].lex_str).str));
               (yyvsp[-2].item)->base_flags|= item_base_t::IS_EXPLICIT_NAME;
               (yyvsp[-2].item)->set_name(thd, (yyvsp[0].lex_str));
