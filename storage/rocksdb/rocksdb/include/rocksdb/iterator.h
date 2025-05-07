@@ -53,11 +53,13 @@ class Iterator : public Cleanable {
   // All Seek*() methods clear any error status() that the iterator had prior to
   // the call; after the seek, status() indicates only the error (if any) that
   // happened during the seek, not any past errors.
+  // Target does not contain timestamp.
   virtual void Seek(const Slice& target) = 0;
 
   // Position at the last key in the source that at or before target.
   // The iterator is Valid() after this call iff the source contains
   // an entry that comes at or before target.
+  // Target does not contain timestamp.
   virtual void SeekForPrev(const Slice& target) = 0;
 
   // Moves to the next entry in the source.  After this call, Valid() is
@@ -90,6 +92,10 @@ class Iterator : public Cleanable {
   // If supported, renew the iterator to represent the latest state. The
   // iterator will be invalidated after the call. Not supported if
   // ReadOptions.snapshot is given when creating the iterator.
+  //
+  // WARNING: Do not use `Iterator::Refresh()` API on DBs where `DeleteRange()`
+  // has been used or will be used. This feature combination is neither
+  // supported nor programmatically prevented.
   virtual Status Refresh() {
     return Status::NotSupported("Refresh() is not supported");
   }
@@ -108,6 +114,11 @@ class Iterator : public Cleanable {
   //   Get the user-key portion of the internal key at which the iteration
   //   stopped.
   virtual Status GetProperty(std::string prop_name, std::string* prop);
+
+  virtual Slice timestamp() const {
+    assert(false);
+    return Slice();
+  }
 };
 
 // Return an empty iterator (yields nothing).

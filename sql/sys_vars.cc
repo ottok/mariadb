@@ -2982,7 +2982,7 @@ static const char *adjust_secondary_key_cost[]=
 {
   "adjust_secondary_key_cost", "disable_max_seek", "disable_forced_index_in_group_by",
   "fix_innodb_cardinality", "fix_reuse_range_for_ref",
-  "fix_card_multiplier", 0
+  "fix_card_multiplier", "fix_derived_table_read_cost", 0
 };
 
 
@@ -2999,8 +2999,9 @@ static Sys_var_set Sys_optimizer_adjust_secondary_key_costs(
     "secondary keys. "
     "fix_reuse_range_for_ref = Do a better job at reusing range access estimates "
     "when estimating ref access. "
-    "fix_card_multiplier = Fix the computation in selectivity_for_indexes."
-    " selectivity_multiplier. "
+    "fix_card_multiplier = Fix the computation in selectivity_for_indexes. "
+    "fix_derived_table_read_cost = Fix the cost of reading materialized "
+    "derived table. "
 
     "This variable will be deleted in MariaDB 11.0 as it is not needed with the "
     "new 11.0 optimizer.",
@@ -6309,7 +6310,9 @@ static const char *wsrep_binlog_format_names[]=
 static Sys_var_enum Sys_wsrep_forced_binlog_format(
        "wsrep_forced_binlog_format", "binlog format to take effect over user's choice",
        GLOBAL_VAR(wsrep_forced_binlog_format), CMD_LINE(REQUIRED_ARG),
-       wsrep_binlog_format_names, DEFAULT(BINLOG_FORMAT_UNSPEC));
+       wsrep_binlog_format_names, DEFAULT(BINLOG_FORMAT_UNSPEC),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG,
+       ON_CHECK(wsrep_forced_binlog_format_check));
 
 static Sys_var_mybool Sys_wsrep_recover_datadir(
        "wsrep_recover", "Recover database state after crash and exit",

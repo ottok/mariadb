@@ -5001,7 +5001,7 @@ static int test_conc_fraction(MYSQL *mysql)
 
   for (i=0; i < 10; i++, frac=frac*10+i)
   {
-    unsigned long expected= 0;
+    unsigned int expected= frac;
     sprintf(query, "SELECT '2018-11-05 22:25:59.%ld'", frac);
 
     diag("%d: %s", i, query);
@@ -5027,11 +5027,15 @@ static int test_conc_fraction(MYSQL *mysql)
 
     diag("second_part: %ld", tm.second_part);
 
-    expected= i > 6 ? 123456 : frac * (unsigned int)powl(10, (6 - i));
+    while (expected && expected < 100000)
+      expected *= 10;
+    while (expected >= 1000000)
+      expected /= 10;
 
     if (tm.second_part != expected)
     {
-      diag("Error: tm.second_part=%ld expected=%ld", tm.second_part, expected);
+      diag("Error: tm.second_part=%ld expected=%d", tm.second_part, expected);
+      mysql_stmt_close(stmt);
       return FAIL;
     }
   }
@@ -5618,6 +5622,7 @@ static int test_conc623(MYSQL *mysql)
   rc= mysql_stmt_attr_set(stmt, STMT_ATTR_CB_PARAM, conc623_param_callback);
   check_stmt_rc(rc, stmt);
 
+  memset(&bind, 0, sizeof(MYSQL_BIND));
   bind.buffer_type= MYSQL_TYPE_LONG;
   rc= mysql_stmt_bind_param(stmt, &bind);
   check_stmt_rc(rc, stmt);
@@ -5910,9 +5915,50 @@ static int test_conc176(MYSQL *mysql)
   return OK;
 }
 
+static int test_conc762(MYSQL *mysql)
+{
+  int rc;
+  MYSQL_STMT *stmt= mysql_stmt_init(mysql);
+  MYSQL_BIND bind[2];
+  my_bool is_null[2]= {1,1};
+  unsigned long length[2]= {1,1};
+
+  rc= mysql_stmt_prepare(stmt, SL("SELECT NULL, 'foo'"));
+  check_stmt_rc(rc, stmt);
+
+  memset(&bind, 0, sizeof(MYSQL_BIND) * 2);
+
+  bind[0].buffer_type = MYSQL_TYPE_STRING;
+  bind[1].buffer_type = MYSQL_TYPE_STRING;
+  bind[0].is_null= &is_null[0];
+  bind[1].is_null= &is_null[1];
+  bind[0].buffer_length= bind[1].buffer_length= 0;
+  bind[0].length= &length[0];
+  bind[1].length= &length[1];
+
+  rc= mysql_stmt_execute(stmt);
+  check_stmt_rc(rc, stmt);
+
+  rc= mysql_stmt_bind_result(stmt, bind);
+
+  mysql_stmt_fetch(stmt);
+  FAIL_IF(is_null[0]==0, "Expected NULL value");
+  FAIL_IF(is_null[1]==1, "Expected non NULL value");
+  FAIL_IF(length[0]!=0, "Expected length=0");
+  FAIL_IF(length[1]!=3, "Expected length=3");
+
+//  FAIL_IF(length[0] != 0, "Expected length=0");
+  
+//FAIL_IF(length[1] != 3, "Expected length=3)";
+
+  mysql_stmt_close(stmt);
+  return OK;
+}
+
 
 struct my_tests_st my_tests[] = {
   {"test_conc702", test_conc702, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
+  {"test_conc762", test_conc762, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_conc176", test_conc176, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_conc739", test_conc739, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_conc633", test_conc633, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},

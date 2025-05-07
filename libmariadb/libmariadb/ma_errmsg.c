@@ -119,6 +119,8 @@ const char *mariadb_client_errors[] =
   /* 5022 */ "File '%s' is not a binary log file",
   /* 5023 */ "Semi sync request error: %s",
   /* 5024 */ "Invalid client flags (%lu) specified. Supported flags: %lu",
+  /* 5025 */ "",
+  /* 5026 */ "Server returned an error packet without further information",
   ""
 };
 
