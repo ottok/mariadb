@@ -295,10 +295,13 @@ Copyright: 1979-2009 MySQL AB
            2011 Kentoku SHIBA
 License: GPL-2
 
-Files: include/maria.h include/myisamchk.h
+Files: include/maria.h
+ include/myisamchk.h
+ include/my_rnd.h
+ include/thr_timer.h
 Copyright: 2006-2008 MySQL AB
  2008-2009 Sun Microsystems, Inc
- 2009, 2013, Monty Program Ab
+ 2009, 2013, 2014 Monty Program Ab
 License: GPL-2+
 
 Files: plugin/auth_pam/testing/pam_mariadb_mtr.c
@@ -377,7 +380,7 @@ License: unlimited-free-doc
 Files: mysql-test/lib/mtr_misc.pl
  mysql-test/lib/My/SafeProcess.pm
 Copyright: 2004, 2007, 2011, Oracle and/or its affiliates
-License: LGPL
+License: LGPL-2
 
 Files:
  storage/myisam/ft_update.c
@@ -437,7 +440,7 @@ License: GPL-2+
 Files: sql-bench/*.sh
 Copyright: 2009 Sun Microsystems, Inc
            2000-2007 MySQL AB
-License: LGPL
+License: LGPL-2
 
 Files: client/completion_hash.h
  scripts/mysqlaccess.sh
@@ -446,7 +449,11 @@ Files: client/completion_hash.h
  storage/myisam/ftbench/ft-test-run.sh
  storage/myisam/mi_test_all.sh
  strings/ctype-uca.c
+ strings/ctype-uca.h
+ strings/ctype-uca1400.h
+ strings/ctype-uca-scanner_next.inl
  strings/ctype-ucs2.c
+ strings/ctype-unidata.c
  strings/ctype-utf8.c
  support-files/MacOSX/postflight.sh
  support-files/MacOSX/preflight.sh
@@ -462,7 +469,8 @@ Files: client/completion_hash.h
 Copyright: 2000-2013 Oracle and/or its affiliates
            2000-2007 MySQL AB
            2009 Sun Microsystems Inc
-License: LGPL
+           2009, 2018, 2020-2021, MariaDB
+License: LGPL-2
 
 Files: BUILD/util.sh
 Copyright: 2010 Kristian Nielsen and Monty Program AB
@@ -493,7 +501,14 @@ Files: strings/ctype-bin.c
 Copyright:
  2000,2002,2005-2011 Oracle and/or its affiliates
  tommy@valley.ne.jp
-License: LGPL
+License: LGPL-2
+
+Files: scripts/galera_new_cluster.sh
+ storage/connect/inihandl.cpp
+Copyright: 1993 Miguel de Icaza
+ 1996 Alexandre Julliard
+ MariaDB Foundation
+License: LGPL-2.1+
 
 Files: scripts/mysqld_safe.sh
  support-files/mysql-multi.server.sh
@@ -505,64 +520,11 @@ Files: storage/innobase/include/pars0grm.h storage/innobase/pars/pars0grm.cc
 Copyright: 1995-2009 Innobase Oy.
  1984,1989-1990,2000-2004 Free Software Foundation Inc.
 License: GPL-2+-with-bison-exception
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2, or (at your option)
- any later version.
- .
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- .
- You should have received a copy of the GNU General Public License
- along with this program; if not, see <https://www.gnu.org/licenses/>.
- .
- As a special exception, you may create a larger work that contains
- part or all of the Bison parser skeleton and distribute that work
- under terms of your choice, so long as that work isn't itself a
- parser generator using the skeleton or a modified version thereof
- as a parser skeleton.  Alternatively, if you modify or redistribute
- the parser skeleton itself, you may (at your option) remove this
- special exception, which will cause the skeleton and the resulting
- Bison output files to be licensed under the GNU General Public
- License without this special exception.
- .
- This special exception was added by the Free Software Foundation in
- version 2.2 of Bison.
 
 Files: storage/innobase/fts/fts0pars.cc
  storage/innobase/include/fts0pars.h
 Copyright: 1984, 1989-1990, 2000-2006  Free Software Foundation, Inc.
 License: GPL-3+-with-bison-exception
-
-License: GPL-3+-with-bison-exception
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
- .
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- .
- You should have received a copy of the GNU General Public License
- along with this program.  If not, see <https://www.gnu.org/licenses/>.
- .
- As a special exception, you may create a larger work that contains
- part or all of the Bison parser skeleton and distribute that work
- under terms of your choice, so long as that work isn't itself a
- parser generator using the skeleton or a modified version thereof
- as a parser skeleton.  Alternatively, if you modify or redistribute
- the parser skeleton itself, you may (at your option) remove this
- special exception, which will cause the skeleton and the resulting
- Bison output files to be licensed under the GNU General Public
- License without this special exception.
- .
- This special exception was added by the Free Software Foundation in
- version 2.2 of Bison.
-
 
 Files: include/t_ctype.h
  strings/t_ctype.h
@@ -637,13 +599,15 @@ License: GPL-2
 Files: strings/dtoa.c
 Copyright: 2007-2012 Oracle and/or its affiliates.
  1991,2000-2001 Lucent Technologies
-License: LGPL
+ 2017, 2020, MariaDB Corporation
+License: LGPL-2
 
 Files: scripts/mysqldumpslow.sh
 Copyright:
  2000-2002,2005-2008 MySQL AB
  2008-2009 Sun Microsystems Inc
-License: LGPL
+ 2000, 2017, Oracle and/or its affiliates
+License: LGPL-2
 
 Files: libmysqld/lib_sql.cc
 Copyright: 2000 SWsoft  company
@@ -690,6 +654,137 @@ Files: wsrep-lib/*
 Copyright: 2008-2019 Codership Oy <https://galeracluster.com/>
 License: GPL-2
 
+Files:
+ wsrep-lib/dbsim/db_client.cpp
+ wsrep-lib/dbsim/db_client.hpp
+ wsrep-lib/dbsim/db_client_service.cpp
+ wsrep-lib/dbsim/db_client_service.hpp
+ wsrep-lib/dbsim/db_client_state.hpp
+ wsrep-lib/dbsim/db_high_priority_service.cpp
+ wsrep-lib/dbsim/db_high_priority_service.hpp
+ wsrep-lib/dbsim/db_params.cpp
+ wsrep-lib/dbsim/db_params.hpp
+ wsrep-lib/dbsim/db_server.cpp
+ wsrep-lib/dbsim/db_server.hpp
+ wsrep-lib/dbsim/db_server_service.cpp
+ wsrep-lib/dbsim/db_server_service.hpp
+ wsrep-lib/dbsim/db_server_state.cpp
+ wsrep-lib/dbsim/db_server_state.hpp
+ wsrep-lib/dbsim/db_simulator.cpp
+ wsrep-lib/dbsim/db_simulator.hpp
+ wsrep-lib/dbsim/db_storage_engine.cpp
+ wsrep-lib/dbsim/db_storage_engine.hpp
+ wsrep-lib/dbsim/db_storage_service.hpp
+ wsrep-lib/dbsim/db_threads.cpp
+ wsrep-lib/dbsim/db_threads.hpp
+ wsrep-lib/dbsim/db_tls.cpp
+ wsrep-lib/dbsim/db_tls.hpp
+ wsrep-lib/dbsim/dbsim.cpp
+ wsrep-lib/include/wsrep/allowlist_service.hpp
+ wsrep-lib/include/wsrep/atomic.hpp
+ wsrep-lib/include/wsrep/buffer.hpp
+ wsrep-lib/include/wsrep/chrono.hpp
+ wsrep-lib/include/wsrep/client_id.hpp
+ wsrep-lib/include/wsrep/client_service.hpp
+ wsrep-lib/include/wsrep/client_state.hpp
+ wsrep-lib/include/wsrep/compiler.hpp
+ wsrep-lib/include/wsrep/condition_variable.hpp
+ wsrep-lib/include/wsrep/encryption_service.hpp
+ wsrep-lib/include/wsrep/event_service.hpp
+ wsrep-lib/include/wsrep/exception.hpp
+ wsrep-lib/include/wsrep/gtid.hpp
+ wsrep-lib/include/wsrep/high_priority_service.hpp
+ wsrep-lib/include/wsrep/id.hpp
+ wsrep-lib/include/wsrep/key.hpp
+ wsrep-lib/include/wsrep/lock.hpp
+ wsrep-lib/include/wsrep/logger.hpp
+ wsrep-lib/include/wsrep/mutex.hpp
+ wsrep-lib/include/wsrep/provider.hpp
+ wsrep-lib/include/wsrep/provider_options.hpp
+ wsrep-lib/include/wsrep/reporter.hpp
+ wsrep-lib/include/wsrep/seqno.hpp
+ wsrep-lib/include/wsrep/server_service.hpp
+ wsrep-lib/include/wsrep/server_state.hpp
+ wsrep-lib/include/wsrep/sr_key_set.hpp
+ wsrep-lib/include/wsrep/storage_service.hpp
+ wsrep-lib/include/wsrep/streaming_context.hpp
+ wsrep-lib/include/wsrep/thread.hpp
+ wsrep-lib/include/wsrep/thread_service.hpp
+ wsrep-lib/include/wsrep/tls_service.hpp
+ wsrep-lib/include/wsrep/transaction.hpp
+ wsrep-lib/include/wsrep/transaction_id.hpp
+ wsrep-lib/include/wsrep/version.hpp
+ wsrep-lib/include/wsrep/view.hpp
+ wsrep-lib/include/wsrep/xid.hpp
+ wsrep-lib/scripts/benchmark-provider.sh
+ wsrep-lib/scripts/benchmark-report.sh
+ wsrep-lib/scripts/stress-provider.sh
+ wsrep-lib/src/allowlist_service_v1.cpp
+ wsrep-lib/src/allowlist_service_v1.hpp
+ wsrep-lib/src/client_state.cpp
+ wsrep-lib/src/config_service_v1.cpp
+ wsrep-lib/src/config_service_v1.hpp
+ wsrep-lib/src/event_service_v1.cpp
+ wsrep-lib/src/event_service_v1.hpp
+ wsrep-lib/src/exception.cpp
+ wsrep-lib/src/gtid.cpp
+ wsrep-lib/src/id.cpp
+ wsrep-lib/src/key.cpp
+ wsrep-lib/src/logger.cpp
+ wsrep-lib/src/provider.cpp
+ wsrep-lib/src/provider_options.cpp
+ wsrep-lib/src/reporter.cpp
+ wsrep-lib/src/seqno.cpp
+ wsrep-lib/src/server_state.cpp
+ wsrep-lib/src/service_helpers.hpp
+ wsrep-lib/src/sr_key_set.cpp
+ wsrep-lib/src/streaming_context.cpp
+ wsrep-lib/src/thread.cpp
+ wsrep-lib/src/thread_service_v1.cpp
+ wsrep-lib/src/thread_service_v1.hpp
+ wsrep-lib/src/tls_service_v1.cpp
+ wsrep-lib/src/tls_service_v1.hpp
+ wsrep-lib/src/transaction.cpp
+ wsrep-lib/src/uuid.cpp
+ wsrep-lib/src/uuid.hpp
+ wsrep-lib/src/view.cpp
+ wsrep-lib/src/wsrep_provider_v26.cpp
+ wsrep-lib/src/wsrep_provider_v26.hpp
+ wsrep-lib/src/xid.cpp
+ wsrep-lib/test/buffer_test.cpp
+ wsrep-lib/test/client_state_fixture.hpp
+ wsrep-lib/test/gtid_test.cpp
+ wsrep-lib/test/id_test.cpp
+ wsrep-lib/test/mock_client_state.cpp
+ wsrep-lib/test/mock_client_state.hpp
+ wsrep-lib/test/mock_high_priority_service.cpp
+ wsrep-lib/test/mock_high_priority_service.hpp
+ wsrep-lib/test/mock_provider.hpp
+ wsrep-lib/test/mock_server_state.hpp
+ wsrep-lib/test/mock_storage_service.cpp
+ wsrep-lib/test/mock_storage_service.hpp
+ wsrep-lib/test/nbo_test.cpp
+ wsrep-lib/test/reporter_test.cpp
+ wsrep-lib/test/rsu_test.cpp
+ wsrep-lib/test/server_context_test.cpp
+ wsrep-lib/test/test_utils.cpp
+ wsrep-lib/test/test_utils.hpp
+ wsrep-lib/test/toi_test.cpp
+ wsrep-lib/test/transaction_test.cpp
+ wsrep-lib/test/transaction_test_2pc.cpp
+ wsrep-lib/test/view_test.cpp
+ wsrep-lib/test/wsrep-lib_test.cpp
+ wsrep-lib/test/xid_test.cpp
+ wsrep-lib/wsrep-API/v26/wsrep_allowlist_service.h
+ wsrep-lib/wsrep-API/v26/wsrep_config_service.h
+ wsrep-lib/wsrep-API/v26/wsrep_event_service.h
+ wsrep-lib/wsrep-API/v26/wsrep_membership_service.h
+ wsrep-lib/wsrep-API/v26/wsrep_node_isolation.h
+ wsrep-lib/wsrep-API/v26/wsrep_thread_service.h
+ wsrep-lib/wsrep-API/v26/wsrep_tls_service.h
+Copyright: 2008-2019 Codership Oy <https://galeracluster.com/>
+License: GPL-2+
+
 Files: libmariadb/*
 Copyright:
  2000-2012 MySQL AB & MySQL Finland AB & TCX DataKonsult AB
@@ -698,6 +793,11 @@ Copyright:
  2014-2020 MariaDB Corporation Ab
  2014 Kristian Nielsen & MariaDB Corporation
 License: LGPL-2+
+
+Files: libmariadb/cmake/*
+Copyright: 2013-2018 MariaDB Corporation AB
+ 2010, Michael Bell <michael.bell@web.de>
+License: BSD-3-Clause
 
 Files: libmariadb/libmariadb/mariadb_dyncol.*
 Copyright:
@@ -709,17 +809,13 @@ Files: libmariadb/libmariadb/ma_dtoa.*
 Copyright:
  1991, 2000-2001, Lucent Technologies
  2007, 2012, Oracle and/or its affiliates.
-License: LGPL
+ 2016, 2022, MariaDB Corporation
+License: LGPL-2
 
 Files: libmariadb/unittest/libmariadb/getopt.*
 Copyright:
  1989-1994, Free Software Foundation, Inc
 License: LGPL-2+
-
-Files: libmariadb/cmake/FindIconv.cmake
-Copyright:
- 2010, Michael Bell <michael.bell@web.de>
-License: BSD-2-Clause
 
 Files: storage/archive/azio.c
  storage/archive/azlib.h
@@ -728,21 +824,6 @@ Copyright:
  1995-2005 Jean-loup Gailly
  1995-2005 Mark Adler
 License: zlib/libpng
-  This software is provided 'as-is', without any express or implied
-  warranty.  In no event will the authors be held liable for any damages
-  arising from the use of this software.
-  .
-  Permission is granted to anyone to use this software for any purpose,
-  including commercial applications, and to alter it and redistribute it
-  freely, subject to the following restrictions:
-  .
-  1. The origin of this software must not be misrepresented; you must not
-     claim that you wrote the original software. If you use this software
-     in a product, an acknowledgment in the product documentation would be
-     appreciated but is not required.
-  2. Altered source versions must be plainly marked as such, and must not be
-     misrepresented as being the original software.
-  3. This notice may not be removed or altered from any source distribution.
 
 Files: mysys/CMakeLists.txt
 Copyright: 2006, 2014, Oracle and/or its affiliates
@@ -789,22 +870,59 @@ Comment:
  On Debian systems, the complete text of the GNU General Public
  License version 2 can be found in `/usr/share/common-licenses/GPL-2`.
 
-License: LGPL
- This library is free software; you can redistribute it and/or
- modify it under the terms of the GNU Library General Public
- License as published by the Free Software Foundation; version 2
- of the License.
+License: GPL-2+-with-bison-exception
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2, or (at your option)
+ any later version.
  .
- This library is distributed in the hope that it will be useful,
+ This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- Library General Public License for more details.
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
  .
- You should have received a copy of the GNU Library General Public
- License along with this library; if not, see <https://www.gnu.org/licenses/>.
-Comment:
- On Debian systems, the complete text of the GNU Library General Public
- License version 2 can be found in "/usr/share/common-licenses/LGPL-2".
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, see <https://www.gnu.org/licenses/>.
+ .
+ As a special exception, you may create a larger work that contains
+ part or all of the Bison parser skeleton and distribute that work
+ under terms of your choice, so long as that work isn't itself a
+ parser generator using the skeleton or a modified version thereof
+ as a parser skeleton.  Alternatively, if you modify or redistribute
+ the parser skeleton itself, you may (at your option) remove this
+ special exception, which will cause the skeleton and the resulting
+ Bison output files to be licensed under the GNU General Public
+ License without this special exception.
+ .
+ This special exception was added by the Free Software Foundation in
+ version 2.2 of Bison.
+
+License: GPL-3+-with-bison-exception
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ .
+ As a special exception, you may create a larger work that contains
+ part or all of the Bison parser skeleton and distribute that work
+ under terms of your choice, so long as that work isn't itself a
+ parser generator using the skeleton or a modified version thereof
+ as a parser skeleton.  Alternatively, if you modify or redistribute
+ the parser skeleton itself, you may (at your option) remove this
+ special exception, which will cause the skeleton and the resulting
+ Bison output files to be licensed under the GNU General Public
+ License without this special exception.
+ .
+ This special exception was added by the Free Software Foundation in
+ version 2.2 of Bison.
 
 License: LGPL-2
  This library is free software; you can redistribute it and/or
@@ -857,7 +975,7 @@ Comment:
  On Debian systems, the complete text of the GNU Library General Public
  License version 2.1 can be found in `/usr/share/common-licenses/LGPL-2.1`.
 
-License: BSD-2-clause
+License: BSD-2-Clause
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are
  met:
@@ -881,147 +999,34 @@ License: BSD-3-clause
  3. Neither the name of the University nor the names of its contributors
     may be used to endorse or promote products derived from this software
     without specific prior written permission.
- .
- THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- SUCH DAMAGE.
+Comment:
+ On Debian systems, the complete text of the BSD-3-Clause License can be
+ found in `/usr/share/common-licenses/BSD`.
 
 License: Artistic
- The "Artistic License"
- .
- Preamble
- .
- The intent of this document is to state the conditions under which a
- Package may be copied, such that the Copyright Holder maintains some
- semblance of artistic control over the development of the package,
- while giving the users of the package the right to use and distribute
- the Package in a more-or-less customary fashion, plus the right to make
- reasonable modifications.
- .
- Definitions:
- .
- "Package" refers to the collection of files distributed by the
- Copyright Holder, and derivatives of that collection of files
- created through textual modification.
- .
- "Standard Version" refers to such a Package if it has not been
- modified, or has been modified in accordance with the wishes
- of the Copyright Holder as specified below.
- .
- "Copyright Holder" is whoever is named in the copyright or
- copyrights for the package.
- .
- "You" is you, if you're thinking about copying or distributing
- this Package.
- .
- "Reasonable copying fee" is whatever you can justify on the
- basis of media cost, duplication charges, time of people involved,
- and so on.  (You will not be required to justify it to the
- Copyright Holder, but only to the computing community at large
- as a market that must bear the fee.)
- .
- "Freely Available" means that no fee is charged for the item
- itself, though there may be fees involved in handling the item.
- It also means that recipients of the item may redistribute it
- under the same conditions they received it.
- .
- 1. You may make and give away verbatim copies of the source form of the
- Standard Version of this Package without restriction, provided that you
- duplicate all of the original copyright notices and associated disclaimers.
- .
- 2. You may apply bug fixes, portability fixes and other modifications
- derived from the Public Domain or from the Copyright Holder.  A Package
- modified in such a way shall still be considered the Standard Version.
- .
- 3. You may otherwise modify your copy of this Package in any way, provided
- that you insert a prominent notice in each changed file stating how and
- when you changed that file, and provided that you do at least ONE of the
- following:
- .
-     a) place your modifications in the Public Domain or otherwise make them
-     Freely Available, such as by posting said modifications to Usenet or
-     an equivalent medium, or placing the modifications on a major archive
-     site such as uunet.uu.net, or by allowing the Copyright Holder to include
-     your modifications in the Standard Version of the Package.
- .
-     b) use the modified Package only within your corporation or organization.
- .
-     c) rename any non-standard executables so the names do not conflict
-     with standard executables, which must also be provided, and provide
-     a separate manual page for each non-standard executable that clearly
-     documents how it differs from the Standard Version.
- .
-     d) make other distribution arrangements with the Copyright Holder.
- .
- 4. You may distribute the programs of this Package in object code or
- executable form, provided that you do at least ONE of the following:
- .
-     a) distribute a Standard Version of the executables and library files,
-     together with instructions (in the manual page or equivalent) on where
-     to get the Standard Version.
- .
-     b) accompany the distribution with the machine-readable source of
-     the Package with your modifications.
- .
-     c) give non-standard executables non-standard names, and clearly
-     document the differences in manual pages (or equivalent), together
-     with instructions on where to get the Standard Version.
- .
-     d) make other distribution arrangements with the Copyright Holder.
- .
- 5. You may charge a reasonable copying fee for any distribution of this
- Package.  You may charge any fee you choose for support of this
- Package.  You may not charge a fee for this Package itself.  However,
- you may distribute this Package in aggregate with other (possibly
- commercial) programs as part of a larger (possibly commercial) software
- distribution provided that you do not advertise this Package as a
- product of your own.  You may embed this Package's interpreter within
- an executable of yours (by linking); this shall be construed as a mere
- form of aggregation, provided that the complete Standard Version of the
- interpreter is so embedded.
- .
- 6. The scripts and library files supplied as input to or produced as
- output from the programs of this Package do not automatically fall
- under the copyright of this Package, but belong to whoever generated
- them, and may be sold commercially, and may be aggregated with this
- Package.  If such scripts or library files are aggregated with this
- Package via the so-called "undump" or "unexec" methods of producing a
- binary executable image, then distribution of such an image shall
- neither be construed as a distribution of this Package nor shall it
- fall under the restrictions of Paragraphs 3 and 4, provided that you do
- not represent such an executable image as a Standard Version of this
- Package.
- .
- 7. C subroutines (or comparably compiled subroutines in other
- languages) supplied by you and linked into this Package in order to
- emulate subroutines and variables of the language defined by this
- Package shall not be considered part of this Package, but are the
- equivalent of input as in Paragraph 6, provided these subroutines do
- not change the language in any way that would cause it to fail the
- regression tests for the language.
- .
- 8. Aggregation of this Package with a commercial distribution is always
- permitted provided that the use of this Package is embedded; that is,
- when no overt attempt is made to make this Package's interfaces visible
- to the end user of the commercial distribution.  Such use shall not be
- construed as a distribution of this Package.
- .
- 9. The name of the Copyright Holder may not be used to endorse or promote
- products derived from this software without specific prior written permission.
- .
- 10. THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR
- IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
- WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
- .
- The End
+ THIS PROGRAM IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+ WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+ MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+Comment:
+ On Debian systems, the complete text of the Artistic License can be
+ found in `/usr/share/common-licenses/Artistic`.
+
+License: zlib/libpng
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+  .
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+  .
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
 
 License: public-domain
  The work is public domain (no license).
