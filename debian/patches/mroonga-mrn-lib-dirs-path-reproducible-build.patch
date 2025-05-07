@@ -13,7 +13,7 @@ Forwarded: not-needed
  1 file changed, 4 insertions(+), 8 deletions(-)
 
 diff --git a/storage/mroonga/CMakeLists.txt b/storage/mroonga/CMakeLists.txt
-index 399201a..f1b26dd 100644
+index bdda771..14e9f49 100644
 --- a/storage/mroonga/CMakeLists.txt
 +++ b/storage/mroonga/CMakeLists.txt
 @@ -214,7 +214,7 @@ set(MYSQL_INCLUDE_DIRS

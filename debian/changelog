@@ -1,6 +1,15 @@
-mariadb (1:11.4.5-0ubuntu0.25.04.1) UNRELEASED; urgency=medium
+mariadb (1:11.4.6-0ubuntu0.25.04.1) plucky-security; urgency=medium
 
-  * Start new git branch for Ubuntu 25.04 (Plucky Puffin) maintenance
+  * SECURITY UPDATE: New upstream version 11.4.6 includes fixes for regressions
+    as noted at https://mariadb.com/kb/en/mariadb-11-4-6-release-notes/ and
+    also fixes the following security vulnerabilities (LP: #2110070):
+    - CVE-2023-52969
+    - CVE-2023-52970
+    - CVE-2023-52971
+    - CVE-2025-30693
+    - CVE-2025-30722
+  * Drop all RocksDB patches now upstream due to update to version 6.29fb
+  * Drop PCRE2 10.45 compatibility patch obsoleted by upstream test change
 
  -- Otto Kekäläinen <otto@debian.org>  Wed, 07 May 2025 09:43:28 -0700
 

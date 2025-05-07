@@ -46,10 +46,10 @@ index 2aa2355..2dbd03d 100644
  
  #ifdef HAVE_READLINE
 diff --git a/sql/mysqld.cc b/sql/mysqld.cc
-index 2d91cad..d063745 100644
+index 47050d9..75e3ca1 100644
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
-@@ -4952,13 +4952,23 @@ static int init_server_components()
+@@ -4955,13 +4955,23 @@ static int init_server_components()
  
    /*
      Print source revision hash, as one of the first lines, if not the
