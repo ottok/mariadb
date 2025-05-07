@@ -1307,6 +1307,13 @@ got_deleted:
 	} else if (p.second // the first FILE_MODIFY or FILE_RENAME
 		   || f.name != fname.name) {
 reload:
+		if (f.name.size() == 0) {
+			/* Augment the recv_spaces.emplace_hint() for the
+			FILE_MODIFY record that had been added by
+			recv_sys_t::parse() */
+			f.name = fname.name;
+		}
+
 		fil_space_t*	space;
 
 		/* Check if the tablespace file exists and contains
@@ -2577,8 +2584,8 @@ page_id_corrupted:
       if (i != recv_spaces.end() && i->first == space_id);
       else if (recovered_lsn < mlog_checkpoint_lsn)
         /* We have not seen all records between the checkpoint and
-        FILE_CHECKPOINT. There should be a FILE_DELETE for this
-        tablespace later. */
+        FILE_CHECKPOINT. There should be a FILE_DELETE or FILE_MODIFY
+        for this tablespace later, to be handled in fil_name_process() */
         recv_spaces.emplace_hint(i, space_id, file_name_t("", false));
       else
       {
@@ -4158,7 +4165,7 @@ recv_init_missing_space(dberr_t err, const recv_spaces_t::const_iterator& i)
 		break;
 	case SRV_OPERATION_RESTORE:
 	case SRV_OPERATION_RESTORE_EXPORT:
-		if (i->second.name.find("/#sql") != std::string::npos) {
+		if (i->second.name.find("/#sql") == std::string::npos) {
 			ib::warn() << "Tablespace " << i->first << " was not"
 				" found at " << i->second.name << " when"
 				" restoring a (partial?) backup. All redo log"
@@ -4842,28 +4849,43 @@ bool recv_dblwr_t::validate_page(const page_id_t page_id, lsn_t max_lsn,
   goto check_if_corrupted;
 }
 
-byte *recv_dblwr_t::find_encrypted_page(const fil_node_t &node,
-                                        uint32_t page_no,
-                                        byte *buf) noexcept
+ATTRIBUTE_COLD
+byte *recv_dblwr_t::find_deferred_page(const fil_node_t &node,
+                                       uint32_t page_no,
+                                       byte *buf) noexcept
 {
-  ut_ad(node.space->crypt_data);
   ut_ad(node.space->full_crc32());
   mysql_mutex_lock(&recv_sys.mutex);
   byte *result_page= nullptr;
+  bool is_encrypted= node.space->crypt_data &&
+                     node.space->crypt_data->is_encrypted();
   for (list::iterator page_it= pages.begin(); page_it != pages.end();
        page_it++)
   {
     if (page_get_page_no(*page_it) != page_no ||
         buf_page_is_corrupted(true, *page_it, node.space->flags))
       continue;
+
+    if (is_encrypted &&
+        !mach_read_from_4(*page_it + FIL_PAGE_FCRC32_KEY_VERSION))
+      continue;
+
     memcpy(buf, *page_it, node.space->physical_size());
     buf_tmp_buffer_t *slot= buf_pool.io_buf_reserve(false);
     ut_a(slot);
     slot->allocate();
-    bool invalidate=
-      !fil_space_decrypt(node.space, slot->crypt_buf, buf) ||
-      (node.space->is_compressed() &&
-       !fil_page_decompress(slot->crypt_buf, buf, node.space->flags));
+
+    bool invalidate= false;
+    if (is_encrypted)
+    {
+      invalidate= !fil_space_decrypt(node.space, slot->crypt_buf, buf);
+      if (!invalidate && node.space->is_compressed())
+        goto decompress;
+    }
+    else
+decompress:
+      invalidate= !fil_page_decompress(slot->crypt_buf, buf,
+                                       node.space->flags);
     slot->release();
 
     if (invalidate ||
