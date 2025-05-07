@@ -7,6 +7,3 @@ fix-reproducible-builds-rocksdb.patch
 mroonga-mrn-lib-dirs-path-reproducible-build.patch
 2006-kfreebsd-amd64.patch
 1063738-revert-c432c9ef.patch
-MDEV-36217-Fix-building-with-older-Clang-on-RISC-V.patch
-1099515-insert-select-not-null.patch
-MDEV-36229-Remove-CAP_DAC_OVERRIDE-CAP_AUDIT_WRITE-from-AmbientCapabilities.patch
