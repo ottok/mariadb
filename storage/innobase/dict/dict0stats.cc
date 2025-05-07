@@ -2896,11 +2896,12 @@ dict_stats_save(
 	pars_info_t*	pinfo;
 	char		db_utf8[MAX_DB_UTF8_LEN];
 	char		table_utf8[MAX_TABLE_UTF8_LEN];
+	THD* const	thd = current_thd;
 
 #ifdef ENABLED_DEBUG_SYNC
 	DBUG_EXECUTE_IF("dict_stats_save_exit_notify",
-	   SCOPE_EXIT([] {
-	       debug_sync_set_action(current_thd,
+	   SCOPE_EXIT([thd] {
+	       debug_sync_set_action(thd,
 	       STRING_WITH_LEN("now SIGNAL dict_stats_save_finished"));
 	    });
 	);
@@ -2914,41 +2915,10 @@ dict_stats_save(
 		return (dict_stats_report_error(table));
 	}
 
-	THD* thd = current_thd;
-	MDL_ticket *mdl_table = nullptr, *mdl_index = nullptr;
-	dict_table_t* table_stats = dict_table_open_on_name(
-		TABLE_STATS_NAME, false, DICT_ERR_IGNORE_NONE);
-	if (table_stats) {
-		dict_sys.freeze(SRW_LOCK_CALL);
-		table_stats = dict_acquire_mdl_shared<false>(table_stats, thd,
-							     &mdl_table);
-		dict_sys.unfreeze();
-	}
-	if (!table_stats
-	    || strcmp(table_stats->name.m_name, TABLE_STATS_NAME)) {
-release_and_exit:
-		if (table_stats) {
-			dict_table_close(table_stats, false, thd, mdl_table);
-		}
+	dict_stats stats;
+	if (stats.open(thd)) {
 		return DB_STATS_DO_NOT_EXIST;
 	}
-
-	dict_table_t* index_stats = dict_table_open_on_name(
-		INDEX_STATS_NAME, false, DICT_ERR_IGNORE_NONE);
-	if (index_stats) {
-		dict_sys.freeze(SRW_LOCK_CALL);
-		index_stats = dict_acquire_mdl_shared<false>(index_stats, thd,
-							     &mdl_index);
-		dict_sys.unfreeze();
-	}
-	if (!index_stats) {
-		goto release_and_exit;
-	}
-	if (strcmp(index_stats->name.m_name, INDEX_STATS_NAME)) {
-		dict_table_close(index_stats, false, thd, mdl_index);
-		goto release_and_exit;
-	}
-
 	dict_fs2utf8(table->name.m_name, db_utf8, sizeof(db_utf8),
 		     table_utf8, sizeof(table_utf8));
 	const time_t now = time(NULL);
@@ -2957,9 +2927,9 @@ release_and_exit:
 	trx_start_internal(trx);
 	dberr_t ret = trx->read_only
 		? DB_READ_ONLY
-		: lock_table_for_trx(table_stats, trx, LOCK_X);
+		: lock_table_for_trx(stats.table(), trx, LOCK_X);
 	if (ret == DB_SUCCESS) {
-		ret = lock_table_for_trx(index_stats, trx, LOCK_X);
+		ret = lock_table_for_trx(stats.index(), trx, LOCK_X);
 	}
 	if (ret != DB_SUCCESS) {
 		if (trx->state != TRX_STATE_NOT_STARTED) {
@@ -3014,8 +2984,7 @@ free_and_exit:
 		dict_sys.unlock();
 unlocked_free_and_exit:
 		trx->free();
-		dict_table_close(table_stats, false, thd, mdl_table);
-		dict_table_close(index_stats, false, thd, mdl_index);
+		stats.close();
 		return ret;
 	}
 
@@ -3485,9 +3454,7 @@ dict_stats_fetch_from_ps(
 	dict_table_t*	table)	/*!< in/out: table */
 {
 	index_fetch_t	index_fetch_arg;
-	trx_t*		trx;
 	pars_info_t*	pinfo;
-	dberr_t		ret;
 	char		db_utf8[MAX_DB_UTF8_LEN];
 	char		table_utf8[MAX_TABLE_UTF8_LEN];
 
@@ -3497,48 +3464,15 @@ dict_stats_fetch_from_ps(
 	stats. */
 	dict_stats_empty_table(table, true);
 
-	THD* thd = current_thd;
-	MDL_ticket *mdl_table = nullptr, *mdl_index = nullptr;
-	dict_table_t* table_stats = dict_table_open_on_name(
-		TABLE_STATS_NAME, false, DICT_ERR_IGNORE_NONE);
-	if (table_stats) {
-		dict_sys.freeze(SRW_LOCK_CALL);
-		table_stats = dict_acquire_mdl_shared<false>(table_stats, thd,
-							     &mdl_table);
-		dict_sys.unfreeze();
-	}
-	if (!table_stats
-	    || strcmp(table_stats->name.m_name, TABLE_STATS_NAME)) {
-release_and_exit:
-		if (table_stats) {
-			dict_table_close(table_stats, false, thd, mdl_table);
-		}
+	THD* const thd = current_thd;
+	dict_stats stats;
+	if (stats.open(thd)) {
 		return DB_STATS_DO_NOT_EXIST;
-	}
-
-	dict_table_t* index_stats = dict_table_open_on_name(
-		INDEX_STATS_NAME, false, DICT_ERR_IGNORE_NONE);
-	if (index_stats) {
-		dict_sys.freeze(SRW_LOCK_CALL);
-		index_stats = dict_acquire_mdl_shared<false>(index_stats, thd,
-							     &mdl_index);
-		dict_sys.unfreeze();
-	}
-	if (!index_stats) {
-		goto release_and_exit;
-	}
-	if (strcmp(index_stats->name.m_name, INDEX_STATS_NAME)) {
-		dict_table_close(index_stats, false, thd, mdl_index);
-		goto release_and_exit;
 	}
 
 #ifdef ENABLED_DEBUG_SYNC
 	DEBUG_SYNC(thd, "dict_stats_mdl_acquired");
 #endif /* ENABLED_DEBUG_SYNC */
-
-	trx = trx_create();
-
-	trx_start_internal_read_only(trx);
 
 	dict_fs2utf8(table->name.m_name, db_utf8, sizeof(db_utf8),
 		     table_utf8, sizeof(table_utf8));
@@ -3560,76 +3494,77 @@ release_and_exit:
 			        "fetch_index_stats_step",
 			        dict_stats_fetch_index_stats_step,
 			        &index_fetch_arg);
-	dict_sys.lock(SRW_LOCK_CALL); /* FIXME: remove this */
-	ret = que_eval_sql(pinfo,
-			   "PROCEDURE FETCH_STATS () IS\n"
-			   "found INT;\n"
-			   "DECLARE FUNCTION fetch_table_stats_step;\n"
-			   "DECLARE FUNCTION fetch_index_stats_step;\n"
-			   "DECLARE CURSOR table_stats_cur IS\n"
-			   "  SELECT\n"
-			   /* if you change the selected fields, be
-			   sure to adjust
-			   dict_stats_fetch_table_stats_step() */
-			   "  n_rows,\n"
-			   "  clustered_index_size,\n"
-			   "  sum_of_other_index_sizes\n"
-			   "  FROM \"" TABLE_STATS_NAME "\"\n"
-			   "  WHERE\n"
-			   "  database_name = :database_name AND\n"
-			   "  table_name = :table_name;\n"
-			   "DECLARE CURSOR index_stats_cur IS\n"
-			   "  SELECT\n"
-			   /* if you change the selected fields, be
-			   sure to adjust
-			   dict_stats_fetch_index_stats_step() */
-			   "  index_name,\n"
-			   "  stat_name,\n"
-			   "  stat_value,\n"
-			   "  sample_size\n"
-			   "  FROM \"" INDEX_STATS_NAME "\"\n"
-			   "  WHERE\n"
-			   "  database_name = :database_name AND\n"
-			   "  table_name = :table_name;\n"
+	dict_sys.lock(SRW_LOCK_CALL);
+	que_t* graph = pars_sql(
+		pinfo,
+		"PROCEDURE FETCH_STATS () IS\n"
+		"found INT;\n"
+		"DECLARE FUNCTION fetch_table_stats_step;\n"
+		"DECLARE FUNCTION fetch_index_stats_step;\n"
+		"DECLARE CURSOR table_stats_cur IS\n"
+		"  SELECT\n"
+		/* if you change the selected fields, be
+		sure to adjust
+		dict_stats_fetch_table_stats_step() */
+		"  n_rows,\n"
+		"  clustered_index_size,\n"
+		"  sum_of_other_index_sizes\n"
+		"  FROM \"" TABLE_STATS_NAME "\"\n"
+		"  WHERE\n"
+		"  database_name = :database_name AND\n"
+		"  table_name = :table_name;\n"
+		"DECLARE CURSOR index_stats_cur IS\n"
+		"  SELECT\n"
+		/* if you change the selected fields, be
+		sure to adjust
+		dict_stats_fetch_index_stats_step() */
+		"  index_name,\n"
+		"  stat_name,\n"
+		"  stat_value,\n"
+		"  sample_size\n"
+		"  FROM \"" INDEX_STATS_NAME "\"\n"
+		"  WHERE\n"
+		"  database_name = :database_name AND\n"
+		"  table_name = :table_name;\n"
 
-			   "BEGIN\n"
+		"BEGIN\n"
 
-			   "OPEN table_stats_cur;\n"
-			   "FETCH table_stats_cur INTO\n"
-			   "  fetch_table_stats_step();\n"
-			   "IF (SQL % NOTFOUND) THEN\n"
-			   "  CLOSE table_stats_cur;\n"
-			   "  RETURN;\n"
-			   "END IF;\n"
-			   "CLOSE table_stats_cur;\n"
+		"OPEN table_stats_cur;\n"
+		"FETCH table_stats_cur INTO\n"
+		"  fetch_table_stats_step();\n"
+		"IF (SQL % NOTFOUND) THEN\n"
+		"  CLOSE table_stats_cur;\n"
+		"  RETURN;\n"
+		"END IF;\n"
+		"CLOSE table_stats_cur;\n"
 
-			   "OPEN index_stats_cur;\n"
-			   "found := 1;\n"
-			   "WHILE found = 1 LOOP\n"
-			   "  FETCH index_stats_cur INTO\n"
-			   "    fetch_index_stats_step();\n"
-			   "  IF (SQL % NOTFOUND) THEN\n"
-			   "    found := 0;\n"
-			   "  END IF;\n"
-			   "END LOOP;\n"
-			   "CLOSE index_stats_cur;\n"
+		"OPEN index_stats_cur;\n"
+		"found := 1;\n"
+		"WHILE found = 1 LOOP\n"
+		"  FETCH index_stats_cur INTO\n"
+		"    fetch_index_stats_step();\n"
+		"  IF (SQL % NOTFOUND) THEN\n"
+		"    found := 0;\n"
+		"  END IF;\n"
+		"END LOOP;\n"
+		"CLOSE index_stats_cur;\n"
 
-			   "END;", trx);
-	/* pinfo is freed by que_eval_sql() */
+		"END;");
 	dict_sys.unlock();
 
-	dict_table_close(table_stats, false, thd, mdl_table);
-	dict_table_close(index_stats, false, thd, mdl_index);
+	trx_t* trx = trx_create();
+	trx->graph = nullptr;
+	graph->trx = trx;
 
+	trx_start_internal_read_only(trx);
+	que_run_threads(que_fork_start_command(graph));
+	que_graph_free(graph);
 	trx_commit_for_mysql(trx);
-
+	dberr_t ret = index_fetch_arg.stats_were_modified
+		? trx->error_state : DB_STATS_DO_NOT_EXIST;
 	trx->free();
-
-	if (!index_fetch_arg.stats_were_modified) {
-		return(DB_STATS_DO_NOT_EXIST);
-	}
-
-	return(ret);
+	stats.close();
+	return ret;
 }
 
 /*********************************************************************//**

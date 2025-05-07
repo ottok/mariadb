@@ -1581,11 +1581,6 @@ uint xb_client_options_count = array_elements(xb_client_options);
 static const char *dbug_option;
 #endif
 
-#ifdef HAVE_URING
-extern const char *io_uring_may_be_unsafe;
-bool innodb_use_native_aio_default();
-#endif
-
 struct my_option xb_server_options[] =
 {
   {"datadir", 'h', "Path to the database root.", (G_PTR*) &mysql_data_home,
@@ -1705,12 +1700,7 @@ struct my_option xb_server_options[] =
    "Use native AIO if supported on this platform.",
    (G_PTR*) &srv_use_native_aio,
    (G_PTR*) &srv_use_native_aio, 0, GET_BOOL, NO_ARG,
-#ifdef HAVE_URING
-   innodb_use_native_aio_default(),
-#else
-   TRUE,
-#endif
-   0, 0, 0, 0, 0},
+   TRUE, 0, 0, 0, 0, 0},
   {"innodb_page_size", OPT_INNODB_PAGE_SIZE,
    "The universal page size of the database.",
    (G_PTR*) &innobase_page_size, (G_PTR*) &innobase_page_size, 0,
@@ -2302,12 +2292,8 @@ static bool innodb_init_param()
 		msg("InnoDB: Using Linux native AIO");
 	}
 #elif defined(HAVE_URING)
-	if (!srv_use_native_aio) {
-	} else if (io_uring_may_be_unsafe) {
-		msg("InnoDB: Using liburing on this kernel %s may cause hangs;"
-		    " see https://jira.mariadb.org/browse/MDEV-26674",
-		    io_uring_may_be_unsafe);
-	} else {
+
+	if (srv_use_native_aio) {
 		msg("InnoDB: Using liburing");
 	}
 #else
@@ -2635,6 +2621,15 @@ my_bool regex_list_check_match(
 	const regex_list_t& list,
 	const char* name)
 {
+	if (list.empty()) return (FALSE);
+
+	/*
+	  regexec/pcre2_regexec is not threadsafe, also documented.
+	  Serialize access from multiple threads to compiled regexes.
+	*/
+	static std::mutex regex_match_mutex;
+	std::lock_guard<std::mutex> lock(regex_match_mutex);
+
 	regmatch_t tables_regmatch[1];
 	for (regex_list_t::const_iterator i = list.begin(), end = list.end();
 	     i != end; ++i) {
@@ -5564,9 +5559,22 @@ xtrabackup_apply_delta(
 					buf + FSP_HEADER_OFFSET + FSP_SIZE);
 				if (mach_read_from_4(buf
 						     + FIL_PAGE_SPACE_ID)) {
+#ifdef _WIN32
+					os_offset_t last_page =
+					  os_file_get_size(dst_file) /
+					  page_size;
+
+					/* os_file_set_size() would
+					shrink the size of the file */
+					if (last_page < n_pages &&
+					    !os_file_set_size(
+					       dst_path, dst_file,
+					       n_pages * page_size))
+#else
 					if (!os_file_set_size(
 						    dst_path, dst_file,
 						    n_pages * page_size))
+#endif /* _WIN32 */
 						goto error;
 				} else if (fil_space_t* space
 					   = fil_system.sys_space) {

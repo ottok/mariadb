@@ -425,6 +425,9 @@ int mthd_stmt_fetch_to_bind(MYSQL_STMT *stmt, unsigned char *row)
           stmt->bind[i].is_null= &stmt->bind[i].is_null_value;
         *stmt->bind[i].is_null= 1;
         stmt->bind[i].u.row_ptr= NULL;
+        if (!stmt->bind[i].length)
+          stmt->bind[i].length= &stmt->bind[i].length_value;
+        *stmt->bind[i].length= stmt->bind[i].length_value= 0;
       }
     } else
     {
@@ -437,6 +440,9 @@ int mthd_stmt_fetch_to_bind(MYSQL_STMT *stmt, unsigned char *row)
         if (stmt->result_callback)
           stmt->result_callback(stmt->user_data, i, &row);
         else {
+          if (!stmt->bind[i].is_null)
+            stmt->bind[i].is_null= &stmt->bind[i].is_null_value;
+          *stmt->bind[i].is_null= 0;
           if (mysql_ps_fetch_functions[stmt->fields[i].type].pack_len >= 0)
             length= mysql_ps_fetch_functions[stmt->fields[i].type].pack_len;
           else
