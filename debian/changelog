@@ -1,3 +1,19 @@
+mariadb (1:10.11.12-0+deb12u1) bookworm; urgency=medium
+
+  * New upstream version 10.11.12. Includes fixes for several severe regressions
+    as noted at https://mariadb.com/kb/en/mariadb-10-11-12-release-notes/ as
+    well as security issues:
+    - CVE-2023-52969
+    - CVE-2023-52970
+    - CVE-2023-52971
+    - CVE-2025-30693
+    - CVE-2025-30722
+  * Drop all RocksDB patches now upstream due to update to version 6.29fb
+  * New upstream version has now CEST as allowed in main.timezone test
+    (Closes: #1084293)
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 07 May 2025 00:00:01 -0700
+
 mariadb (1:10.11.11-0+deb12u1) bookworm; urgency=medium
 
   [ Otto Kekäläinen ]
