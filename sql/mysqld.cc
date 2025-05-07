@@ -424,7 +424,9 @@ my_bool opt_require_secure_transport= 0;
 char* opt_secure_file_priv;
 my_bool lower_case_file_system= 0;
 my_bool opt_large_pages= 0;
+#ifdef HAVE_SOLARIS_LARGE_PAGES
 my_bool opt_super_large_pages= 0;
+#endif
 my_bool opt_myisam_use_mmap= 0;
 uint   opt_large_page_size= 0;
 #if defined(ENABLED_DEBUG_SYNC)
@@ -1415,10 +1417,6 @@ Dynamic_array<MYSQL_SOCKET> listen_sockets(PSI_INSTRUMENT_MEM, 0);
 bool unix_sock_is_online= false;
 static int systemd_sock_activation; /* systemd socket activation */
 
-/** wakeup listening(main) thread by writing to this descriptor */
-static int termination_event_fd= -1;
-
-
 
 C_MODE_START
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
@@ -1472,9 +1470,14 @@ static pthread_t select_thread;
 #endif
 
 /* OS specific variables */
-
+#ifndef EMBEDDED_LIBRARY
 #ifdef _WIN32
+/** wakeup main thread by signaling this event */
 HANDLE hEventShutdown;
+#else
+/** wakeup listening(main) thread by writing to this descriptor */
+static int termination_event_fd= -1;
+#endif
 #endif
 
 
@@ -3717,12 +3720,12 @@ static void my_malloc_size_cb_func(long long size, my_bool is_thread_specific)
 #endif
 
   /*
-    When thread specific is set, both mysqld_server_initialized and thd
-    must be set, and we check that with DBUG_ASSERT.
-
-    However, do not crash, if current_thd is NULL, in release version.
+    is_thread_specific is only relevant when a THD exist and the server
+    has fully started. is_thread_specific can be set during recovery by
+    Aria for functions that are normally only run in one thread.
+    However InnoDB sets thd early, so we can use it.
   */
-  DBUG_ASSERT(!is_thread_specific || (mysqld_server_initialized && thd));
+  DBUG_ASSERT(!is_thread_specific || thd || !plugins_are_initialized);
 
   if (is_thread_specific && likely(thd))  /* If thread specific memory */
   {
@@ -4045,7 +4048,7 @@ static int init_common_variables()
   if (opt_large_pages)
   {
     DBUG_PRINT("info", ("Large page set"));
-    if (my_init_large_pages(opt_super_large_pages))
+    if (my_init_large_pages())
     {
       return 1;
     }
@@ -5329,7 +5332,7 @@ static int init_server_components()
       MARIADB_REMOVED_OPTION("innodb-log-optimize-ddl"),
       MARIADB_REMOVED_OPTION("innodb-lru-flush-size"),
       MARIADB_REMOVED_OPTION("innodb-page-cleaners"),
-      MARIADB_REMOVED_OPTION("innodb-purge-truncate-frequency"),
+      MARIADB_REMOVED_OPTION("innodb-purge-rseg-truncate-frequency"),
       MARIADB_REMOVED_OPTION("innodb-replication-delay"),
       MARIADB_REMOVED_OPTION("innodb-scrub-log"),
       MARIADB_REMOVED_OPTION("innodb-scrub-log-speed"),
@@ -6062,8 +6065,8 @@ int mysqld_main(int argc, char **argv)
   (void)MYSQL_SET_STAGE(0 ,__FILE__, __LINE__);
 
   /* Memory used when everything is setup */
-  start_memory_used= global_status_var.global_memory_used;
-
+  start_memory_used= (global_status_var.global_memory_used +
+                      my_malloc_init_memory_allocated);
   run_main_loop();
 
   /* Shutdown requested */
@@ -7342,7 +7345,7 @@ static int show_memory_used(THD *thd, SHOW_VAR *var, void *buff,
   if (scope == OPT_GLOBAL)
   {
     calc_sum_of_all_status_if_needed(status_var);
-    *(longlong*) buff= (status_var->global_memory_used +
+    *(longlong*) buff= (status_var->global_memory_used + my_malloc_init_memory_allocated +
                         status_var->local_memory_used);
   }
   else
@@ -7920,7 +7923,9 @@ static int mysql_init_variables(void)
   bzero((char*) &global_status_var, offsetof(STATUS_VAR,
                                              last_cleared_system_status_var));
   opt_large_pages= 0;
+#ifdef HAVE_SOLARIS_LARGE_PAGES
   opt_super_large_pages= 0;
+#endif
 #if defined(ENABLED_DEBUG_SYNC)
   opt_debug_sync_timeout= 0;
 #endif /* defined(ENABLED_DEBUG_SYNC) */
@@ -8943,15 +8948,22 @@ char *set_server_version(char *buf, size_t size)
   bool is_log= opt_log || global_system_variables.sql_log_slow || opt_bin_log;
   bool is_debug= IF_DBUG(!strstr(MYSQL_SERVER_SUFFIX_STR, "-debug"), 0);
   const char *is_valgrind=
-#ifdef HAVE_VALGRIND
+#ifdef HAVE_valgrind
     !strstr(MYSQL_SERVER_SUFFIX_STR, "-valgrind") ? "-valgrind" :
 #endif
     "";
+  const char *is_asan=
+#ifdef __SANITIZE_ADDRESS__
+    !strstr(MYSQL_SERVER_SUFFIX_STR, "-asan") ? "-asan" :
+#endif
+    "";
+
   return strxnmov(buf, size - 1,
                   MYSQL_SERVER_VERSION,
                   MYSQL_SERVER_SUFFIX_STR,
                   IF_EMBEDDED("-embedded", ""),
                   is_valgrind,
+                  is_asan,
                   is_debug ? "-debug" : "",
                   is_log ? "-log" : "",
                   NullS);
@@ -9377,6 +9389,7 @@ PSI_stage_info stage_preparing= { 0, "Preparing", 0};
 PSI_stage_info stage_purging_old_relay_logs= { 0, "Purging old relay logs", 0};
 PSI_stage_info stage_query_end= { 0, "Query end", 0};
 PSI_stage_info stage_starting_cleanup= { 0, "Starting cleanup", 0};
+PSI_stage_info stage_slave_sql_cleanup= { 0, "Slave SQL thread ending", 0};
 PSI_stage_info stage_rollback= { 0, "Rollback", 0};
 PSI_stage_info stage_rollback_implicit= { 0, "Rollback_implicit", 0};
 PSI_stage_info stage_commit= { 0, "Commit", 0};
@@ -9619,6 +9632,7 @@ PSI_stage_info *all_server_stages[]=
   & stage_preparing,
   & stage_purging_old_relay_logs,
   & stage_starting_cleanup,
+  & stage_slave_sql_cleanup,
   & stage_query_end,
   & stage_queueing_master_event_to_the_relay_log,
   & stage_reading_event_from_the_relay_log,

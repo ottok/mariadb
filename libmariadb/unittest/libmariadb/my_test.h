@@ -84,10 +84,13 @@ if (force_tls || fingerprint[0])\
 
 MYSQL *mysql_default = NULL;  /* default connection */
 
+#define IS_MAXSCALE_ENV()\
+    (getenv("srv")!=NULL && (strcmp(getenv("srv"), "maxscale") == 0 ||\
+     strcmp(getenv("srv"), "skysql-ha") == 0))
+
 #define IS_MAXSCALE()\
    ((mysql_default && strstr(mysql_get_server_info(mysql_default), "maxScale")) ||\
-    (getenv("srv")!=NULL && (strcmp(getenv("srv"), "maxscale") == 0 ||\
-     strcmp(getenv("srv"), "skysql-ha") == 0)))
+     IS_MAXSCALE_ENV())
 
 #define SKIP_MAXSCALE \
 if (IS_MAXSCALE()) \
@@ -545,7 +548,7 @@ MYSQL *test_connect(struct my_tests_st *test)
   if (!(my_test_connect(mysql, hostname, username, password,
                            schema, port, socketname, (test) ? test->connect_flags:0, 1)))
   {
-    diag("Couldn't establish connection to server %s. Error (%d): %s", 
+    diag("Couldn't establish connection to server %s. Error (%d): %s",
                    hostname, mysql_errno(mysql), mysql_error(mysql));
     mysql_close(mysql);
     return(NULL);
@@ -661,6 +664,7 @@ MYSQL *my_test_connect(MYSQL *mysql,
                        my_bool auto_fingerprint)
 {
   char *have_fp;
+  my_bool verify= 0;
   if (force_tls)
     mysql_options(mysql, MYSQL_OPT_SSL_ENFORCE, &force_tls);
   mysql_get_optionv(mysql, MARIADB_OPT_SSL_FP, &have_fp);
@@ -668,6 +672,14 @@ MYSQL *my_test_connect(MYSQL *mysql,
   {
     mysql_options(mysql, MARIADB_OPT_SSL_FP, fingerprint);
   }
+
+  if (IS_MAXSCALE_ENV())
+  {
+    mysql_get_optionv(mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify);
+    if (force_tls || verify)
+      port= ssl_port;
+  }
+
   if (!mysql_real_connect(mysql, host, user, passwd, db, port, unix_socket, clientflag))
   {
     diag("error: %s", mysql_error(mysql));

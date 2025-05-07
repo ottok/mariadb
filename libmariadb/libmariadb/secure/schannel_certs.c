@@ -488,7 +488,7 @@ static SECURITY_STATUS VerifyServerCertificate(
   PCCERT_CONTEXT  pServerCert,
   HCERTSTORE      hStore,
   LPWSTR          pwszServerName,
-  DWORD           dwRevocationCheckFlags,
+  DWORD           dwCertChainFlags,
   DWORD           dwVerifyFlags,
   LPSTR           errmsg,
   size_t          errmsg_len)
@@ -534,7 +534,7 @@ static SECURITY_STATUS VerifyServerCertificate(
     NULL,
     pServerCert->hCertStore,
     &ChainPara,
-    dwRevocationCheckFlags,
+    dwCertChainFlags,
     NULL,
     &pChainContext))
   {
@@ -552,6 +552,7 @@ static SECURITY_STATUS VerifyServerCertificate(
   memset(&PolicyPara, 0, sizeof(PolicyPara));
   PolicyPara.cbSize = sizeof(PolicyPara);
   PolicyPara.pvExtraPolicyPara = &polExtra;
+  PolicyPara.dwFlags= CERT_CHAIN_POLICY_IGNORE_ALL_REV_UNKNOWN_FLAGS;
 
   memset(&PolicyStatus, 0, sizeof(PolicyStatus));
   PolicyStatus.cbSize = sizeof(PolicyStatus);
@@ -606,7 +607,10 @@ SECURITY_STATUS schannel_verify_server_certificate(
   SECURITY_STATUS status = SEC_E_OK;
   wchar_t* wserver_name = NULL;
   DWORD dwVerifyFlags;
-  DWORD dwRevocationFlags;
+  DWORD dwCertChainFlags;
+
+  if (!verify_flags)
+    return status;
 
   if (verify_flags & MARIADB_TLS_VERIFY_HOST)
   {
@@ -623,18 +627,18 @@ SECURITY_STATUS schannel_verify_server_certificate(
   }
 
   dwVerifyFlags = 0;
-  dwRevocationFlags = 0;
+  dwCertChainFlags = CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL|CERT_CHAIN_CACHE_END_CERT;
   if (verify_flags & MARIADB_TLS_VERIFY_REVOKED)
-    dwRevocationFlags |= CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT | CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY;
+    dwCertChainFlags |= CERT_CHAIN_REVOCATION_CHECK_END_CERT|CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY;
   if (!(verify_flags & MARIADB_TLS_VERIFY_HOST))
     dwVerifyFlags |= SECURITY_FLAG_IGNORE_CERT_CN_INVALID;
-  /* Period was already checked before */
-  dwVerifyFlags |= SECURITY_FLAG_IGNORE_CERT_DATE_INVALID;
+  if (!(verify_flags & MARIADB_TLS_VERIFY_PERIOD))
+    dwVerifyFlags |= SECURITY_FLAG_IGNORE_CERT_DATE_INVALID;
   if (!(verify_flags & MARIADB_TLS_VERIFY_TRUST))
     dwVerifyFlags |= SECURITY_FLAG_IGNORE_UNKNOWN_CA;
 
   status = VerifyServerCertificate(cert, store, wserver_name ? wserver_name : L"SERVER_NAME",
-    dwRevocationFlags, dwVerifyFlags, errmsg, errmsg_len);
+    dwCertChainFlags, dwVerifyFlags, errmsg, errmsg_len);
 
 cleanup:
   LocalFree(wserver_name);
