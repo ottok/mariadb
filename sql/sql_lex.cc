@@ -6556,6 +6556,21 @@ LEX::find_variable(const LEX_CSTRING *name,
 }
 
 
+sp_fetch_target *LEX::make_fetch_target(THD *thd, const Lex_ident_sys_st &name)
+{
+  sp_pcontext *spc;
+  const Sp_rcontext_handler *rha;
+  sp_variable *spv= find_variable(&name, &spc, &rha);
+  if (unlikely(!spv))
+  {
+    my_error(ER_SP_UNDECLARED_VAR, MYF(0), name.str);
+    return nullptr;
+  }
+  return new (thd->mem_root) sp_fetch_target(name,
+                               sp_rcontext_addr(rha, spv->offset));
+}
+
+
 static bool is_new(const char *str)
 {
   return (str[0] == 'n' || str[0] == 'N') &&
@@ -7234,8 +7249,11 @@ bool LEX::sp_for_loop_cursor_iterate(THD *thd, const Lex_for_loop_st &loop)
                                         spcont, loop.m_cursor_offset, false);
   if (unlikely(instr == NULL) || unlikely(sphead->add_instr(instr)))
     return true;
-  instr->add_to_varlist(loop.m_index);
-  return false;
+  const sp_rcontext_addr raddr(&sp_rcontext_handler_local,
+                               loop.m_index->offset);
+  sp_fetch_target *trg=
+    new (thd->mem_root) sp_fetch_target(loop.m_index->name, raddr);
+  return !trg || instr->add_to_fetch_target_list(trg);
 }
 
 
@@ -9321,7 +9339,7 @@ int set_statement_var_if_exists(THD *thd, const char *var_name,
 }
 
 
-bool LEX::sp_add_cfetch(THD *thd, const LEX_CSTRING *name)
+sp_instr_cfetch *LEX::sp_add_instr_cfetch(THD *thd, const LEX_CSTRING *name)
 {
   uint offset;
   sp_instr_cfetch *i;
@@ -9329,14 +9347,14 @@ bool LEX::sp_add_cfetch(THD *thd, const LEX_CSTRING *name)
   if (!spcont->find_cursor(name, &offset, false))
   {
     my_error(ER_SP_CURSOR_MISMATCH, MYF(0), name->str);
-    return true;
+    return nullptr;
   }
   i= new (thd->mem_root)
     sp_instr_cfetch(sphead->instructions(), spcont, offset,
                     !(thd->variables.sql_mode & MODE_ORACLE));
   if (unlikely(i == NULL) || unlikely(sphead->add_instr(i)))
-    return true;
-  return false;
+    return nullptr;
+  return i;
 }
 
 
@@ -11275,7 +11293,8 @@ st_select_lex::build_pushable_cond_for_having_pushdown(THD *thd, Item *cond)
 Field_pair *get_corresponding_field_pair(Item *item,
                                          List<Field_pair> pair_list)
 {
-  DBUG_ASSERT(item->type() == Item::FIELD_ITEM ||
+  DBUG_ASSERT(item->type() == Item::DEFAULT_VALUE_ITEM ||
+              item->type() == Item::FIELD_ITEM ||
               (item->type() == Item::REF_ITEM &&
                ((((Item_ref *) item)->ref_type() == Item_ref::VIEW_REF) ||
                (((Item_ref *) item)->ref_type() == Item_ref::REF))));
@@ -12361,6 +12380,48 @@ bool SELECT_LEX_UNIT::explainable() const
                derived->is_materialized_derived() && // (3)
                  !is_derived_eliminated() :
                false;
+}
+
+/**
+  Find the real table in prepared SELECT tree
+
+  NOTE: all SELECT must be prepared (to have leaf table list).
+
+  NOTE: it looks only for real tables (not view or derived)
+
+  @param thd          the current thread handle
+  @param db_name      name of db of the table to look for
+  @param db_name      name of db of the table to look for
+
+  @return first found table, NULL or ERROR_TABLE
+*/
+
+TABLE_LIST *SELECT_LEX::find_table(THD *thd,
+                                   const LEX_CSTRING *db_name,
+                                   const LEX_CSTRING *table_name)
+{
+  uchar buff[STACK_BUFF_ALLOC];                 // Max argument in function
+  if (check_stack_overrun(thd, STACK_MIN_SIZE, buff))
+    return NULL;
+
+  List_iterator_fast <TABLE_LIST> ti(leaf_tables);
+  TABLE_LIST *table;
+  while ((table= ti++))
+  {
+    if (cmp(&table->db, db_name) == 0 &&
+        cmp(&table->table_name, table_name) == 0)
+      return table;
+  }
+
+  for (SELECT_LEX_UNIT *u= first_inner_unit(); u; u= u->next_unit())
+  {
+    for (st_select_lex *sl= u->first_select(); sl; sl=sl->next_select())
+    {
+      if ((table= sl->find_table(thd, db_name, table_name)))
+        return table;
+    }
+  }
+  return NULL;
 }
 
 

@@ -168,12 +168,6 @@ SET(MYSQL_LIB_SYMBOLS
  mysql_use_result
  mysql_warning_count)
 
-# some gcc versions fail to compile asm parts of my_context.c,
-# if build type is "Release" (see CONC-133), so we need to add -g flag
-IF(CMAKE_COMPILER_IS_GNUCC AND CMAKE_BUILD_TYPE MATCHES "Release")
-  SET_SOURCE_FILES_PROPERTIES(my_context.c PROPERTIES COMPILE_FLAGS -g)
-ENDIF()
-
 IF(ZLIB_FOUND AND WITH_EXTERNAL_ZLIB)
   INCLUDE_DIRECTORIES(${ZLIB_INCLUDE_DIR})
 ELSE()

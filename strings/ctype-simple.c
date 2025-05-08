@@ -348,6 +348,7 @@ void my_hash_sort_simple_nopad(CHARSET_INFO *cs,
   register const uchar *sort_order=cs->sort_order;
   const uchar *end= key + len;
   register ulong m1= *nr1, m2= *nr2;
+  DBUG_ASSERT(key); /* Avoid UBSAN nullptr-with-offset */
   for (; key < (uchar*) end ; key++)
   {
     MY_HASH_ADD(m1, m2, (uint) sort_order[(uint) *key]);
@@ -364,6 +365,7 @@ void my_hash_sort_simple(CHARSET_INFO *cs,
   register const uchar *sort_order=cs->sort_order;
   const uchar *end;
   uint16 space_weight= sort_order[' '];
+  DBUG_ASSERT(key); /* Avoid UBSAN nullptr-with-offset */
 
   /*
     Remove all trailing characters that are equal to space.
@@ -2190,7 +2192,8 @@ MY_COLLATION_HANDLER my_collation_8bit_simple_ci_handler =
     my_min_str_8bit_simple,
     my_max_str_8bit_simple,
     my_ci_get_id_generic,
-    my_ci_get_collation_name_generic
+    my_ci_get_collation_name_generic,
+    my_ci_eq_collation_generic
 };
 
 
@@ -2211,5 +2214,6 @@ MY_COLLATION_HANDLER my_collation_8bit_simple_nopad_ci_handler =
     my_min_str_8bit_simple_nopad,
     my_max_str_8bit_simple,
     my_ci_get_id_generic,
-    my_ci_get_collation_name_generic
+    my_ci_get_collation_name_generic,
+    my_ci_eq_collation_generic
 };
