@@ -10,8 +10,18 @@ mariadb (1:11.4.6-0ubuntu0.25.04.1) plucky-security; urgency=medium
     - CVE-2025-30722
   * Drop all RocksDB patches now upstream due to update to version 6.29fb
   * Drop PCRE2 10.45 compatibility patch obsoleted by upstream test change
+  * Revert "Set CAP_IPC_LOCK capability if possible" because of MDEV-36229
+  * Update configuration traces to include new upstream system variables:
+    - innodb-buffer-pool-size-auto-min (default: 0)
+    - innodb-buffer-pool-size-max (default: 0)
+    - innodb-log-checkpoint-now (default: FALSE)
+  * Also update configuration traces to match that in 10.11.12 the variables
+    innodb-buffer-pool-chunk-size and innodb-log-spin-wait-delay are advertised
+    as deprecated.
+  * Add Breaks/Replaces for files moved around in src:mysql-8.4 (LP: #2110378)
+  * Disable new unreliable test main.mysql-interactive
 
- -- Otto Kekäläinen <otto@debian.org>  Wed, 07 May 2025 09:43:28 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 08 May 2025 12:58:20 -0700
 
 mariadb (1:11.4.5-1) unstable; urgency=medium
 
