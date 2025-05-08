@@ -11,8 +11,22 @@ mariadb (1:10.11.12-0+deb12u1) bookworm; urgency=medium
   * Drop all RocksDB patches now upstream due to update to version 6.29fb
   * New upstream version has now CEST as allowed in main.timezone test
     (Closes: #1084293)
+  * New upstream includes systemd service fix for restarts on crashes
+    (Closes: #1073847)
+  * New upstream also fixes regression in INSERT SELECT on NOT NULL columns
+    while having BEFORE UPDATE trigger (Closes: #1099515)
+  * Revert "Set CAP_IPC_LOCK capability if possible" because of MDEV-36229
+  * Update configuration traces to have --ssl-verify-server-cert from MDEV-28908
+  * Update configuration traces to include new upstream system variables:
+    - innodb-buffer-pool-size-auto-min (default: 0)
+    - innodb-buffer-pool-size-max (default: 0)
+    - innodb-log-checkpoint-now (default: FALSE)
+  * Also update configuration traces to match that in 10.11.12 the variables
+    innodb-buffer-pool-chunk-size and innodb-log-spin-wait-delay are advertised
+    as deprecated.
+  * Fix changelog entry formatting in 1:10.11.11-0+deb12u1
 
- -- Otto Kekäläinen <otto@debian.org>  Wed, 07 May 2025 00:00:01 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 08 May 2025 12:29:13 -0700
 
 mariadb (1:10.11.11-0+deb12u1) bookworm; urgency=medium
 
@@ -43,7 +57,8 @@ mariadb (1:10.11.11-0+deb12u1) bookworm; urgency=medium
     unstable in MariaDB 11.4 for a long time, and which are likely needed to
     avoid occasional shutdown issues, in particular on upgrades (LP: #2034125)
     in both Debian and Ubuntu
-    - Make SysV init more verbose in case of MariaDB start failures (Related: #1033234)
+    - Make SysV init more verbose in case of MariaDB start failures
+      (Related: #1033234)
     - Limit check of running mysqld/mariadbd to system users (Closes: #1032047)
     - When shutting down 'mariadbd', fallback to 'mysqld'
   * Add Lintian overrides for new upstream documentation JavaScript files
