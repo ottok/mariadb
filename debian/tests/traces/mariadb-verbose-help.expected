@@ -156,9 +156,8 @@ The following specify which files/extra groups are read (specified before remain
   --ssl-crlpath=name  Certificate revocation list path (implies --ssl).
   --tls-version=name  TLS protocol version for secure connection.
   --ssl-verify-server-cert 
-                      Verify server's "Common Name" in its cert against
-                      hostname used when connecting. This option is disabled by
-                      default.
+                      Verify server's certificate to prevent man-in-the-middle
+                      attacks
   -t, --table         Output in table format.
   --tee=name          Append everything into outfile. See interactive help (\h)
                       also. Does not work in batch mode. Disable with
