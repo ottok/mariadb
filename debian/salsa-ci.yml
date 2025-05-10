@@ -99,6 +99,25 @@ packaging-fix-checks:
 # Buster only has libfmt 6.1 but 7.0 is required, so backport build for Buster
 # is not possible unless somebody packages libfmt7-dev for Buster.
 
+build Ubuntu plucky:
+  extends: .build-package
+  variables:
+    RELEASE: plucky
+
+build Ubuntu oracular:
+  extends: .build-package
+  variables:
+    RELEASE: oracular
+
+build Ubuntu noble:
+  extends: .build-package
+  variables:
+    RELEASE: noble
+
+# Ubuntu Jammy too old for dpkg-dev (>= 1.22.5)
+
+# Ubuntu Focal too old for debhelper-compat (= 13)
+
 autopkgtest:
   extends: .test-autopkgtest
   artifacts:
@@ -613,6 +632,27 @@ mariadb and Bookworm upgrade:
     - service mariadb restart
     - *test-full-upgrade
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
+    - *test-verify-final
+
+mariadb and Ubuntu Noble upgrade:
+  extends: .salsa-ci-template-for-mariadb
+  stage: upgrade MariaDB and distro
+  image: ubuntu:noble
+  script:
+    - *test-prepare-container
+    # Install everything MariaDB currently in Ubuntu Noble
+    - apt-get install -qq --yes 'mariadb-*' 'libmariadb*'
+    # Verify installation of MariaDB from Noble
+    - dpkg -l | grep -e "mariadb-server.*10\.11"
+    - *test-verify-initial
+    - *test-enable-sid-repos
+    # Ensure mariadbd will not crash on next shutdown for any reason
+    - service mariadb restart
+    - *test-enable-artifacts-repo
+    - apt-get install -qq --simulate mariadb-server
+    - apt-get install -qq --yes mariadb-server
+    - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
+    - apt-get purge --yes mariadb*10.?
     - *test-verify-final
 
 mariadb-10.6 and Bookworm-20230208 upgrade:
