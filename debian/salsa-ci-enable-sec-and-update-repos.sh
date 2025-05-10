@@ -1,10 +1,14 @@
 #!/bin/sh
 
-set -x
-set -e
+echo "Running salsa-ci-enable-sec-and-update-repos.sh to enable the same"
+echo "repositories thate were available at build time in e.g."
+echo "registry.salsa.debian.org/salsa-ci-team/pipeline/base:bullseye"
 
-# Debug what repositories are available to begin with
-grep -r "^deb " /etc/apt/sources.*
+# Debug what repositories are available to begin
+head /etc/apt/sources.list /etc/apt/sources.list.d/* || true
+
+# Fail on non-zero exit codes from this point onward
+set -e
 
 # Enable the same repositories that were available at build time in
 # registry.salsa.debian.org/salsa-ci-team/pipeline/base:bullseye
