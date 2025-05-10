@@ -1187,10 +1187,10 @@ mtr-2038:
     - adduser --disabled-password --gecos "" mariadb-test-runner
     - chown -R mariadb-test-runner /usr/share/mariadb/mariadb-test
     - su - mariadb-test-runner
-    - faketime "2038-03-03" ./mtr
+    - faketime "@2038-03-03" ./mtr
       --force --parallel=auto --skip-rpl --suite=main
       --vardir=$(mktemp -d) --skip-test-list=unstable-tests.amd64 || true
-    - faketime "2038-03-03" perl -I. ./mariadb-test-run
+    - faketime "@2038-03-03" perl -I. ./mariadb-test-run
       --force --testcase-timeout=120 --suite-timeout=540 --retry=3
       --verbose-restart --max-save-core=1 --max-save-datadir=1
       --parallel=auto --skip-rpl --suite=main
@@ -1206,10 +1206,10 @@ mtr-2037:
     - adduser --disabled-password --gecos "" mariadb-test-runner
     - chown -R mariadb-test-runner /usr/share/mariadb/mariadb-test
     - su - mariadb-test-runner
-    - faketime "2037-03-03" ./mtr
+    - faketime "@2037-03-03" ./mtr
       --force --parallel=auto --skip-rpl --suite=main
       --vardir=$(mktemp -d) --skip-test-list=unstable-tests.amd64 || true
-    - faketime "2037-03-03" perl -I. ./mariadb-test-run
+    - faketime "@2037-03-03" perl -I. ./mariadb-test-run
       --force --testcase-timeout=120 --suite-timeout=540 --retry=3
       --verbose-restart --max-save-core=1 --max-save-datadir=1
       --parallel=auto --skip-rpl --suite=main
