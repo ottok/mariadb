@@ -3167,7 +3167,7 @@ user-variables                                               ON
 userstat                                                     FALSE
 verbose                                                      TRUE
 version                                                      VERSION
-version-comment                                              Debian RELEASE
+version-comment                                              VERSION-COMMENT
 version-compile-machine                                      ARCH
 version-compile-os                                           debian-linux-gnu
 version-malloc-library                                       system

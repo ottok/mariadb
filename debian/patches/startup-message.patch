@@ -8,45 +8,33 @@ star on GitHub. This patch experiments with how well such a banner works, and
 may later change the contents to drive some other kind of engagement.
 
 Client output:
+
     Welcome to the MariaDB monitor.  Commands end with ; or \g.
-    Your MariaDB connection id is 34
-    Server version: 10.11.7-MariaDB-3 Debian n/a
+    Your MariaDB connection id is 17
+    Server version: 11.8.1-MariaDB-5 from Debian -- Please help get to 10k stars at https://github.com/MariaDB/Server
 
     Copyright (c) 2000, 2018, Oracle, MariaDB Corporation Ab and others.
-    Support MariaDB developers by giving a star at https://github.com/MariaDB/server
 
     Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
 
     MariaDB [(none)]>
 
 Server output:
-    [Note] Support MariaDB developers by giving a star at https://github.com/MariaDB/server
+    [Note] Please help get to 10k stars at https://github.com/MariaDB/Server
 
-Server output if build in git directory:
-    [Note] Starting MariaDB 10.11.7-MariaDB-3 source revision 219efb0a6ab0ee8ce2ec831c715783586c4db2ef as process 5426
+Server output if built in git directory:
+    [Note] Starting MariaDB 11.8.1-MariaDB-5 from Debian source revision 1a9c3debfd6b1b16af4e501d3530b866b85c38a8 server_uid eNAjF8/wvUNM09/mSmh+k3a5o5w= as process 1359
+
+Logs will also show as server output:
+    mysqld: Version: '11.8.1-MariaDB-5 from Debian'  socket: '/run/mysqld/mysqld.sock'  port: 3306  -- Please help get to 10k stars at https://github.com/MariaDB/Server
 
 Forwarded: no
 ---
- client/mysql.cc |  3 +++
- sql/mysqld.cc   | 20 +++++++++++++++-----
- 2 files changed, 18 insertions(+), 5 deletions(-)
+ sql/mysqld.cc | 20 +++++++++++++++-----
+ 1 file changed, 15 insertions(+), 5 deletions(-)
 
-diff --git a/client/mysql.cc b/client/mysql.cc
-index e04276d..debe1d8 100644
---- a/client/mysql.cc
-+++ b/client/mysql.cc
-@@ -1339,6 +1339,9 @@ int main(int argc,char *argv[])
-             mysql_thread_id(&mysql), server_version_string(&mysql));
-     put_info((char*) glob_buffer.ptr(),INFO_INFO);
-     put_info(ORACLE_WELCOME_COPYRIGHT_NOTICE("2000"), INFO_INFO);
-+    put_info("Support MariaDB developers by giving a star at "
-+             "https://github.com/MariaDB/server",
-+             INFO_INFO);
-   }
- 
- #ifdef HAVE_READLINE
 diff --git a/sql/mysqld.cc b/sql/mysqld.cc
-index ce75a02..bb1ae7f 100644
+index ce75a02..13477ef 100644
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
 @@ -5038,13 +5038,23 @@ static int init_server_components()
@@ -72,7 +60,7 @@ index ce75a02..bb1ae7f 100644
 +      sql_print_information("Starting MariaDB %s server_uid %s "
 +                            "as process %lu",
 +                            server_version, server_uid, (ulong) getpid());
-+      sql_print_information("Support MariaDB developers by giving a star at "
++      sql_print_information("Please help get to 10k stars at "
 +                            "https://github.com/MariaDB/server");
 +    }
  

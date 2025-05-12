@@ -49,10 +49,6 @@ trace() {
     # Hostname varies one very machine
     sed "s/$(hostname)/HOSTNAME/g" -i "$TEMPFILE"
 
-    # Version/revision increases on every release
-    VERSION=$($MARIADB_SERVER_PATH/mariadbd --help --verbose | grep -e "^version " | rev | cut -d ' ' -f 1 | rev)
-    sed "s/$VERSION/VERSION/g" -i "$TEMPFILE"
-
     # SSL library version inherited form dependency, not relevant for tracing
     # the correctness of the MariaDB build itself
     sed 's/OpenSSL 3.*/SSL-VERSION/' -i "$TEMPFILE"
@@ -66,8 +62,10 @@ trace() {
     # armhf/armel might have: debian-linux-gnueabi, debian-linux-gnueabihf
     normalize_value version-compile-os debian-linux-gnu
 
-    # In Sid 'Debian n/a', in Bookworm 'Debian 12'
-    normalize_value version-comment "Debian RELEASE"
+    # Version strings and compilation comment contents may change on every
+    # release and build on different Debian/Ubuntu releases and architecutres
+    normalize_value version "VERSION"
+    normalize_value version-comment "VERSION-COMMENT"
 
     # Inherits git commit id from latest upstream release and thus not constant
     normalize_value version-source-revision -
