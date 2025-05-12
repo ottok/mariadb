@@ -52,6 +52,75 @@ Please do not file bugs in Debian regarding packages with '+maria' in the
 revision string.
 
 
+* DEFAULT MARIADB SERVER SETTINGS ARE SECURE
+============================================
+
+For reference, these are the default users, grants and databases in a fresh
+MariaDB installation:
+
+    SELECT User,Host FROM mysql.user;
+    +-------------+-----------+
+    | User        | Host      |
+    +-------------+-----------+
+    | mariadb.sys | localhost |
+    | mysql       | localhost |
+    | root        | localhost |
+    +-------------+-----------+
+
+    SHOW GRANTS FOR 'mariadb.sys'@'localhost';
+    +----------------------------------------------------------------------------+
+    | Grants for mariadb.sys@localhost                                           |
+    +----------------------------------------------------------------------------+
+    | GRANT USAGE ON *.* TO `mariadb.sys`@`localhost`                            |
+    | GRANT SELECT, DELETE ON `mysql`.`global_priv` TO `mariadb.sys`@`localhost` |
+    +----------------------------------------------------------------------------+
+
+    SHOW GRANTS FOR 'mysql'@'localhost';
+    +------------------------------------------------------------------------------------------------------------------------------------------+
+    | Grants for mysql@localhost                                                                                                               |
+    +------------------------------------------------------------------------------------------------------------------------------------------+
+    | GRANT ALL PRIVILEGES ON *.* TO `mysql`@`localhost` IDENTIFIED VIA mysql_native_password USING 'invalid' OR unix_socket WITH GRANT OPTION |
+    | GRANT PROXY ON ''@'%' TO 'mysql'@'localhost' WITH GRANT OPTION                                                                           |
+    +------------------------------------------------------------------------------------------------------------------------------------------+
+
+    SHOW GRANTS FOR 'root'@'localhost';
+    +-----------------------------------------------------------------------------------------------------------------------------------------+
+    | Grants for root@localhost                                                                                                               |
+    +-----------------------------------------------------------------------------------------------------------------------------------------+
+    | GRANT ALL PRIVILEGES ON *.* TO `root`@`localhost` IDENTIFIED VIA mysql_native_password USING 'invalid' OR unix_socket WITH GRANT OPTION |
+    | GRANT PROXY ON ''@'%' TO 'root'@'localhost' WITH GRANT OPTION                                                                           |
+    +-----------------------------------------------------------------------------------------------------------------------------------------+
+
+    SHOW DATABASES;
+    +--------------------+
+    | Database           |
+    +--------------------+
+    | information_schema |
+    | mysql              |
+    | performance_schema |
+    | sys                |
+    +--------------------+
+
+These are secure. All users are bound to localhost only. The `root` user is used
+by the Linux root user (or somebody running `sudo`) accessing MariaDB. The user
+`mysql` is used by some system automation scripts that don't need full database
+root access. The user `mariadb.sys` cannot be used to login at all, and exists
+only as in internal construct for system table access.
+
+There is absolutely no need to run the script `mariadb-secure-installation` or
+(`mysql_secure_installation`) after installing MariaDB with `apt install
+mariadb-server`. The script is useless, and very misleading with reporting
+"Success!" after every step even if it did nothing.
+
+The script claims to activate unix socket authentication for root, but
+Debian/Ubuntu has already been using it by default for over a decade. The script
+also claims to remove remote access for the root user, but the default root user
+is already bound to localhost only by default. Additionally the script claims to
+drop anonymous users and remove test databases, but there are none. The script
+itself hasn't really been maintained for over a decade, and it is best to not
+trust it in any way.
+
+
 * ROOT USER AUTHENTICATION VIA UNIX SOCKET
 ==========================================
 
@@ -82,7 +151,7 @@ passwordless-root setup, you can do so with:
 
 And then drop the debian-sys-maint user with:
 
-  DROP USER 'debian-sys-maint'@'localhost' 
+  DROP USER 'debian-sys-maint'@'localhost'
 
 And then:
 
@@ -93,61 +162,96 @@ ensure you keep a mysql root connection open until you're sure the changes
 work and you can still create new root connections to your server.
 
 
-* MARIADB IS SECURE BY DEFAULT
+* ROOT USER WITH REMOTE ACCESS
 ==============================
 
-MariaDB in Debian is secure by default, because:
+This is not recommended in general, but if you specifically want the user 'root'
+to be able to access MariaDB remotely, run this to add a second 'root' entry in
+the users table that can access from any remote host and authenticate using
+password:
 
-- It only listens to the localhost socket and cannot be accessed remotely unless
-  the sysadmin changes the configuration in /etc/mysql to allow so.
-- There is no debian-sys-maint with password in /etc/mysql/debian.cnf anymore.
-- There is no root account with password anymore. The system admin needs to
-  create one themselves if they need it. With no password, all issues related
-  to password management and password leaking are gone. Sysadmins can access
-  the database without a password simply by running 'sudo mysql' thanks to
-  socket based authentication, which detects the system root user and allows
-  them to use the mysqld console as the mysql root user. For details see
-  https://www.slideshare.net/ottokekalainen/less-passwords-more-security-unix-socket-authentication-and-other-mariadb-hardening-tips
-- There is no test database nor test accounts in the out-of-the-box Debian
-  installation.
+    - Configure root@% for remote connections using password
+    CREATE OR REPLACE USER 'root'@'%' IDENTIFIED BY 'your_secure_password';
 
-Therefore there is also no need to run the 'mysql_secure_installation'. In fact
-that script will try to do things that are already prevented, and might fail.
+    -- Grant full privileges with permission to grant more
+    GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+    GRANT PROXY ON ''@'%' TO 'root'@'%' WITH GRANT OPTION;
+
+    -- Reload privilege tables
+    FLUSH PRIVILEGES;
 
 
-* WHAT TO DO AFTER UPGRADES
-===========================
+* CREATING DATABASES AND USERS FOR APPS
+=======================================
 
-The privilege tables are automatically updated so all there is left is read
-the release notes on https://mariadb.com/kb/en/release-notes/ to see if any
-changes affect custom apps.
+On Debian/MariaDB running `apt install mariadb-server` will set up a sane and
+secure MariaDB server by default. The commands `mariadb-install-db` and
+`mariadb-upgrade` run automatically when needed.
 
-There should not be any need to run 'mysql_upgrade' manually, as the upgrade
-scripts do that automatically.
+The primary tasks for the administrator is to create new users and databases,
+and add custom settings in `/etc/mysql/mariadb.conf.d/`.
+
+To add a custom database for an app, and create a custom password-authenticated
+user that has full access to that database over the network, run the following
+commands using the `mariadb` client (e.g., via `sudo mariadb`):
+
+    -- Create the database
+    CREATE DATABASE app_db;
+
+    -- Create the user 'app_db' with a secure password, allowing connections from any IP address
+    CREATE USER 'app_user'@'%' IDENTIFIED BY 'your_secure_password';
+
+    -- Grant full privileges to the 'app_db' user on the 'app_db' database
+    GRANT ALL PRIVILEGES ON app_db.* TO 'app_user'@'%';
+
+    -- Reload the privilege tables to apply changes
+    FLUSH PRIVILEGES;
+
+Remember to replace 'your_secure_password' with a strong, unique password.
+Using '%' for the host allows connections from any IP address, which is less
+secure than restricting connections to a specific IP address or subnet if
+possible.
 
 
-* WHAT TO DO AFTER INSTALLATION
-===============================
-
-The MySQL manual describes certain steps to do at this stage in a separate
-chapter. They are not necessary as the Debian packages does them
-automatically.
-
-There should not be any need to run 'mysql_install_db' manually, as the install
-scripts do that automatically.
-
-The only thing that is left over for the admin is
- - creating new users and databases
- - read the rest of this text
-
-
-* NETWORKING
-============
+* REMOTE CONNECTIONS OVER THE NETWORK AND TLS
+=============================================
 
 For security reasons, the Debian package has enabled networking only on the
-loop-back device using "bind-address" in /etc/mysql/my.cnf.  Check with
-"netstat -tlnp" where it is listening. If your connection is aborted
-immediately check your firewall rules or network routes.
+loop-back device using `bind-address` in
+`/etc/mysql/mariadb.conf.d/50-server.cnf`. Check current setting by running:
+
+    SHOW VARIABLES LIKE 'bind_address';
+
+Alternatively, check with `sudo netstat -tlnp` on what ports services are
+listening. If your connection is aborted immediately, check your firewall rules
+or network routes.
+
+To allow remote connections from the network, the easiest way is to create a new
+configuration file and allow the MariaDB Server to listen for remote
+connections. To ensure passwords don't leak on the network, enforce that
+connections must use TLS encryption.
+
+Create file `/etc/mysql/mariadb.conf.d/99-server-customizations.cnf`
+with contents:
+
+    [mariadbd]
+    # Listen for connections from anywhere
+    bind-address = 0.0.0.0
+    # Only allow TLS encrypted connections
+    require-secure-transport = on
+
+For settings to take effect, restart the server:
+
+    systemctl restart mariadb
+
+Note that in MariaDB 11.8 the TLS certificates are generated automatically, so
+there is no need to create them manually.
+
+Test connections with e.g.
+
+    mariadb --user=app_user --password=your_secure_password  --host=192.168.1.66 -e '\s'
+    mariadb --user=root --password=your_secure_password  --host=192.168.1.66 --ssl
+
 
 * WHERE IS THE DOCUMENTATION?
 =============================
