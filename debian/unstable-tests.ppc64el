@@ -1,5 +1,6 @@
 main.index_merge_innodb : MDEV-30728
 main.innodb_ext_key : MDEV-30728
+main.mysql-interactive : disable new test in MariaDB 10.4.6 with Windows line endings that cause unpatcheable line ending mismatches
 main.mysqld--help-aria : MDEV-34733: feedback plugin: failed to retrieve the MAC address
 maria.maria-purge : MDEV-31349
 spider.spider_fixes_part : MDEV-30929 - sporadic, not just ppc64el

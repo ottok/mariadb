@@ -1,3 +1,4 @@
+main.mysql-interactive : disable new test in MariaDB 10.4.6 with Windows line endings that cause unpatcheable line ending mismatches
 main.mysqld--help-aria : MDEV-34733
 maria.maria-purge : MDEV-31349
 rpl.parallel_backup_slave_binlog_off : MDEV-30676
