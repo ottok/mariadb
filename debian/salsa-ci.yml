@@ -51,20 +51,6 @@ stages:
   - test extras
   - publish  # Stage referenced by Salsa CI template aptly stanza, so must exist even though not used
 
-gnitpick:
-  stage: provisioning
-  image: debian:sid-slim
-  script: |
-    # Bare minimal (<4MB) for apt-key and gnitpick to work
-    apt-get update -qq && apt-get -qq install --no-install-recommends --yes ca-certificates curl python3-minimal git
-    curl -sL https://raw.githubusercontent.com/Seravo/gnitpick/master/gnitpick.py -o /usr/bin/gnitpick; chmod +x /usr/bin/gnitpick
-    # Actual Gnitpick part
-    gnitpick --target-repository https://salsa.debian.org/mariadb-team/mariadb-server.git --target-branch debian/latest
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
-  allow_failure: true  # Gnitpick does not fully support this branch naming scheme so ignore it for now
-
 packaging-fix-checks:
   stage: provisioning
   image: debian:sid-slim
@@ -110,9 +96,6 @@ packaging-fix-checks:
 # reverted.
 # Buster only has libfmt 6.1 but 7.0 is required, so backport build for Buster
 # is not possible unless somebody packages libfmt7-dev for Buster.
-
-
-
 
 autopkgtest:
   extends: .test-autopkgtest
