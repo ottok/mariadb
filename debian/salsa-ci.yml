@@ -87,9 +87,10 @@ packaging-fix-checks:
     - |
       shellcheck -x --shell=sh $(grep -Irnw debian/ -e '^#!.*/sh' | sort -u |cut -d ':' -f 1 | xargs)
       shellcheck -x --shell=bash $(grep -Irnw debian/ -e '^#!.*/bash' | sort -u |cut -d ':' -f 1 | xargs)
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+  rules:
+    # Do not create a pipeline for tags unless SALSA_CI_ENABLE_PIPELINE_ON_TAGS is set
+    - if: $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+      when: never
 
 # Bookworm and Bullseye backports can be enabled if
 # https://salsa.debian.org/mariadb-team/mariadb-server/-/merge_requests/67 is
@@ -526,9 +527,10 @@ blhc:
     - echo "This script section must be overridden in each test" && exit 1
   variables:
     GIT_STRATEGY: none
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+  rules:
+    # Do not create a pipeline for tags unless SALSA_CI_ENABLE_PIPELINE_ON_TAGS is set
+    - if: $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+      when: never
 
 .salsa-ci-template-for-mariadb-upgrade:
   stage: test
@@ -569,9 +571,10 @@ blhc:
     GIT_STRATEGY: none
     MARIADB_VERSION: "10.0"
     RELEASE: sid  # does not seem to affect "Suites: ${RELEASE}", resorting to hard-coded string there
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+  rules:
+    # Do not create a pipeline for tags unless SALSA_CI_ENABLE_PIPELINE_ON_TAGS is set
+    - if: $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+      when: never
 
 fresh install:
   extends: .salsa-ci-template-for-mariadb
