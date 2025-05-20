@@ -1083,7 +1083,7 @@ mariadb.org-10.11 upgrade:
     - apt-get install -qq --yes mariadb-server
     - dpkg -l | grep -e "mariadb-server.*10\.11"
     - *test-verify-initial
-    - *test-full-upgrade
+    - *test-install-all
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
