@@ -117,7 +117,7 @@ blhc:
   # Change directory to ./debian/output where build artifacts can be found
   cd ${WORKING_DIR}
   # Enable automatic restarts from maint scripts
-  sed -i "s/101/0/g" -i /usr/sbin/policy-rc.d
+  sed -i "s/101/0/g" /usr/sbin/policy-rc.d
   # Fake /sbin/runlevel to avoid warnings of "invoke-rc.d: could not determine current runlevel"
   echo -e '#!/bin/sh\necho "N 5"' > /sbin/runlevel; chmod +x /sbin/runlevel
   # Never stop apt to ask for confirmation, just assume `--yes` all the time
