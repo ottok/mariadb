@@ -1,6 +1,8 @@
-mariadb (1:11.4.6-0ubuntu0.25.04.1) plucky-security; urgency=medium
+mariadb (1:11.4.7-0ubuntu0.25.04.1) plucky-security; urgency=medium
 
-  * SECURITY UPDATE: New upstream version 11.4.6 includes fixes for regressions
+  * SECURITY UPDATE: New upstream version 11.4.7 includes fixes for regressions
+    as noted at https://mariadb.com/kb/en/mariadb-11-4-7-release-notes/ and
+    also the preivous upstream version 11.4.6 includes fixes for regressions
     as noted at https://mariadb.com/kb/en/mariadb-11-4-6-release-notes/ and
     also fixes the following security vulnerabilities (LP: #2110070):
     - CVE-2023-52969
@@ -21,7 +23,7 @@ mariadb (1:11.4.6-0ubuntu0.25.04.1) plucky-security; urgency=medium
   * Add Breaks/Replaces for files moved around in src:mysql-8.4 (LP: #2110378)
   * Disable new unreliable test main.mysql-interactive
 
- -- Otto Kekäläinen <otto@debian.org>  Thu, 08 May 2025 12:58:20 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 23 May 2025 16:35:15 -0700
 
 mariadb (1:11.4.5-1) unstable; urgency=medium
 
