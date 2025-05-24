@@ -1,0 +1,45 @@
+From: Sam Bull <git@sambull.org>
+Date: Tue, 5 Nov 2024 12:44:58 +0000
+Subject: MDEV-36009: Systemd: Restart on OOM
+
+Per https://github.com/systemd/systemd/issues/36529 OOM counts
+as a on-abnormal condition. To ensure that MariaDB testart on
+OOM the Restart is changes to on-abnormal which an extension
+on the current on-abort condition.
+
+(cherry-picked from 839828e57fdf734b15c81cb9cb76d3760a9161f1)
+
+Closes Debian Bug#1073847.
+
+Forwarded: https://github.com/MariaDB/server/pull/3611
+---
+ support-files/mariadb.service.in  | 2 +-
+ support-files/mariadb@.service.in | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/support-files/mariadb.service.in b/support-files/mariadb.service.in
+index 0aa157d..3c16a46 100644
+--- a/support-files/mariadb.service.in
++++ b/support-files/mariadb.service.in
+@@ -108,7 +108,7 @@ SendSIGKILL=no
+ 
+ # Restart crashed server only, on-failure would also restart, for example, when
+ # my.cnf contains unknown option
+-Restart=on-abort
++Restart=on-abnormal
+ RestartSec=5s
+ 
+ UMask=007
+diff --git a/support-files/mariadb@.service.in b/support-files/mariadb@.service.in
+index 31f1586..0c5372c 100644
+--- a/support-files/mariadb@.service.in
++++ b/support-files/mariadb@.service.in
+@@ -219,7 +219,7 @@ SendSIGKILL=no
+ 
+ # Restart crashed server only, on-failure would also restart, for example, when
+ # my.cnf contains unknown option
+-Restart=on-abort
++Restart=on-abnormal
+ RestartSec=5s
+ 
+ UMask=007

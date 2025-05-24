@@ -6,9 +6,9 @@
 # Yuri Kozlov <yuray@komyakino.ru>, 2009, 2014, 2016.
 msgid ""
 msgstr ""
-"Project-Id-Version: mariadb 10.0.25-1\n"
+"Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2019-07-23 19:16-0300\n"
+"POT-Creation-Date: 2022-12-31 18:55-0800\n"
 "PO-Revision-Date: 2016-05-04 18:56+0300\n"
 "Last-Translator: Yuri Kozlov <yuray@komyakino.ru>\n"
 "Language-Team: Russian <debian-l10n-russian@lists.debian.org>\n"

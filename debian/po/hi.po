@@ -1,0 +1,105 @@
+# Hindi translation of mariadb debconf templates
+# Copyright (C) 2025 MariaDB Foundation
+# This file is distributed under the same license as the mariadb package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: mariadb\n"
+"Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
+"POT-Creation-Date: 2022-12-31 18:55-0800\n"
+"PO-Revision-Date: 2025-02-22 12:00+0530\n"
+"Last-Translator: Debian Hindi Team <debian-l10n-hindi@lists.debian.org>\n"
+"Language-Team: Hindi <debian-l10n-hindi@lists.debian.org>\n"
+"Language: hi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:2001
+msgid "The old data directory will be saved at new location"
+msgstr "पुरानी डेटा डायरेक्टरी नए स्थान पर सहेजी जाएगी"
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:2001
+msgid ""
+"A file named /var/lib/mysql/debian-*.flag exists on this system. The number "
+"indicates a database binary format version that cannot automatically be "
+"upgraded (or downgraded)."
+msgstr ""
+"इस सिस्टम पर /var/lib/mysql/debian-*.flag नाम की फ़ाइल मौजूद है। संख्या एक "
+"डेटाबेस बाइनरी प्रारूप संस्करण को इंगित करती है जिसे स्वचालित रूप से अपग्रेड "
+"(या डाउनग्रेड) नहीं किया जा सकता है।"
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:2001
+msgid ""
+"Therefore the previous data directory will be renamed to /var/lib/mysql-* "
+"and a new data directory will be initialized at /var/lib/mysql."
+msgstr ""
+"इसलिए पिछली डेटा डायरेक्टरी का नाम बदलकर /var/lib/mysql-* कर दिया जाएगा "
+"और /var/lib/mysql पर एक नई डेटा डायरेक्टरी को आरंभ किया जाएगा।"
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:2001
+msgid ""
+"Please manually export/import your data (e.g. with mysqldump) if needed."
+msgstr ""
+"यदि आवश्यक हो तो कृपया अपना डेटा मैन्युअल रूप से निर्यात/आयात करें (जैसे mysqldump के साथ)।"
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "Important note for NIS/YP users"
+msgstr "NIS/YP उपयोगकर्ताओं के लिए महत्वपूर्ण नोट"
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid ""
+"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
+"local system with:"
+msgstr ""
+"NIS/YP के तहत MariaDB का उपयोग करने के लिए स्थानीय सिस्टम पर एक mysql उपयोगकर्ता खाता "
+"जोड़ने की आवश्यकता है:"
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid ""
+"You should also check the permissions and ownership of the /var/lib/mysql "
+"directory:"
+msgstr ""
+"आपको /var/lib/mysql डायरेक्टरी की अनुमतियों और स्वामित्व की भी जांच करनी चाहिए:"
+
+#. Type: boolean
+#. Description
+#: ../mariadb-server.templates:4001
+msgid "Remove all MariaDB databases?"
+msgstr "सभी MariaDB डेटाबेस हटाएं?"
+
+#. Type: boolean
+#. Description
+#: ../mariadb-server.templates:4001
+msgid ""
+"The /var/lib/mysql directory which contains the MariaDB databases is about "
+"to be removed."
+msgstr ""
+"/var/lib/mysql डायरेक्टरी जिसमें MariaDB डेटाबेस हैं, हटाई जाने वाली है।"
+
+#. Type: boolean
+#. Description
+#: ../mariadb-server.templates:4001
+msgid ""
+"If you're removing the MariaDB package in order to later install a more "
+"recent version or if a different mariadb-server package is already using it, "
+"the data should be kept."
+msgstr ""
+"यदि आप बाद में एक नया संस्करण स्थापित करने के लिए MariaDB पैकेज को हटा रहे हैं या "
+"यदि कोई अन्य mariadb-server पैकेज पहले से ही इसका उपयोग कर रहा है, तो डेटा को "
+"रखा जाना चाहिए।"

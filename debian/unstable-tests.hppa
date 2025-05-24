@@ -1,0 +1,11 @@
+main.analyze_engine_stats : MDEV-32375
+main.analyze_stmt_orderby : MDEV-32375
+main.analyze_stmt_slow_query_log : MDEV-12237
+main.cte_recursive : MDEV-32375
+main.derived_split_innodb : MDEV-32375
+main.explain_json_format_partitions : MDEV-32375
+main.join_cache_notasan : MDEV-31893 (fixed but perhaps not for hppa)
+main.join_cache_notasan : MDEV-34084
+main.rowid_filter_innodb : MDEV-32375
+repair_symlink-5543  : MDEV-23920
+unit.conc_connection : CONC-640: unit.conc_connection fails on test_conc21

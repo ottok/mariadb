@@ -1,0 +1,23 @@
+From: Sergei Golubchik <serg@mariadb.org>
+Date: Mon, 31 Mar 2025 11:10:12 +0200
+Subject: fix main.timezone test for DST
+
+Origin: https://github.com/MariaDB/server/commit/402595f138db92a3bf7e67f30e24f682e6c3ca82.patch
+Forwarded: https://github.com/MariaDB/server/commit/402595f138db92a3bf7e67f30e24f682e6c3ca82
+---
+ mysql-test/main/timezone.test | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mysql-test/main/timezone.test b/mysql-test/main/timezone.test
+index 0fa50b7..fb03889 100644
+--- a/mysql-test/main/timezone.test
++++ b/mysql-test/main/timezone.test
+@@ -8,7 +8,7 @@ select FROM_UNIXTIME(24*3600);
+ enable_query_log;
+ 
+ # The following is because of daylight saving time
+---replace_result MEST CET MET CET
++--replace_result MEST CET MET CET CEST CET
+ show variables like "system_time_zone";
+ 
+ --echo #

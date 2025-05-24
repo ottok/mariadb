@@ -20,7 +20,7 @@ ${DEBIAN_SCRIPT_DEBUG:+ set -v -x}
 test -x /usr/sbin/mariadbd || exit 0
 
 # shellcheck source=/dev/null
-. /lib/lsb/init-functions
+. /usr/lib/lsb/init-functions
 
 SELF="$(cd "$(dirname "$0")"; pwd -P)/$(basename "$0")"
 
@@ -176,18 +176,8 @@ case "${1:-''}" in
     # Start MariaDB!
     /usr/bin/mariadbd-safe "${@:2}" 2>&1 >/dev/null | $ERR_LOGGER &
 
-    # Make sure that there is some default
-    # 30 seconds is fine default for starting
-    # maximum is one hour if there is gigantic
-    # database
-    MARIADB_STARTUP_TIMEOUT=${MYSQLD_STARTUP_TIMEOUT:-30}
-
-    for i in {1..3600}
+    for _ in $(seq 1 "${MYSQLD_STARTUP_TIMEOUT:-30}")
     do
-      if [ "${i}" -gt "${MARIADB_STARTUP_TIMEOUT}" ]
-      then
-        break
-      fi
       sleep 1
       if mariadbd_status check_alive nowarn
       then
@@ -244,7 +234,7 @@ case "${1:-''}" in
       log_end_msg 1
       [ "$VERBOSE" != "no" ] && log_failure_msg "Error: $shutdown_out"
       log_daemon_msg "Killing MariaDB database server by signal" "mariadbd"
-      killall -15 mariadbd
+      killall -15 mariadbd || killall -15 mysqld
       server_down=
       for _ in {1..600}
       do
@@ -257,7 +247,7 @@ case "${1:-''}" in
       done
       if test -z "$server_down"
       then
-        killall -9 mariadbd
+        killall -9 mariadbd || killall -9 mysqld
       fi
     fi
   fi

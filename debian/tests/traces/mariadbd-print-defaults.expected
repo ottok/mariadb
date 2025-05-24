@@ -1,0 +1,2 @@
+/usr/sbin/mariadbd would have been started with the following arguments:
+--socket=/run/mysqld/mysqld.sock --pid-file=/run/mysqld/mysqld.pid --basedir=/usr --bind-address=127.0.0.1 --expire_logs_days=10 

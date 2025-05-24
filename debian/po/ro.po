@@ -1,27 +1,29 @@
-# Romanian translation of mysql-dfsg.
-# Copyright (C) 2006 THE mysql-dfsg'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the mysql-dfsg package.
+# Romanian translation of mariadb.
+# Copyright © 2006, 2023 THE mariadb COPYRIGHT HOLDER
+# This file is distributed under the same license as the mariadb package.
 #
 # Stan Ioan-Eugen <stan.ieugen@gmail.com>, 2006.
+# Remus-Gabriel Chelu <remusgabriel.chelu@disroot.org>, 2023.
+#
 msgid ""
 msgstr ""
-"Project-Id-Version: po-debconf://mysql-dfsg\n"
+"Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2019-07-23 19:16-0300\n"
-"PO-Revision-Date: 2006-12-20 21:27+0200\n"
-"Last-Translator: stan ioan-eugen <stan.ieugen@gmail.com>\n"
+"POT-Creation-Date: 2022-12-31 18:55-0800\n"
+"PO-Revision-Date: 2023-01-29 23:56+0100\n"
+"Last-Translator: Remus-Gabriel Chelu <remusgabriel.chelu@disroot.org>\n"
 "Language-Team: romanian <debian-l10n-romanian@lists.debian.org>\n"
-"Language: \n"
+"Language: ro\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Generator: KBabel 1.11.4\n"
+"X-Generator: Poedit 3.2.2\n"
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:2001
 msgid "The old data directory will be saved at new location"
-msgstr ""
+msgstr "Vechiul director de date va fi salvat în noua locație"
 
 #. Type: note
 #. Description
@@ -31,29 +33,33 @@ msgid ""
 "indicates a database binary format version that cannot automatically be "
 "upgraded (or downgraded)."
 msgstr ""
+"Un fișier numit „/var/lib/mysql/debian-*.flag” există în acest sistem. Numărul "
+"indică o versiune în format binar al bazei de date care nu poate fi actualizată "
+"(sau retrogradată) automat."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:2001
 msgid ""
-"Therefore the previous data directory will be renamed to /var/lib/mysql-* "
-"and a new data directory will be initialized at /var/lib/mysql."
+"Therefore the previous data directory will be renamed to /var/lib/mysql-* and a "
+"new data directory will be initialized at /var/lib/mysql."
 msgstr ""
+"Prin urmare, directorul de date anterior va fi redenumit în „/var/lib/mysql-*” "
+"și un nou director de date va fi inițializat la „/var/lib/mysql”."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:2001
-msgid ""
-"Please manually export/import your data (e.g. with mysqldump) if needed."
+msgid "Please manually export/import your data (e.g. with mysqldump) if needed."
 msgstr ""
+"Exportați/importați manual datele dumneavoastră (de exemplu, cu «mysqldump»), "
+"dacă este necesar."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
-#, fuzzy
-#| msgid "Important note for NIS/YP users!"
 msgid "Important note for NIS/YP users"
-msgstr "Notă importantă pentru utilizatorii NIS/YP!"
+msgstr "Notă importantă pentru utilizatorii NIS/YP"
 
 #. Type: note
 #. Description
@@ -62,6 +68,8 @@ msgid ""
 "Using MariaDB under NIS/YP requires a mysql user account to be added on the "
 "local system with:"
 msgstr ""
+"Dacă MariaDB se utilizează sub NIS/YP, se necesită adăugarea unui cont de "
+"utilizator „mysql” în sistemul local cu:"
 
 #. Type: note
 #. Description
@@ -70,34 +78,33 @@ msgid ""
 "You should also check the permissions and ownership of the /var/lib/mysql "
 "directory:"
 msgstr ""
+"Ar trebui să verificați, de asemenea, permisiunile și dreptul de proprietate "
+"asupra directorului „/var/lib/mysql”:"
 
 #. Type: boolean
 #. Description
 #: ../mariadb-server.templates:4001
 msgid "Remove all MariaDB databases?"
-msgstr ""
+msgstr "Eliminați toate bazele de date MariaDB?"
 
 #. Type: boolean
 #. Description
 #: ../mariadb-server.templates:4001
 msgid ""
-"The /var/lib/mysql directory which contains the MariaDB databases is about "
-"to be removed."
+"The /var/lib/mysql directory which contains the MariaDB databases is about to "
+"be removed."
 msgstr ""
+"Directorul „/var/lib/mysql” care conține bazele de date MariaDB este pe cale să "
+"fie eliminat."
 
 #. Type: boolean
 #. Description
 #: ../mariadb-server.templates:4001
-#, fuzzy
-#| msgid ""
-#| "The script is about to remove the data directory /var/lib/mysql. If it is "
-#| "planned to just install a higher MySQL version or if a different mysql-"
-#| "server package is already using it, the data should be kept."
 msgid ""
-"If you're removing the MariaDB package in order to later install a more "
-"recent version or if a different mariadb-server package is already using it, "
-"the data should be kept."
+"If you're removing the MariaDB package in order to later install a more recent "
+"version or if a different mariadb-server package is already using it, the data "
+"should be kept."
 msgstr ""
-"Scriptul urmează să şteargă directorul de date /var/lib/mysql. Dacă plănuiţi "
-"doar să instalaţi o versiune nouă MariaDB sau datele sunt folosite de către "
-"un alt pachet mariadb-server, atunci ar trebui păstraţi datele."
+"Dacă eliminați pachetul MariaDB pentru a instala ulterior o versiune mai "
+"recentă sau dacă un alt pachet mariadb-server îl folosește deja, datele ar "
+"trebui păstrate."

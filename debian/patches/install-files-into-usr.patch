@@ -1,0 +1,30 @@
+From: Michael Biebl <biebl@debian.org>
+Date: Mon, 22 Jan 2024 22:52:25 +0100
+Subject: Install PAM modules and systemd units into /usr
+
+Since Debian trixie all files need to be installed into their canonical
+location under /usr.
+
+Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1061348
+Forwarded: no
+---
+ cmake/install_layout.cmake | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/cmake/install_layout.cmake b/cmake/install_layout.cmake
+index eb96967..3be0498 100644
+--- a/cmake/install_layout.cmake
++++ b/cmake/install_layout.cmake
+@@ -194,10 +194,10 @@ SET(INSTALL_SUPPORTFILESDIR_DEB         "share/mariadb")
+ SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mysql")
+ 
+ SET(INSTALL_UNIX_ADDRDIR_DEB            "/run/mysqld/mysqld.sock")
+-SET(INSTALL_SYSTEMD_UNITDIR_DEB         "/lib/systemd/system")
++SET(INSTALL_SYSTEMD_UNITDIR_DEB         "/usr/lib/systemd/system")
+ SET(INSTALL_SYSTEMD_SYSUSERSDIR_DEB     "/usr/lib/sysusers.d")
+ SET(INSTALL_SYSTEMD_TMPFILESDIR_DEB     "/usr/lib/tmpfiles.d")
+-SET(INSTALL_PAMDIR_DEB                  "/lib/${CMAKE_CXX_LIBRARY_ARCHITECTURE}/security")
++SET(INSTALL_PAMDIR_DEB                  "/usr/lib/${CMAKE_CXX_LIBRARY_ARCHITECTURE}/security")
+ SET(INSTALL_PAMDATADIR_DEB              "/etc/security")
+ 
+ #

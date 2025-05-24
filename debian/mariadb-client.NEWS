@@ -1,0 +1,42 @@
+mariadb (1:11.4.3-1) unstable; urgency=medium
+
+  Fixes related to CVE-2024-21096 may break forwards and backwards
+  compatibility on in certain situations when doing logical backup and restore
+  with plain SQL files (e.g. when using `mariadb-dump` or `mysqldump`).
+
+  The MariaDB client now has the command-line option `--sandbox` and the
+  MariaDB client database prompt command `\-`. This enables sandbox mode for
+  the rest of the session, until disconnected. Once in sandbox mode, any
+  command that could do something on the shell is disabled.
+
+  Additionally `mariadb-dump` now adds the following command inside a comment
+  at the very top of the logical SQL file to trigger sandbox mode:
+
+    /*M!999999\- enable the sandbox mode */
+
+  Newer version of MariaDB clients strip away the backslash and dash (\-), and
+  then tries to execute the internal command with a dash.
+
+  Older versions of MariaDB client and all versions of MySQL client considers
+  this a comment, and will ignore it. There may however be situations where
+  importing logical SQL dump files may fail due to this, so users should be
+  advised.
+
+  Users are best protected from both security issues and interoperability
+  issues by using the latest `mariadb-dump` shipped in MariaDB 11.4.3, 10.11.9,
+  10.6.19 and 10.5.26. The CVE-2024-21096 was officially fixed already in
+  11.4.2, but the latest batch of MariaDB minor maintenance releases include
+  further improvements on the sandbox mode.
+
+  Note that the `mariadb-dump` can be used to make the logical backups from
+  both MariaDB and MySQL servers. Also the `mariadb` client program can connect
+  to both MariaDB and MySQL servers and import those SQL dump files.
+
+  Further details about what kind of security issues injecting shell commands
+  into a logical SQL dump may pose and how to protect against them can be found
+  in:
+
+  * https://jfg-mysql.blogspot.com/2024/06/trusting-mysqldump-and-insecure-client-lead-to-remote-code-execution.html
+  * https://mariadb.org/mariadb-dump-file-compatibility-change/
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 06 Aug 2024 22:11:24 +0000

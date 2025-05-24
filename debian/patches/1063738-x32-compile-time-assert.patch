@@ -1,0 +1,32 @@
+From: Otto Kekalainen <otto@debian.org>
+Date: Thu, 4 Jul 2024 00:03:58 -0700
+Subject: Make compile_time_assert compatible with x32 (Closes: #1063738)
+
+The x32 build was failing on:
+
+    compile_time_assert(sizeof(MYSQL) == 77*sizeof(void*)+656);
+
+Reported upstream at https://jira.mariadb.org/browse/MDEV-34195.
+This is a regression from upstream commits c432c9ef and 06a884a57071.
+
+Fix is based on advice from https://lists.debian.org/debian-amd64/2024/07/msg00003.html
+which is also aligned with https://wiki.debian.org/X32Port.
+
+Forwarded: no
+---
+ tests/mysql_client_fw.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/mysql_client_fw.c b/tests/mysql_client_fw.c
+index 9f0faf8..b8794d0 100644
+--- a/tests/mysql_client_fw.c
++++ b/tests/mysql_client_fw.c
+@@ -1442,7 +1442,7 @@ int main(int argc, char **argv)
+   this limited check is enough, if sizeof(MYSQL) changes, it changes
+   everywhere
+ */
+-#if defined __x86_64__
++#if defined(__x86_64__) && !defined(__ILP32__)
+   compile_time_assert(sizeof(MYSQL) == 1272);
+ #elif defined __i386__
+   compile_time_assert(sizeof(MYSQL) == 964);

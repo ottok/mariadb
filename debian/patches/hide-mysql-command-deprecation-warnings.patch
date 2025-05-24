@@ -1,0 +1,33 @@
+From: Otto Kekalainen <otto@debian.org>
+Date: Sun, 30 Jun 2024 15:18:06 +0000
+Subject: Disable the 'mysql*' command deprecation warning
+
+Many command-line tools expect the commands they run to return without
+any output in stderr or having error codes. The fact that now in MariaDB
+11.4 all 'mysql*' commands emit a deprecation warning causes a lot of
+scripts to fail, such as the /etc/init.d/mariadb itself and many dependent
+programs as witnessed via Debian autopkgtests. See examples below.
+
+https://ci.debian.net/packages/m/mariadb-connector-odbc/testing/amd64/48373500/
+https://ci.debian.net/packages/p/pam-mysql/testing/amd64/48373511/
+https://ci.debian.net/packages/r/roundcube/testing/amd64/48373518/
+
+Forwarded: no
+---
+ mysys/my_init.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/mysys/my_init.c b/mysys/my_init.c
+index 3525365..9ec0d61 100644
+--- a/mysys/my_init.c
++++ b/mysys/my_init.c
+@@ -197,7 +197,8 @@ my_bool my_init(void)
+ #endif
+       if ((res == 0 || my_readlink(link_name, my_progname, MYF(0)) == 0) &&
+            strncmp(link_name + dirname_length(link_name), "mariadb", 7) == 0)
+-      my_error(EE_NAME_DEPRECATED, MYF(MY_WME), link_name);
++      /* Intentionally don't emit any errors for now */
++      DBUG_PRINT("deprecation warning", "skipped");
+     }
+   }
+ 

@@ -1,0 +1,80 @@
+From: Otto Kekalainen <otto@debian.org>
+Date: Sun, 10 Mar 2024 16:56:13 +0000
+Subject: Show banner in server and client startup to drive community
+ engagement
+
+Suggest to users that they can support MariaDB development by simply giving a
+star on GitHub. This patch experiments with how well such a banner works, and
+may later change the contents to drive some other kind of engagement.
+
+Client output:
+    Welcome to the MariaDB monitor.  Commands end with ; or \g.
+    Your MariaDB connection id is 34
+    Server version: 10.11.7-MariaDB-3 Debian n/a
+
+    Copyright (c) 2000, 2018, Oracle, MariaDB Corporation Ab and others.
+    Support MariaDB developers by giving a star at https://github.com/MariaDB/server
+
+    Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+    MariaDB [(none)]>
+
+Server output:
+    [Note] Support MariaDB developers by giving a star at https://github.com/MariaDB/server
+
+Server output if build in git directory:
+    [Note] Starting MariaDB 10.11.7-MariaDB-3 source revision 219efb0a6ab0ee8ce2ec831c715783586c4db2ef as process 5426
+
+Forwarded: no
+---
+ client/mysql.cc |  3 +++
+ sql/mysqld.cc   | 20 +++++++++++++++-----
+ 2 files changed, 18 insertions(+), 5 deletions(-)
+
+diff --git a/client/mysql.cc b/client/mysql.cc
+index e04276d..debe1d8 100644
+--- a/client/mysql.cc
++++ b/client/mysql.cc
+@@ -1339,6 +1339,9 @@ int main(int argc,char *argv[])
+             mysql_thread_id(&mysql), server_version_string(&mysql));
+     put_info((char*) glob_buffer.ptr(),INFO_INFO);
+     put_info(ORACLE_WELCOME_COPYRIGHT_NOTICE("2000"), INFO_INFO);
++    put_info("Support MariaDB developers by giving a star at "
++             "https://github.com/MariaDB/server",
++             INFO_INFO);
+   }
+ 
+ #ifdef HAVE_READLINE
+diff --git a/sql/mysqld.cc b/sql/mysqld.cc
+index ce75a02..bb1ae7f 100644
+--- a/sql/mysqld.cc
++++ b/sql/mysqld.cc
+@@ -5038,13 +5038,23 @@ static int init_server_components()
+ 
+   /*
+     Print source revision hash, as one of the first lines, if not the
+-    first in error log, for troubleshooting and debugging purposes
++    first in error log, for troubleshooting and debugging purposes.
++    If not, suggest database admin to help project by giving a star
++    on GitHub.
+   */
+   if (!opt_help)
+-    sql_print_information("Starting MariaDB %s source revision %s "
+-                          "server_uid %s as process %lu",
+-                          server_version, SOURCE_REVISION, server_uid,
+-                          (ulong) getpid());
++    if (SOURCE_REVISION) {
++      sql_print_information("Starting MariaDB %s source revision %s "
++                            "server_uid %s as process %lu",
++                            server_version, SOURCE_REVISION, server_uid,
++                            (ulong) getpid());
++    } else {
++      sql_print_information("Starting MariaDB %s server_uid %s "
++                            "as process %lu",
++                            server_version, server_uid, (ulong) getpid());
++      sql_print_information("Support MariaDB developers by giving a star at "
++                            "https://github.com/MariaDB/server");
++    }
+ 
+ #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
+   /*

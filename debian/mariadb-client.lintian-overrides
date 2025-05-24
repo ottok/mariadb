@@ -1,8 +1,4 @@
-# Mainly for BSD family to make sure that perl is found
-incorrect-path-for-interpreter /usr/bin/env perl != /usr/bin/perl [usr/bin/mytop]
-
-# Used to determine which shell we have. False-positive situation
-bash-term-in-posix-shell '`echo "testing\c"' [usr/bin/mariadb-secure-installation:191]
-
-# Needed outside conflict
-conflicts-with-version mysql-client (<< 5.0.51)
+# The Innotop changelog has this name for a valid reason
+wrong-name-for-upstream-changelog [usr/share/doc/mariadb-client/changelog.innotop.gz]
+# Man syntax needs to be fixed upstream
+groff-message troff:<standard input>:*: warning: macro 'Table' not defined [usr/share/man*]

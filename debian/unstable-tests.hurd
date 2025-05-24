@@ -1,0 +1,1 @@
+# MDEV-8535: auth_socket does not build on hurd-i368

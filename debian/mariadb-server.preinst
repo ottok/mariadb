@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 #
 # summary of how this script can be called:
 #        * <new-preinst> install
@@ -6,8 +6,6 @@
 #        * <new-preinst> upgrade <old-version>
 #        * <old-preinst> abort-upgrade <new-version>
 #
-
-set -e
 
 # shellcheck source=/dev/null
 . /usr/share/debconf/confmodule
@@ -26,8 +24,8 @@ fi
 ${DEBIAN_SCRIPT_TRACE:+ echo "#42#DEBUG# RUNNING $0 $*" 1>&2 }
 
 export PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin
-mariadb_datadir=/var/lib/mysql
-mariadb_upgradedir=/var/lib/mysql-upgrade
+mysql_datadir=/var/lib/mysql
+mysql_upgradedir=/var/lib/mysql-upgrade
 
 MARIADBD_USERS="root"
 
@@ -61,7 +59,8 @@ stop_server() {
   then
     echo "Attempt to stop MariaDB/MySQL server returned exitcode $errno" 1>&2
     echo "There is a MariaDB/MySQL server running, but we failed in our attempts to stop it." 1>&2
-    echo "Stop it yourself and try again!" 1>&2
+    echo "Check if there is any server running with 'pgrep -af \"mysqld|mariadbd\"' and" 1>&2
+    echo "try to stop it yourself by issuing 'invoke-rc.d mariadb stop'." 1>&2
     db_stop
     exit 1
   fi
@@ -77,13 +76,13 @@ max_upgradeable_version=5.7
 # Check if a flag file is found that indicates a previous MariaDB or MySQL
 # version was installed. If multiple flags are found, check which one was
 # the biggest version number.
-for flag in "$mariadb_datadir"/debian-*.flag
+for flag in "$mysql_datadir"/debian-*.flag
 do
 
   # The for loop leaves $flag as the query string if there are no results,
   # so the check below is needed to stop further processing when there are
   # no real results.
-  if [ "$flag" = "$mariadb_datadir/debian-*.flag" ]
+  if [ "$flag" = "$mysql_datadir/debian-*.flag" ]
   then
     break
   fi
@@ -121,13 +120,13 @@ then
   # MySQL 8.0 in Ubuntu has a bug in packaging and the file is name wrongly
   # 'debian-5.7.flag', so in case '5.7' was encountered an extra check needs to
   # be done to see is there is a file called undo_001, which is a sign of 8.0.
-  if [ "$found_version" == "5.7" ] && [ -f "$mariadb_datadir/undo_001" ]
+  if [ "$found_version" == "5.7" ] && [ -f "$mysql_datadir/undo_001" ]
   then
     # Seems to be a 8.0, flag has wrongly 5.7 (know bug)
     found_version=8.0
   fi
 
-  echo "$mariadb_datadir: found previous version $found_version"
+  echo "$mysql_datadir: found previous version $found_version"
 
   if dpkg --compare-versions "$found_version" '>>' "$this_version"
   then
@@ -147,10 +146,10 @@ fi
 # installs), then that file is enough of additional indication to trigger the
 # move of the data directory.
 if [ -z "$found_version" ] &&
-   [ -z "$(find $mariadb_datadir/debian-*.flag 2> /dev/null)" ] &&
-   [ -f "$mariadb_datadir/undo_001" ]
+   [ -z "$(find $mysql_datadir/debian-*.flag 2> /dev/null)" ] &&
+   [ -f "$mysql_datadir/undo_001" ]
 then
-  echo "$mariadb_datadir: no server version flag found, assuming MySQL 8.0 data encountered"
+  echo "$mysql_datadir: no server version flag found, assuming MySQL 8.0 data encountered" 1>&2
   downgrade_detected=true
   found_version="previous" # Just use dummy name as we don't know real version
 fi
@@ -161,12 +160,12 @@ if [ -n "$downgrade_detected" ]
 then
   db_input critical "mariadb-server/old_data_directory_saved" || true
   db_go
-  echo "The file $mariadb_datadir/debian-$found_version.flag indicates a" 1>&2
+  echo "The contents of $mysql_datadir/ indicates a" 1>&2
   echo "version that cannot automatically be upgraded. Therefore the" 1>&2
-  echo "previous data directory will be renamed to $mariadb_datadir-$found_version and" 1>&2
-  echo "a new data directory will be initialized at $mariadb_datadir." 1>&2
+  echo "previous data directory will be renamed to $mysql_datadir-$found_version and" 1>&2
+  echo "a new data directory will be initialized at $mysql_datadir." 1>&2
   echo "Please manually export/import your data (e.g. with mysqldump) if needed." 1>&2
-  mv -f "$mariadb_datadir" "$mariadb_datadir-$found_version"
+  mv -f "$mysql_datadir" "$mysql_datadir-$found_version"
   # Also move away the old debian.cnf file that included credentials that are
   # no longer valid. If none existed, ignore error and let dpkg continue.
   mv -f /etc/mysql/debian.cnf "/etc/mysql/debian.cnf-$found_version" || true
@@ -226,24 +225,24 @@ do
   if [ -L "$checkdir" ]
   then
     # Use mkdir option 'Z' to create with correct SELinux context.
-    mkdir -pZ "$mariadb_upgradedir"
-    cp -dT "$checkdir" "$mariadb_upgradedir/$dir.link"
+    mkdir -pZ "$mysql_upgradedir"
+    cp -dT "$checkdir" "$mysql_upgradedir/$dir.link"
   fi
 done
 
 # creating mysql home directory
-if [ ! -d $mariadb_datadir ] && [ ! -L $mariadb_datadir ]
+if [ ! -d $mysql_datadir ] && [ ! -L $mysql_datadir ]
 then
   # Use mkdir option 'Z' to create with correct SELinux context.
-  mkdir -Z $mariadb_datadir
+  mkdir -Z $mysql_datadir
 fi
 
 # As preset blocksize of GNU df is 1024 then available bytes is $df_available_blocks * 1024
 # 4096 blocks is then lower than 4 MB
-df_available_blocks="$(LC_ALL=C BLOCKSIZE='' df --output=avail "$mariadb_datadir" | tail -n 1)"
+df_available_blocks="$(LC_ALL=C BLOCKSIZE='' df --output=avail "$mysql_datadir" | tail -n 1)"
 if [ "$df_available_blocks" -lt "4096" ]
 then
-  echo "ERROR: There's not enough space in $mariadb_datadir/" 1>&2
+  echo "ERROR: There's not enough space in $mysql_datadir/" 1>&2
   db_stop
   exit 1
 fi
@@ -256,11 +255,35 @@ fi
 # The "set +e" is necessary as e.g. a ".journal" of a ext3 partition is
 # not chgrp'able (#318435).
 set +e
-find $mariadb_datadir ! -uid "$(id -u mysql)" -print0 | xargs -0 -r chown mysql
-find $mariadb_datadir -follow -not -group mysql -print0 2>/dev/null \
+find $mysql_datadir ! -uid "$(id -u mysql)" -print0 | xargs -0 -r chown mysql
+find $mysql_datadir -follow -not -group mysql -print0 2>/dev/null \
   | xargs -0 --no-run-if-empty chgrp mysql
 set -e
 
 db_stop
 
 #DEBHELPER#
+
+# dh_installinit/13.11.3 adds this check but only with 'install', so we need to
+# have and extra one to check 'upgrade'. This ensures that upgrades from
+# mariadb-server-x.y to mariadb-server (without version suffix) ends up with
+# the executable bit set on /etc/init.d/mariadb, which otherwise would end up
+# disabled due to the mariadb-server-x.y.postrm being triggered.
+#   $1 = upgrade
+#   $2 = 1:10.6.11-2
+if [ "$1" = "upgrade" ] && [ -n "$2" ] && [ -e "/etc/init.d/mariadb" ]
+then
+  chmod +x "/etc/init.d/mariadb" >/dev/null || true
+fi
+
+# dh_installinit/13.11.3 adds this check but with extra condition that there
+# must be a version passed as '$2', but that will always be empty when install
+# runs after the unpack that is retriggered for package 'mariadb-server' when
+# the old 'mariadb-server-10.6' is purged, so we need to repeat the same check
+# here without any expectation for '$2'. This ensures that upgrades from
+# mariadb-server-x.y to mariadb-server (without version suffix) ends up with the
+# executable bit set on /etc/init.d/mariadb.
+if [ "$1" = "install" ] && [ -e "/etc/init.d/mariadb" ]
+then
+  chmod +x "/etc/init.d/mariadb" >/dev/null || true
+fi

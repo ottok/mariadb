@@ -1,0 +1,10 @@
+# MyISAM stopwords that cannot be changed and spelling errors remain
+spelling-error-in-binary noone no one [usr/lib/*/libmariadbd.so.19]
+spelling-error-in-binary thats that's [usr/lib/*/libmariadbd.so.19]
+spelling-error-in-binary theres there's [usr/lib/*/libmariadbd.so.19]
+spelling-error-in-binary yuR your [usr/lib/*/libmariadbd.so.19]
+# libmariadbd cannot have a symbols file as it would be massively large with all
+# the _ZNK* prefixed symbols leaking
+no-symbols-control-file usr/lib/*/libmariadbd.so.19
+# Probably due to leaking ABI symbols
+exit-in-shared-library [usr/lib/*/libmariadbd.so.19]

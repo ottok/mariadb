@@ -1,0 +1,2 @@
+/usr/bin/mariadb would have been started with the following arguments:
+--socket=/run/mysqld/mysqld.sock 

@@ -1,0 +1,227 @@
+mariadb (1:10.11.2-1) unstable; urgency=medium
+
+  MariaDB 10.11.2 was released on February 16th 2023 by the MariaDB Foundation
+  (https://mariadb.org/mariadb-10-11-2-ga-now-available/). This is the first
+  release in the 10.11 series to be announced GA (general availability). The
+  10.11 series has long-term support with commitment from the MariaDB Foundation
+  (https://mariadb.org/about/#maintenance-policy) to publish maintenance
+  versions with fixes to software defects and security vulnerabilities until
+  February 2028.
+
+  The previous major releases (10.7, 10.8, 10.9, 10.10) were not long-terms
+  supported versions and thus not imported to Debian. To learn what is new in
+  10.11 it is recommended to read all the release notes:
+
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-1011/
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-1010/
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-109/
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-108/
+  * https://mariadb.com/kb/en/changes-improvements-in-mariadb-107/
+
+  Notable new features:
+  - New datatypes UUID and INET4
+  - New functions SFORMAT (text formatting), NATURAL_SORT_KEY, RANDOM_BYTES and
+    several related to JSON
+  - New keyword AUTO in system versioned tables for partitioning
+    (https://mariadb.com/kb/en/system-versioned-tables/#automatically-creating-partitions)
+  - Unicode Collation Algorithm (UCA) upgrade to 14.0.0
+  - New privileges 'READ ONLY ADMIN' and 'GRANT TO PUBLIC'
+    (https://mariadb.org/grant-to-public-in-mariadb/)
+  - password_reuse_check plugin (part of mariadb-server package)
+  - Hashicorp Key Management Plugin for implementing encryption using keys
+    stored in the Hashicorp Vault KMS (mariadb-plugin-hashicorp-key-management
+    package)
+
+  Important packaging change: Compression libraries have been split into
+  separate packages named mariadb-provider-plugin-(bzip2/lz4/lzma/lzo/snappy).
+  If a non-zlib compression algorithm was used in InnoDB or Mroonga before
+  upgrading to 10.11, those tables will be unreadable until the appropriate
+  compression library is installed.
+
+  Things to consider when upgrading from 10.6 to 10.11 are listed on the page
+  https://mariadb.com/kb/en/upgrading-from-mariadb-10-6-to-mariadb-10-11/.
+
+  New server variables in 10.11 (compared to 10.6):
+  - binlog-alter-two-phase: When set, split ALTER at binary logging into 2
+    statements: START ALTER and COMMIT/ROLLBACK ALTER. Defaults to 'FALSE'.
+  - innodb-log-file-buffering: Whether the file system cache for ib_logfile0 is
+    enabled
+  - optimizer-extra-pruning-depth: If the optimizer needs to enumerate join
+    prefix of this size or larger, then it will try aggressively prune away the
+    search space.
+  - log-slow-min-examined-row-limit: Don't write queries to slow log that
+    examine fewer rows than that
+  - log-slow-query: Log slow queries to a table or log file. Defaults logging to
+    a file 'hostname'-slow.log or a table mysql.slow_log if --log-output=TABLE
+    is used. Must be enabled to activate other slow log options.
+  - log-slow-query-file: Log slow queries to given log file. Defaults logging to
+    'hostname'-slow.log. Must be enabled to activate other slow log options
+  - log-slow-query-time: Log all queries that have taken more than
+    log_slow_query_time seconds to execute to the slow query log file. The
+    argument will be treated as a decimal value with microsecond precision
+  - slave-max-statement-time: A query that has taken more than
+    slave_max_statement_time seconds to run on the slave will be aborted. The
+    argument will be treated as a decimal value with microsecond precision. A
+    value of 0 (default) means no timeout
+  - system-versioning-insert-history: Allows direct inserts into ROW_START and
+    ROW_END columns if secure_timestamp allows changing @@timestamp
+  - wsrep-allowlist: Allowed IP addresses split by comma delimiter
+  - wsrep-status-file: wsrep status output filename
+
+  Changed behavior in server variables in 10.11 (compared to 10.6):
+  - explicit-defaults-for-timestamp: enabled by default
+  - optimizer-prune-level: defaults to 2 (instead of 1)
+  - old-mode: new options IGNORE_INDEX_ONLY_FOR_JOIN and COMPAT_5_1_CHECKSUM
+  - wsrep-mode: new option BF_ABORT_MARIABACKUP
+  - read-only: changing value requires 'READ ONLY ADMIN' privilege
+
+  One of the most important performance related server variables
+  'innodb_log_file_size' is now dynamic so it can be changed without having to
+  restart the server.
+
+  Removed in 10.11 (compared to 10.6):
+  - innodb-log-write-ahead-size: the physical block size of the underlying
+    storage is instead detected and used
+  - wsrep-replicate-myisam: use wsrep_mode instead
+  - wsrep-strict-ddl: use wsrep_mode instead
+
+  Deprecated server variables:
+  - innodb_change_buffering
+  - innodb-buffer-pool-chunk-size: defaults to 0 (instead of 134217728) in
+    server variables because the server automatically sizes it
+  - keep_files_on_create: orphan files are now deleted automatically, so this
+    setting should never be needed
+
+  Note also that the MariaDB client settings have changed to now use SSL/TLS
+  by default.
+
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 16 Feb 2023 23:53:02 -0800
+
+mariadb (1:10.11.1-1) unstable; urgency=medium
+
+  Version suffixed packages (e.g. mariadb-server-10.6) have now been deprecated
+  as it made maintenance complicated and there was no known use cases or users
+  of the naming scheme, as multiple different major version MariaDB server
+  packages could not be co-installed anyway and source or the 'mariadb-server'
+  and 'mariadb-client' packages is easiest controlled by repositories and
+  package versioning, not versions in package *names*.
+
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 02 Jan 2023 23:42:58 -0800
+
+mariadb-10.6 (1:10.6.4-1) unstable; urgency=medium
+
+  Import new upstream release MariaDB 10.6.4
+  - 10.6 introduces one new status variable:
+    * Innodb_buffer_pool_pages_lru_freed
+      (https://mariadb.com/kb/en/status-variables-added-in-mariadb-106/)
+    * Resultset_metadata_skipped
+      (undocumented upstream https://mariadb.com/docs/reference/mdb/status-variables/Resultset_metadata_skipped/)
+
+    Read more at https://mariadb.com/kb/en/status-variables-added-in-mariadb-106/
+
+  - 10.6 introduces several new server variables:
+    * binlog_expire_logs_seconds
+    * innodb_deadlock_report
+    * innodb_read_only_compressed
+
+    Read more at https://mariadb.com/kb/en/system-variables-added-in-mariadb-106/
+
+  - 10.6 removes several server variables:
+    * innodb_adaptive_max_sleep_delay
+    * innodb_background_scrub_data_*
+    * innodb_buffer_pool_instances
+    * innodb_commit_concurrency
+    * innodb_concurrency_tickets
+    * innodb_file_format
+    * innodb_large_prefix
+    * innodb_lock_schedule_algorithm
+    * innodb_log_checksums
+    * innodb_log_compressed_pages
+    * innodb_log_files_in_group
+    * innodb_log_optimize_ddl
+    * innodb_page_cleaners
+    * innodb_replication_delay (*not* related to https://mariadb.com/kb/en/delayed-replication/)
+    * innodb_scrub_*
+    * innodb_sync_array_size
+    * innodb_thread_*
+    * innodb_undo_logs
+
+    Read more at https://mariadb.com/kb/en/upgrading-from-mariadb-105-to-mariadb-106/#options-that-have-been-removed-or-renamed
+
+  - 10.6 introduces new default server variable values:
+    * character sets utf8 -> utf8mb3
+    * innodb_flush_method fsync -> O_DIRECT
+    * innodb_use_native_aio ON -> OFF
+    * old_mode (none) -> UTF8_IS_UTF8MB3
+
+  - 10.6 introduces new 'sys' database and several 'sys' procedures
+
+    Read more at https://mariadb.com/kb/en/sys-schema/
+
+  - Read more about above changes at
+    https://mariadb.com/kb/en/upgrading-from-mariadb-105-to-mariadb-106/
+    https://mariadb.com/kb/en/changes-improvements-in-mariadb-106/
+
+  - Update libmariadb folder to match the one in MariaDB 10.6.4
+    (MariaDB Connector C 10.6.4)
+
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 06 Sep 2021 22:55:39 -0700
+
+mariadb-10.5 (1:10.5.5-1) unstable; urgency=medium
+
+   The latest version 10.5 of the MariaDB Server came out in June 2020 and is
+   guaranteed to have security releases at least until summer 2025.
+
+   For more information on what is new in MariaDB 10.5 check out:
+   https://speakerdeck.com/ottok/debconf-2020-whats-new-in-mariadb-server-10-dot-5-and-galera-4
+   or video from https://peertube.debian.social/videos/watch/bb80cf53-d9ba-4ed9-b472-a21238fb67f5.
+
+   Quick summary:
+   - Service name is now 'mariadb', e.g. /etc/init.d/mariadb and systemctl mariadb
+   - The main server binary is now running as 'mariadbd' instead of old 'mysqld'
+   - Many commands are now mariadb-* instead of old mysql*, but old names
+     continue to work as symlinks
+   - Referencing the /etc/mysql/debian.cnf file is not advised anymore. It will
+     be deprecated in a future Debian release and has been obsolete anyway for
+     several years now since MariaDB in Debian introduced Unix socket
+     authentication for the root account in 2015.
+
+   MariaDB 10.5 has been tested to be backwards compatible with all previous
+   versions of MariaDB and all previous versions of MySQL up until version 5.7.
+   Note that MySQL 8.0 introduces significant backwards incompatible changes
+   compared to MySQL 5.7, and thus in-place binary upgrades from MySQL 8.0 to
+   MariaDB 10.5 are not possible, but sysadmins need to upgrade by exporting and
+   importing SQL dumps of their databases.
+
+   If you encounter any bugs, please make sure your bug report is of highest
+   standards so we can quickly reproduce and fix the issue. Even better if you
+   find the solution yourself, and can submit it as a Merge Request at
+   https://salsa.debian.org/mariadb-team/mariadb-10.5/
+
+   If you appreciate the Debian packaging work done, please star us on Salsa!
+
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 17 Sep 2020 14:37:47 +0300
+
+mariadb-10.1 (10.1.20-1) unstable; urgency=low
+
+    MariaDB is now the default MySQL variant in Debian, at version 10.1. The
+    Stretch release introduces a new mechanism for switching the default
+    variant, using metapackages created from the 'mysql-defaults' source
+    package. For example, installing the metapackage 'default-mysql-server' will
+    install 'mariadb-server-10.1'. Users who had 'mysql-server-5.5' or
+    'mysql-server-5.6' will have it removed and replaced by the MariaDB
+    equivalent. Similarly, installing 'default-mysql-client' will install
+    'mariadb-client-10.1'.
+
+    Note that the database binary data file formats are not backwards
+    compatible, so once you have upgraded to MariaDB 10.1 you will not be able
+    to switch back to any previous version of MariaDB or MySQL unless you have a
+    proper database dump. Therefore, before upgrading, please make backups of
+    all important databases with an appropriate tool such as 'mysqldump'.
+
+    The 'virtual-mysql-*' and 'default-mysql-*' packages will continue to exist.
+    MySQL continues to be maintained in Debian, in the unstable release. See the
+    page https://wiki.debian.org/Teams/MySQL more information about the
+    mysql-related software available in Debian.
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 14 Mar 2017 16:21:58 +0200

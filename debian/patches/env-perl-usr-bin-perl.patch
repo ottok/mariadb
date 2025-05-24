@@ -1,0 +1,135 @@
+From: Otto Kekalainen <otto@debian.org>
+Date: Sun, 20 Dec 2020 20:58:42 +0200
+Subject: Fix perl path in scripts
+
+Fix Lintian issue https://lintian.debian.org/tags/incorrect-path-for-interpreter.html
+
+Upstream will never accept this patch,
+see https://github.com/MariaDB/server/pull/1718
+
+Origin: https://patch-diff.githubusercontent.com/raw/MariaDB/server/pull/1718.patch
+Forwarded: https://github.com/MariaDB/server/pull/1718 (rejected, will never be merged)
+---
+ mysql-test/lib/process-purecov-annotations.pl       | 2 +-
+ mysql-test/lib/v1/mysql-test-run.pl                 | 2 +-
+ mysql-test/mariadb-stress-test.pl                   | 2 +-
+ mysql-test/mariadb-test-run.pl                      | 2 +-
+ mysql-test/std_data/checkDBI_DBD-MariaDB.pl         | 2 +-
+ mysql-test/suite/engines/rr_trx/run_stress_tx_rr.pl | 2 +-
+ mysql-test/suite/funcs_1/lib/DataGen_local.pl       | 2 +-
+ mysql-test/suite/funcs_1/lib/DataGen_modify.pl      | 2 +-
+ mysql-test/suite/funcs_2/lib/gen_charset_utf8.pl    | 2 +-
+ mysql-test/suite/rpl/extension/checksum.pl          | 2 +-
+ scripts/mytop.sh                                    | 2 +-
+ 11 files changed, 11 insertions(+), 11 deletions(-)
+
+diff --git a/mysql-test/lib/process-purecov-annotations.pl b/mysql-test/lib/process-purecov-annotations.pl
+index 4381aae..d533bd0 100755
+--- a/mysql-test/lib/process-purecov-annotations.pl
++++ b/mysql-test/lib/process-purecov-annotations.pl
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ # -*- cperl -*-
+ 
+ # This script processes a .gcov coverage report to honor purecov 
+diff --git a/mysql-test/lib/v1/mysql-test-run.pl b/mysql-test/lib/v1/mysql-test-run.pl
+index 268f71b..7225f68 100755
+--- a/mysql-test/lib/v1/mysql-test-run.pl
++++ b/mysql-test/lib/v1/mysql-test-run.pl
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ # -*- cperl -*-
+ 
+ # Copyright (c) 2008, 2013, Oracle and/or its affiliates. All rights reserved.
+diff --git a/mysql-test/mariadb-stress-test.pl b/mysql-test/mariadb-stress-test.pl
+index 3ccf965..ef7d974 100755
+--- a/mysql-test/mariadb-stress-test.pl
++++ b/mysql-test/mariadb-stress-test.pl
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ 
+ # Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
+ #
+diff --git a/mysql-test/mariadb-test-run.pl b/mysql-test/mariadb-test-run.pl
+index afe13a8..91e3adb 100755
+--- a/mysql-test/mariadb-test-run.pl
++++ b/mysql-test/mariadb-test-run.pl
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ # -*- cperl -*-
+ 
+ # Copyright (c) 2004, 2014, Oracle and/or its affiliates.
+diff --git a/mysql-test/std_data/checkDBI_DBD-MariaDB.pl b/mysql-test/std_data/checkDBI_DBD-MariaDB.pl
+index b078342..ed0f5b4 100755
+--- a/mysql-test/std_data/checkDBI_DBD-MariaDB.pl
++++ b/mysql-test/std_data/checkDBI_DBD-MariaDB.pl
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ 
+ # Copyright (c) 2011, Oracle and/or its affiliates
+ #
+diff --git a/mysql-test/suite/engines/rr_trx/run_stress_tx_rr.pl b/mysql-test/suite/engines/rr_trx/run_stress_tx_rr.pl
+index e997f47..f277bce 100755
+--- a/mysql-test/suite/engines/rr_trx/run_stress_tx_rr.pl
++++ b/mysql-test/suite/engines/rr_trx/run_stress_tx_rr.pl
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ ################################################################################
+ #
+ # This script runs the transactional stress test "stress_tx_rr" against the
+diff --git a/mysql-test/suite/funcs_1/lib/DataGen_local.pl b/mysql-test/suite/funcs_1/lib/DataGen_local.pl
+index 8ca7440..738a73e 100755
+--- a/mysql-test/suite/funcs_1/lib/DataGen_local.pl
++++ b/mysql-test/suite/funcs_1/lib/DataGen_local.pl
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ 
+ 
+ if ( (scalar(@ARGV) != 1 ) || ($ARGV[0] =~ /[^0-9]/i ) )
+diff --git a/mysql-test/suite/funcs_1/lib/DataGen_modify.pl b/mysql-test/suite/funcs_1/lib/DataGen_modify.pl
+index 8ad8e61..4675049 100755
+--- a/mysql-test/suite/funcs_1/lib/DataGen_modify.pl
++++ b/mysql-test/suite/funcs_1/lib/DataGen_modify.pl
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ 
+ 
+ if ( (scalar(@ARGV) != 2 ) || ($ARGV[0] =~ /[^0-9]/i ) )
+diff --git a/mysql-test/suite/funcs_2/lib/gen_charset_utf8.pl b/mysql-test/suite/funcs_2/lib/gen_charset_utf8.pl
+index c0973a1..3b85ed0 100755
+--- a/mysql-test/suite/funcs_2/lib/gen_charset_utf8.pl
++++ b/mysql-test/suite/funcs_2/lib/gen_charset_utf8.pl
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ 
+ #################################################################################
+ # Author:  Serge Kozlov								#	
+diff --git a/mysql-test/suite/rpl/extension/checksum.pl b/mysql-test/suite/rpl/extension/checksum.pl
+index 8369d1b..f943414 100755
+--- a/mysql-test/suite/rpl/extension/checksum.pl
++++ b/mysql-test/suite/rpl/extension/checksum.pl
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ 
+ # Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
+ #
+diff --git a/scripts/mytop.sh b/scripts/mytop.sh
+index e5d926e..c7748ef 100644
+--- a/scripts/mytop.sh
++++ b/scripts/mytop.sh
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ #
+ # $Id: mytop,v 1.99-maria6 2019/10/22 14:53:51 jweisbuch Exp $
+ 

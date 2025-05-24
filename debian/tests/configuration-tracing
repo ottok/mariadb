@@ -1,0 +1,144 @@
+#!/bin/sh
+# shellcheck disable=SC2086
+#
+# dep8 smoke test for mariadbd
+# Author: Otto Kekäläinen <otto@debian.org>
+#
+# This test should be declared in debian/tests/control with a dependency
+# on the package that provides a configured MariaDB server (eg.
+# mariadb-server).
+#
+# This test should be declared in debian/tests/control with the
+# following restrictions:
+# - needs-root (binaries in /usr/sbin need root to run)
+# - allow-stderr (set -x always outputs to stderr, also if mariadbd was not
+#   launched as a service it will complain that mysql.plugin table is empty)
+#
+# This test prints out various configuration information from mariadbd and
+# compares the result to expected values in original binary/build.
+#
+
+MARIADB_CLIENT_PATH="${MARIADB_CLIENT_PATH:-/usr/bin}"
+MARIADB_SERVER_PATH="${MARIADB_SERVER_PATH:-/usr/sbin}"
+
+normalize_value() {
+  VARIABLE="$1"
+  VALUE="$2"
+  # In sed the '\s.*' will match whitespace followed by any other chars until end of line
+  sed "s/^$VARIABLE\(\s\s*\).*$/$VARIABLE\1$VALUE/" -i "$TEMPFILE"
+}
+
+trace() {
+  TRACE_NAME="$(basename "$*" | sed 's/ //g' | sed 's/--/-/g')"
+
+  # Show in test what was run
+  echo
+  echo "Tracing: $*"
+
+  # shellcheck disable=SC2068
+  $@ > "$TRACE_NAME.actual"
+
+  # Normalize contents for know special case
+  if echo "$*" | grep -q verbose
+  then
+    TEMPFILE="$(mktemp)"
+    # Use 'tail' to skip first line that has version and architecture strings which
+    # we intentionally do not want to include in the trace file.
+    tail -n +2 "$TRACE_NAME.actual" > "$TEMPFILE"
+
+    # Hostname varies one very machine
+    sed "s/$(hostname)/HOSTNAME/g" -i "$TEMPFILE"
+
+    # Version/revision increases on every release
+    VERSION=$($MARIADB_SERVER_PATH/mariadbd --help --verbose | grep -e "^version " | rev | cut -d ' ' -f 1 | rev)
+    sed "s/$VERSION/VERSION/g" -i "$TEMPFILE"
+
+    # SSL library version inherited form dependency, not relevant for tracing
+    # the correctness of the MariaDB build itself
+    sed 's/OpenSSL 3.*/SSL-VERSION/' -i "$TEMPFILE"
+
+    # Normalize values that depend on build environment
+    normalize_value system-time-zone UTC    # depends on OS environment
+    normalize_value open-files-limit 32000  # depends on OS environment
+    normalize_value thread-pool-size 2      # depends on CPU cores available
+    normalize_value version-compile-machine ARCH # x86_64, aarch64, armv7l ..
+
+    # armhf/armel might have: debian-linux-gnueabi, debian-linux-gnueabihf
+    normalize_value version-compile-os debian-linux-gnu
+
+    # In Sid 'Debian n/a', in Bookworm 'Debian 12'
+    normalize_value version-comment "Debian RELEASE"
+
+    # Inherits git commit id from latest upstream release and thus not constant
+    normalize_value version-source-revision -
+
+    # 32-bit systems (i386, armel, armhf) have lower values
+    normalize_value innodb-io-capacity-max 18446744073709551615 # 32-bit: 4294967295
+    normalize_value max-binlog-cache-size 18446744073709547520 # 32-bit: 4294963200
+    normalize_value max-binlog-stmt-cache-size 18446744073709547520 # 32-bit: 4294963200
+    normalize_value myisam-max-sort-file-size 18446744073709551615 # 32-bit: 2146435072
+    normalize_value myisam-mmap-size 9223372036853727232 # 32-bit: 4294967295
+    normalize_value quick-max-column-width 9223372036854775807 # 32-bit: 2147483647
+    normalize_value tmp-disk-table-size 18446744073709551615 # 32-bit: 4294967295
+
+    # ppc64el has larger default value: 393216
+    normalize_value log-tc-size 24576
+
+    # feedback plugin submitter identifier is random
+    normalize_value server-uid 1234567890abcdefghijklmnopq=
+
+    # wsrep-provider exists twice as a system variable: both to control if
+    # plugin is on or off, and to define the path to the plugin. As according to
+    # https://mariadb.com/kb/en/galera-cluster-system-variables/#wsrep_provider)
+    # defining the path is the documented on, clean away the ON/OFF flag from
+    # causing issues in tracing:
+    sed '/wsrep-provider\s\+ON/d' -i "$TEMPFILE"
+    sed '/^  --wsrep-provider\[=name\]/,/^[[:blank:]]\+be uninstalled/d' -i "$TEMPFILE"
+
+    mv "$TEMPFILE" "$TRACE_NAME.actual"
+  fi
+
+  echo "diff --ignore-space-change -u $TRACE_NAME.expected $TRACE_NAME.actual"
+  # Validate that trace file in source code matches tested
+  if ! diff --ignore-space-change -u "$TRACE_NAME.expected" "$TRACE_NAME.actual"
+  then
+    echo "Error: Output from '$*' did NOT match what was expected"
+    echo
+    echo "If the change is intentional, update the debian/tests/traces to match"
+    echo "the new values and document change to users in mariadb-server.NEWS"
+
+    if [ -n "$ERRORS" ]
+    then
+      ERRORS="$ERRORS, $TRACE_NAME"
+    else
+      ERRORS="$TRACE_NAME"
+    fi
+  fi
+}
+
+TEST_DIR="$(dirname "$(realpath "$0")")"
+echo "Running test 'configuration-tracing' at $TEST_DIR"
+cd $TEST_DIR/traces || exit 1
+
+set -e
+
+ERRORS=""
+
+# Dump out what parameters mariadb would be called with by default
+trace $MARIADB_CLIENT_PATH/mariadb --print-defaults
+
+# Dump out all help texts, client variables and their default values
+trace $MARIADB_CLIENT_PATH/mariadb --verbose --help
+
+# Dump out what parameters mariadbd would be called with by default on system
+trace $MARIADB_SERVER_PATH/mariadbd --print-defaults
+
+# Dump out all help texts, server variables and their default values
+trace $MARIADB_SERVER_PATH/mariadbd --verbose --help
+
+# Emit non-zero exit code if there was errors
+if [ -n "$ERRORS" ]
+then
+  echo "Error: mismatch in $ERRORS"
+  exit 1
+fi

@@ -22,6 +22,8 @@ usr/bin/mariadb-slap
 usr/bin/mariadb-tzinfo-to-sql
 usr/bin/mariadb-waitpid
 usr/bin/msql2mysql
+usr/bin/mysqladmin
+usr/bin/mysqldump
 usr/bin/mytop
 usr/bin/perror
 usr/bin/replace
@@ -45,6 +47,8 @@ usr/share/man/man1/mariadb-slap.1
 usr/share/man/man1/mariadb-tzinfo-to-sql.1
 usr/share/man/man1/mariadb-waitpid.1
 usr/share/man/man1/msql2mysql.1
+usr/share/man/man1/mysqladmin.1
+usr/share/man/man1/mysqldump.1
 usr/share/man/man1/mytop.1
 usr/share/man/man1/perror.1
 usr/share/man/man1/replace.1

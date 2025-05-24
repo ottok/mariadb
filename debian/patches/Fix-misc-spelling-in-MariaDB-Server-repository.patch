@@ -1,0 +1,251 @@
+From: Otto Kekalainen <otto@debian.org>
+Date: Sun, 10 Mar 2024 16:56:13 +0000
+Subject: Fix misc spelling in MariaDB Server repository
+
+This is a combined patch of various spelling fixes.
+
+* Fix misc typos in MariaDB Server
+
+* Fix spelling of 'allows one to'
+
+  Fix the following Lintian nags introduced in commit
+  c8d040938a7ebe10e62506a726702c5990ef4dda:
+
+  I: mariadb-backup: spelling-error-in-binary "allows to" "allows one to" [usr/bin/mariadb-backup]
+  I: mariadb-server-core: spelling-error-in-binary "allows to" "allows one to" [usr/sbin/mariadbd]
+  I: mariadb-test: spelling-error-in-binary "allows to" "allows one to" [usr/bin/mariadb-client-test-embedded]
+  I: mariadb-test: spelling-error-in-binary "allows to" "allows one to" [usr/bin/mariadb-test-embedded]
+  I: mariadb-test: spelling-error-in-binary "allows to" "allows one to" [usr/bin/test-connect-t]
+
+* Fix typo: Enrypt->Encrypt
+
+Forwarded: no
+---
+ extra/mariabackup/innobackupex.cc                         |  4 ++--
+ extra/mariabackup/xtrabackup.cc                           |  6 +++---
+ mysql-test/main/mysqld--help.result                       | 15 ++++++++-------
+ mysql-test/suite/sys_vars/r/sysvars_innodb.result         |  2 +-
+ .../suite/sys_vars/r/sysvars_server_embedded.result       |  2 +-
+ .../suite/sys_vars/r/sysvars_server_notembedded.result    |  2 +-
+ sql/opt_subselect.cc                                      |  4 ++--
+ sql/sql_select.cc                                         |  4 ++--
+ sql/sys_vars.cc                                           |  2 +-
+ storage/connect/odbconn.cpp                               |  2 +-
+ storage/innobase/handler/ha_innodb.cc                     |  2 +-
+ support-files/mysql.server.sh                             |  2 +-
+ 12 files changed, 24 insertions(+), 23 deletions(-)
+
+diff --git a/extra/mariabackup/innobackupex.cc b/extra/mariabackup/innobackupex.cc
+index 60c3854..bb5656a 100644
+--- a/extra/mariabackup/innobackupex.cc
++++ b/extra/mariabackup/innobackupex.cc
+@@ -188,7 +188,7 @@ enum innobackupex_options
+ 	OPT_DATABASES,
+ 	OPT_DECOMPRESS,
+ 
+-	/* options wich are passed directly to xtrabackup */
++	/* options which are passed directly to xtrabackup */
+ 	OPT_CLOSE_FILES,
+ 	OPT_COMPACT,
+ 	OPT_COMPRESS,
+@@ -447,7 +447,7 @@ static struct my_option ibx_long_options[] =
+ 	{"startup-wait-timeout", OPT_LOCK_WAIT_TIMEOUT,
+          "This option specifies time in seconds that mariadb-backup should wait for "
+          "BACKUP STAGE START to complete. BACKUP STAGE START has to wait until all "
+-         "currently running queries using explicite LOCK TABLES has ended. "
++         "currently running queries using explicit LOCK TABLES has ended. "
+          "If there are still such queries when the timeout expires, mariadb-backup "
+          "terminates with an error. Default is 0, in which case mariadb-backup waits "
+          "indefinitely for BACKUP STAGE START to finish",
+diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
+index 34d6314..d0b60a1 100644
+--- a/extra/mariabackup/xtrabackup.cc
++++ b/extra/mariabackup/xtrabackup.cc
+@@ -219,7 +219,7 @@ uint xtrabackup_compress = FALSE;
+ uint xtrabackup_compress_threads;
+ ulonglong xtrabackup_compress_chunk_size = 0;
+ 
+-/* sleep interval beetween log copy iterations in log copying thread
++/* sleep interval between log copy iterations in log copying thread
+ in milliseconds (default is 1 second) */
+ ulint xtrabackup_log_copy_interval = 1000;
+ static ulong max_buf_pool_modified_pct;
+@@ -1735,7 +1735,7 @@ struct my_option xb_client_options[]= {
+     {"startup-wait-timeout", OPT_LOCK_WAIT_TIMEOUT,
+      "This option specifies time in seconds that mariadb-backup should wait for "
+      "BACKUP STAGE START to complete. BACKUP STAGE START has to wait until all "
+-     "currently running queries using explicite LOCK TABLES has ended. "
++     "currently running queries using explicit LOCK TABLES has ended. "
+      "If there are still such queries when the timeout expires, mariadb-backup "
+      "terminates with an error. Default is 0, in which case mariadb-backup waits "
+      "indefinitely for BACKUP STAGE START to finish",
+@@ -5799,7 +5799,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
+ 	}
+ 
+ 	/* Mariabackup doesn't detect any FILE_OP for the deferred
+-	tablespace. There is a possiblity that page0 could've
++	tablespace. There is a possibility that page0 could've
+ 	been corrupted persistently in the disk */
+ 	for (auto space_name: defer_space_names) {
+ 		if (!check_if_skip_table(space_name.c_str())) {
+diff --git a/mysql-test/main/mysqld--help.result b/mysql-test/main/mysqld--help.result
+index 00fbdf5..02e27c2 100644
+--- a/mysql-test/main/mysqld--help.result
++++ b/mysql-test/main/mysqld--help.result
+@@ -815,13 +815,14 @@ The following specify which files/extra groups are read (specified before remain
+  storage as part of an index scan
+  --optimizer-join-limit-pref-ratio=# 
+  For queries with JOIN and ORDER BY LIMIT : make the
+- optimizer consider a join order that allows to short-cut
+- execution after producing #LIMIT matches if that promises
+- N times speedup. (A conservative setting here would be is
+- a high value, like 100 so the short-cutting plan is used
+- if it promises a speedup of 100x or more). Short-cutting
+- plans are inherently risky so the default is 0 which
+- means do not consider this optimization
++ optimizer consider a join order that allows one to
++ short-cut execution after producing #LIMIT matches if
++ that promises N times speedup. (A conservative setting
++ here would be is a high value, like 100 so the
++ short-cutting plan is used if it promises a speedup of
++ 100x or more). Short-cutting plans are inherently risky
++ so the default is 0 which means do not consider this
++ optimization
+  --optimizer-key-compare-cost=# 
+  Cost of checking a key against the end key condition
+  --optimizer-key-copy-cost=# 
+diff --git a/mysql-test/suite/sys_vars/r/sysvars_innodb.result b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
+index fe7c07c..0d58133 100644
+--- a/mysql-test/suite/sys_vars/r/sysvars_innodb.result
++++ b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
+@@ -528,7 +528,7 @@ SESSION_VALUE	NULL
+ DEFAULT_VALUE	OFF
+ VARIABLE_SCOPE	GLOBAL
+ VARIABLE_TYPE	BOOLEAN
+-VARIABLE_COMMENT	Encrypt the temporary table data
++VARIABLE_COMMENT	Encrypt the temporary table data.
+ NUMERIC_MIN_VALUE	NULL
+ NUMERIC_MAX_VALUE	NULL
+ NUMERIC_BLOCK_SIZE	NULL
+diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
+index 2c1da01..9d94e48 100644
+--- a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
++++ b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
+@@ -2485,7 +2485,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
+ VARIABLE_NAME	OPTIMIZER_JOIN_LIMIT_PREF_RATIO
+ VARIABLE_SCOPE	SESSION
+ VARIABLE_TYPE	BIGINT UNSIGNED
+-VARIABLE_COMMENT	For queries with JOIN and ORDER BY LIMIT : make the optimizer consider a join order that allows to short-cut execution after producing #LIMIT matches if that promises N times speedup. (A conservative setting here would be is a high value, like 100 so the short-cutting plan is used if it promises a speedup of 100x or more). Short-cutting plans are inherently risky so the default is 0 which means do not consider this optimization
++VARIABLE_COMMENT	For queries with JOIN and ORDER BY LIMIT : make the optimizer consider a join order that allows one to short-cut execution after producing #LIMIT matches if that promises N times speedup. (A conservative setting here would be is a high value, like 100 so the short-cutting plan is used if it promises a speedup of 100x or more). Short-cutting plans are inherently risky so the default is 0 which means do not consider this optimization
+ NUMERIC_MIN_VALUE	0
+ NUMERIC_MAX_VALUE	4294967295
+ NUMERIC_BLOCK_SIZE	1
+diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
+index 00f5095..a44c9d1 100644
+--- a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
++++ b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
+@@ -2695,7 +2695,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
+ VARIABLE_NAME	OPTIMIZER_JOIN_LIMIT_PREF_RATIO
+ VARIABLE_SCOPE	SESSION
+ VARIABLE_TYPE	BIGINT UNSIGNED
+-VARIABLE_COMMENT	For queries with JOIN and ORDER BY LIMIT : make the optimizer consider a join order that allows to short-cut execution after producing #LIMIT matches if that promises N times speedup. (A conservative setting here would be is a high value, like 100 so the short-cutting plan is used if it promises a speedup of 100x or more). Short-cutting plans are inherently risky so the default is 0 which means do not consider this optimization
++VARIABLE_COMMENT	For queries with JOIN and ORDER BY LIMIT : make the optimizer consider a join order that allows one to short-cut execution after producing #LIMIT matches if that promises N times speedup. (A conservative setting here would be is a high value, like 100 so the short-cutting plan is used if it promises a speedup of 100x or more). Short-cutting plans are inherently risky so the default is 0 which means do not consider this optimization
+ NUMERIC_MIN_VALUE	0
+ NUMERIC_MAX_VALUE	4294967295
+ NUMERIC_BLOCK_SIZE	1
+diff --git a/sql/opt_subselect.cc b/sql/opt_subselect.cc
+index 4ad0540..873e56a 100644
+--- a/sql/opt_subselect.cc
++++ b/sql/opt_subselect.cc
+@@ -6880,7 +6880,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
+         add("rows", inner_record_count_1).
+         add("materialization_cost", materialize_strategy_cost).
+         add("in_exist_cost", in_exists_strategy_cost).
+-        add("choosen", strategy);
++        add("chosen", strategy);
+     }
+ 
+     DBUG_PRINT("info",
+@@ -6918,7 +6918,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
+     {
+       Json_writer_object trace_wrapper(thd);
+       Json_writer_object trace_subquery(thd, "subquery_plan_revert");
+-      trace_subquery.add("choosen", "in_to_exists");
++      trace_subquery.add("chosen", "in_to_exists");
+     }
+   }
+ 
+diff --git a/sql/sql_select.cc b/sql/sql_select.cc
+index c14afdc..d3e5d38 100644
+--- a/sql/sql_select.cc
++++ b/sql/sql_select.cc
+@@ -11745,7 +11745,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
+ 
+ /*
+   @brief
+-    Finalize building the join order which allows to short-cut the join
++    Finalize building the join order which allows one to short-cut the join
+     execution.
+ 
+   @detail
+@@ -15185,7 +15185,7 @@ void JOIN::drop_unused_derived_keys()
+       }
+       /*
+         We dropped all keys except the chosen one and unique keys.
+-        The choosen one is stored as the first key (number 0).
++        The chosen one is stored as the first key (number 0).
+       */
+       tab->ref.key= 0;
+     }
+diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
+index 4e4a77e..230b614 100644
+--- a/sql/sys_vars.cc
++++ b/sql/sys_vars.cc
+@@ -2958,7 +2958,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
+ static Sys_var_ulonglong Sys_optimizer_join_limit_pref_ratio(
+        "optimizer_join_limit_pref_ratio",
+        "For queries with JOIN and ORDER BY LIMIT : make the optimizer "
+-       "consider a join order that allows to short-cut execution after "
++       "consider a join order that allows one to short-cut execution after "
+        "producing #LIMIT matches if that promises N times speedup. "
+        "(A conservative setting here would be is a high value, like 100 so "
+        "the short-cutting plan is used if it promises a speedup of 100x or "
+diff --git a/storage/connect/odbconn.cpp b/storage/connect/odbconn.cpp
+index 520b82d..a782570 100644
+--- a/storage/connect/odbconn.cpp
++++ b/storage/connect/odbconn.cpp
+@@ -281,7 +281,7 @@ static CATPARM *AllocCatInfo(PGLOBAL g, CATINFO fid, PCSZ db,
+ 		cap->Status = (UWORD *)PlugSubAlloc(g, NULL, m * sizeof(UWORD));
+ 
+ 	} catch (int n) {
+-		htrc("Exeption %d: %s\n", n, g->Message);
++		htrc("Exception %d: %s\n", n, g->Message);
+ 		cap = NULL;
+ 	} catch (const char *msg) {
+ 		htrc(g->Message, msg);
+diff --git a/storage/innobase/handler/ha_innodb.cc b/storage/innobase/handler/ha_innodb.cc
+index 0d26b70..62d67f1 100644
+--- a/storage/innobase/handler/ha_innodb.cc
++++ b/storage/innobase/handler/ha_innodb.cc
+@@ -19898,7 +19898,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
+ 
+ static MYSQL_SYSVAR_BOOL(encrypt_temporary_tables, innodb_encrypt_temporary_tables,
+   PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
+-  "Encrypt the temporary table data",
++  "Encrypt the temporary table data.",
+   NULL, NULL, false);
+ 
+ static MYSQL_SYSVAR_BOOL(truncate_temporary_tablespace_now,
+diff --git a/support-files/mysql.server.sh b/support-files/mysql.server.sh
+index dd8cbd4..cc4b866 100644
+--- a/support-files/mysql.server.sh
++++ b/support-files/mysql.server.sh
+@@ -194,7 +194,7 @@ su_kill() {
+ 
+ #
+ # Read defaults file from 'basedir'.   If there is no defaults file there
+-# check if it's in the old (depricated) place (datadir) and read it from there
++# check if it's in the old (deprecated) place (datadir) and read it from there
+ #
+ 
+ extra_args=""

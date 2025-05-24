@@ -1,0 +1,3 @@
+# The m68k build on Debian runs in a qemu builder and has
+# DEB_BUILD_OPTIONS="nobench nocheck" defined, so *all* tests are skipped
+# intentionally (Bug#972057)

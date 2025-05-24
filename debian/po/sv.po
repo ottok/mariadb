@@ -6,9 +6,9 @@
 # Martin Bagge <brother@bsnet.se>, 2009, 2015, 2017
 msgid ""
 msgstr ""
-"Project-Id-Version: mysql-dfsg-5.1 5.0.21-3\n"
+"Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2019-07-23 19:16-0300\n"
+"POT-Creation-Date: 2022-12-31 18:55-0800\n"
 "PO-Revision-Date: 2017-03-23 09:20+0100\n"
 "Last-Translator: Martin Bagge / brother <brother@bsnet.se>\n"
 "Language-Team: Swedish <debian-l10n-swedish@lists.debian.org>\n"
