@@ -933,7 +933,7 @@ Package: mariadb-plugin-gssapi-server
 Architecture: any
 Depends:
  libgssapi-krb5-2,
- mariadb-server-core,
+ mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
 Breaks:
@@ -984,7 +984,7 @@ Description: CrackLib Password Validation Plugin for MariaDB server
 Package: mariadb-plugin-hashicorp-key-management
 Architecture: any
 Depends:
- mariadb-server-core,
+ mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
 Description: Hashicorp Key Management plugin for MariaDB
@@ -994,7 +994,7 @@ Description: Hashicorp Key Management plugin for MariaDB
 Package: mariadb-plugin-provider-bzip2
 Architecture: any
 Depends:
- mariadb-server-core (>= 1:10.11.1-1),
+ mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
 Description: BZip2 compression support in the server and storage engines
@@ -1009,7 +1009,7 @@ Description: BZip2 compression support in the server and storage engines
 Package: mariadb-plugin-provider-lz4
 Architecture: any
 Depends:
- mariadb-server-core (>= 1:10.11.1-1),
+ mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
 Description: LZ4 compression support in the server and storage engines
@@ -1024,7 +1024,7 @@ Description: LZ4 compression support in the server and storage engines
 Package: mariadb-plugin-provider-lzma
 Architecture: any
 Depends:
- mariadb-server-core (>= 1:10.11.1-1),
+ mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
 Description: LZMA compression support in the server and storage engines
@@ -1039,7 +1039,7 @@ Description: LZMA compression support in the server and storage engines
 Package: mariadb-plugin-provider-lzo
 Architecture: any
 Depends:
- mariadb-server-core (>= 1:10.11.1-1),
+ mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
 Description: LZO compression support in the server and storage engines
@@ -1054,7 +1054,7 @@ Description: LZO compression support in the server and storage engines
 Package: mariadb-plugin-provider-snappy
 Architecture: any
 Depends:
- mariadb-server-core (>= 1:10.11.1-1),
+ mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
 Description: Snappy compression support in the server and storage engines
