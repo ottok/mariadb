@@ -12,11 +12,9 @@ Forwarded: not-needed
  storage/mroonga/CMakeLists.txt | 12 ++++--------
  1 file changed, 4 insertions(+), 8 deletions(-)
 
-diff --git a/storage/mroonga/CMakeLists.txt b/storage/mroonga/CMakeLists.txt
-index d39e628..5bb2e2c 100644
 --- a/storage/mroonga/CMakeLists.txt
 +++ b/storage/mroonga/CMakeLists.txt
-@@ -213,7 +213,7 @@ set(MYSQL_INCLUDE_DIRS
+@@ -213,7 +213,7 @@
  
  if(MRN_BUNDLED)
    set(MYSQL_PLUGIN_DIR "${INSTALL_PLUGINDIR}")
@@ -25,7 +23,7 @@ index d39e628..5bb2e2c 100644
    set(MYSQL_CFLAGS "${CMAKE_C_FLAGS}")
    set(MYSQL_VERSION "${MYSQL_BASE_VERSION}")
  else()
-@@ -252,15 +252,11 @@ endif()
+@@ -252,15 +252,11 @@
  
  if(MRN_GROONGA_BUNDLED)
    set(GROONGA_INCLUDE_DIRS "${MRN_BUNDLED_GROONGA_DIR}/include")

@@ -10,8 +10,6 @@ Forwarded: no
  storage/connect/ioapi.h | 5 +++--
  1 file changed, 3 insertions(+), 2 deletions(-)
 
-diff --git a/storage/connect/ioapi.h b/storage/connect/ioapi.h
-index 94b292e..7971717 100644
 --- a/storage/connect/ioapi.h
 +++ b/storage/connect/ioapi.h
 @@ -21,9 +21,10 @@

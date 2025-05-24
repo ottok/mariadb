@@ -31,11 +31,9 @@ Forwarded: no
  sql/mysqld.cc   | 20 +++++++++++++++-----
  2 files changed, 18 insertions(+), 5 deletions(-)
 
-diff --git a/client/mysql.cc b/client/mysql.cc
-index e04276d..debe1d8 100644
 --- a/client/mysql.cc
 +++ b/client/mysql.cc
-@@ -1339,6 +1339,9 @@ int main(int argc,char *argv[])
+@@ -1339,6 +1339,9 @@
              mysql_thread_id(&mysql), server_version_string(&mysql));
      put_info((char*) glob_buffer.ptr(),INFO_INFO);
      put_info(ORACLE_WELCOME_COPYRIGHT_NOTICE("2000"), INFO_INFO);
@@ -45,11 +43,9 @@ index e04276d..debe1d8 100644
    }
  
  #ifdef HAVE_READLINE
-diff --git a/sql/mysqld.cc b/sql/mysqld.cc
-index ce75a02..bb1ae7f 100644
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
-@@ -5038,13 +5038,23 @@ static int init_server_components()
+@@ -5040,13 +5040,23 @@
  
    /*
      Print source revision hash, as one of the first lines, if not the

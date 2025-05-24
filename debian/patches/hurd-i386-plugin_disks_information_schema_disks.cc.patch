@@ -10,8 +10,6 @@ Forwarded: no
  plugin/disks/information_schema_disks.cc | 3 +++
  1 file changed, 3 insertions(+)
 
-diff --git a/plugin/disks/information_schema_disks.cc b/plugin/disks/information_schema_disks.cc
-index 01df325..d42d303 100644
 --- a/plugin/disks/information_schema_disks.cc
 +++ b/plugin/disks/information_schema_disks.cc
 @@ -32,6 +32,9 @@

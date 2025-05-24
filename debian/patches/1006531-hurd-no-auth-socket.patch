@@ -15,11 +15,9 @@ Forwarded: no
  cmake/build_configurations/mysql_release.cmake | 5 ++++-
  1 file changed, 4 insertions(+), 1 deletion(-)
 
-diff --git a/cmake/build_configurations/mysql_release.cmake b/cmake/build_configurations/mysql_release.cmake
-index a2e4f26..3f59b3e 100644
 --- a/cmake/build_configurations/mysql_release.cmake
 +++ b/cmake/build_configurations/mysql_release.cmake
-@@ -120,7 +120,10 @@ ELSEIF(DEB)
+@@ -120,7 +120,10 @@
    SET(WITH_ZLIB system CACHE STRING "")
    SET(WITH_LIBWRAP ON)
    SET(HAVE_EMBEDDED_PRIVILEGE_CONTROL ON)

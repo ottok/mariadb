@@ -11,11 +11,9 @@ Forwarded: no
  cmake/install_layout.cmake | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/cmake/install_layout.cmake b/cmake/install_layout.cmake
-index eb96967..3be0498 100644
 --- a/cmake/install_layout.cmake
 +++ b/cmake/install_layout.cmake
-@@ -194,10 +194,10 @@ SET(INSTALL_SUPPORTFILESDIR_DEB         "share/mariadb")
+@@ -194,10 +194,10 @@
  SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mysql")
  
  SET(INSTALL_UNIX_ADDRDIR_DEB            "/run/mysqld/mysqld.sock")

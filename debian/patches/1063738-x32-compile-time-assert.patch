@@ -17,11 +17,9 @@ Forwarded: no
  tests/mysql_client_fw.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/tests/mysql_client_fw.c b/tests/mysql_client_fw.c
-index 9f0faf8..b8794d0 100644
 --- a/tests/mysql_client_fw.c
 +++ b/tests/mysql_client_fw.c
-@@ -1442,7 +1442,7 @@ int main(int argc, char **argv)
+@@ -1442,7 +1442,7 @@
    this limited check is enough, if sizeof(MYSQL) changes, it changes
    everywhere
  */
