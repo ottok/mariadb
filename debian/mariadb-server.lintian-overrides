@@ -18,5 +18,3 @@ executable-in-usr-lib [usr/lib/mysql/plugin/auth_pam_tool_dir/auth_pam_tool]
 uses-dpkg-database-directly [postinst]
 # New issue in summer of 2024, perhaps due to dependency update and should be investigated
 library-not-linked-against-libc [usr/lib/mysql/plugin/metadata_lock_info.so]
-# Lintian check outdated, does not detect new path /usr/lib/lsb/init-functions
-init.d-script-does-not-source-init-functions [etc/init.d/mariadb]
