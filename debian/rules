@@ -221,7 +221,7 @@ ifneq (,$(filter linux,$(DEB_HOST_ARCH_OS)))
 	dh_missing --list-missing
 endif
 
-override_dh_installinit-arch:
+override_dh_installinit:
 	dh_installinit --name=mariadb
 
 # Use custom server version string variable
