@@ -497,26 +497,31 @@ repositories one needs to run:
 
     docker run -it -v ${PWD}:/build -w /build debian:sid bash
     apt update
-    apt install --yes python3-junit.xml python3-debian apt-file
-    curl -O https://salsa.debian.org/salsa-ci-team/pipeline/-/raw/master/images/scripts/check_for_missing_breaks_replaces.py
-    chmod +x check_for_missing_breaks_replaces.py
-    apt install --no-install-recommends --yes gpg gpg-agent dirmngr ca-certificates curl debian-archive-keyring
-    curl -sS https://mariadb.org/mariadb_release_signing_key.asc -o /etc/apt/trusted.gpg.d/mariadb.asc
-    gpg --list-keys # Initialize default keyring
-    gpg --no-default-keyring --keyring gnupg-ring:/etc/apt/trusted.gpg.d/mariadb.gpg --keyserver hkps://keyserver.ubuntu.com:443 --recv-keys 871920D1991BC93C 3B4FE6ACC0B21F32 CBF8D6FD518E17E1 7638D0442B90D010 8C718D3B5072E1F5 9334A25F8507EFA5 CBCB082A1BB943DB 467B942D3A79BD29 B7B3B788A8D3785C
-    chmod 644 /etc/apt/trusted.gpg.d/mariadb.gpg
+    apt install --yes devscripts python3-junit.xml apt-file
+    cat > /etc/apt/apt.conf.d/99ignore-keys <<EOF
+    APT::Get::AllowUnauthenticated "true";
+    Acquire::AllowInsecureRepositories "true";
+    Acquire::AllowDowngradeToInsecureRepositories "true";
+    Acquire::Check-Valid-Until "false";
+    Acquire::Check-Date "false";
+    EOF
     cat > /etc/apt/sources.list.d/mariadb.list <<EOF
     deb http://deb.debian.org/debian trixie main
     deb http://deb.debian.org/debian bookworm main
     deb http://deb.debian.org/debian bullseye main
-    deb http://deb.debian.org/debian buster main
+    deb http://archive.debian.org/debian buster main
     deb http://archive.debian.org/debian stretch main
-    deb [trusted=yes] http://archive.debian.org/debian jessie main
+    deb http://archive.debian.org/debian jessie main
+    deb http://archive.ubuntu.com/ubuntu/ plucky main restricted universe multiverse
+    deb http://archive.ubuntu.com/ubuntu/ oracular main restricted universe multiverse
+    deb http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
     deb http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
     deb http://archive.ubuntu.com/ubuntu/ focal main restricted universe multiverse
     deb http://archive.ubuntu.com/ubuntu/ bionic main restricted universe multiverse
     deb http://archive.ubuntu.com/ubuntu/ xenial main restricted universe multiverse
     deb http://archive.ubuntu.com/ubuntu/ trusty main restricted universe multiverse
+    deb https://archive.mariadb.org/mariadb-11.8/repo/debian bookworm main
+    deb https://archive.mariadb.org/mariadb-11.7/repo/debian bookworm main
     deb https://archive.mariadb.org/mariadb-11.6/repo/debian bookworm main
     deb https://archive.mariadb.org/mariadb-11.5/repo/debian bookworm main
     deb https://archive.mariadb.org/mariadb-11.4/repo/debian bookworm main
@@ -535,10 +540,17 @@ repositories one needs to run:
     deb https://archive.mariadb.org/mariadb-10.3/repo/debian buster main
     deb https://archive.mariadb.org/mariadb-10.2/repo/debian buster main
     deb https://archive.mariadb.org/mariadb-10.1/repo/debian stretch main
-    deb [trusted=yes] https://archive.mariadb.org/mariadb-10.0/repo/debian jessie main
-    deb [trusted=yes] https://archive.mariadb.org/mariadb-5.5/repo/debian wheezy main
+    deb https://archive.mariadb.org/mariadb-10.0/repo/debian jessie main
+    deb https://archive.mariadb.org/mariadb-5.5/repo/debian wheezy main
+    deb https://repo.mysql.com/apt/ubuntu/ noble mysql-8.4-lts
+    deb https://repo.mysql.com/apt/ubuntu/ noble mysql-8.0
     deb https://repo.mysql.com/apt/ubuntu/ jammy mysql-8.0
     deb https://repo.mysql.com/apt/ubuntu/ focal mysql-8.0
+    deb https://repo.mysql.com/apt/debian/ bookworm mysql-innovation
+    deb https://repo.mysql.com/apt/debian/ bookworm mysql-8.4-lts
+    deb https://repo.mysql.com/apt/debian/ bookworm mysql-8.0
+    deb https://repo.mysql.com/apt/debian/ bullseye mysql-8.4-lts
+    deb https://repo.mysql.com/apt/debian/ bullseye mysql-8.0
     deb https://repo.mysql.com/apt/debian/ buster mysql-8.0
     deb https://repo.mysql.com/apt/debian/ buster mysql-5.7
     deb https://repo.mysql.com/apt/debian/ buster mysql-5.6
@@ -553,7 +565,7 @@ repositories one needs to run:
     deb https://repo.percona.com/apt/ wheezy main
     EOF
     apt-file update
-    ./check_for_missing_breaks_replaces.py --changes-file mariadb_*.changes --debug
+    deb-check-file-conflicts --debug --changes-file mariadb_*_amd64.changes
 
 ## Check reverse dependencies
 
