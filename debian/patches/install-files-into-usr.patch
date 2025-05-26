@@ -6,7 +6,7 @@ Since Debian trixie all files need to be installed into their canonical
 location under /usr.
 
 Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1061348
-Forwarded: no
+Forwarded: https://github.com/MariaDB/server/pull/4065
 ---
  cmake/install_layout.cmake | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)
