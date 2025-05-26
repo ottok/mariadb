@@ -1,8 +1,23 @@
-mariadb (1:11.8.1-5) UNRELEASED; urgency=medium
+mariadb (1:11.8.1-5) unstable; urgency=medium
 
-  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+  [ Otto Kekäläinen ]
+  * Disable additional tests that failed on sparc64 (MDEV-36670)
+  * Have all server plugins depend on mariadb-server-core (Closes: #1039702)
+  * Make plugin dependencies on mariadbd on strictly versioned
+    (Closes: #1057708)
+  * Remove redundant BSD license comment in debian/copyright
+  * Remove unnecessary arch from dh_installinit rule
+  * Make COMPILATION_COMMENT and MYSQL_SERVER_SUFFIX more useful
+  * Several improvements to Salsa CI, Lintian overrides and other quality
+    assurance for Debian 13 "Trixie"
 
- -- Otto Kekäläinen <otto@debian.org>  Wed, 23 Apr 2025 16:48:12 -0700
+  [ Jing Luo ]
+  * d/upstream/metadata: change github url protocol from git to https
+  * d/copyright: remove old FSF address
+  * d/copyright: move "On Debian systems..." to comment stanza
+  * d/copyright: misc fixes, remove the full text of BSD-3 and Artistic
+
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 26 May 2025 09:23:46 -0700
 
 mariadb (1:11.8.1-4) unstable; urgency=medium
 
