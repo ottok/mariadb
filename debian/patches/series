@@ -8,3 +8,4 @@ hurd-i386-storage_connect_ioapi.h.patch
 hide-mysql-command-deprecation-warnings.patch
 1063738-x32-compile-time-assert.patch
 Fix-misc-spelling-in-MariaDB-Server-repository.patch
+Improve-output-from-mariadb-secure-installation-to-be-mor.patch
