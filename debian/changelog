@@ -4,7 +4,7 @@ mariadb (1:11.8.2-1) UNRELEASED; urgency=medium
     ready for general availability (GA) with security releases for 5 years.
     This release includes fixes for several defects as noted at
     https://mariadb.com/kb/en/mariadb-11-8-2-release-notes/ as well
-    the following security issues:
+    the following security issues (Closes: #1100437, #1105976):
     - CVE-2023-52969
     - CVE-2023-52970
     - CVE-2023-52971
@@ -12,6 +12,15 @@ mariadb (1:11.8.2-1) UNRELEASED; urgency=medium
     - CVE-2025-30722
   * Drop all RocksDB patches now upstream due to update to version 6.29fb
   * Drop PCRE2 10.45 compatibility patch obsoleted by upstream test change
+  * Update configuration traces to include new upstream system variables:
+    - innodb-buffer-pool-size-auto-min (default: 0)
+    - innodb-buffer-pool-size-max (default: 0)
+    - innodb-log-checkpoint-now (default: FALSE)
+  * Also update configuration traces to match that in 11.8.2 the variables
+    innodb-buffer-pool-chunk-size and innodb-log-spin-wait-delay are advertised
+    as deprecated.
+  * Disable new unreliable test main.mysql-interactive
+  * Add Breaks/Replaces for files moved around in src:mysql-8.4 (LP: #2110378)
 
  -- Otto Kekäläinen <otto@debian.org>  Thu, 05 Jun 2025 13:09:49 +0300
 
