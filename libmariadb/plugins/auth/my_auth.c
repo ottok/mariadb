@@ -426,15 +426,27 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
     if (ma_pvio_start_ssl(mysql->net.pvio))
       goto error;
 
-    verify_flags= MARIADB_TLS_VERIFY_PERIOD | MARIADB_TLS_VERIFY_REVOKED;
+    verify_flags= MARIADB_TLS_VERIFY_PERIOD;
+
+    /* Don't check for revocation if CRL not provided */
+    if (mysql->options.extension &&
+       (mysql->options.extension->ssl_crl || mysql->options.extension->ssl_crlpath))
+    {
+      verify_flags|= MARIADB_TLS_VERIFY_REVOKED;
+    }
+
     if (have_fingerprint(mysql))
     {
       verify_flags|= MARIADB_TLS_VERIFY_FINGERPRINT;
     } else {
-      verify_flags|= MARIADB_TLS_VERIFY_TRUST;
-      /* Don't check host name on local (non globally resolvable) addresses */
+      /*
+        Don't check host name on local (non globally resolvable) addresses
+        For local connections, only check CA if CA is given.
+      */
       if (!is_local_connection(mysql->net.pvio))
-        verify_flags |= MARIADB_TLS_VERIFY_HOST;
+        verify_flags |= MARIADB_TLS_VERIFY_HOST|MARIADB_TLS_VERIFY_TRUST;
+      else if (mysql->options.ssl_ca || mysql->options.ssl_capath)
+        verify_flags |= MARIADB_TLS_VERIFY_TRUST;
     }
 
     if (mysql->options.extension->tls_verification_callback(mysql->net.pvio->ctls, verify_flags))
@@ -442,13 +454,7 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
       if (mysql->net.tls_verify_status > MARIADB_TLS_VERIFY_AUTO ||
           (mysql->options.ssl_ca || mysql->options.ssl_capath))
         goto error;
-
-      if (is_local_connection(mysql->net.pvio))
-      {
-        CLEAR_CLIENT_ERROR(mysql);
-        mysql->net.tls_verify_status&= ~MARIADB_TLS_VERIFY_AUTO;
-      }
-      else if (!password_and_hashing(mysql, mpvio->plugin))
+      if (!password_and_hashing(mysql, mpvio->plugin))
         goto error;
     }
   }

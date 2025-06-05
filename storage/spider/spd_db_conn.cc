@@ -2365,7 +2365,7 @@ int spider_db_fetch_table(
     if (result_list->quick_mode == 0)
     {
       SPIDER_DB_RESULT *result = current->result;
-      if (!(row = result->fetch_row()))
+      if (!(row = result->fetch_row(result_list->skips)))
       {
         table->status = STATUS_NOT_FOUND;
         DBUG_RETURN(HA_ERR_END_OF_FILE);
@@ -2481,7 +2481,7 @@ int spider_db_fetch_key(
   if (result_list->quick_mode == 0)
   {
     SPIDER_DB_RESULT *result = current->result;
-    if (!(row = result->fetch_row()))
+    if (!(row = result->fetch_row(result_list->skips)))
     {
       table->status = STATUS_NOT_FOUND;
       DBUG_RETURN(HA_ERR_END_OF_FILE);
@@ -2588,7 +2588,7 @@ int spider_db_fetch_minimum_columns(
   if (result_list->quick_mode == 0)
   {
     SPIDER_DB_RESULT *result = current->result;
-    if (!(row = result->fetch_row()))
+    if (!(row = result->fetch_row(result_list->skips)))
     {
       table->status = STATUS_NOT_FOUND;
       DBUG_RETURN(HA_ERR_END_OF_FILE);
@@ -3039,6 +3039,10 @@ int spider_db_store_result(
     db_conn = conn->db_conn;
     if (!result_list->current)
     {
+      /*
+        Point ->current and ->bgs_current to ->first (create ->first
+        if needed)
+      */
       if (!result_list->first)
       {
         if (!(result_list->first = (SPIDER_RESULT *)
@@ -3063,11 +3067,15 @@ int spider_db_store_result(
       }
       result_list->bgs_current = result_list->current;
       current = (SPIDER_RESULT*) result_list->current;
-    } else {
+    } else { /* result_list->current != NULL */
       if (
         result_list->bgs_phase > 0 ||
         result_list->quick_phase > 0
       ) {
+        /*
+          Advance bgs_current to the next result. Create a new result
+          if needed
+        */
         if (result_list->bgs_current == result_list->last)
         {
           if (!(result_list->last = (SPIDER_RESULT *)
@@ -3110,6 +3118,10 @@ int spider_db_store_result(
         }
         current = (SPIDER_RESULT*) result_list->bgs_current;
       } else {
+        /*
+          Advance current to the next result. Create a new result if
+          needed
+        */
         if (result_list->current == result_list->last)
         {
           if (!(result_list->last = (SPIDER_RESULT *)
@@ -3346,7 +3358,7 @@ int spider_db_store_result(
           }
           position++;
           roop_count++;
-          row = current->result->fetch_row();
+          row = current->result->fetch_row(result_list->skips);
         }
       } else {
         do {
@@ -3368,7 +3380,7 @@ int spider_db_store_result(
           }
         } while (
           page_size > roop_count &&
-          (row = current->result->fetch_row())
+          (row = current->result->fetch_row(result_list->skips))
         );
       }
       if (
@@ -3406,7 +3418,7 @@ int spider_db_store_result(
           roop_count++;
         } while (
           result_list->limit_num > roop_count &&
-          (row = current->result->fetch_row())
+          (row = current->result->fetch_row(result_list->skips))
         );
         tmp_tbl->file->ha_end_bulk_insert();
         page_size = result_list->limit_num;
@@ -3625,7 +3637,7 @@ int spider_db_store_result_for_reuse_cursor(
     }
     current->dbton_id = current->result->dbton_id;
     SPIDER_DB_ROW *row;
-    if (!(row = current->result->fetch_row()))
+    if (!(row = current->result->fetch_row(result_list->skips)))
     {
       error_num = current->result->get_errno();
       DBUG_PRINT("info",("spider set finish_flg point 3"));
@@ -3701,7 +3713,7 @@ int spider_db_store_result_for_reuse_cursor(
         }
         position++;
         roop_count++;
-        row = current->result->fetch_row();
+        row = current->result->fetch_row(result_list->skips);
       }
     } else {
       do {
@@ -3723,7 +3735,7 @@ int spider_db_store_result_for_reuse_cursor(
         }
       } while (
         page_size > roop_count &&
-        (row = current->result->fetch_row())
+        (row = current->result->fetch_row(result_list->skips))
       );
     }
     if (
@@ -3759,7 +3771,7 @@ int spider_db_store_result_for_reuse_cursor(
         roop_count++;
       } while (
         result_list->limit_num > roop_count &&
-        (row = current->result->fetch_row())
+        (row = current->result->fetch_row(result_list->skips))
       );
       tmp_tbl->file->ha_end_bulk_insert();
       page_size = result_list->limit_num;
@@ -4302,9 +4314,8 @@ int spider_db_seek_next(
         }
       }
     }
-    DBUG_RETURN(spider_db_fetch(buf, spider, table));
-  } else
-    DBUG_RETURN(spider_db_fetch(buf, spider, table));
+  }
+  DBUG_RETURN(spider_db_fetch(buf, spider, table));
 }
 
 int spider_db_seek_last(

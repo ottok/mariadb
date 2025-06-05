@@ -2423,6 +2423,7 @@ static int test_conc748(MYSQL *my __attribute__((unused)))
   MYSQL *mysql;
   int i;
   const char *ciphers[3]= {"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"};
+  my_bool verify= 0;
 
   SKIP_MAXSCALE;
 
@@ -2432,6 +2433,7 @@ static int test_conc748(MYSQL *my __attribute__((unused)))
     mysql= mysql_init(NULL);
 
     mysql_ssl_set(mysql, NULL, NULL, NULL, NULL, NULL);
+    mysql_optionsv(mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify);
     mysql_optionsv(mysql, MYSQL_OPT_SSL_CIPHER, ciphers[i]);
 
     if (!my_test_connect(mysql, hostname, username,
@@ -2454,7 +2456,6 @@ static int test_conc748(MYSQL *my __attribute__((unused)))
 static int test_conc589(MYSQL *my)
 {
   MYSQL *mysql= mysql_init(NULL);
-  MYSQL_RES *result;
   int rc;
   my_bool reconnect= 1, verify= 0;
   unsigned long last_thread_id= 0;
@@ -2475,15 +2476,85 @@ static int test_conc589(MYSQL *my)
   check_mysql_rc(rc, mysql);
 
   last_thread_id= mysql_thread_id(mysql);
+  rc= mysql_query(mysql, "SET @a:=1");
+  check_mysql_rc(rc, mysql);
+
+  sleep(10);
+
+  rc= mysql_query(mysql, "SET @a:=2");
+  check_mysql_rc(rc, mysql);
+  FAIL_IF(mysql_thread_id(mysql) == last_thread_id, "Expected new connection id");
+  last_thread_id= mysql_thread_id(mysql);
+
+  mysql_kill(my, last_thread_id);
+
+  sleep(10);
+
+  rc= mysql_query(mysql, "SET @a:=3");
+  check_mysql_rc(rc, mysql);
+  FAIL_IF(mysql_thread_id(mysql) == last_thread_id, "Expected new connection id");
+  mysql_close(mysql);
+  return OK;
+}
+
+#ifdef WIN32
+static int test_conc760(MYSQL *my)
+{
+  MYSQL *mysql= mysql_init(NULL);
+  MYSQL_RES *result;
+  MYSQL_ROW row;
+  int rc;
+  char named_pipe_name[128];
+  my_bool reconnect= 1, verify= 0;
+  unsigned long last_thread_id= 0;
+  unsigned int protocol= MYSQL_PROTOCOL_PIPE;
+  my_bool have_named_pipe= 0;
+
+  SKIP_MAXSCALE;
+
+  rc= mysql_query(my, "select @@named_pipe, @@socket");
+  check_mysql_rc(rc, mysql);
+
+  if ((result= mysql_store_result(my)))
+  {
+    if((row= mysql_fetch_row(result)))
+      have_named_pipe= atoi(row[0]);
+    strncpy(named_pipe_name, row[1], sizeof(named_pipe_name)-1);
+    named_pipe_name[sizeof(named_pipe_name)-1]= '\0';
+    mysql_free_result(result);
+  }
+
+  if (!have_named_pipe)
+  {
+    diag("Server doesn't support named pipes");
+    return SKIP;
+  }
+
+  mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
+  mysql_options(mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify);
+  mysql_options(mysql, MYSQL_OPT_PROTOCOL, &protocol);
+
+  if (!my_test_connect(mysql, hostname, username,
+                       password, schema, port, named_pipe_name, CLIENT_REMEMBER_OPTIONS, 0))
+  {
+    diag("error: %s", mysql_error(mysql));
+    return FAIL;
+  }
+
+  rc= mysql_query(mysql, "SET SESSION wait_timeout=5");
+  check_mysql_rc(rc, mysql);
+
+  last_thread_id= mysql_thread_id(mysql);
   if ((rc= mysql_query(mysql, "SELECT 1")) || (result= mysql_store_result(mysql)) == NULL)
     check_mysql_rc(rc, mysql);
 
   mysql_free_result(result);
   sleep(10);
 
-  if ((rc= mysql_query(mysql, "SELECT 2")) || (result= mysql_store_result(mysql)) == NULL)
-    check_mysql_rc(rc, mysql);
-  mysql_free_result(result);
+  rc= mysql_query(mysql, "SELECT 2");
+  check_mysql_rc(rc, mysql);
+  if (result= mysql_store_result(mysql))
+    mysql_free_result(result);
   FAIL_IF(mysql_thread_id(mysql) == last_thread_id, "Expected new connection id");
   last_thread_id= mysql_thread_id(mysql);
 
@@ -2498,8 +2569,12 @@ static int test_conc589(MYSQL *my)
   mysql_close(mysql);
   return OK;
 }
+#endif
 
 struct my_tests_st my_tests[] = {
+#ifdef WIN32
+  {"test_conc760", test_conc760, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
+#endif
   {"test_conc589", test_conc589, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_tls_timeout", test_tls_timeout, TEST_CONNECTION_NONE, 0, NULL, NULL},
   {"test_parsec", test_parsec, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},

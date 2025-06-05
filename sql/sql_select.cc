@@ -6371,6 +6371,10 @@ make_join_statistics(JOIN *join, List<TABLE_LIST> &tables_list,
       for (i= 0; i < join->table_count ; i++)
         if (double rr= join->best_positions[i].records_read)
           records= COST_MULT(records, rr);
+
+      if (join->group_list)
+        records= estimate_post_group_cardinality(join, records);
+
       rows= double_to_rows(records);
       set_if_smaller(rows, unit->lim.get_select_limit());
       join->select_lex->increase_derived_records(rows);
@@ -15070,6 +15074,36 @@ bool generate_derived_keys_for_table(KEYUSE *keyuse, uint count, uint keys)
 }
    
 
+/*
+  Procedure of keys generation for result tables of materialized derived
+  tables/views.
+
+  A key is generated for each equi-join pair {derived_table, some_other_table}.
+  Each generated key consists of fields of derived table used in equi-join.
+  Example:
+
+    SELECT * FROM (SELECT * FROM t1 GROUP BY 1) tt JOIN
+                  t1 ON tt.f1=t1.f3 and tt.f2.=t1.f4;
+  In this case for the derived table tt one key will be generated. It will
+  consist of two parts f1 and f2.
+  Example:
+
+    SELECT * FROM (SELECT * FROM t1 GROUP BY 1) tt JOIN
+                  t1 ON tt.f1=t1.f3 JOIN
+                  t2 ON tt.f2=t2.f4;
+  In this case for the derived table tt two keys will be generated.
+  One key over f1 field, and another key over f2 field.
+  Currently optimizer may choose to use only one such key, thus the second
+  one will be dropped after range optimizer is finished.
+  See also JOIN::drop_unused_derived_keys function.
+  Example:
+
+    SELECT * FROM (SELECT * FROM t1 GROUP BY 1) tt JOIN
+                  t1 ON tt.f1=a_function(t1.f3);
+  In this case for the derived table tt one key will be generated. It will
+  consist of one field - f1.
+*/
+
 static
 bool generate_derived_keys(DYNAMIC_ARRAY *keyuse_array)
 {
@@ -15813,7 +15847,7 @@ uint check_join_cache_usage(JOIN_TAB *tab,
       }
       goto no_join_cache;
     }
-    if (cache_level > 4 && no_bka_cache)
+    if (cache_level < 5 || no_bka_cache)
       goto no_join_cache;
     
     if ((flags & HA_MRR_NO_ASSOCIATION) &&
@@ -19753,6 +19787,8 @@ simplify_joins(JOIN *join, List<TABLE_LIST> *join_list, COND *conds, bool top,
         prev_table->dep_tables|= used_tables;
       if (prev_table->on_expr)
       {
+        /* If the ON expression is still there, it's an outer join */
+        DBUG_ASSERT(prev_table->outer_join);
         prev_table->dep_tables|= table->on_expr_dep_tables;
         table_map prev_used_tables= prev_table->nested_join ?
 	                            prev_table->nested_join->used_tables :
@@ -19767,11 +19803,59 @@ simplify_joins(JOIN *join, List<TABLE_LIST> *join_list, COND *conds, bool top,
           prevents update of inner table dependences.
           For example it might happen if RAND() function
           is used in JOIN ON clause.
-	*/  
-        if (!((prev_table->on_expr->used_tables() &
-               ~(OUTER_REF_TABLE_BIT | RAND_TABLE_BIT)) &
-              ~prev_used_tables))
+	*/
+        table_map prev_on_expr_deps= prev_table->on_expr->used_tables() &
+                                     ~(OUTER_REF_TABLE_BIT | RAND_TABLE_BIT);
+        prev_on_expr_deps&= ~prev_used_tables;
+
+        if (!prev_on_expr_deps)
           prev_table->dep_tables|= used_tables;
+        else
+        {
+          /*
+            Another possible case is when prev_on_expr_deps!=0 but it depends
+            on a table outside this join nest. SQL name resolution don't allow
+            this but it is possible when LEFT JOIN is inside a subquery which
+            is converted into a semi-join nest, Example:
+
+              t1 SEMI JOIN (
+                t2
+                LEFT JOIN (t3 LEFT JOIN t4 ON t4.col=t1.col) ON expr
+              ) ON ...
+
+            here, we would have prev_table=t4, table=t3.  The condition
+            "ON t4.col=t1.col" depends on tables {t1, t4}. To make sure the
+            optimizer puts t3 before t4 we need to make sure t4.dep_tables
+            includes t3.
+          */
+
+          DBUG_ASSERT(table->embedding == prev_table->embedding);
+          if (table->embedding)
+          {
+            /*
+              Find what are the "peers" of "table" in the join nest. Normally,
+              it is table->embedding->nested_join->used_tables, but here we are
+              in the process of recomputing that value.
+              So, we walk the join list and collect the bitmap of peers:
+            */
+            table_map peers= 0;
+            List_iterator_fast<TABLE_LIST> li(*join_list);
+            TABLE_LIST *peer;
+            while ((peer= li++))
+            {
+              table_map curmap= peer->nested_join
+                                    ? peer->nested_join->used_tables
+                                    : peer->get_map();
+              peers|= curmap;
+            }
+            /*
+              If prev_table doesn't depend on any of its peers, add a
+              dependency on nearest peer, that is, on 'table'.
+            */
+            if (!(prev_on_expr_deps & peers))
+              prev_table->dep_tables|= used_tables;
+          }
+        }
       }
     }
     prev_table= table;
@@ -23647,6 +23731,8 @@ do_select(JOIN *join, Procedure *procedure)
         */
         clear_tables(join, &cleared_tables);
       }
+      if (join->tmp_table_param.copy_funcs.elements)
+        copy_fields(&join->tmp_table_param);
       if (!join->having || join->having->val_bool())
       {
         List<Item> *columns_list= (procedure ? &join->procedure_fields_list :
@@ -28389,9 +28475,13 @@ find_order_in_list(THD *thd, Ref_ptr_array ref_pointer_array,
       original field name, we should additionally check if we have conflict
       for this name (in case if we would perform lookup in all tables).
     */
-    if (resolution == RESOLVED_BEHIND_ALIAS &&
-        order_item->fix_fields_if_needed_for_order_by(thd, order->item))
-      return TRUE;
+    if (resolution == RESOLVED_BEHIND_ALIAS)
+    {
+      if (order_item->fix_fields_if_needed_for_order_by(thd, order->item))
+        return TRUE;
+      // fix_fields may have replaced order->item, reset local variable.
+      order_item= *order->item;
+    }
 
     /* Lookup the current GROUP field in the FROM clause. */
     order_item_type= order_item->type();
@@ -31872,7 +31962,7 @@ void st_select_lex::print_item_list(THD *thd, String *str,
       */
       if (top_level ||
           item->is_explicit_name() ||
-          !check_column_name(item->name.str))
+          !check_column_name(item->name))
         item->print_item_w_name(str, query_type);
       else
         item->print(str, query_type);
@@ -34237,39 +34327,38 @@ static void MYSQL_DML_START(THD *thd)
 }
 
 
-static void MYSQL_DML_DONE(THD *thd, int rc)
+static void MYSQL_DML_GET_STAT(THD * thd, ha_rows &found, ha_rows &changed)
 {
   switch (thd->lex->sql_command) {
-
   case SQLCOM_UPDATE:
-    MYSQL_UPDATE_DONE(
-    rc,
-    (rc ? 0 :
-     ((multi_update*)(((Sql_cmd_dml*)(thd->lex->m_sql_cmd))->get_result()))
-     ->num_found()),
-    (rc ? 0 :
-     ((multi_update*)(((Sql_cmd_dml*)(thd->lex->m_sql_cmd))->get_result()))
-     ->num_updated()));
-    break;
   case SQLCOM_UPDATE_MULTI:
-    MYSQL_MULTI_UPDATE_DONE(
-    rc,
-    (rc ? 0 :
-     ((multi_update*)(((Sql_cmd_dml*)(thd->lex->m_sql_cmd))->get_result()))
-     ->num_found()),
-    (rc ? 0 :
-     ((multi_update*)(((Sql_cmd_dml*)(thd->lex->m_sql_cmd))->get_result()))
-     ->num_updated()));
+  case SQLCOM_DELETE_MULTI:
+    thd->lex->m_sql_cmd->get_dml_stat(found, changed);
     break;
   case SQLCOM_DELETE:
-    MYSQL_DELETE_DONE(rc, (rc ? 0 : (ulong) (thd->get_row_count_func())));
+    found= 0;
+    changed= (thd->get_row_count_func());
+    break;
+  default:
+    DBUG_ASSERT(0);
+  }
+}
+
+
+static void MYSQL_DML_DONE(THD *thd, int rc, ha_rows found, ha_rows changed)
+{
+  switch (thd->lex->sql_command) {
+  case SQLCOM_UPDATE:
+    MYSQL_UPDATE_DONE(rc, found, changed);
+    break;
+  case SQLCOM_UPDATE_MULTI:
+    MYSQL_MULTI_UPDATE_DONE(rc, found, changed);
+    break;
+  case SQLCOM_DELETE:
+    MYSQL_DELETE_DONE(rc, changed);
     break;
   case SQLCOM_DELETE_MULTI:
-    MYSQL_MULTI_DELETE_DONE(
-    rc,
-    (rc ? 0 :
-     ((multi_delete*)(((Sql_cmd_dml*)(thd->lex->m_sql_cmd))->get_result()))
-     ->num_deleted()));
+    MYSQL_MULTI_DELETE_DONE(rc, changed);
     break;
   default:
     DBUG_ASSERT(0);
@@ -34358,6 +34447,7 @@ err:
 bool Sql_cmd_dml::execute(THD *thd)
 {
   lex = thd->lex;
+  ha_rows found= 0, changed= 0;
   bool res;
 
   SELECT_LEX_UNIT *unit = &lex->unit;
@@ -34408,6 +34498,8 @@ bool Sql_cmd_dml::execute(THD *thd)
 
   if (res)
     goto err;
+  else
+    MYSQL_DML_GET_STAT(thd, found, changed);
 
   thd->push_final_warnings();
   res= unit->cleanup();
@@ -34417,13 +34509,13 @@ bool Sql_cmd_dml::execute(THD *thd)
 
   THD_STAGE_INFO(thd, stage_end);
 
-  MYSQL_DML_DONE(thd, res);
+  MYSQL_DML_DONE(thd, 0, found, changed);
 
   return res;
 
 err:
   DBUG_ASSERT(thd->is_error() || thd->killed);
-  MYSQL_DML_DONE(thd, 1);
+  MYSQL_DML_DONE(thd, 1, 0, 0);
   THD_STAGE_INFO(thd, stage_end);
   (void)unit->cleanup();
   if (is_prepared())

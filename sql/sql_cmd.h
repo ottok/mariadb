@@ -20,7 +20,7 @@
 #ifndef SQL_CMD_INCLUDED
 #define SQL_CMD_INCLUDED
 
-#include "my_base.h"
+#include <my_base.h>
 
 /*
   When a command is added here, be sure it's also added in mysqld.cc
@@ -140,6 +140,7 @@ public:
   bool resolve_storage_engine_with_error(THD *thd, handlerton **ha,
                                          bool tmp_table);
   bool is_set() { return m_storage_engine_name.str != NULL; }
+  const LEX_CSTRING *name() const { return &m_storage_engine_name; }
 };
 
 
@@ -226,6 +227,11 @@ public:
     @return true if SQL command is a DML statement, false otherwise
   */
   virtual bool is_dml() const { return false; }
+
+  virtual void get_dml_stat (ha_rows &found, ha_rows &changed)
+  {
+    found= changed= 0;
+  }
 
   /**
     @brief Unprepare prepared statement for the command

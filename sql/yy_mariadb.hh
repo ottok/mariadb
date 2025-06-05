@@ -902,6 +902,7 @@ union YYSTYPE
   Item_basic_constant *item_basic_constant;
   Key_part_spec *key_part;
   LEX *lex;
+  sp_instr_cfetch *instr_cfetch;
   sp_expr_lex *expr_lex;
   sp_assignment_lex *assignment_lex;
   class sp_lex_cursor *sp_cursor_stmt;
@@ -915,6 +916,7 @@ union YYSTYPE
   List<Statement_information_item> *stmt_info_list;
   List<String> *string_list;
   List<Lex_ident_sys> *ident_sys_list;
+  List<sp_fetch_target> *fetch_target_list;
   Statement_information_item *stmt_info_item;
   String *string;
   TABLE_LIST *table_list;
@@ -985,7 +987,7 @@ union YYSTYPE
     LEX_CSTRING expr_str;
   } expr_and_query_str;
 
-#line 989 "/home/buildbot/git/mkdist/sql/yy_mariadb.hh"
+#line 991 "/home/buildbot/git/mkdist/sql/yy_mariadb.hh"
 
 };
 typedef union YYSTYPE YYSTYPE;

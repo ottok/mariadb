@@ -506,12 +506,15 @@ unsigned int ma_schannel_verify_certs(MARIADB_TLS *ctls, unsigned int verify_fla
   HCERTSTORE store= NULL;
   int ret= 0;
 
+  if (!crl_file && !crl_path) // backward compatible behavior
+    verify_flags &= ~MARIADB_TLS_VERIFY_REVOKED;
+
+  if (!verify_flags)
+    return 0;
+
   status = schannel_create_store(ca_file, ca_path, crl_file, crl_path, &store, errmsg, sizeof(errmsg));
   if(status)
     goto end;
-
-  if (!crl_file && !crl_path) // backward compatible behavior
-    verify_flags &= ~MARIADB_TLS_VERIFY_REVOKED;
 
   status = QueryContextAttributesA(&sctx->hCtxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, (PVOID)&pServerCert);
   if (status)

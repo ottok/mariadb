@@ -2306,8 +2306,20 @@ os_file_rename_func(
 	ut_ad(exists);
 #endif /* UNIV_DEBUG */
 
-	if (MoveFileEx(oldpath, newpath, MOVEFILE_REPLACE_EXISTING)) {
-		return(true);
+	for (int retry= 50;; retry--){
+		if (MoveFileEx(oldpath, newpath, MOVEFILE_REPLACE_EXISTING))
+			return true;
+
+		if (!retry)
+			break;
+
+		if (GetLastError() != ERROR_SHARING_VIOLATION)
+			break;
+
+		// oldpath was opened by someone else (antivirus?)
+		//without FILE_SHARE_DELETE flag. Retry operation
+
+		Sleep(10);
 	}
 
 	os_file_handle_rename_error(oldpath, newpath);
@@ -3338,6 +3350,12 @@ size_t os_aio_pending_reads_approx() noexcept
 size_t os_aio_pending_writes() noexcept
 {
   std::lock_guard<std::mutex> lock(write_slots->mutex());
+  return write_slots->pending_io_count();
+}
+
+/** @return approximate number of pending writes */
+size_t os_aio_pending_writes_approx() noexcept
+{
   return write_slots->pending_io_count();
 }
 
