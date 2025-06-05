@@ -605,9 +605,8 @@ The following specify which files/extra groups are read (specified before remain
                       FORCE_PLUS_PERMANENT (like FORCE, but the plugin can not
                       be uninstalled).
   --innodb-buffer-pool-chunk-size=# 
-                      Size of a single memory chunk for resizing buffer pool.
-                      Online buffer pool resizing happens at this granularity.
-                      0 means autosize this variable based on buffer pool size
+                      Deprecated parameter with no effect. Deprecated, will be
+                      removed in a future release.
   --innodb-buffer-pool-dump-at-shutdown 
                       Dump the buffer pool into a file named
                       @@innodb_buffer_pool_filename
@@ -633,6 +632,11 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-buffer-pool-size=# 
                       The size of the memory buffer InnoDB uses to cache data
                       and indexes of its tables
+  --innodb-buffer-pool-size-auto-min=# 
+                      Minimum innodb_buffer_pool_size for dynamic shrinking on
+                      memory pressure
+  --innodb-buffer-pool-size-max=# 
+                      Maximum innodb_buffer_pool_size
   --innodb-buffer-pool-stats[=name] 
                       Enable or disable INNODB_BUFFER_POOL_STATS plugin. One
                       of: ON, OFF, FORCE (don't start if the plugin fails to
@@ -741,7 +745,7 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-encryption-rotation-iops=# 
                       Use this many iops for background key rotation
   --innodb-encryption-threads=# 
-                      Number of threads performing background key rotation 
+                      Number of threads performing background key rotation
   --innodb-fast-shutdown[=#] 
                       Speeds up the shutdown process of the InnoDB storage
                       engine. Possible values are 0, 1 (faster), 2
@@ -816,7 +820,7 @@ The following specify which files/extra groups are read (specified before remain
                       FORCE_PLUS_PERMANENT (like FORCE, but the plugin can not
                       be uninstalled).
   --innodb-ft-enable-diag-print 
-                      Whether to enable additional FTS diagnostic printout 
+                      Whether to enable additional FTS diagnostic printout
   --innodb-ft-enable-stopword 
                       Create FTS index with stopword
                       (Defaults to on; use --skip-innodb-ft-enable-stopword to disable.)
@@ -836,7 +840,7 @@ The following specify which files/extra groups are read (specified before remain
                       InnoDB Fulltext search minimum token size in characters
   --innodb-ft-num-word-optimize[=#] 
                       InnoDB Fulltext search number of words to optimize for
-                      each optimize table call 
+                      each optimize table call
   --innodb-ft-result-cache-limit=# 
                       InnoDB Fulltext search query result cache limit in bytes
   --innodb-ft-server-stopword-table[=name] 
@@ -875,6 +879,9 @@ The following specify which files/extra groups are read (specified before remain
                       be uninstalled).
   --innodb-log-buffer-size=# 
                       Redo log buffer size in bytes
+  --innodb-log-checkpoint-now 
+                      Write back dirty pages from the buffer pool and update
+                      the log checkpoint
   --innodb-log-file-buffering 
                       Whether the file system cache for ib_logfile0 is enabled
   --innodb-log-file-mmap 
@@ -888,8 +895,8 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-log-group-home-dir=name 
                       Path to ib_logfile0
   --innodb-log-spin-wait-delay[=#] 
-                      Delay between log buffer spin lock polls (0 to use a
-                      blocking latch)
+                      Deprecated parameter with no effect. Deprecated, will be
+                      removed in a future release.
   --innodb-log-write-ahead-size=# 
                       Redo log write size to avoid read-on-write; must be a
                       power of two
@@ -2453,7 +2460,7 @@ The following specify which files/extra groups are read (specified before remain
                       wsrep_sst_donor as a preferred donor. Note that multiple
                       nodes in a cluster can have the same name
   --wsrep-notify-cmd=name 
-  --wsrep-on          To enable wsrep replication 
+  --wsrep-on          To enable wsrep replication
   --wsrep-provider=name 
                       Path to replication provider library
   --wsrep-provider-options=name 
@@ -2488,7 +2495,7 @@ The following specify which files/extra groups are read (specified before remain
   --wsrep-sst-receive-address=name 
                       Address where node is waiting for SST contact
   --wsrep-start-position=name 
-                      global transaction position to start from 
+                      global transaction position to start from
   --wsrep-status-file=name 
                       wsrep status output filename
   --wsrep-sync-wait[=#] 
@@ -2672,6 +2679,8 @@ innodb-buffer-pool-load-abort                                FALSE
 innodb-buffer-pool-load-at-startup                           TRUE
 innodb-buffer-pool-load-now                                  FALSE
 innodb-buffer-pool-size                                      134217728
+innodb-buffer-pool-size-auto-min                             0
+innodb-buffer-pool-size-max                                  0
 innodb-buffer-pool-stats                                     ON
 innodb-checksum-algorithm                                    full_crc32
 innodb-cmp                                                   ON
@@ -2740,6 +2749,7 @@ innodb-lock-wait-timeout                                     50
 innodb-lock-waits                                            ON
 innodb-locks                                                 ON
 innodb-log-buffer-size                                       16777216
+innodb-log-checkpoint-now                                    FALSE
 innodb-log-file-buffering                                    FALSE
 innodb-log-file-mmap                                         TRUE
 innodb-log-file-size                                         100663296
@@ -3011,7 +3021,7 @@ performance-schema-setup-objects-size                        -1
 performance-schema-users-size                                -1
 pid-file                                                     /run/mysqld/mysqld.pid
 plugin-dir                                                   /usr/lib/mysql/plugin/
-plugin-maturity                                              beta
+plugin-maturity                                              gamma
 port                                                         3306
 port-open-timeout                                            0
 preload-buffer-size                                          32768
