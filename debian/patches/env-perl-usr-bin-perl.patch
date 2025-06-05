@@ -54,7 +54,7 @@ index 3ccf965..ef7d974 100755
  # Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
  #
 diff --git a/mysql-test/mariadb-test-run.pl b/mysql-test/mariadb-test-run.pl
-index afe13a8..91e3adb 100755
+index 4e9aa8b..beb44f4 100755
 --- a/mysql-test/mariadb-test-run.pl
 +++ b/mysql-test/mariadb-test-run.pl
 @@ -1,4 +1,4 @@

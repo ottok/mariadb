@@ -1,3 +1,20 @@
+mariadb (1:11.8.2-1) UNRELEASED; urgency=medium
+
+  * New upstream version 11.8.2, which also announces the 11.8 series now
+    ready for general availability (GA) with security releases for 5 years.
+    This release includes fixes for several defects as noted at
+    https://mariadb.com/kb/en/mariadb-11-8-2-release-notes/ as well
+    the following security issues:
+    - CVE-2023-52969
+    - CVE-2023-52970
+    - CVE-2023-52971
+    - CVE-2025-30693
+    - CVE-2025-30722
+  * Drop all RocksDB patches now upstream due to update to version 6.29fb
+  * Drop PCRE2 10.45 compatibility patch obsoleted by upstream test change
+
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 05 Jun 2025 13:09:49 +0300
+
 mariadb (1:11.8.1-5) unstable; urgency=medium
 
   [ Otto Kekäläinen ]

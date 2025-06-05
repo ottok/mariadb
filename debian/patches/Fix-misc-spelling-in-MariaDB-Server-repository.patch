@@ -36,7 +36,7 @@ Forwarded: no
  12 files changed, 24 insertions(+), 23 deletions(-)
 
 diff --git a/extra/mariabackup/innobackupex.cc b/extra/mariabackup/innobackupex.cc
-index 60c3854..bb5656a 100644
+index 22f4dc3..1c0bc11 100644
 --- a/extra/mariabackup/innobackupex.cc
 +++ b/extra/mariabackup/innobackupex.cc
 @@ -188,7 +188,7 @@ enum innobackupex_options
@@ -58,10 +58,10 @@ index 60c3854..bb5656a 100644
           "terminates with an error. Default is 0, in which case mariadb-backup waits "
           "indefinitely for BACKUP STAGE START to finish",
 diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
-index 34d6314..d0b60a1 100644
+index 7751bc5..41e257f 100644
 --- a/extra/mariabackup/xtrabackup.cc
 +++ b/extra/mariabackup/xtrabackup.cc
-@@ -219,7 +219,7 @@ uint xtrabackup_compress = FALSE;
+@@ -217,7 +217,7 @@ uint xtrabackup_compress = FALSE;
  uint xtrabackup_compress_threads;
  ulonglong xtrabackup_compress_chunk_size = 0;
  
@@ -79,7 +79,7 @@ index 34d6314..d0b60a1 100644
       "If there are still such queries when the timeout expires, mariadb-backup "
       "terminates with an error. Default is 0, in which case mariadb-backup waits "
       "indefinitely for BACKUP STAGE START to finish",
-@@ -5799,7 +5799,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
+@@ -5812,7 +5812,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
  	}
  
  	/* Mariabackup doesn't detect any FILE_OP for the deferred
@@ -115,10 +115,10 @@ index 00fbdf5..02e27c2 100644
   Cost of checking a key against the end key condition
   --optimizer-key-copy-cost=# 
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_innodb.result b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
-index fe7c07c..0d58133 100644
+index 1043684..714c317 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_innodb.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
-@@ -528,7 +528,7 @@ SESSION_VALUE	NULL
+@@ -552,7 +552,7 @@ SESSION_VALUE	NULL
  DEFAULT_VALUE	OFF
  VARIABLE_SCOPE	GLOBAL
  VARIABLE_TYPE	BOOLEAN
@@ -176,10 +176,10 @@ index 4ad0540..873e56a 100644
    }
  
 diff --git a/sql/sql_select.cc b/sql/sql_select.cc
-index c14afdc..d3e5d38 100644
+index e40a5b5..074b677 100644
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
-@@ -11745,7 +11745,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
+@@ -11749,7 +11749,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
  
  /*
    @brief
@@ -188,7 +188,7 @@ index c14afdc..d3e5d38 100644
      execution.
  
    @detail
-@@ -15185,7 +15185,7 @@ void JOIN::drop_unused_derived_keys()
+@@ -15219,7 +15219,7 @@ void JOIN::drop_unused_derived_keys()
        }
        /*
          We dropped all keys except the chosen one and unique keys.
@@ -198,7 +198,7 @@ index c14afdc..d3e5d38 100644
        tab->ref.key= 0;
      }
 diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
-index 4e4a77e..230b614 100644
+index c8f6bb6..a7b3a65 100644
 --- a/sql/sys_vars.cc
 +++ b/sql/sys_vars.cc
 @@ -2958,7 +2958,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
@@ -224,10 +224,10 @@ index 520b82d..a782570 100644
  	} catch (const char *msg) {
  		htrc(g->Message, msg);
 diff --git a/storage/innobase/handler/ha_innodb.cc b/storage/innobase/handler/ha_innodb.cc
-index 0d26b70..62d67f1 100644
+index b4e6112..e632cb0 100644
 --- a/storage/innobase/handler/ha_innodb.cc
 +++ b/storage/innobase/handler/ha_innodb.cc
-@@ -19898,7 +19898,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
+@@ -19892,7 +19892,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
  
  static MYSQL_SYSVAR_BOOL(encrypt_temporary_tables, innodb_encrypt_temporary_tables,
    PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
