@@ -165,6 +165,7 @@ extern my_thread_id (*sf_malloc_dbug_id)(void);
 typedef void (*MALLOC_SIZE_CB) (long long size, my_bool is_thread_specific); 
 extern void set_malloc_size_cb(MALLOC_SIZE_CB func);
 extern MALLOC_SIZE_CB update_malloc_size;
+extern int64 my_malloc_init_memory_allocated;
 
 	/* defines when allocating data */
 extern void *my_malloc(PSI_memory_key key, size_t size, myf MyFlags);
@@ -175,9 +176,15 @@ extern void my_free(void *ptr);
 extern void *my_memdup(PSI_memory_key key, const void *from,size_t length,myf MyFlags);
 extern char *my_strdup(PSI_memory_key key, const char *from,myf MyFlags);
 extern char *my_strndup(PSI_memory_key key, const char *from, size_t length, myf MyFlags);
+extern my_bool my_use_large_pages;
 
-int my_init_large_pages(my_bool super_large_pages);
+int my_init_large_pages(void);
 uchar *my_large_malloc(size_t *size, myf my_flags);
+#ifdef _WIN32
+/* On Windows, use my_virtual_mem_reserve() and my_virtual_mem_commit(). */
+#else
+char *my_large_virtual_alloc(size_t *size);
+#endif
 void my_large_free(void *ptr, size_t size);
 void my_large_page_truncate(size_t *size);
 
@@ -1144,11 +1151,8 @@ static inline my_bool my_charset_same(CHARSET_INFO *cs1, CHARSET_INFO *cs2)
   return (cs1->cs_name.str == cs2->cs_name.str);
 }
 extern my_bool init_compiled_charsets(myf flags);
-extern void add_compiled_collation(struct charset_info_st *cs);
+extern int add_compiled_collation(struct charset_info_st *cs);
 extern void add_compiled_extra_collation(struct charset_info_st *cs);
-extern my_bool add_alias_for_collation(LEX_CSTRING *collation_name,
-                                       uint collation_id,
-                                       LEX_CSTRING *alias, uint alias_id);
 extern size_t escape_string_for_mysql(CHARSET_INFO *charset_info,
                                       char *to, size_t to_length,
                                       const char *from, size_t length,

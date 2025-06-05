@@ -366,7 +366,7 @@ bool Sql_cmd_update::update_single_table(THD *thd)
   ha_rows       dup_key_found;
   bool          need_sort= TRUE;
   bool          reverse= FALSE;
-  ha_rows	updated, updated_or_same, found;
+  ha_rows	updated_or_same;
   key_map	old_covering_keys;
   TABLE		*table;
   SQL_SELECT	*select= NULL;
@@ -1377,13 +1377,13 @@ produce_explain_and_leave:
     goto err;
 
 emit_explain_and_leave:
+  if (!thd->is_error() && need_to_optimize &&
+      select_lex->optimize_unflattened_subqueries(false))
+    DBUG_RETURN(TRUE);
   bool extended= thd->lex->describe & DESCRIBE_EXTENDED;
   int err2= thd->lex->explain->send_explain(thd, extended);
 
   delete select;
-  if (!thd->is_error() && need_to_optimize &&
-      select_lex->optimize_unflattened_subqueries(false))
-    DBUG_RETURN(TRUE);
   free_underlaid_joins(thd, select_lex);
   DBUG_RETURN((err2 || thd->is_error()) ? 1 : 0);
 }
@@ -1584,7 +1584,7 @@ static bool multi_update_check_table_access(THD *thd, TABLE_LIST *table,
       if (multi_update_check_table_access(thd, tbl, tables_for_update,
                                           &updated))
       {
-        tbl->hide_view_error(thd);
+        tbl->replace_view_error_with_generic(thd);
         return true;
       }
     }
@@ -2117,7 +2117,8 @@ multi_update::initialize_tables(JOIN *join)
   if (unlikely((thd->variables.option_bits & OPTION_SAFE_UPDATES) &&
                error_if_full_join(join)))
     DBUG_RETURN(1);
-  if (join->implicit_grouping)
+  if (join->implicit_grouping ||
+      join->select_lex->have_window_funcs())
   {
     my_error(ER_INVALID_GROUP_FUNC_USE, MYF(0));
     DBUG_RETURN(1);
@@ -3222,6 +3223,13 @@ bool Sql_cmd_update::execute_inner(THD *thd)
 
   if (result)
   {
+    /* In single table case, this->updated set by update_single_table */
+    if (res && multitable)
+    {
+      found= ((multi_update*)get_result())->num_found();
+      updated= ((multi_update*)get_result())->num_updated();
+    }
+
     res= false;
     delete result;
   }

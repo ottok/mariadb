@@ -80,7 +80,7 @@
 #define strncasecmp _strnicmp
 #endif
 
-#define ASYNC_CONTEXT_DEFAULT_STACK_SIZE (4096*15)
+#define ASYNC_CONTEXT_DEFAULT_STACK_SIZE (256*1024)
 #define MA_RPL_VERSION_HACK "5.5.5-"
 
 #define CHARSET_NAME_LEN 64
@@ -273,6 +273,11 @@ restart:
         ma_strmake(net->last_error,(char*) pos,
                 min(len,sizeof(net->last_error)-1));
       }
+      /* MDEV-35935: if server sends error packet without error, we have to
+         set error manually */
+      if (!net->last_errno) {
+        my_set_error(mysql, CR_ERR_MISSING_ERROR_INFO, SQLSTATE_UNKNOWN, 0);
+      }
     }
     else
     {
@@ -401,7 +406,7 @@ mthd_my_send_cmd(MYSQL *mysql,enum enum_server_command command, const char *arg,
 
   /* CONC-589: If reconnect option was specified, we have to check if the connection
                (socket) is still available */
-  if (command != COM_QUIT && mysql->options.reconnect && ma_pvio_is_alive(mysql->net.pvio))
+  if (command != COM_QUIT && mysql->options.reconnect && !ma_pvio_is_alive(mysql->net.pvio))
   {
     ma_pvio_close(mysql->net.pvio);
     mysql->net.pvio= NULL;
@@ -1563,42 +1568,8 @@ mysql_real_connect(MYSQL *mysql, const char *host, const char *user,
       return my;
     }
   }
-#ifndef HAVE_SCHANNEL
   return mysql->methods->db_connect(mysql, host, user, passwd,
                                     db, port, unix_socket, client_flag);
-#else
-/* 
-   With older windows versions (prior Win 10) TLS connections periodically
-   fail with SEC_E_INVALID_TOKEN, SEC_E_BUFFER_TOO_SMALL or SEC_E_MESSAGE_ALTERED
-   error (see MDEV-13492). If the connect attempt returns on of these error codes
-   in mysql->net.extended_errno we will try to connect again (max. 3 times)
-*/
-#define MAX_SCHANNEL_CONNECT_ATTEMPTS 3
-  {
-    int ssl_retry= (mysql->options.use_ssl) ? MAX_SCHANNEL_CONNECT_ATTEMPTS : 1;
-	MYSQL *my= NULL;
-    while (ssl_retry)
-    {
-      if ((my= mysql->methods->db_connect(mysql, host, user, passwd,
-                                    db, port, unix_socket, client_flag | CLIENT_REMEMBER_OPTIONS)))
-        return my;
-
-      switch (mysql->net.extension->extended_errno) {
-        case SEC_E_INVALID_TOKEN:
-        case SEC_E_BUFFER_TOO_SMALL:
-        case SEC_E_MESSAGE_ALTERED:
-          ssl_retry--;
-          break;
-        default:
-          ssl_retry= 0;
-          break;
-      }
-    }
-    if (!my && !(client_flag & CLIENT_REMEMBER_OPTIONS))
-      mysql_close_options(mysql);
-    return my;
-  }
-#endif
 }
 
 struct st_host {

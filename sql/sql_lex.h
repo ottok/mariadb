@@ -148,8 +148,10 @@ class LEX_COLUMN;
 class sp_head;
 class sp_name;
 class sp_instr;
+class sp_instr_cfetch;
 class sp_pcontext;
 class sp_variable;
+class sp_fetch_target;
 class sp_expr_lex;
 class sp_assignment_lex;
 class partition_info;
@@ -1550,6 +1552,10 @@ public:
   bool is_unit_nest() { return (nest_flags & UNIT_NEST_FL); }
   void mark_as_unit_nest() { nest_flags= UNIT_NEST_FL; }
   bool is_sj_conversion_prohibited(THD *thd);
+
+  TABLE_LIST *find_table(THD *thd,
+                         const LEX_CSTRING *db_name,
+                         const LEX_CSTRING *table_name);
 };
 typedef class st_select_lex SELECT_LEX;
 
@@ -3872,6 +3878,7 @@ public:
     sp_pcontext *not_used_ctx;
     return find_variable(name, &not_used_ctx, rh);
   }
+  sp_fetch_target *make_fetch_target(THD *thd, const Lex_ident_sys_st &name);
   bool set_variable(const Lex_ident_sys_st *name, Item *item,
                     const LEX_CSTRING &expr_str);
   bool set_variable(const Lex_ident_sys_st *name1,
@@ -4502,7 +4509,7 @@ public:
     create_info.add(options);
     return check_create_options(create_info);
   }
-  bool sp_add_cfetch(THD *thd, const LEX_CSTRING *name);
+  sp_instr_cfetch *sp_add_instr_cfetch(THD *thd, const LEX_CSTRING *name);
   bool sp_add_agg_cfetch();
 
   bool set_command_with_check(enum_sql_command command,
@@ -4639,7 +4646,7 @@ public:
   int add_period(Lex_ident_column name,
                  Lex_ident_sys_st start, Lex_ident_sys_st end)
   {
-    if (check_period_name(name.str)) {
+    if (check_column_name(name)) {
       my_error(ER_WRONG_COLUMN_NAME, MYF(0), name.str);
       return 1;
     }

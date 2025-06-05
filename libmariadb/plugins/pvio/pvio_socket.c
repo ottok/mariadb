@@ -1101,10 +1101,10 @@ my_bool pvio_socket_is_alive(MARIADB_PVIO *pvio)
 
   res= poll(&poll_fd, 1, 0);
   if (res <= 0) /* timeout or error */
-    return FALSE;
+    return TRUE;
   if (!(poll_fd.revents & (POLLIN | POLLPRI)))
-    return FALSE;
-  return TRUE;
+    return TRUE;
+  return FALSE;
 #else
   /* We can't use the WSAPoll function, it's broken :-(
      (see Windows 8 Bugs 309411 - WSAPoll does not report failed connections)
@@ -1117,8 +1117,8 @@ my_bool pvio_socket_is_alive(MARIADB_PVIO *pvio)
 
   res= select((int)csock->socket + 1, &sfds, NULL, NULL, &tv);
   if (res > 0 && FD_ISSET(csock->socket, &sfds))
-    return TRUE;
-  return FALSE;
+    return FALSE;
+  return TRUE;
 #endif
 }
 /* }}} */

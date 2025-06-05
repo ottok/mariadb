@@ -1,8 +1,8 @@
-commit: 1c4aed7c680c0402d6e97e097f03815c0e9bf4c5
-date: 2025-02-12 10:17:44 +0100
-build-date: 2025-02-12 10:13:27 +0000 
-short: 1c4aed7c680
+commit: 8d36cafe4fc700e6e577d5a36650c58707e76b92
+date: 2025-05-21 15:57:16 +0200
+build-date: 2025-05-21 14:09:19 +0000 
+short: 8d36cafe4fc
 branch: HEAD
 
 
-MariaDB source 11.8.1
+MariaDB source 11.8.2

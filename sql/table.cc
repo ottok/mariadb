@@ -1260,7 +1260,8 @@ bool parse_vcol_defs(THD *thd, MEM_ROOT *mem_root, TABLE *table,
       table->map= 1;
       if (vcol &&
           (field_ptr[0]->check_vcol_sql_mode_dependency(thd, mode) ||
-           vcol->expr->check_assignability_to(field_ptr[0], false)))
+           vcol->expr->check_assignability_to(field_ptr[0],
+             mode == VCOL_INIT_DEPENDENCY_FAILURE_IS_WARNING)))
       {
         DBUG_ASSERT(thd->is_error());
         *error_reported= true;
@@ -5443,9 +5444,10 @@ bool Lex_ident_db::check_name_with_error(const LEX_CSTRING &str)
 }
 
 
-bool check_column_name(const char *name)
+bool check_column_name(const Lex_cstring &ident)
 {
   // name length in symbols
+  const char *name= ident.str, *end= ident.str + ident.length;
   size_t name_length= 0;
   bool last_char_is_space= TRUE;
 
@@ -5455,9 +5457,7 @@ bool check_column_name(const char *name)
     last_char_is_space= my_isspace(system_charset_info, *name);
     if (system_charset_info->use_mb())
     {
-      int len=my_ismbchar(system_charset_info, name, 
-                          name+system_charset_info->mbmaxlen);
-      if (len)
+      if (int len= my_ismbchar(system_charset_info, name,  end))
       {
         name += len;
         name_length++;
@@ -5474,12 +5474,6 @@ bool check_column_name(const char *name)
   }
   /* Error if empty or too long column name */
   return last_char_is_space || (name_length > NAME_CHAR_LEN);
-}
-
-
-bool check_period_name(const char *name)
-{
-  return check_column_name(name);
 }
 
 
@@ -6491,9 +6485,9 @@ bool TABLE_LIST::prep_check_option(THD *thd, uint8 check_opt_type)
   @pre This method can be called only if there is an error.
 */
 
-void TABLE_LIST::hide_view_error(THD *thd)
+void TABLE_LIST::replace_view_error_with_generic(THD *thd)
 {
-  if ((thd->killed && !thd->is_error())|| thd->get_internal_handler())
+  if ((thd->killed && !thd->is_error()) || thd->get_internal_handler())
     return;
   /* Hide "Unknown column" or "Unknown function" error */
   DBUG_ASSERT(thd->is_error());
@@ -10203,37 +10197,6 @@ int TABLE_LIST::fetch_number_of_rows()
     error= table->file->info(HA_STATUS_VARIABLE | HA_STATUS_NO_LOCK);
   return error;
 }
-
-/*
-  Procedure of keys generation for result tables of materialized derived
-  tables/views.
-
-  A key is generated for each equi-join pair derived table-another table.
-  Each generated key consists of fields of derived table used in equi-join.
-  Example:
-
-    SELECT * FROM (SELECT * FROM t1 GROUP BY 1) tt JOIN
-                  t1 ON tt.f1=t1.f3 and tt.f2.=t1.f4;
-  In this case for the derived table tt one key will be generated. It will
-  consist of two parts f1 and f2.
-  Example:
-
-    SELECT * FROM (SELECT * FROM t1 GROUP BY 1) tt JOIN
-                  t1 ON tt.f1=t1.f3 JOIN
-                  t2 ON tt.f2=t2.f4;
-  In this case for the derived table tt two keys will be generated.
-  One key over f1 field, and another key over f2 field.
-  Currently optimizer may choose to use only one such key, thus the second
-  one will be dropped after range optimizer is finished.
-  See also JOIN::drop_unused_derived_keys function.
-  Example:
-
-    SELECT * FROM (SELECT * FROM t1 GROUP BY 1) tt JOIN
-                  t1 ON tt.f1=a_function(t1.f3);
-  In this case for the derived table tt one key will be generated. It will
-  consist of one field - f1.
-*/
-
 
 
 /*

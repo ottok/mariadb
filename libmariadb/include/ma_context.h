@@ -26,8 +26,33 @@
   (This particular implementation uses Posix ucontext swapcontext().)
 */
 
+
+/*
+  When running with address sanitizer, the stack switching can cause confusion
+  unless the __sanitizer_{start,finish}_switch_fiber() functions are used
+  (CONC-618).
+
+  In this case prefer the use of boost::context or ucontext, which should have
+  this instrumentation, over our custom assembler variants.
+*/
+#ifdef __has_feature
+   /* Clang */
+#  if __has_feature(address_sanitizer)
+#    define ASAN_PREFER_NON_ASM 1
+#  endif
+#else
+   /* GCC */
+#  ifdef __SANITIZE_ADDRESS__
+#    define ASAN_PREFER_NON_ASM 1
+#  endif
+#endif
+
 #ifdef _WIN32
 #define MY_CONTEXT_USE_WIN32_FIBERS 1
+#elif defined(ASAN_PREFER_NON_ASM) && defined(HAVE_BOOST_CONTEXT_H)
+#define MY_CONTEXT_USE_BOOST_CONTEXT
+#elif defined(ASAN_PREFER_NON_ASM) && defined(HAVE_UCONTEXT_H)
+#define MY_CONTEXT_USE_UCONTEXT
 #elif defined(__GNUC__) && __GNUC__ >= 3 && defined(__x86_64__) && !defined(__ILP32__)
 #define MY_CONTEXT_USE_X86_64_GCC_ASM
 #elif defined(__GNUC__) && __GNUC__ >= 3 && defined(__i386__)

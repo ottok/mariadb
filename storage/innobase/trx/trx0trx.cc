@@ -140,8 +140,6 @@ trx_init(
 
 	trx->will_lock = false;
 
-	trx->bulk_insert = false;
-
 	trx->apply_online_log = false;
 
 	ut_d(trx->start_file = 0);
@@ -458,7 +456,7 @@ void trx_t::free()
 /** Transition to committed state, to release implicit locks. */
 TRANSACTIONAL_INLINE inline void trx_t::commit_state()
 {
-  ut_d(auto trx_state{state});
+  ut_d(auto trx_state= state);
   ut_ad(trx_state == TRX_STATE_PREPARED ||
         trx_state == TRX_STATE_PREPARED_RECOVERED ||
         trx_state == TRX_STATE_ACTIVE);
@@ -1519,6 +1517,7 @@ bool trx_t::commit_cleanup() noexcept
   *detailed_error= '\0';
   mod_tables.clear();
 
+  bulk_insert= TRX_NO_BULK;
   check_foreigns= true;
   check_unique_secondary= true;
   assert_freed();

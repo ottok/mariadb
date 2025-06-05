@@ -1561,10 +1561,10 @@ class User_table_json: public User_table
   {
     sql_print_warning("'user' entry '%s@%s' "
                       "has a wrong 'access' value 0x%llx "
-                      "(allowed mask is 0x%llx, version_id=%lld)",
+                      "(allowed mask is 0x%llx, version_id is %llu)",
                       safe_str(get_user(current_thd->mem_root)),
                       safe_str(get_host(current_thd->mem_root)),
-                      access, mask, version_id);
+                      access, (ulonglong) mask, version_id);
   }
 
   privilege_t adjust_access(ulonglong version_id, ulonglong access) const
@@ -8508,19 +8508,13 @@ bool check_grant(THD *thd, privilege_t want_access, TABLE_LIST *tables,
 
     /*
       If sequence is used as part of NEXT VALUE, PREVIOUS VALUE or SELECT,
-      we need to modify the requested access rights depending on how the
-      sequence is used.
+      the privilege will be checked in ::fix_fields().
+      Direct SELECT of a sequence table doesn't set t_ref->sequence, so
+      privileges will be checked normally, as for any table.
     */
     if (t_ref->sequence &&
         !(want_access & ~(SELECT_ACL | INSERT_ACL | UPDATE_ACL | DELETE_ACL)))
-    {
-      /*
-        We want to have either SELECT or INSERT rights to sequences depending
-        on how they are accessed
-      */
-      orig_want_access= ((t_ref->lock_type >= TL_FIRST_WRITE) ?
-                         INSERT_ACL : SELECT_ACL);
-    }
+      continue;
 
     const ACL_internal_table_access *access=
       get_cached_table_access(&t_ref->grant.m_internal,
@@ -10544,7 +10538,7 @@ static int handle_grant_table(THD *thd, const Grant_table_base& grant_table,
         if (which_table != PROXIES_PRIV_TABLE)
         {
           DBUG_PRINT("loop",("scan fields: '%s'@'%s' '%s' '%s' '%s'",
-                             user_from->user, user_from->host,
+                             user_from->user.str, user_from->host.str,
                              get_field(thd->mem_root, table->field[1]) /*db*/,
                              get_field(thd->mem_root, table->field[3]) /*table*/,
                              get_field(thd->mem_root,
@@ -13127,7 +13121,12 @@ static int fill_users_schema_record(THD *thd, TABLE * table, ACL_USER *user)
 int fill_users_schema_table(THD *thd, TABLE_LIST *tables, COND *cond)
 {
   int res= 0;
+
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
+  /* --skip-grants */
+  if (!initialized)
+    return res;
+
   bool see_whole_table= check_access(thd, SELECT_ACL, "mysql", NULL, NULL,
                                      true, true) == 0;
   TABLE *table= tables->table;
@@ -13282,6 +13281,9 @@ LEX_USER *get_current_user(THD *thd, LEX_USER *user, bool lock)
       dup->host= empty_clex_str;
       return dup;
     }
+
+    if (!initialized)
+      return dup;
 
     if (lock)
       mysql_mutex_lock(&acl_cache->lock);
