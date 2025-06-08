@@ -30,24 +30,9 @@ Logs will also show as server output:
 
 Forwarded: no
 ---
- client/mysql.cc |  3 +++
- sql/mysqld.cc   | 20 +++++++++++++++-----
- 2 files changed, 18 insertions(+), 5 deletions(-)
+ sql/mysqld.cc | 20 +++++++++++++++-----
+ 1 file changed, 15 insertions(+), 5 deletions(-)
 
-diff --git a/client/mysql.cc b/client/mysql.cc
-index e04276d..debe1d8 100644
---- a/client/mysql.cc
-+++ b/client/mysql.cc
-@@ -1339,6 +1339,9 @@ int main(int argc,char *argv[])
-             mysql_thread_id(&mysql), server_version_string(&mysql));
-     put_info((char*) glob_buffer.ptr(),INFO_INFO);
-     put_info(ORACLE_WELCOME_COPYRIGHT_NOTICE("2000"), INFO_INFO);
-+    put_info("Support MariaDB developers by giving a star at "
-+             "https://github.com/MariaDB/server",
-+             INFO_INFO);
-   }
- 
- #ifdef HAVE_READLINE
 diff --git a/sql/mysqld.cc b/sql/mysqld.cc
 index bcbda40..90397c5 100644
 --- a/sql/mysqld.cc

@@ -1,4 +1,4 @@
-mariadb (1:11.8.2-1) UNRELEASED; urgency=medium
+mariadb (1:11.8.2-1) unstable; urgency=medium
 
   * New upstream version 11.8.2, which also announces the 11.8 series now
     ready for general availability (GA) with security releases for 5 years.
@@ -21,8 +21,11 @@ mariadb (1:11.8.2-1) UNRELEASED; urgency=medium
     as deprecated.
   * Disable new unreliable test main.mysql-interactive
   * Add Breaks/Replaces for files moved around in src:mysql-8.4 (LP: #2110378)
+  * Update mariadb-server.NEWS with information about MariaDB 11.8 and
+  * best practices for creating app user and allowing remote connections
+  * Add patch to improve output from mariadb-secure-installation
 
- -- Otto Kekäläinen <otto@debian.org>  Thu, 05 Jun 2025 13:09:49 +0300
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 08 Jun 2025 11:19:07 +0300
 
 mariadb (1:11.8.1-5) unstable; urgency=medium
 
