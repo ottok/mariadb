@@ -670,7 +670,7 @@ mariadb-10.6 and Bookworm-20230208 upgrade:
       rm /etc/apt/sources.list.d/debian.sources
       apt-get update -qq
     # In February 2023 Bookworm snapshot this will install MariaDB 10.6
-    - apt-get install -qq --yes mariadb-server
+    - apt-get install -qq --yes 'default-mysql*' 'mariadb-*' 'libmariadb*'
     # Verify installation of MariaDB from (February 2023) Bookworm
     - dpkg -l | grep -e "mariadb-server.*10\.6"
     - *test-verify-initial
