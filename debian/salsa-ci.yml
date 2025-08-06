@@ -150,6 +150,20 @@ blhc:
   EOF
   # Emit non-zero exit code also on warnings to ensure CI stops on any issue
   echo 'APT::Update::Error-Mode "any";' > /etc/apt/apt.conf.d/non-zero-exit-on-warnings
+  # Use archive.d.o for discontinued releases no longer on deb.d.o
+  if grep -q -E 'buster|stretch' /etc/os-release
+  then
+    # Update mirror url to point to archive.debian.org
+    sed -E -i "s/(deb|security)\.debian\.org/archive.debian.org/" /etc/apt/sources.list
+    # Drop the updates suite, as it's not present in archive.d.o
+    sed -E -i '/^deb .* [a-z]+-updates /d' /etc/apt/sources.list
+  fi
+  # Use archive.d.o for discontinued backports, which usually happens earlier
+  # than when the release is discontinued
+  if grep -q -E 'bullseye|buster|stretch' /etc/os-release && find /etc/apt/sources.list.d/backports.list
+  then
+    sed -E -i "s/deb\.debian\.org/archive.debian.org/" /etc/apt/sources.list.d/backports.list
+  fi
   # Prime the apt cache so later apt commands can run
   apt-get update -q
 
