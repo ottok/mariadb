@@ -377,7 +377,7 @@ blhc:
   # Fourth run likely passes.
   - |
     function usrmerge-temp-fix {
-      for x in bash cat cp dash ln more sh sleep
+      for x in bash cat cp dash ln more sh sleep rm
       do
         if [ -x /usr/bin/$x ]
         then
