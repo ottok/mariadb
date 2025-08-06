@@ -1,5 +1,5 @@
 ---
-# Include Salsa-CI as a base
+# Include Salsa CI as a base
 include:
   - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/recipes/debian.yml
 
@@ -138,8 +138,6 @@ packaging-fix-checks:
 # Bookworm and Bullseye backports can be enabled if
 # https://salsa.debian.org/mariadb-team/mariadb-server/-/merge_requests/67 is
 # reverted.
-# Buster only has libfmt 6.1 but 7.0 is required, so backport build for Buster
-# is not possible unless somebody packages libfmt7-dev for Buster.
 
 autopkgtest:
   extends: .test-autopkgtest
@@ -158,6 +156,7 @@ blhc:
 # Define snippets used to construct jobs
 
 .test-prepare-container: &test-prepare-container |
+  # Prepare container for use in CI
   # Change directory to ./debian/output where build artifacts can be found
   cd ${WORKING_DIR}
   # Enable automatic restarts from maint scripts
@@ -339,38 +338,44 @@ blhc:
       test -L /lib || cp -av /usr/lib/lsb /lib/
       apt-get remove login mount perl -qq --yes --allow-remove-essential || true
     fi
+  # Pre-emptively upgrade sysvinit-utils and symlink new location from old to
+  # prevent upgrades from old MariaDB versions failing when the old service
+  # file tries to restart server before upgrade:
+  #   /etc/init.d/mysql: line 22: /lib/lsb/init-functions: No such file or directory
   - |
-    # Pre-emptively upgrade sysvinit-utils and symlink new location from old to
-    # prevent upgrades from old MariaDB versions failing when the old service
-    # file tries to restart server before upgrade:
-    #   /etc/init.d/mysql: line 22: /lib/lsb/init-functions: No such file or directory
     apt-get install -q --yes sysvinit-utils && cp -av /usr/lib/lsb /lib/ || true
+  # Upgrades from Ubuntu Noble fail on:
+  #   Prevent: dpkg-divert: error:
+  #   'diversion of /lib32 to /.lib32.usr-is-merged by base-files' clashes
+  #    with 'diversion of /lib32 to /lib32.usr-is-merged by base-files'
+  # This is because Noble already has these:
+  #   $ dpkg-divert --list | grep 'by base-files'
+  #   diversion of /libx32 to /.libx32.usr-is-merged by base-files
+  #   diversion of /lib32 to /.lib32.usr-is-merged by base-files
+  #   diversion of /libo32 to /.libo32.usr-is-merged by base-files
+  # Circumvent them by simply removing them before starting upgrade, as the
+  # upgrade of base-files will immediately put them back again:
   - |
-    # Upgrades from Ubuntu Noble fail on:
-    #   Prevent: dpkg-divert: error:
-    #   'diversion of /lib32 to /.lib32.usr-is-merged by base-files' clashes
-    #    with 'diversion of /lib32 to /lib32.usr-is-merged by base-files'
-    # This is because Noble already has these:
-    #   $ dpkg-divert --list | grep 'by base-files'
-    #   diversion of /libx32 to /.libx32.usr-is-merged by base-files
-    #   diversion of /lib32 to /.lib32.usr-is-merged by base-files
-    #   diversion of /libo32 to /.libo32.usr-is-merged by base-files
-    # Circumvent them by simply removing them before starting upgrade, as the
-    # upgrade of base-files will immediately put them back again:
     if grep -q -E 'noble' /etc/os-release
     then
       BASE_DIVERSIONS="$(dpkg-divert --list | grep 'by base-files' | \
                        grep --only-matching --perl-regex 'of\K /[a-z0-9]+ ')"
       for x in $BASE_DIVERSIONS; do dpkg-divert --no-rename --remove $x; done
     fi
+  # Due to usrmerge, several upgrade attempts are needed until it passes,
+  # with some manual copying of files from /usr/bin/ to /bin/
+  # First 'apt-get upgrade' run likely fails on:
+  #   dpkg (subprocess): unable to execute installed bash package
+  #   post-installation script (/var/lib/dpkg/info/bash.postinst): No such file
+  #   or directory
+  # Second run fails on:
+  #   dpkg (subprocess): unable to execute installed dash package
+  #   post-installation script (/var/lib/dpkg/info/dash.postinst): No such file
+  #   or directory
+  # Third run fails on:
+  #   update-alternatives: error: alternative path /bin/more doesn't exist
+  # Fourth run likely passes.
   - |
-    # First 'apt-get upgrade' run fails on:
-    #   dpkg (subprocess): unable to execute installed bash package post-installation script (/var/lib/dpkg/info/bash.postinst): No such file or directory
-    # Second run fails on:
-    #   dpkg (subprocess): unable to execute installed dash package post-installation script (/var/lib/dpkg/info/dash.postinst): No such file or directory
-    # Third run fails on:
-    #   update-alternatives: error: alternative path /bin/more doesn't exist
-    # Repeat upgrade attempts until passes
     function usrmerge-temp-fix {
       for x in bash cat cp dash ln more sh sleep
       do
@@ -433,7 +438,7 @@ blhc:
 
 .test-full-upgrade: &test-full-upgrade
   - *test-enable-artifacts-repo
-  - apt-get full-upgrade -qq --simulate
+  - apt-get full-upgrade -q --simulate
   - apt-get full-upgrade -qq --yes
   # Verify installation of MariaDB built in this commit
   - mariadb --version
@@ -697,7 +702,7 @@ mariadb-10.6 and Ubuntu Jammy upgrade:
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mariadb restart
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate mariadb-server
+    - apt-get install -q --simulate mariadb-server
     - apt-get install -qq --yes mariadb-server
     # Due to usrmerge, full-upgrade from Jammy to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
@@ -719,7 +724,7 @@ mariadb-10.5 and Bullseye upgrade:
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mariadb restart
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate mariadb-server
+    - apt-get install -q --simulate mariadb-server
     - apt-get install -qq --yes mariadb-server
     # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
@@ -741,7 +746,7 @@ mariadb-10.3 and Ubuntu Focal upgrade:
     # Ensure mariadbd will not crash on next shutdown for any reason
     - service mysql restart # in 10.3 service name is still 'mysql'
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate mariadb-server
+    - apt-get install -q --simulate mariadb-server
     - apt-get install -qq --yes mariadb-server
     # Due to usrmerge, full-upgrade from Focal to Trixie or newer cannot work
     - service mysql status
@@ -767,8 +772,8 @@ default-mysql-server and Bookworm upgrade:
     - *test-verify-initial
     - *test-enable-trixie-repos
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate default-mysql-server
-    - apt-get install -qq --yes default-mysql-server
+    - apt-get install -q --simulate default-mysql-server
+    - apt-get install -q --yes default-mysql-server
     - *test-full-upgrade
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
@@ -787,8 +792,8 @@ default-mysql-server and Bullseye upgrade:
     - *test-verify-initial
     - *test-enable-trixie-repos
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate default-mysql-server
-    - apt-get install -qq --yes default-mysql-server
+    - apt-get install -q --simulate default-mysql-server
+    - apt-get install -q --yes default-mysql-server
     # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
@@ -939,7 +944,7 @@ mysql-8.4 in Ubuntu 25.04 upgrade:
     # service file compatible with daemonless systemctl, so skip trying to
     # start or stop the service, just proceed directly to upgrade
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate mariadb-server
+    - apt-get install -q --simulate mariadb-server
     - apt-get install -qq --yes mariadb-server
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     # Remove everything MySQL except mysql-common which also MariaDB depends on
@@ -989,7 +994,7 @@ mysql-community-cluster-8.0 from MySQL.com with Bookworm upgrade:
     - systemctl stop mysql # Stop manually as maintainer scripts don't handle this with systemctl shim
     - *test-enable-trixie-repos
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate mariadb-server
+    - apt-get install -q --simulate mariadb-server
     - apt-get install -qq --yes mariadb-server
     # Ignore systemctl shim result as MariaDB systemd file is incompatible with it and yields:
     #   ERROR:systemctl:the ExecStartPre control process exited with error code
@@ -1080,7 +1085,7 @@ mariadb.org-10.5 upgrade:
     - |
       curl -sLO https://snapshot.debian.org/archive/debian/20240331T210805Z/pool/main/liba/libaio/libaio1_0.3.113-5_amd64.deb
       apt-get -qq install --no-install-recommends --yes ./libaio1_0.3.113-5_amd64.deb
-    - apt-get install -qq --yes mariadb-server
+    - apt-get install -q --yes mariadb-server
     - *test-verify-initial
     - *test-install-all
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
