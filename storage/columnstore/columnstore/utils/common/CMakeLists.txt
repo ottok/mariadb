@@ -1,7 +1,6 @@
+include_directories(${ENGINE_COMMON_INCLUDES})
 
-include_directories( ${ENGINE_COMMON_INCLUDES} )
-
-########### next target ###############
+# ########## next target ###############
 
 set(common_LIB_SRCS
     fixedallocator.cpp
@@ -10,15 +9,17 @@ set(common_LIB_SRCS
     MonitorProcMem.cpp
     nullvaluemanip.cpp
     threadnaming.cpp
-    utils_utf8.cpp
-    statistics.cpp
-    string_prefixes.cpp)
+    string_prefixes.cpp
+)
 
-add_library(common SHARED ${common_LIB_SRCS})
-
-target_link_libraries(common boost_filesystem)
-
-add_dependencies(common loggingcpp)
-
-install(TARGETS common DESTINATION ${ENGINE_LIBDIR} COMPONENT columnstore-engine)
-
+columnstore_library(common ${common_LIB_SRCS})
+columnstore_link(
+    common
+    PRIVATE
+    boost_filesystem
+    configcpp
+    loggingcpp
+    messageqcpp
+    idbdatafile
+    mariadb_charset
+)

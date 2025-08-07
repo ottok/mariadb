@@ -45,7 +45,7 @@ template <typename element_t>
 class FIFO : public DataListImpl<std::vector<element_t>, element_t>
 {
  private:
-  typedef DataListImpl<std::vector<element_t>, element_t> base;
+  using base = DataListImpl<std::vector<element_t>, element_t>;
 
  public:
   enum ElementMode
@@ -55,15 +55,15 @@ class FIFO : public DataListImpl<std::vector<element_t>, element_t>
   };
 
   FIFO(uint32_t numConsumers, uint32_t maxElements);
-  virtual ~FIFO();
+  ~FIFO() override;
 
   /* DataList<element_t> interface */
-  inline void insert(const element_t& e);
-  inline void insert(const std::vector<element_t>& v);
-  inline bool next(uint64_t it, element_t* e);
-  uint64_t getIterator();
-  void endOfInput();
-  void setMultipleProducers(bool b);
+  inline void insert(const element_t& e) override;
+  inline void insert(const std::vector<element_t>& v) override;
+  inline bool next(uint64_t it, element_t* e) override;
+  uint64_t getIterator() override;
+  void endOfInput() override;
+  void setMultipleProducers(bool b) override;
 
   /* Use this insert() to detect when insertion fills up buffer.      */
   /* When this happens, call waitTillReadyForInserts() before resuming*/
@@ -72,16 +72,16 @@ class FIFO : public DataListImpl<std::vector<element_t>, element_t>
   inline void waitTillReadyForInserts();
   inline bool isOutputBlocked() const;
 
-  void OID(execplan::CalpontSystemCatalog::OID oid)
+  void OID(execplan::CalpontSystemCatalog::OID oid) override
   {
     base::OID(oid);
   }
-  execplan::CalpontSystemCatalog::OID OID() const
+  execplan::CalpontSystemCatalog::OID OID() const override
   {
     return base::OID();
   }
 
-  inline void dropToken(){};
+  inline void dropToken() {};
   inline void dropToken(uint32_t){};
 
   // Counters that reflect how many many times this FIFO blocked on reads/writes
@@ -89,7 +89,7 @@ class FIFO : public DataListImpl<std::vector<element_t>, element_t>
   uint64_t blockedReadCount() const;
 
   // @bug 653 set number of consumers when it is empty.
-  void setNumConsumers(uint32_t nc);
+  void setNumConsumers(uint32_t nc) override;
 
   void inOrder(bool order)
   {
@@ -109,7 +109,7 @@ class FIFO : public DataListImpl<std::vector<element_t>, element_t>
   {
     fTotSize = totSize;
   }
-  uint64_t totalSize()
+  uint64_t totalSize() override
   {
     return fTotSize;
   }
@@ -167,9 +167,11 @@ class FIFO : public DataListImpl<std::vector<element_t>, element_t>
   uint64_t blockedInsertWriteCount;
   uint64_t blockedNextReadCount;
 
-  FIFO& operator=(const FIFO&);
-  FIFO(const FIFO&);
-  FIFO();
+  FIFO& operator=(const FIFO&) = delete;
+  FIFO(const FIFO&) = delete;
+  FIFO& operator=(FIFO&&) = delete;
+  FIFO(FIFO&&) = delete;
+  FIFO() = delete;
 
   void signalPs();
   bool swapBuffers(bool waitIfBlocked = true);
@@ -205,24 +207,6 @@ FIFO<element_t>::FIFO(uint32_t con, uint32_t max) : DataListImpl<std::vector<ele
   cDone = con;
 
   blockedInsertWriteCount = blockedNextReadCount = 0;
-}
-
-template <typename element_t>
-FIFO<element_t>::FIFO()
-{
-  throw std::logic_error("don't use FIFO()");
-}
-
-template <typename element_t>
-FIFO<element_t>::FIFO(const FIFO<element_t>& f)
-{
-  throw std::logic_error("don't use FIFO(FIFO &)");
-}
-
-template <typename element_t>
-FIFO<element_t>& FIFO<element_t>::operator=(const FIFO<element_t>& f)
-{
-  throw std::logic_error("don't use FIFO:: =");
 }
 
 template <typename element_t>
@@ -495,14 +479,11 @@ void FIFO<element_t>::maxElements(uint64_t max)
   {
     fMaxElements = max;
 
-    if (pBuffer)
-      delete[] pBuffer;
+    delete[] pBuffer;
+    delete[] cBuffer;
 
-    if (cBuffer)
-      delete[] cBuffer;
-
-    pBuffer = 0;
-    cBuffer = 0;
+    pBuffer = nullptr;
+    cBuffer = nullptr;
 
     for (uint64_t i = 0; i < base::numConsumers; ++i)
       cpos[i] = fMaxElements;
@@ -528,4 +509,3 @@ void FIFO<element_t>::totalFileCounts(uint64_t& numFiles, uint64_t& numBytes) co
 }
 
 }  // namespace joblist
-

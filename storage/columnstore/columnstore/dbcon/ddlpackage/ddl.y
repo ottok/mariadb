@@ -19,7 +19,7 @@
 /* $Id: ddl.y 9314 2013-03-19 17:39:25Z dhall $ */
 /* This describes a substantial subset of SQL92 DDL with some
    enhancements from various vendors.  Most of the nomenclature in the
-   grammar is drawn from SQL92. 
+   grammar is drawn from SQL92.
 
    If you have to care about this grammar, you should consult one or
    more of the following sources:
@@ -50,13 +50,13 @@
 #define scanner x->scanner
 
 using namespace std;
-using namespace ddlpackage;	
+using namespace ddlpackage;
 
 int ddllex(YYSTYPE* ddllval, void* yyscanner);
 void ddlerror(struct pass_to_bison* x, char const *s);
 char* copy_string(const char *str);
 
-void fix_column_length_and_charset(SchemaObject* elem, const CHARSET_INFO* def_cs)
+void fix_column_length_and_charset(SchemaObject* elem, const CHARSET_INFO* def_cs, myf utf8_flag)
 {
     auto* column = dynamic_cast<ColumnDef*>(elem);
 
@@ -82,9 +82,9 @@ void fix_column_length_and_charset(SchemaObject* elem, const CHARSET_INFO* def_c
         CHARSET_INFO* cs = def_cs ? def_cs : &my_charset_latin1;
 
         if (column->fType->fCollate)
-            cs = get_charset_by_name(column->fType->fCollate, MYF(0));
+            cs = get_charset_by_name(column->fType->fCollate, MYF(utf8_flag));
         else if (column->fType->fCharset)
-            cs = get_charset_by_csname(column->fType->fCharset, MY_CS_PRIMARY, MYF(0));
+            cs = get_charset_by_csname(column->fType->fCharset, MY_CS_PRIMARY, MYF(utf8_flag));
 
         column->fType->fCharset = cs->cs_name.str;
         column->fType->fCollate = cs->coll_name.str;
@@ -101,7 +101,7 @@ void fix_column_length_and_charset(SchemaObject* elem, const CHARSET_INFO* def_c
             column->fType->fLength = 255;
         else if (column->fType->fLength <= 65535)
             column->fType->fLength = 65535;
-        else 
+        else
             column->fType->fLength = 16777215;
     }
 }
@@ -244,7 +244,7 @@ ZEROFILL
 %type <columnType>           approximate_numeric_type
 %type <str>                  opt_display_width
 %type <str> 		     	 opt_display_precision_scale_null
-%type <str>                  opt_if_exists
+%type <flag>                 opt_if_exists
 %type <str>                  opt_if_not_exists
 %type <str>                  opt_signed
 %type <str>                  opt_zerofill
@@ -289,7 +289,7 @@ stmtmulti:
 		}
 	}
 	| stmt
-	{ 
+	{
 		if ($1 != NULL)
 		{
 			$$ = x->fParseTree;
@@ -314,22 +314,22 @@ stmt:
 	;
 
 drop_table_statement:
-	DROP TABLE opt_if_exists qualified_name {$$ = new DropTableStatement($4, false);}
+	DROP TABLE opt_if_exists qualified_name {$$ = new DropTableStatement($4, false, $3);}
 	| DROP TABLE opt_if_exists qualified_name CASCADE CONSTRAINTS
 	{
-		{$$ = new DropTableStatement($4, true);}
+		{$$ = new DropTableStatement($4, true, $3);}
 	}
 	;
 
 opt_if_exists:
-	IDB_IF EXISTS {$$ = NULL;}
-	| {$$ = NULL;}
+	IDB_IF EXISTS {$$ = true;}
+	| {$$ = true;}
 	;
 
 drop_index_statement:
 	DROP INDEX qualified_name {$$ = new DropIndexStatement($3);}
 	;
-	
+
 /* Notice that we allow table_options here (e.g. engine=infinidb) but
    we ignore them. */
 create_index_statement:
@@ -355,7 +355,7 @@ create_table_statement:
 	{
         for (auto* elem : *$6)
         {
-            fix_column_length_and_charset(elem, x->default_table_charset);
+            fix_column_length_and_charset(elem, x->default_table_charset, x->utf8_flag);
         }
 		$$ = new CreateTableStatement(new TableDef($4, $6, $8));
 	}
@@ -374,7 +374,7 @@ trunc_table_statement:
 rename_table_statement:
     RENAME TABLE qualified_name TO qualified_name
     {
-        // MCOL-876. The change reuses existing infrastructure. 
+        // MCOL-876. The change reuses existing infrastructure.
         AtaRenameTable* renameAction = new AtaRenameTable($5);
         AlterTableActionList* actionList = new AlterTableActionList();
         actionList->push_back(renameAction);
@@ -526,7 +526,7 @@ table_options:
 		$$ = new TableOptionMap();
 		(*$$)[$1->first] = $1->second;
 		delete $1;
-	}	
+	}
 	| table_options table_option
 	{
 		$$ = $1;
@@ -589,7 +589,7 @@ alter_table_actions:
 			/* An alter_table_statement requires at least one action.
 			   So, this shouldn't happen. */
 			$$ = NULL;
-		}		
+		}
 	}
 	| alter_table_actions ',' alter_table_action
 	{
@@ -651,7 +651,7 @@ rename_column:
 	{$$ = new AtaRenameColumn($2, $3, $4, $5, NULL, $6);}
 	|CHANGE COLUMN column_name column_name data_type column_qualifier_list column_option
 	{$$ = new AtaRenameColumn($3, $4, $5, $6, NULL, $7);}
-	|CHANGE column_name column_name data_type default_clause 
+	|CHANGE column_name column_name data_type default_clause
 	{$$ = new AtaRenameColumn($2, $3, $4, NULL, $5);}
 	|CHANGE COLUMN column_name column_name data_type default_clause
 	{$$ = new AtaRenameColumn($3, $4, $5, NULL, $6);}
@@ -659,22 +659,22 @@ rename_column:
 	{$$ = new AtaRenameColumn($2, $3, $4, NULL, $5, $6);}
 	|CHANGE COLUMN column_name column_name data_type default_clause column_option
 	{$$ = new AtaRenameColumn($3, $4, $5, NULL, $6, $7);}
-	|CHANGE column_name column_name data_type column_qualifier_list default_clause 
+	|CHANGE column_name column_name data_type column_qualifier_list default_clause
 	{$$ = new AtaRenameColumn($2, $3, $4, $5, $6);}
 	|CHANGE COLUMN column_name column_name data_type column_qualifier_list default_clause
 	{$$ = new AtaRenameColumn($3, $4, $5, $6, $7);}
-	|CHANGE column_name column_name data_type default_clause column_qualifier_list  
+	|CHANGE column_name column_name data_type default_clause column_qualifier_list
 	{$$ = new AtaRenameColumn($2, $3, $4, $6, $5);}
 	|CHANGE COLUMN column_name column_name data_type default_clause column_qualifier_list
 	{$$ = new AtaRenameColumn($3, $4, $5, $7, $6);}
 	|CHANGE column_name column_name data_type column_qualifier_list default_clause column_option
 	{$$ = new AtaRenameColumn($2, $3, $4, $5, $6, $7);}
 	|CHANGE COLUMN column_name column_name data_type column_qualifier_list default_clause column_option
-	{$$ = new AtaRenameColumn($3, $4, $5, $6, $7, $8);}	
+	{$$ = new AtaRenameColumn($3, $4, $5, $6, $7, $8);}
 	|CHANGE column_name column_name data_type default_clause column_qualifier_list column_option
 	{$$ = new AtaRenameColumn($2, $3, $4, $6, $5, $7);}
 	|CHANGE COLUMN column_name column_name data_type default_clause column_qualifier_list column_option
-	{$$ = new AtaRenameColumn($3, $4, $5, $7, $6, $8);}	
+	{$$ = new AtaRenameColumn($3, $4, $5, $7, $6, $8);}
 	;
 
 drop_table_constraint_def:
@@ -719,17 +719,17 @@ ata_add_column:
     /* See the documentation for SchemaObject for an explanation of why we are using
      * dynamic_cast here.
      */
-	ADD column_def { fix_column_length_and_charset($2, x->default_table_charset); $$ = new AtaAddColumn(dynamic_cast<ColumnDef*>($2));}
-	| ADD COLUMN column_def { fix_column_length_and_charset($3, x->default_table_charset); $$ = new AtaAddColumn(dynamic_cast<ColumnDef*>($3));}
+	ADD column_def { fix_column_length_and_charset($2, x->default_table_charset, x->utf8_flag); $$ = new AtaAddColumn(dynamic_cast<ColumnDef*>($2));}
+	| ADD COLUMN column_def { fix_column_length_and_charset($3, x->default_table_charset, x->utf8_flag); $$ = new AtaAddColumn(dynamic_cast<ColumnDef*>($3));}
 	| ADD '(' table_element_list ')' {
         for (auto* elem : *$3) {
-            fix_column_length_and_charset(elem, x->default_table_charset);
+            fix_column_length_and_charset(elem, x->default_table_charset, x->utf8_flag);
         }
         $$ = new AtaAddColumns($3);
     }
 	| ADD COLUMN '(' table_element_list ')' {
         for (auto* elem : *$4) {
-            fix_column_length_and_charset(elem, x->default_table_charset);
+            fix_column_length_and_charset(elem, x->default_table_charset, x->utf8_flag);
         }
         $$ = new AtaAddColumns($4);
     }
@@ -747,8 +747,8 @@ constraint_name:
 
 column_option:
 	COMMENT  string_literal {$$ = $2;}
-	
-column_def:	
+
+column_def:
 	column_name data_type opt_null_tok
 	{
 		$$ = new ColumnDef($1, $2, NULL, NULL );
@@ -863,7 +863,7 @@ column_qualifier_list:
 	{
 		$$ = new ColumnConstraintList();
 		$$->push_back($1);
-	}	
+	}
 	| column_qualifier_list column_constraint_def
 	{
 		$$ = $1;
@@ -893,7 +893,7 @@ column_constraint_def:
 			$3->fDeferrable = $4->fDeferrable;
 			$3->fCheckTime = $4->fCheckTime;
 		}
-		
+
 	}
 	;
 
@@ -956,7 +956,7 @@ check_constraint_def:
 
 string_literal:
 	'\'' SCONST '\'' {$$ = $2;}
-	; 
+	;
 
 opt_quoted_literal:
     string_literal
@@ -1251,7 +1251,7 @@ opt_signed:
             '(' ICONST ',' ICONST ')' {$$ = NULL;}
             | {$$ = NULL;}
             ;
-            
+
     literal:
         ICONST
         | string_literal

@@ -25,6 +25,7 @@
 #include <memory>
 #include <boost/shared_ptr.hpp>
 #include "poolallocator.h"
+#include "resourcemanager.h"
 
 #undef min
 #undef max
@@ -37,7 +38,7 @@ namespace utils
 as the deleter. */
 struct BoostPoolDeallocator
 {
-  inline void operator()(void* ptr){};
+  inline void operator()(void* /*ptr*/) {};
 };
 
 /* This is an STL-compliant wrapper for PoolAllocator + an optimization for containers
@@ -61,6 +62,9 @@ class STLPoolAllocator
   };
 
   STLPoolAllocator() throw();
+  STLPoolAllocator(joblist::ResourceManager* rm,
+                   const int64_t checkPointStepSize = allocators::CheckPointStepSize,
+                   const int64_t memoryLimitLowerBound = allocators::MemoryLimitLowerBound);
   STLPoolAllocator(const STLPoolAllocator&) throw();
   STLPoolAllocator(uint32_t capacity) throw();
   template <class U>
@@ -95,15 +99,25 @@ STLPoolAllocator<T>::STLPoolAllocator() throw()
 }
 
 template <class T>
-STLPoolAllocator<T>::STLPoolAllocator(const STLPoolAllocator<T>& s) throw()
+STLPoolAllocator<T>::STLPoolAllocator(joblist::ResourceManager* rm,
+                                      const int64_t checkPointStepSize,
+                                      const int64_t memoryLimitLowerBound)
 {
-  pa = s.pa;
+  if (rm)
+  {
+    auto alloc = rm->getAllocator<PoolAllocatorBufType>(checkPointStepSize, memoryLimitLowerBound);
+    pa.reset(new PoolAllocator(alloc, DEFAULT_SIZE));
+  }
+  else
+  {
+    pa.reset(new PoolAllocator(DEFAULT_SIZE));
+  }
 }
 
 template <class T>
-STLPoolAllocator<T>::STLPoolAllocator(uint32_t capacity) throw()
+STLPoolAllocator<T>::STLPoolAllocator(const STLPoolAllocator<T>& s) throw()
 {
-  pa.reset(new PoolAllocator(capacity));
+  pa = s.pa;
 }
 
 template <class T>
@@ -119,26 +133,15 @@ STLPoolAllocator<T>::~STLPoolAllocator()
 }
 
 template <class T>
-void STLPoolAllocator<T>::usePoolAllocator(boost::shared_ptr<PoolAllocator> p)
-{
-  pa = p;
-}
-template <class T>
-boost::shared_ptr<utils::PoolAllocator> STLPoolAllocator<T>::getPoolAllocator()
-{
-  return pa;
-}
-
-template <class T>
 typename STLPoolAllocator<T>::pointer STLPoolAllocator<T>::allocate(
-    typename STLPoolAllocator<T>::size_type s, typename STLPoolAllocator<T>::const_pointer hint)
+    typename STLPoolAllocator<T>::size_type s, typename STLPoolAllocator<T>::const_pointer /*hint*/)
 {
   return (pointer)pa->allocate(s * sizeof(T));
 }
 
 template <class T>
 void STLPoolAllocator<T>::deallocate(typename STLPoolAllocator<T>::pointer p,
-                                     typename STLPoolAllocator<T>::size_type n)
+                                     typename STLPoolAllocator<T>::size_type /*n*/)
 {
   pa->deallocate((void*)p);
 }

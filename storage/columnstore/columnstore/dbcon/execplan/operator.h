@@ -70,23 +70,23 @@ class Operator : public TreeNode
 {
  public:
   Operator();
-  Operator(const std::string& operatorName);
+  explicit Operator(const std::string& operatorName);
   Operator(const Operator& rhs);
 
-  virtual ~Operator();
+  ~Operator() override;
 
-  virtual const std::string toString() const override;
-  virtual const std::string data() const override
+  const std::string toString() const override;
+  const std::string data() const override
   {
     return fData;
   }
-  virtual void data(const std::string data) override;
+  void data(const std::string data) override;
 
   /** return a copy of this pointer
    *
    * deep copy of this pointer and return the copy
    */
-  inline virtual Operator* clone() const override
+  inline Operator* clone() const override
   {
     return new Operator(*this);
   }
@@ -101,15 +101,15 @@ class Operator : public TreeNode
   /**
    * The serialization interface
    */
-  virtual void serialize(messageqcpp::ByteStream&) const override;
-  virtual void unserialize(messageqcpp::ByteStream&) override;
+  void serialize(messageqcpp::ByteStream&) const override;
+  void unserialize(messageqcpp::ByteStream&) override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
    * Do a deep, strict (as opposed to semantic) equivalence test.
    * @return true iff every member of t is a duplicate copy of every member of this; false otherwise
    */
-  virtual bool operator==(const TreeNode* t) const override;
+  bool operator==(const TreeNode* t) const override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -123,7 +123,7 @@ class Operator : public TreeNode
    * Do a deep, strict (as opposed to semantic) equivalence test.
    * @return false iff every member of t is a duplicate copy of every member of this; true otherwise
    */
-  virtual bool operator!=(const TreeNode* t) const override;
+  bool operator!=(const TreeNode* t) const override;
 
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -139,7 +139,7 @@ class Operator : public TreeNode
    */
   virtual void reverseOp();
 
-  virtual std::string toCppCode(IncludeSet& includes) const override;
+  std::string toCppCode(IncludeSet& includes) const override;
 
  protected:
   std::string fData;
@@ -157,85 +157,85 @@ class Operator : public TreeNode
     fOp = op;
   }
   using TreeNode::evaluate;
-  virtual void evaluate(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual void evaluate(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
   }
 
   // The following methods should be pure virtual. Currently too many instanslization exists.
   using TreeNode::getStrVal;
-  virtual const utils::NullString& getStrVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual const utils::NullString& getStrVal(rowgroup::Row& /*row*/, bool& isNull, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     isNull = isNull || fResult.strVal.isNull();
     return fResult.strVal;
   }
   using TreeNode::getIntVal;
-  virtual int64_t getIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual int64_t getIntVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.intVal;
   }
   using TreeNode::getUintVal;
-  virtual uint64_t getUintVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual uint64_t getUintVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.uintVal;
   }
   using TreeNode::getFloatVal;
-  virtual float getFloatVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual float getFloatVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.floatVal;
   }
   using TreeNode::getDoubleVal;
-  virtual double getDoubleVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual double getDoubleVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.doubleVal;
   }
   using TreeNode::getLongDoubleVal;
-  virtual long double getLongDoubleVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual long double getLongDoubleVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.longDoubleVal;
   }
   using TreeNode::getDecimalVal;
-  virtual IDB_Decimal getDecimalVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual IDB_Decimal getDecimalVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.decimalVal;
   }
   using TreeNode::getDateIntVal;
-  virtual int32_t getDateIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual int32_t getDateIntVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.intVal;
   }
   using TreeNode::getDatetimeIntVal;
-  virtual int64_t getDatetimeIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual int64_t getDatetimeIntVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.intVal;
   }
   using TreeNode::getTimestampIntVal;
-  virtual int64_t getTimestampIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual int64_t getTimestampIntVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.intVal;
   }
   using TreeNode::getTimeIntVal;
-  virtual int64_t getTimeIntVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual int64_t getTimeIntVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.intVal;
   }
   using TreeNode::getBoolVal;
-  virtual bool getBoolVal(rowgroup::Row& row, bool& isNull, ParseTree* lop, ParseTree* rop)
+  virtual bool getBoolVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ParseTree* /*lop*/, ParseTree* /*rop*/)
   {
     return fResult.boolVal;
   }
-  virtual bool getBoolVal(rowgroup::Row& row, bool& isNull, ReturnedColumn* lop, ReturnedColumn* rop)
+  virtual bool getBoolVal(rowgroup::Row& /*row*/, bool& /*isNull*/, ReturnedColumn* /*lop*/, ReturnedColumn* /*rop*/)
   {
     return fResult.boolVal;
   }
 
-  virtual void setOpType(Type& l, Type& r)
+  virtual void setOpType(Type& /*l*/, Type& /*r*/)
   {
   }
-  virtual void operationType(const Type& ot) override
+  void operationType(const Type& ot) override
   {
     fOperationType = ot;
   }
-  virtual const Type& operationType() const override
+  const Type& operationType() const override
   {
     return fOperationType;
   }

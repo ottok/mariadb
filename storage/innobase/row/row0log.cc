@@ -398,12 +398,17 @@ start_log:
 		}
 
 		log->tail.blocks++;
+		DBUG_EXECUTE_IF("os_file_write_fail",
+				log->error = DB_TEMP_FILE_WRITE_FAIL;
+				goto write_failed;);
+
 		if (os_file_write(
 			    IORequestWrite,
 			    "(modification log)",
 			    log->fd,
 			    buf, byte_offset, srv_sort_buf_size)
 		    != DB_SUCCESS) {
+			log->error = DB_TEMP_FILE_WRITE_FAIL;
 write_failed:
 			index->type |= DICT_CORRUPT;
 		}
@@ -2655,7 +2660,8 @@ all_done:
 	ut_ad((mrec == NULL) == (index->online_log->head.bytes == 0));
 
 #ifdef UNIV_DEBUG
-	if (next_mrec_end == index->online_log->head.block
+	if (index->online_log->head.block &&
+	    next_mrec_end == index->online_log->head.block
 	    + srv_sort_buf_size) {
 		/* If tail.bytes == 0, next_mrec_end can also be at
 		the end of tail.block. */
@@ -2670,7 +2676,8 @@ all_done:
 			ut_ad(index->online_log->tail.blocks
 			      > index->online_log->head.blocks);
 		}
-	} else if (next_mrec_end == index->online_log->tail.block
+	} else if (index->online_log->tail.block &&
+		   next_mrec_end == index->online_log->tail.block
 		   + index->online_log->tail.bytes) {
 		ut_ad(next_mrec == index->online_log->tail.block
 		      + index->online_log->head.bytes);

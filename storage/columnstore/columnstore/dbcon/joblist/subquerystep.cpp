@@ -239,7 +239,7 @@ uint32_t SubAdapterStep::nextBand(messageqcpp::ByteStream& bs)
   if (fEndOfResult)
   {
     // send an empty / error band
-    RGData rgData(fRowGroupDeliver, 0);
+    RGData rgData(fRowGroupDeliver, 0U);
     fRowGroupDeliver.setData(&rgData);
     fRowGroupDeliver.resetRowGroup(0);
     fRowGroupDeliver.setStatus(status());
@@ -337,9 +337,6 @@ void SubAdapterStep::execute()
   fRowGroupOut.initRow(&rowOut);
 
   RGData rowFeData;
-  StepTeleStats sts;
-  sts.query_uuid = fQueryUuid;
-  sts.step_uuid = fStepUuid;
   bool usesFE = false;
 
   if (fRowGroupFe.getColumnCount() > 0)
@@ -355,8 +352,7 @@ void SubAdapterStep::execute()
 
   try
   {
-    sts.msg_type = StepTeleStats::ST_START;
-    sts.total_units_of_work = 1;
+    StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_START, 1);
     postStepStartTele(sts);
 
     fSubStep->run();
@@ -431,9 +427,7 @@ void SubAdapterStep::execute()
     printCalTrace();
   }
 
-  sts.msg_type = StepTeleStats::ST_SUMMARY;
-  sts.total_units_of_work = sts.units_of_work_completed = 1;
-  sts.rows = fRowsReturned;
+  StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_SUMMARY, 1, 1, fRowsReturned);
   postStepSummaryTele(sts);
 
   // Bug 3136, let mini stats to be formatted if traceOn.

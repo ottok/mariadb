@@ -26,13 +26,11 @@
 #include <vector>
 #include <boost/scoped_ptr.hpp>
 
-
-#include "returnedcolumn.h"  // SRCP
-#include "rowgroup.h"        // RowGroup
-#include "rowaggregation.h"  // SP_GroupConcat
-#include "limitedorderby.h"  // IdbOrderBy
-
-#define EXPORT
+#include "groupconcatcolumn.h"  // GroupConcatColumn
+#include "returnedcolumn.h"     // SRCP
+#include "rowgroup.h"           // RowGroup
+#include "rowaggregation.h"     // SP_GroupConcat
+#include "limitedorderby.h"     // IdbOrderBy
 
 namespace joblist
 {
@@ -45,7 +43,7 @@ class GroupConcatInfo
 {
  public:
   GroupConcatInfo();
-  virtual ~GroupConcatInfo();
+  ~GroupConcatInfo();
 
   void prepGroupConcat(JobInfo&);
   void mapColumns(const rowgroup::RowGroup&);
@@ -62,47 +60,63 @@ class GroupConcatInfo
   const std::string toString() const;
 
  protected:
-  uint32_t getColumnKey(const execplan::SRCP& srcp, JobInfo& jobInfo);
-  std::shared_ptr<int[]> makeMapping(const rowgroup::RowGroup&, const rowgroup::RowGroup&);
+  uint32_t getColumnKey(const execplan::SRCP& srcp, JobInfo& jobInfo) const;
+  std::shared_ptr<int[]> makeMapping(const rowgroup::RowGroup&, const rowgroup::RowGroup&) const;
 
   std::set<uint32_t> fColumns;
   std::vector<rowgroup::SP_GroupConcat> fGroupConcat;
 };
 
-class GroupConcatAgUM : public rowgroup::GroupConcatAg
+class GroupConcatAg
 {
  public:
-  EXPORT GroupConcatAgUM(rowgroup::SP_GroupConcat&);
-  EXPORT ~GroupConcatAgUM();
+  explicit GroupConcatAg(rowgroup::SP_GroupConcat&, bool isJsonArrayAgg = false);
+  ~GroupConcatAg();
 
-  using rowgroup::GroupConcatAg::merge;
   void initialize();
   void processRow(const rowgroup::Row&);
-  EXPORT void merge(const rowgroup::Row&, int64_t);
+  void merge(const rowgroup::Row&, uint64_t);
   boost::scoped_ptr<GroupConcator>& concator()
   {
     return fConcator;
   }
 
-  EXPORT uint8_t* getResult();
+  uint8_t* getResult();
+
+  uint32_t getGroupConcatId() const
+  {
+    return fGroupConcat->id;
+  }
+
+  void serialize(messageqcpp::ByteStream& bs) const;
+  void deserialize(messageqcpp::ByteStream& bs);
+
+  rowgroup::RGDataSizeType getDataSize() const;
 
  protected:
   void applyMapping(const std::shared_ptr<int[]>&, const rowgroup::Row&);
 
+  rowgroup::SP_GroupConcat fGroupConcat;
+  bool fIsJsonArrayAgg{false};
   boost::scoped_ptr<GroupConcator> fConcator;
   boost::scoped_array<uint8_t> fData;
   rowgroup::Row fRow;
   rowgroup::RGData fRowRGData;
   rowgroup::RowGroup fRowGroup;
   bool fNoOrder;
+  rowgroup::RGDataSizeType fMemSize{0};
 };
+
+using SP_GroupConcatAg = boost::shared_ptr<GroupConcatAg>;
 
 // GROUP_CONCAT base
 class GroupConcator
 {
  public:
-  GroupConcator();
-  virtual ~GroupConcator();
+  explicit GroupConcator(bool isJsonArrayAgg) : fIsJsonArrayAgg(isJsonArrayAgg)
+  {
+  }
+  virtual ~GroupConcator() = default;
 
   virtual void initialize(const rowgroup::SP_GroupConcat&);
   virtual void processRow(const rowgroup::Row&) = 0;
@@ -114,6 +128,10 @@ class GroupConcator
 
   virtual const std::string toString() const;
 
+  virtual void serialize(messageqcpp::ByteStream&) const;
+  virtual void deserialize(messageqcpp::ByteStream&);
+  virtual rowgroup::RGDataSizeType getDataSize() const = 0;
+
  protected:
   virtual bool concatColIsNull(const rowgroup::Row&);
   virtual void outputRow(std::ostringstream&, const rowgroup::Row&);
@@ -121,65 +139,128 @@ class GroupConcator
 
   std::vector<uint32_t> fConcatColumns;
   std::vector<std::pair<utils::NullString, uint32_t> > fConstCols;
-  int64_t fCurrentLength;
-  int64_t fGroupConcatLen;
-  int64_t fConstantLen;
+  int64_t fCurrentLength{0};
+  int64_t fGroupConcatLen{0};
+  int64_t fConstantLen{0};
   std::unique_ptr<std::string> outputBuf_;
-  long fTimeZone;
+  long fTimeZone{0};
+  bool fIsJsonArrayAgg{false};
+
+  joblist::ResourceManager* fRm{nullptr};
+  boost::shared_ptr<int64_t> fSessionMemLimit;
 };
 
 // For GROUP_CONCAT withour distinct or orderby
 class GroupConcatNoOrder : public GroupConcator
 {
  public:
-  GroupConcatNoOrder();
-  virtual ~GroupConcatNoOrder();
+  explicit GroupConcatNoOrder(bool isJsonArrayAgg) : GroupConcator(isJsonArrayAgg)
+  {
+  }
+  ~GroupConcatNoOrder() override;
 
-  void initialize(const rowgroup::SP_GroupConcat&);
-  void processRow(const rowgroup::Row&);
+  void initialize(const rowgroup::SP_GroupConcat&) override;
+  void processRow(const rowgroup::Row&) override;
 
-  void merge(GroupConcator*);
+  void merge(GroupConcator*) override;
   using GroupConcator::getResult;
-  uint8_t* getResultImpl(const std::string& sep);
-  //uint8_t* getResult(const std::string& sep);
+  uint8_t* getResultImpl(const std::string& sep) override;
+  // uint8_t* getResult(const std::string& sep);
 
-  const std::string toString() const;
+  void serialize(messageqcpp::ByteStream&) const override;
+  void deserialize(messageqcpp::ByteStream&) override;
+
+  rowgroup::RGDataSizeType getDataSize() const override
+  {
+    return fMemSize;
+  }
+
+  const std::string toString() const override;
 
  protected:
+  std::vector<rowgroup::RGDataUnPtr>& getRGDatas() { return fDataVec; }
+
+  void createNewRGData();
   rowgroup::RowGroup fRowGroup;
   rowgroup::Row fRow;
-  rowgroup::RGData fData;
-  std::queue<rowgroup::RGData> fDataQueue;
-  uint64_t fRowsPerRG;
-  uint64_t fErrorCode;
-  uint64_t fMemSize;
-  ResourceManager* fRm;
-  boost::shared_ptr<int64_t> fSessionMemLimit;
+  std::vector<rowgroup::RGDataUnPtr> fDataVec;
+  uint64_t fRowsPerRG{128};
+  rowgroup::RGDataSizeType fMemSize{0};
+  rowgroup::RGDataSizeType fCurMemSize{0};
 };
 
 // ORDER BY used in GROUP_CONCAT class
 // This version is for GROUP_CONCAT, the size is limited by the group_concat_max_len.
-class GroupConcatOrderBy : public GroupConcator, public ordering::IdbOrderBy
+class GroupConcatOrderBy : public GroupConcator, public ordering::IdbCompare
 {
  public:
-  GroupConcatOrderBy();
-  virtual ~GroupConcatOrderBy();
+  explicit GroupConcatOrderBy(bool isJsonArrayAgg);
+  ~GroupConcatOrderBy() override;
 
-  using ordering::IdbOrderBy::initialize;
-  void initialize(const rowgroup::SP_GroupConcat&);
-  void processRow(const rowgroup::Row&);
+  using ordering::IdbCompare::initialize;
+  void initialize(const rowgroup::SP_GroupConcat&) override;
+  void processRow(const rowgroup::Row&) override;
   uint64_t getKeyLength() const;
 
-  void merge(GroupConcator*);
-  using GroupConcator::getResult;
-  uint8_t* getResultImpl(const std::string& sep);
-  //uint8_t* getResult(const std::string& sep);
+  void serialize(messageqcpp::ByteStream&) const override;
+  void deserialize(messageqcpp::ByteStream&) override;
 
-  const std::string toString() const;
+  rowgroup::RGDataSizeType getDataSize() const override;
+
+  void merge(GroupConcator*) override;
+  using GroupConcator::getResult;
+  uint8_t* getResultImpl(const std::string& sep) override;
+  // uint8_t* getResult(const std::string& sep);
+
+  const std::string toString() const override;
 
  protected:
+  struct Hasher
+  {
+    GroupConcatOrderBy* ts;
+    utils::Hasher_r h;
+    uint32_t colCount;
+
+    Hasher(GroupConcatOrderBy* t, uint32_t c) : ts(t), colCount(c)
+    {
+    }
+    uint64_t operator()(const rowgroup::Row::Pointer&) const;
+  };
+
+  struct Eq
+  {
+    GroupConcatOrderBy* ts;
+    uint32_t colCount;
+
+    Eq(GroupConcatOrderBy* t, uint32_t c) : ts(t), colCount(c)
+    {
+    }
+
+    bool operator()(const rowgroup::Row::Pointer&, const rowgroup::Row::Pointer&) const;
+  };
+
+  using DistinctMap = std::unordered_map<rowgroup::Row::Pointer, uint64_t, Hasher, Eq>;
+
+  class SortingPQ;
+
+ protected:
+  void createNewRGData();
+  uint64_t getCurrentRowIdx() const;
+  static uint64_t shiftGroupIdxBy(uint64_t idx, uint32_t shift);
+  std::vector<rowgroup::RGDataUnPtr>& getRGDatas() { return fDataVec; }
+  SortingPQ* getQueue() { return fOrderByQueue.get(); }
+
+  rowgroup::RGDataSizeType fMemSize{0};
+  static constexpr uint64_t fRowsPerRG{128};
+
+  std::vector<ordering::IdbSortSpec> fOrderByCond;
+  rowgroup::Row fRow0;
+  rowgroup::Row row1, row2;
+  ordering::CompareRule fRule;
+  std::vector<rowgroup::RGDataUnPtr> fDataVec;
+  bool fDistinct;
+  std::unique_ptr<DistinctMap> fDistinctMap;
+  std::unique_ptr<SortingPQ> fOrderByQueue;
 };
 
 }  // namespace joblist
-
-#undef EXPORT

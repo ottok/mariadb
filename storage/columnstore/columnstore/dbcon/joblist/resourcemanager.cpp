@@ -22,6 +22,7 @@
  ******************************************************************************************/
 
 #include <unistd.h>
+#include <atomic>
 #include <string>
 #include <stdexcept>
 #include <iostream>
@@ -236,14 +237,22 @@ ResourceManager::ResourceManager(bool runningInExeMgr, config::Config* aConfig)
   else
     fUseHdfs = false;
 
-  fAllowedDiskAggregation =
-      getBoolVal(fRowAggregationStr, "AllowDiskBasedAggregation", defaultAllowDiskAggregation);
-
   if (!load_encryption_keys())
   {
     Logger log;
     log.logMessage(logging::LOG_TYPE_ERROR, "Error loading CEJ password encryption keys");
   }
+}
+
+// For UT
+ResourceManager::ResourceManager()
+ : fExeMgrStr("ForUT")
+ , fHJUmMaxMemorySmallSideDistributor(
+       fHashJoinStr, "UmMaxMemorySmallSide",
+       1024*1024,
+       1024*1024, 0)
+ , fHJPmMaxMemorySmallSideSessionMap(1024*1024)
+{
 }
 
 int ResourceManager::getEmPriority() const
@@ -346,23 +355,23 @@ bool ResourceManager::userPriorityEnabled() const
 // If both have space, return true.
 bool ResourceManager::getMemory(int64_t amount, boost::shared_ptr<int64_t>& sessionLimit, bool patience)
 {
-  bool ret1 = (atomicops::atomicSub(&totalUmMemLimit, amount) >= 0);
+  bool ret1 = (atomicops::atomicSubRef(totalUmMemLimit, amount) >= 0);
   bool ret2 = sessionLimit ? (atomicops::atomicSub(sessionLimit.get(), amount) >= 0) : ret1;
 
   uint32_t retryCounter = 0, maxRetries = 20;  // 10s delay
 
   while (patience && !(ret1 && ret2) && retryCounter++ < maxRetries)
   {
-    atomicops::atomicAdd(&totalUmMemLimit, amount);
+    atomicops::atomicAddRef(totalUmMemLimit, amount);
     sessionLimit ? atomicops::atomicAdd(sessionLimit.get(), amount) : 0;
     usleep(500000);
-    ret1 = (atomicops::atomicSub(&totalUmMemLimit, amount) >= 0);
+    ret1 = (atomicops::atomicSubRef(totalUmMemLimit, amount) >= 0);
     ret2 = sessionLimit ? (atomicops::atomicSub(sessionLimit.get(), amount) >= 0) : ret1;
   }
   if (!(ret1 && ret2))
   {
     // If  we  didn't  get any memory, restore the counters.
-    atomicops::atomicAdd(&totalUmMemLimit, amount);
+    atomicops::atomicAddRef(totalUmMemLimit, amount);
     sessionLimit ? atomicops::atomicAdd(sessionLimit.get(), amount) : 0;
   }
   return (ret1 && ret2);
@@ -371,22 +380,27 @@ bool ResourceManager::getMemory(int64_t amount, boost::shared_ptr<int64_t>& sess
 // The amount type is unsafe if amount close to max<int64_t> that is unrealistic in 2024.
 bool ResourceManager::getMemory(int64_t amount, bool patience)
 {
-  bool ret1 = (atomicops::atomicSub(&totalUmMemLimit, amount) >= 0);
+  bool ret1 = (atomicops::atomicSubRef(totalUmMemLimit, amount) >= 0);
 
   uint32_t retryCounter = 0, maxRetries = 20;  // 10s delay
 
   while (patience && !ret1 && retryCounter++ < maxRetries)
   {
-    atomicops::atomicAdd(&totalUmMemLimit, amount);
+    atomicops::atomicAddRef(totalUmMemLimit, amount);
     usleep(500000);
-    ret1 = (atomicops::atomicSub(&totalUmMemLimit, amount) >= 0);
+    ret1 = (atomicops::atomicSubRef(totalUmMemLimit, amount) >= 0);
   }
   if (!ret1)
   {
     // If  we  didn't  get any memory, restore the counters.
-    atomicops::atomicAdd(&totalUmMemLimit, amount);
+    atomicops::atomicAddRef(totalUmMemLimit, amount);
   }
   return ret1;
+}
+
+bool ResourceManager::getAllowDiskAggregation() const
+{
+    return getBoolVal(fRowAggregationStr, "AllowDiskBasedAggregation", defaultAllowDiskAggregation);
 }
 
 }  // namespace joblist

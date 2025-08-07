@@ -78,7 +78,7 @@
 #include "dbrm.h"
 
 #include "mariadb_my_sys.h"
-#include "statistics.h"
+#include "statistics_manager/statistics.h"
 #include "serviceexemgr.h"
 #include "sqlfrontsessionthread.h"
 
@@ -89,25 +89,11 @@ void startRssMon(size_t maxPct, int pauseSeconds);
 
 void added_a_pm(int)
 {
-  logging::LoggingID logid(21, 0, 0);
-  logging::Message::Args args1;
-  logging::Message msg(1);
-  args1.add("exeMgr caught SIGHUP. Resetting connections");
-  msg.format(args1);
-  std::cout << msg.msg().c_str() << std::endl;
-  logging::Logger logger(logid.fSubsysID);
-  logger.logMessage(logging::LOG_TYPE_DEBUG, msg, logid);
-
-  auto* dec = exemgr::globServiceExeMgr->getDec();
-  if (dec)
-  {
-    oam::OamCache* oamCache = oam::OamCache::makeOamCache();
-    oamCache->forceReload();
-    dec->Setup();
-  }
+  int64_t num = globServiceExeMgr->getRm().availableMemory();
+  std::cout << "Total UM memory available: " << num << std::endl;
 }
 
-void printTotalUmMemory(int sig)
+void printTotalUmMemory(int /*sig*/)
 {
   int64_t num = globServiceExeMgr->getRm().availableMemory();
   std::cout << "Total UM memory available: " << num << std::endl;

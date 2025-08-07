@@ -25,13 +25,13 @@
 using namespace std;
 
 #include <boost/uuid/uuid_io.hpp>
+#include <utility>
 
 #include "bytestream.h"
 using namespace messageqcpp;
 
 #include "calpontselectexecutionplan.h"
 #include "objectreader.h"
-#include "filter.h"
 #include "returnedcolumn.h"
 #include "simplecolumn.h"
 #include "querystats.h"
@@ -63,10 +63,10 @@ CalpontSelectExecutionPlan::ColumnMap CalpontSelectExecutionPlan::fColMap;
 /**
  * Constructors/Destructors
  */
-CalpontSelectExecutionPlan::CalpontSelectExecutionPlan(const int location)
+CalpontSelectExecutionPlan::CalpontSelectExecutionPlan(int location)
  : fLocalQuery(GLOBAL_QUERY)
- , fFilters(0)
- , fHaving(0)
+ , fFilters(nullptr)
+ , fHaving(nullptr)
  , fLocation(location)
  , fDependent(false)
  , fTxnID(-1)
@@ -98,17 +98,18 @@ CalpontSelectExecutionPlan::CalpontSelectExecutionPlan(const int location)
   fUuid = QueryTeleClient::genUUID();
 }
 
-CalpontSelectExecutionPlan::CalpontSelectExecutionPlan(
-    const ReturnedColumnList& returnedCols, ParseTree* filters, const SelectList& subSelects,
-    const GroupByColumnList& groupByCols, ParseTree* having, const OrderByColumnList& orderByCols,
-    const string alias, const int location, const bool dependent, const bool withRollup)
- : fReturnedCols(returnedCols)
+CalpontSelectExecutionPlan::CalpontSelectExecutionPlan(ReturnedColumnList returnedCols, ParseTree* filters,
+                                                       SelectList subSelects, GroupByColumnList groupByCols,
+                                                       ParseTree* having, OrderByColumnList orderByCols,
+                                                       string alias, int location, bool dependent,
+                                                       bool withRollup)
+ : fReturnedCols(std::move(returnedCols))
  , fFilters(filters)
- , fSubSelects(subSelects)
- , fGroupByCols(groupByCols)
+ , fSubSelects(std::move(subSelects))
+ , fGroupByCols(std::move(groupByCols))
  , fHaving(having)
- , fOrderByCols(orderByCols)
- , fTableAlias(alias)
+ , fOrderByCols(std::move(orderByCols))
+ , fTableAlias(std::move(alias))
  , fLocation(location)
  , fDependent(dependent)
  , fPriority(querystats::DEFAULT_USER_PRIORITY_LEVEL)
@@ -118,23 +119,18 @@ CalpontSelectExecutionPlan::CalpontSelectExecutionPlan(
 }
 
 CalpontSelectExecutionPlan::CalpontSelectExecutionPlan(string data)
- : fData(data)
- , fPriority(querystats::DEFAULT_USER_PRIORITY_LEVEL)
- , fWithRollup(false)
+ : fData(std::move(data)), fPriority(querystats::DEFAULT_USER_PRIORITY_LEVEL), fWithRollup(false)
 {
   fUuid = QueryTeleClient::genUUID();
 }
 
 CalpontSelectExecutionPlan::~CalpontSelectExecutionPlan()
 {
-  if (fFilters != NULL)
-    delete fFilters;
+  delete fFilters;
+  delete fHaving;
 
-  if (fHaving != NULL)
-    delete fHaving;
-
-  fFilters = NULL;
-  fHaving = NULL;
+  fFilters = nullptr;
+  fHaving = nullptr;
 
   if (!fDynamicParseTreeVec.empty())
   {
@@ -145,11 +141,11 @@ CalpontSelectExecutionPlan::~CalpontSelectExecutionPlan()
         // 'delete fFilters;' above has already deleted objects pointed
         // to by parseTree->left()/right()/data(), so we set the
         // pointers to NULL here before calling 'delete parseTree;'
-        parseTree->left((ParseTree*)(NULL));
-        parseTree->right((ParseTree*)(NULL));
-        parseTree->data((TreeNode*)(NULL));
+        parseTree->left((ParseTree*)(nullptr));
+        parseTree->right((ParseTree*)(nullptr));
+        parseTree->data((TreeNode*)(nullptr));
         delete parseTree;
-        parseTree = NULL;
+        parseTree = nullptr;
       }
     }
 
@@ -197,51 +193,71 @@ void CalpontSelectExecutionPlan::havingTokenList(const FilterTokenList& havingTo
     having(parser.parse(tokens.begin(), tokens.end()));
 }
 
-string CalpontSelectExecutionPlan::toString() const
+std::string endlWithIndent(const size_t ident)
+{
+  ostringstream output;
+  output << endl;
+  output << std::string(ident, ' ');
+  return output.str();
+}
+
+void CalpontSelectExecutionPlan::printSubCSEP(const size_t& ident, ostringstream& output,
+                                           CalpontSelectExecutionPlan*& plan) const
+{
+  if (plan)
+  {
+    output << endlWithIndent(ident) << "{";
+    output << plan->toString(ident + 2);
+    output << endlWithIndent(ident) << "}";
+  }
+}
+string CalpontSelectExecutionPlan::toString(const size_t ident) const
 {
   ostringstream output;
 
-  output << ">SELECT ";
+  output << endlWithIndent(ident) << "SELECT ";
 
   if (distinct())
-    output << "DISTINCT ";
+  {
+    output << endlWithIndent(ident) << "DISTINCT ";
+  }
 
-  output << "limit: " << limitStart() << " - " << limitNum() << endl;
+  output << endlWithIndent(ident) << "limit: " << limitStart() << " - " << limitNum();
 
   switch (location())
   {
-    case CalpontSelectExecutionPlan::MAIN: output << "MAIN" << endl; break;
+    case CalpontSelectExecutionPlan::MAIN: output << endlWithIndent(ident) << "MAIN"; break;
 
-    case CalpontSelectExecutionPlan::FROM: output << "FROM" << endl; break;
+    case CalpontSelectExecutionPlan::FROM: output << endlWithIndent(ident) << "FROM"; break;
 
-    case CalpontSelectExecutionPlan::WHERE: output << "WHERE" << endl; break;
+    case CalpontSelectExecutionPlan::WHERE: output << endlWithIndent(ident) << "WHERE"; break;
 
-    case CalpontSelectExecutionPlan::HAVING: output << "HAVING" << endl; break;
+    case CalpontSelectExecutionPlan::HAVING: output << "HAVING" << endlWithIndent(ident); break;
   }
 
   // Returned Column
   CalpontSelectExecutionPlan::ReturnedColumnList retCols = returnedCols();
-  output << ">>Returned Columns" << endl;
+  output << endlWithIndent(ident) << ">>Returned Columns";
+
   uint32_t seq = 0;
 
   for (unsigned int i = 0; i < retCols.size(); i++)
   {
-    output << *retCols[i] << endl;
+    output << endlWithIndent(ident+2) << *retCols[i]; // WIP replace with constant
 
     if (retCols[i]->colSource() & SELECT_SUB)
     {
-      output << "select sub -- " << endl;
+      output << endlWithIndent(ident + 2) << "select sub -- ";
       CalpontSelectExecutionPlan* plan =
           dynamic_cast<CalpontSelectExecutionPlan*>(fSelectSubList[seq++].get());
 
-      if (plan)
-        output << "{" << *plan << "}" << endl;
+      printSubCSEP(ident + 2, output, plan);
     }
   }
 
   // From Clause
   CalpontSelectExecutionPlan::TableList tables = tableList();
-  output << ">>From Tables" << endl;
+  output << endlWithIndent(ident) <<">>From Tables";
   seq = 0;
 
   for (unsigned int i = 0; i < tables.size(); i++)
@@ -249,42 +265,50 @@ string CalpontSelectExecutionPlan::toString() const
     // derived table
     if (tables[i].schema.length() == 0 && tables[i].table.length() == 0)
     {
-      output << "derived table - " << tables[i].alias << endl;
+      output << endlWithIndent(ident+2) << "derived table - " << tables[i].alias;
       CalpontSelectExecutionPlan* plan =
           dynamic_cast<CalpontSelectExecutionPlan*>(fDerivedTableList[seq++].get());
 
-      if (plan)
-        output << "{" << *plan << "}" << endl;
+      printSubCSEP(ident + 2, output, plan);
     }
     else
     {
-      output << tables[i] << endl;
+      output << endlWithIndent(ident+2) << tables[i];
     }
   }
 
   // Filters
-  output << ">>Filters" << endl;
+  output << endlWithIndent(ident) << ">>Filters";
 
-  if (filters() != 0)
+  if (filters() != nullptr)
+  {
+    output << endlWithIndent(ident + 2);
     filters()->walk(ParseTree::print, output);
+  }
   else
-    output << "empty filter tree" << endl;
+  {
+    output << endlWithIndent(ident + 2) << "empty filter tree";
+  }
 
   // Group by columns
   const CalpontSelectExecutionPlan::GroupByColumnList& gbc = groupByCols();
 
   if (gbc.size() > 0)
   {
-    output << ">>Group By Columns" << endl;
+    output << endlWithIndent(ident) << ">>Group By Columns";
+    output << std::string(ident, ' ');
 
     for (unsigned int i = 0; i < gbc.size(); i++)
-      output << *gbc[i] << endl;
+    {
+      output << endlWithIndent(ident + 2) << *gbc[i];
+    }
+    output << std::string(ident, ' ');
   }
 
   // Having
-  if (having() != 0)
+  if (having() != nullptr)
   {
-    output << ">>Having" << endl;
+    output << endlWithIndent(ident) << ">>Having" << endlWithIndent(ident + 2);
     having()->walk(ParseTree::print, output);
   }
 
@@ -293,39 +317,42 @@ string CalpontSelectExecutionPlan::toString() const
 
   if (obc.size() > 0)
   {
-    output << ">>Order By Columns" << endl;
+    output << endlWithIndent(ident) << ">>Order By Columns";
 
     for (unsigned int i = 0; i < obc.size(); i++)
-      output << *obc[i] << endl;
+      output << endlWithIndent(ident + 2) << *obc[i];
   }
 
-  output << "SessionID: " << fSessionID << endl;
-  output << "TxnID: " << fTxnID << endl;
-  output << "VerID: " << fVerID << endl;
-  output << "TraceFlags: " << fTraceFlags << endl;
-  output << "StatementID: " << fStatementID << endl;
-  output << "DistUnionNum: " << (int)fDistinctUnionNum << endl;
-  output << "Limit: " << fLimitStart << " - " << fLimitNum << endl;
-  output << "String table threshold: " << fStringTableThreshold << endl;
+  output << endlWithIndent(ident) << "SessionID: " << fSessionID;
+  output << endlWithIndent(ident) << "TxnID: " << fTxnID;
+  output << endlWithIndent(ident) << "VerID: " << fVerID;
+  output << endlWithIndent(ident) << "TraceFlags: " << fTraceFlags;
+  output << endlWithIndent(ident) << "StatementID: " << fStatementID;
+  output << endlWithIndent(ident) << "DistUnionNum: " << (int)fDistinctUnionNum;
+  output << endlWithIndent(ident) << "Limit: " << fLimitStart << " - " << fLimitNum;
+  output << endlWithIndent(ident) << "String table threshold: " << fStringTableThreshold;
 
-  output << "--- Column Map ---" << endl;
+  output << endlWithIndent(ident) << "--- Column Map ---";
   CalpontSelectExecutionPlan::ColumnMap::const_iterator iter;
 
   for (iter = columnMap().begin(); iter != columnMap().end(); iter++)
-    output << (*iter).first << " : " << (*iter).second << endl;
+  {
+    output << endlWithIndent(ident + 2) << (*iter).first << " : " << (*iter).second;
+  }
 
-  output << "UUID: " << fUuid << endl;
-  output << "QueryType: " << queryType() << endl;
+  output << endlWithIndent(ident) << "UUID: " << fUuid;
+  output << endlWithIndent(ident) << "QueryType: " << queryType();
 
   if (!unionVec().empty())
-    output << "\n--- Union Unit ---" << endl;
+  {
+    output << endlWithIndent(ident) << "--- Union Unit ---";
+  }
 
   for (unsigned i = 0; i < unionVec().size(); i++)
   {
     CalpontSelectExecutionPlan* plan = dynamic_cast<CalpontSelectExecutionPlan*>(unionVec()[i].get());
 
-    if (plan)
-      output << "{" << *plan << "}\n" << endl;
+    printSubCSEP(ident, output, plan);
   }
 
   return output.str();
@@ -496,16 +523,16 @@ void CalpontSelectExecutionPlan::unserialize(messageqcpp::ByteStream& b)
   fDerivedTableList.clear();
   fSelectSubList.clear();
 
-  if (fFilters != 0)
+  if (fFilters != nullptr)
   {
     delete fFilters;
-    fFilters = 0;
+    fFilters = nullptr;
   }
 
-  if (fHaving != 0)
+  if (fHaving != nullptr)
   {
     delete fHaving;
-    fHaving = 0;
+    fHaving = nullptr;
   }
 
   if (!fDynamicParseTreeVec.empty())
@@ -517,11 +544,11 @@ void CalpontSelectExecutionPlan::unserialize(messageqcpp::ByteStream& b)
         // 'delete fFilters;' above has already deleted objects pointed
         // to by parseTree->left()/right()/data(), so we set the
         // pointers to NULL here before calling 'delete parseTree;'
-        parseTree->left((ParseTree*)(NULL));
-        parseTree->right((ParseTree*)(NULL));
-        parseTree->data((TreeNode*)(NULL));
+        parseTree->left((ParseTree*)(nullptr));
+        parseTree->right((ParseTree*)(nullptr));
+        parseTree->data((TreeNode*)(nullptr));
         delete parseTree;
-        parseTree = NULL;
+        parseTree = nullptr;
       }
     }
 
@@ -699,12 +726,12 @@ bool CalpontSelectExecutionPlan::operator==(const CalpontSelectExecutionPlan& t)
       return false;
 
   // fFilters
-  if (fFilters != NULL && t.fFilters != NULL)
+  if (fFilters != nullptr && t.fFilters != nullptr)
   {
     if (*fFilters != *t.fFilters)
       return false;
   }
-  else if (fFilters != NULL || t.fFilters != NULL)
+  else if (fFilters != nullptr || t.fFilters != nullptr)
     return false;
 
   // fSubSelects
@@ -725,12 +752,12 @@ bool CalpontSelectExecutionPlan::operator==(const CalpontSelectExecutionPlan& t)
       return false;
 
   // fHaving
-  if (fHaving != NULL && t.fHaving != NULL)
+  if (fHaving != nullptr && t.fHaving != nullptr)
   {
     if (*fHaving != *t.fHaving)
       return false;
   }
-  else if (fHaving != NULL || t.fHaving != NULL)
+  else if (fHaving != nullptr || t.fHaving != nullptr)
     return false;
 
   // fOrderByCols
@@ -795,7 +822,7 @@ bool CalpontSelectExecutionPlan::operator==(const CalpontExecutionPlan* t) const
 
   ac = dynamic_cast<const CalpontSelectExecutionPlan*>(t);
 
-  if (ac == NULL)
+  if (ac == nullptr)
     return false;
 
   return *this == *ac;
@@ -834,6 +861,109 @@ void CalpontSelectExecutionPlan::rmParms(const RMParmVec& parms)
 void CalpontSelectExecutionPlan::pron(std::string&& pron)
 {
   fPron = pron;
+}
+
+// This routine doesn't copy derived table list, union vector, select subqueries, subquery list, and subselects.
+execplan::SCSEP CalpontSelectExecutionPlan::cloneWORecursiveSelects()
+{
+  execplan::SCSEP newPlan(new CalpontSelectExecutionPlan(fLocation));
+  
+  // Copy simple members
+  newPlan->fLocalQuery = fLocalQuery;
+  newPlan->fTableAlias = fTableAlias;
+  newPlan->fLocation = fLocation;
+  newPlan->fDependent = fDependent;
+  newPlan->fData = fData;
+  newPlan->fSessionID = fSessionID;
+  newPlan->fTxnID = fTxnID;
+  newPlan->fVerID = fVerID;
+  newPlan->fSchemaName = fSchemaName;
+  newPlan->fTableName = fTableName;
+  newPlan->fTraceFlags = fTraceFlags;
+  newPlan->fStatementID = fStatementID;
+  newPlan->fDistinct = fDistinct;
+  newPlan->fOverrideLargeSideEstimate = fOverrideLargeSideEstimate;
+  newPlan->fDistinctUnionNum = fDistinctUnionNum;
+  newPlan->fSubType = fSubType;
+  newPlan->fDerivedTbAlias = fDerivedTbAlias;
+  newPlan->fDerivedTbView = fDerivedTbView;
+  newPlan->fLimitStart = fLimitStart;
+  newPlan->fLimitNum = fLimitNum;
+  newPlan->fHasOrderBy = fHasOrderBy;
+  newPlan->fStringScanThreshold = fStringScanThreshold;
+  newPlan->fQueryType = fQueryType;
+  newPlan->fPriority = fPriority;
+  newPlan->fStringTableThreshold = fStringTableThreshold;
+  newPlan->fSpecHandlerProcessed = fSpecHandlerProcessed;
+  newPlan->fOrderByThreads = fOrderByThreads;
+  newPlan->fUuid = fUuid;
+  newPlan->fDJSSmallSideLimit = fDJSSmallSideLimit;
+  newPlan->fDJSLargeSideLimit = fDJSLargeSideLimit;
+  newPlan->fDJSPartitionSize = fDJSPartitionSize;
+  newPlan->fDJSMaxPartitionTreeDepth = fDJSMaxPartitionTreeDepth;
+  newPlan->fDJSForceRun = fDJSForceRun;
+  newPlan->fMaxPmJoinResultCount = fMaxPmJoinResultCount;
+  newPlan->fUMMemLimit = fUMMemLimit;
+  newPlan->fIsDML = fIsDML;
+  newPlan->fTimeZone = fTimeZone;
+  newPlan->fPron = fPron;
+  newPlan->fWithRollup = fWithRollup;
+  
+  // Deep copy of ReturnedColumnList
+  ReturnedColumnList newReturnedCols;
+  for (const auto& col : fReturnedCols)
+  {
+    if (col)
+      newReturnedCols.push_back(SRCP(col->clone()));
+  }
+  newPlan->returnedCols(newReturnedCols);
+  
+  // Deep copy of filters
+  if (fFilters)
+    newPlan->filters(new ParseTree(*fFilters));
+  
+  // Deep copy of filter token list
+  newPlan->filterTokenList(fFilterTokenList);
+  newPlan->havingTokenList(fHavingTokenList);
+  
+  // Deep copy of group by columns
+  GroupByColumnList newGroupByCols;
+  for (const auto& col : fGroupByCols)
+  {
+    if (col)
+      newGroupByCols.push_back(SRCP(col->clone()));
+  }
+  newPlan->groupByCols(newGroupByCols);
+  
+  // Deep copy of having clause
+  if (fHaving)
+    newPlan->having(new ParseTree(*fHaving));
+  
+  // Deep copy of order by columns
+  OrderByColumnList newOrderByCols;
+  for (const auto& col : fOrderByCols)
+  {
+    if (col)
+      newOrderByCols.push_back(SRCP(col->clone()));
+  }
+  newPlan->orderByCols(newOrderByCols);
+  
+  // Deep copy of column map
+  ColumnMap newColumnMap;
+  for (const auto& entry : fColumnMap)
+  {
+    if (entry.second)
+      newColumnMap.insert(ColumnMap::value_type(entry.first, SRCP(entry.second->clone())));
+  }
+  newPlan->columnMap(newColumnMap);
+  
+  // Copy RM parameters
+  newPlan->rmParms(frmParms);
+  
+  // Deep copy of table list
+  newPlan->tableList(fTableList);
+  
+  return newPlan;
 }
 
 }  // namespace execplan

@@ -17,7 +17,39 @@
 #include <typeinfo>
 #include <string>
 
+// This makes specific MDB classes' attributes public to implement
+// MCOL-4740 temporary solution. Search for MCOL-4740
+// to get the actual place where it is used.
+#define updated_leaves \
+  updated_leaves;      \
+                       \
+ public:
+
 #include "ha_mcs_pushdown.h"
+
+void update_counters_on_multi_update()
+{
+  if (ha_mcs_common::isMultiUpdateStatement(current_thd->lex->sql_command) &&
+      !ha_mcs_common::isForeignTableUpdate(current_thd))
+  {
+    SELECT_LEX_UNIT* unit = &current_thd->lex->unit;
+    SELECT_LEX* select_lex = unit->first_select();
+    auto* multi = (select_lex->join) ? reinterpret_cast<multi_update*>(select_lex->join->result) : nullptr;
+
+    if (multi)
+    {
+      multi->table_to_update = multi->update_tables ? multi->update_tables->table : 0;
+
+      cal_impl_if::cal_connection_info* ci =
+          reinterpret_cast<cal_impl_if::cal_connection_info*>(get_fe_conn_info_ptr());
+
+      if (ci)
+      {
+        multi->updated = multi->found = ci->affectedRows;
+      }
+    }
+  }
+}
 
 void check_walk(const Item* item, void* arg);
 
@@ -360,101 +392,6 @@ bool check_user_var(SELECT_LEX* select_lex)
   return is_user_var_func;
 }
 
-/*@brief  create_columnstore_group_by_handler- Creates handler*/
-/***********************************************************
- * DESCRIPTION:
- * Creates a group_by pushdown handler if there is no:
- *  non-equi JOIN, e.g * t1.c1 > t2.c2
- *  logical OR in the filter predicates
- *  Impossible WHERE
- *  Impossible HAVING
- * and there is either GROUP BY or aggregation function
- * exists at the top level.
- * Valid queries with the last two crashes the server if
- * processed.
- * Details are in server/sql/group_by_handler.h
- * PARAMETERS:
- *    thd - THD pointer
- *    query - Query structure LFM in group_by_handler.h
- * RETURN:
- *    group_by_handler if success
- *    NULL in other case
- ***********************************************************/
-group_by_handler* create_columnstore_group_by_handler(THD* thd, Query* query)
-{
-  ha_mcs_group_by_handler* handler = NULL;
-  // Disable GBH.
-  return handler;
-
-  // same as thd->lex->current_select
-  SELECT_LEX* select_lex = query->from->select_lex;
-
-  // MCOL-2178 Disable SP support in the group_by_handler for now
-  // Check the session variable value to enable/disable use of
-  // group_by_handler. There is no GBH if SH works for the query.
-  if ((get_select_handler_mode(thd) == mcs_select_handler_mode_t::ON) || !get_group_by_handler(thd) ||
-      (thd->lex)->sphead)
-  {
-    return handler;
-  }
-
-  // Create a handler if query is valid. See comments for details.
-  if (query->group_by || select_lex->with_sum_func)
-  {
-    bool unsupported_feature = false;
-    // revisit SELECT_LEX for all units
-    for (TABLE_LIST* tl = query->from; !unsupported_feature && tl; tl = tl->next_global)
-    {
-      select_lex = tl->select_lex;
-      // Correlation subquery. Comming soon so fail on this yet.
-      unsupported_feature = select_lex->is_correlated;
-
-      // Impossible HAVING or WHERE
-      if (!unsupported_feature &&
-          (select_lex->having_value == Item::COND_FALSE || select_lex->cond_value == Item::COND_FALSE))
-      {
-        unsupported_feature = true;
-      }
-
-      // Unsupported JOIN conditions
-      if (!unsupported_feature)
-      {
-        JOIN* join = select_lex->join;
-
-        if (unsupported_feature == false && join && join->conds)
-        {
-          join->conds->traverse_cond(check_walk, &unsupported_feature, Item::POSTFIX);
-        }
-
-        if (unsupported_feature == false && select_lex->where)
-        {
-          select_lex->where->traverse_cond(check_walk, &unsupported_feature, Item::POSTFIX);
-        }
-      }
-
-      // Iterate and traverse through the item list and the JOIN cond
-      // and do not create GBH if the unsupported (set_user_var)
-      // function is present.
-      if (check_user_var(select_lex))
-      {
-        return handler;
-      }
-    }  // unsupported features check ends here
-
-    if (!unsupported_feature)
-    {
-      handler = new ha_mcs_group_by_handler(thd, query);
-
-      // Notify the server, that CS handles GROUP BY, ORDER BY and HAVING clauses.
-      query->group_by = NULL;
-      query->order_by = NULL;
-      query->having = NULL;
-    }
-  }
-
-  return handler;
-}
-
 /*@brief  create_columnstore_derived_handler- Creates handler*/
 /************************************************************
  * DESCRIPTION:
@@ -486,7 +423,7 @@ derived_handler* create_columnstore_derived_handler(THD* thd, TABLE_LIST* table_
 
   // MCOL-1482 Disable derived_handler if the multi-table update
   // statement contains a non-columnstore table.
-  if (cal_impl_if::isUpdateHasForeignTable(thd))
+  if (ha_mcs_common::isUpdateHasForeignTable(thd))
   {
     return handler;
   }
@@ -644,93 +581,20 @@ void ha_columnstore_derived_handler::print_error(int, unsigned long)
 {
 }
 
-/***********************************************************
- * DESCRIPTION:
- * GROUP BY handler constructor
- * PARAMETERS:
- *    thd - THD pointer.
- *    query - Query describing structure
- ***********************************************************/
-ha_mcs_group_by_handler::ha_mcs_group_by_handler(THD* thd_arg, Query* query)
- : group_by_handler(thd_arg, mcs_hton)
- , select(query->select)
- , table_list(query->from)
- , distinct(query->distinct)
- , where(query->where)
- , group_by(query->group_by)
- , order_by(query->order_by)
- , having(query->having)
-{
-  const char* timeZone = thd_arg->variables.time_zone->get_name()->ptr();
-  dataconvert::timeZoneToOffset(timeZone, strlen(timeZone), &time_zone);
-}
-
-/***********************************************************
- * DESCRIPTION:
- * GROUP BY destructor
- ***********************************************************/
-ha_mcs_group_by_handler::~ha_mcs_group_by_handler()
-{
-}
-
-/***********************************************************
- * DESCRIPTION:
- * Makes the plan and prepares the data
- * RETURN:
- *    int rc
- ***********************************************************/
-int ha_mcs_group_by_handler::init_scan()
-{
-  DBUG_ENTER("ha_mcs_group_by_handler::init_scan");
-
-  mcs_handler_info mhi = mcs_handler_info(reinterpret_cast<void*>(this), GROUP_BY);
-  int rc = ha_mcs_impl_group_by_init(&mhi, table);
-
-  DBUG_RETURN(rc);
-}
-
-/***********************************************************
- * DESCRIPTION:
- * Fetches a row and saves it to a temporary table.
- * RETURN:
- *    int rc
- ***********************************************************/
-int ha_mcs_group_by_handler::next_row()
-{
-  DBUG_ENTER("ha_mcs_group_by_handler::next_row");
-  int rc = ha_mcs_impl_group_by_next(table, time_zone);
-
-  DBUG_RETURN(rc);
-}
-
-/***********************************************************
- * DESCRIPTION:
- * Shuts the scan down.
- * RETURN:
- *    int rc
- ***********************************************************/
-int ha_mcs_group_by_handler::end_scan()
-{
-  DBUG_ENTER("ha_mcs_group_by_handler::end_scan");
-  int rc = ha_mcs_impl_group_by_end(table);
-
-  DBUG_RETURN(rc);
-}
-
 /*@brief  create_columnstore_select_handler_- Creates handler
 ************************************************************
- * DESCRIPTION:
- * Creates a select handler if there is no non-equi JOIN, e.g
- * t1.c1 > t2.c2 and logical OR in the filter predicates.
- * More details in server/sql/select_handler.h
- * PARAMETERS:
- *    thd - THD pointer.
- *    sel_lex - SELECT_LEX* that describes the query.
- *    sel_unit - SELECT_LEX_UNIT* that describes the query.
- * RETURN:
- *    select_handler if possible
- *    NULL in other case
- ***********************************************************/
+* DESCRIPTION:
+* Creates a select handler if there is no non-equi JOIN, e.g
+* t1.c1 > t2.c2 and logical OR in the filter predicates.
+* More details in server/sql/select_handler.h
+* PARAMETERS:
+*    thd - THD pointer.
+*    sel_lex - SELECT_LEX* that describes the query.
+*    sel_unit - SELECT_LEX_UNIT* that describes the query.
+* RETURN:
+*    select_handler if possible
+*    NULL in other case
+***********************************************************/
 select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex, SELECT_LEX_UNIT* sel_unit)
 {
   mcs_select_handler_mode_t select_handler_mode = get_select_handler_mode(thd);
@@ -746,7 +610,7 @@ select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex
   // MCOL-1482 Disable select_handler for a multi-table update
   // with a non-columnstore table as the target table of the update
   // operation.
-  if (cal_impl_if::isForeignTableUpdate(thd))
+  if (ha_mcs_common::isForeignTableUpdate(thd))
   {
     return nullptr;
   }
@@ -814,15 +678,15 @@ select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex
   // or unsupported feature.
   ha_columnstore_select_handler* handler;
 
-  if (sel_unit && sel_lex) // partial pushdown of the SELECT_LEX_UNIT
+  if (sel_unit && sel_lex)  // partial pushdown of the SELECT_LEX_UNIT
   {
     handler = new ha_columnstore_select_handler(thd, sel_lex, sel_unit);
   }
-  else if (sel_unit) // complete pushdown of the SELECT_LEX_UNIT
+  else if (sel_unit)  // complete pushdown of the SELECT_LEX_UNIT
   {
     handler = new ha_columnstore_select_handler(thd, sel_unit);
   }
-  else // Query only has a SELECT_LEX, no SELECT_LEX_UNIT
+  else  // Query only has a SELECT_LEX, no SELECT_LEX_UNIT
   {
     handler = new ha_columnstore_select_handler(thd, sel_lex);
   }
@@ -848,7 +712,7 @@ select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex
       create_explain_query_if_not_exists(thd->lex, thd->mem_root);
       Query_arena *arena, backup;
       arena = thd->activate_stmt_arena_if_needed(&backup);
-      COND* conds = join->conds;
+      COND* conds = join ? join->conds : nullptr;
       select_lex->where = conds;
 
       if (isPS)
@@ -856,7 +720,11 @@ select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex
         select_lex->prep_where = conds ? conds->copy_andor_structure(thd) : 0;
       }
 
-      select_lex->update_used_tables();
+      // no join indicates that there is no tables to update
+      if (join)
+      {
+        select_lex->update_used_tables();
+      }
 
       if (arena)
         thd->restore_active_arena(arena, &backup);
@@ -882,7 +750,8 @@ select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex
       JOIN* join = select_lex->join;
 
       // This is taken from JOIN::optimize()
-      join->fields = &select_lex->item_list;
+      if (join)
+        join->fields = &select_lex->item_list;
 
       // Instantiate handler::table, which is the place for the result set.
       if ((i == 0) && handler->prepare())
@@ -912,8 +781,7 @@ select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex
           select_lex != select_lex->master_unit()->fake_select_lex)  // (2)
         thd->lex->set_limit_rows_examined();
 
-      if ((!sel_unit || sel_lex) && !join->tables_list &&
-          (join->table_count || !select_lex->with_sum_func) &&
+      if ((!sel_unit || sel_lex) && !join->tables_list && (join->table_count || !select_lex->with_sum_func) &&
           !select_lex->have_window_funcs())
       {
         if (!thd->is_error())
@@ -926,7 +794,7 @@ select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex
         return handler;
       }
 
-      if (!join->zero_result_cause && join->exec_const_cond && !join->exec_const_cond->val_int())
+      if (join && !join->zero_result_cause && join->exec_const_cond && !join->exec_const_cond->val_int())
         join->zero_result_cause = "Impossible WHERE noticed after reading const tables";
 
       // We've called exec_const_cond->val_int(). This may have caused an error.
@@ -937,7 +805,7 @@ select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex
         return handler;
       }
 
-      if (join->zero_result_cause)
+      if (join && join->zero_result_cause)
       {
         if (join->select_lex->have_window_funcs() && join->send_row_on_empty_set())
         {
@@ -957,7 +825,7 @@ select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex
         }
       }
 
-      if ((join->select_lex->options & OPTION_SCHEMA_TABLE) &&
+      if (join && (join->select_lex->options & OPTION_SCHEMA_TABLE) &&
           get_schema_tables_result(join, PROCESSED_BY_JOIN_EXEC))
       {
         if (!thd->is_error())
@@ -1172,6 +1040,11 @@ int ha_columnstore_select_handler::end_scan()
   DBUG_ENTER("ha_columnstore_select_handler::end_scan");
 
   scan_ended = true;
+
+  // MCOL-4740 multi_update::send_eof(), which outputs the affected
+  // number of rows to the client, is called after handler::rnd_end().
+  // So we set multi_update::updated and multi_update::found here.
+  update_counters_on_multi_update();
 
   int rc = ha_mcs_impl_rnd_end(table, true);
 

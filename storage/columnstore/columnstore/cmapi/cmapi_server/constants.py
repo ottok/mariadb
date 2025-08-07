@@ -20,9 +20,11 @@ EM_PATH_SUFFIX = 'data1/systemFiles/dbrm'
 MCS_EM_PATH = os.path.join(MCS_DATA_PATH, EM_PATH_SUFFIX)
 MCS_BRM_CURRENT_PATH = os.path.join(MCS_EM_PATH, 'BRM_saves_current')
 S3_BRM_CURRENT_PATH = os.path.join(EM_PATH_SUFFIX, 'BRM_saves_current')
+
 # keys file for CEJ password encryption\decryption
 # (CrossEngineSupport section in Columnstore.xml)
-MCS_SECRETS_FILE_PATH = os.path.join(MCS_DATA_PATH, '.secrets')
+MCS_SECRETS_FILENAME = '.secrets'
+MCS_SECRETS_FILE_PATH = os.path.join(MCS_DATA_PATH, MCS_SECRETS_FILENAME)
 
 # CMAPI SERVER
 CMAPI_CONFIG_FILENAME = 'cmapi_server.conf'
@@ -41,7 +43,14 @@ SECRET_KEY = 'MCSIsTheBestEver'  # not just a random string! (base32)
 
 
 # network constants
-LOCALHOSTS = ('localhost', '127.0.0.1', '::1')
+# according to https://www.ibm.com/docs/en/storage-sentinel/1.1.2?topic=installation-map-your-local-host-loopback-address
+LOCALHOSTS = (
+    '127.0.0.1',
+    'localhost', 'localhost.localdomain',
+    'localhost4', 'localhost4.localdomain4',
+    '::1',
+    'localhost6', 'localhost6.localdomain6',
+)
 
 CMAPI_INSTALL_PATH = '/usr/share/columnstore/cmapi/'
 CMAPI_PYTHON_BIN = os.path.join(CMAPI_INSTALL_PATH, "python/bin/python3")
@@ -82,3 +91,10 @@ MCS_INSTALL_BIN = '/usr/bin'
 IFLAG = os.path.join(MCS_ETC_PATH, 'container-initialized')
 LIBJEMALLOC_DEFAULT_PATH = os.path.join(MCS_DATA_PATH, 'libjemalloc.so.2')
 MCS_LOG_PATH = '/var/log/mariadb/columnstore'
+
+
+# client constants
+CMAPI_PORT = 8640  #TODO: use it in all places
+CURRENT_NODE_CMAPI_URL = f'https://localhost:{CMAPI_PORT}'
+REQUEST_TIMEOUT: float = 30.0
+TRANSACTION_TIMEOUT: float = 300.0  # 5 minutes

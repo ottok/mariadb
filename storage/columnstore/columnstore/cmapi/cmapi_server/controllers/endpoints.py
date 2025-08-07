@@ -14,19 +14,22 @@ import requests
 
 from cmapi_server.exceptions import CMAPIBasicError
 from cmapi_server.constants import (
-    DEFAULT_SM_CONF_PATH, EM_PATH_SUFFIX, DEFAULT_MCS_CONF_PATH, MCS_EM_PATH,
-    MCS_BRM_CURRENT_PATH, S3_BRM_CURRENT_PATH, CMAPI_CONF_PATH, SECRET_KEY,
+    DEFAULT_MCS_CONF_PATH, DEFAULT_SM_CONF_PATH, EM_PATH_SUFFIX,
+    MCS_BRM_CURRENT_PATH, MCS_EM_PATH, S3_BRM_CURRENT_PATH, SECRET_KEY,
 )
 from cmapi_server.controllers.error import APIError
 from cmapi_server.handlers.cej import CEJError
+from cmapi_server.handlers.cej import CEJPasswordHandler
 from cmapi_server.handlers.cluster import ClusterHandler
 from cmapi_server.helpers import (
-    cmapi_config_check, get_config_parser, get_current_key, get_dbroots,
-    system_ready, save_cmapi_conf_file, dequote, in_maintenance_state,
+    cmapi_config_check, dequote, get_active_nodes, get_config_parser,
+    get_current_key, get_dbroots, in_maintenance_state, save_cmapi_conf_file,
+    system_ready,
 )
 from cmapi_server.logging_management import change_loggers_level
-from cmapi_server.managers.process import MCSProcessManager
 from cmapi_server.managers.application import AppManager
+from cmapi_server.managers.process import MCSProcessManager
+from cmapi_server.managers.transaction import TransactionManager
 from cmapi_server.node_manipulation import is_master, switch_node_maintenance
 from mcs_node_control.models.dbrm import set_cluster_mode
 from mcs_node_control.models.node_config import NodeConfig
@@ -59,6 +62,9 @@ def raise_422_error(
     :type exc_info: bool
     :raises APIError: everytime with custom error message
     """
+    # TODO: change:
+    #       - func name to inspect.stack(0)[1][3]
+    #       - make something to logger, seems passing here is useless
     logger.error(f'{func_name} {err_msg}', exc_info=exc_info)
     raise APIError(422, err_msg)
 
@@ -145,7 +151,27 @@ def active_operation():
     if txn_section is not None:
         txn_manager_address = app.config['txn'].get('manager_address', None)
     if txn_manager_address is not None and len(txn_manager_address) > 0:
-        raise APIError(422, "There is an active operation.")
+        raise_422_error(
+            module_logger, 'active_operation', 'There is an active operation.'
+        )
+
+
+@cherrypy.tools.register('before_handler', priority=82)
+def has_active_nodes():
+    """Check if there are any active nodes in the cluster.
+
+    TODO: Remove in next releases due to never used.
+          Now TransactionManager has this check inside.
+          Before removing, have to check all API endpoints without transaction
+          mechanics to potential use of this handler.
+    """
+    active_nodes = get_active_nodes()
+
+    if len(active_nodes) == 0:
+        raise_422_error(
+            module_logger, 'has_active_nodes',
+            'No active nodes in the cluster.'
+        )
 
 
 class TimingTool(cherrypy.Tool):
@@ -325,23 +351,28 @@ class ConfigController:
         # the config file or apply the changes
         is_test = request_body.get('test', False)
 
-        mandatory = [request_revision, request_manager, request_timeout]
+        mandatory = (request_revision, request_manager, request_timeout)
         if None in mandatory:
             raise_422_error(
                 module_logger, func_name, 'Mandatory attribute is missing.')
 
         request_mode = request_body.get('cluster_mode', None)
-        request_config = request_body.get('config', None)
+        xml_config = request_body.get('config', None)
+        sm_config = request_body.get('sm_config', None)
         mcs_config_filename = request_body.get(
             'mcs_config_filename', DEFAULT_MCS_CONF_PATH
         )
         sm_config_filename = request_body.get(
             'sm_config_filename', DEFAULT_SM_CONF_PATH
         )
+        secrets = request_body.get('secrets', None)
 
-        if request_mode is None and request_config is None:
+        operation_params = (request_mode, xml_config, secrets)
+        # if no operation to apply, return 422
+        if not any(operation_params):
             raise_422_error(
-                module_logger, func_name, 'Mandatory attribute is missing.'
+                module_logger, func_name,
+                'Mandatory attribute is missing.'
             )
 
         request_headers = cherrypy.request.headers
@@ -366,9 +397,11 @@ class ConfigController:
             )
         request_response = {'timestamp': str(datetime.now())}
 
+        if secrets:
+            #TODO: validate incoming secrets?
+            CEJPasswordHandler().save_secrets(secrets)
+
         node_config = NodeConfig()
-        xml_config = request_body.get('config', None)
-        sm_config = request_body.get('sm_config', None)
         if is_test:
             return request_response
         if request_mode is not None:
@@ -417,7 +450,7 @@ class ConfigController:
             )
             if in_maintenance_state():
                 module_logger.info(
-                    'Maintaninance state is active in new config. '
+                    'Maintenance state is active in new config. '
                     'MCS processes should not be started.'
                 )
                 cherrypy.engine.publish('failover', False)
@@ -436,7 +469,7 @@ class ConfigController:
                         module_logger, func_name,
                         (
                             'Error while starting node. '
-                            f'Details: {err.message}.'
+                            f'Details: {err.message}'
                         ),
                         exc_info=False
                     )
@@ -797,9 +830,14 @@ class ClusterController:
         request = cherrypy.request
         request_body = request.json
         config = request_body.get('config', DEFAULT_MCS_CONF_PATH)
+        in_transaction = request_body.get('in_transaction', False)
 
         try:
-            response = ClusterHandler.start(config)
+            if not in_transaction:
+                with TransactionManager():
+                    response = ClusterHandler.start(config)
+            else:
+                response = ClusterHandler.start(config)
         except CMAPIBasicError as err:
             raise_422_error(module_logger, func_name, err.message)
 
@@ -816,10 +854,17 @@ class ClusterController:
 
         request = cherrypy.request
         request_body = request.json
+        timeout = request_body.get('timeout', None)
+        force = request_body.get('force', False)
         config = request_body.get('config', DEFAULT_MCS_CONF_PATH)
+        in_transaction = request_body.get('in_transaction', False)
 
         try:
-            response = ClusterHandler.shutdown(config)
+            if not in_transaction:
+                with TransactionManager():
+                    response = ClusterHandler.shutdown(config, timeout)
+            else:
+                response = ClusterHandler.shutdown(config)
         except CMAPIBasicError as err:
             raise_422_error(module_logger, func_name, err.message)
 
@@ -838,9 +883,14 @@ class ClusterController:
         request_body = request.json
         mode = request_body.get('mode', 'readonly')
         config = request_body.get('config', DEFAULT_MCS_CONF_PATH)
+        in_transaction = request_body.get('in_transaction', False)
 
         try:
-            response = ClusterHandler.set_mode(mode, config=config)
+            if not in_transaction:
+                with TransactionManager():
+                    response = ClusterHandler.set_mode(mode, config=config)
+            else:
+                response = ClusterHandler.set_mode(mode, config=config)
         except CMAPIBasicError as err:
             raise_422_error(module_logger, func_name, err.message)
 
@@ -859,12 +909,17 @@ class ClusterController:
         request_body = request.json
         node = request_body.get('node', None)
         config = request_body.get('config', DEFAULT_MCS_CONF_PATH)
+        in_transaction = request_body.get('in_transaction', False)
 
         if node is None:
             raise_422_error(module_logger, func_name, 'missing node argument')
 
         try:
-            response = ClusterHandler.add_node(node, config)
+            if not in_transaction:
+                with TransactionManager(extra_nodes=[node]):
+                    response = ClusterHandler.add_node(node, config)
+            else:
+                response = ClusterHandler.add_node(node, config)
         except CMAPIBasicError as err:
             raise_422_error(module_logger, func_name, err.message)
 
@@ -882,14 +937,18 @@ class ClusterController:
         request_body = request.json
         node = request_body.get('node', None)
         config = request_body.get('config', DEFAULT_MCS_CONF_PATH)
-        response = {'timestamp': str(datetime.now())}
+        in_transaction = request_body.get('in_transaction', False)
 
         #TODO: add arguments verification decorator
         if node is None:
             raise_422_error(module_logger, func_name, 'missing node argument')
 
         try:
-            response = ClusterHandler.remove_node(node, config)
+            if not in_transaction:
+                with TransactionManager(remove_nodes=[node]):
+                    response = ClusterHandler.remove_node(node, config)
+            else:
+                response = ClusterHandler.remove_node(node, config)
         except CMAPIBasicError as err:
             raise_422_error(module_logger, func_name, err.message)
 
@@ -999,7 +1058,7 @@ class ClusterController:
 
         if not totp_key or not new_api_key:
             # not show which arguments in error message because endpoint for
-            # internal usage only
+            # cli tool or internal usage only
             raise_422_error(
                 module_logger, func_name, 'Missing required arguments.'
             )

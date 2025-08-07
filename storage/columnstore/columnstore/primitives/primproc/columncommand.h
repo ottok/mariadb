@@ -31,6 +31,7 @@
 #pragma once
 
 #include <memory>
+#include "bytestream.h"
 #include "columnwidth.h"
 #include "command.h"
 #include "calpontsystemcatalog.h"
@@ -45,9 +46,9 @@ class ColumnCommand : public Command
  public:
   ColumnCommand();
   ColumnCommand(execplan::CalpontSystemCatalog::ColType& aColType);
-  virtual ~ColumnCommand();
+  ~ColumnCommand() override;
 
-  inline uint64_t getLBID()
+  inline uint64_t getLBID() override
   {
     return lbid;
   }
@@ -68,12 +69,12 @@ class ColumnCommand : public Command
     return colType;
   }
 
-  void execute();
+  void execute() override;
   void execute(int64_t* vals);  // used by RTSCommand to redirect values
-  virtual void prep(int8_t outputType, bool absRids);
-  void project();
-  void projectIntoRowGroup(rowgroup::RowGroup& rg, uint32_t pos);
-  void nextLBID();
+  void prep(int8_t outputType, bool absRids) override;
+  void project(messageqcpp::SBS& bs) override;
+  void projectIntoRowGroup(rowgroup::RowGroup& rg, uint32_t pos) override;
+  void nextLBID() override;
   bool isScan()
   {
     return _isScan;
@@ -88,18 +89,18 @@ class ColumnCommand : public Command
     return lbidAux;
   }
 
-  void createCommand(messageqcpp::ByteStream&);
+  void createCommand(messageqcpp::ByteStream&) override;
   void createCommand(execplan::CalpontSystemCatalog::ColType& aColType, messageqcpp::ByteStream&);
-  void resetCommand(messageqcpp::ByteStream&);
-  void setMakeAbsRids(bool m)
+  void resetCommand(messageqcpp::ByteStream&) override;
+  void setMakeAbsRids(bool m) override
   {
     makeAbsRids = m;
   }
   bool willPrefetch();
   int64_t getLastLbid();
-  void getLBIDList(uint32_t loopCount, std::vector<int64_t>* lbids);
+  void getLBIDList(uint32_t loopCount, std::vector<int64_t>* lbids) override;
 
-  virtual SCommand duplicate();
+  SCommand duplicate() override;
   bool operator==(const ColumnCommand&) const;
   bool operator!=(const ColumnCommand&) const;
 
@@ -111,7 +112,7 @@ class ColumnCommand : public Command
   void disableFilters();
   void enableFilters();
 
-  int getCompType() const
+  int getCompType() const override
   {
     return colType.compressionType;
   }
@@ -151,7 +152,7 @@ class ColumnCommand : public Command
   template <int W>
   void _process_OT_DATAVALUE();
   void process_OT_ROWGROUP();
-  void projectResult();
+  void projectResult(messageqcpp::SBS& bs);
   template <typename T>
   void _projectResultRGLoop(rowgroup::Row& r, const T* valuesArray, const uint32_t offset);
   template <int W>
@@ -321,4 +322,3 @@ inline void ColumnCommand::fillEmptyBlock<messageqcpp::ByteStream::hexbyte>(uint
 }
 
 }  // namespace primitiveprocessor
-
