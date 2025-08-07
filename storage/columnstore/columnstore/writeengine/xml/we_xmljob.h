@@ -25,7 +25,7 @@
 
 #include <iostream>
 #include <string>
-#include <time.h>
+#include <ctime>
 #include <boost/filesystem/path.hpp>
 
 #include "we_xmlop.h"
@@ -54,7 +54,7 @@ class XMLJob : public XMLOp
   /**
    * @brief Default Destructor
    */
-  EXPORT ~XMLJob();
+  EXPORT ~XMLJob() override;
 
   /**
    * @brief Utility to generate a full path name for a Job XML file name
@@ -115,7 +115,7 @@ class XMLJob : public XMLOp
    * @brief Process node
    * @param pParentNode Node to be parsed from XML
    */
-  EXPORT bool processNode(xmlNode* pParentNode);
+  EXPORT bool processNode(xmlNode* pParentNode) override;
 
   /**
    * @brief Set timezone
@@ -142,7 +142,6 @@ class XMLJob : public XMLOp
 
   Job fJob;  // current job xml
 
-  DebugLevel fDebugLevel;      // internal use debug level
   bool fDeleteTempFile;        // delete tmp jobfile in destructor
   std::string fJobFileName;    // job file name
   JobColList fDefaultColumns;  // temporary list of default cols

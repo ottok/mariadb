@@ -60,12 +60,8 @@ namespace joblist
 class JobStepAssociation
 {
  public:
-  JobStepAssociation()
-  {
-  }
-  virtual ~JobStepAssociation()
-  {
-  }
+  JobStepAssociation() = default;
+  virtual ~JobStepAssociation() = default;
 
   void inAdd(const AnyDataListSPtr& spdl) __attribute__((deprecated))
   {
@@ -127,10 +123,8 @@ class JobStep
  public:
   /** constructor
    */
-  JobStep()
-  {
-  }
-  JobStep(const JobInfo&);
+  JobStep() = default;
+  explicit JobStep(const JobInfo&);
   /** destructor
    */
   virtual ~JobStep()
@@ -225,6 +219,15 @@ class JobStep
   virtual void view(const std::string& vw)
   {
     fView = vw;
+  }
+  // MCOL-5886 support partitions
+  virtual execplan::Partitions partitions() const
+  {
+    return fPartitions;
+  }
+  virtual void partitions(const execplan::Partitions& ps)
+  {
+    fPartitions = ps;
   }
   // @bug 3438, stats with column name
   virtual std::string name() const
@@ -471,6 +474,7 @@ class JobStep
 
   std::string fAlias;
   std::string fView;
+  execplan::Partitions fPartitions;
   std::string fName;
   std::string fSchema;
   uint32_t fTraceFlags;
@@ -508,12 +512,8 @@ class JobStep
 class TupleJobStep
 {
  public:
-  TupleJobStep()
-  {
-  }
-  virtual ~TupleJobStep()
-  {
-  }
+  TupleJobStep() = default;
+  virtual ~TupleJobStep() = default;
   virtual void setOutputRowGroup(const rowgroup::RowGroup&) = 0;
   virtual void setFcnExpGroup3(const std::vector<execplan::SRCP>&)
   {
@@ -527,9 +527,7 @@ class TupleJobStep
 class TupleDeliveryStep : public TupleJobStep
 {
  public:
-  virtual ~TupleDeliveryStep()
-  {
-  }
+  ~TupleDeliveryStep() override = default;
   virtual uint32_t nextBand(messageqcpp::ByteStream& bs) = 0;
   virtual const rowgroup::RowGroup& getDeliveredRowGroup() const = 0;
   virtual void deliverStringTableRowGroup(bool b) = 0;
@@ -541,17 +539,17 @@ class NullStep : public JobStep
  public:
   /** @brief virtual void Run method
    */
-  virtual void run()
+  void run() override
   {
   }
   /** @brief virtual void join method
    */
-  virtual void join()
+  void join() override
   {
   }
   /** @brief virtual string toString method
    */
-  virtual const std::string toString() const
+  const std::string toString() const override
   {
     return "NullStep";
   }
@@ -566,4 +564,3 @@ typedef boost::shared_ptr<JobStepAssociation> JobStepAssociationSPtr;
 typedef boost::shared_ptr<JobStep> SJSTEP;
 
 }  // namespace joblist
-

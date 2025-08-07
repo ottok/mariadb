@@ -34,10 +34,11 @@
 #include <string.h>
 #include <vector>
 #include <sstream>
-#include <boost/filesystem/path.hpp>
-#include <boost/filesystem/convenience.hpp>
+
+#include <boost/filesystem.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
+
 #include <pwd.h>
 
 #include "we_bulkstatus.h"
@@ -71,7 +72,7 @@ const std::string ERR_LOG_SUFFIX = ".err";  // Job err log file suffix
 namespace WriteEngine
 {
 /* static */ std::vector<std::shared_ptr<TableInfo>> BulkLoad::fTableInfo;
-/* static */ boost::mutex* BulkLoad::fDDLMutex = 0;
+/* static */ boost::mutex* BulkLoad::fDDLMutex = new boost::mutex();
 
 /* static */ const std::string BulkLoad::DIR_BULK_JOB("job");
 /* static */ const std::string BulkLoad::DIR_BULK_TEMP_JOB("tmpjob");
@@ -139,35 +140,8 @@ struct CancellationThread
 // Constructor
 //------------------------------------------------------------------------------
 BulkLoad::BulkLoad()
- : fColOp(new ColumnOpBulk())
- , fColDelim('\0')
- , fNoOfBuffers(-1)
- , fBufferSize(-1)
- , fFileVbufSize(-1)
- , fMaxErrors(-1)
- , fNoOfParseThreads(3)
- , fNoOfReadThreads(1)
- , fKeepRbMetaFiles(false)
- , fNullStringMode(false)
- , fEnclosedByChar('\0')
- ,  // not enabled unless user overrides enclosed by char
- fEscapeChar('\0')
- , fTotalTime(0.0)
- , fBulkMode(BULK_MODE_LOCAL)
- , fbTruncationAsError(false)
- , fImportDataMode(IMPORT_DATA_TEXT)
- , fbContinue(false)
- , fDisableTimeOut(false)
- , fUUID(boost::uuids::nil_generator()())
- , fTimeZone(dataconvert::systemTimeZoneOffset())
- , fUsername("mysql")  // MCOL-4328 default file owner
 {
-  fTableInfo.clear();
   setDebugLevel(DEBUG_0);
-
-  fDDLMutex = new boost::mutex();
-  memset(&fStartTime, 0, sizeof(timeval));
-  memset(&fEndTime, 0, sizeof(timeval));
 }
 
 //------------------------------------------------------------------------------
@@ -539,6 +513,7 @@ int BulkLoad::preProcess(Job& job, int tableNo, std::shared_ptr<TableInfo>& tabl
   tableInfo->setImportDataMode(fImportDataMode);
   tableInfo->setTimeZone(fTimeZone);
   tableInfo->setJobUUID(fUUID);
+  tableInfo->setSkipRows(fSkipRows);
 
   // MCOL-4328 Get username gid and uid if they are set
   // We inject uid and gid into TableInfo and All ColumnInfo-s later.
@@ -555,14 +530,14 @@ int BulkLoad::preProcess(Job& job, int tableNo, std::shared_ptr<TableInfo>& tabl
   if (pwd)
     tableInfo->setUIDGID(pwd->pw_uid, pwd->pw_gid);
 
-  if (fMaxErrors != -1)
+  if (fMaxErrors != MAX_ERRORS_DEFAULT)
     tableInfo->setMaxErrorRows(fMaxErrors);
   else
     tableInfo->setMaxErrorRows(job.jobTableList[tableNo].maxErrNum);
 
   // @bug 3929: cpimport.bin error messaging using up too much memory.
   // Validate that max allowed error count is within valid range
-  long long maxErrNum = tableInfo->getMaxErrorRows();
+  int maxErrNum = tableInfo->getMaxErrorRows();
 
   if (maxErrNum > MAX_ALLOW_ERROR_COUNT)
   {
@@ -902,7 +877,7 @@ int BulkLoad::preProcessAutoInc(const std::string& fullTableName, ColumnInfo* co
 //    NO_ERROR if success
 //    other if fail
 //------------------------------------------------------------------------------
-int BulkLoad::preProcessHwmLbid(const ColumnInfo* info, int minWidth, uint32_t partition, uint16_t segment,
+int BulkLoad::preProcessHwmLbid(const ColumnInfo* info, int /*minWidth*/, uint32_t partition, uint16_t segment,
                                 HWM& hwm,                   // input/output
                                 BRM::LBID_t& lbid,          // output
                                 bool& bSkippedToNewExtent)  // output
@@ -999,6 +974,11 @@ int BulkLoad::processJob()
   {
     // std::cout << "Using default escape char" << std::endl;
     fEscapeChar = '\\';
+  }
+
+  if (fSkipRows == 0)
+  {
+    fSkipRows = curJob.fSkipRows;
   }
 
   // std::cout << "bulkload::fEnclosedByChar<" << fEnclosedByChar << '>' <<

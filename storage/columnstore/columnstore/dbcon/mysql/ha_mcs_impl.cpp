@@ -19,6 +19,8 @@
 #define PREFER_MY_CONFIG_H
 #include <my_config.h>
 #include <unistd.h>
+#include <chrono>
+#include <thread>
 #include <string>
 #include <iostream>
 #include <stack>
@@ -126,13 +128,44 @@ using namespace funcexp;
 #include "ha_mcs_sysvars.h"
 
 #include "ha_mcs_datatype.h"
-#include "statistics.h"
 #include "ha_mcs_logging.h"
 #include "ha_subquery.h"
+#include "statistics_manager/statistics.h"
 
 namespace cal_impl_if
 {
 extern bool nonConstFunc(Item_func* ifp);
+
+void gp_walk_info::mergeTableStatistics(const TableStatisticsMap& aTableStatisticsMap)
+{
+  for (auto& [schemaAndTableName, aColumnStatisticsMap]: aTableStatisticsMap)
+  {
+    auto tableStatisticsMapIt = tableStatisticsMap.find(schemaAndTableName);
+    if (tableStatisticsMapIt == tableStatisticsMap.end())
+    {
+      tableStatisticsMap[schemaAndTableName] = aColumnStatisticsMap;
+    }
+    else
+    {
+      for (auto& [columnName, histogram]: aColumnStatisticsMap)
+      {
+        tableStatisticsMapIt->second[columnName] = histogram;
+      }
+    }
+  }
+}
+
+std::optional<ColumnStatisticsMap> gp_walk_info::findStatisticsForATable(SchemaAndTableName& schemaAndTableName)
+{
+  auto tableStatisticsMapIt = tableStatisticsMap.find(schemaAndTableName);
+  if (tableStatisticsMapIt == tableStatisticsMap.end())
+  {
+    return std::nullopt;
+  }
+
+  return {tableStatisticsMapIt->second};
+}
+
 }
 
 namespace
@@ -303,18 +336,18 @@ int fetchNextRow(uchar* buf, cal_table_info& ti, cal_connection_info* ci, long t
   {
     // @bug 2244. Always log this msg for now, as we try to track down when/why we are
     //			losing socket connection with ExeMgr
-    //#ifdef INFINIDB_DEBUG
+    // #ifdef INFINIDB_DEBUG
     tpl_scan_fetch_LogException(ti, ci, &ex);
-    //#endif
+    // #endif
     sm_stat = sm::CALPONT_INTERNAL_ERROR;
   }
   catch (...)
   {
     // @bug 2244. Always log this msg for now, as we try to track down when/why we are
     //			losing socket connection with ExeMgr
-    //#ifdef INFINIDB_DEBUG
+    // #ifdef INFINIDB_DEBUG
     tpl_scan_fetch_LogException(ti, ci, 0);
-    //#endif
+    // #endif
     sm_stat = sm::CALPONT_INTERNAL_ERROR;
   }
 
@@ -760,7 +793,8 @@ vector<string> getOnUpdateTimestampColumns(string& schema, string& tableName, in
 
 uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& condStack)
 {
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -829,7 +863,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
     {
       Message::Args args;
 
-      if (isUpdateStatement(thd->lex->sql_command))
+      if (ha_mcs_common::isUpdateStatement(thd->lex->sql_command))
         args.add("Update");
 #if 0
             else if (thd->rgi_slave && thd->rgi_slave->m_table_map.count() != 0)
@@ -886,7 +920,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
   updateCP->isDML(true);
 
   //@Bug 2753. the memory already freed by destructor of UpdateSqlStatement
-  if (isUpdateStatement(thd->lex->sql_command))
+  if (ha_mcs_common::isUpdateStatement(thd->lex->sql_command))
   {
     ColumnAssignment* columnAssignmentPtr = nullptr;
     Item_field* item;
@@ -898,7 +932,6 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
 
     while ((item = (Item_field*)field_it++))
     {
-
       string tmpTableName = bestTableName(item);
 
       //@Bug 5312 populate aliasname with tablename if it is empty
@@ -1182,7 +1215,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
   }
 
   // Exit early if there is nothing to update
-  if (colAssignmentListPtr->empty() && isUpdateStatement(thd->lex->sql_command))
+  if (colAssignmentListPtr->empty() && ha_mcs_common::isUpdateStatement(thd->lex->sql_command))
   {
     ci->affectedRows = 0;
     delete colAssignmentListPtr;
@@ -1196,7 +1229,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
   CalpontSystemCatalog::TableName aTableName;
   TABLE_LIST* first_table = 0;
 
-  if (isUpdateStatement(thd->lex->sql_command))
+  if (ha_mcs_common::isUpdateStatement(thd->lex->sql_command))
   {
     aTableName.schema = schemaName;
     aTableName.table = tableName;
@@ -1218,17 +1251,16 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
   IDEBUG(cout << "STMT: " << dmlStmt << " and sessionID " << thd->thread_id << endl);
   VendorDMLStatement dmlStatement(dmlStmt, sessionID);
 
-  if (isUpdateStatement(thd->lex->sql_command))
+  if (ha_mcs_common::isUpdateStatement(thd->lex->sql_command))
     dmlStatement.set_DMLStatementType(DML_UPDATE);
   else
     dmlStatement.set_DMLStatementType(DML_DELETE);
-
 
   UpdateSqlStatement updateStmt;
   //@Bug 2753. To make sure the momory is freed.
   updateStmt.fColAssignmentListPtr = colAssignmentListPtr;
 
-  if (isUpdateStatement(thd->lex->sql_command))
+  if (ha_mcs_common::isUpdateStatement(thd->lex->sql_command))
   {
     TableName* qualifiedTablName = new TableName();
     qualifiedTablName->fName = tableName;
@@ -1317,7 +1349,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
   List<Item> items;
   SELECT_LEX select_lex;
 
-  if (isUpdateStatement(thd->lex->sql_command))
+  if (ha_mcs_common::isUpdateStatement(thd->lex->sql_command))
   {
     items = (thd->lex->first_select_lex()->item_list);
     thd->lex->first_select_lex()->item_list = thd->lex->value_list;
@@ -1466,7 +1498,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
       returnedCols.push_back((updateCP->columnMap()).begin()->second);
 
     //@Bug 6123. get the correct returned columnlist
-    if (isDeleteStatement(thd->lex->sql_command))
+    if (ha_mcs_common::isDeleteStatement(thd->lex->sql_command))
     {
       returnedCols.clear();
       // choose the smallest column to project
@@ -1517,7 +1549,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
 
     updateCP->returnedCols(returnedCols);
 
-    if (isUpdateStatement(thd->lex->sql_command))
+    if (ha_mcs_common::isUpdateStatement(thd->lex->sql_command))
     {
       const ParseTree* ptsub = updateCP->filters();
 
@@ -1635,7 +1667,8 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
             // cout << "doUpdateDelete start new DMLProc client for ctrl-c " <<  " for session " << sessionID
             // << endl;
             VendorDMLStatement cmdStmt("CTRL+C", DML_COMMAND, sessionID);
-	    std::shared_ptr<CalpontDMLPackage> pDMLPackage(CalpontDMLFactory::makeCalpontDMLPackageFromMysqlBuffer(cmdStmt));
+            std::shared_ptr<CalpontDMLPackage> pDMLPackage(
+                CalpontDMLFactory::makeCalpontDMLPackageFromMysqlBuffer(cmdStmt));
             pDMLPackage->set_TimeZone(timeZoneOffset);
             ByteStream bytestream;
             bytestream << static_cast<uint32_t>(sessionID);
@@ -1758,7 +1791,8 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
     if (command != "")
     {
       VendorDMLStatement cmdStmt(command, DML_COMMAND, sessionID);
-      std::shared_ptr<CalpontDMLPackage> pDMLPackage(CalpontDMLFactory::makeCalpontDMLPackageFromMysqlBuffer(cmdStmt));
+      std::shared_ptr<CalpontDMLPackage> pDMLPackage(
+          CalpontDMLFactory::makeCalpontDMLPackageFromMysqlBuffer(cmdStmt));
       pDMLPackage->set_TimeZone(timeZoneOffset);
       pDMLPackage->setTableOid(ci->tableOid);
       ByteStream bytestream;
@@ -1976,7 +2010,7 @@ int ha_mcs_impl_analyze(THD* thd, TABLE* table)
   if (table->s->db.length && strcmp(table->s->db.str, "information_schema") == 0)
     return 0;
 
-  bool columnStore = (table ? isMCSTable(table) : true);
+  bool columnStore = (table ? ha_mcs_common::isMCSTable(table) : true);
   // Skip non columnstore tables.
   if (!columnStore)
     return 0;
@@ -2044,7 +2078,8 @@ int ha_mcs_impl_analyze(THD* thd, TABLE* table)
   query.assign(idb_mysql_query_str(thd));
   caep->data(query);
 
-  if (!get_fe_conn_info_ptr()) {
+  if (!get_fe_conn_info_ptr())
+  {
     set_fe_conn_info_ptr(reinterpret_cast<void*>(new cal_connection_info(), thd));
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -2107,7 +2142,8 @@ error:
   return ER_INTERNAL_ERROR;
 }
 
-int ha_mcs_impl_open(const char* name, int mode, uint32_t test_if_locked)
+int ha_mcs_impl_open([[maybe_unused]] const char* name, [[maybe_unused]] int mode,
+                     [[maybe_unused]] uint32_t test_if_locked)
 {
   IDEBUG(cout << "ha_mcs_impl_open: " << name << ", " << mode << ", " << test_if_locked << endl);
   Config::makeConfig();
@@ -2151,7 +2187,8 @@ int ha_mcs_impl_direct_update_delete_rows(bool execute, ha_rows* affected_rows,
   gwi.thd = thd;
   int rc = 0;
 
-  if (thd->slave_thread && !get_replication_slave(thd) && isDMLStatement(thd->lex->sql_command))
+  if (thd->slave_thread && !get_replication_slave(thd) &&
+      ha_mcs_common::isDMLStatement(thd->lex->sql_command))
   {
     if (affected_rows)
       *affected_rows = 0;
@@ -2169,7 +2206,6 @@ int ha_mcs_impl_direct_update_delete_rows(bool execute, ha_rows* affected_rows,
     *affected_rows = ci->affectedRows;
   }
 
-
   return rc;
 }
 
@@ -2185,11 +2221,10 @@ int ha_mcs::impl_rnd_init(TABLE* table, const std::vector<COND*>& condStack)
   gwi.thd = thd;
 
   if (thd->slave_thread && !get_replication_slave(thd) &&
-      (isDMLStatement(thd->lex->sql_command) ||
-       thd->lex->sql_command == SQLCOM_ALTER_TABLE))
+      (ha_mcs_common::isDMLStatement(thd->lex->sql_command) || thd->lex->sql_command == SQLCOM_ALTER_TABLE))
     return 0;
 
-    // check whether the system is ready to process statement.
+  // check whether the system is ready to process statement.
   static DBRM dbrm(true);
   int bSystemQueryReady = dbrm.getSystemQueryReady();
 
@@ -2238,14 +2273,15 @@ int ha_mcs::impl_rnd_init(TABLE* table, const std::vector<COND*>& condStack)
     UPDATE innotab1 SET a=100 WHERE a NOT IN (SELECT a FROM cstab1 WHERE a=1);
   */
   if (!isReadOnly() &&  // make sure the current table is being modified
-      isUpdateOrDeleteStatement(thd->lex->sql_command))
+      ha_mcs_common::isUpdateOrDeleteStatement(thd->lex->sql_command))
     return doUpdateDelete(thd, gwi, condStack);
 
   uint32_t sessionID = tid2sid(thd->thread_id);
   boost::shared_ptr<CalpontSystemCatalog> csc = CalpontSystemCatalog::makeCalpontSystemCatalog(sessionID);
   csc->identity(CalpontSystemCatalog::FE);
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -2350,8 +2386,18 @@ int ha_mcs::impl_rnd_init(TABLE* table, const std::vector<COND*>& condStack)
     ByteStream msg;
     ByteStream emsgBs;
 
+    int ntries = 10;
+
+    // XXX: MCOL-5396: unable to reach this code.
     while (true)
     {
+      string emsg;
+      if (ntries < 0)
+      {
+        emsg = "Lost connection to ExeMgr. Please contact your administrator";
+        setError(thd, ER_INTERNAL_ERROR, emsg);
+        return ER_INTERNAL_ERROR;
+      }
       try
       {
         ByteStream::quadbyte qb = 4;
@@ -2369,7 +2415,6 @@ int ha_mcs::impl_rnd_init(TABLE* table, const std::vector<COND*>& condStack)
         emsgBs.restart();
         msg = hndl->exeMgr->read();
         emsgBs = hndl->exeMgr->read();
-        string emsg;
 
         if (msg.length() == 0 || emsgBs.length() == 0)
         {
@@ -2434,6 +2479,10 @@ int ha_mcs::impl_rnd_init(TABLE* table, const std::vector<COND*>& condStack)
         hndl->csc = csc;
 
         ti.conn_hndl = hndl;
+
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(100ms);
+        ntries--;
 
         try
         {
@@ -2561,11 +2610,10 @@ int ha_mcs_impl_rnd_next(uchar* buf, TABLE* table, long timeZone)
   THD* thd = current_thd;
 
   if (thd->slave_thread && !get_replication_slave(thd) &&
-      (isDMLStatement(thd->lex->sql_command) ||
-       thd->lex->sql_command == SQLCOM_ALTER_TABLE))
+      (ha_mcs_common::isDMLStatement(thd->lex->sql_command) || thd->lex->sql_command == SQLCOM_ALTER_TABLE))
     return HA_ERR_END_OF_FILE;
 
-  if (isMCSTableUpdate(thd) || isMCSTableDelete(thd))
+  if (ha_mcs_common::isMCSTableUpdate(thd) || ha_mcs_common::isMCSTableDelete(thd))
     return HA_ERR_END_OF_FILE;
 
   // @bug 2547
@@ -2573,7 +2621,8 @@ int ha_mcs_impl_rnd_next(uchar* buf, TABLE* table, long timeZone)
   //    if (MIGR::infinidb_vtable.impossibleWhereOnUnion)
   //        return HA_ERR_END_OF_FILE;
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -2644,19 +2693,17 @@ int ha_mcs_impl_rnd_end(TABLE* table, bool is_pushdown_hand)
   THD* thd = current_thd;
 
   if (thd->slave_thread && !get_replication_slave(thd) &&
-      (isDMLStatement(thd->lex->sql_command) ||
-       thd->lex->sql_command == SQLCOM_ALTER_TABLE))
-    return 0;
+      (ha_mcs_common::isDMLStatement(thd->lex->sql_command) || thd->lex->sql_command == SQLCOM_ALTER_TABLE))
+    return rc;
 
   cal_connection_info* ci = nullptr;
-
   if (get_fe_conn_info_ptr() != NULL)
     ci = reinterpret_cast<cal_connection_info*>(get_fe_conn_info_ptr());
 
   if ((thd->lex)->sql_command == SQLCOM_ALTER_TABLE)
     return rc;
 
-  if (isMCSTableUpdate(thd) || isMCSTableDelete(thd))
+  if (ha_mcs_common::isMCSTableUpdate(thd) || ha_mcs_common::isMCSTableDelete(thd))
     return rc;
 
   if (!ci)
@@ -2669,18 +2716,18 @@ int ha_mcs_impl_rnd_end(TABLE* table, bool is_pushdown_hand)
   if (thd->lex->analyze_stmt && ci->cal_conn_hndl && ci->cal_conn_hndl->exeMgr)
   {
     // The ANALYZE statement leaves ExeMgr hanging. This clears it up.
-    ci->cal_conn_hndl->exeMgr->read(); // Ignore the returned buffer
+    ci->cal_conn_hndl->exeMgr->read();  // Ignore the returned buffer
     ByteStream msg;
-    ByteStream::quadbyte qb = 1; // Tell PrimProc front session to eat all the rows
+    ByteStream::quadbyte qb = 1;  // Tell PrimProc front session to eat all the rows
     msg << qb;
     ci->cal_conn_hndl->exeMgr->write(msg);
     // This is the command to start sending return values. because we previously sent the swallow
     // rows command, there won't be anything useful coming back, but it needs this to flush internal queues.
-    qb = 5; // Read the result data.
+    qb = 5;  // Read the result data.
     msg.reset();
     msg << qb;
     ci->cal_conn_hndl->exeMgr->write(msg);
-    qb = 0; // End the query
+    qb = 0;  // End the query
     msg.reset();
     msg << qb;
     ci->cal_conn_hndl->exeMgr->write(msg);
@@ -2732,7 +2779,6 @@ int ha_mcs_impl_rnd_end(TABLE* table, bool is_pushdown_hand)
         ti.conn_hndl = hndl;
       else
         ci->cal_conn_hndl = hndl;
-
     }
     catch (IDBExcept& e)
     {
@@ -2780,7 +2826,8 @@ int ha_mcs_impl_create(const char* name, TABLE* table_arg, HA_CREATE_INFO* creat
 {
   THD* thd = current_thd;
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -2824,7 +2871,8 @@ int ha_mcs_impl_delete_table(const char* name)
   if (!memcmp((uchar*)name, tmp_file_prefix, tmp_file_prefix_length))
     return 0;
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -2889,7 +2937,8 @@ int ha_mcs_impl_write_row(const uchar* buf, TABLE* table, uint64_t rows_changed,
     return ER_CHECK_NOT_IMPLEMENTED;
   }
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -2942,7 +2991,8 @@ int ha_mcs_impl_write_row(const uchar* buf, TABLE* table, uint64_t rows_changed,
 
 int ha_mcs_impl_update_row()
 {
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(current_thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -2958,7 +3008,8 @@ int ha_mcs_impl_update_row()
 
 int ha_mcs_impl_delete_row()
 {
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(current_thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -2979,7 +3030,8 @@ void ha_mcs_impl_start_bulk_insert(ha_rows rows, TABLE* table, bool is_cache_ins
   if (thd->slave_thread && !get_replication_slave(thd))
     return;
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -3106,7 +3158,7 @@ void ha_mcs_impl_start_bulk_insert(ha_rows rows, TABLE* table, bool is_cache_ins
         ci->useXbit = false;
 
       //@bug 6122 Check how many columns have not null constraint. columnn with not null constraint will not
-      //show up in header.
+      // show up in header.
       unsigned int numberNotNull = 0;
 
       for (unsigned int j = 0; j < colrids.size(); j++)
@@ -3263,9 +3315,8 @@ void ha_mcs_impl_start_bulk_insert(ha_rows rows, TABLE* table, bool is_cache_ins
         int execvErrno = errno;
 
         ostringstream oss;
-        oss << " : execvp error: cpimport.bin invocation failed; "
-            << "(errno-" << errno << "); " << strerror(execvErrno)
-            << "; Check file and try invoking locally.";
+        oss << " : execvp error: cpimport.bin invocation failed; " << "(errno-" << errno << "); "
+            << strerror(execvErrno) << "; Check file and try invoking locally.";
         cout << oss.str();
 
         setError(current_thd, ER_INTERNAL_ERROR, "Forking process cpimport failed.");
@@ -3284,7 +3335,6 @@ void ha_mcs_impl_start_bulk_insert(ha_rows rows, TABLE* table, bool is_cache_ins
       // Set read_set used for bulk insertion of Fields inheriting
       // from Field_blob|Field_varstring. Used in ColWriteBatchString()
       bitmap_set_all(table->read_set);
-
     }
     else
     {
@@ -3400,7 +3450,8 @@ int ha_mcs_impl_end_bulk_insert(bool abort, TABLE* table)
 
   std::string aTmpDir(startup::StartUp::tmpDir());
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -3426,7 +3477,6 @@ int ha_mcs_impl_end_bulk_insert(bool abort, TABLE* table)
          ((thd->lex)->sql_command == SQLCOM_LOAD) || ((thd->lex)->sql_command == SQLCOM_INSERT_SELECT) ||
          ci->isCacheInsert))
     {
-
       if ((thd->killed > 0) && (ci->cpimport_pid > 0))  // handle CTRL-C
       {
         // cout << "sending ctrl-c to cpimport" << endl;
@@ -3505,12 +3555,9 @@ int ha_mcs_impl_end_bulk_insert(bool abort, TABLE* table)
         else
         {
           ostringstream oss;
-          oss << "End SQL statement with error, rc=" << rc
-              << ", aPid=" << aPid
-              << ", WIF=" << WIFEXITED(aStatus)
-              << ", WEXIT=" << WEXITSTATUS(aStatus);
-          ha_mcs_impl::log_this(thd, oss.str().c_str(), logging::LOG_TYPE_DEBUG,
-                                tid2sid(thd->thread_id));
+          oss << "End SQL statement with error, rc=" << rc << ", aPid=" << aPid
+              << ", WIF=" << WIFEXITED(aStatus) << ", WEXIT=" << WEXITSTATUS(aStatus);
+          ha_mcs_impl::log_this(thd, oss.str().c_str(), logging::LOG_TYPE_DEBUG, tid2sid(thd->thread_id));
         }
 
         ci->columnTypes.clear();
@@ -3596,7 +3643,8 @@ int ha_mcs_impl_end_bulk_insert(bool abort, TABLE* table)
 
 int ha_mcs_impl_commit(handlerton* hton, THD* thd, bool all)
 {
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -3631,7 +3679,8 @@ int ha_mcs_impl_commit(handlerton* hton, THD* thd, bool all)
 
 int ha_mcs_impl_rollback(handlerton* hton, THD* thd, bool all)
 {
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -3703,7 +3752,8 @@ int ha_mcs_impl_rename_table(const char* from, const char* to)
 {
   IDEBUG(cout << "ha_mcs_impl_rename_table: " << from << " => " << to << endl);
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(current_thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -3729,7 +3779,7 @@ int ha_mcs_impl_rename_table(const char* from, const char* to)
   return rc;
 }
 
-int ha_mcs_impl_delete_row(const uchar* buf)
+int ha_mcs_impl_delete_row(const uchar* /*buf*/)
 {
   IDEBUG(cout << "ha_mcs_impl_delete_row" << endl);
   return 0;
@@ -3737,8 +3787,7 @@ int ha_mcs_impl_delete_row(const uchar* buf)
 
 // this place is as good as any.
 ext_cond_info::ext_cond_info(long timeZone)
-  : chainHolder(new SubQueryChainHolder())
-  , gwi(timeZone, &chainHolder->chain)
+ : chainHolder(new SubQueryChainHolder()), gwi(timeZone, &chainHolder->chain)
 {
 }
 
@@ -3746,7 +3795,7 @@ COND* ha_mcs_impl_cond_push(COND* cond, TABLE* table, std::vector<COND*>& condSt
 {
   THD* thd = current_thd;
 
-  if (isUpdateOrDeleteStatement(thd->lex->sql_command))
+  if (ha_mcs_common::isUpdateOrDeleteStatement(thd->lex->sql_command))
   {
     condStack.push_back(cond);
     return nullptr;
@@ -3756,7 +3805,8 @@ COND* ha_mcs_impl_cond_push(COND* cond, TABLE* table, std::vector<COND*>& condSt
   alias.assign(table->alias.ptr(), table->alias.length());
   IDEBUG(cout << "ha_mcs_impl_cond_push: " << alias << endl);
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -3829,7 +3879,7 @@ COND* ha_mcs_impl_cond_push(COND* cond, TABLE* table, std::vector<COND*>& condSt
 
 inline void disableBinlogForDML(THD* thd)
 {
-  if (isDMLStatement(thd->lex->sql_command) && (thd->variables.option_bits & OPTION_BIN_LOG))
+  if (ha_mcs_common::isDMLStatement(thd->lex->sql_command) && (thd->variables.option_bits & OPTION_BIN_LOG))
   {
     set_original_option_bits(thd->variables.option_bits, thd);
     thd->variables.option_bits &= ~OPTION_BIN_LOG;
@@ -3839,7 +3889,7 @@ inline void disableBinlogForDML(THD* thd)
 
 inline void restoreBinlogForDML(THD* thd)
 {
-  if (isDMLStatement(thd->lex->sql_command))
+  if (ha_mcs_common::isDMLStatement(thd->lex->sql_command))
   {
     ulonglong orig_option_bits = get_original_option_bits(thd);
 
@@ -3867,7 +3917,8 @@ int ha_mcs::impl_external_lock(THD* thd, TABLE* table, int lock_type)
   alias.assign(table->alias.ptr(), table->alias.length());
   IDEBUG(cout << "external_lock for " << alias << endl);
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -3981,695 +4032,12 @@ int ha_mcs::impl_external_lock(THD* thd, TABLE* table, int lock_type)
 }
 
 // for sorting length exceeds blob limit. Just error out for now.
-int ha_mcs_impl_rnd_pos(uchar* buf, uchar* pos)
+int ha_mcs_impl_rnd_pos(uchar* /*buf*/, uchar* /*pos*/)
 {
   IDEBUG(cout << "ha_mcs_impl_rnd_pos" << endl);
   string emsg = logging::IDBErrorInfo::instance()->errorMsg(ERR_ORDERBY_TOO_BIG);
   setError(current_thd, ER_INTERNAL_ERROR, emsg);
   return ER_INTERNAL_ERROR;
-}
-
-/*@brief ha_mcs_impl_group_by_init - Get data for MariaDB group_by
-    pushdown handler */
-/***********************************************************
- * DESCRIPTION:
- * Prepares data for group_by_handler::next_row() calls.
- * PARAMETERS:
- *    group_hand - group by handler, that preserves initial table and items lists. .
- *    table - TABLE pointer The table to save the result set into.
- * RETURN:
- *    0 if success
- *    others if something went wrong whilst getting the result set
- ***********************************************************/
-int ha_mcs_impl_group_by_init(mcs_handler_info* handler_info, TABLE* table)
-{
-  ha_mcs_group_by_handler* group_hand = reinterpret_cast<ha_mcs_group_by_handler*>(handler_info->hndl_ptr);
-  string tableName = group_hand->table_list->table->s->table_name.str;
-  IDEBUG(cout << "group_by_init for table " << tableName << endl);
-  THD* thd = current_thd;
-
-  // check whether the system is ready to process statement.
-  static DBRM dbrm(true);
-  int bSystemQueryReady = dbrm.getSystemQueryReady();
-
-  if (bSystemQueryReady == 0)
-  {
-    // Still not ready
-    setError(thd, ER_INTERNAL_ERROR, "The system is not yet ready to accept queries");
-    return ER_INTERNAL_ERROR;
-  }
-  else if (bSystemQueryReady < 0)
-  {
-    // Still not ready
-    setError(thd, ER_INTERNAL_ERROR, "DBRM is not responding. Cannot accept queries");
-    return ER_INTERNAL_ERROR;
-  }
-
-
-  uint32_t sessionID = tid2sid(thd->thread_id);
-  boost::shared_ptr<CalpontSystemCatalog> csc = CalpontSystemCatalog::makeCalpontSystemCatalog(sessionID);
-  csc->identity(CalpontSystemCatalog::FE);
-
-  if (get_fe_conn_info_ptr() == nullptr) {
-    set_fe_conn_info_ptr((void*)new cal_connection_info());
-    thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
-  }
-
-  cal_connection_info* ci = reinterpret_cast<cal_connection_info*>(get_fe_conn_info_ptr());
-
-  idbassert(ci != 0);
-
-  if (thd->killed == KILL_QUERY || thd->killed == KILL_QUERY_HARD)
-  {
-    force_close_fep_conn(thd, ci);
-    return 0;
-  }
-
-  sm::tableid_t tableid = 0;
-  cal_table_info ti;
-  cal_group_info gi;
-  sm::cpsm_conhdl_t* hndl;
-  SCSEP csep;
-
-  bool localQuery = get_local_query(thd);
-
-  {
-    ci->stats.reset();  // reset query stats
-    ci->stats.setStartTime();
-    if (thd->main_security_ctx.user)
-    {
-      ci->stats.fUser = thd->main_security_ctx.user;
-    }
-    else
-    {
-      ci->stats.fUser = "";
-    }
-
-    if (thd->main_security_ctx.host)
-      ci->stats.fHost = thd->main_security_ctx.host;
-    else if (thd->main_security_ctx.host_or_ip)
-      ci->stats.fHost = thd->main_security_ctx.host_or_ip;
-    else
-      ci->stats.fHost = "unknown";
-
-    try
-    {
-      ci->stats.userPriority(ci->stats.fHost, ci->stats.fUser);
-    }
-    catch (std::exception& e)
-    {
-      string msg = string("Columnstore User Priority - ") + e.what();
-      ci->warningMsg = msg;
-    }
-
-    // If the previous query has error and
-    // this is not a subquery run by the server(MCOL-1601)
-    // re-establish the connection
-    if (ci->queryState != 0)
-    {
-      if (ci->cal_conn_hndl_st.size() == 0)
-        sm::sm_cleanup(ci->cal_conn_hndl);
-      ci->cal_conn_hndl = 0;
-    }
-
-    sm::sm_init(sessionID, &ci->cal_conn_hndl, localQuery);
-    idbassert(ci->cal_conn_hndl != 0);
-    ci->cal_conn_hndl->csc = csc;
-    idbassert(ci->cal_conn_hndl->exeMgr != 0);
-
-    try
-    {
-      ci->cal_conn_hndl->connect();
-    }
-    catch (...)
-    {
-      setError(thd, ER_INTERNAL_ERROR, IDBErrorInfo::instance()->errorMsg(ERR_LOST_CONN_EXEMGR));
-      CalpontSystemCatalog::removeCalpontSystemCatalog(sessionID);
-      goto error;
-    }
-
-    hndl = ci->cal_conn_hndl;
-
-    ci->cal_conn_hndl_st.push(ci->cal_conn_hndl);
-    if (!csep)
-      csep.reset(new CalpontSelectExecutionPlan());
-
-    SessionManager sm;
-    BRM::TxnID txnID;
-    txnID = sm.getTxnID(sessionID);
-
-    if (!txnID.valid)
-    {
-      txnID.id = 0;
-      txnID.valid = true;
-    }
-
-    QueryContext verID;
-    verID = sm.verID();
-
-    csep->txnID(txnID.id);
-    csep->verID(verID);
-    csep->sessionID(sessionID);
-
-    if (group_hand->table_list->db.length)
-      csep->schemaName(group_hand->table_list->db.str, lower_case_table_names);
-
-    csep->traceFlags(ci->traceFlags);
-
-    // MCOL-1052 Send Items lists down to the optimizer.
-    gi.groupByTables = group_hand->table_list;
-    gi.groupByFields = group_hand->select;
-    gi.groupByWhere = group_hand->where;
-    gi.groupByGroup = group_hand->group_by;
-    gi.groupByOrder = group_hand->order_by;
-    gi.groupByHaving = group_hand->having;
-    gi.groupByDistinct = group_hand->distinct;
-
-    // MCOL-1052 Send pushed conditions here, since server could omit GROUP BY
-    // items in case of = or IN functions used on GROUP BY columns.
-    {
-      CalTableMap::iterator mapiter;
-      execplan::CalpontSelectExecutionPlan::ColumnMap::iterator colMapIter;
-      execplan::CalpontSelectExecutionPlan::ColumnMap::iterator condColMapIter;
-      execplan::ParseTree* ptIt;
-
-      for (TABLE_LIST* tl = gi.groupByTables; tl; tl = tl->next_local)
-      {
-        mapiter = ci->tableMap.find(tl->table);
-
-        if (mapiter != ci->tableMap.end() && mapiter->second.condInfo != NULL &&
-            mapiter->second.condInfo->gwi.condPush)
-        {
-          while (!mapiter->second.condInfo->gwi.ptWorkStack.empty())
-          {
-            ptIt = mapiter->second.condInfo->gwi.ptWorkStack.top();
-            mapiter->second.condInfo->gwi.ptWorkStack.pop();
-            gi.pushedPts.push_back(ptIt);
-          }
-        }
-      }
-    }
-    // send plan whenever group_init is called
-    int status = cp_get_group_plan(thd, csep, gi);
-
-    // Never proceed if status != 0 to avoid empty DA
-    // crashes on later stages
-    if (status != 0)
-      goto internal_error;
-
-    // @bug 2547. don't need to send the plan if it's impossible where for all unions.
-    // MCOL-2178 commenting the below out since cp_get_group_plan does not modify this variable
-    // which has a default value of false
-    // if (MIGR::infinidb_vtable.impossibleWhereOnUnion)
-    //  return 0;
-
-    string query;
-    // Set the query text only once if the server executes
-    // subqueries separately.
-    if (ci->queryState)
-      query.assign("<subquery of the previous>");
-    else
-      query.assign(thd->query_string.str(), thd->query_string.length());
-    csep->data(query);
-
-    try
-    {
-      csep->priority(ci->stats.userPriority(ci->stats.fHost, ci->stats.fUser));
-    }
-    catch (std::exception& e)
-    {
-      string msg = string("Columnstore User Priority - ") + e.what();
-      push_warning(thd, Sql_condition::WARN_LEVEL_WARN, 9999, msg.c_str());
-    }
-
-#ifdef PLAN_HEX_FILE
-    // plan serialization
-    string tmpDir = aTmpDir + "/li1-plan.hex";
-
-    ifstream ifs(tmpDir);
-    ByteStream bs1;
-    ifs >> bs1;
-    ifs.close();
-    csep->unserialize(bs1);
-#endif
-
-    if (ci->traceFlags & 1)
-    {
-      cerr << "---------------- EXECUTION PLAN ----------------" << endl;
-      cerr << *csep << endl;
-      cerr << "-------------- EXECUTION PLAN END --------------\n" << endl;
-    }
-    else
-    {
-      IDEBUG(cout << "---------------- EXECUTION PLAN ----------------" << endl);
-      IDEBUG(cerr << *csep << endl);
-      IDEBUG(cout << "-------------- EXECUTION PLAN END --------------\n" << endl);
-    }
-  }  // end of execution plan generation
-
-  {
-    ByteStream msg;
-    ByteStream emsgBs;
-
-    while (true)
-    {
-      try
-      {
-        ByteStream::quadbyte qb = 4;
-        msg << qb;
-        hndl->exeMgr->write(msg);
-        msg.restart();
-        csep->rmParms(ci->rmParms);
-
-        // send plan
-        csep->serialize(msg);
-        hndl->exeMgr->write(msg);
-
-        // get ExeMgr status back to indicate a vtable joblist success or not
-        msg.restart();
-        emsgBs.restart();
-        msg = hndl->exeMgr->read();
-        emsgBs = hndl->exeMgr->read();
-        string emsg;
-
-        if (msg.length() == 0 || emsgBs.length() == 0)
-        {
-          emsg = "Lost connection to ExeMgr. Please contact your administrator";
-          setError(thd, ER_INTERNAL_ERROR, emsg);
-          return ER_INTERNAL_ERROR;
-        }
-
-        string emsgStr;
-        emsgBs >> emsgStr;
-        bool err = false;
-
-        if (msg.length() == 4)
-        {
-          msg >> qb;
-
-          if (qb != 0)
-          {
-            err = true;
-            // for makejoblist error, stats contains only error code and insert from here
-            // because table fetch is not started
-            ci->stats.setEndTime();
-            ci->stats.fQuery = csep->data();
-            ci->stats.fQueryType = csep->queryType();
-            ci->stats.fErrorNo = qb;
-
-            try
-            {
-              ci->stats.insert();
-            }
-            catch (std::exception& e)
-            {
-              string msg = string("Columnstore Query Stats - ") + e.what();
-              push_warning(thd, Sql_condition::WARN_LEVEL_WARN, 9999, msg.c_str());
-            }
-          }
-        }
-        else
-        {
-          err = true;
-        }
-
-        if (err)
-        {
-          setError(thd, ER_INTERNAL_ERROR, emsgStr);
-          return ER_INTERNAL_ERROR;
-        }
-
-        ci->rmParms.clear();
-
-        ci->queryState = 1;
-
-        break;
-      }
-      catch (...)
-      {
-        sm::sm_cleanup(hndl);
-        hndl = 0;
-
-        sm::sm_init(sessionID, &hndl, localQuery);
-        idbassert(hndl != 0);
-        hndl->csc = csc;
-
-        ci->cal_conn_hndl = hndl;
-        ci->cal_conn_hndl_st.pop();
-        ci->cal_conn_hndl_st.push(ci->cal_conn_hndl);
-        try
-        {
-          hndl->connect();
-        }
-        catch (...)
-        {
-          setError(thd, ER_INTERNAL_ERROR, IDBErrorInfo::instance()->errorMsg(ERR_LOST_CONN_EXEMGR));
-          CalpontSystemCatalog::removeCalpontSystemCatalog(sessionID);
-          goto error;
-        }
-
-        msg.restart();
-      }
-    }
-  }
-
-  // set query state to be in_process. Sometimes mysql calls rnd_init multiple
-  // times, this makes sure plan only being generated and sent once. It will be
-  // reset when query finishes in sm::end_query
-
-  // common path for both vtable select phase and table mode -- open scan handle
-  ti = ci->tableMap[table];
-  ti.msTablePtr = table;
-
-  {
-    // MCOL-1601 Using stacks of ExeMgr conn hndls, table and scan contexts.
-    ti.tpl_ctx.reset(new sm::cpsm_tplh_t());
-    ti.tpl_ctx_st.push(ti.tpl_ctx);
-    ti.tpl_scan_ctx = sm::sp_cpsm_tplsch_t(new sm::cpsm_tplsch_t());
-    ti.tpl_scan_ctx_st.push(ti.tpl_scan_ctx);
-
-    // make sure rowgroup is null so the new meta data can be taken. This is for some case mysql
-    // call rnd_init for a table more than once.
-    ti.tpl_scan_ctx->rowGroup = nullptr;
-
-    try
-    {
-      tableid = execplan::IDB_VTABLE_ID;
-    }
-    catch (...)
-    {
-      string emsg = "No table ID found for table " + string(table->s->table_name.str);
-      setError(thd, ER_INTERNAL_ERROR, emsg);
-      CalpontSystemCatalog::removeCalpontSystemCatalog(sessionID);
-      goto internal_error;
-    }
-
-    try
-    {
-      sm::tpl_open(tableid, ti.tpl_ctx, hndl);
-      sm::tpl_scan_open(tableid, ti.tpl_scan_ctx, hndl);
-    }
-    catch (std::exception& e)
-    {
-      string emsg = "table can not be opened: " + string(e.what());
-      setError(thd, ER_INTERNAL_ERROR, emsg);
-      CalpontSystemCatalog::removeCalpontSystemCatalog(sessionID);
-      goto internal_error;
-    }
-    catch (...)
-    {
-      string emsg = "table can not be opened";
-      setError(thd, ER_INTERNAL_ERROR, emsg);
-      CalpontSystemCatalog::removeCalpontSystemCatalog(sessionID);
-      goto internal_error;
-    }
-
-    ti.tpl_scan_ctx->traceFlags = ci->traceFlags;
-
-    if ((ti.tpl_scan_ctx->ctp).size() == 0)
-    {
-      uint32_t num_attr = table->s->fields;
-
-      for (uint32_t i = 0; i < num_attr; i++)
-      {
-        CalpontSystemCatalog::ColType ctype;
-        ti.tpl_scan_ctx->ctp.push_back(ctype);
-      }
-    }
-  }
-
-  ci->tableMap[table] = ti;
-  return 0;
-
-error:
-
-  if (ci->cal_conn_hndl)
-  {
-    // end_query() should be called here.
-    sm::sm_cleanup(ci->cal_conn_hndl);
-    ci->cal_conn_hndl = 0;
-  }
-
-  // do we need to close all connection handle of the table map?
-  return ER_INTERNAL_ERROR;
-
-internal_error:
-
-  if (ci->cal_conn_hndl)
-  {
-    // end_query() should be called here.
-    sm::sm_cleanup(ci->cal_conn_hndl);
-    ci->cal_conn_hndl = 0;
-  }
-
-  return ER_INTERNAL_ERROR;
-}
-
-/*@brief ha_mcs_impl_group_by_next - Return result set for MariaDB group_by
-    pushdown handler
-*/
-/***********************************************************
- * DESCRIPTION:
- * Return a result record for each group_by_handler::next_row() call.
- * PARAMETERS:
- *    group_hand - group by handler, that preserves initial table and items lists. .
- *    table - TABLE pointer The table to save the result set in.
- * RETURN:
- *    0 if success
- *    HA_ERR_END_OF_FILE if the record set has come to an end
- *    others if something went wrong whilst getting the result set
- ***********************************************************/
-int ha_mcs_impl_group_by_next(TABLE* table, long timeZone)
-{
-  THD* thd = current_thd;
-
-  if (thd->slave_thread && !get_replication_slave(thd) && isDMLStatement(thd->lex->sql_command))
-    return HA_ERR_END_OF_FILE;
-
-  if (isMCSTableUpdate(thd) || isMCSTableDelete(thd))
-    return HA_ERR_END_OF_FILE;
-
-  if (get_fe_conn_info_ptr() == nullptr) {
-    set_fe_conn_info_ptr((void*)new cal_connection_info());
-    thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
-  }
-
-  cal_connection_info* ci = reinterpret_cast<cal_connection_info*>(get_fe_conn_info_ptr());
-
-  if (thd->killed == KILL_QUERY || thd->killed == KILL_QUERY_HARD)
-  {
-    force_close_fep_conn(thd, ci);
-    return 0;
-  }
-
-  if (ci->alterTableState > 0)
-    return HA_ERR_END_OF_FILE;
-
-  cal_table_info ti;
-  ti = ci->tableMap[table];
-  int rc = HA_ERR_END_OF_FILE;
-
-  if (!ti.tpl_ctx || !ti.tpl_scan_ctx)
-  {
-    CalpontSystemCatalog::removeCalpontSystemCatalog(tid2sid(thd->thread_id));
-    return ER_INTERNAL_ERROR;
-  }
-
-  idbassert(ti.msTablePtr == table);
-
-  try
-  {
-    // fetchNextRow interface forces to use buf.
-    unsigned char buf;
-    rc = fetchNextRow(&buf, ti, ci, timeZone, true);
-  }
-  catch (std::exception& e)
-  {
-    string emsg = string("Error while fetching from ExeMgr: ") + e.what();
-    setError(thd, ER_INTERNAL_ERROR, emsg);
-    CalpontSystemCatalog::removeCalpontSystemCatalog(tid2sid(thd->thread_id));
-    return ER_INTERNAL_ERROR;
-  }
-
-  ci->tableMap[table] = ti;
-
-  if (rc != 0 && rc != HA_ERR_END_OF_FILE)
-  {
-    string emsg;
-
-    // remove this check when all error handling migrated to the new framework.
-    if (rc >= 1000)
-      emsg = ti.tpl_scan_ctx->errMsg;
-    else
-    {
-      logging::ErrorCodes errorcodes;
-      emsg = errorcodes.errorString(rc);
-    }
-
-    setError(thd, ER_INTERNAL_ERROR, emsg);
-    ci->stats.fErrorNo = rc;
-    CalpontSystemCatalog::removeCalpontSystemCatalog(tid2sid(thd->thread_id));
-    rc = ER_INTERNAL_ERROR;
-  }
-
-  return rc;
-}
-
-int ha_mcs_impl_group_by_end(TABLE* table)
-{
-  int rc = 0;
-  THD* thd = current_thd;
-
-  if (thd->slave_thread && !get_replication_slave(thd) && isDMLStatement(thd->lex->sql_command))
-    return 0;
-
-  cal_connection_info* ci = nullptr;
-
-  if (get_fe_conn_info_ptr() != NULL)
-    ci = reinterpret_cast<cal_connection_info*>(get_fe_conn_info_ptr());
-
-  if (!ci)
-  {
-    set_fe_conn_info_ptr((void*)new cal_connection_info());
-    ci = reinterpret_cast<cal_connection_info*>(get_fe_conn_info_ptr());
-    thd_set_ha_data(thd, mcs_hton, ci);
-  }
-
-  if (((thd->lex)->sql_command == SQLCOM_INSERT) || ((thd->lex)->sql_command == SQLCOM_INSERT_SELECT))
-  {
-    force_close_fep_conn(thd, ci, true);  // with checking prev command rc
-    return rc;
-  }
-
-  if (thd->killed == KILL_QUERY || thd->killed == KILL_QUERY_HARD)
-  {
-    force_close_fep_conn(thd, ci);
-    // clear querystats because no query stats available for cancelled query
-    ci->queryStats = "";
-    // Poping next ExeMgr connection out of the stack
-    if (ci->cal_conn_hndl_st.size())
-    {
-      ci->cal_conn_hndl_st.pop();
-      if (ci->cal_conn_hndl_st.size())
-        ci->cal_conn_hndl = ci->cal_conn_hndl_st.top();
-    }
-
-    return 0;
-  }
-
-  IDEBUG(cerr << "group_by_end for table " << table->s->table_name.str << endl);
-
-  cal_table_info ti = ci->tableMap[table];
-  sm::cpsm_conhdl_t* hndl;
-  bool clearScanCtx = false;
-
-  hndl = ci->cal_conn_hndl;
-
-  if (ti.tpl_ctx)
-  {
-    if (ti.tpl_scan_ctx.get())
-    {
-      clearScanCtx = ((ti.tpl_scan_ctx.get()->rowsreturned) &&
-                      ti.tpl_scan_ctx.get()->rowsreturned == ti.tpl_scan_ctx.get()->getRowCount());
-      try
-      {
-        sm::tpl_scan_close(ti.tpl_scan_ctx);
-      }
-      catch (...)
-      {
-        rc = ER_INTERNAL_ERROR;
-      }
-    }
-
-    ti.tpl_scan_ctx.reset();
-    if (ti.tpl_scan_ctx_st.size())
-    {
-      ti.tpl_scan_ctx_st.pop();
-      if (ti.tpl_scan_ctx_st.size())
-        ti.tpl_scan_ctx = ti.tpl_scan_ctx_st.top();
-    }
-    try
-    {
-      if (hndl)
-      {
-        {
-          bool ask_4_stats = (ci->traceFlags) ? true : false;
-          sm::tpl_close(ti.tpl_ctx, &hndl, ci->stats, ask_4_stats, clearScanCtx);
-	  ti.tpl_ctx = 0;
-        }
-        // Normaly stats variables are set in external_lock method but we set it here
-        // since they we pretend we are in vtable_disabled mode and the stats vars won't be set.
-        // We sum the stats up here since server could run a number of
-        // queries e.g. each for a subquery in a filter.
-        if (hndl)
-        {
-          if (hndl->queryStats.length())
-            ci->queryStats += hndl->queryStats;
-          if (hndl->extendedStats.length())
-            ci->extendedStats += hndl->extendedStats;
-          if (hndl->miniStats.length())
-            ci->miniStats += hndl->miniStats;
-        }
-      }
-      else
-      {
-	ti.tpl_ctx.reset();
-      }
-
-      ci->cal_conn_hndl = hndl;
-
-    }
-    catch (IDBExcept& e)
-    {
-      if (e.errorCode() == ERR_CROSS_ENGINE_CONNECT || e.errorCode() == ERR_CROSS_ENGINE_CONFIG)
-      {
-        string msg = string("Columnstore Query Stats - ") + e.what();
-        push_warning(thd, Sql_condition::WARN_LEVEL_WARN, 9999, msg.c_str());
-      }
-      else
-      {
-        setError(thd, ER_INTERNAL_ERROR, e.what());
-        rc = ER_INTERNAL_ERROR;
-      }
-    }
-    catch (std::exception& e)
-    {
-      setError(thd, ER_INTERNAL_ERROR, e.what());
-      rc = ER_INTERNAL_ERROR;
-    }
-    catch (...)
-    {
-      setError(thd, ER_INTERNAL_ERROR, "Internal error throwed in group_by_end");
-      rc = ER_INTERNAL_ERROR;
-    }
-  }
-
-  ti.tpl_ctx = 0;
-
-  if (ti.tpl_ctx_st.size())
-  {
-    ti.tpl_ctx_st.pop();
-    if (ti.tpl_ctx_st.size())
-      ti.tpl_ctx = ti.tpl_ctx_st.top();
-  }
-
-  if (ci->cal_conn_hndl_st.size())
-  {
-    ci->cal_conn_hndl_st.pop();
-    if (ci->cal_conn_hndl_st.size())
-      ci->cal_conn_hndl = ci->cal_conn_hndl_st.top();
-  }
-
-  ci->tableMap[table] = ti;
-
-  // push warnings from CREATE phase
-  if (!ci->warningMsg.empty())
-    push_warning(thd, Sql_condition::WARN_LEVEL_WARN, 9999, ci->warningMsg.c_str());
-
-  ci->warningMsg.clear();
-  // reset expressionId just in case
-  ci->expressionId = 0;
-  return rc;
 }
 
 /*@brief  Initiate the query for derived_handler           */
@@ -4690,7 +4058,8 @@ int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table, bool
   IDEBUG(cout << "pushdown_init for table " << endl);
   THD* thd = current_thd;
 
-  if (thd->slave_thread && !get_replication_slave(thd) && isDMLStatement(thd->lex->sql_command))
+  if (thd->slave_thread && !get_replication_slave(thd) &&
+      ha_mcs_common::isDMLStatement(thd->lex->sql_command))
     return 0;
 
   const char* timeZone = thd->variables.time_zone->get_name()->ptr();
@@ -4732,15 +4101,16 @@ int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table, bool
 
   // MCOL-4023 We need to test this code path.
   // Update and delete code
-  if (isUpdateOrDeleteStatement(thd->lex->sql_command))
+  if (ha_mcs_common::isUpdateOrDeleteStatement(thd->lex->sql_command))
     return doUpdateDelete(thd, gwi, std::vector<COND*>());
 
   uint32_t sessionID = tid2sid(thd->thread_id);
   boost::shared_ptr<CalpontSystemCatalog> csc = CalpontSystemCatalog::makeCalpontSystemCatalog(sessionID);
   csc->identity(CalpontSystemCatalog::FE);
 
-  if (!get_fe_conn_info_ptr()) {
-    set_fe_conn_info_ptr(reinterpret_cast<void*>(new cal_connection_info(), thd));
+  if (!get_fe_conn_info_ptr()) 
+  {
+    set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
 
@@ -4909,19 +4279,6 @@ int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table, bool
       ifs.close();
       csep->unserialize(bs1);
 #endif
-
-      if (ci->traceFlags & 1)
-      {
-        cerr << "---------------- EXECUTION PLAN ----------------" << endl;
-        cerr << *csep << endl;
-        cerr << "-------------- EXECUTION PLAN END --------------\n" << endl;
-      }
-      else
-      {
-        IDEBUG(cout << "---------------- EXECUTION PLAN ----------------" << endl);
-        IDEBUG(cerr << *csep << endl);
-        IDEBUG(cout << "-------------- EXECUTION PLAN END --------------\n" << endl);
-      }
     }
   }  // end of execution plan generation
 
@@ -4929,8 +4286,23 @@ int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table, bool
     ByteStream msg;
     ByteStream emsgBs;
 
+    int ntries = 10;
+
+    // The issue is MCOL-5396.
+    // The delay below is used to trigger old infinite loop condition and
+    // prove that mitigation works. While it looks like unused code, it is
+    // important enough to have it just in case.
+    // using namespace std::chrono_literals;
+    // std::this_thread::sleep_for(10000ms);
     while (true)
     {
+      string emsg;
+      if (ntries < 0)
+      {
+        emsg = "Lost connection to ExeMgr. Please contact your administrator";
+        setError(thd, ER_INTERNAL_ERROR, emsg);
+        return ER_INTERNAL_ERROR;
+      }
       try
       {
         ByteStream::quadbyte qb = 4;
@@ -4948,7 +4320,6 @@ int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table, bool
         emsgBs.restart();
         msg = hndl->exeMgr->read();
         emsgBs = hndl->exeMgr->read();
-        string emsg;
 
         if (msg.length() == 0 || emsgBs.length() == 0)
         {
@@ -5015,6 +4386,10 @@ int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table, bool
         hndl->csc = csc;
 
         ci->cal_conn_hndl = hndl;
+
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(100ms);
+        ntries--;
 
         try
         {
@@ -5137,19 +4512,21 @@ int ha_mcs_impl_select_next(uchar* buf, TABLE* table, long timeZone)
 {
   THD* thd = current_thd;
 
-  if (thd->slave_thread && !get_replication_slave(thd) && isDMLStatement(thd->lex->sql_command))
+  if (thd->slave_thread && !get_replication_slave(thd) &&
+      ha_mcs_common::isDMLStatement(thd->lex->sql_command))
     return HA_ERR_END_OF_FILE;
 
   int rc = HA_ERR_END_OF_FILE;
 
-  if (get_fe_conn_info_ptr() == nullptr) {
+  if (get_fe_conn_info_ptr() == nullptr)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
 
   cal_connection_info* ci = reinterpret_cast<cal_connection_info*>(get_fe_conn_info_ptr());
 
-  if (isUpdateOrDeleteStatement(thd->lex->sql_command))
+  if (ha_mcs_common::isUpdateOrDeleteStatement(thd->lex->sql_command))
     return rc;
 
   // @bug 2547

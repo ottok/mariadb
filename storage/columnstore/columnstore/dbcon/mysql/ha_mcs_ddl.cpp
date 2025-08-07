@@ -751,7 +751,7 @@ bool anyNullInTheColumn(THD* thd, string& schema, string& table, string& columnN
   }
 }
 
-int ProcessDDLStatement(string& ddlStatement, string& schema, const string& table, int sessionID,
+int ProcessDDLStatement(string& ddlStatement, string& schema, const string& /*table*/, int sessionID,
                         string& emsg, int compressionTypeIn = 2, bool isAnyAutoincreCol = false,
                         int64_t nextvalue = 1, std::string autoiColName = "",
                         const CHARSET_INFO* default_table_charset = NULL)
@@ -761,13 +761,14 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& tabl
 #ifdef MCS_DEBUG
   cout << "ProcessDDLStatement: " << schema << "." << table << ":" << ddlStatement << endl;
 #endif
-
+  
   parser.setDefaultSchema(schema);
   parser.setDefaultCharset(default_table_charset);
   int rc = 0;
-  parser.Parse(ddlStatement.c_str());
+  parser.Parse(ddlStatement.c_str(), thd->get_utf8_flag());
 
-  if (get_fe_conn_info_ptr() == NULL) {
+  if (get_fe_conn_info_ptr() == NULL)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -1064,12 +1065,11 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& tabl
           }
         }
 
-
-         bool isAutoIncrementColumn =
-                  default_table_charset ? datatypes::CollationAwareComparator(default_table_charset)(
-                                              autoiColName, createTable->fTableDef->fColumns[i]->fName)
-                                        : datatypes::ASCIIStringCaseInsensetiveEquals(
-                                              autoiColName, createTable->fTableDef->fColumns[i]->fName);
+        bool isAutoIncrementColumn = default_table_charset
+                                         ? datatypes::CollationAwareComparator(default_table_charset)(
+                                               autoiColName, createTable->fTableDef->fColumns[i]->fName)
+                                         : datatypes::ASCIIStringCaseInsensetiveEquals(
+                                               autoiColName, createTable->fTableDef->fColumns[i]->fName);
 
         if (!autoIncre && isAnyAutoincreCol && isAutoIncrementColumn)
         {
@@ -1395,7 +1395,8 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& tabl
           {
             //@Bug 3782 This is for synchronization after calonlinealter to use
             boost::algorithm::to_upper(comment);
-            std::regex pat("[[:space:]]*SCHEMA[[:space:]]+SYNC[[:space:]]+ONLY", std::regex_constants::extended);
+            std::regex pat("[[:space:]]*SCHEMA[[:space:]]+SYNC[[:space:]]+ONLY",
+                           std::regex_constants::extended);
 
             if (std::regex_search(comment, pat))
             {
@@ -2184,7 +2185,8 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& tabl
     {
       rc = 0;
       string errmsg(
-          "Error occurred during file deletion. Restart DDLProc or use command tool ddlcleanup to clean up. ");
+          "Error occurred during file deletion. Restart DDLProc or use command tool ddlcleanup to clean "
+          "up. ");
       push_warning(thd, Sql_condition::WARN_LEVEL_WARN, 9999, errmsg.c_str());
     }
 
@@ -2199,24 +2201,34 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& tabl
 
     if (ddlStatement.find("AUTO_INCREMENT") != string::npos)
     {
-      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED,
-                              "Use of the MySQL auto_increment syntax is not supported in Columnstore. If "
-                              "you wish to create an auto increment column in Columnstore, please consult "
-                              "the Columnstore SQL Syntax Guide for the correct usage.");
-      ci->alterTableState = cal_connection_info::NOT_ALTER;
-      ci->isAlter = false;
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax auto_increment is not supported in Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
+    }
+    else if(ddlStatement.find("RENAME COLUMN") != string::npos)
+    {
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax rename column is not supported by Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
+    }
+    else if(ddlStatement.find("MAX_ROWS") != string::npos || ddlStatement.find("MIN_ROWS") != string::npos)
+    {
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax min_rows/max_rows is not supported by Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
+    }
+    else if(ddlStatement.find("REPLACE TABLE") != string::npos)
+    {
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax replace table is not supported by Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
+    }
+    else if(ddlStatement.find("DROP COLUMN IF EXISTS") != string::npos)
+    {
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax drop column if exists is not supported by Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
     }
     else
     {
       //@Bug 1888,1885. update error message
-      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED,
-                              "The syntax or the data type(s) is not supported by Columnstore. Please check "
-                              "the Columnstore syntax guide for supported syntax or data types.");
-      ci->alterTableState = cal_connection_info::NOT_ALTER;
-      ci->isAlter = false;
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax or the data type(s) is not supported by Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
     }
-  }
 
+    ci->alterTableState = cal_connection_info::NOT_ALTER;
+    ci->isAlter = false;
+  }
+  
   return rc;
 }
 
@@ -2228,7 +2240,7 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& tabl
 //       been created.
 //
 
-static bool get_field_default_value(THD* thd, Field* field, String* def_value, bool quoted)
+static bool get_field_default_value(THD* /*thd*/, Field* field, String* def_value, bool quoted)
 {
   bool has_default;
   enum enum_field_types field_type = field->type();
@@ -2306,7 +2318,7 @@ bool hasZerofillDecimal(TABLE* table_arg)
   return false;
 }
 
-int ha_mcs_impl_create_(const char* name, TABLE* table_arg, HA_CREATE_INFO* create_info,
+int ha_mcs_impl_create_(const char* /*name*/, TABLE* table_arg, HA_CREATE_INFO* create_info,
                         cal_connection_info& ci)
 {
 #ifdef MCS_DEBUG
@@ -2391,7 +2403,7 @@ int ha_mcs_impl_create_(const char* name, TABLE* table_arg, HA_CREATE_INFO* crea
       return 1;
     }
     else if (db == "infinidb_vtable")  //@bug 3540. table created in infinidb_vtable schema could be dropped
-                                       //when select statement happen to have same tablename.
+                                       // when select statement happen to have same tablename.
     {
       setError(thd, ER_INTERNAL_ERROR, "Table creation is not allowed in infinidb_vtable schema.");
       return 1;
@@ -2525,8 +2537,7 @@ int ha_mcs_impl_create_(const char* name, TABLE* table_arg, HA_CREATE_INFO* crea
         const CHARSET_INFO* field_cs = (*field)->charset();
         if (field_cs && (!share->table_charset || field_cs->number != share->table_charset->number))
         {
-          oss << " CHARACTER SET " << field_cs->cs_name.str <<
-          " COLLATE " << field_cs->coll_name.str;
+          oss << " CHARACTER SET " << field_cs->cs_name.str << " COLLATE " << field_cs->coll_name.str;
         }
       }
 
@@ -2566,8 +2577,8 @@ int ha_mcs_impl_create_(const char* name, TABLE* table_arg, HA_CREATE_INFO* crea
 
     if (share->table_charset)
     {
-      oss << " DEFAULT CHARSET=" << share->table_charset->cs_name.str <<
-      " COLLATE=" << share->table_charset->coll_name.str;
+      oss << " DEFAULT CHARSET=" << share->table_charset->cs_name.str
+          << " COLLATE=" << share->table_charset->coll_name.str;
     }
 
     // Process table level options such as MIN_ROWS, MAX_ROWS, COMMENT
@@ -2625,7 +2636,7 @@ int ha_mcs_impl_create_(const char* name, TABLE* table_arg, HA_CREATE_INFO* crea
   return rc;
 }
 
-int ha_mcs_impl_delete_table_(const char* db, const char* name, cal_connection_info& ci)
+int ha_mcs_impl_delete_table_(const char* /*db*/, const char* name, cal_connection_info& ci)
 {
 #ifdef MCS_DEBUG
   cout << "ha_mcs_impl_delete_table: " << db << name << endl;
@@ -2751,7 +2762,7 @@ int ha_mcs_impl_rename_table_(const char* from, const char* to, cal_connection_i
 
 extern "C"
 {
-      long long calonlinealter(UDF_INIT* initid, UDF_ARGS* args, char* is_null, char* error)
+  long long calonlinealter(UDF_INIT* /*initid*/, UDF_ARGS* args, char* /*is_null*/, char* /*error*/)
   {
     string stmt(args->args[0], args->lengths[0]);
 
@@ -2789,7 +2800,7 @@ extern "C"
     return rc;
   }
 
-      my_bool calonlinealter_init(UDF_INIT* initid, UDF_ARGS* args, char* message)
+  my_bool calonlinealter_init(UDF_INIT* /*initid*/, UDF_ARGS* args, char* message)
   {
     if (args->arg_count != 1 || args->arg_type[0] != STRING_RESULT)
     {
@@ -2800,8 +2811,7 @@ extern "C"
     return 0;
   }
 
-      void calonlinealter_deinit(UDF_INIT* initid)
+  void calonlinealter_deinit(UDF_INIT* /*initid*/)
   {
   }
 }
-

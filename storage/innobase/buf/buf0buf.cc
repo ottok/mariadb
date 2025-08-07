@@ -1036,7 +1036,7 @@ inline void buf_pool_t::garbage_collect() noexcept
     mysql_mutex_unlock(&mutex);
     sql_print_information("InnoDB: Memory pressure event disregarded;"
                           " innodb_buffer_pool_size=%zum,"
-                          " innodb_buffer_pool_size_min=%zum",
+                          " innodb_buffer_pool_size_auto_min=%zum",
                           old_size >> 20, min_size >> 20);
     return;
   }
@@ -1532,6 +1532,27 @@ void buf_pool_t::close() noexcept
   {
     const size_t size{size_in_bytes};
 
+#ifdef __SANITIZE_ADDRESS__
+    /* Sequence of operation which leads to use_after_poison error:
+
+       mmap();
+       __asan_poison_memory_region();
+       munmap();
+       mmap() reuses the same virtual address
+       Write into the memory region throws the error.
+
+    Recent clang-18, gcc-13.3 doesn't detect this error.
+    Older like clang-14..clang-16 and gcc-10, gcc-11, gcc-12 detects
+    this error. Please check the reported bug
+    (https://github.com/google/sanitizers/issues/1705)
+
+    Unpoison the whole buffer pool memory to avoid this error */
+    #if (defined(__GNUC__) && !defined(__clang__) && (__GNUC__ < 14)) ||\
+        (defined(__clang__) && (__clang_major__ < 18))
+      MEM_MAKE_ADDRESSABLE(memory, size);
+    #endif /* __GNUC__ __clang */
+#endif /* __SANITIZE_ADDRESS__ */
+
     for (char *extent= memory,
            *end= memory + block_descriptors_in_bytes(n_blocks);
          extent < end; extent+= innodb_buffer_pool_extent_size)
@@ -1624,6 +1645,7 @@ ATTRIBUTE_COLD buf_pool_t::shrink_status buf_pool_t::shrink(size_t size)
   noexcept
 {
   mysql_mutex_assert_owner(&mutex);
+  DBUG_EXECUTE_IF("buf_shrink_fail", return SHRINK_ABORT;);
   buf_load_abort();
 
   if (!n_blocks_to_withdraw)
@@ -1760,6 +1782,11 @@ ATTRIBUTE_COLD buf_pool_t::shrink_status buf_pool_t::shrink(size_t size)
         buf_flush_relocate_on_flush_list(b, &block->page);
         mysql_mutex_unlock(&flush_list_mutex);
       }
+      else
+      {
+        ut_d(if (auto om= b->oldest_modification()) ut_ad(om == 2));
+        b->oldest_modification_.store(0, std::memory_order_relaxed);
+      }
     }
 
     /* relocate LRU list */
@@ -1811,6 +1838,12 @@ ATTRIBUTE_COLD buf_pool_t::shrink_status buf_pool_t::shrink(size_t size)
     block= allocate();
     goto next;
   }
+
+  if (block)
+    buf_LRU_block_free_non_file_page(block);
+
+  if (!UT_LIST_GET_LEN(LRU) && n_blocks_to_withdraw)
+    return SHRINK_ABORT;
 
   if (UT_LIST_GET_LEN(free) + UT_LIST_GET_LEN(LRU) < usable_size() / 20)
     return SHRINK_ABORT;
@@ -2026,25 +2059,12 @@ ATTRIBUTE_COLD void buf_pool_t::resize(size_t size, THD *thd) noexcept
     if (ahi_disabled)
       btr_search.enable(true);
 #endif
-    mysql_mutex_lock(&LOCK_global_system_variables);
-    bool resized= n_blocks_removed < 0;
-    if (n_blocks_removed > 0)
-    {
-      mysql_mutex_lock(&mutex);
-      resized= size_in_bytes == old_size;
-      if (resized)
-      {
-        size_in_bytes_requested= size;
-        size_in_bytes= size;
-      }
-      mysql_mutex_unlock(&mutex);
-    }
-
-    if (resized)
+    if (n_blocks_removed)
       sql_print_information("InnoDB: innodb_buffer_pool_size=%zum (%zu pages)"
                             " resized from %zum (%zu pages)",
                             size >> 20, n_blocks_new, old_size >> 20,
                             old_blocks);
+    mysql_mutex_lock(&LOCK_global_system_variables);
   }
   else
   {
@@ -2097,16 +2117,34 @@ ATTRIBUTE_COLD void buf_pool_t::resize(size_t size, THD *thd) noexcept
 
     while (buf_page_t *b= UT_LIST_GET_FIRST(withdrawn))
     {
+      ut_ad(!b->oldest_modification());
+      ut_ad(b->state() == buf_page_t::NOT_USED);
       UT_LIST_REMOVE(withdrawn, b);
       UT_LIST_ADD_LAST(free, b);
       ut_d(b->in_free_list= true);
-      ut_ad(b->state() == buf_page_t::NOT_USED);
       b->lock.init();
+#ifdef BTR_CUR_HASH_ADAPT
+      /* Clear the AHI fields, because buf_block_init_low() expects
+      these to be zeroed. These were not cleared when we relocated
+      the block to withdrawn. Had we successfully shrunk the buffer pool,
+      all this virtual memory would have been zeroed or made unaccessible,
+      and on a subsequent buffer pool extension it would be zero again. */
+      buf_block_t *block= reinterpret_cast<buf_block_t*>(b);
+      block->n_hash_helps= 0;
+# if defined UNIV_AHI_DEBUG || defined UNIV_DEBUG
+      block->n_pointers= 0;
+# endif
+      block->index= nullptr;
+#endif
     }
 
     mysql_mutex_unlock(&mutex);
     my_printf_error(ER_WRONG_USAGE, "innodb_buffer_pool_size change aborted",
                     MYF(ME_ERROR_LOG));
+#ifdef BTR_CUR_HASH_ADAPT
+    if (ahi_disabled)
+      btr_search.enable(true);
+#endif
     mysql_mutex_lock(&LOCK_global_system_variables);
   }
 

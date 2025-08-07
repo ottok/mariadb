@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <memory>
 #include <queue>
 #include <utility>
 #include <vector>
@@ -29,8 +30,10 @@
 
 #include <boost/scoped_ptr.hpp>
 
-#include <tr1/unordered_set>
+#include <unordered_set>
 
+#include "countingallocator.h"
+#include "resourcemanager.h"
 #include "rowgroup.h"
 #include "hasher.h"
 #include "stlpoolallocator.h"
@@ -43,16 +46,26 @@ class ResourceManager;
 
 namespace ordering
 {
-template <typename _Tp, typename _Sequence = std::vector<_Tp>,
+template <typename _Tp, typename _Sequence = std::vector<_Tp, allocators::CountingAllocator<_Tp>>,
           typename _Compare = std::less<typename _Sequence::value_type> >
-class reservablePQ : private std::priority_queue<_Tp, _Sequence, _Compare>
+class ReservablePQ : private std::priority_queue<_Tp, _Sequence, _Compare>
 {
  public:
   typedef typename std::priority_queue<_Tp, _Sequence, _Compare>::size_type size_type;
-  reservablePQ(size_type capacity = 0)
+  explicit ReservablePQ(size_type capacity, std::atomic<int64_t>* memoryLimit,
+                    const int64_t checkPointStepSize = allocators::CheckPointStepSize,
+                    const int64_t lowerBound = allocators::MemoryLimitLowerBound)
+    : std::priority_queue<_Tp, _Sequence, _Compare>(_Compare(),
+        _Sequence(allocators::CountingAllocator<_Tp>(memoryLimit, checkPointStepSize, lowerBound)))
   {
     reserve(capacity);
-  };
+  }
+  explicit ReservablePQ(size_type capacity, allocators::CountingAllocator<_Tp> alloc)
+    : std::priority_queue<_Tp, _Sequence, _Compare>(_Compare(),
+        _Sequence(alloc))
+  {
+    reserve(capacity);
+  }
   void reserve(size_type capacity)
   {
     this->c.reserve(capacity);
@@ -72,7 +85,7 @@ class reservablePQ : private std::priority_queue<_Tp, _Sequence, _Compare>
 class IdbCompare;
 class OrderByRow;
 
-typedef reservablePQ<OrderByRow> SortingPQ;
+using SortingPQ = ReservablePQ<OrderByRow>;
 
 // order by specification
 struct IdbSortSpec
@@ -98,12 +111,10 @@ struct IdbSortSpec
 class Compare
 {
  public:
-  Compare(const IdbSortSpec& spec) : fSpec(spec)
+  explicit Compare(const IdbSortSpec& spec) : fSpec(spec)
   {
   }
-  virtual ~Compare()
-  {
-  }
+  virtual ~Compare() = default;
 
   virtual int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) = 0;
   void revertSortSpec()
@@ -121,53 +132,51 @@ class Compare
 class TinyIntCompare : public Compare
 {
  public:
-  TinyIntCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit TinyIntCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class SmallIntCompare : public Compare
 {
  public:
-  SmallIntCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit SmallIntCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class IntCompare : public Compare
 {
  public:
-  IntCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit IntCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class BigIntCompare : public Compare
 {
  public:
-  BigIntCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit BigIntCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class WideDecimalCompare : public Compare
 {
-  int keyColumnOffset;
-
  public:
-  WideDecimalCompare(const IdbSortSpec& spec, int offset) : Compare(spec), keyColumnOffset(offset)
+  WideDecimalCompare(const IdbSortSpec& spec, int /*offset*/) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 // End of comparators for signed types
@@ -176,41 +185,41 @@ class WideDecimalCompare : public Compare
 class UTinyIntCompare : public Compare
 {
  public:
-  UTinyIntCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit UTinyIntCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class USmallIntCompare : public Compare
 {
  public:
-  USmallIntCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit USmallIntCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class UIntCompare : public Compare
 {
  public:
-  UIntCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit UIntCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class UBigIntCompare : public Compare
 {
  public:
-  UBigIntCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit UBigIntCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 // end of comparators for unsigned types
@@ -220,31 +229,31 @@ class UBigIntCompare : public Compare
 class DoubleCompare : public Compare
 {
  public:
-  DoubleCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit DoubleCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class LongDoubleCompare : public Compare
 {
  public:
-  LongDoubleCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit LongDoubleCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class FloatCompare : public Compare
 {
  public:
-  FloatCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit FloatCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 // End of comparators for float types
@@ -253,31 +262,31 @@ class FloatCompare : public Compare
 class DateCompare : public Compare
 {
  public:
-  DateCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit DateCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class DatetimeCompare : public Compare
 {
  public:
-  DatetimeCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit DatetimeCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 class TimeCompare : public Compare
 {
  public:
-  TimeCompare(const IdbSortSpec& spec) : Compare(spec)
+  explicit TimeCompare(const IdbSortSpec& spec) : Compare(spec)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 };
 
 // End of comparators for temporal types
@@ -287,11 +296,11 @@ class TimeCompare : public Compare
 class StringCompare : public Compare
 {
  public:
-  StringCompare(const IdbSortSpec& spec) : Compare(spec), cs(NULL)
+  explicit StringCompare(const IdbSortSpec& spec) : Compare(spec), cs(nullptr)
   {
   }
 
-  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer);
+  int operator()(IdbCompare*, rowgroup::Row::Pointer, rowgroup::Row::Pointer) override;
 
   CHARSET_INFO* cs;
 };
@@ -301,11 +310,11 @@ class StringCompare : public Compare
 class CompareRule
 {
  public:
-  CompareRule(IdbCompare* c = NULL) : fIdbCompare(c)
+  explicit CompareRule(IdbCompare* c = nullptr) : fIdbCompare(c)
   {
   }
 
-  bool less(rowgroup::Row::Pointer r1, rowgroup::Row::Pointer r2);
+  bool less(rowgroup::Row::Pointer r1, rowgroup::Row::Pointer r2) const;
 
   void compileRules(const std::vector<IdbSortSpec>&, const rowgroup::RowGroup&);
   void revertRules();
@@ -317,8 +326,8 @@ class CompareRule
 class IdbCompare
 {
  public:
-  IdbCompare(){};
-  virtual ~IdbCompare(){};
+  IdbCompare() = default;
+  virtual ~IdbCompare() = default;
 
   virtual void initialize(const rowgroup::RowGroup&);
   void setStringTable(bool b);
@@ -362,7 +371,7 @@ class OrderByRow
 class EqualCompData : public IdbCompare
 {
  public:
-  EqualCompData(std::vector<uint64_t>& v) : fIndex(v)
+  explicit EqualCompData(std::vector<uint64_t>& v) : fIndex(v)
   {
   }
   EqualCompData(std::vector<uint64_t>& v, const rowgroup::RowGroup& rg) : fIndex(v)
@@ -370,7 +379,7 @@ class EqualCompData : public IdbCompare
     initialize(rg);
   }
 
-  ~EqualCompData(){};
+  ~EqualCompData() override = default;
 
   bool operator()(rowgroup::Row::Pointer, rowgroup::Row::Pointer);
 
@@ -381,7 +390,7 @@ class OrderByData : public IdbCompare
 {
  public:
   OrderByData(const std::vector<IdbSortSpec>&, const rowgroup::RowGroup&);
-  virtual ~OrderByData();
+  ~OrderByData() override;
 
   bool operator()(rowgroup::Row::Pointer p1, rowgroup::Row::Pointer p2)
   {
@@ -401,9 +410,9 @@ class IdbOrderBy : public IdbCompare
 {
  public:
   IdbOrderBy();
-  virtual ~IdbOrderBy();
+  ~IdbOrderBy() override;
 
-  virtual void initialize(const rowgroup::RowGroup&);
+  void initialize(const rowgroup::RowGroup&) override;
   virtual void processRow(const rowgroup::Row&) = 0;
   virtual uint64_t getKeyLength() const = 0;
   virtual const std::string toString() const = 0;
@@ -418,16 +427,36 @@ class IdbOrderBy : public IdbCompare
   {
     return fDistinct;
   }
+  // INV fOrderByQueue is always a valid pointer that is instantiated in constructor
   SortingPQ& getQueue()
   {
-    return fOrderByQueue;
+    return *fOrderByQueue;
+  }
+  uint64_t getErrorCode() const
+  {
+    return fErrorCode;
+  }
+
+  void returnAllRGDataMemory2RM()
+  {
+    while (!fOrderByQueue->empty())
+    {
+      fOrderByQueue->pop();
+    }
+    fRm->returnMemory(fMemSize, fSessionMemLimit);
+    fMemSize = 0;
+  }
+   void returnRGDataMemory2RM(const size_t rgDataSize)
+  {
+    fRm->returnMemory(rgDataSize, fSessionMemLimit);
+    fMemSize -= rgDataSize;
   }
   CompareRule& getRule()
   {
     return fRule;
   }
 
-  SortingPQ fOrderByQueue;
+  std::unique_ptr<SortingPQ> fOrderByQueue = nullptr;
 
  protected:
   std::vector<IdbSortSpec> fOrderByCond;
@@ -457,9 +486,8 @@ class IdbOrderBy : public IdbCompare
     bool operator()(const rowgroup::Row::Pointer&, const rowgroup::Row::Pointer&) const;
   };
 
-  typedef std::tr1::unordered_set<rowgroup::Row::Pointer, Hasher, Eq,
-                                  utils::STLPoolAllocator<rowgroup::Row::Pointer> >
-      DistinctMap_t;
+  using DistinctMap_t = std::unordered_set<rowgroup::Row::Pointer, Hasher, Eq,
+                                  utils::STLPoolAllocator<rowgroup::Row::Pointer>>;
   boost::scoped_ptr<DistinctMap_t> fDistinctMap;
   rowgroup::Row row1, row2;  // scratch space for Hasher & Eq
 

@@ -2343,7 +2343,7 @@ static int test_bug4030(MYSQL *mysql)
   rc= mysql_stmt_fetch(stmt);
   FAIL_UNLESS(rc == 0, "rc != 0");
   FAIL_UNLESS(memcmp(&time_canonical, &time_out, sizeof(time_out)) == 0, "time_canonical != time_out");
-  FAIL_UNLESS(memcmp(&date_canonical, &date_out, sizeof(date_out)) == 0, "date_canoncical != date_out");
+  FAIL_UNLESS(memcmp(&date_canonical, &date_out, sizeof(date_out)) == 0, "date_canonical != date_out");
   FAIL_UNLESS(memcmp(&datetime_canonical, &datetime_out, sizeof(datetime_out)) == 0, "datetime_canonical != datetime_out");
   mysql_stmt_close(stmt);
   return OK;
@@ -2677,11 +2677,19 @@ static int test_bug5194(MYSQL *mysql)
   check_mysql_rc(rc, mysql);
 
   my_bind= (MYSQL_BIND*) malloc(MAX_PARAM_COUNT * sizeof(MYSQL_BIND));
+  FAIL_UNLESS(my_bind, "Not enough memory");
   query= (char*) malloc(strlen(query_template) +
                         MAX_PARAM_COUNT * CHARS_PER_PARAM + 1);
+  if(!query)
+    free(my_bind);
+  FAIL_UNLESS(query, "Not enough memory");
   param_str= (char*) malloc(COLUMN_COUNT * CHARS_PER_PARAM);
-
-  FAIL_IF(my_bind == 0 || query == 0 || param_str == 0, "Not enough memory");
+  if(!param_str)
+  {
+    free(my_bind);
+    free(query);
+  }
+  FAIL_UNLESS(param_str, "Not enough memory");
 
   stmt= mysql_stmt_init(mysql);
 
@@ -4030,7 +4038,7 @@ static int test_conc154(MYSQL *mysql)
 
   mysql_stmt_close(stmt);
 
-  /* 3rd: non empty result without free_result */
+  /* 3rd: non-empty result without free_result */
   rc= mysql_query(mysql, "INSERT INTO t1 VALUES ('test_conc154')");
   check_mysql_rc(rc, mysql);
 
@@ -4052,7 +4060,7 @@ static int test_conc154(MYSQL *mysql)
 
   mysql_stmt_close(stmt);
 
-  /* 4th non empty result set with free_result */
+  /* 4th non-empty result set with free_result */
   stmt= mysql_stmt_init(mysql);
   rc= mysql_stmt_prepare(stmt, SL(stmtstr));
   check_stmt_rc(rc, stmt);
@@ -5164,18 +5172,28 @@ static int test_maxparam(MYSQL *mysql)
   MYSQL_BIND* bind;
 
   bind = calloc(65535, sizeof *bind);
+  FAIL_UNLESS(bind, "Not enough memory");
 
   rc= mysql_query(mysql, "DROP TABLE IF EXISTS t1");
+  if (rc)
+    free(bind);
   check_mysql_rc(rc, mysql);
 
   rc= mysql_query(mysql, "CREATE TABLE t1 (a int)");
+  if (rc)
+    free(bind);
   check_mysql_rc(rc, mysql);
 
   buffer= calloc(1, mem);
+  if(!buffer)
+    free(bind);
+  FAIL_UNLESS(bind, "Not enough memory");
   strcpy(buffer, query);
   for (i=0; i < 65534.; i++)
     strcat(buffer, ",(?)");
   rc= mysql_stmt_prepare(stmt, SL(buffer));
+  if (rc)
+    free(bind);
   check_stmt_rc(rc, stmt);
 
   for (i=0; i < 65534; i++)
@@ -5185,9 +5203,13 @@ static int test_maxparam(MYSQL *mysql)
   }
 
   rc= mysql_stmt_bind_param(stmt, bind);
+  if (rc)
+    free(bind);
   check_stmt_rc(rc, stmt);
 
   rc= mysql_stmt_execute(stmt);
+  if (rc)
+    free(bind);
   check_stmt_rc(rc, stmt);
 
   FAIL_IF(mysql_stmt_affected_rows(stmt) != 65535, "Expected affected_rows=65535");
@@ -5369,7 +5391,7 @@ static int test_conc525(MYSQL *mysql)
   fclose(fp);
 
   /* Test: prepare and execute
-     should fail due to non existing file */
+     should fail due to non-existing file */
   stmt= mysql_stmt_init(mysql);
 
   rc= mysql_stmt_prepare(stmt, SL("LOAD DATA LOCAL INFILE './test.notexist' INTO table t1"));
@@ -6011,7 +6033,7 @@ static int test_conc762(MYSQL *mysql)
 
   mysql_stmt_fetch(stmt);
   FAIL_IF(is_null[0]==0, "Expected NULL value");
-  FAIL_IF(is_null[1]==1, "Expected non NULL value");
+  FAIL_IF(is_null[1]==1, "Expected non-NULL value");
   FAIL_IF(length[0]!=0, "Expected length=0");
   FAIL_IF(length[1]!=3, "Expected length=3");
 

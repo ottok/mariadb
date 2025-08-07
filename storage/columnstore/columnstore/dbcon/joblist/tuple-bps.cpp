@@ -275,9 +275,10 @@ uint64_t TupleBPS::JoinLocalData::generateJoinResultSet(const uint32_t depth,
         uint64_t baseRid = local_outputRG.getBaseRid();
         outputData.push_back(joinedData);
         // Don't let the join results buffer get out of control.
-        if (tbps->resourceManager()->getMemory(local_outputRG.getMaxDataSize(), false))
+        auto outputDataSize = local_outputRG.getMaxDataSizeWithStrings();
+        if (tbps->resourceManager()->getMemory(outputDataSize, false))
         {
-          memSizeForOutputRG += local_outputRG.getMaxDataSize();
+          memSizeForOutputRG += outputDataSize;
         }
         else
         {
@@ -2220,7 +2221,7 @@ void TupleBPS::processByteStreamVector(vector<boost::shared_ptr<messageqcpp::Byt
       // changes made here should also be made there and vice versa.
       if (hasUMJoin || !fBPP->pmSendsFinalResult())
       {
-        utils::setThreadName("BSPJoin");
+        utils::setThreadName("BPSJoin");
 
         data->joinedData = RGData(data->local_outputRG);
         data->local_outputRG.setData(&data->joinedData);
@@ -2391,10 +2392,7 @@ void TupleBPS::receiveMultiPrimitiveMessages()
   AnyDataListSPtr dl = fOutputJobStepAssociation.outAt(0);
   RowGroupDL* dlp = (fDelivery ? deliveryDL.get() : dl->rowGroupDL());
 
-  StepTeleStats sts;
-  sts.query_uuid = fQueryUuid;
-  sts.step_uuid = fStepUuid;
-
+  bool sentStartMsg = false;
   uint32_t size = 0;
 
   // Based on the type of `tupleBPS` operation - initialize the `JoinLocalDataPool`.
@@ -2435,11 +2433,11 @@ void TupleBPS::receiveMultiPrimitiveMessages()
       if (traceOn() && fOid >= 3000 && dlTimes.FirstReadTime().tv_sec == 0)
         dlTimes.setFirstReadTime();
 
-      if (fOid >= 3000 && sts.msg_type == StepTeleStats::ST_INVALID && size > 0)
+      if (fOid >= 3000 && !sentStartMsg && size > 0)
       {
-        sts.msg_type = StepTeleStats::ST_START;
-        sts.total_units_of_work = totalMsgs;
+        StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_START, totalMsgs);
         postStepStartTele(sts);
+        sentStartMsg = true;
       }
 
       for (uint32_t z = 0; z < size; z++)
@@ -2571,9 +2569,7 @@ void TupleBPS::receiveMultiPrimitiveMessages()
         {
           fProgress = progress;
 
-          sts.msg_type = StepTeleStats::ST_PROGRESS;
-          sts.total_units_of_work = totalMsgs;
-          sts.units_of_work_completed = msgsRecvd;
+          StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_PROGRESS, totalMsgs, msgsRecvd);
           postStepProgressTele(sts);
         }
       }
@@ -2803,14 +2799,9 @@ void TupleBPS::receiveMultiPrimitiveMessages()
     }
 
     {
-      sts.msg_type = StepTeleStats::ST_SUMMARY;
-      sts.phy_io = fPhysicalIO;
-      sts.cache_io = fCacheIO;
-      sts.msg_rcv_cnt = sts.total_units_of_work = sts.units_of_work_completed = msgsRecvd;
+      StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_SUMMARY, msgsRecvd, msgsRecvd, ridsReturned,
+                          fPhysicalIO, fCacheIO, msgsRecvd, fMsgBytesIn, fMsgBytesOut);
       sts.cp_blocks_skipped = fNumBlksSkipped;
-      sts.msg_bytes_in = fMsgBytesIn;
-      sts.msg_bytes_out = fMsgBytesOut;
-      sts.rows = ridsReturned;
       postStepSummaryTele(sts);
     }
 

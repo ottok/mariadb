@@ -119,7 +119,7 @@ JoinPartition::JoinPartition(const RowGroup& lRG, const RowGroup& sRG, const vec
 }
 
 /* Ctor used by JoinPartition on expansion, creates JP's in filemode */
-JoinPartition::JoinPartition(const JoinPartition& jp, bool splitMode, uint32_t currentPartitionTreeDepth)
+JoinPartition::JoinPartition(const JoinPartition& jp, bool /*splitMode*/, uint32_t currentPartitionTreeDepth)
  : smallRG(jp.smallRG)
  , largeRG(jp.largeRG)
  , smallKeyCols(jp.smallKeyCols)
@@ -821,7 +821,7 @@ uint64_t JoinPartition::writeByteStream(int which, ByteStream& bs)
     {
       fs.close();
       ostringstream os;
-      os << "Disk join could not write file " << filename << ": " << strerror(saveErrno) << endl;
+      os << "Disk join could not write to configured path SystemConfig.SystemTempFileDir in Columnstore.xml " << filename << ": " << strerror(saveErrno) << endl;
       throw IDBExcept(os.str().c_str(), ERR_DBJ_FILE_IO_ERROR);
     }
 
@@ -845,7 +845,7 @@ uint64_t JoinPartition::writeByteStream(int which, ByteStream& bs)
     {
       fs.close();
       ostringstream os;
-      os << "Disk join could not write file " << filename << ": " << strerror(saveErrno) << endl;
+      os << "Disk join could not write to configured path SystemConfig.SystemTempFileDir in Columnstore.xml " << filename << ": " << strerror(saveErrno) << endl;
       throw IDBExcept(os.str().c_str(), ERR_DBJ_FILE_IO_ERROR);
     }
 

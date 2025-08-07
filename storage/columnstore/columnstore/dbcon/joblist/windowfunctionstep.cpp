@@ -18,7 +18,7 @@
 
 //  $Id: windowfunctionstep.cpp 9681 2013-07-11 22:58:05Z xlou $
 
-//#define NDEBUG
+// #define NDEBUG
 #include <cassert>
 #include <sstream>
 #include <iomanip>
@@ -239,7 +239,7 @@ uint32_t WindowFunctionStep::nextBand(messageqcpp::ByteStream& bs)
   return rowCount;
 }
 
-void WindowFunctionStep::setOutputRowGroup(const RowGroup& rg)
+void WindowFunctionStep::setOutputRowGroup(const RowGroup& /*rg*/)
 {
   idbassert(0);
 }
@@ -865,12 +865,10 @@ void WindowFunctionStep::execute()
   if (traceOn())
     dlTimes.setFirstReadTime();
 
-  StepTeleStats sts;
-  sts.query_uuid = fQueryUuid;
-  sts.step_uuid = fStepUuid;
-  sts.msg_type = StepTeleStats::ST_START;
-  sts.total_units_of_work = 1;
-  postStepStartTele(sts);
+  {
+    StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_START, 1);
+    postStepStartTele(sts);
+  }
 
   try
   {
@@ -930,9 +928,7 @@ void WindowFunctionStep::execute()
 
     fOutputDL->endOfInput();
 
-    sts.msg_type = StepTeleStats::ST_SUMMARY;
-    sts.total_units_of_work = sts.units_of_work_completed = 1;
-    sts.rows = fRowsReturned;
+    StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_SUMMARY, 1, 1, fRowsReturned);
     postStepSummaryTele(sts);
 
     if (traceOn())
@@ -982,9 +978,7 @@ void WindowFunctionStep::execute()
 
   fOutputDL->endOfInput();
 
-  sts.msg_type = StepTeleStats::ST_SUMMARY;
-  sts.total_units_of_work = sts.units_of_work_completed = 1;
-  sts.rows = fRowsReturned;
+  StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_SUMMARY, 1, 1, fRowsReturned);
   postStepSummaryTele(sts);
 
   if (traceOn())
@@ -1586,15 +1580,9 @@ void WindowFunctionStep::printCalTrace()
 void WindowFunctionStep::formatMiniStats()
 {
   ostringstream oss;
-  oss << "WFS "
-      << "UM "
-      << "- "
-      << "- "
-      << "- "
-      << "- "
-      << "- "
-      << "- " << JSTimeStamp::tsdiffstr(dlTimes.EndOfInputTime(), dlTimes.FirstReadTime()) << " "
-      << fRowsReturned << " ";
+  oss << "WFS " << "UM " << "- " << "- " << "- " << "- " << "- " << "- "
+      << JSTimeStamp::tsdiffstr(dlTimes.EndOfInputTime(), dlTimes.FirstReadTime()) << " " << fRowsReturned
+      << " ";
   fMiniInfo += oss.str();
 }
 
