@@ -1,9 +1,18 @@
-mariadb (1:11.8.3-1) UNRELEASED; urgency=medium
+mariadb (1:11.8.3-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
   * New upstream maintenance release 11.8.3. For details about fixes please see
     https://mariadb.com/kb/en/mariadb-11-8-3-release-notes/
   * Drop Hurd patches that are now included upstream
+  * Update configuration traces to include new upstream system variables:
+    - analyze-max-length (default: 4294967295)
+    - innodb-linux-aio (default: auto)
+  * Suppress new native AIO warning introduced in upstream a87bb96 to avoid
+    mariadb-test-run failing on on something that isn't a real issue
+  * New upstream release includes fix for MDEV-36815 that yielded "ERROR 1267
+    (HY000): Illegal mix of collations" on some systems when restarting the
+    MariaDB service in Debian (Closes: #1104533)
+  * Remove obsolete cleanup as upstream moved pam_mariadb_mtr.so in c05b1fe
   * Salsa CI: Use full MariaDB package set in Bookworm MariaDB 10.6 upgrade
   * Salsa CI: Automatically use archive.d.o for discontinued releases
 
@@ -11,7 +20,7 @@ mariadb (1:11.8.3-1) UNRELEASED; urgency=medium
   * Do not hardcode libxml2 dependency in mariadb-plugin-connect
     (Closes: #1106889)
 
- -- Otto Kekäläinen <otto@debian.org>  Wed, 06 Aug 2025 23:02:19 -0700
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 08 Aug 2025 10:42:35 -0700
 
 mariadb (1:11.8.2-1) unstable; urgency=medium
 
