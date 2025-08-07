@@ -1,0 +1,37 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Thu, 7 Aug 2025 21:30:51 -0700
+Subject: Suppress native AIO warning introduced in 10.8.3
+
+Upstream a87bb96 introduced a new warning, visible at least on all ppc64el and
+s390x builds which makes the post-build mariadb-test-test fail:
+
+    [Warning] InnoDB: native AIO failed: falling back to
+    innodb_use_native_aio=OFF
+
+Unlike upstream MariaDB, in Debian we removed libaio in for Linux on
+MariaDB 10.6+ in 612630c6 and completely in 1d648d6f. Thus the build
+will not have libaio at all on any platform in Debian, and the warning
+is useless.
+
+This might not be the optimal solution, but at least suppressing the warning
+will unblock the 11.8.3 release for now.
+
+Forwarded: https://jira.mariadb.org/browse/MDEV-37411
+
+---
+ storage/innobase/os/os0file.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/storage/innobase/os/os0file.cc b/storage/innobase/os/os0file.cc
+index f3c0402..d69fe9a 100644
+--- a/storage/innobase/os/os0file.cc
++++ b/storage/innobase/os/os0file.cc
+@@ -3091,7 +3091,7 @@ int os_aio_init() noexcept
+     if (ret)
+     {
+       srv_use_native_aio= false;
+-      sql_print_warning("InnoDB: native AIO failed: falling back to"
++      sql_print_information("InnoDB: native AIO failed: falling back to"
+                         " innodb_use_native_aio=OFF");
+     }
+     else
