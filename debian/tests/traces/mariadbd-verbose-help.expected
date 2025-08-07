@@ -24,6 +24,10 @@ The following specify which files/extra groups are read (specified before remain
   --alter-algorithm[=name] 
                       Specify the alter table algorithm. One of: DEFAULT, COPY,
                       INPLACE, NOCOPY, INSTANT
+  --analyze-max-length=# 
+                      Fields which length in bytes more than this are skipped
+                      by ANALYZE TABLE PERSISTENT unless explicitly listed in
+                      the FOR COLUMNS () clause
   --analyze-sample-percentage=# 
                       Percentage of rows from the table ANALYZE TABLE will
                       sample to collect table statistics. Set to 0 to let
@@ -854,6 +858,10 @@ The following specify which files/extra groups are read (specified before remain
                       rate
   --innodb-io-capacity-max=# 
                       Limit to which innodb_io_capacity can be inflated.
+  --innodb-linux-aio=name 
+                      Specifies which Linux AIO implementation should be used.
+                      Possible value are "auto" (default) to select io_uring
+                      and fallback to aio, or explicit "io_uring" or "aio"
   --innodb-lock-wait-timeout=# 
                       Timeout in seconds an InnoDB transaction may wait for a
                       lock before being rolled back. The value 100000000 is
@@ -2476,6 +2484,7 @@ and boolean options {FALSE|TRUE}                             Value (after readin
 ------------------------------------------------------------ -------------
 allow-suspicious-udfs                                        FALSE
 alter-algorithm                                              DEFAULT
+analyze-max-length                                           4294967295
 analyze-sample-percentage                                    100
 aria-block-size                                              8192
 aria-checkpoint-interval                                     0
@@ -2705,6 +2714,7 @@ innodb-immediate-scrub-data-uncompressed                     FALSE
 innodb-instant-alter-column-allowed                          add_drop_reorder
 innodb-io-capacity                                           200
 innodb-io-capacity-max                                       18446744073709551615
+innodb-linux-aio                                             auto
 innodb-lock-wait-timeout                                     50
 innodb-lock-waits                                            ON
 innodb-locks                                                 ON
