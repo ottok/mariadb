@@ -1,8 +1,17 @@
-mariadb (1:11.8.2-2) UNRELEASED; urgency=medium
+mariadb (1:11.8.3-1) UNRELEASED; urgency=medium
 
-  * Open new changelog entry. This will be replaced with 'gbp dch -avR'.
+  [ Otto Kekäläinen ]
+  * New upstream maintenance release 11.8.3. For details about fixes please see
+    https://mariadb.com/kb/en/mariadb-11-8-3-release-notes/
+  * Drop Hurd patches that are now included upstream
+  * Salsa CI: Use full MariaDB package set in Bookworm MariaDB 10.6 upgrade
+  * Salsa CI: Automatically use archive.d.o for discontinued releases
 
- -- Otto Kekäläinen <otto@debian.org>  Sat, 21 Jun 2025 20:25:41 +0300
+  [ Lena Voytek ]
+  * Do not hardcode libxml2 dependency in mariadb-plugin-connect
+    (Closes: #1106889)
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 06 Aug 2025 23:02:19 -0700
 
 mariadb (1:11.8.2-1) unstable; urgency=medium
 
