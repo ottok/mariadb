@@ -1,2 +1,3 @@
 env-perl-usr-bin-perl.patch
 mroonga-mrn-lib-dirs-path-reproducible-build.patch
+MDEV-37411-suppress-new-warning-about-native-aio.patch
