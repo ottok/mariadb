@@ -14,6 +14,7 @@ Build-Depends:
  cracklib-runtime <!nocheck>,
  default-jdk,
  gdb <!nocheck>,
+ libaio-dev [linux-any],
  libboost-dev,
  libbz2-dev,
  libcrack2-dev (>= 2.9.0),
