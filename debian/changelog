@@ -1,3 +1,9 @@
+mariadb (1:11.8.2-2+deb13u1) trixie; urgency=medium
+
+  * Open new changelog entry for stable updates
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 26 Aug 2025 09:05:45 -0700
+
 mariadb (1:11.8.2-1) unstable; urgency=medium
 
   * New upstream version 11.8.2, which also announces the 11.8 series now
