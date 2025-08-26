@@ -1,6 +1,10 @@
-mariadb (1:11.8.2-2+deb13u1) trixie; urgency=medium
+mariadb (1:11.8.3-0+deb13u1) trixie; urgency=medium
 
-  * Open new changelog entry for stable updates
+  * New upstream maintenance release 11.8.3. For details about fixes please see
+    https://mariadb.com/kb/en/mariadb-11-8-3-release-notes/
+  * Drop Hurd patches that are now included upstream
+  * Salsa CI: Remove Buster upgrades and ignore missing Trixie ones
+  * Start branch debian/13-trixie for stable updates
 
  -- Otto Kekäläinen <otto@debian.org>  Tue, 26 Aug 2025 09:05:45 -0700
 
