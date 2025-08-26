@@ -565,6 +565,7 @@ blhc:
   stage: test
   needs:
     - job: build
+      artifacts: true
   image: debian:${RELEASE}
   artifacts:
     when: always
@@ -585,6 +586,7 @@ blhc:
   stage: test
   needs:
     - job: build
+      artifacts: true
   image: debian:${RELEASE}
   artifacts:
     when: always
