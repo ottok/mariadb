@@ -966,7 +966,17 @@ mysql-8.0 in Sid upgrade:
     - apt-get install -q --yes 'mysql-t*' 'mysql-s*' 'mysql-c*' mysqltcl 'mysql-r*' libmysqlcppconn7t64
     # Ensure MySQL 8.0 package actually got installed
     - dpkg -l | grep -e "mysql-server.*8\.0"
-    - *test-verify-initial
+    # As MySQL no longer ships an init.d file in 8.0.43-3, define a custom
+    # test-verify-initial that does not depend on the service starting
+    - |
+      dpkg -l | grep -iE 'maria|mysql|galera' || true  # List installed
+      # MariaDB until 10.5 only had 'mysql', and since only 'mariadb', so try both
+      service mysql status || service mariadb status || true
+      mysql --skip-column-names -e "select @@version, @@version_comment" || true # Show version
+      mysql --table -e "SHOW DATABASES;" || true # List databases before upgrade
+      mysql --table -e "SELECT host,user,plugin,authentication_string FROM user;" mysql || true
+      mysql --table -e "SELECT * FROM plugin;" mysql || true
+      mysql --table -e "SHOW PLUGINS;" mysql || true
     - *test-install-all
     # Due to some (currently unknown) changes in MySQL 8.0 packaging or apt
     # behaviour changes, a system with a previous installation of MySQL 8.0 will
