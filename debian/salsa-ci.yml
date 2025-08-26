@@ -543,6 +543,7 @@ blhc:
   stage: test
   needs:
     - job: build
+      artifacts: true
   image: debian:${RELEASE}
   artifacts:
     when: always
@@ -563,6 +564,7 @@ blhc:
   stage: test
   needs:
     - job: build
+      artifacts: true
   image: debian:${RELEASE}
   artifacts:
     when: always
@@ -1166,6 +1168,7 @@ mysql.com-5.7 with Buster upgrade:
   stage: upgrade MariaDB variant
   needs:
     - job: build
+      artifacts: true
   image: debian:buster
   script:
     - *test-prepare-container
