@@ -27,10 +27,12 @@ test-suite.log
 tests/.deps/
 tests/.dirstamp
 version.h
+*.dgcov
 *.o
 *.lo
 *.la
 tags
+TAGS
 docs/latex/
 html/
 *.tar.gz

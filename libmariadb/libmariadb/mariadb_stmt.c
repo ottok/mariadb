@@ -152,10 +152,8 @@ my_bool mthd_supported_buffer_type(enum enum_field_types type)
   case MYSQL_TYPE_VAR_STRING:
   case MYSQL_TYPE_YEAR:
     return 1;
-    break;
   default:
     return 0;
-    break;
   }
 }
 
@@ -1349,7 +1347,6 @@ my_bool STDCALL mysql_stmt_bind_param(MYSQL_STMT *stmt, MYSQL_BIND *bind)
       default:
         stmt_set_error(stmt, CR_UNSUPPORTED_PARAM_TYPE, SQLSTATE_UNKNOWN, 0);
         return(1);
-        break;
       }
     }
   }

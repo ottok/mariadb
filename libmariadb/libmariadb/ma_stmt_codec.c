@@ -571,7 +571,6 @@ static void convert_froma_string(MYSQL_BIND *r_param, char *buffer, size_t len)
       str_to_TIME(buffer, len, tm);
       break;
     }
-    break;
     case MYSQL_TYPE_TINY_BLOB:
     case MYSQL_TYPE_MEDIUM_BLOB:
     case MYSQL_TYPE_LONG_BLOB:
