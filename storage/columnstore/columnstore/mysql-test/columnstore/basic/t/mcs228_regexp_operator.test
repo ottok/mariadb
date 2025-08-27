@@ -179,7 +179,6 @@ SELECT hello, regexp_replace(hello, 'и.е', 'Достоевский') FROM t2;
 SELECT hello, regexp_replace(hello, 'ε.α', 'Достоевский') FROM t2;
 SELECT hello, regexp_replace(hello, 'ა.ა', 'Достоевский') FROM t2;
 
-SHOW VARIABLES LIKE 'character_set%';
 CREATE TABLE tw(hello text) DEFAULT CHARSET=cp1251 ENGINE COLUMNSTORE;
 INSERT INTO tw values(convert('привет' USING cp1251));
 SELECT hello, regexp_instr(hello, convert('и.е' USING cp1251)) FROM tw;

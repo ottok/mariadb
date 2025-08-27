@@ -115,13 +115,7 @@ EMCasualPartition_struct::EMCasualPartition_struct()
   isValid = CP_INVALID;
 }
 
-EMCasualPartition_struct::EMCasualPartition_struct(const int64_t lo, const int64_t hi, const int32_t seqNum,
-                                                   const char status)
- : sequenceNum(seqNum), isValid(status), loVal(lo), hiVal(hi)
-{
-}
-
-EMCasualPartition_struct::EMCasualPartition_struct(const int64_t lo, const int64_t hi, const int32_t seqNum)
+EMCasualPartition_struct::EMCasualPartition_struct(int64_t lo, int64_t hi, int32_t seqNum)
 {
   loVal = lo;
   hiVal = hi;
@@ -129,8 +123,13 @@ EMCasualPartition_struct::EMCasualPartition_struct(const int64_t lo, const int64
   isValid = CP_INVALID;
 }
 
-EMCasualPartition_struct::EMCasualPartition_struct(const int128_t bigLo, const int128_t bigHi,
-                                                   const int32_t seqNum)
+EMCasualPartition_struct::EMCasualPartition_struct(const int64_t lo, const int64_t hi, const int32_t seqNum,
+                                                   const char status)
+ : sequenceNum(seqNum), isValid(status), loVal(lo), hiVal(hi)
+{
+}
+
+EMCasualPartition_struct::EMCasualPartition_struct(const int128_t bigLo, const int128_t bigHi, int32_t seqNum)
 {
   bigLoVal = bigLo;
   bigHiVal = bigHi;
@@ -261,7 +260,7 @@ ExtentMapRBTreeImpl::ExtentMapRBTreeImpl(unsigned key, off_t size, bool readOnly
 boost::mutex FreeListImpl::fInstanceMutex;
 
 /*static*/
-FreeListImpl* FreeListImpl::fInstance = 0;
+FreeListImpl* FreeListImpl::fInstance = nullptr;
 
 /*static*/
 FreeListImpl* FreeListImpl::makeFreeListImpl(unsigned key, off_t size, bool readOnly)
@@ -813,7 +812,7 @@ int ExtentMap::markInvalid(const vector<LBID_t>& lbids,
 // TODO MCOL-641 Not adding support here since this function appears to be unused anywhere.
 
 int ExtentMap::setMaxMin(const LBID_t lbid, const int64_t max, const int64_t min, const int32_t seqNum,
-                         bool firstNode)
+                         bool /*firstNode*/)
 {
 #ifdef BRM_INFO
 
@@ -885,7 +884,7 @@ int ExtentMap::setMaxMin(const LBID_t lbid, const int64_t max, const int64_t min
 
 // @bug 1970.  Added updateExtentsMaxMin function.
 // @note - The key passed in the map must the the first LBID in the extent.
-void ExtentMap::setExtentsMaxMin(const CPMaxMinMap_t& cpMap, bool firstNode, bool useLock)
+void ExtentMap::setExtentsMaxMin(const CPMaxMinMap_t& cpMap, bool /*firstNode*/, bool useLock)
 {
   CPMaxMinMap_t::const_iterator it;
 
@@ -1578,6 +1577,8 @@ void ExtentMap::loadVersion4or5(T* in, bool upgradeV4ToV5)
   nbytes += in->read((char*)&emNumElements, sizeof(uint32_t));
   nbytes += in->read((char*)&flNumElements, sizeof(uint32_t));
   idbassert(emNumElements > 0);
+  cout << "Expected EM entries:" << emNumElements << endl;
+  cout << "Expected free list entries:" << flNumElements << endl;
 
   if (nbytes != (2 * sizeof(uint32_t)))
   {
@@ -1696,28 +1697,9 @@ void ExtentMap::loadVersion4or5(T* in, bool upgradeV4ToV5)
   }
 
   fEMRBTreeShminfo->currentSize = (emNumElements * EM_RB_TREE_NODE_SIZE) + EM_RB_TREE_EMPTY_SIZE;
-
-  cout << "lbid\tsz\toid\tfbo\thwm\tpart#\tseg#\tDBRoot\twid\tst\thi\tlo\tsq\tv" << endl;
-
-  // for (const auto& lbidEMEntryPair : *fExtentMapRBTRee)
-  for (auto& lbidEMEntryPair : *fExtentMapRBTree)
-  {
-    const EMEntry& emEntry = lbidEMEntryPair.second;
-    cout << emEntry.range.start << '\t' << emEntry.range.size << '\t' << emEntry.fileID << '\t'
-         << emEntry.blockOffset << '\t' << emEntry.HWM << '\t' << emEntry.partitionNum << '\t'
-         << emEntry.segmentNum << '\t' << emEntry.dbRoot << '\t' << emEntry.status << '\t'
-         << emEntry.partition.cprange.hiVal << '\t' << emEntry.partition.cprange.loVal << '\t'
-         << emEntry.partition.cprange.sequenceNum << '\t' << (int)(emEntry.partition.cprange.isValid) << endl;
-  }
-
-  cout << "Free list entries:" << endl;
-  cout << "start\tsize" << endl;
-
-  for (uint32_t i = 0; i < flNumElements; i++)
-    cout << fFreeList[i].start << '\t' << fFreeList[i].size << endl;
 }
 
-void ExtentMap::load(const string& filename, bool fixFL)
+void ExtentMap::load(const string& filename, bool /*fixFL*/)
 {
 #ifdef BRM_INFO
 
@@ -1844,7 +1826,7 @@ void ExtentMap::save(const string& filename)
 
   if (!out)
   {
-    log_errno("ExtentMap::save(): open");
+    log_errno("ExtentMap::save(): can't open file " + filename);
     releaseFreeList(READ);
     releaseEMIndex(READ);
     releaseEMEntryTable(READ);
@@ -4800,8 +4782,8 @@ HWM_t ExtentMap::getLocalHWM(int OID, uint32_t partitionNum, uint16_t segmentNum
 // (per segment file).
 // Used for dictionary or column OIDs to set the HWM for specific segment file.
 //------------------------------------------------------------------------------
-void ExtentMap::setLocalHWM(int OID, uint32_t partitionNum, uint16_t segmentNum, HWM_t newHWM, bool firstNode,
-                            bool uselock)
+void ExtentMap::setLocalHWM(int OID, uint32_t partitionNum, uint16_t segmentNum, HWM_t newHWM,
+                            bool /*firstNode*/, bool uselock)
 {
 #ifdef BRM_INFO
 
@@ -4962,7 +4944,7 @@ void ExtentMap::bulkUpdateDBRoot(const vector<BulkUpdateDBRootArg>& args)
   }
 }
 
-void ExtentMap::getExtents(int OID, vector<struct EMEntry>& entries, bool sorted, bool notFoundErr,
+void ExtentMap::getExtents(int OID, vector<struct EMEntry>& entries, bool sorted, bool /*notFoundErr*/,
                            bool incOutOfService)
 {
 #ifdef BRM_INFO

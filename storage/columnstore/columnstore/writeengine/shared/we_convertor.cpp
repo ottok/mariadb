@@ -201,7 +201,7 @@ struct Convertor::dmFilePathArgs_t
 const std::string Convertor::getTimeStr()
 {
   char buf[sizeof(DATE_TIME_FORMAT) + 10] = {0};
-  time_t curTime = time(NULL);
+  time_t curTime = time(nullptr);
   struct tm pTime;
   localtime_r(&curTime, &pTime);
   string timeStr;
@@ -248,9 +248,9 @@ const std::string Convertor::int2Str(int val)
  ******************************************************************************/
 /* static */
 
-long long Convertor::convertDecimalString(const char* field, int fieldLength, int scale)
+long long Convertor::convertDecimalString(const char* field, int /*fieldLength*/, int scale)
 {
-  long double dval = strtold(field, NULL);
+  long double dval = strtold(field, nullptr);
   long long ret = 0;
 
   // move scale digits to the left of the decimal point
@@ -634,9 +634,9 @@ void Convertor::convertColType(ColStruct* curStruct)
 {
   CalpontSystemCatalog::ColDataType dataType  // This will be updated later,
       = CalpontSystemCatalog::CHAR;           // CHAR used only for initialization.
-  ColType* internalType = NULL;
+  ColType* internalType = nullptr;
   bool bTokenFlag = false;
-  int* width = NULL;
+  int* width = nullptr;
 
   dataType = curStruct->colDataType;
   internalType = &(curStruct->colType);

@@ -360,7 +360,7 @@ class WriteBatchFieldMariaDB : public WriteBatchField
   }
 
   static void ColWriteBatchTextString(const String& value, const ColBatchWriter& ci,
-                                      const size_t colWidthInBytes)
+                                      const size_t /*colWidthInBytes*/)
   {
     std::string escape;
     escape.assign(value.ptr(), value.length());
@@ -376,7 +376,7 @@ class WriteBatchFieldMariaDB : public WriteBatchField
   }
 
   static void ColWriteBatchBlobString(const String& value, const ColBatchWriter& ci,
-                                      const size_t colWidthInBytes)
+                                      const size_t /*colWidthInBytes*/)
   {
     const char* ptr = value.ptr();
     for (uint32_t i = 0; i < value.length(); i++)
@@ -386,9 +386,9 @@ class WriteBatchFieldMariaDB : public WriteBatchField
     fprintf(ci.filePtr(), "%c", ci.delimiter());
   }
 
-  size_t ColWriteBatchString(const uchar* buf, bool nullVal, ColBatchWriter& ci,
+  size_t ColWriteBatchString(const uchar* /*buf*/, bool nullVal, ColBatchWriter& ci,
                              void (*printFuncPtr)(const String&, const ColBatchWriter&,
-                                                  const size_t colWidthInBytes)) const
+                                                  const size_t /*colWidthInBytes*/)) const
   {
     if (nullVal && (m_type.constraintType != CalpontSystemCatalog::NOTNULL_CONSTRAINT))
     {
@@ -461,11 +461,9 @@ class WriteBatchFieldMariaDB : public WriteBatchField
     }
     else
     {
-      int32_t tmp = (
-                     (*const_cast<uint8_t*>(buf) << 8) |
-                     (*const_cast<uint8_t*>(buf+1) << 16) |
-                     (*const_cast<uint8_t*>(buf+2) << 24)
-                    ) >> 8;
+      int32_t tmp = ((*const_cast<uint8_t*>(buf) << 8) | (*const_cast<uint8_t*>(buf + 1) << 16) |
+                     (*const_cast<uint8_t*>(buf + 2) << 24)) >>
+                    8;
       fprintf(ci.filePtr(), "%d%c", tmp, ci.delimiter());
     }
     return 3;
@@ -477,11 +475,8 @@ class WriteBatchFieldMariaDB : public WriteBatchField
       fprintf(ci.filePtr(), "%c", ci.delimiter());
     else
     {
-      uint32_t tmp = (
-                      (*const_cast<uint8_t*>(buf)) |
-                      (*const_cast<uint8_t*>(buf+1) << 8) |
-                      (*const_cast<uint8_t*>(buf+2) << 16)
-                     );
+      uint32_t tmp = ((*const_cast<uint8_t*>(buf)) | (*const_cast<uint8_t*>(buf + 1) << 8) |
+                      (*const_cast<uint8_t*>(buf + 2) << 16));
       fprintf(ci.filePtr(), "%u%c", tmp, ci.delimiter());
     }
     return 3;

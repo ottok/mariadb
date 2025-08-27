@@ -2422,8 +2422,8 @@ static void activate_tcp_port(uint port,
     else 
     {
       ip_sock.address_family= a->ai_family;
-      sql_print_information("Server socket created on IP: '%s'.",
-                          (const char *) ip_addr);
+      sql_print_information("Server socket created on IP: '%s', port: '%u'.",
+                          (const char *) ip_addr, port);
 
       if (mysql_socket_getfd(ip_sock) == INVALID_SOCKET)
       {
@@ -2884,7 +2884,7 @@ void unlink_thd(THD *thd)
 }
 
 
-#if defined(_WIN32)
+#if defined(_WIN32) && !defined(EMBEDDED_LIBRARY)
 /*
   If server is started as service, the service routine will set
   the callback function.
@@ -9032,7 +9032,7 @@ char *set_server_version(char *buf, size_t size)
   bool is_log= opt_log || global_system_variables.sql_log_slow || opt_bin_log;
   bool is_debug= IF_DBUG(!strstr(MYSQL_SERVER_SUFFIX_STR, "-debug"), 0);
   const char *is_valgrind=
-#ifdef HAVE_valgrind
+#if defined(HAVE_valgrind) && !__has_feature(memory_sanitizer)
     !strstr(MYSQL_SERVER_SUFFIX_STR, "-valgrind") ? "-valgrind" :
 #endif
     "";

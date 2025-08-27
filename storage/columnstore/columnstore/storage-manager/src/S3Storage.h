@@ -19,12 +19,12 @@
 
 #include <deque>
 #include <string>
-#include <map>
 #include <memory>
 #include <optional>
+#include <unordered_map>
+
 #include "CloudStorage.h"
 #include "libmarias3/marias3.h"
-#include "Config.h"
 #include <curl/curl.h>
 
 namespace storagemanager
@@ -32,12 +32,13 @@ namespace storagemanager
 class S3Storage : public CloudStorage
 {
  public:
-  explicit S3Storage(bool skipRetry = false);
+  explicit S3Storage(bool skipRetry = false, bool verbose = false);
 
   ~S3Storage() override;
 
-  int getObject(const std::string& sourceKey, const std::string& destFile, size_t* size = NULL) override;
-  int getObject(const std::string& sourceKey, std::shared_ptr<uint8_t[]>* data, size_t* size = NULL) override;
+  int getObject(const std::string& sourceKey, const std::string& destFile, size_t* size = nullptr) override;
+  int getObject(const std::string& sourceKey, std::shared_ptr<uint8_t[]>* data,
+                size_t* size = nullptr) override;
   int putObject(const std::string& sourceFile, const std::string& destKey) override;
   int putObject(const std::shared_ptr<uint8_t[]> data, size_t len, const std::string& destKey) override;
   int deleteObject(const std::string& key) override;
@@ -56,6 +57,7 @@ class S3Storage : public CloudStorage
   void returnConnection(std::shared_ptr<Connection> conn);
 
   bool skipRetryableErrors;
+  bool verbose_enabled;
 
   std::string bucket;  // might store this as a char *, since it's only used that way
   std::string prefix;
@@ -77,7 +79,9 @@ class S3Storage : public CloudStorage
 
   struct Connection
   {
-    Connection(uint64_t id): id(id) {}
+    explicit Connection(uint64_t id) : id(id)
+    {
+    }
     uint64_t id;
     ms3_st* conn{nullptr};
     timespec touchedAt{};
@@ -96,7 +100,8 @@ class S3Storage : public CloudStorage
 
   mutable boost::mutex connMutex;
   std::deque<std::shared_ptr<Connection>> freeConns;  // using this as a stack to keep lru objects together
-  std::unordered_map<uint64_t, std::shared_ptr<Connection>> usedConns;  // using this for displaying and killing tasks
+  std::unordered_map<uint64_t, std::shared_ptr<Connection>>
+      usedConns;  // using this for displaying and killing tasks
   uint64_t nextConnId = 0;
   const time_t maxIdleSecs = 30;
 };

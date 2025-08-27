@@ -23,7 +23,7 @@
 
 #pragma once
 
-//#define NDEBUG
+// #define NDEBUG
 #include "jobstep.h"
 #include "filter.h"
 
@@ -48,35 +48,40 @@ class ExpressionStep : public JobStep
  public:
   // constructors
   ExpressionStep();
-  ExpressionStep(const JobInfo&);
+  explicit ExpressionStep(const JobInfo&);
   // destructor constructors
-  virtual ~ExpressionStep();
+  ~ExpressionStep() override;
 
   // inherited methods
-  void run();
-  void join();
-  const std::string toString() const;
+  void run() override;
+  void join() override;
+  const std::string toString() const override;
 
-  execplan::CalpontSystemCatalog::OID oid() const
+  execplan::CalpontSystemCatalog::OID oid() const override
   {
     return 0;
   }
-  execplan::CalpontSystemCatalog::OID tableOid() const
+  execplan::CalpontSystemCatalog::OID tableOid() const override
   {
     return fTableOids.empty() ? 0 : fTableOids.front();
   }
   using JobStep::alias;
-  std::string alias() const
+  std::string alias() const override
   {
     return fAliases.empty() ? "" : fAliases.front();
   }
   using JobStep::view;
-  std::string view() const
+  std::string view() const override
   {
     return fViews.empty() ? "" : fViews.front();
   }
+  using JobStep::partitions;
+  execplan::Partitions partitions() const override
+  {
+    return fPartitions;
+  }
   using JobStep::schema;
-  std::string schema() const
+  std::string schema() const override
   {
     return fSchemas.empty() ? "" : fSchemas.front();
   }
@@ -123,6 +128,10 @@ class ExpressionStep : public JobStep
   {
     return fViews;
   }
+  const std::vector<execplan::Partitions>& partitionss() const
+  {
+    return fPartitionss;
+  }
   const std::vector<std::string>& schemas() const
   {
     return fSchemas;
@@ -147,6 +156,10 @@ class ExpressionStep : public JobStep
   std::vector<std::string>& views()
   {
     return fViews;
+  }
+  std::vector<execplan::Partitions>& partitionss()
+  {
+    return fPartitionss;
   }
   std::vector<std::string>& schemas()
   {
@@ -237,6 +250,7 @@ class ExpressionStep : public JobStep
   std::vector<std::string> fAliases;
   std::vector<std::string> fViews;
   std::vector<std::string> fSchemas;
+  std::vector<execplan::Partitions> fPartitionss;
   std::vector<uint32_t> fTableKeys;
   std::vector<uint32_t> fColumnKeys;
   std::vector<execplan::ReturnedColumn*> fColumns;

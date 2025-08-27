@@ -1531,14 +1531,7 @@ int QUICK_RANGE_SELECT::init_ror_merged_scan(bool reuse_handler,
 
   if (!(file= head->file->clone(head->s->normalized_path.str, local_alloc)))
   {
-    /* 
-      Manually set the error flag. Note: there seems to be quite a few
-      places where a failure could cause the server to "hang" the client by
-      sending no response to a query. ATM those are not real errors because 
-      the storage engine calls in question happen to never fail with the 
-      existing storage engines. 
-    */
-    my_error(ER_OUT_OF_RESOURCES, MYF(0)); /* purecov: inspected */
+    /* clone() has already generated an error message */
     /* Caller will free the memory */
     goto failure;  /* purecov: inspected */
   }
@@ -7343,21 +7336,24 @@ static bool ror_intersect_add(ROR_INTERSECT_INFO *info,
       order R by (E(#records_matched) * key_record_length).
 
       S= first(R); -- set of scans that will be used for ROR-intersection
-      R= R-first(S);
+      R= R - S;
       min_cost= cost(S);
       min_scan= make_scan(S);
       while (R is not empty)
       {
-        firstR= R - first(R);
-        if (!selectivity(S + firstR < selectivity(S)))
+        firstR= first(R);
+        if (!selectivity(S + firstR) < selectivity(S))
+        {
+          R= R - firstR;
           continue;
-          
+        }
         S= S + first(R);
         if (cost(S) < min_cost)
         {
           min_cost= cost(S);
           min_scan= make_scan(S);
         }
+        R= R - firstR; --  Remove the processed scan from R
       }
       return min_scan;
     }
@@ -12467,22 +12463,44 @@ static bool is_key_scan_ror(PARAM *param, uint keynr, uint8 nparts)
       return FALSE;
   }
   
+  if (key_part >= key_part_end)
+    return TRUE;
+
+  pk_number= param->table->s->primary_key;
+  if (!param->table->file->pk_is_clustering_key(pk_number))
+    return FALSE;
+
+  if (keynr == pk_number)
+    return TRUE; /* Scan on clustered PK is always ROR */
+
+
+  KEY_PART_INFO *pk_part= param->table->key_info[pk_number].key_part;
+  KEY_PART_INFO *pk_part_end= pk_part +
+                              param->table->key_info[pk_number].user_defined_key_parts;
+  /*
+    Check for columns indexed with DESC.
+    If a column is present in both Secondary Key and Primary Key and either of
+    indexes include it with DESC, then the scan is not a ROR scan.
+  */
+  for (; key_part != key_part_end; ++key_part)
+  {
+    pk_part= param->table->key_info[pk_number].key_part;
+    for (; pk_part != pk_part_end; ++pk_part)
+    {
+      if (key_part->fieldnr == pk_part->fieldnr &&
+          (MY_TEST(key_part->key_part_flag & HA_REVERSE_SORT) ||
+           MY_TEST(pk_part->key_part_flag & HA_REVERSE_SORT)))
+        return FALSE;
+    }
+  }
+
   /*
     If there are equalities for all key parts, it is a ROR scan. If there are
     equalities all keyparts and even some of key parts from "Extended Key"
     index suffix, it is a ROR-scan, too.
   */
-  if (key_part >= key_part_end)
-    return TRUE;
-
   key_part= table_key->key_part + nparts;
-  pk_number= param->table->s->primary_key;
-  if (!param->table->file->pk_is_clustering_key(pk_number))
-    return FALSE;
-
-  KEY_PART_INFO *pk_part= param->table->key_info[pk_number].key_part;
-  KEY_PART_INFO *pk_part_end= pk_part +
-                              param->table->key_info[pk_number].user_defined_key_parts;
+  pk_part= param->table->key_info[pk_number].key_part;
   for (;(key_part!=key_part_end) && (pk_part != pk_part_end);
        ++key_part, ++pk_part)
   {

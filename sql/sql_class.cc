@@ -60,6 +60,7 @@
 #include "lock.h"
 #include "wsrep_mysqld.h"
 #include "sql_connect.h"
+#include "sql_cursor.h"                         //Select_materialize
 #ifdef WITH_WSREP
 #include "wsrep_thd.h"
 #include "wsrep_trans_observer.h"
@@ -910,7 +911,6 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
 
 #ifdef WITH_WSREP
   mysql_cond_init(key_COND_wsrep_thd, &COND_wsrep_thd, NULL);
-  wsrep_info[sizeof(wsrep_info) - 1] = '\0'; /* make sure it is 0-terminated */
 #endif
   /* Call to init() below requires fully initialized Open_tables_state. */
   reset_open_tables_state();
@@ -6049,7 +6049,8 @@ void THD::reset_sub_statement_state(Sub_statement_state *backup,
   if (rpl_master_erroneous_autoinc(this))
   {
     DBUG_ASSERT(backup->auto_inc_intervals_forced.nb_elements() == 0);
-    auto_inc_intervals_forced.swap(&backup->auto_inc_intervals_forced);
+    backup->auto_inc_intervals_forced.copy_shallow(&auto_inc_intervals_forced);
+    MEM_UNDEFINED(&auto_inc_intervals_forced, sizeof auto_inc_intervals_forced);
   }
 #endif
   
@@ -6098,7 +6099,7 @@ void THD::restore_sub_statement_state(Sub_statement_state *backup)
    */
   if (rpl_master_erroneous_autoinc(this))
   {
-    backup->auto_inc_intervals_forced.swap(&auto_inc_intervals_forced);
+    auto_inc_intervals_forced.copy_shallow(&backup->auto_inc_intervals_forced);
     DBUG_ASSERT(backup->auto_inc_intervals_forced.nb_elements() == 0);
   }
 #endif
@@ -8541,16 +8542,19 @@ void mariadb_sleep_for_space(unsigned int seconds)
 {
   THD *thd= current_thd;
   PSI_stage_info old_stage;
+  struct timespec abstime;
   if (!thd)
   {
     sleep(seconds);
     return;
   }
- mysql_mutex_lock(&thd->LOCK_wakeup_ready);
+  set_timespec(abstime, seconds);
+  mysql_mutex_lock(&thd->LOCK_wakeup_ready);
   thd->ENTER_COND(&thd->COND_wakeup_ready, &thd->LOCK_wakeup_ready,
                   &stage_waiting_for_disk_space, &old_stage);
   if (!thd->killed)
-    mysql_cond_wait(&thd->COND_wakeup_ready, &thd->LOCK_wakeup_ready);
+    mysql_cond_timedwait(&thd->COND_wakeup_ready, &thd->LOCK_wakeup_ready,
+                         &abstime);
   thd->EXIT_COND(&old_stage);
   return;
 }
@@ -8892,6 +8896,12 @@ void Charset_loader_server::raise_not_applicable_error(const char *cs,
                                                        const char *cl) const
 {
   my_error(ER_COLLATION_CHARSET_MISMATCH, MYF(0), cl, cs);
+}
+
+
+bool THD::is_cursor_execution() const
+{
+  return dynamic_cast<Select_materialize*>(this->lex->result);
 }
 
 

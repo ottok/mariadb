@@ -1,9 +1,10 @@
 """Typer application for restore Columnstore data."""
 import logging
 import sys
-from typing_extensions import Annotated
+from typing import Optional
 
 import typer
+from typing_extensions import Annotated
 
 from cmapi_server.process_dispatchers.base import BaseDispatcher
 from mcs_cluster_tool.constants import MCS_BACKUP_MANAGER_SH
@@ -144,80 +145,6 @@ def restore(
             )
         )
     ] = '',
-    ha: Annotated[
-        bool,
-        typer.Option(
-            '-ha/-no-ha', '--highavilability/--no-highavilability',
-            help=(
-                'Flag for high available systems (meaning shared storage '
-                'exists supporting the topology so that each node sees '
-                'all data)'
-            )
-        )
-    ] = False,
-    cont: Annotated[
-        bool,
-        typer.Option(
-            '-cont/-no-cont', '--continue/--no-continue',
-            help=(
-                'This acknowledges data in your --new_bucket is ok to delete '
-                'when restoring S3. When set to true skips the enforcement '
-                'that new_bucket should be empty prior to starting a restore.'
-            )
-        )
-    ] = False,
-    f: Annotated[
-        str,
-        typer.Option(
-            '-f', '--config-file',
-            help='Path to backup configuration file to load variables from.',
-            show_default=False
-        )
-    ] = '',
-    smdb: Annotated[
-        bool,
-        typer.Option(
-            '-smdb/-no-smdb', '--skip-mariadb-backup/--no-skip-mariadb-backup',
-            help=(
-               'Skip restoring mariadb server via mariadb-backup - ideal for '
-               'only restoring columnstore.'
-            )
-        )
-    ] = False,
-    sb: Annotated[
-        bool,
-        typer.Option(
-            '-sb/-no-sb', '--skip-bucket-data/--no-skip-bucket-data',
-            help=(
-                'Skip restoring columnstore data in the bucket - ideal if '
-                'looking to only restore mariadb server.'
-            )
-        )
-    ] = False,
-    m: Annotated[
-        str,
-        typer.Option(
-            '-m', '--mode',
-            help=(
-                'Modes ["direct","indirect"] - direct backups run on the '
-                'columnstore nodes themselves. indirect run on another '
-                'machine that has read-only mounts associated with '
-                'columnstore/mariadb\n'
-            ),
-            hidden=True
-        )
-    ] = 'direct',
-    c: Annotated[
-        str,
-        typer.Option(
-            '-c', '--compress',
-            help=(
-                'Hint that the backup is compressed in X format. '
-                'Options: [ pigz ].'
-            ),
-            show_default=False
-        )
-    ] = '',
     P: Annotated[
         int,
         typer.Option(
@@ -228,20 +155,111 @@ def restore(
             )
         )
     ] = 4,
+    ha: Annotated[
+        Optional[bool],
+        typer.Option(
+            '-ha', '--highavilability',
+            help=(
+                'Flag for high available systems (meaning shared storage '
+                'exists supporting the topology so that each node sees '
+                'all data)'
+            ),
+            show_default=False
+        )
+    ] = None,
+    cont: Annotated[
+        Optional[bool],
+        typer.Option(
+            '-cont', '--continue',
+            help=(
+                'This acknowledges data in your --new_bucket is ok to delete '
+                'when restoring S3. When set to true skips the enforcement '
+                'that new_bucket should be empty prior to starting a restore.'
+            ),
+            show_default=False
+        )
+    ] = None,
+    f: Annotated[
+        Optional[str],
+        typer.Option(
+            '-f', '--config-file',
+            help=(
+                'Path to backup configuration file to load variables from - '
+                'relative or full path accepted.'
+            ),
+            show_default=False
+        )
+    ] = None,
+    smdb: Annotated[
+        Optional[bool],
+        typer.Option(
+            '-smdb', '--skip-mariadb-backup',
+            help=(
+               'Skip restoring mariadb server via mariadb-backup - ideal for '
+               'only restoring columnstore.'
+            ),
+            show_default=False
+        )
+    ] = None,
+    sb: Annotated[
+        Optional[bool],
+        typer.Option(
+            '-sb', '--skip-bucket-data',
+            help=(
+                'Skip restoring columnstore data in the bucket - ideal if '
+                'looking to only restore mariadb server.'
+            )
+        )
+    ] = None,
+    m: Annotated[
+        Optional[str],
+        typer.Option(
+            '-m', '--mode',
+            help=(
+                'Modes ["direct","indirect"] - direct backups run on the '
+                'columnstore nodes themselves. indirect run on another '
+                'machine that has read-only mounts associated with '
+                'columnstore/mariadb\n'
+            ),
+            hidden=True,
+            show_default='direct'
+        )
+    ] = None,
+    c: Annotated[
+        Optional[str],
+        typer.Option(
+            '-c', '--compress',
+            help=(
+                'Hint that the backup is compressed in X format. '
+                'Options: [ pigz ].'
+            ),
+            show_default=False
+        )
+    ] = None,
     q: Annotated[
-        bool,
+        Optional[bool],
         typer.Option(
-            '-q/-no-q', '--quiet/--no-quiet',
-            help='Silence verbose copy command outputs.'
+            '-q', '--quiet',
+            help='Silence verbose copy command outputs.',
+            show_default=False
         )
-    ] = False,
+    ] = None,
     nv_ssl: Annotated[
-        bool,
+        Optional[bool],
         typer.Option(
-            '-nv-ssl/-v-ssl','--no-verify-ssl/--verify-ssl',
-            help='Skips verifying ssl certs, useful for onpremise s3 storage.'
+            '-nv-ssl','--no-verify-ssl',
+            help='Skips verifying ssl certs, useful for onpremise s3 storage.',
+            show_default=False,
         )
-    ] = False,
+    ] = None,
+    li: Annotated[
+        Optional[bool],
+        typer.Option(
+            '-li', '--list',
+            help='List backups.',
+            show_default=False
+        )
+    ] = None
 ):
     """Restore Columnstore (and/or MariaDB) data."""
 
@@ -266,53 +284,64 @@ def restore(
 
 @handle_output
 def dbrm_restore(
-    p: Annotated[
+    bl: Annotated[
         str,
         typer.Option(
-            '-p', '--path',
-            help='Path of where dbrm backups stored on disk.'
+            '-bl', '--backup-location',
+            help='Path of where dbrm backups exist on disk.'
         )
     ] = '/tmp/dbrm_backups',
-    d: Annotated[
+    l: Annotated[
         str,
         typer.Option(
-            '-d', '--directory',
-            help='Date or directory chose to restore from.'
+            '-l', '--load',
+            help='Name of the directory to restore from -bl'
         )
     ] = '',
     ns: Annotated[
-        bool,
+        Optional[bool],
         typer.Option(
             '-ns', '--no-start',
             help=(
                 'Do not attempt columnstore startup post dbrm_restore.'
-            )
+            ),
+            show_default=False
         )
-    ] = False,
+    ] = None,
     sdbk: Annotated[
-        bool,
+        Optional[bool],
         typer.Option(
-            '-sdbk/-no-sdbk', '--skip-dbrm-backup/--no-skip-dbrm-backup',
+            '-sdbk', '--skip-dbrm-backup',
             help=(
                 'Skip backing up dbrms before restoring.'
-            )
+            ),
+            show_default=False
         )
-    ] = True,
+    ] = None,
     ssm: Annotated[
+        Optional[bool],
+        typer.Option(
+            '-ssm', '--skip-storage-manager',
+            help='Skip backing up storagemanager directory.',
+            show_default=False
+        )
+    ] = None,
+    li: Annotated[
         bool,
         typer.Option(
-            '-ssm/-no-ssm', '--skip-storage-manager/--no-skip-storage-manager',
-            help='Skip backing up storagemanager directory.'
+            '-li', '--list',
+            help='List backups.',
+            show_default=False
         )
-    ] = True,
+    ] = None
 ):
     """Restore Columnstore DBRM data."""
 
-    # Default: ./$0 dbrm_restore --path /tmp/dbrm_backups
+    # Default: ./$0 dbrm_restore --backup-location /tmp/dbrm_backups
 
     # Examples:
-    #   ./$0 dbrm_restore --path /tmp/dbrm_backups --directory dbrm_backup_20240318_172842
-    #   ./$0 dbrm_restore --path /tmp/dbrm_backups --directory dbrm_backup_20240318_172842 --no-start
+    #       ./$0 dbrm_restore --backup-location /tmp/dbrm_backups --load dbrm_backup_20240318_172842
+    #       ./$0 dbrm_restore --backup-location /tmp/dbrm_backups --load dbrm_backup_20240318_172842 --no-startdbrm_restore --path /tmp/dbrm_backups --directory dbrm_backup_20240318_172842 --no-start
     arguments = []
     for arg_name, value in locals().items():
         sh_arg = cook_sh_arg(arg_name, value)

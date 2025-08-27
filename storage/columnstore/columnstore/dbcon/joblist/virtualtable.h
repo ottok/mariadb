@@ -31,9 +31,7 @@ class VirtualTable
 {
  public:
   VirtualTable();
-  virtual ~VirtualTable()
-  {
-  }
+  virtual ~VirtualTable() = default;
 
   virtual void initialize();
   void addColumn(const execplan::SRCP& column);
@@ -74,6 +72,15 @@ class VirtualTable
     return fView;
   }
 
+  void partitions(const execplan::Partitions& p)
+  {
+    fPartitions = p;
+  }
+  const execplan::Partitions& partitions() const
+  {
+    return fPartitions;
+  }
+
   const std::vector<execplan::SSC>& columns() const
   {
     return fColumns;
@@ -106,6 +113,7 @@ class VirtualTable
   std::string fName;
   std::string fAlias;
   std::string fView;
+  execplan::Partitions fPartitions;
 
   std::vector<execplan::SSC> fColumns;
   std::vector<execplan::CalpontSystemCatalog::ColType> fColumnTypes;

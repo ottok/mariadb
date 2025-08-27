@@ -22,7 +22,7 @@
 #include <stack>
 #include <iterator>
 #include <algorithm>
-//#define NDEBUG
+// #define NDEBUG
 #include <cassert>
 #include <vector>
 #include <set>
@@ -209,7 +209,7 @@ void projectSimpleColumn(const SimpleColumn* sc, JobStepVector& jsv, JobInfo& jo
   else  // must be vtable mode
   {
     oid = (tbl_oid + 1) + sc->colPosition();
-    ct = jobInfo.vtableColTypes[UniqId(oid, alias, "", "")];
+    ct = jobInfo.vtableColTypes[UniqId(oid, alias, "", "", execplan::Partitions())];
     ti = setTupleInfo(ct, oid, jobInfo, tbl_oid, sc, alias);
   }
 
@@ -384,7 +384,6 @@ void checkHavingClause(CalpontSelectExecutionPlan* csep, JobInfo& jobInfo)
       }
     }
   }
-
 }
 
 void preProcessFunctionOnAggregation(const vector<SimpleColumn*>& scs, const vector<AggregateColumn*>& aggs,
@@ -519,9 +518,9 @@ void checkGroupByCols(CalpontSelectExecutionPlan* csep, JobInfo& jobInfo)
         // Not an aggregate column and not an expression of aggregation.
         if (dynamic_cast<AggregateColumn*>(orderByCols[i].get()) == NULL &&
             orderByCols[i]->aggColumnList().empty())
-	{
+        {
           csep->groupByCols().push_back(orderByCols[i]);
-	}
+        }
       }
     }
   }
@@ -574,7 +573,9 @@ void checkGroupByCols(CalpontSelectExecutionPlan* csep, JobInfo& jobInfo)
       if (sc)
         col = UniqId(sc);
       else
-        col = UniqId(rc->expressionId(), rc->alias(), "", "");
+      {
+        col = UniqId(rc->expressionId(), rc->alias(), "", "", execplan::Partitions());
+      }
 
       if (colInGroupBy.find(col) == colInGroupBy.end() || selectSubquery)
       {
@@ -722,7 +723,7 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
       else
       {
         gbOid = (tblOid + 1) + sc->colPosition();
-        ct = jobInfo.vtableColTypes[UniqId(gbOid, alias, "", "")];
+        ct = jobInfo.vtableColTypes[UniqId(gbOid, alias, "", "", execplan::Partitions())];
       }
 
       // As of bug3695, make sure varbinary is not used in group by.
@@ -1034,7 +1035,7 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
             else
             {
               retOid = (tblOid + 1) + sc->colPosition();
-              ct = jobInfo.vtableColTypes[UniqId(retOid, alias, "", "")];
+              ct = jobInfo.vtableColTypes[UniqId(retOid, alias, "", "", execplan::Partitions())];
             }
 
             TupleInfo ti(setTupleInfo(ct, retOid, jobInfo, tblOid, sc, alias));
@@ -1129,7 +1130,10 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
             else
               it = pcv.insert(pcv.end(), srcp);
 
-            projectKeys.insert(projectKeys.begin() + std::distance(pcv.begin(), it), tupleKey);
+            auto placeToInsert = std::distance(pcv.begin(), it);
+            projectKeys.insert(
+                projectKeys.begin() + std::min(placeToInsert, projectKeys.end() - projectKeys.begin()),
+                tupleKey);
           }
           else if (doDistinct)  // @bug4250, move forward distinct column if necessary.
           {
@@ -1189,7 +1193,7 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
         else
         {
           retOid = (tblOid + 1) + sc->colPosition();
-          ct = jobInfo.vtableColTypes[UniqId(retOid, alias, "", "")];
+          ct = jobInfo.vtableColTypes[UniqId(retOid, alias, "", "", execplan::Partitions())];
         }
 
         TupleInfo ti(setTupleInfo(ct, retOid, jobInfo, tblOid, sc, alias));
@@ -1300,7 +1304,9 @@ const JobStepVector doAggProject(const CalpontSelectExecutionPlan* csep, JobInfo
         else
           it = pcv.insert(pcv.end(), srcp);
 
-        projectKeys.insert(projectKeys.begin() + std::distance(pcv.begin(), it), tupleKey);
+        auto placeToInsert = std::distance(pcv.begin(), it);
+        projectKeys.insert(
+            projectKeys.begin() + std::min(placeToInsert, projectKeys.end() - projectKeys.begin()), tupleKey);
       }
       else if (doDistinct)  // @bug4250, move forward distinct column if necessary.
       {
@@ -1535,7 +1541,7 @@ void exceptionHandler(JobList* joblist, const JobInfo& jobInfo, const string& lo
 }
 
 void parseExecutionPlan(CalpontSelectExecutionPlan* csep, JobInfo& jobInfo, JobStepVector& querySteps,
-                        JobStepVector& projectSteps, DeliveredTableMap& deliverySteps)
+                        JobStepVector& projectSteps, DeliveredTableMap& /*deliverySteps*/)
 {
   ParseTree* filters = csep->filters();
   jobInfo.deliveredCols = csep->returnedCols();
@@ -1962,7 +1968,8 @@ void makeJobSteps(CalpontSelectExecutionPlan* csep, JobInfo& jobInfo, JobStepVec
     else
       oid = 0;
 
-    uint32_t tableUid = makeTableKey(jobInfo, oid, it->table, it->alias, it->schema, it->view);
+    uint32_t tableUid =
+        makeTableKey(jobInfo, oid, it->table, it->alias, it->schema, it->view, it->partitions);
     jobInfo.tableList.push_back(tableUid);
   }
 
@@ -2304,8 +2311,8 @@ namespace joblist
 {
 /* static */
 SJLP JobListFactory::makeJobList(CalpontExecutionPlan* cplan, ResourceManager* rm,
-                                 const PrimitiveServerThreadPools& primitiveServerThreadPools, bool tryTuple,
-                                 bool isExeMgr)
+                                 const PrimitiveServerThreadPools& primitiveServerThreadPools,
+                                 bool /*tryTuple*/, bool isExeMgr)
 {
   SJLP ret;
   string emsg;

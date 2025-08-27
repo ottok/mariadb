@@ -381,7 +381,7 @@ class BRMWrapper : public WEObj
    * @brief Commit the transaction
    */
   EXPORT int commit(const BRM::VER_t transID);
-  EXPORT uint8_t newCpimportJob(uint32_t &jobId);
+  EXPORT uint8_t newCpimportJob(uint32_t& jobId);
   EXPORT void finishCpimportJob(uint32_t jobId);
 
   /**
@@ -466,7 +466,7 @@ class BRMWrapper : public WEObj
   //--------------------------------------------------------------------------
 
   static BRMWrapper* volatile m_instance;
-  static boost::thread_specific_ptr<int> m_ThreadDataPtr;
+  static thread_local int m_brmRc;
   static boost::mutex m_instanceCreateMutex;
 
   EXPORT static bool m_useVb;
@@ -489,10 +489,9 @@ inline BRMWrapper::BRMWrapper()
 
 inline BRMWrapper::~BRMWrapper()
 {
-  if (blockRsltnMgrPtr)
-    delete blockRsltnMgrPtr;
+  delete blockRsltnMgrPtr;
 
-  blockRsltnMgrPtr = 0;
+  blockRsltnMgrPtr = nullptr;
 }
 
 inline BRM::DBRM* BRMWrapper::getDbrmObject()
