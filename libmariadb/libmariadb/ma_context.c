@@ -637,6 +637,13 @@ my_context_destroy(struct my_context *c)
 
 
 #ifdef MY_CONTEXT_USE_AARCH64_GCC_ASM
+
+#if (defined(__clang__) && (__clang_major__ >= 9)) ||                   \
+        (defined(__GNUC__) && (__GNUC__ > 9 || (__GNUC__ == 9 && __GNUC_MINOR__ >= 1)))
+#define BTI_J_STR "bti j"
+#else
+#define BTI_J_STR ".inst 0xd503241f"
+#endif
 /*
   GCC-aarch64 (arm64) implementation of my_context.
 
@@ -724,12 +731,14 @@ my_context_spawn(struct my_context *c, void (*f)(void *), void *d)
        will do this for us if needed.
      */
      "1:\n\t"
+     BTI_J_STR "\n\t"
      "ldr x10, [%[save], #88]\n\t"
      "mov sp, x10\n\t"
      "mov %w[ret], #0\n\t"
      "b 3f\n"
      /* Come here when operation was suspended. */
      "2:\n\t"
+     BTI_J_STR "\n\t"
      "mov %w[ret], #1\n"
      "3:\n"
      : [ret] "=r" (ret),
@@ -824,6 +833,7 @@ my_context_continue(struct my_context *c)
        my_context_spawn(), so we preserve the value correctly at this point.
      */
      "1:\n\t"
+     BTI_J_STR "\n\t"
      /* x19 (aka %[save]) is preserved from my_context_spawn() in this case. */
      "ldr x20, [%[save], #8]\n\t"
      "ldp x21, x22, [%[save], #16]\n\t"
@@ -840,6 +850,7 @@ my_context_continue(struct my_context *c)
      "b 3f\n"
      /* Come here when operation is suspended. */
      "2:\n\t"
+     BTI_J_STR "\n\t"
      "mov %w[ret], #1\n"
      "3:\n"
      : [ret] "=r" (ret)
@@ -923,6 +934,7 @@ my_context_yield(struct my_context *c)
      "br x11\n"
 
      "1:\n"
+     BTI_J_STR "\n\t"
      :
      : [save] "r" (save)
      : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",

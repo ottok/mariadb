@@ -325,7 +325,7 @@ static int cli_report_progress(MYSQL *mysql, uchar *packet, uint length)
   return 0;
 }
 
-/* Get the length of next field. Change parameter to point at fieldstart */
+/* Get the length of next field. Change parameter to point at field start */
 ulong
 net_field_length(uchar **packet)
 {
@@ -520,13 +520,6 @@ int ma_multi_command(MYSQL *mysql, enum enum_multi_status status)
     return 0;
   case COM_MULTI_END:
   {
-    size_t len= net->write_pos - net->buff - NET_HEADER_SIZE;
-
-    if (len < NET_HEADER_SIZE) /* don't send empty request */
-    {
-      ma_net_clear(net);
-      return 1;
-    }
     net->extension->multi_status= COM_MULTI_OFF;
     return ma_net_flush(net);
   }
@@ -817,7 +810,6 @@ my_bool _mariadb_set_conf_option(MYSQL *mysql, const char *config_option, const 
         switch (mariadb_defaults[i].type) {
         case MARIADB_OPTION_FUNC:
           return mariadb_defaults[i].u.option_func(mysql, config_option, config_value, -1);
-          break;
         case MARIADB_OPTION_BOOL:
           val_bool= 0;
           if (config_value)
@@ -876,6 +868,11 @@ static int parse_connection_string(MYSQL *mysql, const char *unused __attribute_
 
   /* don't modify original dsn */
   conn_save= (char *)malloc(len + 1);
+  if (!conn_save)
+  {
+    SET_CLIENT_ERROR(mysql, CR_OUT_OF_MEMORY, SQLSTATE_UNKNOWN, 0);
+    return 1;
+  }
   memcpy(conn_save, conn_str, len);
   conn_save[len]= 0;
 
@@ -936,7 +933,6 @@ static int parse_connection_string(MYSQL *mysql, const char *unused __attribute_
         if (pos <= end)
           val= pos;
         continue;
-        break;
       case ';':
         if (in_curly_brace)
         {
@@ -950,7 +946,6 @@ static int parse_connection_string(MYSQL *mysql, const char *unused __attribute_
           _mariadb_set_conf_option(mysql, key, val);
         key= val= NULL;
         continue;
-        break;
     }
     if (!key && *pos)
       key= pos;
@@ -1364,7 +1359,11 @@ mysql_init(MYSQL *mysql)
   return mysql;
 error:
   if (mysql->free_me)
+  {
+    if (mysql->net.extension)
+      free(mysql->net.extension);
     free(mysql);
+  }
   return 0;
 }
 
@@ -1553,42 +1552,8 @@ mysql_real_connect(MYSQL *mysql, const char *host, const char *user,
       return my;
     }
   }
-#ifndef HAVE_SCHANNEL
   return mysql->methods->db_connect(mysql, host, user, passwd,
                                     db, port, unix_socket, client_flag);
-#else
-/* 
-   With older windows versions (prior Win 10) TLS connections periodically
-   fail with SEC_E_INVALID_TOKEN, SEC_E_BUFFER_TOO_SMALL or SEC_E_MESSAGE_ALTERED
-   error (see MDEV-13492). If the connect attempt returns on of these error codes
-   in mysql->net.extended_errno we will try to connect again (max. 3 times)
-*/
-#define MAX_SCHANNEL_CONNECT_ATTEMPTS 3
-  {
-    int ssl_retry= (mysql->options.use_ssl) ? MAX_SCHANNEL_CONNECT_ATTEMPTS : 1;
-	MYSQL *my= NULL;
-    while (ssl_retry)
-    {
-      if ((my= mysql->methods->db_connect(mysql, host, user, passwd,
-                                    db, port, unix_socket, client_flag | CLIENT_REMEMBER_OPTIONS)))
-        return my;
-
-      switch (mysql->net.extension->extended_errno) {
-        case SEC_E_INVALID_TOKEN:
-        case SEC_E_BUFFER_TOO_SMALL:
-        case SEC_E_MESSAGE_ALTERED:
-          ssl_retry--;
-          break;
-        default:
-          ssl_retry= 0;
-          break;
-      }
-    }
-    if (!my && !(client_flag & CLIENT_REMEMBER_OPTIONS))
-      mysql_close_options(mysql);
-    return my;
-  }
-#endif
 }
 
 struct st_host {
@@ -1957,7 +1922,7 @@ restart:
     mysql->server_capabilities|= (unsigned int)(uint2korr(end + 5)) << 16;
     pkt_scramble_len= uint1korr(end + 7);
 
-    /* check if MariaD2B specific capabilities are available */
+    /* check if MariaDB-specific capabilities are available */
     if (mariadb_connection(mysql) && !(mysql->server_capabilities & CLIENT_MYSQL))
     {
       mysql->extension->mariadb_server_capabilities= (ulonglong) uint4korr(end + 14);
@@ -2148,7 +2113,14 @@ my_bool STDCALL mariadb_reconnect(MYSQL *mysql)
     return(1);
   }
 
-  mysql_init(&tmp_mysql);
+  if (!mysql_init(&tmp_mysql))
+  {
+    /* extensions may have failed to allocate */
+    SET_CLIENT_ERROR(mysql, CR_OUT_OF_MEMORY, SQLSTATE_UNKNOWN, 0);
+    tmp_mysql.free_me= 0;
+    mysql_close(&tmp_mysql);
+    return(1);
+  }
   tmp_mysql.free_me= 0;
   tmp_mysql.options=mysql->options;
   if (mysql->extension->conn_hdlr)
@@ -3037,7 +3009,7 @@ mysql_store_result(MYSQL *mysql)
 
 
 /**************************************************************************
-** Alloc struct for use with unbuffered reads. Data is fetched by domand
+** Alloc struct for use with unbuffered reads. Data is fetched by demand
 ** when calling to mysql_fetch_row.
 ** mysql_data_seek is a noop.
 **
