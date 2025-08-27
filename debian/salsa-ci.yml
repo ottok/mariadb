@@ -724,34 +724,6 @@ mariadb-10.5 and Bullseye upgrade:
     - apt-get purge --yes mariadb*10.?
     - *test-verify-final
 
-mariadb-10.3 and Buster upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB and distro
-  image: debian:buster
-  script:
-    - *test-prepare-container
-    # Install everything MariaDB currently in Debian Buster
-    - apt-get install -qq --yes 'default-mysql*' 'mariadb-*' 'libmariadb*'
-    # Verify installation of MariaDB from Buster
-    - dpkg -l | grep -e "mariadb-server.*10\.3"
-    - *test-verify-initial
-    - *test-enable-trixie-repos
-    # Ensure mariadbd will not crash on next shutdown for any reason
-    - service mysql restart # in 10.3 service name is still 'mysql'
-    - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate mariadb-server
-    - apt-get install -qq --yes mariadb-server
-    # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
-    - service mysql status
-    # mariadb-10.3 in Buster ships a /etc/init.d/mysql and it continues to exist
-    # after upgrade, and is removed only on purge
-    - apt-get purge --yes mariadb*10.?
-    - service mariadb status
-    # Give the mariadb-upgrade plenty of time to complete, otherwise next commands
-    # fail on non-existing mariadb.sys user
-    - sleep 15
-    - *test-verify-final
-
 mariadb-10.3 and Ubuntu Focal upgrade:
   extends: .salsa-ci-template-for-mariadb
   stage: upgrade MariaDB and distro
@@ -1042,21 +1014,7 @@ mariadb.org-11.8 upgrade:
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
-# archive.mariadb.org for Debian Sid latest is 11.7.2
-mariadb.org-11.7 upgrade:
-  extends: .salsa-ci-template-for-mariadb-upgrade
-  stage: upgrade MariaDB variant
-  variables:
-    MARIADB_VERSION: "11.7"
-  script:
-    - apt-get install -qq --yes mariadb-server
-    - dpkg -l | grep -e "mariadb-server.*11\.7"
-    - *test-verify-initial
-    - *test-install-all
-    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-final
-
-# archive.mariadb.org for Debian Sid latest is 11.4.5
+# archive.mariadb.org for Debian Trixie has no 11.4 yet
 mariadb.org-11.4 upgrade:
   extends: .salsa-ci-template-for-mariadb-upgrade
   stage: upgrade MariaDB variant
@@ -1069,8 +1027,9 @@ mariadb.org-11.4 upgrade:
     - *test-install-all
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
+  allow_failure: true
 
-# archive.mariadb.org for Debian Sid latest is 10.11.8
+# archive.mariadb.org for Debian Trixie has no 10.11 yet
 mariadb.org-10.11 upgrade:
   extends: .salsa-ci-template-for-mariadb-upgrade
   stage: upgrade MariaDB variant
@@ -1083,8 +1042,9 @@ mariadb.org-10.11 upgrade:
     - *test-install-all
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
+  allow_failure: true
 
-# archive.mariadb.org for Debian Sid latest is 10.6.12
+# archive.mariadb.org for Debian Trixie has no 10.6 yet
 mariadb.org-10.6 upgrade:
   extends: .salsa-ci-template-for-mariadb-upgrade
   stage: upgrade MariaDB variant
@@ -1099,63 +1059,7 @@ mariadb.org-10.6 upgrade:
     - *test-install-all
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
-
-# archive.mariadb.org for Debian Sid latest is 10.5.13
-mariadb.org-10.5 upgrade:
-  extends: .salsa-ci-template-for-mariadb-upgrade
-  stage: upgrade MariaDB variant
-  variables:
-    MARIADB_VERSION: "10.5"
-  script:
-    # OpenSSL 1.1 was removed from Debian Sid in Dec 2022 as Bookworm will ship
-    # with OpenSSL 3.0 only. Use OpenSSL 1.1 from Debian snapshots to be able to
-    # install MariaDB binaries that depend on it.
-    - |
-      apt-get -qq install --no-install-recommends --yes curl ca-certificates
-      curl -sLO https://snapshot.debian.org/archive/debian/20220507T034236Z/pool/main/o/openssl/libssl1.1_1.1.1o-1_amd64.deb
-      apt-get -qq install --no-install-recommends --yes ./libssl1.1_1.1.1o-1_amd64.deb
-    # Package libaio1 was replaced by libaio1t64 in Debian Sid in April 2024.
-    # Use libaio1 from Debian snapshots to be able to install MariaDB binaries
-    # that depend on it.
-    - |
-      curl -sLO https://snapshot.debian.org/archive/debian/20240331T210805Z/pool/main/liba/libaio/libaio1_0.3.113-5_amd64.deb
-      apt-get -qq install --no-install-recommends --yes ./libaio1_0.3.113-5_amd64.deb
-    - apt-get install -qq --yes mariadb-server
-    - *test-verify-initial
-    - *test-install-all
-    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-final
-
-# Buster is the last Debian release Oracle MySQL 5.7 offers binaries for
-mysql.com-5.7 with Buster upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB variant
-  needs:
-    - job: build
-  image: debian:buster
-  script:
-    - *test-prepare-container
-    - apt-get install -qq --yes --no-install-recommends ca-certificates
-    - echo "deb https://repo.mysql.com/apt/debian/ buster mysql-5.7" > /etc/apt/sources.list.d/mysql.list
-    - apt-get update -qq
-    - apt-get install -qq --yes mysql-server 'libmysqlc*'
-    # Ensure MySQL 5.7 package actually got installed
-    - dpkg -l | grep -e "mysql-server.*5.7"
-    - *test-verify-initial
-    - *test-enable-trixie-repos
-    - *test-install-all
-    # Due to some (currently unknown) changes in MySQL 5.7 packaging or apt
-    # behaviour changes, a system with a previous installation of MySQL will
-    # on upgrades to MariaDB first fully remove MySQL, including the
-    # /etc/init.d/mysql file, so previous techniques in
-    # mariadb-server-10.6.postinst to maintain backwards compatibility with
-    # 'service mysql status' after installing MariaDB on top MySQL no longer
-    # works. Thus the step to test it now intentionally has a fallback to use
-    # the service name 'mariadb' instead, and the fallback is always used.
-    - sleep 5 # Give the mysql_upgrade a bit of time to complete before querying the server
-    - service mysql status || service mariadb status
-    - sleep 15 # Give the mysql_upgrade a bit of extra time to complete with MySQL 5.7 before querying the server
-    - *test-verify-final
+  allow_failure: true
 
 # Note: pmm2-client does not exist in the Bookworm repository anymore
 percona-xtradb-5.7 with Bookworm upgrade:
