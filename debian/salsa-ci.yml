@@ -93,10 +93,7 @@ packaging-fix-checks:
     variables:
       - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
 
-build bullseye-backports:
-  extends: .build-package
-  variables:
-    RELEASE: bullseye-backports
+# Bullseye backports no longer available.
 
 # Buster only has libfmt 6.1 but 7.0 is required, so backport build for Buster
 # is not possible unless somebody packages libfmt7-dev for Buster.
@@ -128,7 +125,20 @@ blhc:
   echo -e '#!/bin/sh\necho "N 5"' > /sbin/runlevel; chmod +x /sbin/runlevel
   # Avoid the warnings of "debconf: unable to initialize frontend: Dialog"
   echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
-  # Emit non-zero exit code also on warnings
+  # In CI runs we do not enforce strict supply-chain security and thus expired
+  # and missing keys are ignored. In particular when testing upgrades from old
+  # releases, the old repositories may have expired keys by design, and must be
+  # ignored for CI to be able to run. Instead of adding '[trusted=yes
+  # check-valid-until=no check-date=no]' to every 'deb https://' line in
+  # sources, lax apt security settings system-wide.
+  cat > /etc/apt/apt.conf.d/99ignore-keys <<EOF
+  APT::Get::AllowUnauthenticated "true";
+  Acquire::AllowInsecureRepositories "true";
+  Acquire::AllowDowngradeToInsecureRepositories "true";
+  Acquire::Check-Valid-Until "false";
+  Acquire::Check-Date "false";
+  EOF
+  # Emit non-zero exit code also on warnings to ensure CI stops on any issue
   echo 'APT::Update::Error-Mode "any";' > /etc/apt/apt.conf.d/non-zero-exit-on-warnings
   # Prime the apt cache so later apt commands can run
   apt-get update -qq
@@ -388,24 +398,6 @@ simple upgrade:
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
-mariadb-10.5 with Bullseye backports upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB
-  needs:
-    - job: build bullseye-backports
-  image: debian:bullseye
-  script:
-    - *test-prepare-container
-    # Install everything MariaDB currently in Debian Bullseye
-    - apt-get install -y 'default-mysql*' 'mariadb-*' 'libmariadb*'
-    # Verify installation of MariaDB from Bullseye
-    - dpkg -l | grep -e "mariadb-server.*10.5"
-    - *test-verify-initial
-    - *test-enable-bullseye-backports-repos
-    - *test-full-upgrade
-    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-final
-
 mariadb-10.6 and Bookworm-20230208 upgrade:
   extends: .salsa-ci-template-for-mariadb
   stage: upgrade MariaDB and distro
@@ -445,26 +437,6 @@ mariadb-10.5 and Bullseye upgrade:
     - service mariadb restart
     - *test-full-upgrade
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-final
-
-mariadb-10.3 and Buster upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB and distro
-  image: debian:buster
-  script:
-    - *test-prepare-container
-    # Install everything MariaDB currently in Debian Buster
-    - apt-get install -y 'default-mysql*' 'mariadb-*' 'libmariadb*'
-    # Verify installation of MariaDB from Buster
-    - dpkg -l | grep -e "mariadb-server.*10.3"
-    - *test-verify-initial
-    - *test-enable-bookworm-repos
-    # Ensure mariadbd will not crash on next shutdown for any reason
-    - service mysql restart # in 10.3 service name is still 'mysql'
-    - *test-full-upgrade
-    # mariadb-10.3 in Buster ships a /etc/init.d/mysql and it continues to exist
-    # after upgrade, but is be removed on purge
-    - service mysql status || service mariadb status
     - *test-verify-final
 
 # Similar to the Cacti install test, check that MariaDB consumer Zoph upgrades
@@ -605,93 +577,6 @@ default-libmysqlclient-dev and Bullseye upgrade:
     - *test-full-upgrade-libs
     - *test-verify-libs
 
-default-libmysqlclient-dev and Buster upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB and distro
-  image: debian:buster
-  script:
-    - *test-prepare-container
-    - apt-get install -y pkg-config default-libmysqlclient-dev
-    - pkg-config --list-all
-    - *test-enable-bookworm-repos
-    - *test-full-upgrade-libs
-    - *test-verify-libs
-
-default-libmysqlclient-dev with Bullseye backports upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB
-  needs:
-    - job: build bullseye-backports
-  image: debian:bullseye
-  script:
-    - *test-prepare-container
-    - apt-get install -y pkg-config default-libmysqlclient-dev
-    - pkg-config --list-all
-    - *test-enable-bullseye-backports-repos
-    - *test-full-upgrade-libs
-    - *test-verify-libs
-
-# Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
-# The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
-#
-# Testing on Focal binaries on Buster works. Using Jammy binaries on Bullseye
-# does not work as libc in Jammy is too new.
-mysql-8.0 from Ubuntu 22.04 with Bullseye backports upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB variant
-  needs:
-    - job: build bullseye-backports
-  image: debian:bullseye
-  script:
-    - *test-prepare-container
-    # Add Ubuntu Focal archive keys and repository
-    - apt-get install --no-install-recommends --yes gpg gpg-agent dirmngr ca-certificates # Bare minimal (<4MB) for apt-key to work
-    - apt-key adv --recv-keys --keyserver hkps://keyserver.ubuntu.com:443 871920D1991BC93C 3B4FE6ACC0B21F32
-    - echo "deb http://archive.ubuntu.com/ubuntu/ focal main restricted" > /etc/apt/sources.list.d/ubuntu.list
-    - apt-get update -qq
-    # First install often fail due to bug in mysql-8.0
-    - apt-get install -y mysql-server 'libmysqlc*' || true
-    # Ensure MySQL 8.0 package actually got installed
-    - dpkg -l | grep -e "mysql-server.*8.0"
-    - sleep 10 && apt-get install -f
-    - *test-verify-initial
-    # Enable backports to make galera-4 available
-    - echo "deb http://deb.debian.org/debian bullseye-backports main" > /etc/apt/sources.list.d/backports.list && apt-get update -qq
-    - *test-install-all
-    - service mysql status
-    - sleep 5 # Give the mysql_upgrade a bit of time to complete before querying the server
-    - *test-verify-final
-
-# Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
-# The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
-mysql-community-cluster-8.0 from MySQL.com with Bullseye backports upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB variant
-  needs:
-    - job: build bullseye-backports
-  image: debian:bullseye
-  script:
-    - *test-prepare-container
-    - apt-get install --no-install-recommends --yes ca-certificates curl systemctl
-    - curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xbca43417c3b485dd128ec6d4b7b3b788a8d3785c" -o /etc/apt/trusted.gpg.d/mysql.asc
-    - echo "deb https://repo.mysql.com/apt/debian/ bullseye mysql-cluster-8.0" > /etc/apt/sources.list.d/mysql.list
-    - apt-get update -qq
-    - apt-get install -y mysql-cluster-community-server
-    - sed 's/ExecStartPre=+/ExecStartPre=/' -i /lib/systemd/system/mysql.service # Hack to make file compatible with systemctl shim
-    - systemctl start mysql
-    - dpkg -l | grep -iE 'maria|mysql|galera'
-    - systemctl status mysql; mysql -e 'SELECT VERSION()'
-    - systemctl stop mysql # Stop manually as maintainer scripts don't handle this with systemctl shim
-    # Enable backports to make galera-4 available
-    - echo "deb http://deb.debian.org/debian bullseye-backports main" > /etc/apt/sources.list.d/backports.list && apt-get update -qq
-    - *test-install-all
-    # Ignore systemctl shim result as MariaDB systemd file is incompatible with it and yields:
-    #   ERROR:systemctl:the ExecStartPre control process exited with error code
-    - systemctl status mysql || true
-    - mysql -e 'SELECT VERSION()' || true
-    - sleep 5 # Give the mysql_upgrade a bit of time to complete before querying the server
-    - *test-verify-final
-
 mariadb.org-10.11 upgrade:
   extends: .salsa-ci-template-for-mariadb-upgrade
   stage: upgrade MariaDB variant
@@ -723,59 +608,4 @@ mariadb.org-10.10 upgrade:
     - *test-verify-initial
     - *test-full-upgrade
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-final
-
-mysql.com-5.7 with Buster upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB variant
-  needs:
-    - job: build
-  image: debian:buster
-  script:
-    - *test-prepare-container
-    - |
-      apt-get install --no-install-recommends --yes gpg gpg-agent dirmngr ca-certificates # Bare minimal (<4MB) for apt-key to work
-      apt-key adv --recv-keys --keyserver hkps://keyserver.ubuntu.com:443 B7B3B788A8D3785C
-      echo "deb https://repo.mysql.com/apt/debian/ buster mysql-5.7" > /etc/apt/sources.list.d/mysql.list
-      apt-get update -qq
-      apt-get install -y 'mysql*' 'libmysqlc*'
-    # Ensure MySQL 5.7 package actually got installed
-    - dpkg -l | grep -e "mysql-server.*5.7"
-    - *test-verify-initial
-    - *test-enable-bookworm-repos
-    - *test-install-all
-    # Due to some (currently unknown) changes in MySQL 5.7 packaging or apt
-    # behaviour changes, a system with a previous installation of MySQL will
-    # on upgrades to MariaDB first fully remove MySQL, including the
-    # /etc/init.d/mysql file, so previous techniques in
-    # mariadb-server-10.6.postinst to maintain backwards compatibility with
-    # 'service mysql status' after installing MariaDB on top MySQL no longer
-    # works. Thus the step to test it now intentionally has a fallback to use
-    # the service name 'mariadb' instead, and the fallback is always used.
-    - sleep 5 # Give the mysql_upgrade a bit of time to complete before querying the server
-    - service mysql status || service mariadb status
-    - sleep 15 # Give the mysql_upgrade a bit of extra time to complete with MySQL 5.7 before querying the server
-    - *test-verify-final
-
-percona-xtradb-5.7 with Bullseye backports upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB variant
-  needs:
-    - job: build bullseye-backports
-  image: debian:bullseye
-  script:
-    - *test-prepare-container
-    - |
-      apt-get install --no-install-recommends --yes gpg gpg-agent dirmngr ca-certificates # Bare minimal (<4MB) for apt-key to work
-      apt-key adv --recv-keys --keyserver hkps://keyserver.ubuntu.com:443 9334A25F8507EFA5
-      echo "deb https://repo.percona.com/apt/ bullseye main" > /etc/apt/sources.list.d/mysql.list
-      apt-get update -qq
-      apt-get install -y percona-xtradb-cluster-full-57 percona-xtrabackup-24 percona-toolkit pmm2-client
-    - service mysql status
-    - *test-verify-initial
-    # Enable backports to make galera-4 available
-    - echo "deb http://deb.debian.org/debian bullseye-backports main" >> /etc/apt/sources.list.d/backports.list && apt-get update -qq
-    - *test-install-all
-    - service mysql status
-    - sleep 15 # Give the mysql_upgrade a bit of extra time to complete with MySQL 5.7 before querying the server
     - *test-verify-final
