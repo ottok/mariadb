@@ -2,6 +2,15 @@ mariadb (1:10.11.14-0+deb12u1) bookworm; urgency=medium
 
   * New upstream version 10.11.14. Includes fixes for several regressions
     as noted at https://mariadb.com/kb/en/mariadb-10-11-14-release-notes/
+  * Update configuration traces to include new upstream system variables:
+    - analyze-max-length (default: 4294967295)
+    - innodb-linux-aio (default: auto)
+  * Suppress new native AIO warning introduced in upstream a87bb96 to avoid
+    mariadb-test-run failing on something that isn't a real issue
+  * New upstream release includes fix for MDEV-36815 that yielded "ERROR 1267
+    (HY000): Illegal mix of collations" on some systems when restarting the
+    MariaDB service in Debian (Closes: #1104533)
+  * Update Lintian overrides for new files in latest upstream version
   * Salsa CI: Remove Buster, Bullseye-backports and ignore key errors
 
  -- Otto Kekäläinen <otto@debian.org>  Tue, 26 Aug 2025 23:27:40 -0700
