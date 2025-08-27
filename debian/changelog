@@ -1,3 +1,11 @@
+mariadb (1:10.11.14-0+deb12u1) bookworm; urgency=medium
+
+  * New upstream version 10.11.14. Includes fixes for several regressions
+    as noted at https://mariadb.com/kb/en/mariadb-10-11-14-release-notes/
+  * Salsa CI: Remove Buster, Bullseye-backports and ignore key errors
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 26 Aug 2025 23:27:40 -0700
+
 mariadb (1:10.11.13-0+deb12u1) bookworm; urgency=medium
 
   * New upstream version 10.11.13. Includes fixes for several severe regressions
