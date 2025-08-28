@@ -1,0 +1,64 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Sat, 30 Aug 2025 14:51:31 -0700
+Subject: Implement new build flag WITH_TCMALLOC
+
+Add new CMake option to use tcmalloc as the system memory allocator.
+When set to `system`, the build system fail with a clear error if the
+`libtcmalloc` library isn't found.
+
+Additionally, disable safemalloc to prevent conflicts between the two
+allocators. Move the WITH_TCMALLOC logic to an earlier point to ensure
+its state is known before safemalloc's configuration is evaluated.
+
+See also:
+https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/installing-mariadb/compiling-mariadb-from-source/compiling-mariadb-with-extra-modulesoptions/using-mariadb-with-tcmalloc-or-jemalloc#building-mariadb-with-an-alternative-to-malloc
+---
+ CMakeLists.txt | 21 ++++++++++++++++++---
+ 1 file changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 560e7b8..0da26e0 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -336,6 +336,22 @@ IF(NOT WIN32)
+   ENDFOREACH()
+ ENDIF()
+ 
++# Make it easy to enable tcmalloc from Google's perftools
++SET(WITH_TCMALLOC "OFF" CACHE STRING "Use tcmalloc. Can be OFF or system.")
++IF(WITH_TCMALLOC STREQUAL "system")
++  FIND_LIBRARY(TCMALLOC_LIBRARY_PATH NAMES tcmalloc)
++  IF(TCMALLOC_LIBRARY_PATH)
++    MESSAGE(STATUS "Found tcmalloc: ${TCMALLOC_LIBRARY_PATH}")
++    SET(MALLOC_LIBRARY "tcmalloc")
++    SET(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} -ltcmalloc")
++    ADD_DEFINITIONS(-DWITH_TCMALLOC)
++  ELSE()
++    MESSAGE(FATAL_ERROR "WITH_TCMALLOC=system, but tcmalloc library not found. Please install libgoogle-perftools-dev.")
++  ENDIF()
++ELSE()
++  SET(MALLOC_LIBRARY "system")
++ENDIF()
++
+ # safemalloc can be enabled and disabled independently
+ SET(WITH_SAFEMALLOC "AUTO" CACHE STRING "Use safemalloc memory debugger. Will result in slower execution. Options are: ON OFF AUTO.")
+ 
+@@ -347,7 +363,8 @@ ELSEIF(WITH_SAFEMALLOC MATCHES "AUTO"
+        AND NOT WITH_ASAN
+        AND NOT WITH_UBSAN
+        AND NOT WITH_TSAN
+-       AND NOT WITH_MSAN)
++       AND NOT WITH_MSAN
++       AND NOT WITH_TCMALLOC STREQUAL "system")
+   SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DSAFEMALLOC")
+   SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DSAFEMALLOC")
+ ENDIF()
+@@ -426,8 +443,6 @@ MYSQL_CHECK_SSL()
+ # Add readline or libedit.
+ MYSQL_CHECK_READLINE()
+ 
+-SET(MALLOC_LIBRARY "system")
+-
+ CHECK_PCRE()
+ CHECK_LIBFMT()
+ ADD_SUBDIRECTORY(tpool)

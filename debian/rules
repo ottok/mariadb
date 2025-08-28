@@ -40,6 +40,13 @@ ifeq (,$(filter terse,$(DEB_BUILD_OPTIONS)))
     export DH_VERBOSE=1
 endif
 
+# Use tcmalloc on all architectures except i386
+ifneq (,$(filter $(ARCH), i386))
+    BUILD_WITH_TCMALLOC:=OFF
+else
+    BUILD_WITH_TCMALLOC:=system
+endif
+
 # Parallel build support as advised
 # at https://www.debian.org/doc/debian-policy/ch-source.html#s-debianrules-options
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
@@ -112,6 +119,7 @@ endif
 	    -DPLUGIN_AWS_KEY_MANAGEMENT=NO \
 	    -DPLUGIN_COLUMNSTORE=NO \
 	    -DWITH_NUMA=AUTO \
+			-DWITH_TCMALLOC="$(BUILD_WITH_TCMALLOC)" \
 	    -DIGNORE_AIO_CHECK=ON \
 	    -DWITH_URING=ON \
 	    -DWITH_LIBAIO=ON \

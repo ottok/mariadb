@@ -22,6 +22,7 @@ Build-Depends:
  libedit-dev,
  libedit-dev:native,
  libfmt-dev (>= 10.1.1+ds1-4) | libfmt-dev (<< 10),
+ libgoogle-perftools-dev [!i386],
  libjemalloc-dev [linux-any],
  libjudy-dev,
  libkrb5-dev,
