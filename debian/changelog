@@ -1,3 +1,10 @@
+mariadb (1:11.8.3-2) UNRELEASED; urgency=medium
+
+  [ Daniel Black ]
+  * MDEV-37411: re-enable AIO in Debian
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 30 Aug 2025 16:15:28 -0700
+
 mariadb (1:11.8.3-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
