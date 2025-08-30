@@ -1,3 +1,11 @@
+mariadb (1:10.11.14-0+deb12u2) bookworm; urgency=medium
+
+  * Fix "MARIADB: unbound variable" warning which was a regression from the 
+    preivous version that that the illegal mix of collations fix applied with 
+    wrong variable name (Closes: #1112499)
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 30 Aug 2025 10:17:22 -0700
+
 mariadb (1:10.11.14-0+deb12u1) bookworm; urgency=medium
 
   * New upstream version 10.11.14. Includes fixes for several regressions
