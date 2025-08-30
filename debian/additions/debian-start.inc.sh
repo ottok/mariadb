@@ -78,7 +78,7 @@ function check_root_accounts() {
            JSON_VALUE(priv, '$.plugin') in ('mysql_native_password', 'mysql_old_password', 'parsec') AND
            JSON_VALUE(priv, '$.authentication_string') = '' AND
            JSON_VALUE(priv, '$.password_last_changed') != 0
-     " | $MARIADB --skip-column-names)
+     " | $MYSQL --skip-column-names)
   if [ "$ret" -ne "0" ]
   then
     logger -p daemon.warn -i -t"$0" "WARNING: mysql.user contains $ret root accounts without password!"
