@@ -29,6 +29,8 @@ variables:
   SALSA_CI_DISABLE_REPROTEST: 1
   SALSA_CI_ENABLE_ATOMIC_REPROTEST: 0
   SALSA_CI_DISABLE_RC_BUGS: 0
+  # Testing https://salsa.debian.org/salsa-ci-team/pipeline#git-attributes
+  SALSA_CI_DISABLE_GBP_SETUP_GITATTRIBUTES: 1
 
 .build-package:
   # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
