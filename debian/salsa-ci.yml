@@ -6,6 +6,8 @@ include:
 variables:
   # These pass in Ubuntu 24.04 "Noble", to continue testing that they don't regress
   SALSA_CI_DISABLE_LINTIAN: 0
+  # Testing https://salsa.debian.org/salsa-ci-team/pipeline#git-attributes
+  SALSA_CI_DISABLE_GBP_SETUP_GITATTRIBUTES: 1
 
 .build-package:
   # Extend Salsa CI build jobs to have longer timeout as the default GitLab
