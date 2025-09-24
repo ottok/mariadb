@@ -1,0 +1,9 @@
+# This local-options is only for git checkouts of the source package
+# https://manpages.debian.org/unstable/dpkg-dev/dpkg-source.1.en.html#debian/source/local-options
+#
+# When running `dpkg-source -b .` or other dpkg-source commands in the git
+# checkout of the repository, ignore any changes in WolfSSL in git vs tarball as
+# they are most likely Windows line endings that git has stripped away. We don't
+# use the embedded WolfSSL sources nor ColumnStore in Debian, so we don't really
+# care about them anyway.
+extend-diff-ignore = "^(extra/wolfssl/|storage/columnstore/).*$"
