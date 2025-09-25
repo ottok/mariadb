@@ -955,30 +955,6 @@ mysql-8.4 in Ubuntu 25.04 upgrade:
 
 # Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
 # The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
-mysql-8.0 in Ubuntu 24.10 upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB variant
-  image: ubuntu:oracular
-  script:
-    - *test-prepare-container
-    - apt-get install -qq --yes procps mysql-server 'libmysqlc*'
-    # Ensure MySQL 8.0 package actually got installed
-    - dpkg -l | grep mysql
-    - service mysql status
-    - *test-verify-initial
-    - *test-enable-trixie-repos
-    # Ensure mysqld will not crash on next shutdown for any reason
-    - service mysql restart
-    - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate mariadb-server
-    - apt-get install -qq --yes mariadb-server
-    - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
-    # Remove everything MySQL except mysql-common which also MariaDB depends on
-    - apt-get purge --yes mysql-s* mysql-cl* libmysql*
-    - *test-verify-final
-
-# Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
-# The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
 mysql-community-cluster-8.0 from MySQL.com with Bookworm upgrade:
   extends: .salsa-ci-template-for-mariadb
   stage: upgrade MariaDB variant
