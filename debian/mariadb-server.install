@@ -18,6 +18,7 @@ usr/lib/*/security/pam_user_map.so
 [linux-any] usr/lib/systemd/system/mariadb@bootstrap.service.d/use_galera_new_cluster.conf
 [linux-any] usr/lib/systemd/system/mysql.service
 [linux-any] usr/lib/systemd/system/mysqld.service
+usr/lib/tmpfiles.d/mariadb.conf
 usr/bin/aria_chk
 usr/bin/aria_dump_log
 usr/bin/aria_ftdump
