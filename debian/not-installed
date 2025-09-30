@@ -53,7 +53,6 @@ usr/lib/mysql/plugin/type_test.so
 usr/lib/sysusers.d/mariadb.conf
 usr/lib/sysusers.d/sysusers.conf
 usr/lib/tmpfiles.d/mariadb.conf
-usr/lib/tmpfiles.d/tmpfiles.conf
 usr/lib/*/pkgconfig/mariadb.pc # Server (not client) helper has confusing naming https://jira.mariadb.org/browse/MDEV-23538
 usr/sbin/mysqld
 usr/sbin/rcmysql
