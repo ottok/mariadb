@@ -14,7 +14,6 @@ usr/lib/*/libidbboot.a # ColumnStore header file
 usr/lib/*/libprocessor.a # ColumnStore header file
 usr/lib/*/libwe_xml.a # ColumnStore header file
 usr/lib/sysusers.d/mariadb.conf # Not used (yet) in Debian systemd
-usr/lib/tmpfiles.d/mariadb.conf # Not used (yet) in Debian systemd
 usr/sbin/rcmysql
 usr/share/doc/mariadb-server/COPYING (related file: "debian/tmp/usr/share/mysql/mroonga/COPYING")
 usr/share/doc/mariadb-server/CREDITS
