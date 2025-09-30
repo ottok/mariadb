@@ -23,7 +23,6 @@ usr/lib/*/libwe_xml.a # ColumnStore header file
 usr/lib/mysql/plugin/type_test.so
 usr/lib/*/pkgconfig/mariadb.pc # Server (not client) helper has confusing naming https://jira.mariadb.org/browse/MDEV-23538
 usr/lib/sysusers.d/mariadb.conf # Not used (yet) in Debian systemd
-usr/lib/tmpfiles.d/mariadb.conf # Not used (yet) in Debian systemd
 usr/sbin/rcmysql
 usr/share/doc/mariadb-server/COPYING (related file: "debian/tmp/usr/share/mysql/mroonga/COPYING")
 usr/share/doc/mariadb-server/CREDITS
