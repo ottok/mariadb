@@ -333,7 +333,7 @@ blhc:
       test -L /lib || cp -av /usr/lib/lsb /lib/
       apt-get remove login mount perl -qq --yes --allow-remove-essential || true
     fi
-  # Pre-emptively upgrade sysvinit-utils and symlink new location from old to
+  # Preemptively upgrade sysvinit-utils and symlink new location from old to
   # prevent upgrades from old MariaDB versions failing when the old service
   # file tries to restart server before upgrade:
   #   /etc/init.d/mysql: line 22: /lib/lsb/init-functions: No such file or directory
@@ -410,7 +410,7 @@ blhc:
 .test-enable-artifacts-repo: &test-enable-artifacts-repo |
   # List files so it can be verified from logs that correct artifacts are present
   find -ls -maxdepth 3
-  # Delete any custom pinning thay may have been used to install initial pacakges
+  # Delete any custom pinning thay may have been used to install initial packages
   rm -rfv /etc/apt/preferences.d/mariadb
   apt-get install -qq --yes apt-utils
   apt-ftparchive packages . > Packages
