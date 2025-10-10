@@ -18,7 +18,7 @@
 
 //  $Id: tupleconstantstep.cpp 9649 2013-06-25 16:08:05Z xlou $
 
-//#define NDEBUG
+// #define NDEBUG
 #include <cassert>
 #include <sstream>
 #include <iomanip>
@@ -90,7 +90,7 @@ TupleConstantStep::~TupleConstantStep()
 {
 }
 
-void TupleConstantStep::setOutputRowGroup(const rowgroup::RowGroup& rg)
+void TupleConstantStep::setOutputRowGroup(const rowgroup::RowGroup& /*rg*/)
 {
   throw runtime_error("Disabled, use initialize() to set output RowGroup.");
 }
@@ -278,13 +278,15 @@ void TupleConstantStep::constructContanstRow(const JobInfo& jobInfo)
         break;
       }
     }  // switch
-  }    // for constant columns
+  }  // for constant columns
 }
 
 void TupleConstantStep::run()
 {
   if (fInputJobStepAssociation.outSize() == 0)
+  {
     throw logic_error("No input data list for constant step.");
+  }
 
   fInputDL = fInputJobStepAssociation.outAt(0)->rowGroupDL();
 
@@ -362,7 +364,7 @@ uint32_t TupleConstantStep::nextBand(messageqcpp::ByteStream& bs)
   if (fEndOfResult)
   {
     // send an empty / error band
-    RGData rgData(fRowGroupOut, 0);
+    RGData rgData(fRowGroupOut, 0U);
     fRowGroupOut.setData(&rgData);
     fRowGroupOut.resetRowGroup(0);
     fRowGroupOut.setStatus(status());
@@ -384,10 +386,6 @@ void TupleConstantStep::execute()
   RGData rgDataIn;
   RGData rgDataOut;
   bool more = false;
-  StepTeleStats sts;
-  sts.query_uuid = fQueryUuid;
-  sts.step_uuid = fStepUuid;
-
   try
   {
     more = fInputDL->next(fInputIterator, &rgDataIn);
@@ -395,8 +393,7 @@ void TupleConstantStep::execute()
     if (traceOn())
       dlTimes.setFirstReadTime();
 
-    sts.msg_type = StepTeleStats::ST_START;
-    sts.total_units_of_work = 1;
+    StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_START, 1);
     postStepStartTele(sts);
 
     if (!more && cancelled())
@@ -433,9 +430,7 @@ void TupleConstantStep::execute()
   while (more)
     more = fInputDL->next(fInputIterator, &rgDataIn);
 
-  sts.msg_type = StepTeleStats::ST_SUMMARY;
-  sts.total_units_of_work = sts.units_of_work_completed = 1;
-  sts.rows = fRowsReturned;
+  StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_SUMMARY, 1, 1, fRowsReturned);
   postStepSummaryTele(sts);
 
   // Bug 3136, let mini stats to be formatted if traceOn.
@@ -572,20 +567,15 @@ void TupleConstantStep::printCalTrace()
 void TupleConstantStep::formatMiniStats()
 {
   ostringstream oss;
-  oss << "TCS "
-      << "UM "
-      << "- "
-      << "- "
-      << "- "
-      << "- "
-      << "- "
-      << "- " << JSTimeStamp::tsdiffstr(dlTimes.EndOfInputTime(), dlTimes.FirstReadTime()) << " "
-      << fRowsReturned << " ";
+  oss << "TCS " << "UM " << "- " << "- " << "- " << "- " << "- " << "- "
+      << JSTimeStamp::tsdiffstr(dlTimes.EndOfInputTime(), dlTimes.FirstReadTime()) << " " << fRowsReturned
+      << " ";
   fMiniInfo += oss.str();
 }
 
 // class TupleConstantOnlyStep
-TupleConstantOnlyStep::TupleConstantOnlyStep(const JobInfo& jobInfo) : TupleConstantStep(jobInfo)
+TupleConstantOnlyStep::TupleConstantOnlyStep(const JobInfo& jobInfo)
+ : TupleConstantStep(jobInfo), fEmptySet(jobInfo.constantFalse)
 {
   //	fExtendedInfo = "TCOS: ";
 }
@@ -595,7 +585,7 @@ TupleConstantOnlyStep::~TupleConstantOnlyStep()
 }
 
 // void TupleConstantOnlyStep::initialize(const RowGroup& rgIn, const JobInfo& jobInfo)
-void TupleConstantOnlyStep::initialize(const JobInfo& jobInfo, const rowgroup::RowGroup* rgIn)
+void TupleConstantOnlyStep::initialize(const JobInfo& jobInfo, const rowgroup::RowGroup* /*rgIn*/)
 {
   vector<uint32_t> oids;
   vector<uint32_t> keys;
@@ -667,7 +657,10 @@ void TupleConstantOnlyStep::run()
 
       fillInConstants();
 
-      fOutputDL->insert(rgDataOut);
+      if (!fEmptySet)
+      {
+        fOutputDL->insert(rgDataOut);
+      }
     }
     catch (...)
     {
@@ -720,7 +713,7 @@ uint32_t TupleConstantOnlyStep::nextBand(messageqcpp::ByteStream& bs)
   else
   {
     // send an empty / error band
-    RGData rgData(fRowGroupOut, 0);
+    RGData rgData(fRowGroupOut, 0U);
     fRowGroupOut.setData(&rgData);
     fRowGroupOut.resetRowGroup(0);
     fRowGroupOut.setStatus(status());
@@ -809,7 +802,7 @@ void TupleConstantBooleanStep::run()
 uint32_t TupleConstantBooleanStep::nextBand(messageqcpp::ByteStream& bs)
 {
   // send an empty band
-  RGData rgData(fRowGroupOut, 0);
+  RGData rgData(fRowGroupOut, 0U);
   fRowGroupOut.setData(&rgData);
   fRowGroupOut.resetRowGroup(0);
   fRowGroupOut.setStatus(status());

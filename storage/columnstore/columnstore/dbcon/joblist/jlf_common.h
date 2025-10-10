@@ -43,7 +43,6 @@
 #include "joblist.h"
 #include "jobstep.h"
 #include "groupconcat.h"
-#include "jsonarrayagg.h"
 #include "jl_logger.h"
 
 #include "resourcemanager.h"
@@ -73,15 +72,14 @@ const int32_t CNX_EXP_TABLE_ID = 999;
 
 struct TupleInfo
 {
-  TupleInfo(uint32_t w = 0, uint32_t o = 0, uint32_t k = -1, uint32_t t = -1, uint32_t s = 0, uint32_t p = 0,
-            execplan::CalpontSystemCatalog::ColDataType dt = execplan::CalpontSystemCatalog::BIT,
-            uint32_t csn = 8)
+  explicit TupleInfo(uint32_t w = 0, uint32_t o = 0, uint32_t k = -1, uint32_t t = -1, uint32_t s = 0,
+                     uint32_t p = 0,
+                     execplan::CalpontSystemCatalog::ColDataType dt = execplan::CalpontSystemCatalog::BIT,
+                     uint32_t csn = 8)
    : width(w), oid(o), key(k), tkey(t), scale(s), precision(p), dtype(dt), csNum(csn)
   {
   }
-  ~TupleInfo()
-  {
-  }
+  ~TupleInfo() = default;
 
   uint32_t width;
   uint32_t oid;
@@ -134,6 +132,7 @@ struct UniqId
   std::string fTable;   // table name (table alias)
   std::string fSchema;  // schema name
   std::string fView;    // view name
+  execplan::Partitions fPart;    // partition(s) name(s)
   uint32_t fPseudo;     // pseudo type
                         //	uint64_t	fEngine; // InfiniDB == 0
   uint64_t fSubId;      // subquery ID
@@ -141,12 +140,13 @@ struct UniqId
   UniqId() : fId(-1), fSubId(-1)
   {
   }
-  UniqId(int i, const std::string& t, const std::string& s, const std::string& v, uint32_t pi = 0,
+  UniqId(int i, const std::string& t, const std::string& s, const std::string& v,
+         const execplan::Partitions& p, uint32_t pi = 0,
          uint64_t l = -1)
-   : fId(i), fTable(t), fSchema(s), fView(v), fPseudo(pi), fSubId(l)
+   : fId(i), fTable(t), fSchema(s), fView(v), fPart(p), fPseudo(pi), fSubId(l)
   {
   }
-  UniqId(const execplan::SimpleColumn* sc);
+  explicit UniqId(const execplan::SimpleColumn* sc);
   UniqId(int o, const execplan::SimpleColumn* sc);
 
   std::string toString() const;
@@ -193,7 +193,7 @@ struct TupleKeyInfo
 //------------------------------------------------------------------------------
 struct JobInfo
 {
-  JobInfo(ResourceManager* r)
+  explicit JobInfo(ResourceManager* r)
    : rm(r)
    , sessionId(0)
    , txnId(0)
@@ -204,7 +204,7 @@ struct JobInfo
    , fifoSize(rm->getJlFifoSize())
    , logger(new Logger())
    , traceFlags(0)
-   , projectingTableOID(0)
+   , projectingTableOID(nullptr)
    , isExeMgr(false)
    , trace(false)
    , tryTuples(false)
@@ -219,7 +219,7 @@ struct JobInfo
    , subLevel(0)
    , subNum(0)
    , subId(0)
-   , pJobInfo(NULL)
+   , pJobInfo(nullptr)
    , constantFalse(false)
    , cntStarPos(-1)
    , stringScanThreshold(1)
@@ -442,7 +442,7 @@ execplan::CalpontSystemCatalog::OID tableOid(const execplan::SimpleColumn* sc,
  */
 uint32_t getTupleKey(JobInfo& jobInfo, const execplan::SimpleColumn* sc, bool add = false);
 uint32_t getTableKey(const JobInfo& jobInfo, execplan::CalpontSystemCatalog::OID tableOid,
-                     const std::string& alias, const std::string& schema, const std::string& view);
+                     const std::string& alias, const std::string& schema, const std::string& view, const execplan::Partitions& partitions);
 uint32_t getTupleKey(JobInfo& jobInfo, const execplan::SRCP& srcp, bool add = false);
 uint32_t getTableKey(const JobInfo& jobInfo, uint32_t cid);
 uint32_t getTableKey(JobInfo& jobInfo, JobStep* js);
@@ -454,7 +454,7 @@ uint32_t getExpTupleKey(const JobInfo& jobInfo, uint64_t eid, bool cr = false);
 uint32_t makeTableKey(JobInfo& jobInfo, const execplan::SimpleColumn* sc);
 uint32_t makeTableKey(JobInfo& jobInfo, execplan::CalpontSystemCatalog::OID tableOid,
                       const std::string& tbl_name, const std::string& tbl_alias, const std::string& sch_name,
-                      const std::string& vw_name, uint64_t engine = 0);
+                      const std::string& vw_name, const execplan::Partitions& partitions, uint64_t engine = 0);
 
 /** @brief Returns the tupleInfo associate with the (table, column) key pair
  *

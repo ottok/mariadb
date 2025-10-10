@@ -22,7 +22,9 @@ DROP TABLE IF EXISTS test.mcol812b;
 # Create corresponding in the server
 # -------------------------------------------------------------- #
 
+--disable_warnings
 CREATE USER IF NOT EXISTS'cejuser'@'localhost' IDENTIFIED BY 'Vagrant1!0000001';
+--enable_warnings
 
 GRANT ALL PRIVILEGES ON *.* TO 'cejuser'@'localhost';
 FLUSH PRIVILEGES;

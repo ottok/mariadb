@@ -79,10 +79,7 @@ SubQueryTransformer::~SubQueryTransformer()
 SJSTEP& SubQueryTransformer::makeSubQueryStep(execplan::CalpontSelectExecutionPlan* csep,
                                               bool subInFromClause)
 {
-  if (fOutJobInfo->trace)
-    cout << (*csep) << endl;
-
-  // Setup job info, job list and error status relation.
+    // Setup job info, job list and error status relation.
   fSubJobInfo = new JobInfo(fOutJobInfo->rm);
   fSubJobInfo->sessionId = fOutJobInfo->sessionId;
   fSubJobInfo->txnId = fOutJobInfo->txnId;
@@ -119,6 +116,8 @@ SJSTEP& SubQueryTransformer::makeSubQueryStep(execplan::CalpontSelectExecutionPl
   fSubJobInfo->partitionSize = fOutJobInfo->partitionSize;
   fSubJobInfo->umMemLimit = fOutJobInfo->umMemLimit;
   fSubJobInfo->isDML = fOutJobInfo->isDML;
+  fSubJobInfo->orderByThreads = csep->orderByThreads();
+
 
   // Update v-table's alias.
   fVtable.name("$sub");
@@ -202,6 +201,11 @@ SJSTEP& SubQueryTransformer::makeSubQueryStep(execplan::CalpontSelectExecutionPl
   for (uint64_t i = 0; i < outputCols; i++)
   {
     fVtable.addColumn(fSubReturnedCols[i]);
+    SimpleColumn* sc = dynamic_cast<SimpleColumn*>(fSubReturnedCols[i].get());
+    if (sc)
+    {
+      fVtable.partitions(sc->partitions());
+    }
 
     // make sure the column type is the same as rowgroup
     CalpontSystemCatalog::ColType ct = fVtable.columnType(i);
@@ -262,7 +266,7 @@ SJSTEP& SubQueryTransformer::makeSubQueryStep(execplan::CalpontSelectExecutionPl
       precision.push_back(ti.precision);
     }
 
-    fOutJobInfo->vtableColTypes[UniqId(fVtable.columnOid(i), fVtable.alias(), "", "")] =
+    fOutJobInfo->vtableColTypes[UniqId(fVtable.columnOid(i), fVtable.alias(), "", "", execplan::Partitions())] =
         fVtable.columnType(i);
   }
 
@@ -302,7 +306,7 @@ void SubQueryTransformer::updateCorrelateInfo()
   // Insert at [1], not to mess with OUTER join and hint(INFINIDB_ORDERED -- bug2317).
   fOutJobInfo->tableList.insert(
       fOutJobInfo->tableList.begin() + 1,
-      makeTableKey(*fOutJobInfo, fVtable.tableOid(), fVtable.name(), fVtable.alias(), "", fVtable.view()));
+      makeTableKey(*fOutJobInfo, fVtable.tableOid(), fVtable.name(), fVtable.alias(), "", fVtable.view(), fVtable.partitions()));
 
   // tables in outer level
   set<uint32_t> outTables;
@@ -392,6 +396,7 @@ void SubQueryTransformer::updateCorrelateInfo()
       vector<CalpontSystemCatalog::OID>& tableOids = es->tableOids();
       vector<string>& aliases = es->aliases();
       vector<string>& views = es->views();
+      vector<execplan::Partitions>& partitions = es->partitionss();
       vector<string>& schemas = es->schemas();
       vector<uint32_t>& tableKeys = es->tableKeys();
       vector<uint32_t>& columnKeys = es->columnKeys();
@@ -406,7 +411,7 @@ void SubQueryTransformer::updateCorrelateInfo()
           if (subTables.find(tableKeys[j]) != subTables.end())
           {
             const map<UniqId, uint32_t>::const_iterator k =
-                subMap.find(UniqId(sc->oid(), aliases[j], schemas[j], views[j]));
+                subMap.find(UniqId(sc->oid(), aliases[j], schemas[j], views[j], partitions[j]));
 
             if (k == subMap.end())
               throw IDBExcept(logging::ERR_NON_SUPPORT_SUB_QUERY_TYPE);
@@ -417,6 +422,7 @@ void SubQueryTransformer::updateCorrelateInfo()
             sc->viewName(fVtable.view());
             sc->oid(fVtable.columnOid(k->second));
             sc->columnName(fVtable.columns()[k->second]->columnName());
+	    sc->partitions(fVtable.partitions());
             const CalpontSystemCatalog::ColType& ct = fVtable.columnType(k->second);
             TupleInfo ti = setTupleInfo(ct, sc->oid(), *fOutJobInfo, fVtable.tableOid(), sc, fVtable.alias());
 
@@ -426,6 +432,7 @@ void SubQueryTransformer::updateCorrelateInfo()
             schemas[j] = sc->schemaName();
             columnKeys[j] = ti.key;
             tableKeys[j] = getTableKey(*fOutJobInfo, ti.key);
+	    partitions[j] = sc->partitions();
           }
           else
           {
@@ -441,7 +448,7 @@ void SubQueryTransformer::updateCorrelateInfo()
         {
           // workaround for window function IN/EXISTS subquery
           const map<UniqId, uint32_t>::const_iterator k =
-              subMap.find(UniqId(scList[j]->expressionId(), "", "", ""));
+              subMap.find(UniqId(scList[j]->expressionId(), "", "", "", execplan::Partitions()));
 
           if (k == subMap.end())
             throw IDBExcept(logging::ERR_NON_SUPPORT_SUB_QUERY_TYPE);
@@ -473,7 +480,7 @@ void SubQueryTransformer::updateCorrelateInfo()
 
         if (sc == NULL)
         {
-          UniqId colId = UniqId(rc->expressionId(), "", "", "");
+          UniqId colId = UniqId(rc->expressionId(), "", "", "", execplan::Partitions());
           const map<UniqId, uint32_t>::const_iterator k = subMap.find(colId);
 
           if (k == subMap.end())
@@ -516,7 +523,7 @@ void SubQueryTransformer::updateCorrelateInfo()
 
       if (outTables.find(tid) == outTables.end())
       {
-        if (subMap.find(UniqId(j->oid(), j->alias(), j->schema(), j->view(), 0)) != subMap.end())
+        if (subMap.find(UniqId(j->oid(), j->alias(), j->schema(), j->view(), j->partitions(), 0)) != subMap.end())
           // throw CorrelateFailExcept();
           throw IDBExcept(logging::ERR_NON_SUPPORT_SUB_QUERY_TYPE);
       }

@@ -20,6 +20,7 @@ from cmapi_server.constants import (
     CMAPI_CONF_PATH, CMAPI_SINGLE_NODE_XML, DEFAULT_MCS_CONF_PATH, LOCALHOSTS,
     MCS_DATA_PATH,
 )
+from cmapi_server.managers.network import NetworkManager
 from mcs_node_control.models.node_config import NodeConfig
 
 
@@ -55,13 +56,13 @@ def switch_node_maintenance(
         maintenance_element = etree.SubElement(config_root, 'Maintenance')
     maintenance_element.text = str(maintenance_state).lower()
     node_config.write_config(config_root, filename=output_config_filename)
-    # TODO: probably move publishing to cherrypy.emgine failover channel here?
+    # TODO: probably move publishing to cherrypy.engine failover channel here?
 
 
 def add_node(
     node: str, input_config_filename: str = DEFAULT_MCS_CONF_PATH,
     output_config_filename: Optional[str] = None,
-    rebalance_dbroots: bool = True
+    use_rebalance_dbroots: bool = True
 ):
     """Add node to a cluster.
 
@@ -86,8 +87,8 @@ def add_node(
     :type input_config_filename: str, optional
     :param output_config_filename: mcs output config path, defaults to None
     :type output_config_filename: Optional[str], optional
-    :param rebalance_dbroots: rebalance dbroots or not, defaults to True
-    :type rebalance_dbroots: bool, optional
+    :param use_rebalance_dbroots: rebalance dbroots or not, defaults to True
+    :type use_rebalance_dbroots: bool, optional
     """
     node_config = NodeConfig()
     c_root = node_config.get_current_config_root(input_config_filename)
@@ -100,7 +101,7 @@ def add_node(
             _add_Module_entries(c_root, node)
             _add_active_node(c_root, node)
             _add_node_to_ExeMgrs(c_root, node)
-            if rebalance_dbroots:
+            if use_rebalance_dbroots:
                 _rebalance_dbroots(c_root)
                 _move_primary_node(c_root)
     except Exception:
@@ -116,24 +117,40 @@ def add_node(
             node_config.write_config(c_root, filename=output_config_filename)
 
 
-# deactivate_only is a bool that indicates whether the node is being removed completely from
-# the cluster, or whether it has gone offline and should still be monitored in case it comes back.
-# Note!  this does not pick a new primary node, use the move_primary_node() fcn to change that.
 def remove_node(
-    node, input_config_filename=DEFAULT_MCS_CONF_PATH,
-    output_config_filename=None, deactivate_only=False,
-    rebalance_dbroots = True, **kwargs
+    node: str, input_config_filename: str = DEFAULT_MCS_CONF_PATH,
+    output_config_filename: Optional[str] = None,
+    deactivate_only: bool = True,
+    use_rebalance_dbroots: bool = True, **kwargs
 ):
+    """Remove node from a cluster.
+
+    - Rebuild the PMS section w/o node
+    - Remove the DBRM_Worker entry
+    - Remove the WES entry
+    - Rebuild the "Module*" entries w/o node
+    - Update the list of active / inactive / desired nodes
+
+    :param node: node address or hostname
+    :type node: str
+    :param input_config_filename: mcs input config path,
+                                  defaults to DEFAULT_MCS_CONF_PATH
+    :type input_config_filename: str, optional
+    :param output_config_filename: mcs output config path, defaults to None
+    :type output_config_filename: Optional[str], optional
+    :param deactivate_only: indicates whether the node is being removed
+                            completely from the cluster, or whether it has gone
+                            offline and should still be monitored in case it
+                            comes back.
+                            Note!  this does not pick a new primary node,
+                            use the move_primary_node() fcn to change that.,
+                            defaults to True
+    :type deactivate_only: bool, optional
+    :param use_rebalance_dbroots: rebalance dbroots or not, defaults to True
+    :type use_rebalance_dbroots: bool, optional
+    """
     node_config = NodeConfig()
     c_root = node_config.get_current_config_root(input_config_filename)
-
-    '''
-        Rebuild the PMS section w/o node
-        Remove the DBRM_Worker entry
-        Remove the WES entry
-        Rebuild the "Module*" entries w/o node
-        Update the list of active / inactive / desired nodes
-    '''
 
     try:
         active_nodes = helpers.get_active_nodes(input_config_filename)
@@ -151,7 +168,7 @@ def remove_node(
                 # TODO: unspecific name, need to think of a better one
                 _remove_node(c_root, node)
 
-            if rebalance_dbroots:
+            if use_rebalance_dbroots:
                 _rebalance_dbroots(c_root)
                 _move_primary_node(c_root)
         else:
@@ -470,7 +487,7 @@ def is_master():
                           "AND COMMAND LIKE 'Slave%';\""
     )
 
-    ret = subprocess.run(cmd, stdout=subprocess.PIPE, shell = True)
+    ret = subprocess.run(cmd, stdout=subprocess.PIPE, shell=True)
     if ret.returncode == 0:
         response = ret.stdout.decode("utf-8").strip()
         # Primary will have no slave_threads
@@ -912,7 +929,7 @@ def _remove_node_from_PMS(root, node):
 
     return pm_num
 
-def _add_Module_entries(root, node):
+def _add_Module_entries(root, node: str) -> None:
     '''
     get new node id
     add ModuleIPAddr, ModuleHostName, ModuleDBRootCount (don't set ModuleDBRootID* here)
@@ -921,47 +938,52 @@ def _add_Module_entries(root, node):
     '''
 
     # XXXPAT: No guarantee these are the values used in the rest of the system.
-    # This will work best with a simple network configuration where there is 1 IP addr
-    # and 1 host name for a node.
-    ip4 = socket.gethostbyname(node)
-    if ip4 == node:   # node is an IP addr
-        node_name = socket.gethostbyaddr(node)[0]
-    else:
-        node_name = node   # node is a hostname
+    # TODO: what should we do with complicated network configs where node has
+    #       several ips and\or several hostnames
+    ip4, hostname = NetworkManager.resolve_ip_and_hostname(node)
+    logging.info(f'Using ip address {ip4} and hostname {hostname}')
 
-    logging.info(f"_add_Module_entries(): using ip address {ip4} and hostname {node_name}")
-
-    smc_node = root.find("./SystemModuleConfig")
-    mod_count_node = smc_node.find("./ModuleCount3")
-    nnid_node = root.find("./NextNodeId")
+    smc_node = root.find('./SystemModuleConfig')
+    mod_count_node = smc_node.find('./ModuleCount3')
+    nnid_node = root.find('./NextNodeId')
     nnid = int(nnid_node.text)
     current_module_count = int(mod_count_node.text)
 
     # look for existing entries and fix if they exist
     for i in range(1, nnid):
-        ip_node = smc_node.find(f"./ModuleIPAddr{i}-1-3")
-        name_node = smc_node.find(f"./ModuleHostName{i}-1-3")
-        # if we find a matching IP address, but it has a different hostname, update the addr
-        if ip_node is not None and ip_node.text == ip4:
-            logging.info(f"_add_Module_entries(): found ip address already at ModuleIPAddr{i}-1-3")
-            hostname = smc_node.find(f"./ModuleHostName{i}-1-3").text
-            if hostname != node_name:
-                new_ip_addr = socket.gethostbyname(hostname)
-                logging.info(f"_add_Module_entries(): hostname doesn't match, updating address to {new_ip_addr}")
-                smc_node.find(f"ModuleHostName{i}-1-3").text = new_ip_addr
+        curr_ip_node = smc_node.find(f'./ModuleIPAddr{i}-1-3')
+        curr_name_node = smc_node.find(f'./ModuleHostName{i}-1-3')
+        # TODO: NETWORK: seems it's useless even in very rare cases.
+        #       Even simplier to rewrite resolved IP an Hostname
+        # if we find a matching IP address, but it has a different hostname,
+        # update the addr
+        if curr_ip_node is not None and curr_ip_node.text == ip4:
+            logging.info(f'Found ip address already at ModuleIPAddr{i}-1-3')
+            if curr_name_node != hostname:
+                new_ip_addr = NetworkManager.resolve_hostname_to_ip(
+                    curr_name_node
+                )
+                logging.info(
+                    'Hostname doesn\'t match, updating address to '
+                    f'{new_ip_addr!r}'
+                )
+                smc_node.find(f'ModuleHostName{i}-1-3').text = new_ip_addr
             else:
-                logging.info(f"_add_Module_entries(): no update is necessary")
+                logging.info('No update for ModuleIPAddr{i}-1-3 is necessary')
                 return
 
         # if we find a matching hostname, update the ip addr
-        if name_node is not None and name_node.text == node_name:
-            logging.info(f"_add_Module_entries(): found existing entry for {node_name}, updating its address to {ip4}")
-            ip_node.text = ip4
+        if curr_name_node is not None and curr_name_node.text == hostname:
+            logging.info(
+                f'Found existing entry for {hostname!r}, updating its '
+                f'address to {ip4!r}'
+            )
+            curr_ip_node.text = ip4
             return
 
-    etree.SubElement(smc_node, f"ModuleIPAddr{nnid}-1-3").text = ip4
-    etree.SubElement(smc_node, f"ModuleHostName{nnid}-1-3").text = node_name
-    etree.SubElement(smc_node, f"ModuleDBRootCount{nnid}-3").text = "0"
+    etree.SubElement(smc_node, f'ModuleIPAddr{nnid}-1-3').text = ip4
+    etree.SubElement(smc_node, f'ModuleHostName{nnid}-1-3').text = hostname
+    etree.SubElement(smc_node, f'ModuleDBRootCount{nnid}-3').text = '0'
     mod_count_node.text = str(current_module_count + 1)
     nnid_node.text = str(nnid + 1)
 

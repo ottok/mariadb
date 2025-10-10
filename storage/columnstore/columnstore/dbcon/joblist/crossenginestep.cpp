@@ -20,7 +20,7 @@
 #define PREFER_MY_CONFIG_H
 #include "crossenginestep.h"
 #include <unistd.h>
-//#define NDEBUG
+// #define NDEBUG
 #include <cassert>
 #include <sstream>
 #include <iomanip>
@@ -60,6 +60,7 @@ using namespace querytele;
 namespace joblist
 {
 CrossEngineStep::CrossEngineStep(const std::string& schema, const std::string& table,
+                                 const execplan::Partitions& partitions,
                                  const std::string& alias, const JobInfo& jobInfo)
  : BatchPrimitive(jobInfo)
  , fRowsRetrieved(0)
@@ -72,6 +73,7 @@ CrossEngineStep::CrossEngineStep(const std::string& schema, const std::string& t
  , fSchema(schema)
  , fTable(table)
  , fAlias(alias)
+ , fPartitions(partitions)
  , fColumnCount(0)
  , fFeInstance(funcexp::FuncExp::instance())
 {
@@ -251,14 +253,10 @@ T CrossEngineStep::convertValueNum(const char* str, const CalpontSystemCatalog::
     case CalpontSystemCatalog::USMALLINT: rv = boost::any_cast<uint16_t>(anyVal); break;
 
     case CalpontSystemCatalog::MEDINT:
-    case CalpontSystemCatalog::INT:
-      rv = boost::any_cast<int32_t>(anyVal);
-      break;
+    case CalpontSystemCatalog::INT: rv = boost::any_cast<int32_t>(anyVal); break;
 
     case CalpontSystemCatalog::UMEDINT:
-    case CalpontSystemCatalog::UINT:
-      rv = boost::any_cast<uint32_t>(anyVal);
-      break;
+    case CalpontSystemCatalog::UINT: rv = boost::any_cast<uint32_t>(anyVal); break;
 
     case CalpontSystemCatalog::BIGINT: rv = boost::any_cast<long long>(anyVal); break;
 
@@ -304,7 +302,7 @@ T CrossEngineStep::convertValueNum(const char* str, const CalpontSystemCatalog::
     {
       if (nullFlag)
       {
-        rv = joblist::CHAR8NULL; // SZ: I hate that.
+        rv = joblist::CHAR8NULL;  // SZ: I hate that.
       }
       else
       {
@@ -379,14 +377,9 @@ void CrossEngineStep::join()
 void CrossEngineStep::execute()
 {
   int ret = 0;
-  StepTeleStats sts;
-  sts.query_uuid = fQueryUuid;
-  sts.step_uuid = fStepUuid;
-
   try
   {
-    sts.msg_type = StepTeleStats::ST_START;
-    sts.total_units_of_work = 1;
+    StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_START, 1);
     postStepStartTele(sts);
 
     ret = mysql->init(fHost.c_str(), fPort, fUser.c_str(), fPasswd.c_str(), fSchema.c_str());
@@ -394,7 +387,7 @@ void CrossEngineStep::execute()
     if (ret != 0)
       mysql->handleMySqlError(mysql->getError().c_str(), ret);
 
-    std::string query(makeQuery());
+    std::string query = makeQuery();
     fLogger->logMessage(logging::LOG_TYPE_INFO, "QUERY to foreign engine: " + query);
 
     if (traceOn())
@@ -434,11 +427,10 @@ void CrossEngineStep::execute()
         addRow(rgDataDelivered);
       }
     }
-
     else if (doFE1 && !doFE3)  // FE in WHERE clause only
     {
       std::shared_ptr<uint8_t[]> rgDataFe1;  // functions in where clause
-      Row rowFe1;                       // row for fe evaluation
+      Row rowFe1;                            // row for fe evaluation
       fRowGroupFe1.initRow(&rowFe1, true);
       rgDataFe1.reset(new uint8_t[rowFe1.getSize()]);
       rowFe1.setData(rowgroup::Row::Pointer(rgDataFe1.get()));
@@ -485,11 +477,10 @@ void CrossEngineStep::execute()
         addRow(rgDataDelivered);
       }
     }
-
     else if (!doFE1 && doFE3)  // FE in SELECT clause only
     {
       std::shared_ptr<uint8_t[]> rgDataFe3;  // functions in select clause
-      Row rowFe3;                       // row for fe evaluation
+      Row rowFe3;                            // row for fe evaluation
       fRowGroupOut.initRow(&rowFe3, true);
       rgDataFe3.reset(new uint8_t[rowFe3.getSize()]);
       rowFe3.setData(rowgroup::Row::Pointer(rgDataFe3.get()));
@@ -506,17 +497,16 @@ void CrossEngineStep::execute()
         addRow(rgDataDelivered);
       }
     }
-
     else  // FE in SELECT clause, FE join and WHERE clause
     {
       std::shared_ptr<uint8_t[]> rgDataFe1;  // functions in where clause
-      Row rowFe1;                       // row for fe1 evaluation
+      Row rowFe1;                            // row for fe1 evaluation
       fRowGroupFe1.initRow(&rowFe1, true);
       rgDataFe1.reset(new uint8_t[rowFe1.getSize()]);
       rowFe1.setData(rowgroup::Row::Pointer(rgDataFe1.get()));
 
       std::shared_ptr<uint8_t[]> rgDataFe3;  // functions in select clause
-      Row rowFe3;                       // row for fe3 evaluation
+      Row rowFe3;                            // row for fe3 evaluation
       fRowGroupOut.initRow(&rowFe3, true);
       rgDataFe3.reset(new uint8_t[rowFe3.getSize()]);
       rowFe3.setData(rowgroup::Row::Pointer(rgDataFe3.get()));
@@ -567,7 +557,6 @@ void CrossEngineStep::execute()
       }
     }
 
-    // INSERT_ADAPTER(fOutputDL, rgDataDelivered);
     fOutputDL->insert(rgDataDelivered);
     fRowsRetrieved = mysql->getRowCount();
   }
@@ -577,9 +566,7 @@ void CrossEngineStep::execute()
                     "CrossEngineStep::execute()");
   }
 
-  sts.msg_type = StepTeleStats::ST_SUMMARY;
-  sts.total_units_of_work = sts.units_of_work_completed = 1;
-  sts.rows = fRowsReturned;
+  StepTeleStats sts(fQueryUuid, fStepUuid, StepTeleStats::ST_SUMMARY, 1, 1, fRowsReturned);
   postStepSummaryTele(sts);
 
   fEndOfResult = true;
@@ -683,6 +670,20 @@ std::string CrossEngineStep::makeQuery()
 {
   ostringstream oss;
   oss << fSelectClause << " FROM `" << fTable << "`";
+
+  if (fPartitions.fPartNames.size())
+  {
+    oss << "PARTITION (";
+    for (uint32_t i=0;i<fPartitions.fPartNames.size();i++)
+    {
+      if (i > 0)
+      {
+        oss << ", ";
+      }
+      oss << fPartitions.fPartNames[i];
+    }
+    oss << ") ";
+  }
 
   if (fTable.compare(fAlias) != 0)
     oss << " `" << fAlias << "`";
@@ -808,8 +809,7 @@ void CrossEngineStep::formatMiniStats()
 {
   ostringstream oss;
   oss << "CES "
-      << "UM "
-      << "- "
+      << "UM " << tableAlias() << " "
       << "- "
       << "- "
       << "- "

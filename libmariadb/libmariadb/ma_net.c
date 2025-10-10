@@ -41,6 +41,11 @@
 
 #define MAX_PACKET_LENGTH (256L*256L*256L-1)
 
+#ifndef NET_BUF_ALIGN
+#define NET_BUF_ALIGN 4096U
+#endif
+#define align_network_buffer(len) (((len)+NET_BUF_ALIGN-1) & ~(NET_BUF_ALIGN-1))
+
 /* net_buffer_length and max_allowed_packet are defined in mysql.h
    See bug conc-57
  */
@@ -128,7 +133,7 @@ static my_bool net_realloc(NET *net, size_t length)
     net->pvio->set_error(net->pvio->mysql, CR_NET_PACKET_TOO_LARGE, SQLSTATE_UNKNOWN, 0);
     return(1);
   }
-  pkt_length = (length+IO_SIZE-1) & ~(IO_SIZE-1);
+  pkt_length = align_network_buffer(length);
   /* reallocate buffer:
      size= pkt_length + NET_HEADER_SIZE + COMP_HEADER_SIZE */
   if (!(buff=(uchar*) realloc(net->buff, 
@@ -362,7 +367,7 @@ int ma_net_real_write(NET *net, const char *packet, size_t len)
 }
 
 /*****************************************************************************
- ** Read something from server/clinet
+ ** Read something from server/client
  *****************************************************************************/
 static ulong ma_real_read(NET *net, size_t *complen)
 {
@@ -381,7 +386,7 @@ static ulong ma_real_read(NET *net, size_t *complen)
   {
     while (remain > 0)
     {
-      /* First read is done with non blocking mode */
+      /* First read is done with non-blocking mode */
       if ((length=ma_pvio_cache_read(net->pvio, pos,remain)) <= 0L)
       {
         len= packet_error;

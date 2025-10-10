@@ -29,14 +29,14 @@ class BaseClusterTestCase(BaseServerTestCase):
     def tearDownClass(cls) -> None:
         copyfile(COPY_MCS_CONFIG_FILEPATH, MCS_CONFIG_FILEPATH)
         os.remove(os.path.abspath(COPY_MCS_CONFIG_FILEPATH))
-        MCSProcessManager.stop_node(is_primary=True)
-        MCSProcessManager.start_node(is_primary=True)
+        MCSProcessManager.stop_node(is_primary=True, use_sudo=False)
+        MCSProcessManager.start_node(is_primary=True, use_sudo=False)
         return super().tearDownClass()
 
     def setUp(self) -> None:
         copyfile(TEST_MCS_CONFIG_FILEPATH, MCS_CONFIG_FILEPATH)
-        MCSProcessManager.stop_node(is_primary=True)
-        MCSProcessManager.start_node(is_primary=True)
+        MCSProcessManager.stop_node(is_primary=True, use_sudo=False)
+        MCSProcessManager.start_node(is_primary=True, use_sudo=False)
         return super().setUp()
 
 
@@ -147,7 +147,7 @@ class ClusterModesetTestCase(BaseClusterTestCase):
         )
         error = resp.json()['error']
         self.assertEqual(resp.status_code, 422)
-        self.assertEqual(error, 'No master found in the cluster.')
+        self.assertEqual(error, 'There are no nodes in the cluster.')
 
     def test_add_node_and_set_readonly(self):
         payload = {'node': socket.gethostname()}

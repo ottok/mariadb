@@ -42,30 +42,30 @@ class TupleAnnexStep : public JobStep, public TupleDeliveryStep
  public:
   /** @brief TupleAnnexStep constructor
    */
-  TupleAnnexStep(const JobInfo& jobInfo);
+  explicit TupleAnnexStep(const JobInfo& jobInfo);
   // Copy ctor to have a class mutex
   TupleAnnexStep(const TupleAnnexStep& copy);
 
   /** @brief TupleAnnexStep destructor
    */
-  ~TupleAnnexStep();
+  ~TupleAnnexStep() override;
 
   // inherited methods
-  void run();
-  void join();
-  const std::string toString() const;
+  void run() override;
+  void join() override;
+  const std::string toString() const override;
 
   /** @brief TupleJobStep's pure virtual methods
    */
-  const rowgroup::RowGroup& getOutputRowGroup() const;
-  void setOutputRowGroup(const rowgroup::RowGroup&);
+  const rowgroup::RowGroup& getOutputRowGroup() const override;
+  void setOutputRowGroup(const rowgroup::RowGroup&) override;
 
   /** @brief TupleDeliveryStep's pure virtual methods
    */
-  uint32_t nextBand(messageqcpp::ByteStream& bs);
-  const rowgroup::RowGroup& getDeliveredRowGroup() const;
-  void deliverStringTableRowGroup(bool b);
-  bool deliverStringTableRowGroup() const;
+  uint32_t nextBand(messageqcpp::ByteStream& bs) override;
+  const rowgroup::RowGroup& getDeliveredRowGroup() const override;
+  void deliverStringTableRowGroup(bool b) override;
+  bool deliverStringTableRowGroup() const override;
 
   void initialize(const rowgroup::RowGroup& rgIn, const JobInfo& jobInfo);
 
@@ -95,7 +95,7 @@ class TupleAnnexStep : public JobStep, public TupleDeliveryStep
     fMaxThreads = number;
   }
 
-  virtual bool stringTableFriendly()
+  bool stringTableFriendly() override
   {
     return true;
   }
@@ -109,6 +109,7 @@ class TupleAnnexStep : public JobStep, public TupleDeliveryStep
   void executeWithOrderBy();
   void executeParallelOrderBy(uint64_t id);
   void executeNoOrderByWithDistinct();
+  void checkAndAllocateMemory4RGData(const rowgroup::RowGroup& rowGroup);
   void formatMiniStats();
   void printCalTrace();
   void finalizeParallelOrderBy();
@@ -132,7 +133,7 @@ class TupleAnnexStep : public JobStep, public TupleDeliveryStep
   class Runner
   {
    public:
-    Runner(TupleAnnexStep* step) : fStep(step), id(0)
+    explicit Runner(TupleAnnexStep* step) : fStep(step), id(0)
     {
     }
     Runner(TupleAnnexStep* step, uint32_t id) : fStep(step), id(id)
@@ -171,26 +172,7 @@ class TupleAnnexStep : public JobStep, public TupleDeliveryStep
   std::vector<uint64_t> fRunnersList;
   uint16_t fFinishedThreads;
   boost::mutex fParallelFinalizeMutex;
-};
-
-template <class T>
-class reservablePQ : private std::priority_queue<T>
-{
- public:
-  typedef typename std::priority_queue<T>::size_type size_type;
-  reservablePQ(size_type capacity = 0)
-  {
-    reserve(capacity);
-  };
-  void reserve(size_type capacity)
-  {
-    this->c.reserve(capacity);
-  }
-  size_type capacity() const
-  {
-    return this->c.capacity();
-  }
+  joblist::ResourceManager* fRm;
 };
 
 }  // namespace joblist
-

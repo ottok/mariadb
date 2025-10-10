@@ -24,7 +24,7 @@
 #include <cerrno>
 #include <string>
 #include <map>
-//#define NDEBUG
+// #define NDEBUG
 #include <cassert>
 #include <algorithm>
 #include <unistd.h>
@@ -58,7 +58,7 @@ namespace WriteEngine
 {
 BRMWrapper* volatile BRMWrapper::m_instance = NULL;
 std::atomic<bool> BRMWrapper::finishReported(false);
-boost::thread_specific_ptr<int> BRMWrapper::m_ThreadDataPtr;
+thread_local int BRMWrapper::m_brmRc = 0;
 boost::mutex BRMWrapper::m_instanceCreateMutex;
 
 bool BRMWrapper::m_useVb = true;
@@ -92,7 +92,7 @@ struct fileInfoCompare  // lt operator
 
     return false;
   }  // operator
-};   // struct
+};  // struct
 
 typedef std::map<File, IDBDataFile*, fileInfoCompare> FileOpenMap;
 
@@ -441,17 +441,7 @@ int BRMWrapper::saveState()
 //------------------------------------------------------------------------------
 void BRMWrapper::saveBrmRc(int brmRc)
 {
-  int* dataPtr = m_ThreadDataPtr.get();
-
-  if (dataPtr == 0)
-  {
-    dataPtr = new int(brmRc);
-    m_ThreadDataPtr.reset(dataPtr);
-  }
-  else
-  {
-    *dataPtr = brmRc;
-  }
+  m_brmRc = brmRc;
 }
 
 //------------------------------------------------------------------------------
@@ -555,13 +545,10 @@ int BRMWrapper::getTableLockInfo(uint64_t lockID, BRM::TableLockInfo* lockInfo, 
 /* static */
 int BRMWrapper::getBrmRc(bool reset)
 {
-  if (m_ThreadDataPtr.get() == 0)
-    return BRM::ERR_OK;
-
-  int brmRc = *m_ThreadDataPtr;
+  int brmRc = m_brmRc;
 
   if (reset)
-    m_ThreadDataPtr.reset(new int(BRM::ERR_OK));
+    m_brmRc = static_cast<int>(BRM::ERR_OK);
 
   return brmRc;
 }
@@ -576,7 +563,7 @@ int BRMWrapper::getBrmRc(bool reset)
 
 #define MAX_VERSION_BUFFER_SIZE 1024
 
-int BRMWrapper::copyVBBlock(IDBDataFile* pSourceFile, const OID sourceOid, IDBDataFile* pTargetFile,
+int BRMWrapper::copyVBBlock(IDBDataFile* pSourceFile, const OID /*sourceOid*/, IDBDataFile* pTargetFile,
                             const OID targetOid, const std::vector<uint32_t>& fboList,
                             const BRM::VBRange& freeList, size_t& nBlocksProcessed, DbFileOp* pFileOp,
                             const size_t fboCurrentOffset)
@@ -726,7 +713,7 @@ int BRMWrapper::copyVBBlock(IDBDataFile* pSourceFile, const OID sourceOid, IDBDa
 }
 
 int BRMWrapper::copyVBBlock(IDBDataFile* pSourceFile, IDBDataFile* pTargetFile, const uint64_t sourceFbo,
-                            const uint64_t targetFbo, DbFileOp* fileOp, const Column& column)
+                            const uint64_t targetFbo, DbFileOp* fileOp, const Column& /*column*/)
 {
   size_t rwSize;
   unsigned char buf[BYTE_PER_BLOCK];
@@ -744,14 +731,14 @@ int BRMWrapper::copyVBBlock(IDBDataFile* pSourceFile, IDBDataFile* pTargetFile, 
     return NO_ERROR;
 }
 
-uint8_t BRMWrapper::newCpimportJob(uint32_t &jobId)
+uint8_t BRMWrapper::newCpimportJob(uint32_t& jobId)
 {
   return blockRsltnMgrPtr->newCpimportJob(jobId);
 }
 
 void BRMWrapper::finishCpimportJob(uint32_t jobId)
 {
-  if (finishReported.exchange(true)) // get old and set to true; if old is true, do nothing.
+  if (finishReported.exchange(true))  // get old and set to true; if old is true, do nothing.
   {
     return;
   }
@@ -1436,7 +1423,7 @@ cleanup:
   return rc;
 }
 
-int BRMWrapper::rollBackVersion(const VER_t transID, int sessionId)
+int BRMWrapper::rollBackVersion(const VER_t transID, int /*sessionId*/)
 {
   std::vector<LBID_t> lbidList;
   std::vector<LBIDRange> lbidRangeList;

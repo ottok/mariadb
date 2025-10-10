@@ -51,6 +51,12 @@ DateTime getDateTime(rowgroup::Row& row, FunctionParm& parm, bool& isNull)
     case execplan::CalpontSystemCatalog::DOUBLE:
     {
       double value = parm[0]->data()->getDoubleVal(row, isNull);
+      if (value < 0)
+      {
+        isNull = true;
+        return 0;
+      }
+
       double fracpart, intpart;
       fracpart = modf(value, &intpart);
       val = (int64_t)intpart;
@@ -61,6 +67,12 @@ DateTime getDateTime(rowgroup::Row& row, FunctionParm& parm, bool& isNull)
     case execplan::CalpontSystemCatalog::UDECIMAL:
     {
       IDB_Decimal dec = parm[0]->data()->getDecimalVal(row, isNull);
+
+      if (dec.value < 0)
+      {
+        isNull = true;
+        return 0;
+      }
 
       if (parm[0]->data()->resultType().colWidth == datatypes::MAXDECIMALWIDTH)
       {
@@ -102,8 +114,8 @@ DateTime getDateTime(rowgroup::Row& row, FunctionParm& parm, bool& isNull)
 
 namespace funcexp
 {
-CalpontSystemCatalog::ColType Func_from_unixtime::operationType(FunctionParm& fp,
-                                                                CalpontSystemCatalog::ColType& resultType)
+CalpontSystemCatalog::ColType Func_from_unixtime::operationType(FunctionParm& /*fp*/,
+                                                                CalpontSystemCatalog::ColType& /*resultType*/)
 {
   CalpontSystemCatalog::ColType ct;
   ct.colDataType = CalpontSystemCatalog::VARCHAR;
@@ -140,7 +152,7 @@ int32_t Func_from_unixtime::getDateIntVal(rowgroup::Row& row, FunctionParm& parm
 }
 
 int64_t Func_from_unixtime::getDatetimeIntVal(rowgroup::Row& row, FunctionParm& parm, bool& isNull,
-                                              CalpontSystemCatalog::ColType& ct)
+                                              CalpontSystemCatalog::ColType& /*ct*/)
 {
   DateTime dt = getDateTime(row, parm, isNull);
 
@@ -154,7 +166,7 @@ int64_t Func_from_unixtime::getDatetimeIntVal(rowgroup::Row& row, FunctionParm& 
 }
 
 int64_t Func_from_unixtime::getTimeIntVal(rowgroup::Row& row, FunctionParm& parm, bool& isNull,
-                                          CalpontSystemCatalog::ColType& ct)
+                                          CalpontSystemCatalog::ColType& /*ct*/)
 {
   DateTime dt = getDateTime(row, parm, isNull);
 
@@ -168,7 +180,7 @@ int64_t Func_from_unixtime::getTimeIntVal(rowgroup::Row& row, FunctionParm& parm
 }
 
 int64_t Func_from_unixtime::getIntVal(rowgroup::Row& row, FunctionParm& parm, bool& isNull,
-                                      CalpontSystemCatalog::ColType& ct)
+                                      CalpontSystemCatalog::ColType& /*ct*/)
 {
   DateTime dt = getDateTime(row, parm, isNull);
 

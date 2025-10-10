@@ -47,41 +47,41 @@ class CommandDMLPackage : public CalpontDMLPackage
 
   /** @brief dtor
    */
-  EXPORT virtual ~CommandDMLPackage();
+  EXPORT ~CommandDMLPackage() override;
 
   /** @brief write a CommandDMLPackage to a ByteStream
    *
    *  @param bytestream the ByteStream to write to
    */
-  EXPORT int write(messageqcpp::ByteStream& bytestream);
+  EXPORT int write(messageqcpp::ByteStream& bytestream) override;
 
   /** @brief read CommandDMLPackage from bytestream
    *
    * @param bytestream the ByteStream to read from
    */
-  EXPORT int read(messageqcpp::ByteStream& bytestream);
+  EXPORT int read(messageqcpp::ByteStream& bytestream) override;
   /** @brief do nothing
    *
    * @param buffer
    * @param columns the number of columns in the buffer
    * @param rows the number of rows in the buffer
    */
-  inline int buildFromBuffer(std::string& buffer, int columns = 0, int rows = 0)
+  inline int buildFromBuffer(std::string& /*buffer*/, int /*columns*/ = 0, int /*rows*/ = 0) override
   {
     return 1;
   };
 
   /** @brief build a CommandDMLPackage from a CommandSqlStatement
    */
-  EXPORT int buildFromSqlStatement(SqlStatement& sqlStatement);
+  EXPORT int buildFromSqlStatement(SqlStatement& sqlStatement) override;
 
   /** @brief build a InsertDMLPackage from MySQL buffer
    *
    * @param colNameList, tableValuesMap
    * @param rows the number of rows in the buffer
    */
-  int buildFromMysqlBuffer(ColNameList& colNameList, TableValuesMap& tableValuesMap, int columns, int rows,
-                           NullValuesBitset& nullValues)
+  int buildFromMysqlBuffer(ColNameList& /*colNameList*/, TableValuesMap& /*tableValuesMap*/, int /*columns*/, int /*rows*/,
+                           NullValuesBitset& /*nullValues*/) override
   {
     return 1;
   };

@@ -25,6 +25,7 @@
  */
 #pragma once
 
+#include <atomic>
 #include <vector>
 #include <iostream>
 #include <boost/thread.hpp>
@@ -33,6 +34,7 @@
 
 #include "configcpp.h"
 #include "calpontselectexecutionplan.h"
+#include "countingallocator.h"
 #include "resourcedistributor.h"
 #include "installdir.h"
 #include "branchpred.h"
@@ -100,9 +102,9 @@ const uint64_t defaultRowsPerBatch = 10000;
 /* HJ CP feedback, see bug #1465 */
 const uint32_t defaultHjCPUniqueLimit = 100;
 
-const constexpr uint64_t defaultFlowControlEnableBytesThresh = 50000000;     // ~50Mb
+const constexpr uint64_t defaultFlowControlEnableBytesThresh = 50000000;   // ~50Mb
 const constexpr uint64_t defaultFlowControlDisableBytesThresh = 10000000;  // ~10 MB
-const constexpr uint64_t defaultBPPSendThreadBytesThresh = 250000000;       // ~250 MB
+const constexpr uint64_t defaultBPPSendThreadBytesThresh = 250000000;      // ~250 MB
 const constexpr uint64_t BPPSendThreadMsgThresh = 100;
 
 const bool defaultAllowDiskAggregation = false;
@@ -117,8 +119,12 @@ class ResourceManager
   /** @brief ctor
    *
    */
-  ResourceManager(bool runningInExeMgr = false, config::Config* aConfig = nullptr);
+  explicit ResourceManager(bool runningInExeMgr, config::Config* aConfig = nullptr);
   static ResourceManager* instance(bool runningInExeMgr = false, config::Config* aConfig = nullptr);
+  
+  // For UT
+  explicit ResourceManager();
+  
   config::Config* getConfig()
   {
     return fConfig;
@@ -126,9 +132,7 @@ class ResourceManager
 
   /** @brief dtor
    */
-  virtual ~ResourceManager()
-  {
-  }
+  virtual ~ResourceManager() = default;
 
   typedef std::map<uint32_t, uint64_t> MemMap;
 
@@ -156,10 +160,7 @@ class ResourceManager
     return getIntVal(fExeMgrStr, "ExecQueueSize", defaultEMExecQueueSize);
   }
 
-  bool getAllowDiskAggregation() const
-  {
-    return fAllowedDiskAggregation;
-  }
+  bool getAllowDiskAggregation() const;
 
   uint64_t getDECConnectionsPerQuery() const
   {
@@ -286,12 +287,14 @@ class ResourceManager
 
   uint64_t getDECEnableBytesThresh() const
   {
-    return getUintVal(FlowControlStr, "DECFlowControlEnableBytesThresh(", defaultFlowControlEnableBytesThresh);
+    return getUintVal(FlowControlStr, "DECFlowControlEnableBytesThresh(",
+                      defaultFlowControlEnableBytesThresh);
   }
 
   uint32_t getDECDisableBytesThresh() const
   {
-    return getUintVal(FlowControlStr, "DECFlowControlDisableBytesThresh", defaultFlowControlDisableBytesThresh);
+    return getUintVal(FlowControlStr, "DECFlowControlDisableBytesThresh",
+                      defaultFlowControlDisableBytesThresh);
   }
 
   uint32_t getBPPSendThreadBytesThresh() const
@@ -325,18 +328,23 @@ class ResourceManager
   bool getMemory(int64_t amount, bool patience = true);
   inline void returnMemory(int64_t amount)
   {
-    atomicops::atomicAdd(&totalUmMemLimit, amount);
+    atomicops::atomicAddRef(totalUmMemLimit, amount);
   }
   inline void returnMemory(int64_t amount, boost::shared_ptr<int64_t>& sessionLimit)
   {
-    atomicops::atomicAdd(&totalUmMemLimit, amount);
+    atomicops::atomicAddRef(totalUmMemLimit, amount);
     sessionLimit ? atomicops::atomicAdd(sessionLimit.get(), amount) : 0;
   }
   inline int64_t availableMemory() const
   {
-    return totalUmMemLimit;
+    return atomicops::atomicLoadRef(totalUmMemLimit);
   }
 
+  inline void setMemory(int64_t amount) 
+  {
+    atomicops::atomicStoreRef(totalUmMemLimit, amount);
+  }
+  
   /* old HJ mem interface, used by HashJoin */
   uint64_t getHjPmMaxMemorySmallSide(uint32_t sessionID)
   {
@@ -454,6 +462,14 @@ class ResourceManager
     return configuredUmMemLimit;
   }
 
+  template <typename T>
+  allocators::CountingAllocator<T> getAllocator(
+      const int64_t checkPointStepSize = allocators::CheckPointStepSize,
+      const int64_t memoryLimitLowerBound = allocators::MemoryLimitLowerBound)
+  {
+    return allocators::CountingAllocator<T>(&totalUmMemLimit, checkPointStepSize, memoryLimitLowerBound);
+  }
+
  private:
   void logResourceChangeMessage(logging::LOG_TYPE logType, uint32_t sessionID, uint64_t newvalue,
                                 uint64_t value, const std::string& source, logging::Message::MessageID mid);
@@ -504,7 +520,7 @@ class ResourceManager
   LockedSessionMap fHJPmMaxMemorySmallSideSessionMap;
 
   /* new HJ/Union/Aggregation support */
-  volatile int64_t totalUmMemLimit;  // mem limit for join, union, and aggregation on the UM
+  std::atomic<int64_t> totalUmMemLimit{0};  // mem limit for join, union, and aggregation on the UM
   int64_t configuredUmMemLimit;
   uint64_t pmJoinMemLimit;  // mem limit on individual PM joins
 
@@ -518,7 +534,6 @@ class ResourceManager
 
   bool isExeMgr;
   bool fUseHdfs;
-  bool fAllowedDiskAggregation{false};
   uint64_t fDECConnectionsPerQuery;
 };
 

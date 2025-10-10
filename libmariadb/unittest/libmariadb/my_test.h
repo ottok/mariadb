@@ -99,6 +99,10 @@ if (IS_MAXSCALE()) \
   return SKIP; \
 }
 
+#define IS_ENTERPRISE()\
+   ((mysql_default && strstr(mysql_get_server_info(mysql_default), "enterprise")) ||\
+     (getenv("srv")!=NULL && (strcmp(getenv("srv"), "enterprise"))))
+
 #define IS_XPAND()\
    ((mysql_default && strstr(mysql_get_server_info(mysql_default), "Xpand")) ||\
     (getenv("srv")!=NULL && strcmp(getenv("srv"), "xpand") == 0))
@@ -142,7 +146,7 @@ do {\
 do {\
   if (!mariadb_connection(mysql))\
   {\
-    diag("Skip test for non MariaDB server");\
+    diag("Skip test for non-MariaDB server");\
     return OK;\
   }\
 } while(0)
@@ -424,7 +428,7 @@ my_bool query_int_variable(MYSQL *con, const char *var_name, int *var_value)
           (const char *) var_name);
 
   FAIL_IF(mysql_query(con, query_buffer), "Query failed");
-  FAIL_UNLESS(rs= mysql_store_result(con), "Invaliid result set");
+  FAIL_UNLESS(rs= mysql_store_result(con), "Invalid result set");
   FAIL_UNLESS(row= mysql_fetch_row(rs), "Nothing to fetch");
 
   is_null= row[0] == NULL;
@@ -631,7 +635,6 @@ void get_envvars() {
       ssl_port= atoi(envvar);
     else
       ssl_port = port;
-    diag("ssl_port: %d", ssl_port);
   }
 
   if (!force_tls && (envvar= check_envvar("MYSQL_TEST_TLS")))
@@ -642,15 +645,17 @@ void get_envvars() {
     if ((envvar= check_envvar("MYSQL_TEST_SOCKET")) ||
         (envvar= check_envvar("MASTER_MYSOCK")))
       socketname= envvar;
-    diag("socketname: %s", socketname);
   }
   if ((envvar= check_envvar("MYSQL_TEST_PLUGINDIR")))
     plugindir= envvar;
 
-  if (IS_XPAND())
-  {
-
-  }
+  diag("Connection parameters");
+  diag("Schema: %s", schema);
+  diag("Host: %s", hostname);
+  diag("Port: %d", port);
+  diag("TLS Port: %d", ssl_port);
+  diag("Socket: %s", socketname);
+  diag("Plugindir: %s", plugindir);
 }
 
 MYSQL *my_test_connect(MYSQL *mysql,

@@ -217,6 +217,17 @@ void JobStep::handleException(std::exception_ptr e, const int errorCode, const u
   {
     std::rethrow_exception(e);
   }
+  catch (logging::OutOfMemoryExcept& exc)
+  {
+   std::cerr << methodName << " caught a OutOfMemory exception. " << std::endl;
+    catchHandler(methodName + " caught " + exc.what(), errorCode, fErrorInfo, fSessionId);
+  }
+  // Add it here for now to handle potential bad_alloc exceptions
+  catch (std::bad_alloc& exc)
+  {
+   std::cerr << methodName << " caught a bad_alloc exception. " << std::endl;
+    catchHandler(methodName + " caught " + exc.what(), errorCode, fErrorInfo, fSessionId);
+  }
   catch (const IDBExcept& iex)
   {
     std::cerr << methodName << " caught a internal exception. " << std::endl;

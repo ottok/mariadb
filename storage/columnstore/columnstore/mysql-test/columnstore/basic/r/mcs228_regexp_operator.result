@@ -640,16 +640,6 @@ hello	regexp_replace(hello, 'ა.ა', 'Достоевский')
 привет	привет
 Γεια	Γεια
 სალამი	სДостоевскийმი
-SHOW VARIABLES LIKE 'character_set%';
-Variable_name	Value
-character_set_client	utf8mb3
-character_set_connection	utf8mb3
-character_set_database	utf8mb3
-character_set_filesystem	binary
-character_set_results	utf8mb3
-character_set_server	utf8mb3
-character_set_system	utf8mb3
-character_sets_dir	/usr/share/mysql/charsets/
 CREATE TABLE tw(hello text) DEFAULT CHARSET=cp1251 ENGINE COLUMNSTORE;
 INSERT INTO tw values(convert('привет' USING cp1251));
 SELECT hello, regexp_instr(hello, convert('и.е' USING cp1251)) FROM tw;
