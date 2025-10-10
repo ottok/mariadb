@@ -32,7 +32,7 @@ Forwarded: no
  2 files changed, 18 insertions(+), 5 deletions(-)
 
 diff --git a/client/mysql.cc b/client/mysql.cc
-index 2aa2355..2dbd03d 100644
+index 1002745..63ad74f 100644
 --- a/client/mysql.cc
 +++ b/client/mysql.cc
 @@ -1339,6 +1339,9 @@ int main(int argc,char *argv[])
@@ -46,7 +46,7 @@ index 2aa2355..2dbd03d 100644
  
  #ifdef HAVE_READLINE
 diff --git a/sql/mysqld.cc b/sql/mysqld.cc
-index 47050d9..75e3ca1 100644
+index 3c3b19c..04de815 100644
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
 @@ -4955,13 +4955,23 @@ static int init_server_components()

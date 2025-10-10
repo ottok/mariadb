@@ -1,10 +1,7 @@
 env-perl-usr-bin-perl.patch
 mroonga-mrn-lib-dirs-path-reproducible-build.patch
 install-files-into-usr.patch
-1006531-hurd-no-auth-socket.patch
 startup-message.patch
-hurd-i386-plugin_disks_information_schema_disks.cc.patch
-hurd-i386-storage_connect_ioapi.h.patch
 hide-mysql-command-deprecation-warnings.patch
 1063738-x32-compile-time-assert.patch
 Fix-misc-spelling-in-MariaDB-Server-repository.patch
