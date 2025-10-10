@@ -458,8 +458,12 @@ static int test_pw_check(MYSQL *my)
   char query[1024];
   int ret= FAIL;
 
+  sprintf(query, "DROP USER IF EXISTS '%s'@'%s'", "tlsuser", this_host);
+  rc= mysql_query(my, query);
+  check_mysql_rc(rc, my);
+
   /* connect with password */
-  sprintf(query, "CREATE OR REPLACE USER '%s'@'%s' IDENTIFIED BY '%s'", "tlsuser", this_host, strong_pwd);
+  sprintf(query, "CREATE USER '%s'@'%s' IDENTIFIED BY '%s'", "tlsuser", this_host, strong_pwd);
   rc= mysql_query(my, query);
   check_mysql_rc(rc, my);
 
@@ -480,9 +484,13 @@ static int test_pw_check(MYSQL *my)
   mysql= mysql_init(NULL);
 
   /* connect without pasword */
-  if (!local_safe_connection)
+  if (!IS_ENTERPRISE() && !local_safe_connection)
   {
-    sprintf(query, "CREATE OR REPLACE USER '%s'@'%s'", "tlsuser", this_host);
+    sprintf(query, "DROP USER '%s'@'%s'", "tlsuser", this_host);
+    rc= mysql_query(my, query);
+    check_mysql_rc(rc, my);
+
+    sprintf(query, "CREATE USER '%s'@'%s'", "tlsuser", this_host);
     rc= mysql_query(my, query);
     check_mysql_rc(rc, my);
 
@@ -499,8 +507,11 @@ static int test_pw_check(MYSQL *my)
     mysql_optionsv(mysql, MARIADB_OPT_RESTRICTED_AUTH, "mysql_native_password, mysql_old_password");
 
     diag("expected to fail with old_password plugin");
+    sprintf(query, "DROP USER '%s'@'%s'", "tlsuser", this_host);
+    rc= mysql_query(my, query);
+    check_mysql_rc(rc, my);
     /* Test with an authentication plugin, which doesn't support hashing */
-    sprintf(query, "CREATE OR REPLACE USER '%s'@'%s' IDENTIFIED VIA mysql_old_password USING '7c786c222596437b'", "tlsuser", this_host);
+    sprintf(query, "CREATE USER '%s'@'%s' IDENTIFIED VIA mysql_old_password USING '7c786c222596437b'", "tlsuser", this_host);
     rc= mysql_query(my, query);
     check_mysql_rc(rc, my);
     rc= mysql_query(my, "SET GLOBAL secure_auth=0");
@@ -718,6 +729,13 @@ static int test_env_var(MYSQL *my __attribute__((unused)))
 {
   MYSQL *mysql= mysql_init(NULL);
   int rc= FAIL;
+
+  if (mysql_get_server_version(my) < 110400)
+  {
+    diag("skipping for MySQL / mariadb before 11.4, because might not have ssl on");
+    rc = SKIP;
+    goto end;
+  }
 
 #ifdef _WIN32
   _putenv_s("MARIADB_TLS_DISABLE_PEER_VERIFICATION", "1");

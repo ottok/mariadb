@@ -5,6 +5,7 @@
 # -------------------------------------------------------------- #
 #
 --source ../include/have_columnstore.inc
+--source ../include/detect_maxscale.inc
 #
 USE tpch1;
 #
@@ -22,7 +23,9 @@ drop table if exists mcol2225c;
 # Create corresponding in the server
 # -------------------------------------------------------------- #
 
+--disable_warnings
 CREATE USER IF NOT EXISTS'cejuser'@'localhost' IDENTIFIED BY 'Vagrant1!0000001';
+--enable_warnings
 
 GRANT ALL PRIVILEGES ON *.* TO 'cejuser'@'localhost';
 FLUSH PRIVILEGES;

@@ -1,4 +1,5 @@
 /* Copyright (C) 2014 InfiniDB, Inc.
+   Copyright (C) 2016-2025 MariaDB Corporation
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU General Public License
@@ -86,6 +87,23 @@ int LibMySQL::init(const char* h, unsigned int p, const char* u, const char* w, 
   {
     fErrStr = "fatal error running mysql_init() in libmysql_client lib";
     ret = -1;
+  }
+
+  static const std::string extendNetTimeoutQuery  = "SET SESSION net_write_timeout = 3600";
+  if (mysql_real_query(fCon, extendNetTimeoutQuery.c_str(), extendNetTimeoutQuery.length()) != 0)
+  {
+    fErrStr = "Set or verify credentials in CrossEngineSupport section of Columnstore.xml.";
+    ret = -1;
+    return ret;
+  }
+
+  // Disable Select Handler to avoid recursive SH execution path for CES.
+  static const std::string disableSelectHandler  = "SET SESSION columnstore_select_handler = OFF";
+  if (mysql_real_query(fCon, disableSelectHandler.c_str(), disableSelectHandler.length()) != 0)
+  {
+    fErrStr = "fatal error setting columnstore_select_handler=OFF in libmysql_client lib";
+    ret = -1;
+    return ret;
   }
 
   return ret;

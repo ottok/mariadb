@@ -62,7 +62,7 @@
 #define CACHED_LOGIN_SUCCEEDED 3
 #define RSA_LOGIN_REQUIRED 4
 
-/* MySQL server allows requesting public key only for non secure connections.
+/* MySQL server allows requesting public key only for non-secure connections.
    secure connections are:
      - TLS/SSL connections
      - unix_socket connections
@@ -363,7 +363,10 @@ static int auth_caching_sha2_client(MYSQL_PLUGIN_VIO *vio, MYSQL *mysql)
 
 #endif
     if (!pubkey)
-      return CR_ERROR;
+    {
+      rc= CR_ERROR;
+      goto error;
+    }
 
     pwlen= (unsigned int)strlen(mysql->passwd) + 1;  /* include terminating zero */
     if (pwlen > MAX_PW_LEN)

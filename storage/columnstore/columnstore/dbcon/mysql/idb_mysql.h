@@ -14,19 +14,25 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA. */
-// One include file to deal with all the MySQL pollution of the
-//  global namespace
-//
-// Don't include ANY mysql headers anywhere except here!
+
+/* One include file to deal with all the MySQL pollution of the
+   global namespace
+
+   Don't include ANY mysql headers anywhere except here!
+
+   WARN: if any cmake build target uses this include file,
+   GenError from server must be added to the target dependencies
+   to generate mysqld_error.h used below
+*/
+
 #pragma once
 
 #ifdef TEST_MCSCONFIG_H
 #error mcsconfig.h was included before idb_mysql.h
 #endif
 
-
-//#define INFINIDB_DEBUG
-//#define DEBUG_WALK_COND
+// #define INFINIDB_DEBUG
+// #define DEBUG_WALK_COND
 
 #define MYSQL_SERVER 1  // needed for definition of struct THD in mysql_priv.h
 #define USE_CALPONT_REGEX
@@ -54,6 +60,8 @@
 #define DBUG_OFF 1
 #endif
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #include "sql_plugin.h"
 #include "sql_table.h"
 #include "sql_select.h"
@@ -66,6 +74,38 @@
 #include "rpl_rli.h"
 #include "my_dbug.h"
 #include "sql_show.h"
+#if MYSQL_VERSION_ID >= 110401
+#include "opt_histogram_json.h"
+#else
+// Mock Histogram_bucket for MySQL < 11.4
+struct Histogram_bucket
+{
+  std::string start_value;
+
+  double cum_fract;
+
+  longlong ndv;
+};
+
+class Histogram_json_hb
+{
+  std::vector<Histogram_bucket> buckets;
+
+  std::string last_bucket_end_endp;
+
+public:
+  const std::vector<Histogram_bucket>& get_json_histogram() const
+  {
+    return buckets;
+  }
+
+  const std::string& get_last_bucket_end_endp() const
+  {
+    return last_bucket_end_endp;
+  }
+};
+#endif
+#pragma GCC diagnostic pop
 
 // Now clean up the pollution as best we can...
 #include "mcsconfig_conflicting_defs_undef.h"
@@ -101,4 +141,3 @@ inline char* idb_mysql_query_str(THD* thd)
 #endif
 }
 }  // namespace
-

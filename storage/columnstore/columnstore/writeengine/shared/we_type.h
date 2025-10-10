@@ -40,7 +40,7 @@
 #include "IDBDataFile.h"
 #include "IDBPolicy.h"
 #include "nullstring.h"
-#include "collation.h" // For CHARSET_INFO struct
+#include "mariadb_charset/collation.h"  // For CHARSET_INFO struct
 
 #undef EXPORT
 #undef DELETE
@@ -142,6 +142,13 @@ enum ImportDataMode
   IMPORT_DATA_TEXT = 0,
   IMPORT_DATA_BIN_ACCEPT_NULL = 1,
   IMPORT_DATA_BIN_SAT_NULL = 2
+};
+
+// Max number of ignored errors
+enum MaxErrors
+{
+  MAX_ERRORS_DEFAULT = -1,  // default value
+  MAX_ERRORS_ALL = -2       // special case: ignore all errors
 };
 
 /**
@@ -401,8 +408,8 @@ struct JobColumn /** @brief Job Column Structure */
   int compressionType;             /** @brief compression type */
   bool autoIncFlag;                /** @brief auto increment flag */
   DctnryStruct dctnry;             /** @brief dictionary structure */
-  int128_t fMinIntSat;              /** @brief For integer type, the min saturation value */
-  uint128_t fMaxIntSat;             /** @brief For integer type, the max saturation value */
+  int128_t fMinIntSat;             /** @brief For integer type, the min saturation value */
+  uint128_t fMaxIntSat;            /** @brief For integer type, the max saturation value */
   double fMinDblSat;               /** @brief for float/double, the min saturation value */
   double fMaxDblSat;               /** @brief for float/double, the max saturation value */
   bool fWithDefault;               /** @brief With default */
@@ -440,10 +447,9 @@ struct JobColumn /** @brief Job Column Structure */
    , cs(nullptr)
   {
   }
-  JobColumn(const std::string& colName_, OID mapOid_, const std::string& typeName_,
-            int width_, int definedWidth_, int compressionType_, int dctnryCompressionType_,
-            int64_t minIntSat_, uint64_t maxIntSat_, bool withDefault_,
-            unsigned long long defaultUInt_)
+  JobColumn(const std::string& colName_, OID mapOid_, const std::string& typeName_, int width_,
+            int definedWidth_, int compressionType_, int dctnryCompressionType_, int64_t minIntSat_,
+            uint64_t maxIntSat_, bool withDefault_, unsigned long long defaultUInt_)
    : colName(colName_)
    , mapOid(mapOid_)
    , dataType(execplan::CalpontSystemCatalog::INT)
@@ -525,6 +531,7 @@ struct Job /** @brief Job Structure */
   int numberOfReadBuffers;
   unsigned readBufferSize;
   unsigned writeBufferSize;
+  int fSkipRows;
   Job()
    : id(0)
    , fDelimiter('|')
@@ -533,6 +540,7 @@ struct Job /** @brief Job Structure */
    , numberOfReadBuffers(0)
    , readBufferSize(0)
    , writeBufferSize(0)
+   , fSkipRows(0)
   {
   }
 };
