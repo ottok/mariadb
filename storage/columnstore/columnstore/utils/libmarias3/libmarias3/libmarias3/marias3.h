@@ -55,6 +55,12 @@ typedef void *(*ms3_realloc_callback)(void *ptr, size_t size);
 typedef char *(*ms3_strdup_callback)(const char *str);
 typedef void *(*ms3_calloc_callback)(size_t nmemb, size_t size);
 
+/** The callback function for MS3_OPT_READ_CB. The function and the user data
+ * set with MS3_OPT_USER_DATA are passed to Curl. For more information, refer
+ * to CURLOPT_WRITE_FUNCTION. */
+typedef size_t (*ms3_read_callback)(void *buffer, size_t size,
+                                    size_t nitems, void *userdata);
+
 enum ms3_error_code_t
 {
   MS3_ERR_NONE,
@@ -70,6 +76,7 @@ enum ms3_error_code_t
   MS3_ERR_SERVER,
   MS3_ERR_TOO_BIG,
   MS3_ERR_AUTH_ROLE,
+  MS3_ERR_ENDPOINT,
   MS3_ERR_MAX // Always the last error
 };
 
@@ -82,7 +89,12 @@ enum ms3_set_option_t
   MS3_OPT_BUFFER_CHUNK_SIZE,
   MS3_OPT_FORCE_LIST_VERSION,
   MS3_OPT_FORCE_PROTOCOL_VERSION,
-  MS3_OPT_PORT_NUMBER
+  MS3_OPT_READ_CB,
+  MS3_OPT_USER_DATA,
+  MS3_OPT_PORT_NUMBER,
+  MS3_OPT_CONNECT_TIMEOUT,
+  MS3_OPT_TIMEOUT,
+  MS3_OPT_NO_CONTENT_TYPE
 };
 
 typedef enum ms3_set_option_t ms3_set_option_t;
@@ -124,7 +136,7 @@ MS3_API
 const char *ms3_error(uint8_t errcode);
 
 MS3_API
-void ms3_debug(void);
+void ms3_debug(int debug_state);
 
 MS3_API
 uint8_t ms3_list(ms3_st *ms3, const char *bucket, const char *prefix,
@@ -138,8 +150,14 @@ MS3_API
 void ms3_list_free(ms3_list_st *list);
 
 MS3_API
+void ms3_set_content_type(ms3_st *ms3, const char *content_type);
+
+MS3_API
 uint8_t ms3_put(ms3_st *ms3, const char *bucket, const char *key,
                 const uint8_t *data, size_t length);
+
+MS3_API
+const char *ms3_get_content_type(ms3_st *ms3);
 
 MS3_API
 uint8_t ms3_get(ms3_st *ms3, const char *bucket, const char *key,

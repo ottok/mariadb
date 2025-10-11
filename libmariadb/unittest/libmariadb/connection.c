@@ -1521,6 +1521,7 @@ static int test_conc327(MYSQL *unused __attribute__((unused)))
   const char *env= getenv("MYSQL_TMP_DIR");
   char cnf_file1[FN_REFLEN + 1];
   char cnf_file2[FN_REFLEN + 1];
+  my_bool failed_opening_files;
 
   SKIP_SKYSQL;
 
@@ -1539,7 +1540,19 @@ static int test_conc327(MYSQL *unused __attribute__((unused)))
 
   fp1= fopen(cnf_file1, "w");
   fp2= fopen(cnf_file2, "w");
-  FAIL_IF(!fp1 || !fp2, "fopen failed");
+  if((failed_opening_files = !fp1 || !fp2))
+  {
+    if(fp1)
+    {
+      fclose(fp1);
+    }
+    if(fp2)
+    {
+      fclose(fp2);
+    }
+  }
+  
+  FAIL_IF(failed_opening_files, "fopen failed");
 
   fprintf(fp1, "!include %s\n", cnf_file2);
   
@@ -1564,7 +1577,18 @@ static int test_conc327(MYSQL *unused __attribute__((unused)))
   snprintf(cnf_file1, FN_REFLEN, "%s%cmy.cnf", env, FN_LIBCHAR);
   fp1= fopen(cnf_file1, "w");
   fp2= fopen(cnf_file2, "w");
-  FAIL_IF(!fp1 || !fp2, "fopen failed");
+  if((failed_opening_files = !fp1 || !fp2))
+  {
+    if(fp1)
+    {
+      fclose(fp1);
+    }
+    if(fp2)
+    {
+      fclose(fp2);
+    }
+  }
+  FAIL_IF(failed_opening_files, "fopen failed");
 
   fprintf(fp2, "!includedir %s\n", env);
   

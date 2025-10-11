@@ -287,6 +287,8 @@ static int test_frm_bug(MYSQL *mysql)
   }
 
   rc= mysql_query(mysql, "SHOW TABLE STATUS like 'test_frm_bug'");
+
+  fclose(test_file);
   check_mysql_rc(rc, mysql);
 
   result= mysql_store_result(mysql);
@@ -307,7 +309,6 @@ static int test_frm_bug(MYSQL *mysql)
   mysql_free_result(result);
   mysql_stmt_close(stmt);
 
-  fclose(test_file);
   mysql_query(mysql, "drop table if exists test_frm_bug");
   unlink(test_frm);
   return OK;
@@ -1663,8 +1664,13 @@ int display_extended_field_attribute(MYSQL *mysql)
 
 static int test_ext_field_attr(MYSQL *mysql)
 {
+  if (!is_mariadb)
+  {
+    diag("feature not supported by MySQL server");
+    return SKIP;
+  }
   display_extended_field_attribute(mysql);
-  
+
   return OK;
 }
 

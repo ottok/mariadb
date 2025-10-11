@@ -123,7 +123,6 @@ static uint8_t build_assume_role_request_uri(CURL *curl, const char *base_domain
 {
   char uri_buffer[MAX_URI_LENGTH];
   const char *domain;
-  const uint8_t path_parts = 10; // "https://" + "." + "/"
   const char *http_protocol = "http";
   const char *https_protocol = "https";
   const char *protocol;
@@ -148,13 +147,9 @@ static uint8_t build_assume_role_request_uri(CURL *curl, const char *base_domain
 
   if (query)
   {
-    if (path_parts + strlen(domain) + strlen(query) >= MAX_URI_LENGTH - 1)
-    {
+    if (snprintf(uri_buffer, MAX_URI_LENGTH, "%s://%s/?%s", protocol,
+             domain, query) >= MAX_URI_LENGTH)
       return MS3_ERR_URI_TOO_LONG;
-    }
-
-    snprintf(uri_buffer, MAX_URI_LENGTH - 1, "%s://%s/?%s", protocol,
-             domain, query);
   }
   else
   {
@@ -373,7 +368,7 @@ build_assume_role_request_headers(CURL *curl, struct curl_slist **head,
   time_t now;
   struct tm tmp_tm;
   char headerbuf[3072];
-  char secrethead[45];
+  char secrethead[MAX_S3_SECRET_LENGTH + S3_SECRET_EXTRA_LENGTH];
   char date[9];
   char sha256hash[65];
   char post_hash[65];
@@ -445,7 +440,7 @@ build_assume_role_request_headers(CURL *curl, struct curl_slist **head,
 
   // User signing key hash
   // Date hashed using AWS4:secret_key
-  snprintf(secrethead, sizeof(secrethead), "AWS4%.*s", 40, secret);
+  snprintf(secrethead, sizeof(secrethead), "AWS4%.*s", MAX_S3_SECRET_LENGTH, secret);
   strftime(headerbuf, sizeof(headerbuf), "%Y%m%d", &tmp_tm);
   hmac_sha256((uint8_t *)secrethead, strlen(secrethead), (uint8_t *)headerbuf,
               strlen(headerbuf), hmac_hash);
