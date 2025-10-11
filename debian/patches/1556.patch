@@ -14,7 +14,7 @@ file.
 
 --- a/.gitignore
 +++ b/.gitignore
-@@ -261,7 +261,7 @@
+@@ -262,7 +262,7 @@ support-files/my-innodb-heavy-4G.cnf
  support-files/my-large.cnf
  support-files/my-medium.cnf
  support-files/my-small.cnf
@@ -57,7 +57,7 @@ file.
  
    IF(INSTALL_SUPPORTFILESDIR)
      INSTALL(FILES magic DESTINATION ${inst_location} COMPONENT SupportFiles)
-@@ -207,8 +213,9 @@
+@@ -207,8 +213,9 @@ IF(UNIX AND NOT WITHOUT_SERVER)
    ENDIF()
  
    IF (INSTALL_SYSCONFDIR)
