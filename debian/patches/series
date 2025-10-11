@@ -1,4 +1,3 @@
 env-perl-usr-bin-perl.patch
 mroonga-mrn-lib-dirs-path-reproducible-build.patch
 install-files-into-usr.patch
-1006531-hurd-no-auth-socket.patch
