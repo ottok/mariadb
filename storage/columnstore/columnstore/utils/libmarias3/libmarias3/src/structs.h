@@ -43,6 +43,8 @@ struct ms3_st
   char *region;
   char *base_domain;
   int port; // 0 means "Use default"
+  uint32_t connect_timeout_ms; // 0 means "Use default curl connect timeout"
+  uint32_t timeout_ms; // 0 means "No timeout at all"
 
   char *sts_endpoint;
   char *sts_region;
@@ -58,12 +60,17 @@ struct ms3_st
   CURL *curl;
   char *last_error;
   bool use_http;
+  bool no_content_type;
   bool disable_verification;
   uint8_t list_version;
   uint8_t protocol_version;
   bool first_run;
   char *path_buffer;
   char *query_buffer;
+  void *read_cb;
+  void *user_data;
+  const char *content_type_out;
+  char content_type_in[128]; // max length allowed for mime types
   struct ms3_list_container_st list_container;
 };
 
