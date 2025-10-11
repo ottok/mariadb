@@ -3337,8 +3337,6 @@ mysql_prepare_create_table(THD *thd, HA_CREATE_INFO *create_info,
     Create_field *auto_increment_key= 0;
     Key_part_spec *column;
 
-    bool is_hash_field_needed= key->key_create_info.algorithm
-                               == HA_KEY_ALG_LONG_HASH;
     if (key->type == Key::IGNORE_KEY)
     {
       /* ignore redundant keys */
@@ -3348,6 +3346,9 @@ mysql_prepare_create_table(THD *thd, HA_CREATE_INFO *create_info,
       if (!key)
 	break;
     }
+
+    bool is_hash_field_needed= key->key_create_info.algorithm
+                               == HA_KEY_ALG_LONG_HASH;
 
     if (key_check_without_overlaps(thd, create_info, alter_info, *key))
       DBUG_RETURN(true);
@@ -7680,7 +7681,7 @@ static bool mysql_inplace_alter_table(THD *thd,
 
   if (table->file->ha_prepare_inplace_alter_table(altered_table,
                                                   ha_alter_info))
-    goto rollback;
+    goto rollback_no_restore_lock;
 
   debug_crash_here("ddl_log_alter_after_prepare_inplace");
 
@@ -7732,16 +7733,16 @@ static bool mysql_inplace_alter_table(THD *thd,
   res= table->file->ha_inplace_alter_table(altered_table, ha_alter_info);
   thd->abort_on_warning= false;
   if (res)
-    goto rollback;
+    goto rollback_no_restore_lock;
 
   DEBUG_SYNC(thd, "alter_table_inplace_before_lock_upgrade");
   // Upgrade to EXCLUSIVE before commit.
   if (wait_while_table_is_used(thd, table, HA_EXTRA_PREPARE_FOR_RENAME))
-    goto rollback;
+    goto rollback_no_restore_lock;
 
   /* Set MDL_BACKUP_DDL */
   if (backup_reset_alter_copy_lock(thd))
-    goto rollback;
+    goto rollback_no_restore_lock;
 
   /* Crashing here should cause the original table to be used */
   debug_crash_here("ddl_log_alter_after_copy");
@@ -7770,7 +7771,7 @@ static bool mysql_inplace_alter_table(THD *thd,
   if (!(table->file->partition_ht()->flags &
         HTON_REQUIRES_NOTIFY_TABLEDEF_CHANGED_AFTER_COMMIT) &&
       notify_tabledef_changed(table_list))
-    goto rollback;
+    goto rollback_restore_lock;
 
   {
     TR_table trt(thd, true);
@@ -7783,17 +7784,17 @@ static bool mysql_inplace_alter_table(THD *thd,
         if (!TR_table::use_transaction_registry)
         {
           my_error(ER_VERS_TRT_IS_DISABLED, MYF(0));
-          goto rollback;
+          goto rollback_restore_lock;
         }
         if (trt.update(trx_start_id, trx_end_id))
-          goto rollback;
+          goto rollback_restore_lock;
       }
     }
 
     if (table->file->ha_commit_inplace_alter_table(altered_table,
                                                   ha_alter_info,
                                                   true))
-      goto rollback;
+      goto rollback_restore_lock;
     DEBUG_SYNC(thd, "alter_table_inplace_after_commit");
   }
 
@@ -7890,7 +7891,11 @@ static bool mysql_inplace_alter_table(THD *thd,
 
   DBUG_RETURN(commit_succeded_with_error);
 
- rollback:
+rollback_restore_lock:
+  /* Wait for backup if it is running */
+  backup_reset_alter_copy_lock(thd);
+
+rollback_no_restore_lock:
   table->file->ha_commit_inplace_alter_table(altered_table,
                                              ha_alter_info,
                                              false);
@@ -10784,7 +10789,8 @@ do_continue:;
     thd->count_cuted_fields= CHECK_FIELD_EXPRESSION;
     altered_table.reset_default_fields();
     if (altered_table.default_field &&
-        altered_table.update_default_fields(true))
+        (altered_table.check_sequence_privileges(thd) ||
+         altered_table.update_default_fields(true)))
     {
       cleanup_table_after_inplace_alter(&altered_table);
       goto err_new_table_cleanup;
@@ -11825,7 +11831,7 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to, bool ignore,
   if (unlikely(mysql_trans_commit_alter_copy_data(thd)))
     error= 1;
 
- err:
+end:
   if (bulk_insert_started)
     (void) to->file->ha_end_bulk_insert();
 
@@ -11856,6 +11862,10 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to, bool ignore,
     error= 1;
   thd_progress_end(thd);
   DBUG_RETURN(error > 0 ? -1 : 0);
+
+err:
+  backup_reset_alter_copy_lock(thd);
+  goto end;
 }
 
 
@@ -12111,6 +12121,23 @@ bool check_engine(THD *thd, const char *db_name,
       my_error(ER_OPTION_PREVENTS_STATEMENT, MYF(0), "NO_ENGINE_SUBSTITUTION");
       DBUG_RETURN(TRUE);
     }
+#ifdef WITH_WSREP
+    /*  @@enforce_storage_engine is local, if user has used
+	ENGINE=XXX we can't allow it in cluster in this
+	case as enf_engine != new _engine. This is because
+        original stmt is replicated including ENGINE=XXX and
+        here */
+    if ((create_info->used_fields & HA_CREATE_USED_ENGINE) &&
+        WSREP(thd))
+    {
+      my_error(ER_OPTION_PREVENTS_STATEMENT, MYF(0), "ENFORCE_STORAGE_ENGINE");
+      push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
+                          ER_OPTION_PREVENTS_STATEMENT,
+                          "Do not use ENGINE=x when @@enforce_storage_engine is set");
+
+      DBUG_RETURN(TRUE);
+    }
+#endif
     *new_engine= enf_engine;
   }
 

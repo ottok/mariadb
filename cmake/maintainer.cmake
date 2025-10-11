@@ -43,6 +43,10 @@ SET(MY_WARNING_FLAGS
   -Wcast-function-type-strict
   )
 
+IF(NOT (WITH_MSAN OR WITH_ASAN OR WITH_UBSAN))
+  SET(MY_WARNING_FLAGS ${MY_WARNING_FLAGS} -Wframe-larger-than=16384)
+ENDIF()
+
 # Warning flags that are in testing before moving
 # to MY_WARNING_FLAGS if stable.
 SET(MY_WARNING_FLAGS_NON_FATAL

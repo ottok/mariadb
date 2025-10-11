@@ -1,6 +1,6 @@
 /* sp.c
  *
- * Copyright (C) 2006-2024 wolfSSL Inc.
+ * Copyright (C) 2006-2025 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
@@ -21,16 +21,11 @@
 
 /* Implementation by Sean Parkinson. */
 
-#ifdef HAVE_CONFIG_H
-    #include <config.h>
-#endif
-
-#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/libwolfssl_sources.h>
 
 #if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH) || \
     defined(WOLFSSL_HAVE_SP_ECC)
 
-#include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/cpuid.h>
 #ifdef NO_INLINE
     #include <wolfssl/wolfcrypt/misc.h>
@@ -114,9 +109,9 @@ static void sp_2048_from_bin(sp_digit* r, int size, const byte* a, int n)
         }
 #else
         switch (i) {
-            case 2: d[2] = a[2]; //fallthrough
-            case 1: d[1] = a[1]; //fallthrough
-            case 0: d[0] = a[0]; //fallthrough
+            case 2: d[i-2] = a[2]; //fallthrough
+            case 1: d[i-1] = a[1]; //fallthrough
+            case 0: d[i-0] = a[0]; //fallthrough
         }
 #endif
         j++;
@@ -30305,9 +30300,9 @@ static void sp_3072_from_bin(sp_digit* r, int size, const byte* a, int n)
         }
 #else
         switch (i) {
-            case 2: d[2] = a[2]; //fallthrough
-            case 1: d[1] = a[1]; //fallthrough
-            case 0: d[0] = a[0]; //fallthrough
+            case 2: d[i-2] = a[2]; //fallthrough
+            case 1: d[i-1] = a[1]; //fallthrough
+            case 0: d[i-0] = a[0]; //fallthrough
         }
 #endif
         j++;
@@ -83399,9 +83394,9 @@ static void sp_4096_from_bin(sp_digit* r, int size, const byte* a, int n)
         }
 #else
         switch (i) {
-            case 2: d[2] = a[2]; //fallthrough
-            case 1: d[1] = a[1]; //fallthrough
-            case 0: d[0] = a[0]; //fallthrough
+            case 2: d[i-2] = a[2]; //fallthrough
+            case 1: d[i-1] = a[1]; //fallthrough
+            case 0: d[i-0] = a[0]; //fallthrough
         }
 #endif
         j++;
@@ -103943,9 +103938,9 @@ static void sp_256_from_bin(sp_digit* r, int size, const byte* a, int n)
         }
 #else
         switch (i) {
-            case 2: d[2] = a[2]; //fallthrough
-            case 1: d[1] = a[1]; //fallthrough
-            case 0: d[0] = a[0]; //fallthrough
+            case 2: d[i-2] = a[2]; //fallthrough
+            case 1: d[i-1] = a[1]; //fallthrough
+            case 0: d[i-0] = a[0]; //fallthrough
         }
 #endif
         j++;
@@ -114852,9 +114847,9 @@ static void sp_384_from_bin(sp_digit* r, int size, const byte* a, int n)
         }
 #else
         switch (i) {
-            case 2: d[2] = a[2]; //fallthrough
-            case 1: d[1] = a[1]; //fallthrough
-            case 0: d[0] = a[0]; //fallthrough
+            case 2: d[i-2] = a[2]; //fallthrough
+            case 1: d[i-1] = a[1]; //fallthrough
+            case 0: d[i-0] = a[0]; //fallthrough
         }
 #endif
         j++;
@@ -129094,9 +129089,9 @@ static void sp_521_from_bin(sp_digit* r, int size, const byte* a, int n)
         }
 #else
         switch (i) {
-            case 2: d[2] = a[2]; //fallthrough
-            case 1: d[1] = a[1]; //fallthrough
-            case 0: d[0] = a[0]; //fallthrough
+            case 2: d[i-2] = a[2]; //fallthrough
+            case 1: d[i-1] = a[1]; //fallthrough
+            case 0: d[i-0] = a[0]; //fallthrough
         }
 #endif
         j++;
@@ -218537,9 +218532,9 @@ static void sp_1024_from_bin(sp_digit* r, int size, const byte* a, int n)
         }
 #else
         switch (i) {
-            case 2: d[2] = a[2]; //fallthrough
-            case 1: d[1] = a[1]; //fallthrough
-            case 0: d[0] = a[0]; //fallthrough
+            case 2: d[i-2] = a[2]; //fallthrough
+            case 1: d[i-1] = a[1]; //fallthrough
+            case 0: d[i-0] = a[0]; //fallthrough
         }
 #endif
         j++;

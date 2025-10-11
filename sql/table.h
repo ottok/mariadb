@@ -1092,6 +1092,11 @@ struct TABLE_SHARE
     return (tmp_table == SYSTEM_TMP_TABLE) ? 0 : table_map_id;
   }
 
+  bool is_optimizer_tmp_table()
+  {
+    return tmp_table == INTERNAL_TMP_TABLE && !db.length && table_name.length;
+  }
+
   bool visit_subgraph(Wait_for_flush *waiting_ticket,
                       MDL_wait_for_graph_visitor *gvisitor);
 
@@ -1711,6 +1716,7 @@ public:
                                       TABLE *tmp_table,
                                       TMP_TABLE_PARAM *tmp_table_param,
                                       bool with_cleanup);
+  bool check_sequence_privileges(THD *thd);
   bool vcol_fix_expr(THD *thd);
   bool vcol_cleanup_expr(THD *thd);
   Field *find_field_by_name(LEX_CSTRING *str) const;

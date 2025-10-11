@@ -290,8 +290,8 @@ typedef unsigned short ushort;
 /* From old s-system.h */
 
 /*
-  Support macros for non ansi & other old compilers. Since such
-  things are no longer supported we do nothing. We keep then since
+  Support macros for non-ansi & other old compilers. Since such
+  things are no longer supported we do nothing. We keep them since
   some of our code may still be needed to upgrade old customers.
 */
 #define _VARARGS(X) X
@@ -394,7 +394,7 @@ typedef SOCKET_SIZE_TYPE size_socket;
 #define FN_EXTCHAR	'.'
 #define FN_HOMELIB	'~'	/* ~/ is used as abbrev for home dir */
 #define FN_CURLIB	'.'	/* ./ is used as abbrev for current dir */
-#define FN_PARENTDIR	".."	/* Parentdirectory; Must be a string */
+#define FN_PARENTDIR	".."	/* Parent directory; Must be a string */
 #define FN_DEVCHAR	':'
 
 #ifndef FN_LIBCHAR
@@ -485,9 +485,11 @@ extern double		my_atof(const char*);
 #if defined(_lint) || defined(FORCE_INIT_OF_VARS) || \
     defined(__cplusplus) || !defined(__GNUC__)
 #define UNINIT_VAR(x) x= 0
-#else
+#elif defined(__GNUC__) && !defined(__clang__)
 /* GCC specific self-initialization which inhibits the warning. */
 #define UNINIT_VAR(x) x= x
+#else
+#define UNINIT_VAR(x) x
 #endif
 
 
@@ -683,7 +685,7 @@ typedef unsigned long	size_s; /* Size of strings (In string-funcs) */
 typedef int		myf;	/* Type of MyFlags in my_funcs */
 typedef char		my_bool; /* Small bool */
 typedef unsigned long long my_ulonglong;
-#if !defined(bool) && !defined(bool_defined) && (!defined(HAVE_BOOL) || !defined(__cplusplus))
+#if !defined(bool) && !defined(bool_defined) && (!defined(HAVE_BOOL) || !defined(__cplusplus)) && (__STDC_VERSION__ < 202300L)
 typedef char		bool;	/* Ordinary boolean values 0 1 */
 #endif
 	/* Macros for converting *constants* to the right type */
