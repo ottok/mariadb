@@ -1,7 +1,14 @@
 ---
-# Include Salsa-CI as a base
+# Include Salsa CI as a base
+#
+# Revert back to version prior to Sept 11th as the MariaDB builds never went
+# past ~90% with the new sbuild based system, it is too slow. Switch back to
+# default Ubuntu recipie once this is fixed:
+# https://salsa.debian.org/salsa-ci-team/pipeline/-/issues/507
 include:
-  - https://salsa.debian.org/salsa-ci-team/pipeline/-/raw/master/recipes/ubuntu.yml
+  - https://salsa.debian.org/salsa-ci-team/pipeline/-/raw/59e55e8cf51542bd8f72f08d61a78280b043672d/salsa-ci.yml
+  - https://salsa.debian.org/salsa-ci-team/pipeline/-/raw/59e55e8cf51542bd8f72f08d61a78280b043672d/pipeline-jobs.yml
+  - https://salsa.debian.org/salsa-ci-team/pipeline/-/raw/59e55e8cf51542bd8f72f08d61a78280b043672d/vars/ubuntu.yml
 
 variables:
   # These pass in Ubuntu 25.04 "Plucky", so continue testing to ensure they
