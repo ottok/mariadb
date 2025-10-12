@@ -5,6 +5,15 @@ mariadb (1:11.4.8-0ubuntu0.25.04.1) plucky; urgency=medium
     https://mariadb.com/docs/release-notes/community-server/11.4/11.4.8
     (LP: #2120204)
   * Drop Hurd patches that are now included upstream
+  * Suppress native AIO warning introduced in upstream a87bb96
+  * Update server trace to include new parameters and values
+  * Remove obsolete cleanup as upstream moved pam_mariadb_mtr.so in c05b1fe
+  * Add debian/source/local-options to suppress WolfSSL line ending errors
+  * Salsa CI: Revert back to pre-sbuild pipeline version to builds can pass
+
+  [ Sergei Golubchik ]
+  * MDEV-36815 Fresh MariaDB 11.4 installation gives errors when configuring
+    utf8
 
  -- Otto Kekäläinen <otto@debian.org>  Thu, 09 Oct 2025 22:33:23 -0700
 
