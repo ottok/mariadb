@@ -3,6 +3,8 @@ mariadb-10.6 (1:10.6.23-0ubuntu0.22.04.1) jammy; urgency=medium
   * New upstream maintenance release 10.6.23. For details about fixes please see
     https://mariadb.com/docs/release-notes/community-server/10.6/10.6.24
     (LP: #2120204)
+  * Update Lintian overrides for new files in latest upstream version
+  * Add debian/source/local-options to suppress WolfSSL line ending errors
 
  -- Otto Kekäläinen <otto@debian.org>  Fri, 10 Oct 2025 20:03:01 -0700
 
