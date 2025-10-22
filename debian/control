@@ -894,7 +894,6 @@ Description: RocksDB storage engine for MariaDB server
 Package: mariadb-plugin-oqgraph
 Architecture: any
 Depends:
- libjudydebian1,
  mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
@@ -954,7 +953,6 @@ Description: Spider storage engine for MariaDB server
 Package: mariadb-plugin-gssapi-server
 Architecture: any
 Depends:
- libgssapi-krb5-2,
  mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
@@ -973,7 +971,6 @@ Description: GSSAPI authentication plugin for MariaDB server
 Package: mariadb-plugin-gssapi-client
 Architecture: any
 Depends:
- libgssapi-krb5-2,
  mariadb-client (= ${binary:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
@@ -992,7 +989,6 @@ Description: GSSAPI authentication plugin for MariaDB client
 Package: mariadb-plugin-cracklib-password-check
 Architecture: any
 Depends:
- libcrack2 (>= 2.9.0),
  mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
