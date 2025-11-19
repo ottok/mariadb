@@ -885,7 +885,7 @@ build mariadbclient consumer Python-MySQLdb:
   script:
     - *test-prepare-container
     - *test-install-all-libs
-    - apt-get install -qq --yes pkg-config python3-pip
+    - apt-get install -qq --yes pkg-config python3-pip build-essential
     # See what MySQLdb will build with
     - pkg-config --cflags --libs mysqlclient
     # MySQLdb is also available in Debian as package python3-mysqldb, but
