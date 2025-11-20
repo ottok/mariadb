@@ -773,8 +773,11 @@ default-mysql-server and Bookworm upgrade:
     - *test-verify-initial
     - *test-enable-sid-repos
     - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate default-mysql-server
-    - apt-get install -qq --yes default-mysql-server
+    # Ensure provider plugins are upgraded together with the server, otherwise
+    # this job can end up with 10.11 providers and an 11.x server (see
+    # mariadb-server #1121151, apt #1121158).
+    - apt-get install -qq --simulate default-mysql-server mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy
+    - apt-get install -qq --yes default-mysql-server mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy
     - *test-full-upgrade
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
