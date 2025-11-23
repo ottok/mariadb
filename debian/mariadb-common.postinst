@@ -4,6 +4,15 @@ set -e
 
 case "$1" in
   configure)
+    # Set /etc/mysql/mariadb.cnf as main /etc/mysql/my.cnf alternative if it exists.
+    # As conffile, dpkg does not automatically re-add it if missing on upgrade,
+    # and admins might have intentionally removed it and chose a different my.cnf.
+    if [ ! -f /etc/mysql/mariadb.cnf ]
+    then
+      echo 'Notice: /etc/mysql/mariadb.cnf does not exist, leaving my.cnf untouched'
+      exit 0
+    fi
+
     # New packaging paradigm for my.cnf handling among MySQL variants
     # Used in Ubuntu since Dec-2014 and in Debian since Jul-2015
     #
@@ -33,7 +42,7 @@ case "$1" in
     # alternative and override with priority 500 if needed.
     if ! update-alternatives --query my.cnf | grep --quiet "Value: /etc/mysql/mariadb.cnf"
     then
-      update-alternatives --install /etc/mysql/my.cnf my.cnf "/etc/mysql/mariadb.cnf" 500 || true
+      update-alternatives --install /etc/mysql/my.cnf my.cnf "/etc/mysql/mariadb.cnf" 500
     fi
     ;;
 esac
