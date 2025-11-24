@@ -2,3 +2,12 @@ FAQ:
 
 Q: My <tab> completion is gone, why?
 A: You have "no-auto-rehash" in the "[mysql]" section of /etc/mysql/my.cnf!
+
+Q: Some Perl-based tools like innotop, mariadb-report or mytop fail with
+   "Can't locate DBI.pm" or similar errors. What should I install?
+A: The core mariadb-client package only suggests these Perl modules as
+   optional enhancements. Install the following packages if you want to use
+   the advanced Perl clients:
+     - libdbi-perl
+     - libdbd-mariadb-perl (or libdbd-mysql-perl)
+     - libterm-readkey-perl

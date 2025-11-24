@@ -306,7 +306,6 @@ Package: mariadb-client
 Architecture: any
 Depends:
  debianutils (>=1.6),
- libconfig-inifiles-perl,
  mariadb-client-core (>= ${source:Version}),
  ${misc:Depends},
  ${perl:Depends},
@@ -398,7 +397,7 @@ Replaces:
  virtual-mysql-client,
 Provides:
  virtual-mysql-client,
-Recommends:
+Suggests:
  libdbd-mariadb-perl | libdbd-mysql-perl,
  libdbi-perl,
  libterm-readkey-perl,
