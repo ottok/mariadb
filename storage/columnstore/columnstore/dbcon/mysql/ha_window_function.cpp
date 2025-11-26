@@ -25,7 +25,6 @@
 #include <my_config.h>
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "idb_mysql.h"
 #include "ha_mcs_impl_if.h"
@@ -53,6 +52,8 @@ using namespace mcsv1sdk;
 
 #include "vlarray.h"
 
+using namespace std;
+
 namespace cal_impl_if
 {
 ReturnedColumn* nullOnError(gp_walk_info& gwi)
@@ -60,13 +61,13 @@ ReturnedColumn* nullOnError(gp_walk_info& gwi)
   if (gwi.hasSubSelect)
   {
     gwi.parseErrorText = logging::IDBErrorInfo::instance()->errorMsg(logging::ERR_NON_SUPPORT_SELECT_SUB);
-    setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText);
+    setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText, gwi);
   }
 
   if (gwi.parseErrorText.empty())
   {
     gwi.parseErrorText = logging::IDBErrorInfo::instance()->errorMsg(logging::ERR_WF_NON_SUPPORT);
-    setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText);
+    setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText, gwi);
   }
 
   return NULL;
@@ -96,7 +97,8 @@ WF_FRAME frame(Window_frame_bound::Bound_precedence_type bound, Item* offset)
 }
 ReturnedColumn* buildBoundExp(WF_Boundary& bound, SRCP& order, gp_walk_info& gwi)
 {
-  if (get_fe_conn_info_ptr() == NULL) {
+  if (get_fe_conn_info_ptr() == NULL)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(current_thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -305,7 +307,8 @@ ReturnedColumn* buildWindowFunctionColumn(Item* item, gp_walk_info& gwi, bool& n
   // String str;
   // item->print(&str, QT_INFINIDB_NO_QUOTE);
   // cout << str.c_ptr() << endl;
-  if (get_fe_conn_info_ptr() == NULL) {
+  if (get_fe_conn_info_ptr() == NULL)
+  {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(current_thd, mcs_hton, get_fe_conn_info_ptr());
   }
@@ -530,8 +533,8 @@ ReturnedColumn* buildWindowFunctionColumn(Item* item, gp_walk_info& gwi, bool& n
           return nullOnError(gwi);
 
         srcp->asc(orderCol->direction == ORDER::ORDER_ASC ? true : false);
-        //					srcp->nullsFirst(orderCol->nulls); // nulls 2-default, 1-nulls first,
-        //0-nulls last
+        //					srcp->nullsFirst(orderCol->nulls); // nulls 2-default, 1-nulls
+        //first, 0-nulls last
         srcp->nullsFirst(orderCol->direction == ORDER::ORDER_ASC
                              ? 1
                              : 0);  // WINDOWS TODO: implement NULLS FIRST/LAST in 10.2 front end
@@ -876,12 +879,12 @@ ReturnedColumn* buildWindowFunctionColumn(Item* item, gp_walk_info& gwi, bool& n
     if (gwi.parseErrorText.empty())
       gwi.parseErrorText = logging::IDBErrorInfo::instance()->errorMsg(logging::ERR_WF_NON_SUPPORT);
 
-    setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText);
+    setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText, gwi);
     return NULL;
   }
 #if 0
     if (item_sum->sum_func() != Item_sum::UDF_SUM_FUNC &&
-        item_sum->sum_func() != Item_sum::SUM_FUNC && 
+        item_sum->sum_func() != Item_sum::SUM_FUNC &&
         item_sum->sum_func() != Item_sum::SUM_DISTINCT_FUNC &&
         item_sum->sum_func() != Item_sum::AVG_FUNC &&
         item_sum->sum_func() != Item_sum::AVG_DISTINCT_FUNC)

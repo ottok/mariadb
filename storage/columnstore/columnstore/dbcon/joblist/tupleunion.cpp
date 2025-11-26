@@ -35,6 +35,8 @@ using namespace querytele;
 #include "resourcemanager.h"
 #include "tupleunion.h"
 
+#include "m_string.h"
+
 using namespace std;
 using namespace std::tr1;
 using namespace boost;
@@ -78,6 +80,15 @@ namespace
     int diff = out->getScale(i) - scale;
     ival = datatypes::applySignedScale<uint64_t>(ival, diff);
     return ival;
+  }
+
+  NullString formatDouble(double val)
+  {
+    char buf[datatypes::INT128MAXPRECISION + 1];
+    my_bool error = 0;
+    auto len = my_gcvt(val, MY_GCVT_ARG_DOUBLE, sizeof(buf) - 1, buf, &error);
+    idbassert(error == 0 && len <= sizeof(buf));
+    return {buf, len};
   }
 
   void normalizeIntToIntNoScale(const Row& in, Row* out, uint32_t i) 
@@ -124,20 +135,14 @@ namespace
 
   void normalizeIntToStringWithScale(const Row& in, Row* out, uint32_t i) 
   {
-    ostringstream os;
     double d = in.getIntField(i);
     d /= exp10(in.getScale(i));
-    os.precision(15);
-    os << d;
-    utils::NullString ns(os.str());
-    out->setStringField(ns, i);
+    out->setStringField(formatDouble(d), i);
   }
 
   void normalizeIntToStringNoScale(const Row& in, Row* out, uint32_t i) 
   {
-    ostringstream os;
-    os << in.getIntField(i);
-    utils::NullString ns(os.str());
+    utils::NullString ns(std::to_string(in.getIntField(i)));
     out->setStringField(ns, i);
   }
 
@@ -203,20 +208,14 @@ namespace
 
   void normalizeUintToStringWithScale(const Row& in, Row* out, uint32_t i) 
   {
-    ostringstream os;
     double d = in.getUintField(i);
     d /= exp10(in.getScale(i));
-    os.precision(15);
-    os << d;
-    utils::NullString ns(os.str());
-    out->setStringField(ns, i);
+    out->setStringField(formatDouble(d), i);
   }
 
   void normalizeUintToStringNoScale(const Row& in, Row* out, uint32_t i) 
   {
-    ostringstream os;
-    os << in.getUintField(i);
-    utils::NullString ns(os.str());
+    utils::NullString ns(std::to_string(in.getUintField(i)));
     out->setStringField(ns, i);
   }
 
@@ -514,21 +513,13 @@ namespace
   void normalizeXFloatToString(const Row& in, Row* out, uint32_t i) 
   {
     double val = in.getFloatField(i);
-    ostringstream os;
-    os.precision(15);  // to match mysql's output
-    os << val;
-    utils::NullString ns(os.str());
-    out->setStringField(ns, i);
+    out->setStringField(formatDouble(val), i);
   }
 
   void normalizeXDoubleToString(const Row& in, Row* out, uint32_t i) 
   {
     double val = in.getDoubleField(i);
-    ostringstream os;
-    os.precision(15);  // to match mysql's output
-    os << val;
-    utils::NullString ns(os.str());
-    out->setStringField(ns, i);
+    out->setStringField(formatDouble(val), i);
   }
 
   void normalizeXFloatToWideXDecimal(const Row& in, Row* out, uint32_t i) 
@@ -599,6 +590,7 @@ namespace
 
   void normalizeLongDoubleToString(const Row& in, Row* out, uint32_t i) 
   {
+    // FIXME: ostream output looks like '1.234e+56' while MDB output is '1.234e56'
     long double val = in.getLongDoubleField(i);
     ostringstream os;
     os.precision(15);  // to match mysql's output
@@ -1305,7 +1297,7 @@ inline uint64_t TupleUnion::Hasher::operator()(const RowPosition& p) const
   else
     ts->rowMemory[p.group].getRow(p.row, &row);
 
-  return row.hash();
+  return row.hash(ts->fLastCol);
 }
 
 inline bool TupleUnion::Eq::operator()(const RowPosition& d1, const RowPosition& d2) const
@@ -1322,10 +1314,10 @@ inline bool TupleUnion::Eq::operator()(const RowPosition& d1, const RowPosition&
   else
     ts->rowMemory[d2.group].getRow(d2.row, &r2);
 
-  return r1.equals(r2);
+  return r1.equals(r2, ts->fLastCol);
 }
 
-TupleUnion::TupleUnion(CalpontSystemCatalog::OID tableOID, const JobInfo& jobInfo)
+TupleUnion::TupleUnion(CalpontSystemCatalog::OID tableOID, const JobInfo& jobInfo, uint32_t keyCount)
  : JobStep(jobInfo)
  , fTableOID(tableOID)
  , output(NULL)
@@ -1340,6 +1332,7 @@ TupleUnion::TupleUnion(CalpontSystemCatalog::OID tableOID, const JobInfo& jobInf
  , joinRan(false)
  , sessionMemLimit(jobInfo.umMemLimit)
  , fTimeZone(jobInfo.timeZone)
+ , fLastCol(keyCount - 1)
 {
   uniquer.reset(new Uniquer_t(10, Hasher(this), Eq(this), allocator));
   fExtendedInfo = "TUN: ";

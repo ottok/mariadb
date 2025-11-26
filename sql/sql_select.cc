@@ -371,6 +371,7 @@ bool join_limit_shortcut_is_applicable(const JOIN *join);
 POSITION *join_limit_shortcut_finalize_plan(JOIN *join, double *cost);
 
 static bool find_indexes_matching_order(JOIN *, TABLE *, ORDER *, key_map *);
+static void init_join_plan_search_state(JOIN *join);
 
 #ifndef DBUG_OFF
 
@@ -665,8 +666,8 @@ bool handle_select(THD *thd, LEX *lex, select_result *result,
     thd->abort_on_warning= saved_abort_on_warning;
     thd->reset_killed();
   }
-  /* Disable LIMIT ROWS EXAMINED after query execution. */
-  thd->lex->limit_rows_examined_cnt= ULONGLONG_MAX;
+  /* Deactivate LIMIT ROWS EXAMINED after query execution. */
+  thd->lex->deactivate_limit_rows_examined();
 
   MYSQL_SELECT_DONE((int) res, (ulong) thd->limit_found_rows);
   DBUG_RETURN(res);
@@ -1982,7 +1983,6 @@ bool JOIN::build_explain()
 int JOIN::optimize()
 {
   int res= 0;
-  join_optimization_state init_state= optimization_state;
   if (select_lex->pushdown_select)
   {
     if (optimization_state == JOIN::OPTIMIZATION_DONE)
@@ -1999,18 +1999,18 @@ int JOIN::optimize()
     }
     with_two_phase_optimization= false;
   }
-  else if (optimization_state == JOIN::OPTIMIZATION_PHASE_1_DONE)
-    res= optimize_stage2();
   else
   {
-    // to prevent double initialization on EXPLAIN
+    /*
+      This function may be invoked multiple times. Do nothing if the
+      optimization (either full or stage1) are already done.
+    */
     if (optimization_state != JOIN::NOT_OPTIMIZED)
       return FALSE;
     optimization_state= JOIN::OPTIMIZATION_IN_PROGRESS;
     res= optimize_inner();
   }
-  if (!with_two_phase_optimization ||
-      init_state == JOIN::OPTIMIZATION_PHASE_1_DONE)
+  if (!with_two_phase_optimization)
   {
     if (!res && have_query_plan != QEP_DELETED)
       res= build_explain();
@@ -2023,6 +2023,29 @@ int JOIN::optimize()
   */
   if (select_lex->select_number == 1)
     thd->status_var.last_query_cost= best_read;
+  return res;
+}
+
+
+/*
+  @brief
+    Call optimize_stage2() and save the query plan.
+*/
+
+int JOIN::optimize_stage2_and_finish()
+{
+  int res= 0;
+  DBUG_ASSERT(with_two_phase_optimization);
+  DBUG_ASSERT(optimization_state == OPTIMIZATION_PHASE_1_DONE);
+
+  if (optimize_stage2())
+    res= 1;
+  else
+  {
+    if (have_query_plan != JOIN::QEP_DELETED)
+      res= build_explain();
+    optimization_state= JOIN::OPTIMIZATION_DONE;
+  }
   return res;
 }
 
@@ -2542,7 +2565,10 @@ JOIN::optimize_inner()
 	    DBUG_RETURN(1);
         }
 	if (mysql_handle_single_derived(thd->lex, tbl, DT_OPTIMIZE))
+        {
+          error= 1;
 	  DBUG_RETURN(1);
+        }
       }
     }
   }
@@ -2758,6 +2784,19 @@ setup_subq_exit:
 }
 
 
+/*
+  @brief
+    In the Stage 1 we've picked the join order.
+    Now, refine the query plan and sort out all the details.
+    The choice how to handle GROUP/ORDER BY is also made here.
+
+  @detail
+    The main reason this is a separate function is Split-Materialized
+    optimization. There, we first consider doing non-split Materialization for
+    a SELECT. After that, the parent SELECT will attempt doing Splitting in
+    multiple ways and make the final choice.
+*/
+
 int JOIN::optimize_stage2()
 {
   ulonglong select_opts_for_readinfo;
@@ -2778,7 +2817,7 @@ int JOIN::optimize_stage2()
   if (make_range_rowid_filters())
     DBUG_RETURN(1);
 
-  if (select_lex->handle_derived(thd->lex, DT_OPTIMIZE))
+  if (select_lex->handle_derived(thd->lex, DT_OPTIMIZE_STAGE2))
     DBUG_RETURN(1);
 
   /*
@@ -3253,9 +3292,14 @@ int JOIN::optimize_stage2()
     (as MariaDB is by default sorting on GROUP BY) or
     if there is no GROUP BY and aggregate functions are used
     (as the result will only contain one row).
+
+    (1) - Do not remove ORDER BY if we have WITH TIES and are using
+          QUICK_GROUP_MIN_MAX_SELECT to handle GROUP BY. See the comment
+          for using_with_ties_and_group_min_max() for details.
   */
   if (order && (test_if_subpart(group_list, order) ||
-                (!group_list && tmp_table_param.sum_func_count)))
+                (!group_list && tmp_table_param.sum_func_count)) &&
+      !using_with_ties_and_group_min_max(this)) // (1)
     order=0;
 
   // Can't use sort on head table if using join buffering
@@ -3569,7 +3613,7 @@ setup_subq_exit:
       some of the derived tables, and never did stage 2.
       Do it now, otherwise Explain data structure will not be complete.
     */
-    if (select_lex->handle_derived(thd->lex, DT_OPTIMIZE))
+    if (select_lex->handle_derived(thd->lex, DT_OPTIMIZE_STAGE2))
       DBUG_RETURN(1);
   }
   /*
@@ -4849,6 +4893,7 @@ bool JOIN::save_explain_data(Explain_query *output, bool can_overwrite,
 int JOIN::exec()
 {
   int res;
+  DBUG_ASSERT(optimization_state == OPTIMIZATION_DONE);
   DBUG_EXECUTE_IF("show_explain_probe_join_exec_start", 
                   if (dbug_user_var_equals_int(thd, 
                                                "show_explain_probe_select_id", 
@@ -4878,7 +4923,7 @@ int JOIN::exec_inner()
   THD_STAGE_INFO(thd, stage_executing);
 
   /*
-    Enable LIMIT ROWS EXAMINED during query execution if:
+    Activate enforcement of LIMIT ROWS EXAMINED during query execution if:
     (1) This JOIN is the outermost query (not a subquery or derived table)
         This ensures that the limit is enabled when actual execution begins,
         and not if a subquery is evaluated during optimization of the outer
@@ -5436,6 +5481,9 @@ static bool get_quick_record_count(THD *thd, SQL_SELECT *select,
   uchar buff[STACK_BUFF_ALLOC];
   if (unlikely(check_stack_overrun(thd, STACK_MIN_SIZE, buff)))
     DBUG_RETURN(false);                           // Fatal error flag is set
+
+  DEBUG_SYNC(thd, "before_get_quick_record_count");
+
   if (select)
   {
     select->head=table;
@@ -6832,7 +6880,7 @@ add_key_field(JOIN *join,
 
   @note
     If field items f1 and f2 belong to the same multiple equality and
-    a key is added for f1, the the same key is added for f2.
+    a key is added for f1, the same key is added for f2.
 
   @returns
     *key_fields is incremented if we stored a key in the array
@@ -8729,7 +8777,26 @@ best_access_path(JOIN      *join,
       ulong key_flags;
       uint key_parts;
       key_part_map found_part= 0;
-      /* key parts which won't have NULL in lookup tuple */
+
+      /*
+        Bitmap indicating which key parts are used with NULL-rejecting
+        conditions.
+
+        A bit is set to 1 for a key part if it's used with a
+        NULL-rejecting condition (i.e., the condition will never be
+        satisfied when the indexed column contains NULL). A bit is 0 if
+        the key part is used with a non-NULL-rejecting condition (i.e.,
+        the condition can be satisfied even when the indexed column
+        contains NULL, e.g., is NULL or <=>).
+
+        Example: for condition
+          t1.keypart1 = t2.col1 AND t1.keypart2 <=> t2.col2 AND
+          t1.keypart3 = t2.col3
+        the notnull_part bitmap will be 101 (binary), because:
+        - keypart1: '=' is NULL-rejecting (bit 1)
+        - keypart2: '<=>' is NOT NULL-rejecting (bit 0)
+        - keypart3: '=' is NULL-rejecting (bit 1)
+      */
       key_part_map notnull_part=0;
       table_map found_ref= 0;
       uint key= keyuse->key;
@@ -8851,7 +8918,7 @@ best_access_path(JOIN      *join,
       } while (keyuse->table == table && keyuse->key == key);
 
       /*
-        Assume that that each key matches a proportional part of table.
+        Assume that each key matches a proportional part of table.
       */
       if (!found_part && !ft_key && !loose_scan_opt.have_a_case())
         continue;                               // Nothing usable found
@@ -8984,7 +9051,8 @@ best_access_path(JOIN      *join,
             }
             else
             {
-              if (!(records= keyinfo->actual_rec_per_key(key_parts-1)))
+              if (!(records=
+                    keyinfo->rec_per_key_null_aware(key_parts-1, notnull_part)))
               {                                   /* Prefer longer keys */
                 trace_access_idx.add("rec_per_key_stats_missing", true);
                 records=
@@ -9116,7 +9184,9 @@ best_access_path(JOIN      *join,
             else
             {
               /* Check if we have statistic about the distribution */
-              if ((records= keyinfo->actual_rec_per_key(max_key_part-1)))
+              if ((records=
+                   keyinfo->rec_per_key_null_aware(max_key_part-1,
+                                                   notnull_part)))
               {
                 /* 
                   Fix for the case where the index statistics is too
@@ -9273,7 +9343,7 @@ best_access_path(JOIN      *join,
           table->can_use_rowid_filter(start_key->key))
       {
         /*
-          If we use filter F with selectivity s the the cost of fetching data
+          If we use filter F with selectivity s the cost of fetching data
           by key using this filter will be
              cost_of_fetching_1_row * rows * s +
              cost_of_fetching_1_key_tuple * rows * (1 - s) +
@@ -9569,7 +9639,7 @@ best_access_path(JOIN      *join,
     (1) The found 'ref' access produces more records than a table scan
         (or index scan, or quick select), or 'ref' is more expensive than
         any of them.
-    (2) This doesn't hold: the best way to perform table scan is to to perform
+    (2) This doesn't hold: the best way to perform table scan is to perform
         'range' access using index IDX, and the best way to perform 'ref' 
         access is to use the same index IDX, with the same or more key parts.
         (note: it is not clear how this rule is/should be extended to 
@@ -10128,11 +10198,8 @@ choose_plan(JOIN *join, table_map join_tables, TABLE_LIST *emb_sjm_nest)
   DBUG_ENTER("choose_plan");
 
   join->limit_optimization_mode= false;
-  join->cur_embedding_map= 0;
   join->extra_heuristic_pruning= false;
   join->prune_level= join->thd->variables.optimizer_prune_level;
-
-  reset_nj_counters(join, join->join_list);
 
   if ((join->emb_sjm_nest= emb_sjm_nest))
   {
@@ -10177,13 +10244,6 @@ choose_plan(JOIN *join, table_map join_tables, TABLE_LIST *emb_sjm_nest)
 
   if (!emb_sjm_nest)
     choose_initial_table_order(join);
-
-  /*
-    Note: constant tables are already in the join prefix. We don't
-    put them into the cur_sj_inner_tables, though.
-  */
-
-  join->cur_sj_inner_tables= 0;
 
   if (straight_join)
   {
@@ -10516,6 +10576,8 @@ optimize_straight_join(JOIN *join, table_map remaining_tables)
   POSITION  loose_scan_pos;
   THD *thd= join->thd;
 
+  init_join_plan_search_state(join);
+
   for (JOIN_TAB **pos= join->best_ref + idx ; (s= *pos) ; pos++)
   {
     POSITION *position= join->positions + idx;
@@ -10714,6 +10776,8 @@ greedy_search(JOIN      *join,
   uint      n_tables __attribute__((unused));
   DBUG_ENTER("greedy_search");
   DBUG_ASSERT(!(remaining_tables & join->const_table_map));
+
+  init_join_plan_search_state(join);
 
   /* number of tables that remain to be optimized */
   usable_tables= (join->emb_sjm_nest ?
@@ -10936,7 +11000,7 @@ void JOIN::get_partial_cost_and_fanout(int end_tab_idx,
    - it operates on a JOIN that haven't yet finished its optimization phase (in
      particular, fix_semijoin_strategies_for_picked_join_order() and
      get_best_combination() haven't been called)
-   - it assumes the the join prefix doesn't have any semi-join plans
+   - it assumes the join prefix doesn't have any semi-join plans
 
   These assumptions are met by the caller of the function.
 */
@@ -11177,7 +11241,7 @@ double table_after_join_selectivity(JOIN *join, uint idx, JOIN_TAB *s,
       as a starting point. This value includes selectivity of equality (*). We
       should somehow discount it. 
       
-      Looking at calculate_cond_selectivity_for_table(), one can see that that
+      Looking at calculate_cond_selectivity_for_table(), one can see that
       the value is not necessarily a direct multiplicand in 
       table->cond_selectivity
 
@@ -12505,7 +12569,7 @@ int JOIN_TAB::make_scan_filter()
   @details
   This function finds out whether the ref items that have been chosen
   by the planner to access this table can be used for hash join algorithms.
-  The answer depends on a certain property of the the fields of the
+  The answer depends on a certain property of the fields of the
   joined tables on which the hash join key is built.
   
   @note
@@ -12906,7 +12970,7 @@ JOIN_TAB *first_explain_order_tab(JOIN* join)
   JOIN_TAB* tab;
   tab= join->join_tab;
   if (!tab)
-    return NULL; /* Can happen when when the tables were optimized away */
+    return NULL; /* Can happen when the tables were optimized away */
   return (tab->bush_children) ? tab->bush_children->start : tab;
 }
 
@@ -13463,6 +13527,7 @@ static bool create_hj_key_for_table(JOIN *join, JOIN_TAB *join_tab,
   keyinfo->algorithm= HA_KEY_ALG_UNDEF;
   keyinfo->flags= HA_GENERATED_KEY;
   keyinfo->is_statistics_from_stat_tables= FALSE;
+  keyinfo->all_nulls_key_parts= 0;
   keyinfo->name.str= "$hj";
   keyinfo->name.length= 3;
   keyinfo->rec_per_key= thd->calloc<ulong>(key_parts);
@@ -13877,7 +13942,7 @@ inline void add_cond_and_fix(THD *thd, Item **e1, Item *e2)
       
     Implementation overview
       1. update_ref_and_keys() accumulates info about null-rejecting
-         predicates in in KEY_FIELD::null_rejecting
+         predicates in KEY_FIELD::null_rejecting
       1.1 add_key_part saves these to KEYUSE.
       2. create_ref_for_key copies them to TABLE_REF.
       3. add_not_null_conds adds "x IS NOT NULL" to join_tab->select_cond of
@@ -14655,7 +14720,20 @@ make_join_select(JOIN *join,SQL_SELECT *select,COND *cond)
             if (build_tmp_join_prefix_cond(join, tab, &sel->cond))
               return true;
 
-	    /*
+            /*
+              To be removed in 11.0+:
+              Caution: we can reach this point with quick=NULL. Below, we'll
+              use tab->keys and not tab->const_keys like
+              get_quick_record_count() did. If we have constructed a
+              group-min-max quick select, make sure we're able to construct it
+              again
+            */
+            if (sel->quick && sel->quick->get_type() ==
+                QUICK_SELECT_I::QS_TYPE_GROUP_MIN_MAX)
+            {
+              tab->keys.set_bit(sel->quick->index);
+            }
+      /*
               We can't call sel->cond->fix_fields,
               as it will break tab->on_expr if it's AND condition
               (fix_fields currently removes extra AND/OR levels).
@@ -15550,7 +15628,7 @@ end_sj_materialize(JOIN *join, JOIN_TAB *join_tab, bool end_of_records)
     has been chosen. If the function decides that a join buffer can be employed
     then it selects the most appropriate join cache object that contains this
     join buffer.
-    The result of the check and the type of the the join buffer to be used
+    The result of the check and the type of the join buffer to be used
     depend on:
       - the access method to access rows of the joined table
       - whether the join table is an inner table of an outer join or semi-join
@@ -16016,7 +16094,7 @@ restart:
   to re-check the same single-table condition for each joined record.
 
   This method removes from JOIN_TAB::select_cond and JOIN_TAB::select::cond
-  all top-level conjuncts that also appear in in JOIN_TAB::cache_select::cond.
+  all top-level conjuncts that also appear in JOIN_TAB::cache_select::cond.
 */
 
 void JOIN_TAB::remove_redundant_bnl_scan_conds()
@@ -20154,6 +20232,7 @@ static bool check_interleaving_with_nj(JOIN_TAB *next_tab)
     if (!next_emb->sj_on_expr)
     {
       next_emb->nested_join->counter++;
+      DBUG_ASSERT(next_emb->nested_join->counter <= next_emb->nested_join->n_tables);
       if (next_emb->nested_join->counter == 1)
       {
         /*
@@ -22438,6 +22517,7 @@ bool Create_tmp_table::finalize(THD *thd,
     keyinfo->collected_stats= NULL;
     keyinfo->algorithm= HA_KEY_ALG_UNDEF;
     keyinfo->is_statistics_from_stat_tables= FALSE;
+    keyinfo->all_nulls_key_parts= 0;
     keyinfo->name= group_key;
     keyinfo->comment.str= 0;
     ORDER *cur_group= m_group;
@@ -22559,6 +22639,7 @@ bool Create_tmp_table::finalize(THD *thd,
     keyinfo->name= distinct_key;
     keyinfo->algorithm= HA_KEY_ALG_UNDEF;
     keyinfo->is_statistics_from_stat_tables= FALSE;
+    keyinfo->all_nulls_key_parts= 0;
     keyinfo->read_stats= NULL;
     keyinfo->collected_stats= NULL;
 
@@ -24002,7 +24083,7 @@ sub_select_postjoin_aggr(JOIN *join, JOIN_TAB *join_tab, bool end_of_records)
   NOTES
     The function implements the algorithmic schema for both Blocked Nested
     Loop Join and Batched Key Access Join. The difference can be seen only at
-    the level of of the implementation of the put_record and join_records
+    the level of the implementation of the put_record and join_records
     virtual methods for the cache object associated with the join_tab.
     The put_record method accumulates records in the cache, while the 
     join_records method builds all matching join records and send them into
@@ -24170,7 +24251,7 @@ sub_select_cache(JOIN *join, JOIN_TAB *join_tab, bool end_of_records)
     the predicate (t2.b=5 OR t2.b IS NULL) can not be checked until
     t4.a=t2.a becomes true. 
     In order not to re-evaluate the predicates that were already evaluated
-    as attached pushed down predicates, a pointer to the the first
+    as attached pushed down predicates, a pointer to the first
     most inner unmatched table is maintained in join_tab->first_unmatched.
     Thus, when the first row from t5 with t5.a=t3.a is found
     this pointer for t5 is changed from t4 to t2.             
@@ -24579,7 +24660,7 @@ evaluate_null_complemented_join_record(JOIN *join, JOIN_TAB *join_tab)
   COND *select_cond;
   for ( ; join_tab <= last_inner_tab ; join_tab++)
   {
-    /* Change the the values of guard predicate variables. */
+    /* Change the values of guard predicate variables. */
     join_tab->found= 1;
     join_tab->not_null_compl= 0;
     /* The outer row is complemented by nulls for each inner tables */
@@ -28052,10 +28133,10 @@ JOIN_TAB::remove_duplicates()
     sort_field_keylength+= ptr->length + (ptr->item->maybe_null() ? 1 : 0);
 
   /*
-    Disable LIMIT ROWS EXAMINED in order to avoid interrupting prematurely
+    Deactivate LIMIT ROWS EXAMINED in order to avoid interrupting prematurely
     duplicate removal, and produce a possibly incomplete query result.
   */
-  thd->lex->limit_rows_examined_cnt= ULONGLONG_MAX;
+  thd->lex->deactivate_limit_rows_examined();
   if (thd->killed == ABORT_QUERY)
     thd->reset_killed();
 
@@ -30068,7 +30149,7 @@ void free_underlaid_joins(THD *thd, SELECT_LEX *select)
   The function replaces occurrences of group by fields in expr
   by ref objects for these fields unless they are under aggregate
   functions.
-  The function also corrects value of the the maybe_null attribute
+  The function also corrects value of the maybe_null attribute
   for the items of all subexpressions containing group by fields.
 
   @b EXAMPLES
@@ -30539,7 +30620,7 @@ void inline JOIN::clear_sum_funcs()
   Prepare for returning 'empty row' when there is no matching row.
 
   - Mark all tables with mark_as_null_row()
-  - Make a copy of of all simple SELECT items
+  - Make a copy of all simple SELECT items
   - Reset all sum functions to NULL or 0.
 */
 
@@ -33022,7 +33103,7 @@ test_if_cheaper_ordering(bool in_join_optimizer,
              */
             KEY *pkinfo=tab->table->key_info+table->s->primary_key;
             /*
-              If the values of of records per key for the prefixes
+              If the values of records per key for the prefixes
               of the primary key are considered unknown we assume
               they are equal to 1.
 	    */
@@ -34332,6 +34413,12 @@ bool JOIN::transform_all_conds_and_on_exprs_in_join_list(
   return false;
 }
 
+static void init_join_plan_search_state(JOIN *join)
+{
+  join->cur_sj_inner_tables= 0;
+  join->cur_embedding_map= 0;
+  reset_nj_counters(join, join->join_list);
+}
 
 static void MYSQL_DML_START(THD *thd)
 {

@@ -638,11 +638,19 @@ my_context_destroy(struct my_context *c)
 
 #ifdef MY_CONTEXT_USE_AARCH64_GCC_ASM
 
-#if (defined(__clang__) && (__clang_major__ >= 9)) ||                   \
-        (defined(__GNUC__) && (__GNUC__ > 9 || (__GNUC__ == 9 && __GNUC_MINOR__ >= 1)))
-#define BTI_J_STR "bti j"
+/* According to ARM, the instruction BTI [J][C] is a NOP in ARMv8
+implementations that do not support it. However, the built-in assembler
+in clang 9 through 11 would refuse to emit the instruction unless a
+late enough ARMv8.x-A is specified.
+
+On GCC, we cannot easily detect which assembler is going to be invoked
+to translate the symbolic assembler code to binary. Hence, we will always
+use the numeric encoding in order to be compatible with old assemblers. */
+
+#if defined __clang_major__ && __clang_major__ >= 12
+# define BTI_J_STR "bti j"
 #else
-#define BTI_J_STR ".inst 0xd503241f"
+# define BTI_J_STR ".inst 0xd503249f"
 #endif
 /*
   GCC-aarch64 (arm64) implementation of my_context.

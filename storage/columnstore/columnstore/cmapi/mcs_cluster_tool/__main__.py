@@ -39,7 +39,7 @@ app.command(
 app.command(
     'cskeys', rich_help_panel='Tools commands',
     short_help=(
-        'Generates a random AES encryption key and init vector and writes '
+        'Generate a random AES encryption key and init vector and write '
         'them to disk.'
     )
 )(tools_commands.cskeys)
@@ -56,6 +56,12 @@ app.command(
         'Provides useful functions to review and troubleshoot the MCS cluster.'
     )
 )(tools_commands.review)
+app.add_typer(
+    tools_commands.sentry_app, name='sentry', rich_help_panel='Tools commands', hidden=True
+)
+app.command(
+    'install_es', rich_help_panel='Tools commands',
+)(tools_commands.install_es)
 
 
 @app.command(
@@ -65,6 +71,7 @@ app.command(
 def help_all():
     # Open the man page in interactive mode
     subprocess.run(['man', 'mcs'])
+
 
 @app.callback()
 def main(verbose: bool = typer.Option(False, '--verbose', '-v', help='Enable verbose logging to console')):
@@ -76,7 +83,10 @@ def setup_logging(verbose: bool = False) -> None:
     add_logging_level('TRACE', 5)
     dict_config(MCS_CLI_LOG_CONF_PATH)
     if verbose:
-        enable_console_logging(logging.getLogger())
+        for logger_name in ("", "mcs_cli"):
+            current_logger = logging.getLogger(logger_name)
+            current_logger.setLevel(logging.DEBUG)
+            enable_console_logging(current_logger)
 
 
 if __name__ == '__main__':

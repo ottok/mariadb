@@ -1,5 +1,6 @@
 #include "functor_json.h"
 #include "functioncolumn.h"
+#include "json_lib.h"
 using namespace execplan;
 
 #include "rowgroup.h"
@@ -13,7 +14,7 @@ using namespace funcexp::helpers;
 
 namespace
 {
-int doMerge(string& retJS, json_engine_t* jsEg1, json_engine_t* jsEg2)
+int doMerge(std::string& retJS, json_engine_t* jsEg1, json_engine_t* jsEg2)
 {
   if (json_read_value(jsEg1) || json_read_value(jsEg2))
     return 1;
@@ -214,8 +215,8 @@ CalpontSystemCatalog::ColType Func_json_merge::operationType(FunctionParm& fp,
   return fp[0]->data()->resultType();
 }
 
-string Func_json_merge::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
-                                  execplan::CalpontSystemCatalog::ColType& /*type*/)
+std::string Func_json_merge::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
+                                       execplan::CalpontSystemCatalog::ColType& /*type*/)
 {
   const auto js = fp[0]->data()->getStrVal(row, isNull);
   if (isNull)
@@ -223,10 +224,8 @@ string Func_json_merge::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& is
 
   const CHARSET_INFO* js1CS = getCharset(fp[0]);
 
-  json_engine_t jsEg1, jsEg2;
-
   utils::NullString tmpJS(js);
-  string retJS;
+  std::string retJS;
 
   for (size_t i = 1; i < fp.size(); i++)
   {
@@ -234,10 +233,10 @@ string Func_json_merge::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& is
     if (isNull)
       goto error;
 
-    initJSEngine(jsEg1, js1CS, tmpJS);
+    initJSEngine(jsEg, js1CS, tmpJS);
     initJSEngine(jsEg2, getCharset(fp[i]), js2);
 
-    if (doMerge(retJS, &jsEg1, &jsEg2))
+    if (doMerge(retJS, &jsEg, &jsEg2))
       goto error;
 
     // tmpJS save the merge result for next loop
@@ -245,9 +244,9 @@ string Func_json_merge::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& is
     retJS.clear();
   }
 
-  initJSEngine(jsEg1, js1CS, tmpJS);
+  initJSEngine(jsEg, js1CS, tmpJS);
   retJS.clear();
-  if (doFormat(&jsEg1, retJS, Func_json_format::LOOSE))
+  if (doFormat(&jsEg, retJS, Func_json_format::LOOSE))
     goto error;
 
   isNull = false;

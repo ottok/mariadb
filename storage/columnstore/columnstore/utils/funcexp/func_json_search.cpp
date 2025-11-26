@@ -17,15 +17,23 @@ using namespace funcexp::helpers;
 
 namespace
 {
-static bool appendJSPath(string& ret, const json_path_t* p)
+static bool appendJSPath(std::string& ret, const json_path_t* p)
 {
   const json_path_step_t* c;
-
+#if MYSQL_VERSION_ID >= 120200
+  const json_path_step_t* last_step= (const json_path_step_t*)
+                                           (mem_root_dynamic_array_get_val((MEM_ROOT_DYNAMIC_ARRAY*)&p->steps,
+                                                                            (size_t)p->last_step_idx));
+#endif
   try
   {
     ret.append("\"$");
 
+#if MYSQL_VERSION_ID >= 120200
+    for (c = reinterpret_cast<json_path_step_t*>(p->steps.buffer)+1; c <= last_step; c++)
+#else
     for (c = p->steps + 1; c <= p->last_step; c++)
+#endif
     {
       if (c->type & JSON_PATH_KEY)
       {
@@ -35,7 +43,7 @@ static bool appendJSPath(string& ret, const json_path_t* p)
       else /*JSON_PATH_ARRAY*/
       {
         ret.append("[");
-        ret.append(to_string(c->n_item));
+        ret.append(std::to_string(c->n_item));
         ret.append("]");
       }
     }
@@ -81,10 +89,10 @@ CalpontSystemCatalog::ColType Func_json_search::operationType(FunctionParm& fp,
   return fp[0]->data()->resultType();
 }
 
-string Func_json_search::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
-                                   execplan::CalpontSystemCatalog::ColType& /*type*/)
+std::string Func_json_search::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
+                                        execplan::CalpontSystemCatalog::ColType& /*type*/)
 {
-  string ret;
+  std::string ret;
   bool isNullJS = false, isNullVal = false;
   const auto& js = fp[0]->data()->getStrVal(row, isNull);
   const auto& cmpStr = fp[2]->data()->getStrVal(row, isNull);
@@ -102,7 +110,7 @@ string Func_json_search::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& i
     const auto& mode_ns = fp[1]->data()->getStrVal(row, isNull);
     if (isNull)
       return "";
-    string mode = mode_ns.safeString("");
+    std::string mode = mode_ns.safeString("");
 
     transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
     if (mode != "one" && mode != "all")
@@ -132,8 +140,6 @@ string Func_json_search::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& i
     escape = isNullEscape ? '\\' : escapeStr.safeString("")[0];
   }
 
-  json_engine_t jsEg;
-  json_path_t p, savPath;
   const CHARSET_INFO* cs = getCharset(fp[0]);
 
 #if MYSQL_VERSION_ID >= 100900
@@ -142,11 +148,10 @@ string Func_json_search::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& i
 #endif
   int pathFound = 0;
 
-  initJSPaths(paths, fp, 4, 1);
-
   for (size_t i = 4; i < fp.size(); i++)
   {
     JSONPath& path = paths[i - 4];
+
     if (!path.parsed)
     {
       if (parseJSPath(path, row, fp[i]))
@@ -162,8 +167,13 @@ string Func_json_search::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& i
   while (json_get_path_next(&jsEg, &p) == 0)
   {
 #if MYSQL_VERSION_ID >= 100900
+#if MYSQL_VERSION_ID >= 120200
     if (hasNegPath && jsEg.value_type == JSON_VALUE_ARRAY &&
+        json_skip_array_and_count(&jsEg, arrayCounter + p.last_step_idx))
+#else
+        if (hasNegPath && jsEg.value_type == JSON_VALUE_ARRAY &&
         json_skip_array_and_count(&jsEg, arrayCounter + (p.last_step - p.steps)))
+#endif
       goto error;
 #endif
 
@@ -180,7 +190,11 @@ string Func_json_search::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& i
         if (pathFound == 1)
         {
           savPath = p;
+#if MYSQL_VERSION_ID >= 120200
+          mem_root_dynamic_array_copy_values(&savPath.steps, &p.steps);
+#else
           savPath.last_step = savPath.steps + (p.last_step - p.steps);
+#endif
         }
         else
         {

@@ -16,11 +16,15 @@ from cherrypy.process import plugins
 # TODO: fix dispatcher choose logic because code executing in endpoints.py
 #       while import process, this cause module logger misconfiguration
 from cmapi_server.logging_management import config_cmapi_server_logging
+from tracing.sentry import maybe_init_sentry
+from tracing.traceparent_backend import TraceparentBackend
+from tracing.tracer import get_tracer
 config_cmapi_server_logging()
+from tracing.trace_tool import register_tracing_tools
 
 from cmapi_server import helpers
 from cmapi_server.constants import DEFAULT_MCS_CONF_PATH, CMAPI_CONF_PATH
-from cmapi_server.controllers.dispatcher import dispatcher, jsonify_error
+from cmapi_server.controllers.dispatcher import dispatcher, jsonify_error, jsonify_404
 from cmapi_server.failover_agent import FailoverAgent
 from cmapi_server.managers.application import AppManager
 from cmapi_server.managers.process import MCSProcessManager
@@ -140,15 +144,25 @@ if __name__ == '__main__':
     # TODO: read cmapi config filepath as an argument
     helpers.cmapi_config_check()
 
+    register_tracing_tools()
+    get_tracer().register_backend(TraceparentBackend())  # Register default tracing backend
+    maybe_init_sentry()  # Init Sentry if DSN is present
+
     CertificateManager.create_self_signed_certificate_if_not_exist()
     CertificateManager.renew_certificate()
 
     app = cherrypy.tree.mount(root=None, config=CMAPI_CONF_PATH)
+    root_config = {
+        "request.dispatch": dispatcher,
+        "error_page.default": jsonify_error,
+        "error_page.404": jsonify_404,
+        # Enable tracing tools
+        'tools.trace.on': True,
+        'tools.trace_end.on': True,
+    }
+
     app.config.update({
-        '/': {
-            'request.dispatch': dispatcher,
-            'error_page.default': jsonify_error,
-        },
+        '/': root_config,
         'config': {
             'path': CMAPI_CONF_PATH,
         },
@@ -220,10 +234,10 @@ if __name__ == '__main__':
                 'Something went wrong while trying to detect dbrm protocol.\n'
                 'Seems "controllernode" process isn\'t started.\n'
                 'This is just a notification, not a problem.\n'
-                'Next detection will started at first node\\cluster '
+                'Next detection will start at first node\\cluster '
                 'status check.\n'
-                f'This can cause extra {SOCK_TIMEOUT} seconds delay while\n'
-                'first attempt to get status.',
+                f'This can cause extra {SOCK_TIMEOUT} seconds delay during\n'
+                'this first attempt to get the status.',
                 exc_info=True
             )
     else:

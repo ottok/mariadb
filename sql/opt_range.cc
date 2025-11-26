@@ -5979,7 +5979,7 @@ ha_rows records_in_index_intersect_extension(PARTIAL_INDEX_INTERSECT_INFO *curr,
   SYNOPSIS
     prepare_search_best_index_intersect()
       param         common info about index ranges
-      tree          tree of ranges for indexes than can be intersected
+      tree          tree of ranges for indexes that can be intersected
       common    OUT info needed for search to be filled by the function 
       init      OUT info for an initial pseudo step of the intersection plans
       cutoff_cost   cut off cost of the interesting index intersection 
@@ -6689,7 +6689,7 @@ void find_index_intersect_best_extension(THD *thd,
   SYNOPSIS
     get_best_index_intersect()
       param         common info about index ranges
-      tree          tree of ranges for indexes than can be intersected
+      tree          tree of ranges for indexes that can be intersected
       read_time     cut off value for the evaluated plans 
 
   DESCRIPTION
@@ -8612,7 +8612,7 @@ SEL_TREE *Item_func_in::get_func_row_mm_tree(RANGE_OPT_PARAM *param,
       res_tree= 0;
       break;
     }
-    /* Join the disjunct the the OR tree that is being constructed */
+    /* Join the disjunct the OR tree that is being constructed */
     res_tree= !res_tree ? and_tree : tree_or(param, res_tree, and_tree);
   }
   if (omitted_tuples == argument_count() - 1)
@@ -9931,7 +9931,7 @@ int and_range_trees(RANGE_OPT_PARAM *param, SEL_TREE *tree1, SEL_TREE *tree2,
       tree2 represents the formula RT2 AND MT2 
         where RT2 = R2_1 AND ... AND R2_k2, MT2=M2_1 AND ... AND M2_l2.
 
-    The result tree will represent the formula of the the following structure:
+    The result tree will represent the formula of the following structure:
       RT AND RT1MT2 AND RT2MT1, such that
         rt is a tree obtained by range intersection of trees tree1 and tree2,
         RT1MT2 = RT1M2_1 AND ... AND RT1M2_l2,
@@ -10019,7 +10019,7 @@ SEL_TREE *tree_and(RANGE_OPT_PARAM *param, SEL_TREE *tree1, SEL_TREE *tree2)
     For each imerge in 'tree' that contains only one disjunct tree, i.e.
     for any imerge of the form m=rt, the function performs and operation
     the range part of tree, replaces rt the with the result of anding and
-    removes imerge m from the the merge part of 'tree'.
+    removes imerge m from the merge part of 'tree'.
 
   RETURN VALUE
     none          
@@ -10419,8 +10419,6 @@ tree_or(RANGE_OPT_PARAM *param,SEL_TREE *tree1,SEL_TREE *tree2)
   {
     bool must_be_ored= sel_trees_must_be_ored(param, tree1, tree2, ored_keys);
     no_imerge_from_ranges= must_be_ored;
-    if (param->disable_index_merge_plans)
-      no_imerge_from_ranges= true;
 
     if (no_imerge_from_ranges && no_merges1 && no_merges2)
     {
@@ -10469,6 +10467,13 @@ tree_or(RANGE_OPT_PARAM *param,SEL_TREE *tree1,SEL_TREE *tree2)
       result->type= SEL_TREE::ALWAYS;
     DBUG_RETURN(result);
   }
+
+  /*
+    Ok, the result now has the ranges that one gets for (RT1 OR RT2).
+    If construction of SEL_IMERGE is disabled, stop right here.
+  */
+  if (param->disable_index_merge_plans)
+    DBUG_RETURN(result);
 
   SEL_IMERGE *imerge_from_ranges;
   if (!(imerge_from_ranges= new SEL_IMERGE()))
@@ -10832,7 +10837,7 @@ SEL_ARG *key_and_with_limit(RANGE_OPT_PARAM *param, uint keyno,
 
    ( 1 < kp1 <= 2 AND ( kp2 = 2 OR kp2 = 3 ) ) OR kp1 = 3
 
-   Is a a valid SER_ARG expression for a key of at least 2 keyparts.
+   Is a valid SER_ARG expression for a key of at least 2 keyparts.
    
    For simplicity, we will assume that expr2 is a single range predicate,
    i.e. on the form ( a < x < b AND ... ). It is easy to generalize to a
@@ -12337,7 +12342,7 @@ ha_rows check_quick_select(PARAM *param, uint idx, ha_rows limit,
       ha_rows diff= rows - table_records;
       /*
         For any index the total number of records within all ranges
-        cannot be be bigger than the number of records in the table.
+        cannot be bigger than the number of records in the table.
         This check is needed as sometimes that table statistics or range
         estimates may be slightly out of sync.
 
@@ -15848,6 +15853,46 @@ TRP_GROUP_MIN_MAX::make_quick(PARAM *param, bool retrieve_full_rows,
 
 
 /*
+  @brief
+    Return true if the select is using "Using index for group-by" and also
+    has "ORDER BY ... FETCH FIRST n ROWS WITH TIES"
+
+  @detail
+    There is a rewrite that removes the ORDER BY (JOIN::order) if the select
+    also has a GROUP BY that produces a compatible ordering.
+    However "FETCH FIRST ... WITH TIES" needs an ORDER BY clause (in
+    JOIN::alloc_order_fields()).
+    GROUP BY strategies handle it this way:
+    - For strategies using temporary table, JOIN::make_aggr_tables_info() will
+      put the ORDER BY clause back.
+    - OrderedGroupBy in end_send_group() handles WITH TIES with the GROUP BY
+      clause (note that SQL doesn't allow "GROUP BY ... WITH TIES").
+    - The remaining strategy is QUICK_GROUP_MIN_MAX_SELECT, for which
+       = the grouping strategy in the quick select doesn't handle WITH TIES.
+       = end_send() would not handle WITH TIES, because JOIN::order is removed.
+
+    The solution is to NOT remove ORDER BY when QUICK_GROUP_MIN_MAX_SELECT is
+    used.
+
+    Unfortunately, the optimizer then will not recognize that it can skip
+    sorting and will use filesort, which will prevent short-cutting the
+    execution when LIMIT is reached.
+*/
+
+bool using_with_ties_and_group_min_max(JOIN *join)
+{
+  if (join->unit->lim.is_with_ties())
+  {
+    JOIN_TAB *tab= &join->join_tab[join->const_tables];
+    if (tab->select && tab->select->quick &&
+        tab->select->quick->get_type() ==
+          QUICK_SELECT_I::QS_TYPE_GROUP_MIN_MAX)
+    return true;
+  }
+  return false;
+}
+
+/*
   Construct new quick select for group queries with min/max.
 
   SYNOPSIS
@@ -16100,7 +16145,7 @@ bool QUICK_GROUP_MIN_MAX_SELECT::add_range(SEL_ARG *sel_range)
   NOTES
     quick_prefix_select is made over the conditions on the whole key.
     It defines a number of ranges of length x. 
-    However when jumping through the prefixes we use only the the first 
+    However when jumping through the prefixes we use only the first 
     few most significant keyparts in the range key. However if there
     are more keyparts to follow the ones we are using we must make the 
     condition on the key inclusive (because x < "ab" means 

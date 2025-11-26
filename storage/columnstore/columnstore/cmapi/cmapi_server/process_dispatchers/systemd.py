@@ -5,6 +5,7 @@ import re
 from typing import Union, Tuple
 
 from cmapi_server.process_dispatchers.base import BaseDispatcher
+from cmapi_server.process_dispatchers.locks import release_shmem_locks
 
 
 class SystemdDispatcher(BaseDispatcher):

@@ -14,7 +14,7 @@ using namespace funcexp::helpers;
 
 namespace funcexp
 {
-bool JSONEgWrapper::checkAndGetScalar(string& ret, int* error)
+bool JSONEgWrapper::checkAndGetScalar(std::string& ret, int* error)
 {
   CHARSET_INFO* cs;
   const uchar* js;
@@ -73,18 +73,31 @@ bool JSONPathWrapper::extract(std::string& ret, rowgroup::Row& row, execplan::SP
   if (json_path_setup(&p, getCharset(funcParamPath), (const uchar*)sjsp.str(), (const uchar*)sjsp.end()))
     return true;
 
+
+#if MYSQL_VERSION_ID >= 120200
+  JSONEgWrapper je(getCharset(funcParamJS), reinterpret_cast<const uchar*>(js.str()),
+                   reinterpret_cast<const uchar*>(js.end()), je_stack);
+#else
   JSONEgWrapper je(getCharset(funcParamJS), reinterpret_cast<const uchar*>(js.str()),
                    reinterpret_cast<const uchar*>(js.end()));
+#endif
 
+#if MYSQL_VERSION_ID >= 120200
+  currStep = reinterpret_cast<json_path_step_t*>(p.steps.buffer);
+#else
   currStep = p.steps;
+#endif
 
   do
   {
     if (error)
       return true;
-
+#if MYSQL_VERSION_ID >= 120200
+    if (json_find_path(&je, &p, &currStep, &array))
+#else
     IntType arrayCounters[JSON_DEPTH_LIMIT];
     if (json_find_path(&je, &p, &currStep, arrayCounters))
+#endif
       return true;
 
     if (json_read_value(&je))
@@ -111,16 +124,16 @@ class JSONPathWrapperValue : public JSONPathWrapper
   {
   }
 
-  bool checkAndGetValue(JSONEgWrapper* je, string& res, int* error) override
+  bool checkAndGetValue(JSONEgWrapper* je, std::string& res, int* error) override
   {
     return je->checkAndGetScalar(res, error);
   }
 };
 
-string Func_json_value::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
-                                  execplan::CalpontSystemCatalog::ColType& /*type*/)
+std::string Func_json_value::getStrVal(rowgroup::Row& row, FunctionParm& fp, bool& isNull,
+                                       execplan::CalpontSystemCatalog::ColType& /*type*/)
 {
-  string ret;
+  std::string ret;
   JSONPathWrapperValue pw;
   isNull = pw.extract(ret, row, fp[0], fp[1]);
   return isNull ? "" : ret;
