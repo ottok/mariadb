@@ -21,6 +21,17 @@ include(columnstore_version)
 
 set(CMAPI_PACKAGE_VERSION "${CMAPI_VERSION_MAJOR}.${CMAPI_VERSION_MINOR}.${CMAPI_VERSION_PATCH}")
 
+# Git revision to embed into VERSION (may be provided via -DCMAPI_GIT_REVISION or env)
+if(NOT DEFINED CMAPI_GIT_REVISION OR "${CMAPI_GIT_REVISION}" STREQUAL "")
+    if(DEFINED ENV{CMAPI_GIT_REVISION} AND NOT "$ENV{CMAPI_GIT_REVISION}" STREQUAL "")
+        set(CMAPI_GIT_REVISION "$ENV{CMAPI_GIT_REVISION}")
+    elseif(DEFINED ENV{DRONE_COMMIT} AND NOT "$ENV{DRONE_COMMIT}" STREQUAL "")
+        set(CMAPI_GIT_REVISION "$ENV{DRONE_COMMIT}")
+    else()
+        set(CMAPI_GIT_REVISION "unknown")
+    endif()
+endif()
+
 set(CMAPI_USER "root")
 
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "MariaDB ColumnStore CMAPI: cluster management API and command line tool.")
@@ -63,6 +74,7 @@ configure_file(conffiles.template conffiles)
 configure_file(mcs.template mcs)
 configure_file(mcs_aws.template mcs_aws)
 configure_file(mcs_gsutil.template mcs_gsutil)
+configure_file(updater/cmapi_updater.service.template cmapi_updater.service)
 
 install(
     DIRECTORY python
@@ -72,6 +84,7 @@ install(
               cmapi_server
               engine_files
               mcs_cluster_tool
+              tracing
     DESTINATION ${CMAPI_DIR}
     USE_SOURCE_PERMISSIONS
     PATTERN "test" EXCLUDE
@@ -85,7 +98,7 @@ install(
     DESTINATION ${CMAPI_DIR}
 )
 install(FILES cmapi_server/cmapi_server.conf systemd.env DESTINATION ${ETC_DIR})
-install(FILES ${SYSTEMD_UNIT_NAME}.service DESTINATION ${SYSTEMD_UNIT_DIR})
+install(FILES ${SYSTEMD_UNIT_NAME}.service cmapi_updater.service DESTINATION ${SYSTEMD_UNIT_DIR})
 install(
     FILES mcs
     PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
@@ -106,7 +119,13 @@ install(
     PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
     DESTINATION ${BIN_DIR}
 )
+install(
+    FILES updater/cmapi_updater.sh
+    PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+    DESTINATION ${BIN_DIR}
+)
 install(FILES mcs_cluster_tool/mcs.1 DESTINATION ${MAN_DIR})
+
 
 option(RPM "Build an RPM" OFF)
 if(RPM)
@@ -152,11 +171,11 @@ if(RPM)
     string(REPLACE "-" "_" SERVER_VERSION ${SERVER_VERSION})
     get_linux_lsb_release_information()
 
-    string(REGEX MATCH "^." OS_VERSION_MAJOR "${LSB_RELEASE_VERSION_SHORT}")
+    string(REGEX MATCH "^[0-9]+" OS_VERSION_MAJOR "${LSB_RELEASE_VERSION_SHORT}")
     message(STATUS ${OS_VERSION_MAJOR})
     if(LSB_RELEASE_ID_SHORT MATCHES "centos|rocky|rhel|alma|RedHatEnterprise")
         set(OS_NAME_SHORT "el")
-        if(OS_VERSION_MAJOR MATCHES "9")
+        if(OS_VERSION_MAJOR GREATER_EQUAL 9)
             set(CPACK_RPM_PACKAGE_REQUIRES "libxcrypt-compat")
         endif()
     else()

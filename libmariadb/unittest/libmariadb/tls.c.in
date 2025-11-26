@@ -827,9 +827,60 @@ static int test_cert_ip(MYSQL *my __attribute((unused)))
   return OK;
 }
 
+static int test_conc795(MYSQL *my __attribute__((unused)))
+{
+  MYSQL *mysql= mysql_init(NULL);
+  MYSQL_RES *res= NULL;
+  int rc, ret= FAIL;
+  MYSQL_ROW row;
+
+  set_verify(mysql, 0);
+
+  if (!hostname || ma_is_ip_address(hostname))
+  {
+    diag("SNI test skipped (hostname = ip address or empty)");
+    ret = SKIP;
+    goto end;
+  }
+
+  mysql_ssl_set(mysql, NULL, NULL, NULL, NULL, NULL);
+
+  if (!my_test_connect(mysql, hostname, username, password, schema,
+                       port, socketname, 0, 0))
+  {
+    diag("error: %s", mysql_error(mysql));
+    goto end;
+  }
+
+  rc= mysql_query(mysql, "SHOW STATUS LIKE 'Tls_sni_server_name'");
+  check_mysql_rc(rc, mysql);
+
+  if (!(res = mysql_store_result(mysql)) || !(row = mysql_fetch_row(res)))
+  {
+    diag("Server doesn't support tls_sni_server_name");
+    ret= SKIP;
+    goto end;
+  }
+
+  if (strcmp(row[1], hostname))
+  {
+    diag("SNI mismatch: %s != %s", hostname, row[1]);
+    goto end;
+  }
+
+  diag("SNI match: %s == %s", hostname, row[1]);
+  ret= OK;
+end:
+  if (res)
+    mysql_free_result(res);
+  mysql_close(mysql);
+  return ret;
+}
+
 
 struct my_tests_st my_tests[] = {
   /* Don't add test above, test_init needs to be run first */
+  {"test_conc795", test_conc795, TEST_CONNECTION_NEW, 0, NULL, NULL},
   {"test_start_tls_server", test_start_tls_server, TEST_CONNECTION_NONE, 0, NULL, NULL},
   {"test_init", test_init, TEST_CONNECTION_NONE, 0, NULL, NULL},
   /* Here you can add more tests */

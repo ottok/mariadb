@@ -83,6 +83,18 @@ void getAggCols(execplan::ParseTree* n, void* obj)
   }
 }
 
+const std::vector<SimpleColumn*>& getSCsFromRCForExtended(const SRCP& srcp)
+{
+  srcp->setSimpleColumnListExtended();
+  return srcp->simpleColumnListExtended();
+}
+
+const std::vector<SimpleColumn*>& getSCsFromRC(const SRCP& srcp)
+{
+  srcp->setSimpleColumnList();
+  return srcp->simpleColumnList();
+}
+
 /**
  * Constructors/Destructors
  */
@@ -126,6 +138,31 @@ AggregateColumn::AggregateColumn(const AggregateColumn& rhs, const uint32_t sess
  * Methods
  */
 
+void AggregateColumn::setSimpleColumnListExtended()
+{
+  fSimpleColumnListExtended.clear();
+  return setSimpleColumnListExtended_();
+}
+
+void AggregateColumn::setSimpleColumnListExtended_()
+{
+  for (const auto& parm : aggParms())
+  {
+    if (!parm)
+      continue;
+
+    auto aggParmsAsSCVec = getSCsFromRCForExtended(parm);
+
+    for (auto* sc : aggParmsAsSCVec)
+    {
+      if (sc)
+      {
+        fSimpleColumnListExtended.push_back(sc);
+      }
+    }
+  }
+}
+
 const string AggregateColumn::toString() const
 {
   ostringstream output;
@@ -152,13 +189,49 @@ const string AggregateColumn::toString() const
   return output.str();
 }
 
+const string AggregateColumn::toString(bool compact) const
+{
+  if (!compact)
+  {
+    return toString();
+  }
+
+  ostringstream output;
+
+  // Compact format for tree display - let tree printer handle indentation
+  output << "AggregateColumn:";
+  output << endl << "Function: " << (int)fAggOp << ", Distinct: " << fDistinct;
+
+  if (fAlias.length() > 0)
+    output << endl << "Alias: " << fAlias;
+
+  if (fAggParms.size() > 0)
+  {
+    for (uint32_t i = 0; i < fAggParms.size(); ++i)
+    {
+      SimpleColumn* sc = dynamic_cast<SimpleColumn*>(fAggParms[i].get());
+      if (sc)
+      {
+        output << endl << sc->toString(true);
+      }
+      else
+      {
+        output << endl << "Param: " << fAggParms[i]->data();
+      }
+    }
+  }
+
+  return output.str();
+}
+
 string AggregateColumn::toCppCode(IncludeSet& includes) const
 {
   includes.insert("aggregatecolumn.h");
   stringstream ss;
   auto fContent = fData.substr(fFunctionName.size() + 1, fData.size() - fFunctionName.size() - 2);
 
-  ss << "AggregateColumn(" << std::quoted(fFunctionName) << ", " << std::quoted(fContent) << ", " << sessionID() << ")";
+  ss << "AggregateColumn(" << std::quoted(fFunctionName) << ", " << std::quoted(fContent) << ", "
+     << sessionID() << ")";
 
   return ss.str();
 }
@@ -588,15 +661,15 @@ void AggregateColumn::evaluate(Row& row, bool& isNull)
 
     case CalpontSystemCatalog::VARBINARY:
     case CalpontSystemCatalog::BLOB:
-      {
-        auto const str = row.getConstString(fInputIndex);
-        fResult.strVal.dropString();
-        if (!str.isNull())
-          fResult.strVal.assign((const uint8_t*)str.str(), str.length());
+    {
+      auto const str = row.getConstString(fInputIndex);
+      fResult.strVal.dropString();
+      if (!str.isNull())
+        fResult.strVal.assign((const uint8_t*)str.str(), str.length());
 
-        isNull = isNull || fResult.strVal.isNull();
-      }
-      break;
+      isNull = isNull || fResult.strVal.isNull();
+    }
+    break;
 
     default:  // treat as int64
       if (row.equals<8>(BIGINTNULL, fInputIndex))

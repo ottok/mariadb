@@ -161,6 +161,9 @@ class AggregateColumn : public ReturnedColumn
     fAggParms = parms;
   }
 
+  void setSimpleColumnListExtended() override;
+  void setSimpleColumnListExtended_();
+
   /** return a copy of this pointer
    *
    * deep copy of this pointer and return the copy
@@ -220,6 +223,7 @@ class AggregateColumn : public ReturnedColumn
    * Overloaded stream operator
    */
   const std::string toString() const override;
+  const std::string toString(bool compact) const;
   std::string toCppCode(IncludeSet& includes) const override;
 
   /**

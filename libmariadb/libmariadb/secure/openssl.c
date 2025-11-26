@@ -447,6 +447,12 @@ void *ma_tls_init(MYSQL *mysql)
   if (!(ssl= SSL_new(ctx)))
     goto error;
 
+#if !defined(OPENSSL_NO_TLSEXT)
+  if (mysql->host && !ma_is_ip_address(mysql->host))
+    if (!SSL_set_tlsext_host_name(ssl, mysql->host))
+      goto error;
+#endif
+
   if (!SSL_set_app_data(ssl, mysql))
     goto error;
 

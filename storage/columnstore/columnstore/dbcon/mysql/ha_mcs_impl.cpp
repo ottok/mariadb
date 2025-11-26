@@ -24,25 +24,22 @@
 #include <string>
 #include <iostream>
 #include <stack>
-#include <tr1/unordered_map>
-#include <tr1/unordered_set>
+#include <unordered.h>
+
 #include <fstream>
 #include <sstream>
 #include <cerrno>
 #include <cstring>
-#include <time.h>
-#include <cassert>
+#include <ctime>
 #include <vector>
 #include <map>
 #include <limits>
 #include <wait.h>  //wait()
-using namespace std;
 
 #include <boost/shared_ptr.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/thread.hpp>
 
-#include "mcs_basic_types.h"
 #include "idb_mysql.h"
 
 #define NEED_CALPONT_INTERFACE
@@ -69,7 +66,6 @@ using namespace messageqcpp;
 
 #include "dmlpackage.h"
 #include "calpontdmlpackage.h"
-#include "insertdmlpackage.h"
 #include "vendordmlstatement.h"
 #include "calpontdmlfactory.h"
 using namespace dmlpackage;
@@ -89,28 +85,19 @@ using namespace BRM;
 #include "querystats.h"
 using namespace querystats;
 
-#include "calpontselectexecutionplan.h"
 #include "mcsanalyzetableexecutionplan.h"
 #include "calpontsystemcatalog.h"
 #include "simplecolumn_int.h"
 #include "simplecolumn_decimal.h"
-#include "aggregatecolumn.h"
 #include "constantcolumn.h"
 #include "simplefilter.h"
-#include "constantfilter.h"
-#include "functioncolumn.h"
-#include "arithmeticcolumn.h"
 #include "arithmeticoperator.h"
-#include "logicoperator.h"
 #include "predicateoperator.h"
 #include "rowcolumn.h"
-#include "selectfilter.h"
 using namespace execplan;
 
-#include "joblisttypes.h"
 using namespace joblist;
 
-#include "cacheutils.h"
 
 #include "errorcodes.h"
 #include "idberrorinfo.h"
@@ -119,18 +106,17 @@ using namespace logging;
 
 #include "resourcemanager.h"
 
-#include "funcexp.h"
 #include "functor.h"
 using namespace funcexp;
 
 #include "installdir.h"
-#include "columnstoreversion.h"
-#include "ha_mcs_sysvars.h"
 
 #include "ha_mcs_datatype.h"
+#include "statistics.h"
 #include "ha_mcs_logging.h"
 #include "ha_subquery.h"
-#include "statistics_manager/statistics.h"
+
+using namespace std;
 
 namespace cal_impl_if
 {
@@ -138,7 +124,7 @@ extern bool nonConstFunc(Item_func* ifp);
 
 void gp_walk_info::mergeTableStatistics(const TableStatisticsMap& aTableStatisticsMap)
 {
-  for (auto& [schemaAndTableName, aColumnStatisticsMap]: aTableStatisticsMap)
+  for (auto& [schemaAndTableName, aColumnStatisticsMap] : aTableStatisticsMap)
   {
     auto tableStatisticsMapIt = tableStatisticsMap.find(schemaAndTableName);
     if (tableStatisticsMapIt == tableStatisticsMap.end())
@@ -147,7 +133,7 @@ void gp_walk_info::mergeTableStatistics(const TableStatisticsMap& aTableStatisti
     }
     else
     {
-      for (auto& [columnName, histogram]: aColumnStatisticsMap)
+      for (auto& [columnName, histogram] : aColumnStatisticsMap)
       {
         tableStatisticsMapIt->second[columnName] = histogram;
       }
@@ -155,18 +141,7 @@ void gp_walk_info::mergeTableStatistics(const TableStatisticsMap& aTableStatisti
   }
 }
 
-std::optional<ColumnStatisticsMap> gp_walk_info::findStatisticsForATable(SchemaAndTableName& schemaAndTableName)
-{
-  auto tableStatisticsMapIt = tableStatisticsMap.find(schemaAndTableName);
-  if (tableStatisticsMapIt == tableStatisticsMap.end())
-  {
-    return std::nullopt;
-  }
-
-  return {tableStatisticsMapIt->second};
-}
-
-}
+}  // namespace cal_impl_if
 
 namespace
 {
@@ -176,26 +151,26 @@ const string infinidb_autoswitch_warning =
     "was switched to standard mode with downgraded performance.";
 
 // copied from item_timefunc.cc
-static const string interval_names[] = {"year",
-                                        "quarter",
-                                        "month",
-                                        "week",
-                                        "day",
-                                        "hour",
-                                        "minute",
-                                        "second",
-                                        "microsecond",
-                                        "year_month",
-                                        "day_hour",
-                                        "day_minute",
-                                        "day_second",
-                                        "hour_minute",
-                                        "hour_second",
-                                        "minute_second",
-                                        "day_microsecond",
-                                        "hour_microsecond",
-                                        "minute_microsecond",
-                                        "second_microsecond"};
+[[maybe_unused]] static const string interval_names[] = {"year",
+                                                         "quarter",
+                                                         "month",
+                                                         "week",
+                                                         "day",
+                                                         "hour",
+                                                         "minute",
+                                                         "second",
+                                                         "microsecond",
+                                                         "year_month",
+                                                         "day_hour",
+                                                         "day_minute",
+                                                         "day_second",
+                                                         "hour_minute",
+                                                         "hour_second",
+                                                         "minute_second",
+                                                         "day_microsecond",
+                                                         "hour_microsecond",
+                                                         "minute_microsecond",
+                                                         "second_microsecond"};
 
 // HDFS is never used nowadays, so don't bother
 bool useHdfs = false;  // ResourceManager::instance()->useHdfs();
@@ -926,7 +901,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
     Item_field* item;
     List_iterator_fast<Item> field_it(thd->lex->first_select_lex()->item_list);
     List_iterator_fast<Item> value_it(thd->lex->value_list);
-    updateCP->queryType(CalpontSelectExecutionPlan::UPDATE);
+    updateCP->queryType(IDBQueryType::UPDATE);
     ci->stats.fQueryType = updateCP->queryType();
     tr1::unordered_set<string> timeStampColumnNames;
 
@@ -1210,7 +1185,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
 #endif
   else
   {
-    updateCP->queryType(CalpontSelectExecutionPlan::DELETE);
+    updateCP->queryType(IDBQueryType::DELETE);
     ci->stats.fQueryType = updateCP->queryType();
   }
 
@@ -1347,7 +1322,6 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
 
   // Save the item list
   List<Item> items;
-  SELECT_LEX select_lex;
 
   if (ha_mcs_common::isUpdateStatement(thd->lex->sql_command))
   {
@@ -1355,7 +1329,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
     thd->lex->first_select_lex()->item_list = thd->lex->value_list;
   }
 
-  select_lex = *lex->first_select_lex();
+  SELECT_LEX* select_lex = lex->first_select_lex();
 
   //@Bug 2808 Error out on order by or limit clause
   //@bug5096. support dml limit.
@@ -1411,7 +1385,7 @@ uint32_t doUpdateDelete(THD* thd, gp_walk_info& gwi, const std::vector<COND*>& c
 
     gwi.clauseType = WHERE;
 
-    if (getSelectPlan(gwi, select_lex, updateCP, false, false, false, condStack) !=
+    if (getSelectPlan(gwi, *select_lex, updateCP, false, false, false, condStack) !=
         0)  //@Bug 3030 Modify the error message for unsupported functions
     {
       if (gwi.cs_vtable_is_update_with_derive)
@@ -2917,7 +2891,7 @@ int ha_mcs_impl_delete_table(const char* name)
   int rc = ha_mcs_impl_delete_table_(dbName, name, *ci);
   return rc;
 }
-int ha_mcs_impl_write_row(const uchar* buf, TABLE* table, uint64_t rows_changed, long timeZone)
+int ha_mcs_impl_write_row(const uchar* buf, TABLE* table, uint64_t rows_inserted, long timeZone)
 {
   THD* thd = current_thd;
 
@@ -2947,7 +2921,7 @@ int ha_mcs_impl_write_row(const uchar* buf, TABLE* table, uint64_t rows_changed,
 
   // At the beginning of insert, make sure there are no
   // left-over values from a previously possibly failed insert.
-  if (rows_changed == 0)
+  if (rows_inserted == 0)
     ci->tableValuesMap.clear();
 
   if (ci->alterTableState > 0)
@@ -3383,11 +3357,13 @@ void ha_mcs_impl_start_bulk_insert(ha_rows rows, TABLE* table, bool is_cache_ins
     }
 
     if ((thd->lex)->sql_command == SQLCOM_INSERT)
-      ci->stats.fQueryType =
-          CalpontSelectExecutionPlan::queryTypeToString(CalpontSelectExecutionPlan::INSERT);
+    {
+      ci->stats.fQueryType = CalpontSelectExecutionPlan::queryTypeToString(IDBQueryType::INSERT);
+    }
     else if ((thd->lex)->sql_command == SQLCOM_LOAD)
-      ci->stats.fQueryType =
-          CalpontSelectExecutionPlan::queryTypeToString(CalpontSelectExecutionPlan::LOAD_DATA_INFILE);
+    {
+      ci->stats.fQueryType = CalpontSelectExecutionPlan::queryTypeToString(IDBQueryType::LOAD_DATA_INFILE);
+    }
 
     //@Bug 4387. Check BRM status before start statement.
     boost::scoped_ptr<DBRM> dbrmp(new DBRM());
@@ -4108,7 +4084,7 @@ int ha_mcs_impl_pushdown_init(mcs_handler_info* handler_info, TABLE* table, bool
   boost::shared_ptr<CalpontSystemCatalog> csc = CalpontSystemCatalog::makeCalpontSystemCatalog(sessionID);
   csc->identity(CalpontSystemCatalog::FE);
 
-  if (!get_fe_conn_info_ptr()) 
+  if (!get_fe_conn_info_ptr())
   {
     set_fe_conn_info_ptr((void*)new cal_connection_info());
     thd_set_ha_data(thd, mcs_hton, get_fe_conn_info_ptr());

@@ -42,8 +42,6 @@ set(libcalmysql_SRCS
     is_columnstore_files.cpp
     is_columnstore_extents.cpp
     columnstore_dataload.cpp
-    rulebased_optimizer.cpp
-    rbo_apply_parallel_ces.cpp
 )
 
 set_source_files_properties(ha_mcs.cpp PROPERTIES COMPILE_FLAGS "-fno-implicit-templates")
@@ -60,11 +58,12 @@ if(COMMAND mysql_add_plugin)
         MODULE_ONLY
         ${disabled}
         LINK_LIBRARIES
+        rbo
         ${ENGINE_LDFLAGS}
         ${PLUGIN_EXEC_LIBS}
         ${PLUGIN_WRITE_LIBS}
         joblist_server
-        statistics_manager
+        ${NETSNMP_LIBRARIES}
         ${MARIADB_CLIENT_LIBS}
         ${S3API_DEPS}
         threadpool
@@ -87,13 +86,14 @@ else()
 
     columnstore_link(
         ha_columnstore
+        rbo
         ${S3API_DEPS}
         ${ENGINE_LDFLAGS}
         ${ENGINE_WRITE_LIBS}
+        ${NETSNMP_LIBRARIES}
         ${SERVER_BUILD_DIR}/libservices/libmysqlservices.a
         threadpool
         loggingcpp
-        statistics_manager
         marias3
     )
     # define this dummy target for standalone builds (ie, when mysql_add_plugin doesn't exist)

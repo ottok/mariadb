@@ -7,7 +7,7 @@ import typer
 from typing_extensions import Annotated
 
 from cmapi_server.process_dispatchers.base import BaseDispatcher
-from mcs_cluster_tool.constants import MCS_BACKUP_MANAGER_SH
+from cmapi_server.constants import MCS_BACKUP_MANAGER_SH
 from mcs_cluster_tool.decorators import handle_output
 from mcs_cluster_tool.helpers import cook_sh_arg
 
@@ -284,7 +284,7 @@ def backup(
         )
     ] = None,
 ):
-    """Backup Columnstore and/or MariDB data."""
+    """Backup Columnstore and/or MariaDB data."""
 
     # Local Storage Examples:
     #     ./$0 backup -bl /tmp/backups/ -bd Local -s LocalStorage

@@ -25,16 +25,14 @@
 #include <string>
 #include <iostream>
 #include <stack>
-#include <tr1/unordered_map>
 #include <fstream>
 #include <sstream>
 #include <cerrno>
 #include <cstring>
 #include <regex>
-#include <tr1/unordered_set>
+#include <unordered.h>
 #include <utility>
 #include <cassert>
-using namespace std;
 
 #include <boost/shared_ptr.hpp>
 #include <boost/tokenizer.hpp>
@@ -81,6 +79,7 @@ using namespace execplan;
 
 #include "resourcemanager.h"
 using namespace joblist;
+using namespace std;
 
 namespace
 {
@@ -126,7 +125,7 @@ CalpontSystemCatalog::ColDataType convertDataType(const ddlpackage::ColumnType& 
   const datatypes::TypeHandler* h = datatypes::TypeHandler::find_by_ddltype(ct);
   if (!h)
   {
-    throw runtime_error("Unsupported datatype!");
+    throw runtime_error("Unsupported datatype to convert from!");
     return CalpontSystemCatalog::UNDEFINED;
   }
   return h->code();
@@ -761,7 +760,7 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& /*ta
 #ifdef MCS_DEBUG
   cout << "ProcessDDLStatement: " << schema << "." << table << ":" << ddlStatement << endl;
 #endif
-  
+
   parser.setDefaultSchema(schema);
   parser.setDefaultCharset(default_table_charset);
   int rc = 0;
@@ -823,10 +822,11 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& /*ta
 
         if (createTable->fTableDef->fColumns[i]->fConstraints.size() > 0)
         {
-          // support default value and NOT NULL constraint
+          // support default value, JSON validation and NOT NULL constraint
           for (uint32_t j = 0; j < createTable->fTableDef->fColumns[i]->fConstraints.size(); j++)
           {
-            if (createTable->fTableDef->fColumns[i]->fConstraints[j]->fConstraintType != DDL_NOT_NULL)
+            auto ctype = createTable->fTableDef->fColumns[i]->fConstraints[j]->fConstraintType;
+            if (ctype != DDL_NOT_NULL && ctype != DDL_VALIDATE_JSON)
             {
               rc = 1;
               thd->get_stmt_da()->set_overwrite_status(true);
@@ -867,12 +867,14 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& /*ta
           return rc;
         }
 
+#if MYSQL_VERSION_ID < 110400
         // For TIMESTAMP, if no constraint is given, default to NOT NULL
         if (createTable->fTableDef->fColumns[i]->fType->fType == ddlpackage::DDL_TIMESTAMP &&
             createTable->fTableDef->fColumns[i]->fConstraints.empty())
         {
           createTable->fTableDef->fColumns[i]->fConstraints.push_back(new ColumnConstraintDef(DDL_NOT_NULL));
         }
+#endif
 
         if (createTable->fTableDef->fColumns[i]->fDefaultValue)
         {
@@ -1225,7 +1227,8 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& /*ta
             // support default value and NOT NULL constraint
             for (uint32_t j = 0; j < addColumnPtr->fColumnDef->fConstraints.size(); j++)
             {
-              if (addColumnPtr->fColumnDef->fConstraints[j]->fConstraintType != DDL_NOT_NULL)
+              auto ctype = addColumnPtr->fColumnDef->fConstraints[j]->fConstraintType;
+              if (ctype != DDL_NOT_NULL && ctype != DDL_VALIDATE_JSON)
               {
                 rc = 1;
                 thd->get_stmt_da()->set_overwrite_status(true);
@@ -1358,6 +1361,7 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& /*ta
           }
 
           // For TIMESTAMP, if no constraint is given, default to NOT NULL
+	  // XXX: see same code conditionally enabled for specific MariaDB version.
           if (addColumnPtr->fColumnDef->fType->fType == ddlpackage::DDL_TIMESTAMP &&
               addColumnPtr->fColumnDef->fConstraints.empty())
           {
@@ -1610,7 +1614,8 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& /*ta
             //@Bug 5274. support default value and NOT NULL constraint
             for (uint32_t j = 0; j < addColumnsPtr->fColumns[0]->fConstraints.size(); j++)
             {
-              if (addColumnsPtr->fColumns[0]->fConstraints[j]->fConstraintType != DDL_NOT_NULL)
+              auto ctype = addColumnsPtr->fColumns[0]->fConstraints[j]->fConstraintType;
+              if (ctype != DDL_NOT_NULL && ctype != DDL_VALIDATE_JSON)
               {
                 rc = 1;
                 thd->get_stmt_da()->set_overwrite_status(true);
@@ -1743,6 +1748,7 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& /*ta
           }
 
           // For TIMESTAMP, if no constraint is given, default to NOT NULL
+	  // XXX: please see conditional to MariaDB version enablement of similar code.
           if (addColumnsPtr->fColumns[0]->fType->fType == ddlpackage::DDL_TIMESTAMP &&
               addColumnsPtr->fColumns[0]->fConstraints.empty())
           {
@@ -2072,6 +2078,16 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& /*ta
                   return rc;
                 }
               }
+	      else if (renameColumnsPtr->fConstraints[j]->fConstraintType == DDL_VALIDATE_JSON)
+              {
+                rc = 1;
+                thd->get_stmt_da()->set_overwrite_status(true);
+                thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED,
+                                        (IDBErrorInfo::instance()->errorMsg(ERR_CONSTRAINTS)).c_str());
+                ci->alterTableState = cal_connection_info::NOT_ALTER;
+                ci->isAlter = false;
+                return rc;
+              }
               else
               {
                 rc = 1;
@@ -2201,34 +2217,46 @@ int ProcessDDLStatement(string& ddlStatement, string& schema, const string& /*ta
 
     if (ddlStatement.find("AUTO_INCREMENT") != string::npos)
     {
-      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax auto_increment is not supported in Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED,
+                              "The syntax auto_increment is not supported in Columnstore. Please check the "
+                              "Columnstore syntax guide for supported syntax or data types.");
     }
-    else if(ddlStatement.find("RENAME COLUMN") != string::npos)
+    else if (ddlStatement.find("RENAME COLUMN") != string::npos)
     {
-      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax rename column is not supported by Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED,
+                              "The syntax rename column is not supported by Columnstore. Please check the "
+                              "Columnstore syntax guide for supported syntax or data types.");
     }
-    else if(ddlStatement.find("MAX_ROWS") != string::npos || ddlStatement.find("MIN_ROWS") != string::npos)
+    else if (ddlStatement.find("MAX_ROWS") != string::npos || ddlStatement.find("MIN_ROWS") != string::npos)
     {
-      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax min_rows/max_rows is not supported by Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED,
+                              "The syntax min_rows/max_rows is not supported by Columnstore. Please check "
+                              "the Columnstore syntax guide for supported syntax or data types.");
     }
-    else if(ddlStatement.find("REPLACE TABLE") != string::npos)
+    else if (ddlStatement.find("REPLACE TABLE") != string::npos)
     {
-      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax replace table is not supported by Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED,
+                              "The syntax replace table is not supported by Columnstore. Please check the "
+                              "Columnstore syntax guide for supported syntax or data types.");
     }
-    else if(ddlStatement.find("DROP COLUMN IF EXISTS") != string::npos)
+    else if (ddlStatement.find("DROP COLUMN IF EXISTS") != string::npos)
     {
-      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax drop column if exists is not supported by Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED,
+                              "The syntax drop column if exists is not supported by Columnstore. Please "
+                              "check the Columnstore syntax guide for supported syntax or data types.");
     }
     else
     {
       //@Bug 1888,1885. update error message
-      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED, "The syntax or the data type(s) is not supported by Columnstore. Please check the Columnstore syntax guide for supported syntax or data types.");
+      thd->raise_error_printf(ER_CHECK_NOT_IMPLEMENTED,
+                              "The syntax or the data type(s) is not supported by Columnstore. Please check "
+                              "the Columnstore syntax guide for supported syntax or data types.");
     }
 
     ci->alterTableState = cal_connection_info::NOT_ALTER;
     ci->isAlter = false;
   }
-  
+
   return rc;
 }
 

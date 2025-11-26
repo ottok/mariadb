@@ -224,7 +224,7 @@ static my_bool ma_pvio_tls_compare_fp(MARIADB_TLS *ctls,
                                      const char *cert_fp,
                                      unsigned int cert_fp_len)
 {
-  const char fp[EVP_MAX_MD_SIZE];
+  char fp[EVP_MAX_MD_SIZE];
   unsigned int fp_len= EVP_MAX_MD_SIZE;
   unsigned int hash_type;
 
@@ -266,11 +266,11 @@ static my_bool ma_pvio_tls_compare_fp(MARIADB_TLS *ctls,
     }
   }
 
-  if (!ma_tls_get_finger_print(ctls, hash_type, (char *)fp, fp_len))
+  if (!ma_tls_get_finger_print(ctls, hash_type, fp, fp_len))
     return 1;
 
   p= (char *)cert_fp;
-  c = (char *)fp;
+  c = fp;
 
   for (p = (char*)cert_fp; p < cert_fp + cert_fp_len; c++, p += 2)
   {

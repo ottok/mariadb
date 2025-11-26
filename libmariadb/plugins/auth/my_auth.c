@@ -277,6 +277,11 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
   char *buff, *end;
   size_t conn_attr_len= (mysql->options.extension) ? 
                          mysql->options.extension->connect_attrs_len : 0;
+  size_t proxy_header_len= 0;
+  char *proxy_header=
+      (mysql->options.extension) ? mysql->options.extension->proxy_header : NULL;
+  if (proxy_header)
+    proxy_header_len= mysql->options.extension->proxy_header_len;
 
   /* see end= buff+32 below, fixed size of the packet is 32 bytes */
   buff= malloc(33 + USERNAME_LENGTH + data_len + NAME_LEN + NAME_LEN + conn_attr_len + 9);
@@ -414,6 +419,14 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
       Send mysql->client_flag, max_packet_size - unencrypted otherwise
       the server does not know we want to do SSL
     */
+    if (proxy_header_len)
+    {
+      ma_net_write_buff(net, proxy_header, proxy_header_len);
+      /* Reset proxy header */
+      proxy_header_len= 0;
+      proxy_header= NULL;
+    }
+
     if (ma_net_write(net, (unsigned char *)buff, (size_t) (end-buff)) || ma_net_flush(net))
     {
       my_set_error(mysql, CR_SERVER_LOST, SQLSTATE_UNKNOWN,
@@ -524,6 +537,8 @@ static int send_client_reply_packet(MCPVIO_EXT *mpvio,
     *end++= compression_level;
   }
 
+  if (proxy_header_len)
+    ma_net_write_buff(net, proxy_header, proxy_header_len);
   /* Write authentication package */
   if (ma_net_write(net, (unsigned char *)buff, (size_t) (end-buff)) || ma_net_flush(net))
   {

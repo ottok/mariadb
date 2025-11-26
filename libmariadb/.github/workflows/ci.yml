@@ -29,9 +29,9 @@ jobs:
       - uses: actions/checkout@v4
       - id: set-matrix
         name: build matrix
-        uses: rusher/mariadb-test-build-matrix@main
+        uses: mariadb-corporation/connector-ci-build-matrix@main
         with:
-          additional-matrix: '[{"name": "MariaDB 11.4 (local) - windows 2025", "os": "windows-2025", "db-type": "community", "db-tag": "11.4"}]'
+          additional-matrix: '[{"name": "MariaDB 11.4 (local) - windows 2025", "os": "windows-2025", "db-type": "community", "db-tag": "11.4"},{"name": "MariaDB 11.4 32bits (local) - windows 2025", "os": "windows-2025", "db-type": "community", "db-tag": "11.4", "arch": "32"}]'
 
   ci-server:
     name: server ${{ matrix.server.version }} test suite ${{ matrix.server.env && format(' {0}', matrix.server.env) || '' }}
@@ -98,7 +98,7 @@ jobs:
           TEST_OPTION: ${{ matrix.server.env.TEST_OPTION }}
           MYSQL_TEST_HOST: 127.0.0.1
 
-      - name: Archive production artifacts
+      - name: Archive error logs
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
@@ -128,7 +128,7 @@ jobs:
 
       - name: Setup Test Environment
         id: setup-env
-        uses: rusher/mariadb-test-setup@master
+        uses: mariadb-corporation/connector-ci-setup@master
         with:
           node-version: ${{ matrix.node }}
           db-type: ${{ matrix.db-type }}
@@ -147,10 +147,16 @@ jobs:
           cmake . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWITH_EXTERNAL_ZLIB=On
           make
 
-      - name: make windows
-        if: ${{ startsWith(matrix.os, 'windows') }}
+      - name: make windows 64bits
+        if: ${{ startsWith(matrix.os, 'windows') && (matrix.arch != '32' || !matrix.arch) }}
         run: |
-          cmake . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWITH_CURL=ON
+          cmake . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWITH_CURL=ON -DWITH_MSI=ON
+          cmake --build . --config RelWithDebInfo
+
+      - name: make windows 32bits
+        if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.arch, '32') }}
+        run: |
+          cmake -A Win32 . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWITH_CURL=ON -DWITH_MSI=ON
           cmake --build . --config RelWithDebInfo
 
       - name: Run test suite
