@@ -1,17 +1,28 @@
-mariadb (1:11.8.3-2) UNRELEASED; urgency=medium
-
-  [ Daniel Black ]
-  * MDEV-37411: re-enable AIO in Debian
+mariadb (1:11.8.5-1) UNRELEASED; urgency=medium
 
   [ Otto Kekäläinen ]
+  * New upstream maintenance release 11.8.5. For details about fixes please see
+    https://mariadb.com/docs/release-notes/community-server/11.8/11.8.5
+  * The version 11.8.4 was skipped in Debian (and Ubuntu) as it has a severe
+    regression causing partial data deletion when using the DELETE statement on
+    MyISAM or Aria tables under specific conditions (MDEV-38068)
+  * For details about fixes in 11.8.4 please see
+    https://mariadb.com/docs/release-notes/community-server/11.8/11.8.4
+  * This release does _not_ include any CVE tracked security fixes as per
+    https://mariadb.com/docs/server/security/securing-mariadb/security
   * Add Lintian override for false error in test plugin
   * Salsa CI: Disable running `gbp setup-gitattributes`
   * Salsa CI: Fix typos introduced in 855bc4f6
 
-  [ Aquila Macedo ]
-  * Add patch for MDEV-38046 PCRE2 offset change (Closes: #1119866)
+  [ Daniel Black ]
+  * Re-enable AIO in Debian (MDEV-37411)
 
- -- Aquila Macedo Costa <aquilamacedo@riseup.net>  Wed, 12 Nov 2025 10:47:40 -0300
+  [ Aquila Macedo ]
+  * Add patch for new PCRE2 version 10.47 offset change (Closes: #1119866)
+  * Salsa CI: install build-essential for Python-MySQLdb job (Closes: #1121027)
+  * Salsa CI: keep provider plugins in sync in bookworm -> sid upgrade job
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 25 Nov 2025 21:41:00 -0800
 
 mariadb (1:11.8.3-1) unstable; urgency=medium
 
