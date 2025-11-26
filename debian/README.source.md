@@ -23,7 +23,7 @@ run them with `--verbose` and read the respective man pages for details.
 To get the Debian packaging source code and have the upstream remote alongside
 it, simply run:
 
-    gbp clone vcs-git:mariadb --add-upstreamvcs
+    gbp clone vcs-git:mariadb --add-upstream-vcs
 
 Alternatively, run this to define precisely one upstream branch to be tracked:
 
@@ -244,7 +244,7 @@ Debian systems. Once the upload has been accepted, remember to run:
 
 ## Building the packages
 
-The easiest way to build this package is in a Ubuntu sid (unstable) container.
+The easiest way to build this package is in a Debian sid (unstable) container.
 Example commands:
 
     podman run --interactive --network host --tty --rm --shm-size=1G --volume=$PWD:/tmp/build --workdir=/tmp/build debian:sid bash

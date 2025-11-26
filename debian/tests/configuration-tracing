@@ -63,7 +63,7 @@ trace() {
     normalize_value version-compile-os debian-linux-gnu
 
     # Version strings and compilation comment contents may change on every
-    # release and build on different Debian/Ubuntu releases and architecutres
+    # release and build on different Debian/Ubuntu releases and architectures
     normalize_value version "VERSION"
     normalize_value version-comment "VERSION-COMMENT"
 

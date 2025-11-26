@@ -8,7 +8,7 @@
 #
 # THIS PROGRAM IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
 # WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
-# MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -1431,7 +1431,7 @@ Feedback and improvements are welcome.
 
 THIS PROGRAM IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
 WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
-MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -5123,7 +5123,7 @@ sub purge_master_logs {
       map  { $vars{$_}->{$clock} } @cxns;
    @cxns = map { $_->{cxn} } @vars;
 
-   # Figure out which master to purge ons.
+   # Figure out which master to purge owns.
    my @masters = map { $_->{cxn} } grep { $_->{file} } @vars;
    my ( $master ) = select_cxn('Which master?', @masters );
    return unless $master;
@@ -9337,7 +9337,7 @@ sub get_status_info {
          $vars->{Uptime_hires} ||= get_uptime($cxn);
          $vars->{cxn} = $cxn;
 
-         # Add SHOW VARIABLES to the hash.  If we've gotten this info before, skip and re-use.
+         # Add SHOW VARIABLES to the hash.  If we've gotten this info before, skip and reuse.
          if ( $show_variables{$cxn} ) {
             $res = $show_variables{$cxn};
          }
@@ -12233,7 +12233,7 @@ Feedback and improvements are welcome.
 
 THIS PROGRAM IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
 WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
-MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
