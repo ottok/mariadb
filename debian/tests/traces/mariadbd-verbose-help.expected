@@ -579,6 +579,10 @@ The following specify which files/extra groups are read (specified before remain
                       flushing happens
   --innodb-adaptive-hash-index 
                       Enable InnoDB adaptive hash index (disabled by default)
+  --innodb-adaptive-hash-index-cells=# 
+                      Number of adaptive hash table cells in each partition;
+                      16381 at start defaults to being derived from
+                      innodb_buffer_pool_size
   --innodb-adaptive-hash-index-parts[=#] 
                       Number of InnoDB Adaptive Hash Index Partitions (default
                       8)
@@ -1173,7 +1177,10 @@ The following specify which files/extra groups are read (specified before remain
                       the only option you need for specifying log files. Sets
                       names for --log-bin, --log-bin-index, --relay-log,
                       --relay-log-index, --general-log-file,
-                      --log-slow-query-file, --log-error-file, and --pid-file
+                      --log-slow-query-file, --log-error-file, and --pid-file.
+                      If log-basename includes a path, the path will apply for
+                      all above variables except pid-file that will use it
+                      without the path
   --log-bin[=name]    Log update queries in binary format. Optional argument
                       should be name for binary log. If not given
                       'datadir'/'log-basename'-bin or 'datadir'/mysql-bin will
@@ -1445,6 +1452,10 @@ The following specify which files/extra groups are read (specified before remain
   --net-write-timeout=# 
                       Number of seconds to wait for a block to be written to a
                       connection before aborting the write
+  --new-mode=name     Used to introduce new behavior to existing MariaDB
+                      versions. Any combination of: FIX_DISK_TMPTABLE_COSTS, 
+                      FIX_INDEX_STATS_FOR_ALL_NULLS, FIX_INDEX_LOOKUP_COST, or
+                      ALL to set all combinations
   --note-verbosity=name 
                       Verbosity level for note-warnings given to the user. See
                       also @@sql_notes. Any combination of: basic, 
@@ -2672,6 +2683,7 @@ innodb                                                       ON
 innodb-adaptive-flushing                                     TRUE
 innodb-adaptive-flushing-lwm                                 10
 innodb-adaptive-hash-index                                   FALSE
+innodb-adaptive-hash-index-cells                             16381
 innodb-adaptive-hash-index-parts                             8
 innodb-alter-copy-bulk                                       TRUE
 innodb-autoextend-increment                                  64
@@ -2938,6 +2950,7 @@ net-buffer-length                                            16384
 net-read-timeout                                             30
 net-retry-count                                              10
 net-write-timeout                                            60
+new-mode                                                     
 note-verbosity                                               basic,explain
 old                                                          FALSE
 old-mode                                                     UTF8_IS_UTF8MB3
