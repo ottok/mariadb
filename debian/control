@@ -18,6 +18,7 @@ Build-Depends:
  libboost-dev,
  libbz2-dev,
  libcrack2-dev (>= 2.9.0),
+ libcrypt-dev,
  libcurl4-openssl-dev | libcurl4-dev,
  libedit-dev,
  libedit-dev:native,
