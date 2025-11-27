@@ -28,6 +28,10 @@ variables:
   # pinpoint what aspect of the build is broken if not reproducible.
   SALSA_CI_DISABLE_REPROTEST: 1
   SALSA_CI_ENABLE_ATOMIC_REPROTEST: 0
+  # Debrebuild works, but it too takes very long time and timeouts, so better to
+  # have it disabled by default and only run occasionally when specifically
+  # debugging reproducibility issues.
+  SALSA_CI_DISABLE_DEBREBUILD: 1
   SALSA_CI_DISABLE_RC_BUGS: 0
   # Testing https://salsa.debian.org/salsa-ci-team/pipeline#git-attributes
   SALSA_CI_DISABLE_GBP_SETUP_GITATTRIBUTES: 1
