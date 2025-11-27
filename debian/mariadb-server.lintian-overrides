@@ -7,7 +7,6 @@ spelling-error-in-binary theres there's [usr/bin/*]
 # Most likely false positive
 hardening-no-fortify-functions [usr/lib/mysql/plugin/auth_pam_v1.so]
 hardening-no-fortify-functions [usr/lib/mysql/plugin/auth_pam.so]
-hardening-no-fortify-functions [usr/lib/mysql/plugin/file_key_management.so]
 hardening-no-fortify-functions [usr/lib/mysql/plugin/ha_archive.so]
 hardening-no-fortify-functions [usr/lib/mysql/plugin/ha_blackhole.so]
 hardening-no-fortify-functions [usr/lib/*/security/pam_user_map.so]
