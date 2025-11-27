@@ -1,3 +1,4 @@
+main.alter_table_lock : https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1104002
 main.check : MDEV-36670
 main.concurrent_innodb_safelog : MDEV-36670
 main.ctype_binary : https://bugs.debian.org/1053485
@@ -9,6 +10,7 @@ main.func_str : MDEV-27954
 main.group_by : MDEV-27954
 main.group_by_null : MDEV-27954
 main.long_unique_bugs : MDEV-30928
+main.long_unique_innodb : https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1104002
 main.mariadb-import : MDEV-36670
 main.mysql-interactive : disable new test in MariaDB 10.4.6 with Windows line endings that cause unpatcheable line ending mismatches
 main.mysqld--help-aria : MDEV-36334
@@ -18,6 +20,7 @@ main.partition_order : MDEV-27954
 main.repair_symlink-5543 : MDEV-23920
 main.sp-innodb : MDEV-36670
 main.type_datetime : MDEV-27954
+main.unsafe_binlog_innodb : https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1104002
 main.vector : MDEV-36670
 main.vector_aria : MDEV-36670
 main.vector_funcs : MDEV-36670
