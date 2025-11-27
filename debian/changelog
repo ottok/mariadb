@@ -1,4 +1,4 @@
-mariadb (1:11.8.5-1) UNRELEASED; urgency=medium
+mariadb (1:11.8.5-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
   * New upstream maintenance release 11.8.5. For details about fixes please see
@@ -10,19 +10,43 @@ mariadb (1:11.8.5-1) UNRELEASED; urgency=medium
     https://mariadb.com/docs/release-notes/community-server/11.8/11.8.4
   * This release does _not_ include any CVE tracked security fixes as per
     https://mariadb.com/docs/server/security/securing-mariadb/security
+  * Update server trace to include new parameters and values
+  * Already existing plugins marked ready for general availability by upstream
+    in this release: uuid_v4, uuid_v7 and inet4
   * Add Lintian override for false error in test plugin
+  * Patch new upstream test main.alter_merge to allow 'from Debian'
+  * Add libcrypt-dev to Build-Depends (Closes: #1106944)
+  * Extend unstable tests to skip for sparc64 and x32
+  * Remove Rules-Requires-Root
+  * Update patch Forwarded fields to reflect latest status
   * Salsa CI: Disable running `gbp setup-gitattributes`
   * Salsa CI: Fix typos introduced in 855bc4f6
+  * Salsa CI: Disable the new 'debrebuild' job for MariaDB due to timeouts
 
   [ Daniel Black ]
-  * Re-enable AIO in Debian (MDEV-37411)
+  * MDEV-37411: Re-enable AIO in Debian
+  * MDEV-15502: use tmpfiles with systemd (Closes: #1028272)
+  * MDEV-37776: shlibs:Depends shouldn't be explicit
+
+  [ Jean Weisbuch ]
+  * MDEV-37852: Fix mytop connection to localhost (Closes: #1109394)
+
+  [ Christian Hesse ]
+  * MDEV-35904/MDEV-19210: use environment file in systemd units for
+    _WSREP_START_POSITION (Closes: #1105029)
 
   [ Aquila Macedo ]
   * Add patch for new PCRE2 version 10.47 offset change (Closes: #1119866)
   * Salsa CI: install build-essential for Python-MySQLdb job (Closes: #1121027)
   * Salsa CI: keep provider plugins in sync in bookworm -> sid upgrade job
 
- -- Otto Kekäläinen <otto@debian.org>  Tue, 25 Nov 2025 21:41:00 -0800
+  [ Sergei Golubchik ]
+  * MDEV-37600: Implement caching_sha2_password plugin for MySQL compatibility
+
+  [ Helge Kreutzmann ]
+  * Update German translation of debconf messages (Closes: #1120669)
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 26 Nov 2025 22:29:56 -0800
 
 mariadb (1:11.8.3-1) unstable; urgency=medium
 
