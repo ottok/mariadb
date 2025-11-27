@@ -213,9 +213,7 @@ endif
 
 # Change dh_missing from fail to list on non-Linux
 override_dh_missing:
-ifneq (,$(filter linux,$(DEB_HOST_ARCH_OS)))
-	dh_missing --list-missing
-endif
+	dh_missing $(if $(filter linux,$(DEB_HOST_ARCH_OS)),,--list-missing)
 
 override_dh_installinit:
 	dh_installinit --name=mariadb
