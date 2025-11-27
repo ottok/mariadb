@@ -19,7 +19,7 @@ This is a combined patch of various spelling fixes.
 
 * Fix typo: Enrypt->Encrypt
 
-Forwarded: no
+Forwarded: https://github.com/MariaDB/server/pull/4458
 ---
  extra/mariabackup/innobackupex.cc                         |  4 ++--
  extra/mariabackup/xtrabackup.cc                           |  6 +++---

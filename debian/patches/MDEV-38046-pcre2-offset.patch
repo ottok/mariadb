@@ -8,6 +8,7 @@ Update the expected result and add a --replace_regex in the test so the
 suite passes with both older and newer PCRE2 versions.
 
 Forwarded: https://jira.mariadb.org/browse/MDEV-38046
+(accepted upstream, will be in MariaDB 11.8.6+)
 ---
  mysql-test/main/func_regexp_pcre.result | 2 +-
  mysql-test/main/func_regexp_pcre.test   | 2 ++

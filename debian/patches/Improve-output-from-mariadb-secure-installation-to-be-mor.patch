@@ -5,6 +5,8 @@ Subject: Improve output from mariadb-secure-installation to be more honest
 The script is not useful in Debian, and likely misleading to users.
 Improve the output to be more clear about what it is doing or is not
 doing.
+
+Forwarded: https://github.com/MariaDB/server/pull/4457
 ---
  scripts/mysql_secure_installation.sh | 24 ++++++++++++++----------
  1 file changed, 14 insertions(+), 10 deletions(-)
