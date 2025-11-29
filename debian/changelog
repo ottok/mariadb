@@ -10,6 +10,11 @@ mariadb (1:11.8.5-1) unstable; urgency=medium
     https://mariadb.com/docs/release-notes/community-server/11.8/11.8.4
   * This release does _not_ include any CVE tracked security fixes as per
     https://mariadb.com/docs/server/security/securing-mariadb/security
+  * The MariaDB 11.8.4 did have a fix for mariadb-dump failing to run if a
+    for any table with a slash in the name. This has no actual exploit and
+    requires the attacker to already have access to the database so they can
+    create tables with arbitrary names. Trend Micro did however publish:
+    - CVE-2025-13699
   * Update server trace to include new parameters and values
   * Already existing plugins marked ready for general availability by upstream
     in this release: uuid_v4, uuid_v7 and inet4
@@ -46,7 +51,7 @@ mariadb (1:11.8.5-1) unstable; urgency=medium
   [ Helge Kreutzmann ]
   * Update German translation of debconf messages (Closes: #1120669)
 
- -- Otto Kekäläinen <otto@debian.org>  Wed, 26 Nov 2025 22:29:56 -0800
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 29 Nov 2025 09:48:55 -0800
 
 mariadb (1:11.8.3-1) unstable; urgency=medium
 
