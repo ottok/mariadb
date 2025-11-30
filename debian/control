@@ -306,6 +306,7 @@ Package: mariadb-client
 Architecture: any
 Depends:
  debianutils (>=1.6),
+ mariadb-client-compat,
  mariadb-client-core (>= ${source:Version}),
  ${misc:Depends},
  ${perl:Depends},
@@ -616,6 +617,7 @@ Depends:
  libdbi-perl,
  lsof [linux-any],
  mariadb-client (>= ${source:Version}),
+ mariadb-server-compat,
  mariadb-server-core (>= ${server:Version}),
  passwd,
  perl (>= 5.6),
