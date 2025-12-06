@@ -1,3 +1,23 @@
+mariadb (1:11.8.5-2) unstable; urgency=medium
+
+  [ Aquila Macedo ]
+  * Relax perl client dependencies in mariadb-client (Closes: #1115678)
+
+  [ Otto Kekäläinen ]
+  * Make all MariaDB client plugins available in server plugin path
+  * Ensure dh_missing runs as intended in debian/rules
+  * Install upstream generated symlinks/binaries/manpages
+  * Fix misc typos and in Debian packaging
+  * Update Lintian overrides to clean away false positives and remove obsolete
+    Lintian overrides
+
+  [ MichaIng ]
+  * Make mariadb-common postinstallation script robust for situations where
+    the /etc/mysql/mariadb.cnf file for any reason was deleted on the system
+    so that the install/upgrade completes regardless
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 06 Dec 2025 10:38:02 -0800
+
 mariadb (1:11.8.5-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
