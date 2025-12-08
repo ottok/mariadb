@@ -1,3 +1,2 @@
 main.alter_table_mdev539_maria : MDEV-23922
-main.mysql-interactive : disable new test in MariaDB 10.4.6 with Windows line endings that cause unpatcheable line ending mismatches
 repair_symlink-5543            : MDEV-23920

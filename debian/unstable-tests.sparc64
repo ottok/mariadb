@@ -12,7 +12,6 @@ main.group_by_null : MDEV-27954
 main.long_unique_bugs : MDEV-30928
 main.long_unique_innodb : https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1104002
 main.mariadb-import : MDEV-36670
-main.mysql-interactive : disable new test in MariaDB 10.4.6 with Windows line endings that cause unpatcheable line ending mismatches
 main.mysqld--help-aria : MDEV-36334
 main.partition : MDEV-27954
 main.partition_icp : MDEV-36669

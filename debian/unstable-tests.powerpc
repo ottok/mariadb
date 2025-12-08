@@ -1,2 +1,1 @@
-main.mysql-interactive : disable new test in MariaDB 10.4.6 with Windows line endings that cause unpatcheable line ending mismatches
 unit.conc_connection : CONC-640: unit.conc_connection fails on test_conc21
