@@ -149,7 +149,6 @@ ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	./mtr --force --testcase-timeout=120 --suite-timeout=540 --retry=3 \
 	      --verbose-restart --max-save-core=1 --max-save-datadir=1 \
 	      --parallel=$(NUMJOBS) --big-test \
-	      --skip-test-list=$(MTR_SKIP_TEST_LIST) \
 	      $(MTR_ARGUMENTS_APPEND)
 	# Don't use --mem here as official Debian builders and most Docker systems don't have a large mem device available and
 	# would fail with errors on lack of disk space.

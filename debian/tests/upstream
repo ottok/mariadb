@@ -58,7 +58,6 @@ eatmydata perl -I. ./mysql-test-run.pl \
     --force --testcase-timeout=120 --suite-timeout=540 --retry=3 \
     --verbose-restart --max-save-core=1 --max-save-datadir=1 \
     --parallel=auto --big-test \
-    --skip-test-list="$MTR_SKIP_TEST_LIST" \
     --vardir="$WORKDIR/var" --tmpdir="$WORKDIR/tmp" \
     --xml-report="$AUTOPKGTEST_ARTIFACTS/mysql-test-run-junit.xml" \
     $MTR_ARGUMENTS_APPEND \
