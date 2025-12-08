@@ -1,3 +1,10 @@
+mariadb (1:11.8.5-3) UNRELEASED; urgency=medium
+
+  * Open new changelog entry. This will be replaced by `gbp dch -Rc` and
+    potentially some manual editing at the time of release.
+
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 08 Dec 2025 08:08:08 -0800
+
 mariadb (1:11.8.5-2) unstable; urgency=medium
 
   [ Aquila Macedo ]
