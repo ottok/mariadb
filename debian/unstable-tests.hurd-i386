@@ -1,1 +1,3 @@
-unstable-tests.hurd
+# Hurd-i386 completes the compilation phase, but all tests fail on:
+#   Warning: Internal memory accounting error of 3504 bytes
+# (https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1074561)

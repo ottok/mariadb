@@ -1,11 +1,20 @@
-main.analyze_engine_stats : MDEV-32375
-main.analyze_stmt_orderby : MDEV-32375
+main.analyze_engine_stats : MDEV-32375 (https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1053487)
+main.analyze_stmt_orderby : MDEV-32375 (https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1053487)
 main.analyze_stmt_slow_query_log : MDEV-12237
-main.cte_recursive : MDEV-32375
-main.derived_split_innodb : MDEV-32375
-main.explain_json_format_partitions : MDEV-32375
-main.join_cache_notasan : MDEV-31893 (fixed but perhaps not for hppa)
+main.cte_recursive : MDEV-32375 (https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1053487)
+main.derived_split_innodb : MDEV-32375 (https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1053487)
+main.explain_json_format_partitions : MDEV-32375 (https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1053487)
 main.join_cache_notasan : MDEV-34084
-main.rowid_filter_innodb : MDEV-32375
+main.rowid_filter_innodb : MDEV-32375 (now runs only in debug build)
+# Below tests only run in "big" tests
+binlog.flashback-largebinlog : Out of memory (Needed 1073742848 bytes)
+innodb_fts.misc_1 : MDEV-38343
+innodb_fts.phrase  : MDEV-38343
+mariabackup.incremental_encrypted : Can't allocate 1073741824 bytes
 repair_symlink-5543  : MDEV-23920
-unit.conc_connection : CONC-640: unit.conc_connection fails on test_conc21
+rpl.rpl_change_master_demote : MDEV-38338 At line 88 Explicit --die command executed
+spider.partition_mrr : Result content mismatch
+spider.quick_mode_0 : Result content mismatch
+spider.quick_mode_1 : Result content mismatch
+spider/feature.checksum_table_parallel_extended : Result content mismatch
+# Seems also that the hppa runner will time out after ~2000 tests and never finish

@@ -1,4 +1,6 @@
-main.mysqld--help-aria : MDEV-36334
 # Below tests only run in "big" tests
 disks.disks : MDEV-38335 (fails only on Debian buildd)
 disks.disks_notembedded : MDEV-38335 (fails only on Debian buildd)
+main.vector_innodb : MDEV-38267 (sporadic)
+main.vector2_notembedded : MDEV-38267 (sporadic)
+rpl.rpl_skip_replication : MDEV-38334 (sporadic)

@@ -1,31 +1,33 @@
-main.alter_table_lock : https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1104002
-main.check : MDEV-36670
-main.concurrent_innodb_safelog : MDEV-36670
-main.ctype_binary : https://bugs.debian.org/1053485
-main.ctype_latin1 : https://bugs.debian.org/1053485
+main.check : MDEV-36670 (sporadic)
+main.ctype_binary : MDEV-36652 (https://bugs.debian.org/1053485)
+main.ctype_latin1 : MDEV-36652 (https://bugs.debian.org/1053485)
 main.features : MDEV-27954
 main.func_like : MDEV-27954
 main.func_math : MDEV-27954
 main.func_str : MDEV-27954
-main.group_by : MDEV-27954
+main.group_by : MDEV-27954 (passed in MariaDB 11.8.5, sporadic?)
 main.group_by_null : MDEV-27954
 main.long_unique_bugs : MDEV-30928
-main.long_unique_innodb : https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1104002
-main.mariadb-import : MDEV-36670
 main.mysqld--help-aria : MDEV-36334
+main.long_unique_innodb : MDEV-30928
+main.mariadb-import : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
 main.partition : MDEV-27954
-main.partition_icp : MDEV-36669
+main.partition_icp : MDEV-36669/MDEV-36652
 main.partition_order : MDEV-27954
 main.repair_symlink-5543 : MDEV-23920
 main.sp-innodb : MDEV-36670
 main.type_datetime : MDEV-27954
-main.unsafe_binlog_innodb : https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1104002
-main.vector : MDEV-36670
-main.vector_aria : MDEV-36670
-main.vector_funcs : MDEV-36670
-main.vector_innodb : MDEV-36670
-main.vector2 : MDEV-36670
-main.vector2_notembedded : MDEV-36670
-main.view : MDEV-36145
+main.unsafe_binlog_innodb : MDEV-36670
+main.vector : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector_aria : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector_funcs : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector_innodb : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector2 : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector2_notembedded : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.view : MDEV-36145 (https://bugs.debian.org/1098651)
 main.xml : MDEV-21968
-unit.conc_connection : CONC-640: unit.conc_connection fails on test_conc21
+# Below tests only run in "big" tests
+binlog_encryption.encrypted_slave : MDEV-23905
+binlog_encryption.encrypted_master : MDEV-23905
+# Lots of tests fails, this would need a sparc64 expert to spend more time on
+# Completed: Failed 148/6460 tests, 97.71% were successful.

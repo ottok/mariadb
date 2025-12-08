@@ -1,1 +1,16 @@
-unit.conc_connection : CONC-640: unit.conc_connection fails on test_conc21
+# Below tests only run in "big" tests
+disks.disks : MDEV-38335 (fails only on Debian buildd)
+disks.disks_notembedded : MDEV-38335 (fails only on Debian buildd)
+innodb_fts.basic : MDEV-38343
+innodb_fts.fulltext : MDEV-38343
+innodb_fts.innodb_fts_large_records : MDEV-38343
+innodb_fts.innodb_fts_misc_1 : MDEV-38343
+innodb_fts.innodb_fts_multiple_index : MDEV-38343
+innodb_fts.innodb_fts_proximity : MDEV-38343
+innodb_fts.misc : MDEV-38343
+innodb_fts.misc_1 : MDEV-38343
+innodb_fts.multiple_index : MDEV-38343
+innodb_fts.opt : MDEV-38343
+innodb_fts.phrase : MDEV-38343
+rpl.rpl_change_master_demote : MDEV-38338 At line 88 Explicit --die command executed
+sys_vars.sysvars_wsrep : MDEV-38342 Empty DEFAULT value

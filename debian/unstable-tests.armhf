@@ -1,15 +1,22 @@
-# MDEV-33381: The full test suite (including --big-test) has numerous failures
-# on armhf and a Raspberry Pi enthusiast is needed to debug them
-federated.federatedx_versioning : MDEV-33381
 main.mysqld--help-aria : MDEV-36334
-main.xml : MDEV-21968
-period.versioning : MDEV-33381
-spider.basic_sql : MDEV-33381
-spider.spider_fixes_part : MDEV-33381
-spider/bg.basic_sql : MDEV-33381
-spider/bg.spider_fixes_part : MDEV-33381
-unit.conc_connection : CONC-640: unit.conc_connection fails on test_conc21
-versioning.autoinc : MDEV-33381
-versioning.online : MDEV-33381
-versioning.partition : MDEV-33381
-versioning.trx_id : MDEV-33381
+main.xml : MDEV-21968 (fails only on Launchpad)
+# Below tests only run in "big" tests
+compat/oracle.sp-package  : MDEV-38340 (fails only on Launchpad)
+disks.disks : MDEV-38335 (fails only on Debian buildd)
+disks.disks_notembedded : MDEV-38335 (fails only on Debian buildd)
+mroonga/storage.column_datetime_32bit_2038 : MDEV-38286
+mroonga/storage.column_datetime_32bit_before_unix_epoch : MDEV-38286
+mroonga/storage.column_datetime_32bit_max : MDEV-38286
+mroonga/storage.column_datetime_32bit_out_of_range : MDEV-38286
+mroonga/storage.index_multiple_column_unique_date_32bit_equal : MDEV-38286
+mroonga/storage.index_multiple_column_unique_date_order_32bit_asc : MDEV-38286
+mroonga/storage.index_multiple_column_unique_date_order_32bit_desc : MDEV-38286
+mroonga/storage.index_multiple_column_unique_year_32bit_equal : MDEV-38286
+mroonga/storage.index_multiple_column_unique_year_order_32bit_asc : MDEV-38286
+mroonga/storage.index_multiple_column_unique_year_order_32bit_desc : MDEV-38286
+spider.basic_sql : MDEV-33381 (fails only on Launchpad)
+spider.spider_fixes_part : MDEV-33381 (fails only on Launchpad)
+spider/bg.basic_sql : MDEV-33381 (fails only on Launchpad)
+spider/bg.spider_fixes_part : MDEV-33381 (fails only on Launchpad)
+spider/bugfix.mdev_24517 : MDEV-33381 (fails only on Launchpad)
+unit.aes : MDEV-38341 (fails only on Launchpad)

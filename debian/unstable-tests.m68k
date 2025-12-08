@@ -1,3 +1,10 @@
 # The m68k build on Debian runs in a qemu builder and has
 # DEB_BUILD_OPTIONS="nobench nocheck" defined, so *all* tests are skipped
 # intentionally (Bug#972057)
+#
+# When forced to run some tests pass, e.g.:
+#  main.connect                             w2 [ pass ]  17388
+#  main.pool_of_threads                     w1 [ pass ]  110779
+#  binlog.binlog_row_annotate 'row'         w1 [ pass ]  11558
+#  binlog.max_binlog_total_size 'mix'       w1 [ pass ]    449
+# ..but the majority of tests fail

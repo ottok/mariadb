@@ -1,2 +1,6 @@
 main.mysqld--help-aria : MDEV-36334
-unit.conc_connection : CONC-640: unit.conc_connection fails on test_conc21
+# Below tests only run in "big" tests
+disks.disks : MDEV-38335 (fails only on Debian buildd)
+disks.disks_notembedded : MDEV-38335 (fails only on Debian buildd)
+main.vector_innodb : MDEV-38267 (sporadic)
+main.vector2_notembedded : MDEV-38267 (sporadic)

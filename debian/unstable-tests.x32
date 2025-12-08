@@ -1,6 +1,13 @@
-main.mariadb-import : MDEV-36670
-main.vector : MDEV-36670
-main.vector_funcs : MDEV-36670
-main.vector_innodb : MDEV-36670
-main.vector2 : MDEV-36670
-main.vector2_notembedded : MDEV-36670
+main.mariadb-import : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector_funcs : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector_innodb : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector2 : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector2_notembedded : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+# Below tests only run in "big" tests
+mariabackup.vector : MDEV-36670
+mroonga/storage.column_datetime_32bit_2038 : MDEV-38333
+mroonga/storage.column_datetime_32bit_before_unix_epoch : MDEV-38333
+mroonga/storage.column_datetime_32bit_max : MDEV-38333
+# Lots of tests fails, this would need a x32 expert to spend more time on
+# Completed: Failed 38/7051 tests, 99.46% were successful.

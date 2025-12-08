@@ -1,2 +1,3 @@
 main.mysqld--help-aria : MDEV-36334
-unit.conc_connection : CONC-640: unit.conc_connection fails on test_conc21
+# The armhf architecture was removed from Debian in November 2025
+# https://lists.debian.org/debian-devel-announce/2025/11/msg00001.html
