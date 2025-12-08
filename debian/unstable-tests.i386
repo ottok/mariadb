@@ -1,1 +1,1 @@
-main.mysqld--help-aria : MDEV-36334
+main.mysqld--help-aria : MDEV-36668 (continues to fail if only loopback device available)

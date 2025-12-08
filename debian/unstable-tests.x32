@@ -1,6 +1,6 @@
-main.mariadb-import : MDEV-36670
-main.vector : MDEV-36670
-main.vector_funcs : MDEV-36670
-main.vector_innodb : MDEV-36670
-main.vector2 : MDEV-36670
-main.vector2_notembedded : MDEV-36670
+main.mariadb-import : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector_funcs : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector_innodb : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector2 : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+main.vector2_notembedded : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
