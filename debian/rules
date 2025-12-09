@@ -105,7 +105,6 @@ endif
 	    $(CMAKEFLAGS) \
 	    $(if $(filter $(DEB_BUILD_ARCH),$(DEB_HOST_ARCH)),,-DIMPORT_EXECUTABLES=$(CURDIR)/builddir-native/import_executables.cmake) \
 	    -DCOMPILATION_COMMENT="-- Please help get to 10k stars at https://github.com/MariaDB/Server" \
-	    -DMYSQL_SERVER_SUFFIX="-$(DEB_VERSION_REVISION) from $(DEB_VENDOR)" \
 	    -DSYSTEM_TYPE="debian-$(DEB_HOST_GNU_SYSTEM)" \
 	    -DBUILD_CONFIG=mysql_release \
 	    -DCONC_DEFAULT_CHARSET=utf8mb4 \

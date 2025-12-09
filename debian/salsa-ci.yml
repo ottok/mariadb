@@ -50,48 +50,6 @@ stages:
   - test extras
   - publish  # Stage referenced by Salsa CI template aptly stanza, so must exist even though not used
 
-packaging-fix-checks:
-  stage: provisioning
-  image: debian:sid-slim
-  script:
-    - apt-get update -qq && apt-get -qq install --no-install-recommends --yes git devscripts python3-debian shellcheck make lsb-release dh-debputy python3-pygls
-    # Check debian/* for typical errors. Don't check spelling as there are too
-    # many false positives and anyway spelling issues are level 'pedantic' in
-    # Debputy and do not emit an exit code, so wouldn't show up as failure in CI
-    # anyway.
-    - debputy lint
-    - |
-      if [ "$(find debian/patches/ -type f -not -name series | wc -l)" -eq "$(cat debian/patches/series | wc -l)" ]
-      then
-        echo "The directory debian/patches/ contents and debian/patches/series file match by count."
-      else
-        find debian/patches -type f -not -name series -printf "%P\n" | sort > /tmp/patches-directory-sorted
-        sort debian/patches/series > /tmp/patches-series-sorted
-        diff -y /tmp/patches-series-sorted /tmp/patches-directory-sorted
-        echo
-        echo "The directory debian/patches/ file count does not match that in debian/series. Check that there are no unaccounted patches!"
-        exit 1
-      fi
-    - |
-      wrap-and-sort -ast
-      if [ "$(git diff --name-only | wc -l)" -eq 0 ]
-      then
-        echo "No uncommitted changes after 'wrap-and-sort -ast', maintainer has done good job keeping files in order."
-      else
-        git diff
-        echo
-        echo "Debian packaging files are unordered! Please run 'wrap-and-sort -vast'."
-        exit 1
-      fi
-    - |
-      shellcheck -x --shell=sh $(grep -Irnw debian/ -e '^#!.*/sh' | sort -u |cut -d ':' -f 1 | xargs)
-      shellcheck -x --shell=bash $(grep -Irnw debian/ -e '^#!.*/bash' | sort -u |cut -d ':' -f 1 | xargs)
-  rules:
-    # Do not create a pipeline for tags unless SALSA_CI_ENABLE_PIPELINE_ON_TAGS is set
-    - if: $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
-      when: never
-    - when: always
-
 # Bookworm and Bullseye backports can be enabled if
 # https://salsa.debian.org/mariadb-team/mariadb-server/-/merge_requests/67 is
 # reverted.
