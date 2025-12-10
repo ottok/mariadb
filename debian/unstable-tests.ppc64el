@@ -1,3 +1,2 @@
 main.mysqld--help-aria : MDEV-36668 (continues to fail if only loopback device available)
 # Below tests only run in "big" tests
-innodb.log_file_size_online : MDEV-38287 sporadic failure on s390x and ppc64el
