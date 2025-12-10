@@ -50,6 +50,13 @@ else
     NUMJOBS = auto
 endif
 
+# Exception: Launchpad riscv64 runners don't seem able to handle high
+# parallelism during tests and times out/hangs, so try forcing to run on a
+# single worker
+ifeq ($(DEB_HOST_ARCH),riscv64)
+    NUMJOBS = 1
+endif
+
 # RocksDB cannot build on 32-bit platforms
 ifeq (32,$(DEB_HOST_ARCH_BITS))
     CMAKEFLAGS += -DPLUGIN_ROCKSDB=NO
