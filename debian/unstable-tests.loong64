@@ -2,5 +2,5 @@
 disks.disks : MDEV-38335
 disks.disks_notembedded : MDEV-38335
 main.vector_innodb : MDEV-38267
-main.vector2_notembedded : sporadic?
+main.vector2_notembedded : MDEV-38267, sporadic?
 rpl.rpl_skip_replication : MDEV-38334
