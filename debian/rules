@@ -147,7 +147,7 @@ override_dh_auto_build:
 	cd $(BUILDDIR)/mysql-test && \
 	export MTR_PRINT_CORE=detailed && \
 	./mtr --force --testcase-timeout=120 --suite-timeout=540 --retry=3 \
-	      --max-save-core=1 --max-save-datadir=1 \
+	      --max-save-core=1 --max-save-datadir=1 --max-test-fail=0 \
 	      --parallel=$(NUMJOBS) --big-test \
 	      $(MTR_ARGUMENTS_APPEND)
 
