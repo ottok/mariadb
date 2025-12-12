@@ -1,1 +1,3 @@
-# MDEV-8535: auth_socket does not build on hurd-i368
+# MDEV-8535: auth_socket does not build on Hurd
+#  (CMake Error at cmake/plugin.cmake:338 (MESSAGE):
+#    Plugin AUTH_SOCKET cannot be built)
