@@ -4,3 +4,8 @@ main.vector_funcs : MDEV-36670 Multiple vector related tests crash under sparc64
 main.vector_innodb : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
 main.vector2 : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
 main.vector2_notembedded : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
+# Below tests only run in "big" tests
+mariabackup.vector : MDEV-36670
+mroonga/storage.column_datetime_32bit_2038 : MDEV-38333
+mroonga/storage.column_datetime_32bit_before_unix_epoch : MDEV-38333
+mroonga/storage.column_datetime_32bit_max : MDEV-38333

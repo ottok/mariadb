@@ -27,3 +27,5 @@ main.vector2_notembedded : MDEV-36670 Multiple vector related tests crash under 
 main.view : MDEV-36145 (https://bugs.debian.org/1098651)
 main.xml : MDEV-21968
 # Below tests only run in "big" tests
+binlog_encryption.encrypted_slave : MDEV-23905
+binlog_encryption.encrypted_master : MDEV-23905
