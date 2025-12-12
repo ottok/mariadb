@@ -143,14 +143,6 @@ override_dh_auto_build:
 	dpkg-architecture
 	cd $(BUILDDIR) && $(MAKE)
 
-	# Run testsuite
-	cd $(BUILDDIR)/mysql-test && \
-	export MTR_PRINT_CORE=detailed && \
-	./mtr --force --testcase-timeout=120 --suite-timeout=540 --retry=3 \
-	      --max-save-core=1 --max-save-datadir=1 --max-test-fail=0 \
-	      --parallel=$(NUMJOBS) --big-test \
-	      $(MTR_ARGUMENTS_APPEND)
-
 # Note that the 'nocheck' condition inside this section may potentially be
 # completely obsolete, as at least the Launchpad riscv64 builder completely
 # skips this section with message:
@@ -161,6 +153,22 @@ override_dh_auto_test:
 	dh_testdir
 	# Skip running test suite after build if DEB_BUILD_OPTIONS contains 'nocheck'
 	@echo "DEB_BUILD_OPTIONS: $(DEB_BUILD_OPTIONS)"
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	# Skip unstable tests if such are defined for arch
+	[ ! -f debian/unstable-tests.$(DEB_HOST_ARCH) ] || cat debian/unstable-tests.$(DEB_HOST_ARCH) >> $(MTR_SKIP_TEST_LIST)
+	# Show contents of skip list on this architecture
+	@echo "On architecture $(DEB_HOST_ARCH) skip tests:"
+	cat $(MTR_SKIP_TEST_LIST)
+	# Run testsuite
+	cd $(BUILDDIR)/mysql-test && \
+	export MTR_PRINT_CORE=detailed && \
+	./mtr --force --testcase-timeout=120 --suite-timeout=540 --retry=3 --max-test-fail=0 \
+	      --max-save-core=1 --max-save-datadir=1 \
+	      --parallel=$(NUMJOBS) --big-test \
+	      $(MTR_ARGUMENTS_APPEND)
+	# Don't use --mem here as official Debian builders and most Docker systems don't have a large mem device available and
+	# would fail with errors on lack of disk space.
+endif
 
 override_dh_auto_install:
 	@echo "RULES.$@"
