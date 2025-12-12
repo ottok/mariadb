@@ -38,7 +38,7 @@ variables:
 .build-package:
   # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
   # timeout (1h) is often not enough
-  timeout: 3h
+  timeout: 6h
 
 stages:
   - provisioning
