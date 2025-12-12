@@ -11,3 +11,4 @@ MDEV-38046-pcre2-offset.patch
 MDEV-35810-test-case-fixup.patch
 MDEV-36668-main.mysqld--help-aria_test-failure-when-no-MAC-address.patch
 Fix-Spider-test-failures-in-network-less-environments.patch
+WIP-Skip-compiling-socket-auth-both-on-hurd-i386-and-hurd.patch
