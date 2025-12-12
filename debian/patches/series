@@ -12,3 +12,4 @@ MDEV-35810-test-case-fixup.patch
 MDEV-36668-main.mysqld--help-aria_test-failure-when-no-MAC-address.patch
 Fix-Spider-test-failures-in-network-less-environments.patch
 WIP-Skip-compiling-socket-auth-both-on-hurd-i386-and-hurd.patch
+MDEV-38289-innodb.log_corruption_recovery-sporadically-fa.patch
