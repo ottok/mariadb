@@ -10,3 +10,4 @@ MDEV-37411-suppress-new-warning-about-native-aio.patch
 MDEV-38046-pcre2-offset.patch
 MDEV-35810-test-case-fixup.patch
 MDEV-36668-main.mysqld--help-aria_test-failure-when-no-MAC-address.patch
+Fix-Spider-test-failures-in-network-less-environments.patch
