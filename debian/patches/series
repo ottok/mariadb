@@ -9,3 +9,4 @@ Improve-output-from-mariadb-secure-installation-to-be-mor.patch
 MDEV-37411-suppress-new-warning-about-native-aio.patch
 MDEV-38046-pcre2-offset.patch
 include-debian-in-test-merge-alter-result.patch
+WIP-Skip-compiling-socket-auth-both-on-hurd-i386-and-hurd.patch
