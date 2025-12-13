@@ -9,4 +9,5 @@ Improve-output-from-mariadb-secure-installation-to-be-mor.patch
 MDEV-37411-suppress-new-warning-about-native-aio.patch
 MDEV-38046-pcre2-offset.patch
 MDEV-36668-main.mysqld--help-aria_test-failure-when-no-MAC-address.patch
+MDEV-35810-test-log_file_size_online-fixup.patch
 include-debian-in-test-merge-alter-result.patch
