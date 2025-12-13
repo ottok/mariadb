@@ -11,13 +11,13 @@ Build-Depends:
  dpkg-dev (>= 1.22.5),
  bison,
  cmake,
- cracklib-runtime <!nocheck>,
+ cracklib-runtime [!hurd-amd64] <!nocheck>,
  default-jdk,
  gdb <!nocheck>,
  libaio-dev [linux-any],
  libboost-dev,
  libbz2-dev,
- libcrack2-dev (>= 2.9.0),
+ libcrack2-dev (>= 2.9.0) [!hurd-amd64],
  libcrypt-dev,
  libcurl4-openssl-dev | libcurl4-dev,
  libedit-dev,
@@ -986,7 +986,7 @@ Description: GSSAPI authentication plugin for MariaDB client
  This package contains the client parts.
 
 Package: mariadb-plugin-cracklib-password-check
-Architecture: any
+Architecture: kfreebsd-any linux-any hurd-i386
 Depends:
  mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
