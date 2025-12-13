@@ -56,7 +56,7 @@ export MTR_PRINT_CORE=detailed
 # shellcheck disable=SC2086
 eatmydata perl -I. ./mariadb-test-run.pl \
     --force --testcase-timeout=120 --suite-timeout=540 --retry=3 \
-    --verbose-restart --max-save-core=1 --max-save-datadir=1 \
+    --max-test-fail=30 --max-save-core=1 --max-save-datadir=1 \
     --parallel=auto --skip-rpl --suite=main \
     --skip-test-list="$MTR_SKIP_TEST_LIST" \
     --vardir="$WORKDIR/var" --tmpdir="$WORKDIR/tmp" \
