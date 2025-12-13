@@ -55,6 +55,11 @@ ifeq (32,$(DEB_HOST_ARCH_BITS))
     CMAKEFLAGS += -DPLUGIN_ROCKSDB=NO
 endif
 
+# Java is missing on hppa
+ifeq ($(DEB_HOST_ARCH),hppa)
+    CMAKEFLAGS += -DCONNECT_WITH_JDBC=NO
+endif
+
 # Fix compilation errors like "relocation truncated to fit: GPREL16 against symbol `wsrep_debug'"
 ifeq ($(DEB_HOST_ARCH),alpha)
     export DEB_LDFLAGS_MAINT_APPEND += -Wl,--no-relax

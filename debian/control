@@ -12,7 +12,7 @@ Build-Depends:
  bison,
  cmake,
  cracklib-runtime <!nocheck>,
- default-jdk,
+ default-jdk [!hppa],
  gdb <!nocheck>,
  libaio-dev [linux-any],
  libboost-dev,
