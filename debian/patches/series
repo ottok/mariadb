@@ -11,4 +11,5 @@ MDEV-38046-pcre2-offset.patch
 MDEV-36668-main.mysqld--help-aria_test-failure-when-no-MAC-address.patch
 MDEV-35810-test-log_file_size_online-fixup.patch
 MDEV-38289-innodb.log_corruption_recovery-failed-sporadically.patch
+MDEV-37098-Spider-test-failures-in-network-less-environments.patch
 include-debian-in-test-merge-alter-result.patch

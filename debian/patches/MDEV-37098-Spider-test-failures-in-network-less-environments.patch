@@ -1,0 +1,45 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Fri, 12 Dec 2025 08:53:33 +0000
+Subject: MDEV-37098 Fix Spider test failures in network-less environments
+
+When running tests in environments without a network interface (such as
+containers with `--network=none`), Spider could not retrieve a hardware
+address to generate a node ID. This triggered a warning in the server
+log, causing MTR to fail the test due to unexpected output:
+
+    [Warning] mariadbd: Can't get hardware address with error 2
+
+Fix this by logging Spider hardware address errors to server log only.
+This ensures the message is recorded in the server log for debugging but
+does not pollute the client output.
+
+It is questionable if this is a problem at all anyway, as when
+`my_gethwaddr` fails, the code zeroes out the address buffer, resulting
+in a `spider_unique_id` formatted like `-000000000000-PID-`, which is
+valid.
+
+Forwarded: https://github.com/MariaDB/server/pull/4479
+---
+ storage/spider/spd_table.cc | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/storage/spider/spd_table.cc b/storage/spider/spd_table.cc
+index 9194b5d..5fb1530 100644
+--- a/storage/spider/spd_table.cc
++++ b/storage/spider/spd_table.cc
+@@ -6530,8 +6530,13 @@ int spider_db_init(
+
+   if (my_gethwaddr((uchar *) addr))
+   {
+-    my_printf_error(ER_SPIDER_CANT_NUM, ER_SPIDER_CANT_STR1, MYF(ME_WARNING),
+-      "get hardware address with error ", errno);
++    sql_print_information("Spider: Can't get hardware address with error %d", errno);
++    /*
++      If we can't get the hardware address, we zero it out.
++      The spider_unique_id will then look like: -000000000000-PID-
++      This is still unique enough per-process to detect self-loops within
++      the same server instance, which is the primary purpose.
++    */
+     bzero(addr,6);
+   }
+   spider_unique_id.str = spider_unique_id_buf;
