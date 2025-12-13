@@ -1,2 +1,1 @@
-main.mysqld--help-aria : MDEV-36334
 # Below tests only run in "big" tests

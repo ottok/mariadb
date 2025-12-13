@@ -1,4 +1,3 @@
-main.mysqld--help-aria : MDEV-36334
 # Below tests only run in "big" tests
 binlog.flashback-largebinlog : MDEV-32352 crashes server on Debian CI amd64 and arm64 runner
 disks.disks : MDEV-38335 (fails only on Debian buildd)

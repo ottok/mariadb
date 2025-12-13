@@ -8,7 +8,6 @@ main.func_str : MDEV-27954
 main.group_by : MDEV-27954 (passed in MariaDB 11.8.5, sporadic?)
 main.group_by_null : MDEV-27954
 main.long_unique_bugs : MDEV-30928
-main.mysqld--help-aria : MDEV-36334
 main.long_unique_innodb : MDEV-30928
 main.mariadb-import : MDEV-36670 Multiple vector related tests crash under sparc64 and x32
 main.partition : MDEV-27954

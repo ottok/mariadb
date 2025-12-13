@@ -1,3 +1,2 @@
-main.mysqld--help-aria : MDEV-36334
 # The armhf architecture was removed from Debian in November 2025
 # https://lists.debian.org/debian-devel-announce/2025/11/msg00001.html
