@@ -1,0 +1,55 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Sat, 13 Dec 2025 22:43:27 -0800
+Subject: WIP: Make RocksDB compatible with GNU Hurd
+
+(untested)
+
+Fixes build error:
+
+  /build/reproducible-path/mariadb-11.8.5/storage/rocksdb/rocksdb/env/env_posix.cc:46:10: fatal error: Availability.h: No such file or directory
+    46 | #include <Availability.h>
+---
+ storage/rocksdb/build_rocksdb.cmake      | 2 ++
+ storage/rocksdb/rocksdb/CMakeLists.txt   | 2 ++
+ storage/rocksdb/rocksdb/env/env_posix.cc | 2 +-
+ 3 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/storage/rocksdb/build_rocksdb.cmake b/storage/rocksdb/build_rocksdb.cmake
+index 8866f26..5e41cdd 100644
+--- a/storage/rocksdb/build_rocksdb.cmake
++++ b/storage/rocksdb/build_rocksdb.cmake
+@@ -88,6 +88,8 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+   add_definitions(-DOS_MACOSX)
+ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
+   add_definitions(-DOS_LINUX)
++elseif(CMAKE_SYSTEM_NAME MATCHES "GNU")
++  add_definitions(-DOS_GNU_HURD)
+ elseif(CMAKE_SYSTEM_NAME MATCHES "SunOS")
+   add_definitions(-DOS_SOLARIS)
+ elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+diff --git a/storage/rocksdb/rocksdb/CMakeLists.txt b/storage/rocksdb/rocksdb/CMakeLists.txt
+index ec59d44..9d92cae 100644
+--- a/storage/rocksdb/rocksdb/CMakeLists.txt
++++ b/storage/rocksdb/rocksdb/CMakeLists.txt
+@@ -537,6 +537,8 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+   add_definitions(-DOS_MACOSX)
+ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
+   add_definitions(-DOS_LINUX)
++elseif(CMAKE_SYSTEM_NAME MATCHES "GNU")
++  add_definitions(-DOS_GNU_HURD)
+ elseif(CMAKE_SYSTEM_NAME MATCHES "SunOS")
+   add_definitions(-DOS_SOLARIS)
+ elseif(CMAKE_SYSTEM_NAME MATCHES "kFreeBSD")
+diff --git a/storage/rocksdb/rocksdb/env/env_posix.cc b/storage/rocksdb/rocksdb/env/env_posix.cc
+index 609d169..3894b03 100644
+--- a/storage/rocksdb/rocksdb/env/env_posix.cc
++++ b/storage/rocksdb/rocksdb/env/env_posix.cc
+@@ -41,7 +41,7 @@
+ 
+ #include <algorithm>
+ // Get nano time includes
+-#if defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_GNU_KFREEBSD)
++#if defined(OS_LINUX) || defined(OS_GNU_HURD) || defined(OS_FREEBSD) || defined(OS_GNU_KFREEBSD)
+ #elif defined(__MACH__)
+ #include <Availability.h>
+ #include <mach/clock.h>
