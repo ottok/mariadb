@@ -768,21 +768,6 @@ Description: MySQL compatibility links to mariadb-server binaries/scripts
  The package contains links and binaries that are needed by MySQL centric
  tools which also work with MariaDB.
  .
-
-Package: mariadb-server-10.5
-Architecture: any
-Depends:
- mariadb-server (>= 1:11.4),
- ${misc:Depends},
- ${shlibs:Depends},
-Description: MariaDB database server binaries (transitional dummy package)
- MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
- server. SQL (Structured Query Language) is the most popular database query
- language in the world. The main goals of MariaDB are speed, robustness and
- ease of use.
- .
- This package is a transitional dummy package designed to make upgrades
- from previous MariaDB versions seamless.
  This package is also useful for users who are switcing from MySQL to
  MariaDB and want to use continue using the legacy 'mysqld' and other
  binary names instead of the new 'mariadbd' and alike.
