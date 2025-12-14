@@ -84,9 +84,9 @@ Description: MariaDB database development files
  language in the world. The main goals of MariaDB are speed, robustness and
  ease of use.
  .
- This package includes development libraries and header files. To allow sources
+ This package includes development libraries and header files to allow sources
  expecting the MariaDB Connector/C to build. Sources that expect the MySQL
- Client libraries should use files from the libmariadb-dev-compat package.
+ client libraries should use files from the libmariadb-dev-compat package.
 
 Package: libmariadb-dev-compat
 Architecture: any
@@ -187,7 +187,7 @@ Breaks:
 Replaces:
  libmariadb-dev (<< 1:10.4),
  libmysqld-dev,
-Description: MariaDB embedded database, development files
+Description: MariaDB embedded database, development files package
  MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
  server. SQL (Structured Query Language) is the most popular database query
  language in the world. The main goals of MariaDB are speed, robustness and
@@ -202,7 +202,7 @@ Depends:
  mysql-common (>= 5.6.25),
  ${misc:Depends},
 Multi-Arch: foreign
-Description: MariaDB database common config files (/etc/mysql/mariadb.conf.d/)
+Description: MariaDB database common files (/etc/mysql/mariadb.conf.d/)
  MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
  server. SQL (Structured Query Language) is the most popular database query
  language in the world. The main goals of MariaDB are speed, robustness and
@@ -503,9 +503,9 @@ Description: MySQL compatibility links to mariadb-client binaries/scripts
  The package contains links and binaries that are needed by MySQL centric
  tools which also works with MariaDB.
  .
- This package is also useful for users with long background in MySQL
- maintenance who wants to switch to MariaDB but wants to continue using
- familiar 'mysql' command-line tools instead of their MariaDB equivalents.
+ This package is also useful for users who are switcing from MySQL to
+ MariaDB and want to use continue using the legacy 'mysql*' command-line
+ tools instead of the new 'mariadb-*' equivalents.
 
 Package: mariadb-server-core
 Architecture: any
@@ -766,11 +766,8 @@ Conflicts:
 Multi-Arch: foreign
 Description: MySQL compatibility links to mariadb-server binaries/scripts
  The package contains links and binaries that are needed by MySQL centric
- tools which also works with MariaDB.
+ tools which also work with MariaDB.
  .
- This package is also useful for users with long background in MySQL
- maintenance who wants to switch to MariaDB but wants to continue using
- familiar 'mysql' commands instead of their MariaDB equivalents.
 
 Package: mariadb-server-10.5
 Architecture: any
@@ -786,6 +783,9 @@ Description: MariaDB database server binaries (transitional dummy package)
  .
  This package is a transitional dummy package designed to make upgrades
  from previous MariaDB versions seamless.
+ This package is also useful for users who are switcing from MySQL to
+ MariaDB and want to use continue using the legacy 'mysqld' and other
+ binary names instead of the new 'mariadbd' and alike.
 
 Package: mariadb-backup
 Architecture: any
@@ -915,7 +915,7 @@ Description: OQGraph storage engine for MariaDB server
  This package contains the OQGraph plugin for MariaDB server.
 
 Package: mariadb-plugin-mroonga
-Architecture: any-alpha any-amd64 any-arm any-arm64 any-i386 any-ia64 any-mips64el any-mips64r6el any-mipsel any-mipsr6el any-nios2 any-powerpcel any-ppc64el any-sh3 any-sh4
+Architecture: any-alpha any-amd64 any-arm any-arm64 any-i386 any-ia64 any-mips64el any-mips64r6el any-mipsel any-mipsr6el any-nios2 any-powerpcel any-ppc64el any-sh3 any-sh4 any-tilegx
 Depends:
  mariadb-server-core (= ${server:Version}),
  ${misc:Depends},
@@ -993,10 +993,11 @@ Depends:
  ${shlibs:Depends},
 Description: CrackLib Password Validation Plugin for MariaDB server
  This password validation plugin uses cracklib to allow only
- sufficiently secure (as defined by cracklib) user passwords in MariaDB server.
+ sufficiently secure (as defined by cracklib) user passwords in
+ MariaDB server.
  .
- Install and configure this to enforce stronger passwords for MariaDB server
- users.
+ Install and configure this to enforce stronger passwords for
+ MariaDB server users.
 
 Package: mariadb-plugin-hashicorp-key-management
 Architecture: any
