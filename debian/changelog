@@ -1,9 +1,19 @@
-mariadb (1:11.8.5-3) UNRELEASED; urgency=medium
+mariadb (1:11.8.5-3) unstable; urgency=medium
 
-  * Open new changelog entry. This will be replaced by `gbp dch -Rc` and
-    potentially some manual editing at the time of release.
+  * MDEV-23538: Rename mariadb.pc to mariadb-server-embedded.pc to avoid
+    confusion, as well as sync other misc Debian packaging improvements from
+    upstream
+  * Drop transitional dummy package `mariadb-server-10.5`
+  * Make mariadb-test-run logs more informative to make debugging failures
+    in Debian/Ubuntu build and autopkgtest logs easier
+  * Remove override for test 'main.mysql-interactive' and extensively document
+    and ensure all the mariadb-test-run skip lists are current
+  * Add tentative upstream patch to fix main.mysqld--help-aria test failure
+  * Add upstream patch to fix test innodb_log_file_size failures
+  * Add upstream patch to fix test innodb.log_corruption_recovery failures
+  * Add patch to fix Spider test failures in networkless environments
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 08 Dec 2025 08:08:08 -0800
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 15 Dec 2025 20:00:00 -0800
 
 mariadb (1:11.8.5-2) unstable; urgency=medium
 
