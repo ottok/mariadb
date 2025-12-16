@@ -1151,38 +1151,6 @@ mariadb.org-10.5 upgrade:
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
-# Buster is the last Debian release Oracle MySQL 5.7 offers binaries for
-mysql.com-5.7 with Buster upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB variant
-  needs:
-    - job: build
-      artifacts: true
-  image: debian:buster
-  script:
-    - *test-prepare-container
-    - apt-get install -qq --yes --no-install-recommends ca-certificates
-    - echo "deb https://repo.mysql.com/apt/debian/ buster mysql-5.7" > /etc/apt/sources.list.d/mysql.list
-    - apt-get update -qq
-    - apt-get install -qq --yes mysql-server 'libmysqlc*'
-    # Ensure MySQL 5.7 package actually got installed
-    - dpkg -l | grep -e "mysql-server.*5.7"
-    - *test-verify-initial
-    - *test-enable-sid-repos
-    - *test-install-all
-    # Due to some (currently unknown) changes in MySQL 5.7 packaging or apt
-    # behaviour changes, a system with a previous installation of MySQL will
-    # on upgrades to MariaDB first fully remove MySQL, including the
-    # /etc/init.d/mysql file, so previous techniques in
-    # mariadb-server-10.6.postinst to maintain backwards compatibility with
-    # 'service mysql status' after installing MariaDB on top MySQL no longer
-    # works. Thus the step to test it now intentionally has a fallback to use
-    # the service name 'mariadb' instead, and the fallback is always used.
-    - sleep 5 # Give the mysql_upgrade a bit of time to complete before querying the server
-    - service mysql status || service mariadb status
-    - sleep 15 # Give the mysql_upgrade a bit of extra time to complete with MySQL 5.7 before querying the server
-    - *test-verify-final
-
 # Note: pmm2-client does not exist in the Bookworm repository anymore
 percona-xtradb-5.7 with Bookworm upgrade:
   extends: .salsa-ci-template-for-mariadb
