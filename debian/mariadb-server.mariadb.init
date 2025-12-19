@@ -26,10 +26,18 @@ SELF="$(cd "$(dirname "$0")"; pwd -P)/$(basename "$0")"
 
 if [ -f /usr/bin/mariadb-admin ]
 then
-  MYADMIN="/usr/bin/mariadb-admin --defaults-file=/etc/mysql/debian.cnf"
+  DEBIAN_CNF_OPT=""
+  if [ -r /etc/mysql/debian.cnf ]; then
+    DEBIAN_CNF_OPT="--defaults-file=/etc/mysql/debian.cnf"
+  fi
+  MYADMIN="/usr/bin/mariadb-admin $DEBIAN_CNF_OPT"
 elif [ -f /usr/bin/mysqladmin ]
 then
-  MYADMIN="/usr/bin/mysqladmin --defaults-file=/etc/mysql/debian.cnf"
+  DEBIAN_CNF_OPT=""
+  if [ -r /etc/mysql/debian.cnf ]; then
+    DEBIAN_CNF_OPT="--defaults-file=/etc/mysql/debian.cnf"
+  fi
+  MYADMIN="/usr/bin/mysqladmin $DEBIAN_CNF_OPT"
 else
   log_failure_msg "Command mariadb-admin/mysqladmin not found! This SysV init script depends on it."
   exit 1

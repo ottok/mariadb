@@ -22,10 +22,17 @@ then
   . /etc/default/mariadb
 fi
 
-MARIADB="/usr/bin/mariadb --defaults-extra-file=/etc/mysql/debian.cnf"
-MYADMIN="/usr/bin/mariadb-admin --defaults-extra-file=/etc/mysql/debian.cnf"
+# Legacy credentials file from old installations. It is not present on new
+# installs and should not be unconditionally referenced.
+DEBIAN_CNF_OPT=""
+if [ -r /etc/mysql/debian.cnf ]; then
+  DEBIAN_CNF_OPT="--defaults-extra-file=/etc/mysql/debian.cnf"
+fi
+
+MARIADB="/usr/bin/mariadb $DEBIAN_CNF_OPT"
+MYADMIN="/usr/bin/mariadb-admin $DEBIAN_CNF_OPT"
 # Don't run full mariadb-upgrade on every server restart, use --version-check to do it only once
-MYUPGRADE="/usr/bin/mariadb-upgrade --defaults-extra-file=/etc/mysql/debian.cnf --version-check --silent"
+MYUPGRADE="/usr/bin/mariadb-upgrade $DEBIAN_CNF_OPT --version-check --silent"
 MYCHECK_SUBJECT="WARNING: mariadb-check has found corrupt tables"
 MYCHECK_RCPT="${MYCHECK_RCPT:-root}"
 
