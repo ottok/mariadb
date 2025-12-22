@@ -1,0 +1,54 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Mon, 22 Dec 2025 15:05:30 -0800
+Subject: Fix MariaDB build failure on amd64v3
+
+Test patch from https://jira.mariadb.org/browse/MDEV-38398?focusedCommentId=319851&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-319851
+
+Confirmed to work on Launchpad builds. This will most likely be fixed in next
+upstream release MariaDB 11.8.6 by upstream in a more elegant way, and this
+patch should be kept in Debian (and Ubuntu) only temporairly.
+
+Forwarded: https://jira.mariadb.org/browse/MDEV-38398
+---
+ strings/ctype.c | 20 ++++++++++++++++----
+ 1 file changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/strings/ctype.c b/strings/ctype.c
+index 629514e..60f154f 100644
+--- a/strings/ctype.c
++++ b/strings/ctype.c
+@@ -17,6 +17,7 @@
+ #include "strings_def.h"
+ #include <m_ctype.h>
+ #include <my_xml.h>
++#include <stdint.h>
+ 
+ /*
+ 
+@@ -1251,11 +1252,22 @@ my_convert(char *to, uint32 to_length, CHARSET_INFO *to_cs,
+     gives about 10% performance improvement comparing
+     to byte-by-byte loop.
+   */
+-  for ( ; length >= 4; length-= 4, from+= 4, to+= 4)
+   {
+-    if ((*(uint32*)from) & 0x80808080)
+-      break;
+-    *((uint32*) to)= *((const uint32*) from);
++    const char *from2= from;
++    for ( ; ((uintptr_t)from & 3) != 0
++            && ((*from & 0x80) == 0)
++            && length >= 4;
++         length--, from++);
++    if (((uintptr_t)from & 3) == 0)
++    {
++      for ( ; length >= 4; length-= 4, from+= 4)
++      {
++        if ((*(uint32*)from) & 0x80808080)
++          break;
++      }
++    }
++    memcpy(to, from2, length2 - length);
++    to+= (length2 - length);
+   }
+ #endif /* __i386__ */
+ 

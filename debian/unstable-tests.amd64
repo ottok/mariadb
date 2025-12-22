@@ -1,3 +1,6 @@
+# Failed on Launchpad amd64v3 builds
+main.gis : MDEV-38398
+main.ctype_utf16le : MDEV-38398
 # Below tests only run in "big" tests
 disks.disks : MDEV-38335 (fails only on Debian buildd)
 disks.disks_notembedded : MDEV-38335 (fails only on Debian buildd)
