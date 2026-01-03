@@ -95,8 +95,6 @@ packaging-fix-checks:
 # Bookworm and Bullseye backports can be enabled if
 # https://salsa.debian.org/mariadb-team/mariadb-server/-/merge_requests/67 is
 # reverted.
-# Buster only has libfmt 6.1 but 7.0 is required, so backport build for Buster
-# is not possible unless somebody packages libfmt7-dev for Buster.
 
 autopkgtest:
   extends: .test-autopkgtest
@@ -707,34 +705,6 @@ mariadb-10.5 and Bullseye upgrade:
     # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - apt-get purge --yes mariadb*10.?
-    - *test-verify-final
-
-mariadb-10.3 and Buster upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB and distro
-  image: debian:buster
-  script:
-    - *test-prepare-container
-    # Install everything MariaDB currently in Debian Buster
-    - apt-get install -qq --yes 'default-mysql*' 'mariadb-*' 'libmariadb*'
-    # Verify installation of MariaDB from Buster
-    - dpkg -l | grep -e "mariadb-server.*10\.3"
-    - *test-verify-initial
-    - *test-enable-sid-repos
-    # Ensure mariadbd will not crash on next shutdown for any reason
-    - service mysql restart # in 10.3 service name is still 'mysql'
-    - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate mariadb-server
-    - apt-get install -qq --yes mariadb-server
-    # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
-    - service mysql status
-    # mariadb-10.3 in Buster ships a /etc/init.d/mysql and it continues to exist
-    # after upgrade, and is removed only on purge
-    - apt-get purge --yes mariadb*10.?
-    - service mariadb status
-    # Give the mariadb-upgrade plenty of time to complete, otherwise next commands
-    # fail on non-existing mariadb.sys user
-    - sleep 15
     - *test-verify-final
 
 mariadb-10.3 and Ubuntu Focal upgrade:
