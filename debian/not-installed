@@ -42,9 +42,9 @@ usr/share/mariadb/Mongo2.jar
 usr/share/mariadb/Mongo3.jar
 usr/share/mariadb/mysql.server # Debian packaging uses mariadb-server.mariadb.init
 usr/share/mariadb/mysqld_multi.server
-usr/share/mariadb/policy/apparmor/README # In MariaDB we don't want to use AppArmor at the moment
-usr/share/mariadb/policy/apparmor/usr.sbin.mysqld # In MariaDB we don't want to use AppArmor at the moment
-usr/share/mariadb/policy/apparmor/usr.sbin.mysqld.local # In MariaDB we don't want to use AppArmor at the moment
+usr/share/mariadb/policy/apparmor/README # Use Debian-specific AppArmor instead of upstream's
+usr/share/mariadb/policy/apparmor/usr.sbin.mysqld # Use Debian-specific AppArmor instead of upstream's
+usr/share/mariadb/policy/apparmor/usr.sbin.mysqld.local # Use Debian-specific AppArmor instead of upstream's
 usr/share/mariadb/policy/selinux/mariadb-server.fc # In MariaDB we don't want to use SELinux at the moment
 usr/share/mariadb/policy/selinux/mariadb-server.te # In MariaDB we don't want to use SELinux at the moment
 usr/share/mariadb/policy/selinux/mariadb.te # In MariaDB we don't want to use SELinux at the moment

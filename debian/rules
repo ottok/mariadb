@@ -179,9 +179,6 @@ override_dh_auto_install:
 	mkdir -p $(TMP)/usr/share/doc/mariadb-server
 	nm --defined-only $(BUILDDIR)/sql/mariadbd | LC_ALL=C sort | gzip -n -9 > $(TMP)/usr/share/doc/mariadb-server/mariadbd.sym.gz
 
-	# Rename and install AppArmor profile
-	install -D -m 644 debian/apparmor-profile $(TMP)/etc/apparmor.d/usr.sbin.mariadbd
-
 	# Rename mariadb.pc as mariadb-embedded-server.pc as to be more descriptive
 	mv -v $(TMP)/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig/mariadb.pc $(TMP)/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig/mariadb-embedded-server.pc
 	# Keep libmariadbd.pc around for backwards compatibility as all Debian users
@@ -211,6 +208,9 @@ override_dh_auto_install:
 	# it manually to keep total artifact size under 250 MB
 	strip --strip-debug --remove-section=.comment --remove-section=.note --enable-deterministic-archives -R .gnu.lto_\* \
 		-R .gnu.debuglto_\* -N __gnu_lto_slim -N __gnu_lto_v1 debian/tmp/usr/lib/*/libmariadbd.a
+
+	# Install apparmor profile inside override_dh_install as recommended in dh_apparmor(1)
+	dh_apparmor -pmariadb-server --profile-name=mariadbd
 
 # Define name used for service, and install mariadb.service on Linux only
 override_dh_installsystemd:

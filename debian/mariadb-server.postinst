@@ -258,7 +258,7 @@ EOF
     # This allows upgrade from old versions (that have an apparmor profile
     # on by default) to work both to disable a default profile, and to keep
     # any profile installed and maintained by users themselves.
-    profile="/etc/apparmor.d/usr.sbin.mariadbd"
+    profile="/etc/apparmor.d/mariadbd"
     if [ -f "$profile" ] && aa-status --enabled 2> /dev/null
     then
       if grep -q /usr/sbin/mariadbd "$profile" 2> /dev/null

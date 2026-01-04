@@ -5,7 +5,7 @@ debian/additions/echo_stderr usr/share/mariadb
 debian/additions/mariadb.conf.d/50-mysqld_safe.cnf etc/mysql/mariadb.conf.d
 debian/additions/mariadb.conf.d/50-server.cnf etc/mysql/mariadb.conf.d
 debian/additions/source_mariadb.py usr/share/apport/package-hooks
-etc/apparmor.d/usr.sbin.mariadbd
+debian/apparmor/mariadbd etc/apparmor.d
 etc/logrotate.d/mariadb
 etc/security/user_map.conf
 usr/lib/*/security/pam_user_map.so

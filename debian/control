@@ -5,6 +5,7 @@ Uploaders:
  Otto Kekäläinen <otto@debian.org>,
 Build-Depends:
  debhelper-compat (= 13),
+ dh-apparmor,
  dh-exec,
  dh-package-notes,
  dpkg-dev (>= 1.22.5),

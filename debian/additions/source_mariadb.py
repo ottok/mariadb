@@ -36,7 +36,7 @@ def add_info(report):
         for line in read_file('/var/log/mysql/error.log').split('\n'):
             report[key] += line + '\n'
     attach_mac_events(report, '/usr/sbin/mariadbd')
-    attach_file(report,'/etc/apparmor.d/usr.sbin.mariadbd')
+    attach_file(report,'/etc/apparmor.d/mariadbd')
     _add_my_conf_files(report, '/etc/mysql/mariadb.cnf')
     for f in os.listdir('/etc/mysql/conf.d'):
         _add_my_conf_files(report, os.path.join('/etc/mysql/conf.d', f))
