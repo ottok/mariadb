@@ -604,7 +604,6 @@ Recommends:
  mariadb-plugin-provider-snappy,
  pv,
 Pre-Depends:
- adduser (>= 3.40),
  debconf,
  mariadb-common (>= ${source:Version}),
  procps,
@@ -622,6 +621,7 @@ Depends:
  psmisc,
  rsync,
  socat,
+ systemd-sysusers | systemd-standalone-sysusers | systemd,
  ${misc:Depends},
  ${shlibs:Depends},
 Conflicts:
