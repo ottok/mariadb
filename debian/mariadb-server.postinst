@@ -66,6 +66,14 @@ case "$1" in
     mariadb_cfgdir=/etc/mysql
     mariadb_upgradedir=/var/lib/mysql-upgrade
 
+    # Ensure mysql user/group exists before any ownership fixes or
+    # mariadb-install-db runs. Note that systemd-sysusers operates on
+    # /etc/passwd and /etc/group directly.
+    if ! getent passwd mysql >/dev/null 2>&1 || ! getent group mysql >/dev/null 2>&1
+    then
+      systemd-sysusers ${DPKG_ROOT:+--root="$DPKG_ROOT"} mariadb.conf
+    fi
+
     # If the following symlink exists, it is a preserved copy the old data dir
     # created by the preinst script during a upgrade that would have otherwise
     # been replaced by an empty mysql dir.  This should restore it.
@@ -150,11 +158,13 @@ EOF
     # The mariadb_statedir must not be writable by the mysql user under any
     # circumstances as it contains scripts that are executed by root.
     set +e
-    find $mariadb_statedir ! -uid 0 -print0 -or ! -gid 0 -print0 | xargs -0 -r sudo chown 0:0
-    find $mariadb_datadir ! -uid "$(id -u mysql)" -print0 | xargs -0 -r chown mysql
-    chown mysql:adm $mariadb_logdir
+    find "$mariadb_statedir" \( ! -uid 0 -o ! -gid 0 \) -print0 | xargs -0 -r chown 0:0
+    find "$mariadb_datadir" ! -uid "$(id -u mysql)" -print0 | xargs -0 -r chown mysql
+    find "$mariadb_datadir" -follow -not -group mysql -print0 2>/dev/null \
+      | xargs -0 --no-run-if-empty chgrp mysql
+    chown mysql:adm "$mariadb_logdir"
     find "$mariadb_logdir" -print0 | xargs -0 -r chown mysql:adm
-    chmod 2750 $mariadb_logdir
+    chmod 2750 "$mariadb_logdir"
     set -e
 
     ## Set the correct filesystem ownership for the PAM v2 plugin
