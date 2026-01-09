@@ -23,13 +23,14 @@ Template: mariadb-server/nis_warning
 Type: note
 #flag:translate!:3,5
 _Description: Important note for NIS/YP users
- Using MariaDB under NIS/YP requires a mysql user account to be added on
- the local system with:
+ systemd-sysusers creates local system accounts by editing /etc/passwd and
+ /etc/group directly (it does not create users in NIS/LDAP)
  .
-  adduser --system --group --home /var/lib/mysql mysql
+ On NIS/YP setups this package may create a local 'mysql' user/group during
+ installation/upgrade. Please verify your nsswitch.conf setup and ensure this
+ matches your local policy.
  .
- You should also check the permissions and ownership of the
- /var/lib/mysql directory:
+ You should also check the permissions and ownership of /var/lib/mysql:
  .
   /var/lib/mysql: drwxr-xr-x   mysql    mysql
 
