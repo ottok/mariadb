@@ -14,3 +14,4 @@ MDEV-38289-innodb.log_corruption_recovery-failed-sporadically.patch
 MDEV-37098-Spider-test-failures-in-network-less-environments.patch
 include-debian-in-test-merge-alter-result.patch
 MDEV-38398-amd64v3-compatibility.patch
+sysusers-lock-mysql-account.patch

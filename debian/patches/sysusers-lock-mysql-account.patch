@@ -1,0 +1,17 @@
+From: Aquila Macedo <aquilamacedo@riseup.net>
+Date: Thu, 8 Jan 2026 21:34:26 -0300
+Subject: sysusers.d: lock mysql user and keep Debian home/shell
+
+Use u! and set HOME=/nonexistent and shell=/bin/false for the mysql
+user.
+---
+ support-files/sysusers.conf.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/support-files/sysusers.conf.in b/support-files/sysusers.conf.in
+index a975b29..8de384f 100644
+--- a/support-files/sysusers.conf.in
++++ b/support-files/sysusers.conf.in
+@@ -1 +1 @@
+-u @MYSQLD_USER@ - "MariaDB" @MYSQL_DATADIR@
++u! @MYSQLD_USER@ - "MariaDB Server" /nonexistent /bin/false
