@@ -27,7 +27,3 @@ shared-library-lacks-prerequisites [usr/lib/mysql/plugin/test_sql_service.so]
 spare-manual-page [usr/share/man/man1/mysql-test-run.pl.1.gz]
 # Text script, should be moved to another path
 no-manual-page [usr/bin/test-connect-t]
-# This test plugin does not link against libc at all, and thus the linker will
-# automatically omit extra libc hardening flags from it, resulting in false
-# positive Lintian error
-library-not-linked-against-libc [usr/lib/mysql/plugin/test_versioning.so]

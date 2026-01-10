@@ -15,5 +15,3 @@ executable-in-usr-lib [usr/lib/mysql/plugin/auth_pam_tool_dir/auth_pam_tool]
 # Intentional to handle upgrades from versioned package names to versionless
 # (e.g. mariadb-server-10.5 -> mariadb-server)
 uses-dpkg-database-directly [postinst]
-# New issue in summer of 2024, perhaps due to dependency update and should be investigated
-library-not-linked-against-libc [usr/lib/mysql/plugin/metadata_lock_info.so]
