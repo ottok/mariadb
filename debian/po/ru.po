@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2016-05-04 18:56+0300\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Yuri Kozlov <yuray@komyakino.ru>\n"
 "Language-Team: Russian <debian-l10n-russian@lists.debian.org>\n"
 "Language: ru\n"
@@ -17,8 +17,8 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Lokalize 1.5\n"
-"Plural-Forms:  nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
-"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"Plural-Forms:  nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
 #. Type: note
 #. Description
@@ -68,18 +68,29 @@ msgstr "Важное замечание для пользователей NIS/YP
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"Использование MariaDB в NIS/YP требует добавления учётной записи mysql в "
-"локальную систему с:"
+"systemd-sysusers создает локальные системные учетные записи путем прямого "
+"редактирования /etc/passwd и /etc/group (он не создает пользователей в NIS/"
+"LDAP)"
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"В конфигурациях NIS/YP этот пакет может создать локального пользователя/"
+"группу 'mysql' во время установки/обновления. Проверьте конфигурацию "
+"nsswitch.conf и убедитесь, что она соответствует вашей локальной политике."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr "Также проверьте права доступа и владельца каталога /var/lib/mysql:"
 
 #. Type: boolean
@@ -108,3 +119,10 @@ msgstr ""
 "Если вы удаляете пакет MariaDB для установки более новой версии MariaDB, или "
 "есть другие пакеты mariadb-server, использующие этот каталог, то данные "
 "лучше сохранить."
+
+#~ msgid ""
+#~ "Using MariaDB under NIS/YP requires a mysql user account to be added on "
+#~ "the local system with:"
+#~ msgstr ""
+#~ "Использование MariaDB в NIS/YP требует добавления учётной записи mysql в "
+#~ "локальную систему с:"

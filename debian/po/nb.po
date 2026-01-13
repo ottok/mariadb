@@ -7,11 +7,11 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2007-02-18 12:13+0100\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Bjørn Steensrud <bjornst@powertech.no>\n"
 "Language-Team: Norwegian Bokmål <i18n-nb@lister.ping.uio.no>\n"
-"Language: \n"
+"Language: nb\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -42,8 +42,8 @@ msgid ""
 "Therefore the previous data directory will be renamed to /var/lib/mysql-* "
 "and a new data directory will be initialized at /var/lib/mysql."
 msgstr ""
-"Derfor vil den tidligere datakatalogen bli omdøpt til /var/lib/mysql-* "
-"og en ny datakatalog vil bli initialisert i /var/lib/mysql."
+"Derfor vil den tidligere datakatalogen bli omdøpt til /var/lib/mysql-* og en "
+"ny datakatalog vil bli initialisert i /var/lib/mysql."
 
 #. Type: note
 #. Description
@@ -51,7 +51,8 @@ msgstr ""
 msgid ""
 "Please manually export/import your data (e.g. with mysqldump) if needed."
 msgstr ""
-"Eksporter/importer dataene dine manuelt (f.eks. med mysqldump) hvis nødvendig."
+"Eksporter/importer dataene dine manuelt (f.eks. med mysqldump) hvis "
+"nødvendig."
 
 #. Type: note
 #. Description
@@ -63,18 +64,28 @@ msgstr "Viktig merknad for NIS/YP-brukere"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"Bruk av MariaDB under NIS/YP krever at en mysql-brukerkonto legges til på det "
-"lokale systemet med:"
+"Lokale systemkontoer opprettes av systemd-sysusers som redigerer /etc/"
+"passwd- og /etc/group-filene direkte, uten å bruke NIS/LDAP."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"I NIS/YP-oppsett kan denne pakken opprette en lokal 'mysql'-bruker/gruppe "
+"under installasjon/oppgradering. Verifiser nsswitch.conf-oppsettet ditt og "
+"sørg for at det samsvarer med din lokale policy."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr ""
 "Du bør også sjekke tillatelser og eierskap for katalogen /var/lib/mysql:"
 
@@ -105,3 +116,4 @@ msgstr ""
 "Hvis du fjerner MariaDB-pakken for å senere installere en nyere versjon, "
 "eller hvis en annen mariadb-server-pakke allerede bruker den, bør dataene "
 "beholdes."
+

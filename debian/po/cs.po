@@ -15,8 +15,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2020-10-18 17:13+0200\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Miroslav Kure <kurem@debian.cz>\n"
 "Language-Team: Czech <debian-l10n-czech@lists.debian.org>\n"
 "Language: cs\n"
@@ -71,18 +71,28 @@ msgstr "Důležitá poznámka pro uživatele NIS/YP"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"Používání MariaDB pod NIS/YP vyžaduje, aby byl účet mysql uživatele přidán "
-"na lokálním systému příkazem:"
+"Místní systémové účty jsou vytvářeny systemd-sysusers, který upravuje "
+"soubory /etc/passwd a /etc/group přímo, bez použití NIS/LDAP."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"V nastaveních NIS/YP může tento balíček vytvořit místního uživatele/skupinu "
+"'mysql' během instalace/aktualizace. Ověřte prosím nastavení nsswitch.conf a "
+"ujistěte se, že odpovídá vaší místní politice."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr ""
 "Také byste měli zkontrolovat vlastníka a oprávnění adresáře /var/lib/mysql:"
 
@@ -113,3 +123,4 @@ msgstr ""
 "Jestliže odstraňujete balík MariaDB za účelem instalace novější verze "
 "MariaDB, nebo pokud tato data souběžně využívá jiný balík mariadb-server, "
 "měli byste data ponechat."
+

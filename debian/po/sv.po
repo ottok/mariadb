@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2017-03-23 09:20+0100\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Martin Bagge / brother <brother@bsnet.se>\n"
 "Language-Team: Swedish <debian-l10n-swedish@lists.debian.org>\n"
 "Language: sv\n"
@@ -65,18 +65,28 @@ msgstr "Viktig information för NIS/YP-användare"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"För att kunna använda MariaDB under NIS/YP måste ett användarkonto för mysql "
-"läggas till i systemet."
+"Lokala systemkonton skapas av systemd-sysusers som redigerar filerna /etc/"
+"passwd och /etc/group direkt, utan att använda NIS/LDAP."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"I NIS/YP-inställningar kan detta paket skapa en lokal 'mysql'-användare/"
+"grupp under installation/uppgradering. Verifiera din nsswitch.conf-"
+"inställning och se till att den matchar din lokala policy."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr ""
 "Du bör också kontrollera rättigheterna och ägaren av katalogen /var/lib/"
 "mysql."
@@ -108,3 +118,10 @@ msgstr ""
 "Om avinstallationen av MariaDB-paketet görs för att senare kunna installera "
 "en nyare version eller om en annan mariadb-server redan använder filerna ska "
 "de inte raderas."
+
+#~ msgid ""
+#~ "Using MariaDB under NIS/YP requires a mysql user account to be added on "
+#~ "the local system with:"
+#~ msgstr ""
+#~ "För att kunna använda MariaDB under NIS/YP måste ett användarkonto för "
+#~ "mysql läggas till i systemet."

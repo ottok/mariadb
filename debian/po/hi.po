@@ -6,8 +6,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2025-02-22 12:00+0530\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Debian Hindi Team <debian-l10n-hindi@lists.debian.org>\n"
 "Language-Team: Hindi <debian-l10n-hindi@lists.debian.org>\n"
 "Language: hi\n"
@@ -30,9 +30,9 @@ msgid ""
 "indicates a database binary format version that cannot automatically be "
 "upgraded (or downgraded)."
 msgstr ""
-"इस सिस्टम पर /var/lib/mysql/debian-*.flag नाम की फ़ाइल मौजूद है। संख्या एक "
-"डेटाबेस बाइनरी प्रारूप संस्करण को इंगित करती है जिसे स्वचालित रूप से अपग्रेड "
-"(या डाउनग्रेड) नहीं किया जा सकता है।"
+"इस सिस्टम पर /var/lib/mysql/debian-*.flag नाम की फ़ाइल मौजूद है। संख्या एक डेटाबेस "
+"बाइनरी प्रारूप संस्करण को इंगित करती है जिसे स्वचालित रूप से अपग्रेड (या डाउनग्रेड) नहीं "
+"किया जा सकता है।"
 
 #. Type: note
 #. Description
@@ -41,8 +41,8 @@ msgid ""
 "Therefore the previous data directory will be renamed to /var/lib/mysql-* "
 "and a new data directory will be initialized at /var/lib/mysql."
 msgstr ""
-"इसलिए पिछली डेटा डायरेक्टरी का नाम बदलकर /var/lib/mysql-* कर दिया जाएगा "
-"और /var/lib/mysql पर एक नई डेटा डायरेक्टरी को आरंभ किया जाएगा।"
+"इसलिए पिछली डेटा डायरेक्टरी का नाम बदलकर /var/lib/mysql-* कर दिया जाएगा और /var/"
+"lib/mysql पर एक नई डेटा डायरेक्टरी को आरंभ किया जाएगा।"
 
 #. Type: note
 #. Description
@@ -62,18 +62,28 @@ msgstr "NIS/YP उपयोगकर्ताओं के लिए महत�
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"NIS/YP के तहत MariaDB का उपयोग करने के लिए स्थानीय सिस्टम पर एक mysql उपयोगकर्ता खाता "
-"जोड़ने की आवश्यकता है:"
+"स्थानीय सिस्टम खाते systemd-sysusers द्वारा बनाए जाते हैं जो /etc/"
+"passwd और /etc/group फ़ाइलों को सीधे संपादित करता है, NIS/LDAP का उपयोग किए बिना।"
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"NIS/YP सेटअप में यह पैकेज इंस्टॉलेशन/अपग्रेड के दौरान एक स्थानीय 'mysql' उपयोगकर्ता/समूह "
+"बना सकता है। कृपया अपनी nsswitch.conf सेटअप की जांच करें और सुनिश्चित करें कि यह आपकी "
+"स्थानीय नीति से मेल खाता है।"
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr ""
 "आपको /var/lib/mysql डायरेक्टरी की अनुमतियों और स्वामित्व की भी जांच करनी चाहिए:"
 
@@ -89,8 +99,7 @@ msgstr "सभी MariaDB डेटाबेस हटाएं?"
 msgid ""
 "The /var/lib/mysql directory which contains the MariaDB databases is about "
 "to be removed."
-msgstr ""
-"/var/lib/mysql डायरेक्टरी जिसमें MariaDB डेटाबेस हैं, हटाई जाने वाली है।"
+msgstr "/var/lib/mysql डायरेक्टरी जिसमें MariaDB डेटाबेस हैं, हटाई जाने वाली है।"
 
 #. Type: boolean
 #. Description
@@ -100,6 +109,7 @@ msgid ""
 "recent version or if a different mariadb-server package is already using it, "
 "the data should be kept."
 msgstr ""
-"यदि आप बाद में एक नया संस्करण स्थापित करने के लिए MariaDB पैकेज को हटा रहे हैं या "
-"यदि कोई अन्य mariadb-server पैकेज पहले से ही इसका उपयोग कर रहा है, तो डेटा को "
-"रखा जाना चाहिए।"
+"यदि आप बाद में एक नया संस्करण स्थापित करने के लिए MariaDB पैकेज को हटा रहे हैं या यदि "
+"कोई अन्य mariadb-server पैकेज पहले से ही इसका उपयोग कर रहा है, तो डेटा को रखा जाना "
+"चाहिए।"
+

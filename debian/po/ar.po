@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2007-05-01 13:04+0300\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Ossama M. Khayat <okhayat@yahoo.com>\n"
 "Language-Team: Arabic <support@arabeyes.org>\n"
 "Language: ar\n"
@@ -17,13 +17,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: KBabel 1.11.4\n"
 "Plural-Forms: nplurals=6; plural=n==1 ? 0 : n==0 ? 1 : n==2 ? 2: n%100>=3 && "
-"n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5\n"
-": n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5\n"
-": n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5\n"
-": n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5\n"
-": n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5\n"
-": n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5\n"
-": n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5\n"
+"n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
 
 #. Type: note
 #. Description
@@ -39,9 +33,8 @@ msgid ""
 "indicates a database binary format version that cannot automatically be "
 "upgraded (or downgraded)."
 msgstr ""
-"يوجد ملف باسم /var/lib/mysql/debian-*.flag على هذا النظام. يشير الرقم "
-"إلى إصدار تنسيق قاعدة البيانات الثنائي الذي لا يمكن ترقيته (أو تخفيضه) "
-"تلقائيًا."
+"يوجد ملف باسم /var/lib/mysql/debian-*.flag على هذا النظام. يشير الرقم إلى "
+"إصدار تنسيق قاعدة البيانات الثنائي الذي لا يمكن ترقيته (أو تخفيضه) تلقائيًا."
 
 #. Type: note
 #. Description
@@ -50,8 +43,8 @@ msgid ""
 "Therefore the previous data directory will be renamed to /var/lib/mysql-* "
 "and a new data directory will be initialized at /var/lib/mysql."
 msgstr ""
-"لذلك سيتم إعادة تسمية دليل البيانات السابق إلى /var/lib/mysql-* "
-"وسيتم تهيئة دليل بيانات جديد في /var/lib/mysql."
+"لذلك سيتم إعادة تسمية دليل البيانات السابق إلى /var/lib/mysql-* وسيتم تهيئة "
+"دليل بيانات جديد في /var/lib/mysql."
 
 #. Type: note
 #. Description
@@ -71,19 +64,29 @@ msgstr "ملاحظة هامة لمستخدمي NIS/YP"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"يتطلب استخدام MariaDB تحت NIS/YP إضافة حساب مستخدم mysql على النظام "
-"المحلي باستخدام:"
+"يتم إنشاء حسابات النظام المحلية بواسطة systemd-sysusers الذي يحرر ملفات /etc/"
+"passwd و/etc/group مباشرة، دون استخدام NIS/LDAP."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
-msgstr "عليك أيضاً التحقق من الصلاحيات والملكية للدليل /var/lib/mysql:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"في إعدادات NIS/YP، قد ينشئ هذا الحزمة مستخدم/مجموعة 'mysql' محلية أثناء "
+"التثبيت/الترقية. يرجى التحقق من إعداد nsswitch.conf الخاص بك والتأكد من أنه "
+"يتوافق مع سياساتك المحلية."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
+msgstr "يجب عليك أيضًا التحقق من أذونات وملكية /var/lib/mysql:"
 
 #. Type: boolean
 #. Description

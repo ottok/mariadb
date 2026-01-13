@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2017-03-18 13:32+0700\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Trần Ngọc Quân <vnwildman@gmail.com>\n"
 "Language-Team: Vietnamese <debian-l10n-vietnamese@lists.debian.org>\n"
 "Language: vi\n"
@@ -65,18 +65,28 @@ msgstr "Chú ý quan trọng cho người dùng NIS/YP"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"Dùng MariaDB dưới NIS/YP cần một tài khoản người dùng được thêm vào một hệ "
-"thống nội bộ với:"
+"Các tài khoản hệ thống cục bộ được tạo bởi systemd-sysusers, nó chỉnh sửa "
+"trực tiếp các tập tin /etc/passwd và /etc/group, không sử dụng NIS/LDAP."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"Trong các cài đặt NIS/YP, gói này có thể tạo một nhóm/người dùng 'mysql' cục "
+"bộ trong quá trình cài đặt/nâng cấp. Vui lòng kiểm tra cài đặt nsswitch.conf "
+"của bạn và đảm bảo điều này phù hợp với chính sách cục bộ của bạn."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr ""
 "Bạn cũng nên kiểm tra phân quyền và chủ sở hữu của thư mục /var/lib/mysql:"
 
@@ -107,3 +117,10 @@ msgstr ""
 "Nếu bạn gỡ bỏ gói cốt để mà sau này cài đặt gói máy phục vụ phiên bản gần "
 "đây hoặc là một gói mariadb-server khác đang được dùng, dữ liệu nên được giữ "
 "lại."
+
+#~ msgid ""
+#~ "Using MariaDB under NIS/YP requires a mysql user account to be added on "
+#~ "the local system with:"
+#~ msgstr ""
+#~ "Dùng MariaDB dưới NIS/YP cần một tài khoản người dùng được thêm vào một "
+#~ "hệ thống nội bộ với:"

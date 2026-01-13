@@ -23,8 +23,8 @@ Template: mariadb-server/nis_warning
 Type: note
 #flag:translate!:5
 _Description: Important note for NIS/YP users
- systemd-sysusers creates local system accounts by editing /etc/passwd and
- /etc/group directly (it does not create users in NIS/LDAP)
+ Local system accounts are created by systemd-sysusers which edits the
+ /etc/passwd and /etc/group files directly, without using NIS/LDAP.
  .
  On NIS/YP setups this package may create a local 'mysql' user/group during
  installation/upgrade. Please verify your nsswitch.conf setup and ensure this

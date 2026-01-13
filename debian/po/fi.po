@@ -6,8 +6,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2017-03-15 22:36+0200\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: antti.jarvinen@katiska.org\n"
 "Language-Team: \n"
 "Language: fi\n"
@@ -64,18 +64,28 @@ msgstr "Merkittävä huomio NIS/YP -käyttäjille"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"MariaDB:n käyttäminen NIS/YP:n kanssa edellyttää, että järjestelmään luodaan "
-"käyttäjätunnus mysql:"
+"Paikalliset järjestelmätunnukset luodaan systemd-sysusers-ohjelmalla, joka "
+"muokkaa /etc/passwd- ja /etc/group-tiedostoja suoraan käyttämättä NIS/LDAP:ia."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"NIS/YP-asetuksissa tämä paketti voi luoda paikallisen 'mysql'-käyttäjän/"
+"ryhmän asennuksen/päivityksen aikana. Tarkista nsswitch.conf-asetuksesi ja "
+"varmista, että se vastaa paikallista käytäntöäsi."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr "Tarkista myös hakemiston /var/lib/mysql omistaja ja oikeudet:"
 
 #. Type: boolean
@@ -103,3 +113,4 @@ msgid ""
 msgstr ""
 "Jos poistat MariaDB-paketin asentaaksesi uudemman version tai jos joku muu "
 "mariadb-server -paketti jo käyttää tietoja, tiedot tulisi säästää. "
+

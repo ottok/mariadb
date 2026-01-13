@@ -6,8 +6,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2023-01-30 10:35+0100\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Pablo <parodper@gmail.com>\n"
 "Language-Team: Galician <proxecto@trasno.net>\n"
 "Language: gl\n"
@@ -64,19 +64,29 @@ msgstr "Aviso importante se usa NIS/YP"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"Para usar MariaDB con NIS/YP precisa engadir a conta de usuario mysql ao "
-"sistema local facendo:"
+"As contas de sistema local créanse mediante systemd-sysusers, que edita os "
+"ficheiros /etc/passwd e /etc/group directamente, sen usar NIS/LDAP."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
-msgstr "Tamén comprobe os permisos e propietario do directorio /var/lib/mysql:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"En configuracións NIS/YP, este paquete pode crear un usuario/grupo 'mysql' "
+"local durante a instalación/actualización. Verifique a configuración de "
+"nsswitch.conf e asegúrese de que coincide coa súa política local."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
+msgstr "Tamén comprobe os permisos e propietario de /var/lib/mysql:"
 
 #. Type: boolean
 #. Description
@@ -104,3 +114,4 @@ msgstr ""
 "Recomendamos que non elimine os datos se vai eliminar o paquete MariaDB para "
 "instalar unha versión máis nova, ou se inda os usa algún paquete mariadb-"
 "server."
+

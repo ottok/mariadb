@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb 11.18.3\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2025-11-14 08:28+0100\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Chris Leick <c.leick@vollbio.de>\n"
 "Language-Team: German <debian-l10n-german@lists.debian.org>\n"
 "Language: \n"
@@ -64,21 +64,32 @@ msgstr "Wichtige Anmerkung für NIS/YP-Benutzer!"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"Falls MariaDB mit NIS/YP genutzt wird, muss ein »mysql«-Benutzerkonto wie folgt auf "
-"dem lokalen System hinzugefügt werden:"
+"Lokale Systemkonten werden von systemd-sysusers erstellt, das die Dateien /"
+"etc/passwd und /etc/group direkt editiert, ohne NIS/LDAP zu verwenden."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
 msgstr ""
-"Sie sollten außerdem Besitzer und Zugriffsrechte des Verzeichnisses /var/lib/"
-"mysql überprüfen:"
+"Bei NIS/YP-Setups kann dieses Paket während der Installation/Aktualisierung "
+"einen lokalen 'mysql'-Benutzer/-Gruppe erstellen. Bitte überprüfen Sie Ihre "
+"nsswitch.conf-Einstellungen und stellen Sie sicher, dass diese mit Ihrer "
+"lokalen Richtlinie übereinstimmen."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
+msgstr ""
+"Sie sollten außerdem Besitzer und Zugriffsrechte von /var/lib/mysql "
+"überprüfen:"
 
 #. Type: boolean
 #. Description
@@ -107,3 +118,10 @@ msgstr ""
 "Falls geplant ist, das MariaDB-Paket zu entfernen, um lediglich eine höhere "
 "Version zu installieren oder ein anderes mariadb-server-Paket die Daten "
 "benutzt, sollten diese beibehalten werden."
+
+#~ msgid ""
+#~ "Using MariaDB under NIS/YP requires a mysql user account to be added on "
+#~ "the local system with:"
+#~ msgstr ""
+#~ "Falls MariaDB mit NIS/YP genutzt wird, muss ein »mysql«-Benutzerkonto wie "
+#~ "folgt auf dem lokalen System hinzugefügt werden:"

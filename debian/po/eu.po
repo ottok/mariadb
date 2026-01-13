@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2009-07-29 11:59+0200\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Piarres Beobide <pi@beobide.net>\n"
 "Language-Team: Euskara <debian-l10n-eu@lists.debian.org>\n"
 "Language: \n"
@@ -43,8 +43,8 @@ msgid ""
 "Therefore the previous data directory will be renamed to /var/lib/mysql-* "
 "and a new data directory will be initialized at /var/lib/mysql."
 msgstr ""
-"Beraz, aurreko datu direktorioa /var/lib/mysql-* gisa berrizendatuko da "
-"eta datu direktorio berri bat hasieratuko da /var/lib/mysql-en."
+"Beraz, aurreko datu direktorioa /var/lib/mysql-* gisa berrizendatuko da eta "
+"datu direktorio berri bat hasieratuko da /var/lib/mysql-en."
 
 #. Type: note
 #. Description
@@ -65,21 +65,31 @@ msgstr "NIS/YP erabiltzaileentzat ohar garrantzitsua"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"MariaDB NIS/YP-ren azpian erabiltzeak mysql erabiltzaile kontu bat gehitzea "
-"eskatzen du sistema lokalean honekin:"
+"systemd-sysusers-ek sistema lokaleko kontuak sortzen ditu /etc/passwd eta /"
+"etc/group fitxategiak zuzenean editatuz, NIS/LDAP erabili gabe."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
 msgstr ""
-"/var/lib/mysql direktorioaren baimenak eta jabetza ere egiaztatu "
-"beharko zenituzke:"
+"NIS/YP konfigurazioetan pakete honek 'mysql' erabiltzaile/grupo lokala sor "
+"dezake instalazioan/eguneratzean. Egiaztatu zure nsswitch.conf konfigurazioa "
+"eta ziurtatu zure politika lokalarekin bat datorrela."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
+msgstr ""
+"/var/lib/mysql direktorioaren baimenak eta jabetza ere egiaztatu beharko "
+"zenituzke:"
 
 #. Type: boolean
 #. Description
@@ -107,3 +117,10 @@ msgstr ""
 "MariaDB paketea beranduago bertsio berriago bat instalatzeko kentzen ari "
 "bazara, edo beste mariadb-server pakete bat berau erabiltzen ari bada, "
 "datuak mantendu egin beharko lirateke."
+
+#~ msgid ""
+#~ "Using MariaDB under NIS/YP requires a mysql user account to be added on "
+#~ "the local system with:"
+#~ msgstr ""
+#~ "MariaDB NIS/YP-ren azpian erabiltzeak mysql erabiltzaile kontu bat "
+#~ "gehitzea eskatzen du sistema lokalean honekin:"

@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2017-08-06 10:00+0100\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Rui Branco <ruipb@debianpt.org>\n"
 "Language-Team: Portuguese <traduz@debianpt.org>\n"
 "Language: pt\n"
@@ -65,18 +65,28 @@ msgstr "Nota importante para os utilizadores de NIS/YP"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"Utilizar MariaDB com NIS/YP necessita de uma conta de utilizador de mysql "
-"para ser acrescentada ao sistema local com:"
+"Contas de sistema local são criadas pelo systemd-sysusers que edita os "
+"ficheiros /etc/passwd e /etc/group diretamente, sem usar NIS/LDAP."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"Em configurações NIS/YP, este pacote pode criar um utilizador/grupo 'mysql' "
+"local durante a instalação/actualização. Verifique a sua configuração "
+"nsswitch.conf e certifique-se de que corresponde à sua política local."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr ""
 "Deve também verificar as permissões e o dono do directório /var/lib/mysql:"
 
@@ -107,3 +117,4 @@ msgstr ""
 "Se está a remover o pacote MariaDB de forma a posteriormente instalar uma "
 "versão mais recente ou se um pacote mariadb-server já o está a utilizar, "
 "então os dados devem ser mantidos."
+

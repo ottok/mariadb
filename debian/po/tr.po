@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2017-03-16 13:16+0300\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Atila KOÇ <koc@artielektronik.com.tr>\n"
 "Language-Team: Turkish <debian-l10n-turkish@lists.debian.org>\n"
 "Language: tr\n"
@@ -63,18 +63,29 @@ msgstr "NIS/YP kullanıcıları için önemli not"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"MariaDB'nin NIS/YP ile kullanılması için yerel sisteme aşağıdaki komut "
-"çalıştırılarak mysql kullanıcı hesabının eklenmesi gereklidir:"
+"systemd-sysusers, /etc/passwd ve /etc/group dosyalarını doğrudan "
+"düzenleyerek yerel sistem hesapları oluşturur (NIS/LDAP'da kullanıcı "
+"oluşturmaz)"
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"NIS/YP kurulumlarında bu paket, kurulum/güncelleme sırasında yerel bir "
+"'mysql' kullanıcısı/grubu oluşturabilir. Lütfen nsswitch.conf kurulumunuzu "
+"doğrulayın ve bunun yerel politikanızla eşleştiğinden emin olun."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr ""
 "/var/lib/mysql dizininin sahiplik ve izin ayarlarını da gözden "
 "geçirmelisiniz:"
@@ -105,3 +116,10 @@ msgstr ""
 "Eğer MariaDB paketini daha sonra güncel bir sürümünü kurmak üzere "
 "kaldırıyorsanız ya da veritabanlarınıza başka bir mariadb-server paketi ile "
 "erişiyorsanız, veritabanlarınızı kaldırmamalısınız."
+
+#~ msgid ""
+#~ "Using MariaDB under NIS/YP requires a mysql user account to be added on "
+#~ "the local system with:"
+#~ msgstr ""
+#~ "MariaDB'nin NIS/YP ile kullanılması için yerel sisteme aşağıdaki komut "
+#~ "çalıştırılarak mysql kullanıcı hesabının eklenmesi gereklidir:"

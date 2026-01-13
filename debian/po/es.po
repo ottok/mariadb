@@ -41,8 +41,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2016-04-30 21:26+0200\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Javier Fernández-Sanguino <jfs@debian.org>\n"
 "Language-Team: Debian l10 Spanish <debian-l10n-spanish@lists.debian.org>\n"
 "Language: Spanish\n"
@@ -99,18 +99,28 @@ msgstr "Nota importante para los usuarios de NIS/YP"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"Para utilizar MariaDB bajo NIS/YP es necesario añadir una cuenta de usuario "
-"mysql en el sistema local con:"
+"Las cuentas del sistema local son creadas por systemd-sysusers editando los archivos /etc/"
+"passwd y /etc/group directamente, sin usar NIS/LDAP."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"En configuraciones NIS/YP, este paquete puede crear un usuario/grupo 'mysql' "
+"local durante la instalación/actualización. Verifique su configuración "
+"nsswitch.conf y asegúrese de que coincida con su política local."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr ""
 "También debería comprobar los permisos y el propietario del directorio /var/"
 "lib/mysql:"
@@ -142,3 +152,10 @@ msgstr ""
 "Debería mantener los datos si tiene planificado instalar una versión de "
 "MariaDB más reciente o si hay un paquete «mariadb-server» distinto que los "
 "está utilizando."
+
+#~ msgid ""
+#~ "Using MariaDB under NIS/YP requires a mysql user account to be added on "
+#~ "the local system with:"
+#~ msgstr ""
+#~ "Para utilizar MariaDB bajo NIS/YP es necesario añadir una cuenta de "
+#~ "usuario mysql en el sistema local con:"

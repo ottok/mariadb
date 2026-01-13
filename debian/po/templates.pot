@@ -57,8 +57,8 @@ msgstr ""
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"systemd-sysusers creates local system accounts by editing /etc/passwd and "
-"/etc/group directly (it does not create users in NIS/LDAP)"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
 
 #. Type: note

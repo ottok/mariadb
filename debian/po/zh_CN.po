@@ -6,8 +6,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2023-02-02 03:08+0800\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Tianyu Chen <billchenchina2001@gmail.com>\n"
 "Language-Team: \n"
 "Language: zh_CN\n"
@@ -61,16 +61,27 @@ msgstr "对 NIS/YP 用户的重要提示"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
-msgstr "在 NIS/YP 下使用 MariaDB 需要使用以下命令在系统中添加一个 mysql 用户："
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
+msgstr ""
+"systemd-sysusers 通过直接编辑 /etc/passwd 和 /etc/group 来创建本地系统账户"
+"（它不会在 NIS/LDAP 中创建用户）"
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"在 NIS/YP 环境中，此软件包可能在安装/升级期间创建本地 'mysql' 用户/组。请验证"
+"您的 nsswitch.conf 配置并确保其符合您的本地策略。"
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr "你还需要检查 /var/lib/mysql 目录的权限和所有权："
 
 #. Type: boolean
@@ -97,3 +108,4 @@ msgid ""
 msgstr ""
 "如果您是为了安装新版本而卸载 MariaDB 包，或正在使用另一个 mariadb-server 包，"
 "您应该保留数据。"
+

@@ -6,8 +6,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2025-02-22 12:00+0900\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Debian Korean Team <debian-l10n-korean@lists.debian.org>\n"
 "Language-Team: Korean <debian-l10n-korean@lists.debian.org>\n"
 "Language: ko\n"
@@ -30,9 +30,9 @@ msgid ""
 "indicates a database binary format version that cannot automatically be "
 "upgraded (or downgraded)."
 msgstr ""
-"이 시스템에 /var/lib/mysql/debian-*.flag라는 파일이 있습니다. 이 숫자는 "
-"자동으로 업그레이드(또는 다운그레이드)할 수 없는 데이터베이스 바이너리 형식 "
-"버전을 나타냅니다."
+"이 시스템에 /var/lib/mysql/debian-*.flag라는 파일이 있습니다. 이 숫자는 자동"
+"으로 업그레이드(또는 다운그레이드)할 수 없는 데이터베이스 바이너리 형식 버전"
+"을 나타냅니다."
 
 #. Type: note
 #. Description
@@ -41,8 +41,8 @@ msgid ""
 "Therefore the previous data directory will be renamed to /var/lib/mysql-* "
 "and a new data directory will be initialized at /var/lib/mysql."
 msgstr ""
-"따라서 이전 데이터 디렉터리의 이름이 /var/lib/mysql-*로 변경되고 "
-"/var/lib/mysql에 새 데이터 디렉터리가 초기화됩니다."
+"따라서 이전 데이터 디렉터리의 이름이 /var/lib/mysql-*로 변경되고 /var/lib/"
+"mysql에 새 데이터 디렉터리가 초기화됩니다."
 
 #. Type: note
 #. Description
@@ -62,20 +62,29 @@ msgstr "NIS/YP 사용자를 위한 중요 참고사항"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"NIS/YP에서 MariaDB를 사용하려면 로컬 시스템에 mysql 사용자 계정을 "
-"추가해야 합니다:"
+"systemd-sysusers는 /etc/passwd 및 /etc/group 파일을 직접 편집하여 로컬 시스템 "
+"계정을 생성하며, NIS/LDAP를 사용하지 않습니다."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
 msgstr ""
-"/var/lib/mysql 디렉터리의 권한과 소유권도 확인해야 합니다:"
+"NIS/YP 설정에서 이 패키지는 설치/업그레이드 중에 로컬 'mysql' 사용자/그룹을 "
+"생성할 수 있습니다. nsswitch.conf 설정을 확인하고 로컬 정책과 일치하는지 확인"
+"하십시오."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
+msgstr "/var/lib/mysql 디렉터리의 권한과 소유권도 확인해야 합니다:"
 
 #. Type: boolean
 #. Description
@@ -89,8 +98,7 @@ msgstr "모든 MariaDB 데이터베이스를 제거하시겠습니까?"
 msgid ""
 "The /var/lib/mysql directory which contains the MariaDB databases is about "
 "to be removed."
-msgstr ""
-"MariaDB 데이터베이스가 포함된 /var/lib/mysql 디렉터리가 제거됩니다."
+msgstr "MariaDB 데이터베이스가 포함된 /var/lib/mysql 디렉터리가 제거됩니다."
 
 #. Type: boolean
 #. Description
@@ -100,5 +108,5 @@ msgid ""
 "recent version or if a different mariadb-server package is already using it, "
 "the data should be kept."
 msgstr ""
-"나중에 더 최신 버전을 설치하기 위해 MariaDB 패키지를 제거하거나 다른 "
-"mariadb-server 패키지가 이미 사용 중인 경우 데이터를 유지해야 합니다."
+"나중에 더 최신 버전을 설치하기 위해 MariaDB 패키지를 제거하거나 다른 mariadb-"
+"server 패키지가 이미 사용 중인 경우 데이터를 유지해야 합니다."

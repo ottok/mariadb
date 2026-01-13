@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mariadb\n"
 "Report-Msgid-Bugs-To: mariadb@packages.debian.org\n"
-"POT-Creation-Date: 2022-12-31 18:55-0800\n"
-"PO-Revision-Date: 2017-03-20 17:55+0100\n"
+"POT-Creation-Date: 2026-01-13 13:13-0000\n"
+"PO-Revision-Date: 2026-01-13 13:13-0000\n"
 "Last-Translator: Innocent De Marchi <tangram.peces@gmail.com>\n"
 "Language-Team: Debian l10n Catalan <debian-l10n-catalan@lists.debian.org>\n"
 "Language: ca\n"
@@ -64,18 +64,28 @@ msgstr "Nota important pels usuaris de «NIS/YP»"
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"Using MariaDB under NIS/YP requires a mysql user account to be added on the "
-"local system with:"
+"Local system accounts are created by systemd-sysusers which edits the /etc/"
+"passwd and /etc/group files directly, without using NIS/LDAP."
 msgstr ""
-"Fer servir MariaDB sota «NIS/YP» requereix afegir un compte d'usuari MySQL "
-"al sistema local fent servir:"
+"Els comptes de sistema local es creen mitjançant systemd-sysusers, que edita "
+"directament els fitxers /etc/passwd i /etc/group, sense fer servir NIS/LDAP."
 
 #. Type: note
 #. Description
 #: ../mariadb-server.templates:3001
 msgid ""
-"You should also check the permissions and ownership of the /var/lib/mysql "
-"directory:"
+"On NIS/YP setups this package may create a local 'mysql' user/group during "
+"installation/upgrade. Please verify your nsswitch.conf setup and ensure this "
+"matches your local policy."
+msgstr ""
+"En configuracions NIS/YP, aquest paquet pot crear un usuari/grup 'mysql' "
+"local durant la instal·lació/actualització. Verifiqueu la configuració de "
+"nsswitch.conf i assegureu-vos que coincideixi amb la vostra política local."
+
+#. Type: note
+#. Description
+#: ../mariadb-server.templates:3001
+msgid "You should also check the permissions and ownership of /var/lib/mysql:"
 msgstr ""
 "També heu de comprovar els permisos i els propietaris del directori «/var/"
 "lib/mysql»"
@@ -107,3 +117,4 @@ msgstr ""
 "Si estau des-instal·lant el paquet MariaDB amb la intenció d'instal·lar a "
 "continuació una versió més recent o hi ha una versió diferent del paquet "
 "«mariadb-server» que l'està fent servir, cal mantenir les dades."
+
