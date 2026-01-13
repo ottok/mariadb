@@ -150,8 +150,8 @@ Copyright:
  2011 Clint Byrum <clint@ubuntu.com>
  2011 Ondřej Surý <ondrej@debian.org>
  2012 Nicholas Bamber <nicholas@periapt.co.uk>
- 2013,2016 Kristian Nielsen <knielsen@askmonty.org>
- 2013-2025 Otto Kekäläinen <otto@debian.org>
+ 2013-2016 Kristian Nielsen <knielsen@askmonty.org>
+ 2013-2026 Otto Kekäläinen <otto@debian.org>
  2014 Daniel Schepler <schepler@debian.org>
  2014 Julien Muchembled <jm@jmuchemb.eu>
  2014 Tobias Frost <tobi@coldtobi.de>
@@ -162,7 +162,7 @@ Copyright:
  2015 Jan Wagner <waja@cyconet.org>
  2015 Jean Weisbuch <jean@phpnet.org>
  2015 Olaf van der Spek <olafvdspek@gmail.com>
- 2015-2106 Robie Basak <robie.basak@canonical.com>
+ 2015-2016 Robie Basak <robie.basak@canonical.com>
  2016 Axel Beckert <abe@debian.org>
  2016 Dieter Adriaenssens <dieter.adriaenssens@gmail.com>
  2016 Ian Gilfillan <ian@mariadb.org>
@@ -170,6 +170,7 @@ Copyright:
  2016 Paul Gevers <elbrus@debian.org>
  2016 Samuel Thibault <sthibault@debian.org>
  2016 Vicențiu Ciorbaru <vicentiu@mariadb.org>
+ 2025-2026 Aquila Macedo <aquilamacedo@riseup.net>
 License: GPL-2+
 
 Files: plugin/feedback/*
