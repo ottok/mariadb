@@ -21,7 +21,7 @@ _Description: The old data directory will be saved at new location
 
 Template: mariadb-server/nis_warning
 Type: note
-#flag:translate!:3,5
+#flag:translate!:5
 _Description: Important note for NIS/YP users
  systemd-sysusers creates local system accounts by editing /etc/passwd and
  /etc/group directly (it does not create users in NIS/LDAP)
