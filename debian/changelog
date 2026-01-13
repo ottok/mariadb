@@ -1,9 +1,21 @@
-mariadb (1:11.8.5-4) UNRELEASED; urgency=medium
+mariadb (1:11.8.5-4) unstable; urgency=medium
 
-  * Open new changelog entry. This will be replaced by `gbp dch -Rc` and
-    potentially some manual editing at the time of release.
+  [ Otto Kekäläinen ]
+  * Add tentative upstream patch to fix amd64v3 build issues (MDEV-38398)
+  * Drop redundant `Priority: optional`
+  * Update Debian copyright for 2026
+  * Bump Debian Policy version
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 22 Dec 2025 15:04:17 -0800
+  [ Aquila Macedo ]
+  * Drop obsolete library-not-linked-against-libc overrides
+  * Ship upstream sysusers.d mariadb.conf in mariadb-server (Closes: #1028271)
+  * Add patch sysusers-lock-mysql-account.patch
+  * Create mysql via sysusers in postinst, drop preinst adduser handling
+  * Drop adduser pre-depends, depend on systemd-sysusers provider
+  * Clarify NIS/YP debconf note for sysusers mysql account creation
+  * Update all translations to match updated template
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 13 Jan 2026 19:03:57 +0000
 
 mariadb (1:11.8.5-3) unstable; urgency=medium
 
