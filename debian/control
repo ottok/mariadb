@@ -1,6 +1,5 @@
 Source: mariadb
 Section: database
-Priority: optional
 Maintainer: Debian MySQL Maintainers <pkg-mysql-maint@lists.alioth.debian.org>
 Uploaders:
  Otto Kekäläinen <otto@debian.org>,
