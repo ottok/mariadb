@@ -31,8 +31,6 @@ usr/share/man/man1/mysql-stress-test.pl.1
 usr/share/man/man1/mysql-test-run.pl.1 # Spare manual page, should be deleted upstream
 usr/share/man/man1/mysql.server.1
 usr/share/mariadb/binary-configure
-usr/share/mariadb/JavaWrappers.jar # These are only built if JNI/libjawt.so is installed from e.g. openjdk-8-jre-headless
-usr/share/mariadb/JdbcInterface.jar # These are only built if JNI/libjawt.so is installed from e.g. openjdk-8-jre-headless
 usr/share/mariadb/magic
 usr/share/mariadb/maria_add_gis_sp.sql # mariadb-server-core.install has *_bootstrap.sql
 usr/share/mariadb/mariadb-test/asan.supp

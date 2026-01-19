@@ -1,2 +1,3 @@
 etc/mysql/mariadb.conf.d/connect.cnf
 usr/lib/mysql/plugin/ha_connect.so
+usr/share/mysql/JdbcInterface.jar
