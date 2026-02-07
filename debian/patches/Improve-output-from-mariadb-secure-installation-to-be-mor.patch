@@ -6,13 +6,17 @@ The script is not useful in Debian, and likely misleading to users.
 Improve the output to be more clear about what it is doing or is not
 doing.
 
+Merged on 'main' in
+https://github.com/MariaDB/server/commit/3a08a8e3d2212f3f60937b3fd97207c3ea7b933a
+and thus included in MariaDB 12.3 onward.
+
 Forwarded: https://github.com/MariaDB/server/pull/4457
 ---
  scripts/mysql_secure_installation.sh | 24 ++++++++++++++----------
  1 file changed, 14 insertions(+), 10 deletions(-)
 
 diff --git a/scripts/mysql_secure_installation.sh b/scripts/mysql_secure_installation.sh
-index ad18385..1248103 100644
+index 5883398..2d21973 100755
 --- a/scripts/mysql_secure_installation.sh
 +++ b/scripts/mysql_secure_installation.sh
 @@ -338,7 +338,8 @@ set_root_password() {

@@ -19,6 +19,9 @@ This is a combined patch of various spelling fixes.
 
 * Fix typo: Enrypt->Encrypt
 
+Merged in https://github.com/MariaDB/server/commit/5879c85f505d3a11d4b8f479f2437416d8a1d724
+and thus included in MariaDB 12.3 onward.
+
 Forwarded: https://github.com/MariaDB/server/pull/4458
 ---
  extra/mariabackup/innobackupex.cc                         |  4 ++--
@@ -58,7 +61,7 @@ index 22f4dc3..1c0bc11 100644
           "terminates with an error. Default is 0, in which case mariadb-backup waits "
           "indefinitely for BACKUP STAGE START to finish",
 diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
-index 090bd99..498b2db 100644
+index effbac0..377082a 100644
 --- a/extra/mariabackup/xtrabackup.cc
 +++ b/extra/mariabackup/xtrabackup.cc
 @@ -220,7 +220,7 @@ uint xtrabackup_compress = FALSE;
@@ -70,7 +73,7 @@ index 090bd99..498b2db 100644
  in milliseconds (default is 1 second) */
  ulint xtrabackup_log_copy_interval = 1000;
  static ulong max_buf_pool_modified_pct;
-@@ -1803,7 +1803,7 @@ struct my_option xb_client_options[]= {
+@@ -1808,7 +1808,7 @@ struct my_option xb_client_options[]= {
      {"startup-wait-timeout", OPT_LOCK_WAIT_TIMEOUT,
       "This option specifies time in seconds that mariadb-backup should wait for "
       "BACKUP STAGE START to complete. BACKUP STAGE START has to wait until all "
@@ -79,7 +82,7 @@ index 090bd99..498b2db 100644
       "If there are still such queries when the timeout expires, mariadb-backup "
       "terminates with an error. Default is 0, in which case mariadb-backup waits "
       "indefinitely for BACKUP STAGE START to finish",
-@@ -5846,7 +5846,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
+@@ -5852,7 +5852,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
  	}
  
  	/* Mariabackup doesn't detect any FILE_OP for the deferred
@@ -89,7 +92,7 @@ index 090bd99..498b2db 100644
  	for (auto space_name: defer_space_names) {
  		if (!check_if_skip_table(space_name.c_str())) {
 diff --git a/mysql-test/main/mysqld--help.result b/mysql-test/main/mysqld--help.result
-index 5f97793..733bba9 100644
+index 44a92c2..4422900 100644
 --- a/mysql-test/main/mysqld--help.result
 +++ b/mysql-test/main/mysqld--help.result
 @@ -826,13 +826,14 @@ The following specify which files/extra groups are read (specified before remain
@@ -128,7 +131,7 @@ index b9f1e8b..bf590a5 100644
  NUMERIC_MAX_VALUE	NULL
  NUMERIC_BLOCK_SIZE	NULL
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
-index dce6fbc..fa14d01 100644
+index f127a28..df7647d 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 @@ -2505,7 +2505,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
@@ -141,7 +144,7 @@ index dce6fbc..fa14d01 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
-index ef501a5..0506498 100644
+index 9ead8d4..3b79975 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 @@ -2715,7 +2715,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
@@ -154,10 +157,10 @@ index ef501a5..0506498 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/sql/opt_subselect.cc b/sql/opt_subselect.cc
-index 7c65f2d..e136030 100644
+index 0bf1998..4ebb368 100644
 --- a/sql/opt_subselect.cc
 +++ b/sql/opt_subselect.cc
-@@ -6892,7 +6892,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
+@@ -6894,7 +6894,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
          add("rows", inner_record_count_1).
          add("materialization_cost", materialize_strategy_cost).
          add("in_exist_cost", in_exists_strategy_cost).
@@ -166,7 +169,7 @@ index 7c65f2d..e136030 100644
      }
  
      DBUG_PRINT("info",
-@@ -6930,7 +6930,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
+@@ -6932,7 +6932,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
      {
        Json_writer_object trace_wrapper(thd);
        Json_writer_object trace_subquery(thd, "subquery_plan_revert");
@@ -176,7 +179,7 @@ index 7c65f2d..e136030 100644
    }
  
 diff --git a/sql/sql_select.cc b/sql/sql_select.cc
-index 170c022..abc851b 100644
+index fa73d52..1e697a5 100644
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
 @@ -11831,7 +11831,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
@@ -188,7 +191,7 @@ index 170c022..abc851b 100644
      execution.
  
    @detail
-@@ -15315,7 +15315,7 @@ void JOIN::drop_unused_derived_keys()
+@@ -15318,7 +15318,7 @@ void JOIN::drop_unused_derived_keys()
        }
        /*
          We dropped all keys except the chosen one and unique keys.
@@ -198,7 +201,7 @@ index 170c022..abc851b 100644
        tab->ref.key= 0;
      }
 diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
-index 53ade77..bc19ecd 100644
+index 3c2fee2..545821d 100644
 --- a/sql/sys_vars.cc
 +++ b/sql/sys_vars.cc
 @@ -2973,7 +2973,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
@@ -224,10 +227,10 @@ index 520b82d..a782570 100644
  	} catch (const char *msg) {
  		htrc(g->Message, msg);
 diff --git a/storage/innobase/handler/ha_innodb.cc b/storage/innobase/handler/ha_innodb.cc
-index ef62e93..09baa5b 100644
+index 21dbe9c..40b974a 100644
 --- a/storage/innobase/handler/ha_innodb.cc
 +++ b/storage/innobase/handler/ha_innodb.cc
-@@ -19852,7 +19852,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
+@@ -19866,7 +19866,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
  
  static MYSQL_SYSVAR_BOOL(encrypt_temporary_tables, innodb_encrypt_temporary_tables,
    PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,

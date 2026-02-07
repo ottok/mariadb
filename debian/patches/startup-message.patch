@@ -34,10 +34,10 @@ Forwarded: no
  1 file changed, 15 insertions(+), 5 deletions(-)
 
 diff --git a/sql/mysqld.cc b/sql/mysqld.cc
-index 84dc12f..82220ae 100644
+index 251c342..c8595a5 100644
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
-@@ -5042,13 +5042,23 @@ static int init_server_components()
+@@ -5043,13 +5043,23 @@ static int init_server_components()
  
    /*
      Print source revision hash, as one of the first lines, if not the

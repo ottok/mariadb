@@ -1,3 +1,11 @@
+mariadb (1:11.8.6-1) UNRELEASED; urgency=medium
+
+  * Update d/watch to use uscan v5 format
+  * New upstream maintenance release 11.8.6. For details about fixes please see
+    https://mariadb.com/docs/release-notes/community-server/11.8/11.8.6
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 07 Feb 2026 07:07:07 +0000
+
 mariadb (1:11.8.5-4) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
