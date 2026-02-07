@@ -811,7 +811,8 @@ catch (const wsrep::runtime_error& e)
     wsrep::log_error() << "sst_received failed: " << e.what();
     if (provider_)
     {
-        provider_->sst_received(wsrep::gtid::undefined(), -EINTR);
+        provider_->sst_received(wsrep::gtid::undefined(),
+                                (disable_node_reset_ ? -ECANCELED : -EINTR));
     }
     return 1;
 }
@@ -1364,10 +1365,6 @@ void wsrep::server_state::state(
 
     if (allowed[state_][state] == false)
     {
-        /* If we are disconnecting ignore any remaining state events from
-         * the replication queue */
-        if (s_disconnecting == state_) return;
-
         std::ostringstream os;
         os << "server: " << name_ << " unallowed state transition: "
            << wsrep::to_string(state_) << " -> " << wsrep::to_string(state);

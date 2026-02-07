@@ -1121,6 +1121,7 @@ dummy_empty:
 		index->table->stats_mutex_unlock();
 		return err;
 	} else if (dict_index_is_online_ddl(index) || !index->is_committed()
+		   || !index->is_btree()
 		   || !index->table->space) {
 		goto dummy_empty;
 	} else {
@@ -2947,7 +2948,7 @@ free_and_exit:
 		trx->dict_operation_lock_mode = false;
 		dict_sys.unlock();
 unlocked_free_and_exit:
-		trx->free();
+		trx->clear_and_free();
 		stats.close();
 		return ret;
 	}

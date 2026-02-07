@@ -315,6 +315,8 @@ DropTableProcessor::DDLResult DropTableProcessor::processPackageInternal(ddlpack
     Oam oam;
 
     // Save qualified tablename, all column, dictionary OIDs, and transaction ID into a file in ASCII format
+    // Reserve space for OIDs
+    oidList.reserve(tableColRidList.size() + dictOIDList.size());
     for (unsigned i = 0; i < tableColRidList.size(); i++)
     {
       if (tableColRidList[i].objnum > 3000)
@@ -639,6 +641,7 @@ DropTableProcessor::DDLResult DropTableProcessor::processPackageInternal(ddlpack
     auxRoPair.objnum = tableAUXColOid;
     tableColRidList.push_back(auxRoPair);
   }
+  oidList.push_back(roPair.objnum);
 
   // Save the oids to a file
   try
@@ -776,6 +779,7 @@ DropTableProcessor::DDLResult DropTableProcessor::processPackageInternal(ddlpack
   deleteLogFile(DROPTABLE_LOG, roPair.objnum, uniqueId);
   // release the transaction
   // fSessionManager.committed(txnID);
+  tableColRidList.push_back(roPair);
   returnOIDs(tableColRidList, dictOIDList);
   return result;
 }
@@ -965,6 +969,9 @@ TruncTableProcessor::DDLResult TruncTableProcessor::processPackageInternal(ddlpa
 
     dictOIDList = systemCatalogPtr->dictOIDs(userTableName);
 
+    // Reserve space for OIDs (columns + aux column + dictionaries)
+    columnOidList.reserve(tableColRidList.size() + 1);
+    allOidList.reserve(tableColRidList.size() + 1 + dictOIDList.size());
     for (unsigned i = 0; i < tableColRidList.size(); i++)
     {
       if (tableColRidList[i].objnum > 3000)

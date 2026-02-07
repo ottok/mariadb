@@ -306,7 +306,8 @@ static TYPELIB tc_heuristic_recover_typelib=
 
 const char *first_keyword= "first";
 const char *my_localhost= "localhost",
-           *delayed_user= "delayed", *slave_user= "<replication_slave>";
+           *delayed_user= "delayed", *slave_user= "<replication_slave>",
+           *wsrep_user= "<wsrep_applier>";
 
 bool opt_large_files= sizeof(my_off_t) > 4;
 static my_bool opt_autocommit; ///< for --autocommit command-line option
@@ -3360,7 +3361,7 @@ void my_message_sql(uint error, const char *str, myf MyFlags)
   DBUG_ASSERT((MyFlags & ~(ME_BELL | ME_ERROR_LOG | ME_ERROR_LOG_ONLY |
                            ME_NOTE | ME_WARNING | ME_FATAL)) == 0);
 
-  DBUG_ASSERT(str[strlen(str)-1] != '\n');
+  DBUG_ASSERT(str[strlen(str)-1] != '\n' || strlen(str) == MYSQL_ERRMSG_SIZE-1);
 
   if (MyFlags & ME_NOTE)
   {
@@ -5453,8 +5454,14 @@ static int init_server_components()
 #endif
 
     if ((ho_error= handle_options(&remaining_argc, &remaining_argv, removed_opts,
-                                  mysqld_get_one_option)))
+                                  mysqld_get_one_option))) {
+#ifdef WITH_WSREP
+      Wsrep_server_state::instance().disable_node_reset();
+#endif
+
       unireg_abort(ho_error);
+    }
+
     /* Add back the program name handle_options removes */
     remaining_argc++;
     remaining_argv--;

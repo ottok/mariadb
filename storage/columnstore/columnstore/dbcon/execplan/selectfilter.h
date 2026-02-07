@@ -170,7 +170,7 @@ class SelectFilter : public Filter
    */
   bool operator!=(const SelectFilter& t) const;
 
-  void setSimpleColumnListExtended();
+  void setSimpleColumnListExtended() override;
   const std::vector<SimpleColumn*>& simpleColumnListExtended();
 
  private:
@@ -180,9 +180,9 @@ class SelectFilter : public Filter
   std::vector<SRCP> fCols;
   SOP fOp;
   SCSEP fSub;
-  bool fCorrelated;
+  bool fCorrelated = false;
   std::string fData;
-  uint64_t fReturnedColPos;  // offset in fSub->returnedColList to indicate the start of projection
+  uint64_t fReturnedColPos = 0;  // offset in fSub->returnedColList to indicate the start of projection
   std::vector<SimpleColumn*> fSimpleColumnListExtended{};
 };
 

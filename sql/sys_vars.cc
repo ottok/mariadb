@@ -4114,6 +4114,7 @@ static const char *new_mode_all_names[]=
 {
   "FIX_DISK_TMPTABLE_COSTS",
   "FIX_INDEX_STATS_FOR_ALL_NULLS",
+  "FIX_INDEX_LOOKUP_COST",
   "TEST_WARNING1",                       // Default from here, See NEW_MODE_MAX
   "TEST_WARNING2",
   0
@@ -4121,8 +4122,8 @@ static const char *new_mode_all_names[]=
 
 static int new_mode_hidden_names[] =
 {
-  2,  // TEST_WARNING1
-  3,  // TEST_WARNING2
+  3,  // TEST_WARNING1
+  4,  // TEST_WARNING2
   -1  // End of list
 };
 
@@ -6586,7 +6587,7 @@ static Sys_var_enum Sys_wsrep_trx_fragment_unit(
       wsrep_fragment_units,
       DEFAULT(WSREP_FRAG_BYTES),
       NO_MUTEX_GUARD, NOT_IN_BINLOG,
-      ON_CHECK(0),
+      ON_CHECK(wsrep_trx_fragment_unit_check),
       ON_UPDATE(wsrep_trx_fragment_unit_update));
 
 extern const char *wsrep_SR_store_types[];
