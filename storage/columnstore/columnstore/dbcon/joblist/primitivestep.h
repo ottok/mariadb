@@ -1250,7 +1250,7 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
   uint64_t totalMsgs;
   uint64_t msgsSent;
   uint64_t msgsRecvd;
-  volatile bool finishedSending;
+  std::atomic<bool> finishedSending;
   bool firstRead;
   bool sendWaiting;
   uint32_t recvWaiting;
@@ -1281,7 +1281,7 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
   boost::condition condvarWakeupProducer, condvar;
 
   std::vector<bool> scanFlags;  // use to keep track of which extents to eliminate from this step
-  bool BPPIsAllocated;
+  std::atomic<bool> BPPIsAllocated;
   uint32_t uniqueID;
   ResourceManager* fRm;
 

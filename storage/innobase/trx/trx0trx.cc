@@ -363,7 +363,7 @@ trx_t *trx_create()
 }
 
 /** Free the memory to trx_pools */
-void trx_t::free()
+void trx_t::free() noexcept
 {
   autoinc_locks.fake_defined();
 #ifdef HAVE_MEM_CHECK
@@ -391,8 +391,10 @@ void trx_t::free()
   ut_ad(magic_n == TRX_MAGIC_N);
   ut_ad(!read_only);
   ut_ad(!lock.wait_lock);
+  ut_ad(!commit_lsn);
 
   dict_operation= false;
+  commit_lsn= 0;
   trx_sys.deregister_trx(this);
   check_unique_secondary= true;
   check_foreigns= true;
@@ -821,6 +823,7 @@ static void trx_assign_rseg_low(trx_t *trx)
 	undo tablespaces that are scheduled for truncation. */
 	static Atomic_counter<unsigned>	rseg_slot;
 	unsigned slot = rseg_slot++ % TRX_SYS_N_RSEGS;
+	DBUG_EXECUTE_IF("assign_same_rseg", slot= 0;);
 	ut_d(const auto start_scan_slot = slot);
 	ut_d(bool look_for_rollover = false);
 	trx_rseg_t*	rseg;
@@ -833,6 +836,8 @@ static void trx_assign_rseg_low(trx_t *trx)
 			ut_ad(!look_for_rollover || start_scan_slot != slot);
 			ut_d(look_for_rollover = true);
 			slot = (slot + 1) % TRX_SYS_N_RSEGS;
+			DBUG_EXECUTE_IF("assign_same_rseg",
+				slot= (slot - 1) % TRX_SYS_N_RSEGS;);
 
 			if (!rseg->space) {
 				continue;
@@ -1265,6 +1270,8 @@ static void trx_flush_log_if_needed(lsn_t lsn, trx_t *trx)
 
   if (log_sys.get_flushed_lsn(std::memory_order_relaxed) >= lsn)
     return;
+
+  ut_ad(!trx->mysql_thd || !trx->mysql_thd->tx_read_only);
 
   const bool flush= srv_flush_log_at_trx_commit & 1;
   if (!log_sys.is_mmap())
@@ -1737,12 +1744,14 @@ void trx_commit_complete_for_mysql(trx_t *trx)
     return;
   switch (srv_flush_log_at_trx_commit) {
   case 0:
-    return;
+    goto func_exit;
   case 1:
     if (trx->active_commit_ordered)
       return;
   }
   trx_flush_log_if_needed(lsn, trx);
+ func_exit:
+  trx->commit_lsn= 0;
 }
 
 /**********************************************************************//**

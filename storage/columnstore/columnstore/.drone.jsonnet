@@ -67,10 +67,6 @@ local customBuildFlags(buildKey) =
 
 local any_branch = "**";
 
-
-local mtr_suite_list = "basic,bugfixes";
-local mtr_full_set = "basic,bugfixes,devregression,autopilot,extended,multinode,oracle,1pmonly";
-
 local upgrade_test_lists = {
   rockylinux8: {
     arm64: ["10.6.4-1", "10.6.9-5", "10.6.11-6", "10.6.12-7", "10.6.15-10"],
@@ -171,7 +167,7 @@ local Pipeline(branch, platform, event, arch="amd64", server="10.6-enterprise", 
     ],
   },
 
-  local regression_tests = if (event == "cron") then [
+  local regression_tests_base = if (event == "cron") then [
     "test000.sh",
     "test001.sh",
     "test005.sh",
@@ -201,6 +197,9 @@ local Pipeline(branch, platform, event, arch="amd64", server="10.6-enterprise", 
     "test000.sh",
     "test001.sh",
   ],
+
+
+  local regression_tests = [regression_tests_base[i] for i in indexes(regression_tests_base) if !std.member(ignoreFailureStepList, regression_tests_base[i])],
 
   local mdb_server_versions = upgrade_test_lists[platformKey][arch],
 
@@ -311,19 +310,17 @@ local Pipeline(branch, platform, event, arch="amd64", server="10.6-enterprise", 
     image: "docker:git",
     volumes: [pipeline._volumes.docker, pipeline._volumes.mdb],
     environment: {
-      MTR_SUITE_LIST: "${MTR_SUITE_LIST:-" + mtr_suite_list + "}",
       MTR_FULL_SUITE: "${MTR_FULL_SUITE:-false}",
     },
     commands: [
       prepareTestContainer(getContainerName("mtr"), result, true),
-      'MTR_SUITE_LIST=$([ "$MTR_FULL_SUITE" == true ] && echo "' + mtr_full_set + '" || echo "$MTR_SUITE_LIST")',
 
       "apk add bash &&" +
       get_build_command("run_mtr.sh") +
       " --container-name " + getContainerName("mtr") +
       " --distro " + platform +
-      " --suite-list $${MTR_SUITE_LIST}" +
       " --triggering-event " + event +
+      " --full-mtr $${MTR_FULL_SUITE}" +
       if std.endsWith(result, "ASan") then " --run-as-extern" else "",
     ],
     [if (std.member(ignoreFailureStepList, "mtr")) then "failure"]: "ignore",
@@ -396,23 +393,13 @@ local Pipeline(branch, platform, event, arch="amd64", server="10.6-enterprise", 
     name: "dockerfile",
     depends_on: ["publish pkg", "publish cmapi build"],
     image: "alpine/git:2.49.0",
+    volumes: [pipeline._volumes.mdb],
     environment: {
-      DOCKER_BRANCH_REF: "${DRONE_SOURCE_BRANCH}",
-      DOCKER_REF_AUX: branch_ref,
+      DRONE_SOURCE_BRANCH: "${DRONE_SOURCE_BRANCH}",
     },
     commands: [
-      // compute branch.
-      'echo "$$DOCKER_REF"',
-      'echo "$$DOCKER_BRANCH_REF"',
-      // if DOCKER_REF is empty, try to see whether docker repository has a branch named as one we PR.
-      'export DOCKER_REF=$${DOCKER_REF:-$$(git ls-remote https://github.com/mariadb-corporation/mariadb-columnstore-docker --h --sort origin "refs/heads/$$DOCKER_BRANCH_REF" | grep -E -o "[^/]+$$")}',
-      'echo "$$DOCKER_REF"',
-      // DOCKER_REF can be empty if there is no appropriate branch in docker repository.
-      // assign what is appropriate by default.
-      "export DOCKER_REF=$${DOCKER_REF:-$$DOCKER_REF_AUX}",
-      'echo "$$DOCKER_REF"',
-      "git clone --branch $$DOCKER_REF --depth 1 https://github.com/mariadb-corporation/mariadb-columnstore-docker docker",
-      "touch docker/.secrets",
+      "apk add bash && " +
+      get_build_command("clone_docker_repo.sh"),
     ],
   },
   dockerhub:: {
@@ -485,11 +472,35 @@ local Pipeline(branch, platform, event, arch="amd64", server="10.6-enterprise", 
       MCS_IMAGE_NAME: "mariadb/enterprise-columnstore-dev:" + container_tags[0],
     },
     commands: [
-      "echo $$DOCKER_PASSWORD | docker login --username $$DOCKER_LOGIN --password-stdin",
       "apk add bash && " +
       get_build_command("run_multi_node_mtr.sh") +
       " --columnstore-image-name $${MCS_IMAGE_NAME} " +
       " --distro " + platform,
+    ],
+  },
+
+  multinode_mtrlog:: {
+    name: "multinode-mtrlog",
+    depends_on: ["mtr"],
+    image: "docker:28.2.2",
+    volumes: [pipeline._volumes.docker, pipeline._volumes.mdb],
+    when: {
+      status: ["success", "failure"],
+    },
+    commands: [
+      "apk add bash",
+      "mkdir -p /drone/src/" + result + "/mtr-multinode/mcs1 /drone/src/" + result + "/mtr-multinode/mcs2 /drone/src/" + result + "/mtr-multinode/mcs3",
+      "docker cp mcs1:/var/log/mariadb/columnstore/cmapi_server.log /drone/src/" + result + "/mtr-multinode/mcs1/ 2>/dev/null || true",
+      "docker cp mcs1:/var/log/mariadb/columnstore/debug.log /drone/src/" + result + "/mtr-multinode/mcs1/ 2>/dev/null || true",
+      "docker exec -t mcs1 journalctl -u mariadb --no-pager > /drone/src/" + result + "/mtr-multinode/mcs1/journalctl_mariadb.log 2>&1 || true",
+      "docker cp mcs2:/var/log/mariadb/columnstore/cmapi_server.log /drone/src/" + result + "/mtr-multinode/mcs2/ 2>/dev/null || true",
+      "docker cp mcs2:/var/log/mariadb/columnstore/debug.log /drone/src/" + result + "/mtr-multinode/mcs2/ 2>/dev/null || true",
+      "docker exec -t mcs2 journalctl -u mariadb --no-pager > /drone/src/" + result + "/mtr-multinode/mcs2/journalctl_mariadb.log 2>&1 || true",
+      "docker cp mcs3:/var/log/mariadb/columnstore/cmapi_server.log /drone/src/" + result + "/mtr-multinode/mcs3/ 2>/dev/null || true",
+      "docker cp mcs3:/var/log/mariadb/columnstore/debug.log /drone/src/" + result + "/mtr-multinode/mcs3/ 2>/dev/null || true",
+      "docker exec -t mcs3 journalctl -u mariadb --no-pager > /drone/src/" + result + "/mtr-multinode/mcs3/journalctl_mariadb.log 2>&1 || true",
+      "docker cp mcs1:/usr/share/mysql-test/var/log /drone/src/" + result + "/mtr-multinode/mcs1/mtr-logs 2>/dev/null || true",
+      "ls -lR /drone/src/" + result + "/mtr-multinode",
     ],
   },
 
@@ -632,7 +643,7 @@ local Pipeline(branch, platform, event, arch="amd64", server="10.6-enterprise", 
          [pipeline.cmapitest] +
          [pipeline.cmapilog] +
          [pipeline.publish("cmapilog")] +
-         (if (platform == "rockylinux:8" && arch == "amd64" && customBootstrapParamsKey == "gcc-toolset") then [pipeline.dockerfile] + [pipeline.dockerhub] + [pipeline.multi_node_mtr] else [pipeline.mtr] + [pipeline.mtrlog] + [pipeline.publish("mtrlog")]) +
+         (if (platform == "rockylinux:8" && arch == "amd64" && customBootstrapParamsKey == "gcc-toolset") then [pipeline.dockerfile] + [pipeline.dockerhub] + [pipeline.multi_node_mtr] + [pipeline.multinode_mtrlog] + [pipeline.publish("multinode-mtrlog")] else [pipeline.mtr] + [pipeline.mtrlog] + [pipeline.publish("mtrlog")]) +
          [pipeline.regression(regression_tests[i], if (i == 0) then ["mtr", "publish pkg", "publish cmapi build"] else [regression_tests[i - 1]]) for i in indexes(regression_tests)] +
          [pipeline.regressionlog] +
          [pipeline.publish("regressionlog")] +
@@ -702,16 +713,24 @@ local AllPipelines =
     for triggeringEvent in events
     for server in servers[current_branch]
   ] +
-  // last argument is to ignore mtr and regression failures
-  // [
-  //   Pipeline(b, platform, triggeringEvent, a, server, flag, "", ["regression", "mtr"])
-  //   for a in ["amd64"]
-  //   for b in std.objectFields(platforms)
-  //   for platform in ["ubuntu:24.04"]
-  //   for flag in ["ASan", "UBSan"]
-  //   for triggeringEvent in events
-  //   for server in servers[current_branch]
-  // ] +
+  [
+    Pipeline(b, platform, triggeringEvent, a, server, flag, "")
+    for a in ["amd64"]
+    for b in std.objectFields(platforms)
+    for platform in ["ubuntu:24.04"]
+    for flag in ["UBSan"]
+    for triggeringEvent in events
+    for server in servers[current_branch]
+  ] +
+  [
+    Pipeline(b, platform, triggeringEvent, a, server, flag, "", ['test009.sh', 'test011.sh', 'test012.sh'])
+    for a in ["amd64"]
+    for b in std.objectFields(platforms)
+    for platform in ["ubuntu:24.04"]
+    for flag in ["ASan"]
+    for triggeringEvent in events
+    for server in servers[current_branch]
+  ] +
 
   [];
 

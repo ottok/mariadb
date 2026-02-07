@@ -1685,8 +1685,7 @@ fseg_create(fil_space_t *space, ulint byte_offset, mtr_t *mtr, dberr_t *err,
 {
 	fseg_inode_t*	inode;
 	ib_id_t		seg_id;
-	uint32_t	n_reserved;
-	bool		reserved_extent = false;
+	uint32_t	n_reserved = 0;
 
 	DBUG_ENTER("fseg_create");
 
@@ -1713,16 +1712,16 @@ inode_alloc:
 	if (!inode) {
 		block = nullptr;
 reserve_extent:
-		if (!has_done_reservation && !reserved_extent) {
+		if (!has_done_reservation && !n_reserved) {
 			*err = fsp_reserve_free_extents(&n_reserved, space, 2,
 							FSP_NORMAL, mtr);
 			if (UNIV_UNLIKELY(*err != DB_SUCCESS)) {
 				DBUG_RETURN(nullptr);
 			}
 
+			ut_ad(n_reserved > 0);
 			/* Extents reserved successfully. So
 			try allocating the page or inode */
-			reserved_extent = true;
 			if (inode) {
 				goto page_alloc;
 			}
@@ -1792,7 +1791,8 @@ page_alloc:
 				       + block->page.frame, space->id);
 
 funct_exit:
-	if (!has_done_reservation && reserved_extent) {
+	if (n_reserved) {
+		ut_ad(!has_done_reservation);
 		space->release_free_extents(n_reserved);
 	}
 
@@ -2176,8 +2176,6 @@ take_hinted_page:
 		buf_block_t* block = fsp_alloc_free_page(
 			space, hint, mtr, init_mtr, err);
 
-		ut_ad(block || !has_done_reservation || *err);
-
 		if (block) {
 			/* Put the page in the fragment page array of the
 			segment */
@@ -2190,6 +2188,8 @@ take_hinted_page:
 			fseg_set_nth_frag_page_no(
 				seg_inode, iblock, n,
 				block->page.id().page_no(), mtr);
+		} else {
+			ut_ad(*err != DB_SUCCESS);
 		}
 
 		/* fsp_alloc_free_page() invoked fsp_init_file_page()
@@ -5723,6 +5723,14 @@ corrupt:
       goto corrupt;
     if (!dict_sys.is_sys_table(mach_read_from_8(field)))
     {
+      const byte *name_field = rec_get_nth_field_old(
+        rec, DICT_FLD__SYS_TABLES__NAME, &len);
+      if (len != UNIV_SQL_NULL && len > 0)
+      {
+        sql_print_information(
+          "InnoDB: Found unexpected table in system tablespace: %.*s",
+          (int)len, (const char *)name_field);
+      }
       err= DB_SUCCESS_LOCKED_REC;
       btr_pcur_close(&pcur);
       goto func_exit;
@@ -5740,7 +5748,7 @@ dberr_t fil_space_t::defragment() noexcept
   if (err == DB_SUCCESS_LOCKED_REC)
   {
     sql_print_information(
-      "InnoDB: User table exists in the system tablespace."
+      "InnoDB: Unexpected table exists in the system tablespace."
       "Please try to move the data from system tablespace "
       "to separate tablespace before defragment the "
       "system tablespace.");

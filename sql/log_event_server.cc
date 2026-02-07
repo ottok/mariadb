@@ -5003,6 +5003,12 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
       goto err;
     }
 
+    DBUG_EXECUTE_IF("rows_log_event_after_open_table", {
+      const char action[]=
+          "now SIGNAL after_open_table WAIT_FOR continue_rows_ev";
+      DBUG_ASSERT(!debug_sync_set_action(thd, STRING_WITH_LEN(action)));
+    };);
+
     /*
       When the open and locking succeeded, we check all tables to
       ensure that they still have the correct type.
@@ -7000,15 +7006,21 @@ int Rows_log_event::update_sequence()
   bool old_master= false;
   int err= 0;
 
-  if (!bitmap_is_set(table->rpl_write_set, MIN_VALUE_FIELD_NO) ||
-      (
-#if defined(WITH_WSREP)
-       ! WSREP(thd) &&
+  rpl_group_info *table_rgi=
+#ifdef WITH_WSREP
+  WSREP(thd) ? thd->wsrep_rgi :
 #endif
-       table->in_use->rgi_slave &&
-       !(table->in_use->rgi_slave->gtid_ev_flags2 & Gtid_log_event::FL_DDL) &&
+  table->in_use->rgi_slave;
+  rpl_group_info *thd_rgi=
+#ifdef WITH_WSREP
+  WSREP(thd) ? thd->wsrep_rgi :
+#endif
+  thd->rgi_slave;
+  if (!bitmap_is_set(table->rpl_write_set, MIN_VALUE_FIELD_NO) ||
+      (table_rgi &&
+       !(table_rgi->gtid_ev_flags2 & Gtid_log_event::FL_DDL) &&
        !(old_master=
-         rpl_master_has_bug(thd->rgi_slave->rli,
+         rpl_master_has_bug(thd_rgi->rli,
                             29621, FALSE, FALSE, FALSE, TRUE))))
   {
     /* This event come from a setval function executed on the master.
@@ -7067,10 +7079,22 @@ Write_rows_log_event::do_exec_row(rpl_group_info *rgi)
 #if defined(HAVE_REPLICATION)
 uint8 Write_rows_log_event::get_trg_event_map() const
 {
-  return trg2bit(TRG_EVENT_INSERT) | trg2bit(TRG_EVENT_UPDATE) |
-         trg2bit(TRG_EVENT_DELETE);
+  /*
+    In SLAVE_EXEC_MODE_IDEMPOTENT mode, Write_rows_log_event event is
+    implicitly a REPLACE, deleting all conflicting rows which can cause
+    foreign key constraint cascade operations on FK referencing table.
+
+    In SLAVE_EXEC_MODE_STRICT mode, the Write_rows_log_event is pure INSERT,
+    will never cause foreign key constraint cascade operations on foreign key
+    referencing tables.
+  */
+  if (slave_exec_mode_options == SLAVE_EXEC_MODE_IDEMPOTENT)
+    return trg2bit(TRG_EVENT_INSERT) | trg2bit(TRG_EVENT_DELETE);
+  else
+    return trg2bit(TRG_EVENT_INSERT);
 }
 #endif
+
 
 /**************************************************************************
 	Delete_rows_log_event member functions

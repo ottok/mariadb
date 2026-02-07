@@ -23,6 +23,8 @@ jobs:
           '',
           '--enable-all --enable-asn=template',
           '--enable-all --enable-asn=original',
+          '--enable-all --enable-asn=template CPPFLAGS=-DWOLFSSL_OLD_OID_SUM',
+          '--enable-all --enable-asn=original CPPFLAGS=-DWOLFSSL_OLD_OID_SUM',
           '--enable-harden-tls',
           '--enable-tls13 --enable-session-ticket --enable-dtls --enable-dtls13
              --enable-opensslextra --enable-sessioncerts
@@ -39,9 +41,30 @@ jobs:
           '--enable-dtls --enable-dtls13 --enable-dtls-frag-ch
            --enable-dtls-mtu',
           '--enable-dtls --enable-dtlscid --enable-dtls13 --enable-secure-renegotiation
-            --enable-psk --enable-aesccm --enable-nullcipher CPPFLAGS=-DWOLFSSL_STATIC_RSA',
+            --enable-psk --enable-aesccm --enable-nullcipher
+            CPPFLAGS=-DWOLFSSL_STATIC_RSA',
           '--enable-ascon --enable-experimental',
           '--enable-ascon CPPFLAGS=-DWOLFSSL_ASCON_UNROLL --enable-experimental',
+          '--enable-all CPPFLAGS=''-DNO_AES_192 -DNO_AES_256'' ',
+          '--enable-sniffer --enable-curve25519 --enable-curve448 --enable-enckeys
+            CPPFLAGS=-DWOLFSSL_DH_EXTRA',
+          '--enable-dtls --enable-dtls13 --enable-dtls-frag-ch
+            --enable-dtls-mtu CPPFLAGS=-DWOLFSSL_DTLS_RECORDS_CAN_SPAN_DATAGRAMS',
+          '--enable-opensslall --enable-opensslextra CPPFLAGS=-DWC_RNG_SEED_CB',
+          '--enable-opensslall --enable-opensslextra
+            CPPFLAGS=''-DWC_RNG_SEED_CB -DWOLFSSL_NO_GETPID'' ',
+          '--enable-opensslextra CPPFLAGS=''-DWOLFSSL_NO_CA_NAMES'' ',
+          '--enable-opensslextra=x509small',
+          'CPPFLAGS=''-DWOLFSSL_EXTRA'' ',
+          '--enable-lms=small,verify-only --enable-xmss=small,verify-only',
+          '--disable-sys-ca-certs',
+          '--enable-all CPPFLAGS=-DWOLFSSL_DEBUG_CERTS ',
+          '--enable-all CFLAGS="-DWOLFSSL_CHECK_MEM_ZERO"',
+          '--enable-coding=no',
+          '--enable-dtls --enable-dtls13 --enable-ocspstapling --enable-ocspstapling2
+           --enable-cert-setup-cb --enable-sessioncerts',
+          '--disable-sni --disable-ecc --disable-tls13 --disable-secure-renegotiation-info',
+          'CPPFLAGS=-DWOLFSSL_BLIND_PRIVATE_KEY',
         ]
     name: make check
     if: github.repository_owner == 'wolfssl'
@@ -52,7 +75,7 @@ jobs:
       - name: Build and test wolfSSL
         uses: wolfSSL/actions-build-autotools-project@v1
         with:
-          configure: ${{ matrix.config }}
+          configure: CFLAGS="-pedantic -Wno-overlength-strings -Wdeclaration-after-statement -DTEST_LIBWOLFSSL_SOURCES_INCLUSION_SEQUENCE" ${{ matrix.config }}
           check: true
 
   make_user_settings:

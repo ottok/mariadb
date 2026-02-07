@@ -1369,22 +1369,24 @@ bool buildPredicateItem(Item_func* ifp, gp_walk_info* gwip)
   else if (ifp->functype() == Item_func::IN_FUNC)
   {
     idbassert(gwip->rcWorkStack.size() >= 2);
-    ReturnedColumn* rhs = gwip->rcWorkStack.top();
+    std::unique_ptr<ReturnedColumn> rhs(gwip->rcWorkStack.top());
     gwip->rcWorkStack.pop();
-    ReturnedColumn* lhs = gwip->rcWorkStack.top();
+    std::unique_ptr<ReturnedColumn> lhs(gwip->rcWorkStack.top());
     gwip->rcWorkStack.pop();
 
     // @bug3038
-    RowColumn* rrhs = dynamic_cast<RowColumn*>(rhs);
-    RowColumn* rlhs = dynamic_cast<RowColumn*>(lhs);
+    RowColumn* rrhs = dynamic_cast<RowColumn*>(rhs.get());
+    RowColumn* rlhs = dynamic_cast<RowColumn*>(lhs.get());
 
     if (rrhs && rlhs)
     {
+      rhs.release();  // buildRowColumnFilter takes ownership
+      lhs.release();
       return buildRowColumnFilter(gwip, rrhs, rlhs, ifp);
     }
 
-    ConstantColumn* crhs = dynamic_cast<ConstantColumn*>(rhs);
-    ConstantColumn* clhs = dynamic_cast<ConstantColumn*>(lhs);
+    ConstantColumn* crhs = dynamic_cast<ConstantColumn*>(rhs.get());
+    ConstantColumn* clhs = dynamic_cast<ConstantColumn*>(lhs.get());
 
     if (!crhs || !clhs)
     {
@@ -1411,11 +1413,10 @@ bool buildPredicateItem(Item_func* ifp, gp_walk_info* gwip)
     sop.reset(new PredicateOperator(eqop));
     SRCP scsp = gwip->scsp;
     idbassert(scsp.get() != nullptr);
-    // sop->setOpType(gwip->scsp->resultType(), rhs->resultType());
     sop->setOpType(scsp->resultType(), rhs->resultType());
     ConstantFilter* cf = 0;
 
-    cf = new ConstantFilter(sop, scsp->clone(), lhs);
+    cf = new ConstantFilter(sop, scsp->clone(), lhs.release());
     sop.reset(new LogicOperator(cmbop));
     cf->op(sop);
     sop.reset(new PredicateOperator(eqop));
@@ -1424,15 +1425,18 @@ bool buildPredicateItem(Item_func* ifp, gp_walk_info* gwip)
 
     while (!gwip->rcWorkStack.empty())
     {
-      lhs = gwip->rcWorkStack.top();
+      std::unique_ptr<ReturnedColumn> val(gwip->rcWorkStack.top());
 
-      if (dynamic_cast<ConstantColumn*>(lhs) == 0)
+      if (dynamic_cast<ConstantColumn*>(val.get()) == 0)
+      {
+        val.release();  // put back - not ours to delete
         break;
+      }
 
       gwip->rcWorkStack.pop();
       sop.reset(new PredicateOperator(eqop));
-      sop->setOpType(scsp->resultType(), lhs->resultType());
-      cf->pushFilter(new SimpleFilter(sop, scsp->clone(), lhs->clone(), gwip->timeZone));
+      sop->setOpType(scsp->resultType(), val->resultType());
+      cf->pushFilter(new SimpleFilter(sop, scsp->clone(), val->clone(), gwip->timeZone));
     }
 
     if (!gwip->rcWorkStack.empty())
@@ -2254,10 +2258,10 @@ void setError(THD* thd, uint32_t errcode, string errmsg)
   ci->expressionId = 0;
 }
 
-void setError(THD* thd, uint32_t errcode, string errmsg, gp_walk_info& gwi)
+void setError(THD* thd, uint32_t errcode, string errmsg, gp_walk_info& /*gwi*/)
 {
-  // Clean up any allocated objects in the work stacks to prevent memory leaks
-  clearDeleteStacks(gwi);
+  // Note: Work stacks are cleaned up by StackCleanupGuard in the calling function.
+  // The gwi parameter is kept for API compatibility.
   setError(thd, errcode, errmsg);
 }
 
@@ -2269,13 +2273,12 @@ int setErrorAndReturn(gp_walk_info& gwi)
   // processing.
   if (gwi.thd->derived_tables_processing)
   {
-    // Clean up work stacks even for derived table processing to prevent leaks
-    clearDeleteStacks(gwi);
+    // Work stacks are cleaned up by StackCleanupGuard in the caller (processWhere)
     gwi.cs_vtable_is_update_with_derive = true;
     return -1;
   }
 
-  setError(gwi.thd, ER_INTERNAL_ERROR, gwi.parseErrorText, gwi);
+  setError(gwi.thd, ER_INTERNAL_ERROR, gwi.parseErrorText);
   return ER_INTERNAL_ERROR;
 }
 
@@ -5267,31 +5270,11 @@ void extractColumnStatistics(TABLE_LIST* table_ptr, gp_walk_info& gwi)
       Field* field = table_ptr->table->key_info[j].key_part[0].field;
       if (field->read_stats)
       {
-        auto* histogram = dynamic_cast<Histogram_json_hb*>(field->read_stats->histogram);
-        if (histogram)
-        {
-          SchemaAndTableName tableName = {field->table->s->db.str, field->table->s->table_name.str};
-          auto sc =
-              std::unique_ptr<execplan::SimpleColumn>(buildSimpleColumnFromFieldForStatistics(field, gwi));
-          auto tableStatisticsMapIt = gwi.tableStatisticsMap.find(tableName);
-          if (tableStatisticsMapIt == gwi.tableStatisticsMap.end())
-          {
-            gwi.tableStatisticsMap[tableName][field->field_name.str] = {*sc, {histogram}};
-          }
-          else
-          {
-            auto columnStatisticsMapIt = tableStatisticsMapIt->second.find(field->field_name.str);
-            if (columnStatisticsMapIt == tableStatisticsMapIt->second.end())
-            {
-              tableStatisticsMapIt->second[field->field_name.str] = {*sc, {histogram}};
-            }
-            else
-            {
-              auto columnStatisticsVec = columnStatisticsMapIt->second.second;
-              columnStatisticsVec.push_back(histogram);
-            }
-          }
-        }
+        SchemaAndTableName tableName = {field->table->s->db.str, field->table->s->table_name.str};
+        auto sc =
+            std::unique_ptr<execplan::SimpleColumn>(buildSimpleColumnFromFieldForStatistics(field, gwi));
+        assert(field->field_name.str);
+        gwi.tableStatistics.createOrUpdate(tableName, field->field_name.str, *sc, field->read_stats);
       }
     }
   }
@@ -6334,25 +6317,6 @@ int processWhere(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep, const s
     csep->filters(filters);
   }
 
-  if (!gwi.rcWorkStack.empty())
-  {
-    while (!gwi.rcWorkStack.empty())
-    {
-      ReturnedColumn* t = gwi.rcWorkStack.top();
-      delete t;
-      gwi.rcWorkStack.pop();
-    }
-  }
-  if (!gwi.ptWorkStack.empty())
-  {
-    while (!gwi.ptWorkStack.empty())
-    {
-      ParseTree* t = gwi.ptWorkStack.top();
-      delete t;
-      gwi.ptWorkStack.pop();
-    }
-  }
-
   return 0;
 }
 
@@ -6956,6 +6920,7 @@ int processSelect(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep, vector
     for (uint32_t i = 0; i < gwi.returnedCols.size(); i++)
     {
       vector<CalpontSystemCatalog::ColType> coltypes;
+      coltypes.reserve(csep->unionVec().size());
 
       for (uint32_t j = 0; j < csep->unionVec().size(); j++)
       {
@@ -7236,6 +7201,9 @@ int processOrderBy(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep,
 int getSelectPlan(gp_walk_info& gwi, SELECT_LEX& select_lex, SCSEP& csep, bool isUnion,
                   bool isSelectHandlerTop, bool isSelectLexUnit, const std::vector<COND*>& condStack)
 {
+  // RAII: automatically clean up work stacks on any return path
+  StackCleanupGuard stackGuard(gwi);
+
 #ifdef DEBUG_WALK_COND
   cerr << "getSelectPlan()" << endl;
 #endif

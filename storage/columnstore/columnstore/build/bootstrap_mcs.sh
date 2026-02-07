@@ -630,6 +630,12 @@ run_unit_tests() {
         return
     fi
 
+    make_dir /etc/columnstore
+    if [[ ! -f /etc/columnstore/Columnstore.xml ]]; then
+        cp "$MDB_SOURCE_PATH"/storage/columnstore/columnstore/oam/etc/Columnstore.xml /etc/columnstore/Columnstore.xml
+    fi
+
+
     message "Running unittests"
     cd $MARIA_BUILD_PATH
     ${CTEST_BIN_NAME} . -R columnstore: -j $(nproc) --output-on-failure
@@ -695,7 +701,7 @@ fix_config_files() {
         if grep -q ASAN $MDB_SERVICE_FILE; then
             warn "MDB Server has ASAN options in $MDB_SERVICE_FILE, check it's compatibility"
         else
-            echo Environment="'ASAN_OPTIONS=abort_on_error=$SANITIZERS_ABORT_ON_ERROR:disable_coredump=0,print_stats=false,detect_odr_violation=0,check_initialization_order=0,detect_stack_use_after_return=1,atexit=false,log_path=${REPORT_PATH}/asan.mariadb'" >>$MDB_SERVICE_FILE
+            echo Environment="'ASAN_OPTIONS=abort_on_error=$SANITIZERS_ABORT_ON_ERROR:disable_coredump=0,print_stats=false,detect_odr_violation=0,check_initialization_order=0,detect_stack_use_after_return=0,atexit=false,log_path=${REPORT_PATH}/asan.mariadb'" >>$MDB_SERVICE_FILE
             message "ASAN options were added to $MDB_SERVICE_FILE"
         fi
     fi
