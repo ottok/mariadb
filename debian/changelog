@@ -1,3 +1,10 @@
+mariadb (1:11.8.6-2) UNRELEASED; urgency=medium
+
+  [ Aquila Macedo ]
+  * Add systemd hardening patch for MariaDB units (Closes: #1123021)
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 10 Feb 2026 02:02:02 +0000
+
 mariadb (1:11.8.6-1) unstable; urgency=medium
 
   * Update d/watch to use uscan v5 format
