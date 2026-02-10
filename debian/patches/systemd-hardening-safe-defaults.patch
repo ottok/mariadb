@@ -10,6 +10,10 @@ MDEV-36591, MDEV-36681
 
 Includes kernel/cgroup protections, disables realtime scheduling, locks
 personality, and restricts namespace creation (overrideable via drop-in)
+
+This patch should be submitted upstream once proven stable in Debian.
+
+Forwarded: no
 ---
  support-files/mariadb.service.in  | 21 +++++++++++++++++++++
  support-files/mariadb@.service.in | 21 +++++++++++++++++++++

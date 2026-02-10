@@ -12,7 +12,7 @@ https://ci.debian.net/packages/m/mariadb-connector-odbc/testing/amd64/48373500/
 https://ci.debian.net/packages/p/pam-mysql/testing/amd64/48373511/
 https://ci.debian.net/packages/r/roundcube/testing/amd64/48373518/
 
-Forwarded: no
+Forwarded: not-needed
 ---
  mysys/my_init.c | 3 ++-
  1 file changed, 2 insertions(+), 1 deletion(-)

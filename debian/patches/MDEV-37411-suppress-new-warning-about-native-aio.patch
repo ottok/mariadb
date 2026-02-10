@@ -25,14 +25,14 @@ last resort.
 
 Edited & Updated: Daniel Black <daniel@mariabdb.org>
 
-Forwarded: https://jira.mariadb.org/browse/MDEV-37411 (rejected)
-
 Upstream rejected this with the conclusion, is that it will start working in
 Debian/Salsa/Ubuntu/Launchpad once the Linux kernel is new enough to handle the
 I/O calls and fallbacks properly, or once the CI system increases the value of
 /proc/sys/fs/aio-max-nr to 1 million or so, to allow multiple parallel MariaDB
 servers (as started by mariadb-test-run) each have enough quota for native AIO
 to work.
+
+Forwarded: https://jira.mariadb.org/browse/MDEV-37411 (rejected)
 ---
  mysql-test/mariadb-test-run.pl | 2 ++
  1 file changed, 2 insertions(+)

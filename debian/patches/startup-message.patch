@@ -28,7 +28,12 @@ Server output if built in git directory:
 Logs will also show as server output:
     mysqld: Version: '11.8.1-MariaDB-5 from Debian'  socket: '/run/mysqld/mysqld.sock'  port: 3306  -- Please help get to 10k stars at https://github.com/MariaDB/Server
 
-Forwarded: no
+This patch can be dropped if Debian updates to ship
+
+Something similar was merged in https://github.com/MariaDB/server/commit/346c7afe9b7071ce9c47892a83d69944b608b3da
+and thus included in MariaDB 12.3 onward.
+
+Forwarded: not-needed
 ---
  sql/mysqld.cc | 20 +++++++++++++++-----
  1 file changed, 15 insertions(+), 5 deletions(-)

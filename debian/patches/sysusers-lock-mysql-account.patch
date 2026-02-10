@@ -4,6 +4,10 @@ Subject: sysusers.d: lock mysql user and keep Debian home/shell
 
 Use u! and set HOME=/nonexistent and shell=/bin/false for the mysql
 user.
+
+This patch should be submitted upstream once proven stable in Debian.
+
+Forwarded: no
 ---
  support-files/sysusers.conf.in | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
