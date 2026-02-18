@@ -16,7 +16,7 @@ Forwarded: https://github.com/MariaDB/server/pull/4457
  1 file changed, 14 insertions(+), 10 deletions(-)
 
 diff --git a/scripts/mysql_secure_installation.sh b/scripts/mysql_secure_installation.sh
-index 5883398..2d21973 100755
+index 5883398..f9f020e 100755
 --- a/scripts/mysql_secure_installation.sh
 +++ b/scripts/mysql_secure_installation.sh
 @@ -338,7 +338,8 @@ set_root_password() {
@@ -68,7 +68,7 @@ index 5883398..2d21973 100755
 +echo "NOTE: MariaDB is secure by default in Debian. Running this script is"
 +echo "      useless at best, and misleading at worst. This script will be"
 +echo "      removed in a future MariaDB release in Debian. Please read"
-+echo "      mariadb-server.README.Debian for details."
++echo "      /usr/share/doc/mariadb-server/README.Debian.gz for details."
  echo
 -echo "In order to log into MariaDB to secure it, we'll need the current"
 -echo "password for the root user. If you've just installed MariaDB, and"
