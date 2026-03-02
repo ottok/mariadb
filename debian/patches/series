@@ -7,3 +7,4 @@ hide-mysql-command-deprecation-warnings.patch
 Fix-misc-spelling-in-MariaDB-Server-repository.patch
 Improve-output-from-mariadb-secure-installation-to-be-mor.patch
 MDEV-37411-suppress-new-warning-about-native-aio.patch
+include-debian-in-test-merge-alter-result.patch
