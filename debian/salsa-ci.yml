@@ -51,47 +51,6 @@ stages:
   - test extras
   - publish  # Stage referenced by Salsa CI template aptly stanza, so must exist even though not used
 
-# try to autodetect the target distribution
-.get-target-distribution: &get-target-distribution
-  - dist=$(dpkg-parsechangelog --show-field=distribution || echo UNRELEASED)
-  # if dist is UNRELEASED, try to use 'dch' to guess a sane default.
-  # Use questing by default if VENDOR's value is `ubuntu`.
-  - clbak="/tmp/debian.changelog"
-  - cp debian/changelog "${clbak}"
-  - |
-    if [ "$VENDOR" = ubuntu ] && [ "${dist}" = UNRELEASED ]
-    then
-      dist=questing
-    elif [ "${dist}" = UNRELEASED ]
-    then
-      dch --release foo || true; dist=$(dpkg-parsechangelog --show-field=distribution || echo UNRELEASED); cat "${clbak}" >debian/changelog;
-    fi
-  - rm -rf "${clbak}"
-  # strip away UNRELEASED prefix/suffix/...
-  - dist=${dist#UNRELEASED-}
-  - dist=${dist%-UNRELEASED}
-  - dist=${dist%-security}
-  - dist=${dist#UNRELEASED}
-  - test -n "${dist}" || dist=$DEFAULT_RELEASE
-
-  - echo "RELEASE_FROM_CHANGELOG=${dist}" | tee ${CI_PROJECT_DIR}/salsa.env
-
-# The extract-soruce runs using the gbp container image, which is always Debian
-# unstable, and thus origtargz in it won't see any Trixie sources unless it is
-# injected there like this.
-extract-source:
-  extends: .provisioning-extract-source
-  before_script:
-    - |
-      cat > /etc/apt/sources.list.d/trixie.sources <<EOF
-      Types: deb-src
-      URIs: http://deb.debian.org/debian
-      Suites: trixie
-      Components: main
-      Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
-      EOF
-      apt update -qq
-
 packaging-fix-checks:
   stage: provisioning
   image: debian:trixie-slim
