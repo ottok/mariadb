@@ -64,3 +64,8 @@ eatmydata perl -I. ./mariadb-test-run.pl \
     $MTR_ARGUMENTS_APPEND \
     "$@" 2>&1
 echo "run: OK"
+
+echo "=== AppArmor diagnostics ==="
+aa-status 2>/dev/null | grep -A5 -B5 mariadb || true
+dmesg | grep -i apparmor | grep -i mariadb || true
+journalctl -k | grep -i apparmor | grep -i mariadb || true
