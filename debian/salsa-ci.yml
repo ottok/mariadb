@@ -589,12 +589,14 @@ blhc:
   before_script:
     - *test-prepare-container
     - apt-get install -qq --yes --no-install-recommends ca-certificates
+    # Test upgrades from the last version upstream released for Debian Sid in
+    # their archive for each upstream major release series
     - |
       cat > /etc/apt/sources.list.d/mariadb.sources <<EOF
       X-Repolib-Name: MariaDB
       Types: deb
       URIs: https://archive.mariadb.org/mariadb-${MARIADB_VERSION}/repo/debian
-      Suites: trixie
+      Suites: sid
       Components: main
       EOF
       # Pin the MariaDB.org repository so all MariaDB packages are from the
@@ -1006,7 +1008,7 @@ mariadb.org-11.8 upgrade:
     - dpkg -l | grep -e "mariadb-server.*11\.8"
     - *test-verify-initial
     # Install MariaDB built in this commit
-    # Force downgrades so our version installs on top of upstream revision, e.g. 1:11.4.2-1 vs 1:11.4.2+mariadb~debsid
+    # Force downgrades so our version installs on top of upstream revision, e.g. 1:11.8.6-0+deb13u1 vs 1:11.8.6+maria~deb13
     - apt-get install -q --yes --allow-downgrades ./*.deb
     # Verify installation of MariaDB built in this commit
     - dpkg -l | grep -iE 'maria|mysql|galera' || true # List installed
@@ -1014,7 +1016,7 @@ mariadb.org-11.8 upgrade:
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
-# archive.mariadb.org for Debian Trixie has no 11.4 yet
+# archive.mariadb.org last Debian Sid version was 11.4.5
 mariadb.org-11.4 upgrade:
   extends: .salsa-ci-template-for-mariadb-upgrade
   stage: upgrade MariaDB variant
@@ -1027,9 +1029,8 @@ mariadb.org-11.4 upgrade:
     - *test-install-all
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
-  allow_failure: true
 
-# archive.mariadb.org for Debian Trixie has no 10.11 yet
+# archive.mariadb.org last Debian Sid version was 10.11.8
 mariadb.org-10.11 upgrade:
   extends: .salsa-ci-template-for-mariadb-upgrade
   stage: upgrade MariaDB variant
@@ -1042,9 +1043,8 @@ mariadb.org-10.11 upgrade:
     - *test-install-all
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
-  allow_failure: true
 
-# archive.mariadb.org for Debian Trixie has no 10.6 yet
+# archive.mariadb.org last Debian Sid version was 10.6.12
 mariadb.org-10.6 upgrade:
   extends: .salsa-ci-template-for-mariadb-upgrade
   stage: upgrade MariaDB variant
@@ -1059,7 +1059,32 @@ mariadb.org-10.6 upgrade:
     - *test-install-all
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
-  allow_failure: true
+
+# archive.mariadb.org last Debian Sid version was 10.5.13
+mariadb.org-10.5 upgrade:
+  extends: .salsa-ci-template-for-mariadb-upgrade
+  stage: upgrade MariaDB variant
+  variables:
+    MARIADB_VERSION: "10.5"
+  script:
+    # OpenSSL 1.1 was removed from Debian Sid in Dec 2022 as Bookworm will ship
+    # with OpenSSL 3.0 only. Use OpenSSL 1.1 from Debian snapshots to be able to
+    # install MariaDB binaries that depend on it.
+    - |
+      apt-get -qq install --no-install-recommends --yes curl ca-certificates
+      curl -sLO https://snapshot.debian.org/archive/debian/20220507T034236Z/pool/main/o/openssl/libssl1.1_1.1.1o-1_amd64.deb
+      apt-get -qq install --no-install-recommends --yes ./libssl1.1_1.1.1o-1_amd64.deb
+    # Package libaio1 was replaced by libaio1t64 in Debian Sid in April 2024.
+    # Use libaio1 from Debian snapshots to be able to install MariaDB binaries
+    # that depend on it.
+    - |
+      curl -sLO https://snapshot.debian.org/archive/debian/20240331T210805Z/pool/main/liba/libaio/libaio1_0.3.113-5_amd64.deb
+      apt-get -qq install --no-install-recommends --yes ./libaio1_0.3.113-5_amd64.deb
+    - apt-get install -qq --yes mariadb-server
+    - *test-verify-initial
+    - *test-install-all
+    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
+    - *test-verify-final
 
 # Note: pmm2-client does not exist in the Bookworm repository anymore
 percona-xtradb-5.7 with Bookworm upgrade:
