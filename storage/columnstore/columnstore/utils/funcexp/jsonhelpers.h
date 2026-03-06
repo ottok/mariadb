@@ -10,10 +10,10 @@
 #include <my_sys.h>
 // #include <json_lib.h>
 
-#include "mariadb_charset/collation.h"
+#include "collation.h"
 #include "functor_json.h"
 #include "functor_str.h"
-#include "mariadb_charset/collation.h"
+#include "collation.h"
 #include "rowgroup.h"
 #include "treenode.h"
 #include "functioncolumn.h"
@@ -30,19 +30,19 @@ static const int NO_WILDCARD_ALLOWED = 1;
   Checks if the path has '.*' '[*]' or '**' constructions
   and sets the NO_WILDCARD_ALLOWED error if the case.
 */
-int setupJSPath(json_path_t* path, CHARSET_INFO* cs, const string_view& str, bool wildcards);
+int setupJSPath(json_path_t* path, CHARSET_INFO* cs, const std::string_view& str, bool wildcards);
 
 // Return true if err occur, let the outer function handle the exception
-bool appendEscapedJS(string& ret, const CHARSET_INFO* retCS, const utils::NullString& js,
+bool appendEscapedJS(std::string& ret, const CHARSET_INFO* retCS, const utils::NullString& js,
                      const CHARSET_INFO* jsCS);
-bool appendJSKeyName(string& ret, const CHARSET_INFO* retCS, rowgroup::Row& row, execplan::SPTP& parm);
-bool appendJSValue(string& ret, const CHARSET_INFO* retCS, rowgroup::Row& row, execplan::SPTP& parm);
+bool appendJSKeyName(std::string& ret, const CHARSET_INFO* retCS, rowgroup::Row& row, execplan::SPTP& parm);
+bool appendJSValue(std::string& ret, const CHARSET_INFO* retCS, rowgroup::Row& row, execplan::SPTP& parm);
 
 static const int TAB_SIZE_LIMIT = 8;
 static const char tab_arr[TAB_SIZE_LIMIT + 1] = "        ";
 
 // Format the json using format mode
-int doFormat(json_engine_t* je, string& niceJS, Func_json_format::FORMATS mode, int tabSize = 4);
+int doFormat(json_engine_t* je, std::string& niceJS, Func_json_format::FORMATS mode, int tabSize = 4);
 
 static const int SHOULD_END_WITH_ARRAY = 2;
 static const int TRIVIAL_PATH_NOT_ALLOWED = 3;
@@ -63,8 +63,18 @@ using IntType = uint;
 inline static int locateJSPath(json_engine_t& jsEg, JSONPath& path, int* jsErr = nullptr)
 {
   IntType arrayCounters[JSON_DEPTH_LIMIT];
+
+#if MYSQL_VERSION_ID >= 120200
+  MEM_ROOT_DYNAMIC_ARRAY array;
+
+  initJsonArray(NULL, &array, sizeof(int), &arrayCounters, MY_INIT_BUFFER_USED | MY_BUFFER_NO_RESIZE);
+
+  path.currStep = reinterpret_cast<json_path_step_t*>(path.p.steps.buffer);
+  if (json_find_path(&jsEg, &path.p, &path.currStep, &array))
+#else
   path.currStep = path.p.steps;
   if (json_find_path(&jsEg, &path.p, &path.currStep, arrayCounters))
+#endif
   {
     if (jsErr && jsEg.s.error)
       *jsErr = 1;
@@ -94,13 +104,6 @@ inline void initJSEngine(json_engine_t& jsEg, const CHARSET_INFO* jsCS, const ut
 
 int parseJSPath(JSONPath& path, rowgroup::Row& row, execplan::SPTP& parm, bool wildcards = true);
 
-inline void initJSPaths(vector<JSONPath>& paths, FunctionParm& fp, const int start, const int step)
-{
-  if (paths.empty())
-    for (size_t i = start; i < fp.size(); i += step)
-      paths.emplace_back();
-}
-
-bool matchJSPath(const vector<funcexp::JSONPath>& paths, const json_path_t* p, json_value_types valType,
+bool matchJSPath(const std::vector<funcexp::JSONPath>& paths, const json_path_t* p, json_value_types valType,
                  const int* arrayCounter = nullptr, bool exact = true);
 }  // namespace funcexp::helpers

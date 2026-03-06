@@ -21,8 +21,7 @@
 #include <string>
 #include <iostream>
 #include <stack>
-#include <tr1/unordered_map>
-#include <tr1/unordered_set>
+#include <unordered.h>
 #include <fstream>
 #include <sstream>
 #include <cerrno>
@@ -35,8 +34,6 @@
 #include "messagelog.h"
 
 #include <string.h>
-
-using namespace std;
 
 #include <boost/scoped_ptr.hpp>
 #include <boost/shared_ptr.hpp>
@@ -63,7 +60,6 @@ using namespace logging;
 #include "ha_subquery.h"
 #include "ha_mcs_pushdown.h"
 #include "ha_tzinfo.h"
-#include "ha_mcs_logging.h"
 using namespace cal_impl_if;
 
 #include "aggregatecolumn.h"
@@ -73,7 +69,6 @@ using namespace cal_impl_if;
 #include "calpontsystemcatalog.h"
 #include "constantcolumn.h"
 #include "constantfilter.h"
-#include "existsfilter.h"
 #include "functioncolumn.h"
 #include "groupconcatcolumn.h"
 #include "intervalcolumn.h"
@@ -83,10 +78,8 @@ using namespace cal_impl_if;
 #include "rewrites.h"
 #include "rowcolumn.h"
 #include "rulebased_optimizer.h"
-#include "selectfilter.h"
 #include "simplecolumn_decimal.h"
 #include "simplecolumn_int.h"
-#include "simplecolumn_uint.h"
 #include "simplefilter.h"
 #include "udafcolumn.h"
 using namespace execplan;
@@ -99,8 +92,45 @@ using namespace funcexp;
 
 #include "ha_view.h"
 
+using namespace std;
+
 namespace cal_impl_if
 {
+// Helper utilities to store plan strings and applied rules into cal_connection_info
+
+enum class PlanType
+{
+  Original,
+  Optimized
+};
+
+static cal_connection_info* ensure_conn_info()
+{
+  if (get_fe_conn_info_ptr() == NULL)
+  {
+    set_fe_conn_info_ptr((void*)new cal_connection_info());
+    thd_set_ha_data(current_thd, mcs_hton, get_fe_conn_info_ptr());
+  }
+  return static_cast<cal_connection_info*>(get_fe_conn_info_ptr());
+}
+
+static void store_query_plan(execplan::SCSEP& csep, PlanType planType)
+{
+  cal_connection_info* ci = ensure_conn_info();
+  switch (planType)
+  {
+    case PlanType::Original: ci->queryPlanOriginal = csep->toString(); break;
+    case PlanType::Optimized: ci->queryPlanOptimized = csep->toString(); break;
+    default: break;
+  }
+}
+
+static void store_applied_rules(const std::string rboRules)
+{
+  cal_connection_info* ci = ensure_conn_info();
+  ci->rboAppliedRules = rboRules;
+}
+
 // This is taken from Item_cond::fix_fields in sql/item_cmpfunc.cc.
 void calculateNotNullTables(const std::vector<COND*>& condList, table_map& not_null_tables)
 {
@@ -506,7 +536,6 @@ bool sortItemIsInGroupRec(Item* sort_item, Item* group_item)
     Item* ifp_sort_arg = ifp_sort->arguments()[i];
     if (ifp_sort_arg->type() == Item::FUNC_ITEM || ifp_sort_arg->type() == Item::FIELD_ITEM)
     {
-      Item* ifp_sort_arg = ifp_sort->arguments()[i];
       found = sortItemIsInGroupRec(ifp_sort_arg, group_item);
     }
     else if (ifp_sort_arg->type() == Item::REF_ITEM)
@@ -1231,19 +1260,20 @@ bool buildEqualityPredicate(execplan::ReturnedColumn* lhs, execplan::ReturnedCol
 
   if (sop->op() == OP_EQ)
   {
-    CalpontSystemCatalog::TableAliasName tan_lhs;
-    CalpontSystemCatalog::TableAliasName tan_rhs;
-    bool outerjoin = (rhs->singleTable(tan_rhs) && lhs->singleTable(tan_lhs));
+    auto tan_rhs = rhs->singleTable();
+    auto tan_lhs = lhs->singleTable();
+
+    bool outerjoin = (tan_rhs && tan_lhs);
 
     // @bug 1632. Alias should be taken account to the identity of tables for selfjoin to work
-    if (outerjoin && tan_lhs != tan_rhs)  // join
+    if (outerjoin && *tan_lhs != *tan_rhs)  // join
     {
       if (!gwip->condPush)  // vtable
       {
         if (!gwip->innerTables.empty())
         {
-          checkOuterTableColumn(gwip, tan_lhs, lhs);
-          checkOuterTableColumn(gwip, tan_rhs, rhs);
+          checkOuterTableColumn(gwip, *tan_lhs, lhs);
+          checkOuterTableColumn(gwip, *tan_rhs, rhs);
         }
 
         if (funcType == Item_func::EQ_FUNC)
@@ -1339,22 +1369,24 @@ bool buildPredicateItem(Item_func* ifp, gp_walk_info* gwip)
   else if (ifp->functype() == Item_func::IN_FUNC)
   {
     idbassert(gwip->rcWorkStack.size() >= 2);
-    ReturnedColumn* rhs = gwip->rcWorkStack.top();
+    std::unique_ptr<ReturnedColumn> rhs(gwip->rcWorkStack.top());
     gwip->rcWorkStack.pop();
-    ReturnedColumn* lhs = gwip->rcWorkStack.top();
+    std::unique_ptr<ReturnedColumn> lhs(gwip->rcWorkStack.top());
     gwip->rcWorkStack.pop();
 
     // @bug3038
-    RowColumn* rrhs = dynamic_cast<RowColumn*>(rhs);
-    RowColumn* rlhs = dynamic_cast<RowColumn*>(lhs);
+    RowColumn* rrhs = dynamic_cast<RowColumn*>(rhs.get());
+    RowColumn* rlhs = dynamic_cast<RowColumn*>(lhs.get());
 
     if (rrhs && rlhs)
     {
+      rhs.release();  // buildRowColumnFilter takes ownership
+      lhs.release();
       return buildRowColumnFilter(gwip, rrhs, rlhs, ifp);
     }
 
-    ConstantColumn* crhs = dynamic_cast<ConstantColumn*>(rhs);
-    ConstantColumn* clhs = dynamic_cast<ConstantColumn*>(lhs);
+    ConstantColumn* crhs = dynamic_cast<ConstantColumn*>(rhs.get());
+    ConstantColumn* clhs = dynamic_cast<ConstantColumn*>(lhs.get());
 
     if (!crhs || !clhs)
     {
@@ -1381,11 +1413,10 @@ bool buildPredicateItem(Item_func* ifp, gp_walk_info* gwip)
     sop.reset(new PredicateOperator(eqop));
     SRCP scsp = gwip->scsp;
     idbassert(scsp.get() != nullptr);
-    // sop->setOpType(gwip->scsp->resultType(), rhs->resultType());
     sop->setOpType(scsp->resultType(), rhs->resultType());
     ConstantFilter* cf = 0;
 
-    cf = new ConstantFilter(sop, scsp->clone(), lhs);
+    cf = new ConstantFilter(sop, scsp->clone(), lhs.release());
     sop.reset(new LogicOperator(cmbop));
     cf->op(sop);
     sop.reset(new PredicateOperator(eqop));
@@ -1394,15 +1425,18 @@ bool buildPredicateItem(Item_func* ifp, gp_walk_info* gwip)
 
     while (!gwip->rcWorkStack.empty())
     {
-      lhs = gwip->rcWorkStack.top();
+      std::unique_ptr<ReturnedColumn> val(gwip->rcWorkStack.top());
 
-      if (dynamic_cast<ConstantColumn*>(lhs) == 0)
+      if (dynamic_cast<ConstantColumn*>(val.get()) == 0)
+      {
+        val.release();  // put back - not ours to delete
         break;
+      }
 
       gwip->rcWorkStack.pop();
       sop.reset(new PredicateOperator(eqop));
-      sop->setOpType(scsp->resultType(), lhs->resultType());
-      cf->pushFilter(new SimpleFilter(sop, scsp->clone(), lhs->clone(), gwip->timeZone));
+      sop->setOpType(scsp->resultType(), val->resultType());
+      cf->pushFilter(new SimpleFilter(sop, scsp->clone(), val->clone(), gwip->timeZone));
     }
 
     if (!gwip->rcWorkStack.empty())
@@ -2226,6 +2260,8 @@ void setError(THD* thd, uint32_t errcode, string errmsg)
 
 void setError(THD* thd, uint32_t errcode, string errmsg, gp_walk_info& /*gwi*/)
 {
+  // Note: Work stacks are cleaned up by StackCleanupGuard in the calling function.
+  // The gwi parameter is kept for API compatibility.
   setError(thd, errcode, errmsg);
 }
 
@@ -2237,11 +2273,12 @@ int setErrorAndReturn(gp_walk_info& gwi)
   // processing.
   if (gwi.thd->derived_tables_processing)
   {
+    // Work stacks are cleaned up by StackCleanupGuard in the caller (processWhere)
     gwi.cs_vtable_is_update_with_derive = true;
     return -1;
   }
 
-  setError(gwi.thd, ER_INTERNAL_ERROR, gwi.parseErrorText, gwi);
+  setError(gwi.thd, ER_INTERNAL_ERROR, gwi.parseErrorText);
   return ER_INTERNAL_ERROR;
 }
 
@@ -2651,6 +2688,38 @@ CalpontSystemCatalog::ColType colType_MysqlToIDB(const Item* item)
   return ct;
 }
 
+// Simplified version to support QA-specific RBO re-write rule.
+// TBD turn into template to merge with colType_MysqlToIDB for Item
+CalpontSystemCatalog::ColType colType_MysqlToIDB(const Field* field)
+{
+  CalpontSystemCatalog::ColType ct;
+  ct.precision = 4;
+
+  switch (field->result_type())
+  {
+    case INT_RESULT:
+      if (field->is_unsigned())
+      {
+        ct.colDataType = CalpontSystemCatalog::UBIGINT;
+      }
+      else
+      {
+        ct.colDataType = CalpontSystemCatalog::BIGINT;
+      }
+
+      ct.colWidth = 8;
+      break;
+
+    case STRING_RESULT: ct.colDataType = CalpontSystemCatalog::VARCHAR;
+
+    default:
+      IDEBUG(cerr << "colType_MysqlToIDB:: Unknown result type of MySQL " << item->result_type() << endl);
+      break;
+  }
+  ct.charsetNumber = field->charset()->number;
+  return ct;
+}
+
 bool itemDisablesWrapping(Item* item, gp_walk_info& gwi)
 {
   if (gwi.select_lex == nullptr)
@@ -2733,7 +2802,8 @@ ReturnedColumn* buildReturnedColumnNull(gp_walk_info& gwi)
   return rc;
 }
 
-ReturnedColumn* buildReturnedColumnBody(Item* item, gp_walk_info& gwi, bool& nonSupport, bool /*isRefItem*/)
+ReturnedColumn* buildReturnedColumnBody(Item* item, gp_walk_info& gwi, bool& nonSupport, bool /*isRefItem*/,
+                                        IDBQueryType queryType)
 {
   ReturnedColumn* rc = NULL;
 
@@ -2755,7 +2825,7 @@ ReturnedColumn* buildReturnedColumnBody(Item* item, gp_walk_info& gwi, bool& non
     {
       Item_field* ifp = (Item_field*)item;
 
-      return wrapIntoAggregate(buildSimpleColumn(ifp, gwi), gwi, ifp);
+      return wrapIntoAggregate(buildSimpleColumn(ifp, gwi, queryType), gwi, ifp);
     }
     case Item::NULL_ITEM: return buildReturnedColumnNull(gwi);
     case Item::CONST_ITEM:
@@ -2794,10 +2864,10 @@ ReturnedColumn* buildReturnedColumnBody(Item* item, gp_walk_info& gwi, bool& non
       }
 
       if (func_name == "+" || func_name == "-" || func_name == "*" || func_name == "/")
-        return buildArithmeticColumn(ifp, gwi, nonSupport);
+        return buildArithmeticColumn(ifp, gwi, nonSupport, queryType);
       else
       {
-        return buildFunctionColumn(ifp, gwi, nonSupport);
+        return buildFunctionColumn(ifp, gwi, nonSupport, false, queryType);
       }
     }
 
@@ -2814,11 +2884,13 @@ ReturnedColumn* buildReturnedColumnBody(Item* item, gp_walk_info& gwi, bool& non
       {
         case Item::SUM_FUNC_ITEM: return buildAggregateColumn(*(ref->ref), gwi);
 
-        case Item::FIELD_ITEM: return buildReturnedColumn(*(ref->ref), gwi, nonSupport);
+        case Item::FIELD_ITEM: return buildReturnedColumn(*(ref->ref), gwi, nonSupport, false, queryType);
 
-        case Item::REF_ITEM: return buildReturnedColumn(*(((Item_ref*)(*(ref->ref)))->ref), gwi, nonSupport);
+        case Item::REF_ITEM:
+          return buildReturnedColumn(*(((Item_ref*)(*(ref->ref)))->ref), gwi, nonSupport, false, queryType);
 
-        case Item::FUNC_ITEM: return buildFunctionColumn((Item_func*)(*(ref->ref)), gwi, nonSupport);
+        case Item::FUNC_ITEM:
+          return buildFunctionColumn((Item_func*)(*(ref->ref)), gwi, nonSupport, false, queryType);
 
         case Item::WINDOW_FUNC_ITEM: return buildWindowFunctionColumn(*(ref->ref), gwi, nonSupport);
 
@@ -2830,7 +2902,7 @@ ReturnedColumn* buildReturnedColumnBody(Item* item, gp_walk_info& gwi, bool& non
         default:
           if (ref->ref_type() == Item_ref::DIRECT_REF)
           {
-            return buildReturnedColumn(ref->real_item(), gwi, nonSupport);
+            return buildReturnedColumn(ref->real_item(), gwi, nonSupport, false, queryType);
           }
           gwi.fatalParseError = true;
           gwi.parseErrorText = "Unknown REF item";
@@ -2919,11 +2991,12 @@ ReturnedColumn* buildReturnedColumnBody(Item* item, gp_walk_info& gwi, bool& non
 
   return rc;
 }
-ReturnedColumn* buildReturnedColumn(Item* item, gp_walk_info& gwi, bool& nonSupport, bool isRefItem)
+ReturnedColumn* buildReturnedColumn(Item* item, gp_walk_info& gwi, bool& nonSupport, bool isRefItem,
+                                    IDBQueryType queryType)
 {
   bool disableWrapping = gwi.disableWrapping;
   gwi.disableWrapping = gwi.disableWrapping || itemDisablesWrapping(item, gwi);
-  ReturnedColumn* rc = buildReturnedColumnBody(item, gwi, nonSupport, isRefItem);
+  ReturnedColumn* rc = buildReturnedColumnBody(item, gwi, nonSupport, isRefItem, queryType);
   gwi.disableWrapping = disableWrapping;
   return rc;
 }
@@ -2957,7 +3030,8 @@ ReturnedColumn* buildBooleanConstantColumn(Item* item, gp_walk_info& gwi, bool& 
   return cc;
 }
 
-ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bool& nonSupport)
+ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bool& nonSupport,
+                                          IDBQueryType queryType)
 {
   if (get_fe_conn_info_ptr() == NULL)
   {
@@ -2986,7 +3060,7 @@ ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bo
     if (gwi.clauseType == SELECT || /*gwi.clauseType == HAVING || */ gwi.clauseType == GROUP_BY ||
         gwi.clauseType == FROM)  // select list
     {
-      lhs = new ParseTree(buildReturnedColumn(sfitempp[0], gwi, nonSupport));
+      lhs = new ParseTree(buildReturnedColumn(sfitempp[0], gwi, nonSupport, false, queryType));
 
       if (!lhs->data() && (sfitempp[0]->type() == Item::FUNC_ITEM))
       {
@@ -3001,12 +3075,12 @@ ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bo
         gwi.fatalParseError = false;
 
         // ReturnedColumn* rc = buildAggFrmTempField(sfitempp[0], gwi);
-        ReturnedColumn* rc = buildReturnedColumn(sfitempp[0], gwi, nonSupport);
+        ReturnedColumn* rc = buildReturnedColumn(sfitempp[0], gwi, nonSupport, false, queryType);
         if (rc)
           lhs = new ParseTree(rc);
       }
 
-      rhs = new ParseTree(buildReturnedColumn(sfitempp[1], gwi, nonSupport));
+      rhs = new ParseTree(buildReturnedColumn(sfitempp[1], gwi, nonSupport, false, queryType));
 
       if (!rhs->data() && (sfitempp[1]->type() == Item::FUNC_ITEM))
       {
@@ -3021,7 +3095,7 @@ ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bo
         gwi.fatalParseError = false;
 
         // ReturnedColumn* rc = buildAggFrmTempField(sfitempp[1], gwi);
-        ReturnedColumn* rc = buildReturnedColumn(sfitempp[1], gwi, nonSupport);
+        ReturnedColumn* rc = buildReturnedColumn(sfitempp[1], gwi, nonSupport, false, queryType);
         if (rc)
           rhs = new ParseTree(rc);
       }
@@ -3032,7 +3106,7 @@ ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bo
       {
         if (gwi.ptWorkStack.empty())
         {
-          rhs = new ParseTree(buildReturnedColumn(sfitempp[1], gwi, nonSupport));
+          rhs = new ParseTree(buildReturnedColumn(sfitempp[1], gwi, nonSupport, false, queryType));
         }
         else
         {
@@ -3044,7 +3118,7 @@ ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bo
       {
         if (gwi.rcWorkStack.empty())
         {
-          rhs = new ParseTree(buildReturnedColumn(sfitempp[1], gwi, nonSupport));
+          rhs = new ParseTree(buildReturnedColumn(sfitempp[1], gwi, nonSupport, false, queryType));
         }
         else
         {
@@ -3057,7 +3131,7 @@ ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bo
       {
         if (gwi.ptWorkStack.empty())
         {
-          lhs = new ParseTree(buildReturnedColumn(sfitempp[0], gwi, nonSupport));
+          lhs = new ParseTree(buildReturnedColumn(sfitempp[0], gwi, nonSupport, false, queryType));
         }
         else
         {
@@ -3069,7 +3143,7 @@ ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bo
       {
         if (gwi.rcWorkStack.empty())
         {
-          lhs = new ParseTree(buildReturnedColumn(sfitempp[0], gwi, nonSupport));
+          lhs = new ParseTree(buildReturnedColumn(sfitempp[0], gwi, nonSupport, false, queryType));
         }
         else
         {
@@ -3102,13 +3176,13 @@ ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bo
 
     if (gwi.clauseType == SELECT || gwi.clauseType == HAVING || gwi.clauseType == GROUP_BY)  // select clause
     {
-      rhs = new ParseTree(buildReturnedColumn(sfitempp[0], gwi, nonSupport));
+      rhs = new ParseTree(buildReturnedColumn(sfitempp[0], gwi, nonSupport, false, queryType));
     }
     else
     {
       if (gwi.rcWorkStack.empty())
       {
-        rhs = new ParseTree(buildReturnedColumn(sfitempp[0], gwi, nonSupport));
+        rhs = new ParseTree(buildReturnedColumn(sfitempp[0], gwi, nonSupport, false, queryType));
       }
       else
       {
@@ -3230,17 +3304,18 @@ ReturnedColumn* buildArithmeticColumnBody(Item_func* item, gp_walk_info& gwi, bo
   }
   return ac;
 }
-ReturnedColumn* buildArithmeticColumn(Item_func* item, gp_walk_info& gwi, bool& nonSupport)
+ReturnedColumn* buildArithmeticColumn(Item_func* item, gp_walk_info& gwi, bool& nonSupport,
+                                      IDBQueryType queryType)
 {
   bool disableWrapping = gwi.disableWrapping;
   gwi.disableWrapping = gwi.disableWrapping || itemDisablesWrapping(item, gwi);
-  ReturnedColumn* rc = buildArithmeticColumnBody(item, gwi, nonSupport);
+  ReturnedColumn* rc = buildArithmeticColumnBody(item, gwi, nonSupport, queryType);
   gwi.disableWrapping = disableWrapping;
   return rc;
 }
 
 ReturnedColumn* buildFunctionColumnBody(Item_func* ifp, gp_walk_info& gwi, bool& nonSupport,
-                                        bool selectBetweenIn)
+                                        bool selectBetweenIn, IDBQueryType queryType)
 {
   if (get_fe_conn_info_ptr() == NULL)
   {
@@ -3303,12 +3378,12 @@ ReturnedColumn* buildFunctionColumnBody(Item_func* ifp, gp_walk_info& gwi, bool&
   // Arithmetic exp
   if (funcName == "+" || funcName == "-" || funcName == "*" || funcName == "/")
   {
-    return buildArithmeticColumn(ifp, gwi, nonSupport);
+    return buildArithmeticColumn(ifp, gwi, nonSupport, queryType);
   }
 
   else if (funcName == "case")
   {
-    fc = buildCaseFunction(ifp, gwi, nonSupport);
+    fc = buildCaseFunction(ifp, gwi, nonSupport, queryType);
   }
 
   else if ((funcName == "charset" || funcName == "collation") && ifp->argument_count() == 1 &&
@@ -3483,7 +3558,7 @@ ReturnedColumn* buildFunctionColumnBody(Item_func* ifp, gp_walk_info& gwi, bool&
           rc = buildBooleanConstantColumn(ifp->arguments()[i], gwi, nonSupport);
         else
         {
-          rc = buildReturnedColumn(ifp->arguments()[i], gwi, nonSupport);
+          rc = buildReturnedColumn(ifp->arguments()[i], gwi, nonSupport, false, queryType);
         }
 
         // MCOL-1510 It must be a temp table field, so find the corresponding column.
@@ -3850,16 +3925,18 @@ ReturnedColumn* buildFunctionColumnBody(Item_func* ifp, gp_walk_info& gwi, bool&
 
   return fc;
 }
-ReturnedColumn* buildFunctionColumn(Item_func* ifp, gp_walk_info& gwi, bool& nonSupport, bool selectBetweenIn)
+ReturnedColumn* buildFunctionColumn(Item_func* ifp, gp_walk_info& gwi, bool& nonSupport, bool selectBetweenIn,
+                                    IDBQueryType queryType)
 {
   bool disableWrapping = gwi.disableWrapping;
   gwi.disableWrapping = gwi.disableWrapping || itemDisablesWrapping(ifp, gwi);
-  ReturnedColumn* rc = buildFunctionColumnBody(ifp, gwi, nonSupport, selectBetweenIn);
+  ReturnedColumn* rc = buildFunctionColumnBody(ifp, gwi, nonSupport, selectBetweenIn, queryType);
   gwi.disableWrapping = disableWrapping;
   return rc;
 }
 
-FunctionColumn* buildCaseFunction(Item_func* item, gp_walk_info& gwi, bool& nonSupport)
+FunctionColumn* buildCaseFunction(Item_func* item, gp_walk_info& gwi, bool& nonSupport,
+                                  IDBQueryType queryType)
 {
   if (get_fe_conn_info_ptr() == NULL)
   {
@@ -3942,7 +4019,7 @@ FunctionColumn* buildCaseFunction(Item_func* item, gp_walk_info& gwi, bool& nonS
       // rwWorkStack or ptWorkStack.
       // For example, simple predicates, such as 1=1 or 1=0, land in the
       // ptWorkStack but other stuff might land in the rwWorkStack
-      ReturnedColumn* parm = buildReturnedColumn(item->arguments()[i], gwi, nonSupport);
+      ReturnedColumn* parm = buildReturnedColumn(item->arguments()[i], gwi, nonSupport, false, queryType);
 
       if (parm)
       {
@@ -4082,7 +4159,7 @@ ConstantColumn* buildDecimalColumn(const Item* idp, const std::string& valStr, g
   return cc;
 }
 
-SimpleColumn* buildSimpleColumn(Item_field* ifp, gp_walk_info& gwi)
+SimpleColumn* buildSimpleColumn(Item_field* ifp, gp_walk_info& gwi, IDBQueryType queryType)
 {
   if (!gwi.csc)
   {
@@ -4096,6 +4173,14 @@ SimpleColumn* buildSimpleColumn(Item_field* ifp, gp_walk_info& gwi)
   if (ifp->cached_table && ifp->cached_table->db.length > 0 &&
       strcmp(ifp->cached_table->db.str, "information_schema") == 0)
     isInformationSchema = true;
+
+  if (queryType == IDBQueryType::UNION && !isInformationSchema)
+  {
+    auto* rc = gwi.returnedCols[ifp->field->field_index]->clone();
+    rc->orderPos(ifp->field->field_index);
+    gwi.returnedCols[ifp->field->field_index]->incRefCount();
+    return dynamic_cast<SimpleColumn*>(rc);
+  }
 
   // support FRPM subquery. columns from the derived table has no definition
   if ((!ifp->field || !ifp->db_name.str || strlen(ifp->db_name.str) == 0) && !isInformationSchema)
@@ -4180,6 +4265,62 @@ SimpleColumn* buildSimpleColumn(Item_field* ifp, gp_walk_info& gwi)
   {
     sc->partitions(getPartitions(ifp->cached_table));
   }
+
+  return sc;
+}
+
+SimpleColumn* buildSimpleColumnFromFieldForStatistics(Field* field, gp_walk_info& gwi)
+{
+  if (!gwi.csc)
+  {
+    gwi.csc = CalpontSystemCatalog::makeCalpontSystemCatalog(gwi.sessionid);
+    gwi.csc->identity(CalpontSystemCatalog::FE);
+  }
+
+  CalpontSystemCatalog::ColType ct;
+  datatypes::SimpleColumnParam prm(gwi.sessionid, true);
+
+  try
+  {
+    // check foreign engine
+    if (field->table)
+      prm.columnStore(ha_mcs_common::isMCSTable(field->table));
+
+    if (prm.columnStore())
+    {
+      ct = gwi.csc->colType(gwi.csc->lookupOID(
+          make_tcn(field->table->s->db.str, field->table->s->table_name.str, field->field_name.str)));
+    }
+    else
+    {
+      ct = colType_MysqlToIDB(field);
+    }
+  }
+  catch (std::exception& ex)
+  {
+    gwi.fatalParseError = true;
+    gwi.parseErrorText = ex.what();
+    return NULL;
+  }
+
+  const datatypes::DatabaseQualifiedColumnName name(field->table->s->db.str, field->table->s->table_name.str,
+                                                    field->field_name.str);
+  const datatypes::TypeHandler* h = ct.typeHandler();
+  SimpleColumn* sc = h->newSimpleColumn(name, ct, prm);
+
+  sc->resultType(ct);
+  sc->charsetNumber(field->charset()->number);
+  string tbname(field->table->s->table_name.str);
+
+  // Note: differs with the original buildSimpleColumn
+  sc->tableAlias(field->table->alias.c_ptr(), lower_case_table_names);
+
+  sc->alias(field->field_name.str);
+  sc->isColumnStore(prm.columnStore());
+  sc->timeZone(gwi.timeZone);
+
+  sc->oid(field->field_index + 1);  // ExeMgr requires offset started from 1
+  // TODO add partitions support here
 
   return sc;
 }
@@ -5116,6 +5257,34 @@ void setExecutionParams(gp_walk_info& gwi, SCSEP& csep)
     csep->umMemLimit(get_um_mem_limit(gwi.thd) * 1024ULL * 1024);
 }
 
+// Loop over indexes available for a table to find and extract corresponding Engine Independent column
+// statistics for the first column of the index if any. Statistics are stored in a GWI context. Mock for
+// ES 10.6
+// TODO clean up extra logging when the feature is ready
+#if MYSQL_VERSION_ID >= 110406
+void extractColumnStatistics(TABLE_LIST* table_ptr, gp_walk_info& gwi)
+{
+  for (uint j = 0; j < table_ptr->table->s->keys; j++)
+  {
+    {
+      Field* field = table_ptr->table->key_info[j].key_part[0].field;
+      if (field->read_stats)
+      {
+        SchemaAndTableName tableName = {field->table->s->db.str, field->table->s->table_name.str};
+        auto sc =
+            std::unique_ptr<execplan::SimpleColumn>(buildSimpleColumnFromFieldForStatistics(field, gwi));
+        assert(field->field_name.str);
+        gwi.tableStatistics.createOrUpdate(tableName, field->field_name.str, *sc, field->read_stats);
+      }
+    }
+  }
+}
+#else
+void extractColumnStatistics(TABLE_LIST* /*table_ptr*/, gp_walk_info& /*gwi*/)
+{
+}
+#endif
+
 /*@brief  Process FROM part of the query or sub-query      */
 /***********************************************************
  * DESCRIPTION:
@@ -5207,9 +5376,15 @@ int processFrom(bool& isUnion, SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP&
 
         // trigger system catalog cache
         if (columnStore)
+        {
           gwi.csc->columnRIDs(
               make_table(table_ptr->db.str, table_ptr->table_name.str, lower_case_table_names), true);
-
+        }
+        else
+        {
+          // TODO move extractColumnStatistics up when statistics is supported in MCS
+          extractColumnStatistics(table_ptr, gwi);
+        }
         string table_name = table_ptr->table_name.str;
 
         // @bug5523
@@ -6142,25 +6317,6 @@ int processWhere(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep, const s
     csep->filters(filters);
   }
 
-  if (!gwi.rcWorkStack.empty())
-  {
-    while (!gwi.rcWorkStack.empty())
-    {
-      ReturnedColumn* t = gwi.rcWorkStack.top();
-      delete t;
-      gwi.rcWorkStack.pop();
-    }
-  }
-  if (!gwi.ptWorkStack.empty())
-  {
-    while (!gwi.ptWorkStack.empty())
-    {
-      ParseTree* t = gwi.ptWorkStack.top();
-      delete t;
-      gwi.ptWorkStack.pop();
-    }
-  }
-
   return 0;
 }
 
@@ -6193,23 +6349,25 @@ int processLimitAndOffset(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep
        We therefore do not allow limit set to 1 here for such queries.
     */
     if (gwi.subSelectType != CalpontSelectExecutionPlan::IN_SUBS &&
-        gwi.subSelectType != CalpontSelectExecutionPlan::EXISTS_SUBS &&
-        select_lex.master_unit()->global_parameters()->limit_params.explicit_limit)
+        gwi.subSelectType != CalpontSelectExecutionPlan::EXISTS_SUBS)
     {
-      if (select_lex.master_unit()->global_parameters()->limit_params.offset_limit)
+      if (select_lex.master_unit()->global_parameters()->limit_params.explicit_limit)
       {
-        Item_int* offset =
-            (Item_int*)select_lex.master_unit()->global_parameters()->limit_params.offset_limit;
-        csep->limitStart(offset->val_int());
-      }
+        if (select_lex.master_unit()->global_parameters()->limit_params.offset_limit)
+        {
+          Item_int* offset =
+              (Item_int*)select_lex.master_unit()->global_parameters()->limit_params.offset_limit;
+          csep->limitStart(offset->val_int());
+        }
 
-      if (select_lex.master_unit()->global_parameters()->limit_params.select_limit)
-      {
-        Item_int* select =
-            (Item_int*)select_lex.master_unit()->global_parameters()->limit_params.select_limit;
-        csep->limitNum(select->val_int());
-        // MCOL-894 Activate parallel ORDER BY
-        csep->orderByThreads(get_orderby_threads(gwi.thd));
+        if (select_lex.master_unit()->global_parameters()->limit_params.select_limit)
+        {
+          Item_int* select =
+              (Item_int*)select_lex.master_unit()->global_parameters()->limit_params.select_limit;
+          csep->limitNum(select->val_int());
+          // MCOL-894 Activate parallel ORDER BY
+          csep->orderByThreads(get_orderby_threads(gwi.thd));
+        }
       }
     }
   }
@@ -6287,39 +6445,6 @@ int processLimitAndOffset(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep
 
   return 0;
 }
-
-// Loop over available indexes to find and extract corresponding EI column statistics
-// for the first column of the index if any.
-// Statistics is stored in GWI context.
-// Mock for ES 10.6
-#if MYSQL_VERSION_ID >= 110401
-void extractColumnStatistics(Item_field* ifp, gp_walk_info& gwi)
-{
-  for (uint j = 0; j < ifp->field->table->s->keys; j++)
-  {
-    for (uint i = 0; i < ifp->field->table->s->key_info[j].usable_key_parts; i++)
-    {
-      if (ifp->field->table->s->key_info[j].key_part[i].fieldnr == ifp->field->field_index + 1)
-      {
-        if (i == 0 && ifp->field->read_stats)
-        {
-          assert(ifp->field->table->s);
-          auto* histogram = dynamic_cast<Histogram_json_hb*>(ifp->field->read_stats->histogram);
-          if (histogram)
-          {
-            SchemaAndTableName tableName = {ifp->field->table->s->db.str, ifp->field->table->s->table_name.str};
-            gwi.tableStatisticsMap[tableName][ifp->field->field_name.str] = *histogram;
-          }
-        }
-      }
-    }
-  }
-}
-#else
-void extractColumnStatistics(Item_field* /*ifp*/, gp_walk_info& /*gwi*/)
-{
-}
-#endif
 
 /*@brief  Process SELECT part of a query or sub-query      */
 /***********************************************************
@@ -6410,7 +6535,6 @@ int processSelect(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep, vector
       case Item::FIELD_ITEM:
       {
         Item_field* ifp = (Item_field*)item;
-        extractColumnStatistics(ifp, gwi);
         // Handle * case
         if (ifp->field_name.length && string(ifp->field_name.str) == "*")
         {
@@ -6796,6 +6920,7 @@ int processSelect(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep, vector
     for (uint32_t i = 0; i < gwi.returnedCols.size(); i++)
     {
       vector<CalpontSystemCatalog::ColType> coltypes;
+      coltypes.reserve(csep->unionVec().size());
 
       for (uint32_t j = 0; j < csep->unionVec().size(); j++)
       {
@@ -6820,6 +6945,85 @@ int processSelect(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep, vector
       }
     }
   }
+  return 0;
+}
+
+int processOrderByCol(const ORDER* ordercol, gp_walk_info& gwi, IDBQueryType queryType = IDBQueryType::SELECT)
+{
+  ReturnedColumn* rc = nullptr;
+
+  if (ordercol->in_field_list && (ordercol->counter_used || ((*ordercol->item)->type() == Item::FIELD_ITEM &&
+                                                             queryType == IDBQueryType::UNION)))
+  {
+    auto* ifp = dynamic_cast<Item_field*>(*ordercol->item);
+    auto pos = ordercol->counter_used ? ordercol->counter - 1 : ifp->field->field_index;
+    rc = gwi.returnedCols[pos]->clone();
+    rc->orderPos(pos);
+    // can not be optimized off if used in order by with counter.
+    // set with self derived table alias if it's derived table
+    gwi.returnedCols[pos]->incRefCount();
+  }
+  else
+  {
+    Item* ord_item = *ordercol->item;
+
+    // ignore not_used column on order by.
+    if ((ord_item->type() == Item::CONST_ITEM && ord_item->cmp_type() == INT_RESULT) &&
+        ord_item->full_name() && !strcmp(ord_item->full_name(), "Not_used"))
+    {
+      return 0;
+    }
+    else if (ord_item->type() == Item::CONST_ITEM && ord_item->cmp_type() == INT_RESULT)
+    {
+      // DRRTUY This section looks useless b/c there is no
+      // way to put constant INT into an ORDER BY list
+      rc = gwi.returnedCols[((Item_int*)ord_item)->val_int() - 1]->clone();
+    }
+    else if (ord_item->type() == Item::SUBSELECT_ITEM)
+    {
+      gwi.fatalParseError = true;
+    }
+    else if ((ord_item->type() == Item::FUNC_ITEM) &&
+             (((Item_func*)ord_item)->functype() == Item_func::COLLATE_FUNC))
+    {
+      push_warning(gwi.thd, Sql_condition::WARN_LEVEL_NOTE, WARN_OPTION_IGNORED,
+                   "COLLATE is ignored in ColumnStore");
+      return 0;
+    }
+    else
+    {
+      rc = buildReturnedColumn(ord_item, gwi, gwi.fatalParseError, false, queryType);
+
+      rc = wrapIntoAggregate(rc, gwi, ord_item);
+    }
+    // @bug5501 try item_ptr if item can not be fixed. For some
+    // weird dml statement state, item can not be fixed but the
+    // infomation is available in item_ptr.
+    if (!rc || gwi.fatalParseError)
+    {
+      Item* item_ptr = ordercol->item_ptr;
+
+      while (item_ptr->type() == Item::REF_ITEM)
+        item_ptr = *((Item_ref*)item_ptr)->ref;
+
+      rc = buildReturnedColumn(item_ptr, gwi, gwi.fatalParseError, false, queryType);
+    }
+
+    if (!rc)
+    {
+      string emsg = IDBErrorInfo::instance()->errorMsg(ERR_NON_SUPPORT_ORDER_BY);
+      gwi.parseErrorText = emsg;
+      setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, emsg, gwi);
+      return ER_CHECK_NOT_IMPLEMENTED;
+    }
+  }
+
+  if (ordercol->direction == ORDER::ORDER_ASC)
+    rc->asc(true);
+  else
+    rc->asc(false);
+
+  gwi.orderByCols.emplace_back(rc);
   return 0;
 }
 
@@ -6862,82 +7066,19 @@ int processOrderBy(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep,
     }
   }
 
-  // re-visit the first of ordercol list
-  ordercol = static_cast<ORDER*>(order_list.first);
-
-  for (; ordercol; ordercol = ordercol->next)
+  if (!unionSel)
   {
-    ReturnedColumn* rc = NULL;
+    // re-visit the first of ordercol list
+    ordercol = static_cast<ORDER*>(order_list.first);
 
-    if (ordercol->in_field_list && ordercol->counter_used)
+    for (; ordercol; ordercol = ordercol->next)
     {
-      rc = gwi.returnedCols[ordercol->counter - 1]->clone();
-      rc->orderPos(ordercol->counter - 1);
-      // can not be optimized off if used in order by with counter.
-      // set with self derived table alias if it's derived table
-      gwi.returnedCols[ordercol->counter - 1]->incRefCount();
-    }
-    else
-    {
-      Item* ord_item = *(ordercol->item);
-
-      // ignore not_used column on order by.
-      if ((ord_item->type() == Item::CONST_ITEM && ord_item->cmp_type() == INT_RESULT) &&
-          ord_item->full_name() && !strcmp(ord_item->full_name(), "Not_used"))
+      if (auto ret = processOrderByCol(ordercol, gwi); ret != 0)
       {
-        continue;
-      }
-      else if (ord_item->type() == Item::CONST_ITEM && ord_item->cmp_type() == INT_RESULT)
-      {
-        // DRRTUY This section looks useless b/c there is no
-        // way to put constant INT into an ORDER BY list
-        rc = gwi.returnedCols[((Item_int*)ord_item)->val_int() - 1]->clone();
-      }
-      else if (ord_item->type() == Item::SUBSELECT_ITEM)
-      {
-        gwi.fatalParseError = true;
-      }
-      else if ((ord_item->type() == Item::FUNC_ITEM) &&
-               (((Item_func*)ord_item)->functype() == Item_func::COLLATE_FUNC))
-      {
-        push_warning(gwi.thd, Sql_condition::WARN_LEVEL_NOTE, WARN_OPTION_IGNORED,
-                     "COLLATE is ignored in ColumnStore");
-        continue;
-      }
-      else
-      {
-        rc = buildReturnedColumn(ord_item, gwi, gwi.fatalParseError);
-
-        rc = wrapIntoAggregate(rc, gwi, ord_item);
-      }
-      // @bug5501 try item_ptr if item can not be fixed. For some
-      // weird dml statement state, item can not be fixed but the
-      // infomation is available in item_ptr.
-      if (!rc || gwi.fatalParseError)
-      {
-        Item* item_ptr = ordercol->item_ptr;
-
-        while (item_ptr->type() == Item::REF_ITEM)
-          item_ptr = *(((Item_ref*)item_ptr)->ref);
-
-        rc = buildReturnedColumn(item_ptr, gwi, gwi.fatalParseError);
-      }
-
-      if (!rc)
-      {
-        string emsg = IDBErrorInfo::instance()->errorMsg(ERR_NON_SUPPORT_ORDER_BY);
-        gwi.parseErrorText = emsg;
-        setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, emsg, gwi);
-        return ER_CHECK_NOT_IMPLEMENTED;
+        // Errors have already been reported.
+        return ret;
       }
     }
-
-    if (ordercol->direction == ORDER::ORDER_ASC)
-      rc->asc(true);
-    else
-      rc->asc(false);
-
-    gwi.orderByCols.push_back(SRCP(rc));
   }
 
   // make sure columnmap, returnedcols and count(*) arg_list are not empty
@@ -7012,31 +7153,20 @@ int processOrderBy(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep,
       gwi.returnedCols.push_back(minSc);
   }
 
-  // ORDER BY translation part
+  // process UNION ORDER BY part
   if (!isUnion && !gwi.hasWindowFunc && gwi.subSelectType == CalpontSelectExecutionPlan::MAIN_SELECT)
   {
+    if (unionSel)
     {
-      if (unionSel)
-        order_list = select_lex.master_unit()->global_parameters()->order_list;
-
+      order_list = select_lex.master_unit()->global_parameters()->order_list;
       ordercol = static_cast<ORDER*>(order_list.first);
 
       for (; ordercol; ordercol = ordercol->next)
       {
-        Item* ord_item = *(ordercol->item);
-
-        if (ord_item->name.length)
+        if (auto ret = processOrderByCol(ordercol, gwi, IDBQueryType::UNION); ret != 0)
         {
-          // for union order by 1 case. For unknown reason, it doesn't show in_field_list
-          if (ord_item->type() == Item::CONST_ITEM && ord_item->cmp_type() == INT_RESULT)
-          {
-          }
-          else if (ord_item->type() == Item::SUBSELECT_ITEM)
-          {
-          }
-          else
-          {
-          }
+          // Errors have already been reported.
+          return ret;
         }
       }
     }
@@ -7071,6 +7201,9 @@ int processOrderBy(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep,
 int getSelectPlan(gp_walk_info& gwi, SELECT_LEX& select_lex, SCSEP& csep, bool isUnion,
                   bool isSelectHandlerTop, bool isSelectLexUnit, const std::vector<COND*>& condStack)
 {
+  // RAII: automatically clean up work stacks on any return path
+  StackCleanupGuard stackGuard(gwi);
+
 #ifdef DEBUG_WALK_COND
   cerr << "getSelectPlan()" << endl;
 #endif
@@ -7127,7 +7260,7 @@ int getSelectPlan(gp_walk_info& gwi, SELECT_LEX& select_lex, SCSEP& csep, bool i
     if (funcFieldVec.size() != 0 && !gwi.fatalParseError)
     {
       string emsg("Fatal parse error in vtable mode: Unsupported Items in union or sub select unit");
-      setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, emsg);
+      setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, emsg, gwi);
       return ER_CHECK_NOT_IMPLEMENTED;
     }
   }
@@ -7191,12 +7324,12 @@ int getSelectPlan(gp_walk_info& gwi, SELECT_LEX& select_lex, SCSEP& csep, bool i
 
   SRCP minSc;  // min width projected column. for count(*) use
 
-  bool unionSel = (!isUnion && select_lex.master_unit()->is_unit_op()) ? true : false;
+  bool unionSel = !isUnion && select_lex.master_unit()->is_unit_op();
 
+  gwi.clauseType = GROUP_BY;
   // Group by list. not valid for union main query
   if (!unionSel)
   {
-    gwi.clauseType = GROUP_BY;
     if ((rc = processGroupBy(select_lex, gwi, withRollup)))
     {
       return rc;
@@ -7231,6 +7364,7 @@ int getSelectPlan(gp_walk_info& gwi, SELECT_LEX& select_lex, SCSEP& csep, bool i
       minSc = gwi.returnedCols[0];
     else if (!gwi.additionalRetCols.empty())
       minSc = gwi.additionalRetCols[0];
+    minSc->orderPos(0);
   }
 
   // @bug3523, count(*) on subquery always pick column[0].
@@ -7247,6 +7381,7 @@ int getSelectPlan(gp_walk_info& gwi, SELECT_LEX& select_lex, SCSEP& csep, bool i
       sc1->viewName(sc->viewName());
       sc1->partitions(sc->partitions());
       sc1->colPosition(0);
+      sc1->orderPos(0);
       sc1->timeZone(gwi.timeZone);
       minSc.reset(sc1);
     }
@@ -7475,13 +7610,21 @@ int cs_get_select_plan(ha_columnstore_select_handler* handler, THD* thd, SCSEP& 
     cerr << "-------------- EXECUTION PLAN END --------------\n" << endl;
   }
 
-  // Derived table projection and filter optimization.
+  // Store original (pre-RBO) plan string for UDFs
+  store_query_plan(csep, PlanType::Original);
+
+  // Derived table projection list optimization.
   derivedTableOptimization(&gwi, csep);
 
-  if (get_unstable_optimizer(thd))
   {
-    optimizer::RBOptimizerContext ctx(gwi);
-    bool csepWasOptimized = optimizer::optimizeCSEP(*csep, ctx);
+    optimizer::RBOptimizerContext ctx(gwi, *thd, csep->traceOn(), get_query_accel_parallel_factor(thd));
+    // TODO RBO can crash or fail leaving CSEP in an invalid state, so there must be a valid CSEP copy
+    // TBD There is a tradeoff b/w copy per rule and copy per optimizer run.
+    bool csepWasOptimized = optimizer::optimizeCSEP(*csep, ctx, get_unstable_optimizer(&ctx.getThd()));
+
+    // Store optimized plan and applied rules
+    store_query_plan(csep, PlanType::Optimized);
+    store_applied_rules(ctx.serializeAppliedRules());
     if (csep->traceOn() && csepWasOptimized)
     {
       cerr << "---------------- cs_get_select_plan optimized EXECUTION PLAN ----------------" << endl;

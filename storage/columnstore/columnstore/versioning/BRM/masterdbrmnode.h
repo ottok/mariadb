@@ -26,6 +26,9 @@
 
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <boost/thread.hpp>
 #include <boost/scoped_ptr.hpp>
 
@@ -255,9 +258,13 @@ class MasterDBRMNode
   std::condition_variable cpimportJobsCond;
   int runners, NumWorkers;
   ThreadParams* params;
-  volatile bool die, halting;
+  std::atomic<bool> die;
+  std::atomic<bool> halting;
   bool reloadCmd;
   mutable bool readOnly;
+  // Maximum time to wait for worker responses/reconfigure before forcing read-only
+  // Loaded from Columnstore.xml: SystemConfig/DBRMUnresponsiveTimeout (default: 300 seconds)
+  struct timespec haltTimeout;
   mutable bool waitToFinishJobs{false};
   struct timespec MSG_TIMEOUT;
 };

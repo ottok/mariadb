@@ -132,6 +132,7 @@ class SimpleFilter : public Filter
   void rhs(ReturnedColumn* rhs);
 
   const std::string toString() const override;
+  const std::string toString(bool compact) const;
 
   /**
    * The serialization interface
@@ -222,7 +223,7 @@ class SimpleFilter : public Filter
 
   static std::string escapeString(const std::string& input);
 
-  string toCppCode(IncludeSet& includes) const override;
+  std::string toCppCode(IncludeSet& includes) const override;
 
  private:
   SOP fOp;               /// operator
@@ -243,10 +244,9 @@ class SimpleFilter : public Filter
   inline double getDoubleVal(rowgroup::Row& row, bool& isNull) override;
   inline long double getLongDoubleVal(rowgroup::Row& row, bool& isNull) override;
 
-  // get all simple columns involved in this column
-  const std::vector<SimpleColumn*>& simpleColumnList();
   // walk through the simple filter operands to re-populate fSimpleColumnList
-  void setSimpleColumnList();
+  virtual void setSimpleColumnList() override;
+  virtual void setSimpleColumnListExtended() override;
   // walk through the simple filter operands to check existence of aggregate
   bool hasAggregate();
 
@@ -263,7 +263,6 @@ class SimpleFilter : public Filter
   }
 
  private:
-  std::vector<SimpleColumn*> fSimpleColumnList;
   std::vector<AggregateColumn*> fAggColumnList;
   std::vector<WindowFunctionColumn*> fWindowFunctionColumnList;
 };

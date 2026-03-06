@@ -142,7 +142,7 @@ static my_bool  verbose= 0, opt_no_create_info= 0, opt_no_data= 0, opt_no_data_m
 #define OPT_SYSTEM_STATS 32
 #define OPT_SYSTEM_TIMEZONES 64
 static const char *opt_system_type_values[]=
-  {"all", "users", "plugins",  "udfs", "servers", "stats", "timezones"};
+  {"all", "users", "plugins",  "udfs", "servers", "stats", "timezones", NullS};
 static TYPELIB opt_system_types=CREATE_TYPELIB_FOR(opt_system_type_values);
 static ulonglong opt_system= 0ULL;
 static my_bool insert_pat_inited= 0, debug_info_flag= 0, debug_check_flag= 0,
@@ -492,7 +492,7 @@ static struct my_option my_long_options[] =
   {"max_allowed_packet", 0,
    "The maximum packet length to send to or receive from server.",
     &opt_max_allowed_packet, &opt_max_allowed_packet, 0,
-    GET_ULONG, REQUIRED_ARG, 24*1024*1024, 4096,
+    GET_ULONG, REQUIRED_ARG, 1024LL*1024*1024, 4096,
    (longlong) 2L*1024L*1024L*1024L, 0, 1024, 0},
   {"max-statement-time", 0,
    "Max statement execution time. If unset, overrides server default with 0.",
@@ -1942,6 +1942,40 @@ static char *cover_definer_clause(const char *stmt_str,
   return query_str;
 }
 
+
+static char *format_fs_safe_filename(const char *from, char *to, size_t to_size)
+{
+  if (check_if_legal_tablename(from))
+    strxnmov(to, to_size - 1, from , "@@@", NULL);
+  else
+  {
+    uint errors, len;
+    len= my_convert(to, (uint32)(to_size - 1), &my_charset_filename,
+     from, (uint32) strlen(from), charset_info, &errors);
+    to[len]= 0;
+  }
+  return to;
+}
+
+static void format_fs_safe_output_dir(const char *db, char *out_dir, size_t out_size)
+{
+  DBUG_ASSERT(opt_dir);
+  char fs_safe_db[FN_REFLEN];
+  format_fs_safe_filename(db, fs_safe_db, sizeof(fs_safe_db));
+  my_snprintf(out_dir, out_size, "%s/%s", opt_dir, fs_safe_db);
+}
+
+static const char* build_path_for_table(char *to, const char *dir,
+                                        const char *table, const char *ext)
+{
+  char filename[FN_REFLEN], tmp_path[FN_REFLEN];
+  convert_dirname(tmp_path, dir, NULL);
+  my_load_path(tmp_path, tmp_path, NULL);
+  format_fs_safe_filename(table, filename, sizeof(filename));
+  return fn_format(to, filename, tmp_path, ext, MYF(MY_UNPACK_FILENAME));
+}
+
+
 /*
   Open a new .sql file to dump the table or view into
 
@@ -1957,18 +1991,17 @@ static char *cover_definer_clause(const char *stmt_str,
 static FILE* open_sql_file_for_table(const char *db, const char* table, int flags)
 {
   FILE* res;
-  char filename[FN_REFLEN], tmp_path[FN_REFLEN];
+  char filename[FN_REFLEN];
   char out_dir_buf[FN_REFLEN];
 
   char *out_dir= path;
   if (opt_dir)
   {
     out_dir= out_dir_buf;
-    my_snprintf(out_dir_buf, sizeof(out_dir_buf), "%s/%s", opt_dir, db);
+    format_fs_safe_output_dir(db, out_dir_buf, sizeof(out_dir_buf));
   }
 
-  convert_dirname(tmp_path, out_dir, NullS);
-  res= my_fopen(fn_format(filename, table, tmp_path, ".sql", 4),
+  res= my_fopen(build_path_for_table(filename, out_dir, table, ".sql"),
                 flags, MYF(MY_WME));
   return res;
 }
@@ -4290,12 +4323,12 @@ static void dump_table(const char *table, const char *db, const uchar *hash_key,
 
   if (multi_file_output)
   {
-    char filename[FN_REFLEN], tmp_path[FN_REFLEN];
+    char filename[FN_REFLEN];
     char out_dir_buf[FN_REFLEN];
     char *out_dir= path;
     if (!out_dir)
     {
-      my_snprintf(out_dir_buf, sizeof(out_dir_buf), "%s/%s", opt_dir, db);
+      format_fs_safe_output_dir(db, out_dir_buf, sizeof(out_dir_buf));
       out_dir= out_dir_buf;
     }
 
@@ -4303,9 +4336,7 @@ static void dump_table(const char *table, const char *db, const uchar *hash_key,
       Convert the path to native os format
       and resolve to the full filepath.
     */
-    convert_dirname(tmp_path,out_dir,NullS);
-    my_load_path(tmp_path, tmp_path, NULL);
-    fn_format(filename, table, tmp_path, ".txt", MYF(MY_UNPACK_FILENAME));
+    build_path_for_table(filename, out_dir, table, ".txt");
 
     /* Must delete the file that 'INTO OUTFILE' will write to */
     my_delete(filename, MYF(0));
@@ -4314,7 +4345,6 @@ static void dump_table(const char *table, const char *db, const uchar *hash_key,
     to_unix_path(filename);
 
     /* now build the query string */
-
     dynstr_append_checked(&query_string, "SELECT /*!40001 SQL_NO_CACHE */ ");
     dynstr_append_checked(&query_string, select_field_names.str);
     dynstr_append_checked(&query_string, " INTO OUTFILE '");
@@ -4459,6 +4489,11 @@ static void dump_table(const char *table, const char *db, const uchar *hash_key,
       fprintf(md_result_file,"/*M!101100 SET @old_system_versioning_insert_history=@@session.system_versioning_insert_history, @@session.system_versioning_insert_history=1 */;\n");
       check_io(md_result_file);
     }
+    if (no_autocommit)
+    {
+      fprintf(md_result_file, "SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;\n");
+      check_io(md_result_file);
+    }
     if (opt_lock)
     {
       fprintf(md_result_file,"LOCK TABLES %s WRITE;\n", opt_quoted_table);
@@ -4479,11 +4514,6 @@ static void dump_table(const char *table, const char *db, const uchar *hash_key,
     if (opt_xml)
       print_xml_tag(md_result_file, "\t", "\n", "table_data", "name=", table,
               NullS);
-    if (no_autocommit)
-    {
-      fprintf(md_result_file, "set autocommit=0;\n");
-      check_io(md_result_file);
-    }
 
     while ((row= mysql_fetch_row(res)))
     {
@@ -4755,7 +4785,7 @@ static void dump_table(const char *table, const char *db, const uchar *hash_key,
     }
     if (no_autocommit)
     {
-      fprintf(md_result_file, "commit;\n");
+      fprintf(md_result_file, "COMMIT;\nSET AUTOCOMMIT=@OLD_AUTOCOMMIT;\n");
       check_io(md_result_file);
     }
     if (versioned && !opt_xml && opt_dump_history)
@@ -7288,6 +7318,85 @@ static void init_connection_pool(uint n_connections)
 }
 
 /*
+  Fix permissions and ownership of given directory to be the same
+  as the root output directory.
+
+  The function is used for newly created database directories,
+  together with --dir option
+
+  This function is not thread-safe, nor does it need to be, because
+  it is called from the main thread only.
+
+  chmod/chown errors are ignored after the first one, with a warning printed,
+  so it is really the best effort attempt. We might see an error later
+  if the server can't write into the directory, and this will be the
+  real error.
+
+  On Windows, this function does nothing, because the permissions are
+  inherited from the parent directory anyway.
+
+  @param dirpath  Directory path
+*/
+static void fix_permissions_and_owner(const char *dirpath)
+{
+#ifndef _WIN32
+  // Permissions and ownership of output directory (--dir)
+  static struct stat  st_out_dir;
+
+  static bool fix_perms= true; // Try fixing permission bits
+  static bool fix_ownership_uid= true; // Try fixing user+group ownership
+  static bool fix_ownership_gid= false; // Try fixing group ownership only
+
+  static bool first_time= true;
+  if (first_time)
+  {
+    /* Find out permissions and ownership of output directory */
+    first_time= false;
+    if (stat(opt_dir, &st_out_dir) != 0)
+    {
+      die(EX_CONSCHECK, "Error: cannot stat output directory %s, errno %d",
+          opt_dir, errno);
+    }
+  }
+
+  /* Change permissions to be the same as for the output directory*/
+  if (fix_perms &&
+      chmod(dirpath, st_out_dir.st_mode & (S_IRWXU|S_IRWXG|S_IRWXO)))
+  {
+    fprintf(stderr,
+        "Warning: cannot set permissions on directory %s, errno %d\n",
+        dirpath, errno);
+    fix_perms= false;
+  }
+
+  /*
+    Change ownership to be the same as backup root dir.
+    If user can't be changed, try changing owner group only.
+  */
+  if (fix_ownership_uid &&
+          chown(dirpath, st_out_dir.st_uid, st_out_dir.st_gid))
+  {
+    // No warning, error is expected, unless current user is root.
+    fix_ownership_uid= false;
+    fix_ownership_gid= true;
+  }
+
+  if (fix_ownership_gid && chown(dirpath, -1, st_out_dir.st_gid))
+  {
+    if (!(st_out_dir.st_mode & S_IWOTH))
+    {
+      /* Only warn if directory is not world-writable (group ownership
+         matters more in this case), to avoid spamming stderr.*/
+      fprintf(stderr,
+              "Warning: cannot set group ownership on directory %s, errno %d\n",
+              dirpath, errno);
+    }
+    fix_ownership_gid= false;
+  }
+#endif
+}
+
+/*
   If --dir option is in use, ensure that output directory for given db
   exists.
 */
@@ -7295,7 +7404,7 @@ static void ensure_out_dir_exists(const char *db)
 {
   DBUG_ASSERT(opt_dir);
   char outdir[FN_REFLEN];
-  my_snprintf(outdir, sizeof(outdir), "%s/%s", opt_dir, db);
+  format_fs_safe_output_dir(db, outdir, sizeof(outdir));
   struct stat st;
   if (stat(outdir, &st) == 0)
   {
@@ -7306,6 +7415,7 @@ static void ensure_out_dir_exists(const char *db)
   }
   if (my_mkdir(outdir, 0777, MYF(MY_WME)))
     die(EX_MYSQLERR, "Error creating directory %s", outdir);
+  fix_permissions_and_owner(outdir);
 }
 
 

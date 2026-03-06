@@ -43,7 +43,7 @@
 
   The execution of the transformed query (Q1R) follows these steps:
     1. For each row of t1 where t1.b < const a temporary table
-       containing all rows of of t2 with t2.a = t1.a is created
+       containing all rows of t2 with t2.a = t1.a is created
     2. If there are any rows in the temporary table aggregation
        is performed for them
     3. The result of the aggregation is joined with t1.
@@ -155,7 +155,7 @@
   subsets the operation can applied to each subset independently. In this case
   all rows are first partitioned into the groups each of which contains all the
   rows from the partitions belonging the same subset and then each group
-  is subpartitioned into groups in the the post join operation.
+  is subpartitioned into groups in the post join operation.
 
   The set of all rows belonging to the union of several partitions is called
   here superpartition. If a grouping operation is defined by the list
@@ -355,6 +355,7 @@ struct SplM_field_ext_info: public SplM_field_info
        with available statistics.
     10. The select doesn't use WITH ROLLUP (This limitation can probably be
        lifted)
+    11. The select doesn't have ORDER BY with LIMIT
 
   @retval
     true   if the answer is positive
@@ -386,6 +387,9 @@ bool JOIN::check_for_splittable_materialized()
       select_lex->window_specs.head()->partition_list->first;
   }
   if (!partition_list)
+    return false;
+
+  if (select_lex->order_list.elements > 0 && !unit->lim.is_unlimited()) //!(11)
     return false;
 
   Json_writer_object trace_wrapper(thd);
@@ -600,8 +604,8 @@ void TABLE::add_splitting_info_for_key_field(KEY_FIELD *key_field)
     condition of the select that specifies this table.
   */
   THD *thd= in_use;
-  Item *left_item= spl_field->producing_item->build_clone(thd);
-  Item *right_item= key_field->val->build_clone(thd);
+  Item *left_item= spl_field->producing_item->deep_copy_with_checks(thd);
+  Item *right_item= key_field->val->deep_copy_with_checks(thd);
   Item_bool_func *eq_item= 0;
   if (left_item && right_item)
   {
@@ -652,7 +656,7 @@ add_ext_keyuse_for_splitting(Dynamic_array<KEYUSE_EXT> *ext_keyuses,
   possible_keys.intersect(field->table->keys_usable_for_splitting);
   tab->keys.merge(possible_keys);
 
-  Item_func_eq *eq_item= (Item_func_eq *) (added_key_field->cond);
+  Item_args *eq_item= (Item_args *) (added_key_field->cond);
   keyuse_ext.table= field->table;
   keyuse_ext.val= eq_item->arguments()[1];
   keyuse_ext.key= key;
@@ -1282,7 +1286,7 @@ bool JOIN::inject_best_splitting_cond(table_map excluded_tables)
     Test if equality is injected for split optimization
 
   @param
-    eq_item   equality to to test
+    eq_item   equality to test
 
   @retval
     true    eq_item is equality injected for split optimization

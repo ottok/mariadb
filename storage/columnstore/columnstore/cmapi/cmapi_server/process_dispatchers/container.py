@@ -11,8 +11,9 @@ from time import sleep
 import psutil
 
 from cmapi_server.constants import (
-    IFLAG, LIBJEMALLOC_DEFAULT_PATH, MCS_INSTALL_BIN, ALL_MCS_PROGS
+    IFLAG, LIBJEMALLOC_DEFAULT_PATH, MCS_INSTALL_BIN, ALL_MCS_PROGS, MCSProgs
 )
+from cmapi_server.process_dispatchers.locks import release_shmem_locks
 from cmapi_server.exceptions import CMAPIBasicError
 from cmapi_server.process_dispatchers.base import BaseDispatcher
 
@@ -99,7 +100,7 @@ class ContainerDispatcher(BaseDispatcher):
 
     @classmethod
     def is_service_running(cls, service: str, use_sudo: bool = True) -> bool:
-        """Check if mcs process is running.
+        """Check if MCS process (not only MCS, but also any other process) is running.
 
         :param service: service name
         :type service: str
@@ -126,7 +127,8 @@ class ContainerDispatcher(BaseDispatcher):
         :return: command with arguments if needed
         :rtype: str
         """
-        service_info = ALL_MCS_PROGS[service]
+        prog = MCSProgs(service)
+        service_info = ALL_MCS_PROGS[prog]
         command = os.path.join(MCS_INSTALL_BIN, service)
 
         if service_info.subcommand:
@@ -188,7 +190,8 @@ class ContainerDispatcher(BaseDispatcher):
             env=env_vars
         )
         # TODO: any other way to detect service finished its initialisation?
-        sleep(ALL_MCS_PROGS[service].delay)
+        prog = MCSProgs(service)
+        sleep(ALL_MCS_PROGS[prog].delay)
         logger.debug(f'Started "{service}".')
 
         if is_primary and service == 'DDLProc':
@@ -219,6 +222,11 @@ class ContainerDispatcher(BaseDispatcher):
         service_proc = cls._get_proc_object(service)
 
         if service == 'workernode':
+            # Run pre-stop lock reset before saving BRM
+            # These stale locks can occur if the controllernode couldn't stop correctly
+            #  and they cause mcs-savebrm.py to hang
+            release_shmem_locks(logger)
+
             # start mcs-savebrm.py before stoping workernode
             logger.debug('Waiting to save BRM.')
             savebrm_path = os.path.join(MCS_INSTALL_BIN, 'mcs-savebrm.py')
@@ -289,6 +297,7 @@ class ContainerDispatcher(BaseDispatcher):
 
         ...TODO: for next releases. Additional error handling.
         """
+        stop_success = True
         if cls.is_service_running(service):
             # TODO: retry?
             stop_success = cls.stop(service, is_primary, use_sudo)

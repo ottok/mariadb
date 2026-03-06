@@ -48,8 +48,10 @@ using namespace joblist;
 #include "functioncolumn.h"
 #include "simplecolumn.h"
 #include "simplefilter.h"
+#include "selectfilter.h"
 #include "aggregatecolumn.h"
 #include "constantfilter.h"
+#include "logicoperator.h"
 #include "../../utils/windowfunction/windowfunction.h"
 #include "utils/common/branchpred.h"
 
@@ -88,6 +90,54 @@ void getSimpleCols(execplan::ParseTree* n, void* obj)
   {
     cf->setSimpleColumnList();
     list->insert(list->end(), cf->simpleColumnList().begin(), cf->simpleColumnList().end());
+  }
+}
+
+void getSimpleColsExtended(execplan::ParseTree* n, void* obj)
+{
+  vector<SimpleColumn*>* list = reinterpret_cast<vector<SimpleColumn*>*>(obj);
+  TreeNode* tn = n->data();
+  ArithmeticColumn* ac = dynamic_cast<ArithmeticColumn*>(tn);
+  AggregateColumn* agc = dynamic_cast<AggregateColumn*>(tn);
+  FunctionColumn* fc = dynamic_cast<FunctionColumn*>(tn);
+  SimpleColumn* sc = dynamic_cast<SimpleColumn*>(tn);
+  LogicOperator* lo = dynamic_cast<LogicOperator*>(tn);
+  Filter* f = dynamic_cast<Filter*>(tn);
+
+  if (sc)
+  {
+    list->push_back(sc);
+  }
+  else if (fc)
+  {
+    fc->setSimpleColumnListExtended();
+    list->insert(list->end(), fc->simpleColumnListExtended().begin(), fc->simpleColumnListExtended().end());
+  }
+  else if (ac)
+  {
+    ac->setSimpleColumnListExtended();
+    list->insert(list->end(), ac->simpleColumnListExtended().begin(), ac->simpleColumnListExtended().end());
+  }
+  else if (agc)
+  {
+    agc->setSimpleColumnListExtended();
+    list->insert(list->end(), agc->simpleColumnListExtended().begin(), agc->simpleColumnListExtended().end());
+  }
+  else if (f)
+  {
+    f->setSimpleColumnListExtended();
+    list->insert(list->end(), f->simpleColumnListExtended().begin(), f->simpleColumnListExtended().end());
+  }
+  else if (lo) // XXX: should it be default case?
+  {
+    if (n->left())
+    {
+      n->left()->walk(getSimpleColsExtended, obj);
+    }
+    if (n->right())
+    {
+      n->right()->walk(getSimpleColsExtended, obj);
+    }
   }
 }
 
@@ -207,6 +257,7 @@ SimpleColumn::SimpleColumn(const SimpleColumn& rhs, const uint32_t sessionID)
  , fTimeZone(rhs.timeZone())
  , fisColumnStore(rhs.isColumnStore())
 {
+  fResultType = rhs.resultType();
 }
 
 SimpleColumn::SimpleColumn(const ReturnedColumn& rhs, const uint32_t sessionID)
@@ -250,6 +301,7 @@ SimpleColumn& SimpleColumn::operator=(const SimpleColumn& rhs)
     fDistinct = rhs.distinct();
     fisColumnStore = rhs.isColumnStore();
     fPartitions = rhs.fPartitions;
+    fResultType = rhs.resultType();
   }
 
   return *this;
@@ -288,6 +340,28 @@ const string SimpleColumn::toString() const
          << delim << colPosition() << delim << cs.getCharset().cs_name.str << delim
          << cs.getCharset().coll_name.str << " inputindex/outputindex: " << fInputIndex << delim
          << fOutputIndex << " eid " << fExpressionId << endl;
+
+  return output.str();
+}
+
+const string SimpleColumn::toString(bool compact) const
+{
+  if (!compact)
+  {
+    // Use the original detailed format
+    return toString();
+  }
+
+  ostringstream output;
+
+  // Compact format for tree display - let tree printer handle indentation
+  output << "Column: " << data();
+  datatypes::Charset cs(fResultType.charsetNumber);
+  output << endl
+         << "Info: " << schemaName() << "." << tableName()
+         << "(" << tableAlias() << ")"
+          << "."  << columnName()
+         << " (Type: " << colDataTypeToString(fResultType.colDataType) << ", OID: " << oid() << ")";
 
   return output.str();
 }
@@ -527,13 +601,10 @@ void SimpleColumn::setDerivedTable()
     fDerivedTable = "";
 }
 
-bool SimpleColumn::singleTable(CalpontSystemCatalog::TableAliasName& tan)
+std::optional<CalpontSystemCatalog::TableAliasName> SimpleColumn::singleTable()
 {
-  tan.table = fTableName;
-  tan.schema = fSchemaName;
-  tan.view = fViewName;
-  tan.alias = fTableAlias;
-  return true;
+  return {
+      CalpontSystemCatalog::TableAliasName(fSchemaName, fTableName, fTableAlias, fViewName, fisColumnStore)};
 }
 
 // @todo move to inline
@@ -749,6 +820,81 @@ void SimpleColumn::evaluate(Row& row, bool& isNull)
       break;
     }
   }
+}
+
+void SimpleColumn::setSimpleColumnList()
+{
+  if (fSimpleColumnList.empty())
+  {
+    fSimpleColumnList.push_back(this);
+  }
+  else
+  {
+    fSimpleColumnList.back() = this;
+  }
+}
+
+void SimpleColumn::setSimpleColumnListExtended()
+{
+  if (fSimpleColumnListExtended.empty())
+  {
+    fSimpleColumnListExtended.push_back(this);
+  }
+  else
+  {
+    fSimpleColumnListExtended.back() = this;
+  }
+}
+
+std::optional<CalpontSystemCatalog::TableAliasName> sameTableCheck(
+    std::vector<SimpleColumn*> simpleColumnList)
+{
+  std::optional<CalpontSystemCatalog::TableAliasName> tan;
+  for (SimpleColumn* simpleColumn : simpleColumnList)
+  {
+    CalpontSystemCatalog::TableAliasName stan(simpleColumn->schemaName(), simpleColumn->tableName(),
+                                              simpleColumn->tableAlias(), simpleColumn->viewName());
+
+    if (!tan.has_value())
+      tan = stan;
+    else if (stan != tan)
+      return std::nullopt;
+  }
+
+  return tan;
+}
+
+std::string getSimpleColumnAlias(const ReturnedColumn& origCol, int64_t colPos)
+{
+  std::string alias = origCol.alias();
+  if (alias.empty())
+  {
+    if (auto* sc = dynamic_cast<const SimpleColumn*>(&origCol); sc)
+    {
+      alias = sc->columnName();
+    }
+    else if (auto* fc = dynamic_cast<const FunctionColumn*>(&origCol); fc)
+    {
+      alias = fc->functionName();
+    }
+    else if (auto* ac = dynamic_cast<const AggregateColumn*>(&origCol); ac)
+    {
+      alias = ac->functionName();
+    }
+    else if (auto* wc = dynamic_cast<const WindowFunctionColumn*>(&origCol); wc)
+    {
+      alias = wc->functionName();
+    }
+  }
+  if (alias.empty())
+  {
+    alias = "`$col_" + std::to_string(colPos) + "`";
+  }
+  if (alias[0] != '`')
+  {
+    alias = "`" + alias + "`";
+  }
+  return alias;
 }
 
 }  // namespace execplan

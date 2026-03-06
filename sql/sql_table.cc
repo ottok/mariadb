@@ -2163,7 +2163,8 @@ bool quick_rm_table(THD *thd, handlerton *base, const LEX_CSTRING *db,
     handler *file= get_new_handler((TABLE_SHARE*) 0, thd->mem_root, base);
     if (!file)
       DBUG_RETURN(true);
-    (void) file->ha_create_partitioning_metadata(path, NULL, CHF_DELETE_FLAG);
+    (void) file->ha_create_partitioning_metadata(path, NULL, CHF_DELETE_FLAG,
+                                                 true);
     delete file;
   }
   if (flags & QRMT_HANDLER)
@@ -4559,7 +4560,7 @@ handler *mysql_create_frm_image(THD *thd, HA_CREATE_INFO *create_info,
   /*
     Unless table's storage engine supports partitioning natively
     don't allow foreign keys on partitioned tables (they won't
-    work work even with InnoDB beneath of partitioning engine).
+    work even with InnoDB beneath of partitioning engine).
     If storage engine handles partitioning natively (like NDB)
     foreign keys support is possible, so we let the engine decide.
   */
@@ -5095,32 +5096,35 @@ bool wsrep_check_sequence(THD* thd,
                           const bool used_engine)
 {
     enum legacy_db_type db_type;
+    const LEX_CSTRING *engine_name;
 
     DBUG_ASSERT(WSREP(thd));
 
     if (used_engine)
     {
       db_type= thd->lex->create_info.db_type->db_type;
+      // Currently any dynamic storage engine is not possible to identify
+      // using DB_TYPE_XXXX and ENGINE=SEQUENCE is one of them.
+      // Therefore, we get storage engine name from lex.
+      engine_name=
+        thd->lex->m_sql_cmd->option_storage_engine_name()->name();
     }
     else
     {
       const handlerton *hton= ha_default_handlerton(thd);
       db_type= hton->db_type;
+      engine_name= hton_name(hton);
     }
 
     // In Galera cluster we support only InnoDB sequences
     if (db_type != DB_TYPE_INNODB)
     {
-      // Currently any dynamic storage engine is not possible to identify
-      // using DB_TYPE_XXXX and ENGINE=SEQUENCE is one of them.
-      // Therefore, we get storage engine name from lex.
-      const LEX_CSTRING *tb_name= thd->lex->m_sql_cmd->option_storage_engine_name()->name();
       // (1) CREATE TABLE ... ENGINE=SEQUENCE  OR
       // (2) ALTER TABLE ... ENGINE=           OR
       //     Note in ALTER TABLE table->s->sequence != nullptr
       // (3) CREATE SEQUENCE ... ENGINE=
       if ((thd->lex->sql_command == SQLCOM_CREATE_TABLE &&
-           lex_string_eq(tb_name, STRING_WITH_LEN("SEQUENCE"))) ||
+           lex_string_eq(engine_name, STRING_WITH_LEN("SEQUENCE"))) ||
           (thd->lex->sql_command == SQLCOM_ALTER_TABLE) ||
           (thd->lex->sql_command == SQLCOM_CREATE_SEQUENCE))
       {
@@ -5128,7 +5132,8 @@ bool wsrep_check_sequence(THD* thd,
                  "non-InnoDB sequences in Galera cluster");
         push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
                             ER_NOT_SUPPORTED_YET,
-                            "ENGINE=%s not supported by Galera", tb_name->str);
+                            "ENGINE=%s not supported by Galera",
+                            engine_name->str);
 	return(true);
       }
     }
@@ -7175,7 +7180,7 @@ static bool fill_alter_inplace_info(THD *thd, TABLE *table,
             alter_expr= ALTER_STORED_GCOL_EXPR;
           else
             alter_expr= ALTER_VIRTUAL_GCOL_EXPR;
-          if (!field->vcol_info->is_equal(new_field->vcol_info))
+          if (!field->vcol_info->is_equal(new_field->vcol_info, false))
           {
             ha_alter_info->handler_flags|= alter_expr;
             value_changes= true;
@@ -7669,12 +7674,8 @@ bool mysql_compare_tables(TABLE *table, Alter_info *alter_info,
     {
       if (!tmp_new_field->field->vcol_info)
         DBUG_RETURN(false);
-      bool err;
-      if (!field->vcol_info->is_equivalent(thd, table->s, create_info->table->s,
-                                           tmp_new_field->field->vcol_info, err))
+      if (!field->vcol_info->is_equal(tmp_new_field->field->vcol_info, true))
         DBUG_RETURN(false);
-      if (err)
-        DBUG_RETURN(true);
     }
 
     /*
@@ -8854,6 +8855,9 @@ mysql_prepare_alter_table(THD *thd, TABLE *table,
         }
         else
         {
+          if (def->default_value != alter->default_value &&
+              def->has_default_now_unireg_check())
+            def->unireg_check= Field::NONE;
           if ((def->default_value= alter->default_value) ||
               !(def->flags & NOT_NULL_FLAG))
             def->flags&= ~NO_DEFAULT_VALUE_FLAG;
@@ -9487,7 +9491,7 @@ mysql_prepare_alter_table(THD *thd, TABLE *table,
 
         if (keep)
         {
-          Item *expr_copy= check->expr->get_copy(thd);
+          Item *expr_copy= check->expr->shallow_copy_with_checks(thd);
           check= new Virtual_column_info();
           check->name= share->period.constr_name;
           check->automatic_name= true;
@@ -10684,6 +10688,8 @@ const char *online_alter_check_supported(THD *thd,
   selects which algorithm to use in check_if_supported_inplace_alter()
   based on information about the table changes from fill_alter_inplace_info().
 */
+
+PRAGMA_DISABLE_CHECK_STACK_FRAME
 
 bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
                        const LEX_CSTRING *new_name,
@@ -11907,7 +11913,11 @@ alter_copy:
       binlog_as_create_select= 1;
       DBUG_ASSERT(new_table->file->row_logging);
       new_table->mark_columns_needed_for_insert();
-      mysql_bin_log.write_table_map(thd, new_table, 1);
+      if (thd->binlog_write_annotated_row(new_table->file->row_logging_has_trans ||
+                                          (thd->variables.option_bits &
+                                           OPTION_GTID_BEGIN)) ||
+          mysql_bin_log.write_table_map(thd, new_table))
+        goto err_new_table_cleanup;
     }
 
     /*
@@ -11927,6 +11937,7 @@ alter_copy:
   }
   else
   {
+    /* MERGE TABLE */
     if (!table->s->tmp_table &&
         wait_while_table_is_used(thd, table, HA_EXTRA_FORCE_REOPEN))
       goto err_new_table_cleanup;
@@ -11935,6 +11946,8 @@ alter_copy:
                             alter_info->keys_onoff);
     if (trans_commit_stmt(thd) || trans_commit_implicit(thd))
       goto err_new_table_cleanup;
+    /* Ensure that the ALTER is binlogged as a DDL */
+    thd->transaction->stmt.mark_trans_did_ddl();
   }
   thd->count_cuted_fields= CHECK_FIELD_IGNORE;
 
@@ -12056,7 +12069,7 @@ alter_copy:
     5) Write statement to the binary log.
     6) If we are under LOCK TABLES and do ALTER TABLE ... RENAME we
        remove placeholders and release metadata locks.
-    7) If we are not not under LOCK TABLES we rely on the caller
+    7) If we are not under LOCK TABLES we rely on the caller
       (mysql_execute_command()) to release metadata locks.
   */
 
@@ -12373,6 +12386,7 @@ err_with_mdl:
   goto err_cleanup;
 }
 
+PRAGMA_REENABLE_CHECK_STACK_FRAME
 
 
 /**
@@ -13649,6 +13663,8 @@ bool Sql_cmd_create_table_like::execute(THD *thd)
 
       DEBUG_SYNC(thd, "wsrep_create_table_as_select");
 
+      Write_record write;
+
       /*
         select_create is currently not re-execution friendly and
         needs to be created for every execution of a PS/SP.
@@ -13660,7 +13676,8 @@ bool Sql_cmd_create_table_like::execute(THD *thd)
                                                      select_lex->item_list,
                                                      lex->duplicates,
                                                      lex->ignore,
-                                                     select_tables)))
+                                                     select_tables,
+                                                     &write)))
       {
         /*
           CREATE from SELECT give its SELECT_LEX for SELECT,

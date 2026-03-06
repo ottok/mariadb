@@ -13,7 +13,7 @@ using namespace funcexp::helpers;
 
 namespace funcexp
 {
-int Func_json_extract::doExtract(Row& row, FunctionParm& fp, json_value_types* type, string& retJS,
+int Func_json_extract::doExtract(Row& row, FunctionParm& fp, json_value_types* type, std::string& retJS,
                                  bool compareWhole = true)
 {
   bool isNull = false;
@@ -21,8 +21,6 @@ int Func_json_extract::doExtract(Row& row, FunctionParm& fp, json_value_types* t
   if (isNull)
     return 1;
   const char* rawJS = js.str();
-  json_engine_t jsEg, savJSEg;
-  json_path_t p;
   const uchar* value;
   bool notFirstVal = false;
   size_t valLen;
@@ -34,9 +32,7 @@ int Func_json_extract::doExtract(Row& row, FunctionParm& fp, json_value_types* t
   bool hasNegPath = false;
 #endif
   const size_t argSize = fp.size();
-  string tmp;
-
-  initJSPaths(paths, fp, 1, 1);
+  std::string tmp;
 
   for (size_t i = 1; i < argSize; i++)
   {
@@ -71,8 +67,14 @@ int Func_json_extract::doExtract(Row& row, FunctionParm& fp, json_value_types* t
   while (json_get_path_next(&jsEg, &p) == 0)
   {
 #if MYSQL_VERSION_ID >= 100900
+#if MYSQL_VERSION_ID >= 120200
+    json_path_step_t *last_step= reinterpret_cast<json_path_step_t*>(mem_root_dynamic_array_get_val(&p.steps, p.last_step_idx));
     if (hasNegPath && jsEg.value_type == JSON_VALUE_ARRAY &&
+        json_skip_array_and_count(&jsEg, arrayCounter + (last_step - reinterpret_cast<json_path_step_t*>(p.steps.buffer))))
+#else
+   if (hasNegPath && jsEg.value_type == JSON_VALUE_ARRAY &&
         json_skip_array_and_count(&jsEg, arrayCounter + (p.last_step - p.steps)))
+#endif
       return 1;
 #endif
 
@@ -151,10 +153,10 @@ CalpontSystemCatalog::ColType Func_json_extract::operationType(FunctionParm& fp,
   return fp[0]->data()->resultType();
 }
 
-string Func_json_extract::getStrVal(Row& row, FunctionParm& fp, bool& isNull,
-                                    CalpontSystemCatalog::ColType& /*type*/)
+std::string Func_json_extract::getStrVal(Row& row, FunctionParm& fp, bool& isNull,
+                                         CalpontSystemCatalog::ColType& /*type*/)
 {
-  string retJS;
+  std::string retJS;
   json_value_types valType;
   if (doExtract(row, fp, &valType, retJS) == 0)
     return retJS;
@@ -166,7 +168,7 @@ string Func_json_extract::getStrVal(Row& row, FunctionParm& fp, bool& isNull,
 int64_t Func_json_extract::getIntVal(rowgroup::Row& row, FunctionParm& fp, bool& /*isNull*/,
                                      execplan::CalpontSystemCatalog::ColType& /*type*/)
 {
-  string retJS;
+  std::string retJS;
   json_value_types valType;
   int64_t ret = 0;
   if (doExtract(row, fp, &valType, retJS, false) == 0)
@@ -192,7 +194,7 @@ int64_t Func_json_extract::getIntVal(rowgroup::Row& row, FunctionParm& fp, bool&
 double Func_json_extract::getDoubleVal(rowgroup::Row& row, FunctionParm& fp, bool& /*isNull*/,
                                        execplan::CalpontSystemCatalog::ColType& /*type*/)
 {
-  string retJS;
+  std::string retJS;
   json_value_types valType;
   double ret = 0.0;
   if (doExtract(row, fp, &valType, retJS, false) == 0)
@@ -219,7 +221,7 @@ execplan::IDB_Decimal Func_json_extract::getDecimalVal(rowgroup::Row& row, Funct
                                                        execplan::CalpontSystemCatalog::ColType& /*type*/)
 {
   json_value_types valType;
-  string retJS;
+  std::string retJS;
 
   if (doExtract(row, fp, &valType, retJS, false) == 0)
   {

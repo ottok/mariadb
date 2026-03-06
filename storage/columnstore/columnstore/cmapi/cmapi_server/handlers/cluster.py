@@ -1,24 +1,45 @@
 """Module contains Cluster business logic functions."""
+import configparser
+import hashlib
 import logging
+import os
+import tempfile
+import time
 from datetime import datetime
 from enum import Enum
 from typing import Optional
 
 import requests
 
-from cmapi_server.constants import (
-    CMAPI_CONF_PATH, DEFAULT_MCS_CONF_PATH,
-)
-from cmapi_server.exceptions import CMAPIBasicError
-from cmapi_server.helpers import (
-    broadcast_new_config, get_active_nodes, get_dbroots, get_config_parser,
-    get_current_key, get_version, update_revision_and_manager,
-)
-from cmapi_server.node_manipulation import (
-    add_node, add_dbroot, remove_node, switch_node_maintenance,
-)
 from mcs_node_control.models.misc import get_dbrm_master
 from mcs_node_control.models.node_config import NodeConfig
+from tracing.traced_session import get_traced_session
+
+from cmapi_server.constants import (
+    CMAPI_CONF_PATH,
+    CMAPI_PORT,
+    DEFAULT_MCS_CONF_PATH,
+    DMLPROC_SHUTDOWN_TIMEOUT,
+    REQUEST_TIMEOUT,
+)
+from cmapi_server.exceptions import CMAPIBasicError, exc_to_cmapi_error
+from cmapi_server.controllers.api_clients import NodeControllerClient
+from cmapi_server.helpers import (
+    broadcast_new_config,
+    get_active_nodes,
+    get_config_parser,
+    get_current_key,
+    get_dbroots,
+    get_version,
+    update_revision_and_manager,
+)
+from cmapi_server.node_manipulation import (
+    add_dbroot,
+    add_node,
+    remove_node,
+    switch_node_maintenance,
+    update_dbroots_of_read_replicas,
+)
 
 
 class ClusterAction(Enum):
@@ -27,7 +48,7 @@ class ClusterAction(Enum):
 
 
 def toggle_cluster_state(
-        action: ClusterAction, config: str) -> dict:
+        action: ClusterAction, config: str, timeout: int = DMLPROC_SHUTDOWN_TIMEOUT) -> dict:
     """Toggle the state of the cluster (start or stop).
 
     :param action: The cluster action to perform.
@@ -47,10 +68,10 @@ def toggle_cluster_state(
 
     switch_node_maintenance(maintainance_flag)
     update_revision_and_manager()
-    broadcast_new_config(config, distribute_secrets=True)
+    broadcast_new_config(config, distribute_secrets=True, timeout=timeout)
 
 
-class ClusterHandler():
+class ClusterHandler:
     """Class for handling MCS Cluster operations."""
 
     @staticmethod
@@ -78,20 +99,48 @@ class ClusterHandler():
         for node in active_nodes:
             url = f'https://{node}:8640/cmapi/{get_version()}/node/status'
             try:
-                r = requests.get(url, verify=False, headers=headers)
+                r = get_traced_session().request(
+                    'GET', url, verify=False, headers=headers, timeout=REQUEST_TIMEOUT
+                )
                 r.raise_for_status()
                 r_json = r.json()
                 if len(r_json.get('services', 0)) == 0:
                     r_json['dbrm_mode'] = 'offline'
                     r_json['cluster_mode'] = 'offline'
-
+                # add node state field ('online' if services not empty and mode not offline)
+                services = r_json.get('services', [])
+                node_state = (
+                    'offline'
+                    if not services or r_json.get('cluster_mode') == 'offline'
+                    else 'online'
+                )
+                r_json['state'] = node_state
                 response[f'{str(node)}'] = r_json
                 num_nodes += 1
-            except Exception as err:
-                raise CMAPIBasicError(
-                    f'Got an error retrieving status from node {node}'
-                ) from err
+            except (requests.exceptions.RequestException, ValueError) as err:
+                # Do not fail the whole request: record node as unreachable
+                logger.error('Error retrieving status from node %s: %s', node, str(err))
+                try:
+                    node_dbroots = sorted(get_dbroots(node, config))
+                except Exception as e:
+                    logger.warning(
+                        'ClusterHandler.status: failed to obtain dbroots for node %s: %s. Using empty list.',
+                        node, e
+                    )
+                    node_dbroots = []
+                response[str(node)] = {
+                    'timestamp': str(datetime.now()),
+                    'uptime': None,
+                    'dbrm_mode': 'offline',
+                    'cluster_mode': 'offline',
+                    'dbroots': node_dbroots,
+                    'module_id': 0,
+                    'services': [],
+                    'state': 'offline',
+                    'error': f'Unreachable: {err.__class__.__name__}'
+                }
 
+        # num_nodes stays as number of reachable nodes
         response['num_nodes'] = num_nodes
         logger.debug('Successfully finished getting cluster status.')
         return response
@@ -116,7 +165,7 @@ class ClusterHandler():
 
     @staticmethod
     def shutdown(
-        config: str = DEFAULT_MCS_CONF_PATH, timeout: Optional[int] = None
+        config: str = DEFAULT_MCS_CONF_PATH, timeout: int = DMLPROC_SHUTDOWN_TIMEOUT,
     ) -> dict:
         """Method to stop the MCS Cluster.
 
@@ -124,7 +173,7 @@ class ClusterHandler():
                        defaults to DEFAULT_MCS_CONF_PATH
         :type config: str, optional
         :param timeout: timeout in seconds to gracefully stop DMLProc,
-                        defaults to None
+                        defaults to DMLPROC_SHUTDOWN_TIMEOUT
         :type timeout: Optional[int], optional
         :raises CMAPIBasicError: if no nodes in the cluster
         :return: start timestamp
@@ -135,12 +184,15 @@ class ClusterHandler():
             'Cluster shutdown command called. Shutting down the cluster.'
         )
         operation_start_time = str(datetime.now())
-        toggle_cluster_state(ClusterAction.STOP, config)
+        toggle_cluster_state(ClusterAction.STOP, config, timeout=timeout)
         logger.debug('Successfully finished shutting down the cluster.')
         return {'timestamp': operation_start_time}
 
     @staticmethod
-    def add_node(node: str, config: str = DEFAULT_MCS_CONF_PATH) -> dict:
+    def add_node(
+        node: str, config: str = DEFAULT_MCS_CONF_PATH,
+        read_replica: bool = False,
+    ) -> dict:
         """Method to add node to MCS CLuster.
 
         :param node: node IP or name or FQDN
@@ -148,6 +200,8 @@ class ClusterHandler():
         :param config: columnstore xml config file path,
                        defaults to DEFAULT_MCS_CONF_PATH
         :type config: str, optional
+        :param read_replica: add node as read replica, defaults to False
+        :type read_replica: bool, optional
         :raises CMAPIBasicError: on exception while starting transaction
         :raises CMAPIBasicError: if transaction start isn't successful
         :raises CMAPIBasicError: on exception while adding node
@@ -158,28 +212,32 @@ class ClusterHandler():
         :rtype: dict
         """
         logger: logging.Logger = logging.getLogger('cmapi_server')
-        logger.debug(f'Cluster add node command called. Adding node {node}.')
+        logger.debug(
+            f'Cluster add node command called. Adding node {node} in '
+            f'{"read-replica" if read_replica else "read-write"} mode.'
+        )
 
         response = {'timestamp': str(datetime.now())}
 
-        try:
+        with exc_to_cmapi_error(prefix='Error while adding node'):
             add_node(
                 node, input_config_filename=config,
-                output_config_filename=config
+                output_config_filename=config,
+                read_replica=read_replica,
             )
             if not get_dbroots(node, config):
-                add_dbroot(
-                    host=node, input_config_filename=config,
-                    output_config_filename=config
-                )
-        except Exception as err:
-            raise CMAPIBasicError('Error while adding node.') from err
+                if not read_replica:  # Read replicas don't own dbroots
+                    add_dbroot(
+                        host=node, input_config_filename=config,
+                        output_config_filename=config
+                    )
 
         response['node_id'] = node
         update_revision_and_manager(
             input_config_filename=config, output_config_filename=config
         )
         broadcast_new_config(config, distribute_secrets=True)
+        ClusterHandler.check_shared_storage()
         logger.debug(f'Successfully finished adding node {node}.')
         return response
 
@@ -209,21 +267,23 @@ class ClusterHandler():
         )
         response = {'timestamp': str(datetime.now())}
 
-        try:
+        with exc_to_cmapi_error(prefix='Error while removing node'):
             remove_node(
                 node, input_config_filename=config,
                 output_config_filename=config
             )
-        except Exception as err:
-            raise CMAPIBasicError('Error while removing node.') from err
 
         response['node_id'] = node
         active_nodes = get_active_nodes(config)
         if len(active_nodes) > 0:
+            with NodeConfig().modify_config(config) as root:
+                update_dbroots_of_read_replicas(root)
+
             update_revision_and_manager(
                 input_config_filename=config, output_config_filename=config
             )
             broadcast_new_config(config, nodes=active_nodes)
+        ClusterHandler.check_shared_storage()
         logger.debug(f'Successfully finished removing node {node}.')
         return response
 
@@ -266,7 +326,8 @@ class ClusterHandler():
             raise CMAPIBasicError('No master found in the cluster.')
         else:
             master = master['IPAddr']
-            payload = {'cluster_mode': mode}
+            payload: dict = {}
+            payload['cluster_mode'] = mode
             url = f'https://{master}:8640/cmapi/{get_version()}/node/config'
 
         nc = NodeConfig()
@@ -277,7 +338,9 @@ class ClusterHandler():
         payload['cluster_mode'] = mode
 
         try:
-            r = requests.put(url, headers=headers, json=payload, verify=False)
+            r = get_traced_session().request(
+                'PUT', url, headers=headers, json=payload, verify=False
+            )
             r.raise_for_status()
             response['cluster-mode'] = mode
         except Exception as err:
@@ -330,7 +393,7 @@ class ClusterHandler():
             logger.debug(f'Setting new api key to "{node}".')
             url = f'https://{node}:8640/cmapi/{get_version()}/node/apikey-set'
             try:
-                resp = requests.put(url, verify=False, json=body)
+                resp = get_traced_session().request('PUT', url, verify=False, json=body, headers={})
                 resp.raise_for_status()
                 r_json = resp.json()
                 if active_nodes_count > 0:
@@ -383,7 +446,7 @@ class ClusterHandler():
             logger.debug(f'Setting new log level to "{node}".')
             url = f'https://{node}:8640/cmapi/{get_version()}/node/log-level'
             try:
-                resp = requests.put(url, verify=False, json=body)
+                resp = get_traced_session().request('PUT', url, verify=False, json=body, headers={})
                 resp.raise_for_status()
                 r_json = resp.json()
                 if active_nodes_count > 0:
@@ -397,5 +460,100 @@ class ClusterHandler():
         response['timestamp'] = str(datetime.now())
         logger.debug(
             'Successfully finished setting new log level to all nodes.'
+        )
+        return response
+
+    @staticmethod
+    def check_shared_storage(skip_nodes: Optional[list[str]] = None) -> dict:
+        """Check shared storage.
+
+        :return: status result
+        """
+        tmp_file_path: str
+        logger = logging.getLogger('shared_storage_monitor')
+        active_nodes = get_active_nodes()
+        if skip_nodes:
+            # Remove any nodes the caller asked us to skip (e.g., unstable HB)
+            active_nodes = [n for n in active_nodes if n not in set(skip_nodes)]
+        all_responses: dict = dict()
+        nodes_errors: dict = dict()
+        sm_parser = configparser.ConfigParser()
+        sm_config_str = NodeConfig().get_current_sm_config()
+        sm_parser.read_string(sm_config_str)
+        storage_type = sm_parser.get(
+            'ObjectStorage', 'service', fallback='LocalStorage'
+        )
+        file_dir = '/var/lib/columnstore/data1'
+        if storage_type.lower() == 's3':
+            file_dir = '/var/lib/columnstore/storagemanager/metadata/data1'
+
+        with tempfile.NamedTemporaryFile(
+            mode='wb+', delete=True, dir=file_dir, prefix='mcs_test_shared'
+        ) as temp_file:
+            file_data = rb'File to check shared storage working.'
+            temp_file.write(file_data)
+            # Make sure data is on disk/visible to other nodes before checks
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+            tmp_file_path = temp_file.name
+            logger.debug(f'Temporary file to check shared storage created at: {tmp_file_path}')
+            tmp_file_md5 = hashlib.md5(file_data).hexdigest()
+            logger.debug(f'Temporary file md5: {tmp_file_md5}')
+            for node in active_nodes:
+                logger.debug(f'Checking shared file on {node!r}.')
+                client = NodeControllerClient(
+                    request_timeout=REQUEST_TIMEOUT,
+                    base_url=f'https://{node}:{CMAPI_PORT}'
+                )
+                last_err_msg = None
+                for attempt in range(2):
+                    try:
+                        node_response = client.check_shared_file(
+                            file_path=tmp_file_path, check_sum=tmp_file_md5
+                        )
+                        logger.debug(f'Finished checking file on {node!r}')
+                        all_responses[node] = node_response
+                        break
+                    except CMAPIBasicError as err:  # per-node failure must not abort the whole check
+                        last_err_msg = err.message
+                        if attempt == 0:
+                            time.sleep(1)
+                        continue
+                else:
+                    # Retries exhausted
+                    logger.warning(
+                        f'Error checking shared file on {node!r}: {last_err_msg}',
+                        exc_info=True
+                    )
+                    nodes_errors[node] = last_err_msg or 'unknown error'
+
+        nodes_success_responses = [
+            v.get('success', False) for v in all_responses.values()
+        ]
+        if nodes_success_responses:
+            shared_storage = all(nodes_success_responses)
+        else:
+            # no nodes in cluster case
+            shared_storage = False
+        # Consider partial failures either when not all successful among reachable
+        # or when some nodes were unreachable (nodes_errors present).
+        partially_failed = False
+        if len(active_nodes) > 2:
+            if nodes_errors:
+                partially_failed = True
+            elif nodes_success_responses and not all(nodes_success_responses):
+                partially_failed = True
+
+        response = {
+            'timestamp': str(datetime.now()),
+            'shared_storage': shared_storage,
+            'partially_failed': partially_failed,
+            'active_nodes_count': len(active_nodes),
+            'nodes_responses': {**all_responses},
+            'nodes_errors': {**nodes_errors}
+        }
+
+        logger.debug(
+            'Successfully finished checking shared storage on all nodes.'
         )
         return response

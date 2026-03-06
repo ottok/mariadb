@@ -301,12 +301,13 @@ static const char *tc_heuristic_recover_names[]=
 static TYPELIB tc_heuristic_recover_typelib=
 {
   array_elements(tc_heuristic_recover_names)-1,"",
-  tc_heuristic_recover_names, NULL
+  tc_heuristic_recover_names, NULL, NULL
 };
 
 const char *first_keyword= "first";
 const char *my_localhost= "localhost",
-           *delayed_user= "delayed", *slave_user= "<replication_slave>";
+           *delayed_user= "delayed", *slave_user= "<replication_slave>",
+           *wsrep_user= "<wsrep_applier>";
 
 bool opt_large_files= sizeof(my_off_t) > 4;
 static my_bool opt_autocommit; ///< for --autocommit command-line option
@@ -3360,7 +3361,7 @@ void my_message_sql(uint error, const char *str, myf MyFlags)
   DBUG_ASSERT((MyFlags & ~(ME_BELL | ME_ERROR_LOG | ME_ERROR_LOG_ONLY |
                            ME_NOTE | ME_WARNING | ME_FATAL)) == 0);
 
-  DBUG_ASSERT(str[strlen(str)-1] != '\n');
+  DBUG_ASSERT(str[strlen(str)-1] != '\n' || strlen(str) == MYSQL_ERRMSG_SIZE-1);
 
   if (MyFlags & ME_NOTE)
   {
@@ -4267,6 +4268,7 @@ static int init_common_variables()
   global_system_variables.lc_messages= my_default_lc_messages;
   global_system_variables.errmsgs= my_default_lc_messages->errmsgs->errmsgs;
   init_client_errs();
+  check_new_mode_value(NULL, &global_system_variables.new_behavior);
   mysql_library_init(unused,unused,unused); /* for replication */
   lex_init();
   if (item_create_init())
@@ -5452,8 +5454,14 @@ static int init_server_components()
 #endif
 
     if ((ho_error= handle_options(&remaining_argc, &remaining_argv, removed_opts,
-                                  mysqld_get_one_option)))
+                                  mysqld_get_one_option))) {
+#ifdef WITH_WSREP
+      Wsrep_server_state::instance().disable_node_reset();
+#endif
+
       unireg_abort(ho_error);
+    }
+
     /* Add back the program name handle_options removes */
     remaining_argc++;
     remaining_argv--;
@@ -6774,7 +6782,9 @@ struct my_option my_long_options[]=
    "names at once (in 'datadir') and is normally the only option you need "
    "for specifying log files. Sets names for --log-bin, --log-bin-index, "
    "--relay-log, --relay-log-index, --general-log-file, "
-   "--log-slow-query-file, --log-error-file, and --pid-file",
+   "--log-slow-query-file, --log-error-file, and --pid-file. "
+   "If log-basename includes a path, the path will apply for all above "
+   "variables except pid-file that will use it without the path",
    &opt_log_basename, &opt_log_basename, 0, GET_STR, REQUIRED_ARG,
    0, 0, 0, 0, 0, 0},
   {"log-bin", OPT_BIN_LOG,
@@ -7629,6 +7639,7 @@ SHOW_VAR status_vars[]= {
   {"Feature_application_time_periods", (char*) offsetof(STATUS_VAR, feature_application_time_periods), SHOW_LONG_STATUS},
   {"Feature_timezone",         (char*) offsetof(STATUS_VAR, feature_timezone), SHOW_LONG_STATUS},
   {"Feature_trigger",          (char*) offsetof(STATUS_VAR, feature_trigger), SHOW_LONG_STATUS},
+  {"Feature_vector_index",     (char*) offsetof(STATUS_VAR, feature_vector_index), SHOW_LONG_STATUS},
   {"Feature_window_functions", (char*) offsetof(STATUS_VAR, feature_window_functions), SHOW_LONG_STATUS},
   {"Feature_xml",              (char*) offsetof(STATUS_VAR, feature_xml), SHOW_LONG_STATUS},
   {"Handler_commit",           (char*) offsetof(STATUS_VAR, ha_commit_count), SHOW_LONG_STATUS},
@@ -7891,7 +7902,6 @@ static void print_help()
                   array_elements(pfs_early_options));
   sys_var_add_options(&all_options, sys_var::PARSE_EARLY);
   add_plugin_options(&all_options, &mem_root);
-  sort_dynamic(&all_options, (qsort_cmp) option_cmp);
   sort_dynamic(&all_options, (qsort_cmp) option_cmp);
   add_terminator(&all_options);
 
@@ -8297,10 +8307,12 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
   case (int) OPT_LOG_BASENAME:
   {
     if (opt_log_basename[0] == 0 || strchr(opt_log_basename, FN_EXTCHAR) ||
-        strchr(opt_log_basename,FN_LIBCHAR) ||
+        !my_basename(opt_log_basename)[0] ||
         !is_filename_allowed(opt_log_basename, strlen(opt_log_basename), FALSE))
     {
-      sql_print_error("Wrong argument for --log-basename. It can't be empty or contain '.' or '" FN_DIRSEP "'. It must be valid filename.");
+      sql_print_error("Wrong argument for --log-basename. It can't be empty, "
+                      "contain '.' or be a directory name'. "
+                      "It must be valid filename.");
       return 1;
     }
     if (log_error_file_ptr != disabled_my_option)
@@ -8334,7 +8346,8 @@ mysqld_get_one_option(const struct my_option *opt, const char *argument,
     {
       SYSVAR_AUTOSIZE(pidfile_name_ptr, pidfile_name);
       /* PID file */
-      strmake(pidfile_name, argument, sizeof(pidfile_name)-5);
+      strmake(pidfile_name, my_basename(opt_log_basename),
+              sizeof(pidfile_name)-5);
       strmov(fn_ext(pidfile_name),".pid");
     }
     break;
@@ -8749,6 +8762,9 @@ static void option_error_reporter(enum loglevel level, const char *format, ...)
 }
 
 C_MODE_END
+
+extern const char **new_mode_default_names;
+
 
 /**
   Get server options from the command line,

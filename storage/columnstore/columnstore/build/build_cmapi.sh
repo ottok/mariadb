@@ -41,18 +41,37 @@ on_exit() {
 }
 trap on_exit EXIT
 
+get_cmapi_git_revision() {
+  # Prefer explicit CMAPI_GIT_REVISION; fallback to DRONE_COMMIT; otherwise read current repo revision
+  local rev="${CMAPI_GIT_REVISION:-${DRONE_COMMIT:-}}"
+  if [[ -z "$rev" ]]; then
+    rev="$(git -C "$COLUMNSTORE_SOURCE_PATH" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+  fi
+  echo "$rev"
+}
+
 install_deps() {
   echo "Installing dependencies..."
 
   cd "$COLUMNSTORE_SOURCE_PATH"/cmapi
 
-  if [[ "$OS" == "rockylinux:9" ]]; then
+  if is_rocky_version $OS 9; then
     retry_eval 5 "dnf install -q -y libxcrypt-compat yum-utils"
     retry_eval 5 "dnf config-manager --set-enabled devel && dnf update -q -y" #to make redhat-lsb-core available for rocky 9
   fi
 
+  #no redhat-lsb-release for rockylinux >=10
+  if is_rocky_version $OS && ! is_rocky_version_ge $OS 10; then
+    retry_eval 5 "dnf update -q -y && dnf install -q -y redhat-lsb-core"
+  fi
+
+
+  if is_rocky_version_ge $OS 10; then
+    retry_eval 5 "dnf update -q -y && dnf install -q -y libxcrypt-compat"
+  fi
+
   if [[ "$PKG_FORMAT" == "rpm" ]]; then
-    retry_eval 5 "dnf update -q -y && dnf install -q -y epel-release wget zstd findutils gcc cmake make rpm-build redhat-lsb-core libarchive"
+    retry_eval 5 "dnf update -q -y && dnf install -q -y epel-release wget zstd findutils gcc cmake make rpm-build libarchive"
   else
     retry_eval 5 "apt-get update -qq -o Dpkg::Use-Pty=0 && apt-get install -qq -o Dpkg::Use-Pty=0 wget zstd findutils gcc cmake make dpkg-dev lsb-release"
   fi
@@ -80,7 +99,8 @@ install_deps() {
 build_cmapi() {
   cd "$COLUMNSTORE_SOURCE_PATH"/cmapi
   ./cleanup.sh
-  cmake -D"${PKG_FORMAT^^}"=1 -DSERVER_DIR="$MDB_SOURCE_PATH" . && make package
+  CMAPI_GIT_REVISION_ARG="$(get_cmapi_git_revision)"
+  cmake -D"${PKG_FORMAT^^}"=1 -DSERVER_DIR="$MDB_SOURCE_PATH" -DCMAPI_GIT_REVISION="$CMAPI_GIT_REVISION_ARG" . && make package
 }
 install_deps
 build_cmapi

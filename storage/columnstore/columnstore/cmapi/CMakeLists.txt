@@ -21,6 +21,17 @@ include(columnstore_version)
 
 set(CMAPI_PACKAGE_VERSION "${CMAPI_VERSION_MAJOR}.${CMAPI_VERSION_MINOR}.${CMAPI_VERSION_PATCH}")
 
+# Git revision to embed into VERSION (may be provided via -DCMAPI_GIT_REVISION or env)
+if(NOT DEFINED CMAPI_GIT_REVISION OR "${CMAPI_GIT_REVISION}" STREQUAL "")
+    if(DEFINED ENV{CMAPI_GIT_REVISION} AND NOT "$ENV{CMAPI_GIT_REVISION}" STREQUAL "")
+        set(CMAPI_GIT_REVISION "$ENV{CMAPI_GIT_REVISION}")
+    elseif(DEFINED ENV{DRONE_COMMIT} AND NOT "$ENV{DRONE_COMMIT}" STREQUAL "")
+        set(CMAPI_GIT_REVISION "$ENV{DRONE_COMMIT}")
+    else()
+        set(CMAPI_GIT_REVISION "unknown")
+    endif()
+endif()
+
 set(CMAPI_USER "root")
 
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "MariaDB ColumnStore CMAPI: cluster management API and command line tool.")
@@ -63,6 +74,7 @@ configure_file(conffiles.template conffiles)
 configure_file(mcs.template mcs)
 configure_file(mcs_aws.template mcs_aws)
 configure_file(mcs_gsutil.template mcs_gsutil)
+configure_file(updater/cmapi_updater.service.template cmapi_updater.service)
 
 install(
     DIRECTORY python
@@ -72,6 +84,7 @@ install(
               cmapi_server
               engine_files
               mcs_cluster_tool
+              tracing
     DESTINATION ${CMAPI_DIR}
     USE_SOURCE_PERMISSIONS
     PATTERN "test" EXCLUDE
@@ -85,7 +98,7 @@ install(
     DESTINATION ${CMAPI_DIR}
 )
 install(FILES cmapi_server/cmapi_server.conf systemd.env DESTINATION ${ETC_DIR})
-install(FILES ${SYSTEMD_UNIT_NAME}.service DESTINATION ${SYSTEMD_UNIT_DIR})
+install(FILES ${SYSTEMD_UNIT_NAME}.service cmapi_updater.service DESTINATION ${SYSTEMD_UNIT_DIR})
 install(
     FILES mcs
     PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
@@ -103,6 +116,11 @@ install(
 )
 install(
     FILES scripts/mcs_backup_manager.sh scripts/cs_package_manager.sh scripts/columnstore_review.sh
+    PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+    DESTINATION ${BIN_DIR}
+)
+install(
+    FILES updater/cmapi_updater.sh
     PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
     DESTINATION ${BIN_DIR}
 )
@@ -145,18 +163,37 @@ if(RPM)
     set(CPACK_RPM_POST_INSTALL_SCRIPT_FILE ${CMAKE_CURRENT_SOURCE_DIR}/postinst)
     set(CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE ${CMAKE_CURRENT_SOURCE_DIR}/prerm)
     set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION ${ETC_DIR} ${SHARE_DIR})
-    set(CPACK_RPM_USER_FILELIST "%config(noreplace) ${CMAPI_CONF_FILEPATH}")
+
+
+    # Define %ignore as a comment so RPM doesn't claim ownership of shared directories
+    set(CPACK_RPM_SPEC_MORE_DEFINE
+        "${CPACK_RPM_SPEC_MORE_DEFINE}
+%define ignore \#
+"
+    )
+
+    set(ignored
+        "%ignore /usr/share/man"
+        "%ignore /usr/share/man/man1"
+        "%ignore /usr/lib/systemd"
+        "%ignore /usr/lib/systemd/system"
+    )
+
+    # Combine your config file and your ignores into the same USER_FILELIST
+    set(CPACK_RPM_USER_FILELIST
+        "%config(noreplace) ${CMAPI_CONF_FILEPATH}"
+        ${ignored}
+    )
 
     set(CPACK_RPM_PACKAGE_OBSOLETES "mariadb-columnstore-cmapi")
     set(CPACK_RPM_PACKAGE_REQUIRES "curl")
-    string(REPLACE "-" "_" SERVER_VERSION ${SERVER_VERSION})
     get_linux_lsb_release_information()
 
-    string(REGEX MATCH "^." OS_VERSION_MAJOR "${LSB_RELEASE_VERSION_SHORT}")
+    string(REGEX MATCH "^[0-9]+" OS_VERSION_MAJOR "${LSB_RELEASE_VERSION_SHORT}")
     message(STATUS ${OS_VERSION_MAJOR})
     if(LSB_RELEASE_ID_SHORT MATCHES "centos|rocky|rhel|alma|RedHatEnterprise")
         set(OS_NAME_SHORT "el")
-        if(OS_VERSION_MAJOR MATCHES "9")
+        if(OS_VERSION_MAJOR GREATER_EQUAL 9)
             set(CPACK_RPM_PACKAGE_REQUIRES "libxcrypt-compat")
         endif()
     else()
@@ -166,12 +203,12 @@ if(RPM)
     message(STATUS "OS_VERSION ${OS_VERSION}")
 
     set(CPACK_RPM_PACKAGE_FILE_NAME
-        "${CPACK_PACKAGE_NAME}-${SERVER_VERSION}_${CMAPI_PACKAGE_VERSION}-${CMAPI_VERSION_RELEASE}.${OS_VERSION}.${CMAKE_HOST_SYSTEM_PROCESSOR}"
+        "${CPACK_PACKAGE_NAME}-${CMAPI_PACKAGE_VERSION}-${CMAPI_VERSION_RELEASE}.${OS_VERSION}.${CMAKE_HOST_SYSTEM_PROCESSOR}"
     )
     message(STATUS "CPACK_RPM_PACKAGE_FILE_NAME ${CPACK_RPM_PACKAGE_FILE_NAME}")
     set(CPACK_PACKAGE_FILE_NAME ${CPACK_RPM_PACKAGE_FILE_NAME})
     # version and release the same as in Columnstore engine package
-    set(CPACK_RPM_PACKAGE_VERSION "${SERVER_VERSION}_${CMAPI_PACKAGE_VERSION}")
+    set(CPACK_RPM_PACKAGE_VERSION "${CMAPI_PACKAGE_VERSION}")
     set(CPACK_RPM_PACKAGE_RELEASE "${CMAPI_VERSION_RELEASE}.${OS_VERSION}")
 endif()
 
@@ -195,7 +232,6 @@ if(DEB)
 
     set(CPACK_DEBIAN_PACKAGE_REPLACES "mariadb-columnstore-cmapi")
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "curl")
-    string(REPLACE "-" "." SERVER_VERSION ${SERVER_VERSION})
     set(PATCHLEVEL "+maria")
     get_linux_lsb_release_information()
     string(REGEX MATCH "^..." LSBID ${LSB_RELEASE_ID_SHORT})
@@ -209,12 +245,12 @@ if(DEB)
     )
     message(STATUS "ARCHITECTURE detected ${ARCHITECTURE}")
     set(CPACK_DEBIAN_PACKAGE_FILE_NAME
-        "${CPACK_PACKAGE_NAME}_${SERVER_VERSION}-${CMAPI_PACKAGE_VERSION}${PATCHLEVEL}~${LSBID}${LSBVERSION}_${ARCHITECTURE}"
+        "${CPACK_PACKAGE_NAME}_${CMAPI_PACKAGE_VERSION}${PATCHLEVEL}~${LSBID}${LSBVERSION}_${ARCHITECTURE}"
     )
     message(STATUS "CPACK_DEBIAN_PACKAGE_FILE_NAME ${CPACK_DEBIAN_PACKAGE_FILE_NAME}")
     set(CPACK_PACKAGE_FILE_NAME ${CPACK_DEBIAN_PACKAGE_FILE_NAME})
     # making possible to store several cmapi packages in one repo (same version as in Columnstore engine package)
-    set(CPACK_DEBIAN_PACKAGE_VERSION "${SERVER_VERSION}-${CMAPI_PACKAGE_VERSION}${PATCHLEVEL}~${LSBID}${LSBVERSION}")
+    set(CPACK_DEBIAN_PACKAGE_VERSION "${CMAPI_PACKAGE_VERSION}${PATCHLEVEL}~${LSBID}${LSBVERSION}")
 endif()
 
 include(CPack)

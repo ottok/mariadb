@@ -82,16 +82,6 @@ macro(columnstore_shared_library libname)
     columnstore_install_target(${libname} ${ENGINE_LIBDIR})
 endmacro()
 
-macro(columnstore_static_library libname)
-    add_definitions(-fPIC -DPIC)
-    add_library(${libname} STATIC ${ARGN})
-endmacro()
-
-macro(columnstore_shared_library libname)
-    add_library(${libname} SHARED ${ARGN})
-    columnstore_install_target(${libname} ${ENGINE_LIBDIR})
-endmacro()
-
 macro(columnstore_library libname)
     if(COLUMNSTORE_STATIC_LIBRARIES)
         columnstore_static_library(${libname} ${ARGN})
@@ -109,16 +99,54 @@ macro(columnstore_link libname)
     target_link_libraries(${libname} ${ARGN})
 endmacro()
 
-macro(columnstore_mysql_plugin_library libname)
-    add_library(${libname} SHARED ${ARGN})
-    columnstore_install_target(${libname} ${MARIADB_PLUGINDIR})
-endmacro()
-
-macro(columnstore_link libname)
-    target_link_libraries(${libname} ${ARGN})
-endmacro()
-
 macro(columnstore_executable executable_name)
-    add_executable(${executable_name} ${ARGN})
+    if(WITH_COLUMNSTORE_ASAN)
+        add_executable(${executable_name} ${ARGN} ${CMAKE_BINARY_DIR}/asan_options.cpp)
+    else()
+        add_executable(${executable_name} ${ARGN})
+    endif()
     columnstore_install_target(${executable_name} ${ENGINE_BINDIR})
 endmacro()
+
+# Read /etc/os-release and output: ID (lowercase) and VERSION_ID major number
+function(columnstore_detect_os OUT_ID OUT_VER_MAJOR)
+    set(_os_id "")
+    set(_os_version_major "")
+
+    set(_os_release "/etc/os-release")
+    if(EXISTS "${_os_release}")
+        file(READ "${_os_release}" _osr)
+        # Extract ID
+        string(REGEX MATCH "\nID=([^\n]+)" _id_match "\nID=([^\n]+)" ${_osr})
+        if(_id_match)
+            string(REGEX REPLACE ".*\nID=\"?([^\"\n]+)\"?.*" "\\1" _os_id "${_osr}")
+            string(TOLOWER "${_os_id}" _os_id)
+        endif()
+        # Extract VERSION_ID major digits
+        string(REGEX MATCH "\nVERSION_ID=([^\n]+)" _vid_match "\nVERSION_ID=([^\n]+)" ${_osr})
+        if(_vid_match)
+            string(REGEX REPLACE ".*\nVERSION_ID=\"?([0-9]+).*" "\\1" _os_version_major "${_osr}")
+        endif()
+    endif()
+
+    set(${OUT_ID}
+        "${_os_id}"
+        PARENT_SCOPE
+    )
+    set(${OUT_VER_MAJOR}
+        "${_os_version_major}"
+        PARENT_SCOPE
+    )
+endfunction()
+
+# Check whether a given lowercase OS ID is RHEL-like (RHEL/Rocky/Alma/CentOS/RedHat)
+function(columnstore_is_rhel_like OS_ID OUT_BOOL)
+    set(_is_rhel_like FALSE)
+    if(${OS_ID} MATCHES "^(rhel|rocky|almalinux|centos|redhatenterpriseserver|redhatenterprise|redhat)$")
+        set(_is_rhel_like TRUE)
+    endif()
+    set(${OUT_BOOL}
+        "${_is_rhel_like}"
+        PARENT_SCOPE
+    )
+endfunction()

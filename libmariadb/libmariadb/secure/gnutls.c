@@ -1162,7 +1162,11 @@ void *ma_tls_init(MYSQL *mysql)
      a client certificate we will send it via callback function */
   if ((ssl_error= gnutls_credentials_set(ssl, GNUTLS_CRD_CERTIFICATE, ctx)) < 0)
     goto error;
-  
+
+  if (mysql->host && !ma_is_ip_address(mysql->host))
+    if ((ssl_error = gnutls_server_name_set(ssl, GNUTLS_NAME_DNS, mysql->host, strlen(mysql->host))) < 0)
+      goto error;
+
   pthread_mutex_unlock(&LOCK_gnutls_config);
   return (void *)ssl;
 error:

@@ -602,7 +602,7 @@ struct rpl_gtid;
 struct wait_for_commit;
 class Binlog_commit_by_rotate;
 
-class MYSQL_BIN_LOG: public TC_LOG, private Event_log
+class MYSQL_BIN_LOG: public TC_LOG, public Event_log
 {
   friend Binlog_commit_by_rotate;
 
@@ -1023,7 +1023,7 @@ public:
   bool write_incident_already_locked(THD *thd);
   bool write_incident(THD *thd);
   void write_binlog_checkpoint_event_already_locked(const char *name, uint len);
-  bool write_table_map(THD *thd, TABLE *table, bool with_annotate);
+  bool write_table_map(THD *thd, TABLE *table);
 
   void start_union_events(THD *thd, query_id_t query_id_param);
   void stop_union_events(THD *thd);
@@ -1412,6 +1412,7 @@ int binlog_flush_pending_rows_event(THD *thd, bool stmt_end,
                                     bool is_transactional,
                                     Event_log *bin_log,
                                     binlog_cache_data *cache_data);
+void binlog_truncate_tmp_files(binlog_cache_mngr *cache_mngr);
 Rows_log_event* binlog_get_pending_rows_event(binlog_cache_mngr *cache_mngr,
                                               bool use_trans_cache);
 int online_alter_log_row(TABLE* table, const uchar *before_record,
@@ -1453,8 +1454,8 @@ inline bool normalize_binlog_name(char *to, const char *from, bool is_relay_log)
   /* opt_name is not null and not empty and from is a relative path */
   if (opt_name && opt_name[0] && from && !test_if_hard_path(from))
   {
-    // take the path from opt_name
-    // take the filename from from 
+    // take the path from "opt_name"
+    // take the filename from "from"
     char log_dirpart[FN_REFLEN], log_dirname[FN_REFLEN];
     size_t log_dirpart_len, log_dirname_len;
     dirname_part(log_dirpart, opt_name, &log_dirpart_len);
@@ -1506,6 +1507,7 @@ const char *
 get_gtid_list_event(IO_CACHE *cache, Gtid_list_log_event **out_gtid_list);
 
 int binlog_commit(THD *thd, bool all, bool is_ro_1pc= false);
+int binlog_rollback(THD *thd, bool all);
 int binlog_commit_by_xid(XID *xid);
 int binlog_rollback_by_xid(XID *xid);
 bool write_bin_log_start_alter(THD *thd, bool& partial_alter,

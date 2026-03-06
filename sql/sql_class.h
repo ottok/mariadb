@@ -198,6 +198,8 @@ enum enum_binlog_row_image {
 #define MODE_TIME_ROUND_FRACTIONAL      (1ULL << 34)
 /* The following modes are specific to MySQL */
 #define MODE_MYSQL80_TIME_TRUNCATE_FRACTIONAL (1ULL << 32)
+#define WAS_ORACLE                      (1ULL << 35)
+#define IS_OR_WAS_ORACLE                (MODE_ORACLE | WAS_ORACLE)
 
 
 /* Bits for different old style modes */
@@ -215,6 +217,24 @@ enum enum_binlog_row_image {
 #define OLD_MODE_DEFAULT_VALUE          OLD_MODE_UTF8_IS_UTF8MB3
 
 void old_mode_deprecated_warnings(ulonglong v);
+
+
+/*
+  Bits for @@new_mode -> thd->variables.new_behaviour system variable
+  See sys_vars.cc /new_mode_all_names
+*/
+
+#define NEW_MODE_FIX_DISK_TMPTABLE_COSTS                            (1ULL << 0)
+#define NEW_MODE_FIX_INDEX_STATS_FOR_ALL_NULLS                      (1ULL << 1)
+#define NEW_MODE_FIX_INDEX_LOOKUP_COST                              (1ULL << 2)
+#define NEW_MODE_MAX                                                3
+
+/* Definitions above that have transitioned from new behaviour to default */
+
+#define NOW_DEFAULT                                             -1
+
+#define TEST_NEW_MODE_FLAG(thd, flag) \
+  (flag == NOW_DEFAULT ? TRUE : thd->variables.new_behavior & flag)
 
 extern char internal_table_name[2];
 extern char empty_c_string[1];
@@ -724,6 +744,7 @@ typedef struct system_variables
   ulonglong optimizer_trace;
   sql_mode_t sql_mode; ///< which non-standard SQL behaviour should be enabled
   sql_mode_t old_behavior; ///< which old SQL behaviour should be enabled
+  sql_mode_t new_behavior; ///< which new SQL behaviour should be enabled
   ulonglong option_bits; ///< OPTION_xxx constants, e.g. OPTION_PROFILING
   ulonglong join_buff_space_limit;
   ulonglong log_slow_filter; 
@@ -1028,6 +1049,7 @@ typedef struct system_status_var
   ulong feature_timezone;	    /* +1 when XPATH is used */
   ulong feature_trigger;	    /* +1 opening a table with triggers */
   ulong feature_xml;		    /* +1 when XPATH is used */
+  ulong feature_vector_index;       /* +1 when open table with vector index */
   ulong feature_window_functions;   /* +1 when window functions are used */
   ulong feature_into_outfile;       /* +1 when INTO OUTFILE is used */
   ulong feature_into_variable;      /* +1 when INTO VARIABLE is used */
@@ -1070,13 +1092,15 @@ typedef struct system_status_var
   double last_query_cost;
   uint32 threads_running;
 
-  /* Following variables are not cleared by FLUSH STATUS */
+  /* Memory used by internal temporary tables and on disk transaction cache */
   ulonglong max_tmp_space_used;
   /* Memory used for thread local storage */
   int64 max_local_memory_used;
-  /* Don't copy variables back to THD after this in show status */
+  /*
+    Following variables are not cleared by FLUSH STATUS
+    Don't copy them back to THD after show status
+  */
   ulonglong tmp_space_used;
-  /* Don't reset variables after this */
   volatile int64 local_memory_used;
   /* Memory allocated for global usage */
   volatile int64 global_memory_used;
@@ -1095,12 +1119,12 @@ typedef struct system_status_var
 
 #define STATUS_OFFSET(A) offsetof(STATUS_VAR,A)
 /* Clear as part of flush */
-#define clear_for_flush_status      STATUS_OFFSET(tmp_space_used)
-/* Clear as part of startup */
-#define clear_for_new_connection         STATUS_OFFSET(local_memory_used)
+#define clear_for_flush_status           STATUS_OFFSET(tmp_space_used)
+/* Clear as part of a new connection and reuse connection */
+#define clear_for_new_connection         STATUS_OFFSET(max_tmp_space_used)
 /* Full initialization. Note that global_memory_used is updated early! */
-#define clear_for_server_start  STATUS_OFFSET(global_memory_used)
-#define last_restored_status_var        clear_for_flush_status
+#define clear_for_server_start           STATUS_OFFSET(global_memory_used)
+#define last_restored_status_var         clear_for_flush_status
 
 
 /** Number of contiguous global status variables */
@@ -1843,7 +1867,7 @@ public:
   bool check_access(const privilege_t want_access, bool match_any = false);
   bool is_priv_user(const LEX_CSTRING &user, const LEX_CSTRING &host);
   bool is_user_defined() const
-    { return user && user != delayed_user && user != slave_user; };
+    { return user && user != delayed_user && user != slave_user && user != wsrep_user; };
 };
 
 
@@ -2309,6 +2333,76 @@ public:
 };
 
 
+extern "C" void my_message_sql(uint error, const char *str, myf MyFlags);
+
+/**
+  Error handler that captures and postpones errors.
+  Warnings and notes are passed through to the next handler.
+  Stored errors can be re-emitted later via emit_errors().
+*/
+
+class Postponed_error_handler : public Internal_error_handler
+{
+  struct Error_entry
+  {
+    uint sql_errno;
+    char message[MYSQL_ERRMSG_SIZE];
+    Error_entry *next;
+  };
+
+  Error_entry *m_first;
+  Error_entry *m_last;
+  MEM_ROOT *m_mem_root;
+
+public:
+  Postponed_error_handler(MEM_ROOT *mem_root)
+    : m_first(nullptr), m_last(nullptr), m_mem_root(mem_root)
+  {}
+
+  bool handle_condition(THD *thd,
+                        uint sql_errno,
+                        const char *sqlstate,
+                        Sql_condition::enum_warning_level *level,
+                        const char *msg,
+                        Sql_condition **cond_hdl) override
+  {
+    /* Only capture errors, let warnings and notes pass through */
+    if (*level != Sql_condition::WARN_LEVEL_ERROR)
+      return false;
+
+    Error_entry *entry= (Error_entry*) alloc_root(m_mem_root,
+                                                  sizeof(Error_entry));
+    if (!entry)
+      return false;  // Can't store, let error propagate
+
+    entry->sql_errno= sql_errno;
+    strmake(entry->message, msg, sizeof(entry->message) - 1);
+    entry->next= nullptr;
+
+    if (m_last)
+      m_last->next= entry;
+    else
+      m_first= entry;
+    m_last= entry;
+
+    return true;
+  }
+
+  bool has_errors() const { return m_first != nullptr; }
+
+  void emit_errors()
+  {
+    for (Error_entry *e= m_first; e; e= e->next)
+      my_message_sql(e->sql_errno, e->message, MYF(0));
+  }
+
+  void clear()
+  {
+    m_first= m_last= nullptr;
+  }
+};
+
+
 /**
   This class is an internal error handler implementation for
   DROP TABLE statements. The thing is that there may be warnings during
@@ -2713,16 +2807,16 @@ struct wait_for_commit
 
 class Sp_caches
 {
+protected:
+  ulong m_sp_cache_version;
 public:
   sp_cache *sp_proc_cache;
   sp_cache *sp_func_cache;
   sp_cache *sp_package_spec_cache;
   sp_cache *sp_package_body_cache;
   Sp_caches()
-   :sp_proc_cache(NULL),
-    sp_func_cache(NULL),
-    sp_package_spec_cache(NULL),
-    sp_package_body_cache(NULL)
+   :m_sp_cache_version(0), sp_proc_cache(NULL), sp_func_cache(NULL),
+    sp_package_spec_cache(NULL), sp_package_body_cache(NULL)
   { }
   ~Sp_caches()
   {
@@ -2732,19 +2826,22 @@ public:
     DBUG_ASSERT(sp_package_spec_cache == NULL);
     DBUG_ASSERT(sp_package_body_cache == NULL);
   }
-  void sp_caches_swap(Sp_caches &rhs)
-  {
-    swap_variables(sp_cache*, sp_proc_cache, rhs.sp_proc_cache);
-    swap_variables(sp_cache*, sp_func_cache, rhs.sp_func_cache);
-    swap_variables(sp_cache*, sp_package_spec_cache, rhs.sp_package_spec_cache);
-    swap_variables(sp_cache*, sp_package_body_cache, rhs.sp_package_body_cache);
-  }
   void sp_caches_clear();
   /**
     Clear content of sp related caches.
     Don't delete cache objects itself.
   */
   void sp_caches_empty();
+  ulong sp_cache_version() const
+  {
+    DBUG_ASSERT(m_sp_cache_version);
+    return m_sp_cache_version;
+  }
+  void set_sp_cache_version_if_needed(ulong version)
+  {
+    if (!m_sp_cache_version)
+      m_sp_cache_version= version;
+  }
 };
 
 
@@ -3324,7 +3421,7 @@ public:
                         enum_binlog_row_image row_image,
                         const uchar *old_data, const uchar *new_data);
   bool prepare_handlers_for_update(uint flag);
-  bool binlog_write_annotated_row(Log_event_writer *writer);
+  bool binlog_write_annotated_row(bool use_trans_cache);
   void binlog_prepare_for_row_logging();
   bool binlog_write_table_maps();
 
@@ -3345,7 +3442,7 @@ public:
   {
     if (!log_current_statement())
       return false;
-    auto *cache_mngr= binlog_get_cache_mngr();
+    binlog_cache_mngr *cache_mngr= binlog_get_cache_mngr();
     if (!cache_mngr)
       return true;
     return !binlog_get_pending_rows_event(cache_mngr,
@@ -3354,6 +3451,13 @@ public:
   }
 
   bool binlog_for_noop_dml(bool transactional_table);
+
+  void binlog_truncate_tmp_files()
+  {
+    binlog_cache_mngr *cache_mngr= binlog_get_cache_mngr();
+    if (cache_mngr)
+      ::binlog_truncate_tmp_files(cache_mngr);
+  }
 
   /**
     Determine the binlog format of the current statement.
@@ -5980,7 +6084,7 @@ public:
         return variables.idle_transaction_timeout;
     }
 
-    return variables.net_wait_timeout;
+    return uint(variables.net_wait_timeout);
   }
 
   /**
@@ -6672,6 +6776,8 @@ public:
   int send_data(List<Item> &items) override;
 };
 
+class Write_record; // defined in sql_insert.h
+
 
 class select_insert :public select_result_interceptor {
  public:
@@ -6679,13 +6785,14 @@ class select_insert :public select_result_interceptor {
   TABLE_LIST *table_list;
   TABLE *table;
   List<Item> *fields;
+  Write_record *write;
   ulonglong autoinc_value_of_last_inserted_row; // autogenerated or not
   COPY_INFO info;
   bool insert_into_view;
   select_insert(THD *thd_arg, TABLE_LIST *table_list_par, TABLE *table_par,
                 List<Item> *fields_par, List<Item> *update_fields,
                 List<Item> *update_values, enum_duplicates duplic,
-                bool ignore, select_result *sel_ret_list);
+                bool ignore, select_result *sel_ret_list, Write_record *write);
   ~select_insert();
   int prepare(List<Item> &list, SELECT_LEX_UNIT *u) override;
   int prepare2(JOIN *join) override;
@@ -6719,9 +6826,9 @@ public:
                 Table_specification_st *create_info_par,
                 Alter_info *alter_info_arg,
                 List<Item> &select_fields,enum_duplicates duplic, bool ignore,
-                TABLE_LIST *select_tables_arg):
+                TABLE_LIST *select_tables_arg, Write_record *write):
     select_insert(thd_arg, table_arg, NULL, &select_fields, 0, 0, duplic,
-                  ignore, NULL),
+                  ignore, NULL, write),
     create_info(create_info_par),
     select_tables(select_tables_arg),
     alter_info(alter_info_arg),
@@ -6965,7 +7072,7 @@ public:
     ("c"),("b"),("c"),("c"),("a"),("b"),("g")
     ("c"),("a"),("b"),("d"),("b"),("e")
 
-  - Let's demonstrate how the the set operation INTERSECT ALL is proceesed
+  - Let's demonstrate how the set operation INTERSECT ALL is proceesed
     for the query
               SELECT f FROM t1 INTERSECT ALL SELECT f FROM t2
 
@@ -7013,7 +7120,7 @@ public:
       |0      |1      |c  |
       |0      |1      |c  |
 
-  - Let's demonstrate how the the set operation EXCEPT ALL is proceesed
+  - Let's demonstrate how the set operation EXCEPT ALL is proceesed
     for the query
               SELECT f FROM t1 EXCEPT ALL SELECT f FROM t3
 
@@ -7896,27 +8003,23 @@ public:
   If command creates or drops a database
 */
 #define CF_DB_CHANGE (1U << 23)
-
-#ifdef WITH_WSREP
-/**
-  DDL statement that may be subject to error filtering.
-*/
-#define CF_WSREP_MAY_IGNORE_ERRORS (1U << 24)
-/**
-   Basic DML statements that create writeset.
-*/
-#define CF_WSREP_BASIC_DML (1u << 25)
-
-#endif /* WITH_WSREP */
-
-
-/* Bits in server_command_flags */
-
 /**
   Statement that deletes existing rows (DELETE, DELETE_MULTI)
 */
 #define CF_DELETES_DATA (1U << 24)
 
+#ifdef WITH_WSREP
+/**
+  DDL statement that may be subject to error filtering.
+*/
+#define CF_WSREP_MAY_IGNORE_ERRORS (1U << 25)
+/**
+   Basic DML statements that create writeset.
+*/
+#define CF_WSREP_BASIC_DML (1u << 26)
+#endif /* WITH_WSREP */
+
+/* Bits in server_command_flags */
 /**
   Skip the increase of the global query id counter. Commonly set for
   commands that are stateless (won't cause any change on the server
@@ -8172,7 +8275,7 @@ class Sql_mode_save
   Sql_mode_save(THD *thd) : thd(thd), old_mode(thd->variables.sql_mode) {}
   ~Sql_mode_save() { thd->variables.sql_mode = old_mode; }
 
- private:
+ protected:
   THD *thd;
   sql_mode_t old_mode; // SQL mode saved at construction time.
 };
@@ -8189,6 +8292,9 @@ public:
   Sql_mode_save_for_frm_handling(THD *thd)
    :Sql_mode_save(thd)
   {
+    if (thd->variables.sql_mode & MODE_ORACLE)
+      thd->variables.sql_mode|= IS_OR_WAS_ORACLE;
+
     /*
       - MODE_REAL_AS_FLOAT            affect only CREATE TABLE parsing
       + MODE_PIPES_AS_CONCAT          affect expression parsing
@@ -8218,6 +8324,12 @@ public:
                                 MODE_IGNORE_SPACE | MODE_NO_BACKSLASH_ESCAPES |
                                 MODE_ORACLE | MODE_EMPTY_STRING_IS_NULL);
   };
+
+  ~Sql_mode_save_for_frm_handling()
+  {
+    if (thd->variables.sql_mode & IS_OR_WAS_ORACLE)
+      thd->variables.sql_mode&= ~IS_OR_WAS_ORACLE;
+  }
 };
 
 

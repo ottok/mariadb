@@ -87,7 +87,7 @@ char empty_c_string[1]= {0};    /* used for not defined db */
 extern "C" const uchar *get_var_key(const void *entry_, size_t *length,
                                     my_bool)
 {
-  auto entry= static_cast<const user_var_entry *>(entry_);
+  const user_var_entry *entry= static_cast<const user_var_entry *>(entry_);
   *length= entry->name.length;
   return reinterpret_cast<const uchar *>(entry->name.str);
 }
@@ -106,7 +106,7 @@ extern "C" void free_user_var(void *entry_)
 extern "C" const uchar *get_sequence_last_key(const void *entry_,
                                               size_t *length, my_bool)
 {
-  auto *entry= static_cast<const SEQUENCE_LAST_VALUE *>(entry_);
+  const SEQUENCE_LAST_VALUE *entry= static_cast<const SEQUENCE_LAST_VALUE *>(entry_);
   *length= entry->length;
   return entry->key;
 }
@@ -799,6 +799,7 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
   status_var.local_memory_used= sizeof(THD);
   status_var.max_local_memory_used= status_var.local_memory_used;
   status_var.global_memory_used= 0;
+  status_var.tmp_space_used= 0;
   variables.pseudo_thread_id= thread_id;
   variables.max_mem_used= global_system_variables.max_mem_used;
   main_da.init();
@@ -916,6 +917,7 @@ THD::THD(my_thread_id id, bool is_wsrep_applier)
   reset_open_tables_state();
 
   init();
+
   debug_sync_init_thread(this);
 #if defined(ENABLED_PROFILING)
   profiling.set_thd(this);
@@ -1383,11 +1385,12 @@ void THD::init()
   reset_binlog_local_stmt_filter();
   /* local_memory_used was setup in THD::THD() */
   set_status_var_init(clear_for_new_connection);
+  status_var.max_tmp_space_used= status_var.tmp_space_used; // Should be 0
   status_var.max_local_memory_used= status_var.local_memory_used;
   bzero((char *) &org_status_var, sizeof(org_status_var));
   status_in_global= 0;
   start_bytes_received= 0;
-  m_last_commit_gtid.seq_no= 0;
+  bzero(&m_last_commit_gtid, sizeof(m_last_commit_gtid));
   last_stmt= NULL;
   /* Reset status of last insert id */
   arg_of_last_insert_id_function= FALSE;
@@ -1497,7 +1500,7 @@ void THD::update_all_stats()
   end_cpu_time= my_getcputime();
   end_utime=    microsecond_interval_timer();
   busy_time= end_utime - start_utime;
-  cpu_time=  end_cpu_time - start_cpu_time;
+  cpu_time=  (end_cpu_time - start_cpu_time+5)/10;
   /* In case there are bad values, 2629743 is the #seconds in a month. */
   if (cpu_time > 2629743000000ULL)
     cpu_time= 0;
@@ -1574,6 +1577,7 @@ void THD::change_user(void)
                HASH_THREAD_SPECIFIC);
   sp_caches_clear();
   opt_trace.delete_traces();
+  binlog_truncate_tmp_files();
 }
 
 /**
@@ -1730,6 +1734,7 @@ void THD::cleanup(void)
 
 void THD::free_connection()
 {
+  DBUG_ENTER("free_connection");
   DBUG_ASSERT(free_connection_done == 0);
   my_free(const_cast<char*>(db.str));
   db= null_clex_str;
@@ -1756,6 +1761,9 @@ void THD::free_connection()
   profiling.restart();                          // Reset profiling
 #endif
   debug_sync_reset_thread(this);
+  DBUG_ASSERT(status_var.tmp_space_used == 0 ||
+              !debug_assert_on_not_freed_memory);
+  DBUG_VOID_RETURN;
 }
 
 /*
@@ -2156,7 +2164,7 @@ void THD::disconnect()
 
 #ifdef SIGNAL_WITH_VIO_CLOSE
   /*
-    Since a active vio might might have not been set yet, in
+    Since a active vio might have not been set yet, in
     any case save a reference to avoid closing a inexistent
     one or closing the vio twice if there is a active one.
   */
@@ -2265,6 +2273,10 @@ int THD::killed_errno()
     DBUG_RETURN(ER_CONNECTION_KILLED);
   case KILL_QUERY:
   case KILL_QUERY_HARD:
+#ifdef WITH_WSREP
+  if (WSREP(this))
+    wsrep_report_query_interrupted(this, __FILE__, __LINE__);
+#endif /* WITH_WSREP */
     DBUG_RETURN(ER_QUERY_INTERRUPTED);
   case KILL_TIMEOUT:
   case KILL_TIMEOUT_HARD:
@@ -2482,7 +2494,7 @@ void THD::cleanup_after_query()
   if (!in_active_multi_stmt_transaction())
     wsrep_affected_rows= 0;
 #endif /* WITH_WSREP */
-
+  gap_tracker_data.init();
   DBUG_VOID_RETURN;
 }
 
@@ -3560,6 +3572,7 @@ int select_export::send_data(List<Item> &items)
   tmp.length(0);
 
   row_count++;
+  thd->server_status|= SERVER_STATUS_RETURNED_ROW;
   Item *item;
   uint used_length=0,items_left=items.elements;
   List_iterator_fast<Item> li(items);
@@ -3834,6 +3847,7 @@ int select_dump::send_data(List<Item> &items)
       goto err;
     }
   }
+  thd->server_status|= SERVER_STATUS_RETURNED_ROW;
   DBUG_RETURN(0);
 err:
   DBUG_RETURN(1);
@@ -3967,7 +3981,7 @@ bool select_max_min_finder_subselect::cmp_time()
 {
   Item *maxmin= ((Item_singlerow_subselect *)item)->element_index(0);
   THD *thd= current_thd;
-  auto val1= cache->val_time_packed(thd), val2= maxmin->val_time_packed(thd);
+  longlong val1= cache->val_time_packed(thd), val2= maxmin->val_time_packed(thd);
 
   /* Ignore NULLs for ANY and keep them for ALL subqueries */
   if (cache->null_value)
@@ -4285,7 +4299,7 @@ C_MODE_START
 static const uchar *get_statement_id_as_hash_key(const void *record,
                                                  size_t *key_length, my_bool)
 {
-  auto statement= static_cast<const Statement *>(record);
+  const Statement *statement= static_cast<const Statement *>(record);
   *key_length= sizeof(statement->id);
   return reinterpret_cast<const uchar *>(&(statement)->id);
 }
@@ -4298,7 +4312,7 @@ static void delete_statement_as_hash_key(void *key)
 static const uchar *get_stmt_name_hash_key(const void *entry_, size_t *length,
                                            my_bool)
 {
-  auto entry= static_cast<const Statement *>(entry_);
+  const Statement *entry= static_cast<const Statement *>(entry_);
   *length= entry->name.length;
   return reinterpret_cast<const uchar *>(entry->name.str);
 }
@@ -4490,6 +4504,7 @@ bool select_dumpvar::send_data_to_var_list(List<Item> &items)
     if (mv->set(thd, item))
       DBUG_RETURN(true);
   }
+  thd->server_status|= SERVER_STATUS_RETURNED_ROW;
   DBUG_RETURN(false);
 }
 
@@ -4509,6 +4524,7 @@ int select_dumpvar::send_data(List<Item> &items)
       send_data_to_var_list(items))
     DBUG_RETURN(1);
 
+  thd->server_status|= SERVER_STATUS_RETURNED_ROW;
   DBUG_RETURN(thd->is_error());
 }
 
@@ -4607,6 +4623,7 @@ int select_materialize_with_stats::send_data(List<Item> &items)
     return 0;
 
   ++count_rows;
+  thd->server_status|= SERVER_STATUS_RETURNED_ROW;
 
   while ((cur_item= item_it++))
   {
@@ -5248,7 +5265,7 @@ void destroy_thd(MYSQL_THD thd)
 */
 MYSQL_THD create_background_thd()
 {
-  auto save_thd = current_thd;
+  THD *save_thd= current_thd;
   set_current_thd(nullptr);
 
   auto save_mysysvar= my_thread_var;
@@ -5342,7 +5359,7 @@ void destroy_background_thd(MYSQL_THD thd)
      would kill it, if we're not careful.
   */
 #ifdef HAVE_PSI_THREAD_INTERFACE
-  auto save_psi_thread= PSI_CALL_get_thread();
+  PSI_thread *save_psi_thread= PSI_CALL_get_thread();
 #endif
   PSI_CALL_set_thread(0);
   set_mysys_var(thd_mysys_var);
@@ -5418,16 +5435,6 @@ extern "C" void thd_decrement_pending_ops(void *thd_)
   }
 }
 
-
-unsigned long long thd_get_query_id(const MYSQL_THD thd)
-{
-  return((unsigned long long)thd->query_id);
-}
-
-void thd_clear_error(MYSQL_THD thd)
-{
-  thd->clear_error();
-}
 
 extern "C" const struct charset_info_st *thd_charset(MYSQL_THD thd)
 {
@@ -5817,12 +5824,6 @@ extern "C" int thd_binlog_format(const MYSQL_THD thd)
   if (mysql_bin_log.is_open() && (thd->variables.option_bits & OPTION_BIN_LOG))
     return (int) thd->variables.binlog_format;
   return BINLOG_FORMAT_UNSPEC;
-}
-
-extern "C" void thd_mark_transaction_to_rollback(MYSQL_THD thd, bool all)
-{
-  DBUG_ASSERT(thd);
-  thd->mark_transaction_to_rollback(all);
 }
 
 extern "C" bool thd_binlog_filter_ok(const MYSQL_THD thd)
@@ -6542,7 +6543,7 @@ start_new_trans::start_new_trans(THD *thd)
   mdl_savepoint= thd->mdl_context.mdl_savepoint();
   memcpy(old_ha_data, thd->ha_data, sizeof(old_ha_data));
   thd->reset_n_backup_open_tables_state(&open_tables_state_backup);
-  for (auto &data : thd->ha_data)
+  for (Ha_data &data : thd->ha_data)
     data.reset();
   old_transaction= thd->transaction;
   thd->transaction= &new_transaction;
@@ -7724,7 +7725,7 @@ bool THD::binlog_for_noop_dml(bool transactional_table)
 }
 
 
-#if defined(DBUG_TRACE) && !defined(_lint)
+#if defined(DBUG_TRACE)
 static const char *
 show_query_type(THD::enum_binlog_query_type qtype)
 {
@@ -7738,7 +7739,7 @@ show_query_type(THD::enum_binlog_query_type qtype)
     DBUG_ASSERT(0 <= qtype && qtype < THD::QUERY_TYPE_COUNT);
   }
   static char buf[64];
-  sprintf(buf, "UNKNOWN#%d", qtype);
+  snprintf(buf, sizeof(buf), "UNKNOWN#%d", qtype);
   return buf;
 }
 #endif
@@ -8100,7 +8101,7 @@ int THD::binlog_query(THD::enum_binlog_query_type qtype, char const *query_arg,
 
   The filter is in decide_logging_format() to mark queries to not be stored
   in the binary log, for example by a shared distributed engine like S3.
-  This function resets the filter to ensure the the query is logged if
+  This function resets the filter to ensure the query is logged if
   the binlog is active.
 
   Note that 'direct' is set to false, which means that the query will
@@ -8380,6 +8381,10 @@ wait_for_commit::wait_for_prior_commit2(THD *thd, bool allow_kill)
     wakeup_error= ER_QUERY_INTERRUPTED;
   my_message(wakeup_error, ER_THD(thd, wakeup_error), MYF(0));
   thd->EXIT_COND(&old_stage);
+#ifdef WITH_WSREP
+  if (WSREP(thd))
+    wsrep_report_query_interrupted(thd, __FILE__, __LINE__);
+#endif /* WITH_WSREP */
   /*
     Must do the DEBUG_SYNC() _after_ exit_cond(), as DEBUG_SYNC is not safe to
     use within enter_cond/exit_cond.

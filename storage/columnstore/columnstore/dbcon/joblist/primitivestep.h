@@ -33,7 +33,7 @@
 #include <map>
 #include <stdexcept>
 #include <sstream>
-#include <tr1/memory>
+#include <memory>
 
 #include <boost/shared_ptr.hpp>
 
@@ -61,6 +61,7 @@
 #include "rowgroup.h"
 #include "rowaggregation.h"
 #include "funcexpwrapper.h"
+#include "oamcache.h"
 
 namespace joblist
 {
@@ -888,9 +889,9 @@ class BatchPrimitive : public JobStep, public DECEventListener
 struct _CPInfo
 {
   _CPInfo(int64_t MIN, int64_t MAX, uint64_t l, bool dictScan, bool val)
-   : min(MIN), max(MAX), LBID(l), valid(val), dictScan(dictScan){};
+   : min(MIN), max(MAX), LBID(l), valid(val), dictScan(dictScan) {};
   _CPInfo(int128_t BIGMIN, int128_t BIGMAX, uint64_t l, bool val)
-   : bigMin(BIGMIN), bigMax(BIGMAX), LBID(l), valid(val), dictScan(false){};
+   : bigMin(BIGMIN), bigMax(BIGMAX), LBID(l), valid(val), dictScan(false) {};
   union
   {
     int128_t bigMin;
@@ -946,9 +947,9 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
   void receiveMultiPrimitiveMessages();
 
   // Processes the vector of `bytestream` starting from `begin` index to the `end` index, non inclusive.
-  void processByteStreamVector(vector<boost::shared_ptr<messageqcpp::ByteStream>>& bsv, const uint32_t begin,
-                               const uint32_t end, vector<_CPInfo>& cpv, RowGroupDL* dlp,
-                               const uint32_t threadID);
+  void processByteStreamVector(std::vector<boost::shared_ptr<messageqcpp::ByteStream>>& bsv,
+                               const uint32_t begin, const uint32_t end, std::vector<_CPInfo>& cpv,
+                               RowGroupDL* dlp, const uint32_t threadID);
 
   /** @brief Add a filter when the column is anything but a 4-byte float type.
    *
@@ -1207,9 +1208,9 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
   void startPrimitiveThread();
   void startAggregationThread();
   // Processes the vector of `bytestream` starting from `begin` index to the `end` index, non inclusive.
-  void startProcessingThread(TupleBPS* tbps, vector<boost::shared_ptr<messageqcpp::ByteStream>>& bsv,
-                             const uint32_t begin, const uint32_t end, vector<_CPInfo>& cpv, RowGroupDL* dlp,
-                             const uint32_t threadID);
+  void startProcessingThread(TupleBPS* tbps, std::vector<boost::shared_ptr<messageqcpp::ByteStream>>& bsv,
+                             const uint32_t begin, const uint32_t end, std::vector<_CPInfo>& cpv,
+                             RowGroupDL* dlp, const uint32_t threadID);
   void initializeConfigParms();
   uint64_t getFBO(uint64_t lbid);
   void checkDupOutputColumns(const rowgroup::RowGroup& rg);
@@ -1249,7 +1250,7 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
   uint64_t totalMsgs;
   uint64_t msgsSent;
   uint64_t msgsRecvd;
-  volatile bool finishedSending;
+  std::atomic<bool> finishedSending;
   bool firstRead;
   bool sendWaiting;
   uint32_t recvWaiting;
@@ -1280,7 +1281,7 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
   boost::condition condvarWakeupProducer, condvar;
 
   std::vector<bool> scanFlags;  // use to keep track of which extents to eliminate from this step
-  bool BPPIsAllocated;
+  std::atomic<bool> BPPIsAllocated;
   uint32_t uniqueID;
   ResourceManager* fRm;
 
@@ -1362,7 +1363,7 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
    private:
     uint64_t generateJoinResultSet(const uint32_t depth, std::vector<rowgroup::RGData>& outputData,
                                    RowGroupDL* dlp);
-    void processFE2(vector<rowgroup::RGData>& rgData);
+    void processFE2(std::vector<rowgroup::RGData>& rgData);
 
     TupleBPS* tbps;  // Parent
     rowgroup::RowGroup local_primRG;
@@ -1384,7 +1385,7 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
     bool doJoin;
 
     // Join vars.
-    vector<vector<rowgroup::Row::Pointer>> joinerOutput;
+    std::vector<std::vector<rowgroup::Row::Pointer>> joinerOutput;
     rowgroup::Row largeSideRow;
     rowgroup::Row joinedBaseRow;
     rowgroup::Row largeNull;
@@ -1394,8 +1395,8 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
     boost::scoped_array<uint8_t> joinedBaseRowData;
     boost::scoped_array<uint8_t> joinFERowData;
     std::shared_ptr<int[]> largeMapping;
-    vector<std::shared_ptr<int[]>> smallMappings;
-    vector<std::shared_ptr<int[]>> fergMappings;
+    std::vector<std::shared_ptr<int[]>> smallMappings;
+    std::vector<std::shared_ptr<int[]>> fergMappings;
     rowgroup::RGData joinedData;
     boost::scoped_array<uint8_t> largeNullMemory;
     boost::scoped_array<std::shared_ptr<uint8_t[]>> smallNullMemory;
@@ -1458,7 +1459,7 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
   uint32_t blocksPerJob;
 
   /* Pseudo column filter processing.  Think about refactoring into a separate class. */
-  bool processPseudoColFilters(uint32_t extentIndex, boost::shared_ptr<std::map<int, int>> dbRootPMMap) const;
+  bool processPseudoColFilters(uint32_t extentIndex, oam::OamCache* oamCache) const;
   template <typename T>
   bool processOneFilterType(int8_t colWidth, T value, uint32_t type) const;
   template <typename T>
@@ -1472,6 +1473,7 @@ class TupleBPS : public BatchPrimitive, public TupleDeliveryStep
   bool compareRange(uint8_t COP, int64_t min, int64_t max, int64_t val) const;
   bool hasPCFilter, hasPMFilter, hasRIDFilter, hasSegmentFilter, hasDBRootFilter, hasSegmentDirFilter,
       hasPartitionFilter, hasMaxFilter, hasMinFilter, hasLBIDFilter, hasExtentIDFilter;
+  int findClosestPM(const std::map<int, std::set<int>>& dbrootConnMap, int dbroot);
 };
 
 /** @brief class FilterStep

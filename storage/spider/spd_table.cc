@@ -6530,8 +6530,12 @@ int spider_db_init(
 
   if (my_gethwaddr((uchar *) addr))
   {
-    my_printf_error(ER_SPIDER_CANT_NUM, ER_SPIDER_CANT_STR1, MYF(ME_WARNING),
+    my_printf_error(ER_SPIDER_CANT_NUM, ER_SPIDER_CANT_STR1, MYF(ME_NOTE),
       "get hardware address with error ", errno);
+    /*
+      If we can't get the hardware address, we zero it out.
+      The spider_unique_id will then look like: -000000000000-PID-
+    */
     bzero(addr,6);
   }
   spider_unique_id.str = spider_unique_id_buf;
@@ -6962,7 +6966,8 @@ void spider_get_partition_info(
           DBUG_VOID_RETURN;
         }
         DBUG_PRINT("info",("spider tmp_name=%s", tmp_name));
-        if (!memcmp(table_name, tmp_name, table_name_length + 1))
+        if (table_name_length == strlen(tmp_name) &&
+            !strncmp(table_name, tmp_name, table_name_length))
           DBUG_VOID_RETURN;
         if (
           tmp_flg &&
@@ -6983,7 +6988,8 @@ void spider_get_partition_info(
         DBUG_VOID_RETURN;
       }
       DBUG_PRINT("info",("spider tmp_name=%s", tmp_name));
-      if (!memcmp(table_name, tmp_name, table_name_length + 1))
+      if (table_name_length == strlen(tmp_name) &&
+          !strncmp(table_name, tmp_name, table_name_length))
         DBUG_VOID_RETURN;
       if (
         tmp_flg &&

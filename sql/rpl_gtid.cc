@@ -29,6 +29,7 @@
 #include "rpl_rli.h"
 #include "slave.h"
 #include "log_event.h"
+#include "transaction.h"
 
 const LEX_CSTRING rpl_gtid_slave_state_table_name=
   { STRING_WITH_LEN("gtid_slave_pos") };
@@ -457,7 +458,7 @@ rpl_slave_state::truncate_state_table(THD *thd)
     {
       ha_commit_trans(thd, FALSE);
       close_thread_tables(thd);
-      ha_commit_trans(thd, TRUE);
+      trans_commit(thd);
     }
     thd->release_transactional_locks();
   }
@@ -939,8 +940,15 @@ rpl_slave_state::gtid_delete_pending(THD *thd,
     table->rpl_write_set= table->write_set;
 
     /* Now delete any already committed GTIDs. */
-    bitmap_set_bit(table->read_set, table->field[0]->field_index);
-    bitmap_set_bit(table->read_set, table->field[1]->field_index);
+#ifdef HAVE_REPLICATION
+    if (unlikely(table->s->online_alter_binlog))
+      bitmap_set_all(table->read_set);
+    else
+#endif
+    {
+      bitmap_set_bit(table->read_set, table->field[0]->field_index);
+      bitmap_set_bit(table->read_set, table->field[1]->field_index);
+    }
 
     if (!direct_pos)
     {
@@ -2413,7 +2421,7 @@ rpl_binlog_state::drop_domain(DYNAMIC_ARRAY *ids,
     // compose a sequence of unique pointers to domain object
     for (k= 0; k < domain_unique.elements; k++)
     {
-      if ((rpl_binlog_state::element*) dynamic_array_ptr(&domain_unique, k)
+      if (*(rpl_binlog_state::element**) dynamic_array_ptr(&domain_unique, k)
           == elem)
         break; // domain_id's elem has been already in
     }

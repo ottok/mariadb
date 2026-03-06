@@ -156,9 +156,8 @@ Item* convert_charset_partition_constant(Item *item, CHARSET_INFO *cs)
   @param name        String searched for
   @param list_names  A list of names searched in
 
-  @return True if if the name is in the list.
-    @retval true   String found
-    @retval false  String not found
+  @retval true   String found
+  @retval false  String not found
 */
 
 static bool is_name_in_list(const Lex_ident_partition &name,
@@ -1566,7 +1565,21 @@ static bool check_vers_constants(THD *thd, partition_info *part_info)
     part_info->range_int_array[el->id]= el->range_value=
       my_tz_OFFSET0->TIME_to_gmt_sec(&ltime, &error);
     if (error)
-      goto err;
+    {
+      if (error == ER_WARN_DATA_OUT_OF_RANGE)
+      {
+        /* Partial interval partition must be last history partition */
+        if (el->id < hist_parts - 1)
+          goto err;
+        /* range_value is open endpoint (less than TIMESTAMP_MAX_VALUE) */
+        part_info->range_int_array[el->id]= el->range_value= TIMESTAMP_MAX_VALUE;
+        vers_info->hist_part= el;
+        el= it++;
+        break;
+      }
+      else
+        goto err;
+    }
     if (vers_info->hist_part->range_value <= (longlong) thd->query_start())
       vers_info->hist_part= el;
   }
@@ -2129,7 +2142,7 @@ static int add_keyword_string(String *str, const char *keyword,
 
 
 /**
-  @brief  Truncate the partition file name from a path it it exists.
+  @brief  Truncate the partition file name from a path it exists.
 
   @note  A partition file name will contian one or more '#' characters.
 One of the occurances of '#' will be either "#P#" or "#p#" depending
@@ -3404,7 +3417,7 @@ uint32 get_list_array_idx_for_endpoint(partition_info *part_info,
       '2000-00-00' can be compared to '2000-01-01' but TO_DAYS('2000-00-00')
       returns NULL which cannot be compared used <, >, <=, >= etc.
 
-      Otherwise, just return the the first index (lowest value).
+      Otherwise, just return the first index (lowest value).
     */
     enum_monotonicity_info monotonic;
     monotonic= part_info->part_expr->get_monotonicity_info();
@@ -3501,13 +3514,14 @@ int vers_get_partition_id(partition_info *part_info, uint32 *part_id,
       goto done; // fastpath
 
     ts= row_end->get_timestamp(&unused);
-    if ((loc_hist_id == 0 || range_value[loc_hist_id - 1] < (longlong) ts) &&
-        (loc_hist_id == max_hist_id || range_value[loc_hist_id] >= (longlong) ts))
+    if ((loc_hist_id == 0 || range_value[loc_hist_id - 1] <= (longlong) ts) &&
+        (loc_hist_id == max_hist_id || (longlong) ts < range_value[loc_hist_id]))
       goto done; // fastpath
 
     while (max_hist_id > min_hist_id)
     {
       loc_hist_id= (max_hist_id + min_hist_id) / 2;
+      /* Left boundary is closed */
       if (range_value[loc_hist_id] <= (longlong) ts)
         min_hist_id= loc_hist_id + 1;
       else
@@ -4860,6 +4874,21 @@ static void check_datadir_altered_for_innodb(THD *thd,
 }
 
 
+static bool check_name_in_fields(const Field * const *fields, Lex_ident_column &name)
+{
+  if (!fields)
+    return FALSE;
+
+  for (; *fields; fields++)
+  {
+    if ((*fields)->field_name.streq(name))
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+
 /*
   Prepare for ALTER TABLE of partition structure
 
@@ -4907,6 +4936,31 @@ uint prep_alter_part_table(THD *thd, TABLE *table, Alter_info *alter_info,
   {
     my_error(ER_PARTITION_MGMT_ON_NONPARTITIONED, MYF(0));
     DBUG_RETURN(TRUE);
+  }
+
+  if (table->part_info && alter_info->partition_flags == 0 &&
+      (alter_info->flags & ALTER_PARSER_DROP_COLUMN))
+  {
+    List_iterator<Alter_drop> drop_it(alter_info->drop_list);
+    Alter_drop *drop;
+
+    while ((drop= drop_it++))
+    {
+      if (drop->type != Alter_drop::COLUMN)
+        continue;
+
+      if (check_name_in_fields(table->part_info->part_field_array,
+                               drop->name) ||
+          check_name_in_fields(table->part_info->subpart_field_array,
+                               drop->name))
+      {
+        /*
+          The ALTER drops column used in partitioning expression.
+          That cannot be done INPLACE.
+        */
+        *partition_changed= TRUE;
+      }
+    }
   }
 
   partition_info *alt_part_info= thd->lex->part_info;
@@ -5423,6 +5477,7 @@ that are reorganised.
           partition_element *part_elem= alt_it++;
           if (*fast_alter_table)
             part_elem->part_state= PART_TO_BE_ADDED;
+          part_elem->id= tab_part_info->partitions.elements;
           if (unlikely(tab_part_info->partitions.push_back(part_elem,
                                                            thd->mem_root)))
             goto err;

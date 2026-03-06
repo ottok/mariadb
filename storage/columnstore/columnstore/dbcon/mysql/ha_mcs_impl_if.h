@@ -21,7 +21,7 @@
 #include <bitset>
 #include <string>
 #include <stdint.h>
-#include <tr1/unordered_map>
+#include <unordered.h>
 #include <iosfwd>
 #include <boost/shared_ptr.hpp>
 #include <stack>
@@ -95,16 +95,20 @@ enum ClauseType
   ORDER_BY
 };
 
-struct SchemaAndTableName {
+struct SchemaAndTableName
+{
   std::string schema;
   std::string table;
-  bool operator==(const SchemaAndTableName& other) const {
+  bool operator==(const SchemaAndTableName& other) const
+  {
     return schema == other.schema && table == other.table;
   }
 };
 
-struct SchemaAndTableNameHash {
-  std::size_t operator()(const SchemaAndTableName& k) const {
+struct SchemaAndTableNameHash
+{
+  std::size_t operator()(const SchemaAndTableName& k) const
+  {
     return std::hash<std::string>()(k.schema + k.table);
   }
 };
@@ -115,9 +119,245 @@ typedef dmlpackage::TableValuesMap TableValuesMap;
 typedef std::map<execplan::CalpontSystemCatalog::TableAliasName, std::pair<int, TABLE_LIST*>> TableMap;
 typedef std::tr1::unordered_map<TABLE_LIST*, std::vector<COND*>> TableOnExprList;
 typedef std::tr1::unordered_map<TABLE_LIST*, uint> TableOuterJoinMap;
+
+class ColumnStatistics;
+using MDBColumnStatistics = Column_statistics;
 using ColumnName = std::string;
-using ColumnStatisticsMap = std::unordered_map<ColumnName, Histogram_json_hb>;
-using TableStatisticsMap = std::unordered_map<SchemaAndTableName, ColumnStatisticsMap, SchemaAndTableNameHash>;
+using ColumnStatisticsMap = std::unordered_map<ColumnName, ColumnStatistics>;
+using TableStatisticsMap =
+    std::unordered_map<SchemaAndTableName, ColumnStatisticsMap, SchemaAndTableNameHash>;
+
+#if MYSQL_VERSION_ID >= 110406
+class ColumnStatistics
+{
+ public:
+  ColumnStatistics(execplan::SimpleColumn& column, MDBColumnStatistics* mdbStatisticsWithHistogram)
+   : column(column)
+  {
+    Histogram_json_hb* histogram = dynamic_cast<Histogram_json_hb*>(mdbStatisticsWithHistogram->histogram);
+    if (histogram)
+    {
+      histograms.push_back(histogram);
+    }
+    if (mdbStatisticsWithHistogram->min_max_values_are_provided())
+    {
+      minValue = mdbStatisticsWithHistogram->min_value;
+      maxValue = mdbStatisticsWithHistogram->max_value;
+    }
+  }
+  ColumnStatistics() = default;
+
+  static bool hasHistogramOrMinAndMaxRangeValues(MDBColumnStatistics* mdbStatisticsWithHistogram)
+  {
+    return dynamic_cast<Histogram_json_hb*>(mdbStatisticsWithHistogram->histogram) != nullptr ||
+           mdbStatisticsWithHistogram->min_max_values_are_provided();
+  }
+
+  void addHistogram(MDBColumnStatistics* mdbStatisticsWithHistogram)
+  {
+    Histogram_json_hb* histogram = dynamic_cast<Histogram_json_hb*>(mdbStatisticsWithHistogram->histogram);
+    if (histogram)
+    {
+      histograms.push_back(histogram);
+    }
+    if (mdbStatisticsWithHistogram->min_max_values_are_provided())
+    {
+      minValue = mdbStatisticsWithHistogram->min_value;
+      maxValue = mdbStatisticsWithHistogram->max_value;
+    }
+  }
+
+  const Histogram_json_hb* getHistogram() const
+  {
+    if (histograms.empty())
+      return nullptr;
+    return histograms.front();
+  }
+
+  bool hasNonEmptyHistogram() const
+  {
+    auto histogram = getHistogram();
+    return histogram && !histogram->get_json_histogram().empty();
+  }
+
+  bool hasMinAndMaxRangeValues() const
+  {
+    return hasMinValue() && hasMaxValue();
+  }
+
+  execplan::SimpleColumn& getColumn()
+  {
+    return column;
+  }
+
+  bool hasMinValue() const
+  {
+    return minValue != nullptr;
+  }
+
+  bool hasMaxValue() const
+  {
+    return maxValue != nullptr;
+  }
+
+  std::optional<int64_t> getIntMinValue() const
+  {
+    return (minValue) ? std::optional<int64_t>(minValue->val_int()) : std::nullopt;
+  }
+
+  std::optional<uint64_t> getUIntMinValue() const
+  {
+    return (minValue) ? std::optional<uint64_t>(minValue->val_uint()) : std::nullopt;
+  }
+
+  std::optional<int64_t> getIntMaxValue() const
+  {
+    return (maxValue) ? std::optional<int64_t>(maxValue->val_int()) : std::nullopt;
+  }
+
+  std::optional<uint64_t> getUIntMaxValue() const
+  {
+    return (maxValue) ? std::optional<uint64_t>(maxValue->val_uint()) : std::nullopt;
+  }
+
+ private:
+  execplan::SimpleColumn column;
+  std::vector<Histogram_json_hb*> histograms;
+  Field* minValue{nullptr};
+  Field* maxValue{nullptr};
+};
+#else
+class ColumnStatistics
+{
+ public:
+  ColumnStatistics(execplan::SimpleColumn& /*column*/, MDBColumnStatistics* /*mdbStatisticsWithHistogram*/)
+  {
+  }
+  ColumnStatistics() = default;
+
+  static bool hasHistogramOrMinAndMaxRangeValues(MDBColumnStatistics* /*mdbStatisticsWithHistogram*/)
+  {
+    return false;
+  }
+
+  execplan::SimpleColumn& getColumn()
+  {
+    return column;
+  }
+
+  const Histogram_json_hb* getHistogram() const
+  {
+    return nullptr;
+  }
+
+  void addHistogram(MDBColumnStatistics* /*mdbStatisticsWithHistogram*/)
+  {
+  }
+
+  bool hasMinAndMaxRangeValues() const
+  {
+    return false;
+  }
+
+  bool hasNonEmptyHistogram() const
+  {
+    return false;
+  }
+
+  std::optional<int64_t> getIntMinValue() const
+  {
+    return std::nullopt;
+  }
+
+  std::optional<uint64_t> getUIntMinValue() const
+  {
+    return std::nullopt;
+  }
+
+  std::optional<int64_t> getIntMaxValue() const
+  {
+    return std::nullopt;
+  }
+
+  std::optional<uint64_t> getUIntMaxValue() const
+  {
+    return std::nullopt;
+  }
+
+ private:
+  execplan::SimpleColumn column;
+};
+#endif
+
+struct TableStatistics
+{
+  TableStatistics() = default;
+
+  void createOrUpdate(SchemaAndTableName tableName, const char* fieldName, execplan::SimpleColumn& sc,
+                      MDBColumnStatistics* statistics)
+  {
+    if (!ColumnStatistics::hasHistogramOrMinAndMaxRangeValues(statistics))
+    {
+      return;
+    }
+
+    auto tableStatisticsIt = tableStatistics_.find(tableName);
+    {
+      if (tableStatisticsIt == tableStatistics_.end())
+      {
+        tableStatistics_[tableName][fieldName] = {sc, statistics};
+      }
+      else
+      {
+        auto columnStatisticsMapIt = tableStatisticsIt->second.find(fieldName);
+        if (columnStatisticsMapIt == tableStatisticsIt->second.end())
+        {
+          tableStatisticsIt->second[fieldName] = {sc, statistics};
+        }
+        else
+        {
+          columnStatisticsMapIt->second.addHistogram(statistics);
+        }
+      }
+    }
+  }
+
+  std::optional<ColumnStatisticsMap*> findStatisticsForATable(SchemaAndTableName& schemaAndTableName)
+  {
+    auto tableStatisticsIt = tableStatistics_.find(schemaAndTableName);
+
+    if (tableStatisticsIt == tableStatistics_.end())
+    {
+      return std::nullopt;
+    }
+
+    return {&tableStatisticsIt->second};
+  }
+
+  void mergeTableStatistics(const TableStatistics& aTableStatistics)
+  {
+    for (auto& [schemaAndTableName, aColumnStatisticsMap] : aTableStatistics.tableStatistics_)
+    {
+      auto tableStatisticsIt = tableStatistics_.find(schemaAndTableName);
+      if (tableStatisticsIt == tableStatistics_.end())
+      {
+        tableStatistics_[schemaAndTableName] = aColumnStatisticsMap;
+      }
+      else
+      {
+        // Note: This algo overwrites histograms but shouldn't be a problem b/c
+        // statistics can't change.
+        for (auto& [columnName, histogram] : aColumnStatisticsMap)
+        {
+          tableStatisticsIt->second[columnName] = histogram;
+        }
+      }
+    }
+  }
+
+ private:
+  TableStatisticsMap tableStatistics_;
+};
 
 // This structure is used to store MDB AST -> CSEP translation context.
 // There is a column statistics for some columns in a query.
@@ -133,7 +373,7 @@ struct gp_walk_info
   execplan::CalpontSelectExecutionPlan::ReturnedColumnList orderByCols;
   std::vector<Item*> extSelAggColsItems;
   execplan::CalpontSelectExecutionPlan::ColumnMap columnMap;
-  TableStatisticsMap tableStatisticsMap;
+  TableStatistics tableStatistics;
   // This vector temporarily hold the projection columns to be added
   // to the returnedCols vector for subquery processing. It will be appended
   // to the end of returnedCols when the processing is finished.
@@ -224,7 +464,7 @@ struct gp_walk_info
   SubQuery** subQueriesChain;
 
   gp_walk_info(long timeZone_, SubQuery** subQueriesChain_)
-   : tableStatisticsMap({})
+   : tableStatistics({})
    , sessionid(0)
    , fatalParseError(false)
    , condPush(false)
@@ -256,8 +496,11 @@ struct gp_walk_info
   }
   ~gp_walk_info();
 
-  void mergeTableStatistics(const TableStatisticsMap& tableStatisticsMap);
-  std::optional<ColumnStatisticsMap> findStatisticsForATable(SchemaAndTableName& schemaAndTableName);
+  void mergeTableStatistics(const TableStatistics& tableStatistics);
+  std::optional<ColumnStatisticsMap*> findStatisticsForATable(SchemaAndTableName& schemaAndTableName)
+  {
+    return tableStatistics.findStatisticsForATable(schemaAndTableName);
+  }
 };
 
 struct SubQueryChainHolder;
@@ -383,6 +626,9 @@ struct cal_connection_info
   bool isCacheInsert;
   std::string extendedStats;
   std::string miniStats;
+  std::string queryPlanOriginal;   // CSEP string before RBO
+  std::string queryPlanOptimized;  // CSEP string after RBO
+  std::string rboAppliedRules;     // Comma-separated list of applied RBO rules
   messageqcpp::MessageQueueClient* dmlProc;
   ha_rows rowsHaveInserted;
   ColNameList colNameList;
@@ -424,23 +670,48 @@ int cs_get_select_plan(ha_columnstore_select_handler* handler, THD* thd, execpla
 int getSelectPlan(gp_walk_info& gwi, SELECT_LEX& select_lex, execplan::SCSEP& csep, bool isUnion = false,
                   bool isSelectHandlerTop = false, bool isSelectLexUnit = false,
                   const std::vector<COND*>& condStack = std::vector<COND*>());
-void setError(THD* thd, uint32_t errcode, const std::string errmsg, gp_walk_info* gwi);
+void setError(THD* thd, uint32_t errcode, const std::string errmsg, gp_walk_info& gwi);
 void setError(THD* thd, uint32_t errcode, const std::string errmsg);
 void gp_walk(const Item* item, void* arg);
 void clearDeleteStacks(gp_walk_info& gwi);
+
+// RAII guard to unconditionally clean up work stacks when going out of scope.
+class StackCleanupGuard
+{
+ public:
+  explicit StackCleanupGuard(gp_walk_info& gwi) : fgwi(gwi)
+  {
+  }
+  ~StackCleanupGuard()
+  {
+    clearDeleteStacks(fgwi);
+  }
+  StackCleanupGuard(const StackCleanupGuard&) = delete;
+  StackCleanupGuard& operator=(const StackCleanupGuard&) = delete;
+
+ private:
+  gp_walk_info& fgwi;
+};
 void parse_item(Item* item, std::vector<Item_field*>& field_vec, bool& hasNonSupportItem, uint16& parseInfo,
                 gp_walk_info* gwip = nullptr);
 const std::string bestTableName(const Item_field* ifp);
 
 // execution plan util functions prototypes
-execplan::ReturnedColumn* buildReturnedColumn(Item* item, gp_walk_info& gwi, bool& nonSupport,
-                                              bool isRefItem = false);
-execplan::ReturnedColumn* buildFunctionColumn(Item_func* item, gp_walk_info& gwi, bool& nonSupport,
-                                              bool selectBetweenIn = false);
-execplan::ReturnedColumn* buildArithmeticColumn(Item_func* item, gp_walk_info& gwi, bool& nonSupport);
+execplan::ReturnedColumn* buildReturnedColumn(
+    Item* item, gp_walk_info& gwi, bool& nonSupport, bool isRefItem = false,
+    execplan::IDBQueryType queryType = execplan::IDBQueryType::SELECT);
+execplan::ReturnedColumn* buildFunctionColumn(
+    Item_func* item, gp_walk_info& gwi, bool& nonSupport, bool selectBetweenIn = false,
+    execplan::IDBQueryType queryType = execplan::IDBQueryType::SELECT);
+execplan::ReturnedColumn* buildArithmeticColumn(
+    Item_func* item, gp_walk_info& gwi, bool& nonSupport,
+    execplan::IDBQueryType queryType = execplan::IDBQueryType::SELECT);
 execplan::ConstantColumn* buildDecimalColumn(const Item* item, const std::string& str, gp_walk_info& gwi);
-execplan::SimpleColumn* buildSimpleColumn(Item_field* item, gp_walk_info& gwi);
-execplan::FunctionColumn* buildCaseFunction(Item_func* item, gp_walk_info& gwi, bool& nonSupport);
+execplan::SimpleColumn* buildSimpleColumn(Item_field* item, gp_walk_info& gwi,
+                                          execplan::IDBQueryType queryType = execplan::IDBQueryType::SELECT);
+execplan::FunctionColumn* buildCaseFunction(
+    Item_func* item, gp_walk_info& gwi, bool& nonSupport,
+    execplan::IDBQueryType queryType = execplan::IDBQueryType::SELECT);
 execplan::ParseTree* buildParseTree(Item* item, gp_walk_info& gwi, bool& nonSupport);
 execplan::ReturnedColumn* buildAggregateColumn(Item* item, gp_walk_info& gwi);
 execplan::ReturnedColumn* buildWindowFunctionColumn(Item* item, gp_walk_info& gwi, bool& nonSupport);

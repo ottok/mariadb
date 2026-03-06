@@ -353,7 +353,7 @@ void TupleHashJoinStep::outOfMemoryHandler(std::shared_ptr<joiner::TupleJoiner> 
     return;
   if (!allowDJS || isDML || (fSessionId & 0x80000000) || (tableOid() < 3000 && tableOid() >= 1000))
   {
-    joinIsTooBig = true;
+    joinIsTooBig.store(true, std::memory_order_relaxed);
     ostringstream oss;
     oss << "(" << __LINE__ << ") " << logging::IDBErrorInfo::instance()->errorMsg(logging::ERR_JOIN_TOO_BIG);
     fLogger->logMessage(logging::LOG_TYPE_INFO, oss.str());
@@ -365,7 +365,6 @@ void TupleHashJoinStep::outOfMemoryHandler(std::shared_ptr<joiner::TupleJoiner> 
   else if (allowDJS)
   {
     joiner->setConvertToDiskJoin();
-    // TODO RGData that triggers this path is lost. Need to store it to pass it future.
   }
 }
 
@@ -386,18 +385,35 @@ void TupleHashJoinStep::smallRunnerFcn(uint32_t index, uint threadID, uint64_t* 
   smallRG = smallRGs[index];
 
   smallRG.initRow(&r);
+
   try
   {
     // Very unfortunate choice for the type b/c of RM::getMemory type.
     ssize_t rgSize;
     bool gotMem;
-    goto next;
-    // TODO need to quit this loop early of on-disk flag is set by any of the small size threads.
     while (more && !cancelled())
     {
+      if (joinIsTooBig.load())
+      {
+        // convert joiner to disk-join if on-disk flag is set by any of
+        // the small size threads.
+        return outOfMemoryHandler(joiner);
+      }
+
+      dlMutex.lock();
+      more = smallDL->next(smallIt, &oneRG);
+      dlMutex.unlock();
+
+      if (!more)
+      {
+        break;
+      }
+
       smallRG.setData(&oneRG);
       if (smallRG.getRowCount() == 0)
-        goto next;
+      {
+        continue;
+      }
 
       // TupleHJ owns the row memory
       utils::getSpinlock(rgdLock);
@@ -405,22 +421,11 @@ void TupleHashJoinStep::smallRunnerFcn(uint32_t index, uint threadID, uint64_t* 
       utils::releaseSpinlock(rgdLock);
 
       rgSize = smallRG.getSizeWithStrings();
-      gotMem = resourceManager->getMemory(rgSize, sessionMemLimit, true);
-      if (gotMem)
-      {
-        atomicops::atomicAdd(&memUsedByEachJoin[index], rgSize);
-      }
-      else
-      {
-        /*  Mem went over the limit.
-            If DML or a syscat query, abort.
-            if disk join is enabled, use it.
-            else abort.
-        */
-        return outOfMemoryHandler(joiner);
-      }
+      gotMem = resourceManager->getMemoryForce(rgSize, sessionMemLimit);
+      atomicops::atomicAdd(&memUsedByEachJoin[index], rgSize);
       joiner->insertRGData(smallRG, threadID);
-      if (!joiner->inUM() && (memUsedByEachJoin[index] > pmMemLimit))
+
+      if (!joiner->inUM() && memUsedByEachJoin[index] > pmMemLimit)
       {
         joiner->setInUM(rgData[index]);
 
@@ -430,10 +435,15 @@ void TupleHashJoinStep::smallRunnerFcn(uint32_t index, uint threadID, uint64_t* 
               jobstepThreadPool.invoke([this, i, index, jobs] { this->smallRunnerFcn(index, i, jobs); });
         }
       }
-    next:
-      dlMutex.lock();
-      more = smallDL->next(smallIt, &oneRG);
-      dlMutex.unlock();
+
+      if (!gotMem || resourceManager->availableMemory(sessionMemLimit) < allocators::MemoryLimitLowerBound) {
+        /*  Mem went over the limit.
+            If DML or a syscat query, abort.
+            if disk join is enabled, use it.
+            else abort.
+        */
+        return outOfMemoryHandler(joiner);
+      }
     }
   }
   catch (std::bad_alloc& exc)
@@ -675,7 +685,7 @@ void TupleHashJoinStep::hjRunner()
     errorMessage("too many threads");
     status(logging::threadResourceErr);
     errorLogging(emsg, logging::threadResourceErr);
-    fDie = true;
+    fDie.store(true, std::memory_order_relaxed);
     deliverMutex.unlock();
   }
 
@@ -694,7 +704,7 @@ void TupleHashJoinStep::hjRunner()
      and draining the corresponding inputs & telling downstream EOF?  todo, think about it */
   if (!djsJoiners.empty())
   {
-    joinIsTooBig = false;
+    joinIsTooBig.store(false, std::memory_order_relaxed);
 
     if (!cancelled())
       fLogger->logMessage(logging::LOG_TYPE_INFO, logging::INFO_SWITCHING_TO_DJS);
@@ -815,7 +825,7 @@ void TupleHashJoinStep::hjRunner()
 
   if (cancelled())
   {
-    if (joinIsTooBig && !status())
+    if (joinIsTooBig.load() && !status())
     {
       ostringstream oss;
       oss << "(" << __LINE__ << ") "
@@ -1576,7 +1586,7 @@ void TupleHashJoinStep::joinRunnerFcn(uint32_t threadID)
       joinerRunnerInputRecordsStats[threadID] += local_inputRG.getRowCount();
 
       joinOneRG(threadID, joinedRowData, local_inputRG, local_outputRG, largeRow, joinFERow, joinedRow,
-                baseRow, joinMatches, smallRowTemplates, outputDL);
+                baseRow, joinMatches, smallRowTemplates, outputDL, fe2 ? &local_fe : nullptr);
     }
 
     if (fe2)
@@ -1718,7 +1728,8 @@ void TupleHashJoinStep::grabSomeWork(vector<RGData>* work)
 void TupleHashJoinStep::joinOneRG(
     uint32_t threadID, vector<RGData>& out, RowGroup& inputRG, RowGroup& joinOutput, Row& largeSideRow,
     Row& joinFERow, Row& joinedRow, Row& baseRow, vector<vector<Row::Pointer> >& joinMatches,
-    std::shared_ptr<Row[]>& smallRowTemplates, RowGroupDL* outputDL,
+    std::shared_ptr<Row[]>& smallRowTemplates, RowGroupDL* lOutputDL,
+    FuncExpWrapper* localFE2,
     // disk-join support vars.  This param list is insane; refactor attempt would be nice at some point.
     vector<std::shared_ptr<joiner::TupleJoiner> >* tjoiners,
     std::shared_ptr<std::shared_ptr<int[]>[]>* rgMappings,
@@ -1836,7 +1847,7 @@ void TupleHashJoinStep::joinOneRG(
       applyMapping((*rgMappings)[smallSideCount], largeSideRow, &baseRow);
       baseRow.setRid(largeSideRow.getRelRid());
       generateJoinResultSet(threadID, joinMatches, baseRow, *rgMappings, 0, joinOutput, joinedData, out,
-                            smallRowTemplates, joinedRow, outputDL);
+                            smallRowTemplates, joinedRow, lOutputDL, localFE2);
     }
   }
 
@@ -1850,7 +1861,7 @@ void TupleHashJoinStep::generateJoinResultSet(const uint32_t threadID,
                                               const uint32_t depth, RowGroup& l_outputRG, RGData& rgData,
                                               vector<RGData>& outputData,
                                               const std::shared_ptr<Row[]>& smallRows, Row& joinedRow,
-                                              RowGroupDL* dlp)
+                                              RowGroupDL* dlp, FuncExpWrapper* localFE2)
 {
   uint32_t i;
   Row& smallRow = smallRows[depth];
@@ -1863,7 +1874,7 @@ void TupleHashJoinStep::generateJoinResultSet(const uint32_t threadID,
       smallRow.setPointer(joinerOutput[depth][i]);
       applyMapping(mappings[depth], smallRow, &baseRow);
       generateJoinResultSet(threadID, joinerOutput, baseRow, mappings, depth + 1, l_outputRG, rgData,
-                            outputData, smallRows, joinedRow, dlp);
+                            outputData, smallRows, joinedRow, dlp, localFE2);
     }
   }
   else
@@ -1887,7 +1898,7 @@ void TupleHashJoinStep::generateJoinResultSet(const uint32_t threadID,
         if (UNLIKELY(outputData.size() > flushThreshold || !getMemory(l_outputRG.getSizeWithStrings())))
         {
           // MCOL-5512
-          if (fe2)
+          if (localFE2)
           {
             RowGroup l_fe2RG;
             Row fe2InRow;
@@ -1900,7 +1911,7 @@ void TupleHashJoinStep::generateJoinResultSet(const uint32_t threadID,
             // WIP do we remove previosuly pushed(line 1825) rgData
             // replacing it with a new FE2 rgdata added by processFE2?
             // Generates a new RGData w/o accounting its memory consumption
-            processFE2(l_outputRG, l_fe2RG, fe2InRow, fe2OutRow, &outputData, fe2.get());
+            processFE2(l_outputRG, l_fe2RG, fe2InRow, fe2OutRow, &outputData, localFE2);
           }
           // Don't let the join results buffer get out of control.
           sendResult(outputData);
@@ -1939,7 +1950,7 @@ void TupleHashJoinStep::segregateJoiners()
   {
     if (anyTooLarge)
     {
-      joinIsTooBig = true;
+      joinIsTooBig.store(true, std::memory_order_relaxed);
       abort();
     }
 
@@ -1967,7 +1978,7 @@ void TupleHashJoinStep::segregateJoiners()
   {
     if (anyTooLarge)
     {
-      joinIsTooBig = true;
+      joinIsTooBig.store(true, std::memory_order_relaxed);
 
       for (i = 0; i < smallSideCount; i++)
       {
@@ -1987,7 +1998,7 @@ void TupleHashJoinStep::segregateJoiners()
   {
     for (i = 0; i < smallSideCount; ++i)
     {
-      joinIsTooBig = true;
+      joinIsTooBig.store(true, std::memory_order_relaxed);
       joiners[i]->setConvertToDiskJoin();
       djsJoiners.push_back(joiners[i]);
       djsJoinerMap.push_back(i);
@@ -2007,7 +2018,7 @@ void TupleHashJoinStep::segregateJoiners()
           tbpsJoiners.push_back(joiners[i]);
         else
         {
-          joinIsTooBig = true;
+          joinIsTooBig.store(true, std::memory_order_relaxed);
           joiners[i]->setConvertToDiskJoin();
           djsJoiners.push_back(joiners[i]);
           djsJoinerMap.push_back(i);
@@ -2026,7 +2037,7 @@ void TupleHashJoinStep::segregateJoiners()
 
       for (; i < smallSideCount; i++)
       {
-        joinIsTooBig = true;
+        joinIsTooBig.store(true, std::memory_order_relaxed);
         joiners[i]->setConvertToDiskJoin();
         djsJoiners.push_back(joiners[i]);
         djsJoinerMap.push_back(i);

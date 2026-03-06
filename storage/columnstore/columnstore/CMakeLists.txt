@@ -48,6 +48,7 @@ include(configureEngine)
 include(compiler_flags)
 include(misc)
 include(cpack_manage)
+include(selinux_policy)
 
 if(NOT __msg1_CS_NO_CXX20)
     add_subdirectory(dbcon/mysql)
@@ -62,18 +63,13 @@ columnstore_install_file(${CMAKE_CURRENT_BINARY_DIR}/gitversionEngine ${ENGINE_S
 set(COMPONENTS
     utils
     oam/oamcpp
-    dbcon/execplan
-    dbcon/joblist
+    dbcon
     versioning
     oam
     writeengine/wrapper
     writeengine/client
     writeengine/xml
     writeengine/redistribute
-    dbcon/ddlpackage
-    dbcon/ddlpackageproc
-    dbcon/dmlpackage
-    dbcon/dmlpackageproc
     ddlproc
     dmlproc
     oamapps
@@ -90,3 +86,9 @@ set(COMPONENTS
 foreach(component ${COMPONENTS})
     add_subdirectory(${component})
 endforeach()
+
+add_dependencies(rbo GenError)
+add_dependencies(udf_mysql GenError)
+add_dependencies(funcexp GenError)
+add_dependencies(oamcpp GenError)
+add_dependencies(regr_mysql GenError)

@@ -100,7 +100,7 @@ pack_row(TABLE *table, MY_BITMAP const* cols,
           length is stored in little-endian format, since this is the
           format used for the binlog.
         */
-#ifndef DBUG_OFF
+#if !defined DBUG_OFF && defined DBUG_TRACE
         const uchar *old_pack_ptr= pack_ptr;
 #endif
         pack_ptr= field->pack(pack_ptr, field->ptr + offset,
@@ -311,7 +311,7 @@ static void convert_field(Field *f, Field *result_field, Field *conv_field)
    @note The relay log information can be NULL, which means that no
    checking or comparison with the source table is done, simply
    because it is not used.  This feature is used by MySQL Backup to
-   unpack a row from from the backup image, but can be used for other
+   unpack a row from the backup image, but can be used for other
    purposes as well.
 
    @param rgi     Relay group info

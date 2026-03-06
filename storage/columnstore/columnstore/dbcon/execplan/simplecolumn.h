@@ -205,6 +205,7 @@ class SimpleColumn : public ReturnedColumn
   void unserialize(messageqcpp::ByteStream&) override;
 
   const std::string toString() const override;
+  const std::string toString(bool compact) const;
   std::string toCppCode(IncludeSet& includes) const override;
   /** @brief Do a deep, strict (as opposed to semantic) equivalence test
    *
@@ -262,7 +263,10 @@ class SimpleColumn : public ReturnedColumn
    * @return true, if all arguments belong to one table
    *         false, if multiple tables are involved in the function
    */
-  bool singleTable(CalpontSystemCatalog::TableAliasName& tan) override;
+  std::optional<CalpontSystemCatalog::TableAliasName> singleTable() override;
+
+  void setSimpleColumnList() override;
+  void setSimpleColumnListExtended() override;
 
  protected:
   /**
@@ -333,6 +337,10 @@ class SimpleColumn : public ReturnedColumn
   double getDoubleVal(rowgroup::Row& row, bool& isNull) override
   {
     evaluate(row, isNull);
+    if (isNull)
+    {
+      return 0;
+    }
     return TreeNode::getDoubleVal();
   }
 
@@ -403,6 +411,14 @@ std::ostream& operator<<(std::ostream& output, const SimpleColumn& rhs);
  * utility function to extract all simple columns from a parse tree
  */
 void getSimpleCols(ParseTree* n, void* obj);
+void getSimpleColsExtended(execplan::ParseTree* n, void* obj);
 ParseTree* replaceRefCol(ParseTree*& n, CalpontSelectExecutionPlan::ReturnedColumnList&);
+
+std::optional<CalpontSystemCatalog::TableAliasName> sameTableCheck(
+    std::vector<SimpleColumn*> simpleColumnList);
+
+/// utility function for constructing a reasonable alias for a SimpleColumn copy, based on the alias/column
+/// name/function name of the original colum
+std::string getSimpleColumnAlias(const ReturnedColumn& origCol, int64_t colPos);
 
 }  // namespace execplan

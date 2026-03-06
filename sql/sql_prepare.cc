@@ -96,7 +96,7 @@ When one supplies long data for a placeholder:
 #include "sql_cache.h"                          // query_cache_*
 #include "sql_view.h"                          // create_view_precheck
 #include "sql_select.h" // for JOIN
-#include "sql_insert.h" // upgrade_lock_type_for_insert, mysql_prepare_insert
+#include "sql_insert.h" // mysql_prepare_insert
 #include "sql_db.h"     // mysql_opt_change_db, mysql_change_db
 #include "sql_derived.h" // mysql_derived_prepare,
                          // mysql_handle_derived
@@ -1322,8 +1322,6 @@ static bool mysql_test_insert_common(Prepared_statement *stmt,
   if (insert_precheck(thd, table_list))
     goto error;
 
-  //upgrade_lock_type_for_insert(thd, &table_list->lock_type, duplic,
-  //                             values_list.elements > 1);
   /*
     open temporary memory pool for temporary data allocated by derived
     tables & preparation procedure
@@ -1481,6 +1479,10 @@ static int mysql_test_select(Prepared_statement *stmt,
   */
   if (unit->prepare(unit->derived, 0, 0))
     goto error;
+
+  if (thd->lex->prepare_unreferenced_in_with_clauses())
+    goto error;
+
   if (!lex->describe && !thd->lex->analyze_stmt && !stmt->is_sql_prepare())
   {
     /* Make copy of item list, as change_columns may change it */
@@ -5094,7 +5096,6 @@ bool Prepared_statement::execute(String *expanded_query, bool open_cursor)
       thd->used|= m_prepare_time_thd_used_flags;
       error= mysql_execute_command(thd, true);
       MYSQL_QUERY_EXEC_DONE(error);
-      thd->update_server_status();
     }
     else
     {
@@ -5103,6 +5104,7 @@ bool Prepared_statement::execute(String *expanded_query, bool open_cursor)
       thd->update_stats();
       qc_executed= TRUE;
     }
+    thd->update_server_status();
   }
 
   /*
@@ -5125,6 +5127,11 @@ bool Prepared_statement::execute(String *expanded_query, bool open_cursor)
       See the next comment block for more details.
     */
     cleanup_stmt(false);
+
+  mysql_audit_general(thd, MYSQL_AUDIT_GENERAL_STATUS,
+                      thd->get_stmt_da()->is_error() ?
+                      thd->get_stmt_da()->sql_errno() : 0,
+                      command_name[thd->get_command()].str);
 
   /*
     Log the statement to slow query log if it passes filtering.

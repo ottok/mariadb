@@ -154,8 +154,11 @@ class SimpleScalarFilter : public Filter
    */
   bool operator!=(const SimpleScalarFilter& t) const;
 
-  string toCppCode(IncludeSet& includes) const override;
+  std::string toCppCode(IncludeSet& includes) const override;
 
+  // walk through the simple filter operands to re-populate fSimpleColumnList
+  virtual void setSimpleColumnList() override;
+  virtual void setSimpleColumnListExtended() override;
  private:
   // default okay?
   // SelectFilter& operator=(const SelectFilter& rhs);

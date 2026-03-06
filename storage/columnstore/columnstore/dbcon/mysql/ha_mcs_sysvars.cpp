@@ -21,6 +21,15 @@
 #include "ha_mcs_sysvars.h"
 #include "mcsconfig.h"
 
+#ifndef CREATE_TYPELIB_FOR
+#define CREATE_TYPELIB_FOR(A) { \
+    array_elements(A) - 1,      \
+    #A,                         \
+    A,                          \
+    nullptr                     \
+  }
+#endif
+
 const char* mcs_compression_type_names[] = {"SNAPPY",  // 0
                                             "SNAPPY",  // 1
                                             "SNAPPY",  // 2
@@ -29,9 +38,7 @@ const char* mcs_compression_type_names[] = {"SNAPPY",  // 0
 #endif
                                             NullS};
 
-static TYPELIB mcs_compression_type_names_lib = {array_elements(mcs_compression_type_names) - 1,
-                                                 "mcs_compression_type_names", mcs_compression_type_names,
-                                                 NULL};
+static TYPELIB mcs_compression_type_names_lib = CREATE_TYPELIB_FOR(mcs_compression_type_names);
 
 // compression type
 static MYSQL_THDVAR_ENUM(compression_type, PLUGIN_VAR_RQCMDARG,
@@ -49,23 +56,21 @@ static MYSQL_THDVAR_ENUM(compression_type, PLUGIN_VAR_RQCMDARG,
 
 // fe_conn_info pointer
 static MYSQL_THDVAR_ULONGLONG(fe_conn_info_ptr, PLUGIN_VAR_NOSYSVAR | PLUGIN_VAR_NOCMDOPT,
-                              "FrontEnd connection structure pointer. For internal usage.", NULL, NULL, 0, 0,
+                              "FrontEnd connection structure pointer. For internal usage", NULL, NULL, 0, 0,
                               ~0U, 1);
 
 // optimizer flags vault
 static MYSQL_THDVAR_ULONGLONG(original_optimizer_flags, PLUGIN_VAR_NOSYSVAR | PLUGIN_VAR_NOCMDOPT,
-                              "Vault for original optimizer flags. For internal usage.", NULL, NULL, 0, 0,
+                              "Vault for original optimizer flags. For internal usage", NULL, NULL, 0, 0,
                               ~0U, 1);
 
 static MYSQL_THDVAR_ULONGLONG(original_option_bits, PLUGIN_VAR_NOSYSVAR | PLUGIN_VAR_NOCMDOPT,
-                              "Storage for thd->variables.option_bits. For internal usage.", NULL, NULL, 0, 0,
+                              "Storage for thd->variables.option_bits. For internal usage", NULL, NULL, 0, 0,
                               ~0U, 1);
 
 const char* mcs_select_handler_mode_values[] = {"OFF", "ON", "AUTO", NullS};
 
-static TYPELIB mcs_select_handler_mode_values_lib = {array_elements(mcs_select_handler_mode_values) - 1,
-                                                     "mcs_select_handler_mode_values",
-                                                     mcs_select_handler_mode_values, NULL};
+static TYPELIB mcs_select_handler_mode_values_lib = CREATE_TYPELIB_FOR(mcs_select_handler_mode_values);
 
 static MYSQL_THDVAR_ENUM(select_handler, PLUGIN_VAR_RQCMDARG,
                          "Set the MCS select_handler to Disabled, Enabled, or Automatic",
@@ -85,13 +90,19 @@ static MYSQL_THDVAR_UINT(orderby_threads, PLUGIN_VAR_RQCMDARG,
                          "Number of parallel threads used by ORDER BY. (default to 16)", NULL, NULL, 16, 0,
                          2048, 1);
 
+static constexpr uint DEFAULT_CES_OPTIMIZATION_PARALLEL_FACTOR = 50;
+
+static MYSQL_THDVAR_UINT(query_accel_parallel_factor, PLUGIN_VAR_RQCMDARG,
+                         "Maximum parallel factor for parallel CES optimization. (default to 50)", NULL, NULL,
+                         DEFAULT_CES_OPTIMIZATION_PARALLEL_FACTOR, 1, 1000, 1);
+
 // legacy system variables
 static MYSQL_THDVAR_ULONG(decimal_scale, PLUGIN_VAR_RQCMDARG,
-                          "The default decimal precision for calculated column sub-operations ", NULL, NULL,
+                          "The default decimal precision for calculated column sub-operations", NULL, NULL,
                           8, 0, 18, 1);
 
 static MYSQL_THDVAR_BOOL(varbin_always_hex, PLUGIN_VAR_NOCMDARG,
-                         "Always display/process varbinary columns as if they have been hexified.", NULL,
+                         "Always display/process varbinary columns as if they have been hexified", NULL,
                          NULL, 0);
 
 static MYSQL_THDVAR_BOOL(use_decimal_scale, PLUGIN_VAR_NOCMDARG,
@@ -99,14 +110,14 @@ static MYSQL_THDVAR_BOOL(use_decimal_scale, PLUGIN_VAR_NOCMDARG,
 
 static MYSQL_THDVAR_BOOL(
     double_for_decimal_math, PLUGIN_VAR_NOCMDARG,
-    "Enable/disable for ColumnStore to replace DECIMAL with DOUBLE in arithmetic operation.", NULL, NULL, 0);
+    "Enable/disable for ColumnStore to replace DECIMAL with DOUBLE in arithmetic operation", NULL, NULL, 0);
 
 static MYSQL_THDVAR_BOOL(decimal_overflow_check, PLUGIN_VAR_NOCMDARG,
-                         "Enable/disable for ColumnStore to check for overflow in arithmetic operation.",
+                         "Enable/disable for ColumnStore to check for overflow in arithmetic operation",
                          NULL, NULL, 0);
 
 static MYSQL_THDVAR_BOOL(ordered_only, PLUGIN_VAR_NOCMDARG,
-                         "Always use the first table in the from clause as the large side "
+                         "Always use the first table in the from clause as the large side"
                          "table for joins",
                          NULL, NULL, 0);
 
@@ -119,27 +130,27 @@ static MYSQL_THDVAR_ULONG(stringtable_threshold, PLUGIN_VAR_RQCMDARG,
                           20, 9, ~0U, 1);
 
 static MYSQL_THDVAR_ULONG(diskjoin_smallsidelimit, PLUGIN_VAR_RQCMDARG,
-                          "The maximum amount of disk space in MB to use per query for storing "
+                          "The maximum amount of disk space in MB to use per query for storing"
                           "'small side' tables for a disk-based join. (0 = unlimited)",
                           NULL, NULL, 0, 0, ~0U, 1);
 
 static MYSQL_THDVAR_ULONG(diskjoin_largesidelimit, PLUGIN_VAR_RQCMDARG,
-                          "The maximum amount of disk space in MB to use per join for storing "
+                          "The maximum amount of disk space in MB to use per join for storing"
                           "'large side' table data for a disk-based join. (0 = unlimited)",
                           NULL, NULL, 0, 0, ~0U, 1);
 
 static MYSQL_THDVAR_ULONG(diskjoin_bucketsize, PLUGIN_VAR_RQCMDARG,
-                          "The maximum size in MB of each 'small side' table in memory.", NULL, NULL, 100, 1,
+                          "The maximum size in MB of each 'small side' table in memory", NULL, NULL, 100, 1,
                           ~0U, 1);
 
 static MYSQL_THDVAR_ULONG(diskjoin_max_partition_tree_depth, PLUGIN_VAR_RQCMDARG,
-                          "The maximum size of partition tree depth.", NULL, NULL, 8, 1, ~0U, 1);
+                          "The maximum size of partition tree depth", NULL, NULL, 8, 1, ~0U, 1);
 
-static MYSQL_THDVAR_BOOL(diskjoin_force_run, PLUGIN_VAR_RQCMDARG, "Force run for the disk join step.", NULL,
+static MYSQL_THDVAR_BOOL(diskjoin_force_run, PLUGIN_VAR_RQCMDARG, "Force run for the disk join step", NULL,
                          NULL, 0);
 
 static MYSQL_THDVAR_ULONG(max_pm_join_result_count, PLUGIN_VAR_RQCMDARG,
-                          "The maximum size of the join result for the single block on BPP.", NULL, NULL,
+                          "The maximum size of the join result for the single block on BPP", NULL, NULL,
                           1048576, 1, ~0U, 1);
 
 static MYSQL_THDVAR_ULONG(um_mem_limit, PLUGIN_VAR_RQCMDARG,
@@ -147,7 +158,7 @@ static MYSQL_THDVAR_ULONG(um_mem_limit, PLUGIN_VAR_RQCMDARG,
                           NULL, 0, 0, ~0U, 1);
 
 static MYSQL_THDVAR_ULONG(local_query, PLUGIN_VAR_RQCMDARG,
-                          "Enable/disable the ColumnStore local PM query only feature.", NULL, NULL, 0, 0, 2,
+                          "Enable/disable the ColumnStore local PM query only feature", NULL, NULL, 0, 0, 2,
                           1);
 
 static MYSQL_THDVAR_ULONG(import_for_batchinsert_delimiter, PLUGIN_VAR_RQCMDARG,
@@ -172,9 +183,8 @@ static MYSQL_THDVAR_ULONG(import_for_batchinsert_enclosed_by, PLUGIN_VAR_RQCMDAR
 
 const char* mcs_use_import_for_batchinsert_mode_values[] = {"OFF", "ON", "ALWAYS", NullS};
 
-static TYPELIB mcs_use_import_for_batchinsert_mode_values_lib = {
-    array_elements(mcs_use_import_for_batchinsert_mode_values) - 1,
-    "mcs_use_import_for_batchinsert_mode_values", mcs_use_import_for_batchinsert_mode_values, NULL};
+static TYPELIB mcs_use_import_for_batchinsert_mode_values_lib =
+  CREATE_TYPELIB_FOR(mcs_use_import_for_batchinsert_mode_values);
 
 static MYSQL_THDVAR_ENUM(use_import_for_batchinsert, PLUGIN_VAR_RQCMDARG,
                          "LOAD DATA INFILE and INSERT..SELECT will use cpimport internally",
@@ -210,67 +220,67 @@ static MYSQL_THDVAR_STR(pron, PLUGIN_VAR_NOCMDOPT | PLUGIN_VAR_MEMALLOC, "Debug 
 
 static MYSQL_THDVAR_ULONGLONG(cmapi_port, PLUGIN_VAR_NOCMDOPT, "CMAPI port", NULL, NULL, 8640, 100, 65356, 1);
 
-static MYSQL_THDVAR_STR(s3_key, PLUGIN_VAR_NOCMDOPT | PLUGIN_VAR_MEMALLOC, "S3 Authentication Key ", NULL,
+static MYSQL_THDVAR_STR(s3_key, PLUGIN_VAR_NOCMDOPT | PLUGIN_VAR_MEMALLOC, "S3 Authentication Key", NULL,
                         NULL, "");
 static MYSQL_THDVAR_STR(s3_secret, PLUGIN_VAR_NOCMDOPT | PLUGIN_VAR_MEMALLOC, "S3 Authentication Secret",
                         NULL, NULL, "");
 static MYSQL_THDVAR_STR(s3_region, PLUGIN_VAR_NOCMDOPT | PLUGIN_VAR_MEMALLOC, "S3 region", NULL, NULL, "");
 
 static MYSQL_THDVAR_ULONG(max_allowed_in_values, PLUGIN_VAR_RQCMDARG,
-                          "The maximum length of the entries in the IN query clause.", NULL, NULL, 6000, 1,
+                          "The maximum length of the entries in the IN query clause", NULL, NULL, 6000, 1,
                           ~0U, 1);
 
 static my_bool innodb_queries_use_mcs;
 static MYSQL_SYSVAR_BOOL(innodb_queries_use_mcs, innodb_queries_use_mcs,
                       PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
-                      "Direct all InnoDB-only queries into MCS via Select Handler.", NULL, NULL, FALSE);
+                      "Direct all InnoDB-only queries into MCS via Select Handler", NULL, NULL, FALSE);
 static MYSQL_THDVAR_BOOL(unstable_optimizer, PLUGIN_VAR_RQCMDARG,
-                        "Apply optimizer rules after translation from SELECT_LEX/UNION", NULL, NULL, FALSE);
-                        
-st_mysql_sys_var* mcs_system_variables[] = {
-    MYSQL_SYSVAR(compression_type),
-    MYSQL_SYSVAR(fe_conn_info_ptr),
-    MYSQL_SYSVAR(original_optimizer_flags),
-    MYSQL_SYSVAR(original_option_bits),
-    MYSQL_SYSVAR(select_handler),
-    MYSQL_SYSVAR(derived_handler),
-    MYSQL_SYSVAR(select_handler_in_stored_procedures),
-    MYSQL_SYSVAR(orderby_threads),
-    MYSQL_SYSVAR(decimal_scale),
-    MYSQL_SYSVAR(use_decimal_scale),
-    MYSQL_SYSVAR(ordered_only),
-    MYSQL_SYSVAR(string_scan_threshold),
-    MYSQL_SYSVAR(stringtable_threshold),
-    MYSQL_SYSVAR(diskjoin_smallsidelimit),
-    MYSQL_SYSVAR(diskjoin_largesidelimit),
-    MYSQL_SYSVAR(diskjoin_bucketsize),
-    MYSQL_SYSVAR(diskjoin_max_partition_tree_depth),
-    MYSQL_SYSVAR(diskjoin_force_run),
-    MYSQL_SYSVAR(max_pm_join_result_count),
-    MYSQL_SYSVAR(um_mem_limit),
-    MYSQL_SYSVAR(double_for_decimal_math),
-    MYSQL_SYSVAR(decimal_overflow_check),
-    MYSQL_SYSVAR(local_query),
-    MYSQL_SYSVAR(use_import_for_batchinsert),
-    MYSQL_SYSVAR(import_for_batchinsert_delimiter),
-    MYSQL_SYSVAR(import_for_batchinsert_enclosed_by),
-    MYSQL_SYSVAR(varbin_always_hex),
-    MYSQL_SYSVAR(replication_slave),
-    MYSQL_SYSVAR(cache_inserts),
-    MYSQL_SYSVAR(cache_use_import),
-    MYSQL_SYSVAR(cache_flush_threshold),
-    MYSQL_SYSVAR(cmapi_host),
-    MYSQL_SYSVAR(cmapi_port),
-    MYSQL_SYSVAR(cmapi_version),
-    MYSQL_SYSVAR(cmapi_key),
-    MYSQL_SYSVAR(s3_key),
-    MYSQL_SYSVAR(s3_secret),
-    MYSQL_SYSVAR(s3_region),
-    MYSQL_SYSVAR(pron),
-    MYSQL_SYSVAR(max_allowed_in_values),
-    MYSQL_SYSVAR(innodb_queries_use_mcs),
-    MYSQL_SYSVAR(unstable_optimizer),
-    NULL};
+                         "Apply optimizer rules after translation from SELECT_LEX/UNION", NULL, NULL, FALSE);
+
+st_mysql_sys_var* mcs_system_variables[] = {MYSQL_SYSVAR(compression_type),
+                                            MYSQL_SYSVAR(fe_conn_info_ptr),
+                                            MYSQL_SYSVAR(original_optimizer_flags),
+                                            MYSQL_SYSVAR(original_option_bits),
+                                            MYSQL_SYSVAR(select_handler),
+                                            MYSQL_SYSVAR(derived_handler),
+                                            MYSQL_SYSVAR(select_handler_in_stored_procedures),
+                                            MYSQL_SYSVAR(orderby_threads),
+                                            MYSQL_SYSVAR(query_accel_parallel_factor),
+                                            MYSQL_SYSVAR(decimal_scale),
+                                            MYSQL_SYSVAR(use_decimal_scale),
+                                            MYSQL_SYSVAR(ordered_only),
+                                            MYSQL_SYSVAR(string_scan_threshold),
+                                            MYSQL_SYSVAR(stringtable_threshold),
+                                            MYSQL_SYSVAR(diskjoin_smallsidelimit),
+                                            MYSQL_SYSVAR(diskjoin_largesidelimit),
+                                            MYSQL_SYSVAR(diskjoin_bucketsize),
+                                            MYSQL_SYSVAR(diskjoin_max_partition_tree_depth),
+                                            MYSQL_SYSVAR(diskjoin_force_run),
+                                            MYSQL_SYSVAR(max_pm_join_result_count),
+                                            MYSQL_SYSVAR(um_mem_limit),
+                                            MYSQL_SYSVAR(double_for_decimal_math),
+                                            MYSQL_SYSVAR(decimal_overflow_check),
+                                            MYSQL_SYSVAR(local_query),
+                                            MYSQL_SYSVAR(use_import_for_batchinsert),
+                                            MYSQL_SYSVAR(import_for_batchinsert_delimiter),
+                                            MYSQL_SYSVAR(import_for_batchinsert_enclosed_by),
+                                            MYSQL_SYSVAR(varbin_always_hex),
+                                            MYSQL_SYSVAR(replication_slave),
+                                            MYSQL_SYSVAR(cache_inserts),
+                                            MYSQL_SYSVAR(cache_use_import),
+                                            MYSQL_SYSVAR(cache_flush_threshold),
+                                            MYSQL_SYSVAR(cmapi_host),
+                                            MYSQL_SYSVAR(cmapi_port),
+                                            MYSQL_SYSVAR(cmapi_version),
+                                            MYSQL_SYSVAR(cmapi_key),
+                                            MYSQL_SYSVAR(s3_key),
+                                            MYSQL_SYSVAR(s3_secret),
+                                            MYSQL_SYSVAR(s3_region),
+                                            MYSQL_SYSVAR(pron),
+                                            MYSQL_SYSVAR(max_allowed_in_values),
+                                            MYSQL_SYSVAR(innodb_queries_use_mcs),
+                                            MYSQL_SYSVAR(unstable_optimizer),
+                                            NULL};
 
 st_mysql_show_var mcs_status_variables[] = {{"columnstore_version", (char*)&cs_version, SHOW_CHAR},
                                             {"columnstore_commit_hash", (char*)&cs_commit_hash, SHOW_CHAR},
@@ -366,6 +376,15 @@ uint get_orderby_threads(THD* thd)
 void set_orderby_threads(THD* thd, uint value)
 {
   THDVAR(thd, orderby_threads) = value;
+}
+
+uint get_query_accel_parallel_factor(THD* thd)
+{
+  return (thd == NULL) ? DEFAULT_CES_OPTIMIZATION_PARALLEL_FACTOR : THDVAR(thd, query_accel_parallel_factor);
+}
+void set_query_accel_parallel_factor(THD* thd, uint value)
+{
+  THDVAR(thd, query_accel_parallel_factor) = value;
 }
 
 bool get_use_decimal_scale(THD* thd)

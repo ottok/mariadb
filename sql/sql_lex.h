@@ -711,6 +711,28 @@ bool print_explain_for_slow_log(LEX *lex, THD *thd, String *str);
 
 
 class st_select_lex_unit: public st_select_lex_node {
+private:
+  /*
+    When a CTE is merged to the parent SELECT, its unit is excluded
+    which separates it from the tree of units for this query.  It
+    needs to be cleaned up but not at the time it is excluded, since
+    its queries are merged to the unit above it.  Remember all such
+    units via the stranded_clean_list and clean them at the end of
+    the query.  This list is maintained only at the root unit node
+    of the query tree.
+   */
+  st_select_lex_unit *stranded_clean_list{nullptr};
+
+  // Add myself to the stranded_clean_list.
+  void remember_my_cleanup();
+
+  /*
+    Walk the stranded_clean_list and cleanup units.  This must only
+    be called for the st_select_lex_unit type because it assumes
+    that those are the only nodes in the stranded_clean_list.
+  */
+  void cleanup_stranded_units();
+
 protected:
   TABLE_LIST result_table_list;
   select_unit *union_result;
@@ -953,9 +975,20 @@ Field_pair *find_matching_field_pair(Item *item, List<Field_pair> pair_list);
 class st_select_lex: public st_select_lex_node
 {
 public:
+  Name_resolution_context context;
+  LEX_CSTRING db;
+
+  /*
+    Point to the LEX in which it was created, used in view subquery detection.
+
+    TODO: make also st_select_lex::parent_stmt_lex (see LEX::stmt_lex)
+    and use st_select_lex::parent_lex & st_select_lex::parent_stmt_lex
+    instead of global (from THD) references where it is possible.
+  */
+  LEX *parent_lex;
   /*
     Currently the field first_nested is used only by parser.
-    It containa either a reference to the first select
+    It contains either a reference to the first select
     of the nest of selects to which 'this' belongs to, or
     in the case of priority jump it contains a reference to
     the select to which the priority nest has to be attached to.
@@ -968,18 +1001,6 @@ public:
     while select3->first_nested points to select2 and
     select1->first_nested points to select1.
   */
-
-  Name_resolution_context context;
-  LEX_CSTRING db;
-
-  /*
-    Point to the LEX in which it was created, used in view subquery detection.
-
-    TODO: make also st_select_lex::parent_stmt_lex (see LEX::stmt_lex)
-    and use st_select_lex::parent_lex & st_select_lex::parent_stmt_lex
-    instead of global (from THD) references where it is possible.
-  */
-  LEX *parent_lex;
   st_select_lex *first_nested;
   Item *where, *having;                         /* WHERE & HAVING clauses */
   Item *prep_where; /* saved WHERE clause for prepared statement processing */
@@ -1525,7 +1546,8 @@ public:
     DBUG_ENTER("SELECT_LEX::set_linkage_and_distinct");
     DBUG_PRINT("info", ("select: %p  distinct %d", this, d));
     set_linkage(l);
-    DBUG_ASSERT(l == UNION_TYPE ||
+    DBUG_ASSERT(l == UNSPECIFIED_TYPE ||
+                l == UNION_TYPE ||
                 l == INTERSECT_TYPE ||
                 l == EXCEPT_TYPE);
     if (d && master_unit() && master_unit()->union_distinct != this)
@@ -1556,6 +1578,7 @@ public:
   TABLE_LIST *find_table(THD *thd,
                          const LEX_CSTRING *db_name,
                          const LEX_CSTRING *table_name);
+  bool optimize_constant_subqueries();
 };
 typedef class st_select_lex SELECT_LEX;
 
@@ -3262,7 +3285,7 @@ public:
     at parse time to set local name resolution contexts for various parts
     of a query. For example, in a JOIN ... ON (some_condition) clause the
     Items in 'some_condition' must be resolved only against the operands
-    of the the join, and not against the whole clause. Similarly, Items in
+    of the join, and not against the whole clause. Similarly, Items in
     subqueries should be resolved against the subqueries (and outer queries).
     The stack is used in the following way: when the parser detects that
     all Items in some clause need a local context, it creates a new context
@@ -3512,14 +3535,32 @@ public:
   static const ulong initial_gtid_domain_buffer_size= 16;
   uint32 gtid_domain_static_buffer[initial_gtid_domain_buffer_size];
 
-  inline void set_limit_rows_examined()
+  /*
+    Activates enforcement of the LIMIT ROWS EXAMINED clause, if present
+    in the query.
+  */
+
+  bool has_returning_list;
+
+  void set_limit_rows_examined()
   {
     if (limit_rows_examined)
       limit_rows_examined_cnt= limit_rows_examined->val_uint();
-    else
-      limit_rows_examined_cnt= ULONGLONG_MAX;
   }
 
+  /**
+    Deactivates enforcement of the LIMIT ROWS EXAMINED clause and returns its
+    prior state.
+    Return value:
+    - false: LIMIT ROWS EXAMINED was not activated
+    - true:  LIMIT ROWS EXAMINED was activated
+  */
+  bool deactivate_limit_rows_examined()
+  {
+    bool was_activated= (limit_rows_examined_cnt != ULONGLONG_MAX);
+    limit_rows_examined_cnt= ULONGLONG_MAX; // Unreachable value
+    return was_activated;
+  }
 
   LEX_CSTRING *win_ref;
   Window_frame *win_frame;
@@ -3674,6 +3715,7 @@ public:
                          select_stack_head()->select_number :
                          0),
                         select_lex, select_lex->select_number));
+    DBUG_ASSERT(select_lex);
     if (unlikely(select_stack_top > MAX_SELECT_NESTING))
     {
       my_error(ER_TOO_HIGH_LEVEL_OF_NESTING_FOR_SELECT, MYF(0));
@@ -3861,6 +3903,7 @@ public:
                                const sp_name *name,
                                const sp_name *name2,
                                const char *cpp_body_end);
+  bool show_routine_code_start(THD *thd, enum_sql_command cmd, sp_name *name);
   bool call_statement_start(THD *thd, sp_name *name);
   bool call_statement_start(THD *thd, const Lex_ident_sys_st *name);
   bool call_statement_start(THD *thd, const Lex_ident_sys_st *name1,
@@ -4712,7 +4755,7 @@ public:
   }
   bool main_select_push(bool service= false);
   bool insert_select_hack(SELECT_LEX *sel);
-  SELECT_LEX *create_priority_nest(SELECT_LEX *first_in_nest);
+  SELECT_LEX *create_priority_nest(SELECT_LEX *first_in_nest, SELECT_LEX *attach_to);
 
   bool set_main_unit(st_select_lex_unit *u)
   {
@@ -4801,7 +4844,7 @@ public:
   SELECT_LEX *returning()
   { return &builtin_select; }
   bool has_returning()
-  { return !builtin_select.item_list.is_empty(); }
+  { return has_returning_list; }
 
 private:
   bool stmt_create_routine_start(const DDL_options_st &options)
@@ -4877,6 +4920,7 @@ public:
                               DDL_options ddl_options);
 
   bool check_dependencies_in_with_clauses();
+  bool prepare_unreferenced_in_with_clauses();
   bool check_cte_dependencies_and_resolve_references();
   bool resolve_references_to_cte(TABLE_LIST *tables,
                                  TABLE_LIST **tables_last,
@@ -5278,6 +5322,13 @@ bool sp_create_assignment_instr(THD *thd, bool no_lookahead,
                                 bool need_set_keyword= true);
 
 void mark_or_conds_to_avoid_pushdown(Item *cond);
+
+
+inline
+bool TABLE_LIST::is_pure_alias() const
+{
+  return !db.length || (table_options & TL_OPTION_ALIAS);
+}
 
 #endif /* MYSQL_SERVER */
 #endif /* SQL_LEX_INCLUDED */

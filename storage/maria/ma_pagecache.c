@@ -996,7 +996,7 @@ static int flush_all_key_blocks(PAGECACHE *pagecache)
     The function first compares the memory size parameter
     with the key cache value.
 
-    If they differ the function free the the memory allocated for the
+    If they differ the function free the memory allocated for the
     old key cache blocks by calling the end_pagecache function and
     then rebuilds the key cache with new blocks by calling
     init_key_cache.
@@ -5232,7 +5232,7 @@ int flush_pagecache_blocks_with_filter(PAGECACHE *pagecache,
 {
   int res;
   DBUG_ENTER("flush_pagecache_blocks_with_filter");
-  DBUG_PRINT("enter", ("pagecache: %p  fd: %di", pagecache, file->file));
+  DBUG_PRINT("enter", ("pagecache: %p  fd: %d", pagecache, file->file));
 
   if (pagecache->disk_blocks <= 0)
     DBUG_RETURN(0);

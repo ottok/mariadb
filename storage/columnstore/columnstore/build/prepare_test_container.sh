@@ -5,16 +5,19 @@ set -eo pipefail
 
 SCRIPT_LOCATION=$(dirname "$0")
 COLUMNSTORE_SOURCE_PATH=$(realpath "$SCRIPT_LOCATION"/../)
+MDB_SOURCE_PATH=$(realpath "$SCRIPT_LOCATION"/../../../..)
 
 source "$SCRIPT_LOCATION"/utils.sh
 
-echo "Arguments received: $@"
+message "Arguments received: $@"
 
 optparse.define short=c long=container-name desc="Name of the Docker container to run tests in" variable=CONTAINER_NAME
 optparse.define short=i long=docker-image desc="Docker image name to start container from" variable=DOCKER_IMAGE
 optparse.define short=r long=result-path desc="Name suffix used in core dump file path" variable=RESULT
 optparse.define short=s long=do-setup desc="Run setup-repo.sh inside the container" variable=DO_SETUP
 optparse.define short=u long=packages-url desc="Packages url" variable=PACKAGES_URL
+optparse.define short=l long=install-libcpp desc="Install libcpp" variable=INSTALL_LIBCPP default=false value=true
+
 source $(optparse.build)
 
 if [[ "$EUID" -ne 0 ]]; then
@@ -23,18 +26,20 @@ if [[ "$EUID" -ne 0 ]]; then
 fi
 
 if [[ -z "${CONTAINER_NAME:-}" || -z "${DOCKER_IMAGE:-}" || -z "${RESULT:-}" || -z "${DO_SETUP:-}" || -z "${PACKAGES_URL:-}" ]]; then
-    echo "Please provide --container-name, --docker-image, --result-path, --packages-url and --do-setup parameters, e.g. ./prepare_test_stage.sh --container-name smoke11212 --docker-image detravi/ubuntu:24.04 --result-path ubuntu24.04 --packages-url https://cspkg.s3.amazonaws.com/stable-23.10/pull_request/91/10.6-enterprise --do-setup true"
+    warn "Please provide --container-name, --docker-image, --result-path, --packages-url and --do-setup parameters, e.g. ./prepare_test_stage.sh --container-name smoke11212 --docker-image detravi/ubuntu:24.04 --result-path ubuntu24.04 --packages-url https://cspkg.s3.amazonaws.com/stable-23.10/pull_request/91/10.6-enterprise --do-setup true"
     exit 1
 fi
 
 select_pkg_format ${RESULT}
 
 start_container() {
+    message Starting $DOCKER_IMAGE
     if [[ $PKG_FORMAT == "rpm" ]]; then
         SYSTEMD_PATH="/usr/lib/systemd/systemd"
         MTR_PATH="/usr/share/mysql-test"
     else
-        SYSTEMD_PATH="systemd"
+        # Debian/Ubuntu based
+        SYSTEMD_PATH="/lib/systemd/systemd"
         MTR_PATH="/usr/share/mysql/mysql-test"
     fi
 
@@ -44,6 +49,7 @@ start_container() {
         --env DEBIAN_FRONTEND=noninteractive
         --env MCS_USE_S3_STORAGE=0
         --name "$CONTAINER_NAME"
+        --cgroupns=host
         --ulimit core=-1
         --privileged
         --detach
@@ -52,19 +58,35 @@ start_container() {
     if [[ "$CONTAINER_NAME" == *smoke* ]]; then
         docker_run_args+=(--memory 3g)
     elif [[ "$CONTAINER_NAME" == *mtr* ]]; then
-        docker_run_args+=(--shm-size=500m --memory 8g --env MYSQL_TEST_DIR="$MTR_PATH")
+        docker_run_args+=(--shm-size=500m --memory 13g --env MYSQL_TEST_DIR="$MTR_PATH")
     elif [[ "$CONTAINER_NAME" == *cmapi* ]]; then
         docker_run_args+=(--env PYTHONPATH="${PYTHONPATH}")
     elif [[ "$CONTAINER_NAME" == *upgrade* ]]; then
         docker_run_args+=(--env UCF_FORCE_CONFNEW=1 --volume /sys/fs/cgroup:/sys/fs/cgroup:ro)
     elif [[ "$CONTAINER_NAME" == *regression* ]]; then
-        docker_run_args+=(--shm-size=500m --memory 12g)
+        # Mount volume to write memory logs outside of container
+        REGRESSION_RESULTS_DIR="${SCRIPT_LOCATION}/regression-results"
+        mkdir -p "$REGRESSION_RESULTS_DIR"
+        docker_run_args+=(--shm-size=500m --memory 15g --volume "${REGRESSION_RESULTS_DIR}:/regression-results")
     else
-        echo "Unknown container type: $CONTAINER_NAME"
+        error "Unknown container type: $CONTAINER_NAME"
         exit 1
     fi
 
-    docker_run_args+=("$DOCKER_IMAGE" "$SYSTEMD_PATH" --unit=basic.target)
+    # Debian/Ubuntu: systemd expects cgroups and tmpfs for /run
+    if [[ $PKG_FORMAT == "deb" ]]; then
+        docker_run_args+=(--tmpfs /run --tmpfs /run/lock)
+    fi
+    # Debian 13: mount cgroup hierarchy (writable, systemd needs to manage cgroups)
+    if [[ $DOCKER_IMAGE == *"debian:13"* ]]; then
+        docker_run_args+=(--volume /sys/fs/cgroup:/sys/fs/cgroup)
+    fi
+
+    # Add image - must come after all docker run options
+    docker_run_args+=("$DOCKER_IMAGE")
+
+    # Always run systemd as PID 1 to enable systemctl-based waiting
+    docker_run_args+=("$SYSTEMD_PATH" --unit=basic.target)
 
     docker run "${docker_run_args[@]}"
     sleep 5
@@ -78,57 +100,86 @@ start_container() {
 }
 
 prepare_container() {
-if [[ "$RESULT" != *rocky* ]]; then
-    execInnerDocker "$CONTAINER_NAME" 'sed -i "s/exit 101/exit 0/g" /usr/sbin/policy-rc.d'
-fi
+    if [[ "$RESULT" != *rocky* ]]; then
+        execInnerDocker "$CONTAINER_NAME" 'sed -i "s/exit 101/exit 0/g" /usr/sbin/policy-rc.d'
+    fi
 
-#list_cgroups
-echo "Docker CGroups opts here"
-ls -al /sys/fs/cgroup/cgroup.controllers || true
-ls -al /sys/fs/cgroup/ || true
-ls -al /sys/fs/cgroup/memory || true
+    #list_cgroups
+    echo "Docker CGroups opts here"
+    ls -al /sys/fs/cgroup/cgroup.controllers || true
+    ls -al /sys/fs/cgroup/ || true
+    ls -al /sys/fs/cgroup/memory || true
 
-execInnerDocker "$CONTAINER_NAME" 'echo Inner Docker CGroups opts here'
-execInnerDocker "$CONTAINER_NAME" 'ls -al /sys/fs/cgroup/cgroup.controllers || true'
-execInnerDocker "$CONTAINER_NAME" 'ls -al /sys/fs/cgroup/ || true'
-execInnerDocker "$CONTAINER_NAME" 'ls -al /sys/fs/cgroup/memory || true'
+    execInnerDocker "$CONTAINER_NAME" 'echo Inner Docker CGroups opts here'
+    execInnerDocker "$CONTAINER_NAME" 'ls -al /sys/fs/cgroup/cgroup.controllers || true'
+    execInnerDocker "$CONTAINER_NAME" 'ls -al /sys/fs/cgroup/ || true'
+    execInnerDocker "$CONTAINER_NAME" 'ls -al /sys/fs/cgroup/memory || true'
 
-# Prepare core dump directory inside container
-execInnerDocker "$CONTAINER_NAME" 'mkdir -p core && chmod 777 core'
-docker cp "$COLUMNSTORE_SOURCE_PATH"/core_dumps/. "$CONTAINER_NAME":/
-docker cp "$COLUMNSTORE_SOURCE_PATH"/build/utils.sh "$CONTAINER_NAME":/
-docker cp "$COLUMNSTORE_SOURCE_PATH"/setup-repo.sh "$CONTAINER_NAME":/
+    # Prepare core dump directory inside container
+    execInnerDocker "$CONTAINER_NAME" 'mkdir -p core && chmod 777 core'
+    # Prepare ASAN logs directory
+    execInnerDocker "$CONTAINER_NAME" 'mkdir -p /tmp/asan && chmod 777 /tmp/asan'
+    docker cp "$COLUMNSTORE_SOURCE_PATH"/core_dumps/. "$CONTAINER_NAME":/
+    docker cp "$COLUMNSTORE_SOURCE_PATH"/build/utils.sh "$CONTAINER_NAME":/
+    docker cp "$COLUMNSTORE_SOURCE_PATH"/setup-repo.sh "$CONTAINER_NAME":/
 
-if [[ "$DO_SETUP" == "true" ]]; then
-    execInnerDocker "$CONTAINER_NAME" '/setup-repo.sh'
-fi
+    if [[ "$DO_SETUP" == "true" ]]; then
+        execInnerDocker "$CONTAINER_NAME" '/setup-repo.sh'
+    fi
 
-# install deps
-if [[ "$RESULT" == *rocky* ]]; then
-    execInnerDockerWithRetry "$CONTAINER_NAME" 'yum --nobest update -y && yum --nobest install -y cracklib-dicts diffutils elfutils epel-release expect findutils iproute gawk gcc-c++ gdb hostname lz4 patch perl procps-ng rsyslog sudo tar wget which'
-else
-    change_ubuntu_mirror_in_docker "$CONTAINER_NAME" "us"
-    execInnerDockerWithRetry "$CONTAINER_NAME" 'apt update -y && apt install -y elfutils expect findutils iproute2 g++ gawk gdb hostname liblz4-tool patch procps rsyslog sudo tar wget'
-fi
+    # FIX THIS HACK
+    if [[ "$INSTALL_LIBCPP" == "true" ]]; then
+        docker cp "$COLUMNSTORE_SOURCE_PATH"/build/install_clang_deb.sh "$CONTAINER_NAME":/
+        docker cp "$COLUMNSTORE_SOURCE_PATH"/build/install_libc++.sh "$CONTAINER_NAME":/
 
-# Configure core dump naming pattern
-execInnerDocker "$CONTAINER_NAME" 'sysctl -w kernel.core_pattern="/core/%E_${RESULT}_core_dump.%p"'
+        execInnerDocker "$CONTAINER_NAME" '/install_clang_deb.sh 20'
+        execInnerDocker "$CONTAINER_NAME" '/install_libc++.sh 20'
+    fi
 
-#Install columnstore in container
-echo "Installing columnstore..."
-if [[ "$RESULT" == *rocky* ]]; then
-    execInnerDockerWithRetry "$CONTAINER_NAME" 'yum install -y MariaDB-columnstore-engine MariaDB-test'
-else
-    execInnerDockerWithRetry "$CONTAINER_NAME" 'apt update -y && apt install -y mariadb-plugin-columnstore mariadb-test mariadb-test-data'
-fi
+    # install deps
+    if [[ "$RESULT" == *rocky* ]]; then
+        execInnerDockerWithRetry "$CONTAINER_NAME" 'yum --nobest update -y && yum --nobest install -y cracklib-dicts diffutils elfutils epel-release expect findutils iproute gawk gcc-c++ gdb hostname lz4 patch perl procps-ng rsyslog sudo tar wget which'
+    else
+        change_ubuntu_mirror_in_docker "$CONTAINER_NAME" "us"
+        execInnerDockerWithRetry "$CONTAINER_NAME" 'apt update -y && apt install -y elfutils expect findutils iproute2 g++ gawk gdb hostname lz4 patch procps rsyslog sudo tar wget'
+    fi
 
-sleep 5
-echo "PrepareTestStage completed in $CONTAINER_NAME"
+    execInnerDockerWithRetry "$CONTAINER_NAME" 'wget -qO- https://sh.rustup.rs | sh -s -- -y --default-toolchain stable'
+    execInnerDockerWithRetry "$CONTAINER_NAME" 'source /root/.cargo/env && cargo install tpchgen-cli && ln -sf /root/.cargo/bin/tpchgen-cli /usr/local/bin/tpchgen-cli'
+
+    # Configure core dump naming pattern
+    execInnerDocker "$CONTAINER_NAME" 'sysctl -w kernel.core_pattern="/core/%E_${RESULT}_core_dump.%p"'
+
+    #Install columnstore in container
+    message "Installing columnstore..."
+    
+    # Try to detect server version from VERSION file (CI) or PACKAGES_URL (local)
+    if [[ -f "$MDB_SOURCE_PATH/VERSION" ]]; then
+        SERVER_VERSION=$(grep -E 'MYSQL_VERSION_(MAJOR|MINOR)' $MDB_SOURCE_PATH/VERSION | cut -d'=' -f2 | paste -sd. -)
+    else
+        # Extract from PACKAGES_URL: e.g., /10.6-enterprise/ -> 10.6
+        SERVER_VERSION=$(echo "$PACKAGES_URL" | sed -n 's|.*/\([0-9]\+\.[0-9]\+\)-enterprise\(/.*\)\?|\1|p')
+    fi
+    message "Server version of build is: ${SERVER_VERSION:-unknown}"
+
+    if [[ "$RESULT" == *rocky* ]]; then
+        execInnerDockerWithRetry "$CONTAINER_NAME" 'yum install -y MariaDB-columnstore-engine MariaDB-test'
+    else
+        execInnerDockerWithRetry "$CONTAINER_NAME" 'apt update -y && apt install -y mariadb-plugin-columnstore mariadb-test mariadb-test-data mariadb-plugin-columnstore-dbgsym mariadb-test-dbgsym'
+        
+        # Try to install server debug symbols (may not be available)
+        if [[ -n "$SERVER_VERSION" && $SERVER_VERSION == '10.6' ]]; then
+            execInnerDocker "$CONTAINER_NAME" 'apt install -y mariadb-client-10.6-dbgsym mariadb-client-core-10.6-dbgsym mariadb-server-10.6-dbgsym mariadb-server-core-10.6-dbgsym' || warn "Debug symbols not available (not critical)"
+        fi
+    fi
+
+    sleep 5
+    message "PrepareTestStage completed in $CONTAINER_NAME"
 }
-
 
 if [[ -z $(docker ps -q --filter "name=${CONTAINER_NAME}") ]]; then
     start_container
     prepare_container
-else message "Container ${CONTAINER_NAME} is already running, skipping prepare step"
+else
+    message "Container ${CONTAINER_NAME} is already running, skipping prepare step"
 fi

@@ -84,16 +84,20 @@ SECURITY_STATUS ma_schannel_handshake_loop(MARIADB_PVIO *pvio, my_bool InitialRe
   PUCHAR          IoBuffer;
   BOOL            fDoRead;
   MARIADB_TLS     *ctls= pvio->ctls;
+  MYSQL *mysql=   pvio->mysql;
   SC_CTX          *sctx= (SC_CTX *)ctls->ssl;
+  char            *sni_host= NULL;
 
 
   dwSSPIFlags = ISC_REQ_SEQUENCE_DETECT |
                 ISC_REQ_REPLAY_DETECT |
                 ISC_REQ_CONFIDENTIALITY |
                 ISC_RET_EXTENDED_ERROR |
-                ISC_REQ_ALLOCATE_MEMORY | 
+                ISC_REQ_ALLOCATE_MEMORY |
                 ISC_REQ_STREAM;
 
+  if (mysql->host && !ma_is_ip_address(mysql->host))
+    sni_host= mysql->host;
 
   /* Allocate data buffer */
   if (!(IoBuffer = malloc(SC_IO_BUFFER_SIZE)))
@@ -166,7 +170,7 @@ SECURITY_STATUS ma_schannel_handshake_loop(MARIADB_PVIO *pvio, my_bool InitialRe
 
     rc = InitializeSecurityContextA(&sctx->CredHdl,
                                     &sctx->hCtxt,
-                                    NULL,
+                                    sni_host,
                                     dwSSPIFlags,
                                     0,
                                     SECURITY_NATIVE_DREP,

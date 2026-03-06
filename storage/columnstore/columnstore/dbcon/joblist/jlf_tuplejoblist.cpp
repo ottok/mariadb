@@ -71,7 +71,7 @@ using namespace dataconvert;
 #include "jlf_tuplejoblist.h"
 using namespace joblist;
 
-#include "statistics_manager/statistics.h"
+#include "statistics.h"
 
 #ifdef __clang__
 #pragma clang diagnostic push
@@ -246,9 +246,30 @@ void constructJoinedRowGroup(RowGroup& rg, uint32_t large, uint32_t prev, bool r
   if (root == false)  // not root
   {
     vector<uint32_t>& joinKeys = jobInfo.tableJoinMap[make_pair(large, prev)].fLeftKeys;
+    // Reserve space for vectors (estimate based on join keys + tables)
+    size_t estimatedSize = joinKeys.size() + tableSet.size() * 8;  // rough estimate
+    pos.reserve(estimatedSize + 1);
+    oids.reserve(estimatedSize);
+    keys.reserve(estimatedSize);
+    scale.reserve(estimatedSize);
+    precision.reserve(estimatedSize);
+    types.reserve(estimatedSize);
+    csNums.reserve(estimatedSize);
 
     for (vector<uint32_t>::iterator i = joinKeys.begin(); i != joinKeys.end(); i++)
       addColumnToRG(*i, pos, oids, keys, scale, precision, types, csNums, jobInfo);
+  }
+  else
+  {
+    // Reserve space for vectors when root
+    size_t estimatedSize = tableSet.size() * 8;  // rough estimate
+    pos.reserve(estimatedSize + 1);
+    oids.reserve(estimatedSize);
+    keys.reserve(estimatedSize);
+    scale.reserve(estimatedSize);
+    precision.reserve(estimatedSize);
+    types.reserve(estimatedSize);
+    csNums.reserve(estimatedSize);
   }
 
   // -- followed by the columns in select or expression
@@ -346,6 +367,16 @@ void adjustLastStep(JobStepVector& querySteps, DeliveredTableMap& deliverySteps,
   vector<CalpontSystemCatalog::ColDataType> types;
   vector<uint32_t> csNums;
   pos.push_back(2);
+
+  // Reserve space for all vectors
+  size_t vSize = v.size();
+  pos.reserve(vSize + 1);
+  oids.reserve(vSize);
+  keys.reserve(vSize);
+  types.reserve(vSize);
+  csNums.reserve(vSize);
+  scale.reserve(vSize);
+  precision.reserve(vSize);
 
   for (unsigned i = 0; i < v.size(); i++)
   {
@@ -499,67 +530,7 @@ void adjustLastStep(JobStepVector& querySteps, DeliveredTableMap& deliverySteps,
     deliverySteps[CNX_VTABLE_ID] = ws;
   }
 
-  // TODO MCOL-894 we don't need to run sorting|distinct
-  // every time
-  //    if ((jobInfo.limitCount != (uint64_t) - 1) ||
-  //            (jobInfo.constantCol == CONST_COL_EXIST) ||
-  //            (jobInfo.hasDistinct))
-  //    {
-  if (jobInfo.annexStep.get() == NULL)
-    jobInfo.annexStep.reset(new TupleAnnexStep(jobInfo));
-
-  TupleAnnexStep* tas = dynamic_cast<TupleAnnexStep*>(jobInfo.annexStep.get());
-  tas->setLimit(jobInfo.limitStart, jobInfo.limitCount);
-
-  if (jobInfo.orderByColVec.size() > 0)
-  {
-    tas->addOrderBy(new LimitedOrderBy());
-    if (jobInfo.orderByThreads > 1)
-      tas->setParallelOp();
-    tas->setMaxThreads(jobInfo.orderByThreads);
-  }
-
-  if (jobInfo.constantCol == CONST_COL_EXIST)
-    tas->addConstant(new TupleConstantStep(jobInfo));
-
-  if (jobInfo.hasDistinct)
-    tas->setDistinct();
-
-  //    }
-
-  if (jobInfo.annexStep)
-  {
-    TupleDeliveryStep* ds = dynamic_cast<TupleDeliveryStep*>(deliverySteps[CNX_VTABLE_ID].get());
-    RowGroup rg2 = ds->getDeliveredRowGroup();
-
-    if (jobInfo.trace)
-      cout << "Output RowGroup 2: " << rg2.toString() << endl;
-
-    AnyDataListSPtr spdlIn(new AnyDataList());
-    RowGroupDL* dlIn;
-    if (jobInfo.orderByColVec.size() > 0)
-      dlIn = new RowGroupDL(jobInfo.orderByThreads, jobInfo.fifoSize);
-    else
-      dlIn = new RowGroupDL(1, jobInfo.fifoSize);
-    dlIn->OID(CNX_VTABLE_ID);
-    spdlIn->rowGroupDL(dlIn);
-    JobStepAssociation jsaIn;
-    jsaIn.outAdd(spdlIn);
-    dynamic_cast<JobStep*>(ds)->outputAssociation(jsaIn);
-    jobInfo.annexStep->inputAssociation(jsaIn);
-
-    AnyDataListSPtr spdlOut(new AnyDataList());
-    RowGroupDL* dlOut = new RowGroupDL(1, jobInfo.fifoSize);
-    dlOut->OID(CNX_VTABLE_ID);
-    spdlOut->rowGroupDL(dlOut);
-    JobStepAssociation jsaOut;
-    jsaOut.outAdd(spdlOut);
-    jobInfo.annexStep->outputAssociation(jsaOut);
-
-    querySteps.push_back(jobInfo.annexStep);
-    dynamic_cast<TupleAnnexStep*>(jobInfo.annexStep.get())->initialize(rg2, jobInfo);
-    deliverySteps[CNX_VTABLE_ID] = jobInfo.annexStep;
-  }
+  addAnnexStep(querySteps, deliverySteps, jobInfo);
 
   // Check if constant false
   if (jobInfo.constantFalse)
@@ -662,6 +633,16 @@ void addProjectStepsToBps(TableInfoMap::iterator& mit, BatchPrimitive* bps, JobI
   psv.insert(psv.begin(), keySteps.begin(), keySteps.end());  // add joinkeys to project
   psv.insert(psv.end(), expSteps.begin(), expSteps.end());    // add expressions to project
   set<uint32_t> seenCols;                                     // columns already processed
+
+  // Reserve space for output rowgroup vectors (psv.size() + fjKeys is upper bound)
+  size_t estimatedSize = psv.size() + fjKeys.size();
+  pos.reserve(estimatedSize + 1);
+  oids.reserve(estimatedSize);
+  keys.reserve(estimatedSize);
+  scale.reserve(estimatedSize);
+  precision.reserve(estimatedSize);
+  types.reserve(estimatedSize);
+  csNums.reserve(estimatedSize);
 
   // for passthru conversion
   // passthru is disabled (default lastTupleId to -1) unless the TupleBPS::bop is BOP_AND.
@@ -1353,6 +1334,16 @@ bool combineJobStepsByTable(TableInfoMap::iterator& mit, JobInfo& jobInfo)
         vector<CalpontSystemCatalog::ColDataType> types;
         vector<uint32_t> csNums;
         pos.push_back(2);
+
+        // Reserve space for all vectors
+        size_t tisSize = tis.size();
+        pos.reserve(tisSize + 1);
+        oids.reserve(tisSize);
+        keys.reserve(tisSize);
+        types.reserve(tisSize);
+        csNums.reserve(tisSize);
+        scale.reserve(tisSize);
+        precision.reserve(tisSize);
 
         for (unsigned i = 0; i < tis.size(); i++)
         {
@@ -4407,6 +4398,78 @@ void makeNoTableJobStep(JobStepVector& querySteps, JobStepVector& projectSteps,
 
 namespace joblist
 {
+
+void addAnnexStep(JobStepVector& querySteps, DeliveredTableMap& deliverySteps, JobInfo& jobInfo,
+                  IDBQueryType queryType)
+{
+  // TODO MCOL-894 we don't need to run sorting|distinct
+  // every time
+  //    if ((jobInfo.limitCount != (uint64_t) - 1) ||
+  //            (jobInfo.constantCol == CONST_COL_EXIST) ||
+  //            (jobInfo.hasDistinct))
+  //    {
+  if (!jobInfo.annexStep)
+  {
+    jobInfo.annexStep.reset(new TupleAnnexStep(jobInfo));
+  }
+
+  auto* tas = dynamic_cast<TupleAnnexStep*>(jobInfo.annexStep.get());
+  tas->setLimit(jobInfo.limitStart, jobInfo.limitCount);
+
+  if (!jobInfo.orderByColVec.empty())
+  {
+    tas->addOrderBy(new LimitedOrderBy());
+    if (jobInfo.orderByThreads > 1)
+      tas->setParallelOp();
+    tas->setMaxThreads(jobInfo.orderByThreads);
+  }
+
+  if (queryType != IDBQueryType::UNION)
+  {
+    if (jobInfo.constantCol == CONST_COL_EXIST)
+      tas->addConstant(new TupleConstantStep(jobInfo));
+
+    if (jobInfo.hasDistinct)
+      tas->setDistinct();
+  }
+  //    }
+
+  auto* tds = dynamic_cast<TupleDeliveryStep*>(deliverySteps[CNX_VTABLE_ID].get());
+  RowGroup rg = tds->getDeliveredRowGroup();
+
+  if (jobInfo.trace)
+    cout << "Output RowGroup 2: " << rg.toString() << endl;
+
+  AnyDataListSPtr spdlIn(new AnyDataList());
+  RowGroupDL* dlIn;
+  if (jobInfo.orderByColVec.empty())
+  {
+    dlIn = new RowGroupDL(1, jobInfo.fifoSize);
+  }
+  else
+  {
+    dlIn = new RowGroupDL(jobInfo.orderByThreads, jobInfo.fifoSize);
+  }
+  dlIn->OID(CNX_VTABLE_ID);
+  spdlIn->rowGroupDL(dlIn);
+  JobStepAssociation jsaIn;
+  jsaIn.outAdd(spdlIn);
+  dynamic_cast<JobStep*>(tds)->outputAssociation(jsaIn);
+  jobInfo.annexStep->inputAssociation(jsaIn);
+
+  AnyDataListSPtr spdlOut(new AnyDataList());
+  RowGroupDL* dlOut = new RowGroupDL(1, jobInfo.fifoSize);
+  dlOut->OID(CNX_VTABLE_ID);
+  spdlOut->rowGroupDL(dlOut);
+  JobStepAssociation jsaOut;
+  jsaOut.outAdd(spdlOut);
+  jobInfo.annexStep->outputAssociation(jsaOut);
+
+  querySteps.push_back(jobInfo.annexStep);
+  dynamic_cast<TupleAnnexStep*>(jobInfo.annexStep.get())->initialize(rg, jobInfo);
+  deliverySteps[CNX_VTABLE_ID] = jobInfo.annexStep;
+}
+
 void associateTupleJobSteps(JobStepVector& querySteps, JobStepVector& projectSteps,
                             DeliveredTableMap& deliverySteps, JobInfo& jobInfo,
                             const bool overrideLargeSideEstimate)
@@ -5049,7 +5112,7 @@ void associateTupleJobSteps(JobStepVector& querySteps, JobStepVector& projectSte
   adjustLastStep(querySteps, deliverySteps, jobInfo);  // to match the select clause
 }
 
-SJSTEP unionQueries(JobStepVector& queries, uint64_t distinctUnionNum, JobInfo& jobInfo)
+SJSTEP unionQueries(JobStepVector& queries, uint64_t distinctUnionNum, JobInfo& jobInfo, uint32_t keyCount)
 {
   vector<RowGroup> inputRGs;
   vector<bool> distinct;
@@ -5124,7 +5187,7 @@ SJSTEP unionQueries(JobStepVector& queries, uint64_t distinctUnionNum, JobInfo& 
   dl->OID(CNX_VTABLE_ID);
   JobStepAssociation jsa;
   jsa.outAdd(spdl);
-  TupleUnion* unionStep = new TupleUnion(CNX_VTABLE_ID, jobInfo);
+  TupleUnion* unionStep = new TupleUnion(CNX_VTABLE_ID, jobInfo, keyCount);
   unionStep->inputAssociation(jsaToUnion);
   unionStep->outputAssociation(jsa);
 
@@ -5167,6 +5230,11 @@ SJSTEP unionQueries(JobStepVector& queries, uint64_t distinctUnionNum, JobInfo& 
 
   for (size_t i = 0; i < jobInfo.deliveredCols.size(); i++)
   {
+    auto* cc = dynamic_cast<ConstantColumn*>(jobInfo.deliveredCols[i].get());
+    if (cc)
+    {
+      jobInfo.deliveredCols[i].reset(new SimpleColumn(*jobInfo.deliveredCols[i]));
+    }
     CalpontSystemCatalog::ColType ct = jobInfo.deliveredCols[i]->resultType();
     // XXX remove after connector change
     ct.colDataType = types[i];

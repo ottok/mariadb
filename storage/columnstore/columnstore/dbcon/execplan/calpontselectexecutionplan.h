@@ -55,6 +55,22 @@ enum RM_PARMS
   UMSMALLSIDEMEMORY,
 };
 
+// query type of select plan.
+// TODO: move it somewhere?
+enum class IDBQueryType : uint32_t
+{
+  SELECT,
+  UPDATE,
+  DELETE,
+  INSERT_SELECT,
+  CREATE_TABLE,
+  DROP_TABLE,
+  ALTER_TABLE,
+  INSERT,
+  LOAD_DATA_INFILE,
+  UNION
+};
+
 struct RMParam
 {
   RMParam(uint32_t s, uint16_t i, uint64_t v) : sessionId(s), id(i), value(v)
@@ -96,21 +112,6 @@ class CalpontSelectExecutionPlan : public CalpontExecutionPlan
   typedef std::vector<SCEP> SelectList;
 
   typedef std::vector<RMParam> RMParmVec;
-
-  // query type of this select plan.
-#undef DELETE  // Windows defines this...
-  enum IDB_QUERYTYPE
-  {
-    SELECT,
-    UPDATE,
-    DELETE,
-    INSERT_SELECT,
-    CREATE_TABLE,
-    DROP_TABLE,
-    ALTER_TABLE,
-    INSERT,
-    LOAD_DATA_INFILE
-  };
 
   enum SE_LOCATION
   {
@@ -163,6 +164,11 @@ class CalpontSelectExecutionPlan : public CalpontExecutionPlan
    * Clones this CSEP without recursive selects for optimizer purposes
    */
   execplan::SCSEP cloneWORecursiveSelects();
+
+  execplan::SCSEP cloneForTableWORecursiveSelectsGbObHaving(
+      const execplan::CalpontSystemCatalog::TableAliasName& targetTableAlias, const bool withFilters = true);
+
+  SCSEP clone();
   /**
    * Access and mutator methods
    */
@@ -490,7 +496,7 @@ class CalpontSelectExecutionPlan : public CalpontExecutionPlan
   {
     return fDerivedTableList;
   }
-  void derivedTableList(SelectList& derivedTableList)
+  void derivedTableList(const SelectList& derivedTableList)
   {
     fDerivedTableList = derivedTableList;
   }
@@ -641,7 +647,7 @@ class CalpontSelectExecutionPlan : public CalpontExecutionPlan
   }
 
   // query type. return string for easy stats insert
-  void queryType(const uint32_t queryType)
+  void queryType(const IDBQueryType queryType)
   {
     fQueryType = queryType;
   }
@@ -649,7 +655,7 @@ class CalpontSelectExecutionPlan : public CalpontExecutionPlan
   {
     return queryTypeToString(fQueryType);
   }
-  static std::string queryTypeToString(const uint32_t queryType);
+  static std::string queryTypeToString(const IDBQueryType queryType);
 
   void priority(uint32_t p)
   {
@@ -709,7 +715,7 @@ class CalpontSelectExecutionPlan : public CalpontExecutionPlan
   {
     fDJSMaxPartitionTreeDepth = value;
   }
-  uint64_t djsMaxPartitionTreeDepth()
+  uint64_t djsMaxPartitionTreeDepth() const
   {
     return fDJSMaxPartitionTreeDepth;
   }
@@ -801,7 +807,7 @@ class CalpontSelectExecutionPlan : public CalpontExecutionPlan
    * Return a string rep of the CSEP
    * @return a string
    */
-  void printSubCSEP(const size_t& ident, ostringstream& output, CalpontSelectExecutionPlan*& plan) const;
+  void printSubCSEP(const size_t& ident, std::ostringstream& output, CalpontSelectExecutionPlan*& plan) const;
   virtual std::string toString(const size_t ident = 0) const;
 
   /** @brief Is this an internal query?
@@ -941,13 +947,14 @@ class CalpontSelectExecutionPlan : public CalpontExecutionPlan
   bool fHasOrderBy = false;
 
   // for Select clause subquery
+  // Populated from derived found in projection list.
   SelectList fSelectSubList;
 
   // @bug3321, for string scan blocks
   uint64_t fStringScanThreshold = ULONG_MAX;
 
   // query type
-  uint32_t fQueryType = SELECT;
+  IDBQueryType fQueryType{IDBQueryType::SELECT};
 
   uint32_t fPriority;
   uint32_t fStringTableThreshold = 20;
@@ -957,6 +964,7 @@ class CalpontSelectExecutionPlan : public CalpontExecutionPlan
   uint32_t fOrderByThreads = 1;
 
   // Derived table involved in the query. For derived table optimization
+  // Populated from derived found in filters.
   std::vector<SCSEP> fSubSelectList;
 
   boost::uuids::uuid fUuid{};
@@ -968,7 +976,7 @@ class CalpontSelectExecutionPlan : public CalpontExecutionPlan
   uint32_t fDJSMaxPartitionTreeDepth = 8;
   bool fDJSForceRun = false;
   uint32_t fMaxPmJoinResultCount = 1048576;
-  int64_t fUMMemLimit = numeric_limits<int64_t>::max();
+  int64_t fUMMemLimit = std::numeric_limits<int64_t>::max();
   bool fIsDML = false;
   long fTimeZone = 0;
   std::vector<execplan::ParseTree*> fDynamicParseTreeVec;

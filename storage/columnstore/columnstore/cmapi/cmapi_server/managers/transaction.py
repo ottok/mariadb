@@ -4,7 +4,7 @@ from contextlib import ContextDecorator
 from signal import (
     SIGINT, SIGTERM, SIGHUP, SIG_DFL, signal, default_int_handler
 )
-from typing import Optional, Type
+from typing import Optional
 
 from cmapi_server.constants import DEFAULT_MCS_CONF_PATH, TRANSACTION_TIMEOUT
 from cmapi_server.exceptions import CMAPIBasicError
@@ -55,7 +55,7 @@ class TransactionManager(ContextDecorator):
         self.success_txn_nodes = None
 
     def _handle_exception(
-            self, exc: Optional[Type[Exception]] = None,
+            self, exc: Optional[Exception] = None,
             signum: Optional[int] = None
     ) -> None:
         """Handle raised exceptions.
@@ -73,7 +73,8 @@ class TransactionManager(ContextDecorator):
         if (exc or signum) and self.active_transaction:
             self.rollback_transaction(nodes=self.success_txn_nodes)
         self.set_default_signals()
-        raise exc
+        if exc is not None:
+            raise exc
 
     def _handle_signal(self, signum, frame) -> None:
         """Handler for signals.
@@ -106,10 +107,10 @@ class TransactionManager(ContextDecorator):
         try:
             rollback_transaction(self.txn_id, nodes=nodes)
             self.active_transaction = False
-            logging.debug(f'Success rollback of transaction "{self.txn_id}".')
+            logging.debug(f'Successful rollback of transaction "{self.txn_id}".')
         except Exception:
             logging.error(
-                f'Error while rollback transaction "{self.txn_id}"',
+                f'Error while rolling back transaction "{self.txn_id}"',
                 exc_info=True
             )
 
@@ -133,6 +134,7 @@ class TransactionManager(ContextDecorator):
     def __enter__(self):
         if self.handle_signals:
             self.set_custom_signals()
+        suceeded, success_txn_nodes = False, []
         try:
             suceeded, _, success_txn_nodes = start_transaction(
                 cs_config_filename=DEFAULT_MCS_CONF_PATH,

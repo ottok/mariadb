@@ -155,7 +155,7 @@ const char *tx_isolation_names[]=
   NullS};
 TYPELIB tx_isolation_typelib= CREATE_TYPELIB_FOR(tx_isolation_names);
 
-static TYPELIB known_extensions= {0,"known_exts", NULL, NULL};
+static TYPELIB known_extensions= {0,"known_exts", NULL, NULL, NULL};
 uint known_extensions_id= 0;
 
 
@@ -2126,15 +2126,17 @@ err:
                 thd->rgi_slave->is_parallel_exec);
   }
 end:
-  if (mdl_backup.ticket)
+  // reset the pointer to the ticket when it's stack instantiated
+  if (thd->backup_commit_lock == &mdl_backup)
   {
     /*
       We do not always immediately release transactional locks
       after ha_commit_trans() (see uses of ha_enable_transaction()),
       thus we release the commit blocker lock as soon as it's
       not needed.
-    */
-    thd->mdl_context.release_lock(mdl_backup.ticket);
+     */
+    if (mdl_backup.ticket)
+      thd->mdl_context.release_lock(mdl_backup.ticket);
     thd->backup_commit_lock= 0;
   }
 #ifdef WITH_WSREP
@@ -2203,11 +2205,36 @@ static bool is_ro_1pc_trans(THD *thd, Ha_trx_info *ha_info, bool all,
   return !rw_trans;
 }
 
-static bool has_binlog_hton(Ha_trx_info *ha_info)
+inline Ha_trx_info* get_binlog_hton(Ha_trx_info *ha_info)
 {
-  bool rc;
-  for (rc= false; ha_info && !rc; ha_info= ha_info->next())
-    rc= ha_info->ht() == &binlog_tp;
+  for (; ha_info; ha_info= ha_info->next())
+    if (ha_info->ht() == &binlog_tp)
+      return ha_info;
+
+  return ha_info;
+}
+
+static int run_binlog_first(THD *thd, bool all, THD_TRANS *trans,
+                            bool is_real_trans, bool is_commit)
+{
+  int rc= 0;
+  Ha_trx_info *ha_info= trans->ha_list;
+
+  if ((ha_info= get_binlog_hton(ha_info)))
+  {
+    int err;
+    if ((err= is_commit ? binlog_commit(thd, all,
+                                        is_ro_1pc_trans(thd, ha_info, all,
+                                                        is_real_trans))
+                        : binlog_rollback(thd, all)))
+    {
+      my_error(is_commit ? ER_ERROR_DURING_COMMIT : ER_ERROR_DURING_ROLLBACK,
+               MYF(0), err);
+      rc= 1;
+    }
+  }
+  else if (WSREP(thd))
+    rc= thd->binlog_flush_pending_rows_event(TRUE);
 
   return rc;
 }
@@ -2225,27 +2252,19 @@ commit_one_phase_2(THD *thd, bool all, THD_TRANS *trans, bool is_real_trans)
   if (ha_info)
   {
     int err= 0;
-
-    if (has_binlog_hton(ha_info))
+    /*
+      Binlog hton must be called first regardless of its position
+      in trans->ha_list at least to prevent from commiting any engine
+      branches when afterward a duplicate GTID error out of binlog_commit()
+      is generated.
+    */
+    for (int binlog_err= error=
+           run_binlog_first(thd, all, trans, is_real_trans, true);
+         ha_info; ha_info= ha_info_next)
     {
-      if ((err= binlog_commit(thd, all, is_ro_1pc_trans(thd, ha_info, all,
-                                                        is_real_trans))))
-      {
-        my_error(ER_ERROR_DURING_COMMIT, MYF(0), err);
-        error= 1;
+      if (binlog_err)
         goto err;
-      }
-    }
-#ifdef WITH_WSREP
-    else
-    {
-      if (wsrep_on(thd))
-        error= thd->binlog_flush_pending_rows_event(TRUE);
-    }
-#endif
 
-    for (; ha_info; ha_info= ha_info_next)
-    {
       transaction_participant *ht= ha_info->ht();
       if ((err= ht->commit(thd, all)))
       {
@@ -2369,11 +2388,18 @@ int ha_rollback_trans(THD *thd, bool all)
     if (is_real_trans)                          /* not a statement commit */
       thd->stmt_map.close_transient_cursors();
 
-    for (; ha_info; ha_info= ha_info_next)
+    /*
+      Binlog hton must be called first regardless of its position
+      in trans->ha_list in order to avoid race to binlog between the current
+      rollbacker and any transaction that depends on it. This guarantees
+      the execution time dependency identifies binlog ordering.
+    */
+    for (error= run_binlog_first(thd, all, trans, is_real_trans, false);
+         ha_info; ha_info= ha_info_next)
     {
       int err;
       transaction_participant *ht= ha_info->ht();
-      if ((err= ht->rollback(thd, all)))
+      if (ht != &binlog_tp && (err= ht->rollback(thd, all)))
       {
         // cannot happen
         my_error(ER_ERROR_DURING_ROLLBACK, MYF(0), err);
@@ -4785,7 +4811,7 @@ void handler::print_error(int error, myf errflag)
   case HA_ERR_RECORD_DELETED:
   case HA_ERR_END_OF_FILE:
     /*
-      This errors is not not normally fatal (for example for reads). However
+      This errors is not normally fatal (for example for reads). However
       if you get it during an update or delete, then its fatal.
       As the user is calling print_error() (which is not done on read), we
       assume something when wrong with the update or delete.
@@ -5295,12 +5321,6 @@ uint handler::get_dup_key(int error)
       error == HA_ERR_DROP_INDEX_FK)
     info(HA_STATUS_ERRKEY | HA_STATUS_NO_LOCK);
   DBUG_RETURN(errkey);
-}
-
-bool handler::has_dup_ref() const
-{
-  DBUG_ASSERT(lookup_errkey != (uint)-1 || errkey != (uint)-1);
-  return ha_table_flags() & HA_DUPLICATE_POS || lookup_errkey != (uint)-1;
 }
 
 
@@ -5976,7 +5996,12 @@ handler::ha_create(const char *name, TABLE *form, HA_CREATE_INFO *info_arg)
     info_arg->options|= HA_LEX_CREATE_GLOBAL_TMP_TABLE;
   int error= create(name, form, info_arg);
   if (!error &&
-      !(info_arg->options & (HA_LEX_CREATE_TMP_TABLE | HA_CREATE_TMP_ALTER)))
+      !(info_arg->options & (HA_LEX_CREATE_TMP_TABLE | HA_CREATE_TMP_ALTER)) &&
+      /*
+        DO not notify if not main handler.
+        So skip notifications for partitions.
+      */
+      form->file == this)
     mysql_audit_create_table(form);
   return error;
 }
@@ -5991,7 +6016,8 @@ handler::ha_create(const char *name, TABLE *form, HA_CREATE_INFO *info_arg)
 int
 handler::ha_create_partitioning_metadata(const char *name,
                                          const char *old_name,
-                                         chf_create_flags action_flag)
+                                         chf_create_flags action_flag,
+                                         bool ignore_delete_error)
 {
   /*
     Normally this is done when unlocked, but in fast_alter_partition_table,
@@ -6001,7 +6027,8 @@ handler::ha_create_partitioning_metadata(const char *name,
   DBUG_ASSERT(m_lock_type == F_UNLCK ||
               (!old_name && strcmp(name, table_share->path.str)));
 
-  return create_partitioning_metadata(name, old_name, action_flag);
+  return create_partitioning_metadata(name, old_name, action_flag,
+                                      ignore_delete_error);
 }
 
 
@@ -6516,9 +6543,10 @@ int ha_create_table(THD *thd, const char *path, const char *db,
 
     bzero((char*) &index_cinfo, sizeof(index_cinfo));
     index_cinfo.alter_info= &index_ainfo;
-    if (create_info->index_file_name)
+    index_file_name_end= const_cast<char*>(create_info->index_file_name);
+    if (index_file_name_end)
     {
-      index_file_name_end= strmov(index_file_name, create_info->index_file_name);
+      index_file_name_end= strmov(index_file_name, index_file_name_end);
       index_cinfo.index_file_name= index_file_name;
       index_cinfo.data_file_name= index_file_name;
     }
@@ -8004,8 +8032,12 @@ int handler::ha_check_overlaps(const uchar *old_data, const uchar* new_data)
   DBUG_ASSERT(this == table->file);
   if (!table_share->period.unique_keys)
     return 0;
-  if (table->versioned() && !table->vers_end_field()->is_max())
-    return 0;
+  if (table->versioned())
+  {
+    Field *end= table->vers_end_field();
+    if (!end->is_max(end->ptr_in_record(new_data)))
+      return 0;
+  }
 
   const bool after_write= ha_table_flags() & HA_CHECK_UNIQUE_AFTER_WRITE;
   const bool is_update= !after_write && old_data;

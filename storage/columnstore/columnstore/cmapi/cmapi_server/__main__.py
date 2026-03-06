@@ -6,6 +6,7 @@ CherryPy-based webservice daemon with background threads
 
 import logging
 import os
+import sys
 import threading
 import time
 from datetime import datetime
@@ -16,18 +17,24 @@ from cherrypy.process import plugins
 # TODO: fix dispatcher choose logic because code executing in endpoints.py
 #       while import process, this cause module logger misconfiguration
 from cmapi_server.logging_management import config_cmapi_server_logging
-config_cmapi_server_logging()
+from tracing.sentry import maybe_init_sentry
+from tracing.traceparent_backend import TraceparentBackend
+from tracing.tracer import get_tracer
 
+config_cmapi_server_logging()
 from cmapi_server import helpers
-from cmapi_server.constants import DEFAULT_MCS_CONF_PATH, CMAPI_CONF_PATH
-from cmapi_server.controllers.dispatcher import dispatcher, jsonify_error
+from cmapi_server.constants import CMAPI_CONF_PATH, DEFAULT_MCS_CONF_PATH
+from cmapi_server.controllers.dispatcher import dispatcher, jsonify_404, jsonify_error
 from cmapi_server.failover_agent import FailoverAgent
+from cmapi_server.invariant_checks import run_invariant_checks
 from cmapi_server.managers.application import AppManager
-from cmapi_server.managers.process import MCSProcessManager
 from cmapi_server.managers.certificate import CertificateManager
+from cmapi_server.managers.process import MCSProcessManager
 from failover.node_monitor import NodeMonitor
+from failover.config import Config
 from mcs_node_control.models.dbrm_socket import SOCK_TIMEOUT, DBRMSocketHandler
 from mcs_node_control.models.node_config import NodeConfig
+from tracing.trace_tool import register_tracing_tools
 
 
 def worker(app):
@@ -91,7 +98,8 @@ class FailoverBackgroundThread(plugins.SimplePlugin):
 
     def __init__(self, bus, turned_on):
         super().__init__(bus)
-        self.node_monitor = NodeMonitor(agent=FailoverAgent())
+        sampling_interval = Config().getFailoverTimeoutSeconds()
+        self.node_monitor = NodeMonitor(agent=FailoverAgent(), samplingInterval=sampling_interval)
         self.running = False
         self.turned_on = turned_on
         if self.turned_on:
@@ -140,15 +148,31 @@ if __name__ == '__main__':
     # TODO: read cmapi config filepath as an argument
     helpers.cmapi_config_check()
 
+    register_tracing_tools()
+    get_tracer().register_backend(TraceparentBackend())  # Register default tracing backend
+    maybe_init_sentry()  # Init Sentry if DSN is present
+
     CertificateManager.create_self_signed_certificate_if_not_exist()
     CertificateManager.renew_certificate()
 
+    # Run checks, if some of them fail -- log and exit
+    diag = run_invariant_checks()
+    if diag:
+        logging.error('Invariant checks failed, exiting')
+        sys.exit(1)
+
     app = cherrypy.tree.mount(root=None, config=CMAPI_CONF_PATH)
+    root_config = {
+        "request.dispatch": dispatcher,
+        "error_page.default": jsonify_error,
+        "error_page.404": jsonify_404,
+        # Enable tracing tools
+        'tools.trace.on': True,
+        'tools.trace_end.on': True,
+    }
+
     app.config.update({
-        '/': {
-            'request.dispatch': dispatcher,
-            'error_page.default': jsonify_error,
-        },
+        '/': root_config,
         'config': {
             'path': CMAPI_CONF_PATH,
         },
@@ -220,10 +244,10 @@ if __name__ == '__main__':
                 'Something went wrong while trying to detect dbrm protocol.\n'
                 'Seems "controllernode" process isn\'t started.\n'
                 'This is just a notification, not a problem.\n'
-                'Next detection will started at first node\\cluster '
+                'Next detection will start at first node\\cluster '
                 'status check.\n'
-                f'This can cause extra {SOCK_TIMEOUT} seconds delay while\n'
-                'first attempt to get status.',
+                f'This can cause extra {SOCK_TIMEOUT} seconds delay during\n'
+                'this first attempt to get the status.',
                 exc_info=True
             )
     else:

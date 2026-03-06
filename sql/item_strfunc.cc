@@ -290,7 +290,7 @@ String *Item_func_sha2::val_str_ascii(String *str)
   /* Convert the large number to a string-hex representation. */
   array_to_hex((char *) str->ptr(), digest_buf, (uint)digest_length);
 
-  /* We poked raw bytes in.  We must inform the the String of its length. */
+  /* We poked raw bytes in.  We must inform the String of its length. */
   str->length((uint) digest_length*2); /* Each byte as two nybbles */
 
   null_value= FALSE;
@@ -1618,7 +1618,18 @@ String *Item_func_sformat::val_str(String *res)
   /* Create the string output  */
   try
   {
+#ifdef _MSC_VER
+/*
+  C4834 : "discarding return value of function with [[nodiscard]] attribute"
+  in fmt 12.1 template code, for isalpha()
+*/
+#pragma warning(push)
+#pragma warning(disable : 4834)
+#endif
     auto text = fmt::vformat(fmt_locale, fmt_arg->c_ptr_safe(), arg_store);
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
     res->length(0);
     res->set_charset(collation.collation);
     res->append(text.c_str(), text.size(), fmt_arg->charset());
@@ -3354,32 +3365,32 @@ String *Item_func_make_set::val_str(String *str)
     if (bits & 1)
     {
       String *res= (*ptr)->val_str(str);
-      if (res)					// Skip nulls
+      if (res)                                  // Skip nulls
       {
-	if (!first_found)
-	{					// First argument
-	  first_found=1;
-	  if (res != str)
-	    result=res;				// Use original string
-	  else
-	  {
-	    if (tmp_str.copy(*res))		// Don't use 'str'
+        if (!first_found)
+        {                                       // First argument
+          first_found=1;
+          if (res->ptr() != str->ptr())
+            result=res;                         // Use original string
+          else
+          {
+            if (tmp_str.copy(*res))             // Don't use 'str'
               return make_empty_result(str);
-	    result= &tmp_str;
-	  }
-	}
-	else
-	{
-	  if (result != &tmp_str)
-	  {					// Copy data to tmp_str
-	    if (tmp_str.alloc(result->length()+res->length()+1) ||
-		tmp_str.copy(*result))
+            result= &tmp_str;
+          }
+        }
+        else
+        {
+          if (result != &tmp_str)
+          {                                     // Copy data to tmp_str
+            if (tmp_str.alloc(result->length()+res->length()+1) ||
+                tmp_str.copy(*result))
               return make_empty_result(str);
-	    result= &tmp_str;
-	  }
-	  if (tmp_str.append(STRING_WITH_LEN(","), &my_charset_bin) || tmp_str.append(*res))
+            result= &tmp_str;
+          }
+          if (tmp_str.append(STRING_WITH_LEN(","), &my_charset_bin) || tmp_str.append(*res))
             return make_empty_result(str);
-	}
+        }
       }
     }
   }
@@ -4080,9 +4091,10 @@ bool Item_func_set_collation::fix_length_and_dec(THD *thd)
 }
 
 
-bool Item_func_set_collation::eq(const Item *item, bool binary_cmp) const
+bool Item_func_set_collation::eq(const Item *item,
+                                 const Eq_config &config) const
 {
-  return Item_func::eq(item, binary_cmp) &&
+  return Item_func::eq(item, config) &&
          collation.collation == item->collation.collation;
 }
 
@@ -4257,9 +4269,21 @@ String *Item_func_hex::val_str_ascii_from_val_str(String *str)
 {
   DBUG_ASSERT(&tmp_value != str);
   String *res= args[0]->val_str(&tmp_value);
-  DBUG_ASSERT(res != str);
+  THD *thd= current_thd;
+
   if ((null_value= (res == NULL)))
     return NULL;
+
+  if (res->length()*2 > thd->variables.max_allowed_packet)
+  {
+    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                        ER_WARN_ALLOWED_PACKET_OVERFLOWED,
+                        ER_THD(thd, ER_WARN_ALLOWED_PACKET_OVERFLOWED),
+                        func_name(), thd->variables.max_allowed_packet);
+    null_value= true;
+    return NULL;
+  }
+
   return str->set_hex(res->ptr(), res->length()) ? make_empty_result(str) : str;
 }
 

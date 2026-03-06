@@ -29,16 +29,22 @@ using namespace std;
 
 #include "returnedcolumn.h"
 #include "constantcolumn.h"
-#include "simplecolumn.h"
-#include "operator.h"
-#include "constantfilter.h"
+#include "simplefilter.h"
 #include "bytestream.h"
 #include "objectreader.h"
-#include "functioncolumn.h"
-#include "arithmeticcolumn.h"
-#include "simplefilter.h"
+#include "simplecolumn.h"
 #include "aggregatecolumn.h"
+#include "arithmeticcolumn.h"
+#include "functioncolumn.h"
+#include "constantcolumn.h"
+#include "selectfilter.h"
+#include "operator.h"
 #include "windowfunctioncolumn.h"
+#include "rowgroup.h"
+#include "joblisttypes.h"
+using namespace messageqcpp;
+using namespace std;
+using namespace execplan;
 
 namespace execplan
 {
@@ -247,6 +253,53 @@ const string SimpleFilter::toString() const
   output << "  " << *fLhs;
   output << "  " << *fOp;
   output << "  " << *fRhs;
+  return output.str();
+}
+
+const string SimpleFilter::toString(bool compact) const
+{
+  if (!compact)
+  {
+    // Use the original detailed format
+    return toString();
+  }
+
+  ostringstream output;
+
+  // Compact format for tree display
+  output << "SimpleFilter(indexflag=" << fIndexFlag;
+  output << " joinFlag= " << fJoinFlag;
+  output << " card= " << fCardinality << ")";
+
+  // Handle different types of left operands with compact formatting
+  SimpleColumn* sc = dynamic_cast<SimpleColumn*>(fLhs);
+  AggregateColumn* ac = dynamic_cast<AggregateColumn*>(fLhs);
+
+  if (ac)
+  {
+    string acCompact = ac->toString(true);
+    if (!acCompact.empty())
+    {
+      output << endl << acCompact;
+    }
+  }
+  else if (sc)
+  {
+    string scCompact = sc->toString(true);
+    if (!scCompact.empty())
+    {
+      output << endl << scCompact;
+    }
+  }
+  else
+  {
+    // For other operand types, show them compactly
+    output << endl << "LHS: " << fLhs->toString();
+  }
+
+  output << endl << "Op: " << fOp->toString();
+  output << endl << "RHS: " << fRhs->toString();
+
   return output.str();
 }
 
@@ -752,11 +805,6 @@ void SimpleFilter::replaceRealCol(CalpontSelectExecutionPlan::ReturnedColumnList
   }
 }
 
-const std::vector<SimpleColumn*>& SimpleFilter::simpleColumnList()
-{
-  return fSimpleColumnList;
-}
-
 void SimpleFilter::setSimpleColumnList()
 {
   SimpleColumn* lsc = dynamic_cast<SimpleColumn*>(fLhs);
@@ -783,6 +831,37 @@ void SimpleFilter::setSimpleColumnList()
     fRhs->setSimpleColumnList();
     fSimpleColumnList.insert(fSimpleColumnList.end(), fRhs->simpleColumnList().begin(),
                              fRhs->simpleColumnList().end());
+  }
+}
+
+void SimpleFilter::setSimpleColumnListExtended()
+{
+  SimpleColumn* lsc = dynamic_cast<SimpleColumn*>(fLhs);
+  SimpleColumn* rsc = dynamic_cast<SimpleColumn*>(fRhs);
+  fSimpleColumnListExtended.clear();
+
+  if (lsc)
+  {
+    fSimpleColumnListExtended.push_back(lsc);
+  }
+  else if (fLhs)
+  {
+    fLhs->setSimpleColumnListExtended();
+    fSimpleColumnListExtended.insert(fSimpleColumnListExtended.end(),
+                                     fLhs->simpleColumnListExtended().begin(),
+                                     fLhs->simpleColumnListExtended().end());
+  }
+
+  if (rsc)
+  {
+    fSimpleColumnListExtended.push_back(rsc);
+  }
+  else if (fRhs)
+  {
+    fRhs->setSimpleColumnListExtended();
+    fSimpleColumnListExtended.insert(fSimpleColumnListExtended.end(),
+                                     fRhs->simpleColumnListExtended().begin(),
+                                     fRhs->simpleColumnListExtended().end());
   }
 }
 

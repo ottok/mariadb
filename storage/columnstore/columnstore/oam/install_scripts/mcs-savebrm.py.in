@@ -11,6 +11,7 @@ import struct
 import subprocess
 import sys
 import time
+from typing import Optional
 import xml.etree.ElementTree as ET
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -23,20 +24,24 @@ MCS_CONFIG_PATH = os.path.join(MCS_ETC_PATH, 'Columnstore.xml')
 SM_CONFIG_PATH = os.path.join(MCS_ETC_PATH, 'storagemanager.cnf')
 MCS_BIN_DIR = '@ENGINE_BINDIR@'
 SAVEBRM = os.path.join(MCS_BIN_DIR, 'save_brm')
+CLEAR_ALL_SHMEM_LOCKS = os.path.join(MCS_BIN_DIR, 'mcs-shmem-locks')
+CLEAR_ALL_SHMEM_LOCKS_ARGS = '-a'
 EM_FILE_SUFFIX = '_em'
 EM_FILE_SIZE_THRESHOLD = 1000
 FIVE_SECS = 5
 NUMBER_OF_FILES_TO_KEEP = 40
 DEFAULT_EM_LOCAL_PATH_PREFIX = ''
 LOCALHOST = '127.0.0.1'
-# according to https://www.ibm.com/docs/en/storage-sentinel/1.1.2?topic=installation-map-your-local-host-loopback-address
-LOCALHOSTS = (
+LOCALHOST_IPS = {
     '127.0.0.1',
+    '::1',
+}
+LOCALHOST_HOSTNAMES = {
     'localhost', 'localhost.localdomain',
     'localhost4', 'localhost4.localdomain4',
-    '::1',
     'localhost6', 'localhost6.localdomain6',
-)
+}
+LOCALHOSTS = LOCALHOST_IPS.union(LOCALHOST_HOSTNAMES)
 API_VERSION = '0.4.0'
 API_PORT = '8640'
 BRM_BACKUP_PATH = '/tmp/columnstore_tmp_files/rdwrscratch/'
@@ -68,7 +73,7 @@ def cmapi_available():
     :return: is CMAPI running or not
     :rtype: bool
     """
-    logging.error('Detecting CMAPI is up and running.')
+    logging.info('Detecting CMAPI is up and running.')
     url = 'https://{}:{}/notfound'.format(LOCALHOST, API_PORT)
     request = Request(method='POST', url=url)
     ctx = get_unverified_context()
@@ -109,7 +114,7 @@ def get_ip_address_by_nic(ifname):
             )[20:24]
         )
     except Exception as exc:
-        logging.error(
+        logging.debug(
             'Exception while getting IP address of an "{}" interface'.format(
                 ifname
             ),
@@ -120,6 +125,60 @@ def get_ip_address_by_nic(ifname):
     return ip_addr
 
 
+def get_my_hostnames_aux():
+    """Calculate hostnames for current node based on interface IPs."""
+    hostnames = set()
+    ip_addrs = []
+    for _, nic_name in socket.if_nameindex():
+        ip_addr = get_ip_address_by_nic(nic_name)
+        if ip_addr and ip_addr not in LOCALHOST_IPS:
+            ip_addrs.append(ip_addr)
+    logging.debug('Found ip addresses %s.', ip_addrs)
+
+    for ip_addr in ip_addrs:
+        try:
+            hostnames_3tuple = socket.gethostbyaddr(ip_addr)
+            hostnames.update([hostnames_3tuple[0], *hostnames_3tuple[1]])
+        except Exception:
+            logging.debug(
+                'Exception while getting hostnames for IP "%s"',
+                ip_addr,
+                exc_info=True,
+            )
+
+    logging.debug('Found hostnames %s.', hostnames)
+    return hostnames
+
+
+def get_my_hostnames(max_retries=5, delay_secs=2):
+    """Detect hostnames for current node with retries
+
+    There are possible cases where NIC is not ready yet even after network-online target is reached.
+    So here we added retries to work around it.
+    """
+    attempt = 0
+    hostnames = set()
+    while attempt < max_retries:
+        hostnames = get_my_hostnames_aux()
+
+        if not hostnames or hostnames.issubset(LOCALHOSTS):
+            attempt += 1
+            if attempt < max_retries:
+                logging.debug(
+                    'Hostname detection attempt %d returned only localhost ' \
+                    'hostnames %s, retrying in %d seconds.',
+                    attempt,
+                    hostnames,
+                    delay_secs,
+                )
+                time.sleep(delay_secs)
+                continue
+
+        return hostnames
+
+    return hostnames
+
+
 def is_primary_fallback(current_hostname):
     """Detect is node primary or not without cmapi.
 
@@ -128,19 +187,17 @@ def is_primary_fallback(current_hostname):
     :return: is node primary
     :rtype: bool
     """
-    logging.error(
+    logging.info(
         'Current DBRM_Controller/IPAddr is {}'.format(current_hostname)
     )
-    hostnames = set()
-    for _, nic_name in socket.if_nameindex():
-        ip_addr = get_ip_address_by_nic(nic_name)
-        try:
-            hostnames_3tuple = socket.gethostbyaddr(ip_addr)
-            hostnames.update([hostnames_3tuple[0], *hostnames_3tuple[1]])
-        except:
-            pass
-    logging.error('Found hostnames {}.'.format(hostnames))
-    return current_hostname in LOCALHOSTS or current_hostname in hostnames
+    if current_hostname in LOCALHOSTS:
+        logging.info('is_primary_fallback result: True (localhost match)')
+        return True
+
+    hostnames = get_my_hostnames()
+    is_primary = current_hostname in hostnames
+    logging.info('is_primary_fallback result: %s', is_primary)
+    return is_primary
 
 
 def is_node_primary(conf_root):
@@ -205,10 +262,10 @@ def get_file_size(file_path):
     except OSError as e:
         logging.error('OSError in get_file_size(): {}.'.format(e))
         return None
-    
+
 
 def em_is_empty(file_path_prefix):
-    """Returns True if EM file size is less than EM_FILE_SIZE_THRESHOLD 
+    """Returns True if EM file size is less than EM_FILE_SIZE_THRESHOLD
         or its argument is None.
 
     :rtype: Bool
@@ -233,7 +290,7 @@ def clean_up_backup_brm_files(save_brm_dir_path):
     files_to_remove = filenames[NUMBER_OF_FILES_TO_KEEP:]
     for filename in files_to_remove:
         file_path = os.path.join(save_brm_dir_path, filename)
-        logging.error('Clean up {}.'.format(file_path))
+        logging.info('Clean up {}.'.format(file_path))
         try:
             os.remove(file_path)
         except OSError as e:
@@ -283,7 +340,7 @@ def get_epoch_prefix():
     :rtype: String
     """
     epoch_time = int(time.time())
-    
+
     return 'backup_{}'.format(epoch_time)
 
 
@@ -304,7 +361,7 @@ def get_save_brm_dir_path(a_mcs_config_root):
             save_brm_dir_path = system_temp_file_dir + hdfs_rdwr_scratch
         except AttributeError:
             logging.error('Exception while getting SystemTempFileDir and hdfsRdwrScratch from Columnstore.xml', exc_info=True)
-    
+
     return save_brm_dir_path
 
 
@@ -318,72 +375,65 @@ def get_save_brm_path_prefix(a_mcs_config_root):
     return get_save_brm_dir_path(a_mcs_config_root) + '/' + BRM_BACKUP_PATH_PART.format(epoch_prefix)
 
 
-def call_save_brm(path):
-    """Calls save_brm first and then tries to call it with local path. 
+def call_executable_with_params(executable: str, args: str) -> bool:
+    """Calls executable and return optional result
 
-    :param file_path: xml config XML root
-    :rtype: None
+    :param executable: executable to call
+    :rtype: Optional[str]
     """
-    savebrm_cmd = SAVEBRM + ' ' + path
+    executable_w_args: str = executable + ' ' + args
     try:
-        subprocess.check_call(savebrm_cmd, shell=True)
+        subprocess.check_call(executable_w_args, shell=True)
     except subprocess.CalledProcessError as exc:
-        logging.error('The call to {} exits with {}.'.format(savebrm_cmd, exc.returncode))
-        return None
+        logging.error('The call to {} exits with {}.'.format(executable, exc.returncode))
+        return False
     except OSError:
-        logging.error('Os error while calling savebrm', exc_info=True)
-        return None
-    return path
+        logging.error('Os error while calling {}.'.format(executable), exc_info=True)
+        return False
+    return True
 
 
-def call_save_brm_locally(a_mcs_config_root):
-    """Calls save_brm first and then tries to call it with local path. 
+def clear_shmem_locks() -> bool:
+    """Clears shmem locks before save_brm call
 
-    :param file_path: xml config XML root
-    :rtype: None
+    :rtype: Optional[str]
     """
-    local_path = get_save_brm_path_prefix(a_mcs_config_root)
-    return call_save_brm(local_path)
+    logging.info('Clear shmem read locks.')
+    return call_executable_with_params(CLEAR_ALL_SHMEM_LOCKS, CLEAR_ALL_SHMEM_LOCKS_ARGS)
 
 
-def call_save_brm_with_local_fallback(a_mcs_config_root):
-    """Calls save_brm first and then tries to call it with local path. 
+def call_save_brm(path) -> bool:
+    """Calls save_brm with a path.
 
-    :param file_path: xml config XML root
-    :rtype: None
+    :param path: path to save_brm
+    :rtype: Optional[str]
     """
-    try:
-        subprocess.check_call(SAVEBRM, shell=True)
-    except subprocess.CalledProcessError as exc:
-        logging.error('The primary call to {} exits with {}.'.format(exc.cmd, exc.returncode))
-        backup_path = get_save_brm_path_prefix(a_mcs_config_root)
-        logging.error('Back up BRM files locally to {}.'.format(backup_path))
-        backup_cmd = SAVEBRM + ' ' + backup_path
-        try:
-            subprocess.check_call(backup_cmd, shell=True)
-        except subprocess.CalledProcessError:
-            logging.error('The backup call to {} exits with {}.'.format(exc.cmd, exc.returncode))
-        except OSError:
-            logging.error('Os error while calling savebrm during the backup', exc_info=True)
-
-        sys.exit(1)
-    except OSError:
-        logging.error('Os error while calling savebrm', exc_info=True)
-        sys.exit(1)
+    return call_executable_with_params(SAVEBRM, path)
 
 
 if __name__ == '__main__':
+    # Configure logging to show INFO level messages
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
+
     mcs_config_root = get_config_root_from_file(MCS_CONFIG_PATH)
+    if clear_shmem_locks() is None:
+        logging.error('Exiting with error cleaning locks.')
+        sys.exit(1)
+    em_local_path_prefix = get_save_brm_path_prefix(mcs_config_root)
     # config_root can be None
     if is_node_primary(mcs_config_root):
-        em_local_path_prefix = call_save_brm_locally(mcs_config_root)
-        if not em_local_path_prefix or em_is_empty(em_local_path_prefix):
-            # remove_files_by_prefix_if_exist(em_local_path_prefix)
-            logging.error('Exiting with error.')
+        if not call_save_brm(em_local_path_prefix) or em_is_empty(em_local_path_prefix):
+            logging.error('Exiting with error trying to safe BRM locally on primary node.')
             sys.exit(1)
-        
+
         clean_up_backup_brm_files(get_save_brm_dir_path(mcs_config_root))
 
         call_save_brm(DEFAULT_EM_LOCAL_PATH_PREFIX)
+    else:
+        # Node is not primary. Call save_brm locally to save a copy of BRM localy
+        logging.error('Node is not primary. Call save_brm locally')
+        if not call_save_brm(em_local_path_prefix) or em_is_empty(em_local_path_prefix):
+            logging.error('Exiting with error trying to safe BRM locally on non-primary node.')
+            sys.exit(1)
 
     sys.exit(0)

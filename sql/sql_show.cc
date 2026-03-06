@@ -2930,7 +2930,9 @@ static my_bool list_callback(THD *tmp, list_callback_arg *arg)
 
     thd_info->thread_id=tmp->thread_id;
     thd_info->os_thread_id=tmp->os_thread_id;
-    thd_info->user= arg->thd->strdup(tmp_sctx->user && tmp_sctx->user != slave_user ?
+    thd_info->user= arg->thd->strdup(tmp_sctx->user &&
+                                     (tmp_sctx->user != slave_user &&
+                                      tmp_sctx->user != wsrep_user) ?
                                        tmp_sctx->user :
                                        (tmp->system_thread ?
                                          "system user" : "unauthenticated user"));
@@ -3438,8 +3440,9 @@ static my_bool processlist_callback(THD *tmp, processlist_callback_arg *arg)
   /* ID */
   arg->table->field[0]->store((longlong) tmp->thread_id, TRUE);
   /* USER */
-  val= tmp_sctx->user && tmp_sctx->user != slave_user ? tmp_sctx->user :
-        (tmp->system_thread ? "system user" : "unauthenticated user");
+  val= tmp_sctx->user && (tmp_sctx->user != slave_user &&
+       tmp_sctx->user != wsrep_user) ? tmp_sctx->user :
+       (tmp->system_thread ? "system user" : "unauthenticated user");
   arg->table->field[1]->store(val, strlen(val), cs);
   /* HOST */
   if (tmp->peer_port && (tmp_sctx->host || tmp_sctx->ip) &&
@@ -4484,6 +4487,12 @@ bool get_lookup_field_values(THD *thd, COND *cond, bool fix_table_name_case,
 
 enum enum_schema_tables get_schema_table_idx(ST_SCHEMA_TABLE *schema_table)
 {
+  if (schema_table < schema_tables ||
+      schema_table > &schema_tables[SCH_N_SERVER_TABLES])
+  {
+    return SCH_PLUGIN_TABLE;
+  }
+
   return (enum enum_schema_tables) (schema_table - &schema_tables[0]);
 }
 
@@ -5290,21 +5299,19 @@ static int fill_schema_table_from_frm(THD *thd, MEM_ROOT *mem_root,
   res= open_table_from_share(thd, share, table_name, 0,
                              EXTRA_RECORD | OPEN_FRM_FILE_ONLY,
                              thd->open_options, &tbl, FALSE);
-  if (res && hide_object_error(thd->get_stmt_da()->sql_errno()))
-    res= 0;
+  if (res)
+  {
+    if (hide_object_error(thd->get_stmt_da()->sql_errno()))
+      res= 0;
+  }
   else
   {
-    char buf[NAME_CHAR_LEN + 1];
-    if (unlikely(res))
-      get_table_engine_for_i_s(thd, buf, &table_list, db_name, table_name);
-
     tbl.s= share;
     table_list.table= &tbl;
     table_list.view= (LEX*) share->is_view;
     bool res2= schema_table->process_table(thd, &table_list, table, res,
                                            db_name, table_name);
-    if (res == 0)
-      closefrm(&tbl);
+    closefrm(&tbl);
     res= res2;
   }
 
@@ -5349,7 +5356,7 @@ end:
 
 static privilege_t get_schema_privileges_for_show(THD *thd, TABLE_LIST *tables,
                                                   const privilege_t need,
-                                                  bool any)
+                                                  bool on_any_column)
 {
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
   /* 
@@ -5357,13 +5364,16 @@ static privilege_t get_schema_privileges_for_show(THD *thd, TABLE_LIST *tables,
     necessary privileges, but the caller didn't pass down the GRANT_INFO
     object, so we have to rediscover everything again :( 
   */
-  if (!(thd->col_access & need))
-  {
-    check_grant(thd, need, tables, 0, 1, 1);
-    return (any ? tables->grant.all_privilege() 
-                : tables->grant.privilege) & need;
-  }
-  return thd->col_access & need;
+  if (thd->col_access & need)
+    return thd->col_access & need;
+
+  privilege_t all3= acl_get_all3(thd->security_ctx, tables->table->s->db.str, 0);
+  if (all3 & need)
+    return all3 & need;
+
+  check_grant(thd, need, tables, 0, 1, true);
+  return (on_any_column ? tables->grant.all_privilege()
+                        : tables->grant.privilege) & need;
 #else
   return need;
 #endif
@@ -5447,30 +5457,6 @@ int get_all_tables(THD *thd, TABLE_LIST *tables, COND *cond)
   uint table_open_method= tables->table_open_method;
   bool can_deadlock;
   MEM_ROOT tmp_mem_root;
-  /*
-    We're going to open FRM files for tables.
-    In case of VIEWs that contain stored function calls,
-    these stored functions will be parsed and put to the SP cache.
-
-    Suppose we have a view containing a stored function call:
-      CREATE VIEW v1 AS SELECT f1() AS c1;
-    and now we're running:
-      SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME=f1();
-    If a parallel thread invalidates the cache,
-    e.g. by creating or dropping some stored routine,
-    the SELECT query will re-parse f1() when processing "v1"
-    and replace the outdated cached version of f1() to a new one.
-    But the old version of f1() is referenced from the m_sp member
-    of the Item_func_sp instances used in the WHERE condition.
-    We cannot destroy it. To avoid such clashes, let's remember
-    all old routines into a temporary SP cache collection
-    and process tables with a new empty temporary SP cache collection.
-    Then restore to the old SP cache collection at the end.
-  */
-  Sp_caches old_sp_caches;
-
-  old_sp_caches.sp_caches_swap(*thd);
-
   bzero(&tmp_mem_root, sizeof(tmp_mem_root));
 
   /*
@@ -5695,14 +5681,6 @@ int get_all_tables(THD *thd, TABLE_LIST *tables, COND *cond)
 err:
   thd->restore_backup_open_tables_state(&open_tables_state_backup);
   free_root(&tmp_mem_root, 0);
-
-  /*
-    Now restore to the saved SP cache collection
-    and clear the temporary SP cache collection.
-  */
-  old_sp_caches.sp_caches_swap(*thd);
-  old_sp_caches.sp_caches_clear();
-
   DBUG_RETURN(error);
 }
 
@@ -7736,9 +7714,9 @@ static int get_schema_constraints_record(THD *thd, TABLE_LIST *tables,
 }
 
 
-static bool store_trigger(THD *thd, Trigger *trigger,
-                          TABLE *table, const LEX_CSTRING *db_name,
-                          const LEX_CSTRING *table_name)
+static bool store_trigger(THD *thd, Trigger *trigger, TABLE *table,
+                          const LEX_CSTRING *db_name,
+                          const LEX_CSTRING *table_name, bool trigger_priv)
 {
   CHARSET_INFO *cs= system_charset_info;
   LEX_CSTRING sql_mode_rep;
@@ -7760,7 +7738,20 @@ static bool store_trigger(THD *thd, Trigger *trigger,
   table->field[5]->store(db_name->str, db_name->length, cs);
   table->field[6]->store(table_name->str, table_name->length, cs);
   table->field[7]->store(trigger->action_order);
-  table->field[9]->store(trigger_body.str, trigger_body.length, cs);
+
+  if (trigger_priv)
+  {
+    table->field[9]->set_notnull();
+    table->field[18]->set_notnull();
+    table->field[9]->store(trigger_body.str, trigger_body.length, cs);
+    table->field[18]->store(definer_buffer.str, definer_buffer.length, cs);
+  }
+  else
+  {
+    table->field[9]->set_null();
+    table->field[18]->set_null();
+  }
+
   table->field[10]->store(STRING_WITH_LEN("ROW"), cs);
   table->field[11]->store(trg_action_time_type_names[trigger->action_time].str,
                           trg_action_time_type_names[trigger->action_time].length, cs);
@@ -7780,7 +7771,6 @@ static bool store_trigger(THD *thd, Trigger *trigger,
 
   sql_mode_string_representation(thd, trigger->sql_mode, &sql_mode_rep);
   table->field[17]->store(sql_mode_rep.str, sql_mode_rep.length, cs);
-  table->field[18]->store(definer_buffer.str, definer_buffer.length, cs);
   table->field[19]->store(&trigger->client_cs_name, cs);
   table->field[20]->store(&trigger->connection_cl_name, cs);
   table->field[21]->store(&trigger->db_cl_name, cs);
@@ -7800,8 +7790,20 @@ static int get_schema_triggers_record(THD *thd, TABLE_LIST *tables,
     Table_triggers_list *triggers= tables->table->triggers;
     int event, timing;
 
-    if (check_table_access(thd, TRIGGER_ACL, tables, FALSE, 1, TRUE))
-      goto ret;
+#ifndef NO_EMBEDDED_ACCESS_CHECKS
+    bool trigger_priv=
+                !check_table_access(thd, TRIGGER_ACL, tables, FALSE, 1, TRUE);
+
+    const privilege_t need= (INSERT_ACL | UPDATE_ACL | DELETE_ACL);
+    if (!(trigger_priv || (thd->col_access & need)))
+    {
+      check_grant(thd, need, tables, 0, 1, 1);
+      if (!(tables->grant.all_privilege() & need))
+        DBUG_RETURN(0);
+    }
+#else
+    bool trigger_priv= true;
+#endif
 
     for (event= 0; event < (int)TRG_EVENT_MAX; event++)
     {
@@ -7814,13 +7816,12 @@ static int get_schema_triggers_record(THD *thd, TABLE_LIST *tables,
              trigger;
              trigger= trigger->next)
         {
-          if (store_trigger(thd, trigger, table, db_name, table_name))
+          if (store_trigger(thd, trigger, table, db_name, table_name, trigger_priv))
             DBUG_RETURN(1);
         }
       }
     }
   }
-ret:
   DBUG_RETURN(0);
 }
 
@@ -10310,7 +10311,7 @@ ST_FIELD_INFO triggers_fields_info[]=
   Column("EVENT_OBJECT_TABLE",        Name(), NOT_NULL, "Table",    OPEN_FRM_ONLY),
   Column("ACTION_ORDER",        SLonglong(4), NOT_NULL,             OPEN_FRM_ONLY),
   Column("ACTION_CONDITION", Longtext(65535), NULLABLE,             OPEN_FRM_ONLY),
-  Column("ACTION_STATEMENT", Longtext(65535), NOT_NULL, "Statement",OPEN_FRM_ONLY),
+  Column("ACTION_STATEMENT", Longtext(65535), NULLABLE, "Statement",OPEN_FRM_ONLY),
   Column("ACTION_ORIENTATION",    Varchar(9), NOT_NULL,             OPEN_FRM_ONLY),
   Column("ACTION_TIMING",         Varchar(6), NOT_NULL, "Timing",   OPEN_FRM_ONLY),
   Column("ACTION_REFERENCE_OLD_TABLE",Name(), NULLABLE,             OPEN_FRM_ONLY),
@@ -10320,7 +10321,7 @@ ST_FIELD_INFO triggers_fields_info[]=
   /* 2 here indicates 2 decimals */
   Column("CREATED",              Datetime(2), NULLABLE, "Created",  OPEN_FRM_ONLY),
   Column("SQL_MODE",               SQLMode(), NOT_NULL, "sql_mode", OPEN_FRM_ONLY),
-  Column("DEFINER",                Definer(), NOT_NULL, "Definer",  OPEN_FRM_ONLY),
+  Column("DEFINER",                Definer(), NULLABLE, "Definer",  OPEN_FRM_ONLY),
   Column("CHARACTER_SET_CLIENT",    CSName(), NOT_NULL, "character_set_client",
                                                                  OPEN_FRM_ONLY),
   Column("COLLATION_CONNECTION",    CLName(), NOT_NULL, "collation_connection",
@@ -10893,7 +10894,7 @@ ST_SCHEMA_TABLE schema_tables[]=
   {Lex_ident_i_s_table(), 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
-static_assert(array_elements(schema_tables) == SCH_ENUM_SIZE + 1,
+static_assert(array_elements(schema_tables) == SCH_N_SERVER_TABLES + 1,
               "Update enum_schema_tables as well.");
 
 int initialize_schema_table(void *plugin_)

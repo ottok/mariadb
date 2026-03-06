@@ -7,7 +7,7 @@ import typer
 from typing_extensions import Annotated
 
 from cmapi_server.process_dispatchers.base import BaseDispatcher
-from mcs_cluster_tool.constants import MCS_BACKUP_MANAGER_SH
+from cmapi_server.constants import MCS_BACKUP_MANAGER_SH
 from mcs_cluster_tool.decorators import handle_output
 from mcs_cluster_tool.helpers import cook_sh_arg
 
@@ -48,12 +48,12 @@ def backup(
     scp: Annotated[
         Optional[str],
         typer.Option(
-            '-scp',
+            '-scp', '--secure-copy-protocol',
             help=(
                 'Used only if --backup-destination="Remote".\n'
                 'The user/credentials that will be used to scp the backup '
                 'files\n'
-                'Example: "centos@10.14.51.62"'
+                'Example: "centos@192.168.0.1"'
             )
         )
     ] = None,
@@ -284,7 +284,7 @@ def backup(
         )
     ] = None,
 ):
-    """Backup Columnstore and/or MariDB data."""
+    """Backup Columnstore and/or MariaDB data."""
 
     # Local Storage Examples:
     #     ./$0 backup -bl /tmp/backups/ -bd Local -s LocalStorage
@@ -366,11 +366,59 @@ def dbrm_backup(
             show_default=False
         )
     ] = None,
+    sbrm: Annotated[
+        Optional[bool],
+        typer.Option(
+            '-sbrm', '--skip-save-brm',
+            help=(
+                'Skip saving BRM prior to running a DBRM backup - '
+                'ideal for dirty backups.'
+            ),
+            show_default=False
+        )
+    ] = None,
+    slock: Annotated[
+        Optional[bool],
+        typer.Option(
+            '-slock', '--skip-locks',
+            help='Skip issuing flush read locks to dbrms.',
+            show_default=False
+        )
+    ] = None,
+    spoll: Annotated[
+        Optional[bool],
+        typer.Option(
+            '-spoll', '--skip-polls',
+            help='Skip polling to confirm locks are released.',
+            show_default=False
+        )
+    ] = None,
     q: Annotated[
         Optional[bool],
         typer.Option(
             '-q', '--quiet',
             help='Silence verbose copy command outputs.',
+            show_default=False
+        )
+    ] = None,
+    pi: Annotated[
+        Optional[int],
+        typer.Option(
+            '-pi', '--poll-interval',
+            help=(
+                'Number of seconds to wait between polls to confirm.'
+            ),
+            show_default=False
+        )
+    ] = None,
+    pmw: Annotated[
+        Optional[int],
+        typer.Option(
+            '-pmw', '--poll-max-wait',
+            help=(
+                'Max number of minutes for polling checks for writes to wait '
+                'before exiting as a failed dbrm backup attempt.'
+            ),
             show_default=False
         )
     ] = None,
