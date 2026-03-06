@@ -5,6 +5,9 @@ Subject: cmake: add support for reproducible buildS
 We should use relative path not absolute path. We can use target without
 breaking reproducibility.
 
+This patch can be removed once MariaDB ships with Mroonga v12.00+ that has
+https://github.com/mroonga/mroonga/commit/27caeb9b8ce7fa432b1251eca475b517c6902a6c
+
 Origin: https://github.com/mroonga/mroonga/issues/298#issuecomment-1030815927
 Bug: https://github.com/mroonga/mroonga/issues/298
 Forwarded: not-needed
