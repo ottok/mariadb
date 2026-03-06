@@ -10,7 +10,7 @@ doing.
  1 file changed, 14 insertions(+), 10 deletions(-)
 
 diff --git a/scripts/mysql_secure_installation.sh b/scripts/mysql_secure_installation.sh
-index ad18385..1248103 100644
+index 5883398..2d21973 100755
 --- a/scripts/mysql_secure_installation.sh
 +++ b/scripts/mysql_secure_installation.sh
 @@ -338,7 +338,8 @@ set_root_password() {

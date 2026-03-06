@@ -1,3 +1,28 @@
+mariadb (1:11.8.6-0+deb13u1) UNRELEASED; urgency=medium
+
+  * New upstream maintenance release 11.8.6. For details about fixes please see
+    https://mariadb.com/docs/release-notes/community-server/11.8/11.8.6
+  * For details about fixes in 11.8.5 please see
+    https://mariadb.com/docs/release-notes/community-server/11.8/11.8.5
+    and the security notices:
+    - CVE-2025-13699
+    - CVE-2026-21968
+  * For details about fixes in 11.8.4 please see
+    https://mariadb.com/docs/release-notes/community-server/11.8/11.8.4
+  * The version 11.8.4 was skipped in Debian (and Ubuntu) as it has a severe
+    regression causing partial data deletion when using the DELETE statement on
+    MyISAM or Aria tables under specific conditions (MDEV-38068)
+  * Already existing plugins marked ready for general availability by upstream
+    in this release: uuid_v4, uuid_v7 and inet4
+  * Upstream 11.8.5 included fix to MDEV-36556 about upgrades failing from 10.4
+    when encryption enabled (Closes: #1122811)
+  * Add debian/source/local-options to suppress WolfSSL line ending errors
+  * Salsa CI: Apply several fixes already in use on debian/latest branch and
+    which are needed on this branch as well due to external changes since
+    August 2026, most notably Salsa CI switching to be sbuild based
+
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 06 Mar 2026 13:13:13 +0000
+
 mariadb (1:11.8.3-0+deb13u1) trixie; urgency=medium
 
   * New upstream maintenance release 11.8.3. For details about fixes please see

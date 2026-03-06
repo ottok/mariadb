@@ -17,7 +17,6 @@ This might not be the optimal solution, but at least suppressing the warning
 will unblock the 11.8.3 release for now.
 
 Forwarded: https://jira.mariadb.org/browse/MDEV-37411
-
 ---
  storage/innobase/os/os0file.cc | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

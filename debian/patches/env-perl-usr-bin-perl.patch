@@ -54,7 +54,7 @@ index 3ccf965..ef7d974 100755
  # Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
  #
 diff --git a/mysql-test/mariadb-test-run.pl b/mysql-test/mariadb-test-run.pl
-index 4f98775..85d0713 100755
+index bc9845b..6739995 100755
 --- a/mysql-test/mariadb-test-run.pl
 +++ b/mysql-test/mariadb-test-run.pl
 @@ -1,4 +1,4 @@
@@ -124,12 +124,12 @@ index 8369d1b..f943414 100755
  # Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
  #
 diff --git a/scripts/mytop.sh b/scripts/mytop.sh
-index e5d926e..c7748ef 100644
+index bf4e72e..f7d0fbf 100644
 --- a/scripts/mytop.sh
 +++ b/scripts/mytop.sh
 @@ -1,4 +1,4 @@
 -#!/usr/bin/env perl
 +#!/usr/bin/perl
  #
- # $Id: mytop,v 1.99-maria6 2019/10/22 14:53:51 jweisbuch Exp $
+ # $Id: mytop,v 1.99-maria8 2025/07/16 17:59:26 jweisbuch Exp $
  
