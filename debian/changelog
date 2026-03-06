@@ -1,5 +1,6 @@
-mariadb (1:11.8.6-0+deb13u1) UNRELEASED; urgency=medium
+mariadb (1:11.8.6-0+deb13u1) trixie; urgency=medium
 
+  [ Otto Kekäläinen ]
   * New upstream maintenance release 11.8.6. For details about fixes please see
     https://mariadb.com/docs/release-notes/community-server/11.8/11.8.6
   * For details about fixes in 11.8.5 please see
@@ -17,9 +18,24 @@ mariadb (1:11.8.6-0+deb13u1) UNRELEASED; urgency=medium
   * Upstream 11.8.5 included fix to MDEV-36556 about upgrades failing from 10.4
     when encryption enabled (Closes: #1122811)
   * Add debian/source/local-options to suppress WolfSSL line ending errors
+  * Patch new upstream test main.alter_merge to allow 'from Debian'
+  * Fix path to mariadb-server.README in mariadb-secure-install
+    (Closes: #1127863)
+  * Add preliminary upstream patch to fix MDEV-38811 that affected Akonadi and
+    any other use case that relies on 'skip-grant-tables' (Closes: #1127431)
+  * Update patch statuses and Forwarded fields to aid patch maintenance in
+    future new upstream version updates
+  * Update server trace to include new 'new-mode' value 'FIX_INDEX_LOOKUP_COST'
   * Salsa CI: Apply several fixes already in use on debian/latest branch and
     which are needed on this branch as well due to external changes since
     August 2026, most notably Salsa CI switching to be sbuild based
+
+  [ Daniel Black ]
+  * MDEV-37411: Re-enable AIO in Debian to fix earlier incomplete fix that was
+    done after new upstream 11.8.3 release introduced innodb_linux_aio
+  * MDEV-15502: With recent changes in upstream systemd, the tmpfiles are now
+    required, otherwise starting MariaDB would fail on error:
+    "cannot create /run/mysqld/wsrep-start-position: Directory nonexistent"
 
  -- Otto Kekäläinen <otto@debian.org>  Fri, 06 Mar 2026 13:13:13 +0000
 
