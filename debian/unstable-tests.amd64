@@ -1,3 +1,5 @@
+main.vector : MDEV-37559 / MDEV-38196 Frequent sporadic failures as vector searches are fundamentally non-deterministic
+main.vector2 : MDEV-37559 / MDEV-38196 Frequent sporadic failures as vector searches are fundamentally non-deterministic
 # Failed on Launchpad amd64v3 builds
 main.gis : MDEV-38398
 main.ctype_utf16le : MDEV-38398
