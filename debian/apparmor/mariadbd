@@ -81,6 +81,9 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
   /etc/systemd/system/mariadb.service.d/ r,
   /etc/systemd/system/mariadb.service.d/** r,
 
+# Allow OS detection (lsb_release)
+  /etc/lsb-release r,
+
 # Allow pid, socket, socket lock file access
   /run/mysqld/mysqld.pid rw,
   /run/mysqld/mysqld.sock rw,
@@ -103,6 +106,9 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
 # Allow error msg and charset access
   /usr/share/mariadb/ r,
   /usr/share/mariadb/** r,
+
+# Allow test file creation during autopkgtest
+  /usr/share/mariadb/mariadb-test/** rwk,
 
 # Allow data dir access
   /var/lib/mariadb/ r,
@@ -139,6 +145,18 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
 # This broad deny rule should override any problematic mount operations
 # that might be included from system abstractions
   audit deny mount options=(runbindable),
+
+# Additional rules required for systemd notification and proper operation
+# These fix "Failed name lookup - disconnected path" errors seen in logs
+# UUID generation for internal use
+  @{PROC}/sys/kernel/random/uuid r,
+
+# Thread name setting (required by some storage engines and for debugging)
+  @{PROC}/@{pid}/task/*/comm rw,
+
+# Additional sys/block access for RocksDB/InnoDB disk introspection
+  /sys/block/ r,
+  /sys/devices/virtual/block/*/dev r,
 
   # Site-specific additions and overrides. See local/README for details.
   include if exists <local/mariadbd>
