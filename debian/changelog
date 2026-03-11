@@ -1,3 +1,14 @@
+mariadb (1:11.8.6-3) unstable; urgency=medium
+
+  * Skip nondeterministic vector tests in mariadb-test-run to avoid sporadic
+    failures that are not signs of any actual regressions
+  * Make autopkgtest emit debug info on service start failures
+  * Fix AppArmor "disconnected path" errors (LP: #2143708) to ensure that
+    systemd notify signals are passed correctly and the MariaDB systemd service
+    won't think the service failed to start and timeout after 15 minutes
+
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 10 Mar 2026 23:23:23 +0000
+
 mariadb (1:11.8.6-2) unstable; urgency=medium
 
   [ Aquila Macedo ]
