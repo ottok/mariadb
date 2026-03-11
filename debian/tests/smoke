@@ -39,32 +39,28 @@ else
   # If systemd (and systemctl) is available, but the service did not start, then
   # this smoke test is supposed to fail with extensive diagnostics output of
   # that might explain why the service failed to start.
-  systemctl restart mariadb ||
-  {
-    echo "=== Systemd service status ==="
-    systemctl status mariadb.service || true
-    echo "=== Systemd journal ==="
-    journalctl -xeu mariadb.service || true
-    echo "=== MariaDB error log (if exists) ==="
-    cat /var/log/mysql/error.log 2>/dev/null || cat /var/lib/mysql/*.err 2>/dev/null || echo "No error log found"
-    echo "=== MariaDB processes ==="
-    # shellcheck disable=SC2009
-    ps aux | grep -i mariadb || true
-    echo "=== data directory contents and permissions ==="
-    find /var/lib/mariadb/ -ls || true
-    find /var/lib/mysql/ -ls || true
-    echo "=== Socket existence ==="
-    find /run/mariadbd/ -ls || true
-    find /run/mysqld/ -ls || true
-    echo "=== AppArmor profile status ==="
-    aa-status 2>/dev/null | grep -A5 -B5 mariadb || true
-    echo "=== AppArmor denials ==="
-    dmesg | grep -i apparmor | grep -i mariadb || true
-    journalctl -k | grep -i apparmor | grep -i mariadb || true
-    echo "=== Start mariadbd directly to capture immediate error ==="
-    timeout 10 /usr/sbin/mariadbd --user=mysql --console 2>&1 || true
-    exit 1
-  }
+  systemctl restart mariadb || true
+  sleep 5
+  echo "=== Systemd service status ==="
+  systemctl status mariadb.service || true
+  echo "=== Systemd journal ==="
+  journalctl -xeu mariadb.service || true
+  echo "=== MariaDB error log (if exists) ==="
+  cat /var/log/mysql/error.log 2>/dev/null || cat /var/lib/mysql/*.err 2>/dev/null || echo "No error log found"
+  echo "=== MariaDB processes ==="
+  # shellcheck disable=SC2009
+  ps aux | grep -i mariadb || true
+  echo "=== data directory contents and permissions ==="
+  find /var/lib/mariadb/ -ls || true
+  find /var/lib/mysql/ -ls || true
+  echo "=== Socket existence ==="
+  find /run/mariadbd/ -ls || true
+  find /run/mysqld/ -ls || true
+  echo "=== AppArmor profile status ==="
+  aa-status 2>/dev/null | grep -A5 -B5 mariadb || true
+  echo "=== AppArmor denials ==="
+  dmesg | grep -i apparmor | grep -i mariadb || true
+  journalctl -k | grep -i apparmor | grep -i mariadb || true
 fi
 
 mariadb <<EOT
