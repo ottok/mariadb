@@ -26,6 +26,7 @@ Tests:
  upstream,
 Depends:
  eatmydata,
+ mariadb-backup,
  mariadb-test,
 Restrictions:
  allow-stderr,
