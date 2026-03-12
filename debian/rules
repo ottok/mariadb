@@ -102,6 +102,12 @@ endif
 	PATH=$${MYSQL_BUILD_PATH:-"/usr/lib/ccache:/usr/local/bin:/usr/bin:/bin"} \
 	    dh_auto_configure --builddirectory=$(BUILDDIR) -- \
 	    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+	    -DWITH_DEBUG_SYNC=ON \
+	    -DWITH_TEST_PLUGINS=ON \
+	    -DPLUGIN_FEEDBACK=DYNAMIC \
+	    -DPLUGIN_SERVER_AUDIT=DYNAMIC \
+	    -DPLUGIN_PARSEC=DYNAMIC \
+	    -DPLUGIN_CRACKLIB_PASSWORD_CHECK=DYNAMIC \
 	    $(CMAKEFLAGS) \
 	    $(if $(filter $(DEB_BUILD_ARCH),$(DEB_HOST_ARCH)),,-DIMPORT_EXECUTABLES=$(CURDIR)/builddir-native/import_executables.cmake) \
 	    -DCOMPILATION_COMMENT="-- Please help get to 10k stars at https://github.com/MariaDB/Server" \

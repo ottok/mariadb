@@ -51,13 +51,20 @@ cp -v "$MTR_SKIP_TEST_LIST" "$AUTOPKGTEST_ARTIFACTS"
 
 cd /usr/share/mariadb/mariadb-test
 echo "starting mariadb-test-run.pl..."
+
+# Enable feedback plugin tests
+export MTR_FEEDBACK_PLUGIN=1
+
+# Ensure debug sync is enabled (timeout in seconds)
+export MTR_DEBUG_SYNC_TIMEOUT=300
+
 export MTR_PRINT_CORE=detailed
 # The $MTR_ARGUMENTS_APPEND is intentionally used to pass in extra arguments
 # shellcheck disable=SC2086
 eatmydata perl -I. ./mariadb-test-run.pl \
     --force --testcase-timeout=120 --suite-timeout=540 --retry=3 \
     --max-test-fail=0 --max-save-core=1 --max-save-datadir=1 \
-    --parallel=auto --big-test \
+    --parallel=auto --big-test --enable-disabled \
     --vardir="$WORKDIR/var" --tmpdir="$WORKDIR/tmp" \
     --xml-report="$AUTOPKGTEST_ARTIFACTS/mariadb-test-run-junit.xml" \
     $MTR_ARGUMENTS_APPEND \

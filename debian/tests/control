@@ -26,7 +26,15 @@ Tests:
  upstream,
 Depends:
  eatmydata,
+ libdbi-perl,
+ libdbd-mariadb-perl | libdbd-mysql-perl,
  mariadb-backup,
+ mariadb-plugin-provider-bzip2,
+ mariadb-plugin-provider-lz4,
+ mariadb-plugin-provider-lzma,
+ mariadb-plugin-provider-lzo,
+ mariadb-plugin-provider-snappy,
+ mariadb-plugin-rocksdb [amd64 arm64 mips64el ppc64el riscv64 loong64],
  mariadb-test,
 Restrictions:
  allow-stderr,
