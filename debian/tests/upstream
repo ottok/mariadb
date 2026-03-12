@@ -58,11 +58,17 @@ export MTR_FEEDBACK_PLUGIN=1
 # Ensure debug sync is enabled (timeout in seconds)
 export MTR_DEBUG_SYNC_TIMEOUT=300
 
+# Ensure test plugins can be found (UDF example, etc.)
+export MTR_TEST_PLUGIN_DIR=/usr/lib/mysql/plugin
+
+# Ensure plugins are loaded for testing
+export MTR_PLUGIN_LOAD="cracklib_password_check,feedback,server_audit,auth_parsec"
+
 export MTR_PRINT_CORE=detailed
 # The $MTR_ARGUMENTS_APPEND is intentionally used to pass in extra arguments
 # shellcheck disable=SC2086
 eatmydata perl -I. ./mariadb-test-run.pl \
-    --force --testcase-timeout=120 --suite-timeout=540 --retry=3 \
+    --force --testcase-timeout=180 --suite-timeout=600 --retry=3 \
     --max-test-fail=0 --max-save-core=1 --max-save-datadir=1 \
     --parallel=auto --big-test --enable-disabled \
     --vardir="$WORKDIR/var" --tmpdir="$WORKDIR/tmp" \

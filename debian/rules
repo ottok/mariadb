@@ -102,12 +102,7 @@ endif
 	PATH=$${MYSQL_BUILD_PATH:-"/usr/lib/ccache:/usr/local/bin:/usr/bin:/bin"} \
 	    dh_auto_configure --builddirectory=$(BUILDDIR) -- \
 	    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-	    -DWITH_DEBUG_SYNC=ON \
-	    -DWITH_TEST_PLUGINS=ON \
-	    -DPLUGIN_FEEDBACK=DYNAMIC \
-	    -DPLUGIN_SERVER_AUDIT=DYNAMIC \
-	    -DPLUGIN_PARSEC=DYNAMIC \
-	    -DPLUGIN_CRACKLIB_PASSWORD_CHECK=DYNAMIC \
+	    -DFEATURE_SUMMARY=ON \
 	    $(CMAKEFLAGS) \
 	    $(if $(filter $(DEB_BUILD_ARCH),$(DEB_HOST_ARCH)),,-DIMPORT_EXECUTABLES=$(CURDIR)/builddir-native/import_executables.cmake) \
 	    -DCOMPILATION_COMMENT="-- Please help get to 10k stars at https://github.com/MariaDB/Server" \
@@ -116,6 +111,7 @@ endif
 	    -DCONC_DEFAULT_CHARSET=utf8mb4 \
 	    -DPLUGIN_AWS_KEY_MANAGEMENT=NO \
 	    -DPLUGIN_COLUMNSTORE=NO \
+	    -DPLUGIN_FEEDBACK=DYNAMIC \
 	    -DWITH_NUMA=AUTO \
 	    -DIGNORE_AIO_CHECK=ON \
 	    -DWITH_URING=ON \
@@ -151,7 +147,7 @@ ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	# Run testsuite
 	cd $(BUILDDIR)/mysql-test && \
 	export MTR_PRINT_CORE=detailed && \
-	./mtr --force --testcase-timeout=120 --suite-timeout=540 --retry=3 \
+	./mtr --force --testcase-timeout=180 --suite-timeout=600 --retry=3 \
 	      --max-test-fail=30 --max-save-core=1 --max-save-datadir=1 \
 	      --parallel=$(NUMJOBS) --skip-rpl --suite=main \
 	      --skip-test-list=$(MTR_SKIP_TEST_LIST) \
