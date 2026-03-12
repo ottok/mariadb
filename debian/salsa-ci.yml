@@ -59,6 +59,8 @@ autopkgtest:
   artifacts:
     reports:
       junit: ${WORKING_DIR}/debci/artifacts/mysql-test-run-junit.xml
+  # Extra long timeout as autopkgtest runs --big-test
+  timeout: 6h
 
 piuparts:
   stage: test extras
