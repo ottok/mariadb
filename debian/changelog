@@ -1,3 +1,10 @@
+mariadb (1:11.8.6-4) UNRELEASED; urgency=medium
+
+  * Extend AppArmor profile to cover all testable MariaDB features
+  * Enable disabled tests to maximize test coverage in autopkgtest
+
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 12 Mar 2026 12:12:12 +0000
+
 mariadb (1:11.8.6-3) unstable; urgency=medium
 
   * Skip nondeterministic vector tests in mariadb-test-run to avoid sporadic
