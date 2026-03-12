@@ -101,7 +101,7 @@ endif
 	# Don't build ColumnStore, not mature enough for Debian yet.
 	PATH=$${MYSQL_BUILD_PATH:-"/usr/lib/ccache:/usr/local/bin:/usr/bin:/bin"} \
 	    dh_auto_configure --builddirectory=$(BUILDDIR) -- \
-	    -DCMAKE_BUILD_TYPE=Debug \
+	    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
 	    $(CMAKEFLAGS) \
 	    $(if $(filter $(DEB_BUILD_ARCH),$(DEB_HOST_ARCH)),,-DIMPORT_EXECUTABLES=$(CURDIR)/builddir-native/import_executables.cmake) \
 	    -DCOMPILATION_COMMENT="-- Please help get to 10k stars at https://github.com/MariaDB/Server" \
