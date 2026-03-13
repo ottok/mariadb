@@ -63,6 +63,9 @@ export MTR_FEEDBACK_PLUGIN=1
 # Ensure debug sync is enabled (timeout in seconds)
 export MTR_DEBUG_SYNC_TIMEOUT=300
 
+# Ensure libjvm.so can be found by the Connect engine JDBC plugin
+export LD_LIBRARY_PATH=/usr/lib/jvm/default-java/lib/server:$LD_LIBRARY_PATH
+
 # Ensure test plugins can be found (UDF example, etc.)
 export MTR_TEST_PLUGIN_DIR=/usr/lib/mysql/plugin
 
