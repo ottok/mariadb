@@ -97,6 +97,9 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
   /usr/sbin/mariadbd mr,
   /usr/sbin/mysqld mr,
 
+# Allow addr2line for stack trace symbolization on crashes
+  /usr/bin/*-linux-gnu-addr2line mrix,
+
 # Allow plugin access
   /usr/lib/{@{multiarch},mysql}/mariadb{,d}/plugin/ r,
   /usr/lib/{@{multiarch},mysql}/mariadb{,d}/plugin/*.so* mr,
@@ -130,6 +133,16 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
 # Allow read access to OpenSSL config
   /etc/ssl/openssl.cnf r,
 
+# Allow GSS mechanism configuration (for GSSAPI plugin)
+  /etc/gss/mech.d/ r,
+  /etc/gss/mech.d/* r,
+
+# Allow ODBC configuration (for Connect engine)
+  /etc/odbc.ini r,
+  /etc/odbcinst.ini r,
+  /var/lib/odbc/*.ini r,
+  owner @{HOME}/.odbc.ini rw,
+
 # Memory pressure detection
   @{sys}/fs/cgroup/**/memory.pressure rw,
 
@@ -140,6 +153,15 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
 # Innodb physical disk size introspection
   @{sys}/dev/block/*/queue/physical_block_size r,
   @{sys}/devices/**/queue/physical_block_size r,
+
+# Allow cracklib dictionary access (for cracklib_password_check plugin)
+  /var/cache/cracklib/cracklib_dict.* r,
+
+# Allow reading process mounts info (container/filesystem detection)
+  @{PROC}/@{pid}/mounts r,
+
+# Allow mmap of root directory (path resolution)
+  / r,
 
 # Deny invalid runbindable mount rule that causes parser errors
 # This broad deny rule should override any problematic mount operations
