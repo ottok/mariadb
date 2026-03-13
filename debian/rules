@@ -166,6 +166,9 @@ override_dh_auto_install:
 	@echo "Running $(MAKE) install DESTDIR=$(TMP) ..."
 	cd $(BUILDDIR) && $(MAKE) install DESTDIR=$(TMP) > /dev/null
 
+	# Install udf_example.so test plugin that is built but not automatically installed
+	cp $(BUILDDIR)/sql/udf_example.so $(TMP)/usr/lib/mysql/plugin/
+
 	# If mariadb-test package is removed, also remove most of it's files
 	grep --quiet "Package: mariadb-test" debian/control || rm -rf $(TMP)/usr/share/mariadb/mariadb-test
 
