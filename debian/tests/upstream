@@ -21,6 +21,30 @@ mkdir tmp
 echo "using vardir: $WORKDIR/var"
 echo "using tmpdir: $WORKDIR/tmp"
 
+echo "=== Linux/Proc Diagnostics ==="
+echo "Checking for Linux-specific test requirements..."
+uname -a
+echo "--- /proc mount check ---"
+mount | grep proc || echo "No proc mount found in mount output"
+echo "--- /proc filesystem contents ---"
+ls -la /proc/ | head -20
+echo "--- /proc/thread_self check ---"
+ls -la /proc/thread_self 2>&1 || echo "/proc/thread_self not available"
+echo "--- /proc/self check ---"
+ls -la /proc/self/ | head -10
+echo "--- Checking for container environment ---"
+if [ -f /proc/1/cgroup ]; then
+  echo "Container cgroups:"
+  cat /proc/1/cgroup
+fi
+if [ -f /proc/self/status ]; then
+  echo "CapBnd (Bounding capabilities):"
+  grep CapBnd /proc/self/status || echo "No CapBnd found"
+fi
+echo "--- Kernel version ---"
+cat /proc/version
+echo "=== End Diagnostics ==="
+
 echo "Generating required locales for tests..."
 # Generate locales needed by specific tests
 sed -i 's/^# de_DE.iso88591/de_DE.iso88591/' /etc/locale.gen
