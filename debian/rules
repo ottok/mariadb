@@ -119,6 +119,7 @@ endif
 	    -DWITH_INNODB_SNAPPY=ON \
 	    -DHAVE_SYSTEM_LIBFMT_EXITCODE=0 \
 	    -DWITH_SBOM=NO \
+	    -DWITH_LIBWRAP=OFF \
 	    -DDEB=$(DEB_VENDOR)
 
 # This is needed, otherwise 'make test' will run before binaries have been built
