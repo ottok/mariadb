@@ -21,6 +21,12 @@ mkdir tmp
 echo "using vardir: $WORKDIR/var"
 echo "using tmpdir: $WORKDIR/tmp"
 
+echo "Generating required locales for tests..."
+# Generate locales needed by specific tests
+sed -i 's/^# de_DE.iso88591/de_DE.iso88591/' /etc/locale.gen
+sed -i 's/^# zh_CN.gbk/zh_CN.gbk/' /etc/locale.gen
+locale-gen de_DE.iso88591 zh_CN.gbk
+
 echo "Setting up skip-tests-list"
 
 # Use the arch specific skiplists if exist, otherwise list is empty
