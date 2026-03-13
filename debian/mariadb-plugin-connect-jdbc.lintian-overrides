@@ -1,0 +1,5 @@
+# Java class version 69 corresponds to Java 25, which is newer than what Lintian
+# currently recognizes. This is expected as the package is built with a newer
+# Java version. The code is compatible with older runtimes as long as they
+# support the class file version.
+mariadb-plugin-connect-jdbc: unknown-java-class-version wrappers/JdbcInterface.class -> 69 [usr/share/mariadb/JdbcInterface.jar]
