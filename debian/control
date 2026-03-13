@@ -825,6 +825,7 @@ Description: Connect storage engine for MariaDB server
 
 Package: mariadb-plugin-connect-jdbc
 Architecture: all
+Multi-Arch: foreign
 Depends:
  default-jre-headless,
  ${misc:Depends},
