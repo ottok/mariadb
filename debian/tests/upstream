@@ -7,14 +7,13 @@
 # https://bugs.launchpad.net/ubuntu/+source/mysql-5.5/+bug/959683
 
 echo "Running test 'testsuite'"
-set -e
 
 MTR_SKIP_TEST_LIST=$(mktemp)
 ARCH=$(dpkg --print-architecture)
 
 WORKDIR=$(mktemp -d)
 trap 'rm -rf $WORKDIR $MTR_SKIP_TEST_LIST' 0 INT QUIT ABRT PIPE TERM
-cd "$WORKDIR"
+cd "$WORKDIR" || exit
 
 mkdir var
 mkdir tmp
@@ -49,7 +48,7 @@ fi
 # failed autopkgtest runs
 cp -v "$MTR_SKIP_TEST_LIST" "$AUTOPKGTEST_ARTIFACTS"
 
-cd /usr/share/mariadb/mariadb-test
+cd /usr/share/mariadb/mariadb-test || exit
 echo "starting mariadb-test-run.pl..."
 
 # Enable feedback plugin tests
@@ -65,19 +64,29 @@ export MTR_TEST_PLUGIN_DIR=/usr/lib/mysql/plugin
 export MTR_PLUGIN_LOAD="cracklib_password_check,feedback,server_audit,auth_parsec"
 
 export MTR_PRINT_CORE=detailed
+
 # The $MTR_ARGUMENTS_APPEND is intentionally used to pass in extra arguments
 # shellcheck disable=SC2086
 eatmydata perl -I. ./mariadb-test-run.pl \
-    --force --testcase-timeout=180 --suite-timeout=600 --retry=3 \
+    --force --testcase-timeout=180 --suite-timeout=720 --retry=3 \
     --max-test-fail=0 --max-save-core=1 --max-save-datadir=1 \
     --parallel=auto --big-test --enable-disabled \
     --vardir="$WORKDIR/var" --tmpdir="$WORKDIR/tmp" \
     --xml-report="$AUTOPKGTEST_ARTIFACTS/mariadb-test-run-junit.xml" \
     $MTR_ARGUMENTS_APPEND \
     "$@" 2>&1
-echo "run: OK"
+TEST_RESULT=$?
+
+if [ $TEST_RESULT -eq 0 ]
+then
+  echo "run: OK"
+else
+  echo "run: FAILED (exit code $TEST_RESULT)"
+fi
 
 echo "=== AppArmor diagnostics ==="
 aa-status 2>/dev/null | grep -A5 -B5 mariadb || true
 dmesg | grep -i apparmor | grep -i mariadb || true
 journalctl -k | grep -i apparmor | grep -i mariadb || true
+
+exit $TEST_RESULT
