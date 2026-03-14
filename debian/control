@@ -606,7 +606,6 @@ Recommends:
 Pre-Depends:
  debconf,
  mariadb-common (>= ${source:Version}),
- init-system-helpers:any,
  procps,
  ${misc:Pre-Depends},
 Depends:
