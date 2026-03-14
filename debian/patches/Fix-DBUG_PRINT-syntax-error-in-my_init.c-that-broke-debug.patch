@@ -1,0 +1,48 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Fri, 13 Mar 2026 01:15:45 +0000
+Subject: Fix DBUG_PRINT syntax error in my_init.c that broke debug builds
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Change the macro call to use proper printf syntax with parenthesized
+arguments, matching the pattern used elsewhere in the codebase.
+
+Fixes build failure in debug mode caused by incorrect DBUG_PRINT usage:
+
+    In file included from /debcraft/source/include/my_global.h:1024,
+                     from /debcraft/source/mysys/mysys_priv.h:19,
+                     from /debcraft/source/mysys/my_init.c:18:
+    /debcraft/source/mysys/my_init.c: In function ‘my_init’:
+    /debcraft/source/include/my_dbug.h:77:46: error: statement with no effect [-Werror=unused-value]
+       77 |         do if (_db_pargs_(__LINE__,keyword)) _db_doprnt_ arglist; while(0)
+          |                                              ^~~~~~~~~~~
+    /debcraft/source/mysys/my_init.c:201:7: note: in expansion of macro ‘DBUG_PRINT’
+      201 |       DBUG_PRINT("deprecation warning", "skipped");
+          |       ^~~~~~~~~~
+    /debcraft/source/mysys/my_init.c:201:41: error: expected ‘;’ before string constant
+      201 |       DBUG_PRINT("deprecation warning", "skipped");
+          |                                         ^~~~~~~~~
+    /debcraft/source/include/my_dbug.h:77:58: note: in definition of macro ‘DBUG_PRINT’
+       77 |         do if (_db_pargs_(__LINE__,keyword)) _db_doprnt_ arglist; while(0)
+          |                                                          ^~~~~~~
+    cc1: all warnings being treated as errors
+    make[4]: *** [mysys/CMakeFiles/mysys.dir/build.make:810: mysys/CMakeFiles/mysys.dir/my_init.c.o] Error 1
+    make[4]: *** Waiting for unfinished jobs....
+---
+ mysys/my_init.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mysys/my_init.c b/mysys/my_init.c
+index 9ec0d61..180f157 100644
+--- a/mysys/my_init.c
++++ b/mysys/my_init.c
+@@ -198,7 +198,7 @@ my_bool my_init(void)
+       if ((res == 0 || my_readlink(link_name, my_progname, MYF(0)) == 0) &&
+            strncmp(link_name + dirname_length(link_name), "mariadb", 7) == 0)
+       /* Intentionally don't emit any errors for now */
+-      DBUG_PRINT("deprecation warning", "skipped");
++      DBUG_PRINT("deprecation warning", ("skipped"));
+     }
+   }
+ 

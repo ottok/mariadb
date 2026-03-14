@@ -9,3 +9,4 @@ MDEV-37411-suppress-new-warning-about-native-aio.patch
 sysusers-lock-mysql-account.patch
 systemd-hardening-safe-defaults.patch
 MDEV-38811-skip-grant-tables-crash.patch
+Fix-DBUG_PRINT-syntax-error-in-my_init.c-that-broke-debug.patch
