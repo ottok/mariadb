@@ -1,0 +1,163 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Fri, 13 Mar 2026 13:38:01 +0000
+Subject: Extend test skip messages to show the value that caused the skip
+
+- have_openssl.inc: Show current have_openssl value
+- have_ssl_communication.inc: Show current have_ssl value
+- have_tlsv13.inc: Show current SSL version in use
+- require_openssl_client.inc: Show $CLIENT_TLS_LIBRARY
+- Show current @@binlog_format when skipping non-ROW format tests
+- Show current @@have_dynamic_loading and UDF_EXAMPLE_SO for UDF tests
+- Append the actual value of @@version_compile_os to the Linux skip messages
+- Store the current binlog format in a variable and append it to the
+  skip message, making it immediately visible why the test was skipped
+---
+ mysql-test/include/have_binlog_format_mixed_or_row.inc       | 3 ++-
+ mysql-test/include/have_binlog_format_mixed_or_statement.inc | 4 ++--
+ mysql-test/include/have_binlog_format_row.inc                | 3 ++-
+ mysql-test/include/have_binlog_format_row_or_statement.inc   | 4 ++--
+ mysql-test/include/have_openssl.inc                          | 3 ++-
+ mysql-test/include/have_ssl_communication.inc                | 3 ++-
+ mysql-test/include/have_tlsv13.inc                           | 3 ++-
+ mysql-test/include/have_udf.inc                              | 5 +++--
+ mysql-test/include/linux.inc                                 | 3 ++-
+ mysql-test/include/require_openssl_client.inc                | 2 +-
+ 10 files changed, 20 insertions(+), 13 deletions(-)
+
+diff --git a/mysql-test/include/have_binlog_format_mixed_or_row.inc b/mysql-test/include/have_binlog_format_mixed_or_row.inc
+index c6c5284..06ab86d 100644
+--- a/mysql-test/include/have_binlog_format_mixed_or_row.inc
++++ b/mysql-test/include/have_binlog_format_mixed_or_row.inc
+@@ -1,6 +1,7 @@
+ --source include/have_log_bin.inc
+ 
++--let $binlog_format= `SELECT @@binlog_format`
+ if (`SELECT @@binlog_format = 'STATEMENT'`)
+ {
+-  --skip Neither MIXED nor ROW binlog format
++  --skip Neither MIXED nor ROW binlog format (current binlog_format=$binlog_format);
+ }
+diff --git a/mysql-test/include/have_binlog_format_mixed_or_statement.inc b/mysql-test/include/have_binlog_format_mixed_or_statement.inc
+index 3888dd4..c7352ea 100644
+--- a/mysql-test/include/have_binlog_format_mixed_or_statement.inc
++++ b/mysql-test/include/have_binlog_format_mixed_or_statement.inc
+@@ -1,7 +1,7 @@
+ source include/have_log_bin.inc;
+ 
+-
++--let $binlog_format= `SELECT @@binlog_format`
+ if (`SELECT @@binlog_format = 'ROW'`)
+ {
+-  --skip Neither MIXED nor STATEMENT binlog format
++  --skip Neither MIXED nor STATEMENT binlog format (current binlog_format=$binlog_format);
+ }
+diff --git a/mysql-test/include/have_binlog_format_row.inc b/mysql-test/include/have_binlog_format_row.inc
+index a946ccd..5b927a1 100644
+--- a/mysql-test/include/have_binlog_format_row.inc
++++ b/mysql-test/include/have_binlog_format_row.inc
+@@ -1,6 +1,7 @@
+ --source include/have_log_bin.inc
+ 
++--let $binlog_format= `SELECT @@binlog_format`
+ if (`SELECT @@binlog_format != 'ROW'`)
+ {
+-  --skip Not ROW format
++  --skip Not ROW format (current binlog_format=$binlog_format);
+ }
+diff --git a/mysql-test/include/have_binlog_format_row_or_statement.inc b/mysql-test/include/have_binlog_format_row_or_statement.inc
+index 6ea0ecd..32faa9c 100644
+--- a/mysql-test/include/have_binlog_format_row_or_statement.inc
++++ b/mysql-test/include/have_binlog_format_row_or_statement.inc
+@@ -1,8 +1,8 @@
+ source include/have_log_bin.inc;
+ 
+-
++--let $binlog_format= `SELECT @@binlog_format`
+ if (`SELECT @@binlog_format = 'MIXED'`)
+ {
+-  --skip Neither ROW nor STATEMENT binlog format
++  --skip Neither ROW nor STATEMENT binlog format (current binlog_format=$binlog_format);
+ }
+ 
+diff --git a/mysql-test/include/have_openssl.inc b/mysql-test/include/have_openssl.inc
+index ee51ee4..1a0b854 100644
+--- a/mysql-test/include/have_openssl.inc
++++ b/mysql-test/include/have_openssl.inc
+@@ -1,4 +1,5 @@
++--let $have_openssl= `SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_VARIABLES WHERE VARIABLE_NAME = 'have_openssl'`
+ if (`SELECT count(*) = 0 FROM information_schema.GLOBAL_VARIABLES WHERE
+       VARIABLE_NAME = 'have_openssl' AND VARIABLE_VALUE = 'YES'`){
+-  skip Needs OpenSSL;
++  skip Needs OpenSSL (current have_openssl=$have_openssl);
+ }
+diff --git a/mysql-test/include/have_ssl_communication.inc b/mysql-test/include/have_ssl_communication.inc
+index 84278e7..b976aa1 100644
+--- a/mysql-test/include/have_ssl_communication.inc
++++ b/mysql-test/include/have_ssl_communication.inc
+@@ -1,4 +1,5 @@
++--let $have_ssl= `SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_VARIABLES WHERE VARIABLE_NAME = 'have_ssl'`
+ if (`SELECT count(*) = 0 FROM information_schema.GLOBAL_VARIABLES WHERE
+       VARIABLE_NAME = 'have_ssl' AND VARIABLE_VALUE = 'YES'`){
+-  skip Needs SSL;
++  skip Needs SSL (current have_ssl=$have_ssl);
+ }
+diff --git a/mysql-test/include/have_tlsv13.inc b/mysql-test/include/have_tlsv13.inc
+index ef897d9..d0924ffb 100644
+--- a/mysql-test/include/have_tlsv13.inc
++++ b/mysql-test/include/have_tlsv13.inc
+@@ -1,8 +1,9 @@
+ --disable_query_log
+ connect (ssl_connection,localhost,root,,,,,SSL);
+ 
++--let $ssl_version= `SELECT VARIABLE_VALUE FROM information_schema.SESSION_STATUS WHERE VARIABLE_NAME = 'ssl_version'`
+ if (`SELECT VARIABLE_VALUE NOT LIKE 'TLSv1.3' FROM information_schema.SESSION_STATUS WHERE VARIABLE_NAME = 'ssl_version'`) {
+-  skip Needs TLSv1.3;
++  skip Needs TLSv1.3 (current ssl_version=$ssl_version);
+ }
+ 
+ disconnect ssl_connection;
+diff --git a/mysql-test/include/have_udf.inc b/mysql-test/include/have_udf.inc
+index be7390f..2d05f1e 100644
+--- a/mysql-test/include/have_udf.inc
++++ b/mysql-test/include/have_udf.inc
+@@ -1,14 +1,15 @@
+ #
+ # Check if server has support for loading plugins
+ #
++--let $have_dynamic_loading= `SELECT @@have_dynamic_loading`
+ if (`SELECT @@have_dynamic_loading != 'YES'`) {
+-  --skip UDF requires dynamic loading
++  --skip UDF requires dynamic loading (current have_dynamic_loading=$have_dynamic_loading);
+ }
+ 
+ #
+ # Check if the variable UDF_EXAMPLE_LIB is set
+ #
+ if (!$UDF_EXAMPLE_SO) {
+-  --skip Need udf example
++  --skip Need udf example (current UDF_EXAMPLE_SO=$UDF_EXAMPLE_SO);
+ }
+ 
+diff --git a/mysql-test/include/linux.inc b/mysql-test/include/linux.inc
+index cc126ff..e8b8454 100644
+--- a/mysql-test/include/linux.inc
++++ b/mysql-test/include/linux.inc
+@@ -1,5 +1,6 @@
++--let $version_compile_os= `select @@version_compile_os`
+ if (`select @@version_compile_os not LIKE 'Linux%'`)
+ {
+-  skip Need Linux;
++  skip Need Linux (current version_compile_os=$version_compile_os);
+ }
+ 
+diff --git a/mysql-test/include/require_openssl_client.inc b/mysql-test/include/require_openssl_client.inc
+index 463c44f..e8c419e 100644
+--- a/mysql-test/include/require_openssl_client.inc
++++ b/mysql-test/include/require_openssl_client.inc
+@@ -1,5 +1,5 @@
+ if ($CLIENT_TLS_LIBRARY != "OpenSSL") {
+   if ($CLIENT_TLS_LIBRARY != "LibreSSL") {
+-    skip Test requires Connector/C with OpenSSL library;
++    skip Test requires Connector/C with OpenSSL library (current CLIENT_TLS_LIBRARY=$CLIENT_TLS_LIBRARY);
+   }
+ }
