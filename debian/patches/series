@@ -15,3 +15,4 @@ Add-missing-definition-of-debug_sync_C_callback_ptr.patch
 Extend-test-skip-messages-to-show-the-value-that-caused-t.patch
 Handle-WITH_LIBWRAP-correctly-to-silence-CMake-CMP0077-wa.patch
 Remove-DEPENDS-in-MERGE_STATIC_LIBS-macro-to-fix-CMake-CM.patch
+Allow-setting-FEATURE_SUMMARY-to-ON.patch

@@ -1,0 +1,25 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Fri, 13 Mar 2026 15:05:31 +0000
+Subject: Allow setting FEATURE_SUMMARY to ON
+
+The FEATURE_SUMMARY option was being forced to OFF after the first
+configure run, preventing users from re-enabling it interactively.
+Remove the FORCE flag so the option remains user-configurable while
+still defaulting to OFF after the initial display.
+---
+ CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 4fd1332..9a2c1f4 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -613,7 +613,7 @@ FEATURE_SUMMARY(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES VAR MARIADB_FEATURE_
+ OPTION(FEATURE_SUMMARY "Print feature summary at the end of configure step" ON)
+ IF (FEATURE_SUMMARY)
+   MESSAGE("${MARIADB_FEATURE_SUMMARY}")
+-  SET(FEATURE_SUMMARY OFF CACHE BOOL "" FORCE)
++  SET(FEATURE_SUMMARY OFF CACHE BOOL "" )
+ ENDIF()
+ 
+ IF(NON_DISTRIBUTABLE_WARNING)
