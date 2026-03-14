@@ -1,0 +1,46 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Fri, 13 Mar 2026 12:10:07 +0000
+Subject: WIP: Add missing definition of debug_sync_C_callback_ptr
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+This symbol is declared as extern in the header but was never defined,
+causing the test framework to fail detecting it via nm. The callback
+pointer is used by plugins to access the debug sync facility, so we need
+a proper definition with external linkage.
+
+Define the symbol in debug_sync.cc where the actual debug_sync()
+implementation lives, establishing the connection between the C callback
+interface and the C++ implementation.
+
+Before:
+
+    ± nm -C debian/tmp/usr/sbin/mariadbd | grep debug_sync
+    00000000023e9d88 B debug_sync_C_callback_ptr
+    0000000000e177c0 T Wsrep_client_service::debug_sync(char const*)
+    0000000000e47850 T Wsrep_server_service::debug_sync(char const*)
+
+After:
+
+    ± nm -C ./builddir/sql/mariadbd | grep debug_sync
+    00000000023e9d88 B debug_sync_C_callback_ptr
+    0000000000e177c0 T Wsrep_client_service::debug_sync(char const*)
+    0000000000e47850 T Wsrep_server_service::debug_sync(char const*)
+---
+ sql/debug_sync.cc | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/sql/debug_sync.cc b/sql/debug_sync.cc
+index 7345e3c..e5d48d1 100644
+--- a/sql/debug_sync.cc
++++ b/sql/debug_sync.cc
+@@ -174,6 +174,8 @@ static void debug_sync(THD *thd, const char *sync_point_name, size_t name_len);
+ static int debug_sync_qsort_cmp(const void *, const void *);
+ C_MODE_END
+ 
++void (*debug_sync_C_callback_ptr)(THD *, const char *, size_t);
++
+ #ifdef HAVE_PSI_INTERFACE
+ static PSI_mutex_key key_debug_sync_globals_ds_mutex;
+ 
