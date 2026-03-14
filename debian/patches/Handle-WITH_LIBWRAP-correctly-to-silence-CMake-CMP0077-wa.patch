@@ -1,0 +1,59 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Fri, 13 Mar 2026 13:51:47 +0000
+Subject: Handle WITH_LIBWRAP correctly to silence CMake CMP0077 warning
+
+CMake 3.13+ now treats `option()` as a cache variable and warns when a
+normal variable of the same name already exists. The MySQL release
+configuration was setting `WITH_LIBWRAP` as a normal variable, which
+caused the policy warning during configuration.
+
+Promote the assignment to a cache entry so the variable kind matches
+what the subsequent `option(WITH_LIBWRAP ...)` command expects.
+
+Now the configure process will fail with a clear error message if
+WITH_LIBWRAP=ON is set but the libwrap development libraries are not
+installed, making the build requirements explicit and helping users
+understand why their configuration is not working as expected.
+
+Fixes warning:
+
+    CMake Warning (dev) at configure.cmake:145 (OPTION):
+      Policy CMP0077 is not set: option() honors normal variables.  Run "cmake
+      --help-policy CMP0077" for policy details.  Use the cmake_policy command to
+      set the policy and suppress this warning.
+
+      For compatibility with older versions of CMake, option is clearing the
+      normal variable 'WITH_LIBWRAP'.
+    Call Stack (most recent call first):
+      CMakeLists.txt:405 (INCLUDE)
+---
+ cmake/build_configurations/mysql_release.cmake | 2 +-
+ configure.cmake                                | 2 ++
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/cmake/build_configurations/mysql_release.cmake b/cmake/build_configurations/mysql_release.cmake
+index 8c12064..5ada3d5 100644
+--- a/cmake/build_configurations/mysql_release.cmake
++++ b/cmake/build_configurations/mysql_release.cmake
+@@ -118,7 +118,7 @@ ELSEIF(RPM)
+ ELSEIF(DEB)
+   SET(WITH_SSL system CACHE STRING "")
+   SET(WITH_ZLIB system CACHE STRING "")
+-  SET(WITH_LIBWRAP ON)
++  SET(WITH_LIBWRAP ON CACHE BOOL "Compile with tcp wrappers support")
+   SET(HAVE_EMBEDDED_PRIVILEGE_CONTROL ON)
+   # On Hurd systems (GNU) there is no auth socket implementation
+   IF(NOT CMAKE_SYSTEM_NAME STREQUAL "GNU")
+diff --git a/configure.cmake b/configure.cmake
+index 1a0743bb..7693b45 100644
+--- a/configure.cmake
++++ b/configure.cmake
+@@ -161,6 +161,8 @@ IF(UNIX)
+     IF(HAVE_LIBWRAP)
+       SET(MYSYS_LIBWRAP_SOURCE  ${CMAKE_SOURCE_DIR}/mysys/my_libwrap.c)
+       SET(LIBWRAP "wrap")
++    ELSEIF(WITH_LIBWRAP)
++      MESSAGE(FATAL_ERROR "WITH_LIBWRAP is ON but libwrap (tcp wrappers) was not found. Install libwrap0-dev or set WITH_LIBWRAP=OFF")
+     ENDIF()
+   ENDIF()
+   ADD_FEATURE_INFO(LIBWRAP HAVE_LIBWRAP "Support for tcp wrappers")
