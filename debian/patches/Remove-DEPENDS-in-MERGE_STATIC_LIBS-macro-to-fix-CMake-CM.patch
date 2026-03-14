@@ -1,0 +1,40 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Fri, 13 Mar 2026 13:52:57 +0000
+Subject: Remove DEPENDS in MERGE_STATIC_LIBS macro to fix CMake CMP0175
+ warning
+
+The DEPENDS keyword is not valid for add_custom_command() with a TARGET
+signature. CMake 3.27+ warns about this via policy CMP0175.
+
+The generated MRI script is created in the same directory as the build
+output and is written by FILE(GENERATE) immediately before the custom
+command runs, so an explicit dependency is unnecessary.
+
+Fixes warning:
+
+    CMake Warning (dev) at cmake/libutils.cmake:229 (ADD_CUSTOM_COMMAND):
+      The following keywords are not supported when using
+      add_custom_command(TARGET): DEPENDS.
+
+      Policy CMP0175 is not set: add_custom_command() rejects invalid arguments.
+      Run "cmake --help-policy CMP0175" for policy details.  Use the cmake_policy
+      command to set the policy and suppress this warning.
+    Call Stack (most recent call first):
+      cmake/libutils.cmake:267 (MERGE_STATIC_LIBS)
+      libmysqld/CMakeLists.txt:207 (MERGE_LIBRARIES)
+---
+ cmake/libutils.cmake | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/cmake/libutils.cmake b/cmake/libutils.cmake
+index 8fd8f32..a7a43d8 100644
+--- a/cmake/libutils.cmake
++++ b/cmake/libutils.cmake
+@@ -227,7 +227,6 @@ MACRO(MERGE_STATIC_LIBS TARGET OUTPUT_NAME LIBS_TO_MERGE)
+       FILE(GENERATE OUTPUT ${MRI_SCRIPT} INPUT ${MRI_SCRIPT_TPL})
+ 
+       ADD_CUSTOM_COMMAND(TARGET ${TARGET} POST_BUILD
+-        DEPENDS ${MRI_SCRIPT}
+         COMMAND ${CMAKE_COMMAND}
+         ARGS
+           -DTARGET_SCRIPT="${MRI_SCRIPT}"
