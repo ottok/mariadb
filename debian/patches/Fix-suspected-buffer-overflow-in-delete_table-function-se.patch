@@ -1,0 +1,55 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Fri, 13 Mar 2026 01:36:50 +0000
+Subject: Fix suspected buffer overflow in delete_table function seen in debug
+ builds
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+The code was unconditionally writing a null terminator at the current
+pointer position, but when no path separator was found, the pointer
+could be positioned before the buffer start (at offset -1), causing a
+buffer overflow.
+
+Add a bounds check before writing the null terminator to ensure we only
+write when a path separator was actually found. This prevents the
+stringop-overflow warning and potential memory corruption.
+
+Fixes this build error:
+
+    [ 35%] Building C object storage/myisam/CMakeFiles/myisam.dir/mi_unique.c.o
+    cd /debcraft/source/builddir/storage/myisam && /usr/lib/ccache/cc -DHAVE_CONFIG_H -D_FILE_OFFSET_BITS=64 -I/debcraft/source/wsrep-lib/include -I/debcraft/source/wsrep-lib/wsrep-API/v26 -I/debcraft/source/builddir/include -I/debcraft/source/include/providers -I/debcraft/source/include -I/debcraft/source/sql -g -O2 -Werror=implicit-function-declaration -ffile-prefix-map=/debcraft/source=. -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection -Wdate-time -D_FORTIFY_SOURCE=2 -Wdate-time -D_FORTIFY_SOURCE=2 -pie -fPIC -fstack-protector --param=ssp-buffer-size=4 -fPIC -g -g -fno-omit-frame-pointer -fno-strict-aliasing  -Wno-uninitialized -DPROTECT_STATEMENT_MEMROOT -DDBUG_TRACE -DENABLED_DEBUG_SYNC -ggdb3 -DSAFE_MUTEX -DSAFEMALLOC -DTRASH_FREED_MEMORY -Wall -Wdeclaration-after-statement -Wenum-compare -Wenum-conversion -Wextra -Wformat-security -Wmissing-braces -Wno-format-truncation -Wno-init-self -Wno-nonnull-compare -Wno-unused-parameter -Wvla -Wwrite-strings -Wframe-larger-than=16384 -Werror -std=gnu99   -Wdate-time -D_FORTIFY_SOURCE=2  -fvisibility=hidden -MD -MT storage/myisam/CMakeFiles/myisam.dir/mi_unique.c.o -MF CMakeFiles/myisam.dir/mi_unique.c.o.d -o CMakeFiles/myisam.dir/mi_unique.c.o -c /debcraft/source/storage/myisam/mi_unique.c
+    /debcraft/source/storage/perfschema/ha_perfschema.cc: In member function ‘virtual int ha_perfschema::delete_table(const char*)’:
+    /debcraft/source/storage/perfschema/ha_perfschema.cc:471:8: error: writing 1 byte into a region of size 0 [-Werror=stringop-overflow=]
+      471 |   *ptr = '\0';
+          |   ~~~~~^~~~~~
+    /debcraft/source/storage/perfschema/ha_perfschema.cc:453:8: note: at offset -1 into destination object ‘table_path’ of size 513
+      453 |   char table_path[FN_REFLEN+1];
+          |        ^~~~~~~~~~
+    cc1plus: all warnings being treated as errors
+    make[4]: *** [storage/perfschema/CMakeFiles/perfschema.dir/build.make:138: storage/perfschema/CMakeFiles/perfschema.dir/ha_perfschema.cc.o] Error 1
+    make[4]: *** Waiting for unfinished jobs...
+---
+ storage/perfschema/ha_perfschema.cc | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/storage/perfschema/ha_perfschema.cc b/storage/perfschema/ha_perfschema.cc
+index 327b5a6..64977d9 100644
+--- a/storage/perfschema/ha_perfschema.cc
++++ b/storage/perfschema/ha_perfschema.cc
+@@ -468,7 +468,9 @@ int ha_perfschema::delete_table(const char *name)
+   }
+ 
+   table_name = ptr + 1;
+-  *ptr = '\0';
++  /* Only null-terminate if we found a separator (ptr >= table_path) */
++  if (ptr >= table_path)
++    *ptr = '\0';
+ 
+   /* Find path separator */
+   while ((ptr >= table_path) && (*ptr != '\\') && (*ptr != '/')) {
+@@ -539,4 +541,3 @@ void ha_perfschema::print_error(int error, myf errflag)
+      break;
+   }
+ }
+-

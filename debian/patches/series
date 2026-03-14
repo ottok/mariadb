@@ -10,3 +10,4 @@ sysusers-lock-mysql-account.patch
 systemd-hardening-safe-defaults.patch
 MDEV-38811-skip-grant-tables-crash.patch
 Fix-DBUG_PRINT-syntax-error-in-my_init.c-that-broke-debug.patch
+Fix-suspected-buffer-overflow-in-delete_table-function-se.patch
