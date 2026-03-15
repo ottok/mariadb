@@ -52,9 +52,10 @@ cp -v "$MTR_SKIP_TEST_LIST" "$AUTOPKGTEST_ARTIFACTS"
 cd /usr/share/mariadb/mariadb-test
 echo "starting mariadb-test-run.pl..."
 export MTR_PRINT_CORE=detailed
+
 # The $MTR_ARGUMENTS_APPEND is intentionally used to pass in extra arguments
 # shellcheck disable=SC2086
-eatmydata perl -I. ./mariadb-test-run.pl \
+if eatmydata perl -I. ./mariadb-test-run.pl \
     --force --testcase-timeout=120 --suite-timeout=540 --retry=3 \
     --max-test-fail=30 --max-save-core=1 --max-save-datadir=1 \
     --parallel=auto --skip-rpl --suite=main \
@@ -63,9 +64,21 @@ eatmydata perl -I. ./mariadb-test-run.pl \
     --xml-report="$AUTOPKGTEST_ARTIFACTS/mariadb-test-run-junit.xml" \
     $MTR_ARGUMENTS_APPEND \
     "$@" 2>&1
-echo "run: OK"
+then
+  TEST_RESULT=0
+  echo "run: OK"
+else
+  TEST_RESULT=$?
+  echo "run: FAILED (exit code $TEST_RESULT)"
+fi
+
+echo # empty newline for legibility
 
 echo "=== AppArmor diagnostics ==="
 aa-status 2>/dev/null | grep -A5 -B5 mariadb || true
 dmesg | grep -i apparmor | grep -i mariadb || true
 journalctl -k | grep -i apparmor | grep -i mariadb || true
+
+# Don't quote the variable passed to exit to ensure it stays as a number
+# shellcheck disable=SC2086
+exit $TEST_RESULT
