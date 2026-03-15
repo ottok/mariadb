@@ -26,7 +26,7 @@
 # Define RUN, HOMEDIRS etc globally
 include <tunables/global>
 
-profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
+profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected) {
 
   # Including <abstractions/base> does not work on Ubuntu 24.04. The issue was
   # fixed upstream https://gitlab.com/apparmor/apparmor/-/merge_requests/1236
