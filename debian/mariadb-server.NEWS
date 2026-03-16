@@ -1,3 +1,53 @@
+mariadb (1:11.8.6-4) unstable; urgency=medium
+
+  The mariadb-server package now ships with an AppArmor profile to ensure the
+  MariaDB server can only access a defined list of system resources. If a
+  malicious actor ever compromises the mariadbd process, AppArmor will prevent
+  them from gaining further access to the system and emit DENIED entries in the
+  system log for system administrators to audit.
+
+  The AppArmor profile is enabled by default starting with this MariaDB version
+  in Debian (and Ubuntu). As the profile is new, the likelihood of false
+  positives is elevated.
+
+  If you encounter issues with MariaDB functionality that worked in previous
+  versions, check for AppArmor denials in the system logs:
+
+    journalctl -k | grep -i apparmor | grep -i mariadb
+
+  On systems without systemd, use the command:
+
+    dmesg | grep -i apparmor | grep -i mariadb
+
+  To add local overrides for specific access needs, create a file in
+  /etc/apparmor.d/local/mariadbd with your custom rules. For example:
+
+    /path/to/custom/data/dir/** rwk,
+
+  Then reload the AppArmor profile:
+
+    apparmor_parser -r /etc/apparmor.d/mariadbd
+
+  To switch the AppArmor profile to complain mode (where violations are logged
+  but not denied), run:
+
+    aa-complain /etc/apparmor.d/mariadbd
+
+  To revert back to enforce mode, run:
+
+    aa-enforce /etc/apparmor.d/mariadbd
+
+  If you believe you have found a false positive (legitimate MariaDB
+  functionality that is blocked by the profile), please file a bug report at
+  bugs.debian.org including the denial logs and details about the operation that
+  failed.
+
+  See also https://optimizedbyotto.com/post/new-apparmor-profile-for-mariadb/
+  for additional information on how this new AppArmor profile for MariaDB was
+  developed, tested and reviewed.
+
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 19 Mar 2026 13:13:13 +0000
+
 mariadb (1:11.8.2-1) unstable; urgency=medium
 
   MariaDB 11.8.2 was released on June 4th 2025 by the MariaDB Foundation
