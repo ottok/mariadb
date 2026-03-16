@@ -55,7 +55,7 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
   #@{PROC}/@{pid}/fd/ r,
   #@{PROC}/@{pid}/stat r,
 
-# Allow system resource access
+  # Allow system resource access
   @{PROC}/@{pid}/cgroup r,
   @{PROC}/@{pid}/status r,
   @{PROC}/sys/kernel/core_pattern r,
@@ -73,71 +73,67 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
   #capability setuid,
   #capability setgid,
 
-# Allow network access
+  # Allow network access
   network tcp,
 
-# Allow config access
+  # Allow config access
+  /etc/mariadb/** r,
   /etc/mysql/** r,
+  /etc/ssl/openssl.cnf r,
   /etc/systemd/system/mariadb.service.d/ r,
   /etc/systemd/system/mariadb.service.d/** r,
 
-# Allow pid, socket, socket lock file access
-  /run/mysqld/mysqld.pid rw,
-  /run/mysqld/mysqld.sock rw,
-  /run/mysqld/mysqld.sock.lock rw,
+  # Allow pid, socket, socket lock file access
+  /run/mariadbd/** rw,
+  /run/mysqld/** rw,
 
-# Allow systemd notify messages
+  # Allow systemd notify messages
   /run/systemd/notify w,
   /run/systemd/private rw,
 
-# Allow execution of server binary
+  # Allow execution of server binary
   /usr/sbin/mariadbd mr,
   /usr/sbin/mysqld mr,
 
-# Allow plugin access
+  # Allow plugin access
   /usr/lib/{@{multiarch},mysql}/mariadb{,d}/plugin/ r,
   /usr/lib/{@{multiarch},mysql}/mariadb{,d}/plugin/*.so* mr,
   /usr/lib/mysql/plugin/ r,
   /usr/lib/mysql/plugin/*.so* mr,
 
-# Allow error msg and charset access
+  # Allow error msg and charset access
   /usr/share/mariadb/ r,
   /usr/share/mariadb/** r,
 
-# Allow data dir access
+  # Allow data dir access
   /var/lib/mariadb/ r,
   /var/lib/mariadb/** rwk,
   /var/lib/mysql/ r,
   /var/lib/mysql/** rwk,
 
-# Allow log file access
+  # Allow log file access
   /var/log/mariadb/ r,
   /var/log/mariadb/** rw,
   /var/log/mysql/ r,
   /var/log/mysql/** rw,
 
-# Allow shared memory access
+  # Allow shared memory access
   /{run,dev}/shm/** rw,
-  # More specific shared memory for MariaDB
-  /run/mysqld/* rw,
 
-# Allow read access to OpenSSL config
-  /etc/ssl/openssl.cnf r,
-
-# Memory pressure detection
+  # Memory pressure detection
   @{sys}/fs/cgroup/**/memory.pressure rw,
 
-# For huge/large page support
+  # For huge/large page support
   @{sys}/kernel/mm/hugepages/ r,
   @{sys}/kernel/mm/hugepages/** r,
 
-# Innodb physical disk size introspection
+  # Innodb physical disk size introspection
   @{sys}/dev/block/*/queue/physical_block_size r,
   @{sys}/devices/**/queue/physical_block_size r,
 
-# Deny invalid runbindable mount rule that causes parser errors
-# This broad deny rule should override any problematic mount operations
-# that might be included from system abstractions
+  # Deny invalid runbindable mount rule that causes parser errors
+  # This broad deny rule should override any problematic mount operations
+  # that might be included from system abstractions
   audit deny mount options=(runbindable),
 
   # Site-specific additions and overrides. See local/README for details.
