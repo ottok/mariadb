@@ -2537,7 +2537,7 @@ alter-algorithm                                              DEFAULT
 analyze-max-length                                           4294967295
 analyze-sample-percentage                                    100
 aria-block-size                                              8192
-aria-checkpoint-interval                                     0
+aria-checkpoint-interval                                     30
 aria-checkpoint-log-activity                                 1048576
 aria-encrypt-tables                                          FALSE
 aria-force-start-after-recovery-failures                     0
@@ -2552,7 +2552,7 @@ aria-pagecache-age-threshold                                 300
 aria-pagecache-buffer-size                                   134217728
 aria-pagecache-division-limit                                100
 aria-pagecache-file-hash-size                                512
-aria-recover-options                                         
+aria-recover-options                                         BACKUP,QUICK
 aria-repair-threads                                          1
 aria-sort-buffer-size                                        268434432
 aria-stats-method                                            nulls_unequal

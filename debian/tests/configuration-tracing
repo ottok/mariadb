@@ -93,6 +93,13 @@ trace() {
     sed '/wsrep-provider\s\+ON/d' -i "$TEMPFILE"
     sed '/^  --wsrep-provider\[=name\]/,/^[[:blank:]]\+be uninstalled/d' -i "$TEMPFILE"
 
+    # Due to unknown reasons, in Debian (and in Ubuntu before March 16, 2026)
+    # these values were zero and empty, instead of the actual default values,
+    # which are also documented at
+    # https://mariadb.com/docs/server/server-usage/storage-engines/aria/aria-system-variables
+    normalize_value aria-checkpoint-interval 30
+    normalize_value aria-recover-options BACKUP,QUICK
+
     mv "$TEMPFILE" "$TRACE_NAME.actual"
   fi
 
