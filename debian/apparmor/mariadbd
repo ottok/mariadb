@@ -77,6 +77,7 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
   network tcp,
 
   # Allow config access
+  /etc/ r,
   /etc/mariadb/** r,
   /etc/mysql/** r,
   /etc/ssl/openssl.cnf r,
@@ -117,19 +118,79 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected,complain) {
   /var/log/mysql/ r,
   /var/log/mysql/** rw,
 
+  # Allow reading process mounts info (container/filesystem detection)
+  @{PROC}/@{pid}/mounts r,
+  @{PROC}/@{pid}/mountinfo r,
+  @{PROC}/@{pid}/limits r,
+
+  # Allow memory mapping limit introspection
+  @{PROC}/sys/vm/mmap_min_addr r,
+
   # Allow shared memory access
   /{run,dev}/shm/** rw,
 
-  # Memory pressure detection
+  # Allow cgroup hierarchy detection
+  @{PROC}/cgroups r,
+
+  # Allow cgroup v2 detection and memory limit introspection
+  @{sys}/fs/cgroup/cgroup.controllers r,
+  @{sys}/fs/cgroup/**/cpu.max r,
+  @{sys}/fs/cgroup/**/memory.max r,
   @{sys}/fs/cgroup/**/memory.pressure rw,
 
   # For huge/large page support
   @{sys}/kernel/mm/hugepages/ r,
   @{sys}/kernel/mm/hugepages/** r,
+  @{sys}/kernel/mm/transparent_hugepage/enabled r,
+  @{sys}/kernel/mm/transparent_hugepage/shmem_enabled r,
 
   # Innodb physical disk size introspection
   @{sys}/dev/block/*/queue/physical_block_size r,
   @{sys}/devices/**/queue/physical_block_size r,
+
+  # Additional sys/block access for RocksDB/InnoDB disk introspection
+  /sys/block/ r,
+  /sys/devices/virtual/block/*/dev r,
+
+  # Allow cracklib dictionary access (for cracklib_password_check plugin)
+  /var/cache/cracklib/cracklib_dict.* r,
+
+  # Allow GSS mechanism configuration (for GSSAPI plugin)
+  /etc/gss/mech.d/ r,
+  /etc/gss/mech.d/* r,
+
+  # Allow ODBC configuration (for Connect engine)
+  /etc/odbc.ini r,
+  /etc/odbcinst.ini r,
+  /var/lib/odbc/*.ini r,
+  owner @{HOME}/.odbc.ini rw,
+
+  # Allow Java/OpenJDK configuration (for Connect engine and UDFs)
+  /etc/java-*-openjdk/** r,
+
+  # Allow network interface enumeration (for Java/Connect engine)
+  @{PROC}/@{pid}/net/if_inet6 r,
+
+  # Allow OS detection (lsb_release)
+  /etc/lsb-release r,
+
+  # Allow kernel version detection
+  @{PROC}/version r,
+
+  # Allow mmap of root directory (path resolution)
+  / r,
+
+  # UUID generation for internal use
+  @{PROC}/sys/kernel/random/uuid r,
+
+  # Thread name setting (required by some storage engines and for debugging)
+  @{PROC}/@{pid}/task/*/comm rw,
+
+  # Allow coredump filter configuration (for debugging)
+  @{PROC}/@{pid}/coredump_filter rw,
+
+  # Allow addr2line for stack trace symbolization on crashes
+  /usr/bin/*-linux-gnu-addr2line mrix,
 
   # Deny invalid runbindable mount rule that causes parser errors
   # This broad deny rule should override any problematic mount operations
