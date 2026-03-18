@@ -10,3 +10,4 @@ include-debian-in-test-merge-alter-result.patch
 sysusers-lock-mysql-account.patch
 systemd-hardening-safe-defaults.patch
 MDEV-38811-skip-grant-tables-crash.patch
+MDEV-39082-mysql-test-use-vardir-as-datadir-in-collect_my.patch
