@@ -47,9 +47,20 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected) {
   # Galera gu_thread_setschedparam still uses this
   capability sys_nice,
   capability kill,
+  # Required to raise file-descriptor and memory limits beyond hard defaults
+  capability sys_resource,
+  # Required to read files owned by root (e.g., SSL keys, config files)
+  # while running as unprivileged mysql user (uid 122)
+  capability dac_override,
+  capability dac_read_search,
+  # Required for privilege dropping and user switching operations
+  capability setuid,
+  capability setgid,
+  # Various types of network access
   network inet stream,
   network inet dgram,
   network unix stream,
+  network tcp,
   # Probably excessive/unnecessary:
   #@{PROC}/sys/kernel/ngroups_max r,
   #@{PROC}/@{pid}/fd/ r,
@@ -66,20 +77,22 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected) {
   @{sys}/devices/system/node/ r,
   @{sys}/devices/system/node/** r,
 
-  # Should not be necessary according to Daniel Black:
-  #capability dac_override,
-  #capability dac_read_search,
-  # Should not be necessary as mariadbd does not run as root:
-  #capability setuid,
-  #capability setgid,
-
-  # Allow network access
-  network tcp,
-
   # Allow config access
   /etc/ r,
+  /etc/gai.conf r,
+  /etc/group r,
+  /etc/hosts.allow r,
+  /etc/hosts.deny r,
+  /etc/ld.so.cache r,
+  /etc/letsencrypt/archive/*/**  r,
+  /etc/letsencrypt/live/*/privkey.pem    r,
   /etc/mariadb/** r,
+  /etc/mtab r,
+  /etc/my.cnf r,
   /etc/mysql/** r,
+  /etc/nsswitch.conf r,
+  /etc/passwd r,
+  /etc/services r,
   /etc/ssl/openssl.cnf r,
   /etc/systemd/system/mariadb.service.d/ r,
   /etc/systemd/system/mariadb.service.d/** r,
@@ -150,7 +163,9 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected) {
 
   # Additional sys/block access for RocksDB/InnoDB disk introspection
   /sys/block/ r,
-  /sys/devices/virtual/block/*/dev r,
+  # Both virtual block devices (e.g., dm, loop) and physical block devices
+  # (e.g., sda, nvme) for disk size detection
+  /sys/devices/**/block/*/dev r,
 
   # Allow cracklib dictionary access (for cracklib_password_check plugin)
   /var/cache/cracklib/cracklib_dict.* r,
@@ -171,8 +186,10 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected) {
   # Allow network interface enumeration (for Java/Connect engine)
   @{PROC}/@{pid}/net/if_inet6 r,
 
-  # Allow OS detection (lsb_release)
+  # Allow OS detection
+  /etc/debian_version r,
   /etc/lsb-release r,
+  /etc/os-release r,
 
   # Allow kernel version detection
   @{PROC}/version r,
