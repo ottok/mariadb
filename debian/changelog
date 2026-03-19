@@ -1,8 +1,22 @@
-mariadb (1:11.8.6-4) UNRELEASED; urgency=medium
+mariadb (1:11.8.6-4) unstable; urgency=medium
 
-  * Open new changelog entry. This will be replaced by `gbp dch`.
+  * New AppArmor for mariadbd now in 'enforce' mode. See NEWS for details.
+  * Additional refinement to make the AppArmor and related autopkgtest as
+    robust as possible:
+    - Add patch to have mariadb-test-run not write in
+      /usr/share/mariadb/mariadb-test/ to not violate the AppArmor profile
+    - Normalize variables 'aria-checkpoint-interval' and 'aria-recover-options'
+      to documented defaults as they seem to be effect in Ubuntu binaries now,
+      while Debian binaries seem to default to zero and empty for an unknown
+      reason.
+    - Ensure AppArmor diagnostics run even when autopkgtests fail to catch
+      potential situations where autopkgtests job 'upstream' violated the
+      AppArmor profile.
+    - Simplify AppArmor profile, allow 'mariadb' aliases and unify indentation.
+    - Extend AppArmor profile to cover all easily testable features
+      (Closes: #1130272).
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 16 Mar 2026 01:01:00 +0000
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 19 Mar 2026 13:13:13 +0000
 
 mariadb (1:11.8.6-3) unstable; urgency=medium
 
