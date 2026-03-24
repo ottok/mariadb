@@ -1,8 +1,26 @@
-mariadb (1:11.8.6-5) UNRELEASED; urgency=medium
+mariadb (1:11.8.6-5) unstable; urgency=medium
 
-  * Open new changelog entry. This will be replaced by `gbp dch`.
+  * New mariadb-server installs will now use /var/lib/mariadb as the default
+    data directory. See NEWS for details.
+    - Determine whether to use /var/lib/mysql or /var/lib/mariadb during
+      mariadb-server preinst and postinst.
+    - On purge, remove /var/lib/mariadb, and /var/lib/mysql only if owned by
+      mariadb.
+    - d/p/set-default-datadir-to-var-lib-mariadb.patch: Update compile-time
+      INSTALL_MYSQLDATADIR_DEB setting to /var/lib/mariadb.
+    - d/mariadb-server.mariadb.init: Default to /var/lib/mariadb if datadir is
+      not specified in config.
+    - d/additions/50-server.cnf: Update default datadir in comment to
+      /var/lib/mariadb.
+    - Update autopkgtests to match new data directory expectations.
+    - Apport: Include /var/lib/mariadb data directory info in report.
+    - Salsa CI: Confirm correct datadir is in use for each test and add list of
+      /var/lib/mariadb files as test artifact.
+  * Use mariadb_upgrade_info/mysql_upgrade_info version files instead of
+    generated flag files to detect active data directory and downgrade
+    attempts.
 
- -- Otto Kekäläinen <otto@debian.org>  Thu, 19 Mar 2026 13:33:33 +0000
+ -- Lena Voytek <lena@voytek.dev>  Tue, 24 Mar 2026 09:26:38 -0400
 
 mariadb (1:11.8.6-4) unstable; urgency=medium
 
