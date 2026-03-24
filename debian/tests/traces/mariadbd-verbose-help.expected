@@ -2543,7 +2543,7 @@ aria-encrypt-tables                                          FALSE
 aria-force-start-after-recovery-failures                     0
 aria-group-commit                                            none
 aria-group-commit-interval                                   0
-aria-log-dir-path                                            /var/lib/mysql/
+aria-log-dir-path                                            /var/lib/mariadb/
 aria-log-file-size                                           1073741824
 aria-log-purge-type                                          immediate
 aria-max-sort-file-size                                      9223372036853727232
@@ -2604,7 +2604,7 @@ concurrent-insert                                            AUTO
 connect-timeout                                              10
 console                                                      FALSE
 core-file                                                    FALSE
-datadir                                                      /var/lib/mysql/
+datadir                                                      /var/lib/mariadb/
 deadlock-search-depth-long                                   15
 deadlock-search-depth-short                                  4
 deadlock-timeout-long                                        50000000
@@ -3216,7 +3216,7 @@ wsrep-certify-nonPK                                          TRUE
 wsrep-cluster-address                                        
 wsrep-cluster-name                                           my_wsrep_cluster
 wsrep-convert-LOCK-to-trx                                    FALSE
-wsrep-data-home-dir                                          /var/lib/mysql/
+wsrep-data-home-dir                                          /var/lib/mariadb/
 wsrep-dbug-option                                            
 wsrep-debug                                                  NONE
 wsrep-desync                                                 FALSE

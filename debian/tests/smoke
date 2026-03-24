@@ -46,7 +46,8 @@ else
     echo "=== Systemd journal ==="
     journalctl -xeu mariadb.service || true
     echo "=== MariaDB error log (if exists) ==="
-    cat /var/log/mysql/error.log 2>/dev/null || cat /var/lib/mysql/*.err 2>/dev/null || echo "No error log found"
+    cat /var/log/mysql/error.log 2>/dev/null || cat /var/lib/mysql/*.err 2>/dev/null || \
+    cat /var/log/mariadb/error.log 2>/dev/null || cat /var/lib/mariadb/*.err 2>/dev/null || echo "No error log found"
     echo "=== MariaDB processes ==="
     # shellcheck disable=SC2009
     ps aux | grep -i mariadb || true
@@ -117,7 +118,7 @@ if [ "$(dpkg-architecture -qDEB_HOST_ARCH_BITS)" != 32 ] &&
 then
   dpkg-query -W $plugin
 
-  LOG=/var/lib/mysql/#rocksdb/LOG
+  LOG=/var/lib/mariadb/#rocksdb/LOG
   # XXX: The server may only be started during the install of
   #      mariadb-server, which happens before that of the plugin.
   [ -e $LOG ] || mariadb -e "INSTALL PLUGIN RocksDB SONAME 'ha_rocksdb';"
