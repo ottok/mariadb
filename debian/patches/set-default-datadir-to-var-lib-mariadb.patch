@@ -1,0 +1,18 @@
+Description: Update default datadir config to /var/lib/mariadb.
+ Use /var/lib/mariadb as the default datadir for Debian/Ubuntu to improve
+ co-installability between MySQL and MariaDB servers.
+Author: Lena Voytek <lena@voytek.dev>
+Last-Update: 2026-03-24
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/cmake/install_layout.cmake
++++ b/cmake/install_layout.cmake
+@@ -192,7 +192,7 @@
+ SET(INSTALL_SQLBENCHDIR_DEB             ".")
+ SET(INSTALL_SUPPORTFILESDIR_DEB         "share/mariadb")
+ #
+-SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mysql")
++SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mariadb")
+ 
+ SET(INSTALL_RUNDATADIR_DEB              "/run/mysqld")
+ SET(INSTALL_UNIX_ADDRDIR_DEB            "${INSTALL_RUNDATADIR_DEB}/mysqld.sock")
