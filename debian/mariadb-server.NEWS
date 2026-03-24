@@ -1,3 +1,17 @@
+mariadb (1:11.8.6-5) unstable; urgency=medium
+
+  MariaDB's data directory now defaults to /var/lib/mariadb for new
+  installations to facilitate better co-installability between MariaDB and
+  MySQL servers. This change does not affect existing installations, which will
+  continue to use /var/lib/mysql.
+
+  The data directory location is determined by the mariadbd datadir config
+  option, which is now set to /var/lib/mariadb by default. For existing
+  installations using /var/lib/mysql, the datadir config option is enforced in
+  /etc/mysql/mariadb.conf.d/99-legacy-datadir.cnf.
+
+ -- Lena Voytek <lena@voytek.dev>  Tue, 24 Mar 2026 09:26:38 -0400
+
 mariadb (1:11.8.6-4) unstable; urgency=medium
 
   The mariadb-server package now ships with an AppArmor profile to ensure the
