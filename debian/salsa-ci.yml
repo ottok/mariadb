@@ -635,7 +635,7 @@ simple upgrade:
     - apt-get install -qq --yes 'default-mysql*' ${BUILT_PACKAGES}
     - *test-full-upgrade
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-using-legacy-data-directory
+    - *test-verify-using-new-data-directory
     - *test-verify-final
 
 mariadb and Bookworm upgrade:
