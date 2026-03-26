@@ -33,9 +33,16 @@ mariadb (1:11.8.6-4) unstable; urgency=medium
 
     dmesg | grep -i apparmor | grep -i mariadb
 
+  On some systems the denials are suppressed by default but can be enabled with:
+
+      echo -n noquiet >/sys/module/apparmor/parameters/audit
+
+  See https://manpages.debian.org/unstable/apparmor/apparmor.7.en.html#Turn_off_deny_audit_quieting
+
   To add local overrides for specific access needs, create a file in
   /etc/apparmor.d/local/mariadbd with your custom rules. For example:
 
+    /path/to/custom/data/dir/ r,
     /path/to/custom/data/dir/** rwk,
 
   Then reload the AppArmor profile:
