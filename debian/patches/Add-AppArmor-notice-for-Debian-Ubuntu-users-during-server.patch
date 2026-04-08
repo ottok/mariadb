@@ -1,0 +1,74 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Wed, 8 Apr 2026 23:32:51 +0800
+Subject: Add AppArmor notice for Debian/Ubuntu users during server startup
+
+When MariaDB fails to start due to permission errors, users on
+Debian/Ubuntu might not be able to guess that AppArmor might be the
+cause, and they should check for AppArmor denials in the kernel audit
+log.
+
+Add an informational message during startup that:
+- Only prints when the 'mariadbd' profile is actually loaded
+- Includes exact commands from the Debian packaging NEWS
+- Provides actionable paths for local overrides
+- Mentions both complain and enforce modes for troubleshooting
+
+The message is printed once during normal server startup (not in help or
+bootstrap modes) through the existing logging infrastructure, ensuring
+it appears in both syslog and the error log where users will see it when
+troubleshooting startup failures.
+---
+ sql/mysqld.cc | 40 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/sql/mysqld.cc b/sql/mysqld.cc
+index c8595a5..c2c6a78 100644
+--- a/sql/mysqld.cc
++++ b/sql/mysqld.cc
+@@ -5061,6 +5061,46 @@ static int init_server_components()
+                             "https://github.com/MariaDB/server");
+     }
+ 
++  /*
++    Print notice about AppArmor on Debian/Ubuntu systems to help users diagnose
++    permission issues that may be caused by AppArmor denials on systems where
++    the AppArmor profile is active.
++  */
++  if (!opt_help && !opt_bootstrap)
++  {
++    MY_STAT stat_info;
++    if (my_stat("/sys/kernel/security/apparmor/profiles", &stat_info, MYF(0)))
++    {
++      /* Check if mariadbd profile is loaded by reading the profiles file */
++      FILE *fp = fopen("/sys/kernel/security/apparmor/profiles", "r");
++      if (fp)
++      {
++        char line[256];
++        bool mariadb_profile_active = false;
++        while (fgets(line, sizeof(line), fp))
++        {
++          if (strstr(line, "mariadbd"))
++          {
++            mariadb_profile_active = true;
++            break;
++          }
++        }
++        fclose(fp);
++
++        if (mariadb_profile_active)
++        {
++          sql_print_information(
++            "AppArmor profile 'mariadbd' is active. "
++            "If permission errors occur, check: 'aa-status | grep mariadb' "
++            "or 'sudo dmesg | grep -i apparmor'. "
++            "To disable enforcement: 'aa-complain /etc/apparmor.d/mariadbd'. "
++            "To add local overrides, create /etc/apparmor.d/local/mariadbd "
++            "(see /usr/share/doc/mariadb-server/NEWS.Debian.gz).");
++        }
++      }
++    }
++  }
++
+ #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
+   /*
+     Parsing the performance schema command line option may have reported
