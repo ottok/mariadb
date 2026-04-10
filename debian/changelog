@@ -1,3 +1,17 @@
+mariadb (1:11.8.6-6) unstable; urgency=medium
+
+  [ Lena Voytek ]
+  * Salsa CI: Update simple upgrade test to expect use of /var/lib/mariadb
+
+  [ Otto Kekäläinen ]
+  * Extend docs in NEWS item based on real AppArmor profile use feedback
+  * Extend AppArmor profile based on real 'enforce' mode use feedback
+    (Closes: #1131915, #1132027)
+  * Extend AppArmor profile to allow Galera helpers (Closes: #1131938)
+  * Add AppArmor notice for Debian/Ubuntu users during server startup
+
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 10 Apr 2026 10:10:10 +0000
+
 mariadb (1:11.8.6-5) unstable; urgency=medium
 
   * New mariadb-server installs will now use /var/lib/mariadb as the default
