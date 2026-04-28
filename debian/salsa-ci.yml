@@ -34,6 +34,14 @@ variables:
   SALSA_CI_DISABLE_RC_BUGS: 0
   # Testing https://salsa.debian.org/salsa-ci-team/pipeline#git-attributes
   SALSA_CI_DISABLE_GBP_SETUP_GITATTRIBUTES: 1
+  # Testing https://salsa.debian.org/salsa-ci-team/pipeline/-/merge_requests/599
+  SALSA_CI_DISABLE_ALL_TESTS: 1
+  SALSA_CI_DPKG_BUILDPACKAGE_ARGS: --build-profiles=nocheck
+  SALSA_CI_DISABLE_APTLY: 1
+  SALSA_CI_DISABLE_BUILD_PACKAGE_FAKETIME: 0
+  SALSA_CI_DISABLE_BUILD_PACKAGE_FAKETIME_I386: 0
+  SALSA_CI_ENABLE_AUTOPKGTEST_FAKETIME: 1
+  SALSA_CI_ENABLE_AUTOPKGTEST_FAKETIME_I386: 1
 
 .build-package:
   # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
