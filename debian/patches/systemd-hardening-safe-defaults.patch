@@ -13,7 +13,10 @@ personality, and restricts namespace creation (overrideable via drop-in)
 
 This patch should be submitted upstream once proven stable in Debian.
 
-Forwarded: no
+Merged in https://github.com/MariaDB/server/commit/d801b2c54b25260e4992d837b1e47486f4e29130
+and thus included in MariaDB 10.11.17 and onward.
+
+Forwarded: https://github.com/MariaDB/server/pull/4787
 ---
  support-files/mariadb.service.in  | 21 +++++++++++++++++++++
  support-files/mariadb@.service.in | 21 +++++++++++++++++++++

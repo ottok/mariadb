@@ -13,3 +13,4 @@ MDEV-38811-skip-grant-tables-crash.patch
 MDEV-39082-mysql-test-use-vardir-as-datadir-in-collect_my.patch
 set-default-datadir-to-var-lib-mariadb.patch
 Add-AppArmor-notice-for-Debian-Ubuntu-users-during-server.patch
+Fix-more-misc-spelling-in-MariaDB-Server-repository.patch

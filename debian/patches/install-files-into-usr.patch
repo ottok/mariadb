@@ -5,6 +5,9 @@ Subject: Install PAM modules and systemd units into /usr
 Since Debian trixie all files need to be installed into their canonical
 location under /usr.
 
+Merged in https://github.com/MariaDB/server/commit/34aac090f2acc1a4b5850810fe41370c19659d55
+and thus included in MariaDB 12.3.2 and onward.
+
 Origin: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1061348
 Forwarded: https://github.com/MariaDB/server/pull/4065
 ---

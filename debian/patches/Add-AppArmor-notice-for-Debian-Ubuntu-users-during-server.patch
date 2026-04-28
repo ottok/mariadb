@@ -17,6 +17,8 @@ The message is printed once during normal server startup (not in help or
 bootstrap modes) through the existing logging infrastructure, ensuring
 it appears in both syslog and the error log where users will see it when
 troubleshooting startup failures.
+
+Forwarded: https://github.com/MariaDB/server/pull/5003
 ---
  sql/mysqld.cc | 40 ++++++++++++++++++++++++++++++++++++++++
  1 file changed, 40 insertions(+)

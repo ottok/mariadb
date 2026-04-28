@@ -7,7 +7,7 @@ user.
 
 This patch should be submitted upstream once proven stable in Debian.
 
-Forwarded: no
+Forwarded: https://github.com/MariaDB/server/pull/5012
 ---
  support-files/sysusers.conf.in | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

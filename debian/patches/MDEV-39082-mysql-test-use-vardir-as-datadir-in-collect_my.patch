@@ -18,6 +18,9 @@ mariadb-test-run is writing in the /usr/share/.. path:
 
     apparmor="DENIED" operation="mknod" ... name="/usr/share/mariadb/mariadb-test/mariadb-aa.lower-test" requested_mask="c"
 
+Merged in https://github.com/MariaDB/server/commit/1ecc1d932a0d89d83c7487da6b34717f10a9b7f5
+and thus included in MariaDB 10.6.26 and onward.
+
 Origin: https://github.com/MariaDB/server/commit/1ecc1d932a0d89d83c7487da6b34717f10a9b7f5.patch
 Forwarded: https://github.com/MariaDB/server/pull/4813
 ---
