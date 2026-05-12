@@ -34,7 +34,7 @@ name has been kept as a symbolic link to the new name for backwards compatibilit
 From MariaDB 10.1 onward the upstream mariadb.service and mariadb@.service are
 used to provide the full systemd experience. Some features available in
 traditional /etc/init.d/mysql have been changed. For details see
-https://mariadb.com/kb/en/mariadb/systemd/
+https://mariadb.com/docs/server/server-management/starting-and-stopping-mariadb/systemd
 
 
 * MIXING PACKAGES FROM MARIADB.ORG AND OFFICIAL DEBIAN REPOSITORIES
@@ -92,6 +92,9 @@ NOTE: Before modifying root permissions to the MariaDB instance, you should
 ensure you keep a mysql root connection open until you're sure the changes
 work and you can still create new root connections to your server.
 
+The privilege tables are automatically updated so all that is left is to read
+the release notes on https://mariadb.com/docs/release-notes to see if any
+changes affect custom apps.
 
 * MARIADB IS SECURE BY DEFAULT
 ==============================
@@ -152,7 +155,7 @@ immediately check your firewall rules or network routes.
 * WHERE IS THE DOCUMENTATION?
 =============================
 
-https://mariadb.com/kb
+Read more at https://mariadb.com/docs
 
 
 * PASSWORDS
@@ -167,7 +170,7 @@ only work for the local Unix user connecting to the database locally.
 
   sudo /usr/bin/mysql -e "GRANT ALL ON *.* TO '$USER'@'localhost' IDENTIFIED VIA unix_socket WITH GRANT OPTION"
 
-To create a local machine account username=USERNAME with a password:
+For settings to take effect, restart the server:
 
   sudo /usr/bin/mysql -e "GRANT ALL ON *.* TO 'USERNAME'@'localhost' IDENTIFIED BY 'password' WITH GRANT OPTION"
 
