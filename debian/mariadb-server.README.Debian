@@ -59,7 +59,7 @@ compatibility.
 From MariaDB 10.1 onward the upstream mariadb.service and mariadb@.service are
 used to provide the full systemd experience. Some features available in
 traditional /etc/init.d/mysql have been changed. For details see
-https://mariadb.com/kb/en/mariadb/systemd/
+https://mariadb.com/docs/server/server-management/starting-and-stopping-mariadb/systemd
 
 
 * MIXING PACKAGES FROM MARIADB.ORG AND OFFICIAL DEBIAN REPOSITORIES
@@ -215,6 +215,9 @@ NOTE: Before modifying root permissions to the MariaDB instance, you should
 ensure you keep a mysql root connection open until you're sure the changes
 work and you can still create new root connections to your server.
 
+The privilege tables are automatically updated so all that is left is to read
+the release notes on https://mariadb.com/docs/release-notes to see if any
+changes affect custom apps.
 
 * ROOT USER WITH REMOTE ACCESS
 ==============================
@@ -294,7 +297,8 @@ with contents:
     # Only allow TLS encrypted connections
     require-secure-transport = on
 
-For settings to take effect, restart the server:
+For more information, see the MariaDB manual in /usr/share/doc/mariadb-doc or
+https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/configuring-mariadb/configuring-mariadb-with-option-files
 
     systemctl restart mariadb
 
@@ -328,4 +332,4 @@ Backups save jobs. Don't get caught without one.
 * WHERE IS THE DOCUMENTATION?
 =============================
 
-Read more at https://mariadb.com/kb
+Read more at https://mariadb.com/docs
