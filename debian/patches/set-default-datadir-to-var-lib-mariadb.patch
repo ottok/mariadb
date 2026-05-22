@@ -7,6 +7,8 @@ Last-Update: 2026-03-24
 Use /var/lib/mariadb as the default datadir for Debian/Ubuntu to improve
 co-installability between MySQL and MariaDB servers.
 Last-Update: 2026-03-24
+
+Forwarded: https://github.com/MariaDB/server/pull/5059
 ---
  cmake/install_layout.cmake | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
