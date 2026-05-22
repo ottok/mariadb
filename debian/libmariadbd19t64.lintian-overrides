@@ -10,5 +10,3 @@ spelling-error-in-binary IiF If [usr/lib/x86_64-linux-gnu/libmariadbd.so.19]
 # libmariadbd cannot have a symbols file as it would be massively large with all
 # the _ZNK* prefixed symbols leaking
 no-symbols-control-file usr/lib/*/libmariadbd.so.19
-# Probably due to leaking ABI symbols
-exit-in-shared-library [usr/lib/*/libmariadbd.so.19]
