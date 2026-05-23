@@ -34,6 +34,8 @@ variables:
   SALSA_CI_DISABLE_RC_BUGS: 0
   # Testing https://salsa.debian.org/salsa-ci-team/pipeline#git-attributes
   SALSA_CI_DISABLE_GBP_SETUP_GITATTRIBUTES: 1
+  # uscan currently fails due regression in comments handling (Bug#1114473)
+  SALSA_CI_DISABLE_USCAN: 1
 
 .build-package:
   # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
