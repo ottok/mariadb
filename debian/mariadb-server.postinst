@@ -88,10 +88,7 @@ case "$1" in
     # Ensure mysql user/group exists before any ownership fixes or
     # mariadb-install-db runs. Note that systemd-sysusers operates on
     # /etc/passwd and /etc/group directly.
-    if ! getent passwd mysql >/dev/null 2>&1 || ! getent group mysql >/dev/null 2>&1
-    then
-      systemd-sysusers ${DPKG_ROOT:+--root="$DPKG_ROOT"} mariadb.conf
-    fi
+    systemd-sysusers ${DPKG_ROOT:+--root="$DPKG_ROOT"} mariadb.conf
 
     # If the following symlink exists, it is a preserved copy the old data dir
     # created by the preinst script during a upgrade that would have otherwise
