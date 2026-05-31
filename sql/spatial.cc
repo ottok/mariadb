@@ -25,6 +25,8 @@
 double my_double_round(double value, longlong dec, bool dec_unsigned,
                        bool truncate);
 
+#define advance(wkb,len,N)      do { wkb+=(N); len-=(N); } while(0)
+
 /* 
   exponential notation :
   1   sign
@@ -470,7 +472,8 @@ Geometry *Geometry::create_from_wkb(Geometry_buffer *buffer,
 
   if (len < WKB_HEADER_SIZE)
     return NULL;
-  geom_type= wkb_get_uint(wkb+1, (wkbByteOrder)wkb[0]);
+  wkbByteOrder bo= (wkbByteOrder)wkb[0];
+  geom_type= wkb_get_uint(wkb+1, bo);
   if (!(geom= create_by_typeid(buffer, (int) geom_type)) ||
       res->reserve(WKB_HEADER_SIZE, 512))
     return NULL;
@@ -478,8 +481,8 @@ Geometry *Geometry::create_from_wkb(Geometry_buffer *buffer,
   res->q_append((char) wkb_ndr);
   res->q_append(geom_type);
 
-  return geom->init_from_wkb(wkb + WKB_HEADER_SIZE, len - WKB_HEADER_SIZE,
-                             (wkbByteOrder) wkb[0], res) ? geom : NULL;
+  advance(wkb,len,WKB_HEADER_SIZE);
+  return geom->init_from_wkb(wkb, len, bo, res) ? geom : 0;
 }
 
 
@@ -853,15 +856,18 @@ static void append_json_point(String *txt, uint max_dec, const char *data)
 static const char *append_json_points(String *txt, uint max_dec,
     uint32 n_points, const char *data, uint32 offset)
 {			     
+  bool any_points= false;
   txt->qs_append('[');
   while (n_points--)
   {
+    any_points= true;
     data+= offset;
     append_json_point(txt, max_dec, data);
     data+= POINT_DATA_SIZE;
     txt->qs_append(", ", 2);
   }
-  txt->length(txt->length() - 2);// Remove ending ', '
+  if (any_points)
+    txt->length(txt->length() - 2);// Remove ending ', '
   txt->qs_append(']');
   return data;
 }
@@ -908,7 +914,7 @@ const char *Geometry::get_mbr_for_points(MBR *mbr, const char *data,
 
 uint32 Gis_point::get_data_size() const
 {
-  return POINT_DATA_SIZE;
+  return no_data(m_data, POINT_DATA_SIZE) ? GET_SIZE_ERROR : POINT_DATA_SIZE;
 }
 
 
@@ -1431,6 +1437,8 @@ int Gis_line_string::is_closed(int *closed) const
 
 int Gis_line_string::num_points(uint32 *n_points) const
 {
+  if (no_data(m_data, 4))
+    return 1;
   *n_points= uint4korr(m_data);
   return 0;
 }
@@ -1627,8 +1635,7 @@ uint Gis_polygon::init_from_wkb(const char *wkb, uint len, wkbByteOrder bo,
 
   if (res->reserve(4, 512))
     return 0;
-  wkb+= 4;
-  len-= 4;
+  advance(wkb,len,4);
   res->q_append(n_linear_rings);
 
   while (n_linear_rings--)
@@ -1645,7 +1652,7 @@ uint Gis_polygon::init_from_wkb(const char *wkb, uint len, wkbByteOrder bo,
 
     if (ls.is_closed(&closed) || !closed)
       return 0;
-    wkb+= ls_len;
+    advance(wkb,len,ls_len);
   }
 
   return (uint) (wkb - wkb_orig);
@@ -1745,9 +1752,11 @@ bool Gis_polygon::get_data_as_json(String *txt, uint max_dec_digits,
   n_linear_rings= uint4korr(data);
   data+= 4;
 
+  bool any_rings= false;
   txt->qs_append('[');
   while (n_linear_rings--)
   {
+    any_rings= true;
     uint32 n_points;
     if (no_data(data, 4))
       return 1;
@@ -1759,7 +1768,8 @@ bool Gis_polygon::get_data_as_json(String *txt, uint max_dec_digits,
     data= append_json_points(txt, max_dec_digits, n_points, data, 0);
     txt->qs_append(", ", 2);
   }
-  txt->length(txt->length() - 2);// Remove ending ', '
+  if (any_rings)
+    txt->length(txt->length() - 2);// Remove ending ', '
   txt->qs_append(']');
   *end= data;
   return 0;
@@ -2258,6 +2268,8 @@ bool Gis_multi_point::get_mbr(MBR *mbr, const char **end) const
 
 int Gis_multi_point::num_geometries(uint32 *num) const
 {
+  if (no_data(m_data, 4))
+    return 1;
   *num= uint4korr(m_data);
   return 0;
 }
@@ -2344,7 +2356,8 @@ int Gis_multi_point::spherical_distance_multipoints(Geometry *g, const double r,
      we are sure that there will be multiple points and we have to construct
      Point geometry and return the smallest result.
   */
-  num_geometries(&num_of_points1);
+  if (num_geometries(&num_of_points1))
+    return 1;
   DBUG_ASSERT(num_of_points1 >= 1);
   g->num_geometries(&num_of_points2);
   DBUG_ASSERT(num_of_points2 >= 1);
@@ -2504,7 +2517,7 @@ uint Gis_multi_line_string::init_from_wkb(const char *wkb, uint len,
     return 0;
   res->q_append(n_line_strings);
   
-  wkb+= 4;
+  advance(wkb,len,4);
   while (n_line_strings--)
   {
     Gis_line_string ls;
@@ -2516,13 +2529,12 @@ uint Gis_multi_line_string::init_from_wkb(const char *wkb, uint len,
 
     res->q_append((char) wkb_ndr);
     res->q_append((uint32) wkb_linestring);
+    wkbByteOrder bo= (wkbByteOrder)wkb[0];
+    advance(wkb,len,WKB_HEADER_SIZE);
 
-    if (!(ls_len= ls.init_from_wkb(wkb + WKB_HEADER_SIZE, len,
-                                   (wkbByteOrder) wkb[0], res)))
+    if (!(ls_len= ls.init_from_wkb(wkb, len, bo, res)))
       return 0;
-    ls_len+= WKB_HEADER_SIZE;;
-    wkb+= ls_len;
-    len-= ls_len;
+    advance(wkb,len,ls_len);
   }
   return (uint) (wkb - wkb_orig);
 }
@@ -2620,9 +2632,11 @@ bool Gis_multi_line_string::get_data_as_json(String *txt, uint max_dec_digits,
   n_line_strings= uint4korr(data);
   data+= 4;
 
+  bool any_ls= false;
   txt->qs_append('[');
   while (n_line_strings--)
   {
+    any_ls= true;
     uint32 n_points;
     if (no_data(data, (WKB_HEADER_SIZE + 4)))
       return 1;
@@ -2634,7 +2648,8 @@ bool Gis_multi_line_string::get_data_as_json(String *txt, uint max_dec_digits,
     data= append_json_points(txt, max_dec_digits, n_points, data, 0);
     txt->qs_append(", ", 2);
   }
-  txt->length(txt->length() - 2);
+  if (any_ls)
+    txt->length(txt->length() - 2);
   txt->qs_append(']');
   *end= data;
   return 0;
@@ -2664,6 +2679,8 @@ bool Gis_multi_line_string::get_mbr(MBR *mbr, const char **end) const
 
 int Gis_multi_line_string::num_geometries(uint32 *num) const
 {
+  if (no_data(m_data, 4))
+    return 1;
   *num= uint4korr(m_data);
   return 0;
 }
@@ -2874,7 +2891,7 @@ uint Gis_multi_polygon::init_from_wkb(const char *wkb, uint len,
     return 0;
   res->q_append(n_poly);
   
-  wkb+=4;
+  advance(wkb,len,4);
   while (n_poly--)
   {
     Gis_polygon p;
@@ -2886,12 +2903,11 @@ uint Gis_multi_polygon::init_from_wkb(const char *wkb, uint len,
     res->q_append((char) wkb_ndr);
     res->q_append((uint32) wkb_polygon);
 
-    if (!(p_len= p.init_from_wkb(wkb + WKB_HEADER_SIZE, len,
-                                 (wkbByteOrder) wkb[0], res)))
+    wkbByteOrder bo= (wkbByteOrder)wkb[0];
+    advance(wkb,len,WKB_HEADER_SIZE);
+    if (!(p_len= p.init_from_wkb(wkb, len, bo, res)))
       return 0;
-    p_len+= WKB_HEADER_SIZE;
-    wkb+= p_len;
-    len-= p_len;
+    advance(wkb,len,p_len);
   }
   return (uint) (wkb - wkb_orig);
 }
@@ -3030,9 +3046,11 @@ bool Gis_multi_polygon::get_data_as_json(String *txt, uint max_dec_digits,
   n_polygons= uint4korr(data);
   data+= 4;
 
+  bool any_polygons= false;
   txt->q_append('[');
   while (n_polygons--)
   {
+    any_polygons= true;
     uint32 n_linear_rings;
     if (no_data(data, 4 + WKB_HEADER_SIZE) ||
 	txt->reserve(1, 512))
@@ -3041,8 +3059,10 @@ bool Gis_multi_polygon::get_data_as_json(String *txt, uint max_dec_digits,
     data+= 4 + WKB_HEADER_SIZE;
     txt->q_append('[');
 
+    bool any_rings= false;
     while (n_linear_rings--)
     {
+      any_rings= true;
       if (no_data(data, 4))
         return 1;
       uint32 n_points= uint4korr(data);
@@ -3054,10 +3074,12 @@ bool Gis_multi_polygon::get_data_as_json(String *txt, uint max_dec_digits,
       data= append_json_points(txt, max_dec_digits, n_points, data, 0);
       txt->qs_append(", ", 2);
     }
-    txt->length(txt->length() - 2);
+    if (any_rings)
+      txt->length(txt->length() - 2);
     txt->qs_append("], ", 3);
   }
-  txt->length(txt->length() - 2);
+  if (any_polygons)
+    txt->length(txt->length() - 2);
   txt->q_append(']');
   *end= data;
   return 0;
@@ -3095,6 +3117,8 @@ bool Gis_multi_polygon::get_mbr(MBR *mbr, const char **end) const
 
 int Gis_multi_polygon::num_geometries(uint32 *num) const
 {
+  if (no_data(m_data, 4))
+    return 1;
   *num= uint4korr(m_data);
   return 0;
 }
@@ -3320,10 +3344,9 @@ uint Gis_geometry_collection::init_from_opresult(String *bin,
                                                  const char *opres,
                                                  uint res_len)
 {
-  const char *opres_orig= opres;
   Geometry_buffer buffer;
   Geometry *geom;
-  int g_len;
+  uint g_len, result= 0;
   uint32 wkb_type;
   int no_pos= bin->length();
   uint32 n_objects= 0;
@@ -3335,7 +3358,7 @@ uint Gis_geometry_collection::init_from_opresult(String *bin,
   if (res_len == 0)
   {
     /* Special case of GEOMETRYCOLLECTION EMPTY. */
-    opres+= 1;
+    result= 1;
     goto empty_geom;
   }
   
@@ -3360,11 +3383,12 @@ uint Gis_geometry_collection::init_from_opresult(String *bin,
       return 0;
     opres+= g_len;
     res_len-= g_len;
+    result+= g_len;
     n_objects++;
   }
 empty_geom:
   bin->write_at_position(no_pos, n_objects);
-  return (uint) (opres - opres_orig);
+  return result;
 }
 
 
@@ -3382,7 +3406,7 @@ uint Gis_geometry_collection::init_from_wkb(const char *wkb, uint len,
     return 0;
   res->q_append(n_geom);
   
-  wkb+= 4;
+  advance(wkb,len,4);
   while (n_geom--)
   {
     Geometry_buffer buffer;
@@ -3394,17 +3418,16 @@ uint Gis_geometry_collection::init_from_wkb(const char *wkb, uint len,
         res->reserve(WKB_HEADER_SIZE, 512))
       return 0;
 
+    wkbByteOrder bo= (wkbByteOrder)wkb[0];
     res->q_append((char) wkb_ndr);
-    wkb_type= wkb_get_uint(wkb+1, (wkbByteOrder) wkb[0]);
+    wkb_type= wkb_get_uint(wkb+1, bo);
     res->q_append(wkb_type);
 
+    advance(wkb,len,WKB_HEADER_SIZE);
     if (!(geom= create_by_typeid(&buffer, wkb_type)) ||
-        !(g_len= geom->init_from_wkb(wkb + WKB_HEADER_SIZE, len,
-                                     (wkbByteOrder)  wkb[0], res)))
+        !(g_len= geom->init_from_wkb(wkb, len, bo, res)))
       return 0;
-    g_len+= WKB_HEADER_SIZE;
-    wkb+= g_len;
-    len-= g_len;
+    advance(wkb,len,g_len);
   }
   return (uint) (wkb - wkb_orig);
 }
@@ -3509,9 +3532,11 @@ bool Gis_geometry_collection::get_data_as_json(String *txt, uint max_dec_digits,
   n_objects= uint4korr(data);
   data+= 4;
 
+  bool any_objects= false;
   txt->qs_append('[');
   while (n_objects--)
   {
+    any_objects= true;
     uint32 wkb_type;
 
     if (no_data(data, WKB_HEADER_SIZE))
@@ -3527,7 +3552,8 @@ bool Gis_geometry_collection::get_data_as_json(String *txt, uint max_dec_digits,
         txt->append(STRING_WITH_LEN("}, "), 512))
       return 1;
   }
-  txt->length(txt->length() - 2);
+  if (any_objects)
+    txt->length(txt->length() - 2);
   if (txt->append(']'))
     return 1;
 

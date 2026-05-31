@@ -19,13 +19,11 @@
 
 #include "config.h"
 #include "common.h"
-#include "debug.h"
 #include "sha256.h"
 
 #include <curl/curl.h>
 #include <curl/easy.h>
 #include <math.h>
-#include <ctype.h>
 
 const char *default_domain = "s3.amazonaws.com";
 
@@ -432,6 +430,7 @@ static uint8_t build_request_headers(CURL *curl, struct curl_slist **head,
   uint8_t i;
   bool has_source = false;
   bool has_token = false;
+  struct curl_slist *current_header;
 
   // Host header
   if (base_domain)
@@ -601,16 +600,15 @@ static uint8_t build_request_headers(CURL *curl, struct curl_slist **head,
     headers = curl_slist_append(headers, headerbuf);
   }
 
-  if (ms3debug_get())
-  {
-    struct curl_slist *current_header = headers;
+  current_header = headers;
 
-    do
-    {
-      ms3debug("Header: %s", current_header->data);
-    }
-    while ((current_header = current_header->next));
+  do
+  {
+    ms3debug("Header: %s", current_header->data);
   }
+  while ((current_header = current_header->next));
+
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
   switch (method)
   {
@@ -645,8 +643,8 @@ static uint8_t build_request_headers(CURL *curl, struct curl_slist **head,
 
   return 0;
 }
-static size_t head_header_callback(char *buffer, size_t size,
-                                   size_t nitems, void *userdata)
+static size_t header_callback(char *buffer, size_t size,
+                              size_t nitems, void *userdata)
 {
   ms3debug("%.*s\n", (int)(nitems * size), buffer);
 
@@ -666,30 +664,6 @@ static size_t head_header_callback(char *buffer, size_t size,
       ms3_status_st *status = (ms3_status_st *) userdata;
       // Length
       status->length = strtoull(buffer + 16, NULL, 10);
-    }
-  }
-
-  return nitems * size;
-}
-
-static size_t get_header_callback(char *buffer, size_t size,
-                                  size_t nitems, void *userdata)
-{
-  ms3debug("%.*s\n", (int)(nitems * size), buffer);
-
-  if (userdata)
-  {
-    if (!strncasecmp(buffer, "Content-Type", 12))
-    {
-      size_t i;
-      ms3_st *ms3 = (ms3_st *) userdata;
-      snprintf(ms3->content_type_in, 127, "%s", (char*)buffer + 14);
-      for (i = 0; i < strlen(ms3->content_type_in); i++)
-      {
-        if (isspace( (unsigned char) ms3->content_type_in[i] ))
-          break;
-      }
-      ms3->content_type_in[i] = '\0';
     }
   }
 
@@ -809,18 +783,11 @@ uint8_t execute_request(ms3_st *ms3, command_t cmd, const char *bucket,
     case MS3_CMD_HEAD:
       method = MS3_HEAD;
       curl_easy_setopt(curl, CURLOPT_HEADERDATA, ret_ptr);
-      curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, head_header_callback);
-      break;
-
-    case MS3_CMD_GET:
-      ms3->content_type_in[0] = '\0';
-      curl_easy_setopt(curl, CURLOPT_HEADERDATA, ms3);
-      curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, get_header_callback);
-      method = MS3_GET;
       break;
 
     case MS3_CMD_LIST:
     case MS3_CMD_LIST_RECURSIVE:
+    case MS3_CMD_GET:
     case MS3_CMD_LIST_ROLE:
       method = MS3_GET;
       break;
@@ -854,20 +821,6 @@ uint8_t execute_request(ms3_st *ms3, command_t cmd, const char *bucket,
     return res;
   }
 
-  if ((method == MS3_PUT) && ms3->content_type_out)
-  {
-    // Mime type maxmum is 128 bytes
-    char content_type[196];
-    snprintf(content_type, 195, "Content-Type: %s", ms3->content_type_out);
-    headers = curl_slist_append(headers, content_type);
-  }
-  else if (ms3->no_content_type)
-  {
-    headers = curl_slist_append(headers, "Content-Type:");
-  }
-
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
   if (ms3->disable_verification)
   {
     ms3debug("Disabling SSL verification");
@@ -900,8 +853,8 @@ uint8_t execute_request(ms3_st *ms3, command_t cmd, const char *bucket,
   }
 
   curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, ms3->buffer_chunk_size);
+  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, ms3debug_get());
   curl_res = curl_easy_perform(curl);
 
   if (curl_res != CURLE_OK)
@@ -913,6 +866,7 @@ uint8_t execute_request(ms3_st *ms3, command_t cmd, const char *bucket,
 
     return MS3_ERR_REQUEST_ERROR;
   }
+
   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
   ms3debug("Response code: %ld", response_code);
 

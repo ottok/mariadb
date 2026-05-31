@@ -1682,6 +1682,8 @@ static int test_disable_tls1_0(MYSQL *my __attribute__((unused)))
   MYSQL_ROW row;
   int rc;
 
+  SKIP_MAXSCALE;
+
 #ifdef HAVE_SCHANNEL
   diag("Test doesn't work with new Schannel TLSv1.3 implementation");
   return SKIP;

@@ -1368,7 +1368,7 @@ code_name(int code)
   case Q_GTID_FLAGS3: return "Q_GTID_FLAGS3";
   case Q_CHARACTER_SET_COLLATIONS: return "Q_CHARACTER_SET_COLLATIONS";
   }
-  sprintf(buf, "CODE#%d", code);
+  snprintf(buf, sizeof(buf), "CODE#%d", code);
   return buf;
 }
 #endif
@@ -2303,7 +2303,7 @@ void Format_description_log_event::deduct_options_written_to_bin_log()
 {
   options_written_to_bin_log= OPTION_AUTO_IS_NULL | OPTION_NOT_AUTOCOMMIT |
               OPTION_NO_FOREIGN_KEY_CHECKS | OPTION_RELAXED_UNIQUE_CHECKS |
-              OPTION_INSERT_HISTORY;
+              OPTION_INSERT_HISTORY | OPTION_NO_CHECK_CONSTRAINT_CHECKS;
   if (!server_version_split.version_is_valid() ||
       server_version_split.kind == master_version_split::KIND_MYSQL ||
       server_version_split < Version(10,5,2))
@@ -2489,8 +2489,10 @@ Gtid_log_event::Gtid_log_event(const uchar *buf, uint event_len,
     buf+= 2;
 
     long data_length= xid.bqual_length + xid.gtrid_length;
-    if (event_len < static_cast<uint>(buf - buf_0) + data_length)
+    if (event_len < static_cast<uint>(buf - buf_0) + data_length ||
+        xid.gtrid_length > MAXGTRIDSIZE || xid.bqual_length > MAXBQUALSIZE)
     {
+      xid.formatID= -1;
       seq_no= 0;
       return;
     }

@@ -16,7 +16,7 @@
 if (ICONV_INCLUDE_DIR AND ICONV_LIBRARIES)
   # Already in cache, be silent
   set(ICONV_FIND_QUIETLY TRUE)
-endif (ICONV_INCLUDE_DIR AND ICONV_LIBRARIES)
+endif ()
 
 find_path(ICONV_INCLUDE_DIR iconv.h)
 
@@ -37,7 +37,7 @@ ENDIF()
 
 if (ICONV_INCLUDE_DIR AND ICONV_LIBRARIES)
    set (ICONV_FOUND TRUE)
-endif (ICONV_INCLUDE_DIR AND ICONV_LIBRARIES)
+endif ()
 
 set(CMAKE_REQUIRED_INCLUDES ${ICONV_INCLUDE_DIR})
 IF(ICONV_EXTERNAL)
@@ -58,8 +58,8 @@ if (ICONV_FOUND)
     return 0;
   }
 " ICONV_SECOND_ARGUMENT_IS_CONST )
-  ADD_DEFINITIONS(-DHAVE_ICONV)
-endif (ICONV_FOUND)
+  add_compile_definitions(HAVE_ICONV)
+endif ()
 
 set (CMAKE_REQUIRED_INCLUDES)
 set (CMAKE_REQUIRED_LIBRARIES)
@@ -67,12 +67,12 @@ set (CMAKE_REQUIRED_LIBRARIES)
 if (ICONV_FOUND)
   if (NOT ICONV_FIND_QUIETLY)
     message (STATUS "Found Iconv: ${ICONV_LIBRARIES}")
-  endif (NOT ICONV_FIND_QUIETLY)
-else (ICONV_FOUND)
+  endif ()
+else ()
   if (Iconv_FIND_REQUIRED)
     message (FATAL_ERROR "Could not find Iconv")
-  endif (Iconv_FIND_REQUIRED)
-endif (ICONV_FOUND)
+  endif ()
+endif ()
 
 MARK_AS_ADVANCED(
   ICONV_INCLUDE_DIR

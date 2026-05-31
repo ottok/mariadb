@@ -2,10 +2,14 @@ name: hostap and wpa-supplicant Tests
 
 # START OF COMMON SECTION
 on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
-  pull_request:
-    branches: [ '*' ]
+    workflow_dispatch: # Allows people to run it manually if they want but
+                       # disables it from running automatically when broken
+# To restore this to an auto test delete the above workflow_dispatch line and
+# comments and uncomment the below lines for push and pull_request
+#  push:
+#    branches: [ 'master', 'main', 'release/**' ]
+#  pull_request:
+#    branches: [ '*' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -80,7 +84,7 @@ jobs:
 
       - name: Checkout hostap
         if: steps.cache.outputs.cache-hit != 'true'
-        run: git clone git://w1.fi/hostap.git hostap
+        run: git clone https://w1.fi/hostap.git hostap
 
   build_uml_linux:
     name: Build UML (UserMode Linux)
@@ -232,6 +236,7 @@ jobs:
         working-directory: hostap/tests/hwsim/auth_serv
         run: |
           ./update.sh
+          ./sha512-generate.sh
           # Force regeneration of rsa3072-ca.key to get rsa3072-generate.sh to
           # correctly update all the certs
           rm rsa3072-ca.key
@@ -330,6 +335,10 @@ jobs:
             fi
             rm -r /tmp/hwsim-test-logs
           done < $GITHUB_WORKSPACE/wolfssl/.github/workflows/hostap-files/configs/${{ matrix.config.hostap_ref }}/tests
+
+      - name: show errors
+        if: ${{ failure() && steps.testing.outcome == 'failure' }}
+        run: grep -riP 'fail|error' /tmp/hwsim-test-logs/latest
 
       # The logs are quite big. It hasn't been useful so far so let's not waste
       # precious gh space.

@@ -206,7 +206,6 @@ ms3_st *ms3_init(const char *s3key, const char *s3secret,
   ms3->curl = curl_easy_init();
   ms3->last_error = NULL;
   ms3->use_http = false;
-  ms3->no_content_type = false;
   ms3->disable_verification = false;
   ms3->first_run = true;
   ms3->path_buffer = ms3_cmalloc(sizeof(char) * 1024);
@@ -229,11 +228,6 @@ ms3_st *ms3_init(const char *s3key, const char *s3secret,
   ms3->sts_endpoint = NULL;
   ms3->sts_region = NULL;
   ms3->iam_role_arn = NULL;
-
-#ifdef HAVE_NEW_CURL_API
-  ms3->content_type_in = NULL;
-#endif
-  ms3->content_type_out = NULL;
 
   return ms3;
 }
@@ -582,12 +576,6 @@ uint8_t ms3_set_option(ms3_st *ms3, ms3_set_option_t option, void *value)
       break;
     }
 
-    case MS3_OPT_NO_CONTENT_TYPE:
-    {
-      ms3->no_content_type = ms3->no_content_type ? 0 : 1;
-      break;
-    }
-
     case MS3_OPT_BUFFER_CHUNK_SIZE:
     {
       size_t new_size;
@@ -743,21 +731,3 @@ uint8_t ms3_assume_role(ms3_st *ms3)
     return res;
 }
 
-void ms3_set_content_type(ms3_st *ms3, const char *content_type)
-{
-    if (!ms3)
-    {
-        return;
-    }
-
-    ms3->content_type_out = content_type;
-}
-
-const char *ms3_get_content_type(ms3_st *ms3)
-{
-    if (!ms3)
-    {
-        return NULL;
-    }
-    return ms3->content_type_in;
-}

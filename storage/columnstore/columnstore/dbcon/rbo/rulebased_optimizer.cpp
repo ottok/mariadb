@@ -22,8 +22,9 @@
 #include "execplan/calpontselectexecutionplan.h"
 #include "predicateoperator.h"
 #include "rbo_apply_parallel_ces.h"
-#include "rbo_predicate_pushdown.h"
 #include "rbo_apply_rewrite_distinct.h"
+#include "rbo_groupby_wrap_columns.h"
+#include "rbo_predicate_pushdown.h"
 #include "utils/pron/pron.h"
 
 #include "calpontsystemcatalog.h"
@@ -81,6 +82,7 @@ bool optimizeCSEP(execplan::CalpontSelectExecutionPlan& root, optimizer::RBOptim
                   bool useUnstableOptimizer)
 {
   std::vector<optimizer::Rule> rules;
+
   if (useUnstableOptimizer)
   {
     optimizer::Rule parallelCES{"parallel_ces", optimizer::parallelCESFilter, optimizer::applyParallelCES};
@@ -90,7 +92,9 @@ bool optimizeCSEP(execplan::CalpontSelectExecutionPlan& root, optimizer::RBOptim
                                     optimizer::applyRewriteDistinct};
     rules.push_back(rewriteDistinct);
   }
-
+  optimizer::Rule rewriteGroupBy{"groupby_wrap", optimizer::groupByWrapColumnsFilter,
+                                  optimizer::applyGroupByWrapColumns};
+  rules.push_back(rewriteGroupBy);
   optimizer::Rule predicatePushdown{"predicate_pushdown", optimizer::predicatePushdownFilter,
                                     optimizer::applyPredicatePushdown};
   rules.push_back(predicatePushdown);

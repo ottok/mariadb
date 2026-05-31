@@ -736,7 +736,7 @@ corrupted:
 
 	if (trx_sys.is_undo_empty()) {
 func_exit:
-		purge_sys.clone_oldest_view<true>();
+		purge_sys.clone_oldest_view<true>(nullptr);
 		return DB_SUCCESS;
 	}
 
@@ -1434,6 +1434,7 @@ TRANSACTIONAL_INLINE inline void trx_t::commit_in_memory(mtr_t *mtr)
         ut_ad(!l);
 #endif /* UNIV_DEBUG */
     commit_state();
+    DEBUG_SYNC_C("trx_after_commit_state");
 
     if (id)
     {
@@ -1858,8 +1859,7 @@ state_ok:
 
 /**********************************************************************//**
 Prints info about a transaction.
-The caller must hold lock_sys.latch.
-When possible, use trx_print() instead. */
+The caller must hold lock_sys.latch. */
 void
 trx_print_latched(
 /*==============*/
@@ -1872,27 +1872,6 @@ trx_print_latched(
 		      trx->lock.n_rec_locks,
 		      UT_LIST_GET_LEN(trx->lock.trx_locks),
 		      mem_heap_get_size(trx->lock.lock_heap));
-}
-
-/**********************************************************************//**
-Prints info about a transaction.
-Acquires and releases lock_sys.latch. */
-TRANSACTIONAL_TARGET
-void
-trx_print(
-/*======*/
-	FILE*		f,		/*!< in: output stream */
-	const trx_t*	trx)		/*!< in: transaction */
-{
-  ulint n_rec_locks, n_trx_locks, heap_size;
-  {
-    TMLockMutexGuard g{SRW_LOCK_CALL};
-    n_rec_locks= trx->lock.n_rec_locks;
-    n_trx_locks= UT_LIST_GET_LEN(trx->lock.trx_locks);
-    heap_size= mem_heap_get_size(trx->lock.lock_heap);
-  }
-
-  trx_print_low(f, trx, n_rec_locks, n_trx_locks, heap_size);
 }
 
 /** Prepare a transaction.

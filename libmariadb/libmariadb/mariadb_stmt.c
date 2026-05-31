@@ -448,7 +448,8 @@ int mthd_stmt_fetch_to_bind(MYSQL_STMT *stmt, unsigned char *row)
         stmt->bind[i].u.row_ptr= NULL;
         if (!stmt->bind[i].length)
           stmt->bind[i].length= &stmt->bind[i].length_value;
-        *stmt->bind[i].length= stmt->bind[i].length_value= 0;
+        if (mysql_ps_fetch_functions[stmt->fields[i].type].pack_len < 0)
+          *stmt->bind[i].length= stmt->bind[i].length_value= 0;
       }
     } else
     {
@@ -924,7 +925,7 @@ my_bool mysql_stmt_skip_paramset(MYSQL_STMT *stmt, uint row)
     if (ma_get_indicator(stmt, i, row) == STMT_INDICATOR_IGNORE_ROW)
       return '\1';
   }
-  
+
   return '\0';
 }
 /* }}} */
@@ -1437,7 +1438,15 @@ my_bool STDCALL mysql_stmt_bind_result(MYSQL_STMT *stmt, MYSQL_BIND *bind)
     if (!stmt->bind[i].error)
       stmt->bind[i].error= &stmt->bind[i].error_value;
 
+    if (mysql_ps_fetch_functions[stmt->bind[i].buffer_type].pack_len >= 0)
+    {
+      *stmt->bind[i].length= stmt->bind[i].length_value= mysql_ps_fetch_functions[stmt->bind[i].buffer_type].pack_len;
+    } else {
+      *stmt->bind[i].length= stmt->bind[i].length_value= 0;
+    }
+
     /* set length values for numeric types */
+/*
     switch(bind[i].buffer_type) {
     case MYSQL_TYPE_NULL:
       *stmt->bind[i].length= stmt->bind[i].length_value= 0;
@@ -1467,6 +1476,7 @@ my_bool STDCALL mysql_stmt_bind_result(MYSQL_STMT *stmt, MYSQL_BIND *bind)
     default:
       break;
     }
+*/
   }
   stmt->bind_result_done= 1;
   CLEAR_CLIENT_STMT_ERROR(stmt);
@@ -1858,7 +1868,7 @@ int STDCALL mysql_stmt_prepare(MYSQL_STMT *stmt, const char *query, unsigned lon
   if (!is_multi && mysql->net.extension->multi_status == COM_MULTI_ENABLED)
     if (ma_multi_command(mysql, COM_MULTI_END))
       goto fail;
-  
+
   if (mysql->net.extension->multi_status > COM_MULTI_OFF ||
       mysql->options.extension->skip_read_response)
     return 0;
@@ -2002,7 +2012,7 @@ int mthd_stmt_read_execute_response(MYSQL_STMT *stmt)
 
   ret= test((mysql->methods->db_read_stmt_result &&
                  mysql->methods->db_read_stmt_result(mysql)));
-  
+
   if (!ret && mysql->field_count && !mysql->fields)
   {
       /*
@@ -2108,7 +2118,7 @@ int mthd_stmt_read_execute_response(MYSQL_STMT *stmt)
     }
 
     if ((stmt->upsert_status.server_status & SERVER_STATUS_CURSOR_EXISTS)  &&
-        (stmt->flags & CURSOR_TYPE_READ_ONLY)) 
+        (stmt->flags & CURSOR_TYPE_READ_ONLY))
     {
       stmt->cursor_exists = TRUE;
       mysql->status = MYSQL_STATUS_READY;
@@ -2218,7 +2228,7 @@ int STDCALL mysql_stmt_execute(MYSQL_STMT *stmt)
   if (!request)
     return 1;
 
-  ret= stmt->mysql->methods->db_command(mysql, 
+  ret= stmt->mysql->methods->db_command(mysql,
                                         stmt->array_size > 0 ? COM_STMT_BULK_EXECUTE : COM_STMT_EXECUTE,
                                         request, request_len, 1, stmt);
   if (request)
@@ -2548,7 +2558,7 @@ int STDCALL mysql_stmt_next_result(MYSQL_STMT *stmt)
   }
 
   if (stmt->mysql->status == MYSQL_STATUS_GET_RESULT)
-    stmt->mysql->status= MYSQL_STATUS_STMT_RESULT; 
+    stmt->mysql->status= MYSQL_STATUS_STMT_RESULT;
 
   if (stmt->mysql->field_count)
     rc= madb_alloc_stmt_fields(stmt);
@@ -2592,7 +2602,7 @@ int STDCALL mariadb_stmt_execute_direct(MYSQL_STMT *stmt,
       (stmt->mysql->extension->mariadb_server_capabilities &
       (MARIADB_CLIENT_STMT_BULK_OPERATIONS >> 32))) || mysql->net.compress;
 
-  /* Server versions < 10.2 don't support execute_direct, so we need to 
+  /* Server versions < 10.2 don't support execute_direct, so we need to
      emulate it */
   if (emulate_cmd)
   {
@@ -2687,7 +2697,7 @@ fail:
     my_set_error(mysql, mysql_stmt_errno(stmt), mysql_stmt_sqlstate(stmt),
                  mysql_stmt_error(stmt));
     stmt->state= MYSQL_STMT_INITTED;
-  } 
+  }
   return 1;
 }
 

@@ -30,6 +30,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <string.h>
 #include <errmsg.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <ma_server_error.h>
 #include <mysql/client_plugin.h>
 #include <errmsg.h>
@@ -84,9 +85,9 @@ if (force_tls || fingerprint[0])\
 
 MYSQL *mysql_default = NULL;  /* default connection */
 
-#define IS_MAXSCALE_ENV()\
-    (getenv("srv")!=NULL && (strcmp(getenv("srv"), "maxscale") == 0 ||\
-     strcmp(getenv("srv"), "skysql-ha") == 0))
+#define IS_MAXSCALE_ENV() \
+    ((getenv("srv") != NULL && strcmp(getenv("srv"), "maxscale") == 0) || \
+    (getenv("MAXSCALE_TAG") != NULL && strlen(getenv("MAXSCALE_TAG")) > 0))
 
 #define IS_MAXSCALE()\
    ((mysql_default && strstr(mysql_get_server_info(mysql_default), "maxScale")) ||\
@@ -135,9 +136,9 @@ if (!((mysql->server_capabilities & CLIENT_LOCAL_FILES) &&  \
 
 #define SKIP_TRAVIS()\
 do {\
-  if (getenv("TRAVIS"))\
+  if (getenv("TRAVIS") || getenv("GITHUB_ACTIONS"))\
   {\
-    diag("Skip test on Travis CI");\
+    diag("Skip test on Travis CI or GitHub Actions");\
     return SKIP;\
   }\
 }while(0)
@@ -282,7 +283,7 @@ int do_verify_prepare_field(MYSQL_RES *result,
                             enum enum_field_types type __attribute__((unused)),
                             const char *table,
                             const char *org_table, const char *db,
-                            unsigned long length __attribute__((unused)), 
+                            unsigned long length __attribute__((unused)),
                             const char *def __attribute__((unused)),
                             const char *file __attribute__((unused)),
                             int line __attribute__((unused)))
@@ -370,7 +371,7 @@ get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
 {
   switch (optid) {
   case '?':
-  case 'I':                           
+  case 'I':
     my_print_help(test_options);
     exit(0);
     break;
@@ -515,7 +516,7 @@ int check_variable(MYSQL *mysql, const char *variable, const char *value)
   return FAIL;
 }
 
-/* 
+/*
  * function *test_connect
  *
  * returns a new connection. This function will be called, if the test doesn't
@@ -678,10 +679,10 @@ MYSQL *my_test_connect(MYSQL *mysql,
     mysql_options(mysql, MARIADB_OPT_SSL_FP, fingerprint);
   }
 
-  if (IS_MAXSCALE_ENV())
+  if (IS_MAXSCALE_ENV() && host && hostname && strcmp(host, hostname) == 0)
   {
     mysql_get_optionv(mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify);
-    if (force_tls || verify)
+    if (force_tls || verify || mysql->options.use_ssl)
       port= ssl_port;
   }
 
@@ -717,7 +718,8 @@ void run_tests(struct my_tests_st *test) {
   mysql_options(mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify);
   mysql_ssl_set(mysql, NULL, NULL, NULL, NULL, NULL);
 
-  if (!mysql_real_connect(mysql, hostname, username, password, schema, port, socketname, 0))
+  if (!mysql_real_connect(mysql, hostname, username, password, schema,
+                          IS_MAXSCALE_ENV() ? ssl_port : port, socketname, 0))
   {
     diag("Error: %s", mysql_error(mysql));
     BAIL_OUT("Can't establish TLS connection to server.");

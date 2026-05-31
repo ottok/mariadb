@@ -60,7 +60,6 @@ struct ms3_st
   CURL *curl;
   char *last_error;
   bool use_http;
-  bool no_content_type;
   bool disable_verification;
   uint8_t list_version;
   uint8_t protocol_version;
@@ -69,8 +68,6 @@ struct ms3_st
   char *query_buffer;
   void *read_cb;
   void *user_data;
-  const char *content_type_out;
-  char content_type_in[128]; // max length allowed for mime types
   struct ms3_list_container_st list_container;
 };
 
