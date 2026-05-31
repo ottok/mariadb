@@ -1215,7 +1215,7 @@ public:
   done before any other THD constructors and decrement - after any other THD
   destructors.
 
-  Destructor unblocks close_conneciton() if there are no more THD's left.
+  Destructor unblocks close_connection() if there are no more THD's left.
 */
 struct THD_count
 {
@@ -6185,6 +6185,12 @@ public:
     return ((variables.note_verbosity & (NOTE_VERBOSITY_UNUSABLE_KEYS)) ||
             (lex->describe && // Is EXPLAIN
              (variables.note_verbosity & NOTE_VERBOSITY_EXPLAIN)));
+  }
+
+  uint gconcat_max_len()
+  {
+    return MY_MIN(variables.group_concat_max_len,
+                  (uint)variables.max_allowed_packet);
   }
 
   bool vers_insert_history_fast(const TABLE *table)

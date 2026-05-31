@@ -301,7 +301,7 @@ ExtentMapIndexImpl* ExtentMapIndexImpl::makeExtentMapIndexImpl(unsigned key, off
 
   if (fInstance_)
   {
-    if (size != fInstance_->getShmemSize())
+    if (size != fInstance_->getShmemImplSize())
     {
       fInstance_->fBRMManagedShmMemImpl_.remap();
     }
@@ -365,7 +365,7 @@ InsertUpdateShmemKeyPair ExtentMapIndexImpl::insert(const EMEntry& emEntry, cons
   while (dbRoot >= extentMapIndexPtr->size())
   {
     const size_t memNeeded = (extentMapIndexPtr->capacity() + extraUnits_) * dbRootContainerUnitSize_;
-    shmemHasGrown = growIfNeeded(memNeeded);
+    shmemHasGrown |= growIfNeeded(memNeeded);
     // Need to refresh all refs and iterators b/c the local address range changed.
     extentMapIndexPtr = get();
     assert(extentMapIndexPtr);
@@ -2063,7 +2063,6 @@ void ExtentMap::grabEMIndex(OPS op)
   }
   else if (fPExtMapIndexImpl_->getShmemImplSize() != (unsigned)fEMIndexShminfo->allocdSize)
   {
-    fPExtMapIndexImpl_->refreshShm();
     fPExtMapIndexImpl_ =
         ExtentMapIndexImpl::makeExtentMapIndexImpl(getInitialEMIndexShmkey(), fEMIndexShminfo->allocdSize);
   }

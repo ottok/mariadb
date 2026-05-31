@@ -4851,7 +4851,7 @@ static int test_codbc138(MYSQL *mysql)
   {0,0,0, 0,0,0, 0,0, MYSQL_TIMESTAMP_ERROR}
   },
 
-  {"SELECT '10:15:00'", 
+  {"SELECT '10:15:00'",
   {0,0,0, 10,15,0, 0,0, MYSQL_TIMESTAMP_TIME}
   },
   {"SELECT '10:15:01'",
@@ -4875,7 +4875,7 @@ static int test_codbc138(MYSQL *mysql)
   {"SELECT '-838:59:59'",
   {0,0,0, 838,59,59, 0, 1, MYSQL_TIMESTAMP_TIME},
   },
- 
+
   {"SELECT '00:60:00'",
   {0,0,0, 0,0,0, 0,0, MYSQL_TIMESTAMP_ERROR},
   },
@@ -4891,7 +4891,7 @@ static int test_codbc138(MYSQL *mysql)
   {"SELECT '1999-12-31 23:59:59.9999999'",
   {1999,12,31, 23,59,59, 999999, 0, MYSQL_TIMESTAMP_DATETIME},
   },
-  {"SELECT '00-08-11 8:46:40'", 
+  {"SELECT '00-08-11 8:46:40'",
   {2000,8,11, 8,46,40, 0,0, MYSQL_TIMESTAMP_DATETIME},
   },
   {"SELECT '1999-12-31 25:59:59.999999'",
@@ -4972,7 +4972,7 @@ static int test_conc344(MYSQL *mysql)
 
   rc= mysql_query(mysql, "DROP TABLE IF EXISTS t1");
   check_mysql_rc(rc, mysql);
- 
+
   rc= mysql_query(mysql, "CREATE TABLE t1 (a int, b int)");
   check_mysql_rc(rc, mysql);
   rc= mysql_query(mysql, "INSERT INTO t1 VALUES (1,1), (2,2),(3,3),(4,4),(5,5)");
@@ -5256,7 +5256,7 @@ static int test_mdev_21920(MYSQL *mysql)
 
   mysql_stmt_close(stmt);
 
-  return OK; 
+  return OK;
 }
 
 static int test_returning(MYSQL *mysql)
@@ -5717,7 +5717,7 @@ static int test_conc633(MYSQL *mysql)
   {
     diag("Error: expected stmt_id=-1");
     goto end;
-  }  
+  }
 
   if (!(my= test_connect(NULL)))
   {
@@ -5752,7 +5752,7 @@ static int test_conc633(MYSQL *mysql)
   {
     diag("Error: no stmt_id assigned");
     goto end;
-  }  
+  }
 
   rc= mysql_query(my, "UNLOCK TABLES");
   check_mysql_rc(rc, mysql);
@@ -5861,7 +5861,7 @@ static int test_conc702(MYSQL *ma)
   rc= mysql_stmt_execute(stmt);
   check_stmt_rc(rc, stmt);
 
- 
+
   mysql_stmt_store_result(stmt);
   check_stmt_rc(rc, stmt);
 
@@ -6013,7 +6013,7 @@ static int test_conc762(MYSQL *mysql)
   my_bool is_null[2]= {1,1};
   unsigned long length[2]= {1,1};
 
-  rc= mysql_stmt_prepare(stmt, SL("SELECT NULL, 'foo'"));
+  rc= mysql_stmt_prepare(stmt, SL("SELECT NULL, 'foo' union select 'bar', NULL union select NULL, 'foobar'"));
   check_stmt_rc(rc, stmt);
 
   memset(&bind, 0, sizeof(MYSQL_BIND) * 2);
@@ -6031,15 +6031,39 @@ static int test_conc762(MYSQL *mysql)
 
   rc= mysql_stmt_bind_result(stmt, bind);
 
+
   mysql_stmt_fetch(stmt);
   FAIL_IF(is_null[0]==0, "Expected NULL value");
   FAIL_IF(is_null[1]==1, "Expected non-NULL value");
   FAIL_IF(length[0]!=0, "Expected length=0");
   FAIL_IF(length[1]!=3, "Expected length=3");
 
-//  FAIL_IF(length[0] != 0, "Expected length=0");
-  
-//FAIL_IF(length[1] != 3, "Expected length=3)";
+  mysql_stmt_fetch(stmt);
+  FAIL_IF(is_null[1]==0, "Expected NULL value");
+  FAIL_IF(is_null[0]==1, "Expected non-NULL value");
+  FAIL_IF(length[1]!=0, "Expected length=0");
+  FAIL_IF(length[0]!=3, "Expected length=3");
+
+  mysql_stmt_fetch(stmt);
+  FAIL_IF(is_null[0]==0, "Expected NULL value");
+  FAIL_IF(is_null[1]==1, "Expected non-NULL value");
+  FAIL_IF(length[0]!=0, "Expected length=0");
+  FAIL_IF(length[1]!=6, "Expected length=3");
+
+  /* Also check with MYSQL_TYPE_NULL */
+  length[0]= 3;
+
+  rc= mysql_stmt_prepare(stmt, SL("SELECT NULL"));
+  check_stmt_rc(rc, stmt);
+
+  rc= mysql_stmt_execute(stmt);
+  check_stmt_rc(rc, stmt);
+
+  rc= mysql_stmt_bind_result(stmt, bind);
+  check_stmt_rc(rc, stmt);
+
+  mysql_stmt_fetch(stmt);
+  FAIL_IF(length[0]!=0, "Expected length=0");
 
   mysql_stmt_close(stmt);
   return OK;

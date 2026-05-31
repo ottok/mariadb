@@ -32,7 +32,6 @@ version.h
 *.lo
 *.la
 tags
-TAGS
 docs/latex/
 html/
 *.tar.gz

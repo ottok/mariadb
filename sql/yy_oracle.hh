@@ -842,11 +842,6 @@ union YYSTYPE
   ulonglong ulonglong_number;
   longlong longlong_number;
   uint sp_instr_addr;
-  /*
-    Longlong_hybrid does not have a default constructor, hence the
-    default value below.
-  */
-  Longlong_hybrid longlong_hybrid_number= Longlong_hybrid(0, false);
 
   /* structs */
   LEX_CSTRING lex_str;
@@ -884,6 +879,11 @@ union YYSTYPE
   Lex_select_lock select_lock;
   Lex_select_limit select_limit;
   Lex_order_limit_lock *order_limit_lock;
+  struct
+  {
+    longlong num;
+    bool is_unsigned;
+  } longlong_hybrid_number;
 
   /* pointers */
   Lex_ident_sys *ident_sys_ptr;

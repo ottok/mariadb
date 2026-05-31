@@ -20,13 +20,13 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.event_name != 'schedule' ||
-      github.ref == 'refs/heads/3.4' ||
-      github.ref == 'refs/heads/3.1' ||
-      github.ref == 'refs/heads/3.2'
+      startsWith(github.ref, 'refs/heads/3.4')  ||
+      startsWith(github.ref, 'refs/heads/3.2')  ||
+      startsWith(github.ref, 'refs/heads/3.1')
     outputs:
       matrix: ${{ steps.set-matrix.outputs.final-matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: set-matrix
         name: build matrix
         uses: mariadb-corporation/connector-ci-build-matrix@main
@@ -114,7 +114,7 @@ jobs:
     env:
       MYSQL_TEST_HOST: mariadb.example.com
       MYSQL_TEST_PORT: 3306
-      MYSQL_TEST_USER: root
+      MYSQL_TEST_USER: testuser
       MYSQL_TEST_PASSWD: "heyPassw-!*20oRd"
       MYSQL_TEST_DB: testc
 
@@ -124,22 +124,22 @@ jobs:
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.continue-on-error || matrix.os == 'macos-latest' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Test Environment
         id: setup-env
         uses: mariadb-corporation/connector-ci-setup@master
         with:
-          node-version: ${{ matrix.node }}
           db-type: ${{ matrix.db-type }}
           db-tag: ${{ matrix.db-tag }}
           test-db-password: ${{ env.MYSQL_TEST_PASSWD }}
           test-db-database: ${{ env.MYSQL_TEST_DB }}
           test-db-port: ${{ env.MYSQL_TEST_PORT }}
           additional-conf: ${{ matrix.additional-conf || '' }}
-          registry-user: ${{ matrix.db-type == 'enterprise' && secrets.ENTERPRISE_USER || (secrets.DOCKER_PWD != '' && 'mariadbtest' || '') }}
-          registry-password: ${{ matrix.db-type == 'enterprise' && secrets.ENTERPRISE_TOKEN || secrets.DOCKER_PWD }}
+          registry-user: ${{ matrix.db-type == 'enterprise' && secrets.ENTERPRISE_USER || (secrets.DOCKER_TOKEN != '' && secrets.DOCKER_LOGIN || '') }}
+          registry-password: ${{ matrix.db-type == 'enterprise' && secrets.ENTERPRISE_TOKEN || secrets.DOCKER_TOKEN }}
           os: ${{ matrix.os }}
+          maxscale-tag: ${{ matrix.maxscale-tag || ''}}
 
       - name: make ubuntu/macos
         if: ${{ !startsWith(matrix.os, 'windows') }}
@@ -163,9 +163,30 @@ jobs:
         shell: bash
         run: |
           cd unittest/libmariadb
-          ctest -V
+          ctest -V --output-on-failure
         env:
           MARIADB_CC_TEST: 1
           MYSQL_TEST_TLS: 0
+          MYSQL_TEST_SSL_PORT: ${{ env.TEST_MAXSCALE_TLS_PORT }}
           srv: ${{ matrix.db-type }}
+          MAXSCALE_TAG: ${{ matrix.maxscale-tag || '' }}
           MARIADB_PLUGIN_DIR: ${{ github.workspace }}
+
+      - name: MaxScale logs on failure
+        if: ${{ failure() && matrix.maxscale-tag != '' && !startsWith(matrix.os, 'windows') }}
+        shell: bash
+        run: |
+          echo "============================="
+          echo "=== MaxScale container(s) ==="
+          echo "============================="
+          podman ps -a --filter "name=maxscale" --format '{{.Names}} {{.Image}} {{.Status}}' || true
+
+          for c in $(podman ps -a --filter "name=maxscale" --format '{{.Names}}'); do
+            echo ""
+            echo "=== podman logs: $c ==="
+            podman logs "$c" 2>&1 | tail -n 500 || true
+
+            echo ""
+            echo "=== /var/log/maxscale/maxscale.log in $c ==="
+            podman exec "$c" sh -c 'tail -n 500 /var/log/maxscale/maxscale.log 2>/dev/null || cat /var/log/maxscale/maxscale.log 2>/dev/null' || true
+          done

@@ -44,7 +44,7 @@ if(GSSAPI_LIBS AND GSSAPI_FLAVOR)
   # in cache already
   set(GSSAPI_FOUND TRUE)
 
-else(GSSAPI_LIBS AND GSSAPI_FLAVOR)
+else()
 
   find_program(KRB5_CONFIG NAMES krb5-config PATHS
      /opt/local/bin
@@ -70,7 +70,7 @@ else(GSSAPI_LIBS AND GSSAPI_FLAVOR)
     if(_return_VALUE)
       message(STATUS "GSSAPI configure check failed.")
       set(HAVE_KRB5_GSSAPI FALSE)
-    endif(_return_VALUE)
+    endif()
     IF(CMAKE_SYSTEM_NAME MATCHES AIX)
       string(REGEX REPLACE "-Wl[A-Za-z0-9_/,:-]*[ $]?" "" GSSAPI_LIBS "${GSSAPI_LIBS}")
       string(REGEX REPLACE  "-L[A-Za-z0-9_/,:-]*[ $]?" "" GSSAPI_LIBS "${GSSAPI_LIBS}")
@@ -93,19 +93,19 @@ else(GSSAPI_LIBS AND GSSAPI_FLAVOR)
     set(GSSAPI_FLAVOR_MIT)
     if(gssapi_flavor_tmp MATCHES ".*Massachusetts.*")
       set(GSSAPI_FLAVOR "MIT")
-    else(gssapi_flavor_tmp MATCHES ".*Massachusetts.*")
+    else()
       set(GSSAPI_FLAVOR "HEIMDAL")
-    endif(gssapi_flavor_tmp MATCHES ".*Massachusetts.*")
+    endif()
 
     if(NOT HAVE_KRB5_GSSAPI)
       if (gssapi_flavor_tmp MATCHES "Sun Microsystems.*")
          message(STATUS "Solaris Kerberos does not have GSSAPI; this is normal.")
          set(GSSAPI_LIBS)
          set(GSSAPI_INCS)
-      else(gssapi_flavor_tmp MATCHES "Sun Microsystems.*")
+      else()
          message(WARNING "${KRB5_CONFIG} failed unexpectedly.")
-      endif(gssapi_flavor_tmp MATCHES "Sun Microsystems.*")
-    endif(NOT HAVE_KRB5_GSSAPI)
+      endif()
+    endif()
 
     if(GSSAPI_LIBS) # GSSAPI_INCS can be also empty, so don't rely on that
       set(GSSAPI_FOUND TRUE CACHE STRING "")
@@ -117,8 +117,8 @@ else(GSSAPI_LIBS AND GSSAPI_FLAVOR)
 
       mark_as_advanced(GSSAPI_INCS GSSAPI_LIBS GSSAPI_FLAVOR)
 
-    endif(GSSAPI_LIBS)
-  
-  endif(KRB5_CONFIG)
+    endif()
 
-endif(GSSAPI_LIBS AND GSSAPI_FLAVOR)
+  endif()
+
+endif()

@@ -105,11 +105,9 @@ ms3_error()
 ms3_debug()
 -----------
 
-.. c:function:: void ms3_debug(int debug_state)
+.. c:function:: void ms3_debug()
 
-   Enables and disables debugging output on stderr.
-
-   :param debug_state: Set to 1 to enable debugging, zero to disable.
+   Enables and disables debugging output on stderr. Each call toggles enable / disable.
 
    Note::
        This enables/disables globally for the library
@@ -392,30 +390,4 @@ Example
    printf("File length: %ld\n", status.length);
    printf("File timestamp: %ld\n", status.created);
    ms3_deinit(ms3);
-
-ms3_set_content_type()
-----------------------
-
-.. c:function:: void ms3_set_content_type(ms3_st *ms3, const char *content_type)
-
-   Sets the ``Content-Type:`` header for subsequent PUT requests. Note that this
-   is not copied, so it should remain in scope for each :c:func:`ms3_put()` call.
-   Setting this to ``NULL`` will clear the ``Content-Type`` header to the default.
-
-   :param ms3: The marias3 object
-   :param content_type: The mime type to set
-
-ms3_get_content_type()
-----------------------
-
-.. c:function:: const char *ms3_get_content_type(ms3_st *ms3)
-
-   Gets the ``Content-Type:`` header for the previous GET request  response
-   from the S3 server.
-   The memory for this is part of the :c:type:`ms3_st` object and should not be
-   freed by the application. The contents will be reset on each GET request.
-
-   :param ms3: The marias3 object
-   :param content_type: The mime type for the previous request
-
 
