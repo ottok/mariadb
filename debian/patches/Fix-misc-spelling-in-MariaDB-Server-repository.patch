@@ -54,10 +54,10 @@ index 22f4dc3..cf704fd 100644
           "terminates with an error. Default is 0, in which case mariadb-backup waits "
           "indefinitely for BACKUP STAGE START to finish",
 diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
-index effbac0..44da7dc 100644
+index dec69a0..b45066f 100644
 --- a/extra/mariabackup/xtrabackup.cc
 +++ b/extra/mariabackup/xtrabackup.cc
-@@ -1808,7 +1808,7 @@ struct my_option xb_client_options[]= {
+@@ -1809,7 +1809,7 @@ struct my_option xb_client_options[]= {
      {"startup-wait-timeout", OPT_LOCK_WAIT_TIMEOUT,
       "This option specifies time in seconds that mariadb-backup should wait for "
       "BACKUP STAGE START to complete. BACKUP STAGE START has to wait until all "
@@ -66,7 +66,7 @@ index effbac0..44da7dc 100644
       "If there are still such queries when the timeout expires, mariadb-backup "
       "terminates with an error. Default is 0, in which case mariadb-backup waits "
       "indefinitely for BACKUP STAGE START to finish",
-@@ -5852,7 +5852,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
+@@ -5868,7 +5868,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
  	}
  
  	/* Mariabackup doesn't detect any FILE_OP for the deferred
@@ -76,7 +76,7 @@ index effbac0..44da7dc 100644
  	for (auto space_name: defer_space_names) {
  		if (!check_if_skip_table(space_name.c_str())) {
 diff --git a/mysql-test/main/mysqld--help.result b/mysql-test/main/mysqld--help.result
-index 44a92c2..4422900 100644
+index 2c65abf..6e3a414 100644
 --- a/mysql-test/main/mysqld--help.result
 +++ b/mysql-test/main/mysqld--help.result
 @@ -826,13 +826,14 @@ The following specify which files/extra groups are read (specified before remain
@@ -102,7 +102,7 @@ index 44a92c2..4422900 100644
   Cost of checking a key against the end key condition
   --optimizer-key-copy-cost=# 
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
-index f127a28..df7647d 100644
+index aad92d5..ec1e062 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 @@ -2505,7 +2505,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
@@ -115,7 +115,7 @@ index f127a28..df7647d 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
-index 9ead8d4..3b79975 100644
+index 11f168d..1f37da6 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 @@ -2715,7 +2715,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
@@ -128,10 +128,10 @@ index 9ead8d4..3b79975 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/sql/opt_subselect.cc b/sql/opt_subselect.cc
-index 0bf1998..4ebb368 100644
+index ad10ab5..fb6806a 100644
 --- a/sql/opt_subselect.cc
 +++ b/sql/opt_subselect.cc
-@@ -6894,7 +6894,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
+@@ -6895,7 +6895,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
          add("rows", inner_record_count_1).
          add("materialization_cost", materialize_strategy_cost).
          add("in_exist_cost", in_exists_strategy_cost).
@@ -140,7 +140,7 @@ index 0bf1998..4ebb368 100644
      }
  
      DBUG_PRINT("info",
-@@ -6932,7 +6932,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
+@@ -6933,7 +6933,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
      {
        Json_writer_object trace_wrapper(thd);
        Json_writer_object trace_subquery(thd, "subquery_plan_revert");
@@ -150,7 +150,7 @@ index 0bf1998..4ebb368 100644
    }
  
 diff --git a/sql/sql_select.cc b/sql/sql_select.cc
-index fa73d52..1e697a5 100644
+index 60f3e45..5b50f6f 100644
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
 @@ -11831,7 +11831,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
@@ -162,7 +162,7 @@ index fa73d52..1e697a5 100644
      execution.
  
    @detail
-@@ -15318,7 +15318,7 @@ void JOIN::drop_unused_derived_keys()
+@@ -15317,7 +15317,7 @@ void JOIN::drop_unused_derived_keys()
        }
        /*
          We dropped all keys except the chosen one and unique keys.
@@ -172,7 +172,7 @@ index fa73d52..1e697a5 100644
        tab->ref.key= 0;
      }
 diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
-index 3c2fee2..545821d 100644
+index ad4bb1f..e1b5dca 100644
 --- a/sql/sys_vars.cc
 +++ b/sql/sys_vars.cc
 @@ -2973,7 +2973,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(

@@ -33,7 +33,7 @@ index cf704fd..1c0bc11 100644
  	OPT_COMPACT,
  	OPT_COMPRESS,
 diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
-index 44da7dc..377082a 100644
+index b45066f..8c218ff 100644
 --- a/extra/mariabackup/xtrabackup.cc
 +++ b/extra/mariabackup/xtrabackup.cc
 @@ -220,7 +220,7 @@ uint xtrabackup_compress = FALSE;
@@ -46,10 +46,10 @@ index 44da7dc..377082a 100644
  ulint xtrabackup_log_copy_interval = 1000;
  static ulong max_buf_pool_modified_pct;
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_innodb.result b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
-index b9f1e8b..bf590a5 100644
+index 988eb24..5540f6f 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_innodb.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
-@@ -565,7 +565,7 @@ SESSION_VALUE	NULL
+@@ -555,7 +555,7 @@ SESSION_VALUE	NULL
  DEFAULT_VALUE	OFF
  VARIABLE_SCOPE	GLOBAL
  VARIABLE_TYPE	BOOLEAN
@@ -59,7 +59,7 @@ index b9f1e8b..bf590a5 100644
  NUMERIC_MAX_VALUE	NULL
  NUMERIC_BLOCK_SIZE	NULL
 diff --git a/storage/connect/odbconn.cpp b/storage/connect/odbconn.cpp
-index 520b82d..a782570 100644
+index 1b35bfa..10a0666 100644
 --- a/storage/connect/odbconn.cpp
 +++ b/storage/connect/odbconn.cpp
 @@ -281,7 +281,7 @@ static CATPARM *AllocCatInfo(PGLOBAL g, CATINFO fid, PCSZ db,
@@ -72,10 +72,10 @@ index 520b82d..a782570 100644
  	} catch (const char *msg) {
  		htrc(g->Message, msg);
 diff --git a/storage/innobase/handler/ha_innodb.cc b/storage/innobase/handler/ha_innodb.cc
-index 21dbe9c..40b974a 100644
+index a38ca1c..18fa9c0 100644
 --- a/storage/innobase/handler/ha_innodb.cc
 +++ b/storage/innobase/handler/ha_innodb.cc
-@@ -19866,7 +19866,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
+@@ -19924,7 +19924,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
  
  static MYSQL_SYSVAR_BOOL(encrypt_temporary_tables, innodb_encrypt_temporary_tables,
    PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,

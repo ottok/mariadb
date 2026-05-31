@@ -1,8 +1,29 @@
-mariadb (1:11.8.6-7) UNRELEASED; urgency=medium
+mariadb (1:11.8.8-1) UNRELEASED; urgency=medium
 
-  * Open new changelog entry. This will be replaced by 'gbp dch'.
+  [ Otto Kekäläinen ]
+  * New upstream version 11.8.8 with critical fix for regression in 11.8.7 as
+    noted at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.8
+    and for the following security issues:
+    - CVE-2026-48165
+    - CVE-2026-48163
+  * Previous upstream version 11.8.7 included fixes for several defects as noted
+    at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.7 as
+    well the following security issues:
+    - CVE-2026-44173
+    - CVE-2026-44172
+    - CVE-2026-44171
+    - CVE-2026-44170
+    - CVE-2026-44169
+    - CVE-2026-44168
+  * Drop patches included upstream and refresh metadata for easier tracking
+  * Remove override for deprecated Lintian tag 'exit-in-shared-library'
+  * Salsa CI: Disable new uscan test that is not suitable for MariaDB
 
- -- Otto Kekäläinen <otto@debian.org>  Tue, 28 Apr 2026 04:26:45 +0000
+  [ Luca Boccassi ]
+  * Use dh-sequence-installsysusers instead of manual dependency
+  * d/mariadb-server.postinst: sd-sysusers is idempotent
+
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 31 May 2026 08:08:08 +0000
 
 mariadb (1:11.8.6-6) unstable; urgency=medium
 
