@@ -1,5 +1,6 @@
 usr/bin/mariadb
 usr/bin/mariadb-check
+usr/bin/mariadb-migrate-config-file
 usr/bin/my_print_defaults
 usr/bin/mysql
 usr/share/man/man1/mariadb-check.1
