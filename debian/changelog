@@ -1,4 +1,4 @@
-mariadb (1:11.8.8-1) UNRELEASED; urgency=medium
+mariadb (1:11.8.8-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
   * New upstream version 11.8.8 with critical fix for regression in 11.8.7 as
@@ -15,15 +15,38 @@ mariadb (1:11.8.8-1) UNRELEASED; urgency=medium
     - CVE-2026-44170
     - CVE-2026-44169
     - CVE-2026-44168
+  * Also cherry-pick the following upstream debian/ changes:
+    - MDEV-38587 slow_query_log missing from debian conf
+    - MDEV-39031 remove Docs/README-wsrep
+    - MDEV-34902 debian-start erroneously reports issues
+    - MDEV-32745 Add a simple MySQL to MariaDB upgrade helper (Debian part)
+  * Update configuration traces to match changes in system variables
+    - new variable 'innodb-buffer-pool-in-core-dump' (default: FALSE)
+    - new default value 0->8796093022208 in 'innodb-buffer-pool-size-max'
+  * New upstream version included fixes for these Debian tracked issues:
+    - MDEV-38698 Upgrade did not fix charset and collation for mysql.user,
+      leading to "Illegal mix of collations" errors on upgrades or when trying
+      to restore backups (Closes: #1104533, #1126850, #1137221)
+    - MDEV-39479 Mroonga hangs on invalid index flag (Closes: #1110683)
   * Drop patches included upstream and refresh metadata for easier tracking
+  * Use upstream patch from MariaDB 13.0 to use the invoking Unix user's login
+    name instead of 'root' when running mytop (Closes: #1109404)
+  * Re-add patch to fix build failures on x32
+  * Add patch to update TLS test regexes for OpenSSL 4.0
+  * Add upstream patch to fix "invalid iv length" with OpenSSL 4.0
+    (Closes: #1138309, LP: #2154856)
   * Remove override for deprecated Lintian tag 'exit-in-shared-library'
   * Salsa CI: Disable new uscan test that is not suitable for MariaDB
+  * Include new upstream test file pam_mariadb_mtr.so
+  * Clean away obsolete Lintian overrides
+  * Extend spelling patch to fix new typos introduced in 11.8.7/8
+  * Bump Debian Policy version to 4.7.4
 
   [ Luca Boccassi ]
   * Use dh-sequence-installsysusers instead of manual dependency
   * d/mariadb-server.postinst: sd-sysusers is idempotent
 
- -- Otto Kekäläinen <otto@debian.org>  Sun, 31 May 2026 08:08:08 +0000
+ -- Otto Kekäläinen <otto@debian.org>  Tue, 02 Jun 2026 00:02:02 +0000
 
 mariadb (1:11.8.6-6) unstable; urgency=medium
 
