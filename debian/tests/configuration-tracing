@@ -71,6 +71,7 @@ trace() {
     normalize_value version-source-revision -
 
     # 32-bit systems (i386, armel, armhf) have lower values
+    normalize_value innodb-buffer-pool-size-max 8796093022208 # 32-bit: 0
     normalize_value innodb-io-capacity-max 18446744073709551615 # 32-bit: 4294967295
     normalize_value max-binlog-cache-size 18446744073709547520 # 32-bit: 4294963200
     normalize_value max-binlog-stmt-cache-size 18446744073709547520 # 32-bit: 4294963200
