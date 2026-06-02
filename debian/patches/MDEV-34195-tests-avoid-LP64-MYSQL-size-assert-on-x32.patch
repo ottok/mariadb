@@ -1,0 +1,34 @@
+From: Aquila Macedo <aquilamacedo@riseup.net>
+Date: Mon, 20 Apr 2026 11:40:01 -0300
+Subject: MDEV-34195 tests: avoid LP64 MYSQL size assert on x32
+
+x32 defines __x86_64__ but uses the ILP32 ABI, so the LP64
+sizeof(MYSQL) == 1272 compile-time assert is selected incorrectly
+and breaks the build.
+
+Guard the x86_64 check with !defined(__ILP32__) so the LP64 size assert
+only applies to real amd64 LP64 builds, while leaving the existing
+Windows amd64 and i386 checks unchanged.
+
+(cherry-picked from 936f04c4f9bd5d66014942bd27e1996b2e740626)
+
+Merged on 10.11, and will be included in next release (10.11.19+, 11.8.9+).
+
+Forwarded: https://github.com/MariaDB/server/pull/4962
+---
+ tests/mysql_client_fw.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tests/mysql_client_fw.c b/tests/mysql_client_fw.c
+index 1c71ac8..e192287 100644
+--- a/tests/mysql_client_fw.c
++++ b/tests/mysql_client_fw.c
+@@ -1444,7 +1444,7 @@ int main(int argc, char **argv)
+ */
+ #if defined _M_AMD64
+   compile_time_assert(sizeof(MYSQL) == 1208);
+-#elif defined __x86_64__
++#elif defined(__x86_64__) && !defined(__ILP32__)
+   compile_time_assert(sizeof(MYSQL) == 1272);
+ #elif defined __i386__
+   compile_time_assert(sizeof(MYSQL) == 964);

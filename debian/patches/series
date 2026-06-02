@@ -12,3 +12,4 @@ set-default-datadir-to-var-lib-mariadb.patch
 Add-AppArmor-notice-for-Debian-Ubuntu-users-during-server.patch
 Fix-more-misc-spelling-in-MariaDB-Server-repository.patch
 MDEV-39290-mytop-use-invoking-login-as-default-user-on-Un.patch
+MDEV-34195-tests-avoid-LP64-MYSQL-size-assert-on-x32.patch
