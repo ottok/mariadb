@@ -6,7 +6,7 @@ Usage: /usr/sbin/mariadbd [OPTIONS]
 
 Default options are read from the following files in the given order:
 /etc/my.cnf /etc/mysql/my.cnf ~/.my.cnf 
-The following groups are read: mysqld server mysqld-11.8 mariadb mariadb-11.8 mariadbd mariadbd-11.8 client-server galera
+The following groups are read: mysqld server mysqld-11.8 mariadb mariadb-11.8 mariadb-11 mariadbd mariadbd-11.8 mariadbd-11 client-server galera
 The following options may be given as the first argument:
 --print-defaults          Print the program argument list and exit.
 --no-defaults             Don't read default options from any option file.
@@ -628,6 +628,8 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-buffer-pool-filename=name 
                       Filename to/from which to dump/load the InnoDB buffer
                       pool
+  --innodb-buffer-pool-in-core-dump 
+                      Include the buffer pool in core dump
   --innodb-buffer-pool-load-abort 
                       Abort a currently running load of the buffer pool
   --innodb-buffer-pool-load-at-startup 
@@ -2030,7 +2032,8 @@ The following specify which files/extra groups are read (specified before remain
                       the transaction)
   --show-slave-auth-info 
                       Show user and password in SHOW SLAVE HOSTS on this master
-  --silent-startup    Don't print [Note] to the error log during startup
+  --silent-startup    Don't print [Note] or failed plugin_loads to the error
+                      log during startup
   --skip-grant-tables Start without grant tables. This gives all users FULL
                       ACCESS to all tables
   --skip-host-cache   Don't cache host names
@@ -2497,6 +2500,8 @@ The following specify which files/extra groups are read (specified before remain
                       statement
   --wsrep-slave-FK-checks 
                       Should slave thread do foreign key constraint checks
+                      (deprecated, has no effect). Deprecated, will be removed
+                      in a future release.
                       (Defaults to on; use --skip-wsrep-slave-FK-checks to disable.)
   --wsrep-slave-UK-checks 
                       Should slave thread do secondary index uniqueness checks
@@ -2696,12 +2701,13 @@ innodb-buffer-pool-dump-at-shutdown                          TRUE
 innodb-buffer-pool-dump-now                                  FALSE
 innodb-buffer-pool-dump-pct                                  25
 innodb-buffer-pool-filename                                  ib_buffer_pool
+innodb-buffer-pool-in-core-dump                              FALSE
 innodb-buffer-pool-load-abort                                FALSE
 innodb-buffer-pool-load-at-startup                           TRUE
 innodb-buffer-pool-load-now                                  FALSE
 innodb-buffer-pool-size                                      134217728
 innodb-buffer-pool-size-auto-min                             0
-innodb-buffer-pool-size-max                                  0
+innodb-buffer-pool-size-max                                  8796093022208
 innodb-buffer-pool-stats                                     ON
 innodb-checksum-algorithm                                    full_crc32
 innodb-cmp                                                   ON
