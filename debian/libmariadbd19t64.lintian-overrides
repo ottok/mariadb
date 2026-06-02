@@ -5,7 +5,6 @@ spelling-error-in-binary theres there's [usr/lib/*/libmariadbd.so.19]
 spelling-error-in-binary yuR your [usr/lib/*/libmariadbd.so.19]
 # False positives from Lintian that finds many short supposedly misspelled words
 # in binaries which don't actually exist in the source code anywhere
-spelling-error-in-binary freeE free [usr/lib/x86_64-linux-gnu/libmariadbd.so.19]
 spelling-error-in-binary IiF If [usr/lib/x86_64-linux-gnu/libmariadbd.so.19]
 # libmariadbd cannot have a symbols file as it would be massively large with all
 # the _ZNK* prefixed symbols leaking

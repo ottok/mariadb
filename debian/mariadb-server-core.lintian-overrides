@@ -6,6 +6,5 @@ spelling-error-in-binary yuR your [usr/sbin/mariadbd]
 # False positives from Lintian that finds many short supposedly misspelled words
 # in binaries which don't actually exist in the source code anywhere
 spelling-error-in-binary IiF If [usr/sbin/mariadbd]
-spelling-error-in-binary freeE free [usr/sbin/mariadbd]
 # Valid reason for extra documentation in context in directory
 package-contains-documentation-outside-usr-share-doc [usr/share/mariadb/charsets/README]

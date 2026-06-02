@@ -1,4 +1,0 @@
-# New error that appeared in early February 2026 after some build dependency
-# updated and changed behavior or detection. This is not due to any change in
-# MariaDB itself, and not a regression or bug to fix.
-mariadb-plugin-connect: embedded-library libminizip [usr/lib/mysql/plugin/ha_connect.so]

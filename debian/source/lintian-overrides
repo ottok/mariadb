@@ -2,8 +2,6 @@
 version-substvar-for-external-package Replaces ${source:Version} libmariadb-dev -> libmysqld-dev *
 # Do not alert for documentation in html
 source-is-missing [sql/share/charsets/languages.html]
-source-is-missing [storage/columnstore/columnstore/utils/libmarias3/libmarias3/docs/_themes/sphinx_rtd_theme/static/js/badge_only.js]
-source-is-missing [storage/columnstore/columnstore/utils/libmarias3/libmarias3/docs/_themes/sphinx_rtd_theme/static/js/theme.js]
 source-is-missing [storage/maria/libmarias3/docs/_themes/sphinx_rtd_theme/static/js/badge_only.js]
 source-is-missing [storage/maria/libmarias3/docs/_themes/sphinx_rtd_theme/static/js/theme.js]
 source-is-missing [storage/rocksdb/rocksdb/docs/_includes/footer.html]
@@ -21,8 +19,6 @@ very-long-line-length-in-source-file * [extra/wolfssl/wolfssl/.codespellexcludel
 very-long-line-length-in-source-file * [extra/wolfssl/wolfssl/certs/renewcerts/wolfssl.cnf:*]
 very-long-line-length-in-source-file * [extra/wolfssl/wolfssl/certs/test/cert-over-max-nc.cfg:*]
 very-long-line-length-in-source-file * [extra/wolfssl/wolfssl/doc/dox_comments/header_files-ja/ssl.h:*]
-very-long-line-length-in-source-file * [extra/wolfssl/wolfssl/doc/dox_comments/header_files-ja/types.h:*]
-very-long-line-length-in-source-file * [extra/wolfssl/wolfssl/doc/dox_comments/header_files-ja/wolfio.h:*]
 very-long-line-length-in-source-file * [extra/wolfssl/wolfssl/doc/formats/html/html_changes/tabs.css:*]
 very-long-line-length-in-source-file * [extra/wolfssl/wolfssl/IDE/Espressif/ESP-IDF/test/test_wolfssl.c:*]
 very-long-line-length-in-source-file * [extra/wolfssl/wolfssl/IDE/IAR-MSP430/main.c:*]

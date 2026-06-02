@@ -10,9 +10,6 @@ spelling-error-in-binary yuR your [usr/bin/mariadb-test-embedded]
 spelling-error-in-binary yuR your [usr/bin/test-connect-t]
 # False positives from Lintian that finds many short supposedly misspelled words
 # in binaries which don't actually exist in the source code anywhere
-spelling-error-in-binary freeE free [usr/bin/mariadb-client-test-embedded]
-spelling-error-in-binary freeE free [usr/bin/mariadb-test-embedded]
-spelling-error-in-binary freeE free [usr/bin/test-connect-t]
 spelling-error-in-binary IiF If [usr/bin/mariadb-client-test-embedded]
 spelling-error-in-binary IiF If [usr/bin/mariadb-test-embedded]
 spelling-error-in-binary IiF If [usr/bin/test-connect-t]
