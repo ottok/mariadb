@@ -593,6 +593,8 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-buffer-pool-filename=name 
                       Filename to/from which to dump/load the InnoDB buffer
                       pool
+  --innodb-buffer-pool-in-core-dump 
+                      Include the buffer pool in core dump.
   --innodb-buffer-pool-load-abort 
                       Abort a currently running load of the buffer pool
   --innodb-buffer-pool-load-at-startup 
@@ -1176,7 +1178,10 @@ The following specify which files/extra groups are read (specified before remain
                       the only option you need for specifying log files. Sets
                       names for --log-bin, --log-bin-index, --relay-log,
                       --relay-log-index, --general-log-file,
-                      --log-slow-query-file, --log-error-file, and --pid-file
+                      --log-slow-query-file, --log-error-file, and --pid-file.
+                      If log-basename includes a path, the path will apply for
+                      all above variables except pid-file that will use it
+                      without the path
   --log-bin[=name]    Log update queries in binary format. Optional argument
                       should be name for binary log. If not given
                       'datadir'/'log-basename'-bin or 'datadir'/mysql-bin will
@@ -2232,9 +2237,8 @@ The following specify which files/extra groups are read (specified before remain
   --thread-pool-priority=name 
                       Threadpool priority. High priority connections usually
                       start executing earlier than low priority.If priority set
-                      to 'auto', the the actual priority(low or high) is
-                      determined based on whether or not connection is inside
-                      transaction.
+                      to 'auto', the actual priority(low or high) is determined
+                      based on whether or not connection is inside transaction.
   --thread-pool-queues[=name] 
                       Enable or disable THREAD_POOL_QUEUES plugin. One of: ON,
                       OFF, FORCE (don't start if the plugin fails to load),
@@ -2429,6 +2433,7 @@ The following specify which files/extra groups are read (specified before remain
                       statement
   --wsrep-slave-FK-checks 
                       Should slave thread do foreign key constraint checks
+                      (deprecated, has no effect)
                       (Defaults to on; use --skip-wsrep-slave-FK-checks to disable.)
   --wsrep-slave-UK-checks 
                       Should slave thread do secondary index uniqueness checks
@@ -2622,12 +2627,13 @@ innodb-buffer-pool-dump-at-shutdown                          TRUE
 innodb-buffer-pool-dump-now                                  FALSE
 innodb-buffer-pool-dump-pct                                  25
 innodb-buffer-pool-filename                                  ib_buffer_pool
+innodb-buffer-pool-in-core-dump                              FALSE
 innodb-buffer-pool-load-abort                                FALSE
 innodb-buffer-pool-load-at-startup                           TRUE
 innodb-buffer-pool-load-now                                  FALSE
 innodb-buffer-pool-size                                      134217728
 innodb-buffer-pool-size-auto-min                             0
-innodb-buffer-pool-size-max                                  0
+innodb-buffer-pool-size-max                                  8796093022208
 innodb-buffer-pool-stats                                     ON
 innodb-change-buffer-max-size                                25
 innodb-change-buffering                                      none
