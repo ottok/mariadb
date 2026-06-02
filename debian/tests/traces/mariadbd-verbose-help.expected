@@ -747,7 +747,7 @@ The following specify which files/extra groups are read (specified before remain
                       Enable encryption for tables. Don't forget to enable
                       --innodb-encrypt-log too. One of: OFF, ON, FORCE
   --innodb-encrypt-temporary-tables 
-                      Encrypt the temporary table data.
+                      Encrypt the temporary table data
   --innodb-encryption-rotate-key-age=# 
                       Key rotation - re-encrypt in background all pages that
                       were encrypted with a key that many (or more) versions
