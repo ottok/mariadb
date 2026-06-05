@@ -1,0 +1,55 @@
+From: Georg Richter <georg@mariadb.com>
+Date: Sat, 2 May 2026 11:44:03 +0200
+Subject: MDEV-39509: Fix "invalid iv length" with OpenSSL 4.0
+
+OpenSSL 4.0 changed the behavior of EVP_CIPHER_CTX_new:
+It now initializes the internal iv_len with a sentinel
+value of -1. When calling EVP_CipherInit_ex with the
+cipher, key, and IV simultaneously, the provider validates
+the IV against this sentinel before the cipher's default
+metadata is applied, triggering an error.
+
+This patch implements a two-stage initialization for OpenSSL 4.0+:
+- Call EVP_CipherInit_ex with only the cipher to "thaw" the
+  context and set the correct default iv_len.
+- Perform a second call to provide the actual Key and IV data.
+
+This approach ensures compatibility with OpenSSL 4.0 while
+avoiding EVP_CipherInit_ex2 to maintain support for FIPS mode
+and older versions.
+
+(cherry picked from commit 5ca4ab639ad5f99d74f794b54ba1b4d6182ec2a9 from
+upstream feature branch, not yet merged)
+
+Forwarded: https://github.com/MariaDB/server/pull/5029
+---
+ mysys_ssl/my_crypt.cc | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/mysys_ssl/my_crypt.cc b/mysys_ssl/my_crypt.cc
+index 346eff5..b1d8977 100644
+--- a/mysys_ssl/my_crypt.cc
++++ b/mysys_ssl/my_crypt.cc
+@@ -61,6 +61,22 @@ class MyCTX
+     if (unlikely(!cipher))
+       return MY_AES_BAD_KEYSIZE;
+ 
++#if !defined(HAVE_WOLFSSL) && OPENSSL_VERSION_NUMBER >= 0x40000000L
++    /* MDEV-39509: In OpenSSL 4.0, EVP_CIPHER_CTX_new initializes the internal
++      iv_len with a sentinel value of -1. If EVP_CipherInit_ex is called with
++      cipher, key, and ii in a single step, the provider validates the IV
++      against this uninitialized state before the cipher's default
++      metadata is applied, resulting in an "invalid iv length" error.
++
++      We perform a two-stage initialization: first, bind the cipher to the
++      context to "thaw" the metadata and set the correct default iv_len.
++      Second, provide the actual Key and IV data. This approach is used
++      instead of EVP_CipherInit_ex2 to maintain compatibility with FIPS mode.
++    */
++    if (EVP_CipherInit_ex(ctx, cipher, NULL, NULL, NULL, encrypt) != 1)
++      return MY_AES_OPENSSL_ERROR;
++#endif
++
+     if (EVP_CipherInit_ex(ctx, cipher, NULL, key, iv, encrypt) != 1)
+       return MY_AES_OPENSSL_ERROR;
+ 
