@@ -1,0 +1,54 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Fri, 5 Jun 2026 02:20:51 +0000
+Subject: Update TLS test regexes for OpenSSL 4.0 error message changes
+
+OpenSSL 4.0 changed TLS alert error messages from "ssl/tls alert ..." to
+"tls alert ...", causing main.ssl_crl and main.tlsv13 to fail with
+result mismatches like:
+
+    -ERROR 2026 (HY000): TLS/SSL error: ssl/tls alert handshake failure
+    -ERROR 2026 (HY000): TLS/SSL error: ssl/tls alert handshake failure
+    +ERROR 2026 (HY000): TLS/SSL error: tls alert handshake failure
+    +ERROR 2026 (HY000): TLS/SSL error: tls alert handshake failure
+
+Update the `--replace_regex` patterns in both tests to accept the new
+"tls alert" variant alongside the existing "sslv3" and "ssl/tls"
+formats, normalizing them to the expected "ssl/tls" output so the
+result files remain valid across OpenSSL versions.
+
+Forwarded: https://github.com/MariaDB/server/pull/5186
+---
+ mysql-test/main/ssl_crl.test | 2 +-
+ mysql-test/main/tlsv13.test  | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/mysql-test/main/ssl_crl.test b/mysql-test/main/ssl_crl.test
+index a09490f..3eb4adc 100644
+--- a/mysql-test/main/ssl_crl.test
++++ b/mysql-test/main/ssl_crl.test
+@@ -8,6 +8,6 @@
+ 
+ --echo # try logging in with a certificate in the server's --ssl-crl : should fail
+ # OpenSSL 1.1.1a and later releases correctly rejects the certificate, but the error message is different
+---replace_regex /(ERROR 2013 \(HY000\): Lost connection to server at '.*', system error: [0-9]+|ERROR 2026 \(HY000\): TLS\/SSL error: sslv3 alert certificate revoked)/ERROR 2026 (HY000): TLS\/SSL error: ssl\/tls alert certificate revoked/
++--replace_regex /(ERROR 2013 \(HY000\): Lost connection to server at '.*', system error: [0-9]+|ERROR 2026 \(HY000\): TLS\/SSL error: (sslv3|ssl\/tls|tls) alert certificate revoked)/ERROR 2026 (HY000): TLS\/SSL error: ssl\/tls alert certificate revoked/
+ --error 1
+ --exec $MYSQL --ssl-ca=$MYSQL_TEST_DIR/std_data/cacert.pem --ssl-key=$MYSQL_TEST_DIR/std_data/client-key.pem --ssl-cert=$MYSQL_TEST_DIR/std_data/client-cert.pem test -e "SHOW STATUS LIKE 'Ssl_version'" 2>&1
+diff --git a/mysql-test/main/tlsv13.test b/mysql-test/main/tlsv13.test
+index f90b684..5fbccf0 100644
+--- a/mysql-test/main/tlsv13.test
++++ b/mysql-test/main/tlsv13.test
+@@ -19,11 +19,11 @@ source include/restart_mysqld.inc;
+ --exec $MYSQL --host=localhost --ssl-cipher=ECDHE-RSA-AES256-GCM-SHA384 --tls-version=TLSv1.2 -e "SHOW STATUS LIKE 'Ssl_cipher%';"
+ 
+ # Check that other ciphers are correctly not supported by the server
+---replace_regex /sslv3 alert handshake failure/ssl\/tls alert handshake failure/
++--replace_regex /(sslv3|ssl\/tls|tls) alert handshake failure/ssl\/tls alert handshake failure/
+ --error 1
+ --exec $MYSQL --host=localhost --ssl-cipher=TLS_AES_256_GCM_SHA384 --tls-version=TLSv1.3 -e "SHOW STATUS LIKE 'Ssl_cipher';" 2>&1
+ 
+---replace_regex /sslv3 alert handshake failure/ssl\/tls alert handshake failure/
++--replace_regex /(sslv3|ssl\/tls|tls) alert handshake failure/ssl\/tls alert handshake failure/
+ --error 1
+ --exec $MYSQL --host=localhost --ssl-cipher=ECDHE-RSA-AES128-GCM-SHA256 --tls-version=TLSv1.2 -e "SHOW STATUS LIKE 'Ssl_cipher';" 2>&1
+ 
