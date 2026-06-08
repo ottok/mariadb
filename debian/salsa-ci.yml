@@ -1,7 +1,8 @@
 ---
 # Include Salsa CI as a base
 include:
-  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/recipes/debian.yml
+  - https://salsa.debian.org/otto/salsa-ci-pipeline/raw/2026-cache/salsa-ci.yml
+  - https://salsa.debian.org/otto/salsa-ci-pipeline/raw/2026-cache/pipeline-jobs.yml
 
 # Override Salsa CI defaults with MariaDB specific variations
 variables:
@@ -36,6 +37,12 @@ variables:
   SALSA_CI_DISABLE_GBP_SETUP_GITATTRIBUTES: 1
   # uscan currently fails due regression in comments handling (Bug#1114473)
   SALSA_CI_DISABLE_USCAN: 1
+  # Test https://salsa.debian.org/salsa-ci-team/pipeline/-/merge_requests/742
+  SALSA_CI_IMAGES: "registry.salsa.debian.org/otto/salsa-ci-pipeline"
+  SALSA_CI_IMAGES_BUILD: "${SALSA_CI_IMAGES}/build:sid_2026-cache"
+  # For i386 faketime builds, also override:
+  SALSA_CI_IMAGES_BUILD_I386: "${SALSA_CI_IMAGES}/i386/build:sid_2026-cache"
+  SALSA_CI_BUILD_CACHE: 1
 
 .build-package:
   # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
