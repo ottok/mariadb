@@ -90,20 +90,17 @@ Description: MariaDB database development files
 
 Package: libmariadb-dev-compat
 Architecture: any
+Multi-Arch: same
 Section: libdevel
 Depends:
  libmariadb-dev (= ${binary:Version}),
 Conflicts:
- libmariadb-client-lgpl-dev-compat,
- libmariadbclient-dev-compat,
  libmysqlclient-dev,
 Provides:
  libmariadb-client-lgpl-dev-compat,
  libmariadbclient-dev-compat,
 Breaks:
- libmariadb-client-lgpl-dev-compat,
  libmariadbclient-dev (<< 1:10.3),
- libmariadbclient-dev-compat,
  libmysqlclient-dev,
 Replaces:
  libmariadb-client-lgpl-dev-compat,
