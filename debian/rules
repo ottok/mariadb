@@ -227,6 +227,30 @@ override_dh_installinit:
 override_dh_gencontrol:
 	dh_gencontrol -- -Tdebian/substvars
 
+# Make libmariadb-dev co-installable across architectures (Multi-Arch: same).
+# Two files would otherwise differ between architectures at shared paths:
+#  - /usr/bin/mariadb_config: replace the per-arch compiled binary with an
+#    architecture-independent shell script that derives the multiarch triplet
+#    at runtime, so the file is byte-identical on every architecture.
+#  - /usr/include/mariadb/mariadb_version.h: move only the two arch-varying
+#    macros (MARIADB_MACHINE_TYPE, MARIADB_PLUGINDIR) into a stub header in the
+#    per-arch triplet include dir (which the compiler searches automatically),
+#    leaving the public header byte-identical across architectures. The header
+#    must NOT be relocated: mysql.h pulls it in with #include "..." (same dir).
+execute_after_dh_install:
+	set -e; pkgdir=debian/libmariadb-dev; inc=$$pkgdir/usr/include; \
+	if [ -f $$inc/mariadb/mariadb_version.h ]; then \
+		install -m0755 debian/mariadb_config $$pkgdir/usr/bin/mariadb_config; \
+		mkdir -p $$inc/$(DEB_HOST_MULTIARCH); \
+		grep -E 'MARIADB_MACHINE_TYPE|MARIADB_PLUGINDIR' \
+			$$inc/mariadb/mariadb_version.h \
+			> $$inc/$(DEB_HOST_MULTIARCH)/mariadb_version_arch.h; \
+		sed -i -E '/MARIADB_MACHINE_TYPE|MARIADB_PLUGINDIR/d' \
+			$$inc/mariadb/mariadb_version.h; \
+		sed -i '/#define _mariadb_version_h_/a #include <mariadb_version_arch.h>' \
+			$$inc/mariadb/mariadb_version.h; \
+	fi
+
 # If a file is not supposed to be included anywhere, add it to the not-installed
 # file and document the reason. Note that dh_install supports the above mentioned
 # white list file only starting from Debian Stretch and Ubuntu Xenial.

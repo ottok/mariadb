@@ -1,0 +1,37 @@
+#!/bin/sh
+# Architecture-independent mariadb_config (Debian multi-arch co-install fix).
+# Derives the multiarch triplet at runtime so this file is byte-identical
+# across architectures and libmariadb-dev can be Multi-Arch: same.
+set -e
+triplet=$(${CC:-cc} -print-multiarch 2>/dev/null) || true
+[ -n "$triplet" ] || triplet=$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null) || true
+[ -n "$triplet" ] || triplet=$(${CC:-cc} -dumpmachine 2>/dev/null) || true
+libdir="/usr/lib/$triplet"
+vhdr="/usr/include/mariadb/mariadb_version.h"
+version=$(sed -n 's/.*MARIADB_CLIENT_VERSION_STR[^"]*"\([^"]*\)".*/\1/p' "$vhdr" 2>/dev/null)
+[ -n "$version" ] || version=unknown
+inc="-I/usr/include/mariadb -I/usr/include/mariadb/mysql"
+usage() {
+  cat <<USE
+Usage: $0 [OPTIONS]
+  --cflags        --include      --libs        --libs_sys
+  --libs_r        --plugindir    --socket      --port
+  --version       --variable=VAR (pkglibdir|plugindir)
+USE
+}
+[ $# -eq 0 ] && { usage; exit 1; }
+for arg in "$@"; do
+  case "$arg" in
+    --cflags|--include)   printf '%s\n' "$inc" ;;
+    --libs|--libs_r)      printf '%s\n' "-L$libdir/ -lmariadb" ;;
+    --libs_sys)           printf '%s\n' "-lz -ldl -lm -lssl -lcrypto" ;;
+    --plugindir)          printf '%s\n' "$libdir/libmariadb3/plugin" ;;
+    --socket)             printf '%s\n' "/run/mysqld/mysqld.sock" ;;
+    --port)               printf '%s\n' "3306" ;;
+    --version)            printf '%s\n' "$version" ;;
+    --variable=pkglibdir) printf '%s\n' "$libdir" ;;
+    --variable=plugindir) printf '%s\n' "$libdir/libmariadb3/plugin" ;;
+    --help|-h)            usage ;;
+    *) echo "$0: unrecognized option '$arg'" >&2; exit 1 ;;
+  esac
+done
