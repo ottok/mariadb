@@ -35,6 +35,10 @@ variables:
   SALSA_CI_DISABLE_RC_BUGS: 0
   # Testing https://salsa.debian.org/salsa-ci-team/pipeline#git-attributes
   SALSA_CI_DISABLE_GBP_SETUP_GITATTRIBUTES: 1
+  # The directory https://archive.mariadb.org/mariadb-11.8/source/ only contains
+  # the sources of the latest MariaDB release, and thus running uscan for past
+  # releases will always fail, and thus uscan job should be disabled on Salsa CI
+  SALSA_CI_DISABLE_USCAN: 1
 
 .build-package:
   # Extend Salsa-CI build jobs to have longer timeout as the default GitLab
