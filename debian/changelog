@@ -1,4 +1,4 @@
-mariadb (1:11.8.8-0+deb13u1) UNRELEASED; urgency=medium
+mariadb (1:11.8.8-0+deb13u1) trixie; urgency=medium
 
   * New upstream version 11.8.8 with critical fix for regression in 11.8.7 as
     noted at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.8
@@ -21,6 +21,11 @@ mariadb (1:11.8.8-0+deb13u1) UNRELEASED; urgency=medium
     - MDEV-39479 Mroonga hangs on invalid index flag (Closes: #1110683)
     - MDEV-38811 Crash in information_schema.table_constraints when running in
       'skip-grant-tables' mode (Closes: #1127431, affected Akonadi)
+  * Also cherry-pick the following upstream debian/ changes:
+    - MDEV-34902 debian-start erroneously reports issues (includes security fix)
+  * Update configuration traces to match changes in system variables
+    - new variable 'innodb-buffer-pool-in-core-dump' (default: FALSE)
+    - new default value 0->8796093022208 in 'innodb-buffer-pool-size-max'
   * Salsa CI: Disable the uscan job as it is incompatible with MariaDB
 
  -- Otto Kekäläinen <otto@debian.org>  Fri, 26 Jun 2026 13:13:13 +0000
