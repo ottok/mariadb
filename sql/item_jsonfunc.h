@@ -48,6 +48,7 @@ void report_path_error_ex(const char *ps, json_path_t *p,
 void report_json_error_ex(const char *js, json_engine_t *je,
                           const char *fname, int n_param,
                           Sql_condition::enum_warning_level lv);
+int st_append_escaped(String *s, const String *a);
 
 class Json_engine_scan: public json_engine_t
 {
@@ -74,7 +75,8 @@ protected:
   virtual ~Json_path_extractor() { }
   virtual bool check_and_get_value(Json_engine_scan *je,
                                    String *to, int *error)=0;
-  bool extract(String *to, Item *js, Item *jp, CHARSET_INFO *cs);
+  bool extract(String *to, Item *js, Item *jp, CHARSET_INFO *cs,
+               const char *func_name, bool allow_wildcard);
 };
 
 
@@ -186,7 +188,8 @@ public:
   String *val_str(String *to) override
   {
     null_value= Json_path_extractor::extract(to, args[0], args[1],
-                                             collation.collation);
+                                             collation.collation, func_name(),
+                                             false);
     return null_value ? NULL : to;
   }
   bool check_and_get_value(Json_engine_scan *je,
@@ -216,7 +219,8 @@ public:
   String *val_str(String *to) override
   {
     null_value= Json_path_extractor::extract(to, args[0], args[1],
-                                             collation.collation);
+                                             collation.collation, func_name(),
+                                             true);
     return null_value ? NULL : to;
   }
   bool check_and_get_value(Json_engine_scan *je,
@@ -320,6 +324,7 @@ public:
   bool fix_length_and_dec(THD *thd) override;
   String *val_str(String *) override;
   longlong val_int() override;
+  bool val_bool() override;
   double val_real() override;
   my_decimal *val_decimal(my_decimal *) override;
   uint get_n_paths() const override { return arg_count - 1; }
@@ -834,6 +839,8 @@ public:
   longlong val_int() override { return 0; }
   my_decimal *val_decimal(my_decimal *decimal_value) override
   {
+    if (null_value)
+      return 0;
     my_decimal_set_zero(decimal_value);
     return decimal_value;
   }
@@ -935,11 +942,11 @@ protected:
   bool item_hash_inited, seen_hash_inited, root_inited;
   HASH items, seen;
   MEM_ROOT hash_root;
-  bool parse_for_each_row;
+  bool parse_for_each_row, is_array;
 public:
   Item_func_json_array_intersect(THD *thd, Item *a, Item *b):
     Item_str_func(thd, a, b)
-    { item_hash_inited= seen_hash_inited= root_inited= parse_for_each_row= false; }
+    { item_hash_inited= seen_hash_inited= root_inited= parse_for_each_row= is_array= false; }
   String *val_str(String *) override;
   bool fix_length_and_dec(THD *thd) override;
   LEX_CSTRING func_name_cstring() const override

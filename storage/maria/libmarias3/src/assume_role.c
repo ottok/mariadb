@@ -511,12 +511,12 @@ uint8_t execute_assume_role_request(ms3_st *ms3, command_t cmd,
   struct curl_slist *headers = NULL;
   uint8_t res = 0;
   struct memory_buffer_st mem;
-  uri_method_t method;
-  char *query = NULL;
+  uri_method_t method = MS3_GET;
+  const char *query = NULL;
   struct put_buffer_st post_data;
   CURLcode curl_res;
   long response_code = 0;
-  char* endpoint = NULL;
+  const char* endpoint = NULL;
   const char* region = iam_request_region;
   char endpoint_type[8];
 
@@ -580,14 +580,14 @@ uint8_t execute_assume_role_request(ms3_st *ms3, command_t cmd,
   if (ms3->disable_verification)
   {
     ms3debug("Disabling SSL verification");
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
   }
 
   curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, body_callback);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&mem);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
   curl_res = curl_easy_perform(curl);
 
   if (curl_res != CURLE_OK)

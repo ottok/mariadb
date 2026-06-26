@@ -123,6 +123,7 @@ static uint8_t build_assume_role_request_uri(CURL *curl, const char *base_domain
 {
   char uri_buffer[MAX_URI_LENGTH];
   const char *domain;
+  const uint8_t path_parts = 10; // "https://" + "." + "/"
   const char *http_protocol = "http";
   const char *https_protocol = "https";
   const char *protocol;
@@ -147,9 +148,13 @@ static uint8_t build_assume_role_request_uri(CURL *curl, const char *base_domain
 
   if (query)
   {
-    if (snprintf(uri_buffer, MAX_URI_LENGTH, "%s://%s/?%s", protocol,
-             domain, query) >= MAX_URI_LENGTH)
+    if (path_parts + strlen(domain) + strlen(query) >= MAX_URI_LENGTH - 1)
+    {
       return MS3_ERR_URI_TOO_LONG;
+    }
+
+    snprintf(uri_buffer, MAX_URI_LENGTH - 1, "%s://%s/?%s", protocol,
+             domain, query);
   }
   else
   {

@@ -364,7 +364,8 @@ void item_check(Item* item, bool* unsupported_feature)
 
 bool check_user_var(SELECT_LEX* select_lex)
 {
-  if (!select_lex) {
+  if (!select_lex)
+  {
     // There are definitely no user vars if select_lex is null
     return false;
   }
@@ -658,6 +659,14 @@ select_handler* create_columnstore_select_handler_(THD* thd, SELECT_LEX* sel_lex
     for (; table_ptr; table_ptr = table_ptr->next_global)
     {
       if (check_user_var(table_ptr->select_lex))
+      {
+        return nullptr;
+      }
+
+      // MCOL-6300: Table functions (e.g. JSON_TABLE) are virtual tables
+      // that ColumnStore cannot handle.  Reject early so the server
+      // processes them natively.
+      if (table_ptr->table_function)
       {
         return nullptr;
       }

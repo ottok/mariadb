@@ -10,6 +10,7 @@
 --source ../include/detect_maxscale.inc
 #
 --disable_warnings
+SET time_zone='+00:00';
 DROP DATABASE IF EXISTS tpch1m;
 DROP DATABASE IF EXISTS tpch1;
 DROP DATABASE IF EXISTS ssb1;
@@ -70,8 +71,8 @@ USE outerjoin;
 
 #
 # Set table name to case insensitive
---exec if test -f /etc/my.cnf.d/server.cnf; then sed -i 's/\[mysqld\]/\[mysqld\]\nlower_case_table_names=1/g' /etc/my.cnf.d/server.cnf; fi
---exec if test -f /etc/mysql/mariadb.conf.d/50.server.cnf; then sed -i 's/\[mysqld\]/\[mysqld\]\nlower_case_table_names=1/g' /etc/mysql/mariadb.conf.d/50-server.cnf; fi
+--exec if test -f /etc/my.cnf.d/server.cnf; then sed -i 's/\[mysqld\]/\[mysqld\]\nlower_case_table_names=2/g' /etc/my.cnf.d/server.cnf; fi
+--exec if test -f /etc/mysql/mariadb.conf.d/50.server.cnf; then sed -i 's/\[mysqld\]/\[mysqld\]\nlower_case_table_names=2/g' /etc/mysql/mariadb.conf.d/50-server.cnf; fi
 #
 --exec systemctl restart mariadb
 --exec sleep 10

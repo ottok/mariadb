@@ -140,7 +140,7 @@ bool st_append_json(String *s,
   Appends arbitrary String to the JSON string taking charsets in
   consideration.
 */
-static int st_append_escaped(String *s, const String *a)
+int st_append_escaped(String *s, const String *a)
 {
   /*
     In the worst case one character from the 'a' string
@@ -672,7 +672,7 @@ bool Item_func_json_exists::fix_length_and_dec(THD *thd)
 bool Item_func_json_exists::val_bool()
 {
   json_engine_t je;
-  int array_counters[JSON_DEPTH_LIMIT];
+  int array_counters[JSON_DEPTH_LIMIT]= {0};
 
   String *js= args[0]->val_json(&tmp_js);
 
@@ -733,19 +733,39 @@ bool Item_func_json_query::fix_length_and_dec(THD *thd)
 
 
 bool Json_path_extractor::extract(String *str, Item *item_js, Item *item_jp,
-                                  CHARSET_INFO *cs)
+                                  CHARSET_INFO *cs, const char *func_name,
+                                  bool allow_wildcard)
 {
   String *js= item_js->val_json(&tmp_js);
   int error= 0;
-  int array_counters[JSON_DEPTH_LIMIT];
+  int array_counters[JSON_DEPTH_LIMIT]= {0};
 
   if (!parsed)
   {
     String *s_p= item_jp->val_str(&tmp_path);
-    if (s_p &&
+
+    if (allow_wildcard)
+    {
+      if (s_p &&
+        json_path_setup(&p, s_p->charset(), (const uchar *) s_p->ptr(),
+                       (const uchar *) s_p->ptr() + s_p->length()))
+        error= true;
+    }
+    else
+    {
+      if (s_p &&
         path_setup_nwc(&p, s_p->charset(), (const uchar *) s_p->ptr(),
                        (const uchar *) s_p->ptr() + s_p->length()))
+        error= true;
+    }
+
+    if (error)
+    {
+      report_path_error_ex(s_p->ptr(), &p, func_name, 1,
+                           Sql_condition::WARN_LEVEL_WARN);
       return true;
+    }
+
     parsed= constant;
   }
 
@@ -1049,8 +1069,18 @@ bool Item_json_str_multipath::fix_fields(THD *thd, Item **ref)
 bool Item_func_json_extract::fix_length_and_dec(THD *thd)
 {
   collation.set(args[0]->collation);
-  max_length= args[0]->max_length * (arg_count - 1);
 
+  /* *2 accounts for LOOSE json_nice() formatting (spaces after : and ,). */
+  ulonglong char_length=
+    (ulonglong) args[0]->max_char_length() * (arg_count - 1) * 2;
+
+  if (arg_count > 2)
+  {
+    /* Multiple paths: result is wrapped as [val1, val2, ...]. */
+    char_length+= 2 + (arg_count - 2) * 2;
+  }
+
+  fix_char_length_ulonglong(char_length);
   mark_constant_paths(paths, args+1, arg_count-1);
   set_maybe_null();
   return FALSE;
@@ -1342,6 +1372,36 @@ my_decimal *Item_func_json_extract::val_decimal(my_decimal *to)
 }
 
 
+bool Item_func_json_extract::val_bool()
+{
+  json_value_types type;
+  char *value;
+  int value_len;
+  longlong i= 0;
+
+  if (read_json(NULL, &type, &value, &value_len) != NULL)
+  {
+    switch (type)
+    {
+      case JSON_VALUE_NUMBER:
+      case JSON_VALUE_STRING:
+      {
+        char *end;
+        int err;
+        i= collation.collation->strntoll(value, value_len, 10, &end, &err);
+        break;
+      }
+      case JSON_VALUE_TRUE:
+        i= 1;
+        break;
+      default:
+        i= 0;
+        break;
+    };
+  }
+  return i != 0;
+}
+
 
 bool Item_func_json_contains::fix_length_and_dec(THD *thd)
 {
@@ -1537,7 +1597,7 @@ bool Item_func_json_contains::val_bool()
 
   if (arg_count>2) /* Path specified. */
   {
-    int array_counters[JSON_DEPTH_LIMIT];
+    int array_counters[JSON_DEPTH_LIMIT]= {0};
     if (!path.parsed)
     {
       String *s_p= args[2]->val_str(&tmp_path);
@@ -1674,7 +1734,7 @@ longlong Item_func_json_contains_path::val_int()
   result= !mode_one;
   for (n_arg=2; n_arg < arg_count; n_arg++)
   {
-    int array_counters[JSON_DEPTH_LIMIT];
+    int array_counters[JSON_DEPTH_LIMIT]= {0};
     json_path_with_flags *c_path= paths + n_arg - 2;
     if (!c_path->parsed)
     {
@@ -2084,7 +2144,7 @@ String *Item_func_json_array_append::val_str(String *str)
 
   for (n_arg=1, n_path=0; n_arg < arg_count; n_arg+=2, n_path++)
   {
-    int array_counters[JSON_DEPTH_LIMIT];
+    int array_counters[JSON_DEPTH_LIMIT]= {0};
     json_path_with_flags *c_path= paths + n_path;
     if (!c_path->parsed)
     {
@@ -2216,7 +2276,7 @@ String *Item_func_json_array_insert::val_str(String *str)
 
   for (n_arg=1, n_path=0; n_arg < arg_count; n_arg+=2, n_path++)
   {
-    int array_counters[JSON_DEPTH_LIMIT];
+    int array_counters[JSON_DEPTH_LIMIT]= {0};
     json_path_with_flags *c_path= paths + n_path;
     const char *item_pos;
     int n_item, corrected_n_item;
@@ -2224,11 +2284,13 @@ String *Item_func_json_array_insert::val_str(String *str)
     if (!c_path->parsed)
     {
       String *s_p= args[n_arg]->val_str(tmp_paths+n_path);
-      if (s_p &&
-          (path_setup_nwc(&c_path->p,s_p->charset(),(const uchar *) s_p->ptr(),
+      if (!s_p)
+        goto return_null;
+
+      if (path_setup_nwc(&c_path->p,s_p->charset(),(const uchar *) s_p->ptr(),
                           (const uchar *) s_p->ptr() + s_p->length()) ||
            c_path->p.last_step - 1 < c_path->p.steps ||
-           c_path->p.last_step->type != JSON_PATH_ARRAY))
+           c_path->p.last_step->type != JSON_PATH_ARRAY)
       {
         if (c_path->p.s.error == 0)
           c_path->p.s.error= SHOULD_END_WITH_ARRAY;
@@ -3067,7 +3129,7 @@ longlong Item_func_json_length::val_int()
   String *js= args[0]->val_json(&tmp_js);
   json_engine_t je;
   uint length= 0;
-  int array_counters[JSON_DEPTH_LIMIT];
+  int array_counters[JSON_DEPTH_LIMIT]= {0};
   int err;
 
   if ((null_value= args[0]->null_value))
@@ -3308,7 +3370,7 @@ String *Item_func_json_insert::val_str(String *str)
 
   for (n_arg=1, n_path=0; n_arg < arg_count; n_arg+=2, n_path++)
   {
-    int array_counters[JSON_DEPTH_LIMIT];
+    int array_counters[JSON_DEPTH_LIMIT]= {0};
     json_path_with_flags *c_path= paths + n_path;
     const char *v_to;
     json_path_step_t *lp;
@@ -3573,7 +3635,7 @@ String *Item_func_json_remove::val_str(String *str)
 
   for (n_arg=1, n_path=0; n_arg < arg_count; n_arg++, n_path++)
   {
-    int array_counters[JSON_DEPTH_LIMIT];
+    int array_counters[JSON_DEPTH_LIMIT]= {0};
     json_path_with_flags *c_path= paths + n_path;
     const char *rem_start= 0, *rem_end;
     json_path_step_t *lp;
@@ -3796,7 +3858,7 @@ String *Item_func_json_keys::val_str(String *str)
   json_engine_t je;
   String *js= args[0]->val_json(&tmp_js);
   uint n_keys= 0;
-  int array_counters[JSON_DEPTH_LIMIT];
+  int array_counters[JSON_DEPTH_LIMIT]= {0};
 
   if ((args[0]->null_value))
     goto null_return;
@@ -3841,6 +3903,7 @@ skip_search:
     goto null_return;
   
   str->length(0);
+  str->set_charset(collation.collation);
   if (str->append('['))
     goto err_return; /* Out of memory. */
   /* Parse the OBJECT collecting the keys. */
@@ -4432,9 +4495,10 @@ Item_func_json_objectagg::fix_fields(THD *thd, Item **ref)
   result.set_charset(collation.collation);
   result_field= 0;
   null_value= 1;
-  max_length= (uint32)(thd->variables.group_concat_max_len
-              / collation.collation->mbminlen
-              * collation.collation->mbmaxlen);
+  max_length= (uint32) MY_MIN((ulonglong) thd->gconcat_max_len()
+                               / collation.collation->mbminlen
+                               * collation.collation->mbmaxlen, UINT_MAX32);
+
 
   if (check_sum_func(thd, ref))
     return TRUE;
@@ -4527,6 +4591,7 @@ String *Item_func_json_normalize::val_str(String *buf)
   }
 
   buf->length(0);
+  buf->set_charset(collation.collation);
   if (buf->append(normalized_json.str, normalized_json.length))
   {
     null_value= 1;
@@ -5194,12 +5259,11 @@ String* Item_func_json_key_value::val_str(String *str)
 
   if ((null_value= args[0]->null_value) ||
       (null_value= args[1]->null_value))
-  {
-    goto return_null;
-  }
+    return NULL;
 
   null_value= Json_path_extractor::extract(&tmp_str, args[0], args[1],
-                                             collation.collation);
+                                           collation.collation,
+                                           func_name(), true);
   if (null_value)
     return NULL;
 
@@ -5435,7 +5499,7 @@ String* Item_func_json_array_intersect::val_str(String *str)
     prepare_json_and_create_hash(&je1, js1);
   }
 
-  if (null_value || args[1]->null_value)
+  if (!is_array || args[1]->null_value)
     goto null_return;
 
   str->set_charset(js2->charset());
@@ -5491,12 +5555,12 @@ bool Item_func_json_array_intersect::prepare_json_and_create_hash(json_engine_t 
     init_alloc_root(PSI_NOT_INSTRUMENTED, &hash_root, 1024, 0, MYF(0));
   root_inited= true;
 
-  if (json_read_value(je1) || je1->value_type != JSON_VALUE_ARRAY ||
+  if (json_read_value(je1)
+     || !(is_array= (je1->value_type == JSON_VALUE_ARRAY)) ||
       create_hash(je1, &items, item_hash_inited, &hash_root))
     {
       if (je1->s.error)
         report_json_error(js, je1, 0);
-      null_value= 1;
     }
 
     max_length= 2*(args[0]->max_length < args[1]->max_length ?

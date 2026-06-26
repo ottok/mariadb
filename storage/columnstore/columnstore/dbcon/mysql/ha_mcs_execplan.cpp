@@ -31,6 +31,7 @@
 #include <vector>
 #include <map>
 #include <limits>
+#include "idberrorinfo.h"
 #include "messagelog.h"
 
 #include <string.h>
@@ -41,6 +42,7 @@
 #include <boost/thread.hpp>
 
 #include "errorids.h"
+#include "mysqld_error.h"
 using namespace logging;
 
 #define PREFER_MY_CONFIG_H
@@ -2748,49 +2750,6 @@ bool itemDisablesWrapping(Item* item, gp_walk_info& gwi)
   }
   return false;
 }
-ReturnedColumn* wrapIntoAggregate(ReturnedColumn* rc, gp_walk_info& gwi, Item* baseItem)
-{
-  if (!gwi.implicitExplicitGroupBy || gwi.disableWrapping || !gwi.select_lex)
-  {
-    return rc;
-  }
-
-  if (dynamic_cast<AggregateColumn*>(rc) != nullptr || dynamic_cast<ConstantColumn*>(rc) != nullptr)
-  {
-    return rc;
-  }
-
-  if (itemDisablesWrapping(baseItem, gwi))
-  {
-    return rc;
-  }
-
-  cal_connection_info* ci = static_cast<cal_connection_info*>(get_fe_conn_info_ptr());
-
-  AggregateColumn* ac = new AggregateColumn(gwi.sessionid);
-  ac->timeZone(gwi.timeZone);
-  ac->alias(rc->alias());
-  ac->aggOp(AggregateColumn::SELECT_SOME);
-  ac->asc(rc->asc());
-  ac->charsetNumber(rc->charsetNumber());
-  ac->orderPos(rc->orderPos());
-  uint32_t i;
-  for (i = 0; i < gwi.processed.size() && !gwi.processed[i].first->eq(baseItem, false); i++)
-  {
-  }
-  if (i < gwi.processed.size())
-  {
-    ac->expressionId(gwi.processed[i].second);
-  }
-  else
-  {
-    ac->expressionId(ci->expressionId++);
-  }
-
-  ac->aggParms().push_back(SRCP(rc));
-  ac->resultType(rc->resultType());
-  return ac;
-}
 
 ReturnedColumn* buildReturnedColumnNull(gp_walk_info& gwi)
 {
@@ -2825,7 +2784,7 @@ ReturnedColumn* buildReturnedColumnBody(Item* item, gp_walk_info& gwi, bool& non
     {
       Item_field* ifp = (Item_field*)item;
 
-      return wrapIntoAggregate(buildSimpleColumn(ifp, gwi, queryType), gwi, ifp);
+      return buildSimpleColumn(ifp, gwi, queryType);
     }
     case Item::NULL_ITEM: return buildReturnedColumnNull(gwi);
     case Item::CONST_ITEM:
@@ -5318,22 +5277,91 @@ int processFrom(bool& isUnion, SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP&
     {
       // Until we handle recursive cte:
       // Checking here ensures we catch all with clauses in the query.
-      if (table_ptr->is_recursive_with_table())
-      {
-        gwi.fatalParseError = true;
-        gwi.parseErrorText = "Recursive CTE";
-        setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText, gwi);
-        return ER_CHECK_NOT_IMPLEMENTED;
-      }
+      /*
 
+      refer to sql_union.cc, exec_recursive for a sample implementation
+
+      might just work by setting isUnion to true, then calling get select again.
+      need to set relevant meta data.
+
+      needs to write all to the first table, probably can be achieved
+      */
       string viewName = getViewName(table_ptr);
       if (lower_case_table_names)
       {
         boost::algorithm::to_lower(viewName);
       }
+      if (table_ptr->is_recursive_with_table())
+      {
+        if (table_ptr->derived->union_distinct)
+        {
+          gwi.fatalParseError = true;
+          gwi.parseErrorText =
+              "Recursive CTE with UNION DISTINCT is not supported by ColumnStore. Use UNION ALL.";
+          setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText, gwi);
+          return ER_CHECK_NOT_IMPLEMENTED;
+        }
+
+        dynamic_cast<CalpontSelectExecutionPlan*>(csep.get())->containsRecursiveQuery(true);
+        SELECT_LEX* start = table_ptr->derived->first_select();
+        // SELECT_LEX* end = NULL;
+        dynamic_cast<CalpontSelectExecutionPlan*>(csep.get())
+            ->maxRecursiveDepth(gwi.thd->variables.max_recursive_iterations);
+        SCSEP anchor_plan = NULL;
+
+        gwi.isRecursiveWithTable = true;
+#ifdef DEBUG_WALK_COND
+
+        if (gwi.recursiveWithTableName == table_ptr->table_name.str)
+        {
+          cerr << "RECURSIVE TABLE: " << gwi.recursiveWithTableName << endl;
+        }
+
+#endif
+
+        FromSubQuery* fromSub = new FromSubQuery(gwi, start);
+        string alias(table_ptr->alias.str);
+        if (lower_case_table_names)
+        {
+          boost::algorithm::to_lower(alias);
+        }
+        fromSub->alias(alias);
+
+        CalpontSystemCatalog::TableAliasName tn =
+            make_aliasview("", table_ptr->table_name.str, alias, viewName);
+        // @bug 3852. check return execplan
+        anchor_plan = fromSub->transform(isUnion);
+        if (!anchor_plan)
+        {
+          setError(gwi.thd, ER_INTERNAL_ERROR, fromSub->gwip().parseErrorText, gwi);
+          CalpontSystemCatalog::removeCalpontSystemCatalog(gwi.sessionid);
+          return ER_INTERNAL_ERROR;
+        }
+        dynamic_cast<CalpontSelectExecutionPlan*>(anchor_plan.get())->isRecursiveWithTable(true);
+        dynamic_cast<CalpontSelectExecutionPlan*>(anchor_plan.get())
+            ->maxRecursiveDepth(gwi.thd->variables.max_recursive_iterations);
+
+        gwi.derivedTbList.push_back(anchor_plan);
+        gwi.tbList.push_back(tn);
+        CalpontSystemCatalog::TableAliasName tan = make_aliastable("", table_ptr->table_name.str, alias);
+        gwi.tableMap[tan] = make_pair(0, table_ptr);
+        // MCOL-2178 isUnion member only assigned, never used
+        // MIGR::infinidb_vtable.isUnion = true; //by-pass the 2nd pass of rnd_init
+        start = table_ptr->derived->first_select();
+
+        // if (with_element->with_anchor)
+        //   end = with_element->first_recursive;
+
+        if (!anchor_plan)
+        {
+          setError(gwi.thd, ER_INTERNAL_ERROR, "No Anchor Query", gwi);
+          CalpontSystemCatalog::removeCalpontSystemCatalog(gwi.sessionid);
+          return ER_INTERNAL_ERROR;
+        }
+      }
 
       // @todo process from subquery
-      if (table_ptr->derived)
+      else if (table_ptr->derived)
       {
         SELECT_LEX* select_cursor = table_ptr->derived->first_select();
         FromSubQuery* fromSub = new FromSubQuery(gwi, select_cursor);
@@ -5355,6 +5383,11 @@ int processFrom(bool& isUnion, SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP&
           return ER_INTERNAL_ERROR;
         }
 
+        if (plan->containsRecursiveQuery())
+        {
+          csep->containsRecursiveQuery(true);
+        }
+
         gwi.derivedTbList.push_back(plan);
         gwi.tbList.push_back(tn);
         CalpontSystemCatalog::TableAliasName tan = make_aliastable("", alias, alias);
@@ -5368,6 +5401,17 @@ int processFrom(bool& isUnion, SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP&
         view->viewName(tn);
         gwi.viewList.push_back(view);
         view->transform();
+      }
+      else if (table_ptr->table_function)
+      {
+        // MCOL-6300: Table functions (e.g. JSON_TABLE) are virtual tables
+        // that do not exist in any database.  ColumnStore cannot handle
+        // them — neither as a native table nor via CrossEngineStep.
+        // Signal unsupported so the caller can fall back to the server.
+        gwi.fatalParseError = true;
+        gwi.parseErrorText = "Table functions (e.g. JSON_TABLE) are not supported by ColumnStore.";
+        setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText, gwi);
+        return ER_CHECK_NOT_IMPLEMENTED;
       }
       else
       {
@@ -5720,6 +5764,59 @@ int processHaving(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep,
   return 0;
 }
 
+execplan::ReturnedColumn* findMatchingAlias(const Item_field* ifp,
+                                            execplan::CalpontSelectExecutionPlan::ReturnedColumnList& cols)
+{
+  if (!ifp->name.length)
+  {
+    return nullptr;
+  }
+
+  execplan::ReturnedColumn* rc = nullptr;
+  for (uint32_t j = 0; j < cols.size(); j++)
+  {
+    if (strcasecmp(ifp->name.str, cols[j].get()->alias().c_str()) == 0)
+    {
+      ReturnedColumn* matched_col = cols[j].get();
+
+      // If it's an aggregate column, try to unwrap it to get the underlying column
+      AggregateColumn* agg_check = dynamic_cast<AggregateColumn*>(matched_col);
+      if (agg_check)
+      {
+        // Check if the aggregate has parameters and use the first parameter if it's not an aggregate
+        // itself
+        if (!agg_check->aggParms().empty())
+        {
+          ReturnedColumn* inner_col = agg_check->aggParms()[0].get();
+          AggregateColumn* inner_agg = dynamic_cast<AggregateColumn*>(inner_col);
+
+          if (!inner_agg)
+          {
+            // Use the inner non-aggregate column
+            matched_col = inner_col;
+          }
+          else
+          {
+            // It's a nested aggregate, skip it
+            continue;
+          }
+        }
+        else
+        {
+          // Aggregate with no parameters (like COUNT(*)), skip it
+          continue;
+        }
+      }
+
+      rc = matched_col->clone();
+      rc->orderPos(j);
+      break;
+    }
+  }
+
+  return rc;
+}
+
 /*@brief  Process GROUP BY part of the query or sub-query      */
 /***********************************************************
  * DESCRIPTION:
@@ -5753,6 +5850,14 @@ int processGroupBy(SELECT_LEX& select_lex, gp_walk_info& gwi, const bool withRol
 
   gwi.hasWindowFunc = hasWindowFunc;
   groupcol = static_cast<ORDER*>(select_lex.group_list.first);
+
+  if (gwi.isRecursiveWithTable && groupcol)
+  {
+    gwi.fatalParseError = true;
+    gwi.parseErrorText = IDBErrorInfo::instance()->errorMsg(ERR_NON_SUPPORT_GROUP_BY, "GROUP BY clause");
+    setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText, gwi);
+    return ER_CHECK_NOT_IMPLEMENTED;
+  }
 
   gwi.disableWrapping = true;
   for (; groupcol; groupcol = groupcol->next)
@@ -5851,8 +5956,11 @@ int processGroupBy(SELECT_LEX& select_lex, gp_walk_info& gwi, const bool withRol
 
       if (sc)
       {
+        // buildSimpleColumn succeeded - we have a valid table column reference
+        // This table column takes precedence over any SELECT aliases (SQL standard behavior)
+        // Just check if it's in the SELECT list to set orderPos (optional optimization)
         bool found = false;
-        for (uint32_t j = 0; j < gwi.returnedCols.size(); j++)
+        for (uint32_t j = 0; !found && j < gwi.returnedCols.size(); j++)
         {
           if (sc->sameColumn(gwi.returnedCols[j].get()))
           {
@@ -5861,29 +5969,24 @@ int processGroupBy(SELECT_LEX& select_lex, gp_walk_info& gwi, const bool withRol
             break;
           }
         }
-        for (uint32_t j = 0; !found && j < gwi.returnedCols.size(); j++)
+        // Note: We do NOT fall back to alias matching here.
+        // The SimpleColumn from buildSimpleColumn is the correct table column to use.
+      }
+      else if (rc)
+      {
+        // rc is not a SimpleColumn (e.g., could be an aggregate or other type)
+        // Try to match by alias name
+        if (auto* nrc = findMatchingAlias(ifp, gwi.returnedCols); nrc != nullptr)
         {
-          if (strcasecmp(sc->alias().c_str(), gwi.returnedCols[j]->alias().c_str()) == 0)
-          {
-            delete rc;
-            rc = gwi.returnedCols[j].get()->clone();
-            rc->orderPos(j);
-            break;
-          }
+          delete rc;
+          rc = nrc;
         }
       }
       else
       {
-        for (uint32_t j = 0; j < gwi.returnedCols.size(); j++)
-        {
-          if (ifp->name.length && string(ifp->name.str) == gwi.returnedCols[j].get()->alias())
-          {
-            delete rc;
-            rc = gwi.returnedCols[j].get()->clone();
-            rc->orderPos(j);
-            break;
-          }
-        }
+        // buildSimpleColumn() returned NULL - this might be due to ambiguity
+        // or column not found. Try to find a matching alias in the SELECT list.
+        rc = findMatchingAlias(ifp, gwi.returnedCols);
       }
 
       if (!rc)
@@ -6560,7 +6663,7 @@ int processSelect(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep, vector
           }
 
           // We need to look into GROUP BY columns to decide if we need to wrap a column.
-          ReturnedColumn* rc = wrapIntoAggregate(sc, gwi, baseItem);
+          ReturnedColumn* rc = sc;
 
           SRCP sprc(rc);
           pushReturnedCol(gwi, baseItem, sprc);
@@ -6993,8 +7096,6 @@ int processOrderByCol(const ORDER* ordercol, gp_walk_info& gwi, IDBQueryType que
     else
     {
       rc = buildReturnedColumn(ord_item, gwi, gwi.fatalParseError, false, queryType);
-
-      rc = wrapIntoAggregate(rc, gwi, ord_item);
     }
     // @bug5501 try item_ptr if item can not be fixed. For some
     // weird dml statement state, item can not be fixed but the
@@ -7040,9 +7141,16 @@ int processOrderBy(SELECT_LEX& select_lex, gp_walk_info& gwi, SCSEP& csep,
 {
   SQL_I_List<ORDER> order_list = select_lex.order_list;
   ORDER* ordercol = static_cast<ORDER*>(order_list.first);
-
   // check if window functions are in order by. InfiniDB process order by list if
   // window functions are involved, either in order by or projection.
+  if (gwi.isRecursiveWithTable && ordercol)
+  {
+    gwi.fatalParseError = true;
+    gwi.parseErrorText = IDBErrorInfo::instance()->errorMsg(ERR_NON_SUPPORT_ORDER_BY, "WITH RECURSIVE");
+    setError(gwi.thd, ER_CHECK_NOT_IMPLEMENTED, gwi.parseErrorText, gwi);
+    return ER_CHECK_NOT_IMPLEMENTED;
+  }
+
   for (; ordercol; ordercol = ordercol->next)
   {
     if ((*(ordercol->item))->type() == Item::WINDOW_FUNC_ITEM)
@@ -7293,7 +7401,7 @@ int getSelectPlan(gp_walk_info& gwi, SELECT_LEX& select_lex, SCSEP& csep, bool i
     funcFieldVec[i]->print(&str, QT_ORDINARY);
     sc->alias(string(str.c_ptr()));
     sc->tableAlias(sc->tableAlias());
-    SRCP srcp(wrapIntoAggregate(sc, gwi, funcFieldVec[i]));
+    SRCP srcp(sc);
     uint32_t j = 0;
 
     for (; j < gwi.returnedCols.size(); j++)
@@ -7625,6 +7733,11 @@ int cs_get_select_plan(ha_columnstore_select_handler* handler, THD* thd, SCSEP& 
     // Store optimized plan and applied rules
     store_query_plan(csep, PlanType::Optimized);
     store_applied_rules(ctx.serializeAppliedRules());
+    if (csep->traceOn())
+    {
+      cerr << "csepWasOptimized=" << csepWasOptimized << " appliedRules=" << ctx.serializeAppliedRules()
+           << endl;
+    }
     if (csep->traceOn() && csepWasOptimized)
     {
       cerr << "---------------- cs_get_select_plan optimized EXECUTION PLAN ----------------" << endl;

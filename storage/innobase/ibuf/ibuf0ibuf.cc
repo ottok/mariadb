@@ -1025,18 +1025,19 @@ ATTRIBUTE_COLD dberr_t ibuf_upgrade()
 
 dberr_t ibuf_upgrade_needed()
 {
+  if (srv_force_recovery == SRV_FORCE_NO_LOG_REDO)
+    return DB_SUCCESS;
+
   mtr_t mtr{nullptr};
   mtr.start();
   mtr.x_lock_space(fil_system.sys_space);
-  dberr_t err;
+  dberr_t err= DB_SUCCESS;
   const buf_block_t *header_page= recv_sys.recover(ibuf_header, &mtr, &err);
 
   if (!header_page)
   {
   err_exit:
     sql_print_error("InnoDB: The change buffer is corrupted");
-    if (srv_force_recovery == SRV_FORCE_NO_LOG_REDO)
-      err= DB_SUCCESS;
   func_exit:
     mtr.commit();
     return err;
@@ -1067,7 +1068,7 @@ dberr_t ibuf_upgrade_needed()
                     " of the change buffer");
     err= DB_READ_ONLY;
   }
-  else if (srv_force_recovery != SRV_FORCE_NO_LOG_REDO)
+  else
     err= DB_FAIL;
 
   goto func_exit;

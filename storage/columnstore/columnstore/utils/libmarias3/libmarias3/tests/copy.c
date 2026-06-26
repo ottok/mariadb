@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 
   if (s3port)
   {
-    int port = atoi(s3port);
+    int port = atol(s3port);
     ms3_set_option(ms3, MS3_OPT_PORT_NUMBER, &port);
   }
 
@@ -170,9 +170,9 @@ int main(int argc, char *argv[])
 
   res = ms3_delete(ms3, s3bucket, "test/moved.txt");
   ASSERT_EQ_(res, 0, "Result: %u", res);
-  ms3_delete(ms3, s3bucket, "test/copied.txt");
-  ms3_delete(ms3, s3bucket, "test/copy_###_test.txt");
-  ms3_delete(ms3, s3bucket, "test/copied###.txt");
+  res = ms3_delete(ms3, s3bucket, "test/copied.txt");
+  res = ms3_delete(ms3, s3bucket, "test/copy_###_test.txt");
+  res = ms3_delete(ms3, s3bucket, "test/copied###.txt");
 
   ms3_free(data);
   ms3_deinit(ms3);

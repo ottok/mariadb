@@ -1,12 +1,12 @@
 INCLUDE_DIRECTORIES(${CC_SOURCE_DIR}/include
                     ${CC_SOURCE_DIR}/libmariadb)
 
-ADD_DEFINITIONS(-D HAVE_COMPRESS)
-ADD_DEFINITIONS(-D LIBMARIADB)
-ADD_DEFINITIONS(-D THREAD)
+add_compile_definitions(HAVE_COMPRESS)
+add_compile_definitions(LIBMARIADB)
+add_compile_definitions(THREAD)
 
 IF(APPLE)
-  ADD_DEFINITIONS(-D _XOPEN_SOURCE)
+  add_compile_definitions(_XOPEN_SOURCE)
 ENDIF()
 
 INCLUDE(${CC_SOURCE_DIR}/cmake/sign.cmake)
@@ -330,7 +330,7 @@ ${SSL_SOURCES}
 )
 
 IF(WIN32)
-  ADD_DEFINITIONS(-DSIZEOF_CHARP=${CMAKE_SIZEOF_VOID_P})
+  add_compile_definitions(SIZEOF_CHARP=${CMAKE_SIZEOF_VOID_P})
   INCLUDE_DIRECTORIES(${CC_SOURCE_DIR}/win-iconv)
   SET(LIBMARIADB_SOURCES
     ${LIBMARIADB_SOURCES}
@@ -346,10 +346,10 @@ ELSE()
      INCLUDE_DIRECTORIES(BEFORE ${ICONV_INCLUDE_DIR}) 
   ENDIF()
   IF(NOT CMAKE_SYSTEM_NAME MATCHES AIX)
-    ADD_DEFINITIONS(-DLIBICONV_PLUG)
+    add_compile_definitions(LIBICONV_PLUG)
   ENDIF()
   IF(APPLE)
-    ADD_DEFINITIONS(-Wno-deprecated-declarations)
+    add_compile_options(-Wno-deprecated-declarations)
   ENDIF()
 ENDIF()
 
@@ -414,16 +414,12 @@ ELSE()
 ENDIF()
 
 
-IF(CMAKE_VERSION VERSION_GREATER 2.8.7)
-  # CREATE OBJECT LIBRARY 
-  ADD_LIBRARY(mariadb_obj OBJECT ${LIBMARIADB_SOURCES})
-  IF(UNIX)
-    SET_TARGET_PROPERTIES(mariadb_obj PROPERTIES COMPILE_FLAGS "${CMAKE_SHARED_LIBRARY_C_FLAGS}")
-  ENDIF()
-  SET (MARIADB_OBJECTS $<TARGET_OBJECTS:mariadb_obj>)
-ELSE()
-  SET (MARIADB_OBJECTS ${LIBMARIADB_SOURCES})
+# CREATE OBJECT LIBRARY
+ADD_LIBRARY(mariadb_obj OBJECT ${LIBMARIADB_SOURCES})
+IF(UNIX)
+  SET_TARGET_PROPERTIES(mariadb_obj PROPERTIES COMPILE_FLAGS "${CMAKE_SHARED_LIBRARY_C_FLAGS}")
 ENDIF()
+SET (MARIADB_OBJECTS $<TARGET_OBJECTS:mariadb_obj>)
 
 # Xcode doesn't support targets that have only object files,
 # so let's add an empty file to keep Xcode happy
@@ -508,14 +504,8 @@ INSTALL(TARGETS libmariadb
         COMPONENT SharedLibraries
         DESTINATION ${INSTALL_LIBDIR})
 ELSE()
-# in cmake 3.12+ we can use
-#INSTALL(TARGETS libmariadb LIBRARY DESTINATION ${INSTALL_LIBDIR}
-#        COMPONENT SharedLibraries NAMELINK_COMPONENT Development)
-# but as long as we build on CentOS 7 with its cmake 2.8.12.2 we have to use
 INSTALL(TARGETS libmariadb LIBRARY DESTINATION ${INSTALL_LIBDIR}
-        COMPONENT SharedLibraries NAMELINK_SKIP)
-INSTALL(TARGETS libmariadb LIBRARY DESTINATION ${INSTALL_LIBDIR}
-        COMPONENT Development NAMELINK_ONLY)
+        COMPONENT SharedLibraries NAMELINK_COMPONENT Development)
 ENDIF()
 
 IF(MSVC)
