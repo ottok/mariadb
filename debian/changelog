@@ -1,3 +1,30 @@
+mariadb (1:11.8.8-0+deb13u1) UNRELEASED; urgency=medium
+
+  * New upstream version 11.8.8 with critical fix for regression in 11.8.7 as
+    noted at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.8
+    and for the following security issues:
+    - CVE-2026-48165
+    - CVE-2026-48163
+  * Previous upstream version 11.8.7 included fixes for several defects as noted
+    at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.7 as
+    well the following security issues:
+    - CVE-2026-44173
+    - CVE-2026-44172
+    - CVE-2026-44171
+    - CVE-2026-44170
+    - CVE-2026-44169
+    - CVE-2026-44168
+  * New upstream version included fixes for these Debian tracked issues:
+    - MDEV-38698 Upgrade did not fix charset and collation for mysql.user,
+      leading to "Illegal mix of collations" errors on upgrades or when trying
+      to restore backups (Closes: #1104533, #1126850, #1137221)
+    - MDEV-39479 Mroonga hangs on invalid index flag (Closes: #1110683)
+    - MDEV-38811 Crash in information_schema.table_constraints when running in
+      'skip-grant-tables' mode (Closes: #1127431, affected Akonadi)
+  * Salsa CI: Disable the uscan job as it is incompatible with MariaDB
+
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 26 Jun 2026 13:13:13 +0000
+
 mariadb (1:11.8.6-0+deb13u1) trixie; urgency=medium
 
   [ Otto Kekäläinen ]

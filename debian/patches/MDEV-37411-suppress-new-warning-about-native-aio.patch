@@ -38,10 +38,10 @@ Forwarded: https://jira.mariadb.org/browse/MDEV-37411 (rejected)
  1 file changed, 2 insertions(+)
 
 diff --git a/mysql-test/mariadb-test-run.pl b/mysql-test/mariadb-test-run.pl
-index 6739995..8d88e4d 100755
+index 3e1dceb..66d875b 100755
 --- a/mysql-test/mariadb-test-run.pl
 +++ b/mysql-test/mariadb-test-run.pl
-@@ -4498,6 +4498,8 @@ sub extract_warning_lines ($$) {
+@@ -4507,6 +4507,8 @@ sub extract_warning_lines ($$) {
       qr/error .*connecting to master/,
       qr/InnoDB: Dumping buffer pool.*/,
       qr/InnoDB: Buffer pool.*/,
