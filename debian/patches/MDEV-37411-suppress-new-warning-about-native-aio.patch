@@ -26,7 +26,7 @@ diff --git a/storage/innobase/os/os0file.cc b/storage/innobase/os/os0file.cc
 index f3c0402..d69fe9a 100644
 --- a/storage/innobase/os/os0file.cc
 +++ b/storage/innobase/os/os0file.cc
-@@ -3091,7 +3091,7 @@ int os_aio_init() noexcept
+@@ -3098,7 +3098,7 @@
      if (ret)
      {
        srv_use_native_aio= false;

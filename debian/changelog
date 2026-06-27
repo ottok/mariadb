@@ -1,7 +1,45 @@
+mariadb (1:10.11.18-0+deb12u1) UNRELEASED; urgency=medium
+
+  * New upstream maintenance 10.11.18 includes several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.11/10.11.18
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-49261
+    - CVE-2026-48165
+    - CVE-2026-48163
+  * Previous upstream maintenance 10.11.17 included several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.11/10.11.17
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-44173
+    - CVE-2026-44172
+    - CVE-2026-44171
+    - CVE-2026-44170
+    - CVE-2026-44168
+  * Previous upstream maintenance 10.11.16 included several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.11/10.11.16
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-3494
+    - CVE-2026-34303
+  * Previous upstream maintenance 10.11.15 included several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.11/10.11.15
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-21968
+    - CVE-2025-13699
+  * New upstream versions included fixes for these Debian tracked issues:
+    - MDEV-38698 Upgrade did not fix charset and collation for mysql.user,
+      leading to "Illegal mix of collations" errors on upgrades or when trying
+      to restore backups (Closes: #1104533, #1126850, #1137221)
+    - MDEV-39479 Mroonga hangs on invalid index flag (Closes: #1110683)
+    - MDEV-38811 Crash in information_schema.table_constraints when running in
+     'skip-grant-tables' mode (Closes: #1127431, affected e.g. Akonadi)
+  * Add debian/source/local-options to suppress WolfSSL and ColumnStore line
+    ending errors
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 27 Jun 2026 11:11:11 +0000
+
 mariadb (1:10.11.14-0+deb12u2) bookworm; urgency=medium
 
-  * Fix "MARIADB: unbound variable" warning which was a regression from the 
-    preivous version that that the illegal mix of collations fix applied with 
+  * Fix "MARIADB: unbound variable" warning which was a regression from the
+    preivous version that that the illegal mix of collations fix applied with
     wrong variable name (Closes: #1112499)
 
  -- Otto Kekäläinen <otto@debian.org>  Sat, 30 Aug 2025 10:17:22 -0700
