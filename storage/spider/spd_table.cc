@@ -4093,7 +4093,7 @@ int spider_create_conn_keys(
     int counter= 0;
     spider_create_conn_key_add_one(&counter, &tmp_name, share->tgt_wrappers[roop_count]);
     spider_create_conn_key_add_one(&counter, &tmp_name, share->tgt_hosts[roop_count]);
-    my_sprintf(port_str, (port_str, "%05ld", share->tgt_ports[roop_count]));
+    snprintf(port_str, sizeof(port_str), "%05ld", share->tgt_ports[roop_count]);
     spider_create_conn_key_add_one(&counter, &tmp_name, port_str);
     spider_create_conn_key_add_one(&counter, &tmp_name, share->tgt_sockets[roop_count]);
     counter++;
@@ -4218,7 +4218,7 @@ SPIDER_SHARE *spider_create_share(
   for (roop_count = 0; roop_count < (int) share->all_link_count;
     roop_count++)
   {
-    my_sprintf(link_idx_str, (link_idx_str, "%010d", roop_count));
+    snprintf(link_idx_str, sizeof(link_idx_str), "%010d", roop_count);
     buf_pos = strmov(buf, share->table_name);
     buf_pos = strmov(buf_pos, link_idx_str);
     *buf_pos = '\0';
@@ -6288,14 +6288,18 @@ int spider_db_init(
 
   if (my_gethwaddr((uchar *) addr))
   {
-    my_printf_error(ER_SPIDER_CANT_NUM, ER_SPIDER_CANT_STR1, MYF(ME_WARNING),
+    my_printf_error(ER_SPIDER_CANT_NUM, ER_SPIDER_CANT_STR1, MYF(ME_NOTE),
       "get hardware address with error ", errno);
+    /*
+      If we can't get the hardware address, we zero it out.
+      The spider_unique_id will then look like: -000000000000-PID-
+    */
     bzero(addr,6);
   }
   spider_unique_id.str = spider_unique_id_buf;
-  spider_unique_id.length = my_sprintf(spider_unique_id_buf,
-    (spider_unique_id_buf, "-%02x%02x%02x%02x%02x%02x-%lx-",
-      addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], (ulong) getpid()));
+  spider_unique_id.length = snprintf(spider_unique_id_buf,
+    sizeof(spider_unique_id_buf), "-%02x%02x%02x%02x%02x%02x-%lx-",
+      addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], (ulong) getpid());
 
   memset(&spider_alloc_func_name, 0, sizeof(spider_alloc_func_name));
   memset(&spider_alloc_file_name, 0, sizeof(spider_alloc_file_name));
@@ -6750,7 +6754,8 @@ void spider_get_partition_info(
           DBUG_VOID_RETURN;
         }
         DBUG_PRINT("info",("spider tmp_name=%s", tmp_name));
-        if (!memcmp(table_name, tmp_name, table_name_length + 1))
+        if (table_name_length == strlen(tmp_name) &&
+            !strncmp(table_name, tmp_name, table_name_length))
           DBUG_VOID_RETURN;
         if (
           tmp_flg &&
@@ -6771,7 +6776,8 @@ void spider_get_partition_info(
         DBUG_VOID_RETURN;
       }
       DBUG_PRINT("info",("spider tmp_name=%s", tmp_name));
-      if (!memcmp(table_name, tmp_name, table_name_length + 1))
+      if (table_name_length == strlen(tmp_name) &&
+          !strncmp(table_name, tmp_name, table_name_length))
         DBUG_VOID_RETURN;
       if (
         tmp_flg &&

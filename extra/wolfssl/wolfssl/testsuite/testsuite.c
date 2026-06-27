@@ -1,12 +1,12 @@
 /* testsuite.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -51,6 +51,10 @@
 #include <examples/echoserver/echoserver.h>
 #include <examples/server/server.h>
 #include <examples/client/client.h>
+#if defined(HAVE_OCSP) && defined(HAVE_OCSP_RESPONDER) && \
+    !defined(NO_FILESYSTEM)
+#include <examples/ocsp_responder/ocsp_responder.h>
+#endif
 
 #include <testsuite/utils.h>
 /* include source file to not change all the testsuite build systems */
@@ -72,6 +76,12 @@ static int test_tls(func_args* server_args);
 #if !defined(NO_WOLFSSL_SERVER) && !defined(NO_WOLFSSL_CLIENT) && \
     defined(HAVE_CRL) && defined(HAVE_CRL_MONITOR)
 static int test_crl_monitor(void);
+#endif
+#if !defined(NO_WOLFSSL_SERVER) && !defined(NO_WOLFSSL_CLIENT) && \
+    !defined(NO_TLS) && !defined(NETOS) && defined(HAVE_OCSP) && \
+    defined(HAVE_OCSP_RESPONDER) && !defined(NO_FILESYSTEM) && \
+    !defined(NO_RSA) && defined(HAVE_CERTIFICATE_STATUS_REQUEST)
+static int test_ocsp_responder(void);
 #endif
 static void show_ciphers(void);
 static void cleanup_output(void);
@@ -197,8 +207,11 @@ int testsuite_test(int argc, char** argv)
     #else
         simple_test(&server_args);
     #endif
-    if (server_args.return_code != 0) return server_args.return_code;
+    if (server_args.return_code != 0)
+        return server_args.return_code;
 #if !defined(NETOS)
+    FreeTcpReady(&ready);
+    InitTcpReady(&ready);
     /* Echo input wolfSSL client server test */
     #ifdef HAVE_STACK_SIZE
         StackSizeCheck_launch(&server_args, echoserver_test, &serverThread,
@@ -235,6 +248,17 @@ int testsuite_test(int argc, char** argv)
 #if !defined(NO_WOLFSSL_SERVER) && !defined(NO_WOLFSSL_CLIENT) && \
     defined(HAVE_CRL) && defined(HAVE_CRL_MONITOR)
     ret = test_crl_monitor();
+    if (ret != 0) {
+        cleanup_output();
+        return ret;
+    }
+#endif
+
+#if !defined(NO_WOLFSSL_SERVER) && !defined(NO_WOLFSSL_CLIENT) && \
+    !defined(NO_TLS) && !defined(NETOS) && defined(HAVE_OCSP) && \
+    defined(HAVE_OCSP_RESPONDER) && !defined(NO_FILESYSTEM) && \
+    !defined(NO_RSA) && defined(HAVE_CERTIFICATE_STATUS_REQUEST)
+    ret = test_ocsp_responder();
     if (ret != 0) {
         cleanup_output();
         return ret;
@@ -309,6 +333,8 @@ static int test_crl_monitor(void)
     int ret = -1;
     int i = -1, j;
 
+    XMEMSET(tmpDir, '\0', sizeof(tmpDir));
+
     printf("\nRunning CRL monitor test\n");
 
     (void)XSNPRINTF(rounds, sizeof(rounds), "%d", CRL_MONITOR_TEST_ROUNDS);
@@ -336,7 +362,6 @@ static int test_crl_monitor(void)
     for (i = 0; i < CRL_MONITOR_TEST_ROUNDS; i++) {
         int expectFail;
         if (i % 2 == 0) {
-
             /* succeed on even rounds */
             (void)XSNPRINTF(buf, sizeof(buf), "%s/%s", tmpDir, "crl.pem");
             if (STAGE_FILE("certs/crl/crl.pem", buf) != 0) {
@@ -379,7 +404,11 @@ static int test_crl_monitor(void)
                 fprintf(stderr, "[%d] Failed to remove file %s\n", i, buf);
                 goto cleanup;
             }
+        #ifndef WOLFSSL_NO_CLIENT_AUTH
             expectFail = 1;
+        #else
+            expectFail = 0;
+        #endif
         }
         /* Give server a moment to register the file change */
         XSLEEP_MS(100);
@@ -415,6 +444,159 @@ cleanup:
     return ret;
 }
 #endif
+
+#if !defined(NO_WOLFSSL_SERVER) && !defined(NO_WOLFSSL_CLIENT) && \
+    !defined(NO_TLS) && !defined(NETOS) && defined(HAVE_OCSP) && \
+    defined(HAVE_OCSP_RESPONDER) && !defined(NO_FILESYSTEM) && \
+    !defined(NO_RSA) && defined(HAVE_CERTIFICATE_STATUS_REQUEST)
+
+/* Run a single OCSP-responder-backed stapling test.
+ *   serverCert   - path to the TLS server certificate (chain file)
+ *   serverKey    - path to the TLS server private key
+ *   expectPass   - non-zero if the client handshake should succeed
+ * Returns 0 on success, non-zero on failure. */
+static int run_ocsp_responder_test_case(const char* serverCert,
+                                         const char* serverKey,
+                                         int expectPass)
+{
+    func_args respArgs;
+    func_args svrArgs;
+    func_args cliArgs;
+    THREAD_TYPE respThread;
+    THREAD_TYPE svrThread;
+    tcp_ready respReady;
+    tcp_ready svrReady;
+    /* Buffers for runtime-built argv entries */
+    char ocspUrl[64];
+    char svrPortStr[8];
+    /* argv arrays (non-const so they can be assigned to char**) */
+    char* respArgv[12];
+    char* svrArgv[15];
+    char* cliArgv[12];
+    int ret = -1;
+
+    /* OCSP responder argv */
+    respArgv[0]  = (char*)"ocsp_responder";
+    respArgv[1]  = (char*)"-p";  respArgv[2]  = (char*)"0";
+    respArgv[3]  = (char*)"-n";  respArgv[4]  = (char*)"1";
+    respArgv[5]  = (char*)"-c";
+    respArgv[6]  = (char*)"certs/ocsp/intermediate1-ca-cert.pem";
+    respArgv[7]  = (char*)"-k";
+    respArgv[8]  = (char*)"certs/ocsp/intermediate1-ca-key.pem";
+    respArgv[9]  = (char*)"-i";
+    respArgv[10] = (char*)"certs/ocsp/index-intermediate1-ca-issued-certs.txt";
+    respArgv[11] = NULL;
+
+    XMEMSET(&respArgs, 0, sizeof(respArgs));
+    InitTcpReady(&respReady);
+    respArgs.signal = &respReady;
+    respArgs.argc = 11;
+    respArgs.argv = respArgv;
+    start_thread(ocsp_responder_test, &respArgs, &respThread);
+    wait_tcp_ready(&respArgs);
+
+    /* Build OCSP URL override pointing at the dynamic responder port */
+    (void)XSNPRINTF(ocspUrl, sizeof(ocspUrl),
+                    "http://127.0.0.1:%d", (int)respReady.port);
+
+    /* TLS server argv */
+    svrArgv[0]  = (char*)"testsuite";
+    svrArgv[1]  = (char*)"-c";  svrArgv[2]  = (char*)serverCert;
+    svrArgv[3]  = (char*)"-k";  svrArgv[4]  = (char*)serverKey;
+    svrArgv[5]  = (char*)"-d";             /* no client cert required */
+    svrArgv[6]  = (char*)"-x";             /* runWithErrors: don't exit on SSL_accept fail */
+    svrArgv[7]  = (char*)"-C";  svrArgv[8]  = (char*)"1"; /* one connection */
+    svrArgv[9]  = (char*)"-O";  svrArgv[10] = ocspUrl;    /* OCSP override  */
+    svrArgv[11] = (char*)"--quieter";
+    svrArgv[12] = (char*)"-p";  svrArgv[13] = (char*)"0";
+    svrArgv[14] = NULL;
+
+    XMEMSET(&svrArgs, 0, sizeof(svrArgs));
+    InitTcpReady(&svrReady);
+    svrArgs.signal = &svrReady;
+    svrArgs.argc = 14;
+    svrArgs.argv = svrArgv;
+    start_thread(server_test, &svrArgs, &svrThread);
+    wait_tcp_ready(&svrArgs);
+
+    /* Build server port string now that it is bound */
+    (void)XSNPRINTF(svrPortStr, sizeof(svrPortStr), "%d",
+                    (int)svrArgs.signal->port);
+
+    /* TLS client argv */
+    cliArgv[0]  = (char*)"testsuite";
+    cliArgv[1]  = (char*)"-A";
+    cliArgv[2]  = (char*)"certs/ocsp/root-ca-cert.pem";
+    cliArgv[3]  = (char*)"-C";             /* disable CRL */
+    cliArgv[4]  = (char*)"-W";  cliArgv[5]  = (char*)"1"; /* OCSP stapling */
+    cliArgv[6]  = (char*)"-H";  cliArgv[7]  = (char*)"exitWithRet";
+    cliArgv[8]  = (char*)"--quieter";
+    cliArgv[9]  = (char*)"-p";  cliArgv[10] = svrPortStr;
+    cliArgv[11] = NULL;
+
+    XMEMSET(&cliArgs, 0, sizeof(cliArgs));
+    cliArgs.signal = &svrReady;
+    cliArgs.argc = 11;
+    cliArgs.argv = cliArgv;
+    client_test(&cliArgs);
+
+    join_thread(svrThread);
+    join_thread(respThread);
+    FreeTcpReady(&svrReady);
+    FreeTcpReady(&respReady);
+
+    if (expectPass) {
+        if (cliArgs.return_code != 0) {
+            fprintf(stderr, "OCSP stapling test: expected success, "
+                    "client returned %d\n", cliArgs.return_code);
+        }
+        else {
+            ret = 0;
+        }
+    }
+    else {
+        if (cliArgs.return_code == 0) {
+            fprintf(stderr, "OCSP stapling test: expected failure "
+                    "(revoked cert), but client returned 0\n");
+        }
+        else {
+            ret = 0;
+        }
+    }
+
+    return ret;
+}
+
+/* Test the OCSP responder example together with TLS OCSP stapling.
+ *
+ * Case 1: server cert is valid   -> client handshake must succeed.
+ * Case 2: server cert is revoked -> client handshake must fail.
+ */
+static int test_ocsp_responder(void)
+{
+    int ret;
+
+    printf("\nRunning OCSP responder test\n");
+
+    /* Test 1: valid certificate - connection should succeed */
+    ret = run_ocsp_responder_test_case("certs/ocsp/server1-cert.pem",
+                                       "certs/ocsp/server1-key.pem", 1);
+    if (ret != 0) {
+        fprintf(stderr, "OCSP responder test (good cert) failed\n");
+        return ret;
+    }
+
+    /* Test 2: revoked certificate - connection should be rejected */
+    ret = run_ocsp_responder_test_case("certs/ocsp/server2-cert.pem",
+                                       "certs/ocsp/server2-key.pem", 0);
+    if (ret != 0) {
+        fprintf(stderr, "OCSP responder test (revoked cert) failed\n");
+        return ret;
+    }
+
+    return 0;
+}
+#endif /* HAVE_OCSP && HAVE_OCSP_RESPONDER */
 
 #if !defined(NO_WOLFSSL_SERVER) && !defined(NO_WOLFSSL_CLIENT) && \
     !defined(NO_TLS) && \
@@ -465,11 +647,6 @@ static int test_tls(func_args* server_args)
     if (echo_args.return_code != 0)
         return echo_args.return_code;
 
-#ifdef WOLFSSL_DTLS
-    /* Ensure server is ready for UDP data. */
-    wait_tcp_ready(server_args);
-#endif
-
     /* Next client connection - send quit to shutdown server. */
     echo_args.argc = 2;
     XSTRLCPY(arg[1], "quit", sizeof(arg[1]));
@@ -499,7 +676,11 @@ static void show_ciphers(void)
 /* Cleanup temporary output file. */
 static void cleanup_output(void)
 {
-    remove(outputName);
+    int ret = 0;
+    ret = remove(outputName);
+    if (ret < 0) {
+        fprintf(stderr, "remove(%s) failed: %d\n", outputName, ret);
+    }
 }
 
 /* Validate output equals input using a hash. Remove temporary output file.

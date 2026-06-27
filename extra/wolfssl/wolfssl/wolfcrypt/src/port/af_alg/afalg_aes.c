@@ -1,12 +1,12 @@
 /* afalg_aes.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -50,7 +50,7 @@ static int wc_AesSetup(Aes* aes, const char* type, const char* name, int ivSz, i
     byte* key = (byte*)aes->key;
 #endif
 
-    if (aes->alFd <= 0) {
+    if (aes->alFd == WC_SOCK_NOTSET) {
         aes->alFd = wc_Afalg_Socket();
         if (aes->alFd < 0) {
             WOLFSSL_MSG("Unable to open an AF_ALG socket");
@@ -133,11 +133,11 @@ int wc_AesSetKey(Aes* aes, const byte* userKey, word32 keylen,
     aes->left = 0;
 #endif
 
-    if (aes->rdFd > 0) {
+    if (aes->rdFd > WC_SOCK_NOTSET) {
         (void)close(aes->rdFd);
     }
     aes->rdFd = WC_SOCK_NOTSET;
-    if (aes->alFd <= 0) {
+    if (aes->alFd == WC_SOCK_NOTSET) {
         aes->alFd = wc_Afalg_Socket();
     }
 
@@ -186,6 +186,10 @@ int wc_AesSetKey(Aes* aes, const byte* userKey, word32 keylen,
         if ((sz / WC_AES_BLOCK_SIZE) > 0) {
             /* update IV */
             cmsg = CMSG_FIRSTHDR(&(aes->msg));
+            if (cmsg == NULL) {
+                WOLFSSL_MSG("CMSG_FIRSTHDR() in wc_AesCbcEncrypt() returned NULL unexpectedly.");
+                return SYSLIB_FAILED_E;
+            }
             ret = wc_Afalg_SetIv(CMSG_NXTHDR(&(aes->msg), cmsg),
                     (byte*)(aes->reg), AES_IV_SIZE);
             if (ret < 0) {
@@ -245,6 +249,10 @@ int wc_AesSetKey(Aes* aes, const byte* userKey, word32 keylen,
         if ((sz / WC_AES_BLOCK_SIZE) > 0) {
             /* update IV */
             cmsg = CMSG_FIRSTHDR(&(aes->msg));
+            if (cmsg == NULL) {
+                WOLFSSL_MSG("CMSG_FIRSTHDR() in wc_AesCbcDecrypt() returned NULL unexpectedly.");
+                return SYSLIB_FAILED_E;
+            }
             ret = wc_Afalg_SetIv(CMSG_NXTHDR(&(aes->msg), cmsg),
                     (byte*)(aes->reg), AES_IV_SIZE);
             if (ret != 0) {
@@ -397,6 +405,10 @@ int wc_AesSetKeyDirect(Aes* aes, const byte* userKey, word32 keylen,
 
                 /* update IV */
                 cmsg = CMSG_FIRSTHDR(&(aes->msg));
+                if (cmsg == NULL) {
+                    WOLFSSL_MSG("CMSG_FIRSTHDR() in wc_AesCtrEncrypt() returned NULL unexpectedly.");
+                    return SYSLIB_FAILED_E;
+                }
                 ret = wc_Afalg_SetIv(CMSG_NXTHDR(&(aes->msg), cmsg),
                         (byte*)(aes->reg), AES_IV_SIZE);
                 if (ret < 0) {
@@ -501,7 +513,7 @@ int wc_AesGcmSetKey(Aes* aes, const byte* key, word32 len)
     const word32 max_key_len = (AES_MAX_KEY_SIZE / 8);
 #endif
 
-    if (aes == NULL ||
+    if (aes == NULL || key == NULL ||
             !((len == 16) || (len == 24) || (len == 32))) {
         return BAD_FUNC_ARG;
     }
@@ -515,11 +527,11 @@ int wc_AesGcmSetKey(Aes* aes, const byte* key, word32 len)
     aes->keylen = len;
     aes->rounds = len/4 + 6;
 
-    if (aes->rdFd > 0) {
+    if (aes->rdFd > WC_SOCK_NOTSET) {
         (void)close(aes->rdFd);
     }
     aes->rdFd = WC_SOCK_NOTSET;
-    if (aes->alFd <= 0) {
+    if (aes->alFd == WC_SOCK_NOTSET) {
         aes->alFd = wc_Afalg_Socket();
     }
 
@@ -582,7 +594,7 @@ int wc_AesGcmEncrypt(Aes* aes, byte* out, const byte* in, word32 sz,
         return BAD_FUNC_ARG;
     }
 
-    if (aes->alFd <= 0) {
+    if (aes->alFd == WC_SOCK_NOTSET) {
         WOLFSSL_MSG("AF_ALG GcmEncrypt called with alFd unset");
         return BAD_FUNC_ARG;
     }
@@ -613,7 +625,15 @@ int wc_AesGcmEncrypt(Aes* aes, byte* out, const byte* in, word32 sz,
 
     msg = &(aes->msg);
     cmsg = CMSG_FIRSTHDR(msg);
+    if (cmsg == NULL) {
+        WOLFSSL_MSG("CMSG_FIRSTHDR() in wc_AesGcmEncrypt() returned NULL unexpectedly.");
+        return SYSLIB_FAILED_E;
+    }
     cmsg = CMSG_NXTHDR(msg, cmsg);
+    if (cmsg == NULL) {
+        WOLFSSL_MSG("CMSG_NEXTHDR() in wc_AesGcmEncrypt() returned NULL unexpectedly.");
+        return SYSLIB_FAILED_E;
+    }
 
     /* set IV and AAD size */
     ret = wc_Afalg_SetIv(cmsg, (byte*)iv, ivSz);
@@ -706,14 +726,18 @@ int wc_AesGcmEncrypt(Aes* aes, byte* out, const byte* in, word32 sz,
     }
 
     {
-        byte* tmp = (byte*)XMALLOC(authInSz, aes->heap, DYNAMIC_TYPE_TMP_BUFFER);
-        if (tmp == NULL) {
-            return MEMORY_E;
+        byte* tmp = NULL;
+
+        if (authInSz > 0) {
+            tmp = (byte*)XMALLOC(authInSz, aes->heap, DYNAMIC_TYPE_TMP_BUFFER);
+            if (tmp == NULL) {
+                return MEMORY_E;
+            }
+            /* first 16 bytes was all 0's */
+            iov[0].iov_base = tmp;
+            (void)scratch;
+            iov[0].iov_len  = authInSz;
         }
-        /* first 16 bytes was all 0's */
-        iov[0].iov_base = tmp;
-        (void)scratch;
-        iov[0].iov_len  = authInSz;
 
         iov[1].iov_base = out;
         iov[1].iov_len  = sz;
@@ -723,9 +747,9 @@ int wc_AesGcmEncrypt(Aes* aes, byte* out, const byte* in, word32 sz,
 
         ret = (int)readv(aes->rdFd, iov, 3);
         XFREE(tmp, aes->heap, DYNAMIC_TYPE_TMP_BUFFER);
-    }
-    if (ret < 0) {
-        return WC_AFALG_SOCK_E;
+        if (ret < 0) {
+            return WC_AFALG_SOCK_E;
+        }
     }
 #endif
 
@@ -738,7 +762,8 @@ int wc_AesGcmEncrypt(Aes* aes, byte* out, const byte* in, word32 sz,
  *
  * Warning: If using Xilinx hardware acceleration it is assumed that the in
  *          buffer is large enough to hold both cipher text and tag. That is
- *          sz | 16 bytes
+ *          sz | 16 bytes. The in buffer has tag appended even though it is
+ *          const for this wolfSSL API.
  */
 int wc_AesGcmDecrypt(Aes* aes, byte* out, const byte* in, word32 sz,
                      const byte* iv, word32 ivSz,
@@ -831,9 +856,6 @@ int wc_AesGcmDecrypt(Aes* aes, byte* out, const byte* in, word32 sz,
         if (ret < 0)
             return ret;
         xorbuf(tag, scratch, WC_AES_BLOCK_SIZE);
-        if (ret != 0) {
-            return AES_GCM_AUTH_E;
-        }
     }
 
     /* it is assumed that in buffer size is large enough to hold TAG */
@@ -913,12 +935,16 @@ int wc_AesGcmDecrypt(Aes* aes, byte* out, const byte* in, word32 sz,
     }
 
     {
-        byte* tmp = (byte*)XMALLOC(authInSz, aes->heap, DYNAMIC_TYPE_TMP_BUFFER);
-        if (tmp == NULL) {
-            return MEMORY_E;
+        byte* tmp = NULL;
+
+        if (authInSz > 0) {
+            tmp = (byte*)XMALLOC(authInSz, aes->heap, DYNAMIC_TYPE_TMP_BUFFER);
+            if (tmp == NULL) {
+                return MEMORY_E;
+            }
+            iov[0].iov_base = tmp;
+            iov[0].iov_len  = authInSz;
         }
-        iov[0].iov_base = tmp;
-        iov[0].iov_len  = authInSz;
         iov[1].iov_base = out;
         iov[1].iov_len  = sz;
         ret = (int)readv(aes->rdFd, iov, 2);

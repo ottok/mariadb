@@ -73,7 +73,7 @@ ulong net_buffer_length= 8192;	/* Default length. Enlarged if necessary */
  ** can't normally do this the client should have a bigger max-buffer.
  */
 
-static int ma_net_write_buff(NET *net,const char *packet, size_t len);
+int ma_net_write_buff(NET *net,const char *packet, size_t len);
 
 
 /* Init with packet info */
@@ -246,7 +246,7 @@ int ma_net_write_command(NET *net, uchar command,
 }
 
 
-static int ma_net_write_buff(NET *net,const char *packet, size_t len)
+int ma_net_write_buff(NET *net,const char *packet, size_t len)
 {
   size_t left_length;
 

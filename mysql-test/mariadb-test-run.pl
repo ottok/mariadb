@@ -1796,7 +1796,7 @@ sub collect_mysqld_features {
   my $args;
   mtr_init_args(\$args);
   mtr_add_arg($args, "--no-defaults");
-  mtr_add_arg($args, "--datadir=.");
+  mtr_add_arg($args, "--datadir=%s", $opt_vardir);
   mtr_add_arg($args, "--basedir=%s", $basedir);
   mtr_add_arg($args, "--lc-messages-dir=%s", $path_language);
   mtr_add_arg($args, "--skip-grant-tables");
@@ -2176,6 +2176,7 @@ sub environment_setup {
   $ENV{'LC_CTYPE'}=           "C";
   $ENV{'LC_COLLATE'}=         "C";
 
+  $ENV{'GNUTLS_SYSTEM_PRIORITY_FILE'}='/dev/null';
   $ENV{'OPENSSL_CONF'}= $mysqld_variables{'version-ssl-library'} gt 'OpenSSL 1.1.1'
                        ? "$glob_mysql_test_dir/lib/openssl.cnf" : '/dev/null';
 
@@ -4545,8 +4546,6 @@ sub extract_warning_lines ($$) {
      qr|table.*is full|,
      qr/\[ERROR\] (mysqld|mariadbd): \Z/,  # Warning from Aria recovery
      qr|Linux Native AIO|, # warning that aio does not work on /dev/shm
-     qr|InnoDB: io_setup\(\) attempt|,
-     qr|InnoDB: io_setup\(\) failed with EAGAIN|,
      qr|io_uring_queue_init\(\) failed with|,
      qr|InnoDB: io_uring failed: falling back to libaio|,
      qr/InnoDB: Failed to set O_DIRECT on file/,

@@ -97,7 +97,7 @@ When one supplies long data for a placeholder:
 #include "sql_view.h"                          // create_view_precheck
 #include "sql_delete.h"                        // mysql_prepare_delete
 #include "sql_select.h" // for JOIN
-#include "sql_insert.h" // upgrade_lock_type_for_insert, mysql_prepare_insert
+#include "sql_insert.h" // mysql_prepare_insert
 #include "sql_update.h" // mysql_prepare_update
 #include "sql_db.h"     // mysql_opt_change_db, mysql_change_db
 #include "sql_derived.h" // mysql_derived_prepare,
@@ -402,38 +402,46 @@ static bool send_prep_stmt(Prepared_statement *stmt,
 static ulong get_param_length(uchar **packet, ulong len)
 {
   uchar *pos= *packet;
+  ulong length;
+
   if (len < 1)
     return 0;
   if (*pos < 251)
   {
     (*packet)++;
-    return (ulong) *pos;
+    length= *pos;
   }
-  if (len < 3)
-    return 0;
-  if (*pos == 252)
+  else if (*pos == 252)
   {
+    if (len < 3)
+      return 0;
     (*packet)+=3;
-    return (ulong) uint2korr(pos+1);
+    length= uint2korr(pos+1);
   }
-  if (len < 4)
-    return 0;
-  if (*pos == 253)
+  else if (*pos == 253)
   {
+    if (len < 4)
+      return 0;
     (*packet)+=4;
-    return (ulong) uint3korr(pos+1);
+    length= uint3korr(pos+1);
   }
-  if (len < 5)
+  else
+  {
+    if (len < 9)
+      return 0;
+    (*packet)+=9; // Must be 254 when here
+    /*
+      In our client-server protocol all numbers bigger than 2^24
+      stored as 8 bytes with uint8korr. Here we always know that
+      parameter length is less than 2^32 so don't look at the second
+      4 bytes. But still we need to obey the protocol hence 9 in the
+      assignment above.
+    */
+    length= uint4korr(pos+1);
+  }
+  if (pos + len < *packet + length)
     return 0;
-  (*packet)+=9; // Must be 254 when here
-  /*
-    In our client-server protocol all numbers bigger than 2^24
-    stored as 8 bytes with uint8korr. Here we always know that
-    parameter length is less than 2^4 so don't look at the second
-    4 bytes. But still we need to obey the protocol hence 9 in the
-    assignment above.
-  */
-  return (ulong) uint4korr(pos+1);
+  return length;
 }
 #else
 #define get_param_length(packet, len) len
@@ -648,7 +656,12 @@ void Item_param::set_param_date(uchar **pos, ulong len)
 */
 void Item_param::set_param_time(uchar **pos, ulong len)
 {
-  MYSQL_TIME tm= *((MYSQL_TIME*)*pos);
+  MYSQL_TIME tm;
+  if (len >= sizeof (MYSQL_TIME))
+    tm= *((MYSQL_TIME*)*pos);
+  else
+    set_zero_time(&tm, MYSQL_TIMESTAMP_TIME);
+
   tm.hour+= tm.day * 24;
   tm.day= tm.year= tm.month= 0;
   if (tm.hour > 838)
@@ -663,15 +676,23 @@ void Item_param::set_param_time(uchar **pos, ulong len)
 
 void Item_param::set_param_datetime(uchar **pos, ulong len)
 {
-  MYSQL_TIME tm= *((MYSQL_TIME*)*pos);
+  MYSQL_TIME tm;
+  if (len >= sizeof (MYSQL_TIME))
+    tm= *((MYSQL_TIME*)*pos);
+  else
+    set_zero_time(&tm, MYSQL_TIMESTAMP_DATETIME);
   tm.neg= 0;
   set_time(&tm, MYSQL_TIMESTAMP_DATETIME, MAX_DATETIME_WIDTH);
 }
 
 void Item_param::set_param_date(uchar **pos, ulong len)
 {
-  MYSQL_TIME *to= (MYSQL_TIME*)*pos;
-  set_time(to, MYSQL_TIMESTAMP_DATE, MAX_DATE_WIDTH);
+  MYSQL_TIME tm;
+  if (len >= sizeof (MYSQL_TIME))
+    tm= *((MYSQL_TIME*)*pos);
+  else
+    set_zero_time(&tm, MYSQL_TIMESTAMP_DATE);
+  set_time(&tm, MYSQL_TIMESTAMP_DATE, MAX_DATE_WIDTH);
 }
 #endif /*!EMBEDDED_LIBRARY*/
 
@@ -683,8 +704,6 @@ void Item_param::set_param_str(uchar **pos, ulong len)
     set_null();
   else
   {
-    if (length > len)
-      length= len;
     /*
       We use &my_charset_bin here. Conversion and setting real character
       sets will be done in Item_param::convert_str_value(), after the
@@ -1310,8 +1329,6 @@ static bool mysql_test_insert_common(Prepared_statement *stmt,
   if (insert_precheck(thd, table_list))
     goto error;
 
-  //upgrade_lock_type_for_insert(thd, &table_list->lock_type, duplic,
-  //                             values_list.elements > 1);
   /*
     open temporary memory pool for temporary data allocated by derived
     tables & preparation procedure
@@ -1513,7 +1530,18 @@ static int mysql_test_update(Prepared_statement *stmt,
   {
     List_iterator_fast<Item> fs(select->item_list), vs(stmt->lex->value_list);
     while (Item *f= fs++)
-      vs++->associate_with_target_field(thd, static_cast<Item_field*>(f));
+    {
+      /*
+        note that if `f` is a non-updatable view field, it may be not
+        inherited from Item_field, and the cast below will essentially
+        produce garbage. But ER_NONUPDATEABLE_COLUMN will happen before it's
+        ever dereferenced.
+      */
+#ifndef DBUG_OFF
+      if (!dynamic_cast<Item_field*>(f)) f= (Item_field*)0x01; // let it crash
+#endif
+      vs++->associate_with_target_field(thd, reinterpret_cast<Item_field*>(f));
+    }
   }
   /* TODO: here we should send types of placeholders to the client. */
   DBUG_RETURN(0);
@@ -1601,13 +1629,15 @@ static int mysql_test_select(Prepared_statement *stmt,
 
   lex->first_select_lex()->context.resolve_in_select_list= TRUE;
 
-  privilege_t privilege(lex->exchange ? SELECT_ACL | FILE_ACL : SELECT_ACL);
+  if (lex->exchange && check_global_access(thd, FILE_ACL, false))
+    goto error;
+
   if (tables)
   {
-    if (check_table_access(thd, privilege, tables, FALSE, UINT_MAX, FALSE))
+    if (check_table_access(thd, SELECT_ACL, tables, FALSE, UINT_MAX, FALSE))
       goto error;
   }
-  else if (check_access(thd, privilege, any_db.str, NULL, NULL, 0, 0))
+  else if (check_access(thd, SELECT_ACL, any_db.str, NULL, NULL, 0, 0))
     goto error;
 
   if (!lex->result && !(lex->result= new (stmt->mem_root) select_send(thd)))
@@ -1630,6 +1660,10 @@ static int mysql_test_select(Prepared_statement *stmt,
   */
   if (unit->prepare(unit->derived, 0, 0))
     goto error;
+
+  if (thd->lex->prepare_unreferenced_in_with_clauses())
+    goto error;
+
   if (!lex->describe && !thd->lex->analyze_stmt && !stmt->is_sql_prepare())
   {
     /* Make copy of item list, as change_columns may change it */
@@ -3956,8 +3990,9 @@ void mysql_stmt_get_longdata(THD *thd, char *packet, ulong packet_length)
     /* Error will be sent in execute call */
     stmt->state= Query_arena::STMT_ERROR;
     stmt->last_errno= ER_WRONG_ARGUMENTS;
-    sprintf(stmt->last_error, ER_THD(thd, ER_WRONG_ARGUMENTS),
-            "mysqld_stmt_send_long_data");
+    snprintf(stmt->last_error, sizeof(stmt->last_error),
+             ER_THD(thd, ER_WRONG_ARGUMENTS),
+             "mysqld_stmt_send_long_data");
     DBUG_VOID_RETURN;
   }
 #endif
@@ -5296,7 +5331,6 @@ bool Prepared_statement::execute(String *expanded_query, bool open_cursor)
                              (char *) thd->security_ctx->host_or_ip, 1);
       error= mysql_execute_command(thd, true);
       MYSQL_QUERY_EXEC_DONE(error);
-      thd->update_server_status();
     }
     else
     {
@@ -5305,6 +5339,7 @@ bool Prepared_statement::execute(String *expanded_query, bool open_cursor)
       thd->update_stats();
       qc_executed= TRUE;
     }
+    thd->update_server_status();
   }
 
   /*
@@ -5327,6 +5362,11 @@ bool Prepared_statement::execute(String *expanded_query, bool open_cursor)
       See the next comment block for more details.
     */
     cleanup_stmt(false);
+
+  mysql_audit_general(thd, MYSQL_AUDIT_GENERAL_STATUS,
+                      thd->get_stmt_da()->is_error() ?
+                      thd->get_stmt_da()->sql_errno() : 0,
+                      command_name[thd->get_command()].str);
 
   /*
     Log the statement to slow query log if it passes filtering.

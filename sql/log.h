@@ -324,7 +324,8 @@ public:
   const char *generate_name(const char *log_name,
                             const char *suffix,
                             bool strip_ext, char *buff);
-  virtual int generate_new_name(char *new_name, const char *log_name,
+  virtual int generate_new_name(char *new_name, size_t name_size,
+                                const char *log_name,
                                 ulong next_log_number);
  protected:
   /* LOCK_log is inited by init_pthread_objects() */
@@ -723,7 +724,8 @@ public:
 
   int open(const char *opt_name) override;
   void close() override;
-  int generate_new_name(char *new_name, const char *log_name,
+  int generate_new_name(char *new_name, size_t name_size,
+                        const char *log_name,
                         ulong next_log_number) override;
   int log_and_order(THD *thd, my_xid xid, bool all,
                     bool need_prepare_ordered, bool need_commit_ordered) override;
@@ -1224,8 +1226,8 @@ inline bool normalize_binlog_name(char *to, const char *from, bool is_relay_log)
   /* opt_name is not null and not empty and from is a relative path */
   if (opt_name && opt_name[0] && from && !test_if_hard_path(from))
   {
-    // take the path from opt_name
-    // take the filename from from 
+    // take the path from "opt_name"
+    // take the filename from "from"
     char log_dirpart[FN_REFLEN], log_dirname[FN_REFLEN];
     size_t log_dirpart_len, log_dirname_len;
     dirname_part(log_dirpart, opt_name, &log_dirpart_len);
@@ -1277,6 +1279,7 @@ const char *
 get_gtid_list_event(IO_CACHE *cache, Gtid_list_log_event **out_gtid_list);
 
 int binlog_commit(THD *thd, bool all, bool is_ro_1pc= false);
+int binlog_rollback(handlerton *hton, THD *thd, bool all);
 int binlog_commit_by_xid(handlerton *hton, XID *xid);
 int binlog_rollback_by_xid(handlerton *hton, XID *xid);
 bool write_bin_log_start_alter(THD *thd, bool& partial_alter,

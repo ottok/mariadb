@@ -98,7 +98,10 @@ my_bool JSNX::SetJpath(PGLOBAL g, char *path, my_bool jb)
 {
 	// Check Value was allocated
 	if (!Value)
+	{
+		snprintf(g->Message, sizeof(g->Message), MSG(NO_MEMORY));
 		return true;
+	}
 
 	Value->SetNullable(true);
 	Jpath = path;
@@ -217,8 +220,11 @@ my_bool JSNX::ParseJpath(PGLOBAL g)
 	if (Parsed)
 		return false;                       // Already done
 	else if (!Jpath)
+	{
 		//	Jpath = Name;
+		snprintf(g->Message, sizeof(g->Message), MSG(ARG_IS_NULL));
 		return true;
+	}
 
 	if (trace(1))
 		htrc("ParseJpath %s\n", SVP(Jpath));
@@ -4511,7 +4517,7 @@ my_bool json_file_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 
 	for (unsigned int i = 1; i < args->arg_count; i++) {
 		if (!(args->arg_type[i] == INT_RESULT || args->arg_type[i] == STRING_RESULT)) {
-			sprintf(message, "Argument %d is not an integer or a string (pretty or path)", i);
+			snprintf(message, MYSQL_ERRMSG_SIZE, "Argument %d is not an integer or a string (pretty or path)", i);
 			return true;
 		} // endif arg_type
 
@@ -5768,7 +5774,7 @@ my_bool jbin_file_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 
 	for (unsigned int i = 1; i < args->arg_count; i++) {
 		if (!(args->arg_type[i] == INT_RESULT || args->arg_type[i] == STRING_RESULT)) {
-			sprintf(message, "Argument %d is not an integer or a string (pretty or path)", i);
+			snprintf(message, MYSQL_ERRMSG_SIZE, "Argument %d is not an integer or a string (pretty or path)", i);
 			return true;
 		} // endif arg_type
 
@@ -5930,7 +5936,7 @@ my_bool jfile_convert_init(UDF_INIT* initid, UDF_ARGS* args, char* message) {
 		return true;
 	} else for (int i = 0; i < 2; i++)
 		if (args->arg_type[i] != STRING_RESULT) {
-			sprintf(message, "Arguments %d must be a string (file name)", i+1);
+			snprintf(message, MYSQL_ERRMSG_SIZE, "Arguments %d must be a string (file name)", i+1);
 			return true;
 		} // endif args
 
@@ -5987,7 +5993,7 @@ my_bool jfile_bjson_init(UDF_INIT* initid, UDF_ARGS* args, char* message) {
 		return true;
 	} else for (int i = 0; i < 2; i++)
 		if (args->arg_type[i] != STRING_RESULT) {
-			sprintf(message, "Arguments %d must be a string (file name)", i + 1);
+			snprintf(message, MYSQL_ERRMSG_SIZE, "Arguments %d must be a string (file name)", i + 1);
 			return true;
 		} // endif args
 

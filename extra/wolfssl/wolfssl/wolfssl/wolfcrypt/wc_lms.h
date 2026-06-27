@@ -1,12 +1,12 @@
 /* wc_lms.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -94,6 +94,12 @@
 
 #include <wolfssl/wolfcrypt/lms.h>
 #include <wolfssl/wolfcrypt/sha256.h>
+
+/* When raw hash access APIs are disabled or unavailable (WOLFSSL_NO_HASH_RAW),
+ * fall back to using the full hash API calls. */
+#if defined(WOLFSSL_NO_HASH_RAW) && !defined(WC_LMS_FULL_HASH)
+    #define WC_LMS_FULL_HASH
+#endif
 
 #ifdef WOLFSSL_LMS_MAX_LEVELS
     /* Maximum number of levels of trees supported by implementation. */
@@ -384,7 +390,11 @@ typedef struct wc_LmsParamsMap {
     /* Identifier of parameters. */
     enum wc_LmsParm id;
     /* String representation of identifier of parameters. */
+#ifdef WOLFSSL_NAMES_STATIC
+    const char str[32]; /* large enough for largest string in wc_lms_map[] */
+#else
     const char* str;
+#endif
     /* LMS parameter set. */
     LmsParams params;
 } wc_LmsParamsMap;

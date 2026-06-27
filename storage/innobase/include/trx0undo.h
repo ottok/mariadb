@@ -27,9 +27,8 @@ Created 3/26/1996 Heikki Tuuri
 #ifndef trx0undo_h
 #define trx0undo_h
 
-#ifndef UNIV_INNOCHECKSUM
 #include "trx0sys.h"
-
+#ifndef UNIV_INNOCHECKSUM
 /** The LSB of the "is insert" flag in DB_ROLL_PTR */
 #define ROLL_PTR_INSERT_FLAG_POS 55
 /** The LSB of the 7-bit trx_rseg_t::id in DB_ROLL_PTR */
@@ -272,6 +271,8 @@ struct trx_undo_t {
 	uint16_t	top_offset;	/*!< offset of the latest undo record,
 					i.e., the topmost element in the undo
 					log if we think of it as a stack */
+	uint16_t	old_offset;	/*!< previous undo record offset
+					for ALTER IGNORE */
 	undo_no_t	top_undo_no;	/*!< undo number of the latest record
 					(IB_ID_MAX if the undo log is empty) */
 	buf_block_t*	guess_block;	/*!< guess for the buffer block where

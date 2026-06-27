@@ -46,6 +46,11 @@
 #include "sql_insert.h"  // For vers_insert_history_row() that may be
                          //   needed for System Versioning.
 
+#ifdef WITH_WSREP
+#include "wsrep_mysqld.h" // wsrep_max_ws_rows, wsrep_max_ws_size
+#include "wsrep_binlog.h" // WSREP_MAX_WS_SIZE
+#endif
+
 /**
    True if the table's input and output record buffers are comparable using
    compare_record(TABLE*).
@@ -538,9 +543,20 @@ int mysql_update(THD *thd,
     DBUG_RETURN(TRUE);
 
   switch_to_nullable_trigger_fields(fields, table);
-  switch_to_nullable_trigger_fields(values, table);
+  if (!(thd->variables.sql_mode & MODE_SIMULTANEOUS_ASSIGNMENT))
+    switch_to_nullable_trigger_fields(values, table);
 
-  /* Apply the IN=>EXISTS transformation to all subqueries and optimize them */
+  /*
+    Apply the IN=>EXISTS and other transformations to all subqueries and
+    optimize them.
+
+    Constant subqueries are treated in a special way here: they can be
+    evaluated even in EXPLAIN statement, so their query plan must be
+    fully initialized for computation.
+  */
+  if (select_lex->optimize_constant_subqueries())
+    DBUG_RETURN(TRUE);
+
   if (select_lex->optimize_unflattened_subqueries(false))
     DBUG_RETURN(TRUE);
 
@@ -563,6 +579,7 @@ int mysql_update(THD *thd,
 
   // Don't count on usage of 'only index' when calculating which key to use
   table->covering_keys.clear_all();
+  table->file->prepare_for_insert(1);
   transactional_table= table->file->has_transactions_and_rollback();
 
 #ifdef WITH_PARTITION_STORAGE_ENGINE
@@ -612,7 +629,7 @@ int mysql_update(THD *thd,
       Currently they rely on the user checking DA for
       errors when unwinding the stack after calling Item::val_xxx().
     */
-    if (error || thd->is_error())
+    if (error || thd->killed || thd->is_error())
     {
       DBUG_RETURN(1);				// Error in where
     }
@@ -1031,7 +1048,6 @@ update_begin:
   can_compare_record= records_are_comparable(table);
   explain->tracker.on_scan_init();
 
-  table->file->prepare_for_insert(1);
   DBUG_ASSERT(table->file->inited != handler::NONE);
 
   THD_STAGE_INFO(thd, stage_updating);
@@ -2018,6 +2034,50 @@ bool mysql_multi_update(THD *thd, TABLE_LIST *table_list, List<Item> *fields,
   if (select_lex->vers_setup_conds(thd, table_list))
     DBUG_RETURN(1);
 
+#ifdef WITH_WSREP
+  if (WSREP(thd))
+  {
+    const bool limited = (wsrep_max_ws_rows ||
+                         (wsrep_max_ws_size != WSREP_MAX_WS_SIZE));
+
+    if (limited)
+    {
+      /* Write set size is limited, check if this update contains
+         updates to both transactional and non-transactional table. */
+      bool transactional= false;
+      bool non_trans= false;
+      for (TABLE_LIST *tablel= table_list; tablel; tablel= tablel->next_global)
+      {
+        TABLE *table= tablel->table;
+        /* This can happen on multi-table update if one of the
+           tables updated is referenced by foreign key from other not
+           updated table. Not updated table is not yet opened, thus
+           there is item on table list but actual table is NULL. */
+        if (!table)
+          continue;
+        /* Table has been opened, check is SE transactional or not. */
+        if (table->file->has_transactions_and_rollback())
+          transactional= true;
+        else
+          non_trans= true;
+      }
+      /* In multi-table update Galera does not support update to both
+         transactional and non-transactional engines if write-set
+         size is limited. */
+      if (transactional && non_trans)
+      {
+        my_error(ER_GALERA_REPLICATION_NOT_SUPPORTED, MYF(0));
+        push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                            ER_GALERA_REPLICATION_NOT_SUPPORTED,
+                            "Galera does not support multi-table update",
+                            " to both transactional and non-transactional engines"
+                            " if write-set size is limited.");
+        DBUG_RETURN(1);
+      }
+    }
+  }
+#endif /* WITH_WSREP */
+
   res= mysql_select(thd,
                     table_list, total_list, conds,
                     select_lex->order_list.elements,
@@ -2233,7 +2293,8 @@ int multi_update::prepare(List<Item> &not_used_values,
     {
       TABLE *table= ((Item_field*)(fields_for_table[i]->head()))->field->table;
       switch_to_nullable_trigger_fields(*fields_for_table[i], table);
-      switch_to_nullable_trigger_fields(*values_for_table[i], table);
+      if (!(thd->variables.sql_mode & MODE_SIMULTANEOUS_ASSIGNMENT))
+        switch_to_nullable_trigger_fields(*values_for_table[i], table);
     }
   }
   copy_field= new (thd->mem_root) Copy_field[max_fields];

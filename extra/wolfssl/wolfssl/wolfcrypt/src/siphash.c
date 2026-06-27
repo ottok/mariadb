@@ -1,12 +1,12 @@
 /* siphash.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -20,6 +20,10 @@
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
+
+#if defined(WC_SIPHASH_NO_ASM) && !defined(WOLFSSL_NO_ASM)
+    #define WOLFSSL_NO_ASM
+#endif
 
 #include <wolfssl/wolfcrypt/siphash.h>
 
@@ -76,7 +80,7 @@
  * @param [in] a  Little-endian byte array.
  * @return 16-bit number.
  */
-#define GET_U16(a)      (*(word16*)(a))
+#define GET_U16(a)      (*(const word16*)(a))
 /**
  * Encode 64-bit number to a little-endian byte array.
  *
@@ -407,8 +411,8 @@ int wc_SipHash(const unsigned char* key, const unsigned char* in, word32 inSz,
         return BAD_FUNC_ARG;
     }
 
-    k0 = ((word64*)key)[0];
-    k1 = ((word64*)key)[1];
+    k0 = ((const word64*)key)[0];
+    k1 = ((const word64*)key)[1];
     __asm__ __volatile__ (
         "xorq   %[k0], %[v0]\n\t"
         "xorq   %[k1], %[v1]\n\t"

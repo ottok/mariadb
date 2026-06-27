@@ -1,12 +1,12 @@
 /* wolfmath.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -74,19 +74,37 @@ This library provides big integer math functions.
 #endif
 
 /* timing resistance array */
-#if !defined(WC_NO_CACHE_RESISTANT) && \
-    ((defined(HAVE_ECC) && defined(ECC_TIMING_RESISTANT)) || \
-     (defined(USE_FAST_MATH) && defined(TFM_TIMING_RESISTANT)))
+#if (!defined(WC_NO_CACHE_RESISTANT) && \
+     ((defined(HAVE_ECC) && defined(ECC_TIMING_RESISTANT)) || \
+      (defined(USE_FAST_MATH) && defined(TFM_TIMING_RESISTANT)))) || \
+    ((defined(WOLFSSL_SP_MATH_ALL) && !defined(WOLFSSL_RSA_VERIFY_ONLY) && \
+      !defined(WOLFSSL_RSA_PUBLIC_ONLY)) || !defined(NO_DH) || \
+     defined(OPENSSL_ALL) && defined(WC_PROTECT_ENCRYPTED_MEM))
 
     extern const wc_ptr_t wc_off_on_addr[2];
 #endif
 
 #if !defined(NO_BIG_INT)
 /* common math functions */
-MP_API int get_digit_count(const mp_int* a);
-MP_API mp_digit get_digit(const mp_int* a, int n);
-MP_API int get_rand_digit(WC_RNG* rng, mp_digit* d);
+
+#ifdef WOLFSSL_API_PREFIX_MAP
+    #define mp_get_digit_count wc_mp_get_digit_count
+    #define mp_get_digit wc_mp_get_digit
+    #define mp_get_rand_digit wc_mp_get_rand_digit
+    #define mp_cond_copy wc_mp_cond_copy
+    #define mp_rand wc_mp_rand
+#endif /* WOLFSSL_API_PREFIX_MAP */
+
+MP_API int mp_get_digit_count(const mp_int* a);
+MP_API mp_digit mp_get_digit(const mp_int* a, int n);
+MP_API int mp_get_rand_digit(WC_RNG* rng, mp_digit* d);
 WOLFSSL_LOCAL void mp_reverse(unsigned char *s, int len);
+
+#if defined(HAVE_FIPS) || defined(HAVE_SELFTEST)
+#define get_digit_count mp_get_digit_count
+#define get_digit mp_get_digit
+#define get_rand_digit mp_get_rand_digit
+#endif
 
 WOLFSSL_API int mp_cond_copy(mp_int* a, int copy, mp_int* b);
 WOLFSSL_API int mp_rand(mp_int* a, int digits, WC_RNG* rng);

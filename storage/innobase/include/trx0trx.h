@@ -219,20 +219,10 @@ trx_print_low(
 			/*!< in: mem_heap_get_size(trx->lock.lock_heap) */
 
 /**********************************************************************//**
-Prints info about a transaction.
-When possible, use trx_print() instead. */
+Prints info about a transaction. */
 void
 trx_print_latched(
 /*==============*/
-	FILE*		f,		/*!< in: output stream */
-	const trx_t*	trx);		/*!< in: transaction */
-
-/**********************************************************************//**
-Prints info about a transaction.
-Acquires and releases lock_sys.latch. */
-void
-trx_print(
-/*======*/
 	FILE*		f,		/*!< in: output stream */
 	const trx_t*	trx);		/*!< in: transaction */
 
@@ -638,7 +628,8 @@ public:
   {
     /** The largest encountered transaction identifier for which no
     transaction was observed to be active. This is a cache to speed up
-    trx_sys_t::find_same_or_older().
+    trx_sys_t::find_same_or_older() as well as to elide some calls to
+    trx_sys_t::find().
 
     This will be zero-initialized in Pool::Pool() and not initialized
     when a transaction object in the pool is freed and reused. The
@@ -709,7 +700,7 @@ public:
 
   Regular transactions:
   * NOT_STARTED -> ACTIVE -> COMMITTED -> NOT_STARTED
-  * NOT_STARTED -> ABORTED (when thd_mark_transaction_to_rollback() is called)
+  * NOT_STARTED -> ABORTED (when THD::mark_transaction_to_rollback() is called)
   * ABORTED -> NOT_STARTED (acknowledging the rollback of a transaction)
 
   Auto-commit non-locking read-only:
@@ -1096,8 +1087,10 @@ public:
   bool has_stats_table_lock() const;
 
   /** Free the memory to trx_pools */
-  void free();
+  void free() noexcept;
 
+  /** Clear commit_lsn and free the memory */
+  void clear_and_free() noexcept { ut_d(commit_lsn= 0;) free(); }
 
   void assert_freed() const
   {
@@ -1200,6 +1193,35 @@ public:
   {
     static_assert(type != TRX_NO_BULK, "");
     return bulk_insert == type ? bulk_insert_apply_low(): DB_SUCCESS;
+  }
+
+  /** This function used only during ALTER IGNORE TABLE command.
+  Reset the undo no and remove the undo log from transaction.
+  By doing this, InnoDB doesn't add any undo logs to purge queue
+  during transaction commit */
+  inline void reset_and_truncate_undo() noexcept;
+
+  /** Clear TRX_DML_BULK, retaining TRX_DDL_BULK if it was set. */
+  void clear_dml_bulk() noexcept
+  {
+    static_assert(TRX_NO_BULK == 0, "");
+    static_assert(TRX_DML_BULK == 2, "");
+    static_assert(TRX_DDL_BULK == 3, "");
+    static_assert((TRX_DML_BULK & 1) == 0, "");
+    ut_ad(bulk_insert != 1);
+    bulk_insert= unsigned(
+      (bulk_insert & (((bulk_insert ^ bulk_insert << 1) & 2 >> 1) * 3)) & 3);
+  }
+
+  /** Clear TRX_DDL_BULK, retaining TRX_DML_BULK if it was set. */
+  void clear_ddl_bulk() noexcept
+  {
+    static_assert(TRX_NO_BULK == 0, "");
+    static_assert(TRX_DML_BULK == 2, "");
+    static_assert(TRX_DDL_BULK == 3, "");
+    static_assert((TRX_DML_BULK & 1) == 0, "");
+    ut_ad(bulk_insert != 1);
+    bulk_insert= unsigned((bulk_insert ^ ((bulk_insert & 1) * 3)) & 3);
   }
 
 private:

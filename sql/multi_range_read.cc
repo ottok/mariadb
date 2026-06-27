@@ -93,7 +93,7 @@ handler::multi_range_read_info_const(uint keyno, RANGE_SEQ_IF *seq,
   */
   ulonglong single_point_ranges= 0;
   /*
-    The counter of of single point ranges that we succeded to assign
+    The counter of single point ranges that we succeded to assign
     to some blocks
   */
   ulonglong assigned_single_point_ranges= 0;
@@ -1525,7 +1525,7 @@ void DsMrr_impl::reset_buffer_sizes(void *dsmrr_arg)
 void DsMrr_impl::redistribute_buffer_space(void *dsmrr_arg)
 {
   DsMrr_impl *dsmrr= (DsMrr_impl*)dsmrr_arg;
-  uchar *unused_start, *unused_end;
+  uchar *unused_start, *unused_end= nullptr;
   dsmrr->key_buffer->remove_unused_space(&unused_start, &unused_end);
   dsmrr->rowid_buffer.grow(unused_start, unused_end);
 }

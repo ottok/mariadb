@@ -388,7 +388,8 @@ tailoring_append(MY_XML_PARSER *st,
   if (MY_XML_OK == my_charset_file_tailoring_realloc(i, newlen))
   {
     char *dst= i->tailoring + i->tailoring_length;
-    sprintf(dst, fmt, (int) len, attr);
+    snprintf(dst, i->tailoring_alloced_length - i->tailoring_length,
+             fmt, (int) len, attr);
     i->tailoring_length+= strlen(dst);
     return MY_XML_OK;
   }
@@ -407,7 +408,8 @@ tailoring_append2(MY_XML_PARSER *st,
   if (MY_XML_OK == my_charset_file_tailoring_realloc(i, newlen))
   {
     char *dst= i->tailoring + i->tailoring_length;
-    sprintf(dst, fmt, (int) len1, attr1, (int) len2, attr2);
+    snprintf(dst, i->tailoring_alloced_length - i->tailoring_length,
+             fmt, (int) len1, attr1, (int) len2, attr2);
     i->tailoring_length+= strlen(dst);
     return MY_XML_OK;
   }
@@ -830,10 +832,11 @@ my_parse_charset_xml(MY_CHARSET_LOADER *loader, const char *buf, size_t len)
     if (sizeof(loader->error) > 32 + strlen(errstr))
     {
       /* We cannot use my_snprintf() here. See previous comment. */
-      sprintf(loader->error, "at line %d pos %d: %s",
-                my_xml_error_lineno(&p)+1,
-                (int) my_xml_error_pos(&p),
-                my_xml_error_string(&p));
+      snprintf(loader->error, sizeof(loader->error),
+               "at line %d pos %d: %s",
+               my_xml_error_lineno(&p)+1,
+               (int) my_xml_error_pos(&p),
+               my_xml_error_string(&p));
     }
   }
   return rc;
@@ -1243,21 +1246,28 @@ my_convert(char *to, uint32 to_length, CHARSET_INFO *to_cs,
 
   length= length2= MY_MIN(to_length, from_length);
 
-#if defined(__i386__) || defined(__x86_64__)
-  /*
-    Special loop for i386, it allows to refer to a
-    non-aligned memory block as UINT32, which makes
-    it possible to copy four bytes at once. This
-    gives about 10% performance improvement comparing
-    to byte-by-byte loop.
-  */
-  for ( ; length >= 4; length-= 4, from+= 4, to+= 4)
+#if SIZEOF_SIZE_T <= 8
+  for (size_t f; length >= sizeof f;
+       length-= sizeof f, from+= sizeof f, to+= sizeof f)
   {
-    if ((*(uint32*)from) & 0x80808080)
-      break;
-    *((uint32*) to)= *((const uint32*) from);
+    memcpy(&f, from, sizeof f);
+    if (f & (size_t) 0x8080808080808080ULL)
+      goto nonascii;
+    memcpy(to, from, sizeof f);
   }
-#endif /* __i386__ */
+# if SIZEOF_SIZE_T > 4
+  if (length >= 4)
+  {
+    uint32 f;
+    memcpy(&f, from, 4);
+    if (f & 0x80808080U)
+      goto nonascii;
+    memcpy(to, from, 4);
+    length-= 4, to+= 4, from+= 4;
+  }
+# endif
+ nonascii:
+#endif
 
   for (; ; *to++= *from++, length--)
   {

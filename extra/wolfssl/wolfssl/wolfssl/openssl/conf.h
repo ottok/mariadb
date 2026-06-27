@@ -1,12 +1,12 @@
 /* conf.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -24,12 +24,12 @@
 #ifndef WOLFSSL_conf_H_
 #define WOLFSSL_conf_H_
 
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/version.h>
+
 #ifdef __cplusplus
     extern "C" {
 #endif
-
-#include <wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/version.h>
 
 typedef struct WOLFSSL_CONF_VALUE {
     char *section;
@@ -37,8 +37,16 @@ typedef struct WOLFSSL_CONF_VALUE {
     char *value;
 } WOLFSSL_CONF_VALUE;
 
+#ifdef  __cplusplus
+} /* extern "C" */
+#endif
+
 /* ssl.h requires WOLFSSL_CONF_VALUE */
 #include <wolfssl/ssl.h>
+
+#ifdef __cplusplus
+    extern "C" {
+#endif
 
 typedef struct WOLFSSL_CONF {
     void *meth_data;

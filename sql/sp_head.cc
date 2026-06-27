@@ -1612,6 +1612,9 @@ sp_head::execute(THD *thd, bool merge_da_on_success)
   DBUG_ASSERT(thd->Item_change_list::is_empty());
   old_change_list.move_elements_to(thd);
   thd->lex= old_lex;
+  DBUG_PRINT("info", ("sp_head::execute: query_id restore: old_query_id=%lld, query_id=%lld, query=%.*s",
+                         old_query_id,
+                         thd->query_id, thd->query_length(), thd->query()));
   thd->set_query_id(old_query_id);
   thd->set_query_inner(old_query);
   DBUG_ASSERT(!thd->derived_tables);
@@ -3609,7 +3612,8 @@ sp_lex_keeper::reset_lex_and_exec_core(THD *thd, uint *nextp,
   thd->lex= m_lex;
 
   thd->set_query_id(next_query_id());
-
+  DBUG_PRINT("info", ("reset_lex_and_exec_core: query_id=%lld, query=%.*s",
+                      thd->query_id, thd->query_length(), thd->query()));
   if (thd->locked_tables_mode <= LTM_LOCK_TABLES)
   {
     /*
@@ -3850,7 +3854,7 @@ sp_instr_stmt::execute(THD *thd, uint *nextp)
       bool log_slow= !res && thd->enable_slow_log;
 
       /* Finalize server status flags after executing a statement. */
-      if (log_slow || thd->get_stmt_da()->is_eof())
+      if (log_slow || thd->get_stmt_da()->is_eof() || mysql_audit_general_enabled())
         thd->update_server_status();
 
       if (thd->get_stmt_da()->is_eof())
@@ -5122,7 +5126,8 @@ sp_head::merge_table_list(THD *thd, TABLE_LIST *table, LEX *lex_for_tmp_check)
   }
 
   for (; table ; table= table->next_global)
-    if (!table->derived && !table->schema_table && !table->table_function)
+    if (!table->derived && !table->schema_table && !table->table_function &&
+        table->lock_type != TL_IGNORE)
     {
       /*
         Structure of key for the multi-set is "db\0table\0alias\0".

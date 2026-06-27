@@ -1988,7 +1988,7 @@ exit:
   if (ii_cursor) {
     grn_ii_cursor_close(ctx, ii_cursor);
   }
-  grn_obj_unlink(ctx, &source_ids);
+  GRN_OBJ_FIN(ctx, &source_ids);
   {
     int i, n_sources;
     n_sources = GRN_BULK_VSIZE(&sources) / sizeof(grn_obj *);
@@ -1996,7 +1996,7 @@ exit:
       grn_obj *source = GRN_PTR_VALUE_AT(&sources, i);
       grn_obj_unlink(ctx, source);
     }
-    grn_obj_unlink(ctx, &sources);
+    GRN_OBJ_FIN(ctx, &sources);
   }
 }
 
@@ -8600,7 +8600,6 @@ grn_obj_set_info_source_invalid_lexicon_error(grn_ctx *ctx,
       source_name_size, source_name);
 }
 
-PRAGMA_REENABLE_CHECK_STACK_FRAME
 
 inline static grn_rc
 grn_obj_set_info_source_validate(grn_ctx *ctx, grn_obj *obj, grn_obj *value)
@@ -8703,6 +8702,8 @@ exit:
   }
   return ctx->rc;
 }
+
+PRAGMA_REENABLE_CHECK_STACK_FRAME
 
 inline static void
 grn_obj_set_info_source_log(grn_ctx *ctx, grn_obj *obj, grn_obj *value)

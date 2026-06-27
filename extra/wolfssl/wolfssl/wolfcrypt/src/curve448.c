@@ -1,12 +1,12 @@
 /* curve448.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -23,6 +23,17 @@
 
 /* Based On Daniel J Bernstein's curve25519 Public Domain ref10 work.
  * Reworked for curve448 by Sean Parkinson.
+ */
+
+/*
+ * Curve448 Build Options:
+ *
+ * HAVE_CURVE448:            Enable Curve448 support                default: off
+ * HAVE_CURVE448_SHARED_SECRET: Enable Curve448 shared secret      default: on
+ *                            (when HAVE_CURVE448 is enabled)
+ * HAVE_CURVE448_KEY_EXPORT: Enable Curve448 key export            default: on
+ * HAVE_CURVE448_KEY_IMPORT: Enable Curve448 key import            default: on
+ * WOLFSSL_ECDHX_SHARED_NOT_ZERO: Check ECDH shared secret != 0   default: off
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
@@ -409,12 +420,12 @@ int wc_curve448_check_public(const byte* pub, word32 pubSz, int endian)
                 return ECC_BAD_ARG_E;
             }
             if ((i == 27) && (pub[i] == 0xfe)) {
-                for (++i; i < CURVE448_PUB_KEY_SIZE - 1; i--) {
+                for (++i; i < CURVE448_PUB_KEY_SIZE - 1; i++) {
                     if (pub[i] != 0xff) {
                         break;
                     }
                 }
-                if ((i == CURVE448_PUB_KEY_SIZE) && (pub[i] >= 0xfe)) {
+                if ((i == CURVE448_PUB_KEY_SIZE - 1) && (pub[i] >= 0xfe)) {
                     return ECC_BAD_ARG_E;
                 }
             }

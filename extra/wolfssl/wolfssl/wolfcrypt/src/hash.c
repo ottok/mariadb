@@ -1,12 +1,12 @@
 /* hash.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -36,27 +36,6 @@
     #include <wolfcrypt/src/misc.c>
 #endif
 
-
-#ifdef NO_ASN
-enum Hash_Sum  {
-    MD2h      = 646,
-    MD5h      = 649,
-    SHAh      =  88,
-    SHA224h   = 417,
-    SHA256h   = 414,
-    SHA384h   = 415,
-    SHA512h   = 416,
-    SHA512_224h = 418,
-    SHA512_256h = 419,
-    SHA3_224h = 420,
-    SHA3_256h = 421,
-    SHA3_384h = 422,
-    SHA3_512h = 423,
-    SHAKE128h = 424,
-    SHAKE256h = 425,
-    SM3h      = 640     /* 0x2A,0x81,0x1C,0xCF,0x55,0x01,0x83,0x11 */
-};
-#endif /* !NO_ASN */
 
 #if !defined(NO_PWDBASED) || !defined(NO_ASN)
 /* function converts int hash type to enum */
@@ -139,100 +118,143 @@ enum wc_HashType wc_HashTypeConvert(int hashType)
 
 int wc_HashGetOID(enum wc_HashType hash_type)
 {
-    int oid = WC_NO_ERR_TRACE(HASH_TYPE_E); /* Default to hash type error */
+    int oid;
     switch(hash_type)
     {
         case WC_HASH_TYPE_MD2:
         #ifdef WOLFSSL_MD2
             oid = MD2h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_MD5_SHA:
+        #if !defined(NO_MD5) && !defined(NO_SHA)
+            oid = MD5h;
+        #else
+            oid = HASH_TYPE_E;
+        #endif
+            break;
         case WC_HASH_TYPE_MD5:
         #ifndef NO_MD5
             oid = MD5h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA:
         #ifndef NO_SHA
             oid = SHAh;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA224:
         #ifdef WOLFSSL_SHA224
             oid = SHA224h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA256:
         #ifndef NO_SHA256
             oid = SHA256h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA384:
         #ifdef WOLFSSL_SHA384
             oid = SHA384h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA512:
         #ifdef WOLFSSL_SHA512
             oid = SHA512h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
-    #ifndef WOLFSSL_NOSHA512_224
         case WC_HASH_TYPE_SHA512_224:
         #if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
             oid = SHA512_224h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
         case WC_HASH_TYPE_SHA512_256:
         #if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
             oid = SHA512_256h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
-    #endif
         case WC_HASH_TYPE_SHA3_224:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_224)
             oid = SHA3_224h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA3_256:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_256)
             oid = SHA3_256h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA3_384:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_384)
             oid = SHA3_384h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA3_512:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_512)
             oid = SHA3_512h;
+        #else
+            oid = HASH_TYPE_E;
         #endif
             break;
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
         case WC_HASH_TYPE_SHAKE128:
+        #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
             oid = SHAKE128h;
+        #else
+            oid = HASH_TYPE_E;
+        #endif
             break;
-    #endif
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
         case WC_HASH_TYPE_SHAKE256:
+        #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
             oid = SHAKE256h;
+        #else
+            oid = HASH_TYPE_E;
+        #endif
             break;
-    #endif
-    #ifdef WOLFSSL_SM3
         case WC_HASH_TYPE_SM3:
+        #ifdef WOLFSSL_SM3
             oid = SM3h;
+        #else
+            oid = HASH_TYPE_E;
+        #endif
             break;
-    #endif
 
         /* Not Supported */
         case WC_HASH_TYPE_MD4:
+            oid = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2B:
+            oid = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2S:
+            oid = HASH_TYPE_E;
+            break;
+
         case WC_HASH_TYPE_NONE:
+            oid = BAD_FUNC_ARG;
+            break;
         default:
             oid = BAD_FUNC_ARG;
             break;
@@ -242,64 +264,95 @@ int wc_HashGetOID(enum wc_HashType hash_type)
 
 enum wc_HashType wc_OidGetHash(int oid)
 {
-    enum wc_HashType hash_type = WC_HASH_TYPE_NONE;
+    enum wc_HashType hash_type;
     switch (oid)
     {
-    #ifdef WOLFSSL_MD2
         case MD2h:
+        #ifdef WOLFSSL_MD2
             hash_type = WC_HASH_TYPE_MD2;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
+        #endif
             break;
-    #endif
         case MD5h:
         #ifndef NO_MD5
             hash_type = WC_HASH_TYPE_MD5;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
         #endif
             break;
         case SHAh:
         #ifndef NO_SHA
             hash_type = WC_HASH_TYPE_SHA;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
         #endif
             break;
         case SHA224h:
         #ifdef WOLFSSL_SHA224
             hash_type = WC_HASH_TYPE_SHA224;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
         #endif
             break;
         case SHA256h:
         #ifndef NO_SHA256
             hash_type = WC_HASH_TYPE_SHA256;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
         #endif
             break;
         case SHA384h:
         #ifdef WOLFSSL_SHA384
             hash_type = WC_HASH_TYPE_SHA384;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
         #endif
             break;
         case SHA512h:
         #ifdef WOLFSSL_SHA512
             hash_type = WC_HASH_TYPE_SHA512;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
         #endif
             break;
-    #ifdef WOLFSSL_SHA3
         case SHA3_224h:
+        #ifdef WOLFSSL_SHA3
             hash_type = WC_HASH_TYPE_SHA3_224;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
+        #endif
             break;
         case SHA3_256h:
+        #ifdef WOLFSSL_SHA3
             hash_type = WC_HASH_TYPE_SHA3_256;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
+        #endif
             break;
         case SHA3_384h:
+        #ifdef WOLFSSL_SHA3
             hash_type = WC_HASH_TYPE_SHA3_384;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
+        #endif
             break;
         case SHA3_512h:
+        #ifdef WOLFSSL_SHA3
             hash_type = WC_HASH_TYPE_SHA3_512;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
+        #endif
             break;
-    #endif /* WOLFSSL_SHA3 */
-    #ifdef WOLFSSL_SM3
         case SM3h:
+        #ifdef WOLFSSL_SM3
             hash_type = WC_HASH_TYPE_SM3;
+        #else
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
+        #endif
             break;
-    #endif
         default:
+            hash_type = WC_ERR_TRACE(WC_HASH_TYPE_NONE);
             break;
     }
     return hash_type;
@@ -311,114 +364,151 @@ enum wc_HashType wc_OidGetHash(int oid)
 /* Get Hash digest size */
 int wc_HashGetDigestSize(enum wc_HashType hash_type)
 {
-    int dig_size = WC_NO_ERR_TRACE(HASH_TYPE_E);
+    int dig_size;
     switch(hash_type)
     {
         case WC_HASH_TYPE_MD2:
         #ifdef WOLFSSL_MD2
             dig_size = WC_MD2_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_MD4:
         #ifndef NO_MD4
             dig_size = WC_MD4_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_MD5:
         #ifndef NO_MD5
             dig_size = WC_MD5_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA:
         #ifndef NO_SHA
             dig_size = WC_SHA_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA224:
         #ifdef WOLFSSL_SHA224
             dig_size = WC_SHA224_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA256:
         #ifndef NO_SHA256
             dig_size = WC_SHA256_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA384:
         #ifdef WOLFSSL_SHA384
             dig_size = WC_SHA384_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA512:
         #ifdef WOLFSSL_SHA512
             dig_size = WC_SHA512_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
-    #ifndef WOLFSSL_NOSHA512_224
         case WC_HASH_TYPE_SHA512_224:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-        #if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
+        #if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+            defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
             dig_size = WC_SHA512_224_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
         case WC_HASH_TYPE_SHA512_256:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-        #if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
+        #if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+            defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
             dig_size = WC_SHA512_256_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
         case WC_HASH_TYPE_MD5_SHA: /* Old TLS Specific */
         #if !defined(NO_MD5) && !defined(NO_SHA)
             dig_size = (int)WC_MD5_DIGEST_SIZE + (int)WC_SHA_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
 
         case WC_HASH_TYPE_SHA3_224:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_224)
             dig_size = WC_SHA3_224_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA3_256:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_256)
             dig_size = WC_SHA3_256_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA3_384:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_384)
             dig_size = WC_SHA3_384_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA3_512:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_512)
             dig_size = WC_SHA3_512_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_BLAKE2B:
+        #if defined(HAVE_BLAKE2B)
+            dig_size = BLAKE2B_OUTBYTES;
+        #else
+            dig_size = HASH_TYPE_E;
+        #endif
+            break;
         case WC_HASH_TYPE_BLAKE2S:
-        #if defined(HAVE_BLAKE2) || defined(HAVE_BLAKE2S)
+        #if defined(HAVE_BLAKE2S)
             dig_size = BLAKE2S_OUTBYTES;
+        #else
+            dig_size = HASH_TYPE_E;
         #endif
             break;
 
-    #ifdef WOLFSSL_SM3
         case WC_HASH_TYPE_SM3:
+        #ifdef WOLFSSL_SM3
             dig_size = WC_SM3_DIGEST_SIZE;
+        #else
+            dig_size = HASH_TYPE_E;
+        #endif
             break;
-    #endif
 
         /* Not Supported */
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
         case WC_HASH_TYPE_SHAKE128:
-    #endif
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
+            dig_size = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE256:
-    #endif
+            dig_size = HASH_TYPE_E;
+            break;
+
         case WC_HASH_TYPE_NONE:
+            dig_size = BAD_FUNC_ARG;
+            break;
         default:
             dig_size = BAD_FUNC_ARG;
             break;
@@ -430,114 +520,151 @@ int wc_HashGetDigestSize(enum wc_HashType hash_type)
 /* Get Hash block size */
 int wc_HashGetBlockSize(enum wc_HashType hash_type)
 {
-    int block_size = WC_NO_ERR_TRACE(HASH_TYPE_E);
+    int block_size;
     switch (hash_type)
     {
         case WC_HASH_TYPE_MD2:
         #ifdef WOLFSSL_MD2
             block_size = WC_MD2_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_MD4:
         #ifndef NO_MD4
             block_size = WC_MD4_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_MD5:
         #ifndef NO_MD5
             block_size = WC_MD5_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA:
         #ifndef NO_SHA
             block_size = WC_SHA_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA224:
         #ifdef WOLFSSL_SHA224
             block_size = WC_SHA224_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA256:
         #ifndef NO_SHA256
             block_size = WC_SHA256_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA384:
         #ifdef WOLFSSL_SHA384
             block_size = WC_SHA384_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA512:
         #ifdef WOLFSSL_SHA512
             block_size = WC_SHA512_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
-    #ifndef WOLFSSL_NOSHA512_224
         case WC_HASH_TYPE_SHA512_224:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-        #if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
+        #if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+            defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
             block_size = WC_SHA512_224_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
         case WC_HASH_TYPE_SHA512_256:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-        #if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
+        #if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+            defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
             block_size = WC_SHA512_256_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
         case WC_HASH_TYPE_MD5_SHA: /* Old TLS Specific */
         #if !defined(NO_MD5) && !defined(NO_SHA)
             block_size = (int)WC_MD5_BLOCK_SIZE + (int)WC_SHA_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
 
         case WC_HASH_TYPE_SHA3_224:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_224)
             block_size = WC_SHA3_224_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA3_256:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_256)
             block_size = WC_SHA3_256_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA3_384:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_384)
             block_size = WC_SHA3_384_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_SHA3_512:
         #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_512)
             block_size = WC_SHA3_512_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
         case WC_HASH_TYPE_BLAKE2B:
+        #if defined(HAVE_BLAKE2B)
+            block_size = BLAKE2B_BLOCKBYTES;
+        #else
+            block_size = HASH_TYPE_E;
+        #endif
+            break;
         case WC_HASH_TYPE_BLAKE2S:
-        #if defined(HAVE_BLAKE2) || defined(HAVE_BLAKE2S)
+        #if defined(HAVE_BLAKE2S)
             block_size = BLAKE2S_BLOCKBYTES;
+        #else
+            block_size = HASH_TYPE_E;
         #endif
             break;
 
-    #ifdef WOLFSSL_SM3
         case WC_HASH_TYPE_SM3:
+        #ifdef WOLFSSL_SM3
             block_size = WC_SM3_BLOCK_SIZE;
+        #else
+            block_size = HASH_TYPE_E;
+        #endif
             break;
-    #endif
 
         /* Not Supported */
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
         case WC_HASH_TYPE_SHAKE128:
-    #endif
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
+            block_size = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE256:
-    #endif
+            block_size = HASH_TYPE_E;
+            break;
+
         case WC_HASH_TYPE_NONE:
+            block_size = BAD_FUNC_ARG;
+            break;
         default:
             block_size = BAD_FUNC_ARG;
             break;
@@ -549,7 +676,7 @@ int wc_HashGetBlockSize(enum wc_HashType hash_type)
 int wc_Hash_ex(enum wc_HashType hash_type, const byte* data,
     word32 data_len, byte* hash, word32 hash_len, void* heap, int devId)
 {
-    int ret = WC_NO_ERR_TRACE(HASH_TYPE_E); /* Default to hash type error */
+    int ret;
     int dig_size;
 
     /* Validate hash buffer size */
@@ -573,51 +700,61 @@ int wc_Hash_ex(enum wc_HashType hash_type, const byte* data,
         case WC_HASH_TYPE_MD5:
 #ifndef NO_MD5
             ret = wc_Md5Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA:
 #ifndef NO_SHA
             ret = wc_ShaHash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA224:
 #ifdef WOLFSSL_SHA224
             ret = wc_Sha224Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA256:
 #ifndef NO_SHA256
             ret = wc_Sha256Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA384:
 #ifdef WOLFSSL_SHA384
             ret = wc_Sha384Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA512:
 #ifdef WOLFSSL_SHA512
             ret = wc_Sha512Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
-    #ifndef WOLFSSL_NOSHA512_224
         case WC_HASH_TYPE_SHA512_224:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
             ret = wc_Sha512_224Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
         case WC_HASH_TYPE_SHA512_256:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
             ret = wc_Sha512_256Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
         case WC_HASH_TYPE_MD5_SHA:
 #if !defined(NO_MD5) && !defined(NO_SHA)
             ret = wc_Md5Hash_ex(data, data_len, hash, heap, devId);
@@ -625,48 +762,71 @@ int wc_Hash_ex(enum wc_HashType hash_type, const byte* data,
                 ret = wc_ShaHash_ex(data, data_len, &hash[WC_MD5_DIGEST_SIZE],
                     heap, devId);
             }
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
 
         case WC_HASH_TYPE_SHA3_224:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_224)
             ret = wc_Sha3_224Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_256:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_256)
             ret = wc_Sha3_256Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_384:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_384)
             ret = wc_Sha3_384Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_512:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_512)
             ret = wc_Sha3_512Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
 
-    #ifdef WOLFSSL_SM3
         case WC_HASH_TYPE_SM3:
+#ifdef WOLFSSL_SM3
             ret = wc_Sm3Hash_ex(data, data_len, hash, heap, devId);
+#else
+            ret = HASH_TYPE_E;
+#endif
             break;
-    #endif
 
         /* Not Supported */
         case WC_HASH_TYPE_MD2:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD4:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2B:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2S:
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE128:
-    #endif
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE256:
-    #endif
+            ret = HASH_TYPE_E;
+            break;
+
         case WC_HASH_TYPE_NONE:
+            ret = BAD_FUNC_ARG;
+            break;
         default:
             ret = BAD_FUNC_ARG;
             break;
@@ -721,7 +881,7 @@ int wc_HashDelete(wc_HashAlg *hash, wc_HashAlg **hash_p) {
 int wc_HashInit_ex(wc_HashAlg* hash, enum wc_HashType type, void* heap,
     int devId)
 {
-    int ret = WC_NO_ERR_TRACE(HASH_TYPE_E); /* Default to hash type error */
+    int ret;
 
     if (hash == NULL)
         return BAD_FUNC_ARG;
@@ -738,91 +898,124 @@ int wc_HashInit_ex(wc_HashAlg* hash, enum wc_HashType type, void* heap,
         case WC_HASH_TYPE_MD5:
 #ifndef NO_MD5
             ret = wc_InitMd5_ex(&hash->alg.md5, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA:
 #ifndef NO_SHA
             ret = wc_InitSha_ex(&hash->alg.sha, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA224:
 #ifdef WOLFSSL_SHA224
             ret = wc_InitSha224_ex(&hash->alg.sha224, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA256:
 #ifndef NO_SHA256
             ret = wc_InitSha256_ex(&hash->alg.sha256, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA384:
 #ifdef WOLFSSL_SHA384
             ret = wc_InitSha384_ex(&hash->alg.sha384, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA512:
 #ifdef WOLFSSL_SHA512
             ret = wc_InitSha512_ex(&hash->alg.sha512, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
-    #ifndef WOLFSSL_NOSHA512_224
         case WC_HASH_TYPE_SHA512_224:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
             ret = wc_InitSha512_224_ex(&hash->alg.sha512, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
         case WC_HASH_TYPE_SHA512_256:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
             ret = wc_InitSha512_256_ex(&hash->alg.sha512, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
         case WC_HASH_TYPE_SHA3_224:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_224)
             ret = wc_InitSha3_224(&hash->alg.sha3, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_256:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_256)
             ret = wc_InitSha3_256(&hash->alg.sha3, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_384:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_384)
             ret = wc_InitSha3_384(&hash->alg.sha3, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_512:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_512)
             ret = wc_InitSha3_512(&hash->alg.sha3, heap, devId);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
 
-    #ifdef WOLFSSL_SM3
         case WC_HASH_TYPE_SM3:
+#ifdef WOLFSSL_SM3
             ret = wc_InitSm3(&hash->alg.sm3, heap, devId);
+#else
+            ret = HASH_TYPE_E;
+#endif
             break;
-    #endif
 
         /* not supported */
         case WC_HASH_TYPE_MD5_SHA:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD2:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD4:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2B:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2S:
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE128:
-    #endif
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE256:
-    #endif
+            ret = HASH_TYPE_E;
+            break;
+
         case WC_HASH_TYPE_NONE:
+            ret = BAD_FUNC_ARG;
+            break;
         default:
             ret = BAD_FUNC_ARG;
     };
@@ -840,7 +1033,7 @@ int wc_HashInit(wc_HashAlg* hash, enum wc_HashType type)
 int wc_HashUpdate(wc_HashAlg* hash, enum wc_HashType type, const byte* data,
                   word32 dataSz)
 {
-    int ret = WC_NO_ERR_TRACE(HASH_TYPE_E); /* Default to hash type error */
+    int ret;
 
     if (hash == NULL || (data == NULL && dataSz > 0))
         return BAD_FUNC_ARG;
@@ -856,91 +1049,124 @@ int wc_HashUpdate(wc_HashAlg* hash, enum wc_HashType type, const byte* data,
         case WC_HASH_TYPE_MD5:
 #ifndef NO_MD5
             ret = wc_Md5Update(&hash->alg.md5, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA:
 #ifndef NO_SHA
             ret = wc_ShaUpdate(&hash->alg.sha, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA224:
 #ifdef WOLFSSL_SHA224
             ret = wc_Sha224Update(&hash->alg.sha224, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA256:
 #ifndef NO_SHA256
             ret = wc_Sha256Update(&hash->alg.sha256, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA384:
 #ifdef WOLFSSL_SHA384
             ret = wc_Sha384Update(&hash->alg.sha384, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA512:
 #ifdef WOLFSSL_SHA512
             ret = wc_Sha512Update(&hash->alg.sha512, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
-    #ifndef WOLFSSL_NOSHA512_224
         case WC_HASH_TYPE_SHA512_224:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
             ret = wc_Sha512_224Update(&hash->alg.sha512, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
         case WC_HASH_TYPE_SHA512_256:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
             ret = wc_Sha512_256Update(&hash->alg.sha512, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
         case WC_HASH_TYPE_SHA3_224:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_224)
             ret = wc_Sha3_224_Update(&hash->alg.sha3, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_256:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_256)
             ret = wc_Sha3_256_Update(&hash->alg.sha3, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_384:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_384)
             ret = wc_Sha3_384_Update(&hash->alg.sha3, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_512:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_512)
             ret = wc_Sha3_512_Update(&hash->alg.sha3, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
 
-    #ifdef WOLFSSL_SM3
         case WC_HASH_TYPE_SM3:
+#ifdef WOLFSSL_SM3
             ret = wc_Sm3Update(&hash->alg.sm3, data, dataSz);
+#else
+            ret = HASH_TYPE_E;
+#endif
             break;
-    #endif
 
         /* not supported */
         case WC_HASH_TYPE_MD5_SHA:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD2:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD4:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2B:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2S:
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE128:
-    #endif
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE256:
-    #endif
+            ret = HASH_TYPE_E;
+            break;
+
         case WC_HASH_TYPE_NONE:
+            ret = BAD_FUNC_ARG;
+            break;
         default:
             ret = BAD_FUNC_ARG;
     };
@@ -950,7 +1176,7 @@ int wc_HashUpdate(wc_HashAlg* hash, enum wc_HashType type, const byte* data,
 
 int wc_HashFinal(wc_HashAlg* hash, enum wc_HashType type, byte* out)
 {
-    int ret = WC_NO_ERR_TRACE(HASH_TYPE_E); /* Default to hash type error */
+    int ret;
 
     if (hash == NULL || out == NULL)
         return BAD_FUNC_ARG;
@@ -966,91 +1192,124 @@ int wc_HashFinal(wc_HashAlg* hash, enum wc_HashType type, byte* out)
         case WC_HASH_TYPE_MD5:
 #ifndef NO_MD5
             ret = wc_Md5Final(&hash->alg.md5, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA:
 #ifndef NO_SHA
             ret = wc_ShaFinal(&hash->alg.sha, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA224:
 #ifdef WOLFSSL_SHA224
             ret = wc_Sha224Final(&hash->alg.sha224, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA256:
 #ifndef NO_SHA256
             ret = wc_Sha256Final(&hash->alg.sha256, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA384:
 #ifdef WOLFSSL_SHA384
             ret = wc_Sha384Final(&hash->alg.sha384, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA512:
 #ifdef WOLFSSL_SHA512
             ret = wc_Sha512Final(&hash->alg.sha512, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
-    #ifndef WOLFSSL_NOSHA512_224
         case WC_HASH_TYPE_SHA512_224:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
             ret = wc_Sha512_224Final(&hash->alg.sha512, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
         case WC_HASH_TYPE_SHA512_256:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
             ret = wc_Sha512_256Final(&hash->alg.sha512, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
         case WC_HASH_TYPE_SHA3_224:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_224)
             ret = wc_Sha3_224_Final(&hash->alg.sha3, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_256:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_256)
             ret = wc_Sha3_256_Final(&hash->alg.sha3, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_384:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_384)
             ret = wc_Sha3_384_Final(&hash->alg.sha3, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_512:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_512)
             ret = wc_Sha3_512_Final(&hash->alg.sha3, out);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
 
-    #ifdef WOLFSSL_SM3
         case WC_HASH_TYPE_SM3:
+#ifdef WOLFSSL_SM3
             ret = wc_Sm3Final(&hash->alg.sm3, out);
+#else
+            ret = HASH_TYPE_E;
+#endif
             break;
-    #endif
 
         /* not supported */
         case WC_HASH_TYPE_MD5_SHA:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD2:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD4:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2B:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2S:
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE128:
-    #endif
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE256:
-    #endif
+            ret = HASH_TYPE_E;
+            break;
+
         case WC_HASH_TYPE_NONE:
+            ret = BAD_FUNC_ARG;
+            break;
         default:
             ret = BAD_FUNC_ARG;
     };
@@ -1060,7 +1319,7 @@ int wc_HashFinal(wc_HashAlg* hash, enum wc_HashType type, byte* out)
 
 int wc_HashFree(wc_HashAlg* hash, enum wc_HashType type)
 {
-    int ret = WC_NO_ERR_TRACE(HASH_TYPE_E); /* Default to hash type error */
+    int ret;
 
     if (hash == NULL)
         return BAD_FUNC_ARG;
@@ -1077,103 +1336,136 @@ int wc_HashFree(wc_HashAlg* hash, enum wc_HashType type)
 #ifndef NO_MD5
             wc_Md5Free(&hash->alg.md5);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA:
 #ifndef NO_SHA
             wc_ShaFree(&hash->alg.sha);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA224:
 #ifdef WOLFSSL_SHA224
             wc_Sha224Free(&hash->alg.sha224);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA256:
 #ifndef NO_SHA256
             wc_Sha256Free(&hash->alg.sha256);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA384:
 #ifdef WOLFSSL_SHA384
             wc_Sha384Free(&hash->alg.sha384);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA512:
 #ifdef WOLFSSL_SHA512
             wc_Sha512Free(&hash->alg.sha512);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
-    #ifndef WOLFSSL_NOSHA512_224
         case WC_HASH_TYPE_SHA512_224:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
             wc_Sha512_224Free(&hash->alg.sha512);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
         case WC_HASH_TYPE_SHA512_256:
-#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST)
-#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
+#if !defined(HAVE_FIPS) && !defined(HAVE_SELFTEST) && \
+    defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
             wc_Sha512_256Free(&hash->alg.sha512);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
-#endif /* !HAVE_FIPS && !HAVE_SELFTEST */
             break;
-    #endif
         case WC_HASH_TYPE_SHA3_224:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_224)
             wc_Sha3_224_Free(&hash->alg.sha3);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_256:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_256)
             wc_Sha3_256_Free(&hash->alg.sha3);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_384:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_384)
             wc_Sha3_384_Free(&hash->alg.sha3);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA3_512:
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_NOSHA3_512)
             wc_Sha3_512_Free(&hash->alg.sha3);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
 
-    #ifdef WOLFSSL_SM3
         case WC_HASH_TYPE_SM3:
+#ifdef WOLFSSL_SM3
             wc_Sm3Free(&hash->alg.sm3);
             ret = 0;
+#else
+            ret = HASH_TYPE_E;
+#endif
             break;
-    #endif
 
         /* not supported */
         case WC_HASH_TYPE_MD5_SHA:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD2:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD4:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2B:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2S:
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE128:
-    #endif
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE256:
-    #endif
+            ret = HASH_TYPE_E;
+            break;
+
         case WC_HASH_TYPE_NONE:
+            ret = BAD_FUNC_ARG;
+            break;
         default:
             ret = BAD_FUNC_ARG;
     };
@@ -1184,7 +1476,7 @@ int wc_HashFree(wc_HashAlg* hash, enum wc_HashType type)
 #ifdef WOLFSSL_HASH_FLAGS
 int wc_HashSetFlags(wc_HashAlg* hash, enum wc_HashType type, word32 flags)
 {
-    int ret = WC_NO_ERR_TRACE(HASH_TYPE_E); /* Default to hash type error */
+    int ret;
 
     if (hash == NULL)
         return BAD_FUNC_ARG;
@@ -1193,37 +1485,59 @@ int wc_HashSetFlags(wc_HashAlg* hash, enum wc_HashType type, word32 flags)
         case WC_HASH_TYPE_MD5:
 #ifndef NO_MD5
             ret = wc_Md5SetFlags(&hash->alg.md5, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA:
 #ifndef NO_SHA
             ret = wc_ShaSetFlags(&hash->alg.sha, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA224:
 #ifdef WOLFSSL_SHA224
             ret = wc_Sha224SetFlags(&hash->alg.sha224, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA256:
 #ifndef NO_SHA256
             ret = wc_Sha256SetFlags(&hash->alg.sha256, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA384:
 #ifdef WOLFSSL_SHA384
             ret = wc_Sha384SetFlags(&hash->alg.sha384, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA512:
-    #ifndef WOLFSSL_NOSHA512_224
-        case WC_HASH_TYPE_SHA512_224:
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
-        case WC_HASH_TYPE_SHA512_256:
-    #endif
 #ifdef WOLFSSL_SHA512
             ret = wc_Sha512SetFlags(&hash->alg.sha512, flags);
+#else
+            ret = HASH_TYPE_E;
+#endif
+            break;
+
+        case WC_HASH_TYPE_SHA512_224:
+#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
+            ret = wc_Sha512SetFlags(&hash->alg.sha512, flags);
+#else
+            ret = HASH_TYPE_E;
+#endif
+            break;
+
+        case WC_HASH_TYPE_SHA512_256:
+#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
+            ret = wc_Sha512SetFlags(&hash->alg.sha512, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
 
@@ -1233,28 +1547,45 @@ int wc_HashSetFlags(wc_HashAlg* hash, enum wc_HashType type, word32 flags)
         case WC_HASH_TYPE_SHA3_512:
 #ifdef WOLFSSL_SHA3
             ret = wc_Sha3_SetFlags(&hash->alg.sha3, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
 
-    #ifdef WOLFSSL_SM3
         case WC_HASH_TYPE_SM3:
+#ifdef WOLFSSL_SM3
             ret = wc_Sm3SetFlags(&hash->alg.sm3, flags);
+#else
+            ret = HASH_TYPE_E;
+#endif
             break;
-    #endif
 
         /* not supported */
         case WC_HASH_TYPE_MD5_SHA:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD2:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD4:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2B:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2S:
-        case WC_HASH_TYPE_NONE:
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE128:
-    #endif
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE256:
-    #endif
+            ret = HASH_TYPE_E;
+            break;
+
+        case WC_HASH_TYPE_NONE:
+            ret = BAD_FUNC_ARG;
+            break;
         default:
             ret = BAD_FUNC_ARG;
     };
@@ -1263,7 +1594,7 @@ int wc_HashSetFlags(wc_HashAlg* hash, enum wc_HashType type, word32 flags)
 }
 int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
 {
-    int ret = WC_NO_ERR_TRACE(HASH_TYPE_E); /* Default to hash type error */
+    int ret;
 
     if (hash == NULL)
         return BAD_FUNC_ARG;
@@ -1272,37 +1603,57 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         case WC_HASH_TYPE_MD5:
 #ifndef NO_MD5
             ret = wc_Md5GetFlags(&hash->alg.md5, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA:
 #ifndef NO_SHA
             ret = wc_ShaGetFlags(&hash->alg.sha, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA224:
 #ifdef WOLFSSL_SHA224
             ret = wc_Sha224GetFlags(&hash->alg.sha224, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA256:
 #ifndef NO_SHA256
             ret = wc_Sha256GetFlags(&hash->alg.sha256, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA384:
 #ifdef WOLFSSL_SHA384
             ret = wc_Sha384GetFlags(&hash->alg.sha384, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
         case WC_HASH_TYPE_SHA512:
-    #ifndef WOLFSSL_NOSHA512_224
-        case WC_HASH_TYPE_SHA512_224:
-    #endif
-    #ifndef WOLFSSL_NOSHA512_256
-        case WC_HASH_TYPE_SHA512_256:
-    #endif
 #ifdef WOLFSSL_SHA512
             ret = wc_Sha512GetFlags(&hash->alg.sha512, flags);
+#else
+            ret = HASH_TYPE_E;
+#endif
+            break;
+        case WC_HASH_TYPE_SHA512_224:
+#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_224)
+            ret = wc_Sha512GetFlags(&hash->alg.sha512, flags);
+#else
+            ret = HASH_TYPE_E;
+#endif
+            break;
+        case WC_HASH_TYPE_SHA512_256:
+#if defined(WOLFSSL_SHA512) && !defined(WOLFSSL_NOSHA512_256)
+            ret = wc_Sha512GetFlags(&hash->alg.sha512, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
 
@@ -1312,28 +1663,45 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         case WC_HASH_TYPE_SHA3_512:
 #ifdef WOLFSSL_SHA3
             ret = wc_Sha3_GetFlags(&hash->alg.sha3, flags);
+#else
+            ret = HASH_TYPE_E;
 #endif
             break;
 
-    #ifdef WOLFSSL_SM3
         case WC_HASH_TYPE_SM3:
+#ifdef WOLFSSL_SM3
             ret = wc_Sm3GetFlags(&hash->alg.sm3, flags);
+#else
+            ret = HASH_TYPE_E;
+#endif
             break;
-    #endif
 
         /* not supported */
         case WC_HASH_TYPE_MD5_SHA:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD2:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_MD4:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2B:
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_BLAKE2S:
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE128)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE128:
-    #endif
-    #if defined(WOLFSSL_SHA3) && defined(WOLFSSL_SHAKE256)
+            ret = HASH_TYPE_E;
+            break;
         case WC_HASH_TYPE_SHAKE256:
-    #endif
+            ret = HASH_TYPE_E;
+            break;
+
         case WC_HASH_TYPE_NONE:
+            ret = BAD_FUNC_ARG;
+            break;
         default:
             ret = BAD_FUNC_ARG;
     };
@@ -1350,17 +1718,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Md5* md5;
-    #else
-        wc_Md5  md5[1];
-    #endif
+        WC_DECLARE_VAR(md5, wc_Md5, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        md5 = (wc_Md5*)XMALLOC(sizeof(wc_Md5), NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        if (md5 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(md5, wc_Md5, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitMd5_ex(md5, heap, devId)) != 0) {
             WOLFSSL_MSG("InitMd5 failed");
@@ -1375,9 +1736,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Md5Free(md5);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(md5, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(md5, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1399,17 +1758,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sha* sha;
-    #else
-        wc_Sha sha[1];
-    #endif
+        WC_DECLARE_VAR(sha, wc_Sha, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sha = (wc_Sha*)XMALLOC(sizeof(wc_Sha), NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        if (sha == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sha, wc_Sha, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSha_ex(sha, heap, devId)) != 0) {
             WOLFSSL_MSG("InitSha failed");
@@ -1424,9 +1776,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_ShaFree(sha);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sha, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sha, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1448,18 +1798,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sha224* sha224;
-    #else
-        wc_Sha224 sha224[1];
-    #endif
+        WC_DECLARE_VAR(sha224, wc_Sha224, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sha224 = (wc_Sha224*)XMALLOC(sizeof(wc_Sha224), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (sha224 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sha224, wc_Sha224, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSha224_ex(sha224, heap, devId)) != 0) {
             WOLFSSL_MSG("InitSha224 failed");
@@ -1474,9 +1816,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Sha224Free(sha224);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sha224, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sha224, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1498,13 +1838,13 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
+    #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
         wc_Sha256* sha256;
     #else
         wc_Sha256 sha256[1];
     #endif
 
-    #ifdef WOLFSSL_SMALL_STACK
+    #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
         sha256 = (wc_Sha256*)XMALLOC(sizeof(wc_Sha256), NULL,
             DYNAMIC_TYPE_TMP_BUFFER);
         if (sha256 == NULL)
@@ -1525,7 +1865,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         }
 
 
-    #ifdef WOLFSSL_SMALL_STACK
+    #if defined(WOLFSSL_SMALL_STACK) && !defined(WOLFSSL_NO_MALLOC)
         XFREE(sha256, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     #endif
 
@@ -1552,18 +1892,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sha512* sha512;
-    #else
-        wc_Sha512 sha512[1];
-    #endif
+        WC_DECLARE_VAR(sha512, wc_Sha512, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sha512 = (wc_Sha512*)XMALLOC(sizeof(wc_Sha512), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (sha512 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sha512, wc_Sha512, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSha512_ex(sha512, heap, devId)) != 0) {
             WOLFSSL_MSG("InitSha512 failed");
@@ -1578,9 +1910,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Sha512Free(sha512);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sha512, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sha512, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1601,18 +1931,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sha512* sha512;
-    #else
-        wc_Sha512 sha512[1];
-    #endif
+        WC_DECLARE_VAR(sha512, wc_Sha512, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sha512 = (wc_Sha512*)XMALLOC(sizeof(wc_Sha512), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (sha512 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sha512, wc_Sha512, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSha512_224_ex(sha512, heap, devId)) != 0) {
             WOLFSSL_MSG("wc_InitSha512_224 failed");
@@ -1627,9 +1949,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Sha512_224Free(sha512);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sha512, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sha512, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1653,18 +1973,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sha512* sha512;
-    #else
-        wc_Sha512 sha512[1];
-    #endif
+        WC_DECLARE_VAR(sha512, wc_Sha512, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sha512 = (wc_Sha512*)XMALLOC(sizeof(wc_Sha512), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (sha512 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sha512, wc_Sha512, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSha512_256_ex(sha512, heap, devId)) != 0) {
             WOLFSSL_MSG("wc_InitSha512_256 failed");
@@ -1679,9 +1991,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Sha512_256Free(sha512);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sha512, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sha512, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1706,18 +2016,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sha384* sha384;
-    #else
-        wc_Sha384 sha384[1];
-    #endif
+        WC_DECLARE_VAR(sha384, wc_Sha384, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sha384 = (wc_Sha384*)XMALLOC(sizeof(wc_Sha384), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (sha384 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sha384, wc_Sha384, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSha384_ex(sha384, heap, devId)) != 0) {
             WOLFSSL_MSG("InitSha384 failed");
@@ -1732,9 +2034,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Sha384Free(sha384);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sha384, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sha384, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1757,18 +2057,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sha3* sha3;
-    #else
-        wc_Sha3 sha3[1];
-    #endif
+        WC_DECLARE_VAR(sha3, wc_Sha3, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sha3 = (wc_Sha3*)XMALLOC(sizeof(wc_Sha3), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (sha3 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sha3, wc_Sha3, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSha3_224(sha3, heap, devId)) != 0) {
             WOLFSSL_MSG("InitSha3_224 failed");
@@ -1783,9 +2075,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Sha3_224_Free(sha3);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sha3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sha3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1807,18 +2097,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sha3* sha3;
-    #else
-        wc_Sha3 sha3[1];
-    #endif
+        WC_DECLARE_VAR(sha3, wc_Sha3, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sha3 = (wc_Sha3*)XMALLOC(sizeof(wc_Sha3), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (sha3 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sha3, wc_Sha3, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSha3_256(sha3, heap, devId)) != 0) {
             WOLFSSL_MSG("InitSha3_256 failed");
@@ -1833,9 +2115,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Sha3_256_Free(sha3);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sha3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sha3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1857,18 +2137,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sha3* sha3;
-    #else
-        wc_Sha3 sha3[1];
-    #endif
+        WC_DECLARE_VAR(sha3, wc_Sha3, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sha3 = (wc_Sha3*)XMALLOC(sizeof(wc_Sha3), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (sha3 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sha3, wc_Sha3, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSha3_384(sha3, heap, devId)) != 0) {
             WOLFSSL_MSG("InitSha3_384 failed");
@@ -1883,9 +2155,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Sha3_384_Free(sha3);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sha3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sha3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1907,18 +2177,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sha3* sha3;
-    #else
-        wc_Sha3 sha3[1];
-    #endif
+        WC_DECLARE_VAR(sha3, wc_Sha3, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sha3 = (wc_Sha3*)XMALLOC(sizeof(wc_Sha3), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (sha3 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sha3, wc_Sha3, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSha3_512(sha3, heap, devId)) != 0) {
             WOLFSSL_MSG("InitSha3_512 failed");
@@ -1933,9 +2195,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Sha3_512_Free(sha3);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sha3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sha3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -1957,18 +2217,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
                         word32 hashLen, void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Shake* shake;
-    #else
-        wc_Shake shake[1];
-    #endif
+        WC_DECLARE_VAR(shake, wc_Shake, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        shake = (wc_Shake*)XMALLOC(sizeof(wc_Shake), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (shake == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(shake, wc_Shake, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitShake128(shake, heap, devId)) != 0) {
             WOLFSSL_MSG("InitShake128 failed");
@@ -1983,9 +2235,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Shake128_Free(shake);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(shake, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(shake, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -2009,18 +2259,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
                         word32 hashLen, void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Shake* shake;
-    #else
-        wc_Shake shake[1];
-    #endif
+        WC_DECLARE_VAR(shake, wc_Shake, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        shake = (wc_Shake*)XMALLOC(sizeof(wc_Shake), NULL,
-            DYNAMIC_TYPE_TMP_BUFFER);
-        if (shake == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(shake, wc_Shake, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitShake256(shake, heap, devId)) != 0) {
             WOLFSSL_MSG("InitShake256 failed");
@@ -2035,9 +2277,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Shake256_Free(shake);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(shake, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(shake, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -2062,17 +2302,10 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
         void* heap, int devId)
     {
         int ret = 0;
-    #ifdef WOLFSSL_SMALL_STACK
-        wc_Sm3* sm3;
-    #else
-        wc_Sm3 sm3[1];
-    #endif
+        WC_DECLARE_VAR(sm3, wc_Sm3, 1, 0);
 
-    #ifdef WOLFSSL_SMALL_STACK
-        sm3 = (wc_Sm3*)XMALLOC(sizeof(wc_Sm3), NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        if (sm3 == NULL)
-            return MEMORY_E;
-    #endif
+        WC_ALLOC_VAR_EX(sm3, wc_Sm3, 1, NULL, DYNAMIC_TYPE_TMP_BUFFER,
+            return MEMORY_E);
 
         if ((ret = wc_InitSm3(sm3, heap, devId)) != 0) {
             WOLFSSL_MSG("InitSm3 failed");
@@ -2087,9 +2320,7 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
             wc_Sm3Free(sm3);
         }
 
-    #ifdef WOLFSSL_SMALL_STACK
-        XFREE(sm3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+        WC_FREE_VAR_EX(sm3, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
         return ret;
     }
@@ -2112,12 +2343,22 @@ int wc_HashGetFlags(wc_HashAlg* hash, enum wc_HashType type, word32* flags)
 int _wc_Hash_Grow(byte** msg, word32* used, word32* len, const byte* in,
                         int inSz, void* heap)
 {
-    if (*len < *used + inSz) {
+    word32 usedSz = 0;
+
+    if (inSz < 0 || !WC_SAFE_SUM_WORD32(*used, (word32)inSz, usedSz))
+        return BAD_FUNC_ARG;
+
+    /* Allow zero-length input as a no-op. Some callers may pass zero-length
+     * data during hash operations and this should not be treated as an error. */
+    if (inSz == 0)
+        return 0;
+
+    if (*len < usedSz) {
         if (*msg == NULL) {
-            *msg = (byte*)XMALLOC(*used + inSz, heap, DYNAMIC_TYPE_TMP_BUFFER);
+            *msg = (byte*)XMALLOC(usedSz, heap, DYNAMIC_TYPE_TMP_BUFFER);
         }
         else {
-            byte* pt = (byte*)XREALLOC(*msg, *used + inSz, heap,
+            byte* pt = (byte*)XREALLOC(*msg, usedSz, heap,
                     DYNAMIC_TYPE_TMP_BUFFER);
             if (pt == NULL) {
                 return MEMORY_E;
@@ -2127,7 +2368,7 @@ int _wc_Hash_Grow(byte** msg, word32* used, word32* len, const byte* in,
         if (*msg == NULL) {
             return MEMORY_E;
         }
-        *len = *used + inSz;
+        *len = usedSz;
     }
     XMEMCPY(*msg + *used, in, inSz);
     *used += inSz;

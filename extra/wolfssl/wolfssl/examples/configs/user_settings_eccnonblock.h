@@ -1,12 +1,12 @@
 /* user_settings_eccnonblock.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -104,8 +104,8 @@ extern "C" {
 #define WOLFSSL_SP_MATH /* forces only single precision */
 
 /* Hashing */
-#define WOLFSL_SHA512
-#define WOLFSL_SHA384
+#define WOLFSSL_SHA512
+#define WOLFSSL_SHA384
 #undef NO_SHA256
 
 /* Debugging */

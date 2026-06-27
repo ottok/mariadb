@@ -1222,9 +1222,12 @@ store_len:
 				columns that were updated. */
 
 				for (i = 0; i < update->n_fields; i++) {
+					const upd_field_t* fld =
+						upd_get_nth_field(update, i);
+					if (upd_fld_is_virtual_col(fld))
+						continue;
 					const ulint field_no
-						= upd_get_nth_field(update, i)
-						->field_no;
+						= fld->field_no;
 					if (field_no >= index->n_fields
 					    || dict_index_get_nth_field(
 						    index, field_no)->col
@@ -1524,7 +1527,7 @@ trx_undo_update_rec_get_update(
 				&field_no);
 			first_v_col = false;
 			/* This column could be dropped or no longer indexed */
-			if (field_no >= index->n_fields) {
+			if (field_no == FIL_NULL) {
 				/* Mark this is no longer needed */
 				upd_field->field_no = REC_MAX_N_FIELDS;
 
@@ -1804,6 +1807,30 @@ static bool trx_has_lock_x(const trx_t &trx, dict_table_t& table)
   return false;
 }
 
+/** For ALTER TABLE...IGNORE ALGORITHM=COPY, rewind the undo log
+to maintain only the latest insert undo record. This allows easy
+rollback of the last inserted row on duplicate key errors.
+@param mtr		mini-transaction
+@param undo_block	undo log page
+@param table  		table being altered
+@param trx		transaction
+@param undo  		insert undo log
+@return mod_tables entry after inserting the table */
+static ATTRIBUTE_COLD ATTRIBUTE_NOINLINE
+std::pair<trx_mod_tables_t::iterator, bool>
+trx_undo_rewrite_ignore(mtr_t *mtr, buf_block_t *undo_block,
+			dict_table_t *table, trx_t *trx, trx_undo_t *undo)
+{
+  mtr->write<2>(*undo_block, undo_block->page.frame + TRX_UNDO_PAGE_HDR +
+                TRX_UNDO_PAGE_FREE, undo->old_offset);
+  ut_ad(trx->undo_no == 1);
+  undo->top_offset= undo->old_offset;
+  undo->top_undo_no= 0;
+  trx->undo_no= 0;
+  trx->mod_tables.clear();
+  return trx->mod_tables.emplace(table, 0);
+}
+
 /***********************************************************************//**
 Writes information to an undo log about an insert, update, or a delete marking
 of a clustered index record. This information is used in a rollback of the
@@ -1909,9 +1936,19 @@ trx_undo_report_row_operation(
 		ut_ad(!trx->read_only);
 		ut_ad(trx->id);
 		pundo = &trx->rsegs.m_redo.undo;
+		const bool clear_ignore = *pundo && trx->undo_no
+			&& (*pundo)->old_offset <= (*pundo)->top_offset
+			&& index->table->skip_alter_undo
+			== dict_table_t::IGNORE_UNDO;
+
 		rseg = trx->rsegs.m_redo.rseg;
 		undo_block = trx_undo_assign_low<false>(trx, rseg, pundo,
 							&mtr, &err);
+		if (clear_ignore) {
+			ut_ad(!rec);
+			m = trx_undo_rewrite_ignore(&mtr, undo_block,
+						    index->table, trx, *pundo);
+		}
 	}
 
 	trx_undo_t*	undo	= *pundo;
@@ -1998,6 +2035,8 @@ err_exit:
 			/* Success */
 			undo->top_page_no = undo_block->page.id().page_no();
 			mtr.commit();
+
+			undo->old_offset = offset;
 			undo->top_offset  = offset;
 			undo->top_undo_no = trx->undo_no++;
 			undo->guess_block = undo_block;
@@ -2238,6 +2277,21 @@ static dberr_t trx_undo_prev_version(const rec_t *rec, dict_index_t *index,
 	byte* buf;
 
 	if (row_upd_changes_field_size_or_external(index, offsets, update)) {
+		/* When CHECK TABLE ... EXTENDED checks for orphan
+		records in secondary indexes, it normally covers some
+		history that is already being purged. This is safe as
+		long as the undo log records have not been freed yet.
+
+		However, BLOBs are only safe to access as long as the
+		purge_sys.view does not permit them to be freed. The
+		check.latch will freeze the purge_sys.view by blocking
+		purge_sys.clone_oldest_view() at the start of
+		trx_purge() or by blocking purge_sys.batch_cleanup()
+		at the end of trx_purge(). */
+		if (check.is_extended() && purge_sys.is_purgeable(trx_id)) {
+			return DB_SUCCESS;
+		}
+
 		/* We should confirm the existence of disowned external data,
 		if the previous version record is delete marked. If the trx_id
 		of the previous record is seen by purge view, we should treat

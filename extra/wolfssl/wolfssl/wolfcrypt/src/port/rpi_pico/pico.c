@@ -1,12 +1,12 @@
 /* pico.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -41,6 +41,9 @@ int wc_pico_rng_gen_block(unsigned char *output, unsigned int sz)
 {
     uint32_t i = 0;
 
+    if (output == NULL || sz == 0)
+        return BAD_FUNC_ARG;
+
     while (i < sz)
     {
         uint64_t rnd = get_rand_64();
@@ -52,6 +55,7 @@ int wc_pico_rng_gen_block(unsigned char *output, unsigned int sz)
             XMEMCPY(output + i, &rnd, sz - i);
             i = sz;
         }
+        rnd = 0;
     }
 
     return 0;

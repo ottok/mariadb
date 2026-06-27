@@ -1,12 +1,12 @@
 /* ocsp.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -74,8 +74,26 @@ WOLFSSL_LOCAL int CheckOcspResponse(WOLFSSL_OCSP *ocsp, byte *response, int resp
                                     OcspEntry *entry, OcspRequest *ocspRequest,
                                     void* heap);
 
-WOLFSSL_LOCAL int CheckOcspResponder(OcspResponse *bs, DecodedCert *cert,
-                                     void* vp);
+WOLFSSL_LOCAL int CheckOcspResponder(OcspResponse *bs, byte* subjectHash,
+        byte extExtKeyUsage, byte* issuerHash, void* vp);
+
+/* Allocates and initializes a WOLFSSL_OCSP object */
+WOLFSSL_API WOLFSSL_OCSP* wc_NewOCSP(WOLFSSL_CERT_MANAGER* cm);
+/* Frees a WOLFSSL_OCSP object allocated by wc_NewOCSP */
+WOLFSSL_API void wc_FreeOCSP(WOLFSSL_OCSP* ocsp);
+WOLFSSL_API int wc_CheckCertOcspResponse(WOLFSSL_OCSP *ocsp, DecodedCert *cert,
+        byte *response, int responseSz, void* heap);
+
+WOLFSSL_API OcspRequest* wc_OcspRequest_new(void* heap);
+WOLFSSL_API void wc_OcspRequest_free(OcspRequest* request);
+
+WOLFSSL_API int wc_InitOcspRequest(OcspRequest* req, DecodedCert* cert,
+                                    byte useNonce, void* heap);
+WOLFSSL_API int wc_EncodeOcspRequest(OcspRequest* req, byte* output,
+                                      word32 size);
+
+WOLFSSL_API OcspResponse* wc_OcspResponse_new(void* heap);
+WOLFSSL_API void wc_OcspResponse_free(OcspResponse* response);
 
 #ifdef OPENSSL_EXTRA
 WOLFSSL_API int wolfSSL_OCSP_resp_find_status(WOLFSSL_OCSP_BASICRESP *bs,
@@ -170,6 +188,33 @@ WOLFSSL_API int wolfSSL_OCSP_request_add1_nonce(OcspRequest* req,
 WOLFSSL_API int wolfSSL_OCSP_check_nonce(OcspRequest* req,
         WOLFSSL_OCSP_BASICRESP* bs);
 #endif /* OPENSSL_EXTRA */
+
+#ifdef HAVE_OCSP_RESPONDER
+/* OCSP Responder API */
+WOLFSSL_API OcspResponder* wc_OcspResponder_new(void* heap, int sendCerts);
+WOLFSSL_API void wc_OcspResponder_free(OcspResponder* responder);
+
+/* Add a cert that this responder can respond for (DER format only) */
+WOLFSSL_API int wc_OcspResponder_AddSigner(OcspResponder* responder,
+    const byte* signerDer, word32 signerDerSz,
+    const byte* keyDer, word32 keyDerSz,
+    const byte* issuerCertDer, word32 issuerCertDerSz);
+
+/* Add a certificate status for a specific CA */
+WOLFSSL_API int wc_OcspResponder_SetCertStatus(OcspResponder* responder,
+    const char* caSubject, word32 caSubjectSz,
+    const byte* serial, word32 serialSz, enum Ocsp_Cert_Status status,
+    time_t revocationTime, enum WC_CRL_Reason revocationReason,
+    word32 validityPeriod);
+
+/* Generate OCSP response for a request */
+WOLFSSL_API int wc_OcspResponder_WriteResponse(OcspResponder* responder,
+    const byte* request, word32 requestSz,
+    byte* response, word32* responseSz);
+WOLFSSL_API int wc_OcspResponder_WriteErrorResponse(
+    enum Ocsp_Response_Status status,
+    byte* response, word32* responseSz);
+#endif /* HAVE_OCSP_RESPONDER */
 
 
 #ifdef __cplusplus

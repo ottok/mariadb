@@ -73,6 +73,8 @@ ulong plugin_maturity;
 
 static LEX_CSTRING MYSQL_PLUGIN_NAME= {STRING_WITH_LEN("plugin") };
 
+enum mysql_plugin_fields { PLUGIN_NAME, PLUGIN_SONAME, PLUGIN_FIELDS_COUNT };
+
 /*
   not really needed now, this map will become essential when we add more
   maturity levels. We cannot change existing maturity constants,
@@ -1678,6 +1680,8 @@ int plugin_init(int *argc, char **argv, int flags)
       tmp.name.length= strlen(plugin->name);
       tmp.state= 0;
       tmp.load_option= mandatory ? PLUGIN_FORCE : PLUGIN_ON;
+      DBUG_ASSERT(!mandatory ||
+        plugin_maturity_map[plugin->maturity] >= SERVER_MATURITY_LEVEL);
 
       for (i=0; i < array_elements(override_plugin_load_policy); i++)
       {
@@ -1873,6 +1877,19 @@ static bool register_builtin(struct st_maria_plugin *plugin,
 }
 
 
+static bool plugin_table_is_valid(TABLE *table)
+{
+  if (table->s->fields < PLUGIN_FIELDS_COUNT ||
+      table->s->primary_key == MAX_KEY)
+  {
+    my_error(ER_CANNOT_LOAD_FROM_TABLE_V2, MYF(0),
+             table->s->db.str, table->s->table_name.str);
+    return false;
+  }
+  return true;
+}
+
+
 /*
   called only by plugin_init()
 */
@@ -1915,6 +1932,9 @@ static void plugin_load(MEM_ROOT *tmp_root)
     goto end;
   }
 
+  if (!plugin_table_is_valid(table))
+    goto end2;
+
   if (init_read_record(&read_record_info, new_thd, table, NULL, NULL, 1, 0,
                        FALSE))
   {
@@ -1927,8 +1947,8 @@ static void plugin_load(MEM_ROOT *tmp_root)
   {
     DBUG_PRINT("info", ("init plugin record"));
     String str_name, str_dl;
-    get_field(tmp_root, table->field[0], &str_name);
-    get_field(tmp_root, table->field[1], &str_dl);
+    get_field(tmp_root, table->field[PLUGIN_NAME], &str_name);
+    get_field(tmp_root, table->field[PLUGIN_SONAME], &str_dl);
 
     LEX_CSTRING name= {str_name.ptr(), str_name.length()};
     LEX_CSTRING dl=   {str_dl.ptr(), str_dl.length()};
@@ -1976,6 +1996,7 @@ static void plugin_load(MEM_ROOT *tmp_root)
     sql_print_error(ER_THD(new_thd, ER_GET_ERRNO), my_errno,
                            table->file->table_type());
   end_read_record(&read_record_info);
+end2:
   table->mark_table_for_reopen();
   close_mysql_tables(new_thd);
 end:
@@ -2247,9 +2268,8 @@ static bool finalize_install(THD *thd, TABLE *table, const LEX_CSTRING *name,
   DBUG_ASSERT(!table->file->row_logging);
   table->use_all_columns();
   restore_record(table, s->default_values);
-  table->field[0]->store(name->str, name->length, system_charset_info);
-  table->field[1]->store(tmp->plugin_dl->dl.str, tmp->plugin_dl->dl.length,
-                         files_charset_info);
+  table->field[PLUGIN_NAME]->store(name->str, name->length, system_charset_info);
+  table->field[PLUGIN_SONAME]->store(&tmp->plugin_dl->dl, files_charset_info);
   error= table->file->ha_write_row(table->record[0]);
   if (unlikely(error))
   {
@@ -2279,8 +2299,8 @@ bool mysql_install_plugin(THD *thd, const LEX_CSTRING *name,
   WSREP_TO_ISOLATION_BEGIN(WSREP_MYSQL_DB, NULL, NULL);
 
   /* need to open before acquiring LOCK_plugin or it will deadlock */
-  if (! (table = open_ltable(thd, &tables, TL_WRITE,
-                             MYSQL_LOCK_IGNORE_TIMEOUT)))
+  table= open_ltable(thd, &tables, TL_WRITE, MYSQL_LOCK_IGNORE_TIMEOUT);
+  if (!table || !plugin_table_is_valid(table))
     DBUG_RETURN(TRUE);
 
   if (my_load_defaults(MYSQL_CONFIG_NAME, load_default_groups, &argc, &argv, NULL))
@@ -2388,7 +2408,7 @@ static bool do_uninstall(THD *thd, TABLE *table, const LEX_CSTRING *name)
 
   uchar user_key[MAX_KEY_LENGTH];
   table->use_all_columns();
-  table->field[0]->store(name->str, name->length, system_charset_info);
+  table->field[PLUGIN_NAME]->store(name->str, name->length, system_charset_info);
   key_copy(user_key, table->record[0], table->key_info,
            table->key_info->key_length);
   if (! table->file->ha_index_read_idx_map(table->record[0], 0, user_key,
@@ -2437,18 +2457,9 @@ bool mysql_uninstall_plugin(THD *thd, const LEX_CSTRING *name,
   WSREP_TO_ISOLATION_BEGIN(WSREP_MYSQL_DB, NULL, NULL);
 
   /* need to open before acquiring LOCK_plugin or it will deadlock */
-  if (! (table= open_ltable(thd, &tables, TL_WRITE, MYSQL_LOCK_IGNORE_TIMEOUT)))
+  table= open_ltable(thd, &tables, TL_WRITE, MYSQL_LOCK_IGNORE_TIMEOUT);
+  if (!table || !plugin_table_is_valid(table))
     DBUG_RETURN(TRUE);
-
-  if (!table->key_info)
-  {
-    my_printf_error(ER_UNKNOWN_ERROR,
-                    "The table %s.%s has no primary key. "
-                    "Please check the table definition and "
-                    "create the primary key accordingly.", MYF(0),
-                    table->s->db.str, table->s->table_name.str);
-    DBUG_RETURN(TRUE);
-  }
 
   /*
     Pre-acquire audit plugins for events that may potentially occur
@@ -3838,7 +3849,7 @@ static int construct_options(MEM_ROOT *mem_root, struct st_plugin_int *tmp,
   char *comment= static_cast<char*>(alloc_root(mem_root, max_comment_len + 1));
   char *optname;
 
-  int index= 0, UNINIT_VAR(offset);
+  int UNINIT_VAR(offset);
   st_mysql_sys_var *opt, **plugin_option;
   st_bookmark *v;
 
@@ -3891,7 +3902,7 @@ static int construct_options(MEM_ROOT *mem_root, struct st_plugin_int *tmp,
   */
 
   for (plugin_option= tmp->plugin->system_vars;
-       plugin_option && *plugin_option; plugin_option++, index++)
+       plugin_option && *plugin_option; plugin_option++)
   {
     opt= *plugin_option;
 
@@ -3948,7 +3959,7 @@ static int construct_options(MEM_ROOT *mem_root, struct st_plugin_int *tmp,
   }
 
   for (plugin_option= tmp->plugin->system_vars;
-       plugin_option && *plugin_option; plugin_option++, index++)
+       plugin_option && *plugin_option; plugin_option++)
   {
     switch ((opt= *plugin_option)->flags & PLUGIN_VAR_TYPEMASK) {
     case PLUGIN_VAR_BOOL:
@@ -4167,7 +4178,7 @@ static int test_plugin_options(MEM_ROOT *tmp_root, struct st_plugin_int *tmp,
                                int *argc, char **argv)
 {
   struct sys_var_chain chain= { NULL, NULL };
-  bool disable_plugin;
+  bool disable_plugin= false;
   enum_plugin_load_option plugin_load_option= tmp->load_option;
 
   MEM_ROOT *mem_root= alloc_root_inited(&tmp->mem_root) ?
@@ -4178,9 +4189,14 @@ static int test_plugin_options(MEM_ROOT *tmp_root, struct st_plugin_int *tmp,
   struct st_bookmark *var;
   size_t len=0, count= EXTRA_OPTIONS;
   st_ptr_backup *tmp_backup= 0;
+  const char *plugin_name= tmp->plugin->name;
+  size_t plugin_name_len= strlen(plugin_name);
   DBUG_ENTER("test_plugin_options");
   DBUG_ASSERT(tmp->plugin && tmp->name.str);
 
+  char *plugin_name_ptr= static_cast<char*>(alloc_root(mem_root, plugin_name_len + 1));
+  safe_strcpy(plugin_name_ptr, plugin_name_len + 1, plugin_name);
+  my_casedn_str(&my_charset_latin1, plugin_name_ptr);
   if (tmp->plugin->system_vars || (*argc > 1))
   {
     for (opt= tmp->plugin->system_vars; opt && *opt; opt++)
@@ -4216,7 +4232,7 @@ static int test_plugin_options(MEM_ROOT *tmp_root, struct st_plugin_int *tmp,
         sys_var *v;
 
         tmp_backup[tmp->nbackups++].save(&o->name);
-        if ((var= find_bookmark(tmp->name.str, o->name, o->flags)))
+        if ((var= find_bookmark(plugin_name_ptr, o->name, o->flags)))
         {
           varname= var->key + 1;
           var->loaded= TRUE;
@@ -4275,22 +4291,24 @@ static int test_plugin_options(MEM_ROOT *tmp_root, struct st_plugin_int *tmp,
     error= handle_options(argc, &argv, opts, mark_changed);
     (*argc)++; /* add back one for the program name */
 
+    /*
+     Set plugin loading policy from option value. First element in the option
+     list is always the <plugin name> option value.
+    */
+    if (!plugin_is_forced(tmp))
+    {
+      plugin_load_option= (enum_plugin_load_option) *(ulong*) opts[0].value;
+      disable_plugin= (plugin_load_option == PLUGIN_OFF);
+      tmp->load_option= plugin_load_option;
+    }
+
     if (unlikely(error))
     {
        sql_print_error("Parsing options for plugin '%s' failed. Disabling plugin",
                        tmp->name.str);
        goto err;
     }
-    /*
-     Set plugin loading policy from option value. First element in the option
-     list is always the <plugin name> option value.
-    */
-    if (!plugin_is_forced(tmp))
-      plugin_load_option= (enum_plugin_load_option) *(ulong*) opts[0].value;
   }
-
-  disable_plugin= (plugin_load_option == PLUGIN_OFF);
-  tmp->load_option= plugin_load_option;
 
   error= 1;
 
@@ -4532,8 +4550,12 @@ my_bool post_init_callback(THD *thd, void *)
     set_current_thd(thd);
     plugin_thdvar_init(thd);
 
+    // Restore proper transaction read-only context
+    thd->variables.tx_read_only= false;
     // Restore option_bits
     thd->variables.option_bits= option_bits_saved;
+    // Restore proper default isolation level for appliers
+    thd->variables.tx_isolation= ISO_READ_COMMITTED;
   }
   set_current_thd(0);
   return 0;

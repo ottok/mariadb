@@ -883,10 +883,10 @@ class Grant_table_base
      A privilege column is of type enum('Y', 'N'). Privilege columns are
      expected to be one after another.
   */
-  void set_table(TABLE *table)
+  bool set_table(TABLE *table)
   {
     if (!(m_table= table)) // Table does not exist or not opened.
-      return;
+      return 0;
 
     for (end_priv_columns= 0; end_priv_columns < num_fields(); end_priv_columns++)
     {
@@ -900,8 +900,18 @@ class Grant_table_base
       else if (start_priv_columns)
           break;
     }
+
+    if (num_fields() < min_columns || !table->key_info ||
+        table->key_info->user_defined_key_parts != pk_parts)
+    {
+      my_error(ER_CANNOT_LOAD_FROM_TABLE_V2, MYF(ME_ERROR_LOG),
+               table->s->db.str, table->s->table_name.str);
+      return 1;
+    }
+    return 0;
   }
 
+  virtual ~Grant_table_base() = default;
 
   /* the min number of columns a table should have */
   uint min_columns;
@@ -909,6 +919,8 @@ class Grant_table_base
   uint start_priv_columns;
   /* The index after the last privilege column */
   uint end_priv_columns;
+  /* number of key_parts in PK */
+  uint pk_parts;
 
   TABLE *m_table;
 };
@@ -1322,7 +1334,7 @@ class User_table_tabular: public User_table
   friend class Grant_tables;
 
   /* Only Grant_tables can instantiate this class. */
-  User_table_tabular() { min_columns= 13; /* As in 3.20.13 */ }
+  User_table_tabular() { min_columns= 13; /* As in 3.20.13 */ pk_parts= 2; }
 
   /* The user table is a bit different compared to the other Grant tables.
      Usually, we only add columns to the grant tables when adding functionality.
@@ -1733,6 +1745,7 @@ class User_table_json: public User_table
   int set_password_expired (bool x) const override
   { return x ? set_password_last_changed(0) : 0; }
 
+  User_table_json() { pk_parts= 2; }
   ~User_table_json() override = default;
  private:
   friend class Grant_tables;
@@ -1763,7 +1776,7 @@ class User_table_json: public User_table
     const char *value_start;
     if (get_value(key, JSV_STRING, &value_start, &value_len))
       return "";
-    char *ptr= (char*)alloca(value_len);
+    char *ptr= (char*)my_safe_alloca(value_len);
     if (!ptr)
       return NULL;
     int len= json_unescape(m_table->field[2]->charset(),
@@ -1771,9 +1784,9 @@ class User_table_json: public User_table
                            (const uchar*)value_start + value_len,
                            system_charset_info,
                            (uchar*)ptr, (uchar*)ptr + value_len);
-    if (len < 0)
-      return NULL;
-    return strmake_root(root, ptr, len);
+    const char *js= len < 0 ? NULL : strmake_root(root, ptr, len);
+    my_safe_afree(ptr, value_len);
+    return js;
   }
   longlong get_int_value(const char *key, longlong def_val= 0) const
   {
@@ -1877,7 +1890,7 @@ class Db_table: public Grant_table_base
  private:
   friend class Grant_tables;
 
-  Db_table() { min_columns= 9; /* as in 3.20.13 */ }
+  Db_table() { min_columns= 9; /* as in 3.20.13 */ pk_parts= 3; }
 };
 
 class Tables_priv_table: public Grant_table_base
@@ -1895,7 +1908,7 @@ class Tables_priv_table: public Grant_table_base
  private:
   friend class Grant_tables;
 
-  Tables_priv_table() { min_columns= 8; /* as in 3.22.26a */ }
+  Tables_priv_table() { min_columns= 8; /* as in 3.22.26a */ pk_parts= 4; }
 };
 
 class Columns_priv_table: public Grant_table_base
@@ -1912,7 +1925,7 @@ class Columns_priv_table: public Grant_table_base
  private:
   friend class Grant_tables;
 
-  Columns_priv_table() { min_columns= 7; /* as in 3.22.26a */ }
+  Columns_priv_table() { min_columns= 7; /* as in 3.22.26a */ pk_parts= 5; }
 };
 
 class Host_table: public Grant_table_base
@@ -1924,7 +1937,7 @@ class Host_table: public Grant_table_base
  private:
   friend class Grant_tables;
 
-  Host_table() { min_columns= 8; /* as in 3.20.13 */ }
+  Host_table() { min_columns= 8; /* as in 3.20.13 */  pk_parts= 2;}
 };
 
 class Procs_priv_table: public Grant_table_base
@@ -1942,7 +1955,7 @@ class Procs_priv_table: public Grant_table_base
  private:
   friend class Grant_tables;
 
-  Procs_priv_table() { min_columns=8; }
+  Procs_priv_table() { min_columns=8; pk_parts= 5; }
 };
 
 class Proxies_priv_table: public Grant_table_base
@@ -1959,7 +1972,7 @@ class Proxies_priv_table: public Grant_table_base
  private:
   friend class Grant_tables;
 
-  Proxies_priv_table() { min_columns= 7; }
+  Proxies_priv_table() { min_columns= 7; pk_parts= 4; }
 };
 
 class Roles_mapping_table: public Grant_table_base
@@ -1973,7 +1986,7 @@ class Roles_mapping_table: public Grant_table_base
  private:
   friend class Grant_tables;
 
-  Roles_mapping_table() { min_columns= 4; }
+  Roles_mapping_table() { min_columns= 4; pk_parts= 3; }
 };
 
 /**
@@ -2037,18 +2050,14 @@ class Grant_tables
                                          (USER_TABLE + 1) * sizeof *tables,
                                          MYF(MY_WME)));
     int res= -1;
+    uint counter;
 
     if (!tables)
       DBUG_RETURN(res);
 
     if (build_table_list(thd, &first, which_tables, lock_type, tables))
-    {
-    func_exit:
-      my_free(tables);
-      DBUG_RETURN(res);
-    }
+      goto func_exit;
 
-    uint counter;
     res= really_open(thd, first, &counter);
 
     /* if User_table_json wasn't found, let's try User_table_tabular */
@@ -2077,23 +2086,30 @@ class Grant_tables
     if (res)
       goto func_exit;
 
-    if (lock_tables(thd, first, counter,
-                    MYSQL_LOCK_IGNORE_TIMEOUT |
+    if (lock_tables(thd, first, counter, MYSQL_LOCK_IGNORE_TIMEOUT |
                     MYSQL_OPEN_IGNORE_LOGGING_FORMAT))
     {
       res= -1;
+      close_mysql_tables(thd);
       goto func_exit;
     }
 
-    p_user_table->set_table(tables[USER_TABLE].table);
-    m_db_table.set_table(tables[DB_TABLE].table);
-    m_tables_priv_table.set_table(tables[TABLES_PRIV_TABLE].table);
-    m_columns_priv_table.set_table(tables[COLUMNS_PRIV_TABLE].table);
-    m_host_table.set_table(tables[HOST_TABLE].table);
-    m_procs_priv_table.set_table(tables[PROCS_PRIV_TABLE].table);
-    m_proxies_priv_table.set_table(tables[PROXIES_PRIV_TABLE].table);
-    m_roles_mapping_table.set_table(tables[ROLES_MAPPING_TABLE].table);
-    goto func_exit;
+    if (p_user_table->set_table(tables[USER_TABLE].table)                ||
+        m_db_table.set_table(tables[DB_TABLE].table)                     ||
+        m_tables_priv_table.set_table(tables[TABLES_PRIV_TABLE].table)   ||
+        m_columns_priv_table.set_table(tables[COLUMNS_PRIV_TABLE].table) ||
+        m_host_table.set_table(tables[HOST_TABLE].table)                 ||
+        m_procs_priv_table.set_table(tables[PROCS_PRIV_TABLE].table)     ||
+        m_proxies_priv_table.set_table(tables[PROXIES_PRIV_TABLE].table) ||
+        m_roles_mapping_table.set_table(tables[ROLES_MAPPING_TABLE].table))
+    {
+      res= -1;
+      close_mysql_tables(thd);
+    }
+
+func_exit:
+    my_free(tables);
+    DBUG_RETURN(res);
   }
 
   inline const User_table& user_table() const
@@ -2640,8 +2656,6 @@ static bool acl_load(THD *thd, const Grant_tables& tables)
 
   SCOPE_CLEAR(thd->variables.sql_mode, MODE_PAD_CHAR_TO_FULL_LENGTH);
 
-  grant_version++; /* Privileges updated */
-
   const Host_table& host_table= tables.host_table();
   init_sql_alloc(key_memory_acl_mem, &acl_memroot, ACL_ALLOC_BLOCK_SIZE, 0, MYF(0));
   if (host_table.table_exists()) // "host" table may not exist (e.g. in MySQL 5.6.7+)
@@ -2924,6 +2938,10 @@ static bool acl_load(THD *thd, const Grant_tables& tables)
 
   init_check_host();
 
+  if (thd->killed)
+    DBUG_RETURN(TRUE);
+
+  grant_version++;              // Privileges updated
   thd->bootstrap= !initialized; // keep FLUSH PRIVILEGES connection special
   initialized=1;
   DBUG_RETURN(FALSE);
@@ -3857,6 +3875,9 @@ exit:
 privilege_t acl_get_all3(Security_context *sctx, const char *db,
                          bool db_is_patern)
 {
+  if (!initialized)
+    return DB_ACLS;
+
   privilege_t access= acl_get(sctx->host, sctx->ip,
                               sctx->priv_user, db, db_is_patern);
   if (sctx->priv_role[0])
@@ -4281,8 +4302,8 @@ bool change_password(THD *thd, LEX_USER *user)
   result= acl_cache_is_locked= 0;
   if (mysql_bin_log.is_open())
   {
-    query_length= sprintf(buff, "SET PASSWORD FOR '%-.120s'@'%-.120s'='%-.120s'",
-           user->user.str, safe_str(user->host.str), auth.auth_string.str);
+    query_length= snprintf(buff, sizeof(buff), "SET PASSWORD FOR '%-.120s'@'%-.120s'='%-.120s'",
+            user->user.str, safe_str(user->host.str), auth.auth_string.str);
     DBUG_ASSERT(query_length);
     thd->clear_error();
     result= thd->binlog_query(THD::STMT_QUERY_TYPE, buff, query_length,
@@ -4349,8 +4370,8 @@ int acl_set_default_role(THD *thd, const char *host, const char *user,
       (WSREP(thd) && !IF_WSREP(thd->wsrep_applier, 0)))
   {
     query_length=
-      sprintf(buff,"SET DEFAULT ROLE '%-.120s' FOR '%-.120s'@'%-.120s'",
-              safe_str(rolename), user, safe_str(host));
+      snprintf(buff, sizeof(buff), "SET DEFAULT ROLE '%-.120s' FOR '%-.120s'@'%-.120s'",
+               safe_str(rolename), user, safe_str(host));
   }
 
   /*
@@ -7620,7 +7641,7 @@ bool mysql_routine_grant(THD *thd, TABLE_LIST *table_list,
   thd->mem_root= old_root;
   mysql_mutex_unlock(&acl_cache->lock);
 
-  if (write_to_binlog)
+  if (write_to_binlog && !result)
   {
     if (write_bin_log(thd, FALSE, thd->query(), thd->query_length()))
       result= TRUE;
@@ -11246,11 +11267,11 @@ bool mysql_create_user(THD *thd, List <LEX_USER> &list, bool handle_as_role)
 
       /* TODO(cvicentiu) refactor replace_roles_mapping_table to use
          Roles_mapping_table instead of TABLE directly. */
-      if (replace_roles_mapping_table(tables.roles_mapping_table().table(),
+      if (tables.roles_mapping_table().table_exists() &&
+          replace_roles_mapping_table(tables.roles_mapping_table().table(),
                                       &thd->lex->definer->user,
                                       &thd->lex->definer->host,
-                                      &user_name->user, true,
-                                      NULL, false))
+                                      &user_name->user, true, NULL, false))
       {
         append_user(thd, &wrong_users, user_name);
         if (grantee)
@@ -13037,6 +13058,13 @@ void fill_effective_table_privileges(THD *thd, GRANT_INFO *grant,
     DBUG_VOID_RETURN;
   }
 
+  /* JSON_TABLE and other db detached table */
+  if (db == any_db.str)
+  {
+    grant->privilege= SELECT_ACL;
+    DBUG_VOID_RETURN;
+  }
+
   /* global privileges */
   grant->privilege= sctx->master_access;
 
@@ -13783,10 +13811,36 @@ static bool parse_com_change_user_packet(MPVIO_EXT *mpvio, uint packet_length)
     Cast *passwd to an unsigned char, so that it doesn't extend the sign for
     *passwd > 127 and become 2**32-127+ after casting to uint.
   */
-  uint passwd_len= (thd->client_capabilities & CLIENT_SECURE_CONNECTION ?
-                    (uchar) (*passwd++) : (uint)strlen(passwd));
-
-  db+= passwd_len + 1;
+  size_t passwd_len;
+  if (!(thd->client_capabilities & CLIENT_SECURE_CONNECTION))
+  {
+    passwd_len= strlen(passwd);
+    db= passwd + passwd_len + 1;  /* +1 to skip null terminator */
+  }
+  else
+  {
+    if (thd->client_capabilities & CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA)
+    {
+      ulonglong len= safe_net_field_length_ll((uchar**)&passwd,
+                                              end - passwd);
+      if (!passwd || len > (ulonglong)(end - passwd))
+      {
+        my_message(ER_UNKNOWN_COM_ERROR, ER_THD(thd, ER_UNKNOWN_COM_ERROR),
+                   MYF(0));
+        DBUG_RETURN(1);
+      }
+      passwd_len= (size_t)len;
+    }
+    else
+      passwd_len= (uchar)(*passwd++);
+    if (passwd_len > (size_t)(end - passwd))
+    {
+      my_message(ER_UNKNOWN_COM_ERROR, ER_THD(thd, ER_UNKNOWN_COM_ERROR),
+                 MYF(0));
+      DBUG_RETURN(1);
+    }
+    db= passwd + passwd_len;
+  }
   /*
     Database name is always NUL-terminated, so in case of empty database
     the packet must contain at least the trailing '\0'.
@@ -13889,7 +13943,7 @@ static bool parse_com_change_user_packet(MPVIO_EXT *mpvio, uint packet_length)
     read_packet()
   */
   mpvio->cached_client_reply.pkt= passwd;
-  mpvio->cached_client_reply.pkt_len= passwd_len;
+  mpvio->cached_client_reply.pkt_len= (uint)passwd_len;
   mpvio->cached_client_reply.plugin= client_plugin;
   mpvio->status= MPVIO_EXT::RESTART;
 #endif
@@ -14016,24 +14070,30 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
     Cast *passwd to an unsigned char, so that it doesn't extend the sign for
     *passwd > 127 and become 2**32-127+ after casting to uint.
   */
-  ulonglong len;
   size_t passwd_len;
 
   if (!(thd->client_capabilities & CLIENT_SECURE_CONNECTION))
-    len= strlen(passwd);
+  {
+    passwd_len= strlen(passwd);
+    db= thd->client_capabilities & CLIENT_CONNECT_WITH_DB ?
+      passwd + passwd_len + 1 : 0;  /* +1 to skip null terminator */
+  }
   else if (!(thd->client_capabilities & CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA))
-    len= (uchar)(*passwd++);
+  {
+    passwd_len= (uchar)(*passwd++);
+    db= thd->client_capabilities & CLIENT_CONNECT_WITH_DB ?
+      passwd + passwd_len : 0;
+  }
   else
   {
-    len= safe_net_field_length_ll((uchar**)&passwd,
+    ulonglong len= safe_net_field_length_ll((uchar**)&passwd,
                                       net->read_pos + pkt_len - (uchar*)passwd);
     if (len > pkt_len)
       return packet_error;
+    passwd_len= (size_t)len;
+    db= thd->client_capabilities & CLIENT_CONNECT_WITH_DB ?
+      passwd + passwd_len : 0;
   }
-
-  passwd_len= (size_t)len;
-  db= thd->client_capabilities & CLIENT_CONNECT_WITH_DB ?
-    db + passwd_len + 1 : 0;
 
   if (passwd == NULL ||
       passwd + passwd_len + MY_TEST(db) > (char*) net->read_pos + pkt_len)

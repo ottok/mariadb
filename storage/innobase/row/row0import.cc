@@ -2577,6 +2577,15 @@ row_import_cfg_read_index_fields(
 		/* Include the NUL byte in the length. */
 		ulint	len = mach_read_from_4(ptr);
 
+		if (len == 0 || len > NAME_LEN + 1) {
+			ib_senderrf(
+				thd, IB_LOG_LEVEL_ERROR, ER_IO_READ_ERROR,
+				0UL, strerror(EINVAL),
+				"while reading .cfg field name length.");
+
+			return(DB_CORRUPTION);
+		}
+
 		byte*	name = UT_NEW_ARRAY_NOKEY(byte, len);
 
 		/* Trigger OOM */
@@ -2713,7 +2722,7 @@ row_import_read_index_data(
 		/* The NUL byte is included in the name length. */
 		ulint	len = mach_read_from_4(ptr);
 
-		if (len > OS_FILE_MAX_PATH) {
+		if (len == 0 || len > NAME_LEN + 1) {
 			ib_errf(thd, IB_LOG_LEVEL_ERROR,
 				ER_INNODB_INDEX_CORRUPT,
 				"Index name length (" ULINTPF ") is too long, "
@@ -2901,12 +2910,11 @@ row_import_read_columns(
 
 		ulint		len = mach_read_from_4(ptr);
 
-		/* FIXME: What is the maximum column name length? */
-		if (len == 0 || len > 128) {
-			ib_errf(thd, IB_LOG_LEVEL_ERROR,
-				ER_IO_READ_ERROR,
-				"Column name length " ULINTPF ", is invalid",
-				len);
+		if (len == 0 || len > NAME_LEN + 1) {
+			ib_senderrf(
+				thd, IB_LOG_LEVEL_ERROR, ER_IO_READ_ERROR,
+				0UL, strerror(EINVAL),
+				"while reading .cfg column name length.");
 
 			return(DB_CORRUPTION);
 		}
@@ -2972,6 +2980,15 @@ row_import_read_v1(
 
 	ulint	len = mach_read_from_4(value);
 
+	if (len == 0 || len > HOSTNAME_LENGTH + 1) {
+		ib_senderrf(
+			thd, IB_LOG_LEVEL_ERROR, ER_IO_READ_ERROR,
+			0UL, strerror(EINVAL),
+			"while reading .cfg hostname length.");
+
+		return(DB_CORRUPTION);
+	}
+
 	/* NUL byte is part of name length. */
 	cfg->m_hostname = UT_NEW_ARRAY_NOKEY(byte, len);
 
@@ -3013,6 +3030,15 @@ row_import_read_v1(
 	}
 
 	len = mach_read_from_4(value);
+
+	if (len == 0 || len > MAX_FULL_NAME_LEN + 1) {
+		ib_senderrf(
+			thd, IB_LOG_LEVEL_ERROR, ER_IO_READ_ERROR,
+			0UL, strerror(EINVAL),
+			"while reading .cfg table name length.");
+
+		return(DB_CORRUPTION);
+	}
 
 	/* NUL byte is part of name length. */
 	cfg->m_table_name = UT_NEW_ARRAY_NOKEY(byte, len);
@@ -4554,11 +4580,11 @@ static void row_import_autoinc(dict_table_t *table, row_prebuilt_t *prebuilt,
 @return DB_SUCCESS or error code */
 dberr_t update_vcol_pos(table_id_t table_id, ulint new_pos, trx_t *trx)
 {
+  DBUG_EXECUTE_IF("ib_import_vcol_update_fail",
+                  return DB_DUPLICATE_KEY;);
   pars_info_t *info= pars_info_create();
   pars_info_add_ull_literal(info, "id", table_id);
   pars_info_add_int4_literal(info, "old_pos", new_pos - 1);
-  DBUG_EXECUTE_IF("ib_import_vcol_update_fail",
-                  return DB_DUPLICATE_KEY;);
   return que_eval_sql(info,
                       "PROCEDURE UPDATE_VCOL () IS\n"
                       "BEGIN\n"
@@ -4616,6 +4642,8 @@ dberr_t innodb_insert_hidden_fts_col(dict_table_t* table,
 		      "(:idx_id, 1, 'FTS_DOC_ID');\n"
 		      "END;\n", trx);
 }
+
+PRAGMA_DISABLE_CHECK_STACK_FRAME
 
 /*****************************************************************//**
 Imports a tablespace. The space id in the .ibd file must match the space id
@@ -4985,3 +5013,5 @@ import_error:
 
 	return row_import_cleanup(prebuilt, err, table);
 }
+
+PRAGMA_REENABLE_CHECK_STACK_FRAME

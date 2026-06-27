@@ -1,12 +1,12 @@
 /* quic.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -72,7 +72,7 @@ static QuicRecord *quic_record_make(WOLFSSL *ssl,
 
     qr = (QuicRecord*)XMALLOC(sizeof(*qr), ssl->heap, DYNAMIC_TYPE_TMP_BUFFER);
     if (qr) {
-        memset(qr, 0, sizeof(*qr));
+        XMEMSET(qr, 0, sizeof(*qr));
         qr->level = level;
         if (level == wolfssl_encryption_early_data) {
             qr->capacity = qr->len = (word32)len;
@@ -184,13 +184,14 @@ static word32 add_rec_header(byte* output, word32 length, byte type)
 
 static sword32 quic_record_transfer(QuicRecord* qr, byte* buf, word32 sz)
 {
-    word32 len = qr->end - qr->start;
+    word32 len;
     word32 offset = 0;
     word32 rlen;
 
-    if (len <= 0) {
+    if (qr->end <= qr->start) {
         return 0;
     }
+    len = qr->end - qr->start;
 
     /* We check if the buf is at least RECORD_HEADER_SZ */
     if (sz < RECORD_HEADER_SZ) {
@@ -227,7 +228,7 @@ const QuicTransportParam* QuicTransportParam_new(const uint8_t* data,
 {
     QuicTransportParam* tp;
 
-    if (len > 65353) return NULL;
+    if (len > 65535) return NULL;
     tp = (QuicTransportParam*)XMALLOC(sizeof(*tp), heap, DYNAMIC_TYPE_TLSX);
     if (!tp) return NULL;
     tp->data = (uint8_t*)XMALLOC(len, heap, DYNAMIC_TYPE_TLSX);
@@ -430,7 +431,7 @@ int wolfSSL_get_peer_quic_transport_version(const WOLFSSL* ssl)
 {
     return ssl->quic.transport_peer ?
         TLSX_KEY_QUIC_TP_PARAMS : (ssl->quic.transport_peer_draft ?
-        TLSX_KEY_QUIC_TP_PARAMS : -1);
+        TLSX_KEY_QUIC_TP_PARAMS_DRAFT : -1);
 }
 
 
@@ -608,11 +609,6 @@ int wolfSSL_quic_do_handshake(WOLFSSL* ssl)
             else {
                 ret = wolfSSL_read_early_data(ssl, tmpbuffer,
                                               sizeof(tmpbuffer), &len);
-                if (ret < 0 && ssl->error == WC_NO_ERR_TRACE(ZERO_RETURN)) {
-                    /* this is expected, since QUIC handles the actual early
-                     * data separately. */
-                    ret = WOLFSSL_SUCCESS;
-                }
             }
             if (ret < 0) {
                 goto cleanup;
@@ -989,12 +985,16 @@ const WOLFSSL_EVP_CIPHER* wolfSSL_quic_get_aead(WOLFSSL* ssl)
 
     switch (cipher->cipherSuite) {
 #if !defined(NO_AES) && defined(HAVE_AESGCM)
+    #ifdef WOLFSSL_AES_128
         case TLS_AES_128_GCM_SHA256:
             evp_cipher = wolfSSL_EVP_aes_128_gcm();
             break;
+    #endif
+    #ifdef WOLFSSL_AES_256
         case TLS_AES_256_GCM_SHA384:
             evp_cipher = wolfSSL_EVP_aes_256_gcm();
             break;
+    #endif
 #endif
 #if defined(HAVE_CHACHA) && defined(HAVE_POLY1305)
         case TLS_CHACHA20_POLY1305_SHA256:
@@ -1115,9 +1115,7 @@ size_t wolfSSL_quic_get_aead_tag_len(const WOLFSSL_EVP_CIPHER* aead_cipher)
     }
 
     (void)wolfSSL_EVP_CIPHER_CTX_cleanup(ctx);
-#ifdef WOLFSSL_SMALL_STACK
-    XFREE(ctx, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-#endif
+    WC_FREE_VAR_EX(ctx, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
     return ret;
 }

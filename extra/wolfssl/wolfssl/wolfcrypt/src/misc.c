@@ -1,12 +1,12 @@
 /* misc.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -205,7 +205,7 @@ WC_MISC_STATIC WC_INLINE void ByteReverseWords(word32* out, const word32* in,
         }
     }
     else if (((size_t)out & 0x3) == 0) {
-        byte *in_bytes = (byte *)in;
+        const byte *in_bytes = (const byte *)in;
         word32 scratch;
 
         byteCount &= ~0x3U;
@@ -216,7 +216,7 @@ WC_MISC_STATIC WC_INLINE void ByteReverseWords(word32* out, const word32* in,
         }
     }
     else {
-        byte *in_bytes = (byte *)in;
+        const byte *in_bytes = (const byte *)in;
         byte *out_bytes = (byte *)out;
         word32 scratch;
 
@@ -234,7 +234,7 @@ WC_MISC_STATIC WC_INLINE void ByteReverseWords(word32* out, const word32* in,
 WC_MISC_STATIC WC_INLINE word32 readUnalignedWord32(const byte *in)
 {
     if (((wc_ptr_t)in & (wc_ptr_t)(sizeof(word32) - 1U)) == (wc_ptr_t)0)
-        return *(word32 *)in;
+        return *(const word32 *)in;
     else {
         word32 out = 0; /* else CONFIG_FORTIFY_SOURCE -Wmaybe-uninitialized */
         XMEMCPY(&out, in, sizeof(out));
@@ -283,7 +283,7 @@ WC_MISC_STATIC WC_INLINE void writeUnalignedWords32(byte *out, const word32 *in,
 WC_MISC_STATIC WC_INLINE word64 readUnalignedWord64(const byte *in)
 {
     if (((wc_ptr_t)in & (wc_ptr_t)(sizeof(word64) - 1U)) == (wc_ptr_t)0)
-        return *(word64 *)in;
+        return *(const word64 *)in;
     else {
         word64 out = 0; /* else CONFIG_FORTIFY_SOURCE -Wmaybe-uninitialized */
         XMEMCPY(&out, in, sizeof(out));
@@ -382,7 +382,7 @@ WC_MISC_STATIC WC_INLINE void ByteReverseWords64(word64* out, const word64* in,
         }
     }
     else if (((size_t)out & 0x7) == 0) {
-        byte *in_bytes = (byte *)in;
+        const byte *in_bytes = (const byte *)in;
         word64 scratch;
 
         byteCount &= ~0x7U;
@@ -393,7 +393,7 @@ WC_MISC_STATIC WC_INLINE void ByteReverseWords64(word64* out, const word64* in,
         }
     }
     else {
-        byte *in_bytes = (byte *)in;
+        const byte *in_bytes = (const byte *)in;
         byte *out_bytes = (byte *)out;
         word64 scratch;
 
@@ -415,7 +415,7 @@ WC_MISC_STATIC WC_INLINE void ByteReverseWords64(word64* out, const word64* in,
 /* Leave no doubt that WOLFSSL_WORD_SIZE is a power of 2. */
 wc_static_assert((WOLFSSL_WORD_SIZE & (WOLFSSL_WORD_SIZE - 1)) == 0);
 
-/* This routine performs a bitwise XOR operation of <*r> and <*a> for <n> number
+/* This routine performs a bitwise XOR operation of <*a> and <*b> for <n> number
 of wolfssl_words, placing the result in <*r>. */
 WC_MISC_STATIC WC_INLINE void XorWordsOut(wolfssl_word** r,
                        const wolfssl_word** a, const wolfssl_word** b, word32 n)
@@ -427,7 +427,7 @@ WC_MISC_STATIC WC_INLINE void XorWordsOut(wolfssl_word** r,
 }
 
 /* This routine performs a bitwise XOR operation of <*buf> and <*mask> of n
-counts, placing the result in <*buf>. */
+counts, placing the result in <*out>. */
 
 WC_MISC_STATIC WC_INLINE void xorbufout(void* out, const void* buf,
                                         const void* mask, word32 count)
@@ -587,32 +587,36 @@ WC_MISC_STATIC WC_INLINE void xorbuf(void* buf, const void* mask, word32 count)
 
 #ifndef WOLFSSL_NO_FORCE_ZERO
 /* This routine fills the first len bytes of the memory area pointed by mem
-   with zeros. It ensures compiler optimization doesn't skip it  */
-WC_MISC_STATIC WC_INLINE void ForceZero(void* mem, word32 len)
+   with zeros. It ensures compiler optimization doesn't skip it. */
+WC_MISC_STATIC WC_INLINE void ForceZero(void* mem, size_t len)
 {
-    volatile byte* z = (volatile byte*)mem;
+    byte *zb = (byte *)mem;
+    unsigned long *zl;
 
-#if (defined(WOLFSSL_X86_64_BUILD) || defined(WOLFSSL_AARCH64_BUILD)) \
-            && defined(WORD64_AVAILABLE)
-    volatile word64* w;
-    #ifndef WOLFSSL_UNALIGNED_64BIT_ACCESS
-        word32 l = (sizeof(word64) - ((size_t)z & (sizeof(word64)-1))) &
-                                                             (sizeof(word64)-1);
+    XFENCE();
 
-        if (len < l) l = len;
-        len -= l;
-        while (l--) *z++ = 0;
-    #endif
-        for (w = (volatile word64*)z;
-             len >= sizeof(*w);
-             len -= (word32)sizeof(*w))
-        {
-            *w++ = 0;
-        }
-    z = (volatile byte*)w;
-#endif
+    while ((wc_ptr_t)zb & (wc_ptr_t)(sizeof(unsigned long) - 1U)) {
+        if (len == 0)
+            return;
+        *zb++ = 0;
+        --len;
+    }
 
-    while (len--) *z++ = 0;
+    zl = (unsigned long *)zb;
+
+    while (len >= sizeof(unsigned long)) {
+        *zl++ = 0;
+        len -= sizeof(unsigned long);
+    }
+
+    zb = (byte *)zl;
+
+    while (len) {
+        *zb++ = 0;
+        --len;
+    }
+
+    XFENCE();
 }
 #endif
 
@@ -633,7 +637,14 @@ WC_MISC_STATIC WC_INLINE int ConstantCompare(const byte* a, const byte* b,
 }
 #endif
 
-#ifndef WOLFSSL_NO_CT_OPS
+
+#if defined(WOLFSSL_NO_CT_OPS) && (!defined(NO_RSA) || !defined(WOLFCRYPT_ONLY)) \
+    && (!defined(WOLFSSL_RSA_VERIFY_ONLY))
+/* constant time operations with mask are required for RSA and TLS operations */
+#warning constant time operations required unless using NO_RSA & WOLFCRYPT_ONLY
+#endif
+
+#if !defined(WOLFSSL_NO_CT_OPS) || !defined(NO_RSA) || !defined(WOLFCRYPT_ONLY)
 /* Constant time - mask set when a > b. */
 WC_MISC_STATIC WC_INLINE byte ctMaskGT(int a, int b)
 {
@@ -761,9 +772,12 @@ WC_MISC_STATIC WC_INLINE void ctMaskCopy(byte mask, byte* dst, byte* src,
     /* returns the smaller of a and b */
     WC_MISC_STATIC WC_INLINE word32 min(word32 a, word32 b)
     {
-#if !defined(WOLFSSL_NO_CT_OPS) && defined(WORD64_AVAILABLE)
-        word32 gte_mask = (word32)ctMaskWord32GTE(a, b);
-        return (a & ~gte_mask) | (b & gte_mask);
+#if !defined(WOLFSSL_NO_CT_OPS) && !defined(WOLFSSL_NO_CT_MAX_MIN) && \
+    defined(WORD64_AVAILABLE)
+        volatile word32 gte_mask = (word32)ctMaskWord32GTE(a, b);
+        word32 r = (a & ~gte_mask);
+        r |= (b & gte_mask);
+        return r;
 #else /* WOLFSSL_NO_CT_OPS */
         return a > b ? b : a;
 #endif /* WOLFSSL_NO_CT_OPS */
@@ -777,8 +791,9 @@ WC_MISC_STATIC WC_INLINE void ctMaskCopy(byte mask, byte* dst, byte* src,
     #endif
     WC_MISC_STATIC WC_INLINE word32 max(word32 a, word32 b)
     {
-#if !defined(WOLFSSL_NO_CT_OPS) && defined(WORD64_AVAILABLE)
-        word32 gte_mask = (word32)ctMaskWord32GTE(a, b);
+#if !defined(WOLFSSL_NO_CT_OPS) && !defined(WOLFSSL_NO_CT_MAX_MIN) && \
+    defined(WORD64_AVAILABLE)
+        volatile word32 gte_mask = (word32)ctMaskWord32GTE(a, b);
         return (a & gte_mask) | (b & ~gte_mask);
 #else /* WOLFSSL_NO_CT_OPS */
         return a > b ? a : b;
@@ -1001,9 +1016,12 @@ WC_MISC_STATIC WC_INLINE void ato64(const byte *in, w64wrapper *w64)
 #ifdef BIG_ENDIAN_ORDER
     XMEMCPY(&w64->n, in, sizeof(w64->n));
 #else
-    word64 _in;
-    XMEMCPY(&_in, in, sizeof(_in));
-    w64->n = ByteReverseWord64(_in);
+    union {
+        word64 w;
+        byte b[sizeof(word64)];
+    } _in;
+    XMEMCPY(_in.b, in, sizeof(_in));
+    w64->n = ByteReverseWord64(_in.w);
 #endif /* BIG_ENDIAN_ORDER */
 }
 

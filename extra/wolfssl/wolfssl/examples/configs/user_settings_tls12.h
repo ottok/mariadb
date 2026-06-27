@@ -1,12 +1,12 @@
 /* user_settings_tls12.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -44,7 +44,6 @@ extern "C" {
 #define WOLFSSL_USER_IO
 #define WOLFSSL_IGNORE_FILE_WARN /* ignore file includes not required */
 //#define WOLFSSL_SMALL_STACK /* option to reduce stack size, offload to heap */
-#define NO_FILESYSTEM
 #define NO_WRITEV
 #define NO_SIG_WRAPPER
 
@@ -133,6 +132,7 @@ extern "C" {
 #define NO_MD4
 #define NO_MD5
 #define NO_DES3
+#define NO_DES3_TLS_SUITES
 #define NO_PWDBASED
 #define WOLFSSL_NO_SHAKE128
 #define WOLFSSL_NO_SHAKE256
