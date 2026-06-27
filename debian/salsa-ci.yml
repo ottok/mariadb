@@ -1,21 +1,28 @@
 ---
-# Include Salsa-CI as a base
+# Include Salsa CI as a base
 include:
-  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/salsa-ci.yml
-  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/pipeline-jobs.yml
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/recipes/debian.yml
 
-# Override Salsa-CI with MariaDB specific variations
+# Override Salsa CI defaults with MariaDB specific variations
 variables:
+  RELEASE: bookworm
   BUILT_PACKAGES: "libmariadb-dev libmariadb-dev-compat libmariadb3 libmariadbd19 libmariadbd-dev mariadb-common mariadb-client mariadb-server mariadb-backup mariadb-plugin-connect mariadb-plugin-s3 mariadb-plugin-rocksdb mariadb-plugin-oqgraph mariadb-plugin-mroonga mariadb-plugin-spider mariadb-plugin-cracklib-password-check mariadb-test mariadb-test-data"
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
-  RELEASE: bookworm
+  # The jobs build-package-any nd build-package-all work, but they can take 2h+
+  # for MariaDB and provide little value as changes to debian/control
+  # `Architecture` and `Multi-Arch` stanzas are rare.
+  SALSA_CI_DISABLE_BUILD_PACKAGE_ALL: 1
+  SALSA_CI_DISABLE_BUILD_PACKAGE_ANY: 1
   # Reprotest works, but takes very long time and often fails due to timeouts.
-  # Thus is is best kept disabled and only occasionally manually enabled to
+  # Thus is best kept disabled and only occasionally manually enabled to
   # test that reproducibility works, along with atomic reprotest to directly
   # pinpoint what aspect of the build is broken if not reproducible.
   SALSA_CI_DISABLE_REPROTEST: 1
   SALSA_CI_ENABLE_ATOMIC_REPROTEST: 0
-  SALSA_CI_DISABLE_MISSING_BREAKS: 0
+  # Debrebuild works, but it too takes very long time and timeouts, so better to
+  # have it disabled by default and only run occasionally when specifically
+  # debugging reproducibility issues.
+  SALSA_CI_DISABLE_DEBREBUILD: 1
   SALSA_CI_DISABLE_RC_BUGS: 0
   # Make Lintian and Piuparts use ${RELEASE} so our commits get tested against
   # the correct release before making an upload to that release
@@ -28,37 +35,16 @@ variables:
   # Extend Salsa CI build jobs to have longer timeout as the default GitLab
   # timeout (1h) is often not enough
   timeout: 3h
-  # Default 5G sporadically fails builds on not having enough disk space
-  variables:
-    CCACHE_MAXSIZE: 3G
-  # Salsa instance runners typically have 30G volumes with 14G free disk space
-  before_script:
-    - echo "Total and free disk space:"
-    - df -h .
 
 stages:
   - provisioning
   - build
-  - test
+  - test  # Stage referenced by Salsa CI template reprotest stanza, so must exist
   - upgrade MariaDB
   - upgrade MariaDB and distro
   - upgrade MariaDB variant
   - test extras
-  - publish # Stage referenced by Salsa-CI template aptly stanza, so must exist even though not used
-
-gnitpick:
-  stage: provisioning
-  image: debian:sid-slim
-  script: |
-    # Bare minimal (<4MB) for apt-key and gnitpick to work
-    apt-get update -qq && apt-get -qq install --no-install-recommends --yes ca-certificates curl python3-minimal git
-    curl -sS https://raw.githubusercontent.com/Seravo/gnitpick/master/gnitpick.py -o /usr/bin/gnitpick; chmod +x /usr/bin/gnitpick
-    # Actual Gnitpick part
-    gnitpick --target-repository https://salsa.debian.org/mariadb-team/mariadb-server.git --target-branch debian/latest
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
-  allow_failure: true  # Gnitpick does not fully support this branch naming scheme so ignore it for now
+  - publish  # Stage referenced by Salsa CI template aptly stanza, so must exist even though not used
 
 packaging-fix-checks:
   stage: provisioning
@@ -98,9 +84,6 @@ packaging-fix-checks:
 # Buster only has libfmt 6.1 but 7.0 is required, so backport build for Buster
 # is not possible unless somebody packages libfmt7-dev for Buster.
 
-test-crossbuild-arm64:
-  stage: build
-
 autopkgtest:
   extends: .test-autopkgtest
   artifacts:
@@ -118,9 +101,11 @@ blhc:
 # Define snippets used to construct jobs
 
 .test-prepare-container: &test-prepare-container |
-  cd ${WORKING_DIR} # Don't repeat this step, it's just cd ./debian/output
+  # Prepare container for use in CI
+  # Change directory to ./debian/output where build artifacts can be found
+  cd ${WORKING_DIR}
   # Enable automatic restarts from maint scripts
-  sed -i "s/101/0/g" -i /usr/sbin/policy-rc.d
+  sed -i "s/101/0/g" /usr/sbin/policy-rc.d
   # Fake /sbin/runlevel to avoid warnings of "invoke-rc.d: could not determine current runlevel"
   echo -e '#!/bin/sh\necho "N 5"' > /sbin/runlevel; chmod +x /sbin/runlevel
   # Avoid the warnings of "debconf: unable to initialize frontend: Dialog"
@@ -157,7 +142,7 @@ blhc:
   apt-get -qq install --no-install-recommends --yes ./libssl1.1_1.1.1o-1_amd64.deb
 
 .test-verify-initial: &test-verify-initial |
-  dpkg -l | grep -iE 'maria|mysql|galera' || true # List installed
+  dpkg -l | grep -iE 'maria|mysql|galera' || true  # List installed
   # MariaDB until 10.5 only had 'mysql', and since only 'mariadb', so try both
   service mysql status || service mariadb status
   mysql --skip-column-names -e "select @@version, @@version_comment" # Show version
@@ -201,10 +186,16 @@ blhc:
   apt-get update -qq
 
 .test-enable-artifacts-repo: &test-enable-artifacts-repo |
-  apt-get install -y apt-utils
+  # Show an ordered file listing that is easy to compare across builds and an be
+  # verified from logs that correct artifacts are present
+  find -maxdepth 3 -printf '%M %4u %4g %10s %TY-%Tm-%Td %TH:%TM %p\n' | sort -k 7
+  # Delete any custom pinning thay may have been used to install initial packages
+  rm -rfv /etc/apt/preferences.d/mariadb
+  apt-get install -qq --yes apt-utils
   apt-ftparchive packages . > Packages
+  apt-ftparchive release . > Release
   echo "deb [trusted=yes] file:$(pwd) ./" > /etc/apt/sources.list.d/mariadb-local.list
-  apt-get update
+  apt-get update -q
 
 .test-install-all: &test-install-all
   - *test-enable-artifacts-repo
@@ -253,6 +244,13 @@ blhc:
   mariadb --table -e "SHOW PLUGINS;" mysql
   # Test that InnoDB works and that command 'mysql' is also still usable
   mysql -e "CREATE DATABASE test; USE test; CREATE TABLE t(a INT PRIMARY KEY) ENGINE=INNODB; INSERT INTO t VALUEs (1); SELECT * FROM t; DROP TABLE t; DROP DATABASE test;"
+  mariadb --version
+  dpkg -l | grep -iE 'maria|mysql|galera' || true  # List installed
+  dpkg -l | grep mariadb | grep salsaci || {
+    echo "ERROR! MariaDB was not upgraded from artifacts"
+    find -maxdepth 3 -printf '%M %4u %4g %10s %TY-%Tm-%Td %TH:%TM %p\n' | sort -k 7
+    exit 1
+  }
 
 .test-verify-libs: &test-verify-libs
   # Don't use a collapsed command as Gitlab-CI would hide each command from the output
@@ -261,7 +259,7 @@ blhc:
   - pkg-config --cflags --libs mysqlclient
   - pkg-config --cflags --libs libmariadb
   - pkg-config --cflags --libs mariadb
-  - apt-get install -y --no-install-recommends g++
+  - apt-get install -qq --yes --no-install-recommends g++
   - |
     # Build a test binary that depends on libmysqlclient
     cat > b933063.cpp <<EOF
@@ -289,7 +287,7 @@ blhc:
       return 0;
     }
     EOF
-    apt-get install -y ./*.deb # Server must be installed for client to connect
+    apt-get install -q --yes ./*.deb # Server must be installed for client to connect
     echo "Testing -l mysqlclient"
     g++ b933063.cpp -l mysqlclient && ./a.out | tee result
     if grep --quiet latin result; then echo "ERROR: Charset latin found!"; exit 1; fi
@@ -328,11 +326,11 @@ blhc:
     EOF
     g++ b1031863.cpp -l mysqlclient && ./a.out
 
-
 .salsa-ci-template-for-mariadb:
   stage: test
   needs:
     - job: build
+      artifacts: true
   image: debian:${RELEASE}
   artifacts:
     when: always
@@ -343,14 +341,17 @@ blhc:
     - echo "This script section must be overridden in each test" && exit 1
   variables:
     GIT_STRATEGY: none
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+  rules:
+    # Do not create a pipeline for tags unless SALSA_CI_ENABLE_PIPELINE_ON_TAGS is set
+    - if: $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+      when: never
+    - when: always
 
 .salsa-ci-template-for-mariadb-upgrade:
   stage: test
   needs:
     - job: build
+      artifacts: true
   image: debian:${RELEASE}
   artifacts:
     when: always
@@ -363,7 +364,7 @@ blhc:
     - |
       [[ -d /etc/apt/keyrings ]] || mkdir /etc/apt/keyrings
       curl -sS https://mariadb.org/mariadb_release_signing_key.pgp -o /etc/apt/keyrings/mariadb-keyring.pgp
-      cat >/etc/apt/sources.list.d/mariadb.sources <<EOF
+      cat > /etc/apt/sources.list.d/mariadb.sources <<EOF
       X-Repolib-Name: MariaDB
       Types: deb
       URIs: https://archive.mariadb.org/mariadb-${MARIADB_VERSION}/repo/debian
@@ -376,9 +377,11 @@ blhc:
     - echo "This script section must be overridden in each test" && exit 1
   variables:
     GIT_STRATEGY: none
-  except:
-    variables:
-      - $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+  rules:
+    # Do not create a pipeline for tags unless SALSA_CI_ENABLE_PIPELINE_ON_TAGS is set
+    - if: $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
+      when: never
+    - when: always
 
 fresh install:
   extends: .salsa-ci-template-for-mariadb
@@ -596,16 +599,3 @@ mariadb.org-10.11 upgrade:
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
-mariadb.org-10.10 upgrade:
-  extends: .salsa-ci-template-for-mariadb-upgrade
-  stage: upgrade MariaDB variant
-  variables:
-    MARIADB_VERSION: "10.10"
-    RELEASE: sid
-  script:
-    # this should not use Sid to begin with
-    - apt-get install -y mariadb-server=1:10.10.2+maria~debunstable mariadb-client=1:10.10.2+maria~debunstable
-    - *test-verify-initial
-    - *test-full-upgrade
-    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-final
