@@ -22,12 +22,13 @@ this program; if not, write to the Free Software Foundation, Inc.,
 Smart ALTER TABLE
 *******************************************************/
 
+#define MYSQL_SERVER
 /* Include necessary SQL headers */
 #include "univ.i"
 #include <debug_sync.h>
 #include <log.h>
-#include <sql_lex.h>
 #include <sql_class.h>
+#include <sql_lex.h>
 #include <sql_table.h>
 #include <mysql/plugin.h>
 #include <strfunc.h>
@@ -1560,9 +1561,8 @@ static bool alter_options_need_rebuild(
 			*ha_alter_info->create_info->option_struct;
 	const ha_table_option_struct& opt= *table->s->option_struct;
 
-	/* Allow an instant change to enable page_compressed,
-	and any change of page_compression_level. */
-	if ((!alt_opt.page_compressed && opt.page_compressed)
+	/* Allow an instant change of page_compression_level. */
+	if ((alt_opt.page_compressed != opt.page_compressed)
 	    || alt_opt.encryption != opt.encryption
 	    || alt_opt.encryption_key_id != opt.encryption_key_id) {
 		return(true);
@@ -2226,6 +2226,8 @@ ha_innobase::check_if_supported_inplace_alter(
 {
 	DBUG_ENTER("check_if_supported_inplace_alter");
 
+	ha_alter_info->file_per_table= !!srv_file_per_table;
+
 	if ((ha_alter_info->handler_flags
 	     & INNOBASE_ALTER_VERSIONED_REBUILD)
 	    && altered_table->versioned(VERS_TIMESTAMP)) {
@@ -2340,7 +2342,8 @@ innodb_instant_alter_column_allowed_reason:
 
 	switch (ha_alter_info->handler_flags & ~INNOBASE_INPLACE_IGNORE) {
 	case ALTER_OPTIONS:
-		if ((srv_file_per_table && !m_prebuilt->table->space_id)
+		if ((ha_alter_info->file_per_table &&
+		     !m_prebuilt->table->space_id)
 		    || alter_options_need_rebuild(ha_alter_info, table)) {
 			reason_rebuild = my_get_err_msg(
 				ER_ALTER_OPERATION_TABLE_OPTIONS_NEED_REBUILD);
@@ -3246,7 +3249,7 @@ innobase_get_foreign_key_info(
 	char*		referenced_table_name = NULL;
 	ulint		num_fk = 0;
 	Alter_info*	alter_info = ha_alter_info->alter_info;
-	const CHARSET_INFO*	cs = thd_charset(trx->mysql_thd);
+	const CHARSET_INFO*	cs = trx->mysql_thd->charset();
 	char db_name[MAX_DATABASE_NAME_LEN + 1];
 	char t_name[MAX_TABLE_NAME_LEN + 1];
 	static_assert(MAX_TABLE_NAME_LEN == MAX_DATABASE_NAME_LEN, "");
@@ -4387,8 +4390,11 @@ static void unlock_and_close_files(const std::vector<pfs_os_file_t> &deleted,
   row_mysql_unlock_data_dictionary(trx);
   for (pfs_os_file_t d : deleted)
     os_file_close(d);
-  if (trx->commit_lsn)
-    log_write_up_to(trx->commit_lsn, true);
+  if (lsn_t lsn= trx->commit_lsn)
+  {
+    trx->commit_lsn= 0;
+    log_write_up_to(lsn, true);
+  }
 }
 
 /** Commit a DDL transaction and unlink any deleted files. */
@@ -6616,7 +6622,7 @@ prepare_inplace_alter_table_dict(
 
 	create_table_info_t info(ctx->prebuilt->trx->mysql_thd, altered_table,
 				 ha_alter_info->create_info, NULL, NULL,
-				 srv_file_per_table);
+				 ha_alter_info->file_per_table);
 
 	/* The primary index would be rebuilt if a FTS Doc ID
 	column is to be added, and the primary index definition
@@ -6706,7 +6712,7 @@ acquire_lock:
 		if (innobase_check_foreigns(
 			    ha_alter_info, old_table,
 			    user_table, ctx->drop_fk, ctx->num_to_drop_fk,
-			    thd_is_strict_mode(ctx->trx->mysql_thd))) {
+			    ctx->trx->mysql_thd->is_strict_mode())) {
 new_clustered_failed:
 			DBUG_ASSERT(ctx->trx != ctx->prebuilt->trx);
 			ctx->trx->rollback();
@@ -8047,7 +8053,7 @@ ha_innobase::prepare_inplace_alter_table(
 				     ha_alter_info->create_info,
 				     NULL,
 				     NULL,
-				     srv_file_per_table);
+				     ha_alter_info->file_per_table);
 
 	info.set_tablespace_type(indexed_table->space != fil_system.sys_space);
 
@@ -8632,7 +8638,7 @@ field_changed:
 					heap, indexed_table,
 					col_names, ULINT_UNDEFINED, 0, 0,
 					(ha_alter_info->ignore
-					 || !thd_is_strict_mode(m_user_thd)),
+					 || !m_user_thd->is_strict_mode()),
 					alt_opt.page_compressed,
 					alt_opt.page_compression_level);
 			ha_alter_info->handler_ctx = ctx;
@@ -8648,15 +8654,6 @@ field_changed:
 		     & ALTER_ADD_VIRTUAL_COLUMN)
 		    && prepare_inplace_add_virtual(
 			    ha_alter_info, altered_table, table)) {
-			DBUG_RETURN(true);
-		}
-
-		if ((ha_alter_info->handler_flags & ALTER_OPTIONS)
-		    && ctx->page_compression_level
-		    && !ctx->old_table->not_redundant()) {
-			my_error(ER_ILLEGAL_HA_CREATE_OPTION, MYF(0),
-				 table_type(),
-				 "PAGE_COMPRESSED=1 ROW_FORMAT=REDUNDANT");
 			DBUG_RETURN(true);
 		}
 
@@ -8788,7 +8785,7 @@ found_col:
 		add_autoinc_col_no,
 		ha_alter_info->create_info->auto_increment_value,
 		autoinc_col_max_value,
-		ha_alter_info->ignore || !thd_is_strict_mode(m_user_thd),
+		ha_alter_info->ignore || !m_user_thd->is_strict_mode(),
 		alt_opt.page_compressed, alt_opt.page_compression_level);
 
 	if (!prepare_inplace_alter_table_dict(
@@ -8818,9 +8815,7 @@ alter_templ_needs_rebuild(
 	const Alter_inplace_info*     ha_alter_info,
 	const dict_table_t*		table)
 {
-        ulint	i = 0;
-
-	for (Field** fp = altered_table->field; *fp; fp++, i++) {
+	for (Field** fp = altered_table->field; *fp; fp++) {
 		for (const Create_field& cf :
 		     ha_alter_info->alter_info->create_list) {
 			for (ulint j=0; j < table->n_cols; j++) {
@@ -9334,6 +9329,7 @@ inline bool rollback_inplace_alter_table(Alter_inplace_info *ha_alter_info,
   {
 free_and_exit:
     DBUG_ASSERT(ctx->prebuilt == prebuilt);
+    ut_d(ctx->trx->commit_lsn= 0);
     ctx->trx->free();
     ctx->trx= nullptr;
 
@@ -9684,13 +9680,11 @@ innobase_rename_columns_try(
 	trx_t*			trx,
 	const char*		table_name)
 {
-	uint	i = 0;
-
 	DBUG_ASSERT(ctx->need_rebuild());
 	DBUG_ASSERT(ha_alter_info->handler_flags
 		    & ALTER_COLUMN_NAME);
 
-	for (Field** fp = table->field; *fp; fp++, i++) {
+	for (Field** fp = table->field; *fp; fp++) {
 		if (!((*fp)->flags & FIELD_IS_RENAMED)) {
 			continue;
 		}
@@ -11198,7 +11192,7 @@ Remove statistics for dropped indexes, add statistics for created indexes
 and rename statistics for renamed indexes.
 @param ha_alter_info Data used during in-place alter
 @param ctx In-place ALTER TABLE context
-@param thd MySQL connection
+@param thd alter table thread
 */
 static
 void
@@ -11225,46 +11219,6 @@ alter_stats_norebuild(
 		if (!(index->type & DICT_FTS)) {
 			dict_stats_update_for_index(index);
 		}
-	}
-
-	DBUG_VOID_RETURN;
-}
-
-/** Adjust the persistent statistics after rebuilding ALTER TABLE.
-Remove statistics for dropped indexes, add statistics for created indexes
-and rename statistics for renamed indexes.
-@param table InnoDB table that was rebuilt by ALTER TABLE
-@param table_name Table name in MySQL
-@param thd MySQL connection
-*/
-static
-void
-alter_stats_rebuild(
-/*================*/
-	dict_table_t*	table,
-	const char*	table_name,
-	THD*		thd)
-{
-	DBUG_ENTER("alter_stats_rebuild");
-
-	if (!table->space || !table->stats_is_persistent()
-	    || dict_stats_persistent_storage_check(false) != SCHEMA_OK) {
-		DBUG_VOID_RETURN;
-	}
-
-	dberr_t	ret = dict_stats_update_persistent(table);
-	if (ret == DB_SUCCESS) {
-		ret = dict_stats_save(table);
-	}
-
-	if (ret != DB_SUCCESS) {
-		push_warning_printf(
-			thd,
-			Sql_condition::WARN_LEVEL_WARN,
-			ER_ALTER_INFO,
-			"Error updating stats for table '%s'"
-			" after table rebuild: %s",
-			table_name, ut_strerr(ret));
 	}
 
 	DBUG_VOID_RETURN;
@@ -11940,9 +11894,7 @@ foreign_fail:
 				(*pctx);
 			DBUG_ASSERT(ctx->need_rebuild());
 
-			alter_stats_rebuild(
-				ctx->new_table, table->s->table_name.str,
-				m_user_thd);
+			alter_stats_rebuild(ctx->new_table, m_user_thd, false);
 		}
 	} else {
 		for (inplace_alter_handler_ctx** pctx = ctx_array;

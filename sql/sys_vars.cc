@@ -80,6 +80,8 @@
 */
 #define export /* not static */
 
+PRAGMA_DISABLE_CHECK_STACK_FRAME
+
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
 
 static Sys_var_mybool Sys_pfs_enabled(
@@ -1685,7 +1687,7 @@ static Sys_var_ulong Sys_max_allowed_packet(
        "max_allowed_packet",
        "Max packet length to send to or receive from the server",
        SESSION_VAR(max_allowed_packet), CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(1024, 1024*1024*1024), DEFAULT(16*1024*1024),
+       VALID_RANGE(1024, MAX_MAX_ALLOWED_PACKET), DEFAULT(16*1024*1024),
        BLOCK_SIZE(1024), NO_MUTEX_GUARD, NOT_IN_BINLOG,
        ON_CHECK(check_max_allowed_packet));
 
@@ -2995,7 +2997,9 @@ static const char *adjust_secondary_key_cost[]=
 {
   "adjust_secondary_key_cost", "disable_max_seek", "disable_forced_index_in_group_by",
   "fix_innodb_cardinality", "fix_reuse_range_for_ref",
-  "fix_card_multiplier", "fix_derived_table_read_cost", 0
+  "fix_card_multiplier", "fix_derived_table_read_cost",
+  "fix_order_by_index_choice",
+  0
 };
 
 
@@ -4202,7 +4206,7 @@ static Sys_var_on_access_global<Sys_var_enum,
 Sys_thread_pool_priority(
   "thread_pool_priority",
   "Threadpool priority. High priority connections usually start executing earlier than low priority."
-  "If priority set to 'auto', the the actual priority(low or high) is determined based on whether or not connection is inside transaction.",
+  "If priority set to 'auto', the actual priority(low or high) is determined based on whether or not connection is inside transaction.",
   SESSION_VAR(threadpool_priority), CMD_LINE(REQUIRED_ARG),
   threadpool_priority_names, DEFAULT(TP_PRIORITY_AUTO));
 
@@ -4804,7 +4808,7 @@ static Sys_var_bit Sys_foreign_key_checks(
        " (including ON UPDATE and ON DELETE behavior) InnoDB tables are checked,"
        " while if set to 0, they are not checked. 0 is not recommended for normal "
        "use, though it can be useful in situations where you know the data is "
-       "consistent, but want to reload data in a different order from that that "
+       "consistent, but want to reload data in a different order from that "
        "specified by parent/child relationships. Setting this variable to 1 does "
        "not retrospectively check for inconsistencies introduced while set to 0.",
        SESSION_VAR(option_bits), NO_CMD_LINE,
@@ -5083,7 +5087,8 @@ static Sys_var_uint Sys_group_concat_max_len(
        "group_concat_max_len",
        "The maximum length of the result of function GROUP_CONCAT()",
        SESSION_VAR(group_concat_max_len), CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(4, UINT_MAX32), DEFAULT(1024*1024), BLOCK_SIZE(1));
+       VALID_RANGE(4, MAX_MAX_ALLOWED_PACKET), DEFAULT(1024*1024),
+       BLOCK_SIZE(1));
 
 static char *glob_hostname_ptr;
 static Sys_var_charptr Sys_hostname(
@@ -5131,10 +5136,7 @@ static Sys_var_uint Sys_repl_report_port(
 static Sys_var_mybool Sys_keep_files_on_create(
        "keep_files_on_create",
        "Don't overwrite stale .MYD and .MYI even if no directory is specified",
-       SESSION_VAR(keep_files_on_create), CMD_LINE(OPT_ARG),
-       DEFAULT(FALSE),
-       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0), ON_UPDATE(0),
-       DEPRECATED("")); // since 10.8.0
+       SESSION_VAR(keep_files_on_create), CMD_LINE(OPT_ARG), DEFAULT(FALSE));
 
 static char *license;
 static Sys_var_charptr Sys_license(
@@ -6078,7 +6080,7 @@ static Sys_var_ulong Sys_wsrep_slave_threads(
        GLOBAL_VAR(wsrep_slave_threads), CMD_LINE(REQUIRED_ARG),
        VALID_RANGE(1, 512), DEFAULT(1), BLOCK_SIZE(1),
        NO_MUTEX_GUARD, NOT_IN_BINLOG,
-       ON_CHECK(0),
+       ON_CHECK(wsrep_slave_threads_check),
        ON_UPDATE(wsrep_slave_threads_update));
 
 static Sys_var_charptr Sys_wsrep_dbug_option(
@@ -6213,7 +6215,7 @@ static Sys_var_charptr Sys_wsrep_start_position (
        CMD_LINE(REQUIRED_ARG),
        DEFAULT(WSREP_START_POSITION_ZERO),
        NO_MUTEX_GUARD, NOT_IN_BINLOG,
-       ON_CHECK(wsrep_start_position_check), 
+       ON_CHECK(wsrep_start_position_check),
        ON_UPDATE(wsrep_start_position_update));
 
 static Sys_var_ulong Sys_wsrep_max_ws_size (
@@ -6226,7 +6228,9 @@ static Sys_var_ulong Sys_wsrep_max_ws_size (
 static Sys_var_ulong Sys_wsrep_max_ws_rows (
        "wsrep_max_ws_rows", "Max number of rows in write set",
        GLOBAL_VAR(wsrep_max_ws_rows), CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(0, 1048576), DEFAULT(0), BLOCK_SIZE(1));
+       VALID_RANGE(0, 1048576), DEFAULT(0),
+       BLOCK_SIZE(1), NO_MUTEX_GUARD, NOT_IN_BINLOG,
+       ON_CHECK(wsrep_max_ws_rows_check), ON_UPDATE(0));
 
 static Sys_var_charptr Sys_wsrep_notify_cmd(
        "wsrep_notify_cmd", "",
@@ -6351,9 +6355,10 @@ static Sys_var_mybool Sys_wsrep_load_data_splitting(
 
 static Sys_var_mybool Sys_wsrep_slave_FK_checks(
        "wsrep_slave_FK_checks", "Should slave thread do "
-       "foreign key constraint checks",
+       "foreign key constraint checks (deprecated, has no effect)",
        GLOBAL_VAR(wsrep_slave_FK_checks), 
-       CMD_LINE(OPT_ARG), DEFAULT(TRUE));
+       CMD_LINE(OPT_ARG), DEFAULT(TRUE), NO_MUTEX_GUARD, NOT_IN_BINLOG,
+       ON_CHECK(0), ON_UPDATE(0), DEPRECATED("")); // since 10.6.26
 
 static Sys_var_mybool Sys_wsrep_slave_UK_checks(
        "wsrep_slave_UK_checks", "Should slave thread do "
@@ -6385,7 +6390,7 @@ static Sys_var_enum Sys_wsrep_trx_fragment_unit(
       wsrep_fragment_units,
       DEFAULT(WSREP_FRAG_BYTES),
       NO_MUTEX_GUARD, NOT_IN_BINLOG,
-      ON_CHECK(0),
+      ON_CHECK(wsrep_trx_fragment_unit_check),
       ON_UPDATE(wsrep_trx_fragment_unit_update));
 
 extern const char *wsrep_SR_store_types[];

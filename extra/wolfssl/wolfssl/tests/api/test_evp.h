@@ -1,12 +1,12 @@
 /* test_evp.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -22,7 +22,25 @@
 #ifndef WOLFSSL_TEST_EVP_H
 #define WOLFSSL_TEST_EVP_H
 
-int test_wolfSSL_EVP_CipherUpdate_Null(void);
-int test_wolfSSL_EVP_CIPHER_type_string(void);
+#include <tests/api/api_decl.h>
+
+int test_wolfSSL_EVP_ENCODE_CTX_new(void);
+int test_wolfSSL_EVP_ENCODE_CTX_free(void);
+int test_wolfSSL_EVP_EncodeInit(void);
+int test_wolfSSL_EVP_EncodeUpdate(void);
+int test_wolfSSL_EVP_EncodeFinal(void);
+int test_wolfSSL_EVP_DecodeInit(void);
+int test_wolfSSL_EVP_DecodeUpdate(void);
+int test_wolfSSL_EVP_DecodeFinal(void);
+
+#define TEST_EVP_ENC_DECLS                                          \
+    TEST_DECL_GROUP("evp_enc", test_wolfSSL_EVP_ENCODE_CTX_new),    \
+    TEST_DECL_GROUP("evp_enc", test_wolfSSL_EVP_ENCODE_CTX_free),   \
+    TEST_DECL_GROUP("evp_enc", test_wolfSSL_EVP_EncodeInit),        \
+    TEST_DECL_GROUP("evp_enc", test_wolfSSL_EVP_EncodeUpdate),      \
+    TEST_DECL_GROUP("evp_enc", test_wolfSSL_EVP_EncodeFinal),       \
+    TEST_DECL_GROUP("evp_enc", test_wolfSSL_EVP_DecodeInit),        \
+    TEST_DECL_GROUP("evp_enc", test_wolfSSL_EVP_DecodeUpdate),      \
+    TEST_DECL_GROUP("evp_enc", test_wolfSSL_EVP_DecodeFinal)
 
 #endif /* WOLFSSL_TEST_EVP_H */

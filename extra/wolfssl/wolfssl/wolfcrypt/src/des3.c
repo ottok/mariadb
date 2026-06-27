@@ -1,12 +1,12 @@
 /* des3.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -17,6 +17,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
+/*
+ * DES3 Build Options:
+ *
+ * NO_DES3:                  Disable 3DES support entirely         default: off
+ * WOLFSSL_DES_ECB:          Enable DES-ECB mode                   default: off
+ *
+ * Hardware Acceleration (DES3-specific):
+ * WC_ASYNC_ENABLE_3DES:     Enable async 3DES operations          default: off
+ * FREESCALE_LTC_DES:        Freescale LTC DES acceleration        default: off
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
@@ -1591,9 +1602,7 @@
                 }
             }
 
-    #ifdef WOLFSSL_SMALL_STACK
-            XFREE(buffer, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    #endif
+            WC_FREE_VAR_EX(buffer, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         }
 
         return 0;
@@ -1677,7 +1686,7 @@
 
     static void DesProcessBlock(Des* des, const byte* in, byte* out)
     {
-        word32 l, r;
+        word32 l = 0, r = 0;
 
         XMEMCPY(&l, in, sizeof(l));
         XMEMCPY(&r, in + sizeof(l), sizeof(r));
@@ -1700,7 +1709,7 @@
 
     static void Des3ProcessBlock(Des3* des, const byte* in, byte* out)
     {
-        word32 l, r;
+        word32 l = 0, r = 0;
 
         XMEMCPY(&l, in, sizeof(l));
         XMEMCPY(&r, in + sizeof(l), sizeof(r));
@@ -1727,6 +1736,10 @@
     {
         word32 blocks = sz / DES_BLOCK_SIZE;
 
+        if (des == NULL || out == NULL || in == NULL) {
+            return BAD_FUNC_ARG;
+        }
+
         while (blocks--) {
             xorbuf((byte*)des->reg, in, DES_BLOCK_SIZE);
             DesProcessBlock(des, (byte*)des->reg, (byte*)des->reg);
@@ -1741,6 +1754,10 @@
     int wc_Des_CbcDecrypt(Des* des, byte* out, const byte* in, word32 sz)
     {
         word32 blocks = sz / DES_BLOCK_SIZE;
+
+        if (des == NULL || out == NULL || in == NULL) {
+            return BAD_FUNC_ARG;
+        }
 
         while (blocks--) {
             XMEMCPY(des->tmp, in, DES_BLOCK_SIZE);

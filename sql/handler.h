@@ -1071,7 +1071,10 @@ enum enum_schema_tables
   SCH_TABLE_PRIVILEGES,
   SCH_TRIGGERS,
   SCH_USER_PRIVILEGES,
-  SCH_VIEWS
+  SCH_VIEWS,
+
+  SCH_N_SERVER_TABLES, /* How many SCHEMA tables in the server. */
+  SCH_PLUGIN_TABLE     /* Schema table defined in plugin. */
 };
 
 struct TABLE_SHARE;
@@ -2498,20 +2501,11 @@ public:
   */
   KEY  *key_info_buffer;
 
-  /** Size of key_info_buffer array. */
-  uint key_count;
-
-  /** Size of index_drop_buffer array. */
-  uint index_drop_count= 0;
-
   /**
      Array of pointers to KEYs to be dropped belonging to the TABLE instance
      for the old version of the table.
   */
   KEY  **index_drop_buffer= nullptr;
-
-  /** Size of index_add_buffer array. */
-  uint index_add_count= 0;
 
   /**
      Array of indexes into key_info_buffer for KEYs to be added,
@@ -2520,32 +2514,6 @@ public:
   uint *index_add_buffer= nullptr;
 
   KEY_PAIR  *index_altered_ignorability_buffer= nullptr;
-
-  /** Size of index_altered_ignorability_buffer array. */
-  uint index_altered_ignorability_count= 0;
-
-  /**
-     Old and new index names. Used for index rename.
-  */
-  struct Rename_key_pair
-  {
-    Rename_key_pair(const KEY *old_key, const KEY *new_key)
-        : old_key(old_key), new_key(new_key)
-    {
-    }
-    const KEY *old_key;
-    const KEY *new_key;
-  };
-  /**
-     Vector of key pairs from DROP/ADD index which can be renamed.
-  */
-  typedef Mem_root_array<Rename_key_pair, true> Rename_keys_vector;
-
-  /**
-     A list of indexes which should be renamed.
-     Index definitions stays the same.
-  */
-  Rename_keys_vector rename_keys;
 
   /**
      Context information to allow handlers to keep context between in-place
@@ -2573,9 +2541,6 @@ public:
   */
   alter_table_operations handler_flags= 0;
 
-  /* Alter operations involving parititons are strored here */
-  ulong partition_flags;
-
   /**
      Partition_info taking into account the partition changes to be performed.
      Contains all partitions which are present in the old version of the table
@@ -2584,14 +2549,8 @@ public:
   */
   partition_info * const modified_part_info;
 
-  /** true for ALTER IGNORE TABLE ... */
-  const bool ignore;
-
-  /** true for online operation (LOCK=NONE) */
-  bool online= false;
-
   /**
-    When ha_commit_inplace_alter_table() is called the the engine can
+    When ha_commit_inplace_alter_table() is called the engine can
     set this to a function to be called after the ddl log
     is committed.
   */
@@ -2600,9 +2559,6 @@ public:
 
   /* This will be used as the argument to the above function when called */
   void *inplace_alter_table_committed_argument= nullptr;
-
-  /** which ALGORITHM and LOCK are supported by the storage engine */
-  enum_alter_inplace_result inplace_supported;
 
   /**
      Can be set by handler to describe why a given operation cannot be done
@@ -2618,11 +2574,57 @@ public:
   */
   const char *unsupported_reason= nullptr;
 
-  /** true when InnoDB should abort the alter when table is not empty */
-  const bool error_if_not_empty;
+  /* Alter operations involving parititons are strored here */
+  ulong partition_flags;
 
+  /**
+     Old and new index names. Used for index rename.
+  */
+  struct Rename_key_pair
+  {
+    Rename_key_pair(const KEY *old_key, const KEY *new_key)
+        : old_key(old_key), new_key(new_key)
+    {
+    }
+    const KEY *old_key;
+    const KEY *new_key;
+  };
+  /**
+     Vector of key pairs from DROP/ADD index which can be renamed.
+  */
+  typedef Mem_root_array<Rename_key_pair, true> Rename_keys_vector;
+
+  /**
+     A list of indexes which should be renamed.
+     Index definitions stays the same.
+  */
+  Rename_keys_vector rename_keys;
+
+  /** Size of key_info_buffer array. */
+  uint key_count;
+
+  /** Size of index_drop_buffer array. */
+  uint index_drop_count= 0;
+
+  /** Size of index_add_buffer array. */
+  uint index_add_count= 0;
+
+  /** Size of index_altered_ignorability_buffer array. */
+  uint index_altered_ignorability_count= 0;
+
+  /** which ALGORITHM and LOCK are supported by the storage engine */
+  enum_alter_inplace_result inplace_supported;
+
+  /** TRUE for online operation (LOCK=NONE) */
+  unsigned online : 1;
+  /** TRUE when innodb_file_per_table is set */
+  unsigned file_per_table : 1;
+  /** TRUE for ALTER IGNORE TABLE ... */
+  unsigned ignore : 1;
+  /** true when InnoDB should abort the alter when table is not empty */
+  unsigned error_if_not_empty : 1;
   /** True when DDL should avoid downgrading the MDL */
-  bool mdl_exclusive_after_prepare= false;
+  unsigned mdl_exclusive_after_prepare : 1;
 
   Alter_inplace_info(HA_CREATE_INFO *create_info_arg,
                      Alter_info *alter_info_arg,
@@ -3138,7 +3140,6 @@ protected:
   Table_flags cached_table_flags;       /* Set on init() and open() */
 
   ha_rows estimation_rows_to_insert;
-  handler *lookup_handler;
   /* Statistics for the query. Updated if handler_stats.active is set */
   ha_handler_stats active_handler_stats;
   void set_handler_stats();
@@ -3147,6 +3148,7 @@ public:
   uchar *ref;				/* Pointer to current row */
   uchar *dup_ref;			/* Pointer to duplicate row */
   uchar *lookup_buffer;
+  handler *lookup_handler;
 
   /* General statistics for the table like number of row, file sizes etc */
   ha_statistics stats;
@@ -3348,9 +3350,8 @@ public:
   handler(handlerton *ht_arg, TABLE_SHARE *share_arg)
     :table_share(share_arg), table(0),
     estimation_rows_to_insert(0),
-    lookup_handler(this),
-    ht(ht_arg), ref(0), lookup_buffer(NULL), handler_stats(NULL),
-    end_range(NULL), implicit_emptied(0),
+    ht(ht_arg), ref(0), lookup_buffer(NULL), lookup_handler(this),
+    handler_stats(NULL), end_range(NULL), implicit_emptied(0),
     mark_trx_read_write_done(0),
     check_table_binlog_row_based_done(0),
     check_table_binlog_row_based_result(0),
@@ -3527,7 +3528,8 @@ public:
   int ha_create(const char *name, TABLE *form, HA_CREATE_INFO *info);
 
   int ha_create_partitioning_metadata(const char *name, const char *old_name,
-                                      chf_create_flags action_flag);
+                                      chf_create_flags action_flag,
+                                      bool ignore_delete_error= false);
 
   int ha_change_partitions(HA_CREATE_INFO *create_info,
                            const char *path,
@@ -3543,7 +3545,6 @@ public:
   virtual void print_error(int error, myf errflag);
   virtual bool get_error_message(int error, String *buf);
   uint get_dup_key(int error);
-  bool has_dup_ref() const;
   /**
     Retrieves the names of the table and the key for which there was a
     duplicate entry in the case of HA_ERR_FOREIGN_DUPLICATE_KEY.
@@ -3587,6 +3588,8 @@ public:
   }
   virtual double scan_time()
   {
+    if (!stats.block_size)
+      return 0.0;
     return ((ulonglong2double(stats.data_file_length) / stats.block_size + 2) *
             avg_io_cost());
   }
@@ -4051,7 +4054,7 @@ public:
   virtual int extra_opt(enum ha_extra_function operation, ulong arg)
   { return extra(operation); }
   /*
-    Table version id for the the table. This should change for each
+    Table version id for the table. This should change for each
     sucessfull ALTER TABLE.
     This is used by the handlerton->check_version() to ask the engine
     if the table definition has been updated.
@@ -5070,7 +5073,8 @@ public:
 
   virtual int create_partitioning_metadata(const char *name,
                                            const char *old_name,
-                                           chf_create_flags action_flag)
+                                           chf_create_flags action_flag,
+                                           bool ignore_delete_error)
   { return FALSE; }
 
   virtual int change_partitions(HA_CREATE_INFO *create_info,

@@ -24,7 +24,9 @@ The transaction
 Created 3/26/1996 Heikki Tuuri
 *******************************************************/
 
+#define MYSQL_SERVER
 #include "trx0trx.h"
+#include "sql_class.h" // THD
 
 #ifdef WITH_WSREP
 #include <mysql/service_wsrep.h>
@@ -355,7 +357,7 @@ trx_t *trx_create()
 }
 
 /** Free the memory to trx_pools */
-void trx_t::free()
+void trx_t::free() noexcept
 {
   autoinc_locks.fake_defined();
 #ifdef HAVE_MEM_CHECK
@@ -376,8 +378,10 @@ void trx_t::free()
   ut_ad(magic_n == TRX_MAGIC_N);
   ut_ad(!read_only);
   ut_ad(!lock.wait_lock);
+  ut_ad(!commit_lsn);
 
   dict_operation= false;
+  commit_lsn= 0;
   trx_sys.deregister_trx(this);
   check_unique_secondary= true;
   check_foreigns= true;
@@ -719,7 +723,7 @@ corrupted:
 
 	if (trx_sys.is_undo_empty()) {
 func_exit:
-		purge_sys.clone_oldest_view<true>();
+		purge_sys.clone_oldest_view<true>(nullptr);
 		return DB_SUCCESS;
 	}
 
@@ -806,7 +810,7 @@ static void trx_assign_rseg_low(trx_t *trx)
 	undo tablespaces that are scheduled for truncation. */
 	static Atomic_counter<unsigned>	rseg_slot;
 	unsigned slot = rseg_slot++ % TRX_SYS_N_RSEGS;
-	ut_d(if (trx_rseg_n_slots_debug) slot = 0);
+	DBUG_EXECUTE_IF("assign_same_rseg", slot= 0;);
 	ut_d(const auto start_scan_slot = slot);
 	ut_d(bool look_for_rollover = false);
 	trx_rseg_t*	rseg;
@@ -818,8 +822,9 @@ static void trx_assign_rseg_low(trx_t *trx)
 			rseg = &trx_sys.rseg_array[slot];
 			ut_ad(!look_for_rollover || start_scan_slot != slot);
 			ut_d(look_for_rollover = true);
-			ut_d(if (!trx_rseg_n_slots_debug))
 			slot = (slot + 1) % TRX_SYS_N_RSEGS;
+			DBUG_EXECUTE_IF("assign_same_rseg",
+				slot= (slot - 1) % TRX_SYS_N_RSEGS;);
 
 			if (!rseg->space) {
 				continue;
@@ -899,16 +904,21 @@ trx_start_low(
 	ut_ad(UT_LIST_GET_LEN(trx->lock.trx_locks) == 0);
 
 	/* Check whether it is an AUTOCOMMIT SELECT */
-	trx->auto_commit = thd_trx_is_auto_commit(trx->mysql_thd);
-
-	trx->read_only = srv_read_only_mode
-		|| (!trx->dict_operation
-		    && thd_trx_is_read_only(trx->mysql_thd));
-
-	if (!trx->auto_commit) {
+        if (const THD* thd = trx->mysql_thd) {
+		trx->auto_commit = !(thd->variables.option_bits
+                                     & (OPTION_NOT_AUTOCOMMIT | OPTION_BEGIN))
+			&& thd->lex->sql_command == SQLCOM_SELECT;
+		trx->read_only = (!trx->dict_operation && thd->tx_read_only)
+			|| srv_read_only_mode;
+		if (!trx->auto_commit) {
+			trx->will_lock = true;
+		} else if (!trx->will_lock) {
+			trx->read_only = true;
+		}
+	} else {
+		trx->auto_commit = false;
+		trx->read_only = false;
 		trx->will_lock = true;
-	} else if (!trx->will_lock) {
-		trx->read_only = true;
 	}
 
 #ifdef WITH_WSREP
@@ -1247,6 +1257,8 @@ static void trx_flush_log_if_needed(lsn_t lsn, trx_t *trx)
   if (log_sys.get_flushed_lsn(std::memory_order_relaxed) >= lsn)
     return;
 
+  ut_ad(!trx->mysql_thd || !trx->mysql_thd->tx_read_only);
+
   const bool flush=
     (srv_file_flush_method != SRV_NOSYNC &&
      (srv_flush_log_at_trx_commit & 1));
@@ -1409,6 +1421,7 @@ TRANSACTIONAL_INLINE inline void trx_t::commit_in_memory(const mtr_t *mtr)
         ut_ad(!l);
 #endif /* UNIV_DEBUG */
     commit_state();
+    DEBUG_SYNC_C("trx_after_commit_state");
 
     if (id)
     {
@@ -1737,12 +1750,14 @@ void trx_commit_complete_for_mysql(trx_t *trx)
     return;
   switch (srv_flush_log_at_trx_commit) {
   case 0:
-    return;
+    goto func_exit;
   case 1:
     if (trx->active_commit_ordered)
       return;
   }
   trx_flush_log_if_needed(lsn, trx);
+ func_exit:
+  trx->commit_lsn= 0;
 }
 
 /**********************************************************************//**
@@ -1849,8 +1864,7 @@ state_ok:
 
 /**********************************************************************//**
 Prints info about a transaction.
-The caller must hold lock_sys.latch.
-When possible, use trx_print() instead. */
+The caller must hold lock_sys.latch. */
 void
 trx_print_latched(
 /*==============*/
@@ -1863,27 +1877,6 @@ trx_print_latched(
 		      trx->lock.n_rec_locks,
 		      UT_LIST_GET_LEN(trx->lock.trx_locks),
 		      mem_heap_get_size(trx->lock.lock_heap));
-}
-
-/**********************************************************************//**
-Prints info about a transaction.
-Acquires and releases lock_sys.latch. */
-TRANSACTIONAL_TARGET
-void
-trx_print(
-/*======*/
-	FILE*		f,		/*!< in: output stream */
-	const trx_t*	trx)		/*!< in: transaction */
-{
-  ulint n_rec_locks, n_trx_locks, heap_size;
-  {
-    TMLockMutexGuard g{SRW_LOCK_CALL};
-    n_rec_locks= trx->lock.n_rec_locks;
-    n_trx_locks= UT_LIST_GET_LEN(trx->lock.trx_locks);
-    heap_size= mem_heap_get_size(trx->lock.lock_heap);
-  }
-
-  trx_print_low(f, trx, n_rec_locks, n_trx_locks, heap_size);
 }
 
 /** Prepare a transaction.
@@ -1974,7 +1967,7 @@ trx_prepare(
 			/* Do not release any locks at the
 			SERIALIZABLE isolation level. */
 		} else if (!trx->mysql_thd
-			   || thd_sql_command(trx->mysql_thd)
+			   || trx->mysql_thd->lex->sql_command
 			   != SQLCOM_XA_PREPARE) {
 			/* Do not release locks for XA COMMIT ONE PHASE
 			or for internal distributed transactions

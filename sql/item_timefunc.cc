@@ -629,11 +629,12 @@ static bool make_date_time(const String *format, const MYSQL_TIME *l_time,
 	str->append(hours_i < 12 ? "AM" : "PM",2);
 	break;
       case 'r':
-	length= sprintf(intbuff, ((l_time->hour % 24) < 12) ?
-                    "%02d:%02d:%02d AM" : "%02d:%02d:%02d PM",
-		    (l_time->hour+11)%12+1,
-		    l_time->minute,
-		    l_time->second);
+	length= snprintf(intbuff, sizeof(intbuff),
+                     ((l_time->hour % 24) < 12) ?
+                     "%02d:%02d:%02d AM" : "%02d:%02d:%02d PM",
+		     (l_time->hour+11)%12+1,
+		     l_time->minute,
+		     l_time->second);
 	str->append(intbuff, length);
 	break;
       case 'S':
@@ -641,8 +642,8 @@ static bool make_date_time(const String *format, const MYSQL_TIME *l_time,
 	str->append_zerofill(l_time->second, 2);
 	break;
       case 'T':
-	length= sprintf(intbuff, "%02d:%02d:%02d",
-		    l_time->hour, l_time->minute, l_time->second);
+	length= snprintf(intbuff, sizeof(intbuff), "%02d:%02d:%02d",
+		     l_time->hour, l_time->minute, l_time->second);
 	str->append(intbuff, length);
 	break;
       case 'U':
@@ -1050,7 +1051,7 @@ uint week_mode(uint mode)
       		   	  If set	Monday is first day of week
    WEEK_YEAR (1)	  If not set	Week is in range 0-53
 
-   	Week 0 is returned for the the last week of the previous year (for
+   	Week 0 is returned for the last week of the previous year (for
 	a date at start of january) In this case one can get 53 for the
 	first week of next year.  This flag ensures that the week is
 	relevant for the given year. Note that this flag is only
@@ -1782,7 +1783,7 @@ bool Item_func_date_format::fix_length_and_dec(THD *thd)
 }
 
 
-bool Item_func_date_format::eq(const Item *item, bool binary_cmp) const
+bool Item_func_date_format::eq(const Item *item, const Eq_config &config) const
 {
   Item_func_date_format *item_func;
 
@@ -1795,7 +1796,7 @@ bool Item_func_date_format::eq(const Item *item, bool binary_cmp) const
   item_func= (Item_func_date_format*) item;
   if (arg_count != item_func->arg_count)
     return 0;
-  if (!args[0]->eq(item_func->args[0], binary_cmp))
+  if (!args[0]->eq(item_func->args[0], config))
     return 0;
   /*
     We must compare format string case sensitive.
@@ -2177,6 +2178,8 @@ bool Item_func_tochar::parse_format_string(const String *format, uint *fmt_len)
         goto error;
       break;
     case 'P':                                   // PM or P.M.
+      if (ptr + 1 == end)
+        goto error;
       next_char= my_toupper(system_charset_info, *(ptr+1));
       if (next_char == 'M')
       {
@@ -2184,7 +2187,7 @@ bool Item_func_tochar::parse_format_string(const String *format, uint *fmt_len)
         ptr+= 1;
         tmp_len+= 2;
       }
-      else if (next_char == '.' &&
+      else if (next_char == '.' && ptr + 3 < end &&
                my_toupper(system_charset_info, *(ptr+2)) == 'M' &&
                my_toupper(system_charset_info, *(ptr+3)) == '.')
       {
@@ -2885,9 +2888,9 @@ bool Func_handler_date_add_interval_datetime_arg0_time::
 }
 
 
-bool Item_date_add_interval::eq(const Item *item, bool binary_cmp) const
+bool Item_date_add_interval::eq(const Item *item, const Eq_config &config) const
 {
-  if (!Item_func::eq(item, binary_cmp))
+  if (!Item_func::eq(item, config))
     return 0;
   Item_date_add_interval *other= (Item_date_add_interval*) item;
   return ((int_type == other->int_type) &&
@@ -3020,7 +3023,7 @@ longlong Item_extract::val_int()
   return 0;                                        // Impossible
 }
 
-bool Item_extract::eq(const Item *item, bool binary_cmp) const
+bool Item_extract::eq(const Item *item, const Eq_config &config) const
 {
   if (this == item)
     return 1;
@@ -3032,13 +3035,13 @@ bool Item_extract::eq(const Item *item, bool binary_cmp) const
   if (ie->int_type != int_type)
     return 0;
 
-  if (!args[0]->eq(ie->args[0], binary_cmp))
+  if (!args[0]->eq(ie->args[0], config))
       return 0;
   return 1;
 }
 
 
-bool Item_char_typecast::eq(const Item *item, bool binary_cmp) const
+bool Item_char_typecast::eq(const Item *item, const Eq_config &config) const
 {
   if (this == item)
     return 1;
@@ -3051,7 +3054,7 @@ bool Item_char_typecast::eq(const Item *item, bool binary_cmp) const
       cast_cs     != cast->cast_cs)
     return 0;
 
-  if (!args[0]->eq(cast->args[0], binary_cmp))
+  if (!args[0]->eq(cast->args[0], config))
       return 0;
   return 1;
 }
@@ -3576,8 +3579,9 @@ bool Item_func_maketime::get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzy
     check_time_range(ltime, decimals, &unused);
     char buf[28];
     char *ptr= longlong10_to_str(hour.value(), buf, hour.is_unsigned() ? 10 : -10);
-    int len = (int)(ptr - buf) + sprintf(ptr, ":%02u:%02u",
-                                         (uint) minute, (uint) sec.sec());
+    int len = (int)(ptr - buf) + snprintf(ptr, buf + sizeof(buf) - ptr,
+                                          ":%02u:%02u",
+                                          (uint) minute, (uint) sec.sec());
     ErrConvString err(buf, len, &my_charset_bin);
     thd->push_warning_truncated_wrong_value("time", err.ptr());
   }

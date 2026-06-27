@@ -25,7 +25,6 @@ Created Jan 06, 2010 Vasil Dimov
 *******************************************************/
 
 #include "dict0stats.h"
-#include "dyn0buf.h"
 #include "row0sel.h"
 #include "trx0trx.h"
 #include "lock0lock.h"
@@ -380,7 +379,15 @@ dict_table_schema_check(
 		return DB_STATS_DO_NOT_EXIST;
 	}
 
-	if (!table->is_readable() || !table->space) {
+	if (!table->is_readable()) {
+		/* table is not readable */
+		snprintf(errstr, errstr_sz,
+			 "Table %s is not readable.",
+			 req_schema->table_name_sql);
+		return DB_ERROR;
+	}
+
+	if (!table->space) {
 		/* missing tablespace */
 		snprintf(errstr, errstr_sz,
 			 "Tablespace for table %s is missing.",
@@ -422,12 +429,12 @@ dict_table_schema_check(
 
 		/* check length for exact match */
 		if (req_schema->columns[i].len != table->cols[j].len) {
-			sql_print_warning("InnoDB: Table %s has"
-					  " length mismatch in the"
-					  " column name %s."
-					  " Please run mariadb-upgrade",
-					  req_schema->table_name_sql,
-					  req_schema->columns[i].name);
+			snprintf(errstr, errstr_sz,
+				 "Unexpected length of %s.%s. Please run "
+				 "mariadb-upgrade or ALTER TABLE",
+				 req_schema->table_name_sql,
+				 req_schema->columns[i].name);
+			return DB_ERROR;
 		}
 
 		/*
@@ -1140,6 +1147,7 @@ dummy_empty:
 		goto dummy_empty;
 #endif /* UNIV_DEBUG || UNIV_IBUF_DEBUG */
 	} else if (dict_index_is_online_ddl(index) || !index->is_committed()
+		   || !index->is_btree()
 		   || !index->table->space) {
 		goto dummy_empty;
 	} else {
@@ -2979,7 +2987,7 @@ free_and_exit:
 		trx->dict_operation_lock_mode = false;
 		dict_sys.unlock();
 unlocked_free_and_exit:
-		trx->free();
+		trx->clear_and_free();
 		stats.close();
 		return ret;
 	}
@@ -3715,8 +3723,9 @@ dberr_t dict_stats_rename_table(const char *old_name, const char *new_name,
   dict_fs2utf8(old_name, old_db, sizeof old_db, old_table, sizeof old_table);
   dict_fs2utf8(new_name, new_db, sizeof new_db, new_table, sizeof new_table);
 
-  if (dict_table_t::is_temporary_name(old_name) ||
-      dict_table_t::is_temporary_name(new_name))
+  /* Delete the stats only if renaming the table from old table to
+  intermediate table during COPY algorithm */
+  if (dict_table_t::is_temporary_name(new_name))
   {
     if (dberr_t e= dict_stats_delete_from_table_stats(old_db, old_table, trx))
       return e;

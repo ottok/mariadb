@@ -1,12 +1,12 @@
 /* pkcs12.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -44,16 +44,6 @@
 #define ERROR_OUT(err, eLabel) { ret = (err); goto eLabel; }
 
 enum {
-    WC_PKCS12_KeyBag = 667,
-    WC_PKCS12_ShroudedKeyBag = 668,
-    WC_PKCS12_CertBag = 669,
-    WC_PKCS12_CertBag_Type1 = 675,
-    WC_PKCS12_CrlBag = 670,
-    WC_PKCS12_SecretBag = 671,
-    WC_PKCS12_SafeContentsBag = 672,
-    WC_PKCS12_DATA = 651,
-    WC_PKCS12_ENCRYPTED_DATA = 656,
-
     WC_PKCS12_DATA_OBJ_SZ = 11,
     WC_PKCS12_MAC_SALT_SZ = 8
 };
@@ -73,7 +63,7 @@ static const byte WC_PKCS12_ShroudedKeyBag_OID[] =
 
 
 typedef struct ContentInfo {
-    byte* data;
+    const byte* data;
     struct ContentInfo* next;
     word32 encC;  /* encryptedContent */
     word32 dataSz;
@@ -344,6 +334,12 @@ static int GetSafeContent(WC_PKCS12* pkcs12, const byte* input,
                 return ret;
             }
 
+            /* Check that OID did not consume more than the sequence length */
+            if (localIdx > curIdx + (word32)curSz) {
+                freeSafe(safe, pkcs12->heap);
+                return ASN_PARSE_E;
+            }
+
             /* create new content info struct ... possible OID sanity check? */
             ci = (ContentInfo*)XMALLOC(sizeof(ContentInfo), pkcs12->heap,
                                        DYNAMIC_TYPE_PKCS);
@@ -354,7 +350,7 @@ static int GetSafeContent(WC_PKCS12* pkcs12, const byte* input,
 
             ci->type   = (int)oid;
             ci->dataSz = (word32)curSz - (localIdx-curIdx);
-            ci->data   = (byte*)input + localIdx;
+            ci->data   = input + localIdx;
             localIdx  += ci->dataSz;
 
         #ifdef WOLFSSL_DEBUG_PKCS12
@@ -519,6 +515,7 @@ exit_gsd:
     if (ret != 0) {
         if (mac) {
             XFREE(mac->digest, pkcs12->heap, DYNAMIC_TYPE_DIGEST);
+            XFREE(mac->salt, pkcs12->heap, DYNAMIC_TYPE_SALT);
             XFREE(mac, pkcs12->heap, DYNAMIC_TYPE_PKCS);
         }
     }
@@ -646,7 +643,13 @@ static int wc_PKCS12_verify(WC_PKCS12* pkcs12, byte* data, word32 dataSz,
     }
 #endif
 
-    return XMEMCMP(digest, mac->digest, mac->digestSz);
+    if (ConstantCompare(digest, mac->digest, (int)mac->digestSz) != 0) {
+        ForceZero(digest, sizeof(digest));
+        return MAC_CMP_FAILED_E;
+    }
+
+    ForceZero(digest, sizeof(digest));
+    return 0;
 }
 
 int wc_PKCS12_verify_ex(WC_PKCS12* pkcs12, const byte* psw, word32 pswSz)
@@ -987,8 +990,10 @@ int wc_i2d_PKCS12(WC_PKCS12* pkcs12, byte** der, int* derSz)
             totalSz += seqSz;
 
             /* check if getting length only */
-            if (der == NULL && derSz != NULL) {
-                *derSz = (int)totalSz;
+            if (der == NULL) {
+                /* repeat nullness check locally to mollify -Wnull-dereference. */
+                if (derSz != NULL)
+                    *derSz = (int)totalSz;
                 XFREE(sdBuf, pkcs12->heap, DYNAMIC_TYPE_PKCS);
                 return WC_NO_ERR_TRACE(LENGTH_ONLY_E);
             }
@@ -1129,9 +1134,7 @@ static WARN_UNUSED_RESULT int freeDecCertList(WC_DerCertList** list,
         current  = current->next;
     }
 
-#ifdef WOLFSSL_SMALL_STACK
-    XFREE(DeCert, heap, DYNAMIC_TYPE_PKCS);
-#endif
+    WC_FREE_VAR_EX(DeCert, heap, DYNAMIC_TYPE_PKCS);
 
     return 0;
 }
@@ -1144,6 +1147,7 @@ static byte* PKCS12_ConcatenateContent(WC_PKCS12* pkcs12,byte* mergedData,
 {
     byte* oldContent;
     word32 oldContentSz;
+    word32 newSz = 0;
 
     (void)pkcs12;
 
@@ -1155,14 +1159,19 @@ static byte* PKCS12_ConcatenateContent(WC_PKCS12* pkcs12,byte* mergedData,
     oldContentSz = *mergedSz;
 
     /* re-allocate new buffer to fit appended data */
-    mergedData = (byte*)XMALLOC(oldContentSz + inSz, pkcs12->heap,
+    if (WC_SAFE_SUM_WORD32(oldContentSz, inSz, newSz) == 0) {
+        XFREE(oldContent, pkcs12->heap, DYNAMIC_TYPE_PKCS);
+        return NULL;
+    }
+
+    mergedData = (byte*)XMALLOC(newSz, pkcs12->heap,
             DYNAMIC_TYPE_PKCS);
     if (mergedData != NULL) {
         if (oldContent != NULL) {
             XMEMCPY(mergedData, oldContent, oldContentSz);
         }
         XMEMCPY(mergedData + oldContentSz, in, inSz);
-        *mergedSz += inSz;
+        *mergedSz = newSz;
     }
     XFREE(oldContent, pkcs12->heap, DYNAMIC_TYPE_PKCS);
 
@@ -1171,7 +1180,8 @@ static byte* PKCS12_ConcatenateContent(WC_PKCS12* pkcs12,byte* mergedData,
 
 /* Check if constructed [0] is seen after wc_BerToDer() or not.
  * returns 1 if seen, 0 if not, ASN_PARSE_E on error */
-static int PKCS12_CheckConstructedZero(byte* data, word32 dataSz, word32* idx)
+static int PKCS12_CheckConstructedZero(const byte* data, word32 dataSz,
+                                       word32* idx)
 {
     word32 oid;
     int    ret = 0;
@@ -1346,7 +1356,7 @@ int wc_PKCS12_parse_ex(WC_PKCS12* pkcs12, const char* psw,
     /* if there is sign data then verify the MAC */
     if (pkcs12->signData != NULL ) {
         if ((ret = wc_PKCS12_verify(pkcs12, pkcs12->safe->data,
-                               pkcs12->safe->dataSz, (byte*)psw, (word32)pswSz)) != 0) {
+                 pkcs12->safe->dataSz, (const byte*)psw, (word32)pswSz)) != 0) {
             WOLFSSL_MSG("PKCS12 Bad MAC on verify");
             WOLFSSL_LEAVE("wc_PKCS12_parse verify ", ret);
             (void)ret;
@@ -1362,7 +1372,7 @@ int wc_PKCS12_parse_ex(WC_PKCS12* pkcs12, const char* psw,
     /* Decode content infos */
     ci = pkcs12->safe->CI;
     for (i = 0; i < pkcs12->safe->numCI; i++) {
-        byte*  data;
+        const byte* data;
         word32 idx = 0;
         int    size, totalSz;
         byte   tag;
@@ -1413,9 +1423,13 @@ int wc_PKCS12_parse_ex(WC_PKCS12* pkcs12, const char* psw,
              * the DecryptContent() expects */
             if (pkcs12->indefinite && PKCS12_CheckConstructedZero(data,
                                                     ci->dataSz, &idx) == 1) {
-                data[idx-1] = ASN_LONG_LENGTH;
-                ret = PKCS12_CoalesceOctetStrings(pkcs12, data, ci->dataSz,
-                                                  &idx, &curIdx);
+                /* safe casts -- pkcs12->indefinite signals that data is inside
+                 * the earlier allocation of der by wc_d2i_PKCS12(().
+                 */
+                ((byte *)(wc_ptr_t)data)[idx-1] = ASN_LONG_LENGTH;
+                ret = PKCS12_CoalesceOctetStrings(
+                    pkcs12, ((byte *)(wc_ptr_t)data), ci->dataSz,
+                    &idx, &curIdx);
                 if (ret < 0) {
                     goto exit_pk12par;
                 }
@@ -1770,6 +1784,51 @@ exit_pk12par:
 }
 
 
+/* Helper function to get parameters for key and cert encryptions */
+static int wc_PKCS12_get_enc_params(int inAlgo, int* vPKCS, int* outAlgo,
+        int* blkOid, int* hmacOid)
+{
+    int ret = 0;
+
+    if (inAlgo == PBE_SHA1_RC4_128) {
+        *vPKCS = 1;   /* PKCS#12 */
+        *outAlgo = PBE_SHA1_RC4_128;
+        *blkOid = 0;  /* Unused */
+        *hmacOid = 0; /* Use SHA1 as default */
+    }
+    else if (inAlgo == PBE_SHA1_DES) {
+        *vPKCS = PKCS5;
+        *outAlgo = PBES1_SHA1_DES;
+        *blkOid = 0;  /* Unused */
+        *hmacOid = 0; /* Use SHA1 as default */
+    }
+    else if (inAlgo == PBE_SHA1_DES3) {
+        *vPKCS = 1;   /* PKCS#12 */
+        *outAlgo = PBE_SHA1_DES3;
+        *blkOid = 0;  /* Unused */
+        *hmacOid = 0; /* Use SHA1 as default */
+    }
+    else if (inAlgo == PBE_AES256_CBC) {
+        *vPKCS = PKCS5;
+        *outAlgo = PBES2;
+        *blkOid = AES256CBCb;
+        *hmacOid = HMAC_SHA256_OID;
+    }
+    else if (inAlgo == PBE_AES128_CBC) {
+        *vPKCS = PKCS5;
+        *outAlgo = PBES2;
+        *blkOid = AES128CBCb;
+        *hmacOid = HMAC_SHA256_OID;
+    }
+    else {
+        WOLFSSL_MSG("Unsupported algorithm for PKCS12 encryption");
+        ret = ALGO_ID_E;
+    }
+
+    return ret;
+}
+
+
 /* Helper function to shroud keys.
  *
  * pkcs12 structure to use with shrouding key
@@ -1791,11 +1850,17 @@ static int wc_PKCS12_shroud_key(WC_PKCS12* pkcs12, WC_RNG* rng,
 {
     void* heap;
     word32 tmpIdx = 0;
-    int vPKCS     = 1; /* PKCS#12 default set to 1 */
     word32 sz;
     word32 totalSz = 0;
     int ret;
     byte* pkcs8Key = NULL;
+    byte salt[PKCS5V2_SALT_SZ]; /* PKCS5V2_SALT_SZ > PKCS5_SALT_SZ */
+    word32 saltSz = 0;
+
+    int vPKCS = -1;
+    int outAlgo = -1;
+    int blkOid = 0;
+    int hmacOid = 0;
 
     if (outSz == NULL || pkcs12 == NULL || rng == NULL || key == NULL ||
             pass == NULL) {
@@ -1832,13 +1897,17 @@ static int wc_PKCS12_shroud_key(WC_PKCS12* pkcs12, WC_RNG* rng,
     else {
         WOLFSSL_MSG("creating PKCS12 Shrouded Key Bag");
 
-        if (vAlgo == PBE_SHA1_DES) {
-            vPKCS = PKCS5;
-            vAlgo = 10;
+        if ((ret = wc_PKCS12_get_enc_params(vAlgo, &vPKCS, &outAlgo, &blkOid,
+                &hmacOid)) < 0) {
+            return ret;
+        }
+        saltSz = (outAlgo != PBES2) ? PKCS5_SALT_SZ : PKCS5V2_SALT_SZ;
+        if ((ret = wc_RNG_GenerateBlock(rng, salt, saltSz)) < 0) {
+            return ret;
         }
 
-        ret = UnTraditionalEnc(key, keySz, pkcs8Key, &sz, pass, passSz,
-                vPKCS, vAlgo, NULL, 0, itt, rng, heap);
+        ret = TraditionalEnc_ex(key, keySz, pkcs8Key, &sz, pass, passSz,
+                vPKCS, outAlgo, blkOid, salt, saltSz, itt, hmacOid, rng, heap);
     }
     if (ret == WC_NO_ERR_TRACE(LENGTH_ONLY_E)) {
         *outSz =  sz + MAX_LENGTH_SZ + 1;
@@ -2078,7 +2147,6 @@ static int wc_PKCS12_encrypt_content(WC_PKCS12* pkcs12, WC_RNG* rng,
         const char* pass, int passSz, int iter, int type)
 {
     void* heap;
-    int vPKCS     = 1; /* PKCS#12 is always set to 1 */
     int ret;
     byte*  tmp;
     word32 idx = 0;
@@ -2086,6 +2154,11 @@ static int wc_PKCS12_encrypt_content(WC_PKCS12* pkcs12, WC_RNG* rng,
     word32 length = 0;
     word32 tmpSz;
     word32 encSz;
+
+    int vPKCS = -1;
+    int outAlgo = -1;
+    int blkOid = 0;
+    int hmacOid = 0;
 
     byte seq[MAX_SEQ_SZ];
 
@@ -2103,9 +2176,15 @@ static int wc_PKCS12_encrypt_content(WC_PKCS12* pkcs12, WC_RNG* rng,
     if (type == WC_PKCS12_ENCRYPTED_DATA) {
         word32 outerSz = 0;
 
+        if ((ret = wc_PKCS12_get_enc_params(vAlgo, &vPKCS, &outAlgo, &blkOid,
+                &hmacOid)) < 0) {
+            return ret;
+        }
+
         encSz = contentSz;
         if ((ret = EncryptContent(NULL, contentSz, NULL, &encSz,
-                   pass, passSz, vPKCS, vAlgo, NULL, 0, iter, rng, heap)) < 0) {
+                   pass, passSz, vPKCS, outAlgo, blkOid, NULL, 0, iter, hmacOid,
+                   rng, heap)) < 0) {
             if (ret != WC_NO_ERR_TRACE(LENGTH_ONLY_E)) {
                 return ret;
             }
@@ -2157,7 +2236,8 @@ static int wc_PKCS12_encrypt_content(WC_PKCS12* pkcs12, WC_RNG* rng,
         }
 
         if ((ret = EncryptContent(content, contentSz, tmp, &encSz,
-                   pass, passSz, vPKCS, vAlgo, NULL, 0, iter, rng, heap)) < 0) {
+                   pass, passSz, vPKCS, outAlgo, blkOid, NULL, 0, iter, hmacOid,
+                   rng, heap)) < 0) {
             XFREE(tmp, heap, DYNAMIC_TYPE_TMP_BUFFER);
             return ret;
         }
@@ -2271,6 +2351,7 @@ static byte* PKCS12_create_key_content(WC_PKCS12* pkcs12, int nidKey,
     heap = wc_PKCS12_GetHeap(pkcs12);
     *keyCiSz = 0;
     switch (nidKey) {
+        /* supported key encryptions */
         case PBE_SHA1_RC4_128:
             algo = 1;
             break;
@@ -2283,8 +2364,15 @@ static byte* PKCS12_create_key_content(WC_PKCS12* pkcs12, int nidKey,
             algo = 3;
             break;
 
-        /* no encryption */
-        case -1:
+        case PBE_AES256_CBC:
+            algo = PBE_AES256_CBC;
+            break;
+
+        case PBE_AES128_CBC:
+            algo = PBE_AES128_CBC;
+            break;
+
+        case -1: /* no encryption */
             algo = -1;
             break;
 
@@ -2391,6 +2479,7 @@ static byte* PKCS12_create_cert_content(WC_PKCS12* pkcs12, int nidCert,
 
     heap = wc_PKCS12_GetHeap(pkcs12);
     switch (nidCert) {
+        /* supported certificate encryptions */
         case PBE_SHA1_RC4_128:
             type = WC_PKCS12_ENCRYPTED_DATA;
             algo = 1;
@@ -2406,7 +2495,17 @@ static byte* PKCS12_create_cert_content(WC_PKCS12* pkcs12, int nidCert,
             algo = 3;
             break;
 
-        case -1:
+        case PBE_AES256_CBC:
+            type = WC_PKCS12_ENCRYPTED_DATA;
+            algo = PBE_AES256_CBC;
+            break;
+
+        case PBE_AES128_CBC:
+            type = WC_PKCS12_ENCRYPTED_DATA;
+            algo = PBE_AES128_CBC;
+            break;
+
+        case -1: /* no encryption */
             type = WC_PKCS12_DATA;
             algo = -1;
             break;

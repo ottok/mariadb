@@ -1,12 +1,12 @@
 /* esp_sdk_time_lib.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -181,10 +181,15 @@ int set_fixed_default_time(void)
 {
     /* ideally, we'd like to set time from network,
      * but let's set a default time, just in case */
+
+    ESP_LOGV(TAG, "Default Date %s", __DATE__);
+    ESP_LOGV(TAG, "YEAR %d", YEAR);
+    ESP_LOGV(TAG, "MONTH %d", MONTH);
+    ESP_LOGV(TAG, "DAY %d", DAY);
     struct tm timeinfo = {
-        .tm_year = YEAR,
-        .tm_mon  = MONTH, /* Month, where 0 = Jan */
-        .tm_mday = DAY,   /* Numeric decimal day of the month */
+        .tm_year = YEAR  - 1900, /* years since 1900                 */
+        .tm_mon  = MONTH - 1,    /* Month, where 0 = Jan             */
+        .tm_mday = DAY,          /* Numeric decimal day of the month */
         .tm_hour = 13,
         .tm_min  =  1,
         .tm_sec  =  5
@@ -271,7 +276,7 @@ int set_time_from_string(const char* time_buffer)
     char offset[28]; /* large arrays, just in case there's still bad data */
     char day_str[28];
     char month_str[28];
-    const char *format = "%3s %3s %d %d:%d:%d %d %s";
+    const char *format = "%3s %3s %d %d:%d:%d %d %27s";
     struct tm this_timeinfo;
     struct timeval now;
     time_t interim_time;
@@ -299,11 +304,15 @@ int set_time_from_string(const char* time_buffer)
                                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
                                    };
 
-            for (int i = 0; i < 12; i++) {
+            int i;
+            for (i = 0; i < 12; i++) {
                 if (strcmp(month_str, months[i]) == 0) {
                     this_timeinfo.tm_mon = i;
                     break;
                 }
+            }
+            if (i == 12) {
+                return ESP_FAIL;
             }
 
             this_timeinfo.tm_mday = day;
@@ -311,6 +320,7 @@ int set_time_from_string(const char* time_buffer)
             this_timeinfo.tm_min = minute;
             this_timeinfo.tm_sec = second;
             this_timeinfo.tm_year = year - 1900; /* Years since 1900 */
+            this_timeinfo.tm_isdst = -1;
 
             interim_time = mktime(&this_timeinfo);
             now = (struct timeval){ .tv_sec = interim_time };
@@ -392,11 +402,11 @@ int set_time(void)
         }
         ESP_LOGI(TAG, "sntp_setservername:");
         for (i = 0; i < CONFIG_LWIP_SNTP_MAX_SERVERS; i++) {
-            const char* thisServer = ntpServerList[i];
-            if (strncmp(thisServer, "\x00", 1) == 0) {
-                /* just in case we run out of NTP servers */
-                break;
+            const char* thisServer;
+            if (i >= NTP_SERVER_COUNT) {
+               break;
             }
+            thisServer = ntpServerList[i];
             ESP_LOGI(TAG, "%s", thisServer);
             sntp_setservername(i, thisServer);
             ret = ESP_OK;

@@ -1,12 +1,12 @@
 /* sp_cdsp_signed.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -2710,10 +2710,6 @@ static int sp_256_ecc_mulmod_10(sp_point* r, const sp_point* g, const sp_digit* 
         if (cache->cnt == 2)
             sp_256_gen_stripe_table_10(g, cache->table, tmp, heap);
 
-#ifndef HAVE_THREAD_LS
-        wc_UnLockMutex(&sp_cache_lock);
-#endif /* HAVE_THREAD_LS */
-
         if (cache->cnt < 2) {
             err = sp_256_ecc_mulmod_fast_10(r, g, k, map, heap);
         }
@@ -2721,6 +2717,9 @@ static int sp_256_ecc_mulmod_10(sp_point* r, const sp_point* g, const sp_digit* 
             err = sp_256_ecc_mulmod_stripe_10(r, g, cache->table, k,
                     map, heap);
         }
+#ifndef HAVE_THREAD_LS
+        wc_UnLockMutex(&sp_cache_lock);
+#endif /* HAVE_THREAD_LS */
     }
 
     return err;

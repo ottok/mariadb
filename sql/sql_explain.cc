@@ -1728,13 +1728,13 @@ void Explain_table_access::tag_to_json(Json_writer *writer,
       /* Handled in full_scan_on_null_key */
       break;
     case ET_FIRST_MATCH:
-      writer->add_member("first_match").add_str(firstmatch_table_name.c_ptr());
+      writer->add_member("first_match").add_str(firstmatch_table_name);
       break;
     case ET_LOOSESCAN:
       writer->add_member("loose_scan").add_bool(true);
       break;
     case ET_USING_MRR:
-      writer->add_member("mrr_type").add_str(mrr_type.c_ptr());
+      writer->add_member("mrr_type").add_str(mrr_type);
       break;
     case ET_USING_INDEX_FOR_GROUP_BY:
       writer->add_member("using_index_for_group_by");
@@ -2684,8 +2684,8 @@ void Explain_update::print_explain_json(Explain_query *query,
 
     if (table_tracker.has_timed_statistics())
     {
-      writer->add_member("r_total_time_ms").
-              add_double(table_tracker.get_time_ms());
+      writer->add_member("r_table_time_ms").add_double(table_tracker.get_time_ms());
+      writer->add_member("r_other_time_ms").add_double(extra_time_tracker.get_time_ms());
     }
   }
 
@@ -2743,7 +2743,7 @@ void Explain_insert::print_explain_json(Explain_query *query,
   writer->add_member("query_block").start_object();
   writer->add_member("select_id").add_ll(1);
   writer->add_member("table").start_object();
-  writer->add_member("table_name").add_str(table_name.c_ptr());
+  writer->add_member("table_name").add_str(table_name);
   writer->end_object(); // table
   print_explain_json_for_children(query, writer, is_analyze);
   writer->end_object(); // query_block

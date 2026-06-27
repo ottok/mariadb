@@ -588,7 +588,7 @@ bool Item_func_in::create_value_list_for_tvc(THD *thd,
       {
         if (i == 1)
 	{
-          sprintf(col_name, "_col_%i", j+1);
+          snprintf(col_name, sizeof(col_name), "_col_%i", j+1);
           row_list->element_index(j)->set_name(thd, col_name, strlen(col_name),
                                                thd->charset());
         }
@@ -601,7 +601,7 @@ bool Item_func_in::create_value_list_for_tvc(THD *thd,
     {
       if (i == 1)
       {
-        sprintf(col_name, "_col_%i", 1);
+        snprintf(col_name, sizeof(col_name), "_col_%i", 1);
         args[i]->set_name(thd, col_name, strlen(col_name), thd->charset());
       }
       if (tvc_value->push_back(args[i]))
@@ -683,7 +683,7 @@ bool table_value_constr::to_be_wrapped_as_with_tail()
     the select of the form
     SELECT * FROM (VALUES (v1), ... (vn)) tvc_x
 
-  @retval pointer to the result of of the transformation if successful
+  @retval pointer to the result of the transformation if successful
           NULL - otherwise
 */
 
@@ -736,7 +736,7 @@ st_select_lex *wrap_tvc(THD *thd, st_select_lex *tvc_sl,
 
   /*
     Create a unit for the substituted select used for TVC and attach it
-    to the the wrapper select wrapper_sl as the only unit. The created
+    to the wrapper select wrapper_sl as the only unit. The created
     unit is the unit for the derived table tvc_x of the transformation.
   */
   if (!(derived_unit= new (thd->mem_root) SELECT_LEX_UNIT()))
@@ -803,7 +803,7 @@ err:
     SELECT * FROM (VALUES (v1), ... (vn)) tvc_x
       ORDER BY ... LIMIT n [OFFSET m]
 
-  @retval pointer to the result of of the transformation if successful
+  @retval pointer to the result of the transformation if successful
           NULL - otherwise
 */
 

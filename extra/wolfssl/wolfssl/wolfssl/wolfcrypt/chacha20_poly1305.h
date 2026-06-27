@@ -1,12 +1,12 @@
 /* chacha20_poly1305.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -129,8 +129,8 @@ WOLFSSL_API WARN_UNUSED_RESULT int wc_ChaCha20Poly1305_Final(ChaChaPoly_Aead* ae
 WOLFSSL_API int wc_XChaCha20Poly1305_Init(
     ChaChaPoly_Aead* aead,
     const byte *ad, word32 ad_len,
-    const byte *inKey, word32 inKeySz,
-    const byte *inIV, word32 inIVSz,
+    const byte *nonce, word32 nonce_len,
+    const byte *key, word32 key_len,
     int isEncrypt);
 
 WOLFSSL_API int wc_XChaCha20Poly1305_Encrypt(

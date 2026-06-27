@@ -1143,7 +1143,7 @@ Field_longstr::pack_sort_string(uchar *to, const SORT_FIELD_ATTR *sort_field)
   @details
   The function returns a double number between 0.0 and 1.0 as the relative
   position of the value of the this field in the numeric interval of [min,max].
-  If the value is not in the interval the the function returns 0.0 when
+  If the value is not in the interval the function returns 0.0 when
   the value is less than min, and, 1.0 when the value is greater than max.
 
   @param  min  value of the left end of the interval
@@ -1204,7 +1204,7 @@ static inline double safe_substract(ulonglong a, ulonglong b)
   @details
   The function returns a double number between 0.0 and 1.0 as the relative
   position of the value of the this field in the string interval of [min,max].
-  If the value is not in the interval the the function returns 0.0 when
+  If the value is not in the interval the function returns 0.0 when
   the value is less than min, and, 1.0 when the value is greater than max.
 
   @note
@@ -2522,7 +2522,9 @@ uint Field::fill_cache_field(CACHE_FIELD *copy)
 bool Field::get_date(MYSQL_TIME *to, date_mode_t mode)
 {
   StringBuffer<40> tmp;
-  Temporal::Warn_push warn(get_thd(), nullptr, nullptr, nullptr, to, mode);
+  Temporal::Warn_push warn(get_thd(), table ? table->s->db.str : nullptr,
+                           table ? table->s->table_name.str : nullptr,
+                           field_name.str, to, mode);
   Temporal_hybrid *t= new(to) Temporal_hybrid(get_thd(), &warn,
                                               val_str(&tmp), mode);
   return !t->is_valid_temporal();
@@ -4723,17 +4725,17 @@ void Field_longlong::set_max()
   int8store(ptr, unsigned_flag ? ULONGLONG_MAX : LONGLONG_MAX);
 }
 
-bool Field_longlong::is_max()
+bool Field_longlong::is_max(const uchar *ptr_arg) const
 {
   DBUG_ASSERT(marked_for_read());
   if (unsigned_flag)
   {
     ulonglong j;
-    j= uint8korr(ptr);
+    j= uint8korr(ptr_arg);
     return j == ULONGLONG_MAX;
   }
   longlong j;
-  j= sint8korr(ptr);
+  j= sint8korr(ptr_arg);
   return j == LONGLONG_MAX;
 }
 
@@ -4755,6 +4757,10 @@ int Field_float::store(const char *from,size_t len,CHARSET_INFO *cs)
 
 int Field_float::store(double nr)
 {
+  if (nr == 0.0)
+  {
+    nr= 0.0; // correct negative zero
+  }
   DBUG_ASSERT(marked_for_write_or_computed());
   int error= truncate_double(&nr, field_length,
                              not_fixed ? NOT_FIXED_DEC : dec,
@@ -4903,6 +4909,10 @@ int Field_double::store(const char *from,size_t len,CHARSET_INFO *cs)
 
 int Field_double::store(double nr)
 {
+  if (nr == 0.0)
+  {
+    nr= 0.0; // correct negative zero
+  }
   DBUG_ASSERT(marked_for_write_or_computed());
   int error= truncate_double(&nr, field_length,
                              not_fixed ? NOT_FIXED_DEC : dec,
@@ -5792,13 +5802,13 @@ void Field_timestampf::set_max()
   DBUG_VOID_RETURN;
 }
 
-bool Field_timestampf::is_max()
+bool Field_timestampf::is_max(const uchar *ptr_arg) const
 {
   DBUG_ENTER("Field_timestampf::is_max");
   DBUG_ASSERT(marked_for_read());
 
-  DBUG_RETURN(mi_sint4korr(ptr) == TIMESTAMP_MAX_VALUE &&
-              mi_sint3korr(ptr + 4) == TIME_MAX_SECOND_PART);
+  DBUG_RETURN(mi_sint4korr(ptr_arg) == TIMESTAMP_MAX_VALUE &&
+              mi_sint3korr(ptr_arg + 4) == TIME_MAX_SECOND_PART);
 }
 
 my_time_t Field_timestampf::get_timestamp(const uchar *pos,
@@ -6662,11 +6672,15 @@ longlong Field_year::val_int(void)
 String *Field_year::val_str(String *val_buffer,
 			    String *val_ptr __attribute__((unused)))
 {
-  DBUG_ASSERT(field_length < 5);
-  val_buffer->alloc(5);
+  /* "YYYY" + NUL terminator */
+  static const size_t YEAR_STR_BUFF_LEN= 5;
+  DBUG_ASSERT(field_length < YEAR_STR_BUFF_LEN);
+  val_buffer->alloc(YEAR_STR_BUFF_LEN);
   val_buffer->length(field_length);
   char *to=(char*) val_buffer->ptr();
-  sprintf(to,field_length == 2 ? "%02d" : "%04d",(int) Field_year::val_int());
+  snprintf(to, YEAR_STR_BUFF_LEN,
+           field_length == 2 ? "%02d" : "%04d",
+           (int) Field_year::val_int());
   val_buffer->set_charset(&my_charset_numeric);
   return val_buffer;
 }
@@ -8816,7 +8830,7 @@ int Field_blob::store(const char *from,size_t length,CHARSET_INFO *cs)
     DBUG_ASSERT(length <= max_data_length());
     
     new_length= length;
-    copy_length= table->in_use->variables.group_concat_max_len;
+    copy_length= table->in_use->gconcat_max_len();
     if (new_length > copy_length)
     {
       new_length= Well_formed_prefix(cs,
@@ -9453,7 +9467,7 @@ int Field_enum::store(const char *from,size_t length,CHARSET_INFO *cs)
       /* This is for reading numbers with LOAD DATA INFILE */
       char *end;
       tmp=(uint) cs->strntoul(from,length,10,&end,&err);
-      if (err || end != from+length || tmp > typelib->count)
+      if (err || end != from+length || !tmp || tmp > typelib->count)
       {
 	tmp=0;
 	set_warning(WARN_DATA_TRUNCATED, 1);
@@ -11803,7 +11817,7 @@ Virtual_column_info* Virtual_column_info::clone(THD *thd)
     return NULL;
   if (expr)
   {
-    dst->expr= expr->build_clone(thd);
+    dst->expr= expr->deep_copy_with_checks(thd);
     if (!dst->expr)
       return NULL;
   }

@@ -201,7 +201,7 @@ int wc_ed25519ctx_sign_msg(const byte* in, word32 inlen, byte* out,
     to sign.
     \param [in] hashLen Length of the hash of the message to sign.
     \param [out] out Buffer in which to store the generated signature.
-    \param [in,out] outlen Maximum length of the output buffer. Will store the
+    \param [in,out] outLen Maximum length of the output buffer. Will store the
     bytes written to out upon successfully generating a message signature.
     \param [in] key Pointer to a private ed25519_key with which to generate the
     signature.
@@ -440,8 +440,8 @@ int wc_ed25519ctx_verify_msg(const byte* sig, word32 siglen, const byte* msg,
     byte hash[] = { initialize with SHA-512 hash of message };
     byte context[] = { initialize with context of signature };
     // initialize key with received public key
-    ret = wc_ed25519ph_verify_hash(sig, sizeof(sig), msg, sizeof(msg),
-            &verified, &key, );
+    ret = wc_ed25519ph_verify_hash(sig, sizeof(sig), hash, sizeof(hash),
+            &verified, &key, context, sizeof(context));
     if (ret < 0) {
         // error performing verification
     } else if (verified == 0)
@@ -496,8 +496,8 @@ int wc_ed25519ph_verify_hash(const byte* sig, word32 siglen, const byte* hash,
     byte msg[] = { initialize with message };
     byte context[] = { initialize with context of signature };
     // initialize key with received public key
-    ret = wc_ed25519ctx_verify_msg(sig, sizeof(sig), msg, sizeof(msg),
-            &verified, &key, );
+    ret = wc_ed25519ph_verify_msg(sig, sizeof(sig), msg, sizeof(msg),
+            &verified, &key, context, sizeof(context));
     if (ret < 0) {
         // error performing verification
     } else if (verified == 0)
@@ -506,8 +506,8 @@ int wc_ed25519ph_verify_hash(const byte* sig, word32 siglen, const byte* hash,
     \endcode
 
     \sa wc_ed25519_verify_msg
+    \sa wc_ed25519ctx_verify_msg
     \sa wc_ed25519ph_verify_hash
-    \sa wc_ed25519ph_verify_msg
     \sa wc_ed25519_sign_msg
 */
 
@@ -747,7 +747,7 @@ int wc_ed25519_import_private_key(const byte* priv, word32 privSz,
 
     ed25519_key key;
     wc_ed25519_init_key(&key);
-    ret = wc_ed25519_import_private_key(priv, sizeof(priv), pub, sizeof(pub),
+    ret = wc_ed25519_import_private_key_ex(priv, sizeof(priv), pub, sizeof(pub),
             &key, 1);
     if (ret != 0) {
         // error importing key
@@ -767,14 +767,14 @@ int wc_ed25519_import_private_key_ex(const byte* priv, word32 privSz,
 /*!
     \ingroup ED25519
 
-    \brief This function exports the private key from an ed25519_key
+    \brief This function exports the public key from an ed25519_key
     structure. It stores the public key in the buffer out, and sets the bytes
     written to this buffer in outLen.
 
     \return 0 Returned upon successfully exporting the public key.
     \return BAD_FUNC_ARG Returned if any of the input values evaluate to NULL.
     \return BUFFER_E Returned if the buffer provided is not large enough to
-    store the private key. Upon returning this error, the function sets the
+    store the public key. Upon returning this error, the function sets the
     size required in outLen.
 
     \param [in] key Pointer to an ed25519_key structure from which to export the
@@ -801,10 +801,11 @@ int wc_ed25519_import_private_key_ex(const byte* priv, word32 privSz,
 
     \sa wc_ed25519_import_public
     \sa wc_ed25519_import_public_ex
+    \sa wc_ed25519_export_private
     \sa wc_ed25519_export_private_only
 */
 
-int wc_ed25519_export_public(ed25519_key* key, byte* out, word32* outLen);
+int wc_ed25519_export_public(const ed25519_key* key, byte* out, word32* outLen);
 
 /*!
     \ingroup ED25519
@@ -840,11 +841,12 @@ int wc_ed25519_export_public(ed25519_key* key, byte* out, word32* outLen);
     \endcode
 
     \sa wc_ed25519_export_public
+    \sa wc_ed25519_export_private
     \sa wc_ed25519_import_private_key
     \sa wc_ed25519_import_private_key_ex
 */
 
-int wc_ed25519_export_private_only(ed25519_key* key, byte* out, word32* outLen);
+int wc_ed25519_export_private_only(const ed25519_key* key, byte* out, word32* outLen);
 
 /*!
     \ingroup ED25519
@@ -888,7 +890,7 @@ int wc_ed25519_export_private_only(ed25519_key* key, byte* out, word32* outLen);
     \sa wc_ed25519_export_private_only
 */
 
-int wc_ed25519_export_private(ed25519_key* key, byte* out, word32* outLen);
+int wc_ed25519_export_private(const ed25519_key* key, byte* out, word32* outLen);
 
 /*!
     \ingroup ED25519
@@ -935,7 +937,7 @@ int wc_ed25519_export_private(ed25519_key* key, byte* out, word32* outLen);
     \sa wc_ed25519_export_public
 */
 
-int wc_ed25519_export_key(ed25519_key* key,
+int wc_ed25519_export_key(const ed25519_key* key,
                           byte* priv, word32 *privSz,
                           byte* pub, word32 *pubSz);
 
@@ -999,7 +1001,7 @@ int wc_ed25519_check_key(ed25519_key* key);
     \sa wc_ed25519_make_key
 */
 
-int wc_ed25519_size(ed25519_key* key);
+int wc_ed25519_size(const ed25519_key* key);
 
 /*!
     \ingroup ED25519
@@ -1028,7 +1030,7 @@ int wc_ed25519_size(ed25519_key* key);
     \sa wc_ed25519_pub_size
 */
 
-int wc_ed25519_priv_size(ed25519_key* key);
+int wc_ed25519_priv_size(const ed25519_key* key);
 
 /*!
     \ingroup ED25519
@@ -1056,7 +1058,7 @@ int wc_ed25519_priv_size(ed25519_key* key);
     \sa wc_ed25519_priv_size
 */
 
-int wc_ed25519_pub_size(ed25519_key* key);
+int wc_ed25519_pub_size(const ed25519_key* key);
 
 /*!
     \ingroup ED25519
@@ -1084,4 +1086,219 @@ int wc_ed25519_pub_size(ed25519_key* key);
     \sa wc_ed25519_sign_msg
 */
 
-int wc_ed25519_sig_size(ed25519_key* key);
+int wc_ed25519_sig_size(const ed25519_key* key);
+/*!
+    \ingroup ED25519
+    \brief Signs message with extended parameters.
+
+    \return 0 on success
+    \return negative on failure
+
+    \param in Input message
+    \param inLen Input message length
+    \param out Output signature buffer
+    \param outLen Output signature length pointer
+    \param key Ed25519 key
+    \param type Signature type
+    \param context Context buffer
+    \param contextLen Context length
+
+    _Example_
+    \code
+    byte msg[] = "message";
+    byte sig[ED25519_SIG_SIZE];
+    word32 sigLen = sizeof(sig);
+    int ret = wc_ed25519_sign_msg_ex(msg, sizeof(msg), sig, &sigLen,
+                                     &key, Ed25519, NULL, 0);
+    \endcode
+
+    \sa wc_ed25519_sign_msg
+*/
+int wc_ed25519_sign_msg_ex(const byte* in, word32 inLen, byte* out,
+    word32 *outLen, ed25519_key* key, byte type, const byte* context,
+    byte contextLen);
+
+/*!
+    \ingroup ED25519
+    \brief Verifies signature with extended parameters.
+
+    \return 0 on success
+    \return negative on failure
+
+    \param sig Signature buffer
+    \param sigLen Signature length
+    \param msg Message buffer
+    \param msgLen Message length
+    \param res Verification result pointer
+    \param key Ed25519 key
+    \param type Signature type
+    \param context Context buffer
+    \param contextLen Context length
+
+    _Example_
+    \code
+    byte msg[] = "message";
+    byte sig[ED25519_SIG_SIZE];
+    int res;
+    int ret = wc_ed25519_verify_msg_ex(sig, sizeof(sig), msg,
+                                       sizeof(msg), &res, &key,
+                                       Ed25519, NULL, 0);
+    \endcode
+
+    \sa wc_ed25519_verify_msg
+*/
+int wc_ed25519_verify_msg_ex(const byte* sig, word32 sigLen,
+    const byte* msg, word32 msgLen, int* res, ed25519_key* key,
+    byte type, const byte* context, byte contextLen);
+
+/*!
+    \ingroup ED25519
+    \brief Initializes streaming verification.
+
+    \return 0 on success
+    \return negative on failure
+
+    \param sig Signature buffer
+    \param sigLen Signature length
+    \param key Ed25519 key
+    \param type Signature type
+    \param context Context buffer
+    \param contextLen Context length
+
+    _Example_
+    \code
+    byte sig[ED25519_SIG_SIZE];
+    int ret = wc_ed25519_verify_msg_init(sig, sizeof(sig), &key,
+                                         Ed25519, NULL, 0);
+    \endcode
+
+    \sa wc_ed25519_verify_msg_update
+    \sa wc_ed25519_verify_msg_final
+*/
+int wc_ed25519_verify_msg_init(const byte* sig, word32 sigLen,
+    ed25519_key* key, byte type, const byte* context,
+    byte contextLen);
+
+/*!
+    \ingroup ED25519
+    \brief Updates streaming verification with message segment.
+
+    \return 0 on success
+    \return negative on failure
+
+    \param msgSegment Message segment buffer
+    \param msgSegmentLen Message segment length
+    \param key Ed25519 key
+
+    _Example_
+    \code
+    byte msgPart[] = "part";
+    int ret = wc_ed25519_verify_msg_update(msgPart, sizeof(msgPart),
+                                           &key);
+    \endcode
+
+    \sa wc_ed25519_verify_msg_init
+    \sa wc_ed25519_verify_msg_final
+*/
+int wc_ed25519_verify_msg_update(const byte* msgSegment,
+    word32 msgSegmentLen, ed25519_key* key);
+
+/*!
+    \ingroup ED25519
+    \brief Finalizes streaming verification.
+
+    \return 0 on success
+    \return negative on failure
+
+    \param sig Signature buffer
+    \param sigLen Signature length
+    \param res Verification result pointer
+    \param key Ed25519 key
+
+    _Example_
+    \code
+    byte sig[ED25519_SIG_SIZE];
+    int res;
+    int ret = wc_ed25519_verify_msg_final(sig, sizeof(sig), &res,
+                                          &key);
+    \endcode
+
+    \sa wc_ed25519_verify_msg_init
+    \sa wc_ed25519_verify_msg_update
+*/
+int wc_ed25519_verify_msg_final(const byte* sig, word32 sigLen,
+    int* res, ed25519_key* key);
+
+/*!
+    \ingroup ED25519
+    \brief Initializes Ed25519 key with extended parameters.
+
+    \return 0 on success
+    \return negative on failure
+
+    \param key Ed25519 key structure
+    \param heap Heap hint for memory allocation
+    \param devId Device ID for hardware acceleration
+
+    _Example_
+    \code
+    ed25519_key key;
+    int ret = wc_ed25519_init_ex(&key, NULL, INVALID_DEVID);
+    \endcode
+
+    \sa wc_ed25519_init
+*/
+int wc_ed25519_init_ex(ed25519_key* key, void* heap, int devId);
+
+/*!
+    \ingroup ED25519
+    \brief Allocates and initializes new Ed25519 key. These New/Delete
+    functions are exposed to support allocation of the structure using
+    dynamic memory to provide better ABI compatibility.
+
+    \note This API is only available when WC_NO_CONSTRUCTORS is not defined.
+    WC_NO_CONSTRUCTORS is automatically defined when WOLFSSL_NO_MALLOC is
+    defined.
+
+    \return ed25519_key pointer on success
+    \return NULL on failure
+
+    \param heap Heap hint for memory allocation
+    \param devId Device ID for hardware acceleration
+    \param result_code Result code pointer
+
+    _Example_
+    \code
+    int result;
+    ed25519_key* key = wc_ed25519_new(NULL, INVALID_DEVID, &result);
+    \endcode
+
+    \sa wc_ed25519_delete
+*/
+ed25519_key* wc_ed25519_new(void* heap, int devId, int *result_code);
+
+/*!
+    \ingroup ED25519
+    \brief Frees and deletes Ed25519 key. These New/Delete functions are
+    exposed to support allocation of the structure using dynamic memory
+    to provide better ABI compatibility.
+
+    \note This API is only available when WC_NO_CONSTRUCTORS is not defined.
+    WC_NO_CONSTRUCTORS is automatically defined when WOLFSSL_NO_MALLOC is
+    defined.
+
+    \return 0 on success
+    \return negative on failure
+
+    \param key Ed25519 key to delete
+    \param key_p Pointer to key pointer (set to NULL after delete)
+
+    _Example_
+    \code
+    ed25519_key* key = wc_ed25519_new(NULL, INVALID_DEVID, NULL);
+    int ret = wc_ed25519_delete(key, &key);
+    \endcode
+
+    \sa wc_ed25519_new
+*/
+int wc_ed25519_delete(ed25519_key* key, ed25519_key** key_p);

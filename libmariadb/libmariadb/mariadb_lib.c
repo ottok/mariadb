@@ -1783,17 +1783,6 @@ restart:
     goto error;
   }
 
-  if (mysql->options.extension && mysql->options.extension->proxy_header)
-  {
-    char *hdr = mysql->options.extension->proxy_header;
-    size_t len = mysql->options.extension->proxy_header_len;
-    if (ma_pvio_write(pvio, (unsigned char *)hdr, len) <= 0)
-    {
-      ma_pvio_close(pvio);
-      goto error;
-    }
-  }
-
   if (ma_net_init(net, pvio))
   {
     ma_pvio_close(pvio);

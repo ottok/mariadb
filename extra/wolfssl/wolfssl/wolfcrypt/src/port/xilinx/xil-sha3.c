@@ -1,12 +1,12 @@
 /* xil-sha3.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -239,7 +239,7 @@ int wc_Sha3_384_Copy(wc_Sha3* src, wc_Sha3* dst)
     return 0;
 #else
     WOLFSSL_MSG("Copy of SHA3 struct not supported with this build");
-    return -1;
+    return NOT_COMPILED_IN;
 #endif
 }
 #endif

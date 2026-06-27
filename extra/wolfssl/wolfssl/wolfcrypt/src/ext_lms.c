@@ -1,12 +1,12 @@
 /* ext_lms.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -840,6 +840,22 @@ int wc_LmsKey_Sign(LmsKey* key, byte * sig, word32 * sigSz, const byte * msg,
         return -1;
     }
 
+    if ((size_t)*sigSz < len) {
+        /* Signature buffer too small. */
+        WOLFSSL_MSG("error: LMS sig buffer too small");
+        return BUFFER_E;
+    }
+
+    if (key->write_private_key == NULL) {
+        WOLFSSL_MSG("error: LmsKey write/read callbacks are not set");
+        return BAD_FUNC_ARG;
+    }
+
+    if (key->context == NULL) {
+        WOLFSSL_MSG("error: LmsKey context is not set");
+        return BAD_FUNC_ARG;
+    }
+
     result = hss_generate_signature(key->working_key, LmsWritePrivKey,
                                     key, (const void *) msg, msgSz,
                                     sig, len, &key->info);
@@ -1041,6 +1057,15 @@ int wc_LmsKey_Verify(LmsKey * key, const byte * sig, word32 sigSz,
     }
 
     return 0;
+}
+
+int wc_LmsKey_GetKid(LmsKey * key, const byte ** kid, word32* kidSz)
+{
+    if ((key == NULL) || (kid == NULL) || (kidSz == NULL)) {
+        return BAD_FUNC_ARG;
+    }
+
+    return NOT_COMPILED_IN;
 }
 
 const byte * wc_LmsKey_GetKidFromPrivRaw(const byte * priv, word32 privSz)

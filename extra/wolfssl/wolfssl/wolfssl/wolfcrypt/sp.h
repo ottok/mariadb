@@ -1,12 +1,12 @@
 /* sp.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -26,6 +26,10 @@
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/settings.h>
 
+#if defined(__riscv) && (__riscv_xlen == 32) && !defined(__riscv_mul)
+    #define SP_NO_MUL_INSTRUCTION
+#endif
+
 #if defined(WOLFSSL_HAVE_SP_RSA) || defined(WOLFSSL_HAVE_SP_DH) || \
                                     defined(WOLFSSL_HAVE_SP_ECC)
 #ifdef _WIN32_WCE
@@ -35,7 +39,7 @@
     typedef unsigned __int8  uint8_t;
     typedef unsigned __int32 uint32_t;
     typedef unsigned __int64 uint64_t;
-#elif !defined(WOLFSSL_LINUXKM)
+#elif !defined(NO_STDINT_H)
     #include <stdint.h>
 #endif
 
@@ -48,18 +52,7 @@
     #undef WOLFSSL_HAVE_SP_ECC
 #endif
 
-#ifdef noinline
-    #define SP_NOINLINE noinline
-#elif defined(_MSC_VER)
-    #define SP_NOINLINE __declspec(noinline)
-#elif defined(__ICCARM__) || defined(__IAR_SYSTEMS_ICC__)
-    #define SP_NOINLINE _Pragma("inline = never")
-#elif defined(__GNUC__) || defined(__KEIL__) || defined(__DCC__)
-    #define SP_NOINLINE __attribute__((noinline))
-#else
-    #define SP_NOINLINE
-#endif
-
+#define SP_NOINLINE WC_NO_INLINE
 
 #ifdef __cplusplus
     extern "C" {

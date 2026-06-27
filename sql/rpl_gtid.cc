@@ -29,6 +29,7 @@
 #include "rpl_rli.h"
 #include "slave.h"
 #include "log_event.h"
+#include "transaction.h"
 
 const LEX_CSTRING rpl_gtid_slave_state_table_name=
   { STRING_WITH_LEN("gtid_slave_pos") };
@@ -457,7 +458,7 @@ rpl_slave_state::truncate_state_table(THD *thd)
     {
       ha_commit_trans(thd, FALSE);
       close_thread_tables(thd);
-      ha_commit_trans(thd, TRUE);
+      trans_commit(thd);
     }
     thd->release_transactional_locks();
   }
@@ -2152,7 +2153,7 @@ end:
 const char*
 rpl_binlog_state::drop_domain(DYNAMIC_ARRAY *ids,
                               Gtid_list_log_event *glev,
-                              char* errbuf)
+                              char* errbuf, size_t errbuf_size)
 {
   DYNAMIC_ARRAY domain_unique; // sequece (unsorted) of unique element*:s
   rpl_binlog_state::element* domain_unique_buffer[16];
@@ -2188,21 +2189,21 @@ rpl_binlog_state::drop_domain(DYNAMIC_ARRAY *ids,
     rpl_gtid* rb_state_gtid= find_nolock(glev->list[l].domain_id,
                                          glev->list[l].server_id);
     if (!rb_state_gtid)
-      sprintf(errbuf,
-              "missing gtids from the '%u-%u' domain-server pair which is "
-              "referred to in the gtid list describing an earlier state. Ignore "
-              "if the domain ('%u') was already explicitly deleted",
-              glev->list[l].domain_id, glev->list[l].server_id,
-              glev->list[l].domain_id);
+      snprintf(errbuf, errbuf_size,
+               "missing gtids from the '%u-%u' domain-server pair which is "
+               "referred to in the gtid list describing an earlier state. Ignore "
+               "if the domain ('%u') was already explicitly deleted",
+               glev->list[l].domain_id, glev->list[l].server_id,
+               glev->list[l].domain_id);
     else if (rb_state_gtid->seq_no < glev->list[l].seq_no)
-      sprintf(errbuf,
-              "having a gtid '%u-%u-%llu' which is less than "
-              "the '%u-%u-%llu' of the gtid list describing an earlier state. "
-              "The state may have been affected by manually injecting "
-              "a lower sequence number gtid or via replication",
-              rb_state_gtid->domain_id, rb_state_gtid->server_id,
-              rb_state_gtid->seq_no, glev->list[l].domain_id,
-              glev->list[l].server_id, glev->list[l].seq_no);
+      snprintf(errbuf, errbuf_size,
+               "having a gtid '%u-%u-%llu' which is less than "
+               "the '%u-%u-%llu' of the gtid list describing an earlier state. "
+               "The state may have been affected by manually injecting "
+               "a lower sequence number gtid or via replication",
+               rb_state_gtid->domain_id, rb_state_gtid->server_id,
+               rb_state_gtid->seq_no, glev->list[l].domain_id,
+               glev->list[l].server_id, glev->list[l].seq_no);
     if (strlen(errbuf)) // use strlen() as cheap flag
       push_warning_printf(current_thd, Sql_condition::WARN_LEVEL_WARN,
                           ER_BINLOG_CANT_DELETE_GTID_DOMAIN,
@@ -2249,16 +2250,17 @@ rpl_binlog_state::drop_domain(DYNAMIC_ARRAY *ids,
 
     if (!all_found)
     {
-      sprintf(errbuf, "binlog files may contain gtids from the domain ('%u') "
-              "being deleted. Make sure to first purge those files",
-              *ptr_domain_id);
+      snprintf(errbuf, errbuf_size,
+               "binlog files may contain gtids from the domain ('%u') "
+               "being deleted. Make sure to first purge those files",
+               *ptr_domain_id);
       errmsg= errbuf;
       goto end;
     }
     // compose a sequence of unique pointers to domain object
     for (k= 0; k < domain_unique.elements; k++)
     {
-      if ((rpl_binlog_state::element*) dynamic_array_ptr(&domain_unique, k)
+      if (*(rpl_binlog_state::element**) dynamic_array_ptr(&domain_unique, k)
           == elem)
         break; // domain_id's elem has been already in
     }

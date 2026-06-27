@@ -1064,13 +1064,13 @@ void Query_log_event::pack_info(Protocol *protocol)
   {
     buf.append(STRING_WITH_LEN("set "));
     if (flags2 & OPTION_NO_FOREIGN_KEY_CHECKS)
-      buf.append(STRING_WITH_LEN("foreign_key_checks=1, "));
+      buf.append(STRING_WITH_LEN("foreign_key_checks=0, "));
     if (flags2 & OPTION_AUTO_IS_NULL)
-      buf.append(STRING_WITH_LEN("sql_auto_is_null, "));
+      buf.append(STRING_WITH_LEN("sql_auto_is_null=1, "));
     if (flags2 & OPTION_RELAXED_UNIQUE_CHECKS)
-      buf.append(STRING_WITH_LEN("unique_checks=1, "));
+      buf.append(STRING_WITH_LEN("unique_checks=0, "));
     if (flags2 & OPTION_NO_CHECK_CONSTRAINT_CHECKS)
-      buf.append(STRING_WITH_LEN("check_constraint_checks=1, "));
+      buf.append(STRING_WITH_LEN("check_constraint_checks=0, "));
     if (flags2 & OPTION_IF_EXISTS)
       buf.append(STRING_WITH_LEN("@@sql_if_exists=1, "));
     if (flags2 & OPTION_INSERT_HISTORY)
@@ -2021,7 +2021,16 @@ int Query_log_event::do_apply_event(rpl_group_info *rgi,
       if (charset_inited)
       {
         rpl_sql_thread_info *sql_info= thd->system_thread_info.rpl_sql_info;
-        if (thd->slave_thread && sql_info->cached_charset_compare(charset))
+        const bool applier=
+#ifdef WITH_WSREP
+          WSREP(thd) ? thd->wsrep_applier :
+#endif
+          false;
+
+        // Event charset should be compared for slave thread
+        // and applier threads
+        if ((thd->slave_thread || applier) &&
+	    sql_info->cached_charset_compare(charset))
         {
           /* Verify that we support the charsets found in the event. */
           if (!(thd->variables.character_set_client=
@@ -3844,7 +3853,7 @@ Gtid_log_event::pack_info(Protocol *protocol)
                    flags2 & FL_PREPARED_XA ? "XA START " : "BEGIN GTID "));
   if (flags2 & FL_PREPARED_XA)
   {
-    p+= sprintf(p, "%s GTID ", xid.serialize());
+    p+= snprintf(p, buf + sizeof(buf) - p, "%s GTID ", xid.serialize());
   }
   p= longlong10_to_str(domain_id, p, 10);
   *p++= '-';
@@ -3931,7 +3940,7 @@ Gtid_log_event::do_apply_event(rpl_group_info *rgi)
 
     thd->lex->xid= &xid;
     thd->lex->xa_opt= XA_NONE;
-    sprintf(buf_xa, fmt, xid.serialize());
+    snprintf(buf_xa, sizeof(buf_xa), fmt, xid.serialize());
     thd->set_query_and_id(buf_xa, static_cast<uint32>(strlen(buf_xa)),
                           &my_charset_bin, next_query_id());
     thd->lex->sql_command= SQLCOM_XA_START;
@@ -4567,9 +4576,9 @@ void XA_prepare_log_event::pack_info(Protocol *protocol)
 {
   char query[sizeof("XA COMMIT ONE PHASE") + 1 + ser_buf_size];
 
-  sprintf(query,
-          (one_phase ? "XA COMMIT %s ONE PHASE" :  "XA PREPARE %s"),
-          m_xid.serialize());
+  snprintf(query, sizeof(query),
+           (one_phase ? "XA COMMIT %s ONE PHASE" :  "XA PREPARE %s"),
+           m_xid.serialize());
 
   protocol->store(query, strlen(query), &my_charset_bin);
 }
@@ -5218,7 +5227,7 @@ void Append_block_log_event::pack_info(Protocol *protocol)
 {
   char buf[256];
   uint length;
-  length= (uint) sprintf(buf, ";file_id=%u;block_len=%u", file_id, block_len);
+  length= (uint) snprintf(buf, sizeof(buf), ";file_id=%u;block_len=%u", file_id, block_len);
   protocol->store(buf, length, &my_charset_bin);
 }
 
@@ -5327,7 +5336,7 @@ void Delete_file_log_event::pack_info(Protocol *protocol)
 {
   char buf[64];
   uint length;
-  length= (uint) sprintf(buf, ";file_id=%u", (uint) file_id);
+  length= (uint) snprintf(buf, sizeof(buf), ";file_id=%u", (uint) file_id);
   protocol->store(buf, (int32) length, &my_charset_bin);
 }
 #endif
@@ -5375,7 +5384,7 @@ void Execute_load_log_event::pack_info(Protocol *protocol)
 {
   char buf[64];
   uint length;
-  length= (uint) sprintf(buf, ";file_id=%u", (uint) file_id);
+  length= (uint) snprintf(buf, sizeof(buf), ";file_id=%u", (uint) file_id);
   protocol->store(buf, (int32) length, &my_charset_bin);
 }
 
@@ -5996,6 +6005,12 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
       goto err;
     }
 
+    DBUG_EXECUTE_IF("rows_log_event_after_open_table", {
+      const char action[]=
+          "now SIGNAL after_open_table WAIT_FOR continue_rows_ev";
+      DBUG_ASSERT(!debug_sync_set_action(thd, STRING_WITH_LEN(action)));
+    };);
+
     /*
       When the open and locking succeeded, we check all tables to
       ensure that they still have the correct type.
@@ -6133,7 +6148,10 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
     Rows_log_event::Db_restore_ctx restore_ctx(this);
     master_had_triggers= table->master_had_triggers;
     bool transactional_table= table->file->has_transactions_and_rollback();
-    table->file->prepare_for_insert(get_general_type_code() != WRITE_ROWS_EVENT);
+    this->slave_exec_mode= slave_exec_mode_options; // fix the mode
+
+    table->file->prepare_for_insert(get_general_type_code() != WRITE_ROWS_EVENT
+                              || slave_exec_mode == SLAVE_EXEC_MODE_IDEMPOTENT);
 
     /*
       table == NULL means that this table should not be replicated
@@ -6165,8 +6183,15 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
     table->rpl_write_set= table->write_set;
 
     /* WRITE ROWS EVENTS store the bitmap in m_cols instead of m_cols_ai */
-    MY_BITMAP *after_image= ((get_general_type_code() == UPDATE_ROWS_EVENT) ?
-                             &m_cols_ai : &m_cols);
+    MY_BITMAP *after_image;
+    if (get_general_type_code() == UPDATE_ROWS_EVENT)
+    {
+      after_image= &m_cols_ai;
+      /* Must read also after-image columns to be able to update them. */
+      bitmap_union(table->read_set, after_image);
+    }
+    else
+      after_image= &m_cols;
     bitmap_intersect(table->write_set, after_image);
 
     if (table->versioned())
@@ -6178,10 +6203,10 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
     }
     m_table->mark_columns_per_binlog_row_image();
 
-    this->slave_exec_mode= slave_exec_mode_options; // fix the mode
-
-    // Do event specific preparations 
-    error= do_before_row_operations(rli);
+    COPY_INFO copy_info;
+    Write_record write_record;
+    // Do event specific preparations
+    error= do_before_row_operations(rgi, &copy_info, &write_record);
 
     /*
       Bug#56662 Assertion failed: next_insert_id == 0, file handler.cc
@@ -6338,7 +6363,11 @@ int Rows_log_event::do_apply_event(rpl_group_info *rgi)
       slave_rows_error_report(ERROR_LEVEL, thd->is_error() ? 0 : error,
                               rgi, thd, table, get_type_str(),
                               RPL_LOG_NAME, log_pos);
-    if (thd->slave_thread)
+    if (thd->slave_thread
+#ifdef WITH_WSREP
+        || (WSREP(thd) && wsrep_thd_is_applying(thd))
+#endif /* WITH_WSREP */
+    )
       free_root(thd->mem_root, MYF(MY_KEEP_PREALLOC));
   }
 
@@ -6893,8 +6922,8 @@ check_table_map(rpl_group_info *rgi, RPL_TABLE_LIST *table_list)
   DBUG_ENTER("check_table_map");
   enum_tbl_map_status res= OK_TO_PROCESS;
   Relay_log_info *rli= rgi->rli;
-  if ((rgi->thd->slave_thread /* filtering is for slave only */ ||
-        IF_WSREP((WSREP(rgi->thd) && rgi->thd->wsrep_applier), 0)) &&
+
+  if (rgi->thd->slave_thread /* filtering is for slave only */ &&
       (!rli->mi->rpl_filter->db_ok(table_list->db.str) ||
        (rli->mi->rpl_filter->is_on() && !rli->mi->rpl_filter->tables_ok("", table_list))))
     res= FILTERED_OUT;
@@ -7547,8 +7576,21 @@ bool Write_rows_compressed_log_event::write()
 
 
 #if defined(HAVE_REPLICATION)
-int 
-Write_rows_log_event::do_before_row_operations(const Slave_reporting_capability *const)
+
+int Write_rows_log_event::incomplete_record_callback(rpl_group_info *rgi)
+{
+  restore_record(m_table,record[1]);
+  int error= unpack_current_row(rgi);
+  if (!error && m_table->s->long_unique_table)
+    error= m_table->update_virtual_fields(m_table->file, VCOL_UPDATE_FOR_WRITE);
+  return error;
+}
+
+
+int
+Write_rows_log_event::do_before_row_operations(rpl_group_info *rgi,
+                                               COPY_INFO* copy_info,
+                                               Write_record* write_record)
 {
   int error= 0;
 
@@ -7622,6 +7664,39 @@ Write_rows_log_event::do_before_row_operations(const Slave_reporting_capability 
     m_table->mark_auto_increment_column(true);
   }
 
+  if (slave_exec_mode == SLAVE_EXEC_MODE_IDEMPOTENT &&
+      (m_table->file->ha_table_flags() & HA_DUPLICATE_POS ||
+       m_table->s->long_unique_table))
+    error= m_table->file->ha_rnd_init_with_error(0);
+
+  if (!error)
+  {
+    bzero(copy_info, sizeof *copy_info);
+    copy_info->handle_duplicates=
+            slave_exec_mode == SLAVE_EXEC_MODE_IDEMPOTENT ?
+            DUP_REPLACE : DUP_ERROR;
+    copy_info->table_list= m_table->pos_in_table_list;
+
+    int (*callback)(void *, void*)= NULL;
+    if (!get_flags(COMPLETE_ROWS_F))
+    {
+      /*
+        If row is incomplete we will use the record found to fill
+        missing columns.
+      */
+      callback= [](void *e, void* r)->int {
+        auto rgi= static_cast<rpl_group_info*>(r);
+        auto event= static_cast<Write_rows_log_event*>(e);
+        return event->incomplete_record_callback(rgi);
+      };
+    }
+    new (write_record) Write_record(thd, m_table, copy_info,
+                                    m_table->versioned(VERS_TIMESTAMP),
+                                    m_table->triggers && do_invoke_trigger(),
+                                    NULL, callback, this, rgi);
+    m_write_record= write_record;
+  }
+
   return error;
 }
 
@@ -7663,7 +7738,15 @@ Write_rows_log_event::do_after_row_operations(const Slave_reporting_capability *
   {
     m_table->file->print_error(local_error, MYF(0));
   }
-  return error? error : local_error;
+  int rnd_error= 0;
+  if (m_table->file->inited)
+  {
+    DBUG_ASSERT(slave_exec_mode == SLAVE_EXEC_MODE_IDEMPOTENT);
+    DBUG_ASSERT(m_table->file->ha_table_flags() & HA_DUPLICATE_POS ||
+                m_table->s->long_unique_table);
+    rnd_error= m_table->file->ha_rnd_end();
+  }
+  return error? error : local_error ? local_error : rnd_error;
 }
 
 bool Rows_log_event::process_triggers(trg_event_type event,
@@ -7685,17 +7768,6 @@ bool Rows_log_event::process_triggers(trg_event_type event,
                                                 old_row_is_record1);
 
   DBUG_RETURN(result);
-}
-/*
-  Check if there are more UNIQUE keys after the given key.
-*/
-static int
-last_uniq_key(TABLE *table, uint keyno)
-{
-  while (++keyno < table->s->keys)
-    if (table->key_info[keyno].flags & HA_NOSAME)
-      return 0;
-  return 1;
 }
 
 /**
@@ -7759,22 +7831,20 @@ is_duplicate_key_error(int errcode)
 */ 
 
 int
-Rows_log_event::write_row(rpl_group_info *rgi,
-                          const bool overwrite)
+Write_rows_log_event::write_row(rpl_group_info *rgi,
+                                const bool overwrite)
 {
   DBUG_ENTER("write_row");
   DBUG_ASSERT(m_table != NULL && thd != NULL);
 
   TABLE *table= m_table;  // pointer to event's table
-  int error;
-  int UNINIT_VAR(keynum);
   const bool invoke_triggers= (m_table->triggers && do_invoke_trigger());
-  auto_afree_ptr<char> key(NULL);
 
   prepare_record(table, m_width, true);
 
   /* unpack row into table->record[0] */
-  if (unlikely((error= unpack_current_row(rgi))))
+  int error= unpack_current_row(rgi);
+  if (unlikely(error))
   {
     table->file->print_error(error, MYF(0));
     DBUG_RETURN(error);
@@ -7843,178 +7913,11 @@ Rows_log_event::write_row(rpl_group_info *rgi,
                   my_sleep(20000););
   if (table->s->sequence)
     error= update_sequence();
-  else while (unlikely(error= table->file->ha_write_row(table->record[0])))
+  else
   {
-    if (error == HA_ERR_LOCK_DEADLOCK ||
-        error == HA_ERR_LOCK_WAIT_TIMEOUT ||
-        (keynum= table->file->get_dup_key(error)) < 0 ||
-        !overwrite)
-    {
-      DBUG_PRINT("info",("get_dup_key returns %d)", keynum));
-      /*
-        Deadlock, waiting for lock or just an error from the handler
-        such as HA_ERR_FOUND_DUPP_KEY when overwrite is false.
-        Retrieval of the duplicate key number may fail
-        - either because the error was not "duplicate key" error
-        - or because the information which key is not available
-      */
-      table->file->print_error(error, MYF(0));
-      DBUG_RETURN(error);
-    }
-    /*
-       We need to retrieve the old row into record[1] to be able to
-       either update or delete the offending record.  We either:
+    error= m_write_record->write_record();
 
-       - use rnd_pos() with a row-id (available as dupp_row) to the
-         offending row, if that is possible (MyISAM and Blackhole), or else
-
-       - use index_read_idx() with the key that is duplicated, to
-         retrieve the offending row.
-     */
-    if (table->file->ha_table_flags() & HA_DUPLICATE_POS)
-    {
-      DBUG_PRINT("info",("Locating offending record using rnd_pos()"));
-
-      if ((error= table->file->ha_rnd_init_with_error(0)))
-      {
-        DBUG_RETURN(error);
-      }
-
-      error= table->file->ha_rnd_pos(table->record[1], table->file->dup_ref);
-      if (unlikely(error))
-      {
-        DBUG_PRINT("info",("rnd_pos() returns error %d",error));
-        table->file->print_error(error, MYF(0));
-        DBUG_RETURN(error);
-      }
-      table->file->ha_rnd_end();
-    }
-    else
-    {
-      DBUG_PRINT("info",("Locating offending record using index_read_idx()"));
-
-      if (table->file->extra(HA_EXTRA_FLUSH_CACHE))
-      {
-        DBUG_PRINT("info",("Error when setting HA_EXTRA_FLUSH_CACHE"));
-        DBUG_RETURN(my_errno);
-      }
-
-      if (key.get() == NULL)
-      {
-        key.assign(static_cast<char*>(my_alloca(table->s->max_unique_length)));
-        if (key.get() == NULL)
-        {
-          DBUG_PRINT("info",("Can't allocate key buffer"));
-          DBUG_RETURN(ENOMEM);
-        }
-      }
-
-      key_copy((uchar*)key.get(), table->record[0], table->key_info + keynum,
-               0);
-      error= table->file->ha_index_read_idx_map(table->record[1], keynum,
-                                                (const uchar*)key.get(),
-                                                HA_WHOLE_KEY,
-                                                HA_READ_KEY_EXACT);
-      if (unlikely(error))
-      {
-        DBUG_PRINT("info",("index_read_idx() returns %s", HA_ERR(error)));
-        table->file->print_error(error, MYF(0));
-        DBUG_RETURN(error);
-      }
-    }
-
-    /*
-       Now, record[1] should contain the offending row.  That
-       will enable us to update it or, alternatively, delete it (so
-       that we can insert the new row afterwards).
-    */
-    if (table->s->long_unique_table)
-    {
-      /* same as for REPLACE/ODKU */
-      table->move_fields(table->field, table->record[1], table->record[0]);
-      table->update_virtual_fields(table->file, VCOL_UPDATE_FOR_REPLACE);
-      table->move_fields(table->field, table->record[0], table->record[1]);
-    }
-
-    /*
-      If row is incomplete we will use the record found to fill 
-      missing columns.  
-    */
-    if (!get_flags(COMPLETE_ROWS_F))
-    {
-      restore_record(table,record[1]);
-      error= unpack_current_row(rgi);
-      if (table->s->long_unique_table)
-        table->update_virtual_fields(table->file, VCOL_UPDATE_FOR_WRITE);
-    }
-
-    DBUG_PRINT("debug",("preparing for update: before and after image"));
-    DBUG_DUMP("record[1] (before)", table->record[1], table->s->reclength);
-    DBUG_DUMP("record[0] (after)", table->record[0], table->s->reclength);
-
-    /*
-       REPLACE is defined as either INSERT or DELETE + INSERT.  If
-       possible, we can replace it with an UPDATE, but that will not
-       work on InnoDB if FOREIGN KEY checks are necessary.
-
-       I (Matz) am not sure of the reason for the last_uniq_key()
-       check as, but I'm guessing that it's something along the
-       following lines.
-
-       Suppose that we got the duplicate key to be a key that is not
-       the last unique key for the table and we perform an update:
-       then there might be another key for which the unique check will
-       fail, so we're better off just deleting the row and inserting
-       the correct row.
-
-       Additionally we don't use UPDATE if rbr triggers should be invoked -
-       when triggers are used we want a simple and predictable execution path.
-     */
-    if (last_uniq_key(table, keynum) && !invoke_triggers &&
-        !table->file->referenced_by_foreign_key())
-    {
-      DBUG_PRINT("info",("Updating row using ha_update_row()"));
-      error= table->file->ha_update_row(table->record[1],
-                                       table->record[0]);
-      switch (error) {
-
-      case HA_ERR_RECORD_IS_THE_SAME:
-        DBUG_PRINT("info",("ignoring HA_ERR_RECORD_IS_THE_SAME error from"
-                           " ha_update_row()"));
-        error= 0;
-
-      case 0:
-        break;
-
-      default:
-        DBUG_PRINT("info",("ha_update_row() returns error %d",error));
-        table->file->print_error(error, MYF(0));
-      }
-
-      DBUG_RETURN(error);
-    }
-    else
-    {
-      DBUG_PRINT("info",("Deleting offending row and trying to write new one again"));
-      if (invoke_triggers &&
-          unlikely(process_triggers(TRG_EVENT_DELETE, TRG_ACTION_BEFORE,
-                                    TRUE)))
-        error= HA_ERR_GENERIC; // in case if error is not set yet
-      else
-      {
-        if (unlikely((error= table->file->ha_delete_row(table->record[1]))))
-        {
-          DBUG_PRINT("info",("ha_delete_row() returns error %d",error));
-          table->file->print_error(error, MYF(0));
-          DBUG_RETURN(error);
-        }
-        if (invoke_triggers &&
-            unlikely(process_triggers(TRG_EVENT_DELETE, TRG_ACTION_AFTER,
-                                      TRUE)))
-          DBUG_RETURN(HA_ERR_GENERIC); // in case if error is not set yet
-      }
-      /* Will retry ha_write_row() with the offending row removed. */
-    }
+    DBUG_RETURN(error ? m_write_record->last_errno() : 0);
   }
 
   if (invoke_triggers &&
@@ -8031,15 +7934,21 @@ int Rows_log_event::update_sequence()
   bool old_master= false;
   int err= 0;
 
-  if (!bitmap_is_set(table->rpl_write_set, MIN_VALUE_FIELD_NO) ||
-      (
-#if defined(WITH_WSREP)
-       ! WSREP(thd) &&
+  rpl_group_info *table_rgi=
+#ifdef WITH_WSREP
+  WSREP(thd) ? thd->wsrep_rgi :
 #endif
-       table->in_use->rgi_slave &&
-       !(table->in_use->rgi_slave->gtid_ev_flags2 & Gtid_log_event::FL_DDL) &&
+  table->in_use->rgi_slave;
+  rpl_group_info *thd_rgi=
+#ifdef WITH_WSREP
+  WSREP(thd) ? thd->wsrep_rgi :
+#endif
+  thd->rgi_slave;
+  if (!bitmap_is_set(table->rpl_write_set, MIN_VALUE_FIELD_NO) ||
+      (table_rgi &&
+       !(table_rgi->gtid_ev_flags2 & Gtid_log_event::FL_DDL) &&
        !(old_master=
-         rpl_master_has_bug(thd->rgi_slave->rli,
+         rpl_master_has_bug(thd_rgi->rli,
                             29621, FALSE, FALSE, FALSE, TRUE))))
   {
     /* This event come from a setval function executed on the master.
@@ -8098,10 +8007,22 @@ Write_rows_log_event::do_exec_row(rpl_group_info *rgi)
 #if defined(HAVE_REPLICATION)
 uint8 Write_rows_log_event::get_trg_event_map()
 {
-  return trg2bit(TRG_EVENT_INSERT) | trg2bit(TRG_EVENT_UPDATE) |
-         trg2bit(TRG_EVENT_DELETE);
+  /*
+    In SLAVE_EXEC_MODE_IDEMPOTENT mode, Write_rows_log_event event is
+    implicitly a REPLACE, deleting all conflicting rows which can cause
+    foreign key constraint cascade operations on FK referencing table.
+
+    In SLAVE_EXEC_MODE_STRICT mode, the Write_rows_log_event is pure INSERT,
+    will never cause foreign key constraint cascade operations on foreign key
+    referencing tables.
+  */
+  if (slave_exec_mode_options == SLAVE_EXEC_MODE_IDEMPOTENT)
+    return trg2bit(TRG_EVENT_INSERT) | trg2bit(TRG_EVENT_DELETE);
+  else
+    return trg2bit(TRG_EVENT_INSERT);
 }
 #endif
+
 
 /**************************************************************************
 	Delete_rows_log_event member functions
@@ -8514,17 +8435,17 @@ int Rows_log_event::find_row(rpl_group_info *rgi)
       found.  I can see no scenario where it would be incorrect to
       chose the row to change only using a PK or an UNNI.
     */
-    if (table->key_info->flags & HA_NOSAME)
+    if (m_key_info->flags & HA_NOSAME)
     {
       /* Unique does not have non nullable part */
-      if (!(table->key_info->flags & (HA_NULL_PART_KEY)))
+      if (!(m_key_info->flags & (HA_NULL_PART_KEY)))
       {
         error= 0;
         goto end;
       }
       else
       {
-        KEY *keyinfo= table->key_info;
+        KEY *keyinfo= m_key_info;
         /*
           Unique has nullable part. We need to check if there is any
           field in the BI image that is null and part of UNNI.
@@ -8663,7 +8584,8 @@ bool Delete_rows_compressed_log_event::write()
 #if defined(HAVE_REPLICATION)
 
 int 
-Delete_rows_log_event::do_before_row_operations(const Slave_reporting_capability *const)
+Delete_rows_log_event::do_before_row_operations(rpl_group_info *rgi,
+                                                COPY_INFO*, Write_record*)
 {
   /*
     Increment the global status delete count variable
@@ -8793,7 +8715,8 @@ void Update_rows_log_event::init(MY_BITMAP const *cols)
 #if defined(HAVE_REPLICATION)
 
 int 
-Update_rows_log_event::do_before_row_operations(const Slave_reporting_capability *const)
+Update_rows_log_event::do_before_row_operations(rpl_group_info *,
+                                                COPY_INFO*, Write_record*)
 {
   /*
     Increment the global status update count variable
@@ -8841,8 +8764,6 @@ Update_rows_log_event::do_exec_row(rpl_group_info *rgi)
     return error;
   }
 
-  const bool history_change= m_table->versioned() ?
-    !m_table->vers_end_field()->is_max() : false;
   TABLE_LIST *tl= m_table->pos_in_table_list;
   uint8 trg_event_map_save= tl->trg_event_map;
 
@@ -8893,8 +8814,12 @@ Update_rows_log_event::do_exec_row(rpl_group_info *rgi)
   {
     if (m_vers_from_plain && m_table->versioned(VERS_TIMESTAMP))
       m_table->vers_update_fields();
-    if (!history_change && !m_table->vers_end_field()->is_max())
+    Field *end= m_table->vers_end_field();
+    const uchar *old_ptr= end->ptr_in_record(m_table->record[1]);
+
+    if (end->is_max(old_ptr) && !end->is_max())
     {
+      // This is a versioned delete, and we'll have to invoke ON DELETE actions
       tl->trg_event_map|= trg2bit(TRG_EVENT_DELETE);
     }
   }

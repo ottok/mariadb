@@ -17,7 +17,6 @@ Build-Depends: bison,
                libboost-dev,
                libboost-filesystem-dev [amd64],
                libboost-regex-dev [amd64],
-               libboost-system-dev [amd64],
                libboost-thread-dev [amd64],
                libbz2-dev,
                libcrack2-dev (>= 2.9.0),
@@ -674,8 +673,7 @@ Description: MariaDB database core server files
 
 Package: mariadb-server
 Architecture: any
-Suggests: mailx,
-          mariadb-test,
+Suggests: mariadb-test,
           netcat-openbsd
 Recommends: libhtml-template-perl,
             pv
@@ -803,8 +801,7 @@ Description: Backup tool for MariaDB server
 
 Package: mariadb-plugin-connect
 Architecture: any
-Depends: libxml2,
-         mariadb-server (= ${server:Version}),
+Depends: mariadb-server (= ${server:Version}),
          unixodbc,
          ${misc:Depends},
          ${shlibs:Depends}
@@ -831,8 +828,7 @@ Description: Connect storage engine for MariaDB server
 
 Package: mariadb-plugin-s3
 Architecture: any
-Depends: libcurl4,
-         mariadb-server (= ${server:Version}),
+Depends: mariadb-server (= ${server:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Description: Amazon S3 archival storage engine for MariaDB
@@ -861,8 +857,7 @@ Description: RocksDB storage engine for MariaDB server
 
 Package: mariadb-plugin-oqgraph
 Architecture: any
-Depends: libjudydebian1,
-         mariadb-server (= ${server:Version}),
+Depends: mariadb-server (= ${server:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Breaks: mariadb-oqgraph-engine-10.0,
@@ -927,8 +922,7 @@ Description: Spider storage engine for MariaDB server
 
 Package: mariadb-plugin-gssapi-server
 Architecture: any
-Depends: libgssapi-krb5-2,
-         mariadb-server,
+Depends: mariadb-server (= ${server:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Breaks: mariadb-gssapi-server-10.1,
@@ -951,8 +945,7 @@ Description: GSSAPI authentication plugin for MariaDB server
 
 Package: mariadb-plugin-gssapi-client
 Architecture: any
-Depends: libgssapi-krb5-2,
-         mariadb-client (= ${binary:Version}),
+Depends: mariadb-client (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Breaks: mariadb-gssapi-client-10.1,
@@ -971,8 +964,7 @@ Description: GSSAPI authentication plugin for MariaDB client
 
 Package: mariadb-plugin-cracklib-password-check
 Architecture: any
-Depends: libcrack2 (>= 2.9.0),
-         mariadb-server,
+Depends: mariadb-server,
          ${misc:Depends},
          ${shlibs:Depends}
 Description: CrackLib Password Validation Plugin for MariaDB server
@@ -985,8 +977,7 @@ Description: CrackLib Password Validation Plugin for MariaDB server
 
 Package: mariadb-plugin-hashicorp-key-management
 Architecture: any
-Depends: libcurl4,
-         mariadb-server,
+Depends: mariadb-server,
          ${misc:Depends},
          ${shlibs:Depends}
 Description: Hashicorp Key Management plugin for MariaDB

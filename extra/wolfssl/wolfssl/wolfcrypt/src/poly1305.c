@@ -1,12 +1,12 @@
 /* poly1305.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -37,6 +37,14 @@ and Daniel J. Bernstein
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
+
+/*
+ * Poly1305 Build Options:
+ *
+ * HAVE_POLY1305:            Enable Poly1305 authenticator          default: off
+ * POLY130564:               Use 64-bit Poly1305 implementation    default: auto
+ * USE_INTEL_POLY1305_SPEEDUP: Intel AVX/AVX2 Poly1305 accel      default: off
+ */
 
 #ifdef HAVE_POLY1305
 #include <wolfssl/wolfcrypt/poly1305.h>
@@ -83,12 +91,13 @@ and Daniel J. Bernstein
 #endif
 
 #ifdef USE_INTEL_POLY1305_SPEEDUP
-static word32 intel_flags = 0;
-static word32 cpu_flags_set = 0;
+static cpuid_flags_t intel_flags = WC_CPUID_INITIALIZER;
 #endif
 
 #if defined(USE_INTEL_POLY1305_SPEEDUP) || defined(POLY130564)
-    #if defined(_MSC_VER)
+    #if defined(__WATCOMC__)
+        #error "POLY130564 || USE_INTEL_POLY1305_SPEEDUP Watcom not supported"
+    #elif defined(_MSC_VER)
         #define POLY1305_NOINLINE __declspec(noinline)
     #elif defined(__GNUC__)
         #define POLY1305_NOINLINE __attribute__((noinline))
@@ -96,13 +105,13 @@ static word32 cpu_flags_set = 0;
         #define POLY1305_NOINLINE
     #endif
 
-    #if defined(_MSC_VER)
+    #if defined(_MSC_VER) && !(__WATCOMC__)
         #include <intrin.h>
 
-        typedef struct word128 {
+        typedef struct poly1305_word128 {
             word64 lo;
             word64 hi;
-        } word128;
+        } poly1305_word128;
 
         #define MUL(out, x, y) out.lo = _umul128((x), (y), &out.hi)
         #define ADD(out, in) { word64 t = out.lo; out.lo += in.lo; \
@@ -114,12 +123,12 @@ static word32 cpu_flags_set = 0;
 
     #elif defined(__GNUC__)
         #if defined(__SIZEOF_INT128__)
-            PEDANTIC_EXTENSION typedef unsigned __int128 word128;
+            PEDANTIC_EXTENSION typedef unsigned __int128 poly1305_word128;
         #else
-            typedef unsigned word128 __attribute__((mode(TI)));
+            typedef unsigned poly1305_word128 __attribute__((mode(TI)));
         #endif
 
-        #define MUL(out, x, y) out = ((word128)(x) * (y))
+        #define MUL(out, x, y) out = ((poly1305_word128)(x) * (y))
         #define ADD(out, in) (out) += (in)
         #define ADDLO(out, in) (out) += (in)
         #define SHR(in, shift) (word64)((in) >> (shift))
@@ -138,14 +147,14 @@ static word32 cpu_flags_set = 0;
  * ctx  Poly1305 context.
  * m    One block of message data.
  */
-extern void poly1305_block_avx(Poly1305* ctx, const unsigned char *m);
+WOLFSSL_LOCAL void poly1305_block_avx(Poly1305* ctx, const unsigned char *m);
 /* Process multiple blocks (n * 16 bytes) of data.
  *
  * ctx    Poly1305 context.
  * m      Blocks of message data.
  * bytes  The number of bytes to process.
  */
-extern void poly1305_blocks_avx(Poly1305* ctx, const unsigned char* m,
+WOLFSSL_LOCAL void poly1305_blocks_avx(Poly1305* ctx, const unsigned char* m,
                                 size_t bytes);
 /* Set the key to use when processing data.
  * Initialize the context.
@@ -153,14 +162,14 @@ extern void poly1305_blocks_avx(Poly1305* ctx, const unsigned char* m,
  * ctx  Poly1305 context.
  * key  The key data (16 bytes).
  */
-extern void poly1305_setkey_avx(Poly1305* ctx, const byte* key);
+WOLFSSL_LOCAL void poly1305_setkey_avx(Poly1305* ctx, const byte* key);
 /* Calculate the final result - authentication data.
  * Zeros out the private data in the context.
  *
  * ctx  Poly1305 context.
  * mac  Buffer to hold 16 bytes.
  */
-extern void poly1305_final_avx(Poly1305* ctx, byte* mac);
+WOLFSSL_LOCAL void poly1305_final_avx(Poly1305* ctx, byte* mac);
 #endif
 
 #ifdef HAVE_INTEL_AVX2
@@ -170,13 +179,13 @@ extern void poly1305_final_avx(Poly1305* ctx, byte* mac);
  * m      Blocks of message data.
  * bytes  The number of bytes to process.
  */
-extern void poly1305_blocks_avx2(Poly1305* ctx, const unsigned char* m,
+WOLFSSL_LOCAL void poly1305_blocks_avx2(Poly1305* ctx, const unsigned char* m,
                                  size_t bytes);
 /* Calculate R^1, R^2, R^3 and R^4 and store them in the context.
  *
  * ctx    Poly1305 context.
  */
-extern void poly1305_calc_powers_avx2(Poly1305* ctx);
+WOLFSSL_LOCAL void poly1305_calc_powers_avx2(Poly1305* ctx);
 /* Set the key to use when processing data.
  * Initialize the context.
  * Calls AVX set key function as final function calls AVX code.
@@ -184,7 +193,7 @@ extern void poly1305_calc_powers_avx2(Poly1305* ctx);
  * ctx  Poly1305 context.
  * key  The key data (16 bytes).
  */
-extern void poly1305_setkey_avx2(Poly1305* ctx, const byte* key);
+WOLFSSL_LOCAL void poly1305_setkey_avx2(Poly1305* ctx, const byte* key);
 /* Calculate the final result - authentication data.
  * Zeros out the private data in the context.
  * Calls AVX final function to quickly process last blocks.
@@ -192,7 +201,7 @@ extern void poly1305_setkey_avx2(Poly1305* ctx, const byte* key);
  * ctx  Poly1305 context.
  * mac  Buffer to hold 16 bytes - authentication data.
  */
-extern void poly1305_final_avx2(Poly1305* ctx, byte* mac);
+WOLFSSL_LOCAL void poly1305_final_avx2(Poly1305* ctx, byte* mac);
 #endif
 
 #ifdef __cplusplus
@@ -263,7 +272,7 @@ static WC_INLINE void u32tole64(const word32 inLe32, byte outLe64[8])
 }
 
 
-#if !defined(WOLFSSL_ARMASM) && !defined(WOLFSSL_RISCV_ASM)
+#if !defined(WOLFSSL_RISCV_ASM)
 /*
 This local function operates on a message with a given number of bytes
 with a given ctx pointer to a Poly1305 structure.
@@ -277,13 +286,27 @@ static int poly1305_blocks(Poly1305* ctx, const unsigned char *m,
     poly1305_blocks_avx(ctx, m, bytes);
     RESTORE_VECTOR_REGISTERS();
     return 0;
+#elif defined(WOLFSSL_ARMASM) && defined(__aarch64__)
+    poly1305_arm64_blocks(ctx, m, bytes);
+    return 0;
+#elif defined(WOLFSSL_ARMASM) && defined(WOLFSSL_ARMASM_THUMB2)
+    poly1305_blocks_thumb2_16(ctx, m, bytes, 1);
+    return 0;
+#elif defined(WOLFSSL_ARMASM)
+#ifndef WOLFSSL_ARMASM_NO_NEON
+    poly1305_arm32_blocks(ctx, m, bytes);
+    return 0;
+#else
+    poly1305_arm32_blocks_16(ctx, m, bytes, 1);
+    return 0;
+#endif
 #elif defined(POLY130564)
     const word64 hibit = (ctx->finished) ? 0 : ((word64)1 << 40); /* 1 << 128 */
     word64 r0,r1,r2;
     word64 s1,s2;
     word64 h0,h1,h2;
     word64 c;
-    word128 d0,d1,d2,d;
+    poly1305_word128 d0,d1,d2,d;
 
     r0 = ctx->r[0];
     r1 = ctx->r[1];
@@ -474,13 +497,23 @@ static int poly1305_blocks(Poly1305* ctx, const unsigned char *m,
 This local function is used for the last call when a message with a given
 number of bytes is less than the block size.
 */
-static int poly1305_block(Poly1305* ctx, const unsigned char *m)
+static WC_INLINE int poly1305_block(Poly1305* ctx, const unsigned char *m)
 {
 #ifdef USE_INTEL_POLY1305_SPEEDUP
     /* No call to poly1305_block when AVX2, AVX2 does 4 blocks at a time. */
     SAVE_VECTOR_REGISTERS(return _svr_ret;);
     poly1305_block_avx(ctx, m);
     RESTORE_VECTOR_REGISTERS();
+    return 0;
+#elif defined(WOLFSSL_ARMASM) && defined(WOLFSSL_ARMASM_THUMB2)
+    poly1305_blocks_thumb2_16(ctx, m, POLY1305_BLOCK_SIZE, !ctx->finished);
+    return 0;
+#elif defined(WOLFSSL_ARMASM) && !defined(__aarch64__)
+    poly1305_arm32_blocks_16(ctx, m, POLY1305_BLOCK_SIZE, !ctx->finished);
+    return 0;
+#elif defined(WOLFSSL_ARMASM)
+    /* Only called from finished. */
+    poly1305_arm64_block_16(ctx, m);
     return 0;
 #else
     return poly1305_blocks(ctx, m, POLY1305_BLOCK_SIZE);
@@ -489,7 +522,8 @@ static int poly1305_block(Poly1305* ctx, const unsigned char *m)
 
 int wc_Poly1305SetKey(Poly1305* ctx, const byte* key, word32 keySz)
 {
-#if defined(POLY130564) && !defined(USE_INTEL_POLY1305_SPEEDUP)
+#if defined(POLY130564) && !defined(USE_INTEL_POLY1305_SPEEDUP) && \
+    !defined(WOLFSSL_ARMASM)
     word64 t0,t1;
 #endif
 
@@ -507,14 +541,12 @@ int wc_Poly1305SetKey(Poly1305* ctx, const byte* key, word32 keySz)
     printf("\n");
 #endif
 
-    if (keySz != 32 || ctx == NULL)
+    if ((ctx == NULL) || (key == NULL) || (keySz != 32)) {
         return BAD_FUNC_ARG;
+    }
 
 #ifdef USE_INTEL_POLY1305_SPEEDUP
-    if (!cpu_flags_set) {
-        intel_flags = cpuid_get_flags();
-        cpu_flags_set = 1;
-    }
+    cpuid_get_flags_ex(&intel_flags);
     SAVE_VECTOR_REGISTERS(return _svr_ret;);
     #ifdef HAVE_INTEL_AVX2
     if (IS_INTEL_AVX2(intel_flags))
@@ -524,6 +556,9 @@ int wc_Poly1305SetKey(Poly1305* ctx, const byte* key, word32 keySz)
         poly1305_setkey_avx(ctx, key);
     RESTORE_VECTOR_REGISTERS();
     ctx->started = 0;
+#elif defined(WOLFSSL_ARMASM)
+    poly1305_set_key(ctx, key);
+    ctx->finished = 0;
 #elif defined(POLY130564)
 
     /* r &= 0xffffffc0ffffffc0ffffffc0fffffff */
@@ -579,6 +614,7 @@ int wc_Poly1305SetKey(Poly1305* ctx, const byte* key, word32 keySz)
 int wc_Poly1305Final(Poly1305* ctx, byte* mac)
 {
 #ifdef USE_INTEL_POLY1305_SPEEDUP
+#elif defined(WOLFSSL_ARMASM)
 #elif defined(POLY130564)
 
     word64 h0,h1,h2,c;
@@ -610,6 +646,29 @@ int wc_Poly1305Final(Poly1305* ctx, byte* mac)
     #endif
         poly1305_final_avx(ctx, mac);
     RESTORE_VECTOR_REGISTERS();
+#elif defined(WOLFSSL_ARMASM)
+    #if !defined(WOLFSSL_ARMASM_THUMB2) && !defined(WOLFSSL_ARMASM_NO_NEON) && \
+        !defined(__aarch64__)
+        if (ctx->leftover >= POLY1305_BLOCK_SIZE) {
+             size_t len = ctx->leftover & (~(POLY1305_BLOCK_SIZE - 1));
+             poly1305_arm32_blocks(ctx, ctx->buffer, len);
+             ctx->leftover -= len;
+             if (ctx->leftover) {
+                 XMEMCPY(ctx->buffer, ctx->buffer + len, ctx->leftover);
+             }
+        }
+    #endif
+        if (ctx->leftover) {
+             size_t i = ctx->leftover;
+             ctx->buffer[i++] = 1;
+             for (; i < POLY1305_BLOCK_SIZE; i++) {
+                 ctx->buffer[i] = 0;
+             }
+            ctx->finished = 1;
+            poly1305_block(ctx, ctx->buffer);
+        }
+
+        poly1305_final(ctx, mac);
 #elif defined(POLY130564)
 
     /* process the remaining block */
@@ -783,7 +842,7 @@ int wc_Poly1305Final(Poly1305* ctx, byte* mac)
 
     return 0;
 }
-#endif /* !WOLFSSL_ARMASM && !WOLFSSL_RISCV_ASM */
+#endif /* !WOLFSSL_RISCV_ASM */
 
 
 int wc_Poly1305Update(Poly1305* ctx, const byte* m, word32 bytes)

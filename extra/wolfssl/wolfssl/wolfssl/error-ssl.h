@@ -1,12 +1,12 @@
 /* error-ssl.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -82,6 +82,7 @@ enum wolfSSL_ErrorCodes {
     CLIENT_ID_ERROR              = -331,   /* psk client identity error  */
     SERVER_HINT_ERROR            = -332,   /* psk server hint error  */
     PSK_KEY_ERROR                = -333,   /* psk key error  */
+    DUPE_ENTRY_E                 = -334,   /* duplicate entry error */
 
     GETTIME_ERROR                = -337,   /* gettimeofday failed ??? */
     GETITIMER_ERROR              = -338,   /* getitimer failed ??? */
@@ -184,7 +185,7 @@ enum wolfSSL_ErrorCodes {
     TLS13_SECRET_CB_E            = -438,   /* TLS1.3 secret Cb fcn failure */
     DTLS_SIZE_ERROR              = -439,   /* Trying to send too much data */
     NO_CERT_ERROR                = -440,   /* TLS1.3 - no cert set error */
-    APP_DATA_READY               = -441,   /* DTLS1.2 application data ready for read */
+    APP_DATA_READY               = -441,   /* Application data ready for read */
     TOO_MUCH_EARLY_DATA          = -442,   /* Too much Early data */
     SOCKET_FILTERED_E            = -443,   /* Session stopped by network filter */
     HTTP_RECV_ERR                = -444,   /* HTTP Receive error */
@@ -220,6 +221,7 @@ enum wolfSSL_ErrorCodes {
     POST_HAND_AUTH_ERROR         = -504,   /* client won't do post-hand auth */
     HRR_COOKIE_ERROR             = -505,   /* HRR msg cookie mismatch */
     UNSUPPORTED_CERTIFICATE      = -506,   /* unsupported certificate type */
+    DTLS_PARTIAL_RECORD_READ     = -455,   /* received a partial record in a datagram */
 
     /* PEM and EVP errors */
     WOLFSSL_PEM_R_NO_START_LINE_E = -507,
@@ -236,7 +238,9 @@ enum wolfSSL_ErrorCodes {
     CRYPTO_POLICY_FORBIDDEN      = -516,   /* operation forbidden by system
                                             * crypto-policy */
 
-    WOLFSSL_LAST_E               = -516
+    SESSION_TICKET_NONCE_OVERFLOW = -517,  /* Session ticket nonce overflow */
+
+    WOLFSSL_LAST_E               = -517
 
     /* codes -1000 to -1999 are reserved for wolfCrypt. */
 };
@@ -263,7 +267,7 @@ enum IOerrors {
 
 
 WOLFSSL_LOCAL
-void SetErrorString(int err, char* buff);
+void SetErrorString(int err, char* str);
 
 #if defined(WOLFSSL_DEBUG_TRACE_ERROR_CODES) && \
         (defined(BUILDING_WOLFSSL) || \

@@ -1,12 +1,12 @@
 /* kcapi_rsa.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -44,12 +44,14 @@ static int KcapiRsa_SetPrivKey(RsaKey* key)
     int ret = 0;
     unsigned char* priv = NULL;
     int len;
+    int allocSz = 0;
 
     len = wc_RsaKeyToDer(key, NULL, 0);
     if (len < 0) {
         ret = len;
     }
     if (ret == 0) {
+        allocSz = len;
         priv = (unsigned char*)XMALLOC(len, key->heap, DYNAMIC_TYPE_TMP_BUFFER);
         if (priv == NULL) {
             ret = MEMORY_E;
@@ -69,7 +71,10 @@ static int KcapiRsa_SetPrivKey(RsaKey* key)
         }
     }
 
-    XFREE(priv, key->heap, DYNAMIC_TYPE_TMP_BUFFER);
+    if (priv != NULL) {
+        ForceZero(priv, allocSz);
+        XFREE(priv, key->heap, DYNAMIC_TYPE_TMP_BUFFER);
+    }
     return ret;
 }
 

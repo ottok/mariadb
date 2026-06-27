@@ -149,7 +149,7 @@ partition_notify_tabledef_changed(handlerton *,
 
 
 /*
-  If frm_error() is called then we will use this to to find out what file
+  If frm_error() is called then we will use this to find out what file
   extensions exist for the storage engine. This is also used by the default
   rename_table and delete_table method in handler.cc.
 */
@@ -670,8 +670,10 @@ int ha_partition::rename_table(const char *from, const char *to)
   SYNOPSIS
     create_partitioning_metadata()
     path                              Path to the new frm file (without ext)
-    old_p                             Path to the old frm file (without ext)
-    create_info                       Create info generated for CREATE TABLE
+    old_path                          Path to the old frm file (without ext)
+    action_flag                       Action to take
+    ignore_delete_error               Whether to ignore error in call to
+                                      mysql_file_delete
 
   RETURN VALUE
     >0                        Error
@@ -687,7 +689,8 @@ int ha_partition::rename_table(const char *from, const char *to)
 
 int ha_partition::create_partitioning_metadata(const char *path,
                                                const char *old_path,
-                                               chf_create_flags action_flag)
+                                               chf_create_flags action_flag,
+                                               bool ignore_delete_error)
 {
   partition_element *part;
   DBUG_ENTER("ha_partition::create_partitioning_metadata");
@@ -706,7 +709,8 @@ int ha_partition::create_partitioning_metadata(const char *path,
     strxmov(name, path, ha_par_ext, NullS);
     strxmov(old_name, old_path, ha_par_ext, NullS);
     if ((action_flag == CHF_DELETE_FLAG &&
-         mysql_file_delete(key_file_ha_partition_par, name, MYF(MY_WME))) ||
+         mysql_file_delete(key_file_ha_partition_par, name,
+                           ignore_delete_error ? MYF(0) : MYF(MY_WME))) ||
         (action_flag == CHF_RENAME_FLAG &&
          mysql_file_rename(key_file_ha_partition_par, old_name, name,
                            MYF(MY_WME))))
@@ -1430,13 +1434,11 @@ int ha_partition::handle_opt_part(THD *thd, HA_CHECK_OPT *check_opt,
    (modelled after mi_check_print_msg)
    TODO: move this into the handler, or rewrite mysql_admin_table.
 */
-bool print_admin_msg(THD* thd, uint len,
-                     const LEX_CSTRING *msg_type,
+bool print_admin_msg(THD* thd, uint len, bool as_error,
                      const char* db_name, String &table_name,
                      const LEX_CSTRING *op_name, const char *fmt, ...)
   ATTRIBUTE_FORMAT(printf, 7, 8);
-bool print_admin_msg(THD* thd, uint len,
-                     const LEX_CSTRING *msg_type,
+bool print_admin_msg(THD* thd, uint len, bool as_error,
                      const char* db_name, String &table_name,
                      const LEX_CSTRING *op_name, const char *fmt, ...)
 {
@@ -1447,6 +1449,7 @@ bool print_admin_msg(THD* thd, uint len,
   char name[NAME_LEN*2+2];
   char *msgbuf;
   bool error= true;
+  const LEX_CSTRING *msg_type= as_error ? &msg_error : &msg_warning;
 
   if (!(msgbuf= (char*) my_malloc(key_memory_Partition_admin, len, MYF(0))))
     return true;
@@ -1460,7 +1463,10 @@ bool print_admin_msg(THD* thd, uint len,
 
   if (!thd->vio_ok())
   {
-    sql_print_error("%s", msgbuf);
+    if (as_error)
+      sql_print_error("%s", msgbuf);
+    else
+      sql_print_warning("%s", msgbuf);
     goto err;
   }
 
@@ -1482,8 +1488,12 @@ bool print_admin_msg(THD* thd, uint len,
   protocol->store(msgbuf, msg_length, system_charset_info);
   if (protocol->write())
   {
-    sql_print_error("Failed on my_net_write, writing to stderr instead: %s",
-                    msgbuf);
+    if (as_error)
+      sql_print_error("Failed on my_net_write, writing to stderr instead: %s",
+                      msgbuf);
+    else
+      sql_print_warning("Failed on my_net_write, writing to stderr instead: %s",
+                        msgbuf);
     goto err;
   }
   error= false;
@@ -1547,7 +1557,7 @@ int ha_partition::handle_opt_partitions(THD *thd, HA_CHECK_OPT *check_opt,
                 error != HA_ADMIN_TRY_ALTER &&
                 error != HA_ERR_TABLE_READONLY)
             {
-	      print_admin_msg(thd, MYSQL_ERRMSG_SIZE, &msg_error,
+	      print_admin_msg(thd, MYSQL_ERRMSG_SIZE, true,
                               table_share->db.str, table->alias,
                               &opt_op_name[flag],
                               "Subpartition %s returned error",
@@ -1574,7 +1584,7 @@ int ha_partition::handle_opt_partitions(THD *thd, HA_CHECK_OPT *check_opt,
               error != HA_ADMIN_ALREADY_DONE &&
               error != HA_ADMIN_TRY_ALTER)
           {
-	    print_admin_msg(thd, MYSQL_ERRMSG_SIZE, &msg_error,
+	    print_admin_msg(thd, MYSQL_ERRMSG_SIZE, true,
                             table_share->db.str, table->alias,
                             &opt_op_name[flag], "Partition %s returned error",
                             part_elem->partition_name);
@@ -2137,12 +2147,12 @@ int ha_partition::change_partitions(HA_CREATE_INFO *create_info,
   DBUG_ASSERT(m_new_file == 0);
   m_new_file= new_file_array;
   for (i= 0; i < part_count; i++)
-    m_added_file[i]->extra(HA_EXTRA_BEGIN_ALTER_COPY);
+    m_added_file[i]->extra(HA_EXTRA_BEGIN_COPY);
   error= copy_partitions(copied, deleted);
   for (i= 0; i < part_count; i++)
     m_added_file[i]->extra(error
-                           ? HA_EXTRA_ABORT_ALTER_COPY
-                           : HA_EXTRA_END_ALTER_COPY);
+                           ? HA_EXTRA_ABORT_COPY
+                           : HA_EXTRA_END_COPY);
   if (unlikely(error))
   {
     /*
@@ -2231,6 +2241,13 @@ int ha_partition::copy_partitions(ulonglong * const copied,
       }
       else
       {
+        if (m_new_file[new_part]->m_lock_type != F_WRLCK)
+        {
+          m_last_part= reorg_part;
+          m_err_rec= table->record[0];
+          result= HA_ERR_ROW_IN_WRONG_PARTITION;
+          goto error;
+        }
         /* Copy record to new handler */
         (*copied)++;
         DBUG_ASSERT(!m_new_file[new_part]->row_logging);
@@ -5491,13 +5508,17 @@ void ha_partition::position(const uchar *record)
 {
   handler *file= m_file[m_last_part];
   size_t pad_length;
-  DBUG_ASSERT(bitmap_is_set(&(m_part_info->read_partitions), m_last_part));
   DBUG_ENTER("ha_partition::position");
 
-  file->position(record);
   int2store(ref, m_last_part);
-  memcpy((ref + PARTITION_BYTES_IN_POS), file->ref, file->ref_length);
-  pad_length= m_ref_length - PARTITION_BYTES_IN_POS - file->ref_length;
+  if (bitmap_is_set(&(m_part_info->read_partitions), m_last_part))
+  {
+    file->position(record);
+    memcpy((ref + PARTITION_BYTES_IN_POS), file->ref, file->ref_length);
+    pad_length= m_ref_length - PARTITION_BYTES_IN_POS - file->ref_length;
+  }
+  else
+    pad_length= m_ref_length - PARTITION_BYTES_IN_POS;
   if (pad_length)
     memset((ref + PARTITION_BYTES_IN_POS + file->ref_length), 0, pad_length);
 
@@ -9468,9 +9489,10 @@ int ha_partition::extra(enum ha_extra_function operation)
   */
     DBUG_RETURN(ER_UNSUPORTED_LOG_ENGINE);
   case HA_EXTRA_STARTING_ORDERED_INDEX_SCAN:
-  case HA_EXTRA_BEGIN_ALTER_COPY:
-  case HA_EXTRA_END_ALTER_COPY:
-  case HA_EXTRA_ABORT_ALTER_COPY:
+  case HA_EXTRA_BEGIN_COPY:
+  case HA_EXTRA_END_COPY:
+  case HA_EXTRA_ABORT_COPY:
+  case HA_EXTRA_BEGIN_ALTER_IGNORE_COPY:
     DBUG_RETURN(loop_partitions(extra_cb, &operation));
   default:
   {
@@ -9791,7 +9813,7 @@ ha_rows ha_partition::min_rows_for_estimate()
     All partitions might have been left as unused during partition pruning
     due to, for example, an impossible WHERE condition. Nonetheless, the
     optimizer might still attempt to perform (e.g. range) analysis where an
-    estimate of the the number of rows is calculated using records_in_range.
+    estimate of the number of rows is calculated using records_in_range.
     Hence, to handle this and other possible cases, use zero as the minimum
     number of rows to base the estimate on if no partition is being used.
   */
@@ -10333,11 +10355,12 @@ void ha_partition::print_error(int error, myf errflag)
   }
   else if (error == HA_ERR_ROW_IN_WRONG_PARTITION)
   {
-    /* Should only happen on DELETE or UPDATE! */
+    /* Should only happen on DELETE, UPDATE or REBUILD PARTITION! */
     DBUG_ASSERT(thd_sql_command(thd) == SQLCOM_DELETE ||
                 thd_sql_command(thd) == SQLCOM_DELETE_MULTI ||
                 thd_sql_command(thd) == SQLCOM_UPDATE ||
-                thd_sql_command(thd) == SQLCOM_UPDATE_MULTI);
+                thd_sql_command(thd) == SQLCOM_UPDATE_MULTI ||
+                thd_sql_command(thd) == SQLCOM_ALTER_TABLE);
     DBUG_ASSERT(m_err_rec);
     if (m_err_rec)
     {
@@ -11341,7 +11364,7 @@ int ha_partition::check_misplaced_rows(uint read_part_id, bool do_repair)
 
       if (num_misplaced_rows > 0)
       {
-	print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, &msg_warning,
+	print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, false,
                         table_share->db.str, table->alias,
                         &opt_op_name[REPAIR_PARTS],
                         "Moved %lld misplaced rows",
@@ -11363,7 +11386,7 @@ int ha_partition::check_misplaced_rows(uint read_part_id, bool do_repair)
       if (!do_repair)
       {
         /* Check. */
-	print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, &msg_error,
+	print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, true,
                         table_share->db.str, table->alias,
                         &opt_op_name[CHECK_PARTS],
                         "Found a misplaced row");
@@ -11412,7 +11435,7 @@ int ha_partition::check_misplaced_rows(uint read_part_id, bool do_repair)
                             (uint) correct_part_id,
                             str.c_ptr_safe());
           }
-	  print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, &msg_error,
+	  print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, true,
                           table_share->db.str, table->alias,
                           &opt_op_name[REPAIR_PARTS],
                           "Failed to move/insert a row"
@@ -11539,7 +11562,7 @@ int ha_partition::check_for_upgrade(HA_CHECK_OPT *check_opt)
               !(part_buf= generate_partition_syntax_for_frm(thd, m_part_info,
                                                             &part_buf_len,
                                                             NULL, NULL)) ||
-	      print_admin_msg(thd, SQL_ADMIN_MSG_TEXT_SIZE + 1, &msg_error,
+	      print_admin_msg(thd, SQL_ADMIN_MSG_TEXT_SIZE + 1, true,
 	                      table_share->db.str,
 	                      table->alias,
                               &opt_op_name[CHECK_PARTS],
@@ -11549,7 +11572,7 @@ int ha_partition::check_for_upgrade(HA_CHECK_OPT *check_opt)
                               part_buf))
 	  {
 	    /* Error creating admin message (too long string?). */
-	    print_admin_msg(thd, MYSQL_ERRMSG_SIZE, &msg_error,
+	    print_admin_msg(thd, MYSQL_ERRMSG_SIZE, true,
                             table_share->db.str, table->alias,
                             &opt_op_name[CHECK_PARTS],
                             KEY_PARTITIONING_CHANGED_STR,
@@ -12170,10 +12193,13 @@ int ha_partition::direct_delete_rows(ha_rows *delete_rows_result)
                    file->pre_direct_delete_rows() :
                    file->ha_direct_delete_rows(&delete_rows))))
       {
-        if (m_pre_calling)
-          file->ha_pre_rnd_end();
-        else
-          file->ha_rnd_end();
+        if (rnd_seq)
+        {
+          if (m_pre_calling)
+            file->ha_pre_rnd_end();
+          else
+            file->ha_rnd_end();
+        }
         DBUG_RETURN(error);
       }
       delete_rows_result+= delete_rows;

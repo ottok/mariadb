@@ -1,12 +1,12 @@
 /* ascon.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -44,6 +44,9 @@
 
 #ifndef WORD64_AVAILABLE
     #error "Ascon implementation requires a 64-bit word"
+#endif
+#ifdef BIG_ENDIAN_ORDER
+    #error "Ascon not yet supported on big-endian systems"
 #endif
 
 /* Data block size in bytes */
@@ -491,6 +494,8 @@ int wc_AsconAEAD128_DecryptUpdate(wc_AsconAEAD128* a, byte* out,
 
 int wc_AsconAEAD128_DecryptFinal(wc_AsconAEAD128* a, const byte* tag)
 {
+    int ret = 0;
+
     if (a == NULL || tag == NULL)
         return BAD_FUNC_ARG;
     if (!a->keySet || !a->nonceSet || !a->adSet)
@@ -509,13 +514,14 @@ int wc_AsconAEAD128_DecryptFinal(wc_AsconAEAD128* a, const byte* tag)
     a->state.s64[4] ^= a->key[1];
 
     if (ConstantCompare(tag, (const byte*)&a->state.s64[3],
-                        ASCON_AEAD128_TAG_SZ) != 0)
-        return ASCON_AUTH_E;
+                        ASCON_AEAD128_TAG_SZ) != 0) {
+        ret = ASCON_AUTH_E;
+    }
 
     /* Clear state as soon as possible */
     wc_AsconAEAD128_Clear(a);
 
-    return 0;
+    return ret;
 }
 
 #endif /* HAVE_ASCON */

@@ -35,6 +35,7 @@ Created 12/9/2009 Jimmy Yang
 #include "srv0srv.h"
 #include "trx0rseg.h"
 #include "trx0sys.h"
+#include "log.h"
 
 /* Macro to standardize the counter names for counters in the
 "monitor_buf_page" module as they have very structured defines */
@@ -1271,6 +1272,18 @@ srv_mon_set_module_control(
 	}
 }
 
+/** Reset all values.
+@param monitor  monitor identifier */
+void srv_mon_reset_all(monitor_id_t monitor) noexcept
+{
+  if (MONITOR_IS_ON(monitor))
+    sql_print_warning("InnoDB: Cannot reset all values for monitor counter '%s' "
+                      "while it is on. Please turn it off and retry.",
+                      srv_mon_get_name(monitor));
+  else
+    MONITOR_RESET_ALL(monitor);
+}
+
 /****************************************************************//**
 Get transaction system's rollback segment size in pages
 @return size in pages */
@@ -1595,7 +1608,7 @@ srv_mon_process_existing_counter(
 		break;
 
 	case MONITOR_LSN_CHECKPOINT_AGE:
-		log_sys.latch.wr_lock(SRW_LOCK_CALL);
+		log_sys.latch.wr_lock();
 		value = static_cast<mon_type_t>(log_sys.get_lsn()
 						- log_sys.last_checkpoint_lsn);
 		log_sys.latch.wr_unlock();

@@ -9,7 +9,14 @@ EXTRA_DIST += \
          certs/test/cert-ext-nc.cfg \
          certs/test/cert-ext-nc.der \
          certs/test/cert-ext-nc.pem \
+         certs/test/cert-ext-nc-combined.der \
+         certs/test/cert-ext-nc-combined.pem \
+         certs/test/cert-ext-ncip.der \
+         certs/test/cert-ext-ncip.pem \
          certs/test/cert-ext-ncdns.der \
+         certs/test/cert-ext-ncdns.pem \
+         certs/test/cert-ext-ncmulti.der \
+         certs/test/cert-ext-ncmulti.pem \
          certs/test/cert-ext-ncmixed.der \
          certs/test/cert-ext-mnc.der \
          certs/test/cert-ext-nct.cfg \
@@ -36,7 +43,8 @@ EXTRA_DIST += \
          certs/test/cert-over-max-altnames.cfg \
          certs/test/cert-over-max-altnames.pem \
          certs/test/cert-over-max-nc.cfg \
-         certs/test/cert-over-max-nc.pem
+         certs/test/cert-over-max-nc.pem \
+         certs/test/client-ecc-cert-ski.hex
 
 # The certs/server-cert with the last byte (signature byte) changed
 EXTRA_DIST += \
@@ -69,6 +77,8 @@ EXTRA_DIST += \
          certs/test/server-localhost.pem \
          certs/test/ossl-trusted-cert.pem \
          certs/test/ktri-keyid-cms.msg \
+         certs/test/kari-keyid-cms.msg \
+         certs/test/encrypteddata.msg \
          certs/test/smime-test.p7s \
          certs/test/smime-test-canon.p7s \
          certs/test/smime-test-multipart.p7s \

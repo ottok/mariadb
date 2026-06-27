@@ -866,7 +866,7 @@ class Year
 protected:
   uint m_year;
   bool m_truncated;
-  uint year_precision(const Item *item) const;
+  static uint year_precision(const Item *item);
 public:
   Year(): m_year(0), m_truncated(false) { }
   Year(longlong value, bool unsigned_flag, uint length);
@@ -1495,7 +1495,7 @@ class Interval_DDhhmmssff: public Temporal
   }
 public:
   // Get fractional second precision from an Item
-  static uint fsp(THD *thd, Item *item);
+  static decimal_digits_t fsp(THD *thd, Item *item);
   /*
     Maximum useful HOUR value:
     TIMESTAMP'0001-01-01 00:00:00' + '87649415:59:59' = '9999-12-31 23:59:59'
@@ -3268,8 +3268,9 @@ public:
   void aggregate_attributes_int(Item **items, uint nitems)
   {
     collation= DTCollation_numeric();
-    fix_char_length(find_max_char_length(items, nitems));
     unsigned_flag= count_unsigned(items, nitems) > 0;
+    fix_char_length(find_max_decimal_int_part(items, nitems) +
+                    (unsigned_flag ? 0 : 1));
     decimals= 0;
   }
   void aggregate_attributes_real(Item **items, uint nitems)
@@ -3940,6 +3941,8 @@ public:
   virtual bool can_return_extract_source(interval_type type) const;
   virtual bool is_bool_type() const { return false; }
   virtual bool is_general_purpose_string_type() const { return false; }
+  virtual Type_std_attributes Item_type_std_attributes_generic(
+                                                       const Item *item) const;
   virtual decimal_digits_t Item_time_precision(THD *thd, Item *item) const;
   virtual decimal_digits_t Item_datetime_precision(THD *thd, Item *item) const;
   virtual decimal_digits_t Item_decimal_scale(const Item *item) const;
@@ -4192,7 +4195,7 @@ public:
     @retval
       NULL      on error
     @retval
-      non-NULL  a pointer to a a valid string on success
+      non-NULL  a pointer to a valid string on success
   */
   virtual String *print_item_value(THD *thd, Item *item, String *str) const= 0;
 
@@ -5287,6 +5290,8 @@ public:
                      bool binary_cmp) const override;
   bool Item_eq_value(THD *thd, const Type_cmp_attributes *attr,
                      Item *a, Item *b) const override;
+  Type_std_attributes Item_type_std_attributes_generic(
+                                              const Item *item) const override;
   decimal_digits_t Item_decimal_precision(const Item *item) const override;
   bool Item_save_in_value(THD *thd, Item *item, st_value *value) const override;
   bool Item_param_set_from_value(THD *thd,
@@ -7000,6 +7005,8 @@ public:
                                    const Bit_addr &bit,
                                    const Column_definition_attributes *attr,
                                    uint32 flags) const override;
+  void Item_param_set_param_func(Item_param *param,
+                                 uchar **pos, ulong len) const override;
 };
 
 

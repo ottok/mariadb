@@ -194,6 +194,8 @@ enum enum_binlog_row_image {
 #define MODE_TIME_ROUND_FRACTIONAL      (1ULL << 34)
 /* The following modes are specific to MySQL */
 #define MODE_MYSQL80_TIME_TRUNCATE_FRACTIONAL (1ULL << 32)
+#define WAS_ORACLE                      (1ULL << 35)
+#define IS_OR_WAS_ORACLE                (MODE_ORACLE | WAS_ORACLE)
 
 
 /* Bits for different old style modes */
@@ -1583,7 +1585,7 @@ public:
   bool check_access(const privilege_t want_access, bool match_any = false);
   bool is_priv_user(const char *user, const char *host);
   bool is_user_defined() const
-    { return user && user != delayed_user && user != slave_user; };
+    { return user && user != delayed_user && user != slave_user && user != wsrep_user; };
 };
 
 
@@ -2045,6 +2047,76 @@ public:
 };
 
 
+extern "C" void my_message_sql(uint error, const char *str, myf MyFlags);
+
+/**
+  Error handler that captures and postpones errors.
+  Warnings and notes are passed through to the next handler.
+  Stored errors can be re-emitted later via emit_errors().
+*/
+
+class Postponed_error_handler : public Internal_error_handler
+{
+  struct Error_entry
+  {
+    uint sql_errno;
+    char message[MYSQL_ERRMSG_SIZE];
+    Error_entry *next;
+  };
+
+  Error_entry *m_first;
+  Error_entry *m_last;
+  MEM_ROOT *m_mem_root;
+
+public:
+  Postponed_error_handler(MEM_ROOT *mem_root)
+    : m_first(nullptr), m_last(nullptr), m_mem_root(mem_root)
+  {}
+
+  bool handle_condition(THD *thd,
+                        uint sql_errno,
+                        const char *sqlstate,
+                        Sql_condition::enum_warning_level *level,
+                        const char *msg,
+                        Sql_condition **cond_hdl) override
+  {
+    /* Only capture errors, let warnings and notes pass through */
+    if (*level != Sql_condition::WARN_LEVEL_ERROR)
+      return false;
+
+    Error_entry *entry= (Error_entry*) alloc_root(m_mem_root,
+                                                  sizeof(Error_entry));
+    if (!entry)
+      return false;  // Can't store, let error propagate
+
+    entry->sql_errno= sql_errno;
+    strmake(entry->message, msg, sizeof(entry->message) - 1);
+    entry->next= nullptr;
+
+    if (m_last)
+      m_last->next= entry;
+    else
+      m_first= entry;
+    m_last= entry;
+
+    return true;
+  }
+
+  bool has_errors() const { return m_first != nullptr; }
+
+  void emit_errors()
+  {
+    for (Error_entry *e= m_first; e; e= e->next)
+      my_message_sql(e->sql_errno, e->message, MYF(0));
+  }
+
+  void clear()
+  {
+    m_first= m_last= nullptr;
+  }
+};
+
+
 /**
   This class is an internal error handler implementation for
   DROP TABLE statements. The thing is that there may be warnings during
@@ -2449,16 +2521,16 @@ struct wait_for_commit
 
 class Sp_caches
 {
+protected:
+  ulong m_sp_cache_version;
 public:
   sp_cache *sp_proc_cache;
   sp_cache *sp_func_cache;
   sp_cache *sp_package_spec_cache;
   sp_cache *sp_package_body_cache;
   Sp_caches()
-   :sp_proc_cache(NULL),
-    sp_func_cache(NULL),
-    sp_package_spec_cache(NULL),
-    sp_package_body_cache(NULL)
+   :m_sp_cache_version(0), sp_proc_cache(NULL), sp_func_cache(NULL),
+    sp_package_spec_cache(NULL), sp_package_body_cache(NULL)
   { }
   ~Sp_caches()
   {
@@ -2468,19 +2540,22 @@ public:
     DBUG_ASSERT(sp_package_spec_cache == NULL);
     DBUG_ASSERT(sp_package_body_cache == NULL);
   }
-  void sp_caches_swap(Sp_caches &rhs)
-  {
-    swap_variables(sp_cache*, sp_proc_cache, rhs.sp_proc_cache);
-    swap_variables(sp_cache*, sp_func_cache, rhs.sp_func_cache);
-    swap_variables(sp_cache*, sp_package_spec_cache, rhs.sp_package_spec_cache);
-    swap_variables(sp_cache*, sp_package_body_cache, rhs.sp_package_body_cache);
-  }
   void sp_caches_clear();
   /**
     Clear content of sp related caches.
     Don't delete cache objects itself.
   */
   void sp_caches_empty();
+  ulong sp_cache_version() const
+  {
+    DBUG_ASSERT(m_sp_cache_version);
+    return m_sp_cache_version;
+  }
+  void set_sp_cache_version_if_needed(ulong version)
+  {
+    if (!m_sp_cache_version)
+      m_sp_cache_version= version;
+  }
 };
 
 
@@ -3060,10 +3135,10 @@ public:
   int binlog_update_row(TABLE* table, bool is_transactional,
                         const uchar *old_data, const uchar *new_data);
   bool prepare_handlers_for_update(uint flag);
-  bool binlog_write_annotated_row(Log_event_writer *writer);
+  bool binlog_write_annotated_row(bool use_trans_cache);
   void binlog_prepare_for_row_logging();
   bool binlog_write_table_maps();
-  bool binlog_write_table_map(TABLE *table, bool with_annotate);
+  bool binlog_write_table_map(TABLE *table);
   static void binlog_prepare_row_images(TABLE* table);
 
   void set_server_id(uint32 sid) { variables.server_id = sid; }
@@ -5727,7 +5802,7 @@ public:
         return variables.idle_transaction_timeout;
     }
 
-    return variables.net_wait_timeout;
+    return uint(variables.net_wait_timeout);
   }
 
   /**
@@ -5828,6 +5903,12 @@ public:
     return ((variables.note_verbosity & (NOTE_VERBOSITY_UNUSABLE_KEYS)) ||
             (lex->describe && // Is EXPLAIN
              (variables.note_verbosity & NOTE_VERBOSITY_EXPLAIN)));
+  }
+
+  uint gconcat_max_len()
+  {
+    return MY_MIN(variables.group_concat_max_len,
+                  (uint)variables.max_allowed_packet);
   }
 
   bool vers_insert_history_fast(const TABLE *table)
@@ -6395,6 +6476,8 @@ public:
   int send_data(List<Item> &items) override;
 };
 
+class Write_record; // defined in sql_insert.h
+
 
 class select_insert :public select_result_interceptor {
  public:
@@ -6402,13 +6485,14 @@ class select_insert :public select_result_interceptor {
   TABLE_LIST *table_list;
   TABLE *table;
   List<Item> *fields;
+  Write_record *write;
   ulonglong autoinc_value_of_last_inserted_row; // autogenerated or not
   COPY_INFO info;
   bool insert_into_view;
   select_insert(THD *thd_arg, TABLE_LIST *table_list_par, TABLE *table_par,
                 List<Item> *fields_par, List<Item> *update_fields,
                 List<Item> *update_values, enum_duplicates duplic,
-                bool ignore, select_result *sel_ret_list);
+                bool ignore, select_result *sel_ret_list, Write_record *write);
   ~select_insert();
   int prepare(List<Item> &list, SELECT_LEX_UNIT *u) override;
   int prepare2(JOIN *join) override;
@@ -6442,9 +6526,9 @@ public:
                 Table_specification_st *create_info_par,
                 Alter_info *alter_info_arg,
                 List<Item> &select_fields,enum_duplicates duplic, bool ignore,
-                TABLE_LIST *select_tables_arg):
+                TABLE_LIST *select_tables_arg, Write_record *write):
     select_insert(thd_arg, table_arg, NULL, &select_fields, 0, 0, duplic,
-                  ignore, NULL),
+                  ignore, NULL, write),
     create_info(create_info_par),
     select_tables(select_tables_arg),
     alter_info(alter_info_arg),
@@ -6687,7 +6771,7 @@ public:
     ("c"),("b"),("c"),("c"),("a"),("b"),("g")
     ("c"),("a"),("b"),("d"),("b"),("e")
 
-  - Let's demonstrate how the the set operation INTERSECT ALL is proceesed
+  - Let's demonstrate how the set operation INTERSECT ALL is proceesed
     for the query
               SELECT f FROM t1 INTERSECT ALL SELECT f FROM t2
 
@@ -6735,7 +6819,7 @@ public:
       |0      |1      |c  |
       |0      |1      |c  |
 
-  - Let's demonstrate how the the set operation EXCEPT ALL is proceesed
+  - Let's demonstrate how the set operation EXCEPT ALL is proceesed
     for the query
               SELECT f FROM t1 EXCEPT ALL SELECT f FROM t3
 
@@ -7338,7 +7422,7 @@ class multi_update :public select_result_interceptor
 {
   TABLE_LIST *all_tables; /* query/update command tables */
   List<TABLE_LIST> *leaves;     /* list of leaves of join table tree */
-  List<TABLE_LIST> updated_leaves;  /* list of of updated leaves */
+  List<TABLE_LIST> updated_leaves;  /* list of updated leaves */
   TABLE_LIST *update_tables;
   TABLE **tmp_tables, *main_table, *table_to_update;
   TMP_TABLE_PARAM *tmp_table_param;
@@ -7600,27 +7684,23 @@ public:
   If command creates or drops a database
 */
 #define CF_DB_CHANGE (1U << 23)
-
-#ifdef WITH_WSREP
-/**
-  DDL statement that may be subject to error filtering.
-*/
-#define CF_WSREP_MAY_IGNORE_ERRORS (1U << 24)
-/**
-   Basic DML statements that create writeset.
-*/
-#define CF_WSREP_BASIC_DML (1u << 25)
-
-#endif /* WITH_WSREP */
-
-
-/* Bits in server_command_flags */
-
 /**
   Statement that deletes existing rows (DELETE, DELETE_MULTI)
 */
 #define CF_DELETES_DATA (1U << 24)
 
+#ifdef WITH_WSREP
+/**
+  DDL statement that may be subject to error filtering.
+*/
+#define CF_WSREP_MAY_IGNORE_ERRORS (1U << 25)
+/**
+   Basic DML statements that create writeset.
+*/
+#define CF_WSREP_BASIC_DML (1u << 26)
+#endif /* WITH_WSREP */
+
+/* Bits in server_command_flags */
 /**
   Skip the increase of the global query id counter. Commonly set for
   commands that are stateless (won't cause any change on the server
@@ -7831,7 +7911,7 @@ class Sql_mode_save
   Sql_mode_save(THD *thd) : thd(thd), old_mode(thd->variables.sql_mode) {}
   ~Sql_mode_save() { thd->variables.sql_mode = old_mode; }
 
- private:
+ protected:
   THD *thd;
   sql_mode_t old_mode; // SQL mode saved at construction time.
 };
@@ -7848,6 +7928,9 @@ public:
   Sql_mode_save_for_frm_handling(THD *thd)
    :Sql_mode_save(thd)
   {
+    if (thd->variables.sql_mode & MODE_ORACLE)
+      thd->variables.sql_mode|= IS_OR_WAS_ORACLE;
+
     /*
       - MODE_REAL_AS_FLOAT            affect only CREATE TABLE parsing
       + MODE_PIPES_AS_CONCAT          affect expression parsing
@@ -7877,6 +7960,12 @@ public:
                                 MODE_IGNORE_SPACE | MODE_NO_BACKSLASH_ESCAPES |
                                 MODE_ORACLE | MODE_EMPTY_STRING_IS_NULL);
   };
+
+  ~Sql_mode_save_for_frm_handling()
+  {
+    if (thd->variables.sql_mode & IS_OR_WAS_ORACLE)
+      thd->variables.sql_mode&= ~IS_OR_WAS_ORACLE;
+  }
 };
 
 
@@ -8037,6 +8126,8 @@ class Database_qualified_name
 public:
   LEX_CSTRING m_db;
   LEX_CSTRING m_name;
+  Database_qualified_name()
+  { }
   Database_qualified_name(const LEX_CSTRING *db, const LEX_CSTRING *name)
    :m_db(*db), m_name(*name)
   { }
