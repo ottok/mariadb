@@ -8,29 +8,38 @@ s390x builds which makes the post-build mariadb-test-test fail:
     [Warning] InnoDB: native AIO failed: falling back to
     innodb_use_native_aio=OFF
 
-Unlike upstream MariaDB, in Debian we removed libaio in for Linux on
-MariaDB 10.6+ in 612630c6 and completely in 1d648d6f. Thus the build
-will not have libaio at all on any platform in Debian, and the warning
-is useless.
+The case of this is the ci environment only where there is insufficent
+fs.aio-max-nr configured. A such we are adding a suppression to the
+mtr only. The warning is valuable for users. Upstream MDEV-37411 has
+added a io_setup as a warning, which will fail in the CI environment,
+so we're pre-emptively suppressing this warning too.
 
-This might not be the optimal solution, but at least suppressing the warning
-will unblock the 11.8.3 release for now.
+Unlike upstream MariaDB, in Debian we removed libaio in for Linux on
+MariaDB 10.6+ in 612630c6 and completely in 1d648d6f. This was re-added
+by upstream added a system variable innodb_linux_aio to control, and
+also provided automated fallback. As such we're readding it back too.
+
+With liburing still seccomp filterer in container environments having
+a libaio fallback is more valuable than the threads implementation of
+last resort.
+
+Edited & Updated: Daniel Black <daniel@mariabdb.org>
 
 Forwarded: https://jira.mariadb.org/browse/MDEV-37411
 ---
- storage/innobase/os/os0file.cc | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ mysql-test/mariadb-test-run.pl | 2 ++
+ 1 file changed, 2 insertions(+)
 
-diff --git a/storage/innobase/os/os0file.cc b/storage/innobase/os/os0file.cc
-index f86ea08..6da7af0 100644
---- a/storage/innobase/os/os0file.cc
-+++ b/storage/innobase/os/os0file.cc
-@@ -3098,7 +3098,7 @@ int os_aio_init() noexcept
-     if (ret)
-     {
-       srv_use_native_aio= false;
--      sql_print_warning("InnoDB: native AIO failed: falling back to"
-+      sql_print_information("InnoDB: native AIO failed: falling back to"
-                         " innodb_use_native_aio=OFF");
-     }
-     else
+diff --git a/mysql-test/mariadb-test-run.pl b/mysql-test/mariadb-test-run.pl
+index 4f98775d87b..0305c51fc03 100755
+--- a/mysql-test/mariadb-test-run.pl
++++ b/mysql-test/mariadb-test-run.pl
+@@ -4497,6 +4497,8 @@ sub extract_warning_lines ($$) {
+      qr/error .*connecting to master/,
+      qr/InnoDB: Dumping buffer pool.*/,
+      qr/InnoDB: Buffer pool.*/,
++     qr/io_setup(%d) returned.*/,
++     qr/InnoDB: native AIO failed: falling back to innodb_use_native_aio=OFF/,
+      qr/InnoDB: Could not free any blocks in the buffer pool!/,
+      qr/InnoDB: innodb_open_files .* should not be greater than/,
+      qr/InnoDB: Trying to delete tablespace.*but there are.*pending/,
