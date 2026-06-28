@@ -42,6 +42,12 @@ mariadb (1:11.8.9+ds-0ubuntu0.26.04.1) resolute-security; urgency=medium
   * Extend test skip lists after witnessing frequent sporadic failures on armhf
   * Backport upstream patch to fix CONC-821 (Closes: #1139473, #1141671,
     #1144671)
+  * Extend docs in NEWS item based on real AppArmor profile use feedback
+  * Extend AppArmor profile based on real 'enforce' mode use feedback
+    (Closes: #1131915, #1132027)
+  * Extend AppArmor profile to allow Galera helpers (Closes: #1131938)
+  * Add AppArmor notice for Debian/Ubuntu users during server startup
+  * Adapt Debian NEWS entry for Ubuntu
 
   [ Daniel Black ]
   * MDEV-34902: debian-start erroneously reports issues
@@ -49,7 +55,7 @@ mariadb (1:11.8.9+ds-0ubuntu0.26.04.1) resolute-security; urgency=medium
   [ Michael Widenius ]
   * MDEV-32745 Add a simple MySQL to MariaDB upgrade helper (Debian part)
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 28 Sep 2026 01:01:01 +0000
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 28 Sep 2026 12:12:12 +0000
 
 mariadb (1:11.8.6-5ubuntu0.1) resolute-security; urgency=medium
 
