@@ -1,5 +1,6 @@
 mariadb (1:10.11.18-0ubuntu0.24.04.1) noble; urgency=medium
 
+  [ Otto Kekäläinen ]
   * SECURITY UPDATE: New upstream maintenance release 10.11.18 (LP: #2158958)
     includes several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.11/10.11.18
@@ -32,7 +33,21 @@ mariadb (1:10.11.18-0ubuntu0.24.04.1) noble; urgency=medium
     - MDEV-39479 Mroonga hangs on invalid index flag (Closes: #1110683)
     - MDEV-38811 Crash in information_schema.table_constraints when running in
      'skip-grant-tables' mode (Closes: #1127431, affected e.g. Akonadi)
+  * Include new upstream test file pam_mariadb_mtr.so
+  * Update configuration traces to match changes in system variables
+    - new variable 'innodb-buffer-pool-in-core-dump' (default: FALSE)
+    - new default value 0->8796093022208 in 'innodb-buffer-pool-size-max'
+    (cherry picked from commit baa19bb49dcd4b0408f2fcf73e8a7c81b1b0c51e)
+  * Make autopkgtest emit debug info on service start failures
   * Salsa CI: Disable running `gbp setup-gitattributes`
+
+  [ Daniel Black ]
+  * MDEV-37411: Re-enable AIO in Debian to fix earlier incomplete fix that was
+    done after new upstream 11.8.3 release introduced innodb_linux_aio
+  * MDEV-15502: With recent changes in upstream systemd, the tmpfiles are now
+    required, otherwise starting MariaDB would fail on error:
+    "cannot create /run/mysqld/wsrep-start-position: Directory nonexistent"
+  * MDEV-34902: debian-start erroneously reports issues (includes security fix)
 
  -- Otto Kekäläinen <otto@debian.org>  Tue, 30 Jun 2026 19:19:19 +0000
 
