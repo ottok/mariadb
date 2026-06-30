@@ -17,16 +17,15 @@ This might not be the optimal solution, but at least suppressing the warning
 will unblock the 11.8.3 release for now.
 
 Forwarded: https://jira.mariadb.org/browse/MDEV-37411
-
 ---
  storage/innobase/os/os0file.cc | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/storage/innobase/os/os0file.cc b/storage/innobase/os/os0file.cc
-index f3c0402..d69fe9a 100644
+index f86ea08..6da7af0 100644
 --- a/storage/innobase/os/os0file.cc
 +++ b/storage/innobase/os/os0file.cc
-@@ -3091,7 +3091,7 @@ int os_aio_init() noexcept
+@@ -3098,7 +3098,7 @@ int os_aio_init() noexcept
      if (ret)
      {
        srv_use_native_aio= false;
