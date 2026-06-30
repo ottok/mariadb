@@ -707,6 +707,7 @@ int check_and_do_in_subquery_rewrites(JOIN *join)
         12. All tables supports comparable rowids.
             This is needed for DuplicateWeedout strategy to work (which
             is the catch-all semi-join strategy so it must be applicable).
+        13. Subquery does not have ROWNUM
     */
     if (optimizer_flag(thd, OPTIMIZER_SWITCH_SEMIJOIN) &&
         in_subs &&                                                    // 1
@@ -722,7 +723,8 @@ int check_and_do_in_subquery_rewrites(JOIN *join)
            select_lex->outer_select()->join->select_options)          // 10
           & SELECT_STRAIGHT_JOIN) &&                                  // 10
         select_lex->first_cond_optimization &&                        // 11
-        join->not_usable_rowid_map == 0)                              // 12
+        join->not_usable_rowid_map == 0 &&                            // 12
+        !select_lex->with_rownum)                                     // 13
     {
       DBUG_PRINT("info", ("Subquery is semi-join conversion candidate"));
 
@@ -3657,7 +3659,7 @@ void JOIN::dbug_verify_sj_inner_tables(uint prefix_size) const
 #endif
 
 /*
-  Remove the last join tab from from join->cur_sj_inner_tables bitmap
+  Remove the last join tab from join->cur_sj_inner_tables bitmap
 
   @note
   remaining_tables contains @tab.
@@ -4596,13 +4598,14 @@ SJ_TMP_TABLE::create_sj_weedout_tmp_table(THD *thd)
     temp_pool_slot = temp_pool_set_next();
 
   if (temp_pool_slot != MY_BIT_NONE) // we got a slot
-    sprintf(path, "%s-subquery-%lx-%i", tmp_file_prefix,
-	    current_pid, temp_pool_slot);
+    snprintf(path, sizeof(path), "%s-subquery-%lx-%i", tmp_file_prefix,
+	     current_pid, temp_pool_slot);
   else
   {
     /* if we run out of slots or we are not using tempool */
-    sprintf(path,"%s-subquery-%lx-%lx-%x", tmp_file_prefix,current_pid,
-            (ulong) thd->thread_id, thd->tmp_table++);
+    snprintf(path, sizeof(path), "%s-subquery-%lx-%lx-%x",
+             tmp_file_prefix, current_pid,
+             (ulong) thd->thread_id, thd->tmp_table++);
   }
   fn_format(path, path, mysql_tmpdir, "", MY_REPLACE_EXT|MY_UNPACK_FILENAME);
 
@@ -4901,7 +4904,7 @@ int SJ_TMP_TABLE::sj_weedout_check_row(THD *thd)
 
   ptr= tmp_table->record[0] + 1;
 
-  /* Put the the rowids tuple into table->record[0]: */
+  /* Put the rowids tuple into table->record[0]: */
 
   // 1. Store the length 
   if (((Field_varstring*)(tmp_table->field[0]))->length_bytes == 1)
@@ -4924,7 +4927,7 @@ int SJ_TMP_TABLE::sj_weedout_check_row(THD *thd)
   }
 
   // 3. Put the rowids
-  for (uint i=0; tab != tab_end; tab++, i++)
+  for (; tab != tab_end; tab++)
   {
     handler *h= tab->join_tab->table->file;
     if (tab->join_tab->table->maybe_null && tab->join_tab->table->null_row)
@@ -5702,10 +5705,10 @@ bool JOIN::optimize_unflattened_subqueries()
   @retval FALSE     success.
   @retval TRUE      error occurred.
 */
- 
-bool JOIN::optimize_constant_subqueries()
+
+bool SELECT_LEX::optimize_constant_subqueries()
 {
-  ulonglong save_options= select_lex->options;
+  ulonglong save_options= options;
   bool res;
   /*
     Constant subqueries may be executed during the optimization phase.
@@ -5714,9 +5717,9 @@ bool JOIN::optimize_constant_subqueries()
     during optimization, constant subqueries must be optimized for execution,
     not for EXPLAIN.
   */
-  select_lex->options&= ~SELECT_DESCRIBE;
-  res= select_lex->optimize_unflattened_subqueries(true);
-  select_lex->options= save_options;
+  options&= ~SELECT_DESCRIBE;
+  res= optimize_unflattened_subqueries(true);
+  options= save_options;
   return res;
 }
 
@@ -6138,7 +6141,7 @@ Item *and_new_conditions_to_optimized_cond(THD *thd, Item *cond,
     }
   }
 
-  if (!cond)
+  if (!cond || cond->fix_fields_if_needed(thd, &cond))
     return NULL;
 
   if (*cond_eq)
@@ -6170,9 +6173,6 @@ Item *and_new_conditions_to_optimized_cond(THD *thd, Item *cond,
   */
   if (cond && is_simplified_cond)
     cond= cond->remove_eq_conds(thd, cond_value, true);
-
-  if (cond && cond->fix_fields_if_needed(thd, NULL))
-    return NULL;
 
   return cond;
 }
@@ -6864,7 +6864,7 @@ bool Item::pushable_equality_checker_for_subquery(uchar *arg)
   NULL if the matching Field_pair wasn't found.
 */
 
-Field_pair *find_matching_field_pair(Item *item, List<Field_pair> pair_list)
+Field_pair *find_matching_field_pair(Item *item, List<Field_pair> &pair_list)
 {
   Field_pair *field_pair= get_corresponding_field_pair(item, pair_list);
   if (field_pair)
@@ -6996,7 +6996,7 @@ Item *Item_field::in_subq_field_transformer_for_where(THD *thd, uchar *arg)
   Item_in_subselect *subq_pred= ((Item *)arg)->get_IN_subquery();
   Item *producing_item= get_corresponding_item(thd, this, subq_pred);
   if (producing_item)
-    return producing_item->build_clone(thd);
+    return producing_item->deep_copy_with_checks(thd);
   return this;
 }
 
@@ -7009,7 +7009,7 @@ Item *Item_direct_view_ref::in_subq_field_transformer_for_where(THD *thd,
     Item_in_subselect *subq_pred= ((Item *)arg)->get_IN_subquery();
     Item *producing_item= get_corresponding_item(thd, this, subq_pred);
     DBUG_ASSERT (producing_item != NULL);
-    return producing_item->build_clone(thd);
+    return producing_item->deep_copy_with_checks(thd);
   }
   return this;
 }

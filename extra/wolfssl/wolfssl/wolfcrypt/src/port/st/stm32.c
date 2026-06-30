@@ -1,12 +1,12 @@
 /* stm32.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -67,6 +67,12 @@
 #elif defined(WOLFSSL_STM32WBA)
 #include <stm32wbaxx_hal_conf.h>
 #include <stm32wbaxx_hal_pka.h>
+#elif defined(WOLFSSL_STM32N6)
+#include <stm32n6xx_hal_conf.h>
+#include <stm32n6xx_hal_pka.h>
+#elif defined(WOLFSSL_STM32H5)
+#include <stm32h5xx_hal_conf.h>
+#include <stm32h5xx_hal_pka.h>
 #else
 #error Please add the hal_pk.h include
 #endif
@@ -156,49 +162,45 @@ static void wc_Stm32_Hash_SaveContext(STM32_HASH_Context* ctx)
 #endif
 }
 
-static void wc_Stm32_Hash_RestoreContext(STM32_HASH_Context* ctx, int algo)
+static void wc_Stm32_Hash_RestoreContext(STM32_HASH_Context* ctx, word32 algo,
+    word32 mode)
 {
     int i;
 
     if (ctx->HASH_CR == 0) {
-        /* init content */
+        /* init context */
 
     #if defined(HASH_IMR_DINIE) && defined(HASH_IMR_DCIE)
-        /* enable IRQ's */
-        HASH->IMR |= (HASH_IMR_DINIE | HASH_IMR_DCIE);
+        /* Disable IRQ's - wolfSSL does not use the HASH/RNG IRQ
+         * If using the HAL hashing API's directly it will re-enable the IRQs */
+        HASH->IMR &= ~(HASH_IMR_DINIE | HASH_IMR_DCIE);
     #endif
 
-        /* reset the control register */
-        HASH->CR &= ~(HASH_CR_ALGO | HASH_CR_MODE | HASH_CR_DATATYPE
-        #ifdef HASH_CR_LKEY
-            | HASH_CR_LKEY
-        #endif
-        );
-
-        /* configure algorithm, mode and data type */
-        HASH->CR |= (algo | HASH_ALGOMODE_HASH | HASH_DATATYPE_8B);
-
-        /* reset HASH processor */
-        HASH->CR |= HASH_CR_INIT;
+        /* Configure algorithm, mode, data type and initialize HASH processor.
+         * INIT must be written in the same register write as ALGO because
+         * setting INIT resets ALGO bits to their default value (MD5). */
+        HASH->CR = (algo | mode | HASH_DATATYPE_8B | HASH_CR_INIT);
 
         /* by default mark all bits valid */
         wc_Stm32_Hash_NumValidBits(0);
 
 #ifdef DEBUG_STM32_HASH
-        printf("STM Init algo %x\n", algo);
+        printf("STM Init algo %x, mode %x, CR %lx, SR %lx\n",
+            (unsigned int)algo, (unsigned int)mode,
+            HASH->CR, HASH->SR);
 #endif
     }
     else {
         /* restore context registers */
         HASH->IMR = ctx->HASH_IMR;
         HASH->STR = ctx->HASH_STR;
-        HASH->CR = ctx->HASH_CR;
 #ifdef STM32_HASH_SHA3
         HASH->SHA3CFGR = ctx->SHA3CFGR;
 #endif
 
-        /* Initialize the hash processor */
-        HASH->CR |= HASH_CR_INIT;
+        /* Restore CR with INIT in a single write - setting INIT resets ALGO
+         * bits, so we must include the saved CR value in the same write. */
+        HASH->CR = ctx->HASH_CR | HASH_CR_INIT;
 
         /* continue restoring context registers */
         for (i=0; i<HASH_CR_SIZE; i++) {
@@ -251,24 +253,45 @@ static void wc_Stm32_Hash_GetDigest(byte* hash, int digestSize)
 #endif
 }
 
-static int wc_Stm32_Hash_WaitDone(STM32_HASH_Context* stmCtx)
+static int wc_Stm32_Hash_WaitDataReady(STM32_HASH_Context* stmCtx)
 {
     int timeout = 0;
     (void)stmCtx;
 
-    /* wait until not busy and hash digest / input block are complete */
-    while ((HASH->SR & HASH_SR_BUSY) &&
-        #ifdef HASH_IMR_DCIE
-            (HASH->SR & HASH_SR_DCIS) == 0 &&
-        #endif
+    /* wait until not busy and data input buffer ready */
+    while (((HASH->SR & HASH_SR_BUSY)
         #ifdef HASH_IMR_DINIE
-            (HASH->SR & HASH_SR_DINIS) == 0 &&
+            || (HASH->SR & HASH_SR_DINIS) == 0
         #endif
-        ++timeout < STM32_HASH_TIMEOUT) {
+        ) && ++timeout < STM32_HASH_TIMEOUT) {
     };
 
 #ifdef DEBUG_STM32_HASH
-    printf("STM Wait done %d, HASH->SR %lx\n", timeout, HASH->SR);
+    printf("STM Wait Data %d, HASH->SR %lx\n", timeout, HASH->SR);
+#endif
+
+    /* verify timeout did not occur */
+    if (timeout >= STM32_HASH_TIMEOUT) {
+        return WC_TIMEOUT_E;
+    }
+    return 0;
+}
+
+static int wc_Stm32_Hash_WaitCalcComp(STM32_HASH_Context* stmCtx)
+{
+    int timeout = 0;
+    (void)stmCtx;
+
+    /* wait until not busy and hash digest calculation complete */
+    while (((HASH->SR & HASH_SR_BUSY)
+        #ifdef HASH_IMR_DCIE
+            || (HASH->SR & HASH_SR_DCIS) == 0
+        #endif
+        ) && ++timeout < STM32_HASH_TIMEOUT) {
+    };
+
+#ifdef DEBUG_STM32_HASH
+    printf("STM Wait Calc %d, HASH->SR %lx\n", timeout, HASH->SR);
 #endif
 
     /* verify timeout did not occur */
@@ -335,7 +358,7 @@ int wc_Stm32_Hash_Update(STM32_HASH_Context* stmCtx, word32 algo,
     STM32_HASH_CLOCK_ENABLE(stmCtx);
 
     /* restore hash context or init as new hash */
-    wc_Stm32_Hash_RestoreContext(stmCtx, algo);
+    wc_Stm32_Hash_RestoreContext(stmCtx, algo, HASH_ALGOMODE_HASH);
 
     /* write blocks to FIFO */
     while (len) {
@@ -363,7 +386,7 @@ int wc_Stm32_Hash_Update(STM32_HASH_Context* stmCtx, word32 algo,
 
     if (wroteToFifo) {
         /* make sure hash operation is done */
-        ret = wc_Stm32_Hash_WaitDone(stmCtx);
+        ret = wc_Stm32_Hash_WaitDataReady(stmCtx);
 
         /* save hash state for next operation */
         wc_Stm32_Hash_SaveContext(stmCtx);
@@ -389,7 +412,7 @@ int wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
     STM32_HASH_CLOCK_ENABLE(stmCtx);
 
     /* restore hash context or init as new hash */
-    wc_Stm32_Hash_RestoreContext(stmCtx, algo);
+    wc_Stm32_Hash_RestoreContext(stmCtx, algo, HASH_ALGOMODE_HASH);
 
     /* finish reading any trailing bytes into FIFO */
     if (stmCtx->buffLen > 0) {
@@ -404,7 +427,7 @@ int wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
     HASH->STR |= HASH_STR_DCAL;
 
     /* wait for hash done */
-    ret = wc_Stm32_Hash_WaitDone(stmCtx);
+    ret = wc_Stm32_Hash_WaitCalcComp(stmCtx);
     if (ret == 0) {
         /* read message digest */
         wc_Stm32_Hash_GetDigest(hash, digestSize);
@@ -416,6 +439,204 @@ int wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
     return ret;
 }
 
+#if defined(STM32_HMAC) && !defined(NO_HMAC)
+
+/* STM32 Port HMAC Functions */
+#include <wolfssl/wolfcrypt/hmac.h>
+
+int wc_Stm32_Hmac_GetAlgoInfo(int macType, word32* algo, word32* blockSize,
+    word32* digestSize)
+{
+    int ret = 0;
+
+    switch (macType) {
+    #if !defined(NO_MD5) && !defined(STM32_NOMD5)
+        case WC_MD5:
+            if (algo)       *algo = HASH_AlgoSelection_MD5;
+            if (blockSize)  *blockSize = WC_MD5_BLOCK_SIZE;
+            if (digestSize) *digestSize = WC_MD5_DIGEST_SIZE;
+            break;
+    #endif
+    #ifndef NO_SHA
+        case WC_SHA:
+            if (algo)       *algo = HASH_AlgoSelection_SHA1;
+            if (blockSize)  *blockSize = WC_SHA_BLOCK_SIZE;
+            if (digestSize) *digestSize = WC_SHA_DIGEST_SIZE;
+            break;
+    #endif
+    #ifdef WOLFSSL_SHA224
+        case WC_SHA224:
+            if (algo)       *algo = HASH_AlgoSelection_SHA224;
+            if (blockSize)  *blockSize = WC_SHA224_BLOCK_SIZE;
+            if (digestSize) *digestSize = WC_SHA224_DIGEST_SIZE;
+            break;
+    #endif
+    #ifndef NO_SHA256
+        case WC_SHA256:
+            if (algo)       *algo = HASH_AlgoSelection_SHA256;
+            if (blockSize)  *blockSize = WC_SHA256_BLOCK_SIZE;
+            if (digestSize) *digestSize = WC_SHA256_DIGEST_SIZE;
+            break;
+    #endif
+    #if defined(STM32_HASH_SHA384) && defined(WOLFSSL_SHA384)
+        case WC_SHA384:
+            if (algo)       *algo = HASH_ALGOSELECTION_SHA384;
+            if (blockSize)  *blockSize = WC_SHA384_BLOCK_SIZE;
+            if (digestSize) *digestSize = WC_SHA384_DIGEST_SIZE;
+            break;
+    #endif
+    #if defined(STM32_HASH_SHA512) && defined(WOLFSSL_SHA512)
+        case WC_SHA512:
+            if (algo)       *algo = HASH_ALGOSELECTION_SHA512;
+            if (blockSize)  *blockSize = WC_SHA512_BLOCK_SIZE;
+            if (digestSize) *digestSize = WC_SHA512_DIGEST_SIZE;
+            break;
+    #endif
+        default:
+            ret = BAD_FUNC_ARG;
+            break;
+    }
+
+    return ret;
+}
+
+static void wc_Stm32_Hmac_FeedKey(const byte* key, word32 keySz)
+{
+    word32 i, blocks;
+    word32 tmp;
+
+    /* feed key words into HASH->DIN */
+    blocks = keySz / STM32_HASH_REG_SIZE;
+    for (i = 0; i < blocks; i++) {
+        XMEMCPY(&tmp, key + (i * STM32_HASH_REG_SIZE), STM32_HASH_REG_SIZE);
+        HASH->DIN = tmp;
+    }
+    /* handle remaining bytes in last partial word */
+    if (keySz % STM32_HASH_REG_SIZE) {
+        tmp = 0;
+        XMEMCPY(&tmp, key + (blocks * STM32_HASH_REG_SIZE),
+            keySz % STM32_HASH_REG_SIZE);
+        HASH->DIN = tmp;
+    }
+    ForceZero(&tmp, sizeof(tmp));
+
+#ifdef DEBUG_STM32_HASH
+    printf("STM HMAC FeedKey %d bytes\n", (int)keySz);
+#endif
+}
+
+
+/* STM32 HMAC Exposed Functions */
+
+int wc_Stm32_Hmac_SetKey(STM32_HASH_Context* stmCtx, int macType,
+    const byte* key, word32 keySz)
+{
+    int ret;
+    word32 algo, blockSize, digestSize;
+    word32 mode;
+
+    if (stmCtx == NULL || key == NULL)
+        return BAD_FUNC_ARG;
+
+    ret = wc_Stm32_Hmac_GetAlgoInfo(macType, &algo, &blockSize, &digestSize);
+    if (ret != 0)
+        return ret;
+
+#ifdef DEBUG_STM32_HASH
+    printf("STM HMAC SetKey: macType %d, keySz %d\n", macType, (int)keySz);
+#endif
+
+    /* clear context for fresh HMAC */
+    wc_Stm32_Hash_Init(stmCtx);
+
+    /* turn on hash clock */
+    STM32_HASH_CLOCK_ENABLE(stmCtx);
+
+    /* initialize hardware for HMAC mode.
+     * Keys are always pre-hashed in software before reaching this point
+     * (see hmac.c), so keySz will always be <= blockSize here. */
+    mode = HASH_ALGOMODE_HMAC;
+    wc_Stm32_Hash_RestoreContext(stmCtx, algo, mode);
+
+    /* Phase 1: Feed key into HASH->DIN */
+    wc_Stm32_Hmac_FeedKey(key, keySz);
+
+    /* set number of valid bits in last word and trigger DCAL */
+    wc_Stm32_Hash_NumValidBits(keySz);
+    HASH->STR |= HASH_STR_DCAL;
+
+    /* wait for data input ready (phase 1 complete) */
+    ret = wc_Stm32_Hash_WaitDataReady(stmCtx);
+
+    if (ret == 0) {
+        /* save context for context switching */
+        wc_Stm32_Hash_SaveContext(stmCtx);
+    }
+
+    /* turn off hash clock */
+    STM32_HASH_CLOCK_DISABLE(stmCtx);
+
+    return ret;
+}
+
+int wc_Stm32_Hmac_Final(STM32_HASH_Context* stmCtx, word32 algo,
+    const byte* key, word32 keySz, byte* hash, word32 digestSize)
+{
+    int ret;
+
+    if (stmCtx == NULL || key == NULL || hash == NULL)
+        return BAD_FUNC_ARG;
+
+#ifdef DEBUG_STM32_HASH
+    printf("STM HMAC Final: algo %x, keySz %d, buffLen %d, fifoBytes %d\n",
+        (unsigned int)algo, (int)keySz, (int)stmCtx->buffLen,
+        (int)stmCtx->fifoBytes);
+#endif
+
+    /* turn on hash clock */
+    STM32_HASH_CLOCK_ENABLE(stmCtx);
+
+    /* restore HMAC context */
+    wc_Stm32_Hash_RestoreContext(stmCtx, algo, HASH_ALGOMODE_HMAC);
+
+    /* finish reading any trailing bytes into FIFO */
+    if (stmCtx->buffLen > 0) {
+        wc_Stm32_Hash_Data(stmCtx, stmCtx->buffLen);
+    }
+
+    /* Phase 2 complete: set valid bits and trigger DCAL */
+    wc_Stm32_Hash_NumValidBits(stmCtx->loLen + stmCtx->buffLen);
+    HASH->STR |= HASH_STR_DCAL;
+
+    /* wait for data input ready (phase 2 complete, ready for phase 3) */
+    ret = wc_Stm32_Hash_WaitDataReady(stmCtx);
+    if (ret != 0) {
+        STM32_HASH_CLOCK_DISABLE(stmCtx);
+        return ret;
+    }
+
+    /* Phase 3: Feed key again into HASH->DIN */
+    wc_Stm32_Hmac_FeedKey(key, keySz);
+
+    /* set valid bits for key and trigger DCAL */
+    wc_Stm32_Hash_NumValidBits(keySz);
+    HASH->STR |= HASH_STR_DCAL;
+
+    /* wait for hash done (digest computation complete) */
+    ret = wc_Stm32_Hash_WaitCalcComp(stmCtx);
+    if (ret == 0) {
+        /* read message digest */
+        wc_Stm32_Hash_GetDigest(hash, digestSize);
+    }
+
+    /* turn off hash clock */
+    STM32_HASH_CLOCK_DISABLE(stmCtx);
+
+    return ret;
+}
+
+#endif /* STM32_HMAC && !NO_HMAC */
+
 #endif /* STM32_HASH */
 
 
@@ -423,7 +644,101 @@ int wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
 
 #ifndef NO_AES
 #ifdef WOLFSSL_STM32_CUBEMX
-int wc_Stm32_Aes_Init(Aes* aes, CRYP_HandleTypeDef* hcryp)
+
+#if defined(WOLFSSL_STM32U5_DHUK)
+/* Set the DHUK IV to be used when unwrapping an AES key
+ * return 0 on success */
+int wc_Stm32_Aes_SetDHUK_IV(struct Aes* aes, const byte* iv, int ivSz)
+{
+    if (ivSz != sizeof(aes->dhukIV)) {
+        return BAD_FUNC_ARG;
+    }
+
+    XMEMCPY(aes->dhukIV, iv, ivSz);
+    aes->dhukIVLen = ivSz;
+    return 0;
+}
+
+/* Wrap an AES key using the DHUK */
+int wc_Stm32_Aes_Wrap(struct Aes* aes, const byte* in, word32 inSz, byte* out,
+    word32* outSz, const byte* iv, int ivSz)
+{
+    CRYP_HandleTypeDef hcryp;
+    int ret = 0;
+    byte key[AES_256_KEY_SIZE];
+
+    /* SAES requires use of the RNG -- HAL_RNG_DeInit() calls from random.c
+        turn off the RNG clock -- re-enable the clock here */
+    __HAL_RCC_RNG_CLK_ENABLE();
+    ByteReverseWords((word32*)key, (word32*)in, inSz);
+    XMEMSET(&hcryp, 0, sizeof(CRYP_HandleTypeDef));
+    if (ret == 0) {
+        hcryp.Instance       = SAES;
+        hcryp.Init.DataType  = CRYP_DATATYPE_8B;
+        hcryp.Init.KeySize   = CRYP_KEYSIZE_256B;
+        hcryp.Init.DataWidthUnit = CRYP_DATAWIDTHUNIT_BYTE;
+        hcryp.Init.KeySelect = CRYP_KEYSEL_HW; /* use DHUK to unwrap with use */
+        hcryp.Init.KeyMode   = CRYP_KEYMODE_WRAPPED;
+        if (iv != NULL) {
+            hcryp.Init.pInitVect = (uint32_t *)iv;
+            hcryp.Init.Algorithm = CRYP_AES_CBC;
+        }
+        else {
+            hcryp.Init.Algorithm = CRYP_AES_ECB;
+        }
+        ret = HAL_CRYP_Init(&hcryp);
+    }
+
+    if (ret == HAL_OK) {
+        ret = HAL_CRYPEx_WrapKey(&hcryp, (uint32_t*)key, (uint32_t*)out, 100);
+        HAL_CRYP_DeInit(&hcryp);
+    }
+    ForceZero(key, sizeof(key));
+
+    ByteReverseWords((word32*)out, (word32*)out, inSz);
+    *outSz = inSz;
+    (void)aes;
+    return ret;
+}
+
+
+int wc_Stm32_Aes_UnWrap(struct Aes* aes, CRYP_HandleTypeDef* hcryp,
+        const byte* in, word32 inSz, const byte* iv, int ivSz)
+{
+    int ret = 0;
+
+    /* SAES requires use of the RNG -- HAL_RNG_DeInit() calls from random.c
+    turn off the RNG clock -- re-enable the clock here */
+    __HAL_RCC_RNG_CLK_ENABLE();
+
+    /* setup for key unwrapping */
+    XMEMSET(hcryp, 0, sizeof(CRYP_HandleTypeDef));
+    hcryp->Instance       = SAES;
+    hcryp->Init.DataType  = CRYP_DATATYPE_8B;
+    hcryp->Init.KeySize   = CRYP_KEYSIZE_256B;
+    hcryp->Init.DataWidthUnit = CRYP_DATAWIDTHUNIT_BYTE;
+    if (ivSz > 0 && iv != NULL) {
+        hcryp->Init.pInitVect = (uint32_t *)iv;
+        hcryp->Init.Algorithm = CRYP_AES_CBC;
+    }
+    else {
+        hcryp->Init.Algorithm = CRYP_AES_ECB;
+    }
+    hcryp->Init.KeyIVConfigSkip = CRYP_KEYIVCONFIG_ALWAYS;
+    hcryp->Init.KeySelect = CRYP_KEYSEL_HW; /* use DHUK to unwrap with use */
+    hcryp->Init.KeyMode   = CRYP_KEYMODE_WRAPPED;
+    ret = HAL_CRYP_Init(hcryp);
+    if (ret == HAL_OK) {
+        /* On success the key is placed into a location where the next encrypt/decrypt
+         * calls using hcryp make use of the key */
+        ret = HAL_CRYPEx_UnwrapKey(hcryp, (uint32_t*)in, 100);
+    }
+    return ret;
+}
+
+#endif
+
+int wc_Stm32_Aes_Init(Aes* aes, CRYP_HandleTypeDef* hcryp, int useSaes)
 {
     int ret;
     word32 keySize;
@@ -452,12 +767,38 @@ int wc_Stm32_Aes_Init(Aes* aes, CRYP_HandleTypeDef* hcryp)
         default:
             break;
     }
-    hcryp->Instance = CRYP;
-    hcryp->Init.DataType = CRYP_DATATYPE_8B;
-    hcryp->Init.pKey = (STM_CRYPT_TYPE*)aes->key;
+
+#ifdef WOLFSSL_STM32U5_DHUK
+    /* Use hardware key */
+    if (useSaes && (aes->devId == WOLFSSL_STM32U5_DHUK_DEVID ||
+            aes->devId == WOLFSSL_STM32U5_SAES_DEVID)) {
+
+            /* SAES requires use of the RNG -- HAL_RNG_DeInit() calls from
+               random.c turn off the RNG clock -- re-enable the clock here */
+            __HAL_RCC_RNG_CLK_ENABLE();
+
+            hcryp->Instance       = SAES;
+            hcryp->Init.DataType  = CRYP_DATATYPE_8B;
+
+            /* Key select (HW, or Normal) */
+            if (aes->devId == WOLFSSL_STM32U5_DHUK_DEVID) {
+                hcryp->Init.KeySelect = CRYP_KEYSEL_HW;
+            }
+            else {
+                hcryp->Init.KeySelect = CRYP_KEYSEL_NORMAL;
+                hcryp->Init.KeyMode   = CRYP_KEYMODE_NORMAL;
+                hcryp->Init.pKey      = (uint32_t*)aes->key;
+            }
+    } else
+#endif
+    {
+        hcryp->Instance = CRYP;
+        hcryp->Init.DataType = CRYP_DATATYPE_8B;
+        hcryp->Init.pKey = (STM_CRYPT_TYPE*)aes->key;
+    }
 #ifdef STM32_HAL_V2
     hcryp->Init.DataWidthUnit = CRYP_DATAWIDTHUNIT_BYTE;
-    #ifdef STM_CRYPT_HEADER_WIDTH
+    #if defined(CRYP_HEADERWIDTHUNIT_BYTE) && defined(STM_CRYPT_HEADER_WIDTH)
     hcryp->Init.HeaderWidthUnit =
             (STM_CRYPT_HEADER_WIDTH == 4) ?
                 CRYP_HEADERWIDTHUNIT_WORD :
@@ -577,7 +918,7 @@ static int stm32_get_from_mp_int(uint8_t *dst, const mp_int *a, int sz)
         XMEMSET(dst, 0, offset);
 
     /* convert mp_int to array of bytes */
-    res = mp_to_unsigned_bin((mp_int*)a, dst + offset);
+    res = mp_to_unsigned_bin(a, dst + offset);
     return res;
 }
 
@@ -756,8 +1097,10 @@ int wc_ecc_mulmod_ex2(const mp_int* k, ecc_point *G, ecc_point *R, mp_int* a,
         }
     }
 #endif
-    if (res != MP_OKAY)
+    if (res != MP_OKAY) {
+        ForceZero(kbin, sizeof(kbin));
         return res;
+    }
 
     pka_mul.modulusSize = szModulus;
     pka_mul.coefSign = coefA_sign;
@@ -774,12 +1117,14 @@ int wc_ecc_mulmod_ex2(const mp_int* k, ecc_point *G, ecc_point *R, mp_int* a,
 
     status = HAL_PKA_ECCMul(&hpka, &pka_mul, HAL_MAX_DELAY);
     if (status != HAL_OK) {
+        ForceZero(kbin, sizeof(kbin));
         HAL_PKA_RAMReset(&hpka);
         return WC_HW_E;
     }
     pka_mul_res.ptX = Gxbin;
     pka_mul_res.ptY = Gybin;
     HAL_PKA_ECCMul_GetResult(&hpka, &pka_mul_res);
+    ForceZero(kbin, sizeof(kbin));
     res = mp_read_unsigned_bin(R->x, Gxbin, szModulus);
     if (res == MP_OKAY) {
         res = mp_read_unsigned_bin(R->y, Gybin, szModulus);
@@ -887,7 +1232,7 @@ int stm32_ecc_verify_hash_ex(mp_int *r, mp_int *s, const byte* hash,
     if (hashlen > STM32_MAX_ECC_SIZE) {
         return ECC_BAD_ARG_E;
     }
-    else if (hashlen > size) {
+    else if ((int)hashlen > size) {
         /* in the case that hashlen is larger than key size place hash at
          * beginning of buffer */
         XMEMCPY(Hashbin, hash, size);
@@ -970,13 +1315,18 @@ int stm32_ecc_sign_hash_ex(const byte* hash, word32 hashlen, WC_RNG* rng,
         status = stm32_get_from_mp_int(Intbin, &gen_k, size);
     mp_clear(&gen_k);
     mp_clear(&order_mp);
-    if (status != MP_OKAY)
+    if (status != MP_OKAY) {
+        ForceZero(Intbin, sizeof(Intbin));
         return status;
+     }
 
     /* get private part of "k" */
     status = stm32_get_from_mp_int(Keybin, wc_ecc_key_get_priv(key), size);
-    if (status != MP_OKAY)
+    if (status != MP_OKAY) {
+        ForceZero(Keybin, sizeof(Keybin));
+        ForceZero(Intbin, sizeof(Intbin));
         return status;
+    }
 
     pka_ecc.primeOrderSize =  size;
     pka_ecc.modulusSize =     size;
@@ -992,9 +1342,11 @@ int stm32_ecc_sign_hash_ex(const byte* hash, word32 hashlen, WC_RNG* rng,
 
     XMEMSET(Hashbin, 0, STM32_MAX_ECC_SIZE);
     if (hashlen > STM32_MAX_ECC_SIZE) {
+        ForceZero(Keybin, sizeof(Keybin));
+        ForceZero(Intbin, sizeof(Intbin));
         return ECC_BAD_ARG_E;
     }
-    else if (hashlen > size) {
+    else if ((int)hashlen > size) {
         /* in the case that hashlen is larger than key size place hash at
          * beginning of buffer */
         XMEMCPY(Hashbin, hash, size);
@@ -1014,10 +1366,14 @@ int stm32_ecc_sign_hash_ex(const byte* hash, word32 hashlen, WC_RNG* rng,
 
     status = HAL_PKA_ECDSASign(&hpka, &pka_ecc, HAL_MAX_DELAY);
     if (status != HAL_OK) {
+        ForceZero(Keybin, sizeof(Keybin));
+        ForceZero(Intbin, sizeof(Intbin));
         HAL_PKA_RAMReset(&hpka);
         return WC_HW_E;
     }
     HAL_PKA_ECDSASign_GetResult(&hpka, &pka_ecc_out, NULL);
+    ForceZero(Keybin, sizeof(Keybin));
+    ForceZero(Intbin, sizeof(Intbin));
     status = mp_read_unsigned_bin(r, pka_ecc_out.RSign, size);
     if (status == MP_OKAY)
         status = mp_read_unsigned_bin(s, pka_ecc_out.SSign, size);

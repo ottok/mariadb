@@ -1,12 +1,12 @@
 /* user_settings.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -333,9 +333,21 @@ extern "C" {
 #define NO_MD4
 #define NO_MD5
 //#define NO_DES3 /* Necessary for pkcs12 tests */
-#define WOLFSSL_NO_SHAKE128
-#define WOLFSSL_NO_SHAKE256
 
+/* PQC ML-KEM */
+#if defined(CONFIG_WOLFSSL_MLKEM)
+    #define WOLFSSL_HAVE_MLKEM
+    #define WOLFSSL_WC_MLKEM
+    #define WOLFSSL_MLKEM_NO_LARGE_CODE
+    #define WOLFSSL_MLKEM_SMALL
+    #define WOLFSSL_MLKEM_MAKEKEY_SMALL_MEM
+    #define WOLFSSL_MLKEM_ENCAPSULATE_SMALL_MEM
+    #define WOLFSSL_SHAKE128
+    #define WOLFSSL_SHAKE256
+#else
+    #define WOLFSSL_NO_SHAKE128
+    #define WOLFSSL_NO_SHAKE256
+#endif
 
 
 /* ------------------------------------------------------------------------- */

@@ -90,7 +90,9 @@ for (my $offset= 0x65; $offset;
 	my $end= unpack("C", substr($page, $offset-7-$i, 1));
 	print ",\n " if $i;
 	print "$fields[$i]=";
-	if ($end & 0x80) {
+	if ($i == 1 || $i == 2) {
+	    print "0x", "XX" x ($end-$start);
+	} elsif ($end & 0x80) {
 	    print "NULL(", ($end & 0x7f) - $start, " bytes)"
 	} elsif ($n_fields > 1 && $i == 0) {
 	    $name= substr($page,$offset+$start,$end-$start);
@@ -211,10 +213,7 @@ BEGIN;
 INSERT INTO tr VALUES(1);
 INSERT INTO tc VALUES(1);
 INSERT INTO td VALUES(1);
-# We cannot access tz, because due to our fiddling of the NO_ROLLBACK flag,
-# it now has a record with DB_TRX_ID=0, which is invalid for
-# transactional tables until MDEV-12288 is implemented.
-# INSERT INTO tz VALUES(1);
+INSERT INTO tz VALUES(1);
 INSERT INTO tp VALUES(1);
 ROLLBACK;
 
@@ -259,13 +258,16 @@ let $shutdown_timeout = 0;
 DROP TABLE t1;
 
 --echo #
---echo # MDEV-34222 Alter operation on redundant table aborts the server
+--echo # MDEV-38079 Crash recovery fails after ALTER TABLE…PAGE_COMPRESSED=1
 --echo #
 SET @df_row = @@global.INNODB_DEFAULT_ROW_FORMAT;
 SET GLOBAL INNODB_DEFAULT_ROW_FORMAT=REDUNDANT;
 CREATE TABLE t1 (c CHAR(1)) ENGINE=InnoDB;
-SET GLOBAL INNODB_DEFAULT_ROW_FORMAT=compact;
 --error ER_ILLEGAL_HA_CREATE_OPTION
-ALTER TABLE t1 PAGE_COMPRESSED=1;
+ALTER TABLE t1 PAGE_COMPRESSED=1, ALGORITHM=INPLACE;
+--error ER_CANT_CREATE_TABLE
+ALTER TABLE t1 PAGE_COMPRESSED=1, ALGORITHM=COPY;
+SET GLOBAL INNODB_DEFAULT_ROW_FORMAT=compact;
+ALTER TABLE t1 PAGE_COMPRESSED=1, ALGORITHM=COPY;
 DROP TABLE t1;
 SET @@global.INNODB_DEFAULT_ROW_FORMAT = @df_row;

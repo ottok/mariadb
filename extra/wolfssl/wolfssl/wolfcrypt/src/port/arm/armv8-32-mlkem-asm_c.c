@@ -1,12 +1,12 @@
 /* armv8-32-mlkem-asm
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -48,6 +48,7 @@
 #define __volatile__
 #define WOLFSSL_NO_VAR_ASSIGN_REG
 #endif /* __ghs__ */
+
 #include <wolfssl/wolfcrypt/wc_mlkem.h>
 
 #ifdef WOLFSSL_WC_MLKEM
@@ -87,9 +88,9 @@ static const word16 L_mlkem_arm32_ntt_zetas[] = {
 };
 
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
-void mlkem_arm32_ntt(sword16* r_p)
+WC_OMIT_FRAME_POINTER void mlkem_arm32_ntt(sword16* r_p)
 #else
-void mlkem_arm32_ntt(sword16* r)
+WC_OMIT_FRAME_POINTER void mlkem_arm32_ntt(sword16* r)
 #endif /* WOLFSSL_NO_VAR_ASSIGN_REG */
 {
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
@@ -99,7 +100,6 @@ void mlkem_arm32_ntt(sword16* r)
 #else
     register word16* L_mlkem_arm32_ntt_zetas_c =
         (word16*)&L_mlkem_arm32_ntt_zetas;
-
 #endif /* !WOLFSSL_NO_VAR_ASSIGN_REG */
 
     __asm__ __volatile__ (
@@ -118,7 +118,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "movt	r10, #0xcff\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "mov	r2, #16\n\t"
         "\n"
     "L_mlkem_arm32_ntt_loop_123_%=: \n\t"
@@ -222,7 +222,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r2, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r7\n\t"
         "smulbt	r7, r11, r7\n\t"
@@ -313,7 +313,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r3, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r8\n\t"
         "smulbt	r8, r11, r8\n\t"
@@ -404,7 +404,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r4, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r9\n\t"
         "smulbt	r9, r11, r9\n\t"
@@ -495,7 +495,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r5, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [r1, #4]\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r4\n\t"
@@ -587,7 +587,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r2, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r5\n\t"
         "smulbt	r5, r11, r5\n\t"
@@ -678,7 +678,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r3, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smultb	r12, r11, r8\n\t"
         "smultt	r8, r11, r8\n\t"
@@ -768,7 +768,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r6, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smultb	r12, r11, r9\n\t"
         "smultt	r9, r11, r9\n\t"
@@ -858,7 +858,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r7, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [r1, #8]\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r3\n\t"
@@ -950,7 +950,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r2, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smultb	r12, r11, r5\n\t"
         "smultt	r5, r11, r5\n\t"
@@ -1040,7 +1040,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r4, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [r1, #12]\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r7\n\t"
@@ -1132,7 +1132,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r6, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smultb	r12, r11, r9\n\t"
         "smultt	r9, r11, r9\n\t"
@@ -1222,7 +1222,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r8, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "str	r2, [%[r]]\n\t"
         "str	r3, [%[r], #64]\n\t"
         "str	r4, [%[r], #128]\n\t"
@@ -1344,7 +1344,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r2, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r5\n\t"
         "smulbt	r5, r11, r5\n\t"
@@ -1435,7 +1435,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r3, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smultb	r12, r11, r8\n\t"
         "smultt	r8, r11, r8\n\t"
@@ -1525,7 +1525,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r6, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smultb	r12, r11, r9\n\t"
         "smultt	r9, r11, r9\n\t"
@@ -1615,7 +1615,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r7, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "str	r2, [%[r]]\n\t"
         "str	r3, [%[r], #16]\n\t"
         "str	r4, [%[r], #32]\n\t"
@@ -1741,7 +1741,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r2, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r7\n\t"
         "smulbt	r7, r11, r7\n\t"
@@ -1832,7 +1832,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r3, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r8\n\t"
         "smulbt	r8, r11, r8\n\t"
@@ -1923,7 +1923,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r4, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r9\n\t"
         "smulbt	r9, r11, r9\n\t"
@@ -2014,7 +2014,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r5, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [sp, #4]\n\t"
         "add	r11, r1, r11, lsr #2\n\t"
         "ldr	r11, [r11, #64]\n\t"
@@ -2108,7 +2108,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r2, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r5\n\t"
         "smulbt	r5, r11, r5\n\t"
@@ -2199,7 +2199,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r3, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smultb	r12, r11, r8\n\t"
         "smultt	r8, r11, r8\n\t"
@@ -2289,7 +2289,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r6, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smultb	r12, r11, r9\n\t"
         "smultt	r9, r11, r9\n\t"
@@ -2379,7 +2379,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r7, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [sp, #4]\n\t"
         "add	r11, r1, r11, lsr #1\n\t"
         "ldr	r11, [r11, #128]\n\t"
@@ -2473,7 +2473,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r2, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smultb	r12, r11, r5\n\t"
         "smultt	r5, r11, r5\n\t"
@@ -2563,7 +2563,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r4, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [sp, #4]\n\t"
         "add	r11, r1, r11, lsr #1\n\t"
         "ldr	r11, [r11, #132]\n\t"
@@ -2657,7 +2657,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r6, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smultb	r12, r11, r9\n\t"
         "smultt	r9, r11, r9\n\t"
@@ -2747,7 +2747,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r8, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 7)
         "mov	r11, #0xc0\n\t"
@@ -2773,7 +2773,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "mov	r10, #0xd01\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r2\n\t"
         "smulwt	lr, r11, r2\n\t"
@@ -2809,7 +2809,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r2, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r3\n\t"
         "smulwt	lr, r11, r3\n\t"
@@ -2845,7 +2845,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r3, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r4\n\t"
         "smulwt	lr, r11, r4\n\t"
@@ -2881,7 +2881,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r4, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r5\n\t"
         "smulwt	lr, r11, r5\n\t"
@@ -2917,7 +2917,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r5, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r6\n\t"
         "smulwt	lr, r11, r6\n\t"
@@ -2953,7 +2953,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r6, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r7\n\t"
         "smulwt	lr, r11, r7\n\t"
@@ -2989,7 +2989,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r7, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r8\n\t"
         "smulwt	lr, r11, r8\n\t"
@@ -3025,7 +3025,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r8, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r9\n\t"
         "smulwt	lr, r11, r9\n\t"
@@ -3061,7 +3061,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "bfi	r9, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 7)
         "mov	r10, #0x1\n\t"
@@ -3075,7 +3075,7 @@ void mlkem_arm32_ntt(sword16* r)
 #else
         "movt	r10, #0xcff\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "str	r2, [%[r]]\n\t"
         "str	r3, [%[r], #4]\n\t"
         "str	r4, [%[r], #8]\n\t"
@@ -3140,9 +3140,9 @@ static const word16 L_mlkem_invntt_zetas_inv[] = {
 };
 
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
-void mlkem_arm32_invntt(sword16* r_p)
+WC_OMIT_FRAME_POINTER void mlkem_arm32_invntt(sword16* r_p)
 #else
-void mlkem_arm32_invntt(sword16* r)
+WC_OMIT_FRAME_POINTER void mlkem_arm32_invntt(sword16* r)
 #endif /* WOLFSSL_NO_VAR_ASSIGN_REG */
 {
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
@@ -3152,7 +3152,6 @@ void mlkem_arm32_invntt(sword16* r)
 #else
     register word16* L_mlkem_invntt_zetas_inv_c =
         (word16*)&L_mlkem_invntt_zetas_inv;
-
 #endif /* !WOLFSSL_NO_VAR_ASSIGN_REG */
 
     __asm__ __volatile__ (
@@ -3171,7 +3170,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "movt	r10, #0xcff\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "mov	r3, #0\n\t"
         "\n"
     "L_mlkem_invntt_loop_765_%=: \n\t"
@@ -3302,7 +3301,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r3, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r4, r5\n\t"
         "sadd16	r4, r4, r5\n\t"
@@ -3418,7 +3417,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r5, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [sp, #4]\n\t"
         "add	r11, r1, r11, lsr #1\n\t"
         "ldr	r11, [r11, #4]\n\t"
@@ -3538,7 +3537,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r7, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r8, r9\n\t"
         "sadd16	r8, r8, r9\n\t"
@@ -3654,7 +3653,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r9, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [sp, #4]\n\t"
         "add	r11, r1, r11, lsr #2\n\t"
         "ldr	r11, [r11, #128]\n\t"
@@ -3774,7 +3773,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r4, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r3, r5\n\t"
         "sadd16	r3, r3, r5\n\t"
@@ -3891,7 +3890,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r5, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r6, r8\n\t"
         "sadd16	r6, r6, r8\n\t"
@@ -4007,7 +4006,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r8, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r7, r9\n\t"
         "sadd16	r7, r7, r9\n\t"
@@ -4123,7 +4122,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r9, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [sp, #4]\n\t"
         "add	r11, r1, r11, lsr #3\n\t"
         "ldr	r11, [r11, #192]\n\t"
@@ -4243,7 +4242,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r6, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r3, r7\n\t"
         "sadd16	r3, r3, r7\n\t"
@@ -4360,7 +4359,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r7, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r4, r8\n\t"
         "sadd16	r4, r4, r8\n\t"
@@ -4477,7 +4476,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r8, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r5, r9\n\t"
         "sadd16	r5, r5, r9\n\t"
@@ -4594,7 +4593,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r9, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 7)
         "mov	r11, #0xc0\n\t"
@@ -4614,7 +4613,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "mov	r11, #0x4ebf\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r2\n\t"
         "smulwt	lr, r11, r2\n\t"
@@ -4650,7 +4649,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r2, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r3\n\t"
         "smulwt	lr, r11, r3\n\t"
@@ -4686,7 +4685,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r3, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r4\n\t"
         "smulwt	lr, r11, r4\n\t"
@@ -4722,7 +4721,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r4, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r5\n\t"
         "smulwt	lr, r11, r5\n\t"
@@ -4758,7 +4757,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r5, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "str	r2, [%[r]]\n\t"
         "str	r3, [%[r], #4]\n\t"
         "str	r4, [%[r], #8]\n\t"
@@ -4907,7 +4906,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r4, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r3, r5\n\t"
         "sadd16	r3, r3, r5\n\t"
@@ -5024,7 +5023,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r5, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r6, r8\n\t"
         "sadd16	r6, r6, r8\n\t"
@@ -5140,7 +5139,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r8, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r7, r9\n\t"
         "sadd16	r7, r7, r9\n\t"
@@ -5256,7 +5255,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r9, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "str	r2, [%[r]]\n\t"
         "str	r3, [%[r], #16]\n\t"
         "str	r4, [%[r], #32]\n\t"
@@ -5408,7 +5407,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r3, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r4, r5\n\t"
         "sadd16	r4, r4, r5\n\t"
@@ -5524,7 +5523,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r5, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [r1, #244]\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r6, r7\n\t"
@@ -5642,7 +5641,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r7, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r8, r9\n\t"
         "sadd16	r8, r8, r9\n\t"
@@ -5758,7 +5757,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r9, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [r1, #248]\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r2, r4\n\t"
@@ -5876,7 +5875,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r4, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r3, r5\n\t"
         "sadd16	r3, r3, r5\n\t"
@@ -5993,7 +5992,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r5, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r6, r8\n\t"
         "sadd16	r6, r6, r8\n\t"
@@ -6109,7 +6108,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r8, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r7, r9\n\t"
         "sadd16	r7, r7, r9\n\t"
@@ -6225,7 +6224,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r9, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 7)
         "mov	r11, #0xc0\n\t"
@@ -6245,7 +6244,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "mov	r11, #0x4ebf\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r2\n\t"
         "smulwt	lr, r11, r2\n\t"
@@ -6281,7 +6280,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r2, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r3\n\t"
         "smulwt	lr, r11, r3\n\t"
@@ -6317,7 +6316,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r3, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r4\n\t"
         "smulwt	lr, r11, r4\n\t"
@@ -6353,7 +6352,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r4, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulwb	r12, r11, r5\n\t"
         "smulwt	lr, r11, r5\n\t"
@@ -6389,7 +6388,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r5, lr, #16, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [r1, #252]\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r2, r6\n\t"
@@ -6507,7 +6506,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r6, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r3, r7\n\t"
         "sadd16	r3, r3, r7\n\t"
@@ -6624,7 +6623,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r7, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r4, r8\n\t"
         "sadd16	r4, r4, r8\n\t"
@@ -6741,7 +6740,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r8, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "ssub16	r12, r5, r9\n\t"
         "sadd16	r5, r5, r9\n\t"
@@ -6858,7 +6857,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r9, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "ldr	r11, [r1, #254]\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r2\n\t"
@@ -6942,7 +6941,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r2, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r3\n\t"
         "smulbt	r3, r11, r3\n\t"
@@ -7025,7 +7024,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r3, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r4\n\t"
         "smulbt	r4, r11, r4\n\t"
@@ -7108,7 +7107,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r4, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r5\n\t"
         "smulbt	r5, r11, r5\n\t"
@@ -7191,7 +7190,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r5, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r6\n\t"
         "smulbt	r6, r11, r6\n\t"
@@ -7274,7 +7273,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r6, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r7\n\t"
         "smulbt	r7, r11, r7\n\t"
@@ -7357,7 +7356,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r7, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r8\n\t"
         "smulbt	r8, r11, r8\n\t"
@@ -7440,7 +7439,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r8, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH >= 6)
         "smulbb	r12, r11, r9\n\t"
         "smulbt	r9, r11, r9\n\t"
@@ -7523,7 +7522,7 @@ void mlkem_arm32_invntt(sword16* r)
 #else
         "bfi	r9, r12, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "str	r2, [%[r]]\n\t"
         "str	r3, [%[r], #64]\n\t"
         "str	r4, [%[r], #128]\n\t"
@@ -7587,10 +7586,11 @@ static const word16 L_mlkem_basemul_mont_zetas[] = {
 };
 
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
-void mlkem_arm32_basemul_mont(sword16* r_p, const sword16* a_p,
-    const sword16* b_p)
+WC_OMIT_FRAME_POINTER void mlkem_arm32_basemul_mont(sword16* r_p,
+    const sword16* a_p, const sword16* b_p)
 #else
-void mlkem_arm32_basemul_mont(sword16* r, const sword16* a, const sword16* b)
+WC_OMIT_FRAME_POINTER void mlkem_arm32_basemul_mont(sword16* r,
+    const sword16* a, const sword16* b)
 #endif /* WOLFSSL_NO_VAR_ASSIGN_REG */
 {
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
@@ -7602,7 +7602,6 @@ void mlkem_arm32_basemul_mont(sword16* r, const sword16* a, const sword16* b)
 #else
     register word16* L_mlkem_basemul_mont_zetas_c =
         (word16*)&L_mlkem_basemul_mont_zetas;
-
 #endif /* !WOLFSSL_NO_VAR_ASSIGN_REG */
 
     __asm__ __volatile__ (
@@ -7621,7 +7620,7 @@ void mlkem_arm32_basemul_mont(sword16* r, const sword16* a, const sword16* b)
 #else
         "movt	r12, #0xcff\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "mov	r8, #0\n\t"
         "\n"
     "L_mlkem_basemul_mont_loop_%=: \n\t"
@@ -7873,7 +7872,7 @@ void mlkem_arm32_basemul_mont(sword16* r, const sword16* a, const sword16* b)
 #endif
         "orr	r4, r9, r8, lsr #16\n\t"
         "orr	r5, r11, r10, lsr #16\n\t"
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "stm	%[r]!, {r4, r5}\n\t"
         "pop	{r8}\n\t"
         "bne	L_mlkem_basemul_mont_loop_%=\n\t"
@@ -7892,11 +7891,11 @@ void mlkem_arm32_basemul_mont(sword16* r, const sword16* a, const sword16* b)
 }
 
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
-void mlkem_arm32_basemul_mont_add(sword16* r_p, const sword16* a_p,
-    const sword16* b_p)
+WC_OMIT_FRAME_POINTER void mlkem_arm32_basemul_mont_add(sword16* r_p,
+    const sword16* a_p, const sword16* b_p)
 #else
-void mlkem_arm32_basemul_mont_add(sword16* r, const sword16* a,
-    const sword16* b)
+WC_OMIT_FRAME_POINTER void mlkem_arm32_basemul_mont_add(sword16* r,
+    const sword16* a, const sword16* b)
 #endif /* WOLFSSL_NO_VAR_ASSIGN_REG */
 {
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
@@ -7908,7 +7907,6 @@ void mlkem_arm32_basemul_mont_add(sword16* r, const sword16* a,
 #else
     register word16* L_mlkem_basemul_mont_zetas_c =
         (word16*)&L_mlkem_basemul_mont_zetas;
-
 #endif /* !WOLFSSL_NO_VAR_ASSIGN_REG */
 
     __asm__ __volatile__ (
@@ -7927,7 +7925,7 @@ void mlkem_arm32_basemul_mont_add(sword16* r, const sword16* a,
 #else
         "movt	r12, #0xcff\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "mov	r8, #0\n\t"
         "\n"
     "L_mlkem_arm32_basemul_mont_add_loop_%=: \n\t"
@@ -8213,7 +8211,7 @@ void mlkem_arm32_basemul_mont_add(sword16* r, const sword16* a,
 #else
         "bfi	r5, r10, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "stm	%[r]!, {r4, r5}\n\t"
         "pop	{r8}\n\t"
         "bne	L_mlkem_arm32_basemul_mont_add_loop_%=\n\t"
@@ -8232,9 +8230,9 @@ void mlkem_arm32_basemul_mont_add(sword16* r, const sword16* a,
 }
 
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
-void mlkem_arm32_csubq(sword16* p_p)
+WC_OMIT_FRAME_POINTER void mlkem_arm32_csubq(sword16* p_p)
 #else
-void mlkem_arm32_csubq(sword16* p)
+WC_OMIT_FRAME_POINTER void mlkem_arm32_csubq(sword16* p)
 #endif /* WOLFSSL_NO_VAR_ASSIGN_REG */
 {
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
@@ -8244,7 +8242,6 @@ void mlkem_arm32_csubq(sword16* p)
 #else
     register word16* L_mlkem_basemul_mont_zetas_c =
         (word16*)&L_mlkem_basemul_mont_zetas;
-
 #endif /* !WOLFSSL_NO_VAR_ASSIGN_REG */
 
     __asm__ __volatile__ (
@@ -8267,7 +8264,7 @@ void mlkem_arm32_csubq(sword16* p)
 #else
         "movt	lr, #0xd01\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "mov	r11, #0x8000\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 7)
         "orr	r11, r11, #0x80000000\n\t"
@@ -8408,7 +8405,7 @@ void mlkem_arm32_csubq(sword16* p)
 #else
         "bfi	r5, r10, #0, #16\n\t"
 #endif
-#endif /* WOLFSLS_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
+#endif /* WOLFSSL_ARM_ARCH && WOLFSSL_ARM_ARCH >= 6 */
         "stm	%[p]!, {r2, r3, r4, r5}\n\t"
         "subs	r1, r1, #8\n\t"
         "bne	L_mlkem_arm32_csubq_loop_%=\n\t"
@@ -8427,11 +8424,11 @@ void mlkem_arm32_csubq(sword16* p)
 }
 
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
-unsigned int mlkem_arm32_rej_uniform(sword16* p_p, unsigned int len_p,
-    const byte* r_p, unsigned int rLen_p)
+WC_OMIT_FRAME_POINTER unsigned int mlkem_arm32_rej_uniform(sword16* p_p,
+    unsigned int len_p, const byte* r_p, unsigned int rLen_p)
 #else
-unsigned int mlkem_arm32_rej_uniform(sword16* p, unsigned int len,
-    const byte* r, unsigned int rLen)
+WC_OMIT_FRAME_POINTER unsigned int mlkem_arm32_rej_uniform(sword16* p,
+    unsigned int len, const byte* r, unsigned int rLen)
 #endif /* WOLFSSL_NO_VAR_ASSIGN_REG */
 {
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
@@ -8439,15 +8436,15 @@ unsigned int mlkem_arm32_rej_uniform(sword16* p, unsigned int len,
     register unsigned int len asm ("r1") = (unsigned int)len_p;
     register const byte* r asm ("r2") = (const byte*)r_p;
     register unsigned int rLen asm ("r3") = (unsigned int)rLen_p;
-    register word16* L_mlkem_basemul_mont_zetas_c asm ("r4") =
+    register word16* L_mlkem_basemul_mont_zetas_c asm ("r12") =
         (word16*)&L_mlkem_basemul_mont_zetas;
 #else
     register word16* L_mlkem_basemul_mont_zetas_c =
         (word16*)&L_mlkem_basemul_mont_zetas;
-
 #endif /* !WOLFSSL_NO_VAR_ASSIGN_REG */
 
     __asm__ __volatile__ (
+        "push	{%[L_mlkem_basemul_mont_zetas]}\n\t"
 #if defined(WOLFSSL_ARM_ARCH) && (WOLFSSL_ARM_ARCH < 7)
         "mov	r8, #0x1\n\t"
         "orr	r8, r8, #0xd00\n\t"
@@ -8701,6 +8698,7 @@ unsigned int mlkem_arm32_rej_uniform(sword16* p, unsigned int len,
         "\n"
     "L_mlkem_arm32_rej_uniform_done_%=: \n\t"
         "lsr	r0, r12, #1\n\t"
+        "pop	{%[L_mlkem_basemul_mont_zetas]}\n\t"
 #ifndef WOLFSSL_NO_VAR_ASSIGN_REG
         : [p] "+r" (p), [len] "+r" (len), [r] "+r" (r), [rLen] "+r" (rLen),
           [L_mlkem_basemul_mont_zetas] "+r" (L_mlkem_basemul_mont_zetas_c)
@@ -8710,7 +8708,7 @@ unsigned int mlkem_arm32_rej_uniform(sword16* p, unsigned int len,
         : [p] "r" (p), [len] "r" (len), [r] "r" (r), [rLen] "r" (rLen),
           [L_mlkem_basemul_mont_zetas] "r" (L_mlkem_basemul_mont_zetas_c)
 #endif /* !WOLFSSL_NO_VAR_ASSIGN_REG */
-        : "memory", "cc", "r12", "lr", "r5", "r6", "r7", "r8"
+        : "memory", "cc", "lr", "r4", "r5", "r6", "r7", "r8"
     );
     return (word32)(size_t)p;
 }

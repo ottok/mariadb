@@ -1470,7 +1470,7 @@ bool Item_in_optimizer::fix_fields(THD *thd, Item **ref)
     - subqueries that were originally EXISTS subqueries (and were coinverted by
       the EXISTS->IN rewrite)
 
-   When Item_in_optimizer is not not working as a pass-through, it
+   When Item_in_optimizer is not working as a pass-through, it
     - caches its "left argument", args[0].
     - makes adjustments to subquery item's return value for proper NULL
       value handling
@@ -1507,7 +1507,7 @@ bool Item_in_optimizer::walk(Item_processor processor,
 
   @details
   The function checks whether an expression cache is needed for this item
-  and if if so wraps the item into an item of the class
+  and if so wraps the item into an item of the class
   Item_cache_wrapper with an appropriate expression cache set up there.
 
   @note
@@ -1758,7 +1758,7 @@ bool Item_in_optimizer::is_null()
   @detail
     Recursively transform the left and the right operand of this Item. The
     Right operand is an Item_in_subselect or its subclass. To avoid the
-    creation of new Items, we use the fact the the left operand of the
+    creation of new Items, we use the fact the left operand of the
     Item_in_subselect is the same as the one of 'this', so instead of
     transforming its operand, we just assign the left operand of the
     Item_in_subselect to be equal to the left operand of 'this'.
@@ -1847,13 +1847,13 @@ bool Item_func_eq::val_bool()
 }
 
 
-Item *Item_func_eq::do_build_clone(THD *thd) const
+Item *Item_func_eq::deep_copy(THD *thd) const
 {
   /*
     Clone the parent and cast to the child class since there is nothing
     specific for Item_func_eq
   */
-  return (Item_func_eq*) Item_bool_rowready_func2::do_build_clone(thd);
+  return (Item_func_eq*) Item_bool_rowready_func2::deep_copy(thd);
 }
 
 
@@ -1928,7 +1928,7 @@ longlong Item_func_strcmp::val_int()
 }
 
 
-bool Item_func_opt_neg::eq(const Item *item, bool binary_cmp) const
+bool Item_func_opt_neg::eq(const Item *item, const Eq_config &config) const
 {
   /* Assume we don't have rtti */
   if (this == item)
@@ -1941,7 +1941,7 @@ bool Item_func_opt_neg::eq(const Item *item, bool binary_cmp) const
     return 0;
   if (negated != ((Item_func_opt_neg *) item_func)->negated)
     return 0;
-  return Item_args::eq(item_func, binary_cmp);
+  return Item_args::eq(item_func, config);
 }
 
 
@@ -5544,16 +5544,16 @@ void Item_cond::neg_arguments(THD *thd)
      0 if an error occurred
 */ 
 
-Item *Item_cond::do_build_clone(THD *thd) const
+Item *Item_cond::deep_copy(THD *thd) const
 {
-  Item_cond *copy= (Item_cond *) get_copy(thd);
+  Item_cond *copy= (Item_cond *) shallow_copy_with_checks(thd);
   if (!copy)
     return 0;
   copy->list.empty();
 
   for (const Item &item : list)
   {
-    Item *arg_clone= item.build_clone(thd);
+    Item *arg_clone= item.deep_copy_with_checks(thd);
     if (!arg_clone)
       return 0;
     if (copy->list.push_back(arg_clone, thd->mem_root))
@@ -6956,7 +6956,7 @@ void Item_equal::add_const(THD *thd, Item *c)
 
     - Also, Field_str::test_if_equality_guarantees_uniqueness() guarantees
     that the comparison collation of all equalities handled by Item_equal
-    match the the collation of the field.
+    match the collation of the field.
 
     Therefore, at Item_equal::add_const() time all constants constXXX
     should be directly comparable to each other without an additional
@@ -7897,9 +7897,9 @@ bool Item_equal::create_pushable_equalities(THD *thd,
   if (right_item)
   {
     Item_func_eq *eq= 0;
-    Item *left_item_clone= left_item->build_clone(thd);
+    Item *left_item_clone= left_item->deep_copy_with_checks(thd);
     Item *right_item_clone= !clone_const ?
-                            right_item : right_item->build_clone(thd);
+                            right_item : right_item->deep_copy_with_checks(thd);
     if (!left_item_clone || !right_item_clone)
       return true;
     eq= new (thd->mem_root) Item_func_eq(thd,
@@ -7926,8 +7926,8 @@ bool Item_equal::create_pushable_equalities(THD *thd,
     if (checker && !((item->*checker) (arg)))
       continue;
     Item_func_eq *eq= 0;
-    Item *left_item_clone= left_item->build_clone(thd);
-    Item *right_item_clone= item->build_clone(thd);
+    Item *left_item_clone= left_item->deep_copy_with_checks(thd);
+    Item *right_item_clone= item->deep_copy_with_checks(thd);
     if (!(left_item_clone && right_item_clone))
       return true;
     left_item_clone->set_item_equal(NULL);

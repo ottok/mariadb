@@ -535,7 +535,7 @@ int ha_json_table::fill_column_values(THD *thd, uchar * buf, uchar *pos)
       {
         json_engine_t je;
         json_path_step_t *cur_step;
-        int array_counters[JSON_DEPTH_LIMIT];
+        int array_counters[JSON_DEPTH_LIMIT]= {0};
         int not_found;
         const uchar* node_start;
         const uchar* node_end;
@@ -711,6 +711,8 @@ TABLE *Create_json_table::start(THD *thd,
   if (!(table= Create_tmp_table::start(thd, param, table_alias)))
     DBUG_RETURN(0);
   share= table->s;
+  share->db= any_db;
+  share->table_name= { STRING_WITH_LEN("json_table") };
   share->not_usable_by_query_cache= FALSE;
   share->db_plugin= NULL;
   if (!(table->file= new (&table->mem_root) ha_json_table(share, jt)))
@@ -968,8 +970,9 @@ int Json_table_column::print(THD *thd, Field **f, String *str)
 
     (*f)->sql_type(column_type);
 
-    if (str->append(column_type) ||
-        ((*f)->has_charset() && m_explicit_cs &&
+    if ((m_format_json ? str->append(STRING_WITH_LEN(" JSON ")) : str->append(column_type)))
+      return 1;
+    if (((*f)->has_charset() && m_explicit_cs &&
          (str->append(STRING_WITH_LEN(" CHARSET ")) ||
           str->append(&m_explicit_cs->cs_name) ||
           (Charset(m_explicit_cs).can_have_collate_clause() &&

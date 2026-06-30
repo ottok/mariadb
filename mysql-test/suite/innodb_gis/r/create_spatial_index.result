@@ -105,7 +105,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	tab	range	idx3	idx3	34	NULL	1	Using where; Using filesort
 SELECT c1,ST_Astext(c4) FROM tab WHERE ST_Crosses(tab.c4, @g1) ORDER BY c1;
 c1	ST_Astext(c4)
-4	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
 EXPLAIN UPDATE tab SET C2 = ST_GeomFromText('POINT(0 0)') 
 WHERE ST_Crosses(tab.c4, @g1);
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
@@ -119,7 +118,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	tab	range	idx3	idx3	34	NULL	1	Using where; Using filesort
 SELECT c1,ST_Astext(c4) FROM tab WHERE  ST_Crosses(tab.c4, @g1) ORDER BY c1;
 c1	ST_Astext(c4)
-1	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
 EXPLAIN UPDATE tab SET C2 = ST_GeomFromText('POINT(0 0)') 
 WHERE ST_Crosses(tab.c4, @g1);
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
@@ -411,7 +409,6 @@ test.tab	check	status	OK
 SET @g1 = ST_GeomFromText('POLYGON((100 200,1010 1010,1020 1020,500 300,300 200,100 300,100 200))');
 SELECT c1,ST_Astext(c4) FROM tab WHERE ST_Crosses(tab.c4, @g1) ORDER BY c1;
 c1	ST_Astext(c4)
-5	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
 DELETE FROM tab WHERE ST_Crosses(tab.c4, @g1);
 SELECT c1,ST_Astext(c4) FROM tab WHERE ST_Crosses(tab.c4, @g1) ORDER BY c1;
 c1	ST_Astext(c4)
@@ -534,7 +531,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	tab	range	idx3	idx3	34	NULL	1	Using where; Using filesort
 SELECT c1,ST_Astext(c4) FROM tab WHERE ST_Crosses(tab.c4, @g1) ORDER BY c1;
 c1	ST_Astext(c4)
-4	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
 EXPLAIN UPDATE tab SET C2 = ST_GeomFromText('POINT(0 0)') 
 WHERE ST_Crosses(tab.c4, @g1);
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
@@ -548,7 +544,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	tab	range	idx3	idx3	34	NULL	1	Using where; Using filesort
 SELECT c1,ST_Astext(c4) FROM tab WHERE  ST_Crosses(tab.c4, @g1) ORDER BY c1;
 c1	ST_Astext(c4)
-1	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
 EXPLAIN UPDATE tab SET C2 = ST_GeomFromText('POINT(0 0)') 
 WHERE ST_Crosses(tab.c4, @g1);
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
@@ -830,7 +825,6 @@ test.tab	check	status	OK
 SET @g1 = ST_GeomFromText('POLYGON((100 200,200 300,400 500,500 300,300 200,100 300,100 200))');
 SELECT c1,ST_Astext(c4) FROM tab WHERE ST_Crosses(tab.c4, @g1) ORDER BY c1;
 c1	ST_Astext(c4)
-4	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
 DELETE FROM tab WHERE ST_Crosses(tab.c4, @g1);
 SELECT c1,ST_Astext(c4) FROM tab WHERE ST_Crosses(tab.c4, @g1) ORDER BY c1;
 c1	ST_Astext(c4)
@@ -952,7 +946,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	tab	range	idx3	idx3	34	NULL	1	Using where; Using filesort
 SELECT c1,ST_Astext(c4) FROM tab WHERE ST_Crosses(tab.c4, @g1) ORDER BY c1;
 c1	ST_Astext(c4)
-4	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
 EXPLAIN UPDATE tab SET C2 = ST_GeomFromText('POINT(0 0)') 
 WHERE ST_Crosses(tab.c4, @g1);
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
@@ -966,7 +959,6 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 1	SIMPLE	tab	range	idx3	idx3	34	NULL	1	Using where; Using filesort
 SELECT c1,ST_Astext(c4) FROM tab WHERE  ST_Crosses(tab.c4, @g1) ORDER BY c1;
 c1	ST_Astext(c4)
-1	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
 EXPLAIN UPDATE tab SET C2 = ST_GeomFromText('POINT(0 0)') 
 WHERE ST_Crosses(tab.c4, @g1);
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
@@ -1281,18 +1273,13 @@ geometrycollection(point(1,-1)),b
 );
 1
 drop table t1;
-CREATE TABLE t1(c1 POINT NOT NULL);
-DROP TABLE mysql.innodb_table_stats;
+#
+# MDEV-24558 : Assertion !index->is_spatial() failed
+#
+CREATE TABLE t1(c1 POINT NOT NULL) ENGINE=InnoDB;
+RENAME TABLE mysql.innodb_table_stats TO mysql.innodb_table_stats_;
 CALL mtr.add_suppression("InnoDB: Table `mysql`.`innodb_table_stats` not found.");
 CALL mtr.add_suppression("InnoDB: Fetch of persistent statistics requested for table `test`.`t1` but the required system tables mysql.innodb_table_stats and mysql.innodb_index_stats are not present or have unexpected structure. Using transient stats instead.");
 CREATE SPATIAL INDEX idx2 ON t1(c1);
 DROP TABLE t1;
-CREATE TABLE mysql.innodb_table_stats (
-database_name varchar(64) COLLATE utf8_bin NOT NULL,
-table_name varchar(199) COLLATE utf8_bin NOT NULL,
-last_update timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-n_rows bigint(20) unsigned NOT NULL,
-clustered_index_size bigint(20) unsigned NOT NULL,
-sum_of_other_index_sizes bigint(20) unsigned NOT NULL,
-PRIMARY KEY (`database_name`,`table_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin STATS_PERSISTENT=0;
+RENAME TABLE mysql.innodb_table_stats_ TO mysql.innodb_table_stats;

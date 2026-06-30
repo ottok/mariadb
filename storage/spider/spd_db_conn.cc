@@ -48,8 +48,6 @@ extern SPIDER_DBTON spider_dbton[SPIDER_DBTON_SIZE];
 
 #define SPIDER_SQL_COALESCE_STR "coalesce("
 #define SPIDER_SQL_COALESCE_LEN (sizeof(SPIDER_SQL_COALESCE_STR) - 1)
-#define SPIDER_SQL_HEX_STR "0x"
-#define SPIDER_SQL_HEX_LEN (sizeof(SPIDER_SQL_HEX_STR) - 1)
 
 #define SPIDER_SQL_SET_NAMES_STR "set names "
 #define SPIDER_SQL_SET_NAMES_LEN sizeof(SPIDER_SQL_SET_NAMES_STR) - 1
@@ -1127,12 +1125,12 @@ void spider_db_append_xid_str(
   spider_string *tmp_str,
   XID *xid
 ) {
-  char format_id[sizeof(long) + 3];
+  char format_id[3*sizeof(long) + 3];
   uint format_id_length;
   DBUG_ENTER("spider_db_append_xid_str");
 
   format_id_length =
-    my_sprintf(format_id, (format_id, "%lu", xid->formatID));
+    snprintf(format_id, sizeof(format_id), "%lu", xid->formatID);
   spider_db_append_hex_string(tmp_str, (uchar *) xid->data, xid->gtrid_length);
 /*
   tmp_str->q_append(SPIDER_SQL_VALUE_QUOTE_STR, SPIDER_SQL_VALUE_QUOTE_LEN);
@@ -1403,7 +1401,7 @@ int spider_db_append_key_columns(
     start_key_part_map >>= 1,
     key_count++
   ) {
-    key_name_length = my_sprintf(tmp_buf, (tmp_buf, "c%u", key_count));
+    key_name_length = snprintf(tmp_buf, sizeof(tmp_buf), "c%u", key_count);
     if (str->reserve(key_name_length + SPIDER_SQL_COMMA_LEN))
       DBUG_RETURN(HA_ERR_OUT_OF_MEM);
     str->q_append(tmp_buf, key_name_length);
@@ -3104,7 +3102,7 @@ int spider_db_store_result(
           result_list->quick_phase == 2
         ) {
           if (result_list->low_mem_read &&
-            result_list->current->result->limit_mode() == 0)
+            conn->db_conn->limit_mode() == 0)
           {
             do {
               spider_db_free_one_result(result_list,
@@ -3396,18 +3394,12 @@ int spider_db_store_result(
 
         DBUG_PRINT("info",("spider store result to temporary table"));
         DBUG_ASSERT(!current->result_tmp_tbl);
-#ifdef SPIDER_use_LEX_CSTRING_for_Field_blob_constructor
         LEX_CSTRING field_name1 = {STRING_WITH_LEN("a")};
         LEX_CSTRING field_name2 = {STRING_WITH_LEN("b")};
         LEX_CSTRING field_name3 = {STRING_WITH_LEN("c")};
         if (!(current->result_tmp_tbl = spider_mk_sys_tmp_table_for_result(
           thd, table, &current->result_tmp_tbl_prm, &field_name1, &field_name2,
           &field_name3, &my_charset_bin)))
-#else
-        if (!(current->result_tmp_tbl = spider_mk_sys_tmp_table_for_result(
-          thd, table, &current->result_tmp_tbl_prm, "a", "b", "c",
-          &my_charset_bin)))
-#endif
         {
           DBUG_RETURN(HA_ERR_OUT_OF_MEM);
         }
@@ -3757,21 +3749,13 @@ int spider_db_store_result_for_reuse_cursor(
 
       DBUG_PRINT("info",("spider store result to temporary table"));
       DBUG_ASSERT(!current->result_tmp_tbl);
-#ifdef SPIDER_use_LEX_CSTRING_for_Field_blob_constructor
       LEX_CSTRING field_name1 = {STRING_WITH_LEN("a")};
       LEX_CSTRING field_name2 = {STRING_WITH_LEN("b")};
       LEX_CSTRING field_name3 = {STRING_WITH_LEN("c")};
       if (!(current->result_tmp_tbl = spider_mk_sys_tmp_table_for_result(
         thd, table, &current->result_tmp_tbl_prm, &field_name1, &field_name2,
         &field_name3, &my_charset_bin)))
-#else
-      if (!(current->result_tmp_tbl = spider_mk_sys_tmp_table_for_result(
-        thd, table, &current->result_tmp_tbl_prm, "a", "b", "c",
-        &my_charset_bin)))
-#endif
-      {
         DBUG_RETURN(HA_ERR_OUT_OF_MEM);
-      }
       current->result_tmp_tbl_thd = thd;
       TABLE *tmp_tbl = current->result_tmp_tbl;
       tmp_tbl->file->extra(HA_EXTRA_WRITE_CACHE);
@@ -7576,8 +7560,10 @@ int spider_db_open_item_int(
 
     if (!(tmp_str2 = item->val_str(tmp_str.get_str())))
     {
-      error_num = HA_ERR_OUT_OF_MEM;
-      goto end;
+      if (str->reserve(SPIDER_SQL_NULL_LEN))
+        error_num = HA_ERR_OUT_OF_MEM;
+      str->q_append(SPIDER_SQL_NULL_STR, SPIDER_SQL_NULL_LEN);
+      DBUG_RETURN(error_num);
     }
     tmp_str.mem_calc();
 
@@ -8685,8 +8671,8 @@ int spider_db_udf_ping_table_append_mon_next(
   where_clause_str.init_calc_mem(SPD_MID_DB_UDF_PING_TABLE_APPEND_MON_NEXT_2);
   child_table_name_str.length(child_table_name_length);
   where_clause_str.length(where_clause_length);
-  limit_str_length = my_sprintf(limit_str, (limit_str, "%lld", limit));
-  sid_str_length = my_sprintf(sid_str, (sid_str, "%lld", first_sid));
+  limit_str_length = snprintf(limit_str, sizeof(limit_str), "%lld", limit);
+  sid_str_length = snprintf(sid_str, sizeof(sid_str), "%lld", first_sid);
   if (str->reserve(
     SPIDER_SQL_SELECT_LEN +
     SPIDER_SQL_PING_TABLE_LEN +
@@ -8783,7 +8769,7 @@ int spider_db_udf_ping_table_append_select(
       str->append_escape_string(where_str->ptr(), where_str->length());
     }
   } else {
-    limit_str_length = my_sprintf(limit_str, (limit_str, "%lld", limit));
+    limit_str_length = snprintf(limit_str, sizeof(limit_str), "%lld", limit);
     if (str->reserve(
       (use_where ? (where_str->length() * 2) : 0) +
       SPIDER_SQL_LIMIT_LEN + limit_str_length

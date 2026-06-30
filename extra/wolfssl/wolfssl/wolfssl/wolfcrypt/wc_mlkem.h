@@ -1,12 +1,12 @@
 /* wc_mlkem.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -44,15 +44,7 @@
     #define WOLFSSL_MLKEM_NO_DECAPSULATE
 #endif
 
-#ifdef noinline
-    #define MLKEM_NOINLINE noinline
-#elif defined(_MSC_VER)
-    #define MLKEM_NOINLINE __declspec(noinline)
-#elif defined(__GNUC__)
-    #define MLKEM_NOINLINE __attribute__((noinline))
-#else
-    #define MLKEM_NOINLINE
-#endif
+#define MLKEM_NOINLINE WC_NO_INLINE
 
 enum {
     /* Flags of Kyber keys. */
@@ -71,7 +63,7 @@ enum {
     MLKEM_COMP_4BITS    =  4,
     MLKEM_COMP_5BITS    =  5,
     MLKEM_COMP_10BITS   = 10,
-    MLKEM_COMP_11BITS   = 11,
+    MLKEM_COMP_11BITS   = 11
 };
 
 
@@ -145,9 +137,6 @@ struct MlKemKey {
 #ifdef __cplusplus
     extern "C" {
 #endif
-
-/* For backward compatibility */
-typedef struct MlKemKey KyberKey;
 
 WOLFSSL_LOCAL
 void mlkem_init(void);
@@ -241,6 +230,8 @@ WOLFSSL_LOCAL
 void mlkem_from_bytes(sword16* p, const byte* b, int k);
 WOLFSSL_LOCAL
 void mlkem_to_bytes(byte* b, sword16* p, int k);
+WOLFSSL_LOCAL
+int mlkem_check_public(sword16* p, int k);
 
 #ifdef USE_INTEL_SPEEDUP
 WOLFSSL_LOCAL
@@ -269,11 +260,6 @@ void mlkem_redistribute_16_rand_avx2(const word64* s, byte* r0, byte* r1,
     byte* r2, byte* r3);
 void mlkem_redistribute_8_rand_avx2(const word64* s, byte* r0, byte* r1,
     byte* r2, byte* r3);
-
-WOLFSSL_LOCAL
-void mlkem_sha3_128_blocksx4_seed_avx2(word64* s, byte* seed);
-WOLFSSL_LOCAL
-void mlkem_sha3_256_blocksx4_seed_avx2(word64* s, byte* seed);
 
 WOLFSSL_LOCAL
 void mlkem_cbd_eta2_avx2(sword16* p, const byte* r);

@@ -136,7 +136,7 @@ bool Item_sum::init_sum_func_check(THD *thd)
     If the context conditions are not met the method reports an error.
     If the set function is aggregated in some outer subquery the method
     adds it to the chain of items for such set functions that is attached
-    to the the st_select_lex structure for this subquery.
+    to the st_select_lex structure for this subquery.
 
     A number of designated members of the object are used to check the
     conditions. They are specified in the comment before the Item_sum
@@ -1115,6 +1115,7 @@ Item_sum_num::fix_fields(THD *thd, Item **ref)
   if (init_sum_func_check(thd))
     return TRUE;
 
+  collation= DTCollation_numeric();
   decimals=0;
   set_maybe_null(sum_func() != COUNT_FUNC);
   for (uint i=0 ; i < arg_count ; i++)
@@ -1365,8 +1366,16 @@ Item_sum_sp::fix_fields(THD *thd, Item **ref)
     return TRUE;
   }
 
-  if (init_result_field(thd, max_length, maybe_null(), &null_value, &name))
-    return TRUE;
+  Query_arena *arena, backup;
+  arena= thd->activate_stmt_arena_if_needed(&backup);
+
+  bool ret= init_result_field(thd, max_length, maybe_null(),
+                              &null_value, &name);
+  if (arena)
+    thd->restore_active_arena(arena, &backup);
+
+  if(ret)
+    return true;
 
   for (uint i= 0 ; i < arg_count ; i++)
   {
@@ -3810,7 +3819,7 @@ int dump_leaf_key(void* key_arg, element_count count __attribute__((unused)),
 {
   Item_func_group_concat *item= (Item_func_group_concat *) item_arg;
   TABLE *table= item->table;
-  uint max_length= table->in_use->variables.group_concat_max_len;
+  uint max_length= table->in_use->gconcat_max_len();
   String tmp((char *)table->record[1], table->s->reclength,
              default_charset_info);
   String tmp2;
@@ -4140,7 +4149,7 @@ bool Item_func_group_concat::repack_tree(THD *thd)
   DBUG_ASSERT(tree->size_of_element == st.tree.size_of_element);
   st.table= table;
   st.len= 0;
-  st.maxlen= thd->variables.group_concat_max_len;
+  st.maxlen= thd->gconcat_max_len();
   tree_walk(tree, &copy_to_tree, &st, left_root_right);
   if (st.len <= st.maxlen) // Copying aborted. Must be OOM
   {
@@ -4219,7 +4228,7 @@ bool Item_func_group_concat::add(bool exclude_nulls)
   {
     THD *thd= table->in_use;
     table->field[0]->store(row_str_len, FALSE);
-    if ((tree_len >> GCONCAT_REPACK_FACTOR) > thd->variables.group_concat_max_len
+    if ((tree_len >> GCONCAT_REPACK_FACTOR) > thd->gconcat_max_len()
         && tree->elements_in_tree > 1)
       if (repack_tree(thd))
         return 1;
@@ -4272,7 +4281,7 @@ Item_func_group_concat::fix_fields(THD *thd, Item **ref)
   result.set_charset(collation.collation);
   result_field= 0;
   null_value= 1;
-  max_length= (uint32) MY_MIN((ulonglong) thd->variables.group_concat_max_len
+  max_length= (uint32) MY_MIN((ulonglong) thd->gconcat_max_len()
                               / collation.collation->mbminlen
                               * collation.collation->mbmaxlen, UINT_MAX32);
 
@@ -4364,8 +4373,7 @@ bool Item_func_group_concat::setup(THD *thd)
       Prepend the field to store the length of the string representation
       of this row. Used to detect when the tree goes over group_concat_max_len
     */
-    Item *item= new (thd->mem_root)
-                    Item_uint(thd, thd->variables.group_concat_max_len);
+    Item *item= new (thd->mem_root) Item_uint(thd, thd->gconcat_max_len());
     if (!item || all_fields.push_front(item, thd->mem_root))
       DBUG_RETURN(TRUE);
   }
@@ -4380,7 +4388,7 @@ bool Item_func_group_concat::setup(THD *thd)
     /*
       Convert bit fields to bigint's in the temporary table.
       Needed as we cannot compare two table records containing BIT fields
-      stored in the the tree used for distinct/order by.
+      stored in the tree used for distinct/order by.
       Moreover we don't even save in the tree record null bits 
       where BIT fields store parts of their data.
     */

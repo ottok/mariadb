@@ -25,6 +25,7 @@ Created 5/7/1996 Heikki Tuuri
 *******************************************************/
 
 #define LOCK_MODULE_IMPLEMENTATION
+#define MYSQL_SERVER
 
 #include "univ.i"
 
@@ -669,25 +670,9 @@ bool wsrep_is_BF_lock_timeout(const trx_t &trx)
              << " error: " << trx.error_state
              << " query: " << wsrep_thd_query(trx.mysql_thd);
 
-  if (const lock_t*wait_lock = trx.lock.wait_lock)
-  {
-    const my_hrtime_t now= my_hrtime_coarse();
-    const my_hrtime_t suspend_time= trx.lock.suspend_time;
-    fprintf(stderr,
-            "------- TRX HAS BEEN WAITING %llu us"
-            " FOR THIS LOCK TO BE GRANTED:\n",
-            now.val - suspend_time.val);
-
-    if (!wait_lock->is_table()) {
-      mtr_t mtr;
-      lock_rec_print(stderr, wait_lock, mtr);
-    } else {
-      lock_table_print(stderr, wait_lock);
-    }
-
-    fprintf(stderr, "------------------\n");
-  }
-
+  // TODO: Can't use lock_rec_print from here because
+  // record lock page might not be latched and we are
+  // actually only interested lock information.
   return true;
 }
 
@@ -1074,7 +1059,7 @@ lock_rec_other_has_expl_req(
 #endif /* UNIV_DEBUG */
 
 #ifdef WITH_WSREP
-void lock_wait_wsrep_kill(trx_t *bf_trx, ulong thd_id, trx_id_t trx_id);
+void lock_wait_wsrep_kill(trx_t *bf_trx, my_thread_id thd_id, trx_id_t trx_id);
 
 #ifdef UNIV_DEBUG
 void wsrep_report_error(const lock_t* victim_lock, const trx_t *bf_trx)
@@ -1175,13 +1160,13 @@ func_exit:
   if (victims.empty())
     goto func_exit;
 
-  std::vector<std::pair<ulong,trx_id_t>> victim_id;
+  std::vector<std::pair<my_thread_id,trx_id_t>> victim_id;
   for (trx_t *v : victims)
   {
     /* Victim must have THD */
     ut_ad(v->mysql_thd);
-    victim_id.emplace_back(std::pair<ulong,trx_id_t>
-                           {thd_get_thread_id(v->mysql_thd), v->id});
+    victim_id.emplace_back(std::pair<my_thread_id,trx_id_t>
+                           {v->mysql_thd->thread_id, v->id});
   }
 
   DBUG_EXECUTE_IF("sync.before_wsrep_thd_abort",
@@ -1580,7 +1565,8 @@ TRANSACTIONAL_TARGET
 static void lock_rec_add_to_queue(unsigned type_mode, const hash_cell_t &cell,
                                   const page_id_t id, const page_t *page,
                                   ulint heap_no, dict_index_t *index,
-                                  trx_t *trx, bool caller_owns_trx_mutex)
+                                  trx_t *trx, bool caller_owns_trx_mutex,
+                                  bool report_waits= false)
 {
 	ut_d(lock_sys.hash_get(type_mode).assert_locked(id));
 	ut_ad(xtest() || caller_owns_trx_mutex == trx->mutex_is_owner());
@@ -1637,15 +1623,27 @@ static void lock_rec_add_to_queue(unsigned type_mode, const hash_cell_t &cell,
 	if (type_mode & LOCK_WAIT) {
 		goto create;
 	} else if (lock_t *first_lock = lock_sys_t::get_first(cell, id)) {
+		bool do_create= false;
 		for (lock_t* lock = first_lock;;) {
 			if (lock->is_waiting()
 			    && lock_rec_get_nth_bit(lock, heap_no)) {
-				goto create;
+#ifdef HAVE_REPLICATION
+				if (report_waits)
+				{
+					do_create= true;
+					thd_rpl_deadlock_check(lock->trx->mysql_thd,
+							       trx->mysql_thd);
+				}
+				else
+#endif
+					goto create;
 			}
 			if (!(lock = lock_rec_get_next_on_page(lock))) {
 				break;
 			}
 		}
+		if (do_create)
+			goto create;
 
 		/* Look for a similar record lock on the same page:
 		if one is found and there are no waiting lock requests,
@@ -1761,6 +1759,7 @@ lock_rec_lock(
         ((LOCK_MODE_MASK | LOCK_TABLE) & mode) == LOCK_X);
   ut_ad(~mode & (LOCK_GAP | LOCK_REC_NOT_GAP));
   ut_ad(dict_index_is_clust(index) || !dict_index_is_online_ddl(index));
+  ut_ad(block->page.lock.have_any());
   DBUG_EXECUTE_IF("innodb_report_deadlock", return DB_DEADLOCK;);
 #ifdef ENABLED_DEBUG_SYNC
   if (trx->mysql_thd)
@@ -1821,7 +1820,7 @@ lock_rec_lock(
         {
           /* Set the requested lock on the record. */
           lock_rec_add_to_queue(mode, g.cell(), id, block->page.frame, heap_no,
-                                index, trx, true);
+                                index, trx, true, true);
           err= DB_SUCCESS_LOCKED_REC;
         }
       }
@@ -4121,9 +4120,7 @@ run_again:
 @return error code */
 dberr_t lock_table_children(dict_table_t *table, trx_t *trx)
 {
-  MDL_context *mdl_context=
-    static_cast<MDL_context*>(thd_mdl_context(trx->mysql_thd));
-  ut_ad(mdl_context);
+  MDL_context *mdl_context= &trx->mysql_thd->mdl_context;
   struct table_mdl{dict_table_t* table; MDL_ticket *mdl;};
   std::vector<table_mdl> children;
   children.emplace_back(table_mdl{table, nullptr});
@@ -5409,8 +5406,10 @@ func_exit:
 		? lock_clust_rec_some_has_impl(rec, index, offsets)
 		: 0;
 
-	if (trx_t *impl_trx = impl_trx_id
-	    ? trx_sys.find(current_trx(), impl_trx_id, false)
+	trx_t *trx= current_trx();
+
+	if (trx_t *impl_trx = impl_trx_id > (trx ? trx->max_inactive_id : 0)
+	    ? trx_sys.find(trx, impl_trx_id, false)
 	    : 0) {
 		/* impl_trx could have been committed before we
 		acquire its mutex, but not thereafter. */
@@ -5990,7 +5989,7 @@ lock_rec_convert_impl_to_expl(
 
 		trx_id = lock_clust_rec_some_has_impl(rec, index, offsets);
 
-		if (trx_id == 0) {
+		if (trx_id <= caller_trx->max_inactive_id) {
 			return nullptr;
 		}
 		if (UNIV_UNLIKELY(trx_id == caller_trx->id)) {
@@ -6308,16 +6307,33 @@ lock_clust_rec_read_check_and_lock(
 		return DB_SUCCESS;
 	}
 
+	trx_id_t trx_id = 0;
+
 	if (heap_no > PAGE_HEAP_NO_SUPREMUM && gap_mode != LOCK_GAP
-            && trx->snapshot_isolation
+	    && trx->snapshot_isolation
 	    && trx->read_view.is_open()) {
-		trx_id_t trx_id= trx_read_trx_id(rec +
-						 row_trx_id_offset(rec, index));
-		if (!trx_sys.is_registered(trx, trx_id)
-		    && !trx->read_view.changes_visible(trx_id)
+		trx_id = trx_read_trx_id(rec + row_trx_id_offset(rec, index));
+		if (!trx->read_view.changes_visible(trx_id)
 		    && IF_WSREP(!(trx->is_wsrep()
 			&& wsrep_thd_skip_locking(trx->mysql_thd)), true)) {
-			return DB_RECORD_CHANGED;
+			/* Our record was last modified by a transaction that
+			we should not see. If that transaction has been
+			committed, we can return an error immediately,
+			without waiting for a record lock. */
+			if (!trx_sys.is_registered(trx, trx_id)) {
+				return DB_RECORD_CHANGED;
+			}
+			/* If lock_rec_lock() below returns DB_LOCK_WAIT,
+			there is a chance that the implicit lock holder will
+			be rolled back while we are waiting for a lock
+			timeout. In that case, this function would be invoked
+			again after the lock wait has been resolved.
+
+			If the lock_rec_lock() succeeds, we will have to
+			return this error. */
+		} else {
+			/* We are allowed to see this record. */
+			trx_id = 0;
 		}
 	}
 
@@ -6327,7 +6343,17 @@ lock_clust_rec_read_check_and_lock(
 	ut_ad(lock_rec_queue_validate(false, block->page.id(),
 				      rec, index, offsets));
 
+	ut_ad(block->page.lock.have_any());
 	DEBUG_SYNC_C("after_lock_clust_rec_read_check_and_lock");
+
+	if (UNIV_UNLIKELY(trx_id != 0) && err <= DB_SUCCESS_LOCKED_REC) {
+		/* The last modifier of rec had just been committed.
+		(It cannot be rolled back, because our caller is holding
+		block->page.lock, which protects rec.)
+		We already determined that rec is too new for us. */
+		ut_ad(err == DB_SUCCESS || err == DB_SUCCESS_LOCKED_REC);
+		err = DB_RECORD_CHANGED;
+	}
 
 	return(err);
 }
@@ -6847,6 +6873,11 @@ bool lock_trx_has_expl_x_lock(const trx_t &trx, const dict_table_t &table,
 
 namespace Deadlock
 {
+  static bool thd_has_edited_nontrans_tables(const THD *thd)
+  {
+    return thd->transaction->all.modified_non_trans_table;
+  }
+
   /** rewind(3) the file used for storing the latest detected deadlock and
   print a heading message to stderr if printing of all deadlocks to stderr
   is enabled. */

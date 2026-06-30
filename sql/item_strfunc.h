@@ -109,10 +109,12 @@ public:
    :Item_str_ascii_func(thd, a) { }
   Item_str_ascii_checksum_func(THD *thd, Item *a, Item *b)
    :Item_str_ascii_func(thd, a, b) { }
-  bool eq(const Item *item, bool binary_cmp) const override
+  bool eq(const Item *item, const Eq_config &config) const override
   {
     // Always use binary argument comparison: MD5('x') != MD5('X')
-    return Item_func::eq(item, true);
+    Eq_config new_config= config;
+    new_config.binary_cmp= true;
+    return Item_func::eq(item, new_config);
   }
 };
 
@@ -129,13 +131,15 @@ public:
    :Item_str_func(thd, a) { }
   Item_str_binary_checksum_func(THD *thd, Item *a, Item *b)
    :Item_str_func(thd, a, b) { }
-  bool eq(const Item *item, bool binary_cmp) const override
+  bool eq(const Item *item, const Eq_config &config) const override
   {
     /*
       Always use binary argument comparison:
         FROM_BASE64('test') != FROM_BASE64('TEST')
     */
-    return Item_func::eq(item, true);
+    Eq_config new_config= config;
+    new_config.binary_cmp= true;
+    return Item_func::eq(item, new_config);
   }
 };
 
@@ -155,7 +159,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("md5") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_md5>(thd, this); }
 };
 
@@ -171,7 +177,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("sha") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_sha>(thd, this); }
 };
 
@@ -187,7 +195,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("sha2") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_sha2>(thd, this); }
 };
 
@@ -204,7 +214,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("to_base64") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_to_base64>(thd, this); }
 };
 
@@ -221,7 +233,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("from_base64") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_from_base64>(thd, this); }
 };
 
@@ -252,7 +266,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("aes_encrypt") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_aes_encrypt>(thd, this); }
 };
 
@@ -267,7 +283,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("aes_decrypt") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_aes_decrypt>(thd, this); }
 };
 
@@ -283,7 +301,7 @@ public:
     return name;
   }
   bool fix_length_and_dec(THD *thd) override;
-  Item *do_get_copy(THD *thd) const override
+  Item *shallow_copy(THD *thd) const override
   {
     return get_item_copy<Item_func_natural_sort_key>(thd, this);
   }
@@ -320,7 +338,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("concat") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_concat>(thd, this); }
 };
 
@@ -351,10 +371,10 @@ public:
       print_sql_mode_qualified_name(str, query_type);
     print_args_parenthesized(str, query_type);
   }
-  Item *do_get_copy(THD *thd) const override
-  {
-    return get_item_copy<Item_func_concat_operator_oracle>(thd, this);
-  }
+
+protected:
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_func_concat_operator_oracle>(thd, this); }
 };
 
 
@@ -376,7 +396,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("decode_histogram") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_decode_histogram>(thd, this); }
 };
 
@@ -393,7 +415,9 @@ public:
     return name;
   }
   table_map not_null_tables() const override { return 0; }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_concat_ws>(thd, this); }
 };
 
@@ -415,7 +439,7 @@ public:
     return mark_unsupported_function(func_name(), "()", arg,
                                      VCOL_NON_DETERMINISTIC | VCOL_NEXTVAL);
   }
-  Item *do_get_copy(THD *thd) const override
+  Item *shallow_copy(THD *thd) const override
   {
     return get_item_copy<Item_func_random_bytes>(thd, this);
   }
@@ -435,7 +459,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("reverse") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_reverse>(thd, this); }
 };
 
@@ -461,7 +487,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("replace") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_replace>(thd, this); }
 };
 
@@ -486,7 +514,9 @@ public:
       print_sql_mode_qualified_name(str, query_type);
     print_args_parenthesized(str, query_type);
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_replace_oracle>(thd, this); }
 };
 
@@ -526,7 +556,8 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("regexp_replace") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override { return 0;}
+protected:
+  Item *shallow_copy(THD *thd) const override { return nullptr; }
 };
 
 
@@ -547,6 +578,8 @@ public:
   {
     return val_str_internal(str, true);
   }
+protected:
+  Item *shallow_copy(THD *thd) const override { return nullptr; }
 };
 
 
@@ -571,7 +604,8 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("regexp_substr") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override { return 0; }
+protected:
+  Item *shallow_copy(THD *thd) const override { return nullptr; }
 };
 
 
@@ -589,7 +623,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("insert") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_insert>(thd, this); }
 };
 
@@ -616,7 +652,9 @@ public:
     return name;
   }
   bool fix_length_and_dec(THD *thd) override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_lcase>(thd, this); }
 };
 
@@ -630,7 +668,9 @@ public:
     return name;
   }
   bool fix_length_and_dec(THD *thd) override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_ucase>(thd, this); }
 };
 
@@ -648,7 +688,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("left") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_left>(thd, this); }
 };
 
@@ -665,7 +707,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("right") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_right>(thd, this); }
 };
 
@@ -694,7 +738,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("substr") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_substr>(thd, this); }
 };
 
@@ -711,7 +757,7 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("sformat") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_sformat>(thd, this); }
 };
 
@@ -747,7 +793,9 @@ public:
       print_sql_mode_qualified_name(str, query_type);
     print_args_parenthesized(str, query_type);
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_substr_oracle>(thd, this); }
 };
 
@@ -764,9 +812,10 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("substring_index") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
-  { return get_item_copy<Item_func_substr_index>(thd, this); }
 
+protected:
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_func_substr_index>(thd, this); }
 };
 
 
@@ -780,7 +829,11 @@ protected:
     if (length == 0)
       return make_empty_result(&tmp_value);
 
-    tmp_value.set(*res, offset, length);
+    if (tmp_value.copy(res->ptr() + offset, length, res->charset()))
+    {
+      my_error(ER_OUTOFMEMORY, length);
+      return NULL;
+    }
     /*
       Make sure to return correct charset and collation:
       TRIM(0x000000 FROM _ucs2 0x0061)
@@ -807,7 +860,9 @@ public:
   }
   void print(String *str, enum_query_type query_type) override;
   virtual LEX_CSTRING mode_name() const { return { "both", 4}; }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_trim>(thd, this); }
 };
 
@@ -828,7 +883,9 @@ public:
     set_maybe_null();
     return res;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_trim_oracle>(thd, this); }
 };
 
@@ -851,7 +908,9 @@ public:
   }
   LEX_CSTRING mode_name() const override
   { return { STRING_WITH_LEN("leading") }; }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_ltrim>(thd, this); }
 };
 
@@ -872,7 +931,9 @@ public:
     set_maybe_null();
     return res;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_ltrim_oracle>(thd, this); }
 };
 
@@ -891,7 +952,9 @@ public:
   }
   LEX_CSTRING mode_name() const override
   { return { STRING_WITH_LEN("trailing") }; }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_rtrim>(thd, this); }
 };
 
@@ -912,7 +975,8 @@ public:
     set_maybe_null();
     return res;
   }
-  Item *do_get_copy(THD *thd) const override
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_rtrim_oracle>(thd, this); }
 };
 
@@ -955,7 +1019,9 @@ public:
   }
   static char *alloc(THD *thd, const char *password, size_t pass_len,
                      enum PW_Alg al);
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_password>(thd, this); }
 };
 
@@ -976,7 +1042,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("des_encrypt") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_des_encrypt>(thd, this); }
 };
 
@@ -995,7 +1063,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("des_decrypt") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_des_decrypt>(thd, this); }
 };
 
@@ -1040,7 +1110,9 @@ public:
   {
     return FALSE;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_encrypt>(thd, this); }
 };
 
@@ -1064,9 +1136,10 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("encode") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
-  { return get_item_copy<Item_func_encode>(thd, this); }
+
 protected:
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_func_encode>(thd, this); }
   virtual void crypto_transform(String *);
 private:
   /** Provide a seed for the PRNG sequence. */
@@ -1089,9 +1162,10 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("decode") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
-  { return get_item_copy<Item_func_decode>(thd, this); }
+
 protected:
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_func_decode>(thd, this); }
   void crypto_transform(String *) override;
 };
 
@@ -1135,7 +1209,9 @@ public:
   }
   const char *fully_qualified_func_name() const override
   { return "database()"; }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_database>(thd, this); }
 };
 
@@ -1163,7 +1239,9 @@ public:
     base_flags&= ~item_base_t::MAYBE_NULL;
     return FALSE;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_sqlerrm>(thd, this); }
 };
 
@@ -1201,7 +1279,9 @@ public:
   {
     return save_str_value_in_field(field, &str_value);
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_user>(thd, this); }
 };
 
@@ -1227,7 +1307,9 @@ public:
     return mark_unsupported_function(fully_qualified_func_name(), arg,
                                      VCOL_SESSION_FUNC);
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_current_user>(thd, this); }
 };
 
@@ -1265,7 +1347,9 @@ public:
     return mark_unsupported_function(fully_qualified_func_name(), arg,
                                      VCOL_SESSION_FUNC);
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_current_role>(thd, this); }
 };
 
@@ -1282,7 +1366,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("soundex") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_soundex>(thd, this); }
 };
 
@@ -1300,7 +1386,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("elt") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_elt>(thd, this); }
 };
 
@@ -1318,7 +1406,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("make_set") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_make_set>(thd, this); }
 };
 
@@ -1339,7 +1429,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("format") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_format>(thd, this); }
 };
 
@@ -1368,9 +1460,12 @@ public:
     return name;
   }
   void print(String *str, enum_query_type query_type) override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_char>(thd, this); }
-};
+} ;
+
 
 class Item_func_chr :public Item_func_char
 {
@@ -1388,7 +1483,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("chr") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_chr>(thd, this); }
 };
 
@@ -1405,7 +1502,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("repeat") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_repeat>(thd, this); }
 };
 
@@ -1421,7 +1520,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("space") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_space>(thd, this); }
 };
 
@@ -1442,7 +1543,9 @@ public:
   {
     return mark_unsupported_function(func_name(), "()", arg, VCOL_IMPOSSIBLE);
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_binlog_gtid_pos>(thd, this); }
 };
 
@@ -1484,7 +1587,9 @@ public:
     return name;
   }
   Sql_mode_dependency value_depends_on_sql_mode() const override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_rpad>(thd, this); }
 };
 
@@ -1518,7 +1623,9 @@ public:
       print_sql_mode_qualified_name(str, query_type);
     print_args_parenthesized(str, query_type);
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_rpad_oracle>(thd, this); }
 };
 
@@ -1544,7 +1651,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("lpad") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_lpad>(thd, this); }
 };
 
@@ -1578,7 +1687,9 @@ public:
       print_sql_mode_qualified_name(str, query_type);
     print_args_parenthesized(str, query_type);
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_lpad_oracle>(thd, this); }
 };
 
@@ -1601,7 +1712,9 @@ public:
     set_maybe_null();
     return FALSE;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_conv>(thd, this); }
 };
 
@@ -1651,7 +1764,9 @@ public:
     fix_char_length(char_length);
     return FALSE;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_hex>(thd, this); }
 };
 
@@ -1677,7 +1792,9 @@ public:
     max_length=(1+args[0]->max_length)/2;
     return FALSE;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_unhex>(thd, this); }
 };
 
@@ -1716,7 +1833,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("like_range_min") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_like_range_min>(thd, this); }
 };
 
@@ -1731,7 +1850,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("like_range_max") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_like_range_max>(thd, this); }
 };
 #endif
@@ -1763,7 +1884,9 @@ public:
     return name;
   }
   bool need_parentheses_in_default() override { return true; }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_binary>(thd, this); }
 };
 
@@ -1790,7 +1913,9 @@ public:
   {
     return mark_unsupported_function(func_name(), "()", arg, VCOL_IMPOSSIBLE);
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_load_file>(thd, this); }
 };
 
@@ -1811,7 +1936,9 @@ class Item_func_export_set: public Item_str_func
     static LEX_CSTRING name= {STRING_WITH_LEN("export_set") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_export_set>(thd, this); }
 };
 
@@ -1827,6 +1954,7 @@ public:
     return name;
   }
   String *val_str(String *) override;
+  table_map not_null_tables() const override { return 0; }
   bool fix_length_and_dec(THD *thd) override
   {
     collation.set(args[0]->collation);
@@ -1838,7 +1966,9 @@ public:
     max_length= (uint32) MY_MIN(max_result_length, MAX_BLOB_WIDTH);
     return FALSE;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_quote>(thd, this); }
 };
 
@@ -1934,9 +2064,11 @@ public:
     return name;
   }
   void print(String *str, enum_query_type query_type) override;
-  Item *do_get_copy(THD *thd) const override
-  { return get_item_copy<Item_func_conv_charset>(thd, this); }
   int save_in_field(Field*, bool) override;
+
+protected:
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_func_conv_charset>(thd, this); }
 };
 
 class Item_func_set_collation :public Item_str_func
@@ -1948,7 +2080,7 @@ public:
     Item_str_func(thd, a), m_set_collation(set_collation) {}
   String *val_str(String *) override;
   bool fix_length_and_dec(THD *thd) override;
-  bool eq(const Item *item, bool binary_cmp) const override;
+  bool eq(const Item *item, const Eq_config &config) const override;
   LEX_CSTRING func_name_cstring() const override
   {
     static LEX_CSTRING name= {STRING_WITH_LEN("collate") };
@@ -1963,7 +2095,9 @@ public:
     return args[0]->field_for_view_update();
   }
   bool need_parentheses_in_default() override { return true; }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_set_collation>(thd, this); }
 };
 
@@ -2000,8 +2134,6 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("charset") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
-  { return get_item_copy<Item_func_charset>(thd, this); }
   table_map used_tables() const override { return 0; }
   bool fix_length_and_dec(THD* thd) override
   {
@@ -2019,6 +2151,10 @@ public:
         args[0]->charset_for_protocol()->cs_name.length;
     return false;
   }
+
+protected:
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_func_charset>(thd, this); }
 };
 
 
@@ -2033,7 +2169,9 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("collation") };
     return name;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_collation>(thd, this); }
 };
 
@@ -2060,9 +2198,9 @@ public:
   }
   String *val_str(String *) override;
   bool fix_length_and_dec(THD *thd) override;
-  bool eq(const Item *item, bool binary_cmp) const override
+  bool eq(const Item *item, const Eq_config &config) const override
   {
-    if (!Item_str_func::eq(item, binary_cmp))
+    if (!Item_str_func::eq(item, config))
       return false;
     Item_func_weight_string *that= (Item_func_weight_string *)item;
     return this->weigth_flags == that->weigth_flags &&
@@ -2073,7 +2211,9 @@ public:
     override
   { return this; }
   void print(String *str, enum_query_type query_type) override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_weight_string>(thd, this); }
 };
 
@@ -2104,7 +2244,9 @@ public:
   }
   bool fix_length_and_dec(THD *thd) override { max_length=10; return FALSE; }
   longlong val_int() override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_crc32>(thd, this); }
 };
 
@@ -2125,7 +2267,9 @@ public:
     set_maybe_null();
     return FALSE; }
   longlong val_int() override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_uncompressed_length>(thd, this); }
 };
 
@@ -2152,7 +2296,9 @@ public:
     return name;
   }
   String *val_str(String *) override ZLIB_DEPENDED_FUNCTION
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_compress>(thd, this); }
 };
 
@@ -2174,7 +2320,9 @@ public:
     return name;
   }
   String *val_str(String *) override ZLIB_DEPENDED_FUNCTION
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_uncompress>(thd, this); }
 };
 
@@ -2201,7 +2349,9 @@ public:
   String *val_str(String *) override;
   void print(String *str, enum_query_type query_type) override;
   enum Functype functype() const override { return DYNCOL_FUNC; }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_dyncol_create>(thd, this); }
 };
 
@@ -2219,7 +2369,9 @@ public:
   }
   String *val_str(String *) override;
   void print(String *str, enum_query_type query_type) override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_dyncol_add>(thd, this); }
 };
 
@@ -2241,7 +2393,9 @@ public:
     decimals= 0;
     return FALSE;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_dyncol_json>(thd, this); }
 };
 
@@ -2291,7 +2445,9 @@ public:
   bool get_dyn_value(THD *thd, DYNAMIC_COLUMN_VALUE *val, String *tmp);
   bool get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzydate) override;
   void print(String *str, enum_query_type query_type) override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_dyncol_get>(thd, this); }
 };
 
@@ -2313,7 +2469,9 @@ public:
     return name;
   }
   String *val_str(String *) override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_dyncol_list>(thd, this); }
 };
 
@@ -2339,7 +2497,9 @@ public:
     return name;
   }
   bool fix_length_and_dec(THD *thd) override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_temptable_rowid>(thd, this); }
 };
 #ifdef WITH_WSREP
@@ -2363,7 +2523,9 @@ public:
     set_maybe_null();
     return FALSE;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_wsrep_last_written_gtid>(thd, this); }
 };
 
@@ -2384,7 +2546,9 @@ public:
     set_maybe_null();
     return FALSE;
   }
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_wsrep_last_seen_gtid>(thd, this); }
 };
 
@@ -2402,7 +2566,9 @@ public:
     return name;
   }
   longlong val_int() override;
-  Item *do_get_copy(THD *thd) const override
+
+protected:
+  Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_func_wsrep_sync_wait_upto>(thd, this); }
 };
 #endif /* WITH_WSREP */

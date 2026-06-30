@@ -2448,8 +2448,20 @@ SHOW CREATE TABLE t1;
 DROP TABLE t1;
 
 --echo #
---echo # End of 10.6 tests
+--echo # MDEV-37947 Item_func_hex doesn't check for max_allowed_packet
 --echo #
+select hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex(hex('\\'))))))))))))))))))))))))))))))))))))))))))))) as x;
+
+--echo #
+--echo # MDEV-32758: TRIM uses memory after freed
+--echo #
+CREATE TABLE t0 (i DOUBLE);
+INSERT INTO t0 VALUES (1);
+SELECT LOCATE(a , 'data1-data2', a) AS c FROM (SELECT TRIM(i) AS a FROM t0 )dt;
+
+DROP TABLE t0;
+
+--echo # End of 10.6 tests
 
 --echo #
 --echo # MDEV-25704 Function random_bytes
@@ -2573,5 +2585,52 @@ DROP TABLE t1;
 SET sql_mode=DEFAULT;
 
 --echo #
---echo # End of 10.11 tests
+--echo # MDEV-37740 LOCATE(X,Y,NULL) is not NULL
 --echo #
+select locate(1,2,NULL);
+
+--echo #
+--echo # MDEV-37835 mysqli silently trims each json_arrayagg result to modulo 64KB
+--echo #
+let $a=`select repeat('a', 65540)`;
+let $b=`select repeat('b', 65540)`;
+replace_regex /a{65535}/a.../ /b{65535}/b.../;
+evalp select group_concat(v) from ( select '$a' as v union all select '$b' as v) t;
+
+--echo #
+--echo # MDEV-38233 Inconsistent results for make_set of cast
+--echo #
+create table t1 (c1 int);
+insert into t1 values (9067);
+select cast(make_set(3, cast(c1 as binary), 0) as char) from t1;
+drop table t1;
+
+--echo #
+--echo # MDEV-39111 The query returns an incorrect value when using LPAD and REPLACE
+--echo #
+
+create table t0 (c0 decimal(10,0));
+insert into t0 values (-1453243642), (0);
+select c0 from t0
+where   (lpad('0', c0 + 1, '1') or replace(cast(false as char), false, c0))
+and not (lpad('0', c0 + 1, '1') or replace(cast(false as char), false, c0));
+drop table t0;
+
+--echo #
+--echo # MDEV-39112 The query returns incorrect results when using LPAD
+--echo #
+create table t0 (c0 text);
+insert into t0 values ('1'),('foo');
+select c0 from t0 where lpad('123', 2-c0, c0);
+select c0 from t0 where rpad('123', 2-c0, c0);
+drop table t0;
+
+--echo #
+--echo # MDEV-39235 Incorrect result with LEFT JOIN and QUOTE
+--echo #
+create table t1 (a int, b int);
+insert t1 values (1,1),(2,3);
+select * from t1 left join t1 t2 on (t1.a=t2.b) where quote(t2.b)>'';
+drop table t1;
+
+--echo # End of 10.11 tests

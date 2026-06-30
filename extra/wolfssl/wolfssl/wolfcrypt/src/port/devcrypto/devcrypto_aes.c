@@ -1,12 +1,12 @@
 /* devcrypto_aes.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -44,8 +44,11 @@ int wc_AesCbcEncrypt(Aes* aes, byte* out, const byte* in, word32 sz)
         return BAD_FUNC_ARG;
     }
 
-    /* encrypt only up to AES block size of date */
+    /* encrypt only up to AES block size of data */
     sz = sz - (sz % WC_AES_BLOCK_SIZE);
+    if (sz == 0) {
+        return 0;
+    }
     if (aes->ctx.cfd == -1) {
             ret = wc_DevCryptoCreate(&aes->ctx, CRYPTO_AES_CBC,
                     (byte*)aes->devKey, aes->keylen);
@@ -73,6 +76,9 @@ int wc_AesCbcDecrypt(Aes* aes, byte* out, const byte* in, word32 sz)
 
     if (aes == NULL || out == NULL || in == NULL || sz % WC_AES_BLOCK_SIZE != 0) {
         return BAD_FUNC_ARG;
+    }
+    if (sz == 0) {
+        return 0;
     }
 
     XMEMCPY(aes->tmp, in + sz - WC_AES_BLOCK_SIZE, WC_AES_BLOCK_SIZE);
@@ -317,7 +323,7 @@ static int wc_DevCrypto_AesGcm(Aes* aes, byte* out, byte* in, word32 sz,
                       dir, (byte*)authIn, authInSz, authTag, authTagSz);
     ret = ioctl(aes->ctx.cfd, CIOCAUTHCRYPT, &crt);
     if (ret != 0) {
-        #ifdef WOLFSSL_DEBUG
+        #ifdef DEBUG_WOLFSSL
         if (authInSz > sysconf(_SC_PAGESIZE)) {
             WOLFSSL_MSG("authIn Buffer greater than System Page Size");
         }

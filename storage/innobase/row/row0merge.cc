@@ -120,7 +120,7 @@ public:
 		ut_ad(mtr_started == scan_mtr->is_active());
 
 		DBUG_EXECUTE_IF("row_merge_instrument_log_check_flush",
-				log_sys.set_check_for_checkpoint(););
+				log_sys.set_check_for_checkpoint(true););
 
 		for (idx_tuple_vec::iterator it = m_dtuple_vec.begin();
 		     it != m_dtuple_vec.end();
@@ -2411,8 +2411,7 @@ end_of_index:
 		} else if (rec_trx_id < trx->id) {
 			/* Reset the DB_TRX_ID,DB_ROLL_PTR of old rows
 			for which history is not going to be
-			available after the rebuild operation.
-			This essentially mimics row_purge_reset_trx_id(). */
+			available after the rebuild operation. */
 			row->fields[new_trx_id_col].data
 				= const_cast<byte*>(reset_trx_id);
 			row->fields[new_trx_id_col + 1].data
@@ -4710,14 +4709,32 @@ row_merge_build_indexes(
 		* static_cast<double>(n_indexes);
 	for (i = 0; i < n_indexes; i++) {
 		if (indexes[i]->type & DICT_FTS) {
-			ibool	opt_doc_id_size = FALSE;
+			bool	opt_doc_id_size = false;
 
 			/* To build FTS index, we would need to extract
 			doc's word, Doc ID, and word's position, so
 			we need to build a "fts sort index" indexing
 			on above three 'fields' */
+
+			/* Check whether we can use 4 bytes instead of 8 bytes
+			integer field to hold the Doc ID, thus reduce
+			the overall sort size. If the fulltext index is being
+			added for the first time then we should use 8 bytes Doc ID
+			size because table->stat_n_rows is an estimation and
+			not reliable to determine the Doc ID size. */
+			if (old_table->fts || !DICT_TF2_FLAG_IS_SET(
+					new_table, DICT_TF2_FTS_ADD_DOC_ID)) {
+				/* If the Doc ID column is supplied by user
+				or rebuilding the existing FTS table, then
+				check the maximum Doc ID in the old table */
+				doc_id_t max_doc_id =
+				  fts_get_max_doc_id((dict_table_t*) old_table);
+				opt_doc_id_size =
+				  (max_doc_id < MAX_DOC_ID_OPT_VAL);
+			}
+
 			fts_sort_idx = row_merge_create_fts_sort_index(
-				indexes[i], old_table, &opt_doc_id_size);
+				indexes[i], new_table, opt_doc_id_size);
 
 			row_merge_dup_t*	dup
 				= static_cast<row_merge_dup_t*>(

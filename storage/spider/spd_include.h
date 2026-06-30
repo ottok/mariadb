@@ -64,7 +64,6 @@
 #undef pthread_cond_destroy
 #endif
 #define pthread_cond_destroy mysql_cond_destroy
-#define my_sprintf(A,B) sprintf B
 
 #define spider_stmt_da_message(A) thd_get_error_message(A)
 #define spider_stmt_da_sql_errno(A) thd_get_error_number(A)
@@ -106,7 +105,6 @@
 
 #define SPIDER_read_record_read_record(A) read_record()
 #define SPIDER_has_Item_with_subquery
-#define SPIDER_use_LEX_CSTRING_for_Field_blob_constructor
 #define SPIDER_use_LEX_CSTRING_for_database_tablename_alias
 #define SPIDER_THD_db_str(A) (A)->db.str
 #define SPIDER_THD_db_length(A) (A)->db.length
@@ -992,8 +990,12 @@ typedef struct st_spider_share
     FIXME: consider removing it and using `active_link_count` instead.
   */
   uint               link_count;
-  /* Number of all links, i.e. all remote servers for the spider
-  table. */
+  /*
+    Number of all links, i.e. all remote servers for the spider
+    table or partition.
+
+    There's also active_link_count
+  */
   uint               all_link_count;
   /*
     The bitmap size of ha_spider::conn_can_fo, where the ha_spider

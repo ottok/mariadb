@@ -1,12 +1,12 @@
 ; /* sp_x86_64_asm.asm */
 ; /*
-;  * Copyright (C) 2006-2025 wolfSSL Inc.
+;  * Copyright (C) 2006-2026 wolfSSL Inc.
 ;  *
 ;  * This file is part of wolfSSL.
 ;  *
 ;  * wolfSSL is free software; you can redistribute it and/or modify
 ;  * it under the terms of the GNU General Public License as published by
-;  * the Free Software Foundation; either version 2 of the License, or
+;  * the Free Software Foundation; either version 3 of the License, or
 ;  * (at your option) any later version.
 ;  *
 ;  * wolfSSL is distributed in the hope that it will be useful,
@@ -64790,7 +64790,7 @@ _text ENDS
 ; /* Double a Montgomery form number (r = a + a % m).
 ;  *
 ;  * r   Result of addition.
-;  * a   Number to souble in Montgomery form.
+;  * a   Number to double in Montgomery form.
 ;  * m   Modulus (prime).
 ;  */
 _text SEGMENT READONLY PARA
@@ -74754,7 +74754,7 @@ _text ENDS
 ; /* Double a Montgomery form number (r = a + a % m).
 ;  *
 ;  * r   Result of addition.
-;  * a   Number to souble in Montgomery form.
+;  * a   Number to double in Montgomery form.
 ;  * m   Modulus (prime).
 ;  */
 _text SEGMENT READONLY PARA
@@ -74919,7 +74919,7 @@ _text ENDS
 ; /* Triple a Montgomery form number (r = a + a + a % m).
 ;  *
 ;  * r   Result of addition.
-;  * a   Number to souble in Montgomery form.
+;  * a   Number to double in Montgomery form.
 ;  * m   Modulus (prime).
 ;  */
 _text SEGMENT READONLY PARA
@@ -76037,7 +76037,7 @@ IFDEF HAVE_INTEL_AVX2
 ; /* Double a Montgomery form number (r = a + a % m).
 ;  *
 ;  * r   Result of addition.
-;  * a   Number to souble in Montgomery form.
+;  * a   Number to double in Montgomery form.
 ;  * m   Modulus (prime).
 ;  */
 _text SEGMENT READONLY PARA
@@ -76186,7 +76186,7 @@ IFDEF HAVE_INTEL_AVX2
 ; /* Triple a Montgomery form number (r = a + a + a % m).
 ;  *
 ;  * r   Result of addition.
-;  * a   Number to souble in Montgomery form.
+;  * a   Number to double in Montgomery form.
 ;  * m   Modulus (prime).
 ;  */
 _text SEGMENT READONLY PARA

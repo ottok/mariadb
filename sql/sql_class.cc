@@ -92,7 +92,7 @@ char empty_c_string[1]= {0};    /* used for not defined db */
 extern "C" const uchar *get_var_key(const void *entry_, size_t *length,
                                     my_bool)
 {
-  auto entry= static_cast<const user_var_entry *>(entry_);
+  const user_var_entry *entry= static_cast<const user_var_entry *>(entry_);
   *length= entry->name.length;
   return reinterpret_cast<const uchar *>(entry->name.str);
 }
@@ -111,7 +111,7 @@ extern "C" void free_user_var(void *entry_)
 extern "C" const uchar *get_sequence_last_key(const void *entry_,
                                               size_t *length, my_bool)
 {
-  auto *entry= static_cast<const SEQUENCE_LAST_VALUE *>(entry_);
+  const SEQUENCE_LAST_VALUE *entry= static_cast<const SEQUENCE_LAST_VALUE *>(entry_);
   *length= entry->length;
   return entry->key;
 }
@@ -1444,7 +1444,7 @@ void THD::update_all_stats()
   end_cpu_time= my_getcputime();
   end_utime=    microsecond_interval_timer();
   busy_time= end_utime - start_utime;
-  cpu_time=  end_cpu_time - start_cpu_time;
+  cpu_time=  (end_cpu_time - start_cpu_time+5)/10;
   /* In case there are bad values, 2629743 is the #seconds in a month. */
   if (cpu_time > 2629743000000ULL)
     cpu_time= 0;
@@ -2080,7 +2080,7 @@ void THD::disconnect()
 
 #ifdef SIGNAL_WITH_VIO_CLOSE
   /*
-    Since a active vio might might have not been set yet, in
+    Since a active vio might have not been set yet, in
     any case save a reference to avoid closing a inexistent
     one or closing the vio twice if there is a active one.
   */
@@ -2182,6 +2182,10 @@ int THD::killed_errno()
     DBUG_RETURN(ER_CONNECTION_KILLED);
   case KILL_QUERY:
   case KILL_QUERY_HARD:
+#ifdef WITH_WSREP
+  if (WSREP(this))
+    wsrep_report_query_interrupted(this, __FILE__, __LINE__);
+#endif /* WITH_WSREP */
     DBUG_RETURN(ER_QUERY_INTERRUPTED);
   case KILL_TIMEOUT:
   case KILL_TIMEOUT_HARD:
@@ -2399,7 +2403,7 @@ void THD::cleanup_after_query()
   if (!in_active_multi_stmt_transaction())
     wsrep_affected_rows= 0;
 #endif /* WITH_WSREP */
-
+  gap_tracker_data.init();
   DBUG_VOID_RETURN;
 }
 
@@ -3475,6 +3479,7 @@ int select_export::send_data(List<Item> &items)
   tmp.length(0);
 
   row_count++;
+  thd->server_status|= SERVER_STATUS_RETURNED_ROW;
   Item *item;
   uint used_length=0,items_left=items.elements;
   List_iterator_fast<Item> li(items);
@@ -3746,6 +3751,7 @@ int select_dump::send_data(List<Item> &items)
       goto err;
     }
   }
+  thd->server_status|= SERVER_STATUS_RETURNED_ROW;
   DBUG_RETURN(0);
 err:
   DBUG_RETURN(1);
@@ -3879,7 +3885,7 @@ bool select_max_min_finder_subselect::cmp_time()
 {
   Item *maxmin= ((Item_singlerow_subselect *)item)->element_index(0);
   THD *thd= current_thd;
-  auto val1= cache->val_time_packed(thd), val2= maxmin->val_time_packed(thd);
+  longlong val1= cache->val_time_packed(thd), val2= maxmin->val_time_packed(thd);
 
   /* Ignore NULLs for ANY and keep them for ALL subqueries */
   if (cache->null_value)
@@ -4153,7 +4159,7 @@ C_MODE_START
 static const uchar *get_statement_id_as_hash_key(const void *record,
                                                  size_t *key_length, my_bool)
 {
-  auto statement= static_cast<const Statement *>(record);
+  const Statement *statement= static_cast<const Statement *>(record);
   *key_length= sizeof(statement->id);
   return reinterpret_cast<const uchar *>(&(statement)->id);
 }
@@ -4166,7 +4172,7 @@ static void delete_statement_as_hash_key(void *key)
 static const uchar *get_stmt_name_hash_key(const void *entry_, size_t *length,
                                            my_bool)
 {
-  auto entry= static_cast<const Statement *>(entry_);
+  const Statement *entry= static_cast<const Statement *>(entry_);
   *length= entry->name.length;
   return reinterpret_cast<const uchar *>(entry->name.str);
 }
@@ -4346,6 +4352,7 @@ bool select_dumpvar::send_data_to_var_list(List<Item> &items)
     if (mv->set(thd, item))
       DBUG_RETURN(true);
   }
+  thd->server_status|= SERVER_STATUS_RETURNED_ROW;
   DBUG_RETURN(false);
 }
 
@@ -4365,6 +4372,7 @@ int select_dumpvar::send_data(List<Item> &items)
       send_data_to_var_list(items))
     DBUG_RETURN(1);
 
+  thd->server_status|= SERVER_STATUS_RETURNED_ROW;
   DBUG_RETURN(thd->is_error());
 }
 
@@ -4464,6 +4472,7 @@ int select_materialize_with_stats::send_data(List<Item> &items)
     return 0;
 
   ++count_rows;
+  thd->server_status|= SERVER_STATUS_RETURNED_ROW;
 
   while ((cur_item= item_it++))
   {
@@ -5014,10 +5023,10 @@ extern "C" const char *thd_priv_user(MYSQL_THD thd, size_t *length)
   have only one table open at any given time.
 */
 TABLE *open_purge_table(THD *thd, const char *db, size_t dblen,
-                        const char *tb, size_t tblen)
+                        const char *tb, size_t tblen,
+                        MDL_ticket *mdl_ticket) noexcept
 {
   DBUG_ENTER("open_purge_table");
-  DBUG_ASSERT(thd->open_tables == NULL);
   DBUG_ASSERT(thd->locked_tables_mode < LTM_PRELOCKED);
 
   /* Purge already hold the MDL for the table */
@@ -5028,23 +5037,20 @@ TABLE *open_purge_table(THD *thd, const char *db, size_t dblen,
 
   tl->init_one_table(&db_name, &table_name, 0, TL_READ);
   tl->i_s_requested_object= OPEN_TABLE_ONLY;
+  tl->mdl_request.ticket= mdl_ticket;
 
   bool error= open_table(thd, tl, &ot_ctx);
 
-  /* we don't recover here */
-  DBUG_ASSERT(!error || !ot_ctx.can_recover_from_failed_open());
-
-  if (unlikely(error))
-    close_thread_tables(thd);
+  /* FLUSH TABLES is executed concurrently - the TABLE_SHARE is marked
+  as flushed and open_table() requests OT_REOPEN_TABLES backoff.
+  So removed the assert */
 
   DBUG_RETURN(error ? NULL : tl->table);
 }
 
-TABLE *get_purge_table(THD *thd)
+MDL_ticket *get_mdl_ticket(TABLE *table)
 {
-  /* see above, at most one table can be opened */
-  DBUG_ASSERT(thd->open_tables == NULL || thd->open_tables->next == NULL);
-  return thd->open_tables;
+  return table->mdl_ticket;
 }
 
 /** Find an open table in the list of prelocked tabled
@@ -5101,10 +5107,10 @@ void destroy_thd(MYSQL_THD thd)
 extern "C" pthread_key(struct st_my_thread_var *, THR_KEY_mysys);
 MYSQL_THD create_background_thd()
 {
-  auto save_thd = current_thd;
+  THD *save_thd= current_thd;
   set_current_thd(nullptr);
 
-  auto save_mysysvar= pthread_getspecific(THR_KEY_mysys);
+  void *save_mysysvar= pthread_getspecific(THR_KEY_mysys);
 
   /*
     Allocate new mysys_var specifically new THD,
@@ -5112,8 +5118,8 @@ MYSQL_THD create_background_thd()
   */
   pthread_setspecific(THR_KEY_mysys, 0);
   my_thread_init();
-  auto thd_mysysvar= pthread_getspecific(THR_KEY_mysys);
-  auto thd= new THD(0);
+  void *thd_mysysvar= pthread_getspecific(THR_KEY_mysys);
+  THD *thd= new THD(0);
   pthread_setspecific(THR_KEY_mysys, save_mysysvar);
   thd->set_psi(nullptr);
   set_current_thd(save_thd);
@@ -5150,7 +5156,7 @@ void *thd_attach_thd(MYSQL_THD thd)
   DBUG_ASSERT(!current_thd);
   DBUG_ASSERT(thd && thd->mysys_var);
 
-  auto save_mysysvar= pthread_getspecific(THR_KEY_mysys);
+  void *save_mysysvar= pthread_getspecific(THR_KEY_mysys);
   pthread_setspecific(THR_KEY_mysys, thd->mysys_var);
   thd->store_globals();
   return save_mysysvar;
@@ -5175,8 +5181,8 @@ void thd_detach_thd(void *mysysvar)
 void destroy_background_thd(MYSQL_THD thd)
 {
   DBUG_ASSERT(!current_thd);
-  auto thd_mysys_var= thd->mysys_var;
-  auto save_mysys_var= thd_attach_thd(thd);
+  struct st_my_thread_var *thd_mysys_var= thd->mysys_var;
+  void *save_mysys_var= thd_attach_thd(thd);
   DBUG_ASSERT(thd_mysys_var != save_mysys_var);
   /*
     Workaround the adverse effect decrementing thread_count on THD()
@@ -5195,7 +5201,7 @@ void destroy_background_thd(MYSQL_THD thd)
      would kill it, if we're not careful.
   */
 #ifdef HAVE_PSI_THREAD_INTERFACE
-  auto save_psi_thread= PSI_CALL_get_thread();
+  PSI_thread *save_psi_thread= PSI_CALL_get_thread();
 #endif
   PSI_CALL_set_thread(0);
   pthread_setspecific(THR_KEY_mysys, thd_mysys_var);
@@ -5207,10 +5213,13 @@ void destroy_background_thd(MYSQL_THD thd)
 
 void reset_thd(MYSQL_THD thd)
 {
+  const char *proc_info= thd->proc_info;
+  thd->proc_info="reset";
   close_thread_tables(thd);
   thd->release_transactional_locks();
   thd->free_items();
   free_root(thd->mem_root, MYF(MY_KEEP_PREALLOC));
+  thd->proc_info= proc_info;
 }
 
 /**
@@ -5271,16 +5280,6 @@ extern "C" void thd_decrement_pending_ops(void *thd_)
   }
 }
 
-
-unsigned long long thd_get_query_id(const MYSQL_THD thd)
-{
-  return((unsigned long long)thd->query_id);
-}
-
-void thd_clear_error(MYSQL_THD thd)
-{
-  thd->clear_error();
-}
 
 extern "C" const struct charset_info_st *thd_charset(MYSQL_THD thd)
 {
@@ -5681,12 +5680,6 @@ extern "C" int thd_binlog_format(const MYSQL_THD thd)
   if (mysql_bin_log.is_open() && (thd->variables.option_bits & OPTION_BIN_LOG))
     return (int) thd->variables.binlog_format;
   return BINLOG_FORMAT_UNSPEC;
-}
-
-extern "C" void thd_mark_transaction_to_rollback(MYSQL_THD thd, bool all)
-{
-  DBUG_ASSERT(thd);
-  thd->mark_transaction_to_rollback(all);
 }
 
 extern "C" bool thd_binlog_filter_ok(const MYSQL_THD thd)
@@ -6360,7 +6353,7 @@ start_new_trans::start_new_trans(THD *thd)
   mdl_savepoint= thd->mdl_context.mdl_savepoint();
   memcpy(old_ha_data, thd->ha_data, sizeof(old_ha_data));
   thd->reset_n_backup_open_tables_state(&open_tables_state_backup);
-  for (auto &data : thd->ha_data)
+  for (Ha_data &data : thd->ha_data)
     data.reset();
   old_transaction= thd->transaction;
   thd->transaction= &new_transaction;
@@ -7699,7 +7692,7 @@ bool THD::binlog_for_noop_dml(bool transactional_table)
 }
 
 
-#if defined(DBUG_TRACE) && !defined(_lint)
+#if defined(DBUG_TRACE)
 static const char *
 show_query_type(THD::enum_binlog_query_type qtype)
 {
@@ -7713,7 +7706,7 @@ show_query_type(THD::enum_binlog_query_type qtype)
     DBUG_ASSERT(0 <= qtype && qtype < THD::QUERY_TYPE_COUNT);
   }
   static char buf[64];
-  sprintf(buf, "UNKNOWN#%d", qtype);
+  snprintf(buf, sizeof(buf), "UNKNOWN#%d", qtype);
   return buf;
 }
 #endif
@@ -7758,11 +7751,11 @@ static void reset_binlog_unsafe_suppression(ulonglong now)
   Auxiliary function to print warning in the error log.
 */
 static void print_unsafe_warning_to_log(THD *thd, int unsafe_type, char* buf,
-                                        char* query)
+                                        size_t buf_size, char* query)
 {
   DBUG_ENTER("print_unsafe_warning_in_log");
-  sprintf(buf, ER_THD(thd, ER_BINLOG_UNSAFE_STATEMENT),
-          ER_THD(thd, LEX::binlog_stmt_unsafe_errcode[unsafe_type]));
+  snprintf(buf, buf_size, ER_THD(thd, ER_BINLOG_UNSAFE_STATEMENT),
+           ER_THD(thd, LEX::binlog_stmt_unsafe_errcode[unsafe_type]));
   sql_print_warning(ER_THD(thd, ER_MESSAGE_AND_STATEMENT), buf, query);
   DBUG_VOID_RETURN;
 }
@@ -7904,7 +7897,8 @@ void THD::issue_unsafe_warnings()
                           ER_THD(this, LEX::binlog_stmt_unsafe_errcode[unsafe_type]));
       if (global_system_variables.log_warnings > 0 &&
           !protect_against_unsafe_warning_flood(unsafe_type))
-        print_unsafe_warning_to_log(this, unsafe_type, buf, query());
+        print_unsafe_warning_to_log(this, unsafe_type, buf,
+                                    sizeof(buf), query());
     }
   }
   DBUG_VOID_RETURN;
@@ -8083,7 +8077,7 @@ int THD::binlog_query(THD::enum_binlog_query_type qtype, char const *query_arg,
 
   The filter is in decide_logging_format() to mark queries to not be stored
   in the binary log, for example by a shared distributed engine like S3.
-  This function resets the filter to ensure the the query is logged if
+  This function resets the filter to ensure the query is logged if
   the binlog is active.
 
   Note that 'direct' is set to false, which means that the query will
@@ -8363,6 +8357,10 @@ wait_for_commit::wait_for_prior_commit2(THD *thd, bool allow_kill)
     wakeup_error= ER_QUERY_INTERRUPTED;
   my_message(wakeup_error, ER_THD(thd, wakeup_error), MYF(0));
   thd->EXIT_COND(&old_stage);
+#ifdef WITH_WSREP
+  if (WSREP(thd))
+    wsrep_report_query_interrupted(thd, __FILE__, __LINE__);
+#endif /* WITH_WSREP */
   /*
     Must do the DEBUG_SYNC() _after_ exit_cond(), as DEBUG_SYNC is not safe to
     use within enter_cond/exit_cond.

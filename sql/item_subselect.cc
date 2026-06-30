@@ -1279,8 +1279,8 @@ Item_singlerow_subselect::select_transformer(JOIN *join)
     if (thd->lex->describe)
     {
       char warn_buff[MYSQL_ERRMSG_SIZE];
-      sprintf(warn_buff, ER_THD(thd, ER_SELECT_REDUCED),
-              select_lex->select_number);
+      snprintf(warn_buff, sizeof(warn_buff), ER_THD(thd, ER_SELECT_REDUCED),
+               select_lex->select_number);
       push_warning(thd, Sql_condition::WARN_LEVEL_NOTE,
 		   ER_SELECT_REDUCED, warn_buff);
     }
@@ -1372,7 +1372,7 @@ bool subselect_single_select_engine::always_returns_one_row() const
 
   @details
   The function checks whether an expression cache is needed for this item
-  and if if so wraps the item into an item of the class
+  and if so wraps the item into an item of the class
   Item_cache_wrapper with an appropriate expression cache set up there.
 
   @note
@@ -1757,7 +1757,7 @@ bool Item_in_subselect::fix_length_and_dec()
 
   @details
   The function checks whether an expression cache is needed for this item
-  and if if so wraps the item into an item of the class
+  and if so wraps the item into an item of the class
   Item_cache_wrapper with an appropriate expression cache set up there.
 
   @note
@@ -2069,8 +2069,8 @@ Item_in_subselect::single_value_transformer(JOIN *join)
     if (thd->lex->describe)
     {
       char warn_buff[MYSQL_ERRMSG_SIZE];
-      sprintf(warn_buff, ER_THD(thd, ER_SELECT_REDUCED),
-              select_lex->select_number);
+      snprintf(warn_buff, sizeof(warn_buff), ER_THD(thd, ER_SELECT_REDUCED),
+               select_lex->select_number);
       push_warning(thd, Sql_condition::WARN_LEVEL_NOTE,
                    ER_SELECT_REDUCED, warn_buff);
     }
@@ -2329,7 +2329,7 @@ Item_in_subselect::create_single_in_to_exists_cond(JOIN *join,
   *having_item= NULL;
 
   if (join_having || select_lex->with_sum_func ||
-      select_lex->group_list.elements)
+      select_lex->group_list.elements || select_lex->with_rownum)
   {
     LEX_CSTRING field_name= this->full_name_cstring();
     Item *item= func->create(thd, expr,
@@ -2576,9 +2576,10 @@ Item_in_subselect::create_row_in_to_exists_cond(JOIN * join,
     during JOIN::optimize: this->tmp_having= this->having; this->having= 0;
   */
   Item* join_having= join->having ? join->having : join->tmp_having;
-  bool is_having_used= (join_having || select_lex->with_sum_func ||
-                        select_lex->group_list.first ||
-                        !select_lex->table_list.elements);
+  bool is_having_used=
+      (join_having || select_lex->with_sum_func ||
+       select_lex->group_list.first || !select_lex->table_list.elements ||
+       select_lex->with_rownum);
   LEX_CSTRING list_ref= { STRING_WITH_LEN("<list ref>")};
   DBUG_ENTER("Item_in_subselect::create_row_in_to_exists_cond");
   DBUG_ASSERT(thd == join->thd);
@@ -3989,10 +3990,9 @@ bool subselect_engine::set_row(List<Item> &item_list, Item_cache **row)
   set_handler(&type_handler_varchar);
   for (uint i= 0; (sel_item= li++); i++)
   {
-    item->max_length= sel_item->max_length;
     set_handler(sel_item->type_handler());
-    item->decimals= sel_item->decimals;
-    item->unsigned_flag= sel_item->unsigned_flag;
+    item->Type_std_attributes::operator=(
+      sel_item->type_handler()->Item_type_std_attributes_generic(sel_item));
     maybe_null= sel_item->maybe_null();
     if (!(row[i]= sel_item->get_cache(thd)))
       return TRUE;

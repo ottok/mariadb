@@ -1,12 +1,12 @@
 /* esp32_aes.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -475,15 +475,17 @@ int wc_esp32AesDecrypt(Aes *aes, const byte* in, byte* out)
 
     ESP_LOGV(TAG, "enter wc_esp32AesDecrypt");
     /* lock the hw engine */
-    esp_aes_hw_InUse();
-    /* load the key into the register */
-    ret = esp_aes_hw_Set_KeyMode(aes, ESP32_AES_UPDATEKEY_DECRYPT);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "wc_esp32AesDecrypt failed "
-                      "during esp_aes_hw_Set_KeyMode");
-        /* release hw */
-        esp_aes_hw_Leave();
-        ret = BAD_FUNC_ARG;
+    ret = esp_aes_hw_InUse();
+    if (ret == ESP_OK) {
+        /* load the key into the register */
+        ret = esp_aes_hw_Set_KeyMode(aes, ESP32_AES_UPDATEKEY_DECRYPT);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "wc_esp32AesDecrypt failed "
+                          "during esp_aes_hw_Set_KeyMode");
+            /* release hw */
+            esp_aes_hw_Leave();
+            ret = BAD_FUNC_ARG;
+        }
     }
 
     if (ret == ESP_OK) {
@@ -606,9 +608,9 @@ int wc_esp32AesCbcDecrypt(Aes* aes, byte* out, const byte* in, word32 sz)
 
             offset += WC_AES_BLOCK_SIZE;
         } /* while (blocks--) */
-        esp_aes_hw_Leave();
     } /* if Set Mode was successful (ret == ESP_OK) */
 
+    esp_aes_hw_Leave();
     ESP_LOGV(TAG, "leave wc_esp32AesCbcDecrypt");
     return ret;
 } /* wc_esp32AesCbcDecrypt */

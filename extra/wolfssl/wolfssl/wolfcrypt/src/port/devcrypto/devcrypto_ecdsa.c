@@ -1,12 +1,12 @@
 /* devcrypto_ecdsa.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -228,6 +228,7 @@ int wc_DevCryptoEccVerify(int curveId, byte* pub, word32 pubSz,
         ret = wc_DevCryptoCreate(&ctx, CRYPTO_ASYM_ECDSA_VERIFY, NULL, 0);
     }
     if (ret == 0) {
+        XMEMSET(&kop, 0, sizeof(kop));
         kop.crk_op = CRK_ECDSA_VERIFY;
         kop.ses    = ctx.sess.ses;
         kop.crk_flags = CurveIDToFlag(curveId);

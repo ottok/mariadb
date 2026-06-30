@@ -2171,6 +2171,11 @@ struct dict_table_t {
                       (as part of rolling back TRUNCATE) */
   dberr_t rename_tablespace(span<const char> new_name, bool replace) const;
 
+  /** Whether the table is eligible to do bulk insert operation
+  @param trx transaction which tries to do bulk insert
+  @retval true if table can do bulk insert
+  @retval false otherwise */
+  bool can_bulk_insert(const trx_t &trx) const noexcept;
 private:
 	/** Initialize instant->field_map.
 	@param[in]	table	table definition to copy from */
@@ -2217,12 +2222,25 @@ public:
 	Use DICT_TF2_FLAG_IS_SET() to parse this flag. */
 	unsigned				flags2:DICT_TF2_BITS;
 
-	/** TRUE if the table is an intermediate table during copy alter
-	operation or a partition/subpartition which is required for copying
-	data and skip the undo log for insertion of row in the table.
-	This variable will be set and unset during extra(), or during the
-	process of altering partitions */
-	unsigned                                skip_alter_undo:1;
+	/** Undo log handling modes for ALTER [IGNORE] TABLE...ALGORITHM=COPY */
+	static constexpr unsigned	NORMAL_UNDO = 0;
+	/** Never writes row-level undo log records */
+	static constexpr unsigned	NO_UNDO = 1;
+	/** For ALTER IGNORE TABLE...ALGORITHM=COPY, this enables rewriting
+	old insert undo blocks to maintain only the latest insert undo log. */
+	static constexpr unsigned	IGNORE_UNDO = 2;
+
+	/** Mode for handling undo logs during ALTER TABLE...ALGORITHM=COPY
+	operations. This will not be consulted in
+	ha_innobase::inplace_alter_table(); Set during copy alter operations
+	or partition/subpartition operations. When set, controls undo log
+	behavior for row operations in the table. This variable is set and
+	unset during extra(), or during the process of altering partitions
+
+	All reads of bit-fields in the same word must be protected by
+	at least a shared MDL on the table, and all writes must be
+	protected by an exclusive MDL. */
+	unsigned                                skip_alter_undo:2;
 
 	/*!< whether this is in a single-table tablespace and the .ibd
 	file is missing or page decryption failed and page is corrupted */
@@ -2322,11 +2340,6 @@ public:
 
 	/** Node of the LRU list of tables. */
 	UT_LIST_NODE_T(dict_table_t)		table_LRU;
-
-	/** Maximum recursive level we support when loading tables chained
-	together with FK constraints. If exceeds this level, we will stop
-	loading child table into memory along with its parent table. */
-	byte					fk_max_recusive_level;
 
   /** DDL transaction that last touched the table definition, or 0 if
   no history is available. This includes possible changes in
@@ -2514,7 +2527,7 @@ public:
   /** @return number of unique columns in FTS_DOC_ID index */
   unsigned fts_n_uniq() const { return versioned() ? 2 : 1; }
 
-  /** @return the index for that starts with a specific column */
+  /** @return the index that starts with a specific column */
   dict_index_t *get_index(const dict_col_t &col) const;
 
   /** @return whether the statistics are initialized */
@@ -2566,6 +2579,17 @@ public:
       if (i->is_spatial())
         return true;
     return false;
+  }
+
+  /** @return whether the table has any indexed virtual column */
+  bool has_virtual_index() const noexcept
+  {
+    if (UNIV_UNLIKELY(n_v_cols != 0))
+      for (dict_index_t *index = indexes.start;
+           index; index = UT_LIST_GET_NEXT(indexes, index))
+        if (index->has_virtual())
+          return true;
+   return false;
   }
 };
 

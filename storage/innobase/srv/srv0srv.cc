@@ -774,6 +774,10 @@ srv_printf_innodb_monitor(
 		for (ulint i = 0; i < btr_ahi_parts; ++i) {
 			const auto part= &btr_search_sys.parts[i];
 			part->latch.rd_lock(SRW_LOCK_CALL);
+			if (!btr_search_enabled) {
+				part->latch.rd_unlock();
+				break;
+			}
 			ut_ad(part->heap->type == MEM_HEAP_FOR_BTR_SEARCH);
 			fprintf(file, "Hash table size " ULINTPF
 				", node heap has " ULINTPF " buffer(s)\n",
@@ -983,7 +987,7 @@ srv_export_innodb_status(void)
 
 	mysql_mutex_unlock(&srv_innodb_monitor_mutex);
 
-	log_sys.latch.wr_lock(SRW_LOCK_CALL);
+	log_sys.latch.wr_lock();
 	export_vars.innodb_lsn_current = log_sys.get_lsn();
 	export_vars.innodb_lsn_flushed = log_sys.get_flushed_lsn();
 	export_vars.innodb_lsn_last_checkpoint = log_sys.last_checkpoint_lsn;

@@ -1,12 +1,12 @@
 /* md5.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -31,7 +31,12 @@
 
 #ifndef NO_MD5
 
-#ifdef HAVE_FIPS
+#ifdef WOLFSSL_API_PREFIX_MAP
+    #define InitMd5   wc_InitMd5
+    #define Md5Update wc_Md5Update
+    #define Md5Final  wc_Md5Final
+    #define Md5Hash   wc_Md5Hash
+#elif defined(HAVE_FIPS)
     #define wc_InitMd5   InitMd5
     #define wc_Md5Update Md5Update
     #define wc_Md5Final  Md5Final
@@ -50,16 +55,14 @@
     #define Md5             wc_Md5
     #define MD5_BLOCK_SIZE  WC_MD5_BLOCK_SIZE
     #define MD5_DIGEST_SIZE WC_MD5_DIGEST_SIZE
-    #define WC_MD5_PAD_SIZE WC_MD5_PAD_SIZE
+    #define MD5_PAD_SIZE    WC_MD5_PAD_SIZE
 #endif
 
 /* in bytes */
-enum {
-    WC_MD5             =  WC_HASH_TYPE_MD5,
-    WC_MD5_BLOCK_SIZE  = 64,
-    WC_MD5_DIGEST_SIZE = 16,
-    WC_MD5_PAD_SIZE    = 56
-};
+#define WC_MD5             WC_HASH_TYPE_MD5
+#define WC_MD5_BLOCK_SIZE  64
+#define WC_MD5_DIGEST_SIZE 16
+#define WC_MD5_PAD_SIZE    56
 
 
 #ifdef WOLFSSL_MICROCHIP_PIC32MZ

@@ -1,12 +1,12 @@
 /* api.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -37,10 +37,32 @@
     #define HEAP_HINT NULL
 #endif
 
+#include <wolfssl/wolfcrypt/hash.h>
 
-#define TEST_STRING    "Everyone gets Friday off."
-#define TEST_STRING_SZ 25
-
+#if defined(WC_FIPS_186_5_PLUS)
+    #define TEST_STRING "WC_FIPS_186_5_PLUS test test"
+    #define TEST_STRING_SZ 28
+#elif defined(WC_FIPS_186_4_PLUS) || defined(HAVE_SELFTEST)
+    #define TEST_STRING "WC_FIPS_186_4_PLUS test.."
+    #define TEST_STRING_SZ 25
+#elif WC_MIN_DIGEST_SIZE <= 25
+    #define TEST_STRING "Everyone gets Friday off."
+    #define TEST_STRING_SZ 25
+#elif WC_MIN_DIGEST_SIZE <= 28
+    #define TEST_STRING "Everyone works the weekends."
+    #define TEST_STRING_SZ 28
+#elif WC_MIN_DIGEST_SIZE <= 32
+    #define TEST_STRING "Everyone works through the night"
+    #define TEST_STRING_SZ 32
+#elif WC_MIN_DIGEST_SIZE <= 48
+    #define TEST_STRING "Everyone gets to summer in Tuscany with Chianti."
+    #define TEST_STRING_SZ 48
+#elif WC_MIN_DIGEST_SIZE <= 64
+    #define TEST_STRING "Everyone works from Christmas Eve, clear through New Year's Day."
+    #define TEST_STRING_SZ 64
+#else
+    #error WC_MIN_DIGEST_SIZE value not supported by unit test.
+#endif
 
 #ifndef ONEK_BUF
     #define ONEK_BUF 1024
@@ -52,6 +74,11 @@
     #define FOURK_BUF 4096
 #endif
 
+#if !defined(NO_RSA) && !defined(NO_SHA) && !defined(NO_FILESYSTEM) && \
+    !defined(NO_CERTS) && \
+    (!defined(NO_WOLFSSL_CLIENT) || !defined(WOLFSSL_NO_CLIENT_AUTH))
+    #define HAVE_CERT_CHAIN_VALIDATION
+#endif
 
 #ifndef NO_RSA
 #define GEN_BUF  294

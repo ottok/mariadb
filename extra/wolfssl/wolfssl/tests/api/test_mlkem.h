@@ -1,12 +1,12 @@
 /* test_mlkem.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -27,10 +27,12 @@
 int test_wc_mlkem_make_key_kats(void);
 int test_wc_mlkem_encapsulate_kats(void);
 int test_wc_mlkem_decapsulate_kats(void);
+int test_wc_mlkem_decapsulate_pubonly_fails(void);
 
 #define TEST_MLKEM_DECLS                                      \
     TEST_DECL_GROUP("mlkem", test_wc_mlkem_make_key_kats),    \
     TEST_DECL_GROUP("mlkem", test_wc_mlkem_encapsulate_kats), \
-    TEST_DECL_GROUP("mlkem", test_wc_mlkem_decapsulate_kats)
+    TEST_DECL_GROUP("mlkem", test_wc_mlkem_decapsulate_kats), \
+    TEST_DECL_GROUP("mlkem", test_wc_mlkem_decapsulate_pubonly_fails)
 
 #endif /* WOLFCRYPT_TEST_MLKEM_H */

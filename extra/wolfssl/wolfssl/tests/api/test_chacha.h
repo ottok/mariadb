@@ -1,12 +1,12 @@
 /* test_chacha.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -26,9 +26,11 @@
 
 int test_wc_Chacha_SetKey(void);
 int test_wc_Chacha_Process(void);
+int test_wc_Chacha_Process_Chunking(void);
 
-#define TEST_CHACHA_DECLS                               \
-    TEST_DECL_GROUP("chacha", test_wc_Chacha_SetKey),   \
-    TEST_DECL_GROUP("chacha", test_wc_Chacha_Process)
+#define TEST_CHACHA_DECLS                                       \
+    TEST_DECL_GROUP("chacha", test_wc_Chacha_SetKey),           \
+    TEST_DECL_GROUP("chacha", test_wc_Chacha_Process),          \
+    TEST_DECL_GROUP("chacha", test_wc_Chacha_Process_Chunking)
 
 #endif /* WOLFCRYPT_TEST_CHACHA_H */

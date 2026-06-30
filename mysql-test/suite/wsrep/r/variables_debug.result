@@ -58,6 +58,8 @@ wsrep_evs_repl_latency	#
 wsrep_evs_state	#
 wsrep_gcomm_uuid	#
 wsrep_gmcast_segment	#
+wsrep_checkpoint_position	#
+wsrep_se_checkpoint	#
 wsrep_applier_thread_count	#
 wsrep_cluster_capabilities	#
 wsrep_cluster_conf_id	#
@@ -140,11 +142,7 @@ WSREP_SST_DONOR_REJECTS_QUERIES
 WSREP_SST_METHOD
 WSREP_SST_RECEIVE_ADDRESS
 WSREP_START_POSITION
-<<<<<<< HEAD
 WSREP_STATUS_FILE
-=======
-WSREP_STRICT_DDL
->>>>>>> bb-10.6-serg
 WSREP_SYNC_WAIT
 WSREP_TRX_FRAGMENT_SIZE
 WSREP_TRX_FRAGMENT_UNIT

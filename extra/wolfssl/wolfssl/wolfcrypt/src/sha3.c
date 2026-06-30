@@ -1,12 +1,12 @@
 /* sha3.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -19,7 +19,36 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+/*
+ * SHA-3 Build Options:
+ *
+ * Core:
+ * WOLFSSL_SHA3:             Enable SHA-3 support                  default: off
+ * WOLFSSL_SHA3_SMALL:       Use smaller SHA-3 implementation      default: off
+ * WOLFSSL_SHAKE128:         Enable SHAKE128 XOF                   default: off
+ * WOLFSSL_SHAKE256:         Enable SHAKE256 XOF                   default: off
+ * SHA3_BY_SPEC:             Use specification Keccak-f order      default: off
+ * WC_SHA3_NO_ASM:           Disable SHA-3 assembly optimizations  default: off
+ * WC_SHA3_FAULT_HARDEN:     Harden SHA-3 against fault attacks    default: off
+ *
+ * Hardware Acceleration (SHA-3-specific):
+ * WC_ASYNC_ENABLE_SHA3:     Enable async SHA-3 operations         default: off
+ * WOLFSSL_ARMASM_CRYPTO_SHA3: ARM crypto SHA-3 instructions       default: off
+ * STM32_HASH_SHA3:          STM32 hardware SHA-3                  default: off
+ * PSOC6_HASH_SHA3:          PSoC6 hardware SHA-3                  default: off
+ */
+
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
+
+#ifdef WC_SHA3_NO_ASM
+    #undef USE_INTEL_SPEEDUP
+    #undef WOLFSSL_ARMASM
+    #undef WOLFSSL_RISCV_ASM
+#endif
+
+#if defined(WOLFSSL_PSOC6_CRYPTO)
+    #include <wolfssl/wolfcrypt/port/cypress/psoc6_crypto.h>
+#endif
 
 #if defined(WOLFSSL_SHA3) && !defined(WOLFSSL_XILINX_CRYPT) && \
    !defined(WOLFSSL_AFALG_XILINX_SHA3)
@@ -61,8 +90,7 @@
         defined(WOLFSSL_ARMASM))
     #include <wolfssl/wolfcrypt/cpuid.h>
 
-    word32 cpuid_flags;
-    int cpuid_flags_set = 0;
+    static cpuid_flags_t cpuid_flags = WC_CPUID_INITIALIZER;
 #ifdef WC_C_DYNAMIC_FALLBACK
     #define SHA3_BLOCK (sha3->sha3_block)
     #define SHA3_BLOCK_N (sha3->sha3_block_n)
@@ -242,9 +270,6 @@ while (0)
  *
  * s  The state.
  */
-#ifndef USE_INTEL_SPEEDUP
-static
-#endif
 void BlockSha3(word64* s)
 {
     byte i, x, y;
@@ -295,7 +320,7 @@ void BlockSha3(word64* s)
  */
 #define ROTL64(a, n)    (((a)<<(n))|((a)>>(64-(n))))
 
-#if !defined(STM32_HASH_SHA3)
+#if !defined(STM32_HASH_SHA3) && !defined(PSOC6_HASH_SHA3)
 /* An array of values to XOR for block operation. */
 static const word64 hash_keccak_r[24] =
 {
@@ -530,14 +555,11 @@ do {                                                      \
 while (0)
 #endif /* SHA3_BY_SPEC */
 
-#if !defined(STM32_HASH_SHA3)
+#if !defined(STM32_HASH_SHA3) && !defined(PSOC6_HASH_SHA3)
 /* The block operation performed on the state.
  *
  * s  The state.
  */
-#ifndef USE_INTEL_SPEEDUP
-static
-#endif
 void BlockSha3(word64* s)
 {
     word64 n[25];
@@ -563,7 +585,8 @@ void BlockSha3(word64* s)
 #endif /* STM32_HASH_SHA3 */
 #endif /* !WOLFSSL_ARMASM && !WOLFSSL_RISCV_ASM */
 
-#if !defined(STM32_HASH_SHA3)
+#if !defined(STM32_HASH_SHA3) && !defined(PSOC6_HASH_SHA3)
+#if defined(BIG_ENDIAN_ORDER)
 static WC_INLINE word64 Load64Unaligned(const unsigned char *a)
 {
     return ((word64)a[0] <<  0) |
@@ -581,9 +604,8 @@ static WC_INLINE word64 Load64Unaligned(const unsigned char *a)
  * a  Array of bytes.
  * returns a 64-bit integer.
  */
-static word64 Load64BitBigEndian(const byte* a)
+static word64 Load64BitLittleEndian(const byte* a)
 {
-#if defined(BIG_ENDIAN_ORDER) || (WOLFSSL_GENERAL_ALIGNMENT == 1)
     word64 n = 0;
     int i;
 
@@ -591,26 +613,33 @@ static word64 Load64BitBigEndian(const byte* a)
         n |= (word64)a[i] << (8 * i);
 
     return n;
-#elif ((WOLFSSL_GENERAL_ALIGNMENT > 0) && (WOLFSSL_GENERAL_ALIGNMENT == 4))
-    word64 n;
-
-    n  =          *(word32*) a;
-    n |= ((word64)*(word32*)(a + 4)) << 32;
-
-    return n;
-#elif ((WOLFSSL_GENERAL_ALIGNMENT > 0) && (WOLFSSL_GENERAL_ALIGNMENT == 2))
-    word64 n;
-
-    n  =          *(word16*) a;
-    n |= ((word64)*(word16*)(a + 2)) << 16;
-    n |= ((word64)*(word16*)(a + 4)) << 32;
-    n |= ((word64)*(word16*)(a + 6)) << 48;
-
-    return n;
+}
+#elif defined(WC_SHA3_FAULT_HARDEN)
+static WC_INLINE word64 Load64Unaligned(const unsigned char *a)
+{
+#ifdef WC_64BIT_CPU
+    return *(word64*)a;
+#elif defined(WC_32BIT_CPU)
+    return (((word64)((word32*)a)[1]) << 32) |
+                     ((word32*)a)[0];
 #else
-    return *(const word64*)a;
+    return (((word64)((word16*)a)[3]) << 48) |
+           (((word64)((word16*)a)[2]) << 32) |
+           (((word64)((word16*)a)[1]) << 16) |
+                     ((word16*)a)[0];
 #endif
 }
+
+/* Convert the array of bytes, in little-endian order, to a 64-bit integer.
+ *
+ * a  Array of bytes.
+ * returns a 64-bit integer.
+ */
+static word64 Load64BitLittleEndian(const byte* a)
+{
+    return Load64Unaligned(a);
+}
+#endif
 
 /* Initialize the state for a SHA3-224 hash operation.
  *
@@ -630,25 +659,27 @@ static int InitSha3(wc_Sha3* sha3)
 #endif
 
 #ifdef USE_INTEL_SPEEDUP
-    if (!cpuid_flags_set) {
-        cpuid_flags = cpuid_get_flags();
-        cpuid_flags_set = 1;
-#ifdef WC_C_DYNAMIC_FALLBACK
-    }
     {
+        int cpuid_flags_were_updated = cpuid_get_flags_ex(&cpuid_flags);
+#ifdef WC_C_DYNAMIC_FALLBACK
+        (void)cpuid_flags_were_updated;
         if (! CAN_SAVE_VECTOR_REGISTERS()) {
             SHA3_BLOCK = BlockSha3;
             SHA3_BLOCK_N = NULL;
         }
         else
+#else
+        if ((! cpuid_flags_were_updated) && (SHA3_BLOCK != NULL)) {
+        }
+        else
 #endif
-        if (IS_INTEL_BMI1(cpuid_flags) && IS_INTEL_BMI2(cpuid_flags)) {
+        if (IS_INTEL_AVX2(cpuid_flags)) {
+            SHA3_BLOCK = sha3_block_avx2;
+            SHA3_BLOCK_N = sha3_block_n_avx2;
+        }
+        else if (IS_INTEL_BMI1(cpuid_flags) && IS_INTEL_BMI2(cpuid_flags)) {
             SHA3_BLOCK = sha3_block_bmi2;
             SHA3_BLOCK_N = sha3_block_n_bmi2;
-        }
-        else if (IS_INTEL_AVX2(cpuid_flags)) {
-            SHA3_BLOCK = sha3_block_avx2;
-            SHA3_BLOCK_N = NULL;
         }
         else {
             SHA3_BLOCK = BlockSha3;
@@ -656,11 +687,13 @@ static int InitSha3(wc_Sha3* sha3)
         }
     }
 #define SHA3_FUNC_PTR
-#endif
+#endif /* USE_INTEL_SPEEDUP */
 #if defined(__aarch64__) && defined(WOLFSSL_ARMASM)
-    if (!cpuid_flags_set) {
-        cpuid_flags = cpuid_get_flags();
-        cpuid_flags_set = 1;
+    {
+        int cpuid_flags_were_updated = cpuid_get_flags_ex(&cpuid_flags);
+        if ((! cpuid_flags_were_updated) && (SHA3_BLOCK != NULL)) {
+        }
+        else
     #ifdef WOLFSSL_ARMASM_CRYPTO_SHA3
         if (IS_AARCH64_SHA3(cpuid_flags)) {
             SHA3_BLOCK = BlockSha3_crypto;
@@ -698,10 +731,15 @@ static int Sha3Update(wc_Sha3* sha3, const byte* data, word32 len, byte p)
 {
     word32 i;
     word32 blocks;
+#ifdef WC_SHA3_FAULT_HARDEN
+    word32 check = 0;
+    word32 total_check = 0;
+#endif
 
-#if defined(WOLFSSL_LINUXKM) && defined(USE_INTEL_SPEEDUP)
-    if (SHA3_BLOCK == sha3_block_avx2)
+#if defined(WOLFSSL_USE_SAVE_VECTOR_REGISTERS) && defined(USE_INTEL_SPEEDUP)
+    if (SHA3_BLOCK == sha3_block_avx2) {
         SAVE_VECTOR_REGISTERS(return _svr_ret;);
+    }
 #endif
     if (sha3->i > 0) {
         byte *t;
@@ -713,15 +751,37 @@ static int Sha3Update(wc_Sha3* sha3, const byte* data, word32 len, byte p)
         t = &sha3->t[sha3->i];
         for (i = 0; i < l; i++) {
             t[i] = data[i];
+    #ifdef WC_SHA3_FAULT_HARDEN
+            check++;
+    #endif
         }
+    #ifdef WC_SHA3_FAULT_HARDEN
+        if (check != l) {
+            return BAD_COND_E;
+        }
+        total_check += l;
+    #endif
         data += i;
         len -= i;
         sha3->i = (byte)(sha3->i + i);
 
         if (sha3->i == p * 8) {
+    #if !defined(BIG_ENDIAN_ORDER) && !defined(WC_SHA3_FAULT_HARDEN)
+            xorbuf(sha3->s, sha3->t, (word32)(p * 8));
+    #else
             for (i = 0; i < p; i++) {
-                sha3->s[i] ^= Load64BitBigEndian(sha3->t + 8 * i);
+                sha3->s[i] ^= Load64BitLittleEndian(sha3->t + 8 * i);
+            #ifdef WC_SHA3_FAULT_HARDEN
+                check++;
+            #endif
             }
+        #ifdef WC_SHA3_FAULT_HARDEN
+            if (check != p + l) {
+                return BAD_COND_E;
+            }
+            total_check += p;
+        #endif
+    #endif
         #ifdef SHA3_FUNC_PTR
             (*SHA3_BLOCK)(sha3->s);
         #else
@@ -739,10 +799,25 @@ static int Sha3Update(wc_Sha3* sha3, const byte* data, word32 len, byte p)
         blocks = 0;
     }
     #endif
+#ifdef WC_SHA3_FAULT_HARDEN
+    total_check += blocks * p;
+#endif
     for (; blocks > 0; blocks--) {
+#if !defined(BIG_ENDIAN_ORDER) && !defined(WC_SHA3_FAULT_HARDEN)
+        xorbuf(sha3->s, data, (word32)(p * 8));
+#else
         for (i = 0; i < p; i++) {
             sha3->s[i] ^= Load64Unaligned(data + 8 * i);
+        #ifdef WC_SHA3_FAULT_HARDEN
+            check++;
+        #endif
         }
+    #ifdef WC_SHA3_FAULT_HARDEN
+        if (check != total_check - ((blocks - 1) * p)) {
+            return BAD_COND_E;
+        }
+    #endif
+#endif
     #ifdef SHA3_FUNC_PTR
         (*SHA3_BLOCK)(sha3->s);
     #else
@@ -751,9 +826,15 @@ static int Sha3Update(wc_Sha3* sha3, const byte* data, word32 len, byte p)
         len -= p * 8U;
         data += p * 8U;
     }
-#if defined(WOLFSSL_LINUXKM) && defined(USE_INTEL_SPEEDUP)
-    if (SHA3_BLOCK == sha3_block_avx2)
+#ifdef WC_SHA3_FAULT_HARDEN
+    if (check != total_check) {
+        return BAD_COND_E;
+    }
+#endif
+#if defined(WOLFSSL_USE_SAVE_VECTOR_REGISTERS) && defined(USE_INTEL_SPEEDUP)
+    if (SHA3_BLOCK == sha3_block_avx2) {
         RESTORE_VECTOR_REGISTERS();
+    }
 #endif
     if (len > 0) {
         XMEMCPY(sha3->t, data, len);
@@ -775,12 +856,28 @@ static int Sha3Final(wc_Sha3* sha3, byte padChar, byte* hash, byte p, word32 l)
 {
     word32 rate = p * 8U;
     word32 j;
+#if defined(BIG_ENDIAN_ORDER) || defined(WC_SHA3_FAULT_HARDEN)
     word32 i;
+#endif
+#ifdef WC_SHA3_FAULT_HARDEN
+    int check = 0;
+#endif
 
+#if !defined(BIG_ENDIAN_ORDER) && !defined(WC_SHA3_FAULT_HARDEN)
+    xorbuf(sha3->s, sha3->t, sha3->i);
+#ifdef WOLFSSL_HASH_FLAGS
+    if ((p == WC_SHA3_256_COUNT) && (sha3->flags & WC_HASH_SHA3_KECCAK256)) {
+        padChar = 0x01;
+    }
+#endif
+    ((byte*)sha3->s)[sha3->i ] ^= padChar;
+    ((byte*)sha3->s)[rate - 1] ^= 0x80;
+#else
     sha3->t[rate - 1]  = 0x00;
 #ifdef WOLFSSL_HASH_FLAGS
-    if ((p == WC_SHA3_256_COUNT) && (sha3->flags & WC_HASH_SHA3_KECCAK256))
+    if ((p == WC_SHA3_256_COUNT) && (sha3->flags & WC_HASH_SHA3_KECCAK256)) {
         padChar = 0x01;
+    }
 #endif
     sha3->t[sha3->i ]  = padChar;
     sha3->t[rate - 1] |= 0x80;
@@ -788,10 +885,19 @@ static int Sha3Final(wc_Sha3* sha3, byte padChar, byte* hash, byte p, word32 l)
         XMEMSET(sha3->t + sha3->i + 1, 0, rate - 1U - (sha3->i + 1U));
     }
     for (i = 0; i < p; i++) {
-        sha3->s[i] ^= Load64BitBigEndian(sha3->t + 8 * i);
+        sha3->s[i] ^= Load64BitLittleEndian(sha3->t + 8 * i);
+    #ifdef WC_SHA3_FAULT_HARDEN
+        check++;
+    #endif
     }
+#ifdef WC_SHA3_FAULT_HARDEN
+    if (check != p) {
+        return BAD_COND_E;
+    }
+#endif
+#endif
 
-#if defined(WOLFSSL_LINUXKM) && defined(USE_INTEL_SPEEDUP)
+#if defined(WOLFSSL_USE_SAVE_VECTOR_REGISTERS) && defined(USE_INTEL_SPEEDUP)
     if (SHA3_BLOCK == sha3_block_avx2)
         SAVE_VECTOR_REGISTERS(return _svr_ret;);
 #endif
@@ -819,9 +925,10 @@ static int Sha3Final(wc_Sha3* sha3, byte padChar, byte* hash, byte p, word32 l)
     #endif
         XMEMCPY(hash + j, sha3->s, l - j);
     }
-#if defined(WOLFSSL_LINUXKM) && defined(USE_INTEL_SPEEDUP)
-    if (SHA3_BLOCK == sha3_block_avx2)
+#if defined(WOLFSSL_USE_SAVE_VECTOR_REGISTERS) && defined(USE_INTEL_SPEEDUP)
+    if (SHA3_BLOCK == sha3_block_avx2) {
         RESTORE_VECTOR_REGISTERS();
+    }
 #endif
 
     return 0;
@@ -829,80 +936,151 @@ static int Sha3Final(wc_Sha3* sha3, byte padChar, byte* hash, byte p, word32 l)
 #endif
 #if defined(STM32_HASH_SHA3)
 
-    /* Supports CubeMX HAL or Standard Peripheral Library */
+/* Supports CubeMX HAL or Standard Peripheral Library */
 
-    static int wc_InitSha3(wc_Sha3* sha3, void* heap, int devId)
-    {
-        if (sha3 == NULL)
-            return BAD_FUNC_ARG;
+static int wc_InitSha3(wc_Sha3* sha3, void* heap, int devId)
+{
+    if (sha3 == NULL)
+        return BAD_FUNC_ARG;
 
-        (void)devId;
-        (void)heap;
+    (void)devId;
+    (void)heap;
 
-        XMEMSET(sha3, 0, sizeof(wc_Sha3));
-        wc_Stm32_Hash_Init(&sha3->stmCtx);
+    XMEMSET(sha3, 0, sizeof(wc_Sha3));
+    wc_Stm32_Hash_Init(&sha3->stmCtx);
+    return 0;
+}
+
+static int Stm32GetAlgo(byte p)
+{
+    switch(p) {
+        case WC_SHA3_224_COUNT:
+            return HASH_ALGOSELECTION_SHA3_224;
+        case WC_SHA3_256_COUNT:
+            return HASH_ALGOSELECTION_SHA3_256;
+        case WC_SHA3_384_COUNT:
+            return HASH_ALGOSELECTION_SHA3_384;
+        case WC_SHA3_512_COUNT:
+            return HASH_ALGOSELECTION_SHA3_512;
+    }
+    /* Should never get here */
+    return WC_SHA3_224_COUNT;
+}
+
+static int wc_Sha3Update(wc_Sha3* sha3, const byte* data, word32 len, byte p)
+{
+    int ret = 0;
+
+    if (sha3 == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    if (data == NULL && len == 0) {
+        /* valid, but do nothing */
+        return 0;
+    }
+    if (data == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        ret = wc_Stm32_Hash_Update(&sha3->stmCtx, Stm32GetAlgo(p), data, len,
+            p * 8);
+        wolfSSL_CryptHwMutexUnLock();
+    }
+    return ret;
+}
+
+static int wc_Sha3Final(wc_Sha3* sha3, byte* hash, byte p, byte len)
+{
+    int ret = 0;
+
+    if (sha3 == NULL || hash == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        ret = wc_Stm32_Hash_Final(&sha3->stmCtx, Stm32GetAlgo(p), hash, len);
+        wolfSSL_CryptHwMutexUnLock();
+    }
+
+    (void)wc_InitSha3(sha3, NULL, 0); /* reset state */
+
+    return ret;
+}
+#elif defined(PSOC6_HASH_SHA3)
+
+static int wc_InitSha3(wc_Sha3* sha3, void* heap, int devId)
+{
+    int ret;
+    if (sha3 == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    (void)devId;
+    (void)heap;
+
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Initialize hash state for SHA-3 operation */
+        ret = wc_Psoc6_Sha3_Init(sha3);
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
+    }
+
+    return ret;
+}
+
+static int wc_Sha3Update(wc_Sha3* sha3, const byte* data, word32 len, byte p)
+{
+    int ret;
+
+    if (sha3 == NULL || (data == NULL && len > 0)) {
+        return BAD_FUNC_ARG;
+    }
+
+    if (data == NULL && len == 0) {
+        /* valid, but do nothing */
         return 0;
     }
 
-    static int Stm32GetAlgo(byte p)
-    {
-        switch(p) {
-            case WC_SHA3_224_COUNT:
-                return HASH_ALGOSELECTION_SHA3_224;
-            case WC_SHA3_256_COUNT:
-                return HASH_ALGOSELECTION_SHA3_256;
-            case WC_SHA3_384_COUNT:
-                return HASH_ALGOSELECTION_SHA3_384;
-            case WC_SHA3_512_COUNT:
-                return HASH_ALGOSELECTION_SHA3_512;
-        }
-        /* Should never get here */
-        return WC_SHA3_224_COUNT;
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Perform SHA3 on the input data and update the hash state */
+        ret = wc_Psoc6_Sha3_Update(sha3, data, len, p);
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
     }
 
-    static int wc_Sha3Update(wc_Sha3* sha3, const byte* data, word32 len, byte p)
-    {
-        int ret = 0;
+    return ret;
+}
 
-        if (sha3 == NULL) {
-            return BAD_FUNC_ARG;
-        }
-        if (data == NULL && len == 0) {
-            /* valid, but do nothing */
-            return 0;
-        }
-        if (data == NULL) {
-            return BAD_FUNC_ARG;
-        }
+static int wc_Sha3Final(wc_Sha3* sha3, byte* hash, byte p, byte len)
+{
+    int ret;
 
-        ret = wolfSSL_CryptHwMutexLock();
+    if (sha3 == NULL || hash == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Finalize SHA3 operations and produce digest */
+        ret = wc_Psoc6_Sha3_Final(sha3, 0x06, hash, p, len);
         if (ret == 0) {
-            ret = wc_Stm32_Hash_Update(&sha3->stmCtx,
-                Stm32GetAlgo(p), data, len, p * 8);
-            wolfSSL_CryptHwMutexUnLock();
+            /* Initialize hash state for SHA-3 operation */
+            ret = wc_Psoc6_Sha3_Init(sha3);
         }
-        return ret;
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
     }
 
-    static int wc_Sha3Final(wc_Sha3* sha3, byte* hash, byte p, byte len)
-    {
-        int ret = 0;
+    return ret;
+}
 
-        if (sha3 == NULL || hash == NULL) {
-            return BAD_FUNC_ARG;
-        }
-
-        ret = wolfSSL_CryptHwMutexLock();
-        if (ret == 0) {
-            ret = wc_Stm32_Hash_Final(&sha3->stmCtx,
-                Stm32GetAlgo(p), hash, len);
-            wolfSSL_CryptHwMutexUnLock();
-        }
-
-        (void)wc_InitSha3(sha3, NULL, 0); /* reset state */
-
-        return ret;
-    }
 #else
 
 /* Initialize the state for a SHA-3 hash operation.
@@ -930,6 +1108,9 @@ static int wc_InitSha3(wc_Sha3* sha3, void* heap, int devId)
 #endif
 #if defined(WOLF_CRYPTO_CB)
     sha3->devId = devId;
+    /* Set to none to determine the hash type later */
+    /* in the update/final functions based on the p value */
+    sha3->hashType = WC_HASH_TYPE_NONE;
 #endif
     (void)devId;
 
@@ -962,15 +1143,22 @@ static int wc_Sha3Update(wc_Sha3* sha3, const byte* data, word32 len, byte p)
     if (sha3->devId != INVALID_DEVID)
     #endif
     {
-        int hash_type = WC_HASH_TYPE_NONE;
-        switch (p) {
-            case WC_SHA3_224_COUNT: hash_type = WC_HASH_TYPE_SHA3_224; break;
-            case WC_SHA3_256_COUNT: hash_type = WC_HASH_TYPE_SHA3_256; break;
-            case WC_SHA3_384_COUNT: hash_type = WC_HASH_TYPE_SHA3_384; break;
-            case WC_SHA3_512_COUNT: hash_type = WC_HASH_TYPE_SHA3_512; break;
-            default: return BAD_FUNC_ARG;
+        /* If the hash type is not set, determine it based on the p value */
+        /* We can skip the switch statement if the hash type set already */
+        if (sha3->hashType == WC_HASH_TYPE_NONE) {
+            switch (p) {
+                case WC_SHA3_224_COUNT:
+                    sha3->hashType = WC_HASH_TYPE_SHA3_224; break;
+                case WC_SHA3_256_COUNT:
+                    sha3->hashType = WC_HASH_TYPE_SHA3_256; break;
+                case WC_SHA3_384_COUNT:
+                    sha3->hashType = WC_HASH_TYPE_SHA3_384; break;
+                case WC_SHA3_512_COUNT:
+                    sha3->hashType = WC_HASH_TYPE_SHA3_512; break;
+                default: return BAD_FUNC_ARG;
+            }
         }
-        ret = wc_CryptoCb_Sha3Hash(sha3, hash_type, data, len, NULL);
+        ret = wc_CryptoCb_Sha3Hash(sha3, sha3->hashType, data, len, NULL);
         if (ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE))
             return ret;
         /* fall-through when unavailable */
@@ -1016,15 +1204,22 @@ static int wc_Sha3Final(wc_Sha3* sha3, byte* hash, byte p, byte len)
     if (sha3->devId != INVALID_DEVID)
     #endif
     {
-        int hash_type = WC_HASH_TYPE_NONE;
-        switch (p) {
-            case WC_SHA3_224_COUNT: hash_type = WC_HASH_TYPE_SHA3_224; break;
-            case WC_SHA3_256_COUNT: hash_type = WC_HASH_TYPE_SHA3_256; break;
-            case WC_SHA3_384_COUNT: hash_type = WC_HASH_TYPE_SHA3_384; break;
-            case WC_SHA3_512_COUNT: hash_type = WC_HASH_TYPE_SHA3_512; break;
-            default: return BAD_FUNC_ARG;
+        /* If the hash type is not set, determine it based on the p value */
+        /* We can skip the switch statement if the hash type is set already */
+        if (sha3->hashType == WC_HASH_TYPE_NONE) {
+            switch (p) {
+                case WC_SHA3_224_COUNT:
+                    sha3->hashType = WC_HASH_TYPE_SHA3_224; break;
+                case WC_SHA3_256_COUNT:
+                    sha3->hashType = WC_HASH_TYPE_SHA3_256; break;
+                case WC_SHA3_384_COUNT:
+                    sha3->hashType = WC_HASH_TYPE_SHA3_384; break;
+                case WC_SHA3_512_COUNT:
+                    sha3->hashType = WC_HASH_TYPE_SHA3_512; break;
+                default: return BAD_FUNC_ARG;
+            }
         }
-        ret = wc_CryptoCb_Sha3Hash(sha3, hash_type, NULL, 0, hash);
+        ret = wc_CryptoCb_Sha3Hash(sha3, sha3->hashType, NULL, 0, hash);
         if (ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE))
             return ret;
         /* fall-through when unavailable */
@@ -1052,6 +1247,7 @@ static int wc_Sha3Final(wc_Sha3* sha3, byte* hash, byte p, byte len)
     return InitSha3(sha3);  /* reset state */
 }
 #endif
+
 /* Dispose of any dynamically allocated data from the SHA3-384 operation.
  * (Required for async ops.)
  *
@@ -1060,7 +1256,34 @@ static int wc_Sha3Final(wc_Sha3* sha3, byte* hash, byte p, byte len)
  */
 static void wc_Sha3Free(wc_Sha3* sha3)
 {
+#if defined(WOLF_CRYPTO_CB) && defined(WOLF_CRYPTO_CB_FREE)
+    int ret = 0;
+#endif
+
     (void)sha3;
+
+#if defined(WOLF_CRYPTO_CB) && defined(WOLF_CRYPTO_CB_FREE)
+    if (sha3 == NULL)
+        return;
+
+    #ifndef WOLF_CRYPTO_CB_FIND
+    if (sha3->devId != INVALID_DEVID)
+    #endif
+    {
+        ret = wc_CryptoCb_Free(sha3->devId, WC_ALGO_TYPE_HASH,
+                         sha3->hashType, 0, (void*)sha3);
+        /* If they want the standard free, they can call it themselves */
+        /* via their callback setting devId to INVALID_DEVID */
+        /* otherwise assume the callback handled it */
+        if (ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE))
+            return;
+        /* fall-through when unavailable */
+    }
+
+    /* silence compiler warning */
+    (void)ret;
+
+#endif /* WOLF_CRYPTO_CB && WOLF_CRYPTO_CB_FREE */
 
 #if defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_SHA3)
     if (sha3 == NULL)
@@ -1068,8 +1291,11 @@ static void wc_Sha3Free(wc_Sha3* sha3)
 
     wolfAsync_DevCtxFree(&sha3->asyncDev, WOLFSSL_ASYNC_MARKER_SHA3);
 #endif /* WOLFSSL_ASYNC_CRYPT */
-}
 
+#if defined(PSOC6_HASH_SHA3)
+    wc_Psoc6_Sha_Free();
+#endif
+}
 
 /* Copy the state of the SHA3 operation.
  *
@@ -1084,11 +1310,35 @@ static int wc_Sha3Copy(wc_Sha3* src, wc_Sha3* dst)
     if (src == NULL || dst == NULL)
         return BAD_FUNC_ARG;
 
+#if defined(WOLF_CRYPTO_CB) && defined(WOLF_CRYPTO_CB_COPY)
+    #ifndef WOLF_CRYPTO_CB_FIND
+    if (src->devId != INVALID_DEVID)
+    #endif
+    {
+        /* Cast the source and destination to be void to keep the abstraction */
+        ret = wc_CryptoCb_Copy(src->devId, WC_ALGO_TYPE_HASH,
+                               src->hashType, (void*)src, (void*)dst);
+        if (ret != WC_NO_ERR_TRACE(CRYPTOCB_UNAVAILABLE))
+            return ret;
+        /* fall-through when unavailable */
+    }
+    ret = 0; /* Reset ret to 0 to avoid returning the callback error code */
+#endif /* WOLF_CRYPTO_CB && WOLF_CRYPTO_CB_COPY */
+
+    /* Free dst resources before copy to prevent memory leaks (e.g.,
+     * hardware contexts). XMEMCPY overwrites dst. */
+    wc_Sha3Free(dst);
     XMEMCPY(dst, src, sizeof(wc_Sha3));
 
 #if defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_SHA3)
     ret = wolfAsync_DevCopy(&src->asyncDev, &dst->asyncDev);
 #endif
+
+#if defined(PSOC6_HASH_SHA3)
+    /* Re-initialize internal pointers in hash_state that point inside sha_buffers */
+    dst->hash_state.hash = (uint8_t*)((cy_stc_crypto_v2_sha3_buffers_t *)&dst->sha_buffers)->hash;
+#endif
+
 #ifdef WOLFSSL_HASH_FLAGS
      dst->flags |= WC_HASH_FLAG_ISCOPY;
 #endif
@@ -1114,13 +1364,13 @@ static int wc_Sha3GetHash(wc_Sha3* sha3, byte* hash, byte p, byte len)
     if (sha3 == NULL || hash == NULL)
         return BAD_FUNC_ARG;
 
+    XMEMSET(&tmpSha3, 0, sizeof(tmpSha3));
     ret = wc_Sha3Copy(sha3, &tmpSha3);
     if (ret == 0) {
         ret = wc_Sha3Final(&tmpSha3, hash, p, len);
     }
     return ret;
 }
-
 
 /* Initialize the state for a SHA3-224 hash operation.
  *
@@ -1439,6 +1689,101 @@ int wc_InitShake128(wc_Shake* shake, void* heap, int devId)
     return wc_InitSha3(shake, heap, devId);
 }
 
+#if defined(PSOC6_HASH_SHA3)
+
+int wc_Shake128_Update(wc_Shake* shake, const byte* data, word32 len)
+{
+    int ret;
+    if (shake == NULL || (data == NULL && len > 0)) {
+         return BAD_FUNC_ARG;
+    }
+
+    if (data == NULL && len == 0) {
+        /* valid, but do nothing */
+        return 0;
+    }
+
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Perform SHA3 on the input data and update the hash state */
+        ret = wc_Psoc6_Sha3_Update(shake, data, len, WC_SHA3_128_COUNT);
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
+    }
+
+    return ret;
+}
+
+int wc_Shake128_Final(wc_Shake* shake, byte* hash, word32 hashLen)
+{
+    int ret;
+
+    if (shake == NULL || hash == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Finalize SHA3 operations and produce digest */
+        ret = wc_Psoc6_Sha3_Final(shake, 0x1f, hash, WC_SHA3_128_COUNT, hashLen);
+        if (ret == 0) {
+            /* Initialize hash state for SHA-3 operation */
+            ret = wc_Psoc6_Sha3_Init(shake);
+        }
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
+    }
+
+    return ret;
+
+}
+
+int wc_Shake128_Absorb(wc_Shake* shake, const byte* data, word32 len)
+{
+    int ret;
+
+    if ((shake == NULL) || (data == NULL && len != 0)) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Perform SHA3 on the input data and update the hash state */
+        ret = wc_Psoc6_Sha3_Update(shake, data, len, WC_SHA3_128_COUNT);
+        if (ret == 0) {
+            /* Finalize SHA3 operations and produce digest */
+            ret = wc_Psoc6_Sha3_Final(shake, 0x1f, NULL, WC_SHA3_128_COUNT, 0);
+        }
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
+    }
+
+    return ret;
+}
+
+
+int wc_Shake128_SqueezeBlocks(wc_Shake* shake, byte* out, word32 blockCnt)
+{
+    int ret;
+    if ((shake == NULL) || (out == NULL && blockCnt != 0)) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Squeeze output blocks from current hash state */
+        ret = wc_Psoc6_Shake_SqueezeBlocks(shake, out, blockCnt);
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
+    }
+
+    return ret;
+}
+#else
 /* Update the SHAKE128 hash state with message data.
  *
  * shake  wc_Shake object holding state.
@@ -1529,7 +1874,7 @@ int wc_Shake128_SqueezeBlocks(wc_Shake* shake, byte* out, word32 blockCnt)
     if ((shake == NULL) || (out == NULL && blockCnt != 0)) {
         return BAD_FUNC_ARG;
     }
-#if defined(WOLFSSL_LINUXKM) && defined(USE_INTEL_SPEEDUP)
+#if defined(WOLFSSL_USE_SAVE_VECTOR_REGISTERS) && defined(USE_INTEL_SPEEDUP)
     if (SHA3_BLOCK == sha3_block_avx2)
         SAVE_VECTOR_REGISTERS(return _svr_ret;);
 #endif
@@ -1546,13 +1891,15 @@ int wc_Shake128_SqueezeBlocks(wc_Shake* shake, byte* out, word32 blockCnt)
     #endif
         out += WC_SHA3_128_COUNT * 8;
     }
-#if defined(WOLFSSL_LINUXKM) && defined(USE_INTEL_SPEEDUP)
+#if defined(WOLFSSL_USE_SAVE_VECTOR_REGISTERS) && defined(USE_INTEL_SPEEDUP)
     if (SHA3_BLOCK == sha3_block_avx2)
         RESTORE_VECTOR_REGISTERS();
 #endif
 
     return 0;
 }
+#endif
+
 
 /* Dispose of any dynamically allocated data from the SHAKE128 operation.
  * (Required for async ops.)
@@ -1590,6 +1937,100 @@ int wc_InitShake256(wc_Shake* shake, void* heap, int devId)
     return wc_InitSha3(shake, heap, devId);
 }
 
+
+#ifdef PSOC6_HASH_SHA3
+
+int wc_Shake256_Update(wc_Shake* shake, const byte* data, word32 len)
+{
+    int ret;
+    if (shake == NULL || (data == NULL && len > 0)) {
+         return BAD_FUNC_ARG;
+    }
+
+    if (data == NULL && len == 0) {
+        /* valid, but do nothing */
+        return 0;
+    }
+
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Perform SHA3 on the input data and update the hash state */
+        ret = wc_Psoc6_Sha3_Update(shake, data, len, WC_SHA3_256_COUNT);
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
+    }
+
+    return ret;
+}
+
+int wc_Shake256_Final(wc_Shake* shake, byte* hash, word32 hashLen)
+{
+    int ret;
+    if (shake == NULL || hash == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Finalize SHA3 operations and produce digest */
+        ret = wc_Psoc6_Sha3_Final(shake, 0x1f, hash, WC_SHA3_256_COUNT, hashLen);
+        if (ret == 0) {
+            /* Initialize hash state for SHA-3 operation */
+            ret = wc_Psoc6_Sha3_Init(shake);
+        }
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
+    }
+
+    return ret;
+}
+
+int wc_Shake256_Absorb(wc_Shake* shake, const byte* data, word32 len)
+{
+    int ret;
+
+    if ((shake == NULL) || (data == NULL && len != 0)) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Perform SHA3 on the input data and update the hash state */
+        ret = wc_Psoc6_Sha3_Update(shake, data, len, WC_SHA3_256_COUNT);
+        if (ret == 0) {
+            /* Finalize SHA3 operations and produce digest */
+            ret = wc_Psoc6_Sha3_Final(shake, 0x1f, NULL, WC_SHA3_256_COUNT, 0);
+        }
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
+    }
+
+    return ret;
+}
+
+int wc_Shake256_SqueezeBlocks(wc_Shake* shake, byte* out, word32 blockCnt)
+{
+    int ret;
+    if ((shake == NULL) || (out == NULL && blockCnt != 0)) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* Lock the mutex to perform crypto operations */
+    ret = wolfSSL_CryptHwMutexLock();
+    if (ret == 0) {
+        /* Squeeze output blocks from current hash state */
+        ret = wc_Psoc6_Shake_SqueezeBlocks(shake, out, blockCnt);
+        /* Release the lock */
+        wolfSSL_CryptHwMutexUnLock();
+    }
+
+    return ret;
+}
+
+#else
 /* Update the SHAKE256 hash state with message data.
  *
  * shake  wc_Shake object holding state.
@@ -1674,7 +2115,7 @@ int wc_Shake256_SqueezeBlocks(wc_Shake* shake, byte* out, word32 blockCnt)
     if ((shake == NULL) || (out == NULL && blockCnt != 0)) {
         return BAD_FUNC_ARG;
     }
-#if defined(WOLFSSL_LINUXKM) && defined(USE_INTEL_SPEEDUP)
+#if defined(WOLFSSL_USE_SAVE_VECTOR_REGISTERS) && defined(USE_INTEL_SPEEDUP)
     if (SHA3_BLOCK == sha3_block_avx2)
         SAVE_VECTOR_REGISTERS(return _svr_ret;);
 #endif
@@ -1691,13 +2132,14 @@ int wc_Shake256_SqueezeBlocks(wc_Shake* shake, byte* out, word32 blockCnt)
     #endif
         out += WC_SHA3_256_COUNT * 8;
     }
-#if defined(WOLFSSL_LINUXKM) && defined(USE_INTEL_SPEEDUP)
+#if defined(WOLFSSL_USE_SAVE_VECTOR_REGISTERS) && defined(USE_INTEL_SPEEDUP)
     if (SHA3_BLOCK == sha3_block_avx2)
         RESTORE_VECTOR_REGISTERS();
 #endif
 
     return 0;
 }
+#endif
 
 /* Dispose of any dynamically allocated data from the SHAKE256 operation.
  * (Required for async ops.)

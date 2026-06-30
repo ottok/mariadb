@@ -1,12 +1,12 @@
 /* test_mldsa.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -25,6 +25,7 @@
 #include <tests/api/api_decl.h>
 
 int test_wc_dilithium(void);
+int test_wc_dilithium_sign_pubonly_fails(void);
 int test_wc_dilithium_make_key(void);
 int test_wc_dilithium_sign(void);
 int test_wc_dilithium_verify(void);
@@ -34,23 +35,34 @@ int test_wc_dilithium_public_der_decode(void);
 int test_wc_dilithium_der(void);
 int test_wc_dilithium_make_key_from_seed(void);
 int test_wc_dilithium_sig_kats(void);
+int test_wc_dilithium_sign_ctx_kats(void);
+int test_wc_dilithium_verify_ctx_kats(void);
 int test_wc_dilithium_verify_kats(void);
-int test_mldsa_pkcs8(void);
+int test_wc_Dilithium_PrivateKeyDecode_OpenSSL_form(void);
+int test_mldsa_pkcs8_import_OpenSSL_form(void);
+int test_mldsa_pkcs8_export_import_wolfSSL_form(void);
+int test_wc_dilithium_encode_w1_large_values(void);
 int test_mldsa_pkcs12(void);
 
-#define TEST_MLDSA_DECLS                                            \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium),                    \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium_make_key),           \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium_sign),               \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium_verify),             \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium_sign_vfy),           \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium_check_key),          \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium_public_der_decode),  \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium_der),                \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium_make_key_from_seed), \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium_sig_kats),           \
-    TEST_DECL_GROUP("mldsa", test_wc_dilithium_verify_kats),        \
-    TEST_DECL_GROUP("mldsa", test_mldsa_pkcs8),                     \
+#define TEST_MLDSA_DECLS                                                       \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium),                               \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_sign_pubonly_fails),           \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_make_key),                      \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_sign),                          \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_verify),                        \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_sign_vfy),                      \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_check_key),                     \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_public_der_decode),             \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_der),                           \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_make_key_from_seed),            \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_sig_kats),                      \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_sign_ctx_kats),                 \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_verify_ctx_kats),               \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_verify_kats),                   \
+    TEST_DECL_GROUP("mldsa", test_wc_Dilithium_PrivateKeyDecode_OpenSSL_form), \
+    TEST_DECL_GROUP("mldsa", test_mldsa_pkcs8_import_OpenSSL_form),            \
+    TEST_DECL_GROUP("mldsa", test_mldsa_pkcs8_export_import_wolfSSL_form),     \
+    TEST_DECL_GROUP("mldsa", test_wc_dilithium_encode_w1_large_values),         \
     TEST_DECL_GROUP("mldsa", test_mldsa_pkcs12)
 
 #endif /* WOLFCRYPT_TEST_MLDSA_H */

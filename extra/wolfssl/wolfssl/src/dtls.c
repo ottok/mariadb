@@ -1,12 +1,12 @@
 /* dtls.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -403,8 +403,9 @@ static int TlsTicketIsValid(const WOLFSSL* ssl, WolfSSL_ConstVector exts,
         if (!IsAtLeastTLSv1_3(it->pv))
             *resume = TRUE;
     }
-    if (it != NULL)
-        ForceZero(it, sizeof(InternalTicket));
+    /* `it` points into tempTicket on successful decryption so clearing it will
+     * also satisfy the WOLFSSL_CHECK_MEM_ZERO check. */
+    ForceZero(tempTicket, SESSION_TICKET_LEN);
     return 0;
 }
 #endif /* HAVE_SESSION_TICKET */
@@ -678,6 +679,8 @@ static int SendStatelessReplyDtls13(const WOLFSSL* ssl, WolfSSL_CH* ch)
             ERROR_OUT(BUFFER_ERROR, dtls13_cleanup);
         if ((sigAlgs.size % 2) != 0)
             ERROR_OUT(BUFFER_ERROR, dtls13_cleanup);
+        if (sigAlgs.size > WOLFSSL_MAX_SIGALGO)
+            ERROR_OUT(BUFFER_ERROR, dtls13_cleanup);
         suites.hashSigAlgoSz = (word16)sigAlgs.size;
         XMEMCPY(suites.hashSigAlgo, sigAlgs.elements, sigAlgs.size);
         haveSA = 1;
@@ -730,8 +733,13 @@ static int SendStatelessReplyDtls13(const WOLFSSL* ssl, WolfSSL_CH* ch)
 
         /* Ask the user for the ciphersuite matching this identity */
         if (TLSX_PreSharedKey_Parse_ClientHello(&parsedExts,
-                tlsx.elements, (word16)tlsx.size, ssl->heap) == 0)
+                tlsx.elements, (word16)tlsx.size, ssl->heap) == 0) {
+            /* suites only needs to be refined when searching for a PSK.
+             * MatchSuite_ex handles refining internally. */
+            refineSuites(WOLFSSL_SUITES(ssl), &suites, &suites,
+                    ssl->options.useClientOrder);
             FindPskSuiteFromExt(ssl, parsedExts, &pskInfo, &suites);
+        }
         /* Revert to full handshake if PSK parsing failed */
 
         if (pskInfo.isValid) {
@@ -751,8 +759,9 @@ static int SendStatelessReplyDtls13(const WOLFSSL* ssl, WolfSSL_CH* ch)
                     ERROR_OUT(PSK_KEY_ERROR, dtls13_cleanup);
                 doKE = 1;
             }
-            else if ((modes & (1 << PSK_KE)) == 0) {
-                    ERROR_OUT(PSK_KEY_ERROR, dtls13_cleanup);
+            else if ((modes & (1 << PSK_KE)) == 0 ||
+                    ssl->options.onlyPskDheKe) {
+                ERROR_OUT(PSK_KEY_ERROR, dtls13_cleanup);
             }
             usePSK = 1;
         }
@@ -848,9 +857,9 @@ static int SendStatelessReplyDtls13(const WOLFSSL* ssl, WolfSSL_CH* ch)
         nonConstSSL->options.tls1_1 = 1;
         nonConstSSL->options.tls1_3 = 1;
 
-        XMEMCPY(nonConstSSL->session->sessionID, ch->sessionId.elements,
-                ch->sessionId.size);
-        nonConstSSL->session->sessionIDSz = (byte)ch->sessionId.size;
+        /* RFC 9147 Section 5.3: DTLS 1.3 ServerHello must have empty
+         * legacy_session_id_echo. Don't copy the client's session ID. */
+        nonConstSSL->session->sessionIDSz = 0;
         nonConstSSL->options.cipherSuite0 = cs.cipherSuite0;
         nonConstSSL->options.cipherSuite = cs.cipherSuite;
         nonConstSSL->extensions = parsedExts;

@@ -152,12 +152,15 @@ char *guess_malloc_library();
 
 /* If we have our own safemalloc (for debugging) */
 #if defined(SAFEMALLOC)
-void sf_report_leaked_memory(my_thread_id id);
+my_bool sf_report_leaked_memory(my_thread_id id);
 int sf_sanity();
+my_bool sf_have_memory_leak();
 extern my_thread_id (*sf_malloc_dbug_id)(void);
 #define SAFEMALLOC_REPORT_MEMORY(X) if (!sf_leaking_memory) sf_report_leaked_memory(X)
+#define SAFEMALLOC_HAVE_MEMORY_LEAK sf_have_memory_leak()
 #else
 #define SAFEMALLOC_REPORT_MEMORY(X) do {} while(0)
+#define SAFEMALLOC_HAVE_MEMORY_LEAK 0
 #endif
 
 typedef void (*MALLOC_SIZE_CB) (long long size, my_bool is_thread_specific); 
@@ -764,7 +767,8 @@ extern int wild_compare(const char *str,const char *wildstr,
                         pbool str_is_pattern);
 extern my_bool array_append_string_unique(const char *str,
                                           const char **array, size_t size);
-extern void get_date(char * to,int timeflag,time_t use_time);
+extern void get_date(char * to, size_t to_len, int timeflag,
+                     time_t use_time);
 extern void soundex(CHARSET_INFO *, char * out_pntr, char * in_pntr,
                     pbool remove_garbage);
 extern int init_record_cache(RECORD_CACHE *info,size_t cachesize,File file,
@@ -857,7 +861,7 @@ extern my_bool init_dynamic_string(DYNAMIC_STRING *str, const char *init_str,
 				   size_t init_alloc,size_t alloc_increment);
 extern my_bool dynstr_append(DYNAMIC_STRING *str, const char *append);
 my_bool dynstr_append_mem(DYNAMIC_STRING *str, const char *append,
-			  size_t length);
+			  size_t length) __attribute__((nonnull(2)));
 extern my_bool dynstr_append_os_quoted(DYNAMIC_STRING *str, const char *append,
                                        ...);
 extern my_bool dynstr_append_quoted(DYNAMIC_STRING *str,
