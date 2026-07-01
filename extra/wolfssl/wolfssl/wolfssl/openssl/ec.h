@@ -1,12 +1,12 @@
 /* ec.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -310,6 +310,9 @@ WOLFSSL_API int wolfSSL_ECDSA_verify(int type, const unsigned char *digest,
 
 
 #if defined HAVE_ECC && (defined(OPENSSL_EXTRA) || defined(OPENSSL_EXTRA_X509_SMALL))
+#ifdef WOLFSSL_API_PREFIX_MAP
+    #define EccEnumToNID wolfSSL_EccEnumToNID
+#endif
 WOLFSSL_API int EccEnumToNID(int n);
 #endif
 
@@ -375,6 +378,9 @@ int wolfSSL_EC_POINT_cmp(const WOLFSSL_EC_GROUP *group,
                          WOLFSSL_BN_CTX *ctx);
 WOLFSSL_API int wolfSSL_EC_POINT_copy(WOLFSSL_EC_POINT *dest,
                                       const WOLFSSL_EC_POINT *src);
+WOLFSSL_API
+WOLFSSL_EC_POINT *wolfSSL_EC_POINT_dup(const WOLFSSL_EC_POINT *src,
+                                       const WOLFSSL_EC_GROUP *group);
 WOLFSSL_API
 void wolfSSL_EC_POINT_free(WOLFSSL_EC_POINT *point);
 WOLFSSL_API
@@ -476,6 +482,7 @@ typedef WOLFSSL_EC_KEY_METHOD         EC_KEY_METHOD;
 #define EC_POINT_clear_free             wolfSSL_EC_POINT_clear_free
 #define EC_POINT_cmp                    wolfSSL_EC_POINT_cmp
 #define EC_POINT_copy                   wolfSSL_EC_POINT_copy
+#define EC_POINT_dup                    wolfSSL_EC_POINT_dup
 #define EC_POINT_is_at_infinity         wolfSSL_EC_POINT_is_at_infinity
 
 #define EC_get_builtin_curves           wolfSSL_EC_get_builtin_curves

@@ -1,12 +1,12 @@
 /* obj_mac.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -23,6 +23,9 @@
 
 #ifndef WOLFSSL_OBJ_MAC_H_
 #define WOLFSSL_OBJ_MAC_H_
+/* include SN_xxx definitions from asn.h */
+#include <wolfssl/wolfcrypt/asn.h>
+
 #ifdef __cplusplus
     extern "C" {
 #endif
@@ -82,8 +85,6 @@
 
 #endif /* !OPENSSL_COEXIST */
 
-/* the definition is for Qt Unit test */
-#define SN_jurisdictionCountryName "jurisdictionC"
 #ifdef __cplusplus
     } /* extern "C" */
 #endif

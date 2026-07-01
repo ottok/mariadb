@@ -2287,6 +2287,7 @@ buf_page_t *buf_page_get_zip(const page_id_t page_id) noexcept
 #ifdef UNIV_DEBUG
   if (!(++buf_dbg_counter % 5771)) buf_pool.validate();
 #endif /* UNIV_DEBUG */
+  ut_ad(bpage->state() >= buf_page_t::UNFIXED);
   return bpage;
 }
 
@@ -3473,7 +3474,7 @@ buf_block_t*
 buf_page_create(fil_space_t *space, uint32_t offset,
                 ulint zip_size, mtr_t *mtr, buf_block_t *free_block) noexcept
 {
-  space->free_page(offset, false);
+  space->free_page<false>(offset);
   return buf_page_create_low({space->id, offset}, zip_size, mtr, free_block);
 }
 
@@ -3698,19 +3699,6 @@ dberr_t buf_page_t::read_complete(const fil_node_t &node) noexcept
     goto database_corrupted;
   }
 
-  if (belongs_to_unzip_LRU())
-  {
-    buf_pool.n_pend_unzip++;
-    auto ok= buf_zip_decompress(reinterpret_cast<buf_block_t*>(this), false);
-    buf_pool.n_pend_unzip--;
-
-    if (!ok)
-    {
-      err= DB_PAGE_CORRUPTED;
-      goto database_corrupted_compressed;
-    }
-  }
-
   {
     const page_id_t read_id(mach_read_from_4(read_frame + FIL_PAGE_SPACE_ID),
                             mach_read_from_4(read_frame + FIL_PAGE_OFFSET));
@@ -3748,6 +3736,19 @@ dberr_t buf_page_t::read_complete(const fil_node_t &node) noexcept
                       expected_id.space(), expected_id.page_no());
       err= DB_FAIL;
       goto release_page;
+    }
+  }
+
+  if (belongs_to_unzip_LRU())
+  {
+    buf_pool.n_pend_unzip++;
+    auto ok= buf_zip_decompress(reinterpret_cast<buf_block_t*>(this), false);
+    buf_pool.n_pend_unzip--;
+
+    if (!ok)
+    {
+      err= DB_PAGE_CORRUPTED;
+      goto database_corrupted_compressed;
     }
   }
 

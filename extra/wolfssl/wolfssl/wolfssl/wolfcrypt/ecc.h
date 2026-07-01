@@ -1,12 +1,12 @@
 /* ecc.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -44,9 +44,6 @@
 
 #ifdef WOLFSSL_ASYNC_CRYPT
     #include <wolfssl/wolfcrypt/async.h>
-    #ifdef WOLFSSL_CERT_GEN
-        #include <wolfssl/wolfcrypt/asn.h>
-    #endif
 #endif
 
 #if defined(WOLFSSL_ATECC508A) || defined(WOLFSSL_ATECC608A)
@@ -85,13 +82,6 @@
 #if FIPS_VERSION3_GE(6,0,0)
     extern const unsigned int wolfCrypt_FIPS_ecc_ro_sanity[2];
     WOLFSSL_LOCAL int wolfCrypt_FIPS_ECC_sanity(void);
-#endif
-
-/* Enable curve B parameter if needed */
-#if defined(HAVE_COMP_KEY) || defined(ECC_CACHE_CURVE)
-    #ifndef USE_ECC_B_PARAM /* Allow someone to force enable */
-        #define USE_ECC_B_PARAM
-    #endif
 #endif
 
 
@@ -181,7 +171,14 @@ enum {
 #elif defined(PLUTON_CRYPTO_ECC)
     ECC_MAX_CRYPTO_HW_SIZE = 32,
 #elif defined(WOLFSSL_SILABS_SE_ACCEL)
+    #if defined(_SILICON_LABS_SECURITY_FEATURE) && \
+            (_SILICON_LABS_SECURITY_FEATURE == \
+             _SILICON_LABS_SECURITY_FEATURE_VAULT) && \
+        !defined(_SILICON_LABS_32B_SERIES_3_CONFIG_301)
+    ECC_MAX_CRYPTO_HW_SIZE = 66, /* up to 521 bit curves */
+    #else
     ECC_MAX_CRYPTO_HW_SIZE = 32,
+    #endif
 #elif defined(WOLFSSL_CRYPTOCELL)
     #ifndef CRYPTOCELL_KEY_SIZE
         CRYPTOCELL_KEY_SIZE = ECC_MAXSIZE,
@@ -215,7 +212,7 @@ enum {
 #if defined(HAVE_ECC) || defined(HAVE_CURVE25519) || \
     defined(HAVE_CURVE448) || defined(WOLFCRYPT_HAVE_SAKKE)
 /* Curve Types */
-typedef enum ecc_curve_id {
+enum ecc_curve_ids {
     ECC_CURVE_INVALID = -1,
     ECC_CURVE_DEF = 0, /* NIST or SECP */
 
@@ -272,7 +269,8 @@ typedef enum ecc_curve_id {
     ECC_CURVE_CUSTOM,
 #endif
     ECC_CURVE_MAX
-} ecc_curve_id;
+};
+typedef enum ecc_curve_ids ecc_curve_id;
 #endif
 
 #ifdef HAVE_ECC
@@ -764,7 +762,7 @@ int wc_ecc_init_label(ecc_key* key, const char* label, void* heap, int devId);
 #endif
 #ifdef WOLFSSL_CUSTOM_CURVES
 WOLFSSL_LOCAL
-void wc_ecc_free_curve(const ecc_set_type* curve, void* heap);
+void wc_ecc_free_curve(ecc_set_type* curve, void* heap);
 #endif
 WOLFSSL_ABI WOLFSSL_API
 int wc_ecc_free(ecc_key* key);
@@ -858,6 +856,9 @@ int wc_ecc_import_x963(const byte* in, word32 inLen, ecc_key* key);
 WOLFSSL_API
 int wc_ecc_import_x963_ex(const byte* in, word32 inLen, ecc_key* key,
                           int curve_id);
+WOLFSSL_API
+int wc_ecc_import_x963_ex2(const byte* in, word32 inLen, ecc_key* key,
+                           int curve_id, int untrusted);
 WOLFSSL_ABI WOLFSSL_API
 int wc_ecc_import_private_key(const byte* priv, word32 privSz, const byte* pub,
                            word32 pubSz, ecc_key* key);
@@ -905,9 +906,11 @@ int wc_ecc_export_point_der_ex(const int curve_idx, ecc_point* point, byte* out,
 WOLFSSL_API
 int wc_ecc_export_point_der(const int curve_idx, ecc_point* point,
                             byte* out, word32* outLen);
+#ifdef HAVE_COMP_KEY
 WOLFSSL_LOCAL
 int wc_ecc_export_point_der_compressed(const int curve_idx, ecc_point* point,
                                        byte* out, word32* outLen);
+#endif /* HAVE_COMP_KEY */
 #endif /* HAVE_ECC_KEY_EXPORT */
 
 

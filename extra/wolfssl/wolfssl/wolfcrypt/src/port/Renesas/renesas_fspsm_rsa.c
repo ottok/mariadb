@@ -1,12 +1,12 @@
 /* renesas_fspsm_rsa.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -34,7 +34,7 @@
 #include <wolfssl/wolfcrypt/logging.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/rsa.h>
-#include <wolfssl/wolfcrypt/port/Renesas/renesas-fspsm-crypt.h>
+#include <wolfssl/wolfcrypt/port/Renesas/renesas_fspsm_internal.h>
 
 #if defined(WOLFSSL_RENESAS_RSIP)
 extern FSPSM_INSTANCE   gFSPSM_ctrl;
@@ -248,7 +248,7 @@ WOLFSSL_LOCAL int wc_fspsm_RsaSign(const byte* in, word32 inLen, byte* out,
     message_hash.data_type =
             info->keyflgs_crypt.bits.message_type;/* message 0, hash 1 */
     signature.pdata = out;
-    signature.data_length = (word32*)outLen;
+    signature.data_length = *outLen;
 
     #if defined(WOLFSSL_RENESAS_RSIP)
     message_hash.hash_type = signature.hash_type =

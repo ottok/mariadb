@@ -18,6 +18,10 @@ export DEB_BUILD_OPTIONS="nocheck $DEB_BUILD_OPTIONS"
 
 # shellcheck source=/dev/null
 source ./VERSION
+
+architecture=$(dpkg-architecture -q DEB_BUILD_ARCH)
+uname_machine=$(uname -m)
+
 # General CI optimizations to keep build output smaller
 if [[ $GITLAB_CI ]]
 then
@@ -26,16 +30,19 @@ then
   sed '/Add support for verbose builds/,/^$/d' -i debian/rules
 elif [ -d storage/columnstore/columnstore/debian ]
 then
-  # ColumnStore is explicitly disabled in the native Debian build. Enable it
-  # now when build is triggered by autobake-deb.sh (MariaDB.org) and when the
-  # build is not running on Gitlab-CI.
-  sed '/-DPLUGIN_COLUMNSTORE=NO/d' -i debian/rules
-  # Take the files and part of control from MCS directory
-  cp -v storage/columnstore/columnstore/debian/mariadb-plugin-columnstore.* debian/
-  # idempotent, except for the blank line, but that can be tolerated.
-  sed -e '/Package: mariadb-plugin-columnstore/,/^$/d' -i debian/control
-  echo >> debian/control
-  cat storage/columnstore/columnstore/debian/control >> debian/control
+  if [ "${MYSQL_VERSION_MAJOR:-not10}" != "10" ] || [ "$architecture" = amd64 ]
+  then
+    # ColumnStore is explicitly disabled in the native Debian build. Enable it
+    # now when build is triggered by autobake-deb.sh (MariaDB.org) and when the
+    # build is not running on Gitlab-CI.
+    sed '/-DPLUGIN_COLUMNSTORE=NO/d' -i debian/rules
+    # Take the files and part of control from MCS directory
+    cp -v storage/columnstore/columnstore/debian/mariadb-plugin-columnstore.* debian/
+    # idempotent, except for the blank line, but that can be tolerated.
+    sed -e '/Package: mariadb-plugin-columnstore/,/^$/d' -i debian/control
+    echo >> debian/control
+    cat storage/columnstore/columnstore/debian/control >> debian/control
+  fi
 fi
 
 # Look up distro-version specific stuff
@@ -60,9 +67,6 @@ replace_uring_with_aio()
   sed -e '/-DIGNORE_AIO_CHECK=ON/d' \
       -e '/-DWITH_URING=ON/d' -i debian/rules
 }
-
-architecture=$(dpkg-architecture -q DEB_BUILD_ARCH)
-uname_machine=$(uname -m)
 
 # Parse release name and number from Linux standard base release
 # Example:

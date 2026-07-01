@@ -1,12 +1,12 @@
 /* sha512_asm.S */
 /*
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -68,13 +68,13 @@ L_avx1_sha512_k:
 .quad	0x72be5d74f27b896f,0x80deb1fe3b1696b1
 .quad	0x9bdc06a725c71235,0xc19bf174cf692694
 .quad	0xe49b69c19ef14ad2,0xefbe4786384f25e3
-.quad	0xfc19dc68b8cd5b5,0x240ca1cc77ac9c65
+.quad	0x0fc19dc68b8cd5b5,0x240ca1cc77ac9c65
 .quad	0x2de92c6f592b0275,0x4a7484aa6ea6e483
 .quad	0x5cb0a9dcbd41fbd4,0x76f988da831153b5
 .quad	0x983e5152ee66dfab,0xa831c66d2db43210
 .quad	0xb00327c898fb213f,0xbf597fc7beef0ee4
 .quad	0xc6e00bf33da88fc2,0xd5a79147930aa725
-.quad	0x6ca6351e003826f,0x142929670a0e6e70
+.quad	0x06ca6351e003826f,0x142929670a0e6e70
 .quad	0x27b70a8546d22ffc,0x2e1b21385c26c926
 .quad	0x4d2c6dfc5ac42aed,0x53380d139d95b3df
 .quad	0x650a73548baf63de,0x766a0abb3c77b2a8
@@ -93,7 +93,7 @@ L_avx1_sha512_k:
 .quad	0xbef9a3f7b2c67915,0xc67178f2e372532b
 .quad	0xca273eceea26619c,0xd186b8c721c0c207
 .quad	0xeada7dd6cde0eb1e,0xf57d4f7fee6ed178
-.quad	0x6f067aa72176fba,0xa637dc5a2c898a6
+.quad	0x06f067aa72176fba,0x0a637dc5a2c898a6
 .quad	0x113f9804bef90dae,0x1b710b35131c471b
 .quad	0x28db77f523047d84,0x32caab7b40c72493
 .quad	0x3c9ebe0a15c9bebc,0x431d67c49c100d4c
@@ -269,7 +269,7 @@ L_transform_sha512_avx1_start:
         movq	%r10, %rax
         addq	%rcx, %r14
         vpaddq	%xmm0, %xmm8, %xmm0
-        # msg_sched done: 0-3
+        # msg_sched done: 0-1
         # msg_sched: 2-3
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -360,7 +360,7 @@ L_transform_sha512_avx1_start:
         movq	%r8, %rax
         addq	%rcx, %r12
         vpaddq	%xmm1, %xmm8, %xmm1
-        # msg_sched done: 2-5
+        # msg_sched done: 2-3
         # msg_sched: 4-5
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -451,7 +451,7 @@ L_transform_sha512_avx1_start:
         movq	%r14, %rax
         addq	%rcx, %r10
         vpaddq	%xmm2, %xmm8, %xmm2
-        # msg_sched done: 4-7
+        # msg_sched done: 4-5
         # msg_sched: 6-7
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -542,7 +542,7 @@ L_transform_sha512_avx1_start:
         movq	%r12, %rax
         addq	%rcx, %r8
         vpaddq	%xmm3, %xmm8, %xmm3
-        # msg_sched done: 6-9
+        # msg_sched done: 6-7
         # msg_sched: 8-9
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -633,7 +633,7 @@ L_transform_sha512_avx1_start:
         movq	%r10, %rax
         addq	%rcx, %r14
         vpaddq	%xmm4, %xmm8, %xmm4
-        # msg_sched done: 8-11
+        # msg_sched done: 8-9
         # msg_sched: 10-11
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -724,7 +724,7 @@ L_transform_sha512_avx1_start:
         movq	%r8, %rax
         addq	%rcx, %r12
         vpaddq	%xmm5, %xmm8, %xmm5
-        # msg_sched done: 10-13
+        # msg_sched done: 10-11
         # msg_sched: 12-13
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -815,7 +815,7 @@ L_transform_sha512_avx1_start:
         movq	%r14, %rax
         addq	%rcx, %r10
         vpaddq	%xmm6, %xmm8, %xmm6
-        # msg_sched done: 12-15
+        # msg_sched done: 12-13
         # msg_sched: 14-15
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -906,7 +906,7 @@ L_transform_sha512_avx1_start:
         movq	%r12, %rax
         addq	%rcx, %r8
         vpaddq	%xmm7, %xmm8, %xmm7
-        # msg_sched done: 14-17
+        # msg_sched done: 14-15
         subl	$0x01, 128(%rsp)
         jne	L_transform_sha512_avx1_start
         vpaddq	(%rsi), %xmm0, %xmm8
@@ -1547,7 +1547,7 @@ L_sha512_len_avx1_start:
         movq	%r10, %rax
         addq	%rcx, %r14
         vpaddq	%xmm0, %xmm8, %xmm0
-        # msg_sched done: 0-3
+        # msg_sched done: 0-1
         # msg_sched: 2-3
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -1638,7 +1638,7 @@ L_sha512_len_avx1_start:
         movq	%r8, %rax
         addq	%rcx, %r12
         vpaddq	%xmm1, %xmm8, %xmm1
-        # msg_sched done: 2-5
+        # msg_sched done: 2-3
         # msg_sched: 4-5
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -1729,7 +1729,7 @@ L_sha512_len_avx1_start:
         movq	%r14, %rax
         addq	%rcx, %r10
         vpaddq	%xmm2, %xmm8, %xmm2
-        # msg_sched done: 4-7
+        # msg_sched done: 4-5
         # msg_sched: 6-7
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -1820,7 +1820,7 @@ L_sha512_len_avx1_start:
         movq	%r12, %rax
         addq	%rcx, %r8
         vpaddq	%xmm3, %xmm8, %xmm3
-        # msg_sched done: 6-9
+        # msg_sched done: 6-7
         # msg_sched: 8-9
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -1911,7 +1911,7 @@ L_sha512_len_avx1_start:
         movq	%r10, %rax
         addq	%rcx, %r14
         vpaddq	%xmm4, %xmm8, %xmm4
-        # msg_sched done: 8-11
+        # msg_sched done: 8-9
         # msg_sched: 10-11
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -2002,7 +2002,7 @@ L_sha512_len_avx1_start:
         movq	%r8, %rax
         addq	%rcx, %r12
         vpaddq	%xmm5, %xmm8, %xmm5
-        # msg_sched done: 10-13
+        # msg_sched done: 10-11
         # msg_sched: 12-13
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -2093,7 +2093,7 @@ L_sha512_len_avx1_start:
         movq	%r14, %rax
         addq	%rcx, %r10
         vpaddq	%xmm6, %xmm8, %xmm6
-        # msg_sched done: 12-15
+        # msg_sched done: 12-13
         # msg_sched: 14-15
         # rnd_0: 0 - 0
         rorq	$23, %rax
@@ -2184,7 +2184,7 @@ L_sha512_len_avx1_start:
         movq	%r12, %rax
         addq	%rcx, %r8
         vpaddq	%xmm7, %xmm8, %xmm7
-        # msg_sched done: 14-17
+        # msg_sched done: 14-15
         movq	136(%rsp), %rdx
         vpaddq	(%rdx), %xmm0, %xmm8
         vpaddq	16(%rdx), %xmm1, %xmm9
@@ -2696,13 +2696,13 @@ L_avx1_rorx_sha512_k:
 .quad	0x72be5d74f27b896f,0x80deb1fe3b1696b1
 .quad	0x9bdc06a725c71235,0xc19bf174cf692694
 .quad	0xe49b69c19ef14ad2,0xefbe4786384f25e3
-.quad	0xfc19dc68b8cd5b5,0x240ca1cc77ac9c65
+.quad	0x0fc19dc68b8cd5b5,0x240ca1cc77ac9c65
 .quad	0x2de92c6f592b0275,0x4a7484aa6ea6e483
 .quad	0x5cb0a9dcbd41fbd4,0x76f988da831153b5
 .quad	0x983e5152ee66dfab,0xa831c66d2db43210
 .quad	0xb00327c898fb213f,0xbf597fc7beef0ee4
 .quad	0xc6e00bf33da88fc2,0xd5a79147930aa725
-.quad	0x6ca6351e003826f,0x142929670a0e6e70
+.quad	0x06ca6351e003826f,0x142929670a0e6e70
 .quad	0x27b70a8546d22ffc,0x2e1b21385c26c926
 .quad	0x4d2c6dfc5ac42aed,0x53380d139d95b3df
 .quad	0x650a73548baf63de,0x766a0abb3c77b2a8
@@ -2721,7 +2721,7 @@ L_avx1_rorx_sha512_k:
 .quad	0xbef9a3f7b2c67915,0xc67178f2e372532b
 .quad	0xca273eceea26619c,0xd186b8c721c0c207
 .quad	0xeada7dd6cde0eb1e,0xf57d4f7fee6ed178
-.quad	0x6f067aa72176fba,0xa637dc5a2c898a6
+.quad	0x06f067aa72176fba,0x0a637dc5a2c898a6
 .quad	0x113f9804bef90dae,0x1b710b35131c471b
 .quad	0x28db77f523047d84,0x32caab7b40c72493
 .quad	0x3c9ebe0a15c9bebc,0x431d67c49c100d4c
@@ -2892,7 +2892,7 @@ L_transform_sha512_avx1_rorx_start:
         addq	%rax, %r14
         xorq	%r8, %rdx
         vpaddq	%xmm0, %xmm8, %xmm0
-        # msg_sched done: 0-3
+        # msg_sched done: 0-1
         # msg_sched: 2-3
         # rnd_0: 0 - 0
         rorxq	$14, %r10, %rax
@@ -2978,7 +2978,7 @@ L_transform_sha512_avx1_rorx_start:
         addq	%rax, %r12
         xorq	%r14, %rdx
         vpaddq	%xmm1, %xmm8, %xmm1
-        # msg_sched done: 2-5
+        # msg_sched done: 2-3
         # msg_sched: 4-5
         # rnd_0: 0 - 0
         rorxq	$14, %r8, %rax
@@ -3064,7 +3064,7 @@ L_transform_sha512_avx1_rorx_start:
         addq	%rax, %r10
         xorq	%r12, %rdx
         vpaddq	%xmm2, %xmm8, %xmm2
-        # msg_sched done: 4-7
+        # msg_sched done: 4-5
         # msg_sched: 6-7
         # rnd_0: 0 - 0
         rorxq	$14, %r14, %rax
@@ -3150,7 +3150,7 @@ L_transform_sha512_avx1_rorx_start:
         addq	%rax, %r8
         xorq	%r10, %rdx
         vpaddq	%xmm3, %xmm8, %xmm3
-        # msg_sched done: 6-9
+        # msg_sched done: 6-7
         # msg_sched: 8-9
         # rnd_0: 0 - 0
         rorxq	$14, %r12, %rax
@@ -3236,7 +3236,7 @@ L_transform_sha512_avx1_rorx_start:
         addq	%rax, %r14
         xorq	%r8, %rdx
         vpaddq	%xmm4, %xmm8, %xmm4
-        # msg_sched done: 8-11
+        # msg_sched done: 8-9
         # msg_sched: 10-11
         # rnd_0: 0 - 0
         rorxq	$14, %r10, %rax
@@ -3322,7 +3322,7 @@ L_transform_sha512_avx1_rorx_start:
         addq	%rax, %r12
         xorq	%r14, %rdx
         vpaddq	%xmm5, %xmm8, %xmm5
-        # msg_sched done: 10-13
+        # msg_sched done: 10-11
         # msg_sched: 12-13
         # rnd_0: 0 - 0
         rorxq	$14, %r8, %rax
@@ -3408,7 +3408,7 @@ L_transform_sha512_avx1_rorx_start:
         addq	%rax, %r10
         xorq	%r12, %rdx
         vpaddq	%xmm6, %xmm8, %xmm6
-        # msg_sched done: 12-15
+        # msg_sched done: 12-13
         # msg_sched: 14-15
         # rnd_0: 0 - 0
         rorxq	$14, %r14, %rax
@@ -3494,7 +3494,7 @@ L_transform_sha512_avx1_rorx_start:
         addq	%rax, %r8
         xorq	%r10, %rdx
         vpaddq	%xmm7, %xmm8, %xmm7
-        # msg_sched done: 14-17
+        # msg_sched done: 14-15
         vpaddq	(%rsi), %xmm0, %xmm8
         vpaddq	16(%rsi), %xmm1, %xmm9
         vmovdqu	%xmm8, (%rsp)
@@ -4099,7 +4099,7 @@ L_sha512_len_avx1_rorx_start:
         addq	%rax, %r14
         xorq	%r8, %rdx
         vpaddq	%xmm0, %xmm8, %xmm0
-        # msg_sched done: 0-3
+        # msg_sched done: 0-1
         # msg_sched: 2-3
         # rnd_0: 0 - 0
         rorxq	$14, %r10, %rax
@@ -4185,7 +4185,7 @@ L_sha512_len_avx1_rorx_start:
         addq	%rax, %r12
         xorq	%r14, %rdx
         vpaddq	%xmm1, %xmm8, %xmm1
-        # msg_sched done: 2-5
+        # msg_sched done: 2-3
         # msg_sched: 4-5
         # rnd_0: 0 - 0
         rorxq	$14, %r8, %rax
@@ -4271,7 +4271,7 @@ L_sha512_len_avx1_rorx_start:
         addq	%rax, %r10
         xorq	%r12, %rdx
         vpaddq	%xmm2, %xmm8, %xmm2
-        # msg_sched done: 4-7
+        # msg_sched done: 4-5
         # msg_sched: 6-7
         # rnd_0: 0 - 0
         rorxq	$14, %r14, %rax
@@ -4357,7 +4357,7 @@ L_sha512_len_avx1_rorx_start:
         addq	%rax, %r8
         xorq	%r10, %rdx
         vpaddq	%xmm3, %xmm8, %xmm3
-        # msg_sched done: 6-9
+        # msg_sched done: 6-7
         # msg_sched: 8-9
         # rnd_0: 0 - 0
         rorxq	$14, %r12, %rax
@@ -4443,7 +4443,7 @@ L_sha512_len_avx1_rorx_start:
         addq	%rax, %r14
         xorq	%r8, %rdx
         vpaddq	%xmm4, %xmm8, %xmm4
-        # msg_sched done: 8-11
+        # msg_sched done: 8-9
         # msg_sched: 10-11
         # rnd_0: 0 - 0
         rorxq	$14, %r10, %rax
@@ -4529,7 +4529,7 @@ L_sha512_len_avx1_rorx_start:
         addq	%rax, %r12
         xorq	%r14, %rdx
         vpaddq	%xmm5, %xmm8, %xmm5
-        # msg_sched done: 10-13
+        # msg_sched done: 10-11
         # msg_sched: 12-13
         # rnd_0: 0 - 0
         rorxq	$14, %r8, %rax
@@ -4615,7 +4615,7 @@ L_sha512_len_avx1_rorx_start:
         addq	%rax, %r10
         xorq	%r12, %rdx
         vpaddq	%xmm6, %xmm8, %xmm6
-        # msg_sched done: 12-15
+        # msg_sched done: 12-13
         # msg_sched: 14-15
         # rnd_0: 0 - 0
         rorxq	$14, %r14, %rax
@@ -4701,7 +4701,7 @@ L_sha512_len_avx1_rorx_start:
         addq	%rax, %r8
         xorq	%r10, %rdx
         vpaddq	%xmm7, %xmm8, %xmm7
-        # msg_sched done: 14-17
+        # msg_sched done: 14-15
         movq	136(%rsp), %rcx
         vpaddq	(%rcx), %xmm0, %xmm8
         vpaddq	16(%rcx), %xmm1, %xmm9
@@ -5200,13 +5200,13 @@ L_avx2_sha512_k:
 .quad	0x72be5d74f27b896f,0x80deb1fe3b1696b1
 .quad	0x9bdc06a725c71235,0xc19bf174cf692694
 .quad	0xe49b69c19ef14ad2,0xefbe4786384f25e3
-.quad	0xfc19dc68b8cd5b5,0x240ca1cc77ac9c65
+.quad	0x0fc19dc68b8cd5b5,0x240ca1cc77ac9c65
 .quad	0x2de92c6f592b0275,0x4a7484aa6ea6e483
 .quad	0x5cb0a9dcbd41fbd4,0x76f988da831153b5
 .quad	0x983e5152ee66dfab,0xa831c66d2db43210
 .quad	0xb00327c898fb213f,0xbf597fc7beef0ee4
 .quad	0xc6e00bf33da88fc2,0xd5a79147930aa725
-.quad	0x6ca6351e003826f,0x142929670a0e6e70
+.quad	0x06ca6351e003826f,0x142929670a0e6e70
 .quad	0x27b70a8546d22ffc,0x2e1b21385c26c926
 .quad	0x4d2c6dfc5ac42aed,0x53380d139d95b3df
 .quad	0x650a73548baf63de,0x766a0abb3c77b2a8
@@ -5225,7 +5225,7 @@ L_avx2_sha512_k:
 .quad	0xbef9a3f7b2c67915,0xc67178f2e372532b
 .quad	0xca273eceea26619c,0xd186b8c721c0c207
 .quad	0xeada7dd6cde0eb1e,0xf57d4f7fee6ed178
-.quad	0x6f067aa72176fba,0xa637dc5a2c898a6
+.quad	0x06f067aa72176fba,0x0a637dc5a2c898a6
 .quad	0x113f9804bef90dae,0x1b710b35131c471b
 .quad	0x28db77f523047d84,0x32caab7b40c72493
 .quad	0x3c9ebe0a15c9bebc,0x431d67c49c100d4c
@@ -5260,8 +5260,8 @@ L_avx2_sha512_k_2:
 .quad	0x9bdc06a725c71235,0xc19bf174cf692694
 .quad	0xe49b69c19ef14ad2,0xefbe4786384f25e3
 .quad	0xe49b69c19ef14ad2,0xefbe4786384f25e3
-.quad	0xfc19dc68b8cd5b5,0x240ca1cc77ac9c65
-.quad	0xfc19dc68b8cd5b5,0x240ca1cc77ac9c65
+.quad	0x0fc19dc68b8cd5b5,0x240ca1cc77ac9c65
+.quad	0x0fc19dc68b8cd5b5,0x240ca1cc77ac9c65
 .quad	0x2de92c6f592b0275,0x4a7484aa6ea6e483
 .quad	0x2de92c6f592b0275,0x4a7484aa6ea6e483
 .quad	0x5cb0a9dcbd41fbd4,0x76f988da831153b5
@@ -5272,8 +5272,8 @@ L_avx2_sha512_k_2:
 .quad	0xb00327c898fb213f,0xbf597fc7beef0ee4
 .quad	0xc6e00bf33da88fc2,0xd5a79147930aa725
 .quad	0xc6e00bf33da88fc2,0xd5a79147930aa725
-.quad	0x6ca6351e003826f,0x142929670a0e6e70
-.quad	0x6ca6351e003826f,0x142929670a0e6e70
+.quad	0x06ca6351e003826f,0x142929670a0e6e70
+.quad	0x06ca6351e003826f,0x142929670a0e6e70
 .quad	0x27b70a8546d22ffc,0x2e1b21385c26c926
 .quad	0x27b70a8546d22ffc,0x2e1b21385c26c926
 .quad	0x4d2c6dfc5ac42aed,0x53380d139d95b3df
@@ -5310,8 +5310,8 @@ L_avx2_sha512_k_2:
 .quad	0xca273eceea26619c,0xd186b8c721c0c207
 .quad	0xeada7dd6cde0eb1e,0xf57d4f7fee6ed178
 .quad	0xeada7dd6cde0eb1e,0xf57d4f7fee6ed178
-.quad	0x6f067aa72176fba,0xa637dc5a2c898a6
-.quad	0x6f067aa72176fba,0xa637dc5a2c898a6
+.quad	0x06f067aa72176fba,0x0a637dc5a2c898a6
+.quad	0x06f067aa72176fba,0x0a637dc5a2c898a6
 .quad	0x113f9804bef90dae,0x1b710b35131c471b
 .quad	0x113f9804bef90dae,0x1b710b35131c471b
 .quad	0x28db77f523047d84,0x32caab7b40c72493
@@ -6585,7 +6585,7 @@ L_sha512_len_avx2_start:
         movq	%r10, %rax
         addq	%rcx, %r14
         vpaddq	%ymm0, %ymm8, %ymm0
-        # msg_sched done: 0-3
+        # msg_sched done: 0-1
         # msg_sched: 4-5
         rorq	$23, %rax
         vpalignr	$8, %ymm1, %ymm2, %ymm12
@@ -6662,7 +6662,7 @@ L_sha512_len_avx2_start:
         movq	%r8, %rax
         addq	%rcx, %r12
         vpaddq	%ymm1, %ymm8, %ymm1
-        # msg_sched done: 4-7
+        # msg_sched done: 4-5
         # msg_sched: 8-9
         rorq	$23, %rax
         vpalignr	$8, %ymm2, %ymm3, %ymm12
@@ -6739,7 +6739,7 @@ L_sha512_len_avx2_start:
         movq	%r14, %rax
         addq	%rcx, %r10
         vpaddq	%ymm2, %ymm8, %ymm2
-        # msg_sched done: 8-11
+        # msg_sched done: 8-9
         # msg_sched: 12-13
         rorq	$23, %rax
         vpalignr	$8, %ymm3, %ymm4, %ymm12
@@ -6816,7 +6816,7 @@ L_sha512_len_avx2_start:
         movq	%r12, %rax
         addq	%rcx, %r8
         vpaddq	%ymm3, %ymm8, %ymm3
-        # msg_sched done: 12-15
+        # msg_sched done: 12-13
         # msg_sched: 16-17
         rorq	$23, %rax
         vpalignr	$8, %ymm4, %ymm5, %ymm12
@@ -6893,7 +6893,7 @@ L_sha512_len_avx2_start:
         movq	%r10, %rax
         addq	%rcx, %r14
         vpaddq	%ymm4, %ymm8, %ymm4
-        # msg_sched done: 16-19
+        # msg_sched done: 16-17
         # msg_sched: 20-21
         rorq	$23, %rax
         vpalignr	$8, %ymm5, %ymm6, %ymm12
@@ -6970,7 +6970,7 @@ L_sha512_len_avx2_start:
         movq	%r8, %rax
         addq	%rcx, %r12
         vpaddq	%ymm5, %ymm8, %ymm5
-        # msg_sched done: 20-23
+        # msg_sched done: 20-21
         # msg_sched: 24-25
         rorq	$23, %rax
         vpalignr	$8, %ymm6, %ymm7, %ymm12
@@ -7047,7 +7047,7 @@ L_sha512_len_avx2_start:
         movq	%r14, %rax
         addq	%rcx, %r10
         vpaddq	%ymm6, %ymm8, %ymm6
-        # msg_sched done: 24-27
+        # msg_sched done: 24-25
         # msg_sched: 28-29
         rorq	$23, %rax
         vpalignr	$8, %ymm7, %ymm0, %ymm12
@@ -7124,7 +7124,7 @@ L_sha512_len_avx2_start:
         movq	%r12, %rax
         addq	%rcx, %r8
         vpaddq	%ymm7, %ymm8, %ymm7
-        # msg_sched done: 28-31
+        # msg_sched done: 28-29
         addq	$0x100, %rsi
         addq	$0x100, %rbp
         cmpq	L_avx2_sha512_k_2_end(%rip), %rsi
@@ -8057,13 +8057,13 @@ L_avx2_rorx_sha512_k:
 .quad	0x72be5d74f27b896f,0x80deb1fe3b1696b1
 .quad	0x9bdc06a725c71235,0xc19bf174cf692694
 .quad	0xe49b69c19ef14ad2,0xefbe4786384f25e3
-.quad	0xfc19dc68b8cd5b5,0x240ca1cc77ac9c65
+.quad	0x0fc19dc68b8cd5b5,0x240ca1cc77ac9c65
 .quad	0x2de92c6f592b0275,0x4a7484aa6ea6e483
 .quad	0x5cb0a9dcbd41fbd4,0x76f988da831153b5
 .quad	0x983e5152ee66dfab,0xa831c66d2db43210
 .quad	0xb00327c898fb213f,0xbf597fc7beef0ee4
 .quad	0xc6e00bf33da88fc2,0xd5a79147930aa725
-.quad	0x6ca6351e003826f,0x142929670a0e6e70
+.quad	0x06ca6351e003826f,0x142929670a0e6e70
 .quad	0x27b70a8546d22ffc,0x2e1b21385c26c926
 .quad	0x4d2c6dfc5ac42aed,0x53380d139d95b3df
 .quad	0x650a73548baf63de,0x766a0abb3c77b2a8
@@ -8082,7 +8082,7 @@ L_avx2_rorx_sha512_k:
 .quad	0xbef9a3f7b2c67915,0xc67178f2e372532b
 .quad	0xca273eceea26619c,0xd186b8c721c0c207
 .quad	0xeada7dd6cde0eb1e,0xf57d4f7fee6ed178
-.quad	0x6f067aa72176fba,0xa637dc5a2c898a6
+.quad	0x06f067aa72176fba,0x0a637dc5a2c898a6
 .quad	0x113f9804bef90dae,0x1b710b35131c471b
 .quad	0x28db77f523047d84,0x32caab7b40c72493
 .quad	0x3c9ebe0a15c9bebc,0x431d67c49c100d4c
@@ -8117,8 +8117,8 @@ L_avx2_rorx_sha512_k_2:
 .quad	0x9bdc06a725c71235,0xc19bf174cf692694
 .quad	0xe49b69c19ef14ad2,0xefbe4786384f25e3
 .quad	0xe49b69c19ef14ad2,0xefbe4786384f25e3
-.quad	0xfc19dc68b8cd5b5,0x240ca1cc77ac9c65
-.quad	0xfc19dc68b8cd5b5,0x240ca1cc77ac9c65
+.quad	0x0fc19dc68b8cd5b5,0x240ca1cc77ac9c65
+.quad	0x0fc19dc68b8cd5b5,0x240ca1cc77ac9c65
 .quad	0x2de92c6f592b0275,0x4a7484aa6ea6e483
 .quad	0x2de92c6f592b0275,0x4a7484aa6ea6e483
 .quad	0x5cb0a9dcbd41fbd4,0x76f988da831153b5
@@ -8129,8 +8129,8 @@ L_avx2_rorx_sha512_k_2:
 .quad	0xb00327c898fb213f,0xbf597fc7beef0ee4
 .quad	0xc6e00bf33da88fc2,0xd5a79147930aa725
 .quad	0xc6e00bf33da88fc2,0xd5a79147930aa725
-.quad	0x6ca6351e003826f,0x142929670a0e6e70
-.quad	0x6ca6351e003826f,0x142929670a0e6e70
+.quad	0x06ca6351e003826f,0x142929670a0e6e70
+.quad	0x06ca6351e003826f,0x142929670a0e6e70
 .quad	0x27b70a8546d22ffc,0x2e1b21385c26c926
 .quad	0x27b70a8546d22ffc,0x2e1b21385c26c926
 .quad	0x4d2c6dfc5ac42aed,0x53380d139d95b3df
@@ -8167,8 +8167,8 @@ L_avx2_rorx_sha512_k_2:
 .quad	0xca273eceea26619c,0xd186b8c721c0c207
 .quad	0xeada7dd6cde0eb1e,0xf57d4f7fee6ed178
 .quad	0xeada7dd6cde0eb1e,0xf57d4f7fee6ed178
-.quad	0x6f067aa72176fba,0xa637dc5a2c898a6
-.quad	0x6f067aa72176fba,0xa637dc5a2c898a6
+.quad	0x06f067aa72176fba,0x0a637dc5a2c898a6
+.quad	0x06f067aa72176fba,0x0a637dc5a2c898a6
 .quad	0x113f9804bef90dae,0x1b710b35131c471b
 .quad	0x113f9804bef90dae,0x1b710b35131c471b
 .quad	0x28db77f523047d84,0x32caab7b40c72493
@@ -9381,7 +9381,7 @@ L_sha512_len_avx2_rorx_start:
         addq	%rax, %r14
         xorq	%r8, %rdx
         vpaddq	%ymm0, %ymm8, %ymm0
-        # msg_sched done: 0-3
+        # msg_sched done: 0-1
         # msg_sched: 4-5
         rorxq	$14, %r10, %rax
         rorxq	$18, %r10, %rcx
@@ -9454,7 +9454,7 @@ L_sha512_len_avx2_rorx_start:
         addq	%rax, %r12
         xorq	%r14, %rdx
         vpaddq	%ymm1, %ymm8, %ymm1
-        # msg_sched done: 4-7
+        # msg_sched done: 4-5
         # msg_sched: 8-9
         rorxq	$14, %r8, %rax
         rorxq	$18, %r8, %rcx
@@ -9527,7 +9527,7 @@ L_sha512_len_avx2_rorx_start:
         addq	%rax, %r10
         xorq	%r12, %rdx
         vpaddq	%ymm2, %ymm8, %ymm2
-        # msg_sched done: 8-11
+        # msg_sched done: 8-9
         # msg_sched: 12-13
         rorxq	$14, %r14, %rax
         rorxq	$18, %r14, %rcx
@@ -9600,7 +9600,7 @@ L_sha512_len_avx2_rorx_start:
         addq	%rax, %r8
         xorq	%r10, %rdx
         vpaddq	%ymm3, %ymm8, %ymm3
-        # msg_sched done: 12-15
+        # msg_sched done: 12-13
         # msg_sched: 16-17
         rorxq	$14, %r12, %rax
         rorxq	$18, %r12, %rcx
@@ -9673,7 +9673,7 @@ L_sha512_len_avx2_rorx_start:
         addq	%rax, %r14
         xorq	%r8, %rdx
         vpaddq	%ymm4, %ymm8, %ymm4
-        # msg_sched done: 16-19
+        # msg_sched done: 16-17
         # msg_sched: 20-21
         rorxq	$14, %r10, %rax
         rorxq	$18, %r10, %rcx
@@ -9746,7 +9746,7 @@ L_sha512_len_avx2_rorx_start:
         addq	%rax, %r12
         xorq	%r14, %rdx
         vpaddq	%ymm5, %ymm8, %ymm5
-        # msg_sched done: 20-23
+        # msg_sched done: 20-21
         # msg_sched: 24-25
         rorxq	$14, %r8, %rax
         rorxq	$18, %r8, %rcx
@@ -9819,7 +9819,7 @@ L_sha512_len_avx2_rorx_start:
         addq	%rax, %r10
         xorq	%r12, %rdx
         vpaddq	%ymm6, %ymm8, %ymm6
-        # msg_sched done: 24-27
+        # msg_sched done: 24-25
         # msg_sched: 28-29
         rorxq	$14, %r14, %rax
         rorxq	$18, %r14, %rcx
@@ -9892,7 +9892,7 @@ L_sha512_len_avx2_rorx_start:
         addq	%rax, %r8
         xorq	%r10, %rdx
         vpaddq	%ymm7, %ymm8, %ymm7
-        # msg_sched done: 28-31
+        # msg_sched done: 28-29
         addq	$0x100, %rbp
         addq	$0x100, %rsi
         cmpq	L_avx2_rorx_sha512_k_2_end(%rip), %rbp

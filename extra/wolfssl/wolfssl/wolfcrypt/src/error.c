@@ -1,12 +1,12 @@
 /* error.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -36,6 +36,9 @@ WOLFSSL_ABI
 const char* wc_GetErrorString(int error)
 {
     switch ((enum wolfCrypt_ErrorCodes)error) {
+
+    case WC_SUCCESS:
+        return "wolfCrypt generic success";
 
     case WC_FAILURE:
         return "wolfCrypt generic failure";
@@ -182,10 +185,10 @@ const char* wc_GetErrorString(int error)
         return "ASN date error, bad size";
 
     case ASN_BEFORE_DATE_E :
-        return "ASN date error, current date before";
+        return "ASN date error, current date is before start of validity";
 
     case ASN_AFTER_DATE_E :
-        return "ASN date error, current date after";
+        return "ASN date error, current date is after expiration";
 
     case ASN_SIG_OID_E :
         return "ASN signature error, mismatched oid";
@@ -315,7 +318,7 @@ const char* wc_GetErrorString(int error)
         return "Random Number Generator failed";
 
     case HMAC_MIN_KEYLEN_E:
-        return "FIPS Mode HMAC Minimum Key Length error";
+        return "FIPS Mode HMAC Minimum Key or Salt Length error";
 
     case RSA_PAD_E:
         return "Rsa Padding error";
@@ -646,6 +649,27 @@ const char* wc_GetErrorString(int error)
 
     case ASCON_AUTH_E:
         return "ASCON Authentication check fail";
+
+    case WC_ACCEL_INHIBIT_E:
+        return "Crypto acceleration is currently inhibited";
+
+    case BAD_INDEX_E:
+        return "Bad index";
+
+    case INTERRUPTED_E:
+        return "Process interrupted";
+
+    case MLKEM_PUB_HASH_E:
+        return "ML-KEM priv key's stored hash doesn't match encoded pub key";
+
+    case BUSY_E:
+        return "Object is busy";
+
+    case ALREADY_E:
+        return "Operation was redundant or preempted";
+
+    case SEQ_OVERFLOW_E:
+        return "Sequence counter would overflow";
 
     case MAX_CODE_E:
     case WC_SPAN1_MIN_CODE_E:

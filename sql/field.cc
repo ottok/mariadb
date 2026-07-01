@@ -4703,6 +4703,10 @@ int Field_float::store(const char *from,size_t len,CHARSET_INFO *cs)
 
 int Field_float::store(double nr)
 {
+  if (nr == 0.0)
+  {
+    nr= 0.0; // correct negative zero
+  }
   DBUG_ASSERT(marked_for_write_or_computed());
   int error= truncate_double(&nr, field_length,
                              not_fixed ? NOT_FIXED_DEC : dec,
@@ -4851,6 +4855,10 @@ int Field_double::store(const char *from,size_t len,CHARSET_INFO *cs)
 
 int Field_double::store(double nr)
 {
+  if (nr == 0.0)
+  {
+    nr= 0.0; // correct negative zero
+  }
   DBUG_ASSERT(marked_for_write_or_computed());
   int error= truncate_double(&nr, field_length,
                              not_fixed ? NOT_FIXED_DEC : dec,
@@ -8764,7 +8772,7 @@ int Field_blob::store(const char *from,size_t length,CHARSET_INFO *cs)
     DBUG_ASSERT(length <= max_data_length());
     
     new_length= length;
-    copy_length= table->in_use->variables.group_concat_max_len;
+    copy_length= table->in_use->gconcat_max_len();
     if (new_length > copy_length)
     {
       new_length= Well_formed_prefix(cs,
@@ -11743,7 +11751,7 @@ Virtual_column_info* Virtual_column_info::clone(THD *thd)
     return NULL;
   if (expr)
   {
-    dst->expr= expr->build_clone(thd);
+    dst->expr= expr->deep_copy_with_checks(thd);
     if (!dst->expr)
       return NULL;
   }

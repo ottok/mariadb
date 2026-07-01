@@ -1,12 +1,12 @@
 /* user_settings.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -45,6 +45,7 @@
 #define WOLFSSL_KEY_GEN /* RSA key gen */
 #define WOLFSSL_ASN_TEMPLATE /* default */
 #define WOLFSSL_SHA3
+#define HAVE_SNI
 
 #if 0
     #define OPENSSL_EXTRA
@@ -59,6 +60,9 @@
 /* Algorithms */
 #define HAVE_ED25519
 #define HAVE_CURVE25519
+
+/* C# wrapper has ephemeral RNG when creating curve25519 key */
+#define NO_CURVE25519_BLINDING
 
 #define HAVE_AESGCM
 #define WOLFSSL_AESGCM_STREAM
@@ -87,6 +91,7 @@
 
 /* Disable Algorithms */
 #define NO_DES3
+#define NO_DES3_TLS_SUITES
 #define NO_DSA
 #define NO_RC4
 #define NO_MD4

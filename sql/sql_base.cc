@@ -820,7 +820,7 @@ static inline bool check_field_pointers(const TABLE *table)
     leave prelocked mode if needed.
 */
 
-int close_thread_tables(THD *thd)
+int close_thread_tables(THD *thd) noexcept
 {
   TABLE *table;
   int error= 0;
@@ -957,6 +957,8 @@ int close_thread_tables(THD *thd)
 
     if (thd->locked_tables_mode == LTM_LOCK_TABLES)
     {
+      if (thd->lock)
+        (void)thd->binlog_flush_pending_rows_event(TRUE);
       error= 0;
       goto end;
     }
@@ -4722,11 +4724,12 @@ bool table_already_fk_prelocked(TABLE_LIST *tl, LEX_CSTRING *db,
 
 
 static TABLE_LIST *internal_table_exists(TABLE_LIST *global_list,
-                                         const char *table_name)
+                                         TABLE_LIST *table)
 {
   do
   {
-    if (global_list->table_name.str == table_name)
+    if (global_list->table_name.str == table->table_name.str &&
+        global_list->db.str == table->db.str)
       return global_list;
   } while ((global_list= global_list->next_global));
   return 0;
@@ -4747,8 +4750,7 @@ add_internal_tables(THD *thd, Query_tables_list *prelocking_ctx,
     /*
       Skip table if already in the list. Can happen with prepared statements
     */
-    if ((tmp= internal_table_exists(global_table_list,
-                                    tables->table_name.str)))
+    if ((tmp= internal_table_exists(global_table_list, tables)))
     {
       /*
         Use the original value for the next local, used by the
@@ -4760,7 +4762,29 @@ add_internal_tables(THD *thd, Query_tables_list *prelocking_ctx,
       continue;
     }
 
+    /*
+      Debug hook: Verify we only allocate once per internal table.
+    */
+     DBUG_EXECUTE_IF("assert_no_alloc_internal_tables", { DBUG_ASSERT(0); });
+
+    /*
+      When a prepared statement uses DEFAULT (like sequence tables) in its
+      second or further execution AND if the table is not already on statement's
+      mem_root, temporarily allow allocating on statement mem_root.
+    */
+#ifdef PROTECT_STATEMENT_MEMROOT
+    const bool read_only_mem_root= (thd->mem_root->flags & ROOT_FLAG_READ_ONLY);
+    if (read_only_mem_root)
+      thd->mem_root->flags&= ~ROOT_FLAG_READ_ONLY;
+#endif
+
     TABLE_LIST *tl= (TABLE_LIST *) thd->alloc(sizeof(TABLE_LIST));
+
+#ifdef PROTECT_STATEMENT_MEMROOT
+    if (read_only_mem_root)
+      thd->mem_root->flags|= ROOT_FLAG_READ_ONLY;
+#endif
+
     if (!tl)
       DBUG_RETURN(TRUE);
     tl->init_one_table_for_prelocking(&tables->db,
@@ -5154,12 +5178,6 @@ static bool check_lock_and_start_stmt(THD *thd,
   int error;
   thr_lock_type lock_type;
   DBUG_ENTER("check_lock_and_start_stmt");
-
-  /*
-    Prelocking placeholder is not set for TABLE_LIST that
-    are directly used by TOP level statement.
-  */
-  DBUG_ASSERT(table_list->prelocking_placeholder == TABLE_LIST::PRELOCK_NONE);
 
   /*
     TL_WRITE_DEFAULT and TL_READ_DEFAULT are supposed to be parser only
@@ -7907,12 +7925,23 @@ bool setup_fields(THD *thd, Ref_ptr_array ref_pointer_array,
 
 int setup_returning_fields(THD* thd, TABLE_LIST* table_list)
 {
+  GRANT_INFO *saved_grant;
+  int res= 0;
+
   if (!thd->lex->has_returning())
     return 0;
-  return setup_wild(thd, table_list, thd->lex->returning()->item_list, NULL,
-                    thd->lex->returning(), true)
-      || setup_fields(thd, Ref_ptr_array(), thd->lex->returning()->item_list,
-                      MARK_COLUMNS_READ, NULL, NULL, 0, THD_WHERE::RETURNING);
+
+  saved_grant= &table_list->table->grant;
+  table_list->table->grant.want_privilege|= SELECT_ACL;
+
+  res= setup_wild(thd, table_list, thd->lex->returning()->item_list, NULL,
+                     thd->lex->returning(), true)
+       || setup_fields(thd, Ref_ptr_array(), thd->lex->returning()->item_list,
+                       MARK_COLUMNS_READ, NULL, NULL, 0, THD_WHERE::RETURNING);
+
+  table_list->table->grant= *saved_grant;
+
+  return res;
 }
 
 

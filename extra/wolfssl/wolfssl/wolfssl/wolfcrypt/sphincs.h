@@ -1,12 +1,12 @@
 /* sphincs.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -83,8 +83,8 @@
 /* Structs */
 
 struct sphincs_key {
-    bool pubKeySet;
-    bool prvKeySet;
+    WC_BITFIELD pubKeySet:1;
+    WC_BITFIELD prvKeySet:1;
     byte level; /* 1,3 or 5 */
     byte optim; /* FAST_VARIANT or SMALL_VARIANT */
     byte p[SPHINCS_MAX_PUB_KEY_SIZE];

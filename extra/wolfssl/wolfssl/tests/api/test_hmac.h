@@ -1,12 +1,12 @@
 /* test_hmac.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -39,6 +39,7 @@ int test_wc_Sha256HmacFinal(void);
 int test_wc_Sha384HmacSetKey(void);
 int test_wc_Sha384HmacUpdate(void);
 int test_wc_Sha384HmacFinal(void);
+int test_tls_hmac_size_overflow(void);
 
 #define TEST_HMAC_DECLS                                 \
     TEST_DECL_GROUP("hmac", test_wc_Md5HmacSetKey),     \
@@ -55,6 +56,7 @@ int test_wc_Sha384HmacFinal(void);
     TEST_DECL_GROUP("hmac", test_wc_Sha256HmacFinal),   \
     TEST_DECL_GROUP("hmac", test_wc_Sha384HmacSetKey),  \
     TEST_DECL_GROUP("hmac", test_wc_Sha384HmacUpdate),  \
-    TEST_DECL_GROUP("hmac", test_wc_Sha384HmacFinal)
+    TEST_DECL_GROUP("hmac", test_wc_Sha384HmacFinal),   \
+    TEST_DECL_GROUP("hmac", test_tls_hmac_size_overflow)
 
 #endif /* WOLFCRYPT_TEST_HMAC_H */

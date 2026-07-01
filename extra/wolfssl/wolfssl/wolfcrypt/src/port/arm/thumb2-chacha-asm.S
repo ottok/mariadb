@@ -1,12 +1,12 @@
 /* thumb2-chacha-asm
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -92,9 +92,9 @@ wc_chacha_setkey:
 	STM	r0!, {r3, r4, r5, r6}
 	/* Next 16 bytes of key. */
 #if defined(__GNUC__) || defined(__ICCARM__) || defined(__IAR_SYSTEMS_ICC__)
-	BEQ	L_chacha_thumb2_setkey_same_keyb_ytes
+	BEQ	L_chacha_thumb2_setkey_same_key_bytes
 #else
-	BEQ.N	L_chacha_thumb2_setkey_same_keyb_ytes
+	BEQ.N	L_chacha_thumb2_setkey_same_key_bytes
 #endif
 	/* Update key pointer for next 16 bytes. */
 	ADD	r1, r1, r2
@@ -102,7 +102,7 @@ wc_chacha_setkey:
 	LDR	r4, [r1, #4]
 	LDR	r5, [r1, #8]
 	LDR	r6, [r1, #12]
-L_chacha_thumb2_setkey_same_keyb_ytes:
+L_chacha_thumb2_setkey_same_key_bytes:
 	STM	r0, {r3, r4, r5, r6}
 	POP	{r4, r5, r6, r7, pc}
 	/* Cycle Count = 60 */

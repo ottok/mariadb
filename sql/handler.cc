@@ -2072,15 +2072,17 @@ err:
                 thd->rgi_slave->is_parallel_exec);
   }
 end:
-  if (mdl_backup.ticket)
+  // reset the pointer to the ticket when it's stack instantiated
+  if (thd->backup_commit_lock == &mdl_backup)
   {
     /*
       We do not always immediately release transactional locks
       after ha_commit_trans() (see uses of ha_enable_transaction()),
       thus we release the commit blocker lock as soon as it's
       not needed.
-    */
-    thd->mdl_context.release_lock(mdl_backup.ticket);
+     */
+    if (mdl_backup.ticket)
+      thd->mdl_context.release_lock(mdl_backup.ticket);
     thd->backup_commit_lock= 0;
   }
 #ifdef WITH_WSREP
@@ -2306,11 +2308,18 @@ int ha_rollback_trans(THD *thd, bool all)
     if (is_real_trans)                          /* not a statement commit */
       thd->stmt_map.close_transient_cursors();
 
+    int err;
+    if (has_binlog_hton(ha_info) &&
+        (err= binlog_hton->rollback(binlog_hton, thd, all)))
+    {
+      my_error(ER_ERROR_DURING_COMMIT, MYF(0), err);
+      error= 1;
+    }
     for (; ha_info; ha_info= ha_info_next)
     {
-      int err;
       handlerton *ht= ha_info->ht();
-      if ((err= ht->rollback(ht, thd, all)))
+
+      if (ht != binlog_hton && (err= ht->rollback(ht, thd, all)))
       {
         // cannot happen
         my_error(ER_ERROR_DURING_ROLLBACK, MYF(0), err);
@@ -5510,11 +5519,14 @@ Alter_inplace_info::Alter_inplace_info(HA_CREATE_INFO *create_info_arg,
     : create_info(create_info_arg),
     alter_info(alter_info_arg),
     key_info_buffer(key_info_arg),
-    key_count(key_count_arg),
-    rename_keys(current_thd->mem_root),
     modified_part_info(modified_part_info_arg),
+    rename_keys(current_thd->mem_root),
+    key_count(key_count_arg),
+    online(false),
+    file_per_table(false),
     ignore(ignore_arg),
-    error_if_not_empty(error_non_empty)
+    error_if_not_empty(error_non_empty),
+    mdl_exclusive_after_prepare(false)
   {}
 
 void Alter_inplace_info::report_unsupported_error(const char *not_supported,
@@ -5646,7 +5658,12 @@ handler::ha_create(const char *name, TABLE *form, HA_CREATE_INFO *info_arg)
     info_arg->options|= HA_LEX_CREATE_GLOBAL_TMP_TABLE;
   int error= create(name, form, info_arg);
   if (!error &&
-      !(info_arg->options & (HA_LEX_CREATE_TMP_TABLE | HA_CREATE_TMP_ALTER)))
+      !(info_arg->options & (HA_LEX_CREATE_TMP_TABLE | HA_CREATE_TMP_ALTER)) &&
+      /*
+        DO not notify if not main handler.
+        So skip notifications for partitions.
+      */
+      form->file == this)
     mysql_audit_create_table(form);
   return error;
 }

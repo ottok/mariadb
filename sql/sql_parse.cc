@@ -1594,6 +1594,7 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
   NET *net= &thd->net;
   bool error= 0;
   bool do_end_of_statement= true;
+  bool log_slow_done= false;
   DBUG_ENTER("dispatch_command");
   DBUG_PRINT("info", ("command: %d %s", command,
                       (command_name[command].str != 0 ?
@@ -1820,6 +1821,7 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
   case COM_STMT_BULK_EXECUTE:
   {
     mysqld_stmt_bulk_execute(thd, packet, packet_length);
+    log_slow_done= true;
 #ifdef WITH_WSREP
     if (WSREP(thd))
     {
@@ -1831,6 +1833,7 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
   case COM_STMT_EXECUTE:
   {
     mysqld_stmt_execute(thd, packet, packet_length);
+    log_slow_done= true;
 #ifdef WITH_WSREP
     if (WSREP(thd))
     {
@@ -2007,6 +2010,7 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
       mysql_parse(thd, beginning_of_next_stmt, length, &parser_state);
 
     }
+    log_slow_done= thd->lex->sql_command == SQLCOM_EXECUTE;
 
     DBUG_PRINT("info",("query ready"));
     break;
@@ -2460,22 +2464,19 @@ resume:
   if (likely(!thd->is_error() && !thd->killed_errno()))
     mysql_audit_general(thd, MYSQL_AUDIT_GENERAL_RESULT, 0, 0);
 
-  mysql_audit_general(thd, MYSQL_AUDIT_GENERAL_STATUS,
-                      thd->get_stmt_da()->is_error() ?
-                      thd->get_stmt_da()->sql_errno() : 0,
-                      command_name[command].str);
+  if (!log_slow_done)
+    mysql_audit_general(thd, MYSQL_AUDIT_GENERAL_STATUS,
+                        thd->get_stmt_da()->is_error() ?
+                        thd->get_stmt_da()->sql_errno() : 0,
+                        command_name[command].str);
 
   thd->update_all_stats();
 
   /*
-    Write to slow query log only those statements that received via the text
-    protocol except the EXECUTE statement. The reason we do that way is
-    that for statements received via binary protocol and for the EXECUTE
-    statement, the slow statements have been already written to slow query log
-    inside the method Prepared_statement::execute().
+    for backward compatibility we only log COM_QUERY here,
+    as if COM_STMT_PREPARE or COM_FIELD_LIST couldn't be slow.
   */
-  if(command == COM_QUERY &&
-     thd->lex->sql_command != SQLCOM_EXECUTE)
+  if (command == COM_QUERY && !log_slow_done)
     log_slow_statement(thd);
   else
     delete_explain_query(thd->lex);
@@ -3999,15 +4000,13 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
       lex->exchange != NULL implies SELECT .. INTO OUTFILE and this
       requires FILE_ACL access.
     */
-    privilege_t privileges_requested= lex->exchange ? SELECT_ACL | FILE_ACL :
-                                                      SELECT_ACL;
+    if (lex->exchange && (res= check_global_access(thd, FILE_ACL, false)))
+      break;
 
     if (all_tables)
-      res= check_table_access(thd,
-                              privileges_requested,
-                              all_tables, FALSE, UINT_MAX, FALSE);
+      res= check_table_access(thd, SELECT_ACL, all_tables, 0, UINT_MAX, 0);
     else
-      res= check_access(thd, privileges_requested, any_db.str, NULL,NULL,0,0);
+      res= check_access(thd, SELECT_ACL, any_db.str, NULL,NULL, 0, 0);
 
     if (!res)
       res= execute_sqlcom_select(thd, all_tables);
@@ -8438,8 +8437,8 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
       }
     }
   }
-  /* Store the table reference preceding the current one. */
-  TABLE_LIST *UNINIT_VAR(previous_table_ref); /* The table preceding the current one. */
+  /* Store the table reference preceding the current in previous_table_ref */
+  TABLE_LIST *UNINIT_VAR(previous_table_ref);
   if (table_list.elements > 0 && likely(!ptr->sequence))
   {
     /*

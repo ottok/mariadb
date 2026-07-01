@@ -1,12 +1,12 @@
 /* opensslv.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -30,14 +30,19 @@
 #if defined(OPENSSL_EXTRA) || defined(OPENSSL_EXTRA_X509_SMALL)
 
 /* api version compatibility */
-#if defined(OPENSSL_VERSION_NUMBER) && (OPENSSL_VERSION_NUMBER == 0x009070dfL) ||\
-    defined(OPENSSL_VERSION_NUMBER) && (OPENSSL_VERSION_NUMBER == 0x0090810fL) ||\
-    defined(OPENSSL_VERSION_NUMBER) && (OPENSSL_VERSION_NUMBER == 0x10100000L) ||\
-    defined(OPENSSL_VERSION_NUMBER) && (OPENSSL_VERSION_NUMBER == 0x10001040L)
+#if defined(OPENSSL_VERSION_NUMBER) && \
+    ((OPENSSL_VERSION_NUMBER == 0x009070dfL) || \
+     (OPENSSL_VERSION_NUMBER == 0x0090810fL) || \
+     (OPENSSL_VERSION_NUMBER == 0x10100000L) || \
+     (OPENSSL_VERSION_NUMBER == 0x10001040L))
+
     /* valid version */
 #elif defined(OPENSSL_VERSION_NUMBER)
     /* unrecognized version, but continue. */
     #define WOLFSSL_OPENSSL_VERSION_NUMBER_UNRECOGNIZED
+#elif defined(WOLFSSL_QT) || defined(WOLFSSL_PYTHON)
+    /* For Qt and Python 3.8.5 compatibility */
+    #define OPENSSL_VERSION_NUMBER 0x10101000L
 #elif defined(HAVE_MOSQUITTO)
     #define OPENSSL_VERSION_NUMBER 0x10100000L
 #elif defined(WOLFSSL_APACHE_HTTPD) || defined(HAVE_LIBEST) || \
@@ -46,9 +51,6 @@
       defined(WOLFSSL_OPENSSH)
     /* For Apache httpd, Use 1.1.0 compatibility */
     #define OPENSSL_VERSION_NUMBER 0x10100003L
-#elif defined(WOLFSSL_QT) || defined(WOLFSSL_PYTHON)
-    /* For Qt and Python 3.8.5 compatibility */
-    #define OPENSSL_VERSION_NUMBER 0x10101000L
 #elif defined(WOLFSSL_HAPROXY) || defined(WOLFSSL_FFMPEG)
     #define OPENSSL_VERSION_NUMBER 0x1010000fL
 #elif defined(OPENSSL_ALL) || defined(HAVE_LIGHTY) || \

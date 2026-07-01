@@ -1,12 +1,12 @@
 /* stm32.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -30,23 +30,25 @@
 
 #ifdef STM32_HASH
 
+#include <stdint.h> /* for uint32_t */
+
 #define WOLFSSL_NO_HASH_RAW
 
 #ifdef HASH_DIGEST
     /* The HASH_DIGEST register indicates SHA224/SHA256 support */
     #define STM32_HASH_SHA2
-    #if defined(WOLFSSL_STM32H5) || defined(WOLFSSL_STM32MP13)
+    #if defined(WOLFSSL_STM32MP13) || defined(WOLFSSL_STM32H7S) || \
+        defined(WOLFSSL_STM32N6) || defined(WOLFSSL_STM32H5)
         #define HASH_CR_SIZE    103
         #define HASH_MAX_DIGEST 64 /* Up to SHA512 */
-    #else
-        #define HASH_CR_SIZE    54
-        #define HASH_MAX_DIGEST 32
-    #endif
-    #if defined(WOLFSSL_STM32MP13) || defined(WOLFSSL_STM32H7S)
+
         #define STM32_HASH_SHA512
         #define STM32_HASH_SHA512_224
         #define STM32_HASH_SHA512_256
         #define STM32_HASH_SHA384
+    #else
+        #define HASH_CR_SIZE    54
+        #define HASH_MAX_DIGEST 32
     #endif
     #if defined(WOLFSSL_STM32MP13)
         #define STM32_HASH_SHA3
@@ -56,9 +58,26 @@
     #define HASH_MAX_DIGEST 20
 #endif
 
+#ifdef WOLFSSL_STM32MP13
+    /* From stm32_hal_legacy.h, but that MP13 header has a bug in it */
+    #define HASH_AlgoSelection_MD5       HASH_ALGOSELECTION_MD5
+    #define HASH_AlgoSelection_SHA1      HASH_ALGOSELECTION_SHA1
+    #define HASH_AlgoSelection_SHA224    HASH_ALGOSELECTION_SHA224
+    #define HASH_AlgoSelection_SHA256    HASH_ALGOSELECTION_SHA256
+#endif
+
+/* These HASH HAL's have no MD5 implementation */
+#if defined(WOLFSSL_STM32MP13) || defined(WOLFSSL_STM32H7S) || \
+    defined(WOLFSSL_STM32N6) || defined(WOLFSSL_STM32H5)
+    #define STM32_NOMD5
+#endif
+
 /* Handle hash differences between CubeMX and StdPeriLib */
 #if !defined(HASH_ALGOMODE_HASH) && defined(HASH_AlgoMode_HASH)
     #define HASH_ALGOMODE_HASH HASH_AlgoMode_HASH
+#endif
+#if !defined(HASH_ALGOMODE_HMAC) && defined(HASH_AlgoMode_HMAC)
+    #define HASH_ALGOMODE_HMAC HASH_AlgoMode_HMAC
 #endif
 #if !defined(HASH_DATATYPE_8B)
     #if defined(HASH_DataType_8b)
@@ -115,6 +134,19 @@ int  wc_Stm32_Hash_Update(STM32_HASH_Context* stmCtx, word32 algo,
 int  wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
     byte* hash, word32 digestSize);
 
+#ifdef STM32_HMAC
+/* STM32 Hardware HMAC API */
+int wc_Stm32_Hmac_GetAlgoInfo(int macType, word32* algo, word32* blockSize,
+    word32* digestSize);
+int wc_Stm32_Hmac_SetKey(STM32_HASH_Context* stmCtx, int macType,
+    const byte* key, word32 keySz);
+/* HMAC Update uses the same data feeding as Hash Update */
+#define wc_Stm32_Hmac_Update(stmCtx, algo, data, len, blockSize) \
+    wc_Stm32_Hash_Update((stmCtx), (algo), (data), (len), (blockSize))
+int wc_Stm32_Hmac_Final(STM32_HASH_Context* stmCtx, word32 algo,
+    const byte* key, word32 keySz, byte* hash, word32 digestSize);
+#endif /* STM32_HMAC */
+
 #endif /* STM32_HASH */
 
 
@@ -128,13 +160,6 @@ int  wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
     #define __HAL_RCC_RNG_CLK_ENABLE __HAL_RCC_RNG1_CLK_ENABLE
     #define __HAL_RCC_HASH_CLK_ENABLE __HAL_RCC_HASH1_CLK_ENABLE
     #define __HAL_RCC_HASH_CLK_DISABLE __HAL_RCC_HASH1_CLK_DISABLE
-    /* From stm32_hal_legacy.h, but that header has a bug in it */
-    #define HASH_AlgoSelection_MD5       HASH_ALGOSELECTION_MD5
-    #define HASH_AlgoSelection_SHA1      HASH_ALGOSELECTION_SHA1
-    #define HASH_AlgoSelection_SHA224    HASH_ALGOSELECTION_SHA224
-    #define HASH_AlgoSelection_SHA256    HASH_ALGOSELECTION_SHA256
-
-    #define STM32_NOMD5 /* The HASH HAL has no MD5 implementation */
 #endif
 
 #ifndef NO_AES
@@ -142,7 +167,8 @@ int  wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
             defined(WOLFSSL_STM32F7) || defined(WOLFSSL_STM32L4) || \
             defined(WOLFSSL_STM32L5) || defined(WOLFSSL_STM32H7) || \
             defined(WOLFSSL_STM32U5) || defined(WOLFSSL_STM32H5) || \
-            defined(WOLFSSL_STM32MP13) || defined(WOLFSSL_STM32H7S))
+            defined(WOLFSSL_STM32MP13) || defined(WOLFSSL_STM32H7S) || \
+            defined(WOLFSSL_STM32N6) || defined(WOLFSSL_STM32G0))
         /* Hardware supports AES GCM acceleration */
         #define STM32_CRYPTO_AES_GCM
     #endif
@@ -158,8 +184,10 @@ int  wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
         #define STM32_HAL_V2
     #endif
     #if defined(WOLFSSL_STM32L4) || defined(WOLFSSL_STM32L5) || \
-        defined(WOLFSSL_STM32U5) || defined(WOLFSSL_STM32H5)
-        #if defined(WOLFSSL_STM32L4) || defined(WOLFSSL_STM32U5)
+        defined(WOLFSSL_STM32U5) || defined(WOLFSSL_STM32H5) || \
+        defined(WOLFSSL_STM32G0)
+        #if defined(WOLFSSL_STM32L4) || defined(WOLFSSL_STM32U5) || \
+            defined(WOLFSSL_STM32G0)
             #define STM32_CRYPTO_AES_ONLY /* crypto engine only supports AES */
         #endif
         #if defined(WOLFSSL_STM32H5)
@@ -177,7 +205,8 @@ int  wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
         (defined(WOLFSSL_STM32F7) || defined(WOLFSSL_STM32L5) || \
          defined(WOLFSSL_STM32H7) || defined(WOLFSSL_STM32U5) || \
          defined(WOLFSSL_STM32H5) || defined(WOLFSSL_STM32MP13) || \
-         defined(WOLFSSL_STM32H7S))
+         defined(WOLFSSL_STM32H7S) || defined(WOLFSSL_STM32N6) || \
+         defined(WOLFSSL_STM32G0))
         #define STM32_HAL_V2
     #endif
 
@@ -188,12 +217,16 @@ int  wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
         #define STM_CRYPT_TYPE uint8_t
     #endif
 
-    /* newer crypt HAL requires auth header size as 4 bytes (word) */
-    #if defined(CRYP_HEADERWIDTHUNIT_BYTE) && \
-        !defined(WOLFSSL_STM32MP13) && !defined(WOLFSSL_STM32H7S)
-        #define STM_CRYPT_HEADER_WIDTH 1
-    #else
-        #define STM_CRYPT_HEADER_WIDTH 4
+    /* Determine minimum AES GCM alignment supported */
+    #ifndef STM_CRYPT_HEADER_WIDTH
+        /* newer crypt HAL requires auth header size as 4 bytes (word) */
+        #if defined(CRYP_HEADERWIDTHUNIT_BYTE) && \
+            !defined(WOLFSSL_STM32MP13) && !defined(WOLFSSL_STM32H7S) && \
+            !defined(WOLFSSL_STM32N6)
+            #define STM_CRYPT_HEADER_WIDTH 1
+        #else
+            #define STM_CRYPT_HEADER_WIDTH 4
+        #endif
     #endif
 
     /* CRYPT_AES_GCM starts the IV with 2 */
@@ -201,7 +234,8 @@ int  wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
 
     struct Aes;
     #ifdef WOLFSSL_STM32_CUBEMX
-        int wc_Stm32_Aes_Init(struct Aes* aes, CRYP_HandleTypeDef* hcryp);
+        int wc_Stm32_Aes_Init(struct Aes* aes, CRYP_HandleTypeDef* hcryp,
+                int useSAES);
         void wc_Stm32_Aes_Cleanup(void);
     #else /* Standard Peripheral Library */
         int wc_Stm32_Aes_Init(struct Aes* aes, CRYP_InitTypeDef* cryptInit,
@@ -211,6 +245,17 @@ int  wc_Stm32_Hash_Final(STM32_HASH_Context* stmCtx, word32 algo,
 #endif /* !NO_AES */
 
 #endif /* STM32_CRYPTO */
+
+#if defined(WOLFSSL_STM32U5_DHUK) && !defined(WOLFSSL_STM32U5_DHUK_DEVID)
+    #define WOLFSSL_STM32U5_DHUK_DEVID 808
+    #define WOLFSSL_STM32U5_SAES_DEVID 807
+    #define WOLFSSL_STM32U5_DHUK_WRAPPED_DEVID 809
+    int wc_Stm32_Aes_Wrap(struct Aes* aes, const byte* in, word32 inSz, byte* out,
+        word32* outSz, const byte* iv, int ivSz);
+    int wc_Stm32_Aes_UnWrap(struct Aes* aes, CRYP_HandleTypeDef* hcryp, const byte* in,
+        word32 inSz, const byte* iv, int ivSz);
+    int wc_Stm32_Aes_SetDHUK_IV(struct Aes* aes, const byte* iv, int ivSz);
+#endif
 
 #if defined(WOLFSSL_STM32_PKA) && defined(HAVE_ECC)
 struct ecc_key;

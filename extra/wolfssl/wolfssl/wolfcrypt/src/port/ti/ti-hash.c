@@ -1,12 +1,12 @@
 /* port/ti/ti-hash.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -65,7 +65,7 @@
 static int hashInit(wolfssl_TI_Hash *hash)
 {
     if (!wolfSSL_TI_CCMInit())
-        return 1;
+        return WC_HW_E;
     hash->used = 0;
     hash->msg  = 0;
     hash->len  = 0;
@@ -75,18 +75,22 @@ static int hashInit(wolfssl_TI_Hash *hash)
 static int hashUpdate(wolfssl_TI_Hash *hash, const byte* data, word32 len)
 {
     void *p;
+    word32 usedSz = 0;
 
-    if ((hash== NULL) || (data == NULL))return BAD_FUNC_ARG;
+    if ((hash == NULL) || (data == NULL) || (len == 0) ||
+        !WC_SAFE_SUM_WORD32(hash->used, len, usedSz))
+        return BAD_FUNC_ARG;
 
-    if (hash->len < hash->used+len) {
+    if (hash->len < usedSz) {
         if (hash->msg == NULL) {
-            p = XMALLOC(hash->used+len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            p = XMALLOC(usedSz, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         } else {
-            p = XREALLOC(hash->msg, hash->used+len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            p = XREALLOC(hash->msg, usedSz, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         }
-        if (p == 0)return 1;
+        if (p == 0)
+            return MEMORY_E;
         hash->msg = p;
-        hash->len = hash->used+len;
+        hash->len = usedSz;
     }
     XMEMCPY(hash->msg+hash->used, data, len);
     hash->used += len;
@@ -96,6 +100,11 @@ static int hashUpdate(wolfssl_TI_Hash *hash, const byte* data, word32 len)
 static int hashGetHash(wolfssl_TI_Hash *hash, byte* result, word32 algo, word32 hsize)
 {
     uint32_t h[16];
+
+    if (hash == NULL || result == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
 #ifndef TI_DUMMY_BUILD
     wolfSSL_TI_lockCCM();
     ROM_SHAMD5Reset(SHAMD5_BASE);
@@ -109,9 +118,6 @@ static int hashGetHash(wolfssl_TI_Hash *hash, byte* result, word32 algo, word32 
 
     XMEMSET(h, 0, sizeof(h));
 #endif
-    if (result == NULL) {
-        return BAD_FUNC_ARG;
-    }
     XMEMCPY(result, h, hsize);
 
     return 0;
@@ -119,6 +125,8 @@ static int hashGetHash(wolfssl_TI_Hash *hash, byte* result, word32 algo, word32 
 
 static int hashCopy(wolfssl_TI_Hash *src, wolfssl_TI_Hash *dst)
 {
+    if (src == NULL || dst == NULL)
+        return BAD_FUNC_ARG;
     /* only copy hash, zero the rest of the struct to avoid double-free */
     dst->msg = NULL;
     dst->used = 0;
@@ -129,44 +137,46 @@ static int hashCopy(wolfssl_TI_Hash *src, wolfssl_TI_Hash *dst)
 
 static int hashFinal(wolfssl_TI_Hash *hash, byte* result, word32 algo, word32 hsize)
 {
-    hashGetHash(hash, result, algo, hsize);
+    int ret;
+
+    if (hash == NULL || result == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    ret = hashGetHash(hash, result, algo, hsize);
     XFREE(hash->msg, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     hashInit(hash);
-    return 0;
+
+    return ret;
 }
 
 static int hashHash(const byte* data, word32 len, byte* hash, word32 algo, word32 hsize)
 {
     int ret = 0;
-#ifdef WOLFSSL_SMALL_STACK
-    wolfssl_TI_Hash* hash_desc;
-#else
-    wolfssl_TI_Hash  hash_desc[1];
-#endif
+    WC_DECLARE_VAR(hash_desc, wolfssl_TI_Hash, 1, 0);
 
-#ifdef WOLFSSL_SMALL_STACK
-    hash_desc = (wolfssl_TI_Hash*)XMALLOC(sizeof(wolfssl_TI_Hash), NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    if (hash_desc == NULL)
-        return MEMORY_E;
-#endif
+    WC_ALLOC_VAR_EX(hash_desc, wolfssl_TI_Hash, 1, NULL,
+        DYNAMIC_TYPE_TMP_BUFFER, return MEMORY_E);
 
     if ((ret = hashInit(hash_desc)) != 0) {
         WOLFSSL_MSG("Hash Init failed");
     }
     else {
-        hashUpdate(hash_desc, data, len);
-        hashFinal(hash_desc, hash, algo, hsize);
+        ret = hashUpdate(hash_desc, data, len);
+        if (ret == 0) {
+            ret = hashFinal(hash_desc, hash, algo, hsize);
+        }
     }
 
-#ifdef WOLFSSL_SMALL_STACK
-    XFREE(hash_desc, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-#endif
+    WC_FREE_VAR_EX(hash_desc, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
     return ret;
 }
 
 static int hashFree(wolfssl_TI_Hash *hash)
 {
+    if (hash == NULL)
+        return BAD_FUNC_ARG;
     XFREE(hash->msg, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     hashInit(hash);
     return 0;
@@ -176,7 +186,7 @@ static int hashFree(wolfssl_TI_Hash *hash)
 WOLFSSL_API int wc_InitMd5_ex(Md5* md5, void* heap, int devId)
 {
     if (md5 == NULL)
-        return 1;
+        return BAD_FUNC_ARG;
     (void)heap;
     (void)devId;
     return hashInit((wolfssl_TI_Hash *)md5);
@@ -222,7 +232,7 @@ WOLFSSL_API void wc_Md5Free(Md5* md5)
 WOLFSSL_API int wc_InitSha_ex(Md5* sha, void* heap, int devId)
 {
     if (sha == NULL)
-        return 1;
+        return BAD_FUNC_ARG;
     (void)heap;
     (void)devId;
     return hashInit((wolfssl_TI_Hash *)sha);
@@ -268,7 +278,7 @@ WOLFSSL_API void wc_ShaFree(Sha* sha)
 WOLFSSL_API int wc_InitSha224_ex(Sha224* sha224, void* heap, int devId)
 {
     if (sha224 == NULL)
-        return 1;
+        return BAD_FUNC_ARG;
     (void)heap;
     (void)devId;
     return hashInit((wolfssl_TI_Hash *)sha224);
@@ -314,7 +324,7 @@ WOLFSSL_API void wc_Sha224Free(Sha224* sha224)
 WOLFSSL_API int wc_InitSha256_ex(Sha256* sha256, void* heap, int devId)
 {
     if (sha256 == NULL)
-        return 1;
+        return BAD_FUNC_ARG;
     (void)heap;
     (void)devId;
     return hashInit((wolfssl_TI_Hash *)sha256);

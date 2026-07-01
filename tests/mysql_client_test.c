@@ -20568,12 +20568,12 @@ static void test_proxy_header_tcp(const char *ipaddr, int port)
   MYSQL_RES *result;
   int family = (strchr(ipaddr,':') == NULL)?AF_INET:AF_INET6;
   char query[256];
-  char text_header[256];
+  char text_header[256], bad_text_header[256];
   char addr_bin[16];
-  v2_proxy_header v2_header;
-  void *header_data[2];
-  size_t header_lengths[2];
-  int i;
+  v2_proxy_header v2_header, bad_v2_header;
+  void *header_data[4];
+  size_t header_lengths[4];
+  size_t i;
 
   // normalize IPv4-mapped IPv6 addresses, e.g ::ffff:127.0.0.2 to 127.0.0.2
   const char *normalized_addr= strncmp(ipaddr, "::ffff:", 7)?ipaddr : ipaddr + 7;
@@ -20611,9 +20611,19 @@ static void test_proxy_header_tcp(const char *ipaddr, int port)
 
   header_data[0]= text_header;
   header_data[1]= &v2_header;
+  header_data[2]= bad_text_header;
+  header_data[3]= &bad_v2_header;
 
   header_lengths[0]= strlen(text_header);
   header_lengths[1]= family == AF_INET ? 28 : 52;
+  header_lengths[2]= sizeof(text_header)-4;
+  header_lengths[3]= header_lengths[1];
+
+  memset(bad_text_header, ' ', sizeof(bad_text_header));
+  memcpy(bad_text_header, text_header, header_lengths[1]-6);
+
+  bad_v2_header= v2_header;
+  bad_v2_header.len= 0;
 
   for (i = 0; i < 2; i++)
   {
@@ -20624,9 +20634,8 @@ static void test_proxy_header_tcp(const char *ipaddr, int port)
     DIE_UNLESS(m);
     mysql_optionsv(m, MARIADB_OPT_PROXY_HEADER, header_data[i], header_lengths[i]);
     if (!mysql_real_connect(m, opt_host, "u", "password", NULL, opt_port, opt_unix_socket, 0))
-    {
-       DIE_UNLESS(0);
-    }
+      DIE(0);
+
     rc= mysql_query(m, "select host from information_schema.processlist WHERE ID = connection_id()");
     myquery(rc);
     /* get the result */
@@ -20643,6 +20652,21 @@ static void test_proxy_header_tcp(const char *ipaddr, int port)
      /* do "dirty" close, to get aborted message in error log.*/
       mariadb_cancel(m);
     }
+
+    mysql_close(m);
+  }
+  for (; i < array_elements(header_data); i++)
+  {
+    MYSQL *m;
+    m = mysql_client_init(NULL);
+    DIE_UNLESS(m);
+    mysql_optionsv(m, MARIADB_OPT_PROXY_HEADER, header_data[i], header_lengths[i]);
+    if (mysql_real_connect(m, opt_host, "u", "password", NULL, opt_port, opt_unix_socket, 0))
+      DIE(0);
+    printf("pass %zu error %i - %s\n", i, mysql_errno(m),
+           mysql_error(m));
+    DIE_IF(i == 2 && mysql_errno(m) != ER_UNKNOWN_ERROR);
+    DIE_IF(i == 3 && mysql_errno(m) != ER_UNKNOWN_ERROR);
     mysql_close(m);
   }
   sprintf(query,"DROP USER 'u'@'%s'",normalized_addr);
@@ -22787,6 +22811,112 @@ insert into t1 values(\
   rc= mysql_query(mysql, "DROP TABLE t1");
   myquery(rc);
 }
+
+static void run_tests_36678(
+            const char *test,
+            const char *table_stmt,
+            const char *insert_stmt,
+            const char *view_stmt,
+            const char *proc_stmt,
+            const char *call_stmt)
+{
+  MYSQL_STMT *stmt;
+  MYSQL_BIND bind;
+  int rc;
+
+  myheader(test);
+
+  if ((table_stmt && table_stmt[0] != '\0' &&
+      (rc= mysql_query_or_error(mysql, table_stmt))))
+    DIE("Table creation failed");
+
+  if ((insert_stmt && insert_stmt[0] != '\0' &&
+      (rc= mysql_query_or_error(mysql, insert_stmt))))
+    DIE("Table insertion failed");
+
+  if ((rc= mysql_query_or_error(mysql, view_stmt)) ||
+      (rc= mysql_query_or_error(mysql, proc_stmt)))
+    DIE("View/Proc creation failed");
+
+  stmt= mysql_stmt_init(mysql);
+  rc= mysql_stmt_prepare(stmt, call_stmt, strlen(call_stmt));
+  DIE_UNLESS(rc == 0);
+
+  memset(&bind, 0, sizeof bind);
+  rc= mysql_stmt_execute(stmt);
+  DIE_UNLESS(rc == 0);
+
+  mysql_stmt_close(stmt);
+  DIE_UNLESS(mysql_query_or_error(mysql, "DROP PROCEDURE proc") == 0);
+  DIE_UNLESS(mysql_query_or_error(mysql, "DROP VIEW v") == 0);
+  if (table_stmt && table_stmt[0] != '\0')
+    DIE_UNLESS(mysql_query_or_error(mysql, "DROP TABLE t") == 0);
+}
+
+static void test_mdev_36678()
+{
+  const char *proc_stmt1= "CREATE OR REPLACE PROCEDURE proc(IN i VARCHAR(1)) \
+    SELECT * FROM v v WHERE CASE WHEN i THEN v.l LIKE CONCAT ('',i) END;";
+  const char *proc_stmt2= "CREATE OR REPLACE PROCEDURE proc(IN `IN_listc2` VARCHAR(1000), IN `IN_limitfrom` INT, IN `IN_limitto` INT) \
+    BEGIN \
+      SELECT * \
+      FROM \
+      v `t` \
+      WHERE \
+      CASE WHEN IN_listc2 IS NOT NULL THEN `t`.`listc2` LIKE CONCAT(\"%\", IN_listc2, \"%\") ELSE TRUE END \
+      LIMIT \
+        IN_limitfrom, \
+        IN_limitto; \
+    END;";
+
+  const char *table_stmt1= "CREATE OR REPLACE TABLE t (c INT) ENGINE=MyISAM;";
+  const char *table_stmt2= "CREATE OR REPLACE TABLE t (c INT) ENGINE=InnoDB;";
+  const char *table_stmt3= "create or replace table t \
+    ( id int auto_increment primary key, col1 int, col2 int, col3 int);";
+
+  const char *insert_stmt1= "insert into t select null, round(rand()*100), \
+    round(rand()*100), round(rand()*100) from seq_1_to_100;";
+
+  const char *view_stmt1= "CREATE OR REPLACE VIEW v \
+    AS SELECT GROUP_CONCAT('', '') AS l FROM (SELECT 1) AS a;";
+  const char *view_stmt2= "CREATE OR REPLACE VIEW v \
+    AS SELECT GROUP_CONCAT('', '') AS l FROM t;";
+  const char *view_stmt3= "create or replace view v as \
+    select col1 as taskcid, sum(col3) as suc3, \
+    group_concat('-',case when `col3` is not null then `col2` else '' end,'-' separator ',') AS `listc2` \
+    from t \
+    group by col1;";
+
+  const char *view_stmt11= "CREATE OR REPLACE VIEW v \
+    AS SELECT CONCAT('', '') AS l FROM (SELECT 1) AS a;";
+  const char *view_stmt21= "CREATE OR REPLACE VIEW v \
+    AS SELECT CONCAT('', '') AS l FROM t;";
+  const char *view_stmt31= "create or replace view v as \
+    select col1 as taskcid, col3 as suc3, \
+    CONCAT('-', CASE WHEN col3 IS NOT NULL THEN col2 ELSE '' END, '-') AS `listc2` \
+    from t;";
+
+  run_tests_36678("View with GROUP_CONCAT created from derived table-",
+                  "", "", view_stmt1, proc_stmt1, "call proc(0)");
+  run_tests_36678("View with CONCAT created from derived table-",
+                  "", "", view_stmt11, proc_stmt1, "call proc(0)");
+
+  run_tests_36678("View with GROUP_CONCAT created from MyISAM table-",
+                  table_stmt1, "", view_stmt2, proc_stmt1, "call proc(0)");
+  run_tests_36678("View with CONCAT created from MyISAM table-",
+                  table_stmt1, "", view_stmt21, proc_stmt1, "call proc(0)");
+
+  run_tests_36678("View with GROUP_CONCAT created from InnoDB table-",
+                  table_stmt2, "", view_stmt2, proc_stmt1, "call proc(0)");
+  run_tests_36678("View with CONCAT created from InnoDB table-",
+                  table_stmt2, "", view_stmt21, proc_stmt1, "call proc(0)");
+
+  run_tests_36678("View with GROUP_CONCAT created from table with data-",
+                  table_stmt3, insert_stmt1, view_stmt3, proc_stmt2, "call proc(null, 0, 25)");
+  run_tests_36678("View with CONCAT created from table with data-",
+                  table_stmt3, insert_stmt1, view_stmt31, proc_stmt2, "call proc(null, 0, 25)");
+}
+
 #endif // EMBEDDED_LIBRARY
 
 /*
@@ -22956,6 +23086,39 @@ static void test_cache_metadata()
   mysql_stmt_close(stmt);
 }
 
+static void test_mdev_38242()
+{
+  MYSQL_STMT *stmt;
+  int        rc;
+  MYSQL_BIND param[2];
+  int val1=117440769, val2;
+  my_bool null1=0, null2=1;
+
+  myheader("test_mdev_38242");
+
+  stmt= mysql_stmt_init(mysql);
+  check_stmt(stmt);
+
+  rc= mysql_stmt_prepare(stmt, STRING_WITH_LEN("SELECT 1 WHERE ?=0 AND ?=0"));
+  check_execute(stmt, rc);
+
+  bzero(param, sizeof(param));
+
+  param[0].buffer= &val1;
+  param[0].buffer_type= MYSQL_TYPE_LONG;
+  param[0].is_null= &null1;
+  param[1].buffer= &val2;
+  param[1].buffer_type= MYSQL_TYPE_LONG;
+  param[1].is_null= &null2;
+
+  rc= mysql_stmt_bind_param(stmt, param);
+  check_execute(stmt, rc);
+
+  stmt->send_types_to_server= 0;
+  rc= mysql_stmt_execute(stmt);
+  check_execute_r(stmt, rc);
+  mysql_stmt_close(stmt);
+}
 
 static struct my_tests_st my_tests[]= {
   { "test_mdev_20516", test_mdev_20516 },
@@ -23266,6 +23429,7 @@ static struct my_tests_st my_tests[]= {
   { "test_connect_autocommit", test_connect_autocommit},
   { "test_execute_direct", test_execute_direct },
   { "test_cache_metadata", test_cache_metadata},
+  { "test_mdev_38242", test_mdev_38242 },
 #ifndef EMBEDDED_LIBRARY
   { "test_mdev_24411", test_mdev_24411},
   { "test_mdev_34718_bu", test_mdev_34718_bu },
@@ -23274,6 +23438,7 @@ static struct my_tests_st my_tests[]= {
   { "test_mdev_34718_ad", test_mdev_34718_ad },
   { "test_mdev_34958", test_mdev_34958 },
   { "test_mdev_32086", test_mdev_32086 },
+  { "test_mdev_36678", test_mdev_36678 },
 #endif
   { 0, 0 }
 };

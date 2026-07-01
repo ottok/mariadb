@@ -1,12 +1,12 @@
 /* xil-versal-trng.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -197,7 +197,7 @@ int wc_VersalTrngReset(void)
  */
 int wc_VersalTrngSelftest(void)
 {
-    return versal_trng_selftest() == XTRNGPSV_SUCCESS ? 0 : -1;
+    return versal_trng_selftest() == XTRNGPSV_SUCCESS ? 0 : WC_HW_E;
 }
 
 /**
@@ -213,6 +213,10 @@ int wc_VersalTrngGenerate(byte* output, word32 sz)
     /* The TRNG always generates exactly 32bytes of output */
     byte buf[XTRNGPSV_SEC_STRENGTH_BYTES];
     word32 bytes_generated = 0;
+
+    if (output == NULL)
+        return BAD_FUNC_ARG;
+
     do {
         word32 bytes_left = sz - bytes_generated;
         word32 bytes_required =
@@ -223,11 +227,13 @@ int wc_VersalTrngGenerate(byte* output, word32 sz)
                                          XTRNGPSV_FALSE);
         if (xret) {
             WOLFSSL_MSG_EX("XTrngpsv_Generate() returned 0x%08x", xret);
+            ForceZero(buf, sizeof(buf));
             return WC_HW_E;
         }
         XMEMCPY(&output[bytes_generated], buf, bytes_required);
         bytes_generated += bytes_required;
     } while (bytes_generated < sz);
+    ForceZero(buf, sizeof(buf));
     return 0;
 }
 

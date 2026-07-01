@@ -1222,9 +1222,12 @@ store_len:
 				columns that were updated. */
 
 				for (i = 0; i < update->n_fields; i++) {
+					const upd_field_t* fld =
+						upd_get_nth_field(update, i);
+					if (upd_fld_is_virtual_col(fld))
+						continue;
 					const ulint field_no
-						= upd_get_nth_field(update, i)
-						->field_no;
+						= fld->field_no;
 					if (field_no >= index->n_fields
 					    || dict_index_get_nth_field(
 						    index, field_no)->col
@@ -1524,7 +1527,7 @@ trx_undo_update_rec_get_update(
 				&field_no);
 			first_v_col = false;
 			/* This column could be dropped or no longer indexed */
-			if (field_no >= index->n_fields) {
+			if (field_no == FIL_NULL) {
 				/* Mark this is no longer needed */
 				upd_field->field_no = REC_MAX_N_FIELDS;
 
@@ -2229,6 +2232,21 @@ static dberr_t trx_undo_prev_version(const rec_t *rec, dict_index_t *index,
 	byte* buf;
 
 	if (row_upd_changes_field_size_or_external(index, offsets, update)) {
+		/* When CHECK TABLE ... EXTENDED checks for orphan
+		records in secondary indexes, it normally covers some
+		history that is already being purged. This is safe as
+		long as the undo log records have not been freed yet.
+
+		However, BLOBs are only safe to access as long as the
+		purge_sys.view does not permit them to be freed. The
+		check.latch will freeze the purge_sys.view by blocking
+		purge_sys.clone_oldest_view() at the start of
+		trx_purge() or by blocking purge_sys.batch_cleanup()
+		at the end of trx_purge(). */
+		if (check.is_extended() && purge_sys.is_purgeable(trx_id)) {
+			return DB_SUCCESS;
+		}
+
 		/* We should confirm the existence of disowned external data,
 		if the previous version record is delete marked. If the trx_id
 		of the previous record is seen by purge view, we should treat

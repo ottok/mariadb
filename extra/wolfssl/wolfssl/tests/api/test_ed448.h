@@ -1,12 +1,12 @@
 /* test_ed448.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -27,6 +27,7 @@
 int test_wc_ed448_make_key(void);
 int test_wc_ed448_init(void);
 int test_wc_ed448_sign_msg(void);
+int test_wc_ed448_sign_msg_pubonly_fails(void);
 int test_wc_ed448_import_public(void);
 int test_wc_ed448_import_private_key(void);
 int test_wc_ed448_export(void);
@@ -40,6 +41,7 @@ int test_wc_Ed448PrivateKeyToDer(void);
     TEST_DECL_GROUP("ed448", test_wc_ed448_make_key),             \
     TEST_DECL_GROUP("ed448", test_wc_ed448_init),                 \
     TEST_DECL_GROUP("ed448", test_wc_ed448_sign_msg),             \
+    TEST_DECL_GROUP("ed448", test_wc_ed448_sign_msg_pubonly_fails), \
     TEST_DECL_GROUP("ed448", test_wc_ed448_import_public),        \
     TEST_DECL_GROUP("ed448", test_wc_ed448_import_private_key),   \
     TEST_DECL_GROUP("ed448", test_wc_ed448_export),               \

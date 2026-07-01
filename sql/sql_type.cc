@@ -596,7 +596,7 @@ Year::Year(longlong value, bool unsigned_flag, uint length)
 }
 
 
-uint Year::year_precision(const Item *item) const
+uint Year::year_precision(const Item *item)
 {
   return item->type_handler() == &type_handler_year2 ? 2 : 4;
 }
@@ -703,7 +703,7 @@ Interval_DDhhmmssff::push_warning_wrong_or_truncated_value(THD *thd,
 }
 
 
-uint Interval_DDhhmmssff::fsp(THD *thd, Item *item)
+decimal_digits_t Interval_DDhhmmssff::fsp(THD *thd, Item *item)
 {
   switch (item->cmp_type()) {
   case INT_RESULT:
@@ -8077,6 +8077,12 @@ void Type_handler_string_result::Item_param_set_param_func(Item_param *param,
                                                            ulong len) const
 {
   param->set_param_str(pos, len);
+}
+
+
+void Type_handler_null::Item_param_set_param_func(Item_param *param,
+                                                  uchar **pos, ulong len) const
+{
 }
 
 

@@ -1,12 +1,12 @@
 /* aes_xts_asm.S */
 /*
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -108,7 +108,7 @@ L_AES_XTS_init_aesni_tweak_aes_enc_block_last:
 .section	__DATA,__data
 #endif /* __APPLE__ */
 L_aes_xts_gc_xts:
-.long	0x87,0x1,0x1,0x1
+.long	0x00000087,0x00000001,0x00000001,0x00000001
 #ifndef __APPLE__
 .text
 .globl	AES_XTS_encrypt_aesni
@@ -1444,7 +1444,6 @@ AES_XTS_init_avx1:
 .p2align	4
 _AES_XTS_init_avx1:
 #endif /* __APPLE__ */
-        movl	%edx, %eax
         vmovdqu	(%rdi), %xmm0
         # aes_enc_block
         vpxor	(%rsi), %xmm0, %xmm0
@@ -1466,13 +1465,13 @@ _AES_XTS_init_avx1:
         vaesenc	%xmm2, %xmm0, %xmm0
         vmovdqu	144(%rsi), %xmm2
         vaesenc	%xmm2, %xmm0, %xmm0
-        cmpl	$11, %eax
+        cmpl	$11, %edx
         vmovdqu	160(%rsi), %xmm2
         jl	L_AES_XTS_init_avx1_tweak_aes_enc_block_last
         vaesenc	%xmm2, %xmm0, %xmm0
         vmovdqu	176(%rsi), %xmm3
         vaesenc	%xmm3, %xmm0, %xmm0
-        cmpl	$13, %eax
+        cmpl	$13, %edx
         vmovdqu	192(%rsi), %xmm2
         jl	L_AES_XTS_init_avx1_tweak_aes_enc_block_last
         vaesenc	%xmm2, %xmm0, %xmm0
@@ -1492,7 +1491,7 @@ L_AES_XTS_init_avx1_tweak_aes_enc_block_last:
 .section	__DATA,__data
 #endif /* __APPLE__ */
 L_avx1_aes_xts_gc_xts:
-.long	0x87,0x1,0x1,0x1
+.long	0x00000087,0x00000001,0x00000001,0x00000001
 #ifndef __APPLE__
 .text
 .globl	AES_XTS_encrypt_avx1

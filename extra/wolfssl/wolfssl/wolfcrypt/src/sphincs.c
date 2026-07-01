@@ -1,12 +1,12 @@
 /* sphincs.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -131,19 +131,17 @@ int wc_sphincs_sign_msg(const byte* in, word32 inLen, byte* out, word32 *outLen,
 
     if (ret == 0) {
         ret = wolfSSL_liboqsRngMutexLock(rng);
+        if (ret == 0) {
+            if (OQS_SIG_sign(oqssig, out, &localOutLen, in, inLen, key->k)
+                == OQS_ERROR) {
+                ret = BAD_FUNC_ARG;
+            }
+        }
+        if (ret == 0) {
+            *outLen = (word32)localOutLen;
+        }
+        wolfSSL_liboqsRngMutexUnlock();
     }
-
-    if ((ret == 0) &&
-        (OQS_SIG_sign(oqssig, out, &localOutLen, in, inLen, key->k)
-         == OQS_ERROR)) {
-        ret = BAD_FUNC_ARG;
-    }
-
-    if (ret == 0) {
-        *outLen = (word32)localOutLen;
-    }
-
-    wolfSSL_liboqsRngMutexUnlock();
 
     if (oqssig != NULL) {
         OQS_SIG_free(oqssig);

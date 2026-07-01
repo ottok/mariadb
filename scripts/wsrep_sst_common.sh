@@ -24,10 +24,19 @@ trap 'exit 3'  INT QUIT TERM
 OS="$(uname)"
 
 # Setting the paths for some utilities on CentOS
-export PATH="${PATH:+$PATH:}/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="${PATH:+$PATH:}/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
 if [ "$OS" != 'Darwin' ]; then
-    export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}/usr/local/lib:/usr/lib:/lib:/opt/lib"
+    export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}/usr/local/lib:/lib:/usr/lib:/opt/lib"
 fi
+
+safe()
+{
+  if [[ "${!1}" = *[\ \'\`\$]* ]]; then
+    wsrep_log_error "Invalid value for $1: ${!1}"
+    exit 21
+  fi
+  echo "${!1}"
+}
 
 commandex()
 {

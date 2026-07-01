@@ -866,7 +866,7 @@ class Year
 protected:
   uint m_year;
   bool m_truncated;
-  uint year_precision(const Item *item) const;
+  static uint year_precision(const Item *item);
 public:
   Year(): m_year(0), m_truncated(false) { }
   Year(longlong value, bool unsigned_flag, uint length);
@@ -1495,7 +1495,7 @@ class Interval_DDhhmmssff: public Temporal
   }
 public:
   // Get fractional second precision from an Item
-  static uint fsp(THD *thd, Item *item);
+  static decimal_digits_t fsp(THD *thd, Item *item);
   /*
     Maximum useful HOUR value:
     TIMESTAMP'0001-01-01 00:00:00' + '87649415:59:59' = '9999-12-31 23:59:59'
@@ -6998,6 +6998,8 @@ public:
                                    const Bit_addr &bit,
                                    const Column_definition_attributes *attr,
                                    uint32 flags) const override;
+  void Item_param_set_param_func(Item_param *param,
+                                 uchar **pos, ulong len) const override;
 };
 
 

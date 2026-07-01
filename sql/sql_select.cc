@@ -7328,7 +7328,7 @@ update_ref_and_keys(THD *thd, DYNAMIC_ARRAY *keyuse,JOIN_TAB *join_tab,
 {
   uint	and_level,i;
   KEY_FIELD *key_fields, *end, *field;
-  uint sz;
+  size_t sz;
   uint m= MY_MAX(select_lex->max_equal_elems,1);
   DBUG_ENTER("update_ref_and_keys");
   DBUG_PRINT("enter", ("normal_tables: %llx", normal_tables));
@@ -17802,7 +17802,7 @@ change_cond_ref_to_const(THD *thd, I_List<COND_CMP> *save_list,
   if (can_change_cond_ref_to_const(func, right_item, left_item,
                                    field_value_owner, field, value))
   {
-    Item *tmp=value->clone_item(thd);
+    Item *tmp=value->clone_constant(thd);
     if (tmp)
     {
       tmp->collation.set(right_item->collation);
@@ -17832,7 +17832,7 @@ change_cond_ref_to_const(THD *thd, I_List<COND_CMP> *save_list,
   else if (can_change_cond_ref_to_const(func, left_item, right_item,
                                         field_value_owner, field, value))
   {
-    Item *tmp= value->clone_item(thd);
+    Item *tmp= value->clone_constant(thd);
     if (tmp)
     {
       tmp->collation.set(left_item->collation);
@@ -20538,7 +20538,7 @@ bool Create_tmp_table::finalize(THD *thd,
       /* Get the value from default_values */
       if (orig_field->is_null_in_record(orig_field->table->s->default_values))
         field->set_null();
-      else
+      else if (orig_field->default_value == NULL)
       {
         /*
           Copy default value. We have to use field_conv() for copy, instead of

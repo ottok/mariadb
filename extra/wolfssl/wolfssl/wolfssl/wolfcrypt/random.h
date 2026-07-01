@@ -1,12 +1,12 @@
 /* random.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -133,6 +133,12 @@
     #else
         typedef unsigned long ProviderHandle;
     #endif
+
+    #ifdef WIN_REUSE_CRYPT_HANDLE
+        /* called from wolfCrypt_Init() and wolfCrypt_Cleanup() */
+        WOLFSSL_LOCAL int  wc_WinCryptHandleInit(void);
+        WOLFSSL_LOCAL void wc_WinCryptHandleCleanup(void);
+    #endif
 #endif
 
 #ifndef WC_RNG_TYPE_DEFINED /* guard on redeclaration */
@@ -150,6 +156,10 @@ struct OS_Seed {
         ProviderHandle handle;
     #else
         int fd;
+    #if defined(WOLFSSL_KEEP_RNG_SEED_FD_OPEN)
+        WC_BITFIELD seedFdOpen:1;
+        WC_BITFIELD keepSeedFdOpen:1;
+    #endif
     #endif
     #if defined(WOLF_CRYPTO_CB)
         int devId;
@@ -157,8 +167,95 @@ struct OS_Seed {
 };
 
 #ifdef HAVE_HASHDRBG
+
+/* The security strength for the RNG is the target number of bits of
+ * entropy you are looking for in a seed. */
+/* RNG_SECURITY_STRENGTH is unprefixed for backward compat. */
+#ifndef RNG_SECURITY_STRENGTH
+    /* SHA-256 requires a minimum of 256-bits of entropy. */
+    #define RNG_SECURITY_STRENGTH (256)
+#endif
+
+/* wolfentropy.h will define for HAVE_ENTROPY_MEMUSE */
+#ifdef HAVE_ENTROPY_MEMUSE
+    #include <wolfssl/wolfcrypt/wolfentropy.h>
+#else
+    /* Maximum entropy bits that can be produced. */
+    #define MAX_ENTROPY_BITS    256
+#endif
+
+/* ENTROPY_SCALE_FACTOR is unprefixed for backward compat. */
+#ifndef ENTROPY_SCALE_FACTOR
+    /* The entropy scale factor should be the whole number inverse of the
+     * minimum bits of entropy per bit of NDRNG output. */
+    #if defined(HAVE_AMD_RDSEED)
+        /* This will yield a SEED_SZ of 16kb. Since nonceSz will be 0,
+         * we'll add an additional 8kb on top.
+         *
+         * See "AMD RNG ESV Public Use Document".  Version 0.7 of October 24,
+         * 2024 specifies 0.656 to 1.312 bits of entropy per 128 bit block of
+         * RDSEED output, depending on CPU family.
+         */
+        #define ENTROPY_SCALE_FACTOR  (512)
+    #elif defined(HAVE_INTEL_RDSEED) || defined(HAVE_INTEL_RDRAND)
+        /* The value of 2 applies to Intel's RDSEED which provides about
+         * 0.5 bits minimum of entropy per bit. The value of 4 gives a
+         * conservative margin for FIPS. */
+        #if defined(HAVE_FIPS) && defined(HAVE_FIPS_VERSION) && \
+            (HAVE_FIPS_VERSION >= 2)
+            #define ENTROPY_SCALE_FACTOR (2*4)
+        #else
+            /* Not FIPS, but Intel RDSEED, only double. */
+            #define ENTROPY_SCALE_FACTOR (2)
+        #endif
+    #elif defined(HAVE_FIPS) && defined(HAVE_FIPS_VERSION) && \
+        (HAVE_FIPS_VERSION >= 2)
+        /* If doing a FIPS build without a specific scale factor, default
+         * to 4. This will give 1024 bits of entropy. More is better, but
+         * more is also slower. */
+        #define ENTROPY_SCALE_FACTOR (4)
+    #else
+        /* Setting the default to 1. */
+        #define ENTROPY_SCALE_FACTOR (1)
+    #endif
+#endif /* !ENTROPY_SCALE_FACTOR */
+
+/* SEED_BLOCK_SZ is unprefixed for backward compat. */
+#ifndef SEED_BLOCK_SZ
+    /* The seed block size, is the size of the output of the underlying NDRNG.
+     * This value is used for testing the output of the NDRNG. */
+    #if defined(HAVE_AMD_RDSEED)
+        /* AMD's RDSEED instruction works in 128-bit blocks read 64-bits
+        * at a time. */
+        #define SEED_BLOCK_SZ (sizeof(word64)*2)
+    #elif defined(HAVE_INTEL_RDSEED) || defined(HAVE_INTEL_RDRAND)
+        /* RDSEED outputs in blocks of 64-bits. */
+        #define SEED_BLOCK_SZ sizeof(word64)
+    #else
+        /* Setting the default to 4. */
+        #define SEED_BLOCK_SZ 4
+    #endif
+#endif
+
+#define WC_DRBG_SEED_BLOCK_SZ SEED_BLOCK_SZ
+
+#define WC_DRBG_SEED_SZ        (RNG_SECURITY_STRENGTH*ENTROPY_SCALE_FACTOR/8)
+
+/* The maximum seed size will be the seed size plus a seed block for the
+ * test, and an additional half of the seed size. This additional half
+ * is in case the user does not supply a nonce. A nonce will be obtained
+ * from the NDRNG. */
+#define WC_DRBG_MAX_SEED_SZ    (WC_DRBG_SEED_SZ + WC_DRBG_SEED_SZ/2 + \
+                                SEED_BLOCK_SZ)
+
+#define RNG_HEALTH_TEST_CHECK_SIZE (WC_SHA256_DIGEST_SIZE * 4)
+
 struct DRBG_internal {
+    #ifdef WORD64_AVAILABLE
+    word64 reseedCtr;
+    #else
     word32 reseedCtr;
+    #endif
     byte V[DRBG_SEED_LEN];
     byte C[DRBG_SEED_LEN];
     void* heap;
@@ -167,21 +264,67 @@ struct DRBG_internal {
 #endif
 #ifdef WOLFSSL_SMALL_STACK_CACHE
     wc_Sha256 sha256;
+    byte seed_scratch[DRBG_SEED_LEN];
+    byte digest_scratch[WC_SHA256_DIGEST_SIZE];
 #endif
 };
+#endif /* HAVE_HASHDRBG */
+
+/* RNG health states */
+#define WC_DRBG_NOT_INIT     0
+#define WC_DRBG_OK           1
+#define WC_DRBG_FAILED       2
+#define WC_DRBG_CONT_FAILED  3
+#ifdef WC_RNG_BANK_SUPPORT
+    #define WC_DRBG_BANKREF  4 /* Marks the WC_RNG as a ref to a wc_rng_bank,
+                                * with no usable DRBG of its own.
+                                */
 #endif
 
 /* RNG context */
 struct WC_RNG {
     struct OS_Seed seed;
     void* heap;
-#ifdef HAVE_HASHDRBG
-    /* Hash-based Deterministic Random Bit Generator */
-    struct DRBG* drbg;
-#if defined(WOLFSSL_NO_MALLOC) && !defined(WOLFSSL_STATIC_MEMORY)
-    struct DRBG_internal drbg_data;
-#endif
     byte status;
+
+#if defined(WC_RNG_BANK_SUPPORT) || defined(HAVE_HASHDRBG)
+
+#ifdef HAVE_ANONYMOUS_INLINE_AGGREGATES
+    union {
+#endif
+
+    #ifdef WC_RNG_BANK_SUPPORT
+        struct wc_rng_bank *bankref;
+    #endif
+
+    #ifdef HAVE_HASHDRBG
+        #ifdef HAVE_ANONYMOUS_INLINE_AGGREGATES
+        struct {
+        #endif
+            /* Hash-based Deterministic Random Bit Generator */
+            struct DRBG* drbg;
+        #if defined(WOLFSSL_NO_MALLOC) && !defined(WOLFSSL_STATIC_MEMORY)
+            struct DRBG_internal drbg_data;
+        #endif
+        #ifdef WOLFSSL_SMALL_STACK_CACHE
+            /* Scratch buffers -- all preallocated by _InitRng(). */
+            struct DRBG_internal *drbg_scratch;
+            byte *health_check_scratch;
+            byte *newSeed_buf;
+        #endif
+        #ifdef HAVE_ANONYMOUS_INLINE_AGGREGATES
+        };
+        #endif
+    #endif /* HAVE_HASHDRBG */
+
+#ifdef HAVE_ANONYMOUS_INLINE_AGGREGATES
+    };
+#endif
+
+#endif /* WC_RNG_BANK_SUPPORT || HAVE_HASHDRBG */
+
+#if defined(HAVE_GETPID) && !defined(WOLFSSL_NO_GETPID)
+    pid_t pid;
 #endif
 #ifdef WOLFSSL_ASYNC_CRYPT
     WC_ASYNC_DEV asyncDev;
@@ -199,7 +342,7 @@ struct WC_RNG {
     #define RNG WC_RNG
 #endif
 
-WOLFSSL_API int wc_GenerateSeed(OS_Seed* os, byte* seed, word32 sz);
+WOLFSSL_API int wc_GenerateSeed(OS_Seed* os, byte* output, word32 sz);
 
 
 #ifdef HAVE_WNR
@@ -222,7 +365,7 @@ WOLFSSL_API int  wc_InitRng_ex(WC_RNG* rng, void* heap, int devId);
 WOLFSSL_API int  wc_InitRngNonce(WC_RNG* rng, byte* nonce, word32 nonceSz);
 WOLFSSL_API int  wc_InitRngNonce_ex(WC_RNG* rng, byte* nonce, word32 nonceSz,
                                     void* heap, int devId);
-WOLFSSL_ABI WOLFSSL_API int wc_RNG_GenerateBlock(WC_RNG* rng, byte* b, word32 sz);
+WOLFSSL_ABI WOLFSSL_API int wc_RNG_GenerateBlock(WC_RNG* rng, byte* output, word32 sz);
 WOLFSSL_API int  wc_RNG_GenerateByte(WC_RNG* rng, byte* b);
 WOLFSSL_API int  wc_FreeRng(WC_RNG* rng);
 #else
@@ -235,7 +378,12 @@ WOLFSSL_API int  wc_FreeRng(WC_RNG* rng);
 /* some older compilers do not like macro function in expression */
 #define wc_RNG_GenerateBlock(rng, b, s) NOT_COMPILED_IN
 #else
-#define wc_RNG_GenerateBlock(rng, b, s) ({(void)rng; (void)b; (void)s; NOT_COMPILED_IN;})
+#ifdef _MSC_VER
+#define wc_RNG_GenerateBlock(rng, b, s) (int)(NOT_COMPILED_IN)
+#else
+#define wc_RNG_GenerateBlock(rng, b, s) \
+        ({(void)rng; (void)b; (void)s; NOT_COMPILED_IN;})
+#endif
 #endif
 #define wc_RNG_GenerateByte(rng, b) NOT_COMPILED_IN
 #define wc_FreeRng(rng) (void)NOT_COMPILED_IN
@@ -246,33 +394,20 @@ WOLFSSL_API int  wc_FreeRng(WC_RNG* rng);
 #endif
 
 #ifdef HAVE_HASHDRBG
-    WOLFSSL_API int wc_RNG_DRBG_Reseed(WC_RNG* rng, const byte* entropy,
-                                       word32 entropySz);
+    WOLFSSL_API int wc_RNG_DRBG_Reseed(WC_RNG* rng, const byte* seed,
+                                       word32 seedSz);
     WOLFSSL_API int wc_RNG_TestSeed(const byte* seed, word32 seedSz);
     WOLFSSL_API int wc_RNG_HealthTest(int reseed,
-                                        const byte* entropyA, word32 entropyASz,
-                                        const byte* entropyB, word32 entropyBSz,
+                                        const byte* seedA, word32 seedASz,
+                                        const byte* seedB, word32 seedBSz,
                                         byte* output, word32 outputSz);
     WOLFSSL_API int wc_RNG_HealthTest_ex(int reseed,
                                         const byte* nonce, word32 nonceSz,
-                                        const byte* entropyA, word32 entropyASz,
-                                        const byte* entropyB, word32 entropyBSz,
+                                        const byte* seedA, word32 seedASz,
+                                        const byte* seedB, word32 seedBSz,
                                         byte* output, word32 outputSz,
                                         void* heap, int devId);
 #endif /* HAVE_HASHDRBG */
-
-#ifdef HAVE_ENTROPY_MEMUSE
-/* Maximum entropy bits that can be produced. */
-#define MAX_ENTROPY_BITS    256
-
-/* For generating data for assessment. */
-WOLFSSL_API int wc_Entropy_GetRawEntropy(unsigned char* raw, int cnt);
-WOLFSSL_API int wc_Entropy_Get(int bits, unsigned char* entropy, word32 len);
-WOLFSSL_API int wc_Entropy_OnDemandTest(void);
-
-WOLFSSL_LOCAL int Entropy_Init(void);
-WOLFSSL_LOCAL void Entropy_Final(void);
-#endif
 
 #ifdef __cplusplus
     } /* extern "C" */

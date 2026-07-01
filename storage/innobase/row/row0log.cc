@@ -2691,8 +2691,8 @@ all_done:
 	ut_ad((mrec == NULL) == (index->online_log->head.bytes == 0));
 
 #ifdef UNIV_DEBUG
-	if (next_mrec_end == index->online_log->head.block
-	    + srv_sort_buf_size) {
+	if (next_mrec_end - srv_sort_buf_size
+	    == index->online_log->head.block) {
 		/* If tail.bytes == 0, next_mrec_end can also be at
 		the end of tail.block. */
 		if (index->online_log->tail.bytes == 0) {
@@ -2706,8 +2706,8 @@ all_done:
 			ut_ad(index->online_log->tail.blocks
 			      > index->online_log->head.blocks);
 		}
-	} else if (next_mrec_end == index->online_log->tail.block
-		   + index->online_log->tail.bytes) {
+	} else if (next_mrec_end - index->online_log->tail.bytes
+		   == index->online_log->tail.block) {
 		ut_ad(next_mrec == index->online_log->tail.block
 		      + index->online_log->head.bytes);
 		ut_ad(index->online_log->tail.blocks == 0);
@@ -2806,10 +2806,10 @@ process_next_block:
 			ut_ad(0);
 			goto unexpected_eof;
 		} else {
-			memcpy(index->online_log->head.buf, mrec,
-			       ulint(mrec_end - mrec));
-			mrec_end += ulint(index->online_log->head.buf - mrec);
+			const size_t s = size_t(mrec_end - mrec);
+			memcpy(index->online_log->head.buf, mrec, s);
 			mrec = index->online_log->head.buf;
+			mrec_end = mrec + s;
 			goto process_next_block;
 		}
 	}
@@ -3601,8 +3601,8 @@ all_done:
 	ut_ad((mrec == NULL) == (index->online_log->head.bytes == 0));
 
 #ifdef UNIV_DEBUG
-	if (next_mrec_end == index->online_log->head.block
-	    + srv_sort_buf_size) {
+	if (next_mrec_end - srv_sort_buf_size
+            == index->online_log->head.block) {
 		/* If tail.bytes == 0, next_mrec_end can also be at
 		the end of tail.block. */
 		if (index->online_log->tail.bytes == 0) {
@@ -3616,8 +3616,8 @@ all_done:
 			ut_ad(index->online_log->tail.blocks
 			      > index->online_log->head.blocks);
 		}
-	} else if (next_mrec_end == index->online_log->tail.block
-		   + index->online_log->tail.bytes) {
+	} else if (next_mrec_end - index->online_log->tail.bytes
+                   == index->online_log->tail.block) {
 		ut_ad(next_mrec == index->online_log->tail.block
 		      + index->online_log->head.bytes);
 		ut_ad(index->online_log->tail.blocks == 0);
@@ -3698,10 +3698,10 @@ process_next_block:
 			ut_ad(0);
 			goto unexpected_eof;
 		} else {
-			memcpy(index->online_log->head.buf, mrec,
-			       ulint(mrec_end - mrec));
-			mrec_end += ulint(index->online_log->head.buf - mrec);
+			const size_t s = size_t(mrec_end - mrec);
+			memcpy(index->online_log->head.buf, mrec, s);
 			mrec = index->online_log->head.buf;
+			mrec_end = mrec + s;
 			goto process_next_block;
 		}
 	}

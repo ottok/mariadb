@@ -549,7 +549,7 @@ bool Item_func_json_exists::fix_length_and_dec()
 bool Item_func_json_exists::val_bool()
 {
   json_engine_t je;
-  uint array_counters[JSON_DEPTH_LIMIT];
+  uint array_counters[JSON_DEPTH_LIMIT]= {0};
 
   String *js= args[0]->val_json(&tmp_js);
 
@@ -614,7 +614,7 @@ bool Json_path_extractor::extract(String *str, Item *item_js, Item *item_jp,
 {
   String *js= item_js->val_json(&tmp_js);
   int error= 0;
-  uint array_counters[JSON_DEPTH_LIMIT];
+  uint array_counters[JSON_DEPTH_LIMIT]= {0};
 
   if (!parsed)
   {
@@ -1368,7 +1368,7 @@ bool Item_func_json_contains::val_bool()
 
   if (arg_count>2) /* Path specified. */
   {
-    uint array_counters[JSON_DEPTH_LIMIT];
+    uint array_counters[JSON_DEPTH_LIMIT]= {0};
     if (!path.parsed)
     {
       String *s_p= args[2]->val_str(&tmp_path);
@@ -1505,7 +1505,7 @@ longlong Item_func_json_contains_path::val_int()
   result= !mode_one;
   for (n_arg=2; n_arg < arg_count; n_arg++)
   {
-    uint array_counters[JSON_DEPTH_LIMIT];
+    uint array_counters[JSON_DEPTH_LIMIT]= {0};
     json_path_with_flags *c_path= paths + n_arg - 2;
     if (!c_path->parsed)
     {
@@ -1895,7 +1895,7 @@ String *Item_func_json_array_append::val_str(String *str)
 
   for (n_arg=1, n_path=0; n_arg < arg_count; n_arg+=2, n_path++)
   {
-    uint array_counters[JSON_DEPTH_LIMIT];
+    uint array_counters[JSON_DEPTH_LIMIT]= {0};
     json_path_with_flags *c_path= paths + n_path;
     if (!c_path->parsed)
     {
@@ -2025,7 +2025,7 @@ String *Item_func_json_array_insert::val_str(String *str)
 
   for (n_arg=1, n_path=0; n_arg < arg_count; n_arg+=2, n_path++)
   {
-    uint array_counters[JSON_DEPTH_LIMIT];
+    uint array_counters[JSON_DEPTH_LIMIT]= {0};
     json_path_with_flags *c_path= paths + n_path;
     const char *item_pos;
     uint n_item;
@@ -2821,7 +2821,7 @@ longlong Item_func_json_length::val_int()
   String *js= args[0]->val_json(&tmp_js);
   json_engine_t je;
   uint length= 0;
-  uint array_counters[JSON_DEPTH_LIMIT];
+  uint array_counters[JSON_DEPTH_LIMIT]= {0};
   int err;
 
   if ((null_value= args[0]->null_value))
@@ -3060,7 +3060,7 @@ String *Item_func_json_insert::val_str(String *str)
 
   for (n_arg=1, n_path=0; n_arg < arg_count; n_arg+=2, n_path++)
   {
-    uint array_counters[JSON_DEPTH_LIMIT];
+    uint array_counters[JSON_DEPTH_LIMIT]= {0};
     json_path_with_flags *c_path= paths + n_path;
     const char *v_to;
     const json_path_step_t *lp;
@@ -3314,7 +3314,7 @@ String *Item_func_json_remove::val_str(String *str)
 
   for (n_arg=1, n_path=0; n_arg < arg_count; n_arg++, n_path++)
   {
-    uint array_counters[JSON_DEPTH_LIMIT];
+    uint array_counters[JSON_DEPTH_LIMIT]= {0};
     json_path_with_flags *c_path= paths + n_path;
     const char *rem_start= 0, *rem_end;
     const json_path_step_t *lp;
@@ -3526,7 +3526,7 @@ String *Item_func_json_keys::val_str(String *str)
   json_engine_t je;
   String *js= args[0]->val_json(&tmp_js);
   uint n_keys= 0;
-  uint array_counters[JSON_DEPTH_LIMIT];
+  uint array_counters[JSON_DEPTH_LIMIT]= {0};
 
   if ((args[0]->null_value))
     goto null_return;
@@ -4103,9 +4103,10 @@ Item_func_json_objectagg::fix_fields(THD *thd, Item **ref)
   result.set_charset(collation.collation);
   result_field= 0;
   null_value= 1;
-  max_length= (uint32)(thd->variables.group_concat_max_len
-              / collation.collation->mbminlen
-              * collation.collation->mbmaxlen);
+  max_length= (uint32) MY_MIN((ulonglong) thd->gconcat_max_len()
+                               / collation.collation->mbminlen
+                               * collation.collation->mbmaxlen, UINT_MAX32);
+
 
   if (check_sum_func(thd, ref))
     return TRUE;
