@@ -1,3 +1,37 @@
+mariadb-10.6 (1:10.6.27-0ubuntu0.22.04.1) UNRELEASED; urgency=medium
+
+  * SECURITY UPDATE: New upstream maintenance release 10.6.27 (LP: #nnnnnnnn)
+    includes several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.6/10.6.27
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-49261
+    - CVE-2026-48165
+    - CVE-2026-48163
+  * Previous upstream maintenance 10.6.26 included several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.6/10.6.26
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-44173
+    - CVE-2026-44172
+    - CVE-2026-44171
+    - CVE-2026-44170
+    - CVE-2026-44168
+  * Previous upstream maintenance 10.6.26 included several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.6/10.6.25
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-3494
+  * Previous upstream maintenance 10.6.24 included several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.6/10.6.24
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-21968
+    - CVE-2025-13699
+  * New upstream versions included fixes for these Debian tracked issues:
+    - MDEV-39479 Mroonga hangs on invalid index flag (Closes: #1110683)
+  * Salsa CI: Disable running `gbp setup-gitattributes`
+  * Salsa CI: Disable the uscan job as it is incompatible with MariaDB
+  * Use archive.mariadb.org as official watch source
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 01 Jul 2026 18:18:18 +0000
+
 mariadb-10.6 (1:10.6.23-0ubuntu0.22.04.1) jammy; urgency=medium
 
   * New upstream maintenance release 10.6.23. For details about fixes please see
@@ -318,7 +352,7 @@ mariadb-10.5 (1:10.5.10-1) unstable; urgency=medium
     - CVE-2021-2022
   * Update symbols to include new one from MariaDB Client 3.1.13
   * Misc Salsa-CI fixes for better QA
-  * Innotop: Add support for MariaDB 10.5+ (Closes: #941986)
+  * Innotop: Add support for MariaDB 10.5 (Closes: #941986)
   * Bugfix: Ensure upstream 1556 patch is included fully (Closes: 987231)
   * Bugfix: Don't create /usr/share/mysql/*.flag files (Closes: #985870)
   * Misc spelling fixes
@@ -1120,8 +1154,8 @@ mariadb-10.1 (10.1.24-1) unstable; urgency=medium
 
   * New upstream version 10.1.24, includes fixes for the following
     high-priority regression fixes:
-    + MDEV-11842: Fail to insert on a table where a field has no default
-    + MDEV-12075: innodb_use_fallocate does not work in MariaDB
+     MDEV-11842: Fail to insert on a table where a field has no default
+     MDEV-12075: innodb_use_fallocate does not work in MariaDB
       Server 10.1.21
   * Refresh patches on top of MariaDB 10.1.24
   * Fix FTBFS in tests: Add cracklib-runtime to Build-Depends
