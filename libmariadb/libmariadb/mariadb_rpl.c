@@ -260,7 +260,7 @@ static void rpl_set_string_and_len(MARIADB_STRING *s,
   s->length= len;
 }
 
-static uint8_t rpl_alloc_set_string_and_len(MARIADB_RPL_EVENT *event, 
+static uint8_t rpl_alloc_set_string_and_len(MARIADB_RPL_EVENT *event,
                                             MARIADB_STRING *s,
                                             void *buffer,
                                             size_t len)
@@ -430,7 +430,7 @@ mariadb_rpl_extract_rows(MARIADB_RPL *rpl,
           column->val.ull= uint1korr(pos);
           pos++;
           break;
-        case MYSQL_TYPE_YEAR: 
+        case MYSQL_TYPE_YEAR:
           column->val.ull= uint1korr(pos++) + 1900;
           break;
         case MYSQL_TYPE_SHORT:
@@ -438,12 +438,12 @@ mariadb_rpl_extract_rows(MARIADB_RPL *rpl,
           column->val.ull= uint2korr(pos);
           pos+= 2;
           break;
-        case MYSQL_TYPE_INT24: 
+        case MYSQL_TYPE_INT24:
           column->val.ll= sint3korr(pos);
           column->val.ull= uint3korr(pos);
           pos+= 3;
           break;
-        case MYSQL_TYPE_LONG: 
+        case MYSQL_TYPE_LONG:
           column->val.ll= sint4korr(pos);
           column->val.ull= uint4korr(pos);
           pos+= 4;
@@ -467,7 +467,7 @@ mariadb_rpl_extract_rows(MARIADB_RPL *rpl,
           dec.len= sizeof(buf) / sizeof(decimal_digit);
 
           bin_size= decimal_bin_size(precision, scale);
-          bin2decimal((char *)pos, &dec, precision, scale); 
+          bin2decimal((char *)pos, &dec, precision, scale);
           decimal2string(&dec, str, &s_len);
           pos+= bin_size;
 
@@ -503,22 +503,19 @@ mariadb_rpl_extract_rows(MARIADB_RPL *rpl,
         }
         case MYSQL_TYPE_TIMESTAMP:
         {
-          column->val.ull= uint4korr(pos);
+          column->val.ts.second= myisam_uint4korr(pos);
+          column->val.ts.second_part= 0;
           pos+= 4;
           break;
         }
         case MYSQL_TYPE_TIMESTAMP2:
         {
-          char tmp[20];
-          uint32_t p1= uint4korr(pos);
-          uint8_t f_len= *metadata++;
-          uint32_t p2;
+          MYSQL_TIME tm;
+          column->val.ts.second= myisam_uint4korr(pos);
           pos+= 4;
-          p2= (uint32_t)uintNkorr(f_len, pos);
-          pos+= f_len;
-          sprintf(tmp, "%d.%d", p1, p2);
-          if (rpl_alloc_set_string_and_len(row_event, &column->val.str, tmp, strlen(tmp)))
-            goto mem_error;
+          pos+= ma_rpl_get_second_part(&tm, pos, metadata);
+          metadata++;
+          column->val.ts.second_part= tm.second_part;
           break;
         }
         case MYSQL_TYPE_DATE:
@@ -530,7 +527,7 @@ mariadb_rpl_extract_rows(MARIADB_RPL *rpl,
           tm->month= (int)(d_val / 32 % 16);
           tm->day= d_val % 32;
           tm->time_type= MYSQL_TIMESTAMP_DATE;
-          break; 
+          break;
         }
         case MYSQL_TYPE_TIME2:
         {
@@ -564,7 +561,7 @@ mariadb_rpl_extract_rows(MARIADB_RPL *rpl,
           tm->day= (unsigned int)date_part % (1 << 5);
           tm->month= (unsigned int)(date_part >> 5) % 13;
           tm->year= (unsigned int)(date_part >> 5) / 13;
- 
+
           tm->second= time_part % (1 << 6);
           tm->minute= (time_part >> 6) % (1 << 6);
           tm->hour= (uint32_t)(time_part >> 12);
@@ -637,7 +634,7 @@ mariadb_rpl_extract_rows(MARIADB_RPL *rpl,
           tm->minute= (unsigned int)(t/100) % 100;
           tm->second= (unsigned int)t % 100;
           tm->time_type= MYSQL_TIMESTAMP_TIME;
-          break;  
+          break;
         }
         case MYSQL_TYPE_DATETIME:
         {
@@ -655,7 +652,7 @@ mariadb_rpl_extract_rows(MARIADB_RPL *rpl,
           tm->time_type= MYSQL_TIMESTAMP_DATETIME;
           break;
         }
-       
+
 
         default:
           break;
@@ -766,7 +763,7 @@ int STDCALL mariadb_rpl_open(MARIADB_RPL *rpl)
       */
      unsigned char *p, buffer[1024];
      size_t len= MIN(strlen(rpl->host), 255);
-    
+
      p= buffer;
      int4store(p, rpl->server_id);
      p+= 4;
@@ -918,7 +915,7 @@ static uint32_t get_compression_info(const unsigned char *buf,
 
   buf++;
 
-  /* Attention: we can't use uint*korr, here, we need myisam macros since 
+  /* Attention: we can't use uint*korr, here, we need myisam macros since
      length is stored in high byte first order
    */
   switch(*header_size) {
@@ -1049,7 +1046,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
         if (rpl->mysql->net.read_pos[1 + 4] == HEARTBEAT_LOG_EVENT)
           continue;
       }
- 
+
       if (!(rpl_event->raw_data= ma_alloc_root(&rpl_event->memroot, pkt_len)))
         goto mem_error;
 
@@ -1126,7 +1123,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
 
     /******************************************************************
      Binlog event header:
-  
+
      All binary log events have the same header:
       - uint32_t timestamp: creation time
       - uint8_t event_type: type code of the event
@@ -1140,7 +1137,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
       - uint16_t flags:     flags
 
      The size of binlog event header must match the header size returned
-     by FORMAT_DESCIPTION_EVENT. In version 4 it is always 19. 
+     by FORMAT_DESCIPTION_EVENT. In version 4 it is always 19.
     ********************************************************************/
     RPL_CHECK_POS(ev, ev_end, RPL_EVENT_HEADER_SIZE);
     rpl_event->timestamp= uint4korr(ev);
@@ -1176,7 +1173,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
       ev+= 1;
       rpl_event->event.heartbeat.flags= uint2korr(ev);
       ev+= 2;
-      
+
       break;
 
     case BEGIN_LOAD_QUERY_EVENT:
@@ -1304,7 +1301,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
       len= ev_end - ev - 5;
       rpl_set_string_and_len(&rpl_event->event.format_description.post_header_lengths, ev, len);
       memset(rpl->post_header_len, 0, ENUM_END_EVENT);
-      memcpy(rpl->post_header_len, rpl_event->event.format_description.post_header_lengths.str, 
+      memcpy(rpl->post_header_len, rpl_event->event.format_description.post_header_lengths.str,
              MIN(len, ENUM_END_EVENT));
 
       ev+= len;
@@ -1395,9 +1392,9 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
            byte<n>   netadata{metadata_size]
            byte<n>   bit fields, indicating which column can be null
                      n= (column_count + 7) / 8;
-          
+
            if (remaining_bytes)
-               byte<n>  optional metadata 
+               byte<n>  optional metadata
       */
       RPL_CHECK_POST_HEADER_LEN(ev, ev_end, TABLE_MAP_EVENT);
 
@@ -1472,7 +1469,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
       rpl_set_string_and_len(&rpl_event->event.uservar.name, ev, len);
       ev+= len;
       RPL_CHECK_POS(ev, ev_end, 1);
-      if (!(rpl_event->event.uservar.is_null= (uint8)*ev)) 
+      if (!(rpl_event->event.uservar.is_null= (uint8)*ev))
       {
         ev++;
         RPL_CHECK_POS(ev, ev_end, 9);
@@ -1561,7 +1558,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
       rpl_set_string_and_len(&rpl_event->event.rotate.filename, ev, len);
       if (ma_set_rpl_filename(rpl, ev, len))
         goto mem_error;
-      
+
       ev+= len;
       break;
 
@@ -1606,7 +1603,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
       break;
 
     case STOP_EVENT:
-      /* 
+      /*
          STOP_EVENT - server shutdown or crash. It's always the last written
          event after shutdown or after resuming from crash.
 
@@ -1619,7 +1616,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
 
     case PREVIOUS_GTIDS_LOG_EVENT:
     {
-      /* 
+      /*
          PREVIOUS_GTID_LOG_EVENT (MySQL only):
 
          8-bytes, always zero ?!
@@ -1731,10 +1728,10 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
 
       RPL_CHECK_POS(ev, ev_end, rpl_event->event.gtid_list.gtid_cnt * 16);
       /* Payload */
-      if (rpl_event->event.gtid_list.gtid_cnt)        
+      if (rpl_event->event.gtid_list.gtid_cnt)
       {
         uint32_t i;
-        if (!(rpl_event->event.gtid_list.gtid= 
+        if (!(rpl_event->event.gtid_list.gtid=
          (MARIADB_GTID *)ma_calloc_root(&rpl_event->memroot,
                                         sizeof(MARIADB_GTID) * rpl_event->event.gtid_list.gtid_cnt)))
           goto mem_error;
@@ -1920,7 +1917,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
         crc= crc32(crc, checksum_start, (uint32_t)(ev_end - checksum_start - 4));
         if (rpl_event->checksum != (uint32_t)crc)
         {
-          rpl_set_error(rpl, CR_ERR_CHECKSUM_VERIFICATION_ERROR, SQLSTATE_UNKNOWN, 0, 
+          rpl_set_error(rpl, CR_ERR_CHECKSUM_VERIFICATION_ERROR, SQLSTATE_UNKNOWN, 0,
                        RPL_ERR_POS(rpl),
                        rpl_event->checksum, (uint32_t)crc);
           mariadb_free_rpl_event(rpl_event);

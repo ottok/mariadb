@@ -1,12 +1,12 @@
 /* wolfcrypt/benchmark/benchmark.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -105,6 +105,9 @@ void bench_dh(int useDeviceID);
 void bench_mlkem(int type);
 void bench_lms(void);
 void bench_xmss(int hash);
+#ifdef WOLFSSL_HAVE_SLHDSA
+void bench_slhdsa(enum SlhDsaParam param);
+#endif
 void bench_ecc_curve(int curveId);
 void bench_eccMakeKey(int useDeviceID, int curveId);
 void bench_ecc(int useDeviceID, int curveId);
@@ -112,8 +115,8 @@ void bench_eccEncrypt(int curveId);
 void bench_sm2(int useDeviceID);
 void bench_curve25519KeyGen(int useDeviceID);
 void bench_curve25519KeyAgree(int useDeviceID);
-void bench_ed25519KeyGen(void);
-void bench_ed25519KeySign(void);
+void bench_ed25519KeyGen(int useDeviceID);
+void bench_ed25519KeySign(int useDeviceID);
 void bench_curve448KeyGen(void);
 void bench_curve448KeyAgree(void);
 void bench_ed448KeyGen(void);
@@ -144,4 +147,3 @@ void bench_stats_print(void);
 
 
 #endif /* WOLFCRYPT_BENCHMARK_H */
-

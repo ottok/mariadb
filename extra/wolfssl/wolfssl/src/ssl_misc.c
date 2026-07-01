@@ -1,12 +1,12 @@
 /* ssl_misc.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -30,7 +30,6 @@
 #if defined(OPENSSL_EXTRA) && !defined(WOLFCRYPT_ONLY)
 #ifndef NO_BIO
 
-#ifdef WOLFSSL_NO_FSEEK
 /* Amount of memory to allocate/add. */
 #define READ_BIO_FILE_CHUNK     128
 
@@ -82,8 +81,18 @@ static int wolfssl_read_bio_file(WOLFSSL_BIO* bio, char** data)
             }
             else {
                 /* No space left for more data to be read - add a chunk. */
+            #ifdef WOLFSSL_NO_REALLOC
+                p = (char*)XMALLOC(ret + READ_BIO_FILE_CHUNK, NULL,
+                    DYNAMIC_TYPE_TMP_BUFFER);
+                if (p != NULL) {
+                    XMEMCPY(p, mem, ret);
+                    XFREE(mem, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+                    mem = NULL;
+                }
+            #else
                 p = (char*)XREALLOC(mem, ret + READ_BIO_FILE_CHUNK, NULL,
                     DYNAMIC_TYPE_TMP_BUFFER);
+            #endif
                 if (p == NULL) {
                     sz = MEMORY_E;
                     break;
@@ -109,7 +118,6 @@ static int wolfssl_read_bio_file(WOLFSSL_BIO* bio, char** data)
     *data = mem;
     return ret;
 }
-#endif
 
 /* Read exactly the required amount into a newly allocated buffer.
  *
@@ -171,15 +179,7 @@ static int wolfssl_read_bio(WOLFSSL_BIO* bio, char** data, int* dataSz,
         }
         *memAlloced = 0;
     }
-#ifndef WOLFSSL_NO_FSEEK
     /* Get pending or, when a file BIO, get length of file. */
-    else if ((sz = wolfSSL_BIO_get_len(bio)) > 0) {
-        ret = wolfssl_read_bio_len(bio, sz, data);
-        if (ret > 0) {
-            *memAlloced = 1;
-        }
-    }
-#else
     else if ((sz = wolfSSL_BIO_pending(bio)) > 0) {
         ret = wolfssl_read_bio_len(bio, sz, data);
         if (ret > 0) {
@@ -192,7 +192,6 @@ static int wolfssl_read_bio(WOLFSSL_BIO* bio, char** data, int* dataSz,
             *memAlloced = 1;
         }
     }
-#endif
     else {
         WOLFSSL_ERROR_MSG("No data read from bio");
         *memAlloced = 0;
@@ -231,7 +230,15 @@ static int wolfssl_file_len(XFILE fp, long* fileSz)
         /* Get file offset at end of file. */
         curr = (long)XFTELL(fp);
         if (curr < 0) {
-            ret = WOLFSSL_BAD_FILE;
+#ifdef ESPIPE
+            if (errno == ESPIPE) {
+                WOLFSSL_ERROR_MSG("wolfssl_file_len: file is a pipe");
+                *fileSz = 0;
+                ret = WOLFSSL_BAD_FILETYPE;
+            }
+            else
+#endif
+                ret = WOLFSSL_BAD_FILE;
         }
     }
     /* Move to end of file. */

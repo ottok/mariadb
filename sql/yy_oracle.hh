@@ -35,8 +35,8 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_ORA_HOME_BUILDBOT_GIT_MKDIST_SQL_YY_ORACLE_HH_INCLUDED
-# define YY_ORA_HOME_BUILDBOT_GIT_MKDIST_SQL_YY_ORACLE_HH_INCLUDED
+#ifndef YY_ORA_HOME_BUILDBOT_TARBALL_DOCKER_BUILD_MKDIST_SQL_YY_ORACLE_HH_INCLUDED
+# define YY_ORA_HOME_BUILDBOT_TARBALL_DOCKER_BUILD_MKDIST_SQL_YY_ORACLE_HH_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -823,7 +823,7 @@ extern int ORAdebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 200 "/home/buildbot/git/sql/sql_yacc.yy"
+#line 200 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
 
   int  num;
   ulong ulong_num;
@@ -957,7 +957,7 @@ union YYSTYPE
   enum plsql_cursor_attr_t plsql_cursor_attr;
   privilege_t privilege;
 
-#line 961 "/home/buildbot/git/mkdist/sql/yy_oracle.hh"
+#line 961 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.hh"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -971,4 +971,4 @@ typedef union YYSTYPE YYSTYPE;
 int ORAparse (THD *thd);
 
 
-#endif /* !YY_ORA_HOME_BUILDBOT_GIT_MKDIST_SQL_YY_ORACLE_HH_INCLUDED  */
+#endif /* !YY_ORA_HOME_BUILDBOT_TARBALL_DOCKER_BUILD_MKDIST_SQL_YY_ORACLE_HH_INCLUDED  */

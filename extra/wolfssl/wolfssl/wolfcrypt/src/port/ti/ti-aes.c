@@ -1,12 +1,12 @@
 /* port/ti/ti-aes.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -73,7 +73,7 @@ static int AesSetIV(Aes* aes, const byte* iv)
 int wc_AesSetKey(Aes* aes, const byte* key, word32 len, const byte* iv, int dir)
 {
     if (!wolfSSL_TI_CCMInit())
-        return 1;
+        return WC_HW_E;
     if ((aes == NULL) || (key == NULL))
         return BAD_FUNC_ARG;
     if (!((dir == AES_ENCRYPTION) || (dir == AES_DECRYPTION)))
@@ -231,6 +231,9 @@ int wc_AesCtrEncrypt(Aes* aes, byte* out, const byte* in, word32 sz)
     char *tmp; /* (char *)aes->tmp, for short */
     int ret;
 
+    if ((aes == NULL) || (out == NULL) || (in == NULL))
+        return BAD_FUNC_ARG;
+
     tmp = (char *)aes->tmp;
     if (aes->left) {
         if ((aes->left + sz) >= WC_AES_BLOCK_SIZE) {
@@ -350,7 +353,7 @@ static int AesAuthArgCheck(Aes* aes, byte* out, const byte* in, word32 inSz,
     case 16:
         *M = AES_CFG_CCM_M_16; break;
     default:
-        return 1;
+        return BAD_FUNC_ARG;
     }
 
     switch (nonceSz) {
@@ -371,7 +374,7 @@ static int AesAuthArgCheck(Aes* aes, byte* out, const byte* in, word32 inSz,
     case 14:
         *L = AES_CFG_CCM_L_1; break;
     default:
-        return 1;
+        return BAD_FUNC_ARG;
     }
     return 0;
 }
@@ -468,6 +471,9 @@ static int AesAuthEncrypt(Aes* aes, byte* out, const byte* in, word32 inSz,
         authTagSz, &M, &L);
     if (ret == WC_NO_ERR_TRACE(BAD_FUNC_ARG)) {
         return ret;
+    }
+    if ((authIn == NULL) && (authInSz > 0)) {
+        return BAD_FUNC_ARG;
     }
 
     AesAuthSetIv(aes, nonce, nonceSz, L, mode);
@@ -569,6 +575,9 @@ static int AesAuthDecrypt(Aes* aes, byte* out, const byte* in, word32 inSz,
     if (ret == WC_NO_ERR_TRACE(BAD_FUNC_ARG)) {
         return ret;
     }
+    if ((authIn == NULL) && (authInSz > 0)) {
+        return BAD_FUNC_ARG;
+    }
 
     AesAuthSetIv(aes, nonce, nonceSz, L, mode);
 
@@ -583,7 +592,7 @@ static int AesAuthDecrypt(Aes* aes, byte* out, const byte* in, word32 inSz,
         ROM_AESDataProcess(AES_BASE, aes->reg, tmpTag, WC_AES_BLOCK_SIZE);
         wolfSSL_TI_unlockCCM();
 
-        if (XMEMCMP(authTag, tmpTag, authTagSz) != 0) {
+        if (ConstantCompare(authTag, tmpTag, authTagSz) != 0) {
             ret = AES_GCM_AUTH_E;
         }
         return ret;
@@ -636,7 +645,7 @@ static int AesAuthDecrypt(Aes* aes, byte* out, const byte* in, word32 inSz,
         (unsigned int*)tmpTag);
     wolfSSL_TI_unlockCCM();
 
-    if ((ret == false) || (XMEMCMP(authTag, tmpTag, authTagSz) != 0)) {
+    if ((ret == false) || (ConstantCompare(authTag, tmpTag, authTagSz) != 0)) {
         XMEMSET(out, 0, inSz);
         ret = AES_GCM_AUTH_E;
     }
@@ -685,6 +694,9 @@ int wc_AesGcmDecrypt(Aes* aes, byte* out, const byte* in, word32 sz,
 
 int wc_GmacSetKey(Gmac* gmac, const byte* key, word32 len)
 {
+    if (gmac == NULL) {
+        return BAD_FUNC_ARG;
+    }
     return AesAuthSetKey(&gmac->aes, key, len);
 }
 
@@ -692,6 +704,9 @@ int wc_GmacUpdate(Gmac* gmac, const byte* iv, word32 ivSz,
                               const byte* authIn, word32 authInSz,
                               byte* authTag, word32 authTagSz)
 {
+    if (gmac == NULL) {
+        return BAD_FUNC_ARG;
+    }
     return AesAuthEncrypt(&gmac->aes, NULL, NULL, 0, iv, ivSz, authTag, authTagSz,
                               authIn, authInSz, AES_CFG_MODE_GCM_HY0CALC);
 }
@@ -780,11 +795,7 @@ int wc_Gmac(const byte* key, word32 keySz, byte* iv, word32 ivSz,
             const byte* authIn, word32 authInSz,
             byte* authTag, word32 authTagSz, WC_RNG* rng)
 {
-#ifdef WOLFSSL_SMALL_STACK
-    Aes *aes = NULL;
-#else
-    Aes aes[1];
-#endif
+    WC_DECLARE_VAR(aes, Aes, 1, 0);
     int ret;
 
     if (key == NULL || iv == NULL || (authIn == NULL && authInSz != 0) ||
@@ -810,9 +821,7 @@ int wc_Gmac(const byte* key, word32 keySz, byte* iv, word32 ivSz,
         wc_AesFree(aes);
     }
     ForceZero(aes, sizeof *aes);
-#ifdef WOLFSSL_SMALL_STACK
-    XFREE(aes, NULL, DYNAMIC_TYPE_AES);
-#endif
+    WC_FREE_VAR_EX(aes, NULL, DYNAMIC_TYPE_AES);
 
     return ret;
 }
@@ -824,11 +833,7 @@ int wc_GmacVerify(const byte* key, word32 keySz,
 {
     int ret;
 #ifdef HAVE_AES_DECRYPT
-#ifdef WOLFSSL_SMALL_STACK
-    Aes *aes = NULL;
-#else
-    Aes aes[1];
-#endif
+    WC_DECLARE_VAR(aes, Aes, 1, 0);
 
     if (key == NULL || iv == NULL || (authIn == NULL && authInSz != 0) ||
         authTag == NULL || authTagSz == 0 || authTagSz > WC_AES_BLOCK_SIZE) {
@@ -851,9 +856,7 @@ int wc_GmacVerify(const byte* key, word32 keySz,
         wc_AesFree(aes);
     }
     ForceZero(aes, sizeof *aes);
-#ifdef WOLFSSL_SMALL_STACK
-    XFREE(aes, NULL, DYNAMIC_TYPE_AES);
-#endif
+    WC_FREE_VAR_EX(aes, NULL, DYNAMIC_TYPE_AES);
 #else
     (void)key;
     (void)keySz;

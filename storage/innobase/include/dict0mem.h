@@ -2320,11 +2320,6 @@ public:
 	/** Node of the LRU list of tables. */
 	UT_LIST_NODE_T(dict_table_t)		table_LRU;
 
-	/** Maximum recursive level we support when loading tables chained
-	together with FK constraints. If exceeds this level, we will stop
-	loading child table into memory along with its parent table. */
-	byte					fk_max_recusive_level;
-
   /** DDL transaction that last touched the table definition, or 0 if
   no history is available. This includes possible changes in
   ha_innobase::prepare_inplace_alter_table() and
@@ -2556,6 +2551,17 @@ public:
   static dict_table_t *create(const span<const char> &name, fil_space_t *space,
                               ulint n_cols, ulint n_v_cols, ulint flags,
                               ulint flags2);
+
+  /** @return whether the table has any indexed virtual column */
+  bool has_virtual_index() const noexcept
+  {
+    if (UNIV_UNLIKELY(n_v_cols != 0))
+      for (dict_index_t *index = indexes.start;
+           index; index = UT_LIST_GET_NEXT(indexes, index))
+        if (index->has_virtual())
+          return true;
+   return false;
+  }
 };
 
 inline void dict_index_t::set_modified(mtr_t& mtr) const

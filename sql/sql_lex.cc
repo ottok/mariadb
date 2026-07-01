@@ -2028,6 +2028,12 @@ int Lex_input_stream::lex_one_token(YYSTYPE *yylval, THD *thd)
   const uchar *const state_map= cs->state_map;
   const uchar *const ident_map= cs->ident_map;
 
+  if (thd->killed)
+  {
+    thd->send_kill_message();
+    return END_OF_INPUT;
+  }
+
   start_token();
   state= next_state;
   next_state= MY_LEX_OPERATOR_OR_IDENT;
@@ -3640,6 +3646,8 @@ uint st_select_lex::get_cardinality_of_ref_ptrs_slice(uint order_group_num_arg)
   if (!order_group_num)
     order_group_num= order_group_num_arg;
 
+  const uint winfunc_factor= window_funcs.elements ? 2 * window_funcs.elements : 1;
+
   /*
     find_order_in_list() may need some extra space,
     so multiply order_group_num by 2
@@ -3649,8 +3657,8 @@ uint st_select_lex::get_cardinality_of_ref_ptrs_slice(uint order_group_num_arg)
           item_list.elements +
           select_n_reserved +
           select_n_having_items +
-          select_n_where_fields +
-          order_group_num * 2 +
+          select_n_where_fields * winfunc_factor +
+          order_group_num * 2 * winfunc_factor +
           hidden_bit_fields +
           fields_in_window_functions;
   return n;
@@ -9012,7 +9020,7 @@ Item *st_select_lex::build_cond_for_grouping_fields(THD *thd, Item *cond,
     if (no_top_clones)
       return cond;
     cond->clear_extraction_flag();
-    return cond->build_clone(thd);
+    return cond->deep_copy_with_checks(thd);
   }
   if (cond->type() == Item::COND_ITEM)
   {

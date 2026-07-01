@@ -6595,7 +6595,7 @@ field_type_lob:
           { $$.set(&type_handler_medium_blob); }
         | JSON_SYM opt_compressed
           {
-            Lex->charset= &my_charset_utf8mb4_bin;
+            Lex->charset= &MY_CHARSET_UTF8MB4_BIN;
             $$.set(&type_handler_long_blob_json);
           }
         ;
@@ -9369,7 +9369,7 @@ select_item:
           }
         | remember_name expr remember_end select_alias
           {
-            DBUG_ASSERT($1 < $3);
+            DBUG_ASSERT($1 < $3 || thd->killed);
 
             if (unlikely(add_item_to_list(thd, $2)))
               MYSQL_YYABORT;

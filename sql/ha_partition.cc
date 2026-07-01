@@ -1430,13 +1430,11 @@ int ha_partition::handle_opt_part(THD *thd, HA_CHECK_OPT *check_opt,
    (modelled after mi_check_print_msg)
    TODO: move this into the handler, or rewrite mysql_admin_table.
 */
-bool print_admin_msg(THD* thd, uint len,
-                     const LEX_CSTRING *msg_type,
+bool print_admin_msg(THD* thd, uint len, bool as_error,
                      const char* db_name, String &table_name,
                      const LEX_CSTRING *op_name, const char *fmt, ...)
   ATTRIBUTE_FORMAT(printf, 7, 8);
-bool print_admin_msg(THD* thd, uint len,
-                     const LEX_CSTRING *msg_type,
+bool print_admin_msg(THD* thd, uint len, bool as_error,
                      const char* db_name, String &table_name,
                      const LEX_CSTRING *op_name, const char *fmt, ...)
 {
@@ -1447,6 +1445,7 @@ bool print_admin_msg(THD* thd, uint len,
   char name[NAME_LEN*2+2];
   char *msgbuf;
   bool error= true;
+  const LEX_CSTRING *msg_type= as_error ? &msg_error : &msg_warning;
 
   if (!(msgbuf= (char*) my_malloc(key_memory_Partition_admin, len, MYF(0))))
     return true;
@@ -1460,7 +1459,10 @@ bool print_admin_msg(THD* thd, uint len,
 
   if (!thd->vio_ok())
   {
-    sql_print_error("%s", msgbuf);
+    if (as_error)
+      sql_print_error("%s", msgbuf);
+    else
+      sql_print_warning("%s", msgbuf);
     goto err;
   }
 
@@ -1482,8 +1484,12 @@ bool print_admin_msg(THD* thd, uint len,
   protocol->store(msgbuf, msg_length, system_charset_info);
   if (protocol->write())
   {
-    sql_print_error("Failed on my_net_write, writing to stderr instead: %s",
-                    msgbuf);
+    if (as_error)
+      sql_print_error("Failed on my_net_write, writing to stderr instead: %s",
+                      msgbuf);
+    else
+      sql_print_warning("Failed on my_net_write, writing to stderr instead: %s",
+                        msgbuf);
     goto err;
   }
   error= false;
@@ -1547,7 +1553,7 @@ int ha_partition::handle_opt_partitions(THD *thd, HA_CHECK_OPT *check_opt,
                 error != HA_ADMIN_TRY_ALTER &&
                 error != HA_ERR_TABLE_READONLY)
             {
-	      print_admin_msg(thd, MYSQL_ERRMSG_SIZE, &msg_error,
+	      print_admin_msg(thd, MYSQL_ERRMSG_SIZE, true,
                               table_share->db.str, table->alias,
                               &opt_op_name[flag],
                               "Subpartition %s returned error",
@@ -1574,7 +1580,7 @@ int ha_partition::handle_opt_partitions(THD *thd, HA_CHECK_OPT *check_opt,
               error != HA_ADMIN_ALREADY_DONE &&
               error != HA_ADMIN_TRY_ALTER)
           {
-	    print_admin_msg(thd, MYSQL_ERRMSG_SIZE, &msg_error,
+	    print_admin_msg(thd, MYSQL_ERRMSG_SIZE, true,
                             table_share->db.str, table->alias,
                             &opt_op_name[flag], "Partition %s returned error",
                             part_elem->partition_name);
@@ -2221,6 +2227,13 @@ int ha_partition::copy_partitions(ulonglong * const copied,
       }
       else
       {
+        if (m_new_file[new_part]->m_lock_type != F_WRLCK)
+        {
+          m_last_part= reorg_part;
+          m_err_rec= table->record[0];
+          result= HA_ERR_ROW_IN_WRONG_PARTITION;
+          goto error;
+        }
         /* Copy record to new handler */
         (*copied)++;
         DBUG_ASSERT(!m_new_file[new_part]->row_logging);
@@ -10320,11 +10333,12 @@ void ha_partition::print_error(int error, myf errflag)
   }
   else if (error == HA_ERR_ROW_IN_WRONG_PARTITION)
   {
-    /* Should only happen on DELETE or UPDATE! */
+    /* Should only happen on DELETE, UPDATE or REBUILD PARTITION! */
     DBUG_ASSERT(thd_sql_command(thd) == SQLCOM_DELETE ||
                 thd_sql_command(thd) == SQLCOM_DELETE_MULTI ||
                 thd_sql_command(thd) == SQLCOM_UPDATE ||
-                thd_sql_command(thd) == SQLCOM_UPDATE_MULTI);
+                thd_sql_command(thd) == SQLCOM_UPDATE_MULTI ||
+                thd_sql_command(thd) == SQLCOM_ALTER_TABLE);
     DBUG_ASSERT(m_err_rec);
     if (m_err_rec)
     {
@@ -11328,7 +11342,7 @@ int ha_partition::check_misplaced_rows(uint read_part_id, bool do_repair)
 
       if (num_misplaced_rows > 0)
       {
-	print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, &msg_warning,
+	print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, false,
                         table_share->db.str, table->alias,
                         &opt_op_name[REPAIR_PARTS],
                         "Moved %lld misplaced rows",
@@ -11350,7 +11364,7 @@ int ha_partition::check_misplaced_rows(uint read_part_id, bool do_repair)
       if (!do_repair)
       {
         /* Check. */
-	print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, &msg_error,
+	print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, true,
                         table_share->db.str, table->alias,
                         &opt_op_name[CHECK_PARTS],
                         "Found a misplaced row");
@@ -11399,7 +11413,7 @@ int ha_partition::check_misplaced_rows(uint read_part_id, bool do_repair)
                             (uint) correct_part_id,
                             str.c_ptr_safe());
           }
-	  print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, &msg_error,
+	  print_admin_msg(ha_thd(), MYSQL_ERRMSG_SIZE, true,
                           table_share->db.str, table->alias,
                           &opt_op_name[REPAIR_PARTS],
                           "Failed to move/insert a row"
@@ -11526,7 +11540,7 @@ int ha_partition::check_for_upgrade(HA_CHECK_OPT *check_opt)
               !(part_buf= generate_partition_syntax_for_frm(thd, m_part_info,
                                                             &part_buf_len,
                                                             NULL, NULL)) ||
-	      print_admin_msg(thd, SQL_ADMIN_MSG_TEXT_SIZE + 1, &msg_error,
+	      print_admin_msg(thd, SQL_ADMIN_MSG_TEXT_SIZE + 1, true,
 	                      table_share->db.str,
 	                      table->alias,
                               &opt_op_name[CHECK_PARTS],
@@ -11536,7 +11550,7 @@ int ha_partition::check_for_upgrade(HA_CHECK_OPT *check_opt)
                               part_buf))
 	  {
 	    /* Error creating admin message (too long string?). */
-	    print_admin_msg(thd, MYSQL_ERRMSG_SIZE, &msg_error,
+	    print_admin_msg(thd, MYSQL_ERRMSG_SIZE, true,
                             table_share->db.str, table->alias,
                             &opt_op_name[CHECK_PARTS],
                             KEY_PARTITIONING_CHANGED_STR,
@@ -12157,10 +12171,13 @@ int ha_partition::direct_delete_rows(ha_rows *delete_rows_result)
                    file->pre_direct_delete_rows() :
                    file->ha_direct_delete_rows(&delete_rows))))
       {
-        if (m_pre_calling)
-          file->ha_pre_rnd_end();
-        else
-          file->ha_rnd_end();
+        if (rnd_seq)
+        {
+          if (m_pre_calling)
+            file->ha_pre_rnd_end();
+          else
+            file->ha_rnd_end();
+        }
         DBUG_RETURN(error);
       }
       delete_rows_result+= delete_rows;

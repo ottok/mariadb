@@ -953,14 +953,13 @@ void copy_not_changed_fields(MARIA_HA *info, MY_BITMAP *changed_fields,
                              uchar *to, uchar *from)
 {
   MARIA_COLUMNDEF *column, *end_column;
-  uchar *bitmap= (uchar*) changed_fields->bitmap;
   MARIA_SHARE *share= info->s;
-  uint bit= 1;
+  uint bit= 0;
 
   for (column= share->columndef, end_column= column+ share->base.fields;
-       column < end_column; column++)
+       column < end_column; column++, bit++)
   {
-    if (!(*bitmap & bit))
+    if (!bitmap_is_set(changed_fields, bit))
     {
       uint field_length= column->length;
       if (column->type == FIELD_VARCHAR)
@@ -971,11 +970,6 @@ void copy_not_changed_fields(MARIA_HA *info, MY_BITMAP *changed_fields,
           field_length= uint2korr(from + column->offset) + 2;
       }
       memcpy(to + column->offset, from + column->offset, field_length);
-    }
-    if ((bit= (bit << 1)) == 256)
-    {
-      bitmap++;
-      bit= 1;
     }
   }
 }
@@ -5788,7 +5782,7 @@ static size_t fill_insert_undo_parts(MARIA_HA *info, const uchar *record,
     /* Store length of all not empty char, varchar and blob fields */
     log_parts->str= field_lengths - 2;
     log_parts->length=   info->cur_row.field_lengths_length+2;
-    int2store(log_parts->str, info->cur_row.field_lengths_length);
+    int2store((void *)log_parts->str, info->cur_row.field_lengths_length);
     row_length+= log_parts->length;
     log_parts++;
   }

@@ -1745,15 +1745,15 @@ class User_table_json: public User_table
     const char *value_start;
     if (get_value(key, JSV_STRING, &value_start, &value_len))
       return "";
-    char *ptr= (char*)alloca(value_len);
+    char *ptr= (char*)my_safe_alloca(value_len);
     int len= json_unescape(m_table->field[2]->charset(),
                            (const uchar*)value_start,
                            (const uchar*)value_start + value_len,
                            system_charset_info,
                            (uchar*)ptr, (uchar*)ptr + value_len);
-    if (len < 0)
-      return NULL;
-    return strmake_root(root, ptr, len);
+    const char *js= len < 0 ? NULL : strmake_root(root, ptr, len);
+    my_safe_afree(ptr, value_len);
+    return js;
   }
   longlong get_int_value(const char *key, longlong def_val= 0) const
   {
@@ -13846,24 +13846,30 @@ static ulong parse_client_handshake_packet(MPVIO_EXT *mpvio,
     Cast *passwd to an unsigned char, so that it doesn't extend the sign for
     *passwd > 127 and become 2**32-127+ after casting to uint.
   */
-  ulonglong len;
   size_t passwd_len;
 
   if (!(thd->client_capabilities & CLIENT_SECURE_CONNECTION))
-    len= strlen(passwd);
+  {
+    passwd_len= strlen(passwd);
+    db= thd->client_capabilities & CLIENT_CONNECT_WITH_DB ?
+      passwd + passwd_len + 1 : 0;  /* +1 to skip null terminator */
+  }
   else if (!(thd->client_capabilities & CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA))
-    len= (uchar)(*passwd++);
+  {
+    passwd_len= (uchar)(*passwd++);
+    db= thd->client_capabilities & CLIENT_CONNECT_WITH_DB ?
+      passwd + passwd_len : 0;
+  }
   else
   {
-    len= safe_net_field_length_ll((uchar**)&passwd,
+    ulonglong len= safe_net_field_length_ll((uchar**)&passwd,
                                       net->read_pos + pkt_len - (uchar*)passwd);
     if (len > pkt_len)
       return packet_error;
+    passwd_len= (size_t)len;
+    db= thd->client_capabilities & CLIENT_CONNECT_WITH_DB ?
+      passwd + passwd_len : 0;
   }
-
-  passwd_len= (size_t)len;
-  db= thd->client_capabilities & CLIENT_CONNECT_WITH_DB ?
-    db + passwd_len + 1 : 0;
 
   if (passwd == NULL ||
       passwd + passwd_len + MY_TEST(db) > (char*) net->read_pos + pkt_len)

@@ -4,12 +4,12 @@
    modify it under the terms of the GNU Library General Public
    License as published by the Free Software Foundation; either
    version 2 of the License, or (at your option) any later version.
- 
+
    This library is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
    Library General Public License for more details.
- 
+
    You should have received a copy of the GNU Library General Public
    License along with this library; if not, write to the Free
    Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
@@ -39,7 +39,7 @@ extern "C" {
 
 #define FL_STMT_END 1
 
-/* GTID flags */ 
+/* GTID flags */
 
 /* FL_STANDALONE is set in case there is no terminating COMMIT event. */
 #define FL_STANDALONE            0x01
@@ -209,7 +209,7 @@ enum opt_metadata_field_type
   COLUMN_NAME,
   SET_STR_VALUE,
   ENUM_STR_VALUE,
-  GEOMETRY_TYPE, 
+  GEOMETRY_TYPE,
   SIMPLE_PRIMARY_KEY,
   PRIMARY_KEY_WITH_PREFIX,
   ENUM_AND_SET_DEFAULT_CHARSET,
@@ -262,7 +262,7 @@ enum opt_metadata_field_type
    is the active binary log.
    Note: When reading data via COM_BINLOG_DUMP this
          flag is never set.
-*/ 
+*/
 #define LOG_EVENT_BINLOG_IN_USE_F           0x0001
 
 /* Looks like this flag is no longer in use */
@@ -317,6 +317,10 @@ typedef struct st_mariadb_gtid {
   unsigned long long sequence_nr;
 } MARIADB_GTID;
 
+typedef struct st_rpl_timestamp {
+  uint32_t second;
+  uint32_t second_part;
+} MARIADB_TIMESTAMP;
 
 /* Generic replication handle */
 typedef struct st_mariadb_rpl {
@@ -354,6 +358,7 @@ typedef struct st_mariadb_rpl_value {
     float f;
     double d;
     MYSQL_TIME tm;
+    MARIADB_TIMESTAMP ts;
     MARIADB_STRING str;
   } val;
 } MARIADB_RPL_VALUE;

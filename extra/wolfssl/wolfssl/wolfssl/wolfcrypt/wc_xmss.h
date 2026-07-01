@@ -1,12 +1,12 @@
 /* wc_xmss.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -33,6 +33,12 @@
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/sha512.h>
 #include <wolfssl/wolfcrypt/sha3.h>
+
+/* When raw hash access APIs are disabled or unavailable (WOLFSSL_NO_HASH_RAW),
+ * fall back to using the full hash API calls. */
+#if defined(WOLFSSL_NO_HASH_RAW) && !defined(WC_XMSS_FULL_HASH)
+    #define WC_XMSS_FULL_HASH
+#endif
 
 #if !defined(WOLFSSL_WC_XMSS)
     #error "This code is incompatible with external implementation of XMSS."

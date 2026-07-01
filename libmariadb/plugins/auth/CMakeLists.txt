@@ -13,9 +13,7 @@ ELSEIF(WITH_SSL STREQUAL "OPENSSL")
   SET(CRYPT_LIBS ${SSL_LIBRARIES})
 ELSEIF(WITH_SSL STREQUAL "GNUTLS")
   SET(CRYPT_SOURCE ${CC_SOURCE_DIR}/libmariadb/secure/gnutls_crypt.c)
-  IF (NOT SSL_LIBRARIES MATCHES "^.*\\.a$")
-    SET(CRYPT_LIBS ${SSL_LIBRARIES})
-  ENDIF()
+  SET(CRYPT_LIBS ${SSL_LIBRARIES})
 ELSE()
   UNSET(CRYPTO_PLUGIN)
 ENDIF()
@@ -32,6 +30,7 @@ REGISTER_PLUGIN(TARGET dialog
                 TYPE AUTH
                 CONFIGURATIONS DYNAMIC STATIC OFF
                 DEFAULT DYNAMIC
+                LIBRARIES ${CMAKE_DL_LIBS}
                 SOURCES ${CC_SOURCE_DIR}/plugins/auth/dialog.c
                         ${CC_SOURCE_DIR}/libmariadb/get_password.c)
 

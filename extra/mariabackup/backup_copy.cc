@@ -1462,6 +1462,7 @@ bool backup_start(ds_ctxt *ds_data, ds_ctxt *ds_meta,
 
 	corrupted_pages.backup_fix_ddl(ds_data, ds_meta);
 
+	DBUG_MARIABACKUP_EVENT("after_backup_fix_ddl", {});
 	// There is no need to stop slave thread before coping non-Innodb data when
 	// --no-lock option is used because --no-lock option requires that no DDL or
 	// DML to non-transaction tables can occur.
@@ -2115,6 +2116,14 @@ decrypt_decompress_file(const char *filepath, uint thread_n)
  	if (needs_action) {
 
 		msg(thread_n,"%s\n", message.str().c_str());
+
+                /* all valid *.qp files are table-name-safe */
+                for (const char *s=filepath; *s; s++)
+                  if (!isalnum(*s) && !strchr("-.@/_#", *s))
+                  {
+                    msg(thread_n,"Error: invalid file name\n");
+                    return(false);
+                  }
 
 	 	if (system(cmd.str().c_str()) != 0) {
 	 		return(false);

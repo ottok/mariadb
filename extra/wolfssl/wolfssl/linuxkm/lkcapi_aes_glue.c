@@ -1,12 +1,12 @@
 /* lkcapi_aes_glue.c -- glue logic for AES modes
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -20,15 +20,63 @@
  */
 
 /* included by linuxkm/lkcapi_glue.c */
+#ifndef WC_SKIP_INCLUDED_C_FILES
+
+#ifndef LINUXKM_LKCAPI_REGISTER
+    #error lkcapi_aes_glue.c included in non-LINUXKM_LKCAPI_REGISTER project.
+#endif
+
+#if (defined(LINUXKM_LKCAPI_REGISTER_ALL) || \
+     defined(LINUXKM_LKCAPI_REGISTER_AES_ALL) || \
+     (defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_AES))) && \
+    !defined(LINUXKM_LKCAPI_DONT_REGISTER_AES_ALL) && \
+    !defined(LINUXKM_LKCAPI_REGISTER_AES)
+    #define LINUXKM_LKCAPI_REGISTER_AES
+#endif
+
+#if defined(LINUXKM_LKCAPI_REGISTER_AESCBC) || \
+    defined(LINUXKM_LKCAPI_REGISTER_AESCFB) || \
+    defined(LINUXKM_LKCAPI_REGISTER_AESGCM) || \
+    defined(LINUXKM_LKCAPI_REGISTER_AESGCM_RFC4106) || \
+    defined(LINUXKM_LKCAPI_REGISTER_AESXTS) || \
+    defined(LINUXKM_LKCAPI_REGISTER_AESCTR) || \
+    defined(LINUXKM_LKCAPI_REGISTER_AESOFB) || \
+    defined(LINUXKM_LKCAPI_REGISTER_AESECB) || \
+    defined(LINUXKM_LKCAPI_REGISTER_AES_ALL)
+
+    #ifdef NO_AES
+        #error LINUXKM_LKCAPI_REGISTER_AES* requires !defined(NO_AES)
+    #endif
+
+    #ifndef LINUXKM_LKCAPI_REGISTER_AES
+        #define LINUXKM_LKCAPI_REGISTER_AES
+    #endif
+#endif
 
 #ifdef NO_AES
-    #error lkcapi_aes_glue.c compiled with NO_AES.
+    #undef LINUXKM_LKCAPI_REGISTER_AES
 #endif
+
+#if defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && !defined(CONFIG_CRYPTO_AES)
+    #undef LINUXKM_LKCAPI_REGISTER_AES
+#endif
+
+#if defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_AES) && \
+    !defined(LINUXKM_LKCAPI_REGISTER_AES)
+    #error Config conflict: CONFIG_CRYPTO_AES is defined, but LINUXKM_LKCAPI_REGISTER_AES is not.
+#endif
+
+#ifdef LINUXKM_LKCAPI_REGISTER_AES
 
 #include <wolfssl/wolfcrypt/aes.h>
 
-#if defined(WC_LINUXKM_C_FALLBACK_IN_SHIMS) && !defined(WC_FLAG_DONT_USE_AESNI)
-    #error WC_LINUXKM_C_FALLBACK_IN_SHIMS is defined but WC_FLAG_DONT_USE_AESNI is missing.
+#if defined(WC_FLAG_DONT_USE_AESNI) && !defined(WC_FLAG_DONT_USE_VECTOR_OPS)
+    /* backward compat */
+    #define WC_FLAG_DONT_USE_VECTOR_OPS WC_FLAG_DONT_USE_AESNI
+#endif
+
+#if defined(WC_LINUXKM_C_FALLBACK_IN_SHIMS) && !defined(WC_FLAG_DONT_USE_VECTOR_OPS)
+    #error WC_LINUXKM_C_FALLBACK_IN_SHIMS is defined but WC_FLAG_DONT_USE_VECTOR_OPS is missing.
 #endif
 
 /* note the FIPS code will be returned on failure even in non-FIPS builds. */
@@ -65,15 +113,24 @@
 #define WOLFKM_AESECB_DRIVER ("ecb-aes" WOLFKM_AES_DRIVER_SUFFIX)
 
 #ifdef HAVE_AES_CBC
-    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) && !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESCBC)) && \
+    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) || \
+         defined(LINUXKM_LKCAPI_REGISTER_AES_ALL) || \
+        (defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_CBC))) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESCBC) &&               \
         !defined(LINUXKM_LKCAPI_REGISTER_AESCBC)
         #define LINUXKM_LKCAPI_REGISTER_AESCBC
     #endif
 #else
-        #undef LINUXKM_LKCAPI_REGISTER_AESCBC
+    #if defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_CBC) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESCBC)
+        #error Config conflict: target kernel has CONFIG_CRYPTO_CBC, but module is missing HAVE_AES_CBC.
+    #endif
+    #undef LINUXKM_LKCAPI_REGISTER_AESCBC
 #endif
 #ifdef WOLFSSL_AES_CFB
-    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) && !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESCFB)) && \
+    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) || \
+         defined(LINUXKM_LKCAPI_REGISTER_AES_ALL)) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESCFB) &&      \
         !defined(LINUXKM_LKCAPI_REGISTER_AESCFB)
         #define LINUXKM_LKCAPI_REGISTER_AESCFB
     #endif
@@ -81,36 +138,61 @@
     #undef LINUXKM_LKCAPI_REGISTER_AESCFB
 #endif
 #ifdef HAVE_AESGCM
-    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) && !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESGCM)) && \
+    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) || \
+         defined(LINUXKM_LKCAPI_REGISTER_AES_ALL) || \
+         (defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_GCM))) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESGCM) &&               \
         !defined(LINUXKM_LKCAPI_REGISTER_AESGCM)
         #define LINUXKM_LKCAPI_REGISTER_AESGCM
     #endif
-    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) && !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESGCM_RFC4106)) && \
+    #if ((defined(LINUXKM_LKCAPI_REGISTER_ALL) || \
+          defined(LINUXKM_LKCAPI_REGISTER_AES_ALL)) &&                  \
+         !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESGCM_RFC4106)) &&      \
         !defined(LINUXKM_LKCAPI_REGISTER_AESGCM_RFC4106)
         #define LINUXKM_LKCAPI_REGISTER_AESGCM_RFC4106
     #endif
 #else
+    #if defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_GCM) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESGCM)
+        #error Config conflict: target kernel has CONFIG_CRYPTO_GCM, but module is missing HAVE_AESGCM.
+    #endif
     #undef LINUXKM_LKCAPI_REGISTER_AESGCM
     #undef LINUXKM_LKCAPI_REGISTER_AESGCM_RFC4106
 #endif
 #ifdef WOLFSSL_AES_XTS
-    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) && !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESXTS)) && \
+    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) || \
+         defined(LINUXKM_LKCAPI_REGISTER_AES_ALL) || \
+         (defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_XTS))) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESXTS) &&               \
         !defined(LINUXKM_LKCAPI_REGISTER_AESXTS)
         #define LINUXKM_LKCAPI_REGISTER_AESXTS
     #endif
 #else
+    #if defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_XTS) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESXTS)
+        #error Config conflict: target kernel has CONFIG_CRYPTO_XTS, but module is missing WOLFSSL_AES_XTS.
+    #endif
     #undef LINUXKM_LKCAPI_REGISTER_AESXTS
 #endif
 #ifdef WOLFSSL_AES_COUNTER
-    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) && !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESCTR)) && \
+    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) || \
+         defined(LINUXKM_LKCAPI_REGISTER_AES_ALL) || \
+         (defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_CTR))) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESCTR) &&               \
         !defined(LINUXKM_LKCAPI_REGISTER_AESCTR)
         #define LINUXKM_LKCAPI_REGISTER_AESCTR
     #endif
 #else
+    #if defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_CTR) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESCTR)
+        #error Config conflict: target kernel has CONFIG_CRYPTO_CTR, but module is missing WOLFSSL_AES_COUNTER.
+    #endif
     #undef LINUXKM_LKCAPI_REGISTER_AESCTR
 #endif
 #ifdef WOLFSSL_AES_OFB
-    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) && !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESOFB)) && \
+    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) || \
+         defined(LINUXKM_LKCAPI_REGISTER_AES_ALL)) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESOFB) &&      \
         !defined(LINUXKM_LKCAPI_REGISTER_AESOFB)
         #define LINUXKM_LKCAPI_REGISTER_AESOFB
     #endif
@@ -118,11 +200,18 @@
     #undef LINUXKM_LKCAPI_REGISTER_AESOFB
 #endif
 #ifdef HAVE_AES_ECB
-    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) && !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESECB)) && \
+    #if (defined(LINUXKM_LKCAPI_REGISTER_ALL) || \
+         defined(LINUXKM_LKCAPI_REGISTER_AES_ALL) || \
+         (defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_ECB))) && \
+         !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESECB) &&   \
         !defined(LINUXKM_LKCAPI_REGISTER_AESECB)
         #define LINUXKM_LKCAPI_REGISTER_AESECB
     #endif
 #else
+    #if defined(LINUXKM_LKCAPI_REGISTER_ALL_KCONFIG) && defined(CONFIG_CRYPTO_ECB) && \
+        !defined(LINUXKM_LKCAPI_DONT_REGISTER_AESECB)
+        #error Config conflict: target kernel has CONFIG_CRYPTO_ECB, but module is missing HAVE_AES_ECB.
+    #endif
     #undef LINUXKM_LKCAPI_REGISTER_AESECB
 #endif
 
@@ -207,7 +296,7 @@ static int km_AesInitCommon(
     if (! ctx->aes_encrypt) {
         pr_err("%s: allocation of %zu bytes for encryption key failed.\n",
                name, sizeof(*ctx->aes_encrypt));
-        err = -MEMORY_E;
+        err = -ENOMEM;
         goto out;
     }
 
@@ -230,7 +319,7 @@ static int km_AesInitCommon(
         if (! ctx->aes_decrypt) {
             pr_err("%s: allocation of %zu bytes for decryption key failed.\n",
                    name, sizeof(*ctx->aes_decrypt));
-            err = -MEMORY_E;
+            err = -ENOMEM;
             goto out;
         }
 
@@ -252,7 +341,7 @@ static int km_AesInitCommon(
     if (! ctx->aes_encrypt_C) {
         pr_err("%s: allocation of %zu bytes for encryption key failed.\n",
                name, sizeof(*ctx->aes_encrypt_C));
-        err = -MEMORY_E;
+        err = -ENOMEM;
         goto out;
     }
 
@@ -296,6 +385,10 @@ out:
 
     if (err != 0)
         km_AesExitCommon(ctx);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesInitCommon: %s: %d\n", name, err);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -381,6 +474,10 @@ static void km_AesExitCommon(struct km_AesCtx * ctx)
         km_AesFree(&ctx->aes_decrypt_C);
     }
 #endif
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesExitCommon\n");
+    #endif /* WOLFKM_DEBUG_AES */
 }
 
 #ifdef LINUXKM_LKCAPI_NEED_AES_SKCIPHER_COMMON_FUNCS
@@ -393,8 +490,8 @@ static int km_AesSetKeyCommon(struct km_AesCtx * ctx, const u8 *in_key,
     err = wc_AesSetKey(ctx->aes_encrypt, in_key, key_len, NULL, AES_ENCRYPTION);
 
     if (unlikely(err)) {
-        if (! disable_setkey_warnings)
-            pr_err("%s: wc_AesSetKey for encryption key failed: %d\n", name, err);
+        if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
+            pr_err("%s: wc_AesSetKey for encryption key (len %u) failed: %d\n", name, key_len, err);
         return -EINVAL;
     }
 
@@ -403,9 +500,9 @@ static int km_AesSetKeyCommon(struct km_AesCtx * ctx, const u8 *in_key,
                            AES_DECRYPTION);
 
         if (unlikely(err)) {
-            if (! disable_setkey_warnings)
-                pr_err("%s: wc_AesSetKey for decryption key failed: %d\n",
-                       name, err);
+            if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
+                pr_err("%s: wc_AesSetKey for decryption key (len %u) failed: %d\n",
+                       name, key_len, err);
             return -EINVAL;
         }
     }
@@ -413,12 +510,12 @@ static int km_AesSetKeyCommon(struct km_AesCtx * ctx, const u8 *in_key,
 #ifdef WC_LINUXKM_C_FALLBACK_IN_SHIMS
 
     if (ctx->aes_encrypt->use_aesni) {
-        ctx->aes_encrypt_C->use_aesni = WC_FLAG_DONT_USE_AESNI;
+        ctx->aes_encrypt_C->use_aesni = WC_FLAG_DONT_USE_VECTOR_OPS;
 
         err = wc_AesSetKey(ctx->aes_encrypt_C, in_key, key_len, NULL, AES_ENCRYPTION);
 
         if (unlikely(err)) {
-            if (! disable_setkey_warnings)
+            if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
                 pr_err("%s: wc_AesSetKey for encryption key failed: %d\n", name, err);
             return -EINVAL;
         }
@@ -429,13 +526,13 @@ static int km_AesSetKeyCommon(struct km_AesCtx * ctx, const u8 *in_key,
     }
 
     if (ctx->aes_decrypt_C && ctx->aes_decrypt->use_aesni) {
-        ctx->aes_decrypt_C->use_aesni = WC_FLAG_DONT_USE_AESNI;
+        ctx->aes_decrypt_C->use_aesni = WC_FLAG_DONT_USE_VECTOR_OPS;
 
         err = wc_AesSetKey(ctx->aes_decrypt_C, in_key, key_len, NULL,
                            AES_DECRYPTION);
 
         if (unlikely(err)) {
-            if (! disable_setkey_warnings)
+            if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
                 pr_err("%s: wc_AesSetKey for decryption key failed: %d\n",
                        name, err);
             return -EINVAL;
@@ -447,6 +544,9 @@ static int km_AesSetKeyCommon(struct km_AesCtx * ctx, const u8 *in_key,
 
 #endif /* WC_LINUXKM_C_FALLBACK_IN_SHIMS */
 
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesSetKeyCommon: %s: %d\n", name, key_len);
+    #endif /* WOLFKM_DEBUG_AES */
     return 0;
 }
 
@@ -482,7 +582,7 @@ static int km_AesCbcEncrypt(struct skcipher_request *req)
     struct skcipher_walk     walk;
     unsigned int             nbytes = 0;
     int                      err;
-    Aes                      *aes_copy;
+    Aes                      *aes_copy = NULL;
 
     tfm = crypto_skcipher_reqtfm(req);
     ctx = crypto_skcipher_ctx(tfm);
@@ -494,7 +594,7 @@ static int km_AesCbcEncrypt(struct skcipher_request *req)
 
     err = km_AesGet(ctx, 0 /* decrypt_p */, 1 /* copy_p */, &aes_copy);
     if (unlikely(err)) {
-        return err;
+        goto out;
     }
 
     err = wc_AesSetIV(aes_copy, walk.iv);
@@ -526,7 +626,15 @@ static int km_AesCbcEncrypt(struct skcipher_request *req)
 
 out:
 
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
     km_AesFree(&aes_copy);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesCbcEncrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -538,7 +646,7 @@ static int km_AesCbcDecrypt(struct skcipher_request *req)
     struct skcipher_walk     walk;
     unsigned int             nbytes = 0;
     int                      err;
-    Aes                      *aes_copy;
+    Aes                      *aes_copy = NULL;
 
     tfm = crypto_skcipher_reqtfm(req);
     ctx = crypto_skcipher_ctx(tfm);
@@ -551,14 +659,14 @@ static int km_AesCbcDecrypt(struct skcipher_request *req)
 
     err = km_AesGet(ctx, 1 /* decrypt_p */, 1 /* copy_p */, &aes_copy);
     if (unlikely(err)) {
-        return err;
+        goto out;
     }
 
     err = wc_AesSetIV(aes_copy, walk.iv);
 
     if (unlikely(err)) {
         if (! disable_setkey_warnings)
-            pr_err("%s: wc_AesSetKey failed: %d\n",
+            pr_err("%s: wc_AesSetIV failed: %d\n",
                    crypto_tfm_alg_driver_name(crypto_skcipher_tfm(tfm)), err);
         err = -EINVAL;
         goto out;
@@ -584,7 +692,15 @@ static int km_AesCbcDecrypt(struct skcipher_request *req)
 
 out:
 
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
     km_AesFree(&aes_copy);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesCbcDecrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -630,7 +746,7 @@ static int km_AesCfbEncrypt(struct skcipher_request *req)
     struct km_AesCtx *       ctx = NULL;
     struct skcipher_walk     walk;
     int                      err;
-    Aes                      *aes_copy;
+    Aes                      *aes_copy = NULL;
 
     tfm = crypto_skcipher_reqtfm(req);
     ctx = crypto_skcipher_ctx(tfm);
@@ -645,7 +761,7 @@ static int km_AesCfbEncrypt(struct skcipher_request *req)
 
     err = km_AesGet(ctx, 0 /* decrypt_p */, 1 /* copy_p */, &aes_copy);
     if (unlikely(err)) {
-        return err;
+        goto out;
     }
 
     err = wc_AesSetIV(aes_copy, walk.iv);
@@ -673,7 +789,7 @@ static int km_AesCfbEncrypt(struct skcipher_request *req)
         if (unlikely(err)) {
             pr_err("%s: skcipher_walk_done failed: %d\n",
                    crypto_tfm_alg_driver_name(crypto_skcipher_tfm(tfm)), err);
-            return err;
+            goto out;
         }
     }
 
@@ -682,7 +798,15 @@ static int km_AesCfbEncrypt(struct skcipher_request *req)
 
 out:
 
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
     km_AesFree(&aes_copy);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesCfbEncrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -693,7 +817,7 @@ static int km_AesCfbDecrypt(struct skcipher_request *req)
     struct km_AesCtx *       ctx = NULL;
     struct skcipher_walk     walk;
     int                      err;
-    Aes                      *aes_copy;
+    Aes                      *aes_copy = NULL;
 
     tfm = crypto_skcipher_reqtfm(req);
     ctx = crypto_skcipher_ctx(tfm);
@@ -708,7 +832,7 @@ static int km_AesCfbDecrypt(struct skcipher_request *req)
 
     err = km_AesGet(ctx, 1 /* decrypt_p */, 1 /* copy_p */, &aes_copy);
     if (unlikely(err)) {
-        return err;
+        goto out;
     }
 
     err = wc_AesSetIV(aes_copy, walk.iv);
@@ -746,7 +870,15 @@ static int km_AesCfbDecrypt(struct skcipher_request *req)
 
 out:
 
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
     km_AesFree(&aes_copy);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesCfbDecrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -797,7 +929,7 @@ static int km_AesGcmSetKey(struct crypto_aead *tfm, const u8 *in_key,
     err = wc_AesGcmSetKey(ctx->aes_encrypt, in_key, key_len);
 
     if (unlikely(err)) {
-        if (! disable_setkey_warnings)
+        if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
             pr_err("%s: wc_AesGcmSetKey failed: %d\n",
                    crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)), err);
         return -EINVAL;
@@ -805,12 +937,12 @@ static int km_AesGcmSetKey(struct crypto_aead *tfm, const u8 *in_key,
 
 #ifdef WC_LINUXKM_C_FALLBACK_IN_SHIMS
     if (ctx->aes_encrypt->use_aesni) {
-        ctx->aes_encrypt_C->use_aesni = WC_FLAG_DONT_USE_AESNI;
+        ctx->aes_encrypt_C->use_aesni = WC_FLAG_DONT_USE_VECTOR_OPS;
 
         err = wc_AesGcmSetKey(ctx->aes_encrypt_C, in_key, key_len);
 
         if (unlikely(err)) {
-            if (! disable_setkey_warnings)
+            if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
                 pr_err("%s: wc_AesGcmSetKey failed: %d\n",
                        crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)), err);
             return -EINVAL;
@@ -821,6 +953,9 @@ static int km_AesGcmSetKey(struct crypto_aead *tfm, const u8 *in_key,
     }
 #endif
 
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesGcmSetKey: %d\n", key_len);
+    #endif /* WOLFKM_DEBUG_AES */
     return 0;
 }
 
@@ -842,7 +977,7 @@ static int km_AesGcmSetKey_Rfc4106(struct crypto_aead *tfm, const u8 *in_key,
     err = wc_AesGcmSetKey(ctx->aes_encrypt, in_key, key_len);
 
     if (unlikely(err)) {
-        if (! disable_setkey_warnings)
+        if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
             pr_err("%s: wc_AesGcmSetKey failed: %d\n",
                    crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)), err);
         return -EINVAL;
@@ -850,12 +985,12 @@ static int km_AesGcmSetKey_Rfc4106(struct crypto_aead *tfm, const u8 *in_key,
 
 #ifdef WC_LINUXKM_C_FALLBACK_IN_SHIMS
     if (ctx->aes_encrypt->use_aesni) {
-        ctx->aes_encrypt_C->use_aesni = WC_FLAG_DONT_USE_AESNI;
+        ctx->aes_encrypt_C->use_aesni = WC_FLAG_DONT_USE_VECTOR_OPS;
 
         err = wc_AesGcmSetKey(ctx->aes_encrypt_C, in_key, key_len);
 
         if (unlikely(err)) {
-            if (! disable_setkey_warnings)
+            if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
                 pr_err("%s: wc_AesGcmSetKey failed: %d\n",
                        crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)), err);
             return -EINVAL;
@@ -866,6 +1001,9 @@ static int km_AesGcmSetKey_Rfc4106(struct crypto_aead *tfm, const u8 *in_key,
     }
 #endif
 
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesGcmSetKey_Rfc4106: %d\n", key_len);
+    #endif /* WOLFKM_DEBUG_AES */
     return 0;
 }
 
@@ -942,7 +1080,7 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
     unsigned int         assoclen = req->assoclen;
     u8 *                 assoc = NULL;
     u8 *                 assocmem = NULL;
-    Aes                  *aes_copy;
+    Aes                  *aes_copy = NULL;
 
     tfm = crypto_aead_reqtfm(req);
     ctx = crypto_aead_ctx(tfm);
@@ -968,15 +1106,17 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
 
     err = km_AesGet(ctx, decrypt_p, 1 /* copy_p */, &aes_copy);
     if (unlikely(err)) {
-        return err;
+        goto out;
     }
 
 #ifdef LINUXKM_LKCAPI_REGISTER_AESGCM_RFC4106
     if (rfc4106_p) {
         byte rfc4106_iv[12];
 
-        if (unlikely(assoclen != 16 && assoclen != 20))
-            return -EINVAL;
+        if (unlikely(assoclen != 16 && assoclen != 20)) {
+            err = -EINVAL;
+            goto out;
+        }
         assoclen -= 8;
 
         memcpy(rfc4106_iv, ctx->rfc4106_nonce, 4);
@@ -1008,9 +1148,11 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
         assoc = scatterwalk_map(&assocSgWalk);
 #endif
         if (unlikely(IS_ERR(assoc))) {
+            err = (int)PTR_ERR(assoc);
             pr_err("%s: scatterwalk_map failed: %ld\n",
                    crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)),
                    PTR_ERR(assoc));
+            assoc = NULL;
             goto out;
         }
     }
@@ -1124,7 +1266,16 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
 
 out:
 
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
     km_AesFree(&aes_copy);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting AesGcmCrypt_1: err %d, dec %d, cryptlen %d, "
+            "assoclen %d\n", err, decrypt_p,
+            req->cryptlen, req->assoclen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -1143,7 +1294,7 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
     unsigned int         assoclen = req->assoclen;
     u8 *                 assoc = NULL;
     u8 *                 sg_buf = NULL;
-    Aes                  *aes_copy;
+    Aes                  *aes_copy = NULL;
     u8 *                 in_text = NULL;
     u8 *                 out_text = NULL;
 #ifdef LINUXKM_LKCAPI_REGISTER_AESGCM_RFC4106
@@ -1174,13 +1325,15 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
 
     err = km_AesGet(ctx, decrypt_p, 1 /* copy_p */, &aes_copy);
     if (unlikely(err)) {
-        return err;
+        goto out;
     }
 
 #ifdef LINUXKM_LKCAPI_REGISTER_AESGCM_RFC4106
     if (rfc4106_p) {
-        if (unlikely(assoclen != 16 && assoclen != 20))
-            return -EINVAL;
+        if (unlikely(assoclen != 16 && assoclen != 20)) {
+            err = -EINVAL;
+            goto out;
+        }
         assoclen -= 8;
 
         memcpy(rfc4106_iv, ctx->rfc4106_nonce, 4);
@@ -1201,9 +1354,10 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
         in_map = scatterwalk_map(&in_walk);
 #endif
         if (unlikely(IS_ERR(in_map))) {
+            err = (int)PTR_ERR(in_map);
             pr_err("%s: scatterwalk_map failed: %ld\n",
                    crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)),
-                   PTR_ERR(assoc));
+                   PTR_ERR(in_map));
             in_map = NULL;
             goto out;
         }
@@ -1218,9 +1372,10 @@ static int AesGcmCrypt_1(struct aead_request *req, int decrypt_p, int rfc4106_p)
         out_map = scatterwalk_map(&out_walk);
 #endif
         if (unlikely(IS_ERR(out_map))) {
+            err = (int)PTR_ERR(out_map);
             pr_err("%s: scatterwalk_map failed: %ld\n",
                    crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm)),
-                   PTR_ERR(assoc));
+                   PTR_ERR(out_map));
             out_map = NULL;
             goto out;
         }
@@ -1321,6 +1476,12 @@ out:
 
     km_AesFree(&aes_copy);
 
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting AesGcmCrypt_1: err %d, dec %d, cryptlen %d, "
+            "assoclen %d\n", err, decrypt_p,
+            req->cryptlen, req->assoclen);
+    #endif /* WOLFKM_DEBUG_AES */
+
     return err;
 }
 
@@ -1413,7 +1574,7 @@ static int km_AesXtsInitCommon(struct km_AesXtsCtx * ctx, const char * name)
     ctx->aesXts = (XtsAes *)malloc(sizeof(*ctx->aesXts));
 
     if (! ctx->aesXts)
-        return -MEMORY_E;
+        return -ENOMEM;
 
     err = wc_AesXtsInit(ctx->aesXts, NULL, INVALID_DEVID);
 
@@ -1451,17 +1612,21 @@ static int km_AesXtsSetKey(struct crypto_skcipher *tfm, const u8 *in_key,
                                 AES_ENCRYPTION_AND_DECRYPTION);
 
     if (unlikely(err)) {
-        if (! disable_setkey_warnings)
+        if ((! disable_setkey_warnings) && ((key_len == 16) || (key_len == 24) || (key_len == 32)))
             pr_err("%s: wc_AesXtsSetKeyNoInit failed: %d\n",
                    crypto_tfm_alg_driver_name(crypto_skcipher_tfm(tfm)), err);
         return -EINVAL;
     }
 
     /* It's possible to set ctx->aesXts->{tweak,aes,aes_decrypt}.use_aesni to
-     * WC_FLAG_DONT_USE_AESNI here, for WC_LINUXKM_C_FALLBACK_IN_SHIMS in
+     * WC_FLAG_DONT_USE_VECTOR_OPS here, for WC_LINUXKM_C_FALLBACK_IN_SHIMS in
      * AES-XTS, but we can use the WC_C_DYNAMIC_FALLBACK mechanism
      * unconditionally because there's no AES-XTS in Cert 4718.
      */
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesXtsSetKey: %d\n", key_len);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return 0;
 }
@@ -1597,6 +1762,11 @@ static int km_AesXtsEncrypt(struct skcipher_request *req)
         }
     }
 
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesXtsEncrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
+
     return err;
 }
 
@@ -1728,6 +1898,12 @@ static int km_AesXtsDecrypt(struct skcipher_request *req)
             err = wc_AesXtsDecryptFinal(ctx->aesXts, NULL, NULL, 0, &stream);
         }
     }
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesXtsDecrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
+
     return err;
 }
 
@@ -1774,7 +1950,7 @@ static int km_AesCtrEncrypt(struct skcipher_request *req)
     struct km_AesCtx *       ctx = NULL;
     struct skcipher_walk     walk;
     int                      err;
-    Aes                      *aes_copy;
+    Aes                      *aes_copy = NULL;
 
     tfm = crypto_skcipher_reqtfm(req);
     ctx = crypto_skcipher_ctx(tfm);
@@ -1789,8 +1965,10 @@ static int km_AesCtrEncrypt(struct skcipher_request *req)
 
     /* Copy the cipher state to mitigate races on Aes.reg and Aes.tmp. */
     aes_copy = (struct Aes *)malloc(sizeof(Aes));
-    if (aes_copy == NULL)
-        return -ENOMEM;
+    if (aes_copy == NULL) {
+        err = -ENOMEM;
+        goto out;
+    }
     XMEMCPY(aes_copy, ctx->aes_encrypt, sizeof(Aes));
 
     err = wc_AesSetIV(aes_copy, walk.iv);
@@ -1827,7 +2005,15 @@ static int km_AesCtrEncrypt(struct skcipher_request *req)
 
 out:
 
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
     km_AesFree(&aes_copy);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesCtrEncrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -1838,7 +2024,7 @@ static int km_AesCtrDecrypt(struct skcipher_request *req)
     struct km_AesCtx *       ctx = NULL;
     struct skcipher_walk     walk;
     int                      err;
-    Aes                      *aes_copy;
+    Aes                      *aes_copy = NULL;
 
     tfm = crypto_skcipher_reqtfm(req);
     ctx = crypto_skcipher_ctx(tfm);
@@ -1853,8 +2039,10 @@ static int km_AesCtrDecrypt(struct skcipher_request *req)
 
     /* Copy the cipher state to mitigate races on Aes.reg and Aes.tmp. */
     aes_copy = (struct Aes *)malloc(sizeof(Aes));
-    if (aes_copy == NULL)
-        return -ENOMEM;
+    if (aes_copy == NULL) {
+        err = -ENOMEM;
+        goto out;
+    }
     XMEMCPY(aes_copy, ctx->aes_encrypt, sizeof(Aes)); /* CTR uses the same
                                                        * schedule for encrypt
                                                        * and decrypt.
@@ -1896,7 +2084,15 @@ static int km_AesCtrDecrypt(struct skcipher_request *req)
 
 out:
 
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
     km_AesFree(&aes_copy);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesCtrDecrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -1942,7 +2138,7 @@ static int km_AesOfbEncrypt(struct skcipher_request *req)
     struct km_AesCtx *       ctx = NULL;
     struct skcipher_walk     walk;
     int                      err;
-    Aes                      *aes_copy;
+    Aes                      *aes_copy = NULL;
 
     tfm = crypto_skcipher_reqtfm(req);
     ctx = crypto_skcipher_ctx(tfm);
@@ -1957,8 +2153,10 @@ static int km_AesOfbEncrypt(struct skcipher_request *req)
 
     /* Copy the cipher state to mitigate races on Aes.reg and Aes.tmp. */
     aes_copy = (struct Aes *)malloc(sizeof(Aes));
-    if (aes_copy == NULL)
-        return -ENOMEM;
+    if (aes_copy == NULL) {
+        err = -ENOMEM;
+        goto out;
+    }
     XMEMCPY(aes_copy, ctx->aes_encrypt, sizeof(Aes));
 
     err = wc_AesSetIV(aes_copy, walk.iv);
@@ -1995,7 +2193,15 @@ static int km_AesOfbEncrypt(struct skcipher_request *req)
 
 out:
 
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
     km_AesFree(&aes_copy);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesOfbEncrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -2006,7 +2212,7 @@ static int km_AesOfbDecrypt(struct skcipher_request *req)
     struct km_AesCtx *       ctx = NULL;
     struct skcipher_walk     walk;
     int                      err;
-    Aes                      *aes_copy;
+    Aes                      *aes_copy = NULL;
 
     tfm = crypto_skcipher_reqtfm(req);
     ctx = crypto_skcipher_ctx(tfm);
@@ -2021,8 +2227,10 @@ static int km_AesOfbDecrypt(struct skcipher_request *req)
 
     /* Copy the cipher state to mitigate races on Aes.reg and Aes.tmp. */
     aes_copy = (struct Aes *)malloc(sizeof(Aes));
-    if (aes_copy == NULL)
-        return -ENOMEM;
+    if (aes_copy == NULL) {
+        err = -ENOMEM;
+        goto out;
+    }
     XMEMCPY(aes_copy, ctx->aes_encrypt, sizeof(Aes)); /* OFB uses the same
                                                        * schedule for encrypt
                                                        * and decrypt.
@@ -2063,7 +2271,15 @@ static int km_AesOfbDecrypt(struct skcipher_request *req)
 
 out:
 
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
     km_AesFree(&aes_copy);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesOfbDecrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -2123,7 +2339,7 @@ static int km_AesEcbEncrypt(struct skcipher_request *req)
 
     err = km_AesGet(ctx, 0 /* decrypt_p */, 0 /* copy_p */, &aes);
     if (unlikely(err)) {
-        return err;
+        goto out;
     }
 
     while ((nbytes = walk.nbytes) != 0) {
@@ -2142,6 +2358,14 @@ static int km_AesEcbEncrypt(struct skcipher_request *req)
     }
 
 out:
+
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesEcbEncrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -2166,7 +2390,7 @@ static int km_AesEcbDecrypt(struct skcipher_request *req)
 
     err = km_AesGet(ctx, 1 /* decrypt_p */, 0 /* copy_p */, &aes);
     if (unlikely(err)) {
-        return err;
+        goto out;
     }
 
     while ((nbytes = walk.nbytes) != 0) {
@@ -2185,6 +2409,14 @@ static int km_AesEcbDecrypt(struct skcipher_request *req)
     }
 
 out:
+
+    if (err && walk.nbytes)
+        (void)skcipher_walk_done(&walk, err);
+
+    #ifdef WOLFKM_DEBUG_AES
+    pr_info("info: exiting km_AesEcbDecrypt: err %d, cryptlen %d\n", err,
+            req->cryptlen);
+    #endif /* WOLFKM_DEBUG_AES */
 
     return err;
 }
@@ -2254,7 +2486,7 @@ static int linuxkm_test_aescbc(void)
 
     aes = (Aes *)malloc(sizeof(*aes));
     if (aes == NULL)
-        return -ENOMEM;
+        return MEMORY_E;
 
     XMEMSET(enc, 0, sizeof(enc));
     XMEMSET(dec, 0, sizeof(enc));
@@ -2458,12 +2690,12 @@ static int linuxkm_test_aescfb(void)
 
     aes = (Aes *)malloc(sizeof(*aes));
     if (aes == NULL)
-        return -ENOMEM;
+        return MEMORY_E;
 
     ret = aesofb_test();
     if (ret) {
         wc_test_render_error_message("aesgcm_test failed: ", ret);
-        ret = -EINVAL;
+        ret = WC_TEST_RET_DEC_EC(ret);
         goto test_cfb_end;
     }
 
@@ -2629,7 +2861,7 @@ static int linuxkm_test_aesgcm(void)
         return check_aead_driver_masking(NULL /* tfm */, WOLFKM_AESGCM_NAME, WOLFKM_AESGCM_DRIVER);
     else {
         wc_test_render_error_message("aesgcm_test failed: ", ret);
-        return -EINVAL;
+        return WC_TEST_RET_DEC_EC(ret);
     }
 #else
     int     ret = 0;
@@ -2688,7 +2920,7 @@ static int linuxkm_test_aesgcm(void)
 
     aes = (Aes *)malloc(sizeof(*aes));
     if (aes == NULL)
-        return -ENOMEM;
+        return MEMORY_E;
 
     ret = wc_AesInit(aes, NULL, INVALID_DEVID);
     if (ret) {
@@ -2927,7 +3159,7 @@ static int linuxkm_test_aesgcm_rfc4106(void)
         return check_aead_driver_masking(NULL /* tfm */, WOLFKM_AESGCM_RFC4106_NAME, WOLFKM_AESGCM_RFC4106_DRIVER);
     else {
         wc_test_render_error_message("aesgcm_test failed: ", ret);
-        return -EINVAL;
+        return WC_TEST_RET_DEC_EC(ret);
     }
 }
 
@@ -4055,7 +4287,7 @@ static int linuxkm_test_aesctr(void) {
         return check_skcipher_driver_masking(NULL /* tfm */, WOLFKM_AESCTR_NAME, WOLFKM_AESCTR_DRIVER);
     else {
         wc_test_render_error_message("aes_ctr_test failed: ", ret);
-        return -EINVAL;
+        return WC_TEST_RET_DEC_EC(ret);
     }
 }
 
@@ -4069,7 +4301,7 @@ static int linuxkm_test_aesofb(void) {
         return check_skcipher_driver_masking(NULL /* tfm */, WOLFKM_AESOFB_NAME, WOLFKM_AESOFB_DRIVER);
     else {
         wc_test_render_error_message("aesofb_test failed: ", ret);
-        return -EINVAL;
+        return WC_TEST_RET_DEC_EC(ret);
     }
 }
 
@@ -4083,8 +4315,12 @@ static int linuxkm_test_aesecb(void) {
         return check_skcipher_driver_masking(NULL /* tfm */, WOLFKM_AESECB_NAME, WOLFKM_AESECB_DRIVER);
     else {
         wc_test_render_error_message("aes_test failed: ", ret);
-        return -EINVAL;
+        return WC_TEST_RET_DEC_EC(ret);
     }
 }
 
 #endif /* LINUXKM_LKCAPI_REGISTER_AESECB */
+
+#endif /* LINUXKM_LKCAPI_REGISTER_AES */
+
+#endif /* !WC_SKIP_INCLUDED_C_FILES */

@@ -30,6 +30,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <string.h>
 #include <errmsg.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <ma_server_error.h>
 #include <mysql/client_plugin.h>
 #include <errmsg.h>
@@ -84,10 +85,10 @@ if (force_tls)\
 
 MYSQL *mysql_default = NULL;  /* default connection */
 
-#define IS_MAXSCALE()\
-   ((mysql_default && strstr(mysql_get_server_info(mysql_default), "maxScale")) ||\
-    (getenv("srv")!=NULL && (strcmp(getenv("srv"), "maxscale") == 0 ||\
-     strcmp(getenv("srv"), "skysql-ha") == 0)))
+#define IS_MAXSCALE() \
+   ((mysql_default && strstr(mysql_get_server_info(mysql_default), "maxScale")) || \
+    (getenv("srv") != NULL && strcmp(getenv("srv"), "maxscale") == 0) || \
+    (getenv("MAXSCALE_TAG") != NULL && strlen(getenv("MAXSCALE_TAG")) > 0))
 
 #define SKIP_MAXSCALE \
 if (IS_MAXSCALE()) \
@@ -132,9 +133,9 @@ if (!((mysql->server_capabilities & CLIENT_LOCAL_FILES) &&  \
 
 #define SKIP_TRAVIS()\
 do {\
-  if (getenv("TRAVIS"))\
+  if (getenv("TRAVIS") || getenv("GITHUB_ACTIONS"))\
   {\
-    diag("Skip test on Travis CI");\
+    diag("Skip test on Travis CI or GitHub Actions");\
     return SKIP;\
   }\
 }while(0)
@@ -277,7 +278,7 @@ int do_verify_prepare_field(MYSQL_RES *result,
                             enum enum_field_types type __attribute__((unused)),
                             const char *table,
                             const char *org_table, const char *db,
-                            unsigned long length __attribute__((unused)), 
+                            unsigned long length __attribute__((unused)),
                             const char *def __attribute__((unused)),
                             const char *file __attribute__((unused)),
                             int line __attribute__((unused)))
@@ -365,7 +366,7 @@ get_one_option(int optid, const struct my_option *opt __attribute__((unused)),
 {
   switch (optid) {
   case '?':
-  case 'I':                           
+  case 'I':
     my_print_help(test_options);
     exit(0);
     break;
@@ -510,7 +511,7 @@ int check_variable(MYSQL *mysql, const char *variable, const char *value)
   return FAIL;
 }
 
-/* 
+/*
  * function *test_connect
  *
  * returns a new connection. This function will be called, if the test doesn't
@@ -547,7 +548,7 @@ MYSQL *test_connect(struct my_tests_st *test)
   if (!(my_test_connect(mysql, hostname, username, password,
                            schema, port, socketname, (test) ? test->connect_flags:0)))
   {
-    diag("Couldn't establish connection to server %s. Error (%d): %s", 
+    diag("Couldn't establish connection to server %s. Error (%d): %s",
                    hostname, mysql_errno(mysql), mysql_error(mysql));
     mysql_close(mysql);
     return(NULL);
@@ -663,7 +664,7 @@ MYSQL *my_test_connect(MYSQL *mysql,
                        unsigned long clientflag)
 {
   if (force_tls)
-    mysql_options(mysql, MYSQL_OPT_SSL_ENFORCE, &force_tls); 
+    mysql_options(mysql, MYSQL_OPT_SSL_ENFORCE, &force_tls);
   if (!mysql_real_connect(mysql, host, user, passwd, db, port, unix_socket, clientflag))
   {
     diag("error: %s", mysql_error(mysql));

@@ -3828,9 +3828,21 @@ String *Item_func_hex::val_str_ascii_from_val_str(String *str)
 {
   DBUG_ASSERT(&tmp_value != str);
   String *res= args[0]->val_str(&tmp_value);
-  DBUG_ASSERT(res != str);
+  THD *thd= current_thd;
+
   if ((null_value= (res == NULL)))
     return NULL;
+
+  if (res->length()*2 > thd->variables.max_allowed_packet)
+  {
+    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                        ER_WARN_ALLOWED_PACKET_OVERFLOWED,
+                        ER_THD(thd, ER_WARN_ALLOWED_PACKET_OVERFLOWED),
+                        func_name(), thd->variables.max_allowed_packet);
+    null_value= true;
+    return NULL;
+  }
+
   return str->set_hex(res->ptr(), res->length()) ? make_empty_result(str) : str;
 }
 
@@ -4137,7 +4149,7 @@ String *Item_func_quote::val_str(String *str)
   ulong max_allowed_packet= current_thd->variables.max_allowed_packet;
   char *from, *to, *end, *start;
   String *arg= args[0]->val_str(&tmp_value);
-  uint arg_length, new_length;
+  size_t arg_length, new_length;
   if (!arg)					// Null argument
   {
     /* Return the string 'NULL' */
@@ -4784,9 +4796,9 @@ String *Item_func_dyncol_json::val_str(String *str)
   if ((rc= mariadb_dyncol_json(&col, &json)))
   {
     dynamic_column_error_message(rc);
+    dynstr_free(&json);
     goto null;
   }
-  bzero(&col, sizeof(col));
   {
     /* Move result from DYNAMIC_COLUMN to str */
     char *ptr;
@@ -4799,7 +4811,6 @@ String *Item_func_dyncol_json::val_str(String *str)
   return str;
 
 null:
-  bzero(&col, sizeof(col));
   null_value= TRUE;
   return NULL;
 }

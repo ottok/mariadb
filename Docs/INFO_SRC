@@ -1,8 +1,8 @@
-commit: fe8047caf26d20e98ea7f6ec1dce3924e696703f
-date: 2025-07-28 17:01:16 +0200
-build-date: 2025-07-28 15:52:31 +0000 
-short: fe8047caf26
-branch: HEAD
+commit: b2050fdb4a8776422baf01a41bf86845994edb97
+date: 2026-05-23 12:31:36 +0200
+build-date: 2026-05-23 14:57:02 +0000 
+short: b2050fdb
+branch: 10.6
 
 
-MariaDB source 10.6.23
+MariaDB source 10.6.27

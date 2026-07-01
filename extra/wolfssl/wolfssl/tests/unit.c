@@ -1,12 +1,12 @@
 /* unit.c API unit tests driver
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -89,7 +89,7 @@ int unit_test(int argc, char** argv)
 #endif
 
 #ifdef WC_RNG_SEED_CB
-    wc_SetSeed_Cb(wc_GenerateSeed);
+    wc_SetSeed_Cb(WC_GENERATE_SEED_DEFAULT);
 #endif
 #ifdef HAVE_WNR
     if (wc_InitNetRandom(wnrConfig, NULL, 5000) != 0)
@@ -209,7 +209,7 @@ int unit_test(int argc, char** argv)
             goto exit;
         }
         else if (XSTRCMP(argv[1], "--group") == 0) {
-            if (argc == 1) {
+            if (argc == 2) {
                 fprintf(stderr, "No group name supplied\n");
                 ret = -1;
                 goto exit;
@@ -273,6 +273,7 @@ int unit_test(int argc, char** argv)
         }
 
         printf("wolfCrypt unit test completed successfully.\n\n");
+        fflush(stdout);
     }
 #endif
 
@@ -282,6 +283,7 @@ int unit_test(int argc, char** argv)
     {
         if (apiTesting) {
             ret = ApiTest();
+            fflush(stdout);
             if (ret != 0)
                 goto exit;
         }
@@ -291,26 +293,32 @@ int unit_test(int argc, char** argv)
         }
 
     #ifdef WOLFSSL_W64_WRAPPER
-        if ((ret = w64wrapper_test()) != 0) {
+        ret = w64wrapper_test();
+        fflush(stdout);
+        if (ret != 0) {
             fprintf(stderr, "w64wrapper test failed with %d\n", ret);
             goto exit;
         }
     #endif /* WOLFSSL_W64_WRAPPER */
 
     #ifdef WOLFSSL_QUIC
-        if ((ret = QuicTest()) != 0) {
+        ret = QuicTest();
+        fflush(stdout);
+        if (ret != 0) {
             fprintf(stderr, "quic test failed with %d\n", ret);
             goto exit;
         }
     #endif
 
         SrpTest();
+        fflush(stdout);
     }
 
 #if !defined(NO_WOLFSSL_CIPHER_SUITE_TEST) && \
     !defined(NO_WOLFSSL_CLIENT) && !defined(NO_WOLFSSL_SERVER) && \
     !defined(NO_TLS) && \
-    !defined(SINGLE_THREADED)
+    !defined(SINGLE_THREADED) && \
+    defined(WOLFSSL_PEM_TO_DER)
     if ((ret = SuiteTest(argc, argv)) != 0) {
         fprintf(stderr, "suite test failed with %d\n", ret);
         goto exit;
@@ -322,6 +330,25 @@ exit:
     if (wc_FreeNetRandom() < 0)
         err_sys("Failed to free netRandom context");
 #endif /* HAVE_WNR */
+
+#ifdef WOLFSSL_TRACK_MEMORY
+    if (ret == 0) {
+        ret = wolfSSL_Cleanup(); /* no-op in a successful full run. */
+
+        if (ret == WOLFSSL_SUCCESS)
+            ret = 0;
+        else
+            fprintf(stderr, "wolfSSL_Cleanup() returned %d\n", ret);
+
+        if (wc_MemStats_Ptr->currentBytes > 0)
+        {
+            fprintf(stderr,
+                    "WOLFSSL_TRACK_MEMORY: currentBytes after cleanup is %ld\n",
+                    wc_MemStats_Ptr->currentBytes);
+            ret = MEMORY_E;
+        }
+    }
+#endif
 
     if (ret == 0) {
         puts("\nunit_test: Success for all configured tests.");

@@ -1,12 +1,12 @@
 /* wc_xmss_impl.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -413,8 +413,7 @@ static void wc_idx_update(unsigned char* a, word8 l)
 
 /* Copy index from source buffer to destination buffer.
  *
- * Index is put into the front of the destination buffer with the length of the
- * source.
+ * Index is put in the back of the destination buffer.
  *
  * @param [in]      s   Source buffer.
  * @param [in]      sl  Length of index in source.
@@ -424,8 +423,8 @@ static void wc_idx_update(unsigned char* a, word8 l)
 static void wc_idx_copy(const unsigned char* s, word8 sl, unsigned char* d,
     word8 dl)
 {
-    XMEMCPY(d, s, sl);
-    XMEMSET(d + sl, 0, dl - sl);
+    XMEMSET(d, 0, dl - sl);
+    XMEMCPY(d + dl - sl, s, sl);
 }
 #endif
 
@@ -2590,7 +2589,7 @@ static void wc_xmss_bds_state_treehash_set_next_idx(BdsState* bds, int i,
 static void wc_xmss_bds_state_treehash_complete(BdsState* bds, int i)
 {
     byte* sk = bds->treeHash + i * 4;
-    sk[3] |= 1 << 7;
+    sk[3] |= 1 << 7; /* // NOLINT(clang-analyzer-core.NullDereference) */
 }
 
 /* Get the tree hash data at specified index for the BDS state.
@@ -3312,11 +3311,7 @@ int wc_xmss_keygen(XmssState* state, const unsigned char* seed,
     const word8 n = params->n;
     /* Offset of root node in public key. */
     byte* pk_root = pk;
-#ifdef WOLFSSL_SMALL_STACK
-    BdsState* bds = NULL;
-#else
-    BdsState bds[1];
-#endif
+    WC_DECLARE_VAR(bds, BdsState, 1, 0);
 
 #ifdef WOLFSSL_SMALL_STACK
     /* Allocate memory for tree hash instances and put in BDS state. */
@@ -3427,11 +3422,7 @@ int wc_xmss_sign(XmssState* state, const unsigned char* m, word32 mlen,
     byte node[WC_XMSS_MAX_N];
     word32 idx;
     byte* sig_r = sig + XMSS_IDX_LEN;
-#ifdef WOLFSSL_SMALL_STACK
-    BdsState* bds = NULL;
-#else
-    BdsState bds[1];
-#endif
+    WC_DECLARE_VAR(bds, BdsState, 1, 0);
 
 #ifdef WOLFSSL_SMALL_STACK
     /* Allocate memory for tree hash instances and put in BDS state. */

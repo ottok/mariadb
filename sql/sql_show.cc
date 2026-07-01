@@ -79,6 +79,12 @@ extern size_t sql_functions_length;
 
 extern Native_func_registry_array native_func_registry_array;
 
+/*
+  This is needed for gcc 15.1.1 as it also count static structures in
+  the limits
+*/
+PRAGMA_DISABLE_CHECK_STACK_FRAME;
+
 enum enum_i_s_events_fields
 {
   ISE_EVENT_CATALOG= 0,
@@ -4292,6 +4298,12 @@ bool get_lookup_field_values(THD *thd, COND *cond, TABLE_LIST *tables,
 
 enum enum_schema_tables get_schema_table_idx(ST_SCHEMA_TABLE *schema_table)
 {
+  if (schema_table < schema_tables ||
+      schema_table > &schema_tables[SCH_N_SERVER_TABLES])
+  {
+    return SCH_PLUGIN_TABLE;
+  }
+
   return (enum enum_schema_tables) (schema_table - &schema_tables[0]);
 }
 

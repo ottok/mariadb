@@ -1,12 +1,12 @@
 /* curve25519.c
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -22,11 +22,25 @@
 
  /* Based On Daniel J Bernstein's curve25519 Public Domain ref10 work. */
 
-#include <wolfssl/wolfcrypt/libwolfssl_sources.h>
+/*
+ * X25519 configuration macros:
+ *
+ * WC_X25519_NONBLOCK: Enable non-blocking support for key gen and shared
+ *                     secret. Requires CURVE25519_SMALL. Default: off.
+ */
+
+ #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
+
+#ifdef NO_CURVED25519_X64
+    #undef USE_INTEL_SPEEDUP
+#endif
 
 #ifdef HAVE_CURVE25519
 
 #include <wolfssl/wolfcrypt/curve25519.h>
+#include <wolfssl/wolfcrypt/ge_operations.h>
+#include <wolfssl/wolfcrypt/error-crypt.h>
+#include <wolfssl/wolfcrypt/logging.h>
 #ifdef NO_INLINE
     #include <wolfssl/wolfcrypt/misc.h>
 #else
@@ -50,15 +64,17 @@
         #error "Blinding not needed nor available for small implementation"
     #elif defined(USE_INTEL_SPEEDUP) || defined(WOLFSSL_ARMASM)
         #error "Blinding not needed nor available for assembly implementation"
+    #elif defined(WOLFSSL_CURVE25519_USE_ED25519)
+        #error "Ed25519 base scalar mult cannot be used with blinding "
     #endif
 #endif
 
-#if defined(WOLFSSL_LINUXKM) && !defined(USE_INTEL_SPEEDUP)
+#if defined(WOLFSSL_USE_SAVE_VECTOR_REGISTERS) && !defined(USE_INTEL_SPEEDUP)
     /* force off unneeded vector register save/restore. */
     #undef SAVE_VECTOR_REGISTERS
-    #define SAVE_VECTOR_REGISTERS(fail_clause) WC_DO_NOTHING
+    #define SAVE_VECTOR_REGISTERS(fail_clause) SAVE_NO_VECTOR_REGISTERS(fail_clause)
     #undef RESTORE_VECTOR_REGISTERS
-    #define RESTORE_VECTOR_REGISTERS() WC_DO_NOTHING
+    #define RESTORE_VECTOR_REGISTERS() RESTORE_NO_VECTOR_REGISTERS()
 #endif
 
 const curve25519_set_type curve25519_sets[] = {
@@ -68,6 +84,10 @@ const curve25519_set_type curve25519_sets[] = {
     }
 };
 
+#if (!defined(WOLFSSL_CURVE25519_USE_ED25519) && \
+     !(defined(CURVED25519_X64) || (defined(WOLFSSL_ARMASM) && \
+     defined(__aarch64__)))) || defined(WOLFSSL_CURVE25519_BLINDING) || \
+     defined(WC_X25519_NONBLOCK)
 static const word32 kCurve25519BasePoint[CURVE25519_KEYSIZE/sizeof(word32)] = {
 #ifdef BIG_ENDIAN_ORDER
     0x09000000
@@ -75,6 +95,7 @@ static const word32 kCurve25519BasePoint[CURVE25519_KEYSIZE/sizeof(word32)] = {
     9
 #endif
 };
+#endif /* !WOLFSSL_CURVE25519_USE_ED25519 || WOLFSSL_CURVE25519_BLINDING */
 
 /* Curve25519 private key must be less than order */
 /* These functions clamp private k and check it */
@@ -150,7 +171,31 @@ int wc_curve25519_make_pub(int public_size, byte* pub, int private_size,
 
     SAVE_VECTOR_REGISTERS(return _svr_ret;);
 
+#if defined(WOLFSSL_CURVE25519_USE_ED25519)
+    {
+        ge_p3 A;
+
+        ge_scalarmult_base(&A, priv);
+    #ifndef CURVE25519_SMALL
+        fe_add(A.X, A.Z, A.Y);
+        fe_sub(A.T, A.Z, A.Y);
+        fe_invert(A.T, A.T);
+        fe_mul(A.T, A.X, A.T);
+        fe_tobytes(pub, A.T);
+    #else
+        lm_add(A.X, A.Z, A.Y);
+        lm_sub(A.T, A.Z, A.Y);
+        lm_invert(A.T, A.T);
+        lm_mul(pub, A.X, A.T);
+    #endif
+        ret = 0;
+    }
+#elif defined(CURVED25519_X64) || (defined(WOLFSSL_ARMASM) && \
+    defined(__aarch64__))
+    ret = curve25519_base(pub, priv);
+#else
     ret = curve25519(pub, priv, (byte*)kCurve25519BasePoint);
+#endif
 
     RESTORE_VECTOR_REGISTERS();
 #else
@@ -167,6 +212,15 @@ int wc_curve25519_make_pub(int public_size, byte* pub, int private_size,
     }
 #endif /* !WOLFSSL_CURVE25519_BLINDING */
 #endif /* FREESCALE_LTC_ECC */
+
+/* If WOLFSSL_CURVE25519_BLINDING is defined, this check is run in
+ * wc_curve25519_make_pub_blind since it could be called directly. */
+#if !defined(WOLFSSL_CURVE25519_BLINDING) || defined(FREESCALE_LTC_ECC)
+    if (ret == 0) {
+        ret = wc_curve25519_check_public(pub, (word32)public_size,
+                                    EC25519_LITTLE_ENDIAN);
+    }
+#endif
 
     return ret;
 }
@@ -194,11 +248,11 @@ static int curve25519_smul_blind(byte* rp, const byte* n, const byte* p,
         if (ret < 0) {
             return ret;
         }
-        for (i = CURVE25519_KEYSIZE; i > 0; i--) {
+        for (i = CURVE25519_KEYSIZE - 1; i >= 0; i--) {
             if (rz[i] != 0xff)
                 break;
         }
-        if ((i != 0) || (rz[0] <= 0xec)) {
+        if ((i >= 0) || (rz[0] <= 0xec)) {
             break;
         }
     }
@@ -212,11 +266,11 @@ static int curve25519_smul_blind(byte* rp, const byte* n, const byte* p,
         return ret;
     a[CURVE25519_KEYSIZE-1] &= 0x7f;
     /* k' = k ^ 2k ^ a */
-    n_a[0] = n[0] ^ (n[0] << 1) ^ a[0];
+    n_a[0] = n[0] ^ (byte)(n[0] << 1) ^ a[0];
     for (i = 1; i < CURVE25519_KEYSIZE; i++) {
         byte b1, b2, b3;
         b1 = n[i] ^ a[i];
-        b2 = (n[i] << 1) ^ a[i];
+        b2 = (byte)(n[i] << 1) ^ a[i];
         b3 = (n[i-1] >> 7) ^ a[i];
         n_a[i] = b1 ^ b2 ^ b3;
     }
@@ -260,8 +314,14 @@ int wc_curve25519_make_pub_blind(int public_size, byte* pub, int private_size,
 #else
     fe_init();
 
-    ret = curve25519_smul_blind(pub, priv, (byte*)kCurve25519BasePoint, rng);
+    ret = curve25519_smul_blind(pub, priv, (const byte*)kCurve25519BasePoint,
+                                rng);
 #endif
+
+    if (ret == 0) {
+        ret = wc_curve25519_check_public(pub, (word32)public_size,
+                                    EC25519_LITTLE_ENDIAN);
+    }
 
     return ret;
 }
@@ -391,6 +451,85 @@ int wc_curve25519_make_priv(WC_RNG* rng, int keysize, byte* key)
     return ret;
 }
 
+#ifdef WC_X25519_NONBLOCK
+
+static int wc_curve25519_make_pub_nb(curve25519_key* key)
+{
+    int ret = 0;
+
+    if (key == NULL) {
+        ret = BAD_FUNC_ARG;
+    }
+    else if (key->nb_ctx == NULL) {
+        WOLFSSL_MSG("wc_curve25519_make_pub_nb called with NULL non-blocking "
+            "context.");
+        ret = BAD_FUNC_ARG;
+    }
+
+    if (ret == 0 && key->nb_ctx->state == 0) {
+        /* check clamping */
+        ret = curve25519_priv_clamp_check(key->k);
+        if (ret == 0) {
+            fe_init();
+        }
+    }
+    if (ret == 0) {
+        ret = curve25519_nb(key->p.point, key->k, (byte*)kCurve25519BasePoint,
+                  key->nb_ctx);
+    }
+
+    return ret;
+}
+
+static int wc_curve25519_make_key_nb(WC_RNG* rng, int keysize,
+    curve25519_key* key)
+{
+    int ret = 0;
+
+    if (key == NULL || rng == NULL) {
+        ret = BAD_FUNC_ARG;
+    }
+    else if (key->nb_ctx == NULL) {
+        WOLFSSL_MSG("wc_curve25519_make_key_nb called with NULL non-blocking "
+            "context.");
+        ret = BAD_FUNC_ARG;
+    }
+
+    if (ret == 0 && key->nb_ctx->state == 0) {
+        ret = wc_curve25519_make_priv(rng, keysize, key->k);
+        if (ret == 0) {
+            key->privSet = 1;
+        }
+    }
+    if (ret == 0) {
+        ret = wc_curve25519_make_pub_nb(key);
+        if (ret == 0)  {
+            key->pubSet = 1;
+        }
+    }
+
+    return ret;
+}
+
+int wc_curve25519_set_nonblock(curve25519_key* key, x25519_nb_ctx_t* ctx)
+{
+    if (key == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    /* If a different context is already set, clear it before replacing.
+     * The caller is responsible for freeing any heap-allocated context. */
+    if (key->nb_ctx != NULL && key->nb_ctx != ctx) {
+        XMEMSET(key->nb_ctx, 0, sizeof(x25519_nb_ctx_t));
+    }
+    if (ctx != NULL) {
+        XMEMSET(ctx, 0, sizeof(x25519_nb_ctx_t));
+    }
+    key->nb_ctx = ctx;
+    return 0;
+}
+
+#endif /* WC_X25519_NONBLOCK */
+
 /* generate a new keypair.
  *
  * return value is propagated from wc_curve25519_make_private() or
@@ -412,23 +551,48 @@ int wc_curve25519_make_key(WC_RNG* rng, int keysize, curve25519_key* key)
     }
 #endif
 
+#if defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_X25519) && \
+    defined(WOLFSSL_ASYNC_CRYPT_SW)
+    if (key->asyncDev.marker == WOLFSSL_ASYNC_MARKER_X25519) {
+        if (wc_AsyncSwInit(&key->asyncDev, ASYNC_SW_X25519_MAKE)) {
+            WC_ASYNC_SW* sw = &key->asyncDev.sw;
+            sw->x25519Make.rng = rng;
+            sw->x25519Make.size = keysize;
+            sw->x25519Make.key = key;
+            return WC_PENDING_E;
+        }
+    }
+#endif /* WOLFSSL_ASYNC_CRYPT && WC_ASYNC_ENABLE_X25519 &&
+        * WOLFSSL_ASYNC_CRYPT_SW */
+
 #ifdef WOLFSSL_SE050
     ret = se050_curve25519_create_key(key, keysize);
-#else
-    ret = wc_curve25519_make_priv(rng, keysize, key->k);
-    if (ret == 0) {
-        key->privSet = 1;
-#ifdef WOLFSSL_CURVE25519_BLINDING
-        ret = wc_curve25519_make_pub_blind((int)sizeof(key->p.point),
-                                           key->p.point, (int)sizeof(key->k),
-                                           key->k, rng);
-#else
-        ret = wc_curve25519_make_pub((int)sizeof(key->p.point), key->p.point,
-                                     (int)sizeof(key->k), key->k);
-#endif
-        key->pubSet = (ret == 0);
+#elif defined(WC_X25519_NONBLOCK)
+    if (key->nb_ctx != NULL) {
+        ret = wc_curve25519_make_key_nb(rng, keysize, key);
     }
+    else
 #endif
+#if !defined(WOLFSSL_SE050)
+    {
+        ret = wc_curve25519_make_priv(rng, keysize, key->k);
+        if (ret == 0) {
+            key->privSet = 1;
+#ifdef WOLFSSL_CURVE25519_BLINDING
+            ret = wc_curve25519_make_pub_blind((int)sizeof(key->p.point),
+                      key->p.point, (int)sizeof(key->k), key->k, rng);
+            if (ret == 0) {
+                ret = wc_curve25519_set_rng(key, rng);
+            }
+#else
+            ret = wc_curve25519_make_pub((int)sizeof(key->p.point),
+                      key->p.point, (int)sizeof(key->k), key->k);
+#endif
+            key->pubSet = (ret == 0);
+        }
+    }
+#endif /* !WOLFSSL_SE050 */
+
     return ret;
 }
 
@@ -442,12 +606,65 @@ int wc_curve25519_shared_secret(curve25519_key* private_key,
                                           out, outlen, EC25519_BIG_ENDIAN);
 }
 
+#ifdef WC_X25519_NONBLOCK
+
+static int wc_curve25519_shared_secret_nb(curve25519_key* privKey,
+    curve25519_key* pubKey, byte* out, word32* outlen, int endian)
+{
+    int ret = FP_WOULDBLOCK;
+
+    switch (privKey->nb_ctx->ssState) {
+        case 0:
+            XMEMSET(&privKey->nb_ctx->o, 0, sizeof(privKey->nb_ctx->o));
+            privKey->nb_ctx->ssState = 1;
+            break;
+        case 1:
+            ret = curve25519_nb(privKey->nb_ctx->o.point, privKey->k,
+                      pubKey->p.point, privKey->nb_ctx);
+            if (ret == 0) {
+                ret = FP_WOULDBLOCK;
+                privKey->nb_ctx->ssState = 2;
+            }
+            break;
+        case 2:
+        #ifdef WOLFSSL_ECDHX_SHARED_NOT_ZERO
+            {
+                int i;
+                byte t = 0;
+
+                for (i = 0; i < CURVE25519_KEYSIZE; i++) {
+                    t |= privKey->nb_ctx->o.point[i];
+                }
+                if (t == 0) {
+                    ret = ECC_OUT_OF_RANGE_E;
+                }
+                else
+        #endif /* WOLFSSL_ECDHX_SHARED_NOT_ZERO */
+                {
+                    curve25519_copy_point(out, privKey->nb_ctx->o.point, endian);
+                    *outlen = CURVE25519_KEYSIZE;
+                    ret = 0;
+                }
+        #ifdef WOLFSSL_ECDHX_SHARED_NOT_ZERO
+            }
+        #endif
+            break;
+    }
+
+    if (ret != FP_WOULDBLOCK) {
+        XMEMSET(privKey->nb_ctx, 0, sizeof(x25519_nb_ctx_t));
+    }
+
+    return ret;
+}
+
+#endif /* WC_X25519_NONBLOCK */
+
 int wc_curve25519_shared_secret_ex(curve25519_key* private_key,
                                    curve25519_key* public_key,
                                    byte* out, word32* outlen, int endian)
 {
-    int ret;
-    ECPoint o;
+    int ret = 0;
 
     /* sanity check */
     if (private_key == NULL || public_key == NULL ||
@@ -479,51 +696,80 @@ int wc_curve25519_shared_secret_ex(curve25519_key* private_key,
     }
 #endif
 
-    XMEMSET(&o, 0, sizeof(o));
+#ifdef WC_X25519_NONBLOCK
 
-#ifdef FREESCALE_LTC_ECC
-    /* input point P on Curve25519 */
-    ret = nxp_ltc_curve25519(&o, private_key->k, &public_key->p,
-        kLTC_Curve25519);
-#else
-    #ifdef WOLFSSL_SE050
-    if (!private_key->privSet) {
-        /* use NXP SE050: "privSet" is not set */
-        ret = se050_curve25519_shared_secret(private_key, public_key, &o);
+#if defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_X25519) && \
+    defined(WOLFSSL_ASYNC_CRYPT_SW)
+    if (private_key->asyncDev.marker == WOLFSSL_ASYNC_MARKER_X25519) {
+        if (wc_AsyncSwInit(&private_key->asyncDev,
+                ASYNC_SW_X25519_SHARED_SEC)) {
+            WC_ASYNC_SW* sw = &private_key->asyncDev.sw;
+            sw->x25519SharedSec.priv = private_key;
+            sw->x25519SharedSec.pub = public_key;
+            sw->x25519SharedSec.out = out;
+            sw->x25519SharedSec.outLen = outlen;
+            sw->x25519SharedSec.endian = endian;
+            return WC_PENDING_E;
+        }
+    }
+#endif /* WOLFSSL_ASYNC_CRYPT && WC_ASYNC_ENABLE_X25519 &&
+        * WOLFSSL_ASYNC_CRYPT_SW */
+
+    if (private_key->nb_ctx != NULL) {
+        ret = wc_curve25519_shared_secret_nb(private_key, public_key, out,
+                  outlen, endian);
     }
     else
-    #endif
+#endif /* WC_X25519_NONBLOCK */
     {
-#ifndef WOLFSSL_CURVE25519_BLINDING
-    SAVE_VECTOR_REGISTERS(return _svr_ret;);
+        ECPoint o;
 
-    ret = curve25519(o.point, private_key->k, public_key->p.point);
+        XMEMSET(&o, 0, sizeof(o));
 
-    RESTORE_VECTOR_REGISTERS();
+#ifdef FREESCALE_LTC_ECC
+        /* input point P on Curve25519 */
+        ret = nxp_ltc_curve25519(&o, private_key->k, &public_key->p,
+            kLTC_Curve25519);
 #else
-    ret = curve25519_smul_blind(o.point, private_key->k, public_key->p.point,
-                                private_key->rng);
-#endif
-    }
-#endif
-#ifdef WOLFSSL_ECDHX_SHARED_NOT_ZERO
-    if (ret == 0) {
-        int i;
-        byte t = 0;
-        for (i = 0; i < CURVE25519_KEYSIZE; i++) {
-            t |= o.point[i];
+    #ifdef WOLFSSL_SE050
+        if (!private_key->privSet) {
+            /* use NXP SE050: "privSet" is not set */
+            ret = se050_curve25519_shared_secret(private_key, public_key, &o);
         }
-        if (t == 0) {
-            ret = ECC_OUT_OF_RANGE_E;
-        }
-    }
-#endif
-    if (ret == 0) {
-        curve25519_copy_point(out, o.point, endian);
-        *outlen = CURVE25519_KEYSIZE;
-    }
+        else
+    #endif /* WOLFSSL_SE050 */
+        {
+#ifndef WOLFSSL_CURVE25519_BLINDING
+            SAVE_VECTOR_REGISTERS(return _svr_ret;);
 
-    ForceZero(&o, sizeof(o));
+            ret = curve25519(o.point, private_key->k, public_key->p.point);
+
+            RESTORE_VECTOR_REGISTERS();
+#else
+            ret = curve25519_smul_blind(o.point, private_key->k,
+                      public_key->p.point, private_key->rng);
+#endif
+        }
+#endif /* FREESCALE_LTC_ECC */
+#ifdef WOLFSSL_ECDHX_SHARED_NOT_ZERO
+        if (ret == 0) {
+            int i;
+            byte t = 0;
+            for (i = 0; i < CURVE25519_KEYSIZE; i++) {
+                t |= o.point[i];
+            }
+            if (t == 0) {
+                ret = ECC_OUT_OF_RANGE_E;
+            }
+        }
+#endif /* WOLFSSL_ECDHX_SHARED_NOT_ZERO */
+        if (ret == 0) {
+            curve25519_copy_point(out, o.point, endian);
+            *outlen = CURVE25519_KEYSIZE;
+        }
+
+        ForceZero(&o, sizeof(o));
+    }
 
     return ret;
 }
@@ -867,10 +1113,12 @@ curve25519_key* wc_curve25519_new(void* heap, int devId, int *result_code)
 }
 
 int wc_curve25519_delete(curve25519_key* key, curve25519_key** key_p) {
+    void* heap;
     if (key == NULL)
         return BAD_FUNC_ARG;
+    heap = key->heap;
     wc_curve25519_free(key);
-    XFREE(key, key->heap, DYNAMIC_TYPE_CURVE25519);
+    XFREE(key, heap, DYNAMIC_TYPE_CURVE25519);
     if (key_p != NULL)
         *key_p = NULL;
     return 0;
@@ -879,30 +1127,40 @@ int wc_curve25519_delete(curve25519_key* key, curve25519_key** key_p) {
 
 int wc_curve25519_init_ex(curve25519_key* key, void* heap, int devId)
 {
-    if (key == NULL)
-       return BAD_FUNC_ARG;
+    int ret = 0;
 
-    XMEMSET(key, 0, sizeof(*key));
+    if (key == NULL) {
+       ret = BAD_FUNC_ARG;
+    }
+    else {
+        XMEMSET(key, 0, sizeof(*key));
 
-    /* currently the format for curve25519 */
-    key->dp = &curve25519_sets[0];
+        /* currently the format for curve25519 */
+        key->dp = &curve25519_sets[0];
 
-#ifdef WOLF_CRYPTO_CB
-    key->devId = devId;
-#else
-    (void)devId;
-#endif
-    (void)heap; /* if needed for XMALLOC/XFREE in future */
+    #ifdef WOLF_CRYPTO_CB
+        key->devId = devId;
+    #else
+        (void)devId;
+    #endif
+        (void)heap; /* if needed for XMALLOC/XFREE in future */
 
-#ifndef FREESCALE_LTC_ECC
-    fe_init();
-#endif
+    #ifndef FREESCALE_LTC_ECC
+        fe_init();
+    #endif
 
-#ifdef WOLFSSL_CHECK_MEM_ZERO
-    wc_MemZero_Add("wc_curve25519_init_ex key->k", key->k, CURVE25519_KEYSIZE);
-#endif
+    #ifdef WOLFSSL_CHECK_MEM_ZERO
+        wc_MemZero_Add("wc_curve25519_init_ex key->k", key->k,
+            CURVE25519_KEYSIZE);
+    #endif
 
-    return 0;
+    #if defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_X25519)
+        ret = wolfAsync_DevCtxInit(&key->asyncDev, WOLFSSL_ASYNC_MARKER_X25519,
+                  heap, devId);
+    #endif
+    }
+
+    return ret;
 }
 
 int wc_curve25519_init(curve25519_key* key)

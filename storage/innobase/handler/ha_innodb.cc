@@ -124,10 +124,11 @@ TABLE *find_fk_open_table(THD *thd, const char *db, size_t db_len,
 			  const char *table, size_t table_len);
 MYSQL_THD create_background_thd();
 void reset_thd(MYSQL_THD thd);
-TABLE *get_purge_table(THD *thd);
 TABLE *open_purge_table(THD *thd, const char *db, size_t dblen,
-			const char *tb, size_t tblen);
-void close_thread_tables(THD* thd);
+			const char *tb, size_t tblen,
+			MDL_ticket *mdl_ticket) noexcept;
+int close_thread_tables(THD* thd) noexcept;
+MDL_ticket *get_mdl_ticket(TABLE *table) noexcept;
 
 #ifdef MYSQL_DYNAMIC_PLUGIN
 #define tc_size  400
@@ -1771,26 +1772,6 @@ MYSQL_THD innobase_create_background_thd(const char* name)
 	THDVAR(thd, background_thread) = true;
 	return thd;
 }
-
-
-/** Close opened tables, free memory, delete items for a MYSQL_THD.
-@param[in]	thd	MYSQL_THD to reset */
-void
-innobase_reset_background_thd(MYSQL_THD thd)
-{
-	if (!thd) {
-		thd = current_thd;
-	}
-
-	ut_ad(thd);
-	ut_ad(THDVAR(thd, background_thread));
-
-	/* background purge thread */
-	const char *proc_info= thd_proc_info(thd, "reset");
-	reset_thd(thd);
-	thd_proc_info(thd, proc_info);
-}
-
 
 /******************************************************************//**
 Check if the transaction is an auto-commit transaction. TRUE also
@@ -6075,9 +6056,7 @@ ha_innobase::open(const char* name, int, uint)
 	/* Index block size in InnoDB: used by MySQL in query optimization */
 	stats.block_size = static_cast<uint>(srv_page_size);
 
-	const my_bool for_vc_purge = THDVAR(thd, background_thread);
-
-	if (for_vc_purge || !m_prebuilt->table
+	if (!m_prebuilt->table
 	    || m_prebuilt->table->is_temporary()
 	    || m_prebuilt->table->persistent_autoinc
 	    || !m_prebuilt->table->is_readable()) {
@@ -6104,7 +6083,7 @@ ha_innobase::open(const char* name, int, uint)
 	ut_ad(!m_prebuilt->table
 	      || table->versioned() == m_prebuilt->table->versioned());
 
-	if (!for_vc_purge) {
+	if (!THDVAR(thd, background_thread)) {
 		info(HA_STATUS_NO_LOCK | HA_STATUS_VARIABLE | HA_STATUS_CONST
 		     | HA_STATUS_OPEN);
 	}
@@ -6918,12 +6897,12 @@ wsrep_store_key_val_for_row(
 						 wsrep_thd_query(thd));
 					true_len = buff_space;
 				}
+				memcpy(buff, sorted, true_len);
 				buff       += true_len;
 				buff_space -= true_len;
 			} else {
 				buff += key_len;
 			}
-			memcpy(buff, sorted, true_len);
 		} else {
 			/* Here we handle all other data types except the
 			true VARCHAR, BLOB and TEXT. Note that the column
@@ -8536,7 +8515,7 @@ ATTRIBUTE_COLD bool wsrep_append_table_key(MYSQL_THD thd, const dict_table_t &ta
 {
   char db_buf[NAME_LEN + 1];
   char tbl_buf[NAME_LEN + 1];
-  ulint db_buf_len, tbl_buf_len;
+  size_t db_buf_len, tbl_buf_len;
 
   if (!table.parse_name(db_buf, tbl_buf, &db_buf_len, &tbl_buf_len))
   {
@@ -15532,7 +15511,7 @@ get_foreign_key_info(
 	FOREIGN_KEY_INFO*	pf_key_info;
 	uint			i = 0;
 	size_t			len;
-	char			tmp_buff[NAME_LEN+1];
+	char			tmp_buff[MAX_DATABASE_NAME_LEN+1];
 	char			name_buff[NAME_LEN+1];
 	const char*		ptr;
 	LEX_CSTRING*		name = NULL;
@@ -15787,16 +15766,17 @@ ha_innobase::extra(
 	/* Warning: since it is not sure that MariaDB calls external_lock()
 	before calling this function, m_prebuilt->trx can be obsolete! */
 	trx_t* trx;
+	THD* thd = ha_thd();
 
 	switch (operation) {
 	case HA_EXTRA_FLUSH:
-		(void)check_trx_exists(ha_thd());
+		(void)check_trx_exists(thd);
 		if (m_prebuilt->blob_heap) {
 			row_mysql_prebuilt_free_blob_heap(m_prebuilt);
 		}
 		break;
 	case HA_EXTRA_RESET_STATE:
-		trx = check_trx_exists(ha_thd());
+		trx = check_trx_exists(thd);
 		reset_template();
 		trx->duplicates = 0;
 	stmt_boundary:
@@ -15804,23 +15784,23 @@ ha_innobase::extra(
 		trx->bulk_insert = false;
 		break;
 	case HA_EXTRA_NO_KEYREAD:
-		(void)check_trx_exists(ha_thd());
+		(void)check_trx_exists(thd);
 		m_prebuilt->read_just_key = 0;
 		break;
 	case HA_EXTRA_KEYREAD:
-		(void)check_trx_exists(ha_thd());
+		(void)check_trx_exists(thd);
 		m_prebuilt->read_just_key = 1;
 		break;
 	case HA_EXTRA_KEYREAD_PRESERVE_FIELDS:
-		(void)check_trx_exists(ha_thd());
+		(void)check_trx_exists(thd);
 		m_prebuilt->keep_other_fields_on_keyread = 1;
 		break;
 	case HA_EXTRA_INSERT_WITH_UPDATE:
-		trx = check_trx_exists(ha_thd());
+		trx = check_trx_exists(thd);
 		trx->duplicates |= TRX_DUP_IGNORE;
 		goto stmt_boundary;
 	case HA_EXTRA_NO_IGNORE_DUP_KEY:
-		trx = check_trx_exists(ha_thd());
+		trx = check_trx_exists(thd);
 		trx->duplicates &= ~TRX_DUP_IGNORE;
 		if (trx->is_bulk_insert()) {
 			/* Allow a subsequent INSERT into an empty table
@@ -15829,11 +15809,11 @@ ha_innobase::extra(
 		}
 		goto stmt_boundary;
 	case HA_EXTRA_WRITE_CAN_REPLACE:
-		trx = check_trx_exists(ha_thd());
+		trx = check_trx_exists(thd);
 		trx->duplicates |= TRX_DUP_REPLACE;
 		goto stmt_boundary;
 	case HA_EXTRA_WRITE_CANNOT_REPLACE:
-		trx = check_trx_exists(ha_thd());
+		trx = check_trx_exists(thd);
 		trx->duplicates &= ~TRX_DUP_REPLACE;
 		if (trx->is_bulk_insert()) {
 			/* Allow a subsequent INSERT into an empty table
@@ -15842,7 +15822,7 @@ ha_innobase::extra(
 		}
 		goto stmt_boundary;
 	case HA_EXTRA_BEGIN_ALTER_COPY:
-		trx = check_trx_exists(ha_thd());
+		trx = check_trx_exists(thd);
 		m_prebuilt->table->skip_alter_undo = 1;
 		if (m_prebuilt->table->is_temporary()
 		    || !m_prebuilt->table->versioned_by_id()) {
@@ -15855,7 +15835,7 @@ ha_innobase::extra(
 			.first->second.set_versioned(0);
 		break;
 	case HA_EXTRA_END_ALTER_COPY:
-		trx = check_trx_exists(ha_thd());
+		trx = check_trx_exists(thd);
 		if (!m_prebuilt->table->skip_alter_undo) {
 			/* This could be invoked inside INSERT...SELECT.
 			We do not want any extra log writes, because
@@ -15874,6 +15854,7 @@ ha_innobase::extra(
 			handler::extra(HA_EXTRA_BEGIN_ALTER_COPY). */
 			log_buffer_flush_to_disk();
 		}
+		alter_stats_rebuild(m_prebuilt->table, thd, true);
 		break;
 	default:/* Do nothing */
 		;
@@ -19294,7 +19275,7 @@ static MYSQL_SYSVAR_SIZE_T(ft_result_cache_limit, fts_result_cache_limit,
 static MYSQL_SYSVAR_ULONG(ft_min_token_size, fts_min_token_size,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
   "InnoDB Fulltext search minimum token size in characters",
-  NULL, NULL, 3, 0, 16, 0);
+  NULL, NULL, 3, 1, 16, 0);
 
 static MYSQL_SYSVAR_ULONG(ft_max_token_size, fts_max_token_size,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
@@ -19621,11 +19602,6 @@ static MYSQL_SYSVAR_ENUM(default_row_format, innodb_default_row_format,
   &innodb_default_row_format_typelib);
 
 #ifdef UNIV_DEBUG
-static MYSQL_SYSVAR_UINT(trx_rseg_n_slots_debug, trx_rseg_n_slots_debug,
-  PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_NOCMDOPT,
-  "Debug flags for InnoDB to limit TRX_RSEG_N_SLOTS for trx_rsegf_undo_find_free()",
-  NULL, NULL, 0, 0, 1024, 0);
-
 static MYSQL_SYSVAR_UINT(limit_optimistic_insert_debug,
   btr_cur_limit_optimistic_insert_debug, PLUGIN_VAR_RQCMDARG,
   "Artificially limit the number of records per B-tree page (0=unlimited).",
@@ -19898,7 +19874,6 @@ static struct st_mysql_sys_var* innobase_system_variables[]= {
   MYSQL_SYSVAR(compression_pad_pct_max),
   MYSQL_SYSVAR(default_row_format),
 #ifdef UNIV_DEBUG
-  MYSQL_SYSVAR(trx_rseg_n_slots_debug),
   MYSQL_SYSVAR(limit_optimistic_insert_debug),
   MYSQL_SYSVAR(trx_purge_view_update_only_debug),
   MYSQL_SYSVAR(evict_tables_on_commit_debug),
@@ -20075,37 +20050,28 @@ ha_innobase::multi_range_read_explain_info(
 for purge thread */
 static TABLE* innodb_find_table_for_vc(THD* thd, dict_table_t* table)
 {
-	TABLE *mysql_table;
-	const bool  bg_thread = THDVAR(thd, background_thread);
-
-	if (bg_thread) {
-		if ((mysql_table = get_purge_table(thd))) {
-			return mysql_table;
-		}
-	} else {
-		if (table->vc_templ->mysql_table_query_id
-		    == thd_get_query_id(thd)) {
-			return table->vc_templ->mysql_table;
-		}
+	table->lock_mutex_lock();
+	TABLE *maria_table = table->vc_templ->mysql_table;
+	const uint64_t cached_id = table->vc_templ->mysql_table_query_id;
+	table->lock_mutex_unlock();
+	if (cached_id == thd_get_query_id(thd)) {
+		return maria_table;
 	}
 
+	TABLE *mysql_table;
 	char	db_buf[NAME_LEN + 1];
 	char	tbl_buf[NAME_LEN + 1];
-	ulint	db_buf_len, tbl_buf_len;
+	size_t	db_buf_len, tbl_buf_len;
 
 	if (!table->parse_name(db_buf, tbl_buf, &db_buf_len, &tbl_buf_len)) {
 		return NULL;
 	}
-
-	if (bg_thread) {
-		return open_purge_table(thd, db_buf, db_buf_len,
-					tbl_buf, tbl_buf_len);
-	}
-
 	mysql_table = find_fk_open_table(thd, db_buf, db_buf_len,
 					 tbl_buf, tbl_buf_len);
+	table->lock_mutex_lock();
 	table->vc_templ->mysql_table = mysql_table;
 	table->vc_templ->mysql_table_query_id = thd_get_query_id(thd);
+	table->lock_mutex_unlock();
 	return mysql_table;
 }
 
@@ -21290,4 +21256,25 @@ ulint buf_pool_size_align(ulint size) noexcept
   } else {
     return (ulint)((size / m + 1) * m);
   }
+}
+
+/** Adjust the persistent statistics after rebuilding ALTER TABLE.
+Remove statistics for dropped indexes, add statistics for created indexes
+and rename statistics for renamed indexes.
+@param table InnoDB table that was rebuilt by ALTER TABLE
+@param thd   alter table thread
+@param copy  Caller is from COPY alter algorithm*/
+void alter_stats_rebuild(dict_table_t *table, THD *thd, bool copy)
+{
+  DBUG_ENTER("alter_stats_rebuild");
+  if (!table->space || !dict_stats_is_persistent_enabled(table) ||
+      (copy && !table->name.is_temporary()))
+    DBUG_VOID_RETURN;
+
+  dberr_t ret= dict_stats_update(table, DICT_STATS_RECALC_PERSISTENT);
+  if (ret != DB_SUCCESS)
+    push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                        ER_ALTER_INFO, "Error updating stats for table after"
+                        " table rebuild: %s", ut_strerr(ret));
+  DBUG_VOID_RETURN;
 }

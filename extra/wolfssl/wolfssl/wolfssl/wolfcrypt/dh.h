@@ -1,12 +1,12 @@
 /* dh.h
  *
- * Copyright (C) 2006-2025 wolfSSL Inc.
+ * Copyright (C) 2006-2026 wolfSSL Inc.
  *
  * This file is part of wolfSSL.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfSSL is distributed in the hope that it will be useful,
@@ -104,7 +104,7 @@ enum {
         #endif
     #elif defined(WOLFSSL_SP_MATH_ALL) || defined(WOLFSSL_SP_MATH)
         /* SP implementation supports numbers of SP_INT_BITS bits. */
-        #define DH_MAX_SIZE    (((SP_INT_BITS + 7) / 8) * 8)
+        #define DH_MAX_SIZE    WC_BITS_FULL_BYTES(SP_INT_BITS)
         #if defined(WOLFSSL_MYSQL_COMPATIBLE) && DH_MAX_SIZE < 8192
             #error "MySQL needs SP_INT_BITS at least at 8192"
         #endif
@@ -145,7 +145,6 @@ WOLFSSL_API const DhParams* wc_Dh_ffdhe8192_Get(void);
 WOLFSSL_API int wc_InitDhKey(DhKey* key);
 WOLFSSL_API int wc_InitDhKey_ex(DhKey* key, void* heap, int devId);
 WOLFSSL_API int wc_FreeDhKey(DhKey* key);
-
 WOLFSSL_API int wc_DhGenerateKeyPair(DhKey* key, WC_RNG* rng, byte* priv,
                                  word32* privSz, byte* pub, word32* pubSz);
 WOLFSSL_API int wc_DhAgree(DhKey* key, byte* agree, word32* agreeSz,
@@ -172,6 +171,8 @@ WOLFSSL_API int wc_DhCmpNamedKey(int name, int noQ,
         const byte* q, word32 qSz);
 WOLFSSL_API int wc_DhCopyNamedKey(int name,
         byte* p, word32* pSz, byte* g, word32* gSz, byte* q, word32* qSz);
+WOLFSSL_API int wc_DhGeneratePublic(DhKey* key, byte* priv,
+        word32 privSz, byte* pub, word32* pubSz);
 
 #ifdef WOLFSSL_DH_EXTRA
 WOLFSSL_API int wc_DhImportKeyPair(DhKey* key, const byte* priv, word32 privSz,
@@ -190,15 +191,16 @@ WOLFSSL_API int wc_DhCheckPubKey_ex(DhKey* key, const byte* pub, word32 pubSz,
                             const byte* prime, word32 primeSz);
 WOLFSSL_API int wc_DhCheckPubValue(const byte* prime, word32 primeSz,
                                    const byte* pub, word32 pubSz);
-WOLFSSL_API int wc_DhCheckPrivKey(DhKey* key, const byte* priv, word32 pubSz);
-WOLFSSL_API int wc_DhCheckPrivKey_ex(DhKey* key, const byte* priv, word32 pubSz,
-                            const byte* prime, word32 primeSz);
+WOLFSSL_API int wc_DhCheckPrivKey(DhKey* key, const byte* priv, word32 privSz);
+WOLFSSL_API int wc_DhCheckPrivKey_ex(DhKey* key, const byte* priv,
+        word32 privSz, const byte* prime, word32 primeSz);
 WOLFSSL_API int wc_DhCheckKeyPair(DhKey* key, const byte* pub, word32 pubSz,
                         const byte* priv, word32 privSz);
+#ifdef WOLFSSL_KEY_GEN
 WOLFSSL_API int wc_DhGenerateParams(WC_RNG *rng, int modSz, DhKey *dh);
+#endif
 WOLFSSL_API int wc_DhExportParamsRaw(DhKey* dh, byte* p, word32* pSz,
                        byte* q, word32* qSz, byte* g, word32* gSz);
-
 
 #ifdef __cplusplus
     } /* extern "C" */

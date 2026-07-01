@@ -570,6 +570,9 @@ struct file_name_t {
 	/** Status of the tablespace */
 	fil_status	status;
 
+	/** Log sequence number of a FILE_CREATE record, or 0 */
+	lsn_t		create_lsn = 0;
+
 	/** FSP_SIZE of tablespace */
 	uint32_t	size = 0;
 
@@ -1256,7 +1259,8 @@ inline size_t recv_sys_t::files_size()
 @param[in]	name		file name
 @param[in]	len		length of the file name
 @param[in]	space_id	the tablespace ID
-@param[in]	ftype		FILE_MODIFY, FILE_DELETE, or FILE_RENAME
+@param[in]	ftype		FILE_CREATE, FILE_MODIFY, FILE_DELETE,
+				or FILE_RENAME
 @param[in]	lsn		lsn of the redo log
 @param[in]	store		whether the redo log has to be stored */
 static void fil_name_process(const char *name, ulint len, uint32_t space_id,
@@ -1304,6 +1308,7 @@ got_deleted:
 		}
 
 		ut_ad(f.space == NULL);
+		goto reset_create;
 	} else if (p.second // the first FILE_MODIFY or FILE_RENAME
 		   || f.name != fname.name) {
 reload:
@@ -1366,6 +1371,10 @@ rename:
 				break;
 			}
 
+			if (f.create_lsn) {
+				return;
+			}
+
 			if (srv_force_recovery
 			    || srv_operation == SRV_OPERATION_RESTORE) {
 				/* Without innodb_force_recovery,
@@ -1382,7 +1391,7 @@ rename:
 						      fname.name.c_str(),
 						      space_id);
 			}
-			break;
+			return;
 
 		case FIL_LOAD_DEFER:
 			if (d && ftype == FILE_RENAME
@@ -1418,6 +1427,10 @@ rename:
 					  " due to innodb_force_recovery",
 					  int(len), name, space_id);
 		}
+reset_create:
+		f.create_lsn = 0;
+	} else if (ftype == FILE_CREATE && !f.space) {
+		f.create_lsn = lsn;
 	}
 }
 
@@ -2345,8 +2358,10 @@ static void store_freed_or_init_rec(page_id_t page_id, bool freed)
       space= fil_system.sys_space;
     else
       space= fil_space_get(space_id);
-
-    space->free_page(page_no, freed);
+    if (freed)
+      space->free_page<true>(page_no);
+    else
+      space->free_page<false>(page_no);
     return;
   }
 
@@ -2902,8 +2917,9 @@ same_page:
         if (fnend - fn < 4 || memcmp(fnend - 4, DOT_IBD, 4))
           goto file_rec_error;
 
+        /* The old file name of FILE_RENAME is logged as FILE_MODIFY */
         fil_name_process(fn, fnend - fn, space_id,
-                         (b & 0xf0) == FILE_DELETE ? FILE_DELETE : FILE_MODIFY,
+                         fn2 ? FILE_MODIFY : mfile_type_t(b & 0xf0),
                          start_lsn, *store);
 
         if ((b & 0xf0) < FILE_CHECKPOINT && log_file_op)
@@ -3041,6 +3057,10 @@ static buf_block_t *recv_recover_page(buf_block_t *block, mtr_t &mtr,
 				      block->page.id().page_no()));
 
 		log_phys_t::apply_status a= l->apply(*block, recs.last_offset);
+		DBUG_EXECUTE_IF("recv_corrupt",
+				if (init && init->created &&
+				    (!space || space->id != 0))
+				  a= log_phys_t::APPLIED_CORRUPTED;);
 
 		switch (a) {
 		case log_phys_t::APPLIED_NO:
@@ -3112,17 +3132,9 @@ set_start_lsn:
 			mtr.discard_modifications();
 			mtr.commit();
 
-			fil_space_t* s = space
-				? space
-				: fil_space_t::get(block->page.id().space());
-
 			buf_pool.corrupted_evict(&block->page,
 						 block->page.state() &
 						 buf_page_t::LRU_MASK);
-			if (!space) {
-				s->release();
-			}
-
 			return nullptr;
 		}
 
@@ -3524,7 +3536,6 @@ inline buf_block_t *recv_sys_t::recover_low(const map::iterator &p, mtr_t &mtr,
     DBUG_LOG("ib_log", "skip log for page " << p->first
              << " LSN " << end_lsn << " < " << init.lsn);
   fil_space_t *space= fil_space_t::get(p->first.space());
-
   mtr.start();
   mtr.set_log_mode(MTR_LOG_NO_REDO);
 
@@ -3544,7 +3555,6 @@ inline buf_block_t *recv_sys_t::recover_low(const map::iterator &p, mtr_t &mtr,
     zip_size= fil_space_t::zip_size(flags);
     block= buf_page_create_deferred(p->first.space(), zip_size, &mtr, b);
     ut_ad(block == b);
-    block->page.lock.x_lock_recursive();
   }
   else
   {
@@ -3563,6 +3573,8 @@ inline buf_block_t *recv_sys_t::recover_low(const map::iterator &p, mtr_t &mtr,
     }
   }
 
+  /* Released in buf_pool_t::corrupted_evict(), recover_deferred() or below */
+  block->page.lock.x_lock_recursive();
   ut_d(mysql_mutex_lock(&mutex));
   ut_ad(&recs == &pages.find(p->first)->second);
   ut_d(mysql_mutex_unlock(&mutex));
@@ -3571,8 +3583,11 @@ inline buf_block_t *recv_sys_t::recover_low(const map::iterator &p, mtr_t &mtr,
   ut_ad(mtr.has_committed());
 
   if (space)
+  {
     space->release();
-
+    if (block)
+      block->page.lock.x_unlock();
+  }
   return block ? block : reinterpret_cast<buf_block_t*>(-1);
 }
 
@@ -3668,10 +3683,8 @@ static void log_sort_flush_list() noexcept
   for (size_t i= 0; i < idx; i++)
   {
     buf_page_t *b= list[i];
-    const lsn_t lsn{b->oldest_modification()};
-    if (lsn == 1)
-      continue;
-    DBUG_ASSERT(lsn > 2);
+    ut_d(const lsn_t lsn{b->oldest_modification()});
+    ut_ad(lsn == 1 || lsn > 2);
     UT_LIST_ADD_LAST(buf_pool.flush_list, b);
   }
 
@@ -4231,6 +4244,11 @@ next:
 		case file_name_t::NORMAL:
 			goto next;
 		case file_name_t::MISSING:
+			if (srv_operation != SRV_OPERATION_NORMAL) {
+			} else if (const lsn_t c = i->second.create_lsn) {
+				deferred_spaces.add(space, i->second.name, c);
+				goto next;
+			}
 			err = recv_init_missing_space(err, i);
 			i->second.status = file_name_t::DELETED;
 			/* fall through */

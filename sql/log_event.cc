@@ -216,7 +216,7 @@ private:
   Log_event *m_ev; // Used for Flashback
 };
 
-#ifndef DBUG_OFF
+#if !defined DBUG_OFF && defined DBUG_TRACE
 #define DBUG_DUMP_EVENT_BUF(B,L)                                         \
   do {                                                                   \
     const uchar *_buf=(uchar*)(B);                                       \
@@ -2676,8 +2676,10 @@ Gtid_log_event::Gtid_log_event(const uchar *buf, uint event_len,
     buf+= 2;
 
     long data_length= xid.bqual_length + xid.gtrid_length;
-    if (event_len < static_cast<uint>(buf - buf_0) + data_length)
+    if (event_len < static_cast<uint>(buf - buf_0) + data_length ||
+        xid.gtrid_length > MAXGTRIDSIZE || xid.bqual_length > MAXBQUALSIZE)
     {
+      xid.formatID= -1;
       seq_no= 0;
       return;
     }
