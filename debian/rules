@@ -19,6 +19,13 @@ include /usr/share/debhelper/dh_package_notes/package-notes.mk
 CFLAGS+=$(CPPFLAGS)
 CXXFLAGS+=$(CPPFLAGS)
 
+# Ubuntu 26.04 dpkg-buildflags injects -flto=auto -ffat-lto-objects by default.
+# MariaDB already enables LTO internally; having these flags from the distro too
+# causes extremely slow builds and huge memory usage. Strip them.
+CFLAGS := $(filter-out -flto% -ffat-lto-objects,$(CFLAGS))
+CXXFLAGS := $(filter-out -flto% -ffat-lto-objects,$(CXXFLAGS))
+LDFLAGS := $(filter-out -flto% -ffat-lto-objects,$(LDFLAGS))
+
 # Only do a strict symbol checking on Linux
 # https://manpages.debian.org/testing/dpkg-dev/dpkg-gensymbols.1.en.html
 # Level 4: Fails if some libraries have been introduced.
