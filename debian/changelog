@@ -1,6 +1,6 @@
-mariadb-10.6 (1:10.6.27-0ubuntu0.22.04.1) UNRELEASED; urgency=medium
+mariadb-10.6 (1:10.6.27-0ubuntu0.22.04.1) jammy; urgency=medium
 
-  * SECURITY UPDATE: New upstream maintenance release 10.6.27 (LP: #nnnnnnnn)
+  * SECURITY UPDATE: New upstream maintenance release 10.6.27 (LP: #2158958)
     includes several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.6/10.6.27
     and fixes for the following CVE tracked security issues:
@@ -26,6 +26,11 @@ mariadb-10.6 (1:10.6.27-0ubuntu0.22.04.1) UNRELEASED; urgency=medium
     - CVE-2025-13699
   * New upstream versions included fixes for these Debian tracked issues:
     - MDEV-39479 Mroonga hangs on invalid index flag (Closes: #1110683)
+  * Also cherry-pick the following upstream debian/ changes:
+    - MDEV-34902 debian-start erroneously reports issues (includes security fix)
+    - MDEV-15502 With recent changes in upstream systemd, the tmpfiles are now
+      required, otherwise starting MariaDB would fail on error: "cannot create
+      /run/mysqld/wsrep-start-position: Directory nonexistent"
   * Salsa CI: Disable running `gbp setup-gitattributes`
   * Salsa CI: Disable the uscan job as it is incompatible with MariaDB
   * Use archive.mariadb.org as official watch source
