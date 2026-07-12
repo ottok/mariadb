@@ -1,3 +1,78 @@
+mariadb (1:11.8.6-5ubuntu0.1) resolute-security; urgency=medium
+
+  * SECURITY UPDATE: wsrep unsafe handling of parameters
+    - debian/patches/CVE-2026-44168.patch: MDEV-39413 wsrep unsafe handling of
+      parameters in mysql-test/lib/generate-ssl-certs.sh, mysql-
+      test/std_data/server-new-cert.pem, mysql-test/std_data/server-new-key.pem,
+      mysql-
+      test/suite/galera/r/galera_sst_mariabackup_encrypt_with_key_server.result,
+      mysql-
+      test/suite/galera/t/galera_sst_mariabackup_encrypt_with_key_server.test,
+      scripts/wsrep_sst_common.sh, scripts/wsrep_sst_mariabackup.sh.
+    - CVE-2026-44168
+  * SECURITY UPDATE: SHOW CREATE ROUTINE does not apply to roles
+    - debian/patches/CVE-2026-44169.patch: MDEV-39288 SHOW CREATE ROUTINE does
+      not apply to roles in mysql-test/main/sp-security.result, mysql-
+      test/main/sp-security.test, sql/sql_acl.cc.
+    - CVE-2026-44169
+  * SECURITY UPDATE: mbstream insufficient path validation
+    - debian/patches/CVE-2026-44171.patch: MDEV-39408 mbstream insufficient path
+      validation in extra/mariabackup/xbstream.cc, mysql-
+      test/suite/mariabackup/xbstream.result, mysql-
+      test/suite/mariabackup/xbstream.test.
+    - CVE-2026-44171
+  * SECURITY UPDATE: mysql_real_escape_string incorrectly handles big5
+    - debian/patches/CVE-2026-44172.patch: CONC-819 mysql_real_escape_string
+      incorrectly handles big5 in libmariadb/libmariadb/ma_charset.c,
+      libmariadb/unittest/libmariadb/charset.c.
+    - CVE-2026-44172
+  * SECURITY UPDATE: FILE privilege isn't checked for derived
+    - debian/patches/CVE-2026-44173.patch: MDEV-39493 FILE privilege isn't
+      checked for derived in mysql-test/main/outfile.test, mysql-
+      test/suite/json/r/json_table_notembedded.result, mysql-
+      test/suite/json/t/json_table_notembedded.test, sql/sql_parse.cc,
+      sql/sql_prepare.cc.
+    - CVE-2026-44173
+  * SECURITY UPDATE: wsrep_sst_rsync.sh: apply safe() to joiner-supplied
+    parameters
+    - debian/patches/CVE-2026-48163.patch: MDEV-39648: wsrep_sst_rsync.sh: apply
+      safe() to joiner-supplied parameters in mysql-
+      test/suite/galera/r/galera_sst_rsync_encrypt_with_key_server.result,
+      mysql-test/suite/galera/t/galera_sst_rsync_encrypt_with_key_server.cnf,
+      mysql-test/suite/galera/t/galera_sst_rsync_encrypt_with_key_server.test,
+      scripts/wsrep_sst_rsync.sh.
+    - CVE-2026-48163
+  * SECURITY UPDATE: Galera Cluster-peer > Donor command execution
+    - debian/patches/CVE-2026-48165-1.patch: MDEV-39676 : Galera Cluster-peer >
+      Donor command execution in mysql-
+      test/suite/galera/r/galera_var_sst_donor.result, mysql-
+      test/suite/galera/r/galera_var_sst_method.result, mysql-
+      test/suite/galera/r/galera_var_sst_receive_address.result, mysql-
+      test/suite/galera/t/galera_var_sst_donor.test, mysql-
+      test/suite/galera/t/galera_var_sst_method.test, mysql-
+      test/suite/galera/t/galera_var_sst_receive_address.test, mysql-
+      test/suite/sys_vars/r/wsrep_sst_donor_basic.result, mysql-
+      test/suite/sys_vars/r/wsrep_sst_receive_address_basic.result, mysql-
+      test/suite/sys_vars/t/wsrep_sst_donor_basic.test, mysql-
+      test/suite/sys_vars/t/wsrep_sst_receive_address_basic.test,
+      sql/wsrep_sst.cc.
+    - debian/patches/CVE-2026-48165-2.patch: MDEV-39676 disallow
+      global.wsrep_sst_donor=NULL again in mysql-
+      test/suite/sys_vars/r/wsrep_sst_donor_basic.result, mysql-
+      test/suite/sys_vars/t/wsrep_sst_donor_basic.test, sql/wsrep_sst.cc.
+    - CVE-2026-48165
+  * SECURITY UPDATE: wsrep_notify_cmd should sanitize peer-supplied fields
+    before shell substitution
+    - debian/patches/CVE-2026-49261.patch: MDEV-39721: wsrep_notify.cc: reject
+      shell-unsafe characters in joiner-supplied member fields in mysql-
+      test/suite/galera/r/galera_wsrep_notify_cmd_injection.result, mysql-
+      test/suite/galera/t/galera_wsrep_notify_cmd_injection.cnf, mysql-
+      test/suite/galera/t/galera_wsrep_notify_cmd_injection.test,
+      sql/wsrep_notify.cc.
+    - CVE-2026-49261
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Sun, 12 Jul 2026 10:03:13 -0400
+
 mariadb (1:11.8.6-5) unstable; urgency=medium
 
   * New mariadb-server installs will now use /var/lib/mariadb as the default

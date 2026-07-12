@@ -12,3 +12,12 @@ systemd-hardening-safe-defaults.patch
 MDEV-38811-skip-grant-tables-crash.patch
 MDEV-39082-mysql-test-use-vardir-as-datadir-in-collect_my.patch
 set-default-datadir-to-var-lib-mariadb.patch
+CVE-2026-44168.patch
+CVE-2026-44169.patch
+CVE-2026-44171.patch
+CVE-2026-44172.patch
+CVE-2026-44173.patch
+CVE-2026-48163.patch
+CVE-2026-48165-1.patch
+CVE-2026-48165-2.patch
+CVE-2026-49261.patch
