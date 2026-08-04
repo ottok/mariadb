@@ -55,3 +55,7 @@ usr/share/mariadb/systemd/mariadb@.socket # Installed by rules file
 usr/share/mariadb/systemd/mysql.service  # Installed by rules file
 usr/share/mariadb/systemd/mysqld.service  # Installed by rules file
 usr/share/mariadb/systemd/use_galera_new_cluster.conf
+usr/share/cmake/mariadb-plugin/mariadb-plugin-config.cmake # Added in upstream 3977a282 but not included in packaging by upstream
+usr/share/cmake/mariadb-plugin/mariadb-plugin-defines.cmake # Added in upstream 3977a282 but not included in packaging by upstream
+usr/share/cmake/mariadb-plugin/mariadb-plugin-targets-relwithdebinfo.cmake # Added in upstream 3977a282 but not included in packaging by upstream
+usr/share/cmake/mariadb-plugin/mariadb-plugin-targets.cmake # Added in upstream 3977a282 but not included in packaging by upstream

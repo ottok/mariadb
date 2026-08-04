@@ -4,7 +4,7 @@ usr/include/mariadb/errmsg.h
 usr/include/mariadb/ma_list.h
 usr/include/mariadb/ma_pvio.h
 usr/include/mariadb/ma_tls.h
-usr/include/mariadb/mariadb/ma_io.h
+usr/include/mariadb/mariadb
 usr/include/mariadb/mariadb_com.h
 usr/include/mariadb/mariadb_ctype.h
 usr/include/mariadb/mariadb_dyncol.h
