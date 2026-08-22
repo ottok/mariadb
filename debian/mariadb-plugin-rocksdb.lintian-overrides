@@ -1,10 +1,2 @@
 # Fixed upstream in https://github.com/facebook/rocksdb/pull/6481 but not yet in MariaDB
 spelling-error-in-binary COMMITED COMMITTED [usr/lib/mysql/plugin/ha_rocksdb.so]
-# False positives from Lintian that finds many short supposedly misspelled words
-# in binaries which don't actually exist in the source code anywhere
-spelling-error-in-binary AfE Safe [usr/bin/mariadb-ldb]
-spelling-error-in-binary AfE Safe [usr/lib/mysql/plugin/ha_rocksdb.so]
-spelling-error-in-binary lengH length [usr/bin/mariadb-ldb]
-spelling-error-in-binary lengH length [usr/lib/mysql/plugin/ha_rocksdb.so]
-spelling-error-in-binary ment meant [usr/bin/mariadb-ldb]
-spelling-error-in-binary ment meant [usr/lib/mysql/plugin/ha_rocksdb.so]

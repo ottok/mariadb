@@ -8,15 +8,9 @@ spelling-error-in-binary theres there's [usr/bin/*]
 spelling-error-in-binary yuR your [usr/bin/mariadb-client-test-embedded]
 spelling-error-in-binary yuR your [usr/bin/mariadb-test-embedded]
 spelling-error-in-binary yuR your [usr/bin/test-connect-t]
-# False positives from Lintian that finds many short supposedly misspelled words
-# in binaries which don't actually exist in the source code anywhere
-spelling-error-in-binary IiF If [usr/bin/mariadb-client-test-embedded]
-spelling-error-in-binary IiF If [usr/bin/mariadb-test-embedded]
-spelling-error-in-binary IiF If [usr/bin/test-connect-t]
 # Valid reason for documentation in context in directory
 package-contains-documentation-outside-usr-share-doc [usr/share/mariadb/mariadb-test/README*]
 # Test plugins intentionally not fully featured
-shared-library-lacks-prerequisites [usr/lib/mysql/plugin/auth_0x0100.so]
 shared-library-lacks-prerequisites [usr/lib/mysql/plugin/debug_key_management.so]
 shared-library-lacks-prerequisites [usr/lib/mysql/plugin/test_sql_service.so]
 # The file mysql-test-run.pl is a symlink for mariadb-test-run.pl, which does
