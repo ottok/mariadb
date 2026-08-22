@@ -450,10 +450,6 @@ Copyright: 2001-2014 Andrew Aksyonoff
  2008-2014 Sphinx Technologies Inc
 License: GPL-2
 
-Files: extra/readline/*
-Copyright: 1987-2006 Free Software Foundation Inc
-License: GPL-2+
-
 Files: sql-bench/*.sh
 Copyright: 2009 Sun Microsystems, Inc
            2000-2007 MySQL AB
@@ -848,10 +844,6 @@ License: GPL-2
 
 Files: plugin/server_audit/CMakeLists.txt
 Copyright: 2013 Alexey Botchkov and SkySQL Ab
-License: GPL-2
-
-Files: zlib/CMakeLists.txt
-Copyright: 2006, 2014, Oracle and/or its affiliates
 License: GPL-2
 
 License: GPL-2
