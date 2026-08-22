@@ -4,11 +4,11 @@ Maintainer: Debian MySQL Maintainers <pkg-mysql-maint@lists.alioth.debian.org>
 Uploaders:
  Otto Kekäläinen <otto@debian.org>,
 Build-Depends:
- debhelper-compat (= 13),
+ debhelper-compat (= 14),
  dh-apparmor,
  dh-exec,
  dh-package-notes,
- dh-sequence-installsysusers,
+ dh-sequence-dwz,
  dpkg-dev (>= 1.22.5),
  bison,
  cmake,
@@ -62,8 +62,6 @@ Depends:
  libmariadb3 (= ${binary:Version}),
  libssl-dev,
  zlib1g-dev,
- ${misc:Depends},
- ${shlibs:Depends},
 Breaks:
  libmariadb-client-lgpl-dev,
  libmariadb-dev-compat (<< ${source:Version}),
@@ -94,7 +92,6 @@ Architecture: any
 Section: libdevel
 Depends:
  libmariadb-dev (= ${binary:Version}),
- ${misc:Depends},
 Conflicts:
  libmariadb-client-lgpl-dev-compat,
  libmariadbclient-dev-compat,
@@ -127,8 +124,6 @@ Multi-Arch: same
 Section: libs
 Depends:
  mariadb-common,
- ${misc:Depends},
- ${shlibs:Depends},
 Conflicts:
  mariadb-galera-server-10.0,
  mariadb-galera-server-5.5,
@@ -150,17 +145,12 @@ Description: MariaDB database client library
  This package includes the client library.
 
 Package: libmariadbd19t64
-Provides:
- ${t64:Provides},
 Replaces:
  libmariadbd19,
 Breaks:
  libmariadbd19 (<< ${source:Version}),
 Architecture: any
 Section: libs
-Depends:
- ${misc:Depends},
- ${shlibs:Depends},
 Multi-Arch: same
 Description: MariaDB embedded database, shared library
  MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
@@ -180,8 +170,6 @@ Pre-Depends:
 Depends:
  libmariadb-dev (= ${binary:Version}),
  libmariadbd19t64 (= ${binary:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Breaks:
  libmariadb-dev (<< 1:10.4),
  libmysqld-dev,
@@ -201,7 +189,6 @@ Package: mariadb-common
 Architecture: all
 Depends:
  mysql-common (>= 5.6.25),
- ${misc:Depends},
 Multi-Arch: foreign
 Description: MariaDB database common files (/etc/mysql/mariadb.conf.d/)
  MariaDB is a fast, stable and true multi-user, multi-threaded SQL database
@@ -216,8 +203,6 @@ Architecture: any
 Depends:
  libmariadb3 (>= 10.5.4),
  mariadb-common (>= ${source:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Conflicts:
  mysql-client-5.5,
  mysql-client-5.6,
@@ -308,9 +293,6 @@ Architecture: any
 Depends:
  debianutils (>=1.6),
  mariadb-client-core (>= ${source:Version}),
- ${misc:Depends},
- ${perl:Depends},
- ${shlibs:Depends},
 Conflicts:
  mysql-client-core-5.5,
  mysql-client-core-5.6,
@@ -415,7 +397,6 @@ Package: mariadb-client-compat
 Architecture: all
 Depends:
  mariadb-client (>= ${source:Version}),
- ${misc:Depends},
 Breaks:
  mariadb-client (<< 1:11.0.0),
  mariadb-client-core (<< 1:11.0.0),
@@ -512,8 +493,6 @@ Package: mariadb-server-core
 Architecture: any
 Depends:
  mariadb-common (>= ${source:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Conflicts:
  mariadb-galera-server-5.5,
  mysql-server-5.5,
@@ -607,7 +586,6 @@ Pre-Depends:
  debconf,
  mariadb-common (>= ${source:Version}),
  procps,
- ${misc:Pre-Depends},
 Depends:
  galera-4 (>= 26.4),
  gawk,
@@ -621,8 +599,6 @@ Depends:
  psmisc,
  rsync,
  socat,
- ${misc:Depends},
- ${shlibs:Depends},
 Conflicts:
  handlersocket-mysql-5.5,
  mariadb-tokudb-engine-10.0,
@@ -708,7 +684,6 @@ Package: mariadb-server-compat
 Architecture: all
 Depends:
  mariadb-server (>= ${source:Version}),
- ${misc:Depends},
 Breaks:
  mariadb-server (<< 1:11.0.0),
  mariadb-server-10.5 (<< 1:10.11),
@@ -785,8 +760,6 @@ Replaces:
  mariadb-client-10.1,
 Depends:
  mariadb-client-core (= ${binary:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Description: Backup tool for MariaDB server
  Based on Xtrabackup, but improved to work with MariaDB server.
  This backup tool is guaranteed to be compatible with MariaDB server.
@@ -799,8 +772,6 @@ Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
  unixodbc,
- ${misc:Depends},
- ${shlibs:Depends},
 Recommends:
  curl,
 Conflicts:
@@ -826,7 +797,6 @@ Package: mariadb-plugin-connect-jdbc
 Architecture: all
 Depends:
  default-jre-headless,
- ${misc:Depends},
 Suggests:
  libcsvjdbc-java,
  libmariadb-java,
@@ -846,8 +816,6 @@ Package: mariadb-plugin-s3
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Description: Amazon S3 archival storage engine for MariaDB
  The S3 storage engine allows one to archive MariaDB tables in Amazon S3 (or any
  third-party public or private cloud that implements S3 API), but still have
@@ -859,8 +827,6 @@ Depends:
  mariadb-server-core (= ${server:Version}),
  python3:any,
  rocksdb-tools,
- ${misc:Depends},
- ${shlibs:Depends},
 Breaks:
  mariadb-rocksdb-engine-10.2,
  mariadb-rocksdb-engine-10.3,
@@ -878,8 +844,6 @@ Package: mariadb-plugin-oqgraph
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Conflicts:
  mariadb-oqgraph-engine-10.0,
  mariadb-oqgraph-engine-10.1,
@@ -902,8 +866,6 @@ Package: mariadb-plugin-mroonga
 Architecture: any-alpha any-amd64 any-arm any-arm64 any-i386 any-ia64 any-mips64el any-mips64r6el any-mipsel any-mipsr6el any-nios2 any-powerpcel any-ppc64el any-sh3 any-sh4 any-tilegx
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Breaks:
  mariadb-server-10.0,
  mariadb-server-10.1,
@@ -919,8 +881,6 @@ Package: mariadb-plugin-spider
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Breaks:
  mariadb-server-10.0,
  mariadb-server-10.1,
@@ -937,8 +897,6 @@ Package: mariadb-plugin-gssapi-server
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Breaks:
  mariadb-gssapi-server-10.1,
  mariadb-gssapi-server-10.2,
@@ -955,8 +913,6 @@ Package: mariadb-plugin-gssapi-client
 Architecture: any
 Depends:
  mariadb-client (= ${binary:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Breaks:
  mariadb-gssapi-client-10.1,
  mariadb-gssapi-client-10.2,
@@ -973,8 +929,6 @@ Package: mariadb-plugin-cracklib-password-check
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Description: CrackLib Password Validation Plugin for MariaDB server
  This password validation plugin uses cracklib to allow only
  sufficiently secure (as defined by cracklib) user passwords in
@@ -987,8 +941,6 @@ Package: mariadb-plugin-hashicorp-key-management
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Description: Hashicorp Key Management plugin for MariaDB
  This encryption plugin uses Hashicorp Vault for storing encryption
  keys for MariaDB Data-at-Rest encryption.
@@ -997,8 +949,6 @@ Package: mariadb-plugin-provider-bzip2
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Description: BZip2 compression support in the server and storage engines
  The various MariaDB storage engines, such as InnoDB, RocksDB, Mroonga,
  can use different compression libraries.
@@ -1012,8 +962,6 @@ Package: mariadb-plugin-provider-lz4
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Description: LZ4 compression support in the server and storage engines
  The various MariaDB storage engines, such as InnoDB, RocksDB, Mroonga,
  can use different compression libraries.
@@ -1027,8 +975,6 @@ Package: mariadb-plugin-provider-lzma
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Description: LZMA compression support in the server and storage engines
  The various MariaDB storage engines, such as InnoDB, RocksDB, Mroonga,
  can use different compression libraries.
@@ -1042,8 +988,6 @@ Package: mariadb-plugin-provider-lzo
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Description: LZO compression support in the server and storage engines
  The various MariaDB storage engines, such as InnoDB, RocksDB, Mroonga,
  can use different compression libraries.
@@ -1057,8 +1001,6 @@ Package: mariadb-plugin-provider-snappy
 Architecture: any
 Depends:
  mariadb-server-core (= ${server:Version}),
- ${misc:Depends},
- ${shlibs:Depends},
 Description: Snappy compression support in the server and storage engines
  The various MariaDB storage engines, such as InnoDB, RocksDB, Mroonga,
  can use different compression libraries.
@@ -1076,8 +1018,6 @@ Depends:
  mariadb-server (= ${server:Version}),
  mariadb-test-data (= ${source:Version}),
  virtual-mysql-testsuite,
- ${misc:Depends},
- ${shlibs:Depends},
 Breaks:
  mariadb-test-10.0,
  mariadb-test-10.1,
@@ -1128,10 +1068,6 @@ Description: MariaDB database regression test suite
 Package: mariadb-test-data
 Architecture: all
 Multi-Arch: foreign
-Depends:
- ${misc:Depends},
- ${perl:Depends},
- ${shlibs:Depends},
 Breaks:
  mariadb-test-10.0,
  mariadb-test-10.1,
