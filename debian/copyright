@@ -2,7 +2,23 @@ Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: MariaDB Server
 Upstream-Contact: https://jira.mariadb.org
 Source: https://github.com/MariaDB/server
+Files-Excluded:
+ debian/*
+ extra/readline/*
+ extra/wolfssl/*
+ libmariadb/external/zlib/*
+ storage/columnstore/*
+ storage/duckdb/*
+ zlib/*
 Comment:
+ Delete obsolete/unstable components and embedded source code copies
+ to ensure they are not used in Debian and in general to keep MariaDB binaries
+ secure and using only system libraries that can be updated quickly and easily
+ in case security vulnerabilities are found in any of the libraries.
+ Remove columnstore as the source code is dirty and software not mature enough
+ for Debian anyway.
+ .
+ .
  Originally produced by a modified version of licensecheck2dep5
  from CDBS by Clint Byrum <clint@ubuntu.com>. Hand modified to reduce
  redundancy in the output and add appropriate license text. The file
