@@ -1,3 +1,14 @@
+mariadb (1:10.11.18-0+deb12u2) UNRELEASED; urgency=medium
+
+  * Cherry-pick these changes by Michael Biebl (Closes: #1141976)
+    - Install .service files via .install and and let
+      dh_installinit/dh_systemd generate the maintscript code
+    - Switch to dh_installsystemd and debhelper compat 13
+    - Drop unnecessary mariadb-server.prerm
+    - Rely on dh_installsystemd to stop the service in postrm
+
+ -- Luke Yasuda <jing@jing.rocks>  Mon, 24 Aug 2026 15:10:46 +0900
+
 mariadb (1:10.11.18-0+deb12u1) bookworm; urgency=medium
 
   [ Otto Kekäläinen ]
