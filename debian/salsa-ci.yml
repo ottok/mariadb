@@ -917,9 +917,10 @@ default-libmysqlclient-dev and Bookworm upgrade:
 #default-libmysqlclient-dev and Bullseye upgrade:
 #default-libmysqlclient-dev and Buster upgrade:
 
-# Upgrading from MySQL 8.0 with datadir in place is not possible. Users need to do a data dump.
-# The Debian maintainer scripts detect this situation and simply moves old datadir aside and start fresh.
-mysql-8.0 in Sid upgrade:
+# Starting with MySQL 8.0, upgrading with datadir in place is not possible.
+# Users need to do a data dump. The Debian maintainer scripts detect this
+# situation and simply moves old datadir aside and start fresh.
+mysql-9.7 in Sid upgrade:
   extends: .salsa-ci-template-for-mariadb
   stage: upgrade MariaDB variant
   image: debian:sid
@@ -927,9 +928,9 @@ mysql-8.0 in Sid upgrade:
     - *test-prepare-container
     # Using 'mysql*' would match also mysql-workbench, which is broken, so use
     # more exact matchers
-    - apt-get install -q --yes 'mysql-t*' 'mysql-s*' 'mysql-c*' mysqltcl 'mysql-r*' libmysqlcppconn7t64
-    # Ensure MySQL 8.0 package actually got installed
-    - dpkg -l | grep -e "mysql-server.*8\.0"
+    - apt-get install -q --yes 'mysql-t*' 'mysql-s*' 'mysql-c*' 'mysql-r*'
+    # Ensure MySQL 9.4 package actually got installed
+    - dpkg -l | grep -e "mysql-server.*9\.7"
     # As MySQL no longer ships an init.d file in 8.0.43-3, define a custom
     # test-verify-initial that does not depend on the service starting
     - |
