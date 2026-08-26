@@ -1082,52 +1082,14 @@ mariadb.org-11.7 upgrade:
     - *test-verify-using-legacy-data-directory
     - *test-verify-final
 
-# archive.mariadb.org for Debian Sid latest is 11.4.5
-mariadb.org-11.4 upgrade:
-  extends: .salsa-ci-template-for-mariadb-upgrade
-  stage: upgrade MariaDB variant
-  variables:
-    MARIADB_VERSION: "11.4"
-  script:
-    - apt-get install -qq --yes mariadb-server
-    - dpkg -l | grep -e "mariadb-server.*11\.4"
-    - *test-verify-initial
-    - *test-install-all
-    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-using-legacy-data-directory
-    - *test-verify-final
+# archive.mariadb.org for Debian Sid latest was 11.4.5, but no available
+# anymore since August 2026
 
-# archive.mariadb.org for Debian Sid latest is 10.11.8
-mariadb.org-10.11 upgrade:
-  extends: .salsa-ci-template-for-mariadb-upgrade
-  stage: upgrade MariaDB variant
-  variables:
-    MARIADB_VERSION: "10.11"
-  script:
-    - apt-get install -qq --yes mariadb-server
-    - dpkg -l | grep -e "mariadb-server.*10\.11"
-    - *test-verify-initial
-    - *test-install-all
-    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-using-legacy-data-directory
-    - *test-verify-final
+# archive.mariadb.org for Debian Sid latest was 10.11.8, but no available
+# anymore since August 2026
 
-# archive.mariadb.org for Debian Sid latest is 10.6.12
-mariadb.org-10.6 upgrade:
-  extends: .salsa-ci-template-for-mariadb-upgrade
-  stage: upgrade MariaDB variant
-  variables:
-    MARIADB_VERSION: "10.6"
-  script:
-    # Enable this line when there mariadb-server-10.5 metapackage anymore in Sid
-    # - apt-get install -qq --yes 'mariadb*' libmariadb3 'libmariadb-*' 'libmariadbd*'
-    - apt-get install -qq --yes mariadb-server
-    - dpkg -l | grep -e "mariadb-server.*10\.6"
-    - *test-verify-initial
-    - *test-install-all
-    - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-using-legacy-data-directory
-    - *test-verify-final
+# archive.mariadb.org for Debian Sid latest was 10.6.12, but no available
+# anymore since August 2026
 
 # archive.mariadb.org for Debian Sid latest is 10.5.13
 mariadb.org-10.5 upgrade:
