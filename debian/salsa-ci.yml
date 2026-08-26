@@ -424,43 +424,6 @@ mariadb-10.6 and Bookworm-20230208 upgrade:
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
 
-mariadb-10.5 and Bullseye upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB and distro
-  image: debian:bullseye
-  script:
-    - *test-prepare-container
-    # Install everything MariaDB currently in Debian Bullseye
-    - apt-get install -y 'default-mysql*' 'mariadb-*' 'libmariadb*'
-    # Verify installation of MariaDB from Bullseye
-    - dpkg -l | grep -e "mariadb-server.*10.5"
-    - *test-verify-initial
-    - *test-enable-bookworm-repos
-    # Ensure mariadbd will not crash on next shutdown for any reason
-    - service mariadb restart
-    - *test-full-upgrade
-    - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-final
-
-# Similar to the Cacti install test, check that MariaDB consumer Zoph upgrades
-default-mysql-server and Bullseye upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB and distro
-  image: debian:bullseye
-  script:
-    - *test-prepare-container
-    # Install everything MariaDB currently in Debian Bullseye
-    - apt-get install -y default-mysql-server zoph
-    # Verify installation of MariaDB from Bullseye
-    - *test-verify-initial
-    - *test-enable-bookworm-repos
-    - *test-enable-artifacts-repo
-    # Start with partial upgrade
-    - apt-get install -y default-mysql-server
-    - *test-full-upgrade
-    - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-final
-
 test basic features:
   extends: .salsa-ci-template-for-mariadb
   script:
@@ -568,18 +531,6 @@ default-libmysqlclient-dev upgrade:
     - *test-full-upgrade-libs
     - *test-verify-libs
 
-default-libmysqlclient-dev and Bullseye upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB and distro
-  image: debian:bullseye
-  script:
-    - *test-prepare-container
-    - apt-get install -y pkg-config default-libmysqlclient-dev
-    - pkg-config --list-all
-    - *test-enable-bookworm-repos
-    - *test-full-upgrade-libs
-    - *test-verify-libs
-
 mariadb.org-10.11 upgrade:
   extends: .salsa-ci-template-for-mariadb-upgrade
   stage: upgrade MariaDB variant
@@ -598,4 +549,3 @@ mariadb.org-10.11 upgrade:
     - mariadb --version # Client version
     - service mariadb status # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-final
-
