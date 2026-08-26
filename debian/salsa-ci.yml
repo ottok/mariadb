@@ -179,8 +179,13 @@ blhc:
 
 .test-enable-sid-repos: &test-enable-sid-repos
   # If already on Sid, most steps below will be skipped. If upgrading a distro
-  # older than Debian Bookworm, Sid will be enabled only up until March 2025
-  # version as after that a coreutils/util-linux made it impossible to upgrade.
+  # older than Debian Bookworm or Ubuntu Jammy, Sid will be enabled only up
+  # until March 2025 version, as after that coreutils/util-linux or libc6-dev
+  # issues make it impossible to upgrade.
+  #
+  # Once all Debian Bookworm and Ubuntu Focal and Jammy upgrade test jobs are
+  # removed from this Salsa CI definition, all these usrmerge workarounds can
+  # also be cleaned away.
   - |
     grep PRETTY_NAME /etc/os-release
     if grep -q 'PRETTY_NAME="Debian GNU/Linux trixie/sid"' /etc/os-release
@@ -238,7 +243,7 @@ blhc:
       # Ensure upgrades past 13.2 are blocked to avoid failure on usrmerge issue
       apt-mark hold base-files
       apt-get install -q --yes --fix-broken apt
-      # Upgrades from Ubuntu Jammy will fail on:
+      # Upgrades from Ubuntu Focal and Jammy will fail on:
       #   Unpacking libc6-dev:amd64 (2.41-5) over (2.35-0ubuntu3.9) ...
       #   dpkg: error processing archive /var/cache/apt/archives/libc6-dev_2.41-5_amd64.deb (--unpack):
       #   trying to overwrite '/usr/lib/x86_64-linux-gnu/audit/sotruss-lib.so', which is also in package libc6:amd64 2.35-0ubuntu3.9
@@ -706,28 +711,9 @@ mariadb-10.6 and Ubuntu Jammy upgrade:
     - *test-verify-using-legacy-data-directory
     - *test-verify-final
 
-mariadb-10.5 and Bullseye upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB and distro
-  image: debian:bullseye
-  script:
-    - *test-prepare-container
-    # Install everything MariaDB currently in Debian Bullseye
-    - apt-get install -qq --yes 'default-mysql*' 'mariadb-*' 'libmariadb*'
-    # Verify installation of MariaDB from Bullseye
-    - dpkg -l | grep -e "mariadb-server.*10\.5"
-    - *test-verify-initial
-    - *test-enable-sid-repos
-    # Ensure mariadbd will not crash on next shutdown for any reason
-    - service mariadb restart
-    - *test-enable-artifacts-repo
-    - apt-get install -q --simulate mariadb-server
-    - apt-get install -qq --yes mariadb-server
-    # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
-    - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
-    - apt-get purge --yes mariadb*10.?
-    - *test-verify-using-legacy-data-directory
-    - *test-verify-final
+# No longer possible since due to entanglement with usrmerge upgrades:
+#mariadb-10.5 and Bullseye upgrade:
+#default-mysql-server and Bullseye upgrade:
 
 mariadb-10.3 and Ubuntu Focal upgrade:
   extends: .salsa-ci-template-for-mariadb
@@ -777,27 +763,6 @@ default-mysql-server and Bookworm upgrade:
     - apt-get install -qq --simulate default-mysql-server mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy
     - apt-get install -qq --yes default-mysql-server mariadb-plugin-provider-bzip2 mariadb-plugin-provider-lz4 mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo mariadb-plugin-provider-snappy
     - *test-full-upgrade
-    - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
-    - *test-verify-using-legacy-data-directory
-    - *test-verify-final
-
-# Similar to the Cacti install test, check that MariaDB consumer Zoph upgrades
-default-mysql-server and Bullseye upgrade:
-  extends: .salsa-ci-template-for-mariadb
-  stage: upgrade MariaDB and distro
-  image: debian:bullseye
-  script:
-    - *test-prepare-container
-    # Install everything MariaDB currently in Debian Bullseye
-    - apt-get install -qq --yes default-mysql-server zoph
-    # Verify installation of MariaDB from Bullseye
-    - dpkg -l | grep -e "mariadb-server.*10\.5"
-    - *test-verify-initial
-    - *test-enable-sid-repos
-    - *test-enable-artifacts-repo
-    - apt-get install -qq --simulate default-mysql-server
-    - apt-get install -qq --yes default-mysql-server
-    # Due to usrmerge, full-upgrade from Bullseye to Trixie or newer cannot work
     - service mariadb status  # There is no init.d/mysql in MariaDB 10.5+
     - *test-verify-using-legacy-data-directory
     - *test-verify-final
