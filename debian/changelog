@@ -24,11 +24,13 @@ mariadb (1:11.8.8-0+deb13u1) trixie; urgency=medium
   * New upstream version 11.8.8 with critical fix for regression in 11.8.7 as
     noted at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.8
     and for the following security issues:
+    - CVE-2026-49261
     - CVE-2026-48165
     - CVE-2026-48163
   * Previous upstream version 11.8.7 included fixes for several defects as noted
     at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.7 as
     well the following security issues:
+    - CVE-2026-47064
     - CVE-2026-44173
     - CVE-2026-44172
     - CVE-2026-44171
@@ -56,13 +58,18 @@ mariadb (1:11.8.6-0+deb13u1) trixie; urgency=medium
   [ Otto Kekäläinen ]
   * New upstream maintenance release 11.8.6. For details about fixes please see
     https://mariadb.com/docs/release-notes/community-server/11.8/11.8.6
+  * Included security fixes for:
+    - CVE-2026-3494
+    - CVE-2026-32710
+    - CVE-2026-35549
+    - CVE-2026-34303
   * For details about fixes in 11.8.5 please see
     https://mariadb.com/docs/release-notes/community-server/11.8/11.8.5
+  * For details about fixes in 11.8.4 please see
+    https://mariadb.com/docs/release-notes/community-server/11.8/11.8.4
     and the security notices:
     - CVE-2025-13699
     - CVE-2026-21968
-  * For details about fixes in 11.8.4 please see
-    https://mariadb.com/docs/release-notes/community-server/11.8/11.8.4
   * The version 11.8.4 was skipped in Debian (and Ubuntu) as it has a severe
     regression causing partial data deletion when using the DELETE statement on
     MyISAM or Aria tables under specific conditions (MDEV-38068)
