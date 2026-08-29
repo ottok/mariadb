@@ -1370,12 +1370,6 @@ void log_free_check() noexcept
   }
 }
 
-#ifdef __linux__
-extern void buf_mem_pressure_shutdown() noexcept;
-#else
-inline void buf_mem_pressure_shutdown() noexcept {}
-#endif
-
 /** Make a checkpoint at the latest lsn on shutdown.
 @return the shutdown LSN */
 ATTRIBUTE_COLD lsn_t logs_empty_and_mark_files_at_shutdown() noexcept

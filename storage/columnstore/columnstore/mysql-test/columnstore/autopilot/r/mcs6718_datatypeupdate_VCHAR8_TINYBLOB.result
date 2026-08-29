@@ -1,7 +1,0 @@
-use autopilot;
-START TRANSACTION;
-UPDATE datatypeupdate SET CTINYBLOB = CVCHAR8;
-SELECT CTINYBLOB FROM datatypeupdate;
-CTINYBLOB
-aaaaaaaa
-ROLLBACK;

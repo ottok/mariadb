@@ -74,7 +74,7 @@ SET(CPACK_RPM_PACKAGE_DESCRIPTION "MariaDB: a very fast and robust SQL database 
 It is GPL v2 licensed, which means you can use the it free of charge under the
 conditions of the GNU General Public License Version 2 (http://www.gnu.org/licenses/).
 
-MariaDB documentation can be found at https://mariadb.com/kb
+MariaDB documentation can be found at https://mariadb.com/docs
 MariaDB bug reports should be submitted through https://jira.mariadb.org")
 
 # mariabackup
@@ -263,7 +263,7 @@ IF(WITH_WSREP)
   SETA(CPACK_RPM_server_PACKAGE_REQUIRES
     "galera-4" "rsync" "grep" "gawk" "iproute"
     "coreutils" "findutils" "tar")
-  SETA(CPACK_RPM_server_PACKAGE_RECOMMENDS "lsof" "socat" "pv")
+  SETA(CPACK_RPM_server_PACKAGE_RECOMMENDS "lsof" "socat" "pv" "stunnel")
   SETA(CPACK_RPM_test_PACKAGE_REQUIRES "${CPACK_RPM_PACKAGE_REQUIRES}" "socat")
 ENDIF()
 

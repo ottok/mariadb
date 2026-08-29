@@ -1807,6 +1807,7 @@ public:
   int save_time_in_field(Field *field, bool no_conversions);
   int save_date_in_field(Field *field, bool no_conversions);
   int save_str_in_field(Field *field, bool no_conversions);
+  int save_hex_hybrid_in_field(Field *field, bool no_conversions);
   int save_real_in_field(Field *field, bool no_conversions);
   int save_int_in_field(Field *field, bool no_conversions);
   int save_bool_in_field(Field *field, bool no_conversions);
@@ -2305,6 +2306,7 @@ public:
 
   virtual bool enumerate_field_refs_processor(void *arg) { return 0; }
   virtual bool mark_as_eliminated_processor(void *arg) { return 0; }
+  virtual bool unmark_as_eliminated_processor(void *arg) { return 0; }
   virtual bool eliminate_subselect_processor(void *arg) { return 0; }
   virtual bool view_used_tables_processor(void *arg) { return 0; }
   virtual bool eval_not_null_tables(void *arg) { return 0; }
@@ -2861,9 +2863,9 @@ protected:
 MEM_ROOT *get_thd_memroot(THD *thd);
 
 template <class T>
-inline Item* get_item_copy (THD *thd, const T* item)
+inline T* get_item_copy (THD *thd, const T* item)
 {
-  Item *copy= new (get_thd_memroot(thd)) T(*item);
+  T *copy= new (get_thd_memroot(thd)) T(*item);
   if (likely(copy))
     copy->register_in(thd);
   return copy;
@@ -3533,6 +3535,10 @@ public:
   const Type_handler *type_handler() const override
   {
     return value_item->type_handler();
+  }
+  decimal_digits_t decimal_precision() const override
+  {
+    return value_item->decimal_precision();
   }
 
   bool const_item() const override { return true; }
@@ -4671,10 +4677,10 @@ class Item_bool :public Item_int
 {
 public:
   Item_bool(THD *thd, const char *str_arg, longlong i):
-    Item_int(thd, str_arg, i, 1) {}
-  Item_bool(THD *thd, bool i) :Item_int(thd, (longlong) i, 1) { }
+    Item_int(thd, str_arg, i, 5) {}
+  Item_bool(THD *thd, bool i) :Item_int(thd, (longlong) i, 5) { }
   Item_bool(const char *str_arg, longlong i):
-    Item_int(str_arg, i, 1) {}
+    Item_int(str_arg, i, 5) {}
   bool is_bool_literal() const override { return true; }
   Item *neg_transformer(THD *thd) override;
   const Type_handler *type_handler() const override
@@ -5238,7 +5244,6 @@ public:
     Item_hex_constant(thd, str, str_length) {}
   const Type_handler *type_handler() const override
   { return &type_handler_hex_hybrid; }
-  decimal_digits_t decimal_precision() const override;
   bool val_bool() override
   {
     return longlong_from_hex_hybrid(str_value.ptr(), str_value.length()) != 0;
@@ -6714,7 +6719,7 @@ public:
   bool found_in_select_list;
   bool found_in_group_by;
   Item_outer_ref(THD *thd, Name_resolution_context *context_arg,
-                 Item_field *outer_field_arg):
+                 Item_ident *outer_field_arg):
     Item_direct_ref(thd, context_arg, 0, outer_field_arg->table_name,
                     outer_field_arg->field_name),
     outer_ref(outer_field_arg), in_sum_func(0),
@@ -6969,6 +6974,64 @@ public:
 protected:
   Item *shallow_copy(THD *thd) const override
   { return get_item_copy<Item_copy_string>(thd, this); }
+  Item *deep_copy(THD *thd) const override
+  { return shallow_copy_with_checks(thd); }
+};
+
+
+/*
+  Caches a real number as a double, the same representation Item_cache_real
+  uses.  The generic Item_copy_string stores a copied value through its text
+  form, but a FLOAT keeps only FLT_DIG significant digits as text and that is
+  too few to reproduce its 24 bit mantissa.  The value read back then differs
+  from the original, which gave a wrong result when a FLOAT expression was
+  copied through an aggregation temporary table.
+*/
+class Item_copy_real : public Item_copy
+{
+protected:
+  double cached_value;
+public:
+  Item_copy_real(THD *thd, Item *item_arg)
+   :Item_copy(thd, item_arg), cached_value(0) {}
+  double val_real() override;
+  longlong val_int() override;
+  my_decimal *val_decimal(my_decimal *) override;
+  bool get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzydate) override
+  {
+    DBUG_ASSERT(copied_in);
+    return get_date_from_real(thd, ltime, fuzzydate);
+  }
+  void copy() override;
+  int save_in_field(Field *field, bool no_conversions) override;
+};
+
+
+/*
+  FLOAT and DOUBLE keep the same cached double and differ only in the text
+  conversion, the same split made by Item_cache_float and Item_cache_double.
+*/
+class Item_copy_float : public Item_copy_real
+{
+public:
+  Item_copy_float(THD *thd, Item *item_arg): Item_copy_real(thd, item_arg) {}
+  String *val_str(String *str) override;
+protected:
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_copy_float>(thd, this); }
+  Item *deep_copy(THD *thd) const override
+  { return shallow_copy_with_checks(thd); }
+};
+
+
+class Item_copy_double : public Item_copy_real
+{
+public:
+  Item_copy_double(THD *thd, Item *item_arg): Item_copy_real(thd, item_arg) {}
+  String *val_str(String *str) override;
+protected:
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_copy_double>(thd, this); }
   Item *deep_copy(THD *thd) const override
   { return shallow_copy_with_checks(thd); }
 };
@@ -7264,8 +7327,7 @@ public:
 protected:
   Item *shallow_copy(THD *thd) const override
   {
-    Item_default_value *new_item=
-      (Item_default_value *) get_item_copy<Item_default_value>(thd, this);
+    Item_default_value *new_item= get_item_copy<Item_default_value>(thd, this);
     // This is a copy so do not manage the field and should not delete it
     new_item->m_share_field= 1;
     return new_item;
@@ -8600,7 +8662,11 @@ inline void TABLE::use_all_stored_columns()
   bitmap_set_all(read_set);
   if (Field **vf= vfield)
     for (; *vf; vf++)
-      bitmap_clear_bit(read_set, (*vf)->field_index);
+    {
+      if (!(*vf)->stored_in_db())
+        bitmap_clear_bit(read_set, (*vf)->field_index);
+    }
+
 }
 
 #endif /* SQL_ITEM_INCLUDED */

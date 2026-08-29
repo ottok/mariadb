@@ -42,6 +42,7 @@ sp_get_flags_for_command(LEX *lex);
 class sp_instr;
 class sp_instr_opt_meta;
 class sp_instr_jump_if_not;
+class sp_instr_cursor_copy_struct;
 
 /**
   Number of PSI_statement_info instruments
@@ -330,6 +331,12 @@ private:
   */
   const char *m_cpp_body_begin;
 
+  /**
+    List of pointers to MEM_ROOT objects created when re-parsing failing
+    SP instructions.
+  */
+  List<MEM_ROOT> m_mem_roots_to_release;
+
 public:
   /*
     Security context for stored routine which should be run under
@@ -342,6 +349,11 @@ protected:
           enum_sp_aggregate_type agg_type, sql_mode_t sql_mode);
   virtual ~sp_head();
 public:
+
+  void deallocate_sp_instrs_mem_roots();
+
+  bool register_instr_mem_root_for_deallocation(MEM_ROOT *mem_root);
+
   static void destroy(sp_head *sp);
   static sp_head *create(sp_package *parent, const Sp_handler *handler,
                          enum_sp_aggregate_type agg_type, sql_mode_t sql_mode,
@@ -387,6 +399,9 @@ public:
 
   int
   add_instr(sp_instr *instr);
+
+  int
+  add_instr(sp_instr_cursor_copy_struct *instr);
 
   bool
   add_instr_jump(THD *thd, sp_pcontext *spcont);
@@ -799,6 +814,8 @@ private:
     fill_spvar_definition(thd, &spvar->field_def);
     m_flags|= sp_head::HAS_COLUMN_TYPE_REFS;
   }
+
+  int add_instr_core(sp_instr *instr);
 
 public:
   bool spvar_fill_row(THD *thd, sp_variable *spvar, Row_definition_list *def);

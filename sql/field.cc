@@ -952,6 +952,12 @@ Type_handler::aggregate_for_result_traditional(const Type_handler *a,
     }
     return a;
   }
+  /* Keep a hex hybrid through a typeless NULL (as the rules keep BIT); the
+     merge below has no hybrid type and would demote it to VARCHAR. */
+  if (a == &type_handler_hex_hybrid && b == &type_handler_null)
+    return a;
+  if (b == &type_handler_hex_hybrid && a == &type_handler_null)
+    return b;
   enum_field_types ta= a->traditional_merge_field_type();
   enum_field_types tb= b->traditional_merge_field_type();
   enum_field_types res= field_types_merge_rules[merge_type2index(ta)]
@@ -8706,7 +8712,7 @@ int Field_longstr::compress(char *to, uint to_length,
     /* Store uncompressed */
     to[0]= 0;
     if (buf_length < to_length)
-      memcpy(to + 1, buf, buf_length);
+      memmove(to + 1, buf, buf_length);
     else
     {
       /* Storing string at blob capacity, e.g. 255 bytes string to TINYBLOB. */
@@ -9093,6 +9099,10 @@ int Field_blob::cmp(const uchar *a_ptr, const uchar *b_ptr) const
   memcpy(&blob1, a_ptr+packlength, sizeof(char*));
   memcpy(&blob2, b_ptr+packlength, sizeof(char*));
   size_t a_len= get_length(a_ptr), b_len= get_length(b_ptr);
+  DBUG_ASSERT(blob1 || !a_len);
+  DBUG_ASSERT(blob2 || !b_len);
+  if (!blob1) { blob1= (uchar *) ""; a_len= 0; }
+  if (!blob2) { blob2= (uchar *) ""; b_len= 0; }
   return cmp(blob1, (uint32)a_len, blob2, (uint32)b_len);
 }
 
@@ -9141,10 +9151,14 @@ uint Field_blob::get_key_image_itRAW(const uchar *ptr_arg, uchar *buff,
 {
   size_t blob_length= get_length(ptr_arg);
   const uchar *blob= get_ptr(ptr_arg);
-  size_t local_char_length= length / mbmaxlen();
-  local_char_length= field_charset()->charpos(blob, blob + blob_length,
-                                              local_char_length);
-  set_if_smaller(blob_length, local_char_length);
+  if (blob_length > 0)
+  {
+    size_t local_char_length= length / mbmaxlen();
+    DBUG_ASSERT(blob);
+    local_char_length= field_charset()->charpos(blob, blob + blob_length,
+                                                local_char_length);
+    set_if_smaller(blob_length, local_char_length);
+  }
 
   if (length > blob_length)
   {
@@ -9172,9 +9186,12 @@ void Field_blob::set_key_image(const uchar *buff,uint length)
 
 int Field_blob::key_cmp(const uchar *key_ptr, uint max_key_length) const
 {
+  DBUG_ASSERT(key_ptr);
   uchar *blob1;
   size_t blob_length=get_length(ptr);
   memcpy(&blob1, ptr+packlength, sizeof(char*));
+  DBUG_ASSERT(blob1 || !blob_length);
+  if (!blob1) { blob1= (uchar *) ""; blob_length= 0; }
   CHARSET_INFO *cs= charset();
   size_t local_char_length= max_key_length / cs->mbmaxlen;
   local_char_length= cs->charpos(blob1, blob1+blob_length,

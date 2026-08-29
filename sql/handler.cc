@@ -566,7 +566,6 @@ static void update_discovery_counters(handlerton *hton, int val)
 
 static int hton_drop_table(handlerton *hton, const char *path)
 {
-  Table_path_buffer tmp_path;
   handler *file= get_new_handler(nullptr, current_thd->mem_root, hton);
   if (!file)
   {
@@ -576,7 +575,6 @@ static int hton_drop_table(handlerton *hton, const char *path)
     */
     return my_errno == ENOMEM ? ENOMEM : ENOENT;
   }
-  path= file->get_canonical_filename(Lex_cstring_strlen(path), &tmp_path).str;
   int error= file->delete_table(path);
   delete file;
   return error;
@@ -2604,7 +2602,7 @@ static my_xid wsrep_order_and_check_continuity(XID *list, int len)
     if (!wsrep_is_wsrep_xid(list + i) ||
         wsrep_xid_seqno(list + i) != cur_seqno + 1)
     {
-      WSREP_WARN("Discovered discontinuity in recovered wsrep "
+      WSREP_INFO("Discovered discontinuity in recovered wsrep "
                  "transaction XIDs. Truncating the recovery list to "
                  "%d entries", i);
       break;
@@ -2902,6 +2900,53 @@ static bool xarecover_handlerton(THD *, transaction_participant *hton, void *arg
                        x <= wsrep_limit) && info->dry_run,
                      info->dry_run))
         {
+#ifdef WITH_WSREP
+          /*
+            MDEV-40179: a wsrep transaction still in the prepared state at the
+            final recovery pass (the dry run, commit_list == 0) but they don't
+            have corresponding binlog events because they are no longer part of
+            SST. With log_bin=ON they can't be committed.
+            After recovering from SST without binlogs in place the joiner runs
+            no binlog XA recovery to commit or roll back such transactions, so
+            without binlog events they would abort startup with "Found N prepared
+            transactions!". Roll them back here; the node re-receives them
+            from the donor via IST. Non-wsrep (e.g. user XA) prepared transactions
+            are left untouched and still reported.
+
+            Notice that in the wsrep_emulate_bin_log case below we don't need the
+            binlog events, so these prepared and wsrep-ordered transactions can be
+            safely committed.
+
+            The guard is WSREP_PROVIDER_EXISTS ("a Galera provider is loaded"):
+            a node configured with a provider will rejoin and receive
+            these transactions; a standalone node (no provider) cannot, so
+            there we keep the conservative default and still report them.
+          */
+          if (WSREP_PROVIDER_EXISTS && wsrep_is_wsrep_xid(info->list + i))
+          {
+            int rc= hton->rollback_by_xid(info->list + i);
+            if (rc == 0)
+            {
+              sql_print_warning("Rolled back orphan prepared wsrep "
+                                    "transaction %lld", (longlong) x);
+              continue;
+            }
+            /*
+              A failed rollback is critical: the storage engine is left with
+              a transaction in the prepared state, which blocks purge and will
+              re-surface at the next recovery. We cannot safely continue, so
+              flag the error and abort startup (ha_recover() returns non-zero,
+              which makes the caller unireg_abort()).
+            */
+            sql_print_error("Failed to roll back orphan prepared wsrep "
+                            "transaction %lld during recovery (error %d). "
+                            "The storage engine is left with a transaction in "
+                            "the prepared state; aborting startup.",
+                            (longlong) x, rc);
+            info->error= true;
+            break;
+          }
+#endif /* WITH_WSREP */
           info->found_my_xids++;
           continue;
         }
@@ -2951,7 +2996,7 @@ static bool xarecover_handlerton(THD *, transaction_participant *hton, void *arg
           }
         }
       }
-      if (got < info->len)
+      if (got < info->len || info->error)
         break;
     }
   }
@@ -3355,6 +3400,8 @@ int ha_delete_table(THD *thd, handlerton *hton, const char *path,
                     bool generate_warning)
 {
   int error;
+  const char *name;
+  Table_path_buffer tmp_path;
   bool is_error= thd->is_error();
   DBUG_ENTER("ha_delete_table");
 
@@ -3365,7 +3412,17 @@ int ha_delete_table(THD *thd, handlerton *hton, const char *path,
   if (ha_check_if_updates_are_ignored(thd, hton, "DROP"))
     DBUG_RETURN(0);
 
-  error= hton->drop_table(hton, path);
+  handler *file= get_new_handler(nullptr, thd->mem_root, hton);
+  if (!file)
+  {
+    /*
+      If file is not defined it means that the engine can't create a
+      handler if share is not set or we got an out of memory error
+    */
+    DBUG_RETURN(my_errno == ENOMEM ? ENOMEM : ENOENT);
+  }
+  name= file->get_canonical_filename(Lex_cstring_strlen(path), &tmp_path).str;
+  error= hton->drop_table(hton, name);
   if (error > 0)
   {
     /*
@@ -3378,21 +3435,17 @@ int ha_delete_table(THD *thd, handlerton *hton, const char *path,
     {
       TABLE dummy_table;
       TABLE_SHARE dummy_share;
-      handler *file= get_new_handler(nullptr, thd->mem_root, hton);
-      if (file) {
-        bzero((char*) &dummy_table, sizeof(dummy_table));
-        bzero((char*) &dummy_share, sizeof(dummy_share));
-        dummy_share.path.str= (char*) path;
-        dummy_share.path.length= strlen(path);
-        dummy_share.normalized_path= dummy_share.path;
-        dummy_share.db= Lex_ident_db(*db);
-        dummy_share.table_name= Lex_ident_table(*alias);
-        dummy_table.s= &dummy_share;
-        dummy_table.alias.set(alias->str, alias->length, table_alias_charset);
-        file->change_table_ptr(&dummy_table, &dummy_share);
-        file->print_error(error, MYF(intercept ? ME_WARNING : 0));
-        delete file;
-      }
+      bzero((char*) &dummy_table, sizeof(dummy_table));
+      bzero((char*) &dummy_share, sizeof(dummy_share));
+      dummy_share.path.str= (char*) path;
+      dummy_share.path.length= strlen(path);
+      dummy_share.normalized_path= dummy_share.path;
+      dummy_share.db= Lex_ident_db(*db);
+      dummy_share.table_name= Lex_ident_table(*alias);
+      dummy_table.s= &dummy_share;
+      dummy_table.alias.set(alias->str, alias->length, table_alias_charset);
+      file->change_table_ptr(&dummy_table, &dummy_share);
+      file->print_error(error, MYF(intercept ? ME_WARNING : 0));
     }
     if (intercept)
     {
@@ -3402,6 +3455,7 @@ int ha_delete_table(THD *thd, handlerton *hton, const char *path,
       error= -1;
     }
   }
+  delete file;
   if (error)
     DBUG_PRINT("exit", ("error: %d", error));
   DBUG_RETURN(error);
@@ -6485,10 +6539,9 @@ static int ha_create_table_from_share(THD *thd, TABLE_SHARE *share,
   @param frm            an frm image or NULL (meaning, read it from the file)
   @param skip_frm_file  do not write the frm image to the .frm file
 
-  @retval
-   0  ok
-  @retval
-   1  error
+  @retval 0  ok
+  @retval 1  error. Any table (and high level index tables) that were
+             created are dropped before returning.
 */
 int ha_create_table(THD *thd, const char *path, const char *db,
                     const char *table_name, HA_CREATE_INFO *create_info,
@@ -6580,10 +6633,18 @@ int ha_create_table(THD *thd, const char *path, const char *db,
       uint unused;
       if ((error= ha_create_table_from_share(thd, &index_share, &index_cinfo,
                                              &unused)))
+      {
+        ha_delete_table(thd, create_info->db_type, file_name,
+                        &share.db, &share.table_name, 0);
         break;
+      }
     }
     thd->lex->sql_command= old_sql_command;
     free_table_share(&index_share);
+
+    if (error)
+      ha_delete_table(thd, create_info->db_type, path,
+                      &share.db, &share.table_name, 0);
   }
 
 err:

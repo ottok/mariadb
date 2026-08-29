@@ -1,4 +1,0 @@
-USE tpch1;
-select count(1+1) from nation;
-count(1+1)
-25

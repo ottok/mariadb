@@ -1,4 +1,0 @@
-USE tpch1;
-Select avg(l_extendedprice) from lineitem;
-avg(l_extendedprice)
-38255.138485

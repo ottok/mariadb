@@ -66,7 +66,7 @@ extern ulong tc_size;
 extern uint32 tc_instances;
 
 extern bool tdc_init(void);
-extern void tdc_start_shutdown(void);
+extern void tdc_start_shutdown(bool use_dummy_thd);
 extern void tdc_deinit(void);
 extern ulong tdc_records(void);
 extern void tdc_purge(bool all);

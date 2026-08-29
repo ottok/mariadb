@@ -131,6 +131,7 @@ SET(CPACK_RPM_s3-engine_PACKAGE_SUMMARY "Amazon S3 archival storage engine for M
 SET(CPACK_RPM_s3-engine_PACKAGE_DESCRIPTION "The S3 storage engine allows one to archive MariaDB tables in Amazon S3 (or any third-party public or private cloud that implements S3 API), but still have them accessible in MariaDB in read-only mode." PARENT_SCOPE)
 
 IF(TARGET s3)
+  ADD_SUBMODULE(libmarias3 Makefile.am)
   MYSQL_ADD_EXECUTABLE(aria_s3_copy aria_s3_copy.cc ${S3_SOURCES} COMPONENT s3-engine)
   TARGET_LINK_LIBRARIES(aria_s3_copy aria myisam mysys mysys_ssl ${CURL_LIBRARIES} ${ZLIB_LIBRARIES})
   INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/libmarias3)

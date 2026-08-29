@@ -1345,7 +1345,9 @@ public:
   @param  n_cols   number of columns whose collation is changing */
   void init_change_cols(unsigned n_cols)
   {
-    ut_ad(n_fields > n_cols || type & DICT_FTS);
+    /* Allow n_fields == n_cols when single column indexes
+    undergoes type change */
+    ut_ad(n_fields >= n_cols || type & DICT_FTS);
     change_col_info= static_cast<col_info*>
       (mem_heap_zalloc(heap, sizeof(col_info)));
     change_col_info->n_cols= n_cols;
@@ -2155,6 +2157,10 @@ struct dict_table_t {
   void lock_mutex_lock() { lock_latch.wr_lock(ut_d(SRW_LOCK_CALL)); }
   /** Try to acquire exclusive lock_latch */
   bool lock_mutex_trylock() { return lock_latch.wr_lock_try(); }
+  /** Try to acquire exclusive lock_latch with a bounded spin (no syscall,
+  no blocking), for the lock-release fast paths that hold trx->mutex.
+  @return whether lock_latch was acquired */
+  bool lock_mutex_trylock_spin() noexcept;
   /** Release exclusive lock_latch */
   void lock_mutex_unlock() { lock_latch.wr_unlock(); }
   /** Acquire shared lock_latch */

@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2017, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2022, MariaDB Corporation
+   Copyright (c) 2009, 2026, MariaDB plc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -81,14 +81,14 @@ uint *slave_transaction_retry_errors;
 uint slave_transaction_retry_error_length= 0;
 char slave_transaction_retry_error_names[SHOW_VAR_FUNC_BUFF_SIZE];
 
-char* slave_load_tmpdir = 0;
+READ_ONLY_SYSVAR char* slave_load_tmpdir;
 Master_info *active_mi= 0;
 my_bool replicate_same_server_id;
-ulonglong relay_log_space_limit = 0;
+READ_ONLY_SYSVAR ulonglong relay_log_space_limit;
 ulonglong opt_read_binlog_speed_limit = 0;
 
-const char *relay_log_index= 0;
-const char *relay_log_basename= 0;
+READ_ONLY_SYSVAR const char *relay_log_index;
+READ_ONLY_SYSVAR const char *relay_log_basename;
 
 LEX_CSTRING default_master_connection_name= { (char*) "", 0 };
 
@@ -1893,7 +1893,7 @@ static int get_master_version_and_clock(MYSQL* mysql, Master_info* mi)
   }
   else
   {
-    DBUG_EXECUTE_IF("mock_mariadb_primary_v5_in_get_master_version",
+    DBUG_EXECUTE_IF("mock_mariadb_master_v5_in_get_master_version",
                     version= 5;);
 
     /*
@@ -2912,7 +2912,6 @@ static void write_ignored_events_info_to_relay_log(THD *thd, Master_info *mi)
     }
     if (rli->ign_gtids.count())
     {
-      DBUG_ASSERT(!rli->is_in_group());         // Ensure no active transaction
       glev= new Gtid_list_log_event(&rli->ign_gtids,
                                     Gtid_list_log_event::FLAG_IGN_GTIDS);
       rli->ign_gtids.reset();
@@ -3111,10 +3110,15 @@ void store_master_info(THD *thd, Master_info *mi, TABLE *table,
   (*field++)->store(mi->connection_name.str, mi->connection_name.length,
                     &my_charset_bin);
 
-  mysql_mutex_lock(&mi->run_lock);
+  /* The SQL thread's THD is protected by rli.run_lock, the IO thread's by
+     run_lock. Take each separately to avoid reading a freed THD. */
+  mysql_mutex_lock(&mi->rli.run_lock);
   THD *sql_thd= mi->rli.sql_driver_thd;
+  DEBUG_SYNC(thd, "hold_sss_with_run_lock");
   const char *const slave_sql_running_state=
     sql_thd ? sql_thd->get_proc_info() : "";
+  mysql_mutex_unlock(&mi->rli.run_lock);
+  mysql_mutex_lock(&mi->run_lock);
   THD *io_thd= mi->io_thd;
   const char *const slave_io_running_state=
     io_thd ? io_thd->get_proc_info() : "";
@@ -4109,11 +4113,29 @@ inline void update_state_of_relay_log(Relay_log_info *rli, Log_event *ev)
   }
   if (typ == XID_EVENT || typ == XA_PREPARE_LOG_EVENT)
     rli->clear_flag(Relay_log_info::IN_TRANSACTION);
-  if (typ == GTID_EVENT &&
-      !(((Gtid_log_event*) ev)->flags2 & Gtid_log_event::FL_STANDALONE))
+  else if (typ == GTID_EVENT)
   {
-    /* This GTID_EVENT will generate a BEGIN event */
-    rli->set_flag(Relay_log_info::IN_TRANSACTION);
+    if (!(((Gtid_log_event*) ev)->flags2 & Gtid_log_event::FL_STANDALONE))
+    {
+      /* This GTID_EVENT will generate a BEGIN event */
+      rli->set_flag(Relay_log_info::IN_TRANSACTION);
+    }
+  }
+  else if (unlikely(typ == FORMAT_DESCRIPTION_EVENT))
+  {
+    Format_description_log_event *fdev=
+      static_cast<Format_description_log_event *>(ev);
+    if(fdev->created && !fdev->is_relay_log_event())
+    {
+      /* A master restart can implicitly end an incomplete event group. */
+      rli->clear_flag(Relay_log_info::IN_STMT);
+      rli->clear_flag(Relay_log_info::IN_TRANSACTION);
+    }
+  }
+  else if (unlikely(typ == INCIDENT_EVENT))
+  {
+    rli->clear_flag(Relay_log_info::IN_STMT);
+    rli->clear_flag(Relay_log_info::IN_TRANSACTION);
   }
 
   DBUG_PRINT("info", ("event: %u  IN_STMT: %d  IN_TRANSACTION: %d",
@@ -4286,6 +4308,21 @@ static int exec_relay_log_event(THD* thd, Relay_log_info* rli,
                         serial_rgi->inc_event_relay_log_pos();
                         DBUG_RETURN(0);
                       };);
+    }
+
+    if (typ == GTID_EVENT && unlikely(rli->is_in_group()))
+    {
+      const Gtid_log_event *gtid_ev= static_cast<const Gtid_log_event *>(ev);
+      char buf[FN_REFLEN];
+      my_snprintf(buf, sizeof(buf), "Incomplete event group found in relay "
+                  "log offset %llu, next GTID %u-%u-%llu",
+                  (ulonglong)rli->event_relay_log_pos, gtid_ev->domain_id,
+                  gtid_ev->server_id, gtid_ev->seq_no);
+      my_error(ER_BINLOG_LOGICAL_CORRUPTION, MYF(0),
+               rli->event_relay_log_name, buf);
+      mysql_mutex_unlock(&rli->data_lock);
+      delete ev;
+      DBUG_RETURN(1);
     }
 
     update_state_of_relay_log(rli, ev);
@@ -5995,20 +6032,77 @@ static int queue_event(Master_info* mi, const uchar *buf, ulong event_len)
     mi->checksum_alg_before_fd : mi->rli.relay_log.relay_log_checksum_alg;
 
   const uchar *save_buf= NULL; // needed for checksumming the fake Rotate event
-  uchar rot_buf[LOG_EVENT_HEADER_LEN + ROTATE_HEADER_LEN + FN_REFLEN];
+  uchar rot_buf[LOG_EVENT_HEADER_LEN + ROTATE_HEADER_LEN + FN_REFLEN +
+                BINLOG_CHECKSUM_LEN];
+
+#ifndef DBUG_OFF
+  bool dbg_crash_after_enqueue_gtid_flag= false;
+#endif
+
+  /*
+    The shortest event a master can legally send. Binlog versions older
+    than 4, whose header was shorter, are no longer supported.
+  */
+  ulong min_event_len= LOG_EVENT_MINIMAL_HEADER_LEN;
 
   DBUG_ASSERT(checksum_alg == BINLOG_CHECKSUM_ALG_OFF || 
               checksum_alg == BINLOG_CHECKSUM_ALG_UNDEF || 
               checksum_alg == BINLOG_CHECKSUM_ALG_CRC32); 
 
   DBUG_ENTER("queue_event");
+
+  /*
+    Reject an event that is shorter than the common header before anything
+    reads that header. The code below indexes into the header unconditionally,
+    and several of the per-type parsers derive a body length by subtracting
+    the header length, which wraps on a shorter event.
+    event_checksum_test() subtracts BINLOG_CHECKSUM_LEN in the same way.
+  */
+  if (unlikely(event_len < min_event_len))
+  {
+    error= ER_SLAVE_FATAL_ERROR;
+    error_msg.append(STRING_WITH_LEN("Event from master is shorter than its "
+                                     "common header; the event's length: "));
+    error_msg.append_ulonglong(event_len);
+    unlock_data_lock= FALSE;
+    goto err;
+  }
+
+  /*
+    An event states its length twice: once as the length of the packet the
+    IO thread read the event from, and once in the EVENT_LEN_OFFSET field
+    of the event's own header. The relay log write below takes the packet's
+    length, and every reader of the relay log frames each event by the
+    length that header declares. An event whose two lengths disagree
+    therefore leaves the SQL thread beginning its next read at the wrong
+    offset.
+  */
+  if (unlikely(event_len != uint4korr(buf + EVENT_LEN_OFFSET)))
+  {
+    error= ER_SLAVE_FATAL_ERROR;
+    error_msg.append(STRING_WITH_LEN("Event from master declares a length "
+                                     "that does not match the packet the "
+                                     "event arrived in; the declared "
+                                     "length: "));
+    error_msg.append_ulonglong(uint4korr(buf + EVENT_LEN_OFFSET));
+    error_msg.append(STRING_WITH_LEN(", the packet's length: "));
+    error_msg.append_ulonglong(event_len);
+    unlock_data_lock= FALSE;
+    goto err;
+  }
+
   /*
     FD_queue checksum alg description does not apply in a case of
     FD itself. The one carries both parts of the checksum data.
   */
   if (buf[EVENT_TYPE_OFFSET] == FORMAT_DESCRIPTION_EVENT)
   {
-    checksum_alg= get_checksum_alg(buf, event_len);
+    if (unlikely(get_checksum_alg(buf, event_len, &checksum_alg)))
+    {
+      error= ER_SLAVE_RELAY_LOG_WRITE_FAILURE;
+      unlock_data_lock= FALSE;
+      goto err;
+    }
   }
   else if (buf[EVENT_TYPE_OFFSET] == START_EVENT_V3)
   {
@@ -6089,7 +6183,58 @@ static int queue_event(Master_info* mi, const uchar *buf, ulong event_len)
     goto err;
   case ROTATE_EVENT:
   {
-    Rotate_log_event rev(buf, checksum_alg != BINLOG_CHECKSUM_ALG_OFF ?
+    /*
+      This is normally done in Log_event::read_log_event(),
+      but we bypass it here because it's expensive and costs dynamic memory.
+    */
+    if (unlikely(ROTATE_EVENT >
+      mi->rli.relay_log.description_event_for_queue->number_of_event_types))
+    {
+      // The current FDE does not support `ROTATE_EVENT`.
+      error= ER_SLAVE_RELAY_LOG_WRITE_FAILURE;
+      goto err;
+    }
+    /*
+      RSC_1 and RSC_2 below rewrite the fake Rotate (the one that opens a
+      connection, naming the binary log file the dump starts in; the file
+      switches later in the connection send more, but by then the first
+      format description event has left the relay log carrying the master's
+      algorithm) through rot_buf, and the first two conditions here are the
+      pair that selects them: a fake Rotate that carries a checksum the
+      relay log does not, or the reverse. Both cases memcpy() into rot_buf
+      a length taken from event_len, so event_len has to be bounded before
+      they run. The Rotate_log_event constructed below does not bound it.
+      That constructor caps only new_log_ident, the copy of the file name
+      it keeps for itself, so event_len remains the length the master sent.
+      This check is placed at the start of the case block so a rejected event
+      will not change replication state.
+    */
+    bool is_fake_rotate= uint4korr(&buf[0]) == 0;
+    bool event_has_checksum= checksum_alg != BINLOG_CHECKSUM_ALG_OFF;
+    bool relay_log_has_checksum=
+      mi->rli.relay_log.relay_log_checksum_alg != BINLOG_CHECKSUM_ALG_OFF;
+
+    /* The longest Rotate a master can send under its own checksum policy. */
+    ulong max_rotate_len=
+      LOG_EVENT_HEADER_LEN + ROTATE_HEADER_LEN + FN_REFLEN +
+      (event_has_checksum ? BINLOG_CHECKSUM_LEN : 0);
+
+    if (unlikely(is_fake_rotate &&
+                 event_has_checksum != relay_log_has_checksum &&
+                 event_len > max_rotate_len))
+    {
+      error= ER_SLAVE_FATAL_ERROR;
+      error_msg.append(STRING_WITH_LEN("Rotate event from master names a "
+                                       "binary log file longer than the "
+                                       "maximum file name length; the event's "
+                                       "length: "));
+      error_msg.append_ulonglong(event_len);
+      error_msg.append(STRING_WITH_LEN(", the maximum: "));
+      error_msg.append_ulonglong(max_rotate_len);
+      goto err;
+    }
+
+    Rotate_log_event rev(buf, event_has_checksum ?
                          event_len - BINLOG_CHECKSUM_LEN : event_len,
                          mi->rli.relay_log.description_event_for_queue);
     bool master_changed= false;
@@ -6208,8 +6353,7 @@ static int queue_event(Master_info* mi, const uchar *buf, ulong event_len)
               to compute checksum for its first FD event for RL
               the fake Rotate gets checksummed here.
     */
-    if (uint4korr(&buf[0]) == 0 && checksum_alg == BINLOG_CHECKSUM_ALG_OFF &&
-        mi->rli.relay_log.relay_log_checksum_alg != BINLOG_CHECKSUM_ALG_OFF)
+    if (is_fake_rotate && !event_has_checksum && relay_log_has_checksum)
     {
       ha_checksum rot_crc= 0;
       event_len += BINLOG_CHECKSUM_LEN;
@@ -6232,8 +6376,7 @@ static int queue_event(Master_info* mi, const uchar *buf, ulong event_len)
         RSC_2: If NM \and fake Rotate \and slave does not compute checksum
         the fake Rotate's checksum is stripped off before relay-logging.
       */
-      if (uint4korr(&buf[0]) == 0 && checksum_alg != BINLOG_CHECKSUM_ALG_OFF &&
-          mi->rli.relay_log.relay_log_checksum_alg == BINLOG_CHECKSUM_ALG_OFF)
+      if (is_fake_rotate && event_has_checksum && !relay_log_has_checksum)
       {
         event_len -= BINLOG_CHECKSUM_LEN;
         memcpy(rot_buf, buf, event_len);
@@ -6429,6 +6572,10 @@ static int queue_event(Master_info* mi, const uchar *buf, ulong event_len)
 
   case GTID_EVENT:
   {
+    DBUG_EXECUTE_IF("crash_after_enqueue_gtid_event",
+                    {
+                      dbg_crash_after_enqueue_gtid_flag= true;
+                    });
     DBUG_EXECUTE_IF("kill_slave_io_after_2_events",
                     {
                       mi->dbug_do_disconnect= true;
@@ -6621,13 +6768,14 @@ dbug_gtid_accept:
   */
   case QUERY_COMPRESSED_EVENT:
     inc_pos= event_len;
-    if (query_event_uncompress(rli->relay_log.description_event_for_queue,
-                               checksum_alg == BINLOG_CHECKSUM_ALG_CRC32,
-                               buf, event_len, new_buf_arr, sizeof(new_buf_arr),
-                               &is_malloc, &new_buf, &event_len))
+    if ((error=
+         query_event_uncompress(rli->relay_log.description_event_for_queue,
+                                checksum_alg == BINLOG_CHECKSUM_ALG_CRC32,
+                                buf, event_len, new_buf_arr,
+                                sizeof(new_buf_arr),
+                                &is_malloc, &new_buf, &event_len)))
     {
       char  llbuf[22];
-      error = ER_BINLOG_UNCOMPRESS_ERROR;
       error_msg.append(STRING_WITH_LEN("binlog uncompress error, master log_pos: "));
       llstr(mi->master_log_pos, llbuf);
       error_msg.append(llbuf, strlen(llbuf));
@@ -6645,14 +6793,14 @@ dbug_gtid_accept:
   case DELETE_ROWS_COMPRESSED_EVENT_V1:
     inc_pos = event_len;
     {
-      if (row_log_event_uncompress(rli->relay_log.description_event_for_queue,
-                                   checksum_alg == BINLOG_CHECKSUM_ALG_CRC32,
-                                   buf, event_len, new_buf_arr,
-                                   sizeof(new_buf_arr),
-                                   &is_malloc, &new_buf, &event_len))
+      if ((error=
+           row_log_event_uncompress(rli->relay_log.description_event_for_queue,
+                                    checksum_alg == BINLOG_CHECKSUM_ALG_CRC32,
+                                    buf, event_len, new_buf_arr,
+                                    sizeof(new_buf_arr),
+                                    &is_malloc, &new_buf, &event_len)))
       {
         char  llbuf[22];
-        error = ER_BINLOG_UNCOMPRESS_ERROR;
         error_msg.append(STRING_WITH_LEN("binlog uncompress error, master log_pos: "));
         llstr(mi->master_log_pos, llbuf);
         error_msg.append(llbuf, strlen(llbuf));
@@ -6987,6 +7135,8 @@ dbug_gtid_accept:
     {
       error= ER_SLAVE_RELAY_LOG_WRITE_FAILURE;
     }
+  IF_DBUG(if (dbg_crash_after_enqueue_gtid_flag) DBUG_SUICIDE();,)
+
     rli->ign_master_log_name_end[0]= 0; // last event is not ignored
     if (got_gtid_event)
       rli->ign_gtids.remove_if_present(&event_gtid);
@@ -7051,8 +7201,14 @@ err:
     handle_slave_io() prints it on return.
   */
   if (unlikely(error) && error != ER_SLAVE_RELAY_LOG_WRITE_FAILURE)
-    mi->report(ERROR_LEVEL, error, NULL, ER_DEFAULT(error),
-               error_msg.ptr());
+  {
+    if (error == ER_TOO_BIG_FOR_UNCOMPRESS)
+      mi->report(ERROR_LEVEL, error, error_msg.c_ptr(), ER_DEFAULT(error),
+                 MAX_MAX_ALLOWED_PACKET);
+    else
+      mi->report(ERROR_LEVEL, error, NULL, ER_DEFAULT(error),
+                 error_msg.ptr());
+  }
 
   if (unlikely(is_malloc))
     my_free((void *)new_buf);

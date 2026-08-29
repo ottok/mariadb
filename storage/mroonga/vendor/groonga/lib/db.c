@@ -446,9 +446,6 @@ grn_db_close(grn_ctx *ctx, grn_obj *db)
 
   ctx_used_db = ctx->impl && ctx->impl->db == db;
   if (ctx_used_db) {
-#ifdef GRN_WITH_MECAB
-    grn_db_fin_mecab_tokenizer(ctx);
-#endif
     grn_ctx_loader_clear(ctx);
     if (ctx->impl->parser) {
       grn_expr_parser_close(ctx);
@@ -468,6 +465,10 @@ grn_db_close(grn_ctx *ctx, grn_obj *db)
       grn_array_truncate(ctx, ctx->impl->values);
     }
   }
+
+#ifdef GRN_WITH_MECAB
+  grn_db_fin_mecab_tokenizer(ctx);
+#endif
 
 /* grn_tiny_array_fin should be refined.. */
 #ifdef WIN32
@@ -4240,9 +4241,8 @@ grn_table_group_multi_keys_vector_record(grn_ctx *ctx,
                                          grn_obj *bulk)
 {
   int k;
-  grn_table_sort_key *kp;
 
-  for (k = nth_key, kp = &(keys[nth_key]); k < n_keys; k++, kp++) {
+  for (k = nth_key; k < n_keys; k++) {
     grn_obj *key_buffer = &(key_buffers[k]);
     switch (key_buffer->header.type) {
     case GRN_UVECTOR :

@@ -34,6 +34,7 @@ static int test_conc97(MYSQL *mysql)
   return SKIP;
   stmt= mysql_stmt_init(mysql);
 
+  check(stmt);
   mysql_close(mysql);
 
   rc= mysql_stmt_reset(stmt);
@@ -60,6 +61,7 @@ static int test_conc83(MYSQL *unused __attribute__((unused)))
   SKIP_XPAND;
 
   stmt= mysql_stmt_init(mysql);
+  check(stmt);
 
   mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
   FAIL_IF(!(my_test_connect(mysql, hostname, username, password,
@@ -96,6 +98,7 @@ static int test_conc60(MYSQL *mysql)
   my_bool x= 1;
 
   stmt= mysql_stmt_init(mysql);
+  check(stmt);
 
   rc= mysql_stmt_attr_set(stmt, STMT_ATTR_UPDATE_MAX_LENGTH, (void *)&x);
 
@@ -883,6 +886,8 @@ static int test_prepare_resultset(MYSQL *mysql)
   check_mysql_rc(rc, mysql);
 
   stmt= mysql_stmt_init(mysql);
+  check(stmt);
+
   strcpy(query, "SELECT * FROM test_prepare_resultset");
   rc= mysql_stmt_prepare(stmt, SL(query));
   check_stmt_rc(rc, stmt);
@@ -5128,6 +5133,8 @@ static int test_prepare_error(MYSQL *mysql)
   MYSQL_STMT *stmt= mysql_stmt_init(mysql);
   int rc;
 
+  check(stmt);
+
   rc= mysql_stmt_prepare(stmt, SL("SELECT 1 FROM tbl_not_exists"));
   FAIL_IF(!rc, "Expected error");
 
@@ -5152,6 +5159,8 @@ static int test_conc349(MYSQL *mysql)
   MYSQL_STMT *stmt= mysql_stmt_init(mysql);
   int rc;
   enum mysql_stmt_state state;
+
+  check(stmt);
 
   rc= mysql_stmt_attr_get(stmt, STMT_ATTR_STATE, &state);
   FAIL_IF(state != MYSQL_STMT_INITTED, "expected status MYSQL_STMT_INITTED");
@@ -5230,6 +5239,8 @@ static int test_conc691(MYSQL *mysql)
   MARIADB_CONST_STRING sql;
   const char *sql_stmt[]= {"SELECT 'test' FROM DUAL", "This will return an error", "SELECT 1 FROM DUAL"};
   int rc, i;
+
+  check(stmt);
 
   rc= mysql_stmt_attr_get(stmt, STMT_ATTR_SQL_STATEMENT, &sql);
   check_stmt_rc(rc, stmt);
@@ -5339,7 +5350,71 @@ static int test_conc812(MYSQL *mysql)
   return OK;
 }
 
+static int test_vector(MYSQL *mysql)
+{
+  MYSQL_STMT *stmt;
+  int rc;
+  MYSQL_BIND bind;
+  float f1[4] = {1.0f, 1.1f, 1.2f, 1.3f};
+  float f2[4] = {0.0};
+
+  rc= mysql_query(mysql, "DROP TABLE IF EXISTS my_vector");
+  check_mysql_rc(rc, mysql);
+
+  rc= mysql_query(mysql, "CREATE TABLE my_vector(a vector(4))");
+
+  if (rc) {
+    diag("Server doesn't support vector");
+    return SKIP;
+  }
+
+
+  stmt= mysql_stmt_init(mysql);
+  rc= mysql_stmt_prepare(stmt, SL("INSERT INTO my_vector VALUES (?)"));
+  check_stmt_rc(rc, stmt);
+
+  memset(&bind, 0, sizeof(MYSQL_BIND));
+  bind.buffer= f1;
+  bind.buffer_type= MYSQL_TYPE_VECTOR;
+  bind.buffer_length = sizeof(float) * 4;
+  rc= mysql_stmt_bind_param(stmt, &bind);
+  check_stmt_rc(rc, stmt);
+
+  rc= mysql_stmt_execute(stmt);
+  check_stmt_rc(rc, stmt);
+
+  rc= mysql_stmt_prepare(stmt, SL("SELECT a FROM my_vector"));
+  check_stmt_rc(rc, stmt);
+
+  rc= mysql_stmt_execute(stmt);
+  check_stmt_rc(rc, stmt);
+
+  memset(&bind, 0, sizeof(MYSQL_BIND));
+  bind.buffer= &f2;
+  bind.buffer_length= sizeof(float) * 4;
+  rc= mysql_stmt_bind_result(stmt, &bind);
+  check_stmt_rc(rc, stmt);
+
+  rc= mysql_stmt_fetch(stmt);
+  check_stmt_rc(rc, stmt);
+
+  mysql_stmt_close(stmt);
+
+  if (memcmp(f1, f2, sizeof(float) * 4))
+  {
+    diag("Error: f1 != f2");
+    return FAIL;
+  }
+
+  rc= mysql_query(mysql, "DROP TABLE my_vector");
+  check_mysql_rc(rc, mysql);
+
+  return OK;
+}
+
+
 struct my_tests_st my_tests[] = {
+  {"test_vector", test_vector, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_conc691", test_conc691, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_conc812", test_conc812, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},
   {"test_conc565", test_conc565, TEST_CONNECTION_DEFAULT, 0, NULL, NULL},

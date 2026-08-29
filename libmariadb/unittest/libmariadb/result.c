@@ -1067,9 +1067,195 @@ static int test_conc160(MYSQL *mysql)
   return OK;
 }
 
+extern MYSQL_FIELD *
+unpack_fields(const MYSQL *mysql,
+              MYSQL_DATA *data, MA_MEM_ROOT *alloc, uint fields,
+	      my_bool default_value);
+extern void free_rows(void *);
 
+static int test_conc847_invalid(MYSQL *mysql)
+{
+  MYSQL_DATA *data;
+  MYSQL_ROWS *row;
+  MYSQL_FIELD *fields;
+  char **row_data;
+  int idx;
+
+  /* Identical contiguous buffer layout as test_conc847_valid */
+  static char pkt[] = {
+    'd', 'e', 'f', 0x00,                                               /* [0]  catalog ("def") */
+    't', 'e', 's', 't', 0x00,                                          /* [4]  db ("test") */
+    't', '1', 0x00,                                                    /* [9]  table ("t1") */
+    't', '1', 0x00,                                                    /* [12] org_table ("t1") */
+    'i', 'd', 0x00,                                                    /* [15] name ("id") */
+    'i', 'd', 0x00,                                                    /* [18] org_name ("id") */
+    0x00,                                                              /* [21] ext_meta ("") */
+    
+    /* 12-byte binary payload (only partially available in row->length) */
+    0x3f, 0x00,               /* [22..23] charsetnr */
+    0x0b, 0x00, 0x00, 0x00,   /* [24..27] length */
+    0x03,                     /* [28]     type */
+    0x00, 0x00,               /* [29..30] flags */
+    0x00,                     /* [31]     decimals */
+    0x00, 0x00                /* [32..33] filler */
+  };
+
+  data = (MYSQL_DATA *)calloc(1, sizeof(MYSQL_DATA));
+  FAIL_IF(!data, "Out of memory allocating MYSQL_DATA");
+
+  ma_init_alloc_root(&data->alloc, 8192, 0);
+
+  row = (MYSQL_ROWS *)ma_alloc_root(&data->alloc, sizeof(MYSQL_ROWS));
+  row_data = (char **)ma_alloc_root(&data->alloc, 16 * sizeof(char *));
+  FAIL_IF(!row || !row_data, "Out of memory allocating from data->alloc");
+
+  memset(row, 0, sizeof(MYSQL_ROWS));
+  memset(row_data, 0, 16 * sizeof(char *));
+
+  row_data[0] = &pkt[0];   /* "def" */
+  row_data[1] = &pkt[4];   /* "test" */
+  row_data[2] = &pkt[9];   /* "t1" */
+  row_data[3] = &pkt[12];  /* "t1" */
+  row_data[4] = &pkt[15];  /* "id" */
+  row_data[5] = &pkt[18];  /* "id" */
+
+  if (!(mysql->server_capabilities & CLIENT_MYSQL))
+  {
+    row_data[6] = &pkt[21]; /* ext_meta ("") */
+    row_data[7] = &pkt[22]; /* binary payload */
+    idx = 7;
+  }
+  else
+  {
+    row_data[6] = &pkt[22]; /* binary payload directly */
+    idx = 6;
+  }
+
+  row->data = (MYSQL_ROW)row_data;
+
+  /* 
+    TRUNCATION MODIFICATION:
+    Set row->length so that only 11 bytes are available past row_data[idx].
+    This triggers: (row_data[idx] - row_data[0]) + 12 > row->length
+  */
+  row->length = (unsigned long)(row_data[idx] - row_data[0]) + 11;
+
+  data->data = row;
+  data->rows = 1;
+  data->fields = 1;
+
+  mysql->net.last_errno = 0;
+  mysql->net.last_error[0] = '\0';
+
+  diag("Testing unpack_fields() with truncated packet (expecting failure)...");
+
+  fields = unpack_fields(mysql, data, &mysql->field_alloc, 1, 1);
+
+  /* Assertions expecting failure */
+  FAIL_UNLESS(fields == NULL, "Expected unpack_fields to fail on truncated packet");
+  FAIL_UNLESS(mysql_errno(mysql) == CR_MALFORMED_PACKET,
+              "Expected error CR_MALFORMED_PACKET on truncated field metadata");
+
+  return OK;
+}
+
+static int test_conc847_valid(MYSQL *mysql)
+{
+  MYSQL_DATA *data;
+  MYSQL_ROWS *row;
+  MYSQL_FIELD *fields;
+  char **row_data;
+  int idx;
+
+  /*
+    Contiguous buffer layout:
+    - String fields 0..5 separated by '\0'
+    - Extended metadata field 6 ("\0") if MariaDB
+    - 12-byte binary payload directly at row_data[idx]
+  */
+  static char pkt[] = {
+    'd', 'e', 'f', 0x00,                                               /* [0]  catalog ("def") */
+    't', 'e', 's', 't', 0x00,                                          /* [4]  db ("test") */
+    't', '1', 0x00,                                                    /* [9]  table ("t1") */
+    't', '1', 0x00,                                                    /* [12] org_table ("t1") */
+    'i', 'd', 0x00,                                                    /* [15] name ("id") */
+    'i', 'd', 0x00,                                                    /* [18] org_name ("id") */
+    0x00,                                                              /* [21] ext_meta ("") */
+    
+    /* 12-byte binary payload starting at row_data[idx] */
+    0x3f, 0x00,               /* [22..23] charsetnr = 63 (0x003f) */
+    0x0b, 0x00, 0x00, 0x00,   /* [24..27] length = 11 */
+    0x03,                     /* [28]     type = MYSQL_TYPE_LONG (3) at offset +6 */
+    0x00, 0x00,               /* [29..30] flags = 0 */
+    0x00,                     /* [31]     decimals = 0 */
+    0x00, 0x00                /* [32..33] filler (2 bytes) */
+  };
+
+  data = (MYSQL_DATA *)calloc(1, sizeof(MYSQL_DATA));
+  FAIL_IF(!data, "Out of memory allocating MYSQL_DATA");
+
+  ma_init_alloc_root(&data->alloc, 8192, 0);
+
+  row = (MYSQL_ROWS *)ma_alloc_root(&data->alloc, sizeof(MYSQL_ROWS));
+  row_data = (char **)ma_alloc_root(&data->alloc, 16 * sizeof(char *));
+  FAIL_IF(!row || !row_data, "Out of memory allocating from data->alloc");
+
+  memset(row, 0, sizeof(MYSQL_ROWS));
+  memset(row_data, 0, 16 * sizeof(char *));
+
+  row_data[0] = &pkt[0];   /* "def" */
+  row_data[1] = &pkt[4];   /* "test" */
+  row_data[2] = &pkt[9];   /* "t1" */
+  row_data[3] = &pkt[12];  /* "t1" */
+  row_data[4] = &pkt[15];  /* "id" */
+  row_data[5] = &pkt[18];  /* "id" */
+
+  if (!(mysql->server_capabilities & CLIENT_MYSQL))
+  {
+    row_data[6] = &pkt[21]; /* ext_meta ("") */
+    row_data[7] = &pkt[22]; /* binary payload */
+    idx = 7;
+  }
+  else
+  {
+    row_data[6] = &pkt[22]; /* binary payload directly */
+    idx = 6;
+  }
+
+  row->data = (MYSQL_ROW)row_data;
+
+  /* Total valid row length = offset of binary payload + 13 (boundary check allowance) */
+  row->length = (unsigned long)(row_data[idx] - row_data[0]) + 13;
+
+  data->data = row;
+  data->rows = 1;
+  data->fields = 1;
+
+  mysql->net.last_errno = 0;
+  mysql->net.last_error[0] = '\0';
+
+  diag("Testing unpack_fields() with valid metadata buffer...");
+
+  fields = unpack_fields(mysql, data, &mysql->field_alloc, 1, 1);
+
+  FAIL_UNLESS(fields != NULL, "Expected unpack_fields to succeed on valid metadata");
+  FAIL_UNLESS(mysql_errno(mysql) == 0, "Expected no error code on valid metadata");
+
+  if (fields)
+  {
+    FAIL_UNLESS(strcmp(fields[0].name, "id") == 0, "Field name mismatch");
+    FAIL_UNLESS(fields[0].type == MYSQL_TYPE_LONG, "Field type mismatch");
+  }
+
+  /* FREE THE FIELD ALLOC ROOT TO PREVENT LEAK! */
+  ma_free_root(&mysql->field_alloc, MYF(0));
+
+  return OK;
+}
 
 struct my_tests_st my_tests[] = {
+  {"test_conc847_invalid", test_conc847_invalid, TEST_CONNECTION_DEFAULT, 0,  NULL,  NULL},
+  {"test_conc847_valid", test_conc847_valid, TEST_CONNECTION_DEFAULT, 0,  NULL,  NULL},
   {"test_conc160", test_conc160, TEST_CONNECTION_DEFAULT, 0,  NULL,  NULL},
   {"client_store_result", client_store_result, TEST_CONNECTION_DEFAULT, 0,  NULL,  NULL},
   {"client_use_result", client_use_result, TEST_CONNECTION_DEFAULT, 0,  NULL,  NULL},

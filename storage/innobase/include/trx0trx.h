@@ -75,10 +75,6 @@ trx_t *trx_create();
 /** At shutdown, frees a transaction object. */
 void trx_free_at_shutdown(trx_t *trx);
 
-/** Disconnect a prepared transaction from MySQL.
-@param[in,out]	trx	transaction */
-void trx_disconnect_prepared(trx_t *trx);
-
 /** Initialize (resurrect) transactions at startup. */
 dberr_t trx_lists_init_at_db_start();
 
@@ -619,6 +615,8 @@ private:
 
 
 public:
+  /** trx_sys.rw_trx_ids index, protected by trx_sys.rw_trx_ids.latch */
+  uint32_t rw_trx_ids_slot;
   /** Transaction identifier (0 if no locks were acquired).
   Set by trx_sys_t::register_rw() or trx_resurrect() before
   the transaction is added to trx_sys.rw_trx_hash.
@@ -785,7 +783,7 @@ public:
 	This field is accessed by the thread that owns the transaction,
 	without holding any mutex.
 	There is only one foreign-thread access in trx_print_low()
-	and a possible race condition with trx_disconnect_prepared(). */
+	and a possible race condition with disconnect_prepared(). */
 	bool		is_recovered;
 	const char*	op_info;	/*!< English text describing the
 					current operation, or an empty
@@ -1031,6 +1029,8 @@ public:
   /** Commit the transaction.
   @retval false (always) */
   bool commit() noexcept;
+  /** Disconnect a prepared transaction */
+  void disconnect_prepared() noexcept;
 
   /** Try to drop a persistent table.
   @param table       persistent table

@@ -34,15 +34,16 @@ jobs:
           additional-matrix: '[{"name": "MariaDB 11.4 (local) - windows 2025", "os": "windows-2025", "db-type": "community", "db-tag": "11.4"},{"name": "MariaDB 11.4 32bits (local) - windows 2025", "os": "windows-2025", "db-type": "community", "db-tag": "11.4", "arch": "32"}]'
 
   ci-server:
-    name: server ${{ matrix.server.version }} test suite ${{ matrix.server.env && format(' {0}', matrix.server.env) || '' }}
+    name: server ${{ matrix.server.version }} test suite${{ matrix.server.ps && format(' {0}', matrix.server.ps) || '' }}
     runs-on: ubuntu-latest
     continue-on-error: true
     strategy:
+      fail-fast: false
       matrix:
         server:
           - version: '11.4'
-          - version: '11.8'
-            env: TEST_OPTION=--ps-protocol
+          - version: '11.8'  
+            ps: '--ps-protocol'
     steps:
       - name: Retrieve server ${{ matrix.server.version }}
         shell: bash
@@ -84,7 +85,7 @@ jobs:
           git add libmariadb
           mkdir bld
           cd bld
-          cmake .. -DPLUGIN_MROONGA=NO -DPLUGIN_ROCKSDB=NO -DPLUGIN_SPIDER=NO -DPLUGIN_TOKUDB=NO
+          cmake .. -DWITHOUT_DYNAMIC_PLUGINS=1
           make -j9
 
       - name: Run test suite
@@ -95,7 +96,7 @@ jobs:
           ls -lrt
           ./mysql-test-run.pl --suite=main,unit ${TEST_OPTION} --parallel=auto --skip-test=session_tracker_last_gtid
         env:
-          TEST_OPTION: ${{ matrix.server.env.TEST_OPTION }}
+          TEST_OPTION: ${{ matrix.server.ps }}
           MYSQL_TEST_HOST: 127.0.0.1
 
       - name: Archive error logs
@@ -106,6 +107,24 @@ jobs:
           name: log-files-${{ matrix.server.version }}
           path: |
             ${{ github.workspace }}/workdir-server/bld/mysql-test/var/**/log/*.err
+
+  ci-clang:
+    name: clang build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+
+      - name: build with clang
+        run: |
+          clang --version
+          cmake . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWITH_EXTERNAL_ZLIB=On \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          make -j$(nproc)
 
   ci:
     name: ${{ matrix.name }}
@@ -119,6 +138,7 @@ jobs:
       MYSQL_TEST_DB: testc
 
     strategy:
+      fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
 
     runs-on: ${{ matrix.os }}
