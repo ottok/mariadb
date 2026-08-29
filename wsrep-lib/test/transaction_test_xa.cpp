@@ -17,6 +17,7 @@
  * along with wsrep-lib.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "client_state_fixture.hpp"
+#include "test_utils.hpp"
 #include <iostream>
 
 //
@@ -123,6 +124,104 @@ BOOST_FIXTURE_TEST_CASE(transaction_xa_detach_rollback_by_xid,
     BOOST_REQUIRE(cc2.rollback_by_xid(xid) == 0);
     BOOST_REQUIRE(cc2.after_statement() == 0);
     BOOST_REQUIRE(sc.provider().rollback_fragments() == 1);
+
+    // xa_detach() creates a streaming applier, clean it up
+    wsrep::mock_high_priority_service* hps(
+        static_cast<wsrep::mock_high_priority_service*>(
+            sc.find_streaming_applier(xid)));
+    BOOST_REQUIRE(hps);
+    hps->rollback(wsrep::ws_handle(), wsrep::ws_meta());
+    hps->after_apply();
+    sc.stop_streaming_applier(sc.id(), wsrep::transaction_id(1));
+    server_service.release_high_priority_service(hps);
+}
+
+//
+// Test BF abort during commit_by_xid certify
+//
+BOOST_FIXTURE_TEST_CASE(transaction_xa_detach_commit_by_xid_bf_abort,
+                        replicating_two_clients_fixture_sync_rm)
+{
+    wsrep::xid xid(1, 1, 1, "id");
+
+    cc1.start_transaction(wsrep::transaction_id(1));
+    cc1.assign_xid(xid);
+    cc1.before_prepare();
+    cc1.after_prepare();
+    BOOST_REQUIRE(sc.provider().fragments() == 1);
+    BOOST_REQUIRE(tc.streaming_context().fragments_certified() == 1);
+
+    cc1.xa_detach();
+
+    BOOST_REQUIRE(tc.state() == wsrep::transaction::s_aborted);
+    BOOST_REQUIRE(cc1.after_statement() == 0);
+
+    cc2.start_transaction(wsrep::transaction_id(2));
+    cc2.assign_xid(xid);
+
+    // Inject BF abort for cc2's transaction during certify
+    wsrep_test::bf_abort_provider(sc, cc2, wsrep::seqno(100));
+
+    BOOST_REQUIRE(cc2.client_state::commit_by_xid(xid) == 1);
+    BOOST_REQUIRE(cc2.current_error() == wsrep::e_error_during_commit);
+
+    // Rollback cc2's transaction after failed commit_by_xid
+    BOOST_REQUIRE(cc2.before_rollback() == 0);
+    BOOST_REQUIRE(cc2.after_rollback() == 0);
+    BOOST_REQUIRE(cc2.transaction().state() == wsrep::transaction::s_aborted);
+    // Note that by convention `after_statement()` returns an error only
+    // when the statement can be retried. Currently that is only for
+    // deadlock errors. In this case the error is e_error_during_commit.
+    BOOST_REQUIRE(cc2.after_statement() == 0);
+
+    // xa_detach() creates a streaming applier, clean it up
+    wsrep::mock_high_priority_service* hps(
+        static_cast<wsrep::mock_high_priority_service*>(
+            sc.find_streaming_applier(xid)));
+    BOOST_REQUIRE(hps);
+    hps->rollback(wsrep::ws_handle(), wsrep::ws_meta());
+    hps->after_apply();
+    sc.stop_streaming_applier(sc.id(), wsrep::transaction_id(1));
+    server_service.release_high_priority_service(hps);
+}
+
+//
+// Test BF abort after commit_by_xid certify
+//
+BOOST_FIXTURE_TEST_CASE(transaction_xa_detach_commit_by_xid_bf_abort_after_cert,
+                        replicating_two_clients_fixture_sync_rm)
+{
+    wsrep::xid xid(1, 1, 1, "id");
+
+    cc1.start_transaction(wsrep::transaction_id(1));
+    cc1.assign_xid(xid);
+    cc1.before_prepare();
+    cc1.after_prepare();
+    BOOST_REQUIRE(sc.provider().fragments() == 1);
+    BOOST_REQUIRE(tc.streaming_context().fragments_certified() == 1);
+
+    cc1.xa_detach();
+
+    BOOST_REQUIRE(tc.state() == wsrep::transaction::s_aborted);
+    BOOST_REQUIRE(cc1.after_statement() == 0);
+
+    cc2.start_transaction(wsrep::transaction_id(2));
+    cc2.assign_xid(xid);
+
+    cc2.sync_point_enabled_ = "wsrep_commit_or_rollback_by_xid_after_certify";
+    cc2.sync_point_action_ = wsrep::mock_client_service::spa_bf_abort_unordered;
+
+    BOOST_REQUIRE(cc2.client_state::commit_by_xid(xid) == 1);
+    BOOST_REQUIRE(cc2.current_error() == wsrep::e_error_during_commit);
+
+    // Rollback cc2's transaction after failed commit_by_xid
+    BOOST_REQUIRE(cc2.before_rollback() == 0);
+    BOOST_REQUIRE(cc2.after_rollback() == 0);
+    BOOST_REQUIRE(cc2.transaction().state() == wsrep::transaction::s_aborted);
+    // Note that by convention `after_statement()` returns an error only
+    // when the statement can be retried. Currently that is only for
+    // deadlock errors. In this case the error is e_error_during_commit.
+    BOOST_REQUIRE(cc2.after_statement() == 0);
 
     // xa_detach() creates a streaming applier, clean it up
     wsrep::mock_high_priority_service* hps(

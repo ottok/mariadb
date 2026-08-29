@@ -2884,8 +2884,10 @@ bool ha_partition::create_handler_file(const char *name)
         part_elem->part_state != PART_TO_BE_ADDED &&
         part_elem->part_state != PART_CHANGED)
       continue;
-    tablename_to_filename(part_elem->partition_name.str, part_name,
-                          FN_REFLEN);
+    if (error_if_mysql50_prefix(part_elem->partition_name.str, ER_WRONG_PARTITION_NAME))
+      DBUG_RETURN(TRUE);
+    if (!tablename_to_filename(part_elem->partition_name.str, part_name, FN_REFLEN))
+      DBUG_RETURN(TRUE);
     part_name_len= strlen(part_name);
     if (!m_is_sub_partitioned)
     {
@@ -2898,9 +2900,11 @@ bool ha_partition::create_handler_file(const char *name)
       for (j= 0; j < m_part_info->num_subparts; j++)
       {
 	subpart_elem= sub_it++;
-        tablename_to_filename(subpart_elem->partition_name.str,
-                              subpart_name,
-                              FN_REFLEN);
+        if (error_if_mysql50_prefix(subpart_elem->partition_name.str, ER_WRONG_PARTITION_NAME))
+          DBUG_RETURN(TRUE);
+        if (!tablename_to_filename(subpart_elem->partition_name.str, subpart_name,
+                                   FN_REFLEN))
+          DBUG_RETURN(TRUE);
 	subpart_name_len= strlen(subpart_name);
 	tot_name_len+= part_name_len + subpart_name_len + 5;
         tot_parts++;
@@ -7752,6 +7756,8 @@ int ha_partition::handle_unordered_next(uchar *buf, bool is_next_same)
   int error;
   DBUG_ENTER("ha_partition::handle_unordered_next");
 
+  if (m_part_spec.start_part == NO_CURRENT_PART_ID)
+    DBUG_RETURN(HA_ERR_END_OF_FILE);
   if (m_part_spec.start_part >= m_tot_parts)
   {
     /* Should never happen! */

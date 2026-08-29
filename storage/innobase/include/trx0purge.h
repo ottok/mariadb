@@ -40,9 +40,11 @@ struct TABLE;
 Remove the undo log segment from the rseg slot if it is too big for reuse.
 @param[in]	trx		transaction
 @param[in,out]	undo		undo log
-@param[in,out]	mtr		mini-transaction */
+@param[in,out]	mtr		mini-transaction
+@param[in]	end		transaction serialisation number */
 void
-trx_purge_add_undo_to_history(const trx_t* trx, trx_undo_t*& undo, mtr_t* mtr);
+trx_purge_add_undo_to_history(const trx_t* trx, trx_undo_t*& undo, mtr_t* mtr,
+                              trx_id_t end);
 
 /**
 Remove unnecessary history data from rollback segments. NOTE that when this
@@ -514,6 +516,14 @@ public:
 
   /** Reset the state of a purge_worker_task at the end of a batch */
   inline void reset_worker_thd(THD *thd) const noexcept;
+
+#ifdef UNIV_DEBUG
+  int reset_coordinator() noexcept
+  {
+    coordinator_thd= nullptr;
+    return 0;
+  }
+#endif /* UNIV_DEBUG */
 };
 
 /** The global data structure coordinating a purge */

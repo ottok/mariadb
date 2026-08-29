@@ -168,30 +168,6 @@ SET(MYSQL_LIB_SYMBOLS
  mysql_use_result
  mysql_warning_count)
 
-IF(ZLIB_FOUND AND WITH_EXTERNAL_ZLIB)
-  INCLUDE_DIRECTORIES(${ZLIB_INCLUDE_DIR})
-ELSE()
-  SET(ZLIB_SOURCES
-    ${CC_SOURCE_DIR}/external/zlib/adler32.c
-    ${CC_SOURCE_DIR}/external/zlib/compress.c
-    ${CC_SOURCE_DIR}/external/zlib/crc32.c
-    ${CC_SOURCE_DIR}/external/zlib/deflate.c
-    ${CC_SOURCE_DIR}/external/zlib/gzclose.c
-    ${CC_SOURCE_DIR}/external/zlib/gzlib.c
-    ${CC_SOURCE_DIR}/external/zlib/gzread.c
-    ${CC_SOURCE_DIR}/external/zlib/gzwrite.c
-    ${CC_SOURCE_DIR}/external/zlib/infback.c
-    ${CC_SOURCE_DIR}/external/zlib/inffast.c
-    ${CC_SOURCE_DIR}/external/zlib/inflate.c
-    ${CC_SOURCE_DIR}/external/zlib/inftrees.c
-    ${CC_SOURCE_DIR}/external/zlib/trees.c
-    ${CC_SOURCE_DIR}/external/zlib/uncompr.c
-    ${CC_SOURCE_DIR}/external/zlib/zutil.c
-  )
-  INCLUDE_DIRECTORIES(${CC_SOURCE_DIR}/external/zlib ${CC_BINARY_DIR}/external/zlib)
-ENDIF()
-
-
 SET(MARIADB_DYNCOL_SYMBOLS
  mariadb_dyncol_check
  mariadb_dyncol_column_cmp_named
@@ -287,10 +263,9 @@ SET(MARIADB_NONBLOCK_SYMBOLS
 
 # handle static plugins
 SET(LIBMARIADB_SOURCES ${LIBMARIADB_SOURCES} ${LIBMARIADB_PLUGIN_SOURCES})
-SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${LIBMARIADB_PLUGIN_LIBS} ${ZSTD_LIBRARY} ${ZLIB_LIBRARY})
+SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${LIBMARIADB_PLUGIN_LIBS} ${ZSTD_LIBRARY} ${ZLIB_LIBRARIES})
 MESSAGE(STATUS "SYSTEM_LIBS: ${SYSTEM_LIBS}")
 INCLUDE_DIRECTORIES(${LIBMARIADB_PLUGIN_INCLUDES})
-ADD_DEFINITIONS(${LIBMARIADB_PLUGIN_DEFS})
 FOREACH(plugin ${PLUGINS_STATIC})
   SET(EXTERNAL_PLUGINS "${EXTERNAL_PLUGINS} extern struct st_mysql_client_plugin_${PLUGIN_${plugin}_TYPE} ${plugin}_client_plugin;\n")
   SET(BUILTIN_PLUGINS "${BUILTIN_PLUGINS}   (struct st_mysql_client_plugin *)&${plugin}_client_plugin,\n")
@@ -377,7 +352,7 @@ ELSE()
     SET_SOURCE_FILES_PROPERTIES(${ZLIB_SOURCES} PROPERTIES COMPILE_FLAGS -W0)
   ENDIF()
   SET(LIBMARIADB_SOURCES ${LIBMARIADB_SOURCES} ${ZLIB_SOURCES})
-  INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/external/zlib)
+  INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/external/zlib ${CC_BINARY_DIR}/external/zlib)
 ENDIF()
 
 IF(WITH_DYNCOL)
@@ -486,7 +461,10 @@ IF(WITH_MYSQLCOMPAT)
   ENDIF()
 ENDIF()
 
-create_symlink(libmariadb${CMAKE_STATIC_LIBRARY_SUFFIX} mariadbclient ${INSTALL_LIBDIR})
+# In DEB layout, mariadbclient is already named libmariadb.a — skip the symlink.
+IF(NOT INSTALL_LAYOUT STREQUAL "DEB")
+  create_symlink(libmariadb${CMAKE_STATIC_LIBRARY_SUFFIX} mariadbclient ${INSTALL_LIBDIR})
+ENDIF()
 
 SET_TARGET_PROPERTIES(libmariadb PROPERTIES VERSION
  ${CPACK_PACKAGE_VERSION_MAJOR}

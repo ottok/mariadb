@@ -19,10 +19,6 @@ MACRO(SKIP_ROCKSDB_PLUGIN msg)
   RETURN()
 ENDMACRO()
 
-IF (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/CMakeLists.txt")
-  SKIP_ROCKSDB_PLUGIN("Missing CMakeLists.txt in rocksdb directory. Try \"git submodule update\".")
-ENDIF()
-
 CHECK_LIBRARY_EXISTS(rt timer_delete "" HAVE_TIMER_DELETE)
 IF (HAVE_TIMER_DELETE)
   ADD_DEFINITIONS(-DHAVE_TIMER_DELETE)
@@ -162,6 +158,8 @@ IF(NOT TARGET rocksdb)
   # Bail out if compilation with rocksdb engine is not requested
   RETURN()
 ENDIF()
+
+ADD_SUBMODULE(rocksdb)
 
 INSTALL_MANPAGES(rocksdb-engine mariadb-ldb.1 myrocks_hotbackup.1)
 

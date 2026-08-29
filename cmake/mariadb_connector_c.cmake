@@ -45,7 +45,7 @@ SET(CLIENT_PLUGIN_PVIO_SHMEM STATIC)
 SET(CLIENT_PLUGIN_PVIO_SOCKET STATIC)
 
 MESSAGE("== Configuring MariaDB Connector/C")
-ADD_SUBDIRECTORY(libmariadb)
+ADD_SUBMODULE_SUBDIRECTORY(libmariadb)
 
 IF(MSVC AND TARGET mariadb_obj AND TARGET mariadbclient)
   # With MSVC, do not produce LTCG-compiled static client libraries.

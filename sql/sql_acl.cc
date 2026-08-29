@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2018, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2023, MariaDB
+   Copyright (c) 2009, 2026, MariaDB plc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -477,19 +477,20 @@ public:
   }
 
 
-  void print_grant(String *str)
+  void print_grant(THD *thd, String *str)
   {
-    str->append(STRING_WITH_LEN("GRANT PROXY ON '"));
-    str->append(proxied_user, strlen(proxied_user));
-    str->append(STRING_WITH_LEN("'@'"));
-    if (proxied_host.hostname)
-      str->append(proxied_host.hostname, strlen(proxied_host.hostname));
-    str->append(STRING_WITH_LEN("' TO '"));
-    str->append(user, strlen(user));
-    str->append(STRING_WITH_LEN("'@'"));
-    if (host.hostname)
-      str->append(host.hostname, strlen(host.hostname));
-    str->append(STRING_WITH_LEN("'"));
+    str->append(STRING_WITH_LEN("GRANT PROXY ON "));
+    append_identifier(thd, str, proxied_user, strlen(proxied_user));
+    str->append(STRING_WITH_LEN("@"));
+    DBUG_ASSERT(proxied_host.hostname);
+    if (proxied_host.hostname) // Why?
+      append_identifier(thd, str, proxied_host.hostname, strlen(proxied_host.hostname));
+    str->append(STRING_WITH_LEN(" TO "));
+    append_identifier(thd, str, user, strlen(user));
+    str->append(STRING_WITH_LEN("@"));
+    DBUG_ASSERT(host.hostname);
+    if (host.hostname) // Why?
+      append_identifier(thd, str, host.hostname, strlen(host.hostname));
     if (with_grant)
       str->append(STRING_WITH_LEN(" WITH GRANT OPTION"));
   }
@@ -3849,7 +3850,11 @@ privilege_t acl_get(const char *host, const char *ip,
       [key_data_size + 1, key_data_size + MY_CS_MBMAXLEN].
   */
   CharBuffer<key_data_size + MY_CS_MBMAXLEN> key;
-  key.append(Lex_cstring_strlen(safe_str(ip))).append_char('\0')
+  /*
+    localhost connections have ip=0, host="localhost", roles have ip="",
+    host="". Fall back to host, otherwise both get the same key.
+  */
+  key.append(Lex_cstring_strlen(safe_str(ip ? ip : host))).append_char('\0')
      .append(Lex_cstring_strlen(user)).append_char('\0');
   tmp_db= key.end();
   key.append_opt_casedn(files_charset_info, Lex_cstring_strlen(db),
@@ -6428,6 +6433,7 @@ struct PRIVS_TO_MERGE
     ALL, GLOBAL, DB, TABLE_COLUMN, PROC, FUNC, PACKAGE_SPEC, PACKAGE_BODY
   } what;
   const char *db, *name;
+  bool initial_load; // acl_reload(): grants are calculated, not updated
 };
 
 
@@ -6482,7 +6488,7 @@ static void propagate_role_grants(ACL_ROLE *role,
     return;
 
   mysql_mutex_assert_owner(&acl_cache->lock);
-  PRIVS_TO_MERGE data= { what, db, name };
+  PRIVS_TO_MERGE data= { what, db, name, false };
 
   /*
      Before updating grants to roles that inherit from this role, ensure that
@@ -7291,7 +7297,7 @@ static int merge_role_privileges(ACL_USER_BASE *,
     changed|= merge_role_routine_grant_privileges(grantee,
                             data->db, data->name, &role_hash,
                             &package_body_priv_hash);
-  return !changed; // don't recurse into the subgraph if privs didn't change
+  return !changed && !data->initial_load;
 }
 
 static
@@ -8081,6 +8087,22 @@ bool mysql_grant(THD *thd, LEX_CSTRING db, List <LEX_USER> &list,
     db= tmp_db.to_lex_cstring();
   }
 
+  if (db.str)
+  {
+    /*
+      Reject a db name that would not fit in the mysql.db.Db column instead of
+      silently truncating it into a non-functional grant (MDEV-39047). Escaping
+      wildcards (\_ \%) can make the stored name longer than the actual db name.
+    */
+    Lex_cstring_strlen db_str(db.str);
+    if (check_string_char_length(&db_str, 0, max_dbname_length,
+                                 system_charset_info, 1))
+    {
+      my_error(ER_WRONG_DB_NAME, MYF(0), db.str);
+      DBUG_RETURN(TRUE);
+    }
+  }
+
   if (is_proxy)
   {
     DBUG_ASSERT(!db.str);
@@ -8371,7 +8393,7 @@ static my_bool propagate_role_grants_action(void *role_ptr,
     return 0;
 
   mysql_mutex_assert_owner(&acl_cache->lock);
-  PRIVS_TO_MERGE data= { PRIVS_TO_MERGE::ALL, 0, 0 };
+  PRIVS_TO_MERGE data= { PRIVS_TO_MERGE::ALL, 0, 0, true };
   traverse_role_graph_up(role, &data, NULL, merge_role_privileges);
   return 0;
 }
@@ -9340,9 +9362,8 @@ static void add_user_parameters(THD *thd, String *result, ACL_USER* acl_user,
   {
     if (acl_user->auth->auth_string.length)
     {
-      result->append(STRING_WITH_LEN(" IDENTIFIED BY PASSWORD '"));
-      result->append(&acl_user->auth->auth_string);
-      result->append('\'');
+      result->append(STRING_WITH_LEN(" IDENTIFIED BY PASSWORD "));
+      append_unescaped(result, acl_user->auth->auth_string);
     }
   }
   else
@@ -9355,9 +9376,8 @@ static void add_user_parameters(THD *thd, String *result, ACL_USER* acl_user,
       result->append(&acl_user->auth[i].plugin);
       if (acl_user->auth[i].auth_string.length)
       {
-        result->append(STRING_WITH_LEN(" USING '"));
-        result->append(&acl_user->auth[i].auth_string);
-        result->append('\'');
+        result->append(STRING_WITH_LEN(" USING "));
+        append_unescaped(result, acl_user->auth[i].auth_string);
       }
     }
   }
@@ -9373,27 +9393,25 @@ static void add_user_parameters(THD *thd, String *result, ACL_USER* acl_user,
     if (acl_user->x509_issuer[0])
     {
       ssl_options++;
-      result->append(STRING_WITH_LEN("ISSUER \'"));
-      result->append(acl_user->x509_issuer,strlen(acl_user->x509_issuer));
-      result->append('\'');
+      result->append(STRING_WITH_LEN("ISSUER "));
+      append_unescaped(result, acl_user->x509_issuer,
+                       strlen(acl_user->x509_issuer));
     }
     if (acl_user->x509_subject[0])
     {
       if (ssl_options++)
         result->append(' ');
-      result->append(STRING_WITH_LEN("SUBJECT \'"));
-      result->append(acl_user->x509_subject,strlen(acl_user->x509_subject),
-                    system_charset_info);
-      result->append('\'');
+      result->append(STRING_WITH_LEN("SUBJECT "));
+      append_unescaped(result, acl_user->x509_subject,
+                       strlen(acl_user->x509_subject));
     }
     if (acl_user->ssl_cipher)
     {
       if (ssl_options++)
         result->append(' ');
-      result->append(STRING_WITH_LEN("CIPHER '"));
-      result->append(acl_user->ssl_cipher,strlen(acl_user->ssl_cipher),
-                    system_charset_info);
-      result->append('\'');
+      result->append(STRING_WITH_LEN("CIPHER "));
+      append_unescaped(result, acl_user->ssl_cipher,
+                       strlen(acl_user->ssl_cipher));
     }
   }
   if (with_grant ||
@@ -9663,8 +9681,7 @@ bool get_show_user(THD *thd, LEX_USER *lex_user, const char **username,
   {
     *username= lex_user->user.str;
     *hostname= lex_user->host.str;
-    do_check_access= strcmp(*username, sctx->priv_user) ||
-                     strcmp(*hostname, sctx->priv_host);
+    do_check_access= !sctx->is_priv_user(lex_user->user, lex_user->host);
   }
 
   if (do_check_access && check_access(thd, SELECT_ACL, "mysql", 0, 0, 1, 0))
@@ -11977,6 +11994,49 @@ Silence_routine_definer_errors::handle_condition(
 }
 
 
+/*
+  The low level function to revoke routine privileges for the given sp handler
+  @param thd         the thd
+  @param proc_privs  the table mysql.proc_privs
+  @param sp_db       the routine database
+  @param sp_name     the routine name
+  @param sph         the sp handler
+*/
+static void sp_revoke_privileges_for_handler(THD *thd, TABLE *proc_privs,
+                                             const Lex_ident_db &sp_db,
+                                             const Lex_ident_routine &sp_name,
+                                             const Sp_handler *sph)
+{
+  uint counter, revoked;
+  HASH *hash= sph->get_priv_hash();
+  do
+  {
+    for (counter= 0, revoked= 0 ; counter < hash->records ; )
+    {
+      GRANT_NAME *grant_proc= (GRANT_NAME*) my_hash_element(hash, counter);
+      if (sp_db.streq(Lex_cstring_strlen(grant_proc->db)) &&
+          sp_name.streq(Lex_cstring_strlen(grant_proc->tname)))
+      {
+        LEX_USER lex_user;
+	lex_user.user.str= grant_proc->user;
+	lex_user.user.length= strlen(grant_proc->user);
+        lex_user.host.str= safe_str(grant_proc->host.hostname);
+        lex_user.host.length= strlen(lex_user.host.str);
+        if (replace_routine_table(thd, grant_proc,
+                                  proc_privs, lex_user,
+                                  grant_proc->db, grant_proc->tname,
+                                  sph, ALL_KNOWN_ACL, 1) == 0)
+	{
+	  revoked= 1;
+	  continue;
+	}
+      }
+      counter++;
+    }
+  } while (revoked);
+}
+
+
 /**
   Revoke privileges for all users on a stored procedure.  Use an error handler
   that converts errors about missing grants into warnings.
@@ -11999,9 +12059,7 @@ bool sp_revoke_privileges(THD *thd,
                           const Lex_ident_routine &sp_name,
                           const Sp_handler *sph)
 {
-  uint counter, revoked;
   int result;
-  HASH *hash= sph->get_priv_hash();
   Silence_routine_definer_errors error_handler;
   DBUG_ENTER("sp_revoke_privileges");
 
@@ -12021,31 +12079,12 @@ bool sp_revoke_privileges(THD *thd,
   mysql_mutex_lock(&acl_cache->lock);
 
   /* Remove procedure access */
-  do
-  {
-    for (counter= 0, revoked= 0 ; counter < hash->records ; )
-    {
-      GRANT_NAME *grant_proc= (GRANT_NAME*) my_hash_element(hash, counter);
-      if (sp_db.streq(Lex_cstring_strlen(grant_proc->db)) &&
-          sp_name.streq(Lex_cstring_strlen(grant_proc->tname)))
-      {
-        LEX_USER lex_user;
-	lex_user.user.str= grant_proc->user;
-	lex_user.user.length= strlen(grant_proc->user);
-        lex_user.host.str= safe_str(grant_proc->host.hostname);
-        lex_user.host.length= strlen(lex_user.host.str);
-        if (replace_routine_table(thd, grant_proc,
-                                  tables.procs_priv_table().table(), lex_user,
-                                  grant_proc->db, grant_proc->tname,
-                                  sph, ALL_KNOWN_ACL, 1) == 0)
-	{
-	  revoked= 1;
-	  continue;
-	}
-      }
-      counter++;
-    }
-  } while (revoked);
+  if (sph == &sp_handler_package_spec)
+    sp_revoke_privileges_for_handler(thd, tables.procs_priv_table().table(),
+                                     sp_db, sp_name, &sp_handler_package_body);
+
+  sp_revoke_privileges_for_handler(thd, tables.procs_priv_table().table(),
+                                   sp_db, sp_name, sph);
 
   mysql_mutex_unlock(&acl_cache->lock);
   mysql_rwlock_unlock(&LOCK_grant);
@@ -12253,7 +12292,7 @@ show_proxy_grants(THD *thd, const char *username, const char *hostname,
     {
       String global(buff, buffsize, system_charset_info);
       global.length(0);
-      proxy->print_grant(&global);
+      proxy->print_grant(thd, &global);
       protocol->prepare_for_resend();
       protocol->store(global.ptr(), global.length(), global.charset());
       if (protocol->write())

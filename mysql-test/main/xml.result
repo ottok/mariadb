@@ -1414,6 +1414,7 @@ ExtractValue(@xml, '/employee/dt3')
 NULL
 Warnings:
 Warning	1525	Incorrect XML value: 'parse error at line 10 pos 27: unexpected END-OF-INPUT'
+# End of 10.6 tests
 # Start of 11.4 tests
 #
 # MDEV-36565 Assertion `src != ((void *)0)' failed in my_casedn_8bit

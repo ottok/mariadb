@@ -1,7 +1,0 @@
-use autopilot;
-START TRANSACTION;
-UPDATE datatypeupdate SET CTEXT = CTINYBLOB;
-SELECT CTEXT FROM datatypeupdate;
-CTEXT
-tinyblob
-ROLLBACK;
