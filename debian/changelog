@@ -1,4 +1,4 @@
-mariadb (1:11.8.9+ds-1) UNRELEASED; urgency=medium
+mariadb (1:11.8.9+ds-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
   * New upstream maintenance release version 11.8.9. Includes several fixes as
@@ -11,10 +11,13 @@ mariadb (1:11.8.9+ds-1) UNRELEASED; urgency=medium
     - CVE-2026-47023
     - CVE-2026-60184
   * Drop patches applied upstream
-  * Salsa CI: Clean away defunct MariaDB.org Debian sid upgrade scenarios
-  * Salsa CI: Clean away now defunct Bullseye upgrade test jobs
-  * Salsa CI: Start testing with MySQL 9.7 as 8.0 has been removed from Debian
-    unstable
+  * Update server trace to include new parameters and values
+    - New option innodb-index-shrink (default TRUE)
+  * Clean up d/copyright of files that no longer ship in this release
+  * Update Lintian overrides for new upstream version
+  * Update maintainer documentation to ensure it is current
+  * Skip tests main.mysql_client_test* as they require Internet access
+  * Salsa CI: Clean away defunct test jobs and start testing with MySQL 9.7
 
   [ Luke Yasuda ]
   * d/*.lintian-overrides: fix all the mismatched-override
@@ -40,7 +43,10 @@ mariadb (1:11.8.9+ds-1) UNRELEASED; urgency=medium
   * libmariadb-dev-compat: make Multi-Arch: same co-installable
     (Closes: #1140151)
 
- -- Otto Kekäläinen <otto@debian.org>  Sat, 29 Aug 2026 12:09:53 +0000
+  [ Daniel Black ]
+  * MDEV-39584: links mariadb.org/kb -> mariadb.com/docs
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 29 Aug 2026 19:19:19 +0000
 
 mariadb (1:11.8.8-1) unstable; urgency=medium
 
