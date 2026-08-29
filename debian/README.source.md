@@ -28,7 +28,7 @@ it, simply run:
 Alternatively, run this to define precisely one upstream branch to be tracked:
 
     gbp clone vcs-git:mariadb \
-      --postclone="git remote add -t 11.4 -f upstreamvcs https://github.com/MariaDB/server.git"
+      --postclone="git remote add -t 11.8 -f upstreamvcs https://github.com/MariaDB/server.git"
 
 Using the `vcs-git:`prefix will automatically resolve the git repository
 location, which for most packages is on salsa.debian.org. To build the package
@@ -37,7 +37,7 @@ one needs all three Debian branches (`debian/latest`, `upstream/latest`and
 automatically fetched.
 
 The command above also automatically adds the upstream repository as an extra
-remote, and fetches the latest upstream `11.4` branch commits and tags. The
+remote, and fetches the latest upstream `11.8` branch commits and tags. The
 upstream development branch is not a requirement to build the Debian package,
 but is recommended for making collaboration with upstream easy.
 
@@ -184,6 +184,9 @@ git commit message on the `pq` branch. In the `debian/patches/*`files the
 first three lines need to be exactly `From`, `Date` and `Subject`,
 just like in `git am` managed patches.
 
+
+## Testing and additional changes
+
 Remember that if you did more than just refreshed patches, you should save those
 changes in separate git commits. Remember to build the package, run autopkgtests
 and conduct other appropriate testing. For git-buildpackage the basic command is:
@@ -191,15 +194,46 @@ and conduct other appropriate testing. For git-buildpackage the basic command is
       gbp buildpackage
 
 Alternatively you can use Debcraft and run git-buildpackage inside hermetic
-containers created by it:
+containers created by it, and also benefit from all automation that helps with
+updating to new upstream versions and running tests:
 
-    debcraft validate
+    debcraft update
     debcraft build
     debcraft test
+    debcraft improve
 
 You can also do manual testing and run `apt install <package>` in a `debcraft
 shell` session. Rinse and repeat until the Debian packaging has been properly
 updated in response to the changes in the new upstream version.
+
+
+### Updating trace files
+
+If running `debcraft test`, and the server tracing tests fail due to mismatches
+in the `*.actual` and `*.expected` files, and you are certain that it is not a
+case of a regression, you can easily copy the actual results to be the new
+expected results with by running inside the `debcraft test` session:
+
+    cp -a debian/tests/traces/*.actual /debcraft/source/debian/tests/traces/
+
+On the host system you can rename the files, review them and commit with:
+
+  cd debian/tests/traces/
+  rename --force --verbose 's/.actual/.expected/g' *
+  git citool
+
+
+## Comparing to upstream Debian packaging changes
+
+After importing a new upstream version, it is good to review Debian packaging
+fixes done by upstream:
+
+    git difftool --dir-diff mariadb-11.8.9 -- debian/
+    git log --oneline --first-parent 11.8 -- debian/
+    gitk 11.8 -- debian/ &
+    git cherry-pick -x id1 id2 id3
+
+## Post new version for review
 
 After testing enough locally, push to your fork and open Merge Request on Salsa
 for review (replace 'otto' with your own Salsa username):
@@ -215,6 +249,9 @@ not a problem though, as the upstream import is mechanical for the
 `upstream/latest` and `pristine-tar` branches and thus not a topic to be debated
  in a code review. Only the `debian/latest` branch has changes that warrant
  a review and potentially new revisions.
+
+For examples of previous new upstream version MRs see the tag _new-upstream-version_:
+https://salsa.debian.org/mariadb-team/mariadb-server/-/merge_requests/?sort=created_date&state=all&label_name%5B%5D=new-upstream-version
 
 
 ## Uploading a new release
