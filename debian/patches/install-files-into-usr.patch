@@ -15,13 +15,13 @@ Forwarded: https://github.com/MariaDB/server/pull/4065
  1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/cmake/install_layout.cmake b/cmake/install_layout.cmake
-index 55e960a..d52836a 100644
+index a185073..4a418b2 100644
 --- a/cmake/install_layout.cmake
 +++ b/cmake/install_layout.cmake
-@@ -196,10 +196,10 @@ SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mysql")
+@@ -199,10 +199,10 @@ SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mysql")
  
- SET(INSTALL_RUNDATADIR_DEB              "/run/mysqld")
- SET(INSTALL_UNIX_ADDRDIR_DEB            "${INSTALL_RUNDATADIR_DEB}/mysqld.sock")
+ SET(INSTALL_RUNDIR_DEB                  "/run")
+ SET(INSTALL_UNIX_ADDRDIR_DEB            "${INSTALL_RUNDIR_DEB}/mysqld/mysqld.sock")
 -SET(INSTALL_SYSTEMD_UNITDIR_DEB         "/lib/systemd/system")
 +SET(INSTALL_SYSTEMD_UNITDIR_DEB         "/usr/lib/systemd/system")
  SET(INSTALL_SYSTEMD_SYSUSERSDIR_DEB     "/usr/lib/sysusers.d")

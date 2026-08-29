@@ -24,10 +24,10 @@ Forwarded: https://github.com/MariaDB/server/pull/5003
  1 file changed, 40 insertions(+)
 
 diff --git a/sql/mysqld.cc b/sql/mysqld.cc
-index 36ccb19..74b013f 100644
+index 0f1c02b..d8f2204 100644
 --- a/sql/mysqld.cc
 +++ b/sql/mysqld.cc
-@@ -5128,6 +5128,46 @@ static int init_server_components()
+@@ -5207,6 +5207,46 @@ static int init_server_components()
                              "https://github.com/MariaDB/server");
      }
  

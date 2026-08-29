@@ -1,3 +1,47 @@
+mariadb (1:11.8.9+ds-1) UNRELEASED; urgency=medium
+
+  [ Otto Kekäläinen ]
+  * New upstream maintenance release version 11.8.9. Includes several fixes as
+    noted at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.9
+    and also the following security issues:
+    - CVE-2026-61081
+    - CVE-2026-60585
+    - CVE-2026-60331
+    - CVE-2026-60747
+    - CVE-2026-47023
+    - CVE-2026-60184
+  * Drop patches applied upstream
+  * Salsa CI: Clean away defunct MariaDB.org Debian sid upgrade scenarios
+  * Salsa CI: Clean away now defunct Bullseye upgrade test jobs
+  * Salsa CI: Start testing with MySQL 9.7 as 8.0 has been removed from Debian
+    unstable
+
+  [ Luke Yasuda ]
+  * d/*.lintian-overrides: fix all the mismatched-override
+  * d/mariadb-server.links: drop the use of dh-exec
+  * d/control: upgrade debhelper compatibility level to 14
+  * d/watch: add +ds suffix
+  * Add Files-Excluded section to d/copyright based on d/rules deletions.
+    Until now unwanted upstream storage engines, precompiled binaries and 3rd
+    party libraries and components have been removed in debian/rules clean
+    section, but the proper way to exclude is to filter them out from the
+    upstream release tarball before including them in Debian to begin with.
+    (Closes: #971005, #971367)
+  * d/copyright: drop entries for excluded files
+  * d/gbp.conf: do not force check upstream sigs.
+    We repack orig tarballs now, leaving this on will cause
+    "gbp import-orig --uscan" to fail. uscan already checks the upstream
+    signature and gbp does it again and fails, which is not we want.
+  * drop unused source lintian overrides
+  * drop unused local-options
+
+  [ Dick Hollenbeck ]
+  * libmariadb-dev: make Multi-Arch: same co-installable (Closes: #1140296)
+  * libmariadb-dev-compat: make Multi-Arch: same co-installable
+    (Closes: #1140151)
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 29 Aug 2026 12:09:53 +0000
+
 mariadb (1:11.8.8-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]

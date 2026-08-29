@@ -23,10 +23,10 @@ Forwarded: https://github.com/MariaDB/server/pull/5186
  2 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/mysql-test/main/ssl_crl.test b/mysql-test/main/ssl_crl.test
-index a09490f..3eb4adc 100644
+index 6da116f..f229c9e 100644
 --- a/mysql-test/main/ssl_crl.test
 +++ b/mysql-test/main/ssl_crl.test
-@@ -8,6 +8,6 @@
+@@ -9,6 +9,6 @@
  
  --echo # try logging in with a certificate in the server's --ssl-crl : should fail
  # OpenSSL 1.1.1a and later releases correctly rejects the certificate, but the error message is different

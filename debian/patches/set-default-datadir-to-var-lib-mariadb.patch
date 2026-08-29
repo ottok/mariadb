@@ -14,15 +14,15 @@ Forwarded: https://github.com/MariaDB/server/pull/5059
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/cmake/install_layout.cmake b/cmake/install_layout.cmake
-index d52836a..c46bac3 100644
+index 4a418b2..2074cab 100644
 --- a/cmake/install_layout.cmake
 +++ b/cmake/install_layout.cmake
-@@ -192,7 +192,7 @@ SET(INSTALL_MYSQLTESTDIR_DEB            "share/mariadb/mariadb-test")
+@@ -195,7 +195,7 @@ SET(INSTALL_MYSQLTESTDIR_DEB            "share/mariadb/mariadb-test")
  SET(INSTALL_SQLBENCHDIR_DEB             ".")
  SET(INSTALL_SUPPORTFILESDIR_DEB         "share/mariadb")
  #
 -SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mysql")
 +SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mariadb")
  
- SET(INSTALL_RUNDATADIR_DEB              "/run/mysqld")
- SET(INSTALL_UNIX_ADDRDIR_DEB            "${INSTALL_RUNDATADIR_DEB}/mysqld.sock")
+ SET(INSTALL_RUNDIR_DEB                  "/run")
+ SET(INSTALL_UNIX_ADDRDIR_DEB            "${INSTALL_RUNDIR_DEB}/mysqld/mysqld.sock")
