@@ -19,3 +19,5 @@ shared-library-lacks-prerequisites [usr/lib/mysql/plugin/test_sql_service.so]
 # The file mysql-test-run.pl is a symlink for mariadb-test-run.pl, which does
 # not have a man page, so the man page is indeed used and not a spare one
 spare-manual-page [usr/share/man/man1/mysql-test-run.pl.1.gz]
+# Script used only to generate dummy certificates for testing
+shell-script-fails-syntax-check [usr/share/mariadb/mariadb-test/lib/generate-ssl-certs.sh]
