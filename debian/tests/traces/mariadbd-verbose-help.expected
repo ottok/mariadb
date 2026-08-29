@@ -94,8 +94,8 @@ The following specify which files/extra groups are read (specified before remain
                       probably 1/10 of number of possible open Aria files
   --aria-recover-options[=name] 
                       Specifies how corrupted tables should be automatically
-                      repaired. Any combination of: NORMAL, BACKUP, FORCE, 
-                      QUICK, OFF, or ALL to set all combinations
+                      repaired. Any combination of: NORMAL, BACKUP, FORCE, QUICK,
+                      OFF, or ALL to set all combinations
   --aria-repair-threads=# 
                       Number of threads to use when repairing Aria tables. The
                       value of 1 disables parallel repair
@@ -105,8 +105,7 @@ The following specify which files/extra groups are read (specified before remain
                       or ALTER TABLE
   --aria-stats-method=name 
                       Specifies how Aria index statistics collection code
-                      should treat NULLs. One of: nulls_unequal, nulls_equal, 
-                      nulls_ignored
+                      should treat NULLs. One of: nulls_unequal, nulls_equal, nulls_ignored
   --aria-sync-log-dir=name 
                       Controls syncing directory after log file growth and new
                       file creation. One of: NEVER, NEWFILE, ALWAYS
@@ -257,8 +256,8 @@ The following specify which files/extra groups are read (specified before remain
   --block-encryption-mode=name 
                       Default block encryption mode for AES_ENCRYPT() and
                       AES_DECRYPT() functions. One of: aes-128-ecb, aes-192-ecb,
-                      aes-256-ecb, aes-128-cbc, aes-192-cbc, aes-256-cbc, 
-                      aes-128-ctr, aes-192-ctr, aes-256-ctr
+                      aes-256-ecb, aes-128-cbc, aes-192-cbc, aes-256-cbc, aes-128-ctr,
+                      aes-192-ctr, aes-256-ctr
   --bootstrap         Used by MariaDB installation scripts
   --bulk-insert-buffer-size=# 
                       Size of tree cache used in bulk insert optimization. Note
@@ -311,8 +310,7 @@ The following specify which files/extra groups are read (specified before remain
                       The transaction completion type. One of: NO_CHAIN, CHAIN,
                       RELEASE
   --concurrent-insert[=name] 
-                      Use concurrent insert with MyISAM. One of: NEVER, AUTO, 
-                      ALWAYS
+                      Use concurrent insert with MyISAM. One of: NEVER, AUTO, ALWAYS
   --connect-timeout=# The number of seconds the MariaDB server is waiting for a
                       connect packet before responding with 'Bad handshake'
   --console           Write error output on screen; don't remove the console
@@ -354,9 +352,9 @@ The following specify which files/extra groups are read (specified before remain
                       changed every N days. This behavior can be overridden
                       using the password expiration options in ALTER USER
   --default-regex-flags=name 
-                      Default flags for the regex library. Any combination of: 
-                      DOTALL, DUPNAMES, EXTENDED, EXTENDED_MORE, EXTRA, 
-                      MULTILINE, UNGREEDY, or ALL to set all combinations
+                      Default flags for the regex library. Any combination of: DOTALL,
+                      DUPNAMES, EXTENDED, EXTENDED_MORE, EXTRA, MULTILINE, UNGREEDY,
+                      or ALL to set all combinations
   --default-storage-engine=name 
                       The default storage engine for new tables
   --default-time-zone=name 
@@ -732,8 +730,7 @@ The following specify which files/extra groups are read (specified before remain
                       The default ROW FORMAT for all innodb tables created
                       without explicit ROW_FORMAT. Possible values are
                       REDUNDANT, COMPACT, and DYNAMIC. The ROW_FORMAT value
-                      COMPRESSED is not allowed. One of: redundant, compact, 
-                      dynamic
+                      COMPRESSED is not allowed. One of: redundant, compact, dynamic
   --innodb-disable-sort-file-cache 
                       Whether to disable OS system file cache for sort I/O
   --innodb-doublewrite[=name] 
@@ -785,9 +782,9 @@ The following specify which files/extra groups are read (specified before remain
                       mysqld crashes. 0 has no guarantees in case of crash. 0
                       and 2 can be faster than 1 or 3
   --innodb-flush-method=name 
-                      With which method to flush data. One of: fsync, O_DSYNC, 
-                      littlesync, nosync, O_DIRECT, O_DIRECT_NO_FSYNC.
-                      Deprecated, will be removed in a future release.
+                      With which method to flush data. One of: fsync, O_DSYNC, littlesync,
+                      nosync, O_DIRECT, O_DIRECT_NO_FSYNC. Deprecated, will be
+                      removed in a future release.
   --innodb-flush-neighbors[=#] 
                       Set to 0 (don't flush neighbors from buffer pool), 1
                       (flush contiguous neighbors from buffer pool) or 2 (flush
@@ -865,9 +862,16 @@ The following specify which files/extra groups are read (specified before remain
                       session level
   --innodb-immediate-scrub-data-uncompressed 
                       Enable scrubbing of data
+  --innodb-index-shrink 
+                      Allow InnoDB to shrink a B-tree (merge or reorganize
+                      pages) on record-growing UPDATEs. The default ON keeps
+                      the current behavior; OFF favors a page split instead,
+                      reducing index tree latch upgrades and the contention
+                      they cause, at the cost of slightly sparser pages
+                      (Defaults to on; use --skip-innodb-index-shrink to disable.)
   --innodb-instant-alter-column-allowed=name 
-                      File format constraint for ALTER TABLE. One of: never, 
-                      add_last, add_drop_reorder
+                      File format constraint for ALTER TABLE. One of: never, add_last,
+                      add_drop_reorder
   --innodb-io-capacity=# 
                       Number of IOPs the server can do. Tunes the background IO
                       rate
@@ -1007,8 +1011,8 @@ The following specify which files/extra groups are read (specified before remain
   --innodb-stats-method=name 
                       Specifies how InnoDB index statistics collection code
                       should treat NULLs. Possible values are NULLS_EQUAL
-                      (default), NULLS_UNEQUAL and NULLS_IGNORED. One of: 
-                      nulls_equal, nulls_unequal, nulls_ignored
+                      (default), NULLS_UNEQUAL and NULLS_IGNORED. One of: nulls_equal,
+                      nulls_unequal, nulls_ignored
   --innodb-stats-modified-counter=# 
                       The number of rows modified before we calculate new
                       statistics (default 0 = current limits)
@@ -1215,8 +1219,8 @@ The following specify which files/extra groups are read (specified before remain
                       not specified then 'datadir'/'log-basename'.err or the
                       'pid-file' path with extension .err is used
   --log-isam[=name]   Log all MyISAM changes to file
-  --log-output=name   How logs should be written. Any combination of: NONE, 
-                      FILE, TABLE, or ALL to set all combinations
+  --log-output=name   How logs should be written. Any combination of: NONE, FILE,
+                      TABLE, or ALL to set all combinations
   --log-queries-not-using-indexes 
                       Log queries that are executed without benefit of any
                       index to the slow log if it is open. Same as
@@ -1249,10 +1253,10 @@ The following specify which files/extra groups are read (specified before remain
                       variable is empty all kinds of queries are logged.  All
                       types are bound by slow_query_time, except
                       'not_using_index' which is always logged if enabled. Any
-                      combination of: admin, filesort, filesort_on_disk, 
-                      filesort_priority_queue, full_join, full_scan, 
-                      not_using_index, query_cache, query_cache_miss, tmp_table,
-                      tmp_table_on_disk, or ALL to set all combinations
+                      combination of: admin, filesort, filesort_on_disk, filesort_priority_queue,
+                      full_join, full_scan, not_using_index, query_cache, query_cache_miss,
+                      tmp_table, tmp_table_on_disk, or ALL to set all
+                      combinations
   --log-slow-max-warnings=# 
                       Max numbers of warnings printed to slow query log per
                       statement
@@ -1283,9 +1287,9 @@ The following specify which files/extra groups are read (specified before remain
                       log_slow_disabled_statements
                       (Defaults to on; use --skip-log-slow-slave-statements to disable.)
   --log-slow-verbosity=name 
-                      Verbosity level for the slow log. Any combination of: 
-                      innodb, query_plan, explain, engine, warnings, full, or
-                      ALL to set all combinations
+                      Verbosity level for the slow log. Any combination of: innodb,
+                      query_plan, explain, engine, warnings, full, or ALL to
+                      set all combinations
   --log-tc=name       Path to transaction coordinator log (used for
                       transactions that affect more than one storage engine,
                       when binary log is disabled)
@@ -1396,8 +1400,8 @@ The following specify which files/extra groups are read (specified before remain
   --metadata-locks-hash-instances=# 
                       Unused. Deprecated, will be removed in a future release.
   --mhnsw-default-distance=name 
-                      Distance function to build the vector index for. One of: 
-                      euclidean, cosine
+                      Distance function to build the vector index for. One of: euclidean,
+                      cosine
   --mhnsw-default-m=# Larger values mean slower SELECTs and INSERTs, larger
                       index size and higher memory consumption but more
                       accurate results
@@ -1424,8 +1428,8 @@ The following specify which files/extra groups are read (specified before remain
                       MyISAM tables
   --myisam-recover-options[=name] 
                       Specifies how corrupted tables should be automatically
-                      repaired. Any combination of: DEFAULT, BACKUP, FORCE, 
-                      QUICK, BACKUP_ALL, OFF, or ALL to set all combinations
+                      repaired. Any combination of: DEFAULT, BACKUP, FORCE, QUICK,
+                      BACKUP_ALL, OFF, or ALL to set all combinations
   --myisam-repair-threads=# 
                       If larger than 1, when repairing a MyISAM table all
                       indexes will be created in parallel, with one thread per
@@ -1455,22 +1459,19 @@ The following specify which files/extra groups are read (specified before remain
                       Number of seconds to wait for a block to be written to a
                       connection before aborting the write
   --new-mode=name     Used to introduce new behavior to existing MariaDB
-                      versions. Any combination of: FIX_DISK_TMPTABLE_COSTS, 
-                      FIX_INDEX_STATS_FOR_ALL_NULLS, FIX_INDEX_LOOKUP_COST, or
-                      ALL to set all combinations
+                      versions. Any combination of: FIX_DISK_TMPTABLE_COSTS, FIX_INDEX_STATS_FOR_ALL_NULLS,
+                      FIX_INDEX_LOOKUP_COST, or ALL to set all combinations
   --note-verbosity=name 
                       Verbosity level for note-warnings given to the user. See
-                      also @@sql_notes. Any combination of: basic, 
-                      unusable_keys, explain, or ALL to set all combinations
+                      also @@sql_notes. Any combination of: basic, unusable_keys,
+                      explain, or ALL to set all combinations
   --old               Use compatible behavior from previous MariaDB version.
                       Deprecated, will be removed in a future release. Please
                       use --old-mode instead.
   --old-mode=name     Used to emulate old behavior from earlier MariaDB or
-                      MySQL versions. Any combination of: 
-                      NO_DUP_KEY_WARNINGS_WITH_IGNORE, NO_PROGRESS_INFO, 
-                      ZERO_DATE_TIME_CAST, UTF8_IS_UTF8MB3, 
-                      IGNORE_INDEX_ONLY_FOR_JOIN, COMPAT_5_1_CHECKSUM, 
-                      NO_NULL_COLLATION_IDS, LOCK_ALTER_TABLE_COPY, 
+                      MySQL versions. Any combination of: NO_DUP_KEY_WARNINGS_WITH_IGNORE,
+                      NO_PROGRESS_INFO, ZERO_DATE_TIME_CAST, UTF8_IS_UTF8MB3, IGNORE_INDEX_ONLY_FOR_JOIN,
+                      COMPAT_5_1_CHECKSUM, NO_NULL_COLLATION_IDS, LOCK_ALTER_TABLE_COPY,
                       OLD_FLUSH_STATUS, SESSION_USER_IS_USER, or ALL to set all
                       combinations
   --old-passwords     Use old password encryption method (needed for 4.0 and
@@ -1566,20 +1567,17 @@ The following specify which files/extra groups are read (specified before remain
                       Fine-tune the optimizer behavior. Takes a comma-separated
                       list of option=value pairs, where value is on, off, or
                       default, and options are: index_merge, index_merge_union,
-                      index_merge_sort_union, index_merge_intersection, 
-                      index_merge_sort_intersection, index_condition_pushdown, 
-                      derived_merge, derived_with_keys, firstmatch, loosescan, 
-                      materialization, in_to_exists, semijoin, 
-                      partial_match_rowid_merge, partial_match_table_scan, 
-                      subquery_cache, mrr, mrr_cost_based, mrr_sort_keys, 
-                      outer_join_with_cache, semijoin_with_cache, 
-                      join_cache_incremental, join_cache_hashed, join_cache_bka,
-                      optimize_join_buffer_size, table_elimination, 
-                      extended_keys, exists_to_in, orderby_uses_equalities, 
-                      condition_pushdown_for_derived, split_materialized, 
-                      condition_pushdown_for_subquery, rowid_filter, 
-                      condition_pushdown_from_having, not_null_range_scan, 
-                      hash_join_cardinality, cset_narrowing, sargable_casefold
+                      index_merge_sort_union, index_merge_intersection, index_merge_sort_intersection,
+                      index_condition_pushdown, derived_merge, derived_with_keys,
+                      firstmatch, loosescan, materialization, in_to_exists, semijoin,
+                      partial_match_rowid_merge, partial_match_table_scan, subquery_cache,
+                      mrr, mrr_cost_based, mrr_sort_keys, outer_join_with_cache,
+                      semijoin_with_cache, join_cache_incremental, join_cache_hashed,
+                      join_cache_bka, optimize_join_buffer_size, table_elimination,
+                      extended_keys, exists_to_in, orderby_uses_equalities, condition_pushdown_for_derived,
+                      split_materialized, condition_pushdown_for_subquery, rowid_filter,
+                      condition_pushdown_from_having, not_null_range_scan, hash_join_cardinality,
+                      cset_narrowing, sargable_casefold
   --optimizer-trace=name 
                       Controls tracing of the Optimizer:
                       optimizer_trace=option=val[,option=val...], where option
@@ -1784,8 +1782,8 @@ The following specify which files/extra groups are read (specified before remain
                       adding more plugins every time
   --plugin-maturity=name 
                       The lowest desirable plugin maturity. Plugins less mature
-                      than that will not be installed or loaded. One of: 
-                      unknown, experimental, alpha, beta, gamma, stable
+                      than that will not be installed or loaded. One of: unknown,
+                      experimental, alpha, beta, gamma, stable
   -P, --port=#        Port number to use for connection or 0 to default to,
                       my.cnf, $MYSQL_TCP_PORT, /etc/services, built-in default
                       (3306), whatever comes first
@@ -1999,7 +1997,8 @@ The following specify which files/extra groups are read (specified before remain
                       (Defaults to on; use --skip-secure-auth to disable.)
   --secure-file-priv=name 
                       Limit LOAD DATA, SELECT ... OUTFILE, and LOAD_FILE() to
-                      files within specified directory
+                      files within specified directory. Empty value means no
+                      limits except /proc
   --secure-timestamp=name 
                       Restricts direct setting of a session timestamp. Possible
                       levels are: YES - timestamp cannot deviate from the
@@ -2175,19 +2174,15 @@ The following specify which files/extra groups are read (specified before remain
   --sort-buffer-size=# 
                       Each thread that needs to do a sort allocates a buffer of
                       this size
-  --sql-mode=name     Sets the sql mode. Any combination of: REAL_AS_FLOAT, 
-                      PIPES_AS_CONCAT, ANSI_QUOTES, IGNORE_SPACE, 
-                      IGNORE_BAD_TABLE_OPTIONS, ONLY_FULL_GROUP_BY, 
-                      NO_UNSIGNED_SUBTRACTION, NO_DIR_IN_CREATE, POSTGRESQL, 
-                      ORACLE, MSSQL, DB2, MAXDB, NO_KEY_OPTIONS, 
-                      NO_TABLE_OPTIONS, NO_FIELD_OPTIONS, MYSQL323, MYSQL40, 
-                      ANSI, NO_AUTO_VALUE_ON_ZERO, NO_BACKSLASH_ESCAPES, 
-                      STRICT_TRANS_TABLES, STRICT_ALL_TABLES, NO_ZERO_IN_DATE, 
-                      NO_ZERO_DATE, ALLOW_INVALID_DATES, 
-                      ERROR_FOR_DIVISION_BY_ZERO, TRADITIONAL, 
-                      NO_AUTO_CREATE_USER, HIGH_NOT_PRECEDENCE, 
-                      NO_ENGINE_SUBSTITUTION, PAD_CHAR_TO_FULL_LENGTH, 
-                      EMPTY_STRING_IS_NULL, SIMULTANEOUS_ASSIGNMENT, 
+  --sql-mode=name     Sets the sql mode. Any combination of: REAL_AS_FLOAT, PIPES_AS_CONCAT,
+                      ANSI_QUOTES, IGNORE_SPACE, IGNORE_BAD_TABLE_OPTIONS, ONLY_FULL_GROUP_BY,
+                      NO_UNSIGNED_SUBTRACTION, NO_DIR_IN_CREATE, POSTGRESQL, ORACLE,
+                      MSSQL, DB2, MAXDB, NO_KEY_OPTIONS, NO_TABLE_OPTIONS, NO_FIELD_OPTIONS,
+                      MYSQL323, MYSQL40, ANSI, NO_AUTO_VALUE_ON_ZERO, NO_BACKSLASH_ESCAPES,
+                      STRICT_TRANS_TABLES, STRICT_ALL_TABLES, NO_ZERO_IN_DATE, NO_ZERO_DATE,
+                      ALLOW_INVALID_DATES, ERROR_FOR_DIVISION_BY_ZERO, TRADITIONAL,
+                      NO_AUTO_CREATE_USER, HIGH_NOT_PRECEDENCE, NO_ENGINE_SUBSTITUTION,
+                      PAD_CHAR_TO_FULL_LENGTH, EMPTY_STRING_IS_NULL, SIMULTANEOUS_ASSIGNMENT,
                       TIME_ROUND_FRACTIONAL, or ALL to set all combinations
   --sql-safe-updates  If set to 1, UPDATEs and DELETEs need either a key in the
                       WHERE clause, or a LIMIT clause, or else they will
@@ -2280,8 +2275,8 @@ The following specify which files/extra groups are read (specified before remain
                       How many threads we should keep in a cache for reuse.
                       These are freed after 5 minutes of idle time
   --thread-handling=name 
-                      Define threads usage for handling queries. One of: 
-                      one-thread-per-connection, no-threads, pool-of-threads
+                      Define threads usage for handling queries. One of: one-thread-per-connection,
+                      no-threads, pool-of-threads
   --thread-pool-dedicated-listener 
                       If set to 1,listener thread will not pick up queries
   --thread-pool-exact-stats 
@@ -2360,9 +2355,8 @@ The following specify which files/extra groups are read (specified before remain
                       Allocation block size for transactions to be stored in
                       binary log
   --transaction-isolation=name 
-                      Default transaction isolation level. One of: 
-                      READ-UNCOMMITTED, READ-COMMITTED, REPEATABLE-READ, 
-                      SERIALIZABLE
+                      Default transaction isolation level. One of: READ-UNCOMMITTED,
+                      READ-COMMITTED, REPEATABLE-READ, SERIALIZABLE
   --transaction-prealloc-size=# 
                       Persistent buffer for transactions to be stored in binary
                       log
@@ -2382,9 +2376,8 @@ The following specify which files/extra groups are read (specified before remain
                       of the underlying table and the query uses a LIMIT clause
                       (usually get from GUI tools)
   --use-stat-tables=name 
-                      Specifies how to use system statistics tables. One of: 
-                      NEVER, COMPLEMENTARY, PREFERABLY, 
-                      COMPLEMENTARY_FOR_QUERIES, PREFERABLY_FOR_QUERIES
+                      Specifies how to use system statistics tables. One of: NEVER,
+                      COMPLEMENTARY, PREFERABLY, COMPLEMENTARY_FOR_QUERIES, PREFERABLY_FOR_QUERIES
   -u, --user=name     User to run mariadbd process as
   --user-variables[=name] 
                       Enable or disable user_variables plugin. One of: ON, OFF,
@@ -2429,8 +2422,8 @@ The following specify which files/extra groups are read (specified before remain
                       home directory for wsrep provider
   --wsrep-dbug-option=name 
                       DBUG options to provider library
-  --wsrep-debug=name  WSREP debug level logging. One of: NONE, SERVER, 
-                      TRANSACTION, STREAMING, CLIENT
+  --wsrep-debug=name  WSREP debug level logging. One of: NONE, SERVER, TRANSACTION,
+                      STREAMING, CLIENT
   --wsrep-desync      To desynchronize the node from the cluster
   --wsrep-dirty-reads Allow reads even when the node is not in the primary
                       component
@@ -2439,8 +2432,8 @@ The following specify which files/extra groups are read (specified before remain
                       DEFAULT value into an auto-increment column could fail
                       with duplicate key error
   --wsrep-forced-binlog-format=name 
-                      binlog format to take effect over user's choice. One of: 
-                      MIXED, STATEMENT, ROW, NONE
+                      binlog format to take effect over user's choice. One of: MIXED,
+                      STATEMENT, ROW, NONE
   --wsrep-gtid-domain-id=# 
                       When wsrep_gtid_mode is set, this value is used as
                       gtid_domain_id for galera transactions and also copied to
@@ -2461,10 +2454,9 @@ The following specify which files/extra groups are read (specified before remain
   --wsrep-max-ws-size=# 
                       Max write set size (bytes)
   --wsrep-mode=name   Set of WSREP features that are enabled. Any combination
-                      of: STRICT_REPLICATION, BINLOG_ROW_FORMAT_ONLY, 
-                      REQUIRED_PRIMARY_KEY, REPLICATE_MYISAM, REPLICATE_ARIA, 
-                      DISALLOW_LOCAL_GTID, BF_ABORT_MARIABACKUP, or ALL to set
-                      all combinations
+                      of: STRICT_REPLICATION, BINLOG_ROW_FORMAT_ONLY, REQUIRED_PRIMARY_KEY,
+                      REPLICATE_MYISAM, REPLICATE_ARIA, DISALLOW_LOCAL_GTID, BF_ABORT_MARIABACKUP,
+                      or ALL to set all combinations
   --wsrep-mysql-replication-bundle=# 
                       Number of replication events that are grouped together
   --wsrep-new-cluster Bootstrap a cluster. It works by overriding the current
@@ -2490,8 +2482,7 @@ The following specify which files/extra groups are read (specified before remain
                       wsrep_provider_options documentation)
   --wsrep-recover     Recover database state after crash and exit
   --wsrep-reject-queries[=name] 
-                      Variable to set to reject queries. One of: NONE, ALL, 
-                      ALL_KILL
+                      Variable to set to reject queries. One of: NONE, ALL, ALL_KILL
   --wsrep-restart-slave 
                       Should MariaDB slave be restarted automatically, when
                       node joins back to cluster
@@ -2769,6 +2760,7 @@ innodb-ft-sort-pll-degree                                    2
 innodb-ft-total-cache-size                                   640000000
 innodb-ft-user-stopword-table                                (No default value)
 innodb-immediate-scrub-data-uncompressed                     FALSE
+innodb-index-shrink                                          TRUE
 innodb-instant-alter-column-allowed                          add_drop_reorder
 innodb-io-capacity                                           200
 innodb-io-capacity-max                                       18446744073709551615
