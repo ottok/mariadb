@@ -48,11 +48,13 @@ mariadb (1:11.8.8-1) unstable; urgency=medium
   * New upstream version 11.8.8 with critical fix for regression in 11.8.7 as
     noted at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.8
     and for the following security issues:
+    - CVE-2026-49261
     - CVE-2026-48165
     - CVE-2026-48163
   * Previous upstream version 11.8.7 included fixes for several defects as noted
     at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.7 as
     well the following security issues:
+    - CVE-2026-47064
     - CVE-2026-44173
     - CVE-2026-44172
     - CVE-2026-44171
@@ -187,10 +189,12 @@ mariadb (1:11.8.6-1) unstable; urgency=medium
   * Update d/watch to use uscan v5 format
   * New upstream maintenance release 11.8.6. For details about fixes please see
     https://mariadb.com/docs/release-notes/community-server/11.8/11.8.6
+  * Included security fixes for:
+    - CVE-2026-3494
+    - CVE-2026-32710
+    - CVE-2026-35549
+    - CVE-2026-34303
   * Update server trace to include new 'new-mode' value 'FIX_INDEX_LOOKUP_COST'
-  * This release does not include any CVE addressing security fixes based on
-    https://mariadb.com/docs/server/security/securing-mariadb/security nor is
-    it known to fix any issues tracked in bugs.debian.org or launchpad.net
 
  -- Otto Kekäläinen <otto@debian.org>  Sat, 07 Feb 2026 08:08:08 +0000
 
@@ -267,6 +271,8 @@ mariadb (1:11.8.5-1) unstable; urgency=medium
     requires the attacker to already have access to the database so they can
     create tables with arbitrary names. Trend Micro did however publish:
     - CVE-2025-13699
+  * Additionally 11.8.4 included a fix for:
+    - CVE-2026-21968
   * Update server trace to include new parameters and values
   * Already existing plugins marked ready for general availability by upstream
     in this release: uuid_v4, uuid_v7 and inet4
