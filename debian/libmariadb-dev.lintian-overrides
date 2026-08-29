@@ -2,5 +2,3 @@
 repeated-path-segment mariadb [usr/include/mariadb/mariadb/]
 # Man page syntax needs to be fixed upstream
 groff-message troff:<standard input>:*: warning [*]: cannot adjust line* [usr/share/man*]
-# mysql_config and mariadb_config location is this by old convention
-development-package-ships-elf-binary-in-path [usr/bin/mariadb_config]

@@ -18,3 +18,5 @@ shared-library-lacks-prerequisites [usr/lib/mysql/plugin/test_sql_service.so]
 spare-manual-page [usr/share/man/man1/mysql-test-run.pl.1.gz]
 # Text script, should be moved to another path
 no-manual-page [usr/bin/test-connect-t]
+# Script used only to generate dummy certificates for testing
+shell-script-fails-syntax-check [usr/share/mariadb/mariadb-test/lib/generate-ssl-certs.sh]
