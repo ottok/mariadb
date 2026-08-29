@@ -10,11 +10,6 @@ very-long-line-length-in-source-file * [*.expected:*]
 very-long-line-length-in-source-file * [*.result:*]
 very-long-line-length-in-source-file * [*.test:*]
 very-long-line-length-in-source-file * [BUILD/compile-*]
-# These are mainly found under extra/wolfssl
-very-long-line-length-in-source-file * [*.cproject:*]
-very-long-line-length-in-source-file * [*.launch:*]
-very-long-line-length-in-source-file * [*.md:*]
-very-long-line-length-in-source-file * [*.scfg:*]
 # These are all results for test cases and similar so they can be
 # especially formatted to be too long
 very-long-line-length-in-source-file * [mysql-test/*.dump:*]

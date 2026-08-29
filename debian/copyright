@@ -352,7 +352,7 @@ Copyright: 2003-2007 MySQL AB
 License: GPL-2+
 
 Files: strings/bmove_upp.c strings/is_prefix.c strings/llstr.c
- strings/longlong2str.c strings/strcont.c strings/strfill.c strings/strmov.c
+ strings/longlong2str.c strings/strcont.c strings/strfill.c
  strings/strnmov.c strings/bchange.c strings/int2str.c strings/my_strtoll10.c
  strings/str2int.c strings/strappend.c strings/strcend.c
 Copyright: 2009-2013, Monty Program Ab
@@ -387,12 +387,6 @@ Copyright:
  2007-2013 Arjen G Lentz & Antony T Curtis for Open Query
  2000-2006 MySQL AB
 License: GPL-2
-
-Files: extra/*/INSTALL
-Copyright: 1994-1996, 1999-2002, 2004-2006, Free Software Foundation, Inc.
-License: unlimited-free-doc
- This file is free documentation; the Free Software Foundation gives
- unlimited permission to copy, distribute and modify it.
 
 Files: mysql-test/lib/mtr_misc.pl
  mysql-test/lib/My/SafeProcess.pm
@@ -832,7 +826,6 @@ License: LGPL-2+
 
 Files: storage/archive/azio.c
  storage/archive/azlib.h
- zlib/*
 Copyright:
  1995-2005 Jean-loup Gailly
  1995-2005 Mark Adler
