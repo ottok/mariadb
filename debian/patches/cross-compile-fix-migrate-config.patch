@@ -1,0 +1,37 @@
+Description: Fix cross-compilation of mariadb-migrate-config-file
+ When cross-compiling, generate_option_list is skipped because it lives
+ inside a block guarded by NOT CMAKE_CROSSCOMPILING. This executable
+ runs the target mariadbd binary to produce mariadbd_options.h, which is
+ needed for mariadb-migrate-config-file. When QEMU user-mode emulation is
+ available we can run the target binary, so relax the guard to also allow
+ DEFINED CMAKE_CROSSCOMPILING_EMULATOR.
+ If no emulator is available but a pre-generated mariadbd_options.h exists
+ (e.g. from a native build), copy it into the build directory so the
+ downstream target can still be built.
+Forwarded: no
+
+--- a/extra/CMakeLists.txt
++++ b/extra/CMakeLists.txt
+@@ -48,7 +48,13 @@
+ 
+ # this approach doesn't work with cross-compiing (runs mariadbd)
+ # and doesn't work with ASAN, because LSAN complains about RocksDB (MDEV-36345).
+-IF(NOT CMAKE_CROSSCOMPILING AND NOT WITH_ASAN AND TARGET mariadbd)
++IF((NOT CMAKE_CROSSCOMPILING OR DEFINED CMAKE_CROSSCOMPILING_EMULATOR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mariadbd_options.h) AND NOT WITH_ASAN AND TARGET mariadbd)
++  SET(genhdr ${CMAKE_BINARY_DIR}/extra/mariadbd_options.h)
++  IF(CMAKE_CROSSCOMPILING AND NOT DEFINED CMAKE_CROSSCOMPILING_EMULATOR AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mariadbd_options.h)
++    IF(NOT EXISTS ${genhdr})
++      CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/mariadbd_options.h ${genhdr} COPYONLY)
++    ENDIF()
++  ELSE()
+   ADD_EXECUTABLE(generate_option_list generate_option_list.cc)
+   TARGET_LINK_LIBRARIES(generate_option_list mysys pcre2-8)
+   TARGET_INCLUDE_DIRECTORIES(generate_option_list PRIVATE ${PCRE_INCLUDE_DIRS})
+@@ -98,6 +104,7 @@
+    DEPENDS ${genhdr}
+ 
+  )
++  ENDIF()
+ 
+  MYSQL_ADD_EXECUTABLE(mariadb-migrate-config-file
+    mariadb_migrate_config_file.c
