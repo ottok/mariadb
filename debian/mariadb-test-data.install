@@ -1,4 +1,4 @@
-debian/unstable-tests.* usr/share/mariadb/mariadb-test/
+debian/unstable-tests* usr/share/mariadb/mariadb-test/
 usr/share/mariadb/mariadb-test/collections
 usr/share/mariadb/mariadb-test/include
 usr/share/mariadb/mariadb-test/main
