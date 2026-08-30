@@ -130,6 +130,8 @@ override_dh_auto_test:
 	# Skip running test suite after build if DEB_BUILD_OPTIONS contains 'nocheck'
 	@echo "DEB_BUILD_OPTIONS: $(DEB_BUILD_OPTIONS)"
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	# Skip tests that fail on all architectures
+	[ ! -f debian/unstable-tests ] || cat debian/unstable-tests >> $(MTR_SKIP_TEST_LIST)
 	# Skip unstable tests if such are defined for arch
 	[ ! -f debian/unstable-tests.$(DEB_HOST_ARCH) ] || cat debian/unstable-tests.$(DEB_HOST_ARCH) >> $(MTR_SKIP_TEST_LIST)
 	# Show contents of skip list on this architecture
