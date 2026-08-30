@@ -24,6 +24,12 @@ echo "using tmpdir: $WORKDIR/tmp"
 
 echo "Setting up skip-tests-list"
 
+# Use the common skiplist for tests that fail on all architectures, if it exists
+if [ -f "/usr/share/mariadb/mariadb-test/unstable-tests" ]
+then
+  cat "/usr/share/mariadb/mariadb-test/unstable-tests" >> "$MTR_SKIP_TEST_LIST"
+fi
+
 # Use the arch specific skiplists if exist, otherwise list is empty
 if [ -f "/usr/share/mariadb/mariadb-test/unstable-tests.$ARCH" ]
 then
