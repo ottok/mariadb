@@ -1,3 +1,14 @@
+mariadb (1:11.8.9+ds-2) unstable; urgency=medium
+
+  * Add missing --version_cc to the custom `mariadb_config` (Closes: #1146585) *
+  * Backport upstream patch to fix upstream CONC-821 about
+    mysql_stmt_bind_result zeroes *length for temporal result columns which
+    broke among others Perl, Python, MythTV and more
+    (Closes: #1139473, #1141671, #1144671)
+  * Extend test skip lists after witnessing frequent sporadic failures on armhf
+
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 04 Sep 2026 19:19:19 +0000
+
 mariadb (1:11.8.9+ds-1) unstable; urgency=medium
 
   [ Otto Kekäläinen ]
