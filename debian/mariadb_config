@@ -10,13 +10,15 @@ libdir="/usr/lib/$triplet"
 vhdr="/usr/include/mariadb/mariadb_version.h"
 version=$(sed -n 's/.*MARIADB_CLIENT_VERSION_STR[^"]*"\([^"]*\)".*/\1/p' "$vhdr" 2>/dev/null)
 [ -n "$version" ] || version=unknown
+cc_version=$(sed -n 's/.*MARIADB_PACKAGE_VERSION[^"]*"\([^"]*\)".*/\1/p' "$vhdr" 2>/dev/null)
+[ -n "$cc_version" ] || cc_version=unknown
 inc="-I/usr/include/mariadb -I/usr/include/mariadb/mysql"
 usage() {
   cat <<USE
 Usage: $0 [OPTIONS]
   --cflags        --include      --libs        --libs_sys
   --libs_r        --plugindir    --socket      --port
-  --version       --variable=VAR (pkglibdir|plugindir)
+  --version       --cc_version   --variable=VAR (pkglibdir|plugindir)
 USE
 }
 [ $# -eq 0 ] && { usage; exit 1; }
@@ -29,6 +31,7 @@ for arg in "$@"; do
     --socket)             printf '%s\n' "/run/mysqld/mysqld.sock" ;;
     --port)               printf '%s\n' "3306" ;;
     --version)            printf '%s\n' "$version" ;;
+    --cc_version)         printf '%s\n' "$cc_version" ;;
     --variable=pkglibdir) printf '%s\n' "$libdir" ;;
     --variable=plugindir) printf '%s\n' "$libdir/libmariadb3/plugin" ;;
     --help|-h)            usage ;;
