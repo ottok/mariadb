@@ -13,3 +13,4 @@ Add-AppArmor-notice-for-Debian-Ubuntu-users-during-server.patch
 MDEV-39290-mytop-use-invoking-login-as-default-user-on-Un.patch
 MDEV-39509-Fix-invalid-iv-length-with-OpenSSL-4.0.patch
 Update-TLS-test-regexes-for-OpenSSL-4.0-error-message-cha.patch
+CONC-821-Avoid-resetting-length-pointer-for-variable-leng.patch
