@@ -9,3 +9,4 @@ MDEV-37411-suppress-new-warning-about-native-aio.patch
 include-debian-in-test-merge-alter-result.patch
 sysusers-lock-mysql-account.patch
 set-default-datadir-to-var-lib-mariadb.patch
+CONC-821-Avoid-resetting-length-pointer-for-variable-leng.patch
