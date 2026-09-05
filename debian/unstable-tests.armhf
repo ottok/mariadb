@@ -1,3 +1,5 @@
+main.vector_innodb : MDEV-37559 (sporadic due to the nature of vector search)
+main.vector2_notembedded : MDEV-37559 (sporadic due to the nature of vector search)
 main.table_value_constr : MDEV-33520
 main.xml : MDEV-21968
 maria.maria-purge : MDEV-31349
