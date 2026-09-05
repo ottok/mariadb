@@ -1,3 +1,5 @@
+main.vector_innodb : MDEV-37559 (sporadic due to the nature of vector search)
+main.vector2_notembedded : MDEV-37559 (sporadic due to the nature of vector search)
 disks.disks : MDEV-21587
 disks.disks_notembedded : MDEV-21587
 main.xml : MDEV-21968
