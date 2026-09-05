@@ -1,5 +1,5 @@
+main.vector_innodb : MDEV-37559 (sporadic due to the nature of vector search)
+main.vector2_notembedded : MDEV-37559 (sporadic due to the nature of vector search)
 # Below tests only run in "big" tests
 disks.disks : MDEV-38335 (fails only on Debian buildd)
 disks.disks_notembedded : MDEV-38335 (fails only on Debian buildd)
-main.vector_innodb : MDEV-38267 (sporadic)
-main.vector2_notembedded : MDEV-38267 (sporadic)
