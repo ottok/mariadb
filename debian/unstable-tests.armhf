@@ -1,3 +1,5 @@
+main.vector_innodb : MDEV-37559 (sporadic due to the nature of vector search)
+main.vector2_notembedded : MDEV-37559 (sporadic due to the nature of vector search)
 # MDEV-33381: The full test suite (including --big-test) has numerous failures
 # on armhf and a Raspberry Pi enthusiast is needed to debug them
 federated.federatedx_versioning : MDEV-33381
