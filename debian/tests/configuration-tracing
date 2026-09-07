@@ -49,9 +49,9 @@ trace() {
     # Hostname varies one very machine
     sed "s/$(hostname)/HOSTNAME/g" -i "$TEMPFILE"
 
-    # SSL library version inherited form dependency, not relevant for tracing
+    # SSL library version inherited from dependency, not relevant for tracing
     # the correctness of the MariaDB build itself
-    sed 's/OpenSSL 3.*/SSL-VERSION/' -i "$TEMPFILE"
+    sed 's/OpenSSL [3-4].*/SSL-VERSION/' -i "$TEMPFILE"
 
     # Normalize values that depend on build environment
     normalize_value system-time-zone UTC    # depends on OS environment
