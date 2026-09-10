@@ -108,6 +108,7 @@ endif
 	    -DWITH_URING=ON \
 	    -DWITH_LIBAIO=ON \
 	    -DWITH_INNODB_SNAPPY=ON \
+	    -DWITH_PCRE=system \
 	    -DHAVE_SYSTEM_LIBFMT_EXITCODE=0 \
 	    -DWITH_SBOM=NO \
 	    -DDEB=$(DEB_VENDOR)
