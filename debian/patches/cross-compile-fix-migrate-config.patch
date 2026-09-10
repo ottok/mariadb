@@ -1,37 +1,75 @@
-Description: Fix cross-compilation of mariadb-migrate-config-file
- When cross-compiling, generate_option_list is skipped because it lives
- inside a block guarded by NOT CMAKE_CROSSCOMPILING. This executable
- runs the target mariadbd binary to produce mariadbd_options.h, which is
- needed for mariadb-migrate-config-file. When QEMU user-mode emulation is
- available we can run the target binary, so relax the guard to also allow
- DEFINED CMAKE_CROSSCOMPILING_EMULATOR.
- If no emulator is available but a pre-generated mariadbd_options.h exists
- (e.g. from a native build), copy it into the build directory so the
- downstream target can still be built.
-Forwarded: no
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Thu, 10 Sep 2026 10:56:15 +0300
+Subject: Fix cross-compilation of mariadb-migrate-config-file
 
+When cross-compiling, generate_option_list is skipped because it lives
+inside a block guarded by NOT CMAKE_CROSSCOMPILING. This executable
+runs the target mariadbd binary to produce mariadbd_options.h, which is
+needed for mariadb-migrate-config-file. When QEMU user-mode emulation is
+available we can run the target binary, so relax the guard to also allow
+DEFINED CMAKE_CROSSCOMPILING_EMULATOR.
+
+If no emulator is available but a pre-generated mariadbd_options.h exists
+(e.g. from a native build), copy it into the build directory so the
+downstream target can still be built.
+
+Forwarded: https://jira.mariadb.org/browse/MDEV-41051
+---
+ CMakeLists.txt                | 2 +-
+ extra/CMakeLists.txt          | 5 +++--
+ extra/generate_option_list.cc | 3 +++
+ 3 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 307f78a..95662ab 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -537,7 +537,7 @@ ADD_SUBDIRECTORY(support-files)
+ ADD_SUBDIRECTORY(extra/aws_sdk)
+ 
+ IF(NOT CMAKE_CROSSCOMPILING OR DEFINED CMAKE_CROSSCOMPILING_EMULATOR)
+-  SET(EXPORTED comp_err comp_sql factorial uca-dump)
++  SET(EXPORTED comp_err comp_sql factorial uca-dump generate_option_list)
+   IF(NOT WITHOUT_SERVER)
+     SET(EXPORTED ${EXPORTED} gen_lex_hash gen_lex_token)
+   ENDIF()
+diff --git a/extra/CMakeLists.txt b/extra/CMakeLists.txt
+index 2fcba58..83dce24 100644
 --- a/extra/CMakeLists.txt
 +++ b/extra/CMakeLists.txt
-@@ -48,7 +48,13 @@
+@@ -47,11 +47,11 @@ ADD_CUSTOM_TARGET(GenError
+                   ${CMAKE_BINARY_DIR}/include/mysqld_error.h.tmp)
  
  # this approach doesn't work with cross-compiing (runs mariadbd)
- # and doesn't work with ASAN, because LSAN complains about RocksDB (MDEV-36345).
+-# and doesn't work with ASAN, because LSAN complains about RocksDB (MDEV-36345).
 -IF(NOT CMAKE_CROSSCOMPILING AND NOT WITH_ASAN AND TARGET mariadbd)
-+IF((NOT CMAKE_CROSSCOMPILING OR DEFINED CMAKE_CROSSCOMPILING_EMULATOR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mariadbd_options.h) AND NOT WITH_ASAN AND TARGET mariadbd)
-+  SET(genhdr ${CMAKE_BINARY_DIR}/extra/mariadbd_options.h)
-+  IF(CMAKE_CROSSCOMPILING AND NOT DEFINED CMAKE_CROSSCOMPILING_EMULATOR AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mariadbd_options.h)
-+    IF(NOT EXISTS ${genhdr})
-+      CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/mariadbd_options.h ${genhdr} COPYONLY)
-+    ENDIF()
-+  ELSE()
++IF(NOT CMAKE_CROSSCOMPILING OR DEFINED CMAKE_CROSSCOMPILING_EMULATOR)
    ADD_EXECUTABLE(generate_option_list generate_option_list.cc)
    TARGET_LINK_LIBRARIES(generate_option_list mysys pcre2-8)
    TARGET_INCLUDE_DIRECTORIES(generate_option_list PRIVATE ${PCRE_INCLUDE_DIRS})
-@@ -98,6 +104,7 @@
-    DEPENDS ${genhdr}
- 
++
+   GET_PROPERTY(dynamic_plugins GLOBAL PROPERTY SERVER_DYNAMIC_PLUGINS)
+   GET_PROPERTY(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+   IF(is_multi_config)
+@@ -92,6 +92,7 @@ IF(NOT CMAKE_CROSSCOMPILING AND NOT WITH_ASAN AND TARGET mariadbd)
+    #COMMAND ${CMAKE_COMMAND} -E echo "Executing generate_option_list $<TARGET_FILE:mariadbd> ${my_plugin_dir} ${escaped_plugin_load} ${genhdr}"
+    COMMAND generate_option_list "$<TARGET_FILE:mariadbd>" "${my_plugin_dir}" "${escaped_plugin_load}" "${genhdr}"
+    COMMAND_EXPAND_LISTS
++   DEPENDS mariadbd ${dynamic_plugins}
   )
-+  ENDIF()
  
-  MYSQL_ADD_EXECUTABLE(mariadb-migrate-config-file
-    mariadb_migrate_config_file.c
+  ADD_CUSTOM_TARGET(gen_mariadbd_options_h
+diff --git a/extra/generate_option_list.cc b/extra/generate_option_list.cc
+index 7adfa2f..f1d8b2d 100644
+--- a/extra/generate_option_list.cc
++++ b/extra/generate_option_list.cc
+@@ -86,6 +86,9 @@ std::string call_mariadbd(const char *mariadbd_path, const char *plugin_dir, con
+              " --help";
+ #ifdef _WIN32
+   command << "\"";
++#else
++  setenv("LSAN_OPTIONS=detect_leaks", "0", 1);
++  setenv("ASAN_OPTIONS=detect_leaks", "0", 1);
+ #endif
+   std::cout << "Executing command: " << command.str() << '\n';
+   FILE *f= my_popen(command.str().c_str(), "r");
