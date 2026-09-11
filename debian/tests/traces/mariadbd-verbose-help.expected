@@ -3040,7 +3040,7 @@ performance-schema-session-connect-attrs-size                -1
 performance-schema-setup-actors-size                         -1
 performance-schema-setup-objects-size                        -1
 performance-schema-users-size                                -1
-pid-file                                                     /run/mysqld/mysqld.pid
+pid-file                                                     /run/mariadbd/mysqld.pid
 plugin-dir                                                   /usr/lib/mysql/plugin/
 plugin-maturity                                              gamma
 port                                                         3306
@@ -3130,7 +3130,7 @@ slave-type-conversions
 slow-launch-time                                             2
 slow-query-log                                               FALSE
 slow-query-log-file                                          HOSTNAME-slow.log
-socket                                                       /run/mysqld/mysqld.sock
+socket                                                       /run/mariadbd/mysqld.sock
 sort-buffer-size                                             2097152
 sql-mode                                                     STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
 sql-safe-updates                                             FALSE

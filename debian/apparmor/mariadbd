@@ -263,6 +263,7 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected) {
     /proc/*/net/* r,
     /proc/locks r,
     /proc/sys/net/ipv4/ip_local_port_range r,
+    /run/mariadbd/mysqld.sock rw,
     /run/mysqld/mysqld.sock rw,
     /sbin/ip rix,
     /usr/bin/basename rix,

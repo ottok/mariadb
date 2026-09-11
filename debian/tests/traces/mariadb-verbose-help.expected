@@ -227,7 +227,7 @@ select-limit                      1000
 show-query-costs                  FALSE
 show-warnings                     FALSE
 sigint-ignore                     FALSE
-socket                            /run/mysqld/mysqld.sock
+socket                            /run/mariadbd/mysqld.sock
 ssl                               TRUE
 ssl-ca                            (No default value)
 ssl-capath                        (No default value)
