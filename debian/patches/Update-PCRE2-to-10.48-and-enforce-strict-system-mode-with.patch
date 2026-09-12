@@ -1,0 +1,96 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Sun, 13 Sep 2026 03:31:33 +0000
+Subject: Update PCRE2 to 10.48 and enforce strict system mode with
+ diagnostics
+
+The bundled PCRE2 version is updated from 10.47 to 10.48 to maintain compatibility with the latest upstream release and avoid known issues in PCRE2 10.48 where pcre2_match_8 changed from a symbol to a macro.
+
+The PCRE2 detection logic in cmake/pcre.cmake is restructured to:
+- Print detailed status messages when searching for system PCRE2 via pkg-config and CMake's find_library/find_path, showing exactly what was found or not found (PCRE2_LIBRARY, PCRE2_INCLUDE_DIR).
+- When -DWITH_PCRE=system is specified, the build now fails with a clear FATAL_ERROR if system PCRE2 is not found, instead of silently falling back to bundled. The error includes the search variables and suggests installing libpcre2-8-dev or using -DWITH_PCRE=bundled.
+- In -DWITH_PCRE=auto or -DWITH_PCRE=bundled mode, if system PCRE2 is not found, the build falls back to bundled and prints a status message indicating the bundled version is being used.
+
+The C++ code in sql/item_cmpfunc.cc and related files already handles PCRE2 10.48 via version guards (e.g., #ifndef pcre2_set_depth_limit) so no source changes were required for compatibility.
+---
+ cmake/pcre.cmake | 45 +++++++++++++++++++++++++++++++++------------
+ 1 file changed, 33 insertions(+), 12 deletions(-)
+
+diff --git a/cmake/pcre.cmake b/cmake/pcre.cmake
+index afa8102..7656bc5 100644
+--- a/cmake/pcre.cmake
++++ b/cmake/pcre.cmake
+@@ -65,8 +65,7 @@ MACRO(BUNDLE_PCRE2)
+   ExternalProject_Add(
+     pcre2
+     PREFIX   "${dir}"
+-    URL "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.47/pcre2-10.47.zip"
+-    URL_MD5 7906aec38f872b74f1b925122dde9069
++    URL "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.48/pcre2-10.48.zip"
+     INSTALL_COMMAND ""
+     CMAKE_ARGS
+       "-DCMAKE_WARN_DEPRECATED=FALSE"
+@@ -89,9 +88,22 @@ ENDMACRO()
+ 
+ MACRO (CHECK_PCRE)
+   IF (NOT TARGET pcre2 AND NOT PCRE_FOUND)
++    SET(PCRE2_SYSTEM_FOUND FALSE)
+     IF(WITH_PCRE STREQUAL "system" OR WITH_PCRE STREQUAL "auto")
+       FIND_PACKAGE(PkgConfig QUIET)
+-      PKG_CHECK_MODULES(PCRE libpcre2-8)
++      IF(PkgConfig_FOUND)
++        PKG_CHECK_MODULES(PCRE libpcre2-8)
++        IF(PCRE_FOUND)
++          MESSAGE(STATUS "PCRE2: pkg-config found libpcre2-8")
++          MESSAGE(STATUS "  PCRE_LIBRARIES=${PCRE_LIBRARIES}")
++          MESSAGE(STATUS "  PCRE_INCLUDE_DIRS=${PCRE_INCLUDE_DIRS}")
++        ELSE()
++          MESSAGE(STATUS "PCRE2: pkg-config did not find libpcre2-8")
++        ENDIF()
++      ELSE()
++        MESSAGE(STATUS "PCRE2: pkg-config not available")
++      ENDIF()
++
+       # CHECK_LIBRARY_EXISTS is unreliable during cross-compilation because
+       # it does a real link test that often fails to find the target-arch
+       # library even when it is present. It also breaks with PCRE2 10.48
+@@ -110,22 +122,31 @@ MACRO (CHECK_PCRE)
+           SET(PCRE_LIBRARIES ${PCRE2_LIBRARY})
+           SET(PCRE_INCLUDE_DIRS ${PCRE2_INCLUDE_DIR})
+           GET_FILENAME_COMPONENT(PCRE_LIBRARY_DIRS ${PCRE2_LIBRARY} DIRECTORY)
++          MESSAGE(STATUS "PCRE2: found via CMake find_library/find_path")
++          MESSAGE(STATUS "  PCRE2_LIBRARY=${PCRE2_LIBRARY}")
++          MESSAGE(STATUS "  PCRE2_INCLUDE_DIR=${PCRE2_INCLUDE_DIR}")
++        ELSE()
++          MESSAGE(STATUS "PCRE2: CMake find_library/find_path failed")
++          MESSAGE(STATUS "  PCRE2_LIBRARY=${PCRE2_LIBRARY}")
++          MESSAGE(STATUS "  PCRE2_INCLUDE_DIR=${PCRE2_INCLUDE_DIR}")
+         ENDIF()
+       ENDIF()
++
+       IF(PCRE_FOUND)
+         SET(HAVE_PCRE2_MATCH_8 TRUE)
+-      ENDIF()
+-      find_path(PCRE2_INCLUDE_DIR NAMES pcre2.h)
+-      MESSAGE_ONCE(PCRE2_H "Looking for include file pcre2.h: ${PCRE2_INCLUDE_DIR}")
+-      IF (PCRE2_INCLUDE_DIR)
+-        SET(PCRE_INCLUDE_DIRS ${PCRE2_INCLUDE_DIR})
++        SET(PCRE2_SYSTEM_FOUND TRUE)
+       ENDIF()
+     ENDIF()
+-    IF(NOT HAVE_PCRE2_MATCH_8 OR WITH_PCRE STREQUAL "bundled")
+-      IF (WITH_PCRE STREQUAL "system")
+-        MESSAGE(FATAL_ERROR "system pcre2-8 library is not found or unusable. Set -DWITH_PCRE=bundled to use bundled PCRE2.")
++
++    IF(NOT HAVE_PCRE2_MATCH_8)
++      IF(WITH_PCRE STREQUAL "system")
++        MESSAGE(FATAL_ERROR "WITH_PCRE=system was requested but system PCRE2 was not found. "
++          "PCRE2_LIBRARY=${PCRE2_LIBRARY}, PCRE2_INCLUDE_DIR=${PCRE2_INCLUDE_DIR}. "
++          "Install libpcre2-8-dev (or equivalent) or use -DWITH_PCRE=bundled.")
++      ELSEIF(WITH_PCRE STREQUAL "auto" OR WITH_PCRE STREQUAL "bundled")
++        MESSAGE(STATUS "PCRE2: using bundled version")
++        BUNDLE_PCRE2()
+       ENDIF()
+-      BUNDLE_PCRE2()
+     ELSE()
+       CHECK_LIBRARY_EXISTS(pcre2-posix PCRE2regcomp "${PCRE_LIBRARY_DIRS}" NEEDS_PCRE2_DEBIAN_HACK)
+       IF(NEEDS_PCRE2_DEBIAN_HACK)

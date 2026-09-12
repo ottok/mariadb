@@ -1,0 +1,33 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Sun, 13 Sep 2026 04:11:58 +0000
+Subject: =?utf-8?q?Remove_header=E2=80=91only_fallback_for_PCRE2_library_de?=
+ =?utf-8?q?tection?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+The fallback assumed a matching library existed when only the header was found.
+
+In a cross‑build the native tools compile for x86_64, but only arm64 libpcre2‑8 is installed.
+
+Without the fallback CMake reports PCRE2 not found and uses bundled PCRE2,
+
+fixing the link error.
+---
+ cmake/pcre.cmake | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/cmake/pcre.cmake b/cmake/pcre.cmake
+index 7656bc5..1cb820a 100644
+--- a/cmake/pcre.cmake
++++ b/cmake/pcre.cmake
+@@ -114,9 +114,6 @@ MACRO (CHECK_PCRE)
+                 /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}
+                 /usr/lib)
+         FIND_PATH(PCRE2_INCLUDE_DIR NAMES pcre2.h)
+-        IF(PCRE2_INCLUDE_DIR AND NOT PCRE2_LIBRARY)
+-          SET(PCRE2_LIBRARY pcre2-8)
+-        ENDIF()
+         IF(PCRE2_LIBRARY AND PCRE2_INCLUDE_DIR)
+           SET(PCRE_FOUND TRUE)
+           SET(PCRE_LIBRARIES ${PCRE2_LIBRARY})

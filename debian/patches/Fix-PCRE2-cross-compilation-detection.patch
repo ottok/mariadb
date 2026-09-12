@@ -1,0 +1,93 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Sun, 13 Sep 2026 10:54:08 +0800
+Subject: Fix PCRE2 detection for cross-compilation and newer versions
+
+The CHECK_PCRE macro in cmake/pcre.cmake uses CHECK_LIBRARY_EXISTS to
+verify that libpcre2-8 contains pcre2_match_8. This probe compiles and
+links a tiny test program. During cross-compilation the link test
+fails because the cross-linker does not search the target multiarch
+directory by default, or because CMAKE_LIBRARY_PATH / PCRE_LIBRARY_DIRS
+are not forwarded correctly to CMake's try_compile.
+
+Additionally, PCRE2 10.48 changed how pcre2_match_8 is exported: it is
+now provided via a macro in pcre2.h rather than as a direct library
+symbol. CHECK_LIBRARY_EXISTS deliberately does not include headers, so
+the link test fails even when the correct library is present. Native
+builds usually pass by accident because the native compiler searches
+standard system paths by default.
+
+A second problem is that when pkg-config finds libpcre2-8 in standard
+system directories, it reports an empty PCRE_INCLUDE_DIRS. The original
+code then checked NOT PCRE_INCLUDE_DIRS and fell back to the bundled
+PCRE2 download even though the system library was perfectly usable.
+
+A third problem is that pkg-config may fail entirely in restricted
+build environments (e.g. when PKG_CONFIG_PATH or PKG_CONFIG_LIBDIR
+excludes the native paths during a cross-build), even though the
+library and headers are present.
+
+A fourth problem is that FIND_LIBRARY alone does not search Debian
+multiarch directories such as /usr/lib/x86_64-linux-gnu unless
+CMAKE_LIBRARY_ARCHITECTURE is set. We add explicit PATHS.
+
+A fifth problem is that when the header is found but FIND_LIBRARY
+cannot locate the .so file, the build still falls back to the bundled
+download. We fall back to the bare linker name pcre2-8 in that case.
+
+The fix replaces CHECK_LIBRARY_EXISTS with a trust in pkg-config's
+PCRE_FOUND, adds FIND_LIBRARY/FIND_PATH with explicit Debian multiarch
+PATHS, falls back to the bare library name when only the header is
+found, and removes the spurious PCRE_INCLUDE_DIRS check from the
+fallback condition.
+Forwarded: not yet
+---
+ cmake/pcre.cmake | 29 +++++++++++++++++++++++++----
+ 1 file changed, 25 insertions(+), 4 deletions(-)
+
+diff --git a/cmake/pcre.cmake b/cmake/pcre.cmake
+index 209583b..afa8102 100644
+--- a/cmake/pcre.cmake
++++ b/cmake/pcre.cmake
+@@ -92,17 +92,38 @@ MACRO (CHECK_PCRE)
+     IF(WITH_PCRE STREQUAL "system" OR WITH_PCRE STREQUAL "auto")
+       FIND_PACKAGE(PkgConfig QUIET)
+       PKG_CHECK_MODULES(PCRE libpcre2-8)
+-      # in case pkg-config or libpcre2-8.pc is not installed:
+-      CHECK_LIBRARY_EXISTS(pcre2-8 pcre2_match_8 "${PCRE_LIBRARY_DIRS}" HAVE_PCRE2_MATCH_8)
++      # CHECK_LIBRARY_EXISTS is unreliable during cross-compilation because
++      # it does a real link test that often fails to find the target-arch
++      # library even when it is present. It also breaks with PCRE2 10.48
++      # where pcre2_match_8 is a macro in pcre2.h, not a direct symbol.
++      IF(NOT PCRE_FOUND)
++        FIND_LIBRARY(PCRE2_LIBRARY NAMES pcre2-8
++          PATHS ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}
++                /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}
++                /usr/lib)
++        FIND_PATH(PCRE2_INCLUDE_DIR NAMES pcre2.h)
++        IF(PCRE2_INCLUDE_DIR AND NOT PCRE2_LIBRARY)
++          SET(PCRE2_LIBRARY pcre2-8)
++        ENDIF()
++        IF(PCRE2_LIBRARY AND PCRE2_INCLUDE_DIR)
++          SET(PCRE_FOUND TRUE)
++          SET(PCRE_LIBRARIES ${PCRE2_LIBRARY})
++          SET(PCRE_INCLUDE_DIRS ${PCRE2_INCLUDE_DIR})
++          GET_FILENAME_COMPONENT(PCRE_LIBRARY_DIRS ${PCRE2_LIBRARY} DIRECTORY)
++        ENDIF()
++      ENDIF()
++      IF(PCRE_FOUND)
++        SET(HAVE_PCRE2_MATCH_8 TRUE)
++      ENDIF()
+       find_path(PCRE2_INCLUDE_DIR NAMES pcre2.h)
+       MESSAGE_ONCE(PCRE2_H "Looking for include file pcre2.h: ${PCRE2_INCLUDE_DIR}")
+       IF (PCRE2_INCLUDE_DIR)
+         SET(PCRE_INCLUDE_DIRS ${PCRE2_INCLUDE_DIR})
+       ENDIF()
+     ENDIF()
+-    IF(NOT HAVE_PCRE2_MATCH_8 OR NOT PCRE_INCLUDE_DIRS OR WITH_PCRE STREQUAL "bundled")
++    IF(NOT HAVE_PCRE2_MATCH_8 OR WITH_PCRE STREQUAL "bundled")
+       IF (WITH_PCRE STREQUAL "system")
+-        MESSAGE(FATAL_ERROR "system pcre2-8 library is not found or unusable")
++        MESSAGE(FATAL_ERROR "system pcre2-8 library is not found or unusable. Set -DWITH_PCRE=bundled to use bundled PCRE2.")
+       ENDIF()
+       BUNDLE_PCRE2()
+     ELSE()

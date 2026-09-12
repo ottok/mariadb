@@ -15,3 +15,6 @@ MDEV-39509-Fix-invalid-iv-length-with-OpenSSL-4.0.patch
 Update-TLS-test-regexes-for-OpenSSL-4.0-error-message-cha.patch
 CONC-821-Avoid-resetting-length-pointer-for-variable-leng.patch
 cross-compile-fix-migrate-config.patch
+Fix-PCRE2-cross-compilation-detection.patch
+Update-PCRE2-to-10.48-and-enforce-strict-system-mode-with.patch
+Remove-header-only-fallback-for-PCRE2-library-detection.patch
