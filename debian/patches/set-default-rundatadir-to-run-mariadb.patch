@@ -1,0 +1,21 @@
+From: Lena Voytek <lena@voytek.dev>
+Date: Thu, 10 Sep 2026 09:03:11 -0400
+Subject: Update default rundatadir config to /run/mariadbd.
+
+Use /run/mariadbd as the default rundatadir for Debian/Ubuntu to improve
+co-installability between MySQL and MariaDB servers.
+
+Forwarded: https://github.com/MariaDB/server/pull/5059
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/cmake/install_layout.cmake
++++ b/cmake/install_layout.cmake
+@@ -198,7 +198,7 @@
+ SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mariadb")
+ 
+ SET(INSTALL_RUNDIR_DEB                  "/run")
+-SET(INSTALL_UNIX_ADDRDIR_DEB            "${INSTALL_RUNDIR_DEB}/mysqld/mysqld.sock")
++SET(INSTALL_UNIX_ADDRDIR_DEB            "${INSTALL_RUNDIR_DEB}/mariadbd/mysqld.sock")
+ SET(INSTALL_SYSTEMD_UNITDIR_DEB         "/usr/lib/systemd/system")
+ SET(INSTALL_SYSTEMD_SYSUSERSDIR_DEB     "/usr/lib/sysusers.d")
+ SET(INSTALL_SYSTEMD_TMPFILESDIR_DEB     "/usr/lib/tmpfiles.d")
