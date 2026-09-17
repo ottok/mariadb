@@ -1,7 +1,11 @@
 version=4
-opts=\
-pgpsigurlmangle=s/$/.asc/,\
-uversionmangle=s/-(rc|beta)/$1/,pasv \
+opts=" \
+  uversionmangle=s/-(rc|beta)/$1/, \
+  pasv, \
+  pgpsigurlmangle=s/$/.asc/,\
+  repacksuffix=+ds, \
+  dversionmangle=auto \
+" \
 https://archive.mariadb.org/mariadb-11.8.([\d\.]*(?:-beta|-rc)?)/source/ mariadb-([\d\.]*(?:-beta|-rc)?).tar.gz
 
 # String "-11.8." needs to be in path as MariaDB releases several series in
