@@ -28,7 +28,7 @@ for arg in "$@"; do
     --libs|--libs_r)      printf '%s\n' "-L$libdir/ -lmariadb" ;;
     --libs_sys)           printf '%s\n' "-lz -ldl -lm -lssl -lcrypto" ;;
     --plugindir)          printf '%s\n' "$libdir/libmariadb3/plugin" ;;
-    --socket)             printf '%s\n' "/run/mysqld/mysqld.sock" ;;
+    --socket)             printf '%s\n' "/run/mariadbd/mysqld.sock" ;;
     --port)               printf '%s\n' "3306" ;;
     --version)            printf '%s\n' "$version" ;;
     --cc_version)         printf '%s\n' "$cc_version" ;;
