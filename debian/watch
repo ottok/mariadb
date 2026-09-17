@@ -4,6 +4,8 @@ Source: https://archive.mariadb.org/mariadb-11.8.([\d\.]*(?:-beta|-rc)?)/source/
 Matching-Pattern: mariadb-([\d\.]*(?:-beta|-rc)?).tar.gz
 Pgp-Sig-Url-Mangle: s/$/.asc/
 Uversion-Mangle: s/-(rc|beta)/$1/
+Repack-Suffix: +ds
+Dversion-Mangle: s/\+ds(\d*)?$//
 
 # String "-11.8." needs to be in path as MariaDB releases several series in
 # parallel (e.g 11.4, 10.11, 10.4, 10.3 etc) and uscan should check for updates

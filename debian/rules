@@ -66,13 +66,7 @@ MAKEFLAGS += VERBOSE=1
 override_dh_auto_clean:
 	@echo "RULES.$@"
 	dh_testdir
-	# Delete obsolete/unstable components and embedded source code copies
-	# to ensure they are not used in Debian and in general to keep MariaDB binaries
-	# secure and using only system libraries that can be updated quickly and easily
-	# in case security vulnerabilities are found in any of the libraries
-	rm -rf $(BUILDDIR) builddir-native extra/readline extra/wolfssl zlib libmariadb/external/zlib
-	# Remove columnstore as the source code is dirty and software not mature enough for Debian anyway
-	rm -rf storage/columnstore
+	rm -rf $(BUILDDIR) builddir-native
 
 	# Update po-files when clean runs before each build
 	debconf-updatepo
