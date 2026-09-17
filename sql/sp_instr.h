@@ -400,7 +400,8 @@ public:
   sp_lex_instr(uint ip, sp_pcontext *ctx, LEX *lex, bool is_lex_owner)
   : sp_instr(ip, ctx),
     m_lex_keeper(lex, is_lex_owner),
-    m_mem_root_for_reparsing(nullptr)
+    m_mem_root_for_reparsing(nullptr),
+    m_sp{lex->sphead}
   {}
 
   ~sp_lex_instr() override
@@ -418,7 +419,13 @@ public:
       */
       free_items();
       m_lex_keeper.~sp_lex_keeper();
-      free_root(m_mem_root_for_reparsing, MYF(0));
+
+      /*
+        Ignore the OOM error explicitly since we are inside destructor
+      */
+      (void)m_sp->register_instr_mem_root_for_deallocation(
+        m_mem_root_for_reparsing);
+
       m_mem_root_for_reparsing= nullptr;
     }
   }
@@ -507,6 +514,7 @@ private:
   */
   List<Item_param> cleanup_before_parsing(enum_sp_type sp_type);
 
+  sp_head *m_sp;
 
   /**
     Set up field object for every NEW/OLD item of the trigger and
@@ -1455,16 +1463,31 @@ class sp_instr_cursor_copy_struct: public sp_lex_instr
   bool m_valid;
   LEX_CSTRING m_cursor_stmt;
 
+  /**
+    The pointer to an Item created on parsing the DEFAULT clause of
+    a cursor declaration. An instance of a class derived from the class Item
+    created for storing a value of the DEFAULT clause is created once and lives
+    until the cursor be deallocated on closing a stored routine.
+  */
+  Item *m_def= nullptr;
+
 public:
   sp_instr_cursor_copy_struct(uint ip, sp_pcontext *ctx, uint coffs,
-                              sp_lex_cursor *lex, uint voffs)
+                              sp_lex_cursor *lex, uint voffs,
+                              Item *def= nullptr)
     : sp_lex_instr(ip, ctx, lex, false),
       m_cursor(coffs),
       m_var(voffs),
       m_valid(true),
-      m_cursor_stmt(lex->get_expr_str())
+      m_cursor_stmt(lex->get_expr_str()),
+      m_def(def)
   {}
-  virtual ~sp_instr_cursor_copy_struct() = default;
+  virtual ~sp_instr_cursor_copy_struct() override
+  {
+    if (m_def)
+      m_def->delete_self();
+  }
+
   int execute(THD *thd, uint *nextp) override;
   int exec_core(THD *thd, uint *nextp) override;
   void print(String *str) override;

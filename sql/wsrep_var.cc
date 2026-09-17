@@ -84,7 +84,7 @@ static bool refresh_provider_options()
   {
     std::string opts= Wsrep_server_state::instance().provider().options();
     wsrep_provider_options_init(opts.c_str());
-    get_provider_option_value(wsrep_provider_options,
+    get_provider_option_value(opts.c_str(),
                               (char*)"repl.max_ws_size",
                               &wsrep_max_ws_size);
     return false;
@@ -534,7 +534,9 @@ bool wsrep_provider_options_check(sys_var *self, THD* thd, set_var* var)
   }
   if (wsrep_provider_plugin_enabled())
   {
-    my_error(ER_INCORRECT_GLOBAL_LOCAL_VAR, MYF(0), var->var->name.str, "read only");
+    my_message(ER_WRONG_ARGUMENTS,
+               "wsrep_provider_options cannot be changed while the "
+               "wsrep-provider plugin is loaded", MYF(0));
     return true;
   }
   return false;
@@ -624,10 +626,10 @@ static int wsrep_cluster_address_verify (const char* cluster_address_str)
 
 bool wsrep_cluster_address_check (sys_var *self, THD* thd, set_var* var)
 {
-  char addr_buf[FN_REFLEN];
+  char addr_buf[FN_REFLEN+1];
 
   if ((! var->save_result.string_value.str) ||
-      (var->save_result.string_value.length >= sizeof(addr_buf))) // safety
+      (var->save_result.string_value.length >= FN_REFLEN)) // safety
     goto err;
 
   strmake(addr_buf, var->save_result.string_value.str,
@@ -730,20 +732,19 @@ bool wsrep_node_name_update (sys_var *self, THD* thd, enum_var_type type)
   return 0;
 }
 
-// TODO: do something more elaborate, like checking connectivity
 bool wsrep_node_address_check (sys_var *self, THD* thd, set_var* var)
 {
-  char addr_buf[FN_REFLEN];
-
   if ((! var->save_result.string_value.str) ||
-      (var->save_result.string_value.length > (FN_REFLEN - 1))) // safety
+      (var->save_result.string_value.length >= FN_REFLEN)) // safety
     goto err;
 
-  memcpy(addr_buf, var->save_result.string_value.str,
-         var->save_result.string_value.length);
-  addr_buf[var->save_result.string_value.length]= 0;
+  if (var->save_result.string_value.length)
+  {
+    if (wsrep_check_request_str(var->save_result.string_value.str,
+				wsrep_address_char, false))
+	goto err;
+  }
 
-  // TODO: for now 'allow' 0-length string to be valid (default)
   return 0;
 
 err:

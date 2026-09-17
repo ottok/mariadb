@@ -807,13 +807,13 @@ static json_state_handler json_actions[NR_JSON_STATES][NR_C_CLASSES]=
 int json_scan_start(json_engine_t *je,
                     CHARSET_INFO *i_cs, const uchar *str, const uchar *end)
 {
-  static const uchar no_time_to_die= 0;
+  static const uint32_t no_time_to_die= 0;
 
   json_string_setup(&je->s, i_cs, str, end);
   je->stack[0]= JST_DONE;
   je->stack_p= 0;
   je->state= JST_VALUE;
-  je->killed_ptr = (uchar*)&no_time_to_die;
+  je->killed_ptr=  (uint32_t *) &no_time_to_die;
   return 0;
 }
 
@@ -974,7 +974,12 @@ int json_scan_next(json_engine_t *j)
   int t_next;
 
   get_first_nonspace(&j->s, &t_next, &j->sav_c_len);
-  return *j->killed_ptr || json_actions[j->state][t_next](j);
+  if (j->killed_ptr && *j->killed_ptr)
+  {
+    j->s.error= JE_KILLED;
+    return 1;
+  }
+  return json_actions[j->state][t_next](j);
 }
 
 
@@ -1465,8 +1470,8 @@ int json_find_path(json_engine_t *je,
             handle_match(je, p, p_cur_step, array_counters))
           goto exit;
       }
-      else
-        json_skip_array_item(je);
+      else if (json_skip_array_item(je))
+        goto exit;
       break;
     case JST_OBJ_END:
         /*
@@ -2071,9 +2076,18 @@ err_return:
 
 /** Check if json is valid (well-formed)
 
-  @retval 0 - success, json is well-formed
-  @retval 1 - error, json is invalid
+  @retval 1 - success, json is well-formed
+  @retval 0 - error, json is invalid
 */
+int json_valid_engine(json_engine_t *je, const char *js, size_t js_len, CHARSET_INFO *cs)
+{
+  volatile const uint32_t *killed_ptr= je->killed_ptr;
+  json_scan_start(je, cs, (const uchar *) js, (const uchar *) js + js_len);
+  je->killed_ptr= killed_ptr;
+  while (json_scan_next(je) == 0) /* no-op */ ;
+  return je->s.error == 0;
+}
+
 int json_valid(const char *js, size_t js_len, CHARSET_INFO *cs)
 {
   json_engine_t je;
@@ -2081,7 +2095,6 @@ int json_valid(const char *js, size_t js_len, CHARSET_INFO *cs)
   while (json_scan_next(&je) == 0) /* no-op */ ;
   return je.s.error == 0;
 }
-
 
 /*
   Expects the JSON object as an js argument, and the key name.

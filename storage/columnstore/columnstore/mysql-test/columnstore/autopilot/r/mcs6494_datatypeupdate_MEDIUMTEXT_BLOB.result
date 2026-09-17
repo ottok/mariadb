@@ -1,7 +1,0 @@
-use autopilot;
-START TRANSACTION;
-UPDATE datatypeupdate SET CBLOB = CMEDIUMTEXT;
-SELECT CBLOB FROM datatypeupdate;
-CBLOB
-mediumtestmediumtest
-ROLLBACK;

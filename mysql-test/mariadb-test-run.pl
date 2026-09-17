@@ -25,7 +25,7 @@
 #  Tool used for executing a suite of .test files
 #
 #  See the "MySQL Test framework manual" for more information
-#  https://mariadb.com/kb/en/library/mysqltest/
+#  https://mariadb.com/docs/server/clients-and-utilities/testing-tools/mariadb-test
 #
 #
 ##############################################################################
@@ -246,7 +246,7 @@ my $opt_tail_lines= 20;
 my $opt_dry_run;
 
 my $opt_compress;
-my $opt_ssl;
+our $opt_ssl;
 my $opt_skip_ssl;
 my @opt_skip_test_list;
 our $opt_ssl_supported;
@@ -1647,6 +1647,7 @@ sub command_line_setup {
 
   # Add leak suppressions
   $ENV{LSAN_OPTIONS}= "suppressions=${glob_mysql_test_dir}/lsan.supp:print_suppressions=0"
+     . ($ENV{LSAN_OPTIONS} ? ":$ENV{LSAN_OPTIONS}" : "")
     if -f "$glob_mysql_test_dir/lsan.supp" and not IS_WINDOWS;
 
   mtr_verbose("ASAN_OPTIONS=$ENV{ASAN_OPTIONS}");
@@ -3135,6 +3136,7 @@ sub mysql_install_db {
   mtr_add_arg($args, "--loose-innodb-log-file-size=10M");
   mtr_add_arg($args, "--loose-innodb-fast-shutdown=0");
   mtr_add_arg($args, "--disable-sync-frm");
+  mtr_add_arg($args, "--debug-no-sync");
   mtr_add_arg($args, "--tmpdir=%s", "$opt_vardir/tmp/");
   mtr_add_arg($args, "--core-file");
   mtr_add_arg($args, "--console");
@@ -5459,8 +5461,13 @@ sub stop_servers($$) {
 # Run a query against a server using mysql client. The output of
 # the query will be written into outfile.
 #
+# If $timeout (seconds) is given, the client is not waited for
+# indefinitely: a server stuck in an unstable state can accept the
+# connection but never answer the query, which would otherwise block forever.
+# In that case the client is killed and a non-zero status is returned.
+#
 sub run_query_output {
-  my ($mysqld, $query, $outfile)= @_;
+  my ($mysqld, $query, $outfile, $timeout)= @_;
   my $args;
 
   mtr_init_args(\$args);
@@ -5469,7 +5476,7 @@ sub run_query_output {
   mtr_add_arg($args, "--silent");
   mtr_add_arg($args, "--execute=%s", $query);
 
-  my $res= My::SafeProcess->run
+  my $proc= My::SafeProcess->new
   (
     name          => "run_query_output -> ".$mysqld->name(),
     path          => $exe_mysql,
@@ -5478,7 +5485,15 @@ sub run_query_output {
     error         => $outfile
   );
 
-  return $res
+  # wait_one() returns 1 while the process is still running,
+  # in which case we kill the hung client.
+  if ($proc->wait_one($timeout))
+  {
+    $proc->kill();
+    return 1;
+  }
+
+  return $proc->exit_status();
 }
 
 
@@ -5496,7 +5511,13 @@ sub wait_wsrep_ready($$) {
   my ($tinfo, $mysqld)= @_;
 
   my $sleeptime= 100; # Milliseconds
-  my $loops= ($opt_start_timeout * 1000) / $sleeptime;
+
+  # Bound the whole wait by the server startup timeout. This must be a
+  # wall-clock deadline rather than a simple loop count: a single query
+  # against a wedged server can block indefinitely, which would otherwise
+  # defeat the loop bound and hang MTR until the surrounding suite timeout
+  # fires.
+  my $timeout= start_timer($opt_start_timeout);
 
   my $name= $mysqld->name();
   my $outfile= "$opt_vardir/tmp/$name.wsrep_ready";
@@ -5505,11 +5526,17 @@ sub wait_wsrep_ready($$) {
               FROM INFORMATION_SCHEMA.GLOBAL_STATUS
               WHERE VARIABLE_NAME = 'wsrep_ready'";
 
-  for (my $loop= 1; $loop <= $loops; $loop++)
+  while (1)
   {
+    # Cap each query by the time left so a hung client cannot exceed the
+    # overall startup budget. Integer seconds, and at least 1 (wait_one()
+    # treats 0 as a non-blocking poll).
+    my $remaining= int($timeout - time);
+    last if $remaining <= 0;
+
     # Careful... if MTR runs with option 'verbose' then the
     # file contains also SafeProcess verbose output
-    if (run_query_output($mysqld, $query, $outfile) == 0 &&
+    if (run_query_output($mysqld, $query, $outfile, $remaining) == 0 &&
         mtr_grab_file($outfile) =~ /WSREP_READY\s+ON/)
     {
       unlink($outfile);

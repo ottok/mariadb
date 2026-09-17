@@ -250,19 +250,19 @@ static int join_ft_read_first(JOIN_TAB *tab);
 static int join_ft_read_next(READ_RECORD *info);
 int join_read_always_key_or_null(JOIN_TAB *tab);
 int join_read_next_same_or_null(READ_RECORD *info);
-static COND *make_cond_for_table(THD *thd, Item *cond,table_map table,
-                                 table_map used_table,
-                                 int join_tab_idx_arg,
-                                 bool exclude_expensive_cond,
-                                 bool retain_ref_cond);
-static COND *make_cond_for_table_from_pred(THD *thd, Item *root_cond,
-                                           Item *cond,
-                                           table_map tables,
-                                           table_map used_table,
-                                           int join_tab_idx_arg,
-                                           bool exclude_expensive_cond,
-                                           bool retain_ref_cond,
-                                           bool is_top_and_level);
+COND *make_cond_for_table(THD *thd, Item *cond,table_map table,
+                         table_map used_table,
+                         int join_tab_idx_arg,
+                         bool exclude_expensive_cond,
+                         bool retain_ref_cond);
+COND *make_cond_for_table_from_pred(THD *thd, Item *root_cond,
+                                    Item *cond,
+                                    table_map tables,
+                                    table_map used_table,
+                                    int join_tab_idx_arg,
+                                    bool exclude_expensive_cond,
+                                    bool retain_ref_cond,
+                                    bool is_top_and_level);
 
 static Item* part_of_refkey(TABLE *form,Field *field);
 static bool test_if_cheaper_ordering(bool in_join_optimizer,
@@ -7411,6 +7411,25 @@ static bool add_key_part(DYNAMIC_ARRAY *keyuse_array, KEY_FIELD *key_field)
       if (field->can_optimize_hash_join(key_field->cond, key_field->val) !=
           Data_type_compatibility::OK)
         return false;
+      /*
+        MDEV-24931: For materialized derived tables, don't add hash-join
+        KEYUSE entries beyond max_key_parts(). Excess entries would cause
+        generate_derived_keys_for_table() to build a key with more parts
+        than key_part_map (64 bits) or Bitmap<64> can represent.
+      */
+      if (form->pos_in_table_list &&
+          form->pos_in_table_list->is_materialized_derived())
+      {
+        uint existing= 0;
+        for (uint k= 0; k < keyuse_array->elements; k++)
+        {
+          KEYUSE *ku= dynamic_element(keyuse_array, k, KEYUSE*);
+          if (ku->table == form && is_hash_join_key_no(ku->key))
+            existing++;
+        }
+        if (existing >= form->file->max_key_parts())
+          return FALSE;
+      }
       if (form->is_splittable())
         form->add_splitting_info_for_key_field(key_field);
       /* 
@@ -15122,7 +15141,7 @@ bool generate_derived_keys_for_table(KEYUSE *keyuse, uint count, uint keys)
     do
     {
       keyuse->key= table->s->keys;
-      keyuse->keypart_map= (key_part_map) (1 << parts);     
+      keyuse->keypart_map= (key_part_map) 1 << parts;     
       keyuse++;
       i++;
     } 
@@ -21978,7 +21997,7 @@ TABLE *Create_tmp_table::start(THD *thd,
                         &tmpname, (uint) strlen(path)+1,
                         &m_group_buff, (m_group && ! m_using_unique_constraint ?
                                       param->group_length : 0),
-                        &m_bitmaps, bitmap_buffer_size(field_count)*6,
+                        &m_bitmaps, bitmap_buffer_size(field_count)*5,
                         &const_key_parts, sizeof(*const_key_parts),
                         NullS))
   {
@@ -22895,7 +22914,7 @@ bool Virtual_tmp_table::init(uint field_count)
                         &s, sizeof(*s),
                         &field, (field_count + 1) * sizeof(Field*),
                         &blob_field, (field_count + 1) * sizeof(uint),
-                        &bitmaps, bitmap_buffer_size(field_count) * 6,
+                        &bitmaps, bitmap_buffer_size(field_count) * 5,
                         NullS))
     DBUG_RETURN(true);
   s->reset();
@@ -26442,7 +26461,7 @@ bool test_if_ref(Item *root_cond, Item_field *left_item,Item *right_item)
      make_cond_for_info_schema() uses similar algorithm as well.
 */ 
 
-static Item *
+Item *
 make_cond_for_table(THD *thd, Item *cond, table_map tables,
                     table_map used_table,
                     int join_tab_idx_arg,
@@ -26456,7 +26475,7 @@ make_cond_for_table(THD *thd, Item *cond, table_map tables,
 }
 
 
-static Item *
+Item *
 make_cond_for_table_from_pred(THD *thd, Item *root_cond, Item *cond,
                               table_map tables, table_map used_table,
                               int join_tab_idx_arg,
@@ -34627,6 +34646,13 @@ bool Sql_cmd_dml::execute(THD *thd)
   }
 
   unit->set_limit(select_lex);
+  /*
+    set_limit() evaluates the LIMIT expression and can raise an error, e.g.
+    ER_INVALID_DEFAULT_PARAM when DEFAULT is bound to a LIMIT placeholder.
+    Do not go on executing with an error already in the diagnostics area.
+  */
+  if (thd->is_error())
+    goto err;
 
   /* Perform statement-specific execution */
   res = execute_inner(thd);

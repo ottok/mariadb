@@ -52,6 +52,12 @@ void innodb_preshutdown();
 /** Shut down InnoDB. */
 void innodb_shutdown();
 
+/** Stop memory presure thread and free file descriptors */
+#ifdef __linux__
+void buf_mem_pressure_shutdown() noexcept;
+#else
+inline void buf_mem_pressure_shutdown() noexcept {}
+#endif
 /*************************************************************//**
 Copy the file path component of the physical file to parameter. It will
 copy up to and including the terminating path separator.
