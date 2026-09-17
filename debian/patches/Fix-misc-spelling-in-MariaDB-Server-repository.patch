@@ -33,10 +33,9 @@ Forwarded: https://github.com/MariaDB/server/pull/4458
  sql/opt_subselect.cc                                      |  4 ++--
  sql/sql_select.cc                                         |  4 ++--
  sql/sys_vars.cc                                           |  2 +-
- storage/connect/odbconn.cpp                               |  2 +-
  storage/innobase/handler/ha_innodb.cc                     |  2 +-
  support-files/mysql.server.sh                             |  2 +-
- 12 files changed, 24 insertions(+), 23 deletions(-)
+ 11 files changed, 23 insertions(+), 22 deletions(-)
 
 diff --git a/extra/mariabackup/innobackupex.cc b/extra/mariabackup/innobackupex.cc
 index 22f4dc3..1c0bc11 100644
@@ -61,7 +60,7 @@ index 22f4dc3..1c0bc11 100644
           "terminates with an error. Default is 0, in which case mariadb-backup waits "
           "indefinitely for BACKUP STAGE START to finish",
 diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
-index dec69a0..8c218ff 100644
+index bd59e1c..bc6b38a 100644
 --- a/extra/mariabackup/xtrabackup.cc
 +++ b/extra/mariabackup/xtrabackup.cc
 @@ -220,7 +220,7 @@ uint xtrabackup_compress = FALSE;
@@ -73,7 +72,7 @@ index dec69a0..8c218ff 100644
  in milliseconds (default is 1 second) */
  ulint xtrabackup_log_copy_interval = 1000;
  static ulong max_buf_pool_modified_pct;
-@@ -1809,7 +1809,7 @@ struct my_option xb_client_options[]= {
+@@ -1810,7 +1810,7 @@ struct my_option xb_client_options[]= {
      {"startup-wait-timeout", OPT_LOCK_WAIT_TIMEOUT,
       "This option specifies time in seconds that mariadb-backup should wait for "
       "BACKUP STAGE START to complete. BACKUP STAGE START has to wait until all "
@@ -82,7 +81,7 @@ index dec69a0..8c218ff 100644
       "If there are still such queries when the timeout expires, mariadb-backup "
       "terminates with an error. Default is 0, in which case mariadb-backup waits "
       "indefinitely for BACKUP STAGE START to finish",
-@@ -5868,7 +5868,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
+@@ -6009,7 +6009,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
  	}
  
  	/* Mariabackup doesn't detect any FILE_OP for the deferred
@@ -92,10 +91,10 @@ index dec69a0..8c218ff 100644
  	for (auto space_name: defer_space_names) {
  		if (!check_if_skip_table(space_name.c_str())) {
 diff --git a/mysql-test/main/mysqld--help.result b/mysql-test/main/mysqld--help.result
-index 2c65abf..6e3a414 100644
+index 2b7b177..4441dc9 100644
 --- a/mysql-test/main/mysqld--help.result
 +++ b/mysql-test/main/mysqld--help.result
-@@ -826,13 +826,14 @@ The following specify which files/extra groups are read (specified before remain
+@@ -822,13 +822,14 @@ The following specify which files/extra groups are read (specified before remain
   storage as part of an index scan
   --optimizer-join-limit-pref-ratio=# 
   For queries with JOIN and ORDER BY LIMIT : make the
@@ -118,7 +117,7 @@ index 2c65abf..6e3a414 100644
   Cost of checking a key against the end key condition
   --optimizer-key-copy-cost=# 
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_innodb.result b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
-index 988eb24..5540f6f 100644
+index 5a7b40c..762a4c5 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_innodb.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_innodb.result
 @@ -555,7 +555,7 @@ SESSION_VALUE	NULL
@@ -131,7 +130,7 @@ index 988eb24..5540f6f 100644
  NUMERIC_MAX_VALUE	NULL
  NUMERIC_BLOCK_SIZE	NULL
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
-index aad92d5..ec1e062 100644
+index 7ec7c26..1ac7b3d 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 @@ -2505,7 +2505,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
@@ -144,7 +143,7 @@ index aad92d5..ec1e062 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
-index 11f168d..1f37da6 100644
+index c9fcdf8..650219f 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 @@ -2715,7 +2715,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
@@ -157,7 +156,7 @@ index 11f168d..1f37da6 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/sql/opt_subselect.cc b/sql/opt_subselect.cc
-index ad10ab5..fb6806a 100644
+index 4841d89..3cc8486 100644
 --- a/sql/opt_subselect.cc
 +++ b/sql/opt_subselect.cc
 @@ -6895,7 +6895,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
@@ -179,10 +178,10 @@ index ad10ab5..fb6806a 100644
    }
  
 diff --git a/sql/sql_select.cc b/sql/sql_select.cc
-index 60f3e45..5b50f6f 100644
+index fcc18df..e107425 100644
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
-@@ -11831,7 +11831,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
+@@ -11850,7 +11850,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
  
  /*
    @brief
@@ -191,7 +190,7 @@ index 60f3e45..5b50f6f 100644
      execution.
  
    @detail
-@@ -15317,7 +15317,7 @@ void JOIN::drop_unused_derived_keys()
+@@ -15336,7 +15336,7 @@ void JOIN::drop_unused_derived_keys()
        }
        /*
          We dropped all keys except the chosen one and unique keys.
@@ -201,7 +200,7 @@ index 60f3e45..5b50f6f 100644
        tab->ref.key= 0;
      }
 diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
-index ad4bb1f..e1b5dca 100644
+index 60ce960..ef317ce 100644
 --- a/sql/sys_vars.cc
 +++ b/sql/sys_vars.cc
 @@ -2973,7 +2973,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
@@ -213,24 +212,11 @@ index ad4bb1f..e1b5dca 100644
         "producing #LIMIT matches if that promises N times speedup. "
         "(A conservative setting here would be is a high value, like 100 so "
         "the short-cutting plan is used if it promises a speedup of 100x or "
-diff --git a/storage/connect/odbconn.cpp b/storage/connect/odbconn.cpp
-index 1b35bfa..10a0666 100644
---- a/storage/connect/odbconn.cpp
-+++ b/storage/connect/odbconn.cpp
-@@ -281,7 +281,7 @@ static CATPARM *AllocCatInfo(PGLOBAL g, CATINFO fid, PCSZ db,
- 		cap->Status = (UWORD *)PlugSubAlloc(g, NULL, m * sizeof(UWORD));
- 
- 	} catch (int n) {
--		htrc("Exeption %d: %s\n", n, g->Message);
-+		htrc("Exception %d: %s\n", n, g->Message);
- 		cap = NULL;
- 	} catch (const char *msg) {
- 		htrc(g->Message, msg);
 diff --git a/storage/innobase/handler/ha_innodb.cc b/storage/innobase/handler/ha_innodb.cc
-index a38ca1c..18fa9c0 100644
+index e78f348..96cf23b 100644
 --- a/storage/innobase/handler/ha_innodb.cc
 +++ b/storage/innobase/handler/ha_innodb.cc
-@@ -19924,7 +19924,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
+@@ -19975,7 +19975,7 @@ static MYSQL_SYSVAR_BOOL(immediate_scrub_data_uncompressed,
  
  static MYSQL_SYSVAR_BOOL(encrypt_temporary_tables, innodb_encrypt_temporary_tables,
    PLUGIN_VAR_OPCMDARG | PLUGIN_VAR_READONLY,
@@ -240,10 +226,10 @@ index a38ca1c..18fa9c0 100644
  
  static MYSQL_SYSVAR_BOOL(truncate_temporary_tablespace_now,
 diff --git a/support-files/mysql.server.sh b/support-files/mysql.server.sh
-index dd8cbd4..cc4b866 100644
+index e86687a..a322e9a 100644
 --- a/support-files/mysql.server.sh
 +++ b/support-files/mysql.server.sh
-@@ -194,7 +194,7 @@ su_kill() {
+@@ -202,7 +202,7 @@ su_kill() {
  
  #
  # Read defaults file from 'basedir'.   If there is no defaults file there
