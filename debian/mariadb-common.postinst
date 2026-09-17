@@ -4,6 +4,12 @@ set -e
 
 case "$1" in
   configure)
+    # Upgrading from a MariaDB version using /run/mysqld, temporarily link /run/mariadbd to it.
+    if [ -n "$2" ] && [ -d /run/mysqld ] && [ ! -e /run/mariadbd ] && [ ! -L /run/mariadbd ]
+    then
+      ln -s mysqld /run/mariadbd
+    fi
+
     # Set /etc/mysql/mariadb.cnf as main /etc/mysql/my.cnf alternative if it exists.
     # As conffile, dpkg does not automatically re-add it if missing on upgrade,
     # and admins might have intentionally removed it and chose a different my.cnf.

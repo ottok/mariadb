@@ -178,7 +178,12 @@ case "${1:-''}" in
    log_progress_msg "already running"
    log_end_msg 0
   else
-    # Could be removed during boot
+    # Drop temporary symlink to /run/mysqld from mariadb-common when
+    # transitioning from /run/mysqld to /run/mariadbd.
+    if [ -L /run/mariadbd ] && [ ! -d /run/mariadbd ]
+    then
+      rm -f /run/mariadbd
+    fi
     test -e /run/mariadbd || install -m 755 -o mysql -g root -d /run/mariadbd
 
     # Start MariaDB!
