@@ -1,5 +1,6 @@
 mariadb (1:11.8.9+ds-0+deb13u1) trixie; urgency=medium
 
+  [ Otto Kekäläinen ]
   * New upstream maintenance release version 11.8.9. Includes several fixes as
     noted at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.9
     and also the following security issues:
@@ -10,12 +11,28 @@ mariadb (1:11.8.9+ds-0+deb13u1) trixie; urgency=medium
     - CVE-2026-47023
     - CVE-2026-60184
   * Drop patches applied upstream
+  * Update configuration traces to match changes in system variables
+    - New option innodb-index-shrink (default TRUE)
+  * Skip tests main.mysql_client_test* as they require Internet access
   * Salsa CI: Clean away now defunct Bullseye upgrade test jobs
   * Salsa CI: Clean away defunct MariaDB.org Debian sid upgrade scenarios
   * Update watch file and more to match repacking in Debian unstable as there
     can be only one MariaDB 11.8.9 upstream tarball in Debian, and hence this
     version in Trixie must have identical configuration for reproducing the
     upstream tarball
+  * Salsa CI: Clean away now defunct Bullseye upgrade test jobs
+  * Salsa CI: Clean away defunct MariaDB.org Debian sid upgrade scenarios
+  * Add Lintian override for new upstream version test file
+  * Extend test skip lists after witnessing frequent sporadic failures on armhf
+  * Update watch file and more to match repacking in Debian unstable as there
+    can be only one MariaDB 11.8.9 upstream tarball in Debian, and hence this
+    version in Trixie must have identical configuration for reproducing the
+    upstream tarball
+  * Backport upstream patch to fix CONC-821 (Closes: #1139473, #1141671,
+    #1144671)
+
+  [ Daniel Black ]
+  * MDEV-39584: update help sql tables and replace KB links
 
  -- Otto Kekäläinen <otto@debian.org>  Thu, 17 Sep 2026 17:17:17 +0000
 
