@@ -1,5 +1,17 @@
-mariadb (1:10.11.18-0+deb12u2) UNRELEASED; urgency=medium
+mariadb (1:10.11.19-0+deb12u1) bookworm; urgency=medium
 
+  [ Otto Kekäläinen ]
+  * New upstream maintenance 10.11.19 includes several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.11/10.11.19
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-61081
+    - CVE-2026-60585
+    - CVE-2026-60331
+    - CVE-2026-60747
+    - CVE-2026-47023
+    - CVE-2026-60184
+
+  [ Luke Yasuda ]
   * Cherry-pick these changes by Michael Biebl (Closes: #1141976)
     - Install .service files via .install and and let
       dh_installinit/dh_systemd generate the maintscript code
@@ -7,7 +19,7 @@ mariadb (1:10.11.18-0+deb12u2) UNRELEASED; urgency=medium
     - Drop unnecessary mariadb-server.prerm
     - Rely on dh_installsystemd to stop the service in postrm
 
- -- Luke Yasuda <jing@jing.rocks>  Mon, 24 Aug 2026 15:10:46 +0900
+ -- Otto Kekäläinen <otto@debian.org>  Fri, 18 Sep 2026 08:08:08 +0000
 
 mariadb (1:10.11.18-0+deb12u1) bookworm; urgency=medium
 
