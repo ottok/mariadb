@@ -13,11 +13,18 @@ mariadb (1:10.11.19-0+deb12u1) bookworm; urgency=medium
 
   [ Luke Yasuda ]
   * Cherry-pick these changes by Michael Biebl (Closes: #1141976)
-    - Install .service files via .install and and let
+    - Install .service files via .install and let
       dh_installinit/dh_systemd generate the maintscript code
     - Switch to dh_installsystemd and debhelper compat 13
     - Drop unnecessary mariadb-server.prerm
     - Rely on dh_installsystemd to stop the service in postrm
+  * While the above changes are extensive, they are needed to properly handle
+    the systemd service file bugfixes done by upstream in 10.11.17/18. The
+    changes have been in newer Debian versions already for well over two years
+    and have been reviewed by multiple people to be safe for a maintenance
+    release in Debian Bookworm. The change also brings two new systemd files
+    (mariadb-extra.socket and mariadb-extra@.socket) but they are not active by
+    defaut.
 
  -- Otto Kekäläinen <otto@debian.org>  Fri, 18 Sep 2026 08:08:08 +0000
 
