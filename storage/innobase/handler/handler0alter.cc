@@ -8565,9 +8565,12 @@ err_exit:
 		     i++) {
 			Field* field = table->field[i];
 
-			/* Altering the virtual column is not
-			supported for inplace alter algorithm */
-			if (field->vcol_info) {
+			/* Skip the virtual columns. They are not
+			present in InnoDB dictionary cols[] array, so
+			they must not shift the field-to-column mapping
+			below. Stored generated columns do have an
+			InnoDB column and must be counted as stored. */
+			if (!field->stored_in_db()) {
 				n_v_col++;
 				continue;
 			}

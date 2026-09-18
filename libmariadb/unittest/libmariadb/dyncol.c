@@ -43,6 +43,7 @@ static int create_dyncol_named(MYSQL *mysql)
   uint my_count;
 
   vals= (DYNAMIC_COLUMN_VALUE *)malloc(column_count * sizeof(DYNAMIC_COLUMN_VALUE));
+  check(vals);
 
   for (i=0; i < column_count; i++)
   {
@@ -299,7 +300,35 @@ static int dyncol_nested(MYSQL *mysql __attribute__((unused)))
   return OK;
 }
 
+static int test_conc844(MYSQL *mysql __attribute__((unused)))
+{
+  DYNAMIC_COLUMN str;
+  enum enum_dyncol_func_result rc;
+  DYNAMIC_COLUMN_VALUE value;
+  MYSQL_LEX_STRING ls= {(char*)"test_key", 8};
+
+  uchar corrupted_blob[] = {
+    0x04,                   /* Format byte: offset_size = 2, fixed_hdr = 5 */
+    0x02, 0x00,             /* Column count = 2 */
+    0xFF, 0x0F              /* nmpool_size = 4095 bytes (exceeds actual blob length) */
+  };
+
+  memset(&str, 0, sizeof(str));
+  str.str = (char *)corrupted_blob;
+  str.length = sizeof(corrupted_blob); /* Total buffer length is only 5 bytes */
+
+  /* Call a public API function that invokes init_read_hdr() */
+  rc = mariadb_dyncol_get_named(&str, &ls, &value);
+
+  /* Before fix: Crashes / OOB read / returns unexpected error */
+  /* After fix:  Must safely return ER_DYNCOL_FORMAT */
+  FAIL_IF(rc != ER_DYNCOL_FORMAT, "expected format error");
+
+  return OK;
+}
+
 struct my_tests_st my_tests[] = {
+  {"test_conc844", test_conc844, TEST_CONNECTION_NEW, 0, NULL, NULL}, 
   {"mdev_x1", mdev_x1, TEST_CONNECTION_NEW, 0, NULL, NULL}, 
   {"mdev_4994", mdev_4994, TEST_CONNECTION_NEW, 0, NULL, NULL}, 
   {"create_dyncol_named", create_dyncol_named, TEST_CONNECTION_NEW, 0, NULL, NULL}, 

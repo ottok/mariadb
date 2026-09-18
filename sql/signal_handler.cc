@@ -1,5 +1,5 @@
 /* Copyright (c) 2011, 2012, Oracle and/or its affiliates.
-   Copyright (c) 2011, 2021, MariaDB Corporation.
+   Copyright (c) 2011, 2026, MariaDB plc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -198,14 +198,16 @@ extern "C" sig_handler handle_fatal_signal(int sig)
   my_safe_printf_stderr("%s",
                         "Sorry, we probably made a mistake, and this is a bug.\n\n"
                         "Your assistance in bug reporting will enable us to fix this for the next release.\n"
-                        "To report this bug, see https://mariadb.com/kb/en/reporting-bugs about how to report\n"
+                        "To report this bug, see https://mariadb.com/docs/general-resources/community/community/bug-tracking/reporting-bugs about how to report\n"
                         "a bug on https://jira.mariadb.org/.\n\n"
                         "Please include the information from the server start above, to the end of the\n"
                         "information below.\n\n");
 
-  set_server_version(server_version, sizeof(server_version));
+  /* print the real version on crash */
+  char real_version[SERVER_VERSION_LENGTH];
+  set_server_version(real_version, sizeof(real_version));
   my_safe_printf_stderr("Server version: %s source revision: %s\n\n",
-                        server_version, SOURCE_REVISION);
+                        real_version, SOURCE_REVISION);
 
 #ifdef WITH_WSREP
   Wsrep_server_state::handle_fatal_signal();
@@ -218,7 +220,7 @@ extern "C" sig_handler handle_fatal_signal(int sig)
   {
     my_safe_printf_stderr("%s",
       "The information page at "
-      "https://mariadb.com/kb/en/how-to-produce-a-full-stack-trace-for-mariadbd/\n"
+      "https://mariadb.com/docs/server/reference/product-development/mariadb-fault-finding/how-to-produce-a-full-stack-trace-for-mariadbd"
       "contains instructions to obtain a better version of the backtrace below.\n"
       "Following these instructions will help MariaDB developers provide a fix quicker.\n\n"
       "Attempting backtrace. Include this in the bug report.\n"

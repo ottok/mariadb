@@ -956,6 +956,12 @@ Type_handler::aggregate_for_result_traditional(const Type_handler *a,
     }
     return a;
   }
+  /* Keep a hex hybrid through a typeless NULL (as the rules keep BIT); the
+     merge below has no hybrid type and would demote it to VARCHAR. */
+  if (a == &type_handler_hex_hybrid && b == &type_handler_null)
+    return a;
+  if (b == &type_handler_hex_hybrid && a == &type_handler_null)
+    return b;
   enum_field_types ta= a->traditional_merge_field_type();
   enum_field_types tb= b->traditional_merge_field_type();
   enum_field_types res= field_types_merge_rules[merge_type2index(ta)]
@@ -8601,7 +8607,7 @@ int Field_longstr::compress(char *to, uint to_length,
     /* Store uncompressed */
     to[0]= 0;
     if (buf_length < to_length)
-      memcpy(to + 1, buf, buf_length);
+      memmove(to + 1, buf, buf_length);
     else
     {
       /* Storing string at blob capacity, e.g. 255 bytes string to TINYBLOB. */
@@ -9035,10 +9041,14 @@ uint Field_blob::get_key_image_itRAW(const uchar *ptr_arg, uchar *buff,
 {
   size_t blob_length= get_length(ptr_arg);
   const uchar *blob= get_ptr(ptr_arg);
-  size_t local_char_length= length / mbmaxlen();
-  local_char_length= field_charset()->charpos(blob, blob + blob_length,
-                                              local_char_length);
-  set_if_smaller(blob_length, local_char_length);
+  if (blob_length > 0)
+  {
+    size_t local_char_length= length / mbmaxlen();
+    DBUG_ASSERT(blob);
+    local_char_length= field_charset()->charpos(blob, blob + blob_length,
+                                                local_char_length);
+    set_if_smaller(blob_length, local_char_length);
+  }
 
   if (length > blob_length)
   {

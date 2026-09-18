@@ -244,7 +244,7 @@ static void load_env_plugins(MYSQL *mysql)
   if (ma_check_env_str(s))
     return;
 
-  free_env= strdup(s);
+  free_env= strdup(s); // @infer-ignore NULLPTR_DEREFERENCE
   plugs= s= free_env;
 
   if (!free_env)

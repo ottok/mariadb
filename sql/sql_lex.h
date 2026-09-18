@@ -754,7 +754,6 @@ public:
       UNCACHEABLE_RAND
       UNCACHEABLE_SIDEEFFECT
       UNCACHEABLE_EXPLAIN
-      UNCACHEABLE_PREPARE
   */
 
   bool is_linkage_set() const
@@ -1181,7 +1180,13 @@ public:
 
   /* List of references to fields referenced from inner selects */
   List<Item_outer_ref> inner_refs_list;
+
+  /*
+    Pushdown from HAVING into WHERE optimization: conditions from the HAVING
+    clause that should be added into the WHERE.
+  */
   List<Item> attach_to_conds;
+
   /* Saved values of the WHERE and HAVING clauses*/
   Item::cond_result cond_value, having_value;
   /* 
@@ -2025,7 +2030,7 @@ public:
 
     /**
        INSERT .. SELECT ... SKIP LOCKED is unlikely to have the same
-       rows locked on the replica.
+       rows locked on the slave.
        primary key.
     */
     BINLOG_STMT_UNSAFE_SKIP_LOCKED,
