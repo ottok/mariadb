@@ -633,9 +633,16 @@ static void convert_from_long(MYSQL_BIND *r_param, const MYSQL_FIELD *field, lon
       dbl= (is_unsigned) ? ulonglong2double((ulonglong)val) : (double)val;
       doublestore(r_param->buffer, dbl);
 
-      *r_param->error = (dbl != ceil(dbl)) ||
-                         (is_unsigned ? (ulonglong )dbl != (ulonglong)val :
-                                        (longlong)dbl != (longlong)val);
+      if (dbl != ceil(dbl))
+        *r_param->error= 1;
+      else if (is_unsigned)
+        *r_param->error= dbl < 0 ||
+                          dbl >= (double)ULONGLONG_MAX ||
+                          (ulonglong)dbl != (ulonglong)val;
+      else
+        *r_param->error= dbl < (double)LONGLONG_MIN ||
+                          dbl >= (double)LONGLONG_MAX ||
+                          (longlong)dbl != (longlong)val;
 
       r_param->buffer_length= 8;
       break;
@@ -645,9 +652,18 @@ static void convert_from_long(MYSQL_BIND *r_param, const MYSQL_FIELD *field, lon
       volatile float fval;
       fval= is_unsigned ? (float)(ulonglong)(val) : (float)val;
       floatstore((uchar *)r_param->buffer, fval);
-      *r_param->error= (fval != ceilf(fval)) ||
-                        (is_unsigned ? (ulonglong)fval != (ulonglong)val :
-                                       (longlong)fval != val);
+
+      if (fval != ceilf(fval))
+        *r_param->error= 1;
+      else if (is_unsigned)
+        *r_param->error= fval < 0 ||
+                          fval >= (float)ULONGLONG_MAX ||
+                          (ulonglong)fval != (ulonglong)val;
+      else
+        *r_param->error= fval < (float)LONGLONG_MIN ||
+                          fval >= (float)LONGLONG_MAX ||
+                          (longlong)fval != val;
+
       r_param->buffer_length= 4;
     }
     break;

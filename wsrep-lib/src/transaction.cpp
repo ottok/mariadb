@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2018-2025 Codership Oy <info@codership.com>
  *
  * This file is part of wsrep-lib.
  *
@@ -138,6 +138,7 @@ int wsrep::transaction::start_transaction(
     state_hist_.clear();
     ws_handle_ = wsrep::ws_handle(id);
     flags(wsrep::provider::flag::start_transaction);
+    client_service_.notify_state_change();
     switch (client_state_.mode())
     {
     case wsrep::client_state::m_high_priority:
@@ -167,6 +168,7 @@ int wsrep::transaction::start_transaction(
         id_ = ws_meta.transaction_id();
         assert(client_state_.mode() == wsrep::client_state::m_high_priority);
         state_ = s_executing;
+        client_service_.notify_state_change();
         state_hist_.clear();
         ws_handle_ = ws_handle;
         ws_meta_ = ws_meta;
@@ -1140,6 +1142,7 @@ void wsrep::transaction::clone_for_replay(const wsrep::transaction& other)
     ws_meta_ = other.ws_meta_;
     streaming_context_ = other.streaming_context_;
     state_ = s_replaying;
+    client_service_.notify_state_change();
 }
 
 void wsrep::transaction::assign_xid(const wsrep::xid& xid)
@@ -1197,15 +1200,26 @@ int wsrep::transaction::commit_or_rollback_by_xid(const wsrep::xid& xid,
                      sa->transaction().id(),
                      client_state_.id());
     wsrep::ws_meta meta(stid);
-
+    lock.unlock();
     const enum wsrep::provider::status cert_ret(
         provider().certify(client_state_.id(),
                            ws_handle_,
                            flags(),
                            meta, nullptr));
-
+    client_service_.debug_sync("wsrep_commit_or_rollback_by_xid_after_certify");
+    lock.lock();
     int ret;
-    if (cert_ret == wsrep::provider::success)
+    if (state_ == s_must_abort) {
+        /* This is hyphotetical situation: Commit or rollback by XID
+        * typically happens from a client context which does not have an active
+        * transaction, so there should not a possibility of BF abort. There
+        * may however be other corner cases (e.g. client session becomes killed
+        * during commit/rollback by XID), so this case must be handled
+        * neverteless. */
+        client_state_.override_error(wsrep::e_error_during_commit);
+        ret = 1;
+    }
+    else if (cert_ret == wsrep::provider::success)
     {
         if (commit)
         {
@@ -1222,6 +1236,7 @@ int wsrep::transaction::commit_or_rollback_by_xid(const wsrep::xid& xid,
     }
     else
     {
+        state(lock, s_must_abort);
         client_state_.override_error(wsrep::e_error_during_commit,
                                      cert_ret);
         wsrep::log_error() << "Failed to commit_or_rollback_by_xid,"
@@ -1383,6 +1398,7 @@ void wsrep::transaction::state(
         state_hist_.erase(state_hist_.begin());
     }
     state_ = next_state;
+    client_service_.notify_state_change();
 
     if (state_ == s_must_replay)
     {

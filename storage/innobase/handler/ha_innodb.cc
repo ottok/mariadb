@@ -2868,7 +2868,7 @@ static int innobase_close_connection(handlerton *, THD *thd) noexcept
     case TRX_STATE_PREPARED:
       if (trx->has_logged_persistent())
       {
-        trx_disconnect_prepared(trx);
+        trx->disconnect_prepared();
         return 0;
       }
       /* fall through */
@@ -3377,30 +3377,15 @@ innobase_quote_identifier(
 	const trx_t*	trx,
 	const char*	id)
 {
-	const int	q = trx != NULL && trx->mysql_thd != NULL
-		? get_quote_char_for_identifier(trx->mysql_thd, id, strlen(id))
-		: '`';
-
-	if (q == EOF) {
-		fputs(id, file);
-	} else {
-		putc(q, file);
-
-		while (int c = *id++) {
-			if (c == q) {
-				putc(c, file);
-			}
-			putc(c, file);
-		}
-
-		putc(q, file);
-	}
+  std::string str = innobase_quote_identifier(trx, id);
+  fputs(str.c_str(), file);
 }
 
-/** Quote a standard SQL identifier like tablespace, index or column name.
+/** Quote a standard SQL identifier
 @param[in]	trx	InnoDB transaction, or NULL
 @param[in]	id	identifier to quote
-@return quoted identifier */
+@return quoted identifier
+Assumes the identifier in utf8mb4 character set (cf. append_identifier()) */
 std::string
 innobase_quote_identifier(
 /*======================*/
@@ -3416,7 +3401,12 @@ innobase_quote_identifier(
 		quoted_identifier.append(id);
 	} else {
 		quoted_identifier += char(q);
-		quoted_identifier.append(id);
+		while (int c = *id++) {
+			if (c == q) {
+				quoted_identifier += char(c);
+			}
+			quoted_identifier += char(c);
+		}
 		quoted_identifier += char(q);
 	}
 
@@ -3818,7 +3808,7 @@ static int innodb_init_params()
   }
 
   if (compression_algorithm_is_not_loaded(innodb_compression_algorithm, ME_ERROR_LOG))
-    DBUG_RETURN(HA_ERR_INITIALIZATION);
+    DBUG_RETURN(HA_ERR_RETRY_INIT);
 
   if ((srv_encrypt_tables || srv_encrypt_log ||
        innodb_encrypt_temporary_tables) &&
@@ -4273,6 +4263,8 @@ innobase_end(handlerton*, ha_panic_function)
 		innodb_shutdown();
 		mysql_mutex_destroy(&log_requests.mutex);
 	}
+	else
+		buf_mem_pressure_shutdown();
 
 	DBUG_RETURN(0);
 }
@@ -5843,7 +5835,7 @@ ha_innobase::open(const char* name, int, uint)
 			" defined columns in InnoDB, but " << n_fields
 			<< " columns in MariaDB. Please check"
 			" INFORMATION_SCHEMA.INNODB_SYS_COLUMNS and"
-			" https://mariadb.com/kb/en/innodb-data-dictionary-troubleshooting/"
+			" https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-troubleshooting/innodb-data-dictionary-troubleshooting"
 			" for how to resolve the issue.";
 
 		/* Mark this table as corrupted, so the drop table
@@ -11290,7 +11282,13 @@ create_table_info_t::check_table_options()
 				" ENCRYPTION_KEY_ID=1");
 			compile_time_assert(FIL_DEFAULT_ENCRYPTION_KEY == 1);
 		}
-		if (srv_encrypt_tables != 2) {
+		/* m_trx is non-NULL because TRUNCATE that
+		passes its own transaction. TRUNCATE recreates
+		the table preserving the original ENCRYPTED=NO
+		attribute; bypass the innodb_encrypt_tables=FORCE
+		check here so the encryption state does not
+		silently change across a TRUNCATE. */
+		if (m_trx || srv_encrypt_tables != 2) {
 			break;
 		}
 		push_warning(
@@ -13885,6 +13883,26 @@ int ha_innobase::truncate()
   if (ib_table->is_temporary())
   {
     info.options|= HA_LEX_CREATE_TMP_TABLE;
+
+    /* Validate the create options before dropping the existing
+    table, so that a validation failure leaves the original table
+    intact instead of dropping it and then failing in create(),
+    which would leave the handler without a table. */
+    {
+      char norm_name[FN_REFLEN], remote_path[FN_REFLEN];
+      create_table_info_t validate(m_user_thd, table, &info, norm_name,
+                                   remote_path, true, trx);
+      int err= validate.initialize();
+      if (!err)
+        err= validate.prepare_create_table(ib_table->name.m_name, false);
+      if (err)
+      {
+        trx_rollback_for_mysql(trx);
+        trx->free();
+        DBUG_RETURN(err);
+      }
+    }
+
     btr_drop_temporary_table(*ib_table);
     m_prebuilt->table= nullptr;
     row_prebuilt_free(m_prebuilt);
@@ -17745,7 +17763,9 @@ func_exit:
 					   [FIL_PAGE_SPACE_ID]);
 	}
 	mtr.commit();
-	log_write_up_to(mtr.commit_lsn(), true);
+	if (lsn_t lsn = mtr.commit_lsn()) {
+		log_write_up_to(lsn, true);
+	}
 	goto func_exit;
 }
 #endif // UNIV_DEBUG
@@ -21032,11 +21052,11 @@ ib_errf(
 /* Keep the first 16 characters as-is, since the url is sometimes used
 as an offset from this.*/
 const char*	TROUBLESHOOTING_MSG =
-	"Please refer to https://mariadb.com/kb/en/innodb-troubleshooting/"
+	"Please refer to https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-troubleshooting"
 	" for how to resolve the issue.";
 
 const char*	TROUBLESHOOT_DATADICT_MSG =
-	"Please refer to https://mariadb.com/kb/en/innodb-data-dictionary-troubleshooting/"
+	"Please refer to https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-troubleshooting/innodb-data-dictionary-troubleshooting"
 	" for how to resolve the issue.";
 
 const char*	BUG_REPORT_MSG =
@@ -21044,22 +21064,22 @@ const char*	BUG_REPORT_MSG =
 
 const char*	FORCE_RECOVERY_MSG =
 	"Please refer to "
-	"https://mariadb.com/kb/en/library/innodb-recovery-modes/"
+	"https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-troubleshooting/innodb-recovery-modes"
 	" for information about forcing recovery.";
 
 const char*	OPERATING_SYSTEM_ERROR_MSG =
 	"Some operating system error numbers are described at"
-	" https://mariadb.com/kb/en/library/operating-system-error-codes/";
+	" https://mariadb.com/docs/server/reference/error-codes/operating-system-error-codes";
 
 const char*	FOREIGN_KEY_CONSTRAINTS_MSG =
-	"Please refer to https://mariadb.com/kb/en/library/foreign-keys/"
+	"Please refer to https://mariadb.com/docs/server/ha-and-performance/optimization-and-tuning/optimization-and-indexes/foreign-keys"
 	" for correct foreign key definition.";
 
 const char*	SET_TRANSACTION_MSG =
-	"Please refer to https://mariadb.com/kb/en/library/set-transaction/";
+	"Please refer to https://mariadb.com/docs/server/reference/sql-statements/administrative-sql-statements/set-commands/set-transaction";
 
 const char*	INNODB_PARAMETERS_MSG =
-	"Please refer to https://mariadb.com/kb/en/library/innodb-system-variables/";
+	"Please refer to https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-system-variables";
 
 /**********************************************************************
 Converts an identifier from my_charset_filename to UTF-8 charset.
@@ -21250,7 +21270,7 @@ ib_push_frm_error(
 			" Have you mixed up "
 			".frm files from different "
 			"installations? See "
-			"https://mariadb.com/kb/en/innodb-troubleshooting/\n",
+			"https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-troubleshooting",
 			ib_table->name.m_name);
 
 		if (push_warning) {
@@ -21290,7 +21310,7 @@ ib_push_frm_error(
 			"indexes inside InnoDB, which "
 			"is different from the number of "
 			"indexes %u defined in the .frm file. See "
-			"https://mariadb.com/kb/en/innodb-troubleshooting/\n",
+			"https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-troubleshooting",
 			ib_table->name.m_name, n_keys,
 			table->s->keys);
 

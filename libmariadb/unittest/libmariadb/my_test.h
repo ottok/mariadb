@@ -195,6 +195,14 @@ do {\
   }\
 } while(0)
 
+#define check(expr)\
+do {\
+  if (!(expr)) {\
+    diag("Out of memory (%s:%d)", __FILE__, __LINE__);\
+    return FAIL;\
+  }\
+} while(0)
+
 /* connection options */
 #define TEST_CONNECTION_DEFAULT    1 /* default connection */
 #define TEST_CONNECTION_NONE       2 /* tests creates own connection */

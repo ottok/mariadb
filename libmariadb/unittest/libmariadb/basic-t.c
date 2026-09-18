@@ -414,6 +414,8 @@ static int test_mysql_insert_id(MYSQL *mysql)
   unsigned long long res;
   int rc;
 
+  SKIP_MYSQL(mysql);
+
   if (mysql_get_server_version(mysql) < 50100) {
     diag("Test requires MySQL Server version 5.1 or above");
     return SKIP;
@@ -708,6 +710,8 @@ static int test_extended_init_values(MYSQL *unused __attribute__((unused)))
 {
   MYSQL *mysql= mysql_init(NULL);
 
+  check(mysql);
+
   mysql_options(mysql, MYSQL_DEFAULT_AUTH, "unknown");
   FAIL_IF(strcmp(mysql->options.extension->default_auth, "unknown"), "option not set");
 
@@ -731,6 +735,7 @@ static int test_reconnect_maxpackage(MYSQL *unused __attribute__((unused)))
   SKIP_CONNECTION_HANDLER;
 
   mysql= mysql_init(NULL);
+  check(mysql);
 
   FAIL_IF(!my_test_connect(mysql, hostname, username, password, schema,
                               port, socketname,
