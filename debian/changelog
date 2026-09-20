@@ -33,6 +33,7 @@ mariadb (1:10.11.18-0+deb12u1) bookworm; urgency=medium
   * Previous upstream maintenance 10.11.17 included several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.11/10.11.17
     and fixes for the following CVE tracked security issues:
+    - CVE-2026-47064
     - CVE-2026-44173
     - CVE-2026-44172
     - CVE-2026-44171
