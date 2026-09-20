@@ -1,4 +1,4 @@
-mariadb (1:10.11.19-0+deb12u1) bookworm; urgency=medium
+mariadb (1:10.11.19-0+deb12u1) bookworm-security; urgency=medium
 
   [ Otto Kekäläinen ]
   * New upstream maintenance 10.11.19 includes several fixes as listed at
@@ -10,6 +10,13 @@ mariadb (1:10.11.19-0+deb12u1) bookworm; urgency=medium
     - CVE-2026-60747
     - CVE-2026-47023
     - CVE-2026-60184
+  * Update server trace to match new line-wrapping
+  * Skip tests main.mysql_client_test* as they require Internet access
+  * Add Lintian override for new upstream version test file
+  * Extend test skip lists after witnessing frequent sporadic failures on armhf
+  * Salsa CI: Clean away Bullseye tests due to broken security updates
+  * Backport upstream patch to fix CONC-821 (Closes: #1139473, #1141671,
+    #1144671)
 
   [ Luke Yasuda ]
   * Cherry-pick these changes by Michael Biebl (Closes: #1141976)
@@ -24,7 +31,7 @@ mariadb (1:10.11.19-0+deb12u1) bookworm; urgency=medium
     and have been reviewed by multiple people to be safe for a maintenance
     release in Debian Bookworm. The change also brings two new systemd files
     (mariadb-extra.socket and mariadb-extra@.socket) but they are not active by
-    defaut.
+    default.
 
  -- Otto Kekäläinen <otto@debian.org>  Fri, 18 Sep 2026 08:08:08 +0000
 
