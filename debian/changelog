@@ -1,3 +1,21 @@
+mariadb (1:11.8.9+ds-3) unstable; urgency=medium
+
+  [ Lena Voytek ]
+  * Update configuration-tracing test to consider OpenSSL 4 dependency
+  * Swap runtime dir to /run/mariadbd in packaging
+  * Add patch to swap upstream rundir
+  * Temporarily link /run/mariadbd to /run/mysqld during upgrade transition
+  * Update socket in debian/mariadb_config
+  * Move old MySQL debian.cnf on new install
+
+  [ Otto Kekäläinen ]
+  * Mark libnet-ssleay-perl as native for cross‑compilation
+  * Mark default-jdk as native for cross‑compilation to generate
+    JdbcInterface.jar
+  * Add patch to build mariadb-migrate-config-file when cross-compiling
+
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 20 Sep 2026 13:13:13 +0000
+
 mariadb (1:11.8.9+ds-2) unstable; urgency=medium
 
   * Add missing --version_cc to the custom `mariadb_config` (Closes: #1146585) *
