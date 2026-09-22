@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2016, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2024, MariaDB Corporation.
+   Copyright (c) 2009, 2026, MariaDB plc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -645,7 +645,7 @@ extern const LEX_CSTRING Diag_condition_item_names[];
   These states are bit coded with HARD. For each state there must be a pair
   <state_even_num>, and <state_odd_num>_HARD.
 */
-enum killed_state
+enum killed_state : uint32_t
 {
   NOT_KILLED= 0,
   KILL_HARD_BIT= 1,                             /* Bit for HARD KILL */
@@ -1856,7 +1856,7 @@ public:
   void
   restore_security_context(THD *thd, Security_context *backup);
 #endif
-  bool user_matches(Security_context *);
+  bool priv_user_matches(const Security_context *) const;
   /**
     Check global access
     @param want_access The required privileges
@@ -1865,7 +1865,7 @@ public:
     @return True if the security context fulfills the access requirements.
   */
   bool check_access(const privilege_t want_access, bool match_any = false);
-  bool is_priv_user(const LEX_CSTRING &user, const LEX_CSTRING &host);
+  bool is_priv_user(const LEX_CSTRING &user, const LEX_CSTRING &host) const;
   bool is_user_defined() const
     { return user && user != delayed_user && user != slave_user && user != wsrep_user; };
 };
@@ -3579,7 +3579,16 @@ public:
       void reset(THD *thd)
       {
         tv_sec= thd->query_start();
-        tv_usec= (long) thd->query_start_sec_part();
+
+        /*
+          The type of tv_usec depends on the system and on macOS
+          it is __darwin_suseconds_t.  Using decltype is system
+          agnostic because its result is whatever the underlying
+          type of tv_usec is.  This should be more portable than
+          assuming that the left hand side is (long) (the previous
+          cast value).
+         */
+        tv_usec= static_cast<decltype(tv_usec)>(thd->query_start_sec_part());
       }
     } start_time;
 
@@ -5675,6 +5684,7 @@ public:
 
   void mark_transaction_to_rollback(bool all);
   bool internal_transaction() { return transaction != &default_transaction; }
+  MEM_ROOT *user_vars_root() { return &user_vars_memroot; }
 private:
 
   /** The current internal error handler for this thread, or NULL. */
@@ -5696,6 +5706,10 @@ private:
     tree itself is reused between executions and thus is stored elsewhere.
   */
   MEM_ROOT main_mem_root;
+  /**
+    Memory root the user_var_entry objects and their names are allocated on.
+  */
+  MEM_ROOT user_vars_memroot;
   Diagnostics_area main_da;
   Diagnostics_area *m_stmt_da;
 
@@ -5732,7 +5746,7 @@ public:
       1) Non-leader threads use COND_wakeup_ready to wait for the leader thread
          to complete binlog commit.
       2) The leader thread uses COND_wakeup_ready to await ACKs from the
-         replica before signalling the non-leader threads to wake up.
+         slave before signalling the non-leader threads to wake up.
 
     With wait_point=AFTER_COMMIT, there is no overlap as binlogging has
     finished, so COND_wakeup_ready is safe to re-use.
@@ -6187,12 +6201,6 @@ public:
              (variables.note_verbosity & NOTE_VERBOSITY_EXPLAIN)));
   }
 
-  uint gconcat_max_len()
-  {
-    return MY_MIN(variables.group_concat_max_len,
-                  (uint)variables.max_allowed_packet);
-  }
-
   bool vers_insert_history_fast(const TABLE *table)
   {
     DBUG_ASSERT(table->versioned());
@@ -6245,6 +6253,9 @@ public:
   bool report_collected_unit_results();
   bool init_collecting_unit_results();
   void push_final_warnings();
+
+  uint gconcat_max_len()
+  { return (uint) MY_MIN(variables.group_concat_max_len, variables.max_allowed_packet); }
 };
 
 

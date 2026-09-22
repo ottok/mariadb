@@ -1,7 +1,0 @@
-use autopilot;
-START TRANSACTION;
-UPDATE datatypeupdate SET CBIGINT = CDECIMAL5;
-SELECT CBIGINT FROM datatypeupdate;
-CBIGINT
--999
-ROLLBACK;

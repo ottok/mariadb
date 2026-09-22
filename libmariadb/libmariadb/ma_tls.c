@@ -115,7 +115,12 @@ int ma_pvio_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int flags)
 
   /* Skip peer certificate verification */
   if (mysql->options.extension->tls_allow_invalid_server_cert &&
-      (!mysql->options.extension->tls_fp && !mysql->options.extension->tls_fp_list))
+      (!mysql->options.extension->tls_fp &&
+       !mysql->options.extension->tls_fp_list &&
+       !mysql->options.extension->ssl_crl &&
+       !mysql->options.extension->ssl_crlpath &&
+       !mysql->options.ssl_ca &&
+       !mysql->options.ssl_capath))
   {
     /* Since OpenSSL implementation sets status during TLS handshake
        we need to clear verification status */
@@ -269,7 +274,6 @@ static my_bool ma_pvio_tls_compare_fp(MARIADB_TLS *ctls,
   if (!ma_tls_get_finger_print(ctls, hash_type, fp, fp_len))
     return 1;
 
-  p= (char *)cert_fp;
   c = fp;
 
   for (p = (char*)cert_fp; p < cert_fp + cert_fp_len; c++, p += 2)

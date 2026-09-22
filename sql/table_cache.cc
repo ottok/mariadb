@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2012, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2022, MariaDB Corporation.
+   Copyright (c) 2010, 2026, MariaDB plc.
    Copyright (C) 2013 Sergey Vojtovich and MariaDB Foundation
 
    This program is free software; you can redistribute it and/or modify
@@ -56,7 +56,7 @@
 /** Configuration. */
 ulong tdc_size; /**< Table definition cache threshold for LRU eviction. */
 ulong tc_size; /**< Table cache threshold for LRU eviction. */
-uint32 tc_instances;
+READ_ONLY_SYSVAR uint32 tc_instances;
 static size_t tc_allocated_size;
 static std::atomic<uint32_t> tc_active_instances(1);
 static std::atomic<bool> tc_contention_warning_reported;
@@ -632,7 +632,7 @@ bool tdc_init(void)
   minimal in order to reduce number of references to pluggable engines.
 */
 
-void tdc_start_shutdown(void)
+void tdc_start_shutdown(bool use_dummy_thd)
 {
   DBUG_ENTER("tdc_start_shutdown");
   if (tdc_inited)
@@ -645,8 +645,50 @@ void tdc_start_shutdown(void)
     */
     tdc_size= 0;
     tc_size= 0;
+
+    THD *thd= nullptr;
+    bool reset_back_current_thd= false;
+
+    if (use_dummy_thd && _current_thd() == nullptr)
+    {
+      /*
+        There is no active THD, use the surrogate one to handle memory
+        allocations in Sql_alloc::operator new() that uses current_thd()
+        for getting THD to get access to memory allocation API
+      */
+      thd= new THD(0);
+      DBUG_ASSERT(thd != nullptr);
+
+      thd->store_globals();
+      thd->init();
+      thd->set_query_inner((char*) STRING_WITH_LEN("intern:tdc_start_shutdown"),
+                           default_charset_info);
+
+      reset_back_current_thd= true;
+    }
     /* Free all cached but unused TABLEs and TABLE_SHAREs. */
+    /*
+      purge_tables() iterates along opened tables close every one of them.
+      In case tables use triggers it results in destroying sp_head objects
+      for every associated trigger. Destroying an object of the sp_head class
+      leads to deleting sp_instr objects. In case some of SP instruction
+      were previously re-parsed by the reason of changes in tables metadata,
+      the method
+         sp_head::register_instr_mem_root_for_deallocation()
+      is called to add a memory root used for re-parsing to the list of
+      mem_roots to be freed on sp_head destruction. Mem_roots for later
+      destruction are placed on the List that use current_thd() for memory
+      allocation. That is the reason why the dummy THD is created before
+      in case there is no active THD at the moment the function
+      tdc_start_shutdown is invoked.
+    */
     purge_tables();
+
+    if (reset_back_current_thd)
+    {
+      thd->reset_globals();
+      delete thd;
+    }
   }
   DBUG_VOID_RETURN;
 }

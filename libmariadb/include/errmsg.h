@@ -117,10 +117,11 @@ extern const char *mariadb_client_errors[];	/* Error messages */
 #define CR_INVALID_CLIENT_FLAG 5024
 #define CR_STMT_NO_RESULT 5025
 #define CR_ERR_MISSING_ERROR_INFO 5026
+#define CR_ERR_TOO_MUCH_COLUMNS 5027
 
 /* Always last, if you add new error codes please update the
    value for CR_MARIADB_LAST_ERROR */
-#define CR_MARIADB_LAST_ERROR CR_ERR_MISSING_ERROR_INFO
+#define CR_MARIADB_LAST_ERROR CR_ERR_TOO_MUCH_COLUMNS
 
 #endif
 

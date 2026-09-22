@@ -371,9 +371,38 @@ bool Item_subselect::enumerate_field_refs_processor(void *arg)
   return FALSE;
 }
 
+
+/**
+  @brief
+  Set the "eliminated" flag set by mark_as_eliminated_processor().
+
+  @details
+  Table elimination marks every subquery reachable from an eliminated outer
+  join's ON expression as eliminated.
+*/
+
 bool Item_subselect::mark_as_eliminated_processor(void *arg)
 {
   eliminated= TRUE;
+  return FALSE;
+}
+
+/**
+  @brief
+  Clear the "eliminated" flag set by mark_as_eliminated_processor().
+
+  @details
+  Equality propagation (build_equal_items()) can inject a reference to a
+  subquery that lives in another part of the query (e.g. the WHERE clause)
+  into that ON expression.  Such a subquery still has to be executed,
+  so after elimination we walk the surviving expressions and clear the flag
+  on any subquery still referenced from them.
+*/
+
+
+bool Item_subselect::unmark_as_eliminated_processor(void *arg)
+{
+  eliminated= FALSE;
   return FALSE;
 }
 
@@ -473,15 +502,19 @@ public:
   st_select_lex *new_parent; /* Select we're in */
   void visit_field(Item_field *item) override
   {
-    //for (TABLE_LIST *tbl= new_parent->leaf_tables; tbl; tbl= tbl->next_local)
-    //{
-    //  if (tbl->table == field->table)
-    //  {
-        used_tables|= item->field->table->map;
-    //    return;
-    //  }
-    //}
-    //used_tables |= OUTER_REF_TABLE_BIT;
+    DBUG_ASSERT(item->field && item->field->table);
+    if (!item->field->table->pos_in_table_list)
+    {
+      used_tables|= OUTER_REF_TABLE_BIT;
+      return;
+    }
+    st_select_lex *cmp= new_parent;
+    while (cmp->merged_into)
+      cmp= cmp->merged_into;
+    if (item->field->table->pos_in_table_list->select_lex == cmp)
+      used_tables|= item->field->table->map;
+    else
+      used_tables|= OUTER_REF_TABLE_BIT;
   }
 };
 

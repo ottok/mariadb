@@ -1,8 +1,0 @@
-- if no tables involved makeNoTableJobStep
-- Check if constantBooleanSteps is false => sets jobInfo.constantFalse | constant expression evaluates to false 
-- [[JOIN-related processing]]
-- spanningTreeCheck
-- [[combineJobStepsByTable]]
-- joinTables
-- add JOIN query steps in JOIN order 
-- [[adjustLastStep]]

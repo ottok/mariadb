@@ -162,12 +162,31 @@ do {\
   }\
 } while(0)
 
+#define check_mysql_err(rc, mysql) \
+do {\
+  if (rc)\
+  {\
+    diag("Error (%d): %s (%d) in %s line %d", rc, mysql_error(mysql), \
+         mysql_errno(mysql), __FILE__, __LINE__);\
+    goto error;\
+  }\
+} while(0)
+
 #define check_stmt_rc(rc, stmt) \
 do {\
   if (rc)\
   {\
     diag("Error: %s (%s: %d)", mysql_stmt_error(stmt), __FILE__, __LINE__);\
     return(FAIL);\
+  }\
+} while(0)
+
+#define check_stmt_err(rc, stmt) \
+do {\
+  if (rc)\
+  {\
+    diag("Error: %s (%s: %d)", mysql_stmt_error(stmt), __FILE__, __LINE__);\
+    goto error;\
   }\
 } while(0)
 
@@ -195,6 +214,14 @@ do {\
   {\
     diag("Test skipped (connection handler)");\
     return SKIP;\
+  }\
+} while(0)
+
+#define check(expr)\
+do {\
+  if (!(expr)) {\
+    diag("Out of memory (%s:%d)", __FILE__, __LINE__);\
+    return FAIL;\
   }\
 } while(0)
 
