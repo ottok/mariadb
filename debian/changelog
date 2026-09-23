@@ -1,3 +1,11 @@
+mariadb (1:11.8.9+ds-4) unstable; urgency=medium
+
+  [ Lena Voytek ]
+  * Add link from /run/mysqld to /run/mariadbd in mariadb-server-compat
+    (Closes: #1148646)
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 23 Sep 2026 10:10:10 +0000
+
 mariadb (1:11.8.9+ds-3) unstable; urgency=medium
 
   [ Lena Voytek ]
