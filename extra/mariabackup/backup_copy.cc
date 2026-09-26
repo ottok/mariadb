@@ -1540,13 +1540,17 @@ ibx_copy_incremental_over_full()
 
 		if (directory_exists(ROCKSDB_BACKUP_DIR, false)) {
 			if (my_rmtree(ROCKSDB_BACKUP_DIR, MYF(0))) {
-				die("Can't remove " ROCKSDB_BACKUP_DIR);
+				msg("Can't remove " ROCKSDB_BACKUP_DIR);
+				ret = false;
+				goto cleanup;
 			}
 		}
 		snprintf(path, sizeof(path), "%s/" ROCKSDB_BACKUP_DIR, xtrabackup_incremental_dir);
 		if (directory_exists(path, false)) {
 			if (my_mkdir(ROCKSDB_BACKUP_DIR, 0777, MYF(0))) {
-				die("my_mkdir failed for " ROCKSDB_BACKUP_DIR);
+				msg("my_mkdir failed for " ROCKSDB_BACKUP_DIR);
+				ret = false;
+				goto cleanup;
 			}
 			ds_data->copy_or_move_dir(path, ROCKSDB_BACKUP_DIR, true, true);
 		}
@@ -1753,7 +1757,7 @@ copy_back()
 
 	for (uint i = 1; i <= TRX_SYS_MAX_UNDO_SPACES; i++) {
 		char filename[20];
-		sprintf(filename, "undo%03u", i);
+		snprintf(filename, sizeof(filename), "undo%03u", i);
 		if (!file_exists(filename)) {
 			break;
 		}
@@ -1951,6 +1955,14 @@ decrypt_decompress_file(const char *filepath, uint thread_n)
  	if (needs_action) {
 
 		msg(thread_n,"%s\n", message.str().c_str());
+
+                /* all valid *.qp files are table-name-safe */
+                for (const char *s=filepath; *s; s++)
+                  if (!isalnum(*s) && !strchr("-.@/_#", *s))
+                  {
+                    msg(thread_n,"Error: invalid file name\n");
+                    return(false);
+                  }
 
 	 	if (system(cmd.str().c_str()) != 0) {
 	 		return(false);

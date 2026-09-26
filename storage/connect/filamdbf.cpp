@@ -246,7 +246,7 @@ PQRYRES DBFColumns(PGLOBAL g, PCSZ dp, PCSZ fn, PTOS topt, bool info)
   bool       bad, mul;
 	PCSZ       target, pwd;
   DBFHEADER  mainhead, *hp = NULL;
-	DESCRIPTOR thisfield, *tfp;
+	DESCRIPTOR thisfield, *tfp= &thisfield;
 	FILE      *infile = NULL;
 	UNZIPUTL  *zutp = NULL;
   PQRYRES    qrp;
@@ -308,7 +308,6 @@ PQRYRES DBFColumns(PGLOBAL g, PCSZ dp, PCSZ fn, PTOS topt, bool info)
 				return NULL;
 			} // endif dbfhead
 
-			tfp = &thisfield;
 		} // endif zipped
 
 		/************************************************************************/
@@ -437,7 +436,7 @@ PQRYRES DBFColumns(PGLOBAL g, PCSZ dp, PCSZ fn, PTOS topt, bool info)
     /************************************************************************/
     char buf[64];
 
-    sprintf(buf,
+    snprintf(buf, sizeof(buf),
       "Ver=%02x ncol=%hu nlin=%u lrecl=%hu headlen=%hu date=%02d/%02d/%02d",
       hp->Version, fields, hp->Records, hp->Reclen,
       hp->Headlen, hp->Filedate[0], hp->Filedate[1],

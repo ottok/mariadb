@@ -75,10 +75,6 @@ trx_t *trx_create();
 /** At shutdown, frees a transaction object. */
 void trx_free_at_shutdown(trx_t *trx);
 
-/** Disconnect a prepared transaction from MySQL.
-@param[in,out]	trx	transaction */
-void trx_disconnect_prepared(trx_t *trx);
-
 /** Initialize (resurrect) transactions at startup. */
 dberr_t trx_lists_init_at_db_start();
 
@@ -220,20 +216,10 @@ trx_print_low(
 			/*!< in: mem_heap_get_size(trx->lock.lock_heap) */
 
 /**********************************************************************//**
-Prints info about a transaction.
-When possible, use trx_print() instead. */
+Prints info about a transaction. */
 void
 trx_print_latched(
 /*==============*/
-	FILE*		f,		/*!< in: output stream */
-	const trx_t*	trx);		/*!< in: transaction */
-
-/**********************************************************************//**
-Prints info about a transaction.
-Acquires and releases lock_sys.latch. */
-void
-trx_print(
-/*======*/
 	FILE*		f,		/*!< in: output stream */
 	const trx_t*	trx);		/*!< in: transaction */
 
@@ -629,6 +615,8 @@ private:
 
 
 public:
+  /** trx_sys.rw_trx_ids index, protected by trx_sys.rw_trx_ids.latch */
+  uint32_t rw_trx_ids_slot;
   /** Transaction identifier (0 if no locks were acquired).
   Set by trx_sys_t::register_rw() or trx_resurrect() before
   the transaction is added to trx_sys.rw_trx_hash.
@@ -795,7 +783,7 @@ public:
 	This field is accessed by the thread that owns the transaction,
 	without holding any mutex.
 	There is only one foreign-thread access in trx_print_low()
-	and a possible race condition with trx_disconnect_prepared(). */
+	and a possible race condition with disconnect_prepared(). */
 	bool		is_recovered;
 	const char*	op_info;	/*!< English text describing the
 					current operation, or an empty
@@ -1041,6 +1029,8 @@ public:
   /** Commit the transaction.
   @retval false (always) */
   bool commit() noexcept;
+  /** Disconnect a prepared transaction */
+  void disconnect_prepared() noexcept;
 
   /** Try to drop a persistent table.
   @param table       persistent table
@@ -1207,6 +1197,35 @@ public:
   {
     static_assert(type != TRX_NO_BULK, "");
     return bulk_insert == type ? bulk_insert_apply_low(): DB_SUCCESS;
+  }
+
+  /** This function used only during ALTER IGNORE TABLE command.
+  Reset the undo no and remove the undo log from transaction.
+  By doing this, InnoDB doesn't add any undo logs to purge queue
+  during transaction commit */
+  inline void reset_and_truncate_undo() noexcept;
+
+  /** Clear TRX_DML_BULK, retaining TRX_DDL_BULK if it was set. */
+  void clear_dml_bulk() noexcept
+  {
+    static_assert(TRX_NO_BULK == 0, "");
+    static_assert(TRX_DML_BULK == 2, "");
+    static_assert(TRX_DDL_BULK == 3, "");
+    static_assert((TRX_DML_BULK & 1) == 0, "");
+    ut_ad(bulk_insert != 1);
+    bulk_insert= unsigned(
+      (bulk_insert & (((bulk_insert ^ bulk_insert << 1) & 2 >> 1) * 3)) & 3);
+  }
+
+  /** Clear TRX_DDL_BULK, retaining TRX_DML_BULK if it was set. */
+  void clear_ddl_bulk() noexcept
+  {
+    static_assert(TRX_NO_BULK == 0, "");
+    static_assert(TRX_DML_BULK == 2, "");
+    static_assert(TRX_DDL_BULK == 3, "");
+    static_assert((TRX_DML_BULK & 1) == 0, "");
+    ut_ad(bulk_insert != 1);
+    bulk_insert= unsigned((bulk_insert ^ ((bulk_insert & 1) * 3)) & 3);
   }
 
 private:

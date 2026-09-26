@@ -1,14 +1,14 @@
 # Copyright (C) 2008 Sun Microsystems, Inc.
-# 
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; version 2 of the License.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -32,12 +32,12 @@ INCLUDE_DIRECTORIES(${CC_SOURCE_DIR}/include
                     ${CC_BINARY_DIR}/include
                     ${CC_SOURCE_DIR}/unittest/mytap
                     ${CC_SOURCE_DIR}/unittest/libmariadb)
-ADD_DEFINITIONS(-DLIBMARIADB)
+add_compile_definitions(LIBMARIADB)
 
-SET(API_TESTS "bulk1" "performance" "basic-t" "fetch" "charset" "logs" "cursor" "errors" "view" "ps" "ps_bugs" "sp" "result" "connection" "misc" "ps_new" "thread" "features-10_2")
+SET(API_TESTS "bulk1" "performance" "basic-t" "fetch" "charset" "logs" "cursor" "errors" "view" "ps" "ps_bugs" "sp" "result" "connection" "misc" "ps_new" "thread" "features-10_2" "rpl_api")
 
 IF($ENV{TRAVIS})
-  ADD_DEFINITIONS("-DHAVE_TRAVIS=1")
+  add_compile_definitions(HAVE_TRAVIS=1)
 ENDIF()
 
 IF(WITH_DYNCOL)
@@ -49,7 +49,7 @@ IF(NOT WIN32)
 ENDIF()
 
 #exclude following tests from ctests, since we need to run them manually with different credentials
-SET(MANUAL_TESTS "t_conc173" "rpl_api" "conc336") 
+SET(MANUAL_TESTS "t_conc173" "conc336")
 # Get finger print from server certificate
 IF(WITH_SSL)
   IF(CERT_PATH AND NOT DEFINED ENV{TRAVIS})
@@ -57,7 +57,7 @@ IF(WITH_SSL)
     IF(WIN32)
       STRING(REPLACE "\\" "\\\\" CERT_PATH ${CERT_PATH})
     ENDIF()
-    ADD_DEFINITIONS(-DCERT_PATH="${CERT_PATH}")
+    add_compile_definitions(CERT_PATH="${CERT_PATH}")
   ENDIF()
 ENDIF()
 

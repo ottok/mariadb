@@ -1019,7 +1019,7 @@ create table t1 as select concat(least(1,2)) as c1;
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c1` varchar(1) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
+  `c1` varchar(2) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 drop table t1;
 select hex(concat(greatest(1,2)));
@@ -1029,7 +1029,7 @@ create table t1 as select concat(greatest(1,2)) as c1;
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c1` varchar(1) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
+  `c1` varchar(2) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 drop table t1;
 select hex(concat(case when 11 then 22 else 33 end));
@@ -1039,7 +1039,7 @@ create table t1 as select concat(case when 11 then 22 else 33 end) as c1;
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c1` varchar(2) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
+  `c1` varchar(3) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 drop table t1;
 select hex(concat(coalesce(1,2)));
@@ -1049,7 +1049,7 @@ create table t1 as select concat(coalesce(1,2)) as c1;
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c1` varchar(1) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
+  `c1` varchar(2) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 drop table t1;
 select hex(concat_ws(1,2,3));
@@ -1480,7 +1480,7 @@ create table t1 as select concat(ifnull(1,1)) as c1;
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c1` varchar(1) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
+  `c1` varchar(2) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 drop table t1;
 select hex(concat(ifnull(1.1,1.1)));
@@ -1520,7 +1520,7 @@ create table t1 as select concat(if(1,1,1)) as c1;
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
-  `c1` varchar(1) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
+  `c1` varchar(2) CHARACTER SET cp1251 COLLATE cp1251_general_ci DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
 drop table t1;
 select hex(concat(nullif(1,2)));
@@ -3409,12 +3409,12 @@ SELECT * FROM t1 WHERE (a XOR '0');
 a
  1
 Warnings:
-Warning	1292	Truncated incorrect INTEGER value: '`1'
+Warning	1292	Truncated incorrect BOOLEAN value: '`1'
 SELECT * FROM t1 WHERE a=' 1' AND (a XOR '0');
 a
  1
 Warnings:
-Warning	1292	Truncated incorrect INTEGER value: '`1'
+Warning	1292	Truncated incorrect BOOLEAN value: '`1'
 # ' 1' should not be propagated into (a XIR '0')
 EXPLAIN EXTENDED SELECT * FROM t1 WHERE a=' 1' AND (a XOR '0');
 id	select_type	table	type	possible_keys	key	key_len	ref	rows	filtered	Extra

@@ -41,6 +41,7 @@
 #ifdef WITH_WSREP
 #include "mysql/service_wsrep.h"
 #endif
+#include "item_windowfunc.h"
 
 void LEX::parse_error(uint err_number)
 {
@@ -1334,6 +1335,7 @@ void LEX::start(THD *thd_arg)
 
   wild= 0;
   exchange= 0;
+  clause_winfuncs.empty();
 
   table_count_update= 0;
   needs_reprepare= false;
@@ -3005,7 +3007,7 @@ void st_select_lex_node::init_query_common()
   into the front of the stranded_clean_list:
     before: root -> B -> A
      after: root -> this -> B -> A
-  During cleanup, the stranded units are cleaned in FIFO order.
+  During cleanup, the stranded units are cleaned in LIFO order (parent-first).
  */
 void st_select_lex_unit::remember_my_cleanup()
 {
@@ -3024,11 +3026,16 @@ void st_select_lex_unit::remember_my_cleanup()
 
 void st_select_lex_unit::cleanup_stranded_units()
 {
-  if (!stranded_clean_list)
-    return;
-
-  stranded_clean_list->cleanup();
+  st_select_lex_unit *cur= stranded_clean_list;
   stranded_clean_list= nullptr;
+
+  while (cur)
+  {
+    st_select_lex_unit *next= cur->stranded_clean_list;
+    cur->stranded_clean_list= nullptr;
+    cur->cleanup();
+    cur= next;
+  }
 }
 
 
@@ -3731,7 +3738,23 @@ bool st_select_lex::setup_ref_array(THD *thd, uint order_group_num)
   if (!ref_pointer_array.is_null())
     return false;
 
-  Item **array= thd->active_stmt_arena_to_use()->calloc<Item*>(n_elems);
+  DBUG_EXECUTE_IF("assert_no_alloc_ref_array", { DBUG_ASSERT(0); });
+  Query_arena *arena= thd->active_stmt_arena_to_use();
+
+#ifdef PROTECT_STATEMENT_MEMROOT
+  const bool read_only_mem_root= !arena->is_conventional() &&
+                                 (arena->mem_root->flags & ROOT_FLAG_READ_ONLY);
+  if (read_only_mem_root)
+    arena->mem_root->flags&= ~ROOT_FLAG_READ_ONLY;
+#endif
+
+  Item **array= arena->calloc<Item*>(n_elems);
+
+#ifdef PROTECT_STATEMENT_MEMROOT
+  if (read_only_mem_root)
+    arena->mem_root->flags|= ROOT_FLAG_READ_ONLY;
+#endif
+
   if (likely(array != NULL))
     ref_pointer_array= Ref_ptr_array(array, n_elems);
   return array == NULL;
@@ -6476,6 +6499,7 @@ SELECT_LEX *LEX::wrap_select_chain_into_derived(SELECT_LEX *sel)
   SELECT_LEX *dummy_select;
   SELECT_LEX_UNIT *unit;
   Table_ident *ti;
+  Item *sel_item;
   DBUG_ENTER("LEX::wrap_select_chain_into_derived");
 
   if (!(dummy_select= alloc_select(TRUE)))
@@ -6493,6 +6517,19 @@ SELECT_LEX *LEX::wrap_select_chain_into_derived(SELECT_LEX *sel)
     DBUG_RETURN(NULL);
 
   /* add SELECT list*/
+  if (sel->item_list.elements)
+  {
+    List_iterator<Item> li(sel->item_list);
+    while ((sel_item= li++))
+    {
+      Item *item= new (thd->mem_root) Item_field(thd, context, sel_item->name);
+      if (item == NULL ||
+          add_item_to_list(thd, item))
+        goto err;
+    }
+    dummy_select->with_wild= sel->with_wild;
+  }
+  else
   {
     Item *item= new (thd->mem_root) Item_field(thd, context, star_clex_str);
     if (item == NULL)
@@ -6574,14 +6611,15 @@ SELECT_LEX *LEX::create_priority_nest(SELECT_LEX *first_in_nest, SELECT_LEX *att
     wrapper->set_linkage_and_distinct(wr_unit_type, wr_distinct);
     if (attach_to)
     {
-      wrapper->first_nested= attach_to->first_nested;
+      /* wraps whole prefix -> wrapper heads a fresh chain */
+      bool wraps_whole_prefix= (attach_to->first_nested == first_in_nest);
+      wrapper->first_nested= wraps_whole_prefix ? wrapper
+                                                : attach_to->first_nested;
       wrapper->set_master_unit(attach_to->master_unit());
       attach_to->link_neighbour(wrapper);
     }
     else
-    {
       wrapper->first_nested= wrapper;
-    }
   }
   DBUG_RETURN(wrapper);
 }
@@ -7072,7 +7110,14 @@ LEX::sp_variable_declarations_cursor_rowtype_finalize(THD *thd, int nvars,
       new (thd->mem_root) sp_instr_cursor_copy_struct(sphead->instructions(),
                                                       spcont, offset,
                                                       pcursor->lex(),
-                                                      spvar->offset);
+                                                      spvar->offset,
+                        /*
+                          The first cursor in declaration
+                          of cursor row type variables is responsible for
+                          releasing the Item created on parsing the DEFAULT
+                          clause
+                        */
+                                                      (i == 0) ? def : nullptr);
     if (instr == NULL || sphead->add_instr(instr))
      return true;
 
@@ -8674,6 +8719,12 @@ my_var *LEX::create_outvar(THD *thd,
 Item *LEX::create_item_func_nextval(THD *thd, Table_ident *table_ident)
 {
   TABLE_LIST *table;
+  if (clause_that_disallows_subselect)
+  {
+    my_error(ER_SUBQUERIES_NOT_SUPPORTED, MYF(0),
+             clause_that_disallows_subselect);
+    return NULL;
+  }
   if (unlikely(!(table= current_select->add_table_to_list(thd, table_ident, 0,
                                                           TL_OPTION_SEQUENCE,
                                                           TL_WRITE_ALLOW_WRITE,
@@ -8687,6 +8738,12 @@ Item *LEX::create_item_func_nextval(THD *thd, Table_ident *table_ident)
 Item *LEX::create_item_func_lastval(THD *thd, Table_ident *table_ident)
 {
   TABLE_LIST *table;
+  if (clause_that_disallows_subselect)
+  {
+    my_error(ER_SUBQUERIES_NOT_SUPPORTED, MYF(0),
+             clause_that_disallows_subselect);
+    return NULL;
+  }
   if (unlikely(!(table= current_select->add_table_to_list(thd, table_ident, 0,
                                                           TL_OPTION_SEQUENCE,
                                                           TL_READ,
@@ -8702,6 +8759,12 @@ Item *LEX::create_item_func_nextval(THD *thd,
                                     const LEX_CSTRING *name)
 {
   Table_ident *table_ident;
+  if (clause_that_disallows_subselect)
+  {
+    my_error(ER_SUBQUERIES_NOT_SUPPORTED, MYF(0),
+             clause_that_disallows_subselect);
+    return NULL;
+  }
   if (unlikely(!(table_ident=
                  new (thd->mem_root) Table_ident(thd, db, name, false))))
     return NULL;
@@ -8714,6 +8777,12 @@ Item *LEX::create_item_func_lastval(THD *thd,
                                     const LEX_CSTRING *name)
 {
   Table_ident *table_ident;
+  if (clause_that_disallows_subselect)
+  {
+    my_error(ER_SUBQUERIES_NOT_SUPPORTED, MYF(0),
+             clause_that_disallows_subselect);
+    return NULL;
+  }
   if (unlikely(!(table_ident=
                  new (thd->mem_root) Table_ident(thd, db, name, false))))
     return NULL;
@@ -8726,6 +8795,12 @@ Item *LEX::create_item_func_setval(THD *thd, Table_ident *table_ident,
                                    bool is_used)
 {
   TABLE_LIST *table;
+  if (clause_that_disallows_subselect)
+  {
+    my_error(ER_SUBQUERIES_NOT_SUPPORTED, MYF(0),
+             clause_that_disallows_subselect);
+    return NULL;
+  }
   if (unlikely(!(table= current_select->add_table_to_list(thd, table_ident, 0,
                                                           TL_OPTION_SEQUENCE,
                                                           TL_WRITE_ALLOW_WRITE,
@@ -9267,6 +9342,10 @@ void st_select_lex::collect_grouping_fields_for_derived(THD *thd,
 
 /**
   Collect fields that are used in the GROUP BY of this SELECT
+
+  @retval
+    true  - no grouping fields or an error
+    false - collected group fields successfully
 */
 
 bool st_select_lex::collect_grouping_fields(THD *thd)
@@ -9286,7 +9365,7 @@ bool st_select_lex::collect_grouping_fields(THD *thd)
     Field_pair *grouping_tmp_field=
       new Field_pair(((Item_field *)item->real_item())->field, item);
     if (grouping_tmp_fields.push_back(grouping_tmp_field, thd->mem_root))
-      return false;
+      return true;
   }
   if (grouping_tmp_fields.elements)
     return false;
@@ -10765,31 +10844,12 @@ SELECT_LEX_UNIT *LEX::parsed_select_expr_start(SELECT_LEX *s1, SELECT_LEX *s2,
   sel1->link_neighbour(sel2);
   sel2->set_linkage_and_distinct(unit_type, distinct);
   sel2->first_nested= sel1->first_nested= sel1;
-  const bool oracle= (thd->variables.sql_mode & IS_OR_WAS_ORACLE);
-  if (oracle &&
-      /*
-         Recursive CTE must have anchor defined as non-recursive set attached
-         via UNION, such anchor would be lost in wrapping. But in recursive CTE
-         all set operations either distinct or non-distinct
-         (see ER_NOT_SUPPORTED_YET limitation in st_select_lex_unit::prepare()),
-         so explicit prioritization via wrapping is not required.
-
-         Test: compat/oracle.func_concat
-      */
-      !(curr_with_clause && curr_with_clause->with_recursive) &&
-      !(sel1= create_priority_nest(sel1, NULL)))
-  {
-      return NULL;
-  }
   res= create_unit(sel1);
   if (res == NULL)
     return NULL;
   res->pre_last_parse= sel1;
   res->distinct= distinct;
-  if (oracle)
-    push_select(sel1);
-  else
-    push_select(res->fake_select_lex);
+  push_select(res->fake_select_lex);
   return res;
 }
 
@@ -10803,7 +10863,38 @@ SELECT_LEX_UNIT *LEX::parsed_select_expr_cont(SELECT_LEX_UNIT *unit,
   SELECT_LEX *sel1= s2;
   SELECT_LEX *last= unit->pre_last_parse->next_select();
 
-  int cmp= oracle? 0 : cmp_unit_op(unit_type, last->get_linkage());
+  int cmp;
+  if (oracle)
+  {
+    if (unit_type != last->get_linkage())
+    {
+      /*
+        Oracle: equal-priority, left-to-right. Wrap whole prefix on op change.
+        Recursive CTEs use a single operator, so never wrap here (anchor kept).
+      */
+      SELECT_LEX *first_in_nest= unit->first_select();
+      last->cut_next();
+      if ((last= create_priority_nest(first_in_nest, NULL)) == NULL)
+        return NULL;
+      /*
+        Order matters: register_select_chain() re-points unit->slave at the
+        wrapper. Only then can fix_distinct()/reset_distinct() scan the new
+        outer chain instead of the pre-wrap selects that now belong to the
+        derived table's inner unit. Otherwise union_distinct is left pointing
+        into the inner unit (stale, non-NULL). Since optimize_bag_operation()
+        is skipped in Oracle mode, that value survives to execution and makes
+        the outer result temp table de-duplicating (MY_TEST(union_distinct)),
+        dropping rows that a trailing UNION ALL must keep.
+      */
+      unit->register_select_chain(last);
+      unit->fix_distinct();
+    }
+    cmp= 0;
+  }
+  else
+  {
+    cmp= cmp_unit_op(unit_type, last->get_linkage());
+  }
   if (cmp == 0)
   {
     sel1->first_nested= last->first_nested;
@@ -11651,7 +11742,7 @@ st_select_lex::build_pushable_cond_for_having_pushdown(THD *thd, Item *cond)
 */
 
 Field_pair *get_corresponding_field_pair(Item *item,
-                                         List<Field_pair> pair_list)
+                                         List<Field_pair> &pair_list)
 {
   DBUG_ASSERT(item->type() == Item::DEFAULT_VALUE_ITEM ||
               item->type() == Item::FIELD_ITEM ||
@@ -11876,7 +11967,7 @@ Item *st_select_lex::pushdown_from_having_into_where(THD *thd, Item *having)
        list of all its conjuncts saved in attach_to_conds. Otherwise,
        the condition is put into attach_to_conds as the only its element.
   */
-  List_iterator_fast<Item> it(attach_to_conds);
+  List_iterator<Item> it(attach_to_conds);
   Item *item;
   check_cond_extraction_for_grouping_fields(thd, having);
   if (build_pushable_cond_for_having_pushdown(thd, having))
@@ -11940,8 +12031,9 @@ Item *st_select_lex::pushdown_from_having_into_where(THD *thd, Item *having)
                           &Item::field_transformer_for_having_pushdown,
                           (uchar *)this);
 
-    if (item->walk(&Item::cleanup_excluding_immutables_processor, 0, STOP_PTR)
-        || item->fix_fields(thd, NULL))
+    if (item->walk(&Item::cleanup_excluding_immutables_processor, 0,
+                   STOP_PTR) ||
+        item->fix_fields(thd, it.ref()))
     {
       attach_to_conds.empty();
       goto exit;
@@ -12786,6 +12878,37 @@ TABLE_LIST *SELECT_LEX::find_table(THD *thd,
 bool st_select_lex::is_query_topmost(THD *thd)
 {
   return get_master() == &thd->lex->unit;
+}
+
+
+void st_select_lex::optimize_out_order_list()
+{
+  /* Cleanup first related window funcs */
+  for (ORDER *ord= order_list.first; ord; ord= ord->next)
+  {
+    if (ord->window_funcs.is_empty())
+      continue;
+
+    List_iterator<Item_window_func> it_sl(window_funcs);
+    List_iterator<Item_window_func> it_ord(ord->window_funcs);
+    Item_window_func *wf_sl, *wf_ord;
+    while ((wf_sl= it_sl++))
+    {
+      it_ord.rewind();
+      while ((wf_ord= it_ord++))
+      {
+        if (wf_ord == wf_sl)
+        {
+          it_sl.remove();
+          it_ord.remove();
+          break;
+        }
+      }
+      if (ord->window_funcs.is_empty())
+        break;
+    }
+  }
+  order_list.empty();
 }
 
 

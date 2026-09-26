@@ -1,5 +1,5 @@
-/* Copyright 2008-2022 Codership Oy <http://www.codership.com>
-   Copyright (c) 2008, 2022, MariaDB
+/* Copyright (C) 2008, 2025 Codership Oy <http://www.codership.com>
+   Copyright (c) 2008, 2026, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -186,36 +186,6 @@ static void* wsrep_sst_joiner_monitor_thread(void *arg __attribute__((unused)))
   return NULL;
 }
 
-/* return true if character can be a part of a filename */
-static bool filename_char(int const c)
-{
-  return isalnum(c) || (c == '-') || (c == '_') || (c == '.');
-}
-
-/* return true if character can be a part of an address string */
-static bool address_char(int const c)
-{
-  return filename_char(c) ||
-         (c == ':') || (c == '[') || (c == ']') || (c == '/');
-}
-
-static bool check_request_str(const char* const str,
-                              bool (*check) (int c),
-                              bool log_warn = true)
-{
-  for (size_t i(0); str[i] != '\0'; ++i)
-  {
-    if (!check(str[i]))
-    {
-      if (log_warn) WSREP_WARN("Illegal character in state transfer request: %i (%c).",
-                               str[i], str[i]);
-      return true;
-    }
-  }
-
-  return false;
-}
-
 bool wsrep_sst_method_check (sys_var *self, THD* thd, set_var* var)
 {
   if ((! var->save_result.string_value.str) ||
@@ -228,8 +198,8 @@ bool wsrep_sst_method_check (sys_var *self, THD* thd, set_var* var)
   }
 
   /* check also that method name is alphanumeric string  */
-  if (check_request_str(var->save_result.string_value.str,
-                        filename_char, false))
+  if (wsrep_check_request_str(var->save_result.string_value.str,
+                              wsrep_filename_char, false))
   {
     my_error(ER_WRONG_VALUE_FOR_VAR, MYF(0), var->var->name.str,
              var->save_result.string_value.str ?
@@ -270,8 +240,19 @@ static void make_wsrep_defaults_file()
 
 bool  wsrep_sst_receive_address_check (sys_var *self, THD* thd, set_var* var)
 {
-  if ((! var->save_result.string_value.str) ||
-      (var->save_result.string_value.length > (FN_REFLEN - 1))) // safety
+  /* Allow empty value */
+  if (!var->save_result.string_value.str || var->save_result.string_value.length == 0)
+    return 0;
+
+  /* Check length */
+  if ((var->save_result.string_value.length > (FN_REFLEN - 1))) // safety
+  {
+    goto err;
+  }
+
+  /* check also that address contains only accepted characters  */
+  if (wsrep_check_request_str(var->save_result.string_value.str,
+                              wsrep_address_char, false))
   {
     goto err;
   }
@@ -293,7 +274,37 @@ bool wsrep_sst_receive_address_update (sys_var *self, THD* thd,
 
 bool wsrep_sst_auth_check (sys_var *self, THD* thd, set_var* var)
 {
+  /* Allow empty value */
+  if (!var->save_result.string_value.str || var->save_result.string_value.length == 0)
     return 0;
+
+  /* Check length */
+  if ((var->save_result.string_value.length > (FN_REFLEN - 1))) // safety
+  {
+    goto err;
+  }
+
+  {
+    /* Split sst_auth on ':'-character */
+    std::string auth= var->save_result.string_value.str;
+    std::string r_user= auth.substr(0, auth.find(":"));
+
+    /* check also that user contains only accepted characters,
+       password part is not validated. */
+    if (wsrep_check_request_str(r_user.c_str(),
+                                wsrep_filename_char, true))
+    {
+      goto err;
+    }
+  }
+
+  return 0;
+
+err:
+  my_error(ER_WRONG_VALUE_FOR_VAR, MYF(0), var->var->name.str,
+           var->save_result.string_value.str ?
+           var->save_result.string_value.str : "NULL");
+  return 1;
 }
 
 void wsrep_sst_auth_free()
@@ -337,16 +348,29 @@ bool wsrep_sst_auth_update (sys_var *self, THD* thd, enum_var_type type)
 
 bool  wsrep_sst_donor_check (sys_var *self, THD* thd, set_var* var)
 {
-  if ((! var->save_result.string_value.str) ||
-      (var->save_result.string_value.length > (FN_REFLEN -1))) // safety
+  /* Check length */
+  if (!var->save_result.string_value.str ||
+      var->save_result.string_value.length > FN_REFLEN-1) // safety
+    goto err;
+
+  /* Allow empty value */
+  if (var->save_result.string_value.length == 0)
+    return 0;
+
+  /* check also that donor string contains only accepted characters  */
+  if (wsrep_check_request_str(var->save_result.string_value.str,
+                              wsrep_names_list, false))
   {
-    my_error(ER_WRONG_VALUE_FOR_VAR, MYF(0), var->var->name.str,
-             var->save_result.string_value.str ?
-             var->save_result.string_value.str : "NULL");
-    return 1;
+    goto err;
   }
 
   return 0;
+
+err:
+  my_error(ER_WRONG_VALUE_FOR_VAR, MYF(0), var->var->name.str,
+           var->save_result.string_value.str ?
+           var->save_result.string_value.str : "NULL");
+  return 1;
 }
 
 bool wsrep_sst_donor_update (sys_var *self, THD* thd, enum_var_type type)
@@ -373,9 +397,6 @@ static bool wsrep_sst_complete (THD*                thd,
   Wsrep_server_state& server_state= Wsrep_server_state::instance();
   enum wsrep::server_state::state state= server_state.state();
   bool failed= false;
-  char start_pos_buf[FN_REFLEN];
-  ssize_t len= wsrep::print_to_c_str(sst_gtid, start_pos_buf, FN_REFLEN-1);
-  start_pos_buf[len]='\0';
 
   // Do not call sst_received if we are not in joiner or
   // initialized state on server. This is because it
@@ -390,14 +411,31 @@ static bool wsrep_sst_complete (THD*                thd,
     }
     else
     {
-      WSREP_INFO("SST succeeded for position %s", start_pos_buf);
+      /*
+        Note: sst_received() does NOT use sst_gtid (the position reported by
+        the SST script). It determines the position internally from storage via
+        Wsrep_server_service::get_position().
+        For physical SST methods these two may differ (e.g. the joiner's storage
+        recovers to an earlier position than the script reported). Log the
+        position actually adopted, not the script-reported one, to avoid
+        confusion.
+      */
+      wsrep::gtid const received_gtid= wsrep_get_SE_checkpoint<wsrep::gtid>();
+      char recv_pos_buf[FN_REFLEN];
+      ssize_t const recv_len=
+        wsrep::print_to_c_str(received_gtid, recv_pos_buf, FN_REFLEN-1);
+      recv_pos_buf[recv_len > 0 ? recv_len : 0]= '\0';
+      WSREP_INFO("SST succeeded for position %s", recv_pos_buf);
     }
   }
   else
   {
+    char start_pos_buf[FN_REFLEN];
+    ssize_t const len= wsrep::print_to_c_str(sst_gtid, start_pos_buf, FN_REFLEN - 1);
+    start_pos_buf[len > 0 ? len : 0]= '\0';
+
     WSREP_ERROR("SST failed for position %s initialized %d server_state %s",
-                start_pos_buf,
-                server_state.is_initialized(),
+                start_pos_buf, server_state.is_initialized(),
                 wsrep::to_c_string(state));
     failed= true;
   }
@@ -1975,9 +2013,9 @@ static int sst_flush_tables(THD* thd)
     const char base_name[]= "tables_flushed";
     ssize_t const full_len= strlen(mysql_real_data_home) + strlen(base_name)+2;
     char *real_name= (char*) my_malloc(key_memory_WSREP, full_len, 0);
-    sprintf(real_name, "%s/%s", mysql_real_data_home, base_name);
+    snprintf(real_name, full_len, "%s/%s", mysql_real_data_home, base_name);
     char *tmp_name= (char*) my_malloc(key_memory_WSREP, full_len + 4, 0);
-    sprintf(tmp_name, "%s.tmp", real_name);
+    snprintf(tmp_name, full_len + 4, "%s.tmp", real_name);
 
     FILE* file= fopen(tmp_name, "w+");
     if (0 == file)
@@ -2319,7 +2357,7 @@ int wsrep_sst_donate(const std::string& msg,
   const char* method= msg.data();
   size_t method_len= strlen (method);
 
-  if (check_request_str(method, filename_char, true))
+  if (wsrep_check_request_str(method, wsrep_filename_char, true))
   {
     WSREP_ERROR("Bad SST method name. SST canceled.");
     return WSREP_CB_FAILURE;
@@ -2341,7 +2379,27 @@ int wsrep_sst_donate(const std::string& msg,
     addr= data;
   }
 
-  if (check_request_str(addr, address_char, true))
+  if (remote_auth())
+  {
+    /* auth is like localhost:ecee4512990b6a685b5d8df250cb5028 */
+    std::string auth= remote_auth();
+    std::string r_user = auth.substr(0, auth.find(":"));
+    std::string r_pw = auth.substr(auth.find(":")+1, auth.size());
+    if (!r_user.empty() &&
+        wsrep_check_request_str(r_user.c_str(), wsrep_filename_char, true))
+    {
+      WSREP_ERROR("Bad remote auth string. SST canceled.");
+      return WSREP_CB_FAILURE;
+    }
+    if (!r_pw.empty() &&
+        wsrep_check_request_str(r_pw.c_str(), wsrep_filename_char, true))
+    {
+      WSREP_ERROR("Bad remote auth string. SST canceled.");
+      return WSREP_CB_FAILURE;
+    }
+  }
+
+  if (wsrep_check_request_str(addr, wsrep_address_char, true))
   {
     WSREP_ERROR("Bad SST address string. SST canceled.");
     return WSREP_CB_FAILURE;

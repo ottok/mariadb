@@ -572,7 +572,7 @@ static void srv_init()
 			 &page_zip_stat_per_index_mutex, nullptr);
 
 	/* Initialize some INFORMATION SCHEMA internal structures */
-	trx_i_s_cache_init(trx_i_s_cache);
+	trx_i_s_cache_init();
 }
 
 /*********************************************************************//**
@@ -589,7 +589,7 @@ srv_free(void)
 	mysql_mutex_destroy(&page_zip_stat_per_index_mutex);
 	mysql_mutex_destroy(&srv_sys.tasks_mutex);
 
-	trx_i_s_cache_free(trx_i_s_cache);
+	trx_i_s_cache_free();
 	srv_thread_pool_end();
 }
 
@@ -949,7 +949,7 @@ srv_export_innodb_status(void)
 
 	mysql_mutex_unlock(&srv_innodb_monitor_mutex);
 
-	log_sys.latch.wr_lock(SRW_LOCK_CALL);
+	log_sys.latch.wr_lock();
 	export_vars.innodb_lsn_current = log_sys.get_lsn();
 	export_vars.innodb_lsn_flushed = log_sys.get_flushed_lsn();
 	export_vars.innodb_lsn_last_checkpoint = log_sys.last_checkpoint_lsn;

@@ -200,7 +200,7 @@ class String;
 #define STOP_HEADER_LEN      0
 #define LOAD_HEADER_LEN      (4 + 4 + 4 + 1 +1 + 4)
 #define SLAVE_HEADER_LEN     0
-#define START_V3_HEADER_LEN     (2 + ST_SERVER_VER_LEN + 4)
+#define START_V3_HEADER_LEN  ST_COMMON_HEADER_LEN_OFFSET
 #define ROTATE_HEADER_LEN    8 // this is FROZEN (the Rotate post-header is frozen)
 #define INTVAR_HEADER_LEN      0
 #define CREATE_FILE_HEADER_LEN 4
@@ -281,6 +281,7 @@ class String;
 #define ST_SERVER_VER_OFFSET  2
 #define ST_CREATED_OFFSET     (ST_SERVER_VER_OFFSET + ST_SERVER_VER_LEN)
 #define ST_COMMON_HEADER_LEN_OFFSET (ST_CREATED_OFFSET + 4)
+#define ST_POST_HEADER_LEN_OFFSET (ST_COMMON_HEADER_LEN_OFFSET + 1)
 
 /* slave event post-header (this event is never written) */
 
@@ -551,7 +552,7 @@ class String;
 #define OPTIONS_WRITTEN_TO_BIN_LOG (OPTION_EXPLICIT_DEF_TIMESTAMP |\
    OPTION_AUTO_IS_NULL | OPTION_NO_FOREIGN_KEY_CHECKS |  \
    OPTION_RELAXED_UNIQUE_CHECKS | OPTION_NOT_AUTOCOMMIT | OPTION_IF_EXISTS |\
-   OPTION_INSERT_HISTORY)
+   OPTION_INSERT_HISTORY | OPTION_NO_CHECK_CONSTRAINT_CHECKS)
 
 #define CHECKSUM_CRC32_SIGNATURE_LEN 4
 /**
@@ -2901,8 +2902,8 @@ private:
   @return  the value of the buffer pointer
 */
 
-inline char *serialize_xid(char *buf, long fmt, long gln, long bln,
-                           const char *dat)
+inline char *serialize_xid(char *buf, size_t bufsize, long fmt, long gln,
+                           long bln, const char *dat)
 {
   int i;
   char *c= buf;
@@ -2934,7 +2935,7 @@ inline char *serialize_xid(char *buf, long fmt, long gln, long bln,
     c+= 2;
   }
   c[0]= '\'';
-  sprintf(c+1, ",%lu", fmt);
+  snprintf(c + 1, bufsize - (size_t)(c + 1 - buf), ",%lu", fmt);
 
  return buf;
 }
@@ -2955,7 +2956,8 @@ struct event_mysql_xid_t :  MYSQL_XID
   char buf[ser_buf_size];
   char *serialize()
   {
-    return serialize_xid(buf, formatID, gtrid_length, bqual_length, data);
+    return serialize_xid(buf, sizeof(buf), formatID, gtrid_length,
+                         bqual_length, data);
   }
 };
 
@@ -2966,7 +2968,8 @@ struct event_xid_t : XID
 
   char *serialize(char *buf_arg)
   {
-    return serialize_xid(buf_arg, formatID, gtrid_length, bqual_length, data);
+    return serialize_xid(buf_arg, ser_buf_size, formatID, gtrid_length,
+                         bqual_length, data);
   }
   char *serialize()
   {
@@ -3018,9 +3021,9 @@ private:
   int do_commit() override;
   const char* get_query() override
   {
-    sprintf(query,
-            (one_phase ? "XA COMMIT %s ONE PHASE" : "XA PREPARE %s"),
-            m_xid.serialize());
+    snprintf(query, sizeof(query),
+             (one_phase ? "XA COMMIT %s ONE PHASE" : "XA PREPARE %s"),
+             m_xid.serialize());
     return query;
   }
 #endif
@@ -3456,6 +3459,9 @@ public:
 
 #ifdef MYSQL_SERVER
   bool write(Log_event_writer *writer) override;
+#ifdef HAVE_REPLICATION
+  bool is_part_of_group() override { return 1; }
+#endif
   static int make_compatible_event(String *packet, bool *need_dummy_event,
                                     ulong ev_offset, enum_binlog_checksum_alg checksum_alg);
   static bool peek(const uchar *event_start, size_t event_len,
@@ -5526,7 +5532,8 @@ bool slave_execute_deferred_events(THD *thd);
 bool event_that_should_be_ignored(const uchar *buf);
 bool event_checksum_test(uchar *buf, ulong event_len,
                          enum_binlog_checksum_alg alg);
-enum_binlog_checksum_alg get_checksum_alg(const uchar *buf, ulong len);
+bool get_checksum_alg(const uchar *buf, ulong len,
+                      enum_binlog_checksum_alg *alg);
 extern TYPELIB binlog_checksum_typelib;
 #ifdef WITH_WSREP
 enum Log_event_type wsrep_peak_event(rpl_group_info *rgi, ulonglong* event_size);

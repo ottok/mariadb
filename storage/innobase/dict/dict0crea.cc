@@ -1442,6 +1442,7 @@ err_exit:
   }
   if (!sys_virtual)
   {
+    DBUG_EXECUTE_IF("defer_sys_virtual", goto commit_trx;);
     error= que_eval_sql(nullptr, "PROCEDURE CREATE_VIRTUAL() IS\n"
                         "BEGIN\n"
                         "CREATE TABLE\n"
@@ -1456,6 +1457,30 @@ err_exit:
     }
   }
 
+  DBUG_EXECUTE_IF("create_sys_tablespaces",
+                  {
+                    error= que_eval_sql(
+                      nullptr, "PROCEDURE CREATE_DUMMY_1() IS\n"
+                      "BEGIN\n"
+                      "CREATE TABLE\n"
+                      "SYS_TABLESPACES(DUMMY_ID BIGINT, POS INT);\n"
+                      "CREATE UNIQUE CLUSTERED INDEX DUMMY_IND"
+                      " ON SYS_TABLESPACES(DUMMY_ID, POS);\n"
+                      "CREATE TABLE\n"
+                      "SYS_METADATA(DUMMY_ID_1 BIGINT, POS INT);\n"
+                      "CREATE UNIQUE CLUSTERED INDEX DUMMY_IND_1"
+                      " ON SYS_METADATA(DUMMY_ID_1, POS);\n"
+                      "DELETE FROM SYS_TABLES WHERE NAME= 'SYS_METADATA';"
+                      "END;\n", trx);
+                    if (error)
+                    {
+                      tablename = "DUMMY";
+                      goto err_exit;
+                    }
+                  });
+#ifndef DBUG_OFF
+commit_trx:
+#endif /* !DBUG_OFF */
   trx->commit();
   row_mysql_unlock_data_dictionary(trx);
   trx->clear_and_free();
@@ -1483,6 +1508,12 @@ load_fail:
   }
   else
     prevent_eviction(sys_foreign_cols);
+
+  DBUG_EXECUTE_IF("defer_sys_virtual",
+                  {
+                    unlock();
+                    return DB_SUCCESS;
+                  });
 
   if (sys_virtual);
   else if (!(sys_virtual= load_table(SYS_TABLE[SYS_VIRTUAL])))

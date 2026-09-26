@@ -658,6 +658,7 @@ static struct st_service_funcs fmt_data[2]=
 static enum enum_dyncol_func_result
 init_read_hdr(DYN_HEADER *hdr, DYNAMIC_COLUMN *str)
 {
+  size_t nodata_size;
   if (read_fixed_header(hdr, str))
     return ER_DYNCOL_FORMAT;
   hdr->header= (uchar*)str->str + fmt_data[hdr->format].fixed_hdr;
@@ -666,8 +667,11 @@ init_read_hdr(DYN_HEADER *hdr, DYNAMIC_COLUMN *str)
              hdr->column_count);
   hdr->nmpool= hdr->header + hdr->header_size;
   hdr->dtpool= hdr->nmpool + hdr->nmpool_size;
-  hdr->data_size= str->length - fmt_data[hdr->format].fixed_hdr -
-    hdr->header_size - hdr->nmpool_size;
+  nodata_size= fmt_data[hdr->format].fixed_hdr + hdr->header_size +
+               hdr->nmpool_size;
+  if (str->length < nodata_size)
+    return ER_DYNCOL_FORMAT;
+  hdr->data_size= str->length - nodata_size;
   hdr->data_end= (uchar*)str->str + str->length;
   return ER_DYNCOL_OK;
 }
@@ -769,7 +773,8 @@ dynamic_column_var_uint_get(uchar *data, size_t data_length,
   uint length;
   uchar *end= data + data_length;
 
-  for (length=0; data < end ; data++)
+  /* A 64-bit value needs at most 10 groups; stop before the shift reaches 64 */
+  for (length=0; data < end && length < 10; data++)
   {
     val+= (((ulonglong)((*data) & 0x7f)) << (length * 7));
     length++;
@@ -842,6 +847,10 @@ dynamic_column_uint_read(DYNAMIC_COLUMN_VALUE *store_it_here,
   ulonglong value= 0;
   size_t i;
 
+  /* an unsigned value occupies at most 8 bytes; reject the rest to keep i*8 < 64 */
+  if (length > 8)
+    return ER_DYNCOL_FORMAT;
+
   for (i= 0; i < length; i++)
     value+= ((ulonglong)data[i]) << (i*8);
 
@@ -902,8 +911,10 @@ static enum enum_dyncol_func_result
 dynamic_column_sint_read(DYNAMIC_COLUMN_VALUE *store_it_here,
                          uchar *data, size_t length)
 {
+  enum enum_dyncol_func_result rc;
   ulonglong val;
-  dynamic_column_uint_read(store_it_here, data, length);
+  if ((rc= dynamic_column_uint_read(store_it_here, data, length)))
+    return rc;
   val= store_it_here->x.ulong_value;
   if (val & 1)
     val= (val >> 1) ^ 0xffffffffffffffffULL;
@@ -2018,7 +2029,7 @@ static my_bool read_name(DYN_HEADER *hdr, uchar *entry, LEX_STRING *name)
   else
   {
     size_t next_nmoffset= uint2korr(next_entry);
-    if (next_nmoffset > hdr->nmpool_size)
+    if (next_nmoffset > hdr->nmpool_size || next_nmoffset < nmoffset)
       return 1;
     name->length= next_nmoffset - nmoffset;
   }

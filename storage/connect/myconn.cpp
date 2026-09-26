@@ -117,6 +117,11 @@ static MYSQL_RES *connect_use_result(MYSQL *mysql)
 } // end of connect_use_result
 #endif   // !MYSQL_PREPARED_STATEMENTS
 
+#define BUF_SIZE 127
+#define NUM_SIZE 15
+#define _BUF STRINGIFY_ARG(BUF_SIZE)
+#define _NUM STRINGIFY_ARG(NUM_SIZE)
+
 /************************************************************************/
 /*  MyColumns: constructs the result blocks containing all columns      */
 /*  of a MySQL table or view.                                           */
@@ -138,7 +143,7 @@ PQRYRES MyColumns(PGLOBAL g, THD *thd, const char *host, const char *db,
   //unsigned int length[] = {0, 4, 16, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0};
 	unsigned int length[] = {0, 4, 0, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0};
 	PCSZ    fmt;
-	char   *fld, *colname, *chset, v, buf[128], uns[16], zero[16];
+	char   *fld, *colname, *chset, v, buf[BUF_SIZE+1], uns[NUM_SIZE+1], zero[NUM_SIZE+1];
   int     i, n, nf = 0, ncol = sizeof(buftyp) / sizeof(int);
   int     len, type, prec, rc;
 	bool    b;
@@ -261,15 +266,15 @@ PQRYRES MyColumns(PGLOBAL g, THD *thd, const char *host, const char *db,
 			v = 'V';
 			strcpy(buf, "set");
 			b = true;
-		} else switch ((nf = sscanf(fld, "%[^(](%d,%d", buf, &len, &prec))) {
+		} else switch ((nf = sscanf(fld, "%" _BUF "[^(](%d,%d", buf, &len, &prec))) {
       case 3:
-        nf = sscanf(fld, "%[^(](%d,%d) %s %s", buf, &len, &prec, uns, zero);
+        nf = sscanf(fld, "%" _BUF "[^(](%d,%d) %" _NUM "s %" _NUM "s", buf, &len, &prec, uns, zero);
         break;
       case 2:
-        nf = sscanf(fld, "%[^(](%d) %s %s", buf, &len, uns, zero) + 1;
+        nf = sscanf(fld, "%" _BUF "[^(](%d) %" _NUM "s %" _NUM "s", buf, &len, uns, zero) + 1;
         break;
       case 1:
-        nf = sscanf(fld, "%s %s %s", buf, uns, zero) + 2;
+        nf = sscanf(fld, "%" _BUF "s %" _NUM "s %" _NUM "s", buf, uns, zero) + 2;
         break;
       default:
         snprintf(g->Message, sizeof(g->Message), MSG(BAD_FIELD_TYPE), fld);
@@ -312,7 +317,7 @@ PQRYRES MyColumns(PGLOBAL g, THD *thd, const char *host, const char *db,
       } // endswitch nf
 
 		if (b)																 // enum or set
-  		nf = sscanf(fld, "%s ", buf);				 // get values
+			nf = sscanf(fld, "%" _BUF "s ", buf);				 // get values
 
     crp = crp->Next;                       // Type_Name
     crp->Kdata->SetValue(buf, i);
@@ -599,7 +604,7 @@ int MYSQLC::KillQuery(ulong id)
   {
   char kill[20];
 
-  sprintf(kill, "KILL QUERY %u", (unsigned int) id);
+  snprintf(kill, sizeof(kill), "KILL QUERY %u", (unsigned int) id);
 //return (m_DB) ? mysql_query(m_DB, kill) : 1;
   return (m_DB) ? mysql_real_query(m_DB, kill, strlen(kill)) : 1;
   } // end of KillQuery
@@ -722,9 +727,10 @@ int MYSQLC::ExecSQL(PGLOBAL g, const char *query, int *w)
 
 //if (mysql_query(m_DB, query) != 0) {
   if (mysql_real_query(m_DB, query, strlen(query))) {
-    char *msg = (char*)PlugSubAlloc(g, NULL, 512 + strlen(query));
+    size_t msg_size = 512 + strlen(query);
+    char *msg = (char*)PlugSubAlloc(g, NULL, msg_size);
 
-    sprintf(msg, "(%d) %s [%s]", mysql_errno(m_DB),
+    snprintf(msg, msg_size, "(%d) %s [%s]", mysql_errno(m_DB),
                                  mysql_error(m_DB), query);
     strncpy(g->Message, msg, sizeof(g->Message) - 1);
     g->Message[sizeof(g->Message) - 1] = 0;
@@ -741,9 +747,10 @@ int MYSQLC::ExecSQL(PGLOBAL g, const char *query, int *w)
       m_Res = mysql_store_result(m_DB);
 
     if (!m_Res) {
-      char *msg = (char*)PlugSubAlloc(g, NULL, 512 + strlen(query));
+      size_t msg_size = 512 + strlen(query);
+      char *msg = (char*)PlugSubAlloc(g, NULL, msg_size);
 
-      sprintf(msg, "mysql_store_result failed: %s", mysql_error(m_DB));
+      snprintf(msg, msg_size, "mysql_store_result failed: %s", mysql_error(m_DB));
       strncpy(g->Message, msg, sizeof(g->Message) - 1);
       g->Message[sizeof(g->Message) - 1] = 0;
       rc = RC_FX;
@@ -760,7 +767,7 @@ int MYSQLC::ExecSQL(PGLOBAL g, const char *query, int *w)
   } else {
 //  m_Rows = (int)mysql_affected_rows(m_DB);
     m_Rows = (int)m_DB->affected_rows;
-    snprintf(g->Message, sizeof(g->Message), "Affected rows: %d\n", m_Rows);
+    snprintf(g->Message, sizeof(g->Message), "Affected rows: %d", m_Rows);
     rc = RC_NF;
   } // endif field count
 
@@ -778,9 +785,10 @@ int MYSQLC::GetTableSize(PGLOBAL g __attribute__((unused)), PSZ query)
   {
   if (mysql_real_query(m_DB, query, strlen(query))) {
 #if defined(_DEBUG)
-    char *msg = (char*)PlugSubAlloc(g, NULL, 512 + strlen(query));
+    size_t msg_size = 512 + strlen(query);
+    char *msg = (char*)PlugSubAlloc(g, NULL, msg_size);
 
-    sprintf(msg, "(%d) %s [%s]", mysql_errno(m_DB),
+    snprintf(msg, msg_size, "(%d) %s [%s]", mysql_errno(m_DB),
                                  mysql_error(m_DB), query);
     strncpy(g->Message, msg, sizeof(g->Message) - 1);
     g->Message[sizeof(g->Message) - 1] = 0;

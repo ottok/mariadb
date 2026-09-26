@@ -548,14 +548,17 @@ static const char *mrn_inspect_extra_function(enum ha_extra_function operation)
   case HA_EXTRA_STARTING_ORDERED_INDEX_SCAN:
     inspected = "HA_EXTRA_STARTING_ORDERED_INDEX_SCAN";
     break;
-  case HA_EXTRA_BEGIN_ALTER_COPY:
-    inspected = "HA_EXTRA_BEGIN_ALTER_COPY";
+  case HA_EXTRA_BEGIN_COPY:
+    inspected = "HA_EXTRA_BEGIN_COPY";
     break;
-  case HA_EXTRA_END_ALTER_COPY:
-    inspected = "HA_EXTRA_END_ALTER_COPY";
+  case HA_EXTRA_END_COPY:
+    inspected = "HA_EXTRA_END_COPY";
     break;
-  case HA_EXTRA_ABORT_ALTER_COPY:
-    inspected = "HA_EXTRA_ABORT_ALTER_COPY";
+  case HA_EXTRA_ABORT_COPY:
+    inspected = "HA_EXTRA_ABORT_COPY";
+    break;
+  case HA_EXTRA_BEGIN_ALTER_IGNORE_COPY:
+    inspected = "HA_EXTRA_BEGIN_ALTER_IGNORE_COPY";
     break;
 #ifdef MRN_HAVE_HA_EXTRA_EXPORT
   case HA_EXTRA_EXPORT:
@@ -582,19 +585,19 @@ static const char *mrn_inspect_extra_function(enum ha_extra_function operation)
     inspected = "HA_EXTRA_SKIP_SERIALIZABLE_DD_VIEW";
     break;
 #endif
-#ifdef MRN_HAVE_HA_EXTRA_BEGIN_ALTER_COPY
-  case HA_EXTRA_BEGIN_ALTER_COPY:
-    inspected = "HA_EXTRA_BEGIN_ALTER_COPY";
+#ifdef MRN_HAVE_HA_EXTRA_BEGIN_COPY
+  case HA_EXTRA_BEGIN_COPY:
+    inspected = "HA_EXTRA_BEGIN_COPY";
     break;
 #endif
-#ifdef MRN_HAVE_HA_EXTRA_END_ALTER_COPY
-  case HA_EXTRA_END_ALTER_COPY:
-    inspected = "HA_EXTRA_END_ALTER_COPY";
+#ifdef MRN_HAVE_HA_EXTRA_END_COPY
+  case HA_EXTRA_END_COPY:
+    inspected = "HA_EXTRA_END_COPY";
     break;
 #endif
-#ifdef MRN_HAVE_HA_EXTRA_ABORT_ALTER_COPY
-  case HA_EXTRA_ABORT_ALTER_COPY:
-    inspected = "HA_EXTRA_ABORT_ALTER_COPY";
+#ifdef MRN_HAVE_HA_EXTRA_ABORT_COPY
+  case HA_EXTRA_ABORT_COPY:
+    inspected = "HA_EXTRA_ABORT_COPY";
     break;
 #endif
 #ifdef MRN_HAVE_HA_EXTRA_NO_AUTOINC_LOCKING
@@ -772,6 +775,27 @@ static MYSQL_SYSVAR_ENUM(log_level, mrn_log_level,
                          static_cast<ulong>(mrn_log_level),
                          &mrn_log_level_typelib);
 
+static int mrn_log_file_check(THD *thd, struct st_mysql_sys_var *var,
+                              void *save, struct st_mysql_value *value)
+{
+  MRN_DBUG_ENTER_FUNCTION();
+
+  char buf[STRING_BUFFER_USUAL_SIZE];
+  int len = sizeof(buf);
+  const char* new_value = value->val_str(value, buf, &len);
+
+  if (!new_value || len == 0) {
+    my_printf_error(ER_MRN_INVALID_NULL_VALUE_NUM,
+                    ER_MRN_INVALID_NULL_VALUE_STR,
+                    MYF(0),
+                    "mroonga_log_file");
+    DBUG_RETURN(1);
+  }
+
+  *((const char**)save) = thd->strmake(new_value, len);
+
+  DBUG_RETURN(0);
+}
 static void mrn_log_file_update(THD *thd, struct st_mysql_sys_var *var,
                                 void *var_ptr, const void *save)
 {
@@ -844,7 +868,7 @@ static void mrn_log_file_update(THD *thd, struct st_mysql_sys_var *var,
 static MYSQL_SYSVAR_STR(log_file, mrn_log_file_path,
                         PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_MEMALLOC,
                         "log file for " MRN_PLUGIN_NAME_STRING,
-                        NULL,
+                        mrn_log_file_check,
                         mrn_log_file_update,
                         MRN_LOG_FILE_PATH);
 
@@ -934,6 +958,12 @@ static void mrn_default_tokenizer_update(THD *thd, struct st_mysql_sys_var *var,
   char **old_value_ptr = (char **)var_ptr;
   grn_ctx *ctx = &mrn_ctx;
 
+  if(!new_value) {
+    new_value = "off";
+#ifndef MRN_NEED_FREE_STRING_MEMALLOC_PLUGIN_VAR
+    new_value = mrn_my_strdup(new_value, MYF(MY_WME));
+#endif
+  }
   mrn_change_encoding(ctx, system_charset_info);
   if (strcmp(*old_value_ptr, new_value) == 0) {
     GRN_LOG(ctx, GRN_LOG_NOTICE,
@@ -1674,6 +1704,7 @@ static bool mrn_parse_grn_index_column_flags(THD *thd,
                           ER_MRN_INVALID_INDEX_FLAG_NUM,
                           ER_MRN_INVALID_INDEX_FLAG_STR,
                           invalid_flag_name);
+      break;
     }
   }
   return found;
@@ -3695,8 +3726,12 @@ bool ha_mroonga::storage_create_foreign_key(TABLE *table,
     char ref_path[FN_REFLEN + 1];
     TABLE_LIST table_list;
     TABLE_SHARE *tmp_ref_table_share;
-    build_table_filename(ref_path, sizeof(ref_path) - 1,
-                         table->s->db.str, ref_table_name.str, "", 0);
+    if (!build_table_filename(ref_path, sizeof(ref_path) - 1,
+                              table->s->db.str, ref_table_name.str, "", 0))
+    {
+      my_error(ER_WRONG_TABLE_NAME, MYF(0), ref_table_name.str);
+      DBUG_RETURN(false);
+    }
 
     DBUG_PRINT("info", ("mroonga: ref_path=%s", ref_path));
     error = mrn_change_encoding(ctx, system_charset_info);
@@ -3708,8 +3743,9 @@ bool ha_mroonga::storage_create_foreign_key(TABLE *table,
     if (!grn_table_ref) {
       error = ER_CANT_CREATE_TABLE;
       char err_msg[MRN_BUFFER_SIZE];
-      sprintf(err_msg, "reference table [%s.%s] is not mroonga table",
-              table->s->db.str, ref_table_name.str);
+      snprintf(err_msg, MRN_BUFFER_SIZE,
+               "reference table [%s.%s] is not mroonga table",
+               table->s->db.str, ref_table_name.str);
       my_message(error, err_msg, MYF(0));
       DBUG_RETURN(false);
     }
@@ -3725,8 +3761,9 @@ bool ha_mroonga::storage_create_foreign_key(TABLE *table,
       grn_obj_unlink(ctx, grn_table_ref);
       error = ER_CANT_CREATE_TABLE;
       char err_msg[MRN_BUFFER_SIZE];
-      sprintf(err_msg, "reference table [%s.%s] is not found",
-              table->s->db.str, ref_table_name.str);
+      snprintf(err_msg, MRN_BUFFER_SIZE,
+               "reference table [%s.%s] is not found",
+               table->s->db.str, ref_table_name.str);
       my_message(error, err_msg, MYF(0));
       DBUG_RETURN(false);
     }
@@ -3738,8 +3775,9 @@ bool ha_mroonga::storage_create_foreign_key(TABLE *table,
       grn_obj_unlink(ctx, grn_table_ref);
       error = ER_CANT_CREATE_TABLE;
       char err_msg[MRN_BUFFER_SIZE];
-      sprintf(err_msg, "reference table [%s.%s] has no primary key",
-              table->s->db.str, ref_table_name.str);
+      snprintf(err_msg, MRN_BUFFER_SIZE,
+               "reference table [%s.%s] has no primary key",
+               table->s->db.str, ref_table_name.str);
       my_message(error, err_msg, MYF(0));
       DBUG_RETURN(false);
     }
@@ -3752,9 +3790,9 @@ bool ha_mroonga::storage_create_foreign_key(TABLE *table,
       grn_obj_unlink(ctx, grn_table_ref);
       error = ER_CANT_CREATE_TABLE;
       char err_msg[MRN_BUFFER_SIZE];
-      sprintf(err_msg,
-              "reference table [%s.%s] primary key is multiple column",
-              table->s->db.str, ref_table_name.str);
+      snprintf(err_msg, MRN_BUFFER_SIZE,
+               "reference table [%s.%s] primary key is multiple column",
+               table->s->db.str, ref_table_name.str);
       my_message(error, err_msg, MYF(0));
       DBUG_RETURN(false);
     }
@@ -3766,9 +3804,9 @@ bool ha_mroonga::storage_create_foreign_key(TABLE *table,
       grn_obj_unlink(ctx, grn_table_ref);
       error = ER_CANT_CREATE_TABLE;
       char err_msg[MRN_BUFFER_SIZE];
-      sprintf(err_msg,
-              "reference column [%s.%s.%s] is not used for primary key",
-              table->s->db.str, ref_table_name.str, ref_field_name.str);
+      snprintf(err_msg, MRN_BUFFER_SIZE,
+               "reference column [%s.%s.%s] is not used for primary key",
+               table->s->db.str, ref_table_name.str, ref_field_name.str);
       my_message(error, err_msg, MYF(0));
       DBUG_RETURN(false);
     }
@@ -4260,18 +4298,15 @@ int ha_mroonga::wrapper_open(const char *name, int mode, uint open_options)
   if (error)
     DBUG_RETURN(error);
 
-  if (!(open_options & HA_OPEN_FOR_REPAIR)) {
-    error = open_table(name);
-    if (error)
-      DBUG_RETURN(error);
+  error = open_table(name);
+  if (error && !(open_options & HA_OPEN_FOR_REPAIR))
+    goto error_exit;
 
-    error = wrapper_open_indexes(name);
-    if (error) {
-      grn_obj_unlink(ctx, grn_table);
-      grn_table = NULL;
-      DBUG_RETURN(error);
-    }
-  }
+  error = wrapper_open_indexes(name);
+  if (error && !(open_options & HA_OPEN_FOR_REPAIR))
+    goto error_exit;
+
+  error = 0;
 
   mrn_init_alloc_root(&mem_root, 1024, 0, MYF(0));
   wrap_key_info = mrn_create_key_info_for_table(share, table, &error);
@@ -4360,6 +4395,7 @@ int ha_mroonga::wrapper_open(const char *name, int mode, uint open_options)
     }
   }
 
+error_exit:
   if (error)
   {
     grn_obj_unlink(ctx, grn_table);
@@ -4632,37 +4668,35 @@ int ha_mroonga::storage_open(const char *name, int mode, uint open_options)
     DBUG_RETURN(error);
   }
 
+  error = storage_open_indexes(name);
+  if (error && !(open_options & HA_OPEN_FOR_REPAIR)) {
+    storage_close_columns();
+    grn_obj_unlink(ctx, grn_table);
+    grn_table = NULL;
+    DBUG_RETURN(error);
+  }
+
+  storage_set_keys_in_use();
+
   if (!(open_options & HA_OPEN_FOR_REPAIR)) {
-    error = storage_open_indexes(name);
-    if (error) {
-      storage_close_columns();
-      grn_obj_unlink(ctx, grn_table);
-      grn_table = NULL;
-      DBUG_RETURN(error);
-    }
-
-    storage_set_keys_in_use();
-
-    {
-      mrn::Lock lock(&mrn_operations_mutex);
-      mrn::PathMapper mapper(name);
-      const char *table_name = mapper.table_name();
-      size_t table_name_size = strlen(table_name);
-      if (db->is_broken_table(table_name, table_name_size)) {
-        GRN_LOG(ctx, GRN_LOG_NOTICE,
-                "Auto repair is started: <%s>",
-                name);
-        error = operations_->repair(table_name, table_name_size);
+    mrn::Lock lock(&mrn_operations_mutex);
+    mrn::PathMapper mapper(name);
+    const char *table_name = mapper.table_name();
+    size_t table_name_size = strlen(table_name);
+    if (db->is_broken_table(table_name, table_name_size)) {
+      GRN_LOG(ctx, GRN_LOG_NOTICE,
+              "Auto repair is started: <%s>",
+              name);
+      error = operations_->repair(table_name, table_name_size);
+      if (!error)
+        db->mark_table_repaired(table_name, table_name_size);
+      if (!share->disable_keys) {
         if (!error)
-          db->mark_table_repaired(table_name, table_name_size);
-        if (!share->disable_keys) {
-          if (!error)
-            error = storage_reindex();
-        }
-        GRN_LOG(ctx, GRN_LOG_NOTICE,
-                "Auto repair is done: <%s>: %s",
-                name, error == 0 ? "success" : "failure");
+          error = storage_reindex();
       }
+      GRN_LOG(ctx, GRN_LOG_NOTICE,
+              "Auto repair is done: <%s>: %s",
+              name, error == 0 ? "success" : "failure");
     }
   }
 
@@ -5206,7 +5240,7 @@ void ha_mroonga::storage_set_keys_in_use()
     if (i == table_share->primary_key) {
       continue;
     }
-    if (!grn_index_tables[i]) {
+    if (grn_index_tables && !grn_index_tables[i]) {
       /* disabled */
       table_share->keys_in_use.clear_bit(i);
       DBUG_PRINT("info", ("mroonga: key %u disabled", i));
@@ -9015,7 +9049,7 @@ void ha_mroonga::push_warning_unsupported_spatial_index_search(enum ha_rkey_func
   } else if (flag & HA_READ_MBR_EQUAL) {
     strcpy(search_name, "equal");
   } else {
-    sprintf(search_name, "unknown: %d", flag);
+    snprintf(search_name, MRN_BUFFER_SIZE, "unknown: %d", flag);
   }
   push_warning_printf(ha_thd(),
                       MRN_SEVERITY_WARNING,
@@ -9604,11 +9638,11 @@ grn_obj *ha_mroonga::find_tokenizer(const char *name, int name_length)
   tokenizer = grn_ctx_get(ctx, name, name_length);
   if (!tokenizer) {
     char message[MRN_BUFFER_SIZE];
-    sprintf(message,
-            "specified tokenizer for fulltext index <%.*s> doesn't exist. "
-            "The default tokenizer for fulltext index <%s> is used instead.",
-            name_length, name,
-            MRN_DEFAULT_TOKENIZER);
+    snprintf(message, MRN_BUFFER_SIZE,
+             "specified tokenizer for fulltext index <%.*s> doesn't exist. "
+             "The default tokenizer for fulltext index <%s> is used instead.",
+             name_length, name,
+             MRN_DEFAULT_TOKENIZER);
     push_warning(ha_thd(),
                  MRN_SEVERITY_WARNING, ER_UNSUPPORTED_EXTENSION,
                  message);
@@ -9773,9 +9807,9 @@ bool ha_mroonga::find_token_filters_put(grn_obj *token_filters,
     return true;
   } else {
     char message[MRN_BUFFER_SIZE];
-    sprintf(message,
-            "nonexistent token filter: <%.*s>",
-            token_filter_name_length, token_filter_name);
+    snprintf(message, MRN_BUFFER_SIZE,
+             "nonexistent token filter: <%.*s>",
+             token_filter_name_length, token_filter_name);
     push_warning(ha_thd(),
                  MRN_SEVERITY_WARNING, ER_UNSUPPORTED_EXTENSION,
                  message);
@@ -9830,12 +9864,12 @@ bool ha_mroonga::find_token_filters_fill(grn_obj *token_filters,
 break_loop:
   if (!name_start) {
     char message[MRN_BUFFER_SIZE];
-    sprintf(message,
-            "empty token filter name: "
-            "<%.*s|%.*s|%.*s>",
-            (int)(last_name_end - start), start,
-            (int)(current - last_name_end), last_name_end,
-            (int)(end - current), current);
+    snprintf(message, MRN_BUFFER_SIZE,
+             "empty token filter name: "
+             "<%.*s|%.*s|%.*s>",
+             (int)(last_name_end - start), start,
+             (int)(current - last_name_end), last_name_end,
+             (int)(end - current), current);
     push_warning(ha_thd(),
                  MRN_SEVERITY_WARNING, ER_UNSUPPORTED_EXTENSION,
                  message);
@@ -16536,8 +16570,12 @@ char *ha_mroonga::storage_get_foreign_key_create_info()
     char ref_path[FN_REFLEN + 1];
     TABLE_LIST table_list;
     TABLE_SHARE *tmp_ref_table_share;
-    build_table_filename(ref_path, sizeof(ref_path) - 1,
-                         table_share->db.str, ref_table_buff, "", 0);
+    if (!build_table_filename(ref_path, sizeof(ref_path) - 1,
+                              table_share->db.str, ref_table_buff, "", 0))
+    {
+      my_error(ER_WRONG_TABLE_NAME, MYF(0), ref_table_buff);
+      DBUG_RETURN(NULL);
+    }
     DBUG_PRINT("info", ("mroonga: ref_path=%s", ref_path));
 
     LEX_CSTRING table_name= { ref_table_buff, (size_t) ref_table_name_length };
@@ -16740,8 +16778,12 @@ int ha_mroonga::storage_get_foreign_key_list(THD *thd,
     char ref_path[FN_REFLEN + 1];
     TABLE_LIST table_list;
     TABLE_SHARE *tmp_ref_table_share;
-    build_table_filename(ref_path, sizeof(ref_path) - 1,
-                         table_share->db.str, ref_table_buff, "", 0);
+    if (!build_table_filename(ref_path, sizeof(ref_path) - 1,
+                              table_share->db.str, ref_table_buff, "", 0))
+    {
+      my_error(ER_WRONG_TABLE_NAME, MYF(0), ref_table_buff);
+      DBUG_RETURN(false);
+    }
     DBUG_PRINT("info", ("mroonga: ref_path=%s", ref_path));
 
     LEX_CSTRING table_name= { ref_table_buff, (size_t) ref_table_name_length };

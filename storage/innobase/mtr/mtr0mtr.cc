@@ -44,6 +44,11 @@ void (*mtr_t::commit_logger)(mtr_t *, std::pair<lsn_t,lsn_t>);
 
 std::pair<lsn_t,lsn_t> (*mtr_t::finisher)(mtr_t *, size_t);
 
+#ifdef UNIV_DEBUG
+/** Number of times an index latch was acquired in exclusive mode */
+Atomic_counter<uint64_t> mtr_t::n_index_x_lock_calls{0};
+#endif
+
 void mtr_t::finisher_update()
 {
   ut_ad(log_sys.latch_have_wr());
@@ -253,7 +258,7 @@ static void insert_imported(buf_block_t *block)
 {
   if (block->page.oldest_modification() <= 1)
   {
-    log_sys.latch.wr_lock(SRW_LOCK_CALL);
+    log_sys.latch.wr_lock();
     /* For unlogged mtrs (MTR_LOG_NO_REDO), we use the current system LSN. The
     mtr that generated the LSN is either already committed or in mtr_t::commit.
     Shared latch and relaxed atomics should be fine here as it is guaranteed
@@ -555,7 +560,7 @@ void mtr_t::commit_shrink(fil_space_t &space, uint32_t size)
 
   log_write_and_flush_prepare();
   m_latch_ex= true;
-  log_sys.latch.wr_lock(SRW_LOCK_CALL);
+  log_sys.latch.wr_lock();
 
   const lsn_t start_lsn= do_write().first;
   ut_d(m_log.erase());
@@ -673,7 +678,7 @@ bool mtr_t::commit_file(fil_space_t &space, const char *name)
   const size_t size{crypt ? 8 + encrypt() : crc32c()};
 
   log_write_and_flush_prepare();
-  log_sys.latch.wr_lock(SRW_LOCK_CALL);
+  log_sys.latch.wr_lock();
   finish_write(size);
 
   if (!name && space.max_lsn)
@@ -879,7 +884,7 @@ ATTRIBUTE_COLD void log_t::append_prepare_wait(bool late, bool ex) noexcept
     if (!late)
     {
       /* Wait for all threads to back off. */
-      latch.wr_lock(SRW_LOCK_CALL);
+      latch.wr_lock();
       goto got_ex;
     }
 
@@ -931,13 +936,13 @@ ATTRIBUTE_COLD void log_t::append_prepare_wait(bool late, bool ex) noexcept
     log_write_up_to(lsn, false);
     if (ex)
     {
-      latch.wr_lock(SRW_LOCK_CALL);
+      latch.wr_lock();
       return;
     }
   }
 
 done:
-  latch.rd_lock(SRW_LOCK_CALL);
+  latch.rd_lock();
 }
 
 /** Reserve space in the log buffer for appending data.
@@ -1014,7 +1019,7 @@ static lsn_t log_close(lsn_t lsn) noexcept
   limit (lsn - log_sys.max_checkpoint_age) in order to minimize the
   synchronous wait time. */
   if (furious)
-    log_sys.set_check_for_checkpoint();
+    log_sys.set_check_for_checkpoint(true);
 
   return ((lsn - max_age) & ~lsn_t{1}) | lsn_t{furious};
 }
@@ -1091,7 +1096,7 @@ std::pair<lsn_t,lsn_t> mtr_t::do_write() noexcept
   const size_t len{log_sys.is_encrypted() ? 8 + encrypt() : crc32c()};
 
   if (!m_latch_ex)
-    log_sys.latch.rd_lock(SRW_LOCK_CALL);
+    log_sys.latch.rd_lock();
 
   if (UNIV_UNLIKELY(m_user_space && !m_user_space->max_lsn &&
                     !srv_is_undo_tablespace((m_user_space->id))))
@@ -1100,7 +1105,7 @@ std::pair<lsn_t,lsn_t> mtr_t::do_write() noexcept
     {
       m_latch_ex= true;
       log_sys.latch.rd_unlock();
-      log_sys.latch.wr_lock(SRW_LOCK_CALL);
+      log_sys.latch.wr_lock();
       if (UNIV_UNLIKELY(m_user_space->max_lsn != 0))
         goto func_exit;
     }

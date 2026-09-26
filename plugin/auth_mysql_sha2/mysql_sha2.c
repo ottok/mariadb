@@ -124,6 +124,8 @@ static int auth(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
       plain_text[i]^= scramble[i % SCRAMBLE_LENGTH];
     pkt= plain_text;
     pkt_len= (int)plain_text_len;
+    if (pkt_len <= 0 || pkt[pkt_len-1])
+      return CR_ERROR;
   }
   /* now pkt contains plaintext password */
 
@@ -251,6 +253,6 @@ maria_declare_plugin(auth_mysql_sha2)
   status_variables,
   sysvars,
   "1.0",
-  MariaDB_PLUGIN_MATURITY_GAMMA
+  MariaDB_PLUGIN_MATURITY_STABLE
 }
 maria_declare_plugin_end;

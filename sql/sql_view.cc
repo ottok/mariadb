@@ -39,8 +39,6 @@
 #include "debug.h"              // debug_crash_here
 #include "wsrep_mysqld.h"
 
-#define MD5_BUFF_LENGTH 33
-
 const LEX_CSTRING view_type= { STRING_WITH_LEN("VIEW") };
 
 static int mysql_register_view(THD *thd, DDL_LOG_STATE *ddl_log_state,
@@ -264,6 +262,9 @@ bool create_view_precheck(THD *thd, TABLE_LIST *tables, TABLE_LIST *view,
   SELECT_LEX *sl;
   bool res= TRUE;
   DBUG_ENTER("create_view_precheck");
+
+  if (error_if_mysql50_prefix(view->table_name.str, ER_WRONG_TABLE_NAME))
+    DBUG_RETURN(TRUE);
 
   /*
     Privilege check for view creation:
@@ -834,7 +835,7 @@ static File_option view_parameters[]=
   FILE_OPTIONS_ESTRING},
  {{ STRING_WITH_LEN("md5")},
   my_offsetof(TABLE_LIST, md5),
-  FILE_OPTIONS_STRING},
+  FILE_OPTIONS_ESTRING},
  {{ STRING_WITH_LEN("updatable")},
   my_offsetof(TABLE_LIST, updatable_view),
   FILE_OPTIONS_ULONGLONG},
@@ -843,10 +844,10 @@ static File_option view_parameters[]=
   FILE_OPTIONS_VIEW_ALGO},
  {{ STRING_WITH_LEN("definer_user")},
   my_offsetof(TABLE_LIST, definer.user),
-  FILE_OPTIONS_STRING},
+  FILE_OPTIONS_ESTRING},
  {{ STRING_WITH_LEN("definer_host")},
   my_offsetof(TABLE_LIST, definer.host),
-  FILE_OPTIONS_STRING},
+  FILE_OPTIONS_ESTRING},
  {{ STRING_WITH_LEN("suid")},
   my_offsetof(TABLE_LIST, view_suid),
   FILE_OPTIONS_ULONGLONG},
@@ -864,10 +865,10 @@ static File_option view_parameters[]=
   FILE_OPTIONS_ESTRING},
  {{(char*) STRING_WITH_LEN("client_cs_name")},
   my_offsetof(TABLE_LIST, view_client_cs_name),
-  FILE_OPTIONS_STRING},
+  FILE_OPTIONS_ESTRING},
  {{(char*) STRING_WITH_LEN("connection_cl_name")},
   my_offsetof(TABLE_LIST, view_connection_cl_name),
-  FILE_OPTIONS_STRING},
+  FILE_OPTIONS_ESTRING},
  {{(char*) STRING_WITH_LEN("view_body_utf8")},
   my_offsetof(TABLE_LIST, view_body_utf8),
   FILE_OPTIONS_ESTRING},
@@ -875,7 +876,7 @@ static File_option view_parameters[]=
   my_offsetof(TABLE_LIST, mariadb_version),
   FILE_OPTIONS_ULONGLONG},
  {{NullS, 0},			0,
-  FILE_OPTIONS_STRING}
+  FILE_OPTIONS_ESTRING}
 };
 
 
@@ -883,7 +884,7 @@ static File_option view_timestamp_parameters[]=
 {
 
  {{ C_STRING_WITH_LEN("timestamp")}, 0, FILE_OPTIONS_TIMESTAMP},
- {{NullS, 0}, 0, FILE_OPTIONS_STRING}
+ {{NullS, 0}, 0, FILE_OPTIONS_ESTRING}
 };
 
 
@@ -922,7 +923,7 @@ int mariadb_fix_view(THD *thd, TABLE_LIST *view, bool wrong_checksum,
   {
     if (view->md5.length != VIEW_MD5_LEN)
     {
-       if ((view->md5.str= thd->alloc(VIEW_MD5_LEN + 1)) == NULL)
+       if ((view->md5.str= thd->alloc(MD5_BUFF_LENGTH)) == NULL)
          DBUG_RETURN(HA_ADMIN_FAILED);
     }
     view->calc_md5(const_cast<char*>(view->md5.str));
@@ -1690,8 +1691,12 @@ bool mysql_make_view(THD *thd, TABLE_SHARE *share, TABLE_LIST *table,
         /* We have to keep the lock type for sequence tables */
         if (!tbl->sequence)
 	  tbl->lock_type= table->lock_type;
-        tbl->mdl_request.set_type(table->mdl_request.type);
-        tbl->updating= table->updating;
+        /* VIEWs with derived are non-writable */
+        if (!tbl->is_pure_alias())
+        {
+          tbl->mdl_request.set_type(table->mdl_request.type);
+          tbl->updating= table->updating;
+        }
       }
       /*
         If the view is mergeable, we might want to
@@ -1729,7 +1734,7 @@ bool mysql_make_view(THD *thd, TABLE_SHARE *share, TABLE_LIST *table,
     if (lex->first_select_lex()->options & OPTION_TO_QUERY_CACHE)
       old_lex->first_select_lex()->options|= OPTION_TO_QUERY_CACHE;
 
-    old_lex->default_used= lex->default_used;
+    old_lex->default_used|= lex->default_used;
 
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
     if (table->view_suid)
@@ -1828,7 +1833,7 @@ bool mysql_make_view(THD *thd, TABLE_SHARE *share, TABLE_LIST *table,
       {
         table->select_lex->order_list.
           push_back(&lex->first_select_lex()->order_list);
-        lex->first_select_lex()->order_list.empty();
+        lex->first_select_lex()->optimize_out_order_list();
       }
       else
       {

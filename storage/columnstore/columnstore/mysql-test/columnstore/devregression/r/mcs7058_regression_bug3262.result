@@ -1,6 +1,0 @@
-USE tpch1;
-select count(*) into outfile '/tmp/natcount.tbl' from nation;
-select count(*) from nation;
-count(*)
-25
-select count(*) into outfile 'nation.out' from nation;

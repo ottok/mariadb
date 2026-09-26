@@ -988,7 +988,8 @@ bool mysql_insert(THD *thd, TABLE_LIST *table_list,
 #endif /* EMBEDDED_LIBRARY */
   {
     if (prepare_for_replace(table, info.handle_duplicates, info.ignore))
-      DBUG_RETURN(1);
+      goto abort;
+    
     /**
       This is a simple check for the case when the table has a trigger
       that reads from it, or when the statement invokes a stored function
@@ -1455,14 +1456,14 @@ values_loop_end:
                      info.touched : info.updated);
 
     if (ignore)
-      sprintf(buff, ER_THD(thd, ER_INSERT_INFO), (ulong) info.records,
-              (lock_type == TL_WRITE_DELAYED) ? (ulong) 0 :
-              (ulong) (info.records - info.copied),
-              (long) thd->get_stmt_da()->current_statement_warn_count());
+      snprintf(buff, sizeof(buff), ER_THD(thd, ER_INSERT_INFO), (ulong) info.records,
+               (lock_type == TL_WRITE_DELAYED) ? (ulong) 0 :
+               (ulong) (info.records - info.copied),
+               (long) thd->get_stmt_da()->current_statement_warn_count());
     else
-      sprintf(buff, ER_THD(thd, ER_INSERT_INFO), (ulong) info.records,
-              (ulong) (info.deleted + updated),
-              (long) thd->get_stmt_da()->current_statement_warn_count());
+      snprintf(buff, sizeof(buff), ER_THD(thd, ER_INSERT_INFO), (ulong) info.records,
+               (ulong) (info.deleted + updated),
+               (long) thd->get_stmt_da()->current_statement_warn_count());
     if (returning)
       result->send_eof();
     else if (!(thd->in_sub_stmt & SUB_STMT_TRIGGER))
@@ -2296,18 +2297,25 @@ int Write_record::insert_on_duplicate_update(ha_rows *inserted,
     if (error != HA_ERR_RECORD_IS_THE_SAME)
     {
       ++*updated;
-      if (table->versioned() &&
-          table->vers_check_update(*info->update_fields))
+      if (table->versioned())
       {
-        if (versioned)
+        if (table->vers_check_update(*info->update_fields))
         {
-          store_record(table, record[2]);
-          error= vers_insert_history_row(table);
-          restore_record(table, record[2]);
-          if (unlikely(error))
-            return on_ha_error(error);
+          if (versioned)
+          {
+            store_record(table, record[2]);
+            error= vers_insert_history_row(table);
+            restore_record(table, record[2]);
+            if (unlikely(error))
+              return on_ha_error(error);
+          }
+          ++*inserted;
         }
-        ++*inserted;
+        /*
+          INSERT will need it in the next bulk iteration
+          (see vers_check_update() and MDEV-25644).
+        */
+        table->vers_write= true;
       }
     }
     /*
@@ -2322,13 +2330,12 @@ int Write_record::insert_on_duplicate_update(ha_rows *inserted,
     insert_id_for_cur_row= table->file->insert_id_for_cur_row= 0;
 
     ++*inserted; // Conforms the older behavior;
-
-    if (use_triggers
-        && table->triggers->process_triggers(thd, TRG_EVENT_UPDATE,
-                                             TRG_ACTION_AFTER, true,
-                                             nullptr))
-      return restore_on_error();
   }
+
+  if (use_triggers &&
+      table->triggers->process_triggers(thd, TRG_EVENT_UPDATE,
+                                        TRG_ACTION_AFTER, true, nullptr))
+    return restore_on_error();
 
   /*
     Only update next_insert_id if the AUTO_INCREMENT value was explicitly
@@ -2661,6 +2668,7 @@ public:
     thd.lex->current_select= lex->current_select;
     thd.lex->sql_command= lex->sql_command;        // For innodb::store_lock()
     thd.lex->duplicates= lex->duplicates;
+    thd.lex->vers_conditions= lex->vers_conditions; // For TABLE::delete_row()
     /*
       Prevent changes to global.lock_wait_timeout from affecting
       delayed insert threads as any timeouts in delayed inserts
@@ -4592,7 +4600,7 @@ bool select_insert::prepare_eof()
     /* Don't convert the warning to error in case
     statistics updation fails */
     Abort_on_warning_instant_set save_abort_on_warning(thd, false);
-    error= table->file->extra(HA_EXTRA_END_ALTER_COPY);
+    error= table->file->extra(HA_EXTRA_END_COPY);
     if (error == HA_ERR_FOUND_DUPP_KEY)
     {
       uint key_nr= table->file->get_dup_key(error);
@@ -4738,7 +4746,7 @@ void select_insert::abort_result_set()
     finalize_replace(table, info.handle_duplicates, info.ignore);
     table->file->extra(HA_EXTRA_NO_IGNORE_DUP_KEY);
     table->file->extra(HA_EXTRA_WRITE_CANNOT_REPLACE);
-    if (table->file->extra(HA_EXTRA_ABORT_ALTER_COPY) == HA_ERR_ROLLBACK)
+    if (table->file->extra(HA_EXTRA_ABORT_COPY) == HA_ERR_ROLLBACK)
       thd->transaction_rollback_request= true;
     /*
       If at least one row has been inserted/modified and will stay in
@@ -5215,8 +5223,13 @@ select_create::prepare(List<Item> &_values, SELECT_LEX_UNIT *u)
       !table->s->long_unique_table && !table->s->hlindexes())
   {
     table->file->ha_start_bulk_insert((ha_rows) 0);
-    if (thd->lex->duplicates == DUP_ERROR && !thd->lex->ignore)
-      table->file->extra(HA_EXTRA_BEGIN_ALTER_COPY);
+    if (thd->lex->duplicates == DUP_ERROR)
+    {
+      static_assert(int{HA_EXTRA_BEGIN_ALTER_IGNORE_COPY} ==
+                    int{HA_EXTRA_BEGIN_COPY} + 1, "");
+      table->file->extra(ha_extra_function(int{HA_EXTRA_BEGIN_COPY} +
+                                           thd->lex->ignore));
+    }
     table->file->extra(HA_EXTRA_WRITE_CACHE);
   }
   thd->abort_on_warning= !info.ignore && thd->is_strict_mode();

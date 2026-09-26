@@ -4256,7 +4256,6 @@ void get_partition_set(const TABLE *table, uchar *buf, const uint index,
 {
   partition_info *part_info= table->part_info;
   uint num_parts= part_info->get_tot_partitions();
-  uint i, part_id;
   uint sub_part= num_parts;
   uint32 part_part= num_parts;
   KEY *key_info= NULL;
@@ -4404,9 +4403,11 @@ void get_partition_set(const TABLE *table, uchar *buf, const uint index,
       part_spec->start_part= sub_part;
       part_spec->end_part=sub_part+
                            (part_info->num_subparts*(part_info->num_parts-1));
-      for (i= 0, part_id= sub_part; i < part_info->num_parts;
+#if 0 // FIXME: empty loop!
+      for (uint i= 0; part_id= sub_part; i < part_info->num_parts;
            i++, part_id+= part_info->num_subparts)
         ; //Set bit part_id in bit array
+#endif
     }
   }
   if (found_part_field)
@@ -4629,8 +4630,6 @@ static int fast_end_partition(THD *thd, ulonglong copied,
   DBUG_ENTER("fast_end_partition");
 
   thd->proc_info="end";
-
-  query_cache_invalidate3(thd, table_list, 0);
 
   my_snprintf(tmp_name, sizeof(tmp_name), ER_THD(thd, ER_INSERT_INFO),
               (ulong) (copied + deleted),
@@ -6334,7 +6333,7 @@ static bool alter_partition_convert_out(ALTER_PARTITION_PARAM_TYPE *lpt)
 {
   partition_info *part_info= lpt->table->part_info;
   THD *thd= lpt->thd;
-  int error;
+  int error= 0;
   handler *file= get_new_handler(NULL, thd->mem_root, part_info->default_engine_type);
 
   DBUG_ASSERT(lpt->thd->mdl_context.is_lock_owner(MDL_key::TABLE,
@@ -6353,9 +6352,8 @@ static bool alter_partition_convert_out(ALTER_PARTITION_PARAM_TYPE *lpt)
     if (e.part_state != PART_TO_BE_DROPPED)
       continue;
 
-    if (unlikely((error= create_partition_name(from_name, sizeof(from_name),
-                                                path, e.partition_name,
-                                                NORMAL_PART_NAME, FALSE))))
+    if (create_partition_name(from_name, sizeof(from_name), path,
+                              e.partition_name, NORMAL_PART_NAME, TRUE))
     {
       DBUG_ASSERT(thd->is_error());
       return true;
@@ -7524,6 +7522,8 @@ uint fast_alter_partition_table(THD *thd, TABLE *table,
   lpt->deleted= 0;
   lpt->pack_frm_data= NULL;
   lpt->pack_frm_len= 0;
+
+  query_cache_invalidate3(thd, table_list, 0);
 
   /* Add IF EXISTS to binlog if shared table */
   if (table->file->partition_ht()->flags & HTON_TABLE_MAY_NOT_EXIST_ON_SLAVE)
@@ -9149,6 +9149,12 @@ static const char *longest_str(const char *s1, const char *s2,
     in1                       First part
     in2                       Second part
     name_variant              Normal, temporary or renamed partition name
+    translate                 If TRUE, in2 is a user-specified partition name
+                              and is encoded with tablename_to_filename()
+                              before use. If FALSE, in2 is already an on-disk
+                              filename and is used verbatim.
+
+
 
   RETURN VALUE
     0 if ok, error if name too long

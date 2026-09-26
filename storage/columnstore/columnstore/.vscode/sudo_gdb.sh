@@ -1,1 +1,0 @@
-sudo pkexec /usr/bin/gdb "$@"

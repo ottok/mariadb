@@ -367,6 +367,7 @@ enum enum_field_types { MYSQL_TYPE_DECIMAL, MYSQL_TYPE_TINY,
                         MYSQL_TYPE_DATETIME2,
                         MYSQL_TYPE_TIME2,
                         /* --------------------------------------------- */
+                        MYSQL_TYPE_VECTOR=242,
                         MYSQL_TYPE_JSON=245,
                         MYSQL_TYPE_NEWDECIMAL=246,
                         MYSQL_TYPE_ENUM=247,
@@ -410,6 +411,7 @@ enum enum_field_types { MYSQL_TYPE_DECIMAL, MYSQL_TYPE_TINY,
 #define FIELD_TYPE_BIT MYSQL_TYPE_BIT
 
 extern unsigned long max_allowed_packet;
+extern unsigned long max_allowed_auth_packet;
 extern unsigned long net_buffer_length;
 
 #define net_new_transaction(net) ((net)->pkt_nr=0)
@@ -471,7 +473,7 @@ extern "C" {
 #endif
   
 char *ma_scramble_323(char *to,const char *message,const char *password);
-void ma_scramble_41(const unsigned char *buffer, const char *scramble, const char *password);
+int ma_scramble_41(const unsigned char *buffer, const char *scramble, const char *password);
 void ma_hash_password(unsigned long *result, const char *password, size_t len);
 void ma_make_scrambled_password(char *to,const char *password);
 

@@ -20,7 +20,7 @@
   Tool used for executing a .test file
 
   See the "MySQL Test framework manual" for more information
-  https://mariadb.com/kb/en/library/mysqltest/
+  https://mariadb.com/docs/server/clients-and-utilities/testing-tools/mariadb-test
 
   Please keep the test framework tools identical in all versions!
 
@@ -207,7 +207,7 @@ static char TMPDIR[FN_REFLEN];
 static char global_subst_from[200];
 static char global_subst_to[200];
 static char *global_subst= NULL;
-static char *read_command_buf= NULL;
+static char *read_command_buf= NULL, *read_command_buf_end;
 static MEM_ROOT require_file_root;
 static const my_bool my_true= 1;
 static const my_bool my_false= 0;
@@ -1543,12 +1543,12 @@ void do_eval(DYNAMIC_STRING *query_eval, const char *query,
       }
       else
       {
-	if (!(v= var_get(p, &p, 0, 0)))
+        if (!(v= var_get(p, &p, 0, 0)) || !v->str_val)
         {
           report_or_die( "Bad variable in eval");
           DBUG_VOID_RETURN;
         }
-	dynstr_append_mem(query_eval, v->str_val, v->str_val_len);
+        dynstr_append_mem(query_eval, v->str_val, v->str_val_len);
       }
       break;
     case '\\':
@@ -2157,15 +2157,16 @@ void log_msg(const char *fmt, ...)
   SYNOPSIS
   cat_file
   ds - pointer to dynamic string where to add the files content
-  filename - name of the file to read
-
+  filename  - name of the file to read
+  max_lines - number of lines to print. 0 == all
 */
 
-int cat_file(DYNAMIC_STRING* ds, const char* filename)
+int cat_file(DYNAMIC_STRING* ds, const char* filename, uint max_lines)
 {
   int fd;
   size_t len;
   char *buff;
+  uint line= 0;                             // Enough for mtr
 
   if ((fd= my_open(filename, O_RDONLY, MYF(0))) < 0)
     return 1;
@@ -2182,28 +2183,35 @@ int cat_file(DYNAMIC_STRING* ds, const char* filename)
   len= my_read(fd, (uchar*)buff, len, MYF(0));
   my_close(fd, MYF(0));
 
+  if (!max_lines)
+    max_lines= 10000;                           // Enough for mtr
+
+  char *p= buff, *start= buff, *end=buff+len;
+  while (p < end && line < max_lines)
   {
-    char *p= buff, *start= buff,*end=buff+len;
-    while (p < end)
+    /* Convert cr/lf to lf */
+    if (*p == '\r' && p+1 < end && *(p+1)== '\n')
     {
-      /* Convert cr/lf to lf */
-      if (*p == '\r' && p+1 < end && *(p+1)== '\n')
-      {
-        /* Add fake newline instead of cr and output the line */
-        *p= '\n';
-        p++; /* Step past the "fake" newline */
-        *p= 0;
-        replace_dynstr_append_mem(ds, start, p-start);
-        p++; /* Step past the "fake" newline */
-        start= p;
-      }
-      else
-        p++;
+      /* Add fake newline instead of cr and output the line */
+      *p= '\n';
+      p++; /* Step past the "fake" newline */
+      *p= 0;
+      replace_dynstr_append_mem(ds, start, p-start);
+      p++; /* Step past the "fake" newline */
+      start= p;
+      line++;
     }
-    /* Output any chars that migh be left */
-    *p= 0;
-    replace_dynstr_append_mem(ds, start, p-start);
+    else
+    {
+      if (*p == '\n')
+        line++;
+      p++;
+    }
   }
+  /* Output any chars that migh be left */
+  *p= 0;
+  replace_dynstr_append_mem(ds, start, p-start);
+
   my_free(buff);
   return 0;
 }
@@ -2450,11 +2458,11 @@ void show_diff(DYNAMIC_STRING* ds,
     dynstr_append_mem(&ds_tmp, STRING_WITH_LEN(" --- "));
     dynstr_append_mem(&ds_tmp, filename1, strlen(filename1));
     dynstr_append_mem(&ds_tmp, STRING_WITH_LEN(" >>>\n"));
-    cat_file(&ds_tmp, filename1);
+    cat_file(&ds_tmp, filename1, 0);
     dynstr_append_mem(&ds_tmp, STRING_WITH_LEN("<<<\n --- "));
     dynstr_append_mem(&ds_tmp, filename1, strlen(filename1));
     dynstr_append_mem(&ds_tmp, STRING_WITH_LEN(" >>>\n"));
-    cat_file(&ds_tmp, filename2);
+    cat_file(&ds_tmp, filename2, 0);
     dynstr_append_mem(&ds_tmp, STRING_WITH_LEN("<<<<\n"));
   }
 
@@ -2920,7 +2928,7 @@ VAR* var_get(const char *var_name, const char **var_name_end, my_bool raw,
 
   if (!raw && v->int_dirty)
   {
-    sprintf(v->str_val, "%d", v->int_val);
+    snprintf(v->str_val, v->alloced_len, "%d", v->int_val);
     v->int_dirty= false;
     v->str_val_len = strlen(v->str_val);
   }
@@ -2982,7 +2990,7 @@ void var_set(const char *var_name, const char *var_name_end,
   {
     if (v->int_dirty)
     {
-      sprintf(v->str_val, "%d", v->int_val);
+      snprintf(v->str_val, v->alloced_len, "%d", v->int_val);
       v->int_dirty=false;
       v->str_val_len= strlen(v->str_val);
     }
@@ -3878,8 +3886,23 @@ end:
 #endif
   if (error)
   {
-    uint status= WEXITSTATUS(error);
+    uint status;
     int i;
+
+#ifdef _WIN32
+    status= WEXITSTATUS(error);
+#else
+    /* WEXITSTATUS() is only valid for a normal exit; a process killed by an
+       uncaught signal must be translated using the shell's 128+signal
+       convention, or the real error is silently lost as status 0. */
+    if (WIFEXITED(error))
+      status= WEXITSTATUS(error);
+    else if (WIFSIGNALED(error))
+      status= 128 + WTERMSIG(error);
+    else
+      status= error;
+
+#endif
 
     if (command->abort_on_error)
     {
@@ -4684,9 +4707,12 @@ void do_write_file_command(struct st_command *command, my_bool append)
   static DYNAMIC_STRING ds_content;
   static DYNAMIC_STRING ds_filename;
   static DYNAMIC_STRING ds_delimiter;
+  static DYNAMIC_STRING ds_eval_flag;
+  my_bool eval_content;
   const struct command_arg write_file_args[] = {
     { "filename", ARG_STRING, TRUE, &ds_filename, "File to write to" },
-    { "delimiter", ARG_STRING, FALSE, &ds_delimiter, "Delimiter to read until" }
+    { "delimiter", ARG_STRING, FALSE, &ds_delimiter, "Delimiter to read until" },
+    { "eval", ARG_STRING, FALSE, &ds_eval_flag, "Evaluate the content" }
   };
   DBUG_ENTER("do_write_file");
 
@@ -4698,6 +4724,14 @@ void do_write_file_command(struct st_command *command, my_bool append)
 
   if (bad_path(ds_filename.str))
     DBUG_VOID_RETURN;
+
+  if ((eval_content= (ds_eval_flag.length != 0)) &&
+      strcasecmp(ds_eval_flag.str, "eval"))
+  {
+    report_or_die("Invalid argument '%s' to '%.*s', only 'eval' is allowed",
+                  ds_eval_flag.str, command->first_word_len, command->query);
+    DBUG_VOID_RETURN;
+  }
 
   if (!append && access(ds_filename.str, F_OK) == 0)
   {
@@ -4721,10 +4755,24 @@ void do_write_file_command(struct st_command *command, my_bool append)
   if (cur_block->ok)
   {
     DBUG_PRINT("info", ("Writing to file: %s", ds_filename.str));
-    str_to_file2(ds_filename.str, ds_content.str, ds_content.length, append);
+    if (eval_content)
+    {
+      /* Evaluate on every execution, keep command->content unevaluated */
+      DYNAMIC_STRING ds_eval_content;
+      if (init_dynamic_string(&ds_eval_content, "", ds_content.length + 256, 256))
+        die("Out of memory");
+      do_eval(&ds_eval_content, ds_content.str,
+              ds_content.str + ds_content.length, FALSE);
+      str_to_file2(ds_filename.str, ds_eval_content.str, ds_eval_content.length,
+                   append);
+      dynstr_free(&ds_eval_content);
+    }
+    else
+      str_to_file2(ds_filename.str, ds_content.str, ds_content.length, append);
   }
   dynstr_free(&ds_filename);
   dynstr_free(&ds_delimiter);
+  dynstr_free(&ds_eval_flag);
   DBUG_VOID_RETURN;
 }
 
@@ -4735,11 +4783,11 @@ void do_write_file_command(struct st_command *command, my_bool append)
   command	called command
 
   DESCRIPTION
-  write_file <file_name> [<delimiter>];
+  write_file <file_name> [<delimiter> [eval]];
   <what to write line 1>
   <...>
   < what to write line n>
-  EOF
+  <delimiter>
 
   --write_file <file_name>;
   <what to write line 1>
@@ -4749,6 +4797,9 @@ void do_write_file_command(struct st_command *command, my_bool append)
 
   Write everything between the "write_file" command and 'delimiter'
   to "file_name"
+
+  If 'eval' is given, variables and expressions in the content are
+  substituted. It requires <delimiter> to be given explicitly.
 
   NOTE! Will fail if <file_name> exists
 
@@ -4811,11 +4862,11 @@ void do_write_line(struct st_command *command)
   command	called command
 
   DESCRIPTION
-  append_file <file_name> [<delimiter>];
+  append_file <file_name> [<delimiter> [eval]];
   <what to write line 1>
   <...>
   < what to write line n>
-  EOF
+  <delimiter>
 
   --append_file <file_name>;
   <what to write line 1>
@@ -4825,6 +4876,9 @@ void do_write_line(struct st_command *command)
 
   Append everything between the "append_file" command
   and 'delimiter' to "file_name"
+
+  If 'eval' is given, variables and expressions in the content are
+  substituted. It requires <delimiter> to be given explicitly.
 
   Default <delimiter> is EOF
 
@@ -4851,9 +4905,11 @@ void do_append_file(struct st_command *command)
 void do_cat_file(struct st_command *command)
 {
   int error;
-  static DYNAMIC_STRING ds_filename;
+  static DYNAMIC_STRING ds_filename, ds_lines;
+  uint lines= 0;
   const struct command_arg cat_file_args[] = {
-    { "filename", ARG_STRING, TRUE, &ds_filename, "File to read from" }
+    { "filename", ARG_STRING, TRUE, &ds_filename, "File to read from" },
+    { "lines", ARG_STRING, FALSE, &ds_lines, "Number of lines to print"}
   };
   DBUG_ENTER("do_cat_file");
 
@@ -4865,9 +4921,13 @@ void do_cat_file(struct st_command *command)
 
   DBUG_PRINT("info", ("Reading from, file: %s", ds_filename.str));
 
-  error= cat_file(&ds_res, ds_filename.str);
+  if (ds_lines.length)
+    lines= atoi(ds_lines.str);
+
+  error= cat_file(&ds_res, ds_filename.str, lines);
   handle_command_error(command, error, my_errno);
   dynstr_free(&ds_filename);
+  dynstr_free(&ds_lines);
   DBUG_VOID_RETURN;
 }
 
@@ -5259,7 +5319,8 @@ void do_sync_with_master2(struct st_command *command, long offset,
   if (!master_pos.file[0])
     die("Calling 'sync_with_master' without calling 'save_master_pos'");
 
-  sprintf(query_buf, "select master_pos_wait('%s', %ld, %d, '%s')",
+  snprintf(query_buf, sizeof(query_buf),
+          "select master_pos_wait('%s', %ld, %d, '%s')",
           master_pos.file, master_pos.pos + offset, timeout,
           connection_name);
 
@@ -5611,7 +5672,7 @@ static void primary(Expression_value *result, const char **s)
     enum func_type func_type= get_expr_function_type(start,
                                                      end - start);
     if (func_type == FUNC_UNKNOWN)
-      die("Syntax error: Unknown function");
+      die("Syntax error: Unknown function '%.*s'", (int) (end - start), start);
 
     *s= end + 1; // skip '('
     handle_expr_function_call(func_type, result, s);
@@ -6058,47 +6119,48 @@ static void expr(Expression_value *result, const char **s)
 
 static struct {
   const char *name;
+  size_t length;
   enum func_type type;
 } function_table[]= {
     // Numeric functions
-    {"abs", FUNC_ABS},
-    {"bin", FUNC_BIN},
-    {"conv", FUNC_CONV},
-    {"hex", FUNC_HEX},
-    {"oct", FUNC_OCT},
+    {STRING_WITH_LEN("abs"), FUNC_ABS},
+    {STRING_WITH_LEN("bin"), FUNC_BIN},
+    {STRING_WITH_LEN("conv"), FUNC_CONV},
+    {STRING_WITH_LEN("hex"), FUNC_HEX},
+    {STRING_WITH_LEN("oct"), FUNC_OCT},
     // String functions
-    {"concat", FUNC_CONCAT},
-    {"concat_ws", FUNC_CONCAT_WS},
-    {"greatest", FUNC_GREATEST},
-    {"insert", FUNC_INSERT},
-    {"instr", FUNC_INSTR},
-    {"lcase", FUNC_LOWER},
-    {"least", FUNC_LEAST},
-    {"length", FUNC_LENGTH},
-    {"locate", FUNC_LOCATE},
-    {"lower", FUNC_LOWER},
-    {"lpad", FUNC_LPAD},
-    {"ltrim", FUNC_LTRIM},
-    {"repeat", FUNC_REPEAT},
-    {"replace", FUNC_REPLACE},
-    {"reverse", FUNC_REVERSE},
-    {"rpad", FUNC_RPAD},
-    {"rtrim", FUNC_RTRIM},
-    {"substr", FUNC_SUBSTR},
-    {"substring", FUNC_SUBSTR},
-    {"substring_index", FUNC_SUBSTR_IDX},
-    {"trim", FUNC_TRIM},
-    {"ucase", FUNC_UPPER},
-    {"upper", FUNC_UPPER},
+    {STRING_WITH_LEN("concat"), FUNC_CONCAT},
+    {STRING_WITH_LEN("concat_ws"), FUNC_CONCAT_WS},
+    {STRING_WITH_LEN("greatest"), FUNC_GREATEST},
+    {STRING_WITH_LEN("insert"), FUNC_INSERT},
+    {STRING_WITH_LEN("instr"), FUNC_INSTR},
+    {STRING_WITH_LEN("lcase"), FUNC_LOWER},
+    {STRING_WITH_LEN("least"), FUNC_LEAST},
+    {STRING_WITH_LEN("length"), FUNC_LENGTH},
+    {STRING_WITH_LEN("locate"), FUNC_LOCATE},
+    {STRING_WITH_LEN("lower"), FUNC_LOWER},
+    {STRING_WITH_LEN("lpad"), FUNC_LPAD},
+    {STRING_WITH_LEN("ltrim"), FUNC_LTRIM},
+    {STRING_WITH_LEN("repeat"), FUNC_REPEAT},
+    {STRING_WITH_LEN("replace"), FUNC_REPLACE},
+    {STRING_WITH_LEN("reverse"), FUNC_REVERSE},
+    {STRING_WITH_LEN("rpad"), FUNC_RPAD},
+    {STRING_WITH_LEN("rtrim"), FUNC_RTRIM},
+    {STRING_WITH_LEN("substr"), FUNC_SUBSTR},
+    {STRING_WITH_LEN("substring"), FUNC_SUBSTR},
+    {STRING_WITH_LEN("substring_index"), FUNC_SUBSTR_IDX},
+    {STRING_WITH_LEN("trim"), FUNC_TRIM},
+    {STRING_WITH_LEN("ucase"), FUNC_UPPER},
+    {STRING_WITH_LEN("upper"), FUNC_UPPER},
     // Regexp functions
-    {"regexp_instr", FUNC_REGEXP_INSTR},
-    {"regexp_replace", FUNC_REGEXP_REPLACE},
-    {"regexp_substr", FUNC_REGEXP_SUBSTR},
+    {STRING_WITH_LEN("regexp_instr"), FUNC_REGEXP_INSTR},
+    {STRING_WITH_LEN("regexp_replace"), FUNC_REGEXP_REPLACE},
+    {STRING_WITH_LEN("regexp_substr"), FUNC_REGEXP_SUBSTR},
     // Null functions
-    {"coalesce", FUNC_COALESCE},
-    {"ifnull", FUNC_IFNULL},
-    {"nullif", FUNC_NULLIF},
-    {NULL, FUNC_UNKNOWN}
+    {STRING_WITH_LEN("coalesce"), FUNC_COALESCE},
+    {STRING_WITH_LEN("ifnull"), FUNC_IFNULL},
+    {STRING_WITH_LEN("nullif"), FUNC_NULLIF},
+    {NULL, 0, FUNC_UNKNOWN}
 };
 
 
@@ -6156,9 +6218,9 @@ static int cmp_decimal(const My_string &a, const My_string &b)
   size_t b_len= b.length();
 
   // Skip leading whitespace
-  while (a_len > 0 && isspace(*a_ptr))
+  while (a_len > 0 && my_isspace(charset_info, *a_ptr))
     a_ptr++, a_len--;
-  while (b_len > 0 && isspace(*b_ptr))
+  while (b_len > 0 && my_isspace(charset_info, *b_ptr))
     b_ptr++, b_len--;
 
   // Handle empty strings (treat as 0)
@@ -6180,8 +6242,8 @@ static int cmp_decimal(const My_string &a, const My_string &b)
 
   // Find actual numeric length (digits only)
   size_t a_digits= 0, b_digits= 0;
-  for (size_t i= 0; i < a_len && isdigit(a_ptr[i]); i++) a_digits++;
-  for (size_t i= 0; i < b_len && isdigit(b_ptr[i]); i++) b_digits++;
+  for (size_t i= 0; i < a_len && my_isdigit(charset_info, a_ptr[i]); i++) a_digits++;
+  for (size_t i= 0; i < b_len && my_isdigit(charset_info, b_ptr[i]); i++) b_digits++;
 
   // Handle zero cases after removing leading zeros
   bool a_is_zero= (a_digits == 0);
@@ -6244,7 +6306,7 @@ void func_abs(Expression_value args[], int count, Expression_value *result)
   if (!args[0].is_numeric)
     die("abs() requires numeric argument");
 
-  result->set_int(abs(args[0].to_int()));
+  result->set_int(llabs(args[0].to_int()));
 }
 
 
@@ -6338,9 +6400,9 @@ void func_oct(Expression_value args[], int count, Expression_value *result)
   @param[out] result Expression_value to store result
 
   @details
-    Converts a number to hexadecimal representation.
     HEX(N) returns a string representation of the hexadecimal value of N.
     This is equivalent to CONV(N, 10, 16).
+    HEX(str) returns a hexadecimal representation of the bytes of str.
 
   @note Dies if argument count != 1
 */
@@ -6350,7 +6412,15 @@ void func_hex(Expression_value args[], int count, Expression_value *result)
   if (count != 1)
     die("hex() expects 1 argument, got %d", count);
 
-  convert_base_helper(args[0].to_string(), 10, 16, result);
+  if (args[0].is_numeric)
+    convert_base_helper(args[0].to_string(), 10, 16, result);
+  else
+  {
+    My_string str= args[0].to_string();
+    My_string hex_str;
+    hex_str.set_hex(str.ptr(), str.length());
+    result->set_string(hex_str.ptr(), hex_str.length());
+  }
 }
 
 
@@ -7606,7 +7676,8 @@ enum func_type get_expr_function_type(const char *name, size_t len)
 {
   for (int i= 0; function_table[i].name; ++i)
   {
-    if (!strncasecmp(function_table[i].name, name, len))
+    if (function_table[i].length == len &&
+        !strncasecmp(function_table[i].name, name, len))
       return function_table[i].type;
   }
   return FUNC_UNKNOWN;
@@ -9282,8 +9353,9 @@ void do_block(enum block_cmd cmd, struct st_command* command)
 
   /* Parse and evaluate test expression */
   expr_start= strchr(p, '(');
-  if (!expr_start++)
+  if (!expr_start)
     die("missing '(' in %s", cmd_name);
+  expr_start++;
 
   while (my_isspace(charset_info, *expr_start))
     expr_start++;
@@ -9709,7 +9781,7 @@ int read_line()
 	*p= 0;
         DBUG_PRINT("exit", ("Found delimiter '%s' at line %d",
                             delimiter, cur_file->lineno));
-	DBUG_RETURN(0);
+        goto ret;
       }
       else if ((c == '{' &&
                 (!my_strnncoll_simple(charset_info, (const uchar*) "while", 5,
@@ -9722,7 +9794,7 @@ int read_line()
 	*p= 0;
         DBUG_PRINT("exit", ("Found '{' indicating start of block at line %d",
                             cur_file->lineno));
-	DBUG_RETURN(0);
+        goto ret;
       }
       else if (c == '\'' || c == '"' || c == '`')
       {
@@ -9756,7 +9828,7 @@ int read_line()
 	*p= 0;
         DBUG_PRINT("exit", ("Found newline in comment at line: %d",
                             cur_file->lineno));
-	DBUG_RETURN(0);
+        goto ret;
       }
       break;
 
@@ -9776,7 +9848,7 @@ int read_line()
             DBUG_PRINT("info", ("Found two new lines in a row"));
             *p++= c;
             *p= 0;
-            DBUG_RETURN(0);
+            goto ret;
           }
 
           /* Query hasn't started yet */
@@ -9793,7 +9865,7 @@ int read_line()
 	*p= 0;
         DBUG_PRINT("exit", ("Found delimiter '%s' at line: %d",
                             delimiter, cur_file->lineno));
-	DBUG_RETURN(0);
+        goto ret;
       }
       else if (c == '}')
       {
@@ -9802,7 +9874,7 @@ int read_line()
 	*p= 0;
         DBUG_PRINT("exit", ("Found '}' in beginning of a line at line: %d",
                             cur_file->lineno));
-	DBUG_RETURN(0);
+        goto ret;
       }
       else if (c == '\'' || c == '"' || c == '`')
       {
@@ -9861,6 +9933,8 @@ int read_line()
       }
     }
   }
+ret:
+  read_command_buf_end= p;
   DBUG_RETURN(0);
 }
 
@@ -9876,14 +9950,13 @@ int read_line()
 
 */
 
-void convert_to_format_v1(char* query)
+void convert_to_format_v1(char* query, char **end)
 {
   int last_c_was_quote= 0;
   char *p= query, *to= query;
-  char *end= strend(query);
   char last_c;
 
-  while (p <= end)
+  while (p <= *end)
   {
     if (*p == '\n' && !last_c_was_quote)
     {
@@ -9914,6 +9987,7 @@ void convert_to_format_v1(char* query)
       last_c_was_quote= 0;
     }
   }
+  *end= to;
 }
 
 
@@ -10030,9 +10104,9 @@ int read_command(struct st_command** command_ptr)
   }
 
   if (opt_result_format_version == 1)
-    convert_to_format_v1(read_command_buf);
+    convert_to_format_v1(read_command_buf, &read_command_buf_end);
 
-  char *p= read_command_buf;
+  char *p= read_command_buf, *end= read_command_buf_end;
   DBUG_PRINT("info", ("query: '%s'", read_command_buf));
   if (*p == '#')
   {
@@ -10049,29 +10123,32 @@ int read_command(struct st_command** command_ptr)
   }
 
   /* Skip leading spaces */
-  while (*p && my_isspace(charset_info, *p))
+  while (p < end && my_isspace(charset_info, *p))
     p++;
 
-  if (!(command->query_buf= command->query= my_strdup(PSI_NOT_INSTRUMENTED, p, MYF(MY_WME))))
+  if (!(command->query_buf= command->query=
+        (char*)my_memdup(PSI_NOT_INSTRUMENTED, p, end - p, MYF(MY_WME))))
     die("Out of memory");
 
+  command->query_len= (int)(end - p - 1);
+  command->end= command->query + command->query_len;
+  p= command->query;
+  end= command->end;
   /*
     Calculate first word length(the command), terminated
-    by 'space' , '(' or 'delimiter' */
-  p= command->query;
-  while (*p && !my_isspace(charset_info, *p) && *p != '(' && !is_delimiter(p))
+    by 'space' , '(' or 'delimiter'
+   */
+  while (p < end && !my_isspace(charset_info, *p) && *p != '(' && !is_delimiter(p))
     p++;
   command->first_word_len= (uint) (p - command->query);
   DBUG_PRINT("info", ("first_word: %.*s",
                       command->first_word_len, command->query));
 
   /* Skip spaces between command and first argument */
-  while (*p && my_isspace(charset_info, *p))
+  while (p < end && my_isspace(charset_info, *p))
     p++;
   command->first_argument= p;
 
-  command->end= strend(command->query);
-  command->query_len= (int)(command->end - command->query);
   parser.read_lines++;
   DBUG_RETURN(0);
 }
@@ -10870,7 +10947,7 @@ void append_info(DYNAMIC_STRING *ds, ulonglong affected_rows,
                  const char *info)
 {
   char buf[40], buff2[21];
-  size_t len= sprintf(buf,"affected rows: %s\n", llstr(affected_rows, buff2));
+  size_t len= snprintf(buf, sizeof(buf), "affected rows: %s\n", llstr(affected_rows, buff2));
   dynstr_append_mem(ds, buf, len);
   if (info)
   {
@@ -12371,7 +12448,7 @@ void run_query(struct st_connection *cn, struct st_command *command, int flags)
   else
   {
     query = command->query;
-    query_len = strlen(query);
+    query_len = command->query_len;
   }
 
   /*
@@ -12761,6 +12838,7 @@ void get_command_type(struct st_command* command)
     if (type == Q_QUERY)
     {
       /* Skip the "query" part */
+      command->query_len-= (int)(command->first_argument - command->query);
       command->query= command->first_argument;
     }
   }
@@ -13281,7 +13359,7 @@ int main(int argc, char **argv)
       case Q_DIFF_FILES: do_diff_files(command); break;
       case Q_SEND_QUIT: do_send_quit(command); break;
       case Q_CHANGE_USER: do_change_user(command); break;
-      case Q_CAT_FILE: do_cat_file(command); break;
+      case Q_CAT_FILE: do_cat_file(command); command_executed++; break;
       case Q_COPY_FILE: do_copy_file(command); break;
       case Q_MOVE_FILE: do_move_file(command); break;
       case Q_CHMOD_FILE: do_chmod_file(command); break;
@@ -13321,7 +13399,8 @@ int main(int argc, char **argv)
 	if (command->query == command->query_buf)
         {
           /* Skip the first part of command, i.e query_xxx */
-	  command->query= command->first_argument;
+          command->query_len-= (int)(command->first_argument - command->query);
+          command->query= command->first_argument;
           command->first_word_len= 0;
         }
 	/* fall through */
@@ -13383,7 +13462,10 @@ int main(int argc, char **argv)
 
         /* Remove "send" if this is first iteration */
 	if (command->query == command->query_buf)
+        {
+          command->query_len-= (int)(command->first_argument - command->query);
 	  command->query= command->first_argument;
+        }
 
 	/*
 	  run_query() can execute a query partially, depending on the flags.

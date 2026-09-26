@@ -108,6 +108,17 @@ MACRO(MYSQL_ADD_PLUGIN)
     MESSAGE(FATAL_ERROR "Invalid value for PLUGIN_${plugin}")
   ENDIF()
 
+  # Validate that the requested build mode is compatible with what the
+  # plugin actually supports. STATIC_ONLY plugins cannot be built as
+  # dynamic modules, and MODULE_ONLY plugins cannot be linked statically.
+  IF(PLUGIN_${plugin} STREQUAL "DYNAMIC" AND ARG_STATIC_ONLY)
+    MESSAGE(FATAL_ERROR "Plugin ${plugin} is STATIC_ONLY and cannot be built"
+      " with -DPLUGIN_${plugin}=DYNAMIC. Remove this option or use STATIC.")
+  ELSEIF(PLUGIN_${plugin} STREQUAL "STATIC" AND ARG_MODULE_ONLY)
+    MESSAGE(FATAL_ERROR "Plugin ${plugin} is MODULE_ONLY and cannot be built"
+      " with -DPLUGIN_${plugin}=STATIC. Remove this option or use DYNAMIC.")
+  ENDIF()
+
   IF(ARG_STORAGE_ENGINE)
     SET(with_var "WITH_${plugin}_STORAGE_ENGINE" )
   ELSE()
@@ -289,6 +300,11 @@ MACRO(MYSQL_ADD_PLUGIN)
     IF(ARG_CONFIG AND INSTALL_SYSCONF2DIR)
       INSTALL(FILES ${ARG_CONFIG} COMPONENT ${ARG_COMPONENT} DESTINATION ${INSTALL_SYSCONF2DIR})
     ENDIF()
+    IF(NOT ARG_CLIENT)
+      GET_PROPERTY(my_list GLOBAL PROPERTY SERVER_DYNAMIC_PLUGINS)
+      LIST(APPEND my_list ${target})
+      SET_PROPERTY(GLOBAL PROPERTY SERVER_DYNAMIC_PLUGINS "${my_list}")
+    ENDIF()
   ENDIF()
 
   GET_FILENAME_COMPONENT(subpath ${CMAKE_CURRENT_SOURCE_DIR} NAME)
@@ -331,11 +347,13 @@ MACRO(CONFIGURE_PLUGINS)
 
   GET_CMAKE_PROPERTY(ALL_VARS VARIABLES)
   FOREACH (V ${ALL_VARS})
-    IF (V MATCHES "^PLUGIN_" AND ${V} MATCHES "YES")
-      STRING(SUBSTRING ${V} 7 -1 plugin)
-      STRING(TOLOWER ${plugin} target)
-      IF (NOT TARGET ${target})
-        MESSAGE(FATAL_ERROR "Plugin ${plugin} cannot be built")
+    IF (V MATCHES "^PLUGIN_")
+      IF (${V} STREQUAL "YES")
+        STRING(SUBSTRING ${V} 7 -1 plugin)
+        STRING(TOLOWER ${plugin} target)
+        IF (NOT TARGET ${target})
+          MESSAGE(FATAL_ERROR "Plugin ${plugin} cannot be built")
+        ENDIF()
       ENDIF()
     ENDIF()
   ENDFOREACH()

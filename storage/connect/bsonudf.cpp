@@ -16,6 +16,7 @@
 #include <cassert>
 
 #include "bsonudf.h"
+#include "filechk.h"
 
 #if defined(UNIX) || defined(UNIV_LINUX)
 #define _O_RDONLY O_RDONLY
@@ -3541,7 +3542,7 @@ my_bool bson_item_merge_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 		return true;
 	} else for (int i = 0; i < 2; i++)
 		if (!IsArgJson(args, i) && args->arg_type[i] != STRING_RESULT) {
-			sprintf(message, "Argument %d must be a json item", i);
+			snprintf(message, MYSQL_ERRMSG_SIZE, "Argument %d must be a json item", i);
 			return true;
 		}	// endif type
 
@@ -4433,7 +4434,7 @@ my_bool bson_file_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
 
 	for (unsigned int i = 1; i < args->arg_count; i++) {
 		if (!(args->arg_type[i] == INT_RESULT || args->arg_type[i] == STRING_RESULT)) {
-			sprintf(message, "Argument %d is not an integer or a string (pretty or path)", i);
+			snprintf(message, MYSQL_ERRMSG_SIZE, "Argument %d is not an integer or a string (pretty or path)", i);
 			return true;
 		} // endif arg_type
 
@@ -4477,6 +4478,16 @@ char *bson_file(UDF_INIT *initid, UDF_ARGS *args, char *result,
 
 	PlugSubSet(g->Sarea, g->Sarea_Size);
 	fn = MakePSZ(g, args, 0);
+
+	if (!fn) {
+		PUSH_WARNING("Missing file name");
+		*is_null = 1;
+		return NULL;
+	} else if (!connect_can_access_file(fn)) {
+		PUSH_WARNING("Access denied: FILE privilege or secure_file_priv violation");
+		*is_null = 1;
+		return NULL;
+	}
 
 	if (args->arg_count > 1) {
 		int    pretty = 3, pty = 3;
@@ -4629,7 +4640,10 @@ char *bfile_make(UDF_INIT *initid, UDF_ARGS *args, char *result,
 		}	// endswitch arg_type
 
 	if (fn) {
-		if (!bnx.Serialize(g, jvp, fn, pretty))
+		if (!connect_can_access_file(fn)) {
+			PUSH_WARNING("Access denied: FILE privilege or secure_file_priv violation");
+			fn = NULL;
+		} else if (!bnx.Serialize(g, jvp, fn, pretty))
 			PUSH_WARNING(g->Message);
 	} else
 		PUSH_WARNING("Missing file name");
@@ -4669,7 +4683,7 @@ my_bool bfile_convert_init(UDF_INIT* initid, UDF_ARGS* args, char* message) {
 		return true;
 	} else for (int i = 0; i < 2; i++)
 		if (args->arg_type[i] != STRING_RESULT) {
-			sprintf(message, "Arguments %d must be a string (file name)", i+1);
+			snprintf(message, MYSQL_ERRMSG_SIZE, "Arguments %d must be a string (file name)", i+1);
 			return true;
 		} // endif args
 
@@ -4726,7 +4740,7 @@ my_bool bfile_bjson_init(UDF_INIT* initid, UDF_ARGS* args, char* message) {
 		return true;
 	} else for (int i = 0; i < 2; i++)
 		if (args->arg_type[i] != STRING_RESULT) {
-			sprintf(message, "Arguments %d must be a string (file name)", i + 1);
+			snprintf(message, MYSQL_ERRMSG_SIZE, "Arguments %d must be a string (file name)", i + 1);
 			return true;
 		} // endif args
 
@@ -6064,6 +6078,16 @@ char *bbin_file(UDF_INIT *initid, UDF_ARGS *args, char *result,
 		goto fin;
 
 	fn = MakePSZ(g, args, 0);
+
+	if (!fn) {
+		PUSH_WARNING("Missing file name");
+		*error = 1;
+		goto fin;
+	} else if (!connect_can_access_file(fn)) {
+		PUSH_WARNING("Access denied: FILE privilege or secure_file_priv violation");
+		*error = 1;
+		goto fin;
+	}
 
 	for (unsigned int i = 1; i < args->arg_count; i++)
 		if (args->arg_type[i] == INT_RESULT && *(longlong*)args->args[i] < 4) {

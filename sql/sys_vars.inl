@@ -1,5 +1,5 @@
 /* Copyright (c) 2002, 2011, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2020, MariaDB Corporation.
+   Copyright (c) 2010, 2026, MariaDB plc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -87,22 +87,6 @@ extern const char *UNUSED_HELP;
 #ifdef __clang__
 #pragma clang diagnostic ignored "-Winvalid-offsetof"
 #endif
-
-/*
-  special assert for sysvars. Tells the name of the variable,
-  and fails even in non-debug builds.
-
-  It is supposed to be used *only* in Sys_var* constructors,
-  and has name_arg hard-coded to prevent incorrect usage.
-*/
-#define SYSVAR_ASSERT(X)                                                \
-    while(!(X))                                                         \
-    {                                                                   \
-      fprintf(stderr, "Sysvar '%s' failed '%s'\n", name_arg, #X);       \
-      DBUG_ASSERT(0);                                                   \
-      exit(255);                                                        \
-    }
-
 
 static const char *bool_values[3]= {"OFF", "ON", 0};
 TYPELIB bool_typelib= CREATE_TYPELIB_FOR(bool_values);
@@ -2571,19 +2555,27 @@ public:
     /* Use value given in variable declaration */
     global_save_default(thd, var);
   }
-  const uchar *session_value_ptr(THD *thd, const LEX_CSTRING *base) const override
+  uchar *value_ptr_internal(THD *thd, const LEX_CSTRING *base, bool with_lock) const
   {
     ulonglong *tmp, res;
     tmp= (ulonglong*) (((uchar*)&(thd->variables)) + offset);
-    res= get_master_info_ulonglong_value(thd);
+    res= get_master_info_ulonglong_value(thd, with_lock);
     *tmp= res;
     return (uchar*) tmp;
   }
+  const uchar *session_value_ptr(THD *thd, const LEX_CSTRING *base) const override
+  {
+    return value_ptr_internal(thd, base, true);
+  }
   const uchar *global_value_ptr(THD *thd, const LEX_CSTRING *base) const override
   {
-    return session_value_ptr(thd, base);
+    return value_ptr_internal(thd, base, true);
   }
-  ulonglong get_master_info_ulonglong_value(THD *thd) const;
+  const uchar *session_no_lock_value_ptr(THD *thd, const LEX_CSTRING *base) const override
+  {
+    return value_ptr_internal(thd, base, false);
+  }
+  ulonglong get_master_info_ulonglong_value(THD *thd, bool with_lock) const;
   bool update_variable(THD *thd, Master_info *mi)
   {
     return update_multi_source_variable_func(this, thd, mi);

@@ -1,5 +1,6 @@
 /* Copyright (c) 2002, 2013, Oracle and/or its affiliates.
    Copyright (c) 2008, 2014, SkySQL Ab.
+   Copyright (c) 2026, MariaDB plc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -185,6 +186,10 @@ sys_var::sys_var(sys_var_chain *chain, const char *name_arg,
   option.var_type= flags & AUTO_SET ? GET_AUTO : 0;
   option.deprecation_substitute= substitute;
 
+  /* only check readonly, global, not-plugin sysvars */
+  SYSVAR_ASSERT(!is_readonly() || scope() != GLOBAL || offset == 0 ||
+                var_is_ro_after_init((char*)global_var_ptr()));
+
   if (chain->last)
     chain->last->next= this;
   else
@@ -193,6 +198,35 @@ sys_var::sys_var(sys_var_chain *chain, const char *name_arg,
 
   test_load= &static_test_load;
 }
+
+/*
+  move a read-only global char* value to a memroot and reset ALLOCATED flag.
+  used before mprotect()-ing the memroot from changes.
+*/
+void sys_var::move_charptr_to_root(MEM_ROOT *root)
+{
+  char **ptr= (char**)global_var_ptr();
+  if (!is_readonly() || scope() != GLOBAL || cast_pluginvar() || is_struct()
+      || show_type() != SHOW_CHAR_PTR || !*ptr || var_is_ro_after_init(*ptr))
+    return;
+
+  char *old_val= *ptr;
+  *ptr= strdup_root(root, old_val);
+  if (flags & ALLOCATED)
+  {
+    my_free(old_val);
+    flags&= ~ALLOCATED;
+  }
+}
+
+
+void move_allocated_sysvars_to_root(MEM_ROOT *root)
+{
+  for (uint i= 0; i < system_variable_hash.records; i++)
+    ((sys_var*) my_hash_element(&system_variable_hash, i))
+      ->move_charptr_to_root(root);
+}
+
 
 bool sys_var::update(THD *thd, set_var *var)
 {
@@ -241,6 +275,11 @@ const uchar *sys_var::session_value_ptr(THD *thd, const LEX_CSTRING *base) const
   return session_var_ptr(thd);
 }
 
+const uchar *sys_var::session_no_lock_value_ptr(THD *thd, const LEX_CSTRING *base) const
+{
+  return session_value_ptr(thd, base);
+}
+
 const uchar *sys_var::global_value_ptr(THD *thd, const LEX_CSTRING *base) const
 {
   return global_var_ptr();
@@ -284,6 +323,8 @@ const uchar *sys_var::value_ptr(THD *thd, enum_var_type type,
     AutoRLock lock(guard);
     return global_value_ptr(thd, base);
   }
+  else if (type == SHOW_OPT_SESSION_NO_LOCK)
+    return session_no_lock_value_ptr(thd, base);
   else
     return session_value_ptr(thd, base);
 }
@@ -750,6 +791,9 @@ int sql_set_variables(THD *thd, List<set_var_base> *var_list, bool free)
       error|= var->update(thd);         // Returns 0, -1 or 1
   }
 
+  DBUG_EXECUTE_IF("set_skip_name_resolve", opt_skip_name_resolve= 0;);
+  DBUG_EXECUTE_IF("set_version_buf", server_version_ptr[0]= '2';);
+
 err:
   if (free)
     free_underlaid_joins(thd, thd->lex->first_select_lex());
@@ -806,6 +850,7 @@ int set_var::check(THD *thd)
   switch (type) {
   case SHOW_OPT_DEFAULT:
   case SHOW_OPT_SESSION:
+  case SHOW_OPT_SESSION_NO_LOCK:
     DBUG_ASSERT(var->scope() != sys_var::GLOBAL);
     if (var->on_check_access_session(thd))
       return -1;

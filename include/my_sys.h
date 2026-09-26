@@ -92,7 +92,7 @@ C_MODE_START
 #define MY_SYNC       4096U     /* my_copy(): sync dst file */
 #define MY_SYNC_DIR   32768U    /* my_create/delete/rename: sync directory */
 #define MY_THREAD_SPECIFIC 0x10000U /* my_malloc(): thread specific */
-#define MY_ROOT_USE_MPROTECT 0x20000U /* init_alloc_root: read only segments */
+#define MY_ROOT_USE_VMEM 0x20000U /* init_alloc_root: use my_virtual_mem_commit */
 /* Tree that should delete things automatically */
 #define MY_TREE_WITH_DELETE 0x40000U
 #define MY_TRACK 0x80000U             /* Track tmp usage */
@@ -792,11 +792,13 @@ extern char * my_path(char * to,const char *progname,
 			 const char *own_pathname_part);
 extern char * my_load_path(char * to, const char *path,
 			      const char *own_path_prefix);
+extern char *find_file_in_path(char *to,const char *name);
 extern int wild_compare(const char *str,const char *wildstr,
                         pbool str_is_pattern);
 extern my_bool array_append_string_unique(const char *str,
                                           const char **array, size_t size);
-extern void get_date(char * to,int timeflag,time_t use_time);
+extern void get_date(char * to, size_t to_len, int timeflag,
+                     time_t use_time);
 extern void soundex(CHARSET_INFO *, char * out_pntr, char * in_pntr,
                     pbool remove_garbage);
 extern int init_record_cache(RECORD_CACHE *info,size_t cachesize,File file,
@@ -895,7 +897,7 @@ extern my_bool init_dynamic_string(DYNAMIC_STRING *str, const char *init_str,
 				   size_t init_alloc,size_t alloc_increment);
 extern my_bool dynstr_append(DYNAMIC_STRING *str, const char *append);
 my_bool dynstr_append_mem(DYNAMIC_STRING *str, const char *append,
-			  size_t length);
+			  size_t length) __attribute__((nonnull(2)));
 extern my_bool dynstr_append_os_quoted(DYNAMIC_STRING *str, const char *append,
                                        ...);
 extern my_bool dynstr_append_quoted(DYNAMIC_STRING *str,

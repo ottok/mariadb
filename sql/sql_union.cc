@@ -772,10 +772,22 @@ bool select_unit_ext::send_eof()
                         next_sl &&
                         next_sl->get_linkage() == INTERSECT_TYPE &&
                         !next_sl->distinct;
+  /*
+    True at the last INTERSECT of an inline INTERSECT DISTINCT subsequence: the
+    records that did not match every operand (their intersect counter differs
+    from curr_step) must be dropped. Instead of a separate table scan this is
+    folded into the scan/unfold loops below, so the table is scanned only once
+    (MDEV-38722). When the subsequence is materialized in a derived table this
+    filtering is done by select_unit::send_eof() instead.
+  */
+  bool filter_intersect= curr_op_type == INTERSECT_DISTINCT &&
+                         !(next_sl &&
+                           next_sl->get_linkage() == INTERSECT_TYPE);
   bool need_unfold= disable_index_if_needed(curr_sl);
 
   if (((curr_sl->distinct && !is_next_distinct) ||
       curr_op_type == INTERSECT_ALL ||
+      filter_intersect ||
       is_next_intersect_all) &&
       !need_unfold)
   {
@@ -796,6 +808,13 @@ bool select_unit_ext::send_eof()
           break;
         }
         break;
+      }
+      if (filter_intersect && additional_cnt->val_int() != curr_step)
+      {
+        /* drop a record that did not match every INTERSECT operand */
+        if (unlikely(error= delete_record()))
+          break;
+        continue;
       }
       store_record(table, record[1]);
 
@@ -849,6 +868,13 @@ bool select_unit_ext::send_eof()
           break;
         }
         break;
+      }
+      if (filter_intersect && additional_cnt->val_int() != curr_step)
+      {
+        /* drop a record that did not match every INTERSECT operand */
+        if (unlikely(error= delete_record()))
+          break;
+        continue;
       }
       dup_cnt= (ha_rows)duplicate_cnt->val_int();
       /* delete record if not exist in the second operand */
@@ -1512,8 +1538,7 @@ bool st_select_lex_unit::prepare(TABLE_LIST *derived_arg,
   if (item && is_unit_op() &&
       (item->is_in_predicate() || item->is_exists_predicate()))
   {
-    global_parameters()->order_list.first= NULL;
-    global_parameters()->order_list.elements= 0;
+    global_parameters()->optimize_out_order_list();
   }
 
   /* will only optimize once */
@@ -2166,6 +2191,15 @@ void st_select_lex_unit::optimize_bag_operation(bool is_outer_distinct)
           sl->distinct= true;
           disable_index= sl;
         }
+        else if (disable_index)
+        {
+          /*
+            EXCEPT ALL needs the unique index in select_unit_ext::send_data().
+            If the index would otherwise be released at an earlier node,
+            postpone the release until (at least) this operation.
+          */
+          disable_index= sl;
+        }
       }
     }
     else
@@ -2738,8 +2772,6 @@ err:
 
 bool st_select_lex_unit::cleanup()
 {
-  cleanup_stranded_units();
-
   bool error= 0;
   DBUG_ENTER("st_select_lex_unit::cleanup");
 
@@ -2827,6 +2859,17 @@ bool st_select_lex_unit::cleanup()
 
   delete pushdown_unit;
   pushdown_unit= nullptr;
+
+  /*
+    Cleanup stranded units only after this unit has completed its own
+    cleanup, ensuring a parent-first (LIFO) cleanup order for merged tables.
+  */
+  cleanup_stranded_units();
+  /*
+    Cleanup stranded units only after this unit has completed its own
+    cleanup, ensuring a parent-first (LIFO) cleanup order for merged tables.
+  */
+  cleanup_stranded_units();
 
   DBUG_RETURN(error);
 }
@@ -3071,7 +3114,8 @@ void st_select_lex_unit::set_unique_exclude()
 
 bool st_select_lex_unit::check_distinct_in_union()
 {
-  if (union_distinct && !union_distinct->next_select())
+  if (union_distinct && !union_distinct->next_select() &&
+      union_distinct->distinct)
     return true;
   return false;
 }

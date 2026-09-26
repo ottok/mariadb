@@ -26,6 +26,9 @@
   DOESN'T CONTAIN WARNINGS/ERRORS BEFORE YOU PUSH.
 */
 
+/* Real leaks are reported by ASAN, which we run regularly. */
+// @infer-ignore-every MEMORY_LEAK_C
+
 
 /*
   The fw.c file includes all the mysql_client_test framework; this file
@@ -38,6 +41,9 @@
 #include "mysql_client_fw.c"
 #ifndef _WIN32
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #endif
 
 #include "my_valgrind.h"
@@ -1488,7 +1494,7 @@ static void test_prepare()
   /* now, execute the prepared statement to insert 10 records.. */
   for (tiny_data= 0; tiny_data < 100; tiny_data++)
   {
-    length[1]= sprintf(str_data, "MySQL%d", int_data);
+    length[1]= snprintf(str_data, sizeof(str_data), "MySQL%d", int_data);
     rc= mysql_stmt_execute(stmt);
     check_execute(stmt, rc);
     int_data += 25;
@@ -1527,7 +1533,7 @@ static void test_prepare()
   /* now, execute the prepared statement to insert 10 records.. */
   for (o_tiny_data= 0; o_tiny_data < 100; o_tiny_data++)
   {
-    len= sprintf(data, "MySQL%d", o_int_data);
+    len= snprintf(data, sizeof(data), "MySQL%d", o_int_data);
 
     rc= mysql_stmt_fetch(stmt);
     check_execute(stmt, rc);
@@ -2944,7 +2950,7 @@ static void test_simple_update()
   my_bind[0].buffer= szData;                /* string data */
   my_bind[0].buffer_length= sizeof(szData);
   my_bind[0].length= &length[0];
-  length[0]= sprintf(szData, "updated-data");
+  length[0]= snprintf(szData, sizeof(szData), "updated-data");
 
   my_bind[1].buffer= (void *) &nData;
   my_bind[1].buffer_type= MYSQL_TYPE_LONG;
@@ -3140,7 +3146,7 @@ static void test_long_data_str()
   DIE_UNLESS(rc == 1);
   mysql_free_result(result);
 
-  sprintf(data, "%d", i*5);
+  snprintf(data, sizeof(data), "%d", i*5);
   verify_col_data("test_long_data_str", "LENGTH(longstr)", data);
   data[0]= '\0';
   while (i--)
@@ -3198,7 +3204,7 @@ static void test_long_data_str1()
 
   rc= mysql_stmt_bind_param(stmt, my_bind);
   check_execute(stmt, rc);
-  length= sprintf(data, "MySQL AB");
+  length= snprintf(data, sizeof(data), "MySQL AB");
 
   /* supply data in pieces */
   for (i= 0; i < 3; i++)
@@ -3238,10 +3244,10 @@ static void test_long_data_str1()
   DIE_UNLESS(rc == 1);
   mysql_free_result(result);
 
-  sprintf(data, "%ld", (long)i*length);
+  snprintf(data, sizeof(data), "%ld", (long)i*length);
   verify_col_data("test_long_data_str", "length(longstr)", data);
 
-  sprintf(data, "%d", i*2);
+  snprintf(data, sizeof(data), "%d", i*2);
   verify_col_data("test_long_data_str", "length(blb)", data);
 
   /* Test length of field->max_length */
@@ -3513,7 +3519,7 @@ static void test_update()
   my_bind[0].buffer= szData;
   my_bind[0].buffer_length= sizeof(szData);
   my_bind[0].length= &length[0];
-  length[0]= sprintf(szData, "inserted-data");
+  length[0]= snprintf(szData, sizeof(szData), "inserted-data");
 
   my_bind[1].buffer= (void *)&nData;
   my_bind[1].buffer_type= MYSQL_TYPE_LONG;
@@ -3542,7 +3548,7 @@ static void test_update()
   my_bind[0].buffer= szData;
   my_bind[0].buffer_length= sizeof(szData);
   my_bind[0].length= &length[0];
-  length[0]= sprintf(szData, "updated-data");
+  length[0]= snprintf(szData, sizeof(szData), "updated-data");
 
   my_bind[1].buffer= (void *)&nData;
   my_bind[1].buffer_type= MYSQL_TYPE_LONG;
@@ -4111,7 +4117,7 @@ static void bind_fetch(int row_count)
     /* CHAR */
     {
       char buff[20];
-      long len= sprintf(buff, "%d", rc);
+      long len= snprintf(buff, sizeof(buff), "%d", rc);
       DIE_UNLESS(strcmp(s_data, buff) == 0);
       DIE_UNLESS(length[6] == (ulong) len);
     }
@@ -4704,7 +4710,7 @@ static void test_insert()
   /* now, execute the prepared statement to insert 10 records.. */
   for (tiny_data= 0; tiny_data < 3; tiny_data++)
   {
-    length= sprintf(str_data, "MySQL%d", tiny_data);
+    length= snprintf(str_data, sizeof(str_data), "MySQL%d", tiny_data);
     rc= mysql_stmt_execute(stmt);
     check_execute(stmt, rc);
   }
@@ -8952,7 +8958,7 @@ static void test_mem_overun()
   strxmov(buffer, "create table t_mem_overun(", NullS);
   for (i= 0; i < 1000; i++)
   {
-    sprintf(field, "c%u int", i);
+    snprintf(field, sizeof(field), "c%u int", i);
     strxmov(buffer, buffer, field, ", ", NullS);
   }
   length= strlen(buffer);
@@ -9399,7 +9405,7 @@ static void test_ts()
   {
     int row_count= 0;
 
-    sprintf(query, queries[field_count], name);
+    snprintf(query, sizeof(query), queries[field_count], name);
 
     if (!opt_silent)
       fprintf(stdout, "\n  %s", query);
@@ -11713,7 +11719,7 @@ static void test_view_star()
   myquery(rc);
   bzero((char*) my_bind, sizeof(my_bind));
   for (i= 0; i < 2; i++) {
-    sprintf((char *)&parms[i], "%d", i);
+    snprintf((char *)&parms[i], sizeof(parms[i]), "%d", i);
     my_bind[i].buffer_type = MYSQL_TYPE_VAR_STRING;
     my_bind[i].buffer = (char *)&parms[i];
     my_bind[i].buffer_length = 100;
@@ -12068,7 +12074,7 @@ static void test_bug5399()
 
   for (stmt= stmt_list; stmt != stmt_list + NUM_OF_USED_STMT; ++stmt)
   {
-    sprintf(buff, "select %d", (int) (stmt - stmt_list));
+    snprintf(buff, sizeof(buff), "select %d", (int) (stmt - stmt_list));
     *stmt= mysql_stmt_init(mysql);
     rc= mysql_stmt_prepare(*stmt, buff, strlen(buff));
     check_execute(*stmt, rc);
@@ -12100,6 +12106,8 @@ static void test_bug5194()
   MYSQL_BIND *my_bind;
   char *query;
   char *param_str;
+  size_t param_str_size;
+  size_t query_size;
   int param_str_length;
   const char *stmt_text;
   int rc;
@@ -12196,9 +12204,11 @@ static void test_bug5194()
   myquery(rc);
 
   my_bind= (MYSQL_BIND*) malloc(MAX_PARAM_COUNT * sizeof(MYSQL_BIND));
-  query= (char*) malloc(strlen(query_template) +
-                        MAX_PARAM_COUNT * CHARS_PER_PARAM + 1);
-  param_str= (char*) malloc(COLUMN_COUNT * CHARS_PER_PARAM);
+  query_size= strlen(query_template) +
+              MAX_PARAM_COUNT * CHARS_PER_PARAM + 1;
+  query= (char*) malloc(query_size);
+  param_str_size= COLUMN_COUNT * CHARS_PER_PARAM;
+  param_str= (char*) malloc(param_str_size);
 
   if (my_bind == 0 || query == 0 || param_str == 0)
   {
@@ -12215,7 +12225,7 @@ static void test_bug5194()
   stmt= mysql_stmt_init(mysql);
 
   /* setup a template for one row of parameters */
-  sprintf(param_str, "(");
+  snprintf(param_str, param_str_size, "(");
   for (i= 1; i < COLUMN_COUNT; ++i)
     strcat(param_str, "?, ");
   strcat(param_str, "?)");
@@ -12239,7 +12249,7 @@ static void test_bug5194()
   {
     char *query_ptr;
     /* Create statement text for current number of rows */
-    sprintf(query, query_template, param_str);
+    snprintf(query, query_size, query_template, param_str);
     query_ptr= query + strlen(query);
     for (i= 1; i < nrows; ++i)
     {
@@ -13744,7 +13754,7 @@ static void test_bug8378()
   /* No escaping should have actually happened. */
   DIE_UNLESS(memcmp(out, TEST_BUG8378_OUT, len) == 0);
 
-  sprintf(buf, "SELECT '%s'", out);
+  snprintf(buf, sizeof(buf), "SELECT '%s'", out);
   
   rc=mysql_real_query(lmysql, buf, strlen(buf));
   myquery(rc);
@@ -14435,8 +14445,8 @@ static void test_bug10794()
   for (i= 0; i < 42; i++)
   {
     id_val= (i+1)*10;
-    sprintf(a, "a%d", i);
-    a_len= strlen(a); /* safety against broken sprintf */
+    snprintf(a, sizeof(a), "a%d", i);
+    a_len= strlen(a); /* safety against broken snprintf */
     rc= mysql_stmt_execute(stmt);
     check_execute(stmt, rc);
   }
@@ -14798,7 +14808,7 @@ static void test_bug10760()
   for (; i < 42; ++i)
   {
     char buf[100];
-    sprintf(buf, "insert into t1 (id) values (%d)", i+1);
+    snprintf(buf, sizeof(buf), "insert into t1 (id) values (%d)", i+1);
     rc= mysql_query(mysql, buf);
     myquery(rc);
   }
@@ -15735,6 +15745,7 @@ static void test_bug16143()
   myheader("test_bug16143");
 
   stmt= mysql_stmt_init(mysql);
+  check_stmt(stmt);
   /* Check mysql_stmt_sqlstate return "no error" */
   DIE_UNLESS(strcmp(mysql_stmt_sqlstate(stmt), "00000") == 0);
 
@@ -15753,6 +15764,7 @@ static void test_bug16144()
 
   /* Check that attr_get returns correct data on little and big endian CPUs */
   stmt= mysql_stmt_init(mysql);
+  check_stmt(stmt);
   mysql_stmt_attr_set(stmt, STMT_ATTR_UPDATE_MAX_LENGTH, (const void*) &flag);
   mysql_stmt_attr_get(stmt, STMT_ATTR_UPDATE_MAX_LENGTH, (void*) &flag);
   DIE_UNLESS(flag == flag_orig);
@@ -16767,24 +16779,24 @@ static void test_bug27876()
   mytest(result);
   mysql_free_result(result);
 
-  sprintf(query, "DROP FUNCTION IF EXISTS %s", (char*) utf8_func);
+  snprintf(query, sizeof(query), "DROP FUNCTION IF EXISTS %s", (char*) utf8_func);
   rc= mysql_query(mysql, query);
   myquery(rc);
 
-  sprintf(query,
+  snprintf(query, sizeof(query),
           "CREATE FUNCTION %s( %s VARCHAR(25))"
           " RETURNS VARCHAR(25) DETERMINISTIC RETURN %s",
           (char*) utf8_func, (char*) utf8_param, (char*) utf8_param);
   rc= mysql_query(mysql, query);
   myquery(rc);
-  sprintf(query, "SELECT %s(VERSION())", (char*) utf8_func);
+  snprintf(query, sizeof(query), "SELECT %s(VERSION())", (char*) utf8_func);
   rc= mysql_query(mysql, query);
   myquery(rc);
   result= mysql_store_result(mysql);
   mytest(result);
   mysql_free_result(result);
 
-  sprintf(query, "DROP FUNCTION %s", (char*) utf8_func);
+  snprintf(query, sizeof(query), "DROP FUNCTION %s", (char*) utf8_func);
   rc= mysql_query(mysql, query);
   myquery(rc);
 
@@ -16869,18 +16881,18 @@ static void test_change_user()
   myheader("test_change_user");
 
   /* Prepare environment */
-  sprintf(buff, "drop database if exists %s", db);
+  snprintf(buff, sizeof(buff), "drop database if exists %s", db);
   rc= mysql_query(mysql, buff);
   myquery(rc);
 
-  sprintf(buff, "create database %s", db);
+  snprintf(buff, sizeof(buff), "create database %s", db);
   rc= mysql_query(mysql, buff);
   myquery(rc);
 
   rc= mysql_query(mysql, "SET SQL_MODE=''");
   myquery(rc);
 
-  sprintf(buff,
+  snprintf(buff, sizeof(buff),
           "grant select on %s.* to %s@'%%' identified by '%s'",
           db,
           user_pw,
@@ -16888,7 +16900,7 @@ static void test_change_user()
   rc= mysql_query(mysql, buff);
   myquery(rc);
 
-  sprintf(buff,
+  snprintf(buff, sizeof(buff),
           "grant select on %s.* to %s@'localhost' identified by '%s'",
           db,
           user_pw,
@@ -16896,14 +16908,14 @@ static void test_change_user()
   rc= mysql_query(mysql, buff);
   myquery(rc);
 
-  sprintf(buff,
+  snprintf(buff, sizeof(buff),
           "grant select on %s.* to %s@'%%'",
           db,
           user_no_pw);
   rc= mysql_query(mysql, buff);
   myquery(rc);
 
-  sprintf(buff,
+  snprintf(buff, sizeof(buff),
           "grant select on %s.* to %s@'localhost'",
           db,
           user_no_pw);
@@ -17092,23 +17104,23 @@ static void test_change_user()
 
   mysql_close(conn);
 
-  sprintf(buff, "drop database %s", db);
+  snprintf(buff, sizeof(buff), "drop database %s", db);
   rc= mysql_query(mysql, buff);
   myquery(rc);
 
-  sprintf(buff, "drop user %s@'%%'", user_pw);
+  snprintf(buff, sizeof(buff), "drop user %s@'%%'", user_pw);
   rc= mysql_query(mysql, buff);
   myquery(rc);
 
-  sprintf(buff, "drop user %s@'%%'", user_no_pw);
+  snprintf(buff, sizeof(buff), "drop user %s@'%%'", user_no_pw);
   rc= mysql_query(mysql, buff);
   myquery(rc);
 
-  sprintf(buff, "drop user %s@'localhost'", user_pw);
+  snprintf(buff, sizeof(buff), "drop user %s@'localhost'", user_pw);
   rc= mysql_query(mysql, buff);
   myquery(rc);
 
-  sprintf(buff, "drop user %s@'localhost'", user_no_pw);
+  snprintf(buff, sizeof(buff), "drop user %s@'localhost'", user_no_pw);
   rc= mysql_query(mysql, buff);
   myquery(rc);
 
@@ -18005,7 +18017,7 @@ static void test_wl4166_1()
   /* now, execute the prepared statement to insert 10 records.. */
   for (tiny_data= 0; tiny_data < 10; tiny_data++)
   {
-    length[1]= sprintf(str_data, "MySQL%d", int_data);
+    length[1]= snprintf(str_data, sizeof(str_data), "MySQL%d", int_data);
     rc= mysql_stmt_execute(stmt);
     check_execute(stmt, rc);
     int_data += 25;
@@ -18028,7 +18040,7 @@ static void test_wl4166_1()
 
   for (tiny_data= 50; tiny_data < 60; tiny_data++)
   {
-    length[1]= sprintf(str_data, "MySQL%d", int_data);
+    length[1]= snprintf(str_data, sizeof(str_data), "MySQL%d", int_data);
     rc= mysql_stmt_execute(stmt);
     check_execute(stmt, rc);
     int_data += 25;
@@ -18406,6 +18418,7 @@ static void test_bug38486(void)
   myheader("test_bug38486");
 
   stmt= mysql_stmt_init(mysql);
+  check_stmt(stmt);
   mysql_stmt_attr_set(stmt, STMT_ATTR_CURSOR_TYPE, (void*)&type);
   stmt_text= "CREATE TABLE t1 (a INT)";
   mysql_stmt_prepare(stmt, stmt_text, strlen(stmt_text));
@@ -18413,6 +18426,7 @@ static void test_bug38486(void)
   mysql_stmt_close(stmt);
 
   stmt= mysql_stmt_init(mysql);
+  check_stmt(stmt);
   mysql_stmt_attr_set(stmt, STMT_ATTR_CURSOR_TYPE, (void*)&type);
   stmt_text= "INSERT INTO t1 VALUES (1)";
   mysql_stmt_prepare(stmt, stmt_text, strlen(stmt_text));
@@ -20030,7 +20044,7 @@ static void test_bug17512527()
   check_stmt(stmt2);
 
   thread_id= mysql_thread_id(conn);
-  sprintf(query, "KILL %lu", thread_id);
+  snprintf(query, sizeof(query), "KILL %lu", thread_id);
   if (thread_query(query))
     exit(1);
 
@@ -20568,19 +20582,19 @@ static void test_proxy_header_tcp(const char *ipaddr, int port)
   MYSQL_RES *result;
   int family = (strchr(ipaddr,':') == NULL)?AF_INET:AF_INET6;
   char query[256];
-  char text_header[256];
+  char text_header[256], bad_text_header[256];
   char addr_bin[16];
-  v2_proxy_header v2_header;
-  void *header_data[2];
-  size_t header_lengths[2];
-  int i;
+  v2_proxy_header v2_header, bad_v2_header;
+  void *header_data[4];
+  size_t header_lengths[4];
+  size_t i;
 
   // normalize IPv4-mapped IPv6 addresses, e.g ::ffff:127.0.0.2 to 127.0.0.2
   const char *normalized_addr= strncmp(ipaddr, "::ffff:", 7)?ipaddr : ipaddr + 7;
   myheader("test_proxy_header_tcp");
 
   memset(&v2_header, 0, sizeof(v2_header));
-  sprintf(text_header,"PROXY %s %s %s %d 3306\r\n",family == AF_INET?"TCP4":"TCP6", ipaddr, ipaddr, port);
+  snprintf(text_header, sizeof(text_header), "PROXY %s %s %s %d 3306\r\n",family == AF_INET?"TCP4":"TCP6", ipaddr, ipaddr, port);
  
   inet_pton(family,ipaddr,addr_bin);
 
@@ -20605,15 +20619,25 @@ static void test_proxy_header_tcp(const char *ipaddr, int port)
     memcpy(v2_header.addr.ip6.dst_addr,addr_bin, sizeof (v2_header.addr.ip6.dst_addr));
   }
 
-  sprintf(query,"CREATE USER 'u'@'%s' IDENTIFIED BY 'password'",normalized_addr);
+  snprintf(query, sizeof(query), "CREATE USER 'u'@'%s' IDENTIFIED BY 'password'",normalized_addr);
   rc= mysql_query(mysql, query);
   myquery(rc);
 
   header_data[0]= text_header;
   header_data[1]= &v2_header;
+  header_data[2]= bad_text_header;
+  header_data[3]= &bad_v2_header;
 
   header_lengths[0]= strlen(text_header);
   header_lengths[1]= family == AF_INET ? 28 : 52;
+  header_lengths[2]= sizeof(text_header)-4;
+  header_lengths[3]= header_lengths[1];
+
+  memset(bad_text_header, ' ', sizeof(bad_text_header));
+  memcpy(bad_text_header, text_header, header_lengths[1]-6);
+
+  bad_v2_header= v2_header;
+  bad_v2_header.len= 0;
 
   for (i = 0; i < 2; i++)
   {
@@ -20624,9 +20648,8 @@ static void test_proxy_header_tcp(const char *ipaddr, int port)
     DIE_UNLESS(m);
     mysql_optionsv(m, MARIADB_OPT_PROXY_HEADER, header_data[i], header_lengths[i]);
     if (!mysql_real_connect(m, opt_host, "u", "password", NULL, opt_port, opt_unix_socket, 0))
-    {
-       DIE_UNLESS(0);
-    }
+      DIE(0);
+
     rc= mysql_query(m, "select host from information_schema.processlist WHERE ID = connection_id()");
     myquery(rc);
     /* get the result */
@@ -20643,9 +20666,24 @@ static void test_proxy_header_tcp(const char *ipaddr, int port)
      /* do "dirty" close, to get aborted message in error log.*/
       mariadb_cancel(m);
     }
+
     mysql_close(m);
   }
-  sprintf(query,"DROP USER 'u'@'%s'",normalized_addr);
+  for (; i < array_elements(header_data); i++)
+  {
+    MYSQL *m;
+    m = mysql_client_init(NULL);
+    DIE_UNLESS(m);
+    mysql_optionsv(m, MARIADB_OPT_PROXY_HEADER, header_data[i], header_lengths[i]);
+    if (mysql_real_connect(m, opt_host, "u", "password", NULL, opt_port, opt_unix_socket, 0))
+      DIE(0);
+    printf("pass %zu error %i - %s\n", i, mysql_errno(m),
+           mysql_error(m));
+    DIE_IF(i == 2 && mysql_errno(m) != ER_UNKNOWN_ERROR);
+    DIE_IF(i == 3 && mysql_errno(m) != ER_UNKNOWN_ERROR);
+    mysql_close(m);
+  }
+  snprintf(query, sizeof(query), "DROP USER 'u'@'%s'",normalized_addr);
   rc = mysql_query(mysql, query);
   myquery(rc);
 }
@@ -20722,6 +20760,331 @@ static void test_proxy_header_ignore()
   myquery(rc);
 }
 
+static void test_proxy_header_limits()
+{
+  MYSQL *m;
+  char text_header[256];
+  const char *prefix = "PROXY TCP4 1.2.3.4 5.6.7.8 1234 5678";
+  size_t prefix_len;
+
+  myheader("test_proxy_header_limits");
+
+  /* Test maximum length PROXY header (256 bytes) to ensure no overflow */
+  memset(text_header, ' ', sizeof(text_header));
+
+  prefix_len = strlen(prefix);
+
+  memcpy(text_header, prefix, prefix_len);
+  text_header[sizeof(text_header) - 1] = '\n';
+
+  m = mysql_client_init(NULL);
+  DIE_UNLESS(m);
+
+  mysql_optionsv(m, MARIADB_OPT_PROXY_HEADER, text_header, sizeof(text_header));
+
+  DIE_UNLESS(mysql_real_connect(m, opt_host, "root", "", NULL, opt_port, opt_unix_socket, 0) == NULL);
+  mysql_close(m);
+}
+
+
+/*
+  MDEV-37556 memory leak in proxy protocol for non-loopback
+  connections.
+
+  Uses debug_dbug variable to set vio_peer_addr_fake_ipv6 etc
+  to emulate a remote connection
+*/
+static void test_proxy_header_dbug_remote_connection()
+{
+#ifndef DBUG_OFF
+  int rc;
+  MYSQL *m;
+  MYSQL_RES *result;
+  MYSQL_ROW row;
+  v2_proxy_header v2_header;
+  char addr_bin[16];
+  const char *proxy_ipv6 = "2001:db8::6:6";
+  int protocol= MYSQL_PROTOCOL_TCP;
+
+  myheader("test_proxy_header_dbug_remote_connection");
+
+  /* Save and override debug_dbug so name resolution does not hit real DNS. */
+  rc= mysql_query(mysql,
+    "SET @save_debug_dbug = @@GLOBAL.debug_dbug");
+  myquery(rc);
+  rc= mysql_query(mysql,
+    "SET GLOBAL debug_dbug='+d,vio_peer_addr_fake_ipv6"
+    ",getnameinfo_fake_ipv6,getaddrinfo_fake_good_ipv6'");
+  myquery(rc);
+
+  /* Create a user identified by the hostname that the debug points will produce. */
+  rc= mysql_query(mysql,
+    "CREATE USER 'u'@'santa.claus.ipv6.example.com' IDENTIFIED BY 'password'");
+  myquery(rc);
+
+  /* Build a v2 proxy header announcing proxy_ipv6 as the client address. */
+  memset(&v2_header, 0, sizeof(v2_header));
+  memcpy(v2_header.sig, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", 12);
+  v2_header.ver_cmd = (0x2 << 4) | 0x1; /* PROXY command */
+  v2_header.fam     = 0x21;              /* TCPv6 */
+  v2_header.len     = htons(36);
+  inet_pton(AF_INET6, proxy_ipv6, addr_bin);
+  memcpy(v2_header.addr.ip6.src_addr, addr_bin, 16);
+  memcpy(v2_header.addr.ip6.dst_addr, addr_bin, 16);
+  v2_header.addr.ip6.src_port = htons(2222);
+  v2_header.addr.ip6.dst_port = htons(3306);
+
+  m = mysql_client_init(NULL);
+  DIE_UNLESS(m != NULL);
+  mysql_optionsv(m, MARIADB_OPT_PROXY_HEADER, &v2_header, (size_t)52);
+  mysql_optionsv(m, MYSQL_OPT_PROTOCOL, &protocol);
+
+  if (!mysql_real_connect(m, opt_host, "u", "password", NULL, opt_port, NULL, 0))
+    DIE(0);
+
+  /* Verify that the server sees the proxied port, and fake hostname. */
+  rc= mysql_query(m,
+    "SELECT host FROM information_schema.processlist"
+    " WHERE ID = connection_id()");
+  DIE_UNLESS(!rc);
+  result= mysql_store_result(m);
+  DIE_UNLESS(result);
+  row= mysql_fetch_row(result);
+  DIE_UNLESS(strcmp(row[0], "santa.claus.ipv6.example.com:2222") == 0);
+  mysql_free_result(result);
+
+  mysql_close(m);
+
+  rc= mysql_query(mysql, "DROP USER 'u'@'santa.claus.ipv6.example.com'");
+  myquery(rc);
+
+  /* Restore debug_dbug to whatever it was before this test. */
+  rc= mysql_query(mysql, "SET GLOBAL debug_dbug = @save_debug_dbug");
+  myquery(rc);
+#endif /* !DBUG_OFF */
+}
+
+
+/*
+  Open a raw TCP connection and let the handshake fail (server reads EOF) to
+  add one max_connect_errors error. With a header it counts against 'client_ip';
+  with NULL no header is sent, so against the socket peer (the proxy host).
+*/
+static void proxy_send_handshake_error(const char *client_ip)
+{
+  struct addrinfo hints, *ai= NULL, *p;
+  char portbuf[20], header[128];
+  int connected= 0;
+  my_socket s= INVALID_SOCKET;
+
+  snprintf(portbuf, sizeof(portbuf), "%u", opt_port);
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family= AF_UNSPEC;
+  hints.ai_socktype= SOCK_STREAM;
+  DIE_UNLESS(getaddrinfo(opt_host ? opt_host : "localhost", portbuf,
+                         &hints, &ai) == 0);
+
+  for (p= ai; p; p= p->ai_next)
+  {
+    s= socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+    if (s == INVALID_SOCKET)
+      continue;
+    if (connect(s, p->ai_addr, (int) p->ai_addrlen) == 0)
+    {
+      connected= 1;
+      break;
+    }
+    closesocket(s);
+    s= INVALID_SOCKET;
+  }
+  freeaddrinfo(ai);
+  DIE_UNLESS(connected);
+
+  if (client_ip)
+  {
+    snprintf(header, sizeof(header),
+                          "PROXY TCP4 %s 127.0.0.1 12345 %u\r\n",
+                          client_ip, opt_port);
+    DIE_UNLESS(send(s, header, strlen(header), 0) > 0);
+  }
+  /* Half-close our write side so the server's handshake read hits EOF. */
+  DIE_UNLESS(shutdown(s, IF_WIN(SD_SEND,SHUT_WR)) == 0);
+  /* Drain until the server closes, ensuring the error has been accounted. */
+  {
+    char buf[256];
+    while (recv(s, buf, sizeof(buf), 0) > 0)
+      ;
+  }
+  closesocket(s);
+}
+
+/*
+  Connect through PROXY protocol, advertising 'client_ip' as the client.
+  On success returns the connection (caller closes it); on failure returns NULL
+  and stores the client error code in *out_errno.
+*/
+static MYSQL *proxy_connect_as(const char *client_ip, const char *user,
+                               const char *passwd, unsigned int *out_errno)
+{
+  MYSQL *m= mysql_client_init(NULL);
+  char header[128];
+  int proto= MYSQL_PROTOCOL_TCP;
+  int v6= strchr(client_ip, ':') != NULL;
+  DIE_UNLESS(m != NULL);
+  snprintf(header, sizeof(header), "PROXY %s %s %s 12345 %u\r\n",
+           v6 ? "TCP6" : "TCP4", client_ip, v6 ? "::1" : "127.0.0.1", opt_port);
+  mysql_optionsv(m, MARIADB_OPT_PROXY_HEADER, header, strlen(header));
+  mysql_optionsv(m, MYSQL_OPT_PROTOCOL, &proto);
+  if (!mysql_real_connect(m, opt_host, user, passwd, NULL, opt_port, NULL, 0))
+  {
+    if (out_errno)
+      *out_errno= mysql_errno(m);
+    mysql_close(m);
+    return NULL;
+  }
+  if (out_errno)
+    *out_errno= 0;
+  return m;
+}
+
+/*
+  MDEV-25817: with PROXY protocol a successful login must reset the proxied
+  client's connect-error counter; the reset used to be gated on the proxy
+  host's count, so it never fired.
+*/
+static void test_proxy_header_connect_errors_reset()
+{
+  const char *client_ip= "192.0.2.50";
+  char query[256];
+  unsigned int conn_errno= 0;
+  int rc, i;
+  MYSQL *m;
+
+  myheader("test_proxy_header_connect_errors_reset");
+
+  rc= mysql_query(mysql,
+                  "SET @saved_max_connect_errors= @@global.max_connect_errors");
+  myquery(rc);
+  rc= mysql_query(mysql, "SET @@global.max_connect_errors=3");
+  myquery(rc);
+  rc= mysql_query(mysql, "FLUSH HOSTS");
+  myquery(rc);
+
+  snprintf(query, sizeof(query),
+           "CREATE USER 'u'@'%s' IDENTIFIED BY 'password'", client_ip);
+  rc= mysql_query(mysql, query);
+  myquery(rc);
+
+  /* max_connect_errors handshake errors block the host. */
+  for (i= 0; i < 3; i++)
+    proxy_send_handshake_error(client_ip);
+  m= proxy_connect_as(client_ip, "u", "password", &conn_errno);
+  DIE_UNLESS(m == NULL && conn_errno == ER_HOST_IS_BLOCKED);
+
+  rc= mysql_query(mysql, "FLUSH HOSTS");
+  myquery(rc);
+
+  /* Two handshake errors, still below max_connect_errors (3). */
+  proxy_send_handshake_error(client_ip);
+  proxy_send_handshake_error(client_ip);
+
+  /* Below the limit: must connect, and this success must reset the counter. */
+  m= proxy_connect_as(client_ip, "u", "password", &conn_errno);
+  DIE_UNLESS(m != NULL);
+  mysql_close(m);
+
+  /* Two more: with the reset count is 2 (<3, connectable); without it 4
+     (>=3, blocked). */
+  proxy_send_handshake_error(client_ip);
+  proxy_send_handshake_error(client_ip);
+
+  m= proxy_connect_as(client_ip, "u", "password", &conn_errno);
+  DIE_UNLESS(m != NULL);   /* ER_HOST_IS_BLOCKED with unfixed MDEV-25817 */
+  mysql_close(m);
+
+  snprintf(query, sizeof(query), "DROP USER 'u'@'%s'", client_ip);
+  rc= mysql_query(mysql, query);
+  myquery(rc);
+  rc= mysql_query(mysql,
+                 "SET global max_connect_errors=@saved_max_connect_errors");
+  myquery(rc);
+  rc= mysql_query(mysql, "FLUSH HOSTS");
+  myquery(rc);
+}
+
+/*
+  A successful proxied login must also reset the proxy host (socket peer), not
+  only the proxied client - else connections that never finish the handshake
+  (e.g. port checks) could block the proxy and lock out everyone behind it.
+  Debug injection fakes the socket peer to a non-loopback address (2001:db8::6:6,
+  which is in proxy_protocol_networks of both .opt files) and name resolution so
+  it is accounted.
+*/
+static void test_proxy_header_proxy_host_connect_errors_reset()
+{
+#ifndef DBUG_OFF
+  const char *proxied_client= "2001:db8::6:7"; /* in getaddrinfo_fake_good_ipv6 */
+  unsigned int conn_errno= 0;
+  int rc, i;
+  MYSQL *m;
+
+  myheader("test_proxy_header_proxy_host_connect_errors_reset");
+
+  rc= mysql_query(mysql, "SET @save_dbug= @@global.debug_dbug");
+  myquery(rc);
+  rc= mysql_query(mysql, "SET GLOBAL debug_dbug='+d,vio_peer_addr_fake_ipv6,"
+                         "getnameinfo_fake_ipv6,getaddrinfo_fake_good_ipv6'");
+  myquery(rc);
+  rc= mysql_query(mysql,
+                  "SET @save_max_connect_errors= @@global.max_connect_errors");
+  myquery(rc);
+  rc= mysql_query(mysql, "SET @@global.max_connect_errors=3");
+  myquery(rc);
+  rc= mysql_query(mysql, "FLUSH HOSTS");
+  myquery(rc);
+
+  rc= mysql_query(mysql,
+    "CREATE USER 'u'@'santa.claus.ipv6.example.com' IDENTIFIED BY 'password'");
+  myquery(rc);
+
+  /* Errors with no header count against the socket peer (proxy host);
+     max_connect_errors of them block it. */
+  for (i= 0; i < 3; i++)
+    proxy_send_handshake_error(NULL);
+  m= proxy_connect_as(proxied_client, "u", "password", &conn_errno);
+  DIE_UNLESS(m == NULL && conn_errno == ER_HOST_IS_BLOCKED);
+
+  rc= mysql_query(mysql, "FLUSH HOSTS");
+  myquery(rc);
+
+  /* Two proxy-host handshake errors, below max_connect_errors (3). */
+  proxy_send_handshake_error(NULL);
+  proxy_send_handshake_error(NULL);
+
+  /* Success: client has no errors, so this must reset the proxy host's two. */
+  m= proxy_connect_as(proxied_client, "u", "password", &conn_errno);
+  DIE_UNLESS(m != NULL);
+  mysql_close(m);
+
+  /* Two more: with the reset proxy host is at 2 (<3); without it 4 (>=3). */
+  proxy_send_handshake_error(NULL);
+  proxy_send_handshake_error(NULL);
+
+  m= proxy_connect_as(proxied_client, "u", "password", &conn_errno);
+  DIE_UNLESS(m != NULL);   /* ER_HOST_IS_BLOCKED if proxy host not reset */
+  mysql_close(m);
+
+  rc= mysql_query(mysql, "DROP USER 'u'@'santa.claus.ipv6.example.com'");
+  myquery(rc);
+  rc= mysql_query(mysql,
+                  "SET GLOBAL max_connect_errors= @save_max_connect_errors");
+  myquery(rc);
+  rc= mysql_query(mysql, "SET GLOBAL debug_dbug= @save_dbug");
+  myquery(rc);
+  rc= mysql_query(mysql, "FLUSH HOSTS");
+  myquery(rc);
+#endif /* !DBUG_OFF */
+}
 
 static void test_proxy_header()
 {
@@ -20731,6 +21094,10 @@ static void test_proxy_header()
   test_proxy_header_tcp("::ffff:192.0.2.1",2222);
   test_proxy_header_localhost();
   test_proxy_header_ignore();
+  test_proxy_header_limits();
+  test_proxy_header_dbug_remote_connection();
+  test_proxy_header_connect_errors_reset();
+  test_proxy_header_proxy_host_connect_errors_reset();
 }
 
 
@@ -22787,6 +23154,112 @@ insert into t1 values(\
   rc= mysql_query(mysql, "DROP TABLE t1");
   myquery(rc);
 }
+
+static void run_tests_36678(
+            const char *test,
+            const char *table_stmt,
+            const char *insert_stmt,
+            const char *view_stmt,
+            const char *proc_stmt,
+            const char *call_stmt)
+{
+  MYSQL_STMT *stmt;
+  MYSQL_BIND bind;
+  int rc;
+
+  myheader(test);
+
+  if ((table_stmt && table_stmt[0] != '\0' &&
+      (rc= mysql_query_or_error(mysql, table_stmt))))
+    DIE("Table creation failed");
+
+  if ((insert_stmt && insert_stmt[0] != '\0' &&
+      (rc= mysql_query_or_error(mysql, insert_stmt))))
+    DIE("Table insertion failed");
+
+  if ((rc= mysql_query_or_error(mysql, view_stmt)) ||
+      (rc= mysql_query_or_error(mysql, proc_stmt)))
+    DIE("View/Proc creation failed");
+
+  stmt= mysql_stmt_init(mysql);
+  rc= mysql_stmt_prepare(stmt, call_stmt, strlen(call_stmt));
+  DIE_UNLESS(rc == 0);
+
+  memset(&bind, 0, sizeof bind);
+  rc= mysql_stmt_execute(stmt);
+  DIE_UNLESS(rc == 0);
+
+  mysql_stmt_close(stmt);
+  DIE_UNLESS(mysql_query_or_error(mysql, "DROP PROCEDURE proc") == 0);
+  DIE_UNLESS(mysql_query_or_error(mysql, "DROP VIEW v") == 0);
+  if (table_stmt && table_stmt[0] != '\0')
+    DIE_UNLESS(mysql_query_or_error(mysql, "DROP TABLE t") == 0);
+}
+
+static void test_mdev_36678()
+{
+  const char *proc_stmt1= "CREATE OR REPLACE PROCEDURE proc(IN i VARCHAR(1)) \
+    SELECT * FROM v v WHERE CASE WHEN i THEN v.l LIKE CONCAT ('',i) END;";
+  const char *proc_stmt2= "CREATE OR REPLACE PROCEDURE proc(IN `IN_listc2` VARCHAR(1000), IN `IN_limitfrom` INT, IN `IN_limitto` INT) \
+    BEGIN \
+      SELECT * \
+      FROM \
+      v `t` \
+      WHERE \
+      CASE WHEN IN_listc2 IS NOT NULL THEN `t`.`listc2` LIKE CONCAT(\"%\", IN_listc2, \"%\") ELSE TRUE END \
+      LIMIT \
+        IN_limitfrom, \
+        IN_limitto; \
+    END;";
+
+  const char *table_stmt1= "CREATE OR REPLACE TABLE t (c INT) ENGINE=MyISAM;";
+  const char *table_stmt2= "CREATE OR REPLACE TABLE t (c INT) ENGINE=InnoDB;";
+  const char *table_stmt3= "create or replace table t \
+    ( id int auto_increment primary key, col1 int, col2 int, col3 int);";
+
+  const char *insert_stmt1= "insert into t select null, round(rand()*100), \
+    round(rand()*100), round(rand()*100) from seq_1_to_100;";
+
+  const char *view_stmt1= "CREATE OR REPLACE VIEW v \
+    AS SELECT GROUP_CONCAT('', '') AS l FROM (SELECT 1) AS a;";
+  const char *view_stmt2= "CREATE OR REPLACE VIEW v \
+    AS SELECT GROUP_CONCAT('', '') AS l FROM t;";
+  const char *view_stmt3= "create or replace view v as \
+    select col1 as taskcid, sum(col3) as suc3, \
+    group_concat('-',case when `col3` is not null then `col2` else '' end,'-' separator ',') AS `listc2` \
+    from t \
+    group by col1;";
+
+  const char *view_stmt11= "CREATE OR REPLACE VIEW v \
+    AS SELECT CONCAT('', '') AS l FROM (SELECT 1) AS a;";
+  const char *view_stmt21= "CREATE OR REPLACE VIEW v \
+    AS SELECT CONCAT('', '') AS l FROM t;";
+  const char *view_stmt31= "create or replace view v as \
+    select col1 as taskcid, col3 as suc3, \
+    CONCAT('-', CASE WHEN col3 IS NOT NULL THEN col2 ELSE '' END, '-') AS `listc2` \
+    from t;";
+
+  run_tests_36678("View with GROUP_CONCAT created from derived table-",
+                  "", "", view_stmt1, proc_stmt1, "call proc(0)");
+  run_tests_36678("View with CONCAT created from derived table-",
+                  "", "", view_stmt11, proc_stmt1, "call proc(0)");
+
+  run_tests_36678("View with GROUP_CONCAT created from MyISAM table-",
+                  table_stmt1, "", view_stmt2, proc_stmt1, "call proc(0)");
+  run_tests_36678("View with CONCAT created from MyISAM table-",
+                  table_stmt1, "", view_stmt21, proc_stmt1, "call proc(0)");
+
+  run_tests_36678("View with GROUP_CONCAT created from InnoDB table-",
+                  table_stmt2, "", view_stmt2, proc_stmt1, "call proc(0)");
+  run_tests_36678("View with CONCAT created from InnoDB table-",
+                  table_stmt2, "", view_stmt21, proc_stmt1, "call proc(0)");
+
+  run_tests_36678("View with GROUP_CONCAT created from table with data-",
+                  table_stmt3, insert_stmt1, view_stmt3, proc_stmt2, "call proc(null, 0, 25)");
+  run_tests_36678("View with CONCAT created from table with data-",
+                  table_stmt3, insert_stmt1, view_stmt31, proc_stmt2, "call proc(null, 0, 25)");
+}
+
 #endif // EMBEDDED_LIBRARY
 
 /*
@@ -23526,6 +23999,7 @@ static struct my_tests_st my_tests[]= {
   { "test_mdev_34718_ad", test_mdev_34718_ad },
   { "test_mdev_34958", test_mdev_34958 },
   { "test_mdev_32086", test_mdev_32086 },
+  { "test_mdev_36678", test_mdev_36678 },
 #endif
   { "test_mdev_10075", test_mdev_10075},
 #ifndef EMBEDDED_LIBRARY

@@ -29,6 +29,15 @@ if [ "$OS" != 'Darwin' ]; then
     export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}/usr/local/lib:/lib:/usr/lib:/opt/lib"
 fi
 
+safe()
+{
+  if [[ "${!1}" = *[\ \'\`\$]* ]]; then
+    wsrep_log_error "Invalid value for $1: ${!1}"
+    exit 21
+  fi
+  echo "${!1}"
+}
+
 commandex()
 {
     if [ -n "$BASH_VERSION" ]; then
@@ -1444,9 +1453,13 @@ verify_ca_matches_cert()
 
     local not_match=0
     local errmsg
+    # -untrusted lets intermediate CAs bundled after the leaf complete the
+    # chain to the CA. Safe despite the name: these are only candidate links,
+    # still rejected unless signed back to the trusted CA (-CAfile).
     errmsg=$("$OPENSSL_BINARY" verify -verbose \
                                ${ca:+ -CAfile} ${ca:+ "$ca"} \
                                ${cap:+ -CApath} ${cap:+ "$cap"} \
+                               -untrusted "$cert" \
                                "$cert" 2>&1) || not_match=1
 
     if [ $not_match -eq 1 ]; then
@@ -1682,6 +1695,20 @@ check_server_ssl_config()
                "and ssl-key) are ignored by SST due to presence" \
                "of the tca[path], tcert and/or tkey in the [sst] section"
         fi
+    fi
+    # Role-specific overrides: the joiner is the TLS server (listener),
+    # the donor the TLS client (connector). Allow a distinct cert, key
+    # and CA per role for setups where they differ.
+    if [ "$WSREP_SST_OPT_ROLE" = 'joiner' ]; then
+        tcert=$(parse_cnf "$encgroups" 'ssl-server-ca' "$tcert")
+        tcap=$(parse_cnf "$encgroups" 'ssl-server-capath' "$tcap")
+        tpem=$(parse_cnf "$encgroups" 'ssl-server-cert' "$tpem")
+        tkey=$(parse_cnf "$encgroups" 'ssl-server-key' "$tkey")
+    else
+        tcert=$(parse_cnf "$encgroups" 'ssl-client-ca' "$tcert")
+        tcap=$(parse_cnf "$encgroups" 'ssl-client-capath' "$tcap")
+        tpem=$(parse_cnf "$encgroups" 'ssl-client-cert' "$tpem")
+        tkey=$(parse_cnf "$encgroups" 'ssl-client-key' "$tkey")
     fi
     if [ -n "$tcert" ]; then
         if [ "${tcert%/}" != "$tcert" -o -d "$tcert" ]; then

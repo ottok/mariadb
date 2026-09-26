@@ -261,6 +261,16 @@ IF (WITH_MSAN)
   ENDIF()
 ENDIF()
 
+# SANs, with their additional processing workload, should have a basic
+# but debuggable optimization unless user specifies otherwise.
+IF((WITH_ASAN OR WITH_UBSAN OR WITH_TSAN OR WITH_MSAN)
+	AND NOT CMAKE_C_FLAGS MATCHES "-O[0-9sgzf]"
+	AND NOT CMAKE_CXX_FLAGS MATCHES "-O[0-9sgzf]"
+	AND NOT CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE} MATCHES "-O[0-9sgzf]"
+	AND NOT CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE} MATCHES "-O[0-9sgzf]")
+  MY_CHECK_AND_SET_COMPILER_FLAG("-Og")
+ENDIF()
+
 OPTION(WITH_GPROF "Enable profiling with gprof" OFF)
 IF (WITH_GPROF)
   MY_CHECK_AND_SET_COMPILER_FLAG("-pg -g -no-pie -fPIC")
@@ -486,7 +496,6 @@ ADD_SUBDIRECTORY(vio)
 ADD_SUBDIRECTORY(mysys)
 ADD_SUBDIRECTORY(mysys_ssl)
 ADD_SUBDIRECTORY(client)
-ADD_SUBDIRECTORY(extra)
 ADD_SUBDIRECTORY(libservices)
 ADD_SUBDIRECTORY(sql/share)
 
@@ -511,6 +520,8 @@ IF(NOT WITHOUT_SERVER)
     ADD_SUBDIRECTORY(win/packaging)
   ENDIF()
 ENDIF()
+
+ADD_SUBDIRECTORY(extra)
 
 IF(UNIX)
   ADD_SUBDIRECTORY(man)
@@ -561,21 +572,23 @@ CONFIGURE_FILE(
     ${CMAKE_SOURCE_DIR}/cmake/info_macros.cmake.in
     ${CMAKE_BINARY_DIR}/info_macros.cmake @ONLY)
 
-# Handle the "INFO_*" files.
-INCLUDE(${CMAKE_BINARY_DIR}/info_macros.cmake)
-# Source: This can be done during the cmake phase, all information is
-# available, but should be repeated on each "make" just in case someone
-# does "cmake ; make ; git pull ; make".
-CREATE_INFO_SRC(${CMAKE_BINARY_DIR}/Docs)
-ADD_CUSTOM_TARGET(INFO_SRC ALL
-  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/cmake/info_src.cmake
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-)
-# Build flags: This must be postponed to the make phase.
-ADD_CUSTOM_TARGET(INFO_BIN ALL
-  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/cmake/info_bin.cmake
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-)
+IF (NOT WITHOUT_ABI_CHECK)
+  # Handle the "INFO_*" files.
+  INCLUDE(${CMAKE_BINARY_DIR}/info_macros.cmake)
+  # Source: This can be done during the cmake phase, all information is
+  # available, but should be repeated on each "make" just in case someone
+  # does "cmake ; make ; git pull ; make".
+  CREATE_INFO_SRC(${CMAKE_BINARY_DIR}/Docs)
+  ADD_CUSTOM_TARGET(INFO_SRC ALL
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/cmake/info_src.cmake
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+  )
+  # Build flags: This must be postponed to the make phase.
+  ADD_CUSTOM_TARGET(INFO_BIN ALL
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/cmake/info_bin.cmake
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+  )
+ENDIF()
 
 INSTALL_DOCUMENTATION(README.md CREDITS COPYING THIRDPARTY COMPONENT Readme)
 
@@ -585,9 +598,6 @@ INSTALL_DOCUMENTATION(README.md CREDITS COPYING THIRDPARTY COMPONENT Readme)
 
 IF(UNIX)
   INSTALL_DOCUMENTATION(Docs/INSTALL-BINARY COMPONENT Readme)
-  IF(WITH_WSREP)
-    INSTALL_DOCUMENTATION(Docs/README-wsrep COMPONENT Readme)
-  ENDIF()
 ENDIF()
 
 INCLUDE(build_depends)

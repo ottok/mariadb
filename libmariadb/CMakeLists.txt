@@ -5,16 +5,8 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.12.0 FATAL_ERROR)
 
 INCLUDE(CheckFunctionExists)
-IF(COMMAND CMAKE_POLICY)
-  SET(NEW_POLICIES CMP0003 CMP0022 CMP0023 CMP0057 CMP0077 CMP0069 CMP0075)
-  FOREACH(TYPE OLD NEW)
-    FOREACH(P ${${TYPE}_POLICIES})
-      IF(POLICY ${P})
-        CMAKE_POLICY(SET ${P} ${TYPE})
-      ENDIF()
-    ENDFOREACH()
-  ENDFOREACH()
-ENDIF()
+# CMP0077 defaults to NEW since cmake 3.13; can drop when minimum is bumped
+CMAKE_POLICY(SET CMP0077 NEW)
 
 
 # Is C/C built as subproject?
@@ -41,6 +33,10 @@ ADD_OPTION(WITH_BOOST_CONTEXT
   "Use Boost::Context for the non-blocking API on platforms without native implementation"
   OFF)
 
+ADD_OPTION(WITH_TOOLS
+           "Build tools"
+           OFF)
+
 IF(WITH_BOOST_CONTEXT)
   PROJECT(mariadb-connector-c LANGUAGES C CXX)
 ELSE()
@@ -52,7 +48,7 @@ SET(CC_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 SET(CPACK_PACKAGE_VERSION_MAJOR 3)
 SET(CPACK_PACKAGE_VERSION_MINOR 4)
-SET(CPACK_PACKAGE_VERSION_PATCH 9)
+SET(CPACK_PACKAGE_VERSION_PATCH 10)
 
 SET(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
 MATH(EXPR MARIADB_PACKAGE_VERSION_ID "${CPACK_PACKAGE_VERSION_MAJOR} * 10000 +
@@ -76,10 +72,77 @@ ADD_OPTION(WITH_EXTERNAL_ZLIB "Enables use of external zlib" OFF)
 ADD_OPTION(WITH_CURL "Enables use of curl" ON)
 ADD_OPTION(WITH_SSL "Enables use of TLS/SSL library" ON)
 ADD_OPTION(DEFAULT_SSL_VERIFY_SERVER_CERT "Default value for MYSQL_OPT_SSL_VERIFY_SERVER_CERT" ON)
+IF(NOT IS_SUBPROJECT)
+  ADD_OPTION(WITH_ASAN
+    "Enable AddressSanitizer instrumentation for Debug and RelWithDebInfo builds"
+    OFF)
+  ADD_OPTION(WITH_ASAN_SCOPE
+    "Enable -fsanitize-address-use-after-scope for Clang ASAN builds"
+    OFF)
+  ADD_OPTION(WITH_UBSAN
+    "Enable UndefinedBehaviorSanitizer instrumentation for Debug and RelWithDebInfo builds"
+    OFF)
+  ADD_OPTION(WITH_MSAN "Enable MemorySanitizer instrumentation for Debug and RelWithDebInfo builds" OFF)
+ENDIF()
 
 
 INCLUDE(${CC_SOURCE_DIR}/cmake/misc.cmake)
-INCLUDE(FindCURL)
+FIND_PACKAGE(CURL)
+
+IF(NOT IS_SUBPROJECT)
+  MACRO(MARIADB_ADD_SANITIZER_FLAGS compile_flags link_flags)
+    FOREACH(BUILD_TYPE DEBUG RELWITHDEBINFO)
+      SET(CMAKE_C_FLAGS_${BUILD_TYPE}
+          "${CMAKE_C_FLAGS_${BUILD_TYPE}} ${compile_flags}")
+      FOREACH(LINKER EXE SHARED MODULE)
+        SET(CMAKE_${LINKER}_LINKER_FLAGS_${BUILD_TYPE}
+            "${CMAKE_${LINKER}_LINKER_FLAGS_${BUILD_TYPE}} ${link_flags}")
+      ENDFOREACH()
+    ENDFOREACH()
+  ENDMACRO()
+
+  IF(WITH_MSAN AND (WITH_ASAN OR WITH_UBSAN))
+    MESSAGE(FATAL_ERROR "WITH_MSAN is incompatible with WITH_ASAN or WITH_UBSAN")
+  ENDIF()
+
+  IF(WITH_ASAN_SCOPE)
+    IF(NOT WITH_ASAN)
+      MESSAGE(FATAL_ERROR "WITH_ASAN_SCOPE requires WITH_ASAN")
+    ENDIF()
+    IF(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+      MESSAGE(FATAL_ERROR "WITH_ASAN_SCOPE is supported only with Clang")
+    ENDIF()
+    ADD_COMPILE_OPTIONS(
+      "$<$<CONFIG:Debug>:-fsanitize-address-use-after-scope>"
+      "$<$<CONFIG:RelWithDebInfo>:-fsanitize-address-use-after-scope>")
+  ENDIF()
+
+  IF(WITH_ASAN)
+    IF(MSVC)
+      MARIADB_ADD_SANITIZER_FLAGS(
+        "/fsanitize=address /fsanitize-address-use-after-return"
+        "/INCREMENTAL:NO")
+    ELSE()
+      MARIADB_ADD_SANITIZER_FLAGS(
+        "-U_FORTIFY_SOURCE -fsanitize=address"
+        "-fsanitize=address")
+    ENDIF()
+  ENDIF()
+
+  IF(NOT MSVC)
+    IF(WITH_UBSAN)
+      MARIADB_ADD_SANITIZER_FLAGS(
+        "-fsanitize=undefined -U_FORTIFY_SOURCE"
+        "-fsanitize=undefined")
+    ENDIF()
+
+    IF(WITH_MSAN)
+      MARIADB_ADD_SANITIZER_FLAGS(
+        "-fsanitize=memory -fsanitize-memory-track-origins -U_FORTIFY_SOURCE"
+        "-fsanitize=memory -fsanitize-memory-track-origins")
+    ENDIF()
+  ENDIF()
+ENDIF()
 
 IF(WITH_SIGNCODE)
   IF(WIN32 AND NOT SIGN_OPTIONS)
@@ -108,33 +171,31 @@ IF(NOT IS_SUBPROJECT)
 IF(MSVC)
   # Speedup system tests
   INCLUDE(${CC_SOURCE_DIR}/cmake/WindowsCache.cmake)
-  ADD_DEFINITIONS(-DWIN32_LEAN_AND_MEAN -DNOGDI)
-  IF (MSVC)
-    SET(CONFIG_TYPES "DEBUG" "RELEASE" "RELWITHDEBINFO")
-    FOREACH(BUILD_TYPE ${CONFIG_TYPES})
-      FOREACH(COMPILER CXX C)
-        SET(COMPILER_FLAGS "${CMAKE_${COMPILER}_FLAGS_${BUILD_TYPE}}")
-        IF (NOT COMPILER_FLAGS STREQUAL "")
-          IF(NOT WITH_ASAN)
-            STRING(REPLACE "/MD" "/MT" COMPILER_FLAGS ${COMPILER_FLAGS})
-            IF (BUILD_TYPE STREQUAL "DEBUG")
-              SET(COMPILER_FLAGS "${COMPILER_FLAGS} ${RTC_OPTIONS}")
-            ENDIF()
+  add_compile_definitions(WIN32_LEAN_AND_MEAN NOGDI)
+  SET(CONFIG_TYPES "DEBUG" "RELEASE" "RELWITHDEBINFO")
+  FOREACH(BUILD_TYPE ${CONFIG_TYPES})
+    FOREACH(COMPILER CXX C)
+      SET(COMPILER_FLAGS "${CMAKE_${COMPILER}_FLAGS_${BUILD_TYPE}}")
+      IF (NOT COMPILER_FLAGS STREQUAL "")
+        IF(NOT WITH_ASAN)
+          STRING(REPLACE "/MD" "/MT" COMPILER_FLAGS ${COMPILER_FLAGS})
+          IF (BUILD_TYPE STREQUAL "DEBUG")
+            SET(COMPILER_FLAGS "${COMPILER_FLAGS} ${RTC_OPTIONS}")
           ENDIF()
-          STRING(REPLACE "/Zi" "/Z7" COMPILER_FLAGS ${COMPILER_FLAGS})
-          MESSAGE (STATUS "CMAKE_${COMPILER}_FLAGS_${BUILD_TYPE}= ${COMPILER_FLAGS}")
-          SET(CMAKE_${COMPILER}_FLAGS_${BUILD_TYPE} ${COMPILER_FLAGS})
         ENDIF()
-      ENDFOREACH()
+        STRING(REPLACE "/Zi" "/Z7" COMPILER_FLAGS ${COMPILER_FLAGS})
+        MESSAGE (STATUS "CMAKE_${COMPILER}_FLAGS_${BUILD_TYPE}= ${COMPILER_FLAGS}")
+        SET(CMAKE_${COMPILER}_FLAGS_${BUILD_TYPE} ${COMPILER_FLAGS})
+      ENDIF()
     ENDFOREACH()
-  ENDIF()
+  ENDFOREACH()
 ENDIF()
 ELSE()
   # MDEV-16383
   IF(WITH_EMBEDDED_SERVER)
-    ADD_DEFINITIONS(-DHAVE_EMBEDDED)
+    add_compile_definitions(HAVE_EMBEDDED)
   ENDIF()
-ENDIF(NOT IS_SUBPROJECT)
+ENDIF()
 
 # Disable dbug information for release builds
 SET(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -DDBUG_OFF")
@@ -142,7 +203,7 @@ SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DDBUG_OFF")
 SET(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -DDBUG_OFF")
 SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -DDBUG_OFF")
 
-IF(CMAKE_COMPILER_IS_GNUCC)
+IF(CMAKE_C_COMPILER_ID MATCHES "GNU")
   INCLUDE(CheckCCompilerFlag)
   SET(GCC_FLAGS -Wunused -Wlogical-op -Wno-uninitialized  -Wall -Wextra -Wformat-security -Wno-init-self -Wwrite-strings -Wshift-count-overflow -Wdeclaration-after-statement -Wno-undef -Wno-unknown-pragmas -Wno-stringop-truncation)
   FOREACH(GCC_FLAG ${GCC_FLAGS})
@@ -158,7 +219,7 @@ IF(NOT CMAKE_BUILD_TYPE)
   SET(CMAKE_BUILD_TYPE "RelWithDebInfo")
 ENDIF()
 
-INCLUDE(FindGit)
+FIND_PACKAGE(Git)
 IF(GIT_EXECUTABLE AND EXISTS ${CC_SOURCE_DIR}/.git)
   EXECUTE_PROCESS(
     COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
@@ -201,7 +262,7 @@ IF(WIN32)
     ELSE()
       SET(${v}_FILE_VERSION "0")
     ENDIF()
-    IF(NOT ${v}_FILE_VERSION MATCHES "^[0-9]+$")
+    IF(NOT "${${v}_FILE_VERSION}" MATCHES "^[0-9]+$")
       MESSAGE(FATAL_ERROR
         "${v}_FILE_VERSION is not numeric - '${${v}_FILE_VERSION}'")
     ENDIF()
@@ -237,7 +298,17 @@ INCLUDE(${CC_SOURCE_DIR}/cmake/SearchLibrary.cmake)
 INCLUDE(${CC_SOURCE_DIR}/cmake/FindZStd.cmake)
 
 IF(WITH_EXTERNAL_ZLIB)
-  IF(NOT ZLIB_FOUND)
+  IF(TARGET MariaDB::zlib)
+    # Built as a submodule of the MariaDB server tree: use exactly the same
+    # zlib the server uses (bundled or system) instead of searching ourselves.
+    SET(ZLIB_FOUND TRUE)
+    SET(ZLIB_LIBRARY MariaDB::zlib)
+    SET(ZLIB_LIBRARIES MariaDB::zlib)
+    GET_TARGET_PROPERTY(MARIADB_ZLIB_INC MariaDB::zlib INTERFACE_INCLUDE_DIRECTORIES)
+    IF(MARIADB_ZLIB_INC)
+      SET(ZLIB_INCLUDE_DIR ${MARIADB_ZLIB_INC})
+    ENDIF()
+  ELSEIF(NOT ZLIB_FOUND)
     FIND_PACKAGE(ZLIB REQUIRED)
   ENDIF()
   SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${ZLIB_LIBRARIES})
@@ -265,9 +336,9 @@ IF(UNIX)
   SEARCH_LIBRARY(LIBNSL gethostbyname_r "nsl_r;nsl")
   SEARCH_LIBRARY(LIBSOCKET setsockopt socket)
   FIND_PACKAGE(Threads)
-  SET(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES} ${LIBNSL} ${LIBBIND} ${LIBICONV} ${ZLIB_LIBRARY} 
+  SET(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES} ${LIBNSL} ${LIBICONV} ${ZLIB_LIBRARIES}
       ${LIBSOCKET} ${CMAKE_DL_LIBS} ${LIBM} ${LIBPTHREAD})
-  SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${LIBNSL} ${LIBBIND} ${LIBICONV} 
+  SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${LIBNSL} ${LIBICONV}
     ${LIBSOCKET} ${CMAKE_DL_LIBS} ${LIBM} ${LIBPTHREAD})
   #remove possible dups from required libraries
   LIST(LENGTH CMAKE_REQUIRED_LIBRARIES rllength)
@@ -282,15 +353,15 @@ IF(CMAKE_HAVE_PTHREAD_H)
 ENDIF()
 
 IF(DBUG_OFF)
-  ADD_DEFINITIONS(-DDBUG_OFF=1)
+  add_compile_definitions(DBUG_OFF=1)
 ENDIF()
 
-ADD_DEFINITIONS(-DMARIADB_SYSTEM_TYPE="${CMAKE_SYSTEM_NAME}")
-ADD_DEFINITIONS(-DMARIADB_MACHINE_TYPE="${CMAKE_SYSTEM_PROCESSOR}")
+add_compile_definitions(MARIADB_SYSTEM_TYPE="${CMAKE_SYSTEM_NAME}")
+add_compile_definitions(MARIADB_MACHINE_TYPE="${CMAKE_SYSTEM_PROCESSOR}")
 
 IF(WIN32)
-  ADD_DEFINITIONS(-DHAVE_DLOPEN)
-  ADD_DEFINITIONS(-D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE)
+  add_compile_definitions(HAVE_DLOPEN)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
 ENDIF()
 
 IF(NOT DEFAULT_CHARSET)
@@ -315,7 +386,7 @@ IF(WITH_SSL STREQUAL "OPENSSL")
     FIND_PACKAGE(OpenSSL)
   ENDIF()
   IF(OPENSSL_FOUND)
-    ADD_DEFINITIONS(-DHAVE_OPENSSL -DHAVE_TLS)
+    add_compile_definitions(HAVE_OPENSSL HAVE_TLS)
     SET(SSL_SOURCES "${CC_SOURCE_DIR}/libmariadb/secure/openssl.c"
                     "${CC_SOURCE_DIR}/libmariadb/secure/openssl_crypt.c")
     SET(SSL_LIBRARIES ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
@@ -334,7 +405,7 @@ IF(WITH_SSL STREQUAL "OPENSSL")
             COMPILE_DEFINITIONS "-I${OPENSSL_INCLUDE_DIR}"
             RUN_OUTPUT_VARIABLE LIBRESSL_VERSION)
     IF(HAVE_LIBRESSL)
-      ADD_DEFINITIONS(-DHAVE_LIBRESSL)
+      add_compile_definitions(HAVE_LIBRESSL)
       SET(TLS_LIBRARY_VERSION ${LIBRESSL_VERSION})
     ELSE()
       SET(TLS_LIBRARY_VERSION "OpenSSL ${OPENSSL_VERSION}")
@@ -345,7 +416,7 @@ IF(WITH_SSL STREQUAL "OPENSSL")
 ELSEIF(WITH_SSL STREQUAL "GNUTLS")
   FIND_PACKAGE(GnuTLS "3.4.2" REQUIRED)
   IF(GNUTLS_FOUND)
-    ADD_DEFINITIONS(-DHAVE_GNUTLS -DHAVE_TLS)
+    add_compile_definitions(HAVE_GNUTLS HAVE_TLS)
     SET(SSL_SOURCES "${CC_SOURCE_DIR}/libmariadb/secure/gnutls.c"
                     "${CC_SOURCE_DIR}/libmariadb/secure/gnutls_crypt.c")
     GET_FILENAME_COMPONENT(LIB_EXT "${GNUTLS_LIBRARIES}" EXT)
@@ -360,7 +431,7 @@ ELSEIF(WITH_SSL STREQUAL "GNUTLS")
     MESSAGE(FATAL_ERROR "GnuTLS not found")
   ENDIF()
 ELSEIF(WIN32 AND WITH_SSL STREQUAL "SCHANNEL")
-  ADD_DEFINITIONS(-DHAVE_SCHANNEL -DHAVE_TLS -DHAVE_WINCRYPT)
+  add_compile_definitions(HAVE_SCHANNEL HAVE_TLS HAVE_WINCRYPT)
   SET(SSL_SOURCES "${CC_SOURCE_DIR}/libmariadb/secure/schannel.c"
                   "${CC_SOURCE_DIR}/libmariadb/secure/win_crypt.c"
                   "${CC_SOURCE_DIR}/libmariadb/secure/ma_schannel.c"
@@ -434,7 +505,7 @@ IF(NOT REMOTEIO_PLUGIN_TYPE MATCHES "OFF")
     IF(REMOTEIO_PLUGIN_TYPE MATCHES "STATIC")
       SET(SYSTEM_LIBS ${SYSTEM_LIBS} ${CURL_LIBRARIES})
     ENDIF()
-    ADD_DEFINITIONS("-DHAVE_REMOTEIO=1")
+    add_compile_definitions(HAVE_REMOTEIO=1)
   ENDIF()
 ENDIF()
 IF(NOT WIN32)
@@ -455,18 +526,16 @@ IF((NOT WIN32) OR CYGWIN)
   ADD_SUBDIRECTORY(mariadb_config)
 ENDIF()
 
+IF(WITH_TOOLS)
+  ADD_SUBDIRECTORY(tools)
+ENDIF()
+
 IF(IS_DIRECTORY ${CC_SOURCE_DIR}/unittest)
   IF(WITH_UNIT_TESTS)
     ADD_SUBDIRECTORY(unittest/mytap)
     ADD_SUBDIRECTORY(unittest/libmariadb)
   ENDIF()
 ENDIF()
-
-#IF(CLIENT_DOCS)
-#  INSTALL(DIRECTORY ${CLIENT_DOCS}
-#          DESTINATION ${DOCS_INSTALL_DIR_${INSTALL_LAYOUT}}
-#          COMPONENT SharedLibraries)
-#ENDIF()
 
 IF(UNIX)
   ADD_SUBDIRECTORY(man)
@@ -500,17 +569,15 @@ ELSE()
 ENDIF()
 # Build source packages
 IF(GIT_BUILD_SRCPKG)
-  # get branch name
-  EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} show-branch OUTPUT_VARIABLE git_branch)
-  STRING(REGEX MATCH "\\[([^]]+)\\]" git_branch ${git_branch})
-  STRING(REGEX REPLACE "\\[|\\]" "" GIT_BRANCH ${git_branch})
-  MESSAGE1(GIT_BRANCH "${GIT_BRANCH}")
-  IF(WIN32)
-    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} archive ${GIT_BRANCH} --format=zip --prefix=${CPACK_SOURCE_PACKAGE_FILE_NAME}/ --output=${CPACK_SOURCE_PACKAGE_FILE_NAME}.zip)
-  ELSE()
-    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} archive ${GIT_BRANCH} --format=zip --prefix=${CPACK_SOURCE_PACKAGE_FILE_NAME}/ --output=${CPACK_SOURCE_PACKAGE_FILE_NAME}.zip)
-    EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} archive ${GIT_BRANCH} --format=tar --prefix=${CPACK_SOURCE_PACKAGE_FILE_NAME}/ --output=${CPACK_SOURCE_PACKAGE_FILE_NAME}.tar)
-    EXECUTE_PROCESS(COMMAND gzip -9 -f ${CPACK_SOURCE_PACKAGE_FILE_NAME}.tar)
+  EXECUTE_PROCESS(
+    COMMAND ${GIT_EXECUTABLE} archive HEAD --format=zip
+            --prefix=${CPACK_SOURCE_PACKAGE_FILE_NAME}/
+            --output=${CPACK_SOURCE_PACKAGE_FILE_NAME}.zip)
+  IF(NOT WIN32)
+    EXECUTE_PROCESS(
+      COMMAND ${GIT_EXECUTABLE} archive HEAD --format=tar.gz
+              --prefix=${CPACK_SOURCE_PACKAGE_FILE_NAME}/
+              --output=${CPACK_SOURCE_PACKAGE_FILE_NAME}.tar.gz)
   ENDIF()
 ENDIF()
 
@@ -570,6 +637,10 @@ MESSAGE1(STATUS "MariaDB Connector/c configuration:
 -- SSL support: ${WITH_SSL} Libs: ${SSL_LIBRARIES}
 -- Zlib support: ${zlib_status}
 -- ZStd support: ${ZSTD_FOUND}
+-- ASAN support: ${WITH_ASAN}
+-- ASAN scope support: ${WITH_ASAN_SCOPE}
+-- UBSAN support: ${WITH_UBSAN}
+-- MSAN support: ${WITH_MSAN}
 -- Installation layout: ${INSTALL_LAYOUT}
 -- Include files will be installed in ${INSTALL_INCLUDEDIR}
 -- Libraries will be installed in ${INSTALL_LIBDIR}

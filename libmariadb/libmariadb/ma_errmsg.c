@@ -121,6 +121,7 @@ const char *mariadb_client_errors[] =
   /* 5024 */ "Invalid client flags (%lu) specified. Supported flags: %lu",
   /* 5025 */ "Statement has no result set",
   /* 5026 */ "Server returned an error packet without further information",
+  /* 5027 */ "Number of columns in result (=%lu) set execeeds maxmimum allowed number of columns (=%u)",
   ""
 };
 

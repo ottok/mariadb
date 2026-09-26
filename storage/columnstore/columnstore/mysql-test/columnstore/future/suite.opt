@@ -1,2 +1,0 @@
---plugin-load-add=$HA_COLUMNSTORE_SO
---columnstore_innodb_queries_use_mcs=on

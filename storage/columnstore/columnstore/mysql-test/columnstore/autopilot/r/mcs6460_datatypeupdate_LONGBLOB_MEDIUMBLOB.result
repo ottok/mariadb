@@ -1,7 +1,0 @@
-use autopilot;
-START TRANSACTION;
-UPDATE datatypeupdate SET CMEDIUMBLOB = CLONGBLOB;
-SELECT CMEDIUMBLOB FROM datatypeupdate;
-CMEDIUMBLOB
-longbloblongbloblongblob
-ROLLBACK;

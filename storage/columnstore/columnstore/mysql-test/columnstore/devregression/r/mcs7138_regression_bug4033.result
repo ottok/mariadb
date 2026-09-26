@@ -1,2 +1,0 @@
-USE tpch1;
-set character_set_client=sjis;

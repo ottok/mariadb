@@ -115,10 +115,7 @@ static void wsrep_setup_uk_and_fk_checks(THD* thd)
   else
     thd->variables.option_bits&= ~OPTION_RELAXED_UNIQUE_CHECKS;
 
-  if (wsrep_slave_FK_checks == FALSE)
-    thd->variables.option_bits|= OPTION_NO_FOREIGN_KEY_CHECKS;
-  else
-    thd->variables.option_bits&= ~OPTION_NO_FOREIGN_KEY_CHECKS;
+  thd->variables.option_bits&= ~OPTION_NO_FOREIGN_KEY_CHECKS;
 }
 
 static int apply_events(THD*                       thd,
@@ -387,6 +384,12 @@ int Wsrep_high_priority_service::rollback(const wsrep::ws_handle& ws_handle,
      assert(ws_handle == wsrep::ws_handle());
   }
   int ret= (trans_rollback_stmt(m_thd) || trans_rollback(m_thd));
+  DBUG_EXECUTE_IF("simulate_rollback_failure_in_applier", ret= 1;);
+  if (ret)
+    WSREP_WARN("Wsrep_high_priority_service::rollback: trans_rollback "
+               "returned %d for thd %lu (killed=%d, seqno=%lld)",
+               ret, thd_get_thread_id(m_thd), m_thd->killed,
+               (long long) wsrep_thd_trx_seqno(m_thd));
 
   WSREP_DEBUG("::rollback() thread: %lu, client_state %s "
               "client_mode %s trans_state %s killed %d",

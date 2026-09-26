@@ -322,15 +322,26 @@ bool Item_sum::check_sum_func(THD *thd, Item **ref)
           in_sum_func->outer_fields.push_back(field, thd->mem_root);
         }
         else
+        {
           sel->set_non_agg_field_used(true);
+          if (sel->join)
+          {
+            sel->join->non_agg_fields.push_back(field, thd->mem_root);
+          }
+        }
       }
-      if (sel->nest_level > aggr_level &&
-          (sel->agg_func_used()) &&
-          !sel->group_list.elements)
+      else if (sel->nest_level > aggr_level)
       {
-        my_message(ER_MIX_OF_GROUP_FUNC_AND_FIELDS,
-                   ER_THD(thd, ER_MIX_OF_GROUP_FUNC_AND_FIELDS), MYF(0));
-        return TRUE;
+        if ((sel->agg_func_used()) && !sel->group_list.elements)
+        {
+          my_message(ER_MIX_OF_GROUP_FUNC_AND_FIELDS,
+                     ER_THD(thd, ER_MIX_OF_GROUP_FUNC_AND_FIELDS), MYF(0));
+          return TRUE;
+        }
+        else if (sel->join)
+        {
+          sel->join->non_agg_fields.push_back(field, thd->mem_root);
+        }
       }
     }
   }
@@ -3808,7 +3819,7 @@ int dump_leaf_key(void* key_arg, element_count count __attribute__((unused)),
 {
   Item_func_group_concat *item= (Item_func_group_concat *) item_arg;
   TABLE *table= item->table;
-  uint max_length= table->in_use->variables.group_concat_max_len;
+  uint max_length= table->in_use->gconcat_max_len();
   String tmp((char *)table->record[1], table->s->reclength,
              default_charset_info);
   String tmp2;
@@ -4138,7 +4149,7 @@ bool Item_func_group_concat::repack_tree(THD *thd)
   DBUG_ASSERT(tree->size_of_element == st.tree.size_of_element);
   st.table= table;
   st.len= 0;
-  st.maxlen= thd->variables.group_concat_max_len;
+  st.maxlen= thd->gconcat_max_len();
   tree_walk(tree, &copy_to_tree, &st, left_root_right);
   if (st.len <= st.maxlen) // Copying aborted. Must be OOM
   {
@@ -4217,7 +4228,7 @@ bool Item_func_group_concat::add(bool exclude_nulls)
   {
     THD *thd= table->in_use;
     table->field[0]->store(row_str_len, FALSE);
-    if ((tree_len >> GCONCAT_REPACK_FACTOR) > thd->variables.group_concat_max_len
+    if ((tree_len >> GCONCAT_REPACK_FACTOR) > thd->gconcat_max_len()
         && tree->elements_in_tree > 1)
       if (repack_tree(thd))
         return 1;
@@ -4270,7 +4281,7 @@ Item_func_group_concat::fix_fields(THD *thd, Item **ref)
   result.set_charset(collation.collation);
   result_field= 0;
   null_value= 1;
-  max_length= (uint32) MY_MIN((ulonglong) thd->variables.group_concat_max_len
+  max_length= (uint32) MY_MIN((ulonglong) thd->gconcat_max_len()
                               / collation.collation->mbminlen
                               * collation.collation->mbmaxlen, UINT_MAX32);
 
@@ -4362,8 +4373,7 @@ bool Item_func_group_concat::setup(THD *thd)
       Prepend the field to store the length of the string representation
       of this row. Used to detect when the tree goes over group_concat_max_len
     */
-    Item *item= new (thd->mem_root)
-                    Item_uint(thd, thd->variables.group_concat_max_len);
+    Item *item= new (thd->mem_root) Item_uint(thd, thd->gconcat_max_len());
     if (!item || all_fields.push_front(item, thd->mem_root))
       DBUG_RETURN(TRUE);
   }

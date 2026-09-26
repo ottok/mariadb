@@ -622,6 +622,7 @@ sub find_groups
   my ($raw_gids) = @_;
 
   my %gids;
+  my %seen_group;
   my @groups;
 
   if (defined($raw_gids))
@@ -661,7 +662,8 @@ sub find_groups
         # Use $2 + 0 to normalize numbers (002 + 0 -> 2)
         if (not defined($raw_gids) or $gids{$2 + 0})
         {
-          push @groups, "$1$2";
+          push @groups, "$1$2" unless $seen_group{"$1$2"};
+          $seen_group{"$1$2"}=1;
         }
       }
       elsif (/^\s*!include\s+(\S.*?)\s*$/)

@@ -862,7 +862,7 @@ class Year
 protected:
   uint m_year;
   bool m_truncated;
-  uint year_precision(const Item *item) const;
+  static uint year_precision(const Item *item);
 public:
   Year(): m_year(0), m_truncated(false) { }
   Year(longlong value, bool unsigned_flag, uint length);
@@ -3341,8 +3341,9 @@ public:
   void aggregate_attributes_int(Item **items, uint nitems)
   {
     collation= DTCollation_numeric();
-    fix_char_length(find_max_char_length(items, nitems));
     unsigned_flag= count_unsigned(items, nitems) > 0;
+    fix_char_length(find_max_decimal_int_part(items, nitems) +
+                    (unsigned_flag ? 0 : 1));
     decimals= 0;
   }
   void aggregate_attributes_real(Item **items, uint nitems)
@@ -6356,6 +6357,7 @@ public:
                                  uchar **pos, ulong len) const override;
 
   Item_cache *Item_get_cache(THD *thd, const Item *item) const override;
+  Item_copy *create_item_copy(THD *thd, Item *item) const override;
   String *Item_func_hybrid_field_type_val_str(Item_func_hybrid_field_type *,
                                               String *) const override;
   String *Item_func_min_max_val_str(Item_func_min_max *, String *)
@@ -6411,6 +6413,7 @@ public:
                                  uchar **pos, ulong len) const override;
 
   Item_cache *Item_get_cache(THD *thd, const Item *item) const override;
+  Item_copy *create_item_copy(THD *thd, Item *item) const override;
   String *Item_func_hybrid_field_type_val_str(Item_func_hybrid_field_type *,
                                               String *) const override;
   String *Item_func_min_max_val_str(Item_func_min_max *, String *)
@@ -7393,8 +7396,23 @@ class Type_handler_hex_hybrid: public Type_handler_varchar
 public:
   virtual ~Type_handler_hex_hybrid() = default;
   const Type_handler *cast_to_int_type_handler() const override;
+  bool Item_hybrid_func_fix_attributes(THD *thd, const LEX_CSTRING &name,
+                                       Type_handler_hybrid_field_type *h,
+                                       Type_all_attributes *attr,
+                                       Item **items, uint nitems)
+                                       const override;
+  decimal_digits_t Item_decimal_precision(const Item *item) const override;
+  int Item_save_in_field(Item *item, Field *field, bool no_conversions)
+                         const override;
   bool Item_func_round_fix_length_and_dec(Item_func_round *) const override;
   bool Item_func_int_val_fix_length_and_dec(Item_func_int_val*) const override;
+  longlong Item_func_hybrid_field_type_val_int(Item_func_hybrid_field_type *)
+                                               const override;
+  double Item_func_hybrid_field_type_val_real(Item_func_hybrid_field_type *)
+                                              const override;
+  my_decimal *Item_func_hybrid_field_type_val_decimal(
+                                              Item_func_hybrid_field_type *,
+                                              my_decimal *) const override;
 };
 
 

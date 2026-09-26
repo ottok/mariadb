@@ -198,11 +198,6 @@ void _CONCAT_UNDERSCORED(turn_parser_debug_on,yyparse)()
   ulonglong ulonglong_number;
   longlong longlong_number;
   uint sp_instr_addr;
-  /*
-    Longlong_hybrid does not have a default constructor, hence the
-    default value below.
-  */
-  Longlong_hybrid longlong_hybrid_number= Longlong_hybrid(0, false);
 
   /* structs */
   LEX_CSTRING lex_str;
@@ -240,6 +235,11 @@ void _CONCAT_UNDERSCORED(turn_parser_debug_on,yyparse)()
   Lex_select_lock select_lock;
   Lex_select_limit select_limit;
   Lex_order_limit_lock *order_limit_lock;
+  struct
+  {
+    longlong num;
+    bool is_unsigned;
+  } longlong_hybrid_number;
 
   /* pointers */
   Lex_ident_sys *ident_sys_ptr;
@@ -898,7 +898,6 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %token  <kwd>  HELP_SYM
 %token  <kwd>  HIGH_PRIORITY
 %token  <kwd>  HISTORY_SYM                   /* MYSQL */
-%token  <kwd>  HOST_SYM
 %token  <kwd>  HOSTS_SYM
 %token  <kwd>  HOUR_SYM                      /* SQL-2003-R */
 %token  <kwd>  ID_SYM                        /* MYSQL */
@@ -933,6 +932,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %token  <kwd>  LOCKS_SYM
 %token  <kwd>  LOGFILE_SYM
 %token  <kwd>  LOGS_SYM
+%token  <kwd>  LOG_SYM
 %token  <kwd>  MASTER_CONNECT_RETRY_SYM
 %token  <kwd>  MASTER_DELAY_SYM
 %token  <kwd>  MASTER_GTID_POS_SYM
@@ -1008,7 +1008,6 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %token  <kwd>  OPTIONS_SYM
 %token  <kwd>  OPTION                        /* SQL-2003-N */
 %token  <kwd>  OVERLAPS_SYM
-%token  <kwd>  OWNER_SYM
 %token  <kwd>  PACK_KEYS_SYM
 %token  <kwd>  PAGE_SYM
 %token  <kwd>  PARSER_SYM
@@ -1097,7 +1096,6 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %token  <kwd>  SLAVE_POS_SYM
 %token  <kwd>  SLOW
 %token  <kwd>  SNAPSHOT_SYM
-%token  <kwd>  SOCKET_SYM
 %token  <kwd>  SOFT_SYM
 %token  <kwd>  SONAME_SYM
 %token  <kwd>  SOUNDS_SYM
@@ -2332,9 +2330,9 @@ master_def:
             Lex->mi.ssl_crlpath= $3.str;
           }
 
-        | MASTER_HEARTBEAT_PERIOD_SYM '=' NUM_literal
+        | MASTER_HEARTBEAT_PERIOD_SYM '=' opt_plus NUM_literal
           {
-            Lex->mi.heartbeat_period= (float) $3->val_real();
+            Lex->mi.heartbeat_period= (float) $4->val_real();
             if (unlikely(Lex->mi.heartbeat_period >
                          SLAVE_MAX_HEARTBEAT_PERIOD) ||
                 unlikely(Lex->mi.heartbeat_period < 0.0))
@@ -2795,7 +2793,7 @@ sequence_def:
             sequence_definition *seq= Lex->create_info.seq_create_info;
             if (unlikely(seq->used_fields & seq_field_used_min_value))
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "MINVALUE"));
-            seq->min_value_from_parser= $3;
+            seq->min_value_from_parser= Longlong_hybrid($3.num, $3.is_unsigned);
             seq->used_fields|=
               seq_field_used_min_value;
             seq->used_fields|=
@@ -2820,7 +2818,7 @@ sequence_def:
             sequence_definition *seq= Lex->create_info.seq_create_info;
             if (unlikely(seq->used_fields & seq_field_used_max_value))
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "MAXVALUE"));
-            seq->max_value_from_parser= $3;
+            seq->max_value_from_parser= Longlong_hybrid($3.num, $3.is_unsigned);
             seq->used_fields|= seq_field_used_max_value;
             seq->used_fields|= seq_field_specified_max_value;
           }
@@ -2843,7 +2841,7 @@ sequence_def:
             sequence_definition *seq= Lex->create_info.seq_create_info;
             if (unlikely(seq->used_fields & seq_field_used_start))
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "START"));
-            seq->start_from_parser= $3;
+            seq->start_from_parser= Longlong_hybrid($3.num, $3.is_unsigned);
             seq->used_fields|= seq_field_used_start;
           }
         | INCREMENT_SYM opt_by sequence_value_num
@@ -2908,7 +2906,7 @@ sequence_def:
             sequence_definition *seq= Lex->create_info.seq_create_info;
             if (unlikely(seq->used_fields & seq_field_used_restart))
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "RESTART"));
-            seq->restart_from_parser= $3;
+            seq->restart_from_parser= Longlong_hybrid($3.num, $3.is_unsigned);
             seq->used_fields|=
               seq_field_used_restart | seq_field_used_restart_value;
           }
@@ -2937,21 +2935,6 @@ server_options_list:
 server_option:
           USER_SYM TEXT_STRING_sys
           {
-            MYSQL_YYABORT_UNLESS(Lex->server_options.username.str == 0);
-            Lex->server_options.username= $2;
-            engine_option_value *new_option=
-              new (thd->mem_root) engine_option_value(
-                engine_option_value::Name(
-                  safe_lexcstrdup_root(thd->mem_root, $1)),
-                engine_option_value::Value(
-                  safe_lexcstrdup_root(thd->mem_root, $2)), true);
-            new_option->link(&Lex->server_options.option_list,
-                             &Lex->option_list_last);
-          }
-        | HOST_SYM TEXT_STRING_sys
-          {
-            MYSQL_YYABORT_UNLESS(Lex->server_options.host.str == 0);
-            Lex->server_options.host= $2;
             engine_option_value *new_option=
               new (thd->mem_root) engine_option_value(
                 engine_option_value::Name(
@@ -2963,21 +2946,6 @@ server_option:
           }
         | DATABASE TEXT_STRING_sys
           {
-            MYSQL_YYABORT_UNLESS(Lex->server_options.db.str == 0);
-            Lex->server_options.db= $2;
-            engine_option_value *new_option=
-              new (thd->mem_root) engine_option_value(
-                engine_option_value::Name(
-                  safe_lexcstrdup_root(thd->mem_root, $1)),
-                engine_option_value::Value(
-                  safe_lexcstrdup_root(thd->mem_root, $2)), true);
-            new_option->link(&Lex->server_options.option_list,
-                             &Lex->option_list_last);
-          }
-        | OWNER_SYM TEXT_STRING_sys
-          {
-            MYSQL_YYABORT_UNLESS(Lex->server_options.owner.str == 0);
-            Lex->server_options.owner= $2;
             engine_option_value *new_option=
               new (thd->mem_root) engine_option_value(
                 engine_option_value::Name(
@@ -2989,21 +2957,6 @@ server_option:
           }
         | PASSWORD_SYM TEXT_STRING_sys
           {
-            MYSQL_YYABORT_UNLESS(Lex->server_options.password.str == 0);
-            Lex->server_options.password= $2;
-            engine_option_value *new_option=
-              new (thd->mem_root) engine_option_value(
-                engine_option_value::Name(
-                  safe_lexcstrdup_root(thd->mem_root, $1)),
-                engine_option_value::Value(
-                  safe_lexcstrdup_root(thd->mem_root, $2)), true);
-            new_option->link(&Lex->server_options.option_list,
-                             &Lex->option_list_last);
-          }
-        | SOCKET_SYM TEXT_STRING_sys
-          {
-            MYSQL_YYABORT_UNLESS(Lex->server_options.socket.str == 0);
-            Lex->server_options.socket= $2;
             engine_option_value *new_option=
               new (thd->mem_root) engine_option_value(
                 engine_option_value::Name(
@@ -3015,23 +2968,6 @@ server_option:
           }
         | PORT_SYM ulong_num
           {
-            /*
-              We especially don't want this to happen:
-
-              The value of $2 is ULONG_MAX, causing
-              server_options.port to be -1, which means "default
-              port".
-
-              Because we are doing a check here, we may as well check
-              against the SQL data type in one go rather than just the
-              C++ type here and SQL type later in sql_servers.cc.
-            */
-            if ($2 > INT32_MAX)
-            {
-              my_error(ER_DATA_OUT_OF_RANGE, myf(0), "port", "INT");
-              MYSQL_YYABORT;
-            }
-            Lex->server_options.port= $2;
             engine_option_value *new_option=
               new (thd->mem_root) engine_option_value(
                 engine_option_value::Name(
@@ -3043,16 +2979,6 @@ server_option:
         /* port can be a quoted number */
         | PORT_SYM TEXT_STRING_sys
           {
-            int error;
-            char *end= (char *) $2.str + $2.length;
-            longlong p= my_strtoll10($2.str, &end, &error);
-            if (error > 0 || end != (char *) $2.str + $2.length ||
-                p > LONG_MAX || p < LONG_MIN)
-            {
-              thd->parse_error();
-              MYSQL_YYABORT;
-            }
-            Lex->server_options.port= (long) p;
             engine_option_value *new_option=
               new (thd->mem_root) engine_option_value(
                 engine_option_value::Name(
@@ -10312,21 +10238,27 @@ column_default_non_parenthesized_expr:
           }
         | SETVAL_SYM '(' table_ident ',' sequence_value_hybrid_num ')'
           {
-            if (unlikely(!($$= Lex->create_item_func_setval(thd, $3, $5, 0,
-                                                            1))))
+            if (unlikely(!($$= Lex->create_item_func_setval(
+                                      thd, $3,
+                                      Longlong_hybrid($5.num, $5.is_unsigned),
+                                      0, 1))))
               MYSQL_YYABORT;
           }
         | SETVAL_SYM '(' table_ident ',' sequence_value_hybrid_num ',' bool ')'
           {
-            if (unlikely(!($$= Lex->create_item_func_setval(thd, $3, $5, 0,
-                                                            $7))))
+            if (unlikely(!($$= Lex->create_item_func_setval(
+                                      thd, $3,
+                                      Longlong_hybrid($5.num, $5.is_unsigned),
+                                      0, $7))))
               MYSQL_YYABORT;
           }
         | SETVAL_SYM '(' table_ident ',' sequence_value_hybrid_num ',' bool ','
           ulonglong_num ')'
           {
-            if (unlikely(!($$= Lex->create_item_func_setval(thd, $3, $5, $9,
-                                                            $7))))
+            if (unlikely(!($$= Lex->create_item_func_setval(
+                                      thd, $3,
+                                      Longlong_hybrid($5.num, $5.is_unsigned),
+                                      $9, $7))))
               MYSQL_YYABORT;
           }
         ;
@@ -11333,7 +11265,7 @@ window_func_expr:
             $$= new (thd->mem_root) Item_window_func(thd, (Item_sum *) $1, $3);
             if (unlikely($$ == NULL))
               MYSQL_YYABORT;
-            if (unlikely(Select->add_window_func((Item_window_func *) $$)))
+            if (unlikely(Select->add_window_func(thd, (Item_window_func *) $$)))
               MYSQL_YYABORT;
           }
         |
@@ -11349,7 +11281,7 @@ window_func_expr:
                                                       thd->lex->win_spec); 
             if (unlikely($$ == NULL))
               MYSQL_YYABORT;
-            if (unlikely(Select->add_window_func((Item_window_func *) $$)))
+            if (unlikely(Select->add_window_func(thd, (Item_window_func *) $$)))
               MYSQL_YYABORT;
           }
         ;
@@ -11490,7 +11422,7 @@ inverse_distribution_function:
                                                      thd->lex->win_spec);
             if (unlikely($$ == NULL))
               MYSQL_YYABORT;
-            if (unlikely(Select->add_window_func((Item_window_func *) $$)))
+            if (unlikely(Select->add_window_func(thd, (Item_window_func *) $$)))
               MYSQL_YYABORT;
           }
         ;
@@ -12612,7 +12544,7 @@ opt_window_partition_clause:
 
 opt_window_order_clause:
           /* empty */ { }
-        | ORDER_SYM BY order_list { Select->order_list= *($3); } 
+        | ORDER_SYM BY order_list { Select->order_list= *($3); }
         ;
 
 opt_window_frame_clause:
@@ -12747,6 +12679,7 @@ order_clause:
           ORDER_SYM BY
           {
             thd->where= THD_WHERE::ORDER_CLAUSE;
+            thd->lex->clause_winfuncs.empty();
           }
           order_list
           {
@@ -13123,39 +13056,42 @@ sequence_value_hybrid_num:
           opt_plus NUM
           {
             int error;
-            $$= Longlong_hybrid(my_strtoll10($2.str, (char**) 0, &error),
-                                false);
+            $$.num= my_strtoll10($2.str, (char**) 0, &error);
+            $$.is_unsigned= false;
           }
         | opt_plus LONG_NUM
           {
             int error;
-            $$= Longlong_hybrid(my_strtoll10($2.str, (char**) 0, &error),
-                                false);
+            $$.num= my_strtoll10($2.str, (char**) 0, &error);
+            $$.is_unsigned= false;
           }
         | opt_plus ULONGLONG_NUM
           {
             int error;
-            $$= Longlong_hybrid(my_strtoll10($2.str, (char**) 0, &error),
-                                true);
+            $$.num= my_strtoll10($2.str, (char**) 0, &error);
+            $$.is_unsigned= true;
           }
         | '-' NUM
           {
             int error;
-            $$= Longlong_hybrid(- my_strtoll10($2.str, (char**) 0, &error),
-                                false);
+            $$.num= - my_strtoll10($2.str, (char**) 0, &error);
+            $$.is_unsigned= false;
           }
         | '-' LONG_NUM
           {
             int error;
-            $$= Longlong_hybrid(- my_strtoll10($2.str, (char**) 0, &error),
-                                false);
+            $$.num= - my_strtoll10($2.str, (char**) 0, &error);
+            $$.is_unsigned= false;
           }
         | '-' ULONGLONG_NUM
           {
             int error;
             const ulonglong abs= my_strtoll10($2.str, (char**) 0, &error);
             if (abs == 1 + (ulonglong) LONGLONG_MAX)
-              $$= Longlong_hybrid(LONGLONG_MIN, false);
+            {
+              $$.num= LONGLONG_MIN;
+              $$.is_unsigned= false;
+            }
             else
               thd->parse_error(ER_DATA_OUT_OF_RANGE);
           }
@@ -13169,36 +13105,48 @@ sequence_truncated_value_hybrid_num:
           opt_plus NUM
           {
             int error;
-            $$= Longlong_hybrid(my_strtoll10($2.str, (char**) 0, &error),
-                                false);
+            $$.num= my_strtoll10($2.str, (char**) 0, &error);
+            $$.is_unsigned= false;
           }
         | opt_plus LONG_NUM
           {
             int error;
-            $$= Longlong_hybrid(my_strtoll10($2.str, (char**) 0, &error),
-                                false);
+            $$.num= my_strtoll10($2.str, (char**) 0, &error);
+            $$.is_unsigned= false;
           }
         | opt_plus ULONGLONG_NUM
           {
             int error;
-            $$= Longlong_hybrid(my_strtoll10($2.str, (char**) 0, &error),
-                                true);
+            $$.num= my_strtoll10($2.str, (char**) 0, &error);
+            $$.is_unsigned= true;
           }
-        | opt_plus DECIMAL_NUM { $$= Longlong_hybrid(ULONGLONG_MAX, true); }
+        | opt_plus DECIMAL_NUM
+          {
+            $$.num= ULONGLONG_MAX;
+            $$.is_unsigned= true;
+          }
         | '-' NUM
           {
             int error;
-            $$= Longlong_hybrid(- my_strtoll10($2.str, (char**) 0, &error),
-                                false);
+            $$.num= - my_strtoll10($2.str, (char**) 0, &error);
+            $$.is_unsigned= false;
           }
         | '-' LONG_NUM
           {
             int error;
-            $$= Longlong_hybrid(- my_strtoll10($2.str, (char**) 0, &error),
-                                false);
+            $$.num= - my_strtoll10($2.str, (char**) 0, &error);
+            $$.is_unsigned= false;
           }
-        | '-' ULONGLONG_NUM { $$= Longlong_hybrid(LONGLONG_MIN, false); }
-        | '-' DECIMAL_NUM { $$= Longlong_hybrid(LONGLONG_MIN, false); }
+        | '-' ULONGLONG_NUM
+          {
+            $$.num= LONGLONG_MIN;
+            $$.is_unsigned= false;
+          }
+        | '-' DECIMAL_NUM
+          {
+            $$.num= LONGLONG_MIN;
+            $$.is_unsigned= false;
+          }
         ;
 
 ulonglong_num:
@@ -14521,6 +14469,10 @@ show_param:
             Lex->sql_command = SQLCOM_SHOW_BINLOG_STAT;
           }
         | MASTER_SYM STATUS_SYM
+          {
+            Lex->sql_command = SQLCOM_SHOW_BINLOG_STAT;
+          }
+        | BINARY LOG_SYM STATUS_SYM
           {
             Lex->sql_command = SQLCOM_SHOW_BINLOG_STAT;
           }
@@ -16265,12 +16217,10 @@ keyword_sp_var_not_label:
         | FOLLOWING_SYM
         | GET_SYM
         | HELP_SYM
-        | HOST_SYM
         | INSTALL_SYM
         | OPTION
         | OPTIONS_SYM
         | OTHERS_MARIADB_SYM
-        | OWNER_SYM
         | PARSER_SYM
         | PERIOD_SYM
         | PORT_SYM
@@ -16281,7 +16231,6 @@ keyword_sp_var_not_label:
         | RESTORE_SYM
         | SECURITY_SYM
         | SERVER_SYM
-        | SOCKET_SYM
         | SLAVE
         | SLAVES
         | SONAME_SYM
@@ -16541,6 +16490,7 @@ keyword_func_sp_var_and_label:
         | LIST_SYM
         | LOCKED_SYM
         | LOCKS_SYM
+        | LOG_SYM
         | LOGFILE_SYM
         | LOGS_SYM
         | MAX_ROWS

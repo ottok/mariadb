@@ -27,8 +27,8 @@ openssl rsa -in server-key.pem -out server-key.pem
 # sign the server certificate with CA certificate
 openssl ca -keyfile cakey.pem -days 7300 -batch -cert cacert.pem -policy policy_anything -out server-cert.pem -in demoCA/server-req.pem
 
-# server certificate with different validity period (MDEV-16266)
-openssl req -newkey rsa:4096 -keyout server-new-key.pem -out demoCA/server-new-req.pem -days 7301 -nodes -subj '/CN=server-new/C=FI/ST=Helsinki/L=Helsinki/O=MariaDB'
+# server certificate with different validity period (MDEV-16266) and unsafe for shell interpolation (MDEV-39413)
+openssl req -newkey rsa:4096 -keyout server-new-key.pem -out demoCA/server-new-req.pem -days 7301 -nodes -subj /CN="'\`touch A\`'"'-"`touch B`"/C=FI/ST=Helsinki/L=Helsinki/O=MariaDB'
 openssl rsa -in server-new-key.pem -out server-new-key.pem
 openssl ca -keyfile cakey.pem -days 7301 -batch -cert cacert.pem -policy policy_anything -out server-new-cert.pem -in demoCA/server-new-req.pem
 
@@ -64,6 +64,24 @@ rm -fv crldir/*
 cp -v client-cert.crl crldir/`openssl x509 -in client-cert.pem -noout -issuer_hash`.r0
 
 rm -rf demoCA
+# --- Galera SST chain certificate ---
+# A single leaf+intermediate chain certificate usable as both client and
+# server (a Galera node acts as SST donor and joiner), CN=localhost so the
+# donor's host check passes over 127.0.0.1. The CA file holds the root only,
+# the layout produced by cert-manager and similar PKIs.
+rm -rf gcadir
+mkdir gcadir
+openssl genrsa -out gcadir/root.key 4096
+openssl req -new -x509 '-sha256' -key gcadir/root.key -out galera-chain-ca.pem -days 7300 -subj "/O=MariaDB/OU=MariaDB/CN=Galera Chain Root CA" -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+openssl genrsa -out gcadir/int.key 4096
+openssl req -new '-sha256' -key gcadir/int.key -out gcadir/int.csr -subj "/O=MariaDB/OU=MariaDB/CN=Galera Chain Intermediate CA"
+openssl x509 -req -in gcadir/int.csr -CA galera-chain-ca.pem -CAkey gcadir/root.key -CAcreateserial -days 7200 -sha256 -extfile <(printf "basicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign") -out gcadir/int.crt
+openssl genrsa -out galera-chain-key.pem 4096
+openssl req -new '-sha256' -key galera-chain-key.pem -out gcadir/leaf.csr -subj "/CN=localhost"
+openssl x509 -req -in gcadir/leaf.csr -CA gcadir/int.crt -CAkey gcadir/int.key -CAcreateserial -days 7100 -sha256 -extfile <(printf "basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth,clientAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1") -out gcadir/leaf.crt
+cat gcadir/leaf.crt gcadir/int.crt > galera-chain-cert.pem
+rm -rf gcadir
+
 
 # --- Certificate Chain ---
 # These tests are inspired from the following commit from MySQL Server

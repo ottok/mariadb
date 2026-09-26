@@ -1332,7 +1332,11 @@ public:
 
   /** @return whether all non-hard-coded system tables exist */
   bool sys_tables_exist() const
-  { return UNIV_LIKELY(sys_foreign && sys_foreign_cols && sys_virtual); }
+  {
+    DBUG_EXECUTE_IF("defer_sys_virtual",
+                    return sys_foreign && sys_foreign_cols;);
+    return UNIV_LIKELY(sys_foreign && sys_foreign_cols && sys_virtual);
+  }
 
   /** list of persistent tables that can be evicted */
   UT_LIST_BASE_NODE_T(dict_table_t) table_LRU;
@@ -1508,9 +1512,9 @@ public:
   bool is_sys_table(table_id_t table_id) const noexcept
   {
     return (table_id > 0 && table_id <= 4) ||
-      table_id == sys_foreign->id ||
-      table_id == sys_foreign_cols->id ||
-      table_id == sys_virtual->id;
+      (sys_foreign && table_id == sys_foreign->id) ||
+      (sys_foreign_cols && table_id == sys_foreign_cols->id) ||
+      (sys_virtual && table_id == sys_virtual->id);
   }
 };
 
@@ -1669,6 +1673,14 @@ public:
   dict_table_t *table() const noexcept { return table_stats; }
   dict_table_t *index() const noexcept { return index_stats; }
 };
+
+/** Delete the given table id entries from InnoDB system tables
+(like SYS_TABLES, SYS_COLUMNS, SYS_FIELDS, SYS_INDEXES)
+@param table_id table identifier to be removed
+@param trx      transaction
+@return DB_SUCCESS or error code */
+dberr_t dict_drop_table_metadata(table_id_t table_id,
+                                 trx_t *trx) noexcept;
 
 #include "dict0dict.inl"
 

@@ -114,7 +114,8 @@ static Lex_ident_column make_unique_key_name(THD *,
                                              const Lex_ident_column &name,
                                              const KEY *, const KEY *);
 static bool make_unique_constraint_name(THD *, LEX_CSTRING *, const char *,
-                                        List<Virtual_column_info> *, uint *);
+                                        List<Virtual_column_info> *,
+                                        List<Create_field> *, uint *);
 static Lex_ident_column make_unique_invisible_field_name(THD *,
                                              const Lex_ident_column &name,
                                              List<Create_field> *);
@@ -128,13 +129,28 @@ static int mysql_prepare_create_table(THD *, HA_CREATE_INFO *, Alter_info *,
                                       uint *, handler *, KEY **, uint *, int);
 static uint blob_length_by_type(enum_field_types type);
 static bool fix_constraints_names(THD *, List<Virtual_column_info> *,
-                                  const HA_CREATE_INFO *);
+                                  List<Create_field> *, const HA_CREATE_INFO *);
 static bool wait_for_master(THD *thd);
 static int process_master_state(THD *thd, int alter_result,
                                 uint64 &start_alter_id, bool if_exists);
 static bool
 write_bin_log_start_alter_rollback(THD *thd, uint64 &start_alter_id,
                                    bool &partial_alter, bool if_exists);
+
+static bool append_table_to_dir(THD *thd, const char **filename_ptr,
+                                const LEX_CSTRING *table_name)
+{
+  char buf[FN_REFLEN];
+  LEX_CSTRING fname;
+  DBUG_ASSERT(table_name->str[table_name->length] == 0);
+  fname.str= buf;
+  fname.length= tablename_to_filename(table_name->str, buf, sizeof(buf));
+  if (fname.length)
+    return append_file_to_dir(thd, filename_ptr, &fname);
+
+  my_error(ER_WRONG_TABLE_NAME, MYF(0), table_name->str);
+  return 1;
+}
 
 /**
   @brief Helper function for explain_filename
@@ -474,6 +490,15 @@ bool check_mysql50_prefix(const char *name)
 }
 
 
+bool error_if_mysql50_prefix(const char *name, uint error)
+{
+  if (!check_mysql50_prefix(name))
+    return 0;
+  my_error(error, MYF(0), name);
+  return 1;
+}
+
+
 /**
   Check if given string begins with "#mysql50#" prefix, cut it if so.
   
@@ -592,8 +617,10 @@ uint build_table_filename(char *buff, size_t bufflen, const char *db,
   DBUG_ENTER("build_table_filename");
   DBUG_PRINT("enter", ("db: '%s'  table_name: '%s'  ext: '%s'  flags: %x",
                        db, table_name, ext, flags));
+  DBUG_ASSERT(*db);
 
-  (void) tablename_to_filename(db, dbbuff, sizeof(dbbuff));
+  if (!tablename_to_filename(db, dbbuff, sizeof(dbbuff)))
+    DBUG_RETURN(*buff= 0);
 
   /*
     Check if this is a temporary table name. Allow it if a corresponding .frm
@@ -607,8 +634,10 @@ uint build_table_filename(char *buff, size_t bufflen, const char *db,
 
   if (flags & FN_IS_TMP) // FN_FROM_IS_TMP | FN_TO_IS_TMP
     strmake(tbbuff, table_name, sizeof(tbbuff)-1);
-  else
-    (void) tablename_to_filename(table_name, tbbuff, sizeof(tbbuff));
+  else if (!*table_name)
+    *tbbuff= 0; // table_name="" hack is used very often
+  else if (!tablename_to_filename(table_name, tbbuff, sizeof(tbbuff)))
+    DBUG_RETURN(*buff= 0);
 
   char *end = buff + bufflen;
   char *pos= strnmov(buff, mysql_data_home, bufflen-3);
@@ -3273,6 +3302,10 @@ mysql_prepare_create_table_finalize(THD *thd, HA_CREATE_INFO *create_info,
     DBUG_RETURN(TRUE);
   }
 
+  if (alter_info->table_name.length &&
+      error_if_mysql50_prefix(alter_info->table_name.str, ER_WRONG_TABLE_NAME))
+    DBUG_RETURN(TRUE);
+
   select_field_pos= get_select_field_pos(alter_info, select_field_count,
                                          create_info->versioned());
   null_fields= 0;
@@ -4072,7 +4105,18 @@ mysql_prepare_create_table_finalize(THD *thd, HA_CREATE_INFO *create_info,
               key->type != Key::FOREIGN_KEY)
             continue;
 
-          if (check->name.streq(key->name))
+          if (check->name.streq_safe(key->name))
+          {
+            my_error(ER_DUP_CONSTRAINT_NAME, MYF(0), "CHECK", check->name.str);
+            DBUG_RETURN(TRUE);
+          }
+        }
+
+        /* Check that there's no column-level CHECK constraint with same name. */
+        it.rewind();
+        while (const Create_field *cf= it++)
+        {
+          if (cf->check_constraint && check->name.streq(cf->field_name))
           {
             my_error(ER_DUP_CONSTRAINT_NAME, MYF(0), "CHECK", check->name.str);
             DBUG_RETURN(TRUE);
@@ -4668,7 +4712,7 @@ int create_table_impl(THD *thd,
   }
 
   if (fix_constraints_names(thd, &alter_info->check_constraint_list,
-                            create_info))
+                            &alter_info->create_list, create_info))
     DBUG_RETURN(1);
 
   if (thd->variables.sql_mode & MODE_NO_DIR_IN_CREATE)
@@ -5450,32 +5494,37 @@ make_unique_key_name(THD *thd, const Lex_ident_column &field_name,
 static bool make_unique_constraint_name(THD *thd, LEX_CSTRING *name,
                                         const char *own_name_base,
                                         List<Virtual_column_info> *vcol,
+                                        List<Create_field> *create_list,
                                         uint *nr)
 {
   char buff[MAX_FIELD_NAME], *end;
   List_iterator_fast<Virtual_column_info> it(*vcol);
+  List_iterator_fast<Create_field> cf_it(*create_list);
   end=strmov(buff, own_name_base ? own_name_base : "CONSTRAINT_");
   for (int round= 0;; round++)
   {
-    Virtual_column_info *check;
+    const Virtual_column_info *check;
+    const Create_field *cf;
+    Lex_ident_column n(buff, (size_t) 0);
+    bool conflict= false;
     char *real_end= end;
     if (round == 1 && own_name_base)
         *end++= '_';
     // if own_base_name provided, try it first
     if (round != 0 || !own_name_base)
       real_end= int10_to_str((*nr)++, end, 10);
-    const Lex_ident_column ident(buff, (size_t) (real_end - buff));
     it.rewind();
-    while ((check= it++))
+    cf_it.rewind();
+    n.length= real_end - buff;
+    while (!conflict && ((check= it++)))
+      conflict= check->name.str && check->name.streq(n);
+    while (!conflict && ((cf= cf_it++)))
+      conflict= cf->check_constraint && cf->field_name.streq(n);
+    if (!conflict)                              // Found unique name
     {
-      if (check->name.str && check->name.streq(ident))
-        break;
-    }
-    if (!check)                                 // Found unique name
-    {
-      name->length= ident.length;
-      name->str= thd->strmake(buff, name->length);
-      return (name->str == NULL);
+      name->length= n.length;
+      name->str= thd->strmake(buff, n.length);
+      return name->str == NULL;
     }
   }
   return FALSE;
@@ -6441,7 +6490,7 @@ drop_create_field:
       }
       else if (drop->type == Alter_drop::PERIOD)
       {
-        if (table->s->period.name.streq(Lex_ident(drop->name)))
+        if (table->s->period.name.streq_safe(Lex_ident(drop->name)))
           remove_drop= FALSE;
       }
       else /* Alter_drop::KEY and Alter_drop::FOREIGN_KEY */
@@ -6752,7 +6801,7 @@ remove_key:
            c < share->table_check_constraints ; c++)
       {
         Virtual_column_info *dup= table->check_constraints[c];
-        if (check->name.streq(dup->name))
+        if (check->name.streq_safe(dup->name))
         {
           push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
             ER_DUP_CONSTRAINT_NAME, ER_THD(thd, ER_DUP_CONSTRAINT_NAME),
@@ -6791,15 +6840,16 @@ remove_key:
 }
 
 
-static bool fix_constraints_names(THD *thd, List<Virtual_column_info>
-                                  *check_constraint_list,
+static bool fix_constraints_names(THD *thd,
+                                  List<Virtual_column_info> *check_list,
+                                  List<Create_field> *create_list,
                                   const HA_CREATE_INFO *create_info)
 {
-  List_iterator<Virtual_column_info> it((*check_constraint_list));
+  List_iterator<Virtual_column_info> it((*check_list));
   Virtual_column_info *check;
   uint nr= 1;
   DBUG_ENTER("fix_constraints_names");
-  if (!check_constraint_list)
+  if (!check_list)
     DBUG_RETURN(FALSE);
   // Prevent accessing freed memory during generating unique names
   while ((check=it++))
@@ -6821,10 +6871,8 @@ static bool fix_constraints_names(THD *thd, List<Virtual_column_info>
       const char *own_name_base= create_info->period_info.constr == check
         ? create_info->period_info.name.str : NULL;
 
-      if (make_unique_constraint_name(thd, &check->name,
-                                      own_name_base,
-                                      check_constraint_list,
-                                      &nr))
+      if (make_unique_constraint_name(thd, &check->name, own_name_base,
+                                      check_list, create_list, &nr))
         DBUG_RETURN(TRUE);
     }
   }
@@ -7352,7 +7400,7 @@ static bool fill_alter_inplace_info(THD *thd, TABLE *table,
          new_key < new_key_end;
          new_key++)
     {
-      if (table_key->name.streq(new_key->name))
+      if (!cmp(&table_key->name, &new_key->name))
         break;
     }
     if (new_key >= new_key_end)
@@ -7402,7 +7450,7 @@ static bool fill_alter_inplace_info(THD *thd, TABLE *table,
     /* Search an old key with the same name. */
     for (table_key= table->key_info; table_key < table_key_end; table_key++)
     {
-      if (table_key->name.streq(new_key->name))
+      if (!cmp(&table_key->name, &new_key->name))
         break;
     }
     if (table_key >= table_key_end)
@@ -7434,7 +7482,7 @@ static bool fill_alter_inplace_info(THD *thd, TABLE *table,
         continue;
       }
 
-      DBUG_ASSERT(!old_key->name.streq(new_key->name));
+      DBUG_ASSERT(cmp(&old_key->name, &new_key->name));
 
       ha_alter_info->handler_flags|= ALTER_RENAME_INDEX;
       ha_alter_info->rename_keys.push_back(
@@ -7720,7 +7768,7 @@ bool mysql_compare_tables(TABLE *table, Alter_info *alter_info,
     /* Search a key with the same name. */
     for (new_key= key_info_buffer; new_key < new_key_end; new_key++)
     {
-      if (table_key->name.streq(new_key->name))
+      if (!cmp(&table_key->name, &new_key->name))
         break;
     }
     if (new_key >= new_key_end)
@@ -7760,7 +7808,7 @@ bool mysql_compare_tables(TABLE *table, Alter_info *alter_info,
     /* Search a key with the same name. */
     for (table_key= table->s->key_info; table_key < table_key_end; table_key++)
     {
-      if (table_key->name.streq(new_key->name))
+      if (!cmp(&table_key->name, &new_key->name))
         break;
     }
     if (table_key >= table_key_end)
@@ -9477,7 +9525,7 @@ mysql_prepare_alter_table(THD *thd, TABLE *table,
         }
       }
 
-      if (share->period.constr_name.streq(check->name))
+      if (share->period.constr_name.streq_safe(check->name))
       {
         if (!drop_period && !keep)
         {
@@ -9561,6 +9609,7 @@ mysql_prepare_alter_table(THD *thd, TABLE *table,
   {
     Alter_drop *drop;
     drop_it.rewind();
+    List<LEX_CSTRING> dropped_fk;
     while ((drop=drop_it++)) {
       switch (drop->type) {
       case Alter_drop::KEY:
@@ -9589,7 +9638,14 @@ mysql_prepare_alter_table(THD *thd, TABLE *table,
           while (FOREIGN_KEY_INFO *f_key= fk_key_it++)
           {
             if (Lex_ident_column(*f_key->foreign_id).streq(drop->name))
+            {
+              List_iterator<LEX_CSTRING> check_it(dropped_fk);
+              while (LEX_CSTRING *dropped_name = check_it++)
+                if (Lex_ident_column(*f_key->foreign_id).streq(*dropped_name))
+                  goto fk_not_found;
+              dropped_fk.push_back(f_key->foreign_id);
               goto fk_found;
+            }
           }
           goto fk_not_found;
         fk_found:
@@ -9881,6 +9937,7 @@ static bool fk_prepare_copy_alter_table(THD *thd, TABLE *table,
     when a foreign key has the same table as child and parent.
   */
   List_iterator<FOREIGN_KEY_INFO> fk_parent_key_it(fk_parent_key_list);
+  List<FOREIGN_KEY_INFO> keys_to_remove;
 
   while ((f_key= fk_parent_key_it++))
   {
@@ -9900,10 +9957,31 @@ static bool fk_prepare_copy_alter_table(THD *thd, TABLE *table,
           drop->name.streq(*f_key->foreign_id) &&
           table->s->db.streq(*f_key->foreign_db) &&
           table->s->table_name.streq(*f_key->foreign_table))
-        fk_parent_key_it.remove();
+      {
+        keys_to_remove.push_back(f_key);
+        break;
+      }
     }
   }
 
+  IF_DBUG(uint removed= 0,);
+  /* Remove the identified keys */
+  List_iterator<FOREIGN_KEY_INFO> remove_it(keys_to_remove);
+  while ((f_key = remove_it++))
+  {
+    fk_parent_key_it.rewind();
+    while (FOREIGN_KEY_INFO *fk= fk_parent_key_it++)
+    {
+      if (fk == f_key)
+      {
+        fk_parent_key_it.remove();
+        IF_DBUG(removed++,);
+        break;
+      }
+    }
+  }
+  DBUG_ASSERT(keys_to_remove.elements == removed);
+  IF_DBUG(removed= 0,);
   /*
     If there are FKs in which this table is parent which were not
     dropped we need to prevent ALTER deleting rows from the table,
@@ -9974,6 +10052,7 @@ static bool fk_prepare_copy_alter_table(THD *thd, TABLE *table,
     by this ALTER TABLE.
   */
   List_iterator<FOREIGN_KEY_INFO> fk_key_it(fk_child_key_list);
+  keys_to_remove.empty();
 
   while ((f_key= fk_key_it++))
   {
@@ -9985,9 +10064,30 @@ static bool fk_prepare_copy_alter_table(THD *thd, TABLE *table,
       /* Names of foreign keys in InnoDB are case-insensitive. */
       if ((drop->type == Alter_drop::FOREIGN_KEY) &&
           (Lex_ident_column(*f_key->foreign_id).streq(drop->name)))
-        fk_key_it.remove();
+      {
+        keys_to_remove.push_back(f_key);
+        break;
+      }
     }
   }
+
+  /* Remove the identified keys */
+  List_iterator<FOREIGN_KEY_INFO> remove_it2(keys_to_remove);
+  while ((f_key = remove_it2++))
+  {
+    fk_key_it.rewind();
+    while (FOREIGN_KEY_INFO *fk= fk_key_it++)
+    {
+      if (fk == f_key)
+      {
+        fk_key_it.remove();
+        IF_DBUG(removed++,);
+        break;
+      }
+    }
+  }
+
+  DBUG_ASSERT(keys_to_remove.elements == removed);
 
   fk_key_it.rewind();
   while ((f_key= fk_key_it++))
@@ -10789,6 +10889,10 @@ bool mysql_alter_table(THD *thd, const LEX_CSTRING *new_db,
 #endif
   }
 
+  if (new_name->str &&
+      error_if_mysql50_prefix(new_name->str, ER_WRONG_TABLE_NAME))
+    DBUG_RETURN(true);
+
   THD_STAGE_INFO(thd, stage_init_update);
   bzero(&ddl_log_state, sizeof(ddl_log_state));
 
@@ -11210,7 +11314,7 @@ do_continue:;
   if (handle_if_exists_options(thd, table, alter_info,
                                &create_info->period_info) ||
       fix_constraints_names(thd, &alter_info->check_constraint_list,
-                            create_info))
+                            &alter_info->create_list, create_info))
     DBUG_RETURN(true);
 
   /* Check if rename of triggers are supported */
@@ -12734,7 +12838,7 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
   if (from_row_end)
     bitmap_set_bit(from->read_set, from_row_end->field_index);
 
-  from->file->column_bitmaps_signal();
+  from->file->column_bitmaps_signal(false);
 
   to->file->prepare_for_modify(true, false);
   DBUG_ASSERT(to->file->inited == handler::NONE);
@@ -12757,9 +12861,10 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
 
   thd->progress.max_counter= from->file->records();
   time_to_report_progress= MY_HOW_OFTEN_TO_WRITE/10;
-  /* for now, InnoDB needs the undo log for ALTER IGNORE */
-  if (!ignore && !to->s->hlindexes())
-    to->file->extra(HA_EXTRA_BEGIN_ALTER_COPY);
+  static_assert(int{HA_EXTRA_BEGIN_ALTER_IGNORE_COPY} ==
+                int{HA_EXTRA_BEGIN_COPY} + 1, "");
+  if (!to->s->hlindexes())
+    to->file->extra(ha_extra_function(int{HA_EXTRA_BEGIN_COPY} + ignore));
 
   if (!(error= info.read_record()))
   {
@@ -12947,13 +13052,14 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
   }
 
   bulk_insert_started= 0;
-  if (!ignore && !to->s->hlindexes() && error <= 0)
+  if (error <= 0 && !to->s->hlindexes())
   {
-    int alt_error= to->file->extra(HA_EXTRA_END_ALTER_COPY);
+    Abort_on_warning_instant_set save_abort_on_warning(thd, false);
+    int alt_error= to->file->extra(HA_EXTRA_END_COPY);
     if (alt_error > 0)
     {
       error= alt_error;
-      to->file->extra(HA_EXTRA_ABORT_ALTER_COPY);
+      to->file->extra(HA_EXTRA_ABORT_COPY);
       copy_data_error_ignore(error, false, to, thd, alter_ctx);
     }
   }
@@ -13040,6 +13146,9 @@ copy_data_between_tables(THD *thd, TABLE *from, TABLE *to,
 
   if (error > 0 && !from->s->tmp_table)
   {
+    /* Abort the operation which invoked extra(HA_EXTRA_BEGIN_COPY)
+    or extra(HA_EXTRA_BEGIN_ALTER_IGNORE_COPY) */
+    to->file->extra(HA_EXTRA_ABORT_COPY);
     /* We are going to drop the temporary table */
     to->file->extra(HA_EXTRA_PREPARE_FOR_DROP);
   }
@@ -13506,9 +13615,9 @@ bool Sql_cmd_create_table_like::execute(THD *thd)
   create_info.alias= create_table->alias;
 
   /* Fix names if symlinked or relocated tables */
-  if (append_file_to_dir(thd, &create_info.data_file_name,
+  if (append_table_to_dir(thd, &create_info.data_file_name,
                          &create_table->table_name) ||
-      append_file_to_dir(thd, &create_info.index_file_name,
+      append_table_to_dir(thd, &create_info.index_file_name,
                          &create_table->table_name))
     goto end_with_restore_list;
 

@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2015, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2023, MariaDB
+   Copyright (c) 2009, 2026, MariaDB plc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -84,6 +84,12 @@ extern SYMBOL sql_functions[];
 extern size_t sql_functions_length;
 
 extern Native_func_registry_array native_func_registry_array;
+
+/*
+  This is needed for gcc 15.1.1 as it also count static structures in
+  the limits
+*/
+PRAGMA_DISABLE_CHECK_STACK_FRAME;
 
 enum enum_i_s_events_fields
 {
@@ -627,7 +633,7 @@ static DYNAMIC_ARRAY ignore_db_dirs_array;
   A value for the read only system variable to show a list of
   ignored directories.
 */
-char *opt_ignore_db_dirs= NULL;
+READ_ONLY_SYSVAR char *opt_ignore_db_dirs;
 
 /**
   This flag is ON if:
@@ -742,11 +748,6 @@ ignore_db_dirs_reset()
 void
 ignore_db_dirs_free()
 {
-  if (opt_ignore_db_dirs)
-  {
-    my_free(opt_ignore_db_dirs);
-    opt_ignore_db_dirs= NULL;
-  }
   ignore_db_dirs_reset();
   delete_dynamic(&ignore_db_dirs_array);
   my_hash_free(&ignore_db_dirs_hash);
@@ -857,6 +858,7 @@ ignore_db_dirs_process_additions()
     len--;
 
   /* +1 the terminating zero */
+  my_free(opt_ignore_db_dirs);
   ptr= opt_ignore_db_dirs= (char *) my_malloc(key_memory_ignored_db, len + 1,
                                               MYF(0));
   if (!ptr)
@@ -1559,18 +1561,21 @@ bool mysql_show_create_server(THD *thd, LEX_CSTRING *name)
   buffer.append(STRING_WITH_LEN("CREATE SERVER "));
   append_identifier(thd, &buffer, name);
   buffer.append(STRING_WITH_LEN(" FOREIGN DATA WRAPPER "));
-  buffer.append(server->scheme, strlen(server->scheme));
+  append_identifier(thd, &buffer, server->scheme, strlen(server->scheme));
   buffer.append(STRING_WITH_LEN(" OPTIONS ("));
   engine_option_value* option= server->option_list;
   bool first= true;
   while (option)
   {
-    if (!first)
-      buffer.append(STRING_WITH_LEN(", "));
-    buffer.append(option->name);
-    buffer.append(STRING_WITH_LEN(" "));
-    append_unescaped(&buffer, option->value.str, option->value.length);
-    first= false;
+    if (option->value.str)
+    {
+      if (!first)
+        buffer.append(STRING_WITH_LEN(", "));
+      append_identifier(thd, &buffer, &option->name);
+      buffer.append(STRING_WITH_LEN(" "));
+      append_unescaped(&buffer, option->value.str, option->value.length);
+      first= false;
+    }
     option= option->next;
   }
   buffer.append(STRING_WITH_LEN(");"));
@@ -1795,7 +1800,7 @@ static void append_directory(THD *thd, String *packet, LEX_CSTRING *dir_type,
     }
     filename= winfilename;
 #endif
-    packet->append(filename, length);
+    packet->append_for_single_quote(filename, length);
     packet->append('\'');
   }
 }
@@ -1950,10 +1955,7 @@ static void append_create_options(THD *thd, String *packet,
     packet->append(' ');
     append_identifier(thd, packet, &opt->name);
     packet->append('=');
-    if (opt->quoted_value)
-      append_unescaped(packet, opt->value.str, opt->value.length);
-    else
-      packet->append(&opt->value);
+    append_unescaped(packet, opt->value.str, opt->value.length, in_comment);
   }
   if (in_comment)
     packet->append(STRING_WITH_LEN(" */"));
@@ -2586,7 +2588,7 @@ int show_create_table_ex(THD *thd, TABLE_LIST *table_list, const char *force_db,
     {
       Virtual_column_info *check= table->check_constraints[i];
       // period constraint is implicit
-      if (share->period.constr_name.streq(check->name))
+      if (share->period.constr_name.streq_safe(check->name))
         continue;
 
       str.set_buffer_if_not_allocated(&my_charset_utf8mb4_general_ci);
@@ -2906,12 +2908,39 @@ static const char *thread_state_info(THD *tmp)
 }
 
 
+/*
+  Check if user can see a THD in "show processlist" or in I_S.processlist.
+
+  Non-privileged users can see own foreground THDs and also event worker
+  threads that run in user's security context.
+
+  Privileged users can see all THDs.
+
+  @param caller - security context of the acting thread
+  @param thd  - THD to check if visible to the caller
+
+  @retval true  - THD visible in processlist
+  @retval false - THD not visible in processlist
+*/
+static bool thd_visible_in_processlist(const Security_context *caller, THD *thd)
+{
+  if (!thd->vio_ok() && !thd->system_thread)
+    return false; // "something bad happened" thread, don't show it
+
+  if (caller->master_access & PRIV_STMT_SHOW_PROCESSLIST)
+    return true; // privileged user can see all threads
+  bool user_or_event_worker_thread=
+       !thd->system_thread || thd->system_thread & SYSTEM_THREAD_EVENT_WORKER;
+
+  return user_or_event_worker_thread &&
+         thd->security_ctx->priv_user_matches(caller);
+}
+
+
 struct list_callback_arg
 {
-  list_callback_arg(const char *u, THD *t, ulong m):
-    user(u), thd(t), max_query_length(m) {}
+  list_callback_arg(THD *t, ulong m): thd(t), max_query_length(m) {}
   I_List<thread_info> thread_infos;
-  const char *user;
   THD *thd;
   ulong max_query_length;
 };
@@ -2922,9 +2951,7 @@ static my_bool list_callback(THD *tmp, list_callback_arg *arg)
 
   Security_context *tmp_sctx= tmp->security_ctx;
   bool got_thd_data;
-  if ((tmp->vio_ok() || tmp->system_thread) &&
-      (!arg->user || (!tmp->system_thread &&
-                      tmp_sctx->user && !strcmp(tmp_sctx->user, arg->user))))
+  if (thd_visible_in_processlist(arg->thd->security_ctx, tmp))
   {
     thread_info *thd_info= new (arg->thd->mem_root) thread_info;
 
@@ -3007,16 +3034,20 @@ static my_bool list_callback(THD *tmp, list_callback_arg *arg)
 }
 
 
-void mysqld_list_processes(THD *thd,const char *user, bool verbose)
+void mysqld_list_processes(THD *thd, bool verbose)
 {
   Item *field;
   List<Item> field_list;
-  list_callback_arg arg(user, thd,
-                        verbose ? thd->variables.max_allowed_packet :
-                        PROCESS_LIST_WIDTH);
+  list_callback_arg arg(thd, verbose ? thd->variables.max_allowed_packet
+                                     : PROCESS_LIST_WIDTH);
   Protocol *protocol= thd->protocol;
   MEM_ROOT *mem_root= thd->mem_root;
   DBUG_ENTER("mysqld_list_processes");
+
+  /* anonymous users cannot see anything */
+  if (!thd->security_ctx->priv_user[0] &&
+      check_global_access(thd, PRIV_STMT_SHOW_PROCESSLIST))
+    DBUG_VOID_RETURN;
 
   field_list.push_back(new (mem_root)
                        Item_int(thd, "Id", 0, MY_INT32_NUM_DECIMAL_DIGITS),
@@ -3258,30 +3289,24 @@ void select_result_text_buffer::save_to(String *res)
 int fill_show_explain_or_analyze(THD *thd, TABLE_LIST *table, COND *cond,
                                  bool json_format, bool is_analyze)
 {
-  const char *calling_user;
   THD *tmp;
   my_thread_id  thread_id;
   DBUG_ENTER("fill_show_explain_or_analyze");
 
   DBUG_ASSERT(cond==NULL);
   thread_id= thd->lex->value_list.head()->val_int();
-  calling_user= (thd->security_ctx->master_access & PRIV_STMT_SHOW_EXPLAIN) ?
-                 NullS : thd->security_ctx->priv_user;
 
   if ((tmp= find_thread_by_id(thread_id)))
   {
-    Security_context *tmp_sctx= tmp->security_ctx;
     MEM_ROOT explain_mem_root, *save_mem_root;
 
     /*
-      If calling_user==NULL, calling thread has SUPER or PROCESS
-      privilege, and so can do SHOW EXPLAIN/SHOW ANALYZE on any user.
-      
-      if calling_user!=NULL, he's only allowed to view
+      Same rule as for SHOW PROCESSLIST:
+      A thread with PROCESS privilege can do SHOW EXPLAIN/SHOW
+      ANALYZE on any user, everybody else is only allowed to view
       SHOW EXPLAIN/SHOW ANALYZE on his own threads.
     */
-    if (calling_user && (!tmp_sctx->user || strcmp(calling_user, 
-                                                   tmp_sctx->user)))
+    if (!thd_visible_in_processlist(thd->security_ctx, tmp))
     {
       my_error(ER_SPECIFIC_ACCESS_DENIED_ERROR, MYF(0), "PROCESS");
       mysql_mutex_unlock(&tmp->LOCK_thd_kill);
@@ -3427,13 +3452,8 @@ static my_bool processlist_callback(THD *tmp, processlist_callback_arg *arg)
   const char *val;
   ulonglong max_counter;
   bool got_thd_data;
-  char *user=
-          arg->thd->security_ctx->master_access & PRIV_STMT_SHOW_PROCESSLIST ?
-          NullS : arg->thd->security_ctx->priv_user;
 
-  if ((!tmp->vio_ok() && !tmp->system_thread) ||
-      (user && (tmp->system_thread || !tmp_sctx->user ||
-                strcmp(tmp_sctx->user, user))))
+  if (!thd_visible_in_processlist(arg->thd->security_ctx, tmp))
     return 0;
 
   restore_record(arg->table, s->default_values);
@@ -4677,7 +4697,8 @@ make_table_name_list(THD *thd, Dynamic_array<LEX_CSTRING*> *table_names,
                      const LEX_CSTRING *db_name)
 {
   char path[FN_REFLEN + 1];
-  build_table_filename(path, sizeof(path) - 1, db_name->str, "", "", 0);
+  if (!build_table_filename(path, sizeof(path) - 1, db_name->str, "", "", 0))
+    return 0;
   if (!lookup_field_vals->wild_table_value &&
       lookup_field_vals->table_value.str)
   {
@@ -5589,7 +5610,7 @@ int get_all_tables(THD *thd, TABLE_LIST *tables, COND *cond)
         DBUG_ASSERT(table_name->length <= NAME_LEN);
 
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
-        if (!(thd->col_access & TABLE_ACLS))
+        if (!(thd->col_access & (TABLE_ACLS & ~GRANT_ACL)))
         {
           TABLE_LIST table_acl_check;
           table_acl_check.reset();
@@ -5716,6 +5737,8 @@ static bool verify_database_directory_exists(const LEX_CSTRING &dbname)
   if (!dbname.str[0])
     DBUG_RETURN(true); // Empty database name: does not exist.
   path_len= build_table_filename(path, sizeof(path) - 1, dbname.str, "", "", 0);
+  if (!path_len)
+    DBUG_RETURN(true); // invalid name
   path[path_len - 1]= 0;
   if (!mysql_file_stat(key_file_misc, path, &stat_info, MYF(0)))
     DBUG_RETURN(true); // The database directory was not found: does not exist.
@@ -6041,6 +6064,17 @@ static int get_schema_tables_record(THD *thd, TABLE_LIST *tables,
       {
         file->print_error(info_error, MYF(0));
         goto err;
+      }
+
+      if (show_table->s->hlindexes())
+      {
+          // make sure hlindex is opened
+          if (show_table->hlindex || !show_table->hlindex_open(show_table->s->keys))
+          {
+              handler *hi= show_table->hlindex->file;
+              if (!hi->info(HA_STATUS_VARIABLE))
+                  file->stats.index_file_length+= hi->stats.data_file_length;
+          }
       }
 
       enum row_type row_type = file->get_row_type();
@@ -6942,7 +6976,6 @@ int store_schema_params(THD *thd, TABLE *table, TABLE *proc_table,
   CHARSET_INFO *cs= system_charset_info;
   LEX_CSTRING definer, params, returns= empty_clex_str;
   LEX_CSTRING db, name;
-  char path[FN_REFLEN];
   sp_head *sp;
   const Sp_handler *sph;
   bool free_sp_head;
@@ -6952,8 +6985,7 @@ int store_schema_params(THD *thd, TABLE *table, TABLE *proc_table,
   DBUG_ENTER("store_schema_params");
 
   bzero((char*) &tbl, sizeof(TABLE));
-  (void) build_table_filename(path, sizeof(path), "", "", "", 0);
-  init_tmp_table_share(thd, &share, "", 0, "", path, true);
+  init_tmp_table_share(thd, &share, "", 0, "", "", true);
 
   proc_table->field[MYSQL_PROC_FIELD_DB]->val_str_nopad(thd->mem_root, &db);
   proc_table->field[MYSQL_PROC_FIELD_NAME]->val_str_nopad(thd->mem_root, &name);
@@ -7131,13 +7163,11 @@ int store_schema_proc(THD *thd, TABLE *table, TABLE *proc_table,
                                                 &free_sp_head);
         if (sp)
         {
-          char path[FN_REFLEN];
           TABLE_SHARE share;
           TABLE tbl;
 
           bzero((char*) &tbl, sizeof(TABLE));
-          (void) build_table_filename(path, sizeof(path), "", "", "", 0);
-          init_tmp_table_share(thd, &share, "", 0, "", path ,true);
+          init_tmp_table_share(thd, &share, "", 0, "", "", true);
           store_variable_type(thd, sp->m_return_field_def,
                               ""_Lex_ident_column, &tbl, &share, cs, table, 5);
           free_table_share(&share);
@@ -7469,10 +7499,7 @@ static int get_schema_views_record(THD *thd, TABLE_LIST *tables,
     Security_context *sctx= thd->security_ctx;
     if (!tables->allowed_show)
     {
-      if (my_charset_bin.streq(tables->definer.user,
-                               Lex_cstring_strlen(sctx->priv_user)) &&
-          Lex_ident_host(tables->definer.host).
-            streq(Lex_cstring_strlen(sctx->priv_host)))
+      if (sctx->is_priv_user(tables->definer.user, tables->definer.host))
         tables->allowed_show= TRUE;
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
       else

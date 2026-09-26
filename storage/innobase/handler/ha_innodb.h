@@ -77,7 +77,7 @@ public:
 
 	const key_map* keys_to_use_for_scanning() override;
 
-	void column_bitmaps_signal() override;
+	void column_bitmaps_signal(bool mark_for_update) override;
 
 	/** Opens dictionary table object using table name. For partition, we need to
 	try alternative lower/upper case names to support moving data files across
@@ -708,7 +708,10 @@ private:
 	/** Connection thread handle. */
 	THD*		m_thd;
 
-	/** InnoDB transaction handle. */
+	/** InnoDB transaction handle. Non-NULL only when
+	create is invoked from an truncation operation.
+	NULL for regular CREATE TABLE and ALTER TABLE,
+	which build their own transaction internally. */
 	trx_t*		m_trx;
 
 	/** Information on table columns and indexes. */
@@ -920,5 +923,7 @@ bool too_big_key_part_length(size_t max_field_len, const KEY& key);
 Remove statistics for dropped indexes, add statistics for created indexes
 and rename statistics for renamed indexes.
 @param table InnoDB table that was rebuilt by ALTER TABLE
-@param trx   user transaction */
-void alter_stats_rebuild(dict_table_t *table, trx_t *trx) noexcept;
+@param trx   user transaction
+@param copy       caller is from COPY algorithm */
+void alter_stats_rebuild(dict_table_t *table, trx_t *trx,
+			 bool copy=false) noexcept;

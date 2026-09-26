@@ -1,4 +1,0 @@
-USE tpch1;
-select mcsSystemPrimary() as a;
-a
-1

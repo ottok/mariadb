@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2018, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2024, MariaDB Corporation.
+   Copyright (c) 2009, 2026, MariaDB plc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -68,6 +68,7 @@
 #ifdef WITH_WSREP
 #include "wsrep_trans_observer.h"
 #include "wsrep_status.h"
+#include "wsrep_xid.h"
 #endif /* WITH_WSREP */
 
 #ifdef HAVE_REPLICATION
@@ -84,8 +85,8 @@
 
 LOGGER logger;
 
-const char *log_bin_index= 0;
-const char *log_bin_basename= 0;
+READ_ONLY_SYSVAR const char *log_bin_index= 0;
+READ_ONLY_SYSVAR const char *log_bin_basename= 0;
 
 MYSQL_BIN_LOG mysql_bin_log(&sync_binlog_period);
 
@@ -2922,7 +2923,8 @@ static void setup_windows_event_source()
     nonzero if not possible to get unique filename.
 */
 
-static int find_uniq_filename(char *name, ulong min_log_number_to_use,
+static int find_uniq_filename(char *name, size_t name_size,
+                              ulong min_log_number_to_use,
                               ulong *last_used_log_number)
 {
   char                  buff[FN_REFLEN], ext_buf[FN_REFLEN];
@@ -2981,7 +2983,7 @@ updating the index files.", max_found);
   }
 
   next= max_found + 1;
-  if (sprintf(ext_buf, "%06lu", next)<0)
+  if (snprintf(ext_buf, sizeof(ext_buf), "%06lu", next)<0)
   {
     error= 1;
     goto end;
@@ -3002,7 +3004,7 @@ index files.", name, ext_buf, (strlen(ext_buf) + (end - name)));
     goto end;
   }
 
-  if (sprintf(end, "%06lu", next)<0)
+  if (snprintf(end, name + name_size - end, "%06lu", next)<0)
   {
     error= 1;
     goto end;
@@ -3033,8 +3035,9 @@ bool MYSQL_LOG::init_and_set_log_file_name(const char *log_name,
   {
     strmov(log_file_name, new_name);
   }
-  else if (!new_name && generate_new_name(log_file_name, log_name,
-                                          next_log_number))
+  else if (!new_name && generate_new_name(log_file_name,
+                                          sizeof(log_file_name),
+                                          log_name, next_log_number))
     return TRUE;
 
   return FALSE;
@@ -3248,21 +3251,23 @@ void MYSQL_LOG::cleanup()
 }
 
 
-int MYSQL_LOG::generate_new_name(char *new_name, const char *log_name,
+int MYSQL_LOG::generate_new_name(char *new_name, size_t name_size,
+                                 const char *log_name,
                                  ulong next_log_number)
 {
   fn_format(new_name, log_name, mysql_data_home, "", 4);
   return 0;
 }
 
-int MYSQL_BIN_LOG::generate_new_name(char *new_name, const char *log_name,
+int MYSQL_BIN_LOG::generate_new_name(char *new_name, size_t name_size,
+                                     const char *log_name,
                                      ulong next_log_number)
 {
   fn_format(new_name, log_name, mysql_data_home, "", 4);
   if (!fn_ext(log_name)[0])
   {
     if (DBUG_IF("binlog_inject_new_name_error") ||
-        unlikely(find_uniq_filename(new_name, next_log_number,
+        unlikely(find_uniq_filename(new_name, name_size, next_log_number,
                                     &last_used_log_number)))
     {
       THD *thd= current_thd;
@@ -3494,8 +3499,8 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
           my_b_write(&log_file, (uchar*) "\n", 1))
         goto err;
 
-    sprintf(query_time_buff, "%.6f", ulonglong2double(query_utime)/1000000.0);
-    sprintf(lock_time_buff,  "%.6f", ulonglong2double(lock_utime)/1000000.0);
+    snprintf(query_time_buff, sizeof(query_time_buff), "%.6f", ulonglong2double(query_utime)/1000000.0);
+    snprintf(lock_time_buff, sizeof(lock_time_buff),  "%.6f", ulonglong2double(lock_utime)/1000000.0);
     if (my_b_printf(&log_file,
                     "# Thread_id: %lu  Schema: %s  QC_hit: %s\n"
                     "# Query_time: %s  Lock_time: %s  Rows_sent: %lu  Rows_examined: %lu\n"
@@ -3515,12 +3520,12 @@ bool MYSQL_QUERY_LOG::write(THD *thd, time_t current_time,
     {
       ha_handler_stats *stats= &thd->handler_stats;
       double tracker_frequency= timer_tracker_frequency();
-      sprintf(query_time_buff, "%.4f",
-              1000.0 * ulonglong2double(stats->pages_read_time)/
-              tracker_frequency);
-      sprintf(lock_time_buff,  "%.4f",
-              1000.0 * ulonglong2double(stats->engine_time)/
-              tracker_frequency);
+      snprintf(query_time_buff, sizeof(query_time_buff), "%.4f",
+               1000.0 * ulonglong2double(stats->pages_read_time)/
+               tracker_frequency);
+      snprintf(lock_time_buff, sizeof(lock_time_buff),  "%.4f",
+               1000.0 * ulonglong2double(stats->engine_time)/
+               tracker_frequency);
 
       if (my_b_printf(&log_file,
                       "# Pages_accessed: %lu  Pages_read: %lu  "
@@ -4521,13 +4526,15 @@ int MYSQL_BIN_LOG::find_log_pos(LOG_INFO *linfo, const char *log_name,
   error= reinit_io_cache(&index_file, READ_CACHE, (my_off_t) 0, 0, 0);
   DBUG_ASSERT(!error);
 
+  DBUG_EXECUTE_IF("simulate_find_log_pos_error",
+    error= LOG_INFO_EOF;
+    goto end;
+  );
   for (;;)
   {
     size_t length;
     my_off_t offset= my_b_tell(&index_file);
 
-    DBUG_EXECUTE_IF("simulate_find_log_pos_error",
-                    error=  LOG_INFO_EOF; break;);
     /* If we get 0 or 1 characters, this is the end of the file */
     if ((length= my_b_gets(&index_file, fname, FN_REFLEN)) <= 1)
     {
@@ -6011,7 +6018,8 @@ int MYSQL_BIN_LOG::new_file_impl(bool commit_by_rotate)
     We have to do this here and not in open as we want to store the
     new file name in the current binary log file.
   */
-  if (unlikely((error= generate_new_name(new_name, name, 0))))
+  if (unlikely((error= generate_new_name(new_name, sizeof(new_name),
+                                          name, 0))))
   {
     mysql_mutex_unlock(&LOCK_index);
     DBUG_RETURN(error);
@@ -8157,7 +8165,8 @@ static int do_delete_gtid_domain(DYNAMIC_ARRAY *domain_drop_lex)
   if (errmsg)
     goto end;
   errmsg= rpl_global_gtid_binlog_state.drop_domain(domain_drop_lex,
-                                                   glev, errbuf);
+                                                   glev, errbuf,
+                                                   sizeof(errbuf));
 
 end:
   if (errmsg)
@@ -9369,7 +9378,7 @@ void MYSQL_BIN_LOG::trx_group_commit_with_engines(group_commit_entry *leader,
       {
 #ifdef HAVE_REPLICATION
         /*
-          The thread which will await the ACK from the replica can change
+          The thread which will await the ACK from the slave can change
           depending on the wait-point. If AFTER_COMMIT, then the user thread
           will perform the wait. If AFTER_SYNC, the binlog group commit leader
           will perform the wait on behalf of the user thread.
@@ -10573,7 +10582,7 @@ ulong tc_log_page_waits= 0;
 
 static const uchar tc_log_magic[]={(uchar) 254, 0x23, 0x05, 0x74};
 
-ulong opt_tc_log_size;
+READ_ONLY_SYSVAR ulong opt_tc_log_size;
 ulong tc_log_max_pages_used=0, tc_log_page_size=0, tc_log_cur_pages_used=0;
 
 int TC_LOG_MMAP::open(const char *opt_name)
@@ -12868,6 +12877,76 @@ MYSQL_BIN_LOG::recover_gtid_index_abort(Gtid_index_writer *gi)
 }
 
 
+#if defined(WITH_WSREP) && defined(HAVE_REPLICATION)
+/*
+  MDEV-38147: A Galera mariabackup SST no longer ships the donor's binary log
+  (the only thing it carried was a Gtid_list whose position was ahead of the
+  snapshot, causing error 1950). Instead the joiner starts a fresh binary log,
+  so its Gtid_list / @@gtid_binlog_pos must be seeded from the recovered wsrep
+  position - otherwise the joiner would report an empty binlog position until
+  it re-binlogs new transactions, which breaks its use as an async master.
+
+  The wsrep cluster position lives in the storage-engine checkpoint (restored
+  by the SST). Async-replica source positions live in mysql.gtid_slave_pos
+  (also restored from the engine) and are handled separately, so they are not
+  seeded here.
+
+  This seeding applies only with wsrep_gtid_mode=ON. In that mode cluster
+  writes are re-tagged to wsrep_gtid_domain_id and binlogged with the cluster
+  seqno, so @@gtid_binlog_pos in that domain tracks the cluster seqno - which is
+  exactly the SE checkpoint position, and exactly the position from which IST
+  resumes re-binlogging. Seeding it keeps the joiner in lockstep and avoids
+  error 1950 from re-binlogging over an ahead position.
+
+  With wsrep_gtid_mode=OFF cluster writes keep the node's configured
+  gtid_domain_id and are binlogged with a locally allocated seq_no; the cluster
+  seqno is not written to the binlog GTID (it lives only in
+  thd->wsrep_current_gtid_seqno - see the GTID assignment guarded by
+  wsrep_gtid_mode in wsrep_mysqld.cc). That binlog position is node-local and
+  unrelated to the checkpoint seqno, so there is nothing cluster-consistent to
+  seed: a fresh joiner just resumes its own local counter, which cannot produce
+  an ahead position. We therefore seed nothing in that mode.
+*/
+static void wsrep_seed_binlog_gtid_state()
+{
+  /*
+    Only wsrep_gtid_mode=ON has a cluster-consistent binlog position that maps
+    onto the SE checkpoint (see the block comment above).
+  */
+  if (!wsrep_gtid_mode)
+    return;
+
+  wsrep_server_gtid_t const eng= wsrep_get_SE_checkpoint<wsrep_server_gtid_t>();
+  if (eng.seqno <= 0)
+    return;                              /* not a wsrep node / no position */
+
+  rpl_gtid eng_gtid;
+  eng_gtid.domain_id= eng.domain_id;     /* == wsrep_gtid_domain_id */
+  eng_gtid.server_id= eng.server_id;
+  eng_gtid.seq_no=    eng.seqno;
+
+  rpl_gtid *cur= rpl_global_gtid_binlog_state.find_most_recent(eng_gtid.domain_id);
+  if (cur && cur->seq_no >= eng_gtid.seq_no)
+    return;        /* binlog state already at or ahead of the checkpoint */
+
+  sql_print_information("WSREP: seeding binlog GTID state to %u-%u-%llu "
+                        "from the storage-engine checkpoint",
+                        eng_gtid.domain_id, eng_gtid.server_id,
+                        (unsigned long long) eng_gtid.seq_no);
+  /*
+    Use the locking update() for consistency with the find_most_recent() read
+    above. With strict=false the only failure is OOM; update() will have called
+    my_error(ER_OUT_OF_RESOURCES), but there is no current_thd this early in
+    startup, so report the failure explicitly here as well.
+  */
+  if (rpl_global_gtid_binlog_state.update(&eng_gtid, false))
+    sql_print_error("WSREP: failed to seed binlog GTID state to %u-%u-%llu "
+                    "from the storage-engine checkpoint (out of memory)",
+                    eng_gtid.domain_id, eng_gtid.server_id,
+                    (unsigned long long) eng_gtid.seq_no);
+}
+#endif /* WITH_WSREP && HAVE_REPLICATION */
+
 int
 MYSQL_BIN_LOG::do_binlog_recovery(const char *opt_name, bool do_xa_recovery)
 {
@@ -12902,6 +12981,10 @@ MYSQL_BIN_LOG::do_binlog_recovery(const char *opt_name, bool do_xa_recovery)
         error= 0;
       }
     }
+#if defined(WITH_WSREP) && defined(HAVE_REPLICATION)
+    if (!error && WSREP_PROVIDER_EXISTS)
+      wsrep_seed_binlog_gtid_state();
+#endif
     return error;
   }
 

@@ -1179,7 +1179,10 @@ drop table t1,t2,t3;
 # new table creation/renaming is NOT blocked if old encoded table present
 #
 let $MYSQLD_DATADIR= `select @@datadir`;
-create table `#mysql50#t-1` (a int) engine=myisam;
+create table t1 (a int) engine=myisam;
+--move_file $MYSQLD_DATADIR/test/t1.frm $MYSQLD_DATADIR/test/t-1.frm
+--move_file $MYSQLD_DATADIR/test/t1.MYI $MYSQLD_DATADIR/test/t-1.MYI
+--move_file $MYSQLD_DATADIR/test/t1.MYD $MYSQLD_DATADIR/test/t-1.MYD
 insert into `#mysql50#t-1` values (1);
 show tables;
 create table `t-1` (a int);
@@ -1945,6 +1948,23 @@ SHOW CREATE DATABASE `#testone#￭￭￭￭￭￭￭￭￭￭￭￭￭￭￭￭�
 SET NAMES DEFAULT;
 
 --echo # End of 10.5 Test
+
+--echo #
+--echo # MDEV-39002: Diagnostics area assertion failure upon CREATE TABLE
+--echo #
+
+--error ER_CANT_AGGREGATE_2COLLATIONS
+CREATE TABLE t1 (a INT, b VARCHAR(8) DEFAULT (IFNULL(a,''))) CHARSET swe7;
+
+--echo # Test Item_func_case_abbreviation2 (IF, NVL2, IFNULL) with collation mismatch in DEFAULT
+--error ER_CANT_AGGREGATE_2COLLATIONS
+CREATE TABLE t1 (a VARCHAR(8) CHARSET latin1, b VARCHAR(8) DEFAULT (IFNULL(_latin1'x', _swe7'y'))) CHARSET utf8;
+--error ER_CANT_AGGREGATE_2COLLATIONS
+CREATE TABLE t1 (a VARCHAR(8) CHARSET latin1, b VARCHAR(8) DEFAULT (IF(1, _latin1'x', _swe7'y'))) CHARSET utf8;
+--error ER_CANT_AGGREGATE_2COLLATIONS
+CREATE TABLE t1 (a VARCHAR(8) CHARSET latin1, b VARCHAR(8) DEFAULT (NVL2(1, _latin1'x', _swe7'y'))) CHARSET utf8;
+
+--echo End of 10.11 tests
 
 --echo #
 --echo # MDEV-35318 Assertion `tl->jtbm_subselect' failed in JOIN::calc_allowed_top_level_tables on 2nd execution of PS

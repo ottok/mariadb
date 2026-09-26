@@ -5419,9 +5419,14 @@ longlong Item_copy_string::val_int()
 {
   DBUG_ASSERT(copied_in);
   int err;
-  return null_value ? 0 : str_value.charset()->strntoll(str_value.ptr(),
-                                                        str_value.length(), 10,
-                                                        (char**) 0, &err);
+  if (null_value)
+    return 0;
+  if (unsigned_flag)
+    return (longlong)
+        str_value.charset()->strntoull(str_value.ptr(), str_value.length(),
+                                       10, 0, &err);
+  return str_value.charset()->strntoll(str_value.ptr(), str_value.length(),
+                                       10, 0, &err);
 }
 
 
@@ -5462,6 +5467,75 @@ my_decimal *Item_copy_string::val_decimal(my_decimal *decimal_value)
     return (my_decimal *) 0;
   string2my_decimal(E_DEC_FATAL_ERROR, &str_value, decimal_value);
   return (decimal_value);
+}
+
+
+/****************************************************************************
+  Item_copy_real and its FLOAT and DOUBLE variants
+****************************************************************************/
+
+void Item_copy_real::copy()
+{
+  cached_value= item->val_real();
+  null_value= item->null_value;
+#ifndef DBUG_OFF
+  copied_in= 1;
+#endif
+}
+
+
+double Item_copy_real::val_real()
+{
+  DBUG_ASSERT(copied_in);
+  return null_value ? 0.0 : cached_value;
+}
+
+
+longlong Item_copy_real::val_int()
+{
+  DBUG_ASSERT(copied_in);
+  return null_value ? 0 :
+         Converter_double_to_longlong(cached_value, unsigned_flag).result();
+}
+
+
+my_decimal *Item_copy_real::val_decimal(my_decimal *decimal_value)
+{
+  DBUG_ASSERT(copied_in);
+  if (null_value)
+    return NULL;
+  double2my_decimal(E_DEC_FATAL_ERROR, cached_value, decimal_value);
+  return decimal_value;
+}
+
+
+int Item_copy_real::save_in_field(Field *field, bool no_conversions)
+{
+  DBUG_ASSERT(copied_in);
+  if (null_value)
+    return set_field_to_null(field);
+  field->set_notnull();
+  return field->store(cached_value);
+}
+
+
+String *Item_copy_float::val_str(String *str)
+{
+  DBUG_ASSERT(copied_in);
+  if (null_value)
+    return NULL;
+  Float(cached_value).to_string(str, decimals);
+  return str;
+}
+
+
+String *Item_copy_double::val_str(String *str)
+{
+  DBUG_ASSERT(copied_in);
+  if (null_value)
+    return NULL;
+  str->set_real(cached_value, decimals, &my_charset_numeric);
+  return str;
 }
 
 
@@ -5910,6 +5984,50 @@ bool is_outer_table(TABLE_LIST *table, SELECT_LEX *select)
   return TRUE;
 }
 
+/**
+  @brief  check to see if we need to wrap this in an Item_outer_ref
+
+  @description
+    If an outer field is resolved in a grouping select then it
+    is replaced for an Item_outer_ref object. Otherwise an
+    Item_field object is used.
+    The new Item_outer_ref object is saved in the inner_refs_list of
+    the outer select. Here it is only created. It can be fixed only
+    after the original field has been fixed and this is done in the
+    fix_inner_refs() function.
+    Called only from Item_field::fix_outer_field, where *reference type
+    will be applicable.
+  @returns
+    false  normal execution
+    true   error
+*/
+static inline bool inner_refs_check(THD *thd,
+                             Name_resolution_context *last_checked_context,
+                             Name_resolution_context *context,
+                             SELECT_LEX *select,
+                             enum_parsing_place place,
+                             Item **reference)
+{
+#ifndef DBUG_OFF
+  Item::Type ref_type= (*reference)->type();
+#endif
+  if (!last_checked_context->select_lex->having_fix_field &&
+      select->group_list.elements &&
+      (place == SELECT_LIST || place == IN_HAVING))
+  {
+    DBUG_ASSERT(ref_type == Item::REF_ITEM || ref_type == Item::FIELD_ITEM);
+    Item_outer_ref *rf;
+    if (!(rf= new (thd->mem_root)
+                  Item_outer_ref(thd, context,(Item_ident*) (*reference))))
+      return true;
+    thd->change_item_tree(reference, rf);
+    if (select->inner_refs_list.push_back(rf, thd->mem_root))
+      return true;
+    rf->in_sum_func= thd->lex->in_sum_func;
+  }
+  return false;
+}
+
 
 /**
   Resolve the name of an outer select column reference.
@@ -6056,7 +6174,8 @@ Item_field::fix_outer_field(THD *thd, Field **from_field, Item **reference)
           if (select->join)
           {
             marker= select->cur_pos_in_select_list;
-            select->join->non_agg_fields.push_back(this, thd->mem_root);
+            if (!thd->lex->in_sum_func)
+              select->join->non_agg_fields.push_back(this, thd->mem_root);
           }
           else
           {
@@ -6080,27 +6199,9 @@ Item_field::fix_outer_field(THD *thd, Field **from_field, Item **reference)
             prev_subselect_item->const_item_cache= 0;
           }
           set_field(*from_field);
-          if (!last_checked_context->select_lex->having_fix_field &&
-              select->group_list.elements &&
-              (place == SELECT_LIST || place == IN_HAVING))
-          {
-            Item_outer_ref *rf;
-            /*
-              If an outer field is resolved in a grouping select then it
-              is replaced for an Item_outer_ref object. Otherwise an
-              Item_field object is used.
-              The new Item_outer_ref object is saved in the inner_refs_list of
-              the outer select. Here it is only created. It can be fixed only
-              after the original field has been fixed and this is done in the
-              fix_inner_refs() function.
-            */
-            ;
-            if (!(rf= new (thd->mem_root) Item_outer_ref(thd, context, this)))
-              return -1;
-            thd->change_item_tree(reference, rf);
-            select->inner_refs_list.push_back(rf, thd->mem_root);
-            rf->in_sum_func= thd->lex->in_sum_func;
-          }
+          if (inner_refs_check(thd, last_checked_context, context, select,
+                               place, reference))
+            return -1;
           /*
             A reference is resolved to a nest level that's outer or the same as
             the nest level of the enclosing set function : adjust the value of
@@ -6134,6 +6235,11 @@ Item_field::fix_outer_field(THD *thd, Field **from_field, Item **reference)
                             ((ref_type == REF_ITEM || ref_type == FIELD_ITEM) ?
                              (Item_ident*) (*reference) :
                              0), false);
+
+          if (inner_refs_check(thd, last_checked_context, context, select,
+                               place, reference))
+            return -1;
+
           if (thd->lex->in_sum_func &&
               last_checked_context->select_lex->parent_lex ==
               context->select_lex->parent_lex &&
@@ -7193,6 +7299,32 @@ int Item::save_str_in_field(Field *field, bool no_conversions)
 }
 
 
+/*
+  Store a hex/bit hybrid value into a field, like the bare 0xHHHH / b'..'
+  literal does (see Item_hex_hybrid::save_in_field): Field::store_hex_hybrid()
+  stores the integer value into a numeric field and the raw bytes into a string
+  field. Used for COALESCE/IF/CASE/... results that stay a hex hybrid.
+*/
+int Item::save_hex_hybrid_in_field(Field *field, bool no_conversions)
+{
+  String *result;
+  CHARSET_INFO *cs= collation.collation;
+  char buff[MAX_FIELD_WIDTH];		// Alloc buffer for small columns
+  str_value.set_buffer_if_not_allocated(buff, sizeof(buff), cs);
+  result= val_str(&str_value);
+  if (null_value)
+  {
+    str_value.set_buffer_if_not_allocated(0, 0, cs);
+    return set_field_to_null_with_conversions(field, no_conversions);
+  }
+
+  field->set_notnull();
+  int error= field->store_hex_hybrid(result->ptr(), result->length());
+  str_value.set_buffer_if_not_allocated(0, 0, cs);
+  return error;
+}
+
+
 int Item::save_real_in_field(Field *field, bool no_conversions)
 {
   double nr= val_real();
@@ -7592,22 +7724,6 @@ void Item_hex_hybrid::print(String *str, enum_query_type query_type)
 {
   str->append("0x", 2);
   str->append_hex(str_value.ptr(), str_value.length());
-}
-
-
-decimal_digits_t Item_hex_hybrid::decimal_precision() const
-{
-  switch (max_length) {// HEX                                 DEC
-  case 0:              // ----                                ---
-  case 1: return 3;    // 0xFF                                255
-  case 2: return 5;    // 0xFFFF                            65535
-  case 3: return 8;    // 0xFFFFFF                       16777215
-  case 4: return 10;   // 0xFFFFFFFF                   4294967295
-  case 5: return 13;   // 0xFFFFFFFFFF              1099511627775
-  case 6: return 15;   // 0xFFFFFFFFFFFF          281474976710655
-  case 7: return 17;   // 0xFFFFFFFFFFFFFF      72057594037927935
-  }
-  return 20;           // 0xFFFFFFFFFFFFFFFF 18446744073709551615
 }
 
 
@@ -8197,6 +8313,20 @@ Item *Item_direct_view_ref::derived_field_transformer_for_having(THD *thd,
 }
 
 
+/*
+  @brief
+    Given an @p item from this select, check if it originates from
+    derived table made from select @p sel. If yes, return the item
+    expression from select @p sel that produces it.
+
+  @note
+    Also check the multiple equality that @p item is a member of.
+
+  @return
+    The item in sel's select list that is the source for @p item.
+    NULL if the item is not found.
+*/
+
 static 
 Item *find_producing_item(Item *item, st_select_lex *sel)
 {
@@ -8246,6 +8376,16 @@ Item *Item_field::derived_field_transformer_for_where(THD *thd, uchar *arg)
       producing_clone->marker|= MARKER_SUBSTITUTION;
     return producing_clone;
   }
+  /*
+    This item doesn't come from the SELECT that we're pushing condition into.
+    This can be due to:
+     - This item refers to a constant expression. Currently we push those
+       down anyway.
+     - This item is inside Item_direct_view_ref object, call it $REF. $REF
+       participates in multiple equality which includes a pushable item $PI.
+       $REF->derived_field_transformer_for_where() will make sure that $PI
+       is pushed down instead.
+  */
   return this;
 }
 
@@ -8277,6 +8417,17 @@ Item *Item_field::grouping_field_transformer_for_where(THD *thd, uchar *arg)
       producing_clone->marker|= MARKER_SUBSTITUTION;
     return producing_clone;
   }
+  /*
+    We get here in two cases:
+    1. This is DEFAULT(field). TODO: Should this be pushed?
+    2. This item doesn't come from the SELECT that we're pushing condition
+     - This item refers to a constant expression. Currently we push those
+       down anyway.
+     - This item is inside Item_direct_view_ref object, call it $REF. $REF
+       participates in multiple equality which includes a pushable item $PI.
+       $REF->derived_field_transformer_for_where() will make sure that $PI
+       is pushed down instead.
+  */
   return this;
 }
 
@@ -8982,7 +9133,7 @@ bool Item_ref::get_date(THD *thd, MYSQL_TIME *ltime, date_mode_t fuzzydate)
 
 bool Item_ref::val_native(THD *thd, Native *to)
 {
-  return val_native_from_item(thd, *ref, to);
+  return val_native_result_from_item(thd, *ref, to);
 }
 
 
@@ -9919,7 +10070,12 @@ bool Item_args::excl_dep_on_grouping_fields(st_select_lex *sel)
     if (args[i]->type() == Item::FUNC_ITEM &&
         ((Item_func *)args[i])->functype() == Item_func::UDF_FUNC)
       return false;
-    if (args[i]->const_item())
+    /*
+      Constant expression doesn't need to be checked.
+      BUT if it still reports to have references to tables, we must check that
+      only allowed columns are referred.
+    */
+    if (args[i]->const_item() && !args[i]->used_tables())
       continue;
     if (!args[i]->excl_dep_on_grouping_fields(sel))
       return false;
@@ -11040,6 +11196,7 @@ bool Item_cache_str::cache_value()
   }
   else
     value_buff.copy();
+  value_buff.mark_as_const();
   return TRUE;
 }
 

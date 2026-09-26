@@ -29,14 +29,14 @@ SET(CONNECT_SOURCES
 ha_connect.cc connect.cc user_connect.cc mycat.cc
 fmdlex.c osutil.c rcmsg.c rcmsg.h
 array.cpp blkfil.cpp colblk.cpp csort.cpp
-filamap.cpp filamdbf.cpp filamfix.cpp filamgz.cpp filamtxt.cpp filter.cpp
+filamap.cpp filamdbf.cpp filamfix.cpp filamgz.cpp filamtxt.cpp filechk.cpp filter.cpp
 json.cpp jsonudf.cpp maputil.cpp myconn.cpp myutil.cpp plgdbutl.cpp plugutil.cpp
 reldef.cpp tabcol.cpp tabdos.cpp tabext.cpp tabfix.cpp tabfmt.cpp tabjson.cpp
 table.cpp tabmul.cpp tabmysql.cpp taboccur.cpp tabpivot.cpp tabsys.cpp tabtbl.cpp
 tabutil.cpp tabvir.cpp tabxcl.cpp valblk.cpp value.cpp xindex.cpp xobject.cpp
 
 array.h blkfil.h block.h catalog.h checklvl.h colblk.h connect.h csort.h
-engmsg.h filamap.h filamdbf.h filamfix.h filamgz.h filamtxt.h
+engmsg.h filamap.h filamdbf.h filamfix.h filamgz.h filamtxt.h filechk.h
 filter.h global.h ha_connect.h inihandl.h json.h jsonudf.h maputil.h msgid.h
 mycat.h myconn.h myutil.h os.h osutil.h plgcnx.h plgdbsem.h preparse.h reldef.h
 resource.h tabcol.h tabdos.h tabext.h tabfix.h tabfmt.h tabjson.h tabmul.h
@@ -58,7 +58,8 @@ endmacro()
 # OS specific C flags, definitions and source files.
 #
 IF(UNIX)
-  MY_CHECK_AND_SET_COMPILER_FLAG("-Wall -Wmissing-declarations")
+  MY_CHECK_AND_SET_COMPILER_FLAG("-Wall")
+  MY_CHECK_AND_SET_COMPILER_FLAG("-Wmissing-declarations")
   if(NOT WITH_WARNINGS)
     DISABLE_WARNING("unused-function")
     DISABLE_WARNING("unused-variable")
@@ -312,9 +313,14 @@ ENDIF(CONNECT_WITH_JDBC)
 OPTION(CONNECT_WITH_ZIP "Compile CONNECT storage engine with ZIP support" ON)
 
 IF(CONNECT_WITH_ZIP)
-  SET(CONNECT_SOURCES ${CONNECT_SOURCES} filamzip.cpp tabzip.cpp unzip.c ioapi.c zip.c
-    filamzip.h tabzip.h ioapi.h unzip.h zip.h)
+  SET(MINIZIP_SOURCES unzip.c ioapi.c zip.c)
+  SET(CONNECT_SOURCES ${CONNECT_SOURCES} ${MINIZIP_SOURCES} filamzip.cpp
+    tabzip.cpp filamzip.h tabzip.h)
   add_definitions(-DZIP_SUPPORT -DNOCRYPT)
+  SET_SOURCE_FILES_PROPERTIES(${MINIZIP_SOURCES} PROPERTIES COMPILE_FLAGS "\
+    $<${have_C__Wmissing_declarations}:-Wno-missing-declarations> \
+    $<${have_C__Wdeclaration_after_statement}:-Wno-declaration-after-statement> \
+  ")
 ENDIF(CONNECT_WITH_ZIP)
 ADD_FEATURE_INFO(CONNECT_ZIP CONNECT_WITH_ZIP "Support for ZIP in the CONNECT storage engine")
 
