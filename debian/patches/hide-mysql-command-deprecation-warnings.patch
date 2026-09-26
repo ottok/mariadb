@@ -18,10 +18,10 @@ Forwarded: not-needed
  1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/mysys/my_init.c b/mysys/my_init.c
-index 3525365..9ec0d61 100644
+index 172a97c..1a248b8 100644
 --- a/mysys/my_init.c
 +++ b/mysys/my_init.c
-@@ -197,7 +197,8 @@ my_bool my_init(void)
+@@ -198,7 +198,8 @@ my_bool my_init(void)
  #endif
        if ((res == 0 || my_readlink(link_name, my_progname, MYF(0)) == 0) &&
             strncmp(link_name + dirname_length(link_name), "mariadb", 7) == 0)
