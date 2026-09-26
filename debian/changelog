@@ -1,3 +1,67 @@
+mariadb (1:11.8.9+ds-0ubuntu0.26.04.1) UNRELEASED; urgency=medium
+
+  * SECURITY UPDATE: New upstream maintenance release 11.8.9 (LP: #2168592)
+    includes several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/11.8/11.8.9
+    and fixes the following CVE tracked security issues, as listed at
+    https://mariadb.com/docs/server/security/cve/community-server
+    - Fixed in upstream 11.8.9 (2026-08-24):
+      - CVE-2026-61081
+      - CVE-2026-60585
+      - CVE-2026-60331
+      - CVE-2026-60747
+      - CVE-2026-47023
+      - CVE-2026-60184
+    - Fixed in upstream 11.8.8 (2026-05-27):
+      - CVE-2026-49261
+      - CVE-2026-48165
+      - CVE-2026-48163
+    - Fixed in upstream 11.8.7 (2026-05-18):
+      - CVE-2026-47064
+      - CVE-2026-44173
+      - CVE-2026-44172
+      - CVE-2026-44171
+      - CVE-2026-44170
+      - CVE-2026-44169
+      - CVE-2026-44168
+    - Fixed in upstream 11.8.6 (2026-02-04):
+      - CVE-2026-3494
+      - CVE-2026-32710
+      - CVE-2026-35549
+      - CVE-2026-34303
+    - Fixed in upstream 11.8.4 (2025-11-06):
+      - CVE-2026-21968
+      - CVE-2025-13699
+  * The vendor CVE list above lists CVE-2026-61081 twice, with different CVSS
+    base scores and publication dates but the same set of fixed releases. It is
+    listed only once here
+  * CVE-2026-44168, CVE-2026-44169, CVE-2026-44171, CVE-2026-44172,
+    CVE-2026-44173, CVE-2026-48163, CVE-2026-48165 and CVE-2026-49261 were
+    already patched in 1:11.8.6-5ubuntu0.1, and CVE-2025-13699 was documented
+    in 1:11.8.5-1. CVE-2026-21968 was fixed in upstream 11.8.4, which was
+    skipped in Debian, and 1:11.8.5-1 documented no CVE fixes, so exactly when
+    that fix entered the archive is not recorded in this changelog
+  * CVE-2026-47064, CVE-2026-44170, CVE-2026-3494, CVE-2026-32710,
+    CVE-2026-35549 and CVE-2026-34303 had not been patched in any earlier
+    revision of this package, so this is the first Debian and Ubuntu release
+    to include fixes for them. These security issues were not known when
+    1:11.8.6-1 was released, hence the note there about the release not
+    including any CVE tracked security fixes.
+  * New upstream version included fixes for these Debian tracked issues:
+    - MDEV-38698 Upgrade did not fix charset and collation for mysql.user,
+      leading to "Illegal mix of collations" errors on upgrades or when trying
+      to restore backups (Closes: #1104533, #1126850, #1137221)
+    - MDEV-39479 Mroonga hangs on invalid index flag (Closes: #1110683)
+    - MDEV-38811 Crash in information_schema.table_constraints when running in
+      'skip-grant-tables' mode (Closes: #1127431, affected Akonadi)
+  * Start new git branch for Ubuntu 26.04 (Resolute Raccoon) maintenance
+  * Update watch file and more to match repacking in Debian unstable and Trixie,
+    so all releases across Debian and Ubuntu of the same MariaDB version have
+    identical configuration for reproducing the exact same repacked upstream
+    tarball
+
+ -- Otto Kekäläinen <otto@debian.org>  Sat, 26 Sep 2026 08:08:08 +0000
+
 mariadb (1:11.8.6-5ubuntu0.1) resolute-security; urgency=medium
 
   * SECURITY UPDATE: wsrep unsafe handling of parameters

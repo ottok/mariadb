@@ -1,18 +1,26 @@
-Description: Update default datadir config to /var/lib/mariadb.
- Use /var/lib/mariadb as the default datadir for Debian/Ubuntu to improve
- co-installability between MySQL and MariaDB servers.
-Author: Lena Voytek <lena@voytek.dev>
+From: Lena Voytek <lena@voytek.dev>
+Date: Sat, 26 Sep 2026 11:52:18 +0800
+Subject: Update default datadir config to /var/lib/mariadb.
+
+Last-Update: 2026-03-24
+
+Use /var/lib/mariadb as the default datadir for Debian/Ubuntu to improve
+co-installability between MySQL and MariaDB servers.
 Last-Update: 2026-03-24
 ---
-This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+ cmake/install_layout.cmake | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/cmake/install_layout.cmake b/cmake/install_layout.cmake
+index 4a418b2..2074cab 100644
 --- a/cmake/install_layout.cmake
 +++ b/cmake/install_layout.cmake
-@@ -192,7 +192,7 @@
+@@ -195,7 +195,7 @@ SET(INSTALL_MYSQLTESTDIR_DEB            "share/mariadb/mariadb-test")
  SET(INSTALL_SQLBENCHDIR_DEB             ".")
  SET(INSTALL_SUPPORTFILESDIR_DEB         "share/mariadb")
  #
 -SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mysql")
 +SET(INSTALL_MYSQLDATADIR_DEB            "/var/lib/mariadb")
  
- SET(INSTALL_RUNDATADIR_DEB              "/run/mysqld")
- SET(INSTALL_UNIX_ADDRDIR_DEB            "${INSTALL_RUNDATADIR_DEB}/mysqld.sock")
+ SET(INSTALL_RUNDIR_DEB                  "/run")
+ SET(INSTALL_UNIX_ADDRDIR_DEB            "${INSTALL_RUNDIR_DEB}/mysqld/mysqld.sock")
