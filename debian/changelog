@@ -1,5 +1,6 @@
-mariadb (1:11.8.9+ds-0ubuntu0.26.04.1) UNRELEASED; urgency=medium
+mariadb (1:11.8.9+ds-0ubuntu0.26.04.1) resolute-security; urgency=medium
 
+  [ Otto Kekäläinen ]
   * SECURITY UPDATE: New upstream maintenance release 11.8.9 (LP: #2168592)
     includes several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/11.8/11.8.9
@@ -29,8 +30,26 @@ mariadb (1:11.8.9+ds-0ubuntu0.26.04.1) UNRELEASED; urgency=medium
     so all releases across Debian and Ubuntu of the same MariaDB version have
     identical configuration for reproducing the exact same repacked upstream
     tarball
+  * Include new upstream test file pam_mariadb_mtr.so
+  * Update configuration traces to match changes in system variables
+    - new variable 'innodb-buffer-pool-in-core-dump' (default: FALSE)
+    - new default value 0->8796093022208 in 'innodb-buffer-pool-size-max'
+    - new variable 'innodb-index-shrink' (default TRUE)
+    - multiple option description has been re-flowed for a different kind of
+      line wrapping without any changes in values
+  * Skip tests main.mysql_client_test* as they require Internet access
+  * Add Lintian override for new upstream version test file
+  * Extend test skip lists after witnessing frequent sporadic failures on armhf
+  * Backport upstream patch to fix CONC-821 (Closes: #1139473, #1141671,
+    #1144671)
 
- -- Otto Kekäläinen <otto@debian.org>  Sat, 26 Sep 2026 08:08:08 +0000
+  [ Daniel Black ]
+  * MDEV-34902: debian-start erroneously reports issues
+
+  [ Michael Widenius ]
+  * MDEV-32745 Add a simple MySQL to MariaDB upgrade helper (Debian part)
+
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 28 Sep 2026 01:01:01 +0000
 
 mariadb (1:11.8.6-5ubuntu0.1) resolute-security; urgency=medium
 
