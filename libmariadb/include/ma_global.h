@@ -1,15 +1,15 @@
 /* Copyright (C) 2000 MySQL AB & MySQL Finland AB & TCX DataKonsult AB
-   
+
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
    License as published by the Free Software Foundation; either
    version 2 of the License, or (at your option) any later version.
-   
+
    This library is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
    Library General Public License for more details.
-   
+
    You should have received a copy of the GNU Library General Public
    License along with this library; if not, write to the Free
    Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
@@ -30,7 +30,7 @@
 #define strdup _strdup
 #define sleep(x) Sleep(1000*(x))
 #define strerror_r(errno,buf,len) strerror_s(buf,len,errno)
-#define STDCALL __stdcall 
+#define STDCALL __stdcall
 #endif
 
 #include <ma_config.h>
@@ -386,7 +386,10 @@ typedef SOCKET_SIZE_TYPE size_socket;
 #define UNSINT32		/* unsigned int32 */
 
 	/* General constants */
+#define MAX_PACKET_LENGTH 0xFFFFFF
 #define SC_MAXWIDTH	256	/* Max width of screen (for error messages) */
+#define MAX_ZEROFILL_LEN 255
+#define MAX_DECIMAL_LEN 121
 #define FN_LEN		256	/* Max file name len */
 #define FN_HEADLEN	253	/* Max length of filepart of file name */
 #define FN_EXTLEN	20	/* Max length of extension (part of FN_LEN) */
@@ -557,7 +560,14 @@ typedef long my_ptrdiff_t;
 /* Size to make addressable obj. */
 #define ALIGN_PTR(A, t) ((t*) MY_ALIGN((A),sizeof(t)))
 			 /* Offset of filed f in structure t */
-#define OFFSET(t, f)	((size_t)(char *)&((t *)0)->f)
+#if defined(__builtin_offsetof)
+#define OFFSET(t, f) __builtin_offsetof(t, f)
+#elif defined(offsetof)
+#define OFFSET(t, f) offsetof(t, f)
+#else
+#define OFFSET(t, f) ((size_t)&(((t *)0)->f))
+#endif
+
 #define ADD_TO_PTR(ptr,size,type) (type) ((unsigned char*) (ptr)+size)
 #define PTR_BYTE_DIFF(A,B) (my_ptrdiff_t) ((unsigned char*) (A) - (unsigned char*) (B))
 
@@ -663,7 +673,7 @@ typedef off_t os_off_t;
 
 #if defined(_WIN32)
 #define socket_errno	WSAGetLastError()
-#define SOCKET_EINTR	WSAEINTR 
+#define SOCKET_EINTR	WSAEINTR
 #define SOCKET_EAGAIN	WSAEWOULDBLOCK
 #define SOCKET_ENFILE	ENFILE
 #define SOCKET_EMFILE	EMFILE
@@ -685,7 +695,7 @@ typedef unsigned long	size_s; /* Size of strings (In string-funcs) */
 typedef int		myf;	/* Type of MyFlags in my_funcs */
 typedef char		my_bool; /* Small bool */
 typedef unsigned long long my_ulonglong;
-#if !defined(bool) && !defined(bool_defined) && (!defined(HAVE_BOOL) || !defined(__cplusplus)) && (__STDC_VERSION__ < 202300L)
+#if !defined(bool) && !defined(bool_defined) && !defined(HAVE_BOOL) && !defined(__cplusplus) && (__STDC_VERSION__ < 202300L)
 typedef char		bool;	/* Ordinary boolean values 0 1 */
 #endif
 	/* Macros for converting *constants* to the right type */
@@ -766,7 +776,7 @@ typedef char		bool;	/* Ordinary boolean values 0 1 */
 #else
 /*
    ATTENTION !
-   
+
     Please, note, uint3korr reads 4 bytes (not 3) !
     It means, that you have to provide enough allocated space !
 */
@@ -786,7 +796,9 @@ typedef char		bool;	/* Ordinary boolean values 0 1 */
                          (((ulonglong) ((uchar) (A)[5])) << 40))
 #define uint8korr(A)	(*((ulonglong *) (A)))
 #define sint8korr(A)	(*((longlong *) (A)))
-#define int2store(T,A)	*((uint16*) (T))= (uint16) (A)
+#define int2store(T,A)  do { uint tmp= (uint) (A) ;\
+                             *((uchar*) (T))=  (uchar)(tmp); \
+                             *((uchar*) (T)+1)=(uchar)((tmp >> 8)); } while(0)
 #define int3store(T,A)  do { *(T)=  (uchar) ((A) & 0xff);\
                             *(T+1)=(uchar) (((uint) (A) >> 8) & 0xff);\
                             *(T+2)=(uchar) (((A) >> 16)  & 0xff); } while (0)
@@ -838,10 +850,7 @@ do { doubleget_union _tmp; \
 				  (((uint32) (uchar) (A)[2]) << 16) |\
 				  (((uint32) (uchar) (A)[1]) << 8) | \
 				  ((uint32) (uchar) (A)[0])))
-#define sint4korr(A)	(int32) (((int32) ((uchar) (A)[0])) +\
-				(((int32) ((uchar) (A)[1]) << 8)) +\
-				(((int32) ((uchar) (A)[2]) << 16)) +\
-				(((int32) ((int16) (A)[3]) << 24)))
+#define sint4korr(A)	(int32) uint4korr(A)
 #define sint8korr(A)	(longlong) uint8korr(A)
 #define uint2korr(A)	(uint16) (((uint16) ((uchar) (A)[0])) +\
 				  ((uint16) ((uchar) (A)[1]) << 8))
@@ -1078,9 +1087,9 @@ typedef unsigned long long intptr;
 #endif
 
 #ifdef _WIN32
-#define IF_WIN(A,B) A 
+#define IF_WIN(A,B) A
 #else
-#define IF_WIN(A,B) B 
+#define IF_WIN(A,B) B
 #endif
 
 #if defined(SOLARIS) || defined(__sun)

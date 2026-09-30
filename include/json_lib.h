@@ -2,6 +2,7 @@
 #define JSON_LIB_INCLUDED
 
 #include <my_sys.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +30,7 @@ enum json_errors {
   JE_ESCAPING= -6,     /* Error in the escaping. */
 
   JE_DEPTH= -7,        /* The limit on the JSON depth was overrun. */
+  JE_KILLED= -8,       /* Killed during processing */
 };
 
 
@@ -112,6 +114,7 @@ typedef struct st_json_path_t
 } json_path_t;
 
 
+__attribute__((nonnull, warn_unused_result))
 int json_path_setup(json_path_t *p,
                     CHARSET_INFO *i_cs, const uchar *str, const uchar *end);
 
@@ -228,7 +231,7 @@ typedef struct st_json_engine_t
 
   int stack[JSON_DEPTH_LIMIT]; /* Keeps the stack of nested JSON structures. */
   int stack_p;                 /* The 'stack' pointer. */
-  volatile uchar *killed_ptr;
+  volatile const uint32_t *killed_ptr;
 } json_engine_t;
 
 
@@ -434,6 +437,8 @@ int json_path_compare(const json_path_t *a, const json_path_t *b,
                       enum json_value_types vt, const int* array_size_counter);
 
 int json_valid(const char *js, size_t js_len, CHARSET_INFO *cs);
+int json_valid_engine(json_engine_t *je, const char *js, size_t js_len,
+                      CHARSET_INFO *cs);
 
 int json_locate_key(const char *js, const char *js_end,
                     const char *kname,
@@ -442,6 +447,8 @@ int json_locate_key(const char *js, const char *js_end,
 
 int json_normalize(DYNAMIC_STRING *result,
                    const char *s, size_t size, CHARSET_INFO *cs);
+int json_normalize_engine(json_engine_t *je, DYNAMIC_STRING *result,
+                          const char *s, size_t size, CHARSET_INFO *cs);
 
 int json_skip_array_and_count(json_engine_t *j, int* n_item);
 
