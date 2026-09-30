@@ -236,6 +236,8 @@ mariadb (1:10.11.7-1) unstable; urgency=medium
   [ Otto Kekäläinen ]
   * New upstream version 10.11.7. Includes fixes for several regressions
     as noted at https://mariadb.com/kb/en/mariadb-10-11-7-release-notes/
+    as well as security issues:
+    - CVE-2023-52968
   * Add missing ${misc:Depends} to Depends for mariadb-server-10.5
   * Re-export upstream signing key without extra signatures
   * Remove field Priority on binary package mariadb-server-10.5 that duplicates
