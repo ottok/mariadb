@@ -1,31 +1,46 @@
-mariadb (1:10.11.18-0ubuntu0.24.04.1) noble; urgency=medium
+mariadb (1:10.11.19-0ubuntu0) noble; urgency=medium
 
   [ Otto Kekäläinen ]
-  * SECURITY UPDATE: New upstream maintenance release 10.11.18 (LP: #2158958)
+  * SECURITY UPDATE: New upstream maintenance release 10.11.19 (LP: #2168592)
     includes several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.11/10.11.19
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-61081
+    - CVE-2026-60585
+    - CVE-2026-60331
+    - CVE-2026-60747
+    - CVE-2026-47023
+    - CVE-2026-60184
+  * Previous upstream release 10.11.18 included several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.11/10.11.18
     and fixes for the following CVE tracked security issues:
     - CVE-2026-49261
     - CVE-2026-48165
     - CVE-2026-48163
-  * Previous upstream maintenance 10.11.17 included several fixes as listed at
+  * Previous upstream release 10.11.17 included several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.11/10.11.17
     and fixes for the following CVE tracked security issues:
+    - CVE-2026-47064
     - CVE-2026-44173
     - CVE-2026-44172
     - CVE-2026-44171
     - CVE-2026-44170
     - CVE-2026-44168
-  * Previous upstream maintenance 10.11.16 included several fixes as listed at
+  * Previous upstream release 10.11.16 included several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.11/10.11.16
     and fixes for the following CVE tracked security issues:
     - CVE-2026-3494
     - CVE-2026-34303
-  * Previous upstream maintenance 10.11.15 included several fixes as listed at
+  * Previous upstream release 10.11.15 included several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.11/10.11.15
     and fixes for the following CVE tracked security issues:
     - CVE-2026-21968
     - CVE-2025-13699
+  * The vendor CVE list at
+    https://mariadb.com/docs/server/security/cve/community-server
+    lists CVE-2026-61081 twice, with different CVSS base scores and
+    publication dates but the same set of fixed releases. It is listed only
+    once above.
   * New upstream versions included fixes for these Debian tracked issues:
     - MDEV-38698 Upgrade did not fix charset and collation for mysql.user,
       leading to "Illegal mix of collations" errors on upgrades or when trying
