@@ -43,12 +43,13 @@ mariadb-10.6 (1:10.6.28-0ubuntu0) jammy; urgency=medium
   * Salsa CI: Disable running `gbp setup-gitattributes`
   * Salsa CI: Disable the uscan job as it is incompatible with MariaDB
   * Use archive.mariadb.org as official watch source
+  * Add Lintian override for new upstream version test file
   * Note! This was the last MariaDB Community Server release of the 10.6 series.
     Users are advised to contact their support provider for extended support or
     to upgrade to a newer MariaDB major version. See maintenance policy details
     at https://mariadb.org/about/#maintenance-policy
 
- -- Otto Kekäläinen <otto@debian.org>  Wed, 01 Jul 2026 18:18:18 +0000
+ -- Otto Kekäläinen <otto@debian.org>  Thu, 01 Oct 2026 13:13:13 +0000
 
 mariadb-10.6 (1:10.6.23-0ubuntu0.22.04.1) jammy; urgency=medium
 
