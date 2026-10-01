@@ -532,23 +532,19 @@ TRANSACTIONAL_TARGET void trx_free_at_shutdown(trx_t *trx)
 }
 
 
-/**
-  Disconnect a prepared transaction from MySQL
-  @param[in,out] trx transaction
-*/
-void trx_disconnect_prepared(trx_t *trx)
+void trx_t::disconnect_prepared() noexcept
 {
-  ut_ad(trx_state_eq(trx, TRX_STATE_PREPARED));
-  ut_ad(trx->mysql_thd);
-  ut_ad(!trx->mysql_log_file_name);
-  trx->read_view.close();
-  trx_sys.trx_list.freeze();
-  trx->is_recovered= true;
-  trx->mysql_thd= NULL;
-  trx_sys.trx_list.unfreeze();
+  ut_ad(trx_state_eq(this, TRX_STATE_PREPARED));
+  ut_ad(mysql_thd);
+  ut_ad(!mysql_log_file_name);
+  read_view.close();
+  mutex_lock();
+  is_recovered= true;
+  mysql_thd= nullptr;
+  mutex_unlock();
   /* todo/fixme: suggest to do it at innodb prepare */
-  trx->will_lock= false;
-  trx_sys.rw_trx_hash.put_pins(trx);
+  will_lock= false;
+  trx_sys.rw_trx_hash.put_pins(this);
 }
 
 MY_ATTRIBUTE((nonnull, warn_unused_result))

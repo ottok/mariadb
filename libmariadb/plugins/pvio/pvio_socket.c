@@ -345,7 +345,7 @@ ssize_t pvio_socket_read(MARIADB_PVIO *pvio, uchar *buffer, size_t length)
 */   
 ssize_t pvio_socket_async_read(MARIADB_PVIO *pvio, uchar *buffer, size_t length)
 {
-  ssize_t r= -1;
+  ssize_t r;
 #ifndef _WIN32
   int read_flags= MSG_DONTWAIT;
 #endif
@@ -418,7 +418,7 @@ static ssize_t ma_recv(my_socket socket, uchar *buffer, size_t length, int flags
 */   
 ssize_t pvio_socket_async_write(MARIADB_PVIO *pvio, const uchar *buffer, size_t length)
 {
-  ssize_t r= -1;
+  ssize_t r;
   struct st_pvio_socket *csock= NULL;
 #ifndef _WIN32
   int write_flags= MSG_DONTWAIT;
@@ -522,6 +522,9 @@ int pvio_socket_wait_io_or_timeout(MARIADB_PVIO *pvio, my_bool is_read, int time
   csock= (struct st_pvio_socket *)pvio->data;
   {
 #ifndef _WIN32
+    struct timespec start;
+    int remaining;
+
     memset(&p_fd, 0, sizeof(p_fd));
     p_fd.fd= csock->socket;
     p_fd.events= (is_read) ? POLLIN : POLLOUT;
@@ -529,12 +532,41 @@ int pvio_socket_wait_io_or_timeout(MARIADB_PVIO *pvio, my_bool is_read, int time
     if (!timeout)
       timeout= -1;
 
-    do {
-      rc= poll(&p_fd, 1, timeout);
-    } while (rc == -1 && errno == EINTR);
+    remaining= timeout;
+
+    if (timeout > 0)
+      clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for (;;) {
+      rc= poll(&p_fd, 1, remaining);
+
+      if (rc != -1 || errno != EINTR)
+        break;
+
+      if (timeout > 0)
+      {
+        struct timespec now;
+        long long elapsed_ms;
+
+        clock_gettime(CLOCK_MONOTONIC, &now);
+
+        /* Calculate elapsed time utilizing a long long to safely avoid int wrapping */
+        elapsed_ms= (now.tv_sec - start.tv_sec) * 1000LL + 
+                    (now.tv_nsec - start.tv_nsec) / 1000000LL;
+
+        remaining= timeout - (int)elapsed_ms;
+
+        if (remaining <= 0)
+        {
+          rc= 0; /* Budget exhausted, force a timeout return */
+          break;
+        }
+      }
+    }
 
     if (rc == 0)
       errno= ETIMEDOUT;
+
 #else
     FD_ZERO(&fds);
     FD_ZERO(&exc_fds);

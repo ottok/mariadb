@@ -621,7 +621,7 @@ static void srv_init()
 			 &page_zip_stat_per_index_mutex, nullptr);
 
 	/* Initialize some INFORMATION SCHEMA internal structures */
-	trx_i_s_cache_init(trx_i_s_cache);
+	trx_i_s_cache_init();
 }
 
 /*********************************************************************//**
@@ -638,7 +638,7 @@ srv_free(void)
 	mysql_mutex_destroy(&page_zip_stat_per_index_mutex);
 	mysql_mutex_destroy(&srv_sys.tasks_mutex);
 
-	trx_i_s_cache_free(trx_i_s_cache);
+	trx_i_s_cache_free();
 	srv_thread_pool_end();
 }
 

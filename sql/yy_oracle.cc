@@ -3147,136 +3147,136 @@ static const yytype_int16 yyrline[] =
    15567, 15571, 15572, 15573, 15577, 15585, 15586, 15587, 15588, 15592,
    15601, 15609, 15617, 15625, 15626, 15634, 15635, 15639, 15640, 15645,
    15654, 15655, 15663, 15664, 15672, 15673, 15674, 15678, 15689, 15718,
-   15727, 15727, 15729, 15739, 15740, 15741, 15742, 15743, 15744, 15745,
-   15746, 15747, 15748, 15749, 15750, 15755, 15756, 15757, 15758, 15759,
-   15760, 15761, 15762, 15763, 15764, 15765, 15766, 15767, 15771, 15772,
-   15773, 15774, 15775, 15776, 15777, 15778, 15779, 15780, 15781, 15782,
-   15783, 15787, 15788, 15789, 15790, 15791, 15792, 15793, 15794, 15795,
-   15796, 15797, 15798, 15799, 15803, 15804, 15805, 15806, 15807, 15808,
-   15809, 15810, 15823, 15824, 15825, 15826, 15827, 15828, 15829, 15830,
-   15831, 15832, 15833, 15834, 15835, 15836, 15837, 15838, 15839, 15840,
-   15841, 15842, 15843, 15844, 15845, 15846, 15847, 15848, 15849, 15850,
-   15851, 15852, 15853, 15854, 15855, 15856, 15857, 15858, 15859, 15860,
-   15861, 15862, 15863, 15864, 15865, 15866, 15867, 15868, 15869, 15870,
-   15871, 15872, 15873, 15874, 15875, 15916, 15917, 15918, 15919, 15920,
-   15921, 15932, 15933, 15934, 15935, 15936, 15937, 15938, 15939, 15940,
-   15941, 15945, 15946, 15947, 15951, 15952, 15953, 15962, 15963, 15964,
-   15965, 15966, 15967, 15968, 15969, 15970, 15971, 15972, 15973, 15974,
-   15975, 15976, 15977, 15978, 15979, 15980, 15981, 15982, 15983, 15984,
-   15985, 15986, 15987, 15992, 15997, 15998, 15999, 16000, 16001, 16002,
-   16003, 16004, 16005, 16006, 16007, 16008, 16009, 16010, 16011, 16012,
-   16013, 16014, 16015, 16016, 16017, 16018, 16019, 16020, 16021, 16022,
-   16023, 16024, 16025, 16026, 16027, 16028, 16029, 16030, 16031, 16032,
-   16033, 16034, 16035, 16036, 16037, 16038, 16043, 16044, 16045, 16046,
-   16047, 16048, 16049, 16050, 16051, 16052, 16053, 16054, 16055, 16056,
-   16057, 16058, 16059, 16060, 16061, 16062, 16063, 16064, 16065, 16066,
-   16067, 16068, 16069, 16070, 16071, 16072, 16073, 16074, 16075, 16076,
-   16077, 16078, 16079, 16080, 16081, 16082, 16083, 16084, 16085, 16086,
-   16087, 16088, 16089, 16090, 16091, 16092, 16093, 16094, 16095, 16096,
-   16097, 16098, 16099, 16100, 16101, 16102, 16103, 16104, 16105, 16106,
-   16107, 16108, 16109, 16110, 16111, 16112, 16113, 16114, 16115, 16116,
-   16117, 16118, 16119, 16120, 16121, 16122, 16123, 16124, 16125, 16126,
-   16127, 16128, 16129, 16130, 16131, 16132, 16133, 16134, 16135, 16136,
-   16137, 16138, 16139, 16140, 16141, 16142, 16143, 16144, 16145, 16146,
-   16147, 16148, 16149, 16150, 16151, 16152, 16153, 16157, 16158, 16159,
-   16160, 16161, 16162, 16163, 16164, 16165, 16166, 16167, 16168, 16169,
-   16170, 16171, 16172, 16173, 16174, 16175, 16176, 16177, 16178, 16179,
-   16180, 16181, 16182, 16183, 16184, 16185, 16186, 16187, 16188, 16189,
-   16190, 16191, 16192, 16193, 16194, 16195, 16196, 16197, 16198, 16199,
-   16200, 16201, 16202, 16203, 16204, 16205, 16206, 16207, 16208, 16209,
-   16210, 16211, 16212, 16213, 16214, 16215, 16216, 16217, 16218, 16219,
-   16220, 16221, 16222, 16223, 16224, 16225, 16226, 16227, 16228, 16229,
-   16230, 16231, 16232, 16233, 16234, 16235, 16236, 16237, 16238, 16239,
-   16240, 16241, 16242, 16243, 16244, 16245, 16246, 16247, 16248, 16249,
-   16250, 16251, 16252, 16253, 16254, 16255, 16256, 16257, 16258, 16259,
-   16260, 16261, 16262, 16263, 16264, 16265, 16266, 16267, 16268, 16269,
-   16270, 16271, 16272, 16273, 16274, 16275, 16276, 16277, 16278, 16279,
-   16280, 16281, 16282, 16283, 16284, 16285, 16286, 16287, 16288, 16289,
-   16290, 16291, 16292, 16293, 16294, 16295, 16296, 16297, 16298, 16299,
-   16300, 16301, 16302, 16306, 16307, 16313, 16314, 16315, 16316, 16317,
-   16318, 16319, 16320, 16321, 16322, 16323, 16324, 16325, 16326, 16327,
-   16331, 16332, 16333, 16334, 16338, 16339, 16340, 16341, 16342, 16343,
-   16348, 16349, 16350, 16351, 16352, 16353, 16354, 16355, 16356, 16357,
-   16358, 16359, 16360, 16361, 16362, 16363, 16364, 16365, 16366, 16367,
-   16368, 16369, 16370, 16371, 16372, 16373, 16374, 16375, 16376, 16377,
-   16378, 16379, 16380, 16381, 16382, 16383, 16384, 16385, 16386, 16387,
-   16388, 16389, 16390, 16391, 16392, 16393, 16394, 16395, 16396, 16397,
-   16398, 16399, 16400, 16401, 16402, 16403, 16404, 16405, 16406, 16407,
-   16408, 16409, 16410, 16411, 16412, 16413, 16414, 16415, 16416, 16417,
-   16418, 16419, 16420, 16421, 16422, 16423, 16424, 16425, 16426, 16427,
-   16428, 16429, 16430, 16431, 16432, 16433, 16434, 16435, 16436, 16437,
-   16438, 16439, 16440, 16441, 16442, 16443, 16444, 16445, 16446, 16447,
-   16448, 16449, 16450, 16451, 16452, 16453, 16454, 16455, 16456, 16457,
-   16458, 16459, 16460, 16461, 16462, 16463, 16464, 16465, 16466, 16467,
-   16469, 16471, 16472, 16473, 16474, 16475, 16476, 16477, 16478, 16479,
-   16480, 16481, 16482, 16483, 16484, 16485, 16486, 16487, 16488, 16489,
-   16490, 16491, 16492, 16493, 16494, 16495, 16496, 16497, 16498, 16499,
-   16500, 16501, 16502, 16503, 16504, 16505, 16506, 16507, 16508, 16509,
-   16510, 16511, 16512, 16513, 16514, 16515, 16516, 16517, 16518, 16519,
-   16520, 16521, 16522, 16523, 16524, 16525, 16526, 16527, 16528, 16529,
-   16530, 16531, 16532, 16533, 16534, 16535, 16536, 16537, 16538, 16539,
-   16540, 16541, 16542, 16543, 16544, 16545, 16546, 16547, 16548, 16549,
-   16550, 16551, 16552, 16553, 16554, 16555, 16556, 16557, 16558, 16559,
-   16560, 16561, 16562, 16563, 16564, 16565, 16566, 16567, 16568, 16569,
-   16570, 16571, 16572, 16573, 16574, 16575, 16576, 16577, 16578, 16579,
-   16580, 16581, 16582, 16583, 16584, 16585, 16597, 16596, 16609, 16610,
-   16612, 16611, 16623, 16622, 16629, 16627, 16647, 16648, 16653, 16654,
-   16656, 16655, 16669, 16670, 16676, 16675, 16680, 16684, 16685, 16686,
-   16690, 16691, 16692, 16693, 16697, 16698, 16699, 16700, 16709, 16708,
-   16722, 16721, 16736, 16735, 16753, 16752, 16766, 16765, 16779, 16778,
-   16794, 16793, 16807, 16806, 16820, 16819, 16832, 16831, 16843, 16842,
-   16854, 16853, 16865, 16864, 16875, 16893, 16904, 16926, 16948, 16964,
-   16976, 16975, 16989, 16988, 17000, 16999, 17013, 17014, 17015, 17016,
-   17020, 17039, 17057, 17058, 17062, 17063, 17064, 17065, 17070, 17075,
-   17080, 17091, 17092, 17093, 17099, 17105, 17117, 17116, 17130, 17131,
-   17137, 17146, 17147, 17151, 17152, 17156, 17175, 17176, 17177, 17182,
-   17183, 17188, 17187, 17205, 17204, 17216, 17225, 17235, 17234, 17277,
-   17278, 17282, 17283, 17287, 17288, 17289, 17290, 17292, 17291, 17304,
-   17305, 17306, 17307, 17308, 17314, 17319, 17324, 17329, 17333, 17338,
-   17347, 17349, 17354, 17359, 17365, 17371, 17376, 17388, 17389, 17393,
-   17394, 17398, 17403, 17411, 17421, 17440, 17443, 17445, 17449, 17450,
-   17457, 17459, 17463, 17468, 17475, 17479, 17488, 17495, 17496, 17497,
-   17498, 17502, 17503, 17504, 17505, 17506, 17507, 17508, 17509, 17510,
-   17511, 17512, 17513, 17514, 17515, 17516, 17517, 17518, 17519, 17520,
-   17521, 17522, 17523, 17524, 17525, 17526, 17527, 17528, 17529, 17530,
-   17531, 17532, 17533, 17534, 17535, 17536, 17537, 17538, 17539, 17540,
-   17541, 17542, 17543, 17547, 17548, 17552, 17553, 17557, 17564, 17571,
-   17581, 17590, 17596, 17603, 17611, 17616, 17624, 17629, 17637, 17642,
-   17649, 17649, 17650, 17650, 17653, 17659, 17665, 17670, 17677, 17683,
-   17690, 17699, 17703, 17709, 17717, 17719, 17723, 17727, 17731, 17738,
-   17743, 17748, 17753, 17758, 17766, 17767, 17771, 17772, 17777, 17778,
-   17782, 17783, 17787, 17788, 17792, 17793, 17798, 17797, 17807, 17816,
-   17817, 17821, 17822, 17827, 17828, 17829, 17834, 17835, 17836, 17840,
-   17852, 17861, 17867, 17876, 17885, 17898, 17900, 17902, 17910, 17911,
-   17912, 17916, 17917, 17923, 17924, 17925, 17926, 17927, 17928, 17929,
-   17939, 17940, 17945, 17958, 17972, 17973, 17974, 17978, 17979, 17983,
-   17984, 17989, 17990, 17994, 18000, 18009, 18009, 18023, 18024, 18025,
-   18026, 18036, 18038, 18044, 18050, 18060, 18069, 18075, 18080, 18084,
-   18058, 18133, 18133, 18149, 18153, 18157, 18161, 18165, 18169, 18177,
-   18178, 18194, 18201, 18208, 18221, 18222, 18223, 18227, 18228, 18229,
-   18233, 18234, 18239, 18241, 18240, 18246, 18247, 18251, 18256, 18263,
-   18268, 18277, 18283, 18694, 18695, 18699, 18701, 18700, 18714, 18713,
-   18726, 18725, 18739, 18743, 18747, 18752, 18753, 18759, 18760, 18761,
-   18762, 18763, 18764, 18765, 18766, 18770, 18771, 18772, 18773, 18774,
-   18775, 18776, 18777, 18781, 18782, 18783, 18788, 18792, 18801, 18800,
-   18813, 18819, 18823, 18833, 18842, 18843, 18844, 18848, 18849, 18850,
-   18854, 18860, 18866, 18872, 18878, 18884, 18894, 18894, 18906, 18912,
-   18913, 18914, 18915, 18916, 18917, 18918, 18919, 18923, 18924, 18932,
-   18933, 18939, 18938, 18955, 18954, 18973, 18972, 18996, 18997, 19001,
-   19010, 19011, 19015, 19016, 19021, 19020, 19035, 19043, 19044, 19048,
-   19049, 19054, 19055, 19060, 19061, 19065, 19066, 19070, 19074, 19078,
-   19084, 19074, 19093, 19095, 19100, 19101, 19105, 19106, 19110, 19110,
-   19116, 19122, 19130, 19131, 19132, 19138, 19139, 19145, 19146, 19152,
-   19163, 19162, 19190, 19189, 19215, 19224, 19233, 19239, 19238, 19258,
-   19257, 19277, 19281, 19282, 19286, 19287, 19291, 19298, 19308, 19316,
-   19327, 19332, 19337, 19342, 19352, 19351, 19366, 19374, 19365, 19388,
-   19393, 19398, 19403, 19411, 19424, 19423, 19434, 19432, 19448, 19446,
-   19460, 19469, 19467, 19489, 19503, 19508, 19487, 19521, 19525, 19530,
-   19529, 19538, 19542, 19543, 19550, 19551, 19558, 19559, 19563, 19564,
-   19571, 19582, 19581, 19600, 19601, 19602, 19603, 19604, 19605, 19609,
-   19610, 19611, 19612, 19613, 19614, 19615, 19616, 19617, 19618, 19619,
-   19623, 19624, 19625, 19626, 19633, 19631, 19647, 19651, 19645, 19667,
-   19668, 19673, 19672, 19687, 19693, 19686, 19710, 19708
+   15726, 15726, 15728, 15738, 15739, 15740, 15741, 15742, 15743, 15744,
+   15745, 15746, 15747, 15748, 15749, 15754, 15755, 15756, 15757, 15758,
+   15759, 15760, 15761, 15762, 15763, 15764, 15765, 15766, 15770, 15771,
+   15772, 15773, 15774, 15775, 15776, 15777, 15778, 15779, 15780, 15781,
+   15782, 15786, 15787, 15788, 15789, 15790, 15791, 15792, 15793, 15794,
+   15795, 15796, 15797, 15798, 15802, 15803, 15804, 15805, 15806, 15807,
+   15808, 15809, 15822, 15823, 15824, 15825, 15826, 15827, 15828, 15829,
+   15830, 15831, 15832, 15833, 15834, 15835, 15836, 15837, 15838, 15839,
+   15840, 15841, 15842, 15843, 15844, 15845, 15846, 15847, 15848, 15849,
+   15850, 15851, 15852, 15853, 15854, 15855, 15856, 15857, 15858, 15859,
+   15860, 15861, 15862, 15863, 15864, 15865, 15866, 15867, 15868, 15869,
+   15870, 15871, 15872, 15873, 15874, 15915, 15916, 15917, 15918, 15919,
+   15920, 15931, 15932, 15933, 15934, 15935, 15936, 15937, 15938, 15939,
+   15940, 15944, 15945, 15946, 15950, 15951, 15952, 15961, 15962, 15963,
+   15964, 15965, 15966, 15967, 15968, 15969, 15970, 15971, 15972, 15973,
+   15974, 15975, 15976, 15977, 15978, 15979, 15980, 15981, 15982, 15983,
+   15984, 15985, 15986, 15991, 15996, 15997, 15998, 15999, 16000, 16001,
+   16002, 16003, 16004, 16005, 16006, 16007, 16008, 16009, 16010, 16011,
+   16012, 16013, 16014, 16015, 16016, 16017, 16018, 16019, 16020, 16021,
+   16022, 16023, 16024, 16025, 16026, 16027, 16028, 16029, 16030, 16031,
+   16032, 16033, 16034, 16035, 16036, 16037, 16042, 16043, 16044, 16045,
+   16046, 16047, 16048, 16049, 16050, 16051, 16052, 16053, 16054, 16055,
+   16056, 16057, 16058, 16059, 16060, 16061, 16062, 16063, 16064, 16065,
+   16066, 16067, 16068, 16069, 16070, 16071, 16072, 16073, 16074, 16075,
+   16076, 16077, 16078, 16079, 16080, 16081, 16082, 16083, 16084, 16085,
+   16086, 16087, 16088, 16089, 16090, 16091, 16092, 16093, 16094, 16095,
+   16096, 16097, 16098, 16099, 16100, 16101, 16102, 16103, 16104, 16105,
+   16106, 16107, 16108, 16109, 16110, 16111, 16112, 16113, 16114, 16115,
+   16116, 16117, 16118, 16119, 16120, 16121, 16122, 16123, 16124, 16125,
+   16126, 16127, 16128, 16129, 16130, 16131, 16132, 16133, 16134, 16135,
+   16136, 16137, 16138, 16139, 16140, 16141, 16142, 16143, 16144, 16145,
+   16146, 16147, 16148, 16149, 16150, 16151, 16152, 16156, 16157, 16158,
+   16159, 16160, 16161, 16162, 16163, 16164, 16165, 16166, 16167, 16168,
+   16169, 16170, 16171, 16172, 16173, 16174, 16175, 16176, 16177, 16178,
+   16179, 16180, 16181, 16182, 16183, 16184, 16185, 16186, 16187, 16188,
+   16189, 16190, 16191, 16192, 16193, 16194, 16195, 16196, 16197, 16198,
+   16199, 16200, 16201, 16202, 16203, 16204, 16205, 16206, 16207, 16208,
+   16209, 16210, 16211, 16212, 16213, 16214, 16215, 16216, 16217, 16218,
+   16219, 16220, 16221, 16222, 16223, 16224, 16225, 16226, 16227, 16228,
+   16229, 16230, 16231, 16232, 16233, 16234, 16235, 16236, 16237, 16238,
+   16239, 16240, 16241, 16242, 16243, 16244, 16245, 16246, 16247, 16248,
+   16249, 16250, 16251, 16252, 16253, 16254, 16255, 16256, 16257, 16258,
+   16259, 16260, 16261, 16262, 16263, 16264, 16265, 16266, 16267, 16268,
+   16269, 16270, 16271, 16272, 16273, 16274, 16275, 16276, 16277, 16278,
+   16279, 16280, 16281, 16282, 16283, 16284, 16285, 16286, 16287, 16288,
+   16289, 16290, 16291, 16292, 16293, 16294, 16295, 16296, 16297, 16298,
+   16299, 16300, 16301, 16305, 16306, 16312, 16313, 16314, 16315, 16316,
+   16317, 16318, 16319, 16320, 16321, 16322, 16323, 16324, 16325, 16326,
+   16330, 16331, 16332, 16333, 16337, 16338, 16339, 16340, 16341, 16342,
+   16347, 16348, 16349, 16350, 16351, 16352, 16353, 16354, 16355, 16356,
+   16357, 16358, 16359, 16360, 16361, 16362, 16363, 16364, 16365, 16366,
+   16367, 16368, 16369, 16370, 16371, 16372, 16373, 16374, 16375, 16376,
+   16377, 16378, 16379, 16380, 16381, 16382, 16383, 16384, 16385, 16386,
+   16387, 16388, 16389, 16390, 16391, 16392, 16393, 16394, 16395, 16396,
+   16397, 16398, 16399, 16400, 16401, 16402, 16403, 16404, 16405, 16406,
+   16407, 16408, 16409, 16410, 16411, 16412, 16413, 16414, 16415, 16416,
+   16417, 16418, 16419, 16420, 16421, 16422, 16423, 16424, 16425, 16426,
+   16427, 16428, 16429, 16430, 16431, 16432, 16433, 16434, 16435, 16436,
+   16437, 16438, 16439, 16440, 16441, 16442, 16443, 16444, 16445, 16446,
+   16447, 16448, 16449, 16450, 16451, 16452, 16453, 16454, 16455, 16456,
+   16457, 16458, 16459, 16460, 16461, 16462, 16463, 16464, 16465, 16466,
+   16468, 16470, 16471, 16472, 16473, 16474, 16475, 16476, 16477, 16478,
+   16479, 16480, 16481, 16482, 16483, 16484, 16485, 16486, 16487, 16488,
+   16489, 16490, 16491, 16492, 16493, 16494, 16495, 16496, 16497, 16498,
+   16499, 16500, 16501, 16502, 16503, 16504, 16505, 16506, 16507, 16508,
+   16509, 16510, 16511, 16512, 16513, 16514, 16515, 16516, 16517, 16518,
+   16519, 16520, 16521, 16522, 16523, 16524, 16525, 16526, 16527, 16528,
+   16529, 16530, 16531, 16532, 16533, 16534, 16535, 16536, 16537, 16538,
+   16539, 16540, 16541, 16542, 16543, 16544, 16545, 16546, 16547, 16548,
+   16549, 16550, 16551, 16552, 16553, 16554, 16555, 16556, 16557, 16558,
+   16559, 16560, 16561, 16562, 16563, 16564, 16565, 16566, 16567, 16568,
+   16569, 16570, 16571, 16572, 16573, 16574, 16575, 16576, 16577, 16578,
+   16579, 16580, 16581, 16582, 16583, 16584, 16596, 16595, 16608, 16609,
+   16611, 16610, 16622, 16621, 16628, 16626, 16646, 16647, 16652, 16653,
+   16655, 16654, 16668, 16669, 16675, 16674, 16679, 16683, 16684, 16685,
+   16689, 16690, 16691, 16692, 16696, 16697, 16698, 16699, 16708, 16707,
+   16721, 16720, 16735, 16734, 16752, 16751, 16765, 16764, 16778, 16777,
+   16793, 16792, 16806, 16805, 16819, 16818, 16831, 16830, 16842, 16841,
+   16853, 16852, 16864, 16863, 16874, 16892, 16903, 16925, 16947, 16963,
+   16975, 16974, 16988, 16987, 16999, 16998, 17012, 17013, 17014, 17015,
+   17019, 17038, 17056, 17057, 17061, 17062, 17063, 17064, 17069, 17074,
+   17079, 17090, 17091, 17092, 17098, 17104, 17116, 17115, 17129, 17130,
+   17136, 17145, 17146, 17150, 17151, 17155, 17174, 17175, 17176, 17181,
+   17182, 17187, 17186, 17204, 17203, 17215, 17224, 17234, 17233, 17276,
+   17277, 17281, 17282, 17286, 17287, 17288, 17289, 17291, 17290, 17303,
+   17304, 17305, 17306, 17307, 17313, 17318, 17323, 17328, 17332, 17337,
+   17346, 17348, 17353, 17358, 17364, 17370, 17375, 17387, 17388, 17392,
+   17393, 17397, 17402, 17410, 17420, 17439, 17442, 17444, 17448, 17449,
+   17456, 17458, 17462, 17467, 17474, 17478, 17487, 17494, 17495, 17496,
+   17497, 17501, 17502, 17503, 17504, 17505, 17506, 17507, 17508, 17509,
+   17510, 17511, 17512, 17513, 17514, 17515, 17516, 17517, 17518, 17519,
+   17520, 17521, 17522, 17523, 17524, 17525, 17526, 17527, 17528, 17529,
+   17530, 17531, 17532, 17533, 17534, 17535, 17536, 17537, 17538, 17539,
+   17540, 17541, 17542, 17546, 17547, 17551, 17552, 17556, 17563, 17570,
+   17580, 17589, 17595, 17602, 17610, 17615, 17623, 17628, 17636, 17641,
+   17648, 17648, 17649, 17649, 17652, 17658, 17664, 17669, 17676, 17682,
+   17689, 17698, 17702, 17708, 17716, 17718, 17722, 17726, 17730, 17737,
+   17742, 17747, 17752, 17757, 17765, 17766, 17770, 17771, 17776, 17777,
+   17781, 17782, 17786, 17787, 17791, 17792, 17797, 17796, 17806, 17815,
+   17816, 17820, 17821, 17826, 17827, 17828, 17833, 17834, 17835, 17839,
+   17851, 17860, 17866, 17875, 17884, 17897, 17899, 17901, 17909, 17910,
+   17911, 17915, 17916, 17922, 17923, 17924, 17925, 17926, 17927, 17928,
+   17938, 17939, 17944, 17957, 17971, 17972, 17973, 17977, 17978, 17982,
+   17983, 17988, 17989, 17993, 17999, 18008, 18008, 18022, 18023, 18024,
+   18025, 18035, 18037, 18043, 18049, 18059, 18068, 18074, 18079, 18083,
+   18057, 18132, 18132, 18148, 18152, 18156, 18160, 18164, 18168, 18176,
+   18177, 18193, 18200, 18207, 18220, 18221, 18222, 18226, 18227, 18228,
+   18232, 18233, 18238, 18240, 18239, 18245, 18246, 18250, 18255, 18262,
+   18267, 18276, 18282, 18693, 18694, 18698, 18700, 18699, 18713, 18712,
+   18725, 18724, 18738, 18742, 18746, 18751, 18752, 18758, 18759, 18760,
+   18761, 18762, 18763, 18764, 18765, 18769, 18770, 18771, 18772, 18773,
+   18774, 18775, 18776, 18780, 18781, 18782, 18787, 18791, 18800, 18799,
+   18812, 18818, 18822, 18832, 18841, 18842, 18843, 18847, 18848, 18849,
+   18853, 18859, 18865, 18871, 18877, 18883, 18893, 18893, 18905, 18911,
+   18912, 18913, 18914, 18915, 18916, 18917, 18918, 18922, 18923, 18931,
+   18932, 18938, 18937, 18954, 18953, 18972, 18971, 18995, 18996, 19000,
+   19009, 19010, 19014, 19015, 19020, 19019, 19034, 19042, 19043, 19047,
+   19048, 19053, 19054, 19059, 19060, 19064, 19065, 19069, 19073, 19077,
+   19083, 19073, 19092, 19094, 19099, 19100, 19104, 19105, 19109, 19109,
+   19115, 19121, 19129, 19130, 19131, 19137, 19138, 19144, 19145, 19151,
+   19162, 19161, 19189, 19188, 19214, 19223, 19232, 19238, 19237, 19257,
+   19256, 19276, 19280, 19281, 19285, 19286, 19290, 19297, 19307, 19315,
+   19326, 19331, 19336, 19341, 19351, 19350, 19365, 19373, 19364, 19387,
+   19392, 19397, 19402, 19410, 19423, 19422, 19433, 19431, 19447, 19445,
+   19459, 19468, 19466, 19488, 19502, 19507, 19486, 19520, 19524, 19529,
+   19528, 19537, 19541, 19542, 19549, 19550, 19557, 19558, 19562, 19563,
+   19570, 19581, 19580, 19599, 19600, 19601, 19602, 19603, 19604, 19608,
+   19609, 19610, 19611, 19612, 19613, 19614, 19615, 19616, 19617, 19618,
+   19622, 19623, 19624, 19625, 19632, 19630, 19646, 19650, 19644, 19666,
+   19667, 19672, 19671, 19686, 19692, 19685, 19709, 19707
 };
 #endif
 
@@ -48486,68 +48486,67 @@ yyreduce:
             if (unlikely(!((yyval.lex_user)=(LEX_USER*)thd->calloc(sizeof(LEX_USER)))))
               MYSQL_YYABORT;
             (yyval.lex_user)->user= current_user;
-            (yyval.lex_user)->auth= new (thd->mem_root) USER_AUTH();
           }
-#line 48492 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48491 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 2612: /* user: user_maybe_role  */
-#line 15730 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 15729 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
          {
            if ((yyvsp[0].lex_user)->user.str != current_user.str && (yyvsp[0].lex_user)->host.str == 0)
              (yyvsp[0].lex_user)->host= host_not_specified;
            (yyval.lex_user)= (yyvsp[0].lex_user);
          }
-#line 48502 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48501 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3336: /* $@227: %empty  */
-#line 16597 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16596 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->set_stmt_init();
           }
-#line 48511 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48510 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3337: /* set: SET $@227 set_param  */
-#line 16602 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16601 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->check_main_unit_semantics())
               MYSQL_YYABORT;
           }
-#line 48520 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48519 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3340: /* $@228: %empty  */
-#line 16612 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16611 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->option_type= OPT_DEFAULT;
             if (sp_create_assignment_lex(thd, (yyvsp[0].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 48530 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48529 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3341: /* set_param: TRANSACTION_SYM $@228 transaction_characteristics  */
-#line 16618 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16617 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48539 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48538 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3342: /* $@229: %empty  */
-#line 16623 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16622 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->option_type= (yyvsp[0].var_type);
           }
-#line 48547 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48546 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3344: /* $@230: %empty  */
-#line 16629 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16628 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             if (unlikely(lex->table_or_sp_used()))
@@ -48557,112 +48556,112 @@ yyreduce:
             if (Lex->check_main_unit_semantics())
               MYSQL_YYABORT;
           }
-#line 48561 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48560 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3350: /* $@231: %empty  */
-#line 16656 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16655 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[0].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 48570 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48569 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3351: /* start_option_value_list_following_option_type: TRANSACTION_SYM $@231 transaction_characteristics  */
-#line 16661 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16660 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48579 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48578 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3354: /* $@232: %empty  */
-#line 16676 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16675 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->option_type= (yyvsp[0].var_type);
           }
-#line 48587 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48586 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3357: /* option_type: GLOBAL_SYM  */
-#line 16684 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16683 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.var_type)=OPT_GLOBAL; }
-#line 48593 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48592 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3358: /* option_type: LOCAL_SYM  */
-#line 16685 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16684 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.var_type)=OPT_SESSION; }
-#line 48599 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48598 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3359: /* option_type: SESSION_SYM  */
-#line 16686 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16685 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.var_type)=OPT_SESSION; }
-#line 48605 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48604 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3360: /* opt_var_type: %empty  */
-#line 16690 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16689 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.var_type)=OPT_SESSION; }
-#line 48611 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48610 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3361: /* opt_var_type: GLOBAL_SYM  */
-#line 16691 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16690 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.var_type)=OPT_GLOBAL; }
-#line 48617 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48616 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3362: /* opt_var_type: LOCAL_SYM  */
-#line 16692 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16691 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.var_type)=OPT_SESSION; }
-#line 48623 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48622 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3363: /* opt_var_type: SESSION_SYM  */
-#line 16693 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16692 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.var_type)=OPT_SESSION; }
-#line 48629 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48628 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3364: /* opt_var_ident_type: %empty  */
-#line 16697 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16696 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                           { (yyval.var_type)=OPT_DEFAULT; }
-#line 48635 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48634 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3365: /* opt_var_ident_type: GLOBAL_SYM '.'  */
-#line 16698 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16697 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                           { (yyval.var_type)=OPT_GLOBAL; }
-#line 48641 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48640 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3366: /* opt_var_ident_type: LOCAL_SYM '.'  */
-#line 16699 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16698 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                           { (yyval.var_type)=OPT_SESSION; }
-#line 48647 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48646 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3367: /* opt_var_ident_type: SESSION_SYM '.'  */
-#line 16700 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16699 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                           { (yyval.var_type)=OPT_SESSION; }
-#line 48653 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48652 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3368: /* $@233: %empty  */
-#line 16709 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16708 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->main_select_push(false))
               MYSQL_YYABORT;
           }
-#line 48662 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48661 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3369: /* set_stmt_option: ident_cli equal $@233 set_expr_or_default  */
-#line 16714 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16713 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-3].ident_cli));
             if (unlikely(!tmp.str) ||
@@ -48670,20 +48669,20 @@ yyreduce:
               MYSQL_YYABORT;
             Lex->pop_select(); //min select
           }
-#line 48674 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48673 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3370: /* $@234: %empty  */
-#line 16722 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16721 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->main_select_push(false))
               MYSQL_YYABORT;
           }
-#line 48683 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48682 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3371: /* set_stmt_option: ident_cli '.' ident equal $@234 set_expr_or_default  */
-#line 16727 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16726 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-5].ident_cli));
             if (unlikely(!tmp.str) ||
@@ -48692,40 +48691,40 @@ yyreduce:
               MYSQL_YYABORT;
             Lex->pop_select(); //min select
           }
-#line 48696 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48695 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3372: /* $@235: %empty  */
-#line 16736 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16735 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->main_select_push(false))
               MYSQL_YYABORT;
           }
-#line 48705 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48704 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3373: /* set_stmt_option: DEFAULT '.' ident equal $@235 set_expr_or_default  */
-#line 16741 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16740 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->set_default_system_variable(Lex->option_type,
                                                           &(yyvsp[-3].ident_sys), (yyvsp[0].item))))
               MYSQL_YYABORT;
             Lex->pop_select(); //min select
           }
-#line 48716 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48715 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3374: /* $@236: %empty  */
-#line 16753 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16752 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].ident_cli).pos()))
               MYSQL_YYABORT;
           }
-#line 48725 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48724 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3375: /* option_value_following_option_type: ident_cli equal $@236 set_expr_or_default  */
-#line 16758 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16757 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-3].ident_cli));
             if (unlikely(!tmp.str) ||
@@ -48733,20 +48732,20 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48737 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48736 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3376: /* $@237: %empty  */
-#line 16766 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16765 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-3].ident_cli).pos()))
               MYSQL_YYABORT;
           }
-#line 48746 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48745 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3377: /* option_value_following_option_type: ident_cli '.' ident equal $@237 set_expr_or_default  */
-#line 16771 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16770 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-5].ident_cli));
             if (unlikely(!tmp.str) ||
@@ -48754,39 +48753,39 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48758 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48757 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3378: /* $@238: %empty  */
-#line 16779 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16778 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-3].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 48767 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48766 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3379: /* option_value_following_option_type: DEFAULT '.' ident equal $@238 set_expr_or_default  */
-#line 16784 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16783 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->set_default_system_variable(Lex->option_type, &(yyvsp[-3].ident_sys), (yyvsp[0].item))) ||
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48777 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48776 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3380: /* $@239: %empty  */
-#line 16794 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16793 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].ident_cli).pos()))
               MYSQL_YYABORT;
           }
-#line 48786 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48785 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3381: /* option_value_no_option_type: ident_cli_set_usual_case equal $@239 set_expr_or_default  */
-#line 16799 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16798 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-3].ident_cli));
             if (unlikely(!tmp.str) ||
@@ -48794,20 +48793,20 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48798 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48797 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3382: /* $@240: %empty  */
-#line 16807 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16806 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-3].ident_cli).pos()))
               MYSQL_YYABORT;
           }
-#line 48807 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48806 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3383: /* option_value_no_option_type: ident_cli_set_usual_case '.' ident equal $@240 set_expr_or_default  */
-#line 16812 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16811 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-5].ident_cli));
             if (unlikely(!tmp.str) ||
@@ -48815,107 +48814,107 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48819 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48818 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3384: /* $@241: %empty  */
-#line 16820 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16819 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-3].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 48828 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48827 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3385: /* option_value_no_option_type: DEFAULT '.' ident equal $@241 set_expr_or_default  */
-#line 16825 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16824 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->set_default_system_variable(Lex->option_type, &(yyvsp[-3].ident_sys), (yyvsp[0].item))))
               MYSQL_YYABORT;
             if (unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48839 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48838 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3386: /* $@242: %empty  */
-#line 16832 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16831 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-2].lex_str).str))
               MYSQL_YYABORT;
           }
-#line 48848 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48847 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3387: /* option_value_no_option_type: '@' ident_or_text equal $@242 expr  */
-#line 16837 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16836 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->set_user_variable(thd, &(yyvsp[-3].lex_str), (yyvsp[0].item))) ||
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48858 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48857 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3388: /* $@243: %empty  */
-#line 16843 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16842 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-4].lex_str).str))
               MYSQL_YYABORT;
           }
-#line 48867 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48866 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3389: /* option_value_no_option_type: '@' '@' opt_var_ident_type ident_sysvar_name equal $@243 set_expr_or_default  */
-#line 16848 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16847 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->set_system_variable((yyvsp[-4].var_type), &(yyvsp[-3].ident_sys), (yyvsp[0].item))) ||
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48877 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48876 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3390: /* $@244: %empty  */
-#line 16854 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16853 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-6].lex_str).str))
               MYSQL_YYABORT;
           }
-#line 48886 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48885 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3391: /* option_value_no_option_type: '@' '@' opt_var_ident_type ident_sysvar_name '.' ident equal $@244 set_expr_or_default  */
-#line 16859 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16858 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->set_system_variable(thd, (yyvsp[-6].var_type), &(yyvsp[-5].ident_sys), &(yyvsp[-3].ident_sys), (yyvsp[0].item))) ||
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48896 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48895 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3392: /* $@245: %empty  */
-#line 16865 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16864 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-6].lex_str).str))
               MYSQL_YYABORT;
           }
-#line 48905 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48904 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3393: /* option_value_no_option_type: '@' '@' opt_var_ident_type DEFAULT '.' ident equal $@245 set_expr_or_default  */
-#line 16870 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16869 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->set_default_system_variable((yyvsp[-6].var_type), &(yyvsp[-3].ident_sys), (yyvsp[0].item))) ||
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48915 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48914 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3394: /* option_value_no_option_type: charset old_or_new_charset_name_or_default  */
-#line 16876 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16875 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
@@ -48933,11 +48932,11 @@ yyreduce:
             if (unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48937 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48936 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3395: /* option_value_no_option_type: NAMES_SYM equal expr  */
-#line 16894 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16893 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             sp_pcontext *spc= lex->spcont;
@@ -48948,11 +48947,11 @@ yyreduce:
               thd->parse_error();
             MYSQL_YYABORT;
           }
-#line 48952 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48951 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3396: /* option_value_no_option_type: NAMES_SYM charset_name_or_default opt_collate  */
-#line 16905 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16904 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-2].kwd).pos()))
               MYSQL_YYABORT;
@@ -48974,11 +48973,11 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 48978 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 48977 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3397: /* option_value_no_option_type: DEFAULT ROLE_SYM grant_role  */
-#line 16927 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16926 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-2].kwd).pos()))
               MYSQL_YYABORT;
@@ -49000,11 +48999,11 @@ yyreduce:
             if (unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49004 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49003 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3398: /* option_value_no_option_type: DEFAULT ROLE_SYM grant_role FOR_SYM user  */
-#line 16949 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16948 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-4].kwd).pos()))
               MYSQL_YYABORT;
@@ -49020,11 +49019,11 @@ yyreduce:
             if (unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49024 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49023 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3399: /* option_value_no_option_type: ROLE_SYM ident_or_text  */
-#line 16965 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16964 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
@@ -49035,20 +49034,20 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49039 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49038 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3400: /* $@246: %empty  */
-#line 16976 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16975 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 49048 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49047 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3401: /* option_value_no_option_type: ROLE_SYM equal $@246 set_expr_or_default  */
-#line 16981 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16980 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-3].kwd));
             if (unlikely(!tmp.str) ||
@@ -49056,49 +49055,49 @@ yyreduce:
                 unlikely(sp_create_assignment_instr(thd, yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49060 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49059 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3402: /* $@247: %empty  */
-#line 16989 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16988 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 49069 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49068 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3403: /* option_value_no_option_type: PASSWORD_SYM equal $@247 text_or_password  */
-#line 16994 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16993 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_create_set_password_instr(thd, (yyvsp[0].user_auth),
                                                            yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49079 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49078 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3404: /* $@248: %empty  */
-#line 17000 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 16999 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (sp_create_assignment_lex(thd, (yyvsp[-1].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 49088 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49087 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3405: /* option_value_no_option_type: PASSWORD_SYM FOR_SYM $@248 user equal text_or_password  */
-#line 17005 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17004 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_create_set_password_instr(thd, (yyvsp[-2].lex_user), (yyvsp[0].user_auth),
                                                            yychar == YYEMPTY)))
               MYSQL_YYABORT;
           }
-#line 49098 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49097 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3410: /* transaction_access_mode: transaction_access_mode_types  */
-#line 17021 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17020 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             Item *item= new (thd->mem_root) Item_int(thd, (int32) (yyvsp[0].num));
@@ -49114,11 +49113,11 @@ yyreduce:
             if (unlikely(lex->var_list.push_back(var, thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49118 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49117 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3411: /* isolation_level: ISOLATION LEVEL_SYM isolation_types  */
-#line 17040 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17039 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             Item *item= new (thd->mem_root) Item_int(thd, (int32) (yyvsp[0].tx_isolation));
@@ -49133,65 +49132,65 @@ yyreduce:
                 unlikely(lex->var_list.push_back(var, thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49137 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49136 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3412: /* transaction_access_mode_types: READ_SYM ONLY_SYM  */
-#line 17057 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17056 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                             { (yyval.num)= true; }
-#line 49143 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49142 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3413: /* transaction_access_mode_types: READ_SYM WRITE_SYM  */
-#line 17058 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17057 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                              { (yyval.num)= false; }
-#line 49149 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49148 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3414: /* isolation_types: READ_SYM UNCOMMITTED_SYM  */
-#line 17062 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17061 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_READ_UNCOMMITTED; }
-#line 49155 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49154 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3415: /* isolation_types: READ_SYM COMMITTED_SYM  */
-#line 17063 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17062 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_READ_COMMITTED; }
-#line 49161 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49160 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3416: /* isolation_types: REPEATABLE_SYM READ_SYM  */
-#line 17064 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17063 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_REPEATABLE_READ; }
-#line 49167 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49166 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3417: /* isolation_types: SERIALIZABLE_SYM  */
-#line 17065 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17064 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                    { (yyval.tx_isolation)= ISO_SERIALIZABLE; }
-#line 49173 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49172 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3418: /* text_or_password: TEXT_STRING  */
-#line 17071 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17070 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= new (thd->mem_root) USER_AUTH();
             (yyval.user_auth)->auth_str= (yyvsp[0].lex_string_with_metadata);
           }
-#line 49182 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49181 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3419: /* text_or_password: PASSWORD_SYM '(' TEXT_STRING ')'  */
-#line 17076 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17075 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= new (thd->mem_root) USER_AUTH();
             (yyval.user_auth)->pwtext= (yyvsp[-1].lex_string_with_metadata);
           }
-#line 49191 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49190 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3420: /* text_or_password: OLD_PASSWORD_SYM '(' TEXT_STRING ')'  */
-#line 17081 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17080 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= new (thd->mem_root) USER_AUTH();
             (yyval.user_auth)->pwtext= (yyvsp[-1].lex_string_with_metadata);
@@ -49199,53 +49198,53 @@ yyreduce:
                                    (yyvsp[-1].lex_string_with_metadata).str, (yyvsp[-1].lex_string_with_metadata).length, Item_func_password::OLD);
             (yyval.user_auth)->auth_str.length=  SCRAMBLED_PASSWORD_CHAR_LENGTH_323;
           }
-#line 49203 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49202 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3421: /* set_expr_or_default: expr  */
-#line 17091 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17090 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                { (yyval.item)=(yyvsp[0].item); }
-#line 49209 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49208 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3422: /* set_expr_or_default: DEFAULT  */
-#line 17092 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17091 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                   { (yyval.item)=0; }
-#line 49215 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49214 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3423: /* set_expr_or_default: ON  */
-#line 17094 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17093 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.item)=new (thd->mem_root) Item_string_sys(thd, "ON",  2);
             if (unlikely((yyval.item) == NULL))
               MYSQL_YYABORT;
           }
-#line 49225 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49224 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3424: /* set_expr_or_default: ALL  */
-#line 17100 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17099 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.item)=new (thd->mem_root) Item_string_sys(thd, "ALL", 3);
             if (unlikely((yyval.item) == NULL))
               MYSQL_YYABORT;
           }
-#line 49235 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49234 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3425: /* set_expr_or_default: BINARY  */
-#line 17106 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17105 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.item)=new (thd->mem_root) Item_string_sys(thd, "binary", 6);
             if (unlikely((yyval.item) == NULL))
               MYSQL_YYABORT;
           }
-#line 49245 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49244 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3426: /* $@249: %empty  */
-#line 17117 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17116 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
 
@@ -49253,55 +49252,55 @@ yyreduce:
               my_yyabort_error((ER_SP_BADSTATEMENT, MYF(0), "LOCK"));
             lex->sql_command= SQLCOM_LOCK_TABLES;
           }
-#line 49257 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49256 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3427: /* lock: LOCK_SYM table_or_tables $@249 table_lock_list opt_lock_wait_timeout  */
-#line 17125 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17124 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {}
-#line 49263 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49262 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3428: /* opt_lock_wait_timeout: %empty  */
-#line 17130 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17129 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
         {}
-#line 49269 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49268 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3429: /* opt_lock_wait_timeout: WAIT_SYM ulong_num  */
-#line 17132 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17131 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
         {
           if (unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("lock_wait_timeout"), (yyvsp[0].ulong_num))) ||
               unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("innodb_lock_wait_timeout"), (yyvsp[0].ulong_num))))
             MYSQL_YYABORT;
         }
-#line 49279 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49278 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3430: /* opt_lock_wait_timeout: NOWAIT_SYM  */
-#line 17138 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17137 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
         {
           if (unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("lock_wait_timeout"), 0)) ||
               unlikely(set_statement_var_if_exists(thd, STRING_WITH_LEN("innodb_lock_wait_timeout"), 0)))
             MYSQL_YYABORT;
         }
-#line 49289 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49288 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3431: /* table_or_tables: TABLE_SYM  */
-#line 17146 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17145 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                            { }
-#line 49295 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49294 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3432: /* table_or_tables: TABLES  */
-#line 17147 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17146 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                            { }
-#line 49301 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49300 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3435: /* table_lock: table_ident opt_table_alias_clause lock_option  */
-#line 17157 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17156 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             thr_lock_type lock_type= (thr_lock_type) (yyvsp[0].num);
             bool lock_for_write= (lock_type >= TL_FIRST_WRITE);
@@ -49317,43 +49316,43 @@ yyreduce:
                                            lock_type, mdl_type)))
               MYSQL_YYABORT;
           }
-#line 49321 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49320 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3436: /* lock_option: READ_SYM  */
-#line 17175 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17174 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_READ_NO_INSERT; }
-#line 49327 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49326 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3437: /* lock_option: WRITE_SYM  */
-#line 17176 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17175 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_WRITE_DEFAULT; }
-#line 49333 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49332 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3438: /* lock_option: WRITE_SYM CONCURRENT  */
-#line 17178 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17177 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.num)= (Lex->sphead ? TL_WRITE_DEFAULT : TL_WRITE_CONCURRENT_INSERT);
           }
-#line 49341 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49340 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3439: /* lock_option: LOW_PRIORITY WRITE_SYM  */
-#line 17182 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17181 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_WRITE_LOW_PRIORITY; }
-#line 49347 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49346 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3440: /* lock_option: READ_SYM LOCAL_SYM  */
-#line 17183 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17182 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                  { (yyval.num)= TL_READ; }
-#line 49353 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49352 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3441: /* $@250: %empty  */
-#line 17188 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17187 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
 
@@ -49361,34 +49360,34 @@ yyreduce:
               my_yyabort_error((ER_SP_BADSTATEMENT, MYF(0), "UNLOCK"));
             lex->sql_command= SQLCOM_UNLOCK_TABLES;
           }
-#line 49365 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49364 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3442: /* unlock: UNLOCK_SYM $@250 table_or_tables  */
-#line 17196 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17195 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {}
-#line 49371 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49370 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3443: /* $@251: %empty  */
-#line 17205 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17204 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->main_select_push())
               MYSQL_YYABORT;
           }
-#line 49380 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49379 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3444: /* handler: HANDLER_SYM $@251 handler_tail  */
-#line 17210 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17209 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->pop_select(); //main select
           }
-#line 49388 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49387 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3445: /* handler_tail: table_ident OPEN_SYM opt_table_alias_clause  */
-#line 17217 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17216 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             if (unlikely(lex->sphead))
@@ -49397,11 +49396,11 @@ yyreduce:
             if (!lex->current_select->add_table_to_list(thd, (yyvsp[-2].table), (yyvsp[0].lex_str_ptr), 0))
               MYSQL_YYABORT;
           }
-#line 49401 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49400 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3446: /* handler_tail: table_ident_nodb CLOSE_SYM  */
-#line 17226 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17225 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             if (unlikely(lex->sphead))
@@ -49410,11 +49409,11 @@ yyreduce:
             if (!lex->current_select->add_table_to_list(thd, (yyvsp[-1].table), 0, 0))
               MYSQL_YYABORT;
           }
-#line 49414 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49413 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3447: /* $@252: %empty  */
-#line 17235 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17234 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             SELECT_LEX *select= Select;
@@ -49432,11 +49431,11 @@ yyreduce:
             if (!lex->current_select->add_table_to_list(thd, (yyvsp[-1].table), 0, 0))
               MYSQL_YYABORT;
           }
-#line 49436 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49435 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3448: /* handler_tail: table_ident_nodb READ_SYM $@252 handler_read_or_scan opt_where_clause opt_global_limit_clause  */
-#line 17253 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17252 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             SELECT_LEX *select= Select;
@@ -49458,59 +49457,59 @@ yyreduce:
               MYSQL_YYABORT;
             }
           }
-#line 49462 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49461 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3449: /* handler_read_or_scan: handler_scan_function  */
-#line 17277 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17276 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                       { Lex->ident= null_clex_str; }
-#line 49468 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49467 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3450: /* handler_read_or_scan: ident handler_rkey_function  */
-#line 17278 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17277 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                       { Lex->ident= (yyvsp[-1].ident_sys); }
-#line 49474 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49473 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3451: /* handler_scan_function: FIRST_SYM  */
-#line 17282 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17281 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RFIRST; }
-#line 49480 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49479 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3452: /* handler_scan_function: NEXT_SYM  */
-#line 17283 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17282 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RNEXT;  }
-#line 49486 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49485 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3453: /* handler_rkey_function: FIRST_SYM  */
-#line 17287 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17286 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RFIRST; }
-#line 49492 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49491 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3454: /* handler_rkey_function: NEXT_SYM  */
-#line 17288 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17287 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RNEXT;  }
-#line 49498 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49497 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3455: /* handler_rkey_function: PREV_SYM  */
-#line 17289 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17288 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RPREV;  }
-#line 49504 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49503 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3456: /* handler_rkey_function: LAST_SYM  */
-#line 17290 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17289 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                     { Lex->ha_read_mode = RLAST;  }
-#line 49510 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49509 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3457: /* $@253: %empty  */
-#line 17292 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17291 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->ha_read_mode = RKEY;
@@ -49518,143 +49517,143 @@ yyreduce:
             if (unlikely(!(lex->insert_list= new (thd->mem_root) List_item)))
               MYSQL_YYABORT;
           }
-#line 49522 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49521 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3458: /* handler_rkey_function: handler_rkey_mode $@253 '(' values ')'  */
-#line 17300 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17299 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {}
-#line 49528 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49527 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3459: /* handler_rkey_mode: '='  */
-#line 17304 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17303 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                   { (yyval.ha_rkey_mode)=HA_READ_KEY_EXACT;   }
-#line 49534 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49533 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3460: /* handler_rkey_mode: GE  */
-#line 17305 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17304 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                  { (yyval.ha_rkey_mode)=HA_READ_KEY_OR_NEXT; }
-#line 49540 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49539 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3461: /* handler_rkey_mode: LE  */
-#line 17306 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17305 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                  { (yyval.ha_rkey_mode)=HA_READ_KEY_OR_PREV; }
-#line 49546 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49545 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3462: /* handler_rkey_mode: '>'  */
-#line 17307 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17306 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
               { (yyval.ha_rkey_mode)=HA_READ_AFTER_KEY;   }
-#line 49552 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49551 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3463: /* handler_rkey_mode: '<'  */
-#line 17308 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17307 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                   { (yyval.ha_rkey_mode)=HA_READ_BEFORE_KEY;  }
-#line 49558 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49557 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3464: /* revoke: REVOKE clear_privileges revoke_command  */
-#line 17315 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17314 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {}
-#line 49564 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49563 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3465: /* revoke_command: grant_privileges ON opt_table grant_ident FROM user_and_role_list  */
-#line 17320 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17319 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_revoke_table(thd, (yyvsp[-5].lex_grant), *(yyvsp[-2].lex_grant_ident)))
               MYSQL_YYABORT;
           }
-#line 49573 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49572 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3466: /* revoke_command: grant_privileges ON sp_handler grant_ident FROM user_and_role_list  */
-#line 17325 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17324 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_revoke_sp(thd, (yyvsp[-5].lex_grant), *(yyvsp[-2].lex_grant_ident), *(yyvsp[-3].sp_handler)))
               MYSQL_YYABORT;
           }
-#line 49582 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49581 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3467: /* revoke_command: ALL opt_privileges ',' GRANT OPTION FROM user_and_role_list  */
-#line 17330 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17329 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_REVOKE_ALL;
           }
-#line 49590 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49589 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3468: /* revoke_command: PROXY_SYM ON user FROM user_list  */
-#line 17334 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17333 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_revoke_proxy(thd, (yyvsp[-2].lex_user)))
               MYSQL_YYABORT;
           }
-#line 49599 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49598 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3469: /* revoke_command: admin_option_for_role FROM user_and_role_list  */
-#line 17339 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17338 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sql_command= SQLCOM_REVOKE_ROLE;
             if (unlikely(Lex->users_list.push_front((yyvsp[-2].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49609 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49608 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3470: /* admin_option_for_role: ADMIN_SYM OPTION FOR_SYM grant_role  */
-#line 17348 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17347 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
         { Lex->with_admin_option= true; (yyval.lex_user)= (yyvsp[0].lex_user); }
-#line 49615 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49614 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3471: /* admin_option_for_role: grant_role  */
-#line 17350 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17349 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
         { Lex->with_admin_option= false; (yyval.lex_user)= (yyvsp[0].lex_user); }
-#line 49621 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49620 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3472: /* grant: GRANT clear_privileges grant_command  */
-#line 17355 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17354 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {}
-#line 49627 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49626 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3473: /* grant_command: grant_privileges ON opt_table grant_ident TO_SYM grant_list opt_require_clause opt_grant_options  */
-#line 17361 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17360 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_grant_table(thd, (yyvsp[-7].lex_grant), *(yyvsp[-4].lex_grant_ident), (yyvsp[0].privilege)))
               MYSQL_YYABORT;
           }
-#line 49636 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49635 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3474: /* grant_command: grant_privileges ON sp_handler grant_ident TO_SYM grant_list opt_require_clause opt_grant_options  */
-#line 17367 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17366 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_grant_sp(thd, (yyvsp[-7].lex_grant), *(yyvsp[-4].lex_grant_ident), *(yyvsp[-5].sp_handler), (yyvsp[0].privilege)))
               MYSQL_YYABORT;
           }
-#line 49645 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49644 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3475: /* grant_command: PROXY_SYM ON user TO_SYM grant_list opt_grant_option  */
-#line 17372 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17371 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_grant_proxy(thd, (yyvsp[-3].lex_user), (yyvsp[0].privilege)))
               MYSQL_YYABORT;
           }
-#line 49654 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49653 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3476: /* grant_command: grant_role TO_SYM grant_list opt_with_admin_option  */
-#line 17377 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17376 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->sql_command= SQLCOM_GRANT_ROLE;
@@ -49662,64 +49661,64 @@ yyreduce:
             if (unlikely(Lex->users_list.push_front((yyvsp[-3].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49666 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49665 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3477: /* opt_with_admin: %empty  */
-#line 17388 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17387 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                       { Lex->definer = 0; }
-#line 49672 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49671 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3478: /* opt_with_admin: WITH ADMIN_SYM user_or_role  */
-#line 17389 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17388 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                       { Lex->definer = (yyvsp[0].lex_user); }
-#line 49678 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49677 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3479: /* opt_with_admin_option: %empty  */
-#line 17393 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17392 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                       { Lex->with_admin_option= false; }
-#line 49684 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49683 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3480: /* opt_with_admin_option: WITH ADMIN_SYM OPTION  */
-#line 17394 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17393 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                       { Lex->with_admin_option= true; }
-#line 49690 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49689 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3481: /* role_list: grant_role  */
-#line 17399 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17398 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49699 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49698 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3482: /* role_list: role_list ',' grant_role  */
-#line 17404 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17403 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 49708 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49707 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3483: /* current_role: CURRENT_ROLE optional_braces  */
-#line 17412 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17411 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(!((yyval.lex_user)=(LEX_USER*) thd->calloc(sizeof(LEX_USER)))))
               MYSQL_YYABORT;
             (yyval.lex_user)->user= current_role;
             (yyval.lex_user)->auth= NULL;
           }
-#line 49719 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49718 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3484: /* grant_role: ident_or_text  */
-#line 17422 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17421 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             CHARSET_INFO *cs= system_charset_info;
             /* trim end spaces (as they'll be lost in mysql.user anyway) */
@@ -49738,387 +49737,387 @@ yyreduce:
                                                   cs, 0)))
               MYSQL_YYABORT;
           }
-#line 49742 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49741 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3489: /* grant_privileges: ALL opt_privileges  */
-#line 17451 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17450 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { 
             if (!((yyval.lex_grant)= new (thd->mem_root) Lex_grant_privilege(GLOBAL_ACLS, true)))
               MYSQL_YYABORT;
           }
-#line 49751 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49750 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3492: /* object_privilege_list: object_privilege  */
-#line 17464 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17463 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant)= new (thd->mem_root) Lex_grant_privilege((yyvsp[0].privilege))))
               MYSQL_YYABORT;
           }
-#line 49760 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49759 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3493: /* object_privilege_list: column_list_privilege  */
-#line 17469 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17468 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant)= new (thd->mem_root) Lex_grant_privilege()) ||
                 (yyval.lex_grant)->add_column_list_privilege(thd, (yyvsp[0].column_list_privilege).m_columns[0],
                                                    (yyvsp[0].column_list_privilege).m_privilege))
               MYSQL_YYABORT;
           }
-#line 49771 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49770 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3494: /* object_privilege_list: object_privilege_list ',' object_privilege  */
-#line 17476 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17475 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             ((yyval.lex_grant)= (yyvsp[-2].lex_grant))->add_object_privilege((yyvsp[0].privilege));
           }
-#line 49779 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49778 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3495: /* object_privilege_list: object_privilege_list ',' column_list_privilege  */
-#line 17480 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17479 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (((yyval.lex_grant)= (yyvsp[-2].lex_grant))->add_column_list_privilege(thd, (yyvsp[0].column_list_privilege).m_columns[0],
                                                          (yyvsp[0].column_list_privilege).m_privilege))
               MYSQL_YYABORT;
           }
-#line 49789 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49788 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3496: /* column_list_privilege: column_privilege '(' comma_separated_ident_list ')'  */
-#line 17489 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17488 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.column_list_privilege)= Lex_column_list_privilege((yyvsp[-1].ident_sys_list), (yyvsp[-3].privilege));
           }
-#line 49797 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49796 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3497: /* column_privilege: SELECT_SYM  */
-#line 17495 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17494 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SELECT_ACL; }
-#line 49803 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49802 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3498: /* column_privilege: INSERT  */
-#line 17496 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17495 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= INSERT_ACL; }
-#line 49809 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49808 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3499: /* column_privilege: UPDATE_SYM  */
-#line 17497 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17496 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= UPDATE_ACL; }
-#line 49815 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49814 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3500: /* column_privilege: REFERENCES  */
-#line 17498 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17497 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= REFERENCES_ACL; }
-#line 49821 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49820 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3501: /* object_privilege: SELECT_SYM  */
-#line 17502 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17501 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SELECT_ACL; }
-#line 49827 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49826 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3502: /* object_privilege: INSERT  */
-#line 17503 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17502 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= INSERT_ACL; }
-#line 49833 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49832 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3503: /* object_privilege: UPDATE_SYM  */
-#line 17504 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17503 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= UPDATE_ACL; }
-#line 49839 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49838 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3504: /* object_privilege: REFERENCES  */
-#line 17505 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17504 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= REFERENCES_ACL; }
-#line 49845 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49844 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3505: /* object_privilege: DELETE_SYM  */
-#line 17506 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17505 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= DELETE_ACL;}
-#line 49851 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49850 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3506: /* object_privilege: USAGE  */
-#line 17507 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17506 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= NO_ACL; }
-#line 49857 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49856 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3507: /* object_privilege: INDEX_SYM  */
-#line 17508 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17507 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= INDEX_ACL;}
-#line 49863 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49862 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3508: /* object_privilege: ALTER  */
-#line 17509 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17508 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= ALTER_ACL;}
-#line 49869 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49868 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3509: /* object_privilege: CREATE  */
-#line 17510 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17509 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_ACL;}
-#line 49875 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49874 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3510: /* object_privilege: DROP  */
-#line 17511 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17510 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= DROP_ACL;}
-#line 49881 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49880 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3511: /* object_privilege: EXECUTE_SYM  */
-#line 17512 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17511 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= EXECUTE_ACL;}
-#line 49887 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49886 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3512: /* object_privilege: RELOAD  */
-#line 17513 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17512 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= RELOAD_ACL;}
-#line 49893 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49892 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3513: /* object_privilege: SHUTDOWN  */
-#line 17514 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17513 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SHUTDOWN_ACL;}
-#line 49899 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49898 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3514: /* object_privilege: PROCESS  */
-#line 17515 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17514 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= PROCESS_ACL;}
-#line 49905 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49904 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3515: /* object_privilege: FILE_SYM  */
-#line 17516 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17515 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= FILE_ACL;}
-#line 49911 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49910 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3516: /* object_privilege: GRANT OPTION  */
-#line 17517 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17516 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= GRANT_ACL;}
-#line 49917 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49916 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3517: /* object_privilege: SHOW DATABASES  */
-#line 17518 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17517 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SHOW_DB_ACL;}
-#line 49923 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49922 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3518: /* object_privilege: SUPER_SYM  */
-#line 17519 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17518 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SUPER_ACL;}
-#line 49929 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49928 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3519: /* object_privilege: CREATE TEMPORARY TABLES  */
-#line 17520 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17519 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_TMP_ACL;}
-#line 49935 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49934 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3520: /* object_privilege: LOCK_SYM TABLES  */
-#line 17521 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17520 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= LOCK_TABLES_ACL; }
-#line 49941 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49940 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3521: /* object_privilege: REPLICATION SLAVE  */
-#line 17522 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17521 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= REPL_SLAVE_ACL; }
-#line 49947 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49946 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3522: /* object_privilege: REPLICATION CLIENT_SYM  */
-#line 17523 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17522 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= BINLOG_MONITOR_ACL; /*Compatibility*/ }
-#line 49953 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49952 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3523: /* object_privilege: CREATE VIEW_SYM  */
-#line 17524 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17523 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_VIEW_ACL; }
-#line 49959 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49958 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3524: /* object_privilege: SHOW VIEW_SYM  */
-#line 17525 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17524 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SHOW_VIEW_ACL; }
-#line 49965 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49964 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3525: /* object_privilege: CREATE ROUTINE_SYM  */
-#line 17526 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17525 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_PROC_ACL; }
-#line 49971 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49970 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3526: /* object_privilege: ALTER ROUTINE_SYM  */
-#line 17527 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17526 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= ALTER_PROC_ACL; }
-#line 49977 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49976 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3527: /* object_privilege: CREATE USER_SYM  */
-#line 17528 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17527 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_USER_ACL; }
-#line 49983 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49982 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3528: /* object_privilege: EVENT_SYM  */
-#line 17529 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17528 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= EVENT_ACL;}
-#line 49989 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49988 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3529: /* object_privilege: TRIGGER_SYM  */
-#line 17530 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17529 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= TRIGGER_ACL; }
-#line 49995 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 49994 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3530: /* object_privilege: CREATE TABLESPACE  */
-#line 17531 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17530 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= CREATE_TABLESPACE_ACL; }
-#line 50001 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50000 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3531: /* object_privilege: DELETE_SYM HISTORY_SYM  */
-#line 17532 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17531 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= DELETE_HISTORY_ACL; }
-#line 50007 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50006 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3532: /* object_privilege: SET USER_SYM  */
-#line 17533 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17532 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= SET_USER_ACL; }
-#line 50013 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50012 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3533: /* object_privilege: FEDERATED_SYM ADMIN_SYM  */
-#line 17534 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17533 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.privilege)= FEDERATED_ADMIN_ACL; }
-#line 50019 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50018 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3534: /* object_privilege: CONNECTION_SYM ADMIN_SYM  */
-#line 17535 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17534 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.privilege)= CONNECTION_ADMIN_ACL; }
-#line 50025 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50024 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3535: /* object_privilege: READ_SYM ONLY_SYM ADMIN_SYM  */
-#line 17536 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17535 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.privilege)= READ_ONLY_ADMIN_ACL; }
-#line 50031 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50030 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3536: /* object_privilege: READ_ONLY_SYM ADMIN_SYM  */
-#line 17537 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17536 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.privilege)= READ_ONLY_ADMIN_ACL; }
-#line 50037 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50036 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3537: /* object_privilege: BINLOG_SYM MONITOR_SYM  */
-#line 17538 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17537 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.privilege)= BINLOG_MONITOR_ACL; }
-#line 50043 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50042 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3538: /* object_privilege: BINLOG_SYM ADMIN_SYM  */
-#line 17539 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17538 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.privilege)= BINLOG_ADMIN_ACL; }
-#line 50049 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50048 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3539: /* object_privilege: BINLOG_SYM REPLAY_SYM  */
-#line 17540 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17539 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.privilege)= BINLOG_REPLAY_ACL; }
-#line 50055 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50054 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3540: /* object_privilege: REPLICATION MASTER_SYM ADMIN_SYM  */
-#line 17541 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17540 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.privilege)= REPL_MASTER_ADMIN_ACL; }
-#line 50061 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50060 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3541: /* object_privilege: REPLICATION SLAVE ADMIN_SYM  */
-#line 17542 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17541 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.privilege)= REPL_SLAVE_ADMIN_ACL; }
-#line 50067 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50066 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3542: /* object_privilege: SLAVE MONITOR_SYM  */
-#line 17543 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17542 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.privilege)= SLAVE_MONITOR_ACL; }
-#line 50073 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50072 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3543: /* opt_and: %empty  */
-#line 17547 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17546 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       {}
-#line 50079 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50078 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3544: /* opt_and: AND_SYM  */
-#line 17548 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17547 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                   {}
-#line 50085 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50084 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3547: /* require_list_element: SUBJECT_SYM TEXT_STRING  */
-#line 17558 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17557 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             if (lex->account_options.x509_subject.str)
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "SUBJECT"));
             lex->account_options.x509_subject= (yyvsp[0].lex_string_with_metadata);
           }
-#line 50096 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50095 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3548: /* require_list_element: ISSUER_SYM TEXT_STRING  */
-#line 17565 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17564 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             if (lex->account_options.x509_issuer.str)
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "ISSUER"));
             lex->account_options.x509_issuer= (yyvsp[0].lex_string_with_metadata);
           }
-#line 50107 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50106 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3549: /* require_list_element: CIPHER_SYM TEXT_STRING  */
-#line 17572 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17571 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             if (lex->account_options.ssl_cipher.str)
               my_yyabort_error((ER_DUP_ARGUMENT, MYF(0), "CIPHER"));
             lex->account_options.ssl_cipher= (yyvsp[0].lex_string_with_metadata);
           }
-#line 50118 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50117 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3550: /* grant_ident: '*'  */
-#line 17582 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17581 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX_CSTRING db;
             if (unlikely(Lex->copy_db_to(&db)))
@@ -50127,411 +50126,411 @@ yyreduce:
                                             Lex_grant_object_name::STAR)))
               MYSQL_YYABORT;
           }
-#line 50131 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50130 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3551: /* grant_ident: ident '.' '*'  */
-#line 17591 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17590 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant_ident)= new (thd->mem_root) Lex_grant_object_name((yyvsp[-2].ident_sys),
                                             Lex_grant_object_name::IDENT_STAR)))
               MYSQL_YYABORT;
           }
-#line 50141 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50140 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3552: /* grant_ident: '*' '.' '*'  */
-#line 17597 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17596 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant_ident)= new (thd->mem_root) Lex_grant_object_name(
                                             null_clex_str,
                                             Lex_grant_object_name::STAR_STAR)))
               MYSQL_YYABORT;
           }
-#line 50152 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50151 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3553: /* grant_ident: table_ident  */
-#line 17604 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17603 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (!((yyval.lex_grant_ident)= new (thd->mem_root) Lex_grant_object_name((yyvsp[0].table))))
               MYSQL_YYABORT;
           }
-#line 50161 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50160 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3554: /* user_list: user  */
-#line 17612 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17611 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50170 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50169 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3555: /* user_list: user_list ',' user  */
-#line 17617 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17616 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50179 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50178 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3556: /* grant_list: grant_user  */
-#line 17625 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17624 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50188 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50187 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3557: /* grant_list: grant_list ',' grant_user  */
-#line 17630 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17629 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50197 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50196 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3558: /* user_and_role_list: user_or_role  */
-#line 17638 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17637 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50206 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50205 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3559: /* user_and_role_list: user_and_role_list ',' user_or_role  */
-#line 17643 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17642 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->users_list.push_back((yyvsp[0].lex_user), thd->mem_root)))
               MYSQL_YYABORT;
           }
-#line 50215 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50214 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3564: /* grant_user: user IDENTIFIED_SYM BY TEXT_STRING  */
-#line 17654 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17653 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.lex_user)= (yyvsp[-3].lex_user);
             (yyvsp[-3].lex_user)->auth= new (thd->mem_root) USER_AUTH();
             (yyvsp[-3].lex_user)->auth->pwtext= (yyvsp[0].lex_string_with_metadata);
           }
-#line 50225 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50224 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3565: /* grant_user: user IDENTIFIED_SYM BY PASSWORD_SYM TEXT_STRING  */
-#line 17660 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17659 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { 
             (yyval.lex_user)= (yyvsp[-4].lex_user); 
             (yyvsp[-4].lex_user)->auth= new (thd->mem_root) USER_AUTH();
             (yyvsp[-4].lex_user)->auth->auth_str= (yyvsp[0].lex_string_with_metadata);
           }
-#line 50235 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50234 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3566: /* grant_user: user IDENTIFIED_SYM via_or_with auth_expression  */
-#line 17666 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17665 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.lex_user)= (yyvsp[-3].lex_user);
             (yyvsp[-3].lex_user)->auth= (yyvsp[0].user_auth);
           }
-#line 50244 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50243 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3567: /* grant_user: user_or_role  */
-#line 17671 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17670 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.lex_user)= (yyvsp[0].lex_user);
           }
-#line 50252 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50251 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3568: /* auth_expression: auth_token OR_SYM auth_expression  */
-#line 17678 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17677 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= (yyvsp[-2].user_auth);
             DBUG_ASSERT((yyval.user_auth)->next == NULL);
             (yyval.user_auth)->next= (yyvsp[0].user_auth);
           }
-#line 50262 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50261 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3569: /* auth_expression: auth_token  */
-#line 17684 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17683 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.user_auth)= (yyvsp[0].user_auth);
           }
-#line 50270 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50269 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3570: /* auth_token: ident_or_text opt_auth_str  */
-#line 17691 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17690 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
         {
           (yyval.user_auth)= (yyvsp[0].user_auth);
           (yyval.user_auth)->plugin= (yyvsp[-1].lex_str);
         }
-#line 50279 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50278 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3571: /* opt_auth_str: %empty  */
-#line 17699 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17698 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
         {
           if (!((yyval.user_auth)=(USER_AUTH*) thd->calloc(sizeof(USER_AUTH))))
             MYSQL_YYABORT;
         }
-#line 50288 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50287 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3572: /* opt_auth_str: using_or_as TEXT_STRING_sys  */
-#line 17704 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17703 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
         {
           if (!((yyval.user_auth)=(USER_AUTH*) thd->calloc(sizeof(USER_AUTH))))
             MYSQL_YYABORT;
           (yyval.user_auth)->auth_str= (yyvsp[0].lex_str);
         }
-#line 50298 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50297 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3573: /* opt_auth_str: using_or_as PASSWORD_SYM '(' TEXT_STRING ')'  */
-#line 17710 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17709 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
         {
           if (!((yyval.user_auth)=(USER_AUTH*) thd->calloc(sizeof(USER_AUTH))))
             MYSQL_YYABORT;
           (yyval.user_auth)->pwtext= (yyvsp[-1].lex_string_with_metadata);
         }
-#line 50308 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50307 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3575: /* opt_require_clause: REQUIRE_SYM require_list  */
-#line 17720 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17719 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->account_options.ssl_type= SSL_TYPE_SPECIFIED;
           }
-#line 50316 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50315 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3576: /* opt_require_clause: REQUIRE_SYM SSL_SYM  */
-#line 17724 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17723 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->account_options.ssl_type= SSL_TYPE_ANY;
           }
-#line 50324 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50323 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3577: /* opt_require_clause: REQUIRE_SYM X509_SYM  */
-#line 17728 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17727 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->account_options.ssl_type= SSL_TYPE_X509;
           }
-#line 50332 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50331 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3578: /* opt_require_clause: REQUIRE_SYM NONE_SYM  */
-#line 17732 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17731 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->account_options.ssl_type= SSL_TYPE_NONE;
           }
-#line 50340 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50339 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3579: /* resource_option: MAX_QUERIES_PER_HOUR ulong_num  */
-#line 17739 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17738 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->account_options.questions=(yyvsp[0].ulong_num);
             Lex->account_options.specified_limits|= USER_RESOURCES::QUERIES_PER_HOUR;
           }
-#line 50349 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50348 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3580: /* resource_option: MAX_UPDATES_PER_HOUR ulong_num  */
-#line 17744 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17743 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->account_options.updates=(yyvsp[0].ulong_num);
             Lex->account_options.specified_limits|= USER_RESOURCES::UPDATES_PER_HOUR;
           }
-#line 50358 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50357 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3581: /* resource_option: MAX_CONNECTIONS_PER_HOUR ulong_num  */
-#line 17749 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17748 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->account_options.conn_per_hour= (yyvsp[0].ulong_num);
             Lex->account_options.specified_limits|= USER_RESOURCES::CONNECTIONS_PER_HOUR;
           }
-#line 50367 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50366 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3582: /* resource_option: MAX_USER_CONNECTIONS_SYM int_num  */
-#line 17754 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17753 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->account_options.user_conn= (yyvsp[0].num);
             Lex->account_options.specified_limits|= USER_RESOURCES::USER_CONNECTIONS;
           }
-#line 50376 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50375 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3583: /* resource_option: MAX_STATEMENT_TIME_SYM NUM_literal  */
-#line 17759 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17758 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->account_options.max_statement_time= (yyvsp[0].item_num)->val_real();
             Lex->account_options.specified_limits|= USER_RESOURCES::MAX_STATEMENT_TIME;
           }
-#line 50385 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50384 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3584: /* resource_option_list: resource_option_list resource_option  */
-#line 17766 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17765 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                                {}
-#line 50391 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50390 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3585: /* resource_option_list: resource_option  */
-#line 17767 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17766 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                           {}
-#line 50397 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50396 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3586: /* opt_resource_options: %empty  */
-#line 17771 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17770 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       {}
-#line 50403 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50402 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3588: /* opt_grant_options: %empty  */
-#line 17777 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17776 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                  { (yyval.privilege)= NO_ACL;  }
-#line 50409 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50408 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3589: /* opt_grant_options: WITH grant_option_list  */
-#line 17778 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17777 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                  { (yyval.privilege)= (yyvsp[0].privilege); }
-#line 50415 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50414 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3590: /* opt_grant_option: %empty  */
-#line 17782 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17781 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                             { (yyval.privilege)= NO_ACL;    }
-#line 50421 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50420 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3591: /* opt_grant_option: WITH GRANT OPTION  */
-#line 17783 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17782 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                             { (yyval.privilege)= GRANT_ACL; }
-#line 50427 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50426 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3592: /* grant_option_list: grant_option_list grant_option  */
-#line 17787 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17786 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                          { (yyval.privilege)= (yyvsp[-1].privilege) | (yyvsp[0].privilege); }
-#line 50433 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50432 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3594: /* grant_option: GRANT OPTION  */
-#line 17792 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17791 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                           { (yyval.privilege)= GRANT_ACL;}
-#line 50439 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50438 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3595: /* grant_option: resource_option  */
-#line 17793 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17792 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                           { (yyval.privilege)= NO_ACL; }
-#line 50445 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50444 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3596: /* $@254: %empty  */
-#line 17798 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17797 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command = SQLCOM_BEGIN;
             lex->start_transaction_opt= 0;
           }
-#line 50455 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50454 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3597: /* begin_stmt_mariadb: BEGIN_MARIADB_SYM $@254 opt_work  */
-#line 17803 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17802 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                    {}
-#line 50461 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50460 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3598: /* compound_statement: sp_proc_stmt_compound_ok  */
-#line 17808 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17807 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sql_command= SQLCOM_COMPOUND;
             if (Lex->sp_body_finalize_procedure(thd))
               MYSQL_YYABORT;
           }
-#line 50471 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50470 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3599: /* opt_not: %empty  */
-#line 17816 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17815 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                        { (yyval.num)= 0; }
-#line 50477 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50476 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3600: /* opt_not: not  */
-#line 17817 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17816 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                        { (yyval.num)= 1; }
-#line 50483 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50482 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3601: /* opt_work: %empty  */
-#line 17821 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17820 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       {}
-#line 50489 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50488 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3602: /* opt_work: WORK_SYM  */
-#line 17822 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17821 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                     {}
-#line 50495 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50494 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3603: /* opt_chain: %empty  */
-#line 17827 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17826 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { (yyval.m_yes_no_unk)= TVL_UNKNOWN; }
-#line 50501 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50500 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3604: /* opt_chain: AND_SYM NO_SYM CHAIN_SYM  */
-#line 17828 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17827 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                    { (yyval.m_yes_no_unk)= TVL_NO; }
-#line 50507 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50506 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3605: /* opt_chain: AND_SYM CHAIN_SYM  */
-#line 17829 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17828 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                    { (yyval.m_yes_no_unk)= TVL_YES; }
-#line 50513 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50512 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3606: /* opt_release: %empty  */
-#line 17834 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17833 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { (yyval.m_yes_no_unk)= TVL_UNKNOWN; }
-#line 50519 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50518 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3607: /* opt_release: RELEASE_SYM  */
-#line 17835 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17834 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                              { (yyval.m_yes_no_unk)= TVL_YES; }
-#line 50525 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50524 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3608: /* opt_release: NO_SYM RELEASE_SYM  */
-#line 17836 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17835 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                              { (yyval.m_yes_no_unk)= TVL_NO; }
-#line 50531 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50530 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3609: /* commit: COMMIT_SYM opt_work opt_chain opt_release  */
-#line 17841 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17840 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_COMMIT;
@@ -50540,11 +50539,11 @@ yyreduce:
             lex->tx_chain= (yyvsp[-1].m_yes_no_unk);
             lex->tx_release= (yyvsp[0].m_yes_no_unk);
           }
-#line 50544 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50543 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3610: /* rollback: ROLLBACK_SYM opt_work opt_chain opt_release  */
-#line 17853 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17852 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_ROLLBACK;
@@ -50553,145 +50552,145 @@ yyreduce:
             lex->tx_chain= (yyvsp[-1].m_yes_no_unk);
             lex->tx_release= (yyvsp[0].m_yes_no_unk);
           }
-#line 50557 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50556 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3611: /* rollback: ROLLBACK_SYM opt_work TO_SYM SAVEPOINT_SYM ident  */
-#line 17862 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17861 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_ROLLBACK_TO_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 50567 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50566 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3612: /* rollback: ROLLBACK_SYM opt_work TO_SYM ident  */
-#line 17868 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17867 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_ROLLBACK_TO_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 50577 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50576 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3613: /* savepoint: SAVEPOINT_SYM ident  */
-#line 17877 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17876 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 50587 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50586 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3614: /* release: RELEASE_SYM SAVEPOINT_SYM ident  */
-#line 17886 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17885 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->sql_command= SQLCOM_RELEASE_SAVEPOINT;
             lex->ident= (yyvsp[0].ident_sys);
           }
-#line 50597 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50596 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3615: /* unit_type_decl: UNION_SYM union_option  */
-#line 17899 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17898 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { (yyval.unit_operation).unit_type= UNION_TYPE; (yyval.unit_operation).distinct= (yyvsp[0].num); }
-#line 50603 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50602 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3616: /* unit_type_decl: INTERSECT_SYM union_option  */
-#line 17901 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17900 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { (yyval.unit_operation).unit_type= INTERSECT_TYPE; (yyval.unit_operation).distinct= (yyvsp[0].num); }
-#line 50609 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50608 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3617: /* unit_type_decl: EXCEPT_SYM union_option  */
-#line 17903 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17902 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { (yyval.unit_operation).unit_type= EXCEPT_TYPE; (yyval.unit_operation).distinct= (yyvsp[0].num); }
-#line 50615 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50614 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3618: /* union_option: %empty  */
-#line 17910 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17909 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.num)=1; }
-#line 50621 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50620 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3619: /* union_option: DISTINCT  */
-#line 17911 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17910 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                     { (yyval.num)=1; }
-#line 50627 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50626 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3620: /* union_option: ALL  */
-#line 17912 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17911 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                     { (yyval.num)=0; }
-#line 50633 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50632 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3621: /* query_expression_option: STRAIGHT_JOIN  */
-#line 17916 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17915 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                         { Select->options|= SELECT_STRAIGHT_JOIN; }
-#line 50639 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50638 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3622: /* query_expression_option: HIGH_PRIORITY  */
-#line 17918 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17917 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             YYPS->m_lock_type= TL_READ_HIGH_PRIORITY;
             YYPS->m_mdl_type= MDL_SHARED_READ;
             Select->options|= SELECT_HIGH_PRIORITY;
           }
-#line 50649 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50648 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3623: /* query_expression_option: DISTINCT  */
-#line 17923 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17922 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                            { Select->options|= SELECT_DISTINCT; }
-#line 50655 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50654 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3624: /* query_expression_option: UNIQUE_SYM  */
-#line 17924 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17923 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                            { Select->options|= SELECT_DISTINCT; }
-#line 50661 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50660 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3625: /* query_expression_option: SQL_SMALL_RESULT  */
-#line 17925 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17924 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                            { Select->options|= SELECT_SMALL_RESULT; }
-#line 50667 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50666 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3626: /* query_expression_option: SQL_BIG_RESULT  */
-#line 17926 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17925 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                            { Select->options|= SELECT_BIG_RESULT; }
-#line 50673 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50672 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3627: /* query_expression_option: SQL_BUFFER_RESULT  */
-#line 17927 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17926 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                             { Select->options|= OPTION_BUFFER_RESULT; }
-#line 50679 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50678 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3628: /* query_expression_option: SQL_CALC_FOUND_ROWS  */
-#line 17928 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17927 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                               { Select->options|= OPTION_FOUND_ROWS; }
-#line 50685 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50684 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3629: /* query_expression_option: ALL  */
-#line 17929 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17928 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
               { Select->options|= SELECT_ALL; }
-#line 50691 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50690 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3632: /* no_definer: %empty  */
-#line 17945 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17944 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             /*
               We have to distinguish missing DEFINER-clause from case when
@@ -50702,201 +50701,201 @@ yyreduce:
             */
             thd->lex->definer= 0;
           }
-#line 50706 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50705 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3633: /* definer: DEFINER_SYM '=' user_or_role  */
-#line 17959 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17958 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->definer= (yyvsp[0].lex_user);
             Lex->account_options.reset();
           }
-#line 50715 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50714 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3634: /* view_algorithm: ALGORITHM_SYM '=' UNDEFINED_SYM  */
-#line 17972 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17971 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                           { (yyval.num)= DTYPE_ALGORITHM_UNDEFINED; }
-#line 50721 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50720 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3635: /* view_algorithm: ALGORITHM_SYM '=' MERGE_SYM  */
-#line 17973 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17972 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_ALGORITHM_MERGE; }
-#line 50727 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50726 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3636: /* view_algorithm: ALGORITHM_SYM '=' TEMPTABLE_SYM  */
-#line 17974 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17973 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_ALGORITHM_TMPTABLE; }
-#line 50733 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50732 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3637: /* opt_view_suid: %empty  */
-#line 17978 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17977 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= VIEW_SUID_DEFAULT; }
-#line 50739 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50738 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3638: /* opt_view_suid: view_suid  */
-#line 17979 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17978 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= (yyvsp[0].view_suid); }
-#line 50745 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50744 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3639: /* view_suid: SQL_SYM SECURITY_SYM DEFINER_SYM  */
-#line 17983 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17982 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= VIEW_SUID_DEFINER; }
-#line 50751 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50750 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3640: /* view_suid: SQL_SYM SECURITY_SYM INVOKER_SYM  */
-#line 17984 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17983 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                            { (yyval.view_suid)= VIEW_SUID_INVOKER; }
-#line 50757 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50756 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3641: /* view_list_opt: %empty  */
-#line 17989 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17988 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {}
-#line 50763 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50762 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3642: /* view_list_opt: '(' view_list ')'  */
-#line 17990 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17989 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                             { }
-#line 50769 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50768 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3643: /* view_list: ident  */
-#line 17995 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 17994 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->view_list.push_back((LEX_CSTRING*)
                                      thd->memdup(&(yyvsp[0].ident_sys), sizeof(LEX_CSTRING)),
                                      thd->mem_root);
           }
-#line 50779 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50778 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3644: /* view_list: view_list ',' ident  */
-#line 18001 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18000 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->view_list.push_back((LEX_CSTRING*)
                                      thd->memdup(&(yyvsp[0].ident_sys), sizeof(LEX_CSTRING)),
                                      thd->mem_root);
           }
-#line 50789 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50788 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3645: /* $@255: %empty  */
-#line 18009 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18008 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->parsing_options.allows_variable= FALSE;
             lex->create_view->select.str= (char *) YYLIP->get_cpp_ptr();
           }
-#line 50799 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50798 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3646: /* view_select: $@255 query_expression view_check_option  */
-#line 18016 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18015 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->parsed_create_view((yyvsp[-1].select_lex_unit), (yyvsp[0].num)))
               MYSQL_YYABORT;
           }
-#line 50808 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50807 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3647: /* view_check_option: %empty  */
-#line 18023 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18022 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_NONE; }
-#line 50814 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50813 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3648: /* view_check_option: WITH CHECK_SYM OPTION  */
-#line 18024 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18023 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_CASCADED; }
-#line 50820 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50819 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3649: /* view_check_option: WITH CASCADED CHECK_SYM OPTION  */
-#line 18025 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18024 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_CASCADED; }
-#line 50826 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50825 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3650: /* view_check_option: WITH LOCAL_SYM CHECK_SYM OPTION  */
-#line 18026 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18025 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                           { (yyval.num)= VIEW_CHECK_LOCAL; }
-#line 50832 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50831 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3651: /* trigger_action_order: FOLLOWS_SYM  */
-#line 18037 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18036 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
             { (yyval.trigger_action_order_type)= TRG_ORDER_FOLLOWS; }
-#line 50838 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50837 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3652: /* trigger_action_order: PRECEDES_SYM  */
-#line 18039 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18038 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
             { (yyval.trigger_action_order_type)= TRG_ORDER_PRECEDES; }
-#line 50844 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50843 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3653: /* trigger_follows_precedes_clause: %empty  */
-#line 18044 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18043 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
             {
               (yyval.trg_execution_order).ordering_clause= TRG_ORDER_NONE;
               (yyval.trg_execution_order).anchor_trigger_name.str= NULL;
               (yyval.trg_execution_order).anchor_trigger_name.length= 0;
             }
-#line 50854 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50853 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3654: /* trigger_follows_precedes_clause: trigger_action_order ident_or_text  */
-#line 18051 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18050 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
             {
               (yyval.trg_execution_order).ordering_clause= (yyvsp[-1].trigger_action_order_type);
               (yyval.trg_execution_order).anchor_trigger_name= (yyvsp[0].lex_str);
             }
-#line 50863 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50862 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3655: /* $@256: %empty  */
-#line 18060 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18059 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->add_create_options_with_check((yyvsp[0].object_ddl_options))))
               MYSQL_YYABORT;
           }
-#line 50872 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50871 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3656: /* $@257: %empty  */
-#line 18069 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18068 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { /* $9 */
             Lex->raw_trg_on_table_name_begin= YYLIP->get_tok_start();
           }
-#line 50880 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50879 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3657: /* $@258: %empty  */
-#line 18075 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18074 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { /* $13 */
             Lex->raw_trg_on_table_name_end= YYLIP->get_tok_start();
           }
-#line 50888 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50887 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3658: /* $@259: %empty  */
-#line 18080 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18079 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->trg_chistics.ordering_clause_begin= YYLIP->get_cpp_ptr();
           }
-#line 50896 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50895 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3659: /* $@260: %empty  */
-#line 18084 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18083 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { /* $18 */
             LEX *lex= thd->lex;
             Lex_input_stream *lip= YYLIP;
@@ -50917,11 +50916,11 @@ yyreduce:
 
             lex->sphead->set_body_start(thd, lip->get_cpp_tok_start());
           }
-#line 50921 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50920 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3660: /* trigger_tail: remember_name opt_if_not_exists $@256 sp_name trg_action_time trg_event ON remember_name $@257 table_ident FOR_SYM remember_name $@258 EACH_SYM ROW_SYM $@259 trigger_follows_precedes_clause $@260 sp_proc_stmt force_lookahead  */
-#line 18105 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18104 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { /* $21 */
             LEX *lex= Lex;
 
@@ -50940,86 +50939,86 @@ yyreduce:
                                    MDL_SHARED_NO_WRITE))
               MYSQL_YYABORT;
           }
-#line 50944 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50943 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3661: /* $@261: %empty  */
-#line 18133 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18132 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->init_last_field(&lex->sphead->m_return_field_def,
                                  &empty_clex_str,
                                  thd->variables.collation_database);
           }
-#line 50955 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50954 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3662: /* sf_return_type: $@261 field_type  */
-#line 18140 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18139 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sf_return_fill_definition((yyvsp[0].Lex_field_type))))
               MYSQL_YYABORT;
           }
-#line 50964 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50963 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3663: /* xa: XA_SYM begin_or_start xid opt_join_or_resume  */
-#line 18150 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18149 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_START;
           }
-#line 50972 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50971 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3664: /* xa: XA_SYM END xid opt_suspend  */
-#line 18154 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18153 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_END;
           }
-#line 50980 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50979 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3665: /* xa: XA_SYM PREPARE_SYM xid  */
-#line 18158 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18157 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_PREPARE;
           }
-#line 50988 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50987 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3666: /* xa: XA_SYM COMMIT_SYM xid opt_one_phase  */
-#line 18162 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18161 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_COMMIT;
           }
-#line 50996 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 50995 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3667: /* xa: XA_SYM ROLLBACK_SYM xid  */
-#line 18166 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18165 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_ROLLBACK;
           }
-#line 51004 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51003 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3668: /* xa: XA_SYM RECOVER_SYM opt_format_xid  */
-#line 18170 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18169 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sql_command = SQLCOM_XA_RECOVER;
             Lex->verbose= (yyvsp[0].num);
           }
-#line 51013 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51012 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3669: /* opt_format_xid: %empty  */
-#line 18177 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18176 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                      { (yyval.num)= false; }
-#line 51019 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51018 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3670: /* opt_format_xid: FORMAT_SYM '=' ident_or_text  */
-#line 18179 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18178 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (lex_string_eq(&(yyvsp[0].lex_str), STRING_WITH_LEN("SQL")))
               (yyval.num)= true;
@@ -51032,33 +51031,33 @@ yyreduce:
               (yyval.num)= false;
             }
           }
-#line 51036 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51035 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3671: /* xid: text_string  */
-#line 18195 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18194 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             MYSQL_YYABORT_UNLESS((yyvsp[0].string)->length() <= MAXGTRIDSIZE);
             if (unlikely(!(Lex->xid=(XID *)thd->alloc(sizeof(XID)))))
               MYSQL_YYABORT;
             Lex->xid->set(1L, (yyvsp[0].string)->ptr(), (yyvsp[0].string)->length(), 0, 0);
           }
-#line 51047 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51046 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3672: /* xid: text_string ',' text_string  */
-#line 18202 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18201 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             MYSQL_YYABORT_UNLESS((yyvsp[-2].string)->length() <= MAXGTRIDSIZE && (yyvsp[0].string)->length() <= MAXBQUALSIZE);
             if (unlikely(!(Lex->xid=(XID *)thd->alloc(sizeof(XID)))))
               MYSQL_YYABORT;
             Lex->xid->set(1L, (yyvsp[-2].string)->ptr(), (yyvsp[-2].string)->length(), (yyvsp[0].string)->ptr(), (yyvsp[0].string)->length());
           }
-#line 51058 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51057 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3673: /* xid: text_string ',' text_string ',' ulong_num  */
-#line 18209 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18208 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             MYSQL_YYABORT_UNLESS((yyvsp[-4].string)->length() <= MAXGTRIDSIZE &&
                                  (yyvsp[-2].string)->length() <= MAXBQUALSIZE &&
@@ -51068,126 +51067,126 @@ yyreduce:
               MYSQL_YYABORT;
             Lex->xid->set((yyvsp[0].ulong_num), (yyvsp[-4].string)->ptr(), (yyvsp[-4].string)->length(), (yyvsp[-2].string)->ptr(), (yyvsp[-2].string)->length());
           }
-#line 51072 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51071 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3674: /* begin_or_start: BEGIN_MARIADB_SYM  */
-#line 18221 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18220 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                             {}
-#line 51078 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51077 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3675: /* begin_or_start: BEGIN_ORACLE_SYM  */
-#line 18222 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18221 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                            {}
-#line 51084 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51083 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3676: /* begin_or_start: START_SYM  */
-#line 18223 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18222 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                     {}
-#line 51090 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51089 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3677: /* opt_join_or_resume: %empty  */
-#line 18227 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18226 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                         { Lex->xa_opt=XA_NONE;        }
-#line 51096 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51095 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3678: /* opt_join_or_resume: JOIN_SYM  */
-#line 18228 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18227 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                         { Lex->xa_opt=XA_JOIN;        }
-#line 51102 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51101 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3679: /* opt_join_or_resume: RESUME_SYM  */
-#line 18229 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18228 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                         { Lex->xa_opt=XA_RESUME;      }
-#line 51108 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51107 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3680: /* opt_one_phase: %empty  */
-#line 18233 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18232 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                             { Lex->xa_opt=XA_NONE;        }
-#line 51114 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51113 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3681: /* opt_one_phase: ONE_SYM PHASE_SYM  */
-#line 18234 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18233 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                             { Lex->xa_opt=XA_ONE_PHASE;   }
-#line 51120 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51119 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3682: /* opt_suspend: %empty  */
-#line 18239 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18238 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { Lex->xa_opt=XA_NONE;        }
-#line 51126 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51125 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3683: /* $@262: %empty  */
-#line 18241 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18240 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { Lex->xa_opt=XA_SUSPEND;     }
-#line 51132 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51131 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3685: /* opt_migrate: %empty  */
-#line 18246 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18245 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                               {}
-#line 51138 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51137 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3686: /* opt_migrate: FOR_SYM MIGRATE_SYM  */
-#line 18247 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18246 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                               { Lex->xa_opt=XA_FOR_MIGRATE; }
-#line 51144 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51143 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3687: /* install: INSTALL_SYM PLUGIN_SYM opt_if_not_exists ident SONAME_SYM TEXT_STRING_sys  */
-#line 18252 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18251 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_install_plugin((yyvsp[-3].object_ddl_options), (yyvsp[-2].ident_sys), (yyvsp[0].lex_str)))
               MYSQL_YYABORT;
           }
-#line 51153 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51152 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3688: /* install: INSTALL_SYM SONAME_SYM TEXT_STRING_sys  */
-#line 18257 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18256 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->stmt_install_plugin((yyvsp[0].lex_str));
           }
-#line 51161 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51160 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3689: /* uninstall: UNINSTALL_SYM PLUGIN_SYM opt_if_exists ident  */
-#line 18264 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18263 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_uninstall_plugin_by_name((yyvsp[-1].object_ddl_options), (yyvsp[0].ident_sys)))
               MYSQL_YYABORT;
           }
-#line 51170 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51169 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3690: /* uninstall: UNINSTALL_SYM SONAME_SYM opt_if_exists TEXT_STRING_sys  */
-#line 18269 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18268 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_uninstall_plugin_by_soname((yyvsp[-1].object_ddl_options), (yyvsp[0].lex_str)))
               MYSQL_YYABORT;
           }
-#line 51179 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51178 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3691: /* keep_gcc_happy: IMPOSSIBLE_ACTION  */
-#line 18278 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18277 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             YYERROR;
           }
-#line 51187 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51186 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3696: /* $@263: %empty  */
-#line 18701 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18700 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             // Direct procedure call (without the CALL keyword)
             Lex_ident_sys tmp(thd, &(yyvsp[0].ident_cli));
@@ -51195,266 +51194,266 @@ yyreduce:
                 unlikely(Lex->call_statement_start(thd, &tmp)))
               MYSQL_YYABORT;
           }
-#line 51199 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51198 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3697: /* sp_statement: ident_cli_directly_assignable $@263 opt_sp_cparam_list  */
-#line 18709 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18708 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->check_cte_dependencies_and_resolve_references())
               MYSQL_YYABORT;
           }
-#line 51208 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51207 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3698: /* $@264: %empty  */
-#line 18714 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18713 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-2].ident_cli));
             if (unlikely(!tmp.str) ||
                 unlikely(Lex->call_statement_start(thd, &tmp, &(yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51219 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51218 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3699: /* sp_statement: ident_cli_directly_assignable '.' ident $@264 opt_sp_cparam_list  */
-#line 18721 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18720 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->check_cte_dependencies_and_resolve_references())
               MYSQL_YYABORT;
           }
-#line 51228 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51227 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3700: /* $@265: %empty  */
-#line 18726 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18725 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-4].ident_cli));
             if (unlikely(Lex->call_statement_start(thd, &tmp, &(yyvsp[-2].ident_sys), &(yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51238 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51237 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3701: /* sp_statement: ident_cli_directly_assignable '.' ident '.' ident $@265 opt_sp_cparam_list  */
-#line 18732 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18731 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->check_cte_dependencies_and_resolve_references())
               MYSQL_YYABORT;
           }
-#line 51247 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51246 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3702: /* sp_if_then_statements: sp_proc_stmts1_implicit_block  */
-#line 18739 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18738 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                         { }
-#line 51253 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51252 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3703: /* sp_case_then_statements: sp_proc_stmts1_implicit_block  */
-#line 18743 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18742 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                         { }
-#line 51259 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51258 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3727: /* row_field_name: ident_directly_assignable  */
-#line 18793 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18792 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (!((yyval.spvar_definition)= Lex->row_field_name(thd, (yyvsp[0].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51268 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51267 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3728: /* $@266: %empty  */
-#line 18801 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18800 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely((yyvsp[-1].expr_lex)->sp_while_loop_expression(thd)))
               MYSQL_YYABORT;
           }
-#line 51277 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51276 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3729: /* while_body: expr_lex LOOP_SYM $@266 sp_proc_stmts1 END LOOP_SYM  */
-#line 18806 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18805 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_while_loop_finalize(thd)))
               MYSQL_YYABORT;
           }
-#line 51286 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51285 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3730: /* for_loop_statements: LOOP_SYM sp_proc_stmts1 END LOOP_SYM  */
-#line 18814 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18813 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { }
-#line 51292 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51291 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3732: /* sp_block_label: labels_declaration_oracle  */
-#line 18824 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18823 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->spcont->block_label_declare(&(yyvsp[0].lex_str))))
               MYSQL_YYABORT;
             (yyval.lex_str)= (yyvsp[0].lex_str);
           }
-#line 51302 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51301 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3733: /* remember_end_opt: %empty  */
-#line 18833 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18832 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (yychar == YYEMPTY)
               (yyval.simple_string)= (char*) YYLIP->get_cpp_ptr_rtrim();
             else
               (yyval.simple_string)= (char*) YYLIP->get_cpp_tok_end_rtrim();
           }
-#line 51313 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51312 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3734: /* sp_opt_default: _empty  */
-#line 18842 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18841 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                        { (yyval.item) = NULL; }
-#line 51319 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51318 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3735: /* sp_opt_default: DEFAULT expr  */
-#line 18843 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18842 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                        { (yyval.item) = (yyvsp[0].item); }
-#line 51325 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51324 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3736: /* sp_opt_default: SET_VAR expr  */
-#line 18844 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18843 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                        { (yyval.item) = (yyvsp[0].item); }
-#line 51331 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51330 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3737: /* sp_opt_inout: _empty  */
-#line 18848 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18847 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                          { (yyval.spvar_mode)= sp_variable::MODE_IN; }
-#line 51337 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51336 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3739: /* sp_opt_inout: IN_SYM OUT_SYM  */
-#line 18850 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18849 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                          { (yyval.spvar_mode)= sp_variable::MODE_INOUT; }
-#line 51343 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51342 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3740: /* sp_pdparam: sp_param_name sp_opt_inout field_type  */
-#line 18855 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18854 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyvsp[-2].spvar)->mode= (yyvsp[-1].spvar_mode);
             if (unlikely(Lex->sp_param_fill_definition((yyvsp[-2].spvar), (yyvsp[0].Lex_field_type))))
               MYSQL_YYABORT;
           }
-#line 51353 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51352 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3741: /* sp_pdparam: sp_param_name sp_opt_inout sp_decl_ident '.' ident PERCENT_ORACLE_SYM TYPE_SYM  */
-#line 18861 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18860 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyvsp[-6].spvar)->mode= (yyvsp[-5].spvar_mode);
             if (unlikely(Lex->sphead->spvar_fill_type_reference(thd, (yyvsp[-6].spvar), (yyvsp[-4].ident_sys), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51363 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51362 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3742: /* sp_pdparam: sp_param_name sp_opt_inout sp_decl_ident '.' ident '.' ident PERCENT_ORACLE_SYM TYPE_SYM  */
-#line 18867 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18866 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyvsp[-8].spvar)->mode= (yyvsp[-7].spvar_mode);
             if (unlikely(Lex->sphead->spvar_fill_type_reference(thd, (yyvsp[-8].spvar), (yyvsp[-6].ident_sys), (yyvsp[-4].ident_sys), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51373 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51372 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3743: /* sp_pdparam: sp_param_name sp_opt_inout sp_decl_ident PERCENT_ORACLE_SYM ROWTYPE_ORACLE_SYM  */
-#line 18873 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18872 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyvsp[-4].spvar)->mode= (yyvsp[-3].spvar_mode);
             if (unlikely(Lex->sphead->spvar_fill_table_rowtype_reference(thd, (yyvsp[-4].spvar), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51383 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51382 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3744: /* sp_pdparam: sp_param_name sp_opt_inout sp_decl_ident '.' ident PERCENT_ORACLE_SYM ROWTYPE_ORACLE_SYM  */
-#line 18879 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18878 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyvsp[-6].spvar)->mode= (yyvsp[-5].spvar_mode);
             if (unlikely(Lex->sphead->spvar_fill_table_rowtype_reference(thd, (yyvsp[-6].spvar), (yyvsp[-4].ident_sys), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51393 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51392 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3745: /* sp_pdparam: sp_param_name sp_opt_inout ROW_SYM row_type_body  */
-#line 18885 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18884 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyvsp[-3].spvar)->mode= (yyvsp[-2].spvar_mode);
             if (unlikely(Lex->sphead->spvar_fill_row(thd, (yyvsp[-3].spvar), (yyvsp[0].spvar_definition_list))))
               MYSQL_YYABORT;
           }
-#line 51403 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51402 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3746: /* $@267: %empty  */
-#line 18894 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18893 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd);
           }
-#line 51411 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51410 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3747: /* sp_proc_stmts1_implicit_block: $@267 sp_proc_stmts1  */
-#line 18898 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18897 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_finalize(thd)))
               MYSQL_YYABORT;
           }
-#line 51420 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51419 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3748: /* remember_lex: %empty  */
-#line 18906 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18905 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.lex)= thd->lex;
           }
-#line 51428 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51427 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3758: /* ident_directly_assignable: keyword_directly_assignable  */
-#line 18925 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18924 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely((yyval.ident_sys).copy_keyword(thd, &(yyvsp[0].kwd))))
               MYSQL_YYABORT;
           }
-#line 51437 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51436 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3760: /* ident_cli_directly_assignable: keyword_directly_assignable  */
-#line 18933 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18932 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                       { (yyval.ident_cli)= (yyvsp[0].kwd); }
-#line 51443 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51442 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3761: /* $@268: %empty  */
-#line 18939 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18938 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->set_stmt_init();
             if (sp_create_assignment_lex(thd, (yyvsp[-1].ident_cli).pos()))
               MYSQL_YYABORT;
           }
-#line 51454 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51453 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3762: /* set_assign: ident_cli_directly_assignable SET_VAR $@268 set_expr_or_default  */
-#line 18946 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18945 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex_ident_sys tmp(thd, &(yyvsp[-3].ident_cli));
             if (unlikely(!tmp.str) ||
@@ -51463,22 +51462,22 @@ yyreduce:
                                                     false)))
               MYSQL_YYABORT;
           }
-#line 51467 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51466 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3763: /* $@269: %empty  */
-#line 18955 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18954 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex=Lex;
             lex->set_stmt_init();
             if (sp_create_assignment_lex(thd, (yyvsp[-3].ident_cli).pos()))
               MYSQL_YYABORT;
           }
-#line 51478 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51477 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3764: /* set_assign: ident_cli_directly_assignable '.' ident SET_VAR $@269 set_expr_or_default  */
-#line 18962 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18961 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             DBUG_ASSERT(lex->var_list.is_empty());
@@ -51489,11 +51488,11 @@ yyreduce:
                                                     false)))
               MYSQL_YYABORT;
           }
-#line 51493 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51492 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3765: /* $@270: %empty  */
-#line 18973 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18972 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             if (unlikely(!lex->is_trigger_new_or_old_reference(&(yyvsp[-3].ident_sys))))
@@ -51505,11 +51504,11 @@ yyreduce:
             if (sp_create_assignment_lex(thd, (yyvsp[-4].kwd).pos()))
               MYSQL_YYABORT;
           }
-#line 51509 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51508 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3766: /* set_assign: COLON_ORACLE_SYM ident '.' ident SET_VAR $@270 set_expr_or_default  */
-#line 18985 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18984 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX_CSTRING tmp= { (yyvsp[-5].ident_sys).str, (yyvsp[-5].ident_sys).length };
             if (unlikely(Lex->set_trigger_field(&tmp, &(yyvsp[-3].ident_sys), (yyvsp[0].item))) ||
@@ -51517,222 +51516,222 @@ yyreduce:
                                                     false)))
               MYSQL_YYABORT;
           }
-#line 51521 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51520 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3767: /* labels_declaration_oracle: label_declaration_oracle  */
-#line 18996 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18995 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                    { (yyval.lex_str)= (yyvsp[0].lex_str); }
-#line 51527 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51526 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3768: /* labels_declaration_oracle: labels_declaration_oracle label_declaration_oracle  */
-#line 18997 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 18996 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                                              { (yyval.lex_str)= (yyvsp[0].lex_str); }
-#line 51533 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51532 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3769: /* label_declaration_oracle: SHIFT_LEFT label_ident SHIFT_RIGHT  */
-#line 19002 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19001 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_push_goto_label(thd, &(yyvsp[-1].ident_sys))))
               MYSQL_YYABORT;
             (yyval.lex_str)= (yyvsp[-1].ident_sys);
           }
-#line 51543 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51542 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3770: /* opt_exception_clause: _empty  */
-#line 19010 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19009 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                                   { (yyval.num)= 0; }
-#line 51549 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51548 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3771: /* opt_exception_clause: EXCEPTION_ORACLE_SYM exception_handlers  */
-#line 19011 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19010 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                                   { (yyval.num)= (yyvsp[0].num); }
-#line 51555 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51554 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3772: /* exception_handlers: exception_handler  */
-#line 19015 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19014 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                                 { (yyval.num)= 1; }
-#line 51561 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51560 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3773: /* exception_handlers: exception_handlers exception_handler  */
-#line 19016 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19015 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                                 { (yyval.num)= (yyvsp[-1].num) + 1; }
-#line 51567 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51566 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3774: /* $@271: %empty  */
-#line 19021 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19020 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_handler_declaration_init(thd, sp_handler::EXIT)))
               MYSQL_YYABORT;
           }
-#line 51576 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51575 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3775: /* exception_handler: WHEN_SYM $@271 sp_hcond_list THEN_SYM sp_proc_stmts1_implicit_block  */
-#line 19028 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19027 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_handler_declaration_finalize(thd, sp_handler::EXIT)))
               MYSQL_YYABORT;
           }
-#line 51585 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51584 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3776: /* sp_no_param: _empty  */
-#line 19036 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19035 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sphead->m_param_begin= Lex->sphead->m_param_end=
               YYLIP->get_cpp_tok_start() + 1;
           }
-#line 51594 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51593 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3781: /* opt_sp_name: _empty  */
-#line 19054 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19053 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.spname)= NULL; }
-#line 51600 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51599 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3782: /* opt_sp_name: sp_name  */
-#line 19055 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19054 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.spname)= (yyvsp[0].spname); }
-#line 51606 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51605 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3783: /* opt_package_routine_end_name: _empty  */
-#line 19060 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19059 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.lex_str)= null_clex_str; }
-#line 51612 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51611 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3784: /* opt_package_routine_end_name: ident  */
-#line 19061 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19060 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                       { (yyval.lex_str)= (yyvsp[0].ident_sys); }
-#line 51618 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51617 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3787: /* sp_instr_addr: %empty  */
-#line 19070 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19069 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { (yyval.sp_instr_addr)= Lex->sphead->instructions(); }
-#line 51624 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51623 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3788: /* $@272: %empty  */
-#line 19074 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19073 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd);
           }
-#line 51632 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51631 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3789: /* $@273: %empty  */
-#line 19078 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19077 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 51641 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51640 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3790: /* $@274: %empty  */
-#line 19084 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19083 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyvsp[-3].spblock).hndlrs+= (yyvsp[0].spblock_handlers).hndlrs;
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-3].spblock))))
               MYSQL_YYABORT;
           }
-#line 51651 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51650 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3792: /* create_package_chistic: COMMENT_SYM TEXT_STRING_sys  */
-#line 19094 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19093 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { Lex->sp_chistics.comment= (yyvsp[0].lex_str); }
-#line 51657 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51656 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3793: /* create_package_chistic: sp_suid  */
-#line 19096 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19095 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { Lex->sp_chistics.suid= (yyvsp[0].sp_suid); }
-#line 51663 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51662 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3794: /* create_package_chistics: create_package_chistic  */
-#line 19100 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19099 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                  {}
-#line 51669 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51668 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3795: /* create_package_chistics: create_package_chistics create_package_chistic  */
-#line 19101 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19100 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                                          { }
-#line 51675 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51674 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3797: /* opt_create_package_chistics: create_package_chistics  */
-#line 19106 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19105 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { }
-#line 51681 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51680 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3798: /* $@275: %empty  */
-#line 19110 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19109 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { Lex->sp_chistics.init(); }
-#line 51687 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51686 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3800: /* package_implementation_executable_section: END  */
-#line 19117 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19116 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_add_empty(thd)))
               MYSQL_YYABORT;
             (yyval.spblock_handlers).init(0);
           }
-#line 51697 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51696 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3801: /* package_implementation_executable_section: BEGIN_ORACLE_SYM sp_block_statements_and_exceptions END  */
-#line 19122 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19121 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                                                   { (yyval.spblock_handlers)= (yyvsp[-1].spblock_handlers); }
-#line 51703 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51702 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3804: /* package_implementation_declare_section: package_implementation_declare_section_list1 package_implementation_declare_section_list2  */
-#line 19134 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19133 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { (yyval.spblock).join((yyvsp[-1].spblock), (yyvsp[0].spblock)); }
-#line 51709 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51708 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3806: /* package_implementation_declare_section_list1: package_implementation_declare_section_list1 package_implementation_item_declaration  */
-#line 19141 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19140 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { (yyval.spblock).join((yyvsp[-1].spblock), (yyvsp[0].spblock)); }
-#line 51715 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51714 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3808: /* package_implementation_declare_section_list2: package_implementation_declare_section_list2 package_implementation_routine_definition  */
-#line 19148 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19147 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           { (yyval.spblock).join((yyvsp[-1].spblock), (yyvsp[0].spblock)); }
-#line 51721 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51720 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3809: /* package_routine_lex: %empty  */
-#line 19152 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19151 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(!((yyval.lex)= new (thd->mem_root)
                            sp_lex_local(thd, thd->lex))))
               MYSQL_YYABORT;
             thd->m_parser_state->m_yacc.reset_before_substatement();
           }
-#line 51732 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51731 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3810: /* $@276: %empty  */
-#line 19163 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19162 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             DBUG_ASSERT((yyvsp[-2].lex)->sphead->get_package());
             (yyvsp[-1].lex)->sql_command= SQLCOM_CREATE_FUNCTION;
@@ -51747,22 +51746,22 @@ yyreduce:
             (yyvsp[-2].lex)->sphead->get_package()->m_current_routine= (yyvsp[-1].lex);
             (void) is_native_function_with_warn(thd, &(yyvsp[0].ident_sys));
           }
-#line 51751 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51750 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3811: /* package_specification_function: remember_lex package_routine_lex ident $@276 opt_sp_parenthesized_fdparam_list RETURN_ORACLE_SYM sf_return_type sp_c_chistics  */
-#line 19180 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19179 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_head *sp= thd->lex->sphead;
             sp->restore_thd_mem_root(thd);
             thd->lex= (yyvsp[-7].lex);
             (yyval.lex)= (yyvsp[-6].lex);
           }
-#line 51762 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51761 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3812: /* $@277: %empty  */
-#line 19190 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19189 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             DBUG_ASSERT((yyvsp[-2].lex)->sphead->get_package());
             (yyvsp[-1].lex)->sql_command= SQLCOM_CREATE_PROCEDURE;
@@ -51776,22 +51775,22 @@ yyreduce:
               MYSQL_YYABORT;
             (yyvsp[-2].lex)->sphead->get_package()->m_current_routine= (yyvsp[-1].lex);
           }
-#line 51780 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51779 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3813: /* package_specification_procedure: remember_lex package_routine_lex ident $@277 opt_sp_parenthesized_pdparam_list sp_c_chistics  */
-#line 19205 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19204 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_head *sp= thd->lex->sphead;
             sp->restore_thd_mem_root(thd);
             thd->lex= (yyvsp[-5].lex);
             (yyval.lex)= (yyvsp[-4].lex);
           }
-#line 51791 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51790 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3814: /* package_implementation_routine_definition: FUNCTION_SYM package_specification_function package_implementation_function_body ';'  */
-#line 19217 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19216 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_implementation((yyvsp[-2].lex))))
@@ -51799,11 +51798,11 @@ yyreduce:
             pkg->m_current_routine= NULL;
             (yyval.spblock).init();
           }
-#line 51803 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51802 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3815: /* package_implementation_routine_definition: PROCEDURE_SYM package_specification_procedure package_implementation_procedure_body ';'  */
-#line 19226 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19225 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_implementation((yyvsp[-2].lex))))
@@ -51811,17 +51810,17 @@ yyreduce:
             pkg->m_current_routine= NULL;
             (yyval.spblock).init();
           }
-#line 51815 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51814 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3816: /* package_implementation_routine_definition: package_specification_element  */
-#line 19233 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19232 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                         { (yyval.spblock).init(); }
-#line 51821 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51820 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3817: /* $@278: %empty  */
-#line 19239 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19238 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             sp_head *sp= pkg->m_current_routine->sphead;
@@ -51830,22 +51829,22 @@ yyreduce:
             sp->set_c_chistics(thd->lex->sp_chistics);
             sp->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 51834 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51833 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3818: /* package_implementation_function_body: sp_tail_is remember_lex $@278 sp_body opt_package_routine_end_name  */
-#line 19248 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19247 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(thd->lex->sp_body_finalize_function(thd) ||
                          thd->lex->sphead->check_package_routine_end_name((yyvsp[0].lex_str))))
               MYSQL_YYABORT;
             thd->lex= (yyvsp[-3].lex);
           }
-#line 51845 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51844 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3819: /* $@279: %empty  */
-#line 19258 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19257 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             sp_head *sp= pkg->m_current_routine->sphead;
@@ -51854,175 +51853,175 @@ yyreduce:
             sp->set_c_chistics(thd->lex->sp_chistics);
             sp->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 51858 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51857 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3820: /* package_implementation_procedure_body: sp_tail_is remember_lex $@279 sp_body opt_package_routine_end_name  */
-#line 19267 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19266 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(thd->lex->sp_body_finalize_procedure(thd) ||
                          thd->lex->sphead->check_package_routine_end_name((yyvsp[0].lex_str))))
               MYSQL_YYABORT;
             thd->lex= (yyvsp[-3].lex);
           }
-#line 51869 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51868 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3826: /* package_specification_element: FUNCTION_SYM package_specification_function ';'  */
-#line 19292 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19291 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_declaration((yyvsp[-1].lex))))
               MYSQL_YYABORT;
             pkg->m_current_routine= NULL;
           }
-#line 51880 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51879 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3827: /* package_specification_element: PROCEDURE_SYM package_specification_procedure ';'  */
-#line 19299 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19298 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_package *pkg= Lex->get_sp_package();
             if (unlikely(pkg->add_routine_declaration((yyvsp[-1].lex))))
               MYSQL_YYABORT;
             pkg->m_current_routine= NULL;
           }
-#line 51891 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51890 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3828: /* sp_decl_variable_list_anchored: sp_decl_idents_init_vars optionally_qualified_column_ident PERCENT_ORACLE_SYM TYPE_SYM sp_opt_default  */
-#line 19311 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19310 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_variable_declarations_with_ref_finalize(thd, (yyvsp[-4].num), (yyvsp[-3].qualified_column_ident), (yyvsp[0].item))))
               MYSQL_YYABORT;
             (yyval.spblock).init_using_vars((yyvsp[-4].num));
           }
-#line 51901 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51900 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3829: /* sp_decl_variable_list_anchored: sp_decl_idents_init_vars optionally_qualified_column_ident PERCENT_ORACLE_SYM ROWTYPE_ORACLE_SYM sp_opt_default  */
-#line 19319 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19318 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_variable_declarations_rowtype_finalize(thd, (yyvsp[-4].num), (yyvsp[-3].qualified_column_ident), (yyvsp[0].item))))
               MYSQL_YYABORT;
             (yyval.spblock).init_using_vars((yyvsp[-4].num));
           }
-#line 51911 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51910 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3830: /* sp_param_name_and_type_anchored: sp_param_name sp_decl_ident '.' ident PERCENT_ORACLE_SYM TYPE_SYM  */
-#line 19328 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19327 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_type_reference(thd, (yyval.spvar)= (yyvsp[-5].spvar), (yyvsp[-4].ident_sys), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51920 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51919 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3831: /* sp_param_name_and_type_anchored: sp_param_name sp_decl_ident '.' ident '.' ident PERCENT_ORACLE_SYM TYPE_SYM  */
-#line 19333 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19332 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_type_reference(thd, (yyval.spvar)= (yyvsp[-7].spvar), (yyvsp[-6].ident_sys), (yyvsp[-4].ident_sys), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51929 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51928 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3832: /* sp_param_name_and_type_anchored: sp_param_name sp_decl_ident PERCENT_ORACLE_SYM ROWTYPE_ORACLE_SYM  */
-#line 19338 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19337 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_table_rowtype_reference(thd, (yyval.spvar)= (yyvsp[-3].spvar), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51938 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51937 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3833: /* sp_param_name_and_type_anchored: sp_param_name sp_decl_ident '.' ident PERCENT_ORACLE_SYM ROWTYPE_ORACLE_SYM  */
-#line 19343 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19342 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->spvar_fill_table_rowtype_reference(thd, (yyval.spvar)= (yyvsp[-5].spvar), (yyvsp[-4].ident_sys), (yyvsp[-2].ident_sys))))
               MYSQL_YYABORT;
           }
-#line 51947 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51946 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3834: /* $@280: %empty  */
-#line 19352 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19351 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= thd->lex;
             lex->sphead->set_c_chistics(lex->sp_chistics);
             lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 51957 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51956 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3835: /* sf_c_chistics_and_body_standalone: sp_c_chistics $@280 sp_tail_is sp_body force_lookahead  */
-#line 19358 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19357 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_body_finalize_function(thd)))
               MYSQL_YYABORT;
           }
-#line 51966 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51965 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3836: /* $@281: %empty  */
-#line 19366 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19365 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(!Lex->make_sp_head_no_recursive(thd, (yyvsp[0].spname),
                                                          &sp_handler_procedure,
                                                          DEFAULT_AGGREGATE)))
               MYSQL_YYABORT;
           }
-#line 51977 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51976 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3837: /* $@282: %empty  */
-#line 19374 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19373 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sphead->set_c_chistics(Lex->sp_chistics);
             Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 51986 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51985 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3838: /* sp_tail_standalone: sp_name $@281 opt_sp_parenthesized_pdparam_list sp_c_chistics $@282 sp_tail_is sp_body opt_sp_name  */
-#line 19381 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19380 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_body_finalize_procedure_standalone(thd, (yyvsp[0].spname))))
               MYSQL_YYABORT;
           }
-#line 51995 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 51994 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3839: /* drop_routine: DROP FUNCTION_SYM opt_if_exists ident '.' ident  */
-#line 19389 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19388 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_drop_function((yyvsp[-3].object_ddl_options), (yyvsp[-2].ident_sys), (yyvsp[0].ident_sys)))
               MYSQL_YYABORT;
           }
-#line 52004 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52003 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3840: /* drop_routine: DROP FUNCTION_SYM opt_if_exists ident  */
-#line 19394 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19393 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_drop_function((yyvsp[-1].object_ddl_options), (yyvsp[0].ident_sys)))
               MYSQL_YYABORT;
           }
-#line 52013 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52012 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3841: /* drop_routine: DROP PROCEDURE_SYM opt_if_exists sp_name  */
-#line 19399 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19398 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_drop_procedure((yyvsp[-1].object_ddl_options), (yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 52022 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52021 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3842: /* drop_routine: DROP PACKAGE_ORACLE_SYM opt_if_exists sp_name  */
-#line 19404 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19403 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->set_command(SQLCOM_DROP_PACKAGE, (yyvsp[-1].object_ddl_options));
@@ -52030,11 +52029,11 @@ yyreduce:
               my_yyabort_error((ER_SP_NO_DROP_SP, MYF(0), "PACKAGE"));
             lex->spname= (yyvsp[0].spname);
           }
-#line 52034 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52033 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3843: /* drop_routine: DROP PACKAGE_ORACLE_SYM BODY_ORACLE_SYM opt_if_exists sp_name  */
-#line 19412 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19411 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             LEX *lex= Lex;
             lex->set_command(SQLCOM_DROP_PACKAGE_BODY, (yyvsp[-1].object_ddl_options));
@@ -52042,74 +52041,74 @@ yyreduce:
               my_yyabort_error((ER_SP_NO_DROP_SP, MYF(0), "PACKAGE BODY"));
             lex->spname= (yyvsp[0].spname);
           }
-#line 52046 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52045 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3844: /* $@283: %empty  */
-#line 19424 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19423 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_procedure_start((yyvsp[-3].object_ddl_options) | (yyvsp[0].object_ddl_options)))
               MYSQL_YYABORT;
           }
-#line 52055 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52054 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3845: /* create_routine: create_or_replace definer_opt PROCEDURE_SYM opt_if_not_exists $@283 sp_tail_standalone  */
-#line 19429 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19428 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->stmt_create_routine_finalize();
           }
-#line 52063 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52062 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3846: /* $@284: %empty  */
-#line 19434 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19433 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_start((yyvsp[-5].object_ddl_options) | (yyvsp[-1].object_ddl_options), (yyvsp[-3].sp_aggregate_type), (yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 52072 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52071 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3847: /* create_routine: create_or_replace definer opt_aggregate FUNCTION_SYM opt_if_not_exists sp_name $@284 opt_sp_parenthesized_fdparam_list RETURN_ORACLE_SYM sf_return_type sf_c_chistics_and_body_standalone opt_sp_name  */
-#line 19442 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19441 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_finalize_standalone((yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 52081 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52080 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3848: /* $@285: %empty  */
-#line 19448 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19447 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_start((yyvsp[-5].object_ddl_options) | (yyvsp[-1].object_ddl_options), (yyvsp[-3].sp_aggregate_type), (yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 52090 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52089 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3849: /* create_routine: create_or_replace no_definer opt_aggregate FUNCTION_SYM opt_if_not_exists sp_name $@285 opt_sp_parenthesized_fdparam_list RETURN_ORACLE_SYM sf_return_type sf_c_chistics_and_body_standalone opt_sp_name  */
-#line 19456 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19455 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_stored_function_finalize_standalone((yyvsp[0].spname)))
               MYSQL_YYABORT;
           }
-#line 52099 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52098 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3850: /* create_routine: create_or_replace no_definer opt_aggregate FUNCTION_SYM opt_if_not_exists ident RETURNS_SYM udf_type SONAME_SYM TEXT_STRING_sys  */
-#line 19462 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19461 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (Lex->stmt_create_udf_function((yyvsp[-9].object_ddl_options) | (yyvsp[-5].object_ddl_options), (yyvsp[-7].sp_aggregate_type), (yyvsp[-4].ident_sys),
                                               (Item_result) (yyvsp[-2].num), (yyvsp[0].lex_str)))
               MYSQL_YYABORT;
           }
-#line 52109 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52108 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3851: /* $@286: %empty  */
-#line 19469 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19468 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_package *pkg;
             if (unlikely(!(pkg= Lex->
@@ -52121,20 +52120,20 @@ yyreduce:
             pkg->set_c_chistics(Lex->sp_chistics);
             Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
           }
-#line 52125 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52124 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3852: /* create_routine: create_or_replace definer_opt PACKAGE_ORACLE_SYM opt_if_not_exists sp_name opt_create_package_chistics_init $@286 sp_tail_is opt_package_specification_element_list END remember_end_opt opt_sp_name  */
-#line 19483 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19482 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->create_package_finalize(thd, (yyvsp[-7].spname), (yyvsp[0].spname), (yyvsp[-1].simple_string))))
               MYSQL_YYABORT;
           }
-#line 52134 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52133 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3853: /* $@287: %empty  */
-#line 19489 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19488 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_package *pkg;
             if (unlikely(!(pkg= Lex->
@@ -52147,115 +52146,115 @@ yyreduce:
             Lex->sphead->set_body_start(thd, YYLIP->get_cpp_tok_start());
             Lex->sp_block_init(thd);
           }
-#line 52151 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52150 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3854: /* $@288: %empty  */
-#line 19503 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19502 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 52160 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52159 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3855: /* $@289: %empty  */
-#line 19508 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19507 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyvsp[-2].spblock).hndlrs+= (yyvsp[0].spblock_handlers).hndlrs;
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-2].spblock))))
               MYSQL_YYABORT;
           }
-#line 52170 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52169 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3856: /* create_routine: create_or_replace definer_opt PACKAGE_ORACLE_SYM BODY_ORACLE_SYM opt_if_not_exists sp_name opt_create_package_chistics_init $@287 sp_tail_is package_implementation_declare_section $@288 package_implementation_executable_section $@289 remember_end_opt opt_sp_name  */
-#line 19514 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19513 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->create_package_finalize(thd, (yyvsp[-9].spname), (yyvsp[0].spname), (yyvsp[-1].simple_string))))
               MYSQL_YYABORT;
           }
-#line 52179 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52178 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3857: /* opt_sp_decl_body_list: _empty  */
-#line 19522 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19521 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.spblock).init();
           }
-#line 52187 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52186 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3858: /* opt_sp_decl_body_list: sp_decl_body_list  */
-#line 19525 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19524 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                             { (yyval.spblock)= (yyvsp[0].spblock); }
-#line 52193 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52192 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3859: /* $@290: %empty  */
-#line 19530 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19529 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sphead->sp_add_instr_cpush_for_cursors(thd, Lex->spcont)))
               MYSQL_YYABORT;
           }
-#line 52202 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52201 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3860: /* sp_decl_body_list: sp_decl_non_handler_list $@290 opt_sp_decl_handler_list  */
-#line 19535 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19534 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.spblock).join((yyvsp[-2].spblock), (yyvsp[0].spblock));
           }
-#line 52210 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52209 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3862: /* sp_decl_non_handler_list: sp_decl_non_handler ';'  */
-#line 19542 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19541 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                   { (yyval.spblock)= (yyvsp[-1].spblock); }
-#line 52216 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52215 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3863: /* sp_decl_non_handler_list: sp_decl_non_handler_list sp_decl_non_handler ';'  */
-#line 19544 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19543 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.spblock).join((yyvsp[-2].spblock), (yyvsp[-1].spblock));
           }
-#line 52224 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52223 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3864: /* sp_decl_handler_list: sp_decl_handler ';'  */
-#line 19550 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19549 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                               { (yyval.spblock)= (yyvsp[-1].spblock); }
-#line 52230 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52229 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3865: /* sp_decl_handler_list: sp_decl_handler_list sp_decl_handler ';'  */
-#line 19552 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19551 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyval.spblock).join((yyvsp[-2].spblock), (yyvsp[-1].spblock));
           }
-#line 52238 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52237 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3866: /* opt_sp_decl_handler_list: _empty  */
-#line 19558 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19557 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                    { (yyval.spblock).init(); }
-#line 52244 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52243 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3869: /* sp_decl_non_handler: ident_directly_assignable CONDITION_SYM FOR_SYM sp_cond  */
-#line 19565 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19564 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->spcont->declare_condition(thd, &(yyvsp[-3].ident_sys), (yyvsp[0].spcondvalue))))
               MYSQL_YYABORT;
             (yyval.spblock).vars= (yyval.spblock).hndlrs= (yyval.spblock).curs= 0;
             (yyval.spblock).conds= 1;
           }
-#line 52255 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52254 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3870: /* sp_decl_non_handler: ident_directly_assignable EXCEPTION_ORACLE_SYM  */
-#line 19572 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19571 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_condition_value *spcond= new (thd->mem_root)
                                         sp_condition_value_user_defined();
@@ -52265,19 +52264,19 @@ yyreduce:
             (yyval.spblock).vars= (yyval.spblock).hndlrs= (yyval.spblock).curs= 0;
             (yyval.spblock).conds= 1;
           }
-#line 52269 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52268 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3871: /* $@291: %empty  */
-#line 19582 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19581 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd);
           }
-#line 52277 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52276 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3872: /* sp_decl_non_handler: CURSOR_SYM ident_directly_assignable $@291 opt_parenthesized_cursor_formal_parameters IS sp_cursor_stmt  */
-#line 19587 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19586 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             sp_pcontext *param_ctx= Lex->spcont;
             if (unlikely(Lex->sp_block_finalize(thd)))
@@ -52287,69 +52286,69 @@ yyreduce:
             (yyval.spblock).vars= (yyval.spblock).conds= (yyval.spblock).hndlrs= 0;
             (yyval.spblock).curs= 1;
           }
-#line 52291 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52290 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3878: /* sp_proc_stmt: labels_declaration_oracle sp_labelable_stmt  */
-#line 19605 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19604 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                                                       {}
-#line 52297 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52296 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3889: /* sp_labelable_stmt: NULL_SYM  */
-#line 19619 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19618 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
                    { }
-#line 52303 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52302 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3894: /* $@292: %empty  */
-#line 19633 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19632 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd, &(yyvsp[-1].lex_str));
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 52313 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52312 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3895: /* sp_labeled_block: sp_block_label BEGIN_ORACLE_SYM $@292 sp_block_statements_and_exceptions END sp_opt_label  */
-#line 19641 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19640 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_finalize(thd, Lex_spblock((yyvsp[-2].spblock_handlers)), &(yyvsp[0].lex_str))))
               MYSQL_YYABORT;
           }
-#line 52322 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52321 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3896: /* $@293: %empty  */
-#line 19647 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19646 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             Lex->sp_block_init(thd, &(yyvsp[-1].lex_str));
           }
-#line 52330 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52329 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3897: /* $@294: %empty  */
-#line 19651 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19650 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 52339 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52338 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3898: /* sp_labeled_block: sp_block_label DECLARE_ORACLE_SYM $@293 opt_sp_decl_body_list $@294 BEGIN_ORACLE_SYM sp_block_statements_and_exceptions END sp_opt_label  */
-#line 19659 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19658 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyvsp[-5].spblock).hndlrs+= (yyvsp[-2].spblock_handlers).hndlrs;
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-5].spblock), &(yyvsp[0].lex_str))))
               MYSQL_YYABORT;
           }
-#line 52349 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52348 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3901: /* $@295: %empty  */
-#line 19673 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19672 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->maybe_start_compound_statement(thd)))
               MYSQL_YYABORT;
@@ -52357,68 +52356,68 @@ yyreduce:
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 52361 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52360 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3902: /* sp_unlabeled_block: BEGIN_ORACLE_SYM opt_not_atomic $@295 sp_block_statements_and_exceptions END  */
-#line 19682 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19681 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_finalize(thd, Lex_spblock((yyvsp[-1].spblock_handlers)))))
               MYSQL_YYABORT;
           }
-#line 52370 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52369 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3903: /* $@296: %empty  */
-#line 19687 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19686 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->maybe_start_compound_statement(thd)))
               MYSQL_YYABORT;
             Lex->sp_block_init(thd);
           }
-#line 52380 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52379 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3904: /* $@297: %empty  */
-#line 19693 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19692 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
               MYSQL_YYABORT;
           }
-#line 52389 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52388 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3905: /* sp_unlabeled_block: DECLARE_ORACLE_SYM $@296 opt_sp_decl_body_list $@297 BEGIN_ORACLE_SYM sp_block_statements_and_exceptions END  */
-#line 19700 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19699 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             (yyvsp[-4].spblock).hndlrs+= (yyvsp[-1].spblock_handlers).hndlrs;
             if (unlikely(Lex->sp_block_finalize(thd, (yyvsp[-4].spblock))))
               MYSQL_YYABORT;
           }
-#line 52399 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52398 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3906: /* $@298: %empty  */
-#line 19710 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19709 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_executable_section(thd, (yyvsp[-1].sp_instr_addr))))
               MYSQL_YYABORT;
           }
-#line 52408 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52407 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
   case 3907: /* sp_block_statements_and_exceptions: sp_instr_addr sp_proc_stmts $@298 opt_exception_clause  */
-#line 19715 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
+#line 19714 "/home/buildbot/tarball-docker/build/server/sql/sql_yacc.yy"
           {
             if (unlikely(Lex->sp_block_with_exceptions_finalize_exceptions(thd, (yyvsp[-3].sp_instr_addr), (yyvsp[0].num))))
               MYSQL_YYABORT;
             (yyval.spblock_handlers).init((yyvsp[0].num));
           }
-#line 52418 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52417 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
     break;
 
 
-#line 52422 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
+#line 52421 "/home/buildbot/tarball-docker/build/mkdist/sql/yy_oracle.cc"
 
       default: break;
     }

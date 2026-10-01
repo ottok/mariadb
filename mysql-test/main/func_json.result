@@ -1779,6 +1779,8 @@ Warning	4042	Syntax error in JSON path in argument 2 to function 'json_extract' 
 SELECT JSON_EXISTS(CONCAT('[', REPEAT('[', 4000), 'Y', REPEAT(']', 4000), ', 1]'), '$[100]') as ex;
 ex
 NULL
+Warnings:
+Warning	4040	Limit of 32 on JSON nested structures depth is reached in argument 1 to function 'json_exists' at position 131
 #
 # MDEV-35548 UBSAN: runtime error: index -1 out of bounds for type 'json_path_step_t[32]'
 # (aka 'struct st_json_path_step_t[32]')
@@ -1794,6 +1796,24 @@ JSON_EXTRACT('0E+0','$')
 SELECT JSON_EXISTS(CONCAT('[', REPEAT('[', 4000), 'Y', REPEAT(']', 4000), ', 1]'), '$[100]') as je;
 je
 NULL
+Warnings:
+Warning	4040	Limit of 32 on JSON nested structures depth is reached in argument 1 to function 'json_exists' at position 131
+SELECT JSON_EXISTS('[[[[[Y[[[[n[[[[[[[[[[[n[[[Vn]]]]]]]]]]]]]],]]:]]]](', '$[0 to rrrrrRR-1]') as je;
+je
+NULL
+SELECT JSON_EXISTS('[[[[[Y[[[[[[[[[[[[[[[[[[Vn]]]]]]]]]]]]]],]]:]]]](', '$[0 to rrrrRR-1]') as je;
+je
+NULL
 #
+# MDEV-39817 JSON_ARRAYAGG() returns garbage because of off-by-one error
+#
+set session group_concat_max_len = 9;
+create temporary table t (c varchar(20) character set latin1);
+insert into t values ('ab'), ('cd'), ('ef');
+select json_arrayagg(c order by c) from t;
+json_arrayagg(c order by c)
+["ab","cd"]
+Warnings:
+Warning	1260	Row 3 was cut by JSON_ARRAYAGG()
+drop temporary table t;
 # End of 10.6 tests
-#

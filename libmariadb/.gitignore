@@ -114,3 +114,6 @@ RelWithDebInfo
 
 #vim backups
 *.*~
+
+# Infer static analysis output
+infer-out/
