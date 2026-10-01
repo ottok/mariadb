@@ -1,8 +1,8 @@
-commit: b2050fdb4a8776422baf01a41bf86845994edb97
-date: 2026-05-23 12:31:36 +0200
-build-date: 2026-05-23 14:57:02 +0000 
-short: b2050fdb
-branch: 10.6
+commit: 210ab6edf47fa73f3b77e974ed2e9357ccdd051c
+date: 2026-08-11 11:29:59 +0400
+build-date: 2026-08-11 12:55:53 +0000 
+short: 210ab6ed
+branch: bb-10.6-release
 
 
-MariaDB source 10.6.27
+MariaDB source 10.6.28

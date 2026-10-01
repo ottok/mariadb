@@ -403,7 +403,13 @@ get_transfer()
             else
                 # CA verification
                 verify_ca_matches_cert "$tpem" "$tcert" "$tcap"
-                if [ -n "$WSREP_SST_OPT_REMOTE_USER" ]; then
+                if [ "$tmode" = 'VERIFY_CA' ]; then
+                    # VERIFY_CA verifies the chain only, not the peer
+                    # name, so leave "commonname" empty.
+                    CN_option=",commonname=''"
+                    wsrep_log_info \
+                        "Verifying peer certificate chain for ssl-mode=VERIFY_CA"
+                elif [ -n "$WSREP_SST_OPT_REMOTE_USER" ]; then
                     CN_option=",commonname='$(safe WSREP_SST_OPT_REMOTE_USER)'"
                 elif [ "$WSREP_SST_OPT_ROLE" = 'joiner' -o $encrypt -eq 4 ]
                 then
@@ -565,6 +571,11 @@ read_cnf()
         if [ "$tmode" != 'DISABLED' -o $encrypt -ge 2 ]; then
             check_server_ssl_config
         fi
+        # MTR test hook: simulate a missing SSL certificate and key.
+        if [ -n "${MTR_SST_SIMULATE_NO_SSL_CERT:-}" ]; then
+            tpem=""
+            tkey=""
+        fi
         if [ "$tmode" != 'DISABLED' ]; then
             if [ 0 -eq $encrypt -a -n "$tpem" -a -n "$tkey" ]
             then
@@ -592,6 +603,16 @@ read_cnf()
     wsrep_log_info "SSL configuration: CA='$tcert', CAPATH='$tcap'," \
                    "CERT='$tpem', KEY='$tkey', MODE='$tmode'," \
                    "encrypt='$encrypt'"
+
+    # ssl-mode requires encryption but none could be set up (no usable
+    # cert/key): abort instead of silently transferring in cleartext.
+    if [ "$tmode" != 'DISABLED' -a $encrypt -eq 0 ]; then
+        wsrep_log_error "ssl-mode is set to '$tmode', but no usable SSL" \
+                        "certificate and key were found. Cannot perform an" \
+                        "encrypted transfer. Please configure ssl-cert and" \
+                        "ssl-key, or set ssl-mode to DISABLED."
+        exit 22 # EINVAL
+    fi
 
     if [ $encrypt -ge 2 ]; then
         ssl_dhparams=$(parse_cnf "$encgroups" 'ssl-dhparams')
@@ -1117,7 +1138,8 @@ if [ "$WSREP_SST_OPT_ROLE" = 'donor' ]; then
         wsrep_log_info "Using '$itmpdir' as mariadb-backup working directory"
 
         if [ -n "$WSREP_SST_OPT_USER" ]; then
-           INNOEXTRA="$INNOEXTRA --user='$WSREP_SST_OPT_USER'"
+           WSREP_SST_OPT_USER_SAFE="$(safe WSREP_SST_OPT_USER)"
+           INNOEXTRA="$INNOEXTRA --user='$WSREP_SST_OPT_USER_SAFE'"
         fi
 
         if [ -n "$WSREP_SST_OPT_PSWD" ]; then

@@ -69,7 +69,7 @@ my_connect_async(MARIADB_PVIO *pvio,
   int res;
   size_socket s_err_size;
   struct mysql_async_context *b= pvio->mysql->options.extension->async_context;
-  my_socket sock;
+  my_socket sock= -1;
 
   ma_pvio_get_handle(pvio, &sock);
 

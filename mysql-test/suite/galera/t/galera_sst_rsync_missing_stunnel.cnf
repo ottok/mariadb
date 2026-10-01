@@ -1,13 +1,10 @@
 !include ../galera_2nodes.cnf
 
 [mysqld]
-wsrep_sst_method=mariabackup
-wsrep_sst_auth="root:"
-wsrep_debug=1
-
+wsrep_sst_method=rsync
 ssl-cert=@ENV.MYSQL_TEST_DIR/std_data/server-cert.pem
 ssl-key=@ENV.MYSQL_TEST_DIR/std_data/server-key.pem
 ssl-ca=@ENV.MYSQL_TEST_DIR/std_data/cacert.pem
 
 [sst]
-ssl-mode=VERIFY_CA
+ssl-mode=REQUIRED
