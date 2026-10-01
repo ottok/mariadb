@@ -1,13 +1,22 @@
-mariadb-10.6 (1:10.6.27-0ubuntu0.22.04.1) jammy; urgency=medium
+mariadb-10.6 (1:10.6.28-0ubuntu0) jammy; urgency=medium
 
-  * SECURITY UPDATE: New upstream maintenance release 10.6.27 (LP: #2158958)
+  * SECURITY UPDATE: New upstream maintenance release 10.6.28 (LP: #2168592)
     includes several fixes as listed at
+    https://mariadb.com/docs/release-notes/community-server/10.6/10.6.28
+    and fixes for the following CVE tracked security issues:
+    - CVE-2026-61081
+    - CVE-2026-60585
+    - CVE-2026-60331
+    - CVE-2026-60747
+    - CVE-2026-47023
+    - CVE-2026-60184
+  * Previous upstream release 10.6.27 included several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.6/10.6.27
     and fixes for the following CVE tracked security issues:
     - CVE-2026-49261
     - CVE-2026-48165
     - CVE-2026-48163
-  * Previous upstream maintenance 10.6.26 included several fixes as listed at
+  * Previous upstream release 10.6.26 included several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.6/10.6.26
     and fixes for the following CVE tracked security issues:
     - CVE-2026-44173
@@ -15,11 +24,11 @@ mariadb-10.6 (1:10.6.27-0ubuntu0.22.04.1) jammy; urgency=medium
     - CVE-2026-44171
     - CVE-2026-44170
     - CVE-2026-44168
-  * Previous upstream maintenance 10.6.26 included several fixes as listed at
+  * Previous upstream release 10.6.25 included several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.6/10.6.25
     and fixes for the following CVE tracked security issues:
     - CVE-2026-3494
-  * Previous upstream maintenance 10.6.24 included several fixes as listed at
+  * Previous upstream release 10.6.24 included several fixes as listed at
     https://mariadb.com/docs/release-notes/community-server/10.6/10.6.24
     and fixes for the following CVE tracked security issues:
     - CVE-2026-21968
@@ -34,6 +43,10 @@ mariadb-10.6 (1:10.6.27-0ubuntu0.22.04.1) jammy; urgency=medium
   * Salsa CI: Disable running `gbp setup-gitattributes`
   * Salsa CI: Disable the uscan job as it is incompatible with MariaDB
   * Use archive.mariadb.org as official watch source
+  * Note! This was the last MariaDB Community Server release of the 10.6 series.
+    Users are advised to contact their support provider for extended support or
+    to upgrade to a newer MariaDB major version. See maintenance policy details
+    at https://mariadb.org/about/#maintenance-policy
 
  -- Otto Kekäläinen <otto@debian.org>  Wed, 01 Jul 2026 18:18:18 +0000
 
