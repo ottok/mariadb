@@ -12,14 +12,15 @@ mariadb (1:10.11.19-0+deb12u1) bookworm-security; urgency=medium
     - CVE-2026-60184
   * Update server trace to match new line-wrapping
   * Skip tests main.mysql_client_test* as they require Internet access
-  * Add Lintian override for new upstream version test file
+  * Use Bash as interpreter in script with sh-incompatible syntax
   * Extend test skip lists after witnessing frequent sporadic failures on armhf
-  * Salsa CI: Clean away Bullseye tests due to broken security updates
+  * Normalize quick-max-column-width as it differs on 32/64-bit systems
   * Backport upstream patch to fix CONC-821 (Closes: #1139473, #1141671,
     #1144671)
 
   [ Luke Yasuda ]
-  * Cherry-pick these changes by Michael Biebl (Closes: #1141976)
+  * Cherry-pick these changes by Michael Biebl (Closes: #1141976) which are
+    necessary after upstream systemd bugfix in commit 9fa3f51f in 10.11.18:
     - Install .service files via .install and let
       dh_installinit/dh_systemd generate the maintscript code
     - Switch to dh_installsystemd and debhelper compat 13
