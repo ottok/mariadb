@@ -15,3 +15,10 @@ executable-in-usr-lib [usr/lib/mysql/plugin/auth_pam_tool_dir/auth_pam_tool]
 # Intentional to handle upgrades from versioned package names to versionless
 # (e.g. mariadb-server-10.5 -> mariadb-server)
 uses-dpkg-database-directly [postinst]
+# Used to check if running in Bash
+bash-term-in-posix-shell '${BASH_VERSION' [usr/share/mariadb/wsrep_notify:*]
+# mariadbd-safe must stay using sh and these should be ignored for now
+bash-term-in-posix-shell '[ "$url" ==' [usr/bin/mariadbd-safe:*]
+bash-term-in-posix-shell 'let' [usr/bin/mariadbd-safe:*]
+bash-term-in-posix-shell 'ulimit' [usr/bin/mariadbd-safe:*]
+bash-term-in-posix-shell 'ulimit' [usr/bin/mariadbd-safe:*]

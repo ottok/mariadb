@@ -1,0 +1,29 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@kekalainen.net>
+Date: Mon, 12 Oct 2026 16:10:36 +0000
+Subject: Add executable bit to files that are intended to be executable
+
+Both files start with a #! interpreter line and are meant to be run as
+programs. The files had originally correct executable bits, but
+regressed in:
+- 193ced9b: generate-ssl-certs.sh
+- 8fab1293: normalize_query_id.pl
+
+This fixes the following Lintian warnings:
+
+    W: mariadb-test: script-not-executable [usr/share/mariadb/mariadb-test/lib/generate-ssl-certs.sh]
+    W: mariadb-test-data: script-not-executable [usr/share/mariadb/mariadb-test/suite/plugins/t/normalize_query_id.pl]
+
+Forwarded: https://github.com/MariaDB/server/pull/5866
+---
+ mysql-test/lib/generate-ssl-certs.sh             | 0
+ mysql-test/suite/plugins/t/normalize_query_id.pl | 0
+ 2 files changed, 0 insertions(+), 0 deletions(-)
+ mode change 100644 => 100755 mysql-test/lib/generate-ssl-certs.sh
+ mode change 100644 => 100755 mysql-test/suite/plugins/t/normalize_query_id.pl
+
+diff --git a/mysql-test/lib/generate-ssl-certs.sh b/mysql-test/lib/generate-ssl-certs.sh
+old mode 100644
+new mode 100755
+diff --git a/mysql-test/suite/plugins/t/normalize_query_id.pl b/mysql-test/suite/plugins/t/normalize_query_id.pl
+old mode 100644
+new mode 100755

@@ -1,0 +1,41 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@kekalainen.net>
+Date: Mon, 12 Oct 2026 21:58:54 +0800
+Subject: Remove executable bit from files that are not executable
+
+W: mariadb-server: executable-not-elf-or-script [usr/bin/wsrep_sst_common]
+W: mariadb-test-data: executable-not-elf-or-script [usr/share/mariadb/mariadb-test/main/lowercase_table2.result]
+W: mariadb-test-data: executable-not-elf-or-script [usr/share/mariadb/mariadb-test/suite/galera/t/MDEV-35511.test]
+N:
+N:   This executable file is not an ELF format binary, and does not start with
+N:   the #! sequence that marks interpreted scripts. It might be a sh script
+N:   that fails to name /bin/sh as its shell, or it may be incorrectly marked
+N:   as executable. Sometimes upstream files developed on Windows are marked
+N:   unnecessarily as executable on other systems.
+
+Origin commits:
+- 36eba988: lowercase_table2.result (already fixed once in 3812e1c9)
+- 8fab1293: MDEV-35511.test
+
+Additionally confirmed that there are no more test/result files with
+executable bit in vain with:
+
+    find mysql-test -executable -name *.test -or -executable -name *.result
+
+The file usr/bin/wsrep_sst_common is a Bash "library" file that can't be
+executed stand-alone. The proper long-term fix would be to move this to
+a library directory out of the `/usr/bin` path.
+
+Forwarded: https://github.com/MariaDB/server/pull/5866
+---
+ mysql-test/main/lowercase_table2.result   | 0
+ mysql-test/suite/galera/t/MDEV-35511.test | 0
+ 2 files changed, 0 insertions(+), 0 deletions(-)
+ mode change 100755 => 100644 mysql-test/main/lowercase_table2.result
+ mode change 100755 => 100644 mysql-test/suite/galera/t/MDEV-35511.test
+
+diff --git a/mysql-test/main/lowercase_table2.result b/mysql-test/main/lowercase_table2.result
+old mode 100755
+new mode 100644
+diff --git a/mysql-test/suite/galera/t/MDEV-35511.test b/mysql-test/suite/galera/t/MDEV-35511.test
+old mode 100755
+new mode 100644

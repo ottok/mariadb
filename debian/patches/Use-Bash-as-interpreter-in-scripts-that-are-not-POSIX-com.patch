@@ -1,0 +1,54 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@kekalainen.net>
+Date: Tue, 13 Oct 2026 01:47:24 +0000
+Subject: Document bashisms in scripts that are supposed to stay
+ POSIX-compliant
+
+Lintian reported bash-term-in-posix-shell for scripts that declare
+/bin/sh as their interpreter:
+
+    I: mariadb-client: bash-term-in-posix-shell '`echo "testing\c"' [usr/bin/mariadb-secure-installation:199]
+    I: mariadb-server: bash-term-in-posix-shell '${BASH_VERSION' [usr/share/mariadb/wsrep_notify:86]
+    I: mariadb-server: bash-term-in-posix-shell '[ "$url" ==' [usr/bin/mariadbd-safe:222]
+    I: mariadb-server: bash-term-in-posix-shell 'let' [usr/bin/mariadbd-safe:41]
+    I: mariadb-server: bash-term-in-posix-shell 'ulimit' [usr/bin/mariadbd-safe:718]
+    I: mariadb-server: bash-term-in-posix-shell 'ulimit' [usr/bin/mariadbd-safe:838]
+    I: mariadb-server-core: bash-term-in-posix-shell 'source tree,' [usr/bin/mariadb-install-db:100]
+
+Only scripts/mysqld_safe.sh really uses non-POSIX shell features (local
+variables and the == operator in test), but it should stay using sh
+as mentioned in c10bed1.
+
+The other reported scripts do run fine under /bin/sh and are only false
+positives of the Lintian check:
+- mariadb-secure-installation deliberately probes the shell's echo
+  behaviour
+- wsrep_notify intentionally checks for a Bash runtime and falls back
+  to POSIX code when Bash is not available
+- The `let` and `ulimit` hits in mariadbd-safe are respectively a word
+  in a comment and a POSIX utility also provided by Dash
+- `source tree,` is a word in a comment in mariadb-install-db
+
+Also update the existing overrides to ensure paths and line numbers match.
+
+Forwarded: https://github.com/MariaDB/server/pull/5866
+---
+ scripts/mysqld_safe.sh | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/scripts/mysqld_safe.sh b/scripts/mysqld_safe.sh
+index f67dbfd..e32c8a2 100644
+--- a/scripts/mysqld_safe.sh
++++ b/scripts/mysqld_safe.sh
+@@ -1,7 +1,12 @@
+ #!/bin/sh
++#
+ # Copyright Abandoned 1996 TCX DataKonsult AB & Monty Program KB & Detron HB
+ # This file is public domain and comes with NO WARRANTY of any kind
+ #
++# Note: The interpreted must be kept as 'bin/sh' to stay compatible with BSD
++# systems. Do not switch it to Bash and avoid introducing bashisms in the
++# syntax.
++#
+ # Script to start the MySQL daemon and restart it if it dies unexpectedly
+ #
+ # This should be executed in the MySQL base directory if you are using a

@@ -2,3 +2,5 @@
 wrong-name-for-upstream-changelog [usr/share/doc/mariadb-client/changelog.innotop.gz]
 # Man syntax needs to be fixed upstream
 groff-message troff:<standard input>:*: warning: name 'Table' not defined [usr/share/man*]
+# Used to determine which shell is running
+bash-term-in-posix-shell '`echo "testing\c"' [usr/bin/mariadb-secure-installation:*]

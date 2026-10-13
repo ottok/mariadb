@@ -1,0 +1,34 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@kekalainen.net>
+Date: Mon, 12 Oct 2026 21:25:38 +0800
+Subject: Use Bash as interpreter in script with sh-incompatible syntax
+
+This script does not work with plain `sh`:
+
+    $ sh -n mysql-test/lib/generate-ssl-certs.sh
+    mysql-test/lib/generate-ssl-certs.sh: 78: Syntax error: "(" unexpected
+
+Hence a better interpreter choice is Bash.
+
+This issue was detected on Debian due to the Lintian nag:
+
+    E: mariadb-test: shell-script-fails-syntax-check [usr/share/mariadb/mariadb-test/lib/generate-ssl-certs.sh]
+
+This script (and error) was introduced on commit c7313da, first released
+in 10.6.25. As that branch is no longer maintained, this fix targets
+oldest still maintained branch 10.11.
+
+Forwarded: https://github.com/MariaDB/server/pull/5866
+---
+ mysql-test/lib/generate-ssl-certs.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mysql-test/lib/generate-ssl-certs.sh b/mysql-test/lib/generate-ssl-certs.sh
+index 2f2ace8..f139c39 100644
+--- a/mysql-test/lib/generate-ssl-certs.sh
++++ b/mysql-test/lib/generate-ssl-certs.sh
+@@ -1,4 +1,4 @@
+-#!/bin/sh
++#!/bin/bash
+ 
+ set -xe
+ 

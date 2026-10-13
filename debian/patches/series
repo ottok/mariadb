@@ -16,3 +16,7 @@ Update-TLS-test-regexes-for-OpenSSL-4.0-error-message-cha.patch
 CONC-821-Avoid-resetting-length-pointer-for-variable-leng.patch
 cross-compile-fix-migrate-config.patch
 set-default-rundatadir-to-run-mariadb.patch
+Use-Bash-as-interpreter-in-script-with-sh-incompatible-sy.patch
+Remove-executable-bit-from-files-that-are-not-executable.patch
+Add-executable-bit-to-files-that-are-intended-to-be-execu.patch
+Use-Bash-as-interpreter-in-scripts-that-are-not-POSIX-com.patch
