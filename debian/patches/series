@@ -3,3 +3,4 @@ mroonga-mrn-lib-dirs-path-reproducible-build.patch
 install-files-into-usr.patch
 MDEV-37411-suppress-new-warning-about-native-aio.patch
 CONC-821-Avoid-resetting-length-pointer-for-variable-leng.patch
+0010-MDEV-35812-generate-ssl-certs.sh-remove-bashism.patch
