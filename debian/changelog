@@ -1,4 +1,4 @@
-mariadb (1:11.8.9+ds-0ubuntu0.26.04.1) UNRELEASED; urgency=medium
+mariadb (1:11.8.9+ds-0ubuntu0.26.04.1) resolute; urgency=medium
 
   [ Otto Kekäläinen ]
   * SECURITY UPDATE: New upstream maintenance release 11.8.9 (LP: #2168592)
@@ -55,6 +55,10 @@ mariadb (1:11.8.9+ds-0ubuntu0.26.04.1) UNRELEASED; urgency=medium
     - MDEV-39479 Mroonga hangs on invalid index flag (Closes: #1110683)
     - MDEV-38811 Crash in information_schema.table_constraints when running in
       'skip-grant-tables' mode (Closes: #1127431, affected Akonadi)
+  * When dropping patches based on what was applied upstream, the systemd
+    hardening patch was dropped an replaced with a smaller and safer upstream
+    change as the more extensive changes were rejected by upstream review in
+    https://github.com/MariaDB/server/pull/4787
   * Start new git branch for Ubuntu 26.04 (Resolute Raccoon) maintenance
   * Update watch file and more to match repacking in Debian unstable and Trixie,
     so all releases across Debian and Ubuntu of the same MariaDB version have
@@ -72,14 +76,21 @@ mariadb (1:11.8.9+ds-0ubuntu0.26.04.1) UNRELEASED; urgency=medium
   * Extend test skip lists after witnessing frequent sporadic failures on armhf
   * Backport upstream patch to fix CONC-821 (Closes: #1139473, #1141671,
     #1144671)
+  * Extend docs in NEWS item based on real AppArmor profile use feedback
+  * Extend AppArmor profile based on real 'enforce' mode use feedback
+    (Closes: #1131915, #1132027, LP: #2153455, LP: #2168416)
+  * Extend AppArmor profile to allow Galera helpers (Closes: #1131938)
+  * Add AppArmor notice for Debian/Ubuntu users during server startup
+  * Adapt Debian NEWS entry for Ubuntu
 
   [ Daniel Black ]
   * MDEV-34902: debian-start erroneously reports issues
 
   [ Michael Widenius ]
   * MDEV-32745 Add a simple MySQL to MariaDB upgrade helper (Debian part)
+    called 'mariadb-migrate-config-file'
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 28 Sep 2026 01:01:01 +0000
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 14 Oct 2026 13:13:13 +0000
 
 mariadb (1:11.8.6-5ubuntu0.1) resolute-security; urgency=medium
 
