@@ -20,3 +20,8 @@ Tests: upstream
 Depends: eatmydata,
          mariadb-test
 Restrictions: allow-stderr breaks-testbed
+
+Tests: upgrade-socket-activation
+Depends: mariadb-server,
+         procps
+Restrictions: allow-stderr breaks-testbed isolation-container needs-root skippable

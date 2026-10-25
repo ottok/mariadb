@@ -1,0 +1,244 @@
+#!/bin/sh
+#
+# dep8 test for upgrades with mariadb.socket active (#1151058)
+#
+# Re-installs mariadb-server over itself in separate unpack and configure steps
+# and checks that clients can't start the server in between, and that the
+# socket state is the same afterwards. Also covers a server started via the
+# socket just before the postinst restart or still starting when preinst runs,
+# a disabled socket and a fresh install.
+
+echo "Running test 'upgrade-socket-activation'"
+set -ex
+
+if [ ! -d /run/systemd/system ]
+then
+  echo "SKIP: systemd is not running, socket activation can't be tested"
+  exit 77
+fi
+
+export DEBIAN_FRONTEND=noninteractive
+
+SOCKET_FLAG=/run/mariadb-server.socket-was-active
+STARTS_LOG=/run/mariadb-socket-test.starts
+DROPIN_DIR=/etc/systemd/system/mariadb.service.d
+DROPIN="$DROPIN_DIR/zz-socket-test.conf"
+WINDOW_DROPIN="$DROPIN_DIR/zz-socket-test-window.conf"
+SOCKET_DROPIN_DIR=/etc/systemd/system/mariadb.socket.d
+SOCKET_DROPIN="$SOCKET_DROPIN_DIR/zz-socket-test.conf"
+EVENTS_LOG=/run/mariadb-socket-test.events
+WORKDIR="${AUTOPKGTEST_TMP:-$(mktemp -d)}"
+
+fail() {
+  echo "ERROR: $*"
+  systemctl status mariadb.socket mariadb.service || true
+  journalctl --no-pager -n 100 -u mariadb.socket -u mariadb.service || true
+  exit 1
+}
+
+check_state() {
+  unit="$1"
+  expected="$2"
+  actual="$(systemctl is-active "$unit" || true)"
+  if [ "$actual" != "$expected" ]
+  then
+    fail "$unit is '$actual', expected '$expected'"
+  fi
+}
+
+check_enabled() {
+  unit="$1"
+  expected="$2"
+  actual="$(systemctl is-enabled "$unit" || true)"
+  if [ "$actual" != "$expected" ]
+  then
+    fail "$unit is '$actual', expected '$expected'"
+  fi
+}
+
+check_starts() {
+  expected="$1"
+  actual="$(wc -l < "$STARTS_LOG")"
+  if [ "$actual" != "$expected" ]
+  then
+    cat "$STARTS_LOG"
+    fail "mariadb.service was started $actual times, expected $expected"
+  fi
+}
+
+client_query() {
+  timeout 10 mariadb --connect-timeout=2 -e 'SELECT 1'
+}
+
+check_server_unreachable() {
+  if client_query
+  then
+    fail "server answered a client while the package was unpacked"
+  fi
+  check_state mariadb.service inactive
+}
+
+start_client_loop() {
+  rm -f "$WORKDIR/stop-clients"
+  (
+    set +x
+    while [ ! -f "$WORKDIR/stop-clients" ]
+    do
+      mariadb --connect-timeout=1 -e 'SELECT 1' > /dev/null 2>&1 || true
+      sleep 0.2
+    done
+  ) &
+  CLIENT_LOOP_PID=$!
+}
+
+stop_client_loop() {
+  touch "$WORKDIR/stop-clients"
+  wait "$CLIENT_LOOP_PID"
+}
+
+# Log every start of mariadb.service, including socket activations
+mkdir -p "$DROPIN_DIR"
+cat > "$DROPIN" << EOF
+[Service]
+ExecStartPre=+/bin/sh -c 'echo "\$\$(date --rfc-3339=ns) start" >> $STARTS_LOG'
+EOF
+systemctl daemon-reload
+
+cd "$WORKDIR"
+version="$(dpkg-query --showformat='${Version}' --show mariadb-server)"
+apt-get download "mariadb-server=$version"
+set -- mariadb-server_*.deb
+deb="$1"
+[ -f "$deb" ] || fail "could not download mariadb-server=$version"
+
+echo "Case 1: socket and server active"
+# Systemd refuses to start the socket while the service runs
+systemctl stop mariadb.service
+systemctl enable --now mariadb.socket
+systemctl start mariadb.service
+check_state mariadb.socket active
+check_state mariadb.service active
+# Preinst's pgrep can't see the server in some containers (e.g. rootless
+# Podman without CAP_SYS_PTRACE), so it never stops it
+if ! pgrep -x -u root,mysql --nslist pid --ns $$ "mysqld|mariadbd" > /dev/null
+then
+  echo "SKIP: preinst can't detect the running server in this testbed"
+  exit 77
+fi
+: > "$STARTS_LOG"
+start_client_loop
+dpkg --unpack "$deb"
+check_server_unreachable
+check_starts 0
+check_state mariadb.socket inactive
+[ -f "$SOCKET_FLAG" ] || fail "preinst did not record that the socket was active"
+dpkg --configure mariadb-server
+stop_client_loop
+[ ! -f "$SOCKET_FLAG" ] || fail "postinst did not remove $SOCKET_FLAG"
+check_state mariadb.service active
+check_state mariadb.socket active
+check_enabled mariadb.socket enabled
+client_query
+
+echo "Case 2: socket active, server not running"
+systemctl stop mariadb.service
+check_state mariadb.socket active
+check_state mariadb.service inactive
+: > "$STARTS_LOG"
+dpkg --unpack "$deb"
+check_server_unreachable
+check_starts 0
+check_state mariadb.socket inactive
+[ -f "$SOCKET_FLAG" ] || fail "preinst did not record that the socket was active"
+dpkg --configure mariadb-server
+[ ! -f "$SOCKET_FLAG" ] || fail "postinst did not remove $SOCKET_FLAG"
+check_state mariadb.socket active
+client_query
+
+echo "Case 3: server started via socket just before the postinst restart"
+check_state mariadb.socket active
+check_state mariadb.service active
+dpkg --unpack "$deb"
+# Queue the start a client connection would trigger as soon as postinst starts
+# the socket, and keep that start running until the restart comes
+mkdir -p "$SOCKET_DROPIN_DIR"
+cat > "$SOCKET_DROPIN" << EOF
+[Socket]
+ExecStartPost=+/bin/sh -c 'echo socket >> $EVENTS_LOG'
+ExecStartPost=+/bin/systemctl --no-block start mariadb.service
+EOF
+cat > "$WINDOW_DROPIN" << EOF
+[Service]
+ExecStartPre=+/bin/sleep 3
+ExecStartPost=+/bin/sh -c 'echo ready >> $EVENTS_LOG'
+ExecStopPost=+/bin/sh -c 'echo stopped >> $EVENTS_LOG'
+EOF
+: > "$EVENTS_LOG"
+systemctl daemon-reload
+dpkg --configure mariadb-server
+rm -f "$SOCKET_DROPIN" "$WINDOW_DROPIN"
+systemctl daemon-reload
+cat "$EVENTS_LOG"
+# The restart must not stop the server before it is fully started
+if [ "$(head -n 2 "$EVENTS_LOG" | xargs)" != "socket ready" ]
+then
+  fail "mariadb.service was stopped while still starting"
+fi
+check_state mariadb.service active
+check_state mariadb.socket active
+client_query
+
+echo "Case 4: server still starting via the socket when preinst runs"
+# As after the prerm of 10.11.18, which stops the service but not the socket
+systemctl stop mariadb.service
+cat > "$WINDOW_DROPIN" << EOF
+[Service]
+ExecStartPre=+/bin/sleep 3
+ExecStartPost=+/bin/sh -c 'echo ready >> $EVENTS_LOG'
+ExecStopPost=+/bin/sh -c 'echo stopped >> $EVENTS_LOG'
+EOF
+: > "$EVENTS_LOG"
+systemctl daemon-reload
+systemctl --no-block start mariadb.service
+check_state mariadb.service activating
+dpkg --unpack "$deb"
+rm -f "$WINDOW_DROPIN"
+systemctl daemon-reload
+cat "$EVENTS_LOG"
+# Preinst must let the server finish starting before stopping it
+if [ "$(xargs < "$EVENTS_LOG")" != "ready stopped" ]
+then
+  fail "preinst did not wait for mariadb.service to start before stopping it"
+fi
+check_server_unreachable
+dpkg --configure mariadb-server
+check_state mariadb.socket active
+check_state mariadb.service active
+client_query
+
+echo "Case 5: socket disabled"
+systemctl disable --now mariadb.socket
+systemctl restart mariadb.service
+check_state mariadb.socket inactive
+dpkg --unpack "$deb"
+[ ! -f "$SOCKET_FLAG" ] || fail "preinst recorded an inactive socket as active"
+dpkg --configure mariadb-server
+check_state mariadb.service active
+check_state mariadb.socket inactive
+check_enabled mariadb.socket disabled
+client_query
+
+echo "Case 6: fresh install"
+dpkg --purge mariadb-server
+check_state mariadb.socket inactive
+dpkg --install "$deb"
+[ ! -f "$SOCKET_FLAG" ] || fail "preinst recorded an inactive socket as active"
+check_state mariadb.service active
+check_state mariadb.socket inactive
+check_enabled mariadb.socket disabled
+client_query
+
+rm -f "$DROPIN" "$STARTS_LOG" "$EVENTS_LOG"
+systemctl daemon-reload
+
+echo "Test 'upgrade-socket-activation' passed"
