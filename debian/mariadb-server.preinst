@@ -55,6 +55,33 @@ stop_server() {
     fi
 }
 
+# Stop mariadb.socket before the service so clients can't start the server
+# during the upgrade (#1151058). Postinst restarts it if this flag exists.
+mariadb_socket_flag=/run/mariadb-server.socket-was-active
+
+stop_socket() {
+    if [ -z "$DPKG_ROOT" ] && [ -d /run/systemd/system ] && systemctl --quiet is-active mariadb.socket; then
+      touch "$mariadb_socket_flag"
+      deb-systemd-invoke stop mariadb.socket >/dev/null || true
+      # A client may already have started the server via the socket, e.g.
+      # after the prerm of 10.11.18 stopped it. Wait until it is up, as
+      # stopping it halfway through starting makes it hang.
+      if [ "$(systemctl is-active mariadb.service)" = activating ]; then
+        deb-systemd-invoke start mariadb.service >/dev/null || true
+      fi
+    fi
+}
+
+# The old postinst may not know about the socket, so restore it if preinst
+# fails. If the service still runs, systemd refuses that, so keep the flag.
+restore_socket_on_error() {
+    errno=$?
+    if [ "$errno" != 0 ] && [ -f "$mariadb_socket_flag" ] && ! systemctl --quiet is-active mariadb.service; then
+      rm -f "$mariadb_socket_flag"
+      deb-systemd-invoke start mariadb.socket >/dev/null || true
+    fi
+}
+
 ################################ main() ##########################
 
 # @TODO: Rewrite this to use the new upstream /var/lib/mysql_upgrade_info file
@@ -153,6 +180,11 @@ then
   # Also move away the old debian.cnf file that included credentials that are
   # no longer valid. If none existed, ignore error and let dpkg continue.
   mv -f /etc/mysql/debian.cnf "/etc/mysql/debian.cnf-$found_version" || true
+fi
+
+if [ "$1" = "install" ] || [ "$1" = "upgrade" ]; then
+  trap restore_socket_on_error EXIT
+  stop_socket
 fi
 
 # to be sure

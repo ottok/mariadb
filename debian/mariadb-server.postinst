@@ -268,4 +268,15 @@ esac
 
 db_stop # in case invoke fails
 
+# Start mariadb.socket again if preinst stopped it (#1151058)
+if [ -f /run/mariadb-server.socket-was-active ]; then
+  rm -f /run/mariadb-server.socket-was-active
+  systemctl --system daemon-reload >/dev/null || true
+  # Systemd only starts the socket while the service is stopped, as it is here
+  deb-systemd-invoke start mariadb.socket >/dev/null || true
+  # A client may already have started the server via the socket. Wait until
+  # it is up, as stopping it halfway through starting makes it hang.
+  deb-systemd-invoke start mariadb.service >/dev/null || true
+fi
+
 #DEBHELPER#
