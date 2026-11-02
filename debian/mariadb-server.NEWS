@@ -1,3 +1,32 @@
+mariadb (1:10.11.19-0+deb12u2) bookworm; urgency=medium
+
+  * 10.11.18-0+deb12u1 introduced a regression that may warrant human
+    intervention. Due to an unexpected upstream change, mariadb.socket
+    was enabled and started unconditionally during upgrade. This causes
+    mariadb server to listen on *:3306 instead of just 127.0.0.1:3306
+    by default (see also: #1141976). mariadb.socket should be disabled
+    and stopped if listening on *:3306 is not desired.
+
+    This applies when mariadb-server is upgraded to 10.11.18-0+deb12u1
+    or installed at that version. 10.11.19-0+deb12u1 reverted this behavior
+    during upgrade, but any instance of mariadb-server that has already been
+    upgraded to 10.11.18-0+deb12u1 may need human intervention:
+
+    `systemctl disable --now mariadb.socket`
+
+  * Upgrading to 10.11.19-0+deb12u1 with mariadb.socket enabled may also need
+    human intervention due to the way the maintainer script handles stopping
+    and starting mariadb.service and mariadb.socket. mariadb.service may be
+    activated unexpectedly by mariadb.socket during upgrade and the database
+    fails to become ready (see also: #1151058). When upgrading with
+    mariadb.socket enabled, kill the leftover mariadb process, or reboot if
+    that fails.
+
+    10.11.19-0+deb12u2 properly handles mariadb.socket so it will not
+    unintentionally start mariadb.service.
+
+ -- Luke Yasuda <jing@jing.rocks>  Tue, 03 Nov 2026 16:33:28 +0900
+
 mariadb (1:10.11.2-1) unstable; urgency=medium
 
   MariaDB 10.11.2 was released on February 16th 2023 by the MariaDB Foundation
