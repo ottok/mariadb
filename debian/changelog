@@ -1,3 +1,16 @@
+mariadb (1:10.11.19-0+deb12u2) bookworm; urgency=medium
+
+  [ Otto Kekäläinen ]
+  * Salsa CI: Automatically use archive.d.o for discontinued releases
+
+  [ José Miguel Gonçalves ]
+  * Stop mariadb.socket during upgrades (Closes: #1151058)
+
+  [ Luke Yasuda ]
+  * Add a NEWS entry for mariadb-server about mariadb.socket
+
+ -- Otto Kekäläinen <otto@debian.org>  Wed, 04 Nov 2026 06:06:06 +0000
+
 mariadb (1:10.11.19-0+deb12u1) bookworm-security; urgency=medium
 
   [ Otto Kekäläinen ]
