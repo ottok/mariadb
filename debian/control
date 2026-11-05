@@ -573,7 +573,6 @@ Suggests:
  mariadb-test,
  netcat-openbsd,
 Recommends:
- libhtml-template-perl,
  mariadb-plugin-provider-bzip2,
  mariadb-plugin-provider-lz4,
  mariadb-plugin-provider-lzma,
