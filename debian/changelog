@@ -1,4 +1,4 @@
-mariadb (1:10.11.19-0+deb12u2) bookworm; urgency=medium
+mariadb (1:10.11.19-0+deb12u2) UNRELEASED; urgency=medium
 
   [ Otto Kekäläinen ]
   * Salsa CI: Automatically use archive.d.o for discontinued releases

@@ -1,31 +1,33 @@
-mariadb (1:10.11.19-0+deb12u2) bookworm; urgency=medium
+mariadb (1:10.11.20-0+deb12u1) bookworm-security; urgency=medium
 
-  * 10.11.18-0+deb12u1 introduced a regression that may warrant human
-    intervention. Due to an unexpected upstream change, mariadb.socket
-    was enabled and started unconditionally during upgrade. This causes
-    mariadb server to listen on *:3306 instead of just 127.0.0.1:3306
-    by default (see also: #1141976). mariadb.socket should be disabled
-    and stopped if listening on *:3306 is not desired.
+  Any MariaDB server in Debian that was installed or upgraded to
+  10.11.18-0+deb12u1, or upgraded from there to 10.11.19-0+deb12u1, may need
+  human intervention. Check whether the regression enabled the socket unit:
 
-    This applies when mariadb-server is upgraded to 10.11.18-0+deb12u1
-    or installed at that version. 10.11.19-0+deb12u1 reverted this behavior
-    during upgrade, but any instance of mariadb-server that has already been
-    upgraded to 10.11.18-0+deb12u1 may need human intervention:
+     systemctl is-enabled mariadb.socket
 
-    `systemctl disable --now mariadb.socket`
+  If it reports "enabled", stop and disable it and restart the server:
 
-  * Upgrading to 10.11.19-0+deb12u1 with mariadb.socket enabled may also need
-    human intervention due to the way the maintainer script handles stopping
-    and starting mariadb.service and mariadb.socket. mariadb.service may be
-    activated unexpectedly by mariadb.socket during upgrade and the database
-    fails to become ready (see also: #1151058). When upgrading with
-    mariadb.socket enabled, kill the leftover mariadb process, or reboot if
-    that fails.
+     systemctl disable --now mariadb.socket
+     systemctl restart mariadb.service
 
-    10.11.19-0+deb12u2 properly handles mariadb.socket so it will not
-    unintentionally start mariadb.service.
+  Upstream commit 9fa3f51f (MDEV-38313) added an [Install] section with
+  WantedBy=sockets.target to the socket units. It was first released upstream
+  in 10.11.16, and first shipped in Debian in 10.11.18-0+deb12u1, where the
+  debhelper compat level 10 packaging ran `dh_systemd_enable --name=mariadb`
+  and thus also enabled mariadb.socket as a side effect. From the next boot on,
+  the socket accepted connections on port 3306 on all interfaces instead of
+  only 127.0.0.1:3306 as configured by default. It also stayed active while
+  mariadb.service was shut down, so a client connection started the server
+  again in the middle of maintainer scripts, making upgrades hang as described
+  in Bug#1151058.
 
- -- Luke Yasuda <jing@jing.rocks>  Tue, 03 Nov 2026 16:33:28 +0900
+  The maintainer scripts in this version stop mariadb.socket before stopping or
+  restarting the server, and restore it afterwards if it was active
+  (Bug#1151058, commit f80e79567b). They do not disable it, so systems affected
+  by the regression keep listening on *:3306 until the commands above are run.
+
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 16 Nov 2026 16:16:16 +0900
 
 mariadb (1:10.11.2-1) unstable; urgency=medium
 
