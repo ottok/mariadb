@@ -18,8 +18,7 @@ very-long-line-length-in-source-file * [mysql-test/*.rdiff:*]
 very-long-line-length-in-source-file * [mysql-test/*.txt:*]
 very-long-line-length-in-source-file * [mysql-test/*.weekly:*]
 very-long-line-length-in-source-file * [mysql-test/suite/parts/r/*.out:*]
-# SQL source file that has very long inserts/selects
-very-long-line-length-in-source-file * [scripts/fill_help_tables.sql:*]
+# SQL source file that has very long statements
 very-long-line-length-in-source-file * [scripts/mariadb_system_tables.sql:*]
 # Machine formatted HTML
 very-long-line-length-in-source-file * [sql/share/charsets/languages.html:*]
