@@ -30,7 +30,7 @@ and thus included in MariaDB 12.3 onward.
 Forwarded: https://github.com/MariaDB/server/pull/4458
 ---
  extra/mariabackup/innobackupex.cc                         |  2 +-
- extra/mariabackup/xtrabackup.cc                           |  4 ++--
+ extra/mariabackup/xtrabackup.cc                           |  2 +-
  mysql-test/main/mysqld--help.result                       | 15 ++++++++-------
  .../suite/sys_vars/r/sysvars_server_embedded.result       |  2 +-
  .../suite/sys_vars/r/sysvars_server_notembedded.result    |  2 +-
@@ -38,10 +38,10 @@ Forwarded: https://github.com/MariaDB/server/pull/4458
  sql/sql_select.cc                                         |  4 ++--
  sql/sys_vars.cc                                           |  2 +-
  support-files/mysql.server.sh                             |  2 +-
- 9 files changed, 19 insertions(+), 18 deletions(-)
+ 9 files changed, 18 insertions(+), 17 deletions(-)
 
 diff --git a/extra/mariabackup/innobackupex.cc b/extra/mariabackup/innobackupex.cc
-index 22f4dc3..cf704fd 100644
+index 867afa1..1c0bc11 100644
 --- a/extra/mariabackup/innobackupex.cc
 +++ b/extra/mariabackup/innobackupex.cc
 @@ -447,7 +447,7 @@ static struct my_option ibx_long_options[] =
@@ -54,7 +54,7 @@ index 22f4dc3..cf704fd 100644
           "terminates with an error. Default is 0, in which case mariadb-backup waits "
           "indefinitely for BACKUP STAGE START to finish",
 diff --git a/extra/mariabackup/xtrabackup.cc b/extra/mariabackup/xtrabackup.cc
-index bd59e1c..578bab5 100644
+index 81bcce5..743ca4b 100644
 --- a/extra/mariabackup/xtrabackup.cc
 +++ b/extra/mariabackup/xtrabackup.cc
 @@ -1810,7 +1810,7 @@ struct my_option xb_client_options[]= {
@@ -66,17 +66,8 @@ index bd59e1c..578bab5 100644
       "If there are still such queries when the timeout expires, mariadb-backup "
       "terminates with an error. Default is 0, in which case mariadb-backup waits "
       "indefinitely for BACKUP STAGE START to finish",
-@@ -6009,7 +6009,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
- 	}
- 
- 	/* Mariabackup doesn't detect any FILE_OP for the deferred
--	tablespace. There is a possiblity that page0 could've
-+	tablespace. There is a possibility that page0 could've
- 	been corrupted persistently in the disk */
- 	for (auto space_name: defer_space_names) {
- 		if (!check_if_skip_table(space_name.c_str())) {
 diff --git a/mysql-test/main/mysqld--help.result b/mysql-test/main/mysqld--help.result
-index 2b7b177..4441dc9 100644
+index 5f3fd3d..48701e1 100644
 --- a/mysql-test/main/mysqld--help.result
 +++ b/mysql-test/main/mysqld--help.result
 @@ -822,13 +822,14 @@ The following specify which files/extra groups are read (specified before remain
@@ -102,7 +93,7 @@ index 2b7b177..4441dc9 100644
   Cost of checking a key against the end key condition
   --optimizer-key-copy-cost=# 
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
-index 7ec7c26..1ac7b3d 100644
+index a5ba2b5..3b0ed84 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_embedded.result
 @@ -2505,7 +2505,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
@@ -115,7 +106,7 @@ index 7ec7c26..1ac7b3d 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
-index c9fcdf8..650219f 100644
+index a1bc091..cb7afde 100644
 --- a/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 +++ b/mysql-test/suite/sys_vars/r/sysvars_server_notembedded.result
 @@ -2715,7 +2715,7 @@ COMMAND_LINE_ARGUMENT	REQUIRED
@@ -128,10 +119,10 @@ index c9fcdf8..650219f 100644
  NUMERIC_MAX_VALUE	4294967295
  NUMERIC_BLOCK_SIZE	1
 diff --git a/sql/opt_subselect.cc b/sql/opt_subselect.cc
-index 4841d89..3cc8486 100644
+index 7b9f397..fd5cf70 100644
 --- a/sql/opt_subselect.cc
 +++ b/sql/opt_subselect.cc
-@@ -6895,7 +6895,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
+@@ -6896,7 +6896,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
          add("rows", inner_record_count_1).
          add("materialization_cost", materialize_strategy_cost).
          add("in_exist_cost", in_exists_strategy_cost).
@@ -140,7 +131,7 @@ index 4841d89..3cc8486 100644
      }
  
      DBUG_PRINT("info",
-@@ -6933,7 +6933,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
+@@ -6934,7 +6934,7 @@ bool JOIN::choose_subquery_plan(table_map join_tables)
      {
        Json_writer_object trace_wrapper(thd);
        Json_writer_object trace_subquery(thd, "subquery_plan_revert");
@@ -150,10 +141,10 @@ index 4841d89..3cc8486 100644
    }
  
 diff --git a/sql/sql_select.cc b/sql/sql_select.cc
-index fcc18df..e107425 100644
+index d742e3e..e268ccc 100644
 --- a/sql/sql_select.cc
 +++ b/sql/sql_select.cc
-@@ -11850,7 +11850,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
+@@ -12099,7 +12099,7 @@ double recompute_join_cost_with_limit(const JOIN *join, bool skip_sorting,
  
  /*
    @brief
@@ -162,7 +153,7 @@ index fcc18df..e107425 100644
      execution.
  
    @detail
-@@ -15336,7 +15336,7 @@ void JOIN::drop_unused_derived_keys()
+@@ -15611,7 +15611,7 @@ void JOIN::drop_unused_derived_keys()
        }
        /*
          We dropped all keys except the chosen one and unique keys.
@@ -172,10 +163,10 @@ index fcc18df..e107425 100644
        tab->ref.key= 0;
      }
 diff --git a/sql/sys_vars.cc b/sql/sys_vars.cc
-index 60ce960..ef317ce 100644
+index dce5fd8..cda6908 100644
 --- a/sql/sys_vars.cc
 +++ b/sql/sys_vars.cc
-@@ -2973,7 +2973,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
+@@ -2983,7 +2983,7 @@ static Sys_var_ulong Sys_optimizer_selectivity_sampling_limit(
  static Sys_var_ulonglong Sys_optimizer_join_limit_pref_ratio(
         "optimizer_join_limit_pref_ratio",
         "For queries with JOIN and ORDER BY LIMIT : make the optimizer "

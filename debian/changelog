@@ -1,3 +1,30 @@
+mariadb (1:11.8.10+ds-1) UNRELEASED; urgency=medium
+
+  [ Otto Kekäläinen ]
+  * New upstream maintenance release version 11.8.10 with several fixes as noted
+    at https://mariadb.com/docs/release-notes/community-server/11.8/11.8.10
+    and also the following security issues:
+    - CVE-2026-101802
+    - CVE-2026-101796
+    - CVE-2026-101794
+    - CVE-2026-101775
+    - CVE-2026-101747
+    - CVE-2026-101725
+    - CVE-2026-101679
+    - CVE-2026-101619
+    - CVE-2026-101618
+    - CVE-2026-101617
+    - CVE-2026-101615
+    - CVE-2026-101614
+    - CVE-2026-101608
+
+  * Drop patches applied upstream or superseded by upstream changes
+
+  [ Daniel Lewart ]
+  * mariadb-server: drop Recommends: libhtml-template-perl (Closes: #1153074)
+
+ -- Otto Kekäläinen <otto@debian.org>  Mon, 16 Nov 2026 13:53:09 +0000
+
 mariadb (1:11.8.9+ds-4) unstable; urgency=medium
 
   [ Lena Voytek ]
