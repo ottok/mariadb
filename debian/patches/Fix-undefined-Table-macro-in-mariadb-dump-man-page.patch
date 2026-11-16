@@ -1,0 +1,39 @@
+From: =?utf-8?b?T3R0byBLZWvDpGzDpGluZW4=?= <otto@debian.org>
+Date: Mon, 16 Nov 2026 16:16:16 +0000
+Subject: Fix undefined Table macro in mariadb-dump man page
+
+A line beginning with an apostrophe is interpreted by roff as a control line, so
+the quoted text starting with "'Table definition has changed" was treated as an
+unknown "Table" macro. Groff warned about it and dropped the sentence from the
+rendered manual page.
+
+Prefix the line with \& so the apostrophe is treated as literal text.
+
+Fixes Lintian nag:
+
+    groff-message troff:<standard input>:*: warning: name 'Table' not defined [usr/share/man*]
+
+Forwarded: not yet
+---
+ man/mariadb-dump.1 | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/man/mariadb-dump.1 b/man/mariadb-dump.1
+index 4296e91..755dc0e 100644
+--- a/man/mariadb-dump.1
++++ b/man/mariadb-dump.1
+@@ -1614,10 +1614,10 @@ table, but will make the dump operation take considerably longer\&.
+ .\" order-by-size option: mariadb-dump
+ \fB\-\-order\-by\-size\fR
+ .sp
+-Dump each table according to their size, smallest first. Useful when using \-\-single-transaction on tables 
+-which get truncated/altered often\&. The assumption here is that smaller tables get truncated more often, 
+-and by dumping those first, this reduces the chance that a \-\-single-transaction dump will fail with with 
+-'Table definition has changed, please retry transaction'\&.
++Dump each table according to their size, smallest first. Useful when using \-\-single-transaction on tables
++which get truncated/altered often\&. The assumption here is that smaller tables get truncated more often,
++and by dumping those first, this reduces the chance that a \-\-single-transaction dump will fail with with
++\&'Table definition has changed, please retry transaction'\&.
+ .RE
+ .sp
+ .RS 4

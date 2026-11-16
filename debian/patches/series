@@ -12,3 +12,4 @@ Add-AppArmor-notice-for-Debian-Ubuntu-users-during-server.patch
 MDEV-39290-mytop-use-invoking-login-as-default-user-on-Un.patch
 cross-compile-fix-migrate-config.patch
 set-default-rundatadir-to-run-mariadb.patch
+Fix-undefined-Table-macro-in-mariadb-dump-man-page.patch
