@@ -153,8 +153,6 @@ bool mark_unsupported_function(const char *w1, const char *w2,
   Note that for Item_fields, the marker contains
   'select->cur_pos_in_select_list
 */
-/* Used to check GROUP BY list in the MODE_ONLY_FULL_GROUP_BY mode */
-#define MARKER_UNDEF_POS      -1
 #define MARKER_UNUSED         0
 #define MARKER_CHANGE_COND    1
 #define MARKER_PROCESSED      2
@@ -1271,8 +1269,11 @@ public:
   {
     bool binary_cmp;        /**< Make binary comparison */
     bool omit_table_names;  /**< Skip table and db names comparison */
-    Eq_config(bool binary_cmp, bool omit_table_names= false)
-      : binary_cmp(binary_cmp), omit_table_names(omit_table_names) {}
+    bool unordered_conditions; /**< Ignore AND/OR operand order and duplicates */
+    Eq_config(bool binary_cmp, bool omit_table_names= false,
+              bool unordered_conditions= false)
+      : binary_cmp(binary_cmp), omit_table_names(omit_table_names),
+        unordered_conditions(unordered_conditions) {}
   };
   virtual bool eq(const Item *, const Eq_config &config) const;
   enum_field_types field_type() const
@@ -2648,7 +2649,7 @@ public:
       not only numeric/datetime origin.
     */
     if (collation.derivation == DERIVATION_NUMERIC &&
-        collation.repertoire == MY_REPERTOIRE_ASCII &&
+        collation.repertoire_is_subset_of(MY_REPERTOIRE_ASCII) &&
         !(collation.collation->state & MY_CS_NONASCII) &&
         !(tocs->state & MY_CS_NONASCII))
       return false;
@@ -3718,11 +3719,6 @@ public:
     Collect outer references
   */
   bool collect_outer_ref_processor(void *arg) override;
-  friend bool insert_fields(THD *thd, Name_resolution_context *context,
-                            const LEX_CSTRING &db_name,
-                            const LEX_CSTRING &table_name,
-                            List_iterator<Item> *it,
-                            bool any_privileges, bool returning_field);
 };
 
 
@@ -4046,7 +4042,7 @@ public:
     max_length= 0;
     name.str= name_par ? name_par : "NULL";
     name.length= strlen(name.str);
-    collation.set(cs, DERIVATION_IGNORABLE, MY_REPERTOIRE_ASCII);
+    collation.set(cs, DERIVATION_IGNORABLE, MY_REPERTOIRE_NONE);
   }
   Type type() const override { return NULL_ITEM; }
   bool vcol_assignment_allowed_value() const override { return true; }
@@ -4238,6 +4234,11 @@ class Item_param :public Item_basic_value,
   };
 
   bool m_empty_string_is_null;
+  /*
+    The value is changed during the execution (optimized array binding),
+    so the parameter is not a constant
+  */
+  bool m_changing_value;
 
   class PValue_simple
   {
@@ -4323,6 +4324,7 @@ public:
 
   Item_param(THD *thd, const LEX_CSTRING *name_arg,
              uint pos_in_query_arg, uint len_in_query_arg);
+  Item_param(THD *thd, const Item_param &item);
 
   void cleanup() override
   {
@@ -4506,15 +4508,18 @@ public:
     If value for parameter was not set we treat it as non-const
     so no one will use parameters value in fix_fields still
     parameter is constant during execution.
+    During optimized array binding execution the value changes for every
+    set of parameters, so it is not constant either.
   */
   bool const_item() const override
   {
-    return state != NO_VALUE;
+    return state != NO_VALUE && !m_changing_value;
   }
   table_map used_tables() const override
   {
-    return state != NO_VALUE ? (table_map)0 : PARAM_TABLE_BIT;
+    return const_item() ? (table_map)0 : PARAM_TABLE_BIT;
   }
+  void set_changing_value(bool changing);
   void print(String *str, enum_query_type query_type) override;
   bool is_null() override
   { DBUG_ASSERT(state != NO_VALUE); return state == NULL_VALUE; }
@@ -4598,8 +4603,9 @@ private:
   Field *m_default_field;
 
 protected:
-  Item *shallow_copy(THD *thd) const override { return nullptr; }
-  Item *deep_copy(THD *thd) const override { return nullptr; }
+  Item *shallow_copy(THD *thd) const override;
+  Item *deep_copy(THD *thd) const override
+  { return shallow_copy_with_checks(thd); }
 };
 
 
@@ -5983,6 +5989,7 @@ public:
   }
   LEX_CSTRING func_name_cstring(THD *thd, bool is_package_function) const;
   void cleanup();
+  void free_call_ctx();
   bool sp_check_access(THD *thd);
   bool execute(THD *thd, bool *null_value, Item **args, uint arg_count);
   bool execute_impl(THD *thd, Item **args, uint arg_count);
@@ -7889,6 +7896,9 @@ public:
   }
   Item *deep_copy(THD *thd) const override
   { return shallow_copy_with_checks(thd); }
+protected:
+  Item *shallow_copy(THD *thd) const override
+  { return get_item_copy<Item_cache_year>(thd, this); }
 };
 
 
@@ -8499,11 +8509,13 @@ bool fix_escape_item(THD *thd, Item *escape_item, String *tmp_str,
                      int *escape);
 
 inline bool Virtual_column_info::is_equal(const Virtual_column_info* vcol,
-                                          bool omit_table_names) const
+                                          bool omit_table_names,
+                                          bool unordered_conditions) const
 {
   return type_handler()  == vcol->type_handler()
       && is_stored() == vcol->is_stored()
-      && expr->eq(vcol->expr, {true, omit_table_names});
+      && expr->eq(vcol->expr,
+                  {true, omit_table_names, unordered_conditions});
 }
 
 inline void Virtual_column_info::print(String* str)

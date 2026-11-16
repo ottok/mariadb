@@ -2395,6 +2395,22 @@ Type_handler_int_result::make_num_distinct_aggregator_field(MEM_ROOT *mem_root,
 }
 
 
+Field *
+Type_handler_hex_hybrid::make_num_distinct_aggregator_field(
+    MEM_ROOT *mem_root, const Item *item) const
+{
+  /*
+    Hex and bit literals have unsigned integer values in numeric aggregates.
+    Their max_length is a byte count, not a DOUBLE(M,0) display width.
+  */
+  return new (mem_root)
+         Field_longlong(NULL, item->max_length,
+                        (uchar *) (item->maybe_null() ? "" : 0),
+                        item->maybe_null() ? 1 : 0, Field::NONE,
+                        &item->name, 0, true /* unsigned */);
+}
+
+
 /***********************************************************************/
 
 Field *Type_handler_tiny::make_conversion_table_field(MEM_ROOT *root,
@@ -4020,7 +4036,7 @@ Field *Type_handler_set::make_table_field(MEM_ROOT *root,
          Field_set(addr.ptr(), attr.max_length,
                    addr.null_ptr(), addr.null_bit(),
                    Field::NONE, name,
-                   get_enum_pack_length(typelib_attr.typelib()->count),
+                   get_set_pack_length(typelib_attr.typelib()->count),
                    typelib_attr.typelib(),
                    attr.collation);
 }

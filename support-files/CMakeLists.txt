@@ -1,5 +1,5 @@
 # Copyright (c) 2006, 2016, Oracle and/or its affiliates.
-# Copyright (c) 2012, 2022, MariaDB
+# Copyright (c) 2012, 2026, MariaDB plc
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -160,21 +160,19 @@ IF(UNIX AND NOT WITHOUT_SERVER)
 
     # @ in directory name broken between CMake version 2.8.12.2 and 3.3
     # http://public.kitware.com/Bug/view.php?id=14782
-    IF(NOT CMAKE_VERSION VERSION_LESS 3.3.0 OR NOT RPM)
-      CONFIGURE_FILE(mariadb@.service.in
-                     ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.service @ONLY)
-      CONFIGURE_FILE(mariadb@.socket.in
-                     ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.socket @ONLY)
-      CONFIGURE_FILE(mariadb-extra@.socket.in
-                     ${CMAKE_CURRENT_BINARY_DIR}/mariadb-extra@.socket @ONLY)
-      INSTALL(FILES
-              ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.service
-              ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.socket
-              ${CMAKE_CURRENT_BINARY_DIR}/mariadb-extra@.socket
-              ${CMAKE_CURRENT_BINARY_DIR}/mysql.service
-              ${CMAKE_CURRENT_BINARY_DIR}/mysqld.service
-              DESTINATION ${inst_location}/systemd COMPONENT SupportFiles)
-    ENDIF()
+    CONFIGURE_FILE(mariadb@.service.in
+                   ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.service @ONLY)
+    CONFIGURE_FILE(mariadb@.socket.in
+                   ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.socket @ONLY)
+    CONFIGURE_FILE(mariadb-extra@.socket.in
+                   ${CMAKE_CURRENT_BINARY_DIR}/mariadb-extra@.socket @ONLY)
+    INSTALL(FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.service
+            ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.socket
+            ${CMAKE_CURRENT_BINARY_DIR}/mariadb-extra@.socket
+            ${CMAKE_CURRENT_BINARY_DIR}/mysql.service
+            ${CMAKE_CURRENT_BINARY_DIR}/mysqld.service
+            DESTINATION ${inst_location}/systemd COMPONENT SupportFiles)
 
     IF(INSTALL_SYSTEMD_UNITDIR)
       INSTALL(FILES
@@ -185,18 +183,14 @@ IF(UNIX AND NOT WITHOUT_SERVER)
               ${CMAKE_CURRENT_BINARY_DIR}/mysqld.service
               DESTINATION ${INSTALL_SYSTEMD_UNITDIR} COMPONENT Server)
 
-      # http://public.kitware.com/Bug/view.php?id=14782
-      IF(NOT CMAKE_VERSION VERSION_LESS 3.3.0 OR NOT RPM)
-        INSTALL(FILES use_galera_new_cluster.conf
-                DESTINATION
-                "${INSTALL_SYSTEMD_UNITDIR}/mariadb@bootstrap.service.d"
-                COMPONENT Server)
-        INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.service
-                ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.socket
-                ${CMAKE_CURRENT_BINARY_DIR}/mariadb-extra@.socket
-                DESTINATION ${INSTALL_SYSTEMD_UNITDIR} COMPONENT Server)
-      ENDIF()
-
+      INSTALL(FILES use_galera_new_cluster.conf
+              DESTINATION
+              "${INSTALL_SYSTEMD_UNITDIR}/mariadb@bootstrap.service.d"
+              COMPONENT Server)
+      INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.service
+              ${CMAKE_CURRENT_BINARY_DIR}/mariadb@.socket
+              ${CMAKE_CURRENT_BINARY_DIR}/mariadb-extra@.socket
+              DESTINATION ${INSTALL_SYSTEMD_UNITDIR} COMPONENT Server)
     ENDIF()
   ENDIF()
 
@@ -255,4 +249,20 @@ IF(UNIX AND NOT WITHOUT_SERVER)
                    WORKING_DIRECTORY \$ENV{DESTDIR}${prefix})"
                    COMPONENT SupportFiles)
   ENDIF(INSTALL_SYSCONFDIR)
+ENDIF()
+
+# mariadb-plugin-config.cmake lets out-of-tree plugins build against an
+# installed MariaDB-devel / MariaDB SDK; needed on Windows same as on UNIX.
+IF(NOT WITHOUT_SERVER)
+  FILE(READ ${CMAKE_SOURCE_DIR}/cmake/install_layout.cmake install_layout.cmake)
+  FILE(READ ${CMAKE_SOURCE_DIR}/cmake/plugin.cmake plugin.cmake)
+  CONFIGURE_FILE(mariadb-plugin-config.cmake.in mariadb-plugin-config.cmake @ONLY)
+  # DBUG_OFF/ENABLED_DEBUG_SYNC/SAFE_MUTEX affect THD's ABI
+  SET(defines "TARGET_COMPILE_DEFINITIONS(mariadb_private INTERFACE $<$<CONFIG:Debug>:ENABLED_DEBUG_SYNC> $<$<NOT:$<CONFIG:Debug>>:DBUG_OFF> $<$<AND:$<CONFIG:Debug>,$<NOT:$<BOOL:${WIN32}>>>:SAFE_MUTEX>)\n")
+  FILE(GENERATE OUTPUT $<CONFIG>/mariadb-plugin-defines.cmake CONTENT "${defines}")
+  INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/mariadb-plugin-config.cmake
+          ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/mariadb-plugin-defines.cmake
+          DESTINATION ${INSTALL_SHAREDIR}/cmake/mariadb-plugin/ COMPONENT Development)
+  INSTALL(EXPORT mariadb-plugin-targets FILE mariadb-plugin-targets.cmake
+          DESTINATION ${INSTALL_SHAREDIR}/cmake/mariadb-plugin/ COMPONENT Development)
 ENDIF()

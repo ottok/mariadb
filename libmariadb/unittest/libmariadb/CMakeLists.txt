@@ -17,6 +17,10 @@ IF(SKIP_TESTS)
   RETURN()
 ENDIF()
 
+IF(RUN_UNSTABLE_TESTS)
+  ADD_DEFINITIONS(-DRUN_UNSTABLE_TESTS)
+ENDIF()
+
 ENABLE_TESTING()
 
 IF(WIN32 AND DEFINED ENV{TRAVIS})
@@ -34,12 +38,11 @@ INCLUDE_DIRECTORIES(${CC_SOURCE_DIR}/include
                     ${CC_SOURCE_DIR}/unittest/libmariadb)
 add_compile_definitions(LIBMARIADB)
 
-SET(API_TESTS "bulk1" "performance" "basic-t" "fetch" "charset" "logs" "cursor" "errors" "view" "ps" "ps_bugs" "sp" "result" "connection" "misc" "ps_new" "thread" "features-10_2" "rpl_api")
-
 IF($ENV{TRAVIS})
   add_compile_definitions(HAVE_TRAVIS=1)
 ENDIF()
 
+SET(API_TESTS "bulk1" "performance" "basic-t" "fetch" "charset" "logs" "cursor" "errors" "view" "ps" "ps_bugs" "sp" "result" "connection" "misc" "ps_new" "thread" "features-10_2" "rpl_api" "internal")
 IF(WITH_DYNCOL)
   SET(API_TESTS ${API_TESTS} "dyncol")
 ENDIF()
@@ -64,7 +67,7 @@ ENDIF()
 ADD_LIBRARY(ma_getopt ma_getopt.c)
 
 IF(${Python3_FOUND})
-  execute_process(COMMAND ${Python3_EXECUTABLE} -m pip show pyopenssl
+  execute_process(COMMAND ${Python3_EXECUTABLE} -m pip show cryptography
                   RESULT_VARIABLE EXIT_CODE
                   OUTPUT_QUIET)
   if (${EXIT_CODE} EQUAL 0)
@@ -107,4 +110,3 @@ FOREACH(FILE ${ADDITIONAL_FILES})
                  ${CC_BINARY_DIR}/unittest/libmariadb/${FILE}
                  COPYONLY)
 ENDFOREACH()
-

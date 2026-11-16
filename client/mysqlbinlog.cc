@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2014, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2024, MariaDB
+   Copyright (c) 2009, 2026, MariaDB plc
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -127,7 +127,7 @@ static my_bool print_row_count_used= 0, print_row_event_positions_used= 0;
 static my_bool debug_info_flag, debug_check_flag;
 static my_bool force_if_open_opt= 1;
 static my_bool opt_raw_mode= 0, opt_stop_never= 0;
-my_bool opt_gtid_strict_mode= true;
+my_bool opt_gtid_strict_mode= false;
 static ulong opt_stop_never_slave_server_id= 0;
 static my_bool opt_verify_binlog_checksum= 1;
 static ulonglong offset = 0;
@@ -1320,7 +1320,7 @@ Exit_status process_event(PRINT_EVENT_INFO *print_event_info, Log_event *ev,
 
       size_t len_to= 0;
       const char* db_to= binlog_filter->get_rewrite_db(map->get_db_name(), &len_to);
-      if (len_to && map->rewrite_db(db_to, len_to, glob_description_event))
+      if (len_to && map->rewrite_db(db_to, len_to))
       {
         error("Could not rewrite database name");
         goto err;
@@ -1645,7 +1645,7 @@ static struct my_option my_options[] =
    "start < stop comparison condition. Sequence numbers of any gtid domain "
    "must comprise monotically growing sequence",
    &opt_gtid_strict_mode, &opt_gtid_strict_mode, 0,
-   GET_BOOL, NO_ARG, 1, 0, 0, 0, 0, 0},
+   GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"stop-datetime", OPT_STOP_DATETIME,
    "Stop reading the binlog at first event having a datetime equal or "
    "posterior to the argument; the argument must be a date and time "
@@ -2407,6 +2407,53 @@ static Exit_status safe_connect()
 
 
 /**
+  Copied from sql-common/pack.c, since it is needed for reading Log_event
+  objects in sql/log_event.cc, but this function is not available in
+  libmariadbclient.
+
+  The function is simple and the format of the variable length field is
+  fixed, so we can probably live with copying the code for now.
+*/
+my_ulonglong safe_net_field_length_ll(uchar **packet, size_t packet_len)
+{
+  uchar *pos= *packet;
+  if (packet_len < 1)
+    goto err;
+  if (*pos < 251)
+  {
+    (*packet)++;
+    return (my_ulonglong) *pos;
+  }
+  if (*pos == 251)
+  {
+    (*packet)++;
+    return (my_ulonglong) NULL_LENGTH;
+  }
+  if (*pos == 252)
+  {
+    if (packet_len < 3)
+      goto err;
+    (*packet)+=3;
+    return (my_ulonglong) uint2korr(pos+1);
+  }
+  if (*pos == 253)
+  {
+    if (packet_len < 4)
+      goto err;
+    (*packet)+=4;
+    return (my_ulonglong) uint3korr(pos+1);
+  }
+  if (packet_len < 9 || *pos != 254)
+    goto err;
+  (*packet)+=9;
+  return (my_ulonglong) uint8korr(pos+1);
+err:
+  *packet = NULL;
+  return 0;
+}
+
+
+/**
   High-level function for dumping a named binlog.
 
   This function calls dump_remote_log_entries() or
@@ -2737,6 +2784,13 @@ static Exit_status handle_event_raw_mode(PRINT_EVENT_INFO *print_event_info,
     {
       Exit_status ret_val= OK_CONTINUE;
       Rotate_log_event *rev= (Rotate_log_event *)ev;
+
+      if (dirname_length(rev->new_log_ident))
+      {
+        error("Invalid log file name in rotate event: %s", rev->new_log_ident);
+        delete ev;
+        DBUG_RETURN(ERROR_STOP);
+      }
       char *pe= strmake(out_file_name, output_prefix, sizeof(out_file_name)-1);
       strmake(pe, rev->new_log_ident, sizeof(out_file_name) - (pe-out_file_name));
 

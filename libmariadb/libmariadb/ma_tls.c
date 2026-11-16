@@ -116,11 +116,7 @@ int ma_pvio_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int flags)
   /* Skip peer certificate verification */
   if (mysql->options.extension->tls_allow_invalid_server_cert &&
       (!mysql->options.extension->tls_fp &&
-       !mysql->options.extension->tls_fp_list &&
-       !mysql->options.extension->ssl_crl &&
-       !mysql->options.extension->ssl_crlpath &&
-       !mysql->options.ssl_ca &&
-       !mysql->options.ssl_capath))
+       !mysql->options.extension->tls_fp_list))
   {
     /* Since OpenSSL implementation sets status during TLS handshake
        we need to clear verification status */
@@ -141,7 +137,7 @@ int ma_pvio_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int flags)
     }
 #ifdef HAVE_OPENSSL
     /* verification already happened via callback */
-    if (!(mysql->net.tls_verify_status & flags))
+    if (!(mysql->net.tls_verify_status & (flags | MARIADB_TLS_VERIFY_UNKNOWN)))
     {
       mysql->extension->tls_validation= mysql->net.tls_verify_status;
       mysql->net.tls_verify_status= MARIADB_TLS_VERIFY_OK;
@@ -181,7 +177,16 @@ int ma_pvio_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int flags)
   }
   /* Save original validation */
   mysql->extension->tls_validation= mysql->net.tls_verify_status;
-  mysql->net.tls_verify_status&= flags;
+
+#define MA_TLS_SOFT_FLAGS (MARIADB_TLS_VERIFY_TRUST | \
+                           MARIADB_TLS_VERIFY_HOST | \
+                           MARIADB_TLS_VERIFY_FINGERPRINT)
+
+  /* Drop only the soft findings the caller didn't ask for */
+  mysql->net.tls_verify_status&= ~(MA_TLS_SOFT_FLAGS & ~flags);
+
+#undef MA_TLS_SOFT_FLAGS
+
   return rc;
 }
 

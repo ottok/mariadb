@@ -288,6 +288,7 @@ extern struct my_option my_long_options[];
 int handle_early_options();
 extern int MYSQL_PLUGIN_IMPORT mysqld_server_started;
 extern int mysqld_server_initialized;
+extern my_bool plugins_are_initialized;
 extern "C" MYSQL_PLUGIN_IMPORT int orig_argc;
 extern "C" MYSQL_PLUGIN_IMPORT char **orig_argv;
 extern pthread_attr_t connection_attrib;
@@ -768,6 +769,7 @@ enum options_mysqld
   OPT_COSTS_ROWID_COPY_COST,
   OPT_EXPIRE_LOGS_DAYS,
   OPT_BINLOG_EXPIRE_LOGS_SECONDS,
+  OPT_SLAVE_CONNECTIONS_NEEDED_FOR_PURGE,
   OPT_CONSOLE,
   OPT_DEBUG_SYNC_TIMEOUT,
   OPT_REMOVED_OPTION,

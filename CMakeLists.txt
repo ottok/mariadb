@@ -1,5 +1,5 @@
 # Copyright (c) 2006, 2017, Oracle and/or its affiliates.
-# Copyright (c) 2008, 2022, MariaDB Corporation.
+# Copyright (c) 2008, 2026, MariaDB Corporation.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -63,7 +63,7 @@ IF(UNIX AND NOT APPLE)
   # the empty CMAKE_BUILD_TYPE) and the build many times for
   # different build types without re-running cmake!
   # But we only care about WITH_PIC on Unix, where the check for
-  # CMAKE_BUILD_TYPE hapen to work.
+  # CMAKE_BUILD_TYPE happen to work.
   IF (CMAKE_BUILD_TYPE MATCHES "Debug")
     SET(WITH_PIC_DEFAULT ON)
   ELSE()
@@ -487,7 +487,18 @@ SET(PYTHON_SHEBANG "/usr/bin/env python3" CACHE STRING "python shebang")
 MARK_AS_ADVANCED(PYTHON_SHEBANG)
 
 # Add storage engines and plugins.
-CONFIGURE_PLUGINS()
+IF(NOT WITHOUT_SERVER)
+  FILE(GLOB dirs_storage ${CMAKE_SOURCE_DIR}/storage/*)
+ENDIF()
+
+FILE(GLOB dirs_plugin ${CMAKE_SOURCE_DIR}/plugin/*)
+FOREACH(dir ${dirs_storage} ${dirs_plugin})
+  IF (EXISTS ${dir}/CMakeLists.txt)
+    ADD_SUBDIRECTORY(${dir})
+  ENDIF()
+ENDFOREACH()
+
+VERIFY_PLUGINS()
 
 ADD_SUBDIRECTORY(include)
 ADD_SUBDIRECTORY(dbug)

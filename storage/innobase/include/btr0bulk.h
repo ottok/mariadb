@@ -77,7 +77,6 @@ public:
 #ifdef UNIV_DEBUG
 		m_total_data(0),
 #endif /* UNIV_DEBUG */
-		m_modify_clock(0),
 		m_err(DB_SUCCESS)
 	{
 		ut_ad(!dict_index_is_spatial(m_index));
@@ -92,8 +91,9 @@ public:
 
 	/** Initialize members and allocate page if needed and start mtr.
 	Note: must be called and only once right after constructor.
+	@param hint_page_no  page allocation hint, or 0
 	@return error code */
-	dberr_t init();
+	dberr_t init(uint32_t hint_page_no);
 
 	/** Insert a record in the page.
 	@param[in]	rec		record
@@ -261,10 +261,6 @@ private:
 	/** Total data in the page */
 	ulint		m_total_data;
 #endif /* UNIV_DEBUG */
-
-	/** The modify clock value of the buffer block
-	when the block is re-pinned */
-	ib_uint64_t     m_modify_clock;
 
 	/** Operation result DB_SUCCESS or error code */
 	dberr_t		m_err;

@@ -1,8 +1,8 @@
-commit: bf9193a939f515e95dd8def1a5468088c91cede6
-date: 2026-08-19 11:29:29 +0200
-build-date: 2026-08-19 09:35:48 +0000 
-short: bf9193a9
+commit: d04ba7c69bc7fa1719cfc4b8c6393a6d8529b755
+date: 2026-11-09 20:27:12 +0100
+build-date: 2026-11-09 19:49:55 +0000 
+short: d04ba7c6
 branch: bb-11.8-release
 
 
-MariaDB source 11.8.9
+MariaDB source 11.8.10

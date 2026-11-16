@@ -2327,7 +2327,16 @@ end:
   thd->first_successful_insert_id_in_prev_stmt_for_binlog= 0;
   thd->first_successful_insert_id_in_prev_stmt= 0;
   thd->stmt_depends_on_first_successful_insert_id_in_prev_stmt= 0;
-  free_root(thd->mem_root,MYF(MY_KEEP_PREALLOC));
+  /*
+    Not for BINLOG statement: thd->mem_root holds memory of the statement
+    itself (e.g. Items of EXECUTE IMMEDIATE).
+  */
+  if (thd->slave_thread
+#ifdef WITH_WSREP
+      || (WSREP(thd) && wsrep_thd_is_applying(thd))
+#endif /* WITH_WSREP */
+     )
+    free_root(thd->mem_root,MYF(MY_KEEP_PREALLOC));
   DBUG_RETURN(thd->is_slave_error);
 }
 
@@ -2400,7 +2409,8 @@ Query_log_event::peek_is_commit_rollback(const uchar *event_start,
     DBUG_ASSERT(checksum_alg == BINLOG_CHECKSUM_ALG_UNDEF ||
                 checksum_alg == BINLOG_CHECKSUM_ALG_OFF);
 
-  if (event_len < LOG_EVENT_HEADER_LEN + QUERY_HEADER_LEN || event_len < 9)
+  if (unlikely(event_len < LOG_EVENT_HEADER_LEN + QUERY_HEADER_LEN ||
+               event_len < 9))
     return false;
   return !memcmp(event_start + (event_len-7), "\0COMMIT", 7) ||
          !memcmp(event_start + (event_len-9), "\0ROLLBACK", 9);
@@ -2472,7 +2482,7 @@ bool Format_description_log_event::write(Log_event_writer *writer)
   ret= write_header(writer, rec_size) ||
        write_data(writer, buff, buff_size) ||
        (!DBUG_IF("truncate_fde_post_header_len") &&
-         write_data(writer, post_header_len, number_of_event_types)) ||
+         write_data(writer, byte_data_for_post_header_len, number_of_event_types)) ||
        (!DBUG_IF("truncate_fde_used_checksum_alg") &&
          write_data(writer, &checksum_byte, sizeof(checksum_byte))) ||
        write_footer(writer);
@@ -2589,6 +2599,14 @@ int Format_description_log_event::do_apply_event(rpl_group_info *rgi)
     copy_crypto_data(rli->relay_log.description_event_for_exec);
     delete rli->relay_log.description_event_for_exec;
     rli->relay_log.description_event_for_exec= this;
+    /*
+      The start of the relay log has our own generated format description
+      event followed by the real format description from the master.
+      Don't re-compute the bug bitmask from the generated event so we don't
+      leave a window where a wrong value is temporarily set.
+    */
+    if (!is_relay_log_event())
+      rli->calc_master_bug_bitmask(this);
   }
 
   DBUG_RETURN(ret);
@@ -2952,7 +2970,7 @@ bool
 Gtid_log_event::peek(const uchar *event_start, size_t event_len,
                      enum_binlog_checksum_alg checksum_alg,
                      uint32 *domain_id, uint32 *server_id, uint64 *seq_no,
-                     uchar *flags2, const Format_description_log_event *fdev)
+                     uchar *flags2)
 {
   const uchar *p;
 
@@ -2967,10 +2985,12 @@ Gtid_log_event::peek(const uchar *event_start, size_t event_len,
     DBUG_ASSERT(checksum_alg == BINLOG_CHECKSUM_ALG_UNDEF ||
                 checksum_alg == BINLOG_CHECKSUM_ALG_OFF);
 
-  if (event_len < (uint32)fdev->common_header_len + GTID_HEADER_LEN)
+  if (unlikely(event_len <
+               (uint32)Format_description_log_event::common_header_len +
+               GTID_HEADER_LEN))
     return true;
   *server_id= uint4korr(event_start + SERVER_ID_OFFSET);
-  p= event_start + fdev->common_header_len;
+  p= event_start + Format_description_log_event::common_header_len;
   *seq_no= uint8korr(p);
   p+= 8;
   *domain_id= uint4korr(p);
@@ -7009,15 +7029,22 @@ Write_rows_log_event::write_row(rpl_group_info *rgi,
   if (table->versioned(VERS_TIMESTAMP))
   {
     ulong sec_part;
-    // Check whether a row came from unversioned table and fix vers fields.
+    /*
+      If the row came from an unversioned table or the system fields from the
+      master are not trusted, set the system fields here. Then compute
+      vcols, which may depend on them.
+    */
     if (opt_secure_timestamp > SECTIME_REPL)
     {
       table->vers_start_field()->clear_has_explicit_value();
       table->vers_end_field()->clear_has_explicit_value();
-      table->vers_update_fields();
+      if (table->vers_update_fields_vcols())
+        DBUG_RETURN(HA_ERR_GENERIC);
     }
-    else if (table->vers_start_field()->get_timestamp(&sec_part) == 0 && sec_part == 0)
-      table->vers_update_fields();
+    else if (table->vers_start_field()->get_timestamp(&sec_part) == 0 &&
+             sec_part == 0 &&
+             table->vers_update_fields_vcols())
+      DBUG_RETURN(HA_ERR_GENERIC);
     table->vers_fix_old_timestamp(rgi);
   }
 
@@ -7069,8 +7096,8 @@ int Rows_log_event::update_sequence()
       (table_rgi &&
        !(table_rgi->gtid_ev_flags2 & Gtid_log_event::FL_DDL) &&
        !(old_master=
-         rpl_master_has_bug(thd_rgi->rli,
-                            29621, FALSE, FALSE, FALSE, TRUE))))
+         rpl_master_has_bug(thd_rgi->rli, RPL_BUG_MDEV_29621, FALSE,
+                            NULL, NULL))))
   {
     /* This event come from a setval function executed on the master.
        Update the sequence next_number and round, like we do with setval()
@@ -7368,6 +7395,7 @@ int Rows_log_event::find_key(const rpl_group_info *rgi)
     {
       const uchar *curr_row_end= m_curr_row_end;
       Check_level_instant_set clis(m_table->in_use, CHECK_FIELD_IGNORE);
+      m_table->reset_default_fields();
       if (int err= unpack_row(rgi, m_table, m_width, m_curr_row, &m_cols,
                               &curr_row_end, &m_master_reclength, m_rows_end))
         DBUG_RETURN(err);
@@ -8085,7 +8113,11 @@ Update_rows_log_event::do_exec_row(rpl_group_info *rgi)
       {
         m_table->vers_start_field()->clear_has_explicit_value();
         m_table->vers_end_field()->clear_has_explicit_value();
-        m_table->vers_update_fields();
+        if (m_table->vers_update_fields_vcols())
+        {
+          error= HA_ERR_GENERIC;
+          goto err;
+        }
       }
       m_table->vers_fix_old_timestamp(rgi);
     }
@@ -8102,7 +8134,7 @@ Update_rows_log_event::do_exec_row(rpl_group_info *rgi)
   tl->trg_event_map= trg_event_map_save;
   if (unlikely(error == HA_ERR_RECORD_IS_THE_SAME))
     error= 0;
-  if (m_vers_from_plain && m_table->versioned(VERS_TIMESTAMP))
+  if (!error && m_vers_from_plain && m_table->versioned(VERS_TIMESTAMP))
   {
     store_record(m_table, record[2]);
     error= vers_insert_history_row(m_table);
@@ -8242,12 +8274,12 @@ void Ignorable_log_event::pack_info(Protocol *protocol)
 #endif
 
 #if defined(HAVE_REPLICATION)
-Heartbeat_log_event::Heartbeat_log_event(const uchar *buf, uint event_len,
-                    const Format_description_log_event* description_event)
-  :Log_event(buf, description_event), ident_len(0), log_ident(NULL)
+Heartbeat_log_event::Heartbeat_log_event(const uchar *buf, uint event_len)
+  :Log_event(buf, event_len), ident_len(0), log_ident(NULL)
 {
+  uint8 header_size= Format_description_log_event::common_header_len;
   uint sub_header_len= (log_pos == 0) ? HB_SUB_HEADER_LEN : 0;
-  uint all_headers_len= description_event->common_header_len + sub_header_len;
+  uint all_headers_len= header_size + sub_header_len;
 
   /*
     The comparison is <= rather than <, so an event whose length stops exactly
@@ -8268,7 +8300,7 @@ Heartbeat_log_event::Heartbeat_log_event(const uchar *buf, uint event_len,
     return;
 
   if (log_pos == 0)
-    log_pos= uint8korr(buf + description_event->common_header_len);
+    log_pos= uint8korr(buf + header_size);
 
   log_ident= buf + all_headers_len;
   ident_len= event_len - all_headers_len;

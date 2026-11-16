@@ -1202,7 +1202,6 @@ struct interval_range
 
 class Item_func_interval :public Item_long_func
 {
-  Item_row *row;
   bool use_decimal_comparison;
   interval_range *intervals;
   bool check_arguments() const override
@@ -1211,8 +1210,9 @@ class Item_func_interval :public Item_long_func
   }
 public:
   Item_func_interval(THD *thd, Item_row *a):
-    Item_long_func(thd, a), row(a), intervals(0)
+    Item_long_func(thd, a), intervals(0)
   { }
+  Item_row *row() const { return static_cast<Item_row*>(args[0]->real_item()); }
   longlong val_int() override;
   bool fix_length_and_dec(THD *thd) override;
   LEX_CSTRING func_name_cstring() const override
@@ -3390,6 +3390,7 @@ public:
   Item *deep_copy(THD *thd) const override;
   bool excl_dep_on_table(table_map tab_map) override;
   bool excl_dep_on_grouping_fields(st_select_lex *sel) override;
+  bool eq(const Item *item, const Eq_config &config) const override;
 
 private:
   void merge_sub_condition(List_iterator<Item>& li);

@@ -11,6 +11,7 @@ at maximising storage efficiency while maintaining InnoDB-like performance." PAR
 
 MY_CHECK_AND_SET_COMPILER_FLAG(-Wno-range-loop-construct)
 MY_CHECK_AND_SET_COMPILER_FLAG(-Wno-invalid-offsetof)
+MY_CHECK_AND_SET_COMPILER_FLAG(-Wno-redundant-move)
 MY_CHECK_AND_SET_COMPILER_FLAG(-Wno-effc++ DEBUG RELWITHDEBINFO)
 
 MACRO(SKIP_ROCKSDB_PLUGIN msg)
@@ -98,11 +99,7 @@ ELSE()
   SKIP_ROCKSDB_PLUGIN("Compiler not supported")
 ENDIF()
 
-IF(CMAKE_VERSION GREATER 3.0)
-  SET(CMAKE_CXX_STANDARD  11)
-ELSEIF(CXX11_FLAGS)
-  ADD_DEFINITIONS(${CXX11_FLAGS})
-ENDIF()
+SET(CMAKE_CXX_STANDARD  11)
 
 SET(ROCKSDB_SE_SOURCES
   rdb_mariadb_server_port.cc

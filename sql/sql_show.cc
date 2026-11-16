@@ -785,6 +785,9 @@ void ignore_db_dirs_append(const char *dirname_arg)
   LEX_STRING *new_entry;
   size_t len= strlen(dirname_arg);
 
+  if (plugins_are_initialized)
+    return; // cannot modify read-only sysvar at run-time
+
   if (!my_multi_malloc(PSI_INSTRUMENT_ME, MYF(0),
                        &new_entry, sizeof(LEX_STRING),
                        &new_entry_buf, len + 1,
@@ -3453,6 +3456,13 @@ static my_bool processlist_callback(THD *tmp, processlist_callback_arg *arg)
   ulonglong max_counter;
   bool got_thd_data;
 
+  /* Test hook: pause after tmp_sctx is captured, before it is read. */
+  DBUG_EXECUTE_IF("processlist_callback_pause_after_sctx_capture",
+                  if (tmp->system_thread == SYSTEM_THREAD_EVENT_WORKER &&
+                      tmp_sctx != &tmp->main_security_ctx)
+                    DEBUG_SYNC(arg->thd,
+                               "processlist_callback_captured_sctx"););
+
   if (!thd_visible_in_processlist(arg->thd->security_ctx, tmp))
     return 0;
 
@@ -5791,8 +5801,9 @@ int fill_schema_schemata(THD *thd, TABLE_LIST *tables, COND *cond)
       continue;
     }
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
-    if (sctx->master_access & (DB_ACLS | SHOW_DB_ACL) ||
-        acl_get_all3(sctx, db_name->str, false) ||
+    privilege_t test_access(SHOW_DB_ACL | (DB_ACLS & ~GRANT_ACL));
+    if (sctx->master_access & test_access ||
+        acl_get_all3(sctx, db_name->str, false) & test_access ||
         !check_grant_db(thd, db_name->str))
 #endif
     {
@@ -6073,7 +6084,8 @@ static int get_schema_tables_record(THD *thd, TABLE_LIST *tables,
           {
               handler *hi= show_table->hlindex->file;
               if (!hi->info(HA_STATUS_VARIABLE))
-                  file->stats.index_file_length+= hi->stats.data_file_length;
+                  file->stats.index_file_length+= hi->stats.data_file_length
+                                                + hi->stats.index_file_length;
           }
       }
 
@@ -7269,6 +7281,25 @@ int fill_schema_proc(THD *thd, TABLE_LIST *tables, COND *cond)
   {
     // There can be no matching records for the condition
     DBUG_RETURN(0);
+  }
+
+  /*
+    A routine records its database in mysql.proc in lower case whenever
+    lower_case_table_names is set, see sp_name::sp_name().  The lookup value
+    is the name as the query spelled it, and get_lookup_field_values folds it
+    to lower case only for lower_case_table_names 1.  Fold it here for the
+    remaining setting so that the index read below, and the comparison in
+    check_proc_record, both see the form that was stored.  mysql.proc.db is
+    utf8mb3_bin, so neither of them can absorb the difference in case.
+    The value is a buffer allocated by get_lookup_field_values, so it can be
+    changed in place.
+  */
+  char db_buf[NAME_LEN + 1];
+  if (lower_case_table_names && lookup.db_value.length)
+  {
+    lookup.db_value.length= files_charset_info->casedn_z(lookup.db_value.str,
+                               lookup.db_value.length, db_buf, sizeof(db_buf));
+    lookup.db_value.str= db_buf;
   }
 
   start_new_trans new_trans(thd);

@@ -109,7 +109,7 @@ struct buf_page_info_t{
 	ulint		block_id;	/*!< Buffer Pool block ID */
 	/** page identifier */
 	page_id_t	id;
-	uint32_t	access_time;	/*!< Time of first access */
+	uint32_t	access_time;	/*!< buf_page_t::accessed_at() */
 	uint32_t	state;		/*!< buf_page_t::state() */
 #ifdef BTR_CUR_HASH_ADAPT
 	unsigned	hashed:1;	/*!< Whether hash index has been
@@ -117,8 +117,6 @@ struct buf_page_info_t{
 #endif /* BTR_CUR_HASH_ADAPT */
 	unsigned	is_old:1;	/*!< TRUE if the block is in the old
 					blocks in buf_pool.LRU_old */
-	unsigned	freed_page_clock:31; /*!< the value of
-					buf_pool.freed_page_clock */
 	unsigned	zip_ssize:PAGE_ZIP_SSIZE_BITS;
 					/*!< Compressed page size */
 	unsigned	compressed_only:1; /*!< ROW_FORMAT=COMPRESSED only */
@@ -3780,8 +3778,8 @@ i_s_innodb_buffer_page_fill(
 		OK(fields[IDX_BUFFER_PAGE_IS_OLD]->store(
 			   page_info->is_old, true));
 
-		OK(fields[IDX_BUFFER_PAGE_FREE_CLOCK]->store(
-			   page_info->freed_page_clock, true));
+		/* FREE_PAGE_CLOCK has no backing field; report 0 */
+		OK(fields[IDX_BUFFER_PAGE_FREE_CLOCK]->store(0, true));
 
 		OK(schema_table_store_record(thd, table));
 	}
@@ -3873,13 +3871,14 @@ i_s_innodb_buffer_page_get_info(
 
 		page_info->oldest_mod = bpage->oldest_modification();
 
-		page_info->access_time = bpage->access_time;
+		page_info->access_time = bpage->accessed_at();
 
-		page_info->zip_ssize = bpage->zip.ssize;
+		const auto s = bpage->zip.get_state();
 
-		page_info->is_old = bpage->old;
+		page_info->zip_ssize = bpage->zip.ssize(s)
+			& ((1U << PAGE_ZIP_SSIZE_BITS) - 1);
 
-		page_info->freed_page_clock = bpage->freed_page_clock;
+		page_info->is_old = bpage->zip.old(s);
 
 		if (page_info->state >= buf_page_t::READ_FIX
 		    && page_info->state < buf_page_t::WRITE_FIX) {
@@ -4217,8 +4216,8 @@ i_s_innodb_buf_page_lru_fill(
 		OK(fields[IDX_BUF_LRU_PAGE_IS_OLD]->store(
 			   page_info->is_old, true));
 
-		OK(fields[IDX_BUF_LRU_PAGE_FREE_CLOCK]->store(
-			   page_info->freed_page_clock, true));
+		/* FREE_PAGE_CLOCK has no backing field; report 0 */
+		OK(fields[IDX_BUF_LRU_PAGE_FREE_CLOCK]->store(0, true));
 
 		OK(schema_table_store_record(thd, table));
 	}
@@ -4485,7 +4484,8 @@ static int i_s_sys_error_handling(int err, THD *thd)
 @param rec       record to read from (nullptr=use the dict_sys cache)
 @param table     the converted dict_table_t
 @return error message
-@retval nullptr on success */
+@retval nullptr on success, or if the record is not visible, in
+which case *table will be nullptr*/
 static const char *i_s_sys_tables_rec(const btr_pcur_t &pcur, mtr_t *mtr,
                                       const rec_t *rec, dict_table_t **table)
 {
@@ -4548,7 +4548,7 @@ i_s_sys_tables_fill_table(
 		}
 
 		const char*	err_msg;
-		dict_table_t*	table_rec;
+		dict_table_t*	table_rec = nullptr;
 
 		/* Create and populate a dict_table_t structure with
 		information from SYS_TABLES row */
@@ -4556,20 +4556,18 @@ i_s_sys_tables_fill_table(
 		mtr.commit();
 		dict_sys.unlock();
 
-		if (!err_msg) {
+		if (err_msg) {
+			push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+					    ER_CANT_FIND_SYSTEM_REC, "%s",
+					    err_msg);
+		} else if (table_rec) {
 			err = i_s_dict_fill_sys_tables(
 				thd, table_rec, tables->table);
 			if (err) {
 				err = i_s_sys_error_handling(err, thd);
-				if (table_rec) {
-					dict_mem_table_free(table_rec);
-				}
+				dict_mem_table_free(table_rec);
 				goto func_exit;
 			}
-		} else {
-			push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
-					    ER_CANT_FIND_SYSTEM_REC, "%s",
-					    err_msg);
 		}
 
 		if (table_rec) {
@@ -4586,6 +4584,7 @@ i_s_sys_tables_fill_table(
 func_exit:
 	ut_free(pcur.old_rec_buf);
 
+	fil_crypt_threads_signal();
 	DBUG_RETURN(err);
 }
 
@@ -4808,6 +4807,7 @@ i_s_sys_tables_fill_table_stats(
 	dict_sys.unlock();
 func_exit:
 	ut_free(pcur.old_rec_buf);
+	fil_crypt_threads_signal();
 	DBUG_RETURN(err);
 }
 
@@ -6200,9 +6200,9 @@ static int i_s_sys_tablespaces_fill_table(THD *thd, TABLE_LIST *tables, Item*)
   for (fil_space_t &space : fil_system.space_list)
   {
     if (!space.is_temporary() && !space.is_being_imported() &&
-        !space.is_stopping() &&
-        space.chain.start)
+        !space.is_stopping())
     {
+      ut_ad(space.chain.start);
       space.reacquire();
       mysql_mutex_unlock(&fil_system.mutex);
       space.s_lock();
