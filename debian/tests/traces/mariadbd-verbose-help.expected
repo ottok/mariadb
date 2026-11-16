@@ -1472,8 +1472,8 @@ The following specify which files/extra groups are read (specified before remain
                       MySQL versions. Any combination of: NO_DUP_KEY_WARNINGS_WITH_IGNORE,
                       NO_PROGRESS_INFO, ZERO_DATE_TIME_CAST, UTF8_IS_UTF8MB3, IGNORE_INDEX_ONLY_FOR_JOIN,
                       COMPAT_5_1_CHECKSUM, NO_NULL_COLLATION_IDS, LOCK_ALTER_TABLE_COPY,
-                      OLD_FLUSH_STATUS, SESSION_USER_IS_USER, or ALL to set all
-                      combinations
+                      OLD_FLUSH_STATUS, SESSION_USER_IS_USER, X509_LENIENT_COMPARE,
+                      or ALL to set all combinations
   --old-passwords     Use old password encryption method (needed for 4.0 and
                       older clients)
   --old-style-user-limits 
@@ -2052,8 +2052,7 @@ The following specify which files/extra groups are read (specified before remain
   --slave-connections-needed-for-purge=# 
                       Minimum number of connected slaves required for automatic
                       binary log purge with max_binlog_total_size,
-                      binlog_expire_logs_seconds or binlog_expire_logs_days.
-                      Default is 0 when Galera is enabled and 1 otherwise
+                      binlog_expire_logs_seconds or binlog_expire_logs_days
   --slave-ddl-exec-mode=name 
                       How replication events should be executed. Legal values
                       are STRICT and IDEMPOTENT (default). In IDEMPOTENT mode,
@@ -3108,7 +3107,7 @@ skip-show-database                                           FALSE
 skip-slave-start                                             FALSE
 slave-abort-blocking-timeout                                 31536000
 slave-compressed-protocol                                    FALSE
-slave-connections-needed-for-purge                           1
+slave-connections-needed-for-purge                           0
 slave-ddl-exec-mode                                          IDEMPOTENT
 slave-domain-parallel-threads                                0
 slave-exec-mode                                              STRICT
