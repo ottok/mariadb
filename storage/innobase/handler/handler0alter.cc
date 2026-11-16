@@ -918,6 +918,10 @@ my_error_innodb(dberr_t error, const char *table, ulint flags)
 	case DB_CORRUPTION:
 		my_error(ER_NOT_KEYFILE, MYF(0), table);
 		break;
+	case DB_DECRYPTION_FAILED:
+		my_error(ER_GET_ERRMSG, MYF(0), error,
+		         ut_strerr(error), "InnoDB");
+		break;
 	case DB_TOO_BIG_RECORD: {
 		/* Note that in page0zip.ic page_zip_rec_needs_ext() rec_size
 		is limited to COMPRESSED_REC_MAX_DATA_SIZE (16K) or
@@ -1199,8 +1203,8 @@ struct ha_innobase_inplace_ctx : public inplace_alter_handler_ctx
 				index->lock.free();
 				dict_mem_index_free(index);
 			}
-			for (unsigned i = old_n_v_cols; i--; ) {
-				old_v_cols[i].~dict_v_col_t();
+			for (unsigned i = instant_table->n_v_cols; i--; ) {
+				instant_table->v_cols[i].~dict_v_col_t();
 			}
 			if (instant_table->fts) {
 				instant_table->fts->~fts_t();
@@ -4291,20 +4295,19 @@ created_clustered:
 
 	if (add_fts_doc_idx) {
 		index_def_t*	index = indexdef++;
-		uint nfields = 1;
-
-		if (altered_table->versioned())
-			++nfields;
+		const uint	nfields = altered_table->versioned() + 1;
 		index->fields = static_cast<index_field_t*>(
-			mem_heap_alloc(heap, sizeof(*index->fields) * nfields));
+			mem_heap_alloc(heap, nfields * sizeof *index->fields));
 		index->n_fields = nfields;
 		index->fields[0].col_no = fts_doc_id_col;
 		index->fields[0].prefix_len = 0;
 		index->fields[0].descending = false;
 		index->fields[0].is_v_col = false;
 		if (nfields == 2) {
-			index->fields[1].col_no
-				= altered_table->s->vers.end_fieldno;
+			/* FTS_DOC_ID_INDEX(FTS_DOC_ID,row_end) */
+			index->fields[1].col_no = innodb_col_no(
+				altered_table->field[
+					altered_table->s->vers.end_fieldno]);
 			index->fields[1].prefix_len = 0;
 			index->fields[1].descending = false;
 			index->fields[1].is_v_col = false;
@@ -6631,26 +6634,8 @@ prepare_inplace_alter_table_dict(
 	bool table_lock_failed = false;
 
 	if (!ctx->online) {
-acquire_lock:
 		ctx->prebuilt->trx->op_info = "acquiring table lock";
 		error = lock_table_for_trx(user_table, ctx->trx, LOCK_S);
-	} else if (add_key_nums) {
-		/* FIXME: trx_resurrect_table_locks() will not resurrect
-		MDL for any recovered transactions that may hold locks on
-		the table. We will prevent race conditions by "unnecessarily"
-		acquiring an InnoDB table lock even for online operation,
-		to ensure that the rollback of recovered transactions will
-		not run concurrently with online ADD INDEX. */
-		user_table->lock_shared_lock();
-		for (lock_t *lock = UT_LIST_GET_FIRST(user_table->locks);
-		     lock;
-		     lock = UT_LIST_GET_NEXT(un_member.tab_lock.locks, lock)) {
-			if (lock->trx->is_recovered) {
-				user_table->lock_shared_unlock();
-				goto acquire_lock;
-			}
-		}
-		user_table->lock_shared_unlock();
 	}
 
 	if (pause_purge) {
@@ -9078,7 +9063,6 @@ argument passed.
 @param[in]	table		table
 @param[in]	col_no		column number
 @param[in]	is_v		if this is a virtual column
-@param[in]	only_committed	whether to consider only committed indexes
 @retval true column exists
 @retval false column does not exist, true if column is system column or
 it is in the index. */
@@ -9087,8 +9071,7 @@ bool
 check_col_exists_in_indexes(
 	const dict_table_t*	table,
 	ulint			col_no,
-	bool			is_v,
-	bool			only_committed = false)
+	bool			is_v)
 {
 	/* This function does not check system columns */
 	if (!is_v && dict_table_get_nth_col(table, col_no)->mtype == DATA_SYS) {
@@ -9099,9 +9082,7 @@ check_col_exists_in_indexes(
 	     index;
 	     index = dict_table_get_next_index(index)) {
 
-		if (only_committed
-		    ? !index->is_committed()
-		    : index->to_be_dropped) {
+		if (index->to_be_dropped) {
 			continue;
 		}
 
@@ -9312,6 +9293,7 @@ free_and_exit:
     ctx->trx->free();
     ctx->trx= nullptr;
 
+    DEBUG_SYNC_C("alter_rollback_complete");
     dict_sys.lock(SRW_LOCK_CALL);
 
     if (ctx->add_vcol)
@@ -9339,22 +9321,6 @@ free_and_exit:
   DBUG_ASSERT(prebuilt->table->indexes.start->online_status ==
               ONLINE_INDEX_COMPLETE);
 
-  /* Reset dict_col_t::ord_part for unindexed columns */
-  for (ulint i= 0; i < dict_table_get_n_cols(prebuilt->table); i++)
-  {
-    dict_col_t &col= prebuilt->table->cols[i];
-    if (col.ord_part && !check_col_exists_in_indexes(prebuilt->table, i, false,
-                                                     true))
-      col.ord_part= 0;
-  }
-
-  for (ulint i = 0; i < dict_table_get_n_v_cols(prebuilt->table); i++)
-  {
-    dict_col_t &col = prebuilt->table->v_cols[i].m_col;
-    if (col.ord_part && !check_col_exists_in_indexes(prebuilt->table, i, true,
-                                                     true))
-      col.ord_part= 0;
-  }
   dict_sys.unlock();
   trx_commit_for_mysql(prebuilt->trx);
   prebuilt->trx_id = 0;

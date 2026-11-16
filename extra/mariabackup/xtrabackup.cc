@@ -220,7 +220,7 @@ uint xtrabackup_compress = FALSE;
 uint xtrabackup_compress_threads;
 ulonglong xtrabackup_compress_chunk_size = 0;
 
-/* sleep interval beetween log copy iterations in log copying thread
+/* sleep interval between log copy iterations in log copying thread
 in milliseconds (default is 1 second) */
 ulint xtrabackup_log_copy_interval = 1000;
 static ulong max_buf_pool_modified_pct;
@@ -4019,7 +4019,7 @@ xb_fil_io_init()
 @param[in] is_remote true if tablespace file is .isl
 @param[in] skip_node_page0 true if we don't need to read node page 0. Otherwise
 node page0 will be read, and it's size and free pages limit
-will be set from page 0, what is neccessary for checking and fixing corrupted
+will be set from page 0, what is necessary for checking and fixing corrupted
 pages.
 @param[in] defer_space_id use the space id to create space object
 when there is deferred tablespace
@@ -4847,6 +4847,7 @@ xb_load_list_file(
 		if (p) {
 			*p = '\0';
 		} else {
+			fclose(fp);
 			die("`%s...` name is too long", name_buf);
 		}
 
@@ -5613,13 +5614,14 @@ static bool xtrabackup_backup_func()
 	msg("cd to %s", mysql_real_data_home);
 	encryption_plugin_backup_init(mysql_connection);
 	if (innodb_log_checkpoint_now) {
-		msg("Initiating checkpoint");
-		if (mysql_send_query(mysql_connection,
-		    C_STRING_WITH_LEN("SET GLOBAL "
-				      "innodb_log_checkpoint_now=ON;"))) {
-			msg("initiating checkpoint failed");
-			return(false);
-		}
+		/* This had better finish before recv_sys.find_checkpoint()
+		starts executing below. The command may not be recognised
+		by an old server; we can ignore a failure to execute this
+		performance tweak. */
+		xb_mysql_query(
+			mysql_connection,
+			"SET GLOBAL innodb_log_checkpoint_now=ON;",
+			false, false);
 	}
 
 	msg("open files limit requested %lu, set to %lu",
@@ -5729,13 +5731,6 @@ fail:
 		msg("Error: failed to open the target stream for '%s'.",
 		    LOG_FILE_NAME);
 		goto fail;
-	}
-
-	/* try to wait for a log checkpoint, but do not fail if the
-	server does not support this */
-	if (innodb_log_checkpoint_now != false) {
-		mysql_read_query_result(mysql_connection);
-		msg("Finished waiting for checkpoint");
 	}
 
 	if (!select_history()) {
@@ -5866,7 +5861,7 @@ This function handles DDL changes at the end of backup, under protection of
 FTWRL.  This ensures consistent backup in presence of DDL.
 
 - New tables, that were created during backup, are now copied into backup.
-  Also, tablespaces with optimized (no redo loggin DDL) are re-copied into 
+  Also, tablespaces with optimized (no redo logging DDL) are re-copied into
   backup. This tablespaces will get the extension ".new" in the backup
 
 - Tables that were renamed during backup, are marked as renamed
@@ -6009,7 +6004,7 @@ void CorruptedPages::backup_fix_ddl(ds_ctxt *ds_data, ds_ctxt *ds_meta)
 	}
 
 	/* Mariabackup doesn't detect any FILE_OP for the deferred
-	tablespace. There is a possiblity that page0 could've
+	tablespace. There is a possibility that page0 could've
 	been corrupted persistently in the disk */
 	for (auto space_name: defer_space_names) {
 		if (!check_if_skip_table(space_name.c_str())) {
@@ -6735,7 +6730,7 @@ next_file_item_1:
 	/* single table tablespaces */
 	dir = os_file_opendir(path);
 
-	if (UNIV_UNLIKELY(dbdir == IF_WIN(INVALID_HANDLE_VALUE, nullptr))) {
+	if (UNIV_UNLIKELY(dir == IF_WIN(INVALID_HANDLE_VALUE, nullptr))) {
 		msg("Can't open dir %s", path);
 		return TRUE;
 	}

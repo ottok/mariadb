@@ -25,7 +25,8 @@
 #include "set_var.h"
 #include "my_xml.h"
 #include "sp_pcontext.h"
-#include "sql_parse.h"                          // THD
+#include "sql_class.h"                          // THD
+#include "sql_parse.h"                          // for check_stack_overrun
 
 /*
   TODO: future development directions:
@@ -2210,9 +2211,19 @@ static int my_xpath_parse_FilterExpr(MY_XPATH *xpath)
   RETURN
     1 - success
     0 - failure
+
+  Please note: There is non-standard returning here to
+               simplify processing in the parser.
 */
 static int my_xpath_parse_OrExpr(MY_XPATH *xpath)
 {
+  /*
+     Check for stack ovver run because it might call itself and
+     result in stack overflow. Return error if thats the case.
+  */
+  if (check_stack_overrun(current_thd, STACK_MIN_SIZE , NULL))
+    return 0;
+
   if (!my_xpath_parse_AndExpr(xpath))
     return 0;
 
@@ -2509,6 +2520,14 @@ static int my_xpath_parse_MultiplicativeExpr(MY_XPATH *xpath)
 */
 static int my_xpath_parse_UnaryExpr(MY_XPATH *xpath)
 {
+  /*
+    Check for stack overrun because each '-' recurses directly into this
+    function without going through my_xpath_parse_OrExpr(), which would
+    otherwise perform the check (MDEV-33843 follow-up).
+  */
+  if (check_stack_overrun(xpath->thd, STACK_MIN_SIZE, NULL))
+    return 0;
+
   if (!my_xpath_parse_term(xpath, MY_XPATH_LEX_MINUS))
     return my_xpath_parse_UnionExpr(xpath);
   if (!my_xpath_parse_UnaryExpr(xpath))
@@ -2791,7 +2810,13 @@ my_xpath_parse(MY_XPATH *xpath, const char *str, const char *strend)
 bool Item_xml_str_func::fix_length_and_dec(THD *thd)
 {
   max_length= MAX_BLOB_WIDTH;
-  return agg_arg_charsets_for_comparison(collation, args, arg_count);
+  /*
+    The result collation is chosen from the arguments, so
+    MY_COLL_ALLOW_BY_TAILORING is intentionally not passed here:
+    we cannot just pick the collation of one side for a string result.
+  */
+  return agg_arg_charsets(collation, args, arg_count,
+                          MY_COLL_CMP_CONV & ~MY_COLL_ALLOW_BY_TAILORING, 1);
 }
 
 

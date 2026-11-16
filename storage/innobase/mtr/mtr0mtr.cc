@@ -507,8 +507,11 @@ void mtr_t::commit()
       ut_ad(!m_freed_pages->empty());
       ut_ad(m_freed_space == fil_system.temp_space);
       ut_ad(!m_trim_pages);
-      for (const auto &range : *m_freed_pages)
-        m_freed_space->add_free_range(range);
+      {
+        std::lock_guard<std::mutex> freed_lock(m_freed_space->freed_range_mutex);
+        for (const auto &range : *m_freed_pages)
+          m_freed_space->add_free_range(range);
+      }
       delete m_freed_pages;
       m_freed_pages= nullptr;
       m_freed_space= nullptr;
@@ -1031,7 +1034,7 @@ inline void mtr_t::page_checksum(const buf_page_t &bpage)
 
   if (UNIV_LIKELY_NULL(bpage.zip.data))
   {
-    size= (UNIV_ZIP_SIZE_MIN >> 1) << bpage.zip.ssize;
+    size= (UNIV_ZIP_SIZE_MIN >> 1) << bpage.zip.ssize();
     switch (fil_page_get_type(bpage.zip.data)) {
     case FIL_PAGE_TYPE_ALLOCATED:
     case FIL_PAGE_INODE:

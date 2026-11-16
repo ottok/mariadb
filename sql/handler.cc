@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2016, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2024, MariaDB Corporation.
+   Copyright (c) 2009, 2026, MariaDB plc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -127,8 +127,8 @@ ulong total_ha_2pc= 0;
 */
 ulong failed_ha_2pc= 0;
 #endif
-/* size of savepoint storage area (see ha_init) */
-ulong savepoint_alloc_size= 0;
+/* size of SAVEPOINT plus all engines' savepoint storage areas */
+ulong savepoint_alloc_size= sizeof(SAVEPOINT);
 
 static const Lex_ident_engine sys_table_aliases[]=
 {
@@ -616,6 +616,7 @@ int ha_finalize_handlerton(void *plugin_)
     /* Make sure we are not unpluging another plugin */
     DBUG_ASSERT(hton2plugin[hton->slot] == plugin);
     DBUG_ASSERT(hton->slot < MAX_HA);
+    DEBUG_SYNC(current_thd, "ha_finalize_handlerton_before_slot_clear");
     hton2plugin[hton->slot]= NULL;
   }
 
@@ -852,7 +853,6 @@ int ha_init()
     counting total_ha)
   */
   opt_using_transactions= total_ha > (ulong) opt_bin_log;
-  savepoint_alloc_size+= sizeof(SAVEPOINT);
   DBUG_RETURN(error);
 }
 
@@ -880,6 +880,17 @@ int ha_end()
 */
 typedef bool (tp_foreach_func)(THD *thd, transaction_participant *tp, void *arg);
 
+/*
+  Call func for each READY transaction participant.
+
+  LOCK_plugin is not held while func runs. func calls into the engine, and
+  the engine can take plugin locks itself or wait for its own threads, which
+  can deadlock with a thread that holds LOCK_plugin. reap_plugins() and
+  plugin_deinitialize() also run without LOCK_plugin for the same reason.
+  Instead, each plugin gets a reference count under LOCK_plugin, which keeps
+  it from being deinitialized or freed while func runs. The state check and
+  the reference count happen in one step, in plugin_lock_ready().
+*/
 static bool tp_foreach(THD *thd, tp_foreach_func *func, void *arg)
 {
   int j=0, err= 0;
@@ -888,7 +899,25 @@ static bool tp_foreach(THD *thd, tp_foreach_func *func, void *arg)
   {
     if (st_plugin_int *pi= hton2plugin[i])
     {
-      locks[j]= plugin_lock(NULL, plugin_int_to_ref(pi));
+      /*
+        Only PLUGIN_IS_READY engines are visited, as plugin_foreach() does.
+        The slot stays set in hton2plugin[] until the end of
+        ha_finalize_handlerton(), so an engine that reap_plugins() is
+        deinitializing (PLUGIN_IS_DYING) is still found here. The lock then
+        fails and the engine is skipped, as is an engine that is not yet
+        READY. A lock failure for a READY engine is out of memory (debug
+        builds only). It must not skip a live participant, so it is an error.
+      */
+      bool failed;
+      if (!(locks[j]= plugin_lock_ready(NULL, plugin_int_to_ref(pi), &failed)))
+      {
+        if (failed)
+        {
+          err= 1;
+          break;
+        }
+        continue;
+      }
       if ((err= func(thd, plugin_hton(locks[j++]), arg)))
         break;
     }
@@ -3130,7 +3159,7 @@ int ha_rollback_to_savepoint(THD *thd, SAVEPOINT *sv)
     transaction_participant *ht= ha_info->ht();
     DBUG_ASSERT(ht);
     DBUG_ASSERT(ht->savepoint_set != 0);
-    if ((err= ht->savepoint_rollback(thd, (uchar *)(sv+1)+ht->savepoint_offset)))
+    if ((err= ht->savepoint_rollback(thd, (uchar *)sv + ht->savepoint_offset)))
     { // cannot happen
       my_error(ER_ERROR_DURING_ROLLBACK, MYF(0), err);
       error=1;
@@ -3214,7 +3243,7 @@ int ha_savepoint(THD *thd, SAVEPOINT *sv)
       error=1;
       break;
     }
-    if ((err= ht->savepoint_set(thd, (uchar *)(sv+1)+ht->savepoint_offset)))
+    if ((err= ht->savepoint_set(thd, (uchar *)sv + ht->savepoint_offset)))
     { // cannot happen
       my_error(ER_GET_ERRNO, MYF(0), err, hton_name(ht)->str);
       error=1;
@@ -3247,7 +3276,7 @@ int ha_release_savepoint(THD *thd, SAVEPOINT *sv)
     DBUG_ASSERT(ht);
     if (!ht->savepoint_release)
       continue;
-    if ((err= ht->savepoint_release(thd, (uchar *)(sv+1) + ht->savepoint_offset)))
+    if ((err= ht->savepoint_release(thd, (uchar *)sv + ht->savepoint_offset)))
     { // cannot happen
       my_error(ER_GET_ERRNO, MYF(0), err, hton_name(ht)->str);
       error=1;
@@ -5318,7 +5347,7 @@ bool handler::check_old_types() const
 
 static bool update_frm_version(TABLE *table)
 {
-  char path[FN_REFLEN];
+  char path[FN_REFLEN + 1];
   File file;
   int result= 1;
   DBUG_ENTER("update_frm_version");
@@ -7906,7 +7935,11 @@ int handler::ha_reset()
   DBUG_RETURN(reset());
 }
 
-static int wsrep_after_row(THD *thd)
+/*
+  If skip_streaming is true, the row is counted against wsrep_max_ws_rows
+  and validated as usual, but no streaming fragment is replicated for it.
+*/
+static int wsrep_after_row(THD *thd, bool skip_streaming= false)
 {
   DBUG_ENTER("wsrep_after_row");
 #ifdef WITH_WSREP
@@ -7929,7 +7962,7 @@ static int wsrep_after_row(THD *thd)
     my_message(ER_ERROR_DURING_COMMIT, "wsrep_max_ws_rows exceeded", MYF(0));
     DBUG_RETURN(ER_ERROR_DURING_COMMIT);
   }
-  else if (wsrep_after_row_internal(thd))
+  else if (wsrep_after_row_internal(thd, skip_streaming))
   {
     DBUG_RETURN(ER_LOCK_DEADLOCK);
   }
@@ -7997,15 +8030,18 @@ int handler::check_duplicate_long_entry_key(const uchar *new_rec, uint key_no)
   if (result)
     goto end;
 
-  // restore pointers after swap_values in TABLE::update_virtual_fields()
-  for (Field **vf= table->vfield; *vf; vf++)
-  {
-    if (!(*vf)->stored_in_db() && (*vf)->flags & BLOB_FLAG &&
-        bitmap_is_set(table->read_set, (*vf)->field_index))
-      ((Field_blob*)*vf)->swap_value_and_read_value();
-  }
   do
   {
+    /*
+      Undo the VCOL_UPDATE_FOR_READ swap after each lookup read, so that the
+      next read does not compute into the buffer record[1] points to.
+    */
+    for (Field **vf= table->vfield; *vf; vf++)
+    {
+      if (!(*vf)->stored_in_db() && (*vf)->flags & BLOB_FLAG &&
+          bitmap_is_set(table->read_set, (*vf)->field_index))
+        ((Field_blob*)*vf)->swap_value_and_read_value();
+    }
     if (!long_unique_fields_differ(key_info, lookup_buffer))
     {
       lookup_handler->position(table->record[0]);
@@ -8361,9 +8397,20 @@ int handler::ha_write_row(const uchar *buf)
   error= binlog_log_row(0, buf,
                         Write_rows_log_event::binlog_row_logging_function);
 
+  /*
+    Sequence tables are written with SEQUENCE::mutex held (see
+    SEQUENCE::next_value() and ha_sequence::write_row()). For a streaming
+    transaction the streaming step would replicate a fragment and block
+    waiting for certification and commit order, while an applier may be
+    waiting for the same mutex in SEQUENCE::set_value(). That deadlocks
+    the node, so skip only that step here. The row has already been
+    appended to the write set and will be replicated with the following
+    fragment, or at commit. Everything else wsrep_after_row() does, in
+    particular counting the row against wsrep_max_ws_rows, still applies.
+  */
   if (WSREP_NNULL(ha_thd()) && table_share->tmp_table == NO_TMP_TABLE &&
       ht->flags & HTON_WSREP_REPLICATION && !error)
-    error= wsrep_after_row(ha_thd());
+    error= wsrep_after_row(ha_thd(), table_share->sequence != NULL);
 
 err:
   DEBUG_SYNC_C("ha_write_row_end");
@@ -8744,28 +8791,38 @@ static
 int del_global_index_stats_for_table(THD *thd, uchar* cache_key, size_t cache_key_length)
 {
   int res = 0;
-  uint to_delete_counter= 0;
+  uint to_delete_counter;
   INDEX_STATS *index_stats_to_delete[MAX_INDEXES];
   DBUG_ENTER("del_global_index_stats_for_table");
 
   mysql_mutex_lock(&LOCK_global_index_stats);
 
-  for (uint i= 0; i < global_index_stats.records; i++)
+  /*
+    Statistics of renamed indexes stay under their old names, so a table
+    can have more than MAX_INDEXES entries. Delete them in batches.
+  */
+  do
   {
-    INDEX_STATS *index_stats =
-      (INDEX_STATS*) my_hash_element(&global_index_stats, i);
-
-    /* We search correct db\0table_name\0 string */
-    if (index_stats &&
-	index_stats->index_name_length >= cache_key_length &&
-	!memcmp(index_stats->index, cache_key, cache_key_length))
+    to_delete_counter= 0;
+    for (uint i= 0; i < global_index_stats.records &&
+                    to_delete_counter < MAX_INDEXES; i++)
     {
-      index_stats_to_delete[to_delete_counter++]= index_stats;
-    }
-  }
+      INDEX_STATS *index_stats =
+        (INDEX_STATS*) my_hash_element(&global_index_stats, i);
 
-  for (uint i= 0; i < to_delete_counter; i++)
-    res= my_hash_delete(&global_index_stats, (uchar*)index_stats_to_delete[i]);
+      /* We search correct db\0table_name\0 string */
+      if (index_stats &&
+          index_stats->index_name_length >= cache_key_length &&
+          !memcmp(index_stats->index, cache_key, cache_key_length))
+      {
+        index_stats_to_delete[to_delete_counter++]= index_stats;
+      }
+    }
+
+    for (uint i= 0; i < to_delete_counter; i++)
+      res= my_hash_delete(&global_index_stats,
+                          (uchar*)index_stats_to_delete[i]);
+  } while (to_delete_counter == MAX_INDEXES);
 
   mysql_mutex_unlock(&LOCK_global_index_stats);
   DBUG_RETURN(res);

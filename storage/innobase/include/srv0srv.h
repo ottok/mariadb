@@ -210,7 +210,8 @@ extern uint32_t srv_undo_tablespaces_active;
 extern unsigned long long	srv_max_undo_log_size;
 
 extern uint	srv_n_fil_crypt_threads;
-extern uint	srv_n_fil_crypt_threads_started;
+/** count of active fil_crypt_thread(); protected by fil_crypt_threads_mutex */
+extern Atomic_relaxed<uint>	srv_n_fil_crypt_threads_started;
 
 /** Enable or Disable Truncate of UNDO tablespace. */
 extern my_bool	srv_undo_log_truncate;
@@ -541,6 +542,10 @@ void srv_monitor_task(void*);
 
 /** The periodic master task controlling the server. */
 void srv_master_callback(void*);
+
+/** The periodic task that refreshes buf_pool.access_clock while
+srv_master_callback() is not running */
+void buf_pool_clock_callback(void*);
 
 
 /**

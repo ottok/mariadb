@@ -34,6 +34,8 @@
 #include <mariadb_async.h>
 #include <ma_context.h>
 #include <ma_crypt.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 pthread_mutex_t LOCK_gnutls_config;
 
@@ -1071,6 +1073,36 @@ static int ma_gnutls_set_ciphers(gnutls_session_t ssl,
   return gnutls_priority_set_direct(ssl, prio , &err);
 }
 
+/* GnuTLS has no gnutls_certificate_set_x509_crl_dir(), so load every regular
+   file in the directory as a CRL individually. */
+static int ma_gnutls_set_x509_crl_dir(gnutls_certificate_credentials_t ctx,
+                                      const char *path)
+{
+  DIR *dir;
+  struct dirent *entry;
+  int loaded= 0;
+
+  if (!(dir= opendir(path)))
+    return GNUTLS_E_NO_CERTIFICATE_FOUND;
+
+  while ((entry= readdir(dir)))
+  {
+    char filename[FN_REFLEN];
+    struct stat st;
+
+    snprintf(filename, sizeof(filename), "%s/%s", path, entry->d_name);
+
+    if (stat(filename, &st) != 0 || !S_ISREG(st.st_mode))
+      continue;
+
+    if (gnutls_certificate_set_x509_crl_file(ctx, filename, GNUTLS_X509_FMT_PEM) >= 0)
+      loaded++;
+  }
+  closedir(dir);
+
+  return loaded > 0 ? loaded : GNUTLS_E_NO_CERTIFICATE_FOUND;
+}
+
 static int ma_tls_set_certs(MYSQL *mysql,
                             gnutls_certificate_credentials_t ctx)
 {
@@ -1103,6 +1135,14 @@ static int ma_tls_set_certs(MYSQL *mysql,
     {
       goto error;
     }
+  }
+
+  if (mysql->options.extension && mysql->options.extension->ssl_crlpath)
+  {
+    ssl_error= ma_gnutls_set_x509_crl_dir(ctx,
+                   mysql->options.extension->ssl_crlpath);
+    if (ssl_error < 0)
+      goto error;
   }
 
   if (!mysql->options.ssl_ca && !mysql->options.ssl_capath)
@@ -1268,7 +1308,7 @@ static gnutls_x509_crt_t ma_get_cert(MARIADB_TLS *ctls)
   const gnutls_datum_t *cert_list;
   unsigned int cert_list_size;
   gnutls_x509_crt_t cert;
-    
+
   if (!ctls || !ctls->ssl)
     return 0;
 
@@ -1278,16 +1318,18 @@ static gnutls_x509_crt_t ma_get_cert(MARIADB_TLS *ctls)
   if (cert_list == NULL)
   {
     my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
-                        ER(CR_SSL_CONNECTION_ERROR), 
+                        ER(CR_SSL_CONNECTION_ERROR),
                         "Unable to get server certificate");
     return NULL;
   }
 
-  /* Check expiration */
-  gnutls_x509_crt_init(&cert);
+  if (gnutls_x509_crt_init(&cert))
+    return NULL;
 
   if (!gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER))
     return cert;
+
+  gnutls_x509_crt_deinit(cert);
 
   return NULL;
 }
@@ -1475,12 +1517,35 @@ int ma_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int flags)
   if (status)
   {
     set_verification_error(mysql, status);
+
     if (status & GNUTLS_CERT_REVOKED)
-      mysql->net.tls_verify_status|= MARIADB_TLS_VERIFY_REVOKED;
-    if (status & GNUTLS_CERT_SIGNER_NOT_FOUND)
-      mysql->net.tls_verify_status|= MARIADB_TLS_VERIFY_TRUST;
+      mysql->net.tls_verify_status |= MARIADB_TLS_VERIFY_REVOKED;
+
     if ((status & GNUTLS_CERT_NOT_ACTIVATED) || (status & GNUTLS_CERT_EXPIRED))
-      mysql->net.tls_verify_status|= MARIADB_TLS_VERIFY_PERIOD;
+      mysql->net.tls_verify_status |= MARIADB_TLS_VERIFY_PERIOD;
+
+    /* Map GnuTLS hostname mismatch bit directly */
+    if (status & GNUTLS_CERT_UNEXPECTED_OWNER)
+      mysql->net.tls_verify_status |= MARIADB_TLS_VERIFY_HOST;
+
+    if (status & GNUTLS_CERT_SIGNER_NOT_FOUND)
+    {
+      mysql->net.tls_verify_status |= MARIADB_TLS_VERIFY_TRUST;
+    }
+
+    /* Fallback for unhandled GnuTLS bits (e.g. INSECURE_ALGORITHM, SIGNATURE_FAILURE) */
+#define HANDLED_GNUTLS_CERT_FLAGS \
+    (GNUTLS_CERT_INVALID | \
+     GNUTLS_CERT_REVOKED | \
+     GNUTLS_CERT_SIGNER_NOT_FOUND | \
+     GNUTLS_CERT_NOT_ACTIVATED | \
+     GNUTLS_CERT_EXPIRED | \
+     GNUTLS_CERT_UNEXPECTED_OWNER)
+
+    if (status & ~HANDLED_GNUTLS_CERT_FLAGS)
+      mysql->net.tls_verify_status |= MARIADB_TLS_VERIFY_UNKNOWN;
+
+#undef HANDLED_GNUTLS_CERT_FLAGS
   }
 
   if (flags & MARIADB_TLS_VERIFY_HOST)
@@ -1491,7 +1556,7 @@ int ma_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int flags)
     if (!cert)
     {
       my_set_error(mysql, CR_SSL_CONNECTION_ERROR, SQLSTATE_UNKNOWN,
-                   ER(CR_SSL_CONNECTION_ERROR), 
+                   ER(CR_SSL_CONNECTION_ERROR),
                    "Can't access peer certificate");
       mysql->net.tls_verify_status|= MARIADB_TLS_VERIFY_HOST;
       goto end;
@@ -1507,10 +1572,15 @@ int ma_tls_verify_server_cert(MARIADB_TLS *ctls, unsigned int flags)
                      ER(CR_SSL_CONNECTION_ERROR),
                      "Certificate subject name doesn't match specified hostname");
       mysql->net.tls_verify_status|= MARIADB_TLS_VERIFY_HOST;
-    }    
+    }
   }
 end:
-  return mysql->net.tls_verify_status & flags;
+  if ((mysql->net.tls_verify_status > MARIADB_TLS_VERIFY_FINGERPRINT) ||
+      (mysql->net.tls_verify_status & flags))
+  {
+    return MARIADB_TLS_VERIFY_ERROR;
+  }
+  return 0;
 }
 
 const char *ma_tls_get_cipher(MARIADB_TLS *ctls)

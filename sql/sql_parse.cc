@@ -2050,13 +2050,15 @@ dispatch_command_return dispatch_command(enum enum_server_command command,
       break;
     /*
       We have name + wildcard in packet, separated by endzero
-      (The packet is guaranteed to end with an end zero)
+      (The packet is guaranteed to end with an end zero, but it is not
+      part of packet_length, a packet without a separator is malformed)
     */
     arg_end= strend(packet);
     uint arg_length= (uint)(arg_end - packet);
 
     /* Check given table name length. */
-    if (packet_length - arg_length > NAME_LEN + 1 || arg_length > SAFE_NAME_LEN)
+    if (arg_length >= packet_length ||
+        packet_length - arg_length > NAME_LEN + 1 || arg_length > SAFE_NAME_LEN)
     {
       my_message(ER_UNKNOWN_COM_ERROR, ER_THD(thd, ER_UNKNOWN_COM_ERROR),
                  MYF(0));
@@ -2883,7 +2885,8 @@ bool sp_process_definer(THD *thd)
       SUPER privilege).
     */
     bool curuser= thd->security_ctx->is_priv_user(d->user, d->host);
-    bool currole= !curuser && !strcmp(d->user.str, thd->security_ctx->priv_role);
+    bool currole= !curuser && !d->host.length &&
+                  !strcmp(d->user.str, thd->security_ctx->priv_role);
     if (!curuser && !currole &&
         check_global_access(thd, PRIV_DEFINER_CLAUSE, false))
       DBUG_RETURN(TRUE);
@@ -3265,6 +3268,11 @@ static bool prepare_db_action(THD *thd, privilege_t want_access,
 bool Sql_cmd_show_routine_code::execute(THD *thd)
 {
   sp_head *sp;
+#ifdef WITH_WSREP
+  if (WSREP_CLIENT(thd) &&
+      wsrep_sync_wait(thd, WSREP_SYNC_WAIT_BEFORE_SHOW))
+    return true;
+#endif /* WITH_WSREP */
   if (m_handler->sp_cache_routine(thd, m_name, &sp))
     return true;
   if (!sp || sp->show_routine_code(thd))
@@ -5530,6 +5538,7 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
       There is no need to check for table permissions here, because
       if a user has no permissions to read a table, he won't be
       able to open it (with SQLCOM_HA_OPEN) in the first place.
+      On implicit reopen mysql_ha_open() checks privileges again.
     */
     unit->set_limit(select_lex);
 
@@ -6183,8 +6192,9 @@ static bool execute_sqlcom_select(THD *thd, TABLE_LIST *all_tables)
               mysqld_show_warnings().
             */
             lex->unit.print(&str, QT_EXPLAIN_EXTENDED);
-            push_warning(thd, Sql_condition::WARN_LEVEL_NOTE,
-                         ER_YES, str.c_ptr_safe());
+            if (!thd->is_error())
+              push_warning(thd, Sql_condition::WARN_LEVEL_NOTE,
+                           ER_YES, str.c_ptr_safe());
           }
         }
       }
@@ -6889,6 +6899,14 @@ bool check_one_table_access(THD *thd, privilege_t privilege,
   TABLE_LIST *subselects_tables, *view= all_tables->view ? all_tables : 0;
   if ((subselects_tables= all_tables->next_global))
   {
+    /*
+      Only the target table is ours. Own tables come first in the list,
+      so the first not-own table means there are no more to check.
+      The rest were added for prelocking. Their routines check them.
+    */
+    if (subselects_tables == thd->lex->first_not_own_table())
+      return 0;
+
     /*
       Access rights asked for the first table of a view should be the same
       as for the view

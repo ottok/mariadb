@@ -193,6 +193,19 @@ s					8		mysqL		{"HOST": "", "PORT": "8"}
 DROP SERVER s;
 # End of 10.11 tests
 #
+# MDEV-40808 Uninitialized TABLE_LIST causes crash triggered by DROP SERVER
+#
+CREATE SERVER s1 FOREIGN DATA WRAPPER mysql
+OPTIONS (HOST '127.0.0.1', DATABASE 'test', USER 'root');
+CREATE TABLE t1(id INT) CONNECTION='s1';
+HANDLER t1 OPEN;
+DROP SERVER s1;
+HANDLER t1 READ FIRST;
+id
+HANDLER t1 CLOSE;
+DROP TABLE t1;
+# End of 11.4 tests
+#
 # MDEV-40312 SHOW CREATE SERVER incorrect quoting
 #
 create server s1 foreign data wrapper 'my''sql' options (`ho``st` 'va''lue');
@@ -200,4 +213,10 @@ show create server s1;
 Server	Create Server
 s1	CREATE SERVER `s1` FOREIGN DATA WRAPPER `my'sql` OPTIONS (`ho``st` 'va''lue');
 drop server s1;
+#
+# MDEV-41064 MariaDB Server stack overflow when FLUSH PRIVILEGES parses a large JSON value from mysql.servers.Options inside a stored procedure
+#
+INSERT INTO mysql.servers (Server_name, Options) VALUES ('t1', CONCAT('{"x": "', REPEAT('a', 12000000), '"}'));
+FLUSH PRIVILEGES;
+DELETE FROM mysql.servers WHERE Server_name = 't1';
 # End of 11.8 tests

@@ -105,7 +105,7 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Windows")
 endif()
 
 IF(MSVC)
-  add_definitions(/wd4244)
+  add_definitions(/wd4244 /wd4723)
 ENDIF()
 if(NOT WIN32)
   add_definitions(-DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX)
@@ -532,9 +532,7 @@ int main() {
   unset(CMAKE_REQUIRED_FLAGS)
 endif()
 
-IF(CMAKE_VERSION VERSION_GREATER "2.8.10")
-  STRING(TIMESTAMP GIT_DATE_TIME "%Y-%m-%d %H:%M:%S")
-ENDIF()
+STRING(TIMESTAMP GIT_DATE_TIME "%Y-%m-%d %H:%M:%S")
 
 # psergey-added:
 SET(GIT_MOD 0)

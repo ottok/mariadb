@@ -590,6 +590,8 @@ CHECK_C_SOURCE_COMPILES("
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+/* macOS declares select() here and nowhere else that this test includes */
+#include <sys/select.h>
 #endif
 int main()
 {
@@ -748,7 +750,7 @@ IF(NOT C_HAS_inline)
     SET(C_INLINE __inline)
   ElSE()
     SET(C_INLINE)
-    MESSAGE(WARNING "C compiler does not support funcion inlining")
+    MESSAGE(WARNING "C compiler does not support function inlining")
     IF(NOT NOINLINE)
       MESSAGE(FATAL_ERROR "Use -DNOINLINE=TRUE to allow compilation without inlining")
     ENDIF()

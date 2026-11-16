@@ -580,6 +580,7 @@ sp_head::sp_head(MEM_ROOT *mem_root_arg, sp_package *parent,
    m_thd_root(NULL),
    m_thd(NULL),
    m_pcont(new (&main_mem_root) sp_pcontext()),
+   m_pcont_list(NULL),
    m_cont_level(0)
 {
   mem_root= &main_mem_root;
@@ -600,10 +601,10 @@ sp_head::sp_head(MEM_ROOT *mem_root_arg, sp_package *parent,
   m_lex.empty();
   my_init_dynamic_array(key_memory_sp_head_main_root, &m_instr,
                         sizeof(sp_instr *), 16, 8, MYF(0));
-  my_hash_init(key_memory_sp_head_main_root, &m_sptabs,
-               table_alias_charset, 0, 0, 0, sp_table_key, 0, 0);
-  my_hash_init(key_memory_sp_head_main_root, &m_sroutines,
-               Lex_ident_routine::charset_info(),
+  my_hash_init(key_memory_sp_head_main_root, &m_sptabs, table_alias_charset, 0,
+               0, 0, sp_table_key, 0, 0);
+  /* Keys are compared byte for byte, the database name is case sensitive. */
+  my_hash_init(key_memory_sp_head_main_root, &m_sroutines, &my_charset_bin,
                0, 0, 0, sp_sroutine_key, 0, 0);
 
   DBUG_VOID_RETURN;
@@ -901,6 +902,17 @@ sp_head::~sp_head()
   for (uint ip = 0 ; (i = get_instr(ip)) ; ip++)
     delete i;
   delete_dynamic(&m_instr);
+
+  /*
+    Free the parse contexts iteratively, freeing them recursively overran
+    the thread stack on deeply nested BEGIN blocks.
+  */
+  for (sp_pcontext *ctx= m_pcont_list; ctx; )
+  {
+    sp_pcontext *next= ctx->m_next_pcont;
+    delete ctx;
+    ctx= next;
+  }
   delete m_pcont;
   free_items();
 
@@ -1715,7 +1727,8 @@ sp_rcontext *sp_head::rcontext_create(THD *thd, Field *ret_value,
 {
   DBUG_ASSERT(args);
   Row_definition_list defs;
-  m_pcont->retrieve_field_definitions(&defs);
+  if (m_pcont->retrieve_field_definitions(thd, &defs))
+    return NULL;
   if (defs.adjust_formal_params_to_actual_params(thd, args))
     return NULL;
   return rcontext_create(thd, ret_value, &defs, true);
@@ -1726,7 +1739,8 @@ sp_rcontext *sp_head::rcontext_create(THD *thd, Field *ret_value,
                                       Item **args, uint arg_count)
 {
   Row_definition_list defs;
-  m_pcont->retrieve_field_definitions(&defs);
+  if (m_pcont->retrieve_field_definitions(thd, &defs))
+    return NULL;
   if (defs.adjust_formal_params_to_actual_params(thd, args, arg_count))
     return NULL;
   return rcontext_create(thd, ret_value, &defs, true);
@@ -1831,8 +1845,8 @@ sp_head::execute_trigger(THD *thd,
   thd->set_n_backup_active_arena(&call_arena, &backup_arena);
 
   Row_definition_list defs;
-  m_pcont->retrieve_field_definitions(&defs);
-  if (!(nctx= rcontext_create(thd, NULL, &defs, false)))
+  if (m_pcont->retrieve_field_definitions(thd, &defs) ||
+      !(nctx= rcontext_create(thd, NULL, &defs, false)))
   {
     err_status= TRUE;
     goto err_with_cleanup;
@@ -2095,7 +2109,16 @@ sp_head::execute_function(THD *thd, Item **argp, uint argcount,
   */
   thd->set_n_backup_active_arena(call_arena, &backup_arena);
 
-  MYSQL_RUN_SP(this, err_status= execute(thd, TRUE));
+  {
+    /*
+      DML statements of the function must not consume the next values of
+      a bound array of the bulk operation which calls the function
+    */
+    void *save_bulk_param= thd->bulk_param;
+    thd->bulk_param= nullptr;
+    MYSQL_RUN_SP(this, err_status= execute(thd, TRUE));
+    thd->bulk_param= save_bulk_param;
+  }
 
   thd->restore_active_arena(call_arena, &backup_arena);
 
@@ -3207,6 +3230,73 @@ int sp_head::add_instr(sp_instr_cursor_copy_struct *instr)
 
 
 /**
+  In a trigger, add_instr() also takes the NEW and OLD fields in
+  m_cur_instr_trig_field_items. Rebuild this list from THD::free_list
+  after a split, so the fields go with their items.
+*/
+
+static void set_trig_field_items(THD *thd, sp_head *sp)
+{
+  if (sp->m_handler->type() != SP_TYPE_TRIGGER)
+    return;
+  sp->m_cur_instr_trig_field_items.empty();
+  for (Item *item= thd->free_list; item; item= item->next)
+  {
+    if (item->type() == Item::TRIGGER_FIELD_ITEM)
+    {
+      Item_trigger_field *field= static_cast<Item_trigger_field*>(item);
+      sp->m_cur_instr_trig_field_items.insert(field, &field->next_trg_field);
+    }
+  }
+}
+
+
+/**
+  Move the items of an expression from an item list to THD::free_list.
+
+  The list starts with the newest item, and the parser creates the parts
+  of an item before the item itself. So the first item in the list that
+  walk() finds in expr, and all items after it, belong to expr, even
+  those walk() does not visit, like the LIMIT of a subquery.
+
+  @param thd    Thread handle
+  @param list   Item list to take the items from
+  @param expr   Root of the oldest expression that has items in list
+*/
+
+void sp_head::move_expr_items_to_free_list(THD *thd, Item **list, Item *expr)
+{
+  DBUG_ASSERT(!thd->free_list || thd->free_list == *list);
+  Item **pos= list;
+  while (*pos && !expr->walk(&Item::find_item_processor, true, *pos))
+    pos= &(*pos)->next;
+  DBUG_ASSERT(*pos);  // expr itself is always found
+  thd->free_list= *pos;
+  *pos= NULL;
+  set_trig_field_items(thd, this);
+}
+
+
+/**
+  Put an item list back on THD::free_list, so that the next added
+  instruction owns the items, or on an error the routine frees them.
+*/
+
+void sp_head::add_to_free_list(THD *thd, Item *items)
+{
+  if (items)
+  {
+    Item *last= items;
+    while (last->next)
+      last= last->next;
+    last->next= thd->free_list;
+    thd->free_list= items;
+  }
+  set_trig_field_items(thd, this);
+}
+
+
+/**
   Add instruction to SP.
 
   @param instr   Instruction
@@ -3967,6 +4057,15 @@ sp_head::add_set_for_loop_cursor_param_variables(THD *thd,
                                                  Item_args *parameters)
 {
   DBUG_ASSERT(param_spcont->context_var_count() == parameters->argument_count());
+  /*
+    All parameters were parsed as one expression, so THD::free_list holds:
+
+      [items of no parameter] [items of arg N-1] ... [items of arg 0]
+
+    Give each sp_instr_set the items of the argument it evaluates.
+  */
+  Item *rest= thd->free_list;
+  thd->free_list= NULL;
   for (uint idx= 0; idx < parameters->argument_count(); idx ++)
   {
     /*
@@ -3976,13 +4075,29 @@ sp_head::add_set_for_loop_cursor_param_variables(THD *thd,
     */
     bool last= idx + 1 == parameters->argument_count();
     sp_variable *spvar= param_spcont->get_context_variable(idx);
+    /*
+      The last instruction also takes the Item_func_sp of the cursor call
+      and anything that belongs to no argument.
+    */
+    if (last)
+    {
+      add_to_free_list(thd, rest);
+      rest= NULL;
+    }
+    else
+      move_expr_items_to_free_list(thd, &rest, parameters->arguments()[idx]);
     if (set_local_variable(thd, param_spcont,
                            &sp_rcontext_handler_local,
                            spvar, parameters->arguments()[idx],
                            param_lex, last,
                            param_lex->get_expr_str()))
+    {
+      add_to_free_list(thd, rest);
       return true;
+    }
   }
+  /* With no parameters, nothing took the items */
+  add_to_free_list(thd, rest);
   return false;
 }
 

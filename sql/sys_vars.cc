@@ -1327,13 +1327,23 @@ Sys_slave_connections_needed_for_purge(
       "slave_connections_needed_for_purge",
       "Minimum number of connected slaves required for automatic binary "
       "log purge with max_binlog_total_size, binlog_expire_logs_seconds "
-      "or binlog_expire_logs_days. Default is 0 when Galera is enabled and 1 "
-      "otherwise",
+      "or binlog_expire_logs_days",
        GLOBAL_VAR(internal_slave_connections_needed_for_purge),
-       CMD_LINE(REQUIRED_ARG),
-       VALID_RANGE(0, UINT_MAX), DEFAULT(1), BLOCK_SIZE(1),
-       NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(0),
-       ON_UPDATE(update_binlog_space_limit));
+       CMD_LINE(REQUIRED_ARG, OPT_SLAVE_CONNECTIONS_NEEDED_FOR_PURGE),
+       VALID_RANGE(0, UINT_MAX), DEFAULT(0), BLOCK_SIZE(1),
+       NO_MUTEX_GUARD, NOT_IN_BINLOG,
+#ifdef HAVE_REPLICATION
+        ON_CHECK([](sys_var *, THD *, set_var *)
+        {
+          warn_slaves_not_needed_for_purge.store(false,
+            // no need to sync with the variable itself
+            std::memory_order_relaxed);
+          return false;
+        })
+#else
+        ON_CHECK(0)
+#endif
+       , ON_UPDATE(update_binlog_space_limit));
 
 
 static Sys_var_mybool Sys_flush(
@@ -2493,7 +2503,7 @@ Sys_var_slave_parallel_mode::global_update(THD *thd, set_var *var)
   Master_info *mi;
   bool res= false;
 
-  if (!base_name->length)
+  if (!base_name->str)
     base_name= &thd->variables.default_master_connection;
 
   mysql_mutex_unlock(&LOCK_global_system_variables);
@@ -2539,7 +2549,7 @@ Sys_var_slave_parallel_mode::global_value_ptr(THD *thd,
   enum_slave_parallel_mode val=
     (enum_slave_parallel_mode)opt_slave_parallel_mode;
 
-  if (!base_name->length)
+  if (!base_name->str)
     base_name= &thd->variables.default_master_connection;
 
   mysql_mutex_unlock(&LOCK_global_system_variables);
@@ -4073,6 +4083,7 @@ static const char *old_mode_names[]=
   "LOCK_ALTER_TABLE_COPY",              // 7: deprecated since 11.3
   "OLD_FLUSH_STATUS",                   // 8: deprecated since 11.5
   "SESSION_USER_IS_USER",               // 9: deprecated since 11.7
+  "X509_LENIENT_COMPARE",               // 10: deprecated since 13.1
   0
 };
 
@@ -4098,6 +4109,10 @@ static bool old_mode_deprecated(sys_var *self, THD *thd, set_var *var)
   for (; i <= 9; i++)
     if ((1ULL<<i) & v)
       warn_deprecated<1107>(thd, old_mode_names[i]);
+  for (; i <= 10; i++)
+    if ((1ULL<<i) & v)
+      warn_deprecated<1301>(thd, old_mode_names[i]);
+  DBUG_ASSERT(old_mode_names[i] == 0); // all modes were used up above
   return false;
 }
 
@@ -5727,7 +5742,7 @@ bool Sys_var_rpl_filter::global_update(THD *thd, set_var *var)
   bool result= true;                            // Assume error
   LEX_CSTRING *base_name= &var->base;
 
-  if (!base_name->length)
+  if (!base_name->str)
     base_name= &thd->variables.default_master_connection;
 
   mysql_mutex_unlock(&LOCK_global_system_variables);
@@ -5797,6 +5812,9 @@ Sys_var_rpl_filter::global_value_ptr(THD *thd,
   uchar *ret;
   Master_info *mi;
   Rpl_filter *rpl_filter;
+
+  if (!base_name->str)
+    base_name= &thd->variables.default_master_connection;
 
   mysql_mutex_unlock(&LOCK_global_system_variables);
   mi= get_master_info(base_name, !base_name->length ?

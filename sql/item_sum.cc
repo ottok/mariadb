@@ -1454,10 +1454,7 @@ Item_sum_sp::add()
 void
 Item_sum_sp::clear()
 {
-  delete func_ctx;
-  func_ctx= NULL;
-  sp_query_arena->free_items();
-  free_root(&sp_mem_root, MYF(0));
+  free_call_ctx();
 }
 
 const Type_handler *Item_sum_sp::type_handler() const
@@ -3869,7 +3866,17 @@ int dump_leaf_key(void* key_arg, element_count count __attribute__((unused)),
       {
         uint offset= (field->offset(field->table->record[0]) -
                       table->s->null_bytes);
-        DBUG_ASSERT(offset < table->s->reclength);
+        /*
+          When there are no extra null bytes (example when the field
+          can never be null) the offset matches the record length.
+          Otherwise offset < record length.
+        */
+        DBUG_ASSERT(offset + field->pack_length() <=
+                    table->s->reclength - table->s->null_bytes);
+
+        DBUG_ASSERT(offset + field->pack_length() <=
+                    table->s->reclength - table->s->null_bytes);
+
         res= item->get_str_from_field(*arg, field, &tmp, key,
                                       offset + item->get_null_bytes());
       }
@@ -4311,6 +4318,14 @@ Item_func_group_concat::fix_fields(THD *thd, Item **ref)
     new_separator->length(conv_length);
     separator= new_separator;
   }
+
+  /*
+    The result contains not only the aggregated repertoire of the args,
+    but also every character of the separator.
+  */
+  collation.repertoire|= my_string_repertoire(separator->charset(),
+                                              separator->ptr(),
+                                              separator->length());
 
   if (check_sum_func(thd, ref))
     return TRUE;

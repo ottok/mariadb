@@ -990,7 +990,11 @@ bool Item_field::check_field_expression_processor(void *arg)
 bool Item_field::update_vcol_processor(void *arg)
 {
   MY_BITMAP *map= (MY_BITMAP *) arg;
-  if (field->vcol_info &&
+  /*
+    Stored vcols are not recomputed: the caller must have their values
+    in the record (the engine fills them as base columns).
+  */
+  if (!field->stored_in_db() &&
       !bitmap_fast_test_and_set(map, field->field_index))
   {
     field->vcol_info->expr->walk(&Item::update_vcol_processor, 0, arg);
@@ -2453,14 +2457,122 @@ left_is_superset(const DTCollation *left, const DTCollation *right)
           left->collation->mbminlen == right->collation->mbminlen)))))
     return TRUE;
   /* Allow convert from ASCII */
-  if (right->repertoire == MY_REPERTOIRE_ASCII &&
+  if (right->repertoire_is_subset_of(MY_REPERTOIRE_ASCII) &&
       (left->derivation < right->derivation ||
        (left->derivation == right->derivation &&
-        !(left->repertoire == MY_REPERTOIRE_ASCII))))
+        !left->repertoire_is_subset_of(MY_REPERTOIRE_ASCII))))
     return TRUE;
   /* Disallow conversion otherwise */
   return FALSE;
 }
+
+
+/*
+  Choose an algorithmically simpler collation for use in
+  collation aggregation.
+*/
+static bool
+left_is_algorithmically_simpler(const DTCollation &left,
+                                const DTCollation &right)
+{
+  /*
+    If only left is a character set which cannot store all ASCII characters
+    (e.g. swe7, see CHARSET_INFO::is_ascii_superset()),
+    then choose the other side even if the other side is multi-byte.
+    Rationale:
+    The constructor Item_func_conv_charset sets Item_func_conv_charset::safe
+    to false if conversion is done to such a character set,
+    even on ALNUM and IDENT repertoires.
+    So choosing such a side would raise "Illegal mix of collations".
+  */
+  const bool left_ascii_superset= left.collation->is_ascii_superset();
+  const bool right_ascii_superset= right.collation->is_ascii_superset();
+  if (left_ascii_superset != right_ascii_superset)
+    return left_ascii_superset;
+  /*
+    - Between a single byte character set and a multibyte character set
+      choose the single byte one
+    - Between a simple collation (one-to-one mapping) and
+      a complex collation (with contractions and expansions) choose
+      the simple one
+  */
+  if (left.collation->mbmaxlen != right.collation->mbmaxlen)
+    return left.collation->mbmaxlen < right.collation->mbmaxlen;
+  return left.collation->strxfrm_multiply < right.collation->strxfrm_multiply;
+}
+
+
+/*
+  Handle a special case:
+  if both collations have equal collation rules (tailoring) on
+  the cumulative repertoire of all aggregated arguments
+  (e.g. MY_REPERTOIRE_ASCII_{ALNUM|IDENT|ASCII}),
+  then it does not matter which side collation to use for comparison -
+  the result will be equal.
+  Note, the repertoires of the two sides are not compared with each other:
+  both tailorings are requested on the same cumulative_repertoire.
+  Examples:
+    SELECT _latin1'a' = _latin2'a';
+
+  @param dt                     the collation to aggregate with
+  @param flags                  MY_COLL_XXX flags;
+                                MY_COLL_ALLOW_BY_TAILORING must be set,
+                                otherwise this method does nothing
+  @param cumulative_repertoire  the OR-ed repertoires of all arguments
+                                being aggregated
+
+  @retval false  The collations are compatible on cumulative_repertoire.
+                 Either "this" or "dt" was chosen (see
+                 left_is_algorithmically_simpler()). Only the collation
+                 and the derivation are set, the repertoire is not changed:
+                 the caller merges the repertoires of both sides.
+  @retval true   The special case is not applicable, "this" is not changed.
+                 Note, the return value is inverted: true means failure.
+*/
+bool DTCollation::aggregate_by_tailoring(const DTCollation &dt, uint flags,
+                                         my_repertoire_t cumulative_repertoire)
+{
+  // Collation equality should have been handled earlier in the caller
+  DBUG_ASSERT(collation != dt.collation);
+  if ((flags & MY_COLL_ALLOW_BY_TAILORING) &&
+     /*
+       Explicit COLLATE clause with different collations
+       on both sides is an error in the SQL standard.
+       A side with DERIVATION_NONE is an earlier unresolved conflict
+       which can only be resolved by an explicit COLLATE clause.
+     */
+      derivation != DERIVATION_EXPLICIT &&
+      dt.derivation != DERIVATION_EXPLICIT &&
+      derivation != DERIVATION_NONE &&
+      dt.derivation != DERIVATION_NONE &&
+      my_collations_equal_on_repertoire(collation, dt.collation,
+                                        cumulative_repertoire))
+  {
+    /*
+      Collations are compatible on the given repertoire.
+      It does not matter which side to choose for comparison, both will work
+      and produce the same comparison result. Let's try to choose
+      the algorithmically simplest one, to be more deterministic.
+    */
+    /*
+      Do not use set(dt) here: it would also replace the repertoire.
+      The repertoire is not changed here, the caller
+      merges the repertoires of both sides in the common ending
+      of DTCollation::aggregate().
+      If "this" is chosen (i.e. the left side in case of a comparison
+      operator), then nothing needs to be done.
+    */
+    if (left_is_algorithmically_simpler(dt, *this))
+    {
+      // dt is simpler
+      collation= dt.collation;
+      derivation= dt.derivation;
+    }
+    return false;
+  }
+  return true;
+}
+
 
 /**
   Aggregate two collations together taking
@@ -2479,6 +2591,11 @@ left_is_superset(const DTCollation *left, const DTCollation *right)
   Currently processed flags are:
   MY_COLL_ALLOW_SUPERSET_CONV  - allow conversion to a superset
   MY_COLL_ALLOW_COERCIBLE_CONV - allow conversion of a coercible value
+  MY_COLL_ALLOW_BY_TAILORING   - if none of the above chose a winner,
+  allow choosing either side's collation without conversion when both
+  collations have equal comparison rules (tailoring) on the
+  cumulative_repertoire, see aggregate_by_tailoring().
+  Only comparison operators pass this flag.
   - two EXPLICIT collations produce an error, e.g. this is wrong:
   CONCAT(expr1 collate latin1_swedish_ci, expr2 collate latin1_german_ci)
   - the side with smaller derivation value wins,
@@ -2493,10 +2610,27 @@ left_is_superset(const DTCollation *left, const DTCollation *right)
               latin1_german1_ci_column,
               expr COLLATE latin1_german2_ci)
   @endcode
+
+  @param dt                     the collation to aggregate with
+  @param flags                  MY_COLL_XXX flags, see above
+  @param cumulative_repertoire  the OR-ed repertoires of all arguments
+                                being aggregated (not only of the two
+                                collations aggregated at this step).
+                                It is used to compare tailorings
+                                if MY_COLL_ALLOW_BY_TAILORING is set.
+
+  @return false on success, true if the collations cannot be aggregated
 */
 
-bool DTCollation::aggregate(const DTCollation &dt, uint flags)
+bool DTCollation::aggregate(const DTCollation &dt, uint flags,
+                            my_repertoire_t cumulative_repertoire)
 {
+  /*
+    set(dt) replaces the repertoire of "this" with the repertoire of dt.
+    The repertoire of the result must include the repertoires of both sides,
+    otherwise it can be too narrow for the following aggregation steps.
+  */
+  const my_repertoire_t merged_repertoire= repertoire | dt.repertoire;
   if (!my_charset_same(collation, dt.collation))
   {
     /* 
@@ -2545,6 +2679,20 @@ bool DTCollation::aggregate(const DTCollation &dt, uint flags)
     {
       set(dt);
     }
+    /*
+     Here we have:
+      - Different character sets
+      - None of the sides is BINARY/VARBINARY/BLOB
+      - Super-set + derivation based aggregation did not find the winner
+      - Coercible-conversion (derivation) aggregation did not find the winner
+    */
+    else if (!aggregate_by_tailoring(dt, flags, cumulative_repertoire))
+    {
+      /*
+        Both sides have equal tailoring on the OR-ed repertoires.
+        The repertoires are merged in the common ending of this function.
+      */
+    }
     else
     {
       // Cannot apply conversion
@@ -2578,21 +2726,44 @@ bool DTCollation::aggregate(const DTCollation &dt, uint flags)
           dt.collation->state & MY_CS_BINSORT)
         return 1;
       if (collation->state & MY_CS_BINSORT)
+      {
+        repertoire= merged_repertoire;
         return 0;
+      }
       if (dt.collation->state & MY_CS_BINSORT)
       {
         set(dt);
+        repertoire= merged_repertoire;
         return 0;
       }
-      THD *thd = current_thd;
-      myf utf8_flag= thd ? thd->get_utf8_flag()
-        : global_system_variables.old_behavior & OLD_MODE_UTF8_IS_UTF8MB3;
-      CHARSET_INFO *bin= get_charset_by_csname(collation->cs_name.str,
-                                               MY_CS_BINSORT,MYF(utf8_flag));
-      set(bin, DERIVATION_NONE);
+      /*
+        Here we have:
+        - Equal character sets
+        - Equal non-explicit collation derivation
+        - Different collations, both non-binary
+      */
+      /*
+        If both sides have equal tailoring on the OR-ed repertoires,
+        then aggregate_by_tailoring() chooses the collation, and the
+        repertoires are merged in the common ending of this function.
+      */
+      if (aggregate_by_tailoring(dt, flags, cumulative_repertoire))
+      {
+        /*
+          Postpone the decision to the upper level which may have
+          an explicit COLLATE clause. Set the collation to the binary
+          collation of this character set with DERIVATION_NONE.
+        */
+        THD *thd = current_thd;
+        myf utf8_flag= thd ? thd->get_utf8_flag()
+          : global_system_variables.old_behavior & OLD_MODE_UTF8_IS_UTF8MB3;
+        CHARSET_INFO *bin= get_charset_by_csname(collation->cs_name.str,
+                                                 MY_CS_BINSORT,MYF(utf8_flag));
+        set(bin, DERIVATION_NONE);
+      }
     }
   }
-  repertoire|= dt.repertoire;
+  repertoire= merged_repertoire;
   return 0;
 }
 
@@ -2642,11 +2813,14 @@ bool Type_std_attributes::agg_item_collations(DTCollation &c,
   uint i;
   Item **arg;
   bool unknown_cs= 0;
+  my_repertoire_t cumulative_repertoire= av[0]->collation.repertoire;
+  for (i= 1, arg= &av[item_sep]; i < count; i++, arg+= item_sep)
+    cumulative_repertoire|= arg[0]->collation.repertoire;
 
   c.set(av[0]->collation);
   for (i= 1, arg= &av[item_sep]; i < count; i++, arg+= item_sep)
   {
-    if (c.aggregate((*arg)->collation, flags))
+    if (c.aggregate((*arg)->collation, flags, cumulative_repertoire))
     {
       if (c.derivation == DERIVATION_NONE &&
           c.collation == &my_charset_bin)
@@ -2908,13 +3082,29 @@ Item_sp::func_name_cstring(THD *thd, bool is_package_function) const
   return { qname.c_ptr_safe(), qname.length() };
 }
 
+/*
+  Free the context of a stored function call.
+
+  note: The items on the call arena are allocated on sp_mem_root, so they
+        have to be destroyed before the memory root they live in is freed.
+*/
+
+void
+Item_sp::free_call_ctx()
+{
+  delete func_ctx;
+  func_ctx= NULL;
+  sp_query_arena->free_items();
+  free_root(&sp_mem_root, MYF(0));
+  memset(&sp_mem_root, 0, sizeof(sp_mem_root));
+}
+
+
 void
 Item_sp::cleanup()
 {
   m_sp= NULL;
-  delete func_ctx;
-  func_ctx= NULL;
-  free_root(&sp_mem_root, MYF(0));
+  free_call_ctx();
   dummy_table->alias.free();
 }
 
@@ -3044,11 +3234,7 @@ Item_sp::execute_impl(THD *thd, Item **args, uint arg_count)
   if (err_status || func_ctx->quit_func)
   {
     /* Free Items allocated during function execution. */
-    delete func_ctx;
-    func_ctx= NULL;
-    sp_query_arena->free_items();
-    free_root(&sp_mem_root, MYF(0));
-    memset(&sp_mem_root, 0, sizeof(sp_mem_root));
+    free_call_ctx();
   }
   thd->restore_sub_statement_state(&statement_state);
 
@@ -4236,6 +4422,7 @@ Item_param::Item_param(THD *thd, const LEX_CSTRING *name_arg,
   Type_handler_hybrid_field_type(&type_handler_null),
   state(NO_VALUE),
   m_empty_string_is_null(false),
+  m_changing_value(false),
   indicator(STMT_INDICATOR_NONE),
   m_out_param_info(NULL),
   /*
@@ -4259,6 +4446,52 @@ Item_param::Item_param(THD *thd, const LEX_CSTRING *name_arg,
   set_maybe_null();
   with_flags= with_flags | item_with_t::PARAM;
   collation= DTCollation(&my_charset_bin, DERIVATION_IGNORABLE);
+}
+
+
+/*
+  Binding sets only the statement's parameters and their m_clones, so the copy
+  keeps its value. Its strings point into the original's buffer without owning
+  it, which is safe because copies are dropped before the next EXECUTE.
+*/
+Item_param::Item_param(THD *thd, const Item_param &item):
+  Item_basic_value(item),
+  Settable_routine_parameter(item),
+  Rewritable_query_parameter(item),
+  Type_handler_hybrid_field_type(item),
+  state(item.state),
+  m_empty_string_is_null(item.m_empty_string_is_null),
+  m_changing_value(item.m_changing_value),
+  value(item.value),
+  indicator(item.indicator),
+  m_out_param_info(item.m_out_param_info),
+  m_is_settable_routine_parameter(item.m_is_settable_routine_parameter),
+  m_clones(thd->mem_root),
+  m_associated_field(item.m_associated_field),
+  m_default_field(item.m_default_field)
+{}
+
+
+Item *Item_param::shallow_copy(THD *thd) const
+{
+  switch (state) {
+  case NULL_VALUE:
+  case SHORT_DATA_VALUE:
+  case LONG_DATA_VALUE:
+  {
+    /* We can clone only if the item's lifetime will be single PS execution */
+    DBUG_ASSERT(thd->mem_root != thd->stmt_arena->mem_root);
+    Item *copy= new (thd->mem_root) Item_param(thd, *this);
+    if (likely(copy))
+      copy->register_in(thd);
+    return copy;
+  }
+  case NO_VALUE:
+  case DEFAULT_VALUE:
+  case IGNORE_VALUE:
+    break;
+  }
+  return nullptr;
 }
 
 
@@ -4297,6 +4530,7 @@ void Item_param::sync_clones()
 
     c->state= state;
     c->m_empty_string_is_null= m_empty_string_is_null;
+    c->m_changing_value= m_changing_value;
 
     c->value.PValue_simple::operator=(value);
     c->value.Type_handler_hybrid_field_type::operator=(value);
@@ -5006,14 +5240,22 @@ bool Item_param::convert_str_value(THD *thd)
 }
 
 
+void Item_param::set_changing_value(bool changing)
+{
+  m_changing_value= changing;
+  for (Item_param **c= m_clones.begin(); c < m_clones.end(); c++)
+    (*c)->m_changing_value= changing;
+}
+
+
 bool Item_param::basic_const_item() const
 {
   switch (state) {
   case LONG_DATA_VALUE:
   case NULL_VALUE:
-    return true;
+    return !m_changing_value;
   case SHORT_DATA_VALUE:
-    return type_handler()->cmp_type() != TIME_RESULT;
+    return !m_changing_value && type_handler()->cmp_type() != TIME_RESULT;
   case DEFAULT_VALUE:
   case IGNORE_VALUE:
     invalid_default_param();
@@ -5441,7 +5683,10 @@ void Item_copy_string::copy()
 {
   String *res=item->val_str(&str_value);
   if (res && res != &str_value)
-    str_value.copy(*res);
+  {
+    /* item->val_str() can return a String that reuses the buffer of str_value */
+    str_value.copy_maybe_substring(*res);
+  }
   null_value=item->null_value;
 #ifndef DBUG_OFF
   copied_in= 1;
@@ -7399,7 +7644,7 @@ Item_string::make_string_literal_concat(THD *thd, const LEX_CSTRING *str)
 {
   append(str->str, (uint32) str->length);
   set_name(thd, &str_value);
-  if (!(collation.repertoire & MY_REPERTOIRE_EXTENDED))
+  if (collation.repertoire_is_subset_of(MY_REPERTOIRE_ASCII))
   {
     // If the string has been pure ASCII so far, check the new part.
     CHARSET_INFO *cs= thd->variables.collation_connection;
@@ -7421,7 +7666,7 @@ Item *Item_string::make_odbc_literal(THD *thd, const LEX_CSTRING *typestr)
 {
   Item_literal *res;
   const Type_handler *h;
-  if (collation.repertoire == MY_REPERTOIRE_ASCII &&
+  if (collation.repertoire_is_subset_of(MY_REPERTOIRE_ASCII) &&
       str_value.length() < MAX_DATE_STRING_REP_LENGTH * 4 &&
       (h= Type_handler::odbc_literal_type_handler(typestr)) &&
       (res= h->create_literal_item(thd, val_str(NULL), false)))
@@ -10495,6 +10740,7 @@ bool Item_insert_value::fix_fields(THD *thd, Item **items)
       set_field(tmp_field);
       // the index is important when read bits set
       tmp_field->field_index= field_arg->field->field_index;
+      tmp_field->vcol_info= field_arg->field->vcol_info;
     }
   }
   return FALSE;
@@ -11643,6 +11889,443 @@ const char *dbug_print(Item *x)            { return dbug_print_item(x);   }
 const char *dbug_print(SELECT_LEX *x)      { return dbug_print_select(x); }
 const char *dbug_print(SELECT_LEX_UNIT *x) { return dbug_print_unit(x);   }
 
+
+/*
+  Debugger helper functions for visualizing TABLE_LIST join structures.
+
+  All functions return const char* into a static buffer, following the same
+  pattern as dbug_print_item() above.
+
+    (gdb) p dbug_print(join_list)
+    (gdb) p dbug_print(table)
+    (gdb) p dbug_print(table->nested_join)
+
+
+  NOTE: for nice formatting in gdb:
+    (gdb) printf "%s", dbug_print(join_tab)
+
+  NOTE: for nice formatting in lldb:
+    (lldb) p printf("%s", dbug_print(table))
+*/
+
+static char dbug_join_print_buf[16384];
+
+static void dbug_join_indent(String *out, int depth)
+{
+  for (int i= 0; i < depth; i++)
+    out->append("  ", 2);
+}
+
+static const char *dbug_join_type_str(uint outer_join)
+{
+  if (!outer_join)
+    return "INNER";
+  if (outer_join & JOIN_TYPE_RIGHT)
+    return "RIGHT";
+  if (outer_join & JOIN_TYPE_LEFT)
+    return "LEFT";
+  if (outer_join & JOIN_TYPE_OUTER)
+    return "OUTER(marker)";
+  return "???";
+}
+
+static const char *dbug_safe_alias(const TABLE_LIST *tbl)
+{
+  if (tbl->alias.str && tbl->alias.length)
+    return tbl->alias.str;
+  if (tbl->table_name.str && tbl->table_name.length)
+    return tbl->table_name.str;
+  return "<unnamed>";
+}
+
+static void dbug_str_append(String *out, const char *s)
+{
+  out->append(s, strlen(s));
+}
+
+static void dbug_str_append_ptr(String *out, const void *p)
+{
+  char tmp[32];
+  size_t len= (size_t)snprintf(tmp, sizeof(tmp), "%p", p);
+  out->append(tmp, len);
+}
+
+static void dbug_str_append_uint(String *out, uint val)
+{
+  char tmp[16];
+  size_t len= (size_t)snprintf(tmp, sizeof(tmp), "%u", val);
+  out->append(tmp, len);
+}
+
+static void dbug_str_append_hex(String *out, ulonglong val)
+{
+  char tmp[32];
+  size_t len= (size_t)snprintf(tmp, sizeof(tmp), "0x%llx", val);
+  out->append(tmp, len);
+}
+
+static void dbug_str_append_item(String *out, Item *item)
+{
+  if (!item)
+    out->append("NULL", 4);
+  else
+    item->print(out, QT_ORDINARY);
+}
+
+static void dbug_dump_table_to_str(String *out, const TABLE_LIST *tbl,
+                                   int depth)
+{
+  if (!tbl)
+  {
+    dbug_join_indent(out, depth);
+    out->append("(null TABLE_LIST*)\n", 19);
+    return;
+  }
+
+  dbug_join_indent(out, depth);
+
+  out->append('[');
+  dbug_str_append_ptr(out, tbl);
+  out->append("] \"", 3);
+  dbug_str_append(out, dbug_safe_alias(tbl));
+  out->append('"');
+
+  out->append("  join=", 7);
+  dbug_str_append(out, dbug_join_type_str(tbl->outer_join));
+  out->append(" (outer_join=", 13);
+  dbug_str_append_uint(out, tbl->outer_join);
+  out->append(')');
+
+  if (tbl->table)
+  {
+    out->append("  map=", 6);
+    dbug_str_append_hex(out, (ulonglong) tbl->table->map);
+  }
+
+  if (tbl->nested_join)
+  {
+    out->append("  nested_join=", 14);
+    dbug_str_append_ptr(out, tbl->nested_join);
+    out->append(" (elements=", 11);
+    dbug_str_append_uint(out, tbl->nested_join->join_list.elements);
+    out->append(')');
+  }
+
+  if (tbl->sj_on_expr)
+    out->append("  SJ_NEST", 9);
+
+  out->append('\n');
+
+  if (tbl->on_expr)
+  {
+    dbug_join_indent(out, depth + 1);
+    out->append("ON: ", 4);
+    dbug_str_append_item(out, tbl->on_expr);
+    out->append('\n');
+  }
+
+  if (tbl->sj_on_expr)
+  {
+    dbug_join_indent(out, depth + 1);
+    out->append("SJ_ON: ", 7);
+    dbug_str_append_item(out, tbl->sj_on_expr);
+    out->append('\n');
+  }
+
+  if (tbl->prep_on_expr && tbl->prep_on_expr != tbl->on_expr)
+  {
+    dbug_join_indent(out, depth + 1);
+    out->append("PREP_ON: ", 9);
+    dbug_str_append_item(out, tbl->prep_on_expr);
+    out->append('\n');
+  }
+
+  if (tbl->dep_tables)
+  {
+    dbug_join_indent(out, depth + 1);
+    out->append("dep_tables: ", 12);
+    dbug_str_append_hex(out, (ulonglong) tbl->dep_tables);
+    out->append('\n');
+  }
+
+  if (tbl->on_expr_dep_tables)
+  {
+    dbug_join_indent(out, depth + 1);
+    out->append("on_expr_dep_tables: ", 20);
+    dbug_str_append_hex(out, (ulonglong) tbl->on_expr_dep_tables);
+    out->append('\n');
+  }
+}
+
+static void dbug_dump_join_list_to_str(String *out, List<TABLE_LIST> *jl,
+                                       int depth, bool recurse);
+
+static void dbug_dump_nested_join_to_str(String *out, const NESTED_JOIN *nj,
+                                         int depth)
+{
+  if (!nj)
+  {
+    dbug_join_indent(out, depth);
+    out->append("(null NESTED_JOIN*)\n", 20);
+    return;
+  }
+  dbug_join_indent(out, depth);
+  out->append("NESTED_JOIN [", 13);
+  dbug_str_append_ptr(out, nj);
+  out->append("]\n", 2);
+  dbug_join_indent(out, depth + 1);
+  out->append("used_tables:     ", 17);
+  dbug_str_append_hex(out, (ulonglong) nj->used_tables);
+  out->append('\n');
+  dbug_join_indent(out, depth + 1);
+  out->append("not_null_tables: ", 17);
+  dbug_str_append_hex(out, (ulonglong) nj->not_null_tables);
+  out->append('\n');
+  dbug_join_indent(out, depth + 1);
+  out->append("n_tables:        ", 17);
+  dbug_str_append_uint(out, nj->n_tables);
+  out->append('\n');
+  dbug_join_indent(out, depth + 1);
+  out->append("counter:         ", 17);
+  dbug_str_append_uint(out, nj->counter);
+  out->append('\n');
+  dbug_join_indent(out, depth + 1);
+  out->append("nest_type:       ", 17);
+  dbug_str_append_uint(out, nj->nest_type);
+  if (nj->nest_type & JOIN_OP_NEST)
+    out->append(" (JOIN_OP_NEST)", 15);
+  if (nj->nest_type & REBALANCED_NEST)
+    out->append(" (REBALANCED_NEST)", 18);
+  out->append('\n');
+  dbug_join_indent(out, depth + 1);
+  out->append("nj_map:          ", 17);
+  dbug_str_append_hex(out, (ulonglong) nj->nj_map);
+  out->append('\n');
+  dbug_join_indent(out, depth + 1);
+  out->append("join_list:\n", 11);
+  dbug_dump_join_list_to_str(out,
+                             &const_cast<NESTED_JOIN*>(nj)->join_list,
+                             depth + 2, true);
+}
+
+static void dbug_dump_join_list_to_str(String *out, List<TABLE_LIST> *jl,
+                                       int depth, bool recurse)
+{
+  if (!jl)
+  {
+    dbug_join_indent(out, depth);
+    out->append("(null join_list)\n", 17);
+    return;
+  }
+
+  dbug_join_indent(out, depth);
+  out->append("join_list ", 10);
+  dbug_str_append_ptr(out, jl);
+  out->append(" [", 2);
+  dbug_str_append_uint(out, jl->elements);
+  out->append(" element(s)]:\n", 14);
+
+  List_iterator<TABLE_LIST> it(*jl);
+  TABLE_LIST *tbl;
+  uint idx= 0;
+  while ((tbl= it++))
+  {
+    dbug_join_indent(out, depth);
+    out->append("--- #", 5);
+    dbug_str_append_uint(out, idx++);
+    out->append(" ---\n", 5);
+    dbug_dump_table_to_str(out, tbl, depth + 1);
+
+    if (recurse && tbl->nested_join)
+    {
+      dbug_dump_nested_join_to_str(out, tbl->nested_join, depth + 2);
+    }
+  }
+}
+
+static const char *dbug_return_join_buf(String *str, char *buf)
+{
+  if (str->c_ptr_safe() == buf)
+    return buf;
+  else
+    return "Couldn't fit into buffer";
+}
+
+const char *dbug_print_table(const TABLE_LIST *tbl)
+{
+  char *buf= dbug_join_print_buf;
+  String str(buf, sizeof(dbug_join_print_buf), &my_charset_bin);
+  str.length(0);
+  if (!tbl)
+    return "(TABLE_LIST*)NULL";
+  dbug_dump_table_to_str(&str, tbl, 0);
+  return dbug_return_join_buf(&str, buf);
+}
+
+const char *dbug_print_join_list(List<TABLE_LIST> *jl)
+{
+  char *buf= dbug_join_print_buf;
+  String str(buf, sizeof(dbug_join_print_buf), &my_charset_bin);
+  str.length(0);
+  if (!jl)
+    return "(List<TABLE_LIST>*)NULL";
+  dbug_dump_join_list_to_str(&str, jl, 0, false);
+  return dbug_return_join_buf(&str, buf);
+}
+
+const char *dbug_print_join_tree(List<TABLE_LIST> *jl)
+{
+  char *buf= dbug_join_print_buf;
+  String str(buf, sizeof(dbug_join_print_buf), &my_charset_bin);
+  str.length(0);
+  if (!jl)
+    return "(List<TABLE_LIST>*)NULL";
+  dbug_dump_join_list_to_str(&str, jl, 0, true);
+  return dbug_return_join_buf(&str, buf);
+}
+
+const char *dbug_print_embedding(const TABLE_LIST *tbl)
+{
+  char *buf= dbug_join_print_buf;
+  String str(buf, sizeof(dbug_join_print_buf), &my_charset_bin);
+  str.length(0);
+  if (!tbl)
+    return "(TABLE_LIST*)NULL";
+
+  int depth= 0;
+  for (const TABLE_LIST *cur= tbl; cur; cur= cur->embedding)
+  {
+    dbug_join_indent(&str, depth);
+    str.append('[');
+    dbug_str_append_ptr(&str, cur);
+    str.append("] \"", 3);
+    dbug_str_append(&str, dbug_safe_alias(cur));
+    str.append("\"  join=", 8);
+    dbug_str_append(&str, dbug_join_type_str(cur->outer_join));
+    str.append("  nested_join=", 14);
+    dbug_str_append_ptr(&str, cur->nested_join);
+    if (cur->on_expr)
+    {
+      str.append("  ON=<", 6);
+      dbug_str_append_item(&str, cur->on_expr);
+      str.append('>');
+    }
+    str.append('\n');
+    depth++;
+  }
+  return dbug_return_join_buf(&str, buf);
+}
+
+const char *dbug_print_nested_join(const NESTED_JOIN *nj)
+{
+  char *buf= dbug_join_print_buf;
+  String str(buf, sizeof(dbug_join_print_buf), &my_charset_bin);
+  str.length(0);
+  if (!nj)
+    return "(NESTED_JOIN*)NULL";
+  dbug_dump_nested_join_to_str(&str, nj, 0);
+  return dbug_return_join_buf(&str, buf);
+}
+
+const char *dbug_print_join(JOIN *j)
+{
+  char *buf= dbug_join_print_buf;
+  String str(buf, sizeof(dbug_join_print_buf), &my_charset_bin);
+  str.length(0);
+  if (!j)
+    return "(JOIN*)NULL";
+  if (!j->join_list)
+  {
+    str.append("JOIN [", 6);
+    dbug_str_append_ptr(&str, j);
+    str.append("]: join_list is NULL\n", 21);
+    return dbug_return_join_buf(&str, buf);
+  }
+  str.append("JOIN [", 6);
+  dbug_str_append_ptr(&str, j);
+  str.append("]  table_count=", 15);
+  dbug_str_append_uint(&str, j->table_count);
+  str.append("  const_tables=", 15);
+  dbug_str_append_uint(&str, j->const_tables);
+  str.append('\n');
+  if (j->conds)
+  {
+    str.append("  WHERE: ", 9);
+    dbug_str_append_item(&str, j->conds);
+    str.append('\n');
+  }
+  dbug_dump_join_list_to_str(&str, j->join_list, 0, true);
+  return dbug_return_join_buf(&str, buf);
+}
+
+/*
+  Debugger helper function for visualizing a result set row.
+
+  Prints the name and current value of each Item in the row list,
+  as they would be sent to the client by Protocol::send_result_set_row().
+  The output format matches dbug_print_table_row():
+
+    result_set_row(name1, name2, ...)=(val1, val2, ...)
+
+    (gdb)  p dbug_print_result_set_row(&items)
+    (lldb) p dbug_print_result_set_row(&items)
+*/
+
+const char *dbug_print_result_set_row(List<Item> *row_items)
+{
+  char *buf= dbug_join_print_buf;
+  String str(buf, sizeof(dbug_join_print_buf), &my_charset_bin);
+  str.length(0);
+  if (!row_items)
+    return "(List<Item>*)NULL";
+
+  str.append(STRING_WITH_LEN("("));
+
+  List_iterator_fast<Item> name_it(*row_items);
+  bool first= true;
+  for (Item *item= name_it++; item; item= name_it++)
+  {
+    if (first)
+      first= false;
+    else
+      str.append(STRING_WITH_LEN(", "));
+
+    if (item->name.str)
+      str.append(item->name.str, item->name.length);
+    else
+      str.append(STRING_WITH_LEN("(no name)"));
+  }
+
+  str.append(STRING_WITH_LEN(")=("));
+
+  List_iterator_fast<Item> val_it(*row_items);
+  String val_tmp;
+  first= true;
+  for (Item *item= val_it++; item; item= val_it++)
+  {
+    if (first)
+      first= false;
+    else
+      str.append(STRING_WITH_LEN(", "));
+
+    String *val= item->val_str(&val_tmp);
+    if (val)
+      str.append(val->ptr(), val->length());
+    else
+      str.append(&NULL_clex_str);
+  }
+
+  str.append(')');
+
+  return dbug_return_join_buf(&str, buf);
+}
+
+const char *dbug_print(const TABLE_LIST *x)  { return dbug_print_table(x); }
+const char *dbug_print(List<TABLE_LIST> *x)  { return dbug_print_join_tree(x); }
+const char *dbug_print(const NESTED_JOIN *x) { return dbug_print_nested_join(x); }
+const char *dbug_print(JOIN *x)              { return dbug_print_join(x); }
+const char *dbug_print(List<Item> *x)        { return dbug_print_result_set_row(x); }
+
 #endif /*DBUG_OFF*/
 
 void Item::register_in(THD *thd)
@@ -11696,10 +12379,16 @@ void Item_direct_ref_to_item::change_item(THD *thd, Item *i)
 
 bool Item::cleanup_excluding_immutables_processor (void *arg)
 {
-  if (!(get_extraction_flag() == MARKER_IMMUTABLE))
-    return cleanup_processor(arg);
-  else
+  /*
+    basic_const_item() is also true for an Item_ref wrapping a constant,
+    e.g. a reference to a constant select list item of a merged derived
+    table. Such a ref is never marked with MARKER_IMMUTABLE, but the
+    function enclosing it is, so it is not cleaned up here, and
+    fix_fields() does not descend into items that are already fixed.
+  */
+  if (basic_const_item() || get_extraction_flag() == MARKER_IMMUTABLE)
     return false;
+  return cleanup_processor(arg);
 }
 
 

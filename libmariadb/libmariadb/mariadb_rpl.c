@@ -29,6 +29,7 @@
 #include <zlib.h>
 #include <ma_decimal.h>
 #include <mariadb_rpl.h>
+#include <ma_priv.h>
 
 
 #ifdef WIN32
@@ -98,11 +99,16 @@ do { \
         goto malformed_packet; \
 } while(0)
 
-#define RPL_CHECK_FIELD_LENGTH(position, end)\
-{\
-  RPL_CHECK_POS((position), (end), 1);\
-  RPL_CHECK_POS((position), (end), net_field_size((position)));\
-}
+#define RPL_READ_FIELD_LENGTH(position, end, len)                          \
+do {                                                                       \
+  uchar *_p= (uchar *)(position);                                          \
+  ulong _l;                                                                \
+  if (net_field_length_safe(&_p, (end), MARIADB_LENENC_FORBID_NULL, &_l)   \
+      != MARIADB_LENENC_OK || _l > (size_t)((end) - _p))                   \
+    goto malformed_packet;                                                 \
+  (position)= _p;                                                          \
+  (len)= _l;                                                               \
+} while (0)
 
 RPL_SUPPORTED_POST_HEADER_LEN post_header_lengths[] = {
   {1,   {0, 56}},   /* START_EVENT_V3 */
@@ -208,17 +214,6 @@ static inline uint64_t uintNkorr(uint8_t len, u_char *p)
   }
 }
 
-static inline int net_field_size(uchar *p)
-{
-  if (*p <= 251)
-    return 1;
-  if (*p == 252)
-    return 3;
-  if (*p == 253)
-    return 4;
-  return 9;
-}
-
 static inline int rpl_bit_size(uint32_t x)
 {
   int bits= 1;
@@ -297,9 +292,7 @@ uint8_t rpl_parse_opt_metadata(MARIADB_RPL_EVENT *event, const uchar *buffer, si
     uint8_t meta_type= *pos++;
     uint32_t len;
 
-    RPL_CHECK_FIELD_LENGTH((uchar *)pos, end);
-    len= net_field_length((uchar **)&pos);
-    RPL_CHECK_POS(pos, end,len);
+    RPL_READ_FIELD_LENGTH(pos, end, len);
 
     switch(meta_type)
     {
@@ -1248,28 +1241,37 @@ static int ma_set_rpl_filename(MARIADB_RPL *rpl, const unsigned char *filename, 
  *      1  header size  uncompressed length in MyISAM format.
  */
 static uint32_t get_compression_info(const unsigned char *buf,
+                                     const unsigned char *buf_end,
                                      uint8_t *algorithm,
                                      uint8_t *header_size)
 {
   uint8_t alg, header;
-  uint32 len= 0;
+  uint32_t len = 0;
 
   if (!algorithm)
-    algorithm= &alg;
+    algorithm = &alg;
   if (!header_size)
-    header_size= &header;
+    header_size = &header;
 
-  *header_size= 0;
-  *algorithm= 0;
+  *header_size = 0;
+  *algorithm = 0;
 
-  if (!buf)
-    return len;
+  /* Check that we have at least 1 byte for the header marker */
+  if (!buf || !buf_end || buf >= buf_end)
+    return 0;
 
   if ((buf[0] & 0xe0) != 0x80)
-    return len;
+    return 0;
 
-  *header_size= buf[0] & 0x07;
+  *header_size = buf[0] & 0x07;
   *algorithm = (buf[0] & 0x07) >> 4;
+
+  /* Verify that the payload contains the full declared header size */
+  if ((size_t)(buf_end - buf) <= (size_t)*header_size)
+  {
+    *header_size = 0;
+    return 0;
+  }
 
   buf++;
 
@@ -1278,19 +1280,19 @@ static uint32_t get_compression_info(const unsigned char *buf,
    */
   switch(*header_size) {
   case 1:
-    len= *buf;
+    len = *buf;
     break;
   case 2:
-    len= myisam_uint2korr(buf);
+    len = myisam_uint2korr(buf);
     break;
   case 3:
-    len= myisam_uint3korr(buf);
+    len = myisam_uint3korr(buf);
     break;
   case 4:
-    len= myisam_uint4korr(buf);
+    len = myisam_uint4korr(buf);
     break;
   default:
-    len= 0;
+    len = 0;
     break;
   }
 
@@ -1875,7 +1877,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
                 algorithm= 0;
         uLongf source_len, dest_len;
 
-        uint32_t uncompressed_len= get_compression_info(ev, &algorithm, &header_size);
+        uint32_t uncompressed_len= get_compression_info(ev, ev_end, &algorithm, &header_size);
 
         if (header_size >= len || len < header_size ||
             uncompressed_len == 0 ||
@@ -1961,8 +1963,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
       ev+= table_len + 1;
 
       /* Column Count (Max 4096 columns) */
-      RPL_CHECK_FIELD_LENGTH(ev, ev_end);
-      len= mysql_net_field_length(&ev);
+      RPL_READ_FIELD_LENGTH(ev, ev_end, len);
       if (len > 4096)
         goto malformed_packet;
 
@@ -1972,8 +1973,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
       ev+= len;
 
       /* Metadata Size */
-      RPL_CHECK_FIELD_LENGTH(ev, ev_end);
-      metadata_len= mysql_net_field_length(&ev);
+      RPL_READ_FIELD_LENGTH(ev, ev_end, metadata_len);
       RPL_CHECK_POS(ev, ev_end, metadata_len);
       rpl_set_string_and_len(&rpl_event->event.table_map.metadata, ev, metadata_len);
       ev+= metadata_len;
@@ -1989,8 +1989,10 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
 
       if (len > 0)
       {
-        rpl_parse_opt_metadata(rpl_event, ev, len);
+        if (rpl_parse_opt_metadata(rpl_event, ev, len))
+          goto malformed_packet;
         ev+= len;
+        (void)ev;
       }
       break;
     }
@@ -2543,8 +2545,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
       /* END_ROWS_EVENT_V2 */
 
       /* number of columns */
-      RPL_CHECK_FIELD_LENGTH(ev, ev_end);
-      rpl_event->event.rows.column_count= mysql_net_field_length(&ev);
+      RPL_READ_FIELD_LENGTH(ev, ev_end, rpl_event->event.rows.column_count);
       bitmap_len= (rpl_event->event.rows.column_count + 7) / 8;
 
       if (rpl_event->event.rows.column_count < 1)
@@ -2570,7 +2571,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
         uint8_t algorithm= 0, header_size= 0;
         uLongf source_len;
         uLong dest_len;
-        uint32_t uncompressed_len= get_compression_info(ev, &algorithm, &header_size);
+        uint32_t uncompressed_len= get_compression_info(ev, ev_end, &algorithm, &header_size);
 
         if (header_size >= (ev_end - ev) ||
             uncompressed_len == 0 ||
@@ -2601,6 +2602,7 @@ MARIADB_RPL_EVENT * STDCALL mariadb_rpl_fetch(MARIADB_RPL *rpl, MARIADB_RPL_EVEN
         rpl_event->event.rows.row_data_size= dest_len;
         RPL_CHECK_POS(ev, ev_end, header_size + len);
         ev+= header_size + source_len;
+        (void)ev;
       } else {
         RPL_CALC_SAFE_LEN(ev, ev_end, rpl->use_checksum, rpl_event->event.rows.row_data_size, malformed_packet);
 

@@ -2479,4 +2479,64 @@ SELECT * FROM t1 WHERE (0,0) IN (SELECT MAX(c),MIN(c) FROM t1);
 
 DROP TABLE t1;
 
+--echo #
+--echo # MDEV-24907:  Empty the source list after merging an Item_equal
+--echo #
+CREATE TABLE t1 (a INT, b INT) ENGINE=MyISAM;
+INSERT INTO t1 VALUES (0,0);
+CREATE TABLE t2 (c INT) ENGINE=MyISAM;
+INSERT INTO t2 VALUES (2),(0);
+CREATE TABLE t3 (d INT) ENGINE=MyISAM;
+INSERT INTO t3 VALUES (1),(3);
+
+# Result should be empty.
+SELECT * FROM t1 LEFT JOIN (
+    t2 JOIN t3 ON (t3.d = t2.c)
+) ON (
+    t1.b NOT IN (SELECT d FROM t3)
+) WHERE (t1.a, t3.d) IN (SELECT c, MAX(c) FROM t2) AND t1.a = t1.b;
+
+SELECT * FROM t1 LEFT JOIN (
+    t2 JOIN t3 ON (t3.d = t2.c)
+) ON (
+    t1.b > 3
+) WHERE t1.a IN (SELECT MAX(c) FROM t2 GROUP BY c) AND
+        t3.d IN (SELECT COUNT(c) FROM t2 GROUP BY c) AND
+        t1.a = t1.b;
+
+DROP TABLE t1, t2, t3;
+
 --echo # end of 10.11 tests
+
+--echo #
+--echo # MDEV-41303 rand() in a semi-join subquery is checked on outer rows
+--echo #
+
+create table t1 (a int);
+insert into t1 values (1),(2),(3),(100);
+create table t2 (c int, d int);
+insert into t2 select 1, 1 from seq_1_to_80;
+
+set @save_optimizer_switch= @@optimizer_switch;
+set optimizer_switch='firstmatch=off';
+
+--echo # The subquery must check rand(1) < 0.09 on the 80 rows of t2.
+--echo # Must produce count(*)=1, not 0.
+select count(*) from t1
+where t1.a in (select c from t2 where rand(1) < 0.09);
+--echo # Warning must have "<materialize>(...) JOIN..." and not
+--echo # "`test`.`t1` semi join (`test`.`t2`)"
+explain extended
+select count(*) from t1
+where t1.a in (select c from t2 where rand(1) < 0.09);
+
+--echo # rand() in the outer WHERE does not prevent the conversion to a
+--echo # semi-join.
+explain extended
+select count(*) from t1
+where rand(1) < 2 and t1.a in (select c from t2);
+
+set optimizer_switch=@save_optimizer_switch;
+drop table t1, t2;
+
+--echo # end of 11.4 tests
