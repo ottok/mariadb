@@ -1,6 +1,7 @@
 main.xml : MDEV-21968 (fails only on Launchpad)
 main.vector_innodb : MDEV-37559 (sporadic due to the nature of vector search)
 main.vector2_notembedded : MDEV-37559 (sporadic due to the nature of vector search)
+main.lotofstack : MDEV-42362 (fixed nesting depth too low for 32-bit stack frames)
 # Below tests only run in "big" tests
 compat/oracle.sp-package  : MDEV-38340 (fails only on Launchpad)
 disks.disks : MDEV-38335 (fails only on Debian buildd)
