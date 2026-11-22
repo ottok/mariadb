@@ -577,7 +577,7 @@ blhc:
     # Do not create a pipeline for tags unless SALSA_CI_ENABLE_PIPELINE_ON_TAGS is set
     - if: $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
       when: never
-    - when: always
+    - when: on_success
 
 .salsa-ci-template-for-mariadb-upgrade:
   stage: test
@@ -627,7 +627,7 @@ blhc:
     # Do not create a pipeline for tags unless SALSA_CI_ENABLE_PIPELINE_ON_TAGS is set
     - if: $CI_COMMIT_TAG != null && $SALSA_CI_ENABLE_PIPELINE_ON_TAGS !~ /^(1|yes|true)$/
       when: never
-    - when: always
+    - when: on_success
 
 fresh install:
   extends: .salsa-ci-template-for-mariadb
