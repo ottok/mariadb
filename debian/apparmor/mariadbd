@@ -39,7 +39,7 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected) {
   include <abstractions/winbind>
 
   # Minimal essential rules traditionally provided by abstractions/base
-  # These rules are commonly needed by system services and avoid the passt inclusion
+  # These rules are commonly needed by system services and avoid the past inclusion
   capability chown,
   capability fowner,
   # per systemd service file is used with --memlock to lock memory beyond the usual rlimit

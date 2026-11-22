@@ -16,7 +16,7 @@ variables:
     mariadb-plugin-provider-lzma mariadb-plugin-provider-lzo
     mariadb-plugin-provider-snappy mariadb-test mariadb-test-data"
   DEB_BUILD_OPTIONS: "nocheck noautodbgsym"
-  # The jobs build-package-any nd build-package-all work, but they can take 2h+
+  # The jobs build-package-any and build-package-all work, but they can take 2h+
   # for MariaDB and provide little value as changes to debian/control
   # `Architecture` and `Multi-Arch` stanzas are rare.
   SALSA_CI_DISABLE_BUILD_PACKAGE_ALL: 1
@@ -395,10 +395,10 @@ blhc:
     apt-get update -q
 
 .test-enable-artifacts-repo: &test-enable-artifacts-repo |
-  # Show an ordered file listing that is easy to compare across builds and an be
+  # Show an ordered file listing that is easy to compare across builds and can be
   # verified from logs that correct artifacts are present
   find -maxdepth 3 -printf '%M %4u %4g %10s %TY-%Tm-%Td %TH:%TM %p\n' | sort -k 7
-  # Delete any custom pinning thay may have been used to install initial packages
+  # Delete any custom pinning that may have been used to install initial packages
   rm -rfv /etc/apt/preferences.d/mariadb
   apt-get install -qq --yes apt-utils
   apt-ftparchive packages . > Packages
@@ -606,7 +606,7 @@ blhc:
       Components: main
       EOF
       # Pin the MariaDB.org repository so all MariaDB packages are from the
-      # MariaDB archive and not from the Debian/Ubntu archive
+      # MariaDB archive and not from the Debian/Ubuntu archive
       cat > /etc/apt/preferences.d/mariadb <<EOF
       Package: *
       Pin: origin archive.mariadb.org

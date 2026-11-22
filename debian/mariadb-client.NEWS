@@ -17,7 +17,7 @@ mariadb (1:11.4.3-1) unstable; urgency=medium
   Newer version of MariaDB clients strip away the backslash and dash (\-), and
   then tries to execute the internal command with a dash.
 
-  Older versions of MariaDB client and all versions of MySQL client considers
+  Older versions of MariaDB client and all versions of MySQL client consider
   this a comment, and will ignore it. There may however be situations where
   importing logical SQL dump files may fail due to this, so users should be
   advised.

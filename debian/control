@@ -481,10 +481,10 @@ Conflicts:
 Multi-Arch: foreign
 Description: MySQL compatibility links to mariadb-client binaries/scripts
  The package contains links and binaries that are needed by MySQL centric
- tools which also works with MariaDB.
+ tools which also work with MariaDB.
  .
- This package is also useful for users who are switcing from MySQL to
- MariaDB and want to use continue using the legacy 'mysql*' command-line
+ This package is also useful for users who are switching from MySQL to
+ MariaDB and want to continue using the legacy 'mysql*' command-line
  tools instead of the new 'mariadb-*' equivalents.
 
 Package: mariadb-server-core
@@ -740,8 +740,8 @@ Description: MySQL compatibility links to mariadb-server binaries/scripts
  The package contains links and binaries that are needed by MySQL centric
  tools which also work with MariaDB.
  .
- This package is also useful for users who are switcing from MySQL to
- MariaDB and want to use continue using the legacy 'mysqld' and other
+ This package is also useful for users who are switching from MySQL to
+ MariaDB and want to continue using the legacy 'mysqld' and other
  binary names instead of the new 'mariadbd' and alike.
 
 Package: mariadb-backup

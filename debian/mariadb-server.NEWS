@@ -233,7 +233,7 @@ mariadb (1:10.11.2-1) unstable; urgency=medium
   versions with fixes to software defects and security vulnerabilities until
   February 2028.
 
-  The previous major releases (10.7, 10.8, 10.9, 10.10) were not long-terms
+  The previous major releases (10.7, 10.8, 10.9, 10.10) were not long-term
   supported versions and thus not imported to Debian. To learn what is new in
   10.11 it is recommended to read all the release notes:
 
