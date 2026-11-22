@@ -74,6 +74,24 @@ mariadb (1:11.8.9+ds-1) unstable; urgency=medium
     - CVE-2026-60747
     - CVE-2026-47023
     - CVE-2026-60184
+    - CVE-2026-107823
+    - CVE-2026-107822
+    - CVE-2026-107821
+    - CVE-2026-107819
+    - CVE-2026-107818
+    - CVE-2026-107817
+    - CVE-2026-107816
+    - CVE-2026-107815
+    - CVE-2026-107814
+    - CVE-2026-102523
+    - CVE-2026-101797
+    - CVE-2026-101770
+    - CVE-2026-97380
+    - CVE-2026-92262
+    - CVE-2026-86047
+    - CVE-2026-85985
+    - CVE-2026-85746
+    - CVE-2026-85745
   * Drop patches applied upstream
   * Update server trace to include new parameters and values
     - New option innodb-index-shrink (default TRUE)
