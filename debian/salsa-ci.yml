@@ -593,6 +593,10 @@ blhc:
   before_script:
     - *test-prepare-container
     - apt-get install -qq --yes --no-install-recommends ca-certificates
+    # MDEV-22893: The MariaDB.org 11.8 packages call systemd-tmpfiles in their
+    # postinst but do not depend on it. The line below can be removed once the
+    # upstream packaging includes the dependency.
+    - apt-get install -qq --yes --no-install-recommends systemd-standalone-tmpfiles
     - |
       cat > /etc/apt/sources.list.d/mariadb.sources <<EOF
       X-Repolib-Name: MariaDB
