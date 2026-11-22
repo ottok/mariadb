@@ -40,22 +40,24 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected) {
 
   # Minimal essential rules traditionally provided by abstractions/base
   # These rules are commonly needed by system services and avoid the past inclusion
+  #
+  # AppArmor capability rules only permit capabilities that the process already
+  # has; they never grant capabilities. The systemd unit runs mariadbd as user
+  # mysql and grants only CAP_IPC_LOCK via AmbientCapabilities. The other
+  # capabilities below are effective only when mariadbd is started as root
+  # (e.g. via SysV init/mariadbd-safe or manually), where they are needed while
+  # changing file ownership, accessing root-owned files and dropping privileges.
   capability chown,
   capability fowner,
-  # per systemd service file is used with --memlock to lock memory beyond the usual rlimit
-  capability ipc_lock,
-  # Galera gu_thread_setschedparam still uses this
-  capability sys_nice,
   capability kill,
-  # Required to raise file-descriptor and memory limits beyond hard defaults
+  capability sys_nice,
   capability sys_resource,
-  # Required to read files owned by root (e.g., SSL keys, config files)
-  # while running as unprivileged mysql user (uid 122)
   capability dac_override,
   capability dac_read_search,
-  # Required for privilege dropping and user switching operations
   capability setuid,
   capability setgid,
+  # Granted by the systemd unit via AmbientCapabilities=CAP_IPC_LOCK.
+  capability ipc_lock,
   # Various types of network access
   network inet stream,
   network inet dgram,
@@ -89,6 +91,8 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected) {
   /etc/mariadb/** r,
   /etc/mtab r,
   /etc/my.cnf r,
+  # Includes /etc/mysql/conf.d/ and /etc/mysql/mariadb.conf.d/, which are also
+  # read by the Galera SST helper scripts.
   /etc/mysql/** r,
   /etc/nsswitch.conf r,
   /etc/passwd r,
@@ -186,100 +190,46 @@ profile mariadbd /usr/sbin/mariadbd flags=(attach_disconnected) {
   # Allow network interface enumeration (for Java/Connect engine)
   @{PROC}/@{pid}/net/if_inet6 r,
 
-  # Allow Galera helpers. This should be mostly fine since it's providing the
-  # 'i' option which keeps the shells confined according to the rules of the
-  # existing profile.
-  /usr/bin/dash rcx,
+  # Allow the startup notice to check which AppArmor profiles are loaded.
+  /sys/kernel/security/apparmor/profiles r,
 
-  # Detailed profile for 'dash' so Galera can use it
-  # Origin: support-files/policy/apparmor/usr.sbin.mysqld
-  profile /usr/bin/dash flags=(complain) {
-    #include <abstractions/base>
-    #include <abstractions/bash>
-    #include <abstractions/mysql>
-    #include <abstractions/nameservice>
-    #include <abstractions/perl>
+  # Allow execution of Galera SST helper scripts and the utilities they use.
+  # The scripts are executed with 'ix' so they inherit this profile instead of
+  # transitioning to a separate child profile. A separate profile for shells
+  # was not practical: the Galera scripts are bash scripts that call many
+  # utilities, and running that profile in complain mode only produced DENIED
+  # log noise without actually confining anything.
+  /usr/bin/env rix,
+  /usr/bin/bash rix,
+  /usr/bin/dash rix,
+  /usr/bin/sh rix,
+  /usr/bin/galera_recovery rix,
+  /usr/bin/wsrep_sst* rix,
+  /usr/bin/mariabackup* rix,
+  /usr/bin/xtrabackup* rix,
+  /usr/bin/xbstream rix,
+  /usr/bin/my_print_defaults rix,
+  /usr/bin/mysql rix,
+  /usr/bin/mysqldump rix,
+  /usr/bin/{awk,basename,bzip2,cat,chmod,chgrp,chown,cp,cut,date,df,dirname,du,expr,find,gawk,grep,gzip,head,hostname,ifconfig,ip,ln,lsof,mawk,mktemp,mv,nc,nc.openbsd,netcat,netstat,nproc,openssl,ps,pv,readlink,rm,sed,seq,sha256sum,sleep,socat,sort,ss,stat,sync,tail,tar,tee,timeout,touch,tr,uname,uniq,wc,which,xargs,xz,zstd} rix,
+  /usr/bin/stunnel* rix,
+  /sbin/ifconfig rix,
+  /sbin/ip rix,
 
-    /usr/bin/cat rix,
-    /usr/bin/dash rix,
-    /usr/bin/date rix,
-    /usr/bin/grep rix,
-    /usr/bin/nc.openbsd rix,
-    /usr/bin/netstat rix,
-    /usr/bin/ps rix,
-    /usr/bin/rm rix,
-    /usr/bin/sed rix,
-    /usr/bin/sleep rix,
-    /usr/bin/tar rix,
-    /usr/bin/which rix,
-    /dev/tty rw,
-    /etc/ld.so.cache r,
-    /etc/my.cnf r,
-    /proc/ r,
-    /proc/*/cmdline r,
-    /proc/*/fd/ r,
-    /proc/*/net/dev r,
-    /proc/*/net/if_inet6 r,
-    /proc/*/net/tcp r,
-    /proc/*/net/tcp6 r,
-    /proc/*/stat r,
-    /proc/*/status r,
-    /proc/sys/kernel/pid_max r,
-    /proc/tty/drivers r,
-    /proc/uptime r,
-    /proc/version r,
-    /sbin/ifconfig rix,
-    /sys/devices/system/cpu/ r,
-    /tmp/** rw,
-    /usr/bin/cut rix,
-    /usr/bin/dirname rix,
-    /usr/bin/gawk rix,
-    /usr/bin/mysql rix,
-    /usr/bin/perl rix,
-    /usr/bin/seq rix,
-    /usr/bin/wsrep_sst* rix,
-    /usr/bin/wsrep_sst_common r,
-    /usr/bin/mariabackup* rix,
-    /var/lib/mysql/ r,
-    /var/lib/mysql/** rw,
-    /var/lib/mysql/*.log w,
-    /var/lib/mysql/*.err w,
-
-    # MariaDB additions
-    ptrace peer=@{profile_name},
-
-    /usr/bin/hostname rix,
-    /usr/bin/ip rix,
-    /usr/bin/mktemp rix,
-    /usr/bin/ss rix,
-    /usr/bin/sync rix,
-    /usr/bin/touch rix,
-    /usr/bin/uname rix,
-    /etc/mysql/*.cnf r,
-    /etc/mysql/conf.d/ r,
-    /etc/mysql/conf.d/* r,
-    /proc/*/attr/current r,
-    /proc/*/fdinfo/* r,
-    /proc/*/net/* r,
-    /proc/locks r,
-    /proc/sys/net/ipv4/ip_local_port_range r,
-    /run/mariadbd/mysqld.sock rw,
-    /run/mysqld/mysqld.sock rw,
-    /sbin/ip rix,
-    /usr/bin/basename rix,
-    /usr/bin/du rix,
-    /usr/bin/find rix,
-    /usr/bin/lsof rix,
-    /usr/bin/my_print_defaults rix,
-    /usr/bin/mysqldump rix,
-    /usr/bin/pv rix,
-    /usr/bin/rsync rix,
-    /usr/bin/socat rix,
-    /usr/bin/tail rix,
-    /usr/bin/timeout rix,
-    /usr/bin/xargs rix,
-    /usr/bin/xbstream rix,
-  }
+  # Process and network introspection used by the Galera SST scripts.
+  /dev/tty rw,
+  @{PROC}/ r,
+  @{PROC}/@{pid}/attr/current r,
+  @{PROC}/@{pid}/cmdline r,
+  @{PROC}/@{pid}/fd/ r,
+  @{PROC}/@{pid}/fdinfo/* r,
+  @{PROC}/@{pid}/net/* r,
+  @{PROC}/@{pid}/stat r,
+  @{PROC}/locks r,
+  @{PROC}/sys/kernel/pid_max r,
+  @{PROC}/sys/net/ipv4/ip_local_port_range r,
+  @{PROC}/tty/drivers r,
+  @{PROC}/uptime r,
 
   # Allow OS detection
   /etc/debian_version r,
