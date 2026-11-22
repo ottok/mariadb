@@ -17,13 +17,30 @@ mariadb (1:11.8.10+ds-1) UNRELEASED; urgency=medium
     - CVE-2026-101615
     - CVE-2026-101614
     - CVE-2026-101608
-
-  * Drop patches applied upstream or superseded by upstream changes
+  * Also amend the 1:11.8.9+ds-1 entry to include newly documented CVEs
+  * Drop patches applied upstream or superseded by upstream changes:
+    - startup banner is superseded by the upstream equivalent
+    - OpenSSL 4.0 fixes are superseded by upstream MDEV-40287
+    - CONC-821 is fixed in the bundled MariaDB Connector/C 3.4.12
+  * Related upstream commit be67a4f fixed CONC-854 by reverting change in how
+    disable-ssl-verify-server-cert is used with ssl_ca (Closes: #1154991)
+  * Also cherry-pick the following upstream debian/ changes:
+    - MDEV-39245: ASCII validation at two points using my_string_repertoire()
+    - MDEV-40630: stunnel as Deb/RPM recommends for rsync sst (Closes: #1154976)
+    - Fix inconsistent terminology
+  * Explicitly ignore new files added in upstream commit 3977a282 (MDEV-40608)
+  * Skip new 32-bit incompatible test main.lotofstack on armhf (MDEV-42362)
+  * Update symbols file to match MariaDB Connector C/C++ 3.4.12 ABI
+  * Update server trace to include new parameters and values
+  * Clean up obsolete Lintian overrides
+  * Add patch to fix mariadb-dump man page syntax and drop its override
+  * Fix misc typos and indentation in debian/ packaging files
+  * Salsa CI: Install systemd-tmpfiles for mariadb.org-11.8 upgrade
 
   [ Daniel Lewart ]
   * mariadb-server: drop Recommends: libhtml-template-perl (Closes: #1153074)
 
- -- Otto Kekäläinen <otto@debian.org>  Mon, 16 Nov 2026 13:53:09 +0000
+ -- Otto Kekäläinen <otto@debian.org>  Sun, 22 Nov 2026 22:22:22 +0000
 
 mariadb (1:11.8.9+ds-4) unstable; urgency=medium
 
