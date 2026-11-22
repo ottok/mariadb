@@ -81,8 +81,11 @@ fi
 echo # empty newline for legibility
 
 echo "=== AppArmor diagnostics ==="
+echo "aa-status:"
 aa-status 2>/dev/null | grep -A5 -B5 mariadb || true
+echo "dmesg:"
 dmesg | grep -i apparmor | grep -i mariadb || true
+echo "journalctl:"
 journalctl -k | grep -i apparmor | grep -i mariadb || true
 
 # Don't quote the variable passed to exit to ensure it stays as a number
